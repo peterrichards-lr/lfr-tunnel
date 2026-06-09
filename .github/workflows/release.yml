@@ -1,0 +1,58 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - 'v*'
+
+permissions:
+  contents: write
+
+jobs:
+  build-and-release:
+    name: Build and Release
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: '1.20'
+          cache: true
+
+      - name: Run Tests
+        run: go test -v ./...
+
+      - name: Prepare Dist Directory
+        run: mkdir -p dist
+
+      - name: Build Server Gateway (lfr-tunneld)
+        run: |
+          GOOS=linux GOARCH=amd64 go build -ldflags="-s -w" -o dist/lfr-tunneld-linux-amd64 ./cmd/lfr-tunneld
+          GOOS=linux GOARCH=arm64 go build -ldflags="-s -w" -o dist/lfr-tunneld-linux-arm64 ./cmd/lfr-tunneld
+
+      - name: Build Client CLI (lfr-tunnel)
+        run: |
+          # Linux
+          GOOS=linux GOARCH=amd64 go build -ldflags="-s -w" -o dist/lfr-tunnel-linux-amd64 ./cmd/lfr-tunnel
+          GOOS=linux GOARCH=arm64 go build -ldflags="-s -w" -o dist/lfr-tunnel-linux-arm64 ./cmd/lfr-tunnel
+          
+          # macOS (Darwin)
+          GOOS=darwin GOARCH=amd64 go build -ldflags="-s -w" -o dist/lfr-tunnel-darwin-amd64 ./cmd/lfr-tunnel
+          GOOS=darwin GOARCH=arm64 go build -ldflags="-s -w" -o dist/lfr-tunnel-darwin-arm64 ./cmd/lfr-tunnel
+          
+          # Windows
+          GOOS=windows GOARCH=amd64 go build -ldflags="-s -w" -o dist/lfr-tunnel-windows-amd64.exe ./cmd/lfr-tunnel
+
+      - name: Publish Release
+        uses: softprops/action-gh-release@v2
+        with:
+          files: |
+            dist/*
+          draft: false
+          prerelease: false
+          generate_release_notes: true
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

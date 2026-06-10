@@ -37,3 +37,7 @@ The solution will consist of:
 - [x] Add project `LICENSE` (MIT).
 - [x] Configure local pre-commit hooks (formatting, linting, testing).
 - [x] Create CI validation workflow in `.github/workflows/ci.yml`.
+- [ ] Fix CI build failures (errcheck linting errors).
+- [ ] Document / set up GitHub branch protection rulesets.
+- [ ] Update DNS records and test SSH when new VM6 IP is assigned.
+

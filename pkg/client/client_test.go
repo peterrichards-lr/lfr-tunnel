@@ -90,7 +90,7 @@ func TestRegisterTunnel(t *testing.T) {
 
 		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(http.StatusOK)
-		json.NewEncoder(w).Encode(RegisterResponse{
+		_ = json.NewEncoder(w).Encode(RegisterResponse{
 			Status:       "success",
 			SessionToken: "mock-session-token",
 			Remotes:      []string{"R:10001:localhost:8080"},

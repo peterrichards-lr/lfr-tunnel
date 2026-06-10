@@ -199,7 +199,7 @@ func main() {
 	if cfg.BasicAuth != "" {
 		fmt.Printf("[Client] Data Plane HTTP Basic Auth is ENABLED\n")
 	}
-	regResp, err := client.RegisterTunnel(cfg.ServerURL, cfg.AuthToken, sub, portMappings, cfg.RateLimit, cfg.BasicAuth)
+	regResp, err := client.RegisterTunnel(cfg.ServerURL, cfg.AuthToken, sub, portMappings, cfg.RateLimit, cfg.BasicAuth, engine.AddedHeaders)
 	if err != nil {
 		log.Fatalf("[Error] Failed to register: %v\n", err)
 	}

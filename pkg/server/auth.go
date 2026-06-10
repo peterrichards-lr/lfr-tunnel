@@ -22,16 +22,17 @@ type PortMapping struct {
 
 // TunnelLease represents a single active subdomain tunnel allocation.
 type TunnelLease struct {
-	SubdomainPrefix string    `json:"subdomain_prefix"`
-	FullHost        string    `json:"full_host"`
-	SessionToken    string    `json:"session_token"`
-	LocalPort       int       `json:"local_port"`
-	TargetPort      int       `json:"target_port"`
-	RateLimit       int       `json:"rate_limit"`
-	ClientIP        string    `json:"client_ip"`
-	BasicAuth       string    `json:"basic_auth"`
-	Status          string    `json:"status"` // e.g., "up", "maintenance", "down"
-	CreatedAt       time.Time `json:"created_at"`
+	SubdomainPrefix string            `json:"subdomain_prefix"`
+	FullHost        string            `json:"full_host"`
+	SessionToken    string            `json:"session_token"`
+	LocalPort       int               `json:"local_port"`
+	TargetPort      int               `json:"target_port"`
+	RateLimit       int               `json:"rate_limit"`
+	ClientIP        string            `json:"client_ip"`
+	BasicAuth       string            `json:"basic_auth"`
+	AddedHeaders    map[string]string `json:"added_headers"`
+	Status          string            `json:"status"` // e.g., "up", "maintenance", "down"
+	CreatedAt       time.Time         `json:"created_at"`
 }
 
 var (
@@ -111,7 +112,7 @@ func getFreePort() (int, error) {
 }
 
 // Register allocates ports and subdomains for a client.
-func (r *Registry) Register(subdomainPrefix string, ports []PortMapping, domains []string, rateLimit int, clientIP string, basicAuth string) (string, []string, error) {
+func (r *Registry) Register(subdomainPrefix string, ports []PortMapping, domains []string, rateLimit int, clientIP string, basicAuth string, addedHeaders map[string]string) (string, []string, error) {
 	r.Lock()
 	defer r.Unlock()
 
@@ -190,6 +191,7 @@ func (r *Registry) Register(subdomainPrefix string, ports []PortMapping, domains
 				RateLimit:       rateLimit,
 				ClientIP:        clientIP,
 				BasicAuth:       basicAuth,
+				AddedHeaders:    addedHeaders,
 				Status:          "up",
 				CreatedAt:       time.Now(),
 			}

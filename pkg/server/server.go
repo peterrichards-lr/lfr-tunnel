@@ -32,11 +32,12 @@ var adminHTML []byte
 
 // RegisterRequest represents the JSON request payload for registering a tunnel.
 type RegisterRequest struct {
-	SubdomainPrefix string        `json:"subdomain_prefix"`
-	Ports           []PortMapping `json:"ports"`
-	AuthToken       string        `json:"auth_token"`
-	RateLimit       int           `json:"rate_limit,omitempty"`
-	BasicAuth       string        `json:"basic_auth,omitempty"`
+	SubdomainPrefix string            `json:"subdomain_prefix"`
+	Ports           []PortMapping     `json:"ports"`
+	AuthToken       string            `json:"auth_token"`
+	RateLimit       int               `json:"rate_limit,omitempty"`
+	BasicAuth       string            `json:"basic_auth,omitempty"`
+	AddedHeaders    map[string]string `json:"added_headers,omitempty"`
 }
 
 // RegisterResponse represents the JSON response payload.
@@ -412,7 +413,7 @@ func (s *Server) handleRegister(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Register in registry
-	sessionToken, remotes, err := s.registry.Register(req.SubdomainPrefix, req.Ports, activeDomains, effectiveLimit, clientIP, req.BasicAuth)
+	sessionToken, remotes, err := s.registry.Register(req.SubdomainPrefix, req.Ports, activeDomains, effectiveLimit, clientIP, req.BasicAuth, req.AddedHeaders)
 	if err != nil {
 		w.WriteHeader(http.StatusConflict)
 		if err := json.NewEncoder(w).Encode(RegisterResponse{Status: "error", Error: err.Error()}); err != nil {

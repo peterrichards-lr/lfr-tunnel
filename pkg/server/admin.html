@@ -386,6 +386,7 @@
                                 <th>Subdomain</th>
                                 <th>Full Host</th>
                                 <th>Target Port</th>
+                                <th>Modifiers</th>
                                 <th>Client IP</th>
                                 <th>Status</th>
                                 <th>Connected At</th>
@@ -565,11 +566,19 @@
                             statusBadge = '<span class="badge" style="background:var(--danger)">Down</span>';
                         }
 
+                        let modifiersHtml = '<span style="color:var(--text-muted)">None</span>';
+                        if (l.added_headers && Object.keys(l.added_headers).length > 0) {
+                            const count = Object.keys(l.added_headers).length;
+                            const tooltipLines = Object.entries(l.added_headers).map(([k,v]) => `${k}: ${v}`).join('&#10;');
+                            modifiersHtml = `<span class="badge" title="${tooltipLines}" style="background:var(--primary); cursor:help">${count} Headers</span>`;
+                        }
+
                         tbody.innerHTML += `
                             <tr>
                                 <td>${l.subdomain_prefix}</td>
                                 <td><a href="https://${l.full_host}" target="_blank" style="color:var(--primary)">${l.full_host}</a></td>
                                 <td>${l.target_port}</td>
+                                <td>${modifiersHtml}</td>
                                 <td style="font-family: monospace;">${l.client_ip || 'N/A'}</td>
                                 <td>${statusBadge}</td>
                                 <td>${new Date(l.created_at).toLocaleString()}</td>

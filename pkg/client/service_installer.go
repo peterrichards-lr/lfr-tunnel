@@ -106,9 +106,9 @@ WantedBy=default.target
 	}
 
 	// Enable and start
-	exec.Command("systemctl", "--user", "daemon-reload").Run()
-	exec.Command("systemctl", "--user", "enable", "lfr-tunnel.service").Run()
-	exec.Command("systemctl", "--user", "start", "lfr-tunnel.service").Run()
+	_ = exec.Command("systemctl", "--user", "daemon-reload").Run()
+	_ = exec.Command("systemctl", "--user", "enable", "lfr-tunnel.service").Run()
+	_ = exec.Command("systemctl", "--user", "start", "lfr-tunnel.service").Run()
 
 	fmt.Printf("[Success] Installed Linux systemd user service to %s\n", servicePath)
 	fmt.Printf("[Success] lfr-tunnel will now start automatically in the background on login.\n")

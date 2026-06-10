@@ -95,7 +95,10 @@ func (e *InterceptorEngine) StartHealthChecks(serverURL, sessionToken string, ta
 					"session_token": sessionToken,
 					"status":        newStatus,
 				})
-				http.Post(fmt.Sprintf("%s/api/tunnel-status", serverURL), "application/json", bytes.NewBuffer(payload))
+				resp, err := http.Post(fmt.Sprintf("%s/api/tunnel-status", serverURL), "application/json", bytes.NewBuffer(payload))
+				if err == nil {
+					_ = resp.Body.Close()
+				}
 			}
 		}
 	}()
@@ -235,7 +238,7 @@ func (t *interceptorTransport) RoundTrip(req *http.Request) (*http.Response, err
 func serveMaintenancePage(w http.ResponseWriter) {
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
 	w.WriteHeader(http.StatusServiceUnavailable)
-	w.Write([]byte(`
+	_, _ = w.Write([]byte(`
 	<!DOCTYPE html>
 	<html>
 	<head>

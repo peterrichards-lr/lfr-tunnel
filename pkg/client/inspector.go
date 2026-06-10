@@ -21,7 +21,7 @@ func StartInspector(port int, engine *InterceptorEngine) {
 			return
 		}
 		w.Header().Set("Content-Type", "text/html; charset=utf-8")
-		w.Write(inspectorHTML)
+		_, _ = w.Write(inspectorHTML)
 	})
 
 	mux.HandleFunc("/api/state", func(w http.ResponseWriter, r *http.Request) {
@@ -35,7 +35,7 @@ func StartInspector(port int, engine *InterceptorEngine) {
 		}
 
 		w.Header().Set("Content-Type", "application/json")
-		json.NewEncoder(w).Encode(state)
+		_ = json.NewEncoder(w).Encode(state)
 	})
 
 	mux.HandleFunc("/api/maintenance", func(w http.ResponseWriter, r *http.Request) {

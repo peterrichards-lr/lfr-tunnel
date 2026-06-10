@@ -20,7 +20,7 @@ func TestInterceptorEngine_HeaderInjection(t *testing.T) {
 			t.Errorf("Expected X-Injected header to be 'true'")
 		}
 		w.WriteHeader(http.StatusOK)
-		w.Write([]byte("Target Response"))
+		_, _ = w.Write([]byte("Target Response"))
 	}))
 	defer targetServer.Close()
 

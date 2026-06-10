@@ -345,6 +345,7 @@
             <div class="nav-link" onclick="switchView('leases')">Active Tunnels</div>
             <div class="nav-link" onclick="switchView('blacklist')">IP Blacklist</div>
             <div class="nav-link" onclick="switchView('audit')">Audit Log</div>
+            <div class="nav-link" onclick="switchView('settings')">Settings</div>
             <div style="flex:1"></div>
             <button class="logout-btn" onclick="logout()">Logout</button>
         </sidebar>
@@ -449,6 +450,36 @@
                     </table>
                 </div>
             </div>
+
+            <!-- Settings View -->
+            <div id="view-settings" class="view-section">
+                <div class="header">
+                    <h2>Admin Settings</h2>
+                </div>
+                <div class="glass" style="padding: 20px;">
+                    <h3>Email Alerts</h3>
+                    <p style="color: #94a3b8; font-size: 0.9em; margin-bottom: 20px;">Configure which system events trigger an email notification to the administrators.</p>
+                    <div style="margin-bottom: 15px;">
+                        <label style="display:flex; align-items:center; gap: 10px; cursor: pointer;">
+                            <input type="checkbox" id="setting-notify-reg">
+                            <span>Notify on New User Registration</span>
+                        </label>
+                    </div>
+                    <div style="margin-bottom: 15px;">
+                        <label style="display:flex; align-items:center; gap: 10px; cursor: pointer;">
+                            <input type="checkbox" id="setting-notify-ban">
+                            <span>Notify on DDOS IP Auto-Ban</span>
+                        </label>
+                    </div>
+                    <div style="margin-bottom: 25px;">
+                        <label style="display:flex; align-items:center; gap: 10px; cursor: pointer;">
+                            <input type="checkbox" id="setting-notify-offline">
+                            <span>Notify when a Tunnel goes Offline</span>
+                        </label>
+                    </div>
+                    <button onclick="saveSettings()">Save Configuration</button>
+                </div>
+            </div>
         </main>
     </div>
 
@@ -506,7 +537,11 @@
             document.querySelectorAll('.view-section').forEach(el => el.classList.remove('active'));
             document.getElementById('view-' + viewId).classList.add('active');
             
-            loadData(viewId);
+            if (viewId === 'users') loadUsers();
+            if (viewId === 'leases') loadLeases();
+            if (viewId === 'audit') loadAudit();
+            if (viewId === 'blacklist') loadBlacklist();
+            if (viewId === 'settings') loadSettings();
         }
 
         async function fetchAPI(endpoint, options = {}) {
@@ -531,94 +566,106 @@
 
         async function loadData(viewId) {
             try {
-                if (viewId === 'users') {
-                    const users = await fetchAPI('/api/admin/users');
-                    const tbody = document.getElementById('users-tbody');
-                    tbody.innerHTML = '';
-                    users.forEach(u => {
-                        let actions = '';
-                        if (u.status === 'pending') {
-                            actions = `<button class="small" onclick="patchUser('${u.email}', 'approved', '${u.role}')">Approve</button>`;
-                        } else if (u.status === 'approved') {
-                            actions = `<button class="small danger" onclick="patchUser('${u.email}', 'revoked', '${u.role}')">Revoke</button>`;
-                        }
-                        
-                        tbody.innerHTML += `
-                            <tr>
-                                <td>${u.email}</td>
-                                <td>${u.first_name} ${u.last_name}</td>
-                                <td><span class="badge ${u.role === 'admin' ? 'admin' : ''}">${u.role}</span></td>
-                                <td><span class="badge ${u.status}">${u.status}</span></td>
-                                <td>${new Date(u.created_at).toLocaleString()}</td>
-                                <td>${actions}</td>
-                            </tr>
-                        `;
-                    });
-                } else if (viewId === 'leases') {
-                    const leases = await fetchAPI('/api/admin/leases');
-                    const tbody = document.getElementById('leases-tbody');
-                    tbody.innerHTML = '';
-                    leases.forEach(l => {
-                        let statusBadge = '<span class="badge" style="background:var(--success)">Up</span>';
-                        if (l.status === 'maintenance') {
-                            statusBadge = '<span class="badge" style="background:var(--warning)">Maintenance</span>';
-                        } else if (l.status === 'down') {
-                            statusBadge = '<span class="badge" style="background:var(--danger)">Down</span>';
-                        }
-
-                        let modifiersHtml = '<span style="color:var(--text-muted)">None</span>';
-                        if (l.added_headers && Object.keys(l.added_headers).length > 0) {
-                            const count = Object.keys(l.added_headers).length;
-                            const tooltipLines = Object.entries(l.added_headers).map(([k,v]) => `${k}: ${v}`).join('&#10;');
-                            modifiersHtml = `<span class="badge" title="${tooltipLines}" style="background:var(--primary); cursor:help">${count} Headers</span>`;
-                        }
-
-                        tbody.innerHTML += `
-                            <tr>
-                                <td>${l.subdomain_prefix}</td>
-                                <td><a href="https://${l.full_host}" target="_blank" style="color:var(--primary)">${l.full_host}</a></td>
-                                <td>${l.target_port}</td>
-                                <td>${modifiersHtml}</td>
-                                <td style="font-family: monospace;">${l.client_ip || 'N/A'}</td>
-                                <td>${statusBadge}</td>
-                                <td>${new Date(l.created_at).toLocaleString()}</td>
-                                <td><button class="small danger" onclick="kickLease('${l.full_host}')">Kick</button></td>
-                            </tr>
-                        `;
-                    });
-                } else if (viewId === 'blacklist') {
-                    const list = await fetchAPI('/api/admin/blacklist');
-                    const tbody = document.getElementById('blacklist-tbody');
-                    tbody.innerHTML = '';
-                    list.forEach(b => {
-                        tbody.innerHTML += `
-                            <tr>
-                                <td style="font-family: monospace;">${b.ip_address}</td>
-                                <td>${b.reason}</td>
-                                <td>${new Date(b.created_at).toLocaleString()}</td>
-                                <td><button class="small danger" onclick="removeBlacklist('${b.ip_address}')">Unban</button></td>
-                            </tr>
-                        `;
-                    });
-                } else if (viewId === 'audit') {
-                    const logs = await fetchAPI('/api/admin/audit?limit=50');
-                    const tbody = document.getElementById('audit-tbody');
-                    tbody.innerHTML = '';
-                    logs.forEach(l => {
-                        tbody.innerHTML += `
-                            <tr>
-                                <td style="color:var(--text-muted)">${new Date(l.created_at).toLocaleString()}</td>
-                                <td>${l.actor_id}</td>
-                                <td style="font-family:monospace; color:var(--primary)">${l.action}</td>
-                                <td>${l.target_type}</td>
-                                <td>${l.target_id}</td>
-                            </tr>
-                        `;
-                    });
-                }
+                if (viewId === 'users') loadUsers();
+                else if (viewId === 'leases') loadLeases();
+                else if (viewId === 'blacklist') loadBlacklist();
+                else if (viewId === 'audit') loadAudit();
+                else if (viewId === 'settings') loadSettings();
             } catch (err) {
                 if(err.message !== "Unauthorized") showToast(err.message, true);
             }
+        }
+
+        async function loadUsers() {
+            const users = await fetchAPI('/api/admin/users');
+            const tbody = document.getElementById('users-tbody');
+            tbody.innerHTML = '';
+            users.forEach(u => {
+                let actions = '';
+                if (u.status === 'pending') {
+                    actions = `<button class="small" onclick="patchUser('${u.email}', 'approved', '${u.role}')">Approve</button>`;
+                } else if (u.status === 'approved') {
+                    actions = `<button class="small danger" onclick="patchUser('${u.email}', 'revoked', '${u.role}')">Revoke</button>`;
+                }
+                
+                tbody.innerHTML += `
+                    <tr>
+                        <td>${u.email}</td>
+                        <td>${u.first_name} ${u.last_name}</td>
+                        <td><span class="badge ${u.role === 'admin' ? 'admin' : ''}">${u.role}</span></td>
+                        <td><span class="badge ${u.status}">${u.status}</span></td>
+                        <td>${new Date(u.created_at).toLocaleString()}</td>
+                        <td>${actions}</td>
+                    </tr>
+                `;
+            });
+        }
+
+        async function loadLeases() {
+            const leases = await fetchAPI('/api/admin/leases');
+            const tbody = document.getElementById('leases-tbody');
+            tbody.innerHTML = '';
+            leases.forEach(l => {
+                let statusBadge = '<span class="badge" style="background:var(--success)">Up</span>';
+                if (l.status === 'maintenance') {
+                    statusBadge = '<span class="badge" style="background:var(--warning)">Maintenance</span>';
+                } else if (l.status === 'down') {
+                    statusBadge = '<span class="badge" style="background:var(--danger)">Down</span>';
+                }
+
+                let modifiersHtml = '<span style="color:var(--text-muted)">None</span>';
+                if (l.added_headers && Object.keys(l.added_headers).length > 0) {
+                    const count = Object.keys(l.added_headers).length;
+                    const tooltipLines = Object.entries(l.added_headers).map(([k,v]) => `${k}: ${v}`).join('&#10;');
+                    modifiersHtml = `<span class="badge" title="${tooltipLines}" style="background:var(--primary); cursor:help">${count} Headers</span>`;
+                }
+
+                tbody.innerHTML += `
+                    <tr>
+                        <td>${l.subdomain_prefix}</td>
+                        <td><a href="https://${l.full_host}" target="_blank" style="color:var(--primary)">${l.full_host}</a></td>
+                        <td>${l.target_port}</td>
+                        <td>${modifiersHtml}</td>
+                        <td style="font-family: monospace;">${l.client_ip || 'N/A'}</td>
+                        <td>${statusBadge}</td>
+                        <td>${new Date(l.created_at).toLocaleString()}</td>
+                        <td><button class="small danger" onclick="kickLease('${l.full_host}')">Kick</button></td>
+                    </tr>
+                `;
+            });
+        }
+
+        async function loadBlacklist() {
+            const list = await fetchAPI('/api/admin/blacklist');
+            const tbody = document.getElementById('blacklist-tbody');
+            tbody.innerHTML = '';
+            list.forEach(b => {
+                tbody.innerHTML += `
+                    <tr>
+                        <td style="font-family: monospace;">${b.ip_address}</td>
+                        <td>${b.reason}</td>
+                        <td>${new Date(b.created_at).toLocaleString()}</td>
+                        <td><button class="small danger" onclick="removeBlacklist('${b.ip_address}')">Unban</button></td>
+                    </tr>
+                `;
+            });
+        }
+
+        async function loadAudit() {
+            const logs = await fetchAPI('/api/admin/audit?limit=50');
+            const tbody = document.getElementById('audit-tbody');
+            tbody.innerHTML = '';
+            logs.forEach(l => {
+                tbody.innerHTML += `
+                    <tr>
+                        <td style="color:var(--text-muted)">${new Date(l.created_at).toLocaleString()}</td>
+                        <td>${l.actor_id}</td>
+                        <td style="font-family:monospace; color:var(--primary)">${l.action}</td>
+                        <td>${l.target_type}</td>
+                        <td>${l.target_id}</td>
+                    </tr>
+                `;
+            });
         }
 
         async function patchUser(email, status, role) {
@@ -639,7 +686,39 @@
                 await fetchAPI('/api/admin/leases/' + encodeURIComponent(host), { method: 'DELETE' });
                 showToast("Tunnel kicked");
                 loadData('leases');
-            } catch(e) { showToast(e.message, true); }
+            } catch (err) {
+                console.error(err);
+            }
+        }
+
+        async function loadSettings() {
+            try {
+                const data = await fetchAPI('/api/admin/settings');
+                if (data) {
+                    document.getElementById('setting-notify-reg').checked = data.alert_notify_registration === 'true';
+                    document.getElementById('setting-notify-ban').checked = data.alert_notify_blacklist === 'true';
+                    document.getElementById('setting-notify-offline').checked = data.alert_notify_tunnel_offline === 'true';
+                }
+            } catch (err) {
+                console.error(err);
+            }
+        }
+
+        async function saveSettings() {
+            try {
+                const payload = {
+                    alert_notify_registration: document.getElementById('setting-notify-reg').checked ? 'true' : 'false',
+                    alert_notify_blacklist: document.getElementById('setting-notify-ban').checked ? 'true' : 'false',
+                    alert_notify_tunnel_offline: document.getElementById('setting-notify-offline').checked ? 'true' : 'false',
+                };
+                await fetchAPI('/api/admin/settings', {
+                    method: 'POST',
+                    body: JSON.stringify(payload)
+                });
+                showToast("Settings saved successfully.");
+            } catch (err) {
+                console.error(err);
+            }
         }
 
         async function addBlacklist() {

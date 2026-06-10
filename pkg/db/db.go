@@ -151,11 +151,40 @@ func (db *DB) initSchema() error {
 
 	CREATE TABLE IF NOT EXISTS ip_blacklist (
 		ip_address TEXT PRIMARY KEY,
-		reason TEXT,
+		reason     TEXT NOT NULL,
 		created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
-	);`
+	);
+
+	CREATE TABLE IF NOT EXISTS admin_settings (
+		key   TEXT PRIMARY KEY,
+		value TEXT NOT NULL
+	);
+	`
 
 	_, err := db.conn.Exec(schema)
+	return err
+}
+
+// GetAdminSetting retrieves a setting value by key. Returns empty string if not found.
+func (db *DB) GetAdminSetting(key string) (string, error) {
+	var value string
+	err := db.conn.QueryRow("SELECT value FROM admin_settings WHERE key = ?", key).Scan(&value)
+	if err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			return "", nil
+		}
+		return "", err
+	}
+	return value, nil
+}
+
+// SetAdminSetting updates or inserts a setting.
+func (db *DB) SetAdminSetting(key, value string) error {
+	_, err := db.conn.Exec(`
+		INSERT INTO admin_settings (key, value)
+		VALUES (?, ?)
+		ON CONFLICT(key) DO UPDATE SET value = excluded.value
+	`, key, value)
 	return err
 }
 

@@ -204,5 +204,7 @@ Rather than passing the Chisel connection directly to the target local Liferay i
    Once Liferay SSO (OIDC) is integrated, the VPS Gateway will host a centralized web portal (e.g., `https://tunnel.lfr-demo.se/dashboard`) where authenticated Sales Engineers can manage their Long-Lived Developer Tokens, view their permanently reserved subdomains, and monitor their security status.
 2. **SSO Device Authorization Grant**:
    To support "headless" autostart via the `install-service` feature, the SSO integration will generate a long-lived Developer Token (e.g., 90 days) instead of short-lived session cookies, allowing seamless, persistent background connections.
+3. **Configurable Email Alerting Engine**:
+   Extend the existing SMTP service into an event-driven notification hub. The Admin Dashboard will gain a "Settings" page to toggle specific admin alerts (e.g., *DDOS Auto-Bans*, *New User Registrations*). Once the Cloud User Portal is built, SEs will gain a similar UI to subscribe to their own specific tunnel events (e.g., *Tunnel Offline* or *Maintenance Mode Activated*).
 
 ---

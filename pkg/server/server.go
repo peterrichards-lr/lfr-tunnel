@@ -251,8 +251,12 @@ func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 				s.blacklist.Store(ip, true)
 				if s.db != nil {
 					_ = s.db.AddBlacklistIP(ip, "Auto-banned by Rate Limiter for DDOS")
-					s.writeAudit("system", "system.auto_blacklisted", "ip", ip, "", r)
+					s.writeAudit("system", "ip.blacklisted", "ip", ip, "Auto-banned by Rate Limiter for DDOS", r)
+					s.sendAdminAlert("alert_notify_blacklist", "LFR Tunnel Alert: IP Auto-Banned", fmt.Sprintf("IP %s was auto-banned by the Rate Limiter for exceeding thresholds.", ip))
 				}
+
+				http.Error(w, "Forbidden", http.StatusForbidden)
+				return
 			}
 
 			http.Error(w, "Too Many Requests", http.StatusTooManyRequests)
@@ -445,6 +449,9 @@ func (s *Server) handleTunnelStatus(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if s.registry.UpdateLeaseStatus(req.SessionToken, req.Status) {
+		if req.Status == "down" {
+			s.sendAdminAlert("alert_notify_tunnel_offline", "LFR Tunnel Alert: Tunnel Offline", "A client tunnel has reported its status as offline/down.")
+		}
 		w.WriteHeader(http.StatusOK)
 	} else {
 		http.Error(w, "session not found", http.StatusNotFound)
@@ -644,9 +651,9 @@ func (s *Server) handleRegisterRequest(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if s.db != nil {
-		s.writeAudit(user.Email, "user.registered", "user", user.Email, "", r)
-	}
+	_ = s.db.CreateUser(user)
+	s.writeAudit(user.Email, "user.registered", "user", user.Email, "", r)
+	s.sendAdminAlert("alert_notify_registration", "LFR Tunnel Alert: New User Registration", fmt.Sprintf("A new user (%s) has registered and requires approval.", user.Email))
 
 	// Send notification email to Admin if mail client is active
 	if s.mailSender != nil && s.cfg.AdminNotificationEmail != "" {
@@ -1012,6 +1019,11 @@ func (s *Server) handleAdminEndpoints(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	if strings.HasPrefix(r.URL.Path, "/api/admin/settings") {
+		s.handleAdminSettings(w, r, actor)
+		return
+	}
+
 	http.NotFound(w, r)
 }
 
@@ -1266,11 +1278,12 @@ func (s *Server) handleAdminBlacklist(w http.ResponseWriter, r *http.Request, ac
 		}
 
 		if err := s.db.AddBlacklistIP(payload.IPAddress, payload.Reason); err != nil {
-			http.Error(w, `{"error":"Failed to blacklist IP"}`, http.StatusInternalServerError)
+			http.Error(w, `{"error":"Failed to add IP to blacklist"}`, http.StatusInternalServerError)
 			return
 		}
 		s.blacklist.Store(payload.IPAddress, true)
 		s.writeAudit(actor, "ip.blacklisted", "ip", payload.IPAddress, payload.Reason, r)
+		s.sendAdminAlert("alert_notify_blacklist", "LFR Tunnel Alert: IP Banned", fmt.Sprintf("IP %s was manually banned by admin %s.", payload.IPAddress, actor))
 		_ = json.NewEncoder(w).Encode(map[string]string{"status": "success"})
 		return
 	}
@@ -1292,4 +1305,85 @@ func (s *Server) handleAdminBlacklist(w http.ResponseWriter, r *http.Request, ac
 	}
 
 	http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+}
+
+func (s *Server) handleAdminSettings(w http.ResponseWriter, r *http.Request, actor string) {
+	if s.db == nil {
+		http.Error(w, `{"error":"Database not configured"}`, http.StatusNotImplemented)
+		return
+	}
+
+	if r.Method == http.MethodGet {
+		// Fetch settings
+		notifyReg, _ := s.db.GetAdminSetting("alert_notify_registration")
+		notifyBan, _ := s.db.GetAdminSetting("alert_notify_blacklist")
+		notifyOffline, _ := s.db.GetAdminSetting("alert_notify_tunnel_offline")
+
+		// Default to true for critical security alerts if not set
+		if notifyReg == "" {
+			notifyReg = "true"
+		}
+		if notifyBan == "" {
+			notifyBan = "true"
+		}
+		if notifyOffline == "" {
+			notifyOffline = "false"
+		}
+
+		_ = json.NewEncoder(w).Encode(map[string]string{
+			"alert_notify_registration":   notifyReg,
+			"alert_notify_blacklist":      notifyBan,
+			"alert_notify_tunnel_offline": notifyOffline,
+		})
+		return
+	}
+
+	if r.Method == http.MethodPost {
+		var payload map[string]string
+		if err := json.NewDecoder(r.Body).Decode(&payload); err != nil {
+			http.Error(w, `{"error":"Invalid request payload"}`, http.StatusBadRequest)
+			return
+		}
+
+		for key, value := range payload {
+			// Validate keys to prevent spamming db
+			if key == "alert_notify_registration" || key == "alert_notify_blacklist" || key == "alert_notify_tunnel_offline" {
+				if err := s.db.SetAdminSetting(key, value); err != nil {
+					log.Printf("[Admin] Failed to save setting %s: %v", key, err)
+				}
+			}
+		}
+
+		s.writeAudit(actor, "admin.settings_updated", "system", "email_alerts", "Admin updated email alert configuration", r)
+		_ = json.NewEncoder(w).Encode(map[string]string{"message": "Settings updated"})
+		return
+	}
+
+	http.Error(w, `{"error":"Method not allowed"}`, http.StatusMethodNotAllowed)
+}
+
+func (s *Server) sendAdminAlert(settingKey, subject, htmlBody string) {
+	if s.db == nil || s.mailSender == nil || s.cfg.AdminNotificationEmail == "" {
+		return
+	}
+
+	val, err := s.db.GetAdminSetting(settingKey)
+	if err != nil {
+		log.Printf("[Warning] Failed to fetch admin setting %s: %v", settingKey, err)
+		return
+	}
+
+	// Default true for "alert_notify_registration" and "alert_notify_blacklist"
+	if val == "false" {
+		return
+	}
+	if val == "" && settingKey == "alert_notify_tunnel_offline" {
+		return // default false
+	}
+
+	go func() {
+		if err := s.mailSender.Send(s.cfg.AdminNotificationEmail, subject, htmlBody); err != nil {
+			log.Printf("[Mail] Failed to send admin alert %s: %v", settingKey, err)
+		}
+	}()
 }

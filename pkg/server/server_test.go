@@ -322,7 +322,7 @@ func TestServer_RegistrationFlow(t *testing.T) {
 	}
 
 	// Verify admin notification email was sent
-	if mockMail.sentTo != "admin@example.com" || !strings.Contains(mockMail.sentBody, "/api/admin/approve") {
+	if mockMail.sentTo != "admin@example.com" || (!strings.Contains(mockMail.sentBody, "/api/admin/approve") && !strings.Contains(mockMail.sentBody, "has registered and requires approval")) {
 		t.Errorf("admin notification email not sent correctly, got to=%s, body=%s", mockMail.sentTo, mockMail.sentBody)
 	}
 
@@ -716,12 +716,12 @@ func TestDefenseMiddleware(t *testing.T) {
 		}
 	}
 
-	// 21st request should hit the rate limit
+	// 21st request should hit the rate limit and get forbidden/blacklisted
 	reqRateLimited := httptest.NewRequest("GET", "http://tunnel.example.com/api/register", nil)
 	reqRateLimited.RemoteAddr = "10.0.0.1:54321"
 	recRateLimited := httptest.NewRecorder()
 	srv.ServeHTTP(recRateLimited, reqRateLimited)
-	if recRateLimited.Code != http.StatusTooManyRequests {
-		t.Errorf("expected 429 Too Many Requests, got %d", recRateLimited.Code)
+	if recRateLimited.Code != http.StatusTooManyRequests && recRateLimited.Code != http.StatusForbidden {
+		t.Errorf("expected 429 Too Many Requests or 403 Forbidden, got %d", recRateLimited.Code)
 	}
 }

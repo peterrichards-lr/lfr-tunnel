@@ -122,7 +122,7 @@ func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		// Render a simple gateway landing page
 		w.Header().Set("Content-Type", "text/html; charset=utf-8")
 		w.WriteHeader(http.StatusOK)
-		w.Write([]byte(`
+		if _, err := w.Write([]byte(`
 			<!DOCTYPE html>
 			<html>
 			<head>
@@ -137,7 +137,9 @@ func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 				<p>The gateway is online and running.</p>
 			</body>
 			</html>
-		`))
+		`)); err != nil {
+			log.Printf("[Server] Failed to write landing page: %v", err)
+		}
 		return
 	}
 
@@ -152,14 +154,18 @@ func (s *Server) handleRegister(w http.ResponseWriter, r *http.Request) {
 	var req RegisterRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 		w.WriteHeader(http.StatusBadRequest)
-		json.NewEncoder(w).Encode(RegisterResponse{Status: "error", Error: "invalid JSON payload"})
+		if err := json.NewEncoder(w).Encode(RegisterResponse{Status: "error", Error: "invalid JSON payload"}); err != nil {
+			log.Printf("[Server] Failed to encode register error response: %v", err)
+		}
 		return
 	}
 
 	// Validate auth token
 	if s.cfg.AuthToken != "" && req.AuthToken != s.cfg.AuthToken {
 		w.WriteHeader(http.StatusUnauthorized)
-		json.NewEncoder(w).Encode(RegisterResponse{Status: "error", Error: "unauthorized"})
+		if err := json.NewEncoder(w).Encode(RegisterResponse{Status: "error", Error: "unauthorized"}); err != nil {
+			log.Printf("[Server] Failed to encode unauthorized response: %v", err)
+		}
 		return
 	}
 
@@ -180,16 +186,20 @@ func (s *Server) handleRegister(w http.ResponseWriter, r *http.Request) {
 	sessionToken, remotes, err := s.registry.Register(req.SubdomainPrefix, req.Ports, activeDomains)
 	if err != nil {
 		w.WriteHeader(http.StatusConflict)
-		json.NewEncoder(w).Encode(RegisterResponse{Status: "error", Error: err.Error()})
+		if err := json.NewEncoder(w).Encode(RegisterResponse{Status: "error", Error: err.Error()}); err != nil {
+			log.Printf("[Server] Failed to encode conflict response: %v", err)
+		}
 		return
 	}
 
 	w.WriteHeader(http.StatusOK)
-	json.NewEncoder(w).Encode(RegisterResponse{
+	if err := json.NewEncoder(w).Encode(RegisterResponse{
 		Status:       "success",
 		SessionToken: sessionToken,
 		Remotes:      remotes,
-	})
+	}); err != nil {
+		log.Printf("[Server] Failed to encode success response: %v", err)
+	}
 }
 
 // Start kicks off the background processes and listens for gateway traffic.

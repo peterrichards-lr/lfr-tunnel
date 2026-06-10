@@ -40,6 +40,7 @@ The solution will consist of:
 - [x] Fix CI build failures (errcheck linting errors).
 - [ ] Move DNS files to a dedicated `docs/dns/` directory.
 - [ ] Document / set up GitHub branch protection rulesets.
+- [ ] Upgrade dependencies to patch Dependabot vulnerability alerts.
 - [x] Update DNS records (DNS resolved to new IP `82.39.133.178`).
 - [ ] Test SSH and connect to the VPS with the new IP.
 

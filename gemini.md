@@ -61,7 +61,7 @@ The solution will consist of:
 - [x] Add detailed runtime usage examples (LDM, Tomcat bundle, Docker container) to README.md.
 - [x] Verify formatting and contents of documentation.
 - [x] Design OAuth2/Liferay SSO authentication and per-user token management architecture.
-- [ ] Implement user token database storage with expiration/revocation capabilities on the server.
+- [x] Implement user token database storage with expiration/revocation capabilities on the server.
 - [ ] Implement Administrative static developer token provisioning and configuration file storage.
 - [ ] Implement CLI integration (`lfr-tunnel login`) for OIDC token exchanges.
 - [ ] Create server-side administrative control endpoints for user promotion and token management.

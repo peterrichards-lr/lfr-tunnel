@@ -48,4 +48,5 @@ The solution will consist of:
 - [x] Test SSH and connect to the VPS with the new IP.
 - [x] Document supported domains constraint (lfr-demo.se and lfr-demo.online) in README.md and architecture.md.
 - [x] Document support for LDM, native Tomcat bundles, and Docker runtimes in README.md.
+- [x] Create a Makefile for developer commands (fmt, vet, test, build).
 

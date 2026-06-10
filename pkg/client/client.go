@@ -165,7 +165,7 @@ func RegisterTunnel(serverURL string, authToken string, subdomain string, ports 
 }
 
 // RunClient runs the embedded Chisel client.
-func RunClient(ctx context.Context, serverURL string, token string, remotes []string) error {
+func RunClient(ctx context.Context, serverURL string, token string, remotes []string, publicURLs []string) error {
 	// Rewrite remotes if target host override is set (useful for Docker containerized environments)
 	targetHost := os.Getenv("LFT_TARGET_HOST")
 	if targetHost != "" {
@@ -205,6 +205,20 @@ func RunClient(ctx context.Context, serverURL string, token string, remotes []st
 	if err := c.Start(ctx); err != nil {
 		return fmt.Errorf("chisel client error: %v", err)
 	}
+
+	// Print a clean, auto-clickable URL block after connection log sequence
+	go func() {
+		time.Sleep(500 * time.Millisecond)
+		if ctx.Err() == nil {
+			log.Println("[Client] ========================================================")
+			log.Println("[Client] Tunnel is active and fully online!")
+			log.Println("[Client] You can access your local environment at:")
+			for _, u := range publicURLs {
+				log.Printf("  %s", u)
+			}
+			log.Println("[Client] ========================================================")
+		}
+	}()
 
 	// 5. Block until context done or wait error
 	return c.Wait()

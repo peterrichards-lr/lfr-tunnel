@@ -116,6 +116,7 @@ func main() {
 		log.Fatalf("[Client] Registration failed: %v", err)
 	}
 
+	var publicURLs []string
 	log.Println("[Client] Registration successful! Your public tunnel URLs are:")
 	for _, domain := range regResp.Domains {
 		for _, pm := range portMappings {
@@ -125,7 +126,9 @@ func main() {
 			} else {
 				fullSubdomain = fmt.Sprintf("%s-%s", sub, pm.NameSuffix)
 			}
-			log.Printf("  https://%s.%s -> local port %d", fullSubdomain, domain, pm.LocalPort)
+			urlStr := fmt.Sprintf("https://%s.%s", fullSubdomain, domain)
+			publicURLs = append(publicURLs, urlStr)
+			log.Printf("  %s -> local port %d", urlStr, pm.LocalPort)
 		}
 	}
 
@@ -141,7 +144,7 @@ func main() {
 		cancel()
 	}()
 
-	if err := client.RunClient(ctx, cfg.ServerURL, regResp.SessionToken, regResp.Remotes); err != nil && ctx.Err() == nil {
+	if err := client.RunClient(ctx, cfg.ServerURL, regResp.SessionToken, regResp.Remotes, publicURLs); err != nil && ctx.Err() == nil {
 		log.Fatalf("[Client] Tunnel disconnected with error: %v", err)
 	}
 	log.Println("[Client] Tunnel shutdown completed.")

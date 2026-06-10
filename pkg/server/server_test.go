@@ -450,3 +450,76 @@ func TestServer_StaticTokenProvisioning(t *testing.T) {
 		t.Errorf("expected 200 OK after restart, got %d", registerRec2.Code)
 	}
 }
+
+func TestServer_DomainSeparation(t *testing.T) {
+	cfg := &config.ServerConfig{
+		Domain1:   "example.se",
+		Domain2:   "example.online",
+		AuthToken: "mysecret",
+	}
+
+	srv, err := NewServer(cfg)
+	if err != nil {
+		t.Fatalf("failed to create server: %v", err)
+	}
+	defer srv.Stop()
+
+	// 1. Register with Host example.se
+	payload, _ := json.Marshal(RegisterRequest{
+		SubdomainPrefix: "peter-dev",
+		Ports:           []PortMapping{{LocalPort: 8080}},
+		AuthToken:       "mysecret",
+	})
+	req := httptest.NewRequest("POST", "http://tunnel.example.se/api/register", bytes.NewReader(payload))
+	req.Host = "tunnel.example.se"
+	rec := httptest.NewRecorder()
+
+	srv.ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusOK {
+		t.Fatalf("expected 200 OK, got %d", rec.Code)
+	}
+
+	var resp RegisterResponse
+	if err := json.NewDecoder(rec.Body).Decode(&resp); err != nil {
+		t.Fatalf("failed to decode response: %v", err)
+	}
+
+	if len(resp.Domains) != 1 || resp.Domains[0] != "example.se" {
+		t.Errorf("expected registered domains to be [example.se], got %v", resp.Domains)
+	}
+
+	// Verify the lease in registry exists only for example.se
+	if _, exists := srv.registry.leases["peter-dev.example.se"]; !exists {
+		t.Error("expected lease for peter-dev.example.se to exist")
+	}
+	if _, exists := srv.registry.leases["peter-dev.example.online"]; exists {
+		t.Error("expected lease for peter-dev.example.online to NOT exist")
+	}
+
+	// 2. Check subdomain availability using Host header
+	// Checking peter-dev on example.se should say unavailable
+	reqCheck1 := httptest.NewRequest("GET", "http://tunnel.example.se/api/check-subdomain?subdomain=peter-dev&token=mysecret", nil)
+	reqCheck1.Host = "tunnel.example.se"
+	recCheck1 := httptest.NewRecorder()
+	srv.ServeHTTP(recCheck1, reqCheck1)
+
+	var respCheck1 CheckSubdomainResponse
+	json.NewDecoder(recCheck1.Body).Decode(&respCheck1)
+	if respCheck1.Available {
+		t.Error("expected peter-dev.example.se to be unavailable")
+	}
+
+	// Checking peter-dev on example.online should say available
+	reqCheck2 := httptest.NewRequest("GET", "http://tunnel.example.online/api/check-subdomain?subdomain=peter-dev&token=mysecret", nil)
+	reqCheck2.Host = "tunnel.example.online"
+	recCheck2 := httptest.NewRecorder()
+	srv.ServeHTTP(recCheck2, reqCheck2)
+
+	var respCheck2 CheckSubdomainResponse
+	json.NewDecoder(recCheck2.Body).Decode(&respCheck2)
+	if !respCheck2.Available {
+		t.Error("expected peter-dev.example.online to be available")
+	}
+}
+

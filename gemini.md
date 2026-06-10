@@ -86,6 +86,10 @@ The solution will consist of:
 - [x] Create GitHub rulesets documentation (docs/github/) and defer remote application due to GitHub Free private repository limitation.
 - [x] Implement client-side token loading from home directory file (~/.lfr-tunnel/token or LFT_TOKEN_FILE).
 - [x] Add clean target to Makefile and make build depend on clean.
+- [x] Implement domain-specific registration and subdomain checking to keep domain1 and domain2 separate.
+- [x] Print the clickable public URLs at the end of client connection setup.
+
+
 
 
 

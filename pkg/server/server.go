@@ -320,18 +320,8 @@ func (s *Server) handleRegister(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Determine active domains to register
-	var activeDomains []string
-	if s.cfg.Domain1 != "" {
-		activeDomains = append(activeDomains, s.cfg.Domain1)
-	}
-	if s.cfg.Domain2 != "" {
-		activeDomains = append(activeDomains, s.cfg.Domain2)
-	}
-	if len(activeDomains) == 0 {
-		// Fallback for local testing
-		activeDomains = append(activeDomains, "localhost")
-	}
+	// Determine active domains to register dynamically based on request Host
+	activeDomains := s.getActiveDomainsForRequest(r)
 
 	// Register in registry
 	sessionToken, remotes, err := s.registry.Register(req.SubdomainPrefix, req.Ports, activeDomains)
@@ -408,16 +398,8 @@ func (s *Server) handleCheckSubdomain(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	var activeDomains []string
-	if s.cfg.Domain1 != "" {
-		activeDomains = append(activeDomains, s.cfg.Domain1)
-	}
-	if s.cfg.Domain2 != "" {
-		activeDomains = append(activeDomains, s.cfg.Domain2)
-	}
-	if len(activeDomains) == 0 {
-		activeDomains = append(activeDomains, "localhost")
-	}
+	// Determine active domains to check dynamically based on request Host
+	activeDomains := s.getActiveDomainsForRequest(r)
 
 	available, reason := s.registry.CheckSubdomain(subdomain, activeDomains)
 	resp := CheckSubdomainResponse{
@@ -723,4 +705,38 @@ func (s *Server) Stop() {
 	if s.db != nil {
 		s.db.Close()
 	}
+}
+
+// getActiveDomainsForRequest extracts the requested root domain from the HTTP Host header.
+// It returns a slice with only the matched domain if the Host header matches Domain1 or Domain2,
+// keeping them independent. It falls back to all configured domains if no match is found.
+func (s *Server) getActiveDomainsForRequest(r *http.Request) []string {
+	host := r.Host
+	if h, _, err := net.SplitHostPort(host); err == nil {
+		host = h
+	}
+	host = strings.ToLower(host)
+
+	var matchedDomain string
+	if s.cfg.Domain1 != "" && (strings.Contains(host, strings.ToLower(s.cfg.Domain1)) || host == strings.ToLower(s.cfg.Domain1)) {
+		matchedDomain = s.cfg.Domain1
+	} else if s.cfg.Domain2 != "" && (strings.Contains(host, strings.ToLower(s.cfg.Domain2)) || host == strings.ToLower(s.cfg.Domain2)) {
+		matchedDomain = s.cfg.Domain2
+	}
+
+	if matchedDomain != "" {
+		return []string{matchedDomain}
+	}
+
+	var activeDomains []string
+	if s.cfg.Domain1 != "" {
+		activeDomains = append(activeDomains, s.cfg.Domain1)
+	}
+	if s.cfg.Domain2 != "" {
+		activeDomains = append(activeDomains, s.cfg.Domain2)
+	}
+	if len(activeDomains) == 0 {
+		activeDomains = append(activeDomains, "localhost")
+	}
+	return activeDomains
 }

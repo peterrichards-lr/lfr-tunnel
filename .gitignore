@@ -4,3 +4,11 @@ dist/
 
 # System Files
 .DS_Store
+
+# Configuration & Secrets
+.env
+client-config.yaml
+
+# Logs
+*.log
+

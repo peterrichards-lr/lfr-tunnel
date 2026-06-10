@@ -56,6 +56,8 @@ The solution will consist of:
 - [x] Implement server-side supported domains endpoint/response and client-side public URL printing.
 - [x] Implement client-side target host override (LFT_TARGET_HOST) and Dockerfile for containerized local execution.
 - [x] Fix WebSocket path routing by appending /tunnel to client and rewriting to / on server.
+- [x] Create cross-platform Docker wrapper scripts (Bash, Batch, PowerShell) for client run.
+
 
 
 

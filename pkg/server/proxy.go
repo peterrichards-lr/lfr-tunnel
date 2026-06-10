@@ -49,7 +49,7 @@ func (p *ProxyHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 
 			// Resolve client IP address
 			clientIP, _, _ := net.SplitHostPort(req.RemoteAddr)
-			
+
 			// Handle cases where RemoteAddr is not host:port (e.g. Unix socket, test context)
 			if clientIP == "" {
 				clientIP = req.RemoteAddr

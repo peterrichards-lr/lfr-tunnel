@@ -76,6 +76,7 @@ The solution will consist of:
 - [x] Move architecture.md to docs/ directory and update references.
 - [x] Fully quote all Mermaid diagram labels, nodes, and messages in auth_architecture.md to fix GitHub rendering.
 - [x] Replace real admin email address with dummy email in auth_architecture.md.
+- [ ] Purge real admin email from git history (files and commit authors). (In progress)
 
 
 

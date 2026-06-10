@@ -18,12 +18,27 @@ import (
 	"lfr-tunnel/pkg/config"
 )
 
+type arrayFlags []string
+
+func (i *arrayFlags) String() string {
+	return strings.Join(*i, ", ")
+}
+
+func (i *arrayFlags) Set(value string) error {
+	*i = append(*i, value)
+	return nil
+}
+
 func main() {
 	configPath := flag.String("config", "", "Path to client-config.yaml")
 	serverURL := flag.String("server", "", "Gateway server URL (e.g. https://tunnel.liferay.com)")
 	token := flag.String("token", "", "Gateway auth token")
 	subdomain := flag.String("subdomain", "", "Requested subdomain prefix (e.g. alpha-se)")
 	portsStr := flag.String("ports", "", "Comma-separated ports to expose (e.g. 8080,3000)")
+	basicAuth := flag.String("basic-auth", "", "Require HTTP Basic Auth (format: 'username:password')")
+	inspectorPort := flag.Int("inspector-port", 4040, "Local port for the Inspector Web UI")
+	var addHeaders arrayFlags
+	flag.Var(&addHeaders, "add-header", "Inject HTTP header (e.g. 'X-Bypass-CORS: true')")
 	rateLimit := flag.Int("rate-limit", 0, "Max requests per second for your subdomains (0 = unlimited)")
 	background := flag.Bool("background", false, "Run client in background")
 	status := flag.Bool("status", false, "Check status of the background tunnel")
@@ -84,6 +99,9 @@ func main() {
 	if *rateLimit > 0 {
 		cfg.RateLimit = *rateLimit
 	}
+	if *basicAuth != "" {
+		cfg.BasicAuth = *basicAuth
+	}
 
 	if *background {
 		handleBackground()
@@ -126,6 +144,10 @@ func main() {
 			portMappings = []client.PortMapping{{LocalPort: 8080}}
 		}
 	}
+
+	// Start Interceptor Engine
+	engine := client.NewInterceptorEngine(addHeaders)
+	client.StartInspector(*inspectorPort, engine)
 
 	// 4. Resolve subdomain prefix
 	sub := cfg.Subdomain
@@ -174,9 +196,21 @@ func main() {
 	if cfg.RateLimit > 0 {
 		fmt.Printf("[Client] Requested Subdomain Rate Limit: %d req/s\n", cfg.RateLimit)
 	}
-	regResp, err := client.RegisterTunnel(cfg.ServerURL, cfg.AuthToken, cfg.Subdomain, portMappings, cfg.RateLimit)
+	if cfg.BasicAuth != "" {
+		fmt.Printf("[Client] Data Plane HTTP Basic Auth is ENABLED\n")
+	}
+	regResp, err := client.RegisterTunnel(cfg.ServerURL, cfg.AuthToken, sub, portMappings, cfg.RateLimit, cfg.BasicAuth)
 	if err != nil {
 		log.Fatalf("[Error] Failed to register: %v\n", err)
+	}
+
+	// Modify portMappings to point to dynamic Interceptor ports
+	for i, pm := range portMappings {
+		interceptPort, err := engine.InterceptPort(pm.LocalPort)
+		if err != nil {
+			log.Fatalf("[Error] Failed to start interceptor for port %d: %v", pm.LocalPort, err)
+		}
+		portMappings[i].LocalPort = interceptPort
 	}
 
 	var publicURLs []string

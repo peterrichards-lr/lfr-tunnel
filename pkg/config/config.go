@@ -48,6 +48,7 @@ type ClientConfig struct {
 	Ports     []int  `yaml:"ports"`
 	TokenFile string `yaml:"token_file"`
 	RateLimit int    `yaml:"rate_limit"`
+	BasicAuth string `yaml:"basic_auth"`
 }
 
 // DefaultServerConfig returns a ServerConfig with sensible default values.

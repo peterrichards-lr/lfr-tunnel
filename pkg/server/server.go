@@ -36,6 +36,7 @@ type RegisterRequest struct {
 	Ports           []PortMapping `json:"ports"`
 	AuthToken       string        `json:"auth_token"`
 	RateLimit       int           `json:"rate_limit,omitempty"`
+	BasicAuth       string        `json:"basic_auth,omitempty"`
 }
 
 // RegisterResponse represents the JSON response payload.
@@ -406,7 +407,7 @@ func (s *Server) handleRegister(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Register in registry
-	sessionToken, remotes, err := s.registry.Register(req.SubdomainPrefix, req.Ports, activeDomains, effectiveLimit, clientIP)
+	sessionToken, remotes, err := s.registry.Register(req.SubdomainPrefix, req.Ports, activeDomains, effectiveLimit, clientIP, req.BasicAuth)
 	if err != nil {
 		w.WriteHeader(http.StatusConflict)
 		if err := json.NewEncoder(w).Encode(RegisterResponse{Status: "error", Error: err.Error()}); err != nil {

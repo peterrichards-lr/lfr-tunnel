@@ -31,6 +31,7 @@ type RegisterRequest struct {
 	Ports           []PortMapping `json:"ports"`
 	AuthToken       string        `json:"auth_token"`
 	RateLimit       int           `json:"rate_limit,omitempty"`
+	BasicAuth       string        `json:"basic_auth,omitempty"`
 }
 
 // RegisterResponse matches the server DTO for response.
@@ -119,7 +120,7 @@ func DetectWorkspacePorts(rootDir string) ([]PortMapping, error) {
 }
 
 // RegisterTunnel performs the handshake with the server's registration endpoint.
-func RegisterTunnel(serverURL string, authToken string, subdomain string, ports []PortMapping, rateLimit int) (*RegisterResponse, error) {
+func RegisterTunnel(serverURL string, authToken string, subdomain string, ports []PortMapping, rateLimit int, basicAuth string) (*RegisterResponse, error) {
 	// Normalize server URL
 	if !strings.HasPrefix(serverURL, "http") {
 		serverURL = "http://" + serverURL
@@ -136,6 +137,7 @@ func RegisterTunnel(serverURL string, authToken string, subdomain string, ports 
 		Ports:           ports,
 		AuthToken:       authToken,
 		RateLimit:       rateLimit,
+		BasicAuth:       basicAuth,
 	})
 	if err != nil {
 		return nil, err

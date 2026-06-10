@@ -167,13 +167,33 @@ Integrating web dashboards with `fail2ban` requires the Go application to execut
 2. **Subdomain Data Plane Limiting**: 
    A global Admin ceiling (`MaxTunnelRateLimit`) limits traffic flow across all tunnels. Furthermore, a developer can start the CLI with `lfr-tunnel -rate-limit 5` to restrict incoming traffic hitting their specific laptop to 5 requests per second, protecting fragile local runtime environments from sudden traffic surges.
 
+## 8. Admin Web Dashboard
+
+The gateway serves a native **Admin Web Dashboard** at `/admin`. To avoid complex deployment pipelines (like Node.js servers, npm builds, or asset servers), the frontend is a zero-dependency Vanilla HTML/CSS/JS Single Page Application (SPA).
+Using Go's `//go:embed` directive, the `admin.html` file is compiled directly into the `lfr-tunneld` binary, ensuring it executes purely from memory.
+
+**Key Dashboard Capabilities:**
+- **Secure Authentication**: The UI uses your static `Admin PAT` to authenticate API calls via the `Authorization: Bearer` header. No tokens or secrets are exposed in the HTML/JS.
+- **Lease Management**: Admins can view active tunnels (including the client's public IP) and forcefully terminate abusive connections.
+- **IPS / Defense Management**: Admins can manually add or unban IP addresses from the global IP Blacklist.
+- **Audit View**: A real-time timeline of `ip.blacklisted`, `user.registered`, and `lease.kicked` system events.
+
 ---
 
-## 8. Roadmap & Comparison vs ngrok
+## 9. Client-Side Interceptor Architecture
 
-`lfr-tunnel` provides custom domain assignment out-of-the-box (something that costs $20+/month per user on `ngrok` Enterprise plans). However, `ngrok` offers several advanced features that are currently on the `lfr-tunnel` architectural roadmap to achieve "First-Class" developer tooling status:
+To achieve absolute feature parity with premium tunneling solutions like `ngrok`, `lfr-tunnel` implements a highly capable **Client-Side Interceptor Engine** (`pkg/client/interceptor.go`). 
+Rather than passing the Chisel connection directly to the target local Liferay instance, the `lfr-tunnel` CLI transparently injects a reverse proxy on a dynamic local port *between* the tunnel and Tomcat.
 
-1. **Local Traffic Inspector (`http://localhost:4040`)**: 
-   Future versions of the CLI will embed a local web server displaying a live feed of all HTTP requests/responses flowing through the tunnel. This enables developers to debug Webhooks (e.g. Liferay Commerce & Stripe integrations) and provides a "Replay Request" capability without digging through Tomcat logs.
-2. **Data Plane Authentication (Edge Auth)**:
-   Future versions will support a CLI flag like `-basic-auth="demo:secret"` which the Go Gateway will enforce before routing traffic to the Chisel tunnel. This allows Sales Engineers to password-protect sensitive embargoed Liferay demonstrations from the public internet.
+### Key Capabilities
+
+1. **Header Manipulation (`-add-header`)**:
+   SEs can inject arbitrary HTTP headers (e.g., `-add-header "X-Bypass-CORS: true"`) at runtime. The interceptor injects these into every incoming request before Liferay sees them, bypassing restrictive local domain configurations without touching Tomcat config files.
+
+2. **Local Traffic Inspector (`http://localhost:4040`)**:
+   The interceptor buffers the last 100 HTTP requests and their corresponding responses (up to 10KB of body payloads each). It serves a rich, real-time SPA dashboard via `//go:embed` on `localhost:4040`. SEs can watch Webhooks hit their local machine and inspect the exact JSON payloads natively.
+
+3. **Maintenance Mode**:
+   From the Inspector dashboard, developers can instantly toggle **Maintenance Mode**. The interceptor ceases forwarding traffic to Tomcat and immediately returns a `503 Service Unavailable` with a Liferay-branded fallback HTML page. This allows SEs to reboot their local Tomcat without killing the `lfr-tunnel` process or losing their claimed subdomain.
+
+---

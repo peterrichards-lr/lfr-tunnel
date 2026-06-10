@@ -3,6 +3,7 @@ package server
 import (
 	"bytes"
 	_ "embed"
+	"encoding/base64"
 	"fmt"
 	"log"
 	"net"
@@ -53,11 +54,27 @@ func (p *ProxyHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		host = h
 	}
 
-	// 2. Query registry for lease
 	lease, exists := p.registry.GetLease(host)
 	if !exists {
 		p.serveOfflinePage(w, r, host, "No active tunnel registered for this subdomain.")
 		return
+	}
+
+	// 2.5 HTTP Basic Auth Protection
+	if lease.BasicAuth != "" {
+		authHeader := r.Header.Get("Authorization")
+		if authHeader == "" || !strings.HasPrefix(authHeader, "Basic ") {
+			w.Header().Set("WWW-Authenticate", `Basic realm="Secure Liferay Tunnel"`)
+			http.Error(w, "Unauthorized", http.StatusUnauthorized)
+			return
+		}
+
+		payload, err := base64.StdEncoding.DecodeString(strings.TrimPrefix(authHeader, "Basic "))
+		if err != nil || string(payload) != lease.BasicAuth {
+			w.Header().Set("WWW-Authenticate", `Basic realm="Secure Liferay Tunnel"`)
+			http.Error(w, "Unauthorized", http.StatusUnauthorized)
+			return
+		}
 	}
 
 	// 3. Enforce Subdomain Rate Limiting

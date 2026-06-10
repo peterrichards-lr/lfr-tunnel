@@ -29,6 +29,7 @@ type TunnelLease struct {
 	TargetPort      int       `json:"target_port"`
 	RateLimit       int       `json:"rate_limit"`
 	ClientIP        string    `json:"client_ip"`
+	BasicAuth       string    `json:"basic_auth"`
 	CreatedAt       time.Time `json:"created_at"`
 }
 
@@ -109,7 +110,7 @@ func getFreePort() (int, error) {
 }
 
 // Register allocates ports and subdomains for a client.
-func (r *Registry) Register(subdomainPrefix string, ports []PortMapping, domains []string, rateLimit int, clientIP string) (string, []string, error) {
+func (r *Registry) Register(subdomainPrefix string, ports []PortMapping, domains []string, rateLimit int, clientIP string, basicAuth string) (string, []string, error) {
 	r.Lock()
 	defer r.Unlock()
 
@@ -187,6 +188,7 @@ func (r *Registry) Register(subdomainPrefix string, ports []PortMapping, domains
 				TargetPort:      pm.LocalPort,
 				RateLimit:       rateLimit,
 				ClientIP:        clientIP,
+				BasicAuth:       basicAuth,
 				CreatedAt:       time.Now(),
 			}
 			r.leases[fullHost] = lease

@@ -1,0 +1,212 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Liferay Tunnel Inspector</title>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <style>
+        :root {
+            --bg-base: #0f172a;
+            --bg-card: rgba(30, 41, 59, 0.7);
+            --primary: #0B5FFF;
+            --text-main: #f8fafc;
+            --text-muted: #94a3b8;
+            --border: rgba(255, 255, 255, 0.1);
+            --success: #10b981;
+            --warning: #f59e0b;
+            --danger: #ef4444;
+        }
+
+        * { box-sizing: border-box; margin: 0; padding: 0; font-family: 'Inter', sans-serif; }
+        body { background: var(--bg-base); color: var(--text-main); display: flex; height: 100vh; overflow: hidden; }
+
+        sidebar { width: 350px; border-right: 1px solid var(--border); display: flex; flex-direction: column; background: rgba(15, 23, 42, 0.8); }
+        .header-panel { padding: 20px; border-bottom: 1px solid var(--border); }
+        .header-panel h1 { font-size: 20px; font-weight: 700; margin-bottom: 15px; color: white; display: flex; align-items: center; justify-content: space-between; }
+        
+        .toggle-switch { position: relative; display: inline-block; width: 44px; height: 24px; }
+        .toggle-switch input { opacity: 0; width: 0; height: 0; }
+        .slider { position: absolute; cursor: pointer; top: 0; left: 0; right: 0; bottom: 0; background-color: #334155; transition: .4s; border-radius: 24px; }
+        .slider:before { position: absolute; content: ""; height: 18px; width: 18px; left: 3px; bottom: 3px; background-color: white; transition: .4s; border-radius: 50%; }
+        input:checked + .slider { background-color: var(--warning); }
+        input:checked + .slider:before { transform: translateX(20px); }
+
+        .req-list { flex: 1; overflow-y: auto; }
+        .req-item { padding: 12px 16px; border-bottom: 1px solid var(--border); cursor: pointer; transition: background 0.2s; }
+        .req-item:hover { background: rgba(255,255,255,0.05); }
+        .req-item.active { background: rgba(11, 95, 255, 0.15); border-left: 3px solid var(--primary); }
+        .req-method { font-weight: 700; font-size: 12px; margin-right: 8px; width: 45px; display: inline-block; }
+        .req-method.GET { color: var(--success); }
+        .req-method.POST { color: var(--warning); }
+        .req-method.PUT { color: #3b82f6; }
+        .req-method.DELETE { color: var(--danger); }
+        .req-path { font-size: 13px; color: var(--text-main); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; display: inline-block; max-width: 180px; vertical-align: bottom; }
+        .req-status { float: right; font-size: 12px; font-weight: 600; padding: 2px 6px; border-radius: 4px; }
+        .status-2xx { color: var(--success); background: rgba(16, 185, 129, 0.1); }
+        .status-3xx { color: #3b82f6; background: rgba(59, 130, 246, 0.1); }
+        .status-4xx { color: var(--warning); background: rgba(245, 158, 11, 0.1); }
+        .status-5xx { color: var(--danger); background: rgba(239, 68, 68, 0.1); }
+
+        main { flex: 1; display: flex; flex-direction: column; overflow: hidden; }
+        .details-header { padding: 20px; border-bottom: 1px solid var(--border); background: rgba(30, 41, 59, 0.4); }
+        .details-header h2 { font-size: 20px; font-weight: 600; display: flex; align-items: center; gap: 12px; margin-bottom: 8px; }
+        .details-meta { font-size: 13px; color: var(--text-muted); display: flex; gap: 20px; }
+
+        .details-content { flex: 1; padding: 20px; overflow-y: auto; display: flex; gap: 20px; }
+        .panel { flex: 1; background: var(--bg-card); border: 1px solid var(--border); border-radius: 8px; display: flex; flex-direction: column; overflow: hidden; }
+        .panel-title { padding: 12px 16px; font-size: 14px; font-weight: 600; background: rgba(0,0,0,0.2); border-bottom: 1px solid var(--border); }
+        .panel-body { padding: 16px; overflow-y: auto; flex: 1; font-size: 13px; }
+        
+        .code-block { background: #000; color: #a5b4fc; padding: 12px; border-radius: 6px; font-family: monospace; white-space: pre-wrap; word-break: break-all; margin-top: 12px; }
+        .header-row { display: flex; margin-bottom: 6px; }
+        .header-key { font-weight: 600; color: var(--text-muted); width: 140px; }
+        .header-val { color: var(--text-main); flex: 1; word-break: break-all; }
+
+        .empty-state { display: flex; align-items: center; justify-content: center; height: 100%; color: var(--text-muted); font-size: 18px; }
+    </style>
+</head>
+<body>
+    <sidebar>
+        <div class="header-panel">
+            <h1>
+                Inspector
+                <div style="display: flex; align-items: center; gap: 10px; font-size: 13px; font-weight: normal;">
+                    <span id="maint-label">Maintenance</span>
+                    <label class="toggle-switch">
+                        <input type="checkbox" id="maint-toggle" onchange="toggleMaintenance()">
+                        <span class="slider"></span>
+                    </label>
+                </div>
+            </h1>
+            <div style="font-size: 12px; color: var(--text-muted);">Listening on localhost:4040</div>
+        </div>
+        <div class="req-list" id="req-list">
+            <!-- Items injected by JS -->
+        </div>
+    </sidebar>
+
+    <main id="main-view">
+        <div class="empty-state">Select a request to view details</div>
+    </main>
+
+    <script>
+        let requests = [];
+        let selectedId = null;
+
+        async function fetchState() {
+            try {
+                const res = await fetch('/api/state');
+                const state = await res.json();
+                
+                document.getElementById('maint-toggle').checked = state.maintenance_mode;
+                
+                // Update requests if changed
+                if (JSON.stringify(requests.map(r => r.id)) !== JSON.stringify(state.history.map(r => r.id))) {
+                    requests = state.history || [];
+                    renderList();
+                    if(selectedId) renderDetails(requests.find(r => r.id === selectedId));
+                }
+            } catch(e) { console.error("Error fetching state", e); }
+        }
+
+        async function toggleMaintenance() {
+            const isChecked = document.getElementById('maint-toggle').checked;
+            await fetch('/api/maintenance', {
+                method: 'POST',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify({enabled: isChecked})
+            });
+        }
+
+        function renderList() {
+            const listEl = document.getElementById('req-list');
+            listEl.innerHTML = '';
+            requests.forEach(req => {
+                const statusClass = req.status >= 500 ? 'status-5xx' : 
+                                  req.status >= 400 ? 'status-4xx' : 
+                                  req.status >= 300 ? 'status-3xx' : 'status-2xx';
+                
+                const div = document.createElement('div');
+                div.className = `req-item ${req.id === selectedId ? 'active' : ''}`;
+                div.onclick = () => selectRequest(req.id);
+                div.innerHTML = `
+                    <div>
+                        <span class="req-method ${req.method}">${req.method}</span>
+                        <span class="req-path">${req.path}</span>
+                        <span class="req-status ${statusClass}">${req.status}</span>
+                    </div>
+                `;
+                listEl.appendChild(div);
+            });
+        }
+
+        function selectRequest(id) {
+            selectedId = id;
+            renderList();
+            const req = requests.find(r => r.id === id);
+            renderDetails(req);
+        }
+
+        function renderDetails(req) {
+            if(!req) return;
+            const main = document.getElementById('main-view');
+            
+            let reqHeadersHtml = '';
+            for(let k in req.req_headers) {
+                reqHeadersHtml += `<div class="header-row"><div class="header-key">${k}</div><div class="header-val">${req.req_headers[k]}</div></div>`;
+            }
+
+            let respHeadersHtml = '';
+            for(let k in req.resp_headers) {
+                respHeadersHtml += `<div class="header-row"><div class="header-key">${k}</div><div class="header-val">${req.resp_headers[k]}</div></div>`;
+            }
+
+            const statusClass = req.status >= 500 ? 'var(--danger)' : req.status >= 400 ? 'var(--warning)' : req.status >= 300 ? '#3b82f6' : 'var(--success)';
+
+            main.innerHTML = `
+                <div class="details-header">
+                    <h2>
+                        <span style="color: ${statusClass}">${req.status}</span>
+                        <span>${req.method} ${req.path}</span>
+                    </h2>
+                    <div class="details-meta">
+                        <span>Target: localhost:${req.target_port}</span>
+                        <span>Time: ${new Date(req.time).toLocaleTimeString()}</span>
+                        <span>Duration: ${req.duration_ms}ms</span>
+                    </div>
+                </div>
+                <div class="details-content">
+                    <div class="panel">
+                        <div class="panel-title">Request</div>
+                        <div class="panel-body">
+                            ${reqHeadersHtml}
+                            ${req.req_body ? `<div class="code-block">${escapeHtml(req.req_body)}</div>` : ''}
+                        </div>
+                    </div>
+                    <div class="panel">
+                        <div class="panel-title">Response</div>
+                        <div class="panel-body">
+                            ${respHeadersHtml}
+                            ${req.resp_body ? `<div class="code-block">${escapeHtml(req.resp_body)}</div>` : ''}
+                        </div>
+                    </div>
+                </div>
+            `;
+        }
+
+        function escapeHtml(unsafe) {
+            return unsafe
+                 .replace(/&/g, "&amp;")
+                 .replace(/</g, "&lt;")
+                 .replace(/>/g, "&gt;")
+                 .replace(/"/g, "&quot;")
+                 .replace(/'/g, "&#039;");
+        }
+
+        // Poll every 1.5 seconds
+        setInterval(fetchState, 1500);
+        fetchState();
+    </script>
+</body>
+</html>

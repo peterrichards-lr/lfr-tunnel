@@ -139,6 +139,17 @@ To start the tunnel, run the wrapper script matching your operating system. It w
 
 *Note: You can override any environment configuration on the fly by passing standard client CLI arguments directly to the script, e.g. `./lfr-tunnel.sh -subdomain my-temp-se`.*
 
+### Secret Leak Prevention (Pre-Commit Hook)
+
+To prevent API keys, tokens, or passwords from ever being accidentally committed to the repository, we use **Gitleaks** packaged inside a Docker container. This scans your staged files automatically on every commit.
+
+To enable the hook on your local machine, run:
+```bash
+make install-hook
+```
+
+If Gitleaks detects a secret, the commit will be blocked. If it flags a false positive, Gitleaks will output a fingerprint hash. You can copy that hash and paste it in a new line inside `.gitleaksignore` in the root of the project to whitelist it.
+
 ### Quick Start (Zero-Config Mode)
 
 Navigate to the root directory of your Liferay Workspace (which contains your client extensions) and start the tunnel:

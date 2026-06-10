@@ -33,6 +33,14 @@ type RegisterResponse struct {
 	Error        string   `json:"error,omitempty"`
 }
 
+// CheckSubdomainResponse represents the JSON response payload for subdomain checks.
+type CheckSubdomainResponse struct {
+	Available   bool     `json:"available"`
+	Subdomain   string   `json:"subdomain"`
+	Reason      string   `json:"reason,omitempty"`
+	Suggestions []string `json:"suggestions,omitempty"`
+}
+
 // Server coordinates the entire gateway operations.
 type Server struct {
 	cfg          *config.ServerConfig
@@ -115,6 +123,11 @@ func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 
 		if r.Method == http.MethodGet && r.URL.Path == "/api/domains" {
 			s.handleDomains(w, r)
+			return
+		}
+
+		if r.Method == http.MethodGet && r.URL.Path == "/api/check-subdomain" {
+			s.handleCheckSubdomain(w, r)
 			return
 		}
 
@@ -226,6 +239,69 @@ func (s *Server) handleDomains(w http.ResponseWriter, r *http.Request) {
 	w.WriteHeader(http.StatusOK)
 	if err := json.NewEncoder(w).Encode(domains); err != nil {
 		log.Printf("[Server] Failed to encode domains response: %v", err)
+	}
+}
+
+// handleCheckSubdomain verifies if a subdomain prefix is available and generates suggestions if not.
+func (s *Server) handleCheckSubdomain(w http.ResponseWriter, r *http.Request) {
+	w.Header().Set("Content-Type", "application/json")
+
+	// Validate auth token
+	token := r.URL.Query().Get("token")
+	if token == "" {
+		token = r.URL.Query().Get("auth_token")
+	}
+	if token == "" {
+		token = r.Header.Get("X-Auth-Token")
+	}
+	if token == "" {
+		if authHeader := r.Header.Get("Authorization"); strings.HasPrefix(strings.ToLower(authHeader), "bearer ") {
+			token = authHeader[7:]
+		}
+	}
+
+	if s.cfg.AuthToken != "" && token != s.cfg.AuthToken {
+		w.WriteHeader(http.StatusUnauthorized)
+		if err := json.NewEncoder(w).Encode(map[string]string{"error": "unauthorized"}); err != nil {
+			log.Printf("[Server] Failed to encode unauthorized response: %v", err)
+		}
+		return
+	}
+
+	subdomain := r.URL.Query().Get("subdomain")
+	if subdomain == "" {
+		w.WriteHeader(http.StatusBadRequest)
+		if err := json.NewEncoder(w).Encode(map[string]string{"error": "missing subdomain parameter"}); err != nil {
+			log.Printf("[Server] Failed to encode missing subdomain response: %v", err)
+		}
+		return
+	}
+
+	var activeDomains []string
+	if s.cfg.Domain1 != "" {
+		activeDomains = append(activeDomains, s.cfg.Domain1)
+	}
+	if s.cfg.Domain2 != "" {
+		activeDomains = append(activeDomains, s.cfg.Domain2)
+	}
+	if len(activeDomains) == 0 {
+		activeDomains = append(activeDomains, "localhost")
+	}
+
+	available, reason := s.registry.CheckSubdomain(subdomain, activeDomains)
+	resp := CheckSubdomainResponse{
+		Available: available,
+		Subdomain: subdomain,
+		Reason:    reason,
+	}
+
+	if !available {
+		resp.Suggestions = s.registry.GenerateSuggestions(subdomain, activeDomains)
+	}
+
+	w.WriteHeader(http.StatusOK)
+	if err := json.NewEncoder(w).Encode(resp); err != nil {
+		log.Printf("[Server] Failed to encode check subdomain response: %v", err)
 	}
 }
 

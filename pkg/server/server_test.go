@@ -129,3 +129,80 @@ func TestServer_Domains(t *testing.T) {
 		t.Errorf("expected [example.se, example.online], got %v", domains)
 	}
 }
+
+func TestServer_CheckSubdomain(t *testing.T) {
+	cfg := &config.ServerConfig{
+		Domain1:   "example.com",
+		AuthToken: "mysecret",
+	}
+
+	srv, err := NewServer(cfg)
+	if err != nil {
+		t.Fatalf("failed to create server: %v", err)
+	}
+	defer srv.Stop()
+
+	// 1. Missing token (Unauthorized)
+	req := httptest.NewRequest("GET", "http://example.com/api/check-subdomain?subdomain=alpha", nil)
+	req.Host = "example.com"
+	rec := httptest.NewRecorder()
+	srv.ServeHTTP(rec, req)
+	if rec.Code != http.StatusUnauthorized {
+		t.Errorf("expected 401 Unauthorized, got %d", rec.Code)
+	}
+
+	// 2. Bad token (Unauthorized)
+	req = httptest.NewRequest("GET", "http://example.com/api/check-subdomain?subdomain=alpha&token=badsecret", nil)
+	req.Host = "example.com"
+	rec = httptest.NewRecorder()
+	srv.ServeHTTP(rec, req)
+	if rec.Code != http.StatusUnauthorized {
+		t.Errorf("expected 401 Unauthorized, got %d", rec.Code)
+	}
+
+	// 3. Good token, missing subdomain (Bad Request)
+	req = httptest.NewRequest("GET", "http://example.com/api/check-subdomain?token=mysecret", nil)
+	req.Host = "example.com"
+	rec = httptest.NewRecorder()
+	srv.ServeHTTP(rec, req)
+	if rec.Code != http.StatusBadRequest {
+		t.Errorf("expected 400 Bad Request, got %d", rec.Code)
+	}
+
+	// 4. Good token, available subdomain
+	req = httptest.NewRequest("GET", "http://example.com/api/check-subdomain?subdomain=beta-dev&token=mysecret", nil)
+	req.Host = "example.com"
+	rec = httptest.NewRecorder()
+	srv.ServeHTTP(rec, req)
+	if rec.Code != http.StatusOK {
+		t.Errorf("expected 200 OK, got %d", rec.Code)
+	}
+	var checkResp CheckSubdomainResponse
+	if err := json.NewDecoder(rec.Body).Decode(&checkResp); err != nil {
+		t.Fatalf("failed to decode response: %v", err)
+	}
+	if !checkResp.Available {
+		t.Errorf("expected beta-dev to be available")
+	}
+	if len(checkResp.Suggestions) != 0 {
+		t.Errorf("expected no suggestions for available subdomain, got %v", checkResp.Suggestions)
+	}
+
+	// 5. Good token, reserved subdomain (Unavailable)
+	req = httptest.NewRequest("GET", "http://example.com/api/check-subdomain?subdomain=admin&token=mysecret", nil)
+	req.Host = "example.com"
+	rec = httptest.NewRecorder()
+	srv.ServeHTTP(rec, req)
+	if rec.Code != http.StatusOK {
+		t.Errorf("expected 200 OK, got %d", rec.Code)
+	}
+	if err := json.NewDecoder(rec.Body).Decode(&checkResp); err != nil {
+		t.Fatalf("failed to decode response: %v", err)
+	}
+	if checkResp.Available {
+		t.Errorf("expected admin to be unavailable")
+	}
+	if len(checkResp.Suggestions) != 3 {
+		t.Errorf("expected 3 suggestions for unavailable subdomain, got %d", len(checkResp.Suggestions))
+	}
+}

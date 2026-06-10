@@ -136,3 +136,77 @@ func TestRegistryValidation(t *testing.T) {
 		}
 	}
 }
+
+func TestRegistryCheckSubdomain(t *testing.T) {
+	chiselServer, _ := chserver.NewServer(&chserver.Config{Reverse: true})
+	reg := NewRegistry(chiselServer)
+	domains := []string{"liferay.com"}
+
+	// Verify an empty prefix
+	available, reason := reg.CheckSubdomain("", domains)
+	if available || reason != "empty subdomain" {
+		t.Errorf("expected empty subdomain check to fail, got available=%v, reason=%q", available, reason)
+	}
+
+	// Verify short prefix
+	available, reason = reg.CheckSubdomain("ab", domains)
+	if available || !strings.Contains(reason, "length") {
+		t.Errorf("expected short subdomain check to fail, got available=%v, reason=%q", available, reason)
+	}
+
+	// Verify reserved name
+	available, reason = reg.CheckSubdomain("admin", domains)
+	if available || !strings.Contains(reason, "reserved") {
+		t.Errorf("expected reserved subdomain check to fail, got available=%v, reason=%q", available, reason)
+	}
+
+	// Verify invalid characters
+	available, reason = reg.CheckSubdomain("foo_bar", domains)
+	if available || !strings.Contains(reason, "invalid characters") {
+		t.Errorf("expected invalid chars check to fail, got available=%v, reason=%q", available, reason)
+	}
+
+	// Verify valid and free subdomain
+	available, reason = reg.CheckSubdomain("alpha-se", domains)
+	if !available || reason != "" {
+		t.Errorf("expected alpha-se to be available, got available=%v, reason=%q", available, reason)
+	}
+
+	// Register the subdomain
+	_, _, err := reg.Register("alpha-se", []PortMapping{{LocalPort: 8080}}, domains)
+	if err != nil {
+		t.Fatalf("registration failed: %v", err)
+	}
+
+	// Verify it is now taken
+	available, reason = reg.CheckSubdomain("alpha-se", domains)
+	if available || !strings.Contains(reason, "already taken") {
+		t.Errorf("expected registered subdomain to be taken, got available=%v, reason=%q", available, reason)
+	}
+}
+
+func TestRegistryGenerateSuggestions(t *testing.T) {
+	chiselServer, _ := chserver.NewServer(&chserver.Config{Reverse: true})
+	reg := NewRegistry(chiselServer)
+	domains := []string{"liferay.com"}
+
+	// Check suggestions for valid prefix that is taken
+	_, _, _ = reg.Register("alpha-se", []PortMapping{{LocalPort: 8080}}, domains)
+
+	suggestions := reg.GenerateSuggestions("alpha-se", domains)
+	if len(suggestions) != 3 {
+		t.Errorf("expected 3 suggestions, got %d: %v", len(suggestions), suggestions)
+	}
+
+	// Ensure suggestions do not contain the registered one
+	for _, sugg := range suggestions {
+		if sugg == "alpha-se" {
+			t.Errorf("suggestion list should not contain taken subdomain: %s", sugg)
+		}
+		// Validate that the suggestion is actually reported as available
+		available, _ := reg.CheckSubdomain(sugg, domains)
+		if !available {
+			t.Errorf("suggested subdomain %s should be available", sugg)
+		}
+	}
+}

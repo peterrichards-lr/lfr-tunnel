@@ -82,6 +82,8 @@ The solution will consist of:
 - [x] Create a unified, step-by-step VPS and DNS replication setup guide.
 - [ ] Fix CI build and formatting failures (compile golangci-lint from source with goinstall). (In progress)
 - [x] Clean up .golangci.yml config after compiling golangci-lint from source.
+- [x] Implement subdomain availability check API on the server (protected by auth token) with alternative suggestions on conflict.
+
 
 
 

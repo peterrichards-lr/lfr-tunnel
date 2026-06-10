@@ -233,6 +233,91 @@ func (r *Registry) GetBackendPort(host string) (int, bool) {
 	return lease.LocalPort, true
 }
 
+// CheckSubdomain checks a subdomain prefix availability and returns availability, reason if unavailable.
+func (r *Registry) CheckSubdomain(subdomainPrefix string, domains []string) (bool, string) {
+	r.RLock()
+	defer r.RUnlock()
+
+	if subdomainPrefix == "" {
+		return false, "empty subdomain"
+	}
+
+	subdomainPrefix = strings.ToLower(strings.TrimSpace(subdomainPrefix))
+
+	if len(subdomainPrefix) < 3 || len(subdomainPrefix) > 63 {
+		return false, "length must be between 3 and 63 characters"
+	}
+
+	if reservedSubdomains[subdomainPrefix] {
+		return false, "reserved subdomain name"
+	}
+
+	if !subdomainRegex.MatchString(subdomainPrefix) {
+		return false, "invalid characters (only alphanumeric and hyphens allowed)"
+	}
+
+	for _, domain := range domains {
+		fullHost := fmt.Sprintf("%s.%s", subdomainPrefix, domain)
+		if _, exists := r.leases[fullHost]; exists {
+			return false, "subdomain is already taken"
+		}
+	}
+
+	return true, ""
+}
+
+// GenerateSuggestions produces a list of alternative subdomains that are currently available.
+func (r *Registry) GenerateSuggestions(subdomainPrefix string, domains []string) []string {
+	// Clean the prefix
+	cleanPrefix := strings.ToLower(strings.TrimSpace(subdomainPrefix))
+	// Remove invalid characters to form a base prefix
+	var sb strings.Builder
+	for _, ch := range cleanPrefix {
+		if (ch >= 'a' && ch <= 'z') || (ch >= '0' && ch <= '9') || ch == '-' {
+			sb.WriteRune(ch)
+		}
+	}
+	base := sb.String()
+	if len(base) < 3 {
+		base = "dev-" + base
+		if len(base) < 3 {
+			base = "dev-tunnel"
+		}
+	}
+
+	suffixes := []string{"-dev", "-app", "-tunnel", "-se", "-1", "-2", "-3", "-hub", "-node", "-local"}
+	var suggestions []string
+
+	for _, suffix := range suffixes {
+		candidate := base + suffix
+		if len(candidate) > 63 {
+			candidate = candidate[:63]
+			if strings.HasSuffix(candidate, "-") {
+				candidate = candidate[:62]
+			}
+		}
+
+		available, _ := r.CheckSubdomain(candidate, domains)
+		if available {
+			suggestions = append(suggestions, candidate)
+			if len(suggestions) >= 3 {
+				break
+			}
+		}
+	}
+
+	// If we still don't have enough, generate with numeric suffix
+	for i := 1; len(suggestions) < 3 && i < 20; i++ {
+		candidate := fmt.Sprintf("%s-%d", base, time.Now().UnixNano()%1000+int64(i))
+		available, _ := r.CheckSubdomain(candidate, domains)
+		if available {
+			suggestions = append(suggestions, candidate)
+		}
+	}
+
+	return suggestions
+}
+
 // CleanLease removes a lease and its Chisel user registration.
 func (r *Registry) CleanLease(sessionToken string) {
 	r.Lock()

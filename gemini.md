@@ -75,6 +75,7 @@ The solution will consist of:
 - [x] Fix Mermaid syntax parsing errors in auth_architecture.md.
 - [x] Move architecture.md to docs/ directory and update references.
 - [x] Fully quote all Mermaid diagram labels, nodes, and messages in auth_architecture.md to fix GitHub rendering.
+- [x] Replace real admin email address with dummy email in auth_architecture.md.
 
 
 

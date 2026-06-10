@@ -6,6 +6,8 @@ import (
 	"fmt"
 	"log"
 	"net"
+	"regexp"
+	"strings"
 	"sync"
 	"time"
 
@@ -26,6 +28,40 @@ type TunnelLease struct {
 	LocalPort       int       `json:"local_port"`
 	TargetPort      int       `json:"target_port"`
 	CreatedAt       time.Time `json:"created_at"`
+}
+
+var (
+	subdomainRegex     = regexp.MustCompile(`^[a-z0-9]([a-z0-9-]*[a-z0-9])?$`)
+	reservedSubdomains = map[string]bool{
+		"www":     true,
+		"tunnel":  true,
+		"admin":   true,
+		"api":     true,
+		"mail":    true,
+		"blog":    true,
+		"git":     true,
+		"auth":    true,
+		"portal":  true,
+		"billing": true,
+		"root":    true,
+		"assets":  true,
+		"static":  true,
+		"dev":     true,
+		"test":    true,
+		"prod":    true,
+		"status":  true,
+	}
+)
+
+func isValidSubdomain(sub string) bool {
+	sub = strings.ToLower(sub)
+	if len(sub) < 3 || len(sub) > 63 {
+		return false
+	}
+	if reservedSubdomains[sub] {
+		return false
+	}
+	return subdomainRegex.MatchString(sub)
 }
 
 // Registry manages the mapping between subdomains, dynamic ports, and Chisel credentials.
@@ -77,6 +113,9 @@ func (r *Registry) Register(subdomainPrefix string, ports []PortMapping, domains
 
 	if subdomainPrefix == "" {
 		return "", nil, fmt.Errorf("subdomain prefix cannot be empty")
+	}
+	if !isValidSubdomain(subdomainPrefix) {
+		return "", nil, fmt.Errorf("invalid or reserved subdomain prefix: %s", subdomainPrefix)
 	}
 	if len(ports) == 0 {
 		return "", nil, fmt.Errorf("at least one port mapping is required")

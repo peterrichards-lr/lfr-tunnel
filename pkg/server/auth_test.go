@@ -103,3 +103,36 @@ func TestRegistryCleanup(t *testing.T) {
 		t.Error("expected lease to be cleaned up")
 	}
 }
+
+func TestRegistryValidation(t *testing.T) {
+	chiselServer, _ := chserver.NewServer(&chserver.Config{Reverse: true})
+	reg := NewRegistry(chiselServer)
+	domains := []string{"liferay.com"}
+	ports := []PortMapping{{LocalPort: 8080}}
+
+	tests := []struct {
+		subdomain string
+		shouldPass bool
+	}{
+		{"valid-sub", true},
+		{"ok123", true},
+		{"a", false},            // Too short
+		{"invalid_sub", false},  // Has underscore
+		{"sub-", false},         // Ends with hyphen
+		{"-sub", false},         // Starts with hyphen
+		{"www", false},          // Reserved
+		{"admin", false},        // Reserved
+		{"api", false},          // Reserved
+		{"portal", false},       // Reserved
+	}
+
+	for _, tt := range tests {
+		_, _, err := reg.Register(tt.subdomain, ports, domains)
+		if tt.shouldPass && err != nil {
+			t.Errorf("expected subdomain %s to pass, but got error: %v", tt.subdomain, err)
+		}
+		if !tt.shouldPass && err == nil {
+			t.Errorf("expected subdomain %s to be rejected, but it succeeded", tt.subdomain)
+		}
+	}
+}

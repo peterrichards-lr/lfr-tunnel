@@ -78,6 +78,7 @@ The solution will consist of:
 - [x] Replace real admin email address with dummy email in auth_architecture.md.
 - [x] Purge real admin email from git history (files and commit authors).
 - [x] Upgrade dependencies to patch new Dependabot vulnerability alerts.
+- [x] Add subdomain validation and reserved subdomain filtering in Registry.
 
 
 

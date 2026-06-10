@@ -87,6 +87,66 @@ func NewServer(cfg *config.ServerConfig) (*Server, error) {
 		if err != nil {
 			return nil, fmt.Errorf("failed to open database at %s: %v", cfg.DBPath, err)
 		}
+
+		// Seed statically provisioned developer tokens
+		for _, st := range cfg.StaticTokens {
+			st.UserID = strings.ToLower(strings.TrimSpace(st.UserID))
+			st.Token = strings.TrimSpace(st.Token)
+			if st.UserID == "" || st.Token == "" {
+				continue
+			}
+
+			// 1. Ensure User exists and is approved
+			role := st.Role
+			if role == "" {
+				role = "user"
+			}
+			_, err := database.GetUser(st.UserID)
+			if err == db.ErrNotFound {
+				log.Printf("[Server] Seeding static user: %s (role: %s)", st.UserID, role)
+				userModel := &db.User{
+					ID:     st.UserID,
+					Email:  st.UserID,
+					Role:   role,
+					Status: "approved",
+				}
+				if err := database.CreateUser(userModel); err != nil {
+					return nil, fmt.Errorf("failed to seed static user %s: %v", st.UserID, err)
+				}
+			} else if err != nil {
+				return nil, fmt.Errorf("failed to check static user %s: %v", st.UserID, err)
+			}
+
+			// 2. Ensure Personal Access Token exists
+			hashBytes := sha256.Sum256([]byte(st.Token))
+			tokenHash := hex.EncodeToString(hashBytes[:])
+
+			_, err = database.GetPATByHash(tokenHash)
+			if err == db.ErrNotFound {
+				name := st.Name
+				if name == "" {
+					name = "Static Config Token"
+				}
+				log.Printf("[Server] Seeding static token for user: %s (name: %s)", st.UserID, name)
+
+				tokenPrefix := st.Token
+				if len(tokenPrefix) > 12 {
+					tokenPrefix = tokenPrefix[:12]
+				}
+
+				patModel := &db.PersonalAccessToken{
+					UserID:      st.UserID,
+					TokenHash:   tokenHash,
+					TokenPrefix: tokenPrefix,
+					Name:        name,
+				}
+				if err := database.CreatePAT(patModel); err != nil {
+					return nil, fmt.Errorf("failed to seed static token for %s: %v", st.UserID, err)
+				}
+			} else if err != nil {
+				return nil, fmt.Errorf("failed to check static token for %s: %v", st.UserID, err)
+			}
+		}
 	}
 
 	var mailSender mail.Sender

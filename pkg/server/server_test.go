@@ -10,6 +10,7 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 
 	"lfr-tunnel/pkg/config"
 )
@@ -242,7 +243,10 @@ func TestServer_RegistrationFlow(t *testing.T) {
 	if err != nil {
 		t.Fatalf("failed to create server: %v", err)
 	}
-	defer srv.Stop()
+	defer func() {
+		time.Sleep(10 * time.Millisecond)
+		srv.Stop()
+	}()
 
 	mockMail := &mockMailSender{}
 	srv.mailSender = mockMail
@@ -361,5 +365,88 @@ func TestServer_RegistrationFlow(t *testing.T) {
 
 	if badRegisterRec.Code != http.StatusUnauthorized {
 		t.Errorf("expected 401 Unauthorized for bad PAT registration, got %d", badRegisterRec.Code)
+	}
+}
+
+func TestServer_StaticTokenProvisioning(t *testing.T) {
+	tmpDir, err := os.MkdirTemp("", "lfr-tunnel-static-test-*")
+	if err != nil {
+		t.Fatalf("failed to create temp dir: %v", err)
+	}
+	defer os.RemoveAll(tmpDir)
+
+	dbPath := filepath.Join(tmpDir, "test.db")
+
+	cfg := &config.ServerConfig{
+		Domain1: "example.com",
+		DBPath:  dbPath,
+		StaticTokens: []config.StaticTokenConfig{
+			{
+				Token:  "dummy_static_token_xyz_value",
+				UserID: "st-user@liferay.com",
+				Name:   "Static Test User Token",
+				Role:   "admin",
+			},
+		},
+	}
+
+	// 1. Initial startup (Should seed token)
+	srv, err := NewServer(cfg)
+	if err != nil {
+		t.Fatalf("failed to create server: %v", err)
+	}
+
+	// Verify user is created and approved
+	user, err := srv.db.GetUser("st-user@liferay.com")
+	if err != nil {
+		t.Fatalf("failed to find seeded user: %v", err)
+	}
+	if user.Status != "approved" || user.Role != "admin" {
+		t.Errorf("seeded user role/status mismatch, got status=%s, role=%s", user.Status, user.Role)
+	}
+
+	// 2. Validate client registration using seeded static token
+	registerPayload, _ := json.Marshal(RegisterRequest{
+		SubdomainPrefix: "static-tunnel",
+		Ports:           []PortMapping{{LocalPort: 8080}},
+		AuthToken:       "dummy_static_token_xyz_value",
+	})
+	registerReq := httptest.NewRequest("POST", "http://example.com/api/register", bytes.NewReader(registerPayload))
+	registerReq.Host = "example.com"
+	registerRec := httptest.NewRecorder()
+	srv.ServeHTTP(registerRec, registerReq)
+
+	if registerRec.Code != http.StatusOK {
+		t.Errorf("expected 200 OK for tunnel registration with static token, got %d, body: %s", registerRec.Code, registerRec.Body.String())
+	}
+	time.Sleep(10 * time.Millisecond)
+	srv.Stop()
+
+	// 3. Second startup with same DB (Idempotency Check)
+	srv2, err := NewServer(cfg)
+	if err != nil {
+		t.Fatalf("failed to restart server: %v", err)
+	}
+	defer func() {
+		time.Sleep(10 * time.Millisecond)
+		srv2.Stop()
+	}()
+
+	// Ensure user is still present and there is only 1 user in DB
+	users, err := srv2.db.ListUsers()
+	if err != nil {
+		t.Fatalf("failed to list users: %v", err)
+	}
+	if len(users) != 1 {
+		t.Errorf("expected exactly 1 user, got %d", len(users))
+	}
+
+	// Test registration still succeeds
+	registerRec2 := httptest.NewRecorder()
+	registerReq2 := httptest.NewRequest("POST", "http://example.com/api/register", bytes.NewReader(registerPayload))
+	registerReq2.Host = "example.com"
+	srv2.ServeHTTP(registerRec2, registerReq2)
+	if registerRec2.Code != http.StatusOK {
+		t.Errorf("expected 200 OK after restart, got %d", registerRec2.Code)
 	}
 }

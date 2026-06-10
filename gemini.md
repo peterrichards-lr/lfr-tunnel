@@ -62,7 +62,7 @@ The solution will consist of:
 - [x] Verify formatting and contents of documentation.
 - [x] Design OAuth2/Liferay SSO authentication and per-user token management architecture.
 - [x] Implement user token database storage with expiration/revocation capabilities on the server.
-- [ ] Implement Administrative static developer token provisioning and configuration file storage.
+- [x] Implement Administrative static developer token provisioning and configuration file storage.
 - [ ] Implement CLI integration (`lfr-tunnel login`) for OIDC token exchanges.
 - [ ] Create server-side administrative control endpoints for user promotion and token management.
 - [x] Release, tag, and deploy v1.0.1 of lfr-tunneld to the VPS.

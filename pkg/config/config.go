@@ -8,24 +8,33 @@ import (
 	"gopkg.in/yaml.v3"
 )
 
+// StaticTokenConfig holds configuration settings for statically provisioned developer tokens.
+type StaticTokenConfig struct {
+	Token  string `yaml:"token"`
+	UserID string `yaml:"user_id"`
+	Name   string `yaml:"name"`
+	Role   string `yaml:"role"`
+}
+
 // ServerConfig holds configuration settings for the lfr-tunneld server.
 type ServerConfig struct {
-	Domain1                string `yaml:"domain1"`
-	Domain2                string `yaml:"domain2"`
-	BindAddr               string `yaml:"bind_addr"`
-	HTTPBindAddr           string `yaml:"http_bind_addr"`
-	ChiselBindAddr         string `yaml:"chisel_bind_addr"`
-	AuthToken              string `yaml:"auth_token"`
-	SSLCertFile            string `yaml:"ssl_cert_file"`
-	SSLKeyFile             string `yaml:"ssl_key_file"`
-	DBPath                 string `yaml:"db_path"`
-	SMTPHost               string `yaml:"smtp_host"`
-	SMTPPort               int    `yaml:"smtp_port"`
-	SMTPUsername           string `yaml:"smtp_username"`
-	SMTPPassword           string `yaml:"smtp_password"`
-	SMTPFromAddress        string `yaml:"smtp_from_address"`
-	AdminNotificationEmail string `yaml:"admin_notification_email"`
-	InsecureSkipVerify     bool   `yaml:"insecure_skip_verify"`
+	Domain1                string              `yaml:"domain1"`
+	Domain2                string              `yaml:"domain2"`
+	BindAddr               string              `yaml:"bind_addr"`
+	HTTPBindAddr           string              `yaml:"http_bind_addr"`
+	ChiselBindAddr         string              `yaml:"chisel_bind_addr"`
+	AuthToken              string              `yaml:"auth_token"`
+	SSLCertFile            string              `yaml:"ssl_cert_file"`
+	SSLKeyFile             string              `yaml:"ssl_key_file"`
+	DBPath                 string              `yaml:"db_path"`
+	SMTPHost               string              `yaml:"smtp_host"`
+	SMTPPort               int                 `yaml:"smtp_port"`
+	SMTPUsername           string              `yaml:"smtp_username"`
+	SMTPPassword           string              `yaml:"smtp_password"`
+	SMTPFromAddress        string              `yaml:"smtp_from_address"`
+	AdminNotificationEmail string              `yaml:"admin_notification_email"`
+	InsecureSkipVerify     bool                `yaml:"insecure_skip_verify"`
+	StaticTokens           []StaticTokenConfig `yaml:"static_tokens"`
 }
 
 // ClientConfig holds configuration settings for the lfr-tunnel client.

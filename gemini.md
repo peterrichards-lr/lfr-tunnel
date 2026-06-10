@@ -80,8 +80,8 @@ The solution will consist of:
 - [x] Upgrade dependencies to patch new Dependabot vulnerability alerts.
 - [x] Add subdomain validation and reserved subdomain filtering in Registry.
 - [x] Create a unified, step-by-step VPS and DNS replication setup guide.
-- [x] Fix CI build and formatting failures.
-- [x] Create .golangci.yml to specify Go 1.24 targeted linter version.
+- [ ] Fix CI build and formatting failures (compile golangci-lint from source with goinstall). (In progress)
+- [x] Clean up .golangci.yml config after compiling golangci-lint from source.
 
 
 

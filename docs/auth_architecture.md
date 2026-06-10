@@ -9,30 +9,30 @@ This document describes the technical architecture, database schema, API endpoin
 ```mermaid
 graph TD
     subgraph DevMachine ["Developer Machine"]
-        CLI[lfr-tunnel CLI]
-        Browser[System Browser]
+        CLI["lfr-tunnel CLI"]
+        Browser["System Browser"]
     end
 
     subgraph GWServer ["Gateway Server (lfr-tunneld)"]
-        API[Gateway Web Server]
+        API["Gateway Web Server"]
         DB["SQLite / PostgreSQL"]
-        Chisel[Embedded Chisel Server]
+        Chisel["Embedded Chisel Server"]
     end
 
     subgraph IdP ["Identity Provider"]
         SSO["Liferay Portal SSO / OAuth2"]
     end
 
-    CLI -->|1. lfr-tunnel login| API
-    API -->|2. Redirect| Browser
-    Browser -->|3. Authenticate| SSO
-    SSO -->|4. Auth Code| API
-    API -->|5. Exchange Code & Sync User| SSO
-    API -->|6. Write User & Token| DB
-    API -->|7. Return PAT| CLI
-    CLI -->|8. Register Tunnel (with PAT)| API
-    API -->|9. Validate PAT| DB
-    API -->|10. Authorize Session| Chisel
+    CLI -->|"1. lfr-tunnel login"| API
+    API -->|"2. Redirect"| Browser
+    Browser -->|"3. Authenticate"| SSO
+    SSO -->|"4. Auth Code"| API
+    API -->|"5. Exchange Code & Sync User"| SSO
+    API -->|"6. Write User & Token"| DB
+    API -->|"7. Return PAT"| CLI
+    CLI -->|"8. Register Tunnel (with PAT)"| API
+    API -->|"9. Validate PAT"| DB
+    API -->|"10. Authorize Session"| Chisel
 ```
 
 ---
@@ -94,19 +94,19 @@ Before Liferay SSO is fully integrated, developers can request access directly v
 ```mermaid
 sequenceDiagram
     autonumber
-    actor Dev as Developer
+    actor Dev as "Developer"
     participant GW as "Gateway (lfr-tunneld)"
-    actor Admin as Gateway Administrator
+    actor Admin as "Gateway Administrator"
     
-    Dev->>GW: Visits /register (Enters Email, Name, Subdomain request)
+    Dev->>GW: "Visits /register (Enters Email, Name, Subdomain request)"
     Note over GW: Creates User in DB with status='pending'
-    GW->>Admin: Email Notification: New registration request (Contains approval token links)
+    GW->>Admin: "Email Notification: New registration request (Contains approval token links)"
     
-    Admin->>GW: Clicks Approve Link (GET /admin/approve?user=dev&token=xyz)
+    Admin->>GW: "Clicks Approve Link (GET /admin/approve?user=dev&token=xyz)"
     Note over GW: Validates approval token<br/>Updates status='approved'<br/>Generates Personal Access Token (PAT)
     
-    GW->>Dev: Email Notification: Registration Approved! (Contains link to claim PAT)
-    Dev->>GW: Visits /claim?token=abc to download PAT
+    GW->>Dev: "Email Notification: Registration Approved! (Contains link to claim PAT)"
+    Dev->>GW: "Visits /claim?token=abc to download PAT"
     Note over Dev: Configures PAT in local ~/.lfr-tunnel/config.yaml
 ```
 
@@ -130,30 +130,30 @@ Once Liferay SSO is available, this flow will replace the manual approval proces
 ```mermaid
 sequenceDiagram
     autonumber
-    actor Dev as Developer
-    participant CLI as lfr-tunnel CLI
-    participant Browser as Default Browser
+    actor Dev as "Developer"
+    participant CLI as "lfr-tunnel CLI"
+    participant Browser as "Default Browser"
     participant GW as "Gateway (lfr-tunneld)"
     participant SSO as "Liferay SSO (Auth Server)"
 
-    Dev->>CLI: lfr-tunnel login
+    Dev->>CLI: "lfr-tunnel login"
     Note over CLI: CLI starts local server on http://localhost:4444/callback<br/>Generates PKCE Code Verifier & Challenge
-    CLI->>Browser: Open system browser to Gateway SSO Portal
-    Browser->>GW: GET https://tunnel.lfr-demo.se/auth/login?challenge=xxx
-    GW->>SSO: Redirect: /o/oauth2/authorize?client_id=...&code_challenge=xxx
-    Browser->>SSO: User logs in & approves scopes
-    SSO-->>Browser: Redirect back to Gateway: https://tunnel.lfr-demo.se/auth/callback?code=yyy
-    GW->>SSO: POST /o/oauth2/token (code=yyy, client_secret)
-    SSO-->>GW: Access Token & ID Token (User profile info)
+    CLI->>Browser: "Open system browser to Gateway SSO Portal"
+    Browser->>GW: "GET https://tunnel.lfr-demo.se/auth/login?challenge=xxx"
+    GW->>SSO: "Redirect: /o/oauth2/authorize?client_id=...&code_challenge=xxx"
+    Browser->>SSO: "User logs in & approves scopes"
+    SSO-->>Browser: "Redirect back to Gateway: https://tunnel.lfr-demo.se/auth/callback?code=yyy"
+    GW->>SSO: "POST /o/oauth2/token (code=yyy, client_secret)"
+    SSO-->>GW: "Access Token & ID Token (User profile info)"
     
     Note over GW: Resolves user email.<br/>If first user or marked in config -> Set Role = 'admin'<br/>Saves/updates User in SQLite database
     
-    GW->>GW: Generate Personal Access Token (PAT)<br/>Format: lfr_pat_[SecureRandomBytes]<br/>Saves SHA-256 hash of token to DB
+    Note over GW: Generate Personal Access Token (PAT)<br/>Format: lfr_pat_[SecureRandomBytes]<br/>Saves SHA-256 hash of token to DB
     
-    GW-->>Browser: Redirect to: http://localhost:4444/callback?token=lfr_pat_...
-    Browser->>CLI: Delivers PAT to local HTTP Listener
+    GW-->>Browser: "Redirect to: http://localhost:4444/callback?token=lfr_pat_..."
+    Browser->>CLI: "Delivers PAT to local HTTP Listener"
     Note over CLI: CLI saves token to ~/.lfr-tunnel/config.yaml<br/>CLI shuts down local HTTP server
-    CLI-->>Dev: Print "Login Successful! Token saved to config."
+    CLI-->>Dev: "Print 'Login Successful! Token saved to config.'"
 ```
 
 ---

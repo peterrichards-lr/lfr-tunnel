@@ -74,6 +74,7 @@ The solution will consist of:
 - [ ] Add admin approval endpoints and email notification flows.
 - [x] Fix Mermaid syntax parsing errors in auth_architecture.md.
 - [x] Move architecture.md to docs/ directory and update references.
+- [x] Fully quote all Mermaid diagram labels, nodes, and messages in auth_architecture.md to fix GitHub rendering.
 
 
 

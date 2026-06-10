@@ -51,7 +51,48 @@ REG_REQ_RESP=$(curl -s -X POST -H "Content-Type: application/json" \
 echo "Registration request response: $REG_REQ_RESP"
 sleep 2
 
-# 2. Extract approval token from Mailpit
+# 2. Extract verification token from Mailpit
+echo "=== Extracting verification token ==="
+VERIFICATION_TOKEN=$(python3 -c '
+import urllib.request, json, re
+try:
+    data = json.loads(urllib.request.urlopen("http://localhost:8025/api/v1/messages").read())
+    if not data["messages"]:
+        print("")
+        exit(0)
+    msg_id = data["messages"][0]["ID"]
+    msg = json.loads(urllib.request.urlopen(f"http://localhost:8025/api/v1/message/{msg_id}").read())
+    body = msg["Text"]
+    # Look for token in URL like /api/verify-email?email=...&token=...
+    match = re.search(r"token=([a-f0-9]+)", body)
+    if match:
+        print(match.group(1))
+    else:
+        print("")
+except Exception as e:
+    import sys
+    print(f"Error: {e}", file=sys.stderr)
+    print("")
+')
+
+if [ -z "$VERIFICATION_TOKEN" ]; then
+    echo "❌ Failed to extract verification token from Mailpit!"
+    echo "=== lfr-tunneld logs ==="
+    docker-compose logs lfr-tunneld
+    echo "=== Mailpit messages ==="
+    curl -s http://localhost:8025/api/v1/messages
+    docker-compose down -v
+    exit 1
+fi
+echo "Extracted Verification Token: $VERIFICATION_TOKEN"
+
+# 2.5. Call Verification endpoint
+echo "=== Verifying developer email ==="
+VERIFY_RESP=$(curl -s "http://localhost:8000/api/verify-email?email=developer@lfr-demo.se&token=${VERIFICATION_TOKEN}")
+echo "Verify response: $VERIFY_RESP"
+sleep 2
+
+# 3. Extract admin approval token from Mailpit
 echo "=== Extracting admin approval token ==="
 APPROVAL_TOKEN=$(python3 -c '
 import urllib.request, json, re
@@ -77,16 +118,12 @@ except Exception as e:
 
 if [ -z "$APPROVAL_TOKEN" ]; then
     echo "❌ Failed to extract approval token from Mailpit!"
-    echo "=== lfr-tunneld logs ==="
-    docker-compose logs lfr-tunneld
-    echo "=== Mailpit messages ==="
-    curl -s http://localhost:8025/api/v1/messages
     docker-compose down -v
     exit 1
 fi
 echo "Extracted Approval Token: $APPROVAL_TOKEN"
 
-# 3. Call Admin Approval endpoint
+# 3.5. Call Admin Approval endpoint
 echo "=== Approving developer request ==="
 APPROVE_RESP=$(curl -s "http://localhost:8000/api/admin/approve?email=developer@lfr-demo.se&token=${APPROVAL_TOKEN}")
 echo "Approval response: $APPROVE_RESP"

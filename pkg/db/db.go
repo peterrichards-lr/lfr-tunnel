@@ -13,14 +13,16 @@ var (
 )
 
 type User struct {
-	ID        string    `json:"id"`
-	Email     string    `json:"email"`
-	FirstName string    `json:"first_name"`
-	LastName  string    `json:"last_name"`
-	Role      string    `json:"role"`   // "admin", "user"
-	Status    string    `json:"status"` // "pending", "approved", "revoked"
-	CreatedAt time.Time `json:"created_at"`
-	UpdatedAt time.Time `json:"updated_at"`
+	ID            string    `json:"id"`
+	Email         string    `json:"email"`
+	FirstName     string    `json:"first_name"`
+	LastName      string    `json:"last_name"`
+	Role          string    `json:"role"`   // "admin", "user"
+	Status        string    `json:"status"` // "pending", "approved", "revoked"
+	ApprovalToken string    `json:"-"`
+	ClaimToken    string    `json:"-"`
+	CreatedAt     time.Time `json:"created_at"`
+	UpdatedAt     time.Time `json:"updated_at"`
 }
 
 type PersonalAccessToken struct {
@@ -46,8 +48,8 @@ func Open(dsn string) (*DB, error) {
 		return nil, err
 	}
 
-	// Enable foreign key constraints in SQLite
-	if _, err := conn.Exec("PRAGMA foreign_keys = ON;"); err != nil {
+	// Enable foreign key constraints and set busy timeout in SQLite
+	if _, err := conn.Exec("PRAGMA foreign_keys = ON; PRAGMA busy_timeout = 5000;"); err != nil {
 		conn.Close()
 		return nil, err
 	}
@@ -75,6 +77,8 @@ func (db *DB) initSchema() error {
 		last_name TEXT,
 		role TEXT NOT NULL DEFAULT 'user',
 		status TEXT NOT NULL DEFAULT 'pending',
+		approval_token TEXT,
+		claim_token TEXT,
 		created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
 		updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
 	);
@@ -116,42 +120,104 @@ func (db *DB) CreateUser(u *User) error {
 		u.UpdatedAt = time.Now().UTC()
 	}
 
-	query := `INSERT INTO users (id, email, first_name, last_name, role, status, created_at, updated_at)
-	          VALUES (?, ?, ?, ?, ?, ?, ?, ?)`
-	_, err := db.conn.Exec(query, u.ID, u.Email, u.FirstName, u.LastName, u.Role, u.Status, u.CreatedAt, u.UpdatedAt)
+	query := `INSERT INTO users (id, email, first_name, last_name, role, status, approval_token, claim_token, created_at, updated_at)
+	          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+	_, err := db.conn.Exec(query, u.ID, u.Email, u.FirstName, u.LastName, u.Role, u.Status, u.ApprovalToken, u.ClaimToken, u.CreatedAt, u.UpdatedAt)
 	return err
 }
 
 // GetUser fetches a user by their ID.
 func (db *DB) GetUser(id string) (*User, error) {
-	query := `SELECT id, email, first_name, last_name, role, status, created_at, updated_at
+	query := `SELECT id, email, first_name, last_name, role, status, approval_token, claim_token, created_at, updated_at
 	          FROM users WHERE id = ?`
 	row := db.conn.QueryRow(query, id)
 
 	var u User
-	err := row.Scan(&u.ID, &u.Email, &u.FirstName, &u.LastName, &u.Role, &u.Status, &u.CreatedAt, &u.UpdatedAt)
+	var approvalToken, claimToken sql.NullString
+	err := row.Scan(&u.ID, &u.Email, &u.FirstName, &u.LastName, &u.Role, &u.Status, &approvalToken, &claimToken, &u.CreatedAt, &u.UpdatedAt)
 	if err == sql.ErrNoRows {
 		return nil, ErrNotFound
 	}
 	if err != nil {
 		return nil, err
+	}
+	if approvalToken.Valid {
+		u.ApprovalToken = approvalToken.String
+	}
+	if claimToken.Valid {
+		u.ClaimToken = claimToken.String
 	}
 	return &u, nil
 }
 
 // GetUserByEmail fetches a user by their email address.
 func (db *DB) GetUserByEmail(email string) (*User, error) {
-	query := `SELECT id, email, first_name, last_name, role, status, created_at, updated_at
+	query := `SELECT id, email, first_name, last_name, role, status, approval_token, claim_token, created_at, updated_at
 	          FROM users WHERE email = ?`
 	row := db.conn.QueryRow(query, email)
 
 	var u User
-	err := row.Scan(&u.ID, &u.Email, &u.FirstName, &u.LastName, &u.Role, &u.Status, &u.CreatedAt, &u.UpdatedAt)
+	var approvalToken, claimToken sql.NullString
+	err := row.Scan(&u.ID, &u.Email, &u.FirstName, &u.LastName, &u.Role, &u.Status, &approvalToken, &claimToken, &u.CreatedAt, &u.UpdatedAt)
 	if err == sql.ErrNoRows {
 		return nil, ErrNotFound
 	}
 	if err != nil {
 		return nil, err
+	}
+	if approvalToken.Valid {
+		u.ApprovalToken = approvalToken.String
+	}
+	if claimToken.Valid {
+		u.ClaimToken = claimToken.String
+	}
+	return &u, nil
+}
+
+// GetUserByApprovalToken fetches a user by their approval token.
+func (db *DB) GetUserByApprovalToken(token string) (*User, error) {
+	query := `SELECT id, email, first_name, last_name, role, status, approval_token, claim_token, created_at, updated_at
+	          FROM users WHERE approval_token = ?`
+	row := db.conn.QueryRow(query, token)
+
+	var u User
+	var approvalToken, claimToken sql.NullString
+	err := row.Scan(&u.ID, &u.Email, &u.FirstName, &u.LastName, &u.Role, &u.Status, &approvalToken, &claimToken, &u.CreatedAt, &u.UpdatedAt)
+	if err == sql.ErrNoRows {
+		return nil, ErrNotFound
+	}
+	if err != nil {
+		return nil, err
+	}
+	if approvalToken.Valid {
+		u.ApprovalToken = approvalToken.String
+	}
+	if claimToken.Valid {
+		u.ClaimToken = claimToken.String
+	}
+	return &u, nil
+}
+
+// GetUserByClaimToken fetches a user by their claim token.
+func (db *DB) GetUserByClaimToken(token string) (*User, error) {
+	query := `SELECT id, email, first_name, last_name, role, status, approval_token, claim_token, created_at, updated_at
+	          FROM users WHERE claim_token = ?`
+	row := db.conn.QueryRow(query, token)
+
+	var u User
+	var approvalToken, claimToken sql.NullString
+	err := row.Scan(&u.ID, &u.Email, &u.FirstName, &u.LastName, &u.Role, &u.Status, &approvalToken, &claimToken, &u.CreatedAt, &u.UpdatedAt)
+	if err == sql.ErrNoRows {
+		return nil, ErrNotFound
+	}
+	if err != nil {
+		return nil, err
+	}
+	if approvalToken.Valid {
+		u.ApprovalToken = approvalToken.String
+	}
+	if claimToken.Valid {
+		u.ClaimToken = claimToken.String
 	}
 	return &u, nil
 }
@@ -159,9 +225,18 @@ func (db *DB) GetUserByEmail(email string) (*User, error) {
 // UpdateUser updates an existing user profile.
 func (db *DB) UpdateUser(u *User) error {
 	u.UpdatedAt = time.Now().UTC()
-	query := `UPDATE users SET email = ?, first_name = ?, last_name = ?, role = ?, status = ?, updated_at = ?
+	var approvalTokenVal interface{}
+	if u.ApprovalToken != "" {
+		approvalTokenVal = u.ApprovalToken
+	}
+	var claimTokenVal interface{}
+	if u.ClaimToken != "" {
+		claimTokenVal = u.ClaimToken
+	}
+
+	query := `UPDATE users SET email = ?, first_name = ?, last_name = ?, role = ?, status = ?, approval_token = ?, claim_token = ?, updated_at = ?
 	          WHERE id = ?`
-	res, err := db.conn.Exec(query, u.Email, u.FirstName, u.LastName, u.Role, u.Status, u.UpdatedAt, u.ID)
+	res, err := db.conn.Exec(query, u.Email, u.FirstName, u.LastName, u.Role, u.Status, approvalTokenVal, claimTokenVal, u.UpdatedAt, u.ID)
 	if err != nil {
 		return err
 	}
@@ -177,7 +252,7 @@ func (db *DB) UpdateUser(u *User) error {
 
 // ListUsers lists all registered users.
 func (db *DB) ListUsers() ([]*User, error) {
-	query := `SELECT id, email, first_name, last_name, role, status, created_at, updated_at FROM users`
+	query := `SELECT id, email, first_name, last_name, role, status, approval_token, claim_token, created_at, updated_at FROM users`
 	rows, err := db.conn.Query(query)
 	if err != nil {
 		return nil, err
@@ -187,8 +262,15 @@ func (db *DB) ListUsers() ([]*User, error) {
 	var users []*User
 	for rows.Next() {
 		var u User
-		if err := rows.Scan(&u.ID, &u.Email, &u.FirstName, &u.LastName, &u.Role, &u.Status, &u.CreatedAt, &u.UpdatedAt); err != nil {
+		var approvalToken, claimToken sql.NullString
+		if err := rows.Scan(&u.ID, &u.Email, &u.FirstName, &u.LastName, &u.Role, &u.Status, &approvalToken, &claimToken, &u.CreatedAt, &u.UpdatedAt); err != nil {
 			return nil, err
+		}
+		if approvalToken.Valid {
+			u.ApprovalToken = approvalToken.String
+		}
+		if claimToken.Valid {
+			u.ClaimToken = claimToken.String
 		}
 		users = append(users, &u)
 	}

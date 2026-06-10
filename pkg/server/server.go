@@ -2,6 +2,9 @@ package server
 
 import (
 	"context"
+	"crypto/rand"
+	"crypto/sha256"
+	"encoding/hex"
 	"encoding/json"
 	"fmt"
 	"log"
@@ -13,6 +16,8 @@ import (
 	"time"
 
 	"lfr-tunnel/pkg/config"
+	"lfr-tunnel/pkg/db"
+	"lfr-tunnel/pkg/mail"
 
 	"github.com/jpillora/chisel/server"
 )
@@ -48,6 +53,8 @@ type Server struct {
 	registry     *Registry
 	proxyHandler *ProxyHandler
 	chiselProxy  *httputil.ReverseProxy
+	db           *db.DB
+	mailSender   mail.Sender
 	ctx          context.Context
 	cancel       context.CancelFunc
 }
@@ -73,6 +80,27 @@ func NewServer(cfg *config.ServerConfig) (*Server, error) {
 	}
 	chiselProxy := httputil.NewSingleHostReverseProxy(chiselURL)
 
+	var database *db.DB
+	if cfg.DBPath != "" {
+		var err error
+		database, err = db.Open(cfg.DBPath)
+		if err != nil {
+			return nil, fmt.Errorf("failed to open database at %s: %v", cfg.DBPath, err)
+		}
+	}
+
+	var mailSender mail.Sender
+	if cfg.SMTPHost != "" {
+		mailSender = mail.NewSMTPClient(&mail.Config{
+			SMTPHost:           cfg.SMTPHost,
+			SMTPPort:           cfg.SMTPPort,
+			SMTPUsername:       cfg.SMTPUsername,
+			SMTPPassword:       cfg.SMTPPassword,
+			SMTPFromAddress:    cfg.SMTPFromAddress,
+			InsecureSkipVerify: cfg.InsecureSkipVerify,
+		})
+	}
+
 	ctx, cancel := context.WithCancel(context.Background())
 
 	return &Server{
@@ -81,6 +109,8 @@ func NewServer(cfg *config.ServerConfig) (*Server, error) {
 		registry:     registry,
 		proxyHandler: proxyHandler,
 		chiselProxy:  chiselProxy,
+		db:           database,
+		mailSender:   mailSender,
 		ctx:          ctx,
 		cancel:       cancel,
 	}, nil
@@ -128,6 +158,21 @@ func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 
 		if r.Method == http.MethodGet && r.URL.Path == "/api/check-subdomain" {
 			s.handleCheckSubdomain(w, r)
+			return
+		}
+
+		if r.Method == http.MethodPost && r.URL.Path == "/api/register-request" {
+			s.handleRegisterRequest(w, r)
+			return
+		}
+
+		if r.Method == http.MethodGet && r.URL.Path == "/api/admin/approve" {
+			s.handleApproveUser(w, r)
+			return
+		}
+
+		if r.Method == http.MethodGet && r.URL.Path == "/api/claim" {
+			s.handleClaimToken(w, r)
 			return
 		}
 
@@ -181,7 +226,33 @@ func (s *Server) handleRegister(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Validate auth token
-	if s.cfg.AuthToken != "" && req.AuthToken != s.cfg.AuthToken {
+	authorized := false
+	if s.db != nil {
+		hashBytes := sha256.Sum256([]byte(req.AuthToken))
+		tokenHash := hex.EncodeToString(hashBytes[:])
+
+		pat, err := s.db.GetPATByHash(tokenHash)
+		if err == nil {
+			now := time.Now().UTC()
+			if pat.RevokedAt == nil && (pat.ExpiresAt == nil || pat.ExpiresAt.After(now)) {
+				user, err := s.db.GetUser(pat.UserID)
+				if err == nil && user.Status == "approved" {
+					authorized = true
+					go func(patID int64) {
+						if err := s.db.UpdatePATUsed(patID); err != nil {
+							log.Printf("[Server] Failed to update PAT last used time: %v", err)
+						}
+					}(pat.ID)
+				}
+			}
+		}
+	} else {
+		if s.cfg.AuthToken == "" || req.AuthToken == s.cfg.AuthToken {
+			authorized = true
+		}
+	}
+
+	if !authorized {
 		w.WriteHeader(http.StatusUnauthorized)
 		if err := json.NewEncoder(w).Encode(RegisterResponse{Status: "error", Error: "unauthorized"}); err != nil {
 			log.Printf("[Server] Failed to encode unauthorized response: %v", err)
@@ -355,8 +426,241 @@ func (s *Server) Start() error {
 	return srv.ListenAndServe()
 }
 
+// RegisterRequestPayload represents the payload to request developer registration.
+type RegisterRequestPayload struct {
+	Email     string `json:"email"`
+	FirstName string `json:"first_name"`
+	LastName  string `json:"last_name"`
+}
+
+func generateSecureToken() (string, error) {
+	bytes := make([]byte, 16)
+	if _, err := rand.Read(bytes); err != nil {
+		return "", err
+	}
+	return hex.EncodeToString(bytes), nil
+}
+
+// handleRegisterRequest creates a pending user registration request.
+func (s *Server) handleRegisterRequest(w http.ResponseWriter, r *http.Request) {
+	w.Header().Set("Content-Type", "application/json")
+
+	if s.db == nil {
+		w.WriteHeader(http.StatusNotImplemented)
+		_ = json.NewEncoder(w).Encode(map[string]string{"error": "database storage not enabled"})
+		return
+	}
+
+	var req RegisterRequestPayload
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		w.WriteHeader(http.StatusBadRequest)
+		_ = json.NewEncoder(w).Encode(map[string]string{"error": "invalid JSON payload"})
+		return
+	}
+
+	req.Email = strings.ToLower(strings.TrimSpace(req.Email))
+	if req.Email == "" || !strings.Contains(req.Email, "@") {
+		w.WriteHeader(http.StatusBadRequest)
+		_ = json.NewEncoder(w).Encode(map[string]string{"error": "invalid email address"})
+		return
+	}
+
+	// Check if user already exists
+	if _, err := s.db.GetUser(req.Email); err == nil {
+		w.WriteHeader(http.StatusConflict)
+		_ = json.NewEncoder(w).Encode(map[string]string{"error": "registration request already exists or email is registered"})
+		return
+	}
+
+	approvalToken, err := generateSecureToken()
+	if err != nil {
+		w.WriteHeader(http.StatusInternalServerError)
+		_ = json.NewEncoder(w).Encode(map[string]string{"error": "failed to generate approval token"})
+		return
+	}
+
+	user := &db.User{
+		ID:            req.Email,
+		Email:         req.Email,
+		FirstName:     req.FirstName,
+		LastName:      req.LastName,
+		Role:          "user",
+		Status:        "pending",
+		ApprovalToken: approvalToken,
+	}
+
+	if err := s.db.CreateUser(user); err != nil {
+		w.WriteHeader(http.StatusInternalServerError)
+		_ = json.NewEncoder(w).Encode(map[string]string{"error": "failed to save registration request"})
+		return
+	}
+
+	// Send notification email to Admin if mail client is active
+	if s.mailSender != nil && s.cfg.AdminNotificationEmail != "" {
+		subject := "[Liferay Tunnel] New Developer Registration Request"
+		scheme := "http"
+		if s.cfg.SSLCertFile != "" {
+			scheme = "https"
+		}
+		host := r.Host
+		approveURL := fmt.Sprintf("%s://%s/api/admin/approve?email=%s&token=%s", scheme, host, url.QueryEscape(user.Email), approvalToken)
+		body := fmt.Sprintf("<p>New registration request:</p><ul><li>Name: %s %s</li><li>Email: %s</li></ul><p><a href=\"%s\">Click here to approve this request</a></p>", user.FirstName, user.LastName, user.Email, approveURL)
+		if err := s.mailSender.Send(s.cfg.AdminNotificationEmail, subject, body); err != nil {
+			log.Printf("[Server] Failed to send admin alert email: %v", err)
+		}
+	}
+
+	w.WriteHeader(http.StatusOK)
+	_ = json.NewEncoder(w).Encode(map[string]string{"status": "success", "message": "registration request submitted and is pending admin approval"})
+}
+
+// handleApproveUser handles admin clicks on approval links.
+func (s *Server) handleApproveUser(w http.ResponseWriter, r *http.Request) {
+	if s.db == nil {
+		http.Error(w, "Database storage not enabled", http.StatusNotImplemented)
+		return
+	}
+
+	email := r.URL.Query().Get("email")
+	token := r.URL.Query().Get("token")
+
+	if email == "" || token == "" {
+		http.Error(w, "Missing email or token parameters", http.StatusBadRequest)
+		return
+	}
+
+	user, err := s.db.GetUser(email)
+	if err != nil {
+		http.Error(w, "User request not found", http.StatusNotFound)
+		return
+	}
+
+	if user.Status != "pending" || user.ApprovalToken != token {
+		http.Error(w, "Invalid approval link or request already processed", http.StatusGone)
+		return
+	}
+
+	claimToken, err := generateSecureToken()
+	if err != nil {
+		http.Error(w, "Failed to generate claim token", http.StatusInternalServerError)
+		return
+	}
+
+	// Generate PAT
+	patBytes := make([]byte, 16)
+	if _, err := rand.Read(patBytes); err != nil {
+		http.Error(w, "Failed to generate personal access token", http.StatusInternalServerError)
+		return
+	}
+	pat := "lfr_pat_" + hex.EncodeToString(patBytes)
+	hashBytes := sha256.Sum256([]byte(pat))
+	tokenHash := hex.EncodeToString(hashBytes[:])
+
+	// Create PAT entry
+	tokenPrefix := pat[:12]
+	patModel := &db.PersonalAccessToken{
+		UserID:      user.ID,
+		TokenHash:   tokenHash,
+		TokenPrefix: tokenPrefix,
+		Name:        "Default CLI Token",
+	}
+
+	if err := s.db.CreatePAT(patModel); err != nil {
+		http.Error(w, "Failed to create PAT", http.StatusInternalServerError)
+		return
+	}
+
+	user.Status = "approved"
+	user.ApprovalToken = ""
+	user.ClaimToken = claimToken + ":" + pat
+
+	if err := s.db.UpdateUser(user); err != nil {
+		http.Error(w, "Failed to update user status", http.StatusInternalServerError)
+		return
+	}
+
+	// Send approval email to developer with claim link
+	if s.mailSender != nil {
+		subject := "[Liferay Tunnel] Registration Approved!"
+		scheme := "http"
+		if s.cfg.SSLCertFile != "" {
+			scheme = "https"
+		}
+		host := r.Host
+		claimURL := fmt.Sprintf("%s://%s/api/claim?token=%s", scheme, host, claimToken)
+		body := fmt.Sprintf("<p>Your registration request has been approved!</p><p><a href=\"%s\">Click here to claim your personal access token</a></p><p>Note: this link can only be used once.</p>", claimURL)
+		if err := s.mailSender.Send(user.Email, subject, body); err != nil {
+			log.Printf("[Server] Failed to send developer approval email: %v", err)
+		}
+	}
+
+	w.Header().Set("Content-Type", "text/html; charset=utf-8")
+	w.WriteHeader(http.StatusOK)
+	_, _ = w.Write([]byte("<h1>Approval Successful</h1><p>The user has been approved, and an email has been sent to them with instructions to claim their token.</p>"))
+}
+
+// handleClaimToken allows developers to claim their generated PAT.
+func (s *Server) handleClaimToken(w http.ResponseWriter, r *http.Request) {
+	w.Header().Set("Content-Type", "application/json")
+
+	if s.db == nil {
+		w.WriteHeader(http.StatusNotImplemented)
+		_ = json.NewEncoder(w).Encode(map[string]string{"error": "database storage not enabled"})
+		return
+	}
+
+	token := r.URL.Query().Get("token")
+	if token == "" {
+		w.WriteHeader(http.StatusBadRequest)
+		_ = json.NewEncoder(w).Encode(map[string]string{"error": "missing claim token"})
+		return
+	}
+
+	// Find user by claim token prefix
+	users, err := s.db.ListUsers()
+	if err != nil {
+		w.WriteHeader(http.StatusInternalServerError)
+		_ = json.NewEncoder(w).Encode(map[string]string{"error": "failed to list users"})
+		return
+	}
+
+	var targetUser *db.User
+	var plaintextPat string
+
+	for _, u := range users {
+		if u.ClaimToken != "" && strings.HasPrefix(u.ClaimToken, token+":") {
+			targetUser = u
+			plaintextPat = strings.TrimPrefix(u.ClaimToken, token+":")
+			break
+		}
+	}
+
+	if targetUser == nil {
+		w.WriteHeader(http.StatusGone)
+		_ = json.NewEncoder(w).Encode(map[string]string{"error": "invalid or expired claim token"})
+		return
+	}
+
+	// Clear claim token so it can never be claimed again
+	targetUser.ClaimToken = ""
+	if err := s.db.UpdateUser(targetUser); err != nil {
+		w.WriteHeader(http.StatusInternalServerError)
+		_ = json.NewEncoder(w).Encode(map[string]string{"error": "failed to update user"})
+		return
+	}
+
+	w.WriteHeader(http.StatusOK)
+	_ = json.NewEncoder(w).Encode(map[string]string{
+		"status":                 "success",
+		"personal_access_token": plaintextPat,
+	})
+}
+
 // Stop shuts down the server.
 func (s *Server) Stop() {
 	s.cancel()
 	s.chiselServer.Close()
+	if s.db != nil {
+		s.db.Close()
+	}
 }

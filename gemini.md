@@ -69,9 +69,9 @@ The solution will consist of:
 - [x] Fix CI build and formatting failures.
 - [x] Upgrade Go version in GitHub Action workflows to 1.22.
 - [x] Update auth architecture document with SMTP configuration and email verification flows.
-- [ ] Implement self-registration database models and request states (pending, approved, active).
+- [x] Implement self-registration database models and request states (pending, approved, active).
 - [x] Implement outbound email sending service in the server (supporting local postfix and external SMTP relays).
-- [ ] Add admin approval endpoints and email notification flows.
+- [x] Add admin approval endpoints and email notification flows.
 - [x] Fix Mermaid syntax parsing errors in auth_architecture.md.
 - [x] Move architecture.md to docs/ directory and update references.
 - [x] Fully quote all Mermaid diagram labels, nodes, and messages in auth_architecture.md to fix GitHub rendering.

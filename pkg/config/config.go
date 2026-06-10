@@ -10,14 +10,22 @@ import (
 
 // ServerConfig holds configuration settings for the lfr-tunneld server.
 type ServerConfig struct {
-	Domain1        string `yaml:"domain1"`
-	Domain2        string `yaml:"domain2"`
-	BindAddr       string `yaml:"bind_addr"`
-	HTTPBindAddr   string `yaml:"http_bind_addr"`
-	ChiselBindAddr string `yaml:"chisel_bind_addr"`
-	AuthToken      string `yaml:"auth_token"`
-	SSLCertFile    string `yaml:"ssl_cert_file"`
-	SSLKeyFile     string `yaml:"ssl_key_file"`
+	Domain1                string `yaml:"domain1"`
+	Domain2                string `yaml:"domain2"`
+	BindAddr               string `yaml:"bind_addr"`
+	HTTPBindAddr           string `yaml:"http_bind_addr"`
+	ChiselBindAddr         string `yaml:"chisel_bind_addr"`
+	AuthToken              string `yaml:"auth_token"`
+	SSLCertFile            string `yaml:"ssl_cert_file"`
+	SSLKeyFile             string `yaml:"ssl_key_file"`
+	DBPath                 string `yaml:"db_path"`
+	SMTPHost               string `yaml:"smtp_host"`
+	SMTPPort               int    `yaml:"smtp_port"`
+	SMTPUsername           string `yaml:"smtp_username"`
+	SMTPPassword           string `yaml:"smtp_password"`
+	SMTPFromAddress        string `yaml:"smtp_from_address"`
+	AdminNotificationEmail string `yaml:"admin_notification_email"`
+	InsecureSkipVerify     bool   `yaml:"insecure_skip_verify"`
 }
 
 // ClientConfig holds configuration settings for the lfr-tunnel client.
@@ -86,6 +94,32 @@ func LoadServerConfig(path string) (*ServerConfig, error) {
 	}
 	if val := os.Getenv("LFT_SSL_KEY"); val != "" {
 		cfg.SSLKeyFile = val
+	}
+	if val := os.Getenv("LFT_DB_PATH"); val != "" {
+		cfg.DBPath = val
+	}
+	if val := os.Getenv("LFT_SMTP_HOST"); val != "" {
+		cfg.SMTPHost = val
+	}
+	if val := os.Getenv("LFT_SMTP_PORT"); val != "" {
+		if p, err := strconv.Atoi(val); err == nil {
+			cfg.SMTPPort = p
+		}
+	}
+	if val := os.Getenv("LFT_SMTP_USERNAME"); val != "" {
+		cfg.SMTPUsername = val
+	}
+	if val := os.Getenv("LFT_SMTP_PASSWORD"); val != "" {
+		cfg.SMTPPassword = val
+	}
+	if val := os.Getenv("LFT_SMTP_FROM"); val != "" {
+		cfg.SMTPFromAddress = val
+	}
+	if val := os.Getenv("LFT_ADMIN_EMAIL"); val != "" {
+		cfg.AdminNotificationEmail = val
+	}
+	if val := os.Getenv("LFT_INSECURE_SKIP_VERIFY"); val != "" {
+		cfg.InsecureSkipVerify = strings.ToLower(val) == "true" || val == "1"
 	}
 
 	return cfg, nil

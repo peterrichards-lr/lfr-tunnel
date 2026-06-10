@@ -34,12 +34,14 @@ func TestUserCRUD(t *testing.T) {
 	defer cleanupTestDB(database, tmpDir)
 
 	user := &User{
-		ID:        "user-1",
-		Email:     "user1@liferay.com",
-		FirstName: "John",
-		LastName:  "Doe",
-		Role:      "user",
-		Status:    "pending",
+		ID:            "user-1",
+		Email:         "user1@liferay.com",
+		FirstName:     "John",
+		LastName:      "Doe",
+		Role:          "user",
+		Status:        "pending",
+		ApprovalToken: "dummy_approval_token",
+		ClaimToken:    "dummy_claim_token",
 	}
 
 	// 1. Create User
@@ -60,6 +62,9 @@ func TestUserCRUD(t *testing.T) {
 	if fetched.Email != user.Email || fetched.FirstName != user.FirstName {
 		t.Errorf("fetched user mismatch: got email %s, name %s", fetched.Email, fetched.FirstName)
 	}
+	if fetched.ApprovalToken != "dummy_approval_token" || fetched.ClaimToken != "dummy_claim_token" {
+		t.Errorf("fetched user tokens mismatch: got approval=%s, claim=%s", fetched.ApprovalToken, fetched.ClaimToken)
+	}
 
 	// Fetch by email
 	fetchedEmail, err := database.GetUserByEmail("user1@liferay.com")
@@ -68,6 +73,24 @@ func TestUserCRUD(t *testing.T) {
 	}
 	if fetchedEmail.ID != user.ID {
 		t.Errorf("fetched user email mismatch: got ID %s", fetchedEmail.ID)
+	}
+
+	// Fetch by approval token
+	fetchedApp, err := database.GetUserByApprovalToken("dummy_approval_token")
+	if err != nil {
+		t.Fatalf("failed to fetch user by approval token: %v", err)
+	}
+	if fetchedApp.ID != user.ID {
+		t.Errorf("fetched user approval token mismatch: got ID %s", fetchedApp.ID)
+	}
+
+	// Fetch by claim token
+	fetchedClaim, err := database.GetUserByClaimToken("dummy_claim_token")
+	if err != nil {
+		t.Fatalf("failed to fetch user by claim token: %v", err)
+	}
+	if fetchedClaim.ID != user.ID {
+		t.Errorf("fetched user claim token mismatch: got ID %s", fetchedClaim.ID)
 	}
 
 	// Get non-existent user
@@ -79,6 +102,8 @@ func TestUserCRUD(t *testing.T) {
 	// 3. Update User
 	fetched.FirstName = "Johnny"
 	fetched.Status = "approved"
+	fetched.ApprovalToken = ""
+	fetched.ClaimToken = "dummy_new_claim_token"
 	if err := database.UpdateUser(fetched); err != nil {
 		t.Fatalf("failed to update user: %v", err)
 	}
@@ -89,6 +114,9 @@ func TestUserCRUD(t *testing.T) {
 	}
 	if updated.FirstName != "Johnny" || updated.Status != "approved" {
 		t.Errorf("update was not saved: got name %s, status %s", updated.FirstName, updated.Status)
+	}
+	if updated.ApprovalToken != "" || updated.ClaimToken != "dummy_new_claim_token" {
+		t.Errorf("update tokens were not saved: got approval=%q, claim=%q", updated.ApprovalToken, updated.ClaimToken)
 	}
 
 	// Update non-existent user should fail

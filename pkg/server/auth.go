@@ -32,6 +32,8 @@ type TunnelLease struct {
 	BasicAuth       string            `json:"basic_auth"`
 	AddedHeaders    map[string]string `json:"added_headers"`
 	Status          string            `json:"status"` // e.g., "up", "maintenance", "down"
+	BytesIn         uint64            `json:"bytes_in"`
+	BytesOut        uint64            `json:"bytes_out"`
 	CreatedAt       time.Time         `json:"created_at"`
 }
 

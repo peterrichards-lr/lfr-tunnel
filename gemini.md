@@ -109,24 +109,9 @@ The solution will consist of:
 - [x] Add IP Blacklist database table and CRUD API endpoints.
 - [x] Inject missing audit log events (user.registered, token.claimed, lease.kicked, ip.blacklisted).
 - [x] Implement `-rate-limit` CLI flag for Subdomain traffic protection.
-- [x] Build the Admin Web Dashboard (`/admin`).
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
+- [x] Build the Admin Web Dashboard
+- [x] Implement configurable admin email alerts from the UI.
+- [x] Implement manual email verification flow for users to prevent spam.
+- [x] Implement Theming and Aesthetics engine in Admin Dashboard (Light/Dark mode).
+- [ ] Implement Resource/Bandwidth Monitoring per tunnel (Bytes In/Out tracking).
+- [ ] Implement Cloud User Portal (DEFERRED until public repo/OIDC).

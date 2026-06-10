@@ -5,12 +5,14 @@ import (
 	_ "embed"
 	"encoding/base64"
 	"fmt"
+	"io"
 	"log"
 	"net"
 	"net/http"
 	"net/http/httputil"
 	"strings"
 	"sync"
+	"sync/atomic"
 
 	"golang.org/x/time/rate"
 )
@@ -112,6 +114,10 @@ func (p *ProxyHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 			}
 			req.Header.Set("X-Forwarded-Proto", proto)
 		},
+		Transport: &trackingTransport{
+			roundTripper: http.DefaultTransport,
+			lease:        lease,
+		},
 		ErrorHandler: func(w http.ResponseWriter, req *http.Request, err error) {
 			log.Printf("[Proxy] Routing failure to %s (127.0.0.1:%d): %v", host, lease.LocalPort, err)
 			p.serveOfflinePage(w, req, host, err.Error())
@@ -132,4 +138,48 @@ func (p *ProxyHandler) serveOfflinePage(w http.ResponseWriter, r *http.Request, 
 	if _, err := w.Write(pageBytes); err != nil {
 		log.Printf("[Proxy] Failed to write offline page: %v", err)
 	}
+}
+
+type trackingTransport struct {
+	roundTripper http.RoundTripper
+	lease        *TunnelLease
+}
+
+func (t *trackingTransport) RoundTrip(req *http.Request) (*http.Response, error) {
+	if req.Body != nil {
+		req.Body = &trackingReadCloser{
+			ReadCloser: req.Body,
+			addBytes: func(n int) {
+				atomic.AddUint64(&t.lease.BytesIn, uint64(n))
+			},
+		}
+	}
+
+	res, err := t.roundTripper.RoundTrip(req)
+	if err != nil {
+		return res, err
+	}
+
+	if res.Body != nil {
+		res.Body = &trackingReadCloser{
+			ReadCloser: res.Body,
+			addBytes: func(n int) {
+				atomic.AddUint64(&t.lease.BytesOut, uint64(n))
+			},
+		}
+	}
+	return res, nil
+}
+
+type trackingReadCloser struct {
+	io.ReadCloser
+	addBytes func(int)
+}
+
+func (r *trackingReadCloser) Read(p []byte) (int, error) {
+	n, err := r.ReadCloser.Read(p)
+	if n > 0 {
+		r.addBytes(n)
+	}
+	return n, err
 }

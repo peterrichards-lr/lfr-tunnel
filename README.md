@@ -145,6 +145,22 @@ lfr-tunnel -config client-config.yaml
 
 ---
 
+## Future Roadmap
+
+The following server-side administrative capabilities are planned for future versions of `lfr-tunnel`:
+
+1.  **Administrative Web Dashboard**:
+    *   A secure web portal (e.g. at `https://tunnel.lfr-demo.se/admin`) to inspect all active subdomains and target ports.
+    *   Visual representation of current traffic throughput and latency.
+2.  **Audit Logs & Tracking**:
+    *   Trace which specific client sessions (e.g., developer name, host machine hostname) registered and exposed each subdomain.
+3.  **Active Lease Management**:
+    *   Allow administrators to manually terminate (kick) an active subdomain lease or block specific client prefixes directly from the web dashboard.
+4.  **Security Integration**:
+    *   Support OAuth2/OIDC integration (e.g. log in with Okta/GitHub) for developers registering tunnels, rather than relying solely on a shared secret `auth_token`.
+
+---
+
 ## License
 
 This project is licensed under the MIT License. See [LICENSE](LICENSE) for details.

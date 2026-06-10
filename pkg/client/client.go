@@ -37,6 +37,7 @@ type RegisterResponse struct {
 	Status       string   `json:"status"`
 	SessionToken string   `json:"session_token,omitempty"`
 	Remotes      []string `json:"remotes,omitempty"`
+	Domains      []string `json:"domains,omitempty"`
 	Error        string   `json:"error,omitempty"`
 }
 
@@ -165,24 +166,23 @@ func RegisterTunnel(serverURL string, authToken string, subdomain string, ports 
 
 // RunClient runs the embedded Chisel client.
 func RunClient(ctx context.Context, serverURL string, token string, remotes []string) error {
-	// 1. Convert HTTP/HTTPS server URL to WebSocket scheme WS/WSS
+	// Rewrite remotes if target host override is set (useful for Docker containerized environments)
+	targetHost := os.Getenv("LFT_TARGET_HOST")
+	if targetHost != "" {
+		for i, remote := range remotes {
+			remotes[i] = strings.ReplaceAll(remote, "localhost", targetHost)
+			remotes[i] = strings.ReplaceAll(remotes[i], "127.0.0.1", targetHost)
+		}
+	}
+
+	// 1. Ensure server URL starts with http/https
 	if !strings.HasPrefix(serverURL, "http") {
 		serverURL = "http://" + serverURL
 	}
-	parsedURL, err := url.Parse(serverURL)
-	if err != nil {
-		return fmt.Errorf("invalid server URL: %v", err)
-	}
-
-	scheme := "ws"
-	if parsedURL.Scheme == "https" {
-		scheme = "wss"
-	}
-	websocketURL := fmt.Sprintf("%s://%s", scheme, parsedURL.Host)
 
 	// 2. Setup Chisel client config
 	chiselCfg := &chclient.Config{
-		Server:           websocketURL,
+		Server:           serverURL + "/tunnel",
 		Auth:             fmt.Sprintf("%s:%s", token, token),
 		Remotes:          remotes,
 		MaxRetryInterval: 10 * time.Second,
@@ -196,7 +196,7 @@ func RunClient(ctx context.Context, serverURL string, token string, remotes []st
 	}
 
 	// Log client status
-	log.Printf("[Client] Establised lease. Connecting tunnels to %s...", websocketURL)
+	log.Printf("[Client] Establised lease. Connecting tunnels to %s...", serverURL)
 	for _, remote := range remotes {
 		log.Printf("[Client] Forwarding remote port: %s", remote)
 	}

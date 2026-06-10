@@ -29,8 +29,10 @@ type RegisterResponse struct {
 	Status       string   `json:"status"`
 	SessionToken string   `json:"session_token,omitempty"`
 	Remotes      []string `json:"remotes,omitempty"`
+	Domains      []string `json:"domains,omitempty"`
 	Error        string   `json:"error,omitempty"`
 }
+
 
 // Server coordinates the entire gateway operations.
 type Server struct {
@@ -112,9 +114,16 @@ func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 
+		if r.Method == http.MethodGet && r.URL.Path == "/api/domains" {
+			s.handleDomains(w, r)
+			return
+		}
+
+
 		// Route Chisel WebSocket handshake/tunnel request
 		isUpgrade := strings.ToLower(r.Header.Get("Upgrade")) == "websocket"
 		if isUpgrade || strings.HasPrefix(r.URL.Path, "/tunnel") {
+			r.URL.Path = "/"
 			s.chiselProxy.ServeHTTP(w, r)
 			return
 		}
@@ -197,10 +206,31 @@ func (s *Server) handleRegister(w http.ResponseWriter, r *http.Request) {
 		Status:       "success",
 		SessionToken: sessionToken,
 		Remotes:      remotes,
+		Domains:      activeDomains,
 	}); err != nil {
 		log.Printf("[Server] Failed to encode success response: %v", err)
 	}
 }
+
+// handleDomains responds with the supported root domains.
+func (s *Server) handleDomains(w http.ResponseWriter, r *http.Request) {
+	w.Header().Set("Content-Type", "application/json")
+	var domains []string
+	if s.cfg.Domain1 != "" {
+		domains = append(domains, s.cfg.Domain1)
+	}
+	if s.cfg.Domain2 != "" {
+		domains = append(domains, s.cfg.Domain2)
+	}
+	if len(domains) == 0 {
+		domains = append(domains, "localhost")
+	}
+	w.WriteHeader(http.StatusOK)
+	if err := json.NewEncoder(w).Encode(domains); err != nil {
+		log.Printf("[Server] Failed to encode domains response: %v", err)
+	}
+}
+
 
 // Start kicks off the background processes and listens for gateway traffic.
 func (s *Server) Start() error {

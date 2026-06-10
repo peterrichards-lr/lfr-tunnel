@@ -97,3 +97,36 @@ func TestServer_ControlWelcomePage(t *testing.T) {
 		t.Error("expected welcome landing page content")
 	}
 }
+
+func TestServer_Domains(t *testing.T) {
+	cfg := &config.ServerConfig{
+		Domain1: "example.se",
+		Domain2: "example.online",
+	}
+
+	srv, err := NewServer(cfg)
+	if err != nil {
+		t.Fatalf("failed to create server: %v", err)
+	}
+	defer srv.Stop()
+
+	req := httptest.NewRequest("GET", "http://example.se/api/domains", nil)
+	req.Host = "example.se"
+	rec := httptest.NewRecorder()
+
+	srv.ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusOK {
+		t.Errorf("expected 200 OK, got %d", rec.Code)
+	}
+
+	var domains []string
+	if err := json.NewDecoder(rec.Body).Decode(&domains); err != nil {
+		t.Fatalf("failed to decode response: %v", err)
+	}
+
+	if len(domains) != 2 || domains[0] != "example.se" || domains[1] != "example.online" {
+		t.Errorf("expected [example.se, example.online], got %v", domains)
+	}
+}
+

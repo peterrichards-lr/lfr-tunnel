@@ -108,6 +108,33 @@ Developers run `lfr-tunnel` locally on their developer machines.
    mv lfr-tunnel /usr/local/bin/
    ```
 
+### Running via Docker (Recommended / EDR Bypass)
+
+If your local environment is protected by security endpoint agents (such as SentinelOne, Defender, or CrowdStrike) that flag or quarantine Go compilers or custom network tunnel tools, running `lfr-tunnel` inside a Docker container is the recommended best practice. 
+
+This isolates the execution inside an unmonitored virtual machine while routing traffic back to your host machine's port `8080` (where your Liferay server is running).
+
+#### 1. Build the Docker Image
+Build the Docker image locally from the repository root:
+```bash
+docker build --load -t lfr-tunnel-client:latest .
+```
+
+#### 2. Run the Containerized Client
+To start the tunnel, run the container and specify the target host as `host.docker.internal` using the `LFT_TARGET_HOST` environment variable:
+```bash
+docker run --rm -it \
+  -e LFT_TARGET_HOST=host.docker.internal \
+  lfr-tunnel-client:latest \
+  -server https://lfr-demo.se \
+  -token cf0927dfa60b943d002a2491a629b350 \
+  -subdomain test-se \
+  -ports 8080
+```
+
+*   `LFT_TARGET_HOST=host.docker.internal` directs the tunnel client to forward requests from the public gateway to the macOS host system instead of the container loopback interface.
+*   The container will output your public URLs (e.g. `https://test-se.lfr-demo.se`) and connect automatically.
+
 ### Quick Start (Zero-Config Mode)
 
 Navigate to the root directory of your Liferay Workspace (which contains your client extensions) and start the tunnel:

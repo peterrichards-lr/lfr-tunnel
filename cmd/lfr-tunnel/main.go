@@ -116,6 +116,19 @@ func main() {
 		log.Fatalf("[Client] Registration failed: %v", err)
 	}
 
+	log.Println("[Client] Registration successful! Your public tunnel URLs are:")
+	for _, domain := range regResp.Domains {
+		for _, pm := range portMappings {
+			var fullSubdomain string
+			if pm.NameSuffix == "" {
+				fullSubdomain = sub
+			} else {
+				fullSubdomain = fmt.Sprintf("%s-%s", sub, pm.NameSuffix)
+			}
+			log.Printf("  https://%s.%s -> local port %d", fullSubdomain, domain, pm.LocalPort)
+		}
+	}
+
 	// 6. Run Client and wait for signals
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()

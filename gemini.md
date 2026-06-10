@@ -39,7 +39,7 @@ The solution will consist of:
 - [x] Create CI validation workflow in `.github/workflows/ci.yml`.
 - [x] Fix CI build failures (errcheck linting errors).
 - [x] Move DNS files to a dedicated `docs/dns/` directory.
-- [ ] Document / set up GitHub branch protection rulesets (configured ready in docs/github/).
+- [x] Document / set up GitHub branch protection rulesets (configured ready in docs/github/).
 - [x] Document Nginx, SSL redirection, and Let's Encrypt configurations in docs/server/.
 - [x] Configure systemd service and run lfr-tunneld under a dedicated restricted system user.
 - [x] Configure VPS: firewall (ufw), new sudo user `peterrichards`, disable root SSH.
@@ -49,4 +49,15 @@ The solution will consist of:
 - [x] Document supported domains constraint (lfr-demo.se and lfr-demo.online) in README.md and architecture.md.
 - [x] Document support for LDM, native Tomcat bundles, and Docker runtimes in README.md.
 - [x] Create a Makefile for developer commands (fmt, vet, test, build).
+- [x] Generate wildcard Let's Encrypt SSL certificates for domains.
+- [x] Activate Nginx reverse proxy configuration on VPS.
+- [x] Build and deploy lfr-tunneld binary to VPS as a systemd service.
+- [x] Connect and verify client tunnel through VPS.
+- [x] Implement server-side supported domains endpoint/response and client-side public URL printing.
+- [x] Implement client-side target host override (LFT_TARGET_HOST) and Dockerfile for containerized local execution.
+- [x] Fix WebSocket path routing by appending /tunnel to client and rewriting to / on server.
+
+
+
+
 

@@ -286,33 +286,7 @@ func (s *Server) handleRegister(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Validate auth token
-	authorized := false
-	if s.db != nil {
-		hashBytes := sha256.Sum256([]byte(req.AuthToken))
-		tokenHash := hex.EncodeToString(hashBytes[:])
-
-		pat, err := s.db.GetPATByHash(tokenHash)
-		if err == nil {
-			now := time.Now().UTC()
-			if pat.RevokedAt == nil && (pat.ExpiresAt == nil || pat.ExpiresAt.After(now)) {
-				user, err := s.db.GetUser(pat.UserID)
-				if err == nil && user.Status == "approved" {
-					authorized = true
-					go func(patID int64) {
-						if err := s.db.UpdatePATUsed(patID); err != nil {
-							log.Printf("[Server] Failed to update PAT last used time: %v", err)
-						}
-					}(pat.ID)
-				}
-			}
-		}
-	} else {
-		if s.cfg.AuthToken == "" || req.AuthToken == s.cfg.AuthToken {
-			authorized = true
-		}
-	}
-
-	if !authorized {
+	if !s.isValidToken(req.AuthToken) {
 		w.WriteHeader(http.StatusUnauthorized)
 		if err := json.NewEncoder(w).Encode(RegisterResponse{Status: "error", Error: "unauthorized"}); err != nil {
 			log.Printf("[Server] Failed to encode unauthorized response: %v", err)
@@ -381,7 +355,7 @@ func (s *Server) handleCheckSubdomain(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	if s.cfg.AuthToken != "" && token != s.cfg.AuthToken {
+	if !s.isValidToken(token) {
 		w.WriteHeader(http.StatusUnauthorized)
 		if err := json.NewEncoder(w).Encode(map[string]string{"error": "unauthorized"}); err != nil {
 			log.Printf("[Server] Failed to encode unauthorized response: %v", err)
@@ -739,4 +713,36 @@ func (s *Server) getActiveDomainsForRequest(r *http.Request) []string {
 		activeDomains = append(activeDomains, "localhost")
 	}
 	return activeDomains
+}
+
+// isValidToken checks if a token is valid, checking both personal access tokens (PATs)
+// in the database and the server's master auth_token configuration.
+func (s *Server) isValidToken(token string) bool {
+	if token == "" {
+		return false
+	}
+	if s.db != nil {
+		hashBytes := sha256.Sum256([]byte(token))
+		tokenHash := hex.EncodeToString(hashBytes[:])
+
+		pat, err := s.db.GetPATByHash(tokenHash)
+		if err == nil {
+			now := time.Now().UTC()
+			if pat.RevokedAt == nil && (pat.ExpiresAt == nil || pat.ExpiresAt.After(now)) {
+				user, err := s.db.GetUser(pat.UserID)
+				if err == nil && user.Status == "approved" {
+					// Update last used asynchronously
+					go func(patID int64) {
+						if err := s.db.UpdatePATUsed(patID); err != nil {
+							log.Printf("[Server] Failed to update PAT last used time: %v", err)
+						}
+					}(pat.ID)
+					return true
+				}
+			}
+		}
+	}
+
+	// Fallback to server config shared token
+	return s.cfg.AuthToken != "" && token == s.cfg.AuthToken
 }

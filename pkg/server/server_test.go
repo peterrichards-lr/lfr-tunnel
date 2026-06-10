@@ -209,6 +209,49 @@ func TestServer_CheckSubdomain(t *testing.T) {
 	if len(checkResp.Suggestions) != 3 {
 		t.Errorf("expected 3 suggestions for unavailable subdomain, got %d", len(checkResp.Suggestions))
 	}
+
+	// 6. Test check subdomain using database Personal Access Token (PAT)
+	tmpDir, err := os.MkdirTemp("", "lfr-tunnel-check-*")
+	if err != nil {
+		t.Fatalf("failed to create temp dir: %v", err)
+	}
+	defer os.RemoveAll(tmpDir)
+
+	dbPath := filepath.Join(tmpDir, "test.db")
+	cfgDb := &config.ServerConfig{
+		Domain1:   "example.com",
+		DBPath:    dbPath,
+		AuthToken: "mysecret",
+		StaticTokens: []config.StaticTokenConfig{
+			{
+				Token:  "peter-pat-token-abc",
+				UserID: "peter.richards@liferay.com",
+				Role:   "admin",
+			},
+		},
+	}
+
+	srvDb, err := NewServer(cfgDb)
+	if err != nil {
+		t.Fatalf("failed to create server with DB: %v", err)
+	}
+	defer srvDb.Stop()
+
+	// Query check subdomain using the seeded PAT token
+	req = httptest.NewRequest("GET", "http://example.com/api/check-subdomain?subdomain=beta-dev", nil)
+	req.Header.Set("Authorization", "Bearer peter-pat-token-abc")
+	req.Host = "example.com"
+	rec = httptest.NewRecorder()
+	srvDb.ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusOK {
+		t.Errorf("expected 200 OK with PAT token, got %d", rec.Code)
+	}
+	var patCheckResp CheckSubdomainResponse
+	json.NewDecoder(rec.Body).Decode(&patCheckResp)
+	if !patCheckResp.Available {
+		t.Errorf("expected beta-dev to be available under PAT token query")
+	}
 }
 
 type mockMailSender struct {

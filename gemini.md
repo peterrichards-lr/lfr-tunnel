@@ -89,6 +89,10 @@ The solution will consist of:
 - [x] Implement domain-specific registration and subdomain checking to keep domain1 and domain2 separate.
 - [x] Print the clickable public URLs at the end of client connection setup.
 - [x] Implement client-side background execution (-background), check status (-status), and termination (-stop) flags.
+- [x] Allow developer PAT authentication on check-subdomain endpoint.
+- [ ] Implement local E2E Docker integration test suite.
+
+
 
 
 

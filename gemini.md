@@ -47,4 +47,5 @@ The solution will consist of:
 - [x] Update DNS records (DNS resolved to new IP `82.39.133.178`).
 - [x] Test SSH and connect to the VPS with the new IP.
 - [x] Document supported domains constraint (lfr-demo.se and lfr-demo.online) in README.md and architecture.md.
+- [x] Document support for LDM, native Tomcat bundles, and Docker runtimes in README.md.
 

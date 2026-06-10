@@ -743,7 +743,7 @@ func (s *Server) handleVerifyEmail(w http.ResponseWriter, r *http.Request) {
 	}
 
 	w.Header().Set("Content-Type", "text/html")
-	w.Write([]byte(`<html><head><title>Email Verified</title><style>body{font-family:sans-serif;text-align:center;padding:50px;color:#333;background:#f8fafc;}h1{color:#10b981;}</style></head><body><h1>Email Verified! ✅</h1><p>Your email has been verified successfully. An administrator has been notified to review and approve your account.</p></body></html>`))
+	_, _ = w.Write([]byte(`<html><head><title>Email Verified</title><style>body{font-family:sans-serif;text-align:center;padding:50px;color:#333;background:#f8fafc;}h1{color:#10b981;}</style></head><body><h1>Email Verified! ✅</h1><p>Your email has been verified successfully. An administrator has been notified to review and approve your account.</p></body></html>`))
 }
 
 // handleApproveUser handles admin clicks on approval links.

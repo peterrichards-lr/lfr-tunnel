@@ -197,3 +197,12 @@ Rather than passing the Chisel connection directly to the target local Liferay i
    From the Inspector dashboard, developers can instantly toggle **Maintenance Mode**. The interceptor ceases forwarding traffic to Tomcat and immediately returns a `503 Service Unavailable` with a Liferay-branded fallback HTML page. This allows SEs to reboot their local Tomcat without killing the `lfr-tunnel` process or losing their claimed subdomain.
 
 ---
+
+## 10. Roadmap & Future Enhancements
+
+1. **Cloud User Portal (Requires SSO)**: 
+   Once Liferay SSO (OIDC) is integrated, the VPS Gateway will host a centralized web portal (e.g., `https://tunnel.lfr-demo.se/dashboard`) where authenticated Sales Engineers can manage their Long-Lived Developer Tokens, view their permanently reserved subdomains, and monitor their security status.
+2. **SSO Device Authorization Grant**:
+   To support "headless" autostart via the `install-service` feature, the SSO integration will generate a long-lived Developer Token (e.g., 90 days) instead of short-lived session cookies, allowing seamless, persistent background connections.
+
+---

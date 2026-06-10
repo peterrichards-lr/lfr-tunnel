@@ -48,6 +48,13 @@ func main() {
 
 	flag.Parse()
 
+	if len(os.Args) > 1 && os.Args[1] == "install-service" {
+		if err := client.InstallService(); err != nil {
+			log.Fatalf("[Error] Failed to install service: %v", err)
+		}
+		return
+	}
+
 	if *versionFlag {
 		fmt.Printf("lfr-tunnel version %s\n", config.Version)
 		return

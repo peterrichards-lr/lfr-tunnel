@@ -126,3 +126,14 @@ Here is how `lfr-tunnel` resolves this:
   2. It attempts a fast TCP dial check on `127.0.0.1:LocalPort`.
   3. If the connection fails (refused), the gateway deletes the session lease, frees the port back into the port pool, and removes the credentials from the Chisel user database via `DeleteUser(sessionToken)`.
   4. This prevents memory leaks and ensures developer subdomains are immediately freed for others to use if abandoned.
+
+---
+
+## 6. Supported Domains Constraint
+
+The `lfr-tunnel` routing system is designed to only process, authorize, and resolve requests for subdomains under the following domains:
+
+*   **`lfr-demo.se`**: The primary domain for Sales Engineering demonstrations.
+*   **`lfr-demo.online`**: The secondary mirror domain.
+
+Any dynamic registration requests (sent via `/api/register` with a `subdomain_prefix`) will be mapped exclusively to wildcards of these two domains. Any requests arriving at the gateway containing other host headers will be ignored by the routing plane.

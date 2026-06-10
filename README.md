@@ -10,6 +10,16 @@ Unlike generic tunnels, `lfr-tunnel` offers:
 
 ---
 
+## Supported Domains
+
+The Liferay Tunnel gateway is configured to only support routing and DNS wildcard resolution on the following domains:
+- **`lfr-demo.se`**: Primary domain for Sales Engineering demonstrations.
+- **`lfr-demo.online`**: Secondary domain mirroring and proxying to the primary gateway.
+
+Any developer tunnel project prefix must be established as a subdomain of one of these two domains (e.g. `your-project.lfr-demo.se` or `your-project.lfr-demo.online`).
+
+---
+
 ## Architecture Quick Look
 
 ```

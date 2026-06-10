@@ -159,8 +159,28 @@ CLIENT_CONTAINER_ID=$(docker-compose run -d \
 echo "Client container ID: $CLIENT_CONTAINER_ID"
 
 # Wait for client to connect and establish the tunnel
-echo "=== Waiting for tunnel connection (5 seconds) ==="
-sleep 5
+echo "=== Waiting for tunnel connection ==="
+TUNNEL_READY=false
+for i in {1..20}; do
+    RESPONSE_CODE=$(curl -s -o /dev/null -w "%{http_code}" -H "Host: peter-dev.lfr-demo.se" http://localhost:8000/ || true)
+    if [ "$RESPONSE_CODE" = "200" ]; then
+        echo "Tunnel is ready!"
+        TUNNEL_READY=true
+        break
+    fi
+    echo "Waiting for tunnel (HTTP status $RESPONSE_CODE)..."
+    sleep 1
+done
+
+if [ "$TUNNEL_READY" = false ]; then
+    echo "❌ Timeout waiting for tunnel connection!"
+    echo "=== Client tunnel container stdout ==="
+    docker logs "$CLIENT_CONTAINER_ID"
+    echo "=== lfr-tunneld logs ==="
+    docker-compose logs lfr-tunneld
+    docker-compose down -v
+    exit 1
+fi
 
 # Print client container logs to verify Chisel handshake
 echo "=== Client tunnel container stdout ==="

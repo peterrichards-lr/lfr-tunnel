@@ -100,6 +100,8 @@ The solution will consist of:
 - [x] Update release.yml workflow to automatically generate and upload checksums.txt.
 - [x] Fix E2E script on GitHub Actions by supporting docker compose subcommand fallback.
 - [x] Fix unchecked Decode errcheck warnings in pkg/server/server_test.go.
+- [x] Resolve fragile sleep timeout in E2E integration test runner.
+
 
 
 

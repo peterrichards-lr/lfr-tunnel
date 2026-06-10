@@ -99,6 +99,7 @@ The solution will consist of:
 - [x] Implement binary integrity checks during self-upgrade (SHA256 checksum validation).
 - [x] Update release.yml workflow to automatically generate and upload checksums.txt.
 - [x] Fix E2E script on GitHub Actions by supporting docker compose subcommand fallback.
+- [x] Fix unchecked Decode errcheck warnings in pkg/server/server_test.go.
 
 
 

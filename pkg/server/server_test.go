@@ -248,7 +248,9 @@ func TestServer_CheckSubdomain(t *testing.T) {
 		t.Errorf("expected 200 OK with PAT token, got %d", rec.Code)
 	}
 	var patCheckResp CheckSubdomainResponse
-	json.NewDecoder(rec.Body).Decode(&patCheckResp)
+	if err := json.NewDecoder(rec.Body).Decode(&patCheckResp); err != nil {
+		t.Fatalf("failed to decode response: %v", err)
+	}
 	if !patCheckResp.Available {
 		t.Errorf("expected beta-dev to be available under PAT token query")
 	}
@@ -548,7 +550,9 @@ func TestServer_DomainSeparation(t *testing.T) {
 	srv.ServeHTTP(recCheck1, reqCheck1)
 
 	var respCheck1 CheckSubdomainResponse
-	json.NewDecoder(recCheck1.Body).Decode(&respCheck1)
+	if err := json.NewDecoder(recCheck1.Body).Decode(&respCheck1); err != nil {
+		t.Fatalf("failed to decode check1 response: %v", err)
+	}
 	if respCheck1.Available {
 		t.Error("expected peter-dev.example.se to be unavailable")
 	}
@@ -560,7 +564,9 @@ func TestServer_DomainSeparation(t *testing.T) {
 	srv.ServeHTTP(recCheck2, reqCheck2)
 
 	var respCheck2 CheckSubdomainResponse
-	json.NewDecoder(recCheck2.Body).Decode(&respCheck2)
+	if err := json.NewDecoder(recCheck2.Body).Decode(&respCheck2); err != nil {
+		t.Fatalf("failed to decode check2 response: %v", err)
+	}
 	if !respCheck2.Available {
 		t.Error("expected peter-dev.example.online to be available")
 	}

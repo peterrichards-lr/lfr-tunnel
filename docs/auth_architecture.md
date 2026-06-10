@@ -8,19 +8,19 @@ This document describes the technical architecture, database schema, API endpoin
 
 ```mermaid
 graph TD
-    subgraph Developer Machine
+    subgraph DevMachine ["Developer Machine"]
         CLI[lfr-tunnel CLI]
         Browser[System Browser]
     end
 
-    subgraph Gateway Server (lfr-tunneld)
+    subgraph GWServer ["Gateway Server (lfr-tunneld)"]
         API[Gateway Web Server]
-        DB[(SQLite / PostgreSQL)]
+        DB["SQLite / PostgreSQL"]
         Chisel[Embedded Chisel Server]
     end
 
-    subgraph Identity Provider
-        SSO[Liferay Portal SSO / OAuth2]
+    subgraph IdP ["Identity Provider"]
+        SSO["Liferay Portal SSO / OAuth2"]
     end
 
     CLI -->|1. lfr-tunnel login| API
@@ -95,7 +95,7 @@ Before Liferay SSO is fully integrated, developers can request access directly v
 sequenceDiagram
     autonumber
     actor Dev as Developer
-    participant GW as Gateway (lfr-tunneld)
+    participant GW as "Gateway (lfr-tunneld)"
     actor Admin as Gateway Administrator
     
     Dev->>GW: Visits /register (Enters Email, Name, Subdomain request)
@@ -133,8 +133,8 @@ sequenceDiagram
     actor Dev as Developer
     participant CLI as lfr-tunnel CLI
     participant Browser as Default Browser
-    participant GW as Gateway (lfr-tunneld)
-    participant SSO as Liferay SSO (Auth Server)
+    participant GW as "Gateway (lfr-tunneld)"
+    participant SSO as "Liferay SSO (Auth Server)"
 
     Dev->>CLI: lfr-tunnel login
     Note over CLI: CLI starts local server on http://localhost:4444/callback<br/>Generates PKCE Code Verifier & Challenge

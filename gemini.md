@@ -72,6 +72,7 @@ The solution will consist of:
 - [ ] Implement self-registration database models and request states (pending, approved, active).
 - [ ] Implement outbound email sending service in the server (supporting local postfix and external SMTP relays).
 - [ ] Add admin approval endpoints and email notification flows.
+- [x] Fix Mermaid syntax parsing errors in auth_architecture.md.
 
 
 

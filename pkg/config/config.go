@@ -36,6 +36,8 @@ type ServerConfig struct {
 	AdminNotificationEmail string              `yaml:"admin_notification_email"`
 	InsecureSkipVerify     bool                `yaml:"insecure_skip_verify"`
 	StaticTokens           []StaticTokenConfig `yaml:"static_tokens"`
+	IPBlacklist            []string            `yaml:"ip_blacklist"`
+	MaxTunnelRateLimit     int                 `yaml:"max_tunnel_rate_limit"`
 }
 
 // ClientConfig holds configuration settings for the lfr-tunnel client.
@@ -44,6 +46,8 @@ type ClientConfig struct {
 	AuthToken string `yaml:"auth_token"`
 	Subdomain string `yaml:"subdomain"`
 	Ports     []int  `yaml:"ports"`
+	TokenFile string `yaml:"token_file"`
+	RateLimit int    `yaml:"rate_limit"`
 }
 
 // DefaultServerConfig returns a ServerConfig with sensible default values.

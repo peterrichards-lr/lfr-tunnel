@@ -147,3 +147,33 @@ Any dynamic registration request (`/api/register`) with a `subdomain_prefix` wil
 
 > See [Liferay SE Quick-Start Guide](liferay-se-guide.md) for team-specific registration and usage instructions.
 
+---
+
+## 7. Security Architecture: DDOS & Rate Limiting
+
+Because `lfr-tunnel` routes raw internet traffic directly to developers' local laptops, robust edge-level security is critical to prevent malicious scrapers or volumetric Application-Layer DDOS attacks from crashing local Liferay/Tomcat instances. 
+
+We implemented a **Native Go IPS (Intrusion Prevention System)** and Rate Limiting strategy instead of relying on OS-level tools like `fail2ban` or `iptables`.
+
+### Why Native Go over `fail2ban`?
+Integrating web dashboards with `fail2ban` requires the Go application to execute shell commands as `root` (`sudo iptables`), which introduces a massive security vulnerability. By implementing the defense layers entirely natively in Go memory space:
+1. It executes in microseconds (no disk I/O or shelling out).
+2. It is highly secure (no `root` privileges required).
+3. The security model is portable (functions perfectly in a Docker container or on a bare-metal VPS).
+
+### Defense Layers
+1. **API Rate Limiting & Auto-Ban IPS**: 
+   The control plane (`/api/*`) is protected by a global memory token bucket (10 requests per second). If an IP violates this limit 50 times in a short window, the server automatically executes a ban, writes a `system.auto_blacklisted` event to the SQLite database, and returns a hard `403 Forbidden` for all subsequent requests until an Admin unbans the IP via the Web Dashboard.
+2. **Subdomain Data Plane Limiting**: 
+   A global Admin ceiling (`MaxTunnelRateLimit`) limits traffic flow across all tunnels. Furthermore, a developer can start the CLI with `lfr-tunnel -rate-limit 5` to restrict incoming traffic hitting their specific laptop to 5 requests per second, protecting fragile local runtime environments from sudden traffic surges.
+
+---
+
+## 8. Roadmap & Comparison vs ngrok
+
+`lfr-tunnel` provides custom domain assignment out-of-the-box (something that costs $20+/month per user on `ngrok` Enterprise plans). However, `ngrok` offers several advanced features that are currently on the `lfr-tunnel` architectural roadmap to achieve "First-Class" developer tooling status:
+
+1. **Local Traffic Inspector (`http://localhost:4040`)**: 
+   Future versions of the CLI will embed a local web server displaying a live feed of all HTTP requests/responses flowing through the tunnel. This enables developers to debug Webhooks (e.g. Liferay Commerce & Stripe integrations) and provides a "Replay Request" capability without digging through Tomcat logs.
+2. **Data Plane Authentication (Edge Auth)**:
+   Future versions will support a CLI flag like `-basic-auth="demo:secret"` which the Go Gateway will enforce before routing traffic to the Chisel tunnel. This allows Sales Engineers to password-protect sensitive embargoed Liferay demonstrations from the public internet.

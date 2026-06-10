@@ -24,6 +24,7 @@ func main() {
 	token := flag.String("token", "", "Gateway auth token")
 	subdomain := flag.String("subdomain", "", "Requested subdomain prefix (e.g. alpha-se)")
 	portsStr := flag.String("ports", "", "Comma-separated ports to expose (e.g. 8080,3000)")
+	rateLimit := flag.Int("rate-limit", 0, "Max requests per second for your subdomains (0 = unlimited)")
 	background := flag.Bool("background", false, "Run client in background")
 	status := flag.Bool("status", false, "Check status of the background tunnel")
 	stop := flag.Bool("stop", false, "Stop the background tunnel")
@@ -79,6 +80,9 @@ func main() {
 	}
 	if *subdomain != "" {
 		cfg.Subdomain = *subdomain
+	}
+	if *rateLimit > 0 {
+		cfg.RateLimit = *rateLimit
 	}
 
 	if *background {
@@ -166,10 +170,13 @@ func main() {
 	}
 
 	// 5. Registration Handshake
-	log.Println("[Client] Registering tunnel lease with gateway...")
-	regResp, err := client.RegisterTunnel(cfg.ServerURL, cfg.AuthToken, sub, portMappings)
+	fmt.Printf("[Client] Registering tunnel (%s) at %s...\n", cfg.Subdomain, cfg.ServerURL)
+	if cfg.RateLimit > 0 {
+		fmt.Printf("[Client] Requested Subdomain Rate Limit: %d req/s\n", cfg.RateLimit)
+	}
+	regResp, err := client.RegisterTunnel(cfg.ServerURL, cfg.AuthToken, cfg.Subdomain, portMappings, cfg.RateLimit)
 	if err != nil {
-		log.Fatalf("[Client] Registration failed: %v", err)
+		log.Fatalf("[Error] Failed to register: %v\n", err)
 	}
 
 	var publicURLs []string

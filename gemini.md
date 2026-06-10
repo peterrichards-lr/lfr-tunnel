@@ -104,6 +104,12 @@ The solution will consist of:
 - [x] Investigate and resolve E2E Docker Integration Test failure in CI (use --no-deps for docker-compose run to prevent recreate/wipe of server database).
 - [x] Release, tag, and deploy v1.1.0 of lfr-tunnel to GitHub and VPS.
 - [x] Restructure documentation: make README.md and architecture.md generic (self-hostable), create docs/liferay-se-guide.md for Liferay SE team specifics.
+- [x] Implement server-side administrative control endpoints and audit log (v1.2.0).
+- [x] Implement DDOS auto-ban rate limiter in the data plane and application layer.
+- [x] Add IP Blacklist database table and CRUD API endpoints.
+- [x] Inject missing audit log events (user.registered, token.claimed, lease.kicked, ip.blacklisted).
+- [x] Implement `-rate-limit` CLI flag for Subdomain traffic protection.
+- [x] Build the Admin Web Dashboard (`/admin`).
 
 
 

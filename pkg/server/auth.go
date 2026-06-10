@@ -27,6 +27,8 @@ type TunnelLease struct {
 	SessionToken    string    `json:"session_token"`
 	LocalPort       int       `json:"local_port"`
 	TargetPort      int       `json:"target_port"`
+	RateLimit       int       `json:"rate_limit"`
+	ClientIP        string    `json:"client_ip"`
 	CreatedAt       time.Time `json:"created_at"`
 }
 
@@ -107,7 +109,7 @@ func getFreePort() (int, error) {
 }
 
 // Register allocates ports and subdomains for a client.
-func (r *Registry) Register(subdomainPrefix string, ports []PortMapping, domains []string) (string, []string, error) {
+func (r *Registry) Register(subdomainPrefix string, ports []PortMapping, domains []string, rateLimit int, clientIP string) (string, []string, error) {
 	r.Lock()
 	defer r.Unlock()
 
@@ -183,6 +185,8 @@ func (r *Registry) Register(subdomainPrefix string, ports []PortMapping, domains
 				SessionToken:    sessionToken,
 				LocalPort:       localPort,
 				TargetPort:      pm.LocalPort,
+				RateLimit:       rateLimit,
+				ClientIP:        clientIP,
 				CreatedAt:       time.Now(),
 			}
 			r.leases[fullHost] = lease
@@ -221,16 +225,16 @@ func (r *Registry) Register(subdomainPrefix string, ports []PortMapping, domains
 	return sessionToken, clientRemotes, nil
 }
 
-// GetBackendPort retrieves the allocated local port for a host.
-func (r *Registry) GetBackendPort(host string) (int, bool) {
+// GetLease retrieves the allocated lease for a host.
+func (r *Registry) GetLease(host string) (*TunnelLease, bool) {
 	r.RLock()
 	defer r.RUnlock()
 
 	lease, exists := r.leases[host]
 	if !exists {
-		return 0, false
+		return nil, false
 	}
-	return lease.LocalPort, true
+	return lease, true
 }
 
 // CheckSubdomain checks a subdomain prefix availability and returns availability, reason if unavailable.
@@ -387,4 +391,39 @@ func (r *Registry) cleanupOrphanLeases() {
 			conn.Close()
 		}
 	}
+}
+
+// ListLeases returns a snapshot of all active leases.
+func (r *Registry) ListLeases() []*TunnelLease {
+	r.RLock()
+	defer r.RUnlock()
+
+	var snapshot []*TunnelLease
+	for _, lease := range r.leases {
+		snapshot = append(snapshot, lease)
+	}
+	return snapshot
+}
+
+// KickLease terminates an active lease by its subdomain prefix and cleans up resources.
+// It returns true if a lease was found and kicked, false otherwise.
+func (r *Registry) KickLease(subdomainPrefix string) bool {
+	r.RLock()
+	var targetSessionToken string
+	// Find the session token associated with this subdomain prefix.
+	// We search across all full hosts because a single prefix might be registered on multiple domains,
+	// but they share the same session token.
+	for fullHost, lease := range r.leases {
+		if strings.HasPrefix(fullHost, subdomainPrefix+".") {
+			targetSessionToken = lease.SessionToken
+			break
+		}
+	}
+	r.RUnlock()
+
+	if targetSessionToken != "" {
+		r.CleanLease(targetSessionToken)
+		return true
+	}
+	return false
 }

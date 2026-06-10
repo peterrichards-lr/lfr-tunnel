@@ -13,6 +13,7 @@ import (
 	"time"
 
 	"lfr-tunnel/pkg/config"
+	"lfr-tunnel/pkg/db"
 )
 
 func TestServer_Register(t *testing.T) {
@@ -569,5 +570,158 @@ func TestServer_DomainSeparation(t *testing.T) {
 	}
 	if !respCheck2.Available {
 		t.Error("expected peter-dev.example.online to be available")
+	}
+}
+
+func TestAdminEndpoints(t *testing.T) {
+	tmpDir, err := os.MkdirTemp("", "lfr-tunnel-admin-*")
+	if err != nil {
+		t.Fatalf("failed to create temp dir: %v", err)
+	}
+	defer os.RemoveAll(tmpDir)
+
+	dbPath := filepath.Join(tmpDir, "test.db")
+	cfg := &config.ServerConfig{
+		Domain1: "example.com",
+		DBPath:  dbPath,
+		StaticTokens: []config.StaticTokenConfig{
+			{Token: "admin-static-token", UserID: "admin@liferay.com", Role: "admin"},
+			{Token: "user-static-token", UserID: "user@liferay.com", Role: "user"},
+		},
+	}
+
+	srv, err := NewServer(cfg)
+	if err != nil {
+		t.Fatalf("failed to create server: %v", err)
+	}
+	defer srv.Stop()
+
+	// Seed DB with a test user
+	user := &db.User{
+		ID:     "u1",
+		Email:  "testuser@liferay.com",
+		Role:   "user",
+		Status: "approved",
+	}
+	_ = srv.db.CreateUser(user)
+
+	pat := &db.PersonalAccessToken{
+		UserID:      "u1",
+		TokenHash:   "testhash",
+		TokenPrefix: "testprefix",
+		Name:        "test token",
+	}
+	_ = srv.db.CreatePAT(pat)
+
+	// 1. Test unauthorized access (No token)
+	req1 := httptest.NewRequest("GET", "http://tunnel.example.com/api/admin/users", nil)
+	rec1 := httptest.NewRecorder()
+	srv.ServeHTTP(rec1, req1)
+	if rec1.Code != http.StatusUnauthorized {
+		t.Errorf("expected 401 for no token, got %d", rec1.Code)
+	}
+
+	// 2. Test unauthorized access (Non-admin token)
+	req2 := httptest.NewRequest("GET", "http://tunnel.example.com/api/admin/users", nil)
+	req2.Header.Set("Authorization", "Bearer user-static-token")
+	rec2 := httptest.NewRecorder()
+	srv.ServeHTTP(rec2, req2)
+	if rec2.Code != http.StatusUnauthorized {
+		t.Errorf("expected 401 for non-admin token, got %d", rec2.Code)
+	}
+
+	// 3. Test list users (Admin)
+	req3 := httptest.NewRequest("GET", "http://tunnel.example.com/api/admin/users", nil)
+	req3.Header.Set("Authorization", "Bearer admin-static-token")
+	rec3 := httptest.NewRecorder()
+	srv.ServeHTTP(rec3, req3)
+	if rec3.Code != http.StatusOK {
+		t.Errorf("expected 200 for admin token, got %d", rec3.Code)
+	}
+
+	// 4. Test patch user
+	patchBody := `{"role":"admin"}`
+	req4 := httptest.NewRequest("PATCH", "http://tunnel.example.com/api/admin/users/testuser@liferay.com", strings.NewReader(patchBody))
+	req4.Header.Set("Authorization", "Bearer admin-static-token")
+	rec4 := httptest.NewRecorder()
+	srv.ServeHTTP(rec4, req4)
+	if rec4.Code != http.StatusOK {
+		t.Errorf("expected 200 for patch user, got %d", rec4.Code)
+	}
+	u, _ := srv.db.GetUserByEmail("testuser@liferay.com")
+	if u.Role != "admin" {
+		t.Errorf("expected user role to be admin, got %s", u.Role)
+	}
+
+	// 5. Test audit log
+	// Sleep briefly to ensure async audit log write completes
+	time.Sleep(100 * time.Millisecond)
+	req5 := httptest.NewRequest("GET", "http://tunnel.example.com/api/admin/audit?action=user.role_changed", nil)
+	req5.Header.Set("Authorization", "Bearer admin-static-token")
+	rec5 := httptest.NewRecorder()
+	srv.ServeHTTP(rec5, req5)
+	if rec5.Code != http.StatusOK {
+		t.Errorf("expected 200 for audit log, got %d", rec5.Code)
+	}
+	var auditResp []db.AuditEntry
+	_ = json.NewDecoder(rec5.Body).Decode(&auditResp)
+	if len(auditResp) == 0 {
+		t.Error("expected at least 1 audit entry for role change")
+	}
+
+	// 6. Test delete PAT
+	req6 := httptest.NewRequest("DELETE", fmt.Sprintf("http://tunnel.example.com/api/admin/tokens/%d", pat.ID), nil)
+	req6.Header.Set("Authorization", "Bearer admin-static-token")
+	rec6 := httptest.NewRecorder()
+	srv.ServeHTTP(rec6, req6)
+	if rec6.Code != http.StatusOK {
+		t.Errorf("expected 200 for delete PAT, got %d", rec6.Code)
+	}
+
+	deletedPat, _ := srv.db.GetPATByHash("testhash")
+	if deletedPat.RevokedAt == nil {
+		t.Error("expected PAT to have a revoked_at timestamp")
+	}
+}
+
+func TestDefenseMiddleware(t *testing.T) {
+	cfg := &config.ServerConfig{
+		Domain1:     "example.com",
+		IPBlacklist: []string{"192.168.1.100"},
+	}
+
+	srv, err := NewServer(cfg)
+	if err != nil {
+		t.Fatalf("failed to create server: %v", err)
+	}
+	defer srv.Stop()
+
+	// 1. Test IP Blacklist
+	reqBlacklisted := httptest.NewRequest("GET", "http://tunnel.example.com/api/register", nil)
+	reqBlacklisted.RemoteAddr = "192.168.1.100:12345"
+	recBlacklisted := httptest.NewRecorder()
+	srv.ServeHTTP(recBlacklisted, reqBlacklisted)
+	if recBlacklisted.Code != http.StatusForbidden {
+		t.Errorf("expected 403 Forbidden for blacklisted IP, got %d", recBlacklisted.Code)
+	}
+
+	// 2. Test Rate Limiter (Burst of 20 allowed, 21st should fail)
+	for i := 0; i < 20; i++ {
+		req := httptest.NewRequest("GET", "http://tunnel.example.com/api/register", nil)
+		req.RemoteAddr = "10.0.0.1:54321"
+		rec := httptest.NewRecorder()
+		srv.ServeHTTP(rec, req)
+		if rec.Code == http.StatusTooManyRequests {
+			t.Errorf("expected request %d to be allowed, got 429", i+1)
+		}
+	}
+
+	// 21st request should hit the rate limit
+	reqRateLimited := httptest.NewRequest("GET", "http://tunnel.example.com/api/register", nil)
+	reqRateLimited.RemoteAddr = "10.0.0.1:54321"
+	recRateLimited := httptest.NewRecorder()
+	srv.ServeHTTP(recRateLimited, reqRateLimited)
+	if recRateLimited.Code != http.StatusTooManyRequests {
+		t.Errorf("expected 429 Too Many Requests, got %d", recRateLimited.Code)
 	}
 }

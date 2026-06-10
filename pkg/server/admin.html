@@ -1,0 +1,653 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Liferay Tunnel Admin</title>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <style>
+        :root {
+            --bg-base: #0f172a;
+            --bg-card: rgba(30, 41, 59, 0.7);
+            --bg-card-hover: rgba(30, 41, 59, 0.9);
+            --primary: #0B5FFF;
+            --primary-glow: rgba(11, 95, 255, 0.4);
+            --text-main: #f8fafc;
+            --text-muted: #94a3b8;
+            --border: rgba(255, 255, 255, 0.1);
+            --danger: #ef4444;
+            --success: #10b981;
+            --warning: #f59e0b;
+        }
+
+        * {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+            font-family: 'Inter', sans-serif;
+        }
+
+        body {
+            background-color: var(--bg-base);
+            color: var(--text-main);
+            min-height: 100vh;
+            display: flex;
+            overflow-x: hidden;
+        }
+
+        /* Glassmorphism utilities */
+        .glass {
+            background: var(--bg-card);
+            backdrop-filter: blur(12px);
+            -webkit-backdrop-filter: blur(12px);
+            border: 1px solid var(--border);
+            border-radius: 12px;
+        }
+
+        /* Login Screen */
+        #login-screen {
+            position: fixed;
+            inset: 0;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            background: radial-gradient(circle at center, #1e293b 0%, var(--bg-base) 100%);
+            z-index: 1000;
+            transition: opacity 0.5s ease;
+        }
+
+        .login-card {
+            width: 100%;
+            max-width: 400px;
+            padding: 40px;
+            text-align: center;
+            animation: slideUp 0.6s cubic-bezier(0.16, 1, 0.3, 1);
+        }
+
+        .login-card h1 {
+            font-size: 24px;
+            font-weight: 700;
+            margin-bottom: 8px;
+            background: linear-gradient(to right, #fff, #94a3b8);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+        }
+
+        .login-card p {
+            color: var(--text-muted);
+            font-size: 14px;
+            margin-bottom: 30px;
+        }
+
+        input[type="password"], input[type="text"] {
+            width: 100%;
+            padding: 14px 16px;
+            background: rgba(15, 23, 42, 0.6);
+            border: 1px solid var(--border);
+            border-radius: 8px;
+            color: white;
+            font-size: 16px;
+            outline: none;
+            transition: all 0.3s ease;
+            margin-bottom: 20px;
+        }
+
+        input:focus {
+            border-color: var(--primary);
+            box-shadow: 0 0 0 3px var(--primary-glow);
+        }
+
+        button {
+            width: 100%;
+            padding: 14px;
+            background: var(--primary);
+            color: white;
+            border: none;
+            border-radius: 8px;
+            font-size: 16px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            box-shadow: 0 4px 12px var(--primary-glow);
+        }
+
+        button:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 6px 16px var(--primary-glow);
+            filter: brightness(1.1);
+        }
+
+        button:active {
+            transform: translateY(0);
+        }
+
+        button.danger {
+            background: var(--danger);
+            box-shadow: 0 4px 12px rgba(239, 68, 68, 0.3);
+        }
+        button.danger:hover {
+            box-shadow: 0 6px 16px rgba(239, 68, 68, 0.4);
+        }
+
+        button.small {
+            width: auto;
+            padding: 6px 12px;
+            font-size: 12px;
+            border-radius: 6px;
+        }
+
+        /* App Layout */
+        #app {
+            display: none;
+            width: 100%;
+            height: 100vh;
+        }
+
+        sidebar {
+            width: 260px;
+            height: 100vh;
+            border-right: 1px solid var(--border);
+            padding: 24px;
+            display: flex;
+            flex-direction: column;
+            background: rgba(15, 23, 42, 0.8);
+        }
+
+        .brand {
+            font-size: 18px;
+            font-weight: 700;
+            margin-bottom: 40px;
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            color: white;
+        }
+
+        .nav-link {
+            padding: 12px 16px;
+            margin-bottom: 8px;
+            border-radius: 8px;
+            color: var(--text-muted);
+            text-decoration: none;
+            font-weight: 500;
+            cursor: pointer;
+            transition: all 0.2s ease;
+        }
+
+        .nav-link:hover {
+            color: white;
+            background: rgba(255, 255, 255, 0.05);
+        }
+
+        .nav-link.active {
+            color: white;
+            background: var(--primary);
+            box-shadow: 0 2px 8px var(--primary-glow);
+        }
+
+        main {
+            flex: 1;
+            padding: 40px;
+            overflow-y: auto;
+        }
+
+        .header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 40px;
+        }
+
+        .header h2 {
+            font-size: 28px;
+            font-weight: 600;
+        }
+
+        .logout-btn {
+            background: transparent;
+            box-shadow: none;
+            border: 1px solid var(--border);
+            width: auto;
+            padding: 8px 16px;
+        }
+        .logout-btn:hover {
+            background: rgba(255, 255, 255, 0.05);
+            box-shadow: none;
+        }
+
+        /* Tables */
+        .table-container {
+            width: 100%;
+            overflow-x: auto;
+            margin-bottom: 24px;
+            animation: fadeIn 0.4s ease;
+        }
+
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            text-align: left;
+        }
+
+        th, td {
+            padding: 16px;
+            border-bottom: 1px solid var(--border);
+        }
+
+        th {
+            color: var(--text-muted);
+            font-size: 12px;
+            text-transform: uppercase;
+            letter-spacing: 0.05em;
+            font-weight: 600;
+        }
+
+        td {
+            font-size: 14px;
+            color: var(--text-main);
+        }
+
+        tbody tr {
+            transition: background 0.2s ease;
+        }
+
+        tbody tr:hover {
+            background: rgba(255, 255, 255, 0.02);
+        }
+
+        .badge {
+            padding: 4px 8px;
+            border-radius: 12px;
+            font-size: 12px;
+            font-weight: 600;
+            text-transform: capitalize;
+        }
+        .badge.pending { background: rgba(245, 158, 11, 0.2); color: var(--warning); }
+        .badge.approved { background: rgba(16, 185, 129, 0.2); color: var(--success); }
+        .badge.revoked { background: rgba(239, 68, 68, 0.2); color: var(--danger); }
+        .badge.admin { background: rgba(11, 95, 255, 0.2); color: var(--primary); }
+
+        .view-section {
+            display: none;
+        }
+        .view-section.active {
+            display: block;
+        }
+
+        /* Forms inside App */
+        .form-group {
+            display: flex;
+            gap: 12px;
+            margin-bottom: 24px;
+        }
+        .form-group input {
+            margin-bottom: 0;
+            max-width: 300px;
+        }
+
+        /* Animations */
+        @keyframes slideUp {
+            from { opacity: 0; transform: translateY(20px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+        @keyframes fadeIn {
+            from { opacity: 0; }
+            to { opacity: 1; }
+        }
+
+        .toast {
+            position: fixed;
+            bottom: 24px;
+            right: 24px;
+            background: var(--bg-card);
+            border: 1px solid var(--border);
+            padding: 16px 24px;
+            border-radius: 8px;
+            color: white;
+            box-shadow: 0 10px 25px rgba(0,0,0,0.5);
+            transform: translateY(100px);
+            opacity: 0;
+            transition: all 0.3s cubic-bezier(0.16, 1, 0.3, 1);
+            z-index: 2000;
+        }
+        .toast.show {
+            transform: translateY(0);
+            opacity: 1;
+        }
+    </style>
+</head>
+<body>
+
+    <!-- Login Screen -->
+    <div id="login-screen">
+        <div class="glass login-card">
+            <h1>Liferay Tunnel</h1>
+            <p>Admin Dashboard</p>
+            <form id="login-form">
+                <input type="password" id="auth-token" placeholder="Enter Admin PAT or Static Token" required autocomplete="off">
+                <button type="submit">Access Dashboard</button>
+            </form>
+        </div>
+    </div>
+
+    <!-- Main App -->
+    <div id="app">
+        <sidebar>
+            <div class="brand">
+                <svg width="24" height="24" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                    <path d="M12 2L2 7L12 12L22 7L12 2Z" stroke="var(--primary)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+                    <path d="M2 17L12 22L22 17" stroke="var(--primary)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+                    <path d="M2 12L12 17L22 12" stroke="var(--primary)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+                </svg>
+                LFR Tunnel
+            </div>
+            <div class="nav-link active" onclick="switchView('users')">Users</div>
+            <div class="nav-link" onclick="switchView('leases')">Active Tunnels</div>
+            <div class="nav-link" onclick="switchView('blacklist')">IP Blacklist</div>
+            <div class="nav-link" onclick="switchView('audit')">Audit Log</div>
+            <div style="flex:1"></div>
+            <button class="logout-btn" onclick="logout()">Logout</button>
+        </sidebar>
+
+        <main>
+            <!-- Users View -->
+            <div id="view-users" class="view-section active">
+                <div class="header">
+                    <h2>Users & Requests</h2>
+                </div>
+                <div class="glass table-container">
+                    <table>
+                        <thead>
+                            <tr>
+                                <th>Email</th>
+                                <th>Name</th>
+                                <th>Role</th>
+                                <th>Status</th>
+                                <th>Created</th>
+                                <th>Actions</th>
+                            </tr>
+                        </thead>
+                        <tbody id="users-tbody">
+                            <!-- Populated via JS -->
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+
+            <!-- Tunnels View -->
+            <div id="view-leases" class="view-section">
+                <div class="header">
+                    <h2>Active Tunnels</h2>
+                </div>
+                <div class="glass table-container">
+                    <table>
+                        <thead>
+                            <tr>
+                                <th>Subdomain</th>
+                                <th>Full Host</th>
+                                <th>Target Port</th>
+                                <th>Client IP</th>
+                                <th>Connected At</th>
+                                <th>Actions</th>
+                            </tr>
+                        </thead>
+                        <tbody id="leases-tbody">
+                            <!-- Populated via JS -->
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+
+            <!-- Blacklist View -->
+            <div id="view-blacklist" class="view-section">
+                <div class="header">
+                    <h2>IP Blacklist (DDOS Defense)</h2>
+                </div>
+                <div class="form-group">
+                    <input type="text" id="bl-ip" placeholder="IP Address (e.g. 192.168.1.5)">
+                    <input type="text" id="bl-reason" placeholder="Reason (e.g. Malicious scanner)">
+                    <button class="small" style="width: auto;" onclick="addBlacklist()">Ban IP</button>
+                </div>
+                <div class="glass table-container">
+                    <table>
+                        <thead>
+                            <tr>
+                                <th>IP Address</th>
+                                <th>Reason</th>
+                                <th>Banned At</th>
+                                <th>Actions</th>
+                            </tr>
+                        </thead>
+                        <tbody id="blacklist-tbody">
+                            <!-- Populated via JS -->
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+
+            <!-- Audit Log View -->
+            <div id="view-audit" class="view-section">
+                <div class="header">
+                    <h2>System Audit Log</h2>
+                </div>
+                <div class="glass table-container">
+                    <table>
+                        <thead>
+                            <tr>
+                                <th>Time</th>
+                                <th>Actor</th>
+                                <th>Action</th>
+                                <th>Target Type</th>
+                                <th>Target ID</th>
+                            </tr>
+                        </thead>
+                        <tbody id="audit-tbody">
+                            <!-- Populated via JS -->
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </main>
+    </div>
+
+    <div id="toast" class="toast">Action completed successfully</div>
+
+    <script>
+        let apiToken = localStorage.getItem('lfr_admin_token');
+
+        // DOM Elements
+        const loginScreen = document.getElementById('login-screen');
+        const appScreen = document.getElementById('app');
+        const loginForm = document.getElementById('login-form');
+
+        // Init
+        if (apiToken) {
+            showApp();
+        }
+
+        loginForm.addEventListener('submit', async (e) => {
+            e.preventDefault();
+            const token = document.getElementById('auth-token').value;
+            // Test token
+            try {
+                const res = await fetch('/api/admin/users', { headers: { 'Authorization': 'Bearer ' + token } });
+                if (res.ok) {
+                    apiToken = token;
+                    localStorage.setItem('lfr_admin_token', token);
+                    showApp();
+                } else {
+                    showToast("Invalid Admin Token", true);
+                }
+            } catch (err) {
+                showToast("Connection failed", true);
+            }
+        });
+
+        function logout() {
+            localStorage.removeItem('lfr_admin_token');
+            apiToken = null;
+            document.getElementById('auth-token').value = '';
+            appScreen.style.display = 'none';
+            loginScreen.style.display = 'flex';
+        }
+
+        function showApp() {
+            loginScreen.style.display = 'none';
+            appScreen.style.display = 'flex';
+            loadData('users');
+        }
+
+        function switchView(viewId) {
+            document.querySelectorAll('.nav-link').forEach(el => el.classList.remove('active'));
+            event.target.classList.add('active');
+            
+            document.querySelectorAll('.view-section').forEach(el => el.classList.remove('active'));
+            document.getElementById('view-' + viewId).classList.add('active');
+            
+            loadData(viewId);
+        }
+
+        async function fetchAPI(endpoint, options = {}) {
+            if (!options.headers) options.headers = {};
+            options.headers['Authorization'] = 'Bearer ' + apiToken;
+            const res = await fetch(endpoint, options);
+            if (res.status === 401 || res.status === 403) {
+                logout();
+                throw new Error("Unauthorized");
+            }
+            if (!res.ok) throw new Error(await res.text());
+            return res.json();
+        }
+
+        function showToast(msg, isError = false) {
+            const toast = document.getElementById('toast');
+            toast.textContent = msg;
+            toast.style.borderLeft = isError ? '4px solid var(--danger)' : '4px solid var(--success)';
+            toast.classList.add('show');
+            setTimeout(() => toast.classList.remove('show'), 3000);
+        }
+
+        async function loadData(viewId) {
+            try {
+                if (viewId === 'users') {
+                    const users = await fetchAPI('/api/admin/users');
+                    const tbody = document.getElementById('users-tbody');
+                    tbody.innerHTML = '';
+                    users.forEach(u => {
+                        let actions = '';
+                        if (u.status === 'pending') {
+                            actions = `<button class="small" onclick="patchUser('${u.email}', 'approved', '${u.role}')">Approve</button>`;
+                        } else if (u.status === 'approved') {
+                            actions = `<button class="small danger" onclick="patchUser('${u.email}', 'revoked', '${u.role}')">Revoke</button>`;
+                        }
+                        
+                        tbody.innerHTML += `
+                            <tr>
+                                <td>${u.email}</td>
+                                <td>${u.first_name} ${u.last_name}</td>
+                                <td><span class="badge ${u.role === 'admin' ? 'admin' : ''}">${u.role}</span></td>
+                                <td><span class="badge ${u.status}">${u.status}</span></td>
+                                <td>${new Date(u.created_at).toLocaleString()}</td>
+                                <td>${actions}</td>
+                            </tr>
+                        `;
+                    });
+                } else if (viewId === 'leases') {
+                    const leases = await fetchAPI('/api/admin/leases');
+                    const tbody = document.getElementById('leases-tbody');
+                    tbody.innerHTML = '';
+                    leases.forEach(l => {
+                        tbody.innerHTML += `
+                            <tr>
+                                <td>${l.subdomain_prefix}</td>
+                                <td><a href="https://${l.full_host}" target="_blank" style="color:var(--primary)">${l.full_host}</a></td>
+                                <td>${l.target_port}</td>
+                                <td style="font-family: monospace;">${l.client_ip || 'N/A'}</td>
+                                <td>${new Date(l.created_at).toLocaleString()}</td>
+                                <td><button class="small danger" onclick="kickLease('${l.full_host}')">Kick</button></td>
+                            </tr>
+                        `;
+                    });
+                } else if (viewId === 'blacklist') {
+                    const list = await fetchAPI('/api/admin/blacklist');
+                    const tbody = document.getElementById('blacklist-tbody');
+                    tbody.innerHTML = '';
+                    list.forEach(b => {
+                        tbody.innerHTML += `
+                            <tr>
+                                <td style="font-family: monospace;">${b.ip_address}</td>
+                                <td>${b.reason}</td>
+                                <td>${new Date(b.created_at).toLocaleString()}</td>
+                                <td><button class="small danger" onclick="removeBlacklist('${b.ip_address}')">Unban</button></td>
+                            </tr>
+                        `;
+                    });
+                } else if (viewId === 'audit') {
+                    const logs = await fetchAPI('/api/admin/audit?limit=50');
+                    const tbody = document.getElementById('audit-tbody');
+                    tbody.innerHTML = '';
+                    logs.forEach(l => {
+                        tbody.innerHTML += `
+                            <tr>
+                                <td style="color:var(--text-muted)">${new Date(l.created_at).toLocaleString()}</td>
+                                <td>${l.actor_id}</td>
+                                <td style="font-family:monospace; color:var(--primary)">${l.action}</td>
+                                <td>${l.target_type}</td>
+                                <td>${l.target_id}</td>
+                            </tr>
+                        `;
+                    });
+                }
+            } catch (err) {
+                if(err.message !== "Unauthorized") showToast(err.message, true);
+            }
+        }
+
+        async function patchUser(email, status, role) {
+            try {
+                await fetchAPI('/api/admin/users/' + encodeURIComponent(email), {
+                    method: 'PATCH',
+                    headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify({status, role})
+                });
+                showToast("User updated");
+                loadData('users');
+            } catch(e) { showToast(e.message, true); }
+        }
+
+        async function kickLease(host) {
+            if(!confirm("Force disconnect this tunnel?")) return;
+            try {
+                await fetchAPI('/api/admin/leases/' + encodeURIComponent(host), { method: 'DELETE' });
+                showToast("Tunnel kicked");
+                loadData('leases');
+            } catch(e) { showToast(e.message, true); }
+        }
+
+        async function addBlacklist() {
+            const ip = document.getElementById('bl-ip').value;
+            const reason = document.getElementById('bl-reason').value;
+            if(!ip) return showToast("IP is required", true);
+            try {
+                await fetchAPI('/api/admin/blacklist', {
+                    method: 'POST',
+                    headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify({ip_address: ip, reason})
+                });
+                document.getElementById('bl-ip').value = '';
+                document.getElementById('bl-reason').value = '';
+                showToast("IP Banned");
+                loadData('blacklist');
+            } catch(e) { showToast(e.message, true); }
+        }
+
+        async function removeBlacklist(ip) {
+            try {
+                await fetchAPI('/api/admin/blacklist/' + encodeURIComponent(ip), { method: 'DELETE' });
+                showToast("IP Unbanned");
+                loadData('blacklist');
+            } catch(e) { showToast(e.message, true); }
+        }
+    </script>
+</body>
+</html>

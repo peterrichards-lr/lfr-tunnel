@@ -100,7 +100,7 @@ func TestRegisterTunnel(t *testing.T) {
 
 	// 2. Call RegisterTunnel
 	ports := []PortMapping{{LocalPort: 8080}}
-	resp, err := RegisterTunnel(server.URL, "mysecret", "test-sub", ports)
+	resp, err := RegisterTunnel(server.URL, "mysecret", "test-sub", ports, 0)
 	if err != nil {
 		t.Fatalf("RegisterTunnel failed: %v", err)
 	}

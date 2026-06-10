@@ -267,3 +267,104 @@ func TestPATForeignKeysAndCascade(t *testing.T) {
 		t.Errorf("expected PAT to be deleted via CASCADE, but got err: %v", err)
 	}
 }
+
+func TestAuditLogWriteAndFilter(t *testing.T) {
+	database, tmpDir := setupTestDB(t)
+	defer cleanupTestDB(database, tmpDir)
+
+	e1 := &AuditEntry{
+		ActorID:    "admin@test.com",
+		Action:     "user.role_changed",
+		TargetType: "user",
+		TargetID:   "dev@test.com",
+		Details:    `{"role":"admin"}`,
+		IPAddress:  "127.0.0.1",
+	}
+
+	if err := database.WriteAuditEntry(e1); err != nil {
+		t.Fatalf("failed to write audit entry: %v", err)
+	}
+	if e1.ID == 0 {
+		t.Error("expected non-zero ID for audit entry")
+	}
+
+	e2 := &AuditEntry{
+		ActorID:    "admin@test.com",
+		Action:     "token.revoked",
+		TargetType: "token",
+		TargetID:   "123",
+	}
+	_ = database.WriteAuditEntry(e2)
+
+	e3 := &AuditEntry{
+		ActorID:    "other@test.com",
+		Action:     "token.revoked",
+		TargetType: "token",
+		TargetID:   "456",
+	}
+	_ = database.WriteAuditEntry(e3)
+
+	// Filter by Actor
+	entries, err := database.ListAuditEntries(AuditFilter{ActorID: "admin@test.com"})
+	if err != nil {
+		t.Fatalf("failed to list audit entries: %v", err)
+	}
+	if len(entries) != 2 {
+		t.Errorf("expected 2 entries for actor admin@test.com, got %d", len(entries))
+	}
+
+	// Filter by Action
+	entries, err = database.ListAuditEntries(AuditFilter{Action: "token.revoked"})
+	if err != nil {
+		t.Fatalf("failed to list audit entries: %v", err)
+	}
+	if len(entries) != 2 {
+		t.Errorf("expected 2 entries for action token.revoked, got %d", len(entries))
+	}
+
+	// Filter by Target
+	entries, err = database.ListAuditEntries(AuditFilter{TargetID: "dev@test.com"})
+	if err != nil {
+		t.Fatalf("failed to list audit entries: %v", err)
+	}
+	if len(entries) != 1 {
+		t.Errorf("expected 1 entry for target dev@test.com, got %d", len(entries))
+	}
+	if entries[0].Details != `{"role":"admin"}` {
+		t.Errorf("expected details to be preserved, got %s", entries[0].Details)
+	}
+}
+
+func TestListAllPATsAndCountAdmins(t *testing.T) {
+	database, tmpDir := setupTestDB(t)
+	defer cleanupTestDB(database, tmpDir)
+
+	u1 := &User{ID: "u1", Email: "admin1@test.com", Role: "admin", Status: "approved"}
+	u2 := &User{ID: "u2", Email: "admin2@test.com", Role: "admin", Status: "pending"}
+	u3 := &User{ID: "u3", Email: "user@test.com", Role: "user", Status: "approved"}
+
+	_ = database.CreateUser(u1)
+	_ = database.CreateUser(u2)
+	_ = database.CreateUser(u3)
+
+	count, err := database.CountAdmins()
+	if err != nil {
+		t.Fatalf("failed to count admins: %v", err)
+	}
+	if count != 1 {
+		t.Errorf("expected 1 approved admin, got %d", count)
+	}
+
+	p1 := &PersonalAccessToken{UserID: "u1", TokenHash: "h1", TokenPrefix: "p1", Name: "n1"}
+	p2 := &PersonalAccessToken{UserID: "u3", TokenHash: "h2", TokenPrefix: "p2", Name: "n2"}
+	_ = database.CreatePAT(p1)
+	_ = database.CreatePAT(p2)
+
+	pats, err := database.ListAllPATs()
+	if err != nil {
+		t.Fatalf("failed to list all pats: %v", err)
+	}
+	if len(pats) != 2 {
+		t.Errorf("expected 2 total pats, got %d", len(pats))
+	}
+}

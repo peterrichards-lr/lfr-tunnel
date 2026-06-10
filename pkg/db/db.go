@@ -3,10 +3,32 @@ package db
 import (
 	"database/sql"
 	"errors"
+	"strings"
 	"time"
 
 	_ "modernc.org/sqlite"
 )
+
+// AuditEntry records an administrative or lifecycle action for audit purposes.
+type AuditEntry struct {
+	ID         int64     `json:"id"`
+	ActorID    string    `json:"actor_id"`    // email of the admin who triggered the action
+	Action     string    `json:"action"`      // e.g. "user.role_changed", "token.revoked"
+	TargetType string    `json:"target_type"` // "user", "token", "lease"
+	TargetID   string    `json:"target_id"`   // email, PAT ID, or subdomain
+	Details    string    `json:"details"`     // JSON-encoded before/after state
+	IPAddress  string    `json:"ip_address"`
+	CreatedAt  time.Time `json:"created_at"`
+}
+
+// AuditFilter controls optional filtering for ListAuditEntries.
+type AuditFilter struct {
+	ActorID  string
+	Action   string
+	TargetID string
+	Limit    int
+	Offset   int
+}
 
 var (
 	ErrNotFound = errors.New("not found")
@@ -43,12 +65,17 @@ type DB struct {
 
 // Open initializes and returns a DB instance.
 func Open(dsn string) (*DB, error) {
+	if !strings.Contains(dsn, "?") {
+		dsn += "?_pragma=busy_timeout(5000)&_pragma=foreign_keys(1)"
+	} else {
+		dsn += "&_pragma=busy_timeout(5000)&_pragma=foreign_keys(1)"
+	}
 	conn, err := sql.Open("sqlite", dsn)
 	if err != nil {
 		return nil, err
 	}
 
-	// Enable foreign key constraints and set busy timeout in SQLite
+	// Some PRAGMAs can also be executed here as a fallback
 	if _, err := conn.Exec("PRAGMA foreign_keys = ON; PRAGMA busy_timeout = 5000;"); err != nil {
 		conn.Close()
 		return nil, err
@@ -105,6 +132,27 @@ func (db *DB) initSchema() error {
 		connected_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
 		disconnected_at DATETIME,
 		FOREIGN KEY(user_id) REFERENCES users(id) ON DELETE SET NULL
+	);
+
+	CREATE TABLE IF NOT EXISTS admin_audit_log (
+		id         INTEGER PRIMARY KEY AUTOINCREMENT,
+		actor_id   TEXT    NOT NULL,
+		action     TEXT    NOT NULL,
+		target_type TEXT   NOT NULL,
+		target_id  TEXT    NOT NULL,
+		details    TEXT,
+		ip_address TEXT,
+		created_at DATETIME NOT NULL DEFAULT (datetime('now'))
+	);
+
+	CREATE INDEX IF NOT EXISTS idx_audit_actor  ON admin_audit_log(actor_id);
+	CREATE INDEX IF NOT EXISTS idx_audit_action ON admin_audit_log(action);
+	CREATE INDEX IF NOT EXISTS idx_audit_target ON admin_audit_log(target_id);
+
+	CREATE TABLE IF NOT EXISTS ip_blacklist (
+		ip_address TEXT PRIMARY KEY,
+		reason TEXT,
+		created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
 	);`
 
 	_, err := db.conn.Exec(schema)
@@ -412,4 +460,170 @@ func (db *DB) UpdatePATUsed(patID int64) error {
 		return ErrNotFound
 	}
 	return nil
+}
+
+// ListAllPATs returns all PATs across all users (admin view).
+func (db *DB) ListAllPATs() ([]*PersonalAccessToken, error) {
+	query := `SELECT id, user_id, token_hash, token_prefix, name, expires_at, revoked_at, last_used_at, created_at
+	          FROM personal_access_tokens ORDER BY created_at DESC`
+	rows, err := db.conn.Query(query)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var pats []*PersonalAccessToken
+	for rows.Next() {
+		var pat PersonalAccessToken
+		var expires, revoked, lastUsed sql.NullTime
+		if err := rows.Scan(&pat.ID, &pat.UserID, &pat.TokenHash, &pat.TokenPrefix, &pat.Name, &expires, &revoked, &lastUsed, &pat.CreatedAt); err != nil {
+			return nil, err
+		}
+		if expires.Valid {
+			pat.ExpiresAt = &expires.Time
+		}
+		if revoked.Valid {
+			pat.RevokedAt = &revoked.Time
+		}
+		if lastUsed.Valid {
+			pat.LastUsedAt = &lastUsed.Time
+		}
+		pats = append(pats, &pat)
+	}
+	return pats, rows.Err()
+}
+
+// CountAdmins returns the number of users with role="admin" and status="approved".
+func (db *DB) CountAdmins() (int, error) {
+	var count int
+	err := db.conn.QueryRow(`SELECT COUNT(*) FROM users WHERE role = 'admin' AND status = 'approved'`).Scan(&count)
+	return count, err
+}
+
+// WriteAuditEntry appends a new entry to the admin_audit_log table.
+func (db *DB) WriteAuditEntry(e *AuditEntry) error {
+	if e.CreatedAt.IsZero() {
+		e.CreatedAt = time.Now().UTC()
+	}
+	query := `INSERT INTO admin_audit_log (actor_id, action, target_type, target_id, details, ip_address, created_at)
+	          VALUES (?, ?, ?, ?, ?, ?, ?)`
+	res, err := db.conn.Exec(query, e.ActorID, e.Action, e.TargetType, e.TargetID, e.Details, e.IPAddress, e.CreatedAt)
+	if err != nil {
+		return err
+	}
+	id, err := res.LastInsertId()
+	if err != nil {
+		return err
+	}
+	e.ID = id
+	return nil
+}
+
+// ListAuditEntries returns audit log entries with optional filtering and pagination.
+func (db *DB) ListAuditEntries(f AuditFilter) ([]*AuditEntry, error) {
+	if f.Limit <= 0 || f.Limit > 200 {
+		f.Limit = 50
+	}
+
+	query := `SELECT id, actor_id, action, target_type, target_id, details, ip_address, created_at
+	          FROM admin_audit_log WHERE 1=1`
+	args := []interface{}{}
+
+	if f.ActorID != "" {
+		query += " AND actor_id = ?"
+		args = append(args, f.ActorID)
+	}
+	if f.Action != "" {
+		query += " AND action = ?"
+		args = append(args, f.Action)
+	}
+	if f.TargetID != "" {
+		query += " AND target_id = ?"
+		args = append(args, f.TargetID)
+	}
+
+	query += " ORDER BY created_at DESC LIMIT ? OFFSET ?"
+	args = append(args, f.Limit, f.Offset)
+
+	rows, err := db.conn.Query(query, args...)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var entries []*AuditEntry
+	for rows.Next() {
+		var e AuditEntry
+		var details, ip sql.NullString
+		if err := rows.Scan(&e.ID, &e.ActorID, &e.Action, &e.TargetType, &e.TargetID, &details, &ip, &e.CreatedAt); err != nil {
+			return nil, err
+		}
+		if details.Valid {
+			e.Details = details.String
+		}
+		if ip.Valid {
+			e.IPAddress = ip.String
+		}
+		entries = append(entries, &e)
+	}
+	return entries, rows.Err()
+}
+
+// AddBlacklistIP adds an IP to the database blacklist.
+func (db *DB) AddBlacklistIP(ip, reason string) error {
+	query := "INSERT OR IGNORE INTO ip_blacklist (ip_address, reason) VALUES (?, ?)"
+	_, err := db.conn.Exec(query, ip, reason)
+	return err
+}
+
+// RemoveBlacklistIP removes an IP from the database blacklist.
+func (db *DB) RemoveBlacklistIP(ip string) error {
+	query := "DELETE FROM ip_blacklist WHERE ip_address = ?"
+	_, err := db.conn.Exec(query, ip)
+	return err
+}
+
+// IsBlacklisted checks if an IP is currently blacklisted.
+func (db *DB) IsBlacklisted(ip string) (bool, error) {
+	query := "SELECT 1 FROM ip_blacklist WHERE ip_address = ?"
+	var dummy int
+	err := db.conn.QueryRow(query, ip).Scan(&dummy)
+	if err == sql.ErrNoRows {
+		return false, nil
+	}
+	if err != nil {
+		return false, err
+	}
+	return true, nil
+}
+
+// BlacklistEntry represents a blacklisted IP.
+type BlacklistEntry struct {
+	IPAddress string    `json:"ip_address"`
+	Reason    string    `json:"reason"`
+	CreatedAt time.Time `json:"created_at"`
+}
+
+// ListBlacklistedIPs returns all blacklisted IPs.
+func (db *DB) ListBlacklistedIPs() ([]*BlacklistEntry, error) {
+	query := "SELECT ip_address, reason, created_at FROM ip_blacklist ORDER BY created_at DESC"
+	rows, err := db.conn.Query(query)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var entries []*BlacklistEntry
+	for rows.Next() {
+		var e BlacklistEntry
+		var reason sql.NullString
+		if err := rows.Scan(&e.IPAddress, &reason, &e.CreatedAt); err != nil {
+			return nil, err
+		}
+		if reason.Valid {
+			e.Reason = reason.String
+		}
+		entries = append(entries, &e)
+	}
+	return entries, rows.Err()
 }

@@ -25,7 +25,7 @@ func TestRegistryRegister(t *testing.T) {
 	}
 
 	// Register
-	token, remotes, err := reg.Register("alpha-se", ports, domains)
+	token, remotes, err := reg.Register("alpha-se", ports, domains, 0, "127.0.0.1")
 	if err != nil {
 		t.Fatalf("failed to register: %v", err)
 	}
@@ -47,18 +47,18 @@ func TestRegistryRegister(t *testing.T) {
 	}
 
 	// Verify leases are present in registry
-	p1, exists1 := reg.GetBackendPort("alpha-se.liferay.com")
+	lease1, exists1 := reg.GetLease("alpha-se.liferay.com")
 	if !exists1 {
 		t.Error("expected alpha-se.liferay.com to exist")
 	}
 
-	p2, exists2 := reg.GetBackendPort("alpha-se-assets.liferay-tunnel.com")
+	lease2, exists2 := reg.GetLease("alpha-se-assets.liferay-tunnel.com")
 	if !exists2 {
 		t.Error("expected alpha-se-assets.liferay-tunnel.com to exist")
 	}
 
-	if p1 == p2 {
-		t.Errorf("expected different local ports for different targets, got %d for both", p1)
+	if lease1.LocalPort == lease2.LocalPort {
+		t.Errorf("expected different local ports for different targets, got %d for both", lease1.LocalPort)
 	}
 }
 
@@ -67,12 +67,12 @@ func TestRegistryDuplicateSubdomain(t *testing.T) {
 	reg := NewRegistry(chiselServer)
 	domains := []string{"liferay.com"}
 
-	_, _, err := reg.Register("beta-se", []PortMapping{{LocalPort: 8080}}, domains)
+	_, _, err := reg.Register("beta-se", []PortMapping{{LocalPort: 8080}}, domains, 0, "127.0.0.1")
 	if err != nil {
 		t.Fatalf("first registration failed: %v", err)
 	}
 
-	_, _, err = reg.Register("beta-se", []PortMapping{{LocalPort: 8080}}, domains)
+	_, _, err = reg.Register("beta-se", []PortMapping{{LocalPort: 8080}}, domains, 0, "127.0.0.1")
 	if err == nil {
 		t.Error("expected second registration with same subdomain to fail")
 	}
@@ -83,13 +83,13 @@ func TestRegistryCleanup(t *testing.T) {
 	reg := NewRegistry(chiselServer)
 	domains := []string{"liferay.com"}
 
-	token, _, err := reg.Register("gamma-se", []PortMapping{{LocalPort: 8080}}, domains)
+	token, _, err := reg.Register("gamma-se", []PortMapping{{LocalPort: 8080}}, domains, 0, "127.0.0.1")
 	if err != nil {
 		t.Fatalf("registration failed: %v", err)
 	}
 
 	// Verify it exists
-	_, exists := reg.GetBackendPort("gamma-se.liferay.com")
+	_, exists := reg.GetLease("gamma-se.liferay.com")
 	if !exists {
 		t.Fatal("expected lease to exist")
 	}
@@ -98,7 +98,7 @@ func TestRegistryCleanup(t *testing.T) {
 	reg.CleanLease(token)
 
 	// Verify it is gone
-	_, exists = reg.GetBackendPort("gamma-se.liferay.com")
+	_, exists = reg.GetLease("gamma-se.liferay.com")
 	if exists {
 		t.Error("expected lease to be cleaned up")
 	}
@@ -127,7 +127,7 @@ func TestRegistryValidation(t *testing.T) {
 	}
 
 	for _, tt := range tests {
-		_, _, err := reg.Register(tt.subdomain, ports, domains)
+		_, _, err := reg.Register(tt.subdomain, ports, domains, 0, "127.0.0.1")
 		if tt.shouldPass && err != nil {
 			t.Errorf("expected subdomain %s to pass, but got error: %v", tt.subdomain, err)
 		}
@@ -173,7 +173,7 @@ func TestRegistryCheckSubdomain(t *testing.T) {
 	}
 
 	// Register the subdomain
-	_, _, err := reg.Register("alpha-se", []PortMapping{{LocalPort: 8080}}, domains)
+	_, _, err := reg.Register("alpha-se", []PortMapping{{LocalPort: 8080}}, domains, 0, "127.0.0.1")
 	if err != nil {
 		t.Fatalf("registration failed: %v", err)
 	}
@@ -191,7 +191,7 @@ func TestRegistryGenerateSuggestions(t *testing.T) {
 	domains := []string{"liferay.com"}
 
 	// Check suggestions for valid prefix that is taken
-	_, _, _ = reg.Register("alpha-se", []PortMapping{{LocalPort: 8080}}, domains)
+	_, _, _ = reg.Register("alpha-se", []PortMapping{{LocalPort: 8080}}, domains, 0, "127.0.0.1")
 
 	suggestions := reg.GenerateSuggestions("alpha-se", domains)
 	if len(suggestions) != 3 {

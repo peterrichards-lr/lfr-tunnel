@@ -141,9 +141,9 @@ func TestPATCRUD(t *testing.T) {
 
 	// Create user first
 	user := &User{
-		ID:    "dev-1",
-		Email: "dev1@liferay.com",
-		Role:  "user",
+		ID:     "dev-1",
+		Email:  "dev1@liferay.com",
+		Role:   "user",
 		Status: "approved",
 	}
 	if err := database.CreateUser(user); err != nil {
@@ -240,9 +240,9 @@ func TestPATForeignKeysAndCascade(t *testing.T) {
 
 	// Create user
 	user := &User{
-		ID:    "user-to-delete",
-		Email: "deleteme@liferay.com",
-		Role:  "user",
+		ID:     "user-to-delete",
+		Email:  "deleteme@liferay.com",
+		Role:   "user",
 		Status: "approved",
 	}
 	if err := database.CreateUser(user); err != nil {

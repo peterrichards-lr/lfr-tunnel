@@ -160,4 +160,3 @@ func TestLoadClientConfig_TokenFile(t *testing.T) {
 		t.Errorf("expected LFT_CLIENT_TOKEN to override token file, got %q", cfgEnv.AuthToken)
 	}
 }
-

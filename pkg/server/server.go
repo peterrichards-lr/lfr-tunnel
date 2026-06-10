@@ -667,7 +667,7 @@ func (s *Server) handleClaimToken(w http.ResponseWriter, r *http.Request) {
 
 	w.WriteHeader(http.StatusOK)
 	_ = json.NewEncoder(w).Encode(map[string]string{
-		"status":                 "success",
+		"status":                "success",
 		"personal_access_token": plaintextPat,
 	})
 }

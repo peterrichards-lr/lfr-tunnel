@@ -90,7 +90,9 @@ The solution will consist of:
 - [x] Print the clickable public URLs at the end of client connection setup.
 - [x] Implement client-side background execution (-background), check status (-status), and termination (-stop) flags.
 - [x] Allow developer PAT authentication on check-subdomain endpoint.
-- [ ] Implement local E2E Docker integration test suite.
+- [x] Debug and verify local E2E Docker integration test suite (resolved control domain routing via Nginx network aliases and added Nginx startup checks in run.sh).
+- [x] Integrate the E2E Docker integration test suite into the GitHub Actions CI workflow (.github/workflows/ci.yml).
+
 
 
 

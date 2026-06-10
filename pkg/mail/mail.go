@@ -4,6 +4,7 @@ import (
 	"crypto/tls"
 	"fmt"
 	"net"
+	"net/mail"
 	"net/smtp"
 	"time"
 )
@@ -32,7 +33,7 @@ func NewSMTPClient(cfg *Config) *SMTPClient {
 
 // Send sends an HTML email using SMTP.
 func (s *SMTPClient) Send(to string, subject string, body string) error {
-	addr := fmt.Sprintf("%s:%d", s.cfg.SMTPHost, s.cfg.SMTPPort)
+	addr := net.JoinHostPort(s.cfg.SMTPHost, fmt.Sprintf("%d", s.cfg.SMTPPort))
 	var conn net.Conn
 	var err error
 
@@ -72,7 +73,11 @@ func (s *SMTPClient) Send(to string, subject string, body string) error {
 		}
 	}
 
-	if err := c.Mail(s.cfg.SMTPFromAddress); err != nil {
+	fromAddr := s.cfg.SMTPFromAddress
+	if parsed, err := mail.ParseAddress(s.cfg.SMTPFromAddress); err == nil {
+		fromAddr = parsed.Address
+	}
+	if err := c.Mail(fromAddr); err != nil {
 		return fmt.Errorf("failed to set mail sender: %v", err)
 	}
 	if err := c.Rcpt(to); err != nil {

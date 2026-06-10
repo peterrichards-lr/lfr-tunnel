@@ -565,4 +565,3 @@ func TestServer_DomainSeparation(t *testing.T) {
 		t.Error("expected peter-dev.example.online to be available")
 	}
 }
-

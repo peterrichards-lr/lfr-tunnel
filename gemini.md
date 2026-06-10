@@ -67,6 +67,7 @@ The solution will consist of:
 - [ ] Create server-side administrative control endpoints for user promotion and token management.
 - [x] Release, tag, and deploy v1.0.1 of lfr-tunneld to the VPS.
 - [x] Fix CI build and formatting failures.
+- [x] Upgrade Go version in GitHub Action workflows to 1.22.
 
 
 

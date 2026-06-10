@@ -198,7 +198,33 @@ Caddy automatically handles wildcard Let's Encrypt certificate generation and re
 
 Developers run `lfr-tunnel` locally on their developer machines.
 
-### Binary Installation
+### Quick One-Line Installation
+
+To download the pre-compiled binary for your platform and install it directly, run:
+
+*   **macOS / Linux (Bash)**:
+    ```bash
+    curl -sSfL https://raw.githubusercontent.com/peterrichards-lr/lfr-tunnel/master/scripts/install.sh | sh
+    ```
+*   **Windows (PowerShell)**:
+    ```powershell
+    iwr https://raw.githubusercontent.com/peterrichards-lr/lfr-tunnel/master/scripts/install.ps1 | iex
+    ```
+
+### Versioning & Self-Upgrading
+
+You can check the current version of the client or upgrade it to the latest release at any time:
+
+*   **Check Version**:
+    ```bash
+    lfr-tunnel -version
+    ```
+*   **Self-Upgrade**:
+    ```bash
+    lfr-tunnel -upgrade
+    ```
+
+### Build from Source
 
 1. **Build the CLI**:
    ```bash

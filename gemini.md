@@ -94,6 +94,9 @@ The solution will consist of:
 - [x] Integrate the E2E Docker integration test suite into the GitHub Actions CI workflow (.github/workflows/ci.yml).
 - [x] Simplify client-side setup by updating default ServerURL to https://tunnel.lfr-demo.se.
 - [x] Recompile and deploy latest lfr-tunneld to the VPS.
+- [x] Implement client-side versioning (-version) and self-upgrade (-upgrade) capability targeting GitHub Releases.
+- [x] Update README.md with simplified installation instructions (one-liner curl and PowerShell commands).
+
 
 
 

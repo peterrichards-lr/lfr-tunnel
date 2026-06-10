@@ -27,8 +27,22 @@ func main() {
 	background := flag.Bool("background", false, "Run client in background")
 	status := flag.Bool("status", false, "Check status of the background tunnel")
 	stop := flag.Bool("stop", false, "Stop the background tunnel")
+	versionFlag := flag.Bool("version", false, "Print client version")
+	upgradeFlag := flag.Bool("upgrade", false, "Self-upgrade client to the latest release")
 
 	flag.Parse()
+
+	if *versionFlag {
+		fmt.Printf("lfr-tunnel version %s\n", config.Version)
+		return
+	}
+
+	if *upgradeFlag {
+		if err := client.SelfUpgrade(config.Version); err != nil {
+			log.Fatalf("[Error] Upgrade failed: %v", err)
+		}
+		return
+	}
 
 	if *stop {
 		handleStop()
@@ -39,6 +53,16 @@ func main() {
 		handleStatus()
 		return
 	}
+
+	// Start update check asynchronously
+	updateChan := make(chan string, 1)
+	go func() {
+		if latest, err := client.CheckForUpdate(config.Version); err == nil && latest != "" {
+			updateChan <- latest
+		} else {
+			updateChan <- ""
+		}
+	}()
 
 	// 1. Load config from file and environment variables
 	cfg, err := config.LoadClientConfig(*configPath)
@@ -128,6 +152,17 @@ func main() {
 			suffixStr = fmt.Sprintf(" (Suffix: -%s)", pm.NameSuffix)
 		}
 		log.Printf("  - Local port %d%s", pm.LocalPort, suffixStr)
+	}
+
+	// Check update result with 500ms timeout
+	select {
+	case latest := <-updateChan:
+		if latest != "" {
+			log.Printf("[Update] A new version of lfr-tunnel is available: %s (current: %s)", latest, config.Version)
+			log.Printf("[Update] Run 'lfr-tunnel -upgrade' to automatically update to the latest release.")
+		}
+	case <-time.After(500 * time.Millisecond):
+		// Silent timeout if GitHub API is slow or offline
 	}
 
 	// 5. Registration Handshake

@@ -171,17 +171,87 @@ sudo systemctl restart nginx
 
 ---
 
-## 4. Run `lfr-tunneld` Gateway Daemon
+## 4. Prepare `lfr-tunneld` Directory & Config
 
 With Nginx handling the public interface, `lfr-tunneld` is configured to bind to **localhost** (`127.0.0.1:8080`) instead of running directly on port 443.
 
-Update your `server-config.yaml` on the VPS:
+1.  **Create a dedicated system user** (with no login shell and no home directory) to run the daemon securely under restricted privileges:
+    ```bash
+    sudo useradd -r -s /bin/false lfr-tunnel
+    ```
 
-```yaml
-domain1: "lfr-demo.se"
-domain2: "lfr-demo.online"
-bind_addr: "127.0.0.1:8080"
-chisel_bind_addr: "127.0.0.1:8081"
-auth_token: "YOUR_SHARED_SECRET_TOKEN"
-# ssl_cert_file and ssl_key_file are omitted since Nginx terminates SSL
-```
+2.  **Create the configuration directory** and place the `server-config.yaml` file inside it:
+    ```bash
+    sudo mkdir -p /etc/lfr-tunneld
+    ```
+
+3.  **Write the configuration file** at `/etc/lfr-tunneld/server-config.yaml`:
+    ```yaml
+    domain1: "lfr-demo.se"
+    domain2: "lfr-demo.online"
+    bind_addr: "127.0.0.1:8080"
+    chisel_bind_addr: "127.0.0.1:8081"
+    auth_token: "YOUR_SHARED_SECRET_TOKEN"
+    # ssl_cert_file and ssl_key_file are omitted since Nginx terminates SSL
+    ```
+
+4.  **Secure the configuration directory** so only the `lfr-tunnel` service user can read it (this prevents other unprivileged users on the system from reading your shared auth token):
+    ```bash
+    sudo chown -R lfr-tunnel:lfr-tunnel /etc/lfr-tunneld
+    sudo chmod 700 /etc/lfr-tunneld
+    sudo chmod 600 /etc/lfr-tunneld/server-config.yaml
+    ```
+
+---
+
+## 5. Configure & Run systemd Service
+
+To run `lfr-tunneld` as a reliable background service that automatically restarts on boot or crash under the restricted `lfr-tunnel` user, install the systemd service template:
+
+1.  **Copy the executable** to a standard system path:
+    ```bash
+    sudo cp bin/lfr-tunneld /usr/local/bin/
+    sudo chmod 755 /usr/local/bin/lfr-tunneld
+    sudo chown root:root /usr/local/bin/lfr-tunneld
+    ```
+
+2.  **Create the service file** at `/etc/systemd/system/lfr-tunneld.service` using the template provided in `docs/server/lfr-tunneld.service`:
+    ```ini
+    [Unit]
+    Description=Liferay Tunnel Gateway Daemon
+    After=network.target
+
+    [Service]
+    Type=simple
+    User=lfr-tunnel
+    Group=lfr-tunnel
+    WorkingDirectory=/etc/lfr-tunneld
+    ExecStart=/usr/local/bin/lfr-tunneld --config /etc/lfr-tunneld/server-config.yaml
+    Restart=on-failure
+    RestartSec=5s
+
+    # Security Hardening (systemd Sandboxing)
+    ProtectSystem=strict
+    ProtectHome=true
+    PrivateTmp=true
+    NoNewPrivileges=true
+    CapabilityBoundingSet=
+    ReadOnlyPaths=/usr/local/bin/lfr-tunneld
+    ReadWritePaths=/etc/lfr-tunneld
+
+    [Install]
+    WantedBy=multi-user.target
+    ```
+
+3.  **Reload and start the service**:
+    ```bash
+    sudo systemctl daemon-reload
+    sudo systemctl enable lfr-tunneld
+    sudo systemctl start lfr-tunneld
+    ```
+
+4.  **Verify status and logs**:
+    ```bash
+    sudo systemctl status lfr-tunneld
+    sudo journalctl -u lfr-tunneld -n 50 -f
+    ```

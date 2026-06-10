@@ -294,6 +294,30 @@ Run using the configuration file:
 lfr-tunnel -config client-config.yaml
 ```
 
+### Running in the Background
+
+By default, `lfr-tunnel` runs as a foreground process blocking the terminal. You can run the client in the background using the `-background` flag:
+
+```bash
+lfr-tunnel -config client-config.yaml -background
+```
+
+When started with `-background`:
+* It spawns a detached background process and prints the child PID.
+* Logs/outputs are redirected to `~/.lfr-tunnel/client.log`.
+
+To check if the background tunnel is currently active:
+```bash
+lfr-tunnel -status
+```
+
+To gracefully stop the background tunnel and release subdomains on the gateway:
+```bash
+lfr-tunnel -stop
+```
+*(This sends a SIGINT to trigger clean teardown, falling back to a force-kill if it doesn't respond in 2 seconds).*
+
+
 ### Loading Credentials Securely
 
 To avoid storing your sensitive `auth_token` in the workspace-specific `client-config.yaml` (which might be committed to source control), the client can securely load the token from a file:

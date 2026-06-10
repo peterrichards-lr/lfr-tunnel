@@ -7,9 +7,12 @@ import (
 	"log"
 	"os"
 	"os/signal"
+	"os/exec"
+	"path/filepath"
 	"strconv"
 	"strings"
 	"syscall"
+	"time"
 
 	"lfr-tunnel/pkg/client"
 	"lfr-tunnel/pkg/config"
@@ -21,8 +24,21 @@ func main() {
 	token := flag.String("token", "", "Gateway auth token")
 	subdomain := flag.String("subdomain", "", "Requested subdomain prefix (e.g. alpha-se)")
 	portsStr := flag.String("ports", "", "Comma-separated ports to expose (e.g. 8080,3000)")
+	background := flag.Bool("background", false, "Run client in background")
+	status := flag.Bool("status", false, "Check status of the background tunnel")
+	stop := flag.Bool("stop", false, "Stop the background tunnel")
 
 	flag.Parse()
+
+	if *stop {
+		handleStop()
+		return
+	}
+
+	if *status {
+		handleStatus()
+		return
+	}
 
 	// 1. Load config from file and environment variables
 	cfg, err := config.LoadClientConfig(*configPath)
@@ -39,6 +55,11 @@ func main() {
 	}
 	if *subdomain != "" {
 		cfg.Subdomain = *subdomain
+	}
+
+	if *background {
+		handleBackground()
+		return
 	}
 
 	var ports []int
@@ -148,4 +169,153 @@ func main() {
 		log.Fatalf("[Client] Tunnel disconnected with error: %v", err)
 	}
 	log.Println("[Client] Tunnel shutdown completed.")
+}
+
+func getPIDFilePath() (string, error) {
+	home, err := os.UserHomeDir()
+	if err != nil {
+		return "", err
+	}
+	dir := filepath.Join(home, ".lfr-tunnel")
+	if err := os.MkdirAll(dir, 0700); err != nil {
+		return "", err
+	}
+	return filepath.Join(dir, "lfr-tunnel.pid"), nil
+}
+
+func writePID(pid int) error {
+	path, err := getPIDFilePath()
+	if err != nil {
+		return err
+	}
+	return os.WriteFile(path, []byte(strconv.Itoa(pid)), 0600)
+}
+
+func readPID() (int, error) {
+	path, err := getPIDFilePath()
+	if err != nil {
+		return 0, err
+	}
+	data, err := os.ReadFile(path)
+	if err != nil {
+		return 0, err
+	}
+	pidStr := strings.TrimSpace(string(data))
+	return strconv.Atoi(pidStr)
+}
+
+func isPIDRunning(pid int) bool {
+	if pid <= 0 {
+		return false
+	}
+	proc, err := os.FindProcess(pid)
+	if err != nil {
+		return false
+	}
+	err = proc.Signal(syscall.Signal(0))
+	return err == nil
+}
+
+func handleBackground() {
+	pid, err := readPID()
+	if err == nil && pid > 0 && isPIDRunning(pid) {
+		log.Fatalf("[Client] A background tunnel is already running (PID: %d). Stop it first using: lfr-tunnel -stop\n", pid)
+	}
+
+	home, err := os.UserHomeDir()
+	if err != nil {
+		log.Fatalf("[Client] Failed to resolve home directory: %v\n", err)
+	}
+	logDir := filepath.Join(home, ".lfr-tunnel")
+	_ = os.MkdirAll(logDir, 0700)
+	logPath := filepath.Join(logDir, "client.log")
+
+	logFile, err := os.OpenFile(logPath, os.O_CREATE|os.O_WRONLY|os.O_TRUNC, 0600)
+	if err != nil {
+		log.Fatalf("[Client] Failed to create log file: %v\n", err)
+	}
+	defer logFile.Close()
+
+	execPath, err := os.Executable()
+	if err != nil {
+		log.Fatalf("[Client] Failed to get executable path: %v\n", err)
+	}
+
+	var childArgs []string
+	for _, arg := range os.Args[1:] {
+		if arg == "-background" || arg == "--background" {
+			continue
+		}
+		childArgs = append(childArgs, arg)
+	}
+
+	cmd := exec.Command(execPath, childArgs...)
+	cmd.Stdout = logFile
+	cmd.Stderr = logFile
+	cmd.Dir = "."
+
+	if err := cmd.Start(); err != nil {
+		log.Fatalf("[Client] Failed to start background process: %v\n", err)
+	}
+
+	if err := writePID(cmd.Process.Pid); err != nil {
+		log.Printf("[Warning] Failed to write PID file: %v\n", err)
+	}
+
+	log.Printf("[Client] Tunnel started in background (PID: %d).\n", cmd.Process.Pid)
+	log.Printf("[Client] Logs: %s\n", logPath)
+	log.Println("[Client] To stop the tunnel, run: lfr-tunnel -stop")
+}
+
+func handleStop() {
+	pid, err := readPID()
+	if err != nil || pid <= 0 {
+		log.Println("[Client] No background tunnel is active.")
+		return
+	}
+	if !isPIDRunning(pid) {
+		log.Printf("[Client] Stale PID file found. Process %d is not running.\n", pid)
+		pidPath, _ := getPIDFilePath()
+		_ = os.Remove(pidPath)
+		return
+	}
+	proc, err := os.FindProcess(pid)
+	if err != nil {
+		log.Fatalf("[Client] Failed to find process: %v\n", err)
+	}
+
+	log.Printf("[Client] Stopping background tunnel (PID: %d)...\n", pid)
+	_ = proc.Signal(syscall.SIGINT)
+
+	for i := 0; i < 10; i++ {
+		time.Sleep(200 * time.Millisecond)
+		if !isPIDRunning(pid) {
+			break
+		}
+	}
+
+	if isPIDRunning(pid) {
+		log.Println("[Client] Process did not respond to SIGINT. Force terminating...")
+		_ = proc.Kill()
+	}
+	pidPath, _ := getPIDFilePath()
+	_ = os.Remove(pidPath)
+	log.Println("[Client] Tunnel stopped.")
+}
+
+func handleStatus() {
+	pid, err := readPID()
+	if err != nil || pid <= 0 {
+		log.Println("[Client] No background tunnel is active.")
+		return
+	}
+	if isPIDRunning(pid) {
+		log.Printf("[Client] Background tunnel is active (PID: %d).\n", pid)
+		home, _ := os.UserHomeDir()
+		log.Printf("[Client] Logs: %s\n", filepath.Join(home, ".lfr-tunnel", "client.log"))
+	} else {
+		log.Println("[Client] No background tunnel is active (found stale PID file).")
+		pidPath, _ := getPIDFilePath()
+		_ = os.Remove(pidPath)
+	}
 }

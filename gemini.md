@@ -88,6 +88,8 @@ The solution will consist of:
 - [x] Add clean target to Makefile and make build depend on clean.
 - [x] Implement domain-specific registration and subdomain checking to keep domain1 and domain2 separate.
 - [x] Print the clickable public URLs at the end of client connection setup.
+- [x] Implement client-side background execution (-background), check status (-status), and termination (-stop) flags.
+
 
 
 

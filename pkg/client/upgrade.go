@@ -1,6 +1,8 @@
 package client
 
 import (
+	"crypto/sha256"
+	"encoding/hex"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -89,16 +91,39 @@ func SelfUpgrade(currentVersion string) error {
 	}
 
 	var downloadURL string
+	var checksumsURL string
 	for _, asset := range rel.Assets {
 		if asset.Name == expectedAsset {
 			downloadURL = asset.DownloadURL
-			break
+		} else if asset.Name == "checksums.txt" {
+			checksumsURL = asset.DownloadURL
 		}
 	}
 
 	if downloadURL == "" {
 		return fmt.Errorf("no matching pre-built binary asset found for your platform (%s)", expectedAsset)
 	}
+
+	if checksumsURL == "" {
+		return fmt.Errorf("release checksums file (checksums.txt) not found in latest release assets")
+	}
+
+	fmt.Println("[Update] Fetching release checksums...")
+	chkResp, err := client.Get(checksumsURL)
+	if err != nil {
+		return fmt.Errorf("failed to download release checksums: %v", err)
+	}
+	defer chkResp.Body.Close()
+
+	if chkResp.StatusCode != http.StatusOK {
+		return fmt.Errorf("failed downloading checksums: server returned status %d", chkResp.StatusCode)
+	}
+
+	checksumsContent, err := io.ReadAll(chkResp.Body)
+	if err != nil {
+		return fmt.Errorf("failed to read release checksums content: %v", err)
+	}
+	chkResp.Body.Close()
 
 	// Resolve running executable path
 	execPath := targetExecPath
@@ -147,6 +172,32 @@ func SelfUpgrade(currentVersion string) error {
 	}
 	tempFile.Close()
 
+	// Verify SHA256 integrity of the downloaded binary
+	computedHash, err := computeSHA256(tempPath)
+	if err != nil {
+		return fmt.Errorf("failed to compute downloaded binary checksum: %v", err)
+	}
+
+	expectedHash := ""
+	lines := strings.Split(string(checksumsContent), "\n")
+	for _, line := range lines {
+		parts := strings.Fields(line)
+		if len(parts) >= 2 && parts[1] == expectedAsset {
+			expectedHash = strings.ToLower(parts[0])
+			break
+		}
+	}
+
+	if expectedHash == "" {
+		return fmt.Errorf("binary integrity check failed: asset %q not found in release checksums", expectedAsset)
+	}
+
+	if computedHash != expectedHash {
+		return fmt.Errorf("binary integrity check failed: checksum mismatch (expected: %s, got: %s)", expectedHash, computedHash)
+	}
+
+	fmt.Println("[Update] Binary integrity verified successfully.")
+
 	// Perform replacement swap
 	if runtime.GOOS == "windows" {
 		oldPath := execPath + ".old"
@@ -170,4 +221,19 @@ func SelfUpgrade(currentVersion string) error {
 	}
 
 	return nil
+}
+
+func computeSHA256(filePath string) (string, error) {
+	f, err := os.Open(filePath)
+	if err != nil {
+		return "", err
+	}
+	defer f.Close()
+
+	h := sha256.New()
+	if _, err := io.Copy(h, f); err != nil {
+		return "", err
+	}
+
+	return hex.EncodeToString(h.Sum(nil)), nil
 }

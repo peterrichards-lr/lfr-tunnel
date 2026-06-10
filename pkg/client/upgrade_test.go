@@ -1,6 +1,8 @@
 package client
 
 import (
+	"crypto/sha256"
+	"encoding/hex"
 	"encoding/json"
 	"fmt"
 	"net/http"
@@ -8,11 +10,11 @@ import (
 	"os"
 	"path/filepath"
 	"runtime"
+	"strings"
 	"testing"
 )
 
 func TestCheckForUpdate_NewerVersion(t *testing.T) {
-	// 1. Create a mock GitHub server returning a newer version
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
 		rel := Release{
@@ -22,12 +24,10 @@ func TestCheckForUpdate_NewerVersion(t *testing.T) {
 	}))
 	defer srv.Close()
 
-	// Override API endpoint
 	oldBase := githubAPIBase
 	githubAPIBase = srv.URL
 	defer func() { githubAPIBase = oldBase }()
 
-	// 2. Query update with current version v1.0.2
 	latest, err := CheckForUpdate("v1.0.2")
 	if err != nil {
 		t.Fatalf("unexpected error check for update: %v", err)
@@ -63,7 +63,6 @@ func TestCheckForUpdate_SameVersion(t *testing.T) {
 }
 
 func TestSelfUpgrade(t *testing.T) {
-	// Create a temporary mock binary that represents the running executable
 	tmpDir, err := os.MkdirTemp("", "lfr-tunnel-test-*")
 	if err != nil {
 		t.Fatalf("failed to create temp dir: %v", err)
@@ -76,12 +75,10 @@ func TestSelfUpgrade(t *testing.T) {
 	}
 	fakeExecPath := filepath.Join(tmpDir, execFilename)
 
-	// Write initial dummy content to fake binary
 	if err := os.WriteFile(fakeExecPath, []byte("fake-binary-old-content"), 0755); err != nil {
 		t.Fatalf("failed to write fake binary: %v", err)
 	}
 
-	// Mock server to host the release API and the binary asset download
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.URL.Path == "/repos/peterrichards-lr/lfr-tunnel/releases/latest" {
 			w.Header().Set("Content-Type", "application/json")
@@ -99,9 +96,25 @@ func TestSelfUpgrade(t *testing.T) {
 						Name:        assetName,
 						DownloadURL: fmt.Sprintf("http://%s/download/asset", r.Host),
 					},
+					{
+						Name:        "checksums.txt",
+						DownloadURL: fmt.Sprintf("http://%s/download/checksums", r.Host),
+					},
 				},
 			}
 			_ = json.NewEncoder(w).Encode(rel)
+			return
+		}
+
+		if r.URL.Path == "/download/checksums" {
+			w.WriteHeader(http.StatusOK)
+			assetName := fmt.Sprintf("lfr-tunnel-%s-%s", runtime.GOOS, runtime.GOARCH)
+			if runtime.GOOS == "windows" {
+				assetName += ".exe"
+			}
+			h := sha256.Sum256([]byte("fake-binary-new-content"))
+			hexHash := hex.EncodeToString(h[:])
+			_, _ = w.Write([]byte(fmt.Sprintf("%s  %s\n", hexHash, assetName)))
 			return
 		}
 
@@ -115,22 +128,18 @@ func TestSelfUpgrade(t *testing.T) {
 	}))
 	defer srv.Close()
 
-	// Override API base
 	oldBase := githubAPIBase
 	githubAPIBase = srv.URL
 	defer func() { githubAPIBase = oldBase }()
 
-	// Override targetExecPath
 	targetExecPath = fakeExecPath
 	defer func() { targetExecPath = "" }()
 
-	// Execute SelfUpgrade from v1.0.2 to v1.0.3
 	err = SelfUpgrade("v1.0.2")
 	if err != nil {
 		t.Fatalf("SelfUpgrade failed: %v", err)
 	}
 
-	// Verify that the executable file was replaced with the new content
 	newContent, err := os.ReadFile(fakeExecPath)
 	if err != nil {
 		t.Fatalf("failed to read fake binary after upgrade: %v", err)
@@ -138,5 +147,97 @@ func TestSelfUpgrade(t *testing.T) {
 
 	if string(newContent) != "fake-binary-new-content" {
 		t.Errorf("expected new content 'fake-binary-new-content', got %s", string(newContent))
+	}
+}
+
+func TestSelfUpgrade_ChecksumMismatch(t *testing.T) {
+	tmpDir, err := os.MkdirTemp("", "lfr-tunnel-test-*")
+	if err != nil {
+		t.Fatalf("failed to create temp dir: %v", err)
+	}
+	defer os.RemoveAll(tmpDir)
+
+	execFilename := "lfr-tunnel-fake"
+	if runtime.GOOS == "windows" {
+		execFilename += ".exe"
+	}
+	fakeExecPath := filepath.Join(tmpDir, execFilename)
+
+	if err := os.WriteFile(fakeExecPath, []byte("fake-binary-old-content"), 0755); err != nil {
+		t.Fatalf("failed to write fake binary: %v", err)
+	}
+
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path == "/repos/peterrichards-lr/lfr-tunnel/releases/latest" {
+			w.Header().Set("Content-Type", "application/json")
+			assetName := fmt.Sprintf("lfr-tunnel-%s-%s", runtime.GOOS, runtime.GOARCH)
+			if runtime.GOOS == "windows" {
+				assetName += ".exe"
+			}
+			rel := Release{
+				TagName: "v1.0.3",
+				Assets: []struct {
+					Name        string `json:"name"`
+					DownloadURL string `json:"browser_download_url"`
+				}{
+					{
+						Name:        assetName,
+						DownloadURL: fmt.Sprintf("http://%s/download/asset", r.Host),
+					},
+					{
+						Name:        "checksums.txt",
+						DownloadURL: fmt.Sprintf("http://%s/download/checksums", r.Host),
+					},
+				},
+			}
+			_ = json.NewEncoder(w).Encode(rel)
+			return
+		}
+
+		if r.URL.Path == "/download/checksums" {
+			w.WriteHeader(http.StatusOK)
+			assetName := fmt.Sprintf("lfr-tunnel-%s-%s", runtime.GOOS, runtime.GOARCH)
+			if runtime.GOOS == "windows" {
+				assetName += ".exe"
+			}
+			// Write an incorrect checksum
+			_, _ = w.Write([]byte(fmt.Sprintf("%s  %s\n", "badchecksum1234567890", assetName)))
+			return
+		}
+
+		if r.URL.Path == "/download/asset" {
+			w.WriteHeader(http.StatusOK)
+			_, _ = w.Write([]byte("fake-binary-new-content"))
+			return
+		}
+
+		w.WriteHeader(http.StatusNotFound)
+	}))
+	defer srv.Close()
+
+	oldBase := githubAPIBase
+	githubAPIBase = srv.URL
+	defer func() { githubAPIBase = oldBase }()
+
+	targetExecPath = fakeExecPath
+	defer func() { targetExecPath = "" }()
+
+	err = SelfUpgrade("v1.0.2")
+	if err == nil {
+		t.Fatal("expected SelfUpgrade to fail due to checksum mismatch, but it succeeded")
+	}
+
+	if !strings.Contains(err.Error(), "integrity check failed") {
+		t.Errorf("expected error message to contain 'integrity check failed', got: %v", err)
+	}
+
+	// Verify that the executable file was NOT replaced and still has old content
+	content, err := os.ReadFile(fakeExecPath)
+	if err != nil {
+		t.Fatalf("failed to read fake binary: %v", err)
+	}
+
+	if string(content) != "fake-binary-old-content" {
+		t.Errorf("expected binary to retain 'fake-binary-old-content', got %s", string(content))
 	}
 }

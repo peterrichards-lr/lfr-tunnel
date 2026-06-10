@@ -46,6 +46,11 @@ jobs:
           # Windows
           GOOS=windows GOARCH=amd64 go build -ldflags="-s -w" -o dist/lfr-tunnel-windows-amd64.exe ./cmd/lfr-tunnel
 
+      - name: Generate Checksums
+        run: |
+          cd dist
+          sha256sum * > checksums.txt
+
       - name: Publish Release
         uses: softprops/action-gh-release@v2
         with:

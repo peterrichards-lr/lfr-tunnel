@@ -96,6 +96,9 @@ The solution will consist of:
 - [x] Recompile and deploy latest lfr-tunneld to the VPS.
 - [x] Implement client-side versioning (-version) and self-upgrade (-upgrade) capability targeting GitHub Releases.
 - [x] Update README.md with simplified installation instructions (one-liner curl and PowerShell commands).
+- [x] Implement binary integrity checks during self-upgrade (SHA256 checksum validation).
+- [x] Update release.yml workflow to automatically generate and upload checksums.txt.
+
 
 
 

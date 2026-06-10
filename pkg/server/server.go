@@ -292,6 +292,11 @@ func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 
+		if r.Method == http.MethodPost && r.URL.Path == "/api/tunnel-status" {
+			s.handleTunnelStatus(w, r)
+			return
+		}
+
 		if r.Method == http.MethodGet && r.URL.Path == "/api/domains" {
 			s.handleDomains(w, r)
 			return
@@ -424,6 +429,24 @@ func (s *Server) handleRegister(w http.ResponseWriter, r *http.Request) {
 		Domains:      activeDomains,
 	}); err != nil {
 		log.Printf("[Server] Failed to encode success response: %v", err)
+	}
+}
+
+// handleTunnelStatus updates the maintenance/health status of a client's tunnel.
+func (s *Server) handleTunnelStatus(w http.ResponseWriter, r *http.Request) {
+	var req struct {
+		SessionToken string `json:"session_token"`
+		Status       string `json:"status"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		http.Error(w, "invalid request", http.StatusBadRequest)
+		return
+	}
+
+	if s.registry.UpdateLeaseStatus(req.SessionToken, req.Status) {
+		w.WriteHeader(http.StatusOK)
+	} else {
+		http.Error(w, "session not found", http.StatusNotFound)
 	}
 }
 

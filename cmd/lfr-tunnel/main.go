@@ -206,10 +206,12 @@ func main() {
 
 	// Modify portMappings to point to dynamic Interceptor ports
 	for i, pm := range portMappings {
-		interceptPort, err := engine.InterceptPort(pm.LocalPort)
+		targetPort := pm.LocalPort
+		interceptPort, err := engine.InterceptPort(targetPort)
 		if err != nil {
-			log.Fatalf("[Error] Failed to start interceptor for port %d: %v", pm.LocalPort, err)
+			log.Fatalf("[Error] Failed to start interceptor for port %d: %v", targetPort, err)
 		}
+		engine.StartHealthChecks(cfg.ServerURL, regResp.SessionToken, targetPort)
 		portMappings[i].LocalPort = interceptPort
 	}
 

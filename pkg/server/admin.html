@@ -387,6 +387,7 @@
                                 <th>Full Host</th>
                                 <th>Target Port</th>
                                 <th>Client IP</th>
+                                <th>Status</th>
                                 <th>Connected At</th>
                                 <th>Actions</th>
                             </tr>
@@ -557,12 +558,20 @@
                     const tbody = document.getElementById('leases-tbody');
                     tbody.innerHTML = '';
                     leases.forEach(l => {
+                        let statusBadge = '<span class="badge" style="background:var(--success)">Up</span>';
+                        if (l.status === 'maintenance') {
+                            statusBadge = '<span class="badge" style="background:var(--warning)">Maintenance</span>';
+                        } else if (l.status === 'down') {
+                            statusBadge = '<span class="badge" style="background:var(--danger)">Down</span>';
+                        }
+
                         tbody.innerHTML += `
                             <tr>
                                 <td>${l.subdomain_prefix}</td>
                                 <td><a href="https://${l.full_host}" target="_blank" style="color:var(--primary)">${l.full_host}</a></td>
                                 <td>${l.target_port}</td>
                                 <td style="font-family: monospace;">${l.client_ip || 'N/A'}</td>
+                                <td>${statusBadge}</td>
                                 <td>${new Date(l.created_at).toLocaleString()}</td>
                                 <td><button class="small danger" onclick="kickLease('${l.full_host}')">Kick</button></td>
                             </tr>

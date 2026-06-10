@@ -2,6 +2,7 @@ package client
 
 import (
 	"bytes"
+	"encoding/json"
 	"fmt"
 	"io"
 	"log"
@@ -33,6 +34,7 @@ type RequestRecord struct {
 type InterceptorEngine struct {
 	mu              sync.RWMutex
 	MaintenanceMode bool
+	Status          string
 	AddedHeaders    map[string]string
 	History         []*RequestRecord
 	MaxHistory      int
@@ -50,10 +52,53 @@ func NewInterceptorEngine(headers []string) *InterceptorEngine {
 
 	return &InterceptorEngine{
 		MaintenanceMode: false,
+		Status:          "up",
 		AddedHeaders:    headerMap,
 		History:         make([]*RequestRecord, 0),
 		MaxHistory:      100, // Keep last 100 requests
 	}
+}
+
+// StartHealthChecks begins a background loop to verify Tomcat is responding and reports status to the Gateway.
+func (e *InterceptorEngine) StartHealthChecks(serverURL, sessionToken string, targetPort int) {
+	go func() {
+		for {
+			time.Sleep(5 * time.Second)
+
+			// Determine actual status
+			e.mu.RLock()
+			isMaint := e.MaintenanceMode
+			e.mu.RUnlock()
+
+			newStatus := "up"
+			if isMaint {
+				newStatus = "maintenance"
+			} else {
+				// Simple dial test to the local target port
+				conn, err := net.DialTimeout("tcp", fmt.Sprintf("127.0.0.1:%d", targetPort), 2*time.Second)
+				if err != nil {
+					newStatus = "down"
+				} else {
+					conn.Close()
+				}
+			}
+
+			// Update internal state and notify server if changed
+			e.mu.Lock()
+			changed := e.Status != newStatus
+			e.Status = newStatus
+			e.mu.Unlock()
+
+			if changed || newStatus == "maintenance" {
+				// Send status update to Gateway
+				payload, _ := json.Marshal(map[string]string{
+					"session_token": sessionToken,
+					"status":        newStatus,
+				})
+				http.Post(fmt.Sprintf("%s/api/tunnel-status", serverURL), "application/json", bytes.NewBuffer(payload))
+			}
+		}
+	}()
 }
 
 // AddRecord safely appends a record to the history buffer.

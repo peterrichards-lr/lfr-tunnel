@@ -30,6 +30,7 @@ type TunnelLease struct {
 	RateLimit       int       `json:"rate_limit"`
 	ClientIP        string    `json:"client_ip"`
 	BasicAuth       string    `json:"basic_auth"`
+	Status          string    `json:"status"` // e.g., "up", "maintenance", "down"
 	CreatedAt       time.Time `json:"created_at"`
 }
 
@@ -189,6 +190,7 @@ func (r *Registry) Register(subdomainPrefix string, ports []PortMapping, domains
 				RateLimit:       rateLimit,
 				ClientIP:        clientIP,
 				BasicAuth:       basicAuth,
+				Status:          "up",
 				CreatedAt:       time.Now(),
 			}
 			r.leases[fullHost] = lease
@@ -428,4 +430,20 @@ func (r *Registry) KickLease(subdomainPrefix string) bool {
 		return true
 	}
 	return false
+}
+
+// UpdateLeaseStatus updates the status string for all leases associated with a session token.
+func (r *Registry) UpdateLeaseStatus(sessionToken, status string) bool {
+	r.Lock()
+	defer r.Unlock()
+
+	leases, exists := r.sessionLeases[sessionToken]
+	if !exists {
+		return false
+	}
+
+	for _, lease := range leases {
+		lease.Status = status
+	}
+	return true
 }

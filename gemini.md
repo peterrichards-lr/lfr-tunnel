@@ -103,7 +103,7 @@ The solution will consist of:
 - [x] Resolve fragile sleep timeout in E2E integration test runner.
 - [x] Investigate and resolve E2E Docker Integration Test failure in CI (use --no-deps for docker-compose run to prevent recreate/wipe of server database).
 - [x] Release, tag, and deploy v1.1.0 of lfr-tunnel to GitHub and VPS.
-- [ ] Restructure documentation: make README.md and architecture.md generic (self-hostable), create docs/liferay-se-guide.md for Liferay SE team specifics.
+- [x] Restructure documentation: make README.md and architecture.md generic (self-hostable), create docs/liferay-se-guide.md for Liferay SE team specifics.
 
 
 

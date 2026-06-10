@@ -21,5 +21,34 @@ if [ $EXIT_CODE -ne 0 ]; then
   exit $EXIT_CODE
 fi
 
-echo "✅ No secrets detected. Proceeding with commit."
+echo "✅ No secrets detected."
+
+echo "[Git Hook] Running formatting and go vet..."
+make fmt vet
+if [ $? -ne 0 ]; then
+  echo "❌ Error: Code formatting or 'go vet' failed. Please fix before committing."
+  exit 1
+fi
+
+echo "[Git Hook] Running tests..."
+go test ./...
+if [ $? -ne 0 ]; then
+  echo "❌ Error: Tests failed. Please fix before committing."
+  exit 1
+fi
+
+echo "[Git Hook] Running golangci-lint (if installed)..."
+if command -v golangci-lint &> /dev/null; then
+  golangci-lint run
+  if [ $? -ne 0 ]; then
+    echo "❌ Error: golangci-lint found issues. Please fix before committing."
+    exit 1
+  fi
+  echo "✅ Linting passed."
+else
+  echo "⚠️ golangci-lint not installed locally, skipping strict linting check."
+  echo "   (Consider installing it: https://golangci-lint.run/welcome/install/)"
+fi
+
+echo "✅ All pre-commit checks passed! Proceeding with commit."
 exit 0

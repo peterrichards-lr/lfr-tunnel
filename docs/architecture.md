@@ -129,11 +129,21 @@ Here is how `lfr-tunnel` resolves this:
 
 ---
 
-## 6. Supported Domains Constraint
+## 6. Configurable Domain Routing
 
-The `lfr-tunnel` routing system is designed to only process, authorize, and resolve requests for subdomains under the following domains:
+The `lfr-tunnel` routing system is designed to support any two domains you control. The gateway operator configures the domains via the `domain1` and `domain2` fields in `server-config.yaml`. All wildcard subdomain routing, registration validation, and public URL generation are driven by these two values.
 
-*   **`lfr-demo.se`**: The primary domain for Sales Engineering demonstrations.
-*   **`lfr-demo.online`**: The secondary mirror domain.
+```yaml
+# Example: a self-hosted instance
+domain1: "yourdomain.com"
+domain2: "yourdomain.org"
+```
 
-Any dynamic registration requests (sent via `/api/register` with a `subdomain_prefix`) will be mapped exclusively to wildcards of these two domains. Any requests arriving at the gateway containing other host headers will be ignored by the routing plane.
+Any dynamic registration request (`/api/register`) with a `subdomain_prefix` will be mapped to wildcards on both configured domains. Requests arriving with a `Host` header that does not match either domain (or the tunnel control domain `tunnel.<domain1>`) are rejected by the routing plane.
+
+**Liferay SE hosted instance** uses the following configuration:
+*   `domain1`: **`lfr-demo.se`** — Primary domain for Sales Engineering demonstrations.
+*   `domain2`: **`lfr-demo.online`** — Secondary mirror domain.
+
+> See [Liferay SE Quick-Start Guide](liferay-se-guide.md) for team-specific registration and usage instructions.
+

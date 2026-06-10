@@ -10,13 +10,19 @@ Unlike generic tunnels, `lfr-tunnel` offers:
 
 ---
 
-## Supported Domains
+## Domain Configuration
 
-The Liferay Tunnel gateway is configured to only support routing and DNS wildcard resolution on the following domains:
-- **`lfr-demo.se`**: Primary domain for Sales Engineering demonstrations.
-- **`lfr-demo.online`**: Secondary domain mirroring and proxying to the primary gateway.
+`lfr-tunnel` is designed to work with **any** two domains you control. When deploying your own gateway, you configure the domains via the `domain1` and `domain2` fields in `server-config.yaml`:
 
-Any developer tunnel project prefix must be established as a subdomain of one of these two domains (e.g. `your-project.lfr-demo.se` or `your-project.lfr-demo.online`).
+```yaml
+domain1: "yourdomain.com"
+domain2: "yourdomain.org"
+```
+
+The gateway will then issue wildcard subdomain URLs on both domains for every registered tunnel (e.g. `your-project.yourdomain.com` and `your-project.yourdomain.org`).
+
+> [!NOTE]
+> **Liferay Sales Engineering Team**: If you are a member of the Liferay SE team connecting to the shared hosted gateway, please read the [**Liferay SE Quick-Start Guide**](docs/liferay-se-guide.md) which has team-specific instructions, domain details, and registration steps.
 
 ---
 
@@ -41,16 +47,16 @@ my-custom-element:
 
 Running the tunnel in the workspace root:
 ```bash
-lfr-tunnel -server https://lfr-demo.se -token <your-token> -subdomain alpha-se
+lfr-tunnel -server https://tunnel.yourdomain.com -subdomain alpha-se
 ```
 
 Will yield:
 1. **Workspace Scanning**: Detects port `8080` (default Liferay) and port `3001` (from the client extension).
 2. **Subdomain Mapping**: Generates wildcard URLs for both active domains:
-   - `https://alpha-se.lfr-demo.se` ──► Local Liferay (`8080`)
-   - `https://alpha-se-my-custom-element.lfr-demo.se` ──► Local Custom Element Server (`3001`)
-   - `https://alpha-se.lfr-demo.online` ──► Local Liferay (`8080`)
-   - `https://alpha-se-my-custom-element.lfr-demo.online` ──► Local Custom Element Server (`3001`)
+   - `https://alpha-se.yourdomain.com` ──► Local Liferay (`8080`)
+   - `https://alpha-se-my-custom-element.yourdomain.com` ──► Local Custom Element Server (`3001`)
+   - `https://alpha-se.yourdomain.org` ──► Local Liferay (`8080`)
+   - `https://alpha-se-my-custom-element.yourdomain.org` ──► Local Custom Element Server (`3001`)
 
 > [!IMPORTANT]
 > **Docker Wrapper Scanning Limitation**  
@@ -69,7 +75,7 @@ If you are running a native Tomcat bundle (e.g. `liferay-ce-portal-7.4.3.112-ga1
 #### Launching the Tunnel
 1. **Via Native Binary**:
    ```bash
-   lfr-tunnel -server https://lfr-demo.se -token <your-token> -subdomain dev-tomcat -ports 8080
+   lfr-tunnel -server https://tunnel.yourdomain.com -subdomain dev-tomcat -ports 8080
    ```
 2. **Via Docker Wrapper**:
    Since the wrapper defaults to exposing port 8080, you can simply run:
@@ -81,8 +87,8 @@ If you are running a native Tomcat bundle (e.g. `liferay-ce-portal-7.4.3.112-ga1
 To verify that absolute links, redirect URIs, and resource paths render correctly through the proxy:
 1. Log into your local Liferay instance (`http://localhost:8080`).
 2. Navigate to **Control Panel ──► Instance Settings ──► Virtual Hosts**.
-3. Under the default instance, set the Virtual Host name to: `dev-tomcat.lfr-demo.se`.
-4. Now, any incoming request hitting `https://dev-tomcat.lfr-demo.se` will resolve to the correct virtual instance, preserving clean redirects and cookies.
+3. Under the default instance, set the Virtual Host name to: `dev-tomcat.yourdomain.com`.
+4. Now, any incoming request hitting `https://dev-tomcat.yourdomain.com` will resolve to the correct virtual instance, preserving clean redirects and cookies.
 
 ---
 
@@ -118,14 +124,13 @@ If you want to run `lfr-tunnel` inside its own Docker container and have it rout
    ```
    Run the client, overriding the target host to match the Liferay container's network name (`liferay-portal`):
    ```bash
-   docker run --rm -it \
-     --network liferay-net \
-     -e LFT_TARGET_HOST=liferay-portal \
-     lfr-tunnel-client \
-     -server https://lfr-demo.se \
-     -token <your-token> \
-     -subdomain dev-docker \
-     -ports 8080
+    docker run --rm -it \
+      --network liferay-net \
+      -e LFT_TARGET_HOST=liferay-portal \
+      lfr-tunnel-client \
+      -server https://tunnel.yourdomain.com \
+      -subdomain dev-docker \
+      -ports 8080
    ```
 
 ---
@@ -364,7 +369,7 @@ If the token file exists, the client will automatically load it on startup, allo
 The following server-side administrative capabilities are planned for future versions of `lfr-tunnel`:
 
 1.  **Administrative Web Dashboard**:
-    *   A secure web portal (e.g. at `https://tunnel.lfr-demo.se/admin`) to inspect all active subdomains and target ports.
+    *   A secure web portal (e.g. at `https://tunnel.yourdomain.com/admin`) to inspect all active subdomains and target ports.
     *   Visual representation of current traffic throughput and latency.
 2.  **Audit Logs & Tracking**:
     *   Trace which specific client sessions (e.g., developer name, host machine hostname) registered and exposed each subdomain.

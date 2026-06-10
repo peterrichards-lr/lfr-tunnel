@@ -20,6 +20,30 @@
             --warning: #f59e0b;
         }
 
+        :root[data-theme="light"] {
+            --bg-base: #f1f5f9;
+            --bg-card: rgba(255, 255, 255, 0.8);
+            --bg-card-hover: rgba(255, 255, 255, 1);
+            --primary: #0B5FFF;
+            --primary-glow: rgba(11, 95, 255, 0.2);
+            --text-main: #0f172a;
+            --text-muted: #475569;
+            --border: rgba(0, 0, 0, 0.1);
+        }
+
+        @media (prefers-color-scheme: light) {
+            :root:not([data-theme="dark"]) {
+                --bg-base: #f1f5f9;
+                --bg-card: rgba(255, 255, 255, 0.8);
+                --bg-card-hover: rgba(255, 255, 255, 1);
+                --primary: #0B5FFF;
+                --primary-glow: rgba(11, 95, 255, 0.2);
+                --text-main: #0f172a;
+                --text-muted: #475569;
+                --border: rgba(0, 0, 0, 0.1);
+            }
+        }
+
         * {
             box-sizing: border-box;
             margin: 0;
@@ -480,6 +504,25 @@
                     </div>
                     <button onclick="saveSettings()">Save Configuration</button>
                 </div>
+                
+                <div class="glass" style="padding: 20px; margin-top: 20px;">
+                    <h3>Theming & Aesthetics</h3>
+                    <p style="color: var(--text-muted); font-size: 0.9em; margin-bottom: 20px;">Choose your preferred visual theme for the Admin Dashboard.</p>
+                    <div style="margin-bottom: 25px; display: flex; gap: 15px;">
+                        <label style="display:flex; align-items:center; gap: 8px; cursor: pointer;">
+                            <input type="radio" name="theme" value="system" onchange="setTheme('system')">
+                            <span>System Default</span>
+                        </label>
+                        <label style="display:flex; align-items:center; gap: 8px; cursor: pointer;">
+                            <input type="radio" name="theme" value="dark" onchange="setTheme('dark')">
+                            <span>Dark Mode</span>
+                        </label>
+                        <label style="display:flex; align-items:center; gap: 8px; cursor: pointer;">
+                            <input type="radio" name="theme" value="light" onchange="setTheme('light')">
+                            <span>Light Mode</span>
+                        </label>
+                    </div>
+                </div>
             </div>
         </main>
     </div>
@@ -487,6 +530,27 @@
     <div id="toast" class="toast">Action completed successfully</div>
 
     <script>
+        // Initialize theme on load
+        (function() {
+            const savedTheme = localStorage.getItem('lfr-theme') || 'system';
+            if (savedTheme !== 'system') {
+                document.documentElement.setAttribute('data-theme', savedTheme);
+            }
+            window.addEventListener('DOMContentLoaded', () => {
+                const radio = document.querySelector(`input[name="theme"][value="${savedTheme}"]`);
+                if(radio) radio.checked = true;
+            });
+        })();
+
+        function setTheme(theme) {
+            localStorage.setItem('lfr-theme', theme);
+            if (theme === 'system') {
+                document.documentElement.removeAttribute('data-theme');
+            } else {
+                document.documentElement.setAttribute('data-theme', theme);
+            }
+        }
+
         let apiToken = localStorage.getItem('lfr_admin_token');
 
         // DOM Elements

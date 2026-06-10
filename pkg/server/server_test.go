@@ -322,6 +322,7 @@ func TestServer_RegistrationFlow(t *testing.T) {
 	}
 
 	// Verify developer verification email was sent
+	time.Sleep(50 * time.Millisecond)
 	if mockMail.sentTo != "developer@liferay.com" || !strings.Contains(mockMail.sentBody, "/api/verify-email") {
 		t.Errorf("developer verification email not sent correctly, got to=%s, body=%s", mockMail.sentTo, mockMail.sentBody)
 	}
@@ -346,6 +347,7 @@ func TestServer_RegistrationFlow(t *testing.T) {
 	}
 
 	// Verify admin notification email was sent
+	time.Sleep(50 * time.Millisecond)
 	if mockMail.sentTo != "admin@example.com" || (!strings.Contains(mockMail.sentBody, "/api/admin/approve") && !strings.Contains(mockMail.sentBody, "has verified their email")) {
 		t.Errorf("admin notification email not sent correctly, got to=%s, body=%s", mockMail.sentTo, mockMail.sentBody)
 	}
@@ -370,6 +372,7 @@ func TestServer_RegistrationFlow(t *testing.T) {
 	}
 
 	// Verify developer approval email was sent
+	time.Sleep(50 * time.Millisecond)
 	if mockMail.sentTo != "developer@liferay.com" || !strings.Contains(mockMail.sentBody, "/api/claim") {
 		t.Errorf("developer email not sent correctly, got to=%s, body=%s", mockMail.sentTo, mockMail.sentBody)
 	}

@@ -58,7 +58,7 @@ func DefaultServerConfig() *ServerConfig {
 // DefaultClientConfig returns a ClientConfig with sensible default values.
 func DefaultClientConfig() *ClientConfig {
 	return &ClientConfig{
-		ServerURL: "http://localhost:8081",
+		ServerURL: "https://tunnel.lfr-demo.se",
 		Ports:     []int{8080},
 	}
 }

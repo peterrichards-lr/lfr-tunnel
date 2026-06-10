@@ -92,6 +92,9 @@ The solution will consist of:
 - [x] Allow developer PAT authentication on check-subdomain endpoint.
 - [x] Debug and verify local E2E Docker integration test suite (resolved control domain routing via Nginx network aliases and added Nginx startup checks in run.sh).
 - [x] Integrate the E2E Docker integration test suite into the GitHub Actions CI workflow (.github/workflows/ci.yml).
+- [x] Simplify client-side setup by updating default ServerURL to https://tunnel.lfr-demo.se.
+- [x] Recompile and deploy latest lfr-tunneld to the VPS.
+
 
 
 

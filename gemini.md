@@ -80,9 +80,10 @@ The solution will consist of:
 - [x] Upgrade dependencies to patch new Dependabot vulnerability alerts.
 - [x] Add subdomain validation and reserved subdomain filtering in Registry.
 - [x] Create a unified, step-by-step VPS and DNS replication setup guide.
-- [ ] Fix CI build and formatting failures (compile golangci-lint from source with goinstall). (In progress)
+- [x] Fix CI build and formatting failures (compile golangci-lint from source with goinstall).
 - [x] Clean up .golangci.yml config after compiling golangci-lint from source.
 - [x] Implement subdomain availability check API on the server (protected by auth token) with alternative suggestions on conflict.
+- [x] Create GitHub rulesets documentation (docs/github/) and defer remote application due to GitHub Free private repository limitation.
 
 
 

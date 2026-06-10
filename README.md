@@ -146,7 +146,7 @@ If you want to run `lfr-tunnel` inside its own Docker container and have it rout
                                        └──► [ Local Frontend Assets (3000) ]
 ```
 
-For a full routing walkthrough, read the [Architecture & Routing Guide](architecture.md).
+For a full routing walkthrough, read the [Architecture & Routing Guide](docs/architecture.md).
 
 ---
 

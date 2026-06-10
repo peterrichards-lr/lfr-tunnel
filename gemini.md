@@ -73,6 +73,7 @@ The solution will consist of:
 - [ ] Implement outbound email sending service in the server (supporting local postfix and external SMTP relays).
 - [ ] Add admin approval endpoints and email notification flows.
 - [x] Fix Mermaid syntax parsing errors in auth_architecture.md.
+- [x] Move architecture.md to docs/ directory and update references.
 
 
 

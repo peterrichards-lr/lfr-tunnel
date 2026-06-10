@@ -211,6 +211,10 @@ func main() {
 		log.Fatalf("[Error] Failed to register: %v\n", err)
 	}
 
+	if regResp.Warning != "" {
+		log.Printf("\n[WARNING] %s\n\n", regResp.Warning)
+	}
+
 	// Modify portMappings to point to dynamic Interceptor ports
 	for i, pm := range portMappings {
 		targetPort := pm.LocalPort

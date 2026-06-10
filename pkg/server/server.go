@@ -38,6 +38,7 @@ type RegisterRequest struct {
 	RateLimit       int               `json:"rate_limit,omitempty"`
 	BasicAuth       string            `json:"basic_auth,omitempty"`
 	AddedHeaders    map[string]string `json:"added_headers,omitempty"`
+	ClientVersion   string            `json:"client_version,omitempty"`
 }
 
 // RegisterResponse represents the JSON response payload.
@@ -47,6 +48,7 @@ type RegisterResponse struct {
 	Remotes      []string `json:"remotes,omitempty"`
 	Domains      []string `json:"domains,omitempty"`
 	Error        string   `json:"error,omitempty"`
+	Warning      string   `json:"warning,omitempty"`
 }
 
 // CheckSubdomainResponse represents the JSON response payload for subdomain checks.
@@ -431,12 +433,18 @@ func (s *Server) handleRegister(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	var warning string
+	if req.ClientVersion != "" && req.ClientVersion != config.Version {
+		warning = fmt.Sprintf("Version mismatch! Server is running %s but client is %s. Please consider upgrading using 'lfr-tunnel -upgrade'", config.Version, req.ClientVersion)
+	}
+
 	w.WriteHeader(http.StatusOK)
 	if err := json.NewEncoder(w).Encode(RegisterResponse{
 		Status:       "success",
 		SessionToken: sessionToken,
 		Remotes:      remotes,
 		Domains:      activeDomains,
+		Warning:      warning,
 	}); err != nil {
 		log.Printf("[Server] Failed to encode success response: %v", err)
 	}

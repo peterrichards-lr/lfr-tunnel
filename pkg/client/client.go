@@ -5,7 +5,10 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"github.com/jpillora/chisel/client"
+	"gopkg.in/yaml.v3"
 	"io/fs"
+	"lfr-tunnel/pkg/config"
 	"log"
 	"net/http"
 	"net/url"
@@ -14,9 +17,6 @@ import (
 	"strconv"
 	"strings"
 	"time"
-
-	"github.com/jpillora/chisel/client"
-	"gopkg.in/yaml.v3"
 )
 
 // PortMapping matches the server DTO for port allocations.
@@ -33,6 +33,7 @@ type RegisterRequest struct {
 	RateLimit       int               `json:"rate_limit,omitempty"`
 	BasicAuth       string            `json:"basic_auth,omitempty"`
 	AddedHeaders    map[string]string `json:"added_headers,omitempty"`
+	ClientVersion   string            `json:"client_version,omitempty"`
 }
 
 // RegisterResponse matches the server DTO for response.
@@ -42,6 +43,7 @@ type RegisterResponse struct {
 	Remotes      []string `json:"remotes,omitempty"`
 	Domains      []string `json:"domains,omitempty"`
 	Error        string   `json:"error,omitempty"`
+	Warning      string   `json:"warning,omitempty"`
 }
 
 // DetectWorkspacePorts walks the filesystem looking for client-extension.yaml files
@@ -140,6 +142,7 @@ func RegisterTunnel(serverURL string, authToken string, subdomain string, ports 
 		RateLimit:       rateLimit,
 		BasicAuth:       basicAuth,
 		AddedHeaders:    addedHeaders,
+		ClientVersion:   config.Version,
 	})
 	if err != nil {
 		return nil, err

@@ -37,7 +37,9 @@ The solution will consist of:
 - [x] Add project `LICENSE` (MIT).
 - [x] Configure local pre-commit hooks (formatting, linting, testing).
 - [x] Create CI validation workflow in `.github/workflows/ci.yml`.
-- [ ] Fix CI build failures (errcheck linting errors).
+- [x] Fix CI build failures (errcheck linting errors).
+- [ ] Move DNS files to a dedicated `docs/dns/` directory.
 - [ ] Document / set up GitHub branch protection rulesets.
-- [ ] Update DNS records and test SSH when new VM6 IP is assigned.
+- [x] Update DNS records (DNS resolved to new IP `82.39.133.178`).
+- [ ] Test SSH and connect to the VPS with the new IP.
 

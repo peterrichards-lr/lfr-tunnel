@@ -148,7 +148,7 @@ echo "Developer PAT claimed successfully: $DEVELOPER_PAT"
 
 # 6. Start the Client Tunnel inside the container with the PAT using docker-compose run
 echo "=== Starting client tunnel container ==="
-CLIENT_CONTAINER_ID=$(docker-compose run -d \
+CLIENT_CONTAINER_ID=$(docker-compose run -d --no-deps \
   --entrypoint "./lfr-tunnel" \
   -e LFT_CLIENT_TOKEN="$DEVELOPER_PAT" \
   lfr-tunnel \

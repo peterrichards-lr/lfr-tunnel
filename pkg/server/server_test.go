@@ -129,4 +129,3 @@ func TestServer_Domains(t *testing.T) {
 		t.Errorf("expected [example.se, example.online], got %v", domains)
 	}
 }
-

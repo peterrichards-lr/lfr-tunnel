@@ -66,6 +66,7 @@ The solution will consist of:
 - [ ] Implement CLI integration (`lfr-tunnel login`) for OIDC token exchanges.
 - [ ] Create server-side administrative control endpoints for user promotion and token management.
 - [x] Release, tag, and deploy v1.0.1 of lfr-tunneld to the VPS.
+- [x] Fix CI build and formatting failures.
 
 
 

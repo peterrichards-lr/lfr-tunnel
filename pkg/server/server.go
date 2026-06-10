@@ -33,7 +33,6 @@ type RegisterResponse struct {
 	Error        string   `json:"error,omitempty"`
 }
 
-
 // Server coordinates the entire gateway operations.
 type Server struct {
 	cfg          *config.ServerConfig
@@ -118,7 +117,6 @@ func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 			s.handleDomains(w, r)
 			return
 		}
-
 
 		// Route Chisel WebSocket handshake/tunnel request
 		isUpgrade := strings.ToLower(r.Header.Get("Upgrade")) == "websocket"
@@ -230,7 +228,6 @@ func (s *Server) handleDomains(w http.ResponseWriter, r *http.Request) {
 		log.Printf("[Server] Failed to encode domains response: %v", err)
 	}
 }
-
 
 // Start kicks off the background processes and listens for gateway traffic.
 func (s *Server) Start() error {

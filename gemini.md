@@ -60,6 +60,11 @@ The solution will consist of:
 - [x] Add Docker-based gitleaks pre-commit hook to prevent API key and token leaks.
 - [x] Add detailed runtime usage examples (LDM, Tomcat bundle, Docker container) to README.md.
 - [x] Verify formatting and contents of documentation.
+- [ ] Design OAuth2/Liferay SSO authentication and per-user token management architecture.
+- [ ] Implement user token database storage with expiration/revocation capabilities on the server.
+- [ ] Implement Mock SSO/Developer Backdoor login bypass for local testing.
+- [ ] Implement CLI integration (`lfr-tunnel login`) for OIDC token exchanges.
+- [ ] Create server-side administrative control endpoints for user promotion and token management.
 
 
 

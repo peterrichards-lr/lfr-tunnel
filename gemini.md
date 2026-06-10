@@ -46,4 +46,5 @@ The solution will consist of:
 - [x] Upgrade dependencies to patch Dependabot vulnerability alerts.
 - [x] Update DNS records (DNS resolved to new IP `82.39.133.178`).
 - [x] Test SSH and connect to the VPS with the new IP.
+- [x] Document supported domains constraint (lfr-demo.se and lfr-demo.online) in README.md and architecture.md.
 

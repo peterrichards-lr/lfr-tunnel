@@ -98,6 +98,8 @@ The solution will consist of:
 - [x] Update README.md with simplified installation instructions (one-liner curl and PowerShell commands).
 - [x] Implement binary integrity checks during self-upgrade (SHA256 checksum validation).
 - [x] Update release.yml workflow to automatically generate and upload checksums.txt.
+- [x] Fix E2E script on GitHub Actions by supporting docker compose subcommand fallback.
+
 
 
 

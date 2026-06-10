@@ -1,6 +1,13 @@
 #!/bin/bash
 set -e
 
+# Fallback to "docker compose" if "docker-compose" is not installed
+if ! command -v docker-compose >/dev/null 2>&1; then
+    docker-compose() {
+        docker compose "$@"
+    }
+fi
+
 # Change directory to script location
 CDPATH= cd -- "$(dirname -- "$0")"
 

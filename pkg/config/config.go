@@ -2,6 +2,7 @@ package config
 
 import (
 	"os"
+	"path/filepath"
 	"strconv"
 	"strings"
 
@@ -148,6 +149,22 @@ func LoadClientConfig(path string) (*ClientConfig, error) {
 		dec := yaml.NewDecoder(file)
 		if err := dec.Decode(cfg); err != nil {
 			return nil, err
+		}
+	}
+
+	// 2. Load from token file if not set in YAML
+	if cfg.AuthToken == "" {
+		tokenFilePath := os.Getenv("LFT_TOKEN_FILE")
+		if tokenFilePath == "" {
+			homeDir, err := os.UserHomeDir()
+			if err == nil {
+				tokenFilePath = filepath.Join(homeDir, ".lfr-tunnel", "token")
+			}
+		}
+		if tokenFilePath != "" {
+			if data, err := os.ReadFile(tokenFilePath); err == nil {
+				cfg.AuthToken = strings.TrimSpace(string(data))
+			}
 		}
 	}
 

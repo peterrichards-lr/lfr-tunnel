@@ -284,7 +284,6 @@ To avoid typing the server and token every time, create a `client-config.yaml` f
 
 ```yaml
 server_url: "https://tunnel.yourdomain.com"
-auth_token: "se-shared-secret-key"
 subdomain: "alpha-se"
 ports:
   - 8080
@@ -294,6 +293,19 @@ Run using the configuration file:
 ```bash
 lfr-tunnel -config client-config.yaml
 ```
+
+### Loading Credentials Securely
+
+To avoid storing your sensitive `auth_token` in the workspace-specific `client-config.yaml` (which might be committed to source control), the client can securely load the token from a file:
+
+1. **Default Path**: Save your token value directly to `~/.lfr-tunnel/token`.
+2. **Custom Path**: Save your token to a file and set the `LFT_TOKEN_FILE` environment variable to point to it:
+   ```bash
+   export LFT_TOKEN_FILE="/path/to/your/secure/token"
+   ```
+
+If the token file exists, the client will automatically load it on startup, allowing you to safely omit the `auth_token` field from your configuration files.
+
 
 ---
 

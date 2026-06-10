@@ -84,6 +84,7 @@ The solution will consist of:
 - [x] Clean up .golangci.yml config after compiling golangci-lint from source.
 - [x] Implement subdomain availability check API on the server (protected by auth token) with alternative suggestions on conflict.
 - [x] Create GitHub rulesets documentation (docs/github/) and defer remote application due to GitHub Free private repository limitation.
+- [x] Implement client-side token loading from home directory file (~/.lfr-tunnel/token or LFT_TOKEN_FILE).
 
 
 

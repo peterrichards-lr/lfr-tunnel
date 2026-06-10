@@ -117,3 +117,47 @@ ports:
 		t.Errorf("expected Ports override to be [8080, 9000], got %v", cfgEnv.Ports)
 	}
 }
+
+func TestLoadClientConfig_TokenFile(t *testing.T) {
+	// Create a temporary token file
+	tmpTokenFile, err := os.CreateTemp("", "lfr-token-*")
+	if err != nil {
+		t.Fatalf("failed to create temp token file: %v", err)
+	}
+	defer os.Remove(tmpTokenFile.Name())
+
+	tokenVal := "  my-secret-token-from-file\n "
+	if _, err := tmpTokenFile.Write([]byte(tokenVal)); err != nil {
+		t.Fatalf("failed to write token file: %v", err)
+	}
+	tmpTokenFile.Close()
+
+	// 1. Point LFT_TOKEN_FILE to it
+	os.Setenv("LFT_TOKEN_FILE", tmpTokenFile.Name())
+	defer os.Unsetenv("LFT_TOKEN_FILE")
+
+	// 2. Load client config (without path to config yaml, so it uses default)
+	cfg, err := LoadClientConfig("")
+	if err != nil {
+		t.Fatalf("failed to load client config: %v", err)
+	}
+
+	expectedToken := "my-secret-token-from-file"
+	if cfg.AuthToken != expectedToken {
+		t.Errorf("expected AuthToken to be %q, got %q", expectedToken, cfg.AuthToken)
+	}
+
+	// 3. Environment variable LFT_CLIENT_TOKEN should override the token file
+	os.Setenv("LFT_CLIENT_TOKEN", "env-token-override")
+	defer os.Unsetenv("LFT_CLIENT_TOKEN")
+
+	cfgEnv, err := LoadClientConfig("")
+	if err != nil {
+		t.Fatalf("failed to reload client config: %v", err)
+	}
+
+	if cfgEnv.AuthToken != "env-token-override" {
+		t.Errorf("expected LFT_CLIENT_TOKEN to override token file, got %q", cfgEnv.AuthToken)
+	}
+}
+

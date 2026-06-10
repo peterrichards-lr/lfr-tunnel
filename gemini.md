@@ -62,12 +62,13 @@ The solution will consist of:
 - [x] Verify formatting and contents of documentation.
 - [x] Design OAuth2/Liferay SSO authentication and per-user token management architecture.
 - [ ] Implement user token database storage with expiration/revocation capabilities on the server.
-- [ ] Implement Mock SSO/Developer Backdoor login bypass for local testing.
+- [ ] Implement Administrative static developer token provisioning and configuration file storage.
 - [ ] Implement CLI integration (`lfr-tunnel login`) for OIDC token exchanges.
 - [ ] Create server-side administrative control endpoints for user promotion and token management.
 - [x] Release, tag, and deploy v1.0.1 of lfr-tunneld to the VPS.
 - [x] Fix CI build and formatting failures.
 - [x] Upgrade Go version in GitHub Action workflows to 1.22.
+- [x] Update auth architecture document with SMTP configuration and email verification flows.
 
 
 

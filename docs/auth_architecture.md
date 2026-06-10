@@ -39,12 +39,12 @@ graph TD
 
 ## 2. Database Schema (User, Roles, and Tokens)
 
-To support this multi-user capability, the server gateway will utilize a lightweight persistent relational database (such as **SQLite** for zero-config deployments, or **PostgreSQL** for scalable production systems).
+To support this multi-user capability, the server gateway utilizes a lightweight persistent relational database (such as **SQLite** for zero-config deployments, or **PostgreSQL** for scalable production systems).
 
 ### SQL Table Schema
 
 ```sql
--- Users table storing synchronized profile data from Liferay SSO
+-- Users table storing synchronized profile data from Liferay SSO or static admin provisioning
 CREATE TABLE users (
     id VARCHAR(64) PRIMARY KEY,          -- Unique user ID (e.g. Liferay user uuid or email)
     email VARCHAR(255) UNIQUE NOT NULL,
@@ -87,7 +87,7 @@ CREATE TABLE tunnel_audit_logs (
 
 ## 3. OAuth2 Authorization Code Flow with PKCE
 
-The CLI utilizes standard **OAuth2 with PKCE (RFC 7636)** to authenticate developers against the Liferay SSO Server without requiring credentials to pass directly through the CLI or storing a permanent gateway secret client-side.
+Once Liferay SSO is available, the CLI will utilize standard **OAuth2 with PKCE (RFC 7636)** to authenticate developers against the Liferay SSO Server.
 
 ### Login Flow Sequence
 
@@ -122,23 +122,51 @@ sequenceDiagram
 
 ---
 
-### 3.1. Developer Backdoor / Mock SSO Flow (Local testing without Liferay SSO)
+## 4. Administrative Developer Token Provisioning (Pre-SSO / Local UX Setup)
 
-To support proof-of-concept testing, local developer environments, and scenarios where registering `lfr-tunnel` on the enterprise Liferay SSO server is delayed, the gateway server supports a **Mock SSO Bypass**.
+To support secure user management, individual developer auditing, and revocation **before Liferay SSO is integrated**, the gateway server supports static token provisioning via configuration files. 
 
-*   **Activation**: Set the environment variable `LFT_MOCK_SSO=true` or start the gateway server with the `-mock-sso` flag.
-*   **Bypassed Handshake**:
-    1. When the developer runs `lfr-tunnel login`, the browser is directed to `https://tunnel.lfr-demo.se/auth/login`.
-    2. Since `LFT_MOCK_SSO` is active, instead of redirecting the user to Liferay's external SSO endpoint, the server renders a beautiful, themed mockup login screen.
-    3. The screen prompts the developer for a test **Email** (e.g. `admin@lfr-demo.se`) and **Display Name** (e.g. `Peter Richards`).
-    4. Upon clicking "Login (Mock)", the server automatically accepts the credentials and simulates a successful SSO response.
-    5. The server creates or updates the user profile in the database, generates a personal access token (PAT), and redirects the browser back to `http://localhost:4444/callback?token=lfr_pat_...` to save it locally.
+This avoids the insecurity of a single shared token and bypasses the need for mock backdoor login pages or temporary registration screens.
+
+### 4.1. Configuration-based User Tokens (`developer-tokens.yaml`)
+Admins provision tokens directly on the VPS by maintaining a YAML configuration file at `/etc/lfr-tunneld/developer-tokens.yaml`:
+
+```yaml
+tokens:
+  - email: "admin@lfr-demo.se"
+    token_hash: "8f5e2894427814d58262685f56571aef3f772fb7973f9d063f423de3173e97cb" # SHA-256 hash of "lfr_pat_peter_secret_123"
+    description: "Peter's Macbook Pro"
+    role: "admin"
+    expires_at: "2027-12-31T23:59:59Z"
+  - email: "developer@liferay.com"
+    token_hash: "4fc2d409d6c703b715694294025fbc70..."
+    description: "Dev workstation"
+    role: "user"
+    expires_at: "2026-09-30T23:59:59Z"
+```
+
+### 4.2. CLI Generation Tool
+The gateway binary `lfr-tunneld` can include a token helper command for admins running on the VPS terminal to easily generate hashes and values:
+
+```bash
+# Generate a new secure token for a developer
+lfr-tunneld token create --email developer@liferay.com --desc "Dev workstation"
+```
+*   **Output**:
+    ```text
+    Generated Token: lfr_pat_dev_8a7d9f2e4b6c8d0e
+    SHA-256 Hash:    8b3c9d...
     
-This allows testing the complete database integration, token lifecycle management, expiration rules, and administration tools immediately.
+    Please add the SHA-256 Hash to /etc/lfr-tunneld/developer-tokens.yaml
+    ```
+
+### 4.3. Revocation and Verification
+*   **Authentication**: When a client CLI registers a tunnel, it sends their unique token. The server hashes it and verifies it against the active list.
+*   **Revocation**: To revoke a developer's access, the admin deletes their entry from `developer-tokens.yaml` and sends a `SIGHUP` signal to the `lfr-tunneld` daemon, which reloads the configuration immediately and closes any active tunnels associated with that token.
 
 ---
 
-## 4. API Specification & Integration Points
+## 5. API Specification & Integration Points
 
 ### Control Plane REST API
 
@@ -154,21 +182,21 @@ Exchanges a PAT for a dynamic Chisel tunnel lease.
         { "local_port": 8080, "name_suffix": "" },
         { "local_port": 3001, "name_suffix": "react" }
       ],
-      "personal_access_token": "lfr_pat_abc123xyz"
+      "personal_access_token": "lfr_pat_dev_8a7d9f2e4b6c8d0e"
     }
     ```
 *   **Server Logic**:
-    1. Hashes incoming token: `sha256("lfr_pat_abc123xyz")`.
-    2. Queries `personal_access_tokens` joined with `users`.
-    3. Validates that user `is_active` is true, the token is not expired (`expires_at > NOW` or null), and the token is not revoked (`revoked_at` is null).
-    4. If valid, registers the tunnel and logs connection details into `tunnel_audit_logs`.
+    1. Hashes incoming token: `sha256("lfr_pat_dev_8a7d9f2e4b6c8d0e")`.
+    2. Queries the local DB or loaded static configurations.
+    3. Validates that the token is active, not expired, and not revoked.
+    4. If valid, registers the tunnel and logs connection details.
     5. Returns `session_token` and remote mappings.
 
 ---
 
 ### Administrative Control Plane API (Admins Only)
 
-These endpoints require an administrative user session or an administrative header token.
+These endpoints require an administrative session (only active after Liferay SSO is deployed) or an administrative API header token.
 
 #### 1. List Users (`GET /api/admin/users`)
 *   **Response**:
@@ -177,8 +205,6 @@ These endpoints require an administrative user session or an administrative head
       {
         "id": "admin",
         "email": "admin@lfr-demo.se",
-        "first_name": "Peter",
-        "last_name": "Richards",
         "role": "admin",
         "is_active": true
       }
@@ -193,30 +219,24 @@ These endpoints require an administrative user session or an administrative head
       "is_active": false
     }
     ```
-*   **Logic**: Updates the user record. If `is_active` is set to `false`, immediately revokes all of their active Chisel tunnel connections and user leases.
-
-#### 3. Revoke Token (`POST /api/admin/tokens/:id/revoke`)
-*   **Logic**: Sets `revoked_at = CURRENT_TIMESTAMP` for the token. Immediately identifies if this token is currently associated with active `lfr-tunnel` leases and closes those WebSocket connections.
+*   **Logic**: Updates the user record. If `is_active` is set to `false`, immediately revokes all of their active Chisel tunnel connections.
 
 ---
 
-## 5. Security & Isolation Measures
+## 6. Security & Isolation Measures
 
 1.  **Token Hashing (At Rest Security)**:
-    Only SHA-256 hashes of generated tokens (`token_hash`) are stored in the database. If the database is compromised, attackers cannot reconstruct the tokens to establish unauthorized tunnels.
+    Only SHA-256 hashes of generated tokens (`token_hash`) are stored in configurations or databases. If the database/configuration files on the server are compromised, attackers cannot reconstruct the tokens.
 2.  **Active Connection Termination**:
-    When an admin revokes a token or deactivates a user, the gateway server sweeps all active Chisel sessions. Any active WebSocket session authenticated with a lease derived from the revoked token is terminated via `registry.CleanLease(sessionToken)`, shutting down the public endpoint immediately.
+    When an admin revokes a token or deactivates a user, the gateway server sweeps all active Chisel sessions and immediately terminates any corresponding WebSockets.
 3.  **Bootstrap Admin Role**:
-    An environment variable `LFT_BOOTSTRAP_ADMIN` can be set (e.g. `LFT_BOOTSTRAP_ADMIN=admin@lfr-demo.se`). When this email logs in for the first time via Liferay SSO, the system automatically marks them as `admin`. This admin can then promote other users via the Admin Web Panel.
+    An environment variable `LFT_BOOTSTRAP_ADMIN` can be set. When this email logs in for the first time via Liferay SSO, the system automatically marks them as `admin`.
 
 ---
 
-## 6. Implementation & Transition Plan
+## 7. Implementation & Transition Plan
 
-We can implement this system using a standard Go SQLite client package (like `modernc.org/sqlite` which requires no CGO, keeping the cross-compilation of `lfr-tunneld` easy).
-
-1.  **Step 1: Database Setup**: Add SQLite engine, migrations, and database connection logic to `pkg/server/db.go`.
-2.  **Step 2: Authenticator Middleware**: Rewrite token checking in `pkg/server/server.go` to support both legacy shared tokens (for backward compatibility if enabled) and new hashed PAT database lookups.
-3.  **Step 3: OAuth2 Endpoints**: Implement `/auth/login`, `/auth/callback`, and static admin dashboard templates in the server.
-4.  **Step 4: CLI Login Command**: Implement the PKCE flow code and local HTTP callback server inside a new command `lfr-tunnel login`.
-5.  **Step 5: Admin UI Panel**: Serve a clean, glassmorphic administrative interface for managing users, roles, active tunnels, and tokens.
+1.  **Step 1: Token Config Parser**: Implement the configuration loading and `SIGHUP` reload listener for `developer-tokens.yaml` on the server gateway.
+2.  **Step 2: Database Setup**: Add SQLite engine for auditing active leases and mapping sessions.
+3.  **Step 3: Authenticator Middleware**: Update token checking in `pkg/server/server.go` to validate against the configuration file tokens.
+4.  **Step 4: SSO Endpoints (Future Phase)**: Implement OIDC handshake `/auth/login` and `/auth/callback` to automate token acquisition once Liferay SSO client registration is complete.

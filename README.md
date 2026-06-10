@@ -20,12 +20,113 @@ Any developer tunnel project prefix must be established as a subdomain of one of
 
 ---
 
-## Supported Liferay Runtimes
+## Supported Liferay Runtimes & Usage Examples
 
-Because `lfr-tunnel` operates at the network port level, it is fully runtime-agnostic and supports exposing the following local development setups:
-1.  **LDM (Liferay Development Manager)**: Auto-detects port configurations from your active Liferay workspace files.
-2.  **Liferay Tomcat Bundles**: Works out of the box with native Tomcat zip bundles running directly on your host machine.
-3.  **Liferay Docker Containers (non-LDM)**: Exposes any local Liferay instances running inside Docker containers, provided their ports (e.g. `8080`) are mapped to your local loopback interface.
+Because `lfr-tunnel` operates at the network port level, it is fully runtime-agnostic. Below are detailed usage examples and step-by-step configurations for the three most common local Liferay development environments.
+
+### 1. LDM (Liferay Development Manager) / Workspace Projects
+
+LDM workspaces typically orchestrate the main Liferay portal instance alongside one or more Liferay Client Extensions (e.g., React custom elements, custom theme contributors, or standalone backend services). 
+
+#### Zero-Config Automatic Port Scanning
+When running the native client binary `lfr-tunnel` from the root of a Liferay Workspace, the client automatically crawls all workspace subdirectories, detects `client-extension.yaml` (or `.yml`) files, and extracts their configured development ports.
+
+For example, suppose your workspace contains a custom element project with the following `client-extension.yaml`:
+```yaml
+my-custom-element:
+    name: My Custom Element
+    type: customElement
+    port: 3001
+```
+
+Running the tunnel in the workspace root:
+```bash
+lfr-tunnel -server https://lfr-demo.se -token <your-token> -subdomain alpha-se
+```
+
+Will yield:
+1. **Workspace Scanning**: Detects port `8080` (default Liferay) and port `3001` (from the client extension).
+2. **Subdomain Mapping**: Generates wildcard URLs for both active domains:
+   - `https://alpha-se.lfr-demo.se` ──► Local Liferay (`8080`)
+   - `https://alpha-se-my-custom-element.lfr-demo.se` ──► Local Custom Element Server (`3001`)
+   - `https://alpha-se.lfr-demo.online` ──► Local Liferay (`8080`)
+   - `https://alpha-se-my-custom-element.lfr-demo.online` ──► Local Custom Element Server (`3001`)
+
+> [!IMPORTANT]
+> **Docker Wrapper Scanning Limitation**  
+> If you run the tunnel client via the Dockerized wrapper scripts (`./lfr-tunnel.sh`, `lfr-tunnel.bat`, `lfr-tunnel.ps1`), directory scanning is isolated inside the Docker container. You must explicitly pass your ports using the `-ports` argument or define them in your `.env` configuration:
+> ```bash
+> # Run using the Docker wrapper and pass ports manually
+> ./lfr-tunnel.sh -subdomain alpha-se -ports 8080,3001
+> ```
+
+---
+
+### 2. Standalone Liferay Tomcat Bundles (Native Run)
+
+If you are running a native Tomcat bundle (e.g. `liferay-ce-portal-7.4.3.112-ga112`) directly on your host machine, it binds to `127.0.0.1:8080` by default.
+
+#### Launching the Tunnel
+1. **Via Native Binary**:
+   ```bash
+   lfr-tunnel -server https://lfr-demo.se -token <your-token> -subdomain dev-tomcat -ports 8080
+   ```
+2. **Via Docker Wrapper**:
+   Since the wrapper defaults to exposing port 8080, you can simply run:
+   ```bash
+   ./lfr-tunnel.sh -subdomain dev-tomcat
+   ```
+
+#### Liferay Virtual Host Configuration
+To verify that absolute links, redirect URIs, and resource paths render correctly through the proxy:
+1. Log into your local Liferay instance (`http://localhost:8080`).
+2. Navigate to **Control Panel ──► Instance Settings ──► Virtual Hosts**.
+3. Under the default instance, set the Virtual Host name to: `dev-tomcat.lfr-demo.se`.
+4. Now, any incoming request hitting `https://dev-tomcat.lfr-demo.se` will resolve to the correct virtual instance, preserving clean redirects and cookies.
+
+---
+
+### 3. Liferay Running in a Local Docker Container
+
+If your Liferay development server is running in a local Docker container (non-LDM, e.g. via `docker run` or `docker-compose`), you must configure how the tunnel connects to it.
+
+#### Scenario A: Using Host Port Mapping (Recommended)
+If your Liferay container maps port `8080` to the host machine's port `8080` (e.g., `docker run -p 8080:8080 liferay/portal`):
+
+1. **Native Client**: The native `lfr-tunnel` CLI runs on the host and targets `localhost:8080` directly.
+2. **Dockerized Client Wrapper**:
+   The wrapper container runs with `-e LFT_TARGET_HOST=host.docker.internal` configured automatically. This tells Chisel to route the inbound tunnel traffic from the gateway server back out of the tunnel container to the host loopback port `8080`.
+   
+   **Run the wrapper**:
+   ```bash
+   ./lfr-tunnel.sh -subdomain dev-docker
+   ```
+
+#### Scenario B: Using a Shared Docker Network (Container-to-Container)
+If you want to run `lfr-tunnel` inside its own Docker container and have it route traffic directly to the Liferay container *without* publishing ports to the host loopback:
+
+1. **Create/Identify the Docker Network**:
+   Ensure both containers are on the same bridge network (e.g., `liferay-net`).
+2. **Run the Liferay Portal Container**:
+   ```bash
+   docker run --name liferay-portal --network liferay-net -d liferay/portal:latest
+   ```
+3. **Run the Client Container**:
+   Build the client image:
+   ```bash
+   docker build -t lfr-tunnel-client .
+   ```
+   Run the client, overriding the target host to match the Liferay container's network name (`liferay-portal`):
+   ```bash
+   docker run --rm -it \
+     --network liferay-net \
+     -e LFT_TARGET_HOST=liferay-portal \
+     lfr-tunnel-client \
+     -server https://lfr-demo.se \
+     -token <your-token> \
+     -subdomain dev-docker \
+     -ports 8080
+   ```
 
 ---
 

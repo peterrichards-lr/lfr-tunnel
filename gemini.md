@@ -58,6 +58,8 @@ The solution will consist of:
 - [x] Fix WebSocket path routing by appending /tunnel to client and rewriting to / on server.
 - [x] Create cross-platform Docker wrapper scripts (Bash, Batch, PowerShell) for client run.
 - [x] Add Docker-based gitleaks pre-commit hook to prevent API key and token leaks.
+- [x] Add detailed runtime usage examples (LDM, Tomcat bundle, Docker container) to README.md.
+- [x] Verify formatting and contents of documentation.
 
 
 

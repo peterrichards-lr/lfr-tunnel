@@ -327,6 +327,11 @@ func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 
+		if r.Method == http.MethodGet && r.URL.Path == "/api/verify-email" {
+			s.handleVerifyEmail(w, r)
+			return
+		}
+
 		if strings.HasPrefix(r.URL.Path, "/api/admin/") && r.URL.Path != "/api/admin/approve" {
 			s.handleAdminEndpoints(w, r)
 			return
@@ -635,14 +640,22 @@ func (s *Server) handleRegisterRequest(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	verificationToken, err := generateSecureToken()
+	if err != nil {
+		w.WriteHeader(http.StatusInternalServerError)
+		_ = json.NewEncoder(w).Encode(map[string]string{"error": "failed to generate verification token"})
+		return
+	}
+
 	user := &db.User{
-		ID:            req.Email,
-		Email:         req.Email,
-		FirstName:     req.FirstName,
-		LastName:      req.LastName,
-		Role:          "user",
-		Status:        "pending",
-		ApprovalToken: approvalToken,
+		ID:                req.Email,
+		Email:             req.Email,
+		FirstName:         req.FirstName,
+		LastName:          req.LastName,
+		Role:              "user",
+		Status:            "unverified",
+		ApprovalToken:     approvalToken,
+		VerificationToken: verificationToken,
 	}
 
 	if err := s.db.CreateUser(user); err != nil {
@@ -651,11 +664,59 @@ func (s *Server) handleRegisterRequest(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	_ = s.db.CreateUser(user)
 	s.writeAudit(user.Email, "user.registered", "user", user.Email, "", r)
-	s.sendAdminAlert("alert_notify_registration", "LFR Tunnel Alert: New User Registration", fmt.Sprintf("A new user (%s) has registered and requires approval.", user.Email))
 
-	// Send notification email to Admin if mail client is active
+	// Send verification email to the user
+	if s.mailSender != nil {
+		scheme := "https"
+		if r.TLS == nil && r.Header.Get("X-Forwarded-Proto") != "https" {
+			scheme = "http"
+		}
+		verifyURL := fmt.Sprintf("%s://%s/api/verify-email?token=%s", scheme, r.Host, verificationToken)
+		subject := "[Liferay Tunnel] Please Verify Your Email Address"
+		body := fmt.Sprintf("<p>Hi %s,</p><p>Please verify your email address by clicking the link below:</p><p><a href=\"%s\">Verify Email</a></p><p>Once verified, an admin will review your request.</p>", req.FirstName, verifyURL)
+
+		go func() {
+			if err := s.mailSender.Send(user.Email, subject, body); err != nil {
+				log.Printf("[Mail] Failed to send verification email to %s: %v", user.Email, err)
+			}
+		}()
+	}
+
+	w.WriteHeader(http.StatusOK)
+	_ = json.NewEncoder(w).Encode(map[string]string{"status": "success", "message": "registration request submitted. Please check your email to verify your account."})
+}
+
+// handleVerifyEmail processes the email verification link clicked by the user.
+func (s *Server) handleVerifyEmail(w http.ResponseWriter, r *http.Request) {
+	token := r.URL.Query().Get("token")
+	if token == "" {
+		http.Error(w, "missing token", http.StatusBadRequest)
+		return
+	}
+
+	if s.db == nil {
+		http.Error(w, "database storage not enabled", http.StatusNotImplemented)
+		return
+	}
+
+	user, err := s.db.GetUserByVerificationToken(token)
+	if err != nil || user.Status != "unverified" {
+		http.Error(w, "invalid or expired token", http.StatusBadRequest)
+		return
+	}
+
+	user.Status = "pending"
+	user.VerificationToken = "" // Clear it
+	if err := s.db.UpdateUser(user); err != nil {
+		http.Error(w, "failed to update user", http.StatusInternalServerError)
+		return
+	}
+
+	s.writeAudit(user.Email, "user.verified", "user", user.Email, "", r)
+	s.sendAdminAlert("alert_notify_registration", "LFR Tunnel Alert: New User Registration", fmt.Sprintf("A new user (%s) has verified their email and requires approval.", user.Email))
+
+	// Also send the original admin approval email now
 	if s.mailSender != nil && s.cfg.AdminNotificationEmail != "" {
 		subject := "[Liferay Tunnel] New Developer Registration Request"
 		scheme := "http"
@@ -663,15 +724,18 @@ func (s *Server) handleRegisterRequest(w http.ResponseWriter, r *http.Request) {
 			scheme = "https"
 		}
 		host := r.Host
-		approveURL := fmt.Sprintf("%s://%s/api/admin/approve?email=%s&token=%s", scheme, host, url.QueryEscape(user.Email), approvalToken)
-		body := fmt.Sprintf("<p>New registration request:</p><ul><li>Name: %s %s</li><li>Email: %s</li></ul><p><a href=\"%s\">Click here to approve this request</a></p>", user.FirstName, user.LastName, user.Email, approveURL)
-		if err := s.mailSender.Send(s.cfg.AdminNotificationEmail, subject, body); err != nil {
-			log.Printf("[Server] Failed to send admin alert email: %v", err)
-		}
+		approveURL := fmt.Sprintf("%s://%s/api/admin/approve?email=%s&token=%s", scheme, host, url.QueryEscape(user.Email), user.ApprovalToken)
+		body := fmt.Sprintf("<p>New registration request (Email Verified):</p><ul><li>Name: %s %s</li><li>Email: %s</li></ul><p><a href=\"%s\">Click here to approve this request</a></p>", user.FirstName, user.LastName, user.Email, approveURL)
+
+		go func() {
+			if err := s.mailSender.Send(s.cfg.AdminNotificationEmail, subject, body); err != nil {
+				log.Printf("[Server] Failed to send admin alert email: %v", err)
+			}
+		}()
 	}
 
-	w.WriteHeader(http.StatusOK)
-	_ = json.NewEncoder(w).Encode(map[string]string{"status": "success", "message": "registration request submitted and is pending admin approval"})
+	w.Header().Set("Content-Type", "text/html")
+	w.Write([]byte(`<html><head><title>Email Verified</title><style>body{font-family:sans-serif;text-align:center;padding:50px;color:#333;background:#f8fafc;}h1{color:#10b981;}</style></head><body><h1>Email Verified! ✅</h1><p>Your email has been verified successfully. An administrator has been notified to review and approve your account.</p></body></html>`))
 }
 
 // handleApproveUser handles admin clicks on approval links.

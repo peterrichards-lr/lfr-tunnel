@@ -312,17 +312,41 @@ func TestServer_RegistrationFlow(t *testing.T) {
 		t.Errorf("expected 200 OK for register request, got %d, body: %s", rec.Code, rec.Body.String())
 	}
 
-	// Verify user is in DB as pending
+	// Verify user is in DB as unverified
 	user, err := srv.db.GetUser("developer@liferay.com")
 	if err != nil {
 		t.Fatalf("failed to get user: %v", err)
 	}
-	if user.Status != "pending" || user.ApprovalToken == "" {
-		t.Errorf("expected status 'pending' and non-empty approval token, got status=%s, token=%s", user.Status, user.ApprovalToken)
+	if user.Status != "unverified" || user.VerificationToken == "" || user.ApprovalToken == "" {
+		t.Errorf("expected status 'unverified' and non-empty tokens, got status=%s, vt=%s, at=%s", user.Status, user.VerificationToken, user.ApprovalToken)
+	}
+
+	// Verify developer verification email was sent
+	if mockMail.sentTo != "developer@liferay.com" || !strings.Contains(mockMail.sentBody, "/api/verify-email") {
+		t.Errorf("developer verification email not sent correctly, got to=%s, body=%s", mockMail.sentTo, mockMail.sentBody)
+	}
+
+	// 1.5. Developer verifies email
+	verifyReq := httptest.NewRequest("GET", fmt.Sprintf("http://example.com/api/verify-email?token=%s", user.VerificationToken), nil)
+	verifyReq.Host = "example.com"
+	verifyRec := httptest.NewRecorder()
+	srv.ServeHTTP(verifyRec, verifyReq)
+
+	if verifyRec.Code != http.StatusOK {
+		t.Errorf("expected 200 OK for email verify, got %d", verifyRec.Code)
+	}
+
+	// Verify user is in DB as pending
+	user, err = srv.db.GetUser("developer@liferay.com")
+	if err != nil {
+		t.Fatalf("failed to get user: %v", err)
+	}
+	if user.Status != "pending" {
+		t.Errorf("expected status 'pending', got status=%s", user.Status)
 	}
 
 	// Verify admin notification email was sent
-	if mockMail.sentTo != "admin@example.com" || (!strings.Contains(mockMail.sentBody, "/api/admin/approve") && !strings.Contains(mockMail.sentBody, "has registered and requires approval")) {
+	if mockMail.sentTo != "admin@example.com" || (!strings.Contains(mockMail.sentBody, "/api/admin/approve") && !strings.Contains(mockMail.sentBody, "has verified their email")) {
 		t.Errorf("admin notification email not sent correctly, got to=%s, body=%s", mockMail.sentTo, mockMail.sentBody)
 	}
 

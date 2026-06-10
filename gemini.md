@@ -69,6 +69,9 @@ The solution will consist of:
 - [x] Fix CI build and formatting failures.
 - [x] Upgrade Go version in GitHub Action workflows to 1.22.
 - [x] Update auth architecture document with SMTP configuration and email verification flows.
+- [ ] Implement self-registration database models and request states (pending, approved, active).
+- [ ] Implement outbound email sending service in the server (supporting local postfix and external SMTP relays).
+- [ ] Add admin approval endpoints and email notification flows.
 
 
 

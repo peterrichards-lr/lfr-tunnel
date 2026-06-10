@@ -44,14 +44,14 @@ To support this multi-user capability, the server gateway utilizes a lightweight
 ### SQL Table Schema
 
 ```sql
--- Users table storing synchronized profile data from Liferay SSO or static admin provisioning
+-- Users table storing profile data and registration states
 CREATE TABLE users (
     id VARCHAR(64) PRIMARY KEY,          -- Unique user ID (e.g. Liferay user uuid or email)
     email VARCHAR(255) UNIQUE NOT NULL,
     first_name VARCHAR(100),
     last_name VARCHAR(100),
     role VARCHAR(20) NOT NULL DEFAULT 'user', -- 'admin' or 'user'
-    is_active BOOLEAN NOT NULL DEFAULT TRUE,
+    status VARCHAR(20) NOT NULL DEFAULT 'pending', -- 'pending', 'approved', 'revoked'
     created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
     updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
 );
@@ -85,9 +85,45 @@ CREATE TABLE tunnel_audit_logs (
 
 ---
 
-## 3. OAuth2 Authorization Code Flow with PKCE
+## 3. Developer Self-Registration & Admin Approval Flow (Pre-SSO)
 
-Once Liferay SSO is available, the CLI will utilize standard **OAuth2 with PKCE (RFC 7636)** to authenticate developers against the Liferay SSO Server.
+Before Liferay SSO is fully integrated, developers can request access directly via the gateway. To prevent unauthorized use, all registration requests must go through an email-based administrative approval flow.
+
+### Sequence Flow Diagram
+
+```mermaid
+sequenceDiagram
+    autonumber
+    actor Dev as Developer
+    participant GW as Gateway (lfr-tunneld)
+    actor Admin as Gateway Administrator
+    
+    Dev->>GW: Visits /register (Enters Email, Name, Subdomain request)
+    Note over GW: Creates User in DB with status='pending'
+    GW->>Admin: Email Notification: New registration request (Contains approval token links)
+    
+    Admin->>GW: Clicks Approve Link (GET /admin/approve?user=dev&token=xyz)
+    Note over GW: Validates approval token<br/>Updates status='approved'<br/>Generates Personal Access Token (PAT)
+    
+    GW->>Dev: Email Notification: Registration Approved! (Contains link to claim PAT)
+    Dev->>GW: Visits /claim?token=abc to download PAT
+    Note over Dev: Configures PAT in local ~/.lfr-tunnel/config.yaml
+```
+
+### 3.1. Key Steps in the Approval Flow
+1.  **Request Submission**: The developer visits the public landing page `/register` and submits their details.
+2.  **Admin Alert Email**: The server fires a transactional email to the configured administrator's address. The email contains:
+    *   Developer Name and Email.
+    *   Requested subdomain prefix.
+    *   A secure approval link: `https://tunnel.lfr-demo.se/admin/approve?user=developer@liferay.com&token=[SecureRandomApprovalToken]`
+3.  **Approval Validation**: When the admin clicks the link, the server verifies the approval token against the database. If it matches, the user is transitioned to `approved` status, and a unique PAT is generated.
+4.  **Developer Delivery Email**: The server emails the developer containing a link to download their token securely or complete their CLI setup.
+
+---
+
+## 4. OAuth2 Authorization Code Flow with PKCE (Future Phase)
+
+Once Liferay SSO is available, this flow will replace the manual approval process. Developers will authenticate directly using Liferay Portal.
 
 ### Login Flow Sequence
 
@@ -122,51 +158,28 @@ sequenceDiagram
 
 ---
 
-## 4. Administrative Developer Token Provisioning (Pre-SSO / Local UX Setup)
+## 5. Outbound Email Configuration (Local Postfix vs. External SMTP Relay)
 
-To support secure user management, individual developer auditing, and revocation **before Liferay SSO is integrated**, the gateway server supports static token provisioning via configuration files. 
+To support sending transactional emails (such as request notifications to the admin and approval emails to the developers) securely, the server connects to an outbound mail relay.
 
-This avoids the insecurity of a single shared token and bypasses the need for mock backdoor login pages or temporary registration screens.
+The server supports two configuration modes:
+1.  **Local MTA (Null Client)**: Connecting to `127.0.0.1:25` where a local Postfix server is configured to deliver mail.
+2.  **External SMTP Relay**: Connecting to an external email provider (such as Gmail, AWS SES, or Liferay's Google Workspace SMTP) using TLS.
 
-### 4.1. Configuration-based User Tokens (`developer-tokens.yaml`)
-Admins provision tokens directly on the VPS by maintaining a YAML configuration file at `/etc/lfr-tunneld/developer-tokens.yaml`:
+### Server SMTP Configuration (`server-config.yaml`)
 
 ```yaml
-tokens:
-  - email: "admin@lfr-demo.se"
-    token_hash: "8f5e2894427814d58262685f56571aef3f772fb7973f9d063f423de3173e97cb" # SHA-256 hash of "lfr_pat_peter_secret_123"
-    description: "Peter's Macbook Pro"
-    role: "admin"
-    expires_at: "2027-12-31T23:59:59Z"
-  - email: "developer@liferay.com"
-    token_hash: "4fc2d409d6c703b715694294025fbc70..."
-    description: "Dev workstation"
-    role: "user"
-    expires_at: "2026-09-30T23:59:59Z"
+smtp_host: "localhost"              # SMTP Server address (e.g. localhost or smtp.gmail.com)
+smtp_port: 25                       # SMTP Port (e.g. 25, 587 for STARTTLS, or 465 for SSL)
+smtp_username: ""                   # SMTP Username (leave empty for local Postfix)
+smtp_password: ""                   # SMTP Password
+smtp_from_address: "Liferay Tunnel <noreply@lfr-demo.se>"
+admin_notification_email: "admin@lfr-demo.se"
 ```
-
-### 4.2. CLI Generation Tool
-The gateway binary `lfr-tunneld` can include a token helper command for admins running on the VPS terminal to easily generate hashes and values:
-
-```bash
-# Generate a new secure token for a developer
-lfr-tunneld token create --email developer@liferay.com --desc "Dev workstation"
-```
-*   **Output**:
-    ```text
-    Generated Token: lfr_pat_dev_8a7d9f2e4b6c8d0e
-    SHA-256 Hash:    8b3c9d...
-    
-    Please add the SHA-256 Hash to /etc/lfr-tunneld/developer-tokens.yaml
-    ```
-
-### 4.3. Revocation and Verification
-*   **Authentication**: When a client CLI registers a tunnel, it sends their unique token. The server hashes it and verifies it against the active list.
-*   **Revocation**: To revoke a developer's access, the admin deletes their entry from `developer-tokens.yaml` and sends a `SIGHUP` signal to the `lfr-tunneld` daemon, which reloads the configuration immediately and closes any active tunnels associated with that token.
 
 ---
 
-## 5. API Specification & Integration Points
+## 6. API Specification & Integration Points
 
 ### Control Plane REST API
 
@@ -187,16 +200,15 @@ Exchanges a PAT for a dynamic Chisel tunnel lease.
     ```
 *   **Server Logic**:
     1. Hashes incoming token: `sha256("lfr_pat_dev_8a7d9f2e4b6c8d0e")`.
-    2. Queries the local DB or loaded static configurations.
-    3. Validates that the token is active, not expired, and not revoked.
-    4. If valid, registers the tunnel and logs connection details.
-    5. Returns `session_token` and remote mappings.
+    2. Queries database: `SELECT * FROM personal_access_tokens WHERE token_hash = ?`.
+    3. Validates that the associated user's status is `approved` and the token is not expired/revoked.
+    4. Registers the tunnel lease on Chisel.
 
 ---
 
 ### Administrative Control Plane API (Admins Only)
 
-These endpoints require an administrative session (only active after Liferay SSO is deployed) or an administrative API header token.
+These endpoints require an administrative session or an administrative token.
 
 #### 1. List Users (`GET /api/admin/users`)
 *   **Response**:
@@ -206,7 +218,7 @@ These endpoints require an administrative session (only active after Liferay SSO
         "id": "admin",
         "email": "admin@lfr-demo.se",
         "role": "admin",
-        "is_active": true
+        "status": "approved"
       }
     ]
     ```
@@ -216,14 +228,14 @@ These endpoints require an administrative session (only active after Liferay SSO
     ```json
     {
       "role": "admin",
-      "is_active": false
+      "status": "revoked"
     }
     ```
-*   **Logic**: Updates the user record. If `is_active` is set to `false`, immediately revokes all of their active Chisel tunnel connections.
+*   **Logic**: Updates the user status. If status is set to `revoked`, immediately closes all corresponding active WebSocket connections.
 
 ---
 
-## 6. Security & Isolation Measures
+## 7. Security & Isolation Measures
 
 1.  **Token Hashing (At Rest Security)**:
     Only SHA-256 hashes of generated tokens (`token_hash`) are stored in configurations or databases. If the database/configuration files on the server are compromised, attackers cannot reconstruct the tokens.
@@ -234,9 +246,9 @@ These endpoints require an administrative session (only active after Liferay SSO
 
 ---
 
-## 7. Implementation & Transition Plan
+## 8. Implementation & Transition Plan
 
-1.  **Step 1: Token Config Parser**: Implement the configuration loading and `SIGHUP` reload listener for `developer-tokens.yaml` on the server gateway.
-2.  **Step 2: Database Setup**: Add SQLite engine for auditing active leases and mapping sessions.
-3.  **Step 3: Authenticator Middleware**: Update token checking in `pkg/server/server.go` to validate against the configuration file tokens.
+1.  **Step 1: Database Setup**: Add SQLite database containing users (with status tracking) and tokens.
+2.  **Step 2: SMTP Integration**: Implement standard `net/smtp` client connection code inside `pkg/server/mail.go` to handle admin alerts and developer token approvals.
+3.  **Step 3: Registration and Approval API**: Implement `/register` forms, approval validation endpoint (`/admin/approve`), and email notification triggers.
 4.  **Step 4: SSO Endpoints (Future Phase)**: Implement OIDC handshake `/auth/login` and `/auth/callback` to automate token acquisition once Liferay SSO client registration is complete.

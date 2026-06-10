@@ -81,6 +81,7 @@ The solution will consist of:
 - [x] Add subdomain validation and reserved subdomain filtering in Registry.
 - [x] Create a unified, step-by-step VPS and DNS replication setup guide.
 - [x] Fix CI build and formatting failures.
+- [x] Create .golangci.yml to specify Go 1.24 targeted linter version.
 
 
 

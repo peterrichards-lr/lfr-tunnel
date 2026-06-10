@@ -84,5 +84,7 @@ func (p *ProxyHandler) serveOfflinePage(w http.ResponseWriter, r *http.Request, 
 
 	// Replace placeholder host in embedded HTML
 	pageBytes := bytes.Replace(offlineHTML, []byte("loading..."), []byte(host), -1)
-	w.Write(pageBytes)
+	if _, err := w.Write(pageBytes); err != nil {
+		log.Printf("[Proxy] Failed to write offline page: %v", err)
+	}
 }

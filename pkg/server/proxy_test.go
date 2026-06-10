@@ -50,7 +50,7 @@ func TestProxyHandler_Online(t *testing.T) {
 			t.Error("X-Real-IP header was not set")
 		}
 		w.WriteHeader(http.StatusOK)
-		w.Write([]byte("Hello from Liferay Local!"))
+		_, _ = w.Write([]byte("Hello from Liferay Local!"))
 	}))
 	defer backend.Close()
 

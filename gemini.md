@@ -41,6 +41,7 @@ The solution will consist of:
 - [x] Move DNS files to a dedicated `docs/dns/` directory.
 - [ ] Document / set up GitHub branch protection rulesets (configured ready in docs/github/).
 - [x] Document Nginx, SSL redirection, and Let's Encrypt configurations in docs/server/.
+- [ ] Configure systemd service and run lfr-tunneld under a dedicated restricted system user.
 - [x] Configure VPS: firewall (ufw), new sudo user `peterrichards`, disable root SSH.
 - [x] Upgrade dependencies to patch Dependabot vulnerability alerts.
 - [x] Update DNS records (DNS resolved to new IP `82.39.133.178`).

@@ -114,26 +114,30 @@ If your local environment is protected by security endpoint agents (such as Sent
 
 This isolates the execution inside an unmonitored virtual machine while routing traffic back to your host machine's port `8080` (where your Liferay server is running).
 
-#### 1. Build the Docker Image
-Build the Docker image locally from the repository root:
+#### 1. Setup Environment Configuration
+Copy the `.env.example` file to `.env` in the repository root and fill in your token:
 ```bash
-docker build --load -t lfr-tunnel-client:latest .
+cp .env.example .env
 ```
+*(The `.env` file is git-ignored and contains your sensitive `LFT_TOKEN` credentials).*
 
-#### 2. Run the Containerized Client
-To start the tunnel, run the container and specify the target host as `host.docker.internal` using the `LFT_TARGET_HOST` environment variable:
-```bash
-docker run --rm -it \
-  -e LFT_TARGET_HOST=host.docker.internal \
-  lfr-tunnel-client:latest \
-  -server https://lfr-demo.se \
-  -token cf0927dfa60b943d002a2491a629b350 \
-  -subdomain test-se \
-  -ports 8080
-```
+#### 2. Run the Client Wrapper Script
+To start the tunnel, run the wrapper script matching your operating system. It will automatically build the Docker image if it is missing, load your `.env` variables, and establish the tunnel:
 
-*   `LFT_TARGET_HOST=host.docker.internal` directs the tunnel client to forward requests from the public gateway to the macOS host system instead of the container loopback interface.
-*   The container will output your public URLs (e.g. `https://test-se.lfr-demo.se`) and connect automatically.
+*   **macOS / Linux (Bash)**:
+    ```bash
+    ./lfr-tunnel.sh
+    ```
+*   **Windows CMD**:
+    ```cmd
+    lfr-tunnel.bat
+    ```
+*   **Windows PowerShell**:
+    ```powershell
+    .\lfr-tunnel.ps1
+    ```
+
+*Note: You can override any environment configuration on the fly by passing standard client CLI arguments directly to the script, e.g. `./lfr-tunnel.sh -subdomain my-temp-se`.*
 
 ### Quick Start (Zero-Config Mode)
 

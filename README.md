@@ -1,6 +1,6 @@
 # Liferay Tunnel (lfr-tunnel)
 
-`lfr-tunnel` is an open-source, MIT-licensed tunneling utility tailored for Liferay Development and Sales Engineering (SE) teams. It allows multiple local LDM (Liferay Development Manager) or Liferay instances to be securely exposed through dynamic wildcard subdomains on public domain endpoints.
+`lfr-tunnel` is an open-source, MIT-licensed tunneling utility tailored for Liferay Development and Sales Engineering (SE) teams. It allows local Liferay runtime environments (including LDM workspaces, standalone Liferay Tomcat bundles, and Liferay Docker containers) to be securely exposed through dynamic wildcard subdomains on public domain endpoints.
 
 Unlike generic tunnels, `lfr-tunnel` offers:
 - **Zero-Config Port Matching**: Automatically scans Liferay Workspace directories, parses `client-extension.yaml` files, and exposes all client extension asset ports automatically.
@@ -17,6 +17,15 @@ The Liferay Tunnel gateway is configured to only support routing and DNS wildcar
 - **`lfr-demo.online`**: Secondary domain mirroring and proxying to the primary gateway.
 
 Any developer tunnel project prefix must be established as a subdomain of one of these two domains (e.g. `your-project.lfr-demo.se` or `your-project.lfr-demo.online`).
+
+---
+
+## Supported Liferay Runtimes
+
+Because `lfr-tunnel` operates at the network port level, it is fully runtime-agnostic and supports exposing the following local development setups:
+1.  **LDM (Liferay Development Manager)**: Auto-detects port configurations from your active Liferay workspace files.
+2.  **Liferay Tomcat Bundles**: Works out of the box with native Tomcat zip bundles running directly on your host machine.
+3.  **Liferay Docker Containers (non-LDM)**: Exposes any local Liferay instances running inside Docker containers, provided their ports (e.g. `8080`) are mapped to your local loopback interface.
 
 ---
 

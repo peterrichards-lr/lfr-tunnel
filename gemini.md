@@ -57,6 +57,9 @@ The solution will consist of:
 - [x] Implement client-side target host override (LFT_TARGET_HOST) and Dockerfile for containerized local execution.
 - [x] Fix WebSocket path routing by appending /tunnel to client and rewriting to / on server.
 - [x] Create cross-platform Docker wrapper scripts (Bash, Batch, PowerShell) for client run.
+- [x] Add Docker-based gitleaks pre-commit hook to prevent API key and token leaks.
+
+
 
 
 

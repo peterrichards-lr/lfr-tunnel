@@ -1,0 +1,7 @@
+# Gitleaks Ignore File
+#
+# If Gitleaks blocks a commit with a false positive, it will output a "fingerprint" hash.
+# Copy that fingerprint and add it on a new line below to whitelist it.
+#
+# Example:
+# 8f5e2894427814d58262685f56571aef3f772fb7973f9d063f423de3173e97cb

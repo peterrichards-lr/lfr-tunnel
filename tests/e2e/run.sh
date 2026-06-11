@@ -60,15 +60,14 @@ try:
     if not data["messages"]:
         print("")
         exit(0)
-    msg_id = data["messages"][0]["ID"]
-    msg = json.loads(urllib.request.urlopen(f"http://localhost:8025/api/v1/message/{msg_id}").read())
-    body = msg["Text"]
-    # Look for token in URL like /api/verify-email?email=...&token=...
-    match = re.search(r"token=([a-f0-9]+)", body)
-    if match:
-        print(match.group(1))
-    else:
-        print("")
+    for m in data["messages"]:
+        msg = json.loads(urllib.request.urlopen(f"http://localhost:8025/api/v1/message/{m['ID']}").read())
+        body = msg["Text"]
+        match = re.search(r"verify-email\?email=[^&]+&token=([a-f0-9]+)", body)
+        if match:
+            print(match.group(1))
+            exit(0)
+    print("")
 except Exception as e:
     import sys
     print(f"Error: {e}", file=sys.stderr)
@@ -101,15 +100,14 @@ try:
     if not data["messages"]:
         print("")
         exit(0)
-    msg_id = data["messages"][0]["ID"]
-    msg = json.loads(urllib.request.urlopen(f"http://localhost:8025/api/v1/message/{msg_id}").read())
-    body = msg["Text"]
-    # Look for token in URL like /api/admin/approve?email=...&token=...
-    match = re.search(r"token=([a-f0-9]+)", body)
-    if match:
-        print(match.group(1))
-    else:
-        print("")
+    for m in data["messages"]:
+        msg = json.loads(urllib.request.urlopen(f"http://localhost:8025/api/v1/message/{m['ID']}").read())
+        body = msg["Text"]
+        match = re.search(r"approve\?email=[^&]+&token=([a-f0-9]+)", body)
+        if match:
+            print(match.group(1))
+            exit(0)
+    print("")
 except Exception as e:
     import sys
     print(f"Error: {e}", file=sys.stderr)
@@ -135,16 +133,14 @@ CLAIM_TOKEN=$(python3 -c '
 import urllib.request, json, re
 try:
     data = json.loads(urllib.request.urlopen("http://localhost:8025/api/v1/messages").read())
-    # The newest message should be the claim token email
-    msg_id = data["messages"][0]["ID"]
-    msg = json.loads(urllib.request.urlopen(f"http://localhost:8025/api/v1/message/{msg_id}").read())
-    body = msg["Text"]
-    # Look for token in URL like /api/claim?token=...
-    match = re.search(r"token=([a-f0-9]+)", body)
-    if match:
-        print(match.group(1))
-    else:
-        print("")
+    for m in data["messages"]:
+        msg = json.loads(urllib.request.urlopen(f"http://localhost:8025/api/v1/message/{m['ID']}").read())
+        body = msg["Text"]
+        match = re.search(r"claim\?token=([a-f0-9]+)", body)
+        if match:
+            print(match.group(1))
+            exit(0)
+    print("")
 except Exception as e:
     import sys
     print(f"Error: {e}", file=sys.stderr)

@@ -23,10 +23,22 @@ fi
 
 echo "✅ No secrets detected."
 
-echo "[Git Hook] Running formatting and go vet..."
-make fmt vet
+echo "[Git Hook] Checking for unformatted files..."
+UNFORMATTED=$(gofmt -l .)
+if [ -n "$UNFORMATTED" ]; then
+  echo "❌ Error: The following files are not formatted properly:"
+  echo "$UNFORMATTED"
+  echo "Formatting them now..."
+  make fmt
+  echo "❌ Error: Git commit blocked because files were modified by formatting."
+  echo "Please restage these files ('git add .') and try committing again."
+  exit 1
+fi
+
+echo "[Git Hook] Running go vet..."
+go vet ./...
 if [ $? -ne 0 ]; then
-  echo "❌ Error: Code formatting or 'go vet' failed. Please fix before committing."
+  echo "❌ Error: 'go vet' failed. Please fix before committing."
   exit 1
 fi
 

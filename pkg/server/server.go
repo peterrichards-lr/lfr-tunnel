@@ -27,11 +27,8 @@ import (
 	"github.com/jpillora/chisel/server"
 )
 
-//go:embed admin.html
-var adminHTML []byte
-
-//go:embed portal.html
-var portalHTML []byte
+//go:embed dashboard.html
+var dashboardHTML []byte
 
 // RegisterRequest represents the JSON request payload for registering a tunnel.
 type RegisterRequest struct {
@@ -252,7 +249,7 @@ func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		if d == "" {
 			continue
 		}
-		if host == d || host == "tunnel."+d {
+		if host == d || host == "tunnel."+d || host == "portal."+d || host == "api."+d {
 			isControl = true
 			break
 		}
@@ -308,29 +305,51 @@ func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 
-		if r.Method == http.MethodPost && r.URL.Path == "/api/admin/auth/magic-link" {
+		if r.Method == http.MethodPost && r.URL.Path == "/api/auth/magic-link" {
 			s.handleAdminMagicLink(w, r)
 			return
 		}
-		if r.Method == http.MethodPost && r.URL.Path == "/api/admin/auth/verify" {
+		if r.Method == http.MethodPost && r.URL.Path == "/api/auth/verify" {
 			s.handleAdminVerify(w, r)
 			return
 		}
-		if r.Method == http.MethodPost && r.URL.Path == "/api/admin/auth/logout" {
+		if r.Method == http.MethodPost && r.URL.Path == "/api/auth/logout" {
 			s.handleAdminLogout(w, r)
 			return
 		}
 
-		if r.Method == http.MethodGet && r.URL.Path == "/api/admin/auth/providers" {
+		if r.Method == http.MethodGet && r.URL.Path == "/api/auth/providers" {
 			s.handleAuthProviders(w, r)
 			return
 		}
-		if r.Method == http.MethodGet && r.URL.Path == "/api/admin/auth/sso/login" {
+		if r.Method == http.MethodGet && r.URL.Path == "/api/auth/login" {
 			s.handleSSOLogin(w, r)
 			return
 		}
-		if r.Method == http.MethodGet && r.URL.Path == "/api/admin/auth/sso/callback" {
+		if r.Method == http.MethodGet && r.URL.Path == "/api/auth/callback" {
 			s.handleSSOCallback(w, r)
+			return
+		}
+
+		if strings.HasPrefix(r.URL.Path, "/api/portal") {
+			s.handlePortalEndpoints(w, r)
+			return
+		}
+
+		if r.Method == http.MethodGet && r.URL.Path == "/api/me" {
+			s.handleGetMe(w, r)
+			return
+		}
+		if r.Method == http.MethodGet && r.URL.Path == "/api/tokens" {
+			s.handleListTokens(w, r)
+			return
+		}
+		if r.Method == http.MethodPost && r.URL.Path == "/api/tokens" {
+			s.handleCreateToken(w, r)
+			return
+		}
+		if r.Method == http.MethodDelete && strings.HasPrefix(r.URL.Path, "/api/tokens/") {
+			s.handleDeleteToken(w, r)
 			return
 		}
 
@@ -347,48 +366,12 @@ func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 
-		if s.cfg.EnableUserPortal {
-			if r.Method == http.MethodGet && r.URL.Path == "/portal" {
-				w.Header().Set("Content-Type", "text/html; charset=utf-8")
-				w.WriteHeader(http.StatusOK)
-				_, _ = w.Write(portalHTML)
-				return
-			}
-			if strings.HasPrefix(r.URL.Path, "/api/portal/") {
-				s.handlePortalEndpoints(w, r)
-				return
-			}
-		}
-
-		if r.Method == http.MethodGet && r.URL.Path == "/admin" {
+		if r.Method == http.MethodGet && (r.URL.Path == "/" || r.URL.Path == "/admin" || r.URL.Path == "/portal") {
 			w.Header().Set("Content-Type", "text/html; charset=utf-8")
 			w.WriteHeader(http.StatusOK)
-			_, _ = w.Write(adminHTML)
+			_, _ = w.Write(dashboardHTML)
 			return
 		}
-
-		// Render a simple gateway landing page
-		w.Header().Set("Content-Type", "text/html; charset=utf-8")
-		w.WriteHeader(http.StatusOK)
-		if _, err := w.Write([]byte(`
-			<!DOCTYPE html>
-			<html>
-			<head>
-				<title>Liferay Tunnel Gateway</title>
-				<style>
-					body { font-family: sans-serif; text-align: center; padding: 50px; background: #0f172a; color: #f8fafc; }
-					h1 { color: #38bdf8; }
-				</style>
-			</head>
-			<body>
-				<h1>Liferay Tunnel Gateway</h1>
-				<p>The gateway is online and running.</p>
-			</body>
-			</html>
-		`)); err != nil {
-			log.Printf("[Server] Failed to write landing page: %v", err)
-		}
-		return
 	}
 
 	// Data plane requests -> Route to ProxyHandler
@@ -1274,24 +1257,6 @@ func (s *Server) handleAuthProviders(w http.ResponseWriter, r *http.Request) {
 		"sso_enabled": len(providers) > 0,
 		"providers":   providers,
 	})
-}
-
-func (s *Server) handleSSOLogin(w http.ResponseWriter, r *http.Request) {
-	if len(s.cfg.SSOProviders) == 0 {
-		http.Error(w, `{"error":"SSO not configured"}`, http.StatusNotImplemented)
-		return
-	}
-	// TODO: Generate state and nonce, redirect to Issuer Authorization URL
-	http.Error(w, `{"error":"OIDC Flow not fully implemented"}`, http.StatusNotImplemented)
-}
-
-func (s *Server) handleSSOCallback(w http.ResponseWriter, r *http.Request) {
-	if len(s.cfg.SSOProviders) == 0 {
-		http.Error(w, `{"error":"SSO not configured"}`, http.StatusNotImplemented)
-		return
-	}
-	// TODO: Exchange code for token, verify ID Token, extract email, and issue lfr_admin_session cookie
-	http.Error(w, `{"error":"OIDC Flow not fully implemented"}`, http.StatusNotImplemented)
 }
 
 func (s *Server) handleAdminListUsers(w http.ResponseWriter, r *http.Request, actor string) {

@@ -26,7 +26,7 @@ Because `lfr-tunneld` can send emails for user registration and administrative a
 
 *   **SPF (Sender Policy Framework)**: Add a TXT record for `@`:
     ```text
-    v=spf1 ip4:YOUR_VPS_PUBLIC_IP -all
+    v=spf1 ip4:YOUR_VPS_PUBLIC_IPV4 ip6:YOUR_VPS_IPV6 -all
     ```
 *   **DMARC (Domain-based Message Authentication)**: Add a TXT record for `_dmarc`:
     ```text
@@ -280,18 +280,34 @@ sudo nano /etc/lfr-tunneld/server-config.yaml
 
 Paste the following configurations:
 ```yaml
-domain1: "yourdomain.com"
-bind_addr: "127.0.0.1:8080"
-chisel_bind_addr: "127.0.0.1:8081"
-auth_token: "YOUR_SHARED_SECRET_TOKEN_KEY"
+domains:
+  - "yourdomain.com"
+http_bind_addr: "0.0.0.0:8080"
+chisel_bind_addr: ":8081"
+db_path: "/etc/lfr-tunneld/server.db"
 
-# SMTP Relay Configuration (Optional - Required for registration flows)
-smtp_host: "localhost"
-smtp_port: 25
-smtp_username: ""
-smtp_password: ""
-smtp_from_address: "Liferay Tunnel <noreply@yourdomain.com>"
+# Owner and Admins
+owner:
+  user_id: "admin@yourdomain.com"
+  name: "Gateway Admin"
+
 admin_notification_email: "admin@yourdomain.com"
+enable_registration: true
+enable_user_portal: true
+
+# Access Control
+allowed_email_domains:
+  - "liferay.com"
+
+# SMTP Relay Configuration (Required for registration & magic links)
+# Note: Use your domain here instead of 127.0.0.1 to securely pass TLS verification
+# with your Let's Encrypt certificates.
+smtp_server:
+  host: "yourdomain.com"
+  port: 25
+  username: ""
+  password: ""
+  from_address: "Liferay Tunnel <noreply@yourdomain.com>"
 ```
 
 Apply restricted file permissions:
@@ -301,7 +317,20 @@ sudo chmod 700 /etc/lfr-tunneld
 sudo chmod 600 /etc/lfr-tunneld/server-config.yaml
 ```
 
-### 4.4. systemd Service Setup
+### 4.4. Local Postfix Email Relay (TLS Verification)
+If you are running a local Postfix daemon to send emails, you must securely configure Postfix to present your Let's Encrypt certificates. If Postfix uses a self-signed certificate, the Go gateway will securely reject the `STARTTLS` handshake.
+
+To bind the certificates to Postfix and allow relaying from the domain's resolved IP, run the following:
+```bash
+sudo postconf -e "smtpd_tls_cert_file=/etc/letsencrypt/live/yourdomain.com/fullchain.pem"
+sudo postconf -e "smtpd_tls_key_file=/etc/letsencrypt/live/yourdomain.com/privkey.pem"
+sudo postconf -e "mynetworks = 127.0.0.0/8 [::ffff:127.0.0.0]/104 [::1]/128 YOUR_VPS_PUBLIC_IPV4 YOUR_VPS_PUBLIC_IPV6"
+sudo systemctl restart postfix
+```
+
+Make sure that your `smtp_server.host` in the `server-config.yaml` points to your public domain (e.g., `yourdomain.com`) rather than `127.0.0.1` so that the hostname securely matches the Common Name (CN) of the certificate! Also ensure your VPS's external IP addresses are added to Postfix's `mynetworks` as shown above.
+
+### 4.5. systemd Service Setup
 Create a systemd unit file at `/etc/systemd/system/lfr-tunneld.service`:
 ```bash
 sudo nano /etc/systemd/system/lfr-tunneld.service

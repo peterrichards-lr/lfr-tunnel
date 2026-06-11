@@ -57,6 +57,20 @@ func main() {
 		return
 	}
 
+	if len(os.Args) > 1 && os.Args[1] == "login" {
+		cfg, err := config.LoadClientConfig(*configPath)
+		if err != nil {
+			log.Fatalf("[Client] Failed to load configuration: %v", err)
+		}
+		if *serverURL != "" {
+			cfg.ServerURL = *serverURL
+		}
+		if err := client.RunLogin(cfg.ServerURL); err != nil {
+			log.Fatalf("[Error] Login failed: %v", err)
+		}
+		return
+	}
+
 	if *versionFlag {
 		fmt.Printf("lfr-tunnel version %s\n", config.Version)
 		return

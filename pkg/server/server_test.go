@@ -113,8 +113,8 @@ func TestServer_ControlWelcomePage(t *testing.T) {
 	}
 
 	body := rec.Body.String()
-	if !strings.Contains(body, "Liferay Tunnel Gateway") {
-		t.Error("expected welcome landing page content")
+	if !strings.Contains(body, "Liferay Tunnel Identity") {
+		t.Error("expected dashboard landing page content")
 	}
 }
 

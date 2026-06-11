@@ -241,3 +241,22 @@ func TestSelfUpgrade_ChecksumMismatch(t *testing.T) {
 		t.Errorf("expected binary to retain 'fake-binary-old-content', got %s", string(content))
 	}
 }
+
+func TestCompareVersions(t *testing.T) {
+	tests := []struct {
+		v1, v2 string
+		want   int
+	}{
+		{"v1.0.0", "v1.0.0", 0},
+		{"v1.0.0", "v1.0.1", -1},
+		{"v1.1.0", "v1.0.1", 1},
+		{"1.0.0", "v1.0.0", 0},
+		{"v1.2", "v1.2.0", 0},
+	}
+	for _, tt := range tests {
+		got := CompareVersions(tt.v1, tt.v2)
+		if got != tt.want {
+			t.Errorf("CompareVersions(%q, %q) = %d; want %d", tt.v1, tt.v2, got, tt.want)
+		}
+	}
+}

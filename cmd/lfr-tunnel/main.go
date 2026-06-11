@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"encoding/json"
 	"flag"
 	"fmt"
 	"log"
@@ -44,6 +45,7 @@ func main() {
 	status := flag.Bool("status", false, "Check status of the background tunnel")
 	stop := flag.Bool("stop", false, "Stop the background tunnel")
 	versionFlag := flag.Bool("version", false, "Print client version")
+	checkVersionFlag := flag.Bool("check-version", false, "Check server API for version requirements and print as JSON")
 	upgradeFlag := flag.Bool("upgrade", false, "Self-upgrade client to the latest release")
 
 	flag.Parse()
@@ -57,6 +59,23 @@ func main() {
 
 	if *versionFlag {
 		fmt.Printf("lfr-tunnel version %s\n", config.Version)
+		return
+	}
+
+	if *checkVersionFlag {
+		cfg, err := config.LoadClientConfig(*configPath)
+		if err != nil {
+			log.Fatalf("[Client] Failed to load configuration: %v", err)
+		}
+		if *serverURL != "" {
+			cfg.ServerURL = *serverURL
+		}
+		info, err := client.CheckServerCompatibility(cfg.ServerURL)
+		if err != nil {
+			log.Fatalf("[Error] Failed to check server compatibility: %v", err)
+		}
+		b, _ := json.Marshal(info)
+		fmt.Println(string(b))
 		return
 	}
 
@@ -77,14 +96,19 @@ func main() {
 		return
 	}
 
-	// Start update check asynchronously
-	updateChan := make(chan string, 1)
+	// Start compatibility check asynchronously
+	compatChan := make(chan *client.ServerVersionInfo, 1)
 	go func() {
-		if latest, err := client.CheckForUpdate(config.Version); err == nil && latest != "" {
-			updateChan <- latest
-		} else {
-			updateChan <- ""
+		// Temporarily infer server URL before full load to start early
+		sURL := *serverURL
+		if sURL == "" {
+			tmpCfg, _ := config.LoadClientConfig(*configPath)
+			if tmpCfg != nil {
+				sURL = tmpCfg.ServerURL
+			}
 		}
+		info, _ := client.CheckServerCompatibility(sURL)
+		compatChan <- info
 	}()
 
 	// 1. Load config from file and environment variables
@@ -187,15 +211,19 @@ func main() {
 		log.Printf("  - Local port %d%s", pm.LocalPort, suffixStr)
 	}
 
-	// Check update result with 500ms timeout
+	// Check compatibility result with 500ms timeout
 	select {
-	case latest := <-updateChan:
-		if latest != "" {
-			log.Printf("[Update] A new version of lfr-tunnel is available: %s (current: %s)", latest, config.Version)
-			log.Printf("[Update] Run 'lfr-tunnel -upgrade' to automatically update to the latest release.")
+	case info := <-compatChan:
+		if info != nil {
+			if client.CompareVersions(config.Version, info.MinVersion) < 0 {
+				log.Fatalf("[Error] Your Liferay Tunnel client is too old to connect to the server. Minimum required version is %s.", info.MinVersion)
+			}
+			if client.CompareVersions(config.Version, info.LatestVersion) < 0 {
+				log.Printf("[Warning] A new version of Liferay Tunnel (%s) is available. You are running %s.", info.LatestVersion, config.Version)
+			}
 		}
 	case <-time.After(500 * time.Millisecond):
-		// Silent timeout if GitHub API is slow or offline
+		// Silent timeout if server is slow or offline
 	}
 
 	// 5. Registration Handshake

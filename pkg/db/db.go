@@ -212,111 +212,48 @@ func (db *DB) CreateUser(u *User) error {
 	return err
 }
 
-// GetUser fetches a user by their ID.
-func (db *DB) GetUser(id string) (*User, error) {
-	query := `SELECT id, email, first_name, last_name, role, status, verification_token, approval_token, claim_token, created_at, updated_at
-	          FROM users WHERE id = ?`
-	row := db.conn.QueryRow(query, id)
-
+// fetchUserByQuery is a DRY helper for executing a single user fetch query.
+func (db *DB) fetchUserByQuery(query string, arg interface{}) (*User, error) {
 	var u User
 	var vt, at, ct sql.NullString
-	err := row.Scan(&u.ID, &u.Email, &u.FirstName, &u.LastName, &u.Role, &u.Status, &vt, &at, &ct, &u.CreatedAt, &u.UpdatedAt)
-	if err == sql.ErrNoRows {
-		return nil, ErrNotFound
-	}
+	err := db.conn.QueryRow(query, arg).Scan(
+		&u.ID, &u.Email, &u.FirstName, &u.LastName, &u.Role, &u.Status, &vt, &at, &ct, &u.CreatedAt, &u.UpdatedAt,
+	)
 	if err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			return nil, ErrNotFound
+		}
 		return nil, err
 	}
 	u.VerificationToken = vt.String
 	u.ApprovalToken = at.String
 	u.ClaimToken = ct.String
 	return &u, nil
+}
+
+// GetUser fetches a user by their ID.
+func (db *DB) GetUser(id string) (*User, error) {
+	return db.fetchUserByQuery(`SELECT id, email, first_name, last_name, role, status, verification_token, approval_token, claim_token, created_at, updated_at FROM users WHERE id = ?`, id)
 }
 
 // GetUserByEmail fetches a user by their email address.
 func (db *DB) GetUserByEmail(email string) (*User, error) {
-	var u User
-	var vt, at, ct sql.NullString
-	err := db.conn.QueryRow(`
-		SELECT id, email, first_name, last_name, role, status, verification_token, approval_token, claim_token, created_at, updated_at
-		FROM users WHERE email = ?
-	`, email).Scan(
-		&u.ID, &u.Email, &u.FirstName, &u.LastName, &u.Role, &u.Status, &vt, &at, &ct, &u.CreatedAt, &u.UpdatedAt,
-	)
-	if err != nil {
-		if errors.Is(err, sql.ErrNoRows) {
-			return nil, ErrNotFound
-		}
-		return nil, err
-	}
-	u.VerificationToken = vt.String
-	u.ApprovalToken = at.String
-	u.ClaimToken = ct.String
-	return &u, nil
+	return db.fetchUserByQuery(`SELECT id, email, first_name, last_name, role, status, verification_token, approval_token, claim_token, created_at, updated_at FROM users WHERE email = ?`, email)
 }
 
 // GetUserByVerificationToken finds a user by their verification token.
 func (db *DB) GetUserByVerificationToken(token string) (*User, error) {
-	var u User
-	var vt, at, ct sql.NullString
-	err := db.conn.QueryRow(`
-		SELECT id, email, first_name, last_name, role, status, verification_token, approval_token, claim_token, created_at, updated_at
-		FROM users WHERE verification_token = ?
-	`, token).Scan(
-		&u.ID, &u.Email, &u.FirstName, &u.LastName, &u.Role, &u.Status, &vt, &at, &ct, &u.CreatedAt, &u.UpdatedAt,
-	)
-	if err != nil {
-		if errors.Is(err, sql.ErrNoRows) {
-			return nil, ErrNotFound
-		}
-		return nil, err
-	}
-	u.VerificationToken = vt.String
-	u.ApprovalToken = at.String
-	u.ClaimToken = ct.String
-	return &u, nil
+	return db.fetchUserByQuery(`SELECT id, email, first_name, last_name, role, status, verification_token, approval_token, claim_token, created_at, updated_at FROM users WHERE verification_token = ?`, token)
 }
 
 // GetUserByApprovalToken fetches a user by their approval token.
 func (db *DB) GetUserByApprovalToken(token string) (*User, error) {
-	query := `SELECT id, email, first_name, last_name, role, status, verification_token, approval_token, claim_token, created_at, updated_at
-	          FROM users WHERE approval_token = ?`
-	row := db.conn.QueryRow(query, token)
-
-	var u User
-	var vt, at, ct sql.NullString
-	err := row.Scan(&u.ID, &u.Email, &u.FirstName, &u.LastName, &u.Role, &u.Status, &vt, &at, &ct, &u.CreatedAt, &u.UpdatedAt)
-	if err == sql.ErrNoRows {
-		return nil, ErrNotFound
-	}
-	if err != nil {
-		return nil, err
-	}
-	u.VerificationToken = vt.String
-	u.ApprovalToken = at.String
-	u.ClaimToken = ct.String
-	return &u, nil
+	return db.fetchUserByQuery(`SELECT id, email, first_name, last_name, role, status, verification_token, approval_token, claim_token, created_at, updated_at FROM users WHERE approval_token = ?`, token)
 }
 
 // GetUserByClaimToken fetches a user by their claim token.
 func (db *DB) GetUserByClaimToken(token string) (*User, error) {
-	query := `SELECT id, email, first_name, last_name, role, status, verification_token, approval_token, claim_token, created_at, updated_at
-	          FROM users WHERE claim_token = ?`
-	row := db.conn.QueryRow(query, token)
-
-	var u User
-	var vt, at, ct sql.NullString
-	err := row.Scan(&u.ID, &u.Email, &u.FirstName, &u.LastName, &u.Role, &u.Status, &vt, &at, &ct, &u.CreatedAt, &u.UpdatedAt)
-	if err == sql.ErrNoRows {
-		return nil, ErrNotFound
-	}
-	if err != nil {
-		return nil, err
-	}
-	u.VerificationToken = vt.String
-	u.ApprovalToken = at.String
-	u.ClaimToken = ct.String
-	return &u, nil
+	return db.fetchUserByQuery(`SELECT id, email, first_name, last_name, role, status, verification_token, approval_token, claim_token, created_at, updated_at FROM users WHERE claim_token = ?`, token)
 }
 
 // UpdateUser updates an existing user profile.

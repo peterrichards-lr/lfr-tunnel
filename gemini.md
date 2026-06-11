@@ -63,8 +63,8 @@ The solution will consist of:
 - [x] Design OAuth2/Liferay SSO authentication and per-user token management architecture.
 - [x] Implement user token database storage with expiration/revocation capabilities on the server.
 - [x] Implement Administrative static developer token provisioning and configuration file storage.
-- [ ] Implement CLI integration (`lfr-tunnel login`) for OIDC token exchanges.
-- [ ] Create server-side administrative control endpoints for user promotion and token management.
+- [ ] Implement CLI integration (`lfr-tunnel login`) for OIDC token exchanges (DEFERRED).
+- [ ] Create server-side administrative control endpoints for user promotion and token management (DEFERRED).
 - [x] Release, tag, and deploy v1.0.1 of lfr-tunneld to the VPS.
 - [x] Fix CI build and formatting failures.
 - [x] Upgrade Go version in GitHub Action workflows to 1.22.
@@ -113,5 +113,8 @@ The solution will consist of:
 - [x] Implement configurable admin email alerts from the UI.
 - [x] Implement manual email verification flow for users to prevent spam.
 - [x] Implement Theming and Aesthetics engine in Admin Dashboard (Light/Dark mode).
-- [ ] Implement Resource/Bandwidth Monitoring per tunnel (Bytes In/Out tracking).
-- [ ] Implement Cloud User Portal (DEFERRED until public repo/OIDC).
+- [x] Implement Resource/Bandwidth Monitoring per tunnel (Bytes In/Out tracking).
+- [x] Implement Cloud User Portal (Behind `enable_user_portal` feature flag with Magic Link auth).
+- [x] Implement automated Abuse Reporting endpoint (`/api/portal/report`) and sliding portal session expiration window.
+- [x] Implement global Version API Endpoint (`/api/version`) for external script integrations.
+- [x] Implement asynchronous start-up compatibility check and `-check-version` CLI flag to ensure backward compatibility and LDM integration.

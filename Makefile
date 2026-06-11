@@ -1,4 +1,4 @@
-.PHONY: fmt vet test build clean install-hook help
+.PHONY: fmt vet test build deploy clean install-hook help
 
 help:
 	@echo "Liferay Tunnel Developer Commands:"
@@ -6,6 +6,7 @@ help:
 	@echo "  make vet          - Run go vet static analysis"
 	@echo "  make test         - Run all unit tests"
 	@echo "  make build        - Clean and build client and server binaries"
+	@echo "  make deploy       - Cross-compile and deploy server binary to VPS"
 	@echo "  make clean        - Delete build binaries"
 	@echo "  make install-hook - Install the native Git secrets pre-commit hook"
 	@echo "  make help         - Show this help message"
@@ -26,6 +27,9 @@ build: clean
 	mkdir -p bin
 	go build -o bin/lfr-tunnel ./cmd/lfr-tunnel
 	go build -o bin/lfr-tunneld ./cmd/lfr-tunneld
+
+deploy:
+	@./scripts/deploy.sh
 
 install-hook:
 	@echo "Installing native git pre-commit hook..."

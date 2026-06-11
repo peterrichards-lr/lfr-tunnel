@@ -9,6 +9,7 @@ import (
 	"regexp"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/jpillora/chisel/server"
@@ -408,7 +409,11 @@ func (r *Registry) ListLeases() []*TunnelLease {
 
 	var snapshot []*TunnelLease
 	for _, lease := range r.leases {
-		snapshot = append(snapshot, lease)
+		// Make a shallow copy to safely load atomic fields for JSON serialization
+		lCopy := *lease
+		lCopy.BytesIn = atomic.LoadUint64(&lease.BytesIn)
+		lCopy.BytesOut = atomic.LoadUint64(&lease.BytesOut)
+		snapshot = append(snapshot, &lCopy)
 	}
 	return snapshot
 }

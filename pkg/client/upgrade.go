@@ -237,3 +237,52 @@ func computeSHA256(filePath string) (string, error) {
 
 	return hex.EncodeToString(h.Sum(nil)), nil
 }
+
+type ServerVersionInfo struct {
+	LatestVersion string `json:"latest_version"`
+	MinVersion    string `json:"min_version"`
+}
+
+func CheckServerCompatibility(serverURL string) (*ServerVersionInfo, error) {
+	client := &http.Client{Timeout: 3 * time.Second}
+	resp, err := client.Get(strings.TrimRight(serverURL, "/") + "/api/version")
+	if err != nil {
+		return nil, err
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		return nil, fmt.Errorf("server returned status %d", resp.StatusCode)
+	}
+
+	var info ServerVersionInfo
+	if err := json.NewDecoder(resp.Body).Decode(&info); err != nil {
+		return nil, err
+	}
+	return &info, nil
+}
+
+// CompareVersions returns -1 if v1 < v2, 0 if v1 == v2, 1 if v1 > v2.
+func CompareVersions(v1, v2 string) int {
+	v1 = strings.TrimPrefix(v1, "v")
+	v2 = strings.TrimPrefix(v2, "v")
+
+	p1 := strings.Split(v1, ".")
+	p2 := strings.Split(v2, ".")
+
+	for i := 0; i < len(p1) || i < len(p2); i++ {
+		var n1, n2 int
+		if i < len(p1) {
+			fmt.Sscanf(p1[i], "%d", &n1)
+		}
+		if i < len(p2) {
+			fmt.Sscanf(p2[i], "%d", &n2)
+		}
+		if n1 < n2 {
+			return -1
+		} else if n1 > n2 {
+			return 1
+		}
+	}
+	return 0
+}

@@ -94,13 +94,8 @@ func (p *ProxyHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 			req.URL.Scheme = "http"
 			req.URL.Host = fmt.Sprintf("127.0.0.1:%d", lease.LocalPort)
 
-			// Resolve client IP address
-			clientIP, _, _ := net.SplitHostPort(req.RemoteAddr)
-
-			// Handle cases where RemoteAddr is not host:port (e.g. Unix socket, test context)
-			if clientIP == "" {
-				clientIP = req.RemoteAddr
-			}
+			// Resolve client IP address using centralized helper
+			clientIP := getClientIP(req)
 
 			// Inject standard proxy headers
 			req.Header.Set("X-Real-IP", clientIP)

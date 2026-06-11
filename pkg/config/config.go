@@ -5,6 +5,7 @@ import (
 	"path/filepath"
 	"strconv"
 	"strings"
+	"time"
 
 	"gopkg.in/yaml.v3"
 )
@@ -38,6 +39,9 @@ type ServerConfig struct {
 	StaticTokens           []StaticTokenConfig `yaml:"static_tokens"`
 	IPBlacklist            []string            `yaml:"ip_blacklist"`
 	MaxTunnelRateLimit     int                 `yaml:"max_tunnel_rate_limit"`
+	EnableUserPortal       bool                `yaml:"enable_user_portal"`
+	PortalSessionDuration  time.Duration       `yaml:"portal_session_duration"`
+	MinClientVersion       string              `yaml:"min_client_version"`
 }
 
 // ClientConfig holds configuration settings for the lfr-tunnel client.
@@ -54,9 +58,11 @@ type ClientConfig struct {
 // DefaultServerConfig returns a ServerConfig with sensible default values.
 func DefaultServerConfig() *ServerConfig {
 	return &ServerConfig{
-		BindAddr:       ":443",
-		HTTPBindAddr:   ":80",
-		ChiselBindAddr: ":8081",
+		BindAddr:              ":443",
+		HTTPBindAddr:          ":80",
+		ChiselBindAddr:        ":8081",
+		PortalSessionDuration: 24 * time.Hour,
+		MinClientVersion:      "v1.0.0",
 	}
 }
 
@@ -135,6 +141,17 @@ func LoadServerConfig(path string) (*ServerConfig, error) {
 	}
 	if val := os.Getenv("LFT_INSECURE_SKIP_VERIFY"); val != "" {
 		cfg.InsecureSkipVerify = strings.ToLower(val) == "true" || val == "1"
+	}
+	if val := os.Getenv("LFT_ENABLE_USER_PORTAL"); val != "" {
+		cfg.EnableUserPortal = strings.ToLower(val) == "true" || val == "1"
+	}
+	if val := os.Getenv("LFT_PORTAL_SESSION_DURATION"); val != "" {
+		if d, err := time.ParseDuration(val); err == nil {
+			cfg.PortalSessionDuration = d
+		}
+	}
+	if val := os.Getenv("LFT_MIN_CLIENT_VERSION"); val != "" {
+		cfg.MinClientVersion = val
 	}
 
 	return cfg, nil

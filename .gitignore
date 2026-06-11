@@ -12,3 +12,7 @@ client-config.yaml
 # Logs
 *.log
 
+# Database
+*.db
+*.db-journal
+

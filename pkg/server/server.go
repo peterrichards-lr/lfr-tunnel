@@ -30,6 +30,9 @@ import (
 //go:embed admin.html
 var adminHTML []byte
 
+//go:embed portal.html
+var portalHTML []byte
+
 // RegisterRequest represents the JSON request payload for registering a tunnel.
 type RegisterRequest struct {
 	SubdomainPrefix string            `json:"subdomain_prefix"`
@@ -75,6 +78,8 @@ type Server struct {
 	violations   map[string]int
 	vMutex       sync.Mutex
 	blacklist    sync.Map // memory cache for db blacklist
+	portalMap    sync.Map // memory cache for portal magic links and sessions
+
 }
 
 // NewServer initializes and returns a new Server instance.
@@ -223,10 +228,7 @@ func (s *Server) getRateLimiter(ip string) *rate.Limiter {
 // ServeHTTP multiplexes control plane (registration & chisel WebSocket) and data plane (tunnel routing).
 func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	// 1. IP Blacklist Defense (Config + DB Cache)
-	ip, _, err := net.SplitHostPort(r.RemoteAddr)
-	if err != nil {
-		ip = r.RemoteAddr
-	}
+	ip := getClientIP(r)
 	for _, blockedIP := range s.cfg.IPBlacklist {
 		if ip == blockedIP {
 			http.Error(w, "Forbidden", http.StatusForbidden)
@@ -309,6 +311,14 @@ func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 
+		if r.Method == http.MethodGet && r.URL.Path == "/api/version" {
+			respondJSON(w, http.StatusOK, map[string]string{
+				"latest_version": config.Version,
+				"min_version":    s.cfg.MinClientVersion,
+			})
+			return
+		}
+
 		if r.Method == http.MethodGet && r.URL.Path == "/api/check-subdomain" {
 			s.handleCheckSubdomain(w, r)
 			return
@@ -345,6 +355,19 @@ func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 			r.URL.Path = "/"
 			s.chiselProxy.ServeHTTP(w, r)
 			return
+		}
+
+		if s.cfg.EnableUserPortal {
+			if r.Method == http.MethodGet && r.URL.Path == "/portal" {
+				w.Header().Set("Content-Type", "text/html; charset=utf-8")
+				w.WriteHeader(http.StatusOK)
+				_, _ = w.Write(portalHTML)
+				return
+			}
+			if strings.HasPrefix(r.URL.Path, "/api/portal/") {
+				s.handlePortalEndpoints(w, r)
+				return
+			}
 		}
 
 		if r.Method == http.MethodGet && r.URL.Path == "/admin" {
@@ -384,23 +407,15 @@ func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 
 // handleRegister parses registration request and responds with leases.
 func (s *Server) handleRegister(w http.ResponseWriter, r *http.Request) {
-	w.Header().Set("Content-Type", "application/json")
-
 	var req RegisterRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		w.WriteHeader(http.StatusBadRequest)
-		if err := json.NewEncoder(w).Encode(RegisterResponse{Status: "error", Error: "invalid JSON payload"}); err != nil {
-			log.Printf("[Server] Failed to encode register error response: %v", err)
-		}
+		respondJSON(w, http.StatusBadRequest, RegisterResponse{Status: "error", Error: "invalid JSON payload"})
 		return
 	}
 
 	// Validate auth token
 	if !s.isValidToken(req.AuthToken) {
-		w.WriteHeader(http.StatusUnauthorized)
-		if err := json.NewEncoder(w).Encode(RegisterResponse{Status: "error", Error: "unauthorized"}); err != nil {
-			log.Printf("[Server] Failed to encode unauthorized response: %v", err)
-		}
+		respondJSON(w, http.StatusUnauthorized, RegisterResponse{Status: "error", Error: "unauthorized"})
 		return
 	}
 
@@ -418,18 +433,12 @@ func (s *Server) handleRegister(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Get client IP
-	clientIP, _, err := net.SplitHostPort(r.RemoteAddr)
-	if err != nil {
-		clientIP = r.RemoteAddr
-	}
+	clientIP := getClientIP(r)
 
 	// Register in registry
 	sessionToken, remotes, err := s.registry.Register(req.SubdomainPrefix, req.Ports, activeDomains, effectiveLimit, clientIP, req.BasicAuth, req.AddedHeaders)
 	if err != nil {
-		w.WriteHeader(http.StatusConflict)
-		if err := json.NewEncoder(w).Encode(RegisterResponse{Status: "error", Error: err.Error()}); err != nil {
-			log.Printf("[Server] Failed to encode conflict response: %v", err)
-		}
+		respondJSON(w, http.StatusConflict, RegisterResponse{Status: "error", Error: err.Error()})
 		return
 	}
 
@@ -438,16 +447,13 @@ func (s *Server) handleRegister(w http.ResponseWriter, r *http.Request) {
 		warning = fmt.Sprintf("Version mismatch! Server is running %s but client is %s. Please consider upgrading using 'lfr-tunnel -upgrade'", config.Version, req.ClientVersion)
 	}
 
-	w.WriteHeader(http.StatusOK)
-	if err := json.NewEncoder(w).Encode(RegisterResponse{
+	respondJSON(w, http.StatusOK, RegisterResponse{
 		Status:       "success",
 		SessionToken: sessionToken,
 		Remotes:      remotes,
 		Domains:      activeDomains,
 		Warning:      warning,
-	}); err != nil {
-		log.Printf("[Server] Failed to encode success response: %v", err)
-	}
+	})
 }
 
 // handleTunnelStatus updates the maintenance/health status of a client's tunnel.
@@ -1458,4 +1464,237 @@ func (s *Server) sendAdminAlert(settingKey, subject, htmlBody string) {
 			log.Printf("[Mail] Failed to send admin alert %s: %v", settingKey, err)
 		}
 	}()
+}
+
+// respondJSON is a DRY helper for sending JSON API responses
+func respondJSON(w http.ResponseWriter, status int, payload interface{}) {
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(status)
+	if err := json.NewEncoder(w).Encode(payload); err != nil {
+		log.Printf("[Server] Failed to encode JSON response: %v", err)
+	}
+}
+
+// getClientIP extracts the real client IP, respecting proxy headers if present
+func getClientIP(r *http.Request) string {
+	ip := r.Header.Get("X-Real-IP")
+	if ip == "" {
+		ip = r.Header.Get("X-Forwarded-For")
+	}
+	if ip == "" {
+		ip, _, _ = net.SplitHostPort(r.RemoteAddr)
+		if ip == "" {
+			ip = r.RemoteAddr
+		}
+	}
+	return strings.Split(ip, ",")[0]
+}
+
+type PortalSessionData struct {
+	Email     string
+	ExpiresAt time.Time
+	ClientIP  string
+}
+
+// handlePortalEndpoints multiplexes the portal API endpoints
+func (s *Server) handlePortalEndpoints(w http.ResponseWriter, r *http.Request) {
+	if s.db == nil {
+		respondJSON(w, http.StatusServiceUnavailable, map[string]string{"error": "Database not configured"})
+		return
+	}
+
+	if r.Method == http.MethodPost && r.URL.Path == "/api/portal/magic-link" {
+		var req struct {
+			Email string `json:"email"`
+		}
+		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+			respondJSON(w, http.StatusBadRequest, map[string]string{"error": "Invalid request"})
+			return
+		}
+
+		user, err := s.db.GetUserByEmail(strings.ToLower(strings.TrimSpace(req.Email)))
+		if err != nil || user.Status != "approved" {
+			// Don't leak user existence
+			respondJSON(w, http.StatusOK, map[string]string{"status": "ok"})
+			return
+		}
+
+		magicToken, _ := generateSecureToken()
+		clientIP := getClientIP(r)
+
+		sessionData := PortalSessionData{
+			Email:     user.Email,
+			ExpiresAt: time.Now().Add(15 * time.Minute),
+			ClientIP:  clientIP,
+		}
+		s.portalMap.Store("magic_"+magicToken, sessionData)
+
+		s.writeAudit(user.Email, "portal.magic_link_requested", "user", "portal", "Requested magic login link", r)
+
+		if s.mailSender != nil {
+			host := r.Host
+			scheme := "http"
+			if r.TLS != nil || r.Header.Get("X-Forwarded-Proto") == "https" {
+				scheme = "https"
+			}
+			link := fmt.Sprintf("%s://%s/portal?token=%s", scheme, host, magicToken)
+			reportLink := fmt.Sprintf("%s://%s/api/portal/report?token=%s", scheme, host, magicToken)
+			body := fmt.Sprintf("<p>You requested a magic link to log into the Liferay Tunnel Portal.</p>"+
+				"<p><strong>IP Address:</strong> %s</p>"+
+				"<p>This link expires in 15 minutes.</p>"+
+				"<p><a href=\"%s\">Log In to Portal</a></p>"+
+				"<hr>"+
+				"<p><em>If you did not request this, <a href=\"%s\">click here to immediately invalidate the link and report it to security</a>.</em></p>", clientIP, link, reportLink)
+			go s.mailSender.Send(user.Email, "Liferay Tunnel - Portal Login", body)
+		} else {
+			// For testing locally without SMTP
+			log.Printf("[Portal] Magic Link for %s: /portal?token=%s", user.Email, magicToken)
+		}
+
+		respondJSON(w, http.StatusOK, map[string]string{"status": "ok"})
+		return
+	}
+
+	if r.Method == http.MethodGet && r.URL.Path == "/api/portal/report" {
+		token := r.URL.Query().Get("token")
+		val, ok := s.portalMap.LoadAndDelete("magic_" + token)
+		if ok {
+			sessionData := val.(PortalSessionData)
+			s.writeAudit(sessionData.Email, "portal.magic_link_abuse_reported", "system", "portal", fmt.Sprintf("User reported abuse from IP: %s", sessionData.ClientIP), r)
+		}
+		w.Header().Set("Content-Type", "text/html; charset=utf-8")
+		w.WriteHeader(http.StatusOK)
+		_, _ = w.Write([]byte(`<html><head><title>Report Submitted</title><style>body{font-family:sans-serif;text-align:center;padding:50px;color:#333;background:#f8fafc;}h1{color:#10b981;}</style></head><body><h1>Report Submitted ✅</h1><p>Thank you for reporting. This magic link has been invalidated and administrators have been notified.</p></body></html>`))
+		return
+	}
+
+	if r.Method == http.MethodPost && r.URL.Path == "/api/portal/verify" {
+		var req struct {
+			Token string `json:"token"`
+		}
+		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+			respondJSON(w, http.StatusBadRequest, map[string]string{"error": "Invalid request"})
+			return
+		}
+
+		val, ok := s.portalMap.LoadAndDelete("magic_" + req.Token)
+		if !ok {
+			respondJSON(w, http.StatusUnauthorized, map[string]string{"error": "Invalid or expired token"})
+			return
+		}
+
+		sessionData := val.(PortalSessionData)
+		if time.Now().After(sessionData.ExpiresAt) {
+			respondJSON(w, http.StatusUnauthorized, map[string]string{"error": "Token has expired"})
+			return
+		}
+
+		email := sessionData.Email
+		sessionToken, _ := generateSecureToken()
+
+		s.portalMap.Store("session_"+sessionToken, PortalSessionData{
+			Email:     email,
+			ExpiresAt: time.Now().Add(s.cfg.PortalSessionDuration),
+		})
+
+		respondJSON(w, http.StatusOK, map[string]string{"session_token": sessionToken})
+		return
+	}
+
+	// Require a valid session token for subsequent endpoints
+	authHeader := r.Header.Get("Authorization")
+	sessionToken := strings.TrimPrefix(authHeader, "Bearer ")
+	val, ok := s.portalMap.Load("session_" + sessionToken)
+	if !ok {
+		respondJSON(w, http.StatusUnauthorized, map[string]string{"error": "Unauthorized"})
+		return
+	}
+
+	sessionData := val.(PortalSessionData)
+	if time.Now().After(sessionData.ExpiresAt) {
+		s.portalMap.Delete("session_" + sessionToken)
+		respondJSON(w, http.StatusUnauthorized, map[string]string{"error": "Session expired"})
+		return
+	}
+
+	// Sliding expiration: reset expiry time
+	sessionData.ExpiresAt = time.Now().Add(s.cfg.PortalSessionDuration)
+	s.portalMap.Store("session_"+sessionToken, sessionData)
+
+	email := sessionData.Email
+	user, err := s.db.GetUserByEmail(email)
+	if err != nil {
+		respondJSON(w, http.StatusUnauthorized, map[string]string{"error": "User not found"})
+		return
+	}
+
+	if r.Method == http.MethodGet && r.URL.Path == "/api/portal/me" {
+		pats, _ := s.db.ListPATs(user.ID)
+
+		// Map active leases for portal dashboard (dummy filtering for now)
+		var userTunnels []map[string]interface{}
+
+		respondJSON(w, http.StatusOK, map[string]interface{}{
+			"user":    user,
+			"tokens":  pats,
+			"tunnels": userTunnels,
+		})
+		return
+	}
+
+	if r.Method == http.MethodPost && r.URL.Path == "/api/portal/tokens" {
+		var req struct {
+			Name string `json:"name"`
+		}
+		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+			respondJSON(w, http.StatusBadRequest, map[string]string{"error": "Invalid payload"})
+			return
+		}
+
+		tokenStr, _ := generateSecureToken()
+		hashBytes := sha256.Sum256([]byte(tokenStr))
+		tokenHash := hex.EncodeToString(hashBytes[:])
+
+		tokenPrefix := tokenStr
+		if len(tokenPrefix) > 12 {
+			tokenPrefix = tokenPrefix[:12]
+		}
+
+		pat := &db.PersonalAccessToken{
+			UserID:      user.ID,
+			TokenHash:   tokenHash,
+			TokenPrefix: tokenPrefix,
+			Name:        req.Name,
+		}
+
+		if err := s.db.CreatePAT(pat); err != nil {
+			respondJSON(w, http.StatusInternalServerError, map[string]string{"error": "Failed to save token"})
+			return
+		}
+
+		s.writeAudit(user.Email, "portal.token_created", "user", "tokens", "Generated a new PAT: "+req.Name, r)
+
+		respondJSON(w, http.StatusOK, map[string]string{"token": tokenStr})
+		return
+	}
+
+	if r.Method == http.MethodDelete && strings.HasPrefix(r.URL.Path, "/api/portal/tokens/") {
+		tokenHash := strings.TrimPrefix(r.URL.Path, "/api/portal/tokens/")
+		pat, err := s.db.GetPATByHash(tokenHash)
+		if err != nil {
+			respondJSON(w, http.StatusNotFound, map[string]string{"error": "Token not found"})
+			return
+		}
+		if err := s.db.RevokePAT(pat.ID); err != nil {
+			respondJSON(w, http.StatusInternalServerError, map[string]string{"error": "Failed to delete token"})
+			return
+		}
+
+		s.writeAudit(user.Email, "portal.token_revoked", "user", "tokens", "Revoked PAT", r)
+
+		respondJSON(w, http.StatusOK, map[string]string{"status": "deleted"})
+		return
+	}
+
+	respondJSON(w, http.StatusNotFound, map[string]string{"error": "Not Found"})
 }

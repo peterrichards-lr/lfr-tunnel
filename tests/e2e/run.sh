@@ -61,7 +61,8 @@ try:
         print("")
         exit(0)
     for m in data["messages"]:
-        msg = json.loads(urllib.request.urlopen(f"http://localhost:8025/api/v1/message/{m[\"ID\"]}").read())
+        msg_id = m.get("ID")
+        msg = json.loads(urllib.request.urlopen("http://localhost:8025/api/v1/message/" + msg_id).read())
         body = msg["Text"]
         match = re.search(r"verify-email\?email=[^&]+&token=([a-f0-9]+)", body)
         if match:
@@ -101,7 +102,8 @@ try:
         print("")
         exit(0)
     for m in data["messages"]:
-        msg = json.loads(urllib.request.urlopen(f"http://localhost:8025/api/v1/message/{m[\"ID\"]}").read())
+        msg_id = m.get("ID")
+        msg = json.loads(urllib.request.urlopen("http://localhost:8025/api/v1/message/" + msg_id).read())
         body = msg["Text"]
         match = re.search(r"approve\?email=[^&]+&token=([a-f0-9]+)", body)
         if match:
@@ -134,7 +136,8 @@ import urllib.request, json, re
 try:
     data = json.loads(urllib.request.urlopen("http://localhost:8025/api/v1/messages").read())
     for m in data["messages"]:
-        msg = json.loads(urllib.request.urlopen(f"http://localhost:8025/api/v1/message/{m[\"ID\"]}").read())
+        msg_id = m.get("ID")
+        msg = json.loads(urllib.request.urlopen("http://localhost:8025/api/v1/message/" + msg_id).read())
         body = msg["Text"]
         match = re.search(r"claim\?token=([a-f0-9]+)", body)
         if match:

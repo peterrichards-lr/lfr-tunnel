@@ -44,11 +44,17 @@ type ServerConfig struct {
 	PortalSessionDuration  time.Duration    `yaml:"portal_session_duration"`
 	MinClientVersion       string           `yaml:"min_client_version"`
 
-	// OIDC/SSO configuration
-	OIDCClientID     string `yaml:"oidc_client_id"`
-	OIDCClientSecret string `yaml:"oidc_client_secret"`
-	OIDCIssuerURL    string `yaml:"oidc_issuer_url"`
-	OIDCRedirectURL  string `yaml:"oidc_redirect_url"`
+	// Dynamic SSO/OIDC Providers
+	SSOProviders []SSOProviderConfig `yaml:"sso_providers"`
+}
+
+type SSOProviderConfig struct {
+	ID           string `yaml:"id"`
+	Name         string `yaml:"name"`
+	ClientID     string `yaml:"client_id"`
+	ClientSecret string `yaml:"client_secret"`
+	IssuerURL    string `yaml:"issuer_url"`
+	Icon         string `yaml:"icon"`
 }
 
 // ClientConfig holds configuration settings for the lfr-tunnel client.
@@ -161,18 +167,6 @@ func LoadServerConfig(path string) (*ServerConfig, error) {
 		cfg.AllowedEmailDomains = domains
 	}
 
-	if val := os.Getenv("LFT_OIDC_CLIENT_ID"); val != "" {
-		cfg.OIDCClientID = val
-	}
-	if val := os.Getenv("LFT_OIDC_CLIENT_SECRET"); val != "" {
-		cfg.OIDCClientSecret = val
-	}
-	if val := os.Getenv("LFT_OIDC_ISSUER_URL"); val != "" {
-		cfg.OIDCIssuerURL = val
-	}
-	if val := os.Getenv("LFT_OIDC_REDIRECT_URL"); val != "" {
-		cfg.OIDCRedirectURL = val
-	}
 	if val := os.Getenv("LFT_INSECURE_SKIP_VERIFY"); val != "" {
 		cfg.InsecureSkipVerify = strings.ToLower(val) == "true" || val == "1"
 	}

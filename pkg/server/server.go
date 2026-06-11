@@ -1257,14 +1257,27 @@ func (s *Server) handleAdminLogout(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) handleAuthProviders(w http.ResponseWriter, r *http.Request) {
-	ssoEnabled := s.cfg.OIDCClientID != "" && s.cfg.OIDCIssuerURL != ""
+	type ProviderResponse struct {
+		ID   string `json:"id"`
+		Name string `json:"name"`
+		Icon string `json:"icon"`
+	}
+	var providers []ProviderResponse
+	for _, p := range s.cfg.SSOProviders {
+		providers = append(providers, ProviderResponse{
+			ID:   p.ID,
+			Name: p.Name,
+			Icon: p.Icon,
+		})
+	}
 	respondJSON(w, http.StatusOK, map[string]interface{}{
-		"sso_enabled": ssoEnabled,
+		"sso_enabled": len(providers) > 0,
+		"providers":   providers,
 	})
 }
 
 func (s *Server) handleSSOLogin(w http.ResponseWriter, r *http.Request) {
-	if s.cfg.OIDCClientID == "" || s.cfg.OIDCIssuerURL == "" {
+	if len(s.cfg.SSOProviders) == 0 {
 		http.Error(w, `{"error":"SSO not configured"}`, http.StatusNotImplemented)
 		return
 	}
@@ -1273,7 +1286,7 @@ func (s *Server) handleSSOLogin(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) handleSSOCallback(w http.ResponseWriter, r *http.Request) {
-	if s.cfg.OIDCClientID == "" || s.cfg.OIDCIssuerURL == "" {
+	if len(s.cfg.SSOProviders) == 0 {
 		http.Error(w, `{"error":"SSO not configured"}`, http.StatusNotImplemented)
 		return
 	}

@@ -14,3 +14,11 @@ owner:
 
 admin_notification_email: "admin@lfr-demo.se"
 enable_registration: true
+
+sso_providers:
+  - id: "keycloak"
+    name: "Liferay Keycloak"
+    client_id: "lfr-tunnel"
+    client_secret: "secret"
+    issuer_url: "http://keycloak:8080/realms/liferay"
+    icon: "key"

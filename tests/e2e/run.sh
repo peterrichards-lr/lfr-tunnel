@@ -64,7 +64,7 @@ try:
         msg_id = m.get("ID")
         msg = json.loads(urllib.request.urlopen("http://localhost:8025/api/v1/message/" + msg_id).read())
         body = msg["Text"]
-        match = re.search(r"verify-email\?email=[^&]+&token=([a-f0-9]+)", body)
+        match = re.search(r"verify-email\?token=([a-f0-9A-Z]+)", body, re.IGNORECASE)
         if match:
             print(match.group(1))
             exit(0)
@@ -88,7 +88,7 @@ echo "Extracted Verification Token: $VERIFICATION_TOKEN"
 
 # 2.5. Call Verification endpoint
 echo "=== Verifying developer email ==="
-VERIFY_RESP=$(curl -s "http://localhost:8000/api/verify-email?email=developer@lfr-demo.se&token=${VERIFICATION_TOKEN}")
+VERIFY_RESP=$(curl -s "http://localhost:8000/api/verify-email?token=${VERIFICATION_TOKEN}")
 echo "Verify response: $VERIFY_RESP"
 sleep 2
 

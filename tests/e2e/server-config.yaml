@@ -1,14 +1,16 @@
-domain1: "lfr-demo.se"
-domain2: "lfr-demo.online"
+domains:
+  - "lfr-demo.se"
+  - "lfr-demo.online"
 http_bind_addr: "0.0.0.0:8080"
 db_path: "/etc/lfr-tunneld/lfr-tunnel.db"
-smtp_host: "mailpit"
-smtp_port: 1025
-smtp_from_address: "Liferay Tunnel <noreply@lfr-demo.se>"
-admin_notification_email: "admin@lfr-demo.se"
+smtp_server:
+  host: "mailpit"
+  port: 1025
+  from_address: "Liferay Tunnel <noreply@lfr-demo.se>"
 
-static_tokens:
-  - token: "admin-shared-secret-123"
-    user_id: "admin@lfr-demo.se"
-    name: "Admin User"
-    role: "admin"
+owner:
+  user_id: "admin@lfr-demo.se"
+  name: "Admin User"
+
+admin_notification_email: "admin@lfr-demo.se"
+enable_registration: true

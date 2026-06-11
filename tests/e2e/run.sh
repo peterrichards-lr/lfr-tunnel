@@ -33,8 +33,8 @@ done
 
 # Wait for Nginx proxy to be fully online
 echo "=== Waiting for Nginx proxy to be ready ==="
-for i in {1..15}; do
-    if curl -s http://localhost:8000/api/domains > /dev/null; then
+for i in {1..30}; do
+    if curl -s -f http://localhost:8000/api/domains > /dev/null; then
         echo "Nginx proxy is ready!"
         break
     fi
@@ -91,6 +91,7 @@ echo "=== Verifying developer email ==="
 VERIFY_RESP=$(curl -s "http://localhost:8000/api/verify-email?token=${VERIFICATION_TOKEN}")
 echo "Verify response: $VERIFY_RESP"
 sleep 2
+
 
 # 3. Extract admin approval token from Mailpit
 echo "=== Extracting admin approval token ==="

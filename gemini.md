@@ -120,4 +120,6 @@ The solution will consist of:
 - [x] Implement asynchronous start-up compatibility check and `-check-version` CLI flag to ensure backward compatibility and LDM integration.
 - [x] Implement Admin Magic-Link login flow (removing static tokens).
 - [x] Implement Admin Owner role restriction and Admin email domain registration whitelist.
+- [x] Implement support for domains list and simplified Owner block configuration in `server-config.yaml`.
+- [x] Investigate and fix GitHub Actions CI Failures by updating E2E tests for the new configuration schema.
 

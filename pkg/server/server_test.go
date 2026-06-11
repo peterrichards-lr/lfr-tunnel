@@ -20,15 +20,21 @@ import (
 
 func TestServer_Register(t *testing.T) {
 	cfg := &config.ServerConfig{
-		Domain1:   "example.com",
-		AuthToken: "mysecret",
+		Domains: []string{"example.com"},
 	}
 
+	if cfg.DBPath == "" {
+		cfg.DBPath = filepath.Join(t.TempDir(), "test.db")
+	}
 	srv, err := NewServer(cfg)
 	if err != nil {
 		t.Fatalf("failed to create server: %v", err)
 	}
 	defer srv.Stop()
+	_ = srv.db.CreateUser(&db.User{ID: "peter.richards@liferay.com", Email: "peter.richards@liferay.com", Role: "owner", Status: "approved"})
+	_ = srv.db.CreateUser(&db.User{ID: "test@example.com", Email: "test@example.com", Role: "admin", Status: "approved"})
+	patHashBytes := sha256.Sum256([]byte("lfr_pat_mysecret"))
+	_ = srv.db.CreatePAT(&db.PersonalAccessToken{UserID: "test@example.com", TokenHash: hex.EncodeToString(patHashBytes[:]), TokenPrefix: "lfr_pat_myse"})
 
 	// 1. Unauthorized registration
 	badPayload, _ := json.Marshal(RegisterRequest{
@@ -50,7 +56,7 @@ func TestServer_Register(t *testing.T) {
 	goodPayload, _ := json.Marshal(RegisterRequest{
 		SubdomainPrefix: "alpha",
 		Ports:           []PortMapping{{LocalPort: 8080}},
-		AuthToken:       "mysecret",
+		AuthToken:       "lfr_pat_mysecret",
 	})
 	req2 := httptest.NewRequest("POST", "http://example.com/api/register", bytes.NewReader(goodPayload))
 	req2.Host = "example.com"
@@ -80,14 +86,21 @@ func TestServer_Register(t *testing.T) {
 
 func TestServer_ControlWelcomePage(t *testing.T) {
 	cfg := &config.ServerConfig{
-		Domain1: "example.com",
+		Domains: []string{"example.com"},
 	}
 
+	if cfg.DBPath == "" {
+		cfg.DBPath = filepath.Join(t.TempDir(), "test.db")
+	}
 	srv, err := NewServer(cfg)
 	if err != nil {
 		t.Fatalf("failed to create server: %v", err)
 	}
 	defer srv.Stop()
+	_ = srv.db.CreateUser(&db.User{ID: "peter.richards@liferay.com", Email: "peter.richards@liferay.com", Role: "owner", Status: "approved"})
+	_ = srv.db.CreateUser(&db.User{ID: "test@example.com", Email: "test@example.com", Role: "admin", Status: "approved"})
+	patHashBytes := sha256.Sum256([]byte("lfr_pat_mysecret"))
+	_ = srv.db.CreatePAT(&db.PersonalAccessToken{UserID: "test@example.com", TokenHash: hex.EncodeToString(patHashBytes[:]), TokenPrefix: "lfr_pat_myse"})
 
 	req := httptest.NewRequest("GET", "http://example.com/", nil)
 	req.Host = "example.com"
@@ -107,15 +120,21 @@ func TestServer_ControlWelcomePage(t *testing.T) {
 
 func TestServer_Domains(t *testing.T) {
 	cfg := &config.ServerConfig{
-		Domain1: "example.se",
-		Domain2: "example.online",
+		Domains: []string{"example.se", "example.online"},
 	}
 
+	if cfg.DBPath == "" {
+		cfg.DBPath = filepath.Join(t.TempDir(), "test.db")
+	}
 	srv, err := NewServer(cfg)
 	if err != nil {
 		t.Fatalf("failed to create server: %v", err)
 	}
 	defer srv.Stop()
+	_ = srv.db.CreateUser(&db.User{ID: "peter.richards@liferay.com", Email: "peter.richards@liferay.com", Role: "owner", Status: "approved"})
+	_ = srv.db.CreateUser(&db.User{ID: "test@example.com", Email: "test@example.com", Role: "admin", Status: "approved"})
+	patHashBytes := sha256.Sum256([]byte("lfr_pat_mysecret"))
+	_ = srv.db.CreatePAT(&db.PersonalAccessToken{UserID: "test@example.com", TokenHash: hex.EncodeToString(patHashBytes[:]), TokenPrefix: "lfr_pat_myse"})
 
 	req := httptest.NewRequest("GET", "http://example.se/api/domains", nil)
 	req.Host = "example.se"
@@ -139,15 +158,21 @@ func TestServer_Domains(t *testing.T) {
 
 func TestServer_CheckSubdomain(t *testing.T) {
 	cfg := &config.ServerConfig{
-		Domain1:   "example.com",
-		AuthToken: "mysecret",
+		Domains: []string{"example.com"},
 	}
 
+	if cfg.DBPath == "" {
+		cfg.DBPath = filepath.Join(t.TempDir(), "test.db")
+	}
 	srv, err := NewServer(cfg)
 	if err != nil {
 		t.Fatalf("failed to create server: %v", err)
 	}
 	defer srv.Stop()
+	_ = srv.db.CreateUser(&db.User{ID: "peter.richards@liferay.com", Email: "peter.richards@liferay.com", Role: "owner", Status: "approved"})
+	_ = srv.db.CreateUser(&db.User{ID: "test@example.com", Email: "test@example.com", Role: "admin", Status: "approved"})
+	patHashBytes := sha256.Sum256([]byte("lfr_pat_mysecret"))
+	_ = srv.db.CreatePAT(&db.PersonalAccessToken{UserID: "test@example.com", TokenHash: hex.EncodeToString(patHashBytes[:]), TokenPrefix: "lfr_pat_myse"})
 
 	// 1. Missing token (Unauthorized)
 	req := httptest.NewRequest("GET", "http://example.com/api/check-subdomain?subdomain=alpha", nil)
@@ -168,7 +193,7 @@ func TestServer_CheckSubdomain(t *testing.T) {
 	}
 
 	// 3. Good token, missing subdomain (Bad Request)
-	req = httptest.NewRequest("GET", "http://example.com/api/check-subdomain?token=mysecret", nil)
+	req = httptest.NewRequest("GET", "http://example.com/api/check-subdomain?token=lfr_pat_mysecret", nil)
 	req.Host = "example.com"
 	rec = httptest.NewRecorder()
 	srv.ServeHTTP(rec, req)
@@ -177,7 +202,7 @@ func TestServer_CheckSubdomain(t *testing.T) {
 	}
 
 	// 4. Good token, available subdomain
-	req = httptest.NewRequest("GET", "http://example.com/api/check-subdomain?subdomain=beta-dev&token=mysecret", nil)
+	req = httptest.NewRequest("GET", "http://example.com/api/check-subdomain?subdomain=beta-dev&token=lfr_pat_mysecret", nil)
 	req.Host = "example.com"
 	rec = httptest.NewRecorder()
 	srv.ServeHTTP(rec, req)
@@ -196,7 +221,7 @@ func TestServer_CheckSubdomain(t *testing.T) {
 	}
 
 	// 5. Good token, reserved subdomain (Unavailable)
-	req = httptest.NewRequest("GET", "http://example.com/api/check-subdomain?subdomain=admin&token=mysecret", nil)
+	req = httptest.NewRequest("GET", "http://example.com/api/check-subdomain?subdomain=admin&token=lfr_pat_mysecret", nil)
 	req.Host = "example.com"
 	rec = httptest.NewRecorder()
 	srv.ServeHTTP(rec, req)
@@ -222,10 +247,9 @@ func TestServer_CheckSubdomain(t *testing.T) {
 
 	dbPath := filepath.Join(tmpDir, "test.db")
 	cfgDb := &config.ServerConfig{
-		Domain1:    "example.com",
-		DBPath:     dbPath,
-		AuthToken:  "mysecret",
-		OwnerEmail: "peter.richards@liferay.com",
+		Domains: []string{"example.com"},
+		DBPath:  dbPath,
+		Owner:   config.OwnerConfig{UserID: "peter.richards@liferay.com"},
 	}
 
 	srvDb, err := NewServer(cfgDb)
@@ -241,7 +265,7 @@ func TestServer_CheckSubdomain(t *testing.T) {
 		Role:   "admin",
 		Status: "approved",
 	})
-	patHashBytes := sha256.Sum256([]byte("lfr_pat_peter_token_abc"))
+	patHashBytes = sha256.Sum256([]byte("lfr_pat_peter_token_abc"))
 	_ = srvDb.db.CreatePAT(&db.PersonalAccessToken{
 		UserID:      "peter.richards@liferay.com",
 		TokenHash:   hex.EncodeToString(patHashBytes[:]),
@@ -290,7 +314,7 @@ func TestServer_RegistrationFlow(t *testing.T) {
 	dbPath := filepath.Join(tmpDir, "test.db")
 
 	cfg := &config.ServerConfig{
-		Domain1:                "example.com",
+		Domains:                []string{"example.com"},
 		DBPath:                 dbPath,
 		AdminNotificationEmail: "admin@example.com",
 	}
@@ -453,22 +477,27 @@ func TestServer_RegistrationFlow(t *testing.T) {
 
 func TestServer_DomainSeparation(t *testing.T) {
 	cfg := &config.ServerConfig{
-		Domain1:   "example.se",
-		Domain2:   "example.online",
-		AuthToken: "mysecret",
+		Domains: []string{"example.se", "example.online"},
 	}
 
+	if cfg.DBPath == "" {
+		cfg.DBPath = filepath.Join(t.TempDir(), "test.db")
+	}
 	srv, err := NewServer(cfg)
 	if err != nil {
 		t.Fatalf("failed to create server: %v", err)
 	}
 	defer srv.Stop()
+	_ = srv.db.CreateUser(&db.User{ID: "peter.richards@liferay.com", Email: "peter.richards@liferay.com", Role: "owner", Status: "approved"})
+	_ = srv.db.CreateUser(&db.User{ID: "test@example.com", Email: "test@example.com", Role: "admin", Status: "approved"})
+	patHashBytes := sha256.Sum256([]byte("lfr_pat_mysecret"))
+	_ = srv.db.CreatePAT(&db.PersonalAccessToken{UserID: "test@example.com", TokenHash: hex.EncodeToString(patHashBytes[:]), TokenPrefix: "lfr_pat_myse"})
 
 	// 1. Register with Host example.se
 	payload, _ := json.Marshal(RegisterRequest{
 		SubdomainPrefix: "peter-dev",
 		Ports:           []PortMapping{{LocalPort: 8080}},
-		AuthToken:       "mysecret",
+		AuthToken:       "lfr_pat_mysecret",
 	})
 	req := httptest.NewRequest("POST", "http://tunnel.example.se/api/register", bytes.NewReader(payload))
 	req.Host = "tunnel.example.se"
@@ -499,7 +528,7 @@ func TestServer_DomainSeparation(t *testing.T) {
 
 	// 2. Check subdomain availability using Host header
 	// Checking peter-dev on example.se should say unavailable
-	reqCheck1 := httptest.NewRequest("GET", "http://tunnel.example.se/api/check-subdomain?subdomain=peter-dev&token=mysecret", nil)
+	reqCheck1 := httptest.NewRequest("GET", "http://tunnel.example.se/api/check-subdomain?subdomain=peter-dev&token=lfr_pat_mysecret", nil)
 	reqCheck1.Host = "tunnel.example.se"
 	recCheck1 := httptest.NewRecorder()
 	srv.ServeHTTP(recCheck1, reqCheck1)
@@ -513,7 +542,7 @@ func TestServer_DomainSeparation(t *testing.T) {
 	}
 
 	// Checking peter-dev on example.online should say available
-	reqCheck2 := httptest.NewRequest("GET", "http://tunnel.example.online/api/check-subdomain?subdomain=peter-dev&token=mysecret", nil)
+	reqCheck2 := httptest.NewRequest("GET", "http://tunnel.example.online/api/check-subdomain?subdomain=peter-dev&token=lfr_pat_mysecret", nil)
 	reqCheck2.Host = "tunnel.example.online"
 	recCheck2 := httptest.NewRecorder()
 	srv.ServeHTTP(recCheck2, reqCheck2)
@@ -536,9 +565,9 @@ func TestAdminEndpoints(t *testing.T) {
 
 	dbPath := filepath.Join(tmpDir, "test.db")
 	cfg := &config.ServerConfig{
-		Domain1:    "example.com",
-		DBPath:     dbPath,
-		OwnerEmail: "admin@liferay.com",
+		Domains: []string{"example.com"},
+		DBPath:  dbPath,
+		Owner:   config.OwnerConfig{UserID: "admin@liferay.com"},
 	}
 
 	srv, err := NewServer(cfg)
@@ -546,6 +575,10 @@ func TestAdminEndpoints(t *testing.T) {
 		t.Fatalf("failed to create server: %v", err)
 	}
 	defer srv.Stop()
+	_ = srv.db.CreateUser(&db.User{ID: "peter.richards@liferay.com", Email: "peter.richards@liferay.com", Role: "owner", Status: "approved"})
+	_ = srv.db.CreateUser(&db.User{ID: "test@example.com", Email: "test@example.com", Role: "admin", Status: "approved"})
+	patHashBytes := sha256.Sum256([]byte("lfr_pat_mysecret"))
+	_ = srv.db.CreatePAT(&db.PersonalAccessToken{UserID: "test@example.com", TokenHash: hex.EncodeToString(patHashBytes[:]), TokenPrefix: "lfr_pat_myse"})
 
 	userAdmin := &db.User{
 		ID:     "admin@liferay.com",
@@ -657,15 +690,22 @@ func TestAdminEndpoints(t *testing.T) {
 
 func TestDefenseMiddleware(t *testing.T) {
 	cfg := &config.ServerConfig{
-		Domain1:     "example.com",
+		Domains:     []string{"example.com"},
 		IPBlacklist: []string{"192.168.1.100"},
 	}
 
+	if cfg.DBPath == "" {
+		cfg.DBPath = filepath.Join(t.TempDir(), "test.db")
+	}
 	srv, err := NewServer(cfg)
 	if err != nil {
 		t.Fatalf("failed to create server: %v", err)
 	}
 	defer srv.Stop()
+	_ = srv.db.CreateUser(&db.User{ID: "peter.richards@liferay.com", Email: "peter.richards@liferay.com", Role: "owner", Status: "approved"})
+	_ = srv.db.CreateUser(&db.User{ID: "test@example.com", Email: "test@example.com", Role: "admin", Status: "approved"})
+	patHashBytes := sha256.Sum256([]byte("lfr_pat_mysecret"))
+	_ = srv.db.CreatePAT(&db.PersonalAccessToken{UserID: "test@example.com", TokenHash: hex.EncodeToString(patHashBytes[:]), TokenPrefix: "lfr_pat_myse"})
 
 	// 1. Test IP Blacklist
 	reqBlacklisted := httptest.NewRequest("GET", "http://tunnel.example.com/api/register", nil)

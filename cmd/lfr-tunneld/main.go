@@ -5,6 +5,7 @@ import (
 	"log"
 	"os"
 	"os/signal"
+	"strings"
 	"syscall"
 
 	"lfr-tunnel/pkg/config"
@@ -13,9 +14,7 @@ import (
 
 func main() {
 	configPath := flag.String("config", "", "Path to server-config.yaml")
-	domain1 := flag.String("domain1", "", "Primary wildcard domain (e.g. liferay.com)")
-	domain2 := flag.String("domain2", "", "Secondary wildcard domain (e.g. tunnel.com)")
-	token := flag.String("token", "", "Shared client auth token")
+	domainsFlag := flag.String("domains", "", "Comma-separated list of wildcard domains (e.g. liferay.com,tunnel.com)")
 	certFile := flag.String("cert", "", "Wildcard SSL certificate path")
 	keyFile := flag.String("key", "", "Wildcard SSL private key path")
 	bindAddr := flag.String("bind", "", "HTTPS gateway bind address (e.g. :443)")
@@ -30,14 +29,12 @@ func main() {
 	}
 
 	// 2. Override with command line flags if provided
-	if *domain1 != "" {
-		cfg.Domain1 = *domain1
-	}
-	if *domain2 != "" {
-		cfg.Domain2 = *domain2
-	}
-	if *token != "" {
-		cfg.AuthToken = *token
+	if *domainsFlag != "" {
+		domains := strings.Split(*domainsFlag, ",")
+		for i, d := range domains {
+			domains[i] = strings.ToLower(strings.TrimSpace(d))
+		}
+		cfg.Domains = domains
 	}
 	if *certFile != "" {
 		cfg.SSLCertFile = *certFile
@@ -53,8 +50,8 @@ func main() {
 	}
 
 	// 3. Validation
-	if cfg.Domain1 == "" && cfg.Domain2 == "" {
-		log.Println("[Warning] No public domains configured. Running in localhost-only fallback mode.")
+	if len(cfg.Domains) == 0 {
+		log.Fatalf("Fatal: No domains specified. You must provide at least one domain via configuration or LFT_DOMAINS environment variable.")
 	}
 
 	// 4. Initialize server

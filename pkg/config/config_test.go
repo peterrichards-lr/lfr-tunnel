@@ -15,12 +15,12 @@ func TestLoadServerConfig(t *testing.T) {
 	defer os.Remove(tmpFile.Name()) //nolint:errcheck
 
 	content := []byte(`
-domain1: "example.com"
-domain2: "example.org"
+domains:
+  - "example.com"
+  - "example.org"
 bind_addr: ":8443"
 http_bind_addr: ":8080"
 chisel_bind_addr: ":8082"
-auth_token: "file-secret"
 ssl_cert_file: "/path/to/cert"
 ssl_key_file: "/path/to/key"
 `)
@@ -35,18 +35,18 @@ ssl_key_file: "/path/to/key"
 		t.Fatalf("failed to load server config: %v", err)
 	}
 
-	if cfg.Domain1 != "example.com" {
-		t.Errorf("expected Domain1 to be example.com, got %s", cfg.Domain1)
+	if len(cfg.Domains) == 0 || cfg.Domains[0] != "example.com" {
+		t.Errorf("expected Domains[0] to be example.com, got %v", cfg.Domains)
 	}
 	if cfg.BindAddr != ":8443" {
 		t.Errorf("expected BindAddr to be :8443, got %s", cfg.BindAddr)
 	}
 
 	// 3. Set environment variables to override
-	os.Setenv("LFT_DOMAIN1", "env.com") //nolint:errcheck
+	os.Setenv("LFT_DOMAINS", "env.com") //nolint:errcheck
 	os.Setenv("LFT_BIND_ADDR", ":9443") //nolint:errcheck
 	defer func() {
-		os.Unsetenv("LFT_DOMAIN1")   //nolint:errcheck
+		os.Unsetenv("LFT_DOMAINS")   //nolint:errcheck
 		os.Unsetenv("LFT_BIND_ADDR") //nolint:errcheck
 	}()
 
@@ -55,8 +55,8 @@ ssl_key_file: "/path/to/key"
 		t.Fatalf("failed to reload server config: %v", err)
 	}
 
-	if cfgEnv.Domain1 != "env.com" {
-		t.Errorf("expected Domain1 override to be env.com, got %s", cfgEnv.Domain1)
+	if len(cfgEnv.Domains) == 0 || cfgEnv.Domains[0] != "env.com" {
+		t.Errorf("expected Domains override to be [env.com], got %v", cfgEnv.Domains)
 	}
 	if cfgEnv.BindAddr != ":9443" {
 		t.Errorf("expected BindAddr override to be :9443, got %s", cfgEnv.BindAddr)

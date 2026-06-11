@@ -10,31 +10,39 @@ import (
 	"gopkg.in/yaml.v3"
 )
 
+type OwnerConfig struct {
+	UserID string `yaml:"user_id"`
+	Name   string `yaml:"name"`
+	Role   string `yaml:"role"`
+}
+
+type SMTPServerConfig struct {
+	Host        string `yaml:"host"`
+	Port        int    `yaml:"port"`
+	Username    string `yaml:"username"`
+	Password    string `yaml:"password"`
+	FromAddress string `yaml:"from_address"`
+}
+
 // ServerConfig holds configuration settings for the lfr-tunneld server.
 type ServerConfig struct {
-	Domain1                string        `yaml:"domain1"`
-	Domain2                string        `yaml:"domain2"`
-	BindAddr               string        `yaml:"bind_addr"`
-	HTTPBindAddr           string        `yaml:"http_bind_addr"`
-	ChiselBindAddr         string        `yaml:"chisel_bind_addr"`
-	AuthToken              string        `yaml:"auth_token"`
-	SSLCertFile            string        `yaml:"ssl_cert_file"`
-	SSLKeyFile             string        `yaml:"ssl_key_file"`
-	DBPath                 string        `yaml:"db_path"`
-	SMTPHost               string        `yaml:"smtp_host"`
-	SMTPPort               int           `yaml:"smtp_port"`
-	SMTPUsername           string        `yaml:"smtp_username"`
-	SMTPPassword           string        `yaml:"smtp_password"`
-	SMTPFromAddress        string        `yaml:"smtp_from_address"`
-	AdminNotificationEmail string        `yaml:"admin_notification_email"`
-	InsecureSkipVerify     bool          `yaml:"insecure_skip_verify"`
-	OwnerEmail             string        `yaml:"owner_email"`
-	AllowedEmailDomains    []string      `yaml:"allowed_email_domains"`
-	IPBlacklist            []string      `yaml:"ip_blacklist"`
-	MaxTunnelRateLimit     int           `yaml:"max_tunnel_rate_limit"`
-	EnableUserPortal       bool          `yaml:"enable_user_portal"`
-	PortalSessionDuration  time.Duration `yaml:"portal_session_duration"`
-	MinClientVersion       string        `yaml:"min_client_version"`
+	Domains                []string         `yaml:"domains"`
+	BindAddr               string           `yaml:"bind_addr"`
+	HTTPBindAddr           string           `yaml:"http_bind_addr"`
+	ChiselBindAddr         string           `yaml:"chisel_bind_addr"`
+	SSLCertFile            string           `yaml:"ssl_cert_file"`
+	SSLKeyFile             string           `yaml:"ssl_key_file"`
+	DBPath                 string           `yaml:"db_path"`
+	SMTPServer             SMTPServerConfig `yaml:"smtp_server"`
+	AdminNotificationEmail string           `yaml:"admin_notification_email"`
+	InsecureSkipVerify     bool             `yaml:"insecure_skip_verify"`
+	Owner                  OwnerConfig      `yaml:"owner"`
+	AllowedEmailDomains    []string         `yaml:"allowed_email_domains"`
+	IPBlacklist            []string         `yaml:"ip_blacklist"`
+	MaxTunnelRateLimit     int              `yaml:"max_tunnel_rate_limit"`
+	EnableUserPortal       bool             `yaml:"enable_user_portal"`
+	PortalSessionDuration  time.Duration    `yaml:"portal_session_duration"`
+	MinClientVersion       string           `yaml:"min_client_version"`
 
 	// OIDC/SSO configuration
 	OIDCClientID     string `yaml:"oidc_client_id"`
@@ -91,11 +99,12 @@ func LoadServerConfig(path string) (*ServerConfig, error) {
 	}
 
 	// Environment variable overrides
-	if val := os.Getenv("LFT_DOMAIN1"); val != "" {
-		cfg.Domain1 = val
-	}
-	if val := os.Getenv("LFT_DOMAIN2"); val != "" {
-		cfg.Domain2 = val
+	if val := os.Getenv("LFT_DOMAINS"); val != "" {
+		domains := strings.Split(val, ",")
+		for i, d := range domains {
+			domains[i] = strings.ToLower(strings.TrimSpace(d))
+		}
+		cfg.Domains = domains
 	}
 	if val := os.Getenv("LFT_BIND_ADDR"); val != "" {
 		cfg.BindAddr = val
@@ -105,9 +114,6 @@ func LoadServerConfig(path string) (*ServerConfig, error) {
 	}
 	if val := os.Getenv("LFT_CHISEL_BIND_ADDR"); val != "" {
 		cfg.ChiselBindAddr = val
-	}
-	if val := os.Getenv("LFT_AUTH_TOKEN"); val != "" {
-		cfg.AuthToken = val
 	}
 	if val := os.Getenv("LFT_SSL_CERT"); val != "" {
 		cfg.SSLCertFile = val
@@ -119,27 +125,33 @@ func LoadServerConfig(path string) (*ServerConfig, error) {
 		cfg.DBPath = val
 	}
 	if val := os.Getenv("LFT_SMTP_HOST"); val != "" {
-		cfg.SMTPHost = val
+		cfg.SMTPServer.Host = val
 	}
 	if val := os.Getenv("LFT_SMTP_PORT"); val != "" {
 		if p, err := strconv.Atoi(val); err == nil {
-			cfg.SMTPPort = p
+			cfg.SMTPServer.Port = p
 		}
 	}
 	if val := os.Getenv("LFT_SMTP_USERNAME"); val != "" {
-		cfg.SMTPUsername = val
+		cfg.SMTPServer.Username = val
 	}
 	if val := os.Getenv("LFT_SMTP_PASSWORD"); val != "" {
-		cfg.SMTPPassword = val
+		cfg.SMTPServer.Password = val
 	}
 	if val := os.Getenv("LFT_SMTP_FROM"); val != "" {
-		cfg.SMTPFromAddress = val
+		cfg.SMTPServer.FromAddress = val
 	}
 	if val := os.Getenv("LFT_ADMIN_EMAIL"); val != "" {
 		cfg.AdminNotificationEmail = val
 	}
-	if val := os.Getenv("LFT_OWNER_EMAIL"); val != "" {
-		cfg.OwnerEmail = strings.ToLower(strings.TrimSpace(val))
+	if val := os.Getenv("LFT_OWNER_USER_ID"); val != "" {
+		cfg.Owner.UserID = strings.ToLower(strings.TrimSpace(val))
+	}
+	if val := os.Getenv("LFT_OWNER_NAME"); val != "" {
+		cfg.Owner.Name = val
+	}
+	if val := os.Getenv("LFT_OWNER_ROLE"); val != "" {
+		cfg.Owner.Role = val
 	}
 	if val := os.Getenv("LFT_ALLOWED_DOMAINS"); val != "" {
 		domains := strings.Split(val, ",")

@@ -113,13 +113,13 @@ func NewServer(cfg *config.ServerConfig) (*Server, error) {
 	}
 
 	var mailSender mail.Sender
-	if cfg.SMTPHost != "" {
+	if cfg.SMTPServer.Host != "" {
 		mailSender = mail.NewSMTPClient(&mail.Config{
-			SMTPHost:           cfg.SMTPHost,
-			SMTPPort:           cfg.SMTPPort,
-			SMTPUsername:       cfg.SMTPUsername,
-			SMTPPassword:       cfg.SMTPPassword,
-			SMTPFromAddress:    cfg.SMTPFromAddress,
+			SMTPHost:           cfg.SMTPServer.Host,
+			SMTPPort:           cfg.SMTPServer.Port,
+			SMTPUsername:       cfg.SMTPServer.Username,
+			SMTPPassword:       cfg.SMTPServer.Password,
+			SMTPFromAddress:    cfg.SMTPServer.FromAddress,
 			InsecureSkipVerify: cfg.InsecureSkipVerify,
 		})
 	}
@@ -145,6 +145,29 @@ func NewServer(cfg *config.ServerConfig) (*Server, error) {
 		if list, err := srv.db.ListBlacklistedIPs(); err == nil {
 			for _, entry := range list {
 				srv.blacklist.Store(entry.IPAddress, true)
+			}
+		}
+
+		if cfg.Owner.UserID != "" {
+			ownerUser, err := srv.db.GetUserByEmail(cfg.Owner.UserID)
+			if err != nil {
+				parts := strings.SplitN(cfg.Owner.Name, " ", 2)
+				first := parts[0]
+				last := ""
+				if len(parts) > 1 {
+					last = parts[1]
+				}
+				_ = srv.db.CreateUser(&db.User{
+					ID:        cfg.Owner.UserID,
+					Email:     cfg.Owner.UserID,
+					FirstName: first,
+					LastName:  last,
+					Role:      "owner",
+					Status:    "approved",
+				})
+			} else if ownerUser.Role != "owner" {
+				ownerUser.Role = "owner"
+				_ = srv.db.UpdateUser(ownerUser)
 			}
 		}
 	}
@@ -218,10 +241,11 @@ func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	// Identify if host is a control domain
 	isControl := false
 	controlDomains := []string{
-		strings.ToLower(s.cfg.Domain1),
-		strings.ToLower(s.cfg.Domain2),
 		"localhost",
 		"127.0.0.1",
+	}
+	for _, d := range s.cfg.Domains {
+		controlDomains = append(controlDomains, strings.ToLower(d))
 	}
 
 	for _, d := range controlDomains {
@@ -446,13 +470,8 @@ func (s *Server) handleTunnelStatus(w http.ResponseWriter, r *http.Request) {
 // handleDomains responds with the supported root domains.
 func (s *Server) handleDomains(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/json")
-	var domains []string
-	if s.cfg.Domain1 != "" {
-		domains = append(domains, s.cfg.Domain1)
-	}
-	if s.cfg.Domain2 != "" {
-		domains = append(domains, s.cfg.Domain2)
-	}
+	domains := make([]string, len(s.cfg.Domains))
+	copy(domains, s.cfg.Domains)
 	if len(domains) == 0 {
 		domains = append(domains, "localhost")
 	}
@@ -534,7 +553,8 @@ func (s *Server) Start() error {
 	if s.cfg.SSLCertFile != "" && s.cfg.SSLKeyFile != "" {
 		// HTTP redirect server
 		go func() {
-			log.Printf("[Server] Starting HTTP redirect gateway on %s...", s.cfg.HTTPBindAddr)
+			log.Printf("[Server] Loaded config: Bind=%s, HTTPBind=%s, Domains=%v, DB=%s",
+				s.cfg.BindAddr, s.cfg.HTTPBindAddr, s.cfg.Domains, s.cfg.DBPath)
 			redirectSrv := &http.Server{
 				Addr: s.cfg.HTTPBindAddr,
 				Handler: http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -903,23 +923,19 @@ func (s *Server) getActiveDomainsForRequest(r *http.Request) []string {
 	host = strings.ToLower(host)
 
 	var matchedDomain string
-	if s.cfg.Domain1 != "" && (strings.Contains(host, strings.ToLower(s.cfg.Domain1)) || host == strings.ToLower(s.cfg.Domain1)) {
-		matchedDomain = s.cfg.Domain1
-	} else if s.cfg.Domain2 != "" && (strings.Contains(host, strings.ToLower(s.cfg.Domain2)) || host == strings.ToLower(s.cfg.Domain2)) {
-		matchedDomain = s.cfg.Domain2
+	for _, d := range s.cfg.Domains {
+		if strings.Contains(host, strings.ToLower(d)) || host == strings.ToLower(d) {
+			matchedDomain = d
+			break
+		}
 	}
 
 	if matchedDomain != "" {
 		return []string{matchedDomain}
 	}
 
-	var activeDomains []string
-	if s.cfg.Domain1 != "" {
-		activeDomains = append(activeDomains, s.cfg.Domain1)
-	}
-	if s.cfg.Domain2 != "" {
-		activeDomains = append(activeDomains, s.cfg.Domain2)
-	}
+	activeDomains := make([]string, len(s.cfg.Domains))
+	copy(activeDomains, s.cfg.Domains)
 	if len(activeDomains) == 0 {
 		activeDomains = append(activeDomains, "localhost")
 	}
@@ -954,8 +970,8 @@ func (s *Server) isValidToken(token string) bool {
 		}
 	}
 
-	// Fallback to server config shared token
-	return s.cfg.AuthToken != "" && token == s.cfg.AuthToken
+	// Legacy config token removed
+	return false
 }
 
 func (s *Server) writeAudit(actorID, action, targetType, targetID string, details string, r *http.Request) {
@@ -991,7 +1007,7 @@ func (s *Server) requireAdmin(w http.ResponseWriter, r *http.Request) (string, s
 			if time.Now().Before(sessionData.ExpiresAt) {
 				actorEmail = sessionData.Email
 				actorRole = "admin"
-				if s.cfg.OwnerEmail != "" && strings.EqualFold(actorEmail, s.cfg.OwnerEmail) {
+				if s.cfg.Owner.UserID != "" && strings.EqualFold(actorEmail, s.cfg.Owner.UserID) {
 					actorRole = "owner"
 				}
 				authenticated = true
@@ -1023,11 +1039,11 @@ func (s *Server) requireAdmin(w http.ResponseWriter, r *http.Request) (string, s
 				now := time.Now().UTC()
 				if pat.RevokedAt == nil && (pat.ExpiresAt == nil || pat.ExpiresAt.After(now)) {
 					user, err := s.db.GetUser(pat.UserID)
-					if err == nil && user.Status == "approved" && user.Role == "admin" {
+					if err == nil && user.Status == "approved" && (user.Role == "admin" || user.Role == "owner") {
 						go func(patID int64) { _ = s.db.UpdatePATUsed(patID) }(pat.ID)
 						actorEmail = user.Email
 						actorRole = "admin"
-						if s.cfg.OwnerEmail != "" && strings.EqualFold(actorEmail, s.cfg.OwnerEmail) {
+						if s.cfg.Owner.UserID != "" && strings.EqualFold(actorEmail, s.cfg.Owner.UserID) {
 							actorRole = "owner"
 						}
 						authenticated = true
@@ -1131,12 +1147,12 @@ func (s *Server) handleAdminMagicLink(w http.ResponseWriter, r *http.Request) {
 
 	req.Email = strings.ToLower(strings.TrimSpace(req.Email))
 
-	isOwner := s.cfg.OwnerEmail != "" && req.Email == s.cfg.OwnerEmail
+	isOwner := s.cfg.Owner.UserID != "" && req.Email == s.cfg.Owner.UserID
 	var isAdmin bool
 
 	if !isOwner && s.db != nil {
 		user, err := s.db.GetUserByEmail(req.Email)
-		if err == nil && user.Status == "approved" && user.Role == "admin" {
+		if err == nil && user.Status == "approved" && (user.Role == "admin" || user.Role == "owner") {
 			isAdmin = true
 		}
 	}
@@ -1576,10 +1592,10 @@ func (s *Server) handleAdminSettings(w http.ResponseWriter, r *http.Request, act
 			"alert_notify_registration":   notifyReg,
 			"alert_notify_blacklist":      notifyBan,
 			"alert_notify_tunnel_offline": notifyOffline,
-			"owner_email":                 s.cfg.OwnerEmail,
+			"owner_email":                 s.cfg.Owner.UserID,
 			"allowed_email_domains":       s.cfg.AllowedEmailDomains,
-			"smtp_host":                   s.cfg.SMTPHost,
-			"smtp_from":                   s.cfg.SMTPFromAddress,
+			"smtp_host":                   s.cfg.SMTPServer.Host,
+			"smtp_from":                   s.cfg.SMTPServer.FromAddress,
 			"admin_notification_email":    s.cfg.AdminNotificationEmail,
 		})
 		return

@@ -110,66 +110,6 @@ func NewServer(cfg *config.ServerConfig) (*Server, error) {
 		if err != nil {
 			return nil, fmt.Errorf("failed to open database at %s: %v", cfg.DBPath, err)
 		}
-
-		// Seed statically provisioned developer tokens
-		for _, st := range cfg.StaticTokens {
-			st.UserID = strings.ToLower(strings.TrimSpace(st.UserID))
-			st.Token = strings.TrimSpace(st.Token)
-			if st.UserID == "" || st.Token == "" {
-				continue
-			}
-
-			// 1. Ensure User exists and is approved
-			role := st.Role
-			if role == "" {
-				role = "user"
-			}
-			_, err := database.GetUser(st.UserID)
-			if err == db.ErrNotFound {
-				log.Printf("[Server] Seeding static user: %s (role: %s)", st.UserID, role)
-				userModel := &db.User{
-					ID:     st.UserID,
-					Email:  st.UserID,
-					Role:   role,
-					Status: "approved",
-				}
-				if err := database.CreateUser(userModel); err != nil {
-					return nil, fmt.Errorf("failed to seed static user %s: %v", st.UserID, err)
-				}
-			} else if err != nil {
-				return nil, fmt.Errorf("failed to check static user %s: %v", st.UserID, err)
-			}
-
-			// 2. Ensure Personal Access Token exists
-			hashBytes := sha256.Sum256([]byte(st.Token))
-			tokenHash := hex.EncodeToString(hashBytes[:])
-
-			_, err = database.GetPATByHash(tokenHash)
-			if err == db.ErrNotFound {
-				name := st.Name
-				if name == "" {
-					name = "Static Config Token"
-				}
-				log.Printf("[Server] Seeding static token for user: %s (name: %s)", st.UserID, name)
-
-				tokenPrefix := st.Token
-				if len(tokenPrefix) > 12 {
-					tokenPrefix = tokenPrefix[:12]
-				}
-
-				patModel := &db.PersonalAccessToken{
-					UserID:      st.UserID,
-					TokenHash:   tokenHash,
-					TokenPrefix: tokenPrefix,
-					Name:        name,
-				}
-				if err := database.CreatePAT(patModel); err != nil {
-					return nil, fmt.Errorf("failed to seed static token for %s: %v", st.UserID, err)
-				}
-			} else if err != nil {
-				return nil, fmt.Errorf("failed to check static token for %s: %v", st.UserID, err)
-			}
-		}
 	}
 
 	var mailSender mail.Sender
@@ -341,6 +281,19 @@ func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 
 		if r.Method == http.MethodGet && r.URL.Path == "/api/verify-email" {
 			s.handleVerifyEmail(w, r)
+			return
+		}
+
+		if r.Method == http.MethodPost && r.URL.Path == "/api/admin/auth/magic-link" {
+			s.handleAdminMagicLink(w, r)
+			return
+		}
+		if r.Method == http.MethodPost && r.URL.Path == "/api/admin/auth/verify" {
+			s.handleAdminVerify(w, r)
+			return
+		}
+		if r.Method == http.MethodPost && r.URL.Path == "/api/admin/auth/logout" {
+			s.handleAdminLogout(w, r)
 			return
 		}
 
@@ -638,6 +591,25 @@ func (s *Server) handleRegisterRequest(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusBadRequest)
 		_ = json.NewEncoder(w).Encode(map[string]string{"error": "invalid email address"})
 		return
+	}
+
+	if len(s.cfg.AllowedEmailDomains) > 0 {
+		parts := strings.Split(req.Email, "@")
+		if len(parts) == 2 {
+			domain := parts[1]
+			allowed := false
+			for _, d := range s.cfg.AllowedEmailDomains {
+				if domain == d {
+					allowed = true
+					break
+				}
+			}
+			if !allowed {
+				w.WriteHeader(http.StatusForbidden)
+				_ = json.NewEncoder(w).Encode(map[string]string{"error": "email domain not allowed by server configuration"})
+				return
+			}
+		}
 	}
 
 	// Check if user already exists
@@ -973,41 +945,6 @@ func (s *Server) isValidToken(token string) bool {
 	return s.cfg.AuthToken != "" && token == s.cfg.AuthToken
 }
 
-// isAdminToken checks if the provided token belongs to an admin user or is the static admin token.
-func (s *Server) isAdminToken(token string) (string, bool) {
-	if token == "" {
-		return "", false
-	}
-	if s.db != nil {
-		hashBytes := sha256.Sum256([]byte(token))
-		tokenHash := hex.EncodeToString(hashBytes[:])
-
-		pat, err := s.db.GetPATByHash(tokenHash)
-		if err == nil {
-			now := time.Now().UTC()
-			if pat.RevokedAt == nil && (pat.ExpiresAt == nil || pat.ExpiresAt.After(now)) {
-				user, err := s.db.GetUser(pat.UserID)
-				if err == nil && user.Status == "approved" && user.Role == "admin" {
-					// Async update last used
-					go func(patID int64) {
-						_ = s.db.UpdatePATUsed(patID)
-					}(pat.ID)
-					return user.Email, true
-				}
-			}
-		}
-	}
-
-	// Check static tokens for admin role
-	for _, st := range s.cfg.StaticTokens {
-		if st.Token == token && st.Role == "admin" {
-			return st.UserID, true
-		}
-	}
-
-	return "", false
-}
-
 func (s *Server) writeAudit(actorID, action, targetType, targetID string, details string, r *http.Request) {
 	if s.db == nil {
 		return
@@ -1028,24 +965,74 @@ func (s *Server) writeAudit(actorID, action, targetType, targetID string, detail
 	}()
 }
 
-func (s *Server) requireAdmin(w http.ResponseWriter, r *http.Request) (string, bool) {
-	token := r.Header.Get("Authorization")
-	if strings.HasPrefix(strings.ToLower(token), "bearer ") {
-		token = token[7:]
-	} else {
-		token = r.URL.Query().Get("token")
+func (s *Server) requireAdmin(w http.ResponseWriter, r *http.Request) (string, string, bool) {
+	var actorEmail string
+	var actorRole string
+	var authenticated bool
+
+	// 1. Check HTTP-only cookie
+	cookie, err := r.Cookie("lfr_admin_session")
+	if err == nil && cookie.Value != "" {
+		if val, ok := s.portalMap.Load("admin_session_" + cookie.Value); ok {
+			sessionData := val.(PortalSessionData)
+			if time.Now().Before(sessionData.ExpiresAt) {
+				actorEmail = sessionData.Email
+				actorRole = "admin"
+				if s.cfg.OwnerEmail != "" && strings.EqualFold(actorEmail, s.cfg.OwnerEmail) {
+					actorRole = "owner"
+				}
+				authenticated = true
+
+				// Optional: sliding expiration
+				sessionData.ExpiresAt = time.Now().Add(s.cfg.PortalSessionDuration)
+				s.portalMap.Store("admin_session_"+cookie.Value, sessionData)
+			} else {
+				s.portalMap.Delete("admin_session_" + cookie.Value)
+			}
+		}
 	}
 
-	actor, ok := s.isAdminToken(token)
-	if !ok {
-		http.Error(w, `{"error":"Unauthorized: admin access required"}`, http.StatusUnauthorized)
-		return "", false
+	// 2. Fallback to API Token (PAT)
+	if !authenticated {
+		token := r.Header.Get("Authorization")
+		if strings.HasPrefix(strings.ToLower(token), "bearer ") {
+			token = token[7:]
+		} else {
+			token = r.URL.Query().Get("token")
+		}
+
+		if token != "" && strings.HasPrefix(token, "lfr_pat_") && s.db != nil {
+			hashBytes := sha256.Sum256([]byte(token))
+			tokenHash := hex.EncodeToString(hashBytes[:])
+
+			pat, err := s.db.GetPATByHash(tokenHash)
+			if err == nil {
+				now := time.Now().UTC()
+				if pat.RevokedAt == nil && (pat.ExpiresAt == nil || pat.ExpiresAt.After(now)) {
+					user, err := s.db.GetUser(pat.UserID)
+					if err == nil && user.Status == "approved" && user.Role == "admin" {
+						go func(patID int64) { _ = s.db.UpdatePATUsed(patID) }(pat.ID)
+						actorEmail = user.Email
+						actorRole = "admin"
+						if s.cfg.OwnerEmail != "" && strings.EqualFold(actorEmail, s.cfg.OwnerEmail) {
+							actorRole = "owner"
+						}
+						authenticated = true
+					}
+				}
+			}
+		}
 	}
-	return actor, true
+
+	if !authenticated {
+		http.Error(w, `{"error":"Unauthorized: admin access required"}`, http.StatusUnauthorized)
+		return "", "", false
+	}
+	return actorEmail, actorRole, true
 }
 
 func (s *Server) handleAdminEndpoints(w http.ResponseWriter, r *http.Request) {
-	actor, ok := s.requireAdmin(w, r)
+	actor, role, ok := s.requireAdmin(w, r)
 	if !ok {
 		return
 	}
@@ -1063,7 +1050,7 @@ func (s *Server) handleAdminEndpoints(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if r.Method == http.MethodPatch && strings.HasPrefix(r.URL.Path, "/api/admin/users/") {
-		s.handleAdminPatchUser(w, r, actor)
+		s.handleAdminPatchUser(w, r, actor, role)
 		return
 	}
 
@@ -1102,7 +1089,142 @@ func (s *Server) handleAdminEndpoints(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	if r.URL.Path == "/api/admin/auth/magic-link" && r.Method == http.MethodPost {
+		s.handleAdminMagicLink(w, r)
+		return
+	}
+
+	if r.URL.Path == "/api/admin/auth/verify" && r.Method == http.MethodPost {
+		s.handleAdminVerify(w, r)
+		return
+	}
+
+	if r.URL.Path == "/api/admin/auth/logout" && r.Method == http.MethodPost {
+		s.handleAdminLogout(w, r)
+		return
+	}
+
 	http.NotFound(w, r)
+}
+
+func (s *Server) handleAdminMagicLink(w http.ResponseWriter, r *http.Request) {
+	var req struct {
+		Email string `json:"email"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		respondJSON(w, http.StatusBadRequest, map[string]string{"error": "Invalid request"})
+		return
+	}
+
+	req.Email = strings.ToLower(strings.TrimSpace(req.Email))
+
+	isOwner := s.cfg.OwnerEmail != "" && req.Email == s.cfg.OwnerEmail
+	var isAdmin bool
+
+	if !isOwner && s.db != nil {
+		user, err := s.db.GetUserByEmail(req.Email)
+		if err == nil && user.Status == "approved" && user.Role == "admin" {
+			isAdmin = true
+		}
+	}
+
+	if !isOwner && !isAdmin {
+		// Do not leak existence
+		respondJSON(w, http.StatusOK, map[string]string{"status": "ok"})
+		return
+	}
+
+	magicToken, _ := generateSecureToken()
+	clientIP := getClientIP(r)
+
+	sessionData := PortalSessionData{
+		Email:     req.Email,
+		ExpiresAt: time.Now().Add(15 * time.Minute),
+		ClientIP:  clientIP,
+	}
+	s.portalMap.Store("admin_magic_"+magicToken, sessionData)
+
+	s.writeAudit(req.Email, "admin.magic_link_requested", "system", "admin", "Requested admin dashboard login link", r)
+
+	if s.mailSender != nil {
+		host := r.Host
+		scheme := "http"
+		if r.TLS != nil || r.Header.Get("X-Forwarded-Proto") == "https" {
+			scheme = "https"
+		}
+		link := fmt.Sprintf("%s://%s/admin?token=%s", scheme, host, magicToken)
+		body := fmt.Sprintf("<p>You requested a magic link to log into the Liferay Tunnel Admin Dashboard.</p>"+
+			"<p><strong>IP Address:</strong> %s</p>"+
+			"<p>This link expires in 15 minutes.</p>"+
+			"<p><a href=\"%s\">Log In to Admin Dashboard</a></p>", clientIP, link)
+		go s.mailSender.Send(req.Email, "Liferay Tunnel - Admin Login", body) //nolint:errcheck
+	} else {
+		log.Printf("[Admin] Magic Link for %s: /admin?token=%s", req.Email, magicToken)
+	}
+
+	respondJSON(w, http.StatusOK, map[string]string{"status": "ok"})
+}
+
+func (s *Server) handleAdminVerify(w http.ResponseWriter, r *http.Request) {
+	var req struct {
+		Token string `json:"token"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		respondJSON(w, http.StatusBadRequest, map[string]string{"error": "Invalid request"})
+		return
+	}
+
+	val, ok := s.portalMap.LoadAndDelete("admin_magic_" + req.Token)
+	if !ok {
+		respondJSON(w, http.StatusUnauthorized, map[string]string{"error": "Invalid or expired token"})
+		return
+	}
+
+	sessionData := val.(PortalSessionData)
+	if time.Now().After(sessionData.ExpiresAt) {
+		respondJSON(w, http.StatusUnauthorized, map[string]string{"error": "Token has expired"})
+		return
+	}
+
+	email := sessionData.Email
+	sessionToken, _ := generateSecureToken()
+
+	s.portalMap.Store("admin_session_"+sessionToken, PortalSessionData{
+		Email:     email,
+		ExpiresAt: time.Now().Add(s.cfg.PortalSessionDuration),
+	})
+
+	s.writeAudit(email, "admin.login", "system", "admin", "Admin logged into dashboard via magic link", r)
+
+	cookie := &http.Cookie{
+		Name:     "lfr_admin_session",
+		Value:    sessionToken,
+		Path:     "/",
+		Expires:  time.Now().Add(s.cfg.PortalSessionDuration),
+		HttpOnly: true,
+		Secure:   r.TLS != nil || r.Header.Get("X-Forwarded-Proto") == "https",
+		SameSite: http.SameSiteStrictMode,
+	}
+	http.SetCookie(w, cookie)
+
+	respondJSON(w, http.StatusOK, map[string]string{"status": "ok"})
+}
+
+func (s *Server) handleAdminLogout(w http.ResponseWriter, r *http.Request) {
+	cookie, err := r.Cookie("lfr_admin_session")
+	if err == nil {
+		s.portalMap.Delete("admin_session_" + cookie.Value)
+	}
+	http.SetCookie(w, &http.Cookie{
+		Name:     "lfr_admin_session",
+		Value:    "",
+		Path:     "/",
+		Expires:  time.Unix(0, 0),
+		HttpOnly: true,
+		Secure:   r.TLS != nil || r.Header.Get("X-Forwarded-Proto") == "https",
+		SameSite: http.SameSiteStrictMode,
+	})
+	respondJSON(w, http.StatusOK, map[string]string{"status": "ok"})
 }
 
 func (s *Server) handleAdminListUsers(w http.ResponseWriter, r *http.Request, actor string) {
@@ -1155,7 +1277,7 @@ func (s *Server) handleAdminGetUser(w http.ResponseWriter, r *http.Request, acto
 	_ = json.NewEncoder(w).Encode(resp)
 }
 
-func (s *Server) handleAdminPatchUser(w http.ResponseWriter, r *http.Request, actor string) {
+func (s *Server) handleAdminPatchUser(w http.ResponseWriter, r *http.Request, actor, actorRole string) {
 	if s.db == nil {
 		http.Error(w, `{"error":"Database not configured"}`, http.StatusNotImplemented)
 		return
@@ -1188,6 +1310,10 @@ func (s *Server) handleAdminPatchUser(w http.ResponseWriter, r *http.Request, ac
 	details := make(map[string]interface{})
 
 	if req.Role != nil {
+		if actorRole != "owner" {
+			http.Error(w, `{"error":"Only the Owner can change user roles"}`, http.StatusForbidden)
+			return
+		}
 		if *req.Role == "user" && user.Role == "admin" {
 			// Check if this is the last admin
 			count, err := s.db.CountAdmins()
@@ -1408,10 +1534,15 @@ func (s *Server) handleAdminSettings(w http.ResponseWriter, r *http.Request, act
 			notifyOffline = "false"
 		}
 
-		_ = json.NewEncoder(w).Encode(map[string]string{
+		_ = json.NewEncoder(w).Encode(map[string]interface{}{
 			"alert_notify_registration":   notifyReg,
 			"alert_notify_blacklist":      notifyBan,
 			"alert_notify_tunnel_offline": notifyOffline,
+			"owner_email":                 s.cfg.OwnerEmail,
+			"allowed_email_domains":       s.cfg.AllowedEmailDomains,
+			"smtp_host":                   s.cfg.SMTPHost,
+			"smtp_from":                   s.cfg.SMTPFromAddress,
+			"admin_notification_email":    s.cfg.AdminNotificationEmail,
 		})
 		return
 	}

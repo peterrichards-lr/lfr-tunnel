@@ -2,6 +2,8 @@ package server
 
 import (
 	"bytes"
+	"crypto/sha256"
+	"encoding/hex"
 	"encoding/json"
 	"fmt"
 	"net/http"
@@ -220,16 +222,10 @@ func TestServer_CheckSubdomain(t *testing.T) {
 
 	dbPath := filepath.Join(tmpDir, "test.db")
 	cfgDb := &config.ServerConfig{
-		Domain1:   "example.com",
-		DBPath:    dbPath,
-		AuthToken: "mysecret",
-		StaticTokens: []config.StaticTokenConfig{
-			{
-				Token:  "peter-pat-token-abc",
-				UserID: "peter.richards@liferay.com",
-				Role:   "admin",
-			},
-		},
+		Domain1:    "example.com",
+		DBPath:     dbPath,
+		AuthToken:  "mysecret",
+		OwnerEmail: "peter.richards@liferay.com",
 	}
 
 	srvDb, err := NewServer(cfgDb)
@@ -238,9 +234,23 @@ func TestServer_CheckSubdomain(t *testing.T) {
 	}
 	defer srvDb.Stop()
 
+	// Seed user and PAT for check-subdomain test
+	_ = srvDb.db.CreateUser(&db.User{
+		ID:     "peter.richards@liferay.com",
+		Email:  "peter.richards@liferay.com",
+		Role:   "admin",
+		Status: "approved",
+	})
+	patHashBytes := sha256.Sum256([]byte("lfr_pat_peter_token_abc"))
+	_ = srvDb.db.CreatePAT(&db.PersonalAccessToken{
+		UserID:      "peter.richards@liferay.com",
+		TokenHash:   hex.EncodeToString(patHashBytes[:]),
+		TokenPrefix: "lfr_pat_pete",
+	})
+
 	// Query check subdomain using the seeded PAT token
 	req = httptest.NewRequest("GET", "http://example.com/api/check-subdomain?subdomain=beta-dev", nil)
-	req.Header.Set("Authorization", "Bearer peter-pat-token-abc")
+	req.Header.Set("Authorization", "Bearer lfr_pat_peter_token_abc")
 	req.Host = "example.com"
 	rec = httptest.NewRecorder()
 	srvDb.ServeHTTP(rec, req)
@@ -441,89 +451,6 @@ func TestServer_RegistrationFlow(t *testing.T) {
 	}
 }
 
-func TestServer_StaticTokenProvisioning(t *testing.T) {
-	tmpDir, err := os.MkdirTemp("", "lfr-tunnel-static-test-*")
-	if err != nil {
-		t.Fatalf("failed to create temp dir: %v", err)
-	}
-	defer os.RemoveAll(tmpDir) //nolint:errcheck
-
-	dbPath := filepath.Join(tmpDir, "test.db")
-
-	cfg := &config.ServerConfig{
-		Domain1: "example.com",
-		DBPath:  dbPath,
-		StaticTokens: []config.StaticTokenConfig{
-			{
-				Token:  "dummy_static_token_xyz_value",
-				UserID: "st-user@liferay.com",
-				Name:   "Static Test User Token",
-				Role:   "admin",
-			},
-		},
-	}
-
-	// 1. Initial startup (Should seed token)
-	srv, err := NewServer(cfg)
-	if err != nil {
-		t.Fatalf("failed to create server: %v", err)
-	}
-
-	// Verify user is created and approved
-	user, err := srv.db.GetUser("st-user@liferay.com")
-	if err != nil {
-		t.Fatalf("failed to find seeded user: %v", err)
-	}
-	if user.Status != "approved" || user.Role != "admin" {
-		t.Errorf("seeded user role/status mismatch, got status=%s, role=%s", user.Status, user.Role)
-	}
-
-	// 2. Validate client registration using seeded static token
-	registerPayload, _ := json.Marshal(RegisterRequest{
-		SubdomainPrefix: "static-tunnel",
-		Ports:           []PortMapping{{LocalPort: 8080}},
-		AuthToken:       "dummy_static_token_xyz_value",
-	})
-	registerReq := httptest.NewRequest("POST", "http://example.com/api/register", bytes.NewReader(registerPayload))
-	registerReq.Host = "example.com"
-	registerRec := httptest.NewRecorder()
-	srv.ServeHTTP(registerRec, registerReq)
-
-	if registerRec.Code != http.StatusOK {
-		t.Errorf("expected 200 OK for tunnel registration with static token, got %d, body: %s", registerRec.Code, registerRec.Body.String())
-	}
-	time.Sleep(10 * time.Millisecond)
-	srv.Stop()
-
-	// 3. Second startup with same DB (Idempotency Check)
-	srv2, err := NewServer(cfg)
-	if err != nil {
-		t.Fatalf("failed to restart server: %v", err)
-	}
-	defer func() {
-		time.Sleep(10 * time.Millisecond)
-		srv2.Stop()
-	}()
-
-	// Ensure user is still present and there is only 1 user in DB
-	users, err := srv2.db.ListUsers()
-	if err != nil {
-		t.Fatalf("failed to list users: %v", err)
-	}
-	if len(users) != 1 {
-		t.Errorf("expected exactly 1 user, got %d", len(users))
-	}
-
-	// Test registration still succeeds
-	registerRec2 := httptest.NewRecorder()
-	registerReq2 := httptest.NewRequest("POST", "http://example.com/api/register", bytes.NewReader(registerPayload))
-	registerReq2.Host = "example.com"
-	srv2.ServeHTTP(registerRec2, registerReq2)
-	if registerRec2.Code != http.StatusOK {
-		t.Errorf("expected 200 OK after restart, got %d", registerRec2.Code)
-	}
-}
-
 func TestServer_DomainSeparation(t *testing.T) {
 	cfg := &config.ServerConfig{
 		Domain1:   "example.se",
@@ -609,12 +536,9 @@ func TestAdminEndpoints(t *testing.T) {
 
 	dbPath := filepath.Join(tmpDir, "test.db")
 	cfg := &config.ServerConfig{
-		Domain1: "example.com",
-		DBPath:  dbPath,
-		StaticTokens: []config.StaticTokenConfig{
-			{Token: "admin-static-token", UserID: "admin@liferay.com", Role: "admin"},
-			{Token: "user-static-token", UserID: "user@liferay.com", Role: "user"},
-		},
+		Domain1:    "example.com",
+		DBPath:     dbPath,
+		OwnerEmail: "admin@liferay.com",
 	}
 
 	srv, err := NewServer(cfg)
@@ -622,6 +546,26 @@ func TestAdminEndpoints(t *testing.T) {
 		t.Fatalf("failed to create server: %v", err)
 	}
 	defer srv.Stop()
+
+	userAdmin := &db.User{
+		ID:     "admin@liferay.com",
+		Email:  "admin@liferay.com",
+		Role:   "admin",
+		Status: "approved",
+	}
+	_ = srv.db.CreateUser(userAdmin)
+
+	adminToken := "lfr_pat_admin_static_token"
+	adminHashBytes := sha256.Sum256([]byte(adminToken))
+	_ = srv.db.CreatePAT(&db.PersonalAccessToken{
+		UserID:      "admin@liferay.com",
+		TokenHash:   hex.EncodeToString(adminHashBytes[:]),
+		TokenPrefix: "lfr_pat_admi",
+		Name:        "admin token",
+	})
+
+	userToken := "lfr_pat_user_static_token"
+	userHashBytes := sha256.Sum256([]byte(userToken))
 
 	// Seed DB with a test user
 	user := &db.User{
@@ -634,8 +578,8 @@ func TestAdminEndpoints(t *testing.T) {
 
 	pat := &db.PersonalAccessToken{
 		UserID:      "u1",
-		TokenHash:   "testhash",
-		TokenPrefix: "testprefix",
+		TokenHash:   hex.EncodeToString(userHashBytes[:]),
+		TokenPrefix: "lfr_pat_user",
 		Name:        "test token",
 	}
 	_ = srv.db.CreatePAT(pat)
@@ -650,7 +594,7 @@ func TestAdminEndpoints(t *testing.T) {
 
 	// 2. Test unauthorized access (Non-admin token)
 	req2 := httptest.NewRequest("GET", "http://tunnel.example.com/api/admin/users", nil)
-	req2.Header.Set("Authorization", "Bearer user-static-token")
+	req2.Header.Set("Authorization", "Bearer lfr_pat_user_static_token")
 	rec2 := httptest.NewRecorder()
 	srv.ServeHTTP(rec2, req2)
 	if rec2.Code != http.StatusUnauthorized {
@@ -659,7 +603,7 @@ func TestAdminEndpoints(t *testing.T) {
 
 	// 3. Test list users (Admin)
 	req3 := httptest.NewRequest("GET", "http://tunnel.example.com/api/admin/users", nil)
-	req3.Header.Set("Authorization", "Bearer admin-static-token")
+	req3.Header.Set("Authorization", "Bearer lfr_pat_admin_static_token")
 	rec3 := httptest.NewRecorder()
 	srv.ServeHTTP(rec3, req3)
 	if rec3.Code != http.StatusOK {
@@ -669,7 +613,7 @@ func TestAdminEndpoints(t *testing.T) {
 	// 4. Test patch user
 	patchBody := `{"role":"admin"}`
 	req4 := httptest.NewRequest("PATCH", "http://tunnel.example.com/api/admin/users/testuser@liferay.com", strings.NewReader(patchBody))
-	req4.Header.Set("Authorization", "Bearer admin-static-token")
+	req4.Header.Set("Authorization", "Bearer lfr_pat_admin_static_token")
 	rec4 := httptest.NewRecorder()
 	srv.ServeHTTP(rec4, req4)
 	if rec4.Code != http.StatusOK {
@@ -684,7 +628,7 @@ func TestAdminEndpoints(t *testing.T) {
 	// Sleep briefly to ensure async audit log write completes
 	time.Sleep(100 * time.Millisecond)
 	req5 := httptest.NewRequest("GET", "http://tunnel.example.com/api/admin/audit?action=user.role_changed", nil)
-	req5.Header.Set("Authorization", "Bearer admin-static-token")
+	req5.Header.Set("Authorization", "Bearer lfr_pat_admin_static_token")
 	rec5 := httptest.NewRecorder()
 	srv.ServeHTTP(rec5, req5)
 	if rec5.Code != http.StatusOK {
@@ -698,14 +642,14 @@ func TestAdminEndpoints(t *testing.T) {
 
 	// 6. Test delete PAT
 	req6 := httptest.NewRequest("DELETE", fmt.Sprintf("http://tunnel.example.com/api/admin/tokens/%d", pat.ID), nil)
-	req6.Header.Set("Authorization", "Bearer admin-static-token")
+	req6.Header.Set("Authorization", "Bearer lfr_pat_admin_static_token")
 	rec6 := httptest.NewRecorder()
 	srv.ServeHTTP(rec6, req6)
 	if rec6.Code != http.StatusOK {
 		t.Errorf("expected 200 for delete PAT, got %d", rec6.Code)
 	}
 
-	deletedPat, _ := srv.db.GetPATByHash("testhash")
+	deletedPat, _ := srv.db.GetPATByHash(hex.EncodeToString(userHashBytes[:]))
 	if deletedPat.RevokedAt == nil {
 		t.Error("expected PAT to have a revoked_at timestamp")
 	}

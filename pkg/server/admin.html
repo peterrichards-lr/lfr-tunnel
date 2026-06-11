@@ -349,8 +349,8 @@
             <h1>Liferay Tunnel</h1>
             <p>Admin Dashboard</p>
             <form id="login-form">
-                <input type="password" id="auth-token" placeholder="Enter Admin PAT or Static Token" required autocomplete="off">
-                <button type="submit">Access Dashboard</button>
+                <input type="text" id="auth-input" placeholder="Enter Email or Admin PAT" required autocomplete="off">
+                <button type="submit" id="login-btn">Access Dashboard</button>
             </form>
         </div>
     </div>
@@ -560,32 +560,69 @@
         const loginForm = document.getElementById('login-form');
 
         // Init
-        if (apiToken) {
+        const params = new URLSearchParams(window.location.search);
+        if (params.has('token')) {
+            const token = params.get('token');
+            window.history.replaceState({}, document.title, "/admin");
+            
+            fetch('/api/admin/auth/verify', {
+                method: 'POST',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify({token})
+            }).then(res => {
+                if(res.ok) {
+                    showApp();
+                } else {
+                    showToast("Magic link invalid or expired", true);
+                }
+            }).catch(e => showToast("Connection failed", true));
+        } else if (apiToken) {
             showApp();
         }
 
         loginForm.addEventListener('submit', async (e) => {
             e.preventDefault();
-            const token = document.getElementById('auth-token').value;
-            // Test token
-            try {
-                const res = await fetch('/api/admin/users', { headers: { 'Authorization': 'Bearer ' + token } });
-                if (res.ok) {
-                    apiToken = token;
-                    localStorage.setItem('lfr_admin_token', token);
-                    showApp();
-                } else {
-                    showToast("Invalid Admin Token", true);
+            const inputVal = document.getElementById('auth-input').value.trim();
+            const btn = document.getElementById('login-btn');
+            
+            if (inputVal.includes('@')) {
+                btn.textContent = 'Sending...';
+                try {
+                    const res = await fetch('/api/admin/auth/magic-link', {
+                        method: 'POST',
+                        headers: {'Content-Type': 'application/json'},
+                        body: JSON.stringify({email: inputVal})
+                    });
+                    if (res.ok) {
+                        showToast("Magic link sent! Check your email.");
+                    } else {
+                        showToast("Failed to send magic link", true);
+                    }
+                } catch (e) {
+                    showToast("Connection error", true);
                 }
-            } catch (err) {
-                showToast("Connection failed", true);
+                btn.textContent = 'Access Dashboard';
+            } else {
+                try {
+                    const res = await fetch('/api/admin/users', { headers: { 'Authorization': 'Bearer ' + inputVal } });
+                    if (res.ok) {
+                        apiToken = inputVal;
+                        localStorage.setItem('lfr_admin_token', inputVal);
+                        showApp();
+                    } else {
+                        showToast("Invalid Admin Token", true);
+                    }
+                } catch (err) {
+                    showToast("Connection failed", true);
+                }
             }
         });
 
         function logout() {
+            fetch('/api/admin/auth/logout', { method: 'POST' }).catch(e => {});
             localStorage.removeItem('lfr_admin_token');
             apiToken = null;
-            document.getElementById('auth-token').value = '';
+            document.getElementById('auth-input').value = '';
             appScreen.style.display = 'none';
             loginScreen.style.display = 'flex';
         }
@@ -612,7 +649,9 @@
 
         async function fetchAPI(endpoint, options = {}) {
             if (!options.headers) options.headers = {};
-            options.headers['Authorization'] = 'Bearer ' + apiToken;
+            if (apiToken) {
+                options.headers['Authorization'] = 'Bearer ' + apiToken;
+            }
             const res = await fetch(endpoint, options);
             if (res.status === 401 || res.status === 403) {
                 logout();

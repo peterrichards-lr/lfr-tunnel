@@ -122,4 +122,8 @@ The solution will consist of:
 - [x] Implement Admin Owner role restriction and Admin email domain registration whitelist.
 - [x] Implement support for domains list and simplified Owner block configuration in `server-config.yaml`.
 - [x] Investigate and fix GitHub Actions CI Failures by updating E2E tests for the new configuration schema.
+- [x] Unify the Identity Provider and Dashboard into a single responsive Light/Dark mode interface.
+- [x] Reconfigure VPS Postfix to natively present Let's Encrypt certificates to pass secure `STARTTLS`.
+- [x] Reconfigure VPS Postfix to use dual-stack routing (`inet_protocols = all`) and whitelist external IP `mynetworks` for secure SMTP relaying.
+- [x] Fix Magic Link delivery failures by implementing strict dual-stack SPF validation.
 

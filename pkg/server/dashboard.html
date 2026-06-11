@@ -383,6 +383,21 @@
         let generatedRawToken = "";
 
         async function init() {
+            const urlParams = new URLSearchParams(window.location.search);
+            const magicToken = urlParams.get('token');
+            if (magicToken) {
+                window.history.replaceState({}, document.title, window.location.pathname);
+                const vRes = await fetch('/api/auth/verify', {
+                    method: 'POST',
+                    headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify({ token: magicToken })
+                });
+                if (!vRes.ok) {
+                    const err = await vRes.json();
+                    alert("Magic link error: " + (err.error || "Invalid or expired"));
+                }
+            }
+
             try {
                 const res = await fetch('/api/me');
                 if (res.ok) {

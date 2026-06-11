@@ -37,18 +37,13 @@ if [ $? -ne 0 ]; then
   exit 1
 fi
 
-echo "[Git Hook] Running golangci-lint (if installed)..."
-if command -v golangci-lint &> /dev/null; then
-  golangci-lint run
-  if [ $? -ne 0 ]; then
-    echo "❌ Error: golangci-lint found issues. Please fix before committing."
-    exit 1
-  fi
-  echo "✅ Linting passed."
-else
-  echo "⚠️ golangci-lint not installed locally, skipping strict linting check."
-  echo "   (Consider installing it: https://golangci-lint.run/welcome/install/)"
+echo "[Git Hook] Running golangci-lint via Docker..."
+docker run --rm -v "$(pwd)":/app -w /app golangci/golangci-lint:latest golangci-lint run
+if [ $? -ne 0 ]; then
+  echo "❌ Error: golangci-lint found issues. Please fix before committing."
+  exit 1
 fi
+echo "✅ Linting passed."
 
 echo "✅ All pre-commit checks passed! Proceeding with commit."
 exit 0

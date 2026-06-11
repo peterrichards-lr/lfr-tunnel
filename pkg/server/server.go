@@ -297,6 +297,19 @@ func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 
+		if r.Method == http.MethodGet && r.URL.Path == "/api/admin/auth/providers" {
+			s.handleAuthProviders(w, r)
+			return
+		}
+		if r.Method == http.MethodGet && r.URL.Path == "/api/admin/auth/sso/login" {
+			s.handleSSOLogin(w, r)
+			return
+		}
+		if r.Method == http.MethodGet && r.URL.Path == "/api/admin/auth/sso/callback" {
+			s.handleSSOCallback(w, r)
+			return
+		}
+
 		if strings.HasPrefix(r.URL.Path, "/api/admin/") && r.URL.Path != "/api/admin/approve" {
 			s.handleAdminEndpoints(w, r)
 			return
@@ -1225,6 +1238,31 @@ func (s *Server) handleAdminLogout(w http.ResponseWriter, r *http.Request) {
 		SameSite: http.SameSiteStrictMode,
 	})
 	respondJSON(w, http.StatusOK, map[string]string{"status": "ok"})
+}
+
+func (s *Server) handleAuthProviders(w http.ResponseWriter, r *http.Request) {
+	ssoEnabled := s.cfg.OIDCClientID != "" && s.cfg.OIDCIssuerURL != ""
+	respondJSON(w, http.StatusOK, map[string]interface{}{
+		"sso_enabled": ssoEnabled,
+	})
+}
+
+func (s *Server) handleSSOLogin(w http.ResponseWriter, r *http.Request) {
+	if s.cfg.OIDCClientID == "" || s.cfg.OIDCIssuerURL == "" {
+		http.Error(w, `{"error":"SSO not configured"}`, http.StatusNotImplemented)
+		return
+	}
+	// TODO: Generate state and nonce, redirect to Issuer Authorization URL
+	http.Error(w, `{"error":"OIDC Flow not fully implemented"}`, http.StatusNotImplemented)
+}
+
+func (s *Server) handleSSOCallback(w http.ResponseWriter, r *http.Request) {
+	if s.cfg.OIDCClientID == "" || s.cfg.OIDCIssuerURL == "" {
+		http.Error(w, `{"error":"SSO not configured"}`, http.StatusNotImplemented)
+		return
+	}
+	// TODO: Exchange code for token, verify ID Token, extract email, and issue lfr_admin_session cookie
+	http.Error(w, `{"error":"OIDC Flow not fully implemented"}`, http.StatusNotImplemented)
 }
 
 func (s *Server) handleAdminListUsers(w http.ResponseWriter, r *http.Request, actor string) {

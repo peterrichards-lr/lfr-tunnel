@@ -118,3 +118,6 @@ The solution will consist of:
 - [x] Implement automated Abuse Reporting endpoint (`/api/portal/report`) and sliding portal session expiration window.
 - [x] Implement global Version API Endpoint (`/api/version`) for external script integrations.
 - [x] Implement asynchronous start-up compatibility check and `-check-version` CLI flag to ensure backward compatibility and LDM integration.
+- [x] Implement Admin Magic-Link login flow (removing static tokens).
+- [x] Implement Admin Owner role restriction and Admin email domain registration whitelist.
+

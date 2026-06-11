@@ -145,6 +145,49 @@
             transform: translateY(0);
         }
 
+        button.btn-sso {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            background: var(--primary);
+        }
+        
+        button.btn-outline {
+            background: transparent;
+            color: #ec4899;
+            border: 1px solid #ec4899;
+            box-shadow: none;
+        }
+        
+        button.btn-outline:hover {
+            background: rgba(236, 72, 153, 0.1);
+            transform: translateY(-2px);
+        }
+
+        .or-separator {
+            display: flex;
+            align-items: center;
+            text-align: center;
+            color: var(--text-muted);
+            margin: 20px 0;
+            font-size: 14px;
+        }
+        
+        .or-separator::before,
+        .or-separator::after {
+            content: '';
+            flex: 1;
+            border-bottom: 1px solid var(--border);
+        }
+        
+        .or-separator::before {
+            margin-right: .5em;
+        }
+        
+        .or-separator::after {
+            margin-left: .5em;
+        }
+
         button.danger {
             background: var(--danger);
             box-shadow: 0 4px 12px rgba(239, 68, 68, 0.3);
@@ -346,11 +389,24 @@
     <!-- Login Screen -->
     <div id="login-screen">
         <div class="glass login-card">
-            <h1>Liferay Tunnel</h1>
-            <p>Admin Dashboard</p>
+            <h1 style="background: none; -webkit-text-fill-color: initial; color: var(--text-main);">Welcome!</h1>
+            <p>Sign up or log in to continue</p>
+            
+            <div id="sso-container" style="display: none;">
+                <button id="sso-btn" class="btn-sso" onclick="window.location.href='/api/admin/auth/sso/login'" type="button">
+                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" style="margin-right: 12px; vertical-align: text-bottom;">
+                        <path d="M12 2L2 7L12 12L22 7L12 2Z" stroke="white" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+                        <path d="M2 17L12 22L22 17" stroke="white" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+                        <path d="M2 12L12 17L22 12" stroke="white" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+                    </svg>
+                    Continue with Liferay SSO
+                </button>
+                <div class="or-separator">or</div>
+            </div>
+
             <form id="login-form">
                 <input type="text" id="auth-input" placeholder="Enter Email or Admin PAT" required autocomplete="off">
-                <button type="submit" id="login-btn">Access Dashboard</button>
+                <button type="submit" id="login-btn" class="btn-outline">Continue with Email</button>
             </form>
         </div>
     </div>
@@ -579,6 +635,13 @@
         } else if (apiToken) {
             showApp();
         }
+
+        // Check for SSO provider
+        fetch('/api/admin/auth/providers').then(res => res.json()).then(data => {
+            if (data.sso_enabled) {
+                document.getElementById('sso-container').style.display = 'block';
+            }
+        }).catch(e => console.error("Could not fetch auth providers", e));
 
         loginForm.addEventListener('submit', async (e) => {
             e.preventDefault();

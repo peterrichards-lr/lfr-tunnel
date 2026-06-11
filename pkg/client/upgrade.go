@@ -164,7 +164,7 @@ func SelfUpgrade(currentVersion string) error {
 		return fmt.Errorf("failed to create temporary file (is directory writeable?): %v", err)
 	}
 	defer func() {
-		tempFile.Close()    //nolint:errcheck
+		tempFile.Close()        //nolint:errcheck
 		_ = os.Remove(tempPath) // Clean up temp file if not swapped
 	}()
 

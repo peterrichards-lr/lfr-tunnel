@@ -46,7 +46,7 @@ ssl_key_file: "/path/to/key"
 	os.Setenv("LFT_DOMAIN1", "env.com") //nolint:errcheck
 	os.Setenv("LFT_BIND_ADDR", ":9443") //nolint:errcheck
 	defer func() {
-		os.Unsetenv("LFT_DOMAIN1") //nolint:errcheck
+		os.Unsetenv("LFT_DOMAIN1")   //nolint:errcheck
 		os.Unsetenv("LFT_BIND_ADDR") //nolint:errcheck
 	}()
 
@@ -99,10 +99,10 @@ ports:
 
 	// 3. Set environment variables to override
 	os.Setenv("LFT_CLIENT_SERVER", "https://env-tunnel.com") //nolint:errcheck
-	os.Setenv("LFT_CLIENT_PORTS", "8080,9000")
+	os.Setenv("LFT_CLIENT_PORTS", "8080,9000")               //nolint:errcheck
 	defer func() {
 		os.Unsetenv("LFT_CLIENT_SERVER") //nolint:errcheck
-		os.Unsetenv("LFT_CLIENT_PORTS")
+		os.Unsetenv("LFT_CLIENT_PORTS")  //nolint:errcheck
 	}()
 
 	cfgEnv, err := LoadClientConfig(tmpFile.Name())
@@ -133,8 +133,8 @@ func TestLoadClientConfig_TokenFile(t *testing.T) {
 	tmpTokenFile.Close() //nolint:errcheck
 
 	// 1. Point LFT_TOKEN_FILE to it
-	os.Setenv("LFT_TOKEN_FILE", tmpTokenFile.Name())
-	defer os.Unsetenv("LFT_TOKEN_FILE")
+	os.Setenv("LFT_TOKEN_FILE", tmpTokenFile.Name()) //nolint:errcheck
+	defer os.Unsetenv("LFT_TOKEN_FILE")              //nolint:errcheck
 
 	// 2. Load client config (without path to config yaml, so it uses default)
 	cfg, err := LoadClientConfig("")
@@ -148,8 +148,8 @@ func TestLoadClientConfig_TokenFile(t *testing.T) {
 	}
 
 	// 3. Environment variable LFT_CLIENT_TOKEN should override the token file
-	os.Setenv("LFT_CLIENT_TOKEN", "env-token-override")
-	defer os.Unsetenv("LFT_CLIENT_TOKEN")
+	os.Setenv("LFT_CLIENT_TOKEN", "env-token-override") //nolint:errcheck
+	defer os.Unsetenv("LFT_CLIENT_TOKEN")               //nolint:errcheck
 
 	cfgEnv, err := LoadClientConfig("")
 	if err != nil {

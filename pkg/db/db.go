@@ -78,13 +78,13 @@ func Open(dsn string) (*DB, error) {
 
 	// Some PRAGMAs can also be executed here as a fallback
 	if _, err := conn.Exec("PRAGMA foreign_keys = ON; PRAGMA busy_timeout = 5000;"); err != nil {
-		conn.Close()
+		conn.Close() //nolint:errcheck
 		return nil, err
 	}
 
 	db := &DB{conn: conn}
 	if err := db.initSchema(); err != nil {
-		conn.Close()
+		conn.Close() //nolint:errcheck
 		return nil, err
 	}
 
@@ -536,7 +536,7 @@ func (db *DB) ListAuditEntries(f AuditFilter) ([]*AuditEntry, error) {
 	if err != nil {
 		return nil, err
 	}
-	defer rows.Close()
+	defer rows.Close() //nolint:errcheck
 
 	var entries []*AuditEntry
 	for rows.Next() {
@@ -598,7 +598,7 @@ func (db *DB) ListBlacklistedIPs() ([]*BlacklistEntry, error) {
 	if err != nil {
 		return nil, err
 	}
-	defer rows.Close()
+	defer rows.Close() //nolint:errcheck
 
 	var entries []*BlacklistEntry
 	for rows.Next() {

@@ -397,7 +397,7 @@ func (r *Registry) cleanupOrphanLeases() {
 			log.Printf("[Server] Tunnel session %s appears offline, cleaning up...", token)
 			r.CleanLease(token)
 		} else {
-			conn.Close()
+			conn.Close() //nolint:errcheck
 		}
 	}
 }

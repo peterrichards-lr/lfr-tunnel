@@ -216,7 +216,7 @@ func TestServer_CheckSubdomain(t *testing.T) {
 	if err != nil {
 		t.Fatalf("failed to create temp dir: %v", err)
 	}
-	defer os.RemoveAll(tmpDir)
+	defer os.RemoveAll(tmpDir) //nolint:errcheck
 
 	dbPath := filepath.Join(tmpDir, "test.db")
 	cfgDb := &config.ServerConfig{
@@ -275,7 +275,7 @@ func TestServer_RegistrationFlow(t *testing.T) {
 	if err != nil {
 		t.Fatalf("failed to create temp dir: %v", err)
 	}
-	defer os.RemoveAll(tmpDir)
+	defer os.RemoveAll(tmpDir) //nolint:errcheck
 
 	dbPath := filepath.Join(tmpDir, "test.db")
 
@@ -446,7 +446,7 @@ func TestServer_StaticTokenProvisioning(t *testing.T) {
 	if err != nil {
 		t.Fatalf("failed to create temp dir: %v", err)
 	}
-	defer os.RemoveAll(tmpDir)
+	defer os.RemoveAll(tmpDir) //nolint:errcheck
 
 	dbPath := filepath.Join(tmpDir, "test.db")
 
@@ -605,7 +605,7 @@ func TestAdminEndpoints(t *testing.T) {
 	if err != nil {
 		t.Fatalf("failed to create temp dir: %v", err)
 	}
-	defer os.RemoveAll(tmpDir)
+	defer os.RemoveAll(tmpDir) //nolint:errcheck
 
 	dbPath := filepath.Join(tmpDir, "test.db")
 	cfg := &config.ServerConfig{

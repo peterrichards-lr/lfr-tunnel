@@ -35,7 +35,7 @@ func CheckForUpdate(currentVersion string) (string, error) {
 	if err != nil {
 		return "", err
 	}
-	defer resp.Body.Close()
+	defer resp.Body.Close() //nolint:errcheck
 
 	if resp.StatusCode != http.StatusOK {
 		return "", fmt.Errorf("github API returned status %d", resp.StatusCode)
@@ -65,7 +65,7 @@ func SelfUpgrade(currentVersion string) error {
 	if err != nil {
 		return fmt.Errorf("failed to fetch latest release: %v", err)
 	}
-	defer resp.Body.Close()
+	defer resp.Body.Close() //nolint:errcheck
 
 	if resp.StatusCode != http.StatusOK {
 		return fmt.Errorf("github API returned status %d", resp.StatusCode)
@@ -164,8 +164,8 @@ func SelfUpgrade(currentVersion string) error {
 		return fmt.Errorf("failed to create temporary file (is directory writeable?): %v", err)
 	}
 	defer func() {
-		tempFile.Close() //nolint:errcheck
-		os.Remove(tempPath) // Clean up temp file if not swapped
+		tempFile.Close()    //nolint:errcheck
+		_ = os.Remove(tempPath) // Clean up temp file if not swapped
 	}()
 
 	if _, err := io.Copy(tempFile, downloadResp.Body); err != nil {
@@ -250,7 +250,7 @@ func CheckServerCompatibility(serverURL string) (*ServerVersionInfo, error) {
 	if err != nil {
 		return nil, err
 	}
-	defer resp.Body.Close()
+	defer resp.Body.Close() //nolint:errcheck
 
 	if resp.StatusCode != http.StatusOK {
 		return nil, fmt.Errorf("server returned status %d", resp.StatusCode)

@@ -17,7 +17,7 @@ func setupTestDB(t *testing.T) (*DB, string) {
 	dbPath := filepath.Join(tmpDir, "test.db")
 	database, err := Open(dbPath)
 	if err != nil {
-		os.RemoveAll(tmpDir)
+		os.RemoveAll(tmpDir) //nolint:errcheck
 		t.Fatalf("failed to open test database: %v", err)
 	}
 
@@ -25,8 +25,8 @@ func setupTestDB(t *testing.T) (*DB, string) {
 }
 
 func cleanupTestDB(database *DB, tmpDir string) {
-	database.Close() //nolint:errcheck
-	os.RemoveAll(tmpDir)
+	database.Close()     //nolint:errcheck
+	os.RemoveAll(tmpDir) //nolint:errcheck
 }
 
 func TestUserCRUD(t *testing.T) {

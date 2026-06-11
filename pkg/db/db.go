@@ -295,7 +295,7 @@ func (db *DB) ListUsers() ([]*User, error) {
 	if err != nil {
 		return nil, err
 	}
-	defer rows.Close()
+	defer rows.Close() //nolint:errcheck
 
 	var users []*User
 	for rows.Next() {
@@ -386,7 +386,7 @@ func (db *DB) ListPATs(userID string) ([]*PersonalAccessToken, error) {
 	if err != nil {
 		return nil, err
 	}
-	defer rows.Close()
+	defer rows.Close() //nolint:errcheck
 
 	var pats []*PersonalAccessToken
 	for rows.Next() {
@@ -457,7 +457,7 @@ func (db *DB) ListAllPATs() ([]*PersonalAccessToken, error) {
 	if err != nil {
 		return nil, err
 	}
-	defer rows.Close()
+	defer rows.Close() //nolint:errcheck
 
 	var pats []*PersonalAccessToken
 	for rows.Next() {

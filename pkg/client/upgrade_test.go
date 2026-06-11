@@ -67,7 +67,7 @@ func TestSelfUpgrade(t *testing.T) {
 	if err != nil {
 		t.Fatalf("failed to create temp dir: %v", err)
 	}
-	defer os.RemoveAll(tmpDir)
+	defer os.RemoveAll(tmpDir) //nolint:errcheck
 
 	execFilename := "lfr-tunnel-fake"
 	if runtime.GOOS == "windows" {
@@ -114,7 +114,7 @@ func TestSelfUpgrade(t *testing.T) {
 			}
 			h := sha256.Sum256([]byte("fake-binary-new-content"))
 			hexHash := hex.EncodeToString(h[:])
-			_, _ = w.Write([]byte(fmt.Sprintf("%s  %s\n", hexHash, assetName)))
+			_, _ = fmt.Fprintf(w, "%s  %s\n", hexHash, assetName)
 			return
 		}
 
@@ -155,7 +155,7 @@ func TestSelfUpgrade_ChecksumMismatch(t *testing.T) {
 	if err != nil {
 		t.Fatalf("failed to create temp dir: %v", err)
 	}
-	defer os.RemoveAll(tmpDir)
+	defer os.RemoveAll(tmpDir) //nolint:errcheck
 
 	execFilename := "lfr-tunnel-fake"
 	if runtime.GOOS == "windows" {
@@ -201,7 +201,7 @@ func TestSelfUpgrade_ChecksumMismatch(t *testing.T) {
 				assetName += ".exe"
 			}
 			// Write an incorrect checksum
-			_, _ = w.Write([]byte(fmt.Sprintf("%s  %s\n", "badchecksum1234567890", assetName)))
+			_, _ = fmt.Fprintf(w, "%s  %s\n", "badchecksum1234567890", assetName)
 			return
 		}
 

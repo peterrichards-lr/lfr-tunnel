@@ -40,7 +40,7 @@ func TestInterceptorEngine_HeaderInjection(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Failed to request proxy: %v", err)
 	}
-	defer resp.Body.Close()
+	defer resp.Body.Close() //nolint:errcheck
 
 	body, _ := io.ReadAll(resp.Body)
 	if string(body) != "Target Response" {
@@ -93,7 +93,7 @@ func TestInterceptorEngine_MaintenanceMode(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Failed to request proxy: %v", err)
 	}
-	defer resp.Body.Close()
+	defer resp.Body.Close() //nolint:errcheck
 
 	// 4. Assertions
 	if resp.StatusCode != http.StatusServiceUnavailable {

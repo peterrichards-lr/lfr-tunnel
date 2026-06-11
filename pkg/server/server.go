@@ -901,9 +901,9 @@ func (s *Server) handleClaimToken(w http.ResponseWriter, r *http.Request) {
 // Stop shuts down the server.
 func (s *Server) Stop() {
 	s.cancel()
-	s.chiselServer.Close()
+	s.chiselServer.Close() //nolint:errcheck
 	if s.db != nil {
-		s.db.Close()
+		s.db.Close() //nolint:errcheck
 	}
 }
 
@@ -1545,7 +1545,7 @@ func (s *Server) handlePortalEndpoints(w http.ResponseWriter, r *http.Request) {
 				"<p><a href=\"%s\">Log In to Portal</a></p>"+
 				"<hr>"+
 				"<p><em>If you did not request this, <a href=\"%s\">click here to immediately invalidate the link and report it to security</a>.</em></p>", clientIP, link, reportLink)
-			go s.mailSender.Send(user.Email, "Liferay Tunnel - Portal Login", body)
+			go s.mailSender.Send(user.Email, "Liferay Tunnel - Portal Login", body) //nolint:errcheck
 		} else {
 			// For testing locally without SMTP
 			log.Printf("[Portal] Magic Link for %s: /portal?token=%s", user.Email, magicToken)

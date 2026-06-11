@@ -57,7 +57,7 @@ func StartInspector(port int, engine *InterceptorEngine) {
 		engine.mu.Unlock()
 
 		w.WriteHeader(http.StatusOK)
-		fmt.Fprintf(w, `{"status":"ok"}`)
+		fmt.Fprintf(w, `{"status":"ok"}`) //nolint:errcheck
 	})
 
 	addr := fmt.Sprintf("127.0.0.1:%d", port)

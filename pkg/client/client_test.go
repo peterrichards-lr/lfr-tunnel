@@ -15,7 +15,7 @@ func TestDetectWorkspacePorts(t *testing.T) {
 	if err != nil {
 		t.Fatalf("failed to create temp dir: %v", err)
 	}
-	defer os.RemoveAll(tmpDir)
+	defer os.RemoveAll(tmpDir) //nolint:errcheck
 
 	// Create a subdirectory for a client extension
 	extDir := filepath.Join(tmpDir, "client-extensions", "my-custom-element")

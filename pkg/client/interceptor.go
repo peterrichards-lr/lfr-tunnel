@@ -79,7 +79,7 @@ func (e *InterceptorEngine) StartHealthChecks(serverURL, sessionToken string, ta
 				if err != nil {
 					newStatus = "down"
 				} else {
-					conn.Close()
+					conn.Close() //nolint:errcheck
 				}
 			}
 

@@ -78,7 +78,7 @@ func DetectWorkspacePorts(rootDir string) ([]PortMapping, error) {
 			if err != nil {
 				return nil // Skip files we cannot read
 			}
-			defer file.Close()
+			defer file.Close() //nolint:errcheck
 
 			var data map[string]interface{}
 			dec := yaml.NewDecoder(file)
@@ -152,7 +152,7 @@ func RegisterTunnel(serverURL string, authToken string, subdomain string, ports 
 	if err != nil {
 		return nil, fmt.Errorf("registration request failed: %v", err)
 	}
-	defer resp.Body.Close()
+	defer resp.Body.Close() //nolint:errcheck
 
 	var regResp RegisterResponse
 	if err := json.NewDecoder(resp.Body).Decode(&regResp); err != nil {

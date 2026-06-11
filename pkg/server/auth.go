@@ -110,7 +110,7 @@ func getFreePort() (int, error) {
 	if err != nil {
 		return 0, err
 	}
-	defer l.Close()
+	defer l.Close() //nolint:errcheck
 	return l.Addr().(*net.TCPAddr).Port, nil
 }
 

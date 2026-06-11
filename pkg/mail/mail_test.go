@@ -74,20 +74,20 @@ func startMockSMTPServer(t *testing.T, cert *tls.Certificate) (net.Listener, cha
 }
 
 func handleMockConnection(t *testing.T, conn net.Conn, cert *tls.Certificate, dataChan chan string) {
-	defer conn.Close()
+	defer conn.Close() //nolint:errcheck
 
 	reader := bufio.NewReader(conn)
 	writer := bufio.NewWriter(conn)
 
 	respond := func(code int, msg string) {
-		_, _ = writer.WriteString(fmt.Sprintf("%d %s\r\n", code, msg))
+		_, _ = fmt.Fprintf(writer, "%d %s\r\n", code, msg)
 		_ = writer.Flush()
 	}
 
 	respond(220, "smtp.liferay-tunnel-test.local")
 
-	var currentConn net.Conn = conn
-	var isTLS bool = false
+	currentConn := conn
+	isTLS := false
 	var receivedBody strings.Builder
 
 	for {
@@ -151,7 +151,7 @@ func handleMockConnection(t *testing.T, conn net.Conn, cert *tls.Certificate, da
 func TestSMTPClient_Send(t *testing.T) {
 	cert := generateSelfSignedCert(t)
 	server, dataChan := startMockSMTPServer(t, &cert)
-	defer server.Close()
+	defer server.Close() //nolint:errcheck
 
 	_, portStr, err := net.SplitHostPort(server.Addr().String())
 	if err != nil {

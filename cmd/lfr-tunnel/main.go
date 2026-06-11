@@ -351,7 +351,7 @@ func handleBackground() {
 	if err != nil {
 		log.Fatalf("[Client] Failed to create log file: %v\n", err)
 	}
-	defer logFile.Close()
+	defer logFile.Close() //nolint:errcheck
 
 	execPath, err := os.Executable()
 	if err != nil {

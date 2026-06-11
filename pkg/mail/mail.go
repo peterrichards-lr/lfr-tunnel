@@ -50,13 +50,13 @@ func (s *SMTPClient) Send(to string, subject string, body string) error {
 	if err != nil {
 		return fmt.Errorf("failed to dial smtp server: %v", err)
 	}
-	defer conn.Close()
+	defer conn.Close() //nolint:errcheck
 
 	c, err := smtp.NewClient(conn, s.cfg.SMTPHost)
 	if err != nil {
 		return fmt.Errorf("failed to create smtp client: %v", err)
 	}
-	defer c.Close()
+	defer c.Close() //nolint:errcheck
 
 	if s.cfg.SMTPPort != 465 {
 		if ok, _ := c.Extension("STARTTLS"); ok {
@@ -88,7 +88,7 @@ func (s *SMTPClient) Send(to string, subject string, body string) error {
 	if err != nil {
 		return fmt.Errorf("failed to initiate data stream: %v", err)
 	}
-	defer w.Close()
+	defer w.Close() //nolint:errcheck
 
 	headers := make(map[string]string)
 	headers["From"] = s.cfg.SMTPFromAddress

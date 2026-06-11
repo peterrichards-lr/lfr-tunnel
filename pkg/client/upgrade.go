@@ -93,9 +93,10 @@ func SelfUpgrade(currentVersion string) error {
 	var downloadURL string
 	var checksumsURL string
 	for _, asset := range rel.Assets {
-		if asset.Name == expectedAsset {
+		switch asset.Name {
+		case expectedAsset:
 			downloadURL = asset.DownloadURL
-		} else if asset.Name == "checksums.txt" {
+		case "checksums.txt":
 			checksumsURL = asset.DownloadURL
 		}
 	}
@@ -113,7 +114,7 @@ func SelfUpgrade(currentVersion string) error {
 	if err != nil {
 		return fmt.Errorf("failed to download release checksums: %v", err)
 	}
-	defer chkResp.Body.Close()
+	defer chkResp.Body.Close() //nolint:errcheck
 
 	if chkResp.StatusCode != http.StatusOK {
 		return fmt.Errorf("failed downloading checksums: server returned status %d", chkResp.StatusCode)
@@ -123,7 +124,7 @@ func SelfUpgrade(currentVersion string) error {
 	if err != nil {
 		return fmt.Errorf("failed to read release checksums content: %v", err)
 	}
-	chkResp.Body.Close()
+	chkResp.Body.Close() //nolint:errcheck
 
 	// Resolve running executable path
 	execPath := targetExecPath
@@ -151,7 +152,7 @@ func SelfUpgrade(currentVersion string) error {
 	if err != nil {
 		return fmt.Errorf("failed to download new binary: %v", err)
 	}
-	defer downloadResp.Body.Close()
+	defer downloadResp.Body.Close() //nolint:errcheck
 
 	if downloadResp.StatusCode != http.StatusOK {
 		return fmt.Errorf("failed downloading binary: server returned %d", downloadResp.StatusCode)
@@ -163,14 +164,14 @@ func SelfUpgrade(currentVersion string) error {
 		return fmt.Errorf("failed to create temporary file (is directory writeable?): %v", err)
 	}
 	defer func() {
-		tempFile.Close()
+		tempFile.Close() //nolint:errcheck
 		os.Remove(tempPath) // Clean up temp file if not swapped
 	}()
 
 	if _, err := io.Copy(tempFile, downloadResp.Body); err != nil {
 		return fmt.Errorf("failed to write binary content: %v", err)
 	}
-	tempFile.Close()
+	tempFile.Close() //nolint:errcheck
 
 	// Verify SHA256 integrity of the downloaded binary
 	computedHash, err := computeSHA256(tempPath)
@@ -203,7 +204,7 @@ func SelfUpgrade(currentVersion string) error {
 		oldPath := execPath + ".old"
 		_ = os.Remove(oldPath) // Remove any previous leftovers
 		if err := os.Rename(execPath, oldPath); err != nil {
-			return fmt.Errorf("failed to rename running binary: %v. Please make sure you have permissions.", err)
+			return fmt.Errorf("failed to rename running binary: %v (please make sure you have permissions)", err)
 		}
 		if err := os.Rename(tempPath, execPath); err != nil {
 			// Try to rollback rename
@@ -215,7 +216,7 @@ func SelfUpgrade(currentVersion string) error {
 	} else {
 		// On Unix we can rename directly
 		if err := os.Rename(tempPath, execPath); err != nil {
-			return fmt.Errorf("failed to replace running binary: %v. If permission is denied, try running as sudo.", err)
+			return fmt.Errorf("failed to replace running binary: %v (if permission is denied, try running as sudo)", err)
 		}
 		fmt.Println("[Update] Upgrade successful! You are now running the latest version.")
 	}
@@ -228,7 +229,7 @@ func computeSHA256(filePath string) (string, error) {
 	if err != nil {
 		return "", err
 	}
-	defer f.Close()
+	defer f.Close() //nolint:errcheck
 
 	h := sha256.New()
 	if _, err := io.Copy(h, f); err != nil {
@@ -273,10 +274,10 @@ func CompareVersions(v1, v2 string) int {
 	for i := 0; i < len(p1) || i < len(p2); i++ {
 		var n1, n2 int
 		if i < len(p1) {
-			fmt.Sscanf(p1[i], "%d", &n1)
+			fmt.Sscanf(p1[i], "%d", &n1) //nolint:errcheck
 		}
 		if i < len(p2) {
-			fmt.Sscanf(p2[i], "%d", &n2)
+			fmt.Sscanf(p2[i], "%d", &n2) //nolint:errcheck
 		}
 		if n1 < n2 {
 			return -1

@@ -12,7 +12,7 @@ func TestLoadServerConfig(t *testing.T) {
 	if err != nil {
 		t.Fatalf("failed to create temp file: %v", err)
 	}
-	defer os.Remove(tmpFile.Name())
+	defer os.Remove(tmpFile.Name()) //nolint:errcheck
 
 	content := []byte(`
 domain1: "example.com"
@@ -27,7 +27,7 @@ ssl_key_file: "/path/to/key"
 	if _, err := tmpFile.Write(content); err != nil {
 		t.Fatalf("failed to write temp file: %v", err)
 	}
-	tmpFile.Close()
+	tmpFile.Close() //nolint:errcheck
 
 	// 2. Load config from file
 	cfg, err := LoadServerConfig(tmpFile.Name())
@@ -43,11 +43,11 @@ ssl_key_file: "/path/to/key"
 	}
 
 	// 3. Set environment variables to override
-	os.Setenv("LFT_DOMAIN1", "env.com")
-	os.Setenv("LFT_BIND_ADDR", ":9443")
+	os.Setenv("LFT_DOMAIN1", "env.com") //nolint:errcheck
+	os.Setenv("LFT_BIND_ADDR", ":9443") //nolint:errcheck
 	defer func() {
-		os.Unsetenv("LFT_DOMAIN1")
-		os.Unsetenv("LFT_BIND_ADDR")
+		os.Unsetenv("LFT_DOMAIN1") //nolint:errcheck
+		os.Unsetenv("LFT_BIND_ADDR") //nolint:errcheck
 	}()
 
 	cfgEnv, err := LoadServerConfig(tmpFile.Name())
@@ -69,7 +69,7 @@ func TestLoadClientConfig(t *testing.T) {
 	if err != nil {
 		t.Fatalf("failed to create temp file: %v", err)
 	}
-	defer os.Remove(tmpFile.Name())
+	defer os.Remove(tmpFile.Name()) //nolint:errcheck
 
 	content := []byte(`
 server_url: "https://my-tunnel.com"
@@ -82,7 +82,7 @@ ports:
 	if _, err := tmpFile.Write(content); err != nil {
 		t.Fatalf("failed to write temp file: %v", err)
 	}
-	tmpFile.Close()
+	tmpFile.Close() //nolint:errcheck
 
 	// 2. Load config from file
 	cfg, err := LoadClientConfig(tmpFile.Name())
@@ -98,10 +98,10 @@ ports:
 	}
 
 	// 3. Set environment variables to override
-	os.Setenv("LFT_CLIENT_SERVER", "https://env-tunnel.com")
+	os.Setenv("LFT_CLIENT_SERVER", "https://env-tunnel.com") //nolint:errcheck
 	os.Setenv("LFT_CLIENT_PORTS", "8080,9000")
 	defer func() {
-		os.Unsetenv("LFT_CLIENT_SERVER")
+		os.Unsetenv("LFT_CLIENT_SERVER") //nolint:errcheck
 		os.Unsetenv("LFT_CLIENT_PORTS")
 	}()
 
@@ -124,13 +124,13 @@ func TestLoadClientConfig_TokenFile(t *testing.T) {
 	if err != nil {
 		t.Fatalf("failed to create temp token file: %v", err)
 	}
-	defer os.Remove(tmpTokenFile.Name())
+	defer os.Remove(tmpTokenFile.Name()) //nolint:errcheck
 
 	tokenVal := "  my-secret-token-from-file\n "
 	if _, err := tmpTokenFile.Write([]byte(tokenVal)); err != nil {
 		t.Fatalf("failed to write token file: %v", err)
 	}
-	tmpTokenFile.Close()
+	tmpTokenFile.Close() //nolint:errcheck
 
 	// 1. Point LFT_TOKEN_FILE to it
 	os.Setenv("LFT_TOKEN_FILE", tmpTokenFile.Name())

@@ -83,7 +83,7 @@ func LoadServerConfig(path string) (*ServerConfig, error) {
 		if err != nil {
 			return nil, err
 		}
-		defer file.Close()
+		defer file.Close() //nolint:errcheck
 
 		dec := yaml.NewDecoder(file)
 		if err := dec.Decode(cfg); err != nil {
@@ -166,7 +166,7 @@ func LoadClientConfig(path string) (*ClientConfig, error) {
 		if err != nil {
 			return nil, err
 		}
-		defer file.Close()
+		defer file.Close() //nolint:errcheck
 
 		dec := yaml.NewDecoder(file)
 		if err := dec.Decode(cfg); err != nil {

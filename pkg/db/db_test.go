@@ -25,7 +25,7 @@ func setupTestDB(t *testing.T) (*DB, string) {
 }
 
 func cleanupTestDB(database *DB, tmpDir string) {
-	database.Close()
+	database.Close() //nolint:errcheck
 	os.RemoveAll(tmpDir)
 }
 

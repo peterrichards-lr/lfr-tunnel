@@ -93,7 +93,7 @@
             }
         }
 
-        function showDashboard() {
+        async function showDashboard() {
             document.getElementById('loader').style.display = 'none';
             document.getElementById('login-screen').style.display = 'none';
             document.getElementById('dashboard-screen').style.display = 'flex';

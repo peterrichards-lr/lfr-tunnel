@@ -10,6 +10,9 @@ import (
 const defaultMagicLinkEmailTemplate = `
 <p>Hi {{.PreferredName}},</p>
 <p>Click the button below to log in to your account. This link will expire in {{.ExpiryMinutes}} minutes and can only be used once.</p>
+<br/>
+<a href="{{.MagicLink}}" style="background-color:#007bff;color:#fff;padding:10px 20px;text-decoration:none;border-radius:5px;display:inline-block;">Log in to Portal</a>
+<br/><br/>
 <p>If the button doesn't work, copy and paste this URL into your browser: {{.MagicLink}}</p>
 <br/>
 <p>Didn’t request this link?</p>

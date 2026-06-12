@@ -134,3 +134,9 @@ The solution will consist of:
 ## Roadmap (Post Public Visibility PR Flow)
 - [x] Implement targeted user messaging (selectively target individual active users from the dashboard with custom alerts).
 - [x] Implement Playwright UI E2E test automation for full, deterministic Dashboard test coverage.
+- [x] Track and display user registration origin (invite, registration, SSO) in users table.
+- [x] Fix pagination button width and add First/Last/page-select controls.
+- [x] Fix Chart.js infinite page growth on analytics page (constrain canvas in relative div).
+- [x] Set AuthMethod at user creation in all registration flows (registration, invite, SSO).
+- [x] Add SSO/Keycloak E2E integration test suite with isolated Docker environment (`make e2e-sso`).
+- [x] Investigate VPS outbound IPv4 port 25 block for Fastmail/non-Google recipients.

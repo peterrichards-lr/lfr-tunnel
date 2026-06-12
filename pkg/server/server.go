@@ -1420,6 +1420,22 @@ func (s *Server) handleAdminMagicLink(w http.ResponseWriter, r *http.Request) {
 	req.Email = strings.ToLower(strings.TrimSpace(req.Email))
 
 	isOwner := s.cfg.Owner.UserID != "" && req.Email == s.cfg.Owner.UserID
+
+	// Enforce domain whitelist if configured (bypass for owner)
+	if len(s.cfg.AllowedEmailDomains) > 0 && !isOwner {
+		allowed := false
+		for _, d := range s.cfg.AllowedEmailDomains {
+			if strings.HasSuffix(req.Email, "@"+d) {
+				allowed = true
+				break
+			}
+		}
+		if !allowed {
+			// Fail silently to prevent domain-enumeration or email-enumeration attacks
+			respondJSON(w, http.StatusOK, map[string]string{"status": "ok"})
+			return
+		}
+	}
 	var isApproved bool
 	greetingName := "there"
 

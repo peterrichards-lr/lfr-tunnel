@@ -116,6 +116,11 @@
                     const latestVer = vData.latest_version;
                     const userVer = currentUser.last_client_version || '';
                     
+                    if (vData.documentation_url) {
+                        const dl = document.getElementById('docs-link');
+                        if (dl) dl.href = vData.documentation_url;
+                    }
+                    
                     if (!userVer || userVer !== latestVer) {
                         let os = 'Unknown OS';
                         let dlSuffix = '';

@@ -340,8 +340,9 @@ func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 
 		if r.Method == http.MethodGet && r.URL.Path == "/api/version" {
 			respondJSON(w, http.StatusOK, map[string]string{
-				"latest_version": config.Version,
-				"min_version":    s.cfg.MinClientVersion,
+				"latest_version":    config.Version,
+				"min_version":       s.cfg.MinClientVersion,
+				"documentation_url": s.cfg.DocumentationURL,
 			})
 			return
 		}

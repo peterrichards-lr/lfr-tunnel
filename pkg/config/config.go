@@ -43,6 +43,7 @@ type ServerConfig struct {
 	EnableUserPortal       bool             `yaml:"enable_user_portal"`
 	PortalSessionDuration  time.Duration    `yaml:"portal_session_duration"`
 	MinClientVersion       string           `yaml:"min_client_version"`
+	DocumentationURL       string           `yaml:"documentation_url"`
 
 	// Dynamic SSO/OIDC Providers
 	SSOProviders []SSOProviderConfig `yaml:"sso_providers"`
@@ -74,8 +75,11 @@ func DefaultServerConfig() *ServerConfig {
 		BindAddr:              ":443",
 		HTTPBindAddr:          ":80",
 		ChiselBindAddr:        ":8081",
+		MaxTunnelRateLimit:    100,
+		EnableUserPortal:      true,
 		PortalSessionDuration: 24 * time.Hour,
 		MinClientVersion:      "v1.0.0",
+		DocumentationURL:      "https://github.com/peterrichards-lr/lfr-tunnel/tree/master/docs",
 	}
 }
 

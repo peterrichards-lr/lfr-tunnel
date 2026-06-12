@@ -34,6 +34,7 @@ sudo systemctl start lfr-tunneld
 
 - [ ] **Magic Link Login:** From the dummy account, request a login link. Verify it arrives and successfully logs you in without a password.
 - [ ] **Last Login Banner:** Log out and log back in (using a fresh magic link). Verify the banner at the top of the dashboard displays your *previous* login timestamp and IP address.
+- [ ] **Magic Link Auto-Invalidation:** Request a magic link. Do *not* click it. Wait 1 minute, and request a *second* magic link. Click the *second* link to log in. Log out, then try to click the *first* link. Verify you are correctly denied access because the older token was automatically invalidated by your new login.
 - [ ] **Session Expiration:** *(Optional)* Wait 15 minutes for a Magic Link to expire naturally, or check back in an hour to ensure the background garbage collector successfully prunes it from the database.
 
 ### 3. Personal Account Settings & Aesthetics

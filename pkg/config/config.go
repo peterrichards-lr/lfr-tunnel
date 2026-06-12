@@ -44,6 +44,7 @@ type ServerConfig struct {
 	PortalSessionDuration  time.Duration    `yaml:"portal_session_duration"`
 	MinClientVersion       string           `yaml:"min_client_version"`
 	DocumentationURL       string           `yaml:"documentation_url"`
+	RepositoryURL          string           `yaml:"repository_url"`
 
 	// Dynamic SSO/OIDC Providers
 	SSOProviders []SSOProviderConfig `yaml:"sso_providers"`
@@ -80,6 +81,7 @@ func DefaultServerConfig() *ServerConfig {
 		PortalSessionDuration: 24 * time.Hour,
 		MinClientVersion:      "v1.0.0",
 		DocumentationURL:      "https://github.com/peterrichards-lr/lfr-tunnel/tree/master/docs",
+		RepositoryURL:         "https://github.com/peterrichards-lr/lfr-tunnel",
 	}
 }
 

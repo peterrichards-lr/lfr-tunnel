@@ -343,6 +343,7 @@ func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 				"latest_version":    config.Version,
 				"min_version":       s.cfg.MinClientVersion,
 				"documentation_url": s.cfg.DocumentationURL,
+				"repository_url":    s.cfg.RepositoryURL,
 			})
 			return
 		}

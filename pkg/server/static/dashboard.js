@@ -98,7 +98,7 @@
             document.getElementById('login-screen').style.display = 'none';
             document.getElementById('dashboard-screen').style.display = 'flex';
 
-            let greetingName = currentUser.preferred_name || currentUser.first_name;
+            let greetingName = currentUser.preferred_name;
             let welcomeGreeting = greetingName ? `Welcome Back, ${escapeHTML(greetingName)}!` : "Welcome Back!";
             let firstGreeting = greetingName ? `Welcome to Liferay Tunnel, ${escapeHTML(greetingName)}!` : "Welcome to Liferay Tunnel!";
             if (currentUser.last_login_at && !currentUser.last_login_at.startsWith('0001')) {
@@ -137,8 +137,9 @@
                             dlSuffix = '-linux-amd64';
                         }
 
-                        const dlUrl = `https://github.com/peterrichards-lr/lfr-tunnel/releases/download/${latestVer}/lfr-tunnel${dlSuffix}`;
-                        const otherUrl = `https://github.com/peterrichards-lr/lfr-tunnel/releases/tag/${latestVer}`;
+                        const repoUrl = vData.repository_url || 'https://github.com/peterrichards-lr/lfr-tunnel';
+                        const dlUrl = `${repoUrl}/releases/download/${latestVer}/lfr-tunnel${dlSuffix}`;
+                        const otherUrl = `${repoUrl}/releases/tag/${latestVer}`;
 
                         const bannerDiv = document.createElement('div');
                         bannerDiv.className = 'alert alert-info';

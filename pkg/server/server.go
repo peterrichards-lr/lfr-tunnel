@@ -830,6 +830,7 @@ func (s *Server) handleRegisterRequest(w http.ResponseWriter, r *http.Request) {
 		Status:            "unverified",
 		ApprovalToken:     approvalToken,
 		VerificationToken: verificationToken,
+		AuthMethod:        "registration",
 	}
 
 	if err := s.db.CreateUser(user); err != nil {
@@ -1794,6 +1795,7 @@ func (s *Server) handleAdminInviteUser(w http.ResponseWriter, r *http.Request, a
 		Role:            "user",
 		Status:          "approved", // Instant approval because invited by Admin
 		ThemePreference: "system",
+		AuthMethod:      "invite",
 		CreatedAt:       time.Now().UTC(),
 		UpdatedAt:       time.Now().UTC(),
 	}

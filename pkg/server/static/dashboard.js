@@ -881,12 +881,13 @@ function toggleTheme() {
                 }
 
                 const users = allUsers.filter(u => (u.status !== 'pending' && u.status !== 'unverified'));
-                renderTable('users-table-body', users, u => { const isSelf = currentUser && u.email === currentUser.email; const rowStyle = isSelf ? 'opacity: 0.6;' : ''; return `
+                renderTable('users-table-body', users, u => { const isSelf = currentUser && u.email === currentUser.email; const rowStyle = isSelf ? 'opacity: 0.6;' : ''; const originBadge = (() => { const m = (u.auth_method || 'magic link').toLowerCase(); if (m === 'invite') return '<span class="badge" style="background: rgba(99,102,241,0.15); color: #818cf8; border: 1px solid rgba(99,102,241,0.3);">✉ Invite</span>'; if (m === 'registration') return '<span class="badge" style="background: rgba(16,185,129,0.15); color: #34d399; border: 1px solid rgba(16,185,129,0.3);">📝 Registration</span>'; if (m.startsWith('sso - liferay') || m === 'liferay') return '<span class="badge" style="background: rgba(30,120,220,0.15); color: #60a5fa; border: 1px solid rgba(30,120,220,0.3);">🔑 SSO · Liferay</span>'; if (m.startsWith('sso - keycloak') || m === 'keycloak') return '<span class="badge" style="background: rgba(239,68,68,0.15); color: #f87171; border: 1px solid rgba(239,68,68,0.3);">🔑 SSO · Keycloak</span>'; return `<span class="badge">${escapeHTML(u.auth_method || 'Magic Link')}</span>`; })(); return `
                     <tr style="${rowStyle}">
                         <td style="font-weight: 500;">${escapeHTML(u.email)} ${isSelf ? '<span style="font-size: 12px; color: var(--text-muted);">(You)</span>' : ''}</td>
                         <td>${escapeHTML(u.first_name)} ${escapeHTML(u.last_name)}</td>
                         <td><span class="badge ${u.role === 'admin' ? 'success' : ''}">${escapeHTML(u.role)}</span></td>
                         <td><span class="badge ${u.status === 'approved' ? 'success' : (u.status === 'revoked' ? 'danger' : 'warning')}">${escapeHTML(u.status)}</span></td>
+                        <td>${originBadge}</td>
                         <td>${formatLocalTime(u.created_at)}</td>
                         <td>
                             ${(!isSelf && u.status !== 'approved') ? `<button class="btn" style="padding: 4px 8px; margin: 0 4px 0 0;" onclick="approveUser('${u.id}')">Approve</button>` : ''}

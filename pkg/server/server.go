@@ -815,10 +815,7 @@ func (s *Server) handleRegisterRequest(w http.ResponseWriter, r *http.Request) {
 		verifyURL := fmt.Sprintf("%s://%s/setup?token=%s", scheme, r.Host, verificationToken)
 		subject := "[Liferay Tunnel] Complete Your Registration"
 
-		greetingName := "there"
-		if greetingName == "" {
-			greetingName = req.FirstName
-		}
+		greetingName := req.FirstName
 		if greetingName == "" {
 			greetingName = "there"
 		}

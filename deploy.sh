@@ -11,7 +11,7 @@ echo "Uploading binary to VPS..."
 scp bin/lfr-tunneld-linux $VPS_USER@$VPS_IP:/home/$VPS_USER/lfr-tunneld
 
 echo "Uploading error pages to VPS..."
-scp -r docs/server/error_pages $VPS_USER@$VPS_IP:/home/$VPS_USER/
+scp -r resources/server/error_pages $VPS_USER@$VPS_IP:/home/$VPS_USER/
 
 echo "Uploading static assets to VPS..."
 scp -r pkg/server/static $VPS_USER@$VPS_IP:/home/$VPS_USER/

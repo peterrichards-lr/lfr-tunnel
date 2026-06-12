@@ -222,7 +222,7 @@ To run `lfr-tunneld` as a reliable background service that automatically restart
     sudo chown root:root /usr/local/bin/lfr-tunneld
     ```
 
-2.  **Create the service file** at `/etc/systemd/system/lfr-tunneld.service` using the template provided in `docs/server/lfr-tunneld.service`:
+2.  **Create the service file** at `/etc/systemd/system/lfr-tunneld.service` using the template provided in `resources/server/lfr-tunneld.service`:
     ```ini
     [Unit]
     Description=Liferay Tunnel Gateway Daemon

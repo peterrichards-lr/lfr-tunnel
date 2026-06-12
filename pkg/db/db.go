@@ -777,6 +777,13 @@ func (db *DB) MarkMagicLinkUsed(id int) error {
 	return err
 }
 
+// InvalidateOtherMagicLinks expires all other unused magic links for a given email.
+func (db *DB) InvalidateOtherMagicLinks(email string, excludeID int) error {
+	query := `UPDATE admin_magic_links SET expires_at = CURRENT_TIMESTAMP WHERE email = ? AND id != ? AND used_at IS NULL`
+	_, err := db.conn.Exec(query, email, excludeID)
+	return err
+}
+
 // ListMagicLinks returns all magic links, ordered by newest first.
 func (db *DB) ListMagicLinks() ([]*MagicLink, error) {
 	query := `SELECT id, email, client_ip, created_at, expires_at, used_at FROM admin_magic_links ORDER BY created_at DESC LIMIT 100`

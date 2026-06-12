@@ -1524,6 +1524,7 @@ func (s *Server) handleAdminVerify(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		s.db.MarkMagicLinkUsed(link.ID)
+		s.db.InvalidateOtherMagicLinks(link.Email, link.ID)
 		email = link.Email
 	} else {
 		val, ok := s.portalMap.LoadAndDelete("admin_magic_" + req.Token)

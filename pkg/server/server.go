@@ -930,7 +930,7 @@ func (s *Server) handleCompleteSetup(w http.ResponseWriter, r *http.Request) {
 			approveURL := fmt.Sprintf("%s://%s/api/admin/approve?email=%s&token=%s", scheme, r.Host, url.QueryEscape(user.Email), user.ApprovalToken)
 			body := fmt.Sprintf("<p>New registration request (Email Verified & Setup Complete):</p><ul><li>Name: %s %s</li><li>Email: %s</li></ul><p><a href=\"%s\">Click here to approve this request</a></p>", user.FirstName, user.LastName, user.Email, approveURL)
 
-			plainBody := fmt.Sprintf("New user registered: %s", u.Email)
+			plainBody := fmt.Sprintf("New user registered: %s", user.Email)
 			go s.mailSender.Send(s.cfg.AdminNotificationEmail, subject, body, plainBody)
 		}
 	}
@@ -980,7 +980,7 @@ func (s *Server) handleVerifyEmail(w http.ResponseWriter, r *http.Request) {
 		body := fmt.Sprintf("<p>New registration request (Email Verified):</p><ul><li>Name: %s %s</li><li>Email: %s</li></ul><p><a href=\"%s\">Click here to approve this request</a></p>", user.FirstName, user.LastName, user.Email, approveURL)
 
 		go func() {
-			plainBody := fmt.Sprintf("A new user (%s) requires approval.", req.Email)
+			plainBody := fmt.Sprintf("A new user (%s) requires approval.", user.Email)
 			if err := s.mailSender.Send(s.cfg.AdminNotificationEmail, subject, body, plainBody); err != nil {
 				log.Printf("[Server] Failed to send admin alert email: %v", err)
 			}
@@ -1761,7 +1761,7 @@ Best regards,
 Liferay Tunnel Team`, actor, inviteLink, actor, declineLink)
 
 	if s.mailSender != nil {
-		plainBody := fmt.Sprintf("Hi there,\n\nYou have been invited by an administrator to use the Liferay Tunnel portal.\n\nLog in here: %s\n\nDecline here: %s", magicLink, declineLink)
+		plainBody := fmt.Sprintf("Hi there,\n\nYou have been invited by an administrator to use the Liferay Tunnel portal.\n\nLog in here: %s\n\nDecline here: %s", inviteLink, declineLink)
 		go s.mailSender.Send(req.Email, subject, body, plainBody)
 	}
 

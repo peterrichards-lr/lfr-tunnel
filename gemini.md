@@ -132,5 +132,5 @@ The solution will consist of:
 - [x] Create automated dev restart shell scripts to accelerate developer iteration loop.
 
 ## Roadmap (Post Public Visibility PR Flow)
-- [ ] Implement targeted user messaging (selectively target individual active users from the dashboard with custom alerts).
+- [x] Implement targeted user messaging (selectively target individual active users from the dashboard with custom alerts).
 - [x] Implement Playwright UI E2E test automation for full, deterministic Dashboard test coverage.

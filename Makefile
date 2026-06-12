@@ -1,10 +1,12 @@
-.PHONY: fmt vet test build deploy clean install-hook help
+.PHONY: fmt vet test build deploy clean install-hook e2e e2e-sso help
 
 help:
 	@echo "Liferay Tunnel Developer Commands:"
 	@echo "  make fmt          - Format Go files using gofmt"
 	@echo "  make vet          - Run go vet static analysis"
 	@echo "  make test         - Run all unit tests"
+	@echo "  make e2e          - Run the Docker integration E2E tests"
+	@echo "  make e2e-sso      - Run the SSO / Keycloak E2E integration tests"
 	@echo "  make build        - Clean and build client and server binaries"
 	@echo "  make deploy       - Cross-compile and deploy server binary to VPS"
 	@echo "  make clean        - Delete build binaries"
@@ -30,6 +32,12 @@ build: clean
 
 deploy:
 	@./scripts/deploy.sh
+
+e2e:
+	@./tests/e2e/run.sh
+
+e2e-sso:
+	@./tests/e2e/run-sso.sh
 
 install-hook:
 	@echo "Installing native git pre-commit hook..."

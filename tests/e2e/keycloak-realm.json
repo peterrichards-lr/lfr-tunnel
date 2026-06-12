@@ -1,0 +1,55 @@
+{
+  "realm": "liferay",
+  "enabled": true,
+  "sslRequired": "none",
+  "registrationAllowed": false,
+  "loginWithEmailAllowed": true,
+  "duplicateEmailsAllowed": false,
+  "resetPasswordAllowed": false,
+  "editUsernameAllowed": false,
+  "bruteForceProtected": false,
+  "clients": [
+    {
+      "clientId": "lfr-tunnel",
+      "name": "LFR Tunnel",
+      "enabled": true,
+      "protocol": "openid-connect",
+      "publicClient": false,
+      "secret": "secret",
+      "standardFlowEnabled": true,
+      "directAccessGrantsEnabled": true,
+      "serviceAccountsEnabled": false,
+      "authorizationServicesEnabled": false,
+      "redirectUris": [
+        "http://localhost:8000/*",
+        "http://tunnel.lfr-demo.local/*",
+        "http://lfr-demo.local/*"
+      ],
+      "webOrigins": [
+        "http://localhost:8000",
+        "http://tunnel.lfr-demo.local",
+        "http://lfr-demo.local"
+      ],
+      "attributes": {
+        "post.logout.redirect.uris": "http://localhost:8000/*"
+      }
+    }
+  ],
+  "users": [
+    {
+      "username": "sso-user@lfr-demo.local",
+      "email": "sso-user@lfr-demo.local",
+      "emailVerified": true,
+      "enabled": true,
+      "firstName": "SSO",
+      "lastName": "User",
+      "credentials": [
+        {
+          "type": "password",
+          "value": "SsoP@ssw0rd!",
+          "temporary": false
+        }
+      ]
+    }
+  ]
+}

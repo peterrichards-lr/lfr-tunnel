@@ -1,0 +1,30 @@
+domains:
+  - "lfr-demo.local"
+http_bind_addr: "0.0.0.0:8080"
+db_path: "/etc/lfr-tunneld/lfr-tunnel-sso.db"
+smtp_server:
+  host: "mailpit"
+  port: 1025
+  from_address: "Liferay Tunnel <noreply@lfr-demo.local>"
+
+owner:
+  user_id: "admin@lfr-demo.local"
+  name: "Admin User"
+
+admin_notification_email: "admin@lfr-demo.local"
+enable_registration: false
+
+sso_providers:
+  - id: "keycloak"
+    name: "Liferay Keycloak"
+    client_id: "lfr-tunnel"
+    client_secret: "secret"
+    issuer_url: "http://keycloak:8080/realms/liferay"
+    icon: "key"
+
+# Token Expiry & Pruning Configuration
+prune_interval: 1m
+magic_link_expiry: 1m
+invite_link_expiry: 5m
+verification_link_expiry: 5m
+session_expiry: 5m

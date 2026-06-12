@@ -166,14 +166,15 @@ func (s *Server) handleSSOCallback(w http.ResponseWriter, r *http.Request) {
 	}
 	if err == db.ErrNotFound {
 		user = &db.User{
-			ID:        email,
-			Email:     email,
-			FirstName: claims.GivenName,
-			LastName:  claims.FamilyName,
-			Role:      "user",
-			Status:    "approved",
-			CreatedAt: time.Now(),
-			UpdatedAt: time.Now(),
+			ID:         email,
+			Email:      email,
+			FirstName:  claims.GivenName,
+			LastName:   claims.FamilyName,
+			Role:       "user",
+			Status:     "approved",
+			AuthMethod: "sso - " + providerID,
+			CreatedAt:  time.Now(),
+			UpdatedAt:  time.Now(),
 		}
 		// If they match the owner config, grant admin
 		if user.Email == s.cfg.Owner.UserID {

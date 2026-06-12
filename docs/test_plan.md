@@ -35,6 +35,9 @@ sudo systemctl start lfr-tunneld
 - [ ] **Magic Link Login:** From the dummy account, request a login link. Verify it arrives and successfully logs you in without a password.
 - [ ] **Last Login Banner:** Log out and log back in (using a fresh magic link). Verify the banner at the top of the dashboard displays your *previous* login timestamp and IP address.
 - [ ] **Magic Link Auto-Invalidation:** Request a magic link. Do *not* click it. Wait 1 minute, and request a *second* magic link. Click the *second* link to log in. Log out, then try to click the *first* link. Verify you are correctly denied access because the older token was automatically invalidated by your new login.
+- [x] **Strict Single-Session Concurrency:** Log into the dashboard on two different devices (e.g., laptop and phone). Verify that the newer login automatically deletes the older session from the active pool.
+- [x] **Proactive Kicking & Toast Alerts:** After being kicked by the strict concurrency algorithm, verify that your old browser proactively detects the revocation via background polling, instantly redirects you to the login screen, and displays a custom toast alert explaining that you logged in elsewhere.
+- [x] **Domain Whitelist Pre-Flight:** Attempt to request a magic link for an email address that belongs to a non-whitelisted domain. Verify the system fails silently without executing database operations, preventing enumeration.
 - [ ] **Session Expiration:** *(Optional)* Wait 15 minutes for a Magic Link to expire naturally, or check back in an hour to ensure the background garbage collector successfully prunes it from the database.
 
 ### 3. Personal Account Settings & Aesthetics
@@ -49,6 +52,7 @@ sudo systemctl start lfr-tunneld
 - [ ] **User Suspension:** Go to the **Users** tab (as the Owner). Try clicking "Revoke" on the dummy account you created. Verify their status changes to `revoked`.
 - [ ] **IP Blacklisting:** Go to the **IP Blacklist** tab. Add a fake IP address to the ban list. Ensure it appears in the table. 
 - [ ] **Token Management:** Go to the **API Tokens** tab. Generate a test Personal Access Token. Verify it appears in the list and that clicking "Revoke" successfully deletes it.
+- [x] **Global Broadcast Messaging:** Go to the **Users** tab as the Owner and type a Global Broadcast Message. Click "Broadcast" and verify that a red banner drops down dynamically at the top of the screen on all active clients within ~10 seconds.
 - [ ] **Audit Log Verification:** Open the **Audit Logs** tab under the Reporting section. You should see a chronological ledger of everything you just did (e.g., `admin.login`, `user.registered`, `user.approved`).
 
 ### 5. Analytics & Monitoring

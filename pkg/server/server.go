@@ -458,6 +458,12 @@ func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 
+		if r.Method == http.MethodGet && r.URL.Path == "/favicon.ico" {
+			r.URL.Path = "/static/favicon.ico"
+			http.FileServer(http.FS(staticFS)).ServeHTTP(w, r)
+			return
+		}
+
 		if r.Method == http.MethodGet && (r.URL.Path == "/" || r.URL.Path == "/admin" || r.URL.Path == "/portal") {
 			w.Header().Set("Content-Type", "text/html; charset=utf-8")
 			w.WriteHeader(http.StatusOK)

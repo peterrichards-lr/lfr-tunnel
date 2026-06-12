@@ -17,6 +17,7 @@ function renderTable(tbodyId, data, renderRowFn) {
         
         // Filter input
         const filterInput = document.createElement('input');
+        filterInput.id = tbodyId + '-search';
         filterInput.type = 'text';
         filterInput.className = 'input-field';
         filterInput.placeholder = 'Search...';
@@ -31,6 +32,7 @@ function renderTable(tbodyId, data, renderRowFn) {
         
         // Pagination controls
         const paginationDiv = document.createElement('div');
+        paginationDiv.id = tbodyId + '-pagination';
         paginationDiv.style.display = 'flex';
         paginationDiv.style.justifyContent = 'flex-end';
         paginationDiv.style.alignItems = 'center';
@@ -285,8 +287,8 @@ function toggleTheme() {
                         }
 
                         const repoUrl = vData.repository_url || 'https://github.com/peterrichards-lr/lfr-tunnel';
-                        const dlUrl = `${repoUrl}/releases/download/${latestVer}/lfr-tunnel${dlSuffix}`;
-                        const otherUrl = `${repoUrl}/releases/tag/${latestVer}`;
+                        const dlUrl = `${repoUrl}/releases/latest/download/lfr-tunnel${dlSuffix}`;
+                        const otherUrl = `${repoUrl}/releases/latest`;
 
                         const bannerDiv = document.createElement('div');
                         bannerDiv.className = 'alert alert-info';
@@ -330,6 +332,11 @@ function toggleTheme() {
 
             loadTokens();
             loadTunnels();
+            
+            // Route to initial tab based on URL hash
+            const initialTab = window.location.hash ? window.location.hash.slice(1) : 'overview';
+            showTab(initialTab, true);
+            
             startPolling();
         }
 
@@ -353,6 +360,24 @@ function toggleTheme() {
                             banner.style.display = 'block';
                         } else {
                             banner.style.display = 'none';
+                        }
+                        
+                        if (data.targeted_message && window.lastTargetedMessage !== data.targeted_message) {
+                            window.lastTargetedMessage = data.targeted_message;
+                            const tDiv = document.createElement('div');
+                            tDiv.className = 'toast show';
+                            tDiv.style.backgroundColor = 'var(--accent)';
+                            tDiv.style.borderColor = 'var(--accent)';
+                            tDiv.style.zIndex = '999999';
+                            tDiv.innerHTML = `
+                                <div style="display: flex; flex-direction: column;">
+                                    <div style="margin-bottom: 8px;"><strong>Admin Message:</strong> ${escapeHTML(data.targeted_message)}</div>
+                                    <div style="text-align: right;">
+                                        <button onclick="this.parentElement.parentElement.parentElement.remove(); acknowledgeTargetedMessage(); window.lastTargetedMessage = null;" class="btn" style="background: rgba(0,0,0,0.2); color: white; border: none; padding: 4px 8px; margin: 0; min-width: 0; width: auto; font-size: 12px;">Dismiss</button>
+                                    </div>
+                                </div>
+                            `;
+                            document.getElementById('toast-container').appendChild(tDiv);
                         }
                         
                         if (data.killed_previous_session) {
@@ -520,12 +545,18 @@ function toggleTheme() {
             `);
         }
 
-        function showTab(tabName) {
+        function showTab(tabName, skipHistory = false) {
             document.querySelectorAll('.main-content > div').forEach(el => el.classList.add('hidden'));
             document.querySelectorAll('.nav-item').forEach(el => el.classList.remove('active'));
             
-            document.getElementById(`tab-${tabName}`).classList.remove('hidden');
-            document.getElementById(`nav-${tabName}`).classList.add('active');
+            const tabEl = document.getElementById(`tab-${tabName}`);
+            const navEl = document.getElementById(`nav-${tabName}`);
+            if (tabEl) tabEl.classList.remove('hidden');
+            if (navEl) navEl.classList.add('active');
+
+            if (!skipHistory) {
+                history.pushState({ tab: tabName }, '', '#' + tabName);
+            }
 
             if (tabName === 'users') loadUsers();
             if (tabName === 'registrations') loadRegistrations();
@@ -536,6 +567,12 @@ function toggleTheme() {
             if (tabName === 'tunnels') loadTunnels();
             if (tabName === 'analytics') loadAnalytics();
         }
+
+        window.addEventListener('popstate', (e) => {
+            const tabName = (e.state && e.state.tab) ? e.state.tab : (window.location.hash ? window.location.hash.slice(1) : 'overview');
+            showTab(tabName, true);
+        });
+
 
         let charts = {};
 
@@ -820,6 +857,7 @@ function toggleTheme() {
                         <td>
                             ${(!isSelf && u.status !== 'approved') ? `<button class="btn" style="padding: 4px 8px; margin: 0 4px 0 0;" onclick="approveUser('${u.id}')">Approve</button>` : ''}
                             ${(!isSelf && u.status !== 'revoked') ? `<button class="btn" style="padding: 4px 8px; margin: 0 4px 0 0; color: var(--danger); border-color: var(--danger);" onclick="revokeUser('${u.id}')">Revoke</button>` : ''}
+                            ${(!isSelf && u.status === 'approved') ? `<button class="btn" style="padding: 4px 8px; margin: 0 4px 0 0; color: #3b82f6; border-color: #3b82f6;" onclick="promptTargetedMessage('${u.id}', '${escapeHTML(u.email)}')">Message</button>` : ''}
                             ${isSelf ? '<span style="font-size: 12px; color: var(--text-muted);">No actions</span>' : ''}
                         </td>
                     </tr>
@@ -1074,3 +1112,51 @@ function toggleTheme() {
         }
 
         init();
+        // Targeted Messaging
+        function promptTargetedMessage(uid, email) {
+            document.getElementById('targeted-message-userid').value = uid;
+            document.getElementById('targeted-message-desc').innerText = "Send a direct toast alert to " + email;
+            document.getElementById('targeted-message-input').value = "";
+            document.getElementById('targeted-message-modal').style.display = 'flex';
+        }
+
+        function closeTargetedModal() {
+            document.getElementById('targeted-message-modal').style.display = 'none';
+        }
+
+        async function sendTargetedMessage() {
+            const uid = document.getElementById('targeted-message-userid').value;
+            const msg = document.getElementById('targeted-message-input').value.trim();
+            if (!msg) return showToast("Please enter a message.");
+
+            const res = await fetch('/api/admin/targeted-message', {
+                method: 'POST',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify({ user_id: uid, message: msg })
+            });
+            if (res.ok) {
+                showToast("Targeted message sent!");
+                closeTargetedModal();
+            } else {
+                showToast("Failed to send message.");
+            }
+        }
+
+        async function clearTargetedMessage() {
+            const uid = document.getElementById('targeted-message-userid').value;
+            const res = await fetch('/api/admin/targeted-message', {
+                method: 'POST',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify({ user_id: uid, message: "" })
+            });
+            if (res.ok) {
+                showToast("Targeted message cleared!");
+                closeTargetedModal();
+            } else {
+                showToast("Failed to clear message.");
+            }
+        }
+
+        async function acknowledgeTargetedMessage() {
+            await fetch('/api/me/dismiss-message', { method: 'POST' });
+        }

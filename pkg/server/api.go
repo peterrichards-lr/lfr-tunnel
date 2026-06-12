@@ -113,6 +113,12 @@ func (s *Server) handleGetMe(w http.ResponseWriter, r *http.Request) {
 	resp["broadcast_message"] = s.broadcastMessage
 	s.broadcastMutex.RUnlock()
 
+	s.targetedMutex.RLock()
+	if tm, ok := s.targetedMessages[user.ID]; ok && tm != "" {
+		resp["targeted_message"] = tm
+	}
+	s.targetedMutex.RUnlock()
+
 	respondJSON(w, http.StatusOK, resp)
 }
 
@@ -300,4 +306,49 @@ func (s *Server) handleDeleteToken(w http.ResponseWriter, r *http.Request) {
 	})
 
 	respondJSON(w, http.StatusOK, map[string]string{"status": "ok"})
+}
+
+// handleGetAnalytics returns analytics data for the authenticated user and globally if admin.
+func (s *Server) handleGetAnalytics(w http.ResponseWriter, r *http.Request) {
+	if s.db == nil {
+		log.Printf("handleGetAnalytics: db is nil")
+		http.Error(w, `{"error":"Database not enabled"}`, http.StatusNotImplemented)
+		return
+	}
+
+	user, err := s.getCurrentUser(r)
+	if err != nil {
+		log.Printf("handleGetAnalytics: getCurrentUser failed: %v", err)
+		http.Error(w, `{"error":"Unauthorized"}`, http.StatusUnauthorized)
+		return
+	}
+
+	days := 30
+	isAdmin := user.Role == "admin" || user.Role == "owner"
+
+	log.Printf("handleGetAnalytics: user=%s, role=%s, isAdmin=%v", user.Email, user.Role, isAdmin)
+
+	userStats, err := s.db.GetUserAnalytics(user.ID, days)
+	if err != nil {
+		log.Printf("handleGetAnalytics: GetUserAnalytics failed: %v", err)
+		http.Error(w, `{"error":"Failed to fetch user analytics"}`, http.StatusInternalServerError)
+		return
+	}
+
+	resp := map[string]interface{}{
+		"personal": userStats,
+	}
+
+	if isAdmin {
+		globalStats, err := s.db.GetGlobalAnalytics(days)
+		if err != nil {
+			log.Printf("handleGetAnalytics: GetGlobalAnalytics failed: %v", err)
+			http.Error(w, `{"error":"Failed to fetch global analytics"}`, http.StatusInternalServerError)
+			return
+		}
+		log.Printf("handleGetAnalytics: globalStats loaded successfully (TopUsers: %d, Daily: %d)", len(globalStats.TopUsers), len(globalStats.Daily))
+		resp["global"] = globalStats
+	}
+
+	respondJSON(w, http.StatusOK, resp)
 }

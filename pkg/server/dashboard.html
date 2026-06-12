@@ -8,11 +8,26 @@
     <title>Liferay Tunnel Identity</title>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="/static/dashboard.css">
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
 </head>
 <body>
 
     <div id="loader"><div class="spinner"></div></div>
 
+    <!-- TARGETED MESSAGE MODAL -->
+    <div id="targeted-message-modal" class="modal-overlay">
+        <div class="glass modal">
+            <h3>Targeted Message</h3>
+            <p id="targeted-message-desc" style="color: var(--text-muted); margin-bottom: 16px; font-size: 14px;"></p>
+            <input type="hidden" id="targeted-message-userid">
+            <input type="text" id="targeted-message-input" class="input-field" placeholder="Enter message to send..." required>
+            <button class="btn btn-primary" onclick="sendTargetedMessage()">Send Message</button>
+            <button class="btn" style="color: var(--danger); border-color: var(--danger);" onclick="clearTargetedMessage()">Clear Existing Alert</button>
+            <button class="btn" onclick="closeTargetedModal()">Cancel</button>
+        </div>
+    </div>
+
+    <!-- TOAST ALERTS -->
     <!-- LOGIN SCREEN -->
     <div id="login-screen">
         <div class="glass login-card">

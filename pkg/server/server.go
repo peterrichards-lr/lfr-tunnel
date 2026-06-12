@@ -86,6 +86,8 @@ type Server struct {
 	metricsQueue     chan *db.TunnelMetric
 	broadcastMutex   sync.RWMutex
 	broadcastMessage string
+	targetedMessages map[string]string
+	targetedMutex    sync.RWMutex
 }
 
 // NewServer initializes and returns a new Server instance.
@@ -143,18 +145,19 @@ func NewServer(cfg *config.ServerConfig) (*Server, error) {
 	ctx, cancel := context.WithCancel(context.Background())
 
 	srv := &Server{
-		cfg:          cfg,
-		chiselServer: chiselSrv,
-		registry:     registry,
-		proxyHandler: proxyHandler,
-		chiselProxy:  chiselProxy,
-		db:           database,
-		mailSender:   mailSender,
-		ctx:          ctx,
-		cancel:       cancel,
-		rateLimiters: make(map[string]*rate.Limiter),
-		violations:   make(map[string]int),
-		metricsQueue: make(chan *db.TunnelMetric, 1000),
+		cfg:              cfg,
+		chiselServer:     chiselSrv,
+		registry:         registry,
+		proxyHandler:     proxyHandler,
+		chiselProxy:      chiselProxy,
+		db:               database,
+		mailSender:       mailSender,
+		ctx:              ctx,
+		cancel:           cancel,
+		rateLimiters:     make(map[string]*rate.Limiter),
+		violations:       make(map[string]int),
+		metricsQueue:     make(chan *db.TunnelMetric, 1000),
+		targetedMessages: make(map[string]string),
 	}
 
 	srv.registry.OnLeaseCleanup = func(lease *TunnelLease) {
@@ -441,6 +444,17 @@ func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 			s.handleUpdateMe(w, r)
 			return
 		}
+
+		if r.Method == http.MethodPost && r.URL.Path == "/api/me/dismiss-message" {
+			s.handleDismissMessage(w, r)
+			return
+		}
+
+		if r.Method == http.MethodGet && r.URL.Path == "/api/analytics" {
+			s.handleGetAnalytics(w, r)
+			return
+		}
+
 		if r.Method == http.MethodGet && r.URL.Path == "/api/tokens" {
 			s.handleListTokens(w, r)
 			return
@@ -1342,6 +1356,11 @@ func (s *Server) handleAdminEndpoints(w http.ResponseWriter, r *http.Request) {
 
 	if r.Method == http.MethodPost && r.URL.Path == "/api/admin/broadcast" {
 		s.handleAdminBroadcast(w, r, actor)
+		return
+	}
+
+	if r.Method == http.MethodPost && r.URL.Path == "/api/admin/targeted-message" {
+		s.handleAdminTargetedMessage(w, r, actor)
 		return
 	}
 
@@ -2272,4 +2291,45 @@ func (s *Server) handleAdminListMagicLinks(w http.ResponseWriter, r *http.Reques
 		return
 	}
 	respondJSON(w, http.StatusOK, links)
+}
+
+func (s *Server) handleAdminTargetedMessage(w http.ResponseWriter, r *http.Request, actor string) {
+	var req struct {
+		UserID  string `json:"user_id"`
+		Message string `json:"message"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		http.Error(w, `{"error":"Invalid payload"}`, http.StatusBadRequest)
+		return
+	}
+
+	if req.UserID == "" {
+		http.Error(w, `{"error":"user_id is required"}`, http.StatusBadRequest)
+		return
+	}
+
+	s.targetedMutex.Lock()
+	if req.Message == "" {
+		delete(s.targetedMessages, req.UserID)
+	} else {
+		s.targetedMessages[req.UserID] = req.Message
+	}
+	s.targetedMutex.Unlock()
+
+	s.writeAudit(actor, "admin.targeted_message", "user", req.UserID, "Admin sent targeted message", r)
+	respondJSON(w, http.StatusOK, map[string]string{"status": "ok"})
+}
+
+func (s *Server) handleDismissMessage(w http.ResponseWriter, r *http.Request) {
+	user, err := s.getCurrentUser(r)
+	if err != nil {
+		http.Error(w, `{"error":"Unauthorized"}`, http.StatusUnauthorized)
+		return
+	}
+
+	s.targetedMutex.Lock()
+	delete(s.targetedMessages, user.ID)
+	s.targetedMutex.Unlock()
+
+	respondJSON(w, http.StatusOK, map[string]string{"status": "ok"})
 }

@@ -17,3 +17,9 @@ client-config.yaml
 *.db-journal
 
 lfr-tunneld
+
+# Playwright UI Tests
+tests/e2e/ui/node_modules/
+tests/e2e/ui/test-results/
+tests/e2e/ui/playwright-report/
+tests/e2e/ui/playwright/.cache/

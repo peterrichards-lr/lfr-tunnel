@@ -854,7 +854,7 @@ func (db *DB) GetGlobalAnalytics(days int) (*GlobalAnalytics, error) {
 	}
 	defer func() { _ = rows.Close() }()
 
-	var daily []DailyBandwidth
+	daily := make([]DailyBandwidth, 0)
 	for rows.Next() {
 		var dbw DailyBandwidth
 		if err := rows.Scan(&dbw.Date, &dbw.BytesIn, &dbw.BytesOut); err != nil {
@@ -878,7 +878,7 @@ func (db *DB) GetGlobalAnalytics(days int) (*GlobalAnalytics, error) {
 	}
 	defer func() { _ = topRows.Close() }()
 
-	var top []UserBandwidth
+	top := make([]UserBandwidth, 0)
 	for topRows.Next() {
 		var ub UserBandwidth
 		if err := topRows.Scan(&ub.Email, &ub.BytesIn, &ub.BytesOut); err != nil {
@@ -907,7 +907,7 @@ func (db *DB) GetUserAnalytics(userID string, days int) (*UserAnalytics, error) 
 	}
 	defer func() { _ = rows.Close() }()
 
-	var daily []DailyBandwidth
+	daily := make([]DailyBandwidth, 0)
 	for rows.Next() {
 		var dbw DailyBandwidth
 		if err := rows.Scan(&dbw.Date, &dbw.BytesIn, &dbw.BytesOut); err != nil {
@@ -929,7 +929,7 @@ func (db *DB) GetUserAnalytics(userID string, days int) (*UserAnalytics, error) 
 	}
 	defer func() { _ = tunnelRows.Close() }()
 
-	var tunnels []TunnelBandwidth
+	tunnels := make([]TunnelBandwidth, 0)
 	for tunnelRows.Next() {
 		var tb TunnelBandwidth
 		if err := tunnelRows.Scan(&tb.FullHost, &tb.BytesIn, &tb.BytesOut); err != nil {

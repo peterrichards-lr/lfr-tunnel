@@ -41,10 +41,8 @@ services:
     networks:
       default:
         aliases:
-          - tunnel.lfr-demo.se
-          - lfr-demo.se
-          - tunnel.lfr-demo.online
-          - lfr-demo.online
+          - tunnel.lfr-demo.local
+          - lfr-demo.local
     depends_on:
       - lfr-tunneld
 

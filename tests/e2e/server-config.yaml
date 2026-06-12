@@ -1,18 +1,17 @@
 domains:
-  - "lfr-demo.se"
-  - "lfr-demo.online"
+  - "lfr-demo.local"
 http_bind_addr: "0.0.0.0:8080"
 db_path: "/etc/lfr-tunneld/lfr-tunnel.db"
 smtp_server:
   host: "mailpit"
   port: 1025
-  from_address: "Liferay Tunnel <noreply@lfr-demo.se>"
+  from_address: "Liferay Tunnel <noreply@lfr-demo.local>"
 
 owner:
-  user_id: "admin@lfr-demo.se"
+  user_id: "admin@lfr-demo.local"
   name: "Admin User"
 
-admin_notification_email: "admin@lfr-demo.se"
+admin_notification_email: "admin@lfr-demo.local"
 enable_registration: true
 
 sso_providers:

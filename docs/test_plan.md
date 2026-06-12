@@ -4,13 +4,13 @@ Here is a comprehensive checklist of the management and security flows you shoul
 
 ## Hard Reset (Developer Only)
 
-If you ever need to completely wipe the system to test from scratch, SSH into the VPS and execute this exact sequence to ensure memory caches and the SQLite database are fully purged:
+If you ever need to completely wipe the live server system to test from scratch, you can use the automated reset script from the root of the project:
 
 ```bash
-sudo systemctl stop lfr-tunneld
-sudo sh -c 'rm -f /etc/lfr-tunneld/lfr-tunnel.db*'
-sudo systemctl start lfr-tunneld
+./scripts/reset-vps.sh
 ```
+
+*(This automatically SSHs into the VPS, stops the service, purges the SQLite database and caches, and securely restarts the daemon.)*
 
 ## Test Plan
 
@@ -52,7 +52,7 @@ sudo systemctl start lfr-tunneld
 ### 4. Admin Security & Control Panels
 
 - [ ] **User Suspension:** Go to the **Users** tab (as the Owner). Try clicking "Revoke" on the dummy account you created. Verify their status changes to `revoked`.
-- [ ] **IP Blacklisting:** Go to the **IP Blacklist** tab. Add a fake IP address to the ban list. Ensure it appears in the table. 
+- [ ] **IP Blacklisting:** Go to the **IP Blacklist** tab. Add a fake IP address to the ban list. Ensure it appears in the table.
 - [ ] **Token Management:** Go to the **API Tokens** tab. Generate a test Personal Access Token. Verify it appears in the list and that clicking "Revoke" successfully deletes it.
 - [x] **Global Broadcast Messaging:** Go to the **Users** tab as the Owner and type a Global Broadcast Message. Click "Broadcast" and verify that a red banner drops down dynamically at the top of the screen on all active clients within ~10 seconds.
 - [ ] **Audit Log Verification:** Open the **Audit Logs** tab under the Reporting section. You should see a chronological ledger of everything you just did (e.g., `admin.login`, `user.registered`, `user.approved`).
@@ -75,3 +75,17 @@ sudo systemctl start lfr-tunneld
   - Verify that around request ~21, the server starts returning `429 Too Many Requests`.
   - Verify that at request 50, the server transitions to returning `403 Forbidden` permanently.
   - Log into the portal (from a *different* IP/network, e.g. a mobile hotspot) and check the **IP Blacklist** tab to verify your original IP was successfully Auto-Banned by the Rate Limiter. Check your inbox for the automated threat alert email.
+
+## Automated E2E Test Coverage
+
+A subset of the critical flows listed above are now continuously verified by our Playwright E2E UI automation suite (`tests/e2e/ui`). While manual testing is still recommended for a full exploratory pass, the following core features are explicitly covered by automated tests:
+
+- **Initial Bootstrap (Owner Setup)**: Magic Link login flow and rendering of the dashboard overview.
+- **Personal Account Settings & Aesthetics**: Modifying user theme preferences (Light/Dark mode) and verifying DOM state changes.
+- **Table Pagination & Search**: Verifying dynamic Table Pagination and Search Input rendering on the Active Tunnels view.
+- **Analytics & Tunnel Automation**: Token generation, client CLI connection validation inside isolated Docker containers, data routing verification, and successful execution of the `Chart.js` UI rendering lifecycle (including missing dataset fallback logic).
+
+### Last Run Outcome
+
+- **Date/Time**: 2026-06-12 14:04 (UTC)
+- **Status**: PASSED (Resolved edge case where empty Chart.js datasets caused test failures, and restored missing Chart.js CDN inclusion in the dashboard HTML).

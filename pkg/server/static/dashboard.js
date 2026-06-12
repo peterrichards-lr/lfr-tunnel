@@ -126,6 +126,15 @@ function updateTableView(tbodyId) {
     // Render Pagination
     inst.paginationDiv.innerHTML = '';
     if (totalPages > 1) {
+        const firstBtn = document.createElement('button');
+        firstBtn.className = 'btn btn-secondary';
+        firstBtn.style.padding = '4px 8px';
+        firstBtn.style.margin = '0';
+        firstBtn.style.width = 'auto';
+        firstBtn.innerHTML = '&laquo; First';
+        firstBtn.disabled = inst.currentPage === 1;
+        firstBtn.onclick = () => { inst.currentPage = 1; updateTableView(tbodyId); };
+        
         const prevBtn = document.createElement('button');
         prevBtn.className = 'btn btn-secondary';
         prevBtn.style.padding = '4px 8px';
@@ -135,6 +144,22 @@ function updateTableView(tbodyId) {
         prevBtn.disabled = inst.currentPage === 1;
         prevBtn.onclick = () => { inst.currentPage--; updateTableView(tbodyId); };
         
+        const pageSelect = document.createElement('select');
+        pageSelect.className = 'form-control';
+        pageSelect.style.width = 'auto';
+        pageSelect.style.padding = '2px 8px';
+        pageSelect.style.margin = '0';
+        pageSelect.style.display = 'inline-block';
+        pageSelect.style.fontSize = '14px';
+        for (let i = 1; i <= totalPages; i++) {
+            const opt = document.createElement('option');
+            opt.value = i;
+            opt.innerText = `Page ${i} of ${totalPages}`;
+            if (i === inst.currentPage) opt.selected = true;
+            pageSelect.appendChild(opt);
+        }
+        pageSelect.onchange = (e) => { inst.currentPage = parseInt(e.target.value); updateTableView(tbodyId); };
+        
         const nextBtn = document.createElement('button');
         nextBtn.className = 'btn btn-secondary';
         nextBtn.style.padding = '4px 8px';
@@ -143,14 +168,21 @@ function updateTableView(tbodyId) {
         nextBtn.innerText = 'Next';
         nextBtn.disabled = inst.currentPage === totalPages;
         nextBtn.onclick = () => { inst.currentPage++; updateTableView(tbodyId); };
+
+        const lastBtn = document.createElement('button');
+        lastBtn.className = 'btn btn-secondary';
+        lastBtn.style.padding = '4px 8px';
+        lastBtn.style.margin = '0';
+        lastBtn.style.width = 'auto';
+        lastBtn.innerHTML = 'Last &raquo;';
+        lastBtn.disabled = inst.currentPage === totalPages;
+        lastBtn.onclick = () => { inst.currentPage = totalPages; updateTableView(tbodyId); };
         
-        const pageInfo = document.createElement('span');
-        pageInfo.style.fontSize = '14px';
-        pageInfo.innerText = `Page ${inst.currentPage} of ${totalPages}`;
-        
+        inst.paginationDiv.appendChild(firstBtn);
         inst.paginationDiv.appendChild(prevBtn);
-        inst.paginationDiv.appendChild(pageInfo);
+        inst.paginationDiv.appendChild(pageSelect);
         inst.paginationDiv.appendChild(nextBtn);
+        inst.paginationDiv.appendChild(lastBtn);
     }
 }
 

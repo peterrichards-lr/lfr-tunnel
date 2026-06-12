@@ -130,6 +130,7 @@ function updateTableView(tbodyId) {
         prevBtn.className = 'btn btn-secondary';
         prevBtn.style.padding = '4px 8px';
         prevBtn.style.margin = '0';
+        prevBtn.style.width = 'auto';
         prevBtn.innerText = 'Prev';
         prevBtn.disabled = inst.currentPage === 1;
         prevBtn.onclick = () => { inst.currentPage--; updateTableView(tbodyId); };
@@ -138,6 +139,7 @@ function updateTableView(tbodyId) {
         nextBtn.className = 'btn btn-secondary';
         nextBtn.style.padding = '4px 8px';
         nextBtn.style.margin = '0';
+        nextBtn.style.width = 'auto';
         nextBtn.innerText = 'Next';
         nextBtn.disabled = inst.currentPage === totalPages;
         nextBtn.onclick = () => { inst.currentPage++; updateTableView(tbodyId); };

@@ -1,4 +1,4 @@
 package config
 
-// Version is the current version of the lfr-tunnel client.
-const Version = "v1.5.0"
+// Version defines the current application version
+const Version = "v1.6.0"

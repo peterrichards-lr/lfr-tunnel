@@ -1578,6 +1578,18 @@ func (s *Server) handleAdminVerify(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
+	// Enforce strict single-session concurrency by invalidating older active sessions for this user.
+	s.portalMap.Range(func(key, value interface{}) bool {
+		k := key.(string)
+		if strings.HasPrefix(k, "admin_session_") {
+			sessionData := value.(PortalSessionData)
+			if sessionData.Email == email {
+				s.portalMap.Delete(k)
+			}
+		}
+		return true
+	})
+
 	s.portalMap.Store("admin_session_"+sessionToken, PortalSessionData{
 		Email:           email,
 		ExpiresAt:       time.Now().Add(s.cfg.PortalSessionDuration),

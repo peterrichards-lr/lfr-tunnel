@@ -16,11 +16,11 @@ sudo systemctl start lfr-tunneld
 
 ### 0. Initial Bootstrap (Owner Setup)
 
-- [ ] **First Owner Login:** Enter your whitelisted owner email (from `server-config.yaml`) into the "Log In with Email" box and request a magic link.
-- [ ] **Account Provisioning:** Click the magic link. Verify you bypass the registration queue and are taken directly to the dashboard, and your Owner account is automatically populated into the database.
-- [ ] **First Time Welcome:** Verify the system detects this is your first session and prints "We're glad you're here. This appears to be your first time logging in."
-- [ ] **Client Setup Banner:** Verify the dashboard automatically detects your OS (macOS, Windows, or Linux) and presents a prominent banner to download the latest client binary.
-- [ ] **Complete Profile:** Navigate to the **Account** tab to adjust your First/Last name or Theme preferences, then hit Save.
+- [x] **First Owner Login:** Enter your whitelisted owner email (from `server-config.yaml`) into the "Log In with Email" box and request a magic link.
+- [x] **Account Provisioning:** Click the magic link. Verify you bypass the registration queue and are taken directly to the dashboard, and your Owner account is automatically populated into the database.
+- [x] **First Time Welcome:** Verify the system detects this is your first session and prints "We're glad you're here. This appears to be your first time logging in."
+- [x] **Client Setup Banner:** Verify the dashboard automatically detects your OS (macOS, Windows, or Linux) and presents a prominent banner to download the latest client binary.
+- [x] **Complete Profile:** Navigate to the **Account** tab to adjust your First/Last name or Theme preferences, then hit Save.
 
 ### 1. The New User Registration & Moderation Flow
 

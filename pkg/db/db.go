@@ -21,7 +21,31 @@ type AuditEntry struct {
 	CreatedAt  time.Time `json:"created_at"`
 }
 
+// TunnelMetric records bandwidth usage for a tunnel session.
+type TunnelMetric struct {
+	ID              int64     `json:"id"`
+	UserID          string    `json:"user_id"`
+	SubdomainPrefix string    `json:"subdomain_prefix"`
+	FullHost        string    `json:"full_host"`
+	BytesIn         int64     `json:"bytes_in"`
+	BytesOut        int64     `json:"bytes_out"`
+	ConnectedAt     time.Time `json:"connected_at"`
+	RecordedAt      time.Time `json:"recorded_at"`
+}
+
 // AuditFilter controls optional filtering for ListAuditEntries.
+
+// MagicLink represents a sent magic link in the database.
+type MagicLink struct {
+	ID        int        `json:"id"`
+	Email     string     `json:"email"`
+	TokenHash string     `json:"-"` // Not exposed in JSON
+	ClientIP  string     `json:"client_ip"`
+	CreatedAt time.Time  `json:"created_at"`
+	ExpiresAt time.Time  `json:"expires_at"`
+	UsedAt    *time.Time `json:"used_at"`
+}
+
 type AuditFilter struct {
 	ActorID  string
 	Action   string
@@ -35,17 +59,26 @@ var (
 )
 
 type User struct {
-	ID                string    `json:"id"`
-	Email             string    `json:"email"`
-	FirstName         string    `json:"first_name"`
-	LastName          string    `json:"last_name"`
-	Role              string    `json:"role"`   // "admin", "user"
-	Status            string    `json:"status"` // "unverified", "pending", "approved", "revoked"
-	VerificationToken string    `json:"-"`
-	ApprovalToken     string    `json:"-"`
-	ClaimToken        string    `json:"-"`
-	CreatedAt         time.Time `json:"created_at"`
-	UpdatedAt         time.Time `json:"updated_at"`
+	ID                string     `json:"id"`
+	Email             string     `json:"email"`
+	FirstName         string     `json:"first_name"`
+	LastName          string     `json:"last_name"`
+	PreferredName     string     `json:"preferred_name"`
+	Role              string     `json:"role"`   // "admin", "user"
+	Status            string     `json:"status"` // "unverified", "pending", "approved", "revoked"
+	VerificationToken string     `json:"-"`
+	ApprovalToken     string     `json:"-"`
+	ClaimToken        string     `json:"-"`
+	Timezone          string     `json:"timezone"`
+	AuthMethod        string     `json:"auth_method"`
+	ThemePreference   string     `json:"theme_preference"`
+	NotificationPrefs string     `json:"notification_prefs"`
+	CreatedAt         time.Time  `json:"created_at"`
+	UpdatedAt         time.Time  `json:"updated_at"`
+	LastLoginAt       *time.Time `json:"last_login_at"`
+	LastLoginIP       string     `json:"last_login_ip"`
+	LastClientVersion string     `json:"last_client_version"`
+	LastClientOS      string     `json:"last_client_os"`
 }
 
 type PersonalAccessToken struct {
@@ -82,6 +115,15 @@ func Open(dsn string) (*DB, error) {
 		return nil, err
 	}
 
+	// Migrations
+	conn.Exec("ALTER TABLE users ADD COLUMN timezone TEXT DEFAULT 'UTC'")            //nolint:errcheck
+	conn.Exec("ALTER TABLE users ADD COLUMN auth_method TEXT DEFAULT 'Magic Link'")  //nolint:errcheck
+	conn.Exec("ALTER TABLE users ADD COLUMN preferred_name TEXT DEFAULT ''")         //nolint:errcheck
+	conn.Exec("ALTER TABLE users ADD COLUMN theme_preference TEXT DEFAULT 'system'") //nolint:errcheck
+	conn.Exec("ALTER TABLE users ADD COLUMN notification_prefs TEXT DEFAULT '{}'")   //nolint:errcheck
+	conn.Exec("ALTER TABLE users ADD COLUMN last_login_at DATETIME")                 //nolint:errcheck
+	conn.Exec("ALTER TABLE users ADD COLUMN last_login_ip TEXT DEFAULT ''")          //nolint:errcheck
+
 	db := &DB{conn: conn}
 	if err := db.initSchema(); err != nil {
 		conn.Close() //nolint:errcheck
@@ -103,10 +145,17 @@ func (db *DB) initSchema() error {
 		email TEXT UNIQUE NOT NULL,
 		first_name TEXT,
 		last_name TEXT,
+		preferred_name TEXT DEFAULT '',
 		role TEXT NOT NULL DEFAULT 'user',
 		status TEXT NOT NULL DEFAULT 'pending',
 		approval_token TEXT,
 		claim_token TEXT,
+		timezone TEXT DEFAULT 'UTC',
+		auth_method TEXT DEFAULT 'Magic Link',
+		theme_preference TEXT DEFAULT 'system',
+		notification_prefs TEXT DEFAULT '{}',
+		last_login_at DATETIME,
+		last_login_ip TEXT DEFAULT '',
 		created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
 		updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
 	);
@@ -135,6 +184,17 @@ func (db *DB) initSchema() error {
 		FOREIGN KEY(user_id) REFERENCES users(id) ON DELETE SET NULL
 	);
 
+	
+	CREATE TABLE IF NOT EXISTS admin_magic_links (
+		id INTEGER PRIMARY KEY AUTOINCREMENT,
+		email TEXT NOT NULL,
+		token_hash TEXT NOT NULL UNIQUE,
+		client_ip TEXT NOT NULL,
+		created_at DATETIME NOT NULL DEFAULT (datetime('now')),
+		expires_at DATETIME NOT NULL,
+		used_at DATETIME
+	);
+	CREATE INDEX IF NOT EXISTS idx_magic_email ON admin_magic_links(email);
 	CREATE TABLE IF NOT EXISTS admin_audit_log (
 		id         INTEGER PRIMARY KEY AUTOINCREMENT,
 		actor_id   TEXT    NOT NULL,
@@ -152,8 +212,20 @@ func (db *DB) initSchema() error {
 
 	CREATE TABLE IF NOT EXISTS ip_blacklist (
 		ip_address TEXT PRIMARY KEY,
-		reason     TEXT NOT NULL,
-		created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
+		reason TEXT,
+		banned_by TEXT,
+		banned_at DATETIME DEFAULT CURRENT_TIMESTAMP
+	);
+
+	CREATE TABLE IF NOT EXISTS tunnel_metrics (
+		id INTEGER PRIMARY KEY AUTOINCREMENT,
+		user_id TEXT NOT NULL,
+		subdomain_prefix TEXT NOT NULL,
+		full_host TEXT NOT NULL,
+		bytes_in INTEGER NOT NULL,
+		bytes_out INTEGER NOT NULL,
+		connected_at DATETIME NOT NULL,
+		recorded_at DATETIME DEFAULT CURRENT_TIMESTAMP
 	);
 
 	CREATE TABLE IF NOT EXISTS admin_settings (
@@ -169,6 +241,8 @@ func (db *DB) initSchema() error {
 
 	// Migrations
 	_, _ = db.conn.Exec("ALTER TABLE users ADD COLUMN verification_token TEXT")
+	_, _ = db.conn.Exec("ALTER TABLE users ADD COLUMN last_client_version TEXT")
+	_, _ = db.conn.Exec("ALTER TABLE users ADD COLUMN last_client_os TEXT")
 
 	return nil
 }
@@ -184,6 +258,15 @@ func (db *DB) GetAdminSetting(key string) (string, error) {
 		return "", err
 	}
 	return value, nil
+}
+
+// RecordTunnelMetric writes a single bandwidth metric to the database.
+func (db *DB) RecordTunnelMetric(m *TunnelMetric) error {
+	_, err := db.conn.Exec(`
+		INSERT INTO tunnel_metrics (user_id, subdomain_prefix, full_host, bytes_in, bytes_out, connected_at, recorded_at)
+		VALUES (?, ?, ?, ?, ?, ?, ?)
+	`, m.UserID, m.SubdomainPrefix, m.FullHost, m.BytesIn, m.BytesOut, m.ConnectedAt, m.RecordedAt)
+	return err
 }
 
 // SetAdminSetting updates or inserts a setting.
@@ -204,11 +287,23 @@ func (db *DB) CreateUser(u *User) error {
 	if u.UpdatedAt.IsZero() {
 		u.UpdatedAt = time.Now().UTC()
 	}
+	if u.Timezone == "" {
+		u.Timezone = "UTC"
+	}
+	if u.AuthMethod == "" {
+		u.AuthMethod = "Magic Link"
+	}
+	if u.ThemePreference == "" {
+		u.ThemePreference = "system"
+	}
+	if u.NotificationPrefs == "" {
+		u.NotificationPrefs = "{}"
+	}
 
 	_, err := db.conn.Exec(`
-		INSERT INTO users (id, email, first_name, last_name, role, status, verification_token, approval_token, claim_token, created_at, updated_at)
-		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-	`, u.ID, u.Email, u.FirstName, u.LastName, u.Role, u.Status, u.VerificationToken, u.ApprovalToken, u.ClaimToken, u.CreatedAt, u.UpdatedAt)
+		INSERT INTO users (id, email, first_name, last_name, preferred_name, role, status, verification_token, approval_token, claim_token, timezone, auth_method, theme_preference, notification_prefs, created_at, updated_at, last_client_version, last_client_os)
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+	`, u.ID, u.Email, u.FirstName, u.LastName, u.PreferredName, u.Role, u.Status, u.VerificationToken, u.ApprovalToken, u.ClaimToken, u.Timezone, u.AuthMethod, u.ThemePreference, u.NotificationPrefs, u.CreatedAt, u.UpdatedAt, u.LastClientVersion, u.LastClientOS)
 	return err
 }
 
@@ -216,8 +311,11 @@ func (db *DB) CreateUser(u *User) error {
 func (db *DB) fetchUserByQuery(query string, arg interface{}) (*User, error) {
 	var u User
 	var vt, at, ct sql.NullString
+	var lastLogin sql.NullTime
+	var lastClientVersion sql.NullString
+	var lastClientOS sql.NullString
 	err := db.conn.QueryRow(query, arg).Scan(
-		&u.ID, &u.Email, &u.FirstName, &u.LastName, &u.Role, &u.Status, &vt, &at, &ct, &u.CreatedAt, &u.UpdatedAt,
+		&u.ID, &u.Email, &u.FirstName, &u.LastName, &u.PreferredName, &u.Role, &u.Status, &vt, &at, &ct, &u.Timezone, &u.AuthMethod, &u.ThemePreference, &u.NotificationPrefs, &u.CreatedAt, &u.UpdatedAt, &lastLogin, &u.LastLoginIP, &lastClientVersion, &lastClientOS,
 	)
 	if err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
@@ -226,34 +324,46 @@ func (db *DB) fetchUserByQuery(query string, arg interface{}) (*User, error) {
 		return nil, err
 	}
 	u.VerificationToken = vt.String
+	u.LastClientVersion = lastClientVersion.String
+	u.LastClientOS = lastClientOS.String
 	u.ApprovalToken = at.String
 	u.ClaimToken = ct.String
+	if lastLogin.Valid {
+		u.LastLoginAt = &lastLogin.Time
+	}
 	return &u, nil
 }
 
 // GetUser fetches a user by their ID.
 func (db *DB) GetUser(id string) (*User, error) {
-	return db.fetchUserByQuery(`SELECT id, email, first_name, last_name, role, status, verification_token, approval_token, claim_token, created_at, updated_at FROM users WHERE id = ?`, id)
+	return db.fetchUserByQuery(`SELECT id, email, first_name, last_name, preferred_name, role, status, verification_token, approval_token, claim_token, timezone, auth_method, theme_preference, notification_prefs, created_at, updated_at, last_login_at, last_login_ip, last_client_version, last_client_os FROM users WHERE id = ?`, id)
 }
 
 // GetUserByEmail fetches a user by their email address.
 func (db *DB) GetUserByEmail(email string) (*User, error) {
-	return db.fetchUserByQuery(`SELECT id, email, first_name, last_name, role, status, verification_token, approval_token, claim_token, created_at, updated_at FROM users WHERE email = ?`, email)
+	return db.fetchUserByQuery(`SELECT id, email, first_name, last_name, preferred_name, role, status, verification_token, approval_token, claim_token, timezone, auth_method, theme_preference, notification_prefs, created_at, updated_at, last_login_at, last_login_ip, last_client_version, last_client_os FROM users WHERE email = ?`, email)
 }
 
 // GetUserByVerificationToken finds a user by their verification token.
 func (db *DB) GetUserByVerificationToken(token string) (*User, error) {
-	return db.fetchUserByQuery(`SELECT id, email, first_name, last_name, role, status, verification_token, approval_token, claim_token, created_at, updated_at FROM users WHERE verification_token = ?`, token)
+	return db.fetchUserByQuery(`SELECT id, email, first_name, last_name, preferred_name, role, status, verification_token, approval_token, claim_token, timezone, auth_method, theme_preference, notification_prefs, created_at, updated_at, last_login_at, last_login_ip, last_client_version, last_client_os FROM users WHERE verification_token = ?`, token)
 }
 
 // GetUserByApprovalToken fetches a user by their approval token.
 func (db *DB) GetUserByApprovalToken(token string) (*User, error) {
-	return db.fetchUserByQuery(`SELECT id, email, first_name, last_name, role, status, verification_token, approval_token, claim_token, created_at, updated_at FROM users WHERE approval_token = ?`, token)
+	return db.fetchUserByQuery(`SELECT id, email, first_name, last_name, preferred_name, role, status, verification_token, approval_token, claim_token, timezone, auth_method, theme_preference, notification_prefs, created_at, updated_at, last_login_at, last_login_ip, last_client_version, last_client_os FROM users WHERE approval_token = ?`, token)
 }
 
 // GetUserByClaimToken fetches a user by their claim token.
 func (db *DB) GetUserByClaimToken(token string) (*User, error) {
-	return db.fetchUserByQuery(`SELECT id, email, first_name, last_name, role, status, verification_token, approval_token, claim_token, created_at, updated_at FROM users WHERE claim_token = ?`, token)
+	return db.fetchUserByQuery(`SELECT id, email, first_name, last_name, preferred_name, role, status, verification_token, approval_token, claim_token, timezone, auth_method, theme_preference, notification_prefs, created_at, updated_at, last_login_at, last_login_ip, last_client_version, last_client_os FROM users WHERE claim_token = ?`, token)
+}
+
+// DeleteUser removes a user from the database.
+func (db *DB) DeleteUser(id string) error {
+	query := "DELETE FROM users WHERE id = ?"
+	_, err := db.conn.Exec(query, id)
+	return err
 }
 
 // UpdateUser updates an existing user profile.
@@ -272,9 +382,16 @@ func (db *DB) UpdateUser(u *User) error {
 		claimTokenVal = u.ClaimToken
 	}
 
-	query := `UPDATE users SET email = ?, first_name = ?, last_name = ?, role = ?, status = ?, verification_token = ?, approval_token = ?, claim_token = ?, updated_at = ?
+	var lastLoginVal interface{}
+	if u.LastLoginAt != nil {
+		lastLoginVal = *u.LastLoginAt
+	}
+
+	query := `UPDATE users SET email = ?, first_name = ?, last_name = ?, preferred_name = ?, role = ?, status = ?, verification_token = ?, approval_token = ?, claim_token = ?, timezone = ?, auth_method = ?, theme_preference = ?, notification_prefs = ?, updated_at = ?, last_login_at = ?, last_login_ip = ?,
+			last_client_version = ?,
+			last_client_os = ?
 	          WHERE id = ?`
-	res, err := db.conn.Exec(query, u.Email, u.FirstName, u.LastName, u.Role, u.Status, vtVal, approvalTokenVal, claimTokenVal, u.UpdatedAt, u.ID)
+	res, err := db.conn.Exec(query, u.Email, u.FirstName, u.LastName, u.PreferredName, u.Role, u.Status, vtVal, approvalTokenVal, claimTokenVal, u.Timezone, u.AuthMethod, u.ThemePreference, u.NotificationPrefs, u.UpdatedAt, lastLoginVal, u.LastLoginIP, u.LastClientVersion, u.LastClientOS, u.ID)
 	if err != nil {
 		return err
 	}
@@ -290,7 +407,7 @@ func (db *DB) UpdateUser(u *User) error {
 
 // ListUsers lists all registered users.
 func (db *DB) ListUsers() ([]*User, error) {
-	query := `SELECT id, email, first_name, last_name, role, status, verification_token, approval_token, claim_token, created_at, updated_at FROM users`
+	query := `SELECT id, email, first_name, last_name, preferred_name, role, status, verification_token, approval_token, claim_token, timezone, auth_method, theme_preference, notification_prefs, created_at, updated_at, last_login_at, last_login_ip, last_client_version, last_client_os FROM users`
 	rows, err := db.conn.Query(query)
 	if err != nil {
 		return nil, err
@@ -301,12 +418,20 @@ func (db *DB) ListUsers() ([]*User, error) {
 	for rows.Next() {
 		var u User
 		var vt, at, ct sql.NullString
-		if err := rows.Scan(&u.ID, &u.Email, &u.FirstName, &u.LastName, &u.Role, &u.Status, &vt, &at, &ct, &u.CreatedAt, &u.UpdatedAt); err != nil {
+		var lastLogin sql.NullTime
+		var lastClientVersion sql.NullString
+		var lastClientOS sql.NullString
+		if err := rows.Scan(&u.ID, &u.Email, &u.FirstName, &u.LastName, &u.PreferredName, &u.Role, &u.Status, &vt, &at, &ct, &u.Timezone, &u.AuthMethod, &u.ThemePreference, &u.NotificationPrefs, &u.CreatedAt, &u.UpdatedAt, &lastLogin, &u.LastLoginIP, &lastClientVersion, &lastClientOS); err != nil {
 			return nil, err
 		}
 		u.VerificationToken = vt.String
+		u.LastClientVersion = lastClientVersion.String
+		u.LastClientOS = lastClientOS.String
 		u.ApprovalToken = at.String
 		u.ClaimToken = ct.String
+		if lastLogin.Valid {
+			u.LastLoginAt = &lastLogin.Time
+		}
 		users = append(users, &u)
 	}
 	return users, nil
@@ -378,10 +503,10 @@ func (db *DB) GetPATByHash(hash string) (*PersonalAccessToken, error) {
 	return &pat, nil
 }
 
-// ListPATs returns all PATs belonging to a specific user.
+// ListPATs returns all active (unrevoked) PATs belonging to a specific user.
 func (db *DB) ListPATs(userID string) ([]*PersonalAccessToken, error) {
 	query := `SELECT id, user_id, token_hash, token_prefix, name, expires_at, revoked_at, last_used_at, created_at
-	          FROM personal_access_tokens WHERE user_id = ?`
+	          FROM personal_access_tokens WHERE user_id = ? AND revoked_at IS NULL`
 	rows, err := db.conn.Query(query, userID)
 	if err != nil {
 		return nil, err
@@ -613,4 +738,232 @@ func (db *DB) ListBlacklistedIPs() ([]*BlacklistEntry, error) {
 		entries = append(entries, &e)
 	}
 	return entries, rows.Err()
+}
+
+// CreateMagicLink saves a new magic link to the database.
+func (db *DB) CreateMagicLink(email, tokenHash, clientIP string, expiresAt time.Time) error {
+	query := `INSERT INTO admin_magic_links (email, token_hash, client_ip, expires_at) VALUES (?, ?, ?, ?)`
+	_, err := db.conn.Exec(query, email, tokenHash, clientIP, expiresAt)
+	return err
+}
+
+// GetMagicLink retrieves a magic link by its token hash.
+func (db *DB) GetMagicLink(tokenHash string) (*MagicLink, error) {
+	query := `SELECT id, email, token_hash, client_ip, created_at, expires_at, used_at FROM admin_magic_links WHERE token_hash = ?`
+	row := db.conn.QueryRow(query, tokenHash)
+
+	var link MagicLink
+	var usedAt sql.NullTime
+	err := row.Scan(&link.ID, &link.Email, &link.TokenHash, &link.ClientIP, &link.CreatedAt, &link.ExpiresAt, &usedAt)
+	if err != nil {
+		return nil, err
+	}
+	if usedAt.Valid {
+		link.UsedAt = &usedAt.Time
+	}
+	return &link, nil
+}
+
+// PruneExpiredMagicLinks deletes any magic links that have expired from the database.
+func (db *DB) PruneExpiredMagicLinks() error {
+	_, err := db.conn.Exec("DELETE FROM admin_magic_links WHERE expires_at < CURRENT_TIMESTAMP")
+	return err
+}
+
+// MarkMagicLinkUsed marks a magic link as used.
+func (db *DB) MarkMagicLinkUsed(id int) error {
+	query := `UPDATE admin_magic_links SET used_at = datetime('now') WHERE id = ?`
+	_, err := db.conn.Exec(query, id)
+	return err
+}
+
+// ListMagicLinks returns all magic links, ordered by newest first.
+func (db *DB) ListMagicLinks() ([]*MagicLink, error) {
+	query := `SELECT id, email, client_ip, created_at, expires_at, used_at FROM admin_magic_links ORDER BY created_at DESC LIMIT 100`
+	rows, err := db.conn.Query(query)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close() //nolint:errcheck
+
+	var links []*MagicLink
+	for rows.Next() {
+		var link MagicLink
+		var usedAt sql.NullTime
+		if err := rows.Scan(&link.ID, &link.Email, &link.ClientIP, &link.CreatedAt, &link.ExpiresAt, &usedAt); err != nil {
+			return nil, err
+		}
+		if usedAt.Valid {
+			link.UsedAt = &usedAt.Time
+		}
+		links = append(links, &link)
+	}
+	return links, rows.Err()
+}
+
+// Analytics Types
+type DailyBandwidth struct {
+	Date     string `json:"date"`
+	BytesIn  int64  `json:"bytes_in"`
+	BytesOut int64  `json:"bytes_out"`
+}
+
+type UserBandwidth struct {
+	Email    string `json:"email"`
+	BytesIn  int64  `json:"bytes_in"`
+	BytesOut int64  `json:"bytes_out"`
+}
+
+type TunnelBandwidth struct {
+	FullHost string `json:"full_host"`
+	BytesIn  int64  `json:"bytes_in"`
+	BytesOut int64  `json:"bytes_out"`
+}
+
+type GlobalAnalytics struct {
+	Daily    []DailyBandwidth `json:"daily"`
+	TopUsers []UserBandwidth  `json:"top_users"`
+}
+
+type UserAnalytics struct {
+	Daily   []DailyBandwidth  `json:"daily"`
+	Tunnels []TunnelBandwidth `json:"tunnels"`
+}
+
+// GetGlobalAnalytics retrieves system-wide bandwidth stats for the last N days.
+func (db *DB) GetGlobalAnalytics(days int) (*GlobalAnalytics, error) {
+	timeLimit := time.Now().UTC().AddDate(0, 0, -days).Format("2006-01-02")
+
+	dailyQuery := `
+		SELECT strftime('%Y-%m-%d', recorded_at) as d, SUM(bytes_in), SUM(bytes_out)
+		FROM tunnel_metrics
+		WHERE recorded_at >= ?
+		GROUP BY d
+		ORDER BY d ASC
+	`
+	rows, err := db.conn.Query(dailyQuery, timeLimit)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var daily []DailyBandwidth
+	for rows.Next() {
+		var dbw DailyBandwidth
+		if err := rows.Scan(&dbw.Date, &dbw.BytesIn, &dbw.BytesOut); err != nil {
+			return nil, err
+		}
+		daily = append(daily, dbw)
+	}
+
+	topQuery := `
+		SELECT COALESCE(u.email, m.user_id), SUM(m.bytes_in), SUM(m.bytes_out)
+		FROM tunnel_metrics m
+		LEFT JOIN users u ON m.user_id = u.id
+		WHERE m.recorded_at >= ?
+		GROUP BY m.user_id
+		ORDER BY (SUM(m.bytes_in) + SUM(m.bytes_out)) DESC
+		LIMIT 10
+	`
+	topRows, err := db.conn.Query(topQuery, timeLimit)
+	if err != nil {
+		return nil, err
+	}
+	defer topRows.Close()
+
+	var top []UserBandwidth
+	for topRows.Next() {
+		var ub UserBandwidth
+		if err := topRows.Scan(&ub.Email, &ub.BytesIn, &ub.BytesOut); err != nil {
+			return nil, err
+		}
+		top = append(top, ub)
+	}
+
+	return &GlobalAnalytics{Daily: daily, TopUsers: top}, nil
+}
+
+// GetUserAnalytics retrieves bandwidth stats for a specific user for the last N days.
+func (db *DB) GetUserAnalytics(userID string, days int) (*UserAnalytics, error) {
+	timeLimit := time.Now().UTC().AddDate(0, 0, -days).Format("2006-01-02")
+
+	dailyQuery := `
+		SELECT strftime('%Y-%m-%d', recorded_at) as d, SUM(bytes_in), SUM(bytes_out)
+		FROM tunnel_metrics
+		WHERE user_id = ? AND recorded_at >= ?
+		GROUP BY d
+		ORDER BY d ASC
+	`
+	rows, err := db.conn.Query(dailyQuery, userID, timeLimit)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var daily []DailyBandwidth
+	for rows.Next() {
+		var dbw DailyBandwidth
+		if err := rows.Scan(&dbw.Date, &dbw.BytesIn, &dbw.BytesOut); err != nil {
+			return nil, err
+		}
+		daily = append(daily, dbw)
+	}
+
+	tunnelQuery := `
+		SELECT full_host, SUM(bytes_in), SUM(bytes_out)
+		FROM tunnel_metrics
+		WHERE user_id = ? AND recorded_at >= ?
+		GROUP BY full_host
+		ORDER BY (SUM(bytes_in) + SUM(bytes_out)) DESC
+	`
+	tunnelRows, err := db.conn.Query(tunnelQuery, userID, timeLimit)
+	if err != nil {
+		return nil, err
+	}
+	defer tunnelRows.Close()
+
+	var tunnels []TunnelBandwidth
+	for tunnelRows.Next() {
+		var tb TunnelBandwidth
+		if err := tunnelRows.Scan(&tb.FullHost, &tb.BytesIn, &tb.BytesOut); err != nil {
+			return nil, err
+		}
+		tunnels = append(tunnels, tb)
+	}
+
+	return &UserAnalytics{Daily: daily, Tunnels: tunnels}, nil
+}
+
+type ClientVersionStats struct {
+	Version string `json:"version"`
+	OS      string `json:"os"`
+	Count   int    `json:"count"`
+}
+
+// GetClientVersionStats groups users by client version and OS.
+func (db *DB) GetClientVersionStats() ([]ClientVersionStats, error) {
+	rows, err := db.conn.Query(`
+		SELECT 
+			COALESCE(NULLIF(last_client_version, ''), 'Unknown'),
+			COALESCE(NULLIF(last_client_os, ''), 'Unknown'),
+			COUNT(*)
+		FROM users
+		WHERE last_client_version IS NOT NULL AND last_client_version != ''
+		GROUP BY last_client_version, last_client_os
+		ORDER BY last_client_version DESC
+	`)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var stats []ClientVersionStats
+	for rows.Next() {
+		var stat ClientVersionStats
+		if err := rows.Scan(&stat.Version, &stat.OS, &stat.Count); err != nil {
+			return nil, err
+		}
+		stats = append(stats, stat)
+	}
+	return stats, nil
 }

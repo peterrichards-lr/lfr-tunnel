@@ -364,21 +364,16 @@ If the token file exists, the client will automatically load it on startup, allo
 
 ---
 
-## Future Roadmap
+## Enterprise-Ready Security & Administration
 
-The following server-side administrative capabilities are planned for future versions of `lfr-tunnel`:
+`lfr-tunnel` includes a built-in **Admin Web Dashboard** and **Identity Provider (IdP)**.
 
-1.  **Administrative Web Dashboard**:
-    *   A secure web portal (e.g. at `https://tunnel.yourdomain.com/admin`) to inspect all active subdomains and target ports.
-    *   Visual representation of current traffic throughput and latency.
-2.  **Audit Logs & Tracking**:
-    *   Trace which specific client sessions (e.g., developer name, host machine hostname) registered and exposed each subdomain.
-3.  **Active Lease Management**:
-    *   Allow administrators to manually terminate (kick) an active subdomain lease or block specific client prefixes directly from the web dashboard.
-4.  **Security Integration**:
-    *   Support OAuth2/OIDC integration (e.g. log in with Okta/GitHub) for developers registering tunnels, rather than relying solely on a shared secret `auth_token`.
-
----
+1. **OAuth2 / Magic Link Authentication**: No shared secrets. Developers register for accounts and authenticate via secure, passwordless Magic Links (or SSO).
+2. **Personal Access Tokens (PATs)**: Each developer generates scoped PATs to authenticate their CLI tunnels.
+3. **Admin Web Dashboard**: A responsive Light/Dark mode web portal to inspect all active subdomains and target ports.
+4. **Audit Logs & Tracking**: Trace which specific client sessions registered each subdomain, and view full historical access logs.
+5. **DDoS Protection & Rate Limiting**: Built-in sliding-window rate limiters automatically ban malicious IPs abusing the tunnel endpoints.
+6. **Telemetry & Analytics**: Track global and per-user bandwidth usage, and monitor the distribution of client OS/versions connecting to the gateway.
 
 ## License
 

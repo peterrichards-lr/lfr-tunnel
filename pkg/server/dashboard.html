@@ -5,273 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Liferay Tunnel Identity</title>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
-    <style>
-        :root {
-            --bg-base: #0f172a;
-            --bg-card: rgba(30, 41, 59, 0.7);
-            --bg-card-hover: rgba(30, 41, 59, 0.9);
-            --primary: #0B5FFF;
-            --primary-glow: rgba(11, 95, 255, 0.4);
-            --text-main: #f8fafc;
-            --text-muted: #94a3b8;
-            --border: rgba(255, 255, 255, 0.1);
-            --danger: #ef4444;
-            --success: #10b981;
-            --login-gradient: radial-gradient(circle at center, #1e293b 0%, #0f172a 100%);
-            --sidebar-bg: rgba(15, 23, 42, 0.6);
-            --input-bg: rgba(0, 0, 0, 0.2);
-            --modal-overlay: rgba(0, 0, 0, 0.6);
-            --copy-box-bg: #000;
-        }
-
-        :root[data-theme="light"] {
-            --bg-base: #f1f5f9;
-            --bg-card: rgba(255, 255, 255, 0.8);
-            --bg-card-hover: rgba(255, 255, 255, 1);
-            --primary: #0B5FFF;
-            --primary-glow: rgba(11, 95, 255, 0.2);
-            --text-main: #0f172a;
-            --text-muted: #475569;
-            --border: rgba(0, 0, 0, 0.1);
-            --login-gradient: radial-gradient(circle at center, #e2e8f0 0%, #f1f5f9 100%);
-            --sidebar-bg: rgba(241, 245, 249, 0.6);
-            --input-bg: rgba(255, 255, 255, 0.5);
-            --modal-overlay: rgba(255, 255, 255, 0.4);
-            --copy-box-bg: #f8fafc;
-        }
-
-        @media (prefers-color-scheme: light) {
-            :root:not([data-theme="dark"]) {
-                --bg-base: #f1f5f9;
-                --bg-card: rgba(255, 255, 255, 0.8);
-                --bg-card-hover: rgba(255, 255, 255, 1);
-                --primary: #0B5FFF;
-                --primary-glow: rgba(11, 95, 255, 0.2);
-                --text-main: #0f172a;
-                --text-muted: #475569;
-                --border: rgba(0, 0, 0, 0.1);
-                --login-gradient: radial-gradient(circle at center, #e2e8f0 0%, #f1f5f9 100%);
-                --sidebar-bg: rgba(241, 245, 249, 0.6);
-                --input-bg: rgba(255, 255, 255, 0.5);
-                --modal-overlay: rgba(255, 255, 255, 0.4);
-                --copy-box-bg: #f8fafc;
-            }
-        }
-
-        * {
-            box-sizing: border-box;
-            margin: 0;
-            padding: 0;
-            font-family: 'Inter', sans-serif;
-        }
-
-        body {
-            background-color: var(--bg-base);
-            color: var(--text-main);
-            min-height: 100vh;
-            display: flex;
-            overflow-x: hidden;
-        }
-
-        .glass {
-            background: var(--bg-card);
-            backdrop-filter: blur(12px);
-            -webkit-backdrop-filter: blur(12px);
-            border: 1px solid var(--border);
-            border-radius: 12px;
-        }
-
-        /* Loading Screen */
-        #loader {
-            position: fixed;
-            inset: 0;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            background: var(--bg-base);
-            z-index: 2000;
-        }
-        .spinner {
-            width: 40px;
-            height: 40px;
-            border: 4px solid var(--border);
-            border-top-color: var(--primary);
-            border-radius: 50%;
-            animation: spin 1s linear infinite;
-        }
-        @keyframes spin { 100% { transform: rotate(360deg); } }
-
-        /* Login Screen */
-        #login-screen {
-            position: fixed;
-            inset: 0;
-            display: none;
-            align-items: center;
-            justify-content: center;
-            background: var(--login-gradient);
-            z-index: 1000;
-        }
-
-        .login-card {
-            width: 100%;
-            max-width: 400px;
-            padding: 40px;
-            text-align: center;
-            animation: slideUp 0.6s cubic-bezier(0.16, 1, 0.3, 1);
-        }
-        @keyframes slideUp { from { opacity: 0; transform: translateY(20px); } to { opacity: 1; transform: translateY(0); } }
-
-        .login-card h1 {
-            font-size: 24px;
-            font-weight: 700;
-            margin-bottom: 8px;
-            color: var(--text-main);
-        }
-
-        .login-card p {
-            color: var(--text-muted);
-            margin-bottom: 32px;
-            font-size: 14px;
-        }
-
-        .btn {
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            width: 100%;
-            padding: 12px 16px;
-            background: var(--bg-card);
-            color: var(--text-main);
-            border: 1px solid var(--border);
-            border-radius: 8px;
-            font-size: 14px;
-            font-weight: 500;
-            cursor: pointer;
-            transition: all 0.2s ease;
-            text-decoration: none;
-            margin-bottom: 12px;
-        }
-        .btn:hover {
-            background: var(--bg-card-hover);
-            border-color: var(--text-muted);
-        }
-        .btn-primary {
-            background: var(--primary);
-            border-color: transparent;
-            box-shadow: 0 4px 12px var(--primary-glow);
-        }
-        .btn-primary:hover {
-            background: #0050e6;
-            border-color: transparent;
-            transform: translateY(-1px);
-            box-shadow: 0 6px 16px var(--primary-glow);
-        }
-        .btn-icon {
-            margin-right: 8px;
-            font-size: 18px;
-        }
-
-        .divider {
-            display: flex;
-            align-items: center;
-            text-align: center;
-            margin: 24px 0;
-            color: var(--text-muted);
-            font-size: 12px;
-        }
-        .divider::before, .divider::after {
-            content: '';
-            flex: 1;
-            border-bottom: 1px solid var(--border);
-        }
-        .divider:not(:empty)::before { margin-right: .25em; }
-        .divider:not(:empty)::after { margin-left: .25em; }
-
-        .input-field {
-            width: 100%;
-            padding: 12px 16px;
-            background: var(--input-bg);
-            border: 1px solid var(--border);
-            border-radius: 8px;
-            color: var(--text-main);
-            font-size: 14px;
-            outline: none;
-            transition: border-color 0.2s;
-            margin-bottom: 16px;
-        }
-        .input-field:focus { border-color: var(--primary); }
-        .hidden { display: none !important; }
-
-        /* Dashboard */
-        #dashboard-screen {
-            display: none;
-            width: 100%;
-            height: 100vh;
-        }
-        .sidebar {
-            width: 260px;
-            border-right: 1px solid var(--border);
-            display: flex;
-            flex-direction: column;
-            padding: 24px;
-            background: var(--sidebar-bg);
-        }
-        .sidebar-brand { font-size: 18px; font-weight: 700; margin-bottom: 40px; color: var(--text-main); }
-        .nav-item {
-            padding: 10px 16px;
-            border-radius: 8px;
-            color: var(--text-muted);
-            cursor: pointer;
-            margin-bottom: 8px;
-            transition: all 0.2s;
-            font-weight: 500;
-            font-size: 14px;
-        }
-        .nav-item:hover { background: var(--bg-card); color: var(--text-main); }
-        .nav-item.active { background: var(--primary); color: #fff; box-shadow: 0 4px 12px var(--primary-glow); }
-        .sidebar-spacer { flex: 1; }
-        
-        .main-content {
-            flex: 1;
-            padding: 40px 60px;
-            overflow-y: auto;
-        }
-        .header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 40px; }
-        .header h2 { font-size: 24px; font-weight: 600; }
-        
-        .table-container { margin-top: 24px; overflow-x: auto; }
-        table { width: 100%; border-collapse: collapse; font-size: 14px; }
-        th { text-align: left; padding: 16px; color: var(--text-muted); font-weight: 500; border-bottom: 1px solid var(--border); }
-        td { padding: 16px; border-bottom: 1px solid var(--border); }
-        tr:hover td { background: rgba(255, 255, 255, 0.02); }
-
-        .badge {
-            padding: 4px 8px;
-            border-radius: 4px;
-            font-size: 12px;
-            font-weight: 500;
-            background: rgba(16, 185, 129, 0.2);
-            color: var(--success);
-        }
-        .badge.admin { background: rgba(11, 95, 255, 0.2); color: var(--primary); }
-
-        /* Modal */
-        .modal-overlay {
-            position: fixed; inset: 0; background: var(--modal-overlay);
-            backdrop-filter: blur(4px);
-            display: none; align-items: center; justify-content: center; z-index: 3000;
-        }
-        .modal { width: 400px; padding: 24px; }
-        .modal h3 { margin-bottom: 16px; }
-
-        .copy-box {
-            background: var(--copy-box-bg); padding: 16px; border-radius: 8px; border: 1px solid var(--border);
-            font-family: monospace; color: var(--success); margin: 16px 0; word-break: break-all;
-        }
-        .alert { padding: 12px; border-radius: 8px; margin-bottom: 16px; font-size: 14px; }
-        .alert-success { background: rgba(16, 185, 129, 0.1); color: var(--success); border: 1px solid rgba(16, 185, 129, 0.2); }
-        .alert-error { background: rgba(239, 68, 68, 0.1); color: var(--danger); border: 1px solid rgba(239, 68, 68, 0.2); }
-    </style>
+    <link rel="stylesheet" href="/static/dashboard.css">
 </head>
 <body>
 
@@ -287,11 +21,19 @@
 
             <div class="divider" id="sso-divider">or</div>
 
-            <button class="btn" id="btn-show-email">Continue with Email</button>
-            <form id="email-form" class="hidden">
+            <button class="btn" id="btn-show-email">Log In with Email</button>
+            <button class="btn btn-outline" id="btn-show-register" style="margin-top: 8px;">Create Account</button>
+            
+            <form id="email-form" class="hidden" style="margin-top: 16px;">
                 <input type="email" id="email-input" class="input-field" placeholder="name@liferay.com" required>
                 <button type="submit" class="btn btn-primary" id="btn-magic-link">Send Magic Link</button>
                 <div id="email-msg" style="margin-top: 12px; font-size: 13px;"></div>
+            </form>
+
+            <form id="register-form" class="hidden" style="margin-top: 16px;">
+                <input type="email" id="reg-email" class="input-field" placeholder="name@liferay.com" required>
+                <button type="submit" class="btn btn-primary" id="btn-register">Register Account</button>
+                <div id="reg-msg" style="margin-top: 12px; font-size: 13px;"></div>
             </form>
         </div>
     </div>
@@ -301,19 +43,65 @@
         <div class="sidebar">
             <div class="sidebar-brand">Liferay Tunnel</div>
             
-            <div id="nav-tokens" class="nav-item active" onclick="showTab('tokens')">API Tokens</div>
-            <div id="nav-users" class="nav-item hidden" onclick="showTab('users')">Users</div>
-            <div id="nav-blacklist" class="nav-item hidden" onclick="showTab('blacklist')">IP Blacklist</div>
-            <div id="nav-audit" class="nav-item hidden" onclick="showTab('audit')">Audit Logs</div>
+            <div class="sidebar-label">Personal</div>
+            <div id="nav-overview" class="nav-item active" onclick="showTab('overview')">Overview</div>
+            <div id="nav-tokens" class="nav-item" onclick="showTab('tokens')">API Tokens</div>
+            <div id="nav-tunnels" class="nav-item" onclick="showTab('tunnels')">Active Tunnels</div>
+            
+            <div id="admin-sidebar-group" class="hidden">
+                <div class="sidebar-label" style="margin-top: 24px;">Administration</div>
+                <div id="nav-registrations" class="nav-item" onclick="showTab('registrations')">Registrations <span id="reg-badge" class="badge" style="display:none; background: var(--danger); color: white; margin-left: 8px;">0</span></div>
+                <div id="nav-users" class="nav-item" onclick="showTab('users')">Users</div>
+                <div id="nav-blacklist" class="nav-item" onclick="showTab('blacklist')">IP Blacklist</div>
+
+                <div class="sidebar-label" style="margin-top: 24px;">Reporting</div>
+                <div id="nav-analytics" class="nav-item" onclick="showTab('analytics')">System Analytics</div>
+                <div id="nav-audit" class="nav-item" onclick="showTab('audit')">Audit Logs</div>
+                <div id="nav-magic" class="nav-item" onclick="showTab('magic')">Magic Links</div>
+            </div>
             
             <div class="sidebar-spacer"></div>
-            <div class="nav-item" onclick="toggleTheme()" id="theme-toggle">🌗 Toggle Theme</div>
+            
+            <div id="nav-account" class="nav-item" onclick="showTab('account')">Account Settings</div>
             <div class="nav-item" onclick="logout()">Log Out</div>
         </div>
         
         <div class="main-content">
+            <!-- Overview Tab -->
+            <div id="tab-overview">
+                <div class="header">
+                    <h2>Dashboard Overview</h2>
+                </div>
+                
+                <div id="last-login-banner" class="glass" style="padding: 16px; border-radius: 8px; font-size: 14px; margin-bottom: 32px; display: none; align-items: center; justify-content: space-between; border-left: 4px solid var(--primary);">
+                    <span id="last-login-text"></span>
+                </div>
+
+                <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 24px;">
+                    <div class="glass" style="padding: 24px; border-radius: 8px;">
+                        <h3 style="margin-bottom: 16px; font-size: 18px;">What's New in v1.2</h3>
+                        <ul style="color: var(--text-muted); padding-left: 20px; line-height: 1.6; font-size: 14px;">
+                            <li><strong>Admin Dashboard:</strong> A completely redesigned management portal.</li>
+                            <li><strong>Magic Links:</strong> Passwordless authentication is now live.</li>
+                            <li><strong>Bandwidth Analytics:</strong> Monitor data flow across all your active tunnels.</li>
+                            <li><strong>Audit Logs:</strong> Granular tracking of all system and administrative actions.</li>
+                            <li><strong>Theming Engine:</strong> Full support for Dark Mode, Light Mode, and Time of Day.</li>
+                        </ul>
+                    </div>
+
+                    <div class="glass" style="padding: 24px; border-radius: 8px;">
+                        <h3 style="margin-bottom: 16px; font-size: 18px;">Quick Links</h3>
+                        <div style="display: flex; flex-direction: column; gap: 12px;">
+                            <a href="#" onclick="showTab('tokens')" style="color: var(--primary); text-decoration: none; font-weight: 500;">→ Generate a new CLI Token</a>
+                            <a href="#" onclick="showTab('tunnels')" style="color: var(--primary); text-decoration: none; font-weight: 500;">→ View your Active Tunnels</a>
+                            <a href="https://github.com/Liferay-SE/lfr-tunnel" target="_blank" style="color: var(--primary); text-decoration: none; font-weight: 500;">→ Read the Documentation</a>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
             <!-- Tokens Tab -->
-            <div id="tab-tokens">
+            <div id="tab-tokens" class="hidden">
                 <div class="header">
                     <h2>Personal Access Tokens</h2>
                     <button class="btn btn-primary" style="width: auto; margin:0;" onclick="openTokenModal()">Generate New Token</button>
@@ -327,10 +115,179 @@
                 </div>
             </div>
 
-            <!-- Admin Tabs Placeholders -->
-            <div id="tab-users" class="hidden"><div class="header"><h2>Users</h2></div><p>Admin user management coming soon.</p></div>
-            <div id="tab-blacklist" class="hidden"><div class="header"><h2>IP Blacklist</h2></div><p>Admin blacklist coming soon.</p></div>
-            <div id="tab-audit" class="hidden"><div class="header"><h2>Audit Logs</h2></div><p>Admin audit logs coming soon.</p></div>
+            <!-- Account Tab -->
+            <div id="tab-account" class="hidden">
+                <div class="header">
+                    <h2>Account Settings</h2>
+                </div>
+                <div class="glass" style="padding: 24px; border-radius: 8px;">
+                    <form id="account-form">
+                        <div style="display: flex; gap: 16px; margin-bottom: 16px;">
+                            <div style="flex: 1;">
+                                <label style="display:block; margin-bottom: 8px; color: var(--text-muted); font-size: 14px;">First Name</label>
+                                <input type="text" id="acc-first-name" class="input-field">
+                            </div>
+                            <div style="flex: 1;">
+                                <label style="display:block; margin-bottom: 8px; color: var(--text-muted); font-size: 14px;">Last Name</label>
+                                <input type="text" id="acc-last-name" class="input-field">
+                            </div>
+                        </div>
+                        <div style="margin-bottom: 16px;">
+                            <label style="display:block; margin-bottom: 8px; color: var(--text-muted); font-size: 14px;">Preferred Name</label>
+                            <input type="text" id="acc-preferred-name" class="input-field" placeholder="How should we address you?">
+                        </div>
+                        <div style="margin-bottom: 16px;">
+                            <label style="display:block; margin-bottom: 8px; color: var(--text-muted); font-size: 14px;">Theme Preference</label>
+                            <select id="acc-theme" class="input-field">
+                                <option value="system">System Default</option>
+                                <option value="light">Light Mode</option>
+                                <option value="dark">Dark Mode</option>
+                                <option value="time">Time of Day (Sunset/Sunrise)</option>
+                            </select>
+                        </div>
+                        <div style="margin-bottom: 24px;">
+                            <div style="display: flex; align-items: center; gap: 12px; margin-bottom: 8px;">
+                                <label style="margin: 0; color: var(--text-muted); font-size: 14px;">Email Notifications</label>
+                                <label class="toggle-switch">
+                                    <input type="checkbox" id="acc-notifications">
+                                    <span class="toggle-slider"></span>
+                                </label>
+                            </div>
+                            <p style="font-size: 12px; color: var(--text-muted); margin-top: 6px;">Disabling this will suppress administrative alerts (like new registration notifications). Essential emails like Magic Links and account status updates cannot be disabled.</p>
+                        </div>
+                        <button type="submit" class="btn btn-primary" style="width: auto;" id="btn-save-account">Save Changes</button>
+                    </form>
+                </div>
+            </div>
+
+            
+            <!-- Analytics Tab -->
+            <div id="tab-analytics" class="hidden">
+                <div class="header">
+                    <h2>Analytics & Monitoring</h2>
+                </div>
+                <p style="color: var(--text-muted); margin-bottom: 24px; font-size: 14px;">View your bandwidth utilization over the last 30 days.</p>
+                
+                <!-- Admin Only Section -->
+                <div id="admin-analytics-section" style="display: none; margin-bottom: 32px;">
+                    <h3 style="margin-bottom: 16px;">Global Overview</h3>
+                    <div style="display: grid; grid-template-columns: 2fr 1fr; gap: 24px;">
+                        <div class="glass" style="padding: 16px;">
+                            <h4 style="margin-bottom: 12px; color: var(--text-muted); font-size: 14px; font-weight: 500;">Global Bandwidth Over Time</h4>
+                            <canvas id="globalBandwidthChart" style="width: 100%; height: 250px;"></canvas>
+                        </div>
+                        <div class="glass" style="padding: 16px;">
+                            <h4 style="margin-bottom: 12px; color: var(--text-muted); font-size: 14px; font-weight: 500;">Top Users</h4>
+                            <canvas id="topUsersChart" style="width: 100%; height: 250px;"></canvas>
+                        </div>
+                        <div class="glass" style="padding: 16px; grid-column: span 2;">
+                            <h4 style="margin-bottom: 12px; color: var(--text-muted); font-size: 14px; font-weight: 500;">Client Version Distribution</h4>
+                            <div class="table-container" style="max-height: 250px; overflow-y: auto;">
+                                <table>
+                                    <thead><tr><th>Version</th><th>OS</th><th>User Count</th></tr></thead>
+                                    <tbody id="client-stats-table-body"></tbody>
+                                </table>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Personal Section -->
+                <div>
+                    <h3 style="margin-bottom: 16px;">My Usage</h3>
+                    <div style="display: grid; grid-template-columns: 2fr 1fr; gap: 24px;">
+                        <div class="glass" style="padding: 16px;">
+                            <h4 style="margin-bottom: 12px; color: var(--text-muted); font-size: 14px; font-weight: 500;">My Bandwidth Over Time</h4>
+                            <canvas id="myBandwidthChart" style="width: 100%; height: 250px;"></canvas>
+                        </div>
+                        <div class="glass" style="padding: 16px;">
+                            <h4 style="margin-bottom: 12px; color: var(--text-muted); font-size: 14px; font-weight: 500;">My Tunnels Breakdown</h4>
+                            <canvas id="myTunnelsChart" style="width: 100%; height: 250px;"></canvas>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Tunnels Tab -->
+            <div id="tab-tunnels" class="hidden">
+                <div class="header">
+                    <h2>Active Tunnels</h2>
+                </div>
+                <p style="color: var(--text-muted); margin-bottom: 24px; font-size: 14px;">These are your currently active Liferay tunnels.</p>
+                <div class="glass table-container">
+                    <table>
+                        <thead><tr><th>Subdomain</th><th>Full Host</th><th>Status</th><th>Data In</th><th>Data Out</th><th>Connected At</th></tr></thead>
+                        <tbody id="tunnels-table-body"></tbody>
+                    </table>
+                </div>
+            </div>
+
+            <!-- Registrations Tab -->
+            <div id="tab-registrations" class="hidden">
+                <div class="header">
+                    <h2>Pending Registrations</h2>
+                </div>
+                <div class="glass table-container">
+                    <table>
+                        <thead><tr><th>Email</th><th>Name</th><th>Requested At</th><th>Actions</th></tr></thead>
+                        <tbody id="registrations-table-body"></tbody>
+                    </table>
+                </div>
+            </div>
+
+            <!-- Users Tab -->
+            <div id="tab-users" class="hidden">
+                <div class="header">
+                    <h2>Users</h2>
+                    <button class="btn btn-primary" style="width: auto; margin:0;" onclick="openInviteModal()">Invite User</button>
+                </div>
+                <div class="glass table-container">
+                    <table>
+                        <thead><tr><th>Email</th><th>Name</th><th>Role</th><th>Status</th><th>Joined</th><th>Actions</th></tr></thead>
+                        <tbody id="users-table-body"></tbody>
+                    </table>
+                </div>
+            </div>
+
+            <!-- Blacklist Tab -->
+            <div id="tab-blacklist" class="hidden">
+                <div class="header">
+                    <h2>IP Blacklist</h2>
+                    <button class="btn btn-primary" style="width: auto; margin:0;" onclick="openBlacklistModal()">Ban IP</button>
+                </div>
+                <div class="glass table-container">
+                    <table>
+                        <thead><tr><th>IP Address</th><th>Reason</th><th>Banned At</th><th>Actions</th></tr></thead>
+                        <tbody id="blacklist-table-body"></tbody>
+                    </table>
+                </div>
+            </div>
+
+            <!-- Audit Logs Tab -->
+            <div id="tab-audit" class="hidden">
+                <div class="header">
+                    <h2>Audit Logs</h2>
+                </div>
+                <div class="glass table-container">
+                    <table>
+                        <thead><tr><th>Timestamp</th><th>Event</th><th>Actor</th><th>Target</th><th>IP</th><th>Details</th></tr></thead>
+                        <tbody id="audit-table-body"></tbody>
+                    </table>
+                </div>
+            </div>
+            
+            <!-- Magic Links Tab -->
+            <div id="tab-magic" class="hidden">
+                <div class="header">
+                    <h2>Magic Links</h2>
+                </div>
+                <div class="glass table-container">
+                    <table>
+                        <thead><tr><th>Email</th><th>IP Address</th><th>Expires</th><th>Used At</th></tr></thead>
+                        <tbody id="magic-table-body"></tbody>
+                    </table>
+                </div>
+            </div>
         </div>
     </div>
 
@@ -361,242 +318,30 @@
         </div>
     </div>
 
-    <script>
-        // Setup initial theme based on local storage or system preference
-        const savedTheme = localStorage.getItem('theme');
-        if (savedTheme) {
-            document.documentElement.setAttribute('data-theme', savedTheme);
-        } else if (window.matchMedia && window.matchMedia('(prefers-color-scheme: light)').matches) {
-            document.documentElement.setAttribute('data-theme', 'light');
-        } else {
-            document.documentElement.setAttribute('data-theme', 'dark');
-        }
+    <!-- BLACKLIST MODAL -->
+    <div id="blacklist-modal" class="modal-overlay">
+        <div class="glass modal">
+            <h3>Ban IP Address</h3>
+            <input type="text" id="blacklist-ip" class="input-field" placeholder="192.168.1.1" required>
+            <input type="text" id="blacklist-reason" class="input-field" placeholder="Reason (e.g. Malicious Activity)" required>
+            <button class="btn btn-primary" style="background-color: var(--danger);" onclick="submitBlacklist()">Ban IP</button>
+            <button class="btn" onclick="closeBlacklistModal()">Cancel</button>
+        </div>
+    </div>
 
-        function toggleTheme() {
-            let currentTheme = document.documentElement.getAttribute('data-theme');
-            let newTheme = currentTheme === 'light' ? 'dark' : 'light';
-            document.documentElement.setAttribute('data-theme', newTheme);
-            localStorage.setItem('theme', newTheme);
-        }
+    <!-- INVITE USER MODAL -->
+    <div id="invite-modal" class="modal-overlay">
+        <div class="glass modal">
+            <h3>Invite User</h3>
+            <input type="email" id="invite-email" class="input-field" placeholder="Email Address" required>
+            <input type="text" id="invite-first-name" class="input-field" placeholder="First Name" required>
+            <input type="text" id="invite-last-name" class="input-field" placeholder="Last Name" required>
+            <button class="btn btn-primary" onclick="submitInviteUser()">Send Invite</button>
+            <button class="btn" onclick="closeInviteModal()">Cancel</button>
+        </div>
+    </div>
 
-        let currentUser = null;
-        let generatedRawToken = "";
-
-        async function init() {
-            const urlParams = new URLSearchParams(window.location.search);
-            const magicToken = urlParams.get('token');
-            if (magicToken) {
-                window.history.replaceState({}, document.title, window.location.pathname);
-                const vRes = await fetch('/api/auth/verify', {
-                    method: 'POST',
-                    headers: {'Content-Type': 'application/json'},
-                    body: JSON.stringify({ token: magicToken })
-                });
-                if (!vRes.ok) {
-                    const err = await vRes.json();
-                    alert("Magic link error: " + (err.error || "Invalid or expired"));
-                }
-            }
-
-            try {
-                const res = await fetch('/api/me');
-                if (res.ok) {
-                    currentUser = await res.json();
-                    showDashboard();
-                } else {
-                    showLogin();
-                }
-            } catch (e) {
-                showLogin();
-            }
-        }
-
-        async function showLogin() {
-            document.getElementById('loader').style.display = 'none';
-            document.getElementById('login-screen').style.display = 'flex';
-            
-            // Fetch SSO providers
-            const res = await fetch('/api/auth/providers');
-            if (res.ok) {
-                const data = await res.json();
-                const container = document.getElementById('sso-container');
-                const divider = document.getElementById('sso-divider');
-                container.innerHTML = '';
-                if (data.providers && data.providers.length > 0) {
-                    data.providers.forEach(p => {
-                        const a = document.createElement('a');
-                        a.href = `/api/auth/login?provider=${p.id}`;
-                        a.className = 'btn btn-primary';
-                        a.innerHTML = `<span class="btn-icon">⚡</span> Continue with ${p.name}`;
-                        container.appendChild(a);
-                    });
-                    divider.style.display = 'flex';
-                } else {
-                    divider.style.display = 'none';
-                }
-            } else {
-                document.getElementById('sso-divider').style.display = 'none';
-            }
-        }
-
-        function showDashboard() {
-            document.getElementById('loader').style.display = 'none';
-            document.getElementById('login-screen').style.display = 'none';
-            document.getElementById('dashboard-screen').style.display = 'flex';
-
-            if (currentUser.role === 'admin' || currentUser.role === 'owner') {
-                document.getElementById('nav-users').classList.remove('hidden');
-                document.getElementById('nav-blacklist').classList.remove('hidden');
-                document.getElementById('nav-audit').classList.remove('hidden');
-            }
-
-            loadTokens();
-        }
-
-        function showTab(tabName) {
-            document.querySelectorAll('.main-content > div').forEach(el => el.classList.add('hidden'));
-            document.querySelectorAll('.nav-item').forEach(el => el.classList.remove('active'));
-            
-            document.getElementById(`tab-${tabName}`).classList.remove('hidden');
-            document.getElementById(`nav-${tabName}`).classList.add('active');
-        }
-
-        async function loadTokens() {
-            const res = await fetch('/api/tokens');
-            if (res.ok) {
-                const tokens = await res.json() || [];
-                const tbody = document.getElementById('tokens-table-body');
-                tbody.innerHTML = tokens.map(t => `
-                    <tr>
-                        <td style="font-weight: 500;">${escapeHTML(t.name)}</td>
-                        <td style="font-family: monospace;">${t.token_prefix}...</td>
-                        <td>${new Date(t.created_at).toLocaleDateString()}</td>
-                        <td>${t.expires_at ? new Date(t.expires_at).toLocaleDateString() : 'Never'}</td>
-                        <td>
-                            <button class="btn" style="padding: 6px 12px; margin: 0; border-color: var(--danger); color: var(--danger);" onclick="revokeToken(${t.id})">Revoke</button>
-                        </td>
-                    </tr>
-                `).join('');
-                if (tokens.length === 0) {
-                    tbody.innerHTML = `<tr><td colspan="5" style="text-align: center; color: var(--text-muted);">No tokens generated yet.</td></tr>`;
-                }
-            }
-        }
-
-        document.getElementById('btn-show-email').addEventListener('click', (e) => {
-            e.target.classList.add('hidden');
-            document.getElementById('email-form').classList.remove('hidden');
-        });
-
-        document.getElementById('email-form').addEventListener('submit', async (e) => {
-            e.preventDefault();
-            const email = document.getElementById('email-input').value;
-            const btn = document.getElementById('btn-magic-link');
-            const msg = document.getElementById('email-msg');
-            btn.disabled = true;
-            btn.innerText = "Sending...";
-            
-            try {
-                const res = await fetch('/api/auth/magic-link', {
-                    method: 'POST',
-                    headers: {'Content-Type': 'application/json'},
-                    body: JSON.stringify({ email })
-                });
-                if (res.ok) {
-                    msg.style.color = "var(--success)";
-                    msg.innerText = "Magic link sent! Check your email.";
-                } else {
-                    const err = await res.json();
-                    msg.style.color = "var(--danger)";
-                    msg.innerText = err.error || "Failed to send link.";
-                    btn.disabled = false;
-                    btn.innerText = "Send Magic Link";
-                }
-            } catch (e) {
-                msg.innerText = "Network error";
-                btn.disabled = false;
-            }
-        });
-
-        async function logout() {
-            await fetch('/api/auth/logout', { method: 'POST' });
-            window.location.reload();
-        }
-
-        function openTokenModal() {
-            document.getElementById('token-name').value = '';
-            document.getElementById('token-form-step').classList.remove('hidden');
-            document.getElementById('token-result-step').classList.add('hidden');
-            document.getElementById('token-modal').style.display = 'flex';
-        }
-
-        function closeModal() {
-            document.getElementById('token-modal').style.display = 'none';
-        }
-
-        async function generateToken() {
-            const name = document.getElementById('token-name').value;
-            const expiry = parseInt(document.getElementById('token-expiry').value);
-            
-            if (!name) return alert("Please enter a name");
-
-            const res = await fetch('/api/tokens', {
-                method: 'POST',
-                headers: {'Content-Type': 'application/json'},
-                body: JSON.stringify({ name: name, expires_in_days: expiry })
-            });
-
-            if (res.ok) {
-                const data = await res.json();
-                generatedRawToken = data.raw_token;
-                
-                document.getElementById('token-form-step').classList.add('hidden');
-                document.getElementById('token-result-step').classList.remove('hidden');
-                document.getElementById('raw-token-display').innerText = generatedRawToken;
-                
-                // Attempt Magic Handoff
-                const alertBox = document.getElementById('handoff-alert');
-                alertBox.innerText = "Attempting to send token to CLI...";
-                alertBox.className = "alert";
-                
-                try {
-                    const handoff = await fetch('http://127.0.0.1:4444/handoff', {
-                        method: 'POST',
-                        mode: 'no-cors', // We use no-cors to blindly fire it
-                        body: generatedRawToken
-                    });
-                    // Because of no-cors, we can't reliably read the response status locally, 
-                    // but if it didn't throw a network error, the CLI likely received it.
-                    alertBox.innerText = "Token successfully delivered to your CLI! You may close this window.";
-                    alertBox.className = "alert alert-success";
-                } catch (e) {
-                    alertBox.innerText = "Could not connect to CLI locally. Please copy your token below.";
-                    alertBox.className = "alert alert-error";
-                }
-            } else {
-                alert("Failed to create token.");
-            }
-        }
-
-        function copyToken() {
-            navigator.clipboard.writeText(generatedRawToken);
-            alert("Copied to clipboard!");
-        }
-
-        async function revokeToken(id) {
-            if (confirm("Are you sure you want to revoke this token?")) {
-                await fetch(`/api/tokens/${id}`, { method: 'DELETE' });
-                loadTokens();
-            }
-        }
-
-        function escapeHTML(str) {
-            return str.replace(/[&<>'"]/g, tag => ({
-                '&': '&amp;', '<': '&lt;', '>': '&gt;', "'": '&#39;', '"': '&quot;'
-            }[tag]));
-        }
-
-        init();
-    </script>
+    <div id="toast-container"></div>
+    <script src="static/dashboard.js"></script>
 </body>
 </html>

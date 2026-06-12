@@ -97,6 +97,27 @@ server {
     include /etc/letsencrypt/options-ssl-nginx.conf;
     ssl_dhparam /etc/letsencrypt/ssl-dhparams.pem;
 
+    # Serve custom error pages
+    error_page 404 /40x.html;
+    error_page 500 502 503 504 /50x.html;
+    
+    location = /40x.html {
+        root /var/www/lfr-tunnel/error_pages;
+        internal;
+    }
+
+    location = /50x.html {
+        root /var/www/lfr-tunnel/error_pages;
+        internal;
+    }
+
+    # Serve Static Assets (CSS, JS)
+    location /static/ {
+        root /var/www/lfr-tunnel;
+        expires 30d;
+        add_header Cache-Control "public, no-transform";
+    }
+
     # Proxy ALL control plane traffic directly to our Go Application
     location / {
         proxy_pass http://127.0.0.1:8080;

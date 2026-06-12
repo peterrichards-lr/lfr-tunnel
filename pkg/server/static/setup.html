@@ -1,0 +1,78 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Complete Setup - Liferay Tunnel</title>
+    <link rel="stylesheet" href="/static/index.css">
+    <style>
+        .container {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            min-height: 100vh;
+        }
+        .card {
+            width: 100%;
+            max-width: 400px;
+            padding: 32px;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="glass card">
+            <h2 style="text-align: center; margin-bottom: 24px;">Complete Your Profile</h2>
+            <form id="setup-form">
+                <input type="text" id="setup-first-name" class="input-field" placeholder="First Name" required>
+                <input type="text" id="setup-last-name" class="input-field" placeholder="Last Name" required>
+                <input type="text" id="setup-preferred-name" class="input-field" placeholder="Preferred Name (optional)">
+                <button type="submit" class="btn btn-primary" style="margin-top: 16px; width: 100%;">Complete Setup</button>
+                <div id="setup-msg" style="margin-top: 12px; font-size: 13px; text-align: center;"></div>
+            </form>
+        </div>
+    </div>
+    <script>
+        document.getElementById('setup-form').addEventListener('submit', async (e) => {
+            e.preventDefault();
+            const btn = document.querySelector('#setup-form button');
+            const msg = document.getElementById('setup-msg');
+            btn.disabled = true;
+            msg.textContent = "Processing...";
+            msg.style.color = "var(--text)";
+
+            const urlParams = new URLSearchParams(window.location.search);
+            const token = urlParams.get('token');
+
+            const payload = {
+                token: token,
+                first_name: document.getElementById('setup-first-name').value,
+                last_name: document.getElementById('setup-last-name').value,
+                preferred_name: document.getElementById('setup-preferred-name').value
+            };
+
+            try {
+                const res = await fetch('/api/complete-setup', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(payload)
+                });
+                
+                if (res.ok) {
+                    msg.textContent = "Profile setup complete! Please wait for an administrator to approve your account.";
+                    msg.style.color = "var(--success)";
+                } else {
+                    const data = await res.json();
+                    msg.textContent = data.error || "Setup failed. Token may be expired.";
+                    msg.style.color = "var(--danger)";
+                    btn.disabled = false;
+                }
+            } catch (err) {
+                msg.textContent = "A network error occurred.";
+                msg.style.color = "var(--danger)";
+                btn.disabled = false;
+            }
+        });
+    </script>
+</body>
+</html>

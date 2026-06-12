@@ -10,6 +10,7 @@ import (
 	"os/exec"
 	"os/signal"
 	"path/filepath"
+	"runtime"
 	"strconv"
 	"strings"
 	"syscall"
@@ -248,7 +249,7 @@ func main() {
 	if cfg.BasicAuth != "" {
 		fmt.Printf("[Client] Data Plane HTTP Basic Auth is ENABLED\n")
 	}
-	regResp, err := client.RegisterTunnel(cfg.ServerURL, cfg.AuthToken, sub, portMappings, cfg.RateLimit, cfg.BasicAuth, engine.AddedHeaders)
+	regResp, err := client.RegisterTunnel(cfg.ServerURL, cfg.AuthToken, sub, portMappings, cfg.RateLimit, cfg.BasicAuth, engine.AddedHeaders, runtime.GOOS)
 	if err != nil {
 		log.Fatalf("[Error] Failed to register: %v\n", err)
 	}

@@ -40,5 +40,5 @@ lfr-demo.se.	1	IN	AAAA	2a13:9500:10e:2a::a ; cf_tags=cf-proxied:false
 
 ;; TXT Records
 _dmarc.lfr-demo.se.	1	IN	TXT	"v=DMARC1; p=reject; sp=reject; adkim=s; aspf=s;"
-*._domainkey.lfr-demo.se.	1	IN	TXT	"v=DKIM1; p="
+mail._domainkey.lfr-demo.se.	1	IN	TXT	"v=DKIM1; h=sha256; k=rsa; p=MIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEApyQyUaLnQP/gFjRN6+cCODOd3l0UEFJQ5iQrSHA6+K/7KtW2Vxs7HDtRHGiFSnNOo0mzsYTKAS+Dp6JVO5b7Pav1d/QV0tuAOROayv3IoXZAFkHGVsJUbJD9koebUqE8cXGTXrnQWHVADcGQDf+6xeHjgzE/gcAGm5zJQvOrMOG7HmHpjSCk6yZfAo3V+ynS4eLxtTPPI4rH/RR3XriajqqJNwQwgFExuh7CpJdJKqXto+KpgAtlJ6FTsb8KwCOLeuaxLsPwvBPpl2+DpA22qVQdKmCtNvieMq2q7ByIvWe3y2OC6uZ/fk0fNHRuh95hLMdAdP1531+criIv/XQTCwIDAQAB"
 lfr-demo.se.	1	IN	TXT	"v=spf1 ip4:82.39.133.178 ip6:2a13:9500:10e:2a::a -all"

@@ -23,6 +23,7 @@ type PortMapping struct {
 
 // TunnelLease represents a single active subdomain tunnel allocation.
 type TunnelLease struct {
+	UserID          string            `json:"user_id"`
 	SubdomainPrefix string            `json:"subdomain_prefix"`
 	FullHost        string            `json:"full_host"`
 	SessionToken    string            `json:"session_token"`
@@ -75,10 +76,11 @@ func isValidSubdomain(sub string) bool {
 // Registry manages the mapping between subdomains, dynamic ports, and Chisel credentials.
 type Registry struct {
 	sync.RWMutex
-	leases        map[string]*TunnelLease   // Key: FullHost -> Lease
-	sessionLeases map[string][]*TunnelLease // Key: SessionToken -> list of leases
-	usedPorts     map[int]bool
-	chiselServer  *chserver.Server
+	leases         map[string]*TunnelLease   // Key: FullHost -> Lease
+	sessionLeases  map[string][]*TunnelLease // Key: SessionToken -> list of leases
+	usedPorts      map[int]bool
+	chiselServer   *chserver.Server
+	OnLeaseCleanup func(*TunnelLease)
 }
 
 // NewRegistry initializes and returns a new Registry instance.
@@ -115,7 +117,7 @@ func getFreePort() (int, error) {
 }
 
 // Register allocates ports and subdomains for a client.
-func (r *Registry) Register(subdomainPrefix string, ports []PortMapping, domains []string, rateLimit int, clientIP string, basicAuth string, addedHeaders map[string]string) (string, []string, error) {
+func (r *Registry) Register(userID string, subdomainPrefix string, ports []PortMapping, domains []string, rateLimit int, clientIP string, basicAuth string, addedHeaders map[string]string) (string, []string, error) {
 	r.Lock()
 	defer r.Unlock()
 
@@ -186,6 +188,7 @@ func (r *Registry) Register(subdomainPrefix string, ports []PortMapping, domains
 		for _, domain := range domains {
 			fullHost := fmt.Sprintf("%s.%s", subdomain, domain)
 			lease := &TunnelLease{
+				UserID:          userID,
 				SubdomainPrefix: subdomainPrefix,
 				FullHost:        fullHost,
 				SessionToken:    sessionToken,
@@ -342,6 +345,9 @@ func (r *Registry) CleanLease(sessionToken string) {
 	}
 
 	for _, lease := range leases {
+		if r.OnLeaseCleanup != nil {
+			r.OnLeaseCleanup(lease)
+		}
 		delete(r.leases, lease.FullHost)
 		delete(r.usedPorts, lease.LocalPort)
 		log.Printf("[Server] Cleaned up lease for host %s (local port %d)", lease.FullHost, lease.LocalPort)

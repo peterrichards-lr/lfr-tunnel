@@ -357,12 +357,14 @@ func TestServer_RegistrationFlow(t *testing.T) {
 
 	// Verify developer verification email was sent
 	time.Sleep(50 * time.Millisecond)
-	if mockMail.sentTo != "developer@liferay.com" || !strings.Contains(mockMail.sentBody, "/api/verify-email") {
+	if mockMail.sentTo != "developer@liferay.com" || !strings.Contains(mockMail.sentBody, "/setup?token=") {
 		t.Errorf("developer verification email not sent correctly, got to=%s, body=%s", mockMail.sentTo, mockMail.sentBody)
 	}
 
-	// 1.5. Developer verifies email
-	verifyReq := httptest.NewRequest("GET", fmt.Sprintf("http://example.com/api/verify-email?token=%s", user.VerificationToken), nil)
+	// 1.5. Developer completes setup
+	payload := `{"token":"` + user.VerificationToken + `", "first_name":"Dev", "last_name":"User", "theme_preference":"dark"}`
+	verifyReq := httptest.NewRequest("POST", "http://example.com/api/complete-setup", strings.NewReader(payload))
+	verifyReq.Header.Set("Content-Type", "application/json")
 	verifyReq.Host = "example.com"
 	verifyRec := httptest.NewRecorder()
 	srv.ServeHTTP(verifyRec, verifyReq)

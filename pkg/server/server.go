@@ -1,13 +1,16 @@
 package server
 
 import (
+	"bytes"
 	"context"
 	"crypto/rand"
 	"crypto/sha256"
-	_ "embed"
+	"embed"
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
+	"html"
+	"html/template"
 	"log"
 	"net"
 	"net/http"
@@ -28,7 +31,10 @@ import (
 )
 
 //go:embed dashboard.html
-var dashboardHTML []byte
+var dashboardHTML string
+
+//go:embed static/*
+var staticFS embed.FS
 
 // RegisterRequest represents the JSON request payload for registering a tunnel.
 type RegisterRequest struct {
@@ -39,6 +45,7 @@ type RegisterRequest struct {
 	BasicAuth       string            `json:"basic_auth,omitempty"`
 	AddedHeaders    map[string]string `json:"added_headers,omitempty"`
 	ClientVersion   string            `json:"client_version,omitempty"`
+	ClientOS        string            `json:"client_os,omitempty"`
 }
 
 // RegisterResponse represents the JSON response payload.
@@ -76,7 +83,7 @@ type Server struct {
 	vMutex       sync.Mutex
 	blacklist    sync.Map // memory cache for db blacklist
 	portalMap    sync.Map // memory cache for portal magic links and sessions
-
+	metricsQueue chan *db.TunnelMetric
 }
 
 // NewServer initializes and returns a new Server instance.
@@ -135,6 +142,26 @@ func NewServer(cfg *config.ServerConfig) (*Server, error) {
 		cancel:       cancel,
 		rateLimiters: make(map[string]*rate.Limiter),
 		violations:   make(map[string]int),
+		metricsQueue: make(chan *db.TunnelMetric, 1000),
+	}
+
+	srv.registry.OnLeaseCleanup = func(lease *TunnelLease) {
+		if lease.BytesIn > 0 || lease.BytesOut > 0 {
+			m := &db.TunnelMetric{
+				UserID:          lease.UserID,
+				SubdomainPrefix: lease.SubdomainPrefix,
+				FullHost:        lease.FullHost,
+				BytesIn:         int64(lease.BytesIn),
+				BytesOut:        int64(lease.BytesOut),
+				ConnectedAt:     lease.CreatedAt,
+			}
+			select {
+			case srv.metricsQueue <- m:
+			default:
+				// Queue full, drop it
+				log.Printf("[Server] Metrics queue full, dropping metrics for %s", lease.FullHost)
+			}
+		}
 	}
 
 	// Load DB blacklist into cache
@@ -169,7 +196,46 @@ func NewServer(cfg *config.ServerConfig) (*Server, error) {
 		}
 	}
 
+	go srv.processMetricsQueue()
+
 	return srv, nil
+}
+
+func (s *Server) processMetricsQueue() {
+	ticker := time.NewTicker(5 * time.Minute)
+	defer ticker.Stop()
+
+	for {
+		select {
+		case <-s.ctx.Done():
+			return
+		case m := <-s.metricsQueue:
+			if s.db != nil {
+				if err := s.db.RecordTunnelMetric(m); err != nil {
+					log.Printf("[Server] Failed to record tunnel metrics for %s: %v", m.FullHost, err)
+				}
+			}
+		case <-ticker.C:
+			leases := s.registry.ListLeases()
+			for _, lease := range leases {
+				if lease.BytesIn > 0 || lease.BytesOut > 0 {
+					m := &db.TunnelMetric{
+						UserID:          lease.UserID,
+						SubdomainPrefix: lease.SubdomainPrefix,
+						FullHost:        lease.FullHost,
+						BytesIn:         int64(lease.BytesIn),
+						BytesOut:        int64(lease.BytesOut),
+						ConnectedAt:     lease.CreatedAt,
+					}
+					if s.db != nil {
+						if err := s.db.RecordTunnelMetric(m); err != nil {
+							log.Printf("[Server] Failed to periodically record tunnel metrics for %s: %v", m.FullHost, err)
+						}
+					}
+				}
+			}
+		}
+	}
 }
 
 // getRateLimiter retrieves or creates a rate limiter for an IP.
@@ -300,6 +366,15 @@ func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 
+		if r.Method == http.MethodGet && r.URL.Path == "/setup" {
+			s.handleSetupPage(w, r)
+			return
+		}
+		if r.Method == http.MethodPost && r.URL.Path == "/api/complete-setup" {
+			s.handleCompleteSetup(w, r)
+			return
+		}
+
 		if r.Method == http.MethodGet && r.URL.Path == "/api/verify-email" {
 			s.handleVerifyEmail(w, r)
 			return
@@ -307,6 +382,18 @@ func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 
 		if r.Method == http.MethodPost && r.URL.Path == "/api/auth/magic-link" {
 			s.handleAdminMagicLink(w, r)
+			return
+		}
+		if r.Method == http.MethodGet && r.URL.Path == "/api/auth/report" {
+			s.handleAuthReport(w, r)
+			return
+		}
+		if r.Method == http.MethodGet && r.URL.Path == "/api/auth/report-registration" {
+			s.handleReportRegistration(w, r)
+			return
+		}
+		if r.Method == http.MethodGet && r.URL.Path == "/api/auth/decline" {
+			s.handleAuthDecline(w, r)
 			return
 		}
 		if r.Method == http.MethodPost && r.URL.Path == "/api/auth/verify" {
@@ -331,13 +418,13 @@ func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 
-		if strings.HasPrefix(r.URL.Path, "/api/portal") {
-			s.handlePortalEndpoints(w, r)
+		if r.Method == http.MethodGet && r.URL.Path == "/api/me" {
+			s.handleGetMe(w, r)
 			return
 		}
 
-		if r.Method == http.MethodGet && r.URL.Path == "/api/me" {
-			s.handleGetMe(w, r)
+		if r.Method == http.MethodPut && r.URL.Path == "/api/me" {
+			s.handleUpdateMe(w, r)
 			return
 		}
 		if r.Method == http.MethodGet && r.URL.Path == "/api/tokens" {
@@ -366,10 +453,15 @@ func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 
+		if strings.HasPrefix(r.URL.Path, "/static/") {
+			http.FileServer(http.FS(staticFS)).ServeHTTP(w, r)
+			return
+		}
+
 		if r.Method == http.MethodGet && (r.URL.Path == "/" || r.URL.Path == "/admin" || r.URL.Path == "/portal") {
 			w.Header().Set("Content-Type", "text/html; charset=utf-8")
 			w.WriteHeader(http.StatusOK)
-			_, _ = w.Write(dashboardHTML)
+			_, _ = w.Write([]byte(dashboardHTML))
 			return
 		}
 	}
@@ -387,7 +479,8 @@ func (s *Server) handleRegister(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Validate auth token
-	if !s.isValidToken(req.AuthToken) {
+	user, ok := s.isValidToken(req.AuthToken)
+	if !ok {
 		respondJSON(w, http.StatusUnauthorized, RegisterResponse{Status: "error", Error: "unauthorized"})
 		return
 	}
@@ -407,9 +500,25 @@ func (s *Server) handleRegister(w http.ResponseWriter, r *http.Request) {
 
 	// Get client IP
 	clientIP := getClientIP(r)
+	if (req.ClientVersion != "" || req.ClientOS != "") && s.db != nil {
+		if userRec, err := s.db.GetUser(user.ID); err == nil {
+			changed := false
+			if req.ClientVersion != "" && userRec.LastClientVersion != req.ClientVersion {
+				userRec.LastClientVersion = req.ClientVersion
+				changed = true
+			}
+			if req.ClientOS != "" && userRec.LastClientOS != req.ClientOS {
+				userRec.LastClientOS = req.ClientOS
+				changed = true
+			}
+			if changed {
+				_ = s.db.UpdateUser(userRec)
+			}
+		}
+	}
 
 	// Register in registry
-	sessionToken, remotes, err := s.registry.Register(req.SubdomainPrefix, req.Ports, activeDomains, effectiveLimit, clientIP, req.BasicAuth, req.AddedHeaders)
+	sessionToken, remotes, err := s.registry.Register(user.ID, req.SubdomainPrefix, req.Ports, activeDomains, effectiveLimit, clientIP, req.BasicAuth, req.AddedHeaders)
 	if err != nil {
 		respondJSON(w, http.StatusConflict, RegisterResponse{Status: "error", Error: err.Error()})
 		return
@@ -482,7 +591,8 @@ func (s *Server) handleCheckSubdomain(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	if !s.isValidToken(token) {
+	user, ok := s.isValidToken(token)
+	if !ok || user == nil {
 		w.WriteHeader(http.StatusUnauthorized)
 		if err := json.NewEncoder(w).Encode(map[string]string{"error": "unauthorized"}); err != nil {
 			log.Printf("[Server] Failed to encode unauthorized response: %v", err)
@@ -567,14 +677,31 @@ func (s *Server) Start() error {
 		Addr:    s.cfg.HTTPBindAddr,
 		Handler: s,
 	}
+	// Periodic task: Prune expired magic links every hour
+	go func() {
+		ticker := time.NewTicker(1 * time.Hour)
+		defer ticker.Stop()
+		for {
+			select {
+			case <-s.ctx.Done():
+				return
+			case <-ticker.C:
+				if s.db != nil {
+					s.db.PruneExpiredMagicLinks()
+				}
+			}
+		}
+	}()
+
 	return srv.ListenAndServe()
 }
 
 // RegisterRequestPayload represents the payload to request developer registration.
 type RegisterRequestPayload struct {
-	Email     string `json:"email"`
-	FirstName string `json:"first_name"`
-	LastName  string `json:"last_name"`
+	Email         string `json:"email"`
+	FirstName     string `json:"first_name"`
+	LastName      string `json:"last_name"`
+	PreferredName string `json:"preferred_name"`
 }
 
 func generateSecureToken() (string, error) {
@@ -621,6 +748,9 @@ func (s *Server) handleRegisterRequest(w http.ResponseWriter, r *http.Request) {
 				}
 			}
 			if !allowed {
+				if s.db != nil {
+					s.writeAudit(req.Email, "auth.registration_blocked", "ip", getClientIP(r), "Registration blocked by email domain whitelist", r)
+				}
 				w.WriteHeader(http.StatusForbidden)
 				_ = json.NewEncoder(w).Encode(map[string]string{"error": "email domain not allowed by server configuration"})
 				return
@@ -629,9 +759,16 @@ func (s *Server) handleRegisterRequest(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Check if user already exists
-	if _, err := s.db.GetUser(req.Email); err == nil {
-		w.WriteHeader(http.StatusConflict)
-		_ = json.NewEncoder(w).Encode(map[string]string{"error": "registration request already exists or email is registered"})
+	if existingUser, err := s.db.GetUser(req.Email); err == nil {
+		// Log the attempt to the audit log to keep visibility for admins
+		s.writeAudit(req.Email, "auth.registration_attempt_existing", "user", existingUser.Email, "Attempted to register but account already exists", r)
+
+		// Mimic a successful registration to prevent email enumeration
+		w.WriteHeader(http.StatusOK)
+		_ = json.NewEncoder(w).Encode(map[string]string{
+			"status":  "success",
+			"message": "registration request submitted. Please check your email to verify your account.",
+		})
 		return
 	}
 
@@ -654,6 +791,7 @@ func (s *Server) handleRegisterRequest(w http.ResponseWriter, r *http.Request) {
 		Email:             req.Email,
 		FirstName:         req.FirstName,
 		LastName:          req.LastName,
+		PreferredName:     req.PreferredName,
 		Role:              "user",
 		Status:            "unverified",
 		ApprovalToken:     approvalToken,
@@ -674,9 +812,42 @@ func (s *Server) handleRegisterRequest(w http.ResponseWriter, r *http.Request) {
 		if r.TLS == nil && r.Header.Get("X-Forwarded-Proto") != "https" {
 			scheme = "http"
 		}
-		verifyURL := fmt.Sprintf("%s://%s/api/verify-email?token=%s", scheme, r.Host, verificationToken)
-		subject := "[Liferay Tunnel] Please Verify Your Email Address"
-		body := fmt.Sprintf("<p>Hi %s,</p><p>Please verify your email address by clicking the link below:</p><p><a href=\"%s\">Verify Email</a></p><p>Once verified, an admin will review your request.</p>", req.FirstName, verifyURL)
+		verifyURL := fmt.Sprintf("%s://%s/setup?token=%s", scheme, r.Host, verificationToken)
+		subject := "[Liferay Tunnel] Complete Your Registration"
+
+		greetingName := "there"
+		if greetingName == "" {
+			greetingName = req.FirstName
+		}
+		if greetingName == "" {
+			greetingName = "there"
+		}
+
+		clientIP := getClientIP(r)
+		reportLink := fmt.Sprintf("%s://%s/api/auth/report-registration?token=%s", scheme, r.Host, verificationToken)
+
+		body := fmt.Sprintf(`Hi %s,
+
+Thank you for starting your registration! Because your email domain is pre-approved by your organization, you are just one step away from accessing your account.
+
+Click the link below to verify your email and complete your profile setup:
+
+This link will expire in 24 hours and can only be used once. If the link doesn't work, copy and paste this URL into your browser: %s
+
+Once you finish filling in your details, an administrator will review and approve your account.
+
+🛡️ Didn’t request this email?
+This registration request originated from the IP address: %s.
+
+If you did not attempt to register an account with us, please let our security team know by clicking below:
+
+👉 %s
+
+Note: Clicking this report link will instantly deactivate this registration token, preventing anyone from completing the sign-up process with your email address.
+
+Best regards,
+
+Liferay Tunnel Team`, html.EscapeString(greetingName), verifyURL, clientIP, reportLink)
 
 		go func() {
 			if err := s.mailSender.Send(user.Email, subject, body); err != nil {
@@ -687,6 +858,83 @@ func (s *Server) handleRegisterRequest(w http.ResponseWriter, r *http.Request) {
 
 	w.WriteHeader(http.StatusOK)
 	_ = json.NewEncoder(w).Encode(map[string]string{"status": "success", "message": "registration request submitted. Please check your email to verify your account."})
+}
+
+// handleSetupPage serves the setup page to complete registration
+func (s *Server) handleSetupPage(w http.ResponseWriter, r *http.Request) {
+	http.ServeFile(w, r, "static/setup.html")
+}
+
+// handleCompleteSetup processes the profile completion form.
+func (s *Server) handleCompleteSetup(w http.ResponseWriter, r *http.Request) {
+	if s.db == nil {
+		http.Error(w, `{"error":"Database storage not enabled"}`, http.StatusNotImplemented)
+		return
+	}
+
+	var req struct {
+		Token         string `json:"token"`
+		FirstName     string `json:"first_name"`
+		LastName      string `json:"last_name"`
+		PreferredName string `json:"preferred_name"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		http.Error(w, `{"error":"Invalid payload"}`, http.StatusBadRequest)
+		return
+	}
+
+	user, err := s.db.GetUserByVerificationToken(req.Token)
+	if err != nil || user.Status != "unverified" {
+		http.Error(w, `{"error":"Invalid or expired token"}`, http.StatusBadRequest)
+		return
+	}
+
+	user.FirstName = req.FirstName
+	user.LastName = req.LastName
+	user.PreferredName = req.PreferredName
+	if user.PreferredName == "" {
+		user.PreferredName = req.FirstName
+	}
+
+	// Registration must be approved by admin
+	user.Status = "pending"
+	user.VerificationToken = ""
+	// Keep user.ApprovalToken so the admin can approve!
+
+	if err := s.db.UpdateUser(user); err != nil {
+		http.Error(w, `{"error":"Failed to update user"}`, http.StatusInternalServerError)
+		return
+	}
+
+	s.writeAudit(user.Email, "user.verified", "user", user.Email, "User completed setup and is pending approval", r)
+	s.sendAdminAlert("alert_notify_registration", "LFR Tunnel Alert: New User Registration", fmt.Sprintf("A new user (%s %s - %s) has verified their email and requires approval.", user.FirstName, user.LastName, user.Email))
+
+	// Send approval email to admin
+	if s.mailSender != nil && s.cfg.AdminNotificationEmail != "" {
+		sendAdminEmail := true
+		if s.db != nil {
+			if adminUser, err := s.db.GetUserByEmail(s.cfg.AdminNotificationEmail); err == nil && adminUser != nil {
+				if adminUser.NotificationPrefs == "disabled" {
+					sendAdminEmail = false
+				}
+			}
+		}
+
+		if sendAdminEmail {
+			subject := "[Liferay Tunnel] New Developer Registration Request"
+			scheme := "http"
+			if s.cfg.SSLCertFile != "" {
+				scheme = "https"
+			}
+			approveURL := fmt.Sprintf("%s://%s/api/admin/approve?email=%s&token=%s", scheme, r.Host, url.QueryEscape(user.Email), user.ApprovalToken)
+			body := fmt.Sprintf("<p>New registration request (Email Verified & Setup Complete):</p><ul><li>Name: %s %s</li><li>Email: %s</li></ul><p><a href=\"%s\">Click here to approve this request</a></p>", user.FirstName, user.LastName, user.Email, approveURL)
+
+			go s.mailSender.Send(s.cfg.AdminNotificationEmail, subject, body)
+		}
+	}
+
+	w.WriteHeader(http.StatusOK)
+	_ = json.NewEncoder(w).Encode(map[string]string{"status": "ok"})
 }
 
 // handleVerifyEmail processes the email verification link clicked by the user.
@@ -925,11 +1173,11 @@ func (s *Server) getActiveDomainsForRequest(r *http.Request) []string {
 	return activeDomains
 }
 
-// isValidToken checks if a token is valid, checking both personal access tokens (PATs)
-// in the database and the server's master auth_token configuration.
-func (s *Server) isValidToken(token string) bool {
+// isValidToken checks if a token is valid, checking personal access tokens (PATs)
+// in the database.
+func (s *Server) isValidToken(token string) (*db.User, bool) {
 	if token == "" {
-		return false
+		return nil, false
 	}
 	if s.db != nil {
 		hashBytes := sha256.Sum256([]byte(token))
@@ -947,14 +1195,13 @@ func (s *Server) isValidToken(token string) bool {
 							log.Printf("[Server] Failed to update PAT last used time: %v", err)
 						}
 					}(pat.ID)
-					return true
+					return user, true
 				}
 			}
 		}
 	}
 
-	// Legacy config token removed
-	return false
+	return nil, false
 }
 
 func (s *Server) writeAudit(actorID, action, targetType, targetID string, details string, r *http.Request) {
@@ -983,7 +1230,7 @@ func (s *Server) requireAdmin(w http.ResponseWriter, r *http.Request) (string, s
 	var authenticated bool
 
 	// 1. Check HTTP-only cookie
-	cookie, err := r.Cookie("lfr_admin_session")
+	cookie, err := r.Cookie("lfr_session")
 	if err == nil && cookie.Value != "" {
 		if val, ok := s.portalMap.Load("admin_session_" + cookie.Value); ok {
 			sessionData := val.(PortalSessionData)
@@ -1051,8 +1298,24 @@ func (s *Server) handleAdminEndpoints(w http.ResponseWriter, r *http.Request) {
 
 	w.Header().Set("Content-Type", "application/json")
 
+	if r.Method == http.MethodGet && r.URL.Path == "/api/admin/analytics/clients" {
+		stats, err := s.db.GetClientVersionStats()
+		if err != nil {
+			http.Error(w, `{"error":"Failed to get client stats"}`, http.StatusInternalServerError)
+			return
+		}
+		respondJSON(w, http.StatusOK, stats)
+		return
+	}
+
 	if r.Method == http.MethodGet && r.URL.Path == "/api/admin/users" {
+
 		s.handleAdminListUsers(w, r, actor)
+		return
+	}
+
+	if r.Method == http.MethodPost && r.URL.Path == "/api/admin/invite" {
+		s.handleAdminInviteUser(w, r, actor)
 		return
 	}
 
@@ -1101,6 +1364,11 @@ func (s *Server) handleAdminEndpoints(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	if r.Method == http.MethodGet && r.URL.Path == "/api/admin/magic-links" {
+		s.handleAdminListMagicLinks(w, r)
+		return
+	}
+
 	if r.URL.Path == "/api/admin/auth/magic-link" && r.Method == http.MethodPost {
 		s.handleAdminMagicLink(w, r)
 		return
@@ -1131,16 +1399,28 @@ func (s *Server) handleAdminMagicLink(w http.ResponseWriter, r *http.Request) {
 	req.Email = strings.ToLower(strings.TrimSpace(req.Email))
 
 	isOwner := s.cfg.Owner.UserID != "" && req.Email == s.cfg.Owner.UserID
-	var isAdmin bool
+	var isApproved bool
+	greetingName := "there"
 
-	if !isOwner && s.db != nil {
+	if s.db != nil {
 		user, err := s.db.GetUserByEmail(req.Email)
-		if err == nil && user.Status == "approved" && (user.Role == "admin" || user.Role == "owner") {
-			isAdmin = true
+		if err == nil {
+			if user.Status == "approved" {
+				isApproved = true
+			}
+			if user.PreferredName != "" {
+				greetingName = user.PreferredName
+			} else if user.FirstName != "" {
+				greetingName = user.FirstName
+			}
 		}
 	}
 
-	if !isOwner && !isAdmin {
+	if isOwner {
+		isApproved = true
+	}
+
+	if !isApproved {
 		// Do not leak existence
 		respondJSON(w, http.StatusOK, map[string]string{"status": "ok"})
 		return
@@ -1149,14 +1429,21 @@ func (s *Server) handleAdminMagicLink(w http.ResponseWriter, r *http.Request) {
 	magicToken, _ := generateSecureToken()
 	clientIP := getClientIP(r)
 
-	sessionData := PortalSessionData{
-		Email:     req.Email,
-		ExpiresAt: time.Now().Add(15 * time.Minute),
-		ClientIP:  clientIP,
+	expiresAt := time.Now().Add(15 * time.Minute)
+	if s.db != nil {
+		h := sha256.Sum256([]byte(magicToken))
+		tokenHash := hex.EncodeToString(h[:])
+		s.db.CreateMagicLink(req.Email, tokenHash, clientIP, expiresAt)
+	} else {
+		sessionData := PortalSessionData{
+			Email:     req.Email,
+			ExpiresAt: expiresAt,
+			ClientIP:  clientIP,
+		}
+		s.portalMap.Store("admin_magic_"+magicToken, sessionData)
 	}
-	s.portalMap.Store("admin_magic_"+magicToken, sessionData)
 
-	s.writeAudit(req.Email, "admin.magic_link_requested", "system", "admin", "Requested admin dashboard login link", r)
+	s.writeAudit(req.Email, "auth.magic_link_requested", "system", "auth", "Requested portal login link", r)
 
 	if s.mailSender != nil {
 		host := r.Host
@@ -1164,12 +1451,43 @@ func (s *Server) handleAdminMagicLink(w http.ResponseWriter, r *http.Request) {
 		if r.TLS != nil || r.Header.Get("X-Forwarded-Proto") == "https" {
 			scheme = "https"
 		}
-		link := fmt.Sprintf("%s://%s/admin?token=%s", scheme, host, magicToken)
-		body := fmt.Sprintf("<p>You requested a magic link to log into the Liferay Tunnel Admin Dashboard.</p>"+
-			"<p><strong>IP Address:</strong> %s</p>"+
-			"<p>This link expires in 15 minutes.</p>"+
-			"<p><a href=\"%s\">Log In to Admin Dashboard</a></p>", clientIP, link)
-		go s.mailSender.Send(req.Email, "Liferay Tunnel - Admin Login", body) //nolint:errcheck
+		link := fmt.Sprintf("%s://%s/portal?token=%s", scheme, host, magicToken)
+		reportLink := fmt.Sprintf("%s://%s/api/auth/report?token=%s", scheme, host, magicToken)
+
+		tmplStr := ""
+		if s.db != nil {
+			tmplStr, _ = s.db.GetAdminSetting("magic_link_email_template")
+		}
+		if tmplStr == "" {
+			tmplStr = defaultMagicLinkEmailTemplate
+		}
+
+		tmpl, err := template.New("email").Parse(tmplStr)
+		var bodyBuf bytes.Buffer
+		if err == nil {
+			err = tmpl.Execute(&bodyBuf, MagicLinkEmailData{
+				PreferredName: greetingName,
+				ExpiryMinutes: 15,
+				MagicLink:     link,
+				IPAddress:     clientIP,
+				ReportLink:    reportLink,
+			})
+		}
+
+		var body string
+		if err != nil {
+			// Fallback if template parsing fails
+			log.Printf("[Admin] Magic link template error: %v", err)
+			body = fmt.Sprintf("<p>Hi %s,</p>"+
+				"<p>You requested a magic link to log into the Liferay Tunnel Portal.</p>"+
+				"<p><strong>IP Address:</strong> %s</p>"+
+				"<p>This link expires in 15 minutes.</p>"+
+				"<p><a href=\"%s\">Log In to Portal</a></p>", html.EscapeString(greetingName), clientIP, link)
+		} else {
+			body = bodyBuf.String()
+		}
+
+		go s.mailSender.Send(req.Email, "Your magic login link", body) //nolint:errcheck
 	} else {
 		log.Printf("[Admin] Magic Link for %s: /admin?token=%s", req.Email, magicToken)
 	}
@@ -1186,30 +1504,77 @@ func (s *Server) handleAdminVerify(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	val, ok := s.portalMap.LoadAndDelete("admin_magic_" + req.Token)
-	if !ok {
-		respondJSON(w, http.StatusUnauthorized, map[string]string{"error": "Invalid or expired token"})
-		return
-	}
+	var email string
 
-	sessionData := val.(PortalSessionData)
-	if time.Now().After(sessionData.ExpiresAt) {
-		respondJSON(w, http.StatusUnauthorized, map[string]string{"error": "Token has expired"})
-		return
-	}
+	if s.db != nil {
+		h := sha256.Sum256([]byte(req.Token))
+		tokenHash := hex.EncodeToString(h[:])
+		link, err := s.db.GetMagicLink(tokenHash)
+		if err != nil || link == nil || link.UsedAt != nil {
+			respondJSON(w, http.StatusUnauthorized, map[string]string{"error": "Invalid or already used token"})
+			return
+		}
+		if time.Now().After(link.ExpiresAt) {
+			respondJSON(w, http.StatusUnauthorized, map[string]string{"error": "Token has expired"})
+			return
+		}
+		s.db.MarkMagicLinkUsed(link.ID)
+		email = link.Email
+	} else {
+		val, ok := s.portalMap.LoadAndDelete("admin_magic_" + req.Token)
+		if !ok {
+			respondJSON(w, http.StatusUnauthorized, map[string]string{"error": "Invalid or expired token"})
+			return
+		}
 
-	email := sessionData.Email
+		sessionData := val.(PortalSessionData)
+		if time.Now().After(sessionData.ExpiresAt) {
+			respondJSON(w, http.StatusUnauthorized, map[string]string{"error": "Token has expired"})
+			return
+		}
+		email = sessionData.Email
+	}
 	sessionToken, _ := generateSecureToken()
+	clientIP := getClientIP(r)
+
+	var previousLoginAt *time.Time
+	if s.db != nil {
+		u, err := s.db.GetUserByEmail(email)
+		if (err != nil || u == nil) && s.cfg.Owner.UserID != "" && strings.EqualFold(email, s.cfg.Owner.UserID) {
+			// Auto-create owner in DB
+			u = &db.User{
+				ID:        s.cfg.Owner.UserID,
+				Email:     email,
+				FirstName: s.cfg.Owner.Name,
+				Role:      "owner",
+				Status:    "approved",
+			}
+			s.db.CreateUser(u)
+		}
+		if u != nil {
+			if u.LastLoginAt != nil {
+				// Capture a copy of the previous login time
+				prev := *u.LastLoginAt
+				previousLoginAt = &prev
+			}
+			now := time.Now().UTC()
+			u.LastLoginAt = &now
+			u.LastLoginIP = clientIP
+			s.db.UpdateUser(u)
+		}
+	}
 
 	s.portalMap.Store("admin_session_"+sessionToken, PortalSessionData{
-		Email:     email,
-		ExpiresAt: time.Now().Add(s.cfg.PortalSessionDuration),
+		Email:           email,
+		ExpiresAt:       time.Now().Add(s.cfg.PortalSessionDuration),
+		ClientIP:        clientIP,
+		PreviousLoginAt: previousLoginAt,
 	})
 
 	s.writeAudit(email, "admin.login", "system", "admin", "Admin logged into dashboard via magic link", r)
 
 	cookie := &http.Cookie{
-		Name:     "lfr_admin_session",
+		Name:     "lfr_session",
 		Value:    sessionToken,
 		Path:     "/",
 		Expires:  time.Now().Add(s.cfg.PortalSessionDuration),
@@ -1223,12 +1588,12 @@ func (s *Server) handleAdminVerify(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) handleAdminLogout(w http.ResponseWriter, r *http.Request) {
-	cookie, err := r.Cookie("lfr_admin_session")
+	cookie, err := r.Cookie("lfr_session")
 	if err == nil {
 		s.portalMap.Delete("admin_session_" + cookie.Value)
 	}
 	http.SetCookie(w, &http.Cookie{
-		Name:     "lfr_admin_session",
+		Name:     "lfr_session",
 		Value:    "",
 		Path:     "/",
 		Expires:  time.Unix(0, 0),
@@ -1269,7 +1634,136 @@ func (s *Server) handleAdminListUsers(w http.ResponseWriter, r *http.Request, ac
 		http.Error(w, `{"error":"Failed to list users"}`, http.StatusInternalServerError)
 		return
 	}
-	_ = json.NewEncoder(w).Encode(users)
+
+	filtered := make([]*db.User, 0, len(users))
+	for _, u := range users {
+		if actor == s.cfg.Owner.UserID {
+			filtered = append(filtered, u)
+		} else {
+			if u.Email == actor {
+				filtered = append(filtered, u)
+			} else if u.Email == s.cfg.Owner.UserID {
+				continue
+			} else if u.Role == "admin" {
+				continue
+			} else {
+				filtered = append(filtered, u)
+			}
+		}
+	}
+
+	_ = json.NewEncoder(w).Encode(filtered)
+}
+
+func (s *Server) handleAdminInviteUser(w http.ResponseWriter, r *http.Request, actor string) {
+	if s.db == nil {
+		http.Error(w, `{"error":"Database not configured"}`, http.StatusNotImplemented)
+		return
+	}
+
+	var req struct {
+		Email     string `json:"email"`
+		FirstName string `json:"first_name"`
+		LastName  string `json:"last_name"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		http.Error(w, `{"error":"Invalid payload"}`, http.StatusBadRequest)
+		return
+	}
+
+	req.Email = strings.ToLower(strings.TrimSpace(req.Email))
+
+	if req.Email == "" || !strings.Contains(req.Email, "@") {
+		http.Error(w, `{"error":"Invalid email address"}`, http.StatusBadRequest)
+		return
+	}
+
+	// Domain Validation
+	if len(s.cfg.AllowedEmailDomains) > 0 {
+		parts := strings.Split(req.Email, "@")
+		if len(parts) == 2 {
+			domain := parts[1]
+			allowed := false
+			for _, d := range s.cfg.AllowedEmailDomains {
+				if domain == d {
+					allowed = true
+					break
+				}
+			}
+			if !allowed {
+				s.writeAudit(actor, "auth.invite_blocked", "user", req.Email, "Invite blocked by email domain whitelist", r)
+				http.Error(w, `{"error":"Email domain not allowed by server configuration whitelist"}`, http.StatusForbidden)
+				return
+			}
+		}
+	}
+
+	// Check if exists
+	if _, err := s.db.GetUserByEmail(req.Email); err == nil {
+		http.Error(w, `{"error":"User already exists or registration is pending"}`, http.StatusConflict)
+		return
+	}
+
+	// Create User
+	user := &db.User{
+		ID:              req.Email,
+		Email:           req.Email,
+		FirstName:       req.FirstName,
+		LastName:        req.LastName,
+		PreferredName:   req.FirstName,
+		Role:            "user",
+		Status:          "approved", // Instant approval because invited by Admin
+		ThemePreference: "system",
+		CreatedAt:       time.Now().UTC(),
+		UpdatedAt:       time.Now().UTC(),
+	}
+	if err := s.db.CreateUser(user); err != nil {
+		http.Error(w, `{"error":"Failed to create user"}`, http.StatusInternalServerError)
+		return
+	}
+
+	// Send Magic Link Invite Email
+	magicToken, _ := generateSecureToken()
+	clientIP := getClientIP(r)
+	expiresAt := time.Now().Add(7 * 24 * time.Hour) // Invite link lasts 7 days
+	h := sha256.Sum256([]byte(magicToken))
+	tokenHash := hex.EncodeToString(h[:])
+	s.db.CreateMagicLink(req.Email, tokenHash, clientIP, expiresAt)
+
+	inviteLink := fmt.Sprintf("https://%s/api/auth/verify?token=%s", r.Host, magicToken)
+	declineLink := fmt.Sprintf("https://%s/api/auth/decline?token=%s", r.Host, magicToken)
+
+	subject := fmt.Sprintf("%s has invited you to join Liferay Tunnel", actor)
+	body := fmt.Sprintf(`Hi there,
+
+%s has created an account for you on Liferay Tunnel.
+
+Your email domain is pre-approved, so you just need to click the link below to verify your email and set up your profile details:
+
+This invitation link will expire in 7 days. If the button doesn't work, copy and paste this URL into your browser: %s
+
+Once your profile setup is complete, you will be redirected straight to your new dashboard.
+
+🛡️ Wrong email or received this by mistake?
+This invitation was generated by an administrator from within our portal.
+
+If you do not know %s, or believe this invitation was sent to you in error, you can decline it and deactivate the link below:
+
+👉 %s
+
+What happens next? Declining will instantly invalidate this invitation link. It will also notify the administrator so they can correct their records.
+
+Best regards,
+
+Liferay Tunnel Team`, actor, inviteLink, actor, declineLink)
+
+	if s.mailSender != nil {
+		go s.mailSender.Send(req.Email, subject, body)
+	}
+
+	s.writeAudit(actor, "user.invited", "user", req.Email, "Admin invited new user", r)
+
+	respondJSON(w, http.StatusOK, map[string]string{"status": "ok"})
 }
 
 func (s *Server) handleAdminGetUser(w http.ResponseWriter, r *http.Request, actor string) {
@@ -1291,6 +1785,13 @@ func (s *Server) handleAdminGetUser(w http.ResponseWriter, r *http.Request, acto
 			http.Error(w, `{"error":"Failed to get user"}`, http.StatusInternalServerError)
 		}
 		return
+	}
+
+	if actor != s.cfg.Owner.UserID {
+		if user.Email == s.cfg.Owner.UserID || (user.Role == "admin" && user.Email != actor) {
+			http.Error(w, `{"error":"Forbidden: Cannot view this user"}`, http.StatusForbidden)
+			return
+		}
 	}
 
 	pats, err := s.db.ListPATs(user.ID)
@@ -1336,6 +1837,16 @@ func (s *Server) handleAdminPatchUser(w http.ResponseWriter, r *http.Request, ac
 		} else {
 			http.Error(w, `{"error":"Failed to get user"}`, http.StatusInternalServerError)
 		}
+		return
+	}
+
+	if actor != s.cfg.Owner.UserID {
+		if user.Email == s.cfg.Owner.UserID || user.Role == "admin" || user.Email == actor {
+			http.Error(w, `{"error":"Forbidden: Cannot modify this user"}`, http.StatusForbidden)
+			return
+		}
+	} else if user.Email == s.cfg.Owner.UserID {
+		http.Error(w, `{"error":"Forbidden: Cannot modify owner account status"}`, http.StatusForbidden)
 		return
 	}
 
@@ -1622,6 +2133,13 @@ func (s *Server) sendAdminAlert(settingKey, subject, htmlBody string) {
 		return // default false
 	}
 
+	// Check the admin user's personal notification preferences
+	if adminUser, err := s.db.GetUserByEmail(s.cfg.AdminNotificationEmail); err == nil && adminUser != nil {
+		if adminUser.NotificationPrefs == "disabled" {
+			return
+		}
+	}
+
 	go func() {
 		if err := s.mailSender.Send(s.cfg.AdminNotificationEmail, subject, htmlBody); err != nil {
 			log.Printf("[Mail] Failed to send admin alert %s: %v", settingKey, err)
@@ -1632,6 +2150,9 @@ func (s *Server) sendAdminAlert(settingKey, subject, htmlBody string) {
 // respondJSON is a DRY helper for sending JSON API responses
 func respondJSON(w http.ResponseWriter, status int, payload interface{}) {
 	w.Header().Set("Content-Type", "application/json")
+	w.Header().Set("Cache-Control", "no-store, no-cache, must-revalidate, proxy-revalidate")
+	w.Header().Set("Pragma", "no-cache")
+	w.Header().Set("Expires", "0")
 	w.WriteHeader(status)
 	if err := json.NewEncoder(w).Encode(payload); err != nil {
 		log.Printf("[Server] Failed to encode JSON response: %v", err)
@@ -1654,210 +2175,21 @@ func getClientIP(r *http.Request) string {
 }
 
 type PortalSessionData struct {
-	Email     string
-	ExpiresAt time.Time
-	ClientIP  string
+	Email           string
+	ExpiresAt       time.Time
+	ClientIP        string
+	PreviousLoginAt *time.Time
 }
 
-// handlePortalEndpoints multiplexes the portal API endpoints
-func (s *Server) handlePortalEndpoints(w http.ResponseWriter, r *http.Request) {
+func (s *Server) handleAdminListMagicLinks(w http.ResponseWriter, r *http.Request) {
 	if s.db == nil {
-		respondJSON(w, http.StatusServiceUnavailable, map[string]string{"error": "Database not configured"})
+		respondJSON(w, http.StatusOK, []interface{}{})
 		return
 	}
-
-	if r.Method == http.MethodPost && r.URL.Path == "/api/portal/magic-link" {
-		var req struct {
-			Email string `json:"email"`
-		}
-		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-			respondJSON(w, http.StatusBadRequest, map[string]string{"error": "Invalid request"})
-			return
-		}
-
-		user, err := s.db.GetUserByEmail(strings.ToLower(strings.TrimSpace(req.Email)))
-		if err != nil || user.Status != "approved" {
-			// Don't leak user existence
-			respondJSON(w, http.StatusOK, map[string]string{"status": "ok"})
-			return
-		}
-
-		magicToken, _ := generateSecureToken()
-		clientIP := getClientIP(r)
-
-		sessionData := PortalSessionData{
-			Email:     user.Email,
-			ExpiresAt: time.Now().Add(15 * time.Minute),
-			ClientIP:  clientIP,
-		}
-		s.portalMap.Store("magic_"+magicToken, sessionData)
-
-		s.writeAudit(user.Email, "portal.magic_link_requested", "user", "portal", "Requested magic login link", r)
-
-		if s.mailSender != nil {
-			host := r.Host
-			scheme := "http"
-			if r.TLS != nil || r.Header.Get("X-Forwarded-Proto") == "https" {
-				scheme = "https"
-			}
-			link := fmt.Sprintf("%s://%s/portal?token=%s", scheme, host, magicToken)
-			reportLink := fmt.Sprintf("%s://%s/api/portal/report?token=%s", scheme, host, magicToken)
-			body := fmt.Sprintf("<p>You requested a magic link to log into the Liferay Tunnel Portal.</p>"+
-				"<p><strong>IP Address:</strong> %s</p>"+
-				"<p>This link expires in 15 minutes.</p>"+
-				"<p><a href=\"%s\">Log In to Portal</a></p>"+
-				"<hr>"+
-				"<p><em>If you did not request this, <a href=\"%s\">click here to immediately invalidate the link and report it to security</a>.</em></p>", clientIP, link, reportLink)
-			go s.mailSender.Send(user.Email, "Liferay Tunnel - Portal Login", body) //nolint:errcheck
-		} else {
-			// For testing locally without SMTP
-			log.Printf("[Portal] Magic Link for %s: /portal?token=%s", user.Email, magicToken)
-		}
-
-		respondJSON(w, http.StatusOK, map[string]string{"status": "ok"})
-		return
-	}
-
-	if r.Method == http.MethodGet && r.URL.Path == "/api/portal/report" {
-		token := r.URL.Query().Get("token")
-		val, ok := s.portalMap.LoadAndDelete("magic_" + token)
-		if ok {
-			sessionData := val.(PortalSessionData)
-			s.writeAudit(sessionData.Email, "portal.magic_link_abuse_reported", "system", "portal", fmt.Sprintf("User reported abuse from IP: %s", sessionData.ClientIP), r)
-		}
-		w.Header().Set("Content-Type", "text/html; charset=utf-8")
-		w.WriteHeader(http.StatusOK)
-		_, _ = w.Write([]byte(`<html><head><title>Report Submitted</title><style>body{font-family:sans-serif;text-align:center;padding:50px;color:#333;background:#f8fafc;}h1{color:#10b981;}</style></head><body><h1>Report Submitted ✅</h1><p>Thank you for reporting. This magic link has been invalidated and administrators have been notified.</p></body></html>`))
-		return
-	}
-
-	if r.Method == http.MethodPost && r.URL.Path == "/api/portal/verify" {
-		var req struct {
-			Token string `json:"token"`
-		}
-		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-			respondJSON(w, http.StatusBadRequest, map[string]string{"error": "Invalid request"})
-			return
-		}
-
-		val, ok := s.portalMap.LoadAndDelete("magic_" + req.Token)
-		if !ok {
-			respondJSON(w, http.StatusUnauthorized, map[string]string{"error": "Invalid or expired token"})
-			return
-		}
-
-		sessionData := val.(PortalSessionData)
-		if time.Now().After(sessionData.ExpiresAt) {
-			respondJSON(w, http.StatusUnauthorized, map[string]string{"error": "Token has expired"})
-			return
-		}
-
-		email := sessionData.Email
-		sessionToken, _ := generateSecureToken()
-
-		s.portalMap.Store("session_"+sessionToken, PortalSessionData{
-			Email:     email,
-			ExpiresAt: time.Now().Add(s.cfg.PortalSessionDuration),
-		})
-
-		respondJSON(w, http.StatusOK, map[string]string{"session_token": sessionToken})
-		return
-	}
-
-	// Require a valid session token for subsequent endpoints
-	authHeader := r.Header.Get("Authorization")
-	sessionToken := strings.TrimPrefix(authHeader, "Bearer ")
-	val, ok := s.portalMap.Load("session_" + sessionToken)
-	if !ok {
-		respondJSON(w, http.StatusUnauthorized, map[string]string{"error": "Unauthorized"})
-		return
-	}
-
-	sessionData := val.(PortalSessionData)
-	if time.Now().After(sessionData.ExpiresAt) {
-		s.portalMap.Delete("session_" + sessionToken)
-		respondJSON(w, http.StatusUnauthorized, map[string]string{"error": "Session expired"})
-		return
-	}
-
-	// Sliding expiration: reset expiry time
-	sessionData.ExpiresAt = time.Now().Add(s.cfg.PortalSessionDuration)
-	s.portalMap.Store("session_"+sessionToken, sessionData)
-
-	email := sessionData.Email
-	user, err := s.db.GetUserByEmail(email)
+	links, err := s.db.ListMagicLinks()
 	if err != nil {
-		respondJSON(w, http.StatusUnauthorized, map[string]string{"error": "User not found"})
+		http.Error(w, `{"error":"Failed to list magic links"}`, http.StatusInternalServerError)
 		return
 	}
-
-	if r.Method == http.MethodGet && r.URL.Path == "/api/portal/me" {
-		pats, _ := s.db.ListPATs(user.ID)
-
-		// Map active leases for portal dashboard (dummy filtering for now)
-		var userTunnels []map[string]interface{}
-
-		respondJSON(w, http.StatusOK, map[string]interface{}{
-			"user":    user,
-			"tokens":  pats,
-			"tunnels": userTunnels,
-		})
-		return
-	}
-
-	if r.Method == http.MethodPost && r.URL.Path == "/api/portal/tokens" {
-		var req struct {
-			Name string `json:"name"`
-		}
-		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-			respondJSON(w, http.StatusBadRequest, map[string]string{"error": "Invalid payload"})
-			return
-		}
-
-		tokenStr, _ := generateSecureToken()
-		hashBytes := sha256.Sum256([]byte(tokenStr))
-		tokenHash := hex.EncodeToString(hashBytes[:])
-
-		tokenPrefix := tokenStr
-		if len(tokenPrefix) > 12 {
-			tokenPrefix = tokenPrefix[:12]
-		}
-
-		pat := &db.PersonalAccessToken{
-			UserID:      user.ID,
-			TokenHash:   tokenHash,
-			TokenPrefix: tokenPrefix,
-			Name:        req.Name,
-		}
-
-		if err := s.db.CreatePAT(pat); err != nil {
-			respondJSON(w, http.StatusInternalServerError, map[string]string{"error": "Failed to save token"})
-			return
-		}
-
-		s.writeAudit(user.Email, "portal.token_created", "user", "tokens", "Generated a new PAT: "+req.Name, r)
-
-		respondJSON(w, http.StatusOK, map[string]string{"token": tokenStr})
-		return
-	}
-
-	if r.Method == http.MethodDelete && strings.HasPrefix(r.URL.Path, "/api/portal/tokens/") {
-		tokenHash := strings.TrimPrefix(r.URL.Path, "/api/portal/tokens/")
-		pat, err := s.db.GetPATByHash(tokenHash)
-		if err != nil {
-			respondJSON(w, http.StatusNotFound, map[string]string{"error": "Token not found"})
-			return
-		}
-		if err := s.db.RevokePAT(pat.ID); err != nil {
-			respondJSON(w, http.StatusInternalServerError, map[string]string{"error": "Failed to delete token"})
-			return
-		}
-
-		s.writeAudit(user.Email, "portal.token_revoked", "user", "tokens", "Revoked PAT", r)
-
-		respondJSON(w, http.StatusOK, map[string]string{"status": "deleted"})
-		return
-	}
-
-	respondJSON(w, http.StatusNotFound, map[string]string{"error": "Not Found"})
+	respondJSON(w, http.StatusOK, links)
 }

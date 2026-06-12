@@ -133,3 +133,4 @@ The solution will consist of:
 
 ## Roadmap (Post Public Visibility PR Flow)
 - [ ] Implement targeted user messaging (selectively target individual active users from the dashboard with custom alerts).
+- [ ] Implement Playwright UI E2E test automation for full, deterministic Dashboard test coverage.

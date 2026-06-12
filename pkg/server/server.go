@@ -821,10 +821,7 @@ func (s *Server) handleRegisterRequest(w http.ResponseWriter, r *http.Request) {
 		verifyURL := fmt.Sprintf("%s://%s/setup?token=%s", scheme, r.Host, verificationToken)
 		subject := "[Liferay Tunnel] Complete Your Registration"
 
-		greetingName := req.FirstName
-		if greetingName == "" {
-			greetingName = "there"
-		}
+		greetingName := "there"
 
 		clientIP := getClientIP(r)
 		reportLink := fmt.Sprintf("%s://%s/api/auth/report-registration?token=%s", scheme, r.Host, verificationToken)
@@ -853,7 +850,8 @@ Best regards,
 Liferay Tunnel Team`, html.EscapeString(greetingName), verifyURL, clientIP, reportLink)
 
 		go func() {
-			if err := s.mailSender.Send(user.Email, subject, body); err != nil {
+			plainBody := fmt.Sprintf("Hi %s,\n\nPlease complete your registration by visiting: %s\n\nIf you did not request this, you can report it at: %s", greetingName, verifyURL, reportLink)
+			if err := s.mailSender.Send(user.Email, subject, body, plainBody); err != nil {
 				log.Printf("[Mail] Failed to send verification email to %s: %v", user.Email, err)
 			}
 		}()
@@ -932,7 +930,8 @@ func (s *Server) handleCompleteSetup(w http.ResponseWriter, r *http.Request) {
 			approveURL := fmt.Sprintf("%s://%s/api/admin/approve?email=%s&token=%s", scheme, r.Host, url.QueryEscape(user.Email), user.ApprovalToken)
 			body := fmt.Sprintf("<p>New registration request (Email Verified & Setup Complete):</p><ul><li>Name: %s %s</li><li>Email: %s</li></ul><p><a href=\"%s\">Click here to approve this request</a></p>", user.FirstName, user.LastName, user.Email, approveURL)
 
-			go s.mailSender.Send(s.cfg.AdminNotificationEmail, subject, body)
+			plainBody := fmt.Sprintf("New user registered: %s", u.Email)
+			go s.mailSender.Send(s.cfg.AdminNotificationEmail, subject, body, plainBody)
 		}
 	}
 
@@ -981,7 +980,8 @@ func (s *Server) handleVerifyEmail(w http.ResponseWriter, r *http.Request) {
 		body := fmt.Sprintf("<p>New registration request (Email Verified):</p><ul><li>Name: %s %s</li><li>Email: %s</li></ul><p><a href=\"%s\">Click here to approve this request</a></p>", user.FirstName, user.LastName, user.Email, approveURL)
 
 		go func() {
-			if err := s.mailSender.Send(s.cfg.AdminNotificationEmail, subject, body); err != nil {
+			plainBody := fmt.Sprintf("A new user (%s) requires approval.", req.Email)
+			if err := s.mailSender.Send(s.cfg.AdminNotificationEmail, subject, body, plainBody); err != nil {
 				log.Printf("[Server] Failed to send admin alert email: %v", err)
 			}
 		}()
@@ -1066,7 +1066,8 @@ func (s *Server) handleApproveUser(w http.ResponseWriter, r *http.Request) {
 		host := r.Host
 		claimURL := fmt.Sprintf("%s://%s/api/claim?token=%s", scheme, host, claimToken)
 		body := fmt.Sprintf("<p>Your registration request has been approved!</p><p><a href=\"%s\">Click here to claim your personal access token</a></p><p>Note: this link can only be used once.</p>", claimURL)
-		if err := s.mailSender.Send(user.Email, subject, body); err != nil {
+		plainBody := fmt.Sprintf("Your registration has been approved. Claim your token here: %s", claimURL)
+		if err := s.mailSender.Send(user.Email, subject, body, plainBody); err != nil {
 			log.Printf("[Server] Failed to send developer approval email: %v", err)
 		}
 	}
@@ -1413,8 +1414,6 @@ func (s *Server) handleAdminMagicLink(w http.ResponseWriter, r *http.Request) {
 			}
 			if user.PreferredName != "" {
 				greetingName = user.PreferredName
-			} else if user.FirstName != "" {
-				greetingName = user.FirstName
 			}
 		}
 	}
@@ -1490,7 +1489,8 @@ func (s *Server) handleAdminMagicLink(w http.ResponseWriter, r *http.Request) {
 			body = bodyBuf.String()
 		}
 
-		go s.mailSender.Send(req.Email, "Your magic login link", body) //nolint:errcheck
+		plainBody := fmt.Sprintf("Hi %s,\n\nUse this link to log in (expires in 15 minutes):\n%s\n\nReport abuse here:\n%s", greetingName, link, reportLink)
+		go s.mailSender.Send(req.Email, "Your magic login link", body, plainBody) //nolint:errcheck
 	} else {
 		log.Printf("[Admin] Magic Link for %s: /admin?token=%s", req.Email, magicToken)
 	}
@@ -1761,7 +1761,8 @@ Best regards,
 Liferay Tunnel Team`, actor, inviteLink, actor, declineLink)
 
 	if s.mailSender != nil {
-		go s.mailSender.Send(req.Email, subject, body)
+		plainBody := fmt.Sprintf("Hi there,\n\nYou have been invited by an administrator to use the Liferay Tunnel portal.\n\nLog in here: %s\n\nDecline here: %s", magicLink, declineLink)
+		go s.mailSender.Send(req.Email, subject, body, plainBody)
 	}
 
 	s.writeAudit(actor, "user.invited", "user", req.Email, "Admin invited new user", r)
@@ -2144,7 +2145,7 @@ func (s *Server) sendAdminAlert(settingKey, subject, htmlBody string) {
 	}
 
 	go func() {
-		if err := s.mailSender.Send(s.cfg.AdminNotificationEmail, subject, htmlBody); err != nil {
+		if err := s.mailSender.Send(s.cfg.AdminNotificationEmail, subject, htmlBody, "An IP address has been blacklisted."); err != nil {
 			log.Printf("[Mail] Failed to send admin alert %s: %v", settingKey, err)
 		}
 	}()

@@ -19,7 +19,7 @@ type Config struct {
 }
 
 type Sender interface {
-	Send(to string, subject string, body string) error
+	Send(to string, subject string, htmlBody string, plainBody string) error
 }
 
 type SMTPClient struct {
@@ -32,7 +32,7 @@ func NewSMTPClient(cfg *Config) *SMTPClient {
 }
 
 // Send sends an HTML email using SMTP.
-func (s *SMTPClient) Send(to string, subject string, body string) error {
+func (s *SMTPClient) Send(to string, subject string, body string, plainBody string) error {
 	addr := net.JoinHostPort(s.cfg.SMTPHost, fmt.Sprintf("%d", s.cfg.SMTPPort))
 	var conn net.Conn
 	var err error
@@ -95,13 +95,30 @@ func (s *SMTPClient) Send(to string, subject string, body string) error {
 	headers["To"] = to
 	headers["Subject"] = subject
 	headers["MIME-Version"] = "1.0"
-	headers["Content-Type"] = "text/html; charset=UTF-8"
+	headers["Content-Type"] = `multipart/alternative; boundary="lfr-tunnel-boundary-12345"`
 
 	var msg string
 	for k, v := range headers {
 		msg += fmt.Sprintf("%s: %s\r\n", k, v)
 	}
-	msg += "\r\n" + body
+	
+	msg += "\r\n"
+	
+	// Plain text part
+	if plainBody != "" {
+		msg += "--lfr-tunnel-boundary-12345\r\n"
+		msg += "Content-Type: text/plain; charset=UTF-8\r\n\r\n"
+		msg += plainBody + "\r\n\r\n"
+	}
+
+	// HTML part
+	if body != "" {
+		msg += "--lfr-tunnel-boundary-12345\r\n"
+		msg += "Content-Type: text/html; charset=UTF-8\r\n\r\n"
+		msg += body + "\r\n\r\n"
+	}
+
+	msg += "--lfr-tunnel-boundary-12345--\r\n"
 
 	_, err = w.Write([]byte(msg))
 	if err != nil {

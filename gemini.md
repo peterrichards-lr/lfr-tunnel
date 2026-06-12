@@ -149,6 +149,10 @@ The solution will consist of:
 - [x] Bump version to v1.7.0 in pkg/config/version.go
 - [x] Commit, tag v1.7.0, and push to trigger automated GitHub Release
 
+## Bug Fixes
+- [x] Fix unit test TempDir cleanup race by sleeping 50ms before stopping the server
+
+
 
 
 

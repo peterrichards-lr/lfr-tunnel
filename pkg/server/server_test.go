@@ -30,7 +30,10 @@ func TestServer_Register(t *testing.T) {
 	if err != nil {
 		t.Fatalf("failed to create server: %v", err)
 	}
-	defer srv.Stop()
+	defer func() {
+		time.Sleep(50 * time.Millisecond)
+		srv.Stop()
+	}()
 	_ = srv.db.CreateUser(&db.User{ID: "peter.richards@liferay.com", Email: "peter.richards@liferay.com", Role: "owner", Status: "approved"})
 	_ = srv.db.CreateUser(&db.User{ID: "test@example.com", Email: "test@example.com", Role: "admin", Status: "approved"})
 	patHashBytes := sha256.Sum256([]byte("lfr_pat_mysecret"))
@@ -168,7 +171,10 @@ func TestServer_CheckSubdomain(t *testing.T) {
 	if err != nil {
 		t.Fatalf("failed to create server: %v", err)
 	}
-	defer srv.Stop()
+	defer func() {
+		time.Sleep(50 * time.Millisecond)
+		srv.Stop()
+	}()
 	_ = srv.db.CreateUser(&db.User{ID: "peter.richards@liferay.com", Email: "peter.richards@liferay.com", Role: "owner", Status: "approved"})
 	_ = srv.db.CreateUser(&db.User{ID: "test@example.com", Email: "test@example.com", Role: "admin", Status: "approved"})
 	patHashBytes := sha256.Sum256([]byte("lfr_pat_mysecret"))
@@ -256,7 +262,10 @@ func TestServer_CheckSubdomain(t *testing.T) {
 	if err != nil {
 		t.Fatalf("failed to create server with DB: %v", err)
 	}
-	defer srvDb.Stop()
+	defer func() {
+		time.Sleep(50 * time.Millisecond)
+		srvDb.Stop()
+	}()
 
 	// Seed user and PAT for check-subdomain test
 	_ = srvDb.db.CreateUser(&db.User{

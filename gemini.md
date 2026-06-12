@@ -146,6 +146,9 @@ The solution will consist of:
 - [x] Fix Keycloak SSO E2E token verification failure by implementing `skip_issuer_check` in SSO/OIDC provider config.
 - [x] Fix missing `status` field in `/api/me` response to satisfy SSO E2E verification.
 - [x] Create comprehensive SSO/OIDC cloud integration guide (Azure, Google Cloud, AWS) with local mock configuration instructions.
+- [x] Bump version to v1.7.0 in pkg/config/version.go
+- [ ] Commit, tag v1.7.0, and push to trigger automated GitHub Release
+
 
 
 

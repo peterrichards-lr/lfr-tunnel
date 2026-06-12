@@ -86,10 +86,10 @@ func DefaultServerConfig() *ServerConfig {
 		MinClientVersion:      "v1.0.0",
 		DocumentationURL:       "https://github.com/peterrichards-lr/lfr-tunnel/tree/master/docs",
 		RepositoryURL:          "https://github.com/peterrichards-lr/lfr-tunnel",
-		PruneInterval:          15 * time.Minute,
+		PruneInterval:          1 * time.Hour,
 		MagicLinkExpiry:        15 * time.Minute,
-		InviteLinkExpiry:       24 * time.Hour,
-		VerificationLinkExpiry: 1 * time.Hour,
+		InviteLinkExpiry:       7 * 24 * time.Hour,
+		VerificationLinkExpiry: 24 * time.Hour,
 	}
 }
 

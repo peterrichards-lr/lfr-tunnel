@@ -22,3 +22,10 @@ sso_providers:
     client_secret: "secret"
     issuer_url: "http://keycloak:8080/realms/liferay"
     icon: "key"
+
+# Token Expiry & Pruning Configuration
+# Default values are 1h (prune), 15m (magic link), 24h (invite), 24h (verification)
+prune_interval: 1m
+magic_link_expiry: 1m
+invite_link_expiry: 5m
+verification_link_expiry: 5m

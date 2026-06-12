@@ -892,7 +892,15 @@ Liferay Tunnel Team`, html.EscapeString(greetingName), verifyURL, clientIP, repo
 
 // handleSetupPage serves the setup page to complete registration
 func (s *Server) handleSetupPage(w http.ResponseWriter, r *http.Request) {
-	http.ServeFile(w, r, "static/setup.html")
+	data, err := staticFS.ReadFile("static/setup.html")
+	if err != nil {
+		log.Printf("[Server] Failed to read setup.html from embedded FS: %v", err)
+		http.Error(w, "Internal Server Error", http.StatusInternalServerError)
+		return
+	}
+	w.Header().Set("Content-Type", "text/html; charset=utf-8")
+	w.WriteHeader(http.StatusOK)
+	_, _ = w.Write(data)
 }
 
 // handleCompleteSetup processes the profile completion form.
@@ -963,7 +971,7 @@ func (s *Server) handleCompleteSetup(w http.ResponseWriter, r *http.Request) {
 			approveURL := fmt.Sprintf("%s://%s/api/admin/approve?email=%s&token=%s", scheme, r.Host, url.QueryEscape(user.Email), user.ApprovalToken)
 			body := fmt.Sprintf("<p>New registration request (Email Verified & Setup Complete):</p><ul><li>Name: %s %s</li><li>Email: %s</li></ul><p><a href=\"%s\">Click here to approve this request</a></p>", user.FirstName, user.LastName, user.Email, approveURL)
 
-			plainBody := fmt.Sprintf("New user registered: %s", user.Email)
+			plainBody := fmt.Sprintf("New user registered: %s. Approve here: %s", user.Email, approveURL)
 			go func() { _ = s.mailSender.Send(s.cfg.AdminNotificationEmail, subject, body, plainBody) }()
 		}
 	}
@@ -1017,7 +1025,7 @@ func (s *Server) handleVerifyEmail(w http.ResponseWriter, r *http.Request) {
 		body := fmt.Sprintf("<p>New registration request (Email Verified):</p><ul><li>Name: %s %s</li><li>Email: %s</li></ul><p><a href=\"%s\">Click here to approve this request</a></p>", user.FirstName, user.LastName, user.Email, approveURL)
 
 		go func() {
-			plainBody := fmt.Sprintf("A new user (%s) requires approval.", user.Email)
+			plainBody := fmt.Sprintf("A new user (%s) requires approval. Approve here: %s", user.Email, approveURL)
 			if err := s.mailSender.Send(s.cfg.AdminNotificationEmail, subject, body, plainBody); err != nil {
 				log.Printf("[Server] Failed to send admin alert email: %v", err)
 			}

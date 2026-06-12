@@ -23,3 +23,6 @@ tests/e2e/ui/node_modules/
 tests/e2e/ui/test-results/
 tests/e2e/ui/playwright-report/
 tests/e2e/ui/playwright/.cache/
+
+# E2E State coordinator progress signals
+.progress-signal

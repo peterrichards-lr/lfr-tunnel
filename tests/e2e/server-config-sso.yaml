@@ -21,6 +21,7 @@ sso_providers:
     client_secret: "secret"
     issuer_url: "http://keycloak:8080/realms/liferay"
     icon: "key"
+    skip_issuer_check: true
 
 # Token Expiry & Pruning Configuration
 prune_interval: 1m

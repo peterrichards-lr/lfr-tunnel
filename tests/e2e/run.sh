@@ -11,6 +11,23 @@ fi
 # Change directory to script location
 CDPATH= cd -- "$(dirname -- "$0")"
 
+# Signal file configuration
+REPO_ROOT="$(cd ../.. && pwd)"
+SIGNAL_FILE="${REPO_ROOT}/.progress-signal"
+
+echo "BUILDING" > "$SIGNAL_FILE"
+
+# Make sure we write FAILED or SUCCESS on exit
+cleanup() {
+    EXIT_CODE=$?
+    if [ $EXIT_CODE -eq 0 ]; then
+        echo "SUCCESS" > "$SIGNAL_FILE"
+    else
+        echo "FAILED" > "$SIGNAL_FILE"
+    fi
+}
+trap cleanup EXIT INT TERM ERR
+
 echo "=== Starting E2E Docker Integration Test ==="
 
 # Clean previous containers
@@ -19,6 +36,8 @@ docker-compose down -v --remove-orphans || true
 # Start mock target, mailpit, server, proxy and client
 echo "=== Spinning up Docker environment ==="
 docker-compose up --build -d mock-target mailpit lfr-tunneld nginx-proxy lfr-tunnel
+
+echo "WAITING_HEALTHY" > "$SIGNAL_FILE"
 
 # Wait for Mailpit to be fully online
 echo "=== Waiting for Mailpit to be ready ==="
@@ -44,8 +63,9 @@ done
 
 # 1. Submit registration request
 echo "=== Submitting registration request ==="
+echo "TESTING" > "$SIGNAL_FILE"
 REG_REQ_RESP=$(curl -s -X POST -H "Content-Type: application/json" \
-     -d '{"email": "developer@lfr-demo.se", "requested_subdomain": "peter-dev"}' \
+     -d '{"email": "developer@lfr-demo.local", "requested_subdomain": "peter-dev"}' \
      "http://localhost:8000/api/register-request")
 
 echo "Registration request response: $REG_REQ_RESP"
@@ -63,8 +83,8 @@ try:
     for m in data["messages"]:
         msg_id = m.get("ID")
         msg = json.loads(urllib.request.urlopen("http://localhost:8025/api/v1/message/" + msg_id).read())
-        body = msg["Text"]
-        match = re.search(r"verify-email\?token=([a-f0-9A-Z]+)", body, re.IGNORECASE)
+        body = (msg.get("HTML") or "") + "\n" + (msg.get("Text") or "")
+        match = re.search(r"setup\?token=([a-f0-9A-Z]+)", body, re.IGNORECASE)
         if match:
             print(match.group(1))
             exit(0)
@@ -105,7 +125,7 @@ try:
     for m in data["messages"]:
         msg_id = m.get("ID")
         msg = json.loads(urllib.request.urlopen("http://localhost:8025/api/v1/message/" + msg_id).read())
-        body = msg["Text"]
+        body = (msg.get("HTML") or "") + "\n" + (msg.get("Text") or "")
         match = re.search(r"approve\?email=[^&]+&token=([a-f0-9]+)", body)
         if match:
             print(match.group(1))
@@ -126,7 +146,7 @@ echo "Extracted Approval Token: $APPROVAL_TOKEN"
 
 # 3.5. Call Admin Approval endpoint
 echo "=== Approving developer request ==="
-APPROVE_RESP=$(curl -s "http://localhost:8000/api/admin/approve?email=developer@lfr-demo.se&token=${APPROVAL_TOKEN}")
+APPROVE_RESP=$(curl -s "http://localhost:8000/api/admin/approve?email=developer@lfr-demo.local&token=${APPROVAL_TOKEN}")
 echo "Approval response: $APPROVE_RESP"
 sleep 2
 
@@ -139,7 +159,7 @@ try:
     for m in data["messages"]:
         msg_id = m.get("ID")
         msg = json.loads(urllib.request.urlopen("http://localhost:8025/api/v1/message/" + msg_id).read())
-        body = msg["Text"]
+        body = (msg.get("HTML") or "") + "\n" + (msg.get("Text") or "")
         match = re.search(r"claim\?token=([a-f0-9]+)", body)
         if match:
             print(match.group(1))
@@ -189,7 +209,7 @@ CLIENT_CONTAINER_ID=$(docker-compose run -d --no-deps \
   --entrypoint "./lfr-tunnel" \
   -e LFT_CLIENT_TOKEN="$DEVELOPER_PAT" \
   lfr-tunnel \
-  -server http://tunnel.lfr-demo.se \
+  -server http://tunnel.lfr-demo.local \
   -subdomain peter-dev \
   -ports 80)
 
@@ -199,7 +219,7 @@ echo "Client container ID: $CLIENT_CONTAINER_ID"
 echo "=== Waiting for tunnel connection ==="
 TUNNEL_READY=false
 for i in {1..20}; do
-    RESPONSE_CODE=$(curl -s -o /dev/null -w "%{http_code}" -H "Host: peter-dev.lfr-demo.se" http://localhost:8000/ || true)
+    RESPONSE_CODE=$(curl -s -o /dev/null -w "%{http_code}" -H "Host: peter-dev.lfr-demo.local" http://localhost:8000/ || true)
     if [ "$RESPONSE_CODE" = "200" ]; then
         echo "Tunnel is ready!"
         TUNNEL_READY=true
@@ -225,7 +245,7 @@ docker logs "$CLIENT_CONTAINER_ID"
 
 # 7. Query mock target subdomain through nginx-proxy
 echo "=== Verifying routing through tunnel ==="
-RESPONSE=$(curl -s -H "Host: peter-dev.lfr-demo.se" http://localhost:8000/)
+RESPONSE=$(curl -s -H "Host: peter-dev.lfr-demo.local" http://localhost:8000/)
 
 echo "=== Response received ==="
 echo "$RESPONSE"

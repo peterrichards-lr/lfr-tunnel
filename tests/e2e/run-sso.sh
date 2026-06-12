@@ -25,6 +25,23 @@ fi
 
 CDPATH= cd -- "$(dirname -- "$0")"
 
+# Signal file configuration
+REPO_ROOT="$(cd ../.. && pwd)"
+SIGNAL_FILE="${REPO_ROOT}/.progress-signal"
+
+echo "BUILDING" > "$SIGNAL_FILE"
+
+# Make sure we write FAILED or SUCCESS on exit
+cleanup() {
+    EXIT_CODE=$?
+    if [ $EXIT_CODE -eq 0 ]; then
+        echo "SUCCESS" > "$SIGNAL_FILE"
+    else
+        echo "FAILED" > "$SIGNAL_FILE"
+    fi
+}
+trap cleanup EXIT INT TERM ERR
+
 COMPOSE_FILE="docker-compose-sso.yml"
 TUNNEL_BASE="http://localhost:8000"
 KEYCLOAK_BASE="http://localhost:8088"
@@ -60,6 +77,8 @@ docker-compose -f "$COMPOSE_FILE" down -v --remove-orphans || true
 echo "[1/7] Starting Docker environment (Keycloak, lfr-tunneld, nginx)..."
 docker-compose -f "$COMPOSE_FILE" up --build -d
 
+echo "WAITING_HEALTHY" > "$SIGNAL_FILE"
+
 # ── Wait for Keycloak ─────────────────────────────────────────────────────────
 echo "[2/7] Waiting for Keycloak to be healthy (up to 120s)..."
 KEYCLOAK_READY=false
@@ -87,6 +106,7 @@ done
 [ "$TUNNEL_READY" = "true" ] || fail "lfr-tunneld did not become ready within 30s"
 
 # ── Step 4: Drive SSO login via Keycloak Direct Access Grant ──────────────────
+echo "TESTING" > "$SIGNAL_FILE"
 #
 # The standard browser redirect flow is not curl-friendly in a headless
 # environment. Instead we:
@@ -103,13 +123,14 @@ echo "[4/7] Driving SSO authorization code flow..."
 
 # 4a. Request the SSO login redirect from lfr-tunneld
 #     Capture the redirect Location header — this points to Keycloak's login page.
-KC_LOGIN_URL=$(curl -si -o /dev/null -w '%header{location}' \
-  "${TUNNEL_BASE}/api/auth/sso?provider=${PROVIDER_ID}" 2>/dev/null || true)
+KC_LOGIN_URL=$(curl -si -c /tmp/sso-session.txt -o /dev/null -w '%header{location}' \
+  "${TUNNEL_BASE}/api/auth/login?provider=${PROVIDER_ID}" 2>/dev/null || true)
 
 if [ -z "$KC_LOGIN_URL" ]; then
     fail "lfr-tunneld did not redirect to Keycloak login page. Is SSO configured?"
 fi
 echo "  Keycloak login URL obtained (${#KC_LOGIN_URL} chars)"
+KC_LOGIN_URL=$(echo "$KC_LOGIN_URL" | sed 's/keycloak:8080/localhost:8088/g')
 
 # 4b. Fetch the Keycloak login page HTML and extract the form action URL.
 #     Keycloak embeds a signed action URL that includes the session/tab IDs.
@@ -117,7 +138,7 @@ KC_HTML=$(curl -sc /tmp/kc-cookies.txt "$KC_LOGIN_URL" 2>/dev/null)
 KC_ACTION=$(echo "$KC_HTML" | python3 -c '
 import sys, re
 html = sys.stdin.read()
-m = re.search(r'\'action=\"(http[^\"]+)\"\'', html)
+m = re.search(r"action=\"(http[^\"]+)\"", html)
 if m:
     import html as h
     print(h.unescape(m.group(1)))
@@ -127,6 +148,7 @@ if [ -z "$KC_ACTION" ]; then
     fail "Could not extract Keycloak form action URL from login page HTML"
 fi
 echo "  Keycloak form action extracted"
+KC_ACTION=$(echo "$KC_ACTION" | sed 's/keycloak:8080/localhost:8088/g')
 
 # 4c. POST credentials to Keycloak login form.
 #     Keycloak will redirect back to our callback with ?code=...
@@ -148,13 +170,15 @@ echo "  Keycloak redirected to callback: ${CALLBACK_URL:0:80}..."
 # 4d. Follow the callback URL. lfr-tunneld exchanges the code with Keycloak,
 #     creates the user, and sets the lfr_session cookie.
 SESSION_RESPONSE=$(curl -si \
-  -b /tmp/kc-cookies.txt -c /tmp/sso-session.txt \
+  -b /tmp/sso-session.txt -b /tmp/kc-cookies.txt -c /tmp/sso-session.txt \
   --max-redirs 5 \
   "$CALLBACK_URL" 2>/dev/null || true)
 
 # Extract the lfr_session cookie value
 SSO_SESSION=$(grep 'lfr_session' /tmp/sso-session.txt 2>/dev/null | awk '{print $NF}' | tr -d '\r\n' || true)
 if [ -z "$SSO_SESSION" ]; then
+    echo "=== Session Response ==="
+    echo "$SESSION_RESPONSE"
     fail "lfr_session cookie not set after SSO callback — user creation may have failed"
 fi
 echo "  ✅ Session cookie obtained (lfr_session=${SSO_SESSION:0:12}...)"

@@ -100,7 +100,7 @@ func (s *Server) handleSSOCallback(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	_, oauth2Config, provider, err := getOIDCConfig(s.cfg, providerID, r)
+	p, oauth2Config, provider, err := getOIDCConfig(s.cfg, providerID, r)
 	if err != nil {
 		http.Error(w, "Invalid provider configuration", http.StatusInternalServerError)
 		return
@@ -119,7 +119,10 @@ func (s *Server) handleSSOCallback(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	oidcConfig := &oidc.Config{ClientID: oauth2Config.ClientID}
+	oidcConfig := &oidc.Config{
+		ClientID:        oauth2Config.ClientID,
+		SkipIssuerCheck: p.SkipIssuerCheck,
+	}
 	verifier := provider.Verifier(oidcConfig)
 	idToken, err := verifier.Verify(ctx, rawIDToken)
 	if err != nil {

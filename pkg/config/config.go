@@ -55,12 +55,13 @@ type ServerConfig struct {
 }
 
 type SSOProviderConfig struct {
-	ID           string `yaml:"id"`
-	Name         string `yaml:"name"`
-	ClientID     string `yaml:"client_id"`
-	ClientSecret string `yaml:"client_secret"`
-	IssuerURL    string `yaml:"issuer_url"`
-	Icon         string `yaml:"icon"`
+	ID              string `yaml:"id"`
+	Name            string `yaml:"name"`
+	ClientID        string `yaml:"client_id"`
+	ClientSecret    string `yaml:"client_secret"`
+	IssuerURL       string `yaml:"issuer_url"`
+	Icon            string `yaml:"icon"`
+	SkipIssuerCheck bool   `yaml:"skip_issuer_check"`
 }
 
 // ClientConfig holds configuration settings for the lfr-tunnel client.

@@ -84,6 +84,7 @@ func (s *Server) handleGetMe(w http.ResponseWriter, r *http.Request) {
 		"last_name":          user.LastName,
 		"preferred_name":     user.PreferredName,
 		"role":               user.Role,
+		"status":             user.Status,
 		"timezone":           user.Timezone,
 		"auth_method":        user.AuthMethod,
 		"theme_preference":   user.ThemePreference,

@@ -1,0 +1,29 @@
+name: SSO E2E Test
+
+on:
+  push:
+    branches:
+      - master
+  pull_request:
+    branches:
+      - master
+
+permissions:
+  contents: read
+
+jobs:
+  e2e-sso-test:
+    name: E2E Keycloak SSO Integration Test
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: '1.25'
+          cache: true
+
+      - name: Run SSO E2E Integration Test
+        run: ./tests/e2e/run-sso.sh

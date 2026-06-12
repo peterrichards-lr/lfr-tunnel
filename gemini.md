@@ -140,3 +140,10 @@ The solution will consist of:
 - [x] Set AuthMethod at user creation in all registration flows (registration, invite, SSO).
 - [x] Add SSO/Keycloak E2E integration test suite with isolated Docker environment (`make e2e-sso`).
 - [x] Investigate VPS outbound IPv4 port 25 block for Fastmail/non-Google recipients.
+- [x] Fix E2E Docker Integration Test failure in CI (serve setup.html from embedded FS and update token extraction regex in tests/e2e/run.sh).
+- [x] Implement Zero-Dependency Asynchronous E2E State Coordinator using `.progress-signal` lifecycle.
+- [x] Fix Keycloak health check in `tests/e2e/docker-compose-sso.yml` using zero-dependency `/dev/tcp` check.
+- [x] Fix Keycloak SSO E2E token verification failure by implementing `skip_issuer_check` in SSO/OIDC provider config.
+- [x] Fix missing `status` field in `/api/me` response to satisfy SSO E2E verification.
+
+

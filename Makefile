@@ -34,10 +34,10 @@ deploy:
 	@./scripts/deploy.sh
 
 e2e:
-	@./tests/e2e/run.sh
+	@./scripts/run-e2e.sh standard
 
 e2e-sso:
-	@./tests/e2e/run-sso.sh
+	@./scripts/run-e2e.sh sso
 
 install-hook:
 	@echo "Installing native git pre-commit hook..."

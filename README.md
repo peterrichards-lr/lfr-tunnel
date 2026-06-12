@@ -375,6 +375,33 @@ If the token file exists, the client will automatically load it on startup, allo
 5. **DDoS Protection & Rate Limiting**: Built-in sliding-window rate limiters automatically ban malicious IPs abusing the tunnel endpoints.
 6. **Telemetry & Analytics**: Track global and per-user bandwidth usage, and monitor the distribution of client OS/versions connecting to the gateway.
 
+## Headless Testing Stack & State Coordinator
+
+To facilitate reliable, asynchronous orchestration of E2E integration tests (such as CI workflows, external test runners, or local automation scripts), the repository implements the **State Coordinator Pattern** using a lightweight progress mailbox. 
+
+A plain-text file named `.progress-signal` is generated at the workspace root during test execution, signaling the exact status of the lifecycle:
+
+1. **`BUILDING`**: Written at the very beginning of compiling the binaries or packaging Docker services.
+2. **`WAITING_HEALTHY`**: Staged when services are running and container health checks or port warm-ups are being verified.
+3. **`TESTING`**: Staged the exact millisecond the actual test curl/assertions runner begins.
+4. **`SUCCESS`**: Exited and written if all E2E integration test assertions pass cleanly (Exit Code 0).
+5. **`FAILED`**: Written if any step, compilation, health check, or assertion fails or times out (Exit Code > 0).
+
+### Querying Progress
+
+External tools or CI pipelines can poll the `.progress-signal` file to track progress dynamically without scanning long log files:
+
+```bash
+while true; do
+  STATUS=$(cat .progress-signal 2>/dev/null || echo "No signal")
+  echo "Current State: $STATUS"
+  if [ "$STATUS" = "SUCCESS" ] || [ "$STATUS" = "FAILED" ]; then
+    break
+  fi
+  sleep 2
+done
+```
+
 ## License
 
 This project is licensed under the MIT License. See [LICENSE](LICENSE) for details.

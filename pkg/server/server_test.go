@@ -292,15 +292,17 @@ func TestServer_CheckSubdomain(t *testing.T) {
 }
 
 type mockMailSender struct {
-	sentTo      string
-	sentSubject string
-	sentBody    string
+	sentTo       string
+	sentSubject  string
+	sentTextBody string
+	sentHtmlBody string
 }
 
-func (m *mockMailSender) Send(to string, subject string, body string) error {
+func (m *mockMailSender) Send(to string, subject string, textBody string, htmlBody string) error {
 	m.sentTo = to
 	m.sentSubject = subject
-	m.sentBody = body
+	m.sentTextBody = textBody
+	m.sentHtmlBody = htmlBody
 	return nil
 }
 
@@ -357,8 +359,8 @@ func TestServer_RegistrationFlow(t *testing.T) {
 
 	// Verify developer verification email was sent
 	time.Sleep(50 * time.Millisecond)
-	if mockMail.sentTo != "developer@liferay.com" || !strings.Contains(mockMail.sentBody, "/setup?token=") {
-		t.Errorf("developer verification email not sent correctly, got to=%s, body=%s", mockMail.sentTo, mockMail.sentBody)
+	if mockMail.sentTo != "developer@liferay.com" || !strings.Contains(mockMail.sentTextBody, "/setup?token=") {
+		t.Errorf("developer verification email not sent correctly, got to=%s, body=%s", mockMail.sentTo, mockMail.sentTextBody)
 	}
 
 	// 1.5. Developer completes setup
@@ -384,8 +386,8 @@ func TestServer_RegistrationFlow(t *testing.T) {
 
 	// Verify admin notification email was sent
 	time.Sleep(50 * time.Millisecond)
-	if mockMail.sentTo != "admin@example.com" || (!strings.Contains(mockMail.sentBody, "/api/admin/approve") && !strings.Contains(mockMail.sentBody, "has verified their email")) {
-		t.Errorf("admin notification email not sent correctly, got to=%s, body=%s", mockMail.sentTo, mockMail.sentBody)
+	if mockMail.sentTo != "admin@example.com" || (!strings.Contains(mockMail.sentTextBody, "/api/admin/approve") && !strings.Contains(mockMail.sentTextBody, "has verified their email")) {
+		t.Errorf("admin notification email not sent correctly, got to=%s, body=%s", mockMail.sentTo, mockMail.sentTextBody)
 	}
 
 	// 2. Admin approves user
@@ -409,8 +411,8 @@ func TestServer_RegistrationFlow(t *testing.T) {
 
 	// Verify developer approval email was sent
 	time.Sleep(50 * time.Millisecond)
-	if mockMail.sentTo != "developer@liferay.com" || !strings.Contains(mockMail.sentBody, "/api/claim") {
-		t.Errorf("developer email not sent correctly, got to=%s, body=%s", mockMail.sentTo, mockMail.sentBody)
+	if mockMail.sentTo != "developer@liferay.com" || !strings.Contains(mockMail.sentTextBody, "/api/claim") {
+		t.Errorf("developer email not sent correctly, got to=%s, body=%s", mockMail.sentTo, mockMail.sentTextBody)
 	}
 
 	// Extract claim token prefix (before the colon)

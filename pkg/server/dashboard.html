@@ -112,7 +112,7 @@
                 <p style="color: var(--text-muted); margin-bottom: 24px; font-size: 14px;">Tokens allow your CLI to authenticate with the gateway.</p>
                 <div class="glass table-container">
                     <table>
-                        <thead><tr><th>Name</th><th>Prefix</th><th>Created</th><th>Expires</th><th>Action</th></tr></thead>
+                        <thead><tr><th data-sort="name">Name</th><th data-sort="token_prefix">Prefix</th><th data-sort="created_at">Created</th><th data-sort="expires_at">Expires</th><th>Action</th></tr></thead>
                         <tbody id="tokens-table-body"></tbody>
                     </table>
                 </div>
@@ -187,7 +187,7 @@
                             <h4 style="margin-bottom: 12px; color: var(--text-muted); font-size: 14px; font-weight: 500;">Client Version Distribution</h4>
                             <div class="table-container" style="max-height: 250px; overflow-y: auto;">
                                 <table>
-                                    <thead><tr><th>Version</th><th>OS</th><th>User Count</th></tr></thead>
+                                    <thead><tr><th data-sort="version">Version</th><th data-sort="os">OS</th><th data-sort="count">User Count</th></tr></thead>
                                     <tbody id="client-stats-table-body"></tbody>
                                 </table>
                             </div>
@@ -219,7 +219,7 @@
                 <p style="color: var(--text-muted); margin-bottom: 24px; font-size: 14px;">These are your currently active Liferay tunnels.</p>
                 <div class="glass table-container">
                     <table>
-                        <thead><tr><th>Subdomain</th><th>Full Host</th><th>Status</th><th>Data In</th><th>Data Out</th><th>Connected At</th></tr></thead>
+                        <thead><tr><th data-sort="subdomain">Subdomain</th><th data-sort="target">Full Host</th><th data-sort="status">Status</th><th data-sort="bytes_in">Data In</th><th data-sort="bytes_out">Data Out</th><th data-sort="created_at">Connected At</th></tr></thead>
                         <tbody id="tunnels-table-body"></tbody>
                     </table>
                 </div>
@@ -232,7 +232,7 @@
                 </div>
                 <div class="glass table-container">
                     <table>
-                        <thead><tr><th>Email</th><th>Name</th><th>Requested At</th><th>Actions</th></tr></thead>
+                        <thead><tr><th data-sort="email">Email</th><th data-sort="first_name">Name</th><th data-sort="created_at">Requested At</th><th>Actions</th></tr></thead>
                         <tbody id="registrations-table-body"></tbody>
                     </table>
                 </div>
@@ -254,7 +254,7 @@
                 </div>
                 <div class="glass table-container">
                     <table>
-                        <thead><tr><th>Email</th><th>Name</th><th>Role</th><th>Status</th><th>Joined</th><th>Actions</th></tr></thead>
+                        <thead><tr><th data-sort="email">Email</th><th data-sort="first_name">Name</th><th data-sort="role">Role</th><th data-sort="status">Status</th><th data-sort="created_at">Joined</th><th>Actions</th></tr></thead>
                         <tbody id="users-table-body"></tbody>
                     </table>
                 </div>
@@ -268,7 +268,7 @@
                 </div>
                 <div class="glass table-container">
                     <table>
-                        <thead><tr><th>IP Address</th><th>Reason</th><th>Banned At</th><th>Actions</th></tr></thead>
+                        <thead><tr><th data-sort="ip_address">IP Address</th><th data-sort="reason">Reason</th><th data-sort="banned_at">Banned At</th><th>Actions</th></tr></thead>
                         <tbody id="blacklist-table-body"></tbody>
                     </table>
                 </div>
@@ -281,7 +281,7 @@
                 </div>
                 <div class="glass table-container">
                     <table>
-                        <thead><tr><th>Timestamp</th><th>Event</th><th>Actor</th><th>Target</th><th>IP</th><th>Details</th></tr></thead>
+                        <thead><tr><th data-sort="created_at">Timestamp</th><th data-sort="action">Event</th><th data-sort="actor_id">Actor</th><th data-sort="target_id">Target</th><th data-sort="ip_address">IP</th><th>Details</th></tr></thead>
                         <tbody id="audit-table-body"></tbody>
                     </table>
                 </div>
@@ -294,7 +294,7 @@
                 </div>
                 <div class="glass table-container">
                     <table>
-                        <thead><tr><th>Email</th><th>IP Address</th><th>Expires</th><th>Used At</th></tr></thead>
+                        <thead><tr><th data-sort="email">Email</th><th data-sort="client_ip">IP Address</th><th data-sort="expires_at">Expires</th><th data-sort="used_at">Used At</th></tr></thead>
                         <tbody id="magic-table-body"></tbody>
                     </table>
                 </div>

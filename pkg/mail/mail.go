@@ -101,9 +101,9 @@ func (s *SMTPClient) Send(to string, subject string, body string, plainBody stri
 	for k, v := range headers {
 		msg += fmt.Sprintf("%s: %s\r\n", k, v)
 	}
-	
+
 	msg += "\r\n"
-	
+
 	// Plain text part
 	if plainBody != "" {
 		msg += "--lfr-tunnel-boundary-12345\r\n"

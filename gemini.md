@@ -126,4 +126,10 @@ The solution will consist of:
 - [x] Reconfigure VPS Postfix to natively present Let's Encrypt certificates to pass secure `STARTTLS`.
 - [x] Reconfigure VPS Postfix to use dual-stack routing (`inet_protocols = all`) and whitelist external IP `mynetworks` for secure SMTP relaying.
 - [x] Fix Magic Link delivery failures by implementing strict dual-stack SPF validation.
+- [x] Implement strict single-session concurrency and proactive background polling for kick alerts.
+- [x] Implement Global Admin Broadcast messaging system with real-time UI banners.
+- [x] Implement vanilla JS data table pagination, sorting, and filtering across all dashboard views.
+- [x] Create automated dev restart shell scripts to accelerate developer iteration loop.
 
+## Roadmap (Post Public Visibility PR Flow)
+- [ ] Implement targeted user messaging (selectively target individual active users from the dashboard with custom alerts).

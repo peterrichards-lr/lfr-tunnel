@@ -29,3 +29,4 @@ prune_interval: 1m
 magic_link_expiry: 1m
 invite_link_expiry: 5m
 verification_link_expiry: 5m
+session_expiry: 5m

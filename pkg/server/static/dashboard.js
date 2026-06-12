@@ -8,7 +8,150 @@
             document.documentElement.setAttribute('data-theme', 'dark');
         }
 
-        function toggleTheme() {
+        let tableInstances = {};
+
+function renderTable(tbodyId, data, renderRowFn) {
+    if (!tableInstances[tbodyId]) {
+        const tbody = document.getElementById(tbodyId);
+        const container = tbody.closest('.table-container');
+        
+        // Filter input
+        const filterInput = document.createElement('input');
+        filterInput.type = 'text';
+        filterInput.className = 'input-field';
+        filterInput.placeholder = 'Search...';
+        filterInput.style.maxWidth = '250px';
+        filterInput.style.marginBottom = '12px';
+        
+        const controlsDiv = document.createElement('div');
+        controlsDiv.style.display = 'flex';
+        controlsDiv.style.justifyContent = 'space-between';
+        controlsDiv.appendChild(filterInput);
+        container.parentNode.insertBefore(controlsDiv, container);
+        
+        // Pagination controls
+        const paginationDiv = document.createElement('div');
+        paginationDiv.style.display = 'flex';
+        paginationDiv.style.justifyContent = 'flex-end';
+        paginationDiv.style.alignItems = 'center';
+        paginationDiv.style.marginTop = '12px';
+        paginationDiv.style.gap = '8px';
+        container.parentNode.insertBefore(paginationDiv, container.nextSibling);
+
+        tableInstances[tbodyId] = {
+            data: [],
+            filteredData: [],
+            currentPage: 1,
+            pageSize: 10,
+            tbody: tbody,
+            filterInput: filterInput,
+            paginationDiv: paginationDiv,
+            renderRowFn: renderRowFn,
+            sortCol: null,
+            sortAsc: true
+        };
+        
+        // Sorting Headers
+        const headers = container.querySelectorAll('th');
+        headers.forEach((th, index) => {
+            const sortKey = th.getAttribute('data-sort');
+            if (sortKey) {
+                th.style.cursor = 'pointer';
+                th.title = 'Click to sort';
+                th.addEventListener('click', () => {
+                    const inst = tableInstances[tbodyId];
+                    if (inst.sortCol === sortKey) {
+                        inst.sortAsc = !inst.sortAsc;
+                    } else {
+                        inst.sortCol = sortKey;
+                        inst.sortAsc = true;
+                    }
+                    // Update header styling
+                    headers.forEach(h => h.innerText = h.innerText.replace(/ [↑↓]$/, ''));
+                    th.innerText += inst.sortAsc ? ' ↑' : ' ↓';
+                    
+                    updateTableView(tbodyId);
+                });
+            }
+        });
+
+        filterInput.addEventListener('input', (e) => {
+            tableInstances[tbodyId].currentPage = 1;
+            updateTableView(tbodyId);
+        });
+    }
+
+    const inst = tableInstances[tbodyId];
+    inst.data = data;
+    inst.renderRowFn = renderRowFn;
+    updateTableView(tbodyId);
+}
+
+function updateTableView(tbodyId) {
+    const inst = tableInstances[tbodyId];
+    const term = inst.filterInput.value.toLowerCase();
+    
+    // Filter
+    inst.filteredData = inst.data.filter(item => {
+        if (!term) return true;
+        return Object.values(item).some(val => String(val).toLowerCase().includes(term));
+    });
+
+    // Sort
+    if (inst.sortCol) {
+        inst.filteredData.sort((a, b) => {
+            const valA = String(a[inst.sortCol] || '').toLowerCase();
+            const valB = String(b[inst.sortCol] || '').toLowerCase();
+            if (valA < valB) return inst.sortAsc ? -1 : 1;
+            if (valA > valB) return inst.sortAsc ? 1 : -1;
+            return 0;
+        });
+    }
+    
+    // Paginate
+    const totalPages = Math.ceil(inst.filteredData.length / inst.pageSize) || 1;
+    if (inst.currentPage > totalPages) inst.currentPage = totalPages;
+    
+    const start = (inst.currentPage - 1) * inst.pageSize;
+    const pageData = inst.filteredData.slice(start, start + inst.pageSize);
+    
+    // Render
+    inst.tbody.innerHTML = pageData.map(inst.renderRowFn).join('');
+    if (pageData.length === 0) {
+        inst.tbody.innerHTML = `<tr><td colspan="10" style="text-align: center; color: var(--text-muted);">No results found.</td></tr>`;
+    }
+    
+    // Render Pagination
+    inst.paginationDiv.innerHTML = '';
+    if (totalPages > 1) {
+        const prevBtn = document.createElement('button');
+        prevBtn.className = 'btn btn-secondary';
+        prevBtn.style.padding = '4px 8px';
+        prevBtn.style.margin = '0';
+        prevBtn.innerText = 'Prev';
+        prevBtn.disabled = inst.currentPage === 1;
+        prevBtn.onclick = () => { inst.currentPage--; updateTableView(tbodyId); };
+        
+        const nextBtn = document.createElement('button');
+        nextBtn.className = 'btn btn-secondary';
+        nextBtn.style.padding = '4px 8px';
+        nextBtn.style.margin = '0';
+        nextBtn.innerText = 'Next';
+        nextBtn.disabled = inst.currentPage === totalPages;
+        nextBtn.onclick = () => { inst.currentPage++; updateTableView(tbodyId); };
+        
+        const pageInfo = document.createElement('span');
+        pageInfo.style.fontSize = '14px';
+        pageInfo.innerText = `Page ${inst.currentPage} of ${totalPages}`;
+        
+        inst.paginationDiv.appendChild(prevBtn);
+        inst.paginationDiv.appendChild(pageInfo);
+        inst.paginationDiv.appendChild(nextBtn);
+    }
+}
+
+
+function toggleTheme() {
             let currentTheme = document.documentElement.getAttribute('data-theme');
             let newTheme = currentTheme === 'light' ? 'dark' : 'light';
             document.documentElement.setAttribute('data-theme', newTheme);
@@ -365,8 +508,7 @@
         async function loadTunnels() {
             // Already fetched in /api/me
             const tunnels = currentUser.tunnels || [];
-            const tbody = document.getElementById('tunnels-table-body');
-            tbody.innerHTML = tunnels.map(t => `
+            renderTable('tunnels-table-body', tunnels, t => `
                 <tr>
                     <td style="font-weight: 500;">${escapeHTML(t.subdomain_prefix)}</td>
                     <td><a href="https://${escapeHTML(t.full_host)}" target="_blank" style="color: var(--primary); text-decoration: none;">${escapeHTML(t.full_host)}</a></td>
@@ -375,10 +517,7 @@
                     <td>${formatBytes(t.bytes_out)}</td>
                     <td>${formatLocalTime(t.created_at)}</td>
                 </tr>
-            `).join('');
-            if (tunnels.length === 0) {
-                tbody.innerHTML = `<tr><td colspan="6" style="text-align: center; color: var(--text-muted);">No active tunnels.</td></tr>`;
-            }
+            `);
         }
 
         function showTab(tabName) {
@@ -510,17 +649,13 @@
                         const cRes = await fetch('/api/admin/analytics/clients');
                         if (cRes.ok) {
                             const cData = await cRes.json() || [];
-                            const tbody = document.getElementById('client-stats-table-body');
-                            tbody.innerHTML = cData.map(s => `
+                            renderTable('client-stats-table-body', cData, s => `
                                 <tr>
                                     <td><span class="badge" style="background: var(--primary); color: white;">${escapeHTML(s.version)}</span></td>
                                     <td>${escapeHTML(s.os)}</td>
                                     <td style="font-weight: bold;">${s.count}</td>
                                 </tr>
-                            `).join('');
-                            if (cData.length === 0) {
-                                tbody.innerHTML = `<tr><td colspan="3" style="text-align: center; color: var(--text-muted);">No client telemetry data available yet.</td></tr>`;
-                            }
+                            `);
                         }
                     } catch(e) {
                         console.error('Failed to load client stats', e);
@@ -534,8 +669,7 @@
             const res = await fetch('/api/tokens');
             if (res.ok) {
                 const tokens = await res.json() || [];
-                const tbody = document.getElementById('tokens-table-body');
-                tbody.innerHTML = tokens.map(t => `
+                renderTable('tokens-table-body', tokens, t => `
                     <tr>
                         <td style="font-weight: 500;">${escapeHTML(t.name)}</td>
                         <td style="font-family: monospace;">${t.token_prefix}...</td>
@@ -545,10 +679,7 @@
                             <button class="btn" style="padding: 6px 12px; margin: 0; border-color: var(--danger); color: var(--danger);" onclick="revokeToken(${t.id})">Revoke</button>
                         </td>
                     </tr>
-                `).join('');
-                if (tokens.length === 0) {
-                    tbody.innerHTML = `<tr><td colspan="5" style="text-align: center; color: var(--text-muted);">No tokens generated yet.</td></tr>`;
-                }
+                `);
             }
         }
 
@@ -679,12 +810,7 @@
                 }
 
                 const users = allUsers.filter(u => (u.status !== 'pending' && u.status !== 'unverified'));
-                const tbody = document.getElementById('users-table-body');
-                tbody.innerHTML = users.map(u => {
-
-                    const isSelf = currentUser && u.email === currentUser.email;
-                    const rowStyle = isSelf ? 'opacity: 0.6;' : '';
-                    return `
+                renderTable('users-table-body', users, u => { const isSelf = currentUser && u.email === currentUser.email; const rowStyle = isSelf ? 'opacity: 0.6;' : ''; return `
                     <tr style="${rowStyle}">
                         <td style="font-weight: 500;">${escapeHTML(u.email)} ${isSelf ? '<span style="font-size: 12px; color: var(--text-muted);">(You)</span>' : ''}</td>
                         <td>${escapeHTML(u.first_name)} ${escapeHTML(u.last_name)}</td>
@@ -697,9 +823,7 @@
                             ${isSelf ? '<span style="font-size: 12px; color: var(--text-muted);">No actions</span>' : ''}
                         </td>
                     </tr>
-                    `;
-                }).join('');
-                if (users.length === 0) tbody.innerHTML = `<tr><td colspan="6" style="text-align: center; color: var(--text-muted);">No users found.</td></tr>`;
+                    `; });
             }
         }
 
@@ -717,8 +841,7 @@
                     badge.style.display = 'none';
                 }
 
-                const tbody = document.getElementById('registrations-table-body');
-                tbody.innerHTML = pendingUsers.map(u => {
+                renderTable('registrations-table-body', pendingUsers, u => {
                     return `
                     <tr>
                         <td style="font-weight: 500;">${escapeHTML(u.email)} <span class="badge ${u.status === 'pending' ? 'warning' : ''}">${escapeHTML(u.status)}</span></td>
@@ -730,8 +853,7 @@
                         </td>
                     </tr>
                     `;
-                }).join('');
-                if (pendingUsers.length === 0) tbody.innerHTML = `<tr><td colspan="4" style="text-align: center; color: var(--text-muted);">No pending registrations.</td></tr>`;
+                });
             }
         }
 
@@ -772,8 +894,7 @@
             const res = await fetch('/api/admin/blacklist');
             if (res.ok) {
                 const list = await res.json() || [];
-                const tbody = document.getElementById('blacklist-table-body');
-                tbody.innerHTML = list.map(b => `
+                renderTable('blacklist-table-body', list, b => `
                     <tr>
                         <td style="font-family: monospace;">${escapeHTML(b.ip_address)}</td>
                         <td>${escapeHTML(b.reason)}</td>
@@ -782,8 +903,7 @@
                             <button class="btn" style="padding: 4px 8px; margin: 0; color: var(--danger); border-color: var(--danger);" onclick="deleteBlacklist('${b.ip_address}')">Remove</button>
                         </td>
                     </tr>
-                `).join('');
-                if (list.length === 0) tbody.innerHTML = `<tr><td colspan="4" style="text-align: center; color: var(--text-muted);">No IPs on blacklist.</td></tr>`;
+                `);
             }
         }
 
@@ -796,8 +916,7 @@
             const res = await fetch('/api/admin/audit?limit=100');
             if (res.ok) {
                 const logs = await res.json() || [];
-                const tbody = document.getElementById('audit-table-body');
-                tbody.innerHTML = logs.map(l => `
+                renderTable('audit-table-body', logs, l => `
                     <tr>
                         <td>${formatLocalTime(l.created_at)}</td>
                         <td><span style="font-family: monospace; font-size: 13px; background: rgba(0,0,0,0.1); padding: 2px 6px; border-radius: 4px;">${escapeHTML(l.action)}</span></td>
@@ -806,8 +925,7 @@
                         <td>${escapeHTML(l.ip_address)}</td>
                         <td>${escapeHTML(l.details)}</td>
                     </tr>
-                `).join('');
-                if (logs.length === 0) tbody.innerHTML = `<tr><td colspan="6" style="text-align: center; color: var(--text-muted);">No audit logs.</td></tr>`;
+                `);
             }
         }
 
@@ -815,16 +933,14 @@
             const res = await fetch('/api/admin/magic-links');
             if (res.ok) {
                 const links = await res.json() || [];
-                const tbody = document.getElementById('magic-table-body');
-                tbody.innerHTML = links.map(l => `
+                renderTable('magic-table-body', links, l => `
                     <tr>
                         <td>${escapeHTML(l.email)}</td>
                         <td>${escapeHTML(l.client_ip)}</td>
                         <td>${formatLocalTime(l.expires_at)}</td>
                         <td>${l.used_at ? formatLocalTime(l.used_at) : 'Unused'}</td>
                     </tr>
-                `).join('');
-                if (links.length === 0) tbody.innerHTML = `<tr><td colspan="4" style="text-align: center; color: var(--text-muted);">No magic links found.</td></tr>`;
+                `);
             }
         }
 

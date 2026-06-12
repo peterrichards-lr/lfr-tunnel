@@ -77,13 +77,13 @@ type ClientConfig struct {
 // DefaultServerConfig returns a ServerConfig with sensible default values.
 func DefaultServerConfig() *ServerConfig {
 	return &ServerConfig{
-		BindAddr:              ":443",
-		HTTPBindAddr:          ":80",
-		ChiselBindAddr:        ":8081",
-		MaxTunnelRateLimit:    100,
-		EnableUserPortal:      true,
-		PortalSessionDuration: 24 * time.Hour,
-		MinClientVersion:      "v1.0.0",
+		BindAddr:               ":443",
+		HTTPBindAddr:           ":80",
+		ChiselBindAddr:         ":8081",
+		MaxTunnelRateLimit:     100,
+		EnableUserPortal:       true,
+		PortalSessionDuration:  24 * time.Hour,
+		MinClientVersion:       "v1.0.0",
 		DocumentationURL:       "https://github.com/peterrichards-lr/lfr-tunnel/tree/master/docs",
 		RepositoryURL:          "https://github.com/peterrichards-lr/lfr-tunnel",
 		PruneInterval:          1 * time.Hour,

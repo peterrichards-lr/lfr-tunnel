@@ -170,7 +170,7 @@ func TestSMTPClient_Send(t *testing.T) {
 	}
 
 	client := NewSMTPClient(cfg)
-	err = client.Send("dev@liferay.com", "Test Subject", "<h1>Hello World</h1>")
+	err = client.Send("dev@liferay.com", "Test Subject", "Hello World", "<h1>Hello World</h1>")
 	if err != nil {
 		t.Fatalf("failed to send mail: %v", err)
 	}

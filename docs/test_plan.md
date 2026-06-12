@@ -36,9 +36,10 @@ sudo systemctl start lfr-tunneld
 - [ ] **Last Login Banner:** Log out and log back in (using a fresh magic link). Verify the banner at the top of the dashboard displays your *previous* login timestamp and IP address.
 - [ ] **Magic Link Auto-Invalidation:** Request a magic link. Do *not* click it. Wait 1 minute, and request a *second* magic link. Click the *second* link to log in. Log out, then try to click the *first* link. Verify you are correctly denied access because the older token was automatically invalidated by your new login.
 - [x] **Strict Single-Session Concurrency:** Log into the dashboard on two different devices (e.g., laptop and phone). Verify that the newer login automatically deletes the older session from the active pool.
-- [x] **Proactive Kicking & Toast Alerts:** After being kicked by the strict concurrency algorithm, verify that your old browser proactively detects the revocation via background polling, instantly redirects you to the login screen, and displays a custom toast alert explaining that you logged in elsewhere.
+- [x] **Proactive Kicking & Toast Alerts (Old Session):** After being kicked by the strict concurrency algorithm, verify that your old browser proactively detects the revocation via background polling, instantly redirects you to the login screen, and displays a custom toast alert explaining that you logged in elsewhere.
+- [x] **Session Takeover Toast (New Session):** Verify that upon logging into the new device, a toaster notification appears welcoming you and informing you that any previous sessions were terminated to secure your account.
 - [x] **Domain Whitelist Pre-Flight:** Attempt to request a magic link for an email address that belongs to a non-whitelisted domain. Verify the system fails silently without executing database operations, preventing enumeration.
-- [ ] **Session Expiration:** *(Optional)* Wait 15 minutes for a Magic Link to expire naturally, or check back in an hour to ensure the background garbage collector successfully prunes it from the database.
+- [ ] **Session Expiration:** *(Optional)* Wait 15 minutes for a Magic Link to expire naturally, or check back in an hour to ensure the garbage collector successfully prunes it from the database.
 
 ### 3. Personal Account Settings & Aesthetics
 
@@ -46,6 +47,7 @@ sudo systemctl start lfr-tunneld
 - [ ] **Theme Switching:** In the **Account** tab, change your theme to "Dark" or "Light" and hit save. Ensure the UI instantly repaints.
 - [ ] **Time of Day Engine:** Change your theme to "Time of Day". Open your browser's developer console and run `testTimeTheme(10)` (morning) and `testTimeTheme(23)` (night) to watch the UI automatically adapt to the sun's schedule.
 - [ ] **Notification Toggles:** Toggle your email notification preferences, save, and ensure the settings persist across hard page refreshes.
+- [x] **Table Pagination & Search:** Navigate to a tab with a table (e.g., Active Tunnels or Users). Verify a "Search..." box appears above the table. Type a query and ensure the table filters dynamically. Check the table pagination footer, and click column headers to ensure rows sort ascending/descending.
 
 ### 4. Admin Security & Control Panels
 

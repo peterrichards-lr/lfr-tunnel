@@ -68,23 +68,23 @@ type CheckSubdomainResponse struct {
 
 // Server coordinates the entire gateway operations.
 type Server struct {
-	cfg          *config.ServerConfig
-	chiselServer *chserver.Server
-	registry     *Registry
-	proxyHandler *ProxyHandler
-	chiselProxy  *httputil.ReverseProxy
-	db           *db.DB
-	mailSender   mail.Sender
-	ctx          context.Context
-	cancel       context.CancelFunc
-	rateLimiters map[string]*rate.Limiter
-	rlMutex      sync.Mutex
-	violations   map[string]int
-	vMutex       sync.Mutex
-	blacklist    sync.Map // memory cache for db blacklist
-	portalMap       sync.Map // memory cache for portal magic links and sessions
-	metricsQueue    chan *db.TunnelMetric
-	broadcastMutex  sync.RWMutex
+	cfg              *config.ServerConfig
+	chiselServer     *chserver.Server
+	registry         *Registry
+	proxyHandler     *ProxyHandler
+	chiselProxy      *httputil.ReverseProxy
+	db               *db.DB
+	mailSender       mail.Sender
+	ctx              context.Context
+	cancel           context.CancelFunc
+	rateLimiters     map[string]*rate.Limiter
+	rlMutex          sync.Mutex
+	violations       map[string]int
+	vMutex           sync.Mutex
+	blacklist        sync.Map // memory cache for db blacklist
+	portalMap        sync.Map // memory cache for portal magic links and sessions
+	metricsQueue     chan *db.TunnelMetric
+	broadcastMutex   sync.RWMutex
 	broadcastMessage string
 }
 
@@ -128,6 +128,16 @@ func NewServer(cfg *config.ServerConfig) (*Server, error) {
 			SMTPFromAddress:    cfg.SMTPServer.FromAddress,
 			InsecureSkipVerify: cfg.InsecureSkipVerify,
 		})
+	}
+
+	if cfg.VerificationLinkExpiry == 0 {
+		cfg.VerificationLinkExpiry = 24 * time.Hour
+	}
+	if cfg.MagicLinkExpiry == 0 {
+		cfg.MagicLinkExpiry = 15 * time.Minute
+	}
+	if cfg.PortalSessionDuration == 0 {
+		cfg.PortalSessionDuration = 24 * time.Hour
 	}
 
 	ctx, cancel := context.WithCancel(context.Background())
@@ -697,7 +707,7 @@ func (s *Server) Start() error {
 				return
 			case <-ticker.C:
 				if s.db != nil {
-					s.db.PruneExpiredMagicLinks()
+					_ = s.db.PruneExpiredMagicLinks()
 				}
 			}
 		}
@@ -939,7 +949,7 @@ func (s *Server) handleCompleteSetup(w http.ResponseWriter, r *http.Request) {
 			body := fmt.Sprintf("<p>New registration request (Email Verified & Setup Complete):</p><ul><li>Name: %s %s</li><li>Email: %s</li></ul><p><a href=\"%s\">Click here to approve this request</a></p>", user.FirstName, user.LastName, user.Email, approveURL)
 
 			plainBody := fmt.Sprintf("New user registered: %s", user.Email)
-			go s.mailSender.Send(s.cfg.AdminNotificationEmail, subject, body, plainBody)
+			go func() { _ = s.mailSender.Send(s.cfg.AdminNotificationEmail, subject, body, plainBody) }()
 		}
 	}
 
@@ -1468,7 +1478,7 @@ func (s *Server) handleAdminMagicLink(w http.ResponseWriter, r *http.Request) {
 	if s.db != nil {
 		h := sha256.Sum256([]byte(magicToken))
 		tokenHash := hex.EncodeToString(h[:])
-		s.db.CreateMagicLink(req.Email, tokenHash, clientIP, expiresAt)
+		_ = s.db.CreateMagicLink(req.Email, tokenHash, clientIP, expiresAt)
 	} else {
 		sessionData := PortalSessionData{
 			Email:     req.Email,
@@ -1554,8 +1564,8 @@ func (s *Server) handleAdminVerify(w http.ResponseWriter, r *http.Request) {
 			respondJSON(w, http.StatusUnauthorized, map[string]string{"error": "Token has expired"})
 			return
 		}
-		s.db.MarkMagicLinkUsed(link.ID)
-		s.db.InvalidateOtherMagicLinks(link.Email, link.ID)
+		_ = s.db.MarkMagicLinkUsed(link.ID)
+		_ = s.db.InvalidateOtherMagicLinks(link.Email, link.ID)
 		email = link.Email
 	} else {
 		val, ok := s.portalMap.LoadAndDelete("admin_magic_" + req.Token)
@@ -1586,7 +1596,7 @@ func (s *Server) handleAdminVerify(w http.ResponseWriter, r *http.Request) {
 				Role:      "owner",
 				Status:    "approved",
 			}
-			s.db.CreateUser(u)
+			_ = s.db.CreateUser(u)
 		}
 		if u != nil {
 			if u.LastLoginAt != nil {
@@ -1597,7 +1607,7 @@ func (s *Server) handleAdminVerify(w http.ResponseWriter, r *http.Request) {
 			now := time.Now().UTC()
 			u.LastLoginAt = &now
 			u.LastLoginIP = clientIP
-			s.db.UpdateUser(u)
+			_ = s.db.UpdateUser(u)
 		}
 	}
 
@@ -1779,7 +1789,7 @@ func (s *Server) handleAdminInviteUser(w http.ResponseWriter, r *http.Request, a
 	expiresAt := time.Now().Add(s.cfg.InviteLinkExpiry)
 	h := sha256.Sum256([]byte(magicToken))
 	tokenHash := hex.EncodeToString(h[:])
-	s.db.CreateMagicLink(req.Email, tokenHash, clientIP, expiresAt)
+	_ = s.db.CreateMagicLink(req.Email, tokenHash, clientIP, expiresAt)
 
 	inviteLink := fmt.Sprintf("https://%s/api/auth/verify?token=%s", r.Host, magicToken)
 	declineLink := fmt.Sprintf("https://%s/api/auth/decline?token=%s", r.Host, magicToken)
@@ -1810,7 +1820,7 @@ Liferay Tunnel Team`, actor, inviteLink, actor, declineLink)
 
 	if s.mailSender != nil {
 		plainBody := fmt.Sprintf("Hi there,\n\nYou have been invited by an administrator to use the Liferay Tunnel portal.\n\nLog in here: %s\n\nDecline here: %s", inviteLink, declineLink)
-		go s.mailSender.Send(req.Email, subject, body, plainBody)
+		go func() { _ = s.mailSender.Send(req.Email, subject, body, plainBody) }()
 	}
 
 	s.writeAudit(actor, "user.invited", "user", req.Email, "Admin invited new user", r)

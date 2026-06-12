@@ -60,19 +60,19 @@ func (s *Server) handleAuthReport(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Invalidate the token
-	s.db.MarkMagicLinkUsed(link.ID)
+	_ = s.db.MarkMagicLinkUsed(link.ID)
 
 	// Audit Log
 	s.writeAudit(link.Email, "auth.magic_link_reported", "ip", link.ClientIP, "User reported unauthorized magic link request", r)
 
 	// Blacklist the IP
-	s.db.AddBlacklistIP(link.ClientIP, "Reported via Magic Link email")
+	_ = s.db.AddBlacklistIP(link.ClientIP, "Reported via Magic Link email")
 	s.blacklist.Store(link.ClientIP, true)
 
 	log.Printf("[Auth] Magic link reported by %s. IP %s has been blacklisted.", link.Email, link.ClientIP)
 
 	w.Header().Set("Content-Type", "text/html")
-	w.Write([]byte("Thank you. This login link has been deactivated, and the request has been reported to our security team."))
+	_, _ = w.Write([]byte("Thank you. This login link has been deactivated, and the request has been reported to our security team."))
 }
 
 func (s *Server) handleAuthDecline(w http.ResponseWriter, r *http.Request) {
@@ -92,18 +92,18 @@ func (s *Server) handleAuthDecline(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Invalidate the token
-	s.db.MarkMagicLinkUsed(link.ID)
+	_ = s.db.MarkMagicLinkUsed(link.ID)
 
 	// Since they declined the invite, let's delete their user record (it was approved initially by the inviter)
 	user, err := s.db.GetUserByEmail(link.Email)
 	if err == nil {
-		s.db.DeleteUser(user.ID)
+		_ = s.db.DeleteUser(user.ID)
 	}
 
 	s.writeAudit(link.Email, "auth.invite_declined", "user", link.Email, "User declined administrator invitation", r)
 
 	w.Header().Set("Content-Type", "text/html")
-	w.Write([]byte("Thank you. This invitation has been securely declined and the administrator will be notified."))
+	_, _ = w.Write([]byte("Thank you. This invitation has been securely declined and the administrator will be notified."))
 }
 
 func (s *Server) handleReportRegistration(w http.ResponseWriter, r *http.Request) {
@@ -120,10 +120,10 @@ func (s *Server) handleReportRegistration(w http.ResponseWriter, r *http.Request
 	}
 
 	// They reported the registration request as unauthorized
-	s.db.DeleteUser(user.ID)
+	_ = s.db.DeleteUser(user.ID)
 
 	s.writeAudit(user.Email, "auth.registration_reported", "user", user.Email, "User reported unauthorized registration request", r)
 
 	w.Header().Set("Content-Type", "text/html")
-	w.Write([]byte("Thank you. This registration token has been instantly deactivated, preventing anyone from completing the sign-up process."))
+	_, _ = w.Write([]byte("Thank you. This registration token has been instantly deactivated, preventing anyone from completing the sign-up process."))
 }

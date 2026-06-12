@@ -412,7 +412,7 @@ func (db *DB) ListUsers() ([]*User, error) {
 	if err != nil {
 		return nil, err
 	}
-	defer rows.Close() //nolint:errcheck
+	defer func() { _ = rows.Close() }() //nolint:errcheck
 
 	var users []*User
 	for rows.Next() {
@@ -511,7 +511,7 @@ func (db *DB) ListPATs(userID string) ([]*PersonalAccessToken, error) {
 	if err != nil {
 		return nil, err
 	}
-	defer rows.Close() //nolint:errcheck
+	defer func() { _ = rows.Close() }() //nolint:errcheck
 
 	var pats []*PersonalAccessToken
 	for rows.Next() {
@@ -582,7 +582,7 @@ func (db *DB) ListAllPATs() ([]*PersonalAccessToken, error) {
 	if err != nil {
 		return nil, err
 	}
-	defer rows.Close() //nolint:errcheck
+	defer func() { _ = rows.Close() }() //nolint:errcheck
 
 	var pats []*PersonalAccessToken
 	for rows.Next() {
@@ -661,7 +661,7 @@ func (db *DB) ListAuditEntries(f AuditFilter) ([]*AuditEntry, error) {
 	if err != nil {
 		return nil, err
 	}
-	defer rows.Close() //nolint:errcheck
+	defer func() { _ = rows.Close() }() //nolint:errcheck
 
 	var entries []*AuditEntry
 	for rows.Next() {
@@ -723,7 +723,7 @@ func (db *DB) ListBlacklistedIPs() ([]*BlacklistEntry, error) {
 	if err != nil {
 		return nil, err
 	}
-	defer rows.Close() //nolint:errcheck
+	defer func() { _ = rows.Close() }() //nolint:errcheck
 
 	var entries []*BlacklistEntry
 	for rows.Next() {
@@ -791,7 +791,7 @@ func (db *DB) ListMagicLinks() ([]*MagicLink, error) {
 	if err != nil {
 		return nil, err
 	}
-	defer rows.Close() //nolint:errcheck
+	defer func() { _ = rows.Close() }() //nolint:errcheck
 
 	var links []*MagicLink
 	for rows.Next() {
@@ -852,7 +852,7 @@ func (db *DB) GetGlobalAnalytics(days int) (*GlobalAnalytics, error) {
 	if err != nil {
 		return nil, err
 	}
-	defer rows.Close()
+	defer func() { _ = rows.Close() }()
 
 	var daily []DailyBandwidth
 	for rows.Next() {
@@ -876,7 +876,7 @@ func (db *DB) GetGlobalAnalytics(days int) (*GlobalAnalytics, error) {
 	if err != nil {
 		return nil, err
 	}
-	defer topRows.Close()
+	defer func() { _ = topRows.Close() }()
 
 	var top []UserBandwidth
 	for topRows.Next() {
@@ -905,7 +905,7 @@ func (db *DB) GetUserAnalytics(userID string, days int) (*UserAnalytics, error) 
 	if err != nil {
 		return nil, err
 	}
-	defer rows.Close()
+	defer func() { _ = rows.Close() }()
 
 	var daily []DailyBandwidth
 	for rows.Next() {
@@ -927,7 +927,7 @@ func (db *DB) GetUserAnalytics(userID string, days int) (*UserAnalytics, error) 
 	if err != nil {
 		return nil, err
 	}
-	defer tunnelRows.Close()
+	defer func() { _ = tunnelRows.Close() }()
 
 	var tunnels []TunnelBandwidth
 	for tunnelRows.Next() {
@@ -962,7 +962,7 @@ func (db *DB) GetClientVersionStats() ([]ClientVersionStats, error) {
 	if err != nil {
 		return nil, err
 	}
-	defer rows.Close()
+	defer func() { _ = rows.Close() }()
 
 	var stats []ClientVersionStats
 	for rows.Next() {

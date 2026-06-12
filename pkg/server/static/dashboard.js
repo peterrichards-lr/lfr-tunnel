@@ -266,6 +266,22 @@
 
             if (res.ok) {
                 applyTheme(payload.theme_preference);
+                currentUser.first_name = payload.first_name;
+                currentUser.last_name = payload.last_name;
+                currentUser.preferred_name = payload.preferred_name;
+                currentUser.theme_preference = payload.theme_preference;
+                currentUser.notification_prefs = payload.notification_prefs;
+
+                // Update the greeting text immediately
+                let greetingName = currentUser.preferred_name;
+                let welcomeGreeting = greetingName ? `Welcome Back, ${escapeHTML(greetingName)}!` : "Welcome Back!";
+                let firstGreeting = greetingName ? `Welcome to Liferay Tunnel, ${escapeHTML(greetingName)}!` : "Welcome to Liferay Tunnel!";
+                if (currentUser.last_login_at && !currentUser.last_login_at.startsWith('0001')) {
+                    document.getElementById('last-login-text').innerHTML = `<strong>${welcomeGreeting}</strong> Your last login was ${formatLocalTime(currentUser.last_login_at)} from IP <code>${escapeHTML(currentUser.last_login_ip || 'Unknown')}</code>.`;
+                } else {
+                    document.getElementById('last-login-text').innerHTML = `<strong>${firstGreeting}</strong> We're glad you're here. This appears to be your first time logging in.`;
+                }
+
                 btn.innerText = "Saved!";
                 setTimeout(() => {
                     btn.disabled = false;

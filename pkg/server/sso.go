@@ -193,10 +193,24 @@ func (s *Server) handleSSOCallback(w http.ResponseWriter, r *http.Request) {
 
 	// Issue the admin session cookie
 	sessionID, _ := generateSecureToken()
+	killedPreviousSession := false
+	s.portalMap.Range(func(key, value interface{}) bool {
+		k := key.(string)
+		if strings.HasPrefix(k, "admin_session_") {
+			sessionData := value.(PortalSessionData)
+			if sessionData.Email == user.Email {
+				s.portalMap.Delete(k)
+				killedPreviousSession = true
+			}
+		}
+		return true
+	})
+
 	s.portalMap.Store("admin_session_"+sessionID, PortalSessionData{
-		Email:     user.Email,
-		ExpiresAt: time.Now().Add(s.cfg.PortalSessionDuration),
-		ClientIP:  r.Header.Get("X-Real-IP"),
+		Email:                 user.Email,
+		ExpiresAt:             time.Now().Add(s.cfg.PortalSessionDuration),
+		ClientIP:              r.Header.Get("X-Real-IP"),
+		KilledPreviousSession: killedPreviousSession,
 	})
 
 	http.SetCookie(w, &http.Cookie{

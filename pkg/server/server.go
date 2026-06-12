@@ -1585,23 +1585,25 @@ func (s *Server) handleAdminVerify(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	// Enforce strict single-session concurrency by invalidating older active sessions for this user.
+	killedPreviousSession := false
 	s.portalMap.Range(func(key, value interface{}) bool {
 		k := key.(string)
 		if strings.HasPrefix(k, "admin_session_") {
 			sessionData := value.(PortalSessionData)
 			if sessionData.Email == email {
 				s.portalMap.Delete(k)
+				killedPreviousSession = true
 			}
 		}
 		return true
 	})
 
 	s.portalMap.Store("admin_session_"+sessionToken, PortalSessionData{
-		Email:           email,
-		ExpiresAt:       time.Now().Add(s.cfg.PortalSessionDuration),
-		ClientIP:        clientIP,
-		PreviousLoginAt: previousLoginAt,
+		Email:                 email,
+		ExpiresAt:             time.Now().Add(s.cfg.PortalSessionDuration),
+		ClientIP:              clientIP,
+		PreviousLoginAt:       previousLoginAt,
+		KilledPreviousSession: killedPreviousSession,
 	})
 
 	s.writeAudit(email, "admin.login", "system", "admin", "Admin logged into dashboard via magic link", r)
@@ -2226,10 +2228,11 @@ func getClientIP(r *http.Request) string {
 }
 
 type PortalSessionData struct {
-	Email           string
-	ExpiresAt       time.Time
-	ClientIP        string
-	PreviousLoginAt *time.Time
+	Email                 string
+	ExpiresAt             time.Time
+	ClientIP              string
+	PreviousLoginAt       *time.Time
+	KilledPreviousSession bool
 }
 
 func (s *Server) handleAdminListMagicLinks(w http.ResponseWriter, r *http.Request) {

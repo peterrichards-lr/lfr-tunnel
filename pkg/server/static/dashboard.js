@@ -98,6 +98,10 @@
             document.getElementById('login-screen').style.display = 'none';
             document.getElementById('dashboard-screen').style.display = 'flex';
 
+            if (currentUser.killed_previous_session) {
+                setTimeout(() => showToast("Warning: You were previously logged in elsewhere. That session has been invalidated."), 1000);
+            }
+
             let greetingName = currentUser.preferred_name;
             let welcomeGreeting = greetingName ? `Welcome Back, ${escapeHTML(greetingName)}!` : "Welcome Back!";
             let firstGreeting = greetingName ? `Welcome to Liferay Tunnel, ${escapeHTML(greetingName)}!` : "Welcome to Liferay Tunnel!";
@@ -206,6 +210,10 @@
                             banner.style.display = 'block';
                         } else {
                             banner.style.display = 'none';
+                        }
+                        
+                        if (data.killed_previous_session) {
+                            showToast("Warning: You were previously logged in elsewhere. That session has been invalidated.");
                         }
                     }
                 } catch (e) {

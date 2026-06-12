@@ -99,6 +99,12 @@ func (s *Server) handleGetMe(w http.ResponseWriter, r *http.Request) {
 				if sessionData.PreviousLoginAt != nil {
 					resp["last_login_at"] = *sessionData.PreviousLoginAt
 				}
+				if sessionData.KilledPreviousSession {
+					resp["killed_previous_session"] = true
+					// Unset it so the UI only alerts once
+					sessionData.KilledPreviousSession = false
+					s.portalMap.Store("admin_session_"+cookie.Value, sessionData)
+				}
 			}
 		}
 	}

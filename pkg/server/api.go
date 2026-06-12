@@ -103,6 +103,10 @@ func (s *Server) handleGetMe(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
+	s.broadcastMutex.RLock()
+	resp["broadcast_message"] = s.broadcastMessage
+	s.broadcastMutex.RUnlock()
+
 	respondJSON(w, http.StatusOK, resp)
 }
 

@@ -82,8 +82,10 @@ type Server struct {
 	violations   map[string]int
 	vMutex       sync.Mutex
 	blacklist    sync.Map // memory cache for db blacklist
-	portalMap    sync.Map // memory cache for portal magic links and sessions
-	metricsQueue chan *db.TunnelMetric
+	portalMap       sync.Map // memory cache for portal magic links and sessions
+	metricsQueue    chan *db.TunnelMetric
+	broadcastMutex  sync.RWMutex
+	broadcastMessage string
 }
 
 // NewServer initializes and returns a new Server instance.
@@ -1328,6 +1330,11 @@ func (s *Server) handleAdminEndpoints(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	if r.Method == http.MethodPost && r.URL.Path == "/api/admin/broadcast" {
+		s.handleAdminBroadcast(w, r, actor)
+		return
+	}
+
 	if r.Method == http.MethodPost && r.URL.Path == "/api/admin/invite" {
 		s.handleAdminInviteUser(w, r, actor)
 		return
@@ -1790,6 +1797,23 @@ Liferay Tunnel Team`, actor, inviteLink, actor, declineLink)
 
 	s.writeAudit(actor, "user.invited", "user", req.Email, "Admin invited new user", r)
 
+	respondJSON(w, http.StatusOK, map[string]string{"status": "ok"})
+}
+
+func (s *Server) handleAdminBroadcast(w http.ResponseWriter, r *http.Request, actor string) {
+	var req struct {
+		Message string `json:"message"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		http.Error(w, `{"error":"Invalid payload"}`, http.StatusBadRequest)
+		return
+	}
+
+	s.broadcastMutex.Lock()
+	s.broadcastMessage = req.Message
+	s.broadcastMutex.Unlock()
+
+	s.writeAudit(actor, "admin.broadcast", "system", "all", "Admin updated global broadcast message", r)
 	respondJSON(w, http.StatusOK, map[string]string{"status": "ok"})
 }
 

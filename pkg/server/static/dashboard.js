@@ -183,6 +183,57 @@
 
             loadTokens();
             loadTunnels();
+            startPolling();
+        }
+
+        let pollingInterval = null;
+        function startPolling() {
+            if (pollingInterval) clearInterval(pollingInterval);
+            pollingInterval = setInterval(async () => {
+                try {
+                    const res = await fetch('/api/me');
+                    if (res.status === 401) {
+                        clearInterval(pollingInterval);
+                        showToast("Session expired or logged in from another device.");
+                        showLogin();
+                        return;
+                    }
+                    if (res.ok) {
+                        const data = await res.json();
+                        const banner = document.getElementById('global-broadcast-banner');
+                        if (data.broadcast_message) {
+                            banner.innerText = data.broadcast_message;
+                            banner.style.display = 'block';
+                        } else {
+                            banner.style.display = 'none';
+                        }
+                    }
+                } catch (e) {
+                    console.error("Polling error", e);
+                }
+            }, 10000); // 10 seconds for rapid testing, normally 30s
+        }
+
+        async function setBroadcastMessage() {
+            const msg = document.getElementById('admin-broadcast-input').value.trim();
+            const res = await fetch('/api/admin/broadcast', {
+                method: 'POST',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify({ message: msg })
+            });
+            if (res.ok) showToast("Broadcast message sent!");
+            else showToast("Failed to send broadcast");
+        }
+
+        async function clearBroadcastMessage() {
+            document.getElementById('admin-broadcast-input').value = "";
+            const res = await fetch('/api/admin/broadcast', {
+                method: 'POST',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify({ message: "" })
+            });
+            if (res.ok) showToast("Broadcast message cleared!");
+            else showToast("Failed to clear broadcast");
         }
 
         function applyTheme(pref) {
@@ -584,6 +635,7 @@
         });
 
         async function logout() {
+            if (pollingInterval) clearInterval(pollingInterval);
             await fetch('/api/auth/logout', { method: 'POST' });
             window.location.reload();
         }

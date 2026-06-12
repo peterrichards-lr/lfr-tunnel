@@ -69,6 +69,7 @@
         </div>
         
         <div class="main-content">
+            <div id="global-broadcast-banner" style="display:none; background: var(--danger); color: white; padding: 12px 24px; text-align: center; font-weight: 500; border-radius: 8px; margin-bottom: 24px; box-shadow: 0 4px 12px rgba(239, 68, 68, 0.3);"></div>
             <!-- Overview Tab -->
             <div id="tab-overview">
                 <div class="header">
@@ -242,6 +243,14 @@
                 <div class="header">
                     <h2>Users</h2>
                     <button class="btn btn-primary" style="width: auto; margin:0;" onclick="openInviteModal()">Invite User</button>
+                </div>
+                <div class="glass" style="padding: 16px; margin-bottom: 24px;">
+                    <h4 style="margin-bottom: 8px; color: var(--text-muted); font-size: 14px; font-weight: 500;">Global Broadcast Message</h4>
+                    <div style="display: flex; gap: 12px;">
+                        <input type="text" id="admin-broadcast-input" placeholder="e.g. Server is going down for maintenance in 5 minutes..." style="flex: 1;" />
+                        <button class="btn btn-primary" style="width: auto; margin: 0;" onclick="setBroadcastMessage()">Broadcast</button>
+                        <button class="btn btn-secondary" style="width: auto; margin: 0;" onclick="clearBroadcastMessage()">Clear</button>
+                    </div>
                 </div>
                 <div class="glass table-container">
                     <table>

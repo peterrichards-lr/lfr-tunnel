@@ -147,7 +147,7 @@ The solution will consist of:
 - [x] Fix missing `status` field in `/api/me` response to satisfy SSO E2E verification.
 - [x] Create comprehensive SSO/OIDC cloud integration guide (Azure, Google Cloud, AWS) with local mock configuration instructions.
 - [x] Bump version to v1.7.0 in pkg/config/version.go
-- [ ] Commit, tag v1.7.0, and push to trigger automated GitHub Release
+- [x] Commit, tag v1.7.0, and push to trigger automated GitHub Release
 
 
 

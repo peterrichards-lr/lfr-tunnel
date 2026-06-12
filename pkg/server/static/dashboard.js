@@ -723,8 +723,8 @@
                 const tbody = document.getElementById('audit-table-body');
                 tbody.innerHTML = logs.map(l => `
                     <tr>
-                        <td>${formatLocalTime(l.timestamp)}</td>
-                        <td><span style="font-family: monospace; font-size: 13px; background: rgba(0,0,0,0.1); padding: 2px 6px; border-radius: 4px;">${escapeHTML(l.event_type)}</span></td>
+                        <td>${formatLocalTime(l.created_at)}</td>
+                        <td><span style="font-family: monospace; font-size: 13px; background: rgba(0,0,0,0.1); padding: 2px 6px; border-radius: 4px;">${escapeHTML(l.action)}</span></td>
                         <td>${escapeHTML(l.actor_id)}</td>
                         <td>${escapeHTML(l.target_id)}</td>
                         <td>${escapeHTML(l.ip_address)}</td>
@@ -875,7 +875,8 @@
         }
 
         function escapeHTML(str) {
-            return str.replace(/[&<>'"]/g, tag => ({
+            if (!str) return '';
+            return String(str).replace(/[&<>'"]/g, tag => ({
                 '&': '&amp;', '<': '&lt;', '>': '&gt;', "'": '&#39;', '"': '&quot;'
             }[tag]));
         }

@@ -1,39 +1,30 @@
 #!/usr/bin/env bash
 set -e
 
-if [ "$1" == "-h" ] || [ "$1" == "--help" ]; then
-    echo "Usage: ./scripts/deploy.sh [VPS_USER] [VPS_IP] [SSH_KEY_PATH]"
-    echo ""
-    echo "Deploys the lfr-tunneld server binary to the VPS."
-    echo "This script cross-compiles the binary for Linux AMD64, uploads it,"
-    echo "and safely restarts the systemd service."
-    exit 0
-fi
+VPS_USER="peterrichards"
+VPS_IP="82.39.133.178"
 
-# Use environment variables if set, otherwise default to positional parameters or hardcoded defaults
-VPS_USER=${VPS_USER:-${1:-peterrichards}}
-VPS_IP=${VPS_IP:-${2:-82.39.133.178}}
-SSH_KEY=${SSH_KEY:-${3:-~/.ssh/id_rsa}}
-DEPLOY_GOOS=${DEPLOY_GOOS:-linux}
-DEPLOY_GOARCH=${DEPLOY_GOARCH:-amd64}
+echo "Building Linux binary..."
+GOOS=linux GOARCH=amd64 go build -o bin/lfr-tunneld-linux ./cmd/lfr-tunneld
 
-echo "=> Building lfr-tunneld for ${DEPLOY_GOOS} ${DEPLOY_GOARCH}..."
-GOOS=${DEPLOY_GOOS} GOARCH=${DEPLOY_GOARCH} go build -o bin/lfr-tunneld-${DEPLOY_GOOS}-${DEPLOY_GOARCH} ./cmd/lfr-tunneld
+echo "Uploading binary to VPS..."
+scp bin/lfr-tunneld-linux $VPS_USER@$VPS_IP:/home/$VPS_USER/lfr-tunneld
 
-echo "=> Uploading binary to VPS ($VPS_USER@$VPS_IP)..."
-scp -i "$SSH_KEY" bin/lfr-tunneld-${DEPLOY_GOOS}-${DEPLOY_GOARCH} $VPS_USER@$VPS_IP:/tmp/lfr-tunneld
+echo "Uploading error pages to VPS..."
+scp -r resources/server/error_pages $VPS_USER@$VPS_IP:/home/$VPS_USER/
 
-echo "=> Stopping service, moving binary, and restarting..."
-# Note: This assumes $VPS_USER has sudo privileges without a password prompt for systemctl,
-# which is common for service management, or requires entering it during execution.
-ssh -t -i "$SSH_KEY" $VPS_USER@$VPS_IP << 'EOF'
-  sudo systemctl stop lfr-tunneld
-  sudo mv /tmp/lfr-tunneld /usr/local/bin/lfr-tunneld
-  sudo chown lfr-tunnel:lfr-tunnel /usr/local/bin/lfr-tunneld
-  sudo chmod +x /usr/local/bin/lfr-tunneld
-  sudo systemctl start lfr-tunneld
-  sudo systemctl status lfr-tunneld --no-pager
-  exit
-EOF
+echo "Uploading static assets to VPS..."
+scp -r pkg/server/static $VPS_USER@$VPS_IP:/home/$VPS_USER/
 
-echo "=> Deployment successful!"
+echo "Executing remote deployment commands..."
+ssh $VPS_USER@$VPS_IP << REMOTE_SSH
+    sudo mv /home/$VPS_USER/lfr-tunneld /usr/local/bin/lfr-tunneld
+    sudo chmod +x /usr/local/bin/lfr-tunneld
+    sudo mkdir -p /var/www/lfr-tunnel/error_pages
+    sudo cp -r /home/$VPS_USER/error_pages/* /var/www/lfr-tunnel/error_pages/
+    sudo mkdir -p /var/www/lfr-tunnel/static
+    sudo cp -r /home/$VPS_USER/static/* /var/www/lfr-tunnel/static/
+    sudo systemctl restart lfr-tunneld
+REMOTE_SSH
+
+echo "Deployment complete!"

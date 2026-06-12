@@ -45,6 +45,10 @@ type ServerConfig struct {
 	MinClientVersion       string           `yaml:"min_client_version"`
 	DocumentationURL       string           `yaml:"documentation_url"`
 	RepositoryURL          string           `yaml:"repository_url"`
+	PruneInterval          time.Duration    `yaml:"prune_interval"`
+	MagicLinkExpiry        time.Duration    `yaml:"magic_link_expiry"`
+	InviteLinkExpiry       time.Duration    `yaml:"invite_link_expiry"`
+	VerificationLinkExpiry time.Duration    `yaml:"verification_link_expiry"`
 
 	// Dynamic SSO/OIDC Providers
 	SSOProviders []SSOProviderConfig `yaml:"sso_providers"`
@@ -80,8 +84,12 @@ func DefaultServerConfig() *ServerConfig {
 		EnableUserPortal:      true,
 		PortalSessionDuration: 24 * time.Hour,
 		MinClientVersion:      "v1.0.0",
-		DocumentationURL:      "https://github.com/peterrichards-lr/lfr-tunnel/tree/master/docs",
-		RepositoryURL:         "https://github.com/peterrichards-lr/lfr-tunnel",
+		DocumentationURL:       "https://github.com/peterrichards-lr/lfr-tunnel/tree/master/docs",
+		RepositoryURL:          "https://github.com/peterrichards-lr/lfr-tunnel",
+		PruneInterval:          15 * time.Minute,
+		MagicLinkExpiry:        15 * time.Minute,
+		InviteLinkExpiry:       24 * time.Hour,
+		VerificationLinkExpiry: 1 * time.Hour,
 	}
 }
 

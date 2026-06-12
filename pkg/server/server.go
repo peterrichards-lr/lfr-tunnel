@@ -687,7 +687,7 @@ func (s *Server) Start() error {
 	}
 	// Periodic task: Prune expired magic links every hour
 	go func() {
-		ticker := time.NewTicker(1 * time.Hour)
+		ticker := time.NewTicker(s.cfg.PruneInterval)
 		defer ticker.Stop()
 		for {
 			select {
@@ -891,6 +891,10 @@ func (s *Server) handleCompleteSetup(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, `{"error":"Invalid or expired token"}`, http.StatusBadRequest)
 		return
 	}
+	if time.Now().UTC().After(user.CreatedAt.Add(s.cfg.VerificationLinkExpiry)) {
+		http.Error(w, `{"error":"Verification link has expired. Please register again."}`, http.StatusBadRequest)
+		return
+	}
 
 	user.FirstName = req.FirstName
 	user.LastName = req.LastName
@@ -957,6 +961,10 @@ func (s *Server) handleVerifyEmail(w http.ResponseWriter, r *http.Request) {
 	user, err := s.db.GetUserByVerificationToken(token)
 	if err != nil || user.Status != "unverified" {
 		http.Error(w, "invalid or expired token", http.StatusBadRequest)
+		return
+	}
+	if time.Now().UTC().After(user.CreatedAt.Add(s.cfg.VerificationLinkExpiry)) {
+		http.Error(w, "Verification link has expired. Please register again.", http.StatusBadRequest)
 		return
 	}
 
@@ -1433,7 +1441,7 @@ func (s *Server) handleAdminMagicLink(w http.ResponseWriter, r *http.Request) {
 	magicToken, _ := generateSecureToken()
 	clientIP := getClientIP(r)
 
-	expiresAt := time.Now().Add(15 * time.Minute)
+	expiresAt := time.Now().Add(s.cfg.MagicLinkExpiry)
 	if s.db != nil {
 		h := sha256.Sum256([]byte(magicToken))
 		tokenHash := hex.EncodeToString(h[:])
@@ -1731,7 +1739,7 @@ func (s *Server) handleAdminInviteUser(w http.ResponseWriter, r *http.Request, a
 	// Send Magic Link Invite Email
 	magicToken, _ := generateSecureToken()
 	clientIP := getClientIP(r)
-	expiresAt := time.Now().Add(7 * 24 * time.Hour) // Invite link lasts 7 days
+	expiresAt := time.Now().Add(s.cfg.InviteLinkExpiry)
 	h := sha256.Sum256([]byte(magicToken))
 	tokenHash := hex.EncodeToString(h[:])
 	s.db.CreateMagicLink(req.Email, tokenHash, clientIP, expiresAt)

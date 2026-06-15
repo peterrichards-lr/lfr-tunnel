@@ -152,6 +152,11 @@ The solution will consist of:
 ## Bug Fixes
 - [x] Fix unit test TempDir cleanup race by sleeping 50ms before stopping the server
 
+## Dependabot Alert Mitigation
+- [x] Upgrade github.com/jpillora/chisel to v1.11.6 and other dependencies to patch CVE-2026-48113 and resolve Dependabot alerts.
+
+
+
 
 
 

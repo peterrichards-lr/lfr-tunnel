@@ -321,8 +321,8 @@ function toggleTheme() {
                         }
 
                         const repoUrl = vData.repository_url || 'https://github.com/peterrichards-lr/lfr-tunnel';
-                        const dlUrl = `${repoUrl}/releases/latest/download/lfr-tunnel${dlSuffix}`;
                         const otherUrl = `${repoUrl}/releases/latest`;
+                        const rawUrl = repoUrl.replace('github.com', 'raw.githubusercontent.com') + '/master';
 
                         const bannerDiv = document.createElement('div');
                         bannerDiv.className = 'alert alert-info';
@@ -332,15 +332,37 @@ function toggleTheme() {
                         bannerDiv.style.justifyContent = 'space-between';
 
                         const titleText = (!userVer) ? `Get started with the CLI` : `Update Available (v${latestVer})`;
-                        const subText = (!userVer) ? `Download the tunnel client for ${os} to begin.` : `You are using an older client (${userVer}). Please update to the latest release for ${os}.`;
+                        const subText = (!userVer) ? `Run this command in your terminal to install the client for ${os}.` : `You are using an older client (${userVer}). Please update to the latest release for ${os}.`;
 
-                        bannerDiv.innerHTML = `
-                            <div><strong>${titleText}</strong> <br/> ${subText}</div>
-                            <div style="display: flex; gap: 10px;">
-                                ${os !== 'Unknown OS' ? `<a href="${dlUrl}" class="btn btn-primary" style="white-space: nowrap;">⬇️ Download for ${os}</a>` : ''}
-                                <a href="${otherUrl}" target="_blank" class="btn btn-secondary" style="white-space: nowrap;">Other OSs</a>
-                            </div>
-                        `;
+                        let installCmd = '';
+                        if (os === 'macOS' || os === 'Linux') {
+                            installCmd = `curl -sSfL ${rawUrl}/scripts/install.sh | sh`;
+                        } else if (os === 'Windows') {
+                            installCmd = `iwr ${rawUrl}/scripts/install.ps1 | iex`;
+                        }
+
+                        if (os === 'Unknown OS') {
+                            bannerDiv.innerHTML = `
+                                <div><strong>${titleText}</strong> <br/> ${subText}</div>
+                                <div style="display: flex; gap: 10px;">
+                                    <a href="${otherUrl}" target="_blank" class="btn btn-secondary" style="white-space: nowrap;">Releases / Other OSs</a>
+                                </div>
+                            `;
+                        } else {
+                            bannerDiv.innerHTML = `
+                                <div style="flex-grow: 1; overflow: hidden;">
+                                    <strong>${titleText}</strong> <br/>
+                                    <span style="font-size: 0.9rem; color: var(--text-muted);">${subText}</span>
+                                    <div class="copy-box" style="margin-top: 12px; margin-bottom: 0; display: flex; align-items: center; justify-content: space-between; padding: 10px 12px; font-size: 0.85rem; border: 1px solid var(--border);">
+                                        <span style="overflow-x: auto; white-space: nowrap; margin-right: 12px; color: var(--success); font-family: monospace;">${installCmd}</span>
+                                        <button class="btn btn-primary btn-sm" onclick="navigator.clipboard.writeText('${installCmd}'); this.innerText='Copied!'; setTimeout(() => this.innerText='Copy', 2000);" style="padding: 4px 10px; font-size: 0.8rem; white-space: nowrap;">Copy</button>
+                                    </div>
+                                </div>
+                                <div style="display: flex; gap: 10px; margin-left: 20px; align-items: flex-start;">
+                                    <a href="${otherUrl}" target="_blank" class="btn btn-secondary" style="white-space: nowrap;">Other OSs</a>
+                                </div>
+                            `;
+                        }
                         document.getElementById('last-login-banner').after(bannerDiv);
                     }
                 }

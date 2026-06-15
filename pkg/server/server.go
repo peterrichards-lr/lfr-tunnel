@@ -11,6 +11,7 @@ import (
 	"fmt"
 	"html"
 	"html/template"
+	"io"
 	"log"
 	"net"
 	"net/http"
@@ -360,6 +361,26 @@ func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 				"documentation_url": s.cfg.DocumentationURL,
 				"repository_url":    s.cfg.RepositoryURL,
 			})
+			return
+		}
+
+		if r.Method == http.MethodGet && r.URL.Path == "/api/checksums" {
+			repoURL := s.cfg.RepositoryURL
+			if repoURL == "" {
+				repoURL = "https://github.com/peterrichards-lr/lfr-tunnel"
+			}
+			checksumsURL := repoURL + "/releases/latest/download/checksums.txt"
+			client := &http.Client{Timeout: 5 * time.Second}
+			res, err := client.Get(checksumsURL)
+			if err != nil || res.StatusCode != http.StatusOK {
+				http.Error(w, "Failed to fetch checksums", http.StatusBadGateway)
+				return
+			}
+			defer func() { _ = res.Body.Close() }()
+			w.Header().Set("Content-Type", "text/plain")
+			// Add aggressive caching since this is just a proxy for a semi-static file
+			w.Header().Set("Cache-Control", "public, max-age=3600")
+			_, _ = io.Copy(w, res.Body)
 			return
 		}
 

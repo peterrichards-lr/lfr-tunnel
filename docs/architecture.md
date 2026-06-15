@@ -198,6 +198,24 @@ Rather than passing the Chisel connection directly to the target local Liferay i
 
 ---
 
+## 11. Client Release Integrity & Checksums Architecture
+
+To ensure secure downloads and preserve binary integrity during client self-upgrades (`lfr-tunnel -upgrade`), `lfr-tunnel` compares the local binary's SHA256 hash against a centralized `checksums.txt` file generated during the automated build process.
+
+Because of browser security policies and server-level routing constraints, this checksum verification relies on a decoupled, CORS-free storage design:
+
+### The Problem: CORS and Network Blocks
+1. **GitHub Releases CORS Limitations:** Standard client-side `fetch()` requests from the user portal directly to GitHub Release assets (e.g., `releases/latest/download/checksums.txt`) are blocked by browsers. This happens because GitHub redirects these requests to Azure Blob Storage without including the necessary CORS headers on the intermediate `302 redirect` response.
+2. **VPS Network Restrictions:** Bypassing this via a server-side proxy endpoint fails because the VPS gateway environment has strict network restrictions (or IP bans from GitHub DDoS defenses) that block outbound HTTPS traffic to `github.com` and `api.github.com` on port 443.
+
+### The Solution: Decoupled 'checksums' CDN Branch
+To bridge this gap, the project utilizes a dedicated, unprotected **`checksums`** orphan branch on GitHub:
+1. **GitHub Actions Automation (`release.yml`):** During the automated release workflow, the runner compiles the binaries, calculates the SHA256 hashes, generates `checksums.txt`, and commits/pushes this file directly to the unprotected `checksums` branch (bypassing any `master` rulesets).
+2. **CORS-Enabled CDN Delivery:** Because Fastly's edge CDN for `raw.githubusercontent.com` natively supplies `Access-Control-Allow-Origin: *` CORS headers and is fully reachable by both the browser and the VPS, the client portal can safely fetch the checksums directly from `https://raw.githubusercontent.com/peterrichards-lr/lfr-tunnel/checksums/checksums.txt`.
+3. **Dynamic Verification:** The web portal dynamically parses this text file, matches the user's detected operating system to the correct binary filename, and displays the official SHA256 hash immediately below the installation terminal commands for manual or automated verification.
+
+---
+
 ## 10. Roadmap & Future Enhancements
 
 1. **Cloud User Portal (Requires SSO)**: 

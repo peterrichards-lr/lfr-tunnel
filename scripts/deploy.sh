@@ -2,7 +2,7 @@
 set -e
 
 VPS_USER="peterrichards"
-VPS_IP="82.39.133.178"
+VPS_IP="lfr-demo.se"
 
 echo "Building Linux binary..."
 GOOS=linux GOARCH=amd64 go build -o bin/lfr-tunneld-linux ./cmd/lfr-tunneld

@@ -323,6 +323,8 @@ function toggleTheme() {
                         const repoUrl = vData.repository_url || 'https://github.com/peterrichards-lr/lfr-tunnel';
                         const otherUrl = `${repoUrl}/releases/latest`;
                         const rawUrl = repoUrl.replace('github.com', 'raw.githubusercontent.com') + '/master';
+                        const dlUrl = `${repoUrl}/releases/latest/download/lfr-tunnel${dlSuffix}`;
+                        const checksumsUrl = `${repoUrl}/releases/latest/download/checksums.txt`;
 
                         const bannerDiv = document.createElement('div');
                         bannerDiv.className = 'alert alert-info';
@@ -335,6 +337,7 @@ function toggleTheme() {
                         const subText = (!userVer) ? `Run this command in your terminal to install the client for ${os}.` : `You are using an older client (${userVer}). Please update to the latest release for ${os}.`;
 
                         let installCmd = '';
+                        let binaryName = `lfr-tunnel${dlSuffix}`;
                         if (os === 'macOS' || os === 'Linux') {
                             installCmd = `curl -sSfL ${rawUrl}/scripts/install.sh | sh`;
                         } else if (os === 'Windows') {
@@ -349,19 +352,43 @@ function toggleTheme() {
                                 </div>
                             `;
                         } else {
+                            const hashSpanId = 'hash-' + Math.random().toString(36).substr(2, 9);
                             bannerDiv.innerHTML = `
-                                <div style="flex-grow: 1; overflow: hidden;">
+                                <div style="flex-grow: 1; overflow: hidden; padding-right: 20px;">
                                     <strong>${titleText}</strong> <br/>
                                     <span style="font-size: 0.9rem; color: var(--text-muted);">${subText}</span>
-                                    <div class="copy-box" style="margin-top: 12px; margin-bottom: 0; display: flex; align-items: center; justify-content: space-between; padding: 10px 12px; font-size: 0.85rem; border: 1px solid var(--border);">
-                                        <span style="overflow-x: auto; white-space: nowrap; margin-right: 12px; color: var(--success); font-family: monospace;">${installCmd}</span>
-                                        <button class="btn btn-primary btn-sm" onclick="navigator.clipboard.writeText('${installCmd}'); this.innerText='Copied!'; setTimeout(() => this.innerText='Copy', 2000);" style="padding: 4px 10px; font-size: 0.8rem; white-space: nowrap;">Copy</button>
+                                    <div style="margin-top: 12px; margin-bottom: 8px; position: relative; background: #0d1117; color: #e6edf3; border-radius: 6px; border: 1px solid rgba(255,255,255,0.1); padding: 12px 40px 12px 16px; font-family: ui-monospace, SFMono-Regular, Consolas, monospace; font-size: 0.85rem; overflow-x: auto;">
+                                        <span style="user-select: all;">${installCmd}</span>
+                                        <button onclick="navigator.clipboard.writeText('${installCmd}'); this.innerHTML='<span style=\\'font-size:12px;\\'>✓</span>'; setTimeout(() => this.innerHTML='📋', 2000);" style="position: absolute; top: 6px; right: 6px; background: transparent; border: 1px solid rgba(255,255,255,0.2); color: #8b949e; border-radius: 4px; width: 26px; height: 26px; display: flex; align-items: center; justify-content: center; cursor: pointer; transition: 0.2s;" onmouseover="this.style.color='#c9d1d9'; this.style.borderColor='rgba(255,255,255,0.4)';" onmouseout="this.style.color='#8b949e'; this.style.borderColor='rgba(255,255,255,0.2)';">📋</button>
                                     </div>
+                                    <div style="font-size: 0.75rem; color: var(--text-muted); font-family: monospace;">SHA256: <span id="${hashSpanId}">loading...</span></div>
                                 </div>
-                                <div style="display: flex; gap: 10px; margin-left: 20px; align-items: flex-start;">
-                                    <a href="${otherUrl}" target="_blank" class="btn btn-secondary" style="white-space: nowrap;">Other OSs</a>
+                                <div style="display: flex; flex-direction: column; gap: 10px; align-items: stretch; min-width: 140px;">
+                                    <a href="${dlUrl}" class="btn btn-primary" style="white-space: nowrap; text-align: center;">⬇️ Download Binary</a>
+                                    <a href="${otherUrl}" target="_blank" class="btn btn-secondary" style="white-space: nowrap; text-align: center;">Other OSs</a>
                                 </div>
                             `;
+
+                            // Fetch the checksums.txt file asynchronously
+                            fetch(checksumsUrl)
+                                .then(res => res.text())
+                                .then(text => {
+                                    const lines = text.split('\\n');
+                                    let foundHash = 'not found';
+                                    for (let line of lines) {
+                                        if (line.includes(binaryName)) {
+                                            foundHash = line.split(' ')[0];
+                                            break;
+                                        }
+                                    }
+                                    const span = document.getElementById(hashSpanId);
+                                    if (span) span.innerText = foundHash;
+                                })
+                                .catch(err => {
+                                    const span = document.getElementById(hashSpanId);
+                                    if (span) span.innerText = 'error fetching hash';
+                                    console.error("Failed to fetch checksums", err);
+                                });
                         }
                         document.getElementById('last-login-banner').after(bannerDiv);
                     }

@@ -51,6 +51,19 @@ jobs:
           cd dist
           sha256sum * > checksums.txt
 
+      - name: Push Checksums to Checksums Branch
+        run: |
+          git config --global user.name "github-actions[bot]"
+          git config --global user.email "github-actions[bot]@users.noreply.github.com"
+          git clone https://x-access-token:${{ secrets.GITHUB_TOKEN }}@github.com/${{ github.repository }} cb-temp
+          cd cb-temp
+          git checkout checksums || git checkout --orphan checksums
+          git rm -rf . || true
+          cp ../dist/checksums.txt .
+          git add checksums.txt
+          git commit -m "update checksums for ${{ github.ref_name }}"
+          git push -u origin checksums --force
+
       - name: Publish Release
         uses: softprops/action-gh-release@v3
         with:

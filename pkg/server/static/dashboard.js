@@ -324,7 +324,7 @@ function toggleTheme() {
                         const otherUrl = `${repoUrl}/releases/latest`;
                         const rawUrl = repoUrl.replace('github.com', 'raw.githubusercontent.com') + '/master';
                         const dlUrl = `${repoUrl}/releases/latest/download/lfr-tunnel${dlSuffix}`;
-                        const checksumsUrl = `${repoUrl}/releases/latest/download/checksums.txt`;
+                        const checksumsUrl = repoUrl.replace('github.com', 'raw.githubusercontent.com') + '/checksums/checksums.txt';
 
                         const bannerDiv = document.createElement('div');
                         bannerDiv.className = 'alert alert-info';

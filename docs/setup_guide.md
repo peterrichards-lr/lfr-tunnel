@@ -377,6 +377,112 @@ sudo systemctl status lfr-tunneld
 sudo journalctl -u lfr-tunneld -n 50 -f
 ```
 
+### 4.6. Service Self-Healing (Nginx & Watchdog)
+To make your VPS gateway fully self-healing and immune to crashes, configuration dependency omissions, or system freezes, deploy passive and active watchdogs:
+
+#### 1. Nginx Systemd Auto-Restart Override
+By default, Nginx does not automatically recover on failure in standard OS packages. To enable Nginx self-healing:
+1. Create the systemd override directory:
+   ```bash
+   sudo mkdir -p /etc/systemd/system/nginx.service.d/
+   ```
+2. Create `/etc/systemd/system/nginx.service.d/override.conf`:
+   ```ini
+   [Service]
+   Restart=on-failure
+   RestartSec=5s
+   ```
+3. Reload systemd and restart Nginx:
+   ```bash
+   sudo systemctl daemon-reload
+   sudo systemctl restart nginx
+   ```
+
+#### 2. Active Watchdog Script & Timer
+An active watchdog runs every minute to verify Nginx and `lfr-tunneld` ports, and automatically heals missing Let's Encrypt configuration files on-the-fly:
+1. Create the watchdog script at `/usr/local/bin/gateway-watchdog.sh`:
+   ```bash
+   #!/usr/bin/env bash
+   set -euo pipefail
+
+   # 1. Self-Heal missing Certbot options or DH parameter files
+   OPTIONS_FILE="/etc/letsencrypt/options-ssl-nginx.conf"
+   DHPARAMS_FILE="/etc/letsencrypt/ssl-dhparams.pem"
+   HEALED=0
+
+   if [ ! -f "${OPTIONS_FILE}" ]; then
+       sudo mkdir -p /etc/letsencrypt
+       sudo tee "${OPTIONS_FILE}" > /dev/null << 'EOF'
+   ssl_session_cache shared:le_nginx_SSL:10m;
+   ssl_session_timeout 1440m;
+   ssl_session_tickets off;
+   ssl_protocols TLSv1.2 TLSv1.3;
+   ssl_prefer_server_ciphers off;
+   ssl_ciphers "ECDHE-ECDSA-AES128-GCM-SHA256:ECDHE-RSA-AES128-GCM-SHA256:ECDHE-ECDSA-AES256-GCM-SHA384:ECDHE-RSA-AES256-GCM-SHA384:DHE-RSA-AES128-GCM-SHA256:DHE-RSA-AES256-GCM-SHA384";
+   EOF
+       HEALED=1
+   fi
+
+   if [ ! -f "${DHPARAMS_FILE}" ]; then
+       sudo mkdir -p /etc/letsencrypt
+       sudo openssl dhparam -out "${DHPARAMS_FILE}" 2048
+       HEALED=1
+   fi
+
+   if [ "${HEALED}" -eq 1 ]; then
+       if sudo nginx -t; then
+           sudo systemctl restart nginx
+       fi
+   fi
+
+   # 2. Check and heal lfr-tunneld Daemon
+   if ! curl -sf --connect-timeout 5 "http://127.0.0.1:8080/api/version" > /dev/null; then
+       sudo systemctl restart lfr-tunneld
+   fi
+
+   # 3. Check and heal Nginx Active State
+   if ! curl -sfk --connect-timeout 5 "https://127.0.0.1" > /dev/null; then
+       if ! systemctl is-active --quiet nginx; then
+           sudo systemctl restart nginx
+       fi
+   fi
+   ```
+2. Make it executable:
+   ```bash
+   sudo chmod 700 /usr/local/bin/gateway-watchdog.sh
+   sudo chown root:root /usr/local/bin/gateway-watchdog.sh
+   ```
+3. Create the watchdog systemd service `/etc/systemd/system/gateway-watchdog.service`:
+   ```ini
+   [Unit]
+   Description=Gateway Active Watchdog
+   After=network-online.target
+   Wants=network-online.target
+
+   [Service]
+   Type=oneshot
+   ExecStart=/usr/local/bin/gateway-watchdog.sh
+   User=root
+   Group=root
+   ```
+4. Create the watchdog systemd timer `/etc/systemd/system/gateway-watchdog.timer`:
+   ```ini
+   [Unit]
+   Description=Trigger Gateway Active Watchdog every 1 minute
+
+   [Timer]
+   OnBootSec=1min
+   OnUnitActiveSec=1min
+
+   [Install]
+   WantedBy=timers.target
+   ```
+5. Register, enable, and start the timer:
+   ```bash
+   sudo systemctl daemon-reload
+   sudo systemctl enable --now gateway-watchdog.timer
+   ```
+
 ---
 
 ## 5. Client CLI Setup & Connection

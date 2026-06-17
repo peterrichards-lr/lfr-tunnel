@@ -1,0 +1,10 @@
+[Unit]
+Description=Cloudflare Dynamic DNS IPv4/IPv6 Updater
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+ExecStart=/usr/local/bin/cloudflare-ddns.sh
+User=root
+Group=root

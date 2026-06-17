@@ -1,0 +1,9 @@
+[Unit]
+Description=Trigger Gateway Active Watchdog every 1 minute
+
+[Timer]
+OnBootSec=1min
+OnUnitActiveSec=1min
+
+[Install]
+WantedBy=timers.target

@@ -7,8 +7,6 @@ on:
 
 permissions:
   contents: write
-  id-token: write    # Required for GitHub OIDC token (Artifact Attestations)
-  attestations: write # Required to write attestation records
 
 jobs:
   build-and-release:
@@ -52,16 +50,6 @@ jobs:
         run: |
           cd dist
           sha256sum * > checksums.txt
-
-      - name: Generate Build Provenance Attestations
-        uses: actions/attest-build-provenance@v2
-        with:
-          # Attest all release binaries and the checksums file.
-          # This creates a cryptographic, OIDC-backed record in the GitHub
-          # Sigstore transparency log proving each artifact was built by
-          # this workflow at this exact commit.
-          # Verify with: gh attestation verify <binary> --repo peterrichards-lr/lfr-tunnel
-          subject-path: 'dist/*'
 
       - name: Push Checksums to Checksums Branch
         run: |

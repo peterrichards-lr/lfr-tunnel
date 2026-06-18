@@ -8,6 +8,158 @@
             document.documentElement.setAttribute('data-theme', 'dark');
         }
 
+        const supportedLocales = [
+            { code: 'de', name: 'Deutsch' },
+            { code: 'en', name: 'English' },
+            { code: 'es', name: 'Español' },
+            { code: 'fr', name: 'Français' },
+            { code: 'ja', name: '日本語' },
+            { code: 'ko', name: '한국어' },
+            { code: 'pt', name: 'Português' },
+            { code: 'ro', name: 'Română' },
+            { code: 'zh', name: '简体中文' }
+        ];
+
+        function getFlagSVG(lang) {
+            const flags = {
+                en: `<svg viewBox="0 0 640 480" width="16" height="12" style="border-radius: 2px;"><rect width="640" height="480" fill="#012169"/><path d="M0 0l640 480M640 0L0 480" stroke="#fff" stroke-width="80"/><path d="M0 0l640 480M640 0L0 480" stroke="#C8102E" stroke-width="48"/><path d="M320 0v480M0 240h640" stroke="#fff" stroke-width="133.3"/><path d="M320 0v480M0 240h640" stroke="#C8102E" stroke-width="80"/></svg>`,
+                fr: `<svg viewBox="0 0 640 480" width="16" height="12" style="border-radius: 2px;"><g fill-rule="evenodd" stroke-width="1pt"><rect width="213.3" height="480" fill="#00209F"/><rect width="213.3" height="480" x="213.3" fill="#FFF"/><rect width="213.3" height="480" x="426.7" fill="#F42A38"/></g></svg>`,
+                es: `<svg viewBox="0 0 640 480" width="16" height="12" style="border-radius: 2px;"><rect width="640" height="480" fill="#c60b1e"/><rect width="640" height="240" y="120" fill="#ffc400"/><rect width="640" height="480" fill="none"/></svg>`,
+                de: `<svg viewBox="0 0 640 480" width="16" height="12" style="border-radius: 2px;"><rect width="640" height="480" fill="#ffce00"/><rect width="640" height="320" fill="#dd0000"/><rect width="640" height="160" fill="#000000"/></svg>`,
+                pt: `<svg viewBox="0 0 640 480" width="16" height="12" style="border-radius: 2px;"><rect width="640" height="480" fill="#ff0000"/><rect width="256" height="480" fill="#006600"/><circle cx="256" cy="240" r="80" fill="#ffcc00"/></svg>`,
+                ro: `<svg viewBox="0 0 640 480" width="16" height="12" style="border-radius: 2px;"><g fill-rule="evenodd" stroke-width="1pt"><rect width="213.3" height="480" fill="#002B7F"/><rect width="213.3" height="480" x="213.3" fill="#FCD116"/><rect width="213.3" height="480" x="426.7" fill="#CE1126"/></g></svg>`,
+                ko: `<svg viewBox="0 0 640 480" width="16" height="12" style="border-radius: 2px;"><rect width="640" height="480" fill="#FFF"/><circle cx="320" cy="240" r="120" fill="#CD2E3A"/><path d="M320 240a120 120 0 010-240 120 120 0 010 240z" fill="#0047A0"/><path d="M120 90l36 48M484 90l36 48M120 342l36 48M484 342l36 48" stroke="#000" stroke-width="24"/></svg>`,
+                ja: `<svg viewBox="0 0 640 480" width="16" height="12" style="border-radius: 2px;"><rect width="640" height="480" fill="#FFF"/><circle cx="320" cy="240" r="144" fill="#BC002D"/></svg>`,
+                zh: `<svg viewBox="0 0 640 480" width="16" height="12" style="border-radius: 2px;"><rect width="640" height="480" fill="#EE1C25"/><path d="M115 120L78 214l97-58H78l97 58z" fill="#FFFF00"/></svg>`
+            };
+            return flags[lang] || flags['en'];
+        }
+
+        function renderCustomDropdown() {
+            const menu = document.getElementById('custom-dropdown-menu');
+            if (!menu) return;
+            
+            menu.innerHTML = '';
+            supportedLocales.forEach(loc => {
+                const item = document.createElement('div');
+                item.style.display = 'flex';
+                item.style.alignItems = 'center';
+                item.style.gap = '8px';
+                item.style.padding = '8px 12px';
+                item.style.cursor = 'pointer';
+                item.style.fontSize = '13px';
+                item.style.color = 'var(--text-muted)';
+                item.style.transition = '0.2s';
+                
+                item.onmouseover = () => {
+                    item.style.background = 'rgba(255,255,255,0.05)';
+                    item.style.color = 'var(--text-color)';
+                };
+                item.onmouseout = () => {
+                    item.style.background = 'transparent';
+                    item.style.color = 'var(--text-muted)';
+                };
+                
+                item.onclick = () => {
+                    selectCustomLanguage(loc.code);
+                };
+                
+                item.innerHTML = `
+                    ${getFlagSVG(loc.code)}
+                    <span>${loc.name}</span>
+                `;
+                menu.appendChild(item);
+            });
+        }
+
+        function selectCustomLanguage(lang) {
+            const loc = supportedLocales.find(l => l.code === lang) || supportedLocales[1];
+            const flagSpan = document.getElementById('custom-dropdown-flag');
+            const labelSpan = document.getElementById('custom-dropdown-label');
+            if (flagSpan) flagSpan.innerHTML = getFlagSVG(lang);
+            if (labelSpan) labelSpan.innerText = loc.name;
+            
+            const menu = document.getElementById('custom-dropdown-menu');
+            if (menu) menu.style.display = 'none';
+            
+            changePortalLanguage(lang);
+        }
+
+        function toggleCustomDropdown() {
+            const menu = document.getElementById('custom-dropdown-menu');
+            if (!menu) return;
+            menu.style.display = menu.style.display === 'none' ? 'block' : 'none';
+        }
+
+        function renderAccCustomDropdown() {
+            const menu = document.getElementById('acc-custom-menu');
+            if (!menu) return;
+            
+            menu.innerHTML = '';
+            supportedLocales.forEach(loc => {
+                const item = document.createElement('div');
+                item.style.display = 'flex';
+                item.style.alignItems = 'center';
+                item.style.gap = '8px';
+                item.style.padding = '8px 12px';
+                item.style.cursor = 'pointer';
+                item.style.fontSize = '14px';
+                item.style.color = 'var(--text-muted)';
+                item.style.transition = '0.2s';
+                
+                item.onmouseover = () => {
+                    item.style.background = 'rgba(255,255,255,0.05)';
+                    item.style.color = 'var(--text-color)';
+                };
+                item.onmouseout = () => {
+                    item.style.background = 'transparent';
+                    item.style.color = 'var(--text-muted)';
+                };
+                
+                item.onclick = () => {
+                    selectAccLanguage(loc.code);
+                };
+                
+                item.innerHTML = `
+                    ${getFlagSVG(loc.code)}
+                    <span>${loc.name}</span>
+                `;
+                menu.appendChild(item);
+            });
+        }
+
+        function selectAccLanguage(lang) {
+            const loc = supportedLocales.find(l => l.code === lang) || supportedLocales[1];
+            const flagSpan = document.getElementById('acc-custom-flag');
+            const labelSpan = document.getElementById('acc-custom-label');
+            const hiddenInput = document.getElementById('acc-language');
+            if (flagSpan) flagSpan.innerHTML = getFlagSVG(lang);
+            if (labelSpan) labelSpan.innerText = loc.name;
+            if (hiddenInput) hiddenInput.value = lang;
+            
+            const menu = document.getElementById('acc-custom-menu');
+            if (menu) menu.style.display = 'none';
+        }
+
+        function toggleAccDropdown() {
+            const menu = document.getElementById('acc-custom-menu');
+            if (!menu) return;
+            menu.style.display = menu.style.display === 'none' ? 'block' : 'none';
+        }
+
+        document.addEventListener('click', (e) => {
+            const customTrigger = document.getElementById('portal-custom-dropdown');
+            if (customTrigger && !customTrigger.contains(e.target)) {
+                const menu = document.getElementById('custom-dropdown-menu');
+                if (menu) menu.style.display = 'none';
+            }
+            const accTrigger = document.getElementById('acc-language-custom-dropdown');
+            if (accTrigger && !accTrigger.contains(e.target)) {
+                const menu = document.getElementById('acc-custom-menu');
+                if (menu) menu.style.display = 'none';
+            }
+        });
+
         let tableInstances = {};
 
 function renderTable(tbodyId, data, renderRowFn) {
@@ -494,7 +646,12 @@ function toggleTheme() {
             document.getElementById('acc-last-name').value = currentUser.last_name || '';
             document.getElementById('acc-preferred-name').value = currentUser.preferred_name || '';
             document.getElementById('acc-theme').value = currentUser.theme_preference || 'system';
-            document.getElementById('acc-language').value = currentUser.language_preference || 'en';
+            
+            // Render and initialize our high-fidelity custom SVG flag selectors
+            renderCustomDropdown();
+            renderAccCustomDropdown();
+            selectCustomLanguage(currentUser.language_preference || 'en');
+            selectAccLanguage(currentUser.language_preference || 'en');
             document.getElementById('acc-notifications').checked = (currentUser.notification_prefs === 'enabled' || !currentUser.notification_prefs);
 
             // Apply theme from preference if not system

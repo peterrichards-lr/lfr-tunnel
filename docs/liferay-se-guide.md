@@ -211,6 +211,29 @@ lfr-tunnel -stop
 
 If your machine is protected by security agents (SentinelOne, CrowdStrike, etc.) that flag Go binaries:
 
+### Option A: Direct Docker Hub Command (Zero-Install / Zero-Build Method)
+
+You can run our official pre-built, multi-architecture client container directly from Docker Hub! This requires absolutely **no local repository cloning, zero building, and is 100% immune to SentinelOne/EDR host-level alerts**:
+
+```bash
+docker run -d --name lfr-tunnel \
+  -e LFT_CLIENT_TOKEN="YOUR_PERSONAL_ACCESS_TOKEN" \
+  -p 8080:8080 \
+  peterrichards/lfr-tunnel:latest \
+  -server https://tunnel.lfr-demo.se \
+  -subdomain peter-dev \
+  -ports 8080
+```
+
+*   **`-d`**: Runs the tunnel in the background as an isolated daemon.
+*   **`-e LFT_CLIENT_TOKEN`**: Passes your secure developer PAT.
+*   **`-p 8080:8080`**: Exposes the port.
+*   **`peterrichards/lfr-tunnel:latest`**: Pulls the official, pre-scanned, and optimized image dynamically from Docker Hub (supporting both Apple Silicon M1/M2/M3 and Intel natively!).
+*   **`-server`**: Points to your production server gateway.
+*   **`-ports 8080`**: Explicitly routes the incoming wildcard traffic from the gateway back out of the tunnel container to your host Liferay port `8080`.
+
+### Option B: Local Repository Scripts (Clone & Build)
+
 1. Copy `.env.example` to `.env` and add your token:
    ```
    LFT_CLIENT_TOKEN=lfr_pat_your-token-here

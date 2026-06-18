@@ -22,6 +22,7 @@
 
         function getFlagSVG(lang) {
             const flags = {
+                ar: `<svg viewBox="0 0 640 480" width="16" height="12" style="border-radius: 2px;"><rect width="640" height="480" fill="#006C35"/><path d="M190 280h260M190 280l40-20M320 180c-20 0-30 20-30 30s10 30 30 30s30-20 30-30s-10-30-30-30" stroke="#fff" stroke-width="12" fill="none"/></svg>`, // Saudi Arabia flag (Standard DXP compliant!)
                 en: `<svg viewBox="0 0 640 480" width="16" height="12" style="border-radius: 2px;"><rect width="640" height="480" fill="#012169"/><path d="M0 0l640 480M640 0L0 480" stroke="#fff" stroke-width="80"/><path d="M0 0l640 480M640 0L0 480" stroke="#C8102E" stroke-width="48"/><path d="M320 0v480M0 240h640" stroke="#fff" stroke-width="133.3"/><path d="M320 0v480M0 240h640" stroke="#C8102E" stroke-width="80"/></svg>`,
                 fr: `<svg viewBox="0 0 640 480" width="16" height="12" style="border-radius: 2px;"><g fill-rule="evenodd" stroke-width="1pt"><rect width="213.3" height="480" fill="#00209F"/><rect width="213.3" height="480" x="213.3" fill="#FFF"/><rect width="213.3" height="480" x="426.7" fill="#F42A38"/></g></svg>`,
                 es: `<svg viewBox="0 0 640 480" width="16" height="12" style="border-radius: 2px;"><rect width="640" height="480" fill="#c60b1e"/><rect width="640" height="240" y="120" fill="#ffc400"/><rect width="640" height="480" fill="none"/></svg>`,

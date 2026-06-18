@@ -85,9 +85,30 @@ Access to the shared gateway is controlled by a **Personal Access Token (PAT)**.
 
 ---
 
-## Step 3: Store Your Token
+## Step 3: Authenticate and Store Your Token
 
-Save your PAT securely so the client loads it automatically on every run:
+Save your PAT securely so the client loads it automatically on every run without needing any `-token` flags. There are two ways to do this:
+
+### Option A: Automatic Browser Login (Highly Recommended)
+
+The client includes an interactive **Magic Handoff** flow that automatically completes token generation and saves it to your configuration directory with zero manual copying:
+
+1. In your terminal, run the login command:
+   ```bash
+   lfr-tunnel login
+   ```
+2. Your default web browser will open to the gateway's **User Portal**.
+3. Authenticate on the portal (using your `@liferay.com` email and magic link).
+4. Upon logging in, the portal will securely hand off a newly generated token back to your local client terminal session and save it automatically:
+   ```
+   ✅ Successfully authenticated! Your token has been saved securely to ~/.lfr-tunnel/token
+   ```
+
+---
+
+### Option B: Manual Clipboard Configuration
+
+If you prefer to save your claimed token manually:
 
 ```bash
 mkdir -p ~/.lfr-tunnel
@@ -95,7 +116,7 @@ echo "lfr_pat_your-token-here" > ~/.lfr-tunnel/token
 chmod 600 ~/.lfr-tunnel/token
 ```
 
-The client will now authenticate with this token automatically — no need to pass `-token` on the command line.
+The client will now authenticate with this token automatically.
 
 > [!CAUTION]
 > **Never commit your PAT to source control.** The `.env` file (used by the Docker wrapper) is git-ignored, and `~/.lfr-tunnel/token` is outside your workspace. Keep it there.

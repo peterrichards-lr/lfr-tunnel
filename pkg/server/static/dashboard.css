@@ -413,5 +413,7 @@ html[dir="rtl"] td, html[dir="rtl"] th {
 }
 .custom-dropdown-menu {
     z-index: 200 !important; /* Forces the absolute menu to float natively on top of everything */
+    max-height: 175px !important; /* Restricts vertical size to fit completely inside the card bounds */
+    overflow-y: auto !important; /* Enables smooth native vertical scrollbars */
 }
 

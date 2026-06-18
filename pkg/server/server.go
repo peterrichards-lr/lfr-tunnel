@@ -1959,9 +1959,10 @@ func (s *Server) handleAdminInviteUser(w http.ResponseWriter, r *http.Request, a
 	}
 
 	var req struct {
-		Email     string `json:"email"`
-		FirstName string `json:"first_name"`
-		LastName  string `json:"last_name"`
+		Email              string `json:"email"`
+		FirstName          string `json:"first_name"`
+		LastName           string `json:"last_name"`
+		LanguagePreference string `json:"language_preference"`
 	}
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 		http.Error(w, `{"error":"Invalid payload"}`, http.StatusBadRequest)
@@ -2003,17 +2004,18 @@ func (s *Server) handleAdminInviteUser(w http.ResponseWriter, r *http.Request, a
 
 	// Create User
 	user := &db.User{
-		ID:              req.Email,
-		Email:           req.Email,
-		FirstName:       req.FirstName,
-		LastName:        req.LastName,
-		PreferredName:   req.FirstName,
-		Role:            "user",
-		Status:          "approved", // Instant approval because invited by Admin
-		ThemePreference: "system",
-		AuthMethod:      "invite",
-		CreatedAt:       time.Now().UTC(),
-		UpdatedAt:       time.Now().UTC(),
+		ID:                 req.Email,
+		Email:              req.Email,
+		FirstName:          req.FirstName,
+		LastName:           req.LastName,
+		PreferredName:      req.FirstName,
+		Role:               "user",
+		Status:             "approved", // Instant approval because invited by Admin
+		ThemePreference:    "system",
+		LanguagePreference: req.LanguagePreference,
+		AuthMethod:         "invite",
+		CreatedAt:          time.Now().UTC(),
+		UpdatedAt:          time.Now().UTC(),
 	}
 	if err := s.db.CreateUser(user); err != nil {
 		http.Error(w, `{"error":"Failed to create user"}`, http.StatusInternalServerError)
@@ -2031,14 +2033,25 @@ func (s *Server) handleAdminInviteUser(w http.ResponseWriter, r *http.Request, a
 	inviteLink := fmt.Sprintf("https://%s/api/auth/verify?token=%s", r.Host, magicToken)
 	declineLink := fmt.Sprintf("https://%s/api/auth/decline?token=%s", r.Host, magicToken)
 
-	lang := s.ResolveLocale(r)
+	lang := req.LanguagePreference
+	if lang == "" {
+		lang = "en"
+	}
 	subject := s.GetTranslation(lang, "invite_subject")
 	if strings.Contains(subject, "Liferay Tunnel") && actor != "" {
 		// Customise subject to include the inviter if applicable
 		subject = fmt.Sprintf("%s has invited you to join Liferay Tunnel", actor)
 	}
 
-	body := fmt.Sprintf(`Hi there,
+	// Render localized dynamic HTML template from properties / external folder
+	body, err := s.renderEmailTemplate(lang, "invitation.html", map[string]interface{}{
+		"Link":        inviteLink,
+		"DeclineLink": declineLink,
+	})
+	if err != nil {
+		log.Printf("[Server] Failed to render invitation email template: %v", err)
+		// Hardcoded fallback
+		body = fmt.Sprintf(`Hi there,
 
 %s has created an account for you on Liferay Tunnel.
 
@@ -2060,6 +2073,7 @@ What happens next? Declining will instantly invalidate this invitation link. It 
 Best regards,
 
 Liferay Tunnel Team`, actor, inviteLink, actor, declineLink)
+	}
 
 	if s.mailSender != nil {
 		plainBody := fmt.Sprintf("Hi there,\n\nYou have been invited by an administrator to use the Liferay Tunnel portal.\n\nLog in here: %s\n\nDecline here: %s", inviteLink, declineLink)

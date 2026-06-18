@@ -474,6 +474,21 @@
             <input type="email" id="invite-email" class="input-field" placeholder="Email Address" required>
             <input type="text" id="invite-first-name" class="input-field" placeholder="First Name" required>
             <input type="text" id="invite-last-name" class="input-field" placeholder="Last Name" required>
+            <div style="margin-bottom: 16px; text-align: left;">
+                <label style="display:block; margin-bottom: 8px; color: var(--text-muted); font-size: 13px;">Onboarding Language</label>
+                <select id="invite-language" class="input-field" style="background: #161b22; color: var(--text-color); border: 1px solid var(--border); border-radius: 6px; padding: 10px; font-weight: 500; height: 38px; box-sizing: border-box; width: 100%;">
+                    <option value="en" selected>English</option>
+                    <option value="ar">العربية (Arabic)</option>
+                    <option value="ro">Română (Romanian)</option>
+                    <option value="es">Español (Spanish)</option>
+                    <option value="fr">Français (French)</option>
+                    <option value="de">Deutsch (German)</option>
+                    <option value="pt">Português (Portuguese)</option>
+                    <option value="ja">日本語 (Japanese)</option>
+                    <option value="ko">한국어 (Korean)</option>
+                    <option value="zh">简体中文 (Simplified Chinese)</option>
+                </select>
+            </div>
             <button class="btn btn-primary" onclick="submitInviteUser()">Send Invite</button>
             <button class="btn" onclick="closeInviteModal()">Cancel</button>
         </div>

@@ -1236,3 +1236,77 @@ func TestServer_MagicLinkLanguagePersistence(t *testing.T) {
 		t.Errorf("expected user language_preference to be dynamically updated to %q, got %q", "ro", dbUser.LanguagePreference)
 	}
 }
+
+func TestServer_InvitationLanguagePersistence(t *testing.T) {
+	cfg := config.DefaultServerConfig()
+	cfg.Domains = []string{"example.com"}
+	cfg.DBPath = filepath.Join(t.TempDir(), "test.db")
+
+	srv, err := NewServer(cfg)
+	if err != nil {
+		t.Fatalf("failed to create server: %v", err)
+	}
+	defer srv.Stop()
+	defer time.Sleep(50 * time.Millisecond) // prevent SQLite cleanup races
+
+	// Intercept sent emails
+	mockMail := &mockMailSender{}
+	srv.mailSender = mockMail
+
+	// 1. Create an active admin user and session to satisfy the auth middleware
+	adminEmail := "admin_test@example.com"
+	adminUser := &db.User{
+		ID:     adminEmail,
+		Email:  adminEmail,
+		Role:   "admin",
+		Status: "approved",
+	}
+	if err := srv.db.CreateUser(adminUser); err != nil {
+		t.Fatalf("failed to create admin user: %v", err)
+	}
+
+	sessionToken := "admin-test-session-token-987"
+	srv.portalMap.Store("admin_session_"+sessionToken, PortalSessionData{
+		Email:     adminEmail,
+		ExpiresAt: time.Now().Add(1 * time.Hour),
+		ClientIP:  "127.0.0.1",
+	})
+
+	// 2. Forge an administrative POST request to invite a new user with Romanian language preference
+	payload, _ := json.Marshal(map[string]string{
+		"email":               "test_invite_lang@example.com",
+		"first_name":          "Dev",
+		"last_name":           "Liferay",
+		"language_preference": "ro",
+	})
+	req, _ := http.NewRequest("POST", "http://example.com/api/admin/invite", bytes.NewReader(payload))
+	req.Header.Set("Content-Type", "application/json")
+	req.AddCookie(&http.Cookie{
+		Name:  "lfr_session",
+		Value: sessionToken,
+	})
+
+	rec := httptest.NewRecorder()
+	srv.ServeHTTP(rec, req)
+	time.Sleep(30 * time.Millisecond) // wait for goroutine
+
+	// 3. Assert status OK
+	if rec.Code != http.StatusOK {
+		t.Fatalf("expected status 200 OK, got %d, body: %s", rec.Code, rec.Body.String())
+	}
+
+	// 3. Verify that the created user record has 'LanguagePreference' saved as 'ro'
+	dbUser, err := srv.db.GetUserByEmail("test_invite_lang@example.com")
+	if err != nil {
+		t.Fatalf("failed to fetch invited user from DB: %v", err)
+	}
+	if dbUser.LanguagePreference != "ro" {
+		t.Errorf("expected user language_preference to be saved as 'ro', got %q", dbUser.LanguagePreference)
+	}
+
+	// 4. Assert that the sent invitation email is translated into Romanian
+	interceptedBody := mockMail.sentTextBody
+	if !strings.Contains(interceptedBody, "Acceptă Invitația") {
+		t.Error("expected invitation email button to be translated to Romanian ('Acceptă Invitația'), but it was not")
+	}
+}

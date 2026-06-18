@@ -1383,6 +1383,7 @@ function toggleTheme() {
             document.getElementById('invite-email').value = '';
             document.getElementById('invite-first-name').value = '';
             document.getElementById('invite-last-name').value = '';
+            document.getElementById('invite-language').value = 'en';
             document.getElementById('invite-modal').style.display = 'flex';
         }
 
@@ -1394,7 +1395,8 @@ function toggleTheme() {
             const payload = {
                 email: document.getElementById('invite-email').value,
                 first_name: document.getElementById('invite-first-name').value,
-                last_name: document.getElementById('invite-last-name').value
+                last_name: document.getElementById('invite-last-name').value,
+                language_preference: document.getElementById('invite-language').value
             };
             const res = await fetch('/api/admin/invite', {
                 method: 'POST',

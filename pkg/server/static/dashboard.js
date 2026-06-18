@@ -258,6 +258,24 @@ function toggleTheme() {
             } catch (e) {
                 showLogin();
             }
+
+            // Load custom privacy/cookie links if configured
+            try {
+                const vRes = await fetch('/api/version');
+                if (vRes.ok) {
+                    const vData = await vRes.json();
+                    if (vData.privacy_policy_url) {
+                        const pl = document.getElementById('footer-privacy-link');
+                        if (pl) pl.href = vData.privacy_policy_url;
+                    }
+                    if (vData.cookie_policy_url) {
+                        const cl = document.getElementById('footer-cookie-link');
+                        if (cl) cl.href = vData.cookie_policy_url;
+                    }
+                }
+            } catch (e) {
+                console.error("Failed to load policy links", e);
+            }
         }
 
         async function showLogin() {

@@ -75,6 +75,27 @@
                 btn.disabled = false;
             }
         });
+
+        // Load custom privacy/cookie links if configured
+        fetch('/api/version')
+            .then(res => res.json())
+            .then(vData => {
+                if (vData.privacy_policy_url) {
+                    const pl = document.getElementById('footer-privacy-link');
+                    if (pl) pl.href = vData.privacy_policy_url;
+                }
+                if (vData.cookie_policy_url) {
+                    const cl = document.getElementById('footer-cookie-link');
+                    if (cl) cl.href = vData.cookie_policy_url;
+                }
+            })
+            .catch(err => console.error("Failed to load policy links", err));
     </script>
+
+    <div style="margin-top: 24px; padding-top: 12px; border-top: 1px solid rgba(255,255,255,0.06); text-align: center; font-size: 11px; display: flex; justify-content: center; gap: 12px; align-items: center; width: 100%; max-width: 400px; margin-left: auto; margin-right: auto;">
+        <a href="/privacy" id="footer-privacy-link" style="color: var(--text-muted); text-decoration: none; transition: 0.2s;" onmouseover="this.style.color='var(--primary)'" onmouseout="this.style.color='var(--text-muted)'">Privacy Policy</a>
+        <span style="color: var(--text-muted); opacity: 0.5;">•</span>
+        <a href="/cookies" id="footer-cookie-link" style="color: var(--text-muted); text-decoration: none; transition: 0.2s;" onmouseover="this.style.color='var(--primary)'" onmouseout="this.style.color='var(--text-muted)'">Cookie Disclosure</a>
+    </div>
 </body>
 </html>

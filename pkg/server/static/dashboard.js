@@ -911,7 +911,7 @@ function toggleTheme() {
                     <td><span class="badge ${t.status === 'up' ? 'success' : ''}">${escapeHTML(t.status)}</span></td>
                     <td>${formatBytes(t.bytes_in)}</td>
                     <td>${formatBytes(t.bytes_out)}</td>
-                    <td>${formatLocalTime(t.created_at)}</td>
+                    <td>${renderTimestamp(t.created_at)}</td>
                 </tr>
             `);
         }
@@ -1081,8 +1081,8 @@ function toggleTheme() {
                     <tr>
                         <td style="font-weight: 500;">${escapeHTML(t.name)}</td>
                         <td style="font-family: monospace;">${t.token_prefix}...</td>
-                        <td>${formatLocalTime(t.created_at)}</td>
-                        <td>${t.expires_at ? formatLocalTime(t.expires_at) : 'Never'}</td>
+                        <td>${renderTimestamp(t.created_at)}</td>
+                        <td>${t.expires_at ? renderTimestamp(t.expires_at) : 'Never'}</td>
                         <td>
                             <button class="btn" style="padding: 6px 12px; margin: 0; border-color: var(--danger); color: var(--danger);" onclick="revokeToken(${t.id})">Revoke</button>
                         </td>
@@ -1225,7 +1225,7 @@ function toggleTheme() {
                         <td><span class="badge ${u.role === 'admin' ? 'success' : ''}">${escapeHTML(u.role)}</span></td>
                         <td><span class="badge ${u.status === 'approved' ? 'success' : (u.status === 'revoked' ? 'danger' : 'warning')}">${escapeHTML(u.status)}</span></td>
                         <td>${originBadge}</td>
-                        <td>${formatLocalTime(u.created_at)}</td>
+                        <td>${renderTimestamp(u.created_at)}</td>
                         <td>
                             ${(!isSelf && u.status !== 'approved') ? `<button class="btn" style="padding: 4px 8px; margin: 0 4px 0 0;" onclick="approveUser('${u.id}')">Approve</button>` : ''}
                             ${(!isSelf && u.status !== 'revoked') ? `<button class="btn" style="padding: 4px 8px; margin: 0 4px 0 0; color: var(--danger); border-color: var(--danger);" onclick="revokeUser('${u.id}')">Revoke</button>` : ''}
@@ -1332,7 +1332,7 @@ function toggleTheme() {
                 const logs = await res.json() || [];
                 renderTable('audit-table-body', logs, l => `
                     <tr>
-                        <td>${formatLocalTime(l.created_at)}</td>
+                        <td>${renderTimestamp(l.created_at)}</td>
                         <td><span style="font-family: monospace; font-size: 13px; background: rgba(0,0,0,0.1); padding: 2px 6px; border-radius: 4px;">${escapeHTML(l.action)}</span></td>
                         <td>${escapeHTML(l.actor_id)}</td>
                         <td>${escapeHTML(l.target_id)}</td>
@@ -1473,11 +1473,32 @@ function toggleTheme() {
             }
         }
 
-                function formatLocalTime(utcDateStr) {
+        function formatLocalTime(utcDateStr) {
             if (!utcDateStr) return 'Never';
             const date = new Date(utcDateStr);
             const tz = document.getElementById('acc-tz')?.value || 'UTC';
             return date.toLocaleString(undefined, { timeZone: tz });
+        }
+
+        function renderTimestamp(utcDateStr) {
+            if (!utcDateStr || utcDateStr.startsWith('0001-01-01')) return 'Never';
+            // Ensure the input is treated as UTC
+            const date = new Date(utcDateStr.endsWith('Z') ? utcDateStr : utcDateStr + 'Z');
+            if (isNaN(date.getTime())) return escapeHTML(utcDateStr);
+
+            // Format neat UTC string: YYYY-MM-DD HH:mm:ss UTC
+            const pad = (n) => String(n).padStart(2, '0');
+            const utcTimeStr = `${date.getUTCFullYear()}-${pad(date.getUTCMonth() + 1)}-${pad(date.getUTCDate())} ${pad(date.getUTCHours())}:${pad(date.getUTCMinutes())}:${pad(date.getUTCSeconds())} UTC`;
+
+            // Format local browser time and timezone suffix
+            let localTimeStr = "";
+            try {
+                localTimeStr = date.toLocaleString(undefined, { timeZoneName: 'short' });
+            } catch(e) {
+                localTimeStr = date.toLocaleString();
+            }
+
+            return `<span class="timestamp-tooltip" title="Local Browser Time: ${escapeHTML(localTimeStr)}" style="cursor: help; border-bottom: 1px dashed var(--text-muted); padding-bottom: 2px;">${escapeHTML(utcTimeStr)}</span>`;
         }
 
         function escapeHTML(str) {

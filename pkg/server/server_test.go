@@ -567,6 +567,9 @@ func TestServer_DomainSeparation(t *testing.T) {
 	if !respCheck2.Available {
 		t.Error("expected peter-dev.example.online to be available")
 	}
+
+	// Wait 50ms for asynchronous background tasks (like audit logs or PAT updates) to finish
+	time.Sleep(50 * time.Millisecond)
 }
 
 func TestAdminEndpoints(t *testing.T) {

@@ -1310,3 +1310,122 @@ func TestServer_InvitationLanguagePersistence(t *testing.T) {
 		t.Error("expected invitation email button to be translated to Romanian ('Acceptă Invitația'), but it was not")
 	}
 }
+
+func TestServer_RateLimitingEnforcements(t *testing.T) {
+	cfg := config.DefaultServerConfig()
+	cfg.Domains = []string{"example.com"}
+	cfg.DBPath = filepath.Join(t.TempDir(), "test.db")
+
+	srv, err := NewServer(cfg)
+	if err != nil {
+		t.Fatalf("failed to create server: %v", err)
+	}
+	defer srv.Stop()
+	defer time.Sleep(50 * time.Millisecond) // prevent SQLite cleanup races
+
+	// 1. Create a user with a specific DB rate limit quota of 10 RPS
+	email := "throttled_user@example.com"
+	u := &db.User{
+		ID:                 email,
+		Email:              email,
+		Role:               "user",
+		Status:             "approved",
+		RateLimit:          10, // Quota!
+		LanguagePreference: "en",
+	}
+	if err := srv.db.CreateUser(u); err != nil {
+		t.Fatalf("failed to create user: %v", err)
+	}
+
+	// Create a valid personal access token (PAT) inside the SQLite database for this user
+	token := "test-client-token-123"
+	hashBytes := sha256.Sum256([]byte(token))
+	tokenHash := hex.EncodeToString(hashBytes[:])
+
+	pat := &db.PersonalAccessToken{
+		UserID:      email,
+		TokenHash:   tokenHash,
+		TokenPrefix: "lfr_pat_test",
+		Name:        "Test Token",
+	}
+	if err := srv.db.CreatePAT(pat); err != nil {
+		t.Fatalf("failed to create PAT: %v", err)
+	}
+
+	// Mock register request from client requesting a much higher rate limit (100 RPS)
+	payloadRegister, _ := json.Marshal(RegisterRequest{
+		AuthToken:       token, // Pass the valid token!
+		SubdomainPrefix: "throttle-dev",
+		RateLimit:       100, // Client requests 100 RPS
+		Ports:           []PortMapping{{LocalPort: 8080}},
+	})
+
+	reqReg, _ := http.NewRequest("POST", "http://example.com/api/register", bytes.NewReader(payloadRegister))
+	reqReg.Header.Set("Content-Type", "application/json")
+	recReg := httptest.NewRecorder()
+	srv.ServeHTTP(recReg, reqReg)
+
+	if recReg.Code != http.StatusOK {
+		t.Fatalf("expected register OK (200), got %d, body: %s", recReg.Code, recReg.Body.String())
+	}
+
+	// Verify that the active lease's RateLimit was cleanly and dynamically capped at the user's DB quota of 10 RPS!
+	host := "throttle-dev.example.com"
+	lease, ok := srv.registry.GetLease(host)
+	if !ok {
+		t.Fatalf("expected active lease for %q to exist, but it was missing", host)
+	}
+	if lease.RateLimit != 10 {
+		t.Errorf("expected lease rate_limit to be capped at DB user quota (10), got %d", lease.RateLimit)
+	}
+
+	// 2. Perform Administrative Dynamic Rate Limit Override (to 15 RPS)
+	adminEmail := "admin_limiter@example.com"
+	adminUser := &db.User{
+		ID:     adminEmail,
+		Email:  adminEmail,
+		Role:   "admin",
+		Status: "approved",
+	}
+	if err := srv.db.CreateUser(adminUser); err != nil {
+		t.Fatalf("failed to create admin user: %v", err)
+	}
+
+	sessionToken := "admin-limiter-session-token-456"
+	srv.portalMap.Store("admin_session_"+sessionToken, PortalSessionData{
+		Email:     adminEmail,
+		ExpiresAt: time.Now().Add(1 * time.Hour),
+		ClientIP:  "127.0.0.1",
+	})
+
+	// Forge administrative rate-limit override request
+	payloadOverride, _ := json.Marshal(map[string]interface{}{
+		"host":       host,
+		"rate_limit": 15,
+	})
+	reqOverride, _ := http.NewRequest("PUT", "http://example.com/api/admin/leases/rate-limit", bytes.NewReader(payloadOverride))
+	reqOverride.Header.Set("Content-Type", "application/json")
+	reqOverride.AddCookie(&http.Cookie{
+		Name:  "lfr_session",
+		Value: sessionToken,
+	})
+	recOverride := httptest.NewRecorder()
+	srv.ServeHTTP(recOverride, reqOverride)
+
+	// Verify administrative status success
+	if recOverride.Code != http.StatusOK {
+		t.Fatalf("expected override status 200 OK, got %d, body: %s", recOverride.Code, recOverride.Body.String())
+	}
+
+	// Verify that the in-memory lease has been updated instantly to 15 RPS!
+	leaseOverride, _ := srv.registry.GetLease(host)
+	if leaseOverride.RateLimit != 15 {
+		t.Errorf("expected active lease rate_limit to be dynamically updated to 15, got %d", leaseOverride.RateLimit)
+	}
+
+	// Verify that our ProxyHandler's rate limiter dynamically updates its limit and burst on the fly!
+	limiter := srv.proxyHandler.getRateLimiter(host, leaseOverride.RateLimit)
+	if limiter.Limit() != 15 {
+		t.Errorf("expected ProxyHandler's rate limiter to adjust dynamically to 15, got %f", limiter.Limit())
+	}
+}

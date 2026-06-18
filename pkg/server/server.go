@@ -648,8 +648,22 @@ func (s *Server) handleRegister(w http.ResponseWriter, r *http.Request) {
 	// Determine active domains to register dynamically based on request Host
 	activeDomains := s.getActiveDomainsForRequest(r)
 
+	// Fetch database user record if available to enforce user-level quota
+	var userRec *db.User
+	if s.db != nil {
+		userRec, _ = s.db.GetUser(user.ID)
+	}
+
 	// Determine effective rate limit
 	effectiveLimit := req.RateLimit
+	if userRec != nil && userRec.RateLimit > 0 {
+		// Cap developer limit at their database user-level quota!
+		if effectiveLimit <= 0 || effectiveLimit > userRec.RateLimit {
+			effectiveLimit = userRec.RateLimit
+		}
+	}
+
+	// Cap at server-side global max limit as well if configured
 	if s.cfg.MaxTunnelRateLimit > 0 {
 		if effectiveLimit <= 0 || effectiveLimit > s.cfg.MaxTunnelRateLimit {
 			effectiveLimit = s.cfg.MaxTunnelRateLimit
@@ -660,20 +674,18 @@ func (s *Server) handleRegister(w http.ResponseWriter, r *http.Request) {
 
 	// Get client IP
 	clientIP := getClientIP(r)
-	if (req.ClientVersion != "" || req.ClientOS != "") && s.db != nil {
-		if userRec, err := s.db.GetUser(user.ID); err == nil {
-			changed := false
-			if req.ClientVersion != "" && userRec.LastClientVersion != req.ClientVersion {
-				userRec.LastClientVersion = req.ClientVersion
-				changed = true
-			}
-			if req.ClientOS != "" && userRec.LastClientOS != req.ClientOS {
-				userRec.LastClientOS = req.ClientOS
-				changed = true
-			}
-			if changed {
-				_ = s.db.UpdateUser(userRec)
-			}
+	if (req.ClientVersion != "" || req.ClientOS != "") && userRec != nil {
+		changed := false
+		if req.ClientVersion != "" && userRec.LastClientVersion != req.ClientVersion {
+			userRec.LastClientVersion = req.ClientVersion
+			changed = true
+		}
+		if req.ClientOS != "" && userRec.LastClientOS != req.ClientOS {
+			userRec.LastClientOS = req.ClientOS
+			changed = true
+		}
+		if changed {
+			_ = s.db.UpdateUser(userRec)
 		}
 	}
 
@@ -1555,6 +1567,11 @@ func (s *Server) handleAdminEndpoints(w http.ResponseWriter, r *http.Request) {
 
 	if r.Method == http.MethodGet && r.URL.Path == "/api/admin/leases" {
 		s.handleAdminListLeases(w, r, actor)
+		return
+	}
+
+	if (r.Method == http.MethodPost || r.Method == http.MethodPut) && r.URL.Path == "/api/admin/leases/rate-limit" {
+		s.handleAdminOverrideRateLimit(w, r, actor)
 		return
 	}
 
@@ -2525,6 +2542,39 @@ func (s *Server) handleAdminKickLease(w http.ResponseWriter, r *http.Request, ac
 	s.writeAudit(actor, "lease.kicked", "lease", subdomain, "", r)
 	w.WriteHeader(http.StatusOK)
 	_ = json.NewEncoder(w).Encode(map[string]string{"status": "success"})
+}
+
+// handleAdminOverrideRateLimit handles dynamic rate limit overrides for active tunnel leases.
+func (s *Server) handleAdminOverrideRateLimit(w http.ResponseWriter, r *http.Request, actor string) {
+	var req struct {
+		Host      string `json:"host"`
+		RateLimit int    `json:"rate_limit"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		http.Error(w, `{"error":"Invalid payload"}`, http.StatusBadRequest)
+		return
+	}
+
+	if req.Host == "" {
+		http.Error(w, `{"error":"Host is required"}`, http.StatusBadRequest)
+		return
+	}
+
+	if req.RateLimit < 0 {
+		http.Error(w, `{"error":"Rate limit cannot be negative"}`, http.StatusBadRequest)
+		return
+	}
+
+	// Apply override dynamically to active lease in memory!
+	if err := s.registry.UpdateLeaseRateLimit(req.Host, req.RateLimit); err != nil {
+		respondJSON(w, http.StatusNotFound, map[string]string{"error": err.Error()})
+		return
+	}
+
+	// Log audit event
+	s.writeAudit(actor, "tunnel.rate_limit_overridden", "subdomain", req.Host, fmt.Sprintf("Overrode rate limit to %d RPS", req.RateLimit), r)
+
+	respondJSON(w, http.StatusOK, map[string]string{"status": "success"})
 }
 
 func (s *Server) handleAdminAuditLog(w http.ResponseWriter, r *http.Request, actor string) {

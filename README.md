@@ -10,6 +10,15 @@ Unlike generic tunnels, `lfr-tunnel` offers:
 
 ---
 
+## 🚀 Quick Navigation
+
+*   **📖 [Getting Started Guide](docs/getting_started.md)** — Install and connect your first tunnel natively on macOS, Windows, or Linux.
+*   **🐳 [Docker & EDR Bypass Guide](docs/liferay-se-guide.md#using-the-docker-wrapper-edr-bypass)** — Run the client unhindered inside a sandboxed container to bypass SentinelOne/antivirus kills.
+*   **🛠️ [System Administrator Setup Guide](docs/setup_guide.md)** — Deploy the public server gateway, configure Let's Encrypt, Postfix secure SMTP TLS, and Nginx.
+*   **🌐 [SSO & OIDC Integration Guide](docs/sso_cloud_guide.md)** — Configure secure, multi-tenant single-sign-on OIDC authentication (Google, Azure, Liferay, Keycloak).
+
+---
+
 ## Domain Configuration
 
 `lfr-tunnel` is designed to work with **any** two domains you control. When deploying your own gateway, you configure the domains via the `domain1` and `domain2` fields in `server-config.yaml`:

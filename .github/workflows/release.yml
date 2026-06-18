@@ -76,12 +76,7 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Update Homebrew Tap & Scoop Bucket
-        # Requires a GitHub PAT (classic or fine-grained, contents:write scope on
-        # peterrichards-lr/homebrew-tap and peterrichards-lr/scoop-bucket) stored
-        # as the repository secret TAP_BUCKET_PAT.
-        # If the secret is absent the step exits cleanly so forks and draft releases
-        # are unaffected.
-        if: ${{ secrets.TAP_BUCKET_PAT != '' }}
+        if: secrets.TAP_BUCKET_PAT != ''
         env:
           TAP_BUCKET_PAT: ${{ secrets.TAP_BUCKET_PAT }}
         run: |

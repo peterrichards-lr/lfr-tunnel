@@ -121,6 +121,24 @@ func (s *Server) handleGetMe(w http.ResponseWriter, r *http.Request) {
 	}
 	s.targetedMutex.RUnlock()
 
+	s.maintMutex.RLock()
+	isMaint := s.maintenanceMode
+	maintScheduled := s.maintScheduledAt
+	s.maintMutex.RUnlock()
+
+	maintModeStr := "false"
+	var secondsLeft int
+	if isMaint {
+		maintModeStr = "true"
+	} else if !maintScheduled.IsZero() && time.Now().Before(maintScheduled) {
+		maintModeStr = "pending"
+		secondsLeft = int(time.Until(maintScheduled).Seconds())
+	}
+	resp["maintenance_mode"] = maintModeStr
+	if maintModeStr == "pending" {
+		resp["maintenance_seconds_left"] = secondsLeft
+	}
+
 	respondJSON(w, http.StatusOK, resp)
 }
 

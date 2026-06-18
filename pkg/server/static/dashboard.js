@@ -491,6 +491,30 @@ function toggleTheme() {
                         } else {
                             banner.style.display = 'none';
                         }
+
+                        const maintBanner = document.getElementById('global-maintenance-banner');
+                        if (data.maintenance_mode === "pending") {
+                            const secs = data.maintenance_seconds_left;
+                            const mins = Math.floor(secs / 60);
+                            const remSecs = secs % 60;
+                            const timeStr = `${mins}:${remSecs < 10 ? '0' : ''}${remSecs}`;
+                            maintBanner.innerHTML = `⚠️ <strong>Scheduled Maintenance starting in ${timeStr} minutes!</strong> All standard tunnels will be paused.`;
+                            maintBanner.style.backgroundColor = '#f59e0b';
+                            maintBanner.style.display = 'block';
+                        } else if (data.maintenance_mode === "true") {
+                            maintBanner.innerHTML = `🛠️ <strong>Gateway is currently undergoing Scheduled Maintenance!</strong> Tunnels are paused.`;
+                            maintBanner.style.backgroundColor = '#ef4444';
+                            maintBanner.style.display = 'block';
+                            
+                            // If the current user is not admin/owner, force close/logout!
+                            if (currentUser && currentUser.role !== 'admin' && currentUser.role !== 'owner') {
+                                clearInterval(pollingInterval);
+                                showToast("The portal has entered scheduled maintenance. Standard sessions are suspended.", "danger");
+                                logout();
+                            }
+                        } else {
+                            maintBanner.style.display = 'none';
+                        }
                         
                         if (data.targeted_message && window.lastTargetedMessage !== data.targeted_message) {
                             window.lastTargetedMessage = data.targeted_message;
@@ -1484,5 +1508,87 @@ function toggleTheme() {
             } else {
                 const err = await res.json();
                 showToast(err.error || `Failed to ${verb} user.`, "danger");
+            }
+        }
+
+        let globalMaintenanceActive = "false";
+
+        function updateMaintenanceModeUI(active) {
+            globalMaintenanceActive = active;
+            const statusText = document.getElementById('maint-status-text');
+            const toggleBtn = document.getElementById('btn-toggle-maint');
+            const countdownSelect = document.getElementById('maint-countdown-select');
+            if (!statusText || !toggleBtn) return;
+
+            if (active === "true") {
+                statusText.innerHTML = `Status: <span style="color: #ef4444; font-weight: 600;">ACTIVE 🔴</span>`;
+                toggleBtn.innerText = "Disable Maintenance";
+                toggleBtn.className = "btn btn-outline";
+                toggleBtn.style.color = "var(--success)";
+                toggleBtn.style.borderColor = "var(--success)";
+                if (countdownSelect) countdownSelect.style.display = "none";
+            } else if (active === "pending") {
+                statusText.innerHTML = `Status: <span style="color: #f59e0b; font-weight: 600;">PENDING COUNTDOWN ⏳</span>`;
+                toggleBtn.innerText = "Cancel Maintenance";
+                toggleBtn.className = "btn btn-outline";
+                toggleBtn.style.color = "var(--danger)";
+                toggleBtn.style.borderColor = "var(--danger)";
+                if (countdownSelect) countdownSelect.style.display = "none";
+            } else {
+                statusText.innerHTML = `Status: <span style="color: var(--text-muted);">INACTIVE 🟢</span>`;
+                toggleBtn.innerText = "Enable Maintenance";
+                toggleBtn.className = "btn btn-primary";
+                toggleBtn.style.color = "white";
+                toggleBtn.style.borderColor = "var(--primary)";
+                if (countdownSelect) countdownSelect.style.display = "block";
+            }
+        }
+
+        async function toggleMaintenanceMode() {
+            let nextState = true;
+            if (globalMaintenanceActive === "true" || globalMaintenanceActive === "pending") {
+                nextState = false;
+            }
+
+            const verb = nextState ? "enable" : "disable/cancel";
+            let countdownVal = 0;
+            if (nextState) {
+                const countdownSelect = document.getElementById('maint-countdown-select');
+                if (countdownSelect) {
+                    countdownVal = parseInt(countdownSelect.value) || 0;
+                }
+            }
+
+            const promptMsg = nextState 
+                ? (countdownVal > 0 
+                    ? `Are you sure you want to schedule Gateway Maintenance Mode to start in ${countdownVal} minutes?\n\nThis will start an orange countdown banner on all developer terminals and portals, and forcefully activate when the timer hits 0.`
+                    : "Are you sure you want to enable Gateway Maintenance Mode IMMEDIATELY?\n\nThis will instantly close all standard tunnels, reject new connections, and block standard logins!")
+                : "Are you sure you want to disable/cancel Gateway Maintenance Mode?\n\nThis will restore standard gateway routing, logins, and tunnel connections.";
+
+            if (!confirm(promptMsg)) return;
+
+            try {
+                const payload = { enabled: nextState };
+                if (nextState && countdownVal > 0) {
+                    payload.countdown_minutes = countdownVal;
+                }
+
+                const res = await fetch('/api/admin/maintenance', {
+                    method: 'POST',
+                    headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify(payload)
+                });
+
+                if (res.ok) {
+                    const data = await res.json();
+                    updateMaintenanceModeUI(data.maintenance_mode);
+                    showToast(`Maintenance Mode successfully updated!`, "success");
+                    loadTunnels(); // Refresh tunnels lists in case they were kicked
+                } else {
+                    const err = await res.json();
+                    showToast(err.error || "Failed to update maintenance mode", "danger");
+                }
+            } catch (e) {
+                showToast("Network error toggling maintenance mode", "danger");
             }
         }

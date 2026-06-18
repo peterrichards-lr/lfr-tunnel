@@ -29,6 +29,14 @@
                 <input type="text" id="setup-first-name" class="input-field" placeholder="First Name" required>
                 <input type="text" id="setup-last-name" class="input-field" placeholder="Last Name" required>
                 <input type="text" id="setup-preferred-name" class="input-field" placeholder="Preferred Name (optional)">
+                
+                <div id="consent-container" class="hidden" style="display: none; margin-top: 16px; gap: 8px; align-items: flex-start; text-align: left;">
+                    <input type="checkbox" id="setup-consent" style="margin-top: 3px; cursor: pointer;">
+                    <label for="setup-consent" style="font-size: 12px; color: var(--text-muted); line-height: 1.4; cursor: pointer; user-select: none;">
+                        I acknowledge that I have read the <a href="/privacy" target="_blank" id="footer-privacy-link" style="color: var(--primary); text-decoration: none;">Privacy Policy</a> and <a href="/cookies" target="_blank" id="footer-cookie-link" style="color: var(--primary); text-decoration: none;">Cookie Disclosure</a> and agree to their terms.
+                    </label>
+                </div>
+                
                 <button type="submit" class="btn btn-primary" style="margin-top: 16px; width: 100%;">Complete Setup</button>
                 <div id="setup-msg" style="margin-top: 12px; font-size: 13px; text-align: center;"></div>
             </form>
@@ -50,7 +58,8 @@
                 token: token,
                 first_name: document.getElementById('setup-first-name').value,
                 last_name: document.getElementById('setup-last-name').value,
-                preferred_name: document.getElementById('setup-preferred-name').value
+                preferred_name: document.getElementById('setup-preferred-name').value,
+                policy_consent: document.getElementById('setup-consent').checked
             };
 
             try {
@@ -80,6 +89,16 @@
         fetch('/api/version')
             .then(res => res.json())
             .then(vData => {
+                if (vData.enforce_policy_consent === "true") {
+                    const cc = document.getElementById('consent-container');
+                    if (cc) {
+                        cc.style.display = 'flex';
+                        cc.classList.remove('hidden');
+                    }
+                    const cb = document.getElementById('setup-consent');
+                    if (cb) cb.required = true;
+                }
+
                 if (vData.privacy_policy_url) {
                     const pl = document.getElementById('footer-privacy-link');
                     if (pl) pl.href = vData.privacy_policy_url;

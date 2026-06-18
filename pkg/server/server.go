@@ -68,26 +68,31 @@ type CheckSubdomainResponse struct {
 
 // Server coordinates the entire gateway operations.
 type Server struct {
-	cfg              *config.ServerConfig
-	chiselServer     *chserver.Server
-	registry         *Registry
-	proxyHandler     *ProxyHandler
-	chiselProxy      *httputil.ReverseProxy
-	db               *db.DB
-	mailSender       mail.Sender
-	ctx              context.Context
-	cancel           context.CancelFunc
-	rateLimiters     map[string]*rate.Limiter
-	rlMutex          sync.Mutex
-	violations       map[string]int
-	vMutex           sync.Mutex
-	blacklist        sync.Map // memory cache for db blacklist
-	portalMap        sync.Map // memory cache for portal magic links and sessions
-	metricsQueue     chan *db.TunnelMetric
-	broadcastMutex   sync.RWMutex
-	broadcastMessage string
-	targetedMessages map[string]string
-	targetedMutex    sync.RWMutex
+	cfg               *config.ServerConfig
+	chiselServer      *chserver.Server
+	registry          *Registry
+	proxyHandler      *ProxyHandler
+	chiselProxy       *httputil.ReverseProxy
+	db                *db.DB
+	mailSender        mail.Sender
+	ctx               context.Context
+	cancel            context.CancelFunc
+	rateLimiters      map[string]*rate.Limiter
+	rlMutex           sync.Mutex
+	violations        map[string]int
+	vMutex            sync.Mutex
+	blacklist         sync.Map // memory cache for db blacklist
+	portalMap         sync.Map // memory cache for portal magic links and sessions
+	metricsQueue      chan *db.TunnelMetric
+	broadcastMutex    sync.RWMutex
+	broadcastMessage  string
+	targetedMessages  map[string]string
+	targetedMutex     sync.RWMutex
+	maintenanceMode   bool
+	maintTimer        *time.Timer
+	maintScheduledAt  time.Time
+	maintMutex        sync.RWMutex
+	unsubscribeSecret string
 }
 
 // NewServer initializes and returns a new Server instance.
@@ -179,13 +184,27 @@ func NewServer(cfg *config.ServerConfig) (*Server, error) {
 		}
 	}
 
-	// Load DB blacklist into cache
+	// Load DB blacklist and unsubscribe secret into cache
 	if srv.db != nil {
 		if list, err := srv.db.ListBlacklistedIPs(); err == nil {
 			for _, entry := range list {
 				srv.blacklist.Store(entry.IPAddress, true)
 			}
 		}
+
+		// Initialize or load unsubscribe secret
+		unsubSecret := ""
+		val, err := srv.db.GetAdminSetting("unsubscribe_secret")
+		if err == nil && val != "" {
+			unsubSecret = val
+		} else {
+			// Generate secure 32-byte secret
+			bytes := make([]byte, 32)
+			_, _ = rand.Read(bytes)
+			unsubSecret = hex.EncodeToString(bytes)
+			_ = srv.db.SetAdminSetting("unsubscribe_secret", unsubSecret)
+		}
+		srv.unsubscribeSecret = unsubSecret
 
 		if cfg.Owner.UserID != "" {
 			ownerUser, err := srv.db.GetUserByEmail(cfg.Owner.UserID)
@@ -363,13 +382,32 @@ func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 				cookieURL = "/cookies"
 			}
 
+			s.maintMutex.RLock()
+			isMaint := s.maintenanceMode
+			maintScheduled := s.maintScheduledAt
+			s.maintMutex.RUnlock()
+
+			maintStr := "false"
+			if isMaint {
+				maintStr = "true"
+			} else if !maintScheduled.IsZero() && time.Now().Before(maintScheduled) {
+				maintStr = "pending"
+			}
+
+			consentStr := "false"
+			if s.cfg.EnforcePolicyConsent {
+				consentStr = "true"
+			}
+
 			respondJSON(w, http.StatusOK, map[string]string{
-				"latest_version":     config.Version,
-				"min_version":        s.cfg.MinClientVersion,
-				"documentation_url":  s.cfg.DocumentationURL,
-				"repository_url":     s.cfg.RepositoryURL,
-				"privacy_policy_url": privacyURL,
-				"cookie_policy_url":  cookieURL,
+				"latest_version":         config.Version,
+				"min_version":            s.cfg.MinClientVersion,
+				"documentation_url":      s.cfg.DocumentationURL,
+				"repository_url":         s.cfg.RepositoryURL,
+				"privacy_policy_url":     privacyURL,
+				"cookie_policy_url":      cookieURL,
+				"maintenance_mode":       maintStr,
+				"enforce_policy_consent": consentStr,
 			})
 			return
 		}
@@ -381,6 +419,11 @@ func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 
 		if r.Method == http.MethodPost && r.URL.Path == "/api/register-request" {
 			s.handleRegisterRequest(w, r)
+			return
+		}
+
+		if r.Method == http.MethodGet && r.URL.Path == "/api/unsubscribe" {
+			s.handleUnsubscribe(w, r)
 			return
 		}
 
@@ -506,6 +549,13 @@ func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		// Route Chisel WebSocket handshake/tunnel request
 		isUpgrade := strings.ToLower(r.Header.Get("Upgrade")) == "websocket"
 		if isUpgrade || strings.HasPrefix(r.URL.Path, "/tunnel") {
+			s.maintMutex.RLock()
+			isMaint := s.maintenanceMode
+			s.maintMutex.RUnlock()
+			if isMaint {
+				http.Error(w, "Service Unavailable - Gateway is currently undergoing maintenance.", http.StatusServiceUnavailable)
+				return
+			}
 			r.URL.Path = "/"
 			s.chiselProxy.ServeHTTP(w, r)
 			return
@@ -541,6 +591,14 @@ func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Data plane requests -> Route to ProxyHandler
+	s.maintMutex.RLock()
+	isMaint := s.maintenanceMode
+	s.maintMutex.RUnlock()
+	if isMaint {
+		s.handleVisitorMaintenancePage(w, r)
+		return
+	}
+
 	s.proxyHandler.ServeHTTP(w, r)
 }
 
@@ -955,9 +1013,15 @@ func (s *Server) handleCompleteSetup(w http.ResponseWriter, r *http.Request) {
 		FirstName     string `json:"first_name"`
 		LastName      string `json:"last_name"`
 		PreferredName string `json:"preferred_name"`
+		PolicyConsent bool   `json:"policy_consent"`
 	}
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 		http.Error(w, `{"error":"Invalid payload"}`, http.StatusBadRequest)
+		return
+	}
+
+	if s.cfg.EnforcePolicyConsent && !req.PolicyConsent {
+		http.Error(w, `{"error":"You must acknowledge and agree to the Privacy Policy and Cookie Disclosures to complete your setup."}`, http.StatusBadRequest)
 		return
 	}
 
@@ -976,6 +1040,11 @@ func (s *Server) handleCompleteSetup(w http.ResponseWriter, r *http.Request) {
 	user.PreferredName = req.PreferredName
 	if user.PreferredName == "" {
 		user.PreferredName = req.FirstName
+	}
+
+	if req.PolicyConsent {
+		now := time.Now().UTC()
+		user.PolicyConsentAt = &now
 	}
 
 	// Registration must be approved by admin
@@ -1408,6 +1477,11 @@ func (s *Server) handleAdminEndpoints(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	if r.Method == http.MethodPost && r.URL.Path == "/api/admin/maintenance" {
+		s.handleAdminMaintenance(w, r, actor)
+		return
+	}
+
 	if r.Method == http.MethodPost && r.URL.Path == "/api/admin/targeted-message" {
 		s.handleAdminTargetedMessage(w, r, actor)
 		return
@@ -1677,6 +1751,28 @@ func (s *Server) handleAdminVerify(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
+	// Maintenance Mode Block for standard users: Allow only admins and owners.
+	s.maintMutex.RLock()
+	isMaint := s.maintenanceMode
+	s.maintMutex.RUnlock()
+	if isMaint {
+		isAdmin := false
+		if user != nil {
+			if user.Role == "admin" || user.Role == "owner" {
+				isAdmin = true
+			}
+		}
+		if !isAdmin && s.cfg.Owner.UserID != "" && strings.EqualFold(email, s.cfg.Owner.UserID) {
+			isAdmin = true
+		}
+		if !isAdmin {
+			respondJSON(w, http.StatusServiceUnavailable, map[string]string{
+				"error": "The portal is currently undergoing administrative maintenance. Please try again later.",
+			})
+			return
+		}
+	}
+
 	// MFA INTERCEPT: If the user has MFA enabled, do not establish the session yet.
 	// Respond with status="mfa_required" and a short-lived temp_token.
 	if user != nil && user.TOTPEnabled {
@@ -1936,6 +2032,169 @@ func (s *Server) handleAdminBroadcast(w http.ResponseWriter, r *http.Request, ac
 	respondJSON(w, http.StatusOK, map[string]string{"status": "ok"})
 }
 
+func (s *Server) handleAdminMaintenance(w http.ResponseWriter, r *http.Request, actor string) {
+	var req struct {
+		Enabled          bool `json:"enabled"`
+		CountdownMinutes *int `json:"countdown_minutes"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		http.Error(w, `{"error":"Invalid payload"}`, http.StatusBadRequest)
+		return
+	}
+
+	s.maintMutex.Lock()
+	defer s.maintMutex.Unlock()
+
+	// Cancel any pending timers if disabling or toggling state
+	if s.maintTimer != nil {
+		s.maintTimer.Stop()
+		s.maintTimer = nil
+	}
+
+	action := "system.maintenance_disabled"
+	desc := "Admin disabled system maintenance mode"
+
+	if req.Enabled {
+		countdown := 0
+		if req.CountdownMinutes != nil {
+			countdown = *req.CountdownMinutes
+		}
+
+		if countdown > 0 {
+			// Schedule maintenance
+			s.maintenanceMode = false
+			s.maintScheduledAt = time.Now().Add(time.Duration(countdown) * time.Minute)
+			s.maintTimer = time.AfterFunc(time.Duration(countdown)*time.Minute, func() {
+				s.maintMutex.Lock()
+				s.maintenanceMode = true
+				s.maintScheduledAt = time.Time{}
+				s.maintTimer = nil
+				s.maintMutex.Unlock()
+
+				// Forcefully kick all active standard (non-admin) tunnel leases
+				leases := s.registry.ListLeases()
+				for _, lease := range leases {
+					isLeaseAdmin := false
+					if s.db != nil {
+						if u, err := s.db.GetUserByEmail(lease.UserID); err == nil && u != nil {
+							if u.Role == "admin" || u.Role == "owner" {
+								isLeaseAdmin = true
+							}
+						}
+					}
+					if !isLeaseAdmin && s.cfg.Owner.UserID != "" && strings.EqualFold(lease.UserID, s.cfg.Owner.UserID) {
+						isLeaseAdmin = true
+					}
+					if !isLeaseAdmin {
+						s.registry.KickLease(lease.SubdomainPrefix)
+					}
+				}
+				log.Printf("[Server] Scheduled Maintenance countdown hit 0. Gateway Maintenance Mode is now ACTIVE.")
+			})
+
+			action = "system.maintenance_scheduled"
+			desc = fmt.Sprintf("Admin scheduled system maintenance starting in %d minutes", countdown)
+		} else {
+			// Immediate activation
+			s.maintenanceMode = true
+			s.maintScheduledAt = time.Time{}
+
+			// Kick all active standard (non-admin) tunnel leases
+			leases := s.registry.ListLeases()
+			for _, lease := range leases {
+				isLeaseAdmin := false
+				if s.db != nil {
+					if u, err := s.db.GetUserByEmail(lease.UserID); err == nil && u != nil {
+						if u.Role == "admin" || u.Role == "owner" {
+							isLeaseAdmin = true
+						}
+					}
+				}
+				if !isLeaseAdmin && s.cfg.Owner.UserID != "" && strings.EqualFold(lease.UserID, s.cfg.Owner.UserID) {
+					isLeaseAdmin = true
+				}
+				if !isLeaseAdmin {
+					s.registry.KickLease(lease.SubdomainPrefix)
+				}
+			}
+
+			action = "system.maintenance_enabled"
+			desc = "Admin enabled system maintenance mode immediately"
+		}
+	} else {
+		// Complete deactivation
+		s.maintenanceMode = false
+		s.maintScheduledAt = time.Time{}
+	}
+
+	s.writeAudit(actor, action, "system", "all", desc, r)
+
+	maintStr := "false"
+	if s.maintenanceMode {
+		maintStr = "true"
+	} else if !s.maintScheduledAt.IsZero() && time.Now().Before(s.maintScheduledAt) {
+		maintStr = "pending"
+	}
+
+	respondJSON(w, http.StatusOK, map[string]interface{}{
+		"status":           "ok",
+		"maintenance_mode": maintStr,
+	})
+}
+
+func (s *Server) handleVisitorMaintenancePage(w http.ResponseWriter, _ *http.Request) {
+	w.Header().Set("Content-Type", "text/html; charset=utf-8")
+	w.WriteHeader(http.StatusServiceUnavailable)
+	_, _ = w.Write([]byte(`<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Scheduled Maintenance | Liferay Tunnel</title>
+    <link rel="icon" type="image/x-icon" href="/favicon.ico">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;600;800&display=swap" rel="stylesheet">
+    <style>
+        body {
+            font-family: 'Outfit', sans-serif;
+            background: linear-gradient(135deg, #0f172a 0%, #111827 100%);
+            color: #f8fafc;
+            min-height: 100vh;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            padding: 24px;
+            margin: 0;
+        }
+        .card {
+            background: rgba(30, 41, 59, 0.7);
+            border: 1px solid rgba(255, 255, 255, 0.08);
+            backdrop-filter: blur(20px);
+            border-radius: 24px;
+            padding: 48px 32px;
+            max-width: 480px;
+            width: 100%;
+            text-align: center;
+            box-shadow: 0 20px 40px rgba(0, 0, 0, 0.3);
+        }
+        .icon { font-size: 48px; margin-bottom: 20px; display: block; }
+        h1 { font-size: 26px; font-weight: 800; margin-bottom: 12px; color: #f8fafc; }
+        p { font-size: 15px; color: #94a3b8; line-height: 1.6; margin-bottom: 24px; font-weight: 300; }
+        .footer { font-size: 11px; color: #475569; letter-spacing: 1px; }
+    </style>
+</head>
+<body>
+    <div class="card">
+        <span class="icon">🛠️</span>
+        <h1>Scheduled Maintenance</h1>
+        <p>This Liferay Tunnel environment is currently undergoing scheduled administrative maintenance. Standard connection tunnels are paused, but we expect to be fully back online shortly. Thank you for your patience!</p>
+        <div class="footer">LFR-GATEWAY &bull; MAINTENANCE MODE</div>
+    </div>
+</body>
+</html>`))
+}
+
 func (s *Server) handleAdminGetUser(w http.ResponseWriter, r *http.Request, actor string) {
 	if s.db == nil {
 		http.Error(w, `{"error":"Database not configured"}`, http.StatusNotImplemented)
@@ -2060,6 +2319,40 @@ func (s *Server) handleAdminPatchUser(w http.ResponseWriter, r *http.Request, ac
 	if err := s.db.UpdateUser(user); err != nil {
 		http.Error(w, `{"error":"Failed to update user"}`, http.StatusInternalServerError)
 		return
+	}
+
+	// Send role update email notification if configured and user has not unsubscribed
+	if req.Role != nil && s.mailSender != nil && user.NotificationPrefs != "disabled" {
+		subject := "Liferay Tunnel: Account Role Updated"
+		greetingName := user.FirstName
+		if greetingName == "" {
+			greetingName = "there"
+		}
+
+		unsubToken := s.GenerateUnsubscribeToken(user.Email)
+		unsubLink := fmt.Sprintf("https://%s/api/unsubscribe?token=%s", r.Host, unsubToken)
+
+		var body string
+		if *req.Role == "admin" {
+			body = fmt.Sprintf(`Hi %s,<br/><br/>
+Your account role has been updated on Liferay Tunnel. You have been <strong>promoted to an Administrator</strong>.<br/><br/>
+You can now access administrative options on the dashboard, including managing user registrations, viewing system-wide audit logs, managing IP blacklists, scheduling maintenance modes, and broadcasting custom targeted messages to active developers.<br/><br/>
+Best regards,<br/>
+Liferay Tunnel Team<br/><br/>
+<hr style="border:0;border-top:1px solid #eee;margin:20px 0;"/>
+<p style="font-size:11px;color:#999;">You received this email because your account role was updated by an administrator. If you wish to opt-out of optional notifications, you can <a href="%s">unsubscribe with one click</a>.</p>`, html.EscapeString(greetingName), unsubLink)
+		} else {
+			body = fmt.Sprintf(`Hi %s,<br/><br/>
+Your account role has been updated on Liferay Tunnel. Your role has been set to <strong>User</strong>.<br/><br/>
+You can continue to create and manage personal access tokens and connect tunnels cleanly from your client CLI.<br/><br/>
+Best regards,<br/>
+Liferay Tunnel Team<br/><br/>
+<hr style="border:0;border-top:1px solid #eee;margin:20px 0;"/>
+<p style="font-size:11px;color:#999;">You received this email because your account role was updated by an administrator. If you wish to opt-out of optional notifications, you can <a href="%s">unsubscribe with one click</a>.</p>`, html.EscapeString(greetingName), unsubLink)
+		}
+
+		plainBody := fmt.Sprintf("Hi %s,\n\nYour account role has been updated on Liferay Tunnel to: %s.\n\nUnsubscribe from optional emails here: %s\n\nBest regards,\nLiferay Tunnel Team", greetingName, *req.Role, unsubLink)
+		go func() { _ = s.mailSender.Send(user.Email, subject, body, plainBody) }()
 	}
 
 	detailsBytes, _ := json.Marshal(details)

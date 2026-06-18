@@ -564,3 +564,75 @@ Then, save your passphrase once to the keychain:
 ```bash
 ssh-add --apple-use-keychain ~/.ssh/id_ed25519
 ```
+
+---
+
+## 8. Enterprise Customization & Policy Hardening
+
+Liferay Tunnel includes built-in compliance, deliverability, and administrative systems optimized for strict enterprise security parameters.
+
+### 8.1. Configuring Custom Legal Policies (Privacy & Cookies)
+
+By default, the gateway portal serves baseline legal disclosures at `/privacy` and `/cookies` describing generic SQLite database storage and session tracking. You can customize these disclosures using two distinct methods:
+
+#### Method A: Configuration-Driven Redirects (Dynamic URLs)
+Enterprise self-hosters can direct users to corporate legal disclosures hosted externally. Add the following fields to `/etc/lfr-tunneld/server-config.yaml`:
+
+```yaml
+# Optional custom policy links (defaults to server fallbacks if empty)
+privacy_policy_url: "https://yourcompany.com/privacy-policy"
+cookie_policy_url: "https://yourcompany.com/cookie-disclosure"
+```
+
+Once updated and restarted, the portal footers, registration forms, and OOTB welcome pages will automatically point to those corporate links.
+
+#### Method B: Intercepting at Nginx (Static Local Files)
+If you prefer hosting custom policies natively on the VPS but separately from the Go binary, you can use Nginx's high-performance alias blocks.
+
+1. Upload your custom HTML policies to `/var/www/lfr-tunnel/policies/` (automatically done when running `./scripts/deploy.sh` if policies are placed inside `resources/server/policies/`).
+2. Add the following location blocks inside `/etc/nginx/sites-available/lfr-tunnel` (under the port 443 server block):
+   ```nginx
+   # Serve Custom Branded Legal Policies
+   location = /privacy {
+       alias /var/www/lfr-tunnel/policies/privacy.html;
+       default_type text/html;
+   }
+
+   location = /cookies {
+       alias /var/www/lfr-tunnel/policies/cookies.html;
+       default_type text/html;
+   }
+   ```
+3. Test and reload Nginx:
+   ```bash
+   sudo nginx -t && sudo systemctl reload nginx
+   ```
+
+### 8.2. Enforcing Policy Consent Audit Trails
+
+To comply with strict IT auditing frameworks (like SOC2 or ISO 27001), you can optionally force users to explicitly check a consent box agreeing to your legal policies before completing their profile setups.
+
+1. Enable the enforcement flag inside `server-config.yaml`:
+   ```yaml
+   enforce_policy_consent: true
+   ```
+2. Restart the service:
+   ```bash
+   sudo systemctl restart lfr-tunneld
+   ```
+3. **The User Experience**: The Complete Profile Setup page (`setup.html`) will dynamically render a required checkbox. The user cannot submit setup without checking it.
+4. **The Audit Trail**: The server will capture the exact timestamp of consent and save it in the SQLite database under `policy_consent_at`. This provides an airtight compliance record.
+
+### 8.3. Scheduled Maintenance Countdowns
+
+To prevent active tunnel connections or client-facing demonstrations from suddenly dropping without warning, administrators can schedule maintenance with a countdown timer.
+
+1. Navigate to the **Users** tab inside the Admin Dashboard.
+2. In the **Gateway Maintenance Mode** widget, select a countdown duration (e.g., 5 Minutes) from the dropdown list.
+3. Click **"Enable Maintenance"**.
+4. **The Experience**:
+   * All active portal dashboards will instantly display a prominent, blinking orange warning banner: *"⚠️ Warning: Scheduled Maintenance is starting in 4:52 minutes. All standard tunnels will be paused."*
+   * Standard users will be blocked from logging in with a helpful notification.
+   * Once the countdown hits 0, the server automatically flips into active maintenance, forcefully drops all standard WebSocket tunnels (`KickLease`), and logs out active non-admin portal sessions.
+   * Admins and Owners remain unblocked throughout the entire process so they can manage system resources.
+

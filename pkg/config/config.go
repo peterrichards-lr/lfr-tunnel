@@ -51,6 +51,7 @@ type ServerConfig struct {
 	VerificationLinkExpiry time.Duration    `yaml:"verification_link_expiry"`
 	PrivacyPolicyURL       string           `yaml:"privacy_policy_url"`
 	CookiePolicyURL        string           `yaml:"cookie_policy_url"`
+	EnforcePolicyConsent   bool             `yaml:"enforce_policy_consent"`
 
 	// Dynamic SSO/OIDC Providers
 	SSOProviders []SSOProviderConfig `yaml:"sso_providers"`

@@ -99,6 +99,7 @@
         
         <div class="main-content">
             <div id="global-broadcast-banner" style="display:none; background: var(--danger); color: white; padding: 12px 24px; text-align: center; font-weight: 500; border-radius: 8px; margin-bottom: 24px; box-shadow: 0 4px 12px rgba(239, 68, 68, 0.3);"></div>
+            <div id="global-maintenance-banner" style="display:none; background: #f59e0b; color: white; padding: 12px 24px; text-align: center; font-weight: 500; border-radius: 8px; margin-bottom: 24px; box-shadow: 0 4px 12px rgba(245, 158, 11, 0.3);"></div>
             <!-- Overview Tab -->
             <div id="tab-overview">
                 <div class="header">
@@ -289,6 +290,21 @@
                 <div class="header">
                     <h2>Users</h2>
                     <button class="btn btn-primary" style="width: auto; margin:0;" onclick="openInviteModal()">Invite User</button>
+                </div>
+                <div class="glass" style="padding: 16px; margin-bottom: 24px; border-left: 4px solid #f59e0b;">
+                    <h4 style="margin-bottom: 4px; font-size: 14px; font-weight: 600; color: #f59e0b;">🛠️ Gateway Maintenance Mode</h4>
+                    <p style="color: var(--text-muted); font-size: 12px; margin-bottom: 12px; line-height: 1.4;">Activating Maintenance Mode will block standard user logins, reject new tunnel connections, and forcefully kick active standard tunnels. Visitors trying to access dev subdomains will receive a scheduled maintenance page. <strong>Administrators and Owners will remain fully unblocked so you can manage the system.</strong></p>
+                    <div style="display: flex; gap: 12px; align-items: center; flex-wrap: wrap;">
+                        <span id="maint-status-text" style="font-weight: bold; font-size: 14px; color: var(--text-muted); margin-right: 12px;">Status: Loading...</span>
+                        <select id="maint-countdown-select" class="input-field" style="width: auto; margin: 0; padding: 6px 12px; font-size: 13px; height: auto; background: rgba(255,255,255,0.05); border-color: rgba(255,255,255,0.1);">
+                            <option value="0">Immediate Activation ⚡</option>
+                            <option value="1">Schedule in 1 Minute ⏳</option>
+                            <option value="5" selected>Schedule in 5 Minutes ⏳</option>
+                            <option value="10">Schedule in 10 Minutes ⏳</option>
+                            <option value="30">Schedule in 30 Minutes ⏳</option>
+                        </select>
+                        <button id="btn-toggle-maint" class="btn" style="width: auto; margin: 0; padding: 6px 16px; font-weight: 500;" onclick="toggleMaintenanceMode()">Enable Maintenance</button>
+                    </div>
                 </div>
                 <div class="glass" style="padding: 16px; margin-bottom: 24px;">
                     <h4 style="margin-bottom: 8px; color: var(--text-muted); font-size: 14px; font-weight: 500;">Global Broadcast Message</h4>

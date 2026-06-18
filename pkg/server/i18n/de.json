@@ -17,5 +17,27 @@
   "label_last_name": "Nachname",
   "mfa_verify_title": "Multi-Faktor-Verifizierung (MFA)",
   "mfa_verify_desc": "Bitte geben Sie den 6-stelligen Code aus Ihrer Authentifikator-App ein:",
-  "btn_verify_login": "Verifizieren & Einloggen"
+  "btn_verify_login": "Verifizieren & Einloggen",
+
+  "privacy_title": "Datenschutzerklärung",
+  "privacy_desc": "Diese Datenschutzerklärung beschreibt, wie dieses selbstgehostete Liferay Tunnel (lfr-tunneld) Gateway Ihre Daten verarbeitet.",
+  "privacy_sec1_title": "1. Informationen, die wir sammeln und verarbeiten",
+  "privacy_sec1_bullet1": "IP-Adressen: Ausschließlich verarbeitet, um Pakete weiterzuleiten und Auto-Ban-Sicherheitsmaßnahmen anzuwenden.",
+  "privacy_sec1_bullet2": "E-Mail-Adressen: Verarbeitet für die Verifizierung von Konten, Genehmigungsbenachrichtigungen und passwortlose Magic Link-Logins.",
+  "privacy_sec1_bullet3": "Audit-Protokolle: Erfasst administrative Aktionen, Token-Erstellungen und Sicherheitsverletzungen lokal in der Datenbank.",
+  "privacy_sec2_title": "2. Datensicherheit & Speicherung",
+  "privacy_sec2_desc": "Persönliche Zugriffstoken (PATs) werden auf dem Server mithilfe sicherer kryptografischer SHA-256-Hashes gespeichert. Alle Daten werden in einer lokalen, privaten SQLite-Datenbank gespeichert und niemals an externe Server weitergegeben, verkauft oder übertragen.",
+  "return_to_portal": "← Zurück zum Portal",
+
+  "cookie_title": "Cookie-Offenlegung",
+  "cookie_desc": "Diese Webanwendung verwendet genau ein Cookie, um Ihre Sitzung aufrechtzuerhalten.",
+  "cookie_sec1_title": "Unbedingt erforderliche Cookies",
+  "cookie_sec1_bullet1": "Cookie-Name: lfr_session",
+  "cookie_sec1_bullet2": "Typ: First-Party, HTTP-Only, Sicher, SameSite=Lax",
+  "cookie_sec1_bullet3": "Zweck: Dieses Cookie ist unbedingt erforderlich, um Sie sicher in Ihrer Portalsitzung angemeldet zu halten. Es enthält keine Tracking-Daten oder persönlichen Identifikationsmerkmale.",
+  "cookie_sec1_bullet4": "Zustimmung: Gemäß der DSGVO und der ePrivacy-Richtlinie sind unbedingt erforderliche Sitzungscookies von der Pflicht zur Anzeige von Zustimmungsbannern ausgenommen.",
+
+  "setup_title": "Vervollständige dein Profil",
+  "btn_complete_setup": "Einrichtung Abschließen",
+  "policy_consent_label": "Ich bestätige, dass ich die Datenschutzerklärung und die Cookie-Offenlegung gelesen habe und mit deren Bedingungen einverstanden bin."
 }

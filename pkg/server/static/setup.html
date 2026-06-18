@@ -23,21 +23,21 @@
 </head>
 <body>
     <div class="container">
-        <div class="glass card">
-            <h2 style="text-align: center; margin-bottom: 24px;">Complete Your Profile</h2>
+        <div class="glass" style="max-width: 400px; width: 100%; padding: 40px; border-radius: 16px; box-shadow: 0 10px 25px rgba(0,0,0,0.2);">
+            <h2 style="text-align: center; margin-bottom: 24px;" data-i18n="setup_title">Complete Your Profile</h2>
             <form id="setup-form">
                 <input type="text" id="setup-first-name" class="input-field" placeholder="First Name" required>
                 <input type="text" id="setup-last-name" class="input-field" placeholder="Last Name" required>
                 <input type="text" id="setup-preferred-name" class="input-field" placeholder="Preferred Name (optional)">
-                
+
                 <div id="consent-container" class="hidden" style="display: none; margin-top: 16px; gap: 8px; align-items: flex-start; text-align: left;">
                     <input type="checkbox" id="setup-consent" style="margin-top: 3px; cursor: pointer;">
-                    <label for="setup-consent" style="font-size: 12px; color: var(--text-muted); line-height: 1.4; cursor: pointer; user-select: none;">
+                    <label for="setup-consent" style="font-size: 12px; color: var(--text-muted); line-height: 1.4; cursor: pointer; user-select: none;" data-i18n="policy_consent_label">
                         I acknowledge that I have read the <a href="/privacy" target="_blank" id="footer-privacy-link" style="color: var(--primary); text-decoration: none;">Privacy Policy</a> and <a href="/cookies" target="_blank" id="footer-cookie-link" style="color: var(--primary); text-decoration: none;">Cookie Disclosure</a> and agree to their terms.
                     </label>
                 </div>
-                
-                <button type="submit" class="btn btn-primary" style="margin-top: 16px; width: 100%;">Complete Setup</button>
+
+                <button type="submit" class="btn btn-primary" style="margin-top: 16px; width: 100%;" data-i18n="btn_complete_setup">Complete Setup</button>
                 <div id="setup-msg" style="margin-top: 12px; font-size: 13px; text-align: center;"></div>
             </form>
         </div>
@@ -109,6 +109,31 @@
                 }
             })
             .catch(err => console.error("Failed to load policy links", err));
+
+        // Load translations and apply them dynamically on load
+        fetch('/api/i18n')
+            .then(res => res.json())
+            .then(bundle => {
+                // Apply translations to data-i18n tagged elements
+                document.querySelectorAll('[data-i18n]').forEach(el => {
+                    const key = el.getAttribute('data-i18n');
+                    if (bundle[key]) {
+                        // Keep anchor tags intact for privacy link
+                        if (key === "policy_consent_label") {
+                            el.innerHTML = bundle[key].replace("Privacy Policy", `<a href="/privacy" target="_blank" style="color: var(--primary); text-decoration: none;">Privacy Policy</a>`).replace("Cookie Disclosure", `<a href="/cookies" target="_blank" style="color: var(--primary); text-decoration: none;">Cookie Disclosure</a>`).replace("Politica de Cookie-uri", `<a href="/cookies" target="_blank" style="color: var(--primary); text-decoration: none;">Politica de Cookie-uri</a>`).replace("Politică de Confidențialitate", `<a href="/privacy" target="_blank" style="color: var(--primary); text-decoration: none;">Politică de Confidențialitate</a>`);
+                        } else {
+                            el.innerText = bundle[key];
+                        }
+                    }
+                });
+
+                // Apply placeholders
+                const fnInput = document.getElementById('setup-first-name');
+                if (fnInput && bundle.label_first_name) fnInput.placeholder = bundle.label_first_name;
+                const lnInput = document.getElementById('setup-last-name');
+                if (lnInput && bundle.label_last_name) lnInput.placeholder = bundle.label_last_name;
+            })
+            .catch(err => console.error("Failed to load i18n translations", err));
     </script>
 
     <div style="margin-top: 24px; padding-top: 12px; border-top: 1px solid rgba(255,255,255,0.06); text-align: center; font-size: 11px; display: flex; justify-content: center; gap: 12px; align-items: center; width: 100%; max-width: 400px; margin-left: auto; margin-right: auto;">

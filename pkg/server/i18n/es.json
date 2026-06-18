@@ -12,10 +12,33 @@
   "portal_register_desc": "¿No tiene una cuenta todavía? Regístrese aquí:",
   "btn_send_magic_link": "Enviar Enlace Mágico",
   "btn_register_account": "Registrar Cuenta",
+  "btn_login_with_email": "Iniciar Sesión con Correo",
   "label_email": "Dirección de Correo",
   "label_first_name": "Nombre",
   "label_last_name": "Apellido",
   "mfa_verify_title": "Verificación de Múltiples Factores (MFA)",
   "mfa_verify_desc": "Por favor ingrese el código de 6 dígitos de su aplicación autenticadora:",
-  "btn_verify_login": "Verificar e Iniciar Sesión"
+  "btn_verify_login": "Verificar e Iniciar Sesión",
+
+  "privacy_title": "Política de Privacidad",
+  "privacy_desc": "Esta Política de Privacidad describe cómo este gateway autohospedado Liferay Tunnel (lfr-tunneld) procesa sus datos.",
+  "privacy_sec1_title": "1. Información que Recopilamos y Procesamos",
+  "privacy_sec1_bullet1": "Direcciones IP: Procesadas estrictamente para enrutar paquetes y aplicar protecciones de seguridad contra abusos.",
+  "privacy_sec1_bullet2": "Direcciones de Correo: Procesadas para la verificación de cuentas, notificaciones de aprobación e inicios de sesión por enlace mágico.",
+  "privacy_sec1_bullet3": "Registros de Auditoría: Registra acciones administrativas, creaciones de tokens e infracciones de seguridad localmente en la base de datos.",
+  "privacy_sec2_title": "2. Seguridad y Almacenamiento de Datos",
+  "privacy_sec2_desc": "Los Tokens de Acceso Personal (PAT) se almacenan en el servidor mediante hashes criptográficos seguros SHA-256. Todos los datos se almacenan en una base de datos SQLite local y privada, y nunca se comparten, venden ni transmiten a servidores externos.",
+  "return_to_portal": "← Volver al Portal",
+
+  "cookie_title": "Divulgación de Cookies",
+  "cookie_desc": "Esta aplicación web utiliza exactamente una cookie para mantener su sesión activa.",
+  "cookie_sec1_title": "Cookies Estrictamente Necesarias",
+  "cookie_sec1_bullet1": "Nombre de Cookie: lfr_session",
+  "cookie_sec1_bullet2": "Tipo: Propias, HTTP-Only, Seguras, SameSite=Lax",
+  "cookie_sec1_bullet3": "Propósito: Esta cookie es strictly necesaria para mantenerlo conectado de manera segura en su sesión de portal. No contiene datos de seguimiento ni identificadores personales.",
+  "cookie_sec1_bullet4": "Consentimiento: Bajo el RGPD y la Directiva ePrivacy, las cookies de sesión estrictamente necesarias están exentas del requisito de mostrar carteles de consentimiento.",
+
+  "setup_title": "Complete Su Perfil",
+  "btn_complete_setup": "Completar Configuración",
+  "policy_consent_label": "Reconozco que he leído la Política de Privacidad y la Divulgación de Cookies y acepto sus términos."
 }

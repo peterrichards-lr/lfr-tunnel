@@ -12,6 +12,7 @@
   "portal_register_desc": "Ainda não tem uma conta? Registre-se aqui:",
   "btn_send_magic_link": "Enviar Link Mágico",
   "btn_register_account": "Registrar Conta",
+  "btn_login_with_email": "Entrar com E-mail",
   "label_email": "Endereço de E-mail",
   "label_first_name": "Nome",
   "label_last_name": "Sobrenome",
@@ -25,7 +26,7 @@
   "privacy_sec1_bullet1": "Endereços IP: Processados estritamente para rotear pacotes e impor proteções de segurança contra abusos.",
   "privacy_sec1_bullet2": "Endereços de E-mail: Processados para verificação de contas, notificações de aprovação e logins seguros por link mágico.",
   "privacy_sec1_bullet3": "Registros de Auditoria: Registra ações administrativas, criações de tokens e violações de segurança localmente no banco de dados.",
-  "privacy_sec2_title": "2. Segurança e Armazenamento de Dados",
+  "privacy_sec2_title": "2. Segurança e Armazenamento de Datos",
   "privacy_sec2_desc": "Os Tokens de Acesso Pessoal (PAT) são armazenados no servidor usando hashes criptográficos seguros SHA-256. Todos os dados são armazenados em um banco de dados SQLite local e privado, e nunca são compartilhados, vendidos ou transmitidos para servidores externos.",
   "return_to_portal": "← Voltar ao Portal",
 

@@ -12,6 +12,7 @@
   "portal_register_desc": "Haben Sie noch kein Konto? Registrieren Sie sich hier:",
   "btn_send_magic_link": "Magischen Link Senden",
   "btn_register_account": "Konto Registrieren",
+  "btn_login_with_email": "Mit E-Mail einloggen",
   "label_email": "E-Mail-Adresse",
   "label_first_name": "Vorname",
   "label_last_name": "Nachname",

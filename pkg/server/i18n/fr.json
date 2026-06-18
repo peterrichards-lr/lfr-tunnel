@@ -12,10 +12,33 @@
   "portal_register_desc": "Vous n'avez pas encore de compte ? Inscrivez-vous ici :",
   "btn_send_magic_link": "Envoyer le Lien Magique",
   "btn_register_account": "Créer un Compte",
+  "btn_login_with_email": "Se Connecter avec l'E-mail",
   "label_email": "Adresse E-mail",
   "label_first_name": "Prénom",
   "label_last_name": "Nom",
   "mfa_verify_title": "Vérification Multi-Facteurs (MFA)",
   "mfa_verify_desc": "Veuillez saisir le code à 6 chiffres de votre application d'authentification :",
-  "btn_verify_login": "Vérifier & Se Connecter"
+  "btn_verify_login": "Vérifier & Se Connecter",
+
+  "privacy_title": "Politique de Confidentialité",
+  "privacy_desc": "Cette politique de confidentialité décrit comment cette passerelle Liferay Tunnel (lfr-tunneld) autohébergée traite vos données.",
+  "privacy_sec1_title": "1. Informations que nous collectons et traitons",
+  "privacy_sec1_bullet1": "Adresses IP : Traitées strictement pour acheminer les paquets et appliquer les protections de sécurité anti-bannissement.",
+  "privacy_sec1_bullet2": "Adresses e-mail : Traitées pour la vérification des comptes, les notifications d'approbation et les connexions par lien magique.",
+  "privacy_sec1_bullet3": "Jurnaux d'audit : Enregistre les actions administratives, les créations de jetons et les violations de sécurité localement dans la base de données.",
+  "privacy_sec2_title": "2. Sécurité et stockage des données",
+  "privacy_sec2_desc": "Les jetons d'accès personnels (PAT) sont stockés sur le serveur à l'aide de hachages cryptographiques sécurisés SHA-256. Toutes les données sont stockées dans une base de date SQLite locale et privée, et ne sont jamais partagées, vendues ou transmises à des serveurs externes.",
+  "return_to_portal": "← Retour au Portail",
+
+  "cookie_title": "Divulgation des Cookies",
+  "cookie_desc": "Cette application web utilise exactement un cookie pour maintenir votre session.",
+  "cookie_sec1_title": "Cookies Strictement Nécessaires",
+  "cookie_sec1_bullet1": "Nom du Cookie : lfr_session",
+  "cookie_sec1_bullet2": "Type : Propriétaire, HTTP-Only, Sécurisé, SameSite=Lax",
+  "cookie_sec1_bullet3": "Objectif : Ce cookie est strictement nécessaire pour vous maintenir connecté en toute sécurité à votre session de portail. Il ne contient aucune donnée de suivi ni identifiant personnel.",
+  "cookie_sec1_bullet4": "Consentement : En vertu du RGPD et de la directive ePrivacy, les cookies de session strictement nécessaires sont exemptés de l'obligation d'afficher des bannières de consentement.",
+
+  "setup_title": "Complétez Votre Profil",
+  "btn_complete_setup": "Terminer la Configuration",
+  "policy_consent_label": "Je reconnais avoir lu la politique de confidentialité et la divulgation des cookies et j'accepte leurs conditions."
 }

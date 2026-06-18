@@ -12,6 +12,7 @@
   "portal_register_desc": "アカウントをお持ちでないですか？こちらから登録してください：",
   "btn_send_magic_link": "マジックリンクを送信",
   "btn_register_account": "アカウントを登録",
+  "btn_login_with_email": "メールでログイン",
   "label_email": "メールアドレス",
   "label_first_name": "名 (First Name)",
   "label_last_name": "姓 (Last Name)",
@@ -20,7 +21,7 @@
   "btn_verify_login": "検証してログイン",
 
   "privacy_title": "プライバシーポリシー",
-  "privacy_desc": "本プライバシーポリシーは、セルフホストされた Liferay Tunnel (lfr-tunneld) ゲートウェイがお客様のデータを処理する方法を説明するものです。",
+  "privacy_desc": "本プライバシーポリシーは、セルフホストされた Liferay Tunnel (lfr-tunneld) ゲートウェイがお客様의データを処理する方法を説明するものです。",
   "privacy_sec1_title": "1. 収集および処理する情報",
   "privacy_sec1_bullet1": "IPアドレス：パケットのルーティング、および自動アクセス禁止セキュリティの適用のためにのみ厳格に処理されます。",
   "privacy_sec1_bullet2": "メールアドレス：アカウント認証、承認通知、パスワードなしのマジックログインリンクのために処理されます。",

@@ -52,7 +52,7 @@
 
             <div class="divider" id="sso-divider">or</div>
 
-            <button class="btn" id="btn-show-email">Log In with Email</button>
+            <button class="btn" id="btn-show-email" data-i18n="btn_login_with_email">Login with Email</button>
             <button class="btn btn-outline" id="btn-show-register" style="margin-top: 8px;" data-i18n="btn_register_account">Create Account</button>
             
             <form id="email-form" class="hidden" style="margin-top: 16px;">
@@ -71,14 +71,14 @@
                 <p style="font-size: 13px; color: var(--text-muted); margin-bottom: 12px; line-height: 1.5; text-align: left;" data-i18n="mfa_verify_desc">Your account is protected with Multi-Factor Authentication. Please enter the 6-digit code from your authenticator app to complete your login:</p>
                 <input type="text" id="mfa-code-input" class="input-field" placeholder="123456" pattern="[0-9]{6}" maxlength="6" inputmode="numeric" required style="letter-spacing: 8px; text-align: center; font-size: 18px; font-weight: bold;">
                 <input type="hidden" id="mfa-temp-token">
-                <button type="submit" class="btn btn-primary" id="btn-verify-mfa" style="margin-top: 12px;" data-i18n="btn_verify_login">Verify & Log In</button>
+                <button type="submit" class="btn btn-primary" id="btn-verify-mfa" style="margin-top: 12px;" data-i18n="btn_verify_login">Verify & Login</button>
                 <div id="mfa-msg" style="margin-top: 12px; font-size: 13px; color: var(--danger);"></div>
             </form>
 
             <div style="margin-top: 24px; padding-top: 12px; border-top: 1px solid rgba(255,255,255,0.06); text-align: center; font-size: 11px; display: flex; justify-content: center; gap: 12px; align-items: center;">
-                <a href="/privacy" id="footer-privacy-link" style="color: var(--text-muted); text-decoration: none; transition: 0.2s;" onmouseover="this.style.color='var(--primary)'" onmouseout="this.style.color='var(--text-muted)'">Privacy Policy</a>
+                <a href="/privacy" id="footer-privacy-link" style="color: var(--text-muted); text-decoration: none; transition: 0.2s;" onmouseover="this.style.color='var(--primary)'" onmouseout="this.style.color='var(--text-muted)'" data-i18n="privacy_title">Privacy Policy</a>
                 <span style="color: var(--text-muted); opacity: 0.5;">•</span>
-                <a href="/cookies" id="footer-cookie-link" style="color: var(--text-muted); text-decoration: none; transition: 0.2s;" onmouseover="this.style.color='var(--primary)'" onmouseout="this.style.color='var(--text-muted)'">Cookie Disclosure</a>
+                <a href="/cookies" id="footer-cookie-link" style="color: var(--text-muted); text-decoration: none; transition: 0.2s;" onmouseover="this.style.color='var(--primary)'" onmouseout="this.style.color='var(--text-muted)'" data-i18n="cookie_title">Cookie Disclosure</a>
             </div>
         </div>
     </div>
@@ -108,7 +108,7 @@
             <div class="sidebar-spacer"></div>
             
             <div id="nav-account" class="nav-item" onclick="showTab('account')">Account Settings</div>
-            <div class="nav-item" onclick="logout()">Log Out</div>
+            <div class="nav-item" onclick="logout()">Logout</div>
         </div>
         
         <div class="main-content" style="position: relative; padding-top: 60px;">

@@ -12,6 +12,7 @@
   "portal_register_desc": "Nu ai un cont încă? Înregistrează-te aici:",
   "btn_send_magic_link": "Trimite Link-ul Magic",
   "btn_register_account": "Înregistrează Contul",
+  "btn_login_with_email": "Conectează-te cu E-mail",
   "label_email": "Adresă de E-mail",
   "label_first_name": "Prenume",
   "label_last_name": "Nume",

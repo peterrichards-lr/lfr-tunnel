@@ -12,6 +12,7 @@
   "portal_register_desc": "还没有账户？在此注册：",
   "btn_send_magic_link": "发送魔法链接",
   "btn_register_account": "注册账户",
+  "btn_login_with_email": "使用电子邮件登录",
   "label_email": "电子邮件地址",
   "label_first_name": "名字 (First Name)",
   "label_last_name": "姓氏 (Last Name)",

@@ -148,8 +148,23 @@ The solution will consist of:
 - [x] Create comprehensive SSO/OIDC cloud integration guide (Azure, Google Cloud, AWS) with local mock configuration instructions.
 - [x] Bump version to v1.7.0 in pkg/config/version.go
 - [x] Commit, tag v1.7.0, and push to trigger automated GitHub Release
+- [x] Bump version to v1.7.2, integrate Homebrew/Scoop, and create Getting Started Guide
 - [x] Deploy automated dual-stack (IPv4 & IPv6) Cloudflare Dynamic DNS updater service and timer on the VPS.
 - [x] Implement passive and active service self-healing (Nginx auto-restart systemd overrides and gateway watchdog monitor) on the VPS.
+
+## SentinelOne False Positive Mitigation
+- [x] Standardise canonical install path to ~/bin/lfr-tunnel across install.sh, install.ps1, README.md and docs.
+- [x] Add -trimpath to all go build commands (Makefile + release.yml) to strip embedded local filesystem paths from binaries.
+- [x] Add GitHub Artifact Attestations (actions/attest-build-provenance@v2) to release.yml for free supply-chain provenance tied to GitHub OIDC.
+- [x] Create SECURITY.md documenting binary signing status, EDR compatibility, package manager trust signals, and canonical exclusion paths for admins.
+- [x] Add Homebrew Tap support (peterrichards-lr/homebrew-tap) — Formula/lfr-tunnel.rb auto-updated on each release by scripts/update-tap-bucket.sh.
+- [x] Add Scoop Bucket support (peterrichards-lr/scoop-bucket) — bucket/lfr-tunnel.json auto-updated on each release by scripts/update-tap-bucket.sh.
+- [x] Update release.yml with Update Homebrew Tap & Scoop Bucket step (requires TAP_BUCKET_PAT secret).
+- [x] Update README.md and docs/liferay-se-guide.md to lead with Homebrew/Scoop as recommended install methods.
+- [x] Add TAP_BUCKET_PAT secret to lfr-tunnel repo (GitHub PAT, contents:write on homebrew-tap and scoop-bucket).
+- [ ] Apply to SignPath Foundation for free Windows Authenticode signing (https://signpath.org).
+- [ ] Submit official release binary hashes to SentinelOne false-positive review portal.
+- [ ] Ask SentinelOne admin to configure path exclusions per SECURITY.md (Homebrew + direct-install paths).
 
 ## Bug Fixes
 - [x] Fix unit test TempDir cleanup race by sleeping 50ms before stopping the server

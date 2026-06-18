@@ -336,12 +336,15 @@ function toggleTheme() {
                         const titleText = (!userVer) ? `Get started with the CLI` : `Update Available (v${latestVer})`;
                         const subText = (!userVer) ? `Run this command in your terminal to install the client for ${os}.` : `You are using an older client (${userVer}). Please update to the latest release for ${os}.`;
 
-                        let installCmd = '';
+                        let recommendedCmd = '';
+                        let fallbackCmd = '';
                         let binaryName = `lfr-tunnel${dlSuffix}`;
                         if (os === 'macOS' || os === 'Linux') {
-                            installCmd = `curl -sSfL ${rawUrl}/scripts/install.sh | sh`;
+                            recommendedCmd = `brew tap peterrichards-lr/tap && brew install lfr-tunnel`;
+                            fallbackCmd = `curl -sSfL ${rawUrl}/scripts/install.sh | sh`;
                         } else if (os === 'Windows') {
-                            installCmd = `iwr ${rawUrl}/scripts/install.ps1 | iex`;
+                            recommendedCmd = `scoop bucket add peterrichards-lr https://github.com/peterrichards-lr/scoop-bucket && scoop install lfr-tunnel`;
+                            fallbackCmd = `iwr ${rawUrl}/scripts/install.ps1 | iex`;
                         }
 
                         if (os === 'Unknown OS') {
@@ -357,10 +360,19 @@ function toggleTheme() {
                                 <div style="flex-grow: 1; overflow: hidden; padding-right: 20px;">
                                     <strong>${titleText}</strong> <br/>
                                     <span style="font-size: 0.9rem; color: var(--text-muted);">${subText}</span>
-                                    <div style="margin-top: 12px; margin-bottom: 8px; position: relative; background: #0d1117; color: #e6edf3; border-radius: 6px; border: 1px solid rgba(255,255,255,0.1); padding: 12px 40px 12px 16px; font-family: ui-monospace, SFMono-Regular, Consolas, monospace; font-size: 0.85rem; overflow-x: auto;">
-                                        <span style="user-select: all;">${installCmd}</span>
-                                        <button onclick="navigator.clipboard.writeText('${installCmd}'); this.innerHTML='<span style=\\'font-size:12px;\\'>✓</span>'; setTimeout(() => this.innerHTML='📋', 2000);" style="position: absolute; top: 6px; right: 6px; background: transparent; border: 1px solid rgba(255,255,255,0.2); color: #8b949e; border-radius: 4px; width: 26px; height: 26px; display: flex; align-items: center; justify-content: center; cursor: pointer; transition: 0.2s;" onmouseover="this.style.color='#c9d1d9'; this.style.borderColor='rgba(255,255,255,0.4)';" onmouseout="this.style.color='#8b949e'; this.style.borderColor='rgba(255,255,255,0.2)';">📋</button>
+                                    
+                                    <div style="margin-top: 10px; font-size: 0.8rem; font-weight: bold; color: var(--text);">🚀 Recommended (Package Manager):</div>
+                                    <div style="margin-top: 4px; margin-bottom: 8px; position: relative; background: #0d1117; color: #e6edf3; border-radius: 6px; border: 1px solid rgba(255,255,255,0.1); padding: 10px 40px 10px 12px; font-family: ui-monospace, SFMono-Regular, Consolas, monospace; font-size: 0.8rem; overflow-x: auto;">
+                                        <span style="user-select: all;">${recommendedCmd}</span>
+                                        <button onclick="navigator.clipboard.writeText('${recommendedCmd}'); this.innerHTML='<span style=\\'font-size:12px;\\'>✓</span>'; setTimeout(() => this.innerHTML='📋', 2000);" style="position: absolute; top: 6px; right: 6px; background: transparent; border: 1px solid rgba(255,255,255,0.2); color: #8b949e; border-radius: 4px; width: 22px; height: 22px; display: flex; align-items: center; justify-content: center; cursor: pointer; transition: 0.2s;" onmouseover="this.style.color='#c9d1d9'; this.style.borderColor='rgba(255,255,255,0.4)';" onmouseout="this.style.color='#8b949e'; this.style.borderColor='rgba(255,255,255,0.2)';">📋</button>
                                     </div>
+
+                                    <div style="font-size: 0.8rem; font-weight: bold; color: var(--text-muted);">🛠️ Direct Script Fallback:</div>
+                                    <div style="margin-top: 4px; margin-bottom: 8px; position: relative; background: #0d1117; color: #e6edf3; border-radius: 6px; border: 1px solid rgba(255,255,255,0.1); padding: 10px 40px 10px 12px; font-family: ui-monospace, SFMono-Regular, Consolas, monospace; font-size: 0.8rem; overflow-x: auto;">
+                                        <span style="user-select: all;">${fallbackCmd}</span>
+                                        <button onclick="navigator.clipboard.writeText('${fallbackCmd}'); this.innerHTML='<span style=\\'font-size:12px;\\'>✓</span>'; setTimeout(() => this.innerHTML='📋', 2000);" style="position: absolute; top: 6px; right: 6px; background: transparent; border: 1px solid rgba(255,255,255,0.2); color: #8b949e; border-radius: 4px; width: 22px; height: 22px; display: flex; align-items: center; justify-content: center; cursor: pointer; transition: 0.2s;" onmouseover="this.style.color='#c9d1d9'; this.style.borderColor='rgba(255,255,255,0.4)';" onmouseout="this.style.color='#8b949e'; this.style.borderColor='rgba(255,255,255,0.2)';">📋</button>
+                                    </div>
+
                                     <div style="font-size: 0.75rem; color: var(--text-muted); font-family: monospace;">SHA256: <span id="${hashSpanId}">loading...</span></div>
                                 </div>
                                 <div style="display: flex; flex-direction: column; gap: 10px; align-items: stretch; min-width: 140px;">

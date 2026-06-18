@@ -23,14 +23,34 @@ Your tunnel will be reachable at:
 
 ## Step 1: Install the Client
 
-Run the one-liner for your platform. The installer fetches the latest release binary from GitHub and places it on your `PATH`.
+### macOS — Homebrew (Recommended)
 
-**macOS / Linux (Bash)**:
+```bash
+brew tap peterrichards-lr/tap
+brew install lfr-tunnel
+```
+
+Homebrew independently verifies the SHA-256 checksum and removes the macOS quarantine flag automatically.
+
+### Windows — Scoop (Recommended)
+
+```powershell
+scoop bucket add peterrichards-lr https://github.com/peterrichards-lr/scoop-bucket
+scoop install lfr-tunnel
+```
+
+### macOS / Linux — Direct Download (Fallback)
+
+Use this on Linux, or on macOS if Homebrew is not available:
+
 ```bash
 curl -sSfL https://raw.githubusercontent.com/peterrichards-lr/lfr-tunnel/master/scripts/install.sh | sh
 ```
 
-**Windows (PowerShell)**:
+### Windows — Direct Download (Fallback)
+
+Use this if Scoop is not available:
+
 ```powershell
 iwr https://raw.githubusercontent.com/peterrichards-lr/lfr-tunnel/master/scripts/install.ps1 | iex
 ```

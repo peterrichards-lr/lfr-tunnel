@@ -19,19 +19,29 @@ esac
 
 BINARY="lfr-tunnel-${OS}-${ARCH}"
 URL="https://github.com/peterrichards-lr/lfr-tunnel/releases/latest/download/${BINARY}"
+INSTALL_DIR="${HOME}/bin"
+INSTALL_PATH="${INSTALL_DIR}/lfr-tunnel"
 
 echo "Downloading lfr-tunnel for ${OS}-${ARCH}..."
-curl -sSfL "$URL" -o lfr-tunnel
+curl -sSfL "$URL" -o /tmp/lfr-tunnel-download
+chmod +x /tmp/lfr-tunnel-download
 
-chmod +x lfr-tunnel
+# Always install to ~/bin — the single canonical location
+mkdir -p "$INSTALL_DIR"
+mv /tmp/lfr-tunnel-download "$INSTALL_PATH"
+echo "lfr-tunnel installed to ${INSTALL_PATH}"
 
-# Install to /usr/local/bin if directory is writeable, otherwise to ./bin or warn
-if [ -w /usr/local/bin ]; then
-  mv lfr-tunnel /usr/local/bin/lfr-tunnel
-  echo "lfr-tunnel installed successfully to /usr/local/bin/lfr-tunnel"
-else
-  mkdir -p ./bin
-  mv lfr-tunnel ./bin/lfr-tunnel
-  echo "lfr-tunnel installed successfully to ./bin/lfr-tunnel"
-  echo "Please add $(pwd)/bin to your PATH or copy the binary to a directory in your PATH (e.g. /usr/local/bin)."
-fi
+# Advise on PATH if ~/bin is not already present
+case ":${PATH}:" in
+  *":${INSTALL_DIR}:"*)
+    ;;
+  *)
+    echo ""
+    echo "  NOTE: ${INSTALL_DIR} is not yet in your PATH."
+    echo "  Add the following line to your shell profile (~/.zshrc, ~/.bashrc, etc.):"
+    echo ""
+    echo '    export PATH="$HOME/bin:$PATH"'
+    echo ""
+    echo "  Then run: source ~/.zshrc  (or open a new terminal)"
+    ;;
+esac

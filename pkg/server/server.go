@@ -417,6 +417,10 @@ func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 			s.handleAdminVerify(w, r)
 			return
 		}
+		if r.Method == http.MethodPost && r.URL.Path == "/api/auth/mfa-verify" {
+			s.handleMFAVerify(w, r)
+			return
+		}
 		if r.Method == http.MethodPost && r.URL.Path == "/api/auth/logout" {
 			s.handleAdminLogout(w, r)
 			return
@@ -442,6 +446,21 @@ func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 
 		if r.Method == http.MethodPut && r.URL.Path == "/api/me" {
 			s.handleUpdateMe(w, r)
+			return
+		}
+
+		if r.Method == http.MethodGet && r.URL.Path == "/api/mfa/setup" {
+			s.handleMFASetup(w, r)
+			return
+		}
+
+		if r.Method == http.MethodPost && r.URL.Path == "/api/mfa/enable" {
+			s.handleMFAEnable(w, r)
+			return
+		}
+
+		if r.Method == http.MethodPost && r.URL.Path == "/api/mfa/disable" {
+			s.handleMFADisable(w, r)
 			return
 		}
 
@@ -1613,6 +1632,7 @@ func (s *Server) handleAdminVerify(w http.ResponseWriter, r *http.Request) {
 	clientIP := getClientIP(r)
 
 	var previousLoginAt *time.Time
+	var user *db.User
 	if s.db != nil {
 		u, err := s.db.GetUserByEmail(email)
 		if (err != nil || u == nil) && s.cfg.Owner.UserID != "" && strings.EqualFold(email, s.cfg.Owner.UserID) {
@@ -1626,17 +1646,38 @@ func (s *Server) handleAdminVerify(w http.ResponseWriter, r *http.Request) {
 			}
 			_ = s.db.CreateUser(u)
 		}
+		user = u
 		if u != nil {
 			if u.LastLoginAt != nil {
 				// Capture a copy of the previous login time
 				prev := *u.LastLoginAt
 				previousLoginAt = &prev
 			}
-			now := time.Now().UTC()
-			u.LastLoginAt = &now
-			u.LastLoginIP = clientIP
-			_ = s.db.UpdateUser(u)
 		}
+	}
+
+	// MFA INTERCEPT: If the user has MFA enabled, do not establish the session yet.
+	// Respond with status="mfa_required" and a short-lived temp_token.
+	if user != nil && user.TOTPEnabled {
+		tempToken, _ := generateSecureToken()
+		s.portalMap.Store("pre_auth_"+tempToken, PortalSessionData{
+			Email:     email,
+			ClientIP:  clientIP,
+			ExpiresAt: time.Now().Add(5 * time.Minute),
+		})
+		respondJSON(w, http.StatusOK, map[string]interface{}{
+			"status":     "mfa_required",
+			"temp_token": tempToken,
+		})
+		return
+	}
+
+	// Standard login (MFA is not enabled)
+	if s.db != nil && user != nil {
+		now := time.Now().UTC()
+		user.LastLoginAt = &now
+		user.LastLoginIP = clientIP
+		_ = s.db.UpdateUser(user)
 	}
 
 	killedPreviousSession := false
@@ -1930,8 +1971,9 @@ func (s *Server) handleAdminPatchUser(w http.ResponseWriter, r *http.Request, ac
 	}
 
 	var req struct {
-		Role   *string `json:"role"`
-		Status *string `json:"status"`
+		Role     *string `json:"role"`
+		Status   *string `json:"status"`
+		ResetMFA *bool   `json:"reset_mfa"`
 	}
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 		http.Error(w, `{"error":"Invalid request body"}`, http.StatusBadRequest)
@@ -1988,6 +2030,12 @@ func (s *Server) handleAdminPatchUser(w http.ResponseWriter, r *http.Request, ac
 		user.Status = *req.Status
 	}
 
+	if req.ResetMFA != nil && *req.ResetMFA {
+		details["mfa_reset"] = true
+		user.TOTPSecret = ""
+		user.TOTPEnabled = false
+	}
+
 	if err := s.db.UpdateUser(user); err != nil {
 		http.Error(w, `{"error":"Failed to update user"}`, http.StatusInternalServerError)
 		return
@@ -1999,6 +2047,8 @@ func (s *Server) handleAdminPatchUser(w http.ResponseWriter, r *http.Request, ac
 		action = "user.role_changed"
 	} else if req.Status != nil {
 		action = "user.status_changed"
+	} else if req.ResetMFA != nil && *req.ResetMFA {
+		action = "user.mfa_reset"
 	}
 	s.writeAudit(actor, action, "user", user.Email, string(detailsBytes), r)
 

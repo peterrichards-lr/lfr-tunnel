@@ -120,22 +120,49 @@ The gateway will respond with your **Personal Access Token (PAT)** (e.g., `lfr_p
 
 ---
 
-## Step 3: Store Your Token
+## Step 3: Authenticate and Store Your Token
 
-To make using `lfr-tunnel` seamless, store your PAT in the default configuration path. The client will automatically load it from this file on every run, so you won't need to specify it on the command line.
+To make using `lfr-tunnel` seamless, the client CLI looks for a stored PAT in your home directory (`~/.lfr-tunnel/token` or `%USERPROFILE%\.lfr-tunnel\token`). Once saved, the client will automatically load it on every run without needing any `-token` flags.
 
-### macOS / Linux
+There are two ways to generate, claim, and save your token:
+
+### Option A: Automatic Browser Login (Highly Recommended)
+
+The client includes an interactive **Magic Handoff** flow that automatically completes token generation and saves it to your configuration directory with zero manual copying:
+
+1. In your terminal, run the login command:
+   ```bash
+   lfr-tunnel login
+   ```
+2. Your default web browser will open to the gateway's **User Portal**.
+3. Authenticate on the portal (using your approved email and magic link).
+4. Upon logging in, the portal will securely hand off a newly generated token back to your local client terminal session.
+5. The CLI saves the token automatically:
+   ```
+   ✅ Successfully authenticated! Your token has been saved securely to ~/.lfr-tunnel/token
+   ```
+
+---
+
+### Option B: Manual Clipboard Configuration
+
+If you claimed your token manually via `curl` or generated one in the User Portal web interface, you can save it to the default path yourself:
+
+#### macOS / Linux
 ```bash
 mkdir -p ~/.lfr-tunnel
 echo "lfr_pat_your-token-here" > ~/.lfr-tunnel/token
 chmod 600 ~/.lfr-tunnel/token
 ```
 
-### Windows (PowerShell)
+#### Windows (PowerShell)
 ```powershell
 New-Item -ItemType Directory -Force -Path "$Home\.lfr-tunnel"
 Set-Content -Path "$Home\.lfr-tunnel\token" -Value "lfr_pat_your-token-here"
 ```
+
+> [!CAUTION]
+> **Never commit your PAT to source control.** Storing the token in `~/.lfr-tunnel/token` ensures it is kept completely outside your development workspace.
 
 ---
 

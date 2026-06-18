@@ -246,9 +246,71 @@ These endpoints require an administrative session or an administrative token.
 
 ---
 
-## 8. Implementation & Transition Plan
+## 8. Implementation & Transition Status
 
-1.  **Step 1: Database Setup**: Add SQLite database containing users (with status tracking) and tokens.
-2.  **Step 2: SMTP Integration**: Implement standard `net/smtp` client connection code inside `pkg/server/mail.go` to handle admin alerts and developer token approvals.
-3.  **Step 3: Registration and Approval API**: Implement `/register` forms, approval validation endpoint (`/admin/approve`), and email notification triggers.
-4.  **Step 4: SSO Endpoints (Future Phase)**: Implement OIDC handshake `/auth/login` and `/auth/callback` to automate token acquisition once Liferay SSO client registration is complete.
+1.  **[x] Database Integration**: Completed SQLite database system containing users (with registration states), audit logs, and tokens.
+2.  **[x] SMTP Integration**: Completed outbound mail sender logic (`pkg/mail/mail.go`) to handle registration notifications, magic links, and approval emails.
+3.  **[x] Registration and Approval API**: Completed `/register-request` flow, verification links, approval validation endpoints, and token claiming.
+4.  **[x] SSO Endpoints**: Completed fully configuration-driven OpenID Connect (OIDC) login and callback routing with PKCE to support Google, Keycloak, or Liferay OAuth2.
+
+---
+
+## 9. Email Domain Whitelisting & Secure Registration Filters
+
+To prevent open-relay abuse, spam registration, and credential stuffing on public-facing gateways, `lfr-tunneld` implements strict, multi-layered email validation using domain whitelists and denylists.
+
+### Configuration (`server-config.yaml`)
+```yaml
+allowed_email_domains:
+  - "liferay.com"
+  - "lfr-demo.se"
+  - "lfr-demo.online"
+```
+
+### Enforcement Logic & Sequence
+When a user attempts to self-register via `/api/register-request` or log in through an OIDC Single Sign-On (SSO) provider:
+
+1. **Domain Extraction**: The gateway extracts the domain portion of the email address (e.g., `user@domain.com` ──► `domain.com`).
+2. **Whitelist Validation**: The gateway checks the domain against the `allowed_email_domains` slice.
+3. **Strict Rejection**: If the domain is not present in the whitelist:
+   * **Self-Registration**: The request is instantly blocked with a `400 Bad Request`.
+   * **OIDC SSO Provider**: If a user successfully logs in via Google/Keycloak but their email domain is not whitelisted, the gateway denies session creation and returns an unauthorized error.
+4. **Anti-Enumeration Protections**: To prevent malicious actors from guessing whitelisted user accounts or email lists, the gateway fails silently or returns identical neutral responses for verification/login attempts on un-whitelisted domains, preventing user enumeration attacks.
+
+---
+
+## 10. Passwordless Magic Link Authentication
+
+The Cloud User Portal and the Administration Dashboard discard static passwords entirely, instead utilizing a state-of-the-art **Passwordless Magic Link** authentication model. This eliminates password-guessing attacks, brute-force vectors, and database credential-leak risks.
+
+### The Magic Link Lifecycle
+
+```
+[ User Portal Login ]
+        │
+        │ 1. Enter email address (e.g. user@liferay.com)
+        ▼
+[ Gateway (lfr-tunneld) ]
+        │
+        │ 2. Verify email domain is whitelisted
+        │ 3. Generate secure, cryptographically random login token
+        │ 4. Persist token hash to DB with short-lived expiration (e.g. 10m)
+        ▼
+[ Outbound Email (SMTP) ] ──► Transactional Email delivered to Inbox
+                                  │
+                                  ├─► Click "Verify & Log In" Link
+                                  │
+                                  └─► Click "Report Abuse" Link
+```
+
+### Key Security & Concurrency Properties
+
+* **Single-Use Invalidation**: A magic link token can only be consumed once. The moment a user clicks the login link and a session is validated, the token is instantly flagged as consumed and deleted or invalidated in the database.
+* **Single-Session Concurrency**: To prevent token sharing and protect administrative control channels, logging into the portal from a new browser/device automatically revokes all other active sessions for that specific user.
+* **Anti-Abuse Reporting (Zero-Day Protection)**:
+  * Every magic link transactional email includes a prominent **"Report Abuse"** link at the footer.
+  * If a user receives a magic link they did not request (indicating someone is attempting to brute-force or guess their account), clicking the link immediately:
+    1. Revokes the associated login token instantly.
+    2. Writes a critical `portal.magic_link_abuse_reported` event to the server's persistent audit log.
+    3. Triggers administrative alerts with the origin IP address to blacklist or ban the attacker.
+* **Sliding Session Expiration**: Active portal sessions are validated against a sliding window (e.g., 30 minutes). If inactive, the session expires naturally, requiring a fresh login.

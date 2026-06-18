@@ -302,6 +302,16 @@ function toggleTheme() {
                         const key = el.getAttribute('data-i18n');
                         if (bundle[key]) el.innerText = bundle[key];
                     });
+
+                    // Dynamically update the footer privacy/cookie links with ?lang=...
+                    const pl = document.getElementById('footer-privacy-link');
+                    if (pl && pl.getAttribute('href').startsWith('/privacy')) {
+                        pl.href = '/privacy?lang=' + encodeURIComponent(resolvedLang);
+                    }
+                    const cl = document.getElementById('footer-cookie-link');
+                    if (cl && cl.getAttribute('href').startsWith('/cookies')) {
+                        cl.href = '/cookies?lang=' + encodeURIComponent(resolvedLang);
+                    }
                 }
             } catch (e) {
                 console.error("Failed to auto-detect and translate portal language", e);
@@ -1703,6 +1713,16 @@ function toggleTheme() {
                             el.innerText = bundle[key];
                         }
                     });
+
+                    // Dynamically update the footer privacy/cookie links with ?lang=...
+                    const pl = document.getElementById('footer-privacy-link');
+                    if (pl && pl.getAttribute('href').startsWith('/privacy')) {
+                        pl.href = '/privacy?lang=' + encodeURIComponent(lang);
+                    }
+                    const cl = document.getElementById('footer-cookie-link');
+                    if (cl && cl.getAttribute('href').startsWith('/cookies')) {
+                        cl.href = '/cookies?lang=' + encodeURIComponent(lang);
+                    }
                 }
             } catch (e) {
                 console.error("Failed to load language", e);

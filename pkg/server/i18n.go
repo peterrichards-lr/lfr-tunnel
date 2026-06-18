@@ -61,9 +61,25 @@ func (s *Server) GetTranslation(lang, key string) string {
 	return key
 }
 
-// ResolveLocale parses incoming HTTP request headers to extract the best matching locale.
+// ResolveLocale parses incoming HTTP request headers or query parameters to extract the best matching locale.
 func (s *Server) ResolveLocale(r *http.Request) string {
-	// 1. Check Accept-Language header
+	supported := map[string]bool{
+		"en": true, "es": true, "fr": true, "de": true, "pt": true, "ko": true, "ja": true, "zh": true, "ro": true,
+	}
+
+	// 1. Check explicit query parameter first (e.g. ?lang=ro)
+	langQuery := r.URL.Query().Get("lang")
+	if langQuery != "" {
+		langQuery = strings.ToLower(strings.TrimSpace(langQuery))
+		if len(langQuery) > 2 {
+			langQuery = langQuery[:2]
+		}
+		if supported[langQuery] {
+			return langQuery
+		}
+	}
+
+	// 2. Check Accept-Language header
 	acceptLang := r.Header.Get("Accept-Language")
 	if acceptLang == "" {
 		return "en"
@@ -71,9 +87,6 @@ func (s *Server) ResolveLocale(r *http.Request) string {
 
 	// Simple parser: e.g. "fr-CH, fr;q=0.9, en;q=0.8"
 	parts := strings.Split(acceptLang, ",")
-	supported := map[string]bool{
-		"en": true, "es": true, "fr": true, "de": true, "pt": true, "ko": true, "ja": true, "zh": true, "ro": true,
-	}
 
 	for _, part := range parts {
 		subparts := strings.Split(strings.TrimSpace(part), ";")

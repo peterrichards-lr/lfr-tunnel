@@ -114,13 +114,28 @@
         fetch('/api/i18n')
             .then(res => res.json())
             .then(bundle => {
+                // Deduce resolved language by scanning typical strings
+                let resolvedLang = "en";
+                if (bundle.portal_welcome === "Bienvenido") resolvedLang = "es";
+                else if (bundle.portal_welcome === "Bienvenue") resolvedLang = "fr";
+                else if (bundle.portal_welcome === "Willkommen") resolvedLang = "de";
+                else if (bundle.portal_welcome === "Bem-vindo") resolvedLang = "pt";
+                else if (bundle.portal_welcome === "환영합니다") resolvedLang = "ko";
+                else if (bundle.portal_welcome === "ようこそ") resolvedLang = "ja";
+                else if (bundle.portal_welcome === "欢迎") resolvedLang = "zh";
+                else if (bundle.portal_welcome === "Bine ai venit") resolvedLang = "ro";
+
                 // Apply translations to data-i18n tagged elements
                 document.querySelectorAll('[data-i18n]').forEach(el => {
                     const key = el.getAttribute('data-i18n');
                     if (bundle[key]) {
-                        // Keep anchor tags intact for privacy link
+                        // Keep anchor tags intact for privacy link with active language parameter
                         if (key === "policy_consent_label") {
-                            el.innerHTML = bundle[key].replace("Privacy Policy", `<a href="/privacy" target="_blank" style="color: var(--primary); text-decoration: none;">Privacy Policy</a>`).replace("Cookie Disclosure", `<a href="/cookies" target="_blank" style="color: var(--primary); text-decoration: none;">Cookie Disclosure</a>`).replace("Politica de Cookie-uri", `<a href="/cookies" target="_blank" style="color: var(--primary); text-decoration: none;">Politica de Cookie-uri</a>`).replace("Politică de Confidențialitate", `<a href="/privacy" target="_blank" style="color: var(--primary); text-decoration: none;">Politică de Confidențialitate</a>`);
+                            el.innerHTML = bundle[key]
+                                .replace("Privacy Policy", `<a href="/privacy?lang=${resolvedLang}" target="_blank" style="color: var(--primary); text-decoration: none;">Privacy Policy</a>`)
+                                .replace("Cookie Disclosure", `<a href="/cookies?lang=${resolvedLang}" target="_blank" style="color: var(--primary); text-decoration: none;">Cookie Disclosure</a>`)
+                                .replace("Politica de Cookie-uri", `<a href="/cookies?lang=${resolvedLang}" target="_blank" style="color: var(--primary); text-decoration: none;">Politica de Cookie-uri</a>`)
+                                .replace("Politică de Confidențialitate", `<a href="/privacy?lang=${resolvedLang}" target="_blank" style="color: var(--primary); text-decoration: none;">Politică de Confidențialitate</a>`);
                         } else {
                             el.innerText = bundle[key];
                         }
@@ -132,6 +147,16 @@
                 if (fnInput && bundle.label_first_name) fnInput.placeholder = bundle.label_first_name;
                 const lnInput = document.getElementById('setup-last-name');
                 if (lnInput && bundle.label_last_name) lnInput.placeholder = bundle.label_last_name;
+
+                // Update the bottom footer links with active language parameter
+                const pl = document.getElementById('footer-privacy-link');
+                if (pl && pl.getAttribute('href').startsWith('/privacy')) {
+                    pl.href = '/privacy?lang=' + encodeURIComponent(resolvedLang);
+                }
+                const cl = document.getElementById('footer-cookie-link');
+                if (cl && cl.getAttribute('href').startsWith('/cookies')) {
+                    cl.href = '/cookies?lang=' + encodeURIComponent(resolvedLang);
+                }
             })
             .catch(err => console.error("Failed to load i18n translations", err));
     </script>

@@ -321,14 +321,23 @@ sudo chmod 700 /etc/lfr-tunneld
 sudo chmod 600 /etc/lfr-tunneld/server-config.yaml
 ```
 
-### 4.4. Local Postfix Email Relay (TLS Verification)
-If you are running a local Postfix daemon to send emails, you must securely configure Postfix to present your Let's Encrypt certificates. If Postfix uses a self-signed certificate, the Go gateway will securely reject the `STARTTLS` handshake.
+### 4.4. Local Postfix Email Relay (TLS Verification & rDNS Alignment)
+If you are running a local Postfix daemon to send emails, you must securely configure Postfix to present your Let's Encrypt certificates and align its HELO SMTP banner (`myhostname`) with your public IP's PTR (reverse DNS) record to prevent major mail hosts (like Google or Microsoft) from flagging outbound notifications as spam/forgery.
 
-To bind the certificates to Postfix and allow relaying from the domain's resolved IP, run the following:
+To align the banner, bind the certificates to Postfix, and allow relaying from the domain's resolved IP, run the following:
 ```bash
+# 1. Align SMTP HELO Banner with your public reverse DNS (PTR) record
+sudo postconf -e "myhostname = tunnel.yourdomain.com"
+sudo postconf -e "myorigin = yourdomain.com"
+
+# 2. Configure Postfix to present your secure Let's Encrypt SSL certificates
 sudo postconf -e "smtpd_tls_cert_file=/etc/letsencrypt/live/yourdomain.com/fullchain.pem"
 sudo postconf -e "smtpd_tls_key_file=/etc/letsencrypt/live/yourdomain.com/privkey.pem"
+
+# 3. Allow secure relaying from localhost and your VPS external IPs
 sudo postconf -e "mynetworks = 127.0.0.0/8 [::ffff:127.0.0.0]/104 [::1]/128 YOUR_VPS_PUBLIC_IPV4 YOUR_VPS_PUBLIC_IPV6"
+
+# 4. Restart Postfix to apply all updates
 sudo systemctl restart postfix
 ```
 

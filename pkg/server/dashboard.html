@@ -33,6 +33,7 @@
         <div class="glass login-card" style="position: relative;">
             <div style="position: absolute; top: 16px; right: 16px; display: flex; align-items: center; gap: 4px;">
                 <select id="portal-language-selector" style="background: transparent; border: none; color: var(--text-muted); font-size: 11px; cursor: pointer; outline: none; padding: 2px; font-weight: 500;" onchange="changePortalLanguage(this.value)">
+                    <option value="ar">🇵🇸 AR</option>
                     <option value="de">🇩🇪 DE</option>
                     <option value="en">🇺🇸 EN</option>
                     <option value="es">🇪🇸 ES</option>
@@ -45,7 +46,17 @@
                 </select>
             </div>
 
-            <h1 data-i18n="portal_welcome">Welcome Back</h1>
+            <!-- Liferay Tunnel Vector Logo -->
+            <div style="display: flex; justify-content: center; margin-bottom: 12px; margin-top: 8px;">
+                <svg viewBox="0 0 100 100" width="48" height="48">
+                    <path d="M50 5 L88 27 L88 73 L50 95 L12 73 L12 27 Z" fill="none" stroke="var(--primary)" stroke-width="6" stroke-linejoin="round"/>
+                    <path d="M30 40 C30 25, 70 25, 70 40 C70 55, 30 45, 30 60 C30 75, 70 75, 70 60" fill="none" stroke="#58a6ff" stroke-width="6" stroke-linecap="round"/>
+                    <circle cx="50" cy="40" r="4" fill="var(--primary)"/>
+                    <circle cx="42" cy="60" r="4" fill="#00e676"/>
+                </svg>
+            </div>
+
+            <h1 data-i18n="portal_welcome" style="margin-top: 0;">Welcome Back</h1>
             <p data-i18n="portal_login_desc">Log in to access your dashboard</p>
 
             <div id="sso-container"></div>
@@ -86,7 +97,15 @@
     <!-- DASHBOARD SCREEN -->
     <div id="dashboard-screen">
         <div class="sidebar">
-            <div class="sidebar-brand">Liferay Tunnel</div>
+            <div class="sidebar-brand" style="display: flex; align-items: center; gap: 10px; padding: 12px 16px;">
+                <svg viewBox="0 0 100 100" width="28" height="28" style="flex-shrink: 0;">
+                    <path d="M50 5 L88 27 L88 73 L50 95 L12 73 L12 27 Z" fill="none" stroke="var(--primary)" stroke-width="8" stroke-linejoin="round"/>
+                    <path d="M30 40 C30 25, 70 25, 70 40 C70 55, 30 45, 30 60 C30 75, 70 75, 70 60" fill="none" stroke="#58a6ff" stroke-width="8" stroke-linecap="round"/>
+                    <circle cx="50" cy="40" r="5" fill="var(--primary)"/>
+                    <circle cx="42" cy="60" r="5" fill="#00e676"/>
+                </svg>
+                <span style="font-weight: bold; font-size: 16px; color: var(--text-color); letter-spacing: 0.5px;">Liferay Tunnel</span>
+            </div>
             
             <div class="sidebar-label">Personal</div>
             <div id="nav-overview" class="nav-item active" onclick="showTab('overview')">Overview</div>

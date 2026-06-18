@@ -8,7 +8,16 @@ VPS_IP="lfr-demo.se"
 SSH_KEY=""
 while getopts "i:" opt; do
   case $opt in
-    i) SSH_KEY="-i $OPTARG" ;;
+    i) 
+      KEY_PATH="$OPTARG"
+      # Manually resolve tilde (~) to $HOME if it starts with ~/ or is exactly ~
+      if [[ "$KEY_PATH" == "~/"* ]]; then
+        KEY_PATH="${HOME}/${KEY_PATH#~/}"
+      elif [[ "$KEY_PATH" == "~" ]]; then
+        KEY_PATH="${HOME}"
+      fi
+      SSH_KEY="-i $KEY_PATH"
+      ;;
     *) echo "Usage: $0 [-i <identity_file>]" && exit 1 ;;
   esac
 done

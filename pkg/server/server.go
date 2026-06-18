@@ -1678,14 +1678,6 @@ func (s *Server) handleAdminMagicLink(w http.ResponseWriter, r *http.Request) {
 	s.writeAudit(req.Email, "auth.magic_link_requested", "system", "auth", "Requested portal login link", r)
 
 	if s.mailSender != nil {
-		host := r.Host
-		scheme := "http"
-		if r.TLS != nil || r.Header.Get("X-Forwarded-Proto") == "https" {
-			scheme = "https"
-		}
-		link := fmt.Sprintf("%s://%s/portal?token=%s", scheme, host, magicToken)
-		reportLink := fmt.Sprintf("%s://%s/api/auth/report?token=%s", scheme, host, magicToken)
-
 		// Determine target locale for the email subject (welcome page explicit override takes precedence)
 		lang := r.URL.Query().Get("lang")
 		if lang == "" {
@@ -1698,6 +1690,14 @@ func (s *Server) handleAdminMagicLink(w http.ResponseWriter, r *http.Request) {
 		if lang == "" {
 			lang = s.ResolveLocale(r)
 		}
+
+		host := r.Host
+		scheme := "https"
+		if r.TLS == nil && r.Header.Get("X-Forwarded-Proto") != "https" {
+			scheme = "http"
+		}
+		link := fmt.Sprintf("%s://%s/portal?token=%s&lang=%s", scheme, host, magicToken, lang)
+		reportLink := fmt.Sprintf("%s://%s/api/auth/report?token=%s", scheme, host, magicToken)
 
 		// Render localized dynamic HTML template from properties / external folder
 		body, err := s.renderEmailTemplate(lang, "magic_link.html", map[string]interface{}{
@@ -1729,6 +1729,7 @@ func (s *Server) handleAdminMagicLink(w http.ResponseWriter, r *http.Request) {
 func (s *Server) handleAdminVerify(w http.ResponseWriter, r *http.Request) {
 	var req struct {
 		Token string `json:"token"`
+		Lang  string `json:"lang"`
 	}
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 		respondJSON(w, http.StatusBadRequest, map[string]string{"error": "Invalid request"})
@@ -1786,6 +1787,12 @@ func (s *Server) handleAdminVerify(w http.ResponseWriter, r *http.Request) {
 		}
 		user = u
 		if u != nil {
+			// Update the user's language preference dynamically on login if passed
+			if req.Lang != "" && req.Lang != u.LanguagePreference {
+				u.LanguagePreference = req.Lang
+				_ = s.db.UpdateUser(u)
+			}
+
 			if u.LastLoginAt != nil {
 				// Capture a copy of the previous login time
 				prev := *u.LastLoginAt

@@ -1155,3 +1155,84 @@ func extractTokenFromBody(body string) string {
 	}
 	return body[start:end]
 }
+
+func TestServer_MagicLinkLanguagePersistence(t *testing.T) {
+	cfg := config.DefaultServerConfig()
+	cfg.Domains = []string{"example.com"}
+	cfg.DBPath = filepath.Join(t.TempDir(), "test.db")
+
+	srv, err := NewServer(cfg)
+	if err != nil {
+		t.Fatalf("failed to create server: %v", err)
+	}
+	defer srv.Stop()
+	defer time.Sleep(50 * time.Millisecond) // prevent SQLite cleanup races
+
+	// Intercept sent emails
+	mockMail := &mockMailSender{}
+	srv.mailSender = mockMail
+
+	// 1. Create an approved user with English language preference
+	email := "test_lang_persist@example.com"
+	u := &db.User{
+		ID:                 email,
+		Email:              email,
+		Role:               "user",
+		Status:             "approved",
+		LanguagePreference: "en",
+	}
+	if err := srv.db.CreateUser(u); err != nil {
+		t.Fatalf("failed to create user: %v", err)
+	}
+
+	// 2. Request magic link with Romanian language selection (lang=ro)
+	payload, _ := json.Marshal(map[string]string{"email": email})
+	req1, _ := http.NewRequest("POST", "http://example.com/api/auth/magic-link?lang=ro", bytes.NewReader(payload))
+	req1.Header.Set("Content-Type", "application/json")
+	rec1 := httptest.NewRecorder()
+	srv.ServeHTTP(rec1, req1)
+	time.Sleep(30 * time.Millisecond) // wait for goroutine
+
+	// Extract the magic token containing the &lang=ro URL query parameter!
+	bodyText := mockMail.sentTextBody
+	idxToken := strings.Index(bodyText, "token=")
+	if idxToken == -1 {
+		t.Fatal("failed to find token= in email body")
+	}
+	// Verify that the link carries &lang=ro!
+	if !strings.Contains(bodyText, "lang=ro") {
+		t.Error("expected generated magic link to carry '&lang=ro', but it did not")
+	}
+
+	// Extract the actual token hash (64 hex characters)
+	tokenStart := idxToken + 6
+	tokenEnd := tokenStart
+	for tokenEnd < len(bodyText) && bodyText[tokenEnd] != '"' && bodyText[tokenEnd] != '&' && bodyText[tokenEnd] != ' ' {
+		tokenEnd++
+	}
+	token := bodyText[tokenStart:tokenEnd]
+
+	// 3. Forge a POST request to /api/auth/verify containing BOTH the token and the lang override
+	verifyPayload, _ := json.Marshal(map[string]string{
+		"token": token,
+		"lang":  "ro",
+	})
+	reqVerify, _ := http.NewRequest("POST", "http://example.com/api/auth/verify", bytes.NewReader(verifyPayload))
+	reqVerify.Header.Set("Content-Type", "application/json")
+	recVerify := httptest.NewRecorder()
+	srv.ServeHTTP(recVerify, reqVerify)
+
+	// 4. Assert status OK
+	if recVerify.Code != http.StatusOK {
+		t.Fatalf("expected verification to succeed (200), got %d, body: %s", recVerify.Code, recVerify.Body.String())
+	}
+
+	// 5. Fetch the user from the SQLite database and assert their language_preference has been dynamically updated to "ro"!
+	dbUser, err := srv.db.GetUserByEmail(email)
+	if err != nil {
+		t.Fatalf("failed to fetch user from DB: %v", err)
+	}
+	if dbUser.LanguagePreference != "ro" {
+		t.Errorf("expected user language_preference to be dynamically updated to %q, got %q", "ro", dbUser.LanguagePreference)
+	}
+}

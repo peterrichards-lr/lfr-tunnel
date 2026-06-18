@@ -380,12 +380,13 @@ function toggleTheme() {
         async function init() {
             const urlParams = new URLSearchParams(window.location.search);
             const magicToken = urlParams.get('token');
+            const langParam = urlParams.get('lang') || '';
             if (magicToken) {
                 window.history.replaceState({}, document.title, window.location.pathname);
                 const vRes = await fetch('/api/auth/verify', {
                     method: 'POST',
                     headers: {'Content-Type': 'application/json'},
-                    body: JSON.stringify({ token: magicToken })
+                    body: JSON.stringify({ token: magicToken, lang: langParam })
                 });
                 if (vRes.ok) {
                     const data = await vRes.json();

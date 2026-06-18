@@ -16,6 +16,8 @@ import (
 	"net/http"
 	"net/http/httputil"
 	"net/url"
+	"os"
+	"path/filepath"
 	"strconv"
 	"strings"
 	"sync"
@@ -35,6 +37,9 @@ var dashboardHTML string
 
 //go:embed static/*
 var staticFS embed.FS
+
+//go:embed templates/*
+var templatesFS embed.FS
 
 // RegisterRequest represents the JSON request payload for registering a tunnel.
 type RegisterRequest struct {
@@ -1670,41 +1675,6 @@ func (s *Server) handleAdminMagicLink(w http.ResponseWriter, r *http.Request) {
 		link := fmt.Sprintf("%s://%s/portal?token=%s", scheme, host, magicToken)
 		reportLink := fmt.Sprintf("%s://%s/api/auth/report?token=%s", scheme, host, magicToken)
 
-		tmplStr := ""
-		if s.db != nil {
-			tmplStr, _ = s.db.GetAdminSetting("magic_link_email_template")
-		}
-		if tmplStr == "" {
-			tmplStr = defaultMagicLinkEmailTemplate
-		}
-
-		tmpl, err := template.New("email").Parse(tmplStr)
-		var bodyBuf bytes.Buffer
-		if err == nil {
-			err = tmpl.Execute(&bodyBuf, MagicLinkEmailData{
-				PreferredName: greetingName,
-				ExpiryMinutes: 15,
-				MagicLink:     link,
-				IPAddress:     clientIP,
-				ReportLink:    reportLink,
-			})
-		}
-
-		var body string
-		if err != nil {
-			// Fallback if template parsing fails
-			log.Printf("[Admin] Magic link template error: %v", err)
-			body = fmt.Sprintf("<p>Hi %s,</p>"+
-				"<p>You requested a magic link to log into the Liferay Tunnel Portal.</p>"+
-				"<p><strong>IP Address:</strong> %s</p>"+
-				"<p>This link expires in 15 minutes.</p>"+
-				"<p><a href=\"%s\">Log In to Portal</a></p>", html.EscapeString(greetingName), clientIP, link)
-		} else {
-			body = bodyBuf.String()
-		}
-
-		plainBody := fmt.Sprintf("Hi %s,\n\nUse this link to log in (expires in 15 minutes):\n%s\n\nReport abuse here:\n%s", greetingName, link, reportLink)
-
 		// Determine target locale for the email subject
 		lang := "en"
 		if s.db != nil {
@@ -1715,6 +1685,24 @@ func (s *Server) handleAdminMagicLink(w http.ResponseWriter, r *http.Request) {
 		if lang == "" {
 			lang = s.ResolveLocale(r)
 		}
+
+		// Render localized dynamic HTML template from properties / external folder
+		body, err := s.renderEmailTemplate(lang, "magic_link.html", map[string]interface{}{
+			"Name":       greetingName,
+			"Link":       link,
+			"ReportLink": reportLink,
+		})
+		if err != nil {
+			log.Printf("[Server] Failed to render magic link email template: %v", err)
+			// Hardcoded fallback
+			body = fmt.Sprintf("<p>Hi %s,</p>"+
+				"<p>You requested a magic link to log into the Liferay Tunnel Portal.</p>"+
+				"<p><strong>IP Address:</strong> %s</p>"+
+				"<p>This link expires in 15 minutes.</p>"+
+				"<p><a href=\"%s\">Login to Portal</a></p>", html.EscapeString(greetingName), clientIP, link)
+		}
+
+		plainBody := fmt.Sprintf("Hi %s,\n\nUse this link to log in (expires in 15 minutes):\n%s\n\nReport abuse here:\n%s", greetingName, link, reportLink)
 		subject := s.GetTranslation(lang, "magic_link_subject")
 
 		go s.mailSender.Send(req.Email, subject, body, plainBody) //nolint:errcheck
@@ -2943,4 +2931,64 @@ func (s *Server) handleCookiesFallback(w http.ResponseWriter, r *http.Request) {
     </div>
 </body>
 </html>`, lang, title, title, desc, sec1Title, bullet1, bullet2, bullet3, bullet4, returnLink)
+}
+
+// renderEmailTemplate loads and compiles the requested localized HTML template.
+func (s *Server) renderEmailTemplate(lang, templateName string, data interface{}) (string, error) {
+	lang = strings.ToLower(strings.TrimSpace(lang))
+	if len(lang) > 2 {
+		lang = lang[:2]
+	}
+
+	externalDir := "/etc/lfr-tunneld/templates"
+	var htmlContent string
+	loadedExternal := false
+
+	// 1. Try loading from external directory first (Runtime customization!)
+	extPath := filepath.Join(externalDir, lang, templateName)
+	if _, err := os.Stat(extPath); err == nil {
+		data, err := os.ReadFile(extPath)
+		if err == nil {
+			htmlContent = string(data)
+			loadedExternal = true
+		}
+	}
+	if !loadedExternal && lang != "en" {
+		// Try default en external override
+		extPathEn := filepath.Join(externalDir, "en", templateName)
+		if _, err := os.Stat(extPathEn); err == nil {
+			data, err := os.ReadFile(extPathEn)
+			if err == nil {
+				htmlContent = string(data)
+				loadedExternal = true
+			}
+		}
+	}
+
+	// 2. Fall back to Go-embedded assets second
+	if !loadedExternal {
+		// Try localized embedded template first
+		data, err := templatesFS.ReadFile(fmt.Sprintf("templates/%s/%s", lang, templateName))
+		if err != nil {
+			// Fall back to default English embedded template
+			data, err = templatesFS.ReadFile(fmt.Sprintf("templates/en/%s", templateName))
+			if err != nil {
+				return "", fmt.Errorf("failed to load embedded template %s: %w", templateName, err)
+			}
+		}
+		htmlContent = string(data)
+	}
+
+	// 3. Compile and execute using html/template
+	t, err := template.New(templateName).Parse(htmlContent)
+	if err != nil {
+		return "", fmt.Errorf("failed to parse template %s: %w", templateName, err)
+	}
+
+	var buf bytes.Buffer
+	if err := t.Execute(&buf, data); err != nil {
+		return "", fmt.Errorf("failed to execute template %s: %w", templateName, err)
+	}
+
+	return buf.String(), nil
 }

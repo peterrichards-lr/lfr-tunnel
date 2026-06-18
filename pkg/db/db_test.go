@@ -368,3 +368,68 @@ func TestListAllPATsAndCountAdmins(t *testing.T) {
 		t.Errorf("expected 2 total pats, got %d", len(pats))
 	}
 }
+
+func TestBlacklistCRUD(t *testing.T) {
+	database, tmpDir := setupTestDB(t)
+	defer cleanupTestDB(database, tmpDir)
+
+	ip := "192.168.1.100"
+	reason := "Brute-force attempt detected"
+
+	// 1. Initially should not be blacklisted
+	isBanned, err := database.IsBlacklisted(ip)
+	if err != nil {
+		t.Fatalf("IsBlacklisted failed: %v", err)
+	}
+	if isBanned {
+		t.Error("IP should not be blacklisted initially")
+	}
+
+	// 2. Add to blacklist
+	err = database.AddBlacklistIP(ip, reason)
+	if err != nil {
+		t.Fatalf("AddBlacklistIP failed: %v", err)
+	}
+
+	// 3. Should now be blacklisted
+	isBanned, err = database.IsBlacklisted(ip)
+	if err != nil {
+		t.Fatalf("IsBlacklisted failed: %v", err)
+	}
+	if !isBanned {
+		t.Error("IP should be blacklisted")
+	}
+
+	// 4. List blacklisted IPs
+	list, err := database.ListBlacklistedIPs()
+	if err != nil {
+		t.Fatalf("ListBlacklistedIPs failed: %v", err)
+	}
+	if len(list) != 1 {
+		t.Fatalf("expected exactly 1 blacklisted IP, got %d", len(list))
+	}
+	if list[0].IPAddress != ip {
+		t.Errorf("expected IPAddress %q, got %q", ip, list[0].IPAddress)
+	}
+	if list[0].Reason != reason {
+		t.Errorf("expected Reason %q, got %q", reason, list[0].Reason)
+	}
+	if list[0].CreatedAt.IsZero() {
+		t.Error("expected CreatedAt timestamp to be populated, got zero time")
+	}
+
+	// 5. Remove from blacklist
+	err = database.RemoveBlacklistIP(ip)
+	if err != nil {
+		t.Fatalf("RemoveBlacklistIP failed: %v", err)
+	}
+
+	// 6. Should no longer be blacklisted
+	isBanned, err = database.IsBlacklisted(ip)
+	if err != nil {
+		t.Fatalf("IsBlacklisted failed: %v", err)
+	}
+	if isBanned {
+		t.Error("IP should not be blacklisted after removal")
+	}
+}

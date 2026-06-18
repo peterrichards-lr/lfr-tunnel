@@ -651,6 +651,16 @@ function toggleTheme() {
             document.getElementById('acc-last-name').value = currentUser.last_name || '';
             document.getElementById('acc-preferred-name').value = currentUser.preferred_name || '';
             document.getElementById('acc-theme').value = currentUser.theme_preference || 'system';
+
+            // Hide Danger Zone GDPR Self-Deletion for the Platform Owner
+            const dz = document.getElementById('danger-zone-container');
+            if (dz) {
+                if (currentUser.role === 'owner') {
+                    dz.style.display = 'none';
+                } else {
+                    dz.style.display = 'block';
+                }
+            }
             
             // Render and initialize our high-fidelity custom SVG flag selectors
             renderCustomDropdown();
@@ -1028,7 +1038,7 @@ function toggleTheme() {
                         charts['topUsers'] = new Chart(ctx, {
                             type: 'bar',
                             data: {
-                                labels: data.global.top_users.map(u => u.email.split('@')[0]),
+                                labels: data.global.top_users.map(u => (u.email || "Anonymous").split('@')[0]),
                                 datasets: [{
                                     label: 'Total Bandwidth',
                                     data: data.global.top_users.map(u => u.bytes_in + u.bytes_out),
@@ -1047,9 +1057,9 @@ function toggleTheme() {
                             const cData = await cRes.json() || [];
                             renderTable('client-stats-table-body', cData, s => `
                                 <tr>
-                                    <td><span class="badge" style="background: var(--primary); color: white;">${escapeHTML(s.version)}</span></td>
-                                    <td>${escapeHTML(s.os)}</td>
-                                    <td style="font-weight: bold;">${s.count}</td>
+                                    <td><span class="badge" style="background: var(--primary); color: white;">${escapeHTML(s.version || "Unknown")}</span></td>
+                                    <td>${escapeHTML(s.os || "Unknown")}</td>
+                                    <td style="font-weight: bold;">${s.count || 0}</td>
                                 </tr>
                             `);
                         }

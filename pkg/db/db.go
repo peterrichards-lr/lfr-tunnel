@@ -776,7 +776,7 @@ type BlacklistEntry struct {
 
 // ListBlacklistedIPs returns all blacklisted IPs.
 func (db *DB) ListBlacklistedIPs() ([]*BlacklistEntry, error) {
-	query := "SELECT ip_address, reason, created_at FROM ip_blacklist ORDER BY created_at DESC"
+	query := "SELECT ip_address, reason, banned_at FROM ip_blacklist ORDER BY banned_at DESC"
 	rows, err := db.conn.Query(query)
 	if err != nil {
 		return nil, err
@@ -787,22 +787,11 @@ func (db *DB) ListBlacklistedIPs() ([]*BlacklistEntry, error) {
 	for rows.Next() {
 		var e BlacklistEntry
 		var reason sql.NullString
-		var createdAtStr string
-		if err := rows.Scan(&e.IPAddress, &reason, &createdAtStr); err != nil {
+		if err := rows.Scan(&e.IPAddress, &reason, &e.CreatedAt); err != nil {
 			return nil, err
 		}
 		if reason.Valid {
 			e.Reason = reason.String
-		}
-		// Parse SQLite CURRENT_TIMESTAMP string format: "2006-01-02 15:04:05" or RFC3339
-		createdAtStr = strings.TrimSpace(createdAtStr)
-		if t, err := time.Parse("2006-01-02 15:04:05", createdAtStr); err == nil {
-			e.CreatedAt = t
-		} else if t, err := time.Parse(time.RFC3339, createdAtStr); err == nil {
-			e.CreatedAt = t
-		} else {
-			// Fallback
-			e.CreatedAt = time.Now().UTC()
 		}
 		entries = append(entries, &e)
 	}

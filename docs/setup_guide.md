@@ -295,6 +295,10 @@ admin_notification_email: "admin@yourdomain.com"
 enable_registration: true
 enable_user_portal: true
 
+> [!TIP]
+> **Native Multi-Factor Authentication (MFA / TOTP)**  
+> If `enable_user_portal` is set to `true`, users can activate 6-digit Time-Based One-Time Password (TOTP) MFA from their **Account Settings** tab. This secures passwordless portal sessions using two independent factors: possession of email (magic link) + possession of device (authenticator app). Gateway administrators can reset or disable a user's MFA status directly from the Admin Dashboard in case of lost devices.
+
 # Access Control
 allowed_email_domains:
   - "liferay.com"

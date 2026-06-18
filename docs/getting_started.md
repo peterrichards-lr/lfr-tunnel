@@ -1,0 +1,174 @@
+# Getting Started Guide
+
+`lfr-tunnel` is a client-server utility. The client CLI (`lfr-tunnel`) runs on your local machine and establishes a secure tunnel to the gateway server (`lfr-tunneld`) running on a public VPS.
+
+> [!IMPORTANT]
+> **The client CLI binary is of no use on its own.** It cannot establish a tunnel without connecting to a running gateway server, and it requires a valid **Personal Access Token (PAT)** to authenticate.
+
+This guide walks you through installing the client, registering for access, claiming your token, and running your first tunnel.
+
+---
+
+## Overview of the Flow
+
+```
+[ Developer Laptop ]                                         [ Gateway Server ]
+   (lfr-tunnel CLI)                                            (lfr-tunneld)
+         │                                                           │
+         │ 1. Submit Registration ───────────────────────────────────►
+         │    (Provides email & requested subdomain)                 │
+         │                                                           │
+         │                        2. Admin Approves                  │
+         │                           (Validates request)             │
+         │                                                           │
+         │ 3. Claim PAT Token ◄──────────────────────────────────────┘
+         │    (Via approval email link)
+         │
+         │ 4. Store Token
+         │    (Saved in ~/.lfr-tunnel/token)
+         │
+         │ 5. Connect Tunnel ────────────────────────────────────────► Exposes local ports
+```
+
+---
+
+## Step 1: Install the Client
+
+Before registering, install the `lfr-tunnel` client for your operating system.
+
+### Recommended: Package Managers
+
+Using a package manager ensures you get automated integrity validation (SHA-256 checks) and clean path management.
+
+#### macOS / Linux (Homebrew)
+```bash
+brew tap peterrichards-lr/tap
+brew install lfr-tunnel
+```
+
+#### Windows (Scoop)
+```powershell
+scoop bucket add peterrichards-lr https://github.com/peterrichards-lr/scoop-bucket
+scoop install lfr-tunnel
+```
+
+### Direct Script Fallback
+
+If package managers are not available on your system, use the direct installation scripts.
+
+#### macOS / Linux
+```bash
+curl -sSfL https://raw.githubusercontent.com/peterrichards-lr/lfr-tunnel/master/scripts/install.sh | sh
+```
+
+#### Windows (PowerShell)
+```powershell
+iwr https://raw.githubusercontent.com/peterrichards-lr/lfr-tunnel/master/scripts/install.ps1 | iex
+```
+
+Verify your installation:
+```bash
+lfr-tunnel -version
+```
+
+---
+
+## Step 2: Register for Access
+
+Access to the gateway server is authenticated via a Personal Access Token (PAT) associated with your user account. 
+
+### 1. Submit a Registration Request
+To request access, send a registration request to the gateway server. 
+
+* **For Liferay Sales Engineering Team (connecting to the hosted SE gateway):**
+  Submit a request using the hosted server:
+  ```bash
+  curl -s -X POST \
+    -H "Content-Type: application/json" \
+    -d '{"email": "your.name@liferay.com", "requested_subdomain": "your-name-se"}' \
+    https://tunnel.lfr-demo.se/api/register-request
+  ```
+  *(Replace `your.name@liferay.com` with your official email, and `your-name-se` with your desired default subdomain).*
+
+* **For Self-Hosted Gateways:**
+  Replace `https://tunnel.lfr-demo.se` with your own gateway's URL:
+  ```bash
+  curl -s -X POST \
+    -H "Content-Type: application/json" \
+    -d '{"email": "admin@example.com", "requested_subdomain": "my-subdomain"}' \
+    https://tunnel.yourdomain.com/api/register-request
+  ```
+
+You will receive a terminal output confirming your request has been successfully submitted and is pending admin approval.
+
+### 2. Verify Your Email & Wait for Approval
+1. Check your inbox for a **Verification Email** from the gateway. Click the link inside to verify that you own the email address.
+2. Once verified, the gateway administrator receives a notification.
+3. Once the administrator approves your request, you will receive an **Approval Email** containing a link to claim your token.
+
+### 3. Claim Your Token
+Click the link in your approval email, or run the following `curl` command using the claim token found in the email:
+
+```bash
+curl -s "https://tunnel.lfr-demo.se/api/claim?token=<claim-token-from-email>"
+```
+
+The gateway will respond with your **Personal Access Token (PAT)** (e.g., `lfr_pat_abc123...`). 
+
+> [!WARNING]
+> **This token is shown only once.** Copy it immediately and store it securely.
+
+---
+
+## Step 3: Store Your Token
+
+To make using `lfr-tunnel` seamless, store your PAT in the default configuration path. The client will automatically load it from this file on every run, so you won't need to specify it on the command line.
+
+### macOS / Linux
+```bash
+mkdir -p ~/.lfr-tunnel
+echo "lfr_pat_your-token-here" > ~/.lfr-tunnel/token
+chmod 600 ~/.lfr-tunnel/token
+```
+
+### Windows (PowerShell)
+```powershell
+New-Item -ItemType Directory -Force -Path "$Home\.lfr-tunnel"
+Set-Content -Path "$Home\.lfr-tunnel\token" -Value "lfr_pat_your-token-here"
+```
+
+---
+
+## Step 4: Run Your First Tunnel
+
+Once your token is saved, you can run the client. By default, `lfr-tunnel` targets the primary Liferay port `8080` and scans for client extensions.
+
+### Zero-Config Workspace Mode (LDM/Workspaces)
+Navigate to your Liferay Workspace root directory and run:
+
+```bash
+lfr-tunnel -subdomain your-name-se
+```
+
+The client will:
+1. Scan for active client extensions and detect their development ports automatically.
+2. Authenticate with the stored PAT.
+3. Print the live public HTTPS URLs where your local server and assets are now accessible.
+
+### Port-Specific Standalone Mode (Tomcat/Docker)
+If you are running a standalone Tomcat bundle on port `8080` without a Liferay Workspace:
+
+```bash
+lfr-tunnel -subdomain your-name-se -ports 8080
+```
+
+---
+
+## Need Help?
+
+* **Common Errors:**
+  * `[Error] Unauthorized`: Your token may be invalid or revoked. Check `~/.lfr-tunnel/token` and verify your token is copied correctly.
+  * `[Error] Subdomain already registered`: Another active user is currently using the requested subdomain prefix. Try a different `-subdomain` flag.
+* **Detailed Guides:**
+  * For advanced setup and Liferay virtual host configurations, see the [Liferay SE Guide](liferay-se-guide.md).
+  * For details on self-hosting your own gateway, see the [Server Setup Guide](setup_guide.md).

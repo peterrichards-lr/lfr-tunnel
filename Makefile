@@ -27,8 +27,8 @@ clean:
 
 build: clean
 	mkdir -p bin
-	go build -o bin/lfr-tunnel ./cmd/lfr-tunnel
-	go build -o bin/lfr-tunneld ./cmd/lfr-tunneld
+	go build -ldflags="-s -w" -trimpath -o bin/lfr-tunnel ./cmd/lfr-tunnel
+	go build -ldflags="-s -w" -trimpath -o bin/lfr-tunneld ./cmd/lfr-tunneld
 
 deploy:
 	@./scripts/deploy.sh

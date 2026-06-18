@@ -22,6 +22,8 @@ domain2: "yourdomain.org"
 The gateway will then issue wildcard subdomain URLs on both domains for every registered tunnel (e.g. `your-project.yourdomain.com` and `your-project.yourdomain.org`).
 
 > [!NOTE]
+> **Getting Started**: If you are setting up `lfr-tunnel` for the first time, please read the [**Getting Started Guide**](docs/getting_started.md). The client CLI is of no use standalone and requires a valid Personal Access Token (PAT) from a gateway server to connect.
+>
 > **Liferay Sales Engineering Team**: If you are a member of the Liferay SE team connecting to the shared hosted gateway, please read the [**Liferay SE Quick-Start Guide**](docs/liferay-se-guide.md) which has team-specific instructions, domain details, and registration steps.
 
 ---
@@ -205,16 +207,56 @@ Developers run `lfr-tunnel` locally on their developer machines.
 
 ### Quick One-Line Installation
 
-To download the pre-compiled binary for your platform and install it directly, run:
+The installer downloads the pre-compiled binary for your platform and places it in `~/bin/lfr-tunnel` — the single canonical install location. This consistent path makes it simple for your organisation's security team to apply exclusions.
 
-*   **macOS / Linux (Bash)**:
-    ```bash
-    curl -sSfL https://raw.githubusercontent.com/peterrichards-lr/lfr-tunnel/master/scripts/install.sh | sh
-    ```
-*   **Windows (PowerShell)**:
-    ```powershell
-    iwr https://raw.githubusercontent.com/peterrichards-lr/lfr-tunnel/master/scripts/install.ps1 | iex
-    ```
+#### macOS — Homebrew (Recommended)
+
+```bash
+brew tap peterrichards-lr/tap
+brew install lfr-tunnel
+```
+
+Homebrew verifies the SHA-256 checksum independently and removes the macOS quarantine attribute automatically. Install path: `/opt/homebrew/bin/lfr-tunnel` (Apple Silicon) or `/usr/local/bin/lfr-tunnel` (Intel).
+
+#### Windows — Scoop (Recommended)
+
+```powershell
+scoop bucket add peterrichards-lr https://github.com/peterrichards-lr/scoop-bucket
+scoop install lfr-tunnel
+```
+
+Scoop verifies the SHA-256 checksum independently. Creates a shim at `~\scoop\shims\lfr-tunnel.exe` on your `PATH`.
+
+#### macOS / Linux — Direct Download (Fallback)
+
+Use this for Linux, CI/CD pipelines, or environments where Homebrew is not available:
+
+```bash
+curl -sSfL https://raw.githubusercontent.com/peterrichards-lr/lfr-tunnel/master/scripts/install.sh | sh
+```
+
+Places the binary at `~/bin/lfr-tunnel`. If `~/bin` is not yet in your `PATH`, the installer prints the one-line export to add to your shell profile.
+
+#### Windows — Direct Download, PowerShell (Fallback)
+
+Use this for environments where Scoop is not available:
+
+```powershell
+iwr https://raw.githubusercontent.com/peterrichards-lr/lfr-tunnel/master/scripts/install.ps1 | iex
+```
+
+Places the binary at `%USERPROFILE%\bin\lfr-tunnel.exe` and adds it to your user `PATH` automatically.
+
+#### Verifying Binary Integrity
+
+All release binaries are covered by **GitHub Artifact Attestations** — cryptographic, OIDC-backed provenance records that prove the binary was produced by the official GitHub Actions workflow at a specific commit.
+
+Verify any downloaded binary using the GitHub CLI:
+```bash
+gh attestation verify ~/bin/lfr-tunnel --repo peterrichards-lr/lfr-tunnel
+```
+
+SHA-256 checksums for each release are also available in `checksums.txt` on the [Releases](https://github.com/peterrichards-lr/lfr-tunnel/releases) page.
 
 ### Versioning & Self-Upgrading
 
@@ -233,16 +275,20 @@ You can check the current version of the client or upgrade it to the latest rele
 
 1. **Build the CLI**:
    ```bash
-   go build -o lfr-tunnel ./cmd/lfr-tunnel
+   go build -ldflags="-s -w" -trimpath -o lfr-tunnel ./cmd/lfr-tunnel
    ```
-2. **Move to PATH** (optional):
+2. **Move to the canonical install location**:
    ```bash
-   mv lfr-tunnel /usr/local/bin/
+   mkdir -p ~/bin && mv lfr-tunnel ~/bin/
+   # Ensure ~/bin is in your PATH:
+   export PATH="$HOME/bin:$PATH"
    ```
 
-### Running via Docker (Recommended / EDR Bypass)
+### Running via Docker (Alternative / EDR Bypass)
 
-If your local environment is protected by security endpoint agents (such as SentinelOne, Defender, or CrowdStrike) that flag or quarantine Go compilers or custom network tunnel tools, running `lfr-tunnel` inside a Docker container is the recommended best practice. 
+The recommended approach for managing security endpoint agent (EDR) alerts is to install `lfr-tunnel` to `~/bin/` and ask your security admin to add a wildcard path exclusion for `/Users/*/bin/lfr-tunnel` (macOS) or `C:\Users\*\bin\lfr-tunnel.exe` (Windows). See the [Security & EDR Compatibility](#security--edr-compatibility) section for details.
+
+If a path exclusion cannot be applied, running `lfr-tunnel` inside a Docker container is an alternative. 
 
 This isolates the execution inside an unmonitored virtual machine while routing traffic back to your host machine's port `8080` (where your Liferay server is running).
 
@@ -401,6 +447,42 @@ while true; do
   sleep 2
 done
 ```
+
+## Security & EDR Compatibility
+
+`lfr-tunnel` is an unsigned binary (it does not hold an Apple Developer ID or Windows Authenticode certificate). Endpoint Detection and Response (EDR) agents such as SentinelOne, CrowdStrike, and Defender may flag it as suspicious based on static heuristics. This is a known false positive caused by the way Go binaries embed their runtime and by the absence of an OS-level publisher certificate.
+
+### Why Binaries Are Unsigned
+
+Obtaining an **Apple Developer ID** (required to appear as `Type=Signed` on macOS) costs $99/year and requires membership of Apple's Developer Program. **Windows Authenticode** certificates require a paid CA certificate and an HSM-backed key. Neither of these is required to run the software — they are purely trust signals consumed by the operating system loader and by EDR engines.
+
+### What We Do Instead
+
+All release binaries are built with the following hardening flags to minimise the static analysis surface:
+
+```
+-ldflags="-s -w"  # Strip debug info and symbol table
+-trimpath          # Remove local filesystem paths embedded in the binary
+```
+
+Every release binary is also covered by a **GitHub Artifact Attestation** — a free, keyless, OIDC-backed cryptographic provenance record (powered by Sigstore) that cryptographically proves the binary was produced by the official GitHub Actions workflow at a specific commit SHA, and has not been tampered with since.
+
+Verify any downloaded binary with the GitHub CLI:
+```bash
+gh attestation verify ~/bin/lfr-tunnel --repo peterrichards-lr/lfr-tunnel
+```
+
+### Recommended SentinelOne Exclusion (for Admins)
+
+The canonical install location for `lfr-tunnel` is `~/bin/lfr-tunnel` on all platforms:
+
+| Platform | Canonical Path |
+|---|---|
+| macOS | `/Users/*/bin/lfr-tunnel` |
+| Linux | `/home/*/bin/lfr-tunnel` |
+| Windows | `C:\Users\*\bin\lfr-tunnel.exe` |
+
+We recommend that your SentinelOne (or equivalent EDR) administrator add a **wildcard path exclusion** for the paths above. Because all users install to the same predictable location, a single wildcard rule covers the entire team without needing per-user or per-hash exceptions.
 
 ## License
 

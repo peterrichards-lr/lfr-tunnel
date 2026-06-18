@@ -506,3 +506,61 @@ Now that your server is running, any user can connect to it using the `lfr-tunne
     lfr-tunnel -config ~/.lfr-tunnel/config.yaml
     ```
 3.  Your local Liferay instance running on port `8080` is now securely exposed to the web at `https://my-dev-env.yourdomain.com`!
+
+---
+
+## 6. Server Upgrades and Automated Deployment (`deploy.sh`)
+
+When you need to rebuild and deploy a new version of `lfr-tunneld` to your public VPS, you can use the automated `scripts/deploy.sh` script included in the repository root.
+
+This script:
+1. Compiles the Go server gateway natively for Linux (`GOOS=linux GOARCH=amd64`) using secure path-trimming (`-trimpath`).
+2. Uploads the newly compiled binary, error pages, and static web assets to your VPS via `scp`.
+3. Connects via SSH to safely stop, copy, swap, and restart the `lfr-tunneld` daemon.
+
+### Standard Usage:
+```bash
+./scripts/deploy.sh
+```
+
+### Specifying a Custom SSH Key (`-i`):
+If your local SSH agent is empty, or you use a specific private key file/certificate to connect to your VPS, pass it explicitly using the `-i` flag:
+```bash
+./scripts/deploy.sh -i ~/.ssh/id_ed25519
+```
+
+---
+
+## 7. Troubleshooting Deployment Failures
+
+### Issue: `Permission denied (publickey). scp: Connection closed`
+
+When running `./scripts/deploy.sh`, you may receive a `Permission denied (publickey)` error from your VPS server. This means SSH is not offering any private key credentials during the connection handshake.
+
+#### Solution 1: Load your key into your active SSH Agent
+Ensure your private key is actively loaded into your memory-backed SSH agent:
+```bash
+ssh-add ~/.ssh/id_ed25519
+```
+*(Verify loaded keys using: `ssh-add -l`)*
+
+#### Solution 2: Explicitly pass your key file
+Run the script while passing your identity file directly using the `-i` parameter:
+```bash
+./scripts/deploy.sh -i ~/.ssh/id_ed25519
+```
+
+#### Solution 3: Native macOS Keychain Integration (Recommended)
+To prevent your Mac from "forgetting" your loaded SSH keys after reboots, configure your local SSH client to automatically load and retrieve key passphrases directly from your macOS Keychain on-demand.
+
+Add the following block to your local `~/.ssh/config` file (create it if it doesn't exist):
+```text
+Host *
+  AddKeysToAgent yes
+  UseKeychain yes
+  IdentityFile ~/.ssh/id_ed25519
+```
+Then, save your passphrase once to the keychain:
+```bash
+ssh-add --apple-use-keychain ~/.ssh/id_ed25519
+```

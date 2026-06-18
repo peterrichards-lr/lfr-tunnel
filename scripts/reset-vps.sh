@@ -12,7 +12,7 @@ fi
 # Use environment variables if set, otherwise default to positional parameters or hardcoded defaults
 VPS_USER=${VPS_USER:-${1:-peterrichards}}
 VPS_IP=${VPS_IP:-${2:-82.39.133.178}}
-SSH_KEY=${SSH_KEY:-${3:-~/.ssh/id_rsa}}
+SSH_KEY=${SSH_KEY:-${3:-~/.ssh/id_ed25519}}
 
 echo "=> Connecting to VPS to reset the server state..."
 echo "!! WARNING: Deleting production database on $VPS_IP !!"

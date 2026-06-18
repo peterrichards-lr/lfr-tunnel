@@ -318,6 +318,27 @@ To start the tunnel, run the wrapper script matching your operating system. It w
 
 *Note: You can override any environment configuration on the fly by passing standard client CLI arguments directly to the script, e.g. `./lfr-tunnel.sh -subdomain my-temp-se`.*
 
+#### 3. Docker Hub Image (Zero-Install & Zero-Build Method)
+
+You can run our pre-built, multi-architecture client container directly from Docker Hub! This requires absolutely **no local repository cloning, zero building, and is 100% immune to SentinelOne/EDR host-level alerts**:
+
+```bash
+docker run -d --name lfr-tunnel \
+  -e LFT_CLIENT_TOKEN="YOUR_PERSONAL_ACCESS_TOKEN" \
+  -p 8080:8080 \
+  peterrichards/lfr-tunnel:latest \
+  -server https://tunnel.lfr-demo.se \
+  -subdomain peter-dev \
+  -ports 8080
+```
+
+*   **`-d`**: Runs the tunnel in the background as an isolated daemon.
+*   **`-e LFT_CLIENT_TOKEN`**: Passes your secure developer PAT.
+*   **`-p 8080:8080`**: Exposes the port.
+*   **`peterrichards/lfr-tunnel:latest`**: Pulls the official, pre-scanned, and optimized image dynamically from Docker Hub (supporting both Apple Silicon M1/M2/M3 and Intel natively!).
+*   **`-server`**: Points to your production server gateway.
+*   **`-ports 8080`**: Explicitly routes the incoming wildcard traffic from the gateway back out of the tunnel container to your host Liferay port `8080`.
+
 ### Secret Leak Prevention (Pre-Commit Hook)
 
 To prevent API keys, tokens, or passwords from ever being accidentally committed to the repository, we use **Gitleaks** packaged inside a Docker container. This scans your staged files automatically on every commit.

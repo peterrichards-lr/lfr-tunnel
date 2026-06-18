@@ -1,0 +1,21 @@
+{
+  "magic_link_subject": "マジックログインリンクが届きました",
+  "invite_subject": "Liferay Tunnel への招待状",
+  "role_updated_subject": "Liferay Tunnel: アカウント権限의更新完了",
+  "access_suspended_subject": "Liferay Tunnel: アカウントアクセスの一時停止",
+  "account_deleted_subject": "Liferay Tunnel: アカウント削除および匿名化完了",
+  "registration_pending_subject": "Liferay Tunnel: 新規登録承認待ち",
+  
+  "portal_title": "Liferay Tunnel ポータル",
+  "portal_welcome": "ようこそ",
+  "portal_login_desc": "メールアドレスを入力して、パスワードなしのマジックログインリンクを要求します。",
+  "portal_register_desc": "アカウントをお持ちでないですか？こちらから登録してください：",
+  "btn_send_magic_link": "マジックリンクを送信",
+  "btn_register_account": "アカウントを登録",
+  "label_email": "メールアドレス",
+  "label_first_name": "名 (First Name)",
+  "label_last_name": "姓 (Last Name)",
+  "mfa_verify_title": "多要素認証 (MFA)",
+  "mfa_verify_desc": "認証アプリ（Google Authenticatorなど）に表示される6桁のコードを入力してください：",
+  "btn_verify_login": "検証してログイン"
+}

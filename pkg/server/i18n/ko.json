@@ -1,0 +1,21 @@
+{
+  "magic_link_subject": "로그인 매직 링크가 도착했습니다",
+  "invite_subject": "Liferay Tunnel 가입 초대장",
+  "role_updated_subject": "Liferay Tunnel: 계정 권한 업데이트 완료",
+  "access_suspended_subject": "Liferay Tunnel: 계정 접속 권한 일시 중지",
+  "account_deleted_subject": "Liferay Tunnel: 계정 삭제 및 익명화 완료",
+  "registration_pending_subject": "Liferay Tunnel: 새 등록 승인 대기 중",
+  
+  "portal_title": "Liferay Tunnel 포털",
+  "portal_welcome": "환영합니다",
+  "portal_login_desc": "이메일을 입력하여 비밀번호 없는 매직 로그인 링크를 요청하세요.",
+  "portal_register_desc": "아직 계정이 없으신가요? 여기서 등록하세요:",
+  "btn_send_magic_link": "매직 링크 전송",
+  "btn_register_account": "계정 등록하기",
+  "label_email": "이메일 주소",
+  "label_first_name": "이름 (First Name)",
+  "label_last_name": "성 (Last Name)",
+  "mfa_verify_title": "다중 요소 인증 (MFA)",
+  "mfa_verify_desc": "인증 앱(Google Authenticator 등)의 6자리 보안 코드를 입력하세요:",
+  "btn_verify_login": "인증 및 로그인"
+}

@@ -52,7 +52,21 @@ The Liferay Tunnel Cloud User Portal utilizes **exactly one cookie**:
 
 ---
 
-## 4. Host-Your-Own (Sovereign) Policy Customisation
+## 4. GDPR Right to Be Forgotten & Anonymisation
+
+In accordance with General Data Protection Regulation (GDPR) standards, Liferay Tunnel supports an immediate, auditable, and fully automated **Right to Be Forgotten**:
+
+*   **Self-Initiated Deletion**: Users can permanently delete their accounts at any time from the **Danger Zone** inside their Account Settings tab on the dashboard.
+*   **Admin-Initiated Deletion**: Administrators can execute complete account deletions on behalf of developers directly from the administrative panel.
+*   **The Purge & Anonymisation Protocol**:
+    1.  All Personal Access Tokens (PATs) and active session cookies are permanently revoked and deleted from disk.
+    2.  Any active WebSocket tunnel connections are forcefully closed and disconnected.
+    3.  The user's actual profile record (First Name, Last Name, email, and preferences) is permanently deleted from the database.
+    4.  To preserve historical system metrics and auditing trails without violating privacy, any associated logs and bandwidth metrics in `tunnel_metrics`, `tunnel_audit_logs`, and `admin_audit_log` are **permanently obfuscated and anonymised** using a secure SHA-256 hash of their email address (e.g., `gdpr-deleted-user-hash123`).
+
+---
+
+## 5. Host-Your-Own (Sovereign) Policy Customisation
 
 Liferay Tunnel is fully self-hostable. If you run your own private instance of `lfr-tunneld`:
 * You are the sole Data Controller of your database. No data is ever transmitted to Liferay, Peter Richards, or any external third-party server.

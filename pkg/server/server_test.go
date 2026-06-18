@@ -752,3 +752,165 @@ func TestDefenseMiddleware(t *testing.T) {
 		t.Errorf("expected 429 Too Many Requests or 403 Forbidden, got %d", recRateLimited.Code)
 	}
 }
+
+func TestServer_UnsubscribeAndMaintenance(t *testing.T) {
+	tmpDir, err := os.MkdirTemp("", "lfr-tunnel-test-*")
+	if err != nil {
+		t.Fatalf("failed to create temp dir: %v", err)
+	}
+	defer os.RemoveAll(tmpDir) //nolint:errcheck
+
+	cfg := config.DefaultServerConfig()
+	cfg.DBPath = filepath.Join(tmpDir, "test.db")
+	cfg.Domains = []string{"example.com"}
+
+	srv, err := NewServer(cfg)
+	if err != nil {
+		t.Fatalf("failed to create server: %v", err)
+	}
+	defer srv.Stop()
+	defer time.Sleep(50 * time.Millisecond) // prevent SQLite cleanup races
+
+	email := "dev-user@liferay.com"
+	_ = srv.db.CreateUser(&db.User{ID: email, Email: email, Role: "user", Status: "approved"})
+
+	// 1. Test stateless unsubscribe token generation and verification
+	token := srv.GenerateUnsubscribeToken(email)
+	if token == "" {
+		t.Fatal("expected unsubscribe token to be non-empty")
+	}
+
+	parsedEmail, err := srv.VerifyUnsubscribeToken(token)
+	if err != nil {
+		t.Fatalf("expected token verification to succeed, got error: %v", err)
+	}
+	if parsedEmail != email {
+		t.Errorf("expected parsed email %q, got %q", email, parsedEmail)
+	}
+
+	// 2. Test unsubscribe GET request endpoint
+	req := httptest.NewRequest("GET", "http://example.com/api/unsubscribe?token="+token, nil)
+	rec := httptest.NewRecorder()
+	srv.ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusOK {
+		t.Errorf("expected 200 OK for unsubscribe endpoint, got %d", rec.Code)
+	}
+
+	u, err := srv.db.GetUserByEmail(email)
+	if err != nil {
+		t.Fatalf("failed to get user: %v", err)
+	}
+	if u.NotificationPrefs != "disabled" {
+		t.Errorf("expected user notification_prefs to be 'disabled', got %q", u.NotificationPrefs)
+	}
+
+	// 3. Test scheduling maintenance mode with a countdown
+	srv.maintMutex.Lock()
+	srv.maintenanceMode = false
+	srv.maintScheduledAt = time.Now().Add(5 * time.Minute)
+	srv.maintMutex.Unlock()
+
+	reqVer := httptest.NewRequest("GET", "http://example.com/api/version", nil)
+	recVer := httptest.NewRecorder()
+	srv.ServeHTTP(recVer, reqVer)
+
+	if recVer.Code != http.StatusOK {
+		t.Fatalf("expected 200 OK for api/version, got %d", recVer.Code)
+	}
+
+	var verResp map[string]string
+	if err := json.NewDecoder(recVer.Body).Decode(&verResp); err != nil {
+		t.Fatalf("failed to decode response: %v", err)
+	}
+	if verResp["maintenance_mode"] != "pending" {
+		t.Errorf("expected maintenance_mode to be 'pending', got %q", verResp["maintenance_mode"])
+	}
+}
+
+func TestServer_GDPRDeleteAndAnonymization(t *testing.T) {
+	tmpDir, err := os.MkdirTemp("", "lfr-tunnel-test-*")
+	if err != nil {
+		t.Fatalf("failed to create temp dir: %v", err)
+	}
+	defer os.RemoveAll(tmpDir) //nolint:errcheck
+
+	cfg := config.DefaultServerConfig()
+	cfg.DBPath = filepath.Join(tmpDir, "test.db")
+	cfg.Domains = []string{"example.com"}
+
+	srv, err := NewServer(cfg)
+	if err != nil {
+		t.Fatalf("failed to create server: %v", err)
+	}
+	defer srv.Stop()
+	defer time.Sleep(50 * time.Millisecond) // prevent SQLite cleanup races
+
+	email := "gdpr-user@example.com"
+	_ = srv.db.CreateUser(&db.User{ID: email, Email: email, Role: "user", Status: "approved"})
+
+	// Create some audit entries for this user
+	_ = srv.db.WriteAuditEntry(&db.AuditEntry{
+		ActorID:    email,
+		Action:     "tunnel.connected",
+		TargetType: "tunnel",
+		TargetID:   "gamma",
+	})
+
+	// Run anonymization directly
+	anonymizedID := "gdpr-deleted-user-hash123"
+	err = srv.db.AnonymizeUserData(email, anonymizedID)
+	if err != nil {
+		t.Fatalf("AnonymizeUserData failed: %v", err)
+	}
+
+	// Verify audit logs are anonymized
+	entries, err := srv.db.ListAuditEntries(db.AuditFilter{})
+	if err != nil {
+		t.Fatalf("failed to list audit entries: %v", err)
+	}
+	if len(entries) == 0 {
+		t.Fatal("expected at least 1 audit entry")
+	}
+
+	for _, entry := range entries {
+		if entry.ActorID == email {
+			t.Errorf("found un-anonymized actor_id %q in audit log", entry.ActorID)
+		}
+	}
+}
+
+func TestServer_I18nLanguageHandling(t *testing.T) {
+	cfg := config.DefaultServerConfig()
+	cfg.Domains = []string{"example.com"}
+
+	srv, err := NewServer(cfg)
+	if err != nil {
+		t.Fatalf("failed to create server: %v", err)
+	}
+	defer srv.Stop()
+	defer time.Sleep(50 * time.Millisecond) // prevent SQLite cleanup races
+
+	// 1. Test GetTranslation matching
+	subjectFR := srv.GetTranslation("fr", "magic_link_subject")
+	expectedFR := "Votre lien magique de connexion"
+	if subjectFR != expectedFR {
+		t.Errorf("expected French translation %q, got %q", expectedFR, subjectFR)
+	}
+
+	// 2. Test GetTranslation default fallback
+	subjectEN := srv.GetTranslation("ru", "magic_link_subject") // unsupported language falls back to 'en'
+	expectedEN := "Your magic login link"
+	if subjectEN != expectedEN {
+		t.Errorf("expected Fallback English translation %q, got %q", expectedEN, subjectEN)
+	}
+
+	// 3. Test ResolveLocale headers
+	req, _ := http.NewRequest("GET", "http://example.com/", nil)
+	req.Header.Set("Accept-Language", "es-ES,es;q=0.9,en;q=0.8")
+
+	lang := srv.ResolveLocale(req)
+	if lang != "es" {
+		t.Errorf("expected resolved locale 'es', got %q", lang)
+	}
+}

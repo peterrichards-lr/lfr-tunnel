@@ -321,14 +321,23 @@ sudo chmod 700 /etc/lfr-tunneld
 sudo chmod 600 /etc/lfr-tunneld/server-config.yaml
 ```
 
-### 4.4. Local Postfix Email Relay (TLS Verification)
-If you are running a local Postfix daemon to send emails, you must securely configure Postfix to present your Let's Encrypt certificates. If Postfix uses a self-signed certificate, the Go gateway will securely reject the `STARTTLS` handshake.
+### 4.4. Local Postfix Email Relay (TLS Verification & rDNS Alignment)
+If you are running a local Postfix daemon to send emails, you must securely configure Postfix to present your Let's Encrypt certificates and align its HELO SMTP banner (`myhostname`) with your public IP's PTR (reverse DNS) record to prevent major mail hosts (like Google or Microsoft) from flagging outbound notifications as spam/forgery.
 
-To bind the certificates to Postfix and allow relaying from the domain's resolved IP, run the following:
+To align the banner, bind the certificates to Postfix, and allow relaying from the domain's resolved IP, run the following:
 ```bash
+# 1. Align SMTP HELO Banner with your public reverse DNS (PTR) record
+sudo postconf -e "myhostname = tunnel.yourdomain.com"
+sudo postconf -e "myorigin = yourdomain.com"
+
+# 2. Configure Postfix to present your secure Let's Encrypt SSL certificates
 sudo postconf -e "smtpd_tls_cert_file=/etc/letsencrypt/live/yourdomain.com/fullchain.pem"
 sudo postconf -e "smtpd_tls_key_file=/etc/letsencrypt/live/yourdomain.com/privkey.pem"
+
+# 3. Allow secure relaying from localhost and your VPS external IPs
 sudo postconf -e "mynetworks = 127.0.0.0/8 [::ffff:127.0.0.0]/104 [::1]/128 YOUR_VPS_PUBLIC_IPV4 YOUR_VPS_PUBLIC_IPV6"
+
+# 4. Restart Postfix to apply all updates
 sudo systemctl restart postfix
 ```
 
@@ -564,3 +573,128 @@ Then, save your passphrase once to the keychain:
 ```bash
 ssh-add --apple-use-keychain ~/.ssh/id_ed25519
 ```
+
+---
+
+## 8. Enterprise Customization & Policy Hardening
+
+Liferay Tunnel includes built-in compliance, deliverability, and administrative systems optimized for strict enterprise security parameters.
+
+### 8.1. Configuring Custom Legal Policies (Privacy & Cookies)
+
+By default, the gateway portal serves baseline legal disclosures at `/privacy` and `/cookies` describing generic SQLite database storage and session tracking. You can customize these disclosures using two distinct methods:
+
+#### Method A: Configuration-Driven Redirects (Dynamic URLs)
+Enterprise self-hosters can direct users to corporate legal disclosures hosted externally. Add the following fields to `/etc/lfr-tunneld/server-config.yaml`:
+
+```yaml
+# Optional custom policy links (defaults to server fallbacks if empty)
+privacy_policy_url: "https://yourcompany.com/privacy-policy"
+cookie_policy_url: "https://yourcompany.com/cookie-disclosure"
+```
+
+Once updated and restarted, the portal footers, registration forms, and OOTB welcome pages will automatically point to those corporate links.
+
+#### Method B: Intercepting at Nginx (Static Local Files)
+If you prefer hosting custom policies natively on the VPS but separately from the Go binary, you can use Nginx's high-performance alias blocks.
+
+1. Upload your custom HTML policies to `/var/www/lfr-tunnel/policies/` (automatically done when running `./scripts/deploy.sh` if policies are placed inside `resources/server/policies/`).
+2. Add the following location blocks inside `/etc/nginx/sites-available/lfr-tunnel` (under the port 443 server block):
+   ```nginx
+   # Serve Custom Branded Legal Policies
+   location = /privacy {
+       alias /var/www/lfr-tunnel/policies/privacy.html;
+       default_type text/html;
+   }
+
+   location = /cookies {
+       alias /var/www/lfr-tunnel/policies/cookies.html;
+       default_type text/html;
+   }
+   ```
+3. Test and reload Nginx:
+   ```bash
+   sudo nginx -t && sudo systemctl reload nginx
+   ```
+
+### 8.2. Enforcing Policy Consent Audit Trails
+
+To comply with strict IT auditing frameworks (like SOC2 or ISO 27001), you can optionally force users to explicitly check a consent box agreeing to your legal policies before completing their profile setups.
+
+1. Enable the enforcement flag inside `server-config.yaml`:
+   ```yaml
+   enforce_policy_consent: true
+   ```
+2. Restart the service:
+   ```bash
+   sudo systemctl restart lfr-tunneld
+   ```
+3. **The User Experience**: The Complete Profile Setup page (`setup.html`) will dynamically render a required checkbox. The user cannot submit setup without checking it.
+4. **The Audit Trail**: The server will capture the exact timestamp of consent and save it in the SQLite database under `policy_consent_at`. This provides an airtight compliance record.
+
+### 8.3. Scheduled Maintenance Countdowns
+
+To prevent active tunnel connections or client-facing demonstrations from suddenly dropping without warning, administrators can schedule maintenance with a countdown timer.
+
+1. Navigate to the **Users** tab inside the Admin Dashboard.
+2. In the **Gateway Maintenance Mode** widget, select a countdown duration (e.g., 5 Minutes) from the dropdown list.
+3. Click **"Enable Maintenance"**.
+4. **The Experience**:
+   * All active portal dashboards will instantly display a prominent, blinking orange warning banner: *"⚠️ Warning: Scheduled Maintenance is starting in 4:52 minutes. All standard tunnels will be paused."*
+   * Standard users will be blocked from logging in with a helpful notification.
+   * Once the countdown hits 0, the server automatically flips into active maintenance, forcefully drops all standard WebSocket tunnels (`KickLease`), and logs out active non-admin portal sessions.
+   * Admins and Owners remain unblocked throughout the entire process so they can manage system resources.
+
+### 8.4. Automated Cloudflare Dynamic DNS (DDNS) Service Setup
+
+If your VPS or gateway environment runs on a dynamic public IP address, you can configure our native background Cloudflare Dynamic DNS (DDNS) service. 
+
+This background service automatically polls your public IPv4 and IPv6 addresses every 5 minutes and dynamically syncs your Cloudflare DNS zone records for the root (`@`), wildcard (`*`), and your explicit SMTP mail host (`tunnel`) subdomains whenever an IP change is detected, keeping your tunnels and mail server HELO/rDNS alignment 100% self-healing!
+
+#### Step 1: Place API token configuration
+Create a secure configuration file at `/etc/letsencrypt/cloudflare.ini` (this matches the certbot API folder location):
+```ini
+# Cloudflare API Token (with Zone.DNS Edit permissions)
+dns_cloudflare_api_token = YOUR_CLOUDFLARE_API_TOKEN
+```
+Apply restricted permissions to secure the token:
+```bash
+sudo chmod 600 /etc/letsencrypt/cloudflare.ini
+```
+
+#### Step 2: Install the DDNS Script
+Move the script to your server's binary folder and make it executable:
+```bash
+sudo cp scripts/cloudflare-ddns.sh /usr/local/bin/cloudflare-ddns.sh
+sudo chmod +x /usr/local/bin/cloudflare-ddns.sh
+```
+
+#### Step 3: Install the systemd service & timer
+To automate running the script every 5 minutes natively using systemd:
+
+1. Copy the systemd service file to `/etc/systemd/system/cloudflare-ddns.service`:
+   ```bash
+   sudo cp scripts/cloudflare-ddns.service /etc/systemd/system/cloudflare-ddns.service
+   ```
+2. Copy the systemd timer file to `/etc/systemd/system/cloudflare-ddns.timer`:
+   ```bash
+   sudo cp scripts/cloudflare-ddns.timer /etc/systemd/system/cloudflare-ddns.timer
+   ```
+3. Enable and start the timer service:
+   ```bash
+   sudo systemctl daemon-reload
+   sudo systemctl enable cloudflare-ddns.timer
+   sudo systemctl start cloudflare-ddns.timer
+   ```
+
+#### Step 4: Verify the Service
+Check that your systemd timer is active and scheduled:
+```bash
+systemctl list-timers | grep cloudflare
+```
+You can also trigger a manual DNS update check immediately to confirm it works:
+```bash
+sudo systemctl start cloudflare-ddns.service
+sudo journalctl -u cloudflare-ddns.service -n 50
+```
+

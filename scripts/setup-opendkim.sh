@@ -55,6 +55,8 @@ sudo chown -R opendkim:opendkim /etc/opendkim
 sudo chmod go-rw /etc/opendkim/keys
 
 echo "Configuring Postfix..."
+sudo postconf -e "myhostname = tunnel.lfr-demo.se"
+sudo postconf -e "myorigin = lfr-demo.se"
 sudo postconf -e "milter_protocol = 6"
 sudo postconf -e "milter_default_action = accept"
 sudo postconf -e "smtpd_milters = inet:localhost:12301"

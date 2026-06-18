@@ -276,6 +276,35 @@ function toggleTheme() {
             } catch (e) {
                 console.error("Failed to load policy links", e);
             }
+
+            // Auto-detect browser language on first load and translate unauthenticated portal UI
+            try {
+                const res = await fetch('/api/i18n');
+                if (res.ok) {
+                    const bundle = await res.json();
+                    
+                    // Deduce resolved language by scanning typical strings
+                    let resolvedLang = "en";
+                    if (bundle.portal_welcome === "Bienvenido") resolvedLang = "es";
+                    else if (bundle.portal_welcome === "Bienvenue") resolvedLang = "fr";
+                    else if (bundle.portal_welcome === "Willkommen") resolvedLang = "de";
+                    else if (bundle.portal_welcome === "Bem-vindo") resolvedLang = "pt";
+                    else if (bundle.portal_welcome === "환영합니다") resolvedLang = "ko";
+                    else if (bundle.portal_welcome === "ようこそ") resolvedLang = "ja";
+                    else if (bundle.portal_welcome === "欢迎") resolvedLang = "zh";
+
+                    const selector = document.getElementById('portal-language-selector');
+                    if (selector) selector.value = resolvedLang;
+
+                    // Apply translations to data-i18n tagged elements
+                    document.querySelectorAll('[data-i18n]').forEach(el => {
+                        const key = el.getAttribute('data-i18n');
+                        if (bundle[key]) el.innerText = bundle[key];
+                    });
+                }
+            } catch (e) {
+                console.error("Failed to auto-detect and translate portal language", e);
+            }
         }
 
         async function showLogin() {
@@ -454,6 +483,7 @@ function toggleTheme() {
             document.getElementById('acc-last-name').value = currentUser.last_name || '';
             document.getElementById('acc-preferred-name').value = currentUser.preferred_name || '';
             document.getElementById('acc-theme').value = currentUser.theme_preference || 'system';
+            document.getElementById('acc-language').value = currentUser.language_preference || 'en';
             document.getElementById('acc-notifications').checked = (currentUser.notification_prefs === 'enabled' || !currentUser.notification_prefs);
 
             // Apply theme from preference if not system
@@ -490,6 +520,30 @@ function toggleTheme() {
                             banner.style.display = 'block';
                         } else {
                             banner.style.display = 'none';
+                        }
+
+                        const maintBanner = document.getElementById('global-maintenance-banner');
+                        if (data.maintenance_mode === "pending") {
+                            const secs = data.maintenance_seconds_left;
+                            const mins = Math.floor(secs / 60);
+                            const remSecs = secs % 60;
+                            const timeStr = `${mins}:${remSecs < 10 ? '0' : ''}${remSecs}`;
+                            maintBanner.innerHTML = `⚠️ <strong>Scheduled Maintenance starting in ${timeStr} minutes!</strong> All standard tunnels will be paused.`;
+                            maintBanner.style.backgroundColor = '#f59e0b';
+                            maintBanner.style.display = 'block';
+                        } else if (data.maintenance_mode === "true") {
+                            maintBanner.innerHTML = `🛠️ <strong>Gateway is currently undergoing Scheduled Maintenance!</strong> Tunnels are paused.`;
+                            maintBanner.style.backgroundColor = '#ef4444';
+                            maintBanner.style.display = 'block';
+                            
+                            // If the current user is not admin/owner, force close/logout!
+                            if (currentUser && currentUser.role !== 'admin' && currentUser.role !== 'owner') {
+                                clearInterval(pollingInterval);
+                                showToast("The portal has entered scheduled maintenance. Standard sessions are suspended.", "danger");
+                                logout();
+                            }
+                        } else {
+                            maintBanner.style.display = 'none';
                         }
                         
                         if (data.targeted_message && window.lastTargetedMessage !== data.targeted_message) {
@@ -612,6 +666,7 @@ function toggleTheme() {
                 last_name: document.getElementById('acc-last-name').value,
                 preferred_name: document.getElementById('acc-preferred-name').value,
                 theme_preference: document.getElementById('acc-theme').value,
+                language_preference: document.getElementById('acc-language').value,
                 notification_prefs: document.getElementById('acc-notifications').checked ? 'enabled' : 'disabled',
             };
 
@@ -627,6 +682,7 @@ function toggleTheme() {
                 currentUser.last_name = payload.last_name;
                 currentUser.preferred_name = payload.preferred_name;
                 currentUser.theme_preference = payload.theme_preference;
+                currentUser.language_preference = payload.language_preference;
                 currentUser.notification_prefs = payload.notification_prefs;
 
                 // Update the greeting text immediately
@@ -992,6 +1048,7 @@ function toggleTheme() {
                             ${(!isSelf && u.status === 'approved' && u.role === 'admin') ? `<button class="btn" style="padding: 4px 8px; margin: 0 4px 0 0; color: #84cc16; border-color: #84cc16;" onclick="changeUserRole('${escapeHTML(u.email)}', 'user')">Demote</button>` : ''}
                             ${(!isSelf && u.status === 'approved' && u.role === 'user') ? `<button class="btn" style="padding: 4px 8px; margin: 0 4px 0 0; color: #84cc16; border-color: #84cc16;" onclick="changeUserRole('${escapeHTML(u.email)}', 'admin')">Promote</button>` : ''}
                             ${(!isSelf && u.totp_enabled) ? `<button class="btn" style="padding: 4px 8px; margin: 0 4px 0 0; color: #d97706; border-color: #d97706;" onclick="adminResetMFA('${escapeHTML(u.email)}')">Reset MFA</button>` : ''}
+                            ${!isSelf ? `<button class="btn" style="padding: 4px 8px; margin: 0 4px 0 0; color: #f43f5e; border-color: #f43f5e;" onclick="adminDeleteUser('${escapeHTML(u.email)}')">Delete</button>` : ''}
                             ${isSelf ? '<span style="font-size: 12px; color: var(--text-muted);">No actions</span>' : ''}
                         </td>
                     </tr>
@@ -1484,5 +1541,169 @@ function toggleTheme() {
             } else {
                 const err = await res.json();
                 showToast(err.error || `Failed to ${verb} user.`, "danger");
+            }
+        }
+
+        let globalMaintenanceActive = "false";
+
+        function updateMaintenanceModeUI(active) {
+            globalMaintenanceActive = active;
+            const statusText = document.getElementById('maint-status-text');
+            const toggleBtn = document.getElementById('btn-toggle-maint');
+            const countdownSelect = document.getElementById('maint-countdown-select');
+            if (!statusText || !toggleBtn) return;
+
+            if (active === "true") {
+                statusText.innerHTML = `Status: <span style="color: #ef4444; font-weight: 600;">ACTIVE 🔴</span>`;
+                toggleBtn.innerText = "Disable Maintenance";
+                toggleBtn.className = "btn btn-outline";
+                toggleBtn.style.color = "var(--success)";
+                toggleBtn.style.borderColor = "var(--success)";
+                if (countdownSelect) countdownSelect.style.display = "none";
+            } else if (active === "pending") {
+                statusText.innerHTML = `Status: <span style="color: #f59e0b; font-weight: 600;">PENDING COUNTDOWN ⏳</span>`;
+                toggleBtn.innerText = "Cancel Maintenance";
+                toggleBtn.className = "btn btn-outline";
+                toggleBtn.style.color = "var(--danger)";
+                toggleBtn.style.borderColor = "var(--danger)";
+                if (countdownSelect) countdownSelect.style.display = "none";
+            } else {
+                statusText.innerHTML = `Status: <span style="color: var(--text-muted);">INACTIVE 🟢</span>`;
+                toggleBtn.innerText = "Enable Maintenance";
+                toggleBtn.className = "btn btn-primary";
+                toggleBtn.style.color = "white";
+                toggleBtn.style.borderColor = "var(--primary)";
+                if (countdownSelect) countdownSelect.style.display = "block";
+            }
+        }
+
+        async function toggleMaintenanceMode() {
+            let nextState = true;
+            if (globalMaintenanceActive === "true" || globalMaintenanceActive === "pending") {
+                nextState = false;
+            }
+
+            const verb = nextState ? "enable" : "disable/cancel";
+            let countdownVal = 0;
+            if (nextState) {
+                const countdownSelect = document.getElementById('maint-countdown-select');
+                if (countdownSelect) {
+                    countdownVal = parseInt(countdownSelect.value) || 0;
+                }
+            }
+
+            const promptMsg = nextState 
+                ? (countdownVal > 0 
+                    ? `Are you sure you want to schedule Gateway Maintenance Mode to start in ${countdownVal} minutes?\n\nThis will start an orange countdown banner on all developer terminals and portals, and forcefully activate when the timer hits 0.`
+                    : "Are you sure you want to enable Gateway Maintenance Mode IMMEDIATELY?\n\nThis will instantly close all standard tunnels, reject new connections, and block standard logins!")
+                : "Are you sure you want to disable/cancel Gateway Maintenance Mode?\n\nThis will restore standard gateway routing, logins, and tunnel connections.";
+
+            if (!confirm(promptMsg)) return;
+
+            try {
+                const payload = { enabled: nextState };
+                if (nextState && countdownVal > 0) {
+                    payload.countdown_minutes = countdownVal;
+                }
+
+                const res = await fetch('/api/admin/maintenance', {
+                    method: 'POST',
+                    headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify(payload)
+                });
+
+                if (res.ok) {
+                    const data = await res.json();
+                    updateMaintenanceModeUI(data.maintenance_mode);
+                    showToast(`Maintenance Mode successfully updated!`, "success");
+                    loadTunnels(); // Refresh tunnels lists in case they were kicked
+                } else {
+                    const err = await res.json();
+                    showToast(err.error || "Failed to update maintenance mode", "danger");
+                }
+            } catch (e) {
+                showToast("Network error toggling maintenance mode", "danger");
+            }
+        }
+
+        function openDeleteAccountModal() {
+            if (!currentUser) return;
+            document.getElementById('delete-acc-email-hint').innerText = currentUser.email;
+            document.getElementById('delete-acc-confirm-input').value = "";
+            document.getElementById('delete-account-modal').style.display = 'flex';
+        }
+
+        function closeDeleteAccountModal() {
+            document.getElementById('delete-account-modal').style.display = 'none';
+        }
+
+        async function submitSelfDeleteAccount() {
+            const inputVal = document.getElementById('delete-acc-confirm-input').value.trim();
+            if (!inputVal) return showToast("Please type your email to confirm.", "danger");
+
+            if (inputVal.toLowerCase() !== currentUser.email.toLowerCase()) {
+                return showToast("Entered email address does not match your account email.", "danger");
+            }
+
+            try {
+                const res = await fetch('/api/me/delete-account', {
+                    method: 'POST',
+                    headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify({ confirm_email: inputVal })
+                });
+
+                if (res.ok) {
+                    alert("Your account has been permanently deleted and anonymised in accordance with your Right to Be Forgotten. You will now be redirected.");
+                    window.location.reload();
+                } else {
+                    const err = await res.json();
+                    showToast(err.error || "Failed to delete account", "danger");
+                }
+            } catch (e) {
+                showToast("Network error deleting account", "danger");
+            }
+        }
+
+        async function adminDeleteUser(email) {
+            const promptMsg = `⚠️ GDPR RIGHT TO BE FORGOTTEN REQUEST\n\nAre you sure you want to PERMANENTLY DELETE and ANONYMISE the account for ${email}?\n\nThis will instantly revoke all their tokens, close active tunnels, completely delete their profile, and permanently anonymise their logs and bandwidth metrics! This action is absolutely irreversible.`;
+            if (!confirm(promptMsg)) return;
+
+            const secondPrompt = `Type "DELETE" (all caps) to confirm you want to permanently delete and anonymise ${email}:`;
+            const confirmation = prompt(secondPrompt);
+            if (confirmation !== "DELETE") {
+                return showToast("Account deletion cancelled (incorrect confirmation string).", "warning");
+            }
+
+            try {
+                const res = await fetch('/api/admin/users/' + encodeURIComponent(email), {
+                    method: 'DELETE'
+                });
+
+                if (res.ok) {
+                    showToast(`User ${email} has been permanently deleted and anonymised.`, "success");
+                    loadUsers();
+                } else {
+                    const err = await res.json();
+                    showToast(err.error || "Failed to delete user", "danger");
+                }
+            } catch (e) {
+                showToast("Network error deleting user", "danger");
+            }
+        }
+
+        async function changePortalLanguage(lang) {
+            try {
+                const res = await fetch('/api/i18n?lang=' + encodeURIComponent(lang));
+                if (res.ok) {
+                    const bundle = await res.json();
+                    document.querySelectorAll('[data-i18n]').forEach(el => {
+                        const key = el.getAttribute('data-i18n');
+                        if (bundle[key]) {
+                            el.innerText = bundle[key];
+                        }
+                    });
+                }
+            } catch (e) {
+                console.error("Failed to load language", e);
             }
         }

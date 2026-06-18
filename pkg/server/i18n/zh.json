@@ -1,0 +1,21 @@
+{
+  "magic_link_subject": "您的魔法登录链接",
+  "invite_subject": "邀请加入 Liferay Tunnel",
+  "role_updated_subject": "Liferay Tunnel: 账户角色已更新",
+  "access_suspended_subject": "Liferay Tunnel: 账户访问已被暂停",
+  "account_deleted_subject": "Liferay Tunnel: 账户已永久删除并匿名化",
+  "registration_pending_subject": "Liferay Tunnel: 新用户注册等待审批",
+  
+  "portal_title": "Liferay Tunnel 门户",
+  "portal_welcome": "欢迎",
+  "portal_login_desc": "输入您的电子邮件以请求无密码安全登录链接。",
+  "portal_register_desc": "还没有账户？在此注册：",
+  "btn_send_magic_link": "发送魔法链接",
+  "btn_register_account": "注册账户",
+  "label_email": "电子邮件地址",
+  "label_first_name": "名字 (First Name)",
+  "label_last_name": "姓氏 (Last Name)",
+  "mfa_verify_title": "多因素身份验证 (MFA)",
+  "mfa_verify_desc": "请输入您的身份验证器应用程序中的6位数字验证码：",
+  "btn_verify_login": "验证并登录"
+}

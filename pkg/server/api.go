@@ -4,9 +4,12 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
+	"errors"
 	"fmt"
+	"html"
 	"log"
 	"net/http"
+	"net/url"
 	"path"
 	"strconv"
 	"strings"
@@ -121,6 +124,24 @@ func (s *Server) handleGetMe(w http.ResponseWriter, r *http.Request) {
 	}
 	s.targetedMutex.RUnlock()
 
+	s.maintMutex.RLock()
+	isMaint := s.maintenanceMode
+	maintScheduled := s.maintScheduledAt
+	s.maintMutex.RUnlock()
+
+	maintModeStr := "false"
+	var secondsLeft int
+	if isMaint {
+		maintModeStr = "true"
+	} else if !maintScheduled.IsZero() && time.Now().Before(maintScheduled) {
+		maintModeStr = "pending"
+		secondsLeft = int(time.Until(maintScheduled).Seconds())
+	}
+	resp["maintenance_mode"] = maintModeStr
+	if maintModeStr == "pending" {
+		resp["maintenance_seconds_left"] = secondsLeft
+	}
+
 	respondJSON(w, http.StatusOK, resp)
 }
 
@@ -133,12 +154,13 @@ func (s *Server) handleUpdateMe(w http.ResponseWriter, r *http.Request) {
 	}
 
 	var req struct {
-		FirstName         *string `json:"first_name"`
-		LastName          *string `json:"last_name"`
-		PreferredName     *string `json:"preferred_name"`
-		Timezone          *string `json:"timezone"`
-		ThemePreference   *string `json:"theme_preference"`
-		NotificationPrefs *string `json:"notification_prefs"`
+		FirstName          *string `json:"first_name"`
+		LastName           *string `json:"last_name"`
+		PreferredName      *string `json:"preferred_name"`
+		Timezone           *string `json:"timezone"`
+		ThemePreference    *string `json:"theme_preference"`
+		NotificationPrefs  *string `json:"notification_prefs"`
+		LanguagePreference *string `json:"language_preference"`
 	}
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 		http.Error(w, `{"error":"Invalid request payload"}`, http.StatusBadRequest)
@@ -162,6 +184,9 @@ func (s *Server) handleUpdateMe(w http.ResponseWriter, r *http.Request) {
 	}
 	if req.NotificationPrefs != nil {
 		user.NotificationPrefs = strings.TrimSpace(*req.NotificationPrefs)
+	}
+	if req.LanguagePreference != nil {
+		user.LanguagePreference = strings.TrimSpace(*req.LanguagePreference)
 	}
 
 	if err := s.db.UpdateUser(user); err != nil {
@@ -538,6 +563,153 @@ func (s *Server) handleMFAVerify(w http.ResponseWriter, r *http.Request) {
 		SameSite: http.SameSiteLaxMode,
 	}
 	http.SetCookie(w, cookie)
+
+	respondJSON(w, http.StatusOK, map[string]string{"status": "success"})
+}
+
+// performGDPRDeletionAndAnonymization executes a complete, compliant account deletion & anonymization.
+func (s *Server) performGDPRDeletionAndAnonymization(email string, r *http.Request) error {
+	if s.db == nil {
+		return errors.New("database not configured")
+	}
+
+	user, err := s.db.GetUserByEmail(email)
+	if err != nil {
+		return err
+	}
+
+	// 1. Kick any active tunnels matching this user
+	leases := s.registry.ListLeases()
+	for _, lease := range leases {
+		if lease.UserID == user.ID || strings.EqualFold(lease.UserID, user.Email) {
+			s.registry.KickLease(lease.SubdomainPrefix)
+		}
+	}
+
+	// 2. Revoke and delete all personal access tokens
+	pats, err := s.db.ListPATs(user.ID)
+	if err == nil {
+		for _, pat := range pats {
+			_ = s.db.RevokePAT(pat.ID)
+		}
+	}
+
+	// 3. Generate a secure, unique, and anonymized user ID hash for GDPR compliance
+	h := sha256.Sum256([]byte(user.Email))
+	anonymizedID := fmt.Sprintf("gdpr-deleted-user-%s", hex.EncodeToString(h[:8]))
+
+	// 4. Anonymize historical audit logs and bandwidth metrics
+	_ = s.db.AnonymizeUserData(user.ID, anonymizedID)
+	if user.Email != user.ID {
+		_ = s.db.AnonymizeUserData(user.Email, anonymizedID)
+	}
+
+	// 5. Send a final GDPR-deleted/anonymized confirmation email BEFORE purging profile
+	if s.mailSender != nil {
+		subject := s.GetTranslation(user.LanguagePreference, "account_deleted_subject")
+		greetingName := user.FirstName
+		if greetingName == "" {
+			greetingName = "there"
+		}
+		body := fmt.Sprintf(`Hi %s,<br/><br/>
+Your Liferay Tunnel account has been successfully deleted and anonymised in accordance with your Right to Be Forgotten (GDPR).<br/><br/>
+Your profile details (first name, last name, and preferences) and all active personal access tokens have been completely purged from our servers, and your historical bandwidth metrics and audit trails have been permanently anonymised.<br/><br/>
+Best regards,<br/>
+Liferay Tunnel Team`, html.EscapeString(greetingName))
+
+		plainBody := fmt.Sprintf("Hi %s,\n\nYour Liferay Tunnel account has been successfully deleted and anonymised under GDPR.\n\nBest regards,\nLiferay Tunnel Team", greetingName)
+		_ = s.mailSender.Send(user.Email, subject, body, plainBody)
+	}
+
+	// 6. Delete the actual profile record from the users database entirely
+	err = s.db.DeleteUser(user.ID)
+	if err != nil {
+		return err
+	}
+
+	// 7. Write an anonymous audit log confirming account deletion
+	s.writeAudit("system", "user.gdpr_deleted", "user", anonymizedID, "User account successfully deleted and anonymised", r)
+
+	return nil
+}
+
+// handleSelfDeleteAccount handles user self-initiated deletion from their Account Settings.
+func (s *Server) handleSelfDeleteAccount(w http.ResponseWriter, r *http.Request) {
+	user, err := s.getCurrentUser(r)
+	if err != nil {
+		http.Error(w, `{"error":"Unauthorized"}`, http.StatusUnauthorized)
+		return
+	}
+
+	// Prevent Owner from self-deleting
+	if s.cfg.Owner.UserID != "" && strings.EqualFold(user.Email, s.cfg.Owner.UserID) {
+		http.Error(w, `{"error":"Forbidden: The system Owner account cannot be deleted. Please transfer ownership first."}`, http.StatusForbidden)
+		return
+	}
+
+	var req struct {
+		ConfirmEmail string `json:"confirm_email"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		http.Error(w, `{"error":"Invalid request payload"}`, http.StatusBadRequest)
+		return
+	}
+
+	if !strings.EqualFold(req.ConfirmEmail, user.Email) {
+		http.Error(w, `{"error":"Email confirmation does not match your active account email address."}`, http.StatusBadRequest)
+		return
+	}
+
+	err = s.performGDPRDeletionAndAnonymization(user.Email, r)
+	if err != nil {
+		http.Error(w, `{"error":"Failed to delete and anonymise account"}`, http.StatusInternalServerError)
+		return
+	}
+
+	// Clear session cookie
+	cookie := &http.Cookie{
+		Name:     "lfr_session",
+		Value:    "",
+		Path:     "/",
+		Expires:  time.Unix(0, 0),
+		MaxAge:   -1,
+		HttpOnly: true,
+		Secure:   r.TLS != nil,
+	}
+	http.SetCookie(w, cookie)
+
+	respondJSON(w, http.StatusOK, map[string]string{"status": "success"})
+}
+
+// handleAdminDeleteUser processes an admin-initiated user account deletion (GDPR).
+func (s *Server) handleAdminDeleteUser(w http.ResponseWriter, r *http.Request, actor string) {
+	email, err := url.PathUnescape(strings.TrimPrefix(r.URL.Path, "/api/admin/users/"))
+	if err != nil {
+		http.Error(w, `{"error":"Invalid user email"}`, http.StatusBadRequest)
+		return
+	}
+
+	user, err := s.db.GetUserByEmail(email)
+	if err != nil {
+		if err == db.ErrNotFound {
+			http.Error(w, `{"error":"User not found"}`, http.StatusNotFound)
+		} else {
+			http.Error(w, `{"error":"Failed to find user"}`, http.StatusInternalServerError)
+		}
+		return
+	}
+
+	// Prevent deleting Owner
+	if s.cfg.Owner.UserID != "" && strings.EqualFold(user.Email, s.cfg.Owner.UserID) {
+		http.Error(w, `{"error":"Forbidden: Cannot delete the system Owner account."}`, http.StatusForbidden)
+		return
+	}
+
+	err = s.performGDPRDeletionAndAnonymization(user.Email, r)
+	if err != nil {
+		http.Error(w, `{"error":"Failed to delete and anonymise user"}`, http.StatusInternalServerError)
+		return
+	}
 
 	respondJSON(w, http.StatusOK, map[string]string{"status": "success"})
 }

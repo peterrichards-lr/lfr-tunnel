@@ -73,7 +73,7 @@
             });
         }
 
-        function selectCustomLanguage(lang) {
+        function selectCustomLanguage(lang, skipSync = false) {
             const loc = supportedLocales.find(l => l.code === lang) || supportedLocales[1];
             const flagSpan = document.getElementById('custom-dropdown-flag');
             const labelSpan = document.getElementById('custom-dropdown-label');
@@ -82,6 +82,10 @@
             
             const menu = document.getElementById('custom-dropdown-menu');
             if (menu) menu.style.display = 'none';
+            
+            if (!skipSync) {
+                selectAccLanguage(lang, true);
+            }
             
             changePortalLanguage(lang);
         }
@@ -129,7 +133,7 @@
             });
         }
 
-        function selectAccLanguage(lang) {
+        function selectAccLanguage(lang, skipSync = false) {
             const loc = supportedLocales.find(l => l.code === lang) || supportedLocales[1];
             const flagSpan = document.getElementById('acc-custom-flag');
             const labelSpan = document.getElementById('acc-custom-label');
@@ -140,6 +144,10 @@
             
             const menu = document.getElementById('acc-custom-menu');
             if (menu) menu.style.display = 'none';
+            
+            if (!skipSync) {
+                selectCustomLanguage(lang, true);
+            }
         }
 
         function toggleAccDropdown() {

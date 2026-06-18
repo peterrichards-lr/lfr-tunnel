@@ -4,6 +4,7 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
+	"fmt"
 	"log"
 	"net/http"
 	"path"
@@ -352,4 +353,191 @@ func (s *Server) handleGetAnalytics(w http.ResponseWriter, r *http.Request) {
 	}
 
 	respondJSON(w, http.StatusOK, resp)
+}
+
+// handleMFASetup generates a new TOTP secret and returns setup details.
+func (s *Server) handleMFASetup(w http.ResponseWriter, r *http.Request) {
+	u, err := s.getCurrentUser(r)
+	if err != nil {
+		http.Error(w, `{"error":"Unauthorized"}`, http.StatusUnauthorized)
+		return
+	}
+
+	secret, err := GenerateTOTPSecret()
+	if err != nil {
+		http.Error(w, `{"error":"Failed to generate secret"}`, http.StatusInternalServerError)
+		return
+	}
+
+	// URL format compliant with standard authenticator apps (Google/Microsoft Auth, 1Password, etc.)
+	otpauthURL := fmt.Sprintf("otpauth://totp/Liferay%%20Tunnel:%s?secret=%s&issuer=Liferay%%20Tunnel", u.Email, secret)
+
+	respondJSON(w, http.StatusOK, map[string]string{
+		"secret":      secret,
+		"otpauth_url": otpauthURL,
+	})
+}
+
+// handleMFAEnable validates the provided TOTP code and activates MFA for the user.
+func (s *Server) handleMFAEnable(w http.ResponseWriter, r *http.Request) {
+	u, err := s.getCurrentUser(r)
+	if err != nil {
+		http.Error(w, `{"error":"Unauthorized"}`, http.StatusUnauthorized)
+		return
+	}
+
+	var req struct {
+		Secret string `json:"secret"`
+		Code   string `json:"code"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		http.Error(w, `{"error":"Invalid request"}`, http.StatusBadRequest)
+		return
+	}
+
+	if !ValidateTOTP(req.Secret, req.Code) {
+		http.Error(w, `{"error":"Invalid verification code"}`, http.StatusBadRequest)
+		return
+	}
+
+	if s.db != nil {
+		u.TOTPSecret = req.Secret
+		u.TOTPEnabled = true
+		if err := s.db.UpdateUser(u); err != nil {
+			http.Error(w, `{"error":"Failed to enable MFA"}`, http.StatusInternalServerError)
+			return
+		}
+		s.writeAudit(u.Email, "user.mfa_enabled", "user", u.Email, "", r)
+	}
+
+	respondJSON(w, http.StatusOK, map[string]string{"status": "success"})
+}
+
+// handleMFADisable deactivates MFA for the authenticated user after validating their code.
+func (s *Server) handleMFADisable(w http.ResponseWriter, r *http.Request) {
+	u, err := s.getCurrentUser(r)
+	if err != nil {
+		http.Error(w, `{"error":"Unauthorized"}`, http.StatusUnauthorized)
+		return
+	}
+
+	var req struct {
+		Code string `json:"code"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		http.Error(w, `{"error":"Invalid request"}`, http.StatusBadRequest)
+		return
+	}
+
+	if !ValidateTOTP(u.TOTPSecret, req.Code) {
+		http.Error(w, `{"error":"Invalid verification code"}`, http.StatusBadRequest)
+		return
+	}
+
+	if s.db != nil {
+		u.TOTPSecret = ""
+		u.TOTPEnabled = false
+		if err := s.db.UpdateUser(u); err != nil {
+			http.Error(w, `{"error":"Failed to disable MFA"}`, http.StatusInternalServerError)
+			return
+		}
+		s.writeAudit(u.Email, "user.mfa_disabled", "user", u.Email, "", r)
+	}
+
+	respondJSON(w, http.StatusOK, map[string]string{"status": "success"})
+}
+
+// handleMFAVerify completes the 2FA login verification step and issues the final session token.
+func (s *Server) handleMFAVerify(w http.ResponseWriter, r *http.Request) {
+	var req struct {
+		TempToken string `json:"temp_token"`
+		Code      string `json:"code"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		http.Error(w, `{"error":"Invalid request"}`, http.StatusBadRequest)
+		return
+	}
+
+	val, ok := s.portalMap.LoadAndDelete("pre_auth_" + req.TempToken)
+	if !ok {
+		http.Error(w, `{"error":"Session expired or invalid"}`, http.StatusUnauthorized)
+		return
+	}
+
+	preAuth := val.(PortalSessionData)
+	if time.Now().After(preAuth.ExpiresAt) {
+		http.Error(w, `{"error":"Session has expired"}`, http.StatusUnauthorized)
+		return
+	}
+
+	if s.db == nil {
+		http.Error(w, `{"error":"Database not configured"}`, http.StatusInternalServerError)
+		return
+	}
+
+	user, err := s.db.GetUserByEmail(preAuth.Email)
+	if err != nil {
+		http.Error(w, `{"error":"User not found"}`, http.StatusUnauthorized)
+		return
+	}
+
+	if !ValidateTOTP(user.TOTPSecret, req.Code) {
+		// Put the pre-auth session back so they can try again (with a fresh 5 minute lifetime)
+		preAuth.ExpiresAt = time.Now().Add(5 * time.Minute)
+		s.portalMap.Store("pre_auth_"+req.TempToken, preAuth)
+		http.Error(w, `{"error":"Invalid verification code"}`, http.StatusUnauthorized)
+		return
+	}
+
+	// MFA Validation Success -> Issue Portal Session
+	sessionToken, _ := generateSecureToken()
+	clientIP := getClientIP(r)
+
+	var previousLoginAt *time.Time
+	if user.LastLoginAt != nil {
+		prev := *user.LastLoginAt
+		previousLoginAt = &prev
+	}
+
+	// Update user login audit metrics
+	now := time.Now().UTC()
+	user.LastLoginAt = &now
+	user.LastLoginIP = clientIP
+	_ = s.db.UpdateUser(user)
+
+	killedPreviousSession := false
+	s.portalMap.Range(func(key, value interface{}) bool {
+		k := key.(string)
+		if strings.HasPrefix(k, "admin_session_") {
+			sessionData := value.(PortalSessionData)
+			if sessionData.Email == user.Email {
+				s.portalMap.Delete(k)
+				killedPreviousSession = true
+			}
+		}
+		return true
+	})
+
+	s.portalMap.Store("admin_session_"+sessionToken, PortalSessionData{
+		Email:                 user.Email,
+		ExpiresAt:             time.Now().Add(s.cfg.PortalSessionDuration),
+		ClientIP:              clientIP,
+		PreviousLoginAt:       previousLoginAt,
+		KilledPreviousSession: killedPreviousSession,
+	})
+
+	s.writeAudit(user.Email, "admin.login", "system", "admin", "Admin logged into dashboard via magic link + MFA", r)
+
+	cookie := &http.Cookie{
+		Name:     "lfr_session",
+		Value:    sessionToken,
+		Path:     "/",
+		Expires:  time.Now().Add(s.cfg.PortalSessionDuration),
+		HttpOnly: true,
+		Secure:   r.TLS != nil || r.Header.Get("X-Forwarded-Proto") == "https",
+		SameSite: http.SameSiteLaxMode,
+	}
+	http.SetCookie(w, cookie)
+
+	respondJSON(w, http.StatusOK, map[string]string{"status": "success"})
 }

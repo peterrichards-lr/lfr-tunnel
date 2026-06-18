@@ -225,7 +225,23 @@ function toggleTheme() {
                     headers: {'Content-Type': 'application/json'},
                     body: JSON.stringify({ token: magicToken })
                 });
-                if (!vRes.ok) {
+                if (vRes.ok) {
+                    const data = await vRes.json();
+                    if (data.status === 'mfa_required') {
+                        showLogin();
+                        document.getElementById('email-form').classList.add('hidden');
+                        document.getElementById('register-form').classList.add('hidden');
+                        document.getElementById('btn-show-email').classList.add('hidden');
+                        document.getElementById('btn-show-register').classList.add('hidden');
+                        if (document.getElementById('sso-container')) document.getElementById('sso-container').style.display = 'none';
+                        if (document.getElementById('sso-divider')) document.getElementById('sso-divider').style.display = 'none';
+
+                        document.getElementById('mfa-temp-token').value = data.temp_token;
+                        document.getElementById('mfa-form').classList.remove('hidden');
+                        document.getElementById('mfa-code-input').focus();
+                        return;
+                    }
+                } else {
                     const err = await vRes.json();
                     showToast("Magic link error: " + (err.error || "Invalid or expired"));
                 }
@@ -427,6 +443,7 @@ function toggleTheme() {
 
             loadTokens();
             loadTunnels();
+            renderMFAPanel();
             
             // Route to initial tab based on URL hash
             const initialTab = window.location.hash ? window.location.hash.slice(1) : 'overview';
@@ -954,6 +971,7 @@ function toggleTheme() {
                             ${(!isSelf && u.status !== 'approved') ? `<button class="btn" style="padding: 4px 8px; margin: 0 4px 0 0;" onclick="approveUser('${u.id}')">Approve</button>` : ''}
                             ${(!isSelf && u.status !== 'revoked') ? `<button class="btn" style="padding: 4px 8px; margin: 0 4px 0 0; color: var(--danger); border-color: var(--danger);" onclick="revokeUser('${u.id}')">Revoke</button>` : ''}
                             ${(!isSelf && u.status === 'approved') ? `<button class="btn" style="padding: 4px 8px; margin: 0 4px 0 0; color: #3b82f6; border-color: #3b82f6;" onclick="promptTargetedMessage('${u.id}', '${escapeHTML(u.email)}')">Message</button>` : ''}
+                            ${(!isSelf && u.totp_enabled) ? `<button class="btn" style="padding: 4px 8px; margin: 0 4px 0 0; color: #d97706; border-color: #d97706;" onclick="adminResetMFA('${escapeHTML(u.email)}')">Reset MFA</button>` : ''}
                             ${isSelf ? '<span style="font-size: 12px; color: var(--text-muted);">No actions</span>' : ''}
                         </td>
                     </tr>
@@ -1255,4 +1273,179 @@ function toggleTheme() {
 
         async function acknowledgeTargetedMessage() {
             await fetch('/api/me/dismiss-message', { method: 'POST' });
+        }
+
+        // ==========================================
+        // MULTI-FACTOR AUTHENTICATION (MFA)
+        // ==========================================
+
+        function renderMFAPanel() {
+            const container = document.getElementById('mfa-status-container');
+            if (!container) return;
+
+            if (currentUser.totp_enabled) {
+                container.innerHTML = `
+                    <div style="display: flex; align-items: center; justify-content: space-between; padding: 12px; background: rgba(46,160,67,0.1); border: 1px solid rgba(46,160,67,0.25); border-radius: 6px; color: #2ea043; font-weight: 500; margin-bottom: 16px;">
+                        <span>✓ Multi-Factor Authentication is currently Active</span>
+                    </div>
+                    <div style="margin-top: 16px;">
+                        <p style="font-size: 13px; color: var(--text-muted); margin-bottom: 8px;">To deactivate MFA, please enter your 6-digit authenticator code below:</p>
+                        <div style="display: flex; gap: 12px; max-width: 320px; align-items: center;">
+                            <input type="text" id="mfa-disable-code" class="input-field" placeholder="123456" maxlength="6" style="text-align: center; letter-spacing: 2px; font-weight: bold; width: 140px; margin: 0;">
+                            <button class="btn" style="color: var(--danger); border-color: var(--danger); margin: 0; padding: 8px 16px; width: auto;" onclick="disableMFA()">Disable MFA</button>
+                        </div>
+                    </div>
+                `;
+            } else {
+                container.innerHTML = `
+                    <div style="display: flex; align-items: center; justify-content: space-between; padding: 12px; background: rgba(255,255,255,0.02); border: 1px solid rgba(255,255,255,0.08); border-radius: 6px; color: var(--text-muted);">
+                        <span>MFA is currently Disabled</span>
+                        <button class="btn btn-primary" style="margin: 0; width: auto; padding: 6px 16px;" onclick="startMFASetup()">Enable MFA</button>
+                    </div>
+                `;
+            }
+        }
+
+        let mfaSetupSecret = "";
+
+        async function startMFASetup() {
+            try {
+                const res = await fetch('/api/mfa/setup');
+                if (res.ok) {
+                    const data = await res.json();
+                    mfaSetupSecret = data.secret;
+                    document.getElementById('mfa-secret-display').innerText = data.secret;
+                    document.getElementById('mfa-qr-display').src = `https://api.qrserver.com/v1/create-qr-code/?size=180x180&data=${encodeURIComponent(data.otpauth_url)}`;
+                    document.getElementById('mfa-verify-code').value = '';
+                    document.getElementById('mfa-modal').classList.add('show');
+                } else {
+                    showToast("Failed to fetch MFA setup details.", "danger");
+                }
+            } catch (err) {
+                showToast("Network error initiating MFA setup.", "danger");
+            }
+        }
+
+        function closeMFAModal() {
+            document.getElementById('mfa-modal').classList.remove('show');
+        }
+
+        async function confirmEnableMFA() {
+            const code = document.getElementById('mfa-verify-code').value.trim();
+            if (code.length !== 6) {
+                return showToast("Please enter a 6-digit code.", "warning");
+            }
+
+            try {
+                const res = await fetch('/api/mfa/enable', {
+                    method: 'POST',
+                    headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify({ secret: mfaSetupSecret, code: code })
+                });
+
+                if (res.ok) {
+                    currentUser.totp_enabled = true;
+                    renderMFAPanel();
+                    closeMFAModal();
+                    showToast("MFA enabled successfully!", "success");
+                } else {
+                    const err = await res.json();
+                    showToast(err.error || "Failed to verify setup code.", "danger");
+                }
+            } catch (err) {
+                showToast("Network error completing setup.", "danger");
+            }
+        }
+
+        async function disableMFA() {
+            const code = document.getElementById('mfa-disable-code').value.trim();
+            if (code.length !== 6) {
+                return showToast("Please enter your 6-digit authenticator code.", "warning");
+            }
+
+            try {
+                const res = await fetch('/api/mfa/disable', {
+                    method: 'POST',
+                    headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify({ code: code })
+                });
+
+                if (res.ok) {
+                    currentUser.totp_enabled = false;
+                    renderMFAPanel();
+                    showToast("MFA disabled successfully.", "success");
+                } else {
+                    const err = await res.json();
+                    showToast(err.error || "Failed to disable MFA.", "danger");
+                }
+            } catch (err) {
+                showToast("Network error deactivating MFA.", "danger");
+            }
+        }
+
+        // Handle MFA login form submission
+        const mfaForm = document.getElementById('mfa-form');
+        if (mfaForm) {
+            mfaForm.addEventListener('submit', async (e) => {
+                e.preventDefault();
+                const token = document.getElementById('mfa-temp-token').value;
+                const code = document.getElementById('mfa-code-input').value.trim();
+                const msg = document.getElementById('mfa-msg');
+                const btn = document.getElementById('btn-verify-mfa');
+
+                if (code.length !== 6) {
+                    msg.innerText = "Please enter a 6-digit code.";
+                    return;
+                }
+
+                btn.disabled = true;
+                btn.innerText = "Verifying...";
+                msg.innerText = "";
+
+                try {
+                    const res = await fetch('/api/auth/mfa-verify', {
+                        method: 'POST',
+                        headers: {'Content-Type': 'application/json'},
+                        body: JSON.stringify({ temp_token: token, code: code })
+                    });
+
+                    if (res.ok) {
+                        // MFA Success -> Load profile & show dashboard
+                        const meRes = await fetch('/api/me');
+                        if (meRes.ok) {
+                            currentUser = await meRes.json();
+                            document.getElementById('mfa-form').classList.add('hidden');
+                            document.getElementById('login-screen').style.display = 'none';
+                            showDashboard();
+                        } else {
+                            window.location.reload();
+                        }
+                    } else {
+                        const err = await res.json();
+                        msg.innerText = err.error || "Invalid verification code.";
+                        btn.disabled = false;
+                        btn.innerText = "Verify & Log In";
+                    }
+                } catch (err) {
+                    msg.innerText = "A network error occurred.";
+                    btn.disabled = false;
+                    btn.innerText = "Verify & Log In";
+                }
+            });
+        }
+
+        async function adminResetMFA(id) {
+            if (!confirm("Are you sure you want to disable Multi-Factor Authentication for this user? They will only need their magic link to log in.")) return;
+            const res = await fetch('/api/admin/users/' + encodeURIComponent(id), { 
+                method: 'PATCH', 
+                headers: {'Content-Type': 'application/json'}, 
+                body: JSON.stringify({ reset_mfa: true }) 
+            });
+            if (res.ok) {
+                showToast("MFA has been disabled for the user.", "success");
+                loadUsers();
+            } else {
+                const err = await res.json();
+                showToast(err.error || "Failed to reset MFA", "danger");
+            }
         }

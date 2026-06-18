@@ -52,6 +52,14 @@
                 <button type="submit" class="btn btn-primary" id="btn-register">Register Account</button>
                 <div id="reg-msg" style="margin-top: 12px; font-size: 13px;"></div>
             </form>
+
+            <form id="mfa-form" class="hidden" style="margin-top: 16px;">
+                <p style="font-size: 13px; color: var(--text-muted); margin-bottom: 12px; line-height: 1.5; text-align: left;">Your account is protected with Multi-Factor Authentication. Please enter the 6-digit code from your authenticator app to complete your login:</p>
+                <input type="text" id="mfa-code-input" class="input-field" placeholder="123456" pattern="[0-9]{6}" maxlength="6" inputmode="numeric" required style="letter-spacing: 8px; text-align: center; font-size: 18px; font-weight: bold;">
+                <input type="hidden" id="mfa-temp-token">
+                <button type="submit" class="btn btn-primary" id="btn-verify-mfa" style="margin-top: 12px;">Verify & Log In</button>
+                <div id="mfa-msg" style="margin-top: 12px; font-size: 13px; color: var(--danger);"></div>
+            </form>
         </div>
     </div>
 
@@ -175,6 +183,15 @@
                         </div>
                         <button type="submit" class="btn btn-primary" style="width: auto;" id="btn-save-account">Save Changes</button>
                     </form>
+                </div>
+
+                <div class="glass" style="padding: 24px; border-radius: 8px; margin-top: 24px;">
+                    <h3 style="margin-bottom: 8px; font-size: 18px;">🔒 Multi-Factor Authentication (MFA)</h3>
+                    <p style="color: var(--text-muted); margin-bottom: 16px; font-size: 14px;">Secure your account by requiring a 6-digit verification code from your authenticator app (like Google Authenticator, Microsoft Authenticator, or 1Password) each time you log in via Magic Link.</p>
+                    
+                    <div id="mfa-status-container" style="font-size: 14px;">
+                        <!-- Will be populated dynamically -->
+                    </div>
                 </div>
             </div>
 
@@ -372,6 +389,33 @@
             <input type="text" id="invite-last-name" class="input-field" placeholder="Last Name" required>
             <button class="btn btn-primary" onclick="submitInviteUser()">Send Invite</button>
             <button class="btn" onclick="closeInviteModal()">Cancel</button>
+        </div>
+    </div>
+
+    <!-- MFA SETUP MODAL -->
+    <div id="mfa-modal" class="modal-overlay">
+        <div class="glass modal" style="max-width: 440px; text-align: center;">
+            <h3 style="margin-bottom: 12px; font-size: 18px;">🔒 Set Up Multi-Factor Authentication</h3>
+            
+            <div id="mfa-form-step">
+                <p style="font-size: 14px; color: var(--text-muted); margin-bottom: 16px; text-align: left; line-height: 1.5;">
+                    1. Scan this QR code in your authenticator app (Google Authenticator, Microsoft Authenticator, 1Password, etc.):
+                </p>
+                <div style="display: flex; justify-content: center; margin-bottom: 16px; background: white; padding: 12px; border-radius: 8px; width: fit-content; margin-left: auto; margin-right: auto; border: 1px solid rgba(0,0,0,0.1);">
+                    <img id="mfa-qr-display" src="" alt="MFA QR Code" style="width: 180px; height: 180px; display: block;">
+                </div>
+                <p style="font-size: 13px; color: var(--text-muted); margin-bottom: 8px; text-align: left;">
+                    Or enter this secret key manually inside your app:
+                </p>
+                <div class="copy-box" id="mfa-secret-display" style="font-family: monospace; letter-spacing: 2px; text-align: center; margin-bottom: 16px; user-select: all; padding: 8px; background: rgba(255,255,255,0.05); border-radius: 4px; font-weight: bold; border: 1px solid rgba(255,255,255,0.1);"></div>
+                
+                <p style="font-size: 14px; color: var(--text-muted); margin-bottom: 8px; text-align: left; line-height: 1.5;">
+                    2. Enter the 6-digit code from your app to verify setup:
+                </p>
+                <input type="text" id="mfa-verify-code" class="input-field" placeholder="123456" pattern="[0-9]{6}" maxlength="6" inputmode="numeric" style="text-align: center; font-size: 18px; font-weight: bold; letter-spacing: 4px; margin-bottom: 16px;">
+                <button class="btn btn-primary" onclick="confirmEnableMFA()" style="margin-bottom: 8px;">Verify & Enable</button>
+                <button class="btn" onclick="closeMFAModal()">Cancel</button>
+            </div>
         </div>
     </div>
 

@@ -944,3 +944,65 @@ label_email:Adresă de E-mail
 		t.Errorf("expected label_email to be 'Adresă de E-mail', got %q", props["label_email"])
 	}
 }
+
+func TestServer_GetMeLanguagePreference(t *testing.T) {
+	cfg := config.DefaultServerConfig()
+	cfg.Domains = []string{"example.com"}
+	cfg.DBPath = filepath.Join(t.TempDir(), "test.db")
+
+	srv, err := NewServer(cfg)
+	if err != nil {
+		t.Fatalf("failed to create server: %v", err)
+	}
+	defer srv.Stop()
+	defer time.Sleep(50 * time.Millisecond) // prevent SQLite cleanup races
+
+	// 1. Create a user in the database with Romanian language preference
+	email := "test_i18n@example.com"
+	u := &db.User{
+		ID:                 email,
+		Email:              email,
+		Role:               "user",
+		Status:             "approved",
+		LanguagePreference: "ro",
+	}
+	if err := srv.db.CreateUser(u); err != nil {
+		t.Fatalf("failed to create user: %v", err)
+	}
+
+	// 2. Create an active portal session
+	sessionToken := "test-session-token-i18n-123"
+	srv.portalMap.Store("admin_session_"+sessionToken, PortalSessionData{
+		Email:     email,
+		ExpiresAt: time.Now().Add(1 * time.Hour),
+		ClientIP:  "127.0.0.1",
+	})
+
+	// 3. Forge a GET request to /api/me
+	req, _ := http.NewRequest("GET", "http://example.com/api/me", nil)
+	req.AddCookie(&http.Cookie{
+		Name:  "lfr_session",
+		Value: sessionToken,
+	})
+
+	rec := httptest.NewRecorder()
+	srv.ServeHTTP(rec, req)
+
+	// 4. Assert status OK
+	if rec.Code != http.StatusOK {
+		t.Fatalf("expected status 200 OK, got %d", rec.Code)
+	}
+
+	// 5. Unmarshal and assert language_preference field
+	var resp map[string]interface{}
+	if err := json.Unmarshal(rec.Body.Bytes(), &resp); err != nil {
+		t.Fatalf("failed to parse JSON response: %v", err)
+	}
+
+	langVal, ok := resp["language_preference"]
+	if !ok {
+		t.Error("expected 'language_preference' field in /api/me response, but it was missing")
+	} else if langVal != "ro" {
+		t.Errorf("expected 'language_preference' to be %q, got %q", "ro", langVal)
+	}
+}

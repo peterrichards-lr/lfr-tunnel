@@ -706,3 +706,54 @@ To prevent `NXDOMAIN` (or empty resolution) errors on subdomains that have assoc
 
 Our dynamic `cloudflare-ddns.sh` script is natively hardened to automatically handle this. By default, it is configured with `RECORD_NAMES=("@" "*" "tunnel" "portal")` to keep all required exact-match IP mappings 100% synchronized in real-time alongside your wildcard records.
 
+### 8.5. Customizing Translations & Email Templates at Runtime
+
+To provide enterprise-grade flexibility and avoid needing a full software re-release just to edit email copy or add a new locale, `lfr-tunneld` supports **dynamic, zero-recompilation filesystem overrides** for both properties-based translations and HTML email templates.
+
+On startup, the Go gateway daemon utilizes a **Dual-Layer Loading Mechanism**:
+1. It scans `/etc/lfr-tunneld/i18n/` and `/etc/lfr-tunneld/templates/` first for local filesystem overrides.
+2. It falls back to default Go-embedded assets bundled inside the compiled binary second.
+
+#### 1. Customizing Portal Vocabulary & Locales
+To customize, edit, or add any portal translation key:
+1. Create the localized properties configuration directory on your VPS:
+   ```bash
+   sudo mkdir -p /etc/lfr-tunneld/i18n
+   ```
+2. Copy or create a standard Java-style `.properties` file matching the target locale (e.g., `Language_ro.properties` for Romanian, or `Language.properties` for the default English fallback):
+   ```bash
+   sudo nano /etc/lfr-tunneld/i18n/Language_ro.properties
+   ```
+3. Populate with standard `key=value` lines:
+   ```properties
+   portal.welcome=Bine ai venit pe Liferay Tunnel!
+   btn.login.with.email=Autentificare prin E-mail
+   ```
+4. Restart the service to apply:
+   ```bash
+   sudo systemctl restart lfr-tunneld
+   ```
+
+#### 2. Customizing Transactional Email HTML Templates
+To customize the HTML layout or copy of transactional emails (e.g., `magic_link.html`, `invitation.html`, `gdpr_delete.html`):
+1. Create the templates directory structured by language subfolders:
+   ```bash
+   sudo mkdir -p /etc/lfr-tunneld/templates/en
+   sudo mkdir -p /etc/lfr-tunneld/templates/ro
+   ```
+2. Create or copy your custom HTML template file (e.g., `/etc/lfr-tunneld/templates/ro/magic_link.html`):
+   ```bash
+   sudo nano /etc/lfr-tunneld/templates/ro/magic_link.html
+   ```
+3. Use standard Go `html/template` parameters (like `{{.Name}}`, `{{.Link}}`, `{{.ReportLink}}`) to dynamically interpolate values:
+   ```html
+   <p>Salut {{.Name}},</p>
+   <p>Folosește link-ul pentru a te conecta în siguranță:</p>
+   <p><a href="{{.Link}}" style="background:#0969da; color:#fff; padding:12px 24px;">Conectare</a></p>
+   ```
+4. Restart the service to apply instantly:
+   ```bash
+   sudo systemctl restart lfr-tunneld
+   ```
+   *(Note: The server will automatically append the clean English fallback version at the bottom of all non-English emails, separated by a crisp visual divider!)*
+

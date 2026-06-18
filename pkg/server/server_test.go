@@ -914,3 +914,33 @@ func TestServer_I18nLanguageHandling(t *testing.T) {
 		t.Errorf("expected resolved locale 'es', got %q", lang)
 	}
 }
+
+func TestParseProperties(t *testing.T) {
+	mockContent := `# This is a test comment
+! Another comment type
+
+portal.welcome = Bine ai venit
+  btn_send_magic_link  =  Trimite Link-ul Magic  
+label_email:Adresă de E-mail
+
+# Empty line below
+
+`
+	props := parseProperties(mockContent)
+
+	if len(props) != 3 {
+		t.Fatalf("expected exactly 3 properties, got %d", len(props))
+	}
+
+	if props["portal.welcome"] != "Bine ai venit" {
+		t.Errorf("expected portal.welcome to be 'Bine ai venit', got %q", props["portal.welcome"])
+	}
+
+	if props["btn_send_magic_link"] != "Trimite Link-ul Magic" {
+		t.Errorf("expected btn_send_magic_link to be 'Trimite Link-ul Magic', got %q", props["btn_send_magic_link"])
+	}
+
+	if props["label_email"] != "Adresă de E-mail" {
+		t.Errorf("expected label_email to be 'Adresă de E-mail', got %q", props["label_email"])
+	}
+}

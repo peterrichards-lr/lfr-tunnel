@@ -2770,6 +2770,7 @@ func (s *Server) handlePrivacyFallback(w http.ResponseWriter, r *http.Request) {
 	w.WriteHeader(http.StatusOK)
 
 	lang := s.ResolveLocale(r)
+	dir := GetDirection(lang)
 	title := s.GetTranslation(lang, "privacy_title")
 	desc := s.GetTranslation(lang, "privacy_desc")
 	sec1Title := s.GetTranslation(lang, "privacy_sec1_title")
@@ -2781,7 +2782,7 @@ func (s *Server) handlePrivacyFallback(w http.ResponseWriter, r *http.Request) {
 	returnLink := s.GetTranslation(lang, "return_to_portal")
 
 	_, _ = fmt.Fprintf(w, `<!DOCTYPE html>
-<html lang="%s">
+<html lang="%s" dir="%s">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
@@ -2847,7 +2848,7 @@ func (s *Server) handlePrivacyFallback(w http.ResponseWriter, r *http.Request) {
         <p style="margin-top: 32px;"><a href="/">%s</a></p>
     </div>
 </body>
-</html>`, lang, title, title, desc, sec1Title, bullet1, bullet2, bullet3, sec2Title, sec2Desc, returnLink)
+</html>`, lang, dir, title, title, desc, sec1Title, bullet1, bullet2, bullet3, sec2Title, sec2Desc, returnLink)
 }
 
 func (s *Server) handleCookiesFallback(w http.ResponseWriter, r *http.Request) {
@@ -2855,6 +2856,7 @@ func (s *Server) handleCookiesFallback(w http.ResponseWriter, r *http.Request) {
 	w.WriteHeader(http.StatusOK)
 
 	lang := s.ResolveLocale(r)
+	dir := GetDirection(lang)
 	title := s.GetTranslation(lang, "cookie_title")
 	desc := s.GetTranslation(lang, "cookie_desc")
 	sec1Title := s.GetTranslation(lang, "cookie_sec1_title")
@@ -2865,7 +2867,7 @@ func (s *Server) handleCookiesFallback(w http.ResponseWriter, r *http.Request) {
 	returnLink := s.GetTranslation(lang, "return_to_portal")
 
 	_, _ = fmt.Fprintf(w, `<!DOCTYPE html>
-<html lang="%s">
+<html lang="%s" dir="%s">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
@@ -2930,7 +2932,7 @@ func (s *Server) handleCookiesFallback(w http.ResponseWriter, r *http.Request) {
         <p style="margin-top: 32px;"><a href="/">%s</a></p>
     </div>
 </body>
-</html>`, lang, title, title, desc, sec1Title, bullet1, bullet2, bullet3, bullet4, returnLink)
+</html>`, lang, dir, title, title, desc, sec1Title, bullet1, bullet2, bullet3, bullet4, returnLink)
 }
 
 // renderEmailTemplate loads and compiles the requested localized HTML template.

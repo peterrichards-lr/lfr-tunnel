@@ -169,3 +169,15 @@ func (s *Server) handleGetI18n(w http.ResponseWriter, r *http.Request) {
 
 	respondJSON(w, http.StatusOK, bundle)
 }
+
+// GetDirection returns "rtl" for Arabic and Hebrew, and "ltr" for all other languages.
+func GetDirection(lang string) string {
+	lang = strings.ToLower(strings.TrimSpace(lang))
+	if len(lang) > 2 {
+		lang = lang[:2]
+	}
+	if lang == "ar" || lang == "he" {
+		return "rtl"
+	}
+	return "ltr"
+}

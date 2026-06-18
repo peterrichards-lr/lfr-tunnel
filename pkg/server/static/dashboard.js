@@ -449,6 +449,10 @@ function toggleTheme() {
                     const selector = document.getElementById('portal-language-selector');
                     if (selector) selector.value = resolvedLang;
 
+                    // Set HTML direction (RTL support for Arabic/Hebrew)
+                    const dir = (resolvedLang === 'ar' || resolvedLang === 'he') ? 'rtl' : 'ltr';
+                    document.documentElement.dir = dir;
+
                     // Apply translations to data-i18n tagged elements
                     document.querySelectorAll('[data-i18n]').forEach(el => {
                         const key = el.getAttribute('data-i18n');
@@ -1870,6 +1874,10 @@ function toggleTheme() {
                             el.innerText = bundle[key];
                         }
                     });
+
+                    // Set HTML direction (RTL support for Arabic/Hebrew)
+                    const dir = (lang === 'ar' || lang === 'he') ? 'rtl' : 'ltr';
+                    document.documentElement.dir = dir;
 
                     // Dynamically update the footer privacy/cookie links with ?lang=...
                     const pl = document.getElementById('footer-privacy-link');

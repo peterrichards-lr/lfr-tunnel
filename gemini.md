@@ -148,7 +148,7 @@ The solution will consist of:
 - [x] Create comprehensive SSO/OIDC cloud integration guide (Azure, Google Cloud, AWS) with local mock configuration instructions.
 - [x] Bump version to v1.7.0 in pkg/config/version.go
 - [x] Commit, tag v1.7.0, and push to trigger automated GitHub Release
-- [x] Bump version to v1.7.4, integrate Homebrew/Scoop, and create Getting Started Guide (including workflow, OIDC permission, and unit test fixes)
+- [x] Bump version to v1.7.5, integrate Homebrew/Scoop, and create Getting Started Guide (standardising Windows binary naming across platforms)
 - [x] Deploy automated dual-stack (IPv4 & IPv6) Cloudflare Dynamic DNS updater service and timer on the VPS.
 - [x] Implement passive and active service self-healing (Nginx auto-restart systemd overrides and gateway watchdog monitor) on the VPS.
 

@@ -1661,6 +1661,10 @@ func (s *Server) handleAdminMagicLink(w http.ResponseWriter, r *http.Request) {
 	if s.db != nil {
 		h := sha256.Sum256([]byte(magicToken))
 		tokenHash := hex.EncodeToString(h[:])
+
+		// 🛡️ Security hardening: instantly invalidate any older unused magic links for this email!
+		_ = s.db.InvalidateOtherMagicLinks(req.Email, -1)
+
 		_ = s.db.CreateMagicLink(req.Email, tokenHash, clientIP, expiresAt)
 	} else {
 		sessionData := PortalSessionData{

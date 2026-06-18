@@ -1061,3 +1061,97 @@ func TestServer_WelcomePageLanguageOverride(t *testing.T) {
 		t.Error("expected email button to be translated to Romanian ('Conectează-te la Portal'), but it was not")
 	}
 }
+
+func TestServer_MagicLinkInstantRequestInvalidation(t *testing.T) {
+	cfg := config.DefaultServerConfig()
+	cfg.Domains = []string{"example.com"}
+	cfg.DBPath = filepath.Join(t.TempDir(), "test.db")
+
+	srv, err := NewServer(cfg)
+	if err != nil {
+		t.Fatalf("failed to create server: %v", err)
+	}
+	defer srv.Stop()
+	defer time.Sleep(50 * time.Millisecond) // prevent SQLite cleanup races
+
+	// Intercept sent emails
+	mockMail := &mockMailSender{}
+	srv.mailSender = mockMail
+
+	// 1. Create approved user
+	email := "test_invalidation@example.com"
+	u := &db.User{
+		ID:     email,
+		Email:  email,
+		Role:   "user",
+		Status: "approved",
+	}
+	if err := srv.db.CreateUser(u); err != nil {
+		t.Fatalf("failed to create user: %v", err)
+	}
+
+	// 2. Request first magic link
+	payload, _ := json.Marshal(map[string]string{"email": email})
+	req1, _ := http.NewRequest("POST", "http://example.com/api/auth/magic-link", bytes.NewReader(payload))
+	req1.Header.Set("Content-Type", "application/json")
+	rec1 := httptest.NewRecorder()
+	srv.ServeHTTP(rec1, req1)
+	time.Sleep(30 * time.Millisecond) // wait for goroutine
+
+	// Extract first token from intercepted body
+	firstBody := mockMail.sentTextBody
+	firstToken := extractTokenFromBody(firstBody)
+	if firstToken == "" {
+		t.Fatal("failed to extract first magic token from email body")
+	}
+
+	// 3. Request second magic link
+	req2, _ := http.NewRequest("POST", "http://example.com/api/auth/magic-link", bytes.NewReader(payload))
+	req2.Header.Set("Content-Type", "application/json")
+	rec2 := httptest.NewRecorder()
+	srv.ServeHTTP(rec2, req2)
+	time.Sleep(30 * time.Millisecond) // wait for goroutine
+
+	// Extract second token from intercepted body
+	secondBody := mockMail.sentTextBody
+	secondToken := extractTokenFromBody(secondBody)
+	if secondToken == "" {
+		t.Fatal("failed to extract second magic token from email body")
+	}
+
+	// 4. Verify first token is now INVALID (denied 401)
+	verifyPayload1, _ := json.Marshal(map[string]string{"token": firstToken})
+	reqV1, _ := http.NewRequest("POST", "http://example.com/api/auth/verify", bytes.NewReader(verifyPayload1))
+	reqV1.Header.Set("Content-Type", "application/json")
+	recV1 := httptest.NewRecorder()
+	srv.ServeHTTP(recV1, reqV1)
+
+	if recV1.Code != http.StatusUnauthorized {
+		t.Errorf("expected first (older) token to be unauthorized (401), got %d", recV1.Code)
+	}
+
+	// 5. Verify second token is VALID (accepts 200)
+	verifyPayload2, _ := json.Marshal(map[string]string{"token": secondToken})
+	reqV2, _ := http.NewRequest("POST", "http://example.com/api/auth/verify", bytes.NewReader(verifyPayload2))
+	reqV2.Header.Set("Content-Type", "application/json")
+	recV2 := httptest.NewRecorder()
+	srv.ServeHTTP(recV2, reqV2)
+
+	if recV2.Code != http.StatusOK {
+		t.Errorf("expected second (latest) token to be successfully authorized (200), got %d", recV2.Code)
+	}
+}
+
+// helper to extract token from URL in body
+func extractTokenFromBody(body string) string {
+	idx := strings.Index(body, "token=")
+	if idx == -1 {
+		return ""
+	}
+	start := idx + 6
+	end := start
+	for end < len(body) && body[end] != '"' && body[end] != ' ' && body[end] != '\n' && body[end] != '&' && body[end] != '<' {
+		end++
+	}
+	return body[start:end]
+}

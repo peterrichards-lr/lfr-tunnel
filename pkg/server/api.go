@@ -154,12 +154,13 @@ func (s *Server) handleUpdateMe(w http.ResponseWriter, r *http.Request) {
 	}
 
 	var req struct {
-		FirstName         *string `json:"first_name"`
-		LastName          *string `json:"last_name"`
-		PreferredName     *string `json:"preferred_name"`
-		Timezone          *string `json:"timezone"`
-		ThemePreference   *string `json:"theme_preference"`
-		NotificationPrefs *string `json:"notification_prefs"`
+		FirstName          *string `json:"first_name"`
+		LastName           *string `json:"last_name"`
+		PreferredName      *string `json:"preferred_name"`
+		Timezone           *string `json:"timezone"`
+		ThemePreference    *string `json:"theme_preference"`
+		NotificationPrefs  *string `json:"notification_prefs"`
+		LanguagePreference *string `json:"language_preference"`
 	}
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 		http.Error(w, `{"error":"Invalid request payload"}`, http.StatusBadRequest)
@@ -183,6 +184,9 @@ func (s *Server) handleUpdateMe(w http.ResponseWriter, r *http.Request) {
 	}
 	if req.NotificationPrefs != nil {
 		user.NotificationPrefs = strings.TrimSpace(*req.NotificationPrefs)
+	}
+	if req.LanguagePreference != nil {
+		user.LanguagePreference = strings.TrimSpace(*req.LanguagePreference)
 	}
 
 	if err := s.db.UpdateUser(user); err != nil {
@@ -602,7 +606,7 @@ func (s *Server) performGDPRDeletionAndAnonymization(email string, r *http.Reque
 
 	// 5. Send a final GDPR-deleted/anonymized confirmation email BEFORE purging profile
 	if s.mailSender != nil {
-		subject := "Liferay Tunnel: Account Deleted & Anonymised"
+		subject := s.GetTranslation(user.LanguagePreference, "account_deleted_subject")
 		greetingName := user.FirstName
 		if greetingName == "" {
 			greetingName = "there"

@@ -1,0 +1,8 @@
+{
+  "magic_link_subject": "Seu link mágico de login",
+  "invite_subject": "Convite para participar do Liferay Tunnel",
+  "role_updated_subject": "Liferay Tunnel: Função da conta atualizada",
+  "access_suspended_subject": "Liferay Tunnel: Acesso à conta suspenso",
+  "account_deleted_subject": "Liferay Tunnel: Conta excluída e anonimizada",
+  "registration_pending_subject": "Liferay Tunnel: Novo registro pendente de aprovação"
+}

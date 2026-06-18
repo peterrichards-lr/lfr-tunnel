@@ -1,0 +1,8 @@
+{
+  "magic_link_subject": "您的魔法登录链接",
+  "invite_subject": "邀请加入 Liferay Tunnel",
+  "role_updated_subject": "Liferay Tunnel: 账户角色已更新",
+  "access_suspended_subject": "Liferay Tunnel: 账户访问已被暂停",
+  "account_deleted_subject": "Liferay Tunnel: 账户已永久删除并匿名化",
+  "registration_pending_subject": "Liferay Tunnel: 新用户注册等待审批"
+}

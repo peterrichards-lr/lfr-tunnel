@@ -59,29 +59,30 @@ var (
 )
 
 type User struct {
-	ID                string     `json:"id"`
-	Email             string     `json:"email"`
-	FirstName         string     `json:"first_name"`
-	LastName          string     `json:"last_name"`
-	PreferredName     string     `json:"preferred_name"`
-	Role              string     `json:"role"`   // "admin", "user"
-	Status            string     `json:"status"` // "unverified", "pending", "approved", "revoked"
-	VerificationToken string     `json:"-"`
-	ApprovalToken     string     `json:"-"`
-	ClaimToken        string     `json:"-"`
-	Timezone          string     `json:"timezone"`
-	AuthMethod        string     `json:"auth_method"`
-	ThemePreference   string     `json:"theme_preference"`
-	NotificationPrefs string     `json:"notification_prefs"`
-	CreatedAt         time.Time  `json:"created_at"`
-	UpdatedAt         time.Time  `json:"updated_at"`
-	LastLoginAt       *time.Time `json:"last_login_at"`
-	LastLoginIP       string     `json:"last_login_ip"`
-	LastClientVersion string     `json:"last_client_version"`
-	LastClientOS      string     `json:"last_client_os"`
-	TOTPSecret        string     `json:"-"`
-	TOTPEnabled       bool       `json:"totp_enabled"`
-	PolicyConsentAt   *time.Time `json:"policy_consent_at,omitempty"`
+	ID                 string     `json:"id"`
+	Email              string     `json:"email"`
+	FirstName          string     `json:"first_name"`
+	LastName           string     `json:"last_name"`
+	PreferredName      string     `json:"preferred_name"`
+	Role               string     `json:"role"`   // "admin", "user"
+	Status             string     `json:"status"` // "unverified", "pending", "approved", "revoked"
+	VerificationToken  string     `json:"-"`
+	ApprovalToken      string     `json:"-"`
+	ClaimToken         string     `json:"-"`
+	Timezone           string     `json:"timezone"`
+	AuthMethod         string     `json:"auth_method"`
+	ThemePreference    string     `json:"theme_preference"`
+	NotificationPrefs  string     `json:"notification_prefs"`
+	CreatedAt          time.Time  `json:"created_at"`
+	UpdatedAt          time.Time  `json:"updated_at"`
+	LastLoginAt        *time.Time `json:"last_login_at"`
+	LastLoginIP        string     `json:"last_login_ip"`
+	LastClientVersion  string     `json:"last_client_version"`
+	LastClientOS       string     `json:"last_client_os"`
+	TOTPSecret         string     `json:"-"`
+	TOTPEnabled        bool       `json:"totp_enabled"`
+	PolicyConsentAt    *time.Time `json:"policy_consent_at,omitempty"`
+	LanguagePreference string     `json:"language_preference"`
 }
 
 type PersonalAccessToken struct {
@@ -129,6 +130,7 @@ func Open(dsn string) (*DB, error) {
 	conn.Exec("ALTER TABLE users ADD COLUMN totp_secret TEXT DEFAULT ''")            //nolint:errcheck
 	conn.Exec("ALTER TABLE users ADD COLUMN totp_enabled INTEGER DEFAULT 0")         //nolint:errcheck
 	conn.Exec("ALTER TABLE users ADD COLUMN policy_consent_at DATETIME")             //nolint:errcheck
+	conn.Exec("ALTER TABLE users ADD COLUMN language_preference TEXT DEFAULT 'en'")  //nolint:errcheck
 
 	db := &DB{conn: conn}
 	if err := db.initSchema(); err != nil {
@@ -165,6 +167,7 @@ func (db *DB) initSchema() error {
 		totp_secret TEXT DEFAULT '',
 		totp_enabled INTEGER DEFAULT 0,
 		policy_consent_at DATETIME,
+		language_preference TEXT NOT NULL DEFAULT 'en',
 		created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
 		updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
 	);
@@ -314,10 +317,14 @@ func (db *DB) CreateUser(u *User) error {
 		totpEnabledVal = 1
 	}
 
+	if u.LanguagePreference == "" {
+		u.LanguagePreference = "en"
+	}
+
 	_, err := db.conn.Exec(`
-		INSERT INTO users (id, email, first_name, last_name, preferred_name, role, status, verification_token, approval_token, claim_token, timezone, auth_method, theme_preference, notification_prefs, created_at, updated_at, last_client_version, last_client_os, totp_secret, totp_enabled, policy_consent_at)
-		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-	`, u.ID, u.Email, u.FirstName, u.LastName, u.PreferredName, u.Role, u.Status, u.VerificationToken, u.ApprovalToken, u.ClaimToken, u.Timezone, u.AuthMethod, u.ThemePreference, u.NotificationPrefs, u.CreatedAt, u.UpdatedAt, u.LastClientVersion, u.LastClientOS, u.TOTPSecret, totpEnabledVal, u.PolicyConsentAt)
+		INSERT INTO users (id, email, first_name, last_name, preferred_name, role, status, verification_token, approval_token, claim_token, timezone, auth_method, theme_preference, notification_prefs, created_at, updated_at, last_client_version, last_client_os, totp_secret, totp_enabled, policy_consent_at, language_preference)
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+	`, u.ID, u.Email, u.FirstName, u.LastName, u.PreferredName, u.Role, u.Status, u.VerificationToken, u.ApprovalToken, u.ClaimToken, u.Timezone, u.AuthMethod, u.ThemePreference, u.NotificationPrefs, u.CreatedAt, u.UpdatedAt, u.LastClientVersion, u.LastClientOS, u.TOTPSecret, totpEnabledVal, u.PolicyConsentAt, u.LanguagePreference)
 	return err
 }
 
@@ -331,8 +338,9 @@ func (db *DB) fetchUserByQuery(query string, arg interface{}) (*User, error) {
 	var totpSecret sql.NullString
 	var totpEnabled int
 	var policyConsentAt sql.NullTime
+	var langPref sql.NullString
 	err := db.conn.QueryRow(query, arg).Scan(
-		&u.ID, &u.Email, &u.FirstName, &u.LastName, &u.PreferredName, &u.Role, &u.Status, &vt, &at, &ct, &u.Timezone, &u.AuthMethod, &u.ThemePreference, &u.NotificationPrefs, &u.CreatedAt, &u.UpdatedAt, &lastLogin, &u.LastLoginIP, &lastClientVersion, &lastClientOS, &totpSecret, &totpEnabled, &policyConsentAt,
+		&u.ID, &u.Email, &u.FirstName, &u.LastName, &u.PreferredName, &u.Role, &u.Status, &vt, &at, &ct, &u.Timezone, &u.AuthMethod, &u.ThemePreference, &u.NotificationPrefs, &u.CreatedAt, &u.UpdatedAt, &lastLogin, &u.LastLoginIP, &lastClientVersion, &lastClientOS, &totpSecret, &totpEnabled, &policyConsentAt, &langPref,
 	)
 	if err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
@@ -353,32 +361,37 @@ func (db *DB) fetchUserByQuery(query string, arg interface{}) (*User, error) {
 	if lastLogin.Valid {
 		u.LastLoginAt = &lastLogin.Time
 	}
+	if langPref.Valid && langPref.String != "" {
+		u.LanguagePreference = langPref.String
+	} else {
+		u.LanguagePreference = "en"
+	}
 	return &u, nil
 }
 
 // GetUser fetches a user by their ID.
 func (db *DB) GetUser(id string) (*User, error) {
-	return db.fetchUserByQuery(`SELECT id, email, first_name, last_name, preferred_name, role, status, verification_token, approval_token, claim_token, timezone, auth_method, theme_preference, notification_prefs, created_at, updated_at, last_login_at, last_login_ip, last_client_version, last_client_os, totp_secret, totp_enabled, policy_consent_at FROM users WHERE id = ?`, id)
+	return db.fetchUserByQuery(`SELECT id, email, first_name, last_name, preferred_name, role, status, verification_token, approval_token, claim_token, timezone, auth_method, theme_preference, notification_prefs, created_at, updated_at, last_login_at, last_login_ip, last_client_version, last_client_os, totp_secret, totp_enabled, policy_consent_at, language_preference FROM users WHERE id = ?`, id)
 }
 
 // GetUserByEmail fetches a user by their email address.
 func (db *DB) GetUserByEmail(email string) (*User, error) {
-	return db.fetchUserByQuery(`SELECT id, email, first_name, last_name, preferred_name, role, status, verification_token, approval_token, claim_token, timezone, auth_method, theme_preference, notification_prefs, created_at, updated_at, last_login_at, last_login_ip, last_client_version, last_client_os, totp_secret, totp_enabled, policy_consent_at FROM users WHERE email = ?`, email)
+	return db.fetchUserByQuery(`SELECT id, email, first_name, last_name, preferred_name, role, status, verification_token, approval_token, claim_token, timezone, auth_method, theme_preference, notification_prefs, created_at, updated_at, last_login_at, last_login_ip, last_client_version, last_client_os, totp_secret, totp_enabled, policy_consent_at, language_preference FROM users WHERE email = ?`, email)
 }
 
 // GetUserByVerificationToken finds a user by their verification token.
 func (db *DB) GetUserByVerificationToken(token string) (*User, error) {
-	return db.fetchUserByQuery(`SELECT id, email, first_name, last_name, preferred_name, role, status, verification_token, approval_token, claim_token, timezone, auth_method, theme_preference, notification_prefs, created_at, updated_at, last_login_at, last_login_ip, last_client_version, last_client_os, totp_secret, totp_enabled, policy_consent_at FROM users WHERE verification_token = ?`, token)
+	return db.fetchUserByQuery(`SELECT id, email, first_name, last_name, preferred_name, role, status, verification_token, approval_token, claim_token, timezone, auth_method, theme_preference, notification_prefs, created_at, updated_at, last_login_at, last_login_ip, last_client_version, last_client_os, totp_secret, totp_enabled, policy_consent_at, language_preference FROM users WHERE verification_token = ?`, token)
 }
 
 // GetUserByApprovalToken fetches a user by their approval token.
 func (db *DB) GetUserByApprovalToken(token string) (*User, error) {
-	return db.fetchUserByQuery(`SELECT id, email, first_name, last_name, preferred_name, role, status, verification_token, approval_token, claim_token, timezone, auth_method, theme_preference, notification_prefs, created_at, updated_at, last_login_at, last_login_ip, last_client_version, last_client_os, totp_secret, totp_enabled, policy_consent_at FROM users WHERE approval_token = ?`, token)
+	return db.fetchUserByQuery(`SELECT id, email, first_name, last_name, preferred_name, role, status, verification_token, approval_token, claim_token, timezone, auth_method, theme_preference, notification_prefs, created_at, updated_at, last_login_at, last_login_ip, last_client_version, last_client_os, totp_secret, totp_enabled, policy_consent_at, language_preference FROM users WHERE approval_token = ?`, token)
 }
 
 // GetUserByClaimToken fetches a user by their claim token.
 func (db *DB) GetUserByClaimToken(token string) (*User, error) {
-	return db.fetchUserByQuery(`SELECT id, email, first_name, last_name, preferred_name, role, status, verification_token, approval_token, claim_token, timezone, auth_method, theme_preference, notification_prefs, created_at, updated_at, last_login_at, last_login_ip, last_client_version, last_client_os, totp_secret, totp_enabled, policy_consent_at FROM users WHERE claim_token = ?`, token)
+	return db.fetchUserByQuery(`SELECT id, email, first_name, last_name, preferred_name, role, status, verification_token, approval_token, claim_token, timezone, auth_method, theme_preference, notification_prefs, created_at, updated_at, last_login_at, last_login_ip, last_client_version, last_client_os, totp_secret, totp_enabled, policy_consent_at, language_preference FROM users WHERE claim_token = ?`, token)
 }
 
 // DeleteUser removes a user from the database.
@@ -419,9 +432,10 @@ func (db *DB) UpdateUser(u *User) error {
 			last_client_os = ?,
 			totp_secret = ?,
 			totp_enabled = ?,
-			policy_consent_at = ?
+			policy_consent_at = ?,
+			language_preference = ?
 	          WHERE id = ?`
-	res, err := db.conn.Exec(query, u.Email, u.FirstName, u.LastName, u.PreferredName, u.Role, u.Status, vtVal, approvalTokenVal, claimTokenVal, u.Timezone, u.AuthMethod, u.ThemePreference, u.NotificationPrefs, u.UpdatedAt, lastLoginVal, u.LastLoginIP, u.LastClientVersion, u.LastClientOS, u.TOTPSecret, totpEnabledVal, u.PolicyConsentAt, u.ID)
+	res, err := db.conn.Exec(query, u.Email, u.FirstName, u.LastName, u.PreferredName, u.Role, u.Status, vtVal, approvalTokenVal, claimTokenVal, u.Timezone, u.AuthMethod, u.ThemePreference, u.NotificationPrefs, u.UpdatedAt, lastLoginVal, u.LastLoginIP, u.LastClientVersion, u.LastClientOS, u.TOTPSecret, totpEnabledVal, u.PolicyConsentAt, u.LanguagePreference, u.ID)
 	if err != nil {
 		return err
 	}
@@ -437,7 +451,7 @@ func (db *DB) UpdateUser(u *User) error {
 
 // ListUsers lists all registered users.
 func (db *DB) ListUsers() ([]*User, error) {
-	query := `SELECT id, email, first_name, last_name, preferred_name, role, status, verification_token, approval_token, claim_token, timezone, auth_method, theme_preference, notification_prefs, created_at, updated_at, last_login_at, last_login_ip, last_client_version, last_client_os, totp_secret, totp_enabled, policy_consent_at FROM users`
+	query := `SELECT id, email, first_name, last_name, preferred_name, role, status, verification_token, approval_token, claim_token, timezone, auth_method, theme_preference, notification_prefs, created_at, updated_at, last_login_at, last_login_ip, last_client_version, last_client_os, totp_secret, totp_enabled, policy_consent_at, language_preference FROM users`
 	rows, err := db.conn.Query(query)
 	if err != nil {
 		return nil, err
@@ -454,7 +468,8 @@ func (db *DB) ListUsers() ([]*User, error) {
 		var totpSecret sql.NullString
 		var totpEnabled int
 		var policyConsentAt sql.NullTime
-		if err := rows.Scan(&u.ID, &u.Email, &u.FirstName, &u.LastName, &u.PreferredName, &u.Role, &u.Status, &vt, &at, &ct, &u.Timezone, &u.AuthMethod, &u.ThemePreference, &u.NotificationPrefs, &u.CreatedAt, &u.UpdatedAt, &lastLogin, &u.LastLoginIP, &lastClientVersion, &lastClientOS, &totpSecret, &totpEnabled, &policyConsentAt); err != nil {
+		var langPref sql.NullString
+		if err := rows.Scan(&u.ID, &u.Email, &u.FirstName, &u.LastName, &u.PreferredName, &u.Role, &u.Status, &vt, &at, &ct, &u.Timezone, &u.AuthMethod, &u.ThemePreference, &u.NotificationPrefs, &u.CreatedAt, &u.UpdatedAt, &lastLogin, &u.LastLoginIP, &lastClientVersion, &lastClientOS, &totpSecret, &totpEnabled, &policyConsentAt, &langPref); err != nil {
 			return nil, err
 		}
 		u.VerificationToken = vt.String
@@ -469,6 +484,11 @@ func (db *DB) ListUsers() ([]*User, error) {
 		}
 		if lastLogin.Valid {
 			u.LastLoginAt = &lastLogin.Time
+		}
+		if langPref.Valid && langPref.String != "" {
+			u.LanguagePreference = langPref.String
+		} else {
+			u.LanguagePreference = "en"
 		}
 		users = append(users, &u)
 	}

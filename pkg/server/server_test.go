@@ -879,3 +879,38 @@ func TestServer_GDPRDeleteAndAnonymization(t *testing.T) {
 		}
 	}
 }
+
+func TestServer_I18nLanguageHandling(t *testing.T) {
+	cfg := config.DefaultServerConfig()
+	cfg.Domains = []string{"example.com"}
+
+	srv, err := NewServer(cfg)
+	if err != nil {
+		t.Fatalf("failed to create server: %v", err)
+	}
+	defer srv.Stop()
+	defer time.Sleep(50 * time.Millisecond) // prevent SQLite cleanup races
+
+	// 1. Test GetTranslation matching
+	subjectFR := srv.GetTranslation("fr", "magic_link_subject")
+	expectedFR := "Votre lien magique de connexion"
+	if subjectFR != expectedFR {
+		t.Errorf("expected French translation %q, got %q", expectedFR, subjectFR)
+	}
+
+	// 2. Test GetTranslation default fallback
+	subjectEN := srv.GetTranslation("ru", "magic_link_subject") // unsupported language falls back to 'en'
+	expectedEN := "Your magic login link"
+	if subjectEN != expectedEN {
+		t.Errorf("expected Fallback English translation %q, got %q", expectedEN, subjectEN)
+	}
+
+	// 3. Test ResolveLocale headers
+	req, _ := http.NewRequest("GET", "http://example.com/", nil)
+	req.Header.Set("Accept-Language", "es-ES,es;q=0.9,en;q=0.8")
+
+	lang := srv.ResolveLocale(req)
+	if lang != "es" {
+		t.Errorf("expected resolved locale 'es', got %q", lang)
+	}
+}

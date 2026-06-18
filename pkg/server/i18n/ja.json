@@ -1,0 +1,8 @@
+{
+  "magic_link_subject": "マジックログインリンクが届きました",
+  "invite_subject": "Liferay Tunnel への招待状",
+  "role_updated_subject": "Liferay Tunnel: アカウント権限의更新完了",
+  "access_suspended_subject": "Liferay Tunnel: アカウントアクセスの一時停止",
+  "account_deleted_subject": "Liferay Tunnel: アカウント削除および匿名化完了",
+  "registration_pending_subject": "Liferay Tunnel: 新規登録承認待ち"
+}

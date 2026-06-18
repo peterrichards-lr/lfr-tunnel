@@ -454,6 +454,7 @@ function toggleTheme() {
             document.getElementById('acc-last-name').value = currentUser.last_name || '';
             document.getElementById('acc-preferred-name').value = currentUser.preferred_name || '';
             document.getElementById('acc-theme').value = currentUser.theme_preference || 'system';
+            document.getElementById('acc-language').value = currentUser.language_preference || 'en';
             document.getElementById('acc-notifications').checked = (currentUser.notification_prefs === 'enabled' || !currentUser.notification_prefs);
 
             // Apply theme from preference if not system
@@ -636,6 +637,7 @@ function toggleTheme() {
                 last_name: document.getElementById('acc-last-name').value,
                 preferred_name: document.getElementById('acc-preferred-name').value,
                 theme_preference: document.getElementById('acc-theme').value,
+                language_preference: document.getElementById('acc-language').value,
                 notification_prefs: document.getElementById('acc-notifications').checked ? 'enabled' : 'disabled',
             };
 
@@ -651,6 +653,7 @@ function toggleTheme() {
                 currentUser.last_name = payload.last_name;
                 currentUser.preferred_name = payload.preferred_name;
                 currentUser.theme_preference = payload.theme_preference;
+                currentUser.language_preference = payload.language_preference;
                 currentUser.notification_prefs = payload.notification_prefs;
 
                 // Update the greeting text immediately

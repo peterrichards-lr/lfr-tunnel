@@ -93,6 +93,7 @@ type Server struct {
 	maintScheduledAt  time.Time
 	maintMutex        sync.RWMutex
 	unsubscribeSecret string
+	translations      map[string]map[string]string
 }
 
 // NewServer initializes and returns a new Server instance.
@@ -163,6 +164,11 @@ func NewServer(cfg *config.ServerConfig) (*Server, error) {
 		violations:       make(map[string]int),
 		metricsQueue:     make(chan *db.TunnelMetric, 1000),
 		targetedMessages: make(map[string]string),
+	}
+
+	// Initialize i18n dynamic engine
+	if err := srv.initI18n(); err != nil {
+		return nil, err
 	}
 
 	srv.registry.OnLeaseCleanup = func(lease *TunnelLease) {
@@ -1068,8 +1074,10 @@ func (s *Server) handleCompleteSetup(w http.ResponseWriter, r *http.Request) {
 	// Send approval email to admin
 	if s.mailSender != nil && s.cfg.AdminNotificationEmail != "" {
 		sendAdminEmail := true
+		adminLang := "en"
 		if s.db != nil {
 			if adminUser, err := s.db.GetUserByEmail(s.cfg.AdminNotificationEmail); err == nil && adminUser != nil {
+				adminLang = adminUser.LanguagePreference
 				if adminUser.NotificationPrefs == "disabled" {
 					sendAdminEmail = false
 				}
@@ -1077,7 +1085,7 @@ func (s *Server) handleCompleteSetup(w http.ResponseWriter, r *http.Request) {
 		}
 
 		if sendAdminEmail {
-			subject := "[Liferay Tunnel] New Developer Registration Request"
+			subject := s.GetTranslation(adminLang, "registration_pending_subject")
 			scheme := "http"
 			if s.cfg.SSLCertFile != "" {
 				scheme = "https"
@@ -1129,7 +1137,13 @@ func (s *Server) handleVerifyEmail(w http.ResponseWriter, r *http.Request) {
 
 	// Also send the original admin approval email now
 	if s.mailSender != nil && s.cfg.AdminNotificationEmail != "" {
-		subject := "[Liferay Tunnel] New Developer Registration Request"
+		adminLang := "en"
+		if s.db != nil {
+			if adminUser, err := s.db.GetUserByEmail(s.cfg.AdminNotificationEmail); err == nil && adminUser != nil {
+				adminLang = adminUser.LanguagePreference
+			}
+		}
+		subject := s.GetTranslation(adminLang, "registration_pending_subject")
 		scheme := "http"
 		if s.cfg.SSLCertFile != "" {
 			scheme = "https"
@@ -1685,7 +1699,20 @@ func (s *Server) handleAdminMagicLink(w http.ResponseWriter, r *http.Request) {
 		}
 
 		plainBody := fmt.Sprintf("Hi %s,\n\nUse this link to log in (expires in 15 minutes):\n%s\n\nReport abuse here:\n%s", greetingName, link, reportLink)
-		go s.mailSender.Send(req.Email, "Your magic login link", body, plainBody) //nolint:errcheck
+
+		// Determine target locale for the email subject
+		lang := "en"
+		if s.db != nil {
+			if u, err := s.db.GetUserByEmail(req.Email); err == nil && u != nil {
+				lang = u.LanguagePreference
+			}
+		}
+		if lang == "" {
+			lang = s.ResolveLocale(r)
+		}
+		subject := s.GetTranslation(lang, "magic_link_subject")
+
+		go s.mailSender.Send(req.Email, subject, body, plainBody) //nolint:errcheck
 	} else {
 		log.Printf("[Admin] Magic Link for %s: /admin?token=%s", req.Email, magicToken)
 	}
@@ -1991,7 +2018,13 @@ func (s *Server) handleAdminInviteUser(w http.ResponseWriter, r *http.Request, a
 	inviteLink := fmt.Sprintf("https://%s/api/auth/verify?token=%s", r.Host, magicToken)
 	declineLink := fmt.Sprintf("https://%s/api/auth/decline?token=%s", r.Host, magicToken)
 
-	subject := fmt.Sprintf("%s has invited you to join Liferay Tunnel", actor)
+	lang := s.ResolveLocale(r)
+	subject := s.GetTranslation(lang, "invite_subject")
+	if strings.Contains(subject, "Liferay Tunnel") && actor != "" {
+		// Customise subject to include the inviter if applicable
+		subject = fmt.Sprintf("%s has invited you to join Liferay Tunnel", actor)
+	}
+
 	body := fmt.Sprintf(`Hi there,
 
 %s has created an account for you on Liferay Tunnel.
@@ -2333,7 +2366,7 @@ func (s *Server) handleAdminPatchUser(w http.ResponseWriter, r *http.Request, ac
 
 	// Send status update/revocation email notification if configured
 	if req.Status != nil && s.mailSender != nil {
-		subject := "Liferay Tunnel: Account Access Suspended"
+		subject := s.GetTranslation(user.LanguagePreference, "access_suspended_subject")
 		greetingName := user.FirstName
 		if greetingName == "" {
 			greetingName = "there"
@@ -2354,7 +2387,7 @@ Liferay Tunnel Team`, html.EscapeString(greetingName))
 
 	// Send role update email notification if configured and user has not unsubscribed
 	if req.Role != nil && s.mailSender != nil && user.NotificationPrefs != "disabled" {
-		subject := "Liferay Tunnel: Account Role Updated"
+		subject := s.GetTranslation(user.LanguagePreference, "role_updated_subject")
 		greetingName := user.FirstName
 		if greetingName == "" {
 			greetingName = "there"

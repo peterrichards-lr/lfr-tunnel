@@ -1,0 +1,8 @@
+{
+  "magic_link_subject": "로그인 매직 링크가 도착했습니다",
+  "invite_subject": "Liferay Tunnel 가입 초대장",
+  "role_updated_subject": "Liferay Tunnel: 계정 권한 업데이트 완료",
+  "access_suspended_subject": "Liferay Tunnel: 계정 접속 권한 일시 중지",
+  "account_deleted_subject": "Liferay Tunnel: 계정 삭제 및 익명화 완료",
+  "registration_pending_subject": "Liferay Tunnel: 새 등록 승인 대기 중"
+}

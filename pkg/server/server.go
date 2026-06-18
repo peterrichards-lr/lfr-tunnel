@@ -2877,7 +2877,21 @@ func (s *Server) renderEmailTemplate(lang, templateName string, data interface{}
 		return "", fmt.Errorf("failed to execute template %s: %w", templateName, err)
 	}
 
-	return buf.String(), nil
+	renderedHTML := buf.String()
+
+	// Append English fallback version at the bottom of non-English transactional emails
+	if lang != "en" && templateName != "privacy.html" && templateName != "cookies.html" {
+		engHTML, err := s.renderEmailTemplate("en", templateName, data)
+		if err == nil && engHTML != "" {
+			renderedHTML += `
+<br/><br/>
+<hr style="border: none; border-top: 1px solid rgba(0,0,0,0.1); margin: 24px 0;" />
+<p style="font-size: 11px; color: #8b949e; margin-bottom: 16px; font-family: sans-serif;">[ English Translation / Fallback ]</p>
+` + engHTML
+		}
+	}
+
+	return renderedHTML, nil
 }
 
 // renderEmailTemplate loads and compiles the requested localized HTML template.

@@ -116,7 +116,7 @@ git config user.email "github-actions[bot]@users.noreply.github.com"
 # string "$version" is written as-is, which is what Scoop's autoupdate expects.
 jq -n \
   --arg version        "${VERSION_NUM}" \
-  --arg url            "https://github.com/peterrichards-lr/lfr-tunnel/releases/download/${VERSION}/lfr-tunnel-windows-amd64.exe" \
+  --arg url            "https://github.com/peterrichards-lr/lfr-tunnel/releases/download/${VERSION}/lfr-tunnel-windows-amd64.exe#/lfr-tunnel.exe" \
   --arg hash           "${HASH_WINDOWS_AMD64}" \
   '{
     "version":     $version,
@@ -129,14 +129,14 @@ jq -n \
         "hash": $hash
       }
     },
-    "bin": [["lfr-tunnel-windows-amd64.exe", "lfr-tunnel"]],
+    "bin": [["lfr-tunnel.exe", "lfr-tunnel"]],
     "checkver": {
       "github": "https://github.com/peterrichards-lr/lfr-tunnel"
     },
     "autoupdate": {
       "architecture": {
         "64bit": {
-          "url": "https://github.com/peterrichards-lr/lfr-tunnel/releases/download/v$version/lfr-tunnel-windows-amd64.exe",
+          "url": "https://github.com/peterrichards-lr/lfr-tunnel/releases/download/v$version/lfr-tunnel-windows-amd64.exe#/lfr-tunnel.exe",
           "hash": {
             "url":   "https://raw.githubusercontent.com/peterrichards-lr/lfr-tunnel/checksums/checksums.txt",
             "regex": "([a-fA-F0-9]{64})\\s+lfr-tunnel-windows-amd64\\.exe"

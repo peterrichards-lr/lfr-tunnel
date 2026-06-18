@@ -354,11 +354,22 @@ func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		}
 
 		if r.Method == http.MethodGet && r.URL.Path == "/api/version" {
+			privacyURL := s.cfg.PrivacyPolicyURL
+			if privacyURL == "" {
+				privacyURL = "/privacy"
+			}
+			cookieURL := s.cfg.CookiePolicyURL
+			if cookieURL == "" {
+				cookieURL = "/cookies"
+			}
+
 			respondJSON(w, http.StatusOK, map[string]string{
-				"latest_version":    config.Version,
-				"min_version":       s.cfg.MinClientVersion,
-				"documentation_url": s.cfg.DocumentationURL,
-				"repository_url":    s.cfg.RepositoryURL,
+				"latest_version":     config.Version,
+				"min_version":        s.cfg.MinClientVersion,
+				"documentation_url":  s.cfg.DocumentationURL,
+				"repository_url":     s.cfg.RepositoryURL,
+				"privacy_policy_url": privacyURL,
+				"cookie_policy_url":  cookieURL,
 			})
 			return
 		}
@@ -497,6 +508,16 @@ func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		if isUpgrade || strings.HasPrefix(r.URL.Path, "/tunnel") {
 			r.URL.Path = "/"
 			s.chiselProxy.ServeHTTP(w, r)
+			return
+		}
+
+		if r.Method == http.MethodGet && r.URL.Path == "/privacy" {
+			s.handlePrivacyFallback(w, r)
+			return
+		}
+
+		if r.Method == http.MethodGet && r.URL.Path == "/cookies" {
+			s.handleCookiesFallback(w, r)
 			return
 		}
 
@@ -2392,4 +2413,109 @@ func (s *Server) handleDismissMessage(w http.ResponseWriter, r *http.Request) {
 	s.targetedMutex.Unlock()
 
 	respondJSON(w, http.StatusOK, map[string]string{"status": "ok"})
+}
+
+func (s *Server) handlePrivacyFallback(w http.ResponseWriter, _ *http.Request) {
+	w.Header().Set("Content-Type", "text/html; charset=utf-8")
+	w.WriteHeader(http.StatusOK)
+	_, _ = w.Write([]byte(`<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Privacy Policy - Liferay Tunnel</title>
+    <link rel="icon" type="image/x-icon" href="/favicon.ico">
+    <style>
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+            background-color: #0d1117;
+            color: #c9d1d9;
+            line-height: 1.6;
+            margin: 0;
+            padding: 40px 24px;
+        }
+        .container {
+            max-width: 800px;
+            margin: 0 auto;
+            background: rgba(255, 255, 255, 0.03);
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            border-radius: 8px;
+            padding: 32px;
+        }
+        h1 { color: #58a6ff; font-size: 28px; margin-top: 0; border-bottom: 1px solid rgba(255, 255, 255, 0.1); padding-bottom: 12px; }
+        h2 { color: #58a6ff; font-size: 20px; margin-top: 24px; }
+        p, li { font-size: 15px; color: #8b949e; }
+        ul { padding-left: 20px; }
+        a { color: #58a6ff; text-decoration: none; }
+        a:hover { text-decoration: underline; }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>Privacy Policy</h1>
+        <p>This Privacy Policy describes how this self-hosted Liferay Tunnel (lfr-tunneld) gateway processes your data.</p>
+        <h2>1. Information We Collect & Process</h2>
+        <ul>
+            <li><strong>IP Addresses</strong>: Processed strictly to route packets and enforce auto-ban security protections.</li>
+            <li><strong>Email Addresses</strong>: Processed for account verification, approval notifications, and passwordless magic link logins.</li>
+            <li><strong>Audit Logs</strong>: Records administrative actions, token creations, and security violations locally in the gateway database.</li>
+        </ul>
+        <h2>2. Data Security & Storage</h2>
+        <p>Personal Access Tokens (PATs) are stored on the server using secure SHA-256 cryptographic hashes. All data is stored in a local, private SQLite database and is never shared, sold, or transmitted to external servers.</p>
+        <p style="margin-top: 32px;"><a href="/">← Return to Portal</a></p>
+    </div>
+</body>
+</html>`))
+}
+
+func (s *Server) handleCookiesFallback(w http.ResponseWriter, _ *http.Request) {
+	w.Header().Set("Content-Type", "text/html; charset=utf-8")
+	w.WriteHeader(http.StatusOK)
+	_, _ = w.Write([]byte(`<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Cookie Disclosure - Liferay Tunnel</title>
+    <link rel="icon" type="image/x-icon" href="/favicon.ico">
+    <style>
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+            background-color: #0d1117;
+            color: #c9d1d9;
+            line-height: 1.6;
+            margin: 0;
+            padding: 40px 24px;
+        }
+        .container {
+            max-width: 800px;
+            margin: 0 auto;
+            background: rgba(255, 255, 255, 0.03);
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            border-radius: 8px;
+            padding: 32px;
+        }
+        h1 { color: #58a6ff; font-size: 28px; margin-top: 0; border-bottom: 1px solid rgba(255, 255, 255, 0.1); padding-bottom: 12px; }
+        h2 { color: #58a6ff; font-size: 20px; margin-top: 24px; }
+        p, li { font-size: 15px; color: #8b949e; }
+        ul { padding-left: 20px; }
+        a { color: #58a6ff; text-decoration: none; }
+        a:hover { text-decoration: underline; }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>Cookie Disclosure</h1>
+        <p>This web application utilizes exactly <strong>one cookie</strong> to maintain your session.</p>
+        <h2>Strictly Necessary Cookies</h2>
+        <ul>
+            <li><strong>Cookie Name</strong>: <code>lfr_session</code></li>
+            <li><strong>Type</strong>: First-party, HTTP-Only, Secure, SameSite=Lax</li>
+            <li><strong>Purpose</strong>: This cookie is strictly necessary to keep you securely logged into your portal session. It contains no tracking data or personal identifiers.</li>
+            <li><strong>Consent</strong>: Under GDPR and the ePrivacy Directive, strictly necessary session cookies are exempt from requiring consent banner popups.</li>
+        </ul>
+        <p style="margin-top: 32px;"><a href="/">← Return to Portal</a></p>
+    </div>
+</body>
+</html>`))
 }

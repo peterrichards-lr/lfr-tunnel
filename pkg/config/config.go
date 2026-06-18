@@ -49,6 +49,8 @@ type ServerConfig struct {
 	MagicLinkExpiry        time.Duration    `yaml:"magic_link_expiry"`
 	InviteLinkExpiry       time.Duration    `yaml:"invite_link_expiry"`
 	VerificationLinkExpiry time.Duration    `yaml:"verification_link_expiry"`
+	PrivacyPolicyURL       string           `yaml:"privacy_policy_url"`
+	CookiePolicyURL        string           `yaml:"cookie_policy_url"`
 
 	// Dynamic SSO/OIDC Providers
 	SSOProviders []SSOProviderConfig `yaml:"sso_providers"`

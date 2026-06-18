@@ -15,7 +15,7 @@ var i18nFS embed.FS
 // initI18n loads all dynamic translation JSON bundles into server memory.
 func (s *Server) initI18n() error {
 	s.translations = make(map[string]map[string]string)
-	locales := []string{"en", "es", "fr", "de", "pt", "ko", "ja", "zh"}
+	locales := []string{"en", "es", "fr", "de", "pt", "ko", "ja", "zh", "ro"}
 
 	for _, locale := range locales {
 		data, err := i18nFS.ReadFile(fmt.Sprintf("i18n/%s.json", locale))
@@ -72,7 +72,7 @@ func (s *Server) ResolveLocale(r *http.Request) string {
 	// Simple parser: e.g. "fr-CH, fr;q=0.9, en;q=0.8"
 	parts := strings.Split(acceptLang, ",")
 	supported := map[string]bool{
-		"en": true, "es": true, "fr": true, "de": true, "pt": true, "ko": true, "ja": true, "zh": true,
+		"en": true, "es": true, "fr": true, "de": true, "pt": true, "ko": true, "ja": true, "zh": true, "ro": true,
 	}
 
 	for _, part := range parts {

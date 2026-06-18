@@ -292,6 +292,7 @@ function toggleTheme() {
                     else if (bundle.portal_welcome === "환영합니다") resolvedLang = "ko";
                     else if (bundle.portal_welcome === "ようこそ") resolvedLang = "ja";
                     else if (bundle.portal_welcome === "欢迎") resolvedLang = "zh";
+                    else if (bundle.portal_welcome === "Bine ai venit") resolvedLang = "ro";
 
                     const selector = document.getElementById('portal-language-selector');
                     if (selector) selector.value = resolvedLang;

@@ -43,6 +43,7 @@ Using a package manager ensures you get automated integrity validation (SHA-256 
 #### macOS / Linux (Homebrew)
 ```bash
 brew tap peterrichards-lr/tap
+brew trust peterrichards-lr/tap
 brew install lfr-tunnel
 ```
 

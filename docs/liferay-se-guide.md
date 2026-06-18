@@ -27,6 +27,7 @@ Your tunnel will be reachable at:
 
 ```bash
 brew tap peterrichards-lr/tap
+brew trust peterrichards-lr/tap
 brew install lfr-tunnel
 ```
 

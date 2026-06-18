@@ -7,8 +7,6 @@ on:
 
 permissions:
   contents: write
-  id-token: write    # Required for GitHub OIDC token (Artifact Attestations)
-  attestations: write # Required to write attestation records
 
 jobs:
   build-and-release:
@@ -53,16 +51,6 @@ jobs:
           cd dist
           sha256sum * > checksums.txt
 
-      - name: Generate Build Provenance Attestations
-        uses: actions/attest-build-provenance@v2
-        with:
-          # Attest all release binaries and the checksums file.
-          # This creates a cryptographic, OIDC-backed record in the GitHub
-          # Sigstore transparency log proving each artifact was built by
-          # this workflow at this exact commit.
-          # Verify with: gh attestation verify <binary> --repo peterrichards-lr/lfr-tunnel
-          subject-path: 'dist/*'
-
       - name: Push Checksums to Checksums Branch
         run: |
           git config --global user.name "github-actions[bot]"
@@ -88,12 +76,6 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Update Homebrew Tap & Scoop Bucket
-        # Requires a GitHub PAT (classic or fine-grained, contents:write scope on
-        # peterrichards-lr/homebrew-tap and peterrichards-lr/scoop-bucket) stored
-        # as the repository secret TAP_BUCKET_PAT.
-        # If the secret is absent the step exits cleanly so forks and draft releases
-        # are unaffected.
-        if: ${{ secrets.TAP_BUCKET_PAT != '' }}
         env:
           TAP_BUCKET_PAT: ${{ secrets.TAP_BUCKET_PAT }}
         run: |

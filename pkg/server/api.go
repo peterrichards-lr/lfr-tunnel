@@ -82,19 +82,20 @@ func (s *Server) handleGetMe(w http.ResponseWriter, r *http.Request) {
 	}
 
 	resp := map[string]interface{}{
-		"id":                 user.ID,
-		"email":              user.Email,
-		"first_name":         user.FirstName,
-		"last_name":          user.LastName,
-		"preferred_name":     user.PreferredName,
-		"role":               user.Role,
-		"status":             user.Status,
-		"timezone":           user.Timezone,
-		"auth_method":        user.AuthMethod,
-		"theme_preference":   user.ThemePreference,
-		"notification_prefs": user.NotificationPrefs,
-		"last_login_ip":      user.LastLoginIP,
-		"tunnels":            activeLeases,
+		"id":                  user.ID,
+		"email":               user.Email,
+		"first_name":          user.FirstName,
+		"last_name":           user.LastName,
+		"preferred_name":      user.PreferredName,
+		"role":                user.Role,
+		"status":              user.Status,
+		"timezone":            user.Timezone,
+		"auth_method":         user.AuthMethod,
+		"theme_preference":    user.ThemePreference,
+		"language_preference": user.LanguagePreference,
+		"notification_prefs":  user.NotificationPrefs,
+		"last_login_ip":       user.LastLoginIP,
+		"tunnels":             activeLeases,
 	}
 
 	cookie, err := r.Cookie("lfr_session")

@@ -913,18 +913,65 @@ function toggleTheme() {
         }
 
         async function loadTunnels() {
+            const isAdmin = currentUser && (currentUser.role === 'admin' || currentUser.role === 'owner');
+            const headersEl = document.getElementById('tunnels-table-headers');
+            if (headersEl) {
+                if (isAdmin) {
+                    headersEl.innerHTML = `
+                        <th data-sort="subdomain">Subdomain</th>
+                        <th data-sort="target">Full Host</th>
+                        <th data-sort="user_id">Owner</th>
+                        <th data-sort="rate_limit">Limit</th>
+                        <th data-sort="status">Status</th>
+                        <th data-sort="bytes_in">Data In</th>
+                        <th data-sort="bytes_out">Data Out</th>
+                        <th data-sort="created_at">Connected At</th>
+                        <th>Actions</th>
+                    `;
+                } else {
+                    headersEl.innerHTML = `
+                        <th data-sort="subdomain">Subdomain</th>
+                        <th data-sort="target">Full Host</th>
+                        <th data-sort="status">Status</th>
+                        <th data-sort="bytes_in">Data In</th>
+                        <th data-sort="bytes_out">Data Out</th>
+                        <th data-sort="created_at">Connected At</th>
+                    `;
+                }
+            }
+
             // Already fetched in /api/me
             const tunnels = currentUser.tunnels || [];
-            renderTable('tunnels-table-body', tunnels, t => `
-                <tr>
-                    <td style="font-weight: 500;">${escapeHTML(t.subdomain_prefix)}</td>
-                    <td><a href="https://${escapeHTML(t.full_host)}" target="_blank" style="color: var(--primary); text-decoration: none;">${escapeHTML(t.full_host)}</a></td>
-                    <td><span class="badge ${t.status === 'up' ? 'success' : ''}">${escapeHTML(t.status)}</span></td>
-                    <td>${formatBytes(t.bytes_in)}</td>
-                    <td>${formatBytes(t.bytes_out)}</td>
-                    <td>${renderTimestamp(t.created_at)}</td>
-                </tr>
-            `);
+            renderTable('tunnels-table-body', tunnels, t => {
+                if (isAdmin) {
+                    return `
+                        <tr>
+                            <td style="font-weight: 500;">${escapeHTML(t.subdomain_prefix)}</td>
+                            <td><a href="https://${escapeHTML(t.full_host)}" target="_blank" style="color: var(--primary); text-decoration: none;">${escapeHTML(t.full_host)}</a></td>
+                            <td><span style="font-size: 13px; color: var(--text-muted); font-family: monospace;">${escapeHTML(t.user_id || '')}</span></td>
+                            <td><span class="badge" style="font-weight: bold; background: rgba(139,92,246,0.15); color: #a78bfa; border: 1px solid rgba(139,92,246,0.3);">${t.rate_limit ? t.rate_limit + ' RPS' : 'Unlimited'}</span></td>
+                            <td><span class="badge ${t.status === 'up' ? 'success' : ''}">${escapeHTML(t.status)}</span></td>
+                            <td>${formatBytes(t.bytes_in)}</td>
+                            <td>${formatBytes(t.bytes_out)}</td>
+                            <td>${renderTimestamp(t.created_at)}</td>
+                            <td>
+                                <button class="btn" style="padding: 4px 8px; margin: 0; color: #d97706; border-color: #d97706;" onclick="openTunnelOverrideModal('${escapeHTML(t.full_host)}', ${t.rate_limit || 0})">Override Limit</button>
+                            </td>
+                        </tr>
+                    `;
+                } else {
+                    return `
+                        <tr>
+                            <td style="font-weight: 500;">${escapeHTML(t.subdomain_prefix)}</td>
+                            <td><a href="https://${escapeHTML(t.full_host)}" target="_blank" style="color: var(--primary); text-decoration: none;">${escapeHTML(t.full_host)}</a></td>
+                            <td><span class="badge ${t.status === 'up' ? 'success' : ''}">${escapeHTML(t.status)}</span></td>
+                            <td>${formatBytes(t.bytes_in)}</td>
+                            <td>${formatBytes(t.bytes_out)}</td>
+                            <td>${renderTimestamp(t.created_at)}</td>
+                        </tr>
+                    `;
+                }
+            });
         }
 
         function showTab(tabName, skipHistory = false) {
@@ -1236,11 +1283,13 @@ function toggleTheme() {
                         <td><span class="badge ${u.role === 'admin' ? 'success' : ''}">${escapeHTML(u.role)}</span></td>
                         <td><span class="badge ${u.status === 'approved' ? 'success' : (u.status === 'revoked' ? 'danger' : 'warning')}">${escapeHTML(u.status)}</span></td>
                         <td>${originBadge}</td>
+                        <td><span class="badge" style="font-weight: bold; background: rgba(139,92,246,0.15); color: #a78bfa; border: 1px solid rgba(139,92,246,0.3);">${u.rate_limit ? u.rate_limit + ' RPS' : 'Unlimited'}</span></td>
                         <td>${renderTimestamp(u.created_at)}</td>
                         <td>
                             ${(!isSelf && u.status !== 'approved') ? `<button class="btn" style="padding: 4px 8px; margin: 0 4px 0 0;" onclick="approveUser('${u.id}')">Approve</button>` : ''}
                             ${(!isSelf && u.status !== 'revoked') ? `<button class="btn" style="padding: 4px 8px; margin: 0 4px 0 0; color: var(--danger); border-color: var(--danger);" onclick="revokeUser('${u.id}')">Revoke</button>` : ''}
                             ${(!isSelf && u.status === 'approved') ? `<button class="btn" style="padding: 4px 8px; margin: 0 4px 0 0; color: #3b82f6; border-color: #3b82f6;" onclick="promptTargetedMessage('${u.id}', '${escapeHTML(u.email)}')">Message</button>` : ''}
+                            ${(!isSelf && u.status === 'approved') ? `<button class="btn" style="padding: 4px 8px; margin: 0 4px 0 0; color: #8b5cf6; border-color: #8b5cf6;" onclick="openUserQuotaModal('${escapeHTML(u.email)}', ${u.rate_limit || 0})">Set Quota</button>` : ''}
                             ${(!isSelf && u.status === 'approved' && u.role === 'admin') ? `<button class="btn" style="padding: 4px 8px; margin: 0 4px 0 0; color: #84cc16; border-color: #84cc16;" onclick="changeUserRole('${escapeHTML(u.email)}', 'user')">Demote</button>` : ''}
                             ${(!isSelf && u.status === 'approved' && u.role === 'user') ? `<button class="btn" style="padding: 4px 8px; margin: 0 4px 0 0; color: #84cc16; border-color: #84cc16;" onclick="changeUserRole('${escapeHTML(u.email)}', 'admin')">Promote</button>` : ''}
                             ${(!isSelf && u.totp_enabled) ? `<button class="btn" style="padding: 4px 8px; margin: 0 4px 0 0; color: #d97706; border-color: #d97706;" onclick="adminResetMFA('${escapeHTML(u.email)}')">Reset MFA</button>` : ''}
@@ -1939,5 +1988,71 @@ function toggleTheme() {
                 }
             } catch (e) {
                 console.error("Failed to load language", e);
+            }
+        }
+
+        // USER QUOTA MODAL CONTROLLERS
+        let activeQuotaEmail = '';
+        function openUserQuotaModal(email, currentLimit) {
+            activeQuotaEmail = email;
+            document.getElementById('user-quota-email-hint').innerText = email;
+            document.getElementById('user-quota-input').value = currentLimit || '';
+            document.getElementById('user-quota-modal').style.display = 'flex';
+        }
+
+        function closeUserQuotaModal() {
+            document.getElementById('user-quota-modal').style.display = 'none';
+        }
+
+        async function submitUserQuota() {
+            const limit = parseInt(document.getElementById('user-quota-input').value) || 0;
+            const res = await fetch('/api/admin/users/' + encodeURIComponent(activeQuotaEmail), {
+                method: 'PATCH',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify({ rate_limit: limit })
+            });
+            if (res.ok) {
+                showToast('User rate limit quota updated successfully', 'success');
+                closeUserQuotaModal();
+                loadUsers();
+            } else {
+                const err = await res.json();
+                showToast('Failed to update quota: ' + (err.error || 'Unknown error'), 'danger');
+            }
+        }
+
+        // ACTIVE TUNNEL OVERRIDE MODAL CONTROLLERS
+        let activeOverrideHost = '';
+        function openTunnelOverrideModal(host, currentLimit) {
+            activeOverrideHost = host;
+            document.getElementById('tunnel-override-host-hint').innerText = host;
+            document.getElementById('tunnel-override-input').value = currentLimit || '';
+            document.getElementById('tunnel-override-modal').style.display = 'flex';
+        }
+
+        function closeTunnelOverrideModal() {
+            document.getElementById('tunnel-override-modal').style.display = 'none';
+        }
+
+        async function submitTunnelOverride() {
+            const limit = parseInt(document.getElementById('tunnel-override-input').value) || 0;
+            const res = await fetch('/api/admin/leases/rate-limit', {
+                method: 'POST',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify({ host: activeOverrideHost, rate_limit: limit })
+            });
+            if (res.ok) {
+                showToast('Active tunnel rate limit overridden successfully', 'success');
+                closeTunnelOverrideModal();
+                
+                // Instantly reload active leases to update UI stats
+                const meRes = await fetch('/api/me');
+                if (meRes.ok) {
+                    currentUser = await meRes.json();
+                    loadTunnels();
+                }
+            } else {
+                const err = await res.json();
+                showToast('Failed to override limit: ' + (err.error || 'Unknown error'), 'danger');
             }
         }

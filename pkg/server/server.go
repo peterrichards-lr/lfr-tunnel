@@ -433,6 +433,11 @@ func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 
+		if r.Method == http.MethodGet && r.URL.Path == "/api/i18n" {
+			s.handleGetI18n(w, r)
+			return
+		}
+
 		if r.Method == http.MethodGet && r.URL.Path == "/api/admin/approve" {
 			s.handleApproveUser(w, r)
 			return

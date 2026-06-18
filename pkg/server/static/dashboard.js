@@ -276,6 +276,35 @@ function toggleTheme() {
             } catch (e) {
                 console.error("Failed to load policy links", e);
             }
+
+            // Auto-detect browser language on first load and translate unauthenticated portal UI
+            try {
+                const res = await fetch('/api/i18n');
+                if (res.ok) {
+                    const bundle = await res.json();
+                    
+                    // Deduce resolved language by scanning typical strings
+                    let resolvedLang = "en";
+                    if (bundle.portal_welcome === "Bienvenido") resolvedLang = "es";
+                    else if (bundle.portal_welcome === "Bienvenue") resolvedLang = "fr";
+                    else if (bundle.portal_welcome === "Willkommen") resolvedLang = "de";
+                    else if (bundle.portal_welcome === "Bem-vindo") resolvedLang = "pt";
+                    else if (bundle.portal_welcome === "환영합니다") resolvedLang = "ko";
+                    else if (bundle.portal_welcome === "ようこそ") resolvedLang = "ja";
+                    else if (bundle.portal_welcome === "欢迎") resolvedLang = "zh";
+
+                    const selector = document.getElementById('portal-language-selector');
+                    if (selector) selector.value = resolvedLang;
+
+                    // Apply translations to data-i18n tagged elements
+                    document.querySelectorAll('[data-i18n]').forEach(el => {
+                        const key = el.getAttribute('data-i18n');
+                        if (bundle[key]) el.innerText = bundle[key];
+                    });
+                }
+            } catch (e) {
+                console.error("Failed to auto-detect and translate portal language", e);
+            }
         }
 
         async function showLogin() {
@@ -1659,5 +1688,22 @@ function toggleTheme() {
                 }
             } catch (e) {
                 showToast("Network error deleting user", "danger");
+            }
+        }
+
+        async function changePortalLanguage(lang) {
+            try {
+                const res = await fetch('/api/i18n?lang=' + encodeURIComponent(lang));
+                if (res.ok) {
+                    const bundle = await res.json();
+                    document.querySelectorAll('[data-i18n]').forEach(el => {
+                        const key = el.getAttribute('data-i18n');
+                        if (bundle[key]) {
+                            el.innerText = bundle[key];
+                        }
+                    });
+                }
+            } catch (e) {
+                console.error("Failed to load language", e);
             }
         }

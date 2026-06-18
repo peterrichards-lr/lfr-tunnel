@@ -4,5 +4,18 @@
   "role_updated_subject": "Liferay Tunnel: Função da conta atualizada",
   "access_suspended_subject": "Liferay Tunnel: Acesso à conta suspenso",
   "account_deleted_subject": "Liferay Tunnel: Conta excluída e anonimizada",
-  "registration_pending_subject": "Liferay Tunnel: Novo registro pendente de aprovação"
+  "registration_pending_subject": "Liferay Tunnel: Novo registro pendente de aprovação",
+  
+  "portal_title": "Portal Liferay Tunnel",
+  "portal_welcome": "Bem-vindo",
+  "portal_login_desc": "Insira seu e-mail para solicitar um link de login seguro e sem senha.",
+  "portal_register_desc": "Ainda não tem uma conta? Registre-se aqui:",
+  "btn_send_magic_link": "Enviar Link Mágico",
+  "btn_register_account": "Registrar Conta",
+  "label_email": "Endereço de E-mail",
+  "label_first_name": "Nome",
+  "label_last_name": "Sobrenome",
+  "mfa_verify_title": "Verificação de Múltiplos Fatores (MFA)",
+  "mfa_verify_desc": "Por favor, insira o código de 6 dígitos do seu aplicativo autenticador:",
+  "btn_verify_login": "Verificar & Entrar"
 }

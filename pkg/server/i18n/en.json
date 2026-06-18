@@ -4,5 +4,18 @@
   "role_updated_subject": "Liferay Tunnel: Account Role Updated",
   "access_suspended_subject": "Liferay Tunnel: Account Access Suspended",
   "account_deleted_subject": "Liferay Tunnel: Account Deleted & Anonymised",
-  "registration_pending_subject": "Liferay Tunnel: New Registration Pending Approval"
+  "registration_pending_subject": "Liferay Tunnel: New Registration Pending Approval",
+  
+  "portal_title": "Liferay Tunnel Portal",
+  "portal_welcome": "Welcome",
+  "portal_login_desc": "Enter your email to request a passwordless secure login link.",
+  "portal_register_desc": "Don't have an account yet? Register here:",
+  "btn_send_magic_link": "Send Magic Link",
+  "btn_register_account": "Register Account",
+  "label_email": "Email Address",
+  "label_first_name": "First Name",
+  "label_last_name": "Last Name",
+  "mfa_verify_title": "Multi-Factor Verification",
+  "mfa_verify_desc": "Please enter the 6-digit code from your authenticator app:",
+  "btn_verify_login": "Verify & Log In"
 }

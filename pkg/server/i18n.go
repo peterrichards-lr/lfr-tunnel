@@ -88,3 +88,22 @@ func (s *Server) ResolveLocale(r *http.Request) string {
 
 	return "en"
 }
+
+// handleGetI18n serves the parsed JSON translation bundle for the requested locale.
+func (s *Server) handleGetI18n(w http.ResponseWriter, r *http.Request) {
+	lang := r.URL.Query().Get("lang")
+	if lang == "" {
+		lang = s.ResolveLocale(r)
+	}
+	if len(lang) > 2 {
+		lang = lang[:2]
+	}
+
+	bundle, ok := s.translations[lang]
+	if !ok {
+		// Fallback to English
+		bundle = s.translations["en"]
+	}
+
+	respondJSON(w, http.StatusOK, bundle)
+}

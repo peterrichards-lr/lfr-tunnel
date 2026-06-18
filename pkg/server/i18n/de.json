@@ -4,5 +4,18 @@
   "role_updated_subject": "Liferay Tunnel: Kontorolle aktualisiert",
   "access_suspended_subject": "Liferay Tunnel: Kontozugriff gesperrt",
   "account_deleted_subject": "Liferay Tunnel: Konto gelöscht und anonymisiert",
-  "registration_pending_subject": "Liferay Tunnel: Neue Registrierung wartet auf Genehmigung"
+  "registration_pending_subject": "Liferay Tunnel: Neue Registrierung wartet auf Genehmigung",
+  
+  "portal_title": "Liferay Tunnel Portal",
+  "portal_welcome": "Willkommen",
+  "portal_login_desc": "Geben Sie Ihre E-Mail-Adresse ein, um einen passwortlosen, sicheren Login-Link anzufordern.",
+  "portal_register_desc": "Haben Sie noch kein Konto? Registrieren Sie sich hier:",
+  "btn_send_magic_link": "Magischen Link Senden",
+  "btn_register_account": "Konto Registrieren",
+  "label_email": "E-Mail-Adresse",
+  "label_first_name": "Vorname",
+  "label_last_name": "Nachname",
+  "mfa_verify_title": "Multi-Faktor-Verifizierung (MFA)",
+  "mfa_verify_desc": "Bitte geben Sie den 6-stelligen Code aus Ihrer Authentifikator-App ein:",
+  "btn_verify_login": "Verifizieren & Einloggen"
 }

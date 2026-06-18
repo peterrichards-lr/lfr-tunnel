@@ -503,6 +503,11 @@ func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 
+		if r.Method == http.MethodPost && r.URL.Path == "/api/me/delete-account" {
+			s.handleSelfDeleteAccount(w, r)
+			return
+		}
+
 		if r.Method == http.MethodGet && r.URL.Path == "/api/mfa/setup" {
 			s.handleMFASetup(w, r)
 			return
@@ -1502,6 +1507,11 @@ func (s *Server) handleAdminEndpoints(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	if r.Method == http.MethodDelete && strings.HasPrefix(r.URL.Path, "/api/admin/users/") {
+		s.handleAdminDeleteUser(w, r, actor)
+		return
+	}
+
 	if r.Method == http.MethodGet && r.URL.Path == "/api/admin/tokens" {
 		s.handleAdminListTokens(w, r, actor)
 		return
@@ -2319,6 +2329,27 @@ func (s *Server) handleAdminPatchUser(w http.ResponseWriter, r *http.Request, ac
 	if err := s.db.UpdateUser(user); err != nil {
 		http.Error(w, `{"error":"Failed to update user"}`, http.StatusInternalServerError)
 		return
+	}
+
+	// Send status update/revocation email notification if configured
+	if req.Status != nil && s.mailSender != nil {
+		subject := "Liferay Tunnel: Account Access Suspended"
+		greetingName := user.FirstName
+		if greetingName == "" {
+			greetingName = "there"
+		}
+
+		if *req.Status == "revoked" {
+			body := fmt.Sprintf(`Hi %s,<br/><br/>
+Your access permissions on Liferay Tunnel have been <strong>suspended</strong> by an administrator.<br/><br/>
+All your active tunnel connections have been closed, and you will no longer be able to establish connections or access the portal.<br/><br/>
+If you believe this is in error, please contact your administrator.<br/><br/>
+Best regards,<br/>
+Liferay Tunnel Team`, html.EscapeString(greetingName))
+
+			plainBody := fmt.Sprintf("Hi %s,\n\nYour access on Liferay Tunnel has been suspended by an administrator.\n\nBest regards,\nLiferay Tunnel Team", greetingName)
+			go func() { _ = s.mailSender.Send(user.Email, subject, body, plainBody) }()
+		}
 	}
 
 	// Send role update email notification if configured and user has not unsubscribed

@@ -767,11 +767,22 @@ func (db *DB) ListBlacklistedIPs() ([]*BlacklistEntry, error) {
 	for rows.Next() {
 		var e BlacklistEntry
 		var reason sql.NullString
-		if err := rows.Scan(&e.IPAddress, &reason, &e.CreatedAt); err != nil {
+		var createdAtStr string
+		if err := rows.Scan(&e.IPAddress, &reason, &createdAtStr); err != nil {
 			return nil, err
 		}
 		if reason.Valid {
 			e.Reason = reason.String
+		}
+		// Parse SQLite CURRENT_TIMESTAMP string format: "2006-01-02 15:04:05" or RFC3339
+		createdAtStr = strings.TrimSpace(createdAtStr)
+		if t, err := time.Parse("2006-01-02 15:04:05", createdAtStr); err == nil {
+			e.CreatedAt = t
+		} else if t, err := time.Parse(time.RFC3339, createdAtStr); err == nil {
+			e.CreatedAt = t
+		} else {
+			// Fallback
+			e.CreatedAt = time.Now().UTC()
 		}
 		entries = append(entries, &e)
 	}
@@ -1011,4 +1022,28 @@ func (db *DB) GetClientVersionStats() ([]ClientVersionStats, error) {
 		stats = append(stats, stat)
 	}
 	return stats, nil
+}
+
+// AnonymizeUserData obfuscates all audit logs and metrics associated with a deleted user.
+func (db *DB) AnonymizeUserData(userID, anonymizedID string) error {
+	// Update tunnel_metrics
+	_, err1 := db.conn.Exec("UPDATE tunnel_metrics SET user_id = ? WHERE user_id = ?", anonymizedID, userID)
+	// Update tunnel_audit_logs
+	_, err2 := db.conn.Exec("UPDATE tunnel_audit_logs SET user_id = ? WHERE user_id = ?", anonymizedID, userID)
+	// Update admin_audit_log (acting as actor or target)
+	_, err3 := db.conn.Exec("UPDATE admin_audit_log SET actor_id = ? WHERE actor_id = ?", anonymizedID, userID)
+	_, err4 := db.conn.Exec("UPDATE admin_audit_log SET target_id = ? WHERE target_id = ?", anonymizedID, userID)
+	if err1 != nil {
+		return err1
+	}
+	if err2 != nil {
+		return err2
+	}
+	if err3 != nil {
+		return err3
+	}
+	if err4 != nil {
+		return err4
+	}
+	return nil
 }

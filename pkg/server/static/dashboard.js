@@ -1016,6 +1016,7 @@ function toggleTheme() {
                             ${(!isSelf && u.status === 'approved' && u.role === 'admin') ? `<button class="btn" style="padding: 4px 8px; margin: 0 4px 0 0; color: #84cc16; border-color: #84cc16;" onclick="changeUserRole('${escapeHTML(u.email)}', 'user')">Demote</button>` : ''}
                             ${(!isSelf && u.status === 'approved' && u.role === 'user') ? `<button class="btn" style="padding: 4px 8px; margin: 0 4px 0 0; color: #84cc16; border-color: #84cc16;" onclick="changeUserRole('${escapeHTML(u.email)}', 'admin')">Promote</button>` : ''}
                             ${(!isSelf && u.totp_enabled) ? `<button class="btn" style="padding: 4px 8px; margin: 0 4px 0 0; color: #d97706; border-color: #d97706;" onclick="adminResetMFA('${escapeHTML(u.email)}')">Reset MFA</button>` : ''}
+                            ${!isSelf ? `<button class="btn" style="padding: 4px 8px; margin: 0 4px 0 0; color: #f43f5e; border-color: #f43f5e;" onclick="adminDeleteUser('${escapeHTML(u.email)}')">Delete</button>` : ''}
                             ${isSelf ? '<span style="font-size: 12px; color: var(--text-muted);">No actions</span>' : ''}
                         </td>
                     </tr>
@@ -1590,5 +1591,70 @@ function toggleTheme() {
                 }
             } catch (e) {
                 showToast("Network error toggling maintenance mode", "danger");
+            }
+        }
+
+        function openDeleteAccountModal() {
+            if (!currentUser) return;
+            document.getElementById('delete-acc-email-hint').innerText = currentUser.email;
+            document.getElementById('delete-acc-confirm-input').value = "";
+            document.getElementById('delete-account-modal').style.display = 'flex';
+        }
+
+        function closeDeleteAccountModal() {
+            document.getElementById('delete-account-modal').style.display = 'none';
+        }
+
+        async function submitSelfDeleteAccount() {
+            const inputVal = document.getElementById('delete-acc-confirm-input').value.trim();
+            if (!inputVal) return showToast("Please type your email to confirm.", "danger");
+
+            if (inputVal.toLowerCase() !== currentUser.email.toLowerCase()) {
+                return showToast("Entered email address does not match your account email.", "danger");
+            }
+
+            try {
+                const res = await fetch('/api/me/delete-account', {
+                    method: 'POST',
+                    headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify({ confirm_email: inputVal })
+                });
+
+                if (res.ok) {
+                    alert("Your account has been permanently deleted and anonymised in accordance with your Right to Be Forgotten. You will now be redirected.");
+                    window.location.reload();
+                } else {
+                    const err = await res.json();
+                    showToast(err.error || "Failed to delete account", "danger");
+                }
+            } catch (e) {
+                showToast("Network error deleting account", "danger");
+            }
+        }
+
+        async function adminDeleteUser(email) {
+            const promptMsg = `⚠️ GDPR RIGHT TO BE FORGOTTEN REQUEST\n\nAre you sure you want to PERMANENTLY DELETE and ANONYMISE the account for ${email}?\n\nThis will instantly revoke all their tokens, close active tunnels, completely delete their profile, and permanently anonymise their logs and bandwidth metrics! This action is absolutely irreversible.`;
+            if (!confirm(promptMsg)) return;
+
+            const secondPrompt = `Type "DELETE" (all caps) to confirm you want to permanently delete and anonymise ${email}:`;
+            const confirmation = prompt(secondPrompt);
+            if (confirmation !== "DELETE") {
+                return showToast("Account deletion cancelled (incorrect confirmation string).", "warning");
+            }
+
+            try {
+                const res = await fetch('/api/admin/users/' + encodeURIComponent(email), {
+                    method: 'DELETE'
+                });
+
+                if (res.ok) {
+                    showToast(`User ${email} has been permanently deleted and anonymised.`, "success");
+                    loadUsers();
+                } else {
+                    const err = await res.json();
+                    showToast(err.error || "Failed to delete user", "danger");
+                }
+            } catch (e) {
+                showToast("Network error deleting user", "danger");
             }
         }

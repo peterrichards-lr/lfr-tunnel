@@ -827,3 +827,55 @@ func TestServer_UnsubscribeAndMaintenance(t *testing.T) {
 		t.Errorf("expected maintenance_mode to be 'pending', got %q", verResp["maintenance_mode"])
 	}
 }
+
+func TestServer_GDPRDeleteAndAnonymization(t *testing.T) {
+	tmpDir, err := os.MkdirTemp("", "lfr-tunnel-test-*")
+	if err != nil {
+		t.Fatalf("failed to create temp dir: %v", err)
+	}
+	defer os.RemoveAll(tmpDir) //nolint:errcheck
+
+	cfg := config.DefaultServerConfig()
+	cfg.DBPath = filepath.Join(tmpDir, "test.db")
+	cfg.Domains = []string{"example.com"}
+
+	srv, err := NewServer(cfg)
+	if err != nil {
+		t.Fatalf("failed to create server: %v", err)
+	}
+	defer srv.Stop()
+	defer time.Sleep(50 * time.Millisecond) // prevent SQLite cleanup races
+
+	email := "gdpr-user@example.com"
+	_ = srv.db.CreateUser(&db.User{ID: email, Email: email, Role: "user", Status: "approved"})
+
+	// Create some audit entries for this user
+	_ = srv.db.WriteAuditEntry(&db.AuditEntry{
+		ActorID:    email,
+		Action:     "tunnel.connected",
+		TargetType: "tunnel",
+		TargetID:   "gamma",
+	})
+
+	// Run anonymization directly
+	anonymizedID := "gdpr-deleted-user-hash123"
+	err = srv.db.AnonymizeUserData(email, anonymizedID)
+	if err != nil {
+		t.Fatalf("AnonymizeUserData failed: %v", err)
+	}
+
+	// Verify audit logs are anonymized
+	entries, err := srv.db.ListAuditEntries(db.AuditFilter{})
+	if err != nil {
+		t.Fatalf("failed to list audit entries: %v", err)
+	}
+	if len(entries) == 0 {
+		t.Fatal("expected at least 1 audit entry")
+	}
+
+	for _, entry := range entries {
+		if entry.ActorID == email {
+			t.Errorf("found un-anonymized actor_id %q in audit log", entry.ActorID)
+		}
+	}
+}

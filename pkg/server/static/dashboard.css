@@ -350,3 +350,68 @@
 .toast-error { border-left: 4px solid var(--danger); }
 .toast-info { border-left: 4px solid var(--primary); }
 
+/* --- RIGHT-TO-LEFT (RTL) SUPPORT --- */
+html[dir="rtl"] body {
+    text-align: right;
+}
+html[dir="rtl"] .sidebar {
+    left: auto;
+    right: 0;
+    border-right: none;
+    border-left: 1px solid var(--border);
+}
+html[dir="rtl"] .main-content {
+    margin-left: 0;
+    margin-right: 260px;
+}
+html[dir="rtl"] #header-language-container {
+    right: auto;
+    left: 24px;
+}
+html[dir="rtl"] .custom-dropdown-menu {
+    right: auto;
+    left: 0;
+}
+html[dir="rtl"] #toast-container {
+    right: auto;
+    left: 24px;
+}
+html[dir="rtl"] .toast {
+    transform: translateX(-120%);
+}
+html[dir="rtl"] .toast.show {
+    transform: translateX(0);
+}
+html[dir="rtl"] .toast-success {
+    border-left: none;
+    border-right: 4px solid var(--success);
+}
+html[dir="rtl"] .toast-error {
+    border-left: none;
+    border-right: 4px solid var(--danger);
+}
+html[dir="rtl"] .toast-info {
+    border-left: none;
+    border-right: 4px solid var(--primary);
+}
+html[dir="rtl"] .toggle-switch {
+    margin-left: auto;
+    margin-right: 0;
+}
+html[dir="rtl"] .btn svg, html[dir="rtl"] .nav-item svg {
+    margin-right: 0;
+    margin-left: 8px;
+}
+html[dir="rtl"] td, html[dir="rtl"] th {
+    text-align: right;
+}
+
+/* --- CUSTOM DROPDOWN SELECTORS --- */
+.custom-dropdown {
+    position: relative;
+    z-index: 100; /* Elevates parent stacking context above subsequent sibling cards */
+}
+.custom-dropdown-menu {
+    z-index: 200 !important; /* Forces the absolute menu to float natively on top of everything */
+}
+

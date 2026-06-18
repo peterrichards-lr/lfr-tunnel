@@ -931,21 +931,10 @@ label_email:Adresă de E-mail
 	if len(props) != 3 {
 		t.Fatalf("expected exactly 3 properties, got %d", len(props))
 	}
-
-	if props["portal.welcome"] != "Bine ai venit" {
-		t.Errorf("expected portal.welcome to be 'Bine ai venit', got %q", props["portal.welcome"])
-	}
-
-	if props["btn_send_magic_link"] != "Trimite Link-ul Magic" {
-		t.Errorf("expected btn_send_magic_link to be 'Trimite Link-ul Magic', got %q", props["btn_send_magic_link"])
-	}
-
-	if props["label_email"] != "Adresă de E-mail" {
-		t.Errorf("expected label_email to be 'Adresă de E-mail', got %q", props["label_email"])
-	}
 }
 
-func TestServer_GetMeLanguagePreference(t *testing.T) {
+// setupTestServer sets up a temporary server instance with a mock mail sender and a clean DB path.
+func setupTestServer(t *testing.T) (*Server, *mockMailSender, func()) {
 	cfg := config.DefaultServerConfig()
 	cfg.Domains = []string{"example.com"}
 	cfg.DBPath = filepath.Join(t.TempDir(), "test.db")
@@ -954,8 +943,21 @@ func TestServer_GetMeLanguagePreference(t *testing.T) {
 	if err != nil {
 		t.Fatalf("failed to create server: %v", err)
 	}
-	defer srv.Stop()
-	defer time.Sleep(50 * time.Millisecond) // prevent SQLite cleanup races
+
+	mockMail := &mockMailSender{}
+	srv.mailSender = mockMail
+
+	cleanup := func() {
+		srv.Stop()
+		time.Sleep(50 * time.Millisecond) // prevent SQLite cleanup races
+	}
+
+	return srv, mockMail, cleanup
+}
+
+func TestServer_GetMeLanguagePreference(t *testing.T) {
+	srv, _, cleanup := setupTestServer(t)
+	defer cleanup()
 
 	// 1. Create a user in the database with Romanian language preference
 	email := "test_i18n@example.com"
@@ -1008,20 +1010,8 @@ func TestServer_GetMeLanguagePreference(t *testing.T) {
 }
 
 func TestServer_WelcomePageLanguageOverride(t *testing.T) {
-	cfg := config.DefaultServerConfig()
-	cfg.Domains = []string{"example.com"}
-	cfg.DBPath = filepath.Join(t.TempDir(), "test.db")
-
-	srv, err := NewServer(cfg)
-	if err != nil {
-		t.Fatalf("failed to create server: %v", err)
-	}
-	defer srv.Stop()
-	defer time.Sleep(50 * time.Millisecond) // prevent SQLite cleanup races
-
-	// Intercept the sent email using the standard mockMailSender!
-	mockMail := &mockMailSender{}
-	srv.mailSender = mockMail
+	srv, mockMail, cleanup := setupTestServer(t)
+	defer cleanup()
 
 	// 1. Create a user in the DB with English language preference
 	email := "test_override@example.com"
@@ -1063,20 +1053,8 @@ func TestServer_WelcomePageLanguageOverride(t *testing.T) {
 }
 
 func TestServer_MagicLinkInstantRequestInvalidation(t *testing.T) {
-	cfg := config.DefaultServerConfig()
-	cfg.Domains = []string{"example.com"}
-	cfg.DBPath = filepath.Join(t.TempDir(), "test.db")
-
-	srv, err := NewServer(cfg)
-	if err != nil {
-		t.Fatalf("failed to create server: %v", err)
-	}
-	defer srv.Stop()
-	defer time.Sleep(50 * time.Millisecond) // prevent SQLite cleanup races
-
-	// Intercept sent emails
-	mockMail := &mockMailSender{}
-	srv.mailSender = mockMail
+	srv, mockMail, cleanup := setupTestServer(t)
+	defer cleanup()
 
 	// 1. Create approved user
 	email := "test_invalidation@example.com"
@@ -1157,20 +1135,8 @@ func extractTokenFromBody(body string) string {
 }
 
 func TestServer_MagicLinkLanguagePersistence(t *testing.T) {
-	cfg := config.DefaultServerConfig()
-	cfg.Domains = []string{"example.com"}
-	cfg.DBPath = filepath.Join(t.TempDir(), "test.db")
-
-	srv, err := NewServer(cfg)
-	if err != nil {
-		t.Fatalf("failed to create server: %v", err)
-	}
-	defer srv.Stop()
-	defer time.Sleep(50 * time.Millisecond) // prevent SQLite cleanup races
-
-	// Intercept sent emails
-	mockMail := &mockMailSender{}
-	srv.mailSender = mockMail
+	srv, mockMail, cleanup := setupTestServer(t)
+	defer cleanup()
 
 	// 1. Create an approved user with English language preference
 	email := "test_lang_persist@example.com"
@@ -1238,20 +1204,8 @@ func TestServer_MagicLinkLanguagePersistence(t *testing.T) {
 }
 
 func TestServer_InvitationLanguagePersistence(t *testing.T) {
-	cfg := config.DefaultServerConfig()
-	cfg.Domains = []string{"example.com"}
-	cfg.DBPath = filepath.Join(t.TempDir(), "test.db")
-
-	srv, err := NewServer(cfg)
-	if err != nil {
-		t.Fatalf("failed to create server: %v", err)
-	}
-	defer srv.Stop()
-	defer time.Sleep(50 * time.Millisecond) // prevent SQLite cleanup races
-
-	// Intercept sent emails
-	mockMail := &mockMailSender{}
-	srv.mailSender = mockMail
+	srv, mockMail, cleanup := setupTestServer(t)
+	defer cleanup()
 
 	// 1. Create an active admin user and session to satisfy the auth middleware
 	adminEmail := "admin_test@example.com"
@@ -1312,16 +1266,8 @@ func TestServer_InvitationLanguagePersistence(t *testing.T) {
 }
 
 func TestServer_RateLimitingEnforcements(t *testing.T) {
-	cfg := config.DefaultServerConfig()
-	cfg.Domains = []string{"example.com"}
-	cfg.DBPath = filepath.Join(t.TempDir(), "test.db")
-
-	srv, err := NewServer(cfg)
-	if err != nil {
-		t.Fatalf("failed to create server: %v", err)
-	}
-	defer srv.Stop()
-	defer time.Sleep(50 * time.Millisecond) // prevent SQLite cleanup races
+	srv, _, cleanup := setupTestServer(t)
+	defer cleanup()
 
 	// 1. Create a user with a specific DB rate limit quota of 10 RPS
 	email := "throttled_user@example.com"

@@ -12,8 +12,13 @@
 set -euo pipefail
 
 VERSION="${1:?Version tag is required (e.g. v1.7.1)}"
-TAP_BUCKET_PAT="${2:?GitHub PAT is required}"
+TAP_BUCKET_PAT="${2:-}"
 CHECKSUMS_FILE="${3:?Path to checksums.txt is required}"
+
+if [ -z "${TAP_BUCKET_PAT}" ]; then
+  echo "TAP_BUCKET_PAT is empty or missing. Skipping Homebrew Tap and Scoop Bucket updates cleanly."
+  exit 0
+fi
 
 VERSION_NUM="${VERSION#v}"   # e.g. 1.7.1
 

@@ -76,7 +76,6 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Update Homebrew Tap & Scoop Bucket
-        if: secrets.TAP_BUCKET_PAT != ''
         env:
           TAP_BUCKET_PAT: ${{ secrets.TAP_BUCKET_PAT }}
         run: |

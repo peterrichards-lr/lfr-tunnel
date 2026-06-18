@@ -645,3 +645,56 @@ To prevent active tunnel connections or client-facing demonstrations from sudden
    * Once the countdown hits 0, the server automatically flips into active maintenance, forcefully drops all standard WebSocket tunnels (`KickLease`), and logs out active non-admin portal sessions.
    * Admins and Owners remain unblocked throughout the entire process so they can manage system resources.
 
+### 8.4. Automated Cloudflare Dynamic DNS (DDNS) Service Setup
+
+If your VPS or gateway environment runs on a dynamic public IP address, you can configure our native background Cloudflare Dynamic DNS (DDNS) service. 
+
+This background service automatically polls your public IPv4 and IPv6 addresses every 5 minutes and dynamically syncs your Cloudflare DNS zone records for the root (`@`), wildcard (`*`), and your explicit SMTP mail host (`tunnel`) subdomains whenever an IP change is detected, keeping your tunnels and mail server HELO/rDNS alignment 100% self-healing!
+
+#### Step 1: Place API token configuration
+Create a secure configuration file at `/etc/letsencrypt/cloudflare.ini` (this matches the certbot API folder location):
+```ini
+# Cloudflare API Token (with Zone.DNS Edit permissions)
+dns_cloudflare_api_token = YOUR_CLOUDFLARE_API_TOKEN
+```
+Apply restricted permissions to secure the token:
+```bash
+sudo chmod 600 /etc/letsencrypt/cloudflare.ini
+```
+
+#### Step 2: Install the DDNS Script
+Move the script to your server's binary folder and make it executable:
+```bash
+sudo cp scripts/cloudflare-ddns.sh /usr/local/bin/cloudflare-ddns.sh
+sudo chmod +x /usr/local/bin/cloudflare-ddns.sh
+```
+
+#### Step 3: Install the systemd service & timer
+To automate running the script every 5 minutes natively using systemd:
+
+1. Copy the systemd service file to `/etc/systemd/system/cloudflare-ddns.service`:
+   ```bash
+   sudo cp scripts/cloudflare-ddns.service /etc/systemd/system/cloudflare-ddns.service
+   ```
+2. Copy the systemd timer file to `/etc/systemd/system/cloudflare-ddns.timer`:
+   ```bash
+   sudo cp scripts/cloudflare-ddns.timer /etc/systemd/system/cloudflare-ddns.timer
+   ```
+3. Enable and start the timer service:
+   ```bash
+   sudo systemctl daemon-reload
+   sudo systemctl enable cloudflare-ddns.timer
+   sudo systemctl start cloudflare-ddns.timer
+   ```
+
+#### Step 4: Verify the Service
+Check that your systemd timer is active and scheduled:
+```bash
+systemctl list-timers | grep cloudflare
+```
+You can also trigger a manual DNS update check immediately to confirm it works:
+```bash
+sudo systemctl start cloudflare-ddns.service
+sudo journalctl -u cloudflare-ddns.service -n 50
+```
+

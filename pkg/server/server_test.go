@@ -1006,3 +1006,58 @@ func TestServer_GetMeLanguagePreference(t *testing.T) {
 		t.Errorf("expected 'language_preference' to be %q, got %q", "ro", langVal)
 	}
 }
+
+func TestServer_WelcomePageLanguageOverride(t *testing.T) {
+	cfg := config.DefaultServerConfig()
+	cfg.Domains = []string{"example.com"}
+	cfg.DBPath = filepath.Join(t.TempDir(), "test.db")
+
+	srv, err := NewServer(cfg)
+	if err != nil {
+		t.Fatalf("failed to create server: %v", err)
+	}
+	defer srv.Stop()
+	defer time.Sleep(50 * time.Millisecond) // prevent SQLite cleanup races
+
+	// Intercept the sent email using the standard mockMailSender!
+	mockMail := &mockMailSender{}
+	srv.mailSender = mockMail
+
+	// 1. Create a user in the DB with English language preference
+	email := "test_override@example.com"
+	u := &db.User{
+		ID:                 email,
+		Email:              email,
+		Role:               "user",
+		Status:             "approved",
+		LanguagePreference: "en",
+	}
+	if err := srv.db.CreateUser(u); err != nil {
+		t.Fatalf("failed to create user: %v", err)
+	}
+
+	// 2. Forge a POST request to /api/auth/magic-link?lang=ro (Romanian welcome screen selection)
+	payload, _ := json.Marshal(map[string]string{"email": email})
+	req, _ := http.NewRequest("POST", "http://example.com/api/auth/magic-link?lang=ro", bytes.NewReader(payload))
+	req.Header.Set("Content-Type", "application/json")
+
+	rec := httptest.NewRecorder()
+	srv.ServeHTTP(rec, req)
+
+	// Sleep 50ms to let the background email-sending goroutine execute and complete!
+	time.Sleep(50 * time.Millisecond)
+
+	// 3. Assert status OK
+	if rec.Code != http.StatusOK {
+		t.Fatalf("expected status 200 OK, got %d", rec.Code)
+	}
+
+	// 4. Assert that the intercepted email is in Romanian (respecting ?lang=ro instead of DB's "en"!)
+	interceptedBody := mockMail.sentTextBody
+	if !strings.Contains(interceptedBody, "Salut") {
+		t.Error("expected email body to be translated to Romanian ('Salut'), but it was not")
+	}
+	if !strings.Contains(interceptedBody, "Conectează-te la Portal") {
+		t.Error("expected email button to be translated to Romanian ('Conectează-te la Portal'), but it was not")
+	}
+}

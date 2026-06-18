@@ -971,6 +971,8 @@ function toggleTheme() {
                             ${(!isSelf && u.status !== 'approved') ? `<button class="btn" style="padding: 4px 8px; margin: 0 4px 0 0;" onclick="approveUser('${u.id}')">Approve</button>` : ''}
                             ${(!isSelf && u.status !== 'revoked') ? `<button class="btn" style="padding: 4px 8px; margin: 0 4px 0 0; color: var(--danger); border-color: var(--danger);" onclick="revokeUser('${u.id}')">Revoke</button>` : ''}
                             ${(!isSelf && u.status === 'approved') ? `<button class="btn" style="padding: 4px 8px; margin: 0 4px 0 0; color: #3b82f6; border-color: #3b82f6;" onclick="promptTargetedMessage('${u.id}', '${escapeHTML(u.email)}')">Message</button>` : ''}
+                            ${(!isSelf && u.status === 'approved' && u.role === 'admin') ? `<button class="btn" style="padding: 4px 8px; margin: 0 4px 0 0; color: #84cc16; border-color: #84cc16;" onclick="changeUserRole('${escapeHTML(u.email)}', 'user')">Demote</button>` : ''}
+                            ${(!isSelf && u.status === 'approved' && u.role === 'user') ? `<button class="btn" style="padding: 4px 8px; margin: 0 4px 0 0; color: #84cc16; border-color: #84cc16;" onclick="changeUserRole('${escapeHTML(u.email)}', 'admin')">Promote</button>` : ''}
                             ${(!isSelf && u.totp_enabled) ? `<button class="btn" style="padding: 4px 8px; margin: 0 4px 0 0; color: #d97706; border-color: #d97706;" onclick="adminResetMFA('${escapeHTML(u.email)}')">Reset MFA</button>` : ''}
                             ${isSelf ? '<span style="font-size: 12px; color: var(--text-muted);">No actions</span>' : ''}
                         </td>
@@ -1447,5 +1449,22 @@ function toggleTheme() {
             } else {
                 const err = await res.json();
                 showToast(err.error || "Failed to reset MFA", "danger");
+            }
+        }
+
+        async function changeUserRole(id, role) {
+            const verb = role === 'admin' ? 'promote' : 'demote';
+            if (!confirm(`Are you sure you want to ${verb} ${id} to ${role}?`)) return;
+            const res = await fetch('/api/admin/users/' + encodeURIComponent(id), { 
+                method: 'PATCH', 
+                headers: {'Content-Type': 'application/json'}, 
+                body: JSON.stringify({ role: role }) 
+            });
+            if (res.ok) {
+                showToast(`User successfully ${verb}d to ${role}.`, "success");
+                loadUsers();
+            } else {
+                const err = await res.json();
+                showToast(err.error || `Failed to ${verb} user.`, "danger");
             }
         }

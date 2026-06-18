@@ -1682,11 +1682,13 @@ func (s *Server) handleAdminMagicLink(w http.ResponseWriter, r *http.Request) {
 		link := fmt.Sprintf("%s://%s/portal?token=%s", scheme, host, magicToken)
 		reportLink := fmt.Sprintf("%s://%s/api/auth/report?token=%s", scheme, host, magicToken)
 
-		// Determine target locale for the email subject
-		lang := "en"
-		if s.db != nil {
-			if u, err := s.db.GetUserByEmail(req.Email); err == nil && u != nil {
-				lang = u.LanguagePreference
+		// Determine target locale for the email subject (welcome page explicit override takes precedence)
+		lang := r.URL.Query().Get("lang")
+		if lang == "" {
+			if s.db != nil {
+				if u, err := s.db.GetUserByEmail(req.Email); err == nil && u != nil {
+					lang = u.LanguagePreference
+				}
 			}
 		}
 		if lang == "" {

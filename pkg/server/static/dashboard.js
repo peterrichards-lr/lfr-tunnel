@@ -356,6 +356,7 @@ function toggleTheme() {
         }
 
         let currentUser = null;
+        let currentLanguage = "en";
         let generatedRawToken = "";
 
         
@@ -455,6 +456,7 @@ function toggleTheme() {
                     else if (bundle.portal_welcome === "欢迎") resolvedLang = "zh";
                     else if (bundle.portal_welcome === "Bine ai venit") resolvedLang = "ro";
 
+                    currentLanguage = resolvedLang;
                     const selector = document.getElementById('portal-language-selector');
                     if (selector) selector.value = resolvedLang;
 
@@ -1154,7 +1156,7 @@ function toggleTheme() {
             btn.innerText = "Sending...";
             
             try {
-                const res = await fetch('/api/auth/magic-link', {
+                const res = await fetch('/api/auth/magic-link?lang=' + encodeURIComponent(currentLanguage), {
                     method: 'POST',
                     headers: {'Content-Type': 'application/json'},
                     body: JSON.stringify({ email })
@@ -1906,6 +1908,7 @@ function toggleTheme() {
         }
 
         async function changePortalLanguage(lang) {
+            currentLanguage = lang;
             try {
                 const res = await fetch('/api/i18n?lang=' + encodeURIComponent(lang));
                 if (res.ok) {

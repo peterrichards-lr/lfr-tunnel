@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"net/http"
 	"net/http/httptest"
+	"net/url"
 	"os"
 	"path/filepath"
 	"strings"
@@ -1373,5 +1374,32 @@ func TestServer_RateLimitingEnforcements(t *testing.T) {
 	limiter := srv.proxyHandler.getRateLimiter(host, leaseOverride.RateLimit)
 	if limiter.Limit() != 15 {
 		t.Errorf("expected ProxyHandler's rate limiter to adjust dynamically to 15, got %f", limiter.Limit())
+	}
+
+	// 3. Test Administrative User-Level Quota PATCH Update via /api/admin/users/:email
+	payloadUserPatch, _ := json.Marshal(map[string]interface{}{
+		"rate_limit": 50, // Set new DB quota to 50 RPS
+	})
+	reqUserPatch, _ := http.NewRequest("PATCH", "http://example.com/api/admin/users/"+url.QueryEscape(email), bytes.NewReader(payloadUserPatch))
+	reqUserPatch.Header.Set("Content-Type", "application/json")
+	reqUserPatch.AddCookie(&http.Cookie{
+		Name:  "lfr_session",
+		Value: sessionToken,
+	})
+	recUserPatch := httptest.NewRecorder()
+	srv.ServeHTTP(recUserPatch, reqUserPatch)
+
+	// Verify status OK
+	if recUserPatch.Code != http.StatusOK {
+		t.Fatalf("expected user PATCH status 200 OK, got %d, body: %s", recUserPatch.Code, recUserPatch.Body.String())
+	}
+
+	// Verify that the user's RateLimit quota inside the SQLite database was successfully updated to 50 RPS!
+	dbUser, err := srv.db.GetUserByEmail(email)
+	if err != nil {
+		t.Fatalf("failed to fetch user from DB: %v", err)
+	}
+	if dbUser.RateLimit != 50 {
+		t.Errorf("expected user rate_limit quota in DB to be updated to 50, got %d", dbUser.RateLimit)
 	}
 }

@@ -2338,9 +2338,10 @@ func (s *Server) handleAdminPatchUser(w http.ResponseWriter, r *http.Request, ac
 	}
 
 	var req struct {
-		Role     *string `json:"role"`
-		Status   *string `json:"status"`
-		ResetMFA *bool   `json:"reset_mfa"`
+		Role      *string `json:"role"`
+		Status    *string `json:"status"`
+		ResetMFA  *bool   `json:"reset_mfa"`
+		RateLimit *int    `json:"rate_limit"`
 	}
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 		http.Error(w, `{"error":"Invalid request body"}`, http.StatusBadRequest)
@@ -2401,6 +2402,16 @@ func (s *Server) handleAdminPatchUser(w http.ResponseWriter, r *http.Request, ac
 		details["mfa_reset"] = true
 		user.TOTPSecret = ""
 		user.TOTPEnabled = false
+	}
+
+	if req.RateLimit != nil {
+		if *req.RateLimit < 0 {
+			http.Error(w, `{"error":"Rate limit cannot be negative"}`, http.StatusBadRequest)
+			return
+		}
+		details["rate_limit_before"] = user.RateLimit
+		details["rate_limit_after"] = *req.RateLimit
+		user.RateLimit = *req.RateLimit
 	}
 
 	if err := s.db.UpdateUser(user); err != nil {

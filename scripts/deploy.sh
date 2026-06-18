@@ -4,8 +4,8 @@ set -e
 VPS_USER="peterrichards"
 VPS_IP="lfr-demo.se"
 
-echo "Building Linux binary..."
-GOOS=linux GOARCH=amd64 go build -o bin/lfr-tunneld-linux ./cmd/lfr-tunneld
+echo "Building Linux binary with path trimming..."
+GOOS=linux GOARCH=amd64 go build -trimpath -o bin/lfr-tunneld-linux ./cmd/lfr-tunneld
 
 echo "Uploading binary to VPS..."
 scp bin/lfr-tunneld-linux $VPS_USER@$VPS_IP:/home/$VPS_USER/lfr-tunneld

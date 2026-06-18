@@ -7,32 +7,6 @@ import (
 	"net/http"
 )
 
-const defaultMagicLinkEmailTemplate = `
-<p>Hi {{.PreferredName}},</p>
-<p>Click the button below to log in to your account. This link will expire in {{.ExpiryMinutes}} minutes and can only be used once.</p>
-<br/>
-<a href="{{.MagicLink}}" style="background-color:#007bff;color:#fff;padding:10px 20px;text-decoration:none;border-radius:5px;display:inline-block;">Log in to Portal</a>
-<br/><br/>
-<p>If the button doesn't work, copy and paste this URL into your browser: {{.MagicLink}}</p>
-<br/>
-<p>Didn’t request this link?</p>
-<p>This request originated from the IP address: {{.IPAddress}}.</p>
-<p>If this wasn't you, your account remains secure, but someone else entered your email address. You can safely ignore this email, or you can help our security team by flagging it below:</p>
-<p><a href="{{.ReportLink}}">Click here to report this unauthorized request</a></p>
-<p>What happens next? Clicking this link will immediately deactivate the login link above. Our system will securely log the request data to help us detect and block automated abuse.</p>
-<br/>
-<p>Best regards,</p>
-<p>Liferay Tunnel Team</p>
-`
-
-type MagicLinkEmailData struct {
-	PreferredName string
-	ExpiryMinutes int
-	MagicLink     string
-	IPAddress     string
-	ReportLink    string
-}
-
 func (s *Server) handleAuthReport(w http.ResponseWriter, r *http.Request) {
 	token := r.URL.Query().Get("token")
 	if token == "" {

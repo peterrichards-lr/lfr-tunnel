@@ -33,26 +33,37 @@
         <div class="glass login-card" style="position: relative;">
             <div style="position: absolute; top: 16px; right: 16px; display: flex; align-items: center; gap: 4px;">
                 <select id="portal-language-selector" style="background: transparent; border: none; color: var(--text-muted); font-size: 11px; cursor: pointer; outline: none; padding: 2px; font-weight: 500;" onchange="changePortalLanguage(this.value)">
-                    <option value="en">🇺🇸 EN</option>
-                    <option value="fr">🇫🇷 FR</option>
-                    <option value="es">🇪🇸 ES</option>
+                    <option value="ar">🇸🇦 AR</option>
                     <option value="de">🇩🇪 DE</option>
-                    <option value="pt">🇵🇹 PT</option>
-                    <option value="ko">🇰🇷 KO</option>
+                    <option value="en">🇺🇸 EN</option>
+                    <option value="es">🇪🇸 ES</option>
+                    <option value="fr">🇫🇷 FR</option>
                     <option value="ja">🇯🇵 JA</option>
-                    <option value="zh">🇨🇳 ZH</option>
+                    <option value="ko">🇰🇷 KO</option>
+                    <option value="pt">🇵🇹 PT</option>
                     <option value="ro">🇷🇴 RO</option>
+                    <option value="zh">🇨🇳 ZH</option>
                 </select>
             </div>
 
-            <h1 data-i18n="portal_welcome">Welcome Back</h1>
+            <!-- Liferay Tunnel Vector Logo -->
+            <div style="display: flex; justify-content: center; margin-bottom: 12px; margin-top: 8px;">
+                <svg viewBox="0 0 100 100" width="48" height="48">
+                    <path d="M50 5 L88 27 L88 73 L50 95 L12 73 L12 27 Z" fill="none" stroke="var(--primary)" stroke-width="6" stroke-linejoin="round"/>
+                    <path d="M30 40 C30 25, 70 25, 70 40 C70 55, 30 45, 30 60 C30 75, 70 75, 70 60" fill="none" stroke="#58a6ff" stroke-width="6" stroke-linecap="round"/>
+                    <circle cx="50" cy="40" r="4" fill="var(--primary)"/>
+                    <circle cx="42" cy="60" r="4" fill="#00e676"/>
+                </svg>
+            </div>
+
+            <h1 data-i18n="portal_welcome" style="margin-top: 0;">Welcome Back</h1>
             <p data-i18n="portal_login_desc">Log in to access your dashboard</p>
 
             <div id="sso-container"></div>
 
             <div class="divider" id="sso-divider">or</div>
 
-            <button class="btn" id="btn-show-email">Log In with Email</button>
+            <button class="btn" id="btn-show-email" data-i18n="btn_login_with_email">Login with Email</button>
             <button class="btn btn-outline" id="btn-show-register" style="margin-top: 8px;" data-i18n="btn_register_account">Create Account</button>
             
             <form id="email-form" class="hidden" style="margin-top: 16px;">
@@ -71,14 +82,14 @@
                 <p style="font-size: 13px; color: var(--text-muted); margin-bottom: 12px; line-height: 1.5; text-align: left;" data-i18n="mfa_verify_desc">Your account is protected with Multi-Factor Authentication. Please enter the 6-digit code from your authenticator app to complete your login:</p>
                 <input type="text" id="mfa-code-input" class="input-field" placeholder="123456" pattern="[0-9]{6}" maxlength="6" inputmode="numeric" required style="letter-spacing: 8px; text-align: center; font-size: 18px; font-weight: bold;">
                 <input type="hidden" id="mfa-temp-token">
-                <button type="submit" class="btn btn-primary" id="btn-verify-mfa" style="margin-top: 12px;" data-i18n="btn_verify_login">Verify & Log In</button>
+                <button type="submit" class="btn btn-primary" id="btn-verify-mfa" style="margin-top: 12px;" data-i18n="btn_verify_login">Verify & Login</button>
                 <div id="mfa-msg" style="margin-top: 12px; font-size: 13px; color: var(--danger);"></div>
             </form>
 
             <div style="margin-top: 24px; padding-top: 12px; border-top: 1px solid rgba(255,255,255,0.06); text-align: center; font-size: 11px; display: flex; justify-content: center; gap: 12px; align-items: center;">
-                <a href="/privacy" id="footer-privacy-link" style="color: var(--text-muted); text-decoration: none; transition: 0.2s;" onmouseover="this.style.color='var(--primary)'" onmouseout="this.style.color='var(--text-muted)'">Privacy Policy</a>
+                <a href="/privacy" id="footer-privacy-link" style="color: var(--text-muted); text-decoration: none; transition: 0.2s;" onmouseover="this.style.color='var(--primary)'" onmouseout="this.style.color='var(--text-muted)'" data-i18n="privacy_title">Privacy Policy</a>
                 <span style="color: var(--text-muted); opacity: 0.5;">•</span>
-                <a href="/cookies" id="footer-cookie-link" style="color: var(--text-muted); text-decoration: none; transition: 0.2s;" onmouseover="this.style.color='var(--primary)'" onmouseout="this.style.color='var(--text-muted)'">Cookie Disclosure</a>
+                <a href="/cookies" id="footer-cookie-link" style="color: var(--text-muted); text-decoration: none; transition: 0.2s;" onmouseover="this.style.color='var(--primary)'" onmouseout="this.style.color='var(--text-muted)'" data-i18n="cookie_title">Cookie Disclosure</a>
             </div>
         </div>
     </div>
@@ -86,7 +97,15 @@
     <!-- DASHBOARD SCREEN -->
     <div id="dashboard-screen">
         <div class="sidebar">
-            <div class="sidebar-brand">Liferay Tunnel</div>
+            <div class="sidebar-brand" style="display: flex; align-items: center; gap: 10px; padding: 12px 16px;">
+                <svg viewBox="0 0 100 100" width="28" height="28" style="flex-shrink: 0;">
+                    <path d="M50 5 L88 27 L88 73 L50 95 L12 73 L12 27 Z" fill="none" stroke="var(--primary)" stroke-width="8" stroke-linejoin="round"/>
+                    <path d="M30 40 C30 25, 70 25, 70 40 C70 55, 30 45, 30 60 C30 75, 70 75, 70 60" fill="none" stroke="#58a6ff" stroke-width="8" stroke-linecap="round"/>
+                    <circle cx="50" cy="40" r="5" fill="var(--primary)"/>
+                    <circle cx="42" cy="60" r="5" fill="#00e676"/>
+                </svg>
+                <span style="font-weight: bold; font-size: 16px; color: var(--text-color); letter-spacing: 0.5px;">Liferay Tunnel</span>
+            </div>
             
             <div class="sidebar-label">Personal</div>
             <div id="nav-overview" class="nav-item active" onclick="showTab('overview')">Overview</div>
@@ -108,10 +127,22 @@
             <div class="sidebar-spacer"></div>
             
             <div id="nav-account" class="nav-item" onclick="showTab('account')">Account Settings</div>
-            <div class="nav-item" onclick="logout()">Log Out</div>
+            <div class="nav-item" onclick="logout()">Logout</div>
         </div>
         
-        <div class="main-content">
+        <div class="main-content" style="position: relative; padding-top: 60px;">
+            <div id="header-language-container" style="position: absolute; top: 16px; right: 24px; z-index: 100; display: flex; align-items: center; gap: 8px;">
+                <div class="custom-dropdown" id="portal-custom-dropdown" style="position: relative; user-select: none;">
+                    <div class="custom-dropdown-trigger" onclick="toggleCustomDropdown()" style="display: flex; align-items: center; gap: 8px; background: rgba(255,255,255,0.05); border: 1px solid rgba(255,255,255,0.1); padding: 6px 12px; border-radius: 6px; cursor: pointer; font-size: 13px; font-weight: 500; color: var(--text-color); transition: 0.2s; height: 32px; box-sizing: border-box;">
+                        <span id="custom-dropdown-flag"></span>
+                        <span id="custom-dropdown-label">English</span>
+                        <svg viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="currentColor" stroke-width="2" style="margin-left: 4px; transition: 0.2s;"><path d="M6 9l6 6 6-6"/></svg>
+                    </div>
+                    <div class="custom-dropdown-menu" id="custom-dropdown-menu" style="display: none; position: absolute; top: calc(100% + 6px); right: 0; background: #161b22; border: 1px solid rgba(255,255,255,0.15); border-radius: 6px; box-shadow: 0 8px 24px rgba(0,0,0,0.3); min-width: 160px; padding: 4px 0; z-index: 101;">
+                        <!-- Custom list items rendered dynamically in JS -->
+                    </div>
+                </div>
+            </div>
             <div id="global-broadcast-banner" style="display:none; background: var(--danger); color: white; padding: 12px 24px; text-align: center; font-weight: 500; border-radius: 8px; margin-bottom: 24px; box-shadow: 0 4px 12px rgba(239, 68, 68, 0.3);"></div>
             <div id="global-maintenance-banner" style="display:none; background: #f59e0b; color: white; padding: 12px 24px; text-align: center; font-weight: 500; border-radius: 8px; margin-bottom: 24px; box-shadow: 0 4px 12px rgba(245, 158, 11, 0.3);"></div>
             <!-- Overview Tab -->
@@ -194,17 +225,17 @@
                         </div>
                         <div style="margin-bottom: 16px;">
                             <label style="display:block; margin-bottom: 8px; color: var(--text-muted); font-size: 14px;">Language Preference / Langue</label>
-                            <select id="acc-language" class="input-field" style="font-weight: 500;">
-                                <option value="en">🇺🇸 English (US/UK)</option>
-                                <option value="fr">🇫🇷 Français (French)</option>
-                                <option value="es">🇪🇸 Español (Spanish)</option>
-                                <option value="de">🇩🇪 Deutsch (German)</option>
-                                <option value="pt">🇵🇹 Português (Portuguese)</option>
-                                <option value="ko">🇰🇷 한국어 (Korean)</option>
-                                <option value="ja">🇯🇵 日本語 (Japanese)</option>
-                                <option value="zh">🇨🇳 简体中文 (Mandarin)</option>
-                                <option value="ro">🇷🇴 Română (Romanian)</option>
-                            </select>
+                            <input type="hidden" id="acc-language" value="en" />
+                            <div class="custom-dropdown" id="acc-language-custom-dropdown" style="position: relative; user-select: none;">
+                                <div class="custom-dropdown-trigger" onclick="toggleAccDropdown()" style="display: flex; align-items: center; gap: 8px; background: rgba(255,255,255,0.05); border: 1px solid rgba(255,255,255,0.1); padding: 8px 12px; border-radius: 6px; cursor: pointer; font-size: 14px; font-weight: 500; color: var(--text-color); transition: 0.2s; height: 38px; box-sizing: border-box;">
+                                    <span id="acc-custom-flag"></span>
+                                    <span id="acc-custom-label">English</span>
+                                    <svg viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="currentColor" stroke-width="2" style="margin-left: auto; transition: 0.2s;"><path d="M6 9l6 6 6-6"/></svg>
+                                </div>
+                                <div class="custom-dropdown-menu" id="acc-custom-menu" style="display: none; position: absolute; top: calc(100% + 6px); left: 0; background: #161b22; border: 1px solid rgba(255,255,255,0.15); border-radius: 6px; box-shadow: 0 8px 24px rgba(0,0,0,0.3); width: 100%; padding: 4px 0; z-index: 101; max-height: 240px; overflow-y: auto;">
+                                    <!-- Custom list items rendered dynamically in JS -->
+                                </div>
+                            </div>
                         </div>
                         <div style="margin-bottom: 24px;">
                             <div style="display: flex; align-items: center; gap: 12px; margin-bottom: 8px;">

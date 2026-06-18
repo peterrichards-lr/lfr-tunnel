@@ -2,34 +2,83 @@ package server
 
 import (
 	"embed"
-	"encoding/json"
 	"fmt"
 	"log"
 	"net/http"
+	"os"
+	"path/filepath"
 	"strings"
 )
 
 //go:embed i18n/*
 var i18nFS embed.FS
 
-// initI18n loads all dynamic translation JSON bundles into server memory.
+// parseProperties loads standard Java-style property key/value pairs.
+func parseProperties(content string) map[string]string {
+	props := make(map[string]string)
+	lines := strings.Split(content, "\n")
+	for _, line := range lines {
+		line = strings.TrimSpace(line)
+		// Ignore empty lines and comments (starting with # or !)
+		if line == "" || strings.HasPrefix(line, "#") || strings.HasPrefix(line, "!") {
+			continue
+		}
+		idx := strings.Index(line, "=")
+		if idx == -1 {
+			idx = strings.Index(line, ":")
+		}
+		if idx == -1 {
+			continue
+		}
+		key := strings.TrimSpace(line[:idx])
+		val := strings.TrimSpace(line[idx+1:])
+		props[key] = val
+	}
+	return props
+}
+
+// initI18n loads dynamic translation property bundles into server memory.
 func (s *Server) initI18n() error {
 	s.translations = make(map[string]map[string]string)
 	locales := []string{"en", "es", "fr", "de", "pt", "ko", "ja", "zh", "ro"}
 
+	// Local filesystem override directory
+	externalDir := "/etc/lfr-tunneld/i18n"
+
 	for _, locale := range locales {
-		data, err := i18nFS.ReadFile(fmt.Sprintf("i18n/%s.json", locale))
-		if err != nil {
-			log.Printf("[i18n] Warning: failed to load JSON bundle for locale %q: %v", locale, err)
-			continue
+		var content string
+		loadedExternal := false
+
+		// Determine property filename
+		filename := "Language"
+		if locale != "en" {
+			filename = fmt.Sprintf("Language_%s", locale)
+		}
+		filename = filename + ".properties"
+
+		// 1. Try loading from external directory first (Runtime customization!)
+		extPath := filepath.Join(externalDir, filename)
+		if _, err := os.Stat(extPath); err == nil {
+			data, err := os.ReadFile(extPath)
+			if err == nil {
+				content = string(data)
+				loadedExternal = true
+				log.Printf("[i18n] Loaded runtime custom properties override for locale %q: %s", locale, extPath)
+			}
 		}
 
-		var bundle map[string]string
-		if err := json.Unmarshal(data, &bundle); err != nil {
-			return fmt.Errorf("failed to parse JSON bundle for %s: %w", locale, err)
+		// 2. Fall back to Go-embedded asset second
+		if !loadedExternal {
+			data, err := i18nFS.ReadFile(fmt.Sprintf("i18n/%s", filename))
+			if err != nil {
+				log.Printf("[i18n] Warning: failed to load embedded properties for locale %q: %v", locale, err)
+				continue
+			}
+			content = string(data)
 		}
 
-		s.translations[locale] = bundle
+		// Parse the properties format
+		s.translations[locale] = parseProperties(content)
 	}
 
 	log.Printf("[i18n] Successfully initialized dynamic i18n engine with %d locales.", len(s.translations))
@@ -119,4 +168,16 @@ func (s *Server) handleGetI18n(w http.ResponseWriter, r *http.Request) {
 	}
 
 	respondJSON(w, http.StatusOK, bundle)
+}
+
+// GetDirection returns "rtl" for Arabic and Hebrew, and "ltr" for all other languages.
+func GetDirection(lang string) string {
+	lang = strings.ToLower(strings.TrimSpace(lang))
+	if len(lang) > 2 {
+		lang = lang[:2]
+	}
+	if lang == "ar" || lang == "he" {
+		return "rtl"
+	}
+	return "ltr"
 }

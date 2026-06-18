@@ -2779,83 +2779,21 @@ func (s *Server) handlePrivacyFallback(w http.ResponseWriter, r *http.Request) {
 	lang := s.ResolveLocale(r)
 	dir := GetDirection(lang)
 	title := s.GetTranslation(lang, "privacy_title")
-	desc := s.GetTranslation(lang, "privacy_desc")
-	sec1Title := s.GetTranslation(lang, "privacy_sec1_title")
-	bullet1 := s.GetTranslation(lang, "privacy_sec1_bullet1")
-	bullet2 := s.GetTranslation(lang, "privacy_sec1_bullet2")
-	bullet3 := s.GetTranslation(lang, "privacy_sec1_bullet3")
-	sec2Title := s.GetTranslation(lang, "privacy_sec2_title")
-	sec2Desc := s.GetTranslation(lang, "privacy_sec2_desc")
-	returnLink := s.GetTranslation(lang, "return_to_portal")
 
-	_, _ = fmt.Fprintf(w, `<!DOCTYPE html>
-<html lang="%s" dir="%s">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>%s - Liferay Tunnel</title>
-    <link rel="icon" type="image/x-icon" href="/favicon.ico">
-    <style>
-        :root {
-            --bg-color: #ffffff;
-            --text-color: #24292f;
-            --muted-color: #57606a;
-            --container-bg: #f6f8fa;
-            --border-color: #d0d7de;
-            --primary-color: #0969da;
-            --divider-color: #d0d7de;
-        }
-        @media (prefers-color-scheme: dark) {
-            :root {
-                --bg-color: #0d1117;
-                --text-color: #c9d1d9;
-                --muted-color: #8b949e;
-                --container-bg: rgba(255, 255, 255, 0.03);
-                --border-color: rgba(255, 255, 255, 0.1);
-                --primary-color: #58a6ff;
-                --divider-color: rgba(255, 255, 255, 0.1);
-            }
-        }
-        body {
-            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
-            background-color: var(--bg-color);
-            color: var(--text-color);
-            line-height: 1.6;
-            margin: 0;
-            padding: 40px 24px;
-        }
-        .container {
-            max-width: 800px;
-            margin: 0 auto;
-            background-color: var(--container-bg);
-            border: 1px solid var(--border-color);
-            border-radius: 8px;
-            padding: 32px;
-        }
-        h1 { color: var(--primary-color); font-size: 28px; margin-top: 0; border-bottom: 1px solid var(--divider-color); padding-bottom: 12px; }
-        h2 { color: var(--primary-color); font-size: 20px; margin-top: 24px; }
-        p, li { font-size: 15px; color: var(--muted-color); }
-        ul { padding-left: 20px; }
-        a { color: var(--primary-color); text-decoration: none; }
-        a:hover { text-decoration: underline; }
-    </style>
-</head>
-<body>
-    <div class="container">
-        <h1>%s</h1>
-        <p>%s</p>
-        <h2>%s</h2>
-        <ul>
-            <li>%s</li>
-            <li>%s</li>
-            <li>%s</li>
-        </ul>
-        <h2>%s</h2>
-        <p>%s</p>
-        <p style="margin-top: 32px;"><a href="/">%s</a></p>
-    </div>
-</body>
-</html>`, lang, dir, title, title, desc, sec1Title, bullet1, bullet2, bullet3, sec2Title, sec2Desc, returnLink)
+	// Render dynamic localized Privacy Policy template
+	body, err := s.renderEmailTemplate(lang, "privacy.html", map[string]interface{}{
+		"Lang":  lang,
+		"Dir":   dir,
+		"Title": title,
+	})
+	if err != nil {
+		log.Printf("[Server] Failed to render privacy policy template: %v", err)
+		// Hardcoded basic fallback
+		_, _ = w.Write([]byte(`<html><body><h1>Privacy Policy</h1><p>Under maintenance.</p></body></html>`))
+		return
+	}
+
+	_, _ = w.Write([]byte(body))
 }
 
 func (s *Server) handleCookiesFallback(w http.ResponseWriter, r *http.Request) {
@@ -2865,81 +2803,21 @@ func (s *Server) handleCookiesFallback(w http.ResponseWriter, r *http.Request) {
 	lang := s.ResolveLocale(r)
 	dir := GetDirection(lang)
 	title := s.GetTranslation(lang, "cookie_title")
-	desc := s.GetTranslation(lang, "cookie_desc")
-	sec1Title := s.GetTranslation(lang, "cookie_sec1_title")
-	bullet1 := s.GetTranslation(lang, "cookie_sec1_bullet1")
-	bullet2 := s.GetTranslation(lang, "cookie_sec1_bullet2")
-	bullet3 := s.GetTranslation(lang, "cookie_sec1_bullet3")
-	bullet4 := s.GetTranslation(lang, "cookie_sec1_bullet4")
-	returnLink := s.GetTranslation(lang, "return_to_portal")
 
-	_, _ = fmt.Fprintf(w, `<!DOCTYPE html>
-<html lang="%s" dir="%s">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>%s - Liferay Tunnel</title>
-    <link rel="icon" type="image/x-icon" href="/favicon.ico">
-    <style>
-        :root {
-            --bg-color: #ffffff;
-            --text-color: #24292f;
-            --muted-color: #57606a;
-            --container-bg: #f6f8fa;
-            --border-color: #d0d7de;
-            --primary-color: #0969da;
-            --divider-color: #d0d7de;
-        }
-        @media (prefers-color-scheme: dark) {
-            :root {
-                --bg-color: #0d1117;
-                --text-color: #c9d1d9;
-                --muted-color: #8b949e;
-                --container-bg: rgba(255, 255, 255, 0.03);
-                --border-color: rgba(255, 255, 255, 0.1);
-                --primary-color: #58a6ff;
-                --divider-color: rgba(255, 255, 255, 0.1);
-            }
-        }
-        body {
-            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
-            background-color: var(--bg-color);
-            color: var(--text-color);
-            line-height: 1.6;
-            margin: 0;
-            padding: 40px 24px;
-        }
-        .container {
-            max-width: 800px;
-            margin: 0 auto;
-            background-color: var(--container-bg);
-            border: 1px solid var(--border-color);
-            border-radius: 8px;
-            padding: 32px;
-        }
-        h1 { color: var(--primary-color); font-size: 28px; margin-top: 0; border-bottom: 1px solid var(--divider-color); padding-bottom: 12px; }
-        h2 { color: var(--primary-color); font-size: 20px; margin-top: 24px; }
-        p, li { font-size: 15px; color: var(--muted-color); }
-        ul { padding-left: 20px; }
-        a { color: var(--primary-color); text-decoration: none; }
-        a:hover { text-decoration: underline; }
-    </style>
-</head>
-<body>
-    <div class="container">
-        <h1>%s</h1>
-        <p>%s</p>
-        <h2>%s</h2>
-        <ul>
-            <li>%s</li>
-            <li>%s</li>
-            <li>%s</li>
-            <li>%s</li>
-        </ul>
-        <p style="margin-top: 32px;"><a href="/">%s</a></p>
-    </div>
-</body>
-</html>`, lang, dir, title, title, desc, sec1Title, bullet1, bullet2, bullet3, bullet4, returnLink)
+	// Render dynamic localized Cookies Disclosure template
+	body, err := s.renderEmailTemplate(lang, "cookies.html", map[string]interface{}{
+		"Lang":  lang,
+		"Dir":   dir,
+		"Title": title,
+	})
+	if err != nil {
+		log.Printf("[Server] Failed to render cookie disclosure template: %v", err)
+		// Hardcoded basic fallback
+		_, _ = w.Write([]byte(`<html><body><h1>Cookie Disclosure</h1><p>Under maintenance.</p></body></html>`))
+		return
+	}
+
+	_, _ = w.Write([]byte(body))
 }
 
 // renderEmailTemplate loads and compiles the requested localized HTML template.

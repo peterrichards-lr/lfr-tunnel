@@ -26,3 +26,10 @@ tests/e2e/ui/playwright/.cache/
 
 # E2E State coordinator progress signals
 .progress-signal
+
+# Temporary Analysis Images (HEIC, PNG, JPG, GIF)
+*.heic
+*.png
+*.jpg
+*.jpeg
+*.gif

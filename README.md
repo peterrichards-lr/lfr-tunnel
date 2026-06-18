@@ -213,6 +213,7 @@ The installer downloads the pre-compiled binary for your platform and places it 
 
 ```bash
 brew tap peterrichards-lr/tap
+brew trust peterrichards-lr/tap
 brew install lfr-tunnel
 ```
 

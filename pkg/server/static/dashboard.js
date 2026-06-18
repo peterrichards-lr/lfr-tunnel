@@ -356,7 +356,7 @@ function toggleTheme() {
                         let fallbackCmd = '';
                         let binaryName = `lfr-tunnel${dlSuffix}`;
                         if (os === 'macOS' || os === 'Linux') {
-                            recommendedCmd = `brew tap peterrichards-lr/tap && brew install lfr-tunnel`;
+                            recommendedCmd = `brew tap peterrichards-lr/tap && brew trust peterrichards-lr/tap && brew install lfr-tunnel`;
                             fallbackCmd = `curl -sSfL ${rawUrl}/scripts/install.sh | sh`;
                         } else if (os === 'Windows') {
                             recommendedCmd = `scoop bucket add peterrichards-lr https://github.com/peterrichards-lr/scoop-bucket && scoop install lfr-tunnel`;

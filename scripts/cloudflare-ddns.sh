@@ -4,7 +4,7 @@ set -euo pipefail
 # Configuration
 TOKEN_FILE="/etc/letsencrypt/cloudflare.ini"
 DOMAINS=("lfr-demo.se" "lfr-demo.online")
-RECORD_NAMES=("@" "*" "tunnel")
+RECORD_NAMES=("@" "*" "tunnel" "portal")
 
 # Extract API Token from cloudflare.ini
 API_TOKEN=$(grep -E "^dns_cloudflare_api_token[[:space:]]*=" "${TOKEN_FILE}" | cut -d'=' -f2 | tr -d ' "[:space:]')

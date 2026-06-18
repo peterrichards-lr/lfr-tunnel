@@ -698,3 +698,11 @@ sudo systemctl start cloudflare-ddns.service
 sudo journalctl -u cloudflare-ddns.service -n 50
 ```
 
+#### ⚠️ Important RFC 4592 Wildcard Empty Non-Terminal (ENT) Warning
+
+Under strict DNS specifications (RFC 4592), if you define an explicit record of **any** type (even just a `TXT` record, such as an SPF record on `portal.yourdomain.com` or `tunnel.yourdomain.com`), **the wildcard record (`*.yourdomain.com`) is completely bypassed and deactivated for that specific subdomain prefix!**
+
+To prevent `NXDOMAIN` (or empty resolution) errors on subdomains that have associated SPF or DKIM `TXT` records, you **must** configure explicit, exact-match `A` and `AAAA` records for those subdomains (e.g., `portal` and `tunnel`). 
+
+Our dynamic `cloudflare-ddns.sh` script is natively hardened to automatically handle this. By default, it is configured with `RECORD_NAMES=("@" "*" "tunnel" "portal")` to keep all required exact-match IP mappings 100% synchronized in real-time alongside your wildcard records.
+

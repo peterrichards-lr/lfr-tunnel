@@ -54,6 +54,7 @@ type ServerConfig struct {
 	EnforcePolicyConsent   bool             `yaml:"enforce_policy_consent"`
 	DisableBackupScheduler bool             `yaml:"disable_backup_scheduler"`
 	DockerImage            string           `yaml:"docker_image"`
+	DockerBypassURL        string           `yaml:"docker_bypass_url"`
 
 	// Dynamic SSO/OIDC Providers
 	SSOProviders []SSOProviderConfig `yaml:"sso_providers"`
@@ -203,6 +204,9 @@ func LoadServerConfig(path string) (*ServerConfig, error) {
 	}
 	if val := os.Getenv("LFT_DOCKER_IMAGE"); val != "" {
 		cfg.DockerImage = val
+	}
+	if val := os.Getenv("LFT_DOCKER_BYPASS_URL"); val != "" {
+		cfg.DockerBypassURL = val
 	}
 
 	return cfg, nil

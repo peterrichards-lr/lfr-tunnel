@@ -474,6 +474,7 @@ func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 				"maintenance_mode":       maintStr,
 				"enforce_policy_consent": consentStr,
 				"docker_image":           s.cfg.DockerImage,
+				"docker_bypass_url":      s.cfg.DockerBypassURL,
 			})
 			return
 		}

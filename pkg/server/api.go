@@ -64,6 +64,10 @@ func (s *Server) handleGetMe(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	s.portalActivityMu.Lock()
+	s.lastPortalActivity[user.ID] = time.Now()
+	s.portalActivityMu.Unlock()
+
 	var activeLeases []map[string]interface{}
 	if s.registry != nil {
 		leases := s.registry.ListLeases()
@@ -145,6 +149,8 @@ func (s *Server) handleGetMe(w http.ResponseWriter, r *http.Request) {
 	if maintModeStr == "pending" {
 		resp["maintenance_seconds_left"] = secondsLeft
 	}
+
+	resp["iron_curtain"] = s.isNginxMaintenanceActive()
 
 	respondJSON(w, http.StatusOK, resp)
 }

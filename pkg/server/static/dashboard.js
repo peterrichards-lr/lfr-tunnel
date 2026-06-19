@@ -678,6 +678,7 @@ function toggleTheme() {
             if (currentUser.role === 'admin' || currentUser.role === 'owner') {
                 document.getElementById('admin-sidebar-group').classList.remove('hidden');
                 loadUsers(); // This updates the registration badge count
+                updateMaintenanceModeUI(currentUser.maintenance_mode || 'false', currentUser.iron_curtain || false);
             }
 
             // Populate account fields
@@ -693,6 +694,16 @@ function toggleTheme() {
                     dz.style.display = 'none';
                 } else {
                     dz.style.display = 'block';
+                }
+            }
+
+            // Show Iron Curtain Maintenance Card only for Owner
+            const hardCard = document.getElementById('maint-iron-curtain-card');
+            if (hardCard) {
+                if (currentUser.role === 'owner') {
+                    hardCard.style.display = 'block';
+                } else {
+                    hardCard.style.display = 'none';
                 }
             }
             
@@ -761,6 +772,10 @@ function toggleTheme() {
                             }
                         } else {
                             maintBanner.style.display = 'none';
+                        }
+
+                        if (currentUser && (currentUser.role === 'admin' || currentUser.role === 'owner')) {
+                            updateMaintenanceModeUI(data.maintenance_mode, data.iron_curtain);
                         }
                         
                         if (data.targeted_message && window.lastTargetedMessage !== data.targeted_message) {
@@ -1019,6 +1034,7 @@ function toggleTheme() {
             if (tabName === 'tokens') loadTokens();
             if (tabName === 'tunnels') loadTunnels();
             if (tabName === 'analytics') loadAnalytics();
+            if (tabName === 'overview') loadWhatsNew();
         }
 
         window.addEventListener('popstate', (e) => {
@@ -1300,15 +1316,38 @@ function toggleTheme() {
                 }
 
                 const users = allUsers.filter(u => (u.status !== 'pending' && u.status !== 'unverified'));
-                renderTable('users-table-body', users, u => { const isSelf = currentUser && u.email === currentUser.email; const rowStyle = isSelf ? 'opacity: 0.6;' : ''; const originBadge = (() => { const m = (u.auth_method || 'magic link').toLowerCase(); if (m === 'invite') return '<span class="badge" style="background: rgba(99,102,241,0.15); color: #818cf8; border: 1px solid rgba(99,102,241,0.3);">✉ Invite</span>'; if (m === 'registration') return '<span class="badge" style="background: rgba(16,185,129,0.15); color: #34d399; border: 1px solid rgba(16,185,129,0.3);">📝 Registration</span>'; if (m.startsWith('sso - liferay') || m === 'liferay') return '<span class="badge" style="background: rgba(30,120,220,0.15); color: #60a5fa; border: 1px solid rgba(30,120,220,0.3);">🔑 SSO · Liferay</span>'; if (m.startsWith('sso - keycloak') || m === 'keycloak') return '<span class="badge" style="background: rgba(239,68,68,0.15); color: #f87171; border: 1px solid rgba(239,68,68,0.3);">🔑 SSO · Keycloak</span>'; return `<span class="badge">${escapeHTML(u.auth_method || 'Magic Link')}</span>`; })(); return `
+                renderTable('users-table-body', users, u => {
+                    const isSelf = currentUser && u.email === currentUser.email;
+                    const rowStyle = isSelf ? 'opacity: 0.6;' : '';
+                    
+                    const userJsonStr = encodeURIComponent(JSON.stringify(u));
+                    const dotColor = u.portal_active ? '#10b981' : 'rgba(255,255,255,0.2)';
+                    const dotShadow = u.portal_active ? 'box-shadow: 0 0 8px #10b981; text-shadow: 0 0 4px #10b981;' : '';
+                    const dotTitle = u.portal_active ? 'Active on Portal' : 'Offline';
+                    const statusDot = `<span style="color: ${dotColor}; font-size: 14px; font-weight: bold; cursor: default; ${dotShadow}" title="${dotTitle}">●</span>`;
+
+                    const tunnelsCount = u.active_tunnels ? u.active_tunnels.length : 0;
+                    const tunnelsBadge = tunnelsCount > 0 ? `<span class="badge" onclick="openUserDetailsModal('${userJsonStr}')" style="cursor: pointer; background: rgba(99,102,241,0.15); color: #818cf8; border: 1px solid rgba(99,102,241,0.3); padding: 2px 6px; font-size: 11px; margin-left: 8px;" title="Click to view tunnels">🔌 ${tunnelsCount} Tunnel${tunnelsCount > 1 ? 's' : ''}</span>` : '';
+
+                    const emailLink = `<a href="#" onclick="openUserDetailsModal('${userJsonStr}'); return false;" style="font-weight: 500; text-decoration: none; color: inherit; cursor: pointer; transition: opacity 0.2s;" onmouseover="this.style.opacity='0.8'" onmouseout="this.style.opacity='1'">${escapeHTML(u.email)}</a>`;
+
+                    const lastSeenText = u.portal_active ? '<span style="color: #10b981; font-weight: 500;">Active Now</span>' : renderTimestamp(u.last_login_at);
+
+                    return `
                     <tr style="${rowStyle}">
-                        <td style="font-weight: 500;">${escapeHTML(u.email)} ${isSelf ? '<span style="font-size: 12px; color: var(--text-muted);">(You)</span>' : ''}</td>
+                        <td>
+                            <div style="display: flex; align-items: center; gap: 6px;">
+                                ${statusDot}
+                                ${emailLink}
+                                ${isSelf ? '<span style="font-size: 12px; color: var(--text-muted);">(You)</span>' : ''}
+                                ${tunnelsBadge}
+                            </div>
+                        </td>
                         <td>${escapeHTML(u.first_name)} ${escapeHTML(u.last_name)}</td>
                         <td><span class="badge ${u.role === 'admin' ? 'success' : ''}">${escapeHTML(u.role)}</span></td>
                         <td><span class="badge ${u.status === 'approved' ? 'success' : (u.status === 'revoked' ? 'danger' : 'warning')}">${escapeHTML(u.status)}</span></td>
-                        <td>${originBadge}</td>
                         <td><span class="badge" style="font-weight: bold; background: rgba(139,92,246,0.15); color: #a78bfa; border: 1px solid rgba(139,92,246,0.3);">${u.rate_limit ? u.rate_limit + ' RPS' : 'Unlimited'}</span></td>
-                        <td>${renderTimestamp(u.created_at)}</td>
+                        <td>${lastSeenText}</td>
                         <td>
                             ${(!isSelf && u.status !== 'approved') ? `<button class="btn" style="padding: 4px 8px; margin: 0 4px 0 0;" onclick="approveUser('${u.id}')">Approve</button>` : ''}
                             ${(!isSelf && u.status !== 'revoked') ? `<button class="btn" style="padding: 4px 8px; margin: 0 4px 0 0; color: var(--danger); border-color: var(--danger);" onclick="revokeUser('${u.id}')">Revoke</button>` : ''}
@@ -1321,7 +1360,8 @@ function toggleTheme() {
                             ${isSelf ? '<span style="font-size: 12px; color: var(--text-muted);">No actions</span>' : ''}
                         </td>
                     </tr>
-                    `; });
+                    `;
+                });
             }
         }
 
@@ -1877,39 +1917,76 @@ function toggleTheme() {
         }
 
         let globalMaintenanceActive = "false";
+        let globalHardMaintenanceActive = false;
 
-        function updateMaintenanceModeUI(active) {
+        function updateMaintenanceModeUI(active, hardActive) {
             globalMaintenanceActive = active;
+            globalHardMaintenanceActive = !!hardActive;
+
+            // Update Soft Maintenance UI
             const statusText = document.getElementById('maint-status-text');
             const toggleBtn = document.getElementById('btn-toggle-maint');
             const countdownSelect = document.getElementById('maint-countdown-select');
-            if (!statusText || !toggleBtn) return;
+            const softInputs = document.getElementById('maint-soft-input-fields');
 
-            if (active === "true") {
-                statusText.innerHTML = `Status: <span style="color: #ef4444; font-weight: 600;">ACTIVE 🔴</span>`;
-                toggleBtn.innerText = "Disable Maintenance";
-                toggleBtn.className = "btn btn-outline";
-                toggleBtn.style.color = "var(--success)";
-                toggleBtn.style.borderColor = "var(--success)";
-                if (countdownSelect) countdownSelect.style.display = "none";
-            } else if (active === "pending") {
-                statusText.innerHTML = `Status: <span style="color: #f59e0b; font-weight: 600;">PENDING COUNTDOWN ⏳</span>`;
-                toggleBtn.innerText = "Cancel Maintenance";
-                toggleBtn.className = "btn btn-outline";
-                toggleBtn.style.color = "var(--danger)";
-                toggleBtn.style.borderColor = "var(--danger)";
-                if (countdownSelect) countdownSelect.style.display = "none";
-            } else {
-                statusText.innerHTML = `Status: <span style="color: var(--text-muted);">INACTIVE 🟢</span>`;
-                toggleBtn.innerText = "Enable Maintenance";
-                toggleBtn.className = "btn btn-primary";
-                toggleBtn.style.color = "white";
-                toggleBtn.style.borderColor = "var(--primary)";
-                if (countdownSelect) countdownSelect.style.display = "block";
+            if (statusText && toggleBtn) {
+                if (active === "true") {
+                    statusText.innerHTML = `Status: <span style="color: #ef4444; font-weight: 600;">ACTIVE (Bouncer checking IDs) 🔴</span>`;
+                    toggleBtn.innerText = "Disable Soft Maintenance";
+                    toggleBtn.className = "btn btn-outline";
+                    toggleBtn.style.color = "var(--success)";
+                    toggleBtn.style.borderColor = "var(--success)";
+                    toggleBtn.style.background = "none";
+                    if (countdownSelect) countdownSelect.style.display = "none";
+                    if (softInputs) softInputs.style.display = "none";
+                } else if (active === "pending") {
+                    statusText.innerHTML = `Status: <span style="color: #f59e0b; font-weight: 600;">PENDING COUNTDOWN ⏳</span>`;
+                    toggleBtn.innerText = "Cancel Soft Maintenance";
+                    toggleBtn.className = "btn btn-outline";
+                    toggleBtn.style.color = "var(--danger)";
+                    toggleBtn.style.borderColor = "var(--danger)";
+                    toggleBtn.style.background = "none";
+                    if (countdownSelect) countdownSelect.style.display = "none";
+                    if (softInputs) softInputs.style.display = "none";
+                } else {
+                    statusText.innerHTML = `Status: <span style="color: var(--text-muted);">INACTIVE (All welcome) 🟢</span>`;
+                    toggleBtn.innerText = "Enable Soft Maintenance";
+                    toggleBtn.className = "btn btn-primary";
+                    toggleBtn.style.color = "white";
+                    toggleBtn.style.borderColor = "var(--primary)";
+                    toggleBtn.style.background = "var(--primary)";
+                    if (countdownSelect) countdownSelect.style.display = "block";
+                    if (softInputs) softInputs.style.display = "flex";
+                }
+            }
+
+            // Update Hard Maintenance (Iron Curtain / Fire Curtain) UI
+            const hardStatusText = document.getElementById('maint-hard-status-text');
+            const hardToggleBtn = document.getElementById('btn-toggle-hard-maint');
+            const hardInputs = document.getElementById('maint-hard-input-fields');
+
+            if (hardStatusText && hardToggleBtn) {
+                if (hardActive) {
+                    hardStatusText.innerHTML = `Status: <span style="color: #ef4444; font-weight: 600;">ACTIVE (Fire Curtain down) 🔴</span>`;
+                    hardToggleBtn.innerText = "Disable Iron Curtain";
+                    hardToggleBtn.className = "btn btn-outline";
+                    hardToggleBtn.style.color = "var(--success)";
+                    hardToggleBtn.style.borderColor = "var(--success)";
+                    hardToggleBtn.style.background = "none";
+                    if (hardInputs) hardInputs.style.display = "none";
+                } else {
+                    hardStatusText.innerHTML = `Status: <span style="color: var(--text-muted);">INACTIVE (Open gate) 🟢</span>`;
+                    hardToggleBtn.innerText = "Enable Iron Curtain";
+                    hardToggleBtn.className = "btn";
+                    hardToggleBtn.style.color = "white";
+                    hardToggleBtn.style.borderColor = "var(--danger)";
+                    hardToggleBtn.style.background = "var(--danger)";
+                    if (hardInputs) hardInputs.style.display = "flex";
+                }
             }
         }
 
-        async function toggleMaintenanceMode() {
+        async function toggleSoftMaintenanceMode() {
             let nextState = true;
             if (globalMaintenanceActive === "true" || globalMaintenanceActive === "pending") {
                 nextState = false;
@@ -1924,16 +2001,26 @@ function toggleTheme() {
                 }
             }
 
+            const actionVal = document.getElementById('maint-soft-action').value.trim();
+            const reasonVal = document.getElementById('maint-soft-reason').value.trim();
+            const durationVal = parseInt(document.getElementById('maint-soft-duration').value) || 30;
+
             const promptMsg = nextState 
                 ? (countdownVal > 0 
-                    ? `Are you sure you want to schedule Gateway Maintenance Mode to start in ${countdownVal} minutes?\n\nThis will start an orange countdown banner on all developer terminals and portals, and forcefully activate when the timer hits 0.`
-                    : "Are you sure you want to enable Gateway Maintenance Mode IMMEDIATELY?\n\nThis will instantly close all standard tunnels, reject new connections, and block standard logins!")
+                    ? `Are you sure you want to schedule Gateway Soft Maintenance Mode to start in ${countdownVal} minutes?\n\nThis will show a warning banner to users and activate when the timer hits 0.`
+                    : `Are you sure you want to enable Gateway Soft Maintenance Mode IMMEDIATELY?\n\nThis will instantly close all standard tunnels, reject new connections, and block standard logins!`)
                 : "Are you sure you want to disable/cancel Gateway Maintenance Mode?\n\nThis will restore standard gateway routing, logins, and tunnel connections.";
 
             if (!confirm(promptMsg)) return;
 
             try {
-                const payload = { enabled: nextState };
+                const payload = { 
+                    enabled: nextState,
+                    iron_curtain: false,
+                    action: actionVal,
+                    reason: reasonVal,
+                    duration: durationVal
+                };
                 if (nextState && countdownVal > 0) {
                     payload.countdown_minutes = countdownVal;
                 }
@@ -1946,8 +2033,8 @@ function toggleTheme() {
 
                 if (res.ok) {
                     const data = await res.json();
-                    updateMaintenanceModeUI(data.maintenance_mode);
-                    showToast(`Maintenance Mode successfully updated!`, "success");
+                    updateMaintenanceModeUI(data.maintenance_mode, data.iron_curtain);
+                    showToast(`Soft Maintenance Mode successfully updated!`, "success");
                     loadTunnels(); // Refresh tunnels lists in case they were kicked
                 } else {
                     const err = await res.json();
@@ -1955,6 +2042,96 @@ function toggleTheme() {
                 }
             } catch (e) {
                 showToast("Network error toggling maintenance mode", "danger");
+            }
+        }
+
+        async function toggleHardMaintenanceMode() {
+            let nextState = true;
+            if (globalHardMaintenanceActive) {
+                nextState = false;
+            }
+
+            if (nextState) {
+                const actionVal = document.getElementById('maint-hard-action').value.trim();
+                const reasonVal = document.getElementById('maint-hard-reason').value.trim();
+                const durationVal = parseInt(document.getElementById('maint-hard-duration').value) || 60;
+
+                const firstConfirm = confirm(
+                    "⚠️ WARNING: Activating Nginx Iron Curtain Mode will completely lock down the server.\n\n" +
+                    "This blocks ALL traffic including the Admin Dashboard itself. You will be immediately disconnected " +
+                    "and will not be able to turn this off from this website.\n\n" +
+                    "To restore service, you MUST log into the VPS via SSH and run the disable-maintenance scripts.\n\n" +
+                    "Are you sure you want to proceed?"
+                );
+                if (!firstConfirm) return;
+
+                const secondConfirm = prompt(
+                    "To confirm immediate lockdown, please type 'LOCKOUT' in all caps:"
+                );
+                if (secondConfirm !== "LOCKOUT") {
+                    showToast("Lockdown cancelled: confirmation word did not match.", "warning");
+                    return;
+                }
+
+                try {
+                    const payload = {
+                        enabled: true,
+                        iron_curtain: true,
+                        action: actionVal,
+                        reason: reasonVal,
+                        duration: durationVal
+                    };
+
+                    const res = await fetch('/api/admin/maintenance', {
+                        method: 'POST',
+                        headers: {'Content-Type': 'application/json'},
+                        body: JSON.stringify(payload)
+                    });
+
+                    if (res.ok) {
+                        const data = await res.json();
+                        updateMaintenanceModeUI(data.maintenance_mode, data.iron_curtain);
+                        showToast("Nginx Iron Curtain activated. You will be disconnected shortly.", "danger");
+                        setTimeout(() => {
+                            window.location.reload();
+                        }, 1500);
+                    } else {
+                        const err = await res.json();
+                        showToast(err.error || "Failed to activate Iron Curtain", "danger");
+                    }
+                } catch (e) {
+                    showToast("Network error activating Iron Curtain", "danger");
+                }
+            } else {
+                const confirmDisable = confirm(
+                    "Are you sure you want to disable Nginx Iron Curtain Mode?\n\n" +
+                    "Note: If you are seeing this, either the server is not actually behind the Nginx block or you are accessing it via a bypassed endpoint. Disabling will remove the trigger files."
+                );
+                if (!confirmDisable) return;
+
+                try {
+                    const payload = {
+                        enabled: false,
+                        iron_curtain: true
+                    };
+
+                    const res = await fetch('/api/admin/maintenance', {
+                        method: 'POST',
+                        headers: {'Content-Type': 'application/json'},
+                        body: JSON.stringify(payload)
+                    });
+
+                    if (res.ok) {
+                        const data = await res.json();
+                        updateMaintenanceModeUI(data.maintenance_mode, data.iron_curtain);
+                        showToast("Nginx Iron Curtain disabled successfully.", "success");
+                    } else {
+                        const err = await res.json();
+                        showToast(err.error || "Failed to disable Iron Curtain", "danger");
+                    }
+                } catch (e) {
+                    showToast("Network error disabling Iron Curtain", "danger");
+                }
             }
         }
 
@@ -2118,5 +2295,151 @@ function toggleTheme() {
             } else {
                 const err = await res.json();
                 showToast('Failed to override limit: ' + (err.error || 'Unknown error'), 'danger');
+            }
+        }
+
+        // USER DETAILS & TUNNELS MODAL CONTROLLERS
+        function openUserDetailsModal(userJsonEncoded) {
+            const u = JSON.parse(decodeURIComponent(userJsonEncoded));
+            
+            // Set user email and name
+            document.getElementById('detail-user-email').innerText = u.email;
+            document.getElementById('detail-user-name').innerText = `${u.first_name || ''} ${u.last_name || ''}`.trim() || 'N/A';
+            
+            // Set role and status badges
+            const roleEl = document.getElementById('detail-user-role');
+            roleEl.innerText = u.role;
+            roleEl.className = `badge ${u.role === 'admin' ? 'success' : ''}`;
+            
+            const statusEl = document.getElementById('detail-user-status');
+            statusEl.innerText = u.status;
+            statusEl.className = `badge ${u.status === 'approved' ? 'success' : (u.status === 'revoked' ? 'danger' : 'warning')}`;
+            
+            // Account Origin
+            const originEl = document.getElementById('detail-user-origin');
+            const m = (u.auth_method || 'magic link').toLowerCase();
+            let originHTML = '';
+            if (m === 'invite') {
+                originHTML = '<span class="badge" style="background: rgba(99,102,241,0.15); color: #818cf8; border: 1px solid rgba(99,102,241,0.3);">✉ Invite</span>';
+            } else if (m === 'registration') {
+                originHTML = '<span class="badge" style="background: rgba(16,185,129,0.15); color: #34d399; border: 1px solid rgba(16,185,129,0.3);">📝 Registration</span>';
+            } else if (m.startsWith('sso - liferay') || m === 'liferay') {
+                originHTML = '<span class="badge" style="background: rgba(30,120,220,0.15); color: #60a5fa; border: 1px solid rgba(30,120,220,0.3);">🔑 SSO · Liferay</span>';
+            } else if (m.startsWith('sso - keycloak') || m === 'keycloak') {
+                originHTML = '<span class="badge" style="background: rgba(239,68,68,0.15); color: #f87171; border: 1px solid rgba(239,68,68,0.3);">🔑 SSO · Keycloak</span>';
+            } else {
+                originHTML = `<span class="badge">${escapeHTML(u.auth_method || 'Magic Link')}</span>`;
+            }
+            originEl.innerHTML = originHTML;
+            
+            // Joined Date
+            document.getElementById('detail-user-joined').innerText = renderTimestamp(u.created_at);
+            
+            // API Quota
+            document.getElementById('detail-user-quota').innerText = u.rate_limit ? `${u.rate_limit} RPS` : 'Unlimited';
+
+            // Connected Tunnels Table
+            const tunnels = u.active_tunnels || [];
+            document.getElementById('detail-user-tunnels-count').innerText = tunnels.length;
+            
+            const tbody = document.getElementById('detail-user-tunnels-tbody');
+            tbody.innerHTML = '';
+            
+            if (tunnels.length === 0) {
+                tbody.innerHTML = `<tr><td colspan="4" style="text-align: center; padding: 24px; color: var(--text-muted); font-size: 13px;">No active tunnels connected.</td></tr>`;
+            } else {
+                tunnels.forEach(t => {
+                    const tr = document.createElement('tr');
+                    tr.style.borderBottom = '1px solid rgba(255,255,255,0.03)';
+                    
+                    const publicUrl = `https://${t.full_host}`;
+                    const connectedTime = renderTimestamp(t.created_at);
+                    
+                    tr.innerHTML = `
+                        <td style="padding: 12px; vertical-align: middle;">
+                            <div style="font-weight: 600; font-family: monospace; font-size: 13px; color: var(--text);">${escapeHTML(t.subdomain_prefix)}</div>
+                            <div style="font-size: 11px; color: var(--text-muted); margin-top: 2px;">Local Port: ${t.local_port}</div>
+                        </td>
+                        <td style="padding: 12px; vertical-align: middle;">
+                            <a href="${publicUrl}" target="_blank" style="color: var(--primary); text-decoration: none; font-size: 13px; font-family: monospace; word-break: break-all;">${publicUrl}</a>
+                            <div style="font-size: 11px; color: var(--text-muted); margin-top: 2px;">IP: ${escapeHTML(t.client_ip)} | Connected: ${connectedTime}</div>
+                        </td>
+                        <td style="padding: 12px; vertical-align: middle; font-size: 12px; color: var(--text-muted);">
+                            <div>📥 In: <strong style="color: var(--text);">${formatBytes(t.bytes_in)}</strong></div>
+                            <div style="margin-top: 2px;">📤 Out: <strong style="color: var(--text);">${formatBytes(t.bytes_out)}</strong></div>
+                        </td>
+                        <td style="padding: 12px; vertical-align: middle; text-align: right;">
+                            <button class="btn" style="padding: 4px 10px; font-size: 12px; color: var(--danger); border-color: var(--danger);" onclick="kickTunnelFromUserModal('${escapeHTML(t.subdomain_prefix)}', '${userJsonEncoded}')">Kick</button>
+                        </td>
+                    `;
+                    tbody.appendChild(tr);
+                });
+            }
+            
+            document.getElementById('user-details-modal').style.display = 'flex';
+        }
+
+        function closeUserDetailsModal() {
+            document.getElementById('user-details-modal').style.display = 'none';
+        }
+
+        async function kickTunnelFromUserModal(subdomain, userJsonEncoded) {
+            const u = JSON.parse(decodeURIComponent(userJsonEncoded));
+            if (confirm(`Are you sure you want to kick the tunnel lease for subdomain "${subdomain}"?`)) {
+                const res = await fetch(`/api/admin/leases/${encodeURIComponent(subdomain)}`, { method: 'DELETE' });
+                if (res.ok) {
+                    showToast(`Kicked tunnel subdomain "${subdomain}"`, 'success');
+                    
+                    // Reload users list to refresh main UI
+                    await loadUsers();
+                    
+                    // Fetch fresh list of users to reload the active modal with current data
+                    const uRes = await fetch('/api/admin/users');
+                    if (uRes.ok) {
+                        const allUsers = await uRes.json();
+                        const updatedUser = allUsers.find(item => item.id === u.id);
+                        if (updatedUser) {
+                            // If user still exists, reload modal with updated data
+                            const updatedJson = encodeURIComponent(JSON.stringify(updatedUser));
+                            openUserDetailsModal(updatedJson);
+                            return;
+                        }
+                    }
+                    // Fallback: close modal if user or info is gone
+                    closeUserDetailsModal();
+                } else {
+                    const err = await res.json();
+                    showToast('Failed to kick tunnel: ' + (err.error || 'Unknown error'), 'danger');
+                }
+            }
+        }
+
+        async function loadWhatsNew() {
+            try {
+                const res = await fetch('/static/whats-new.json');
+                if (res.ok) {
+                    const data = await res.json();
+                    document.getElementById('whats-new-title').innerText = `What's New in ${data.version || 'this version'}`;
+                    const list = document.getElementById('whats-new-list');
+                    list.innerHTML = '';
+                    if (data.features && data.features.length > 0) {
+                        data.features.forEach(f => {
+                            const li = document.createElement('li');
+                            const colonIdx = f.indexOf(':');
+                            if (colonIdx !== -1) {
+                                const boldPart = f.substring(0, colonIdx + 1);
+                                const regularPart = f.substring(colonIdx + 1);
+                                li.innerHTML = `<strong>${escapeHTML(boldPart)}</strong>${escapeHTML(regularPart)}`;
+                            } else {
+                                li.textContent = f;
+                            }
+                            list.appendChild(li);
+                        });
+                    } else {
+                        list.innerHTML = '<li>No recent feature updates documented.</li>';
+                    }
+                }
+            } catch (e) {
+                console.error("Failed to load What's New content", e);
             }
         }

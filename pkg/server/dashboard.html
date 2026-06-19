@@ -162,13 +162,9 @@
 
                 <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 24px;">
                     <div class="glass" style="padding: 24px; border-radius: 8px;">
-                        <h3 style="margin-bottom: 16px; font-size: 18px;">What's New in v1.2</h3>
-                        <ul style="color: var(--text-muted); padding-left: 20px; line-height: 1.6; font-size: 14px;">
-                            <li><strong>Admin Dashboard:</strong> A completely redesigned management portal.</li>
-                            <li><strong>Magic Links:</strong> Passwordless authentication is now live.</li>
-                            <li><strong>Bandwidth Analytics:</strong> Monitor data flow across all your active tunnels.</li>
-                            <li><strong>Audit Logs:</strong> Granular tracking of all system and administrative actions.</li>
-                            <li><strong>Theming Engine:</strong> Full support for Dark Mode, Light Mode, and Time of Day.</li>
+                        <h3 id="whats-new-title" style="margin-bottom: 16px; font-size: 18px;">What's New</h3>
+                        <ul id="whats-new-list" style="color: var(--text-muted); padding-left: 20px; line-height: 1.6; font-size: 14px;">
+                            <li>Loading updates...</li>
                         </ul>
                     </div>
 
@@ -382,11 +378,32 @@
                     <h2>Users</h2>
                     <button class="btn btn-primary" style="width: auto; margin:0;" onclick="openInviteModal()">Invite User</button>
                 </div>
-                <div class="glass" style="padding: 16px; margin-bottom: 24px; border-left: 4px solid #f59e0b;">
-                    <h4 style="margin-bottom: 4px; font-size: 14px; font-weight: 600; color: #f59e0b;">🛠️ Gateway Maintenance Mode</h4>
-                    <p style="color: var(--text-muted); font-size: 12px; margin-bottom: 12px; line-height: 1.4;">Activating Maintenance Mode will block standard user logins, reject new tunnel connections, and forcefully kick active standard tunnels. Visitors trying to access dev subdomains will receive a scheduled maintenance page. <strong>Administrators and Owners will remain fully unblocked so you can manage the system.</strong></p>
+                <div class="glass" style="padding: 24px; margin-bottom: 24px; border-left: 4px solid #f59e0b;">
+                    <h4 style="margin-bottom: 4px; font-size: 15px; font-weight: 600; color: #f59e0b;">🛠️ Gateway Soft Maintenance Mode</h4>
+                    <p style="color: var(--text-muted); font-size: 12px; margin-bottom: 16px; line-height: 1.4;">
+                        Activating Soft Maintenance Mode blocks standard user logins, rejects new tunnel connections, and kicks active standard tunnels. Visitors trying to access developer subdomains will receive a scheduled maintenance page. 
+                        <strong>Administrators and Owners will remain fully unblocked so they can manage the portal and disable this mode from the dashboard.</strong>
+                    </p>
+                    
+                    <div id="maint-soft-input-fields" style="display: flex; flex-direction: column; gap: 12px; margin-bottom: 16px; max-width: 500px;">
+                        <div style="display: flex; gap: 12px;">
+                            <div style="flex: 1;">
+                                <label style="display:block; color: var(--text-muted); font-size: 11px; text-transform: uppercase; font-weight: 600; margin-bottom: 4px;">Action Name</label>
+                                <input type="text" id="maint-soft-action" class="input-field" value="Server Upgrade" style="width: 100%; box-sizing: border-box;" />
+                            </div>
+                            <div style="flex: 1;">
+                                <label style="display:block; color: var(--text-muted); font-size: 11px; text-transform: uppercase; font-weight: 600; margin-bottom: 4px;">Duration (Minutes)</label>
+                                <input type="number" id="maint-soft-duration" class="input-field" value="30" min="1" style="width: 100%; box-sizing: border-box;" />
+                            </div>
+                        </div>
+                        <div>
+                            <label style="display:block; color: var(--text-muted); font-size: 11px; text-transform: uppercase; font-weight: 600; margin-bottom: 4px;">Reason / Details</label>
+                            <input type="text" id="maint-soft-reason" class="input-field" value="System upgrade and maintenance" style="width: 100%; box-sizing: border-box;" />
+                        </div>
+                    </div>
+
                     <div style="display: flex; gap: 12px; align-items: center; flex-wrap: wrap;">
-                        <span id="maint-status-text" style="font-weight: bold; font-size: 14px; color: var(--text-muted); margin-right: 12px;">Status: Loading...</span>
+                        <span id="maint-status-text" style="font-weight: bold; font-size: 13px; color: var(--text-muted); margin-right: 12px;">Status: Loading...</span>
                         <select id="maint-countdown-select" class="input-field" style="width: auto; margin: 0; padding: 6px 12px; font-size: 13px; height: auto; background: rgba(255,255,255,0.05); border-color: rgba(255,255,255,0.1);">
                             <option value="0">Immediate Activation ⚡</option>
                             <option value="1">Schedule in 1 Minute ⏳</option>
@@ -394,7 +411,37 @@
                             <option value="10">Schedule in 10 Minutes ⏳</option>
                             <option value="30">Schedule in 30 Minutes ⏳</option>
                         </select>
-                        <button id="btn-toggle-maint" class="btn" style="width: auto; margin: 0; padding: 6px 16px; font-weight: 500;" onclick="toggleMaintenanceMode()">Enable Maintenance</button>
+                        <button id="btn-toggle-maint" class="btn" style="width: auto; margin: 0; padding: 6px 16px; font-weight: 500;" onclick="toggleSoftMaintenanceMode()">Enable Soft Maintenance</button>
+                    </div>
+                </div>
+
+                <div id="maint-iron-curtain-card" class="glass" style="display: none; padding: 24px; margin-bottom: 24px; border-left: 4px solid var(--danger);">
+                    <h4 style="margin-bottom: 4px; font-size: 15px; font-weight: 600; color: var(--danger);">🔒 Nginx Iron Curtain Mode (Hard Maintenance - Owner Only)</h4>
+                    <p style="color: var(--text-muted); font-size: 12px; margin-bottom: 16px; line-height: 1.4;">
+                        Activating Nginx Iron Curtain Mode creates the trigger file on the server. Nginx will immediately block **all** external incoming requests—including developer tunnels and the Admin Dashboard itself. 
+                        <strong style="color: #ef4444;">Warning: You will be disconnected and unable to log in to disable this via the portal. It must be disabled via SSH on the VPS using the restore scripts.</strong>
+                    </p>
+
+                    <div id="maint-hard-input-fields" style="display: flex; flex-direction: column; gap: 12px; margin-bottom: 16px; max-width: 500px;">
+                        <div style="display: flex; gap: 12px;">
+                            <div style="flex: 1;">
+                                <label style="display:block; color: var(--text-muted); font-size: 11px; text-transform: uppercase; font-weight: 600; margin-bottom: 4px;">Action Name</label>
+                                <input type="text" id="maint-hard-action" class="input-field" value="Database Restoration" style="width: 100%; box-sizing: border-box;" />
+                            </div>
+                            <div style="flex: 1;">
+                                <label style="display:block; color: var(--text-muted); font-size: 11px; text-transform: uppercase; font-weight: 600; margin-bottom: 4px;">Duration (Minutes)</label>
+                                <input type="number" id="maint-hard-duration" class="input-field" value="60" min="1" style="width: 100%; box-sizing: border-box;" />
+                            </div>
+                        </div>
+                        <div>
+                            <label style="display:block; color: var(--text-muted); font-size: 11px; text-transform: uppercase; font-weight: 600; margin-bottom: 4px;">Reason / Details</label>
+                            <input type="text" id="maint-hard-reason" class="input-field" value="Performing database restore operations." style="width: 100%; box-sizing: border-box;" />
+                        </div>
+                    </div>
+
+                    <div style="display: flex; gap: 12px; align-items: center; flex-wrap: wrap;">
+                        <span id="maint-hard-status-text" style="font-weight: bold; font-size: 13px; color: var(--text-muted); margin-right: 12px;">Status: Inactive 🟢</span>
+                        <button id="btn-toggle-hard-maint" class="btn" style="width: auto; margin: 0; padding: 6px 16px; font-weight: 500; background: var(--danger); color: white; border: none;" onclick="toggleHardMaintenanceMode()">Enable Iron Curtain</button>
                     </div>
                 </div>
                 <div class="glass" style="padding: 16px; margin-bottom: 24px;">
@@ -407,7 +454,7 @@
                 </div>
                 <div class="glass table-container">
                     <table>
-                        <thead><tr><th data-sort="email">Email</th><th data-sort="first_name">Name</th><th data-sort="role">Role</th><th data-sort="status">Status</th><th data-sort="auth_method">Origin</th><th data-sort="rate_limit">Quota</th><th data-sort="created_at">Joined (UTC)</th><th>Actions</th></tr></thead>
+                        <thead><tr><th data-sort="email">Email</th><th data-sort="first_name">Name</th><th data-sort="role">Role</th><th data-sort="status">Status</th><th data-sort="rate_limit">Quota</th><th data-sort="last_login_at">Last Seen</th><th>Actions</th></tr></thead>
                         <tbody id="users-table-body"></tbody>
                     </table>
                 </div>
@@ -621,6 +668,66 @@
             <div style="display: flex; gap: 12px; justify-content: flex-end;">
                 <button class="btn btn-secondary" style="width: auto; margin: 0;" onclick="closeTunnelOverrideModal()">Cancel</button>
                 <button class="btn" style="width: auto; margin: 0; background: #d97706; color: white; border: none;" onclick="submitTunnelOverride()">Apply Override</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- USER DETAILS & TUNNELS MODAL -->
+    <div id="user-details-modal" class="modal-overlay" style="display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.6); align-items: center; justify-content: center; z-index: 1000;">
+        <div class="glass" style="max-width: 720px; width: 100%; padding: 32px; border-radius: 16px; border: 1px solid var(--border); text-align: left;">
+            <h3 style="margin-bottom: 16px; font-size: 20px; display: flex; align-items: center; gap: 8px;">👤 User Profile & Tunnels</h3>
+            
+            <!-- User General Profile Grid -->
+            <div style="display: grid; grid-template-columns: repeat(2, 1fr); gap: 16px; margin-bottom: 24px; padding-bottom: 16px; border-bottom: 1px solid rgba(255,255,255,0.08);">
+                <div>
+                    <label style="display:block; color: var(--text-muted); font-size: 11px; text-transform: uppercase; font-weight: 600;">Email Address</label>
+                    <span id="detail-user-email" style="font-weight: 500; font-family: monospace;"></span>
+                </div>
+                <div>
+                    <label style="display:block; color: var(--text-muted); font-size: 11px; text-transform: uppercase; font-weight: 600;">Full Name</label>
+                    <span id="detail-user-name" style="font-weight: 500;"></span>
+                </div>
+                <div>
+                    <label style="display:block; color: var(--text-muted); font-size: 11px; text-transform: uppercase; font-weight: 600;">Role & Status</label>
+                    <div style="display: flex; gap: 8px; margin-top: 4px;">
+                        <span id="detail-user-role" class="badge"></span>
+                        <span id="detail-user-status" class="badge"></span>
+                    </div>
+                </div>
+                <div>
+                    <label style="display:block; color: var(--text-muted); font-size: 11px; text-transform: uppercase; font-weight: 600;">Account Origin</label>
+                    <span id="detail-user-origin" style="display: inline-block; margin-top: 4px;"></span>
+                </div>
+                <div>
+                    <label style="display:block; color: var(--text-muted); font-size: 11px; text-transform: uppercase; font-weight: 600;">Joined Date</label>
+                    <span id="detail-user-joined" style="font-size: 13px;"></span>
+                </div>
+                <div>
+                    <label style="display:block; color: var(--text-muted); font-size: 11px; text-transform: uppercase; font-weight: 600;">API Quota</label>
+                    <span id="detail-user-quota" class="badge" style="background: rgba(139,92,246,0.15); color: #a78bfa; border: 1px solid rgba(139,92,246,0.3); font-weight: bold; margin-top: 4px;"></span>
+                </div>
+            </div>
+
+            <!-- Active Tunnels Section -->
+            <h4 style="font-size: 15px; font-weight: 600; margin-bottom: 12px; display: flex; align-items: center; gap: 6px;">🔌 Connected Tunnels (<span id="detail-user-tunnels-count">0</span>)</h4>
+            <div style="max-height: 240px; overflow-y: auto; margin-bottom: 24px; border: 1px solid rgba(255,255,255,0.05); border-radius: 8px; background: rgba(0,0,0,0.1);">
+                <table class="dashboard-table" style="width: 100%; border-collapse: collapse; min-width: 100%;">
+                    <thead>
+                        <tr style="border-bottom: 1px solid var(--border); text-align: left; background: rgba(255,255,255,0.02);">
+                            <th style="padding: 10px 12px; color: var(--text-muted); font-size: 12px; font-weight: 500;">Subdomain Prefix</th>
+                            <th style="padding: 10px 12px; color: var(--text-muted); font-size: 12px; font-weight: 500;">Public Target Link</th>
+                            <th style="padding: 10px 12px; color: var(--text-muted); font-size: 12px; font-weight: 500;">Bandwidth Transfer</th>
+                            <th style="padding: 10px 12px; color: var(--text-muted); font-size: 12px; font-weight: 500; text-align: right;">Action</th>
+                        </tr>
+                    </thead>
+                    <tbody id="detail-user-tunnels-tbody">
+                        <!-- Populated dynamically via JS -->
+                    </tbody>
+                </table>
+            </div>
+
+            <div style="display: flex; gap: 12px; justify-content: flex-end;">
+                <button class="btn btn-primary" style="width: auto; margin: 0; padding: 8px 24px;" onclick="closeUserDetailsModal()">Close</button>
             </div>
         </div>
     </div>

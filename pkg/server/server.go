@@ -74,32 +74,38 @@ type CheckSubdomainResponse struct {
 
 // Server coordinates the entire gateway operations.
 type Server struct {
-	cfg               *config.ServerConfig
-	chiselServer      *chserver.Server
-	registry          *Registry
-	proxyHandler      *ProxyHandler
-	chiselProxy       *httputil.ReverseProxy
-	db                *db.DB
-	mailSender        mail.Sender
-	ctx               context.Context
-	cancel            context.CancelFunc
-	rateLimiters      map[string]*rate.Limiter
-	rlMutex           sync.Mutex
-	violations        map[string]int
-	vMutex            sync.Mutex
-	blacklist         sync.Map // memory cache for db blacklist
-	portalMap         sync.Map // memory cache for portal magic links and sessions
-	metricsQueue      chan *db.TunnelMetric
-	broadcastMutex    sync.RWMutex
-	broadcastMessage  string
-	targetedMessages  map[string]string
-	targetedMutex     sync.RWMutex
-	maintenanceMode   bool
-	maintTimer        *time.Timer
-	maintScheduledAt  time.Time
-	maintMutex        sync.RWMutex
-	unsubscribeSecret string
-	translations      map[string]map[string]string
+	cfg                *config.ServerConfig
+	chiselServer       *chserver.Server
+	registry           *Registry
+	proxyHandler       *ProxyHandler
+	chiselProxy        *httputil.ReverseProxy
+	db                 *db.DB
+	mailSender         mail.Sender
+	ctx                context.Context
+	cancel             context.CancelFunc
+	rateLimiters       map[string]*rate.Limiter
+	rlMutex            sync.Mutex
+	violations         map[string]int
+	vMutex             sync.Mutex
+	blacklist          sync.Map // memory cache for db blacklist
+	portalMap          sync.Map // memory cache for portal magic links and sessions
+	metricsQueue       chan *db.TunnelMetric
+	broadcastMutex     sync.RWMutex
+	broadcastMessage   string
+	targetedMessages   map[string]string
+	targetedMutex      sync.RWMutex
+	maintenanceMode    bool
+	maintTimer         *time.Timer
+	maintScheduledAt   time.Time
+	maintMutex         sync.RWMutex
+	unsubscribeSecret  string
+	translations       map[string]map[string]string
+	lastPortalActivity map[string]time.Time
+	portalActivityMu   sync.RWMutex
+	maintReason        string
+	maintAction        string
+	maintDuration      int
+	maintEndTime       time.Time
 }
 
 // NewServer initializes and returns a new Server instance.
@@ -157,19 +163,20 @@ func NewServer(cfg *config.ServerConfig) (*Server, error) {
 	ctx, cancel := context.WithCancel(context.Background())
 
 	srv := &Server{
-		cfg:              cfg,
-		chiselServer:     chiselSrv,
-		registry:         registry,
-		proxyHandler:     proxyHandler,
-		chiselProxy:      chiselProxy,
-		db:               database,
-		mailSender:       mailSender,
-		ctx:              ctx,
-		cancel:           cancel,
-		rateLimiters:     make(map[string]*rate.Limiter),
-		violations:       make(map[string]int),
-		metricsQueue:     make(chan *db.TunnelMetric, 1000),
-		targetedMessages: make(map[string]string),
+		cfg:                cfg,
+		chiselServer:       chiselSrv,
+		registry:           registry,
+		proxyHandler:       proxyHandler,
+		chiselProxy:        chiselProxy,
+		db:                 database,
+		mailSender:         mailSender,
+		ctx:                ctx,
+		cancel:             cancel,
+		rateLimiters:       make(map[string]*rate.Limiter),
+		violations:         make(map[string]int),
+		metricsQueue:       make(chan *db.TunnelMetric, 1000),
+		targetedMessages:   make(map[string]string),
+		lastPortalActivity: make(map[string]time.Time),
 	}
 
 	// Initialize i18n dynamic engine
@@ -2032,7 +2039,43 @@ func (s *Server) handleAdminListUsers(w http.ResponseWriter, r *http.Request, ac
 		}
 	}
 
-	_ = json.NewEncoder(w).Encode(filtered)
+	type AdminUserResponse struct {
+		*db.User
+		PortalActive  bool           `json:"portal_active"`
+		ActiveTunnels []*TunnelLease `json:"active_tunnels"`
+	}
+
+	var allLeases []*TunnelLease
+	if s.registry != nil {
+		allLeases = s.registry.ListLeases()
+	}
+
+	responseList := make([]*AdminUserResponse, 0, len(filtered))
+	for _, u := range filtered {
+		s.portalActivityMu.RLock()
+		lastCheckin, found := s.lastPortalActivity[u.ID]
+		s.portalActivityMu.RUnlock()
+
+		portalActive := false
+		if found && time.Since(lastCheckin) < 30*time.Second {
+			portalActive = true
+		}
+
+		userLeases := make([]*TunnelLease, 0)
+		for _, l := range allLeases {
+			if l.UserID == u.ID {
+				userLeases = append(userLeases, l)
+			}
+		}
+
+		responseList = append(responseList, &AdminUserResponse{
+			User:          u,
+			PortalActive:  portalActive,
+			ActiveTunnels: userLeases,
+		})
+	}
+
+	_ = json.NewEncoder(w).Encode(responseList)
 }
 
 func (s *Server) handleAdminInviteUser(w http.ResponseWriter, r *http.Request, actor string) {
@@ -2187,18 +2230,38 @@ func (s *Server) handleAdminBroadcast(w http.ResponseWriter, r *http.Request, ac
 
 func (s *Server) handleAdminMaintenance(w http.ResponseWriter, r *http.Request, actor string) {
 	var req struct {
-		Enabled          bool `json:"enabled"`
-		CountdownMinutes *int `json:"countdown_minutes"`
+		Enabled          bool   `json:"enabled"`
+		CountdownMinutes *int   `json:"countdown_minutes,omitempty"`
+		Action           string `json:"action,omitempty"`
+		Reason           string `json:"reason,omitempty"`
+		Duration         int    `json:"duration,omitempty"`
+		IronCurtain      bool   `json:"iron_curtain,omitempty"`
 	}
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 		http.Error(w, `{"error":"Invalid payload"}`, http.StatusBadRequest)
 		return
 	}
 
+	// Owner check for Iron Curtain Mode
+	if req.IronCurtain {
+		isOwner := strings.EqualFold(actor, s.cfg.Owner.UserID)
+		if !isOwner && s.db != nil {
+			if u, err := s.db.GetUserByEmail(actor); err == nil && u != nil {
+				if u.Role == "owner" {
+					isOwner = true
+				}
+			}
+		}
+		if !isOwner {
+			http.Error(w, `{"error":"Forbidden: Only the system owner is authorized to toggle Nginx Iron Curtain Maintenance Mode."}`, http.StatusForbidden)
+			return
+		}
+	}
+
 	s.maintMutex.Lock()
 	defer s.maintMutex.Unlock()
 
-	// Cancel any pending timers if disabling or toggling state
+	// Cancel any pending countdown timers
 	if s.maintTimer != nil {
 		s.maintTimer.Stop()
 		s.maintTimer = nil
@@ -2206,25 +2269,80 @@ func (s *Server) handleAdminMaintenance(w http.ResponseWriter, r *http.Request, 
 
 	action := "system.maintenance_disabled"
 	desc := "Admin disabled system maintenance mode"
+	if req.IronCurtain {
+		action = "system.nginx_maintenance_disabled"
+		desc = "Owner disabled Nginx Iron Curtain maintenance mode"
+	}
 
 	if req.Enabled {
-		countdown := 0
-		if req.CountdownMinutes != nil {
-			countdown = *req.CountdownMinutes
+		if req.Action == "" {
+			req.Action = "Server Upgrade"
+		}
+		if req.Reason == "" {
+			req.Reason = "System upgrade and maintenance"
+		}
+		if req.Duration <= 0 {
+			req.Duration = 30
 		}
 
-		if countdown > 0 {
-			// Schedule maintenance
-			s.maintenanceMode = false
-			s.maintScheduledAt = time.Now().Add(time.Duration(countdown) * time.Minute)
-			s.maintTimer = time.AfterFunc(time.Duration(countdown)*time.Minute, func() {
-				s.maintMutex.Lock()
-				s.maintenanceMode = true
-				s.maintScheduledAt = time.Time{}
-				s.maintTimer = nil
-				s.maintMutex.Unlock()
+		s.maintAction = req.Action
+		s.maintReason = req.Reason
+		s.maintDuration = req.Duration
 
-				// Forcefully kick all active standard (non-admin) tunnel leases
+		if req.IronCurtain {
+			// Nginx Hard Maintenance (Iron Curtain)
+			s.maintEndTime = time.Now().Add(time.Duration(req.Duration) * time.Minute)
+			s.writeNginxMaintenanceFiles(req.Action, req.Reason, req.Duration, s.maintEndTime)
+
+			action = "system.nginx_maintenance_enabled"
+			desc = fmt.Sprintf("Owner enabled Nginx Iron Curtain maintenance mode immediate: %s (%s)", req.Action, req.Reason)
+		} else {
+			// In-App Soft Maintenance
+			countdown := 0
+			if req.CountdownMinutes != nil {
+				countdown = *req.CountdownMinutes
+			}
+
+			if countdown > 0 {
+				s.maintenanceMode = false
+				s.maintScheduledAt = time.Now().Add(time.Duration(countdown) * time.Minute)
+				s.maintTimer = time.AfterFunc(time.Duration(countdown)*time.Minute, func() {
+					s.maintMutex.Lock()
+					s.maintenanceMode = true
+					s.maintEndTime = time.Now().Add(time.Duration(req.Duration) * time.Minute)
+					s.maintScheduledAt = time.Time{}
+					s.maintTimer = nil
+					s.maintMutex.Unlock()
+
+					// Kick standard tunnels
+					leases := s.registry.ListLeases()
+					for _, lease := range leases {
+						isLeaseAdmin := false
+						if s.db != nil {
+							if u, err := s.db.GetUserByEmail(lease.UserID); err == nil && u != nil {
+								if u.Role == "admin" || u.Role == "owner" {
+									isLeaseAdmin = true
+								}
+							}
+						}
+						if !isLeaseAdmin && s.cfg.Owner.UserID != "" && strings.EqualFold(lease.UserID, s.cfg.Owner.UserID) {
+							isLeaseAdmin = true
+						}
+						if !isLeaseAdmin {
+							s.registry.KickLease(lease.SubdomainPrefix)
+						}
+					}
+					log.Printf("[Server] Scheduled Soft Maintenance countdown hit 0. Soft Maintenance Mode is now ACTIVE.")
+				})
+
+				action = "system.maintenance_scheduled"
+				desc = fmt.Sprintf("Admin scheduled soft maintenance in %d minutes: %s (%s)", countdown, req.Action, req.Reason)
+			} else {
+				s.maintenanceMode = true
+				s.maintEndTime = time.Now().Add(time.Duration(req.Duration) * time.Minute)
+				s.maintScheduledAt = time.Time{}
+
+				// Kick standard tunnels
 				leases := s.registry.ListLeases()
 				for _, lease := range leases {
 					isLeaseAdmin := false
@@ -2242,42 +2360,23 @@ func (s *Server) handleAdminMaintenance(w http.ResponseWriter, r *http.Request, 
 						s.registry.KickLease(lease.SubdomainPrefix)
 					}
 				}
-				log.Printf("[Server] Scheduled Maintenance countdown hit 0. Gateway Maintenance Mode is now ACTIVE.")
-			})
 
-			action = "system.maintenance_scheduled"
-			desc = fmt.Sprintf("Admin scheduled system maintenance starting in %d minutes", countdown)
-		} else {
-			// Immediate activation
-			s.maintenanceMode = true
-			s.maintScheduledAt = time.Time{}
-
-			// Kick all active standard (non-admin) tunnel leases
-			leases := s.registry.ListLeases()
-			for _, lease := range leases {
-				isLeaseAdmin := false
-				if s.db != nil {
-					if u, err := s.db.GetUserByEmail(lease.UserID); err == nil && u != nil {
-						if u.Role == "admin" || u.Role == "owner" {
-							isLeaseAdmin = true
-						}
-					}
-				}
-				if !isLeaseAdmin && s.cfg.Owner.UserID != "" && strings.EqualFold(lease.UserID, s.cfg.Owner.UserID) {
-					isLeaseAdmin = true
-				}
-				if !isLeaseAdmin {
-					s.registry.KickLease(lease.SubdomainPrefix)
-				}
+				action = "system.maintenance_enabled"
+				desc = fmt.Sprintf("Admin enabled soft maintenance mode immediate: %s (%s)", req.Action, req.Reason)
 			}
-
-			action = "system.maintenance_enabled"
-			desc = "Admin enabled system maintenance mode immediately"
 		}
 	} else {
-		// Complete deactivation
+		// Deactivate
 		s.maintenanceMode = false
 		s.maintScheduledAt = time.Time{}
+		s.maintEndTime = time.Time{}
+		s.maintAction = ""
+		s.maintReason = ""
+		s.maintDuration = 0
+
+		if req.IronCurtain {
+			s.removeNginxMaintenanceFiles()
+		}
 	}
 
 	s.writeAudit(actor, action, "system", "all", desc, r)
@@ -2289,63 +2388,144 @@ func (s *Server) handleAdminMaintenance(w http.ResponseWriter, r *http.Request, 
 		maintStr = "pending"
 	}
 
+	hardActive := s.isNginxMaintenanceActive()
+
 	respondJSON(w, http.StatusOK, map[string]interface{}{
 		"status":           "ok",
 		"maintenance_mode": maintStr,
+		"iron_curtain":     hardActive,
 	})
 }
 
-func (s *Server) handleVisitorMaintenancePage(w http.ResponseWriter, _ *http.Request) {
+func (s *Server) handleVisitorMaintenancePage(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
 	w.WriteHeader(http.StatusServiceUnavailable)
-	_, _ = w.Write([]byte(`<!DOCTYPE html>
-<html lang="en">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Scheduled Maintenance | Liferay Tunnel</title>
-    <link rel="icon" type="image/x-icon" href="/favicon.ico">
-    <link rel="preconnect" href="https://fonts.googleapis.com">
-    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-    <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;600;800&display=swap" rel="stylesheet">
-    <style>
-        body {
-            font-family: 'Outfit', sans-serif;
-            background: linear-gradient(135deg, #0f172a 0%, #111827 100%);
-            color: #f8fafc;
-            min-height: 100vh;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            padding: 24px;
-            margin: 0;
-        }
-        .card {
-            background: rgba(30, 41, 59, 0.7);
-            border: 1px solid rgba(255, 255, 255, 0.08);
-            backdrop-filter: blur(20px);
-            border-radius: 24px;
-            padding: 48px 32px;
-            max-width: 480px;
-            width: 100%;
-            text-align: center;
-            box-shadow: 0 20px 40px rgba(0, 0, 0, 0.3);
-        }
-        .icon { font-size: 48px; margin-bottom: 20px; display: block; }
-        h1 { font-size: 26px; font-weight: 800; margin-bottom: 12px; color: #f8fafc; }
-        p { font-size: 15px; color: #94a3b8; line-height: 1.6; margin-bottom: 24px; font-weight: 300; }
-        .footer { font-size: 11px; color: #475569; letter-spacing: 1px; }
-    </style>
-</head>
-<body>
-    <div class="card">
-        <span class="icon">🛠️</span>
-        <h1>Scheduled Maintenance</h1>
-        <p>This Liferay Tunnel environment is currently undergoing scheduled administrative maintenance. Standard connection tunnels are paused, but we expect to be fully back online shortly. Thank you for your patience!</p>
-        <div class="footer">LFR-GATEWAY &bull; MAINTENANCE MODE</div>
-    </div>
-</body>
-</html>`))
+
+	htmlBytes, err := staticFS.ReadFile("static/maintenance.html")
+	if err != nil {
+		_, _ = w.Write([]byte(`<h1>Scheduled Maintenance</h1><p>The gateway is undergoing administrative updates.</p>`))
+		return
+	}
+
+	htmlContent := string(htmlBytes)
+	s.maintMutex.RLock()
+	action := s.maintAction
+	reason := s.maintReason
+	duration := s.maintDuration
+	endTime := s.maintEndTime
+	s.maintMutex.RUnlock()
+
+	if action == "" {
+		action = "Server Upgrade"
+	}
+	if reason == "" {
+		reason = "System upgrade and maintenance"
+	}
+	durationStr := fmt.Sprintf("%d minutes", duration)
+	if duration >= 60 {
+		durationStr = fmt.Sprintf("%d hour(s)", (duration+59)/60)
+	}
+
+	htmlContent = strings.ReplaceAll(htmlContent, "__ACTION__", action)
+	htmlContent = strings.ReplaceAll(htmlContent, "__REASON__", reason)
+	htmlContent = strings.ReplaceAll(htmlContent, "__DURATION__", durationStr)
+
+	epochSecs := endTime.Unix()
+	if endTime.IsZero() {
+		epochSecs = time.Now().Unix()
+	}
+	htmlContent = strings.ReplaceAll(htmlContent, "__END_TIME__", strconv.FormatInt(epochSecs, 10))
+
+	_, _ = w.Write([]byte(htmlContent))
+}
+
+func (s *Server) writeNginxMaintenanceFiles(action, reason string, duration int, endTime time.Time) {
+	triggerPath := s.cfg.MaintenanceTriggerPath
+	if triggerPath == "" {
+		if fi, err := os.Stat("/var/lib/lfr-tunneld"); err == nil && fi.IsDir() {
+			triggerPath = "/var/lib/lfr-tunneld/maintenance.enable"
+		}
+	}
+	if triggerPath == "" {
+		log.Printf("[Server] Nginx maintenance trigger path not resolved; skipping Nginx hard maintenance.")
+		return
+	}
+
+	triggerDir := filepath.Dir(triggerPath)
+	if err := os.MkdirAll(triggerDir, 0755); err != nil {
+		log.Printf("[Server] Failed to create trigger directory: %v", err)
+		return
+	}
+	if err := os.WriteFile(triggerPath, []byte("enabled"), 0644); err != nil {
+		log.Printf("[Server] Failed to write Nginx maintenance trigger file: %v", err)
+		return
+	}
+
+	htmlBytes, err := staticFS.ReadFile("static/maintenance.html")
+	if err != nil {
+		log.Printf("[Server] Failed to read static template: %v", err)
+		return
+	}
+
+	htmlContent := string(htmlBytes)
+	durationStr := fmt.Sprintf("%d minutes", duration)
+	if duration >= 60 {
+		durationStr = fmt.Sprintf("%d hour(s)", (duration+59)/60)
+	}
+
+	htmlContent = strings.ReplaceAll(htmlContent, "__ACTION__", action)
+	htmlContent = strings.ReplaceAll(htmlContent, "__REASON__", reason)
+	htmlContent = strings.ReplaceAll(htmlContent, "__DURATION__", durationStr)
+	htmlContent = strings.ReplaceAll(htmlContent, "__END_TIME__", strconv.FormatInt(endTime.Unix(), 10))
+
+	htmlDestPath := filepath.Join(triggerDir, "maintenance.html")
+	if err := os.WriteFile(htmlDestPath, []byte(htmlContent), 0644); err != nil {
+		log.Printf("[Server] Failed to write Nginx maintenance HTML file: %v", err)
+	} else {
+		log.Printf("[Server] Nginx maintenance HTML written successfully to %s", htmlDestPath)
+	}
+
+	vpsWebRoot := "/var/www/lfr-tunnel"
+	if fi, err := os.Stat(vpsWebRoot); err == nil && fi.IsDir() {
+		destFilePath := filepath.Join(vpsWebRoot, "maintenance.html")
+		if err := os.WriteFile(destFilePath, []byte(htmlContent), 0644); err != nil {
+			log.Printf("[Server] Could not write directly to %s: %v", destFilePath, err)
+		} else {
+			log.Printf("[Server] Custom maintenance page successfully copied to %s", destFilePath)
+		}
+	}
+}
+
+func (s *Server) removeNginxMaintenanceFiles() {
+	triggerPath := s.cfg.MaintenanceTriggerPath
+	if triggerPath == "" {
+		if fi, err := os.Stat("/var/lib/lfr-tunneld"); err == nil && fi.IsDir() {
+			triggerPath = "/var/lib/lfr-tunneld/maintenance.enable"
+		}
+	}
+	if triggerPath == "" {
+		return
+	}
+
+	_ = os.Remove(triggerPath)
+	triggerDir := filepath.Dir(triggerPath)
+	_ = os.Remove(filepath.Join(triggerDir, "maintenance.html"))
+	_ = os.Remove("/var/www/lfr-tunnel/maintenance.html")
+}
+
+func (s *Server) isNginxMaintenanceActive() bool {
+	triggerPath := s.cfg.MaintenanceTriggerPath
+	if triggerPath == "" {
+		if fi, err := os.Stat("/var/lib/lfr-tunneld"); err == nil && fi.IsDir() {
+			triggerPath = "/var/lib/lfr-tunneld/maintenance.enable"
+		}
+	}
+	if triggerPath != "" {
+		if _, err := os.Stat(triggerPath); err == nil {
+			return true
+		}
+	}
+	return false
 }
 
 func (s *Server) handleAdminGetUser(w http.ResponseWriter, r *http.Request, actor string) {

@@ -55,6 +55,7 @@ type ServerConfig struct {
 	DisableBackupScheduler bool             `yaml:"disable_backup_scheduler"`
 	DockerImage            string           `yaml:"docker_image"`
 	DockerBypassURL        string           `yaml:"docker_bypass_url"`
+	MaintenanceTriggerPath string           `yaml:"maintenance_trigger_path"`
 
 	// Dynamic SSO/OIDC Providers
 	SSOProviders []SSOProviderConfig `yaml:"sso_providers"`

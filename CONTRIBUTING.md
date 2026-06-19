@@ -18,10 +18,14 @@ We love new ideas! Please use the Feature Request template when opening a new is
 ### Pull Requests
 
 1. **GitHub Issues**: A Github issue SHOULD be created for any bug fix or feature. This helps track progress and is required for generating the `CHANGELOG.md` entry.
-2. **Branching Strategy**:
-   - **`master`**: Strictly for environmental hardening, stable maintenance, and verified hotfixes. No direct commits or pre-releases should be cut from master.
-   - **Roadmap / Features**: Large roadmap items, complex features, or experimental refactors MUST use dedicated branches (e.g., `roadmap/feature-name`). All testing and pre-releases (tags matching `v*-pre.*`) must be cut and built directly on these branches.
-   - **Cleanup**: Delete your feature branch immediately after it has been merged into `master`.
+2. **Branching Strategy & PR Workflow**:
+   - **`master`**: Strictly for production-ready, stable releases. Direct pushes to `master` are blocked; all changes must go through a Pull Request (PR).
+   - **Feature Branches**: Develop new features, visual dashboard updates, or configuration additions on branches prefixed with `feature/` (e.g., `feature/dashboard-version-indicator`).
+   - **Bug Fix Branches**: Develop bug fixes, logic corrections, or error patches on branches prefixed with `fix/` (e.g., `fix/api-me-missing-language-field`).
+   - **Roadmap / Pre-releases**: Complex roadmap components or experimental builds must use dedicated `roadmap/` or `release/` branches (e.g., `release/v1.7.7`).
+   - **Conflict Resolution**: Before submitting a PR or merging it, pull the latest `master` into your branch to verify there are no merge conflicts. Resolve all conflicts locally prior to PR completion.
+   - **Pass CI Gates**: PRs must pass all automated Github Actions checks, including unit tests, formatting, and lint rules, before they can be merged.
+   - **Cleanup**: Delete both local and remote feature/fix branches immediately after they are merged into `master`.
 3. If you are working on a stability or hardening task, please align with our **Hardening Workflow**.
 4. **Pass the Lint Check**: Before submitting, you MUST run the local checks:
 

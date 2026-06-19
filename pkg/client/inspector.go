@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"log"
 	"net/http"
+	"os"
 )
 
 //go:embed inspector.html
@@ -60,11 +61,26 @@ func StartInspector(port int, engine *InterceptorEngine) {
 		fmt.Fprintf(w, `{"status":"ok"}`) //nolint:errcheck
 	})
 
-	addr := fmt.Sprintf("127.0.0.1:%d", port)
+	bindIP := "127.0.0.1"
+	if envBind := os.Getenv("LFT_INSPECTOR_BIND"); envBind != "" {
+		bindIP = envBind
+	} else if isDocker() {
+		bindIP = "0.0.0.0"
+	}
+
+	addr := fmt.Sprintf("%s:%d", bindIP, port)
 	go func() {
 		log.Printf("[Inspector] Local Dashboard running at http://%s\n", addr)
 		if err := http.ListenAndServe(addr, mux); err != nil {
-			log.Printf("[Inspector] Failed to start on %d: %v", port, err)
+			log.Printf("[Inspector] Failed to start on %s: %v", addr, err)
 		}
 	}()
+}
+
+// isDocker checks if the application is running inside a Docker container.
+func isDocker() bool {
+	if _, err := os.Stat("/.dockerenv"); err == nil {
+		return true
+	}
+	return false
 }

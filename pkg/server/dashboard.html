@@ -125,6 +125,7 @@
                 <div id="nav-magic" class="nav-item" onclick="showTab('magic')" data-i18n="sidebar_magic">Magic Links</div>
 
                 <div class="sidebar-label" style="margin-top: 24px;" data-i18n="sidebar_maintenance">Maintenance</div>
+                <div id="nav-maintenance" class="nav-item" onclick="showTab('maintenance')" data-i18n="sidebar_maintenance_mode">Gateway Maintenance</div>
                 <div id="nav-backups" class="nav-item" onclick="showTab('backups')" data-i18n="sidebar_backups">Database Backups</div>
             </div>
             
@@ -378,72 +379,6 @@
                     <h2>Users</h2>
                     <button class="btn btn-primary" style="width: auto; margin:0;" onclick="openInviteModal()">Invite User</button>
                 </div>
-                <div class="glass" style="padding: 24px; margin-bottom: 24px; border-left: 4px solid #f59e0b;">
-                    <h4 style="margin-bottom: 4px; font-size: 15px; font-weight: 600; color: #f59e0b;">🛠️ Gateway Soft Maintenance Mode</h4>
-                    <p style="color: var(--text-muted); font-size: 12px; margin-bottom: 16px; line-height: 1.4;">
-                        Activating Soft Maintenance Mode blocks standard user logins, rejects new tunnel connections, and kicks active standard tunnels. Visitors trying to access developer subdomains will receive a scheduled maintenance page. 
-                        <strong>Administrators and Owners will remain fully unblocked so they can manage the portal and disable this mode from the dashboard.</strong>
-                    </p>
-                    
-                    <div id="maint-soft-input-fields" style="display: flex; flex-direction: column; gap: 12px; margin-bottom: 16px; max-width: 500px;">
-                        <div style="display: flex; gap: 12px;">
-                            <div style="flex: 1;">
-                                <label style="display:block; color: var(--text-muted); font-size: 11px; text-transform: uppercase; font-weight: 600; margin-bottom: 4px;">Action Name</label>
-                                <input type="text" id="maint-soft-action" class="input-field" value="Server Upgrade" style="width: 100%; box-sizing: border-box;" />
-                            </div>
-                            <div style="flex: 1;">
-                                <label style="display:block; color: var(--text-muted); font-size: 11px; text-transform: uppercase; font-weight: 600; margin-bottom: 4px;">Duration (Minutes)</label>
-                                <input type="number" id="maint-soft-duration" class="input-field" value="30" min="1" style="width: 100%; box-sizing: border-box;" />
-                            </div>
-                        </div>
-                        <div>
-                            <label style="display:block; color: var(--text-muted); font-size: 11px; text-transform: uppercase; font-weight: 600; margin-bottom: 4px;">Reason / Details</label>
-                            <input type="text" id="maint-soft-reason" class="input-field" value="System upgrade and maintenance" style="width: 100%; box-sizing: border-box;" />
-                        </div>
-                    </div>
-
-                    <div style="display: flex; gap: 12px; align-items: center; flex-wrap: wrap;">
-                        <span id="maint-status-text" style="font-weight: bold; font-size: 13px; color: var(--text-muted); margin-right: 12px;">Status: Loading...</span>
-                        <select id="maint-countdown-select" class="input-field" style="width: auto; margin: 0; padding: 6px 12px; font-size: 13px; height: auto; background: rgba(255,255,255,0.05); border-color: rgba(255,255,255,0.1);">
-                            <option value="0">Immediate Activation ⚡</option>
-                            <option value="1">Schedule in 1 Minute ⏳</option>
-                            <option value="5" selected>Schedule in 5 Minutes ⏳</option>
-                            <option value="10">Schedule in 10 Minutes ⏳</option>
-                            <option value="30">Schedule in 30 Minutes ⏳</option>
-                        </select>
-                        <button id="btn-toggle-maint" class="btn" style="width: auto; margin: 0; padding: 6px 16px; font-weight: 500;" onclick="toggleSoftMaintenanceMode()">Enable Soft Maintenance</button>
-                    </div>
-                </div>
-
-                <div id="maint-iron-curtain-card" class="glass" style="display: none; padding: 24px; margin-bottom: 24px; border-left: 4px solid var(--danger);">
-                    <h4 style="margin-bottom: 4px; font-size: 15px; font-weight: 600; color: var(--danger);">🔒 Nginx Iron Curtain Mode (Hard Maintenance - Owner Only)</h4>
-                    <p style="color: var(--text-muted); font-size: 12px; margin-bottom: 16px; line-height: 1.4;">
-                        Activating Nginx Iron Curtain Mode creates the trigger file on the server. Nginx will immediately block **all** external incoming requests—including developer tunnels and the Admin Dashboard itself. 
-                        <strong style="color: #ef4444;">Warning: You will be disconnected and unable to log in to disable this via the portal. It must be disabled via SSH on the VPS using the restore scripts.</strong>
-                    </p>
-
-                    <div id="maint-hard-input-fields" style="display: flex; flex-direction: column; gap: 12px; margin-bottom: 16px; max-width: 500px;">
-                        <div style="display: flex; gap: 12px;">
-                            <div style="flex: 1;">
-                                <label style="display:block; color: var(--text-muted); font-size: 11px; text-transform: uppercase; font-weight: 600; margin-bottom: 4px;">Action Name</label>
-                                <input type="text" id="maint-hard-action" class="input-field" value="Database Restoration" style="width: 100%; box-sizing: border-box;" />
-                            </div>
-                            <div style="flex: 1;">
-                                <label style="display:block; color: var(--text-muted); font-size: 11px; text-transform: uppercase; font-weight: 600; margin-bottom: 4px;">Duration (Minutes)</label>
-                                <input type="number" id="maint-hard-duration" class="input-field" value="60" min="1" style="width: 100%; box-sizing: border-box;" />
-                            </div>
-                        </div>
-                        <div>
-                            <label style="display:block; color: var(--text-muted); font-size: 11px; text-transform: uppercase; font-weight: 600; margin-bottom: 4px;">Reason / Details</label>
-                            <input type="text" id="maint-hard-reason" class="input-field" value="Performing database restore operations." style="width: 100%; box-sizing: border-box;" />
-                        </div>
-                    </div>
-
-                    <div style="display: flex; gap: 12px; align-items: center; flex-wrap: wrap;">
-                        <span id="maint-hard-status-text" style="font-weight: bold; font-size: 13px; color: var(--text-muted); margin-right: 12px;">Status: Inactive 🟢</span>
-                        <button id="btn-toggle-hard-maint" class="btn" style="width: auto; margin: 0; padding: 6px 16px; font-weight: 500; background: var(--danger); color: white; border: none;" onclick="toggleHardMaintenanceMode()">Enable Iron Curtain</button>
-                    </div>
-                </div>
                 <div class="glass" style="padding: 16px; margin-bottom: 24px;">
                     <h4 style="margin-bottom: 8px; color: var(--text-muted); font-size: 14px; font-weight: 500;">Global Broadcast Message</h4>
                     <div style="display: flex; gap: 12px;">
@@ -517,6 +452,79 @@
                         <thead><tr><th data-sort="filename">Filename</th><th data-sort="size_bytes">Size</th><th data-sort="created_at">Created (UTC)</th></tr></thead>
                         <tbody id="backups-table-body"><tr><td colspan="3" style="text-align:center;opacity:0.6;">Loading...</td></tr></tbody>
                     </table>
+                </div>
+            </div>
+
+            <!-- Maintenance Tab -->
+            <div id="tab-maintenance" class="hidden">
+                <div class="header">
+                    <h2>Gateway Maintenance</h2>
+                </div>
+                <div class="glass" style="padding: 24px; margin-bottom: 24px; border-left: 4px solid #f59e0b;">
+                    <h4 style="margin-bottom: 4px; font-size: 15px; font-weight: 600; color: #f59e0b;">🛠️ Gateway Soft Maintenance Mode</h4>
+                    <p style="color: var(--text-muted); font-size: 12px; margin-bottom: 16px; line-height: 1.4;">
+                        Activating Soft Maintenance Mode blocks standard user logins, rejects new tunnel connections, and kicks active standard tunnels. Visitors trying to access developer subdomains will receive a scheduled maintenance page. 
+                        <strong>Administrators and Owners will remain fully unblocked so they can manage the portal and disable this mode from the dashboard.</strong>
+                    </p>
+                    
+                    <div id="maint-soft-input-fields" style="display: flex; flex-direction: column; gap: 12px; margin-bottom: 16px; max-width: 500px;">
+                        <div style="display: flex; gap: 12px;">
+                            <div style="flex: 1;">
+                                <label style="display:block; color: var(--text-muted); font-size: 11px; text-transform: uppercase; font-weight: 600; margin-bottom: 4px;">Action Name</label>
+                                <input type="text" id="maint-soft-action" class="input-field" value="Server Upgrade" style="width: 100%; box-sizing: border-box;" />
+                            </div>
+                            <div style="flex: 1;">
+                                <label style="display:block; color: var(--text-muted); font-size: 11px; text-transform: uppercase; font-weight: 600; margin-bottom: 4px;">Duration (Minutes)</label>
+                                <input type="number" id="maint-soft-duration" class="input-field" value="30" min="1" style="width: 100%; box-sizing: border-box;" />
+                            </div>
+                        </div>
+                        <div>
+                            <label style="display:block; color: var(--text-muted); font-size: 11px; text-transform: uppercase; font-weight: 600; margin-bottom: 4px;">Reason / Details</label>
+                            <input type="text" id="maint-soft-reason" class="input-field" value="System upgrade and maintenance" style="width: 100%; box-sizing: border-box;" />
+                        </div>
+                    </div>
+
+                    <div style="display: flex; gap: 12px; align-items: center; flex-wrap: wrap;">
+                        <span id="maint-status-text" style="font-weight: bold; font-size: 13px; color: var(--text-muted); margin-right: 12px;">Status: Loading...</span>
+                        <select id="maint-countdown-select" class="input-field" style="width: auto; margin: 0; padding: 6px 12px; font-size: 13px; height: auto; background: rgba(255,255,255,0.05); border-color: rgba(255,255,255,0.1);">
+                            <option value="0">Immediate Activation ⚡</option>
+                            <option value="1">Schedule in 1 Minute ⏳</option>
+                            <option value="5" selected>Schedule in 5 Minutes ⏳</option>
+                            <option value="10">Schedule in 10 Minutes ⏳</option>
+                            <option value="30">Schedule in 30 Minutes ⏳</option>
+                        </select>
+                        <button id="btn-toggle-maint" class="btn" style="width: auto; margin: 0; padding: 6px 16px; font-weight: 500;" onclick="toggleSoftMaintenanceMode()">Enable Soft Maintenance</button>
+                    </div>
+                </div>
+
+                <div id="maint-iron-curtain-card" class="glass" style="display: none; padding: 24px; margin-bottom: 24px; border-left: 4px solid var(--danger);">
+                    <h4 style="margin-bottom: 4px; font-size: 15px; font-weight: 600; color: var(--danger);">🔒 Nginx Iron Curtain Mode (Hard Maintenance - Owner Only)</h4>
+                    <p style="color: var(--text-muted); font-size: 12px; margin-bottom: 16px; line-height: 1.4;">
+                        Activating Nginx Iron Curtain Mode creates the trigger file on the server. Nginx will immediately block **all** external incoming requests—including developer tunnels and the Admin Dashboard itself. 
+                        <strong style="color: #ef4444;">Warning: You will be disconnected and unable to log in to disable this via the portal. It must be disabled via SSH on the VPS using the restore scripts.</strong>
+                    </p>
+
+                    <div id="maint-hard-input-fields" style="display: flex; flex-direction: column; gap: 12px; margin-bottom: 16px; max-width: 500px;">
+                        <div style="display: flex; gap: 12px;">
+                            <div style="flex: 1;">
+                                <label style="display:block; color: var(--text-muted); font-size: 11px; text-transform: uppercase; font-weight: 600; margin-bottom: 4px;">Action Name</label>
+                                <input type="text" id="maint-hard-action" class="input-field" value="Database Restoration" style="width: 100%; box-sizing: border-box;" />
+                            </div>
+                            <div style="flex: 1;">
+                                <label style="display:block; color: var(--text-muted); font-size: 11px; text-transform: uppercase; font-weight: 600; margin-bottom: 4px;">Duration (Minutes)</label>
+                                <input type="number" id="maint-hard-duration" class="input-field" value="60" min="1" style="width: 100%; box-sizing: border-box;" />
+                            </div>
+                        </div>
+                        <div>
+                            <label style="display:block; color: var(--text-muted); font-size: 11px; text-transform: uppercase; font-weight: 600; margin-bottom: 4px;">Reason / Details</label>
+                            <input type="text" id="maint-hard-reason" class="input-field" value="Performing database restore operations." style="width: 100%; box-sizing: border-box;" />
+                        </div>
+                    </div>
+
+                    <div style="display: flex; gap: 12px; align-items: center; flex-wrap: wrap;">
+                        <span id="maint-hard-status-text" style="font-weight: bold; font-size: 13px; color: var(--text-muted); margin-right: 12px;">Status: Inactive 🟢</span>
+                        <button id="btn-toggle-hard-maint" class="btn" style="width: auto; margin: 0; padding: 6px 16px; font-weight: 500; background: var(--danger); color: white; border: none;" onclick="toggleHardMaintenanceMode()">Enable Iron Curtain</button>
+                    </div>
                 </div>
             </div>
         </div>

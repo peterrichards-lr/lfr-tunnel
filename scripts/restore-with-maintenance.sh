@@ -23,7 +23,8 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
 # ── Coordinate Maintenance Mode ──────────────────────────────────────────────
 info "Entering maintenance window..."
-"${SCRIPT_DIR}/enable-maintenance.sh"
+"${SCRIPT_DIR}/enable-maintenance.sh" "Database Restore" "database restoration/optimization" "180"
+
 
 # Ensure we always clean up and disable maintenance mode on script exit
 cleanup() {

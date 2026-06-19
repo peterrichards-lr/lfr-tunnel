@@ -1031,6 +1031,7 @@ function toggleTheme() {
             if (tabName === 'audit') loadAudit();
             if (tabName === 'magic') loadAdminMagicLinks();
             if (tabName === 'backups') loadBackups();
+            if (tabName === 'maintenance') loadMaintenanceStatus();
             if (tabName === 'tokens') loadTokens();
             if (tabName === 'tunnels') loadTunnels();
             if (tabName === 'analytics') loadAnalytics();
@@ -1497,6 +1498,18 @@ function toggleTheme() {
                         <td>${l.used_at ? formatLocalTime(l.used_at) : 'Unused'}</td>
                     </tr>
                 `);
+            }
+        }
+
+        async function loadMaintenanceStatus() {
+            try {
+                const res = await fetch('/api/admin/maintenance');
+                if (res.ok) {
+                    const data = await res.json();
+                    updateMaintenanceModeUI(data.maintenance_mode, data.iron_curtain);
+                }
+            } catch (e) {
+                console.error("Failed to load maintenance status", e);
             }
         }
 

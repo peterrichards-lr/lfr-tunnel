@@ -1,0 +1,14 @@
+{
+  "version": "v1.7.9",
+  "release_date": "2026-06-19",
+  "features": [
+    "Dual-Mode Maintenance: Soft Maintenance ('Bouncer Mode') allows admins to suspend logins and pause standard developer tunnels while keeping administrative dashboard controls open. Hard Maintenance ('Fire Curtain') uses Nginx files to completely shut down all incoming traffic with secure two-tier owner-only confirmation.",
+    "Portal Activity Check-in: Real-time user online session tracking dot on the Users table.",
+    "User Details & Tunnels Modal: Consolidated administration overlay showing active tunnel ports, public links, client details, and direct lease kicking control.",
+    "Multi-Factor Authentication (MFA): Robust TOTP setup and reset directly integrated into the developer settings and admin console.",
+    "LDM Target Host Interceptor: Rewrite Host headers dynamically (`LFT_TARGET_HOST`) to match local containerized port environments.",
+    "Full Dashboard Localization: Seamless real-time bilingual switching across 9 supported locales.",
+    "Advanced SSO Integrations: Complete OIDC compatibility supporting secure Liferay SSO and Keycloak authorization flows.",
+    "SentinelOne False Positive Mitigations: Embedded Attestation signatures and canonical formula setups for Homebrew and Scoop."
+  ]
+}

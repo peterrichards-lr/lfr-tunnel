@@ -668,18 +668,32 @@ To comply with strict IT auditing frameworks (like SOC2 or ISO 27001), you can o
 3. **The User Experience**: The Complete Profile Setup page (`setup.html`) will dynamically render a required checkbox. The user cannot submit setup without checking it.
 4. **The Audit Trail**: The server will capture the exact timestamp of consent and save it in the SQLite database under `policy_consent_at`. This provides an airtight compliance record.
 
-### 8.3. Scheduled Maintenance Countdowns
+### 8.3. Dual-Mode Gateway Maintenance (Bouncer Mode vs. Fire Curtain)
 
-To prevent active tunnel connections or client-facing demonstrations from suddenly dropping without warning, administrators can schedule maintenance with a countdown timer.
+To accommodate different levels of maintenance urgency, the gateway supports two maintenance modalities configurable directly from the dashboard:
 
-1. Navigate to the **Users** tab inside the Admin Dashboard.
-2. In the **Gateway Maintenance Mode** widget, select a countdown duration (e.g., 5 Minutes) from the dropdown list.
-3. Click **"Enable Maintenance"**.
-4. **The Experience**:
-   * All active portal dashboards will instantly display a prominent, blinking orange warning banner: *"⚠️ Warning: Scheduled Maintenance is starting in 4:52 minutes. All standard tunnels will be paused."*
-   * Standard users will be blocked from logging in with a helpful notification.
-   * Once the countdown hits 0, the server automatically flips into active maintenance, forcefully drops all standard WebSocket tunnels (`KickLease`), and logs out active non-admin portal sessions.
-   * Admins and Owners remain unblocked throughout the entire process so they can manage system resources.
+#### A. Soft Maintenance ("Bouncer Mode" - Admins & Owners)
+Soft Maintenance is designed for routine tasks, upgrades, or database checks. It acts like a bouncer checking IDs at the door:
+1. **How to Trigger**:
+   * Navigate to the **Users** tab in the Admin Dashboard.
+   * Under the **Gateway Soft Maintenance Mode** card, specify the Action Name, Reason, and Duration.
+   * Select a countdown duration (e.g., Immediate, or 5 Minutes) and click **"Enable Soft Maintenance"**.
+2. **Behavior & Experience**:
+   * All active dashboards show a prominent countdown warning banner: *"⚠️ Scheduled Maintenance starting in X:XX minutes! All standard tunnels will be paused."*
+   * Once active, all standard client tunnels are forcefully dropped (`KickLease`), new CLI connections are blocked, and standard users are blocked from logging into the portal.
+   * **Admins and Owners remain fully unblocked**—the control panel dashboard and API endpoints remain online so you can manage resources and disable maintenance directly from the UI.
+
+#### B. Nginx Hard Maintenance ("Fire Curtain" - Owner Only)
+For high-risk operations, database restores, or full server downtime, the Platform Owner can drop a Nginx "Fire Curtain" that completely seals the server:
+1. **How to Trigger**:
+   * Navigate to the **Users** tab (only visible if logged in as the `owner`).
+   * Under the **Nginx Iron Curtain Mode** card, fill out the Action Name, Duration, and Reason.
+   * Click **"Enable Iron Curtain"** and type `LOCKOUT` in all caps inside the safety prompt to confirm.
+2. **Behavior & Experience**:
+   * The Go backend immediately writes a `maintenance.enable` trigger file and copies the customized, localized `maintenance.html` fallback template to `/var/lib/lfr-tunneld/` and `/var/www/lfr-tunnel/`.
+   * Nginx immediately intercepts **all** incoming HTTP/HTTPS traffic at the reverse proxy layer, serving the static maintenance page.
+   * **Warning**: This blocks *everyone*, including the Owner and the Admin Dashboard. You will be immediately disconnected.
+   * **Restoration**: To lift the Fire Curtain, you must log in to the VPS via SSH and run `sudo disable-maintenance.sh`.
 
 ### 8.4. Automated Cloudflare Dynamic DNS (DDNS) Service Setup
 

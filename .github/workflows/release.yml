@@ -16,6 +16,22 @@ jobs:
       - name: Checkout Code
         uses: actions/checkout@v4
 
+      - name: Validate Tag Version Matches whats-new.json
+        run: |
+          if [ ! -f pkg/server/static/whats-new.json ]; then
+            echo "❌ Error: pkg/server/static/whats-new.json not found!"
+            exit 1
+          fi
+          JSON_VER=$(jq -r '.version' pkg/server/static/whats-new.json)
+          TAG_VER="${{ github.ref_name }}"
+          JSON_VER_CLEAN="${JSON_VER#v}"
+          TAG_VER_CLEAN="${TAG_VER#v}"
+          if [ "$JSON_VER_CLEAN" != "$TAG_VER_CLEAN" ]; then
+            echo "❌ Error: Pushed tag ($TAG_VER) does not match version in whats-new.json ($JSON_VER)!"
+            exit 1
+          fi
+          echo "✅ Success: Tag ($TAG_VER) matches whats-new.json version ($JSON_VER)."
+
       - name: Set up Go
         uses: actions/setup-go@v5
         with:

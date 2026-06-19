@@ -180,7 +180,7 @@ The solution will consist of:
 - [x] Document Nginx maintenance configuration in `docs/setup_guide.md`.
 - [x] Support dynamic action, reason, and duration details on the maintenance page via scripts.
 - [x] Implement dynamic version number display in the login page footer and sidebar bottom in the dashboard.
-
+- [x] Implement dual-mode maintenance (Bouncer Mode vs Fire Curtain) in portal admin dashboard
 
 ## Documentation and Branching Strategy
 - [x] Review and align markdown files with the current repository state and document the branching/PR conventions in `CONTRIBUTING.md`.
@@ -199,8 +199,6 @@ The solution will consist of:
 - [x] Fix interceptor bypass bug by rewriting client remotes to point to local intercept ports.
 - [x] Update interceptor to support LFT_TARGET_HOST and rewrite HTTP Host header to match the target host.
 - [x] Verify LDM sharing design compatibility and update documentation.
-
-
-
-
-
+- [x] Implement real-time user online portal activity check-in tracking and a decluttered User list table layout.
+- [x] Implement a unified User Details & Active Tunnels Modal with direct tunnel kick capability.
+- [x] Move hardcoded dashboard 'What's New' release notes to a dynamically served JSON file for automated updates.

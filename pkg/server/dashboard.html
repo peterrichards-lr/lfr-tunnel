@@ -108,29 +108,29 @@
                 <span style="font-weight: bold; font-size: 16px; color: var(--text-color); letter-spacing: 0.5px;">Liferay Tunnel</span>
             </div>
             
-            <div class="sidebar-label">Personal</div>
-            <div id="nav-overview" class="nav-item active" onclick="showTab('overview')">Overview</div>
-            <div id="nav-tokens" class="nav-item" onclick="showTab('tokens')">API Tokens</div>
-            <div id="nav-tunnels" class="nav-item" onclick="showTab('tunnels')">Active Tunnels</div>
+            <div class="sidebar-label" data-i18n="sidebar_personal">Personal</div>
+            <div id="nav-overview" class="nav-item active" onclick="showTab('overview')" data-i18n="sidebar_overview">Overview</div>
+            <div id="nav-tokens" class="nav-item" onclick="showTab('tokens')" data-i18n="sidebar_tokens">API Tokens</div>
+            <div id="nav-tunnels" class="nav-item" onclick="showTab('tunnels')" data-i18n="sidebar_tunnels">Active Tunnels</div>
             
             <div id="admin-sidebar-group" class="hidden">
-                <div class="sidebar-label" style="margin-top: 24px;">Administration</div>
-                <div id="nav-registrations" class="nav-item" onclick="showTab('registrations')">Registrations <span id="reg-badge" class="badge" style="display:none; background: var(--danger); color: white; margin-left: 8px;">0</span></div>
-                <div id="nav-users" class="nav-item" onclick="showTab('users')">Users</div>
-                <div id="nav-blacklist" class="nav-item" onclick="showTab('blacklist')">IP Blacklist</div>
+                <div class="sidebar-label" style="margin-top: 24px;" data-i18n="sidebar_administration">Administration</div>
+                <div id="nav-registrations" class="nav-item" onclick="showTab('registrations')"><span data-i18n="sidebar_registrations">Registrations</span> <span id="reg-badge" class="badge" style="display:none; background: var(--danger); color: white; margin-left: 8px;">0</span></div>
+                <div id="nav-users" class="nav-item" onclick="showTab('users')" data-i18n="sidebar_users">Users</div>
+                <div id="nav-blacklist" class="nav-item" onclick="showTab('blacklist')" data-i18n="sidebar_blacklist">IP Blacklist</div>
 
-                <div class="sidebar-label" style="margin-top: 24px;">Reporting</div>
-                <div id="nav-analytics" class="nav-item" onclick="showTab('analytics')">System Analytics</div>
-                <div id="nav-audit" class="nav-item" onclick="showTab('audit')">Audit Logs</div>
-                <div id="nav-magic" class="nav-item" onclick="showTab('magic')">Magic Links</div>
+                <div class="sidebar-label" style="margin-top: 24px;" data-i18n="sidebar_reporting">Reporting</div>
+                <div id="nav-analytics" class="nav-item" onclick="showTab('analytics')" data-i18n="sidebar_analytics">System Analytics</div>
+                <div id="nav-audit" class="nav-item" onclick="showTab('audit')" data-i18n="sidebar_audit">Audit Logs</div>
+                <div id="nav-magic" class="nav-item" onclick="showTab('magic')" data-i18n="sidebar_magic">Magic Links</div>
 
-                <div class="sidebar-label" style="margin-top: 24px;">Maintenance</div>
-                <div id="nav-backups" class="nav-item" onclick="showTab('backups')">Database Backups</div>
+                <div class="sidebar-label" style="margin-top: 24px;" data-i18n="sidebar_maintenance">Maintenance</div>
+                <div id="nav-backups" class="nav-item" onclick="showTab('backups')" data-i18n="sidebar_backups">Database Backups</div>
             </div>
             
             <div class="sidebar-spacer"></div>
             
-            <div id="nav-account" class="nav-item" onclick="showTab('account')">Account Settings</div>
+            <div id="nav-account" class="nav-item" onclick="showTab('account')" data-i18n="sidebar_account">Account Settings</div>
             <div class="nav-item" onclick="logout()">Logout</div>
             <div class="server-version-display" style="font-size: 10px; color: var(--text-muted); opacity: 0.4; margin-top: 16px; padding-left: 16px;"></div>
         </div>
@@ -194,7 +194,10 @@
                                 <span id="docker-pull-text"></span>
                                 <svg viewBox="0 0 24 24" width="16" height="16" stroke="currentColor" stroke-width="2" fill="none" style="flex-shrink:0; margin-left:8px; opacity:0.6;"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>
                             </div>
-                            <a id="docker-hub-link" href="#" target="_blank" style="color: var(--primary); text-decoration: none; font-size: 14px; font-weight: 500; display: inline-block; margin-top: 8px;">→ View on Docker Hub</a>
+                            <div style="display: flex; gap: 16px; margin-top: 8px; flex-wrap: wrap;">
+                                <a id="docker-hub-link" href="#" target="_blank" style="color: var(--primary); text-decoration: none; font-size: 14px; font-weight: 500; display: inline-block;">→ View on Docker Hub</a>
+                                <a id="docker-bypass-link" href="#" target="_blank" style="color: var(--primary); text-decoration: none; font-size: 14px; font-weight: 500; display: none;">→ EDR Bypass Guide</a>
+                            </div>
                         </div>
                     </div>
                 </div>
@@ -218,26 +221,26 @@
             <!-- Account Tab -->
             <div id="tab-account" class="hidden">
                 <div class="header">
-                    <h2>Account Settings</h2>
+                    <h2 data-i18n="account_title">Account Settings</h2>
                 </div>
                 <div class="glass" style="padding: 24px; border-radius: 8px;">
                     <form id="account-form">
                         <div style="display: flex; gap: 16px; margin-bottom: 16px;">
                             <div style="flex: 1;">
-                                <label style="display:block; margin-bottom: 8px; color: var(--text-muted); font-size: 14px;">First Name</label>
+                                <label style="display:block; margin-bottom: 8px; color: var(--text-muted); font-size: 14px;" data-i18n="label_first_name">First Name</label>
                                 <input type="text" id="acc-first-name" class="input-field">
                             </div>
                             <div style="flex: 1;">
-                                <label style="display:block; margin-bottom: 8px; color: var(--text-muted); font-size: 14px;">Last Name</label>
+                                <label style="display:block; margin-bottom: 8px; color: var(--text-muted); font-size: 14px;" data-i18n="label_last_name">Last Name</label>
                                 <input type="text" id="acc-last-name" class="input-field">
                             </div>
                         </div>
                         <div style="margin-bottom: 16px;">
-                            <label style="display:block; margin-bottom: 8px; color: var(--text-muted); font-size: 14px;">Preferred Name</label>
+                            <label style="display:block; margin-bottom: 8px; color: var(--text-muted); font-size: 14px;" data-i18n="label_preferred_name">Preferred Name</label>
                             <input type="text" id="acc-preferred-name" class="input-field" placeholder="How should we address you?">
                         </div>
                         <div style="margin-bottom: 16px;">
-                            <label style="display:block; margin-bottom: 8px; color: var(--text-muted); font-size: 14px;">Theme Preference</label>
+                            <label style="display:block; margin-bottom: 8px; color: var(--text-muted); font-size: 14px;" data-i18n="label_theme">Theme Preference</label>
                             <select id="acc-theme" class="input-field">
                                 <option value="system">System Default</option>
                                 <option value="light">Light Mode</option>
@@ -246,7 +249,7 @@
                             </select>
                         </div>
                         <div style="margin-bottom: 16px;">
-                            <label style="display:block; margin-bottom: 8px; color: var(--text-muted); font-size: 14px;">Language Preference</label>
+                            <label style="display:block; margin-bottom: 8px; color: var(--text-muted); font-size: 14px;" data-i18n="label_language">Language Preference</label>
                             <input type="hidden" id="acc-language" value="en" />
                             <div class="custom-dropdown" id="acc-language-custom-dropdown" style="position: relative; user-select: none;">
                                 <div class="custom-dropdown-trigger" onclick="toggleAccDropdown()" style="display: flex; align-items: center; gap: 8px; background: rgba(255,255,255,0.05); border: 1px solid rgba(255,255,255,0.1); padding: 8px 12px; border-radius: 6px; cursor: pointer; font-size: 14px; font-weight: 500; color: var(--text-color); transition: 0.2s; height: 38px; box-sizing: border-box;">
@@ -261,7 +264,7 @@
                         </div>
                         <div style="margin-bottom: 24px;">
                             <div style="display: flex; align-items: center; gap: 12px; margin-bottom: 8px;">
-                                <label style="margin: 0; color: var(--text-muted); font-size: 14px;">Email Notifications</label>
+                                <label style="margin: 0; color: var(--text-muted); font-size: 14px;" data-i18n="label_notifications">Email Notifications</label>
                                 <label class="toggle-switch">
                                     <input type="checkbox" id="acc-notifications">
                                     <span class="toggle-slider"></span>
@@ -269,12 +272,12 @@
                             </div>
                             <p style="font-size: 12px; color: var(--text-muted); margin-top: 6px;">Disabling this will suppress administrative alerts (like new registration notifications). Essential emails like Magic Links and account status updates cannot be disabled.</p>
                         </div>
-                        <button type="submit" class="btn btn-primary" style="width: auto;" id="btn-save-account">Save Changes</button>
+                        <button type="submit" class="btn btn-primary" style="width: auto;" id="btn-save-account" data-i18n="btn_save_changes">Save Changes</button>
                     </form>
                 </div>
 
                 <div class="glass" style="padding: 24px; border-radius: 8px; margin-top: 24px;">
-                    <h3 style="margin-bottom: 8px; font-size: 18px;">🔒 Multi-Factor Authentication (MFA)</h3>
+                    <h3 style="margin-bottom: 8px; font-size: 18px;" data-i18n="mfa_title">🔒 Multi-Factor Authentication (MFA)</h3>
                     <p style="color: var(--text-muted); margin-bottom: 16px; font-size: 14px;">Secure your account by requiring a 6-digit verification code from your authenticator app (like Google Authenticator, Microsoft Authenticator, or 1Password) each time you log in via Magic Link.</p>
                     
                     <div id="mfa-status-container" style="font-size: 14px;">
@@ -283,7 +286,7 @@
                 </div>
 
                 <div class="glass" id="danger-zone-container" style="padding: 24px; border-radius: 8px; margin-top: 24px; border: 1px solid rgba(239, 68, 68, 0.2);">
-                    <h3 style="margin-bottom: 8px; font-size: 18px; color: #f43f5e;">⚠️ Danger Zone (GDPR / Right to Be Forgotten)</h3>
+                    <h3 style="margin-bottom: 8px; font-size: 18px; color: #f43f5e;" data-i18n="danger_zone_title">⚠️ Danger Zone (GDPR / Right to Be Forgotten)</h3>
                     <p style="color: var(--text-muted); margin-bottom: 16px; font-size: 14px;">Deleting your account will instantly and permanently revoke all of your personal access tokens, kick any active tunnel connections, and permanently purge your profile records from our systems. <strong>Any historical bandwidth metrics and logs will be permanently anonymised to protect your privacy.</strong></p>
                     <button class="btn btn-outline" style="width: auto; color: #f43f5e; border-color: #f43f5e; background: transparent; transition: 0.2s;" onmouseover="this.style.background='rgba(244,63,94,0.1)'" onmouseout="this.style.background='transparent'" onclick="openDeleteAccountModal()">Delete Account...</button>
                 </div>

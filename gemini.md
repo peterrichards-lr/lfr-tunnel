@@ -190,5 +190,11 @@ The solution will consist of:
 - [x] Add direct unit test coverage for TOTP/MFA algorithms in totp_test.go.
 - [x] Format System Analytics PDF print layout to support clean multi-page flows and page breaks.
 - [x] Fix missing `totp_enabled` field in `/api/me` response causing MFA to always display as disabled.
+- [x] Implement full i18n translation support for the dashboard UI elements (sidebar, tab headers, form fields) to allow immediate language switching.
+- [x] Fix Docker Hub link URL suffix by stripping the image tag for web links.
+- [x] Add `docker_bypass_url` support to server config and expose to frontend via `/api/version`.
+
+
+
 
 

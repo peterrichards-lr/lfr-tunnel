@@ -9,6 +9,7 @@
         }
 
         const supportedLocales = [
+            { code: 'ar', name: 'العربية' },
             { code: 'de', name: 'Deutsch' },
             { code: 'en', name: 'English' },
             { code: 'es', name: 'Español' },
@@ -447,7 +448,15 @@ function toggleTheme() {
                         const text = document.getElementById('docker-pull-text');
                         if (text) text.textContent = `docker pull ${vData.docker_image}`;
                         const link = document.getElementById('docker-hub-link');
-                        if (link) link.href = `https://hub.docker.com/r/${vData.docker_image}`;
+                        if (link) {
+                            const repoOnly = vData.docker_image.split(':')[0];
+                            link.href = `https://hub.docker.com/r/${repoOnly}`;
+                        }
+                        const bypassLink = document.getElementById('docker-bypass-link');
+                        if (bypassLink && vData.docker_bypass_url) {
+                            bypassLink.href = vData.docker_bypass_url;
+                            bypassLink.style.display = 'inline-block';
+                        }
                     }
                 }
             } catch (e) {

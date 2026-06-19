@@ -264,12 +264,13 @@ sudo mkdir -p /var/www/lfr-tunnel
         set $maintenance 1;
     }
     # Allow rendering the maintenance page itself without redirect loops
-    if ($request_uri = "/maintenance.html") {
+    if ($uri = "/maintenance.html") {
         set $maintenance 0;
     }
     if ($maintenance = 1) {
         return 503;
     }
+
 
     error_page 503 /maintenance.html;
     location = /maintenance.html {
@@ -792,3 +793,25 @@ To customize the HTML layout or copy of transactional emails (e.g., `magic_link.
    ```
    *(Note: The server will automatically append the clean English fallback version at the bottom of all non-English emails, separated by a crisp visual divider!)*
 
+### 8.6. Gateway Maintenance & Backup Command-Line Utilities
+
+To simplify remote management and updates, the deployment process automatically uploads and registers administrative command-line utilities in the system path (`/usr/local/bin/`) on the VPS. Run these directly as root or via `sudo`:
+
+#### A. Putting the Gateway into Maintenance Mode
+To temporarily put the gateway into maintenance mode (this immediately serves the themed Liferay-branded `503 Service Temporarily Unavailable` fallback page to all standard clients, active tunnels, and user dashboards):
+```bash
+sudo enable-maintenance.sh
+```
+
+#### B. Restoring Gateway Back Online
+To exit maintenance mode and resume normal routing:
+```bash
+sudo disable-maintenance.sh
+```
+
+#### C. Safe Database Restoration Sequence
+To perform a safe database restore from a file backup without exposing users to broken pages or race conditions, run the coordinated restore script:
+```bash
+sudo restore-with-maintenance.sh [backup_file_path]
+```
+*(This automatically enables maintenance mode, launches the backup restoration, and takes the gateway back online once the restoration completes successfully.)*

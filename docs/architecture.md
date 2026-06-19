@@ -191,7 +191,7 @@ Rather than passing the Chisel connection directly to the target local Liferay i
    SEs can inject arbitrary HTTP headers (e.g., `-add-header "X-Bypass-CORS: true"`) at runtime. The interceptor injects these into every incoming request before Liferay sees them, bypassing restrictive local domain configurations without touching Tomcat config files.
 
 2. **Local Traffic Inspector (`http://localhost:4040`)**:
-   The interceptor buffers the last 100 HTTP requests and their corresponding responses (up to 10KB of body payloads each). It serves a rich, real-time SPA dashboard via `//go:embed` on `localhost:4040`. SEs can watch Webhooks hit their local machine and inspect the exact JSON payloads natively.
+   The interceptor buffers the last 100 HTTP requests and their corresponding responses (up to 10KB of body payloads each). It serves a rich, real-time SPA dashboard via `//go:embed` on `localhost:4040` (automatically binding to `0.0.0.0` inside containerized execution to support host port mapping, or custom interfaces via the `LFT_INSPECTOR_BIND` environment variable). SEs can watch Webhooks hit their local machine and inspect the exact JSON payloads natively.
 
 3. **Maintenance Mode**:
    From the Inspector dashboard, developers can instantly toggle **Maintenance Mode**. The interceptor ceases forwarding traffic to Tomcat and immediately returns a `503 Service Unavailable` with a Liferay-branded fallback HTML page. This allows SEs to reboot their local Tomcat without killing the `lfr-tunnel` process or losing their claimed subdomain.

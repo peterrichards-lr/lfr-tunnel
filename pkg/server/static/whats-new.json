@@ -1,7 +1,8 @@
 {
-  "version": "v1.7.12",
+  "version": "v1.7.13",
   "release_date": "2026-06-19",
   "features": [
+    "Local Inspector Bind Address: Automatically bind the inspector web interface to 0.0.0.0 inside containers (or configure via LFT_INSPECTOR_BIND) to support host-to-container port mappings in LDM.",
     "LDM Environment Fallbacks: Natively support LDM environment variables (LFT_SUBDOMAIN, LFT_SERVER_URL, LFT_TOKEN) and automatically clean/strip URL schemes and port suffixes from LFT_TARGET_HOST.",
     "Docker Client Platform Identification: Automatically identify containerized clients and append ' (Docker)' to their OS name inside system analytics and connection stats.",
     "Modal Escaping Hotfix: Fixed HTML escaping in the User Details modal to render localized Joined Date timestamps correctly.",

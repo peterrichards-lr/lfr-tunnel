@@ -277,9 +277,12 @@ When running `lfr-tunnel` directly as a Docker container (e.g. orchestrated by L
 | **Subdomain** | `LFT_CLIENT_SUBDOMAIN` | `LFT_SUBDOMAIN` | Custom subdomain prefix | `pjrtest` |
 | **Target Host** | `LFT_TARGET_HOST` | — | Backend hostname or IP to route to | `liferay` (or `http://liferay:8080`) |
 | **Ports** | `LFT_CLIENT_PORTS` | — | Comma-separated list of ports | `8080,3000` |
+| **Inspector Bind** | `LFT_INSPECTOR_BIND` | — | Binding address for local inspector dashboard | `0.0.0.0` or `127.0.0.1` |
 
 > [!NOTE]
 > The target host parser is URL-aware: if a full URL with scheme/port (e.g. `http://liferay:8080`) is passed into `LFT_TARGET_HOST`, the client automatically cleans it to the raw hostname (`liferay`) to ensure correct routing.
+>
+> Inside container/Docker environments, the inspector automatically binds to `0.0.0.0` instead of `127.0.0.1` by default to ensure port-forwarded traffic from the host machine is able to access the dashboard.
 
 ---
 

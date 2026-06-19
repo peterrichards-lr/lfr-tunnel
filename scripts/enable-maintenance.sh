@@ -26,6 +26,12 @@ die()     { error "$*"; exit 1; }
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 SRC_HTML="${SCRIPT_DIR}/../pkg/server/static/maintenance.html"
 
+# Fallback for VPS deployment when source code repository is not present locally
+if [[ ! -f "$SRC_HTML" ]]; then
+    SRC_HTML="${WEB_ROOT}/static/maintenance.html"
+fi
+
+
 # ── Deploy Maintenance Page ──────────────────────────────────────────────────
 if [[ -f "$SRC_HTML" ]]; then
     mkdir -p "$WEB_ROOT"

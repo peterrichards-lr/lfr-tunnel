@@ -40,10 +40,24 @@ echo "Uploading properties translations and email templates to VPS..."
 scp $SSH_KEY -r pkg/server/i18n $VPS_USER@$VPS_IP:/home/$VPS_USER/
 scp $SSH_KEY -r pkg/server/templates $VPS_USER@$VPS_IP:/home/$VPS_USER/
 
+echo "Uploading maintenance and backup scripts to VPS..."
+scp $SSH_KEY scripts/enable-maintenance.sh scripts/disable-maintenance.sh scripts/restore-with-maintenance.sh scripts/restore-backup.sh $VPS_USER@$VPS_IP:/home/$VPS_USER/
+
 echo "Executing remote deployment commands..."
 ssh $SSH_KEY $VPS_USER@$VPS_IP << REMOTE_SSH
     sudo mv /home/$VPS_USER/lfr-tunneld /usr/local/bin/lfr-tunneld
     sudo chmod +x /usr/local/bin/lfr-tunneld
+    
+    # Install maintenance and backup scripts to system path
+    sudo mv /home/$VPS_USER/enable-maintenance.sh /usr/local/bin/enable-maintenance.sh
+    sudo chmod +x /usr/local/bin/enable-maintenance.sh
+    sudo mv /home/$VPS_USER/disable-maintenance.sh /usr/local/bin/disable-maintenance.sh
+    sudo chmod +x /usr/local/bin/disable-maintenance.sh
+    sudo mv /home/$VPS_USER/restore-with-maintenance.sh /usr/local/bin/restore-with-maintenance.sh
+    sudo chmod +x /usr/local/bin/restore-with-maintenance.sh
+    sudo mv /home/$VPS_USER/restore-backup.sh /usr/local/bin/restore-backup.sh
+    sudo chmod +x /usr/local/bin/restore-backup.sh
+    
     sudo mkdir -p /var/www/lfr-tunnel/error_pages
     sudo cp -r /home/$VPS_USER/error_pages/* /var/www/lfr-tunnel/error_pages/
     sudo mkdir -p /var/www/lfr-tunnel/static

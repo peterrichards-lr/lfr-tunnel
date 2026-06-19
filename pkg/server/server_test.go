@@ -1497,3 +1497,65 @@ func TestServer_DatabaseBackupScheduler(t *testing.T) {
 		t.Errorf("backup file size (%d) is significantly smaller than active DB size (%d)", bInfo.Size(), dbInfo.Size())
 	}
 }
+
+func TestServer_BackupSchedulerConfiguration(t *testing.T) {
+	// 1. Test case A: Backup Scheduler Disabled
+	t.Run("Disabled", func(t *testing.T) {
+		cfg := config.DefaultServerConfig()
+		cfg.Domains = []string{"example.com"}
+		cfg.DBPath = filepath.Join(t.TempDir(), "test.db")
+		cfg.DisableBackupScheduler = true
+
+		srv, err := NewServer(cfg)
+		if err != nil {
+			t.Fatalf("failed to create server: %v", err)
+		}
+		defer func() {
+			srv.Stop()
+			time.Sleep(50 * time.Millisecond) // SQLite race protection
+		}()
+
+		// Allow brief window to verify no background backup runs
+		time.Sleep(50 * time.Millisecond)
+
+		backupsDir := filepath.Join(filepath.Dir(cfg.DBPath), "backups")
+		_, err = os.Stat(backupsDir)
+		if err == nil {
+			t.Error("expected backups directory to not exist when DisableBackupScheduler is true")
+		}
+	})
+
+	// 2. Test case B: Backup Scheduler Enabled
+	t.Run("Enabled", func(t *testing.T) {
+		cfg := config.DefaultServerConfig()
+		cfg.Domains = []string{"example.com"}
+		cfg.DBPath = filepath.Join(t.TempDir(), "test.db")
+		cfg.DisableBackupScheduler = false // Enable!
+
+		srv, err := NewServer(cfg)
+		if err != nil {
+			t.Fatalf("failed to create server: %v", err)
+		}
+		defer func() {
+			srv.Stop()
+			time.Sleep(50 * time.Millisecond) // SQLite race protection
+		}()
+
+		// Wait briefly for initial background backup to run
+		time.Sleep(100 * time.Millisecond)
+
+		backupsDir := filepath.Join(filepath.Dir(cfg.DBPath), "backups")
+		info, err := os.Stat(backupsDir)
+		if err != nil {
+			t.Fatalf("expected backups directory to exist when DisableBackupScheduler is false: %v", err)
+		}
+		if !info.IsDir() {
+			t.Error("expected backups path to be a directory")
+		}
+
+		files, err := os.ReadDir(backupsDir)
+		if err != nil || len(files) == 0 {
+			t.Fatal("expected at least one database backup file to be created")
+		}
+	})
+}

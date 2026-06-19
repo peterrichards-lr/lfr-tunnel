@@ -23,12 +23,12 @@ INSTALL_DIR="${HOME}/bin"
 INSTALL_PATH="${INSTALL_DIR}/lfr-tunnel"
 
 echo "Downloading lfr-tunnel for ${OS}-${ARCH}..."
-curl -sSfL "$URL" -o /tmp/lfr-tunnel-download
-chmod +x /tmp/lfr-tunnel-download
+curl -sSfL "$URL" -o /tmp/lfr-tunnel
+chmod +x /tmp/lfr-tunnel
 
 # Always install to ~/bin — the single canonical location
 mkdir -p "$INSTALL_DIR"
-mv /tmp/lfr-tunnel-download "$INSTALL_PATH"
+mv /tmp/lfr-tunnel "$INSTALL_PATH"
 echo "lfr-tunnel installed to ${INSTALL_PATH}"
 
 # Advise on PATH if ~/bin is not already present

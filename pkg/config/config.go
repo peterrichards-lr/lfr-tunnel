@@ -99,6 +99,8 @@ func DefaultServerConfig() *ServerConfig {
 		MagicLinkExpiry:        15 * time.Minute,
 		InviteLinkExpiry:       7 * 24 * time.Hour,
 		VerificationLinkExpiry: 24 * time.Hour,
+		DockerImage:            "peterjrichards/lfr-tunnel:latest",
+		DockerBypassURL:        "https://github.com/peterrichards-lr/lfr-tunnel/blob/master/docs/liferay-se-guide.md#using-the-docker-wrapper-edr-bypass",
 	}
 }
 

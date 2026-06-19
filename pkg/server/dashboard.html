@@ -497,6 +497,20 @@
                     </div>
                 </div>
 
+                <div class="glass" style="padding: 24px; margin-bottom: 24px; border-left: 4px solid var(--primary);">
+                    <h4 style="margin-bottom: 4px; font-size: 15px; font-weight: 600; color: var(--primary);">📦 Developer Portal Features</h4>
+                    <p style="color: var(--text-muted); font-size: 12px; margin-bottom: 16px; line-height: 1.4;">
+                        Configure which panels and helper resources are visible to standard developers on their main Portal Dashboard.
+                    </p>
+                    <div style="display: flex; align-items: center; gap: 12px;">
+                        <label class="toggle-switch">
+                            <input type="checkbox" id="maint-show-docker-workaround" onchange="savePortalFeatureSettings()">
+                            <span class="toggle-slider"></span>
+                        </label>
+                        <span style="font-size: 13px; font-weight: 500; color: var(--text-color);">Show Docker Hub CLI Workaround Panel</span>
+                    </div>
+                </div>
+
                 <div id="maint-iron-curtain-card" class="glass" style="display: none; padding: 24px; margin-bottom: 24px; border-left: 4px solid var(--danger);">
                     <h4 style="margin-bottom: 4px; font-size: 15px; font-weight: 600; color: var(--danger);">🔒 Nginx Iron Curtain Mode (Hard Maintenance - Owner Only)</h4>
                     <p style="color: var(--text-muted); font-size: 12px; margin-bottom: 16px; line-height: 1.4;">

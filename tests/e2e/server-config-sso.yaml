@@ -29,3 +29,6 @@ magic_link_expiry: 1m
 invite_link_expiry: 5m
 verification_link_expiry: 5m
 session_expiry: 5m
+
+docker_image: "peterjrichards/lfr-tunnel:latest"
+docker_bypass_url: "https://github.com/peterrichards-lr/lfr-tunnel/blob/master/docs/liferay-se-guide.md#using-the-docker-wrapper-edr-bypass"

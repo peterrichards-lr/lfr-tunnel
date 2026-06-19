@@ -378,6 +378,49 @@ function toggleTheme() {
             }, 4000);
         }
 
+        async function loadVersionDetails() {
+            try {
+                const vRes = await fetch('/api/version');
+                if (vRes.ok) {
+                    const vData = await vRes.json();
+                    if (vData.privacy_policy_url) {
+                        const pl = document.getElementById('footer-privacy-link');
+                        if (pl) pl.href = vData.privacy_policy_url;
+                    }
+                    if (vData.cookie_policy_url) {
+                        const cl = document.getElementById('footer-cookie-link');
+                        if (cl) cl.href = vData.cookie_policy_url;
+                    }
+                    if (vData.latest_version) {
+                        const versionDisplays = document.querySelectorAll('.server-version-display');
+                        versionDisplays.forEach(el => {
+                            el.textContent = vData.latest_version;
+                        });
+                    }
+                    const box = document.getElementById('docker-container-box');
+                    if (vData.docker_image) {
+                        if (box) box.style.display = 'block';
+                        const text = document.getElementById('docker-pull-text');
+                        if (text) text.textContent = `docker pull ${vData.docker_image}`;
+                        const link = document.getElementById('docker-hub-link');
+                        if (link) {
+                            const repoOnly = vData.docker_image.split(':')[0];
+                            link.href = `https://hub.docker.com/r/${repoOnly}`;
+                        }
+                        const bypassLink = document.getElementById('docker-bypass-link');
+                        if (bypassLink && vData.docker_bypass_url) {
+                            bypassLink.href = vData.docker_bypass_url;
+                            bypassLink.style.display = 'inline-block';
+                        }
+                    } else {
+                        if (box) box.style.display = 'none';
+                    }
+                }
+            } catch (e) {
+                console.error("Failed to load policy links / version", e);
+            }
+        }
+
         async function init() {
             const urlParams = new URLSearchParams(window.location.search);
             const magicToken = urlParams.get('token');
@@ -423,45 +466,7 @@ function toggleTheme() {
                 showLogin();
             }
 
-            // Load custom privacy/cookie links if configured
-            try {
-                const vRes = await fetch('/api/version');
-                if (vRes.ok) {
-                    const vData = await vRes.json();
-                    if (vData.privacy_policy_url) {
-                        const pl = document.getElementById('footer-privacy-link');
-                        if (pl) pl.href = vData.privacy_policy_url;
-                    }
-                    if (vData.cookie_policy_url) {
-                        const cl = document.getElementById('footer-cookie-link');
-                        if (cl) cl.href = vData.cookie_policy_url;
-                    }
-                    if (vData.latest_version) {
-                        const versionDisplays = document.querySelectorAll('.server-version-display');
-                        versionDisplays.forEach(el => {
-                            el.textContent = vData.latest_version;
-                        });
-                    }
-                    if (vData.docker_image) {
-                        const box = document.getElementById('docker-container-box');
-                        if (box) box.style.display = 'block';
-                        const text = document.getElementById('docker-pull-text');
-                        if (text) text.textContent = `docker pull ${vData.docker_image}`;
-                        const link = document.getElementById('docker-hub-link');
-                        if (link) {
-                            const repoOnly = vData.docker_image.split(':')[0];
-                            link.href = `https://hub.docker.com/r/${repoOnly}`;
-                        }
-                        const bypassLink = document.getElementById('docker-bypass-link');
-                        if (bypassLink && vData.docker_bypass_url) {
-                            bypassLink.href = vData.docker_bypass_url;
-                            bypassLink.style.display = 'inline-block';
-                        }
-                    }
-                }
-            } catch (e) {
-                console.error("Failed to load policy links", e);
-            }
+            await loadVersionDetails();
 
             // Auto-detect browser language on first load and translate unauthenticated portal UI
             try {
@@ -1035,7 +1040,10 @@ function toggleTheme() {
             if (tabName === 'tokens') loadTokens();
             if (tabName === 'tunnels') loadTunnels();
             if (tabName === 'analytics') loadAnalytics();
-            if (tabName === 'overview') loadWhatsNew();
+            if (tabName === 'overview') {
+                loadWhatsNew();
+                loadVersionDetails();
+            }
         }
 
         window.addEventListener('popstate', (e) => {
@@ -1508,8 +1516,37 @@ function toggleTheme() {
                     const data = await res.json();
                     updateMaintenanceModeUI(data.maintenance_mode, data.iron_curtain);
                 }
+                
+                const settingsRes = await fetch('/api/admin/settings');
+                if (settingsRes.ok) {
+                    const settingsData = await settingsRes.json();
+                    const showDocker = settingsData.show_docker_workaround !== "false";
+                    document.getElementById('maint-show-docker-workaround').checked = showDocker;
+                }
             } catch (e) {
                 console.error("Failed to load maintenance status", e);
+            }
+        }
+
+        async function savePortalFeatureSettings() {
+            const showDockerVal = document.getElementById('maint-show-docker-workaround').checked ? "true" : "false";
+            try {
+                const res = await fetch('/api/admin/settings', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        show_docker_workaround: showDockerVal
+                    })
+                });
+                if (res.ok) {
+                    showToast("Portal settings updated successfully!", "success");
+                } else {
+                    const err = await res.json();
+                    showToast("Failed to update settings: " + (err.error || "Unknown error"), "danger");
+                }
+            } catch (e) {
+                console.error("Failed to save portal settings", e);
+                showToast("Failed to save settings.", "danger");
             }
         }
 

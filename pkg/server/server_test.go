@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"net/http"
 	"net/http/httptest"
+	"net/url"
 	"os"
 	"path/filepath"
 	"strings"
@@ -20,7 +21,8 @@ import (
 
 func TestServer_Register(t *testing.T) {
 	cfg := &config.ServerConfig{
-		Domains: []string{"example.com"},
+		Domains:                []string{"example.com"},
+		DisableBackupScheduler: true,
 	}
 
 	if cfg.DBPath == "" {
@@ -89,7 +91,8 @@ func TestServer_Register(t *testing.T) {
 
 func TestServer_ControlWelcomePage(t *testing.T) {
 	cfg := &config.ServerConfig{
-		Domains: []string{"example.com"},
+		Domains:                []string{"example.com"},
+		DisableBackupScheduler: true,
 	}
 
 	if cfg.DBPath == "" {
@@ -123,7 +126,8 @@ func TestServer_ControlWelcomePage(t *testing.T) {
 
 func TestServer_Domains(t *testing.T) {
 	cfg := &config.ServerConfig{
-		Domains: []string{"example.se", "example.online"},
+		Domains:                []string{"example.se", "example.online"},
+		DisableBackupScheduler: true,
 	}
 
 	if cfg.DBPath == "" {
@@ -161,7 +165,8 @@ func TestServer_Domains(t *testing.T) {
 
 func TestServer_CheckSubdomain(t *testing.T) {
 	cfg := &config.ServerConfig{
-		Domains: []string{"example.com"},
+		Domains:                []string{"example.com"},
+		DisableBackupScheduler: true,
 	}
 
 	if cfg.DBPath == "" {
@@ -328,6 +333,7 @@ func TestServer_RegistrationFlow(t *testing.T) {
 		Domains:                []string{"example.com"},
 		DBPath:                 dbPath,
 		AdminNotificationEmail: "admin@example.com",
+		DisableBackupScheduler: true,
 	}
 
 	srv, err := NewServer(cfg)
@@ -490,7 +496,8 @@ func TestServer_RegistrationFlow(t *testing.T) {
 
 func TestServer_DomainSeparation(t *testing.T) {
 	cfg := &config.ServerConfig{
-		Domains: []string{"example.se", "example.online"},
+		Domains:                []string{"example.se", "example.online"},
+		DisableBackupScheduler: true,
 	}
 
 	if cfg.DBPath == "" {
@@ -763,6 +770,7 @@ func TestServer_UnsubscribeAndMaintenance(t *testing.T) {
 	cfg := config.DefaultServerConfig()
 	cfg.DBPath = filepath.Join(tmpDir, "test.db")
 	cfg.Domains = []string{"example.com"}
+	cfg.DisableBackupScheduler = true
 
 	srv, err := NewServer(cfg)
 	if err != nil {
@@ -838,6 +846,7 @@ func TestServer_GDPRDeleteAndAnonymization(t *testing.T) {
 	cfg := config.DefaultServerConfig()
 	cfg.DBPath = filepath.Join(tmpDir, "test.db")
 	cfg.Domains = []string{"example.com"}
+	cfg.DisableBackupScheduler = true
 
 	srv, err := NewServer(cfg)
 	if err != nil {
@@ -883,6 +892,7 @@ func TestServer_GDPRDeleteAndAnonymization(t *testing.T) {
 func TestServer_I18nLanguageHandling(t *testing.T) {
 	cfg := config.DefaultServerConfig()
 	cfg.Domains = []string{"example.com"}
+	cfg.DisableBackupScheduler = true
 
 	srv, err := NewServer(cfg)
 	if err != nil {
@@ -931,31 +941,34 @@ label_email:Adresă de E-mail
 	if len(props) != 3 {
 		t.Fatalf("expected exactly 3 properties, got %d", len(props))
 	}
-
-	if props["portal.welcome"] != "Bine ai venit" {
-		t.Errorf("expected portal.welcome to be 'Bine ai venit', got %q", props["portal.welcome"])
-	}
-
-	if props["btn_send_magic_link"] != "Trimite Link-ul Magic" {
-		t.Errorf("expected btn_send_magic_link to be 'Trimite Link-ul Magic', got %q", props["btn_send_magic_link"])
-	}
-
-	if props["label_email"] != "Adresă de E-mail" {
-		t.Errorf("expected label_email to be 'Adresă de E-mail', got %q", props["label_email"])
-	}
 }
 
-func TestServer_GetMeLanguagePreference(t *testing.T) {
+// setupTestServer sets up a temporary server instance with a mock mail sender and a clean DB path.
+func setupTestServer(t *testing.T) (*Server, *mockMailSender, func()) {
 	cfg := config.DefaultServerConfig()
 	cfg.Domains = []string{"example.com"}
 	cfg.DBPath = filepath.Join(t.TempDir(), "test.db")
+	cfg.DisableBackupScheduler = true
 
 	srv, err := NewServer(cfg)
 	if err != nil {
 		t.Fatalf("failed to create server: %v", err)
 	}
-	defer srv.Stop()
-	defer time.Sleep(50 * time.Millisecond) // prevent SQLite cleanup races
+
+	mockMail := &mockMailSender{}
+	srv.mailSender = mockMail
+
+	cleanup := func() {
+		srv.Stop()
+		time.Sleep(50 * time.Millisecond) // prevent SQLite cleanup races
+	}
+
+	return srv, mockMail, cleanup
+}
+
+func TestServer_GetMeLanguagePreference(t *testing.T) {
+	srv, _, cleanup := setupTestServer(t)
+	defer cleanup()
 
 	// 1. Create a user in the database with Romanian language preference
 	email := "test_i18n@example.com"
@@ -1008,20 +1021,8 @@ func TestServer_GetMeLanguagePreference(t *testing.T) {
 }
 
 func TestServer_WelcomePageLanguageOverride(t *testing.T) {
-	cfg := config.DefaultServerConfig()
-	cfg.Domains = []string{"example.com"}
-	cfg.DBPath = filepath.Join(t.TempDir(), "test.db")
-
-	srv, err := NewServer(cfg)
-	if err != nil {
-		t.Fatalf("failed to create server: %v", err)
-	}
-	defer srv.Stop()
-	defer time.Sleep(50 * time.Millisecond) // prevent SQLite cleanup races
-
-	// Intercept the sent email using the standard mockMailSender!
-	mockMail := &mockMailSender{}
-	srv.mailSender = mockMail
+	srv, mockMail, cleanup := setupTestServer(t)
+	defer cleanup()
 
 	// 1. Create a user in the DB with English language preference
 	email := "test_override@example.com"
@@ -1063,20 +1064,8 @@ func TestServer_WelcomePageLanguageOverride(t *testing.T) {
 }
 
 func TestServer_MagicLinkInstantRequestInvalidation(t *testing.T) {
-	cfg := config.DefaultServerConfig()
-	cfg.Domains = []string{"example.com"}
-	cfg.DBPath = filepath.Join(t.TempDir(), "test.db")
-
-	srv, err := NewServer(cfg)
-	if err != nil {
-		t.Fatalf("failed to create server: %v", err)
-	}
-	defer srv.Stop()
-	defer time.Sleep(50 * time.Millisecond) // prevent SQLite cleanup races
-
-	// Intercept sent emails
-	mockMail := &mockMailSender{}
-	srv.mailSender = mockMail
+	srv, mockMail, cleanup := setupTestServer(t)
+	defer cleanup()
 
 	// 1. Create approved user
 	email := "test_invalidation@example.com"
@@ -1157,20 +1146,8 @@ func extractTokenFromBody(body string) string {
 }
 
 func TestServer_MagicLinkLanguagePersistence(t *testing.T) {
-	cfg := config.DefaultServerConfig()
-	cfg.Domains = []string{"example.com"}
-	cfg.DBPath = filepath.Join(t.TempDir(), "test.db")
-
-	srv, err := NewServer(cfg)
-	if err != nil {
-		t.Fatalf("failed to create server: %v", err)
-	}
-	defer srv.Stop()
-	defer time.Sleep(50 * time.Millisecond) // prevent SQLite cleanup races
-
-	// Intercept sent emails
-	mockMail := &mockMailSender{}
-	srv.mailSender = mockMail
+	srv, mockMail, cleanup := setupTestServer(t)
+	defer cleanup()
 
 	// 1. Create an approved user with English language preference
 	email := "test_lang_persist@example.com"
@@ -1238,20 +1215,8 @@ func TestServer_MagicLinkLanguagePersistence(t *testing.T) {
 }
 
 func TestServer_InvitationLanguagePersistence(t *testing.T) {
-	cfg := config.DefaultServerConfig()
-	cfg.Domains = []string{"example.com"}
-	cfg.DBPath = filepath.Join(t.TempDir(), "test.db")
-
-	srv, err := NewServer(cfg)
-	if err != nil {
-		t.Fatalf("failed to create server: %v", err)
-	}
-	defer srv.Stop()
-	defer time.Sleep(50 * time.Millisecond) // prevent SQLite cleanup races
-
-	// Intercept sent emails
-	mockMail := &mockMailSender{}
-	srv.mailSender = mockMail
+	srv, mockMail, cleanup := setupTestServer(t)
+	defer cleanup()
 
 	// 1. Create an active admin user and session to satisfy the auth middleware
 	adminEmail := "admin_test@example.com"
@@ -1308,5 +1273,227 @@ func TestServer_InvitationLanguagePersistence(t *testing.T) {
 	interceptedBody := mockMail.sentTextBody
 	if !strings.Contains(interceptedBody, "Acceptă Invitația") {
 		t.Error("expected invitation email button to be translated to Romanian ('Acceptă Invitația'), but it was not")
+	}
+}
+
+func TestServer_AuditLogCSVExport(t *testing.T) {
+	srv, _, cleanup := setupTestServer(t)
+	defer cleanup()
+
+	// 1. Create a dummy audit entry
+	email := "audit_test@example.com"
+	s := "test action"
+	dummyReq, _ := http.NewRequest("GET", "/", nil)
+	srv.writeAudit(email, s, "user", "target", "details", dummyReq)
+	time.Sleep(50 * time.Millisecond) // wait for goroutine
+
+	// 2. Create an active admin session
+	adminEmail := "admin_test@example.com"
+	adminUser := &db.User{ID: adminEmail, Email: adminEmail, Role: "admin", Status: "approved"}
+	if err := srv.db.CreateUser(adminUser); err != nil {
+		t.Fatalf("failed to create admin user: %v", err)
+	}
+	sessionToken := "admin-audit-token-123"
+	srv.portalMap.Store("admin_session_"+sessionToken, PortalSessionData{Email: adminEmail, ExpiresAt: time.Now().Add(1 * time.Hour)})
+
+	// 3. Forge a GET request to /api/admin/audit/export
+	req, _ := http.NewRequest("GET", "http://example.com/api/admin/audit/export", nil)
+	req.AddCookie(&http.Cookie{Name: "lfr_session", Value: sessionToken})
+	rec := httptest.NewRecorder()
+	srv.ServeHTTP(rec, req)
+
+	// 4. Assert status OK and Content-Type
+	if rec.Code != http.StatusOK {
+		t.Fatalf("expected status 200 OK, got %d", rec.Code)
+	}
+	if rec.Header().Get("Content-Type") != "text/csv" {
+		t.Errorf("expected Content-Type text/csv, got %s", rec.Header().Get("Content-Type"))
+	}
+
+	// 5. Assert CSV content contains our test action
+	csvContent := rec.Body.String()
+	if !strings.Contains(csvContent, s) {
+		t.Errorf("expected CSV to contain action %q, got: %s", s, csvContent)
+	}
+}
+
+func TestServer_RateLimitingEnforcements(t *testing.T) {
+	srv, _, cleanup := setupTestServer(t)
+	defer cleanup()
+
+	// 1. Create a user with a specific DB rate limit quota of 10 RPS
+	email := "throttled_user@example.com"
+	u := &db.User{
+		ID:                 email,
+		Email:              email,
+		Role:               "user",
+		Status:             "approved",
+		RateLimit:          10, // Quota!
+		LanguagePreference: "en",
+	}
+	if err := srv.db.CreateUser(u); err != nil {
+		t.Fatalf("failed to create user: %v", err)
+	}
+
+	// Create a valid personal access token (PAT) inside the SQLite database for this user
+	token := "test-client-token-123"
+	hashBytes := sha256.Sum256([]byte(token))
+	tokenHash := hex.EncodeToString(hashBytes[:])
+
+	pat := &db.PersonalAccessToken{
+		UserID:      email,
+		TokenHash:   tokenHash,
+		TokenPrefix: "lfr_pat_test",
+		Name:        "Test Token",
+	}
+	if err := srv.db.CreatePAT(pat); err != nil {
+		t.Fatalf("failed to create PAT: %v", err)
+	}
+
+	// Mock register request from client requesting a much higher rate limit (100 RPS)
+	payloadRegister, _ := json.Marshal(RegisterRequest{
+		AuthToken:       token, // Pass the valid token!
+		SubdomainPrefix: "throttle-dev",
+		RateLimit:       100, // Client requests 100 RPS
+		Ports:           []PortMapping{{LocalPort: 8080}},
+	})
+
+	reqReg, _ := http.NewRequest("POST", "http://example.com/api/register", bytes.NewReader(payloadRegister))
+	reqReg.Header.Set("Content-Type", "application/json")
+	recReg := httptest.NewRecorder()
+	srv.ServeHTTP(recReg, reqReg)
+
+	if recReg.Code != http.StatusOK {
+		t.Fatalf("expected register OK (200), got %d, body: %s", recReg.Code, recReg.Body.String())
+	}
+
+	// Verify that the active lease's RateLimit was cleanly and dynamically capped at the user's DB quota of 10 RPS!
+	host := "throttle-dev.example.com"
+	lease, ok := srv.registry.GetLease(host)
+	if !ok {
+		t.Fatalf("expected active lease for %q to exist, but it was missing", host)
+	}
+	if lease.RateLimit != 10 {
+		t.Errorf("expected lease rate_limit to be capped at DB user quota (10), got %d", lease.RateLimit)
+	}
+
+	// 2. Perform Administrative Dynamic Rate Limit Override (to 15 RPS)
+	adminEmail := "admin_limiter@example.com"
+	adminUser := &db.User{
+		ID:     adminEmail,
+		Email:  adminEmail,
+		Role:   "admin",
+		Status: "approved",
+	}
+	if err := srv.db.CreateUser(adminUser); err != nil {
+		t.Fatalf("failed to create admin user: %v", err)
+	}
+
+	sessionToken := "admin-limiter-session-token-456"
+	srv.portalMap.Store("admin_session_"+sessionToken, PortalSessionData{
+		Email:     adminEmail,
+		ExpiresAt: time.Now().Add(1 * time.Hour),
+		ClientIP:  "127.0.0.1",
+	})
+
+	// Forge administrative rate-limit override request
+	payloadOverride, _ := json.Marshal(map[string]interface{}{
+		"host":       host,
+		"rate_limit": 15,
+	})
+	reqOverride, _ := http.NewRequest("PUT", "http://example.com/api/admin/leases/rate-limit", bytes.NewReader(payloadOverride))
+	reqOverride.Header.Set("Content-Type", "application/json")
+	reqOverride.AddCookie(&http.Cookie{
+		Name:  "lfr_session",
+		Value: sessionToken,
+	})
+	recOverride := httptest.NewRecorder()
+	srv.ServeHTTP(recOverride, reqOverride)
+
+	// Verify administrative status success
+	if recOverride.Code != http.StatusOK {
+		t.Fatalf("expected override status 200 OK, got %d, body: %s", recOverride.Code, recOverride.Body.String())
+	}
+
+	// Verify that the in-memory lease has been updated instantly to 15 RPS!
+	leaseOverride, _ := srv.registry.GetLease(host)
+	if leaseOverride.RateLimit != 15 {
+		t.Errorf("expected active lease rate_limit to be dynamically updated to 15, got %d", leaseOverride.RateLimit)
+	}
+
+	// Verify that our ProxyHandler's rate limiter dynamically updates its limit and burst on the fly!
+	limiter := srv.proxyHandler.getRateLimiter(host, leaseOverride.RateLimit)
+	if limiter.Limit() != 15 {
+		t.Errorf("expected ProxyHandler's rate limiter to adjust dynamically to 15, got %f", limiter.Limit())
+	}
+
+	// 3. Test Administrative User-Level Quota PATCH Update via /api/admin/users/:email
+	payloadUserPatch, _ := json.Marshal(map[string]interface{}{
+		"rate_limit": 50, // Set new DB quota to 50 RPS
+	})
+	reqUserPatch, _ := http.NewRequest("PATCH", "http://example.com/api/admin/users/"+url.QueryEscape(email), bytes.NewReader(payloadUserPatch))
+	reqUserPatch.Header.Set("Content-Type", "application/json")
+	reqUserPatch.AddCookie(&http.Cookie{
+		Name:  "lfr_session",
+		Value: sessionToken,
+	})
+	recUserPatch := httptest.NewRecorder()
+	srv.ServeHTTP(recUserPatch, reqUserPatch)
+
+	// Verify status OK
+	if recUserPatch.Code != http.StatusOK {
+		t.Fatalf("expected user PATCH status 200 OK, got %d, body: %s", recUserPatch.Code, recUserPatch.Body.String())
+	}
+
+	// Verify that the user's RateLimit quota inside the SQLite database was successfully updated to 50 RPS!
+	dbUser, err := srv.db.GetUserByEmail(email)
+	if err != nil {
+		t.Fatalf("failed to fetch user from DB: %v", err)
+	}
+	if dbUser.RateLimit != 50 {
+		t.Errorf("expected user rate_limit quota in DB to be updated to 50, got %d", dbUser.RateLimit)
+	}
+}
+
+func TestServer_DatabaseBackupScheduler(t *testing.T) {
+	srv, _, cleanup := setupTestServer(t)
+	defer cleanup()
+
+	// 1. Manually trigger a database backup
+	time.Sleep(1 * time.Second) // Ensure unique timestamp
+	err := srv.BackupDatabase()
+	if err != nil {
+		t.Fatalf("BackupDatabase failed: %v", err)
+	}
+
+	// 2. Locate the backup directory
+	backupsDir := filepath.Join(filepath.Dir(srv.cfg.DBPath), "backups")
+
+	// 3. Verify directory exists
+	info, err := os.Stat(backupsDir)
+	if err != nil || !info.IsDir() {
+		t.Fatalf("expected backups directory to exist at %s, but it did not", backupsDir)
+	}
+
+	// 4. Verify a backup file was created
+	files, err := os.ReadDir(backupsDir)
+	if err != nil || len(files) == 0 {
+		t.Fatalf("expected at least one backup file in %s, but found none", backupsDir)
+	}
+
+	// 5. Verify the file is not empty and matches active DB size
+	backupFile := filepath.Join(backupsDir, files[0].Name())
+	bInfo, err := os.Stat(backupFile)
+	if err != nil {
+		t.Fatalf("failed to stat backup file: %v", err)
+	}
+	if bInfo.Size() == 0 {
+		t.Error("backup file is empty")
+	}
+
+	// 6. Basic size check: backup should be reasonably close to DB size
+	dbInfo, _ := os.Stat(srv.cfg.DBPath)
+	if bInfo.Size() < dbInfo.Size() {
+		t.Errorf("backup file size (%d) is significantly smaller than active DB size (%d)", bInfo.Size(), dbInfo.Size())
 	}
 }

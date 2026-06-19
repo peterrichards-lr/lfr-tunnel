@@ -68,13 +68,15 @@ func (s *Server) handleGetMe(w http.ResponseWriter, r *http.Request) {
 	if s.registry != nil {
 		leases := s.registry.ListLeases()
 		for _, l := range leases {
-			if l.UserID == user.ID {
+			if l.UserID == user.ID || user.Role == "admin" || user.Role == "owner" {
 				activeLeases = append(activeLeases, map[string]interface{}{
 					"subdomain_prefix": l.SubdomainPrefix,
 					"full_host":        l.FullHost,
 					"status":           l.Status,
 					"bytes_in":         l.BytesIn,
 					"bytes_out":        l.BytesOut,
+					"rate_limit":       l.RateLimit,
+					"user_id":          l.UserID,
 					"created_at":       l.CreatedAt,
 				})
 			}

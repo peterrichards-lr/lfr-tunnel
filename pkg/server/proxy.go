@@ -40,7 +40,13 @@ func (p *ProxyHandler) getRateLimiter(host string, limit int) *rate.Limiter {
 	}
 	limiterInterface, exists := p.limiters.Load(host)
 	if exists {
-		return limiterInterface.(*rate.Limiter)
+		limiter := limiterInterface.(*rate.Limiter)
+		if limiter.Limit() != rate.Limit(limit) {
+			// Dynamically adjust the rate limit quota and burst size on-the-fly!
+			limiter.SetLimit(rate.Limit(limit))
+			limiter.SetBurst(limit * 2)
+		}
+		return limiter
 	}
 	// Burst size is twice the limit to allow some small spikes
 	newLimiter := rate.NewLimiter(rate.Limit(limit), limit*2)

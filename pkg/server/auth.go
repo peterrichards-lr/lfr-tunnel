@@ -249,6 +249,19 @@ func (r *Registry) GetLease(host string) (*TunnelLease, bool) {
 	return lease, true
 }
 
+// UpdateLeaseRateLimit dynamically overrides the requests rate limit of an active host.
+func (r *Registry) UpdateLeaseRateLimit(fullHost string, newLimit int) error {
+	r.Lock()
+	defer r.Unlock()
+
+	lease, ok := r.leases[fullHost]
+	if !ok {
+		return fmt.Errorf("active tunnel host %q not found", fullHost)
+	}
+	lease.RateLimit = newLimit
+	return nil
+}
+
 // CheckSubdomain checks a subdomain prefix availability and returns availability, reason if unavailable.
 func (r *Registry) CheckSubdomain(subdomainPrefix string, domains []string) (bool, string) {
 	r.RLock()

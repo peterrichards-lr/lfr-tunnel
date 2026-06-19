@@ -83,6 +83,7 @@ type User struct {
 	TOTPEnabled        bool       `json:"totp_enabled"`
 	PolicyConsentAt    *time.Time `json:"policy_consent_at,omitempty"`
 	LanguagePreference string     `json:"language_preference"`
+	RateLimit          int        `json:"rate_limit"`
 }
 
 type PersonalAccessToken struct {
@@ -168,6 +169,7 @@ func (db *DB) initSchema() error {
 		totp_enabled INTEGER DEFAULT 0,
 		policy_consent_at DATETIME,
 		language_preference TEXT NOT NULL DEFAULT 'en',
+		rate_limit INTEGER DEFAULT 0,
 		created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
 		updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
 	);
@@ -255,8 +257,14 @@ func (db *DB) initSchema() error {
 	_, _ = db.conn.Exec("ALTER TABLE users ADD COLUMN verification_token TEXT")
 	_, _ = db.conn.Exec("ALTER TABLE users ADD COLUMN last_client_version TEXT")
 	_, _ = db.conn.Exec("ALTER TABLE users ADD COLUMN last_client_os TEXT")
+	_, _ = db.conn.Exec("ALTER TABLE users ADD COLUMN rate_limit INTEGER DEFAULT 0")
 
 	return nil
+}
+
+// GetConnection returns the underlying sql.DB connection instance for advanced administrative operations.
+func (db *DB) GetConnection() *sql.DB {
+	return db.conn
 }
 
 // GetAdminSetting retrieves a setting value by key. Returns empty string if not found.
@@ -322,9 +330,9 @@ func (db *DB) CreateUser(u *User) error {
 	}
 
 	_, err := db.conn.Exec(`
-		INSERT INTO users (id, email, first_name, last_name, preferred_name, role, status, verification_token, approval_token, claim_token, timezone, auth_method, theme_preference, notification_prefs, created_at, updated_at, last_client_version, last_client_os, totp_secret, totp_enabled, policy_consent_at, language_preference)
-		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-	`, u.ID, u.Email, u.FirstName, u.LastName, u.PreferredName, u.Role, u.Status, u.VerificationToken, u.ApprovalToken, u.ClaimToken, u.Timezone, u.AuthMethod, u.ThemePreference, u.NotificationPrefs, u.CreatedAt, u.UpdatedAt, u.LastClientVersion, u.LastClientOS, u.TOTPSecret, totpEnabledVal, u.PolicyConsentAt, u.LanguagePreference)
+		INSERT INTO users (id, email, first_name, last_name, preferred_name, role, status, verification_token, approval_token, claim_token, timezone, auth_method, theme_preference, notification_prefs, created_at, updated_at, last_client_version, last_client_os, totp_secret, totp_enabled, policy_consent_at, language_preference, rate_limit)
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+	`, u.ID, u.Email, u.FirstName, u.LastName, u.PreferredName, u.Role, u.Status, u.VerificationToken, u.ApprovalToken, u.ClaimToken, u.Timezone, u.AuthMethod, u.ThemePreference, u.NotificationPrefs, u.CreatedAt, u.UpdatedAt, u.LastClientVersion, u.LastClientOS, u.TOTPSecret, totpEnabledVal, u.PolicyConsentAt, u.LanguagePreference, u.RateLimit)
 	return err
 }
 
@@ -339,8 +347,9 @@ func (db *DB) fetchUserByQuery(query string, arg interface{}) (*User, error) {
 	var totpEnabled int
 	var policyConsentAt sql.NullTime
 	var langPref sql.NullString
+	var rateLimitVal int
 	err := db.conn.QueryRow(query, arg).Scan(
-		&u.ID, &u.Email, &u.FirstName, &u.LastName, &u.PreferredName, &u.Role, &u.Status, &vt, &at, &ct, &u.Timezone, &u.AuthMethod, &u.ThemePreference, &u.NotificationPrefs, &u.CreatedAt, &u.UpdatedAt, &lastLogin, &u.LastLoginIP, &lastClientVersion, &lastClientOS, &totpSecret, &totpEnabled, &policyConsentAt, &langPref,
+		&u.ID, &u.Email, &u.FirstName, &u.LastName, &u.PreferredName, &u.Role, &u.Status, &vt, &at, &ct, &u.Timezone, &u.AuthMethod, &u.ThemePreference, &u.NotificationPrefs, &u.CreatedAt, &u.UpdatedAt, &lastLogin, &u.LastLoginIP, &lastClientVersion, &lastClientOS, &totpSecret, &totpEnabled, &policyConsentAt, &langPref, &rateLimitVal,
 	)
 	if err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
@@ -355,6 +364,7 @@ func (db *DB) fetchUserByQuery(query string, arg interface{}) (*User, error) {
 	u.ClaimToken = ct.String
 	u.TOTPSecret = totpSecret.String
 	u.TOTPEnabled = totpEnabled == 1
+	u.RateLimit = rateLimitVal
 	if policyConsentAt.Valid {
 		u.PolicyConsentAt = &policyConsentAt.Time
 	}
@@ -371,27 +381,27 @@ func (db *DB) fetchUserByQuery(query string, arg interface{}) (*User, error) {
 
 // GetUser fetches a user by their ID.
 func (db *DB) GetUser(id string) (*User, error) {
-	return db.fetchUserByQuery(`SELECT id, email, first_name, last_name, preferred_name, role, status, verification_token, approval_token, claim_token, timezone, auth_method, theme_preference, notification_prefs, created_at, updated_at, last_login_at, last_login_ip, last_client_version, last_client_os, totp_secret, totp_enabled, policy_consent_at, language_preference FROM users WHERE id = ?`, id)
+	return db.fetchUserByQuery(`SELECT id, email, first_name, last_name, preferred_name, role, status, verification_token, approval_token, claim_token, timezone, auth_method, theme_preference, notification_prefs, created_at, updated_at, last_login_at, last_login_ip, last_client_version, last_client_os, totp_secret, totp_enabled, policy_consent_at, language_preference, rate_limit FROM users WHERE id = ?`, id)
 }
 
 // GetUserByEmail fetches a user by their email address.
 func (db *DB) GetUserByEmail(email string) (*User, error) {
-	return db.fetchUserByQuery(`SELECT id, email, first_name, last_name, preferred_name, role, status, verification_token, approval_token, claim_token, timezone, auth_method, theme_preference, notification_prefs, created_at, updated_at, last_login_at, last_login_ip, last_client_version, last_client_os, totp_secret, totp_enabled, policy_consent_at, language_preference FROM users WHERE email = ?`, email)
+	return db.fetchUserByQuery(`SELECT id, email, first_name, last_name, preferred_name, role, status, verification_token, approval_token, claim_token, timezone, auth_method, theme_preference, notification_prefs, created_at, updated_at, last_login_at, last_login_ip, last_client_version, last_client_os, totp_secret, totp_enabled, policy_consent_at, language_preference, rate_limit FROM users WHERE email = ?`, email)
 }
 
 // GetUserByVerificationToken finds a user by their verification token.
 func (db *DB) GetUserByVerificationToken(token string) (*User, error) {
-	return db.fetchUserByQuery(`SELECT id, email, first_name, last_name, preferred_name, role, status, verification_token, approval_token, claim_token, timezone, auth_method, theme_preference, notification_prefs, created_at, updated_at, last_login_at, last_login_ip, last_client_version, last_client_os, totp_secret, totp_enabled, policy_consent_at, language_preference FROM users WHERE verification_token = ?`, token)
+	return db.fetchUserByQuery(`SELECT id, email, first_name, last_name, preferred_name, role, status, verification_token, approval_token, claim_token, timezone, auth_method, theme_preference, notification_prefs, created_at, updated_at, last_login_at, last_login_ip, last_client_version, last_client_os, totp_secret, totp_enabled, policy_consent_at, language_preference, rate_limit FROM users WHERE verification_token = ?`, token)
 }
 
 // GetUserByApprovalToken fetches a user by their approval token.
 func (db *DB) GetUserByApprovalToken(token string) (*User, error) {
-	return db.fetchUserByQuery(`SELECT id, email, first_name, last_name, preferred_name, role, status, verification_token, approval_token, claim_token, timezone, auth_method, theme_preference, notification_prefs, created_at, updated_at, last_login_at, last_login_ip, last_client_version, last_client_os, totp_secret, totp_enabled, policy_consent_at, language_preference FROM users WHERE approval_token = ?`, token)
+	return db.fetchUserByQuery(`SELECT id, email, first_name, last_name, preferred_name, role, status, verification_token, approval_token, claim_token, timezone, auth_method, theme_preference, notification_prefs, created_at, updated_at, last_login_at, last_login_ip, last_client_version, last_client_os, totp_secret, totp_enabled, policy_consent_at, language_preference, rate_limit FROM users WHERE approval_token = ?`, token)
 }
 
 // GetUserByClaimToken fetches a user by their claim token.
 func (db *DB) GetUserByClaimToken(token string) (*User, error) {
-	return db.fetchUserByQuery(`SELECT id, email, first_name, last_name, preferred_name, role, status, verification_token, approval_token, claim_token, timezone, auth_method, theme_preference, notification_prefs, created_at, updated_at, last_login_at, last_login_ip, last_client_version, last_client_os, totp_secret, totp_enabled, policy_consent_at, language_preference FROM users WHERE claim_token = ?`, token)
+	return db.fetchUserByQuery(`SELECT id, email, first_name, last_name, preferred_name, role, status, verification_token, approval_token, claim_token, timezone, auth_method, theme_preference, notification_prefs, created_at, updated_at, last_login_at, last_login_ip, last_client_version, last_client_os, totp_secret, totp_enabled, policy_consent_at, language_preference, rate_limit FROM users WHERE claim_token = ?`, token)
 }
 
 // DeleteUser removes a user from the database.
@@ -433,9 +443,10 @@ func (db *DB) UpdateUser(u *User) error {
 			totp_secret = ?,
 			totp_enabled = ?,
 			policy_consent_at = ?,
-			language_preference = ?
+			language_preference = ?,
+			rate_limit = ?
 	          WHERE id = ?`
-	res, err := db.conn.Exec(query, u.Email, u.FirstName, u.LastName, u.PreferredName, u.Role, u.Status, vtVal, approvalTokenVal, claimTokenVal, u.Timezone, u.AuthMethod, u.ThemePreference, u.NotificationPrefs, u.UpdatedAt, lastLoginVal, u.LastLoginIP, u.LastClientVersion, u.LastClientOS, u.TOTPSecret, totpEnabledVal, u.PolicyConsentAt, u.LanguagePreference, u.ID)
+	res, err := db.conn.Exec(query, u.Email, u.FirstName, u.LastName, u.PreferredName, u.Role, u.Status, vtVal, approvalTokenVal, claimTokenVal, u.Timezone, u.AuthMethod, u.ThemePreference, u.NotificationPrefs, u.UpdatedAt, lastLoginVal, u.LastLoginIP, u.LastClientVersion, u.LastClientOS, u.TOTPSecret, totpEnabledVal, u.PolicyConsentAt, u.LanguagePreference, u.RateLimit, u.ID)
 	if err != nil {
 		return err
 	}
@@ -451,7 +462,7 @@ func (db *DB) UpdateUser(u *User) error {
 
 // ListUsers lists all registered users.
 func (db *DB) ListUsers() ([]*User, error) {
-	query := `SELECT id, email, first_name, last_name, preferred_name, role, status, verification_token, approval_token, claim_token, timezone, auth_method, theme_preference, notification_prefs, created_at, updated_at, last_login_at, last_login_ip, last_client_version, last_client_os, totp_secret, totp_enabled, policy_consent_at, language_preference FROM users`
+	query := `SELECT id, email, first_name, last_name, preferred_name, role, status, verification_token, approval_token, claim_token, timezone, auth_method, theme_preference, notification_prefs, created_at, updated_at, last_login_at, last_login_ip, last_client_version, last_client_os, totp_secret, totp_enabled, policy_consent_at, language_preference, rate_limit FROM users`
 	rows, err := db.conn.Query(query)
 	if err != nil {
 		return nil, err
@@ -469,7 +480,8 @@ func (db *DB) ListUsers() ([]*User, error) {
 		var totpEnabled int
 		var policyConsentAt sql.NullTime
 		var langPref sql.NullString
-		if err := rows.Scan(&u.ID, &u.Email, &u.FirstName, &u.LastName, &u.PreferredName, &u.Role, &u.Status, &vt, &at, &ct, &u.Timezone, &u.AuthMethod, &u.ThemePreference, &u.NotificationPrefs, &u.CreatedAt, &u.UpdatedAt, &lastLogin, &u.LastLoginIP, &lastClientVersion, &lastClientOS, &totpSecret, &totpEnabled, &policyConsentAt, &langPref); err != nil {
+		var rateLimitVal int
+		if err := rows.Scan(&u.ID, &u.Email, &u.FirstName, &u.LastName, &u.PreferredName, &u.Role, &u.Status, &vt, &at, &ct, &u.Timezone, &u.AuthMethod, &u.ThemePreference, &u.NotificationPrefs, &u.CreatedAt, &u.UpdatedAt, &lastLogin, &u.LastLoginIP, &lastClientVersion, &lastClientOS, &totpSecret, &totpEnabled, &policyConsentAt, &langPref, &rateLimitVal); err != nil {
 			return nil, err
 		}
 		u.VerificationToken = vt.String
@@ -479,6 +491,7 @@ func (db *DB) ListUsers() ([]*User, error) {
 		u.ClaimToken = ct.String
 		u.TOTPSecret = totpSecret.String
 		u.TOTPEnabled = totpEnabled == 1
+		u.RateLimit = rateLimitVal
 		if policyConsentAt.Valid {
 			u.PolicyConsentAt = &policyConsentAt.Time
 		}

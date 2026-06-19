@@ -433,3 +433,70 @@ func TestBlacklistCRUD(t *testing.T) {
 		t.Error("IP should not be blacklisted after removal")
 	}
 }
+
+func TestUserRateLimitCRUD(t *testing.T) {
+	database, tmpDir := setupTestDB(t)
+	defer cleanupTestDB(database, tmpDir)
+
+	email := "ratelimit_test@example.com"
+	user := &User{
+		ID:                 email,
+		Email:              email,
+		FirstName:          "Throttle",
+		LastName:           "Tester",
+		Role:               "user",
+		Status:             "approved",
+		RateLimit:          25, // Initial rate limit quota
+		LanguagePreference: "en",
+	}
+
+	// 1. Create User
+	err := database.CreateUser(user)
+	if err != nil {
+		t.Fatalf("CreateUser failed: %v", err)
+	}
+
+	// 2. Fetch User and verify rate limit
+	u, err := database.GetUserByEmail(email)
+	if err != nil {
+		t.Fatalf("GetUserByEmail failed: %v", err)
+	}
+	if u.RateLimit != 25 {
+		t.Errorf("expected RateLimit to be 25, got %d", u.RateLimit)
+	}
+
+	// 3. Update User RateLimit
+	u.RateLimit = 50
+	err = database.UpdateUser(u)
+	if err != nil {
+		t.Fatalf("UpdateUser failed: %v", err)
+	}
+
+	// 4. Fetch again and verify updated rate limit
+	u2, err := database.GetUserByEmail(email)
+	if err != nil {
+		t.Fatalf("GetUserByEmail failed: %v", err)
+	}
+	if u2.RateLimit != 50 {
+		t.Errorf("expected updated RateLimit to be 50, got %d", u2.RateLimit)
+	}
+
+	// 5. List users and verify rate limit is returned
+	list, err := database.ListUsers()
+	if err != nil {
+		t.Fatalf("ListUsers failed: %v", err)
+	}
+	found := false
+	for _, usr := range list {
+		if usr.Email == email {
+			found = true
+			if usr.RateLimit != 50 {
+				t.Errorf("expected ListUsers to return RateLimit 50, got %d", usr.RateLimit)
+			}
+			break
+		}
+	}
+	if !found {
+		t.Error("expected to find created user in ListUsers result")
+	}
+}

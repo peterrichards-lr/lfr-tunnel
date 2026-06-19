@@ -38,10 +38,11 @@ type InterceptorEngine struct {
 	AddedHeaders    map[string]string
 	History         []*RequestRecord
 	MaxHistory      int
+	TargetHost      string
 }
 
 // NewInterceptorEngine creates a new state engine for traffic inspection.
-func NewInterceptorEngine(headers []string) *InterceptorEngine {
+func NewInterceptorEngine(targetHost string, headers []string) *InterceptorEngine {
 	headerMap := make(map[string]string)
 	for _, h := range headers {
 		parts := strings.SplitN(h, ":", 2)
@@ -50,12 +51,17 @@ func NewInterceptorEngine(headers []string) *InterceptorEngine {
 		}
 	}
 
+	if targetHost == "" {
+		targetHost = "127.0.0.1"
+	}
+
 	return &InterceptorEngine{
 		MaintenanceMode: false,
 		Status:          "up",
 		AddedHeaders:    headerMap,
 		History:         make([]*RequestRecord, 0),
 		MaxHistory:      100, // Keep last 100 requests
+		TargetHost:      targetHost,
 	}
 }
 
@@ -75,7 +81,7 @@ func (e *InterceptorEngine) StartHealthChecks(serverURL, sessionToken string, ta
 				newStatus = "maintenance"
 			} else {
 				// Simple dial test to the local target port
-				conn, err := net.DialTimeout("tcp", fmt.Sprintf("127.0.0.1:%d", targetPort), 2*time.Second)
+				conn, err := net.DialTimeout("tcp", fmt.Sprintf("%s:%d", e.TargetHost, targetPort), 2*time.Second)
 				if err != nil {
 					newStatus = "down"
 				} else {
@@ -124,7 +130,7 @@ func (e *InterceptorEngine) InterceptPort(targetPort int) (int, error) {
 
 	listenPort := listener.Addr().(*net.TCPAddr).Port
 
-	targetURL, _ := url.Parse(fmt.Sprintf("http://127.0.0.1:%d", targetPort))
+	targetURL, _ := url.Parse(fmt.Sprintf("http://%s:%d", e.TargetHost, targetPort))
 	proxy := httputil.NewSingleHostReverseProxy(targetURL)
 
 	// Custom Transport to capture response and duration
@@ -138,6 +144,12 @@ func (e *InterceptorEngine) InterceptPort(targetPort int) (int, error) {
 	originalDirector := proxy.Director
 	proxy.Director = func(req *http.Request) {
 		originalDirector(req)
+
+		// Rewrite Host header if target is a custom virtual host
+		if e.TargetHost != "localhost" && e.TargetHost != "127.0.0.1" && e.TargetHost != "host.docker.internal" {
+			req.Host = getHostHeaderValue(e.TargetHost, targetPort)
+		}
+
 		e.mu.RLock()
 		defer e.mu.RUnlock()
 		for k, v := range e.AddedHeaders {
@@ -259,4 +271,11 @@ func serveMaintenancePage(w http.ResponseWriter) {
 	</body>
 	</html>
 	`))
+}
+
+func getHostHeaderValue(host string, port int) string {
+	if port == 80 || port == 443 {
+		return host
+	}
+	return fmt.Sprintf("%s:%d", host, port)
 }

@@ -193,6 +193,9 @@ The solution will consist of:
 - [x] Implement full i18n translation support for the dashboard UI elements (sidebar, tab headers, form fields) to allow immediate language switching.
 - [x] Fix Docker Hub link URL suffix by stripping the image tag for web links.
 - [x] Add `docker_bypass_url` support to server config and expose to frontend via `/api/version`.
+- [x] Fix interceptor bypass bug by rewriting client remotes to point to local intercept ports.
+- [x] Update interceptor to support LFT_TARGET_HOST and rewrite HTTP Host header to match the target host.
+- [x] Verify LDM sharing design compatibility and update documentation.
 
 
 

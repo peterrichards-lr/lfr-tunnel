@@ -158,7 +158,8 @@ The solution will consist of:
 - [x] Align E2E test environments, Docker configuration, and Playwright UI tests
 - [x] Document client platform overrides in Docs
 - [x] Create automated sign-release.sh script in scripts/ supporting environment configuration and secure terminal prompting for macOS, Windows, and Linux signing
-- [ ] Update default macOS command to download binary and copy directly to /usr/local/bin/lfr-tunnel
+- [x] Update default macOS command to download binary and copy directly to /usr/local/bin/lfr-tunnel
+- [x] Update scripts/install.sh to use the S1 whitelisted /tmp/lfr-tunnel staging path
 
 
 

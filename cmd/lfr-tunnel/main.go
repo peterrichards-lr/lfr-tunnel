@@ -253,7 +253,11 @@ func main() {
 	if cfg.BasicAuth != "" {
 		fmt.Printf("[Client] Data Plane HTTP Basic Auth is ENABLED\n")
 	}
-	regResp, err := client.RegisterTunnel(cfg.ServerURL, cfg.AuthToken, sub, portMappings, cfg.RateLimit, cfg.BasicAuth, engine.AddedHeaders, runtime.GOOS)
+	clientOS := runtime.GOOS
+	if _, err := os.Stat("/.dockerenv"); err == nil {
+		clientOS += " (Docker)"
+	}
+	regResp, err := client.RegisterTunnel(cfg.ServerURL, cfg.AuthToken, sub, portMappings, cfg.RateLimit, cfg.BasicAuth, engine.AddedHeaders, clientOS)
 	if err != nil {
 		log.Fatalf("[Error] Failed to register: %v\n", err)
 	}

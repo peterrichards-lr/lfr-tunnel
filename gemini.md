@@ -157,7 +157,9 @@ The solution will consist of:
 - [x] Integrate dynamic platform configurations on Admin/Client Dashboard UI
 - [x] Align E2E test environments, Docker configuration, and Playwright UI tests
 - [x] Document client platform overrides in Docs
-- [ ] Create automated sign-release.sh script in scripts/ supporting environment configuration and secure terminal prompting for macOS, Windows, and Linux signing
+- [x] Create automated sign-release.sh script in scripts/ supporting environment configuration and secure terminal prompting for macOS, Windows, and Linux signing
+- [ ] Update default macOS command to download binary and copy directly to /usr/local/bin/lfr-tunnel
+
 
 
 
@@ -214,4 +216,9 @@ The solution will consist of:
 - [x] Implement Cache-Busting for static JavaScript and CSS assets served by the Gateway.
 - [x] Add dynamic admin settings toggle switch to show/hide the Docker Hub CLI workaround panel.
 - [x] Write E2E Playwright test assertions to cover Docker panel visibility, Joined Date HTML rendering, and dynamic toggle behavior.
+- [x] Fix Nginx control plane server block WebSocket Upgrade routing on VPS.
+- [x] Detect Docker environment on the client side and append ' (Docker)' to Client OS stats.
+- [x] Support overriding LFT_TARGET_HOST in the Docker wrapper scripts (Bash, Batch, PowerShell).
+- [x] Support LDM environment contract fallbacks (LFT_SUBDOMAIN, LFT_SERVER_URL, LFT_TOKEN) in Go client configuration.
+- [ ] Bump version to v1.7.12 in whats-new.json, tag, and push to trigger release CI workflow.
 

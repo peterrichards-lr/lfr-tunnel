@@ -39,9 +39,12 @@ if not "%LFT_SUBDOMAIN%"=="" (
     set "subdomain_flag=-subdomain %LFT_SUBDOMAIN%"
 )
 
+:: Set default target host if not configured
+if "%LFT_TARGET_HOST%"=="" set "LFT_TARGET_HOST=host.docker.internal"
+
 :: Run container
 docker run --rm -it ^
-  -e LFT_TARGET_HOST=host.docker.internal ^
+  -e LFT_TARGET_HOST=%LFT_TARGET_HOST% ^
   lfr-tunnel-client:latest ^
   -server "%LFT_SERVER%" ^
   -token "%LFT_TOKEN%" ^

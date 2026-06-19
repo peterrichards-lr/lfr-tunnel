@@ -33,8 +33,12 @@ if ($LASTEXITCODE -ne 0) {
 
 Write-Host "[Docker Client] Launching tunnel..." -ForegroundColor Green
 
+# Set default target host if not configured
+$targetHost = [System.Environment]::GetEnvironmentVariable("LFT_TARGET_HOST")
+if ([string]::IsNullOrEmpty($targetHost)) { $targetHost = "host.docker.internal" }
+
 # Build arguments list
-$dockerArgs = @("run", "--rm", "-it", "-e", "LFT_TARGET_HOST=host.docker.internal", "lfr-tunnel-client:latest", "-server", $server, "-token", $token)
+$dockerArgs = @("run", "--rm", "-it", "-e", "LFT_TARGET_HOST=$targetHost", "lfr-tunnel-client:latest", "-server", $server, "-token", $token)
 
 if (-not [string]::IsNullOrEmpty($subdomain)) {
     $dockerArgs += @("-subdomain", $subdomain)

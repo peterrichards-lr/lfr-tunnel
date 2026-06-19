@@ -267,6 +267,20 @@ docker run -d --name lfr-tunnel \
    - **Windows CMD**: `lfr-tunnel.bat`
    - **Windows PowerShell**: `.\lfr-tunnel.ps1`
 
+### Docker Container Environment Variable Contract
+When running `lfr-tunnel` directly as a Docker container (e.g. orchestrated by LDM or in a custom docker-compose file), the following environment variable contract is supported:
+
+| Environment Variable | Canonical | Fallbacks | Description | Example |
+| :--- | :--- | :--- | :--- | :--- |
+| **Server URL** | `LFT_CLIENT_SERVER` | `LFT_SERVER_URL`, `LFT_SERVER` | Gateway server endpoint | `https://tunnel.lfr-demo.se` |
+| **Auth Token** | `LFT_CLIENT_TOKEN` | `LFT_TOKEN` | Gateway developer PAT | `lfr_pat_...` |
+| **Subdomain** | `LFT_CLIENT_SUBDOMAIN` | `LFT_SUBDOMAIN` | Custom subdomain prefix | `pjrtest` |
+| **Target Host** | `LFT_TARGET_HOST` | — | Backend hostname or IP to route to | `liferay` (or `http://liferay:8080`) |
+| **Ports** | `LFT_CLIENT_PORTS` | — | Comma-separated list of ports | `8080,3000` |
+
+> [!NOTE]
+> The target host parser is URL-aware: if a full URL with scheme/port (e.g. `http://liferay:8080`) is passed into `LFT_TARGET_HOST`, the client automatically cleans it to the raw hostname (`liferay`) to ensure correct routing.
+
 ---
 
 ## Keeping the Client Up to Date

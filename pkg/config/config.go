@@ -1,6 +1,7 @@
 package config
 
 import (
+	"net/url"
 	"os"
 	"path/filepath"
 	"strconv"
@@ -311,13 +312,24 @@ func LoadClientConfig(path string) (*ClientConfig, error) {
 	// Environment variable overrides
 	if val := os.Getenv("LFT_CLIENT_SERVER"); val != "" {
 		cfg.ServerURL = val
+	} else if val := os.Getenv("LFT_SERVER_URL"); val != "" {
+		cfg.ServerURL = val
+	} else if val := os.Getenv("LFT_SERVER"); val != "" {
+		cfg.ServerURL = val
 	}
+
 	if val := os.Getenv("LFT_CLIENT_TOKEN"); val != "" {
 		cfg.AuthToken = val
+	} else if val := os.Getenv("LFT_TOKEN"); val != "" {
+		cfg.AuthToken = val
 	}
+
 	if val := os.Getenv("LFT_CLIENT_SUBDOMAIN"); val != "" {
 		cfg.Subdomain = val
+	} else if val := os.Getenv("LFT_SUBDOMAIN"); val != "" {
+		cfg.Subdomain = val
 	}
+
 	if val := os.Getenv("LFT_CLIENT_PORTS"); val != "" {
 		parts := strings.Split(val, ",")
 		var ports []int
@@ -331,9 +343,28 @@ func LoadClientConfig(path string) (*ClientConfig, error) {
 			cfg.Ports = ports
 		}
 	}
+
 	if val := os.Getenv("LFT_TARGET_HOST"); val != "" {
-		cfg.TargetHost = val
+		cfg.TargetHost = cleanTargetHost(val)
 	}
 
 	return cfg, nil
+}
+
+// cleanTargetHost extracts the hostname/IP from a URL (e.g. http://liferay:8080 -> liferay)
+// or returns the original string if it is already a plain hostname/IP.
+func cleanTargetHost(target string) string {
+	if target == "" {
+		return ""
+	}
+	// If it doesn't contain a scheme prefix, prepend a dummy scheme to allow url.Parse to work
+	uStr := target
+	if !strings.Contains(uStr, "://") {
+		uStr = "http://" + uStr
+	}
+	u, err := url.Parse(uStr)
+	if err == nil && u.Hostname() != "" {
+		return u.Hostname()
+	}
+	return target
 }

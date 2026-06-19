@@ -177,5 +177,4 @@ The solution will consist of:
 - [x] Create `scripts/disable-maintenance.sh` to disable maintenance mode.
 - [x] Create a wrapper script `scripts/restore-with-maintenance.sh` that safely coordinates maintenance state and restore-backup.sh.
 - [x] Document Nginx maintenance configuration in `docs/setup_guide.md`.
-
-
+- [x] Implement dynamic version number display in the login page footer and sidebar bottom in the dashboard.

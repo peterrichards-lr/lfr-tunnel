@@ -246,10 +246,45 @@ Enable the Nginx configuration and restart Nginx:
 ```bash
 sudo ln -s /etc/nginx/sites-available/lfr-tunnel /etc/nginx/sites-enabled/
 sudo nginx -t
-sudo systemctl restart nginx
+
+### 3.4. Configure Nginx Maintenance Mode (Optional but Recommended)
+To prevent `502 Bad Gateway` errors from being displayed to users during database backups restoration or server updates, you can configure Nginx to automatically intercept traffic and serve a beautiful, static maintenance page when the trigger file is present.
+
+1. Create the web root directory for the static maintenance assets:
+```bash
+sudo mkdir -p /var/www/lfr-tunnel
+```
+
+2. Update `/etc/nginx/sites-available/lfr-tunnel` by adding the following block inside **both** SSL server blocks (the Control Plane block `yourdomain.com` and the Wildcard Data Plane block `*.yourdomain.com`), just after the SSL certificate configurations:
+
+```nginx
+    # Maintenance Check Block
+    # Checks for the presence of the maintenance trigger file
+    if (-f /var/lib/lfr-tunneld/maintenance.enable) {
+        set $maintenance 1;
+    }
+    # Allow rendering the maintenance page itself without redirect loops
+    if ($request_uri = "/maintenance.html") {
+        set $maintenance 0;
+    }
+    if ($maintenance = 1) {
+        return 503;
+    }
+
+    error_page 503 /maintenance.html;
+    location = /maintenance.html {
+        root /var/www/lfr-tunnel;
+    }
+```
+
+3. Validate the configuration and reload Nginx:
+```bash
+sudo nginx -t
+sudo systemctl reload nginx
 ```
 
 ---
+
 
 ## 4. Install & Configure `lfr-tunneld`
 

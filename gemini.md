@@ -180,4 +180,4 @@ The solution will consist of:
 - [x] Implement dynamic version number display in the login page footer and sidebar bottom in the dashboard.
 
 ## Documentation and Branching Strategy
-- [/] Review and align markdown files with the current repository state and document the branching/PR conventions in `CONTRIBUTING.md` (In Progress).
+- [x] Review and align markdown files with the current repository state and document the branching/PR conventions in `CONTRIBUTING.md`.

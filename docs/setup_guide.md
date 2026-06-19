@@ -264,12 +264,13 @@ sudo mkdir -p /var/www/lfr-tunnel
         set $maintenance 1;
     }
     # Allow rendering the maintenance page itself without redirect loops
-    if ($request_uri = "/maintenance.html") {
+    if ($uri = "/maintenance.html") {
         set $maintenance 0;
     }
     if ($maintenance = 1) {
         return 503;
     }
+
 
     error_page 503 /maintenance.html;
     location = /maintenance.html {

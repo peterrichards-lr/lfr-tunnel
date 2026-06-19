@@ -181,3 +181,6 @@ The solution will consist of:
 
 ## Documentation and Branching Strategy
 - [x] Review and align markdown files with the current repository state and document the branching/PR conventions in `CONTRIBUTING.md`.
+
+## Bug Fixes
+- [/] Fix MFA Setup button and modal display logic in the dashboard UI (In Progress).

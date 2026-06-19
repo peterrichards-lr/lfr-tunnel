@@ -1695,7 +1695,7 @@ function toggleTheme() {
                     document.getElementById('mfa-secret-display').innerText = data.secret;
                     document.getElementById('mfa-qr-display').src = `https://api.qrserver.com/v1/create-qr-code/?size=180x180&data=${encodeURIComponent(data.otpauth_url)}`;
                     document.getElementById('mfa-verify-code').value = '';
-                    document.getElementById('mfa-modal').classList.add('show');
+                    document.getElementById('mfa-modal').style.display = 'flex';
                 } else {
                     showToast("Failed to fetch MFA setup details.", "danger");
                 }
@@ -1705,7 +1705,7 @@ function toggleTheme() {
         }
 
         function closeMFAModal() {
-            document.getElementById('mfa-modal').classList.remove('show');
+            document.getElementById('mfa-modal').style.display = 'none';
         }
 
         async function confirmEnableMFA() {

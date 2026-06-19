@@ -242,7 +242,7 @@ func NewServer(cfg *config.ServerConfig) (*Server, error) {
 		}
 	}
 
-	if srv.db != nil {
+	if srv.db != nil && !srv.cfg.DisableBackupScheduler {
 		srv.startDatabaseBackupScheduler()
 	}
 

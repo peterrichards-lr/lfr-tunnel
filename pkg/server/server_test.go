@@ -21,7 +21,8 @@ import (
 
 func TestServer_Register(t *testing.T) {
 	cfg := &config.ServerConfig{
-		Domains: []string{"example.com"},
+		Domains:                []string{"example.com"},
+		DisableBackupScheduler: true,
 	}
 
 	if cfg.DBPath == "" {
@@ -90,7 +91,8 @@ func TestServer_Register(t *testing.T) {
 
 func TestServer_ControlWelcomePage(t *testing.T) {
 	cfg := &config.ServerConfig{
-		Domains: []string{"example.com"},
+		Domains:                []string{"example.com"},
+		DisableBackupScheduler: true,
 	}
 
 	if cfg.DBPath == "" {
@@ -124,7 +126,8 @@ func TestServer_ControlWelcomePage(t *testing.T) {
 
 func TestServer_Domains(t *testing.T) {
 	cfg := &config.ServerConfig{
-		Domains: []string{"example.se", "example.online"},
+		Domains:                []string{"example.se", "example.online"},
+		DisableBackupScheduler: true,
 	}
 
 	if cfg.DBPath == "" {
@@ -162,7 +165,8 @@ func TestServer_Domains(t *testing.T) {
 
 func TestServer_CheckSubdomain(t *testing.T) {
 	cfg := &config.ServerConfig{
-		Domains: []string{"example.com"},
+		Domains:                []string{"example.com"},
+		DisableBackupScheduler: true,
 	}
 
 	if cfg.DBPath == "" {
@@ -329,6 +333,7 @@ func TestServer_RegistrationFlow(t *testing.T) {
 		Domains:                []string{"example.com"},
 		DBPath:                 dbPath,
 		AdminNotificationEmail: "admin@example.com",
+		DisableBackupScheduler: true,
 	}
 
 	srv, err := NewServer(cfg)
@@ -491,7 +496,8 @@ func TestServer_RegistrationFlow(t *testing.T) {
 
 func TestServer_DomainSeparation(t *testing.T) {
 	cfg := &config.ServerConfig{
-		Domains: []string{"example.se", "example.online"},
+		Domains:                []string{"example.se", "example.online"},
+		DisableBackupScheduler: true,
 	}
 
 	if cfg.DBPath == "" {
@@ -764,6 +770,7 @@ func TestServer_UnsubscribeAndMaintenance(t *testing.T) {
 	cfg := config.DefaultServerConfig()
 	cfg.DBPath = filepath.Join(tmpDir, "test.db")
 	cfg.Domains = []string{"example.com"}
+	cfg.DisableBackupScheduler = true
 
 	srv, err := NewServer(cfg)
 	if err != nil {
@@ -839,6 +846,7 @@ func TestServer_GDPRDeleteAndAnonymization(t *testing.T) {
 	cfg := config.DefaultServerConfig()
 	cfg.DBPath = filepath.Join(tmpDir, "test.db")
 	cfg.Domains = []string{"example.com"}
+	cfg.DisableBackupScheduler = true
 
 	srv, err := NewServer(cfg)
 	if err != nil {
@@ -884,6 +892,7 @@ func TestServer_GDPRDeleteAndAnonymization(t *testing.T) {
 func TestServer_I18nLanguageHandling(t *testing.T) {
 	cfg := config.DefaultServerConfig()
 	cfg.Domains = []string{"example.com"}
+	cfg.DisableBackupScheduler = true
 
 	srv, err := NewServer(cfg)
 	if err != nil {
@@ -939,6 +948,7 @@ func setupTestServer(t *testing.T) (*Server, *mockMailSender, func()) {
 	cfg := config.DefaultServerConfig()
 	cfg.Domains = []string{"example.com"}
 	cfg.DBPath = filepath.Join(t.TempDir(), "test.db")
+	cfg.DisableBackupScheduler = true
 
 	srv, err := NewServer(cfg)
 	if err != nil {

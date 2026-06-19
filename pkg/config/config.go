@@ -52,6 +52,7 @@ type ServerConfig struct {
 	PrivacyPolicyURL       string           `yaml:"privacy_policy_url"`
 	CookiePolicyURL        string           `yaml:"cookie_policy_url"`
 	EnforcePolicyConsent   bool             `yaml:"enforce_policy_consent"`
+	DisableBackupScheduler bool             `yaml:"disable_backup_scheduler"`
 
 	// Dynamic SSO/OIDC Providers
 	SSOProviders []SSOProviderConfig `yaml:"sso_providers"`

@@ -772,6 +772,7 @@ func TestServer_UnsubscribeAndMaintenance(t *testing.T) {
 	cfg.DBPath = filepath.Join(tmpDir, "test.db")
 	cfg.Domains = []string{"example.com"}
 	cfg.DisableBackupScheduler = true
+	cfg.DockerImage = "peterrichardslr/lfr-tunnel"
 
 	srv, err := NewServer(cfg)
 	if err != nil {
@@ -834,6 +835,9 @@ func TestServer_UnsubscribeAndMaintenance(t *testing.T) {
 	}
 	if verResp["maintenance_mode"] != "pending" {
 		t.Errorf("expected maintenance_mode to be 'pending', got %q", verResp["maintenance_mode"])
+	}
+	if verResp["docker_image"] != "peterrichardslr/lfr-tunnel" {
+		t.Errorf("expected docker_image to be 'peterrichardslr/lfr-tunnel', got %q", verResp["docker_image"])
 	}
 }
 

@@ -23,6 +23,7 @@ http_bind_addr: ":8080"
 chisel_bind_addr: ":8082"
 ssl_cert_file: "/path/to/cert"
 ssl_key_file: "/path/to/key"
+docker_image: "peterjrichards/lfr-tunnel:latest"
 `)
 	if _, err := tmpFile.Write(content); err != nil {
 		t.Fatalf("failed to write temp file: %v", err)
@@ -41,13 +42,18 @@ ssl_key_file: "/path/to/key"
 	if cfg.BindAddr != ":8443" {
 		t.Errorf("expected BindAddr to be :8443, got %s", cfg.BindAddr)
 	}
+	if cfg.DockerImage != "peterjrichards/lfr-tunnel:latest" {
+		t.Errorf("expected DockerImage to be peterjrichards/lfr-tunnel:latest, got %s", cfg.DockerImage)
+	}
 
 	// 3. Set environment variables to override
-	os.Setenv("LFT_DOMAINS", "env.com") //nolint:errcheck
-	os.Setenv("LFT_BIND_ADDR", ":9443") //nolint:errcheck
+	os.Setenv("LFT_DOMAINS", "env.com")                    //nolint:errcheck
+	os.Setenv("LFT_BIND_ADDR", ":9443")                    //nolint:errcheck
+	os.Setenv("LFT_DOCKER_IMAGE", "override/image:latest") //nolint:errcheck
 	defer func() {
-		os.Unsetenv("LFT_DOMAINS")   //nolint:errcheck
-		os.Unsetenv("LFT_BIND_ADDR") //nolint:errcheck
+		os.Unsetenv("LFT_DOMAINS")      //nolint:errcheck
+		os.Unsetenv("LFT_BIND_ADDR")    //nolint:errcheck
+		os.Unsetenv("LFT_DOCKER_IMAGE") //nolint:errcheck
 	}()
 
 	cfgEnv, err := LoadServerConfig(tmpFile.Name())
@@ -60,6 +66,9 @@ ssl_key_file: "/path/to/key"
 	}
 	if cfgEnv.BindAddr != ":9443" {
 		t.Errorf("expected BindAddr override to be :9443, got %s", cfgEnv.BindAddr)
+	}
+	if cfgEnv.DockerImage != "override/image:latest" {
+		t.Errorf("expected DockerImage override to be override/image:latest, got %s", cfgEnv.DockerImage)
 	}
 }
 

@@ -172,12 +172,29 @@
                         </ul>
                     </div>
 
-                    <div class="glass" style="padding: 24px; border-radius: 8px;">
-                        <h3 style="margin-bottom: 16px; font-size: 18px;">Quick Links</h3>
-                        <div style="display: flex; flex-direction: column; gap: 12px;">
-                            <a href="#" onclick="showTab('tokens')" style="color: var(--primary); text-decoration: none; font-weight: 500;">→ Generate a new CLI Token</a>
-                            <a href="#" onclick="showTab('tunnels')" style="color: var(--primary); text-decoration: none; font-weight: 500;">→ View your Active Tunnels</a>
-                            <a id="docs-link" href="#" target="_blank" style="color: var(--primary); text-decoration: none; font-weight: 500;">→ Read the Documentation</a>
+                    <div style="display: flex; flex-direction: column; gap: 24px;">
+                        <div class="glass" style="padding: 24px; border-radius: 8px;">
+                            <h3 style="margin-bottom: 16px; font-size: 18px;">Quick Links</h3>
+                            <div style="display: flex; flex-direction: column; gap: 12px;">
+                                <a href="#" onclick="showTab('tokens')" style="color: var(--primary); text-decoration: none; font-weight: 500;">→ Generate a new CLI Token</a>
+                                <a href="#" onclick="showTab('tunnels')" style="color: var(--primary); text-decoration: none; font-weight: 500;">→ View your Active Tunnels</a>
+                                <a id="docs-link" href="#" target="_blank" style="color: var(--primary); text-decoration: none; font-weight: 500;">→ Read the Documentation</a>
+                            </div>
+                        </div>
+
+                        <div id="docker-container-box" class="glass" style="padding: 24px; border-radius: 8px; display: none;">
+                            <h3 style="margin-bottom: 12px; font-size: 18px; display: flex; align-items: center; gap: 8px;">
+                                <svg viewBox="0 0 24 24" width="24" height="24" fill="currentColor"><path d="M13.983 11.078h2.119c.102 0 .186-.083.186-.185V8.99c0-.102-.084-.186-.186-.186h-2.119c-.103 0-.186.084-.186.186v1.903c0 .102.083.185.186.185zM11.261 11.078h2.119c.102 0 .186-.083.186-.185V8.99c0-.102-.084-.186-.186-.186h-2.119c-.103 0-.186.084-.186.186v1.903c0 .102.083.185.186.185zM8.539 11.078h2.119c.103 0 .187-.083.187-.185V8.99c0-.102-.084-.186-.187-.186H8.54c-.103 0-.186.084-.186.186v1.903c0 .102.083.185.186.185zm2.722-2.711h2.119c.102 0 .186-.083.186-.185V6.279c0-.102-.084-.186-.186-.186h-2.119c-.103 0-.186.084-.186.186v1.903c0 .102.083.185.186.185zM8.539 8.367h2.119c.103 0 .187-.083.187-.185V6.279c0-.102-.084-.186-.187-.186H8.54c-.103 0-.186.084-.186.186v1.903c0 .102.083.185.186.185zm5.444 0h2.119c.102 0 .186-.083.186-.185V6.279c0-.102-.084-.186-.186-.186h-2.119c-.103 0-.186.084-.186.186v1.903c0 .102.083.185.186.185zM5.817 11.078h2.119c.102 0 .186-.083.186-.185V8.99c0-.102-.084-.186-.186-.186H5.817c-.102 0-.186.084-.186.186v1.903c0 .102.084.185.186.185zM2.8 11.968c-.102 0-.186.083-.186.185v1.903c0 .102.084.186.186.186h2.119c.103 0 .186-.084.186-.186v-1.903c0-.102-.083-.185-.186-.185zm2.722-3.6h2.119c.102 0 .186-.084.186-.186V6.279c0-.102-.084-.186-.186-.186H5.817c-.102 0-.186.084-.186.186v1.903c0 .102.084.185.186.186zM22.047 12.3c-.027-.374-.108-.748-.242-1.116-.271-.741-.747-1.393-1.353-1.859-.607-.466-1.332-.733-2.082-.756-1.5-.045-3.003-.016-4.505-.016h-.123c-.108 0-.197.089-.197.198v1.9c0 .11.089.199.197.199h.286c1.196.012 2.392-.016 3.585.034.409.017.818.113 1.189.3.37.186.686.471.907.822.253.4.37.868.337 1.341-.073 1.055-.494 2.052-1.185 2.825a5.5 5.5 0 01-3.633 1.838c-1.312.188-2.64.137-3.931-.151a11.08 11.08 0 01-5.112-2.738 7.39 7.39 0 01-1.97-4.116C3.963 10.15 3.99 9.1 4.29 8.087a6.94 6.94 0 011.66-2.82A6.52 6.52 0 018.665 3.61c.148-.046.297-.089.448-.13a.194.194 0 00.143-.19v-2c0-.113-.095-.203-.207-.193-.312.029-.623.076-.932.14a8.91 8.91 0 00-3.687 1.8 9.32 9.32 0 00-2.802 3.65c-.563 1.25-.806 2.61-.715 3.978.114 1.706.775 3.322 1.876 4.636 1.1 1.314 2.58 2.247 4.2 2.68 1.944.52 3.974.52 5.918 0a11.1 11.1 0 004.912-2.58c1.378-1.206 2.338-2.84 2.709-4.634.331-1.6.241-3.26-.263-4.81z" fill="currentColor"/></svg>
+                                Docker Hub Image
+                            </h3>
+                            <p style="font-size: 13px; color: var(--text-muted); margin-bottom: 12px; line-height: 1.4;">
+                                You can pull the official Docker client image directly:
+                            </p>
+                            <div class="copy-box" id="docker-pull-cmd" style="font-family: monospace; font-size: 13px; cursor: pointer; display: flex; align-items: center; justify-content: space-between; padding: 12px; background: rgba(0,0,0,0.2); border-radius: 6px; border: 1px solid var(--border); word-break: break-all;" onclick="copyDockerCmd()">
+                                <span id="docker-pull-text"></span>
+                                <svg viewBox="0 0 24 24" width="16" height="16" stroke="currentColor" stroke-width="2" fill="none" style="flex-shrink:0; margin-left:8px; opacity:0.6;"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>
+                            </div>
+                            <a id="docker-hub-link" href="#" target="_blank" style="color: var(--primary); text-decoration: none; font-size: 14px; font-weight: 500; display: inline-block; margin-top: 8px;">→ View on Docker Hub</a>
                         </div>
                     </div>
                 </div>
@@ -275,8 +292,9 @@
             
             <!-- Analytics Tab -->
             <div id="tab-analytics" class="hidden">
-                <div class="header">
+                <div class="header" style="display: flex; justify-content: space-between; align-items: center;">
                     <h2>Analytics & Monitoring</h2>
+                    <button class="btn btn-secondary print-hide" style="width: auto; margin: 0;" onclick="exportAnalyticsPDF()">Export PDF</button>
                 </div>
                 <p style="color: var(--text-muted); margin-bottom: 24px; font-size: 14px;">View your bandwidth utilization over the last 30 days.</p>
                 
@@ -410,7 +428,7 @@
             <div id="tab-audit" class="hidden">
                 <div class="header" style="display: flex; justify-content: space-between; align-items: center;">
                     <h2>Audit Logs</h2>
-                    <button class="btn btn-secondary" onclick="exportAuditLog()">Export CSV</button>
+                    <button class="btn btn-secondary" style="width: auto; margin: 0;" onclick="exportAuditLog()">Export CSV</button>
                 </div>
                 <div class="glass table-container">
                     <table>

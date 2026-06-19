@@ -26,39 +26,53 @@ type SMTPServerConfig struct {
 
 // ServerConfig holds configuration settings for the lfr-tunneld server.
 type ServerConfig struct {
-	Domains                []string         `yaml:"domains"`
-	BindAddr               string           `yaml:"bind_addr"`
-	HTTPBindAddr           string           `yaml:"http_bind_addr"`
-	ChiselBindAddr         string           `yaml:"chisel_bind_addr"`
-	SSLCertFile            string           `yaml:"ssl_cert_file"`
-	SSLKeyFile             string           `yaml:"ssl_key_file"`
-	DBPath                 string           `yaml:"db_path"`
-	SMTPServer             SMTPServerConfig `yaml:"smtp_server"`
-	AdminNotificationEmail string           `yaml:"admin_notification_email"`
-	InsecureSkipVerify     bool             `yaml:"insecure_skip_verify"`
-	Owner                  OwnerConfig      `yaml:"owner"`
-	AllowedEmailDomains    []string         `yaml:"allowed_email_domains"`
-	IPBlacklist            []string         `yaml:"ip_blacklist"`
-	MaxTunnelRateLimit     int              `yaml:"max_tunnel_rate_limit"`
-	EnableUserPortal       bool             `yaml:"enable_user_portal"`
-	PortalSessionDuration  time.Duration    `yaml:"portal_session_duration"`
-	MinClientVersion       string           `yaml:"min_client_version"`
-	DocumentationURL       string           `yaml:"documentation_url"`
-	RepositoryURL          string           `yaml:"repository_url"`
-	PruneInterval          time.Duration    `yaml:"prune_interval"`
-	MagicLinkExpiry        time.Duration    `yaml:"magic_link_expiry"`
-	InviteLinkExpiry       time.Duration    `yaml:"invite_link_expiry"`
-	VerificationLinkExpiry time.Duration    `yaml:"verification_link_expiry"`
-	PrivacyPolicyURL       string           `yaml:"privacy_policy_url"`
-	CookiePolicyURL        string           `yaml:"cookie_policy_url"`
-	EnforcePolicyConsent   bool             `yaml:"enforce_policy_consent"`
-	DisableBackupScheduler bool             `yaml:"disable_backup_scheduler"`
-	DockerImage            string           `yaml:"docker_image"`
-	DockerBypassURL        string           `yaml:"docker_bypass_url"`
-	MaintenanceTriggerPath string           `yaml:"maintenance_trigger_path"`
+	Domains                []string                  `yaml:"domains"`
+	BindAddr               string                    `yaml:"bind_addr"`
+	HTTPBindAddr           string                    `yaml:"http_bind_addr"`
+	ChiselBindAddr         string                    `yaml:"chisel_bind_addr"`
+	SSLCertFile            string                    `yaml:"ssl_cert_file"`
+	SSLKeyFile             string                    `yaml:"ssl_key_file"`
+	DBPath                 string                    `yaml:"db_path"`
+	SMTPServer             SMTPServerConfig          `yaml:"smtp_server"`
+	AdminNotificationEmail string                    `yaml:"admin_notification_email"`
+	InsecureSkipVerify     bool                      `yaml:"insecure_skip_verify"`
+	Owner                  OwnerConfig               `yaml:"owner"`
+	AllowedEmailDomains    []string                  `yaml:"allowed_email_domains"`
+	IPBlacklist            []string                  `yaml:"ip_blacklist"`
+	MaxTunnelRateLimit     int                       `yaml:"max_tunnel_rate_limit"`
+	EnableUserPortal       bool                      `yaml:"enable_user_portal"`
+	PortalSessionDuration  time.Duration             `yaml:"portal_session_duration"`
+	MinClientVersion       string                    `yaml:"min_client_version"`
+	DocumentationURL       string                    `yaml:"documentation_url"`
+	RepositoryURL          string                    `yaml:"repository_url"`
+	PruneInterval          time.Duration             `yaml:"prune_interval"`
+	MagicLinkExpiry        time.Duration             `yaml:"magic_link_expiry"`
+	InviteLinkExpiry       time.Duration             `yaml:"invite_link_expiry"`
+	VerificationLinkExpiry time.Duration             `yaml:"verification_link_expiry"`
+	PrivacyPolicyURL       string                    `yaml:"privacy_policy_url"`
+	CookiePolicyURL        string                    `yaml:"cookie_policy_url"`
+	EnforcePolicyConsent   bool                      `yaml:"enforce_policy_consent"`
+	DisableBackupScheduler bool                      `yaml:"disable_backup_scheduler"`
+	DockerImage            string                    `yaml:"docker_image"`
+	DockerBypassURL        string                    `yaml:"docker_bypass_url"`
+	MaintenanceTriggerPath string                    `yaml:"maintenance_trigger_path"`
+	ClientPlatforms        map[string]PlatformConfig `yaml:"client_platforms"`
 
 	// Dynamic SSO/OIDC Providers
 	SSOProviders []SSOProviderConfig `yaml:"sso_providers"`
+}
+
+type PlatformConfig struct {
+	URL              string `yaml:"url" json:"url"`
+	BinaryName       string `yaml:"binary_name" json:"binary_name"`
+	SHA256           string `yaml:"sha256" json:"sha256"`
+	Cmd              string `yaml:"cmd" json:"cmd"`
+	CmdLabel         string `yaml:"cmd_label" json:"cmd_label"`
+	CmdFallback      string `yaml:"cmd_fallback" json:"cmd_fallback"`
+	CmdFallbackLabel string `yaml:"cmd_fallback_label" json:"cmd_fallback_label"`
+	Recommended      string `yaml:"recommended" json:"recommended"` // "cmd", "cmd_fallback", "url"
+	ShowDownload     *bool  `yaml:"show_download" json:"show_download"`
+	DownloadLabel    string `yaml:"download_label" json:"download_label"`
 }
 
 type SSOProviderConfig struct {
@@ -85,6 +99,7 @@ type ClientConfig struct {
 
 // DefaultServerConfig returns a ServerConfig with sensible default values.
 func DefaultServerConfig() *ServerConfig {
+	trueVal := true
 	return &ServerConfig{
 		BindAddr:               ":443",
 		HTTPBindAddr:           ":80",
@@ -99,6 +114,52 @@ func DefaultServerConfig() *ServerConfig {
 		MagicLinkExpiry:        15 * time.Minute,
 		InviteLinkExpiry:       7 * 24 * time.Hour,
 		VerificationLinkExpiry: 24 * time.Hour,
+		DockerImage:            "peterjrichards/lfr-tunnel:latest",
+		DockerBypassURL:        "https://github.com/peterrichards-lr/lfr-tunnel/blob/master/docs/liferay-se-guide.md#using-the-docker-wrapper-edr-bypass",
+		ClientPlatforms: map[string]PlatformConfig{
+			"macos_arm64": {
+				URL:              "/static/downloads/lfr-tunnel-darwin-arm64",
+				BinaryName:       "lfr-tunnel-darwin-arm64",
+				Cmd:              "brew tap peterrichards-lr/tap && brew trust peterrichards-lr/tap && brew install lfr-tunnel",
+				CmdLabel:         "🚀 Recommended (Package Manager):",
+				CmdFallback:      "curl -sSfL https://raw.githubusercontent.com/peterrichards-lr/lfr-tunnel/master/scripts/install.sh | sh",
+				CmdFallbackLabel: "🛠️ Direct Script Fallback:",
+				Recommended:      "cmd",
+				ShowDownload:     &trueVal,
+				DownloadLabel:    "⬇️ Download Binary",
+			},
+			"macos_amd64": {
+				URL:              "/static/downloads/lfr-tunnel-darwin-amd64",
+				BinaryName:       "lfr-tunnel-darwin-amd64",
+				Cmd:              "brew tap peterrichards-lr/tap && brew trust peterrichards-lr/tap && brew install lfr-tunnel",
+				CmdLabel:         "🚀 Recommended (Package Manager):",
+				CmdFallback:      "curl -sSfL https://raw.githubusercontent.com/peterrichards-lr/lfr-tunnel/master/scripts/install.sh | sh",
+				CmdFallbackLabel: "🛠️ Direct Script Fallback:",
+				Recommended:      "cmd",
+				ShowDownload:     &trueVal,
+				DownloadLabel:    "⬇️ Download Binary",
+			},
+			"windows_amd64": {
+				URL:              "/static/downloads/lfr-tunnel-windows-amd64.exe",
+				BinaryName:       "lfr-tunnel-windows-amd64.exe",
+				Cmd:              "scoop bucket add peterrichards-lr https://github.com/peterrichards-lr/scoop-bucket && scoop install lfr-tunnel",
+				CmdLabel:         "🚀 Recommended (Package Manager):",
+				CmdFallback:      "iwr https://raw.githubusercontent.com/peterrichards-lr/lfr-tunnel/master/scripts/install.ps1 | iex",
+				CmdFallbackLabel: "🛠️ Direct Script Fallback:",
+				Recommended:      "cmd",
+				ShowDownload:     &trueVal,
+				DownloadLabel:    "⬇️ Download Binary",
+			},
+			"linux_amd64": {
+				URL:           "/static/downloads/lfr-tunnel-linux-amd64",
+				BinaryName:    "lfr-tunnel-linux-amd64",
+				Cmd:           "curl -sSfL https://raw.githubusercontent.com/peterrichards-lr/lfr-tunnel/master/scripts/install.sh | sh",
+				CmdLabel:      "🚀 Recommended (Direct Script):",
+				Recommended:   "cmd",
+				ShowDownload:  &trueVal,
+				DownloadLabel: "⬇️ Download Binary",
+			},
+		},
 	}
 }
 

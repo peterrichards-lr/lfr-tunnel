@@ -152,6 +152,14 @@ The solution will consist of:
 - [x] Deploy automated dual-stack (IPv4 & IPv6) Cloudflare Dynamic DNS updater service and timer on the VPS.
 - [x] Implement passive and active service self-healing (Nginx auto-restart systemd overrides and gateway watchdog monitor) on the VPS.
 - [x] Clean up build version naming to omit commit suffixes during local build/deploy
+- [x] Revert DB toggle logic for Docker workaround panel and enforce config-only control
+- [x] Implement client-side platform configuration in config and expose via version endpoint
+- [x] Integrate dynamic platform configurations on Admin/Client Dashboard UI
+- [x] Align E2E test environments, Docker configuration, and Playwright UI tests
+- [x] Document client platform overrides in Docs
+- [ ] Create automated sign-release.sh script in scripts/ supporting environment configuration and secure terminal prompting for macOS, Windows, and Linux signing
+
+
 
 ## SentinelOne False Positive Mitigation
 - [x] Standardise canonical install path to ~/bin/lfr-tunnel across install.sh, install.ps1, README.md and docs.
@@ -202,3 +210,8 @@ The solution will consist of:
 - [x] Implement real-time user online portal activity check-in tracking and a decluttered User list table layout.
 - [x] Implement a unified User Details & Active Tunnels Modal with direct tunnel kick capability.
 - [x] Move hardcoded dashboard 'What's New' release notes to a dynamically served JSON file for automated updates.
+- [x] Resolve Joined Date HTML escaping tooltip bug in User Details modal.
+- [x] Implement Cache-Busting for static JavaScript and CSS assets served by the Gateway.
+- [x] Add dynamic admin settings toggle switch to show/hide the Docker Hub CLI workaround panel.
+- [x] Write E2E Playwright test assertions to cover Docker panel visibility, Joined Date HTML rendering, and dynamic toggle behavior.
+

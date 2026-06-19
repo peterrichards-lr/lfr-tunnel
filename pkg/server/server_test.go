@@ -829,7 +829,7 @@ func TestServer_UnsubscribeAndMaintenance(t *testing.T) {
 		t.Fatalf("expected 200 OK for api/version, got %d", recVer.Code)
 	}
 
-	var verResp map[string]string
+	var verResp map[string]interface{}
 	if err := json.NewDecoder(recVer.Body).Decode(&verResp); err != nil {
 		t.Fatalf("failed to decode response: %v", err)
 	}

@@ -471,7 +471,9 @@ func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 				consentStr = "true"
 			}
 
-			respondJSON(w, http.StatusOK, map[string]string{
+			dockerImg := s.cfg.DockerImage
+
+			respondJSON(w, http.StatusOK, map[string]interface{}{
 				"latest_version":         config.Version,
 				"min_version":            s.cfg.MinClientVersion,
 				"documentation_url":      s.cfg.DocumentationURL,
@@ -480,8 +482,9 @@ func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 				"cookie_policy_url":      cookieURL,
 				"maintenance_mode":       maintStr,
 				"enforce_policy_consent": consentStr,
-				"docker_image":           s.cfg.DockerImage,
+				"docker_image":           dockerImg,
 				"docker_bypass_url":      s.cfg.DockerBypassURL,
+				"client_platforms":       s.cfg.ClientPlatforms,
 			})
 			return
 		}
@@ -676,7 +679,9 @@ func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		if r.Method == http.MethodGet && (r.URL.Path == "/" || r.URL.Path == "/admin" || r.URL.Path == "/portal") {
 			w.Header().Set("Content-Type", "text/html; charset=utf-8")
 			w.WriteHeader(http.StatusOK)
-			_, _ = w.Write([]byte(dashboardHTML))
+			htmlContent := strings.ReplaceAll(dashboardHTML, "static/dashboard.js", "static/dashboard.js?v="+config.Version)
+			htmlContent = strings.ReplaceAll(htmlContent, "/static/dashboard.css", "/static/dashboard.css?v="+config.Version)
+			_, _ = w.Write([]byte(htmlContent))
 			return
 		}
 	}
@@ -1590,6 +1595,35 @@ func (s *Server) handleAdminEndpoints(w http.ResponseWriter, r *http.Request) {
 
 	if r.Method == http.MethodPost && r.URL.Path == "/api/admin/maintenance" {
 		s.handleAdminMaintenance(w, r, actor)
+		return
+	}
+
+	if r.Method == http.MethodGet && r.URL.Path == "/api/admin/maintenance" {
+		s.maintMutex.RLock()
+		isMaint := s.maintenanceMode
+		maintScheduled := s.maintScheduledAt
+		s.maintMutex.RUnlock()
+
+		maintStr := "false"
+		if isMaint {
+			maintStr = "true"
+		} else if !maintScheduled.IsZero() && time.Now().Before(maintScheduled) {
+			maintStr = "pending"
+		}
+
+		ironCurtain := false
+		triggerPath := s.cfg.MaintenanceTriggerPath
+		if triggerPath == "" {
+			triggerPath = "/var/lib/lfr-tunneld/maintenance.enable"
+		}
+		if _, err := os.Stat(triggerPath); err == nil {
+			ironCurtain = true
+		}
+
+		respondJSON(w, http.StatusOK, map[string]interface{}{
+			"maintenance_mode": maintStr,
+			"iron_curtain":     ironCurtain,
+		})
 		return
 	}
 
@@ -3023,7 +3057,7 @@ func (s *Server) handleAdminSettings(w http.ResponseWriter, r *http.Request, act
 		notifyBan, _ := s.db.GetAdminSetting("alert_notify_blacklist")
 		notifyOffline, _ := s.db.GetAdminSetting("alert_notify_tunnel_offline")
 
-		// Default to true for critical security alerts if not set
+		// Default values if not set
 		if notifyReg == "" {
 			notifyReg = "true"
 		}

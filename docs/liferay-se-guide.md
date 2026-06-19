@@ -192,6 +192,28 @@ lfr-tunnel
 
 ---
 
+## Targeting Local Domain Names (LDM & Proxy virtual hosts)
+
+If your local setup resolves virtual hosts (e.g. LDM's local Nginx proxy configured for `my-project.local`), you can route tunnel traffic directly through that proxy instead of Tomcat (`8080`).
+
+By setting a target host, `lfr-tunnel` automatically routes traffic to it and rewrites the incoming HTTP `Host` header to match:
+
+* **CLI flag**:
+  ```bash
+  lfr-tunnel -ports 80 -target-host my-project.local
+  ```
+* **Configuration File (`~/.lfr-tunnel/client-config.yaml`)**:
+  ```yaml
+  server_url: "https://tunnel.lfr-demo.se"
+  subdomain: "your-name-se"
+  target_host: "my-project.local"
+  ports:
+    - 80
+  ```
+* **Environment Variable**: Set `LFT_TARGET_HOST=my-project.local` before execution.
+
+---
+
 ## Running in the Background
 
 ```bash

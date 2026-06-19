@@ -177,15 +177,6 @@ func RegisterTunnel(serverURL string, authToken string, subdomain string, ports 
 
 // RunClient runs the embedded Chisel client.
 func RunClient(ctx context.Context, serverURL string, token string, remotes []string, publicURLs []string) error {
-	// Rewrite remotes if target host override is set (useful for Docker containerized environments)
-	targetHost := os.Getenv("LFT_TARGET_HOST")
-	if targetHost != "" {
-		for i, remote := range remotes {
-			remotes[i] = strings.ReplaceAll(remote, "localhost", targetHost)
-			remotes[i] = strings.ReplaceAll(remotes[i], "127.0.0.1", targetHost)
-		}
-	}
-
 	// 1. Ensure server URL starts with http/https
 	if !strings.HasPrefix(serverURL, "http") {
 		serverURL = "http://" + serverURL

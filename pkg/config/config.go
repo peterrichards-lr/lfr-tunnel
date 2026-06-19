@@ -72,13 +72,14 @@ type SSOProviderConfig struct {
 
 // ClientConfig holds configuration settings for the lfr-tunnel client.
 type ClientConfig struct {
-	ServerURL string `yaml:"server_url"`
-	AuthToken string `yaml:"auth_token"`
-	Subdomain string `yaml:"subdomain"`
-	Ports     []int  `yaml:"ports"`
-	TokenFile string `yaml:"token_file"`
-	RateLimit int    `yaml:"rate_limit"`
-	BasicAuth string `yaml:"basic_auth"`
+	ServerURL  string `yaml:"server_url"`
+	AuthToken  string `yaml:"auth_token"`
+	Subdomain  string `yaml:"subdomain"`
+	Ports      []int  `yaml:"ports"`
+	TokenFile  string `yaml:"token_file"`
+	RateLimit  int    `yaml:"rate_limit"`
+	BasicAuth  string `yaml:"basic_auth"`
+	TargetHost string `yaml:"target_host"`
 }
 
 // DefaultServerConfig returns a ServerConfig with sensible default values.
@@ -267,6 +268,9 @@ func LoadClientConfig(path string) (*ClientConfig, error) {
 		if len(ports) > 0 {
 			cfg.Ports = ports
 		}
+	}
+	if val := os.Getenv("LFT_TARGET_HOST"); val != "" {
+		cfg.TargetHost = val
 	}
 
 	return cfg, nil

@@ -42,6 +42,7 @@ func main() {
 	var addHeaders arrayFlags
 	flag.Var(&addHeaders, "add-header", "Inject HTTP header (e.g. 'X-Bypass-CORS: true')")
 	rateLimit := flag.Int("rate-limit", 0, "Max requests per second for your subdomains (0 = unlimited)")
+	targetHost := flag.String("target-host", "", "Target hostname or IP to route traffic to (e.g. my-project.local)")
 	background := flag.Bool("background", false, "Run client in background")
 	status := flag.Bool("status", false, "Check status of the background tunnel")
 	stop := flag.Bool("stop", false, "Stop the background tunnel")
@@ -148,6 +149,9 @@ func main() {
 	if *basicAuth != "" {
 		cfg.BasicAuth = *basicAuth
 	}
+	if *targetHost != "" {
+		cfg.TargetHost = *targetHost
+	}
 
 	if *background {
 		handleBackground()
@@ -192,7 +196,7 @@ func main() {
 	}
 
 	// Start Interceptor Engine
-	engine := client.NewInterceptorEngine(addHeaders)
+	engine := client.NewInterceptorEngine(cfg.TargetHost, addHeaders)
 	client.StartInspector(*inspectorPort, engine)
 
 	// 4. Resolve subdomain prefix
@@ -259,6 +263,7 @@ func main() {
 	}
 
 	// Modify portMappings to point to dynamic Interceptor ports
+	portMap := make(map[int]int)
 	for i, pm := range portMappings {
 		targetPort := pm.LocalPort
 		interceptPort, err := engine.InterceptPort(targetPort)
@@ -267,6 +272,21 @@ func main() {
 		}
 		engine.StartHealthChecks(cfg.ServerURL, regResp.SessionToken, targetPort)
 		portMappings[i].LocalPort = interceptPort
+		portMap[targetPort] = interceptPort
+	}
+
+	// Rewrite remotes to route through interceptor ports
+	for idx, remote := range regResp.Remotes {
+		parts := strings.Split(remote, ":")
+		if len(parts) >= 4 {
+			lastPart := parts[len(parts)-1]
+			if targetP, err := strconv.Atoi(lastPart); err == nil {
+				if intP, exists := portMap[targetP]; exists {
+					parts[len(parts)-1] = strconv.Itoa(intP)
+					regResp.Remotes[idx] = strings.Join(parts, ":")
+				}
+			}
+		}
 	}
 
 	var publicURLs []string

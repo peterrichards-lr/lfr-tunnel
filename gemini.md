@@ -151,6 +151,7 @@ The solution will consist of:
 - [x] Bump version to v1.7.5, integrate Homebrew/Scoop, and create Getting Started Guide (standardising Windows binary naming across platforms)
 - [x] Deploy automated dual-stack (IPv4 & IPv6) Cloudflare Dynamic DNS updater service and timer on the VPS.
 - [x] Implement passive and active service self-healing (Nginx auto-restart systemd overrides and gateway watchdog monitor) on the VPS.
+- [x] Clean up build version naming to omit commit suffixes during local build/deploy
 
 ## SentinelOne False Positive Mitigation
 - [x] Standardise canonical install path to ~/bin/lfr-tunnel across install.sh, install.ps1, README.md and docs.

@@ -252,6 +252,12 @@ func TestCompareVersions(t *testing.T) {
 		{"v1.1.0", "v1.0.1", 1},
 		{"1.0.0", "v1.0.0", 0},
 		{"v1.2", "v1.2.0", 0},
+		{"v1.7.7-dirty", "v1.7.7", 0},
+		{"v1.7.7-8-g3cc6820", "v1.7.7", 0},
+		{"v1.7.8-dirty", "v1.7.7", 1},
+		{"v1.7.6-8-g3cc6820", "v1.7.7", -1},
+		{"v1.7.7-8-g3cc6820-dirty", "v1.7.7", 0},
+		{"v1.7.7-8-g3cc6820-dirty", "v1.7.8", -1},
 	}
 	for _, tt := range tests {
 		got := CompareVersions(tt.v1, tt.v2)

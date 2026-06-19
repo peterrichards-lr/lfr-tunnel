@@ -419,33 +419,85 @@ html[dir="rtl"] td, html[dir="rtl"] th {
 
 /* --- PRINT MEDIA RULES FOR PDF EXPORT --- */
 @media print {
+    @page {
+        size: portrait;
+        margin: 20mm 15mm;
+    }
+    
     body {
         background: var(--bg) !important;
         color: var(--text-color) !important;
         -webkit-print-color-adjust: exact !important;
         print-color-adjust: exact !important;
     }
-    body * {
-        visibility: hidden;
-    }
-    #tab-analytics, #tab-analytics * {
-        visibility: visible;
-    }
-    #tab-analytics {
-        position: absolute;
-        left: 0;
-        top: 0;
-        width: 100%;
-        padding: 0 !important;
-        margin: 0 !important;
-    }
-    .sidebar, #header-language-container, .print-hide, .btn {
+    
+    /* Hide layout wrappers & elements not needed for analytics printout */
+    .sidebar, 
+    #header-language-container, 
+    .print-hide, 
+    .btn,
+    #tab-overview, 
+    #tab-tokens, 
+    #tab-account,
+    #tab-registrations, 
+    #tab-users, 
+    #tab-blacklist, 
+    #tab-audit, 
+    #tab-magic, 
+    #tab-backups,
+    #tab-tunnels {
         display: none !important;
     }
+    
+    /* Reset layout wrapper limits (remove viewport confinement) to enable natural multi-page flow */
+    .app-container {
+        display: block !important;
+        height: auto !important;
+        min-height: 0 !important;
+        width: 100% !important;
+    }
+    
+    .main-content {
+        display: block !important;
+        width: 100% !important;
+        padding: 0 !important;
+        margin: 0 !important;
+        overflow: visible !important;
+        height: auto !important;
+    }
+    
+    #tab-analytics {
+        display: block !important;
+        width: 100% !important;
+        padding: 0 !important;
+        margin: 0 !important;
+        overflow: visible !important;
+        height: auto !important;
+    }
+
+    /* Convert 2-column grid layout to single-column layout for portrait printing */
+    #tab-analytics div[style*="display: grid"] {
+        grid-template-columns: 1fr !important;
+    }
+    
+    #tab-analytics .glass {
+        grid-column: span 1 !important;
+    }
+    
+    /* Disable table scrolling/clipping in print to allow natural page-break pagination */
+    #tab-analytics .table-container {
+        max-height: none !important;
+        overflow: visible !important;
+    }
+
+    /* Print styling rules for analytical sections and panels */
     .glass {
         border: 1px solid var(--border) !important;
         box-shadow: none !important;
         background: var(--bg-card) !important;
+        page-break-inside: avoid !important;
+        break-inside: avoid !important;
+        margin-bottom: 24px !important;
     }
 }
 

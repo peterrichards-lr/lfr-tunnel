@@ -183,3 +183,29 @@ func TestLoadClientConfig_TokenFile(t *testing.T) {
 		t.Errorf("expected LFT_CLIENT_TOKEN to override token file, got %q", cfgEnv.AuthToken)
 	}
 }
+
+func TestLoadClientConfig_LDMOverridesAndTargetHost(t *testing.T) {
+	// Set environment variables for fallback LDM contract and URL cleaning
+	t.Setenv("LFT_SERVER_URL", "https://ldm-server-url.com")
+	t.Setenv("LFT_TOKEN", "ldm-token-override")
+	t.Setenv("LFT_SUBDOMAIN", "ldm-subdomain-override")
+	t.Setenv("LFT_TARGET_HOST", "http://liferay:8080")
+
+	cfg, err := LoadClientConfig("")
+	if err != nil {
+		t.Fatalf("failed to load client config: %v", err)
+	}
+
+	if cfg.ServerURL != "https://ldm-server-url.com" {
+		t.Errorf("expected ServerURL override to be https://ldm-server-url.com, got %s", cfg.ServerURL)
+	}
+	if cfg.AuthToken != "ldm-token-override" {
+		t.Errorf("expected AuthToken override to be ldm-token-override, got %s", cfg.AuthToken)
+	}
+	if cfg.Subdomain != "ldm-subdomain-override" {
+		t.Errorf("expected Subdomain override to be ldm-subdomain-override, got %s", cfg.Subdomain)
+	}
+	if cfg.TargetHost != "liferay" {
+		t.Errorf("expected TargetHost override to be cleaned to liferay, got %s", cfg.TargetHost)
+	}
+}

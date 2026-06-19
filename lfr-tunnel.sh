@@ -34,10 +34,12 @@ else
 fi
 
 echo "[Docker Client] Launching tunnel..."
+# Set default target host if not configured
+LFT_TARGET_HOST="${LFT_TARGET_HOST:-host.docker.internal}"
+
 # Execute the docker containerized client
-# Set LFT_TARGET_HOST to host.docker.internal to route back to macOS/Linux host
 docker run --rm $DOCKER_FLAGS \
-  -e LFT_TARGET_HOST=host.docker.internal \
+  -e LFT_TARGET_HOST="$LFT_TARGET_HOST" \
   lfr-tunnel-client:latest \
   -server "$LFT_SERVER" \
   -token "$LFT_TOKEN" \

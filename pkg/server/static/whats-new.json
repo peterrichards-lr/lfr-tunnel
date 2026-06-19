@@ -1,7 +1,9 @@
 {
-  "version": "v1.7.11",
+  "version": "v1.7.12",
   "release_date": "2026-06-19",
   "features": [
+    "LDM Environment Fallbacks: Natively support LDM environment variables (LFT_SUBDOMAIN, LFT_SERVER_URL, LFT_TOKEN) and automatically clean/strip URL schemes and port suffixes from LFT_TARGET_HOST.",
+    "Docker Client Platform Identification: Automatically identify containerized clients and append ' (Docker)' to their OS name inside system analytics and connection stats.",
     "Modal Escaping Hotfix: Fixed HTML escaping in the User Details modal to render localized Joined Date timestamps correctly.",
     "Dual-Mode Maintenance: Soft Maintenance ('Bouncer Mode') and Hard Maintenance ('Fire Curtain') settings relocated to a dedicated 'Gateway Maintenance' screen under the sidebar Maintenance section, fully translated across all 10 locales.",
     "Portal Activity Check-in: Real-time user online session tracking dot on the Users table.",

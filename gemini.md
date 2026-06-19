@@ -171,10 +171,11 @@ The solution will consist of:
 
 ## Dependabot Alert Mitigation
 - [x] Upgrade github.com/jpillora/chisel to v1.11.6 and other dependencies to patch CVE-2026-48113 and resolve Dependabot alerts.
-
-
-
-
-
+## Maintenance Mode and Safe Restoration
+- [x] Create a self-contained, Liferay-themed static maintenance page `pkg/server/static/maintenance.html`.
+- [x] Create `scripts/enable-maintenance.sh` to trigger maintenance mode in Nginx.
+- [x] Create `scripts/disable-maintenance.sh` to disable maintenance mode.
+- [x] Create a wrapper script `scripts/restore-with-maintenance.sh` that safely coordinates maintenance state and restore-backup.sh.
+- [x] Document Nginx maintenance configuration in `docs/setup_guide.md`.
 
 

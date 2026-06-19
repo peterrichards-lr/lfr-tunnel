@@ -1644,6 +1644,11 @@ func (s *Server) handleAdminEndpoints(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	if r.Method == http.MethodGet && r.URL.Path == "/api/admin/backups" {
+		s.handleAdminListBackups(w, r, actor)
+		return
+	}
+
 	if strings.HasPrefix(r.URL.Path, "/api/admin/blacklist") {
 		s.handleAdminBlacklist(w, r, actor)
 		return
@@ -2709,6 +2714,59 @@ func (s *Server) handleAdminAuditLog(w http.ResponseWriter, r *http.Request, act
 		return
 	}
 	_ = json.NewEncoder(w).Encode(entries)
+}
+
+// BackupInfo describes a single backup file available for restore.
+type BackupInfo struct {
+	Filename  string    `json:"filename"`
+	SizeBytes int64     `json:"size_bytes"`
+	CreatedAt time.Time `json:"created_at"`
+}
+
+// handleAdminListBackups returns a JSON list of available backup files.
+func (s *Server) handleAdminListBackups(w http.ResponseWriter, r *http.Request, actor string) {
+	if s.db == nil {
+		http.Error(w, `{"error":"Database not configured"}`, http.StatusNotImplemented)
+		return
+	}
+
+	backupsDir := filepath.Join(filepath.Dir(s.cfg.DBPath), "backups")
+	entries, err := os.ReadDir(backupsDir)
+	if err != nil {
+		if os.IsNotExist(err) {
+			// No backups yet — return empty list, not an error
+			w.Header().Set("Content-Type", "application/json")
+			_, _ = w.Write([]byte("[]"))
+			return
+		}
+		http.Error(w, `{"error":"Failed to read backups directory"}`, http.StatusInternalServerError)
+		return
+	}
+
+	var backups []BackupInfo
+	for _, entry := range entries {
+		if entry.IsDir() {
+			continue
+		}
+		info, err := entry.Info()
+		if err != nil {
+			continue
+		}
+		backups = append(backups, BackupInfo{
+			Filename:  entry.Name(),
+			SizeBytes: info.Size(),
+			CreatedAt: info.ModTime().UTC(),
+		})
+	}
+	// Newest first
+	for i, j := 0, len(backups)-1; i < j; i, j = i+1, j-1 {
+		backups[i], backups[j] = backups[j], backups[i]
+	}
+
+	if backups == nil {
+		backups = []BackupInfo{}
+	}
+	respondJSON(w, http.StatusOK, backups)
 }
 
 func (s *Server) handleAdminBlacklist(w http.ResponseWriter, r *http.Request, actor string) {

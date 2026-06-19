@@ -992,6 +992,7 @@ function toggleTheme() {
             if (tabName === 'blacklist') loadBlacklist();
             if (tabName === 'audit') loadAudit();
             if (tabName === 'magic') loadAdminMagicLinks();
+            if (tabName === 'backups') loadBackups();
             if (tabName === 'tokens') loadTokens();
             if (tabName === 'tunnels') loadTunnels();
             if (tabName === 'analytics') loadAnalytics();
@@ -1420,6 +1421,28 @@ function toggleTheme() {
                     </tr>
                 `);
             }
+        }
+
+        async function loadBackups() {
+            const tbody = document.getElementById('backups-table-body');
+            const res = await fetch('/api/admin/backups');
+            if (!res.ok) {
+                tbody.innerHTML = '<tr><td colspan="3" style="text-align:center;opacity:0.6;">Failed to load backups.</td></tr>';
+                return;
+            }
+            const backups = await res.json();
+            if (!backups || backups.length === 0) {
+                tbody.innerHTML = '<tr><td colspan="3" style="text-align:center;opacity:0.6;">No backups found yet. The first backup runs on server startup.</td></tr>';
+                return;
+            }
+            renderTable('backups-table-body', backups, b => {
+                const sizeKB = (b.size_bytes / 1024).toFixed(1);
+                return `<tr>
+                    <td style="font-family:monospace; font-size:0.85em;">${escapeHTML(b.filename)}</td>
+                    <td>${sizeKB} KB</td>
+                    <td>${renderTimestamp(b.created_at)}</td>
+                </tr>`;
+            });
         }
 
         function openBlacklistModal() {

@@ -184,5 +184,6 @@ The solution will consist of:
 
 ## Bug Fixes
 - [x] Fix MFA Setup button and modal display logic in the dashboard UI.
-- [ ] Fix Export CSV button layout width.
-- [ ] Implement System Analytics PDF export feature.
+- [x] Fix Export CSV button layout width.
+- [x] Implement System Analytics PDF export feature.
+- [x] Test configuration parsing of DockerImage environment variable and configuration key in config_test.go.

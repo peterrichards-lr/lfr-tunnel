@@ -222,5 +222,6 @@ The solution will consist of:
 - [x] Support overriding LFT_TARGET_HOST in the Docker wrapper scripts (Bash, Batch, PowerShell).
 - [x] Support LDM environment contract fallbacks (LFT_SUBDOMAIN, LFT_SERVER_URL, LFT_TOKEN) in Go client configuration.
 - [x] Bump version to v1.7.12 in whats-new.json, tag, and push to trigger release CI workflow.
-- [ ] Support dynamic inspector binding address based on Docker detection and LFT_INSPECTOR_BIND.
-
+- [x] Support dynamic inspector binding address based on Docker detection and LFT_INSPECTOR_BIND.
+- [x] Document LFT_INSPECTOR_BIND in setup guide / SE guide.
+- [ ] Bump version to v1.7.13 in whats-new.json, tag, and push to trigger release CI workflow.

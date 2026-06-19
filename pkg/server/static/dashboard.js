@@ -435,6 +435,12 @@ function toggleTheme() {
                         const cl = document.getElementById('footer-cookie-link');
                         if (cl) cl.href = vData.cookie_policy_url;
                     }
+                    if (vData.latest_version) {
+                        const versionDisplays = document.querySelectorAll('.server-version-display');
+                        versionDisplays.forEach(el => {
+                            el.textContent = vData.latest_version;
+                        });
+                    }
                 }
             } catch (e) {
                 console.error("Failed to load policy links", e);

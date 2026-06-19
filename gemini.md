@@ -183,4 +183,6 @@ The solution will consist of:
 - [x] Review and align markdown files with the current repository state and document the branching/PR conventions in `CONTRIBUTING.md`.
 
 ## Bug Fixes
-- [/] Fix MFA Setup button and modal display logic in the dashboard UI (In Progress).
+- [x] Fix MFA Setup button and modal display logic in the dashboard UI.
+- [ ] Fix Export CSV button layout width.
+- [ ] Implement System Analytics PDF export feature.

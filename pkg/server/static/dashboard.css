@@ -417,3 +417,36 @@ html[dir="rtl"] td, html[dir="rtl"] th {
     overflow-y: auto !important; /* Enables smooth native vertical scrollbars */
 }
 
+/* --- PRINT MEDIA RULES FOR PDF EXPORT --- */
+@media print {
+    body {
+        background: var(--bg) !important;
+        color: var(--text-color) !important;
+        -webkit-print-color-adjust: exact !important;
+        print-color-adjust: exact !important;
+    }
+    body * {
+        visibility: hidden;
+    }
+    #tab-analytics, #tab-analytics * {
+        visibility: visible;
+    }
+    #tab-analytics {
+        position: absolute;
+        left: 0;
+        top: 0;
+        width: 100%;
+        padding: 0 !important;
+        margin: 0 !important;
+    }
+    .sidebar, #header-language-container, .print-hide, .btn {
+        display: none !important;
+    }
+    .glass {
+        border: 1px solid var(--border) !important;
+        box-shadow: none !important;
+        background: var(--bg-card) !important;
+    }
+}
+
+

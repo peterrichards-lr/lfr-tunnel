@@ -1397,6 +1397,10 @@ function toggleTheme() {
             window.location.href = '/api/admin/audit/export';
         }
 
+        function exportAnalyticsPDF() {
+            window.print();
+        }
+
         async function loadAudit() {
             const res = await fetch('/api/admin/audit?limit=100');
             if (res.ok) {

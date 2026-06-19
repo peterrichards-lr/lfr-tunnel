@@ -187,3 +187,4 @@ The solution will consist of:
 - [x] Fix Export CSV button layout width.
 - [x] Implement System Analytics PDF export feature.
 - [x] Test configuration parsing of DockerImage environment variable and configuration key in config_test.go.
+- [x] Add direct unit test coverage for TOTP/MFA algorithms in totp_test.go.

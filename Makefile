@@ -2,6 +2,7 @@
 
 VERSION ?= $(shell git describe --tags --abbrev=0 --dirty 2>/dev/null || git describe --always --dirty 2>/dev/null || echo "dev")
 
+
 help:
 	@echo "Liferay Tunnel Developer Commands:"
 	@echo "  make fmt          - Format Go files using gofmt"

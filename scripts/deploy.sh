@@ -24,6 +24,7 @@ done
 shift $((OPTIND - 1))
 
 VERSION=$(git describe --tags --abbrev=0 --dirty 2>/dev/null || git describe --always --dirty 2>/dev/null || echo "dev")
+
 echo "Building Linux binary (version: $VERSION) with path trimming..."
 GOOS=linux GOARCH=amd64 go build -ldflags="-s -w -X lfr-tunnel/pkg/config.Version=$VERSION" -trimpath -o bin/lfr-tunneld-linux ./cmd/lfr-tunneld
 

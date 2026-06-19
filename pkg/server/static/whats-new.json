@@ -1,7 +1,8 @@
 {
-  "version": "v1.7.10",
+  "version": "v1.7.11",
   "release_date": "2026-06-19",
   "features": [
+    "Modal Escaping Hotfix: Fixed HTML escaping in the User Details modal to render localized Joined Date timestamps correctly.",
     "Dual-Mode Maintenance: Soft Maintenance ('Bouncer Mode') and Hard Maintenance ('Fire Curtain') settings relocated to a dedicated 'Gateway Maintenance' screen under the sidebar Maintenance section, fully translated across all 10 locales.",
     "Portal Activity Check-in: Real-time user online session tracking dot on the Users table.",
     "User Details & Tunnels Modal: Consolidated administration overlay showing active tunnel ports, public links, client details, and direct lease kicking control.",

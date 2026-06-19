@@ -2346,7 +2346,7 @@ function toggleTheme() {
             originEl.innerHTML = originHTML;
             
             // Joined Date
-            document.getElementById('detail-user-joined').innerText = renderTimestamp(u.created_at);
+            document.getElementById('detail-user-joined').innerHTML = renderTimestamp(u.created_at);
             
             // API Quota
             document.getElementById('detail-user-quota').innerText = u.rate_limit ? `${u.rate_limit} RPS` : 'Unlimited';

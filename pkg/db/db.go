@@ -262,6 +262,11 @@ func (db *DB) initSchema() error {
 	return nil
 }
 
+// GetConnection returns the underlying sql.DB connection instance for advanced administrative operations.
+func (db *DB) GetConnection() *sql.DB {
+	return db.conn
+}
+
 // GetAdminSetting retrieves a setting value by key. Returns empty string if not found.
 func (db *DB) GetAdminSetting(key string) (string, error) {
 	var value string

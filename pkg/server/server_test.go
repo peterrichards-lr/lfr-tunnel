@@ -1266,6 +1266,47 @@ func TestServer_InvitationLanguagePersistence(t *testing.T) {
 	}
 }
 
+func TestServer_AuditLogCSVExport(t *testing.T) {
+	srv, _, cleanup := setupTestServer(t)
+	defer cleanup()
+
+	// 1. Create a dummy audit entry
+	email := "audit_test@example.com"
+	s := "test action"
+	dummyReq, _ := http.NewRequest("GET", "/", nil)
+	srv.writeAudit(email, s, "user", "target", "details", dummyReq)
+	time.Sleep(50 * time.Millisecond) // wait for goroutine
+
+	// 2. Create an active admin session
+	adminEmail := "admin_test@example.com"
+	adminUser := &db.User{ID: adminEmail, Email: adminEmail, Role: "admin", Status: "approved"}
+	if err := srv.db.CreateUser(adminUser); err != nil {
+		t.Fatalf("failed to create admin user: %v", err)
+	}
+	sessionToken := "admin-audit-token-123"
+	srv.portalMap.Store("admin_session_"+sessionToken, PortalSessionData{Email: adminEmail, ExpiresAt: time.Now().Add(1 * time.Hour)})
+
+	// 3. Forge a GET request to /api/admin/audit/export
+	req, _ := http.NewRequest("GET", "http://example.com/api/admin/audit/export", nil)
+	req.AddCookie(&http.Cookie{Name: "lfr_session", Value: sessionToken})
+	rec := httptest.NewRecorder()
+	srv.ServeHTTP(rec, req)
+
+	// 4. Assert status OK and Content-Type
+	if rec.Code != http.StatusOK {
+		t.Fatalf("expected status 200 OK, got %d", rec.Code)
+	}
+	if rec.Header().Get("Content-Type") != "text/csv" {
+		t.Errorf("expected Content-Type text/csv, got %s", rec.Header().Get("Content-Type"))
+	}
+
+	// 5. Assert CSV content contains our test action
+	csvContent := rec.Body.String()
+	if !strings.Contains(csvContent, s) {
+		t.Errorf("expected CSV to contain action %q, got: %s", s, csvContent)
+	}
+}
+
 func TestServer_RateLimitingEnforcements(t *testing.T) {
 	srv, _, cleanup := setupTestServer(t)
 	defer cleanup()
@@ -1401,5 +1442,48 @@ func TestServer_RateLimitingEnforcements(t *testing.T) {
 	}
 	if dbUser.RateLimit != 50 {
 		t.Errorf("expected user rate_limit quota in DB to be updated to 50, got %d", dbUser.RateLimit)
+	}
+}
+
+func TestServer_DatabaseBackupScheduler(t *testing.T) {
+	srv, _, cleanup := setupTestServer(t)
+	defer cleanup()
+
+	// 1. Manually trigger a database backup
+	time.Sleep(1 * time.Second) // Ensure unique timestamp
+	err := srv.BackupDatabase()
+	if err != nil {
+		t.Fatalf("BackupDatabase failed: %v", err)
+	}
+
+	// 2. Locate the backup directory
+	backupsDir := filepath.Join(filepath.Dir(srv.cfg.DBPath), "backups")
+
+	// 3. Verify directory exists
+	info, err := os.Stat(backupsDir)
+	if err != nil || !info.IsDir() {
+		t.Fatalf("expected backups directory to exist at %s, but it did not", backupsDir)
+	}
+
+	// 4. Verify a backup file was created
+	files, err := os.ReadDir(backupsDir)
+	if err != nil || len(files) == 0 {
+		t.Fatalf("expected at least one backup file in %s, but found none", backupsDir)
+	}
+
+	// 5. Verify the file is not empty and matches active DB size
+	backupFile := filepath.Join(backupsDir, files[0].Name())
+	bInfo, err := os.Stat(backupFile)
+	if err != nil {
+		t.Fatalf("failed to stat backup file: %v", err)
+	}
+	if bInfo.Size() == 0 {
+		t.Error("backup file is empty")
+	}
+
+	// 6. Basic size check: backup should be reasonably close to DB size
+	dbInfo, _ := os.Stat(srv.cfg.DBPath)
+	if bInfo.Size() < dbInfo.Size() {
+		t.Errorf("backup file size (%d) is significantly smaller than active DB size (%d)", bInfo.Size(), dbInfo.Size())
 	}
 }

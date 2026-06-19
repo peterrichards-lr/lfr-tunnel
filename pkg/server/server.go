@@ -6,6 +6,7 @@ import (
 	"crypto/rand"
 	"crypto/sha256"
 	"embed"
+	"encoding/csv"
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
@@ -241,6 +242,10 @@ func NewServer(cfg *config.ServerConfig) (*Server, error) {
 		}
 	}
 
+	if srv.db != nil {
+		srv.startDatabaseBackupScheduler()
+	}
+
 	go srv.processMetricsQueue()
 
 	return srv, nil
@@ -281,6 +286,55 @@ func (s *Server) processMetricsQueue() {
 			}
 		}
 	}
+}
+
+// BackupDatabase clones the active SQLite database to a secure backups folder.
+func (s *Server) BackupDatabase() error {
+	if s.db == nil {
+		return fmt.Errorf("database not configured")
+	}
+
+	backupsDir := filepath.Join(filepath.Dir(s.cfg.DBPath), "backups")
+	if err := os.MkdirAll(backupsDir, 0755); err != nil {
+		return fmt.Errorf("failed to create backups directory: %v", err)
+	}
+
+	// Generate date-stamped filename: lfr-tunnel_backup_2026-06-18.db
+	timeStamp := time.Now().Format("2006-01-02_15-04-05")
+	backupPath := filepath.Join(backupsDir, fmt.Sprintf("lfr-tunnel_backup_%s.db", timeStamp))
+
+	// Safely clone the database online thread-safely!
+	_, err := s.db.GetConnection().Exec(fmt.Sprintf("VACUUM INTO '%s'", backupPath))
+	if err != nil {
+		return fmt.Errorf("failed to execute SQLite hot online backup: %v", err)
+	}
+
+	log.Printf("[Server] SQLite hot online database backup completed successfully: %s", backupPath)
+	return nil
+}
+
+// startDatabaseBackupScheduler triggers daily automated background backups.
+func (s *Server) startDatabaseBackupScheduler() {
+	go func() {
+		ticker := time.NewTicker(24 * time.Hour)
+		defer ticker.Stop()
+
+		// Execute initial database backup on server startup
+		if err := s.BackupDatabase(); err != nil {
+			log.Printf("[Warning] Initial database startup backup failed: %v", err)
+		}
+
+		for {
+			select {
+			case <-s.ctx.Done():
+				return
+			case <-ticker.C:
+				if err := s.BackupDatabase(); err != nil {
+					log.Printf("[Error] Scheduled daily database backup failed: %v", err)
+				}
+			}
+		}
+	}()
 }
 
 // getRateLimiter retrieves or creates a rate limiter for an IP.
@@ -1585,6 +1639,11 @@ func (s *Server) handleAdminEndpoints(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	if r.Method == http.MethodGet && r.URL.Path == "/api/admin/audit/export" {
+		s.handleAdminAuditExport(w, r, actor)
+		return
+	}
+
 	if strings.HasPrefix(r.URL.Path, "/api/admin/blacklist") {
 		s.handleAdminBlacklist(w, r, actor)
 		return
@@ -2586,6 +2645,40 @@ func (s *Server) handleAdminOverrideRateLimit(w http.ResponseWriter, r *http.Req
 	s.writeAudit(actor, "tunnel.rate_limit_overridden", "subdomain", req.Host, fmt.Sprintf("Overrode rate limit to %d RPS", req.RateLimit), r)
 
 	respondJSON(w, http.StatusOK, map[string]string{"status": "success"})
+}
+
+// handleAdminAuditExport streams audit log as CSV.
+func (s *Server) handleAdminAuditExport(w http.ResponseWriter, r *http.Request, actor string) {
+	if s.db == nil {
+		http.Error(w, `{"error":"Database not configured"}`, http.StatusNotImplemented)
+		return
+	}
+
+	entries, err := s.db.ListAuditEntries(db.AuditFilter{})
+	if err != nil {
+		http.Error(w, `{"error":"Failed to list audit entries"}`, http.StatusInternalServerError)
+		return
+	}
+
+	w.Header().Set("Content-Type", "text/csv")
+	w.Header().Set("Content-Disposition", "attachment;filename=audit_log.csv")
+
+	writer := csv.NewWriter(w)
+	_ = writer.Write([]string{"ID", "Actor", "Action", "TargetType", "TargetID", "Details", "IP", "Timestamp"})
+
+	for _, e := range entries {
+		_ = writer.Write([]string{
+			strconv.FormatInt(e.ID, 10),
+			e.ActorID,
+			e.Action,
+			e.TargetType,
+			e.TargetID,
+			e.Details,
+			e.IPAddress,
+			e.CreatedAt.Format(time.RFC3339),
+		})
+	}
+	writer.Flush()
 }
 
 func (s *Server) handleAdminAuditLog(w http.ResponseWriter, r *http.Request, actor string) {

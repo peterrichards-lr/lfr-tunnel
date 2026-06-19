@@ -1386,6 +1386,10 @@ function toggleTheme() {
             loadBlacklist();
         }
 
+        function exportAuditLog() {
+            window.location.href = '/api/admin/audit/export';
+        }
+
         async function loadAudit() {
             const res = await fetch('/api/admin/audit?limit=100');
             if (res.ok) {

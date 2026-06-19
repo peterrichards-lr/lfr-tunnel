@@ -574,88 +574,150 @@ function toggleTheme() {
                         if (dl) dl.href = vData.documentation_url;
                     }
                     
-                    if (!userVer || userVer !== latestVer) {
-                        let os = 'Unknown OS';
-                        let dlSuffix = '';
-                        const ua = navigator.userAgent;
-                        if (ua.includes('Mac OS X')) {
-                            os = 'macOS';
-                            dlSuffix = '-darwin-arm64'; // Default to ARM for modern Macs
-                            if (ua.includes('Intel')) dlSuffix = '-darwin-amd64';
-                        } else if (ua.includes('Windows')) {
-                            os = 'Windows';
-                            dlSuffix = '-windows-amd64.exe';
-                        } else if (ua.includes('Linux')) {
-                            os = 'Linux';
-                            dlSuffix = '-linux-amd64';
+                    let os = 'Unknown OS';
+                    let platformKey = '';
+                    const ua = navigator.userAgent;
+                    if (ua.includes('Mac OS X')) {
+                        os = 'macOS';
+                        platformKey = ua.includes('Intel') ? 'macos_amd64' : 'macos_arm64';
+                    } else if (ua.includes('Windows')) {
+                        os = 'Windows';
+                        platformKey = 'windows_amd64';
+                    } else if (ua.includes('Linux')) {
+                        os = 'Linux';
+                        platformKey = 'linux_amd64';
+                    }
+
+                    const repoUrl = vData.repository_url || 'https://github.com/peterrichards-lr/lfr-tunnel';
+                    const otherUrl = `${repoUrl}/releases/latest`;
+                    const rawUrl = repoUrl.replace('github.com', 'raw.githubusercontent.com') + '/master';
+                    const checksumsUrl = repoUrl.replace('github.com', 'raw.githubusercontent.com') + '/checksums/checksums.txt';
+
+                    const defaults = {
+                        "macos_arm64": {
+                            "url": `${repoUrl}/releases/latest/download/lfr-tunnel-darwin-arm64`,
+                            "cmd": "brew tap peterrichards-lr/tap && brew trust peterrichards-lr/tap && brew install lfr-tunnel",
+                            "cmd_fallback": `curl -sSfL ${rawUrl}/scripts/install.sh | sh`
+                        },
+                        "macos_amd64": {
+                            "url": `${repoUrl}/releases/latest/download/lfr-tunnel-darwin-amd64`,
+                            "cmd": "brew tap peterrichards-lr/tap && brew trust peterrichards-lr/tap && brew install lfr-tunnel",
+                            "cmd_fallback": `curl -sSfL ${rawUrl}/scripts/install.sh | sh`
+                        },
+                        "windows_amd64": {
+                            "url": `${repoUrl}/releases/latest/download/lfr-tunnel-windows-amd64.exe`,
+                            "cmd": "scoop bucket add peterrichards-lr https://github.com/peterrichards-lr/scoop-bucket && scoop install lfr-tunnel",
+                            "cmd_fallback": `iwr ${rawUrl}/scripts/install.ps1 | iex`
+                        },
+                        "linux_amd64": {
+                            "url": `${repoUrl}/releases/latest/download/lfr-tunnel-linux-amd64`,
+                            "cmd": `curl -sSfL ${rawUrl}/scripts/install.sh | sh`,
+                            "cmd_fallback": ""
                         }
+                    };
 
-                        const repoUrl = vData.repository_url || 'https://github.com/peterrichards-lr/lfr-tunnel';
-                        const otherUrl = `${repoUrl}/releases/latest`;
-                        const rawUrl = repoUrl.replace('github.com', 'raw.githubusercontent.com') + '/master';
-                        const dlUrl = `${repoUrl}/releases/latest/download/lfr-tunnel${dlSuffix}`;
-                        const checksumsUrl = repoUrl.replace('github.com', 'raw.githubusercontent.com') + '/checksums/checksums.txt';
+                    let config = (vData.client_platforms && vData.client_platforms[platformKey]) || defaults[platformKey];
+                    let dlUrl = config ? config.url : `${repoUrl}/releases/latest`;
+                    let recommendedCmd = config ? config.cmd : '';
+                    let fallbackCmd = config ? config.cmd_fallback : '';
 
-                        const bannerDiv = document.createElement('div');
-                        bannerDiv.className = 'alert alert-info';
-                        bannerDiv.style.marginTop = '1rem';
-                        bannerDiv.style.display = 'flex';
-                        bannerDiv.style.alignItems = 'center';
-                        bannerDiv.style.justifyContent = 'space-between';
+                    let binaryName = config && config.binary_name ? config.binary_name : '';
+                    if (!binaryName) {
+                        if (platformKey === 'macos_arm64') binaryName = 'lfr-tunnel-darwin-arm64';
+                        else if (platformKey === 'macos_amd64') binaryName = 'lfr-tunnel-darwin-amd64';
+                        else if (platformKey === 'windows_amd64') binaryName = 'lfr-tunnel-windows-amd64.exe';
+                        else if (platformKey === 'linux_amd64') binaryName = 'lfr-tunnel-linux-amd64';
+                    }
 
-                        const titleText = (!userVer) ? `Get started with the CLI` : `Update Available (v${latestVer})`;
-                        const subText = (!userVer) ? `Run this command in your terminal to install the client for ${os}.` : `You are using an older client (${userVer}). Please update to the latest release for ${os}.`;
+                    let staticSHA = config && config.sha256 ? config.sha256 : '';
 
-                        let recommendedCmd = '';
-                        let fallbackCmd = '';
-                        let binaryName = `lfr-tunnel${dlSuffix}`;
-                        if (os === 'macOS' || os === 'Linux') {
-                            recommendedCmd = `brew tap peterrichards-lr/tap && brew trust peterrichards-lr/tap && brew install lfr-tunnel`;
-                            fallbackCmd = `curl -sSfL ${rawUrl}/scripts/install.sh | sh`;
-                        } else if (os === 'Windows') {
-                            recommendedCmd = `scoop bucket add peterrichards-lr https://github.com/peterrichards-lr/scoop-bucket && scoop install lfr-tunnel`;
-                            fallbackCmd = `iwr ${rawUrl}/scripts/install.ps1 | iex`;
+                    // Determine visibility of download button
+                    let showDownload = true;
+                    if (config && config.show_download !== undefined && config.show_download !== null) {
+                        showDownload = config.show_download;
+                    }
+                    let downloadLabel = config && config.download_label ? config.download_label : '⬇️ Download Binary';
+
+                    // Custom labels
+                    let cmdLabel = config && config.cmd_label ? config.cmd_label : '🚀 Recommended (Package Manager):';
+                    let cmdFallbackLabel = config && config.cmd_fallback_label ? config.cmd_fallback_label : '🛠️ Direct Script Fallback:';
+
+                    // Recommended flag positioning
+                    if (config && config.recommended) {
+                        // If fallback is recommended, adjust default labels if not overridden
+                        if (config.recommended === 'cmd_fallback') {
+                            if (!config.cmd_fallback_label) cmdFallbackLabel = '🚀 Recommended (Direct Script):';
+                            if (!config.cmd_label) cmdLabel = '🛠️ Package Manager Option:';
                         }
+                    }
 
-                        if (os === 'Unknown OS') {
-                            bannerDiv.innerHTML = `
-                                <div><strong>${titleText}</strong> <br/> ${subText}</div>
-                                <div style="display: flex; gap: 10px;">
-                                    <a href="${otherUrl}" target="_blank" class="btn btn-secondary" style="white-space: nowrap;">Releases / Other OSs</a>
+                    const bannerDiv = document.createElement('div');
+                    bannerDiv.className = 'alert alert-info';
+                    bannerDiv.style.marginTop = '1rem';
+                    bannerDiv.style.display = 'flex';
+                    bannerDiv.style.alignItems = 'center';
+                    bannerDiv.style.justifyContent = 'space-between';
+
+                    let titleText = 'CLI Client Installation';
+                    let subText = `Run this command in your terminal to install the client for ${os}.`;
+                    if (!userVer) {
+                        titleText = 'Get started with the CLI';
+                        subText = `Run this command in your terminal to install the client for ${os}.`;
+                    } else if (userVer !== latestVer) {
+                        titleText = `Update Available (v${latestVer})`;
+                        subText = `You are using an older client (${userVer}). Please update to the latest release for ${os}.`;
+                    } else {
+                        subText = `Your client is up to date (v${userVer}) for ${os}.`;
+                    }
+
+                    if (os === 'Unknown OS') {
+                        bannerDiv.innerHTML = `
+                            <div><strong>${titleText}</strong> <br/> ${subText}</div>
+                            <div style="display: flex; gap: 10px;">
+                                <a href="${otherUrl}" target="_blank" class="btn btn-secondary" style="white-space: nowrap;">Releases / Other OSs</a>
+                            </div>
+                        `;
+                    } else {
+                        const hashSpanId = 'hash-' + Math.random().toString(36).substr(2, 9);
+                        bannerDiv.innerHTML = `
+                            <div style="flex-grow: 1; overflow: hidden; padding-right: 20px;">
+                                <strong>${titleText}</strong> <br/>
+                                <span style="font-size: 0.9rem; color: var(--text-muted);">${subText}</span>
+                                
+                                ${recommendedCmd ? `
+                                <div style="margin-top: 10px; font-size: 0.8rem; font-weight: bold; color: var(--text);">${cmdLabel}</div>
+                                <div style="margin-top: 4px; margin-bottom: 8px; position: relative; background: #0d1117; color: #e6edf3; border-radius: 6px; border: 1px solid rgba(255,255,255,0.1); padding: 10px 40px 10px 12px; font-family: ui-monospace, SFMono-Regular, Consolas, monospace; font-size: 0.8rem; overflow-x: auto;">
+                                    <span style="user-select: all;">${recommendedCmd}</span>
+                                    <button onclick="navigator.clipboard.writeText('${recommendedCmd}'); this.innerHTML='<span style=\\'font-size:12px;\\'>✓</span>'; setTimeout(() => this.innerHTML='📋', 2000);" style="position: absolute; top: 6px; right: 6px; background: transparent; border: 1px solid rgba(255,255,255,0.2); color: #8b949e; border-radius: 4px; width: 22px; height: 22px; display: flex; align-items: center; justify-content: center; cursor: pointer; transition: 0.2s;" onmouseover="this.style.color='#c9d1d9'; this.style.borderColor='rgba(255,255,255,0.4)';" onmouseout="this.style.color='#8b949e'; this.style.borderColor='rgba(255,255,255,0.2)';">📋</button>
                                 </div>
-                            `;
-                        } else {
-                            const hashSpanId = 'hash-' + Math.random().toString(36).substr(2, 9);
-                            bannerDiv.innerHTML = `
-                                <div style="flex-grow: 1; overflow: hidden; padding-right: 20px;">
-                                    <strong>${titleText}</strong> <br/>
-                                    <span style="font-size: 0.9rem; color: var(--text-muted);">${subText}</span>
-                                    
-                                    <div style="margin-top: 10px; font-size: 0.8rem; font-weight: bold; color: var(--text);">🚀 Recommended (Package Manager):</div>
-                                    <div style="margin-top: 4px; margin-bottom: 8px; position: relative; background: #0d1117; color: #e6edf3; border-radius: 6px; border: 1px solid rgba(255,255,255,0.1); padding: 10px 40px 10px 12px; font-family: ui-monospace, SFMono-Regular, Consolas, monospace; font-size: 0.8rem; overflow-x: auto;">
-                                        <span style="user-select: all;">${recommendedCmd}</span>
-                                        <button onclick="navigator.clipboard.writeText('${recommendedCmd}'); this.innerHTML='<span style=\\'font-size:12px;\\'>✓</span>'; setTimeout(() => this.innerHTML='📋', 2000);" style="position: absolute; top: 6px; right: 6px; background: transparent; border: 1px solid rgba(255,255,255,0.2); color: #8b949e; border-radius: 4px; width: 22px; height: 22px; display: flex; align-items: center; justify-content: center; cursor: pointer; transition: 0.2s;" onmouseover="this.style.color='#c9d1d9'; this.style.borderColor='rgba(255,255,255,0.4)';" onmouseout="this.style.color='#8b949e'; this.style.borderColor='rgba(255,255,255,0.2)';">📋</button>
-                                    </div>
+                                ` : ''}
 
-                                    <div style="font-size: 0.8rem; font-weight: bold; color: var(--text-muted);">🛠️ Direct Script Fallback:</div>
-                                    <div style="margin-top: 4px; margin-bottom: 8px; position: relative; background: #0d1117; color: #e6edf3; border-radius: 6px; border: 1px solid rgba(255,255,255,0.1); padding: 10px 40px 10px 12px; font-family: ui-monospace, SFMono-Regular, Consolas, monospace; font-size: 0.8rem; overflow-x: auto;">
-                                        <span style="user-select: all;">${fallbackCmd}</span>
-                                        <button onclick="navigator.clipboard.writeText('${fallbackCmd}'); this.innerHTML='<span style=\\'font-size:12px;\\'>✓</span>'; setTimeout(() => this.innerHTML='📋', 2000);" style="position: absolute; top: 6px; right: 6px; background: transparent; border: 1px solid rgba(255,255,255,0.2); color: #8b949e; border-radius: 4px; width: 22px; height: 22px; display: flex; align-items: center; justify-content: center; cursor: pointer; transition: 0.2s;" onmouseover="this.style.color='#c9d1d9'; this.style.borderColor='rgba(255,255,255,0.4)';" onmouseout="this.style.color='#8b949e'; this.style.borderColor='rgba(255,255,255,0.2)';">📋</button>
-                                    </div>
-
-                                    <div style="font-size: 0.75rem; color: var(--text-muted); font-family: monospace;">SHA256: <span id="${hashSpanId}">loading...</span></div>
+                                ${fallbackCmd ? `
+                                <div style="margin-top: 10px; font-size: 0.8rem; font-weight: bold; color: var(--text-muted);">${cmdFallbackLabel}</div>
+                                <div style="margin-top: 4px; margin-bottom: 8px; position: relative; background: #0d1117; color: #e6edf3; border-radius: 6px; border: 1px solid rgba(255,255,255,0.1); padding: 10px 40px 10px 12px; font-family: ui-monospace, SFMono-Regular, Consolas, monospace; font-size: 0.8rem; overflow-x: auto;">
+                                    <span style="user-select: all;">${fallbackCmd}</span>
+                                    <button onclick="navigator.clipboard.writeText('${fallbackCmd}'); this.innerHTML='<span style=\\'font-size:12px;\\'>✓</span>'; setTimeout(() => this.innerHTML='📋', 2000);" style="position: absolute; top: 6px; right: 6px; background: transparent; border: 1px solid rgba(255,255,255,0.2); color: #8b949e; border-radius: 4px; width: 22px; height: 22px; display: flex; align-items: center; justify-content: center; cursor: pointer; transition: 0.2s;" onmouseover="this.style.color='#c9d1d9'; this.style.borderColor='rgba(255,255,255,0.4)';" onmouseout="this.style.color='#8b949e'; this.style.borderColor='rgba(255,255,255,0.2)';">📋</button>
                                 </div>
-                                <div style="display: flex; flex-direction: column; gap: 10px; align-items: stretch; min-width: 140px;">
-                                    <a href="${dlUrl}" class="btn btn-primary" style="white-space: nowrap; text-align: center;">⬇️ Download Binary</a>
-                                    <a href="${otherUrl}" target="_blank" class="btn btn-secondary" style="white-space: nowrap; text-align: center;">Other OSs</a>
-                                </div>
-                            `;
+                                ` : ''}
 
-                            // Fetch the checksums.txt file asynchronously
+                                ${(staticSHA || binaryName) ? `<div style="font-size: 0.75rem; color: var(--text-muted); font-family: monospace;">SHA256: <span id="${hashSpanId}">loading...</span></div>` : ''}
+                            </div>
+                            <div style="display: flex; flex-direction: column; gap: 10px; align-items: stretch; min-width: 140px;">
+                                ${showDownload ? `<a href="${dlUrl}" class="btn btn-primary" style="white-space: nowrap; text-align: center;">${downloadLabel}</a>` : ''}
+                                <a href="${otherUrl}" target="_blank" class="btn btn-secondary" style="white-space: nowrap; text-align: center;">Other OSs</a>
+                            </div>
+                        `;
+
+                        if (staticSHA) {
+                            setTimeout(() => {
+                                const span = document.getElementById(hashSpanId);
+                                if (span) span.innerText = staticSHA;
+                            }, 0);
+                        } else if (binaryName) {
                             fetch(checksumsUrl)
                                 .then(res => res.text())
                                 .then(text => {
-                                    const lines = text.split('\\n');
+                                    const lines = text.split('\n');
                                     let foundHash = 'not found';
                                     for (let line of lines) {
                                         if (line.includes(binaryName)) {
@@ -672,8 +734,8 @@ function toggleTheme() {
                                     console.error("Failed to fetch checksums", err);
                                 });
                         }
-                        document.getElementById('last-login-banner').after(bannerDiv);
                     }
+                    document.getElementById('last-login-banner').after(bannerDiv);
                 }
             } catch (e) {
                 console.error("Failed to check version", e);
@@ -1516,37 +1578,8 @@ function toggleTheme() {
                     const data = await res.json();
                     updateMaintenanceModeUI(data.maintenance_mode, data.iron_curtain);
                 }
-                
-                const settingsRes = await fetch('/api/admin/settings');
-                if (settingsRes.ok) {
-                    const settingsData = await settingsRes.json();
-                    const showDocker = settingsData.show_docker_workaround !== "false";
-                    document.getElementById('maint-show-docker-workaround').checked = showDocker;
-                }
             } catch (e) {
                 console.error("Failed to load maintenance status", e);
-            }
-        }
-
-        async function savePortalFeatureSettings() {
-            const showDockerVal = document.getElementById('maint-show-docker-workaround').checked ? "true" : "false";
-            try {
-                const res = await fetch('/api/admin/settings', {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({
-                        show_docker_workaround: showDockerVal
-                    })
-                });
-                if (res.ok) {
-                    showToast("Portal settings updated successfully!", "success");
-                } else {
-                    const err = await res.json();
-                    showToast("Failed to update settings: " + (err.error || "Unknown error"), "danger");
-                }
-            } catch (e) {
-                console.error("Failed to save portal settings", e);
-                showToast("Failed to save settings.", "danger");
             }
         }
 

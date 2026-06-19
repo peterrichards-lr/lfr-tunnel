@@ -24,6 +24,11 @@ chisel_bind_addr: ":8082"
 ssl_cert_file: "/path/to/cert"
 ssl_key_file: "/path/to/key"
 docker_image: "peterjrichards/lfr-tunnel:latest"
+client_platforms:
+  macos_arm64:
+    url: "http://example.com/darwin-arm64"
+    cmd: "brew install test"
+    cmd_fallback: "curl"
 `)
 	if _, err := tmpFile.Write(content); err != nil {
 		t.Fatalf("failed to write temp file: %v", err)
@@ -44,6 +49,15 @@ docker_image: "peterjrichards/lfr-tunnel:latest"
 	}
 	if cfg.DockerImage != "peterjrichards/lfr-tunnel:latest" {
 		t.Errorf("expected DockerImage to be peterjrichards/lfr-tunnel:latest, got %s", cfg.DockerImage)
+	}
+	if cfg.ClientPlatforms == nil || cfg.ClientPlatforms["macos_arm64"].URL != "http://example.com/darwin-arm64" {
+		t.Errorf("expected ClientPlatforms macos_arm64 URL to be http://example.com/darwin-arm64, got %v", cfg.ClientPlatforms)
+	}
+	if cfg.ClientPlatforms["macos_arm64"].Cmd != "brew install test" {
+		t.Errorf("expected ClientPlatforms macos_arm64 Cmd to be brew install test, got %s", cfg.ClientPlatforms["macos_arm64"].Cmd)
+	}
+	if cfg.ClientPlatforms["macos_arm64"].CmdFallback != "curl" {
+		t.Errorf("expected ClientPlatforms macos_arm64 CmdFallback to be curl, got %s", cfg.ClientPlatforms["macos_arm64"].CmdFallback)
 	}
 
 	// 3. Set environment variables to override

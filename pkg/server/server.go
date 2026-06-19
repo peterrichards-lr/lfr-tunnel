@@ -472,13 +472,8 @@ func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 			}
 
 			dockerImg := s.cfg.DockerImage
-			if s.db != nil {
-				if val, _ := s.db.GetAdminSetting("show_docker_workaround"); val == "false" {
-					dockerImg = ""
-				}
-			}
 
-			respondJSON(w, http.StatusOK, map[string]string{
+			respondJSON(w, http.StatusOK, map[string]interface{}{
 				"latest_version":         config.Version,
 				"min_version":            s.cfg.MinClientVersion,
 				"documentation_url":      s.cfg.DocumentationURL,
@@ -489,6 +484,7 @@ func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 				"enforce_policy_consent": consentStr,
 				"docker_image":           dockerImg,
 				"docker_bypass_url":      s.cfg.DockerBypassURL,
+				"client_platforms":       s.cfg.ClientPlatforms,
 			})
 			return
 		}
@@ -3060,7 +3056,6 @@ func (s *Server) handleAdminSettings(w http.ResponseWriter, r *http.Request, act
 		notifyReg, _ := s.db.GetAdminSetting("alert_notify_registration")
 		notifyBan, _ := s.db.GetAdminSetting("alert_notify_blacklist")
 		notifyOffline, _ := s.db.GetAdminSetting("alert_notify_tunnel_offline")
-		showDocker, _ := s.db.GetAdminSetting("show_docker_workaround")
 
 		// Default values if not set
 		if notifyReg == "" {
@@ -3072,15 +3067,11 @@ func (s *Server) handleAdminSettings(w http.ResponseWriter, r *http.Request, act
 		if notifyOffline == "" {
 			notifyOffline = "false"
 		}
-		if showDocker == "" {
-			showDocker = "true"
-		}
 
 		_ = json.NewEncoder(w).Encode(map[string]interface{}{
 			"alert_notify_registration":   notifyReg,
 			"alert_notify_blacklist":      notifyBan,
 			"alert_notify_tunnel_offline": notifyOffline,
-			"show_docker_workaround":      showDocker,
 			"owner_email":                 s.cfg.Owner.UserID,
 			"allowed_email_domains":       s.cfg.AllowedEmailDomains,
 			"smtp_host":                   s.cfg.SMTPServer.Host,
@@ -3099,7 +3090,7 @@ func (s *Server) handleAdminSettings(w http.ResponseWriter, r *http.Request, act
 
 		for key, value := range payload {
 			// Validate keys to prevent spamming db
-			if key == "alert_notify_registration" || key == "alert_notify_blacklist" || key == "alert_notify_tunnel_offline" || key == "show_docker_workaround" {
+			if key == "alert_notify_registration" || key == "alert_notify_blacklist" || key == "alert_notify_tunnel_offline" {
 				if err := s.db.SetAdminSetting(key, value); err != nil {
 					log.Printf("[Admin] Failed to save setting %s: %v", key, err)
 				}

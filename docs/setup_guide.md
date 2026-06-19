@@ -661,14 +661,137 @@ To comply with strict IT auditing frameworks (like SOC2 or ISO 27001), you can o
    ```yaml
    enforce_policy_consent: true
    ```
-2. Restart the service:
-   ```bash
-   sudo systemctl restart lfr-tunneld
-   ```
 3. **The User Experience**: The Complete Profile Setup page (`setup.html`) will dynamically render a required checkbox. The user cannot submit setup without checking it.
-4. **The Audit Trail**: The server will capture the exact timestamp of consent and save it in the SQLite database under `policy_consent_at`. This provides an airtight compliance record.
+4. **The Audit Trail**:    The server will capture the exact timestamp of consent and save it in the SQLite database under `policy_consent_at`. This provides an airtight compliance record.
 
-### 8.3. Dual-Mode Gateway Maintenance (Bouncer Mode vs. Fire Curtain)
+### 8.3. Customizing Client Binary Downloads & Commands (Self-Hosting & EDR Bypass)
+
+By default, the Developer Portal Dashboard recommends client downloads and installation commands pointing directly to the project's official GitHub releases.
+
+If your organization requires codesigned client executables (e.g., to bypass Endpoint Detection & Response (EDR) software like SentinelOne), or if you are running in a restricted intranet zone without public GitHub access, you can host the signed client binaries locally on the VPS (served via Nginx) and override the commands/links shown to developers.
+
+#### Step 1: Configure Nginx to Serve Local Client Downloads
+Upload the signed client binaries to `/var/www/lfr-tunnel/static/downloads/` on the VPS. Add an Nginx alias location block under the port 443 server config block:
+```nginx
+location /static/downloads/ {
+    alias /var/www/lfr-tunnel/static/downloads/;
+    autoindex off;
+    add_header Content-Disposition 'attachment';
+}
+```
+
+#### Step 2: Override Client Platform Configurations in `server-config.yaml`
+Declare the `client_platforms` block to redirect developers to your self-hosted binaries and specify organization-sanctioned package manager formulae or installation scripts:
+
+```yaml
+client_platforms:
+  macos_arm64:
+    url: "https://yourdomain.com/static/downloads/lfr-tunnel-darwin-arm64"
+    cmd: "brew tap yourcompany/tap && brew install lfr-tunnel"
+    cmd_fallback: "curl -sSfL https://yourdomain.com/static/downloads/install.sh | sh"
+  macos_amd64:
+    url: "https://yourdomain.com/static/downloads/lfr-tunnel-darwin-amd64"
+    cmd: "brew tap yourcompany/tap && brew install lfr-tunnel"
+    cmd_fallback: "curl -sSfL https://yourdomain.com/static/downloads/install.sh | sh"
+  windows_amd64:
+    url: "https://yourdomain.com/static/downloads/lfr-tunnel-windows-amd64.exe"
+    cmd: "scoop bucket add yourcompany https://yourdomain.com/scoop && scoop install lfr-tunnel"
+    cmd_fallback: "iwr https://yourdomain.com/static/downloads/install.ps1 | iex"
+  linux_amd64:
+    url: "https://yourdomain.com/static/downloads/lfr-tunnel-linux-amd64"
+    cmd: "curl -sSfL https://yourdomain.com/static/downloads/install.sh | sh"
+```
+
+#### Step 3: Customizing the Docker Workaround Panel Visibility
+If your users still encounter local EDR restrictions running CLI binaries natively, you can display a secondary, Docker-based client setup panel.
+
+The Docker panel will automatically appear on the dashboard **only** if the `docker_image` parameter is declared in `server-config.yaml`. To hide this card entirely, simply leave `docker_image` empty or remove it:
+
+```yaml
+# To enable the Docker card, declare the registry image:
+docker_image: "peterjrichards/lfr-tunnel:latest"
+docker_bypass_url: "https://github.com/peterrichards-lr/lfr-tunnel/blob/master/docs/liferay-se-guide.md#using-the-docker-wrapper-edr-bypass"
+
+# To hide the Docker workaround card, leave it empty or comment it out:
+# docker_image: ""
+```
+
+#### Step 4: Automating Multi-Platform Code Signing & Verification
+
+To establish user trust and ensure EDR compatibility (SentinelOne/false-positive prevention) across Windows, macOS, and Linux, you can utilize the automated signing script located at `scripts/sign-release.sh`. 
+
+This script allows you to build, sign, and update release checksums natively on your macOS MacBook.
+
+##### A. Obtaining Signing Certificates
+
+1. **Windows (Authenticode)**:
+   * **Corporate IT Request**: Ask your IT Department for a **Code Signing Certificate** from your organization's internal Active Directory Certificate Services (AD CS). Have them export it as a PKCS#12 (`.p12` or `.pfx`) file.
+   * *Why it works:* Active Directory domain-joined machines automatically trust certificates issued by the internal CA.
+2. **macOS (Developer ID)**:
+   * **Corporate IT Request**: Ask IT to add your Apple ID to the company’s Apple Developer Team with **Developer** or **Admin** privileges, and export a **Developer ID Application** certificate.
+3. **Linux (GPG Signature)**:
+   * Generate a GPG key pair locally on your machine:
+     ```bash
+     gpg --full-generate-key
+     ```
+
+##### B. Temporary Self-Signed Certificates (Local EDR Testing)
+
+For isolated testing or when corporate certificates are not yet available, you can sign binaries with a self-signed identity and configure a SentinelOne rule to trust it specifically for your machine:
+
+1. **Windows Self-Signed Key Generation (on macOS)**:
+   Generate a temporary PKCS#12 bundle (`temp_signing_key.p12`):
+   ```bash
+   # 1. Generate private key
+   openssl genrsa -out self-signed-key.key 2048
+
+   # 2. Create Certificate Signing Request
+   openssl req -new -key self-signed-key.key -out self-signed.csr -subj "/CN=Lfr-Tunnel Test Code Signing"
+
+   # 3. Create self-signed certificate with Code Signing extended key usage
+   openssl x509 -req -days 365 -in self-signed.csr -signkey self-signed-key.key -out self-signed-cert.crt -addtrust codeSigning
+
+   # 4. Package key and certificate
+   openssl pkcs12 -export -out temp_signing_key.p12 -inkey self-signed-key.key -in self-signed-cert.crt -name "Temp Code Sign"
+   ```
+   * **SentinelOne Exception**: Provide `self-signed-cert.crt` (public key only) to your SentinelOne administrator. They can create an exception under **Exclusions -> Signatures (Authenticode)** to whitelist binaries signed with this certificate.
+
+2. **macOS Self-Signed Key Generation**:
+   * Open the **Keychain Access** app.
+   * Go to **Keychain Access -> Certificate Assistant -> Create a Certificate...**
+   * **Name**: `Temp Code Sign`
+   * **Identity Type**: Self Signed Root
+   * **Certificate Type**: Code Signing
+   * Click **Create**. Right-click the newly generated certificate to export it as a `.cer` file and send it to your SentinelOne administrator for macOS whitelisting.
+
+##### C. Running the Automated Signing Script
+
+The `scripts/sign-release.sh` script compiles the project and signs the binaries. It checks for environment variables and prompts you interactively if they are missing:
+
+* **Interactive Mode**:
+  Ensure you have `osslsigncode` and `gnupg` installed:
+  ```bash
+  brew install osslsigncode gnupg
+  ./scripts/sign-release.sh
+  ```
+  The script will guide you through picking available Keychain identities, selecting a `.p12` file (defaulting to `./temp_signing_key.p12` if present), entering passwords securely, and signing.
+
+* **Environment Variable Mode (CI/CD or Non-Interactive)**:
+  Provide variables directly to bypass CLI prompts:
+  ```bash
+  export LFT_MACOS_IDENTITY="Developer ID Application: Company Name (TEAMID)"
+  export LFT_SIGN_P12="/path/to/certificate.p12"
+  export LFT_SIGN_PASS="your-password"
+  export LFT_GPG_KEY="your.email@company.com"
+
+  ./scripts/sign-release.sh
+  ```
+
+* **Output**:
+  The script updates signed binaries and generates a verified SHA256 list in `bin/checksums.txt`.
+
+
+### 8.4. Dual-Mode Gateway Maintenance (Bouncer Mode vs. Fire Curtain)
 
 To accommodate different levels of maintenance urgency, the gateway supports two maintenance modalities configurable directly from the dashboard:
 
@@ -695,7 +818,7 @@ For high-risk operations, database restores, or full server downtime, the Platfo
    * **Warning**: This blocks *everyone*, including the Owner and the Admin Dashboard. You will be immediately disconnected.
    * **Restoration**: To lift the Fire Curtain, you must log in to the VPS via SSH and run `sudo disable-maintenance.sh`.
 
-### 8.4. Automated Cloudflare Dynamic DNS (DDNS) Service Setup
+### 8.5. Automated Cloudflare Dynamic DNS (DDNS) Service Setup
 
 If your VPS or gateway environment runs on a dynamic public IP address, you can configure our native background Cloudflare Dynamic DNS (DDNS) service. 
 
@@ -756,7 +879,7 @@ To prevent `NXDOMAIN` (or empty resolution) errors on subdomains that have assoc
 
 Our dynamic `cloudflare-ddns.sh` script is natively hardened to automatically handle this. By default, it is configured with `RECORD_NAMES=("@" "*" "tunnel" "portal")` to keep all required exact-match IP mappings 100% synchronized in real-time alongside your wildcard records.
 
-### 8.5. Customizing Translations & Email Templates at Runtime
+### 8.6. Customizing Translations & Email Templates at Runtime
 
 To provide enterprise-grade flexibility and avoid needing a full software re-release just to edit email copy or add a new locale, `lfr-tunneld` supports **dynamic, zero-recompilation filesystem overrides** for both properties-based translations and HTML email templates.
 
@@ -807,7 +930,7 @@ To customize the HTML layout or copy of transactional emails (e.g., `magic_link.
    ```
    *(Note: The server will automatically append the clean English fallback version at the bottom of all non-English emails, separated by a crisp visual divider!)*
 
-### 8.6. Gateway Maintenance & Backup Command-Line Utilities
+### 8.7. Gateway Maintenance & Backup Command-Line Utilities
 
 To simplify remote management and updates, the deployment process automatically uploads and registers administrative command-line utilities in the system path (`/usr/local/bin/`) on the VPS. Run these directly as root or via `sudo`:
 

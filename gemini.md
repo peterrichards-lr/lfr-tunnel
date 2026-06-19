@@ -152,6 +152,14 @@ The solution will consist of:
 - [x] Deploy automated dual-stack (IPv4 & IPv6) Cloudflare Dynamic DNS updater service and timer on the VPS.
 - [x] Implement passive and active service self-healing (Nginx auto-restart systemd overrides and gateway watchdog monitor) on the VPS.
 - [x] Clean up build version naming to omit commit suffixes during local build/deploy
+- [x] Revert DB toggle logic for Docker workaround panel and enforce config-only control
+- [x] Implement client-side platform configuration in config and expose via version endpoint
+- [x] Integrate dynamic platform configurations on Admin/Client Dashboard UI
+- [x] Align E2E test environments, Docker configuration, and Playwright UI tests
+- [x] Document client platform overrides in Docs
+- [ ] Create automated sign-release.sh script in scripts/ supporting environment configuration and secure terminal prompting for macOS, Windows, and Linux signing
+
+
 
 ## SentinelOne False Positive Mitigation
 - [x] Standardise canonical install path to ~/bin/lfr-tunnel across install.sh, install.ps1, README.md and docs.

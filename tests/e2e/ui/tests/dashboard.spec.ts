@@ -133,32 +133,11 @@ test.describe('Dashboard UI Automation', () => {
     // Close user details modal
     await page.click('#user-details-modal button:has-text("Close")');
 
-    // 6. Test the dynamic Docker Workaround Toggle in Maintenance tab
-    await page.click('#nav-maintenance');
-    await expect(page.locator('h2:has-text("Gateway Maintenance")')).toBeVisible();
-
-    const toggleInput = page.locator('#maint-show-docker-workaround');
-    const toggleLabel = page.locator('label:has(#maint-show-docker-workaround)');
-    await expect(toggleInput).toBeChecked(); // Should default to checked
-
-    // Uncheck toggle to hide the Docker panel by clicking its label
-    await toggleLabel.click();
-    // Wait for success toast to be shown
-    await expect(page.locator('text=Portal settings updated successfully!')).toBeVisible();
-    await expect(toggleInput).not.toBeChecked();
-
-    // Navigate to overview and assert Docker panel is now hidden
+    // 7. Verify dynamic platform configuration overrides render correctly on the Overview page
     await page.click('#nav-overview');
-    await expect(page.locator('#docker-container-box')).toBeHidden();
-
-    // Go back to Maintenance and re-enable it
-    await page.click('#nav-maintenance');
-    await toggleLabel.click();
-    await expect(page.locator('text=Portal settings updated successfully!')).toBeVisible();
-    await expect(toggleInput).toBeChecked();
-
-    // Verify panel is visible again on Overview
-    await page.click('#nav-overview');
-    await expect(page.locator('#docker-container-box')).toBeVisible();
+    await expect(page.locator('text=🚀 Recommended Installation:')).toBeVisible();
+    await expect(page.locator('text=🛠️ Fallback Alternative:')).toBeVisible();
+    await expect(page.locator('text=6d4aef719dee798e611139e422d9231b226ec3538617d025fad08accf8fc63d6')).toBeVisible();
+    await expect(page.locator('text=⬇️ Download Signed Binary')).toBeVisible();
   });
 });

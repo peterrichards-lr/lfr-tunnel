@@ -713,8 +713,9 @@ func TestAdminEndpoints(t *testing.T) {
 
 func TestDefenseMiddleware(t *testing.T) {
 	cfg := &config.ServerConfig{
-		Domains:     []string{"example.com"},
-		IPBlacklist: []string{"192.168.1.100"},
+		Domains:                []string{"example.com"},
+		IPBlacklist:            []string{"192.168.1.100"},
+		DisableBackupScheduler: true,
 	}
 
 	if cfg.DBPath == "" {

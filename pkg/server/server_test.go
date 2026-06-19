@@ -983,6 +983,7 @@ func TestServer_GetMeLanguagePreference(t *testing.T) {
 		Role:               "user",
 		Status:             "approved",
 		LanguagePreference: "ro",
+		TOTPEnabled:        true,
 	}
 	if err := srv.db.CreateUser(u); err != nil {
 		t.Fatalf("failed to create user: %v", err)
@@ -1022,6 +1023,13 @@ func TestServer_GetMeLanguagePreference(t *testing.T) {
 		t.Error("expected 'language_preference' field in /api/me response, but it was missing")
 	} else if langVal != "ro" {
 		t.Errorf("expected 'language_preference' to be %q, got %q", "ro", langVal)
+	}
+
+	totpVal, ok := resp["totp_enabled"]
+	if !ok {
+		t.Error("expected 'totp_enabled' field in /api/me response, but it was missing")
+	} else if totpVal != true {
+		t.Errorf("expected 'totp_enabled' to be true, got %v", totpVal)
 	}
 }
 

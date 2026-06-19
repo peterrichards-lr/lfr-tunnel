@@ -98,6 +98,7 @@ func (s *Server) handleGetMe(w http.ResponseWriter, r *http.Request) {
 		"notification_prefs":  user.NotificationPrefs,
 		"last_login_ip":       user.LastLoginIP,
 		"tunnels":             activeLeases,
+		"totp_enabled":        user.TOTPEnabled,
 	}
 
 	cookie, err := r.Cookie("lfr_session")

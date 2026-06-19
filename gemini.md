@@ -188,3 +188,7 @@ The solution will consist of:
 - [x] Implement System Analytics PDF export feature.
 - [x] Test configuration parsing of DockerImage environment variable and configuration key in config_test.go.
 - [x] Add direct unit test coverage for TOTP/MFA algorithms in totp_test.go.
+- [x] Format System Analytics PDF print layout to support clean multi-page flows and page breaks.
+- [x] Fix missing `totp_enabled` field in `/api/me` response causing MFA to always display as disabled.
+
+

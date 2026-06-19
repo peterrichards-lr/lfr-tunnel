@@ -441,6 +441,14 @@ function toggleTheme() {
                             el.textContent = vData.latest_version;
                         });
                     }
+                    if (vData.docker_image) {
+                        const box = document.getElementById('docker-container-box');
+                        if (box) box.style.display = 'block';
+                        const text = document.getElementById('docker-pull-text');
+                        if (text) text.textContent = `docker pull ${vData.docker_image}`;
+                        const link = document.getElementById('docker-hub-link');
+                        if (link) link.href = `https://hub.docker.com/r/${vData.docker_image}`;
+                    }
                 }
             } catch (e) {
                 console.error("Failed to load policy links", e);
@@ -1399,6 +1407,16 @@ function toggleTheme() {
 
         function exportAnalyticsPDF() {
             window.print();
+        }
+
+        function copyDockerCmd() {
+            const textEl = document.getElementById('docker-pull-text');
+            if (!textEl) return;
+            navigator.clipboard.writeText(textEl.textContent).then(() => {
+                showToast("Docker pull command copied to clipboard!", "success");
+            }).catch(err => {
+                console.error("Failed to copy command", err);
+            });
         }
 
         async function loadAudit() {

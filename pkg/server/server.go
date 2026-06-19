@@ -473,6 +473,7 @@ func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 				"cookie_policy_url":      cookieURL,
 				"maintenance_mode":       maintStr,
 				"enforce_policy_consent": consentStr,
+				"docker_image":           s.cfg.DockerImage,
 			})
 			return
 		}

@@ -53,6 +53,7 @@ type ServerConfig struct {
 	CookiePolicyURL        string           `yaml:"cookie_policy_url"`
 	EnforcePolicyConsent   bool             `yaml:"enforce_policy_consent"`
 	DisableBackupScheduler bool             `yaml:"disable_backup_scheduler"`
+	DockerImage            string           `yaml:"docker_image"`
 
 	// Dynamic SSO/OIDC Providers
 	SSOProviders []SSOProviderConfig `yaml:"sso_providers"`
@@ -199,6 +200,9 @@ func LoadServerConfig(path string) (*ServerConfig, error) {
 	}
 	if val := os.Getenv("LFT_MIN_CLIENT_VERSION"); val != "" {
 		cfg.MinClientVersion = val
+	}
+	if val := os.Getenv("LFT_DOCKER_IMAGE"); val != "" {
+		cfg.DockerImage = val
 	}
 
 	return cfg, nil

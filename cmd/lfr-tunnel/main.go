@@ -233,7 +233,7 @@ func main() {
 	// Check compatibility result with 500ms timeout
 	select {
 	case info := <-compatChan:
-		if info != nil {
+		if info != nil && config.Version != "dev" {
 			if client.CompareVersions(config.Version, info.MinVersion) < 0 {
 				log.Fatalf("[Error] Your Liferay Tunnel client is too old to connect to the server. Minimum required version is %s.", info.MinVersion)
 			}

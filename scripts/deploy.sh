@@ -23,8 +23,9 @@ while getopts "i:" opt; do
 done
 shift $((OPTIND - 1))
 
-echo "Building Linux binary with path trimming..."
-GOOS=linux GOARCH=amd64 go build -trimpath -o bin/lfr-tunneld-linux ./cmd/lfr-tunneld
+VERSION=$(git describe --tags --always --dirty 2>/dev/null || echo "dev")
+echo "Building Linux binary (version: $VERSION) with path trimming..."
+GOOS=linux GOARCH=amd64 go build -ldflags="-s -w -X lfr-tunnel/pkg/config.Version=$VERSION" -trimpath -o bin/lfr-tunneld-linux ./cmd/lfr-tunneld
 
 echo "Uploading binary to VPS..."
 scp $SSH_KEY bin/lfr-tunneld-linux $VPS_USER@$VPS_IP:/home/$VPS_USER/lfr-tunneld

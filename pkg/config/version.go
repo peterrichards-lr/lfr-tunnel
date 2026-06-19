@@ -1,4 +1,4 @@
 package config
 
-// Version defines the current application version
-const Version = "v1.7.7"
+// Version defines the current application version (injected at build time via -ldflags)
+var Version = "dev"

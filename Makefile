@@ -1,5 +1,7 @@
 .PHONY: fmt vet test build deploy clean install-hook e2e e2e-sso help
 
+VERSION ?= $(shell git describe --tags --always --dirty 2>/dev/null || echo "dev")
+
 help:
 	@echo "Liferay Tunnel Developer Commands:"
 	@echo "  make fmt          - Format Go files using gofmt"
@@ -27,8 +29,8 @@ clean:
 
 build: clean
 	mkdir -p bin
-	go build -ldflags="-s -w" -trimpath -o bin/lfr-tunnel ./cmd/lfr-tunnel
-	go build -ldflags="-s -w" -trimpath -o bin/lfr-tunneld ./cmd/lfr-tunneld
+	go build -ldflags="-s -w -X lfr-tunnel/pkg/config.Version=$(VERSION)" -trimpath -o bin/lfr-tunnel ./cmd/lfr-tunnel
+	go build -ldflags="-s -w -X lfr-tunnel/pkg/config.Version=$(VERSION)" -trimpath -o bin/lfr-tunneld ./cmd/lfr-tunneld
 
 deploy:
 	@./scripts/deploy.sh

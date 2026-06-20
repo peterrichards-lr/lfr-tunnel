@@ -225,3 +225,14 @@ The solution will consist of:
 - [x] Support dynamic inspector binding address based on Docker detection and LFT_INSPECTOR_BIND.
 - [x] Document LFT_INSPECTOR_BIND in setup guide / SE guide.
 - [x] Bump version to v1.7.13 in whats-new.json, tag, and push to trigger release CI workflow.
+
+## Subdomain Reservation System (v1.8.0)
+- [ ] Create database schema migrations for subdomain reservations and custom user limits.
+- [ ] Implement database CRUD functions for subdomain reservations.
+- [ ] Implement configuration parameters for default max reservations.
+- [ ] Implement API endpoints for reserving, releasing, requesting extensions, and promoting subdomains.
+- [ ] Implement Admin endpoints for approving extensions, demoting reservations, and adjusting user limits.
+- [ ] Add HTML email templates and integrate outbound email triggers for reservation events.
+- [ ] Update tunnel registration and check-subdomain checks to enforce reservations.
+- [ ] Build portal UI dashboard panel and admin control views for reservation management.
+- [ ] Write unit and E2E integration tests for the reservation flow.

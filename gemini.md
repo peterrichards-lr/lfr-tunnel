@@ -242,6 +242,11 @@ The solution will consist of:
 - [x] Fix E2E integration tests failure by updating `tests/e2e/run.sh` to reserve the subdomain before tunnel connection.
 - [x] Bump version to v1.8.0 in whats-new.json, tag, and push to trigger release CI workflow.
 
+## Binary Signing & VPS Upload
+- [x] Support LFT_SKIP_GPG in scripts/sign-release.sh.
+- [x] Sign client binaries and update checksums.
+- [x] Copy signed client binaries and checksums to the VPS.
+
 
 
 

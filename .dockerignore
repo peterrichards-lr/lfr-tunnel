@@ -1,0 +1,11 @@
+.git/
+bin/
+dist/
+tests/e2e/ui/node_modules/
+tests/e2e/ui/test-results/
+tests/e2e/ui/playwright-report/
+tests/e2e/ui/playwright/.cache/
+*.db
+*.db-journal
+*.log
+.DS_Store

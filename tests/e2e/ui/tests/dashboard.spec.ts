@@ -140,4 +140,41 @@ test.describe('Dashboard UI Automation', () => {
     await expect(page.locator('text=6d4aef719dee798e611139e422d9231b226ec3538617d025fad08accf8fc63d6')).toBeVisible();
     await expect(page.locator('text=⬇️ Download Signed Binary')).toBeVisible();
   });
+
+  test('Subdomain Reservations flow', async ({ page }) => {
+    // 1. Login
+    await page.goto('/admin');
+    await page.click('#btn-show-email');
+    await page.fill('#email-input', adminEmail);
+    await page.click('button[type="submit"]');
+
+    const token = await getMagicLinkToken(adminEmail);
+    expect(token).toBeTruthy();
+    await page.goto(`/admin?token=${token}`);
+
+    // 2. Navigate to Reservations
+    await page.click('#nav-reservations');
+    await expect(page.locator('h2:has-text("Subdomain Reservations")')).toBeVisible();
+
+    // 3. Test Generator and reservation fields
+    await expect(page.locator('#res-subdomain')).toBeVisible();
+    await expect(page.locator('#res-domain')).toBeVisible();
+    
+    // Select style and generate
+    await page.selectOption('#res-style-select', 'words');
+    await page.click('#btn-generate-subdomain');
+    
+    // Check that subdomain input is now populated (not empty)
+    await expect(page.locator('#res-subdomain')).toHaveValue(/^[a-z]+-[a-z]+-[a-z]+$/); // word-word-word
+    const val = await page.inputValue('#res-subdomain');
+
+    // Click Reserve Subdomain
+    await page.click('#btn-reserve-subdomain');
+
+    // Wait for the subdomain to show up in the reservations table
+    await expect(page.locator('#reservations-table-body')).toContainText(val);
+
+    // Verify visual quota limit progress bar updates
+    await expect(page.locator('#reservation-quota-text')).toContainText('subdomains reserved');
+  });
 });

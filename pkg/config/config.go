@@ -27,37 +27,40 @@ type SMTPServerConfig struct {
 
 // ServerConfig holds configuration settings for the lfr-tunneld server.
 type ServerConfig struct {
-	Domains                []string                  `yaml:"domains"`
-	BindAddr               string                    `yaml:"bind_addr"`
-	HTTPBindAddr           string                    `yaml:"http_bind_addr"`
-	ChiselBindAddr         string                    `yaml:"chisel_bind_addr"`
-	SSLCertFile            string                    `yaml:"ssl_cert_file"`
-	SSLKeyFile             string                    `yaml:"ssl_key_file"`
-	DBPath                 string                    `yaml:"db_path"`
-	SMTPServer             SMTPServerConfig          `yaml:"smtp_server"`
-	AdminNotificationEmail string                    `yaml:"admin_notification_email"`
-	InsecureSkipVerify     bool                      `yaml:"insecure_skip_verify"`
-	Owner                  OwnerConfig               `yaml:"owner"`
-	AllowedEmailDomains    []string                  `yaml:"allowed_email_domains"`
-	IPBlacklist            []string                  `yaml:"ip_blacklist"`
-	MaxTunnelRateLimit     int                       `yaml:"max_tunnel_rate_limit"`
-	EnableUserPortal       bool                      `yaml:"enable_user_portal"`
-	PortalSessionDuration  time.Duration             `yaml:"portal_session_duration"`
-	MinClientVersion       string                    `yaml:"min_client_version"`
-	DocumentationURL       string                    `yaml:"documentation_url"`
-	RepositoryURL          string                    `yaml:"repository_url"`
-	PruneInterval          time.Duration             `yaml:"prune_interval"`
-	MagicLinkExpiry        time.Duration             `yaml:"magic_link_expiry"`
-	InviteLinkExpiry       time.Duration             `yaml:"invite_link_expiry"`
-	VerificationLinkExpiry time.Duration             `yaml:"verification_link_expiry"`
-	PrivacyPolicyURL       string                    `yaml:"privacy_policy_url"`
-	CookiePolicyURL        string                    `yaml:"cookie_policy_url"`
-	EnforcePolicyConsent   bool                      `yaml:"enforce_policy_consent"`
-	DisableBackupScheduler bool                      `yaml:"disable_backup_scheduler"`
-	DockerImage            string                    `yaml:"docker_image"`
-	DockerBypassURL        string                    `yaml:"docker_bypass_url"`
-	MaintenanceTriggerPath string                    `yaml:"maintenance_trigger_path"`
-	ClientPlatforms        map[string]PlatformConfig `yaml:"client_platforms"`
+	Domains                 []string                  `yaml:"domains"`
+	BindAddr                string                    `yaml:"bind_addr"`
+	HTTPBindAddr            string                    `yaml:"http_bind_addr"`
+	ChiselBindAddr          string                    `yaml:"chisel_bind_addr"`
+	DefaultMaxReservations  int                       `yaml:"default_max_reservations"`
+	SubdomainQuarantineDays int                       `yaml:"subdomain_quarantine_days"`
+	SSLCertFile             string                    `yaml:"ssl_cert_file"`
+	SSLKeyFile              string                    `yaml:"ssl_key_file"`
+	DBPath                  string                    `yaml:"db_path"`
+	SMTPServer              SMTPServerConfig          `yaml:"smtp_server"`
+	AdminNotificationEmail  string                    `yaml:"admin_notification_email"`
+	InsecureSkipVerify      bool                      `yaml:"insecure_skip_verify"`
+	Owner                   OwnerConfig               `yaml:"owner"`
+	AllowedEmailDomains     []string                  `yaml:"allowed_email_domains"`
+	IPBlacklist             []string                  `yaml:"ip_blacklist"`
+	MaxTunnelRateLimit      int                       `yaml:"max_tunnel_rate_limit"`
+	EnableUserPortal        bool                      `yaml:"enable_user_portal"`
+	PortalSessionDuration   time.Duration             `yaml:"portal_session_duration"`
+	MinClientVersion        string                    `yaml:"min_client_version"`
+	DocumentationURL        string                    `yaml:"documentation_url"`
+	RepositoryURL           string                    `yaml:"repository_url"`
+	PruneInterval           time.Duration             `yaml:"prune_interval"`
+	MagicLinkExpiry         time.Duration             `yaml:"magic_link_expiry"`
+	InviteLinkExpiry        time.Duration             `yaml:"invite_link_expiry"`
+	VerificationLinkExpiry  time.Duration             `yaml:"verification_link_expiry"`
+	PrivacyPolicyURL        string                    `yaml:"privacy_policy_url"`
+	CookiePolicyURL         string                    `yaml:"cookie_policy_url"`
+	EnforcePolicyConsent    bool                      `yaml:"enforce_policy_consent"`
+	DisableBackupScheduler  bool                      `yaml:"disable_backup_scheduler"`
+	DockerImage             string                    `yaml:"docker_image"`
+	DockerBypassURL         string                    `yaml:"docker_bypass_url"`
+	MaintenanceTriggerPath  string                    `yaml:"maintenance_trigger_path"`
+	ClientPlatforms         map[string]PlatformConfig `yaml:"client_platforms"`
+	VisitorTimeout          time.Duration             `yaml:"visitor_timeout"`
 
 	// Dynamic SSO/OIDC Providers
 	SSOProviders []SSOProviderConfig `yaml:"sso_providers"`
@@ -102,21 +105,24 @@ type ClientConfig struct {
 func DefaultServerConfig() *ServerConfig {
 	trueVal := true
 	return &ServerConfig{
-		BindAddr:               ":443",
-		HTTPBindAddr:           ":80",
-		ChiselBindAddr:         ":8081",
-		MaxTunnelRateLimit:     100,
-		EnableUserPortal:       true,
-		PortalSessionDuration:  24 * time.Hour,
-		MinClientVersion:       "v1.0.0",
-		DocumentationURL:       "https://github.com/peterrichards-lr/lfr-tunnel/tree/master/docs",
-		RepositoryURL:          "https://github.com/peterrichards-lr/lfr-tunnel",
-		PruneInterval:          1 * time.Hour,
-		MagicLinkExpiry:        15 * time.Minute,
-		InviteLinkExpiry:       7 * 24 * time.Hour,
-		VerificationLinkExpiry: 24 * time.Hour,
-		DockerImage:            "peterjrichards/lfr-tunnel:latest",
-		DockerBypassURL:        "https://github.com/peterrichards-lr/lfr-tunnel/blob/master/docs/liferay-se-guide.md#using-the-docker-wrapper-edr-bypass",
+		BindAddr:                ":443",
+		HTTPBindAddr:            ":80",
+		ChiselBindAddr:          ":8081",
+		DefaultMaxReservations:  3,
+		SubdomainQuarantineDays: 3,
+		MaxTunnelRateLimit:      100,
+		EnableUserPortal:        true,
+		PortalSessionDuration:   24 * time.Hour,
+		MinClientVersion:        "v1.0.0",
+		DocumentationURL:        "https://github.com/peterrichards-lr/lfr-tunnel/tree/master/docs",
+		RepositoryURL:           "https://github.com/peterrichards-lr/lfr-tunnel",
+		PruneInterval:           1 * time.Hour,
+		MagicLinkExpiry:         15 * time.Minute,
+		InviteLinkExpiry:        7 * 24 * time.Hour,
+		VerificationLinkExpiry:  24 * time.Hour,
+		DockerImage:             "peterjrichards/lfr-tunnel:latest",
+		DockerBypassURL:         "https://github.com/peterrichards-lr/lfr-tunnel/blob/master/docs/liferay-se-guide.md#using-the-docker-wrapper-edr-bypass",
+		VisitorTimeout:          30 * time.Second,
 		ClientPlatforms: map[string]PlatformConfig{
 			"macos_arm64": {
 				URL:              "/static/downloads/lfr-tunnel-darwin-arm64",
@@ -269,8 +275,20 @@ func LoadServerConfig(path string) (*ServerConfig, error) {
 	if val := os.Getenv("LFT_DOCKER_IMAGE"); val != "" {
 		cfg.DockerImage = val
 	}
-	if val := os.Getenv("LFT_DOCKER_BYPASS_URL"); val != "" {
-		cfg.DockerBypassURL = val
+	if val := os.Getenv("LFT_DEFAULT_MAX_RESERVATIONS"); val != "" {
+		if limit, err := strconv.Atoi(val); err == nil {
+			cfg.DefaultMaxReservations = limit
+		}
+	}
+	if val := os.Getenv("LFT_SUBDOMAIN_QUARANTINE_DAYS"); val != "" {
+		if days, err := strconv.Atoi(val); err == nil {
+			cfg.SubdomainQuarantineDays = days
+		}
+	}
+	if val := os.Getenv("LFT_VISITOR_TIMEOUT"); val != "" {
+		if d, err := time.ParseDuration(val); err == nil {
+			cfg.VisitorTimeout = d
+		}
 	}
 
 	return cfg, nil

@@ -1,0 +1,5 @@
+<p>Hi {{.Name}},</p>
+<p>Your subdomain reservation <strong>{{.Subdomain}}.{{.Domain}}</strong> has expired and entered a 3-day quarantine period.</p>
+<p>During the quarantine, incoming HTTP requests to this subdomain will receive a Discontinued (410 Gone) message. No other user can reserve or use this subdomain during this grace period, giving you a chance to reclaim it or request an extension.</p>
+<p>If you take no action, it will be released to the public pool on <strong>{{.ReleasedAt}}</strong>.</p>
+<p style="margin: 24px 0;"><a href="{{.PortalLink}}" style="background: #0969da; color: white; padding: 12px 24px; border-radius: 6px; text-decoration: none; font-weight: bold; display: inline-block;">Go to Portal</a></p>

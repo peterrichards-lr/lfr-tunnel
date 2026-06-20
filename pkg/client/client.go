@@ -39,12 +39,13 @@ type RegisterRequest struct {
 
 // RegisterResponse matches the server DTO for response.
 type RegisterResponse struct {
-	Status       string   `json:"status"`
-	SessionToken string   `json:"session_token,omitempty"`
-	Remotes      []string `json:"remotes,omitempty"`
-	Domains      []string `json:"domains,omitempty"`
-	Error        string   `json:"error,omitempty"`
-	Warning      string   `json:"warning,omitempty"`
+	Status          string   `json:"status"`
+	SessionToken    string   `json:"session_token,omitempty"`
+	SubdomainPrefix string   `json:"subdomain_prefix,omitempty"`
+	Remotes         []string `json:"remotes,omitempty"`
+	Domains         []string `json:"domains,omitempty"`
+	Error           string   `json:"error,omitempty"`
+	Warning         string   `json:"warning,omitempty"`
 }
 
 // DetectWorkspacePorts walks the filesystem looking for client-extension.yaml files

@@ -56,12 +56,13 @@ type RegisterRequest struct {
 
 // RegisterResponse represents the JSON response payload.
 type RegisterResponse struct {
-	Status       string   `json:"status"`
-	SessionToken string   `json:"session_token,omitempty"`
-	Remotes      []string `json:"remotes,omitempty"`
-	Domains      []string `json:"domains,omitempty"`
-	Error        string   `json:"error,omitempty"`
-	Warning      string   `json:"warning,omitempty"`
+	Status          string   `json:"status"`
+	SessionToken    string   `json:"session_token,omitempty"`
+	SubdomainPrefix string   `json:"subdomain_prefix,omitempty"`
+	Remotes         []string `json:"remotes,omitempty"`
+	Domains         []string `json:"domains,omitempty"`
+	Error           string   `json:"error,omitempty"`
+	Warning         string   `json:"warning,omitempty"`
 }
 
 // CheckSubdomainResponse represents the JSON response payload for subdomain checks.
@@ -590,6 +591,36 @@ func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 
+		if r.Method == http.MethodGet && r.URL.Path == "/api/portal/reservations" {
+			s.handleListReservations(w, r)
+			return
+		}
+
+		if r.Method == http.MethodPost && r.URL.Path == "/api/portal/reservations" {
+			s.handleCreateReservation(w, r)
+			return
+		}
+
+		if r.Method == http.MethodDelete && strings.HasPrefix(r.URL.Path, "/api/portal/reservations/") {
+			s.handleDeleteReservation(w, r)
+			return
+		}
+
+		if r.Method == http.MethodPost && strings.HasPrefix(r.URL.Path, "/api/portal/reservations/") && strings.HasSuffix(r.URL.Path, "/request-extension") {
+			s.handleRequestExtension(w, r)
+			return
+		}
+
+		if r.Method == http.MethodPost && r.URL.Path == "/api/portal/reservations/promote" {
+			s.handlePromoteReservation(w, r)
+			return
+		}
+
+		if r.Method == http.MethodGet && r.URL.Path == "/api/portal/generate-subdomain" {
+			s.handleGenerateSubdomain(w, r)
+			return
+		}
+
 		if r.Method == http.MethodGet && r.URL.Path == "/api/mfa/setup" {
 			s.handleMFASetup(w, r)
 			return
@@ -695,6 +726,11 @@ func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	if inQuarantine, qHost, qRelease := s.checkQuarantineStatus(host); inQuarantine {
+		s.handleVisitorGonePage(w, r, qHost, qRelease)
+		return
+	}
+
 	s.proxyHandler.ServeHTTP(w, r)
 }
 
@@ -722,25 +758,89 @@ func (s *Server) handleRegister(w http.ResponseWriter, r *http.Request) {
 		userRec, _ = s.db.GetUser(user.ID)
 	}
 
+	// Enforce subdomain reservation checks and handle random generation
+	requestedRandom := req.SubdomainPrefix == "" || req.SubdomainPrefix == "random"
+	if requestedRandom {
+		found := false
+		for attempt := 0; attempt < 10; attempt++ {
+			candidate := s.generateRandomSubdomainPrefix("liferay")
+			available, _ := s.registry.CheckSubdomain(candidate, activeDomains)
+			if available {
+				dbOk := true
+				if s.db != nil {
+					for _, d := range activeDomains {
+						existing, err := s.db.GetSubdomainReservationByName(candidate, d)
+						if err == nil && existing != nil {
+							dbOk = false
+							break
+						}
+					}
+				}
+				if dbOk {
+					req.SubdomainPrefix = candidate
+					found = true
+					break
+				}
+			}
+		}
+		if !found {
+			respondJSON(w, http.StatusInternalServerError, RegisterResponse{Status: "error", Error: "failed to generate unique random subdomain"})
+			return
+		}
+	} else {
+		// Custom subdomain requested
+		// 1. Verify availability in registry (in-memory leases)
+		available, reason := s.registry.CheckSubdomain(req.SubdomainPrefix, activeDomains)
+		if !available {
+			respondJSON(w, http.StatusConflict, RegisterResponse{Status: "error", Error: "Subdomain is already taken: " + reason})
+			return
+		}
+
+		// 2. Verify reservation and quarantine rules in DB
+		if s.db != nil {
+			for _, d := range activeDomains {
+				existing, err := s.db.GetSubdomainReservationByName(req.SubdomainPrefix, d)
+				if err == nil && existing != nil {
+					if existing.ExpiresAt != nil && existing.ExpiresAt.Before(time.Now()) {
+						quarantineCutoff := existing.ExpiresAt.AddDate(0, 0, s.cfg.SubdomainQuarantineDays)
+						if time.Now().Before(quarantineCutoff) {
+							if existing.UserID != user.ID {
+								respondJSON(w, http.StatusConflict, RegisterResponse{Status: "error", Error: "Subdomain is currently in quarantine"})
+								return
+							}
+						}
+					} else {
+						if existing.UserID != user.ID {
+							respondJSON(w, http.StatusConflict, RegisterResponse{Status: "error", Error: "Subdomain is reserved by another user"})
+							return
+						}
+					}
+				} else {
+					if user.Role != "admin" && user.Role != "owner" {
+						respondJSON(w, http.StatusForbidden, RegisterResponse{Status: "error", Error: "Custom subdomains must be reserved in the portal prior to connecting"})
+						return
+					}
+				}
+			}
+		}
+	}
+
 	// Determine effective rate limit
 	effectiveLimit := req.RateLimit
 	if userRec != nil && userRec.RateLimit > 0 {
-		// Cap developer limit at their database user-level quota!
 		if effectiveLimit <= 0 || effectiveLimit > userRec.RateLimit {
 			effectiveLimit = userRec.RateLimit
 		}
 	}
 
-	// Cap at server-side global max limit as well if configured
 	if s.cfg.MaxTunnelRateLimit > 0 {
 		if effectiveLimit <= 0 || effectiveLimit > s.cfg.MaxTunnelRateLimit {
 			effectiveLimit = s.cfg.MaxTunnelRateLimit
 		}
 	} else if effectiveLimit <= 0 {
-		effectiveLimit = 0 // unlimited
+		effectiveLimit = 0
 	}
 
-	// Get client IP
 	clientIP := getClientIP(r)
 	if (req.ClientVersion != "" || req.ClientOS != "") && userRec != nil {
 		changed := false
@@ -770,11 +870,12 @@ func (s *Server) handleRegister(w http.ResponseWriter, r *http.Request) {
 	}
 
 	respondJSON(w, http.StatusOK, RegisterResponse{
-		Status:       "success",
-		SessionToken: sessionToken,
-		Remotes:      remotes,
-		Domains:      activeDomains,
-		Warning:      warning,
+		Status:          "success",
+		SessionToken:    sessionToken,
+		SubdomainPrefix: req.SubdomainPrefix,
+		Remotes:         remotes,
+		Domains:         activeDomains,
+		Warning:         warning,
 	})
 }
 
@@ -1634,6 +1735,26 @@ func (s *Server) handleAdminEndpoints(w http.ResponseWriter, r *http.Request) {
 
 	if r.Method == http.MethodPost && r.URL.Path == "/api/admin/invite" {
 		s.handleAdminInviteUser(w, r, actor)
+		return
+	}
+
+	if r.Method == http.MethodGet && r.URL.Path == "/api/admin/reservations/extensions" {
+		s.handleAdminListExtensions(w, r, actor)
+		return
+	}
+
+	if r.Method == http.MethodPost && strings.HasPrefix(r.URL.Path, "/api/admin/reservations/") && strings.HasSuffix(r.URL.Path, "/approve-extension") {
+		s.handleAdminApproveExtension(w, r, actor)
+		return
+	}
+
+	if r.Method == http.MethodPost && strings.HasPrefix(r.URL.Path, "/api/admin/reservations/") && strings.HasSuffix(r.URL.Path, "/demote") {
+		s.handleAdminDemoteReservation(w, r, actor)
+		return
+	}
+
+	if r.Method == http.MethodPost && strings.HasPrefix(r.URL.Path, "/api/admin/users/") && strings.HasSuffix(r.URL.Path, "/limit") {
+		s.handleAdminOverrideLimit(w, r, actor)
 		return
 	}
 
@@ -2618,10 +2739,11 @@ func (s *Server) handleAdminPatchUser(w http.ResponseWriter, r *http.Request, ac
 	}
 
 	var req struct {
-		Role      *string `json:"role"`
-		Status    *string `json:"status"`
-		ResetMFA  *bool   `json:"reset_mfa"`
-		RateLimit *int    `json:"rate_limit"`
+		Role            *string `json:"role"`
+		Status          *string `json:"status"`
+		ResetMFA        *bool   `json:"reset_mfa"`
+		RateLimit       *int    `json:"rate_limit"`
+		MaxReservations *int    `json:"max_reservations"`
 	}
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 		http.Error(w, `{"error":"Invalid request body"}`, http.StatusBadRequest)
@@ -2692,6 +2814,12 @@ func (s *Server) handleAdminPatchUser(w http.ResponseWriter, r *http.Request, ac
 		details["rate_limit_before"] = user.RateLimit
 		details["rate_limit_after"] = *req.RateLimit
 		user.RateLimit = *req.RateLimit
+	}
+
+	if req.MaxReservations != nil {
+		details["max_reservations_before"] = user.MaxReservations
+		details["max_reservations_after"] = *req.MaxReservations
+		user.MaxReservations = req.MaxReservations
 	}
 
 	if err := s.db.UpdateUser(user); err != nil {
@@ -3347,4 +3475,80 @@ func (s *Server) renderEmailTemplate(lang, templateName string, data interface{}
 	}
 
 	return renderedHTML, nil
+}
+
+var generatorAdjectives = []string{"clever", "dancing", "silent", "flying", "golden", "brave", "swift", "gentle", "happy", "bright", "cool", "smart", "bold", "wild", "ocean", "forest", "mountain", "cloud"}
+var generatorNouns = []string{"rabbit", "tiger", "fox", "owl", "hawk", "lion", "bear", "wolf", "deer", "panda", "koala", "otter", "badger", "falcon", "eagle", "dolphin", "whale", "shark"}
+var generatorTechAdjectives = []string{"hybrid", "headless", "cloud", "dynamic", "static", "micro", "agile", "secure", "elastic", "native", "client", "custom", "remote", "shared"}
+var generatorLiferayNouns = []string{"portal", "tomcat", "extension", "object", "bundle", "theme", "layout", "site", "depot", "asset", "schema", "widget", "module", "service"}
+var generatorWords = []string{"apple", "banana", "cherry", "dragon", "falcon", "guitar", "jungle", "monkey", "orange", "potato", "rocket", "shadow", "tomato", "violin", "wizard", "yellow", "zebra"}
+
+func (s *Server) generateRandomSubdomainPrefix(style string) string {
+	randInt := func(max int) int {
+		b := make([]byte, 4)
+		_, _ = rand.Read(b)
+		val := int(uint32(b[0])<<24 | uint32(b[1])<<16 | uint32(b[2])<<8 | uint32(b[3]))
+		if val < 0 {
+			val = -val
+		}
+		return val % max
+	}
+
+	switch style {
+	case "words":
+		return fmt.Sprintf("%s-%s-%s", generatorWords[randInt(len(generatorWords))], generatorWords[randInt(len(generatorWords))], generatorWords[randInt(len(generatorWords))])
+	case "heroku":
+		return fmt.Sprintf("%s-%s-%d", generatorAdjectives[randInt(len(generatorAdjectives))], generatorNouns[randInt(len(generatorNouns))], randInt(9000)+1000)
+	case "liferay":
+		return fmt.Sprintf("%s-%s-%d", generatorTechAdjectives[randInt(len(generatorTechAdjectives))], generatorLiferayNouns[randInt(len(generatorLiferayNouns))], randInt(900)+100)
+	default: // Completely Random (Alphanumeric) [a-z0-9]{8}
+		const chars = "abcdefghijklmnopqrstuvwxyz0123456789"
+		b := make([]byte, 8)
+		_, _ = rand.Read(b)
+		for i := range b {
+			b[i] = chars[int(b[i])%len(chars)]
+		}
+		return string(b)
+	}
+}
+
+func (s *Server) checkQuarantineStatus(host string) (bool, string, string) {
+	if s.db == nil {
+		return false, "", ""
+	}
+	for _, domain := range s.cfg.Domains {
+		if strings.HasSuffix(host, "."+domain) {
+			subdomain := strings.TrimSuffix(host, "."+domain)
+			existing, err := s.db.GetSubdomainReservationByName(subdomain, domain)
+			if err == nil && existing != nil {
+				if existing.ExpiresAt != nil && existing.ExpiresAt.Before(time.Now()) {
+					quarantineCutoff := existing.ExpiresAt.AddDate(0, 0, s.cfg.SubdomainQuarantineDays)
+					if time.Now().Before(quarantineCutoff) {
+						return true, host, quarantineCutoff.Format("2006-01-02 15:04:05 MST")
+					}
+				}
+			}
+		}
+	}
+	return false, "", ""
+}
+
+func (s *Server) handleVisitorGonePage(w http.ResponseWriter, r *http.Request, host, releaseDate string) {
+	w.Header().Set("Content-Type", "text/html; charset=utf-8")
+	w.WriteHeader(http.StatusGone)
+
+	htmlBytes, err := staticFS.ReadFile("static/gone.html")
+	if err != nil {
+		_, _ = w.Write([]byte(`<h1>Subdomain Discontinued</h1><p>The subdomain is in quarantine.</p>`))
+		return
+	}
+
+	portalURL := s.getPortalBaseURL(r) + "/portal"
+
+	htmlContent := string(htmlBytes)
+	htmlContent = strings.ReplaceAll(htmlContent, "{{.Host}}", html.EscapeString(host))
+	htmlContent = strings.ReplaceAll(htmlContent, "{{.ReleaseDate}}", html.EscapeString(releaseDate))
+	htmlContent = strings.ReplaceAll(htmlContent, "{{.PortalURL}}", html.EscapeString(portalURL))
+
+	_, _ = w.Write([]byte(htmlContent))
 }

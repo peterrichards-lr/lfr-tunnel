@@ -1074,6 +1074,7 @@ function toggleTheme() {
             if (tabName === 'maintenance') loadMaintenanceStatus();
             if (tabName === 'tokens') loadTokens();
             if (tabName === 'tunnels') loadTunnels();
+            if (tabName === 'reservations') loadReservations();
             if (tabName === 'analytics') loadAnalytics();
             if (tabName === 'overview') {
                 loadWhatsNew();
@@ -1628,6 +1629,18 @@ function toggleTheme() {
             document.getElementById('token-name').value = '';
             document.getElementById('token-form-step').classList.remove('hidden');
             document.getElementById('token-result-step').classList.add('hidden');
+            
+            const neverOption = document.getElementById('token-expiry-never');
+            const tokenExpiry = document.getElementById('token-expiry');
+            if (currentUser && currentUser.role !== 'admin' && currentUser.role !== 'owner') {
+                if (neverOption) neverOption.style.display = 'none';
+                if (tokenExpiry.value === '0') {
+                    tokenExpiry.value = '30';
+                }
+            } else {
+                if (neverOption) neverOption.style.display = 'block';
+            }
+            
             document.getElementById('token-modal').style.display = 'flex';
         }
 

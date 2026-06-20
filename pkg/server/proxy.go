@@ -13,6 +13,7 @@ import (
 	"strings"
 	"sync"
 	"sync/atomic"
+	"time"
 
 	"golang.org/x/time/rate"
 )
@@ -99,9 +100,16 @@ func (p *ProxyHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		Director: func(req *http.Request) {
 			req.URL.Scheme = "http"
 			req.URL.Host = fmt.Sprintf("127.0.0.1:%d", lease.LocalPort)
-
 			// Resolve client IP address using centralized helper
 			clientIP := getClientIP(req)
+
+			// Update visitor IP
+			lease.VisitorIPsMu.Lock()
+			if lease.VisitorIPs == nil {
+				lease.VisitorIPs = make(map[string]time.Time)
+			}
+			lease.VisitorIPs[clientIP] = time.Now()
+			lease.VisitorIPsMu.Unlock()
 
 			// Inject standard proxy headers
 			req.Header.Set("X-Real-IP", clientIP)

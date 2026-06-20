@@ -181,3 +181,58 @@ func TestInterceptorEngine_CustomTargetHost(t *testing.T) {
 		t.Errorf("Expected Host header to be preserved as 'public-subdomain.lfr-demo.se', got %s", receivedHost)
 	}
 }
+
+func TestInterceptorEngine_PreserveHost(t *testing.T) {
+	// 1. Setup Dummy Target Server
+	var receivedHost string
+	targetServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		receivedHost = r.Host
+		w.WriteHeader(http.StatusOK)
+		_, _ = w.Write([]byte("OK"))
+	}))
+	defer targetServer.Close()
+
+	// Extract target port
+	targetPort, _ := strconv.Atoi(targetServer.URL[len("http://127.0.0.1:"):])
+
+	// 2. Mock DNS resolution by overriding DefaultTransport.DialContext
+	originalDial := http.DefaultTransport.(*http.Transport).DialContext
+	defer func() {
+		http.DefaultTransport.(*http.Transport).DialContext = originalDial
+	}()
+
+	http.DefaultTransport.(*http.Transport).DialContext = func(ctx context.Context, network, addr string) (net.Conn, error) {
+		host, _, _ := net.SplitHostPort(addr)
+		if host == "custom-target.local" {
+			return (&net.Dialer{}).DialContext(ctx, network, fmt.Sprintf("127.0.0.1:%d", targetPort))
+		}
+		return (&net.Dialer{}).DialContext(ctx, network, addr)
+	}
+
+	// Set env var to true
+	t.Setenv("LFT_PRESERVE_HOST", "true")
+
+	// Custom target domain name (with PreserveHost=true, should NOT rewrite Host header)
+	engine := NewInterceptorEngine("custom-target.local", nil)
+	if !engine.PreserveHost {
+		t.Errorf("Expected PreserveHost to be true")
+	}
+
+	interceptPort, err := engine.InterceptPort(targetPort)
+	if err != nil {
+		t.Fatalf("Failed to intercept port: %v", err)
+	}
+
+	req, _ := http.NewRequest("GET", fmt.Sprintf("http://127.0.0.1:%d", interceptPort), nil)
+	req.Host = "preserved-subdomain.lfr-demo.se"
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		t.Fatalf("Failed to make request: %v", err)
+	}
+	_ = resp.Body.Close()
+
+	// The Host header should be preserved as the public domain name
+	if receivedHost != "preserved-subdomain.lfr-demo.se" {
+		t.Errorf("Expected Host header to be preserved as 'preserved-subdomain.lfr-demo.se', got %s", receivedHost)
+	}
+}

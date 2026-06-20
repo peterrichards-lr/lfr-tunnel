@@ -10,6 +10,7 @@ import (
 	"net/http"
 	"net/http/httputil"
 	"net/url"
+	"os"
 	"strings"
 	"sync"
 	"time"
@@ -39,6 +40,7 @@ type InterceptorEngine struct {
 	History         []*RequestRecord
 	MaxHistory      int
 	TargetHost      string
+	PreserveHost    bool
 }
 
 // NewInterceptorEngine creates a new state engine for traffic inspection.
@@ -55,6 +57,8 @@ func NewInterceptorEngine(targetHost string, headers []string) *InterceptorEngin
 		targetHost = "127.0.0.1"
 	}
 
+	preserveHost := os.Getenv("LFT_PRESERVE_HOST") == "true"
+
 	return &InterceptorEngine{
 		MaintenanceMode: false,
 		Status:          "up",
@@ -62,6 +66,7 @@ func NewInterceptorEngine(targetHost string, headers []string) *InterceptorEngin
 		History:         make([]*RequestRecord, 0),
 		MaxHistory:      100, // Keep last 100 requests
 		TargetHost:      targetHost,
+		PreserveHost:    preserveHost,
 	}
 }
 
@@ -146,7 +151,7 @@ func (e *InterceptorEngine) InterceptPort(targetPort int) (int, error) {
 		originalDirector(req)
 
 		// Rewrite Host header if target is a custom virtual host
-		if e.TargetHost != "localhost" && e.TargetHost != "127.0.0.1" && e.TargetHost != "host.docker.internal" {
+		if !e.PreserveHost && e.TargetHost != "localhost" && e.TargetHost != "127.0.0.1" && e.TargetHost != "host.docker.internal" {
 			req.Host = getHostHeaderValue(e.TargetHost, targetPort)
 		}
 

@@ -1,0 +1,8 @@
+<p>Hi {{.Name}},</p>
+<p>Your extension request for the subdomain <strong>{{.Subdomain}}.{{.Domain}}</strong> has been approved.</p>
+{{if .IsPermanent}}
+<p>This subdomain reservation is now <strong>permanent</strong> (does not expire).</p>
+{{else}}
+<p>The reservation is now extended and will expire on <strong>{{.ExpiresAt}}</strong>.</p>
+{{end}}
+<p style="margin: 24px 0;"><a href="{{.PortalLink}}" style="background: #0969da; color: white; padding: 12px 24px; border-radius: 6px; text-decoration: none; font-weight: bold; display: inline-block;">Go to Portal</a></p>

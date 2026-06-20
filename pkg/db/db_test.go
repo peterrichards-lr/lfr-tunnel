@@ -1,6 +1,7 @@
 package db
 
 import (
+	"errors"
 	"os"
 	"path/filepath"
 	"testing"
@@ -498,5 +499,152 @@ func TestUserRateLimitCRUD(t *testing.T) {
 	}
 	if !found {
 		t.Error("expected to find created user in ListUsers result")
+	}
+}
+
+func TestSubdomainReservationCRUD(t *testing.T) {
+	database, tmpDir := setupTestDB(t)
+	defer cleanupTestDB(database, tmpDir)
+
+	userID := "user-123"
+	email := "reservation_user@example.com"
+	maxResLimit := 5
+	user := &User{
+		ID:                 userID,
+		Email:              email,
+		FirstName:          "Reserve",
+		LastName:           "Tester",
+		Role:               "user",
+		Status:             "approved",
+		MaxReservations:    &maxResLimit,
+		LanguagePreference: "en",
+	}
+
+	// 1. Create User with MaxReservations
+	if err := database.CreateUser(user); err != nil {
+		t.Fatalf("CreateUser failed: %v", err)
+	}
+
+	// Verify MaxReservations is fetched correctly
+	u, err := database.GetUser(userID)
+	if err != nil {
+		t.Fatalf("GetUser failed: %v", err)
+	}
+	if u.MaxReservations == nil || *u.MaxReservations != 5 {
+		t.Errorf("expected MaxReservations to be 5, got %v", u.MaxReservations)
+	}
+
+	// Update MaxReservations to nil (default fallback)
+	u.MaxReservations = nil
+	if err := database.UpdateUser(u); err != nil {
+		t.Fatalf("UpdateUser failed: %v", err)
+	}
+
+	u2, err := database.GetUser(userID)
+	if err != nil {
+		t.Fatalf("GetUser failed: %v", err)
+	}
+	if u2.MaxReservations != nil {
+		t.Errorf("expected MaxReservations to be nil, got %v", *u2.MaxReservations)
+	}
+
+	// 2. Create Reservations
+	res1 := &SubdomainReservation{
+		UserID:    userID,
+		Subdomain: "custom1",
+		Domain:    "lfr-demo.se",
+	}
+	if err := database.CreateSubdomainReservation(res1); err != nil {
+		t.Fatalf("CreateSubdomainReservation failed: %v", err)
+	}
+	if res1.ID == 0 {
+		t.Error("expected reservation ID to be populated")
+	}
+
+	// Test unique constraints (duplicate subdomain+domain should fail)
+	resDup := &SubdomainReservation{
+		UserID:    "other-user",
+		Subdomain: "custom1",
+		Domain:    "lfr-demo.se",
+	}
+	if err := database.CreateSubdomainReservation(resDup); err == nil {
+		t.Error("expected duplicate subdomain+domain registration to fail, but it succeeded")
+	}
+
+	// 3. Fetch Reservation by Name
+	fetched, err := database.GetSubdomainReservationByName("custom1", "lfr-demo.se")
+	if err != nil {
+		t.Fatalf("GetSubdomainReservationByName failed: %v", err)
+	}
+	if fetched.UserID != userID {
+		t.Errorf("expected UserID to be %s, got %s", userID, fetched.UserID)
+	}
+
+	// 4. Create Expiring Reservation
+	expiry := time.Now().UTC().Add(1 * time.Hour)
+	res2 := &SubdomainReservation{
+		UserID:    userID,
+		Subdomain: "expiring1",
+		Domain:    "lfr-demo.se",
+		ExpiresAt: &expiry,
+	}
+	if err := database.CreateSubdomainReservation(res2); err != nil {
+		t.Fatalf("CreateSubdomainReservation failed: %v", err)
+	}
+
+	// 5. List Reservations by User ID
+	list, err := database.ListSubdomainReservationsByUserID(userID)
+	if err != nil {
+		t.Fatalf("ListSubdomainReservationsByUserID failed: %v", err)
+	}
+	if len(list) != 2 {
+		t.Errorf("expected 2 reservations, got %d", len(list))
+	}
+
+	// 6. Delete Expired Reservations after cutoff
+	// Let's create another reservation that expired 4 days ago
+	pastExpiry := time.Now().UTC().AddDate(0, 0, -4)
+	resExpired := &SubdomainReservation{
+		UserID:    userID,
+		Subdomain: "expired-old",
+		Domain:    "lfr-demo.se",
+		ExpiresAt: &pastExpiry,
+	}
+	if err := database.CreateSubdomainReservation(resExpired); err != nil {
+		t.Fatalf("CreateSubdomainReservation failed: %v", err)
+	}
+
+	// Verify it is in list
+	allList, err := database.ListAllSubdomainReservations()
+	if err != nil {
+		t.Fatalf("ListAllSubdomainReservations failed: %v", err)
+	}
+	if len(allList) != 3 {
+		t.Errorf("expected 3 total reservations, got %d", len(allList))
+	}
+
+	// Run cleanup with cutoff: 3 days ago
+	cutoff := time.Now().UTC().AddDate(0, 0, -3)
+	if err := database.DeleteExpiredSubdomainReservations(cutoff); err != nil {
+		t.Fatalf("DeleteExpiredSubdomainReservations failed: %v", err)
+	}
+
+	// Verify only the 4-day-old expired reservation was deleted (2 remain)
+	allListAfter, err := database.ListAllSubdomainReservations()
+	if err != nil {
+		t.Fatalf("ListAllSubdomainReservations failed: %v", err)
+	}
+	if len(allListAfter) != 2 {
+		t.Errorf("expected 2 reservations after cleanup, got %d", len(allListAfter))
+	}
+
+	// 7. Delete specific reservation
+	if err := database.DeleteSubdomainReservation(res1.ID); err != nil {
+		t.Fatalf("DeleteSubdomainReservation failed: %v", err)
+	}
+
+	_, err = database.GetSubdomainReservation(res1.ID)
+	if !errors.Is(err, ErrNotFound) {
+		t.Errorf("expected ErrNotFound after deletion, got %v", err)
 	}
 }

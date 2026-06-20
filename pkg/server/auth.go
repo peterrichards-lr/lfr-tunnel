@@ -23,20 +23,22 @@ type PortMapping struct {
 
 // TunnelLease represents a single active subdomain tunnel allocation.
 type TunnelLease struct {
-	UserID          string            `json:"user_id"`
-	SubdomainPrefix string            `json:"subdomain_prefix"`
-	FullHost        string            `json:"full_host"`
-	SessionToken    string            `json:"session_token"`
-	LocalPort       int               `json:"local_port"`
-	TargetPort      int               `json:"target_port"`
-	RateLimit       int               `json:"rate_limit"`
-	ClientIP        string            `json:"client_ip"`
-	BasicAuth       string            `json:"basic_auth"`
-	AddedHeaders    map[string]string `json:"added_headers"`
-	Status          string            `json:"status"` // e.g., "up", "maintenance", "down"
-	BytesIn         uint64            `json:"bytes_in"`
-	BytesOut        uint64            `json:"bytes_out"`
-	CreatedAt       time.Time         `json:"created_at"`
+	UserID          string               `json:"user_id"`
+	SubdomainPrefix string               `json:"subdomain_prefix"`
+	FullHost        string               `json:"full_host"`
+	SessionToken    string               `json:"session_token"`
+	LocalPort       int                  `json:"local_port"`
+	TargetPort      int                  `json:"target_port"`
+	RateLimit       int                  `json:"rate_limit"`
+	ClientIP        string               `json:"client_ip"`
+	BasicAuth       string               `json:"basic_auth"`
+	AddedHeaders    map[string]string    `json:"added_headers"`
+	Status          string               `json:"status"` // e.g., "up", "maintenance", "down"
+	BytesIn         uint64               `json:"bytes_in"`
+	BytesOut        uint64               `json:"bytes_out"`
+	CreatedAt       time.Time            `json:"created_at"`
+	VisitorIPsMu    sync.Mutex           `json:"-"`
+	VisitorIPs      map[string]time.Time `json:"-"`
 }
 
 var (
@@ -200,6 +202,7 @@ func (r *Registry) Register(userID string, subdomainPrefix string, ports []PortM
 				AddedHeaders:    addedHeaders,
 				Status:          "up",
 				CreatedAt:       time.Now(),
+				VisitorIPs:      make(map[string]time.Time),
 			}
 			r.leases[fullHost] = lease
 			allocatedLeases = append(allocatedLeases, lease)
@@ -428,11 +431,24 @@ func (r *Registry) ListLeases() []*TunnelLease {
 
 	var snapshot []*TunnelLease
 	for _, lease := range r.leases {
-		// Make a shallow copy to safely load atomic fields for JSON serialization
-		lCopy := *lease
-		lCopy.BytesIn = atomic.LoadUint64(&lease.BytesIn)
-		lCopy.BytesOut = atomic.LoadUint64(&lease.BytesOut)
-		snapshot = append(snapshot, &lCopy)
+		// Copy fields manually to safely load atomic fields for JSON serialization and avoid copying sync.Mutex
+		lCopy := &TunnelLease{
+			UserID:          lease.UserID,
+			SubdomainPrefix: lease.SubdomainPrefix,
+			FullHost:        lease.FullHost,
+			SessionToken:    lease.SessionToken,
+			LocalPort:       lease.LocalPort,
+			TargetPort:      lease.TargetPort,
+			RateLimit:       lease.RateLimit,
+			ClientIP:        lease.ClientIP,
+			BasicAuth:       lease.BasicAuth,
+			AddedHeaders:    lease.AddedHeaders,
+			Status:          lease.Status,
+			BytesIn:         atomic.LoadUint64(&lease.BytesIn),
+			BytesOut:        atomic.LoadUint64(&lease.BytesOut),
+			CreatedAt:       lease.CreatedAt,
+		}
+		snapshot = append(snapshot, lCopy)
 	}
 	return snapshot
 }
@@ -474,4 +490,22 @@ func (r *Registry) UpdateLeaseStatus(sessionToken, status string) bool {
 		lease.Status = status
 	}
 	return true
+}
+
+// GetActiveVisitorIPs returns a slice of active visitor IPs that have made a request within the timeout.
+// It also prunes expired entries to prevent memory leaks.
+func (l *TunnelLease) GetActiveVisitorIPs(timeout time.Duration) []string {
+	l.VisitorIPsMu.Lock()
+	defer l.VisitorIPsMu.Unlock()
+
+	var active []string
+	now := time.Now()
+	for ip, lastActive := range l.VisitorIPs {
+		if now.Sub(lastActive) <= timeout {
+			active = append(active, ip)
+		} else {
+			delete(l.VisitorIPs, ip)
+		}
+	}
+	return active
 }

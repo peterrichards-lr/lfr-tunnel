@@ -227,6 +227,7 @@ The solution will consist of:
 - [x] Bump version to v1.7.13 in whats-new.json, tag, and push to trigger release CI workflow.
 
 ## Subdomain Reservation System (v1.8.0)
+- [x] Declutter Active Tunnels dashboard table by moving detailed fields into a new Tunnel Details Dialog Modal (with Copy Link, On-Demand Refresh, and Admin controls).
 - [ ] Create database schema migrations for subdomain reservations and custom user limits.
 - [ ] Implement database CRUD functions for subdomain reservations.
 - [ ] Implement configuration parameters for default max reservations.

@@ -80,10 +80,10 @@ if [ "$LFT_SKIP_GPG" != "true" ] && [ -z "$LFT_GPG_KEY" ]; then
     fi
 fi
 
-# Prompt for GPG key passphrase if needed and stdin is a TTY
-if [ "$LFT_SKIP_GPG" != "true" ] && [ -n "$LFT_GPG_KEY" ] && [ "$LFT_GPG_KEY" != "skip" ] && [ -z "$LFT_GPG_PASS" ]; then
+# Prompt for GPG key passphrase if needed and stdin is a TTY (and no fallback password is set)
+if [ "$LFT_SKIP_GPG" != "true" ] && [ -n "$LFT_GPG_KEY" ] && [ "$LFT_GPG_KEY" != "skip" ] && [ -z "$LFT_GPG_PASS" ] && [ -z "$LFT_SIGN_PASS" ]; then
     if [ -t 0 ]; then
-        read -s -p "Enter passphrase for GPG Private Key (leave empty to fallback to Windows cert password): " LFT_GPG_PASS
+        read -s -p "Enter passphrase for GPG Private Key: " LFT_GPG_PASS
         echo ""
     fi
 fi

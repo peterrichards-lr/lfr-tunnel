@@ -1,18 +1,13 @@
 {
-  "version": "v1.7.13",
-  "release_date": "2026-06-19",
+  "version": "v1.8.0",
+  "release_date": "2026-06-20",
   "features": [
+    "Subdomain Reservation System: Pre-book, extend, release, and promote custom subdomains directly from the dashboard.",
+    "Visual Quota limit indicators: Graphical progress bars reflecting your account's subdomain reservations limit usage.",
+    "Active Visitor IP Tracking: Track remote developer IPs routing through active tunnels in real-time inside the Tunnel Details Modal.",
+    "Automatic Details Modal Refresh: Auto-updates active visitor IP lists and tunnel statistics dynamically every 3 seconds.",
+    "Docker Build Context Optimization: Introduced .dockerignore file, reducing build context overhead from 1.17 GB to 37 kB.",
     "Local Inspector Bind Address: Automatically bind the inspector web interface to 0.0.0.0 inside containers (or configure via LFT_INSPECTOR_BIND) to support host-to-container port mappings in LDM.",
-    "LDM Environment Fallbacks: Natively support LDM environment variables (LFT_SUBDOMAIN, LFT_SERVER_URL, LFT_TOKEN) and automatically clean/strip URL schemes and port suffixes from LFT_TARGET_HOST.",
-    "Docker Client Platform Identification: Automatically identify containerized clients and append ' (Docker)' to their OS name inside system analytics and connection stats.",
-    "Modal Escaping Hotfix: Fixed HTML escaping in the User Details modal to render localized Joined Date timestamps correctly.",
-    "Dual-Mode Maintenance: Soft Maintenance ('Bouncer Mode') and Hard Maintenance ('Fire Curtain') settings relocated to a dedicated 'Gateway Maintenance' screen under the sidebar Maintenance section, fully translated across all 10 locales.",
-    "Portal Activity Check-in: Real-time user online session tracking dot on the Users table.",
-    "User Details & Tunnels Modal: Consolidated administration overlay showing active tunnel ports, public links, client details, and direct lease kicking control.",
-    "Multi-Factor Authentication (MFA): Robust TOTP setup and reset directly integrated into the developer settings and admin console.",
-    "LDM Target Host Interceptor: Rewrite Host headers dynamically (`LFT_TARGET_HOST`) to match local containerized port environments.",
-    "Full Dashboard Localization: Seamless real-time bilingual switching across 9 supported locales.",
-    "Advanced SSO Integrations: Complete OIDC compatibility supporting secure Liferay SSO and Keycloak authorization flows.",
-    "SentinelOne False Positive Mitigations: Embedded Attestation signatures and canonical formula setups for Homebrew and Scoop."
+    "LDM Environment Fallbacks: Natively support LDM environment variables (LFT_SUBDOMAIN, LFT_SERVER_URL, LFT_TOKEN) and automatically clean/strip URL schemes and port suffixes from LFT_TARGET_HOST."
   ]
 }

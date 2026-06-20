@@ -240,6 +240,7 @@ The solution will consist of:
 - [x] Restrict 'Never' API token expiration option to admin and owner roles on both server and client.
 - [x] Write unit and E2E integration tests for the reservation flow.
 - [x] Fix E2E integration tests failure by updating `tests/e2e/run.sh` to reserve the subdomain before tunnel connection.
+- [x] Bump version to v1.8.0 in whats-new.json, tag, and push to trigger release CI workflow.
 
 
 

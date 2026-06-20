@@ -463,6 +463,20 @@ func TestServer_RegistrationFlow(t *testing.T) {
 		t.Errorf("expected claim token to be cleared, got %s", user.ClaimToken)
 	}
 
+	// Insert reservation so standard user registration works
+	resExpiry := time.Now().AddDate(0, 0, 7)
+	err = srv.db.CreateSubdomainReservation(&db.SubdomainReservation{
+		UserID:    user.ID,
+		Subdomain: "dev-tunnel",
+		Domain:    "example.com",
+		ExpiresAt: &resExpiry,
+		CreatedAt: time.Now(),
+		UpdatedAt: time.Now(),
+	})
+	if err != nil {
+		t.Fatalf("failed to create subdomain reservation for test: %v", err)
+	}
+
 	// 4. Register tunnel using claimed PAT
 	registerPayload, _ := json.Marshal(RegisterRequest{
 		SubdomainPrefix: "dev-tunnel",
@@ -1363,6 +1377,20 @@ func TestServer_RateLimitingEnforcements(t *testing.T) {
 		t.Fatalf("failed to create PAT: %v", err)
 	}
 
+	// Insert reservation so standard user registration works
+	resExpiry := time.Now().AddDate(0, 0, 7)
+	err := srv.db.CreateSubdomainReservation(&db.SubdomainReservation{
+		UserID:    email,
+		Subdomain: "throttle-dev",
+		Domain:    "example.com",
+		ExpiresAt: &resExpiry,
+		CreatedAt: time.Now(),
+		UpdatedAt: time.Now(),
+	})
+	if err != nil {
+		t.Fatalf("failed to create subdomain reservation for test: %v", err)
+	}
+
 	// Mock register request from client requesting a much higher rate limit (100 RPS)
 	payloadRegister, _ := json.Marshal(RegisterRequest{
 		AuthToken:       token, // Pass the valid token!
@@ -1571,4 +1599,241 @@ func TestServer_BackupSchedulerConfiguration(t *testing.T) {
 			t.Fatal("expected at least one database backup file to be created")
 		}
 	})
+}
+
+func TestServer_SubdomainReservations(t *testing.T) {
+	srv, _, cleanup := setupTestServer(t)
+	defer cleanup()
+
+	// 1. Setup normal user and admin user
+	emailUser := "user@example.com"
+	uUser := &db.User{
+		ID:                 emailUser,
+		Email:              emailUser,
+		FirstName:          "Standard",
+		Role:               "user",
+		Status:             "approved",
+		LanguagePreference: "en",
+	}
+	_ = srv.db.CreateUser(uUser)
+
+	emailAdmin := "admin@example.com"
+	uAdmin := &db.User{
+		ID:                 emailAdmin,
+		Email:              emailAdmin,
+		FirstName:          "Admin",
+		Role:               "admin",
+		Status:             "approved",
+		LanguagePreference: "en",
+	}
+	_ = srv.db.CreateUser(uAdmin)
+
+	// Setup portal sessions (cookies) with valid expiration times
+	sessionUser := "user-session-123"
+	srv.portalMap.Store("admin_session_"+sessionUser, PortalSessionData{
+		Email:     emailUser,
+		ExpiresAt: time.Now().Add(1 * time.Hour),
+	})
+
+	sessionAdmin := "admin-session-123"
+	srv.portalMap.Store("admin_session_"+sessionAdmin, PortalSessionData{
+		Email:     emailAdmin,
+		ExpiresAt: time.Now().Add(1 * time.Hour),
+	})
+
+	// 2. Reserve subdomain (POST /api/portal/reservations)
+	payload := map[string]string{
+		"subdomain": "my-subdomain",
+		"domain":    "example.com",
+	}
+	body, _ := json.Marshal(payload)
+	req := httptest.NewRequest("POST", "/api/portal/reservations", bytes.NewReader(body))
+	req.AddCookie(&http.Cookie{Name: "lfr_session", Value: sessionUser})
+	rec := httptest.NewRecorder()
+	srv.ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusOK {
+		t.Fatalf("expected 200 OK for reservation, got %d, body: %s", rec.Code, rec.Body.String())
+	}
+
+	var reservation db.SubdomainReservation
+	_ = json.NewDecoder(rec.Body).Decode(&reservation)
+	if reservation.Subdomain != "my-subdomain" || reservation.Domain != "example.com" {
+		t.Errorf("unexpected reservation values: %+v", reservation)
+	}
+
+	// 3. List reservations (GET /api/portal/reservations)
+	reqList := httptest.NewRequest("GET", "/api/portal/reservations", nil)
+	reqList.AddCookie(&http.Cookie{Name: "lfr_session", Value: sessionUser})
+	recList := httptest.NewRecorder()
+	srv.ServeHTTP(recList, reqList)
+
+	if recList.Code != http.StatusOK {
+		t.Fatalf("expected 200 OK listing reservations, got %d", recList.Code)
+	}
+	var listResp map[string]interface{}
+	_ = json.NewDecoder(recList.Body).Decode(&listResp)
+	if listResp["used"].(float64) != 1 {
+		t.Errorf("expected used count 1, got %v", listResp["used"])
+	}
+
+	// 4. Request extension (POST /api/portal/reservations/:id/request-extension)
+	reqExt := httptest.NewRequest("POST", fmt.Sprintf("/api/portal/reservations/%d/request-extension", reservation.ID), nil)
+	reqExt.AddCookie(&http.Cookie{Name: "lfr_session", Value: sessionUser})
+	recExt := httptest.NewRecorder()
+	srv.ServeHTTP(recExt, reqExt)
+
+	if recExt.Code != http.StatusOK {
+		t.Fatalf("expected 200 OK for request-extension, got %d", recExt.Code)
+	}
+
+	// Verify extension_requested flag is set in DB
+	resDb, _ := srv.db.GetSubdomainReservation(reservation.ID)
+	if !resDb.ExtensionRequested {
+		t.Error("expected ExtensionRequested to be true")
+	}
+
+	// 5. Admin List extensions (GET /api/admin/reservations/extensions)
+	reqAdminExt := httptest.NewRequest("GET", "/api/admin/reservations/extensions", nil)
+	reqAdminExt.AddCookie(&http.Cookie{Name: "lfr_session", Value: sessionAdmin})
+	recAdminExt := httptest.NewRecorder()
+	srv.ServeHTTP(recAdminExt, reqAdminExt)
+
+	if recAdminExt.Code != http.StatusOK {
+		t.Fatalf("expected 200 OK, got %d", recAdminExt.Code)
+	}
+	var extensionsList []db.SubdomainReservation
+	_ = json.NewDecoder(recAdminExt.Body).Decode(&extensionsList)
+	if len(extensionsList) != 1 {
+		t.Errorf("expected 1 extension request, got %d", len(extensionsList))
+	}
+
+	// 6. Admin Approve extension (POST /api/admin/reservations/:id/approve-extension)
+	approvePayload := map[string]interface{}{
+		"days":      30,
+		"permanent": false,
+	}
+	approveBody, _ := json.Marshal(approvePayload)
+	reqApprove := httptest.NewRequest("POST", fmt.Sprintf("/api/admin/reservations/%d/approve-extension", reservation.ID), bytes.NewReader(approveBody))
+	reqApprove.AddCookie(&http.Cookie{Name: "lfr_session", Value: sessionAdmin})
+	recApprove := httptest.NewRecorder()
+	srv.ServeHTTP(recApprove, reqApprove)
+
+	if recApprove.Code != http.StatusOK {
+		t.Fatalf("expected 200 OK approving extension, got %d", recApprove.Code)
+	}
+
+	resDb, _ = srv.db.GetSubdomainReservation(reservation.ID)
+	if resDb.ExtensionRequested {
+		t.Error("expected ExtensionRequested to be reset to false")
+	}
+	if resDb.ExpiresAt == nil {
+		t.Error("expected ExpiresAt to not be nil for standard extension")
+	}
+
+	// 7. Admin Demote reservation (POST /api/admin/reservations/:id/demote)
+	reqDemote := httptest.NewRequest("POST", fmt.Sprintf("/api/admin/reservations/%d/demote", reservation.ID), nil)
+	reqDemote.AddCookie(&http.Cookie{Name: "lfr_session", Value: sessionAdmin})
+	recDemote := httptest.NewRecorder()
+	srv.ServeHTTP(recDemote, reqDemote)
+
+	if recDemote.Code != http.StatusOK {
+		t.Fatalf("expected 200 OK for demotion, got %d", recDemote.Code)
+	}
+
+	// 8. Test connection check-gates
+	// Create PAT for normal user
+	patToken := "pat-token-user-1"
+	hashBytes := sha256.Sum256([]byte(patToken))
+	pat := &db.PersonalAccessToken{
+		UserID:      emailUser,
+		TokenHash:   hex.EncodeToString(hashBytes[:]),
+		TokenPrefix: "lfr_pat_user",
+		Name:        "User PAT",
+	}
+	_ = srv.db.CreatePAT(pat)
+
+	// Connecting using reserved subdomain prefix -> Should succeed
+	regPayload1, _ := json.Marshal(RegisterRequest{
+		SubdomainPrefix: "my-subdomain",
+		Ports:           []PortMapping{{LocalPort: 8080}},
+		AuthToken:       patToken,
+	})
+	reqReg1 := httptest.NewRequest("POST", "/api/register", bytes.NewReader(regPayload1))
+	reqReg1.Host = "example.com"
+	recReg1 := httptest.NewRecorder()
+	srv.ServeHTTP(recReg1, reqReg1)
+	if recReg1.Code != http.StatusOK {
+		t.Errorf("expected connection success for reserved subdomain, got %d, body: %s", recReg1.Code, recReg1.Body.String())
+	}
+
+	// Connecting using non-reserved custom subdomain prefix -> Should fail (403 Forbidden)
+	regPayload2, _ := json.Marshal(RegisterRequest{
+		SubdomainPrefix: "another-subdomain",
+		Ports:           []PortMapping{{LocalPort: 8080}},
+		AuthToken:       patToken,
+	})
+	reqReg2 := httptest.NewRequest("POST", "/api/register", bytes.NewReader(regPayload2))
+	reqReg2.Host = "example.com"
+	recReg2 := httptest.NewRecorder()
+	srv.ServeHTTP(recReg2, reqReg2)
+	if recReg2.Code != http.StatusForbidden {
+		t.Errorf("expected 403 Forbidden for non-reserved subdomain, got %d", recReg2.Code)
+	}
+
+	// Connecting using random subdomain prefix -> Should succeed and generate prefix
+	regPayload3, _ := json.Marshal(RegisterRequest{
+		SubdomainPrefix: "random",
+		Ports:           []PortMapping{{LocalPort: 8080}},
+		AuthToken:       patToken,
+	})
+	reqReg3 := httptest.NewRequest("POST", "/api/register", bytes.NewReader(regPayload3))
+	reqReg3.Host = "example.com"
+	recReg3 := httptest.NewRecorder()
+	srv.ServeHTTP(recReg3, reqReg3)
+	if recReg3.Code != http.StatusOK {
+		t.Errorf("expected 200 OK for random subdomain connection, got %d", recReg3.Code)
+	}
+	var regResp3 RegisterResponse
+	_ = json.NewDecoder(recReg3.Body).Decode(&regResp3)
+	if regResp3.SubdomainPrefix == "" || regResp3.SubdomainPrefix == "random" {
+		t.Errorf("expected generated unique subdomain, got %s", regResp3.SubdomainPrefix)
+	}
+
+	// 9. Restrict 'Never' expiration token option for standard user
+	tokenPayload := map[string]interface{}{
+		"name":            "Standard Never Token",
+		"expires_in_days": 0, // Never
+	}
+	tokenBody, _ := json.Marshal(tokenPayload)
+	reqTok := httptest.NewRequest("POST", "/api/tokens", bytes.NewReader(tokenBody))
+	reqTok.AddCookie(&http.Cookie{Name: "lfr_session", Value: sessionUser})
+	recTok := httptest.NewRecorder()
+	srv.ServeHTTP(recTok, reqTok)
+	if recTok.Code != http.StatusForbidden {
+		t.Errorf("expected 403 Forbidden for standard user creating Never token, got %d", recTok.Code)
+	}
+
+	// 10. Test HTTP 410 Gone for quarantined subdomain
+	expiredTime := time.Now().Add(-1 * time.Hour)
+	quarantineRes := &db.SubdomainReservation{
+		UserID:    emailUser,
+		Subdomain: "quarantine-sub",
+		Domain:    "example.com",
+		ExpiresAt: &expiredTime,
+		CreatedAt: time.Now().Add(-8 * time.Hour),
+		UpdatedAt: time.Now().Add(-1 * time.Hour),
+	}
+	_ = srv.db.CreateSubdomainReservation(quarantineRes)
+
+	reqGone := httptest.NewRequest("GET", "http://quarantine-sub.example.com/some/path", nil)
+	recGone := httptest.NewRecorder()
+	srv.ServeHTTP(recGone, reqGone)
+
+	if recGone.Code != http.StatusGone {
+		t.Errorf("expected 410 Gone for quarantined subdomain host, got %d, body: %s", recGone.Code, recGone.Body.String())
+	}
+	if !strings.Contains(recGone.Body.String(), "Subdomain Discontinued") {
+		t.Error("expected gone.html to render, but title missing")
+	}
 }

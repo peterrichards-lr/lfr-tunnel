@@ -82,6 +82,7 @@ func (s *Server) handleGetMe(w http.ResponseWriter, r *http.Request) {
 					"rate_limit":       l.RateLimit,
 					"user_id":          l.UserID,
 					"created_at":       l.CreatedAt,
+					"visitor_ips":      l.GetActiveVisitorIPs(s.cfg.VisitorTimeout),
 				})
 			}
 		}
@@ -238,6 +239,11 @@ func (s *Server) handleCreateToken(w http.ResponseWriter, r *http.Request) {
 	}
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 		http.Error(w, `{"error":"Invalid request"}`, http.StatusBadRequest)
+		return
+	}
+
+	if req.ExpiresIn <= 0 && user.Role != "admin" && user.Role != "owner" {
+		http.Error(w, `{"error":"Only admins and owners can create non-expiring tokens"}`, http.StatusForbidden)
 		return
 	}
 
@@ -722,4 +728,745 @@ func (s *Server) handleAdminDeleteUser(w http.ResponseWriter, r *http.Request, a
 	}
 
 	respondJSON(w, http.StatusOK, map[string]string{"status": "success"})
+}
+
+// getPortalBaseURL constructs the portal's base URL from the incoming request.
+func (s *Server) getPortalBaseURL(r *http.Request) string {
+	if r == nil {
+		if len(s.cfg.Domains) > 0 {
+			return "https://" + s.cfg.Domains[0]
+		}
+		return "https://localhost"
+	}
+	host := r.Host
+	scheme := "https"
+	if r.TLS == nil && r.Header.Get("X-Forwarded-Proto") != "https" {
+		scheme = "http"
+	}
+	return fmt.Sprintf("%s://%s", scheme, host)
+}
+
+func (s *Server) sendSubdomainReservedEmail(user *db.User, subdomain, domain string, expiresAt *time.Time, r *http.Request) {
+	if s.mailSender == nil {
+		return
+	}
+	lang := user.LanguagePreference
+	baseURL := s.getPortalBaseURL(r)
+	portalLink := baseURL + "/portal"
+
+	formattedExpiry := "Never"
+	if expiresAt != nil {
+		formattedExpiry = expiresAt.Format("2006-01-02 15:04:05 MST")
+	}
+
+	body, err := s.renderEmailTemplate(lang, "subdomain_reserved.html", map[string]interface{}{
+		"Name":       user.FirstName,
+		"Subdomain":  subdomain,
+		"Domain":     domain,
+		"ExpiresAt":  formattedExpiry,
+		"PortalLink": portalLink,
+	})
+	if err != nil {
+		log.Printf("[Server] Failed to render subdomain_reserved email: %v", err)
+		return
+	}
+	subject := fmt.Sprintf("Subdomain Reserved: %s.%s", subdomain, domain)
+	plain := fmt.Sprintf("Hi %s,\n\nYou have reserved the subdomain %s.%s.\nExpires on: %s\nPortal: %s", user.FirstName, subdomain, domain, formattedExpiry, portalLink)
+
+	go func() { _ = s.mailSender.Send(user.Email, subject, body, plain) }()
+}
+
+func (s *Server) sendExtensionApprovedEmail(user *db.User, subdomain, domain string, expiresAt *time.Time, r *http.Request) {
+	if s.mailSender == nil {
+		return
+	}
+	lang := user.LanguagePreference
+	baseURL := s.getPortalBaseURL(r)
+	portalLink := baseURL + "/portal"
+
+	formattedExpiry := "Never"
+	isPermanent := true
+	if expiresAt != nil {
+		formattedExpiry = expiresAt.Format("2006-01-02 15:04:05 MST")
+		isPermanent = false
+	}
+
+	body, err := s.renderEmailTemplate(lang, "extension_approved.html", map[string]interface{}{
+		"Name":        user.FirstName,
+		"Subdomain":   subdomain,
+		"Domain":      domain,
+		"ExpiresAt":   formattedExpiry,
+		"IsPermanent": isPermanent,
+		"PortalLink":  portalLink,
+	})
+	if err != nil {
+		log.Printf("[Server] Failed to render extension_approved email: %v", err)
+		return
+	}
+	subject := fmt.Sprintf("Extension Approved: %s.%s", subdomain, domain)
+	plain := fmt.Sprintf("Hi %s,\n\nYour extension request for %s.%s has been approved.\nNew Expiration: %s\nPortal: %s", user.FirstName, subdomain, domain, formattedExpiry, portalLink)
+
+	go func() { _ = s.mailSender.Send(user.Email, subject, body, plain) }()
+}
+
+func (s *Server) sendSubdomainDemotedEmail(user *db.User, subdomain, domain string, expiresAt *time.Time, r *http.Request) {
+	if s.mailSender == nil {
+		return
+	}
+	lang := user.LanguagePreference
+	baseURL := s.getPortalBaseURL(r)
+	portalLink := baseURL + "/portal"
+
+	formattedExpiry := "Never"
+	if expiresAt != nil {
+		formattedExpiry = expiresAt.Format("2006-01-02 15:04:05 MST")
+	}
+
+	body, err := s.renderEmailTemplate(lang, "subdomain_demoted.html", map[string]interface{}{
+		"Name":       user.FirstName,
+		"Subdomain":  subdomain,
+		"Domain":     domain,
+		"ExpiresAt":  formattedExpiry,
+		"PortalLink": portalLink,
+	})
+	if err != nil {
+		log.Printf("[Server] Failed to render subdomain_demoted email: %v", err)
+		return
+	}
+	subject := fmt.Sprintf("Subdomain Demoted: %s.%s", subdomain, domain)
+	plain := fmt.Sprintf("Hi %s,\n\nYour permanent subdomain reservation %s.%s has been demoted back to a standard reservation.\nNew Expiration: %s\nPortal: %s", user.FirstName, subdomain, domain, formattedExpiry, portalLink)
+
+	go func() { _ = s.mailSender.Send(user.Email, subject, body, plain) }()
+}
+
+/*
+func (s *Server) sendSubdomainExpiredEmail(user *db.User, subdomain, domain string, releasedAt time.Time, r *http.Request) {
+	if s.mailSender == nil {
+		return
+	}
+	lang := user.LanguagePreference
+	baseURL := s.getPortalBaseURL(r)
+	portalLink := baseURL + "/portal"
+
+	formattedRelease := releasedAt.Format("2006-01-02 15:04:05 MST")
+
+	body, err := s.renderEmailTemplate(lang, "subdomain_expired.html", map[string]interface{}{
+		"Name":       user.FirstName,
+		"Subdomain":  subdomain,
+		"Domain":     domain,
+		"ReleasedAt": formattedRelease,
+		"PortalLink": portalLink,
+	})
+	if err != nil {
+		log.Printf("[Server] Failed to render subdomain_expired email: %v", err)
+		return
+	}
+	subject := fmt.Sprintf("Subdomain Expired: %s.%s", subdomain, domain)
+	plain := fmt.Sprintf("Hi %s,\n\nYour subdomain reservation %s.%s has expired.\nIt will be released to the public pool on: %s\nPortal: %s", user.FirstName, subdomain, domain, formattedRelease, portalLink)
+
+	go func() { _ = s.mailSender.Send(user.Email, subject, body, plain) }()
+}
+*/
+
+// handleListReservations returns a list of reservations held by the current user.
+func (s *Server) handleListReservations(w http.ResponseWriter, r *http.Request) {
+	user, err := s.getCurrentUser(r)
+	if err != nil {
+		http.Error(w, `{"error":"Unauthorized"}`, http.StatusUnauthorized)
+		return
+	}
+
+	list, err := s.db.ListSubdomainReservationsByUserID(user.ID)
+	if err != nil {
+		log.Printf("[API] Failed to list reservations: %v", err)
+		http.Error(w, `{"error":"Failed to retrieve reservations"}`, http.StatusInternalServerError)
+		return
+	}
+
+	limit := s.cfg.DefaultMaxReservations
+	if user.MaxReservations != nil {
+		limit = *user.MaxReservations
+	}
+
+	respondJSON(w, http.StatusOK, map[string]interface{}{
+		"reservations": list,
+		"limit":        limit,
+		"used":         len(list),
+	})
+}
+
+// handleCreateReservation reserves a subdomain for 7 days.
+func (s *Server) handleCreateReservation(w http.ResponseWriter, r *http.Request) {
+	user, err := s.getCurrentUser(r)
+	if err != nil {
+		http.Error(w, `{"error":"Unauthorized"}`, http.StatusUnauthorized)
+		return
+	}
+
+	var req struct {
+		Subdomain string `json:"subdomain"`
+		Domain    string `json:"domain"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		http.Error(w, `{"error":"Invalid request"}`, http.StatusBadRequest)
+		return
+	}
+
+	req.Subdomain = strings.ToLower(strings.TrimSpace(req.Subdomain))
+	req.Domain = strings.ToLower(strings.TrimSpace(req.Domain))
+
+	if req.Subdomain == "" || req.Domain == "" {
+		http.Error(w, `{"error":"Subdomain and domain are required"}`, http.StatusBadRequest)
+		return
+	}
+
+	// Validate subdomain format
+	if !isValidSubdomain(req.Subdomain) {
+		http.Error(w, `{"error":"Invalid or reserved subdomain format"}`, http.StatusBadRequest)
+		return
+	}
+
+	// Verify requested domain is supported
+	domainSupported := false
+	for _, d := range s.cfg.Domains {
+		if strings.EqualFold(d, req.Domain) {
+			domainSupported = true
+			break
+		}
+	}
+	if !domainSupported {
+		http.Error(w, `{"error":"Domain is not supported by this gateway"}`, http.StatusBadRequest)
+		return
+	}
+
+	// Enforce quota limits
+	limit := s.cfg.DefaultMaxReservations
+	if user.MaxReservations != nil {
+		limit = *user.MaxReservations
+	}
+
+	list, err := s.db.ListSubdomainReservationsByUserID(user.ID)
+	if err != nil {
+		log.Printf("[API] Failed to check reservations: %v", err)
+		http.Error(w, `{"error":"Server error"}`, http.StatusInternalServerError)
+		return
+	}
+
+	// Filter out expired reservations that are not in quarantine
+	activeCount := 0
+	for _, res := range list {
+		if res.ExpiresAt == nil || res.ExpiresAt.After(time.Now()) {
+			activeCount++
+		}
+	}
+
+	if activeCount >= limit {
+		http.Error(w, `{"error":"Subdomain reservation quota limit reached"}`, http.StatusBadRequest)
+		return
+	}
+
+	// Check if already reserved
+	existing, err := s.db.GetSubdomainReservationByName(req.Subdomain, req.Domain)
+	if err == nil && existing != nil {
+		// Check if expired
+		if existing.ExpiresAt != nil && existing.ExpiresAt.Before(time.Now()) {
+			// Check quarantine
+			quarantineCutoff := existing.ExpiresAt.AddDate(0, 0, s.cfg.SubdomainQuarantineDays)
+			if time.Now().Before(quarantineCutoff) {
+				// Quarantined! Can only reclaim if previous owner is the same user
+				if existing.UserID != user.ID {
+					http.Error(w, `{"error":"Subdomain is currently quarantined by another user"}`, http.StatusConflict)
+					return
+				}
+				// Reclaimable! Delete the expired one first
+				_ = s.db.DeleteSubdomainReservation(existing.ID)
+			} else {
+				// Past quarantine, delete expired reservation
+				_ = s.db.DeleteSubdomainReservation(existing.ID)
+			}
+		} else {
+			// Active reservation by someone else
+			http.Error(w, `{"error":"Subdomain is already reserved"}`, http.StatusConflict)
+			return
+		}
+	}
+
+	// Create reservation for 7 days
+	expiresAt := time.Now().AddDate(0, 0, 7)
+	res := &db.SubdomainReservation{
+		UserID:    user.ID,
+		Subdomain: req.Subdomain,
+		Domain:    req.Domain,
+		ExpiresAt: &expiresAt,
+		CreatedAt: time.Now(),
+		UpdatedAt: time.Now(),
+	}
+
+	if err := s.db.CreateSubdomainReservation(res); err != nil {
+		log.Printf("[API] Failed to save reservation: %v", err)
+		http.Error(w, `{"error":"Failed to create reservation"}`, http.StatusInternalServerError)
+		return
+	}
+
+	_ = s.db.WriteAuditEntry(&db.AuditEntry{
+		ActorID:    user.Email,
+		Action:     "subdomain.reserved",
+		TargetType: "subdomain",
+		TargetID:   fmt.Sprintf("%s.%s", req.Subdomain, req.Domain),
+		Details:    "Subdomain reserved for 7 days",
+		IPAddress:  getClientIP(r),
+		CreatedAt:  time.Now(),
+	})
+
+	s.sendSubdomainReservedEmail(user, req.Subdomain, req.Domain, &expiresAt, r)
+
+	respondJSON(w, http.StatusOK, res)
+}
+
+// handleDeleteReservation deletes a reservation.
+func (s *Server) handleDeleteReservation(w http.ResponseWriter, r *http.Request) {
+	user, err := s.getCurrentUser(r)
+	if err != nil {
+		http.Error(w, `{"error":"Unauthorized"}`, http.StatusUnauthorized)
+		return
+	}
+
+	idStr := strings.TrimPrefix(r.URL.Path, "/api/portal/reservations/")
+	id, err := strconv.ParseInt(idStr, 10, 64)
+	if err != nil {
+		http.Error(w, `{"error":"Invalid reservation ID"}`, http.StatusBadRequest)
+		return
+	}
+
+	res, err := s.db.GetSubdomainReservation(id)
+	if err != nil {
+		if errors.Is(err, db.ErrNotFound) {
+			http.Error(w, `{"error":"Reservation not found"}`, http.StatusNotFound)
+		} else {
+			http.Error(w, `{"error":"Database error"}`, http.StatusInternalServerError)
+		}
+		return
+	}
+
+	if res.UserID != user.ID && user.Role != "admin" && user.Role != "owner" {
+		http.Error(w, `{"error":"Forbidden: cannot delete other user's reservation"}`, http.StatusForbidden)
+		return
+	}
+
+	if err := s.db.DeleteSubdomainReservation(id); err != nil {
+		log.Printf("[API] Failed to delete reservation: %v", err)
+		http.Error(w, `{"error":"Failed to delete reservation"}`, http.StatusInternalServerError)
+		return
+	}
+
+	_ = s.db.WriteAuditEntry(&db.AuditEntry{
+		ActorID:    user.Email,
+		Action:     "subdomain.released",
+		TargetType: "subdomain",
+		TargetID:   fmt.Sprintf("%s.%s", res.Subdomain, res.Domain),
+		Details:    "Subdomain reservation deleted / released by owner",
+		IPAddress:  getClientIP(r),
+		CreatedAt:  time.Now(),
+	})
+
+	respondJSON(w, http.StatusOK, map[string]string{"status": "success"})
+}
+
+// handleRequestExtension requests an extension for a reservation.
+func (s *Server) handleRequestExtension(w http.ResponseWriter, r *http.Request) {
+	user, err := s.getCurrentUser(r)
+	if err != nil {
+		http.Error(w, `{"error":"Unauthorized"}`, http.StatusUnauthorized)
+		return
+	}
+
+	suffix := strings.TrimPrefix(r.URL.Path, "/api/portal/reservations/")
+	parts := strings.Split(suffix, "/")
+	if len(parts) == 0 {
+		http.Error(w, `{"error":"Invalid reservation ID"}`, http.StatusBadRequest)
+		return
+	}
+	id, err := strconv.ParseInt(parts[0], 10, 64)
+	if err != nil {
+		http.Error(w, `{"error":"Invalid reservation ID"}`, http.StatusBadRequest)
+		return
+	}
+
+	res, err := s.db.GetSubdomainReservation(id)
+	if err != nil {
+		if errors.Is(err, db.ErrNotFound) {
+			http.Error(w, `{"error":"Reservation not found"}`, http.StatusNotFound)
+		} else {
+			http.Error(w, `{"error":"Database error"}`, http.StatusInternalServerError)
+		}
+		return
+	}
+
+	if res.UserID != user.ID && user.Role != "admin" && user.Role != "owner" {
+		http.Error(w, `{"error":"Forbidden: cannot extend other user's reservation"}`, http.StatusForbidden)
+		return
+	}
+
+	if res.ExpiresAt == nil {
+		http.Error(w, `{"error":"Permanent reservations cannot be extended"}`, http.StatusBadRequest)
+		return
+	}
+
+	res.ExtensionRequested = true
+	if err := s.db.UpdateSubdomainReservation(res); err != nil {
+		log.Printf("[API] Failed to update reservation: %v", err)
+		http.Error(w, `{"error":"Failed to request extension"}`, http.StatusInternalServerError)
+		return
+	}
+
+	_ = s.db.WriteAuditEntry(&db.AuditEntry{
+		ActorID:    user.Email,
+		Action:     "subdomain.extension_requested",
+		TargetType: "subdomain",
+		TargetID:   fmt.Sprintf("%s.%s", res.Subdomain, res.Domain),
+		Details:    "Extension requested for subdomain reservation",
+		IPAddress:  getClientIP(r),
+		CreatedAt:  time.Now(),
+	})
+
+	s.sendAdminAlert("alert_notify_extension_requested", "LFR Tunnel Alert: Subdomain Extension Requested",
+		fmt.Sprintf("User %s has requested an extension for subdomain %s.%s.", user.Email, res.Subdomain, res.Domain))
+
+	respondJSON(w, http.StatusOK, res)
+}
+
+// handlePromoteReservation promotes an active random tunnel lease to a reservation.
+func (s *Server) handlePromoteReservation(w http.ResponseWriter, r *http.Request) {
+	user, err := s.getCurrentUser(r)
+	if err != nil {
+		http.Error(w, `{"error":"Unauthorized"}`, http.StatusUnauthorized)
+		return
+	}
+
+	var req struct {
+		Subdomain string `json:"subdomain"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		http.Error(w, `{"error":"Invalid request"}`, http.StatusBadRequest)
+		return
+	}
+
+	req.Subdomain = strings.ToLower(strings.TrimSpace(req.Subdomain))
+	if req.Subdomain == "" {
+		http.Error(w, `{"error":"Subdomain is required"}`, http.StatusBadRequest)
+		return
+	}
+
+	var activeLease *TunnelLease
+	if s.registry != nil {
+		leases := s.registry.ListLeases()
+		for _, l := range leases {
+			if l.UserID == user.ID && strings.EqualFold(l.SubdomainPrefix, req.Subdomain) {
+				activeLease = l
+				break
+			}
+		}
+	}
+
+	if activeLease == nil {
+		http.Error(w, `{"error":"No active tunnel session found for this subdomain prefix"}`, http.StatusBadRequest)
+		return
+	}
+
+	parts := strings.SplitN(activeLease.FullHost, ".", 2)
+	domain := "lfr-demo.se"
+	if len(parts) == 2 {
+		domain = parts[1]
+	}
+
+	limit := s.cfg.DefaultMaxReservations
+	if user.MaxReservations != nil {
+		limit = *user.MaxReservations
+	}
+
+	list, err := s.db.ListSubdomainReservationsByUserID(user.ID)
+	if err != nil {
+		log.Printf("[API] Failed to check reservations: %v", err)
+		http.Error(w, `{"error":"Server error"}`, http.StatusInternalServerError)
+		return
+	}
+
+	activeCount := 0
+	for _, res := range list {
+		if res.ExpiresAt == nil || res.ExpiresAt.After(time.Now()) {
+			activeCount++
+		}
+	}
+
+	if activeCount >= limit {
+		http.Error(w, `{"error":"Quota limit reached: cannot promote to reservation"}`, http.StatusBadRequest)
+		return
+	}
+
+	existing, err := s.db.GetSubdomainReservationByName(req.Subdomain, domain)
+	if err == nil && existing != nil {
+		if existing.ExpiresAt == nil || existing.ExpiresAt.After(time.Now()) {
+			if existing.UserID != user.ID {
+				http.Error(w, `{"error":"Subdomain is already reserved by another user"}`, http.StatusConflict)
+				return
+			}
+			respondJSON(w, http.StatusOK, existing)
+			return
+		}
+		_ = s.db.DeleteSubdomainReservation(existing.ID)
+	}
+
+	expiresAt := time.Now().AddDate(0, 0, 7)
+	res := &db.SubdomainReservation{
+		UserID:    user.ID,
+		Subdomain: req.Subdomain,
+		Domain:    domain,
+		ExpiresAt: &expiresAt,
+		CreatedAt: time.Now(),
+		UpdatedAt: time.Now(),
+	}
+
+	if err := s.db.CreateSubdomainReservation(res); err != nil {
+		log.Printf("[API] Failed to promote subdomain: %v", err)
+		http.Error(w, `{"error":"Failed to save reservation"}`, http.StatusInternalServerError)
+		return
+	}
+
+	_ = s.db.WriteAuditEntry(&db.AuditEntry{
+		ActorID:    user.Email,
+		Action:     "subdomain.promoted",
+		TargetType: "subdomain",
+		TargetID:   fmt.Sprintf("%s.%s", req.Subdomain, domain),
+		Details:    "Subdomain promoted from active random lease to standard reservation",
+		IPAddress:  getClientIP(r),
+		CreatedAt:  time.Now(),
+	})
+
+	s.sendSubdomainReservedEmail(user, req.Subdomain, domain, &expiresAt, r)
+
+	respondJSON(w, http.StatusOK, res)
+}
+
+// handleAdminListExtensions lists reservations requesting extension.
+func (s *Server) handleAdminListExtensions(w http.ResponseWriter, r *http.Request, actor string) {
+	if s.db == nil {
+		http.Error(w, `{"error":"Database not configured"}`, http.StatusNotImplemented)
+		return
+	}
+
+	all, err := s.db.ListAllSubdomainReservations()
+	if err != nil {
+		log.Printf("[API] Failed to list reservations for admin: %v", err)
+		http.Error(w, `{"error":"Failed to retrieve reservations"}`, http.StatusInternalServerError)
+		return
+	}
+
+	var list []*db.SubdomainReservation
+	for _, res := range all {
+		if res.ExtensionRequested {
+			list = append(list, res)
+		}
+	}
+
+	respondJSON(w, http.StatusOK, list)
+}
+
+// handleAdminApproveExtension approves an extension request.
+func (s *Server) handleAdminApproveExtension(w http.ResponseWriter, r *http.Request, actor string) {
+	if s.db == nil {
+		http.Error(w, `{"error":"Database not configured"}`, http.StatusNotImplemented)
+		return
+	}
+
+	suffix := strings.TrimPrefix(r.URL.Path, "/api/admin/reservations/")
+	parts := strings.Split(suffix, "/")
+	if len(parts) == 0 {
+		http.Error(w, `{"error":"Invalid reservation ID"}`, http.StatusBadRequest)
+		return
+	}
+	id, err := strconv.ParseInt(parts[0], 10, 64)
+	if err != nil {
+		http.Error(w, `{"error":"Invalid reservation ID"}`, http.StatusBadRequest)
+		return
+	}
+
+	var req struct {
+		Days      int  `json:"days"`
+		Permanent bool `json:"permanent"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		http.Error(w, `{"error":"Invalid request"}`, http.StatusBadRequest)
+		return
+	}
+
+	res, err := s.db.GetSubdomainReservation(id)
+	if err != nil {
+		if errors.Is(err, db.ErrNotFound) {
+			http.Error(w, `{"error":"Reservation not found"}`, http.StatusNotFound)
+		} else {
+			http.Error(w, `{"error":"Database error"}`, http.StatusInternalServerError)
+		}
+		return
+	}
+
+	res.ExtensionRequested = false
+	if req.Permanent {
+		res.ExpiresAt = nil
+	} else {
+		baseTime := time.Now()
+		if res.ExpiresAt != nil && res.ExpiresAt.After(time.Now()) {
+			baseTime = *res.ExpiresAt
+		}
+		extended := baseTime.AddDate(0, 0, req.Days)
+		res.ExpiresAt = &extended
+	}
+
+	if err := s.db.UpdateSubdomainReservation(res); err != nil {
+		log.Printf("[API] Failed to update reservation: %v", err)
+		http.Error(w, `{"error":"Failed to approve extension"}`, http.StatusInternalServerError)
+		return
+	}
+
+	_ = s.db.WriteAuditEntry(&db.AuditEntry{
+		ActorID:    actor,
+		Action:     "subdomain.extension_approved",
+		TargetType: "subdomain",
+		TargetID:   fmt.Sprintf("%s.%s", res.Subdomain, res.Domain),
+		Details:    fmt.Sprintf("Extension approved. Permanent: %t, Days: %d", req.Permanent, req.Days),
+		IPAddress:  getClientIP(r),
+		CreatedAt:  time.Now(),
+	})
+
+	user, err := s.db.GetUser(res.UserID)
+	if err == nil && user != nil {
+		s.sendExtensionApprovedEmail(user, res.Subdomain, res.Domain, res.ExpiresAt, r)
+	}
+
+	respondJSON(w, http.StatusOK, res)
+}
+
+// handleAdminDemoteReservation demotes a permanent reservation.
+func (s *Server) handleAdminDemoteReservation(w http.ResponseWriter, r *http.Request, actor string) {
+	if s.db == nil {
+		http.Error(w, `{"error":"Database not configured"}`, http.StatusNotImplemented)
+		return
+	}
+
+	suffix := strings.TrimPrefix(r.URL.Path, "/api/admin/reservations/")
+	parts := strings.Split(suffix, "/")
+	if len(parts) == 0 {
+		http.Error(w, `{"error":"Invalid reservation ID"}`, http.StatusBadRequest)
+		return
+	}
+	id, err := strconv.ParseInt(parts[0], 10, 64)
+	if err != nil {
+		http.Error(w, `{"error":"Invalid reservation ID"}`, http.StatusBadRequest)
+		return
+	}
+
+	res, err := s.db.GetSubdomainReservation(id)
+	if err != nil {
+		if errors.Is(err, db.ErrNotFound) {
+			http.Error(w, `{"error":"Reservation not found"}`, http.StatusNotFound)
+		} else {
+			http.Error(w, `{"error":"Database error"}`, http.StatusInternalServerError)
+		}
+		return
+	}
+
+	expiresAt := time.Now().AddDate(0, 0, 7)
+	res.ExpiresAt = &expiresAt
+	res.ExtensionRequested = false
+
+	if err := s.db.UpdateSubdomainReservation(res); err != nil {
+		log.Printf("[API] Failed to update reservation: %v", err)
+		http.Error(w, `{"error":"Failed to demote reservation"}`, http.StatusInternalServerError)
+		return
+	}
+
+	_ = s.db.WriteAuditEntry(&db.AuditEntry{
+		ActorID:    actor,
+		Action:     "subdomain.demoted",
+		TargetType: "subdomain",
+		TargetID:   fmt.Sprintf("%s.%s", res.Subdomain, res.Domain),
+		Details:    "Permanent reservation demoted back to 7-day expiration",
+		IPAddress:  getClientIP(r),
+		CreatedAt:  time.Now(),
+	})
+
+	user, err := s.db.GetUser(res.UserID)
+	if err == nil && user != nil {
+		s.sendSubdomainDemotedEmail(user, res.Subdomain, res.Domain, &expiresAt, r)
+	}
+
+	respondJSON(w, http.StatusOK, res)
+}
+
+// handleAdminOverrideLimit overrides a user's maximum reservation limit.
+func (s *Server) handleAdminOverrideLimit(w http.ResponseWriter, r *http.Request, actor string) {
+	if s.db == nil {
+		http.Error(w, `{"error":"Database not configured"}`, http.StatusNotImplemented)
+		return
+	}
+
+	suffix := strings.TrimPrefix(r.URL.Path, "/api/admin/users/")
+	parts := strings.Split(suffix, "/")
+	if len(parts) < 2 || parts[1] != "limit" {
+		http.Error(w, `{"error":"Invalid URL path"}`, http.StatusBadRequest)
+		return
+	}
+	email, err := url.PathUnescape(parts[0])
+	if err != nil {
+		http.Error(w, `{"error":"Invalid user email"}`, http.StatusBadRequest)
+		return
+	}
+
+	var req struct {
+		MaxReservations *int `json:"max_reservations"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		http.Error(w, `{"error":"Invalid request"}`, http.StatusBadRequest)
+		return
+	}
+
+	user, err := s.db.GetUserByEmail(email)
+	if err != nil {
+		if errors.Is(err, db.ErrNotFound) {
+			http.Error(w, `{"error":"User not found"}`, http.StatusNotFound)
+		} else {
+			http.Error(w, `{"error":"Database error"}`, http.StatusInternalServerError)
+		}
+		return
+	}
+
+	user.MaxReservations = req.MaxReservations
+	if err := s.db.UpdateUser(user); err != nil {
+		log.Printf("[API] Failed to update user reservations limit: %v", err)
+		http.Error(w, `{"error":"Failed to update quota limit"}`, http.StatusInternalServerError)
+		return
+	}
+
+	_ = s.db.WriteAuditEntry(&db.AuditEntry{
+		ActorID:    actor,
+		Action:     "user.limit_changed",
+		TargetType: "user",
+		TargetID:   user.Email,
+		Details:    fmt.Sprintf("Max reservations limit overridden. Value: %v", req.MaxReservations),
+		IPAddress:  getClientIP(r),
+		CreatedAt:  time.Now(),
+	})
+
+	respondJSON(w, http.StatusOK, map[string]string{"status": "success"})
+}
+
+// handleGenerateSubdomain generates a random subdomain prefix.
+func (s *Server) handleGenerateSubdomain(w http.ResponseWriter, r *http.Request) {
+	_, err := s.getCurrentUser(r)
+	if err != nil {
+		http.Error(w, `{"error":"Unauthorized"}`, http.StatusUnauthorized)
+		return
+	}
+	style := r.URL.Query().Get("style")
+	sub := s.generateRandomSubdomainPrefix(style)
+	respondJSON(w, http.StatusOK, map[string]string{"subdomain": sub})
 }

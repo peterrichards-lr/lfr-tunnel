@@ -228,14 +228,14 @@ The solution will consist of:
 
 ## Subdomain Reservation System (v1.8.0)
 - [x] Declutter Active Tunnels dashboard table by moving detailed fields into a new Tunnel Details Dialog Modal (with Copy Link, On-Demand Refresh, and Admin controls).
-- [ ] Create database schema migrations for subdomain reservations and custom user limits.
-- [ ] Implement database CRUD functions for subdomain reservations.
-- [ ] Implement configuration parameters for default max reservations.
-- [ ] Implement API endpoints for reserving, releasing, requesting extensions, and promoting subdomains.
-- [ ] Implement Admin endpoints for approving extensions, demoting reservations, and adjusting user limits.
-- [ ] Add HTML email templates and integrate outbound email triggers for reservation events.
-- [ ] Update tunnel registration and check-subdomain checks to enforce reservations.
-- [ ] Implement subdomain quarantine period and HTTP 410 Gone fallback page.
-- [ ] Build portal UI dashboard panel and admin control views for reservation management.
-- [ ] Restrict 'Never' API token expiration option to admin and owner roles on both server and client.
+- [x] Fix compile issue in pkg/db/db_test.go.
+- [x] Implement database schema migration for `extension_requested` in `pkg/db/db.go`.
+- [x] Implement database CRUD updates and `UpdateSubdomainReservation` in `pkg/db/db.go`.
+- [x] Implement API endpoints for reserving, releasing, requesting extensions, and promoting subdomains in `pkg/server/api.go`.
+- [x] Implement Admin endpoints for approving extensions, demoting reservations, and adjusting user limits in `pkg/server/api.go`.
+- [x] Add HTML email templates and integrate outbound email triggers for reservation events in `pkg/mail/`.
+- [x] Update tunnel registration and check-subdomain checks to enforce reservations in `pkg/server/server.go`.
+- [x] Implement subdomain quarantine period and HTTP 410 Gone fallback page.
+- [ ] Build portal UI dashboard panel and admin control views for reservation management in `pkg/server/static/dashboard.js`.
+- [x] Restrict 'Never' API token expiration option to admin and owner roles on both server and client.
 - [ ] Write unit and E2E integration tests for the reservation flow.

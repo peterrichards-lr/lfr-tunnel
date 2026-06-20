@@ -84,6 +84,18 @@ type User struct {
 	PolicyConsentAt    *time.Time `json:"policy_consent_at,omitempty"`
 	LanguagePreference string     `json:"language_preference"`
 	RateLimit          int        `json:"rate_limit"`
+	MaxReservations    *int       `json:"max_reservations,omitempty"`
+}
+
+type SubdomainReservation struct {
+	ID                 int64      `json:"id"`
+	UserID             string     `json:"user_id"`
+	Subdomain          string     `json:"subdomain"`
+	Domain             string     `json:"domain"`
+	ExpiresAt          *time.Time `json:"expires_at,omitempty"`
+	ExtensionRequested bool       `json:"extension_requested"`
+	CreatedAt          time.Time  `json:"created_at"`
+	UpdatedAt          time.Time  `json:"updated_at"`
 }
 
 type PersonalAccessToken struct {
@@ -170,9 +182,23 @@ func (db *DB) initSchema() error {
 		policy_consent_at DATETIME,
 		language_preference TEXT NOT NULL DEFAULT 'en',
 		rate_limit INTEGER DEFAULT 0,
+		max_reservations INTEGER DEFAULT NULL,
 		created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
 		updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
 	);
+
+	CREATE TABLE IF NOT EXISTS subdomain_reservations (
+		id INTEGER PRIMARY KEY AUTOINCREMENT,
+		user_id TEXT NOT NULL,
+		subdomain TEXT NOT NULL,
+		domain TEXT NOT NULL,
+		expires_at DATETIME,
+		extension_requested INTEGER DEFAULT 0,
+		created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+		updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+		FOREIGN KEY(user_id) REFERENCES users(id) ON DELETE CASCADE
+	);
+	CREATE UNIQUE INDEX IF NOT EXISTS idx_subdomain_domain ON subdomain_reservations(subdomain, domain);
 
 	CREATE TABLE IF NOT EXISTS personal_access_tokens (
 		id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -258,6 +284,8 @@ func (db *DB) initSchema() error {
 	_, _ = db.conn.Exec("ALTER TABLE users ADD COLUMN last_client_version TEXT")
 	_, _ = db.conn.Exec("ALTER TABLE users ADD COLUMN last_client_os TEXT")
 	_, _ = db.conn.Exec("ALTER TABLE users ADD COLUMN rate_limit INTEGER DEFAULT 0")
+	_, _ = db.conn.Exec("ALTER TABLE users ADD COLUMN max_reservations INTEGER DEFAULT NULL")
+	_, _ = db.conn.Exec("ALTER TABLE subdomain_reservations ADD COLUMN extension_requested INTEGER DEFAULT 0")
 
 	return nil
 }
@@ -330,9 +358,9 @@ func (db *DB) CreateUser(u *User) error {
 	}
 
 	_, err := db.conn.Exec(`
-		INSERT INTO users (id, email, first_name, last_name, preferred_name, role, status, verification_token, approval_token, claim_token, timezone, auth_method, theme_preference, notification_prefs, created_at, updated_at, last_client_version, last_client_os, totp_secret, totp_enabled, policy_consent_at, language_preference, rate_limit)
-		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-	`, u.ID, u.Email, u.FirstName, u.LastName, u.PreferredName, u.Role, u.Status, u.VerificationToken, u.ApprovalToken, u.ClaimToken, u.Timezone, u.AuthMethod, u.ThemePreference, u.NotificationPrefs, u.CreatedAt, u.UpdatedAt, u.LastClientVersion, u.LastClientOS, u.TOTPSecret, totpEnabledVal, u.PolicyConsentAt, u.LanguagePreference, u.RateLimit)
+		INSERT INTO users (id, email, first_name, last_name, preferred_name, role, status, verification_token, approval_token, claim_token, timezone, auth_method, theme_preference, notification_prefs, created_at, updated_at, last_client_version, last_client_os, totp_secret, totp_enabled, policy_consent_at, language_preference, rate_limit, max_reservations)
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+	`, u.ID, u.Email, u.FirstName, u.LastName, u.PreferredName, u.Role, u.Status, u.VerificationToken, u.ApprovalToken, u.ClaimToken, u.Timezone, u.AuthMethod, u.ThemePreference, u.NotificationPrefs, u.CreatedAt, u.UpdatedAt, u.LastClientVersion, u.LastClientOS, u.TOTPSecret, totpEnabledVal, u.PolicyConsentAt, u.LanguagePreference, u.RateLimit, u.MaxReservations)
 	return err
 }
 
@@ -348,8 +376,9 @@ func (db *DB) fetchUserByQuery(query string, arg interface{}) (*User, error) {
 	var policyConsentAt sql.NullTime
 	var langPref sql.NullString
 	var rateLimitVal int
+	var maxReservationsVal sql.NullInt64
 	err := db.conn.QueryRow(query, arg).Scan(
-		&u.ID, &u.Email, &u.FirstName, &u.LastName, &u.PreferredName, &u.Role, &u.Status, &vt, &at, &ct, &u.Timezone, &u.AuthMethod, &u.ThemePreference, &u.NotificationPrefs, &u.CreatedAt, &u.UpdatedAt, &lastLogin, &u.LastLoginIP, &lastClientVersion, &lastClientOS, &totpSecret, &totpEnabled, &policyConsentAt, &langPref, &rateLimitVal,
+		&u.ID, &u.Email, &u.FirstName, &u.LastName, &u.PreferredName, &u.Role, &u.Status, &vt, &at, &ct, &u.Timezone, &u.AuthMethod, &u.ThemePreference, &u.NotificationPrefs, &u.CreatedAt, &u.UpdatedAt, &lastLogin, &u.LastLoginIP, &lastClientVersion, &lastClientOS, &totpSecret, &totpEnabled, &policyConsentAt, &langPref, &rateLimitVal, &maxReservationsVal,
 	)
 	if err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
@@ -365,6 +394,12 @@ func (db *DB) fetchUserByQuery(query string, arg interface{}) (*User, error) {
 	u.TOTPSecret = totpSecret.String
 	u.TOTPEnabled = totpEnabled == 1
 	u.RateLimit = rateLimitVal
+	if maxReservationsVal.Valid {
+		val := int(maxReservationsVal.Int64)
+		u.MaxReservations = &val
+	} else {
+		u.MaxReservations = nil
+	}
 	if policyConsentAt.Valid {
 		u.PolicyConsentAt = &policyConsentAt.Time
 	}
@@ -381,27 +416,27 @@ func (db *DB) fetchUserByQuery(query string, arg interface{}) (*User, error) {
 
 // GetUser fetches a user by their ID.
 func (db *DB) GetUser(id string) (*User, error) {
-	return db.fetchUserByQuery(`SELECT id, email, first_name, last_name, preferred_name, role, status, verification_token, approval_token, claim_token, timezone, auth_method, theme_preference, notification_prefs, created_at, updated_at, last_login_at, last_login_ip, last_client_version, last_client_os, totp_secret, totp_enabled, policy_consent_at, language_preference, rate_limit FROM users WHERE id = ?`, id)
+	return db.fetchUserByQuery(`SELECT id, email, first_name, last_name, preferred_name, role, status, verification_token, approval_token, claim_token, timezone, auth_method, theme_preference, notification_prefs, created_at, updated_at, last_login_at, last_login_ip, last_client_version, last_client_os, totp_secret, totp_enabled, policy_consent_at, language_preference, rate_limit, max_reservations FROM users WHERE id = ?`, id)
 }
 
 // GetUserByEmail fetches a user by their email address.
 func (db *DB) GetUserByEmail(email string) (*User, error) {
-	return db.fetchUserByQuery(`SELECT id, email, first_name, last_name, preferred_name, role, status, verification_token, approval_token, claim_token, timezone, auth_method, theme_preference, notification_prefs, created_at, updated_at, last_login_at, last_login_ip, last_client_version, last_client_os, totp_secret, totp_enabled, policy_consent_at, language_preference, rate_limit FROM users WHERE email = ?`, email)
+	return db.fetchUserByQuery(`SELECT id, email, first_name, last_name, preferred_name, role, status, verification_token, approval_token, claim_token, timezone, auth_method, theme_preference, notification_prefs, created_at, updated_at, last_login_at, last_login_ip, last_client_version, last_client_os, totp_secret, totp_enabled, policy_consent_at, language_preference, rate_limit, max_reservations FROM users WHERE email = ?`, email)
 }
 
 // GetUserByVerificationToken finds a user by their verification token.
 func (db *DB) GetUserByVerificationToken(token string) (*User, error) {
-	return db.fetchUserByQuery(`SELECT id, email, first_name, last_name, preferred_name, role, status, verification_token, approval_token, claim_token, timezone, auth_method, theme_preference, notification_prefs, created_at, updated_at, last_login_at, last_login_ip, last_client_version, last_client_os, totp_secret, totp_enabled, policy_consent_at, language_preference, rate_limit FROM users WHERE verification_token = ?`, token)
+	return db.fetchUserByQuery(`SELECT id, email, first_name, last_name, preferred_name, role, status, verification_token, approval_token, claim_token, timezone, auth_method, theme_preference, notification_prefs, created_at, updated_at, last_login_at, last_login_ip, last_client_version, last_client_os, totp_secret, totp_enabled, policy_consent_at, language_preference, rate_limit, max_reservations FROM users WHERE verification_token = ?`, token)
 }
 
 // GetUserByApprovalToken fetches a user by their approval token.
 func (db *DB) GetUserByApprovalToken(token string) (*User, error) {
-	return db.fetchUserByQuery(`SELECT id, email, first_name, last_name, preferred_name, role, status, verification_token, approval_token, claim_token, timezone, auth_method, theme_preference, notification_prefs, created_at, updated_at, last_login_at, last_login_ip, last_client_version, last_client_os, totp_secret, totp_enabled, policy_consent_at, language_preference, rate_limit FROM users WHERE approval_token = ?`, token)
+	return db.fetchUserByQuery(`SELECT id, email, first_name, last_name, preferred_name, role, status, verification_token, approval_token, claim_token, timezone, auth_method, theme_preference, notification_prefs, created_at, updated_at, last_login_at, last_login_ip, last_client_version, last_client_os, totp_secret, totp_enabled, policy_consent_at, language_preference, rate_limit, max_reservations FROM users WHERE approval_token = ?`, token)
 }
 
 // GetUserByClaimToken fetches a user by their claim token.
 func (db *DB) GetUserByClaimToken(token string) (*User, error) {
-	return db.fetchUserByQuery(`SELECT id, email, first_name, last_name, preferred_name, role, status, verification_token, approval_token, claim_token, timezone, auth_method, theme_preference, notification_prefs, created_at, updated_at, last_login_at, last_login_ip, last_client_version, last_client_os, totp_secret, totp_enabled, policy_consent_at, language_preference, rate_limit FROM users WHERE claim_token = ?`, token)
+	return db.fetchUserByQuery(`SELECT id, email, first_name, last_name, preferred_name, role, status, verification_token, approval_token, claim_token, timezone, auth_method, theme_preference, notification_prefs, created_at, updated_at, last_login_at, last_login_ip, last_client_version, last_client_os, totp_secret, totp_enabled, policy_consent_at, language_preference, rate_limit, max_reservations FROM users WHERE claim_token = ?`, token)
 }
 
 // DeleteUser removes a user from the database.
@@ -444,9 +479,10 @@ func (db *DB) UpdateUser(u *User) error {
 			totp_enabled = ?,
 			policy_consent_at = ?,
 			language_preference = ?,
-			rate_limit = ?
+			rate_limit = ?,
+			max_reservations = ?
 	          WHERE id = ?`
-	res, err := db.conn.Exec(query, u.Email, u.FirstName, u.LastName, u.PreferredName, u.Role, u.Status, vtVal, approvalTokenVal, claimTokenVal, u.Timezone, u.AuthMethod, u.ThemePreference, u.NotificationPrefs, u.UpdatedAt, lastLoginVal, u.LastLoginIP, u.LastClientVersion, u.LastClientOS, u.TOTPSecret, totpEnabledVal, u.PolicyConsentAt, u.LanguagePreference, u.RateLimit, u.ID)
+	res, err := db.conn.Exec(query, u.Email, u.FirstName, u.LastName, u.PreferredName, u.Role, u.Status, vtVal, approvalTokenVal, claimTokenVal, u.Timezone, u.AuthMethod, u.ThemePreference, u.NotificationPrefs, u.UpdatedAt, lastLoginVal, u.LastLoginIP, u.LastClientVersion, u.LastClientOS, u.TOTPSecret, totpEnabledVal, u.PolicyConsentAt, u.LanguagePreference, u.RateLimit, u.MaxReservations, u.ID)
 	if err != nil {
 		return err
 	}
@@ -462,7 +498,7 @@ func (db *DB) UpdateUser(u *User) error {
 
 // ListUsers lists all registered users.
 func (db *DB) ListUsers() ([]*User, error) {
-	query := `SELECT id, email, first_name, last_name, preferred_name, role, status, verification_token, approval_token, claim_token, timezone, auth_method, theme_preference, notification_prefs, created_at, updated_at, last_login_at, last_login_ip, last_client_version, last_client_os, totp_secret, totp_enabled, policy_consent_at, language_preference, rate_limit FROM users`
+	query := `SELECT id, email, first_name, last_name, preferred_name, role, status, verification_token, approval_token, claim_token, timezone, auth_method, theme_preference, notification_prefs, created_at, updated_at, last_login_at, last_login_ip, last_client_version, last_client_os, totp_secret, totp_enabled, policy_consent_at, language_preference, rate_limit, max_reservations FROM users`
 	rows, err := db.conn.Query(query)
 	if err != nil {
 		return nil, err
@@ -481,7 +517,8 @@ func (db *DB) ListUsers() ([]*User, error) {
 		var policyConsentAt sql.NullTime
 		var langPref sql.NullString
 		var rateLimitVal int
-		if err := rows.Scan(&u.ID, &u.Email, &u.FirstName, &u.LastName, &u.PreferredName, &u.Role, &u.Status, &vt, &at, &ct, &u.Timezone, &u.AuthMethod, &u.ThemePreference, &u.NotificationPrefs, &u.CreatedAt, &u.UpdatedAt, &lastLogin, &u.LastLoginIP, &lastClientVersion, &lastClientOS, &totpSecret, &totpEnabled, &policyConsentAt, &langPref, &rateLimitVal); err != nil {
+		var maxReservationsVal sql.NullInt64
+		if err := rows.Scan(&u.ID, &u.Email, &u.FirstName, &u.LastName, &u.PreferredName, &u.Role, &u.Status, &vt, &at, &ct, &u.Timezone, &u.AuthMethod, &u.ThemePreference, &u.NotificationPrefs, &u.CreatedAt, &u.UpdatedAt, &lastLogin, &u.LastLoginIP, &lastClientVersion, &lastClientOS, &totpSecret, &totpEnabled, &policyConsentAt, &langPref, &rateLimitVal, &maxReservationsVal); err != nil {
 			return nil, err
 		}
 		u.VerificationToken = vt.String
@@ -492,6 +529,12 @@ func (db *DB) ListUsers() ([]*User, error) {
 		u.TOTPSecret = totpSecret.String
 		u.TOTPEnabled = totpEnabled == 1
 		u.RateLimit = rateLimitVal
+		if maxReservationsVal.Valid {
+			val := int(maxReservationsVal.Int64)
+			u.MaxReservations = &val
+		} else {
+			u.MaxReservations = nil
+		}
 		if policyConsentAt.Valid {
 			u.PolicyConsentAt = &policyConsentAt.Time
 		}
@@ -1068,4 +1111,179 @@ func (db *DB) AnonymizeUserData(userID, anonymizedID string) error {
 		return err4
 	}
 	return nil
+}
+
+// CreateSubdomainReservation registers a new subdomain reservation lease in the database.
+func (db *DB) CreateSubdomainReservation(r *SubdomainReservation) error {
+	if r.CreatedAt.IsZero() {
+		r.CreatedAt = time.Now().UTC()
+	}
+	if r.UpdatedAt.IsZero() {
+		r.UpdatedAt = time.Now().UTC()
+	}
+
+	extReq := 0
+	if r.ExtensionRequested {
+		extReq = 1
+	}
+
+	res, err := db.conn.Exec(`
+		INSERT INTO subdomain_reservations (user_id, subdomain, domain, expires_at, extension_requested, created_at, updated_at)
+		VALUES (?, ?, ?, ?, ?, ?, ?)
+	`, r.UserID, r.Subdomain, r.Domain, r.ExpiresAt, extReq, r.CreatedAt, r.UpdatedAt)
+	if err != nil {
+		return err
+	}
+
+	id, err := res.LastInsertId()
+	if err != nil {
+		return err
+	}
+	r.ID = id
+	return nil
+}
+
+// GetSubdomainReservation retrieves a subdomain reservation by its ID.
+func (db *DB) GetSubdomainReservation(id int64) (*SubdomainReservation, error) {
+	var r SubdomainReservation
+	var expiresAt sql.NullTime
+	var extReq int
+
+	err := db.conn.QueryRow(`
+		SELECT id, user_id, subdomain, domain, expires_at, extension_requested, created_at, updated_at
+		FROM subdomain_reservations
+		WHERE id = ?
+	`, id).Scan(&r.ID, &r.UserID, &r.Subdomain, &r.Domain, &expiresAt, &extReq, &r.CreatedAt, &r.UpdatedAt)
+	if err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			return nil, ErrNotFound
+		}
+		return nil, err
+	}
+
+	if expiresAt.Valid {
+		r.ExpiresAt = &expiresAt.Time
+	} else {
+		r.ExpiresAt = nil
+	}
+	r.ExtensionRequested = extReq == 1
+
+	return &r, nil
+}
+
+// GetSubdomainReservationByName fetches a reservation by its subdomain and domain prefix combo.
+func (db *DB) GetSubdomainReservationByName(subdomain, domain string) (*SubdomainReservation, error) {
+	var r SubdomainReservation
+	var expiresAt sql.NullTime
+	var extReq int
+
+	err := db.conn.QueryRow(`
+		SELECT id, user_id, subdomain, domain, expires_at, extension_requested, created_at, updated_at
+		FROM subdomain_reservations
+		WHERE subdomain = ? AND domain = ?
+	`, subdomain, domain).Scan(&r.ID, &r.UserID, &r.Subdomain, &r.Domain, &expiresAt, &extReq, &r.CreatedAt, &r.UpdatedAt)
+	if err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			return nil, ErrNotFound
+		}
+		return nil, err
+	}
+
+	if expiresAt.Valid {
+		r.ExpiresAt = &expiresAt.Time
+	} else {
+		r.ExpiresAt = nil
+	}
+	r.ExtensionRequested = extReq == 1
+
+	return &r, nil
+}
+
+// ListSubdomainReservationsByUserID lists all reservations held by a specific user.
+func (db *DB) ListSubdomainReservationsByUserID(userID string) ([]*SubdomainReservation, error) {
+	rows, err := db.conn.Query(`
+		SELECT id, user_id, subdomain, domain, expires_at, extension_requested, created_at, updated_at
+		FROM subdomain_reservations
+		WHERE user_id = ?
+		ORDER BY created_at DESC
+	`, userID)
+	if err != nil {
+		return nil, err
+	}
+	defer func() { _ = rows.Close() }()
+
+	var list []*SubdomainReservation
+	for rows.Next() {
+		var r SubdomainReservation
+		var expiresAt sql.NullTime
+		var extReq int
+		if err := rows.Scan(&r.ID, &r.UserID, &r.Subdomain, &r.Domain, &expiresAt, &extReq, &r.CreatedAt, &r.UpdatedAt); err != nil {
+			return nil, err
+		}
+		if expiresAt.Valid {
+			r.ExpiresAt = &expiresAt.Time
+		}
+		r.ExtensionRequested = extReq == 1
+		list = append(list, &r)
+	}
+	return list, nil
+}
+
+// ListAllSubdomainReservations returns all reservations in the system.
+func (db *DB) ListAllSubdomainReservations() ([]*SubdomainReservation, error) {
+	rows, err := db.conn.Query(`
+		SELECT id, user_id, subdomain, domain, expires_at, extension_requested, created_at, updated_at
+		FROM subdomain_reservations
+		ORDER BY created_at DESC
+	`)
+	if err != nil {
+		return nil, err
+	}
+	defer func() { _ = rows.Close() }()
+
+	var list []*SubdomainReservation
+	for rows.Next() {
+		var r SubdomainReservation
+		var expiresAt sql.NullTime
+		var extReq int
+		if err := rows.Scan(&r.ID, &r.UserID, &r.Subdomain, &r.Domain, &expiresAt, &extReq, &r.CreatedAt, &r.UpdatedAt); err != nil {
+			return nil, err
+		}
+		if expiresAt.Valid {
+			r.ExpiresAt = &expiresAt.Time
+		}
+		r.ExtensionRequested = extReq == 1
+		list = append(list, &r)
+	}
+	return list, nil
+}
+
+// UpdateSubdomainReservation updates an existing subdomain reservation's expiration time and extension status.
+func (db *DB) UpdateSubdomainReservation(r *SubdomainReservation) error {
+	r.UpdatedAt = time.Now()
+	extReq := 0
+	if r.ExtensionRequested {
+		extReq = 1
+	}
+	_, err := db.conn.Exec(`
+		UPDATE subdomain_reservations
+		SET expires_at = ?, extension_requested = ?, updated_at = ?
+		WHERE id = ?
+	`, r.ExpiresAt, extReq, r.UpdatedAt, r.ID)
+	return err
+}
+
+// DeleteSubdomainReservation removes a subdomain reservation.
+func (db *DB) DeleteSubdomainReservation(id int64) error {
+	_, err := db.conn.Exec("DELETE FROM subdomain_reservations WHERE id = ?", id)
+	return err
+}
+
+// DeleteExpiredSubdomainReservations removes reservations that expired before the cutoff.
+func (db *DB) DeleteExpiredSubdomainReservations(cutoff time.Time) error {
+	_, err := db.conn.Exec(`
+		DELETE FROM subdomain_reservations
+		WHERE expires_at IS NOT NULL AND expires_at < ?
+	`, cutoff)
+	return err
 }

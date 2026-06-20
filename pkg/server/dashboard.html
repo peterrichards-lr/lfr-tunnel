@@ -112,6 +112,7 @@
             <div id="nav-overview" class="nav-item active" onclick="showTab('overview')" data-i18n="sidebar_overview">Overview</div>
             <div id="nav-tokens" class="nav-item" onclick="showTab('tokens')" data-i18n="sidebar_tokens">API Tokens</div>
             <div id="nav-tunnels" class="nav-item" onclick="showTab('tunnels')" data-i18n="sidebar_tunnels">Active Tunnels</div>
+            <div id="nav-reservations" class="nav-item" onclick="showTab('reservations')" data-i18n="sidebar_reservations">Reservations</div>
             
             <div id="admin-sidebar-group" class="hidden">
                 <div class="sidebar-label" style="margin-top: 24px;" data-i18n="sidebar_administration">Administration</div>
@@ -360,6 +361,105 @@
                 </div>
             </div>
 
+            <!-- Reservations Tab -->
+            <div id="tab-reservations" class="hidden">
+                <div class="header">
+                    <h2>Subdomain Reservations</h2>
+                </div>
+                <p style="color: var(--text-muted); margin-bottom: 24px; font-size: 14px;">Reserve subdomains to prevent naming conflicts, enforce quotas, and manage lease extensions.</p>
+
+                <!-- Quota Visualization -->
+                <div class="glass" style="padding: 24px; border-radius: 8px; margin-bottom: 24px;">
+                    <div style="display: flex; justify-content: space-between; font-size: 14px; margin-bottom: 8px;">
+                        <span style="font-weight: 500;">Reservations Quota</span>
+                        <span id="reservation-quota-text" style="color: var(--text-muted);">0 / 0 subdomains reserved</span>
+                    </div>
+                    <div style="width: 100%; height: 8px; background: rgba(255,255,255,0.05); border-radius: 4px; overflow: hidden; border: 1px solid var(--border);">
+                        <div id="reservation-quota-bar" style="width: 0%; height: 100%; background: var(--primary); transition: width 0.3s ease;"></div>
+                    </div>
+                </div>
+
+                <!-- Reserve Subdomain Panel -->
+                <div class="glass" style="padding: 24px; border-radius: 8px; margin-bottom: 24px;">
+                    <h3 style="margin-top: 0; margin-bottom: 16px; font-size: 18px;">Reserve a Subdomain</h3>
+                    <div id="reservation-form-container">
+                        <div style="display: flex; gap: 16px; margin-bottom: 16px; align-items: flex-end; flex-wrap: wrap;">
+                            <div style="flex: 2; min-width: 200px;">
+                                <label style="display:block; margin-bottom: 8px; color: var(--text-muted); font-size: 13px;">Subdomain Prefix</label>
+                                <input type="text" id="res-subdomain" class="input-field" placeholder="e.g. my-subdomain" style="width: 100%; box-sizing: border-box;">
+                            </div>
+                            <div style="flex: 1; min-width: 150px;">
+                                <label style="display:block; margin-bottom: 8px; color: var(--text-muted); font-size: 13px;">Domain</label>
+                                <select id="res-domain" class="input-field" style="width: 100%; box-sizing: border-box;"></select>
+                            </div>
+                            <button id="btn-reserve-subdomain" class="btn btn-primary" style="width: auto; margin: 0; height: 38px;" onclick="reserveSubdomain()">Reserve</button>
+                        </div>
+                        
+                        <hr style="border: 0; border-top: 1px solid var(--border); margin: 20px 0;">
+                        
+                        <div style="display: flex; gap: 16px; align-items: center; flex-wrap: wrap;">
+                            <span style="font-size: 13px; color: var(--text-muted);">Need inspiration?</span>
+                            <select id="res-style-select" class="input-field" style="width: auto; max-width: 200px; margin: 0;">
+                                <option value="random">Alphanumeric (8 chars)</option>
+                                <option value="words">What-Three-Words Style</option>
+                                <option value="heroku">Adjective-Noun-Number</option>
+                                <option value="liferay">Liferay SE style</option>
+                            </select>
+                            <button id="btn-generate-subdomain" class="btn btn-secondary" style="width: auto; margin: 0; padding: 6px 16px;" onclick="generateRandomSubdomain()">Generate Random</button>
+                        </div>
+                    </div>
+                    <div id="reservation-quota-warning" class="alert alert-warning hidden" style="margin-top: 16px; background: rgba(245, 158, 11, 0.1); border-color: rgba(245, 158, 11, 0.2); color: #fbbf24;">
+                        You have reached your subdomain reservation quota limit. Release an existing reservation to register a new one.
+                    </div>
+                </div>
+
+                <!-- Active Reservations Table -->
+                <h3 style="margin-bottom: 16px; font-size: 18px;">Your Reserved Subdomains</h3>
+                <div class="glass table-container" style="margin-bottom: 32px;">
+                    <table>
+                        <thead>
+                            <tr>
+                                <th>Subdomain</th>
+                                <th>Domain</th>
+                                <th>Status</th>
+                                <th>Expires At (Local)</th>
+                                <th style="text-align: right;">Actions</th>
+                            </tr>
+                        </thead>
+                        <tbody id="reservations-table-body">
+                            <tr>
+                                <td colspan="5" style="text-align: center; padding: 24px; color: var(--text-muted);">Loading reservations...</td>
+                            </tr>
+                        </tbody>
+                    </table>
+                </div>
+
+                <!-- Admin Section (Only for admin/owner) -->
+                <div id="admin-reservations-section" class="hidden">
+                    <div class="sidebar-label" style="padding-left: 0; margin-bottom: 16px; font-size: 16px; font-weight: bold; border-bottom: 1px solid var(--border); padding-bottom: 8px;">Administration Controls</div>
+                    
+                    <h3 style="margin-bottom: 16px; font-size: 18px;">Extension Requests</h3>
+                    <div class="glass table-container">
+                          <table>
+                              <thead>
+                                  <tr>
+                                      <th>User Email</th>
+                                      <th>Subdomain</th>
+                                      <th>Domain</th>
+                                      <th>Expires At</th>
+                                      <th style="text-align: right;">Actions</th>
+                                  </tr>
+                              </thead>
+                              <tbody id="admin-extensions-table-body">
+                                  <tr>
+                                      <td colspan="5" style="text-align: center; padding: 24px; color: var(--text-muted);">No extension requests pending.</td>
+                                  </tr>
+                              </tbody>
+                          </table>
+                      </div>
+                </div>
+            </div>
+
             <!-- Registrations Tab -->
             <div id="tab-registrations" class="hidden">
                 <div class="header">
@@ -542,7 +642,7 @@
                     <option value="30">30 Days</option>
                     <option value="90">90 Days</option>
                     <option value="365">1 Year</option>
-                    <option value="0">Never</option>
+                    <option value="0" id="token-expiry-never">Never</option>
                 </select>
                 <button class="btn btn-primary" onclick="generateToken()">Generate Token</button>
                 <button class="btn" onclick="closeModal()">Cancel</button>
@@ -659,6 +759,25 @@
         </div>
     </div>
 
+    <!-- EDIT USER RESERVATION LIMIT MODAL -->
+    <div id="user-res-limit-modal" class="modal-overlay" style="display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.6); align-items: center; justify-content: center; z-index: 1000;">
+        <div class="glass" style="max-width: 440px; width: 100%; padding: 32px; border-radius: 16px; border: 1px solid var(--border); text-align: left;">
+            <h3 style="margin-bottom: 12px; font-size: 20px;">Configure Reservations Quota</h3>
+            <p style="font-size: 14px; color: var(--text-muted); margin-bottom: 20px; line-height: 1.5;">
+                Configure the maximum subdomain reservations quota override for <strong><span id="user-res-limit-email-hint"></span></strong>.
+            </p>
+            <div style="margin-bottom: 20px;">
+                <label style="display:block; margin-bottom: 8px; color: var(--text-muted); font-size: 13px;">Max Subdomain Reservations Limit</label>
+                <input type="number" id="user-res-limit-input" class="input-field" min="1" placeholder="Use default value" style="width: 100%; box-sizing: border-box; font-size: 16px; font-weight: bold; padding: 10px;">
+                <span style="font-size: 11px; color: var(--text-muted); display: block; margin-top: 4px;">Leave blank/empty to reset and use gateway configuration default.</span>
+            </div>
+            <div style="display: flex; gap: 12px; justify-content: flex-end;">
+                <button class="btn btn-secondary" style="width: auto; margin: 0;" onclick="closeUserResLimitModal()">Cancel</button>
+                <button class="btn btn-primary" style="width: auto; margin: 0;" onclick="submitUserResLimit()">Save Limit</button>
+            </div>
+        </div>
+    </div>
+
     <!-- ACTIVE TUNNEL OVERRIDE MODAL -->
     <div id="tunnel-override-modal" class="modal-overlay" style="display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.6); align-items: center; justify-content: center; z-index: 1000;">
         <div class="glass" style="max-width: 460px; width: 100%; padding: 32px; border-radius: 16px; border: 1px solid rgba(217,119,6,0.3); text-align: left;">
@@ -730,6 +849,16 @@
                 <div style="grid-column: span 2;">
                     <label style="display:block; color: var(--text-muted); font-size: 11px; text-transform: uppercase; font-weight: 600;">Client IP Address</label>
                     <span id="detail-tunnel-client-ip" style="font-family: monospace; font-size: 13px; font-weight: 500;"></span>
+                </div>
+                <div style="grid-column: span 2;">
+                    <label style="display:block; color: var(--text-muted); font-size: 11px; text-transform: uppercase; font-weight: 600; margin-bottom: 8px;">Active Visitor IPs</label>
+                    <div class="glass" style="max-height: 120px; overflow-y: auto; padding: 12px; border-radius: 6px; border: 1px solid var(--border);">
+                        <table style="width: 100%; font-size: 13px;">
+                            <tbody id="detail-tunnel-visitor-ips-tbody">
+                                <tr><td style="color: var(--text-muted); text-align: center; padding: 8px 0;">No active visitor connections (last 30s)</td></tr>
+                            </tbody>
+                        </table>
+                    </div>
                 </div>
             </div>
 

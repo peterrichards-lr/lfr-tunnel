@@ -1,0 +1,219 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <link rel="icon" type="image/x-icon" href="/favicon.ico">
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Subdomain Discontinued | Liferay Tunnel</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;600;800&display=swap" rel="stylesheet">
+    <style>
+        :root {
+            --bg-gradient: linear-gradient(135deg, #0f172a 0%, #111827 50%, #1f2937 100%);
+            --card-bg: rgba(31, 41, 55, 0.7);
+            --card-border: rgba(255, 255, 255, 0.08);
+            --text-primary: #f9fafb;
+            --text-secondary: #9ca3af;
+            --liferay-blue: #3b82f6;
+            --liferay-blue-glow: rgba(59, 130, 246, 0.3);
+            --alert-orange: #f97316;
+            --alert-orange-glow: rgba(249, 115, 22, 0.3);
+        }
+
+        * {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+        }
+
+        body {
+            font-family: 'Outfit', sans-serif;
+            background: var(--bg-gradient);
+            color: var(--text-primary);
+            min-height: 100vh;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            padding: 24px;
+            overflow-x: hidden;
+        }
+
+        .container {
+            max-width: 520px;
+            width: 100%;
+            text-align: center;
+            position: relative;
+        }
+
+        .ambient-glow {
+            position: absolute;
+            width: 300px;
+            height: 300px;
+            background: var(--alert-orange-glow);
+            filter: blur(100px);
+            border-radius: 50%;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            z-index: -1;
+            pointer-events: none;
+        }
+
+        .card {
+            background: var(--card-bg);
+            border: 1px solid var(--card-border);
+            backdrop-filter: blur(20px);
+            -webkit-backdrop-filter: blur(20px);
+            border-radius: 24px;
+            padding: 48px 32px;
+            box-shadow: 0 20px 40px rgba(0, 0, 0, 0.3);
+        }
+
+        .logo-container {
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            width: 80px;
+            height: 80px;
+            border-radius: 20px;
+            background: rgba(249, 115, 22, 0.1);
+            border: 1px solid rgba(249, 115, 22, 0.2);
+            margin-bottom: 28px;
+            position: relative;
+        }
+
+        .logo-icon {
+            font-size: 38px;
+        }
+
+        h1 {
+            font-size: 32px;
+            font-weight: 800;
+            letter-spacing: -0.5px;
+            margin-bottom: 12px;
+            background: linear-gradient(135deg, #ffedd5 0%, #f97316 100%);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+        }
+
+        p.status-tag {
+            display: inline-block;
+            font-size: 12px;
+            font-weight: 600;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+            padding: 6px 14px;
+            border-radius: 20px;
+            background: rgba(249, 115, 22, 0.15);
+            color: #fdba74;
+            border: 1px solid rgba(249, 115, 22, 0.25);
+            margin-bottom: 24px;
+        }
+
+        p.description {
+            font-size: 16px;
+            line-height: 1.6;
+            color: var(--text-secondary);
+            margin-bottom: 32px;
+        }
+
+        .details-box {
+            background: rgba(0, 0, 0, 0.2);
+            border-radius: 16px;
+            padding: 20px;
+            margin-bottom: 32px;
+            text-align: left;
+            border: 1px solid rgba(255, 255, 255, 0.04);
+        }
+
+        .detail-row {
+            display: flex;
+            justify-content: space-between;
+            margin-bottom: 12px;
+            font-size: 14px;
+        }
+
+        .detail-row:last-child {
+            margin-bottom: 0;
+            padding-top: 12px;
+            border-top: 1px solid rgba(255, 255, 255, 0.06);
+        }
+
+        .detail-label {
+            color: var(--text-secondary);
+        }
+
+        .detail-value {
+            font-weight: 600;
+            color: var(--text-primary);
+            font-family: monospace;
+            font-size: 15px;
+        }
+
+        .btn {
+            display: block;
+            width: 100%;
+            background: #f97316;
+            color: #ffffff;
+            font-size: 16px;
+            font-weight: 600;
+            padding: 14px 24px;
+            border-radius: 12px;
+            text-decoration: none;
+            border: none;
+            cursor: pointer;
+            box-shadow: 0 4px 12px rgba(249, 115, 22, 0.2);
+            transition: all 0.2s ease;
+        }
+
+        .btn:hover {
+            background: #ea580c;
+            transform: translateY(-1px);
+            box-shadow: 0 6px 16px rgba(249, 115, 22, 0.3);
+        }
+
+        .footer {
+            margin-top: 32px;
+            font-size: 12px;
+            color: var(--text-secondary);
+        }
+
+        .footer a {
+            color: var(--liferay-blue);
+            text-decoration: none;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="ambient-glow"></div>
+        <div class="card">
+            <div class="logo-container">
+                <span class="logo-icon">⚠️</span>
+            </div>
+            <h1>Subdomain Discontinued</h1>
+            <p class="status-tag">410 Gone</p>
+            <p class="description">
+                This subdomain reservation has expired and is currently undergoing its cooling-off quarantine grace period. The service previously running here is no longer available.
+            </p>
+            
+            <div class="details-box">
+                <div class="detail-row">
+                    <span class="detail-label">Subdomain Host:</span>
+                    <span class="detail-value">{{.Host}}</span>
+                </div>
+                <div class="detail-row">
+                    <span class="detail-label">Quarantine Release:</span>
+                    <span class="detail-value">{{.ReleaseDate}}</span>
+                </div>
+            </div>
+
+            <a href="{{.PortalURL}}" class="btn">Go to User Portal</a>
+        </div>
+        <div class="footer">
+            Powered by <a href="https://github.com/peterrichards-lr/lfr-tunnel">Liferay Tunnel</a>
+        </div>
+    </div>
+</body>
+</html>

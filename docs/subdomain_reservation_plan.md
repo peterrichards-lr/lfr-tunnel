@@ -11,9 +11,11 @@ This plan outlines the architecture, database schema, API logic, and step-by-ste
 - **Admin/Owner:** Can establish a tunnel using *any* subdomain without pre-registering it, provided it is not already reserved by a regular user.
 - **Conflicts (Strict Block):** If a subdomain is reserved by a user, **no other user (including Admin/Owner)** can register a tunnel using that name.
 
-### Expiration & Quotas
+### Expiration, Quotas & Quarantine
 - **Lease Lifetime:** New reservations default to **7 days**. Users can request an extension through the portal. Admins/owners can approve an extension by $X$ days or make the reservation permanent.
 - **Demotion:** Admin/owners can demote a permanent reservation. Demoted reservations are not deleted instantly; instead, they transition to a standard **7-day reservation**.
+- **Quarantine Period:** When a subdomain reservation expires, it enters a **quarantine state** for a configurable duration (default **3 days**). During this grace period, the subdomain cannot be reserved or used by any other user, allowing the previous owner a chance to reclaim it or request an extension.
+- **HTTP 410 Gone:** When an external HTTP request hits a subdomain that is currently in quarantine, the gateway will return an **HTTP 410 Gone** status code with a themed static page, indicating the service is discontinued, rather than a generic 502/404 error.
 - **Quotas:** By default, users are limited to **3 reserved subdomains**. This quota is globally configurable in the YAML config and can be overridden on a per-user basis.
 - **Email Notifications:** The server will trigger outbound transactional emails to inform users of reservation events (created, extended, demoted, or expired).
 
@@ -53,6 +55,7 @@ Add default quotas to the server gateway configuration structure:
 ```yaml
 # Subdomain Reservation Settings
 default_max_reservations: 3
+subdomain_quarantine_days: 3
 ```
 
 ---

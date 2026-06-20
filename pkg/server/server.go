@@ -798,6 +798,7 @@ func (s *Server) handleRegister(w http.ResponseWriter, r *http.Request) {
 
 		// 2. Verify reservation and quarantine rules in DB
 		if s.db != nil {
+			var domainsToReserve []string
 			for _, d := range activeDomains {
 				existing, err := s.db.GetSubdomainReservationByName(req.SubdomainPrefix, d)
 				if err == nil && existing != nil {
@@ -808,6 +809,12 @@ func (s *Server) handleRegister(w http.ResponseWriter, r *http.Request) {
 								respondJSON(w, http.StatusConflict, RegisterResponse{Status: "error", Error: "Subdomain is currently in quarantine"})
 								return
 							}
+							// Quarantined but belongs to this user. We need to extend/re-reserve it.
+							domainsToReserve = append(domainsToReserve, d)
+						} else {
+							// Past quarantine, delete expired reservation and re-reserve
+							_ = s.db.DeleteSubdomainReservation(existing.ID)
+							domainsToReserve = append(domainsToReserve, d)
 						}
 					} else {
 						if existing.UserID != user.ID {
@@ -816,9 +823,54 @@ func (s *Server) handleRegister(w http.ResponseWriter, r *http.Request) {
 						}
 					}
 				} else {
-					if user.Role != "admin" && user.Role != "owner" {
+					// No reservation exists
+					if s.cfg.AllowClientAutoReservation && userRec != nil && (userRec.Role == "admin" || userRec.Role == "owner") {
+						domainsToReserve = append(domainsToReserve, d)
+					} else {
 						respondJSON(w, http.StatusForbidden, RegisterResponse{Status: "error", Error: "Custom subdomains must be reserved in the portal prior to connecting"})
 						return
+					}
+				}
+			}
+
+			// If we have domains to auto-reserve, verify quota limit first
+			if len(domainsToReserve) > 0 {
+				limit := s.cfg.DefaultMaxReservations
+				if userRec != nil {
+					limit = s.getUserMaxReservations(userRec)
+				}
+
+				list, err := s.db.ListSubdomainReservationsByUserID(user.ID)
+				activeCount := 0
+				if err == nil {
+					for _, res := range list {
+						if res.ExpiresAt == nil || res.ExpiresAt.After(time.Now()) {
+							activeCount++
+						}
+					}
+				}
+
+				needed := len(domainsToReserve)
+				if limit >= 0 && activeCount+needed > limit {
+					respondJSON(w, http.StatusForbidden, RegisterResponse{Status: "error", Error: "Subdomain reservation quota limit reached"})
+					return
+				}
+
+				// Create the reservations
+				for _, d := range domainsToReserve {
+					// Delete any existing quarantined or expired reservation for this user first
+					if existing, err := s.db.GetSubdomainReservationByName(req.SubdomainPrefix, d); err == nil && existing != nil {
+						_ = s.db.DeleteSubdomainReservation(existing.ID)
+					}
+					expiry := time.Now().AddDate(0, 0, 7)
+					res := &db.SubdomainReservation{
+						UserID:    user.ID,
+						Subdomain: req.SubdomainPrefix,
+						Domain:    d,
+						ExpiresAt: &expiry,
+					}
+					if err := s.db.CreateSubdomainReservation(res); err != nil {
+						log.Printf("[Server] Failed to auto-create reservation for %s on %s: %v", req.SubdomainPrefix, d, err)
 					}
 				}
 			}

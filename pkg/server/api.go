@@ -868,6 +868,27 @@ func (s *Server) sendSubdomainExpiredEmail(user *db.User, subdomain, domain stri
 }
 */
 
+// getUserMaxReservations resolves the maximum reservations limit for a given user,
+// taking into account explicit user overrides, role-specific defaults, and server settings.
+func (s *Server) getUserMaxReservations(user *db.User) int {
+	if user.MaxReservations != nil {
+		return *user.MaxReservations
+	}
+	if user.Role == "admin" {
+		if s.cfg.AdminMaxReservations != nil {
+			return *s.cfg.AdminMaxReservations
+		}
+		return 3
+	}
+	if user.Role == "owner" {
+		if s.cfg.OwnerMaxReservations != nil {
+			return *s.cfg.OwnerMaxReservations
+		}
+		return 3
+	}
+	return s.cfg.DefaultMaxReservations
+}
+
 // handleListReservations returns a list of reservations held by the current user.
 func (s *Server) handleListReservations(w http.ResponseWriter, r *http.Request) {
 	user, err := s.getCurrentUser(r)
@@ -883,10 +904,7 @@ func (s *Server) handleListReservations(w http.ResponseWriter, r *http.Request) 
 		return
 	}
 
-	limit := s.cfg.DefaultMaxReservations
-	if user.MaxReservations != nil {
-		limit = *user.MaxReservations
-	}
+	limit := s.getUserMaxReservations(user)
 
 	respondJSON(w, http.StatusOK, map[string]interface{}{
 		"reservations": list,
@@ -940,10 +958,7 @@ func (s *Server) handleCreateReservation(w http.ResponseWriter, r *http.Request)
 	}
 
 	// Enforce quota limits
-	limit := s.cfg.DefaultMaxReservations
-	if user.MaxReservations != nil {
-		limit = *user.MaxReservations
-	}
+	limit := s.getUserMaxReservations(user)
 
 	list, err := s.db.ListSubdomainReservationsByUserID(user.ID)
 	if err != nil {
@@ -960,7 +975,7 @@ func (s *Server) handleCreateReservation(w http.ResponseWriter, r *http.Request)
 		}
 	}
 
-	if activeCount >= limit {
+	if limit >= 0 && activeCount >= limit {
 		http.Error(w, `{"error":"Subdomain reservation quota limit reached"}`, http.StatusBadRequest)
 		return
 	}
@@ -1179,10 +1194,7 @@ func (s *Server) handlePromoteReservation(w http.ResponseWriter, r *http.Request
 		domain = parts[1]
 	}
 
-	limit := s.cfg.DefaultMaxReservations
-	if user.MaxReservations != nil {
-		limit = *user.MaxReservations
-	}
+	limit := s.getUserMaxReservations(user)
 
 	list, err := s.db.ListSubdomainReservationsByUserID(user.ID)
 	if err != nil {
@@ -1191,6 +1203,7 @@ func (s *Server) handlePromoteReservation(w http.ResponseWriter, r *http.Request
 		return
 	}
 
+	// Filter out expired reservations that are not in quarantine
 	activeCount := 0
 	for _, res := range list {
 		if res.ExpiresAt == nil || res.ExpiresAt.After(time.Now()) {
@@ -1198,7 +1211,7 @@ func (s *Server) handlePromoteReservation(w http.ResponseWriter, r *http.Request
 		}
 	}
 
-	if activeCount >= limit {
+	if limit >= 0 && activeCount >= limit {
 		http.Error(w, `{"error":"Quota limit reached: cannot promote to reservation"}`, http.StatusBadRequest)
 		return
 	}

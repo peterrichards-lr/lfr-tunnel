@@ -83,21 +83,30 @@ if [[ "$LFT_SIGN_PASS" == op://* ]]; then
     }
 fi
 
-if [[ "$LFT_SIGN_P12" == op://* ]]; then
+if [ -n "$LFT_SIGN_P12" ] && [ "$LFT_SIGN_P12" != "skip" ] && [ ! -f "$LFT_SIGN_P12" ]; then
     if ! command -v op &> /dev/null; then
-        echo "ERROR: 1Password CLI (op) not found but LFT_SIGN_P12 op:// reference was provided." >&2
+        echo "ERROR: File '$LFT_SIGN_P12' not found locally, and 1Password CLI (op) is not installed." >&2
         exit 2
     fi
     echo "Fetching certificate document from 1Password..."
     TEMP_P12="/tmp/lfr-tunnel-windows-$(date +%s).p12"
-    if ! op read "$LFT_SIGN_P12" --out-file "$TEMP_P12" &>/dev/null && ! op document get "$LFT_SIGN_P12" --output "$TEMP_P12" &>/dev/null; then
-        echo "ERROR: Failed to retrieve certificate document from 1Password using reference: $LFT_SIGN_P12" >&2
-        exit 3
+    if [[ "$LFT_SIGN_P12" == op://* ]]; then
+        if ! op read "$LFT_SIGN_P12" --out-file "$TEMP_P12" &>/dev/null && ! op document get "$LFT_SIGN_P12" --output "$TEMP_P12" &>/dev/null; then
+            echo "ERROR: Failed to retrieve certificate document from 1Password using reference: $LFT_SIGN_P12" >&2
+            exit 3
+        fi
+    else
+        # Try treating it as a document name directly
+        if ! op document get "$LFT_SIGN_P12" --out-file "$TEMP_P12" &>/dev/null; then
+            echo "ERROR: Failed to retrieve 1Password document named: $LFT_SIGN_P12" >&2
+            exit 3
+        fi
     fi
     LFT_SIGN_P12="$TEMP_P12"
     # Ensure temporary file is cleaned up on exit
     trap 'echo "Cleaning up temporary certificate file..."; rm -f "$TEMP_P12"' EXIT
 fi
+
 
 echo ""
 echo "=== Beginning Signing Process ==="

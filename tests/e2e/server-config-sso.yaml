@@ -13,6 +13,8 @@ owner:
 
 admin_notification_email: "admin@lfr-demo.local"
 enable_registration: false
+owner_max_reservations: -1
+allow_client_auto_reservation: true
 
 sso_providers:
   - id: "keycloak"

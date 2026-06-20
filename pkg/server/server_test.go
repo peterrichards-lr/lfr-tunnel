@@ -21,8 +21,9 @@ import (
 
 func TestServer_Register(t *testing.T) {
 	cfg := &config.ServerConfig{
-		Domains:                []string{"example.com"},
-		DisableBackupScheduler: true,
+		Domains:                    []string{"example.com"},
+		DisableBackupScheduler:     true,
+		AllowClientAutoReservation: true,
 	}
 
 	if cfg.DBPath == "" {
@@ -510,8 +511,9 @@ func TestServer_RegistrationFlow(t *testing.T) {
 
 func TestServer_DomainSeparation(t *testing.T) {
 	cfg := &config.ServerConfig{
-		Domains:                []string{"example.se", "example.online"},
-		DisableBackupScheduler: true,
+		Domains:                    []string{"example.se", "example.online"},
+		DisableBackupScheduler:     true,
+		AllowClientAutoReservation: true,
 	}
 
 	if cfg.DBPath == "" {
@@ -1835,5 +1837,117 @@ func TestServer_SubdomainReservations(t *testing.T) {
 	}
 	if !strings.Contains(recGone.Body.String(), "Subdomain Discontinued") {
 		t.Error("expected gone.html to render, but title missing")
+	}
+}
+
+func TestServer_RoleSubdomainLimitsAndAutoReservation(t *testing.T) {
+	infVal := -1
+	adminLimit := 2
+	cfg := &config.ServerConfig{
+		Domains:                    []string{"example.com"},
+		DisableBackupScheduler:     true,
+		AllowClientAutoReservation: true,
+		OwnerMaxReservations:       &infVal,
+		AdminMaxReservations:       &adminLimit,
+	}
+
+	if cfg.DBPath == "" {
+		cfg.DBPath = filepath.Join(t.TempDir(), "test.db")
+	}
+	srv, err := NewServer(cfg)
+	if err != nil {
+		t.Fatalf("failed to create server: %v", err)
+	}
+	defer func() {
+		time.Sleep(50 * time.Millisecond)
+		srv.Stop()
+	}()
+
+	// Create an owner user and an admin user
+	ownerEmail := "owner@example.com"
+	adminEmail := "admin@example.com"
+	_ = srv.db.CreateUser(&db.User{ID: ownerEmail, Email: ownerEmail, Role: "owner", Status: "approved"})
+	_ = srv.db.CreateUser(&db.User{ID: adminEmail, Email: adminEmail, Role: "admin", Status: "approved"})
+
+	patOwner := sha256.Sum256([]byte("pat_owner"))
+	_ = srv.db.CreatePAT(&db.PersonalAccessToken{UserID: ownerEmail, TokenHash: hex.EncodeToString(patOwner[:]), TokenPrefix: "pat_owner"})
+	patAdmin := sha256.Sum256([]byte("pat_admin"))
+	_ = srv.db.CreatePAT(&db.PersonalAccessToken{UserID: adminEmail, TokenHash: hex.EncodeToString(patAdmin[:]), TokenPrefix: "pat_admin"})
+
+	// 1. Verify owner has infinity limit (-1) resolved
+	ownerRec, _ := srv.db.GetUser(ownerEmail)
+	ownerLimit := srv.getUserMaxReservations(ownerRec)
+	if ownerLimit != -1 {
+		t.Errorf("expected owner limit to be -1 (infinity), got %d", ownerLimit)
+	}
+
+	// 2. Verify admin has limit of 2 resolved
+	adminRec, _ := srv.db.GetUser(adminEmail)
+	admLimit := srv.getUserMaxReservations(adminRec)
+	if admLimit != 2 {
+		t.Errorf("expected admin limit to be 2, got %d", admLimit)
+	}
+
+	// 3. Test owner client-side auto-reservation works without reservation pre-created
+	payload1, _ := json.Marshal(RegisterRequest{
+		SubdomainPrefix: "owner-auto-1",
+		Ports:           []PortMapping{{LocalPort: 8080}},
+		AuthToken:       "pat_owner",
+	})
+	req1 := httptest.NewRequest("POST", "http://tunnel.example.com/api/register", bytes.NewReader(payload1))
+	req1.Host = "tunnel.example.com"
+	rec1 := httptest.NewRecorder()
+	srv.ServeHTTP(rec1, req1)
+	if rec1.Code != http.StatusOK {
+		t.Errorf("expected owner auto-reservation connection to succeed, got status %d", rec1.Code)
+	}
+
+	// Verify the reservation was actually created in the DB
+	res, err := srv.db.GetSubdomainReservationByName("owner-auto-1", "example.com")
+	if err != nil || res == nil {
+		t.Error("expected subdomain reservation to be auto-created in the database, got nil or error")
+	}
+
+	// 4. Test admin client-side auto-reservation enforces the quota of 2
+	// Connect first tunnel (takes 1st quota)
+	payloadA1, _ := json.Marshal(RegisterRequest{
+		SubdomainPrefix: "admin-auto-1",
+		Ports:           []PortMapping{{LocalPort: 8080}},
+		AuthToken:       "pat_admin",
+	})
+	reqA1 := httptest.NewRequest("POST", "http://tunnel.example.com/api/register", bytes.NewReader(payloadA1))
+	reqA1.Host = "tunnel.example.com"
+	recA1 := httptest.NewRecorder()
+	srv.ServeHTTP(recA1, reqA1)
+	if recA1.Code != http.StatusOK {
+		t.Errorf("expected admin first connection to succeed, got %d", recA1.Code)
+	}
+
+	// Connect second tunnel (takes 2nd quota)
+	payloadA2, _ := json.Marshal(RegisterRequest{
+		SubdomainPrefix: "admin-auto-2",
+		Ports:           []PortMapping{{LocalPort: 8080}},
+		AuthToken:       "pat_admin",
+	})
+	reqA2 := httptest.NewRequest("POST", "http://tunnel.example.com/api/register", bytes.NewReader(payloadA2))
+	reqA2.Host = "tunnel.example.com"
+	recA2 := httptest.NewRecorder()
+	srv.ServeHTTP(recA2, reqA2)
+	if recA2.Code != http.StatusOK {
+		t.Errorf("expected admin second connection to succeed, got %d", recA2.Code)
+	}
+
+	// Connect third tunnel (should exceed quota of 2 and fail)
+	payloadA3, _ := json.Marshal(RegisterRequest{
+		SubdomainPrefix: "admin-auto-3",
+		Ports:           []PortMapping{{LocalPort: 8080}},
+		AuthToken:       "pat_admin",
+	})
+	reqA3 := httptest.NewRequest("POST", "http://tunnel.example.com/api/register", bytes.NewReader(payloadA3))
+	reqA3.Host = "tunnel.example.com"
+	recA3 := httptest.NewRecorder()
+	srv.ServeHTTP(recA3, reqA3)
+	if recA3.Code != http.StatusForbidden {
+		t.Errorf("expected admin third connection to fail with 403 Forbidden (quota reached), got %d", recA3.Code)
 	}
 }

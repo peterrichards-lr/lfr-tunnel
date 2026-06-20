@@ -255,6 +255,13 @@ The solution will consist of:
 - [x] Sign client binaries and update checksums.
 - [x] Copy signed client binaries and checksums to the VPS.
 
+## Independent Subdomain Limits & Auto-Reservation (v1.9.0)
+- [x] Add admin_max_reservations, owner_max_reservations, and allow_client_auto_reservation to ServerConfig.
+- [x] Implement getUserMaxReservations helper and enforce in api.go endpoints.
+- [x] Implement client-side auto-reservation logic in register handler (server.go).
+- [x] Update dashboard UI to render infinity limits correctly.
+- [x] Update E2E config YAMLs and verify tests.
+
 
 
 

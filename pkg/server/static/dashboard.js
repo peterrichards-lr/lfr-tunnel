@@ -2703,18 +2703,23 @@ function toggleTheme() {
                 if (res.ok) {
                     const data = await res.json();
                     const list = data.reservations || [];
-                    const limit = data.limit || 0;
+                    const limit = data.limit !== undefined && data.limit !== null ? data.limit : 0;
                     const used = data.used || 0;
 
                     // Progress bar & quota text
-                    document.getElementById('reservation-quota-text').innerText = `${used} / ${limit} subdomains reserved`;
-                    const percent = limit > 0 ? (used / limit) * 100 : 0;
-                    document.getElementById('reservation-quota-bar').style.width = `${Math.min(percent, 100)}%`;
+                    if (limit < 0) {
+                        document.getElementById('reservation-quota-text').innerText = `${used} / ∞ subdomains reserved`;
+                        document.getElementById('reservation-quota-bar').style.width = `0%`;
+                    } else {
+                        document.getElementById('reservation-quota-text').innerText = `${used} / ${limit} subdomains reserved`;
+                        const percent = limit > 0 ? (used / limit) * 100 : 0;
+                        document.getElementById('reservation-quota-bar').style.width = `${Math.min(percent, 100)}%`;
+                    }
 
                     const formContainer = document.getElementById('reservation-form-container');
                     const warningAlert = document.getElementById('reservation-quota-warning');
 
-                    if (used >= limit) {
+                    if (limit >= 0 && used >= limit) {
                         if (formContainer) {
                             formContainer.querySelectorAll('input, select, button').forEach(el => el.disabled = true);
                         }

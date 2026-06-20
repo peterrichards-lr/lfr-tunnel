@@ -39,25 +39,35 @@ if [ -z "$LFT_MACOS_IDENTITY" ]; then
     fi
 fi
 
-# 3. Setup/Prompt for Windows P12 Certificate
-if [ -z "$LFT_SIGN_P12" ]; then
+# 3. Setup/Prompt for Windows Certificate (P12, or separate KEY and CRT)
+if [ -z "$LFT_SIGN_P12" ] && { [ -z "$LFT_SIGN_KEY" ] || [ -z "$LFT_SIGN_CRT" ]; }; then
     if [ -f "$PROJECT_ROOT/temp_signing_key.p12" ]; then
         LFT_SIGN_P12="$PROJECT_ROOT/temp_signing_key.p12"
         echo "Found default temporary certificate: $LFT_SIGN_P12"
     elif [ -t 0 ]; then
-        read -p "Enter path to Windows P12 certificate (or leave empty to skip Windows signing): " LFT_SIGN_P12
+        echo "Windows signing configuration:"
+        echo "You can either provide a single P12 certificate, or separate Private Key + Certificate files."
+        read -p "Enter path/1Password name for Windows P12 certificate (leave empty to use separate KEY/CRT): " LFT_SIGN_P12
+        if [ -z "$LFT_SIGN_P12" ]; then
+            read -p "Enter path/1Password name for Windows Private Key (or leave empty to skip Windows signing): " LFT_SIGN_KEY
+            if [ -n "$LFT_SIGN_KEY" ]; then
+                read -p "Enter path/1Password name for Windows Certificate: " LFT_SIGN_CRT
+            fi
+        fi
     else
-        echo "No Windows P12 certificate path found and stdin is not a TTY. Skipping Windows path prompt."
+        echo "No Windows signing credentials specified (LFT_SIGN_P12 or LFT_SIGN_KEY/LFT_SIGN_CRT) and stdin is not a TTY. Skipping prompt."
     fi
 fi
 
-# Prompt for Windows P12 password if path is set but password is empty
-if [ -n "$LFT_SIGN_P12" ] && [ "$LFT_SIGN_P12" != "skip" ] && [ -z "$LFT_SIGN_PASS" ]; then
-    if [ -t 0 ]; then
-        read -s -p "Enter password for Windows P12 certificate: " LFT_SIGN_PASS
-        echo ""
-    else
-        echo "Windows P12 certificate path is specified but password is empty and stdin is not a TTY. Skipping Windows password prompt."
+# Prompt for password if credentials are set but password is empty
+if { [ -n "$LFT_SIGN_P12" ] && [ "$LFT_SIGN_P12" != "skip" ]; } || { [ -n "$LFT_SIGN_KEY" ] && [ "$LFT_SIGN_KEY" != "skip" ]; }; then
+    if [ -z "$LFT_SIGN_PASS" ]; then
+        if [ -t 0 ]; then
+            read -s -p "Enter password for Windows P12 certificate/Private Key: " LFT_SIGN_PASS
+            echo ""
+        else
+            echo "Windows signing credentials specified but password is empty and stdin is not a TTY. Skipping password prompt."
+        fi
     fi
 fi
 
@@ -69,6 +79,16 @@ if [ -z "$LFT_GPG_KEY" ]; then
         echo "No GPG key ID provided and stdin is not a TTY. Skipping Linux GPG key prompt."
     fi
 fi
+
+# Track files to delete on exit
+TEMP_FILES=()
+cleanup() {
+    if [ ${#TEMP_FILES[@]} -gt 0 ]; then
+        echo "Cleaning up temporary signing files..."
+        rm -f "${TEMP_FILES[@]}"
+    fi
+}
+trap cleanup EXIT
 
 # Retrieve credentials from 1Password if references are provided
 if [[ "$LFT_SIGN_PASS" == op://* ]]; then
@@ -103,9 +123,88 @@ if [ -n "$LFT_SIGN_P12" ] && [ "$LFT_SIGN_P12" != "skip" ] && [ ! -f "$LFT_SIGN_
         fi
     fi
     LFT_SIGN_P12="$TEMP_P12"
-    # Ensure temporary file is cleaned up on exit
-    trap 'echo "Cleaning up temporary certificate file..."; rm -f "$TEMP_P12"' EXIT
+    TEMP_FILES+=("$TEMP_P12")
 fi
+
+# Reconstruct P12 from Key + Certificate if both are specified
+if [ -n "$LFT_SIGN_KEY" ] && [ "$LFT_SIGN_KEY" != "skip" ] && [ -n "$LFT_SIGN_CRT" ] && [ "$LFT_SIGN_CRT" != "skip" ]; then
+    # 1. Fetch private key
+    TEMP_KEY=""
+    if [ -f "$LFT_SIGN_KEY" ]; then
+        TEMP_KEY="$LFT_SIGN_KEY"
+    else
+        if ! command -v op &> /dev/null; then
+            echo "ERROR: Private key '$LFT_SIGN_KEY' not found locally, and 1Password CLI (op) is not installed." >&2
+            exit 2
+        fi
+        echo "Fetching private key from 1Password..."
+        TEMP_KEY="/tmp/lfr-tunnel-signing-key-$(date +%s).key"
+        if [[ "$LFT_SIGN_KEY" == op://* ]]; then
+            if ! op read "$LFT_SIGN_KEY" --out-file "$TEMP_KEY" &>/dev/null && ! op document get "$LFT_SIGN_KEY" --output "$TEMP_KEY" &>/dev/null; then
+                echo "ERROR: Failed to retrieve private key from 1Password using reference: $LFT_SIGN_KEY" >&2
+                exit 3
+            fi
+        else
+            if ! op document get "$LFT_SIGN_KEY" --out-file "$TEMP_KEY" &>/dev/null; then
+                echo "ERROR: Failed to retrieve 1Password document named: $LFT_SIGN_KEY" >&2
+                exit 3
+            fi
+        fi
+        TEMP_FILES+=("$TEMP_KEY")
+    fi
+
+    # 2. Fetch public certificate
+    TEMP_CRT=""
+    if [ -f "$LFT_SIGN_CRT" ]; then
+        TEMP_CRT="$LFT_SIGN_CRT"
+    else
+        if ! command -v op &> /dev/null; then
+            echo "ERROR: Certificate '$LFT_SIGN_CRT' not found locally, and 1Password CLI (op) is not installed." >&2
+            exit 2
+        fi
+        echo "Fetching public certificate from 1Password..."
+        TEMP_CRT="/tmp/lfr-tunnel-signing-cert-$(date +%s).crt"
+        if [[ "$LFT_SIGN_CRT" == op://* ]]; then
+            if ! op read "$LFT_SIGN_CRT" --out-file "$TEMP_CRT" &>/dev/null && ! op document get "$LFT_SIGN_CRT" --output "$TEMP_CRT" &>/dev/null; then
+                echo "ERROR: Failed to retrieve certificate from 1Password using reference: $LFT_SIGN_CRT" >&2
+                exit 3
+            fi
+        else
+            if ! op document get "$LFT_SIGN_CRT" --out-file "$TEMP_CRT" &>/dev/null; then
+                echo "ERROR: Failed to retrieve 1Password document named: $LFT_SIGN_CRT" >&2
+                exit 3
+            fi
+        fi
+        TEMP_FILES+=("$TEMP_CRT")
+    fi
+
+    # 3. Generate PKCS12 file using openssl
+    echo "Assembling PKCS12 (.p12) signing archive using openssl..."
+    TEMP_P12="/tmp/lfr-tunnel-windows-$(date +%s).p12"
+    if [ -n "$LFT_SIGN_PASS" ]; then
+        openssl pkcs12 -export \
+          -out "$TEMP_P12" \
+          -inkey "$TEMP_KEY" \
+          -passin "pass:$LFT_SIGN_PASS" \
+          -in "$TEMP_CRT" \
+          -passout "pass:$LFT_SIGN_PASS" || {
+              echo "ERROR: Failed to assemble PKCS12 (.p12) file using openssl." >&2
+              exit 4
+          }
+    else
+        openssl pkcs12 -export \
+          -out "$TEMP_P12" \
+          -inkey "$TEMP_KEY" \
+          -in "$TEMP_CRT" \
+          -nodes || {
+              echo "ERROR: Failed to assemble PKCS12 (.p12) file using openssl (no password)." >&2
+              exit 4
+          }
+    fi
+    LFT_SIGN_P12="$TEMP_P12"
+    TEMP_FILES+=("$TEMP_P12")
+fi
+
 
 
 echo ""

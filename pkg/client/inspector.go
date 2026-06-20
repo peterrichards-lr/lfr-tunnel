@@ -7,6 +7,7 @@ import (
 	"log"
 	"net/http"
 	"os"
+	"strings"
 )
 
 //go:embed inspector.html
@@ -64,7 +65,7 @@ func StartInspector(port int, engine *InterceptorEngine) {
 	bindIP := "127.0.0.1"
 	if envBind := os.Getenv("LFT_INSPECTOR_BIND"); envBind != "" {
 		bindIP = envBind
-	} else if isDocker() {
+	} else if IsDocker() {
 		bindIP = "0.0.0.0"
 	}
 
@@ -77,10 +78,22 @@ func StartInspector(port int, engine *InterceptorEngine) {
 	}()
 }
 
-// isDocker checks if the application is running inside a Docker container.
-func isDocker() bool {
+// IsDocker checks if the application is running inside a Docker container.
+func IsDocker() bool {
 	if _, err := os.Stat("/.dockerenv"); err == nil {
 		return true
+	}
+	// Check cgroups for container signatures
+	for _, path := range []string{"/proc/1/cgroup", "/proc/self/cgroup"} {
+		data, err := os.ReadFile(path)
+		if err == nil {
+			content := string(data)
+			if strings.Contains(content, "docker") ||
+				strings.Contains(content, "containerd") ||
+				strings.Contains(content, "kubepods") {
+				return true
+			}
+		}
 	}
 	return false
 }

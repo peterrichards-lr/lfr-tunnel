@@ -100,8 +100,8 @@ func (p *ProxyHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		Director: func(req *http.Request) {
 			req.URL.Scheme = "http"
 			req.URL.Host = fmt.Sprintf("127.0.0.1:%d", lease.LocalPort)
-			// Resolve client IP address using centralized helper
-			clientIP := getClientIP(req)
+			// Resolve client IP address using centralized helper from original request r
+			clientIP := getClientIP(r)
 
 			// Update visitor IP
 			lease.VisitorIPsMu.Lock()

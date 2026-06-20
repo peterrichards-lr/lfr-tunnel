@@ -81,6 +81,7 @@ func (s *Server) handleGetMe(w http.ResponseWriter, r *http.Request) {
 					"bytes_out":        l.BytesOut,
 					"rate_limit":       l.RateLimit,
 					"user_id":          l.UserID,
+					"client_ip":        l.ClientIP,
 					"created_at":       l.CreatedAt,
 					"visitor_ips":      l.GetActiveVisitorIPs(s.cfg.VisitorTimeout),
 				})
@@ -208,7 +209,7 @@ func (s *Server) handleUpdateMe(w http.ResponseWriter, r *http.Request) {
 	respondJSON(w, http.StatusOK, map[string]string{"status": "ok"})
 }
 
-// handleListTokens returns the current user's PATs.
+// handleListTokens returns the current user's PATs (or all PATs for admin/owner).
 func (s *Server) handleListTokens(w http.ResponseWriter, r *http.Request) {
 	user, err := s.getCurrentUser(r)
 	if err != nil {
@@ -216,7 +217,12 @@ func (s *Server) handleListTokens(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	pats, err := s.db.ListPATs(user.ID)
+	var pats []*db.PersonalAccessToken
+	if user.Role == "admin" || user.Role == "owner" {
+		pats, err = s.db.ListAllPATs()
+	} else {
+		pats, err = s.db.ListPATs(user.ID)
+	}
 	if err != nil {
 		http.Error(w, `{"error":"Failed to list tokens"}`, http.StatusInternalServerError)
 		return
@@ -315,18 +321,21 @@ func (s *Server) handleDeleteToken(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Make sure the token belongs to this user!
-	pats, err := s.db.ListPATs(user.ID)
-	if err != nil {
-		http.Error(w, `{"error":"Server error"}`, http.StatusInternalServerError)
-		return
-	}
-
+	// Make sure the token belongs to this user (or user is admin/owner)
 	ownsToken := false
-	for _, p := range pats {
-		if p.ID == tokenID {
-			ownsToken = true
-			break
+	if user.Role == "admin" || user.Role == "owner" {
+		ownsToken = true
+	} else {
+		pats, err := s.db.ListPATs(user.ID)
+		if err != nil {
+			http.Error(w, `{"error":"Server error"}`, http.StatusInternalServerError)
+			return
+		}
+		for _, p := range pats {
+			if p.ID == tokenID {
+				ownsToken = true
+				break
+			}
 		}
 	}
 
@@ -897,11 +906,28 @@ func (s *Server) handleListReservations(w http.ResponseWriter, r *http.Request) 
 		return
 	}
 
-	list, err := s.db.ListSubdomainReservationsByUserID(user.ID)
+	var list []*db.SubdomainReservation
+	if user.Role == "admin" || user.Role == "owner" {
+		list, err = s.db.ListAllSubdomainReservations()
+	} else {
+		list, err = s.db.ListSubdomainReservationsByUserID(user.ID)
+	}
 	if err != nil {
 		log.Printf("[API] Failed to list reservations: %v", err)
 		http.Error(w, `{"error":"Failed to retrieve reservations"}`, http.StatusInternalServerError)
 		return
+	}
+
+	var usedCount int
+	if user.Role == "admin" || user.Role == "owner" {
+		ownList, err := s.db.ListSubdomainReservationsByUserID(user.ID)
+		if err == nil {
+			usedCount = len(ownList)
+		} else {
+			usedCount = 0
+		}
+	} else {
+		usedCount = len(list)
 	}
 
 	limit := s.getUserMaxReservations(user)
@@ -909,7 +935,7 @@ func (s *Server) handleListReservations(w http.ResponseWriter, r *http.Request) 
 	respondJSON(w, http.StatusOK, map[string]interface{}{
 		"reservations": list,
 		"limit":        limit,
-		"used":         len(list),
+		"used":         usedCount,
 	})
 }
 
@@ -1465,6 +1491,63 @@ func (s *Server) handleAdminOverrideLimit(w http.ResponseWriter, r *http.Request
 		TargetType: "user",
 		TargetID:   user.Email,
 		Details:    fmt.Sprintf("Max reservations limit overridden. Value: %v", req.MaxReservations),
+		IPAddress:  getClientIP(r),
+		CreatedAt:  time.Now(),
+	})
+
+	respondJSON(w, http.StatusOK, map[string]string{"status": "success"})
+}
+
+// handleAdminOverrideTunnelsLimit overrides a user's maximum active tunnels limit.
+func (s *Server) handleAdminOverrideTunnelsLimit(w http.ResponseWriter, r *http.Request, actor string) {
+	if s.db == nil {
+		http.Error(w, `{"error":"Database not configured"}`, http.StatusNotImplemented)
+		return
+	}
+
+	suffix := strings.TrimPrefix(r.URL.Path, "/api/admin/users/")
+	parts := strings.Split(suffix, "/")
+	if len(parts) < 2 || parts[1] != "tunnels-limit" {
+		http.Error(w, `{"error":"Invalid URL path"}`, http.StatusBadRequest)
+		return
+	}
+	email, err := url.PathUnescape(parts[0])
+	if err != nil {
+		http.Error(w, `{"error":"Invalid user email"}`, http.StatusBadRequest)
+		return
+	}
+
+	var req struct {
+		MaxTunnels *int `json:"max_tunnels"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		http.Error(w, `{"error":"Invalid request"}`, http.StatusBadRequest)
+		return
+	}
+
+	user, err := s.db.GetUserByEmail(email)
+	if err != nil {
+		if errors.Is(err, db.ErrNotFound) {
+			http.Error(w, `{"error":"User not found"}`, http.StatusNotFound)
+		} else {
+			http.Error(w, `{"error":"Database error"}`, http.StatusInternalServerError)
+		}
+		return
+	}
+
+	user.MaxTunnels = req.MaxTunnels
+	if err := s.db.UpdateUser(user); err != nil {
+		log.Printf("[API] Failed to update user active tunnels limit: %v", err)
+		http.Error(w, `{"error":"Failed to update quota limit"}`, http.StatusInternalServerError)
+		return
+	}
+
+	_ = s.db.WriteAuditEntry(&db.AuditEntry{
+		ActorID:    actor,
+		Action:     "user.tunnels_limit_changed",
+		TargetType: "user",
+		TargetID:   user.Email,
+		Details:    fmt.Sprintf("Max active tunnels limit overridden. Value: %v", req.MaxTunnels),
 		IPAddress:  getClientIP(r),
 		CreatedAt:  time.Now(),
 	})

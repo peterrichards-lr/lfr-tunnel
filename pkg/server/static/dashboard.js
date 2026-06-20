@@ -556,7 +556,7 @@ function toggleTheme() {
             let firstGreeting = greetingName ? `Welcome to Liferay Tunnel, ${escapeHTML(greetingName)}!` : "Welcome to Liferay Tunnel!";
             if (currentUser.last_login_at && !currentUser.last_login_at.startsWith('0001')) {
                 document.getElementById('last-login-banner').style.display = 'flex';
-                document.getElementById('last-login-text').innerHTML = `<strong>${welcomeGreeting}</strong> Your last login was ${formatLocalTime(currentUser.last_login_at)} from IP <code>${escapeHTML(currentUser.last_login_ip || 'Unknown')}</code>.`;
+                document.getElementById('last-login-text').innerHTML = `<strong>${welcomeGreeting}</strong> Your last login was ${renderTimestamp(currentUser.last_login_at)} from IP <code>${escapeHTML(currentUser.last_login_ip || 'Unknown')}</code>.`;
             } else {
                 document.getElementById('last-login-banner').style.display = 'flex';
                 document.getElementById('last-login-text').innerHTML = `<strong>${firstGreeting}</strong> We're glad you're here. This appears to be your first time logging in.`;
@@ -989,7 +989,7 @@ function toggleTheme() {
                 let welcomeGreeting = greetingName ? `Welcome Back, ${escapeHTML(greetingName)}!` : "Welcome Back!";
                 let firstGreeting = greetingName ? `Welcome to Liferay Tunnel, ${escapeHTML(greetingName)}!` : "Welcome to Liferay Tunnel!";
                 if (currentUser.last_login_at && !currentUser.last_login_at.startsWith('0001')) {
-                    document.getElementById('last-login-text').innerHTML = `<strong>${welcomeGreeting}</strong> Your last login was ${formatLocalTime(currentUser.last_login_at)} from IP <code>${escapeHTML(currentUser.last_login_ip || 'Unknown')}</code>.`;
+                    document.getElementById('last-login-text').innerHTML = `<strong>${welcomeGreeting}</strong> Your last login was ${renderTimestamp(currentUser.last_login_at)} from IP <code>${escapeHTML(currentUser.last_login_ip || 'Unknown')}</code>.`;
                 } else {
                     document.getElementById('last-login-text').innerHTML = `<strong>${firstGreeting}</strong> We're glad you're here. This appears to be your first time logging in.`;
                 }
@@ -1220,17 +1220,47 @@ function toggleTheme() {
             const res = await fetch('/api/tokens');
             if (res.ok) {
                 const tokens = await res.json() || [];
-                renderTable('tokens-table-body', tokens, t => `
-                    <tr>
-                        <td style="font-weight: 500;">${escapeHTML(t.name)}</td>
-                        <td style="font-family: monospace;">${t.token_prefix}...</td>
-                        <td>${renderTimestamp(t.created_at)}</td>
-                        <td>${t.expires_at ? renderTimestamp(t.expires_at) : 'Never'}</td>
-                        <td>
-                            <button class="btn" style="padding: 6px 12px; margin: 0; border-color: var(--danger); color: var(--danger);" onclick="revokeToken(${t.id})">Revoke</button>
-                        </td>
-                    </tr>
-                `);
+                
+                const tokensHeaders = document.getElementById('tokens-table-headers');
+                const isAdminOrOwner = currentUser && (currentUser.role === 'admin' || currentUser.role === 'owner');
+                if (tokensHeaders) {
+                    tokensHeaders.innerHTML = `
+                        <tr>
+                            <th data-sort="name">Name</th>
+                            <th data-sort="token_prefix">Prefix</th>
+                            ${isAdminOrOwner ? '<th data-sort="user_id">Owner</th>' : ''}
+                            <th data-sort="created_at">Created</th>
+                            <th data-sort="expires_at">Expires</th>
+                            <th style="text-align: right;">Action</th>
+                        </tr>
+                    `;
+                }
+
+                renderTable('tokens-table-body', tokens, t => {
+                    const extendBtns = isAdminOrOwner ? `
+                        <div style="display: flex; gap: 4px; align-items: center;">
+                            <button class="btn btn-outline" style="padding: 4px 8px; margin: 0; font-size: 11px; color: #fbbf24; border-color: #fbbf24;" onclick="extendToken(${t.id}, 30)">+30d</button>
+                            <button class="btn btn-outline" style="padding: 4px 8px; margin: 0; font-size: 11px; color: #fbbf24; border-color: #fbbf24;" onclick="extendToken(${t.id}, 90)">+90d</button>
+                            <button class="btn btn-outline" style="padding: 4px 8px; margin: 0; font-size: 11px; color: #fbbf24; border-color: #fbbf24;" onclick="extendToken(${t.id}, 0)">Permanent</button>
+                        </div>
+                    ` : '';
+
+                    return `
+                        <tr>
+                            <td style="font-weight: 500;">${escapeHTML(t.name)}</td>
+                            <td style="font-family: monospace;">${t.token_prefix}...</td>
+                            ${isAdminOrOwner ? `<td style="font-family: monospace; font-size: 13px;">${escapeHTML(t.user_id || 'N/A')}</td>` : ''}
+                            <td>${renderTimestamp(t.created_at)}</td>
+                            <td>${t.expires_at ? renderTimestamp(t.expires_at) : 'Never'}</td>
+                            <td style="text-align: right;">
+                                <div style="display: flex; gap: 6px; justify-content: flex-end; align-items: center;">
+                                    ${extendBtns}
+                                    <button class="btn btn-outline" style="padding: 4px 8px; margin: 0; font-size: 11px; color: var(--danger); border-color: var(--danger);" onclick="revokeToken(${t.id})">Revoke</button>
+                                </div>
+                            </td>
+                        </tr>
+                    `;
+                });
             }
         }
 
@@ -1378,6 +1408,14 @@ function toggleTheme() {
 
                     const lastSeenText = u.portal_active ? '<span style="color: #10b981; font-weight: 500;">Active Now</span>' : renderTimestamp(u.last_login_at);
 
+                    const quotaCell = `
+                        <div style="font-size: 12px; display: flex; flex-direction: column; gap: 2px;">
+                            <div><span style="color: var(--text-muted); font-size: 11px;">RPS:</span> <strong>${u.rate_limit ? u.rate_limit : '∞'}</strong></div>
+                            <div><span style="color: var(--text-muted); font-size: 11px;">Subdomains:</span> <strong>${u.max_reservations !== undefined && u.max_reservations !== null ? (u.max_reservations < 0 ? '∞' : u.max_reservations) : '3'}</strong></div>
+                            <div><span style="color: var(--text-muted); font-size: 11px;">Tunnels:</span> <strong>${u.max_tunnels !== undefined && u.max_tunnels !== null ? (u.max_tunnels < 0 ? '∞' : u.max_tunnels) : '3'}</strong></div>
+                        </div>
+                    `;
+
                     return `
                     <tr style="${rowStyle}">
                         <td>
@@ -1391,7 +1429,7 @@ function toggleTheme() {
                         <td>${escapeHTML(u.first_name)} ${escapeHTML(u.last_name)}</td>
                         <td><span class="badge ${u.role === 'admin' ? 'success' : ''}">${escapeHTML(u.role)}</span></td>
                         <td><span class="badge ${u.status === 'approved' ? 'success' : (u.status === 'revoked' ? 'danger' : 'warning')}">${escapeHTML(u.status)}</span></td>
-                        <td><span class="badge" style="font-weight: bold; background: rgba(139,92,246,0.15); color: #a78bfa; border: 1px solid rgba(139,92,246,0.3);">${u.rate_limit ? u.rate_limit + ' RPS' : 'Unlimited'}</span></td>
+                        <td>${quotaCell}</td>
                         <td>${lastSeenText}</td>
                         <td>
                             ${(!isSelf && u.status !== 'approved') ? `<button class="btn" style="padding: 4px 8px; margin: 0 4px 0 0;" onclick="approveUser('${u.id}')">Approve</button>` : ''}
@@ -1399,6 +1437,7 @@ function toggleTheme() {
                             ${(!isSelf && u.status === 'approved') ? `<button class="btn" style="padding: 4px 8px; margin: 0 4px 0 0; color: #3b82f6; border-color: #3b82f6;" onclick="promptTargetedMessage('${u.id}', '${escapeHTML(u.email)}')">Message</button>` : ''}
                             ${(!isSelf && u.status === 'approved') ? `<button class="btn" style="padding: 4px 8px; margin: 0 4px 0 0; color: #8b5cf6; border-color: #8b5cf6;" onclick="openUserQuotaModal('${escapeHTML(u.email)}', ${u.rate_limit || 0})">Set Quota</button>` : ''}
                             ${(!isSelf && u.status === 'approved') ? `<button class="btn" style="padding: 4px 8px; margin: 0 4px 0 0; color: #f59e0b; border-color: #f59e0b;" onclick="openUserResLimitModal('${escapeHTML(u.email)}', ${u.max_reservations !== undefined && u.max_reservations !== null ? u.max_reservations : ''})">Set Quota Limit</button>` : ''}
+                            ${(!isSelf && u.status === 'approved') ? `<button class="btn" style="padding: 4px 8px; margin: 0 4px 0 0; color: #06b6d4; border-color: #06b6d4;" onclick="openUserTunnelsLimitModal('${escapeHTML(u.email)}', ${u.max_tunnels !== undefined && u.max_tunnels !== null ? u.max_tunnels : ''})">Set Tunnels Limit</button>` : ''}
                             ${(!isSelf && u.status === 'approved' && u.role === 'admin') ? `<button class="btn" style="padding: 4px 8px; margin: 0 4px 0 0; color: #84cc16; border-color: #84cc16;" onclick="changeUserRole('${escapeHTML(u.email)}', 'user')">Demote</button>` : ''}
                             ${(!isSelf && u.status === 'approved' && u.role === 'user') ? `<button class="btn" style="padding: 4px 8px; margin: 0 4px 0 0; color: #84cc16; border-color: #84cc16;" onclick="changeUserRole('${escapeHTML(u.email)}', 'admin')">Promote</button>` : ''}
                             ${(!isSelf && u.totp_enabled) ? `<button class="btn" style="padding: 4px 8px; margin: 0 4px 0 0; color: #d97706; border-color: #d97706;" onclick="adminResetMFA('${escapeHTML(u.email)}')">Reset MFA</button>` : ''}
@@ -1430,7 +1469,7 @@ function toggleTheme() {
                     <tr>
                         <td style="font-weight: 500;">${escapeHTML(u.email)} <span class="badge ${u.status === 'pending' ? 'warning' : ''}">${escapeHTML(u.status)}</span></td>
                         <td>${escapeHTML(u.first_name)} ${escapeHTML(u.last_name)}</td>
-                        <td>${formatLocalTime(u.created_at)}</td>
+                        <td>${renderTimestamp(u.created_at)}</td>
                         <td>
                             <button class="btn btn-primary" style="padding: 4px 8px; margin: 0 4px 0 0;" onclick="approveRegistration('${u.id}')">Approve</button>
                             <button class="btn" style="padding: 4px 8px; margin: 0; color: var(--danger); border-color: var(--danger);" onclick="denyRegistration('${u.id}')">Deny</button>
@@ -1482,7 +1521,7 @@ function toggleTheme() {
                     <tr>
                         <td style="font-family: monospace;">${escapeHTML(b.ip_address)}</td>
                         <td>${escapeHTML(b.reason)}</td>
-                        <td>${formatLocalTime(b.banned_at)}</td>
+                        <td>${renderTimestamp(b.banned_at)}</td>
                         <td>
                             <button class="btn" style="padding: 4px 8px; margin: 0; color: var(--danger); border-color: var(--danger);" onclick="deleteBlacklist('${b.ip_address}')">Remove</button>
                         </td>
@@ -1537,10 +1576,10 @@ function toggleTheme() {
                 const links = await res.json() || [];
                 renderTable('magic-table-body', links, l => `
                     <tr>
-                        <td>${escapeHTML(l.email)}</td>
+                        <td style="font-weight: 500;">${escapeHTML(l.email)}</td>
                         <td>${escapeHTML(l.client_ip)}</td>
-                        <td>${formatLocalTime(l.expires_at)}</td>
-                        <td>${l.used_at ? formatLocalTime(l.used_at) : 'Unused'}</td>
+                        <td>${renderTimestamp(l.expires_at)}</td>
+                        <td>${l.used_at ? renderTimestamp(l.used_at) : 'Unused'}</td>
                     </tr>
                 `);
             }
@@ -2731,53 +2770,73 @@ function toggleTheme() {
                         if (warningAlert) warningAlert.classList.add('hidden');
                     }
 
-                    // Populate table
-                    const tbody = document.getElementById('reservations-table-body');
-                    tbody.innerHTML = '';
-                    if (list.length === 0) {
-                        tbody.innerHTML = `<tr><td colspan="5" style="text-align: center; padding: 24px; color: var(--text-muted);">You have no active subdomain reservations.</td></tr>`;
-                    } else {
-                        list.forEach(item => {
-                            let statusText = '<span class="badge success">Active</span>';
-                            let expiresText = 'Never (Permanent)';
-                            
-                            if (item.expires_at) {
-                                const expiryDate = new Date(item.expires_at);
-                                expiresText = renderTimestamp(item.expires_at);
-                                
-                                // Check if expired (in quarantine)
-                                if (expiryDate < new Date()) {
-                                    statusText = '<span class="badge danger" style="background: rgba(239, 68, 68, 0.15); color: #f87171; border: 1px solid rgba(239, 68, 68, 0.3);">Quarantined</span>';
-                                } else if (item.extension_requested) {
-                                    statusText = '<span class="badge warning" style="background: rgba(245, 158, 11, 0.15); color: #fbbf24; border: 1px solid rgba(245, 158, 11, 0.3);">Extension Requested</span>';
-                                }
-                            }
-
-                            const extButton = (item.expires_at && !item.extension_requested) 
-                                ? `<button class="btn btn-outline" style="padding: 4px 8px; margin: 0; font-size: 12px; color: #fbbf24; border-color: #fbbf24;" onclick="requestExtension('${item.id}')">Extend</button>`
-                                : '';
-
-                            const row = `
-                                <tr>
-                                    <td style="font-weight: 600; font-family: monospace;">${escapeHTML(item.subdomain)}</td>
-                                    <td style="font-family: monospace;">${escapeHTML(item.domain)}</td>
-                                    <td>${statusText}</td>
-                                    <td>${expiresText}</td>
-                                    <td style="text-align: right;">
-                                        <div style="display: flex; gap: 6px; justify-content: flex-end; align-items: center;">
-                                            ${extButton}
-                                            <button class="btn btn-outline" style="padding: 4px 8px; margin: 0; font-size: 12px; color: var(--danger); border-color: var(--danger);" onclick="releaseReservation('${item.id}', '${escapeHTML(item.subdomain)}.${escapeHTML(item.domain)}')">Release</button>
-                                        </div>
-                                    </td>
-                                </tr>
-                            `;
-                            tbody.innerHTML += row;
-                        });
+                    // Set headers dynamically BEFORE calling renderTable
+                    const resHeaders = document.getElementById('reservations-table-headers');
+                    const isAdminOrOwner = currentUser && (currentUser.role === 'admin' || currentUser.role === 'owner');
+                    if (resHeaders) {
+                        resHeaders.innerHTML = `
+                            <tr>
+                                <th data-sort="subdomain">Host</th>
+                                ${isAdminOrOwner ? '<th data-sort="user_id">Owner</th>' : ''}
+                                <th>Status</th>
+                                <th data-sort="expires_at">Expires</th>
+                                <th style="text-align: right;">Action</th>
+                            </tr>
+                        `;
                     }
+
+                    renderTable('reservations-table-body', list, item => {
+                        let statusText = '<span class="badge success">Active</span>';
+                        let expiresText = 'Never (Permanent)';
+                        
+                        if (item.expires_at) {
+                            const expiryDate = new Date(item.expires_at);
+                            expiresText = renderTimestamp(item.expires_at);
+                            
+                            // Check if expired (in quarantine)
+                            if (expiryDate < new Date()) {
+                                statusText = '<span class="badge danger" style="background: rgba(239, 68, 68, 0.15); color: #f87171; border: 1px solid rgba(239, 68, 68, 0.3);">Quarantined</span>';
+                            } else if (item.extension_requested) {
+                                statusText = '<span class="badge warning" style="background: rgba(245, 158, 11, 0.15); color: #fbbf24; border: 1px solid rgba(245, 158, 11, 0.3);">Extension Requested</span>';
+                            }
+                        }
+
+                        const extButton = (item.expires_at && !item.extension_requested) 
+                            ? `<button class="btn btn-outline" style="padding: 4px 8px; margin: 0; font-size: 12px; color: #fbbf24; border-color: #fbbf24;" onclick="requestExtension('${item.id}')">Extend</button>`
+                            : '';
+
+                        const host = `${item.subdomain}.${item.domain}`;
+                        const hostLink = `<a href="https://${host}" target="_blank" class="host-link" style="color: var(--primary); font-family: monospace; font-weight: 600; text-decoration: none;">${escapeHTML(host)}</a>`;
+                        const copyBtn = `
+                            <button class="btn-copy" onclick="copyToClipboard('${escapeHTML(host)}')" style="background: none; border: none; color: var(--text-muted); cursor: pointer; padding: 2px 6px; font-size: 13px; transition: color 0.2s;" title="Copy Host to Clipboard">
+                                📋
+                            </button>
+                        `;
+
+                        return `
+                            <tr>
+                                <td>
+                                    <div style="display: flex; align-items: center; gap: 4px;">
+                                        ${hostLink}
+                                        ${copyBtn}
+                                    </div>
+                                </td>
+                                ${isAdminOrOwner ? `<td style="font-family: monospace; font-size: 13px;">${escapeHTML(item.user_id || 'N/A')}</td>` : ''}
+                                <td>${statusText}</td>
+                                <td>${expiresText}</td>
+                                <td style="text-align: right;">
+                                    <div style="display: flex; gap: 6px; justify-content: flex-end; align-items: center;">
+                                        ${extButton}
+                                        <button class="btn btn-outline" style="padding: 4px 8px; margin: 0; font-size: 12px; color: var(--danger); border-color: var(--danger);" onclick="releaseReservation('${item.id}', '${escapeHTML(host)}')">Release</button>
+                                    </div>
+                                </td>
+                            </tr>
+                        `;
+                    });
 
                     // Admin checks
                     const adminSection = document.getElementById('admin-reservations-section');
-                    if (currentUser && (currentUser.role === 'admin' || currentUser.role === 'owner')) {
+                    if (isAdminOrOwner) {
                         if (adminSection) adminSection.classList.remove('hidden');
                         loadAdminExtensions();
                     } else {
@@ -2974,3 +3033,156 @@ function toggleTheme() {
                 console.error("Failed to submit quota override", e);
             }
         }
+
+        // ADMINISTRATIVE ACTIVE TUNNELS LIMIT OVERRIDES
+        let activeTunnelsLimitEmail = '';
+        function openUserTunnelsLimitModal(email, currentLimit) {
+            activeTunnelsLimitEmail = email;
+            document.getElementById('user-tunnels-limit-email-hint').innerText = email;
+            document.getElementById('user-tunnels-limit-input').value = currentLimit || '';
+            document.getElementById('user-tunnels-limit-modal').style.display = 'flex';
+        }
+        window.openUserTunnelsLimitModal = openUserTunnelsLimitModal;
+
+        function closeUserTunnelsLimitModal() {
+            document.getElementById('user-tunnels-limit-modal').style.display = 'none';
+        }
+        window.closeUserTunnelsLimitModal = closeUserTunnelsLimitModal;
+
+        async function submitUserTunnelsLimit() {
+            const val = document.getElementById('user-tunnels-limit-input').value;
+            const limit = val !== '' ? parseInt(val) : null;
+            
+            try {
+                const res = await fetch(`/api/admin/users/${encodeURIComponent(activeTunnelsLimitEmail)}/tunnels-limit`, {
+                    method: 'POST',
+                    headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify({ max_tunnels: limit })
+                });
+
+                if (res.ok) {
+                    showToast("User active tunnels limit updated successfully", "success");
+                    closeUserTunnelsLimitModal();
+                    loadUsers();
+                } else {
+                    const err = await res.json();
+                    showToast("Failed to update limit: " + (err.error || "Unknown error"), "danger");
+                }
+            } catch (e) {
+                console.error("Failed to submit tunnels limit override", e);
+            }
+        }
+        window.submitUserTunnelsLimit = submitUserTunnelsLimit;
+
+        // COPY TO CLIPBOARD HELPER
+        function copyToClipboard(text) {
+            navigator.clipboard.writeText(text).then(() => {
+                showToast("Copied to clipboard!", "success");
+            }).catch(err => {
+                console.error("Failed to copy text", err);
+            });
+        }
+        window.copyToClipboard = copyToClipboard;
+
+        // ADMINISTRATIVE TOKEN EXTENSION
+        async function extendToken(id, days) {
+            try {
+                const res = await fetch(`/api/admin/tokens/${id}/extend`, {
+                    method: 'POST',
+                    headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify({ days })
+                });
+                if (res.ok) {
+                    showToast("Token expiration updated successfully", "success");
+                    loadTokens();
+                } else {
+                    const err = await res.json();
+                    showToast("Failed to extend token: " + (err.error || "Unknown error"), "danger");
+                }
+            } catch(e) {
+                console.error("Failed to extend token", e);
+            }
+        }
+        window.extendToken = extendToken;
+
+        // CSV EXPORT UTILITIES
+        async function exportReservationsCSV() {
+            try {
+                const res = await fetch('/api/portal/reservations');
+                if (res.ok) {
+                    const data = await res.json();
+                    const list = data.reservations || [];
+                    let csv = "ID,Subdomain,Domain,Owner,Status,ExpiresAt,CreatedAt\n";
+                    list.forEach(item => {
+                        let status = "Active";
+                        if (item.expires_at) {
+                            const expiryDate = new Date(item.expires_at);
+                            if (expiryDate < new Date()) {
+                                status = "Quarantined";
+                            } else if (item.extension_requested) {
+                                status = "Extension Requested";
+                            }
+                        }
+                        const row = [
+                            item.id,
+                            item.subdomain,
+                            item.domain,
+                            item.user_id || "",
+                            status,
+                            item.expires_at || "Never",
+                            item.created_at || ""
+                        ].map(val => `"${String(val).replace(/"/g, '""')}"`).join(",");
+                        csv += row + "\n";
+                    });
+                    
+                    const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
+                    const link = document.createElement("a");
+                    link.href = URL.createObjectURL(blob);
+                    link.setAttribute("download", "subdomain_reservations.csv");
+                    document.body.appendChild(link);
+                    link.click();
+                    document.body.removeChild(link);
+                    showToast("Reservations exported successfully", "success");
+                } else {
+                    showToast("Failed to load reservations for export", "danger");
+                }
+            } catch (e) {
+                console.error("Failed to export CSV", e);
+            }
+        }
+        window.exportReservationsCSV = exportReservationsCSV;
+
+        async function exportTokensCSV() {
+            try {
+                const res = await fetch('/api/tokens');
+                if (res.ok) {
+                    const list = await res.json() || [];
+                    let csv = "ID,Name,Prefix,Owner,ExpiresAt,CreatedAt\n";
+                    list.forEach(item => {
+                        const row = [
+                            item.id,
+                            item.name,
+                            item.token_prefix,
+                            item.user_id || "",
+                            item.expires_at || "Never",
+                            item.created_at || ""
+                        ].map(val => `"${String(val).replace(/"/g, '""')}"`).join(",");
+                        csv += row + "\n";
+                    });
+                    
+                    const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
+                    const link = document.createElement("a");
+                    link.href = URL.createObjectURL(blob);
+                    link.setAttribute("download", "personal_access_tokens.csv");
+                    document.body.appendChild(link);
+                    link.click();
+                    document.body.removeChild(link);
+                    showToast("Tokens exported successfully", "success");
+                } else {
+                    showToast("Failed to load tokens for export", "danger");
+                }
+            } catch (e) {
+                console.error("Failed to export CSV", e);
+            }
+        }
+        window.exportTokensCSV = exportTokensCSV;

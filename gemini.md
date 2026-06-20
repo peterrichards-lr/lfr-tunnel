@@ -5,6 +5,14 @@ Persistent state and planning document.
 ## Goal
 Build an open-source, MIT-licensed tunneling solution tailored for Liferay's Sales Engineering (SE) team. It will allow team members to route traffic from wildcard subdomains on two public domains to their locally running LDM (Liferay Development Manager) / Liferay instances, offload HTTPS/SSL, and handle offline developer machines gracefully.
 
+## Security & Secrets Management Constraints
+- **Plain Text Secrets & Passphrases**: The AI assistant must never ask the user to provide any private keys, certificates, or passphrases in plain text. Since the conversation context is shared with remote servers, pasting sensitive credentials in plain text presents a security risk.
+- **Secure Secret Handling**: Instead of pasting secrets:
+  - Generate temporary keys/certificates locally using scripts or commands.
+  - Load passphrases from secure environment variables or files that are not committed.
+  - Instruct the user to run secure decryption or configuration commands locally on their system rather than sharing passwords in the chat.
+  - Ensure all temporary certificate and private key files are completely deleted before making any git commits to prevent accidental exposure in the repository history.
+
 ## Proposed Architecture
 The solution will consist of:
 1. **Server Gateway (`lfr-tunnel-server` / `lfr-tunneld`)**:

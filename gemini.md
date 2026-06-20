@@ -224,4 +224,4 @@ The solution will consist of:
 - [x] Bump version to v1.7.12 in whats-new.json, tag, and push to trigger release CI workflow.
 - [x] Support dynamic inspector binding address based on Docker detection and LFT_INSPECTOR_BIND.
 - [x] Document LFT_INSPECTOR_BIND in setup guide / SE guide.
-- [ ] Bump version to v1.7.13 in whats-new.json, tag, and push to trigger release CI workflow.
+- [x] Bump version to v1.7.13 in whats-new.json, tag, and push to trigger release CI workflow.

@@ -43,6 +43,7 @@ func main() {
 	flag.Var(&addHeaders, "add-header", "Inject HTTP header (e.g. 'X-Bypass-CORS: true')")
 	rateLimit := flag.Int("rate-limit", 0, "Max requests per second for your subdomains (0 = unlimited)")
 	targetHost := flag.String("target-host", "", "Target hostname or IP to route traffic to (e.g. my-project.local)")
+	preserveHost := flag.Bool("preserve-host", false, "Preserve incoming Host header instead of rewriting to target host")
 	background := flag.Bool("background", false, "Run client in background")
 	status := flag.Bool("status", false, "Check status of the background tunnel")
 	stop := flag.Bool("stop", false, "Stop the background tunnel")
@@ -151,6 +152,9 @@ func main() {
 	}
 	if *targetHost != "" {
 		cfg.TargetHost = *targetHost
+	}
+	if *preserveHost {
+		_ = os.Setenv("LFT_PRESERVE_HOST", "true")
 	}
 
 	if *background {
@@ -295,13 +299,17 @@ func main() {
 
 	var publicURLs []string
 	log.Println("[Client] Registration successful! Your public tunnel URLs are:")
+	subHost := sub
+	if regResp.SubdomainPrefix != "" {
+		subHost = regResp.SubdomainPrefix
+	}
 	for _, domain := range regResp.Domains {
 		for _, pm := range portMappings {
 			var fullSubdomain string
 			if pm.NameSuffix == "" {
-				fullSubdomain = sub
+				fullSubdomain = subHost
 			} else {
-				fullSubdomain = fmt.Sprintf("%s-%s", sub, pm.NameSuffix)
+				fullSubdomain = fmt.Sprintf("%s-%s", subHost, pm.NameSuffix)
 			}
 			urlStr := fmt.Sprintf("https://%s.%s", fullSubdomain, domain)
 			publicURLs = append(publicURLs, urlStr)

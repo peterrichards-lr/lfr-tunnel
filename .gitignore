@@ -33,3 +33,6 @@ tests/e2e/ui/playwright/.cache/
 /*.jpg
 /*.jpeg
 /*.gif
+
+# Local Release Scripts
+scripts/release-client-local.sh

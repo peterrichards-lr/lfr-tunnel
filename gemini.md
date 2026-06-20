@@ -270,7 +270,6 @@ The solution will consist of:
 - [x] Standardise portal dates to always render via renderTimestamp() (dashboard.js).
 - [x] Enhance Subdomains/Tokens UX: copy host button, Owner column for admin view, client-side CSV Export, and admin Token Extend dialog control.
 
-
-
-
-
+## Client Codesigning & 1Password Integration
+- [x] Fix non-interactive read execution failure by checking TTY availability (`[ -t 0 ]`) in signing script.
+- [x] Implement 1Password CLI (`op`) integration in signing script to retrieve passwords and certificate documents from 1Password vault securely.

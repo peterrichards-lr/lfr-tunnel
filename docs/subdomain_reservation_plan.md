@@ -141,4 +141,13 @@ Add HTML templates and integrate mail triggers:
 - **Step 4:** Integrate email notifications in `pkg/mail` and construct HTML templates.
 - **Step 5:** Inject reservation check-gates inside `/api/register` handshake.
 - **Step 6:** Build the Frontend UI reservation panel in `pkg/server/static/dashboard.js` (including User and Admin tabs).
-- **Step 7:** Write comprehensive unit and E2E integration tests to cover all paths.
+- **Step 7:** Implement API token 'Never' expiration restrictions (UI element visibility and server-side validation check).
+- **Step 8:** Write comprehensive unit and E2E integration tests to cover all paths.
+
+---
+
+## 10. Security Enforcement: API Token Expiration Constraints
+
+To enforce proper credential hygiene and encourage regular token rotation:
+- **Client-Side Restriction:** In the Token Creation Modal, the `Never` option is given a specific DOM ID (`token-expiry-never`). On modal open, the script evaluates the user's role. If the user is *not* an admin or owner, the option is hidden (`display: none`), and the default dropdown value is set to `30` days.
+- **Server-Side Validation:** The token generation handler (`handleCreateToken` in `pkg/server/api.go`) will enforce that `expires_in_days <= 0` (Never Expire) is strictly blocked unless the requesting user has the role `admin` or `owner`. Rejection returns a `400 Bad Request` with an explanatory JSON payload.

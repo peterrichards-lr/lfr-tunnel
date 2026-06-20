@@ -236,4 +236,5 @@ The solution will consist of:
 - [ ] Update tunnel registration and check-subdomain checks to enforce reservations.
 - [ ] Implement subdomain quarantine period and HTTP 410 Gone fallback page.
 - [ ] Build portal UI dashboard panel and admin control views for reservation management.
+- [ ] Restrict 'Never' API token expiration option to admin and owner roles on both server and client.
 - [ ] Write unit and E2E integration tests for the reservation flow.

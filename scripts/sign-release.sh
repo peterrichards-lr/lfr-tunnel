@@ -72,11 +72,19 @@ if { [ -n "$LFT_SIGN_P12" ] && [ "$LFT_SIGN_P12" != "skip" ]; } || { [ -n "$LFT_
 fi
 
 # 4. Setup GPG Key for Linux
-if [ -z "$LFT_GPG_KEY" ]; then
+if [ "$LFT_SKIP_GPG" != "true" ] && [ -z "$LFT_GPG_KEY" ]; then
     if [ -t 0 ]; then
-        read -p "Enter GPG key ID/email for Linux binary signing (or leave empty for default GPG key): " LFT_GPG_KEY
+        read -p "Enter path/1Password name for GPG Private Key (or leave empty to skip GPG setup): " LFT_GPG_KEY
     else
-        echo "No GPG key ID provided and stdin is not a TTY. Skipping Linux GPG key prompt."
+        echo "No GPG key specified and stdin is not a TTY. Skipping Linux GPG key prompt."
+    fi
+fi
+
+# Prompt for GPG key passphrase if needed and stdin is a TTY
+if [ "$LFT_SKIP_GPG" != "true" ] && [ -n "$LFT_GPG_KEY" ] && [ "$LFT_GPG_KEY" != "skip" ] && [ -z "$LFT_GPG_PASS" ]; then
+    if [ -t 0 ]; then
+        read -s -p "Enter passphrase for GPG Private Key (leave empty to fallback to Windows cert password): " LFT_GPG_PASS
+        echo ""
     fi
 fi
 
@@ -86,6 +94,10 @@ cleanup() {
     if [ ${#TEMP_FILES[@]} -gt 0 ]; then
         echo "Cleaning up temporary signing files..."
         rm -f "${TEMP_FILES[@]}"
+    fi
+    if [ -n "$GNUPGHOME" ] && [[ "$GNUPGHOME" == /tmp/lfr-tunnel-gpghome-* ]]; then
+        echo "Cleaning up temporary GPG home directory..."
+        rm -rf "$GNUPGHOME"
     fi
 }
 trap cleanup EXIT
@@ -101,6 +113,23 @@ if [[ "$LFT_SIGN_PASS" == op://* ]]; then
         echo "ERROR: Failed to retrieve password from 1Password using reference: $LFT_SIGN_PASS" >&2
         exit 3
     }
+fi
+
+if [[ "$LFT_GPG_PASS" == op://* ]]; then
+    if ! command -v op &> /dev/null; then
+        echo "ERROR: 1Password CLI (op) not found but LFT_GPG_PASS op:// reference was provided." >&2
+        exit 2
+    fi
+    echo "Fetching GPG passphrase from 1Password..."
+    LFT_GPG_PASS=$(op read "$LFT_GPG_PASS") || {
+        echo "ERROR: Failed to retrieve GPG passphrase from 1Password using reference: $LFT_GPG_PASS" >&2
+        exit 3
+    }
+fi
+
+# Fallback to LFT_SIGN_PASS for GPG signing if LFT_GPG_PASS is not set
+if [ -z "$LFT_GPG_PASS" ] && [ -n "$LFT_SIGN_PASS" ]; then
+    LFT_GPG_PASS="$LFT_SIGN_PASS"
 fi
 
 if [ -n "$LFT_SIGN_P12" ] && [ "$LFT_SIGN_P12" != "skip" ] && [ ! -f "$LFT_SIGN_P12" ]; then
@@ -205,7 +234,57 @@ if [ -n "$LFT_SIGN_KEY" ] && [ "$LFT_SIGN_KEY" != "skip" ] && [ -n "$LFT_SIGN_CR
     TEMP_FILES+=("$TEMP_P12")
 fi
 
+# GPG Key Retrieval and Setup GPGHOME
+if [ "$LFT_SKIP_GPG" != "true" ] && [ -n "$LFT_GPG_KEY" ] && [ "$LFT_GPG_KEY" != "skip" ]; then
+    TEMP_GPG_KEY=""
+    if [ -f "$LFT_GPG_KEY" ]; then
+        TEMP_GPG_KEY="$LFT_GPG_KEY"
+    else
+        if ! command -v op &> /dev/null; then
+            echo "ERROR: GPG key '$LFT_GPG_KEY' not found locally, and 1Password CLI (op) is not installed." >&2
+            exit 2
+        fi
+        echo "Fetching GPG private key from 1Password..."
+        TEMP_GPG_KEY="/tmp/lfr-tunnel-gpgkey-$(date +%s).asc"
+        if [[ "$LFT_GPG_KEY" == op://* ]]; then
+            if ! op read "$LFT_GPG_KEY" --out-file "$TEMP_GPG_KEY" &>/dev/null && ! op document get "$LFT_GPG_KEY" --output "$TEMP_GPG_KEY" &>/dev/null; then
+                echo "ERROR: Failed to retrieve GPG private key from 1Password using reference: $LFT_GPG_KEY" >&2
+                exit 3
+            fi
+        else
+            if ! op document get "$LFT_GPG_KEY" --out-file "$TEMP_GPG_KEY" &>/dev/null; then
+                echo "ERROR: Failed to retrieve 1Password GPG document named: $LFT_GPG_KEY" >&2
+                exit 3
+            fi
+        fi
+        TEMP_FILES+=("$TEMP_GPG_KEY")
+    fi
 
+    # Set up temporary isolated GPG Home Directory
+    export GNUPGHOME="/tmp/lfr-tunnel-gpghome-$(date +%s)"
+    echo "Creating isolated temporary GPG keyring in $GNUPGHOME..."
+    mkdir -p -m 700 "$GNUPGHOME"
+
+    # Import GPG key
+    if [ -n "$LFT_GPG_PASS" ]; then
+        gpg --batch --import --pinentry-mode loopback --passphrase "$LFT_GPG_PASS" "$TEMP_GPG_KEY" || {
+            echo "ERROR: Failed to import GPG key with passphrase." >&2
+            exit 3
+        }
+    else
+        gpg --batch --import "$TEMP_GPG_KEY" || {
+            echo "ERROR: Failed to import GPG key." >&2
+            exit 3
+        }
+    fi
+    
+    # Extract the key ID of the imported key so we can reference it exactly for signing
+    IMPORTED_KEY_ID=$(gpg --list-secret-keys --with-colons | grep '^sec:' | cut -d: -f5 | head -n1)
+    if [ -n "$IMPORTED_KEY_ID" ]; then
+        echo "Successfully imported GPG private key: $IMPORTED_KEY_ID"
+        LFT_GPG_KEY="$IMPORTED_KEY_ID"
+    fi
+fi
 
 echo ""
 echo "=== Beginning Signing Process ==="
@@ -256,13 +335,19 @@ if [ "$LFT_SKIP_GPG" != "true" ] && [ "$LFT_GPG_KEY" != "skip" ]; then
     if command -v gpg &> /dev/null; then
         echo "Generating Linux detached GPG signature..."
         rm -f "$BIN_DIR/lfr-tunnel-linux-amd64.asc"
-        if [ -n "$LFT_GPG_KEY" ]; then
-            gpg --yes --local-user "$LFT_GPG_KEY" --armor --detach-sign "$BIN_DIR/lfr-tunnel-linux-amd64" || {
+        if [ -n "$LFT_GPG_PASS" ]; then
+            gpg --batch --yes --pinentry-mode loopback --passphrase "$LFT_GPG_PASS" \
+              --local-user "$LFT_GPG_KEY" --armor --detach-sign "$BIN_DIR/lfr-tunnel-linux-amd64" || {
+                  echo "ERROR: Linux GPG signing failed." >&2
+                  exit 4
+              }
+        elif [ -n "$LFT_GPG_KEY" ]; then
+            gpg --batch --yes --local-user "$LFT_GPG_KEY" --armor --detach-sign "$BIN_DIR/lfr-tunnel-linux-amd64" || {
                 echo "ERROR: Linux GPG signing failed." >&2
                 exit 4
             }
         else
-            gpg --yes --armor --detach-sign "$BIN_DIR/lfr-tunnel-linux-amd64" || {
+            gpg --batch --yes --armor --detach-sign "$BIN_DIR/lfr-tunnel-linux-amd64" || {
                 echo "ERROR: Linux GPG signing failed with default key." >&2
                 exit 4
             }

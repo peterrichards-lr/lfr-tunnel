@@ -1,13 +1,13 @@
 {
-  "version": "v1.8.0",
+  "version": "v1.9.1",
   "release_date": "2026-06-20",
   "features": [
-    "Subdomain Reservation System: Pre-book, extend, release, and promote custom subdomains directly from the dashboard.",
-    "Visual Quota limit indicators: Graphical progress bars reflecting your account's subdomain reservations limit usage.",
-    "Active Visitor IP Tracking: Track remote developer IPs routing through active tunnels in real-time inside the Tunnel Details Modal.",
-    "Automatic Details Modal Refresh: Auto-updates active visitor IP lists and tunnel statistics dynamically every 3 seconds.",
-    "Docker Build Context Optimization: Introduced .dockerignore file, reducing build context overhead from 1.17 GB to 37 kB.",
-    "Local Inspector Bind Address: Automatically bind the inspector web interface to 0.0.0.0 inside containers (or configure via LFT_INSPECTOR_BIND) to support host-to-container port mappings in LDM.",
-    "LDM Environment Fallbacks: Natively support LDM environment variables (LFT_SUBDOMAIN, LFT_SERVER_URL, LFT_TOKEN) and automatically clean/strip URL schemes and port suffixes from LFT_TARGET_HOST."
+    "Independent Subdomain Limits: Configure independent subdomain limits and defaults for Owner and Admin roles.",
+    "Active Tunnels Quota: Limit maximum concurrent active tunnels per user with SQLite tracking and admin overrides.",
+    "Standardised Dashboard Timestamps: Tooltip-enhanced standardised UTC and local browser dates across all tables.",
+    "CSV Data Exports: Client-side CSV export functionality for both reserved subdomains and personal access tokens.",
+    "Docker CLI Telemetry: Added robust client Docker context detection, appending ' (Docker)' to client OS telemetry.",
+    "Subdomains & Tokens Ownership Visibility: Added Owner email column in Admin/Owner views for active subdomains and tokens.",
+    "Tokens Expiration Extension: Admins/Owners can dynamically extend client PAT token expirations from the dashboard."
   ]
 }

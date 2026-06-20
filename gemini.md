@@ -262,6 +262,14 @@ The solution will consist of:
 - [x] Update dashboard UI to render infinity limits correctly.
 - [x] Update E2E config YAMLs and verify tests.
 
+## Refinements & Telemetry (v1.9.1)
+- [x] Implement robust IsDocker() check in client package (pkg/client/inspector.go) and use in client CLI (cmd/lfr-tunnel/main.go) to append " (Docker)" to ClientOS.
+- [x] Fix client_ip returning as N/A by including it in /api/me lease response (pkg/server/api.go).
+- [x] Fix visitor IP tracking by using incoming request r instead of cloned request req in proxy Director (pkg/server/proxy.go).
+- [x] Implement active tunnels limit in database and register handshake checks (pkg/db/db.go, pkg/server/server.go, pkg/server/api.go).
+- [x] Standardise portal dates to always render via renderTimestamp() (dashboard.js).
+- [x] Enhance Subdomains/Tokens UX: copy host button, Owner column for admin view, client-side CSV Export, and admin Token Extend dialog control.
+
 
 
 

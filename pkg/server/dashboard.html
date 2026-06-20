@@ -205,12 +205,15 @@
             <div id="tab-tokens" class="hidden">
                 <div class="header">
                     <h2>Personal Access Tokens</h2>
-                    <button class="btn btn-primary" style="width: auto; margin:0;" onclick="openTokenModal()">Generate New Token</button>
+                    <div style="display: flex; gap: 12px; align-items: center;">
+                        <button class="btn btn-secondary" style="width: auto; margin: 0;" onclick="exportTokensCSV()">Export CSV</button>
+                        <button class="btn btn-primary" style="width: auto; margin: 0;" onclick="openTokenModal()">Generate New Token</button>
+                    </div>
                 </div>
                 <p style="color: var(--text-muted); margin-bottom: 24px; font-size: 14px;">Tokens allow your CLI to authenticate with the gateway.</p>
                 <div class="glass table-container">
                     <table>
-                        <thead><tr><th data-sort="name">Name</th><th data-sort="token_prefix">Prefix</th><th data-sort="created_at">Created</th><th data-sort="expires_at">Expires</th><th>Action</th></tr></thead>
+                        <thead id="tokens-table-headers"><tr><th data-sort="name">Name</th><th data-sort="token_prefix">Prefix</th><th data-sort="created_at">Created</th><th data-sort="expires_at">Expires</th><th>Action</th></tr></thead>
                         <tbody id="tokens-table-body"></tbody>
                     </table>
                 </div>
@@ -414,10 +417,13 @@
                 </div>
 
                 <!-- Active Reservations Table -->
-                <h3 style="margin-bottom: 16px; font-size: 18px;">Your Reserved Subdomains</h3>
+                <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 16px;">
+                    <h3 id="reservations-title" style="margin: 0; font-size: 18px;">Your Reserved Subdomains</h3>
+                    <button class="btn btn-secondary" style="width: auto; margin: 0; padding: 6px 14px; font-size: 13px;" onclick="exportReservationsCSV()">Export CSV</button>
+                </div>
                 <div class="glass table-container" style="margin-bottom: 32px;">
                     <table>
-                        <thead>
+                        <thead id="reservations-table-headers">
                             <tr>
                                 <th>Subdomain</th>
                                 <th>Domain</th>
@@ -489,7 +495,7 @@
                 </div>
                 <div class="glass table-container">
                     <table>
-                        <thead><tr><th data-sort="email">Email</th><th data-sort="first_name">Name</th><th data-sort="role">Role</th><th data-sort="status">Status</th><th data-sort="rate_limit">Quota</th><th data-sort="last_login_at">Last Seen</th><th>Actions</th></tr></thead>
+                        <thead><tr><th data-sort="email">Email</th><th data-sort="first_name">Name</th><th data-sort="role">Role</th><th data-sort="status">Status</th><th style="min-width: 140px;">Quotas</th><th data-sort="last_login_at">Last Seen</th><th>Actions</th></tr></thead>
                         <tbody id="users-table-body"></tbody>
                     </table>
                 </div>
@@ -774,6 +780,25 @@
             <div style="display: flex; gap: 12px; justify-content: flex-end;">
                 <button class="btn btn-secondary" style="width: auto; margin: 0;" onclick="closeUserResLimitModal()">Cancel</button>
                 <button class="btn btn-primary" style="width: auto; margin: 0;" onclick="submitUserResLimit()">Save Limit</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- EDIT USER TUNNELS LIMIT MODAL -->
+    <div id="user-tunnels-limit-modal" class="modal-overlay" style="display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.6); align-items: center; justify-content: center; z-index: 1000;">
+        <div class="glass" style="max-width: 440px; width: 100%; padding: 32px; border-radius: 16px; border: 1px solid var(--border); text-align: left;">
+            <h3 style="margin-bottom: 12px; font-size: 20px;">Configure Active Tunnels Quota</h3>
+            <p style="font-size: 14px; color: var(--text-muted); margin-bottom: 20px; line-height: 1.5;">
+                Configure the maximum concurrent active tunnels quota override for <strong><span id="user-tunnels-limit-email-hint"></span></strong>.
+            </p>
+            <div style="margin-bottom: 20px;">
+                <label style="display:block; margin-bottom: 8px; color: var(--text-muted); font-size: 13px;">Max Active Tunnels Limit</label>
+                <input type="number" id="user-tunnels-limit-input" class="input-field" min="1" placeholder="Use default value" style="width: 100%; box-sizing: border-box; font-size: 16px; font-weight: bold; padding: 10px;">
+                <span style="font-size: 11px; color: var(--text-muted); display: block; margin-top: 4px;">Leave blank/empty to reset and use gateway configuration default.</span>
+            </div>
+            <div style="display: flex; gap: 12px; justify-content: flex-end;">
+                <button class="btn btn-secondary" style="width: auto; margin: 0;" onclick="closeUserTunnelsLimitModal()">Cancel</button>
+                <button class="btn btn-primary" style="width: auto; margin: 0;" onclick="submitUserTunnelsLimit()">Save Limit</button>
             </div>
         </div>
     </div>

@@ -34,6 +34,9 @@ type ServerConfig struct {
 	DefaultMaxReservations     int                       `yaml:"default_max_reservations"`
 	AdminMaxReservations       *int                      `yaml:"admin_max_reservations"`
 	OwnerMaxReservations       *int                      `yaml:"owner_max_reservations"`
+	DefaultMaxActiveTunnels    int                       `yaml:"default_max_active_tunnels"`
+	AdminMaxActiveTunnels      *int                      `yaml:"admin_max_active_tunnels"`
+	OwnerMaxActiveTunnels      *int                      `yaml:"owner_max_active_tunnels"`
 	AllowClientAutoReservation bool                      `yaml:"allow_client_auto_reservation"`
 	SubdomainQuarantineDays    int                       `yaml:"subdomain_quarantine_days"`
 	SSLCertFile                string                    `yaml:"ssl_cert_file"`
@@ -112,6 +115,7 @@ func DefaultServerConfig() *ServerConfig {
 		HTTPBindAddr:            ":80",
 		ChiselBindAddr:          ":8081",
 		DefaultMaxReservations:  3,
+		DefaultMaxActiveTunnels: 3,
 		SubdomainQuarantineDays: 3,
 		MaxTunnelRateLimit:      100,
 		EnableUserPortal:        true,
@@ -281,6 +285,11 @@ func LoadServerConfig(path string) (*ServerConfig, error) {
 	if val := os.Getenv("LFT_DEFAULT_MAX_RESERVATIONS"); val != "" {
 		if limit, err := strconv.Atoi(val); err == nil {
 			cfg.DefaultMaxReservations = limit
+		}
+	}
+	if val := os.Getenv("LFT_DEFAULT_MAX_ACTIVE_TUNNELS"); val != "" {
+		if limit, err := strconv.Atoi(val); err == nil {
+			cfg.DefaultMaxActiveTunnels = limit
 		}
 	}
 	if val := os.Getenv("LFT_SUBDOMAIN_QUARANTINE_DAYS"); val != "" {

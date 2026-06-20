@@ -909,6 +909,39 @@ func (s *Server) handleRegister(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
+	// Enforce active tunnels limit
+	if s.registry != nil {
+		leases := s.registry.ListLeases()
+		uniqueSubs := make(map[string]bool)
+		for _, l := range leases {
+			if l.UserID == user.ID {
+				uniqueSubs[l.SubdomainPrefix] = true
+			}
+		}
+		userTunnelsCount := len(uniqueSubs)
+
+		maxTunnels := s.cfg.DefaultMaxActiveTunnels
+		if user.Role == "admin" && s.cfg.AdminMaxActiveTunnels != nil {
+			maxTunnels = *s.cfg.AdminMaxActiveTunnels
+		} else if user.Role == "owner" && s.cfg.OwnerMaxActiveTunnels != nil {
+			maxTunnels = *s.cfg.OwnerMaxActiveTunnels
+		}
+
+		if userRec != nil && userRec.MaxTunnels != nil {
+			maxTunnels = *userRec.MaxTunnels
+		}
+
+		isReconnecting := uniqueSubs[req.SubdomainPrefix]
+
+		if maxTunnels > 0 && userTunnelsCount >= maxTunnels && !isReconnecting {
+			respondJSON(w, http.StatusForbidden, RegisterResponse{
+				Status: "error",
+				Error:  fmt.Sprintf("Active tunnels concurrency limit reached (%d). Stop another active tunnel or ask an administrator to increase your limit.", maxTunnels),
+			})
+			return
+		}
+	}
+
 	// Register in registry
 	sessionToken, remotes, err := s.registry.Register(user.ID, req.SubdomainPrefix, req.Ports, activeDomains, effectiveLimit, clientIP, req.BasicAuth, req.AddedHeaders)
 	if err != nil {
@@ -1810,6 +1843,11 @@ func (s *Server) handleAdminEndpoints(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	if r.Method == http.MethodPost && strings.HasPrefix(r.URL.Path, "/api/admin/users/") && strings.HasSuffix(r.URL.Path, "/tunnels-limit") {
+		s.handleAdminOverrideTunnelsLimit(w, r, actor)
+		return
+	}
+
 	if r.Method == http.MethodGet && strings.HasPrefix(r.URL.Path, "/api/admin/users/") {
 		s.handleAdminGetUser(w, r, actor)
 		return
@@ -1827,6 +1865,11 @@ func (s *Server) handleAdminEndpoints(w http.ResponseWriter, r *http.Request) {
 
 	if r.Method == http.MethodGet && r.URL.Path == "/api/admin/tokens" {
 		s.handleAdminListTokens(w, r, actor)
+		return
+	}
+
+	if r.Method == http.MethodPost && strings.HasPrefix(r.URL.Path, "/api/admin/tokens/") && strings.HasSuffix(r.URL.Path, "/extend") {
+		s.handleAdminExtendToken(w, r, actor)
 		return
 	}
 
@@ -2985,6 +3028,52 @@ func (s *Server) handleAdminDeleteToken(w http.ResponseWriter, r *http.Request, 
 	}
 
 	s.writeAudit(actor, "token.revoked", "token", patIDStr, "", r)
+	w.WriteHeader(http.StatusOK)
+	_ = json.NewEncoder(w).Encode(map[string]string{"status": "success"})
+}
+
+func (s *Server) handleAdminExtendToken(w http.ResponseWriter, r *http.Request, actor string) {
+	if s.db == nil {
+		http.Error(w, `{"error":"Database not configured"}`, http.StatusNotImplemented)
+		return
+	}
+
+	suffix := strings.TrimPrefix(r.URL.Path, "/api/admin/tokens/")
+	parts := strings.Split(suffix, "/")
+	if len(parts) == 0 {
+		http.Error(w, `{"error":"Invalid token ID"}`, http.StatusBadRequest)
+		return
+	}
+	patID, err := strconv.ParseInt(parts[0], 10, 64)
+	if err != nil {
+		http.Error(w, `{"error":"Invalid token ID"}`, http.StatusBadRequest)
+		return
+	}
+
+	var req struct {
+		Days int `json:"days"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		http.Error(w, `{"error":"Invalid request"}`, http.StatusBadRequest)
+		return
+	}
+
+	var expiresAt *time.Time
+	if req.Days > 0 {
+		exp := time.Now().AddDate(0, 0, req.Days)
+		expiresAt = &exp
+	}
+
+	if err := s.db.UpdatePATExpiry(patID, expiresAt); err != nil {
+		if err == db.ErrNotFound {
+			http.Error(w, `{"error":"Token not found"}`, http.StatusNotFound)
+			return
+		}
+		http.Error(w, `{"error":"Failed to extend token"}`, http.StatusInternalServerError)
+		return
+	}
+
+	s.writeAudit(actor, "token.extended", "token", strconv.FormatInt(patID, 10), fmt.Sprintf("Extended by %d days (permanent if 0)", req.Days), r)
 	w.WriteHeader(http.StatusOK)
 	_ = json.NewEncoder(w).Encode(map[string]string{"status": "success"})
 }

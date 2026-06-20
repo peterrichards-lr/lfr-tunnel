@@ -273,3 +273,12 @@ The solution will consist of:
 ## Client Codesigning & 1Password Integration
 - [x] Fix non-interactive read execution failure by checking TTY availability (`[ -t 0 ]`) in signing script.
 - [x] Implement 1Password CLI (`op`) integration in signing script to retrieve passwords and certificate documents from 1Password vault securely.
+
+## Future Roadmap Suggestions
+- [ ] Implement client-side Terminal UI (TUI) Dashboard for active connection metrics and scrolling request paths.
+- [ ] Create local Request Inspector & Replay web dashboard (similar to Ngrok's local interface) for debugging client extensions and webhooks.
+- [ ] Implement multi-region edge VPS gateways to reduce demo latency globally.
+- [ ] Integrate tunnel provisioning directly into Liferay Development Manager (LDM) execution loops.
+- [ ] Implement live WebSocket-driven telemetry updates in the portal Admin Web Dashboard.
+- [ ] Integrate a lightweight Web Application Firewall (WAF) shield on the gateway to filter basic exploit payloads during public presentations.
+

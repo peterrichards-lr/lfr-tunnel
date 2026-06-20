@@ -1,89 +1,99 @@
 # Liferay Tunnel (lfr-tunnel)
 
+<p align="center">
+  <img src="https://raw.githubusercontent.com/peterrichards-lr/lfr-tunnel/master/resources/images/logo.png" alt="Liferay Tunnel Logo" width="120" height="120" />
+</p>
+
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 [![Docker Pulls](https://img.shields.io/docker/pulls/peterjrichards/lfr-tunnel.svg)](https://hub.docker.com/r/peterjrichards/lfr-tunnel)
 
-**Liferay Tunnel** is a high-performance, secure tunneling solution tailored for the Liferay Sales Engineering (SE) team. It allows developers and SEs to route traffic from public wildcard subdomains to locally running Liferay / Tomcat instances, offload SSL, and inspect traffic in real-time.
+`lfr-tunnel` is a lightweight, secure reverse-tunneling agent built specifically for Liferay developers. It securely exposes local Liferay DXP or Portal instances running inside private networks to external webhooks, remote testing tools, or third-party client extensions without requiring complex firewall modifications or public IP routing.
 
-This image is the client-side component of `lfr-tunnel` designed to run seamlessly inside Docker environments, including orchestration via **Liferay Development Manager (LDM)**.
-
----
-
-## Key Features in Docker
-
-- **Zero-Dependency Startup:** Simply pass your personal access token and server endpoint to establish a secure WebSocket-based tunnel.
-- **Dynamic Port Mapping:** Expose Liferay Tomcat (`8080`) and local asset compilation servers (e.g., `3000`) simultaneously.
-- **Host-to-Container Interceptor:** Transparently intercepts incoming requests, injection-aware header rewriting (`LFT_TARGET_HOST`), and dynamic header additions.
-- **Embedded Web Inspector:** Visualizes webhooks and API traffic in real-time. Runs on port `4040` (automatically binds to `0.0.0.0` inside containers to support host port mapping).
-- **Graceful Offline Fallback:** If your local machine goes offline, the public endpoint automatically displays a beautifully themed maintenance/offline screen without losing your subdomain lease.
+By establishing an outbound connection to a remote gateway, `lfr-tunnel` opens a secure public endpoint that routes incoming HTTP traffic directly back to your local development container or workspace.
 
 ---
 
-## Quick Start (Docker Run)
+## Why lfr-tunnel?
 
-Run the tunnel client container directly to expose your local Liferay instance running at `http://host.docker.internal:8080` to the gateway:
+Standard tunneling utilities often choke on Liferay's sophisticated multi-site architectures, deep session management, and virtual host lookups. When a remote webhook hits a standard tunnel, the absolute URLs, redirected login sequences, or session cookie constraints frequently break down.
+
+`lfr-tunnel` tackles this directly by automatically normalising headers and ensuring cookie structures stay intact between the public entrypoint and your local Tomcat instance.
+
+---
+
+## Quick Start
+
+### 1. Run via Docker CLI
+
+To spin up the tunnel agent and connect it immediately to a running Liferay container on your machine:
 
 ```bash
 docker run -d \
   --name lfr-tunnel \
+  --network liferay-network \
   -p 4040:4040 \
   -e LFT_CLIENT_SERVER="https://tunnel.lfr-demo.se" \
-  -e LFT_CLIENT_TOKEN="your_personal_access_token" \
+  -e LFT_CLIENT_TOKEN="your-secure-access-token" \
   -e LFT_CLIENT_SUBDOMAIN="your-subdomain" \
-  -e LFT_TARGET_HOST="host.docker.internal" \
+  -e LFT_TARGET_HOST="liferay-dxp" \
   -e LFT_CLIENT_PORTS="8080" \
   peterjrichards/lfr-tunnel:latest
 ```
 
-Once running, access the local inspector dashboard on your host at `http://localhost:4040`.
+### 2. Run via Docker Compose
 
----
-
-## Environment Configuration Contract
-
-The container fully respects the standard configuration contract, resolving canonical variables or falling back to standard LDM variables:
-
-| Environment Variable | Canonical | Fallbacks | Description | Example |
-| :--- | :--- | :--- | :--- | :--- |
-| **Server URL** | `LFT_CLIENT_SERVER` | `LFT_SERVER_URL`, `LFT_SERVER` | Gateway server endpoint | `https://tunnel.lfr-demo.se` |
-| **Auth Token** | `LFT_CLIENT_TOKEN` | `LFT_TOKEN` | Gateway developer PAT | `lfr_pat_...` |
-| **Subdomain** | `LFT_CLIENT_SUBDOMAIN` | `LFT_SUBDOMAIN` | Custom subdomain prefix | `pjrtest` |
-| **Target Host** | `LFT_TARGET_HOST` | — | Backend hostname/IP to route to | `host.docker.internal` |
-| **Ports** | `LFT_CLIENT_PORTS` | — | Comma-separated list of ports | `8080,3000` |
-| **Inspector Bind** | `LFT_INSPECTOR_BIND` | — | Binding address for local inspector | `0.0.0.0` or `127.0.0.1` |
-
----
-
-## Docker Compose Example
-
-Deploy the tunnel alongside your local Liferay portal container:
+Integrate the tunnel directly into your existing local development stack:
 
 ```yaml
-version: "3.8"
+version: '3.8'
 
 services:
   liferay:
-    image: liferay/portal:7.4.3.8-ga8
+    image: liferay/portal:7.4.3.112-ga112
+    container_name: liferay-dxp
     ports:
       - "8080:8080"
+    networks:
+      - lfr-dev
 
   tunnel:
     image: peterjrichards/lfr-tunnel:latest
-    ports:
-      - "4040:4040"
-    environment:
-      - LFT_CLIENT_SERVER=https://tunnel.lfr-demo.se
-      - LFT_CLIENT_TOKEN=lfr_pat_your_token_here
-      - LFT_CLIENT_SUBDOMAIN=my-liferay-instance
-      - LFT_TARGET_HOST=liferay
-      - LFT_CLIENT_PORTS=8080
+    container_name: lfr-tunnel-agent
     depends_on:
       - liferay
+    environment:
+      - LFT_CLIENT_SERVER=https://tunnel.lfr-demo.se
+      - LFT_CLIENT_TOKEN=your-secure-access-token
+      - LFT_CLIENT_SUBDOMAIN=your-subdomain
+      - LFT_TARGET_HOST=liferay-dxp
+      - LFT_CLIENT_PORTS=8080
+    networks:
+      - lfr-dev
+
+networks:
+  lfr-dev:
+    driver: bridge
 ```
 
 ---
 
-## Getting Help
+## Configuration Reference
 
-- For self-hosting and server gateway configuration, check the [Liferay Tunnel Setup Guide](https://github.com/peterrichards-lr/lfr-tunnel/blob/master/docs/setup_guide.md).
-- To view full client features and EDR whitelist paths, see the [Liferay SE User Guide](https://github.com/peterrichards-lr/lfr-tunnel/blob/master/docs/liferay-se-guide.md).
+Configure the runtime execution using these environment variables:
+
+| Environment Variable | Canonical | Fallbacks | Description | Default / Example |
+| :--- | :--- | :--- | :--- | :--- |
+| **Server URL** | `LFT_CLIENT_SERVER` | `LFT_SERVER_URL`, `LFT_SERVER` | The public-facing gateway server managing the external entrypoint. | *Required* (e.g., `https://tunnel.lfr-demo.se`) |
+| **Auth Token** | `LFT_CLIENT_TOKEN` | `LFT_TOKEN` | The authentication secret used to register the secure connection with the gateway. | *Required* (e.g., `lfr_pat_...`) |
+| **Subdomain** | `LFT_CLIENT_SUBDOMAIN` | `LFT_SUBDOMAIN` | Custom subdomain prefix for your public endpoint. | `your-subdomain` |
+| **Target Host** | `LFT_TARGET_HOST` | — | The internal address/IP of your target Liferay instance (e.g., `localhost` or `container_name`). | `localhost` |
+| **Ports** | `LFT_CLIENT_PORTS` | — | Comma-separated list of ports to route. | `8080` (or `8080,3000`) |
+| **Inspector Bind** | `LFT_INSPECTOR_BIND` | — | Binding address for local inspector dashboard. | `0.0.0.0` or `127.0.0.1` |
+
+---
+
+## Source and Support
+
+The code for this agent is open source. You can view the implementation, report bugs, or request features at the official repository:
+
+👉 [github.com/peterrichards-lr/lfr-tunnel](https://github.com/peterrichards-lr/lfr-tunnel)

@@ -203,6 +203,47 @@ if [ -z "$DEVELOPER_PAT" ]; then
 fi
 echo "Developer PAT claimed successfully: $DEVELOPER_PAT"
 
+# 5.5. Reserve the subdomain 'peter-dev' for the developer via the Portal API
+echo "=== Requesting magic link for developer ==="
+curl -s -X POST -H "Content-Type: application/json" \
+     -d '{"email": "developer@lfr-demo.local"}' \
+     "http://localhost:8000/api/auth/magic-link"
+sleep 2
+
+echo "=== Extracting developer magic link token ==="
+DEV_ML_TOKEN=$(python3 -c '
+import urllib.request, json, re
+try:
+    data = json.loads(urllib.request.urlopen("http://localhost:8025/api/v1/messages").read())
+    for m in (data.get("messages") or []):
+        msg = json.loads(urllib.request.urlopen("http://localhost:8025/api/v1/message/" + m["ID"]).read())
+        body = msg.get("Text","") or msg.get("HTML","")
+        match = re.search(r"token=([a-f0-9]+)", body, re.IGNORECASE)
+        if match:
+            print(match.group(1))
+            exit(0)
+except Exception as e:
+    import sys; print(f"Error: {e}", file=sys.stderr)
+' 2>/dev/null || true)
+
+if [ -z "$DEV_ML_TOKEN" ]; then
+    echo "❌ Failed to extract developer magic link token!"
+    docker-compose down -v
+    exit 1
+fi
+echo "Developer Magic Link Token: $DEV_ML_TOKEN"
+
+echo "=== Logging in to Portal to establish session ==="
+curl -s -c /tmp/dev-session.txt -X POST -H "Content-Type: application/json" \
+     -d "{\"token\": \"$DEV_ML_TOKEN\"}" \
+     "http://localhost:8000/api/auth/verify"
+
+echo "=== Reserving subdomain peter-dev ==="
+RESERVE_RESP=$(curl -s -b /tmp/dev-session.txt -X POST -H "Content-Type: application/json" \
+     -d '{"subdomain": "peter-dev", "domain": "lfr-demo.local"}' \
+     "http://localhost:8000/api/portal/reservations")
+echo "Reservation response: $RESERVE_RESP"
+
 # 6. Start the Client Tunnel inside the container with the PAT using docker-compose run
 echo "=== Starting client tunnel container ==="
 CLIENT_CONTAINER_ID=$(docker-compose run -d --no-deps \

@@ -1398,6 +1398,7 @@ function toggleTheme() {
                             ${(!isSelf && u.status !== 'revoked') ? `<button class="btn" style="padding: 4px 8px; margin: 0 4px 0 0; color: var(--danger); border-color: var(--danger);" onclick="revokeUser('${u.id}')">Revoke</button>` : ''}
                             ${(!isSelf && u.status === 'approved') ? `<button class="btn" style="padding: 4px 8px; margin: 0 4px 0 0; color: #3b82f6; border-color: #3b82f6;" onclick="promptTargetedMessage('${u.id}', '${escapeHTML(u.email)}')">Message</button>` : ''}
                             ${(!isSelf && u.status === 'approved') ? `<button class="btn" style="padding: 4px 8px; margin: 0 4px 0 0; color: #8b5cf6; border-color: #8b5cf6;" onclick="openUserQuotaModal('${escapeHTML(u.email)}', ${u.rate_limit || 0})">Set Quota</button>` : ''}
+                            ${(!isSelf && u.status === 'approved') ? `<button class="btn" style="padding: 4px 8px; margin: 0 4px 0 0; color: #f59e0b; border-color: #f59e0b;" onclick="openUserResLimitModal('${escapeHTML(u.email)}', ${u.max_reservations !== undefined && u.max_reservations !== null ? u.max_reservations : ''})">Set Quota Limit</button>` : ''}
                             ${(!isSelf && u.status === 'approved' && u.role === 'admin') ? `<button class="btn" style="padding: 4px 8px; margin: 0 4px 0 0; color: #84cc16; border-color: #84cc16;" onclick="changeUserRole('${escapeHTML(u.email)}', 'user')">Demote</button>` : ''}
                             ${(!isSelf && u.status === 'approved' && u.role === 'user') ? `<button class="btn" style="padding: 4px 8px; margin: 0 4px 0 0; color: #84cc16; border-color: #84cc16;" onclick="changeUserRole('${escapeHTML(u.email)}', 'admin')">Promote</button>` : ''}
                             ${(!isSelf && u.totp_enabled) ? `<button class="btn" style="padding: 4px 8px; margin: 0 4px 0 0; color: #d97706; border-color: #d97706;" onclick="adminResetMFA('${escapeHTML(u.email)}')">Reset MFA</button>` : ''}
@@ -2509,10 +2510,15 @@ function toggleTheme() {
             }
         }
 
+        let refreshIntervalId = null;
+
         async function openTunnelDetailsModal(tunnelJsonEncoded) {
             const t = JSON.parse(decodeURIComponent(tunnelJsonEncoded));
             populateTunnelDetails(t);
             document.getElementById('tunnel-details-modal').style.display = 'flex';
+
+            if (refreshIntervalId) clearInterval(refreshIntervalId);
+            refreshIntervalId = setInterval(() => refreshTunnelDetails(true), 3000);
 
             // Asynchronously fetch fresh data to update metrics instantly on open
             try {
@@ -2546,10 +2552,26 @@ function toggleTheme() {
             statusEl.className = `badge ${t.status === 'up' ? 'success' : ''}`;
 
             document.getElementById('detail-tunnel-limit').innerText = t.rate_limit ? `${t.rate_limit} RPS` : 'Unlimited';
-            document.getElementById('detail-tunnel-connected').innerHTML = renderTimestamp(t.createdAt || t.created_at);
+            document.getElementById('detail-tunnel-connected').innerHTML = renderTimestamp(t.created_at);
             document.getElementById('detail-tunnel-bytes-in').innerText = formatBytes(t.bytes_in);
             document.getElementById('detail-tunnel-bytes-out').innerText = formatBytes(t.bytes_out);
             document.getElementById('detail-tunnel-client-ip').innerText = t.client_ip || 'N/A';
+
+            // Populate active visitor IPs
+            const visitorTbody = document.getElementById('detail-tunnel-visitor-ips-tbody');
+            if (visitorTbody) {
+                visitorTbody.innerHTML = '';
+                const ips = t.visitor_ips || [];
+                if (ips.length === 0) {
+                    visitorTbody.innerHTML = `<tr><td style="color: var(--text-muted); text-align: center; padding: 8px 0;">No active visitor connections (last 30s)</td></tr>`;
+                } else {
+                    ips.forEach(ip => {
+                        const tr = document.createElement('tr');
+                        tr.innerHTML = `<td style="font-family: monospace; padding: 4px 0;"><span style="color: #10b981; margin-right: 6px;">●</span>${escapeHTML(ip)}</td>`;
+                        visitorTbody.appendChild(tr);
+                    });
+                }
+            }
 
             // Role / Admin features check
             const isAdmin = currentUser && (currentUser.role === 'admin' || currentUser.role === 'owner');
@@ -2577,6 +2599,10 @@ function toggleTheme() {
         function closeTunnelDetailsModal() {
             document.getElementById('tunnel-details-modal').style.display = 'none';
             activeDetailTunnelSubdomain = null;
+            if (refreshIntervalId) {
+                clearInterval(refreshIntervalId);
+                refreshIntervalId = null;
+            }
         }
 
         function copyTunnelUrlToClipboard() {
@@ -2587,7 +2613,7 @@ function toggleTheme() {
             }
         }
 
-        async function refreshTunnelDetails() {
+        async function refreshTunnelDetails(silent = false) {
             if (!activeDetailTunnelSubdomain) return;
             
             // Reload user data to get fresh tunnel metrics
@@ -2600,9 +2626,9 @@ function toggleTheme() {
                 const freshTunnel = (currentUser.tunnels || []).find(t => t.subdomain_prefix === activeDetailTunnelSubdomain);
                 if (freshTunnel) {
                     populateTunnelDetails(freshTunnel);
-                    showToast("Tunnel metrics refreshed!", "success");
+                    if (!silent) showToast("Tunnel metrics refreshed!", "success");
                 } else {
-                    showToast("Tunnel connection is no longer active.", "warning");
+                    if (!silent) showToast("Tunnel connection is no longer active.", "warning");
                     closeTunnelDetailsModal();
                 }
             }
@@ -2641,5 +2667,305 @@ function toggleTheme() {
                 }
             } catch (e) {
                 console.error("Failed to load What's New content", e);
+            }
+        }
+
+        // SUBDOMAIN RESERVATIONS SYSTEM
+        let domainsLoaded = false;
+        async function loadDomains() {
+            if (domainsLoaded) return;
+            try {
+                const res = await fetch('/api/domains');
+                if (res.ok) {
+                    const domains = await res.json() || [];
+                    const select = document.getElementById('res-domain');
+                    if (select) {
+                        select.innerHTML = '';
+                        domains.forEach(d => {
+                            const opt = document.createElement('option');
+                            opt.value = d;
+                            opt.textContent = d;
+                            select.appendChild(opt);
+                        });
+                        domainsLoaded = true;
+                    }
+                }
+            } catch (e) {
+                console.error("Failed to load domains", e);
+            }
+        }
+
+        async function loadReservations() {
+            await loadDomains();
+            
+            try {
+                const res = await fetch('/api/portal/reservations');
+                if (res.ok) {
+                    const data = await res.json();
+                    const list = data.reservations || [];
+                    const limit = data.limit || 0;
+                    const used = data.used || 0;
+
+                    // Progress bar & quota text
+                    document.getElementById('reservation-quota-text').innerText = `${used} / ${limit} subdomains reserved`;
+                    const percent = limit > 0 ? (used / limit) * 100 : 0;
+                    document.getElementById('reservation-quota-bar').style.width = `${Math.min(percent, 100)}%`;
+
+                    const formContainer = document.getElementById('reservation-form-container');
+                    const warningAlert = document.getElementById('reservation-quota-warning');
+
+                    if (used >= limit) {
+                        if (formContainer) {
+                            formContainer.querySelectorAll('input, select, button').forEach(el => el.disabled = true);
+                        }
+                        if (warningAlert) warningAlert.classList.remove('hidden');
+                    } else {
+                        if (formContainer) {
+                            formContainer.querySelectorAll('input, select, button').forEach(el => el.disabled = false);
+                        }
+                        if (warningAlert) warningAlert.classList.add('hidden');
+                    }
+
+                    // Populate table
+                    const tbody = document.getElementById('reservations-table-body');
+                    tbody.innerHTML = '';
+                    if (list.length === 0) {
+                        tbody.innerHTML = `<tr><td colspan="5" style="text-align: center; padding: 24px; color: var(--text-muted);">You have no active subdomain reservations.</td></tr>`;
+                    } else {
+                        list.forEach(item => {
+                            let statusText = '<span class="badge success">Active</span>';
+                            let expiresText = 'Never (Permanent)';
+                            
+                            if (item.expires_at) {
+                                const expiryDate = new Date(item.expires_at);
+                                expiresText = renderTimestamp(item.expires_at);
+                                
+                                // Check if expired (in quarantine)
+                                if (expiryDate < new Date()) {
+                                    statusText = '<span class="badge danger" style="background: rgba(239, 68, 68, 0.15); color: #f87171; border: 1px solid rgba(239, 68, 68, 0.3);">Quarantined</span>';
+                                } else if (item.extension_requested) {
+                                    statusText = '<span class="badge warning" style="background: rgba(245, 158, 11, 0.15); color: #fbbf24; border: 1px solid rgba(245, 158, 11, 0.3);">Extension Requested</span>';
+                                }
+                            }
+
+                            const extButton = (item.expires_at && !item.extension_requested) 
+                                ? `<button class="btn btn-outline" style="padding: 4px 8px; margin: 0; font-size: 12px; color: #fbbf24; border-color: #fbbf24;" onclick="requestExtension('${item.id}')">Extend</button>`
+                                : '';
+
+                            const row = `
+                                <tr>
+                                    <td style="font-weight: 600; font-family: monospace;">${escapeHTML(item.subdomain)}</td>
+                                    <td style="font-family: monospace;">${escapeHTML(item.domain)}</td>
+                                    <td>${statusText}</td>
+                                    <td>${expiresText}</td>
+                                    <td style="text-align: right;">
+                                        <div style="display: flex; gap: 6px; justify-content: flex-end; align-items: center;">
+                                            ${extButton}
+                                            <button class="btn btn-outline" style="padding: 4px 8px; margin: 0; font-size: 12px; color: var(--danger); border-color: var(--danger);" onclick="releaseReservation('${item.id}', '${escapeHTML(item.subdomain)}.${escapeHTML(item.domain)}')">Release</button>
+                                        </div>
+                                    </td>
+                                </tr>
+                            `;
+                            tbody.innerHTML += row;
+                        });
+                    }
+
+                    // Admin checks
+                    const adminSection = document.getElementById('admin-reservations-section');
+                    if (currentUser && (currentUser.role === 'admin' || currentUser.role === 'owner')) {
+                        if (adminSection) adminSection.classList.remove('hidden');
+                        loadAdminExtensions();
+                    } else {
+                        if (adminSection) adminSection.classList.add('hidden');
+                    }
+                }
+            } catch (e) {
+                console.error("Failed to load reservations", e);
+            }
+        }
+
+        async function generateRandomSubdomain() {
+            const style = document.getElementById('res-style-select').value;
+            try {
+                const res = await fetch(`/api/portal/generate-subdomain?style=${encodeURIComponent(style)}`);
+                if (res.ok) {
+                    const data = await res.json();
+                    document.getElementById('res-subdomain').value = data.subdomain || '';
+                }
+            } catch (e) {
+                console.error("Failed to generate random subdomain", e);
+            }
+        }
+
+        async function reserveSubdomain() {
+            const sub = document.getElementById('res-subdomain').value.trim().toLowerCase();
+            const dom = document.getElementById('res-domain').value;
+            if (!sub) return showToast("Please enter or generate a subdomain prefix", "danger");
+
+            try {
+                const res = await fetch('/api/portal/reservations', {
+                    method: 'POST',
+                    headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify({ subdomain: sub, domain: dom })
+                });
+
+                if (res.ok) {
+                    showToast(`Subdomain ${sub}.${dom} successfully reserved!`, "success");
+                    document.getElementById('res-subdomain').value = '';
+                    loadReservations();
+                } else {
+                    const err = await res.json();
+                    showToast("Failed to reserve: " + (err.error || "Unknown error"), "danger");
+                }
+            } catch (e) {
+                console.error("Failed to reserve subdomain", e);
+            }
+        }
+
+        async function requestExtension(id) {
+            try {
+                const res = await fetch(`/api/portal/reservations/${encodeURIComponent(id)}/request-extension`, {
+                    method: 'POST'
+                });
+                if (res.ok) {
+                    showToast("Extension request submitted to administrators.", "success");
+                    loadReservations();
+                } else {
+                    const err = await res.json();
+                    showToast("Failed to request extension: " + (err.error || "Unknown error"), "danger");
+                }
+            } catch (e) {
+                console.error("Failed to request extension", e);
+            }
+        }
+
+        async function releaseReservation(id, fqdn) {
+            if (confirm(`Are you sure you want to release the subdomain "${fqdn}"? This cannot be undone.`)) {
+                try {
+                    const res = await fetch(`/api/portal/reservations/${encodeURIComponent(id)}`, {
+                        method: 'DELETE'
+                    });
+                    if (res.ok) {
+                        showToast(`Released subdomain reservation "${fqdn}"`, "success");
+                        loadReservations();
+                    } else {
+                        const err = await res.json();
+                        showToast("Failed to release: " + (err.error || "Unknown error"), "danger");
+                    }
+                } catch (e) {
+                    console.error("Failed to release subdomain", e);
+                }
+            }
+        }
+
+        async function loadAdminExtensions() {
+            try {
+                const res = await fetch('/api/admin/reservations/extensions');
+                if (res.ok) {
+                    const list = await res.json() || [];
+                    const tbody = document.getElementById('admin-extensions-table-body');
+                    tbody.innerHTML = '';
+
+                    if (list.length === 0) {
+                        tbody.innerHTML = `<tr><td colspan="5" style="text-align: center; padding: 24px; color: var(--text-muted);">No pending extension requests.</td></tr>`;
+                    } else {
+                        list.forEach(item => {
+                            const expiresVal = item.expires_at ? renderTimestamp(item.expires_at) : 'Never';
+                            const row = `
+                                <tr>
+                                    <td><span style="font-weight: 500;">${escapeHTML(item.user_email || 'User ' + item.user_id)}</span></td>
+                                    <td style="font-family: monospace;">${escapeHTML(item.subdomain)}</td>
+                                    <td style="font-family: monospace;">${escapeHTML(item.domain)}</td>
+                                    <td>${expiresVal}</td>
+                                    <td style="text-align: right;">
+                                        <div style="display: flex; gap: 6px; justify-content: flex-end; align-items: center;">
+                                            <button class="btn" style="padding: 4px 8px; margin: 0; font-size: 12px; color: #10b981; border-color: #10b981;" onclick="approveExtension('${item.id}', 30, false)">+30 Days</button>
+                                            <button class="btn" style="padding: 4px 8px; margin: 0; font-size: 12px; color: #8b5cf6; border-color: #8b5cf6;" onclick="approveExtension('${item.id}', 0, true)">Permanent</button>
+                                            <button class="btn" style="padding: 4px 8px; margin: 0; font-size: 12px; color: #f59e0b; border-color: #f59e0b;" onclick="demoteReservation('${item.id}')">Demote</button>
+                                        </div>
+                                    </td>
+                                </tr>
+                            `;
+                            tbody.innerHTML += row;
+                        });
+                    }
+                }
+            } catch (e) {
+                console.error("Failed to load admin extensions", e);
+            }
+        }
+
+        async function approveExtension(id, days, permanent) {
+            try {
+                const res = await fetch(`/api/admin/reservations/${encodeURIComponent(id)}/approve-extension`, {
+                    method: 'POST',
+                    headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify({ days: days, permanent: permanent })
+                });
+
+                if (res.ok) {
+                    showToast("Extension approved successfully!", "success");
+                    loadReservations();
+                } else {
+                    const err = await res.json();
+                    showToast("Failed to approve extension: " + (err.error || "Unknown error"), "danger");
+                }
+            } catch (e) {
+                console.error("Failed to approve extension", e);
+            }
+        }
+
+        async function demoteReservation(id) {
+            try {
+                const res = await fetch(`/api/admin/reservations/${encodeURIComponent(id)}/demote`, {
+                    method: 'POST'
+                });
+
+                if (res.ok) {
+                    showToast("Reservation successfully demoted to standard 7 days.", "success");
+                    loadReservations();
+                } else {
+                    const err = await res.json();
+                    showToast("Failed to demote: " + (err.error || "Unknown error"), "danger");
+                }
+            } catch (e) {
+                console.error("Failed to demote reservation", e);
+            }
+        }
+
+        // ADMINISTRATIVE RESERVATIONS LIMIT OVERRIDES
+        let activeResLimitEmail = '';
+        function openUserResLimitModal(email, currentLimit) {
+            activeResLimitEmail = email;
+            document.getElementById('user-res-limit-email-hint').innerText = email;
+            document.getElementById('user-res-limit-input').value = currentLimit || '';
+            document.getElementById('user-res-limit-modal').style.display = 'flex';
+        }
+
+        function closeUserResLimitModal() {
+            document.getElementById('user-res-limit-modal').style.display = 'none';
+        }
+
+        async function submitUserResLimit() {
+            const val = document.getElementById('user-res-limit-input').value;
+            const limit = val !== '' ? parseInt(val) : null;
+            
+            try {
+                const res = await fetch(`/api/admin/users/${encodeURIComponent(activeResLimitEmail)}/limit`, {
+                    method: 'POST',
+                    headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify({ max_reservations: limit })
+                });
+
+                if (res.ok) {
+                    showToast("User reservations limit updated successfully", "success");
+                    closeUserResLimitModal();
+                    loadUsers();
+                } else {
+                    const err = await res.json();
+                    showToast("Failed to update limit: " + (err.error || "Unknown error"), "danger");
+                }
+            } catch (e) {
+                console.error("Failed to submit quota override", e);
             }
         }

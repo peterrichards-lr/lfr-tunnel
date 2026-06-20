@@ -236,6 +236,12 @@ The solution will consist of:
 - [x] Add HTML email templates and integrate outbound email triggers for reservation events in `pkg/mail/`.
 - [x] Update tunnel registration and check-subdomain checks to enforce reservations in `pkg/server/server.go`.
 - [x] Implement subdomain quarantine period and HTTP 410 Gone fallback page.
-- [ ] Build portal UI dashboard panel and admin control views for reservation management in `pkg/server/static/dashboard.js`.
+- [x] Build portal UI dashboard panel and admin control views for reservation management in `pkg/server/static/dashboard.js`.
 - [x] Restrict 'Never' API token expiration option to admin and owner roles on both server and client.
-- [ ] Write unit and E2E integration tests for the reservation flow.
+- [x] Write unit and E2E integration tests for the reservation flow.
+- [x] Fix E2E integration tests failure by updating `tests/e2e/run.sh` to reserve the subdomain before tunnel connection.
+
+
+
+
+

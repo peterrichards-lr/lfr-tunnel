@@ -1021,61 +1021,34 @@ function toggleTheme() {
             const isAdmin = currentUser && (currentUser.role === 'admin' || currentUser.role === 'owner');
             const headersEl = document.getElementById('tunnels-table-headers');
             if (headersEl) {
-                if (isAdmin) {
-                    headersEl.innerHTML = `
-                        <th data-sort="subdomain">Subdomain</th>
-                        <th data-sort="target">Full Host</th>
-                        <th data-sort="user_id">Owner</th>
-                        <th data-sort="rate_limit">Limit</th>
-                        <th data-sort="status">Status</th>
-                        <th data-sort="bytes_in">Data In</th>
-                        <th data-sort="bytes_out">Data Out</th>
-                        <th data-sort="created_at">Connected At</th>
-                        <th>Actions</th>
-                    `;
-                } else {
-                    headersEl.innerHTML = `
-                        <th data-sort="subdomain">Subdomain</th>
-                        <th data-sort="target">Full Host</th>
-                        <th data-sort="status">Status</th>
-                        <th data-sort="bytes_in">Data In</th>
-                        <th data-sort="bytes_out">Data Out</th>
-                        <th data-sort="created_at">Connected At</th>
-                    `;
-                }
+                headersEl.innerHTML = `
+                    <th data-sort="subdomain">Subdomain</th>
+                    <th data-sort="target">Full Host</th>
+                    <th data-sort="status">Status</th>
+                    <th>Actions</th>
+                `;
             }
 
             // Already fetched in /api/me
             const tunnels = currentUser.tunnels || [];
             renderTable('tunnels-table-body', tunnels, t => {
-                if (isAdmin) {
-                    return `
-                        <tr>
-                            <td style="font-weight: 500;">${escapeHTML(t.subdomain_prefix)}</td>
-                            <td><a href="https://${escapeHTML(t.full_host)}" target="_blank" style="color: var(--primary); text-decoration: none;">${escapeHTML(t.full_host)}</a></td>
-                            <td><span style="font-size: 13px; color: var(--text-muted); font-family: monospace;">${escapeHTML(t.user_id || '')}</span></td>
-                            <td><span class="badge" style="font-weight: bold; background: rgba(139,92,246,0.15); color: #a78bfa; border: 1px solid rgba(139,92,246,0.3);">${t.rate_limit ? t.rate_limit + ' RPS' : 'Unlimited'}</span></td>
-                            <td><span class="badge ${t.status === 'up' ? 'success' : ''}">${escapeHTML(t.status)}</span></td>
-                            <td>${formatBytes(t.bytes_in)}</td>
-                            <td>${formatBytes(t.bytes_out)}</td>
-                            <td>${renderTimestamp(t.created_at)}</td>
-                            <td>
-                                <button class="btn" style="padding: 4px 8px; margin: 0; color: #d97706; border-color: #d97706;" onclick="openTunnelOverrideModal('${escapeHTML(t.full_host)}', ${t.rate_limit || 0})">Override Limit</button>
-                            </td>
-                        </tr>
-                    `;
-                } else {
-                    return `
-                        <tr>
-                            <td style="font-weight: 500;">${escapeHTML(t.subdomain_prefix)}</td>
-                            <td><a href="https://${escapeHTML(t.full_host)}" target="_blank" style="color: var(--primary); text-decoration: none;">${escapeHTML(t.full_host)}</a></td>
-                            <td><span class="badge ${t.status === 'up' ? 'success' : ''}">${escapeHTML(t.status)}</span></td>
-                            <td>${formatBytes(t.bytes_in)}</td>
-                            <td>${formatBytes(t.bytes_out)}</td>
-                            <td>${renderTimestamp(t.created_at)}</td>
-                        </tr>
-                    `;
-                }
+                const tunnelJsonEncoded = encodeURIComponent(JSON.stringify(t));
+                const actionButtons = `
+                    <button class="btn btn-outline" style="padding: 4px 8px; margin: 0; font-size: 13px;" onclick="openTunnelDetailsModal('${tunnelJsonEncoded}')">Details</button>
+                    ${isAdmin ? `<button class="btn" style="padding: 4px 8px; margin: 0; margin-left: 6px; font-size: 13px; color: var(--danger); border-color: var(--danger);" onclick="kickActiveTunnel('${escapeHTML(t.subdomain_prefix)}')">Kick</button>` : ''}
+                `;
+                return `
+                    <tr>
+                        <td style="font-weight: 500;">${escapeHTML(t.subdomain_prefix)}</td>
+                        <td><a href="https://${escapeHTML(t.full_host)}" target="_blank" style="color: var(--primary); text-decoration: none;">${escapeHTML(t.full_host)}</a></td>
+                        <td><span class="badge ${t.status === 'up' ? 'success' : ''}">${escapeHTML(t.status)}</span></td>
+                        <td>
+                            <div style="display: flex; gap: 6px; align-items: center;">
+                                ${actionButtons}
+                            </div>
+                        </td>
+                    </tr>
+                `;
             });
         }
 
@@ -2494,6 +2467,137 @@ function toggleTheme() {
                     const err = await res.json();
                     showToast('Failed to kick tunnel: ' + (err.error || 'Unknown error'), 'danger');
                 }
+            }
+        }
+
+        let activeDetailTunnelSubdomain = null;
+
+        async function kickActiveTunnel(subdomain) {
+            if (confirm(`Are you sure you want to kick the tunnel lease for subdomain "${subdomain}"?`)) {
+                const res = await fetch(`/api/admin/leases/${encodeURIComponent(subdomain)}`, { method: 'DELETE' });
+                if (res.ok) {
+                    showToast(`Kicked tunnel subdomain "${subdomain}"`, 'success');
+                    
+                    // Close details modal if the active detail tunnel was kicked
+                    if (activeDetailTunnelSubdomain === subdomain) {
+                        closeTunnelDetailsModal();
+                    }
+
+                    // Instantly reload active leases to update UI stats
+                    const meRes = await fetch('/api/me');
+                    if (meRes.ok) {
+                        currentUser = await meRes.json();
+                        loadTunnels();
+                    }
+                } else {
+                    const err = await res.json();
+                    showToast('Failed to kick tunnel: ' + (err.error || 'Unknown error'), 'danger');
+                }
+            }
+        }
+
+        async function openTunnelDetailsModal(tunnelJsonEncoded) {
+            const t = JSON.parse(decodeURIComponent(tunnelJsonEncoded));
+            populateTunnelDetails(t);
+            document.getElementById('tunnel-details-modal').style.display = 'flex';
+
+            // Asynchronously fetch fresh data to update metrics instantly on open
+            try {
+                const meRes = await fetch('/api/me');
+                if (meRes.ok) {
+                    currentUser = await meRes.json();
+                    loadTunnels(); // Keep table in sync
+                    const freshTunnel = (currentUser.tunnels || []).find(x => x.subdomain_prefix === t.subdomain_prefix);
+                    if (freshTunnel) {
+                        populateTunnelDetails(freshTunnel);
+                    }
+                }
+            } catch (e) {
+                console.error("Failed to fetch fresh tunnel details on open", e);
+            }
+        }
+
+        function populateTunnelDetails(t) {
+            activeDetailTunnelSubdomain = t.subdomain_prefix;
+            
+            // Set Host Link
+            const hostEl = document.getElementById('detail-tunnel-host');
+            hostEl.innerText = t.full_host;
+            hostEl.href = `https://${t.full_host}`;
+
+            // Basic details
+            document.getElementById('detail-tunnel-subdomain').innerText = t.subdomain_prefix;
+            
+            const statusEl = document.getElementById('detail-tunnel-status');
+            statusEl.innerText = t.status;
+            statusEl.className = `badge ${t.status === 'up' ? 'success' : ''}`;
+
+            document.getElementById('detail-tunnel-limit').innerText = t.rate_limit ? `${t.rate_limit} RPS` : 'Unlimited';
+            document.getElementById('detail-tunnel-connected').innerHTML = renderTimestamp(t.createdAt || t.created_at);
+            document.getElementById('detail-tunnel-bytes-in').innerText = formatBytes(t.bytes_in);
+            document.getElementById('detail-tunnel-bytes-out').innerText = formatBytes(t.bytes_out);
+            document.getElementById('detail-tunnel-client-ip').innerText = t.client_ip || 'N/A';
+
+            // Role / Admin features check
+            const isAdmin = currentUser && (currentUser.role === 'admin' || currentUser.role === 'owner');
+            
+            const ownerContainer = document.getElementById('detail-tunnel-owner-container');
+            const overrideBtn = document.getElementById('detail-tunnel-override-btn');
+            const kickBtn = document.getElementById('detail-tunnel-kick-btn');
+
+            if (isAdmin) {
+                ownerContainer.style.display = 'block';
+                document.getElementById('detail-tunnel-owner').innerText = t.user_id || 'N/A';
+                overrideBtn.style.display = 'inline-block';
+                overrideBtn.onclick = () => {
+                    closeTunnelDetailsModal();
+                    openTunnelOverrideModal(t.full_host, t.rate_limit || 0);
+                };
+                kickBtn.style.display = 'block';
+            } else {
+                ownerContainer.style.display = 'none';
+                overrideBtn.style.display = 'none';
+                kickBtn.style.display = 'none';
+            }
+        }
+
+        function closeTunnelDetailsModal() {
+            document.getElementById('tunnel-details-modal').style.display = 'none';
+            activeDetailTunnelSubdomain = null;
+        }
+
+        function copyTunnelUrlToClipboard() {
+            const host = document.getElementById('detail-tunnel-host').innerText;
+            if (host) {
+                navigator.clipboard.writeText("https://" + host);
+                showToast("Copied tunnel URL to clipboard!", "success");
+            }
+        }
+
+        async function refreshTunnelDetails() {
+            if (!activeDetailTunnelSubdomain) return;
+            
+            // Reload user data to get fresh tunnel metrics
+            const meRes = await fetch('/api/me');
+            if (meRes.ok) {
+                currentUser = await meRes.json();
+                loadTunnels(); // Refresh main view table
+                
+                // Find matching active tunnel to update the modal
+                const freshTunnel = (currentUser.tunnels || []).find(t => t.subdomain_prefix === activeDetailTunnelSubdomain);
+                if (freshTunnel) {
+                    populateTunnelDetails(freshTunnel);
+                    showToast("Tunnel metrics refreshed!", "success");
+                } else {
+                    showToast("Tunnel connection is no longer active.", "warning");
+                    closeTunnelDetailsModal();
+                }
+            }
+        }
+
+        function kickFromDetails() {
+            if (activeDetailTunnelSubdomain) {
+                kickActiveTunnel(activeDetailTunnelSubdomain);
             }
         }
 

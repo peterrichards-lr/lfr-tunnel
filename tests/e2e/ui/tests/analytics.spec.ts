@@ -93,5 +93,45 @@ test.describe('Analytics & Tunnel Automation', () => {
 
     // Verify it doesn't say "No results found"
     await expect(page.locator('#client-stats-table-body')).not.toContainText('No results found.');
+
+    // 10. Navigate back to Tunnels Tab and test the new Tunnel Details Modal
+    await page.click('#nav-tunnels');
+    
+    // Find the details button and click it
+    const detailsBtn = page.locator('#tunnels-table-body button:has-text("Details")').first();
+    await expect(detailsBtn).toBeVisible();
+    await detailsBtn.click();
+
+    // Verify Tunnel Details modal is visible
+    const detailsModal = page.locator('#tunnel-details-modal');
+    await expect(detailsModal).toBeVisible();
+
+    // Assert the content in the modal is populated correctly
+    await expect(page.locator('#detail-tunnel-subdomain')).not.toBeEmpty();
+    await expect(page.locator('#detail-tunnel-status')).toHaveText('up');
+    await expect(page.locator('#detail-tunnel-owner')).toHaveText(adminEmail);
+    await expect(page.locator('#detail-tunnel-limit')).toHaveText('100 RPS');
+    await expect(page.locator('#detail-tunnel-client-ip')).not.toBeEmpty();
+
+    // Verify Connected At timestamp tooltip structure
+    const connectedEl = page.locator('#detail-tunnel-connected');
+    await expect(connectedEl.locator('span.timestamp-tooltip')).toBeAttached();
+    const connectedText = await connectedEl.innerText();
+    expect(connectedText).not.toContain('<span');
+
+    // Verify bandwidth statistics are not '0 Bytes' (traffic was generated)
+    await expect(page.locator('#detail-tunnel-bytes-out')).not.toHaveText('0 Bytes');
+
+    // Test Copy URL button and Toast
+    await page.click('#tunnel-details-modal button:has-text("Copy URL")');
+    await expect(page.locator('.toast:has-text("Copied tunnel URL to clipboard!")')).toBeVisible();
+
+    // Test Refresh button and Toast
+    await page.click('#tunnel-details-modal button:has-text("Refresh")');
+    await expect(page.locator('.toast:has-text("Tunnel metrics refreshed!")')).toBeVisible();
+
+    // Close the modal and assert it is hidden
+    await page.click('#tunnel-details-modal button:has-text("Close")');
+    await expect(detailsModal).not.toBeVisible();
   });
 });

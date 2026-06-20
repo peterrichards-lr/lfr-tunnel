@@ -140,7 +140,7 @@ if [ -n "$LFT_SIGN_P12" ] && [ "$LFT_SIGN_P12" != "skip" ] && [ ! -f "$LFT_SIGN_
     echo "Fetching certificate document from 1Password..."
     TEMP_P12="/tmp/lfr-tunnel-windows-$(date +%s).p12"
     if [[ "$LFT_SIGN_P12" == op://* ]]; then
-        if ! op read "$LFT_SIGN_P12" --out-file "$TEMP_P12" &>/dev/null && ! op document get "$LFT_SIGN_P12" --output "$TEMP_P12" &>/dev/null; then
+        if ! op read "$LFT_SIGN_P12" > "$TEMP_P12" 2>/dev/null && ! op document get "$LFT_SIGN_P12" --output "$TEMP_P12" &>/dev/null; then
             echo "ERROR: Failed to retrieve certificate document from 1Password using reference: $LFT_SIGN_P12" >&2
             exit 3
         fi
@@ -169,7 +169,7 @@ if [ -n "$LFT_SIGN_KEY" ] && [ "$LFT_SIGN_KEY" != "skip" ] && [ -n "$LFT_SIGN_CR
         echo "Fetching private key from 1Password..."
         TEMP_KEY="/tmp/lfr-tunnel-signing-key-$(date +%s).key"
         if [[ "$LFT_SIGN_KEY" == op://* ]]; then
-            if ! op read "$LFT_SIGN_KEY" --out-file "$TEMP_KEY" &>/dev/null && ! op document get "$LFT_SIGN_KEY" --output "$TEMP_KEY" &>/dev/null; then
+            if ! op read "$LFT_SIGN_KEY" > "$TEMP_KEY" 2>/dev/null && ! op document get "$LFT_SIGN_KEY" --output "$TEMP_KEY" &>/dev/null; then
                 echo "ERROR: Failed to retrieve private key from 1Password using reference: $LFT_SIGN_KEY" >&2
                 exit 3
             fi
@@ -194,7 +194,7 @@ if [ -n "$LFT_SIGN_KEY" ] && [ "$LFT_SIGN_KEY" != "skip" ] && [ -n "$LFT_SIGN_CR
         echo "Fetching public certificate from 1Password..."
         TEMP_CRT="/tmp/lfr-tunnel-signing-cert-$(date +%s).crt"
         if [[ "$LFT_SIGN_CRT" == op://* ]]; then
-            if ! op read "$LFT_SIGN_CRT" --out-file "$TEMP_CRT" &>/dev/null && ! op document get "$LFT_SIGN_CRT" --output "$TEMP_CRT" &>/dev/null; then
+            if ! op read "$LFT_SIGN_CRT" > "$TEMP_CRT" 2>/dev/null && ! op document get "$LFT_SIGN_CRT" --output "$TEMP_CRT" &>/dev/null; then
                 echo "ERROR: Failed to retrieve certificate from 1Password using reference: $LFT_SIGN_CRT" >&2
                 exit 3
             fi
@@ -247,7 +247,7 @@ if [ "$LFT_SKIP_GPG" != "true" ] && [ -n "$LFT_GPG_KEY" ] && [ "$LFT_GPG_KEY" !=
         echo "Fetching GPG private key from 1Password..."
         TEMP_GPG_KEY="/tmp/lfr-tunnel-gpgkey-$(date +%s).asc"
         if [[ "$LFT_GPG_KEY" == op://* ]]; then
-            if ! op read "$LFT_GPG_KEY" --out-file "$TEMP_GPG_KEY" &>/dev/null && ! op document get "$LFT_GPG_KEY" --output "$TEMP_GPG_KEY" &>/dev/null; then
+            if ! op read "$LFT_GPG_KEY" > "$TEMP_GPG_KEY" 2>/dev/null && ! op document get "$LFT_GPG_KEY" --output "$TEMP_GPG_KEY" &>/dev/null; then
                 echo "ERROR: Failed to retrieve GPG private key from 1Password using reference: $LFT_GPG_KEY" >&2
                 exit 3
             fi

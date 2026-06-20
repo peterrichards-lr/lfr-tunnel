@@ -82,7 +82,7 @@ else
 fi
 
 # Linux GPG Signing
-if command -v gpg &> /dev/null; then
+if [ "$LFT_SKIP_GPG" != "true" ] && command -v gpg &> /dev/null; then
     echo "Generating Linux detached GPG signature..."
     rm -f "$BIN_DIR/lfr-tunnel-linux-amd64.asc"
     if [ -n "$LFT_GPG_KEY" ]; then

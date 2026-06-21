@@ -1,8 +1,9 @@
 {
-  "version": "v1.9.2",
+  "version": "v1.9.3",
   "release_date": "2026-06-21",
   "features": [
-    "Client Inspector API: Added GET `/api/healthz` and `/api/info` endpoints on the client's internal HTTP server for automated health check polling (Docker/LDM) and verbose human diagnostics.",
-    "Docker Binding Constraints: Inspector endpoints dynamically bind to `0.0.0.0:4040` inside Docker and `127.0.0.1:4040` outside Docker, respecting `LFT_INSPECTOR_BIND` constraints."
+    "Viewport-Relative Action Menus: Switched action dropdown styling to viewport-relative fixed positioning with dynamic coordinate calculation to prevent clipping on table borders.",
+    "Aligned Reservation Form: Zeroed out bottom input margins and vertically aligned the 'Reserve' button on the same baseline.",
+    "Never Connected Status: Replaced confusing 'Your Client: N/A' text with 'Never Connected' for users without recorded client connection history."
   ]
 }

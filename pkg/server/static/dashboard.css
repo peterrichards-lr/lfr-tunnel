@@ -255,6 +255,9 @@
             color: var(--success);
         }
         .badge.admin { background: rgba(11, 95, 255, 0.2); color: var(--primary); }
+        .badge.success { background: rgba(16, 185, 129, 0.15); color: var(--success); }
+        .badge.warning { background: rgba(245, 158, 11, 0.15); color: #fbbf24; }
+        .badge.danger { background: rgba(239, 68, 68, 0.15); color: var(--danger); }
 
         /* Toggle Switch */
         .toggle-switch {

@@ -185,9 +185,13 @@ The solution will consist of:
 - [ ] Apply to SignPath Foundation for free Windows Authenticode signing (https://signpath.org).
 - [ ] Submit official release binary hashes to SentinelOne false-positive review portal.
 - [ ] Ask SentinelOne admin to configure path exclusions per SECURITY.md (Homebrew + direct-install paths).
+- [ ] Add ~/.ldm/bin/lfr-tunnel to SentinelOne exclusions in README.md and SECURITY.md.
 
 ## Bug Fixes
 - [x] Fix unit test TempDir cleanup race by sleeping 50ms before stopping the server
+- [x] Fix renderTimestamp parsing of dates with timezone offsets in dashboard.js to prevent table wrapping issues
+- [x] Add visual status indicators (Active, Expired, Revoked) for PATs in the dashboard UI
+- [x] Add relative "Expires In" column to PAT table in the dashboard UI
 
 ## Dependabot Alert Mitigation
 - [x] Upgrade github.com/jpillora/chisel to v1.11.6 and other dependencies to patch CVE-2026-48113 and resolve Dependabot alerts.
@@ -273,3 +277,11 @@ The solution will consist of:
 ## Client Codesigning & 1Password Integration
 - [x] Fix non-interactive read execution failure by checking TTY availability (`[ -t 0 ]`) in signing script.
 - [x] Implement 1Password CLI (`op`) integration in signing script to retrieve passwords and certificate documents from 1Password vault securely.
+
+## Future Roadmap Suggestions
+- [ ] Implement client-side Terminal UI (TUI) Dashboard for active connection metrics and scrolling request paths.
+- [ ] Create local Request Inspector & Replay web dashboard (similar to Ngrok's local interface) for debugging client extensions and webhooks.
+- [ ] Implement multi-region edge VPS gateways to reduce demo latency globally.
+- [ ] Integrate tunnel provisioning directly into Liferay Development Manager (LDM) execution loops.
+- [ ] Implement live WebSocket-driven telemetry updates in the portal Admin Web Dashboard.
+- [ ] Integrate a lightweight Web Application Firewall (WAF) shield on the gateway to filter basic exploit payloads during public presentations.

@@ -1220,9 +1220,9 @@ function toggleTheme() {
             const res = await fetch('/api/tokens');
             if (res.ok) {
                 const tokens = await res.json() || [];
-                
                 const tokensHeaders = document.getElementById('tokens-table-headers');
                 const isAdminOrOwner = currentUser && (currentUser.role === 'admin' || currentUser.role === 'owner');
+                
                 if (tokensHeaders) {
                     tokensHeaders.innerHTML = `
                         <tr>
@@ -1231,19 +1231,37 @@ function toggleTheme() {
                             ${isAdminOrOwner ? '<th data-sort="user_id">Owner</th>' : ''}
                             <th data-sort="created_at">Created</th>
                             <th data-sort="expires_at">Expires</th>
+                            <th data-sort="expires_at">Expires In</th>
+                            <th>Status</th>
                             <th style="text-align: right;">Action</th>
                         </tr>
                     `;
                 }
 
                 renderTable('tokens-table-body', tokens, t => {
-                    const extendBtns = isAdminOrOwner ? `
+                    const isRevoked = t.revoked_at != null && !t.revoked_at.startsWith('0001-01-01');
+                    const isExpired = t.expires_at && !t.expires_at.startsWith('0001-01-01') && new Date(t.expires_at) < new Date();
+
+                    let statusBadge = '';
+                    if (isRevoked) {
+                        statusBadge = `<span class="badge danger">Revoked</span>`;
+                    } else if (isExpired) {
+                        statusBadge = `<span class="badge danger">Expired</span>`;
+                    } else {
+                        statusBadge = `<span class="badge success">Active</span>`;
+                    }
+
+                    const extendBtns = (isAdminOrOwner && !isRevoked) ? `
                         <div style="display: flex; gap: 4px; align-items: center;">
                             <button class="btn btn-outline" style="padding: 4px 8px; margin: 0; font-size: 11px; color: #fbbf24; border-color: #fbbf24;" onclick="extendToken(${t.id}, 30)">+30d</button>
                             <button class="btn btn-outline" style="padding: 4px 8px; margin: 0; font-size: 11px; color: #fbbf24; border-color: #fbbf24;" onclick="extendToken(${t.id}, 90)">+90d</button>
                             <button class="btn btn-outline" style="padding: 4px 8px; margin: 0; font-size: 11px; color: #fbbf24; border-color: #fbbf24;" onclick="extendToken(${t.id}, 0)">Permanent</button>
                         </div>
                     ` : '';
+
+                    const revokeBtn = isRevoked ? '' : `
+                        <button class="btn btn-outline" style="padding: 4px 8px; margin: 0; font-size: 11px; color: var(--danger); border-color: var(--danger);" onclick="revokeToken(${t.id})">Revoke</button>
+                    `;
 
                     return `
                         <tr>
@@ -1252,10 +1270,12 @@ function toggleTheme() {
                             ${isAdminOrOwner ? `<td style="font-family: monospace; font-size: 13px;">${escapeHTML(t.user_id || 'N/A')}</td>` : ''}
                             <td>${renderTimestamp(t.created_at)}</td>
                             <td>${t.expires_at ? renderTimestamp(t.expires_at) : 'Never'}</td>
+                            <td>${formatTimeRemaining(t.expires_at, isRevoked)}</td>
+                            <td>${statusBadge}</td>
                             <td style="text-align: right;">
                                 <div style="display: flex; gap: 6px; justify-content: flex-end; align-items: center;">
                                     ${extendBtns}
-                                    <button class="btn btn-outline" style="padding: 4px 8px; margin: 0; font-size: 11px; color: var(--danger); border-color: var(--danger);" onclick="revokeToken(${t.id})">Revoke</button>
+                                    ${revokeBtn}
                                 </div>
                             </td>
                         </tr>
@@ -1757,8 +1777,10 @@ function toggleTheme() {
 
         function renderTimestamp(utcDateStr) {
             if (!utcDateStr || utcDateStr.startsWith('0001-01-01')) return 'Never';
-            // Ensure the input is treated as UTC
-            const date = new Date(utcDateStr.endsWith('Z') ? utcDateStr : utcDateStr + 'Z');
+            // Treat as UTC only if it doesn't already specify a timezone offset
+            const hasTimezone = /Z$/i.test(utcDateStr) || /[+-]\d{2}(:?\d{2})?$/.test(utcDateStr);
+            const parseStr = hasTimezone ? utcDateStr : (utcDateStr.includes(' ') ? utcDateStr.replace(' ', 'T') + 'Z' : utcDateStr + 'Z');
+            const date = new Date(parseStr);
             if (isNaN(date.getTime())) return escapeHTML(utcDateStr);
 
             // Format neat UTC string: YYYY-MM-DD HH:mm:ss UTC
@@ -1774,6 +1796,34 @@ function toggleTheme() {
             }
 
             return `<span class="timestamp-tooltip" title="Local Browser Time: ${escapeHTML(localTimeStr)}" style="cursor: help; border-bottom: 1px dashed var(--text-muted); padding-bottom: 2px;">${escapeHTML(utcTimeStr)}</span>`;
+        }
+
+        function formatTimeRemaining(expiryDateStr, isRevoked) {
+            if (isRevoked) return '—';
+            if (!expiryDateStr || expiryDateStr.startsWith('0001-01-01')) return 'Never';
+            
+            const hasTimezone = /Z$/i.test(expiryDateStr) || /[+-]\d{2}(:?\d{2})?$/.test(expiryDateStr);
+            const parseStr = hasTimezone ? expiryDateStr : (expiryDateStr.includes(' ') ? expiryDateStr.replace(' ', 'T') + 'Z' : expiryDateStr + 'Z');
+            const expiryDate = new Date(parseStr);
+            if (isNaN(expiryDate.getTime())) return '—';
+            
+            const now = new Date();
+            const diffMs = expiryDate - now;
+            if (diffMs <= 0) return 'Expired';
+            
+            const diffMins = Math.floor(diffMs / 60000);
+            const diffHours = Math.floor(diffMins / 60);
+            const diffDays = Math.floor(diffHours / 24);
+            
+            if (diffDays > 0) {
+                const remainingHours = diffHours % 24;
+                return `${diffDays}d ${remainingHours}h`;
+            }
+            if (diffHours > 0) {
+                const remainingMins = diffMins % 60;
+                return `${diffHours}h ${remainingMins}m`;
+            }
+            return `${diffMins > 0 ? diffMins : 1}m`;
         }
 
         function escapeHTML(str) {

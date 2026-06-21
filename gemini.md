@@ -301,6 +301,7 @@ The solution will consist of:
 - [x] Implement latest_client_version key in ServerConfig.
 - [x] Integrate latest_client_version fallback inside server version response.
 - [x] Adapt Dashboard UI version displays to render server_version instead of client version.
+- [x] Fix login page HTML layout nesting crash and restrict login version footer to gateway only.
 - [x] Document version management strategy in setup_guide.md.
 
 ## Future Roadmap Suggestions

@@ -7,16 +7,21 @@ import (
 	"fmt"
 	"github.com/jpillora/chisel/client"
 	"gopkg.in/yaml.v3"
+	"io"
 	"io/fs"
 	"lfr-tunnel/pkg/config"
 	"log"
+	"net"
 	"net/http"
 	"net/url"
 	"os"
 	"path/filepath"
+	"reflect"
+	"regexp"
 	"strconv"
 	"strings"
 	"time"
+	"unsafe"
 )
 
 // PortMapping matches the server DTO for port allocations.
@@ -177,7 +182,7 @@ func RegisterTunnel(serverURL string, authToken string, subdomain string, ports 
 }
 
 // RunClient runs the embedded Chisel client.
-func RunClient(ctx context.Context, serverURL string, token string, remotes []string, publicURLs []string) error {
+func RunClient(ctx context.Context, serverURL string, token string, remotes []string, publicURLs []string, engine *InterceptorEngine) error {
 	// 1. Ensure server URL starts with http/https
 	if !strings.HasPrefix(serverURL, "http") {
 		serverURL = "http://" + serverURL
@@ -198,11 +203,61 @@ func RunClient(ctx context.Context, serverURL string, token string, remotes []st
 		return fmt.Errorf("failed to initialize chisel client: %v", err)
 	}
 
+	// Intercept logger to monitor connection state
+	redirectChiselLogger(c, engine)
+
 	// Log client status
 	log.Printf("[Client] Establised lease. Connecting tunnels to %s...", serverURL)
 	for _, remote := range remotes {
 		log.Printf("[Client] Forwarding remote port: %s", remote)
 	}
+
+	// Start background latency tracker
+	go func() {
+		parsed, err := url.Parse(serverURL)
+		if err != nil {
+			return
+		}
+		host := parsed.Host
+		if !strings.Contains(host, ":") {
+			if parsed.Scheme == "https" {
+				host = host + ":443"
+			} else {
+				host = host + ":80"
+			}
+		}
+
+		ticker := time.NewTicker(15 * time.Second)
+		defer ticker.Stop()
+
+		for {
+			select {
+			case <-ctx.Done():
+				return
+			case <-ticker.C:
+				engine.mu.RLock()
+				state := engine.ConnState
+				engine.mu.RUnlock()
+
+				if state == "connected" {
+					t0 := time.Now()
+					conn, err := net.DialTimeout("tcp", host, 3*time.Second)
+					if err == nil {
+						rtt := time.Since(t0).Milliseconds()
+						_ = conn.Close()
+
+						engine.mu.Lock()
+						engine.LatencyLast = rtt
+						engine.LatencyHistory = append(engine.LatencyHistory, rtt)
+						if len(engine.LatencyHistory) > 60 {
+							engine.LatencyHistory = engine.LatencyHistory[1:]
+						}
+						engine.mu.Unlock()
+					}
+				}
+			}
+		}
+	}()
 
 	// 4. Start the client
 	if err := c.Start(ctx); err != nil {
@@ -225,4 +280,83 @@ func RunClient(ctx context.Context, serverURL string, token string, remotes []st
 
 	// 5. Block until context done or wait error
 	return c.Wait()
+}
+
+var latencyRegex = regexp.MustCompile(`Latency\s+([^)]+)`)
+
+type logParserWriter struct {
+	original io.Writer
+	engine   *InterceptorEngine
+}
+
+func (w *logParserWriter) Write(p []byte) (n int, err error) {
+	msg := string(p)
+	w.parseMessage(msg)
+	return w.original.Write(p)
+}
+
+func (w *logParserWriter) parseMessage(msg string) {
+	w.engine.mu.Lock()
+	defer w.engine.mu.Unlock()
+
+	// Track transitions
+	oldState := w.engine.ConnState
+
+	if strings.Contains(msg, "Connecting to") {
+		w.engine.ConnState = "connecting"
+	} else if strings.Contains(msg, "Connected (Latency") {
+		w.engine.ConnState = "connected"
+		w.engine.UptimeStart = time.Now()
+		w.engine.AuthValid = true
+		w.engine.AuthErrorMessage = ""
+		matches := latencyRegex.FindStringSubmatch(msg)
+		if len(matches) > 1 {
+			durStr := matches[1]
+			dur, err := time.ParseDuration(durStr)
+			if err == nil {
+				ms := dur.Milliseconds()
+				w.engine.LatencyLast = ms
+				w.engine.LatencyHistory = append(w.engine.LatencyHistory, ms)
+				if len(w.engine.LatencyHistory) > 60 {
+					w.engine.LatencyHistory = w.engine.LatencyHistory[1:]
+				}
+			}
+		}
+	} else if strings.Contains(msg, "Disconnected") {
+		w.engine.ConnState = "disconnected"
+		w.engine.UptimeStart = time.Time{}
+		if oldState == "connected" {
+			w.engine.ReconnectCount++
+		}
+	} else if strings.Contains(msg, "Retrying in") {
+		w.engine.ConnState = "reconnecting"
+	} else if strings.Contains(msg, "Authentication failed") {
+		w.engine.AuthValid = false
+		w.engine.AuthErrorMessage = "Authentication failed"
+		w.engine.ConnState = "disconnected"
+	}
+}
+
+func redirectChiselLogger(c *chclient.Client, engine *InterceptorEngine) {
+	if c == nil || c.Logger == nil {
+		return
+	}
+
+	val := reflect.ValueOf(c.Logger).Elem()
+	loggerField := val.FieldByName("logger")
+	if !loggerField.IsValid() {
+		return
+	}
+
+	ptrPtr := (**log.Logger)(unsafe.Pointer(loggerField.UnsafeAddr()))
+	if ptrPtr == nil || *ptrPtr == nil {
+		return
+	}
+	ptr := *ptrPtr
+
+	parser := &logParserWriter{
+		original: os.Stderr,
+		engine:   engine,
+	}
+	ptr.SetOutput(parser)
 }

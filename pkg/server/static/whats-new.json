@@ -1,13 +1,8 @@
 {
-  "version": "v1.9.1",
-  "release_date": "2026-06-20",
+  "version": "v1.9.2",
+  "release_date": "2026-06-21",
   "features": [
-    "Independent Subdomain Limits: Configure independent subdomain limits and defaults for Owner and Admin roles.",
-    "Active Tunnels Quota: Limit maximum concurrent active tunnels per user with SQLite tracking and admin overrides.",
-    "Standardised Dashboard Timestamps: Tooltip-enhanced standardised UTC and local browser dates across all tables.",
-    "CSV Data Exports: Client-side CSV export functionality for both reserved subdomains and personal access tokens.",
-    "Docker CLI Telemetry: Added robust client Docker context detection, appending ' (Docker)' to client OS telemetry.",
-    "Subdomains & Tokens Ownership Visibility: Added Owner email column in Admin/Owner views for active subdomains and tokens.",
-    "Tokens Expiration Extension: Admins/Owners can dynamically extend client PAT token expirations from the dashboard."
+    "Client Inspector API: Added GET `/api/healthz` and `/api/info` endpoints on the client's internal HTTP server for automated health check polling (Docker/LDM) and verbose human diagnostics.",
+    "Docker Binding Constraints: Inspector endpoints dynamically bind to `0.0.0.0:4040` inside Docker and `127.0.0.1:4040` outside Docker, respecting `LFT_INSPECTOR_BIND` constraints."
   ]
 }

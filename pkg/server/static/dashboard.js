@@ -398,6 +398,12 @@ function toggleTheme() {
                             el.textContent = displayVer;
                         });
                     }
+                    if (vData.latest_version) {
+                        const clientDisplays = document.querySelectorAll('.client-version-display');
+                        clientDisplays.forEach(el => {
+                            el.textContent = vData.latest_version;
+                        });
+                    }
                     const box = document.getElementById('docker-container-box');
                     if (vData.docker_image) {
                         if (box) box.style.display = 'block';

@@ -312,3 +312,9 @@ The solution will consist of:
 - [ ] Integrate tunnel provisioning directly into Liferay Development Manager (LDM) execution loops.
 - [ ] Implement live WebSocket-driven telemetry updates in the portal Admin Web Dashboard.
 - [ ] Integrate a lightweight Web Application Firewall (WAF) shield on the gateway to filter basic exploit payloads during public presentations.
+
+## Dynamic Loopback Port Routing Fix (v1.9.4)
+- [x] Explicitly bind the reverse tunnel listening port on the server side to `127.0.0.1` by prefixing it in the dynamic remote format returned by `/api/register`.
+- [x] Verify that all unit and E2E integration tests continue to pass.
+
+

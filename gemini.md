@@ -284,6 +284,7 @@ The solution will consist of:
 - [x] Respect `LFT_INSPECTOR_BIND` binding constraints for local loopback vs Docker wildcard.
 - [x] Write unit tests for inspector endpoints and integration metrics.
 
+
 ## Future Roadmap Suggestions
 - [ ] Implement client-side Terminal UI (TUI) Dashboard for active connection metrics and scrolling request paths.
 - [ ] Create local Request Inspector & Replay web dashboard (similar to Ngrok's local interface) for debugging client extensions and webhooks.

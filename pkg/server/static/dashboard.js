@@ -3304,6 +3304,8 @@ function toggleTheme() {
                     }
                 }
             });
+            // Remove active class from all buttons
+            document.querySelectorAll('.action-menu-btn').forEach(b => b.classList.remove('active'));
         }
         window.closeAllActionMenus = closeAllActionMenus;
 
@@ -3330,6 +3332,9 @@ function toggleTheme() {
                 menu.classList.add('show');
                 
                 const btn = event.currentTarget || (event.target && event.target.closest('.action-menu-btn')) || event.target;
+                if (btn && btn.classList) {
+                    btn.classList.add('active');
+                }
                 const btnRect = btn.getBoundingClientRect();
                 
                 const menuWidth = menu.offsetWidth || 160;
@@ -3371,3 +3376,10 @@ function toggleTheme() {
         window.addEventListener('resize', () => {
             closeAllActionMenus();
         }, { passive: true });
+
+        // Hide dropdowns when pressing Escape key
+        window.addEventListener('keydown', (e) => {
+            if (e.key === 'Escape') {
+                closeAllActionMenus();
+            }
+        });

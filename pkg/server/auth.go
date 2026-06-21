@@ -234,7 +234,7 @@ func (r *Registry) Register(userID string, subdomainPrefix string, ports []PortM
 			continue
 		}
 		seenLocalPorts[lease.LocalPort] = true
-		clientRemotes = append(clientRemotes, fmt.Sprintf("R:%d:localhost:%d", lease.LocalPort, lease.TargetPort))
+		clientRemotes = append(clientRemotes, fmt.Sprintf("R:127.0.0.1:%d:localhost:%d", lease.LocalPort, lease.TargetPort))
 	}
 
 	return sessionToken, clientRemotes, nil

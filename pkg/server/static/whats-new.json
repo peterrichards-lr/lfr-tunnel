@@ -1,9 +1,7 @@
 {
-  "version": "v1.9.3",
+  "version": "v1.9.4",
   "release_date": "2026-06-21",
   "features": [
-    "Viewport-Relative Action Menus: Switched action dropdown styling to viewport-relative fixed positioning with dynamic coordinate calculation to prevent clipping on table borders.",
-    "Aligned Reservation Form: Zeroed out bottom input margins and vertically aligned the 'Reserve' button on the same baseline.",
-    "Never Connected Status: Replaced confusing 'Your Client: N/A' text with 'Never Connected' for users without recorded client connection history."
+    "Loopback Routing Fix: Explicitly bind the reverse tunnel listening port on the server side to 127.0.0.1 (loopback-only) to resolve dynamic port connection refusal on dual-stack VPS gateways and close public port exposure."
   ]
 }

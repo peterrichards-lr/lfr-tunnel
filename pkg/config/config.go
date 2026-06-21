@@ -52,6 +52,7 @@ type ServerConfig struct {
 	EnableUserPortal           bool                      `yaml:"enable_user_portal"`
 	PortalSessionDuration      time.Duration             `yaml:"portal_session_duration"`
 	MinClientVersion           string                    `yaml:"min_client_version"`
+	LatestClientVersion        string                    `yaml:"latest_client_version"`
 	DocumentationURL           string                    `yaml:"documentation_url"`
 	RepositoryURL              string                    `yaml:"repository_url"`
 	PruneInterval              time.Duration             `yaml:"prune_interval"`
@@ -121,6 +122,7 @@ func DefaultServerConfig() *ServerConfig {
 		EnableUserPortal:        true,
 		PortalSessionDuration:   24 * time.Hour,
 		MinClientVersion:        "v1.0.0",
+		LatestClientVersion:     "",
 		DocumentationURL:        "https://github.com/peterrichards-lr/lfr-tunnel/tree/master/docs",
 		RepositoryURL:           "https://github.com/peterrichards-lr/lfr-tunnel",
 		PruneInterval:           1 * time.Hour,
@@ -278,6 +280,9 @@ func LoadServerConfig(path string) (*ServerConfig, error) {
 	}
 	if val := os.Getenv("LFT_MIN_CLIENT_VERSION"); val != "" {
 		cfg.MinClientVersion = val
+	}
+	if val := os.Getenv("LFT_LATEST_CLIENT_VERSION"); val != "" {
+		cfg.LatestClientVersion = val
 	}
 	if val := os.Getenv("LFT_DOCKER_IMAGE"); val != "" {
 		cfg.DockerImage = val

@@ -474,9 +474,15 @@ func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 
 			dockerImg := s.cfg.DockerImage
 
+			latestClientVer := s.cfg.LatestClientVersion
+			if latestClientVer == "" {
+				latestClientVer = config.Version
+			}
+
 			respondJSON(w, http.StatusOK, map[string]interface{}{
-				"latest_version":         config.Version,
+				"latest_version":         latestClientVer,
 				"min_version":            s.cfg.MinClientVersion,
+				"server_version":         config.Version,
 				"documentation_url":      s.cfg.DocumentationURL,
 				"repository_url":         s.cfg.RepositoryURL,
 				"privacy_policy_url":     privacyURL,

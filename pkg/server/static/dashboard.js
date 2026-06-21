@@ -391,10 +391,11 @@ function toggleTheme() {
                         const cl = document.getElementById('footer-cookie-link');
                         if (cl) cl.href = vData.cookie_policy_url;
                     }
-                    if (vData.latest_version) {
+                    const displayVer = vData.server_version || vData.latest_version;
+                    if (displayVer) {
                         const versionDisplays = document.querySelectorAll('.server-version-display');
                         versionDisplays.forEach(el => {
-                            el.textContent = vData.latest_version;
+                            el.textContent = displayVer;
                         });
                     }
                     const box = document.getElementById('docker-container-box');

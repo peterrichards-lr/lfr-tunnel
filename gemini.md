@@ -297,6 +297,12 @@ The solution will consist of:
 - [x] Style and position the action dropdown menu correctly.
 - [x] Handle clicking outside to auto-close dropdown menus.
 
+## Client/Server Versioning Separation (v1.9.3)
+- [x] Implement latest_client_version key in ServerConfig.
+- [x] Integrate latest_client_version fallback inside server version response.
+- [x] Adapt Dashboard UI version displays to render server_version instead of client version.
+- [x] Document version management strategy in setup_guide.md.
+
 ## Future Roadmap Suggestions
 - [ ] Implement client-side Terminal UI (TUI) Dashboard for active connection metrics and scrolling request paths.
 - [ ] Create local Request Inspector & Replay web dashboard (similar to Ngrok's local interface) for debugging client extensions and webhooks.

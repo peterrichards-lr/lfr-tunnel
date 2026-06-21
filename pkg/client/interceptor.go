@@ -41,6 +41,25 @@ type InterceptorEngine struct {
 	MaxHistory      int
 	TargetHost      string
 	PreserveHost    bool
+
+	// Connection status and statistics
+	ConnState         string // "disconnected", "connecting", "connected", "reconnecting"
+	UptimeStart       time.Time
+	ReconnectCount    int
+	LatencyLast       int64   // ms
+	LatencyHistory    []int64 // to calculate 5m rolling average
+	AuthValid         bool
+	AuthErrorMessage  string
+	SubdomainReq      string
+	SubdomainAss      string
+	SubdomainLeased   bool
+	SubdomainConflict bool
+	DestPort          int
+
+	// Traffic stats
+	RequestsTotal int64
+	BytesIn       int64
+	BytesOut      int64
 }
 
 // NewInterceptorEngine creates a new state engine for traffic inspection.
@@ -67,6 +86,10 @@ func NewInterceptorEngine(targetHost string, headers []string) *InterceptorEngin
 		MaxHistory:      100, // Keep last 100 requests
 		TargetHost:      targetHost,
 		PreserveHost:    preserveHost,
+		ConnState:       "disconnected",
+		AuthValid:       true,
+		DestPort:        8080, // Default Liferay port
+		LatencyHistory:  make([]int64, 0),
 	}
 }
 
@@ -123,6 +146,19 @@ func (e *InterceptorEngine) AddRecord(rec *RequestRecord) {
 	if len(e.History) > e.MaxHistory {
 		e.History = e.History[:e.MaxHistory]
 	}
+}
+
+// SetSubdomainDetails updates the subdomain registration details safely.
+func (e *InterceptorEngine) SetSubdomainDetails(req, ass string, leased, conflict bool) {
+	e.mu.Lock()
+	defer e.mu.Unlock()
+	e.SubdomainReq = req
+	e.SubdomainAss = ass
+	if ass == "" {
+		e.SubdomainAss = req
+	}
+	e.SubdomainLeased = leased
+	e.SubdomainConflict = conflict
 }
 
 // InterceptPort creates a reverse proxy listening on a dynamic local port and forwarding to the targetPort.
@@ -206,9 +242,26 @@ func (t *interceptorTransport) RoundTrip(req *http.Request) (*http.Response, err
 
 	// Extract Req Headers
 	reqHeaders := make(map[string]string)
+	var reqHeadersSize int64
 	for k, v := range req.Header {
-		reqHeaders[k] = strings.Join(v, ", ")
+		joinVal := strings.Join(v, ", ")
+		reqHeaders[k] = joinVal
+		reqHeadersSize += int64(len(k) + len(joinVal) + 4) // key + ": " + value + "\r\n"
 	}
+	reqHeadersSize += int64(len(req.Method) + len(req.URL.RequestURI()) + len(req.Proto) + 4) // Request Line + "\r\n"
+
+	var reqBodySize int64
+	if req.ContentLength >= 0 {
+		reqBodySize = req.ContentLength
+	} else {
+		reqBodySize = int64(len(reqBodyStr))
+	}
+
+	// Update requests total and bytes in
+	t.engine.mu.Lock()
+	t.engine.RequestsTotal++
+	t.engine.BytesIn += (reqHeadersSize + reqBodySize)
+	t.engine.mu.Unlock()
 
 	// Forward Request
 	res, err := t.transport.RoundTrip(req)
@@ -240,9 +293,24 @@ func (t *interceptorTransport) RoundTrip(req *http.Request) (*http.Response, err
 	}
 
 	respHeaders := make(map[string]string)
+	var respHeadersSize int64
 	for k, v := range res.Header {
-		respHeaders[k] = strings.Join(v, ", ")
+		joinVal := strings.Join(v, ", ")
+		respHeaders[k] = joinVal
+		respHeadersSize += int64(len(k) + len(joinVal) + 4) // key + ": " + value + "\r\n"
 	}
+	respHeadersSize += int64(len(res.Proto) + 15) // Status line e.g., "HTTP/1.1 200 OK\r\n"
+
+	var respBodySize int64
+	if res.ContentLength >= 0 {
+		respBodySize = res.ContentLength
+	} else {
+		respBodySize = int64(len(respBodyStr))
+	}
+
+	t.engine.mu.Lock()
+	t.engine.BytesOut += (respHeadersSize + respBodySize)
+	t.engine.mu.Unlock()
 
 	rec.Status = res.StatusCode
 	rec.RespHeaders = respHeaders

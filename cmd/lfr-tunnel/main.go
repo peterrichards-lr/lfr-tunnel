@@ -329,7 +329,10 @@ func main() {
 		cancel()
 	}()
 
-	if err := client.RunClient(ctx, cfg.ServerURL, regResp.SessionToken, regResp.Remotes, publicURLs); err != nil && ctx.Err() == nil {
+	// Set lease status and subdomains info on engine
+	engine.SetSubdomainDetails(sub, regResp.SubdomainPrefix, true, false)
+
+	if err := client.RunClient(ctx, cfg.ServerURL, regResp.SessionToken, regResp.Remotes, publicURLs, engine); err != nil && ctx.Err() == nil {
 		log.Fatalf("[Client] Tunnel disconnected with error: %v", err)
 	}
 	log.Println("[Client] Tunnel shutdown completed.")

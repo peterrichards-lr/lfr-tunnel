@@ -4,10 +4,13 @@ import (
 	_ "embed"
 	"encoding/json"
 	"fmt"
+	"lfr-tunnel/pkg/config"
 	"log"
+	"net"
 	"net/http"
 	"os"
 	"strings"
+	"time"
 )
 
 //go:embed inspector.html
@@ -38,6 +41,111 @@ func StartInspector(port int, engine *InterceptorEngine) {
 
 		w.Header().Set("Content-Type", "application/json")
 		_ = json.NewEncoder(w).Encode(state)
+	})
+
+	mux.HandleFunc("/api/healthz", func(w http.ResponseWriter, r *http.Request) {
+		engine.mu.RLock()
+		isWSConnected := engine.ConnState == "connected"
+		isAuthValid := engine.AuthValid
+		isLeased := engine.SubdomainLeased
+		targetHost := engine.TargetHost
+		targetPort := engine.DestPort
+		engine.mu.RUnlock()
+
+		// Perform real-time TCP dial check to local downstream target
+		var destResponsive bool
+		conn, err := net.DialTimeout("tcp", fmt.Sprintf("%s:%d", targetHost, targetPort), 500*time.Millisecond)
+		if err == nil {
+			destResponsive = true
+			_ = conn.Close()
+		}
+
+		w.Header().Set("Content-Type", "application/json")
+		if isWSConnected && isAuthValid && isLeased && destResponsive {
+			w.WriteHeader(http.StatusOK)
+			_, _ = w.Write([]byte(`{"status":"healthy"}`))
+		} else {
+			w.WriteHeader(http.StatusServiceUnavailable)
+			_, _ = w.Write([]byte(`{"status":"unhealthy"}`))
+		}
+	})
+
+	mux.HandleFunc("/api/info", func(w http.ResponseWriter, r *http.Request) {
+		engine.mu.RLock()
+		defer engine.mu.RUnlock()
+
+		// Calculate uptime seconds
+		var uptimeSeconds int64
+		if !engine.UptimeStart.IsZero() && engine.ConnState == "connected" {
+			uptimeSeconds = int64(time.Since(engine.UptimeStart).Seconds())
+		}
+
+		// Calculate average latency
+		var avgLatency int64
+		if len(engine.LatencyHistory) > 0 {
+			var sum int64
+			for _, lat := range engine.LatencyHistory {
+				sum += lat
+			}
+			avgLatency = sum / int64(len(engine.LatencyHistory))
+		} else {
+			avgLatency = engine.LatencyLast
+		}
+
+		// Dial test target responsiveness
+		var destResponsive bool
+		conn, err := net.DialTimeout("tcp", fmt.Sprintf("%s:%d", engine.TargetHost, engine.DestPort), 500*time.Millisecond)
+		if err == nil {
+			destResponsive = true
+			_ = conn.Close()
+		}
+
+		status := "healthy"
+		if engine.ConnState != "connected" || !engine.AuthValid || !engine.SubdomainLeased || !destResponsive {
+			status = "unhealthy"
+		}
+
+		var authErrMsg interface{}
+		if engine.AuthErrorMessage != "" {
+			authErrMsg = engine.AuthErrorMessage
+		}
+
+		info := map[string]interface{}{
+			"status":  status,
+			"version": config.Version,
+			"connection": map[string]interface{}{
+				"state":          engine.ConnState,
+				"uptime_seconds": uptimeSeconds,
+				"latency_ms": map[string]interface{}{
+					"last":   engine.LatencyLast,
+					"avg_5m": avgLatency,
+				},
+				"reconnect_count": engine.ReconnectCount,
+			},
+			"auth": map[string]interface{}{
+				"valid":         engine.AuthValid,
+				"error_message": authErrMsg,
+			},
+			"subdomain": map[string]interface{}{
+				"requested": engine.SubdomainReq,
+				"assigned":  engine.SubdomainAss,
+				"leased":    engine.SubdomainLeased,
+				"conflict":  engine.SubdomainConflict,
+			},
+			"destination": map[string]interface{}{
+				"host":       engine.TargetHost,
+				"port":       engine.DestPort,
+				"responsive": destResponsive,
+			},
+			"traffic": map[string]interface{}{
+				"requests_total": engine.RequestsTotal,
+				"bytes_in":       engine.BytesIn,
+				"bytes_out":      engine.BytesOut,
+			},
+		}
+
+		w.Header().Set("Content-Type", "application/json")
+		_ = json.NewEncoder(w).Encode(info)
 	})
 
 	mux.HandleFunc("/api/maintenance", func(w http.ResponseWriter, r *http.Request) {

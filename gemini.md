@@ -278,6 +278,12 @@ The solution will consist of:
 - [x] Fix non-interactive read execution failure by checking TTY availability (`[ -t 0 ]`) in signing script.
 - [x] Implement 1Password CLI (`op`) integration in signing script to retrieve passwords and certificate documents from 1Password vault securely.
 
+## Client Inspector API Endpoints (v1.9.2)
+- [x] Implement GET `/api/healthz` endpoint on client's internal HTTP server.
+- [x] Implement GET `/api/info` endpoint on client's internal HTTP server.
+- [x] Respect `LFT_INSPECTOR_BIND` binding constraints for local loopback vs Docker wildcard.
+- [x] Write unit tests for inspector endpoints and integration metrics.
+
 ## Future Roadmap Suggestions
 - [ ] Implement client-side Terminal UI (TUI) Dashboard for active connection metrics and scrolling request paths.
 - [ ] Create local Request Inspector & Replay web dashboard (similar to Ngrok's local interface) for debugging client extensions and webhooks.

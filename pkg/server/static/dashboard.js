@@ -252,6 +252,9 @@ function renderTable(tbodyId, data, renderRowFn) {
 }
 
 function updateTableView(tbodyId) {
+    if (window.closeAllActionMenus) {
+        window.closeAllActionMenus();
+    }
     const inst = tableInstances[tbodyId];
     const term = inst.filterInput.value.toLowerCase();
     
@@ -3281,18 +3284,49 @@ function toggleTheme() {
         }
         window.exportTokensCSV = exportTokensCSV;
 
+        function closeAllActionMenus() {
+            document.querySelectorAll('.action-menu-dropdown').forEach(el => {
+                el.classList.remove('show');
+                if (el.dataset.originalParentId) {
+                    const origParent = document.getElementById(el.dataset.originalParentId);
+                    if (origParent && document.body.contains(origParent)) {
+                        if (el.parentElement === document.body) {
+                            origParent.appendChild(el);
+                        }
+                    } else {
+                        // The original parent is gone (e.g. table redrawn), clean up from body to prevent leak
+                        if (el.parentElement === document.body) {
+                            el.remove();
+                        }
+                    }
+                }
+            });
+        }
+        window.closeAllActionMenus = closeAllActionMenus;
+
         window.toggleActionMenu = function(menuId, event) {
             if (event) event.stopPropagation();
             const menu = document.getElementById(menuId);
             const show = menu && !menu.classList.contains('show');
             
             // Close all other dropdowns
-            document.querySelectorAll('.action-menu-dropdown').forEach(el => el.classList.remove('show'));
+            closeAllActionMenus();
             
-            if (menu && show) {
+            if (menu && show && event) {
+                // Save original parent so we can restore it when closed
+                const parent = menu.parentElement;
+                if (parent && parent !== document.body) {
+                    if (!parent.id) {
+                        parent.id = 'parent-' + menuId;
+                    }
+                    menu.dataset.originalParentId = parent.id;
+                }
+                
+                // Move to body before calculating position and showing
+                document.body.appendChild(menu);
                 menu.classList.add('show');
                 
-                const btn = event.currentTarget || event.target;
+                const btn = event.currentTarget || (event.target && event.target.closest('.action-menu-btn')) || event.target;
                 const btnRect = btn.getBoundingClientRect();
                 
                 const menuWidth = menu.offsetWidth || 160;
@@ -3322,17 +3356,10 @@ function toggleTheme() {
         };
 
         window.addEventListener('click', () => {
-            document.querySelectorAll('.action-menu-dropdown').forEach(el => el.classList.remove('show'));
+            closeAllActionMenus();
         });
 
-        // Hide dropdowns when scrolling to prevent floating detached menus
+        // Hide dropdowns when scrolling any container to prevent floating detached menus
         window.addEventListener('scroll', () => {
-            document.querySelectorAll('.action-menu-dropdown').forEach(el => el.classList.remove('show'));
-        }, { passive: true });
-
-        const mainContent = document.querySelector('.main-content');
-        if (mainContent) {
-            mainContent.addEventListener('scroll', () => {
-                document.querySelectorAll('.action-menu-dropdown').forEach(el => el.classList.remove('show'));
-            }, { passive: true });
-        }
+            closeAllActionMenus();
+        }, { capture: true, passive: true });

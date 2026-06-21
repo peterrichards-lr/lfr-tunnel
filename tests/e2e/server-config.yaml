@@ -25,12 +25,13 @@ sso_providers:
     icon: "key"
 
 # Token Expiry & Pruning Configuration
-# Default values are 1h (prune), 15m (magic link), 24h (invite), 24h (verification)
+# Default values are 1h (prune), 15m (magic link), 24h (invite), 24h (verification), 30 (pat_retention_days)
 prune_interval: 1m
 magic_link_expiry: 1m
 invite_link_expiry: 5m
 verification_link_expiry: 5m
 session_expiry: 5m
+pat_retention_days: 30
 
 docker_image: "peterjrichards/lfr-tunnel:latest"
 docker_bypass_url: "https://github.com/peterrichards-lr/lfr-tunnel/blob/master/docs/liferay-se-guide.md#using-the-docker-wrapper-edr-bypass"

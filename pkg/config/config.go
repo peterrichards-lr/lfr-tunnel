@@ -68,6 +68,7 @@ type ServerConfig struct {
 	MaintenanceTriggerPath     string                    `yaml:"maintenance_trigger_path"`
 	ClientPlatforms            map[string]PlatformConfig `yaml:"client_platforms"`
 	VisitorTimeout             time.Duration             `yaml:"visitor_timeout"`
+	PATRetentionDays           int                       `yaml:"pat_retention_days"`
 
 	// Dynamic SSO/OIDC Providers
 	SSOProviders []SSOProviderConfig `yaml:"sso_providers"`
@@ -127,6 +128,7 @@ func DefaultServerConfig() *ServerConfig {
 		RepositoryURL:           "https://github.com/peterrichards-lr/lfr-tunnel",
 		PruneInterval:           1 * time.Hour,
 		MagicLinkExpiry:         15 * time.Minute,
+		PATRetentionDays:        30,
 		InviteLinkExpiry:        7 * 24 * time.Hour,
 		VerificationLinkExpiry:  24 * time.Hour,
 		DockerImage:             "peterjrichards/lfr-tunnel:latest",
@@ -305,6 +307,11 @@ func LoadServerConfig(path string) (*ServerConfig, error) {
 	if val := os.Getenv("LFT_VISITOR_TIMEOUT"); val != "" {
 		if d, err := time.ParseDuration(val); err == nil {
 			cfg.VisitorTimeout = d
+		}
+	}
+	if val := os.Getenv("LFT_PAT_RETENTION_DAYS"); val != "" {
+		if days, err := strconv.Atoi(val); err == nil {
+			cfg.PATRetentionDays = days
 		}
 	}
 

@@ -22,6 +22,7 @@ import (
 	"strconv"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"golang.org/x/time/rate"
@@ -186,14 +187,20 @@ func NewServer(cfg *config.ServerConfig) (*Server, error) {
 	}
 
 	srv.registry.OnLeaseCleanup = func(lease *TunnelLease) {
-		if lease.BytesIn > 0 || lease.BytesOut > 0 {
+		bytesIn := atomic.LoadUint64(&lease.BytesIn)
+		bytesOut := atomic.LoadUint64(&lease.BytesOut)
+		diffIn := int64(bytesIn - lease.LastBytesIn)
+		diffOut := int64(bytesOut - lease.LastBytesOut)
+
+		if diffIn > 0 || diffOut > 0 {
 			m := &db.TunnelMetric{
 				UserID:          lease.UserID,
 				SubdomainPrefix: lease.SubdomainPrefix,
 				FullHost:        lease.FullHost,
-				BytesIn:         int64(lease.BytesIn),
-				BytesOut:        int64(lease.BytesOut),
+				BytesIn:         diffIn,
+				BytesOut:        diffOut,
 				ConnectedAt:     lease.CreatedAt,
+				RecordedAt:      time.Now().UTC(),
 			}
 			select {
 			case srv.metricsQueue <- m:
@@ -276,18 +283,27 @@ func (s *Server) processMetricsQueue() {
 		case <-ticker.C:
 			leases := s.registry.ListLeases()
 			for _, lease := range leases {
-				if lease.BytesIn > 0 || lease.BytesOut > 0 {
+				bytesIn := atomic.LoadUint64(&lease.BytesIn)
+				bytesOut := atomic.LoadUint64(&lease.BytesOut)
+				diffIn := int64(bytesIn - lease.LastBytesIn)
+				diffOut := int64(bytesOut - lease.LastBytesOut)
+
+				if diffIn > 0 || diffOut > 0 {
 					m := &db.TunnelMetric{
 						UserID:          lease.UserID,
 						SubdomainPrefix: lease.SubdomainPrefix,
 						FullHost:        lease.FullHost,
-						BytesIn:         int64(lease.BytesIn),
-						BytesOut:        int64(lease.BytesOut),
+						BytesIn:         diffIn,
+						BytesOut:        diffOut,
 						ConnectedAt:     lease.CreatedAt,
+						RecordedAt:      time.Now().UTC(),
 					}
 					if s.db != nil {
 						if err := s.db.RecordTunnelMetric(m); err != nil {
 							log.Printf("[Server] Failed to periodically record tunnel metrics for %s: %v", m.FullHost, err)
+						} else {
+							lease.LastBytesIn = bytesIn
+							lease.LastBytesOut = bytesOut
 						}
 					}
 				}

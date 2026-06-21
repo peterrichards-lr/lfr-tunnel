@@ -111,6 +111,9 @@ func (p *ProxyHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 			lease.VisitorIPs[clientIP] = time.Now()
 			lease.VisitorIPsMu.Unlock()
 
+			// Log the proxied request visitor IP
+			log.Printf("[Proxy] Routing request on %s from visitor IP %s", host, clientIP)
+
 			// Inject standard proxy headers
 			req.Header.Set("X-Real-IP", clientIP)
 			req.Header.Set("X-Forwarded-For", clientIP)

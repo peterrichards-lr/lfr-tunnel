@@ -324,6 +324,14 @@ The solution will consist of:
 - [x] Write unit tests to cover redirect URL, cookie domain rewriting logic, and large body payloads.
 - [x] Verify E2E integration test suite runs successfully.
 
+## System Analytics & Active Visitor IP Tracking Fixes (v1.9.6)
+- [x] Fix the zero-value RecordedAt timestamp metric logging bug causing empty System Analytics reports.
+- [x] Implement differential delta bandwidth tracking on leases to prevent over-counting metrics.
+- [x] Increase default VisitorTimeout from 30s to 5 minutes to keep active connections visible in Details modal.
+- [x] Add reverse proxy logging for auditing visitor IP addresses.
+- [x] Verify that all unit tests compile and run successfully.
+
+
 
 
 

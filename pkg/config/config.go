@@ -133,7 +133,7 @@ func DefaultServerConfig() *ServerConfig {
 		VerificationLinkExpiry:  24 * time.Hour,
 		DockerImage:             "peterjrichards/lfr-tunnel:latest",
 		DockerBypassURL:         "https://github.com/peterrichards-lr/lfr-tunnel/blob/master/docs/liferay-se-guide.md#using-the-docker-wrapper-edr-bypass",
-		VisitorTimeout:          30 * time.Second,
+		VisitorTimeout:          5 * time.Minute,
 		ClientPlatforms: map[string]PlatformConfig{
 			"macos_arm64": {
 				URL:              "/static/downloads/lfr-tunnel-darwin-arm64",

@@ -1,9 +1,11 @@
 {
-  "version": "v1.9.5",
+  "version": "v1.9.6",
   "release_date": "2026-06-21",
   "features": [
-    "Fix request/response body stream truncation in interceptor logging using io.MultiReader.",
-    "Implement response rewrites for Location redirect domains and Set-Cookie domains to match public gateway URLs."
+    "Fix zero-value RecordedAt timestamp bug causing empty System Analytics reports.",
+    "Implement differential bandwidth logging delta tracking to prevent over-counting in analytics.",
+    "Increase default VisitorTimeout to 5 minutes so active connections remain visible in details modal."
   ]
 }
+
 

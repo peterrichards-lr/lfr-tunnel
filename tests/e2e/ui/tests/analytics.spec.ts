@@ -97,11 +97,31 @@ test.describe('Analytics & Tunnel Automation', () => {
     // 10. Navigate back to Tunnels Tab and test the new Tunnel Details Modal
     await page.click('#nav-tunnels');
     
-    // Open the action menu and click Details
+    // Find the action menu button
     const menuBtn = page.locator('#tunnels-table-body .action-menu-btn').first();
     await expect(menuBtn).toBeVisible();
+    
+    // Open the action menu
     await menuBtn.click();
+    
+    // Assert dropdown is visible and the trigger button has the 'active' class
+    const dropdown = page.locator('.action-menu-dropdown.show').first();
+    await expect(dropdown).toBeVisible();
+    await expect(menuBtn).toHaveClass(/active/);
+    
+    // Press Escape to dismiss the dropdown
+    await page.keyboard.press('Escape');
+    
+    // Assert dropdown is hidden and the trigger button no longer has the 'active' class
+    await expect(dropdown).not.toBeVisible();
+    await expect(menuBtn).not.toHaveClass(/active/);
+    
+    // Open the action menu again
+    await menuBtn.click();
+    await expect(dropdown).toBeVisible();
+    await expect(menuBtn).toHaveClass(/active/);
 
+    // Click the details item inside the open menu
     const detailsItem = page.locator('.action-menu-dropdown.show .action-menu-item:has-text("Details")').first();
     await expect(detailsItem).toBeVisible();
     await detailsItem.click();

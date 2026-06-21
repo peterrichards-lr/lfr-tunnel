@@ -90,8 +90,11 @@
                 <a href="/privacy" id="footer-privacy-link" style="color: var(--text-muted); text-decoration: none; transition: 0.2s;" onmouseover="this.style.color='var(--primary)'" onmouseout="this.style.color='var(--text-muted)'" data-i18n="privacy_title">Privacy Policy</a>
                 <span style="color: var(--text-muted); opacity: 0.5;">•</span>
                 <a href="/cookies" id="footer-cookie-link" style="color: var(--text-muted); text-decoration: none; transition: 0.2s;" onmouseover="this.style.color='var(--primary)'" onmouseout="this.style.color='var(--text-muted)'" data-i18n="cookie_title">Cookie Disclosure</a>
+            <div style="text-align: center; font-size: 9px; color: var(--text-muted); opacity: 0.4; margin-top: 8px; display: flex; justify-content: center; gap: 8px; align-items: center;">
+                <span>Gateway: <span class="server-version-display"></span></span>
+                <span style="opacity: 0.5;">•</span>
+                <span>Client Target: <span class="client-version-display"></span></span>
             </div>
-            <div class="server-version-display" style="text-align: center; font-size: 9px; color: var(--text-muted); opacity: 0.4; margin-top: 8px;"></div>
         </div>
     </div>
 
@@ -134,7 +137,10 @@
             
             <div id="nav-account" class="nav-item" onclick="showTab('account')" data-i18n="sidebar_account">Account Settings</div>
             <div class="nav-item" onclick="logout()">Logout</div>
-            <div class="server-version-display" style="font-size: 10px; color: var(--text-muted); opacity: 0.4; margin-top: 16px; padding-left: 16px;"></div>
+            <div style="font-size: 10px; color: var(--text-muted); opacity: 0.4; margin-top: 16px; padding-left: 16px; display: flex; flex-direction: column; gap: 2px;">
+                <div>Gateway: <span class="server-version-display"></span></div>
+                <div>Client: <span class="client-version-display"></span></div>
+            </div>
         </div>
         
         <div class="main-content" style="position: relative; padding-top: 60px;">

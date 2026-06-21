@@ -398,6 +398,12 @@ function toggleTheme() {
                             el.textContent = displayVer;
                         });
                     }
+                    if (vData.latest_version) {
+                        const clientDisplays = document.querySelectorAll('.client-version-display');
+                        clientDisplays.forEach(el => {
+                            el.textContent = vData.latest_version;
+                        });
+                    }
                     const box = document.getElementById('docker-container-box');
                     if (vData.docker_image) {
                         if (box) box.style.display = 'block';
@@ -673,7 +679,15 @@ function toggleTheme() {
 
                     if (os === 'Unknown OS') {
                         bannerDiv.innerHTML = `
-                            <div><strong>${titleText}</strong> <br/> ${subText}</div>
+                            <div>
+                                <strong>${titleText}</strong> <br/>
+                                <span style="font-size: 0.9rem; color: var(--text-muted);">${subText}</span>
+                                <div style="font-size: 0.8rem; margin-top: 8px; display: flex; flex-wrap: wrap; gap: 16px; color: var(--text-muted); opacity: 0.85;">
+                                    <span>🖥️ <strong>Server Gateway:</strong> ${vData.server_version || latestVer}</span>
+                                    <span>🔌 <strong>Your Client:</strong> ${userVer || 'N/A'}</span>
+                                    <span>🏷️ <strong>Latest Client Target:</strong> ${latestVer}</span>
+                                </div>
+                            </div>
                             <div style="display: flex; gap: 10px;">
                                 <a href="${otherUrl}" target="_blank" class="btn btn-secondary" style="white-space: nowrap;">Releases / Other OSs</a>
                             </div>
@@ -684,6 +698,11 @@ function toggleTheme() {
                             <div style="flex-grow: 1; overflow: hidden; padding-right: 20px;">
                                 <strong>${titleText}</strong> <br/>
                                 <span style="font-size: 0.9rem; color: var(--text-muted);">${subText}</span>
+                                <div style="font-size: 0.8rem; margin-top: 8px; margin-bottom: 8px; display: flex; flex-wrap: wrap; gap: 16px; color: var(--text-muted); opacity: 0.85;">
+                                    <span>🖥️ <strong>Server Gateway:</strong> ${vData.server_version || latestVer}</span>
+                                    <span>🔌 <strong>Your Client:</strong> ${userVer || 'N/A'}</span>
+                                    <span>🏷️ <strong>Latest Client Target:</strong> ${latestVer}</span>
+                                </div>
                                 
                                 ${recommendedCmd ? `
                                 <div style="margin-top: 10px; font-size: 0.8rem; font-weight: bold; color: var(--text);">${cmdLabel}</div>
@@ -692,7 +711,7 @@ function toggleTheme() {
                                     <button onclick="navigator.clipboard.writeText('${recommendedCmd}'); this.innerHTML='<span style=\\'font-size:12px;\\'>✓</span>'; setTimeout(() => this.innerHTML='📋', 2000);" style="position: absolute; top: 6px; right: 6px; background: transparent; border: 1px solid rgba(255,255,255,0.2); color: #8b949e; border-radius: 4px; width: 22px; height: 22px; display: flex; align-items: center; justify-content: center; cursor: pointer; transition: 0.2s;" onmouseover="this.style.color='#c9d1d9'; this.style.borderColor='rgba(255,255,255,0.4)';" onmouseout="this.style.color='#8b949e'; this.style.borderColor='rgba(255,255,255,0.2)';">📋</button>
                                 </div>
                                 ` : ''}
-
+ 
                                 ${fallbackCmd ? `
                                 <div style="margin-top: 10px; font-size: 0.8rem; font-weight: bold; color: var(--text-muted);">${cmdFallbackLabel}</div>
                                 <div style="margin-top: 4px; margin-bottom: 8px; position: relative; background: #0d1117; color: #e6edf3; border-radius: 6px; border: 1px solid rgba(255,255,255,0.1); padding: 10px 40px 10px 12px; font-family: ui-monospace, SFMono-Regular, Consolas, monospace; font-size: 0.8rem; overflow-x: auto;">
@@ -700,7 +719,7 @@ function toggleTheme() {
                                     <button onclick="navigator.clipboard.writeText('${fallbackCmd}'); this.innerHTML='<span style=\\'font-size:12px;\\'>✓</span>'; setTimeout(() => this.innerHTML='📋', 2000);" style="position: absolute; top: 6px; right: 6px; background: transparent; border: 1px solid rgba(255,255,255,0.2); color: #8b949e; border-radius: 4px; width: 22px; height: 22px; display: flex; align-items: center; justify-content: center; cursor: pointer; transition: 0.2s;" onmouseover="this.style.color='#c9d1d9'; this.style.borderColor='rgba(255,255,255,0.4)';" onmouseout="this.style.color='#8b949e'; this.style.borderColor='rgba(255,255,255,0.2)';">📋</button>
                                 </div>
                                 ` : ''}
-
+ 
                                 ${(staticSHA || binaryName) ? `<div style="font-size: 0.75rem; color: var(--text-muted); font-family: monospace;">SHA256: <span id="${hashSpanId}">loading...</span></div>` : ''}
                             </div>
                             <div style="display: flex; flex-direction: column; gap: 10px; align-items: stretch; min-width: 140px;">
@@ -3273,7 +3292,7 @@ function toggleTheme() {
             if (menu && show) {
                 menu.classList.add('show');
                 
-                // Adjust position if it overflows the window
+                // Adjust position if it overflows the window horizontally
                 const rect = menu.getBoundingClientRect();
                 if (rect.left < 0) {
                     menu.style.left = '0';
@@ -3282,6 +3301,26 @@ function toggleTheme() {
                 if (rect.right > window.innerWidth) {
                     menu.style.left = 'auto';
                     menu.style.right = '0';
+                }
+
+                // Adjust vertical position (Dropup) if it overflows the window or container bottom
+                const container = menu.closest('.table-container') || document.body;
+                const containerRect = container.getBoundingClientRect();
+                const menuHeight = rect.height || menu.offsetHeight || 180;
+                
+                const overflowsWindow = (rect.top + menuHeight) > window.innerHeight;
+                const overflowsContainer = (rect.top + menuHeight) > containerRect.bottom - 10;
+                
+                if (overflowsWindow || overflowsContainer) {
+                    menu.style.top = 'auto';
+                    menu.style.bottom = '100%';
+                    menu.style.marginTop = '0';
+                    menu.style.marginBottom = '4px';
+                } else {
+                    menu.style.top = '100%';
+                    menu.style.bottom = 'auto';
+                    menu.style.marginTop = '4px';
+                    menu.style.marginBottom = '0';
                 }
             }
         };

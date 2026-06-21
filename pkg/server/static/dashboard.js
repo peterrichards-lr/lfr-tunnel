@@ -684,7 +684,7 @@ function toggleTheme() {
                                 <span style="font-size: 0.9rem; color: var(--text-muted);">${subText}</span>
                                 <div style="font-size: 0.8rem; margin-top: 8px; display: flex; flex-wrap: wrap; gap: 16px; color: var(--text-muted); opacity: 0.85;">
                                     <span>🖥️ <strong>Server Gateway:</strong> ${vData.server_version || latestVer}</span>
-                                    <span>🔌 <strong>Your Client:</strong> ${userVer || 'N/A'}</span>
+                                    <span>🔌 <strong>Your Client:</strong> ${userVer || 'Never Connected'}</span>
                                     <span>🏷️ <strong>Latest Client Target:</strong> ${latestVer}</span>
                                 </div>
                             </div>
@@ -700,7 +700,7 @@ function toggleTheme() {
                                 <span style="font-size: 0.9rem; color: var(--text-muted);">${subText}</span>
                                 <div style="font-size: 0.8rem; margin-top: 8px; margin-bottom: 8px; display: flex; flex-wrap: wrap; gap: 16px; color: var(--text-muted); opacity: 0.85;">
                                     <span>🖥️ <strong>Server Gateway:</strong> ${vData.server_version || latestVer}</span>
-                                    <span>🔌 <strong>Your Client:</strong> ${userVer || 'N/A'}</span>
+                                    <span>🔌 <strong>Your Client:</strong> ${userVer || 'Never Connected'}</span>
                                     <span>🏷️ <strong>Latest Client Target:</strong> ${latestVer}</span>
                                 </div>
                                 
@@ -3292,39 +3292,47 @@ function toggleTheme() {
             if (menu && show) {
                 menu.classList.add('show');
                 
-                // Adjust position if it overflows the window horizontally
-                const rect = menu.getBoundingClientRect();
-                if (rect.left < 0) {
-                    menu.style.left = '0';
-                    menu.style.right = 'auto';
-                }
-                if (rect.right > window.innerWidth) {
-                    menu.style.left = 'auto';
-                    menu.style.right = '0';
-                }
-
-                // Adjust vertical position (Dropup) if it overflows the window or container bottom
-                const container = menu.closest('.table-container') || document.body;
-                const containerRect = container.getBoundingClientRect();
-                const menuHeight = rect.height || menu.offsetHeight || 180;
+                const btn = event.currentTarget || event.target;
+                const btnRect = btn.getBoundingClientRect();
                 
-                const overflowsWindow = (rect.top + menuHeight) > window.innerHeight;
-                const overflowsContainer = (rect.top + menuHeight) > containerRect.bottom - 10;
+                const menuWidth = menu.offsetWidth || 160;
+                const menuHeight = menu.offsetHeight || 120;
                 
-                if (overflowsWindow || overflowsContainer) {
-                    menu.style.top = 'auto';
-                    menu.style.bottom = '100%';
-                    menu.style.marginTop = '0';
-                    menu.style.marginBottom = '4px';
-                } else {
-                    menu.style.top = '100%';
-                    menu.style.bottom = 'auto';
-                    menu.style.marginTop = '4px';
-                    menu.style.marginBottom = '0';
+                // Horizontal placement (right-aligned to the button by default)
+                let leftPos = btnRect.right - menuWidth;
+                if (leftPos < 10) {
+                    leftPos = 10;
                 }
+                if (leftPos + menuWidth > window.innerWidth - 10) {
+                    leftPos = window.innerWidth - 10 - menuWidth;
+                }
+                
+                // Vertical placement (dropdown by default, dropup if it overflows bottom)
+                let topPos = btnRect.bottom + 4;
+                if (topPos + menuHeight > window.innerHeight - 10) {
+                    topPos = btnRect.top - menuHeight - 4;
+                }
+                
+                menu.style.top = `${topPos}px`;
+                menu.style.left = `${leftPos}px`;
+                menu.style.right = 'auto';
+                menu.style.bottom = 'auto';
+                menu.style.margin = '0';
             }
         };
 
         window.addEventListener('click', () => {
             document.querySelectorAll('.action-menu-dropdown').forEach(el => el.classList.remove('show'));
         });
+
+        // Hide dropdowns when scrolling to prevent floating detached menus
+        window.addEventListener('scroll', () => {
+            document.querySelectorAll('.action-menu-dropdown').forEach(el => el.classList.remove('show'));
+        }, { passive: true });
+
+        const mainContent = document.querySelector('.main-content');
+        if (mainContent) {
+            mainContent.addEventListener('scroll', () => {
+                document.querySelectorAll('.action-menu-dropdown').forEach(el => el.classList.remove('show'));
+            }, { passive: true });
+        }

@@ -236,3 +236,135 @@ func TestInterceptorEngine_PreserveHost(t *testing.T) {
 		t.Errorf("Expected Host header to be preserved as 'preserved-subdomain.lfr-demo.se', got %s", receivedHost)
 	}
 }
+
+func TestInterceptorEngine_ResponseRewriting(t *testing.T) {
+	// 1. Setup Dummy Target Server returning redirects and cookies
+	var targetServer *httptest.Server
+	targetServer = httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Add("Location", targetServer.URL+"/group/control_panel")
+		w.Header().Add("Set-Cookie", "JSESSIONID=abc; Domain=localhost; Path=/")
+		w.Header().Add("Set-Cookie", "ANOTHER=xyz; Domain=127.0.0.1; Secure")
+		w.WriteHeader(http.StatusFound)
+	}))
+	defer targetServer.Close()
+
+	// Extract target port
+	targetPort, _ := strconv.Atoi(targetServer.URL[len("http://127.0.0.1:"):])
+
+	// 2. Setup Interceptor Engine
+	engine := NewInterceptorEngine("127.0.0.1", nil)
+	interceptPort, err := engine.InterceptPort(targetPort)
+	if err != nil {
+		t.Fatalf("Failed to intercept port: %v", err)
+	}
+
+	// 3. Make Request to Interceptor with Forwarded headers
+	proxyURL := fmt.Sprintf("http://127.0.0.1:%d", interceptPort)
+	req, _ := http.NewRequest("GET", proxyURL, nil)
+	req.Header.Set("X-Forwarded-Host", "pjrtest.lfr-demo.online")
+	req.Header.Set("X-Forwarded-Proto", "https")
+
+	// Prevent redirect following for testing Location header value directly
+	client := &http.Client{
+		CheckRedirect: func(req *http.Request, via []*http.Request) error {
+			return http.ErrUseLastResponse
+		},
+	}
+
+	resp, err := client.Do(req)
+	if err != nil {
+		t.Fatalf("Failed to request proxy: %v", err)
+	}
+	defer resp.Body.Close() //nolint:errcheck
+
+	// 4. Assertions on rewritten response headers
+	newLoc := resp.Header.Get("Location")
+	expectedLoc := "https://pjrtest.lfr-demo.online/group/control_panel"
+	if newLoc != expectedLoc {
+		t.Errorf("Expected Location to be rewritten to '%s', got '%s'", expectedLoc, newLoc)
+	}
+
+	cookies := resp.Header["Set-Cookie"]
+	if len(cookies) != 2 {
+		t.Fatalf("Expected 2 Set-Cookie headers, got %d", len(cookies))
+	}
+
+	// Cleaned domains checks
+	if cookies[0] != "JSESSIONID=abc; Path=/" {
+		t.Errorf("Expected first cookie domain to be stripped, got '%s'", cookies[0])
+	}
+	if cookies[1] != "ANOTHER=xyz; Secure" {
+		t.Errorf("Expected second cookie domain to be stripped, got '%s'", cookies[1])
+	}
+}
+
+func TestInterceptorEngine_LargePayloads(t *testing.T) {
+	// Generate 50KB payload
+	largePayload := bytes.Repeat([]byte("A"), 50000)
+
+	// 1. Setup Dummy Target Server validating large request payload and returning large response payload
+	targetServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		reqBody, err := io.ReadAll(r.Body)
+		if err != nil {
+			t.Errorf("Failed to read request body: %v", err)
+		}
+		if len(reqBody) != len(largePayload) {
+			t.Errorf("Expected request body to be %d bytes, got %d", len(largePayload), len(reqBody))
+		}
+		w.Header().Set("Content-Type", "text/plain")
+		w.WriteHeader(http.StatusOK)
+		_, _ = w.Write(largePayload)
+	}))
+	defer targetServer.Close()
+
+	// Extract target port
+	targetPort, _ := strconv.Atoi(targetServer.URL[len("http://127.0.0.1:"):])
+
+	// 2. Setup Interceptor Engine
+	engine := NewInterceptorEngine("127.0.0.1", nil)
+	interceptPort, err := engine.InterceptPort(targetPort)
+	if err != nil {
+		t.Fatalf("Failed to intercept port: %v", err)
+	}
+
+	// 3. Make Request to Interceptor with 50KB payload
+	proxyURL := fmt.Sprintf("http://127.0.0.1:%d", interceptPort)
+	req, _ := http.NewRequest("POST", proxyURL, bytes.NewReader(largePayload))
+
+	client := &http.Client{}
+	resp, err := client.Do(req)
+	if err != nil {
+		t.Fatalf("Failed to request proxy: %v", err)
+	}
+	defer resp.Body.Close() //nolint:errcheck
+
+	// Verify response status
+	if resp.StatusCode != http.StatusOK {
+		t.Errorf("Expected status 200, got %d", resp.StatusCode)
+	}
+
+	// 4. Assert response body length is fully 50KB and not truncated
+	respBody, err := io.ReadAll(resp.Body)
+	if err != nil {
+		t.Fatalf("Failed to read response body: %v", err)
+	}
+	if len(respBody) != len(largePayload) {
+		t.Errorf("Expected response body to be %d bytes, got %d (truncated!)", len(largePayload), len(respBody))
+	}
+
+	// 5. Assert history captured only the first 10KB (10240 bytes)
+	engine.mu.RLock()
+	defer engine.mu.RUnlock()
+
+	if len(engine.History) != 1 {
+		t.Fatalf("Expected 1 history record, got %d", len(engine.History))
+	}
+
+	rec := engine.History[0]
+	if len(rec.ReqBody) != 10240 {
+		t.Errorf("Expected captured request body to be 10240 bytes, got %d", len(rec.ReqBody))
+	}
+	if len(rec.RespBody) != 10240 {
+		t.Errorf("Expected captured response body to be 10240 bytes, got %d", len(rec.RespBody))
+	}
+}

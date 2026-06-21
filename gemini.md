@@ -317,4 +317,13 @@ The solution will consist of:
 - [x] Explicitly bind the reverse tunnel listening port on the server side to `127.0.0.1` by prefixing it in the dynamic remote format returned by `/api/register`.
 - [x] Verify that all unit and E2E integration tests continue to pass.
 
+## Response Header Cookie and Location Domain Rewriting & Body Truncation Fix (v1.9.5)
+- [x] Implement `Location` header URL rewriting in the client's interceptor transport to replace local target host references with the public gateway domain name (`X-Forwarded-Host`/`X-Forwarded-Proto`).
+- [x] Implement `Set-Cookie` header domain stripping/rewriting in the client's interceptor transport to prevent browser rejection of localhost/127.0.0.1 cookie domains.
+- [x] Fix request and response body stream truncation bug in the interceptor using `io.MultiReader`.
+- [x] Write unit tests to cover redirect URL, cookie domain rewriting logic, and large body payloads.
+- [x] Verify E2E integration test suite runs successfully.
+
+
+
 

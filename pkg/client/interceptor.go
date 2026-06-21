@@ -11,6 +11,7 @@ import (
 	"net/http/httputil"
 	"net/url"
 	"os"
+	"strconv"
 	"strings"
 	"sync"
 	"time"
@@ -237,7 +238,13 @@ func (t *interceptorTransport) RoundTrip(req *http.Request) (*http.Response, err
 	if req.Body != nil {
 		bodyBytes, _ := io.ReadAll(io.LimitReader(req.Body, 10240))
 		reqBodyStr = string(bodyBytes)
-		req.Body = io.NopCloser(bytes.NewBuffer(bodyBytes))
+		req.Body = struct {
+			io.Reader
+			io.Closer
+		}{
+			Reader: io.MultiReader(bytes.NewReader(bodyBytes), req.Body),
+			Closer: req.Body,
+		}
 	}
 
 	// Extract Req Headers
@@ -267,6 +274,60 @@ func (t *interceptorTransport) RoundTrip(req *http.Request) (*http.Response, err
 	res, err := t.transport.RoundTrip(req)
 	duration := time.Since(startTime).Milliseconds()
 
+	if err == nil && res != nil {
+		// 1. Rewrite Location redirect header if absolute and points to the target host/port
+		if locStr := res.Header.Get("Location"); locStr != "" {
+			if locURL, parseErr := url.Parse(locStr); parseErr == nil && locURL.IsAbs() {
+				targetHostPort := fmt.Sprintf("%s:%d", t.engine.TargetHost, t.targetPort)
+				isTarget := locURL.Host == targetHostPort ||
+					locURL.Host == fmt.Sprintf("localhost:%d", t.targetPort) ||
+					locURL.Host == fmt.Sprintf("127.0.0.1:%d", t.targetPort)
+
+				if !isTarget && (strings.HasPrefix(locURL.Host, "localhost:") || strings.HasPrefix(locURL.Host, "127.0.0.1:")) {
+					_, p, _ := net.SplitHostPort(locURL.Host)
+					if portInt, _ := strconv.Atoi(p); portInt == t.targetPort {
+						isTarget = true
+					}
+				}
+
+				if isTarget {
+					publicHost := req.Header.Get("X-Forwarded-Host")
+					publicProto := req.Header.Get("X-Forwarded-Proto")
+					if publicHost != "" {
+						if publicProto == "" {
+							publicProto = "https"
+						}
+						locURL.Scheme = publicProto
+						locURL.Host = publicHost
+						res.Header.Set("Location", locURL.String())
+					}
+				}
+			}
+		}
+
+		// 2. Rewrite Set-Cookie domains (remove Domain=localhost, Domain=127.0.0.1, Domain=<TargetHost>)
+		if cookies := res.Header["Set-Cookie"]; len(cookies) > 0 {
+			var newCookies []string
+			for _, cookieStr := range cookies {
+				parts := strings.Split(cookieStr, ";")
+				var newParts []string
+				for _, part := range parts {
+					trimmed := strings.TrimSpace(part)
+					if strings.HasPrefix(strings.ToLower(trimmed), "domain=") {
+						domVal := strings.TrimPrefix(strings.ToLower(trimmed), "domain=")
+						isLocal := domVal == "localhost" || domVal == "127.0.0.1" || domVal == strings.ToLower(t.engine.TargetHost)
+						if isLocal {
+							continue
+						}
+					}
+					newParts = append(newParts, part)
+				}
+				newCookies = append(newCookies, strings.Join(newParts, ";"))
+			}
+			res.Header["Set-Cookie"] = newCookies
+		}
+	}
+
 	rec := &RequestRecord{
 		ID:         fmt.Sprintf("%d", time.Now().UnixNano()),
 		Time:       startTime,
@@ -289,7 +350,13 @@ func (t *interceptorTransport) RoundTrip(req *http.Request) (*http.Response, err
 	if res.Body != nil {
 		bodyBytes, _ := io.ReadAll(io.LimitReader(res.Body, 10240))
 		respBodyStr = string(bodyBytes)
-		res.Body = io.NopCloser(bytes.NewBuffer(bodyBytes))
+		res.Body = struct {
+			io.Reader
+			io.Closer
+		}{
+			Reader: io.MultiReader(bytes.NewReader(bodyBytes), res.Body),
+			Closer: res.Body,
+		}
 	}
 
 	respHeaders := make(map[string]string)

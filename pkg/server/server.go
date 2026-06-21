@@ -1109,7 +1109,7 @@ func (s *Server) Start() error {
 		Addr:    s.cfg.HTTPBindAddr,
 		Handler: s,
 	}
-	// Periodic task: Prune expired magic links every hour
+	// Periodic task: Prune expired magic links and old PATs every hour
 	go func() {
 		ticker := time.NewTicker(s.cfg.PruneInterval)
 		defer ticker.Stop()
@@ -1120,6 +1120,7 @@ func (s *Server) Start() error {
 			case <-ticker.C:
 				if s.db != nil {
 					_ = s.db.PruneExpiredMagicLinks()
+					_ = s.db.PruneExpiredOrRevokedPATs(s.cfg.PATRetentionDays)
 				}
 			}
 		}

@@ -635,10 +635,10 @@ func (db *DB) GetPATByHash(hash string) (*PersonalAccessToken, error) {
 	return &pat, nil
 }
 
-// ListPATs returns all active (unrevoked) PATs belonging to a specific user.
+// ListPATs returns all PATs belonging to a specific user.
 func (db *DB) ListPATs(userID string) ([]*PersonalAccessToken, error) {
 	query := `SELECT id, user_id, token_hash, token_prefix, name, expires_at, revoked_at, last_used_at, created_at
-	          FROM personal_access_tokens WHERE user_id = ? AND revoked_at IS NULL`
+	          FROM personal_access_tokens WHERE user_id = ? ORDER BY created_at DESC`
 	rows, err := db.conn.Query(query, userID)
 	if err != nil {
 		return nil, err
@@ -916,6 +916,19 @@ func (db *DB) GetMagicLink(tokenHash string) (*MagicLink, error) {
 // PruneExpiredMagicLinks deletes any magic links that have expired from the database.
 func (db *DB) PruneExpiredMagicLinks() error {
 	_, err := db.conn.Exec("DELETE FROM admin_magic_links WHERE expires_at < CURRENT_TIMESTAMP")
+	return err
+}
+
+// PruneExpiredOrRevokedPATs deletes revoked or expired PATs that exceed the retention period.
+func (db *DB) PruneExpiredOrRevokedPATs(retentionDays int) error {
+	if retentionDays < 0 {
+		return nil // Retention check disabled
+	}
+	cutoff := time.Now().UTC().AddDate(0, 0, -retentionDays)
+	query := `DELETE FROM personal_access_tokens 
+	          WHERE (revoked_at IS NOT NULL AND revoked_at < ?) 
+	             OR (expires_at IS NOT NULL AND expires_at < ?)`
+	_, err := db.conn.Exec(query, cutoff, cutoff)
 	return err
 }
 

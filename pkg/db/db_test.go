@@ -223,6 +223,110 @@ func TestPATCRUD(t *testing.T) {
 	}
 }
 
+func TestPATRetentionPruning(t *testing.T) {
+	database, tmpDir := setupTestDB(t)
+	defer cleanupTestDB(database, tmpDir)
+
+	// Create user
+	user := &User{
+		ID:     "ret-user",
+		Email:  "retention@liferay.com",
+		Role:   "user",
+		Status: "approved",
+	}
+	if err := database.CreateUser(user); err != nil {
+		t.Fatalf("failed to create user: %v", err)
+	}
+
+	now := time.Now().UTC()
+	oldTime := now.AddDate(0, 0, -35)    // 35 days ago
+	recentTime := now.AddDate(0, 0, -10) // 10 days ago
+
+	// 1. Old expired token (should be pruned)
+	p1 := &PersonalAccessToken{
+		UserID:      user.ID,
+		TokenHash:   "hash-old-expired",
+		TokenPrefix: "prefix1",
+		Name:        "Old Expired",
+		ExpiresAt:   &oldTime,
+	}
+	_ = database.CreatePAT(p1)
+
+	// 2. Recent expired token (should be kept)
+	p2 := &PersonalAccessToken{
+		UserID:      user.ID,
+		TokenHash:   "hash-recent-expired",
+		TokenPrefix: "prefix2",
+		Name:        "Recent Expired",
+		ExpiresAt:   &recentTime,
+	}
+	_ = database.CreatePAT(p2)
+
+	// 3. Old revoked token (should be pruned)
+	p3 := &PersonalAccessToken{
+		UserID:      user.ID,
+		TokenHash:   "hash-old-revoked",
+		TokenPrefix: "prefix3",
+		Name:        "Old Revoked",
+		RevokedAt:   &oldTime,
+	}
+	_ = database.CreatePAT(p3)
+
+	// 4. Recent revoked token (should be kept)
+	p4 := &PersonalAccessToken{
+		UserID:      user.ID,
+		TokenHash:   "hash-recent-revoked",
+		TokenPrefix: "prefix4",
+		Name:        "Recent Revoked",
+		RevokedAt:   &recentTime,
+	}
+	_ = database.CreatePAT(p4)
+
+	// 5. Active token (should be kept)
+	p5 := &PersonalAccessToken{
+		UserID:      user.ID,
+		TokenHash:   "hash-active",
+		TokenPrefix: "prefix5",
+		Name:        "Active",
+	}
+	_ = database.CreatePAT(p5)
+
+	// Run retention pruning (30 days retention)
+	if err := database.PruneExpiredOrRevokedPATs(30); err != nil {
+		t.Fatalf("pruning failed: %v", err)
+	}
+
+	// Verify p1 is deleted
+	_, err := database.GetPATByHash("hash-old-expired")
+	if err != ErrNotFound {
+		t.Errorf("expected p1 to be pruned, got err: %v", err)
+	}
+
+	// Verify p2 is kept
+	_, err = database.GetPATByHash("hash-recent-expired")
+	if err != nil {
+		t.Errorf("expected p2 to be kept, got err: %v", err)
+	}
+
+	// Verify p3 is deleted
+	_, err = database.GetPATByHash("hash-old-revoked")
+	if err != ErrNotFound {
+		t.Errorf("expected p3 to be pruned, got err: %v", err)
+	}
+
+	// Verify p4 is kept
+	_, err = database.GetPATByHash("hash-recent-revoked")
+	if err != nil {
+		t.Errorf("expected p4 to be kept, got err: %v", err)
+	}
+
+	// Verify p5 is kept
+	_, err = database.GetPATByHash("hash-active")
+	if err != nil {
+		t.Errorf("expected p5 to be kept, got err: %v", err)
+	}
+}
+
 func TestPATForeignKeysAndCascade(t *testing.T) {
 	database, tmpDir := setupTestDB(t)
 	defer cleanupTestDB(database, tmpDir)

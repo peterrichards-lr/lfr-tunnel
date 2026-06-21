@@ -1000,6 +1000,8 @@ func TestServer_GetMeLanguagePreference(t *testing.T) {
 		Status:             "approved",
 		LanguagePreference: "ro",
 		TOTPEnabled:        true,
+		LastClientVersion:  "v1.9.5",
+		LastClientOS:       "macOS",
 	}
 	if err := srv.db.CreateUser(u); err != nil {
 		t.Fatalf("failed to create user: %v", err)
@@ -1046,6 +1048,20 @@ func TestServer_GetMeLanguagePreference(t *testing.T) {
 		t.Error("expected 'totp_enabled' field in /api/me response, but it was missing")
 	} else if totpVal != true {
 		t.Errorf("expected 'totp_enabled' to be true, got %v", totpVal)
+	}
+
+	clientVerVal, ok := resp["last_client_version"]
+	if !ok {
+		t.Error("expected 'last_client_version' field in /api/me response, but it was missing")
+	} else if clientVerVal != "v1.9.5" {
+		t.Errorf("expected 'last_client_version' to be %q, got %q", "v1.9.5", clientVerVal)
+	}
+
+	clientOSVal, ok := resp["last_client_os"]
+	if !ok {
+		t.Error("expected 'last_client_os' field in /api/me response, but it was missing")
+	} else if clientOSVal != "macOS" {
+		t.Errorf("expected 'last_client_os' to be %q, got %q", "macOS", clientOSVal)
 	}
 }
 

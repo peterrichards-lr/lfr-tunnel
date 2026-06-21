@@ -329,6 +329,7 @@ The solution will consist of:
 - [x] Implement differential delta bandwidth tracking on leases to prevent over-counting metrics.
 - [x] Increase default VisitorTimeout from 30s to 5 minutes to keep active connections visible in Details modal.
 - [x] Add reverse proxy logging for auditing visitor IP addresses.
+- [x] Fix "Your Client: Never Connected" dashboard issue by returning last_client_version and last_client_os in /api/me response.
 - [x] Verify that all unit tests compile and run successfully.
 
 

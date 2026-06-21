@@ -333,7 +333,7 @@ enable_user_portal: true
 
 # Versioning Controls (Optional)
 min_client_version: "v1.0.0"       # Minimum client version allowed to connect
-latest_client_version: "v1.9.2"    # Latest recommended client version (decouples server upgrades)
+latest_client_version: "v1.9.3"    # Latest recommended client version (decouples server upgrades)
 
 > [!TIP]
 > **Native Multi-Factor Authentication (MFA / TOTP)**  
@@ -966,10 +966,10 @@ To prevent developers from seeing client CLI update warnings when you deploy cos
 * `latest_client_version`: Specifies the latest recommended client CLI version. If set, the gateway will return this version as the `latest_version` to connecting client instances. If a client's version is older than this (but newer than `min_client_version`), it displays a soft update warning.
 
 #### How it works:
-1. **Server-only fixes (e.g., v1.9.3)**:
-   - Leave `latest_client_version` as `"v1.9.2"` in `/etc/lfr-tunneld/server-config.yaml`.
-   - The server gateway will run on `v1.9.3` (visible in the Admin Dashboard footer via the `server_version` API metadata), but it will report the latest client to be `v1.9.2`.
-   - Existing developers running `v1.9.2` will not see any upgrade warnings or console notices.
+1. **Server-only fixes (e.g., v1.9.4)**:
+   - Leave `latest_client_version` as `"v1.9.3"` in `/etc/lfr-tunneld/server-config.yaml`.
+   - The server gateway will run on `v1.9.4` (visible in the Admin Dashboard footer via the `server_version` API metadata), but it will report the latest client to be `v1.9.3`.
+   - Existing developers running `v1.9.3` will not see any upgrade warnings or console notices.
 2. **Client CLI upgrades (e.g., v1.10.0)**:
    - Deploy the new client to package managers.
    - Update `/etc/lfr-tunneld/server-config.yaml` to set `latest_client_version: "v1.10.0"`.

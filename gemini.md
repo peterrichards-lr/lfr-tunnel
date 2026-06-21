@@ -185,9 +185,13 @@ The solution will consist of:
 - [ ] Apply to SignPath Foundation for free Windows Authenticode signing (https://signpath.org).
 - [ ] Submit official release binary hashes to SentinelOne false-positive review portal.
 - [ ] Ask SentinelOne admin to configure path exclusions per SECURITY.md (Homebrew + direct-install paths).
+- [ ] Add ~/.ldm/bin/lfr-tunnel to SentinelOne exclusions in README.md and SECURITY.md.
 
 ## Bug Fixes
 - [x] Fix unit test TempDir cleanup race by sleeping 50ms before stopping the server
+- [x] Fix renderTimestamp parsing of dates with timezone offsets in dashboard.js to prevent table wrapping issues
+- [x] Add visual status indicators (Active, Expired, Revoked) for PATs in the dashboard UI
+- [x] Add relative "Expires In" column to PAT table in the dashboard UI
 
 ## Dependabot Alert Mitigation
 - [x] Upgrade github.com/jpillora/chisel to v1.11.6 and other dependencies to patch CVE-2026-48113 and resolve Dependabot alerts.

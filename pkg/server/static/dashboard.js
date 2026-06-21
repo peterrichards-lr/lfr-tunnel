@@ -1076,6 +1076,9 @@ function toggleTheme() {
         }
 
         function showTab(tabName, skipHistory = false) {
+            if (window.closeAllActionMenus) {
+                window.closeAllActionMenus();
+            }
             document.querySelectorAll('.main-content > div').forEach(el => el.classList.add('hidden'));
             document.querySelectorAll('.nav-item').forEach(el => el.classList.remove('active'));
             
@@ -3363,3 +3366,8 @@ function toggleTheme() {
         window.addEventListener('scroll', () => {
             closeAllActionMenus();
         }, { capture: true, passive: true });
+
+        // Hide dropdowns when window is resized to prevent floating detached menus
+        window.addEventListener('resize', () => {
+            closeAllActionMenus();
+        }, { passive: true });

@@ -97,10 +97,14 @@ test.describe('Analytics & Tunnel Automation', () => {
     // 10. Navigate back to Tunnels Tab and test the new Tunnel Details Modal
     await page.click('#nav-tunnels');
     
-    // Find the details button and click it
-    const detailsBtn = page.locator('#tunnels-table-body button:has-text("Details")').first();
-    await expect(detailsBtn).toBeVisible();
-    await detailsBtn.click();
+    // Open the action menu and click Details
+    const menuBtn = page.locator('#tunnels-table-body .action-menu-btn').first();
+    await expect(menuBtn).toBeVisible();
+    await menuBtn.click();
+
+    const detailsItem = page.locator('.action-menu-dropdown.show .action-menu-item:has-text("Details")').first();
+    await expect(detailsItem).toBeVisible();
+    await detailsItem.click();
 
     // Verify Tunnel Details modal is visible
     const detailsModal = page.locator('#tunnel-details-modal');

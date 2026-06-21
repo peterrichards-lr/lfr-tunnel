@@ -528,12 +528,12 @@ html[dir="rtl"] td, html[dir="rtl"] th {
     margin: 0;
 }
 
-.action-menu-btn:hover {
+.action-menu-btn:hover, .action-menu-btn.active {
     background: rgba(255, 255, 255, 0.1);
     color: var(--text-main);
 }
 
-:root[data-theme="light"] .action-menu-btn:hover {
+:root[data-theme="light"] .action-menu-btn:hover, :root[data-theme="light"] .action-menu-btn.active {
     background: rgba(0, 0, 0, 0.05);
 }
 

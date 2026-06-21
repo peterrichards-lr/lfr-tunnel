@@ -391,10 +391,11 @@ function toggleTheme() {
                         const cl = document.getElementById('footer-cookie-link');
                         if (cl) cl.href = vData.cookie_policy_url;
                     }
-                    if (vData.latest_version) {
+                    const displayVer = vData.server_version || vData.latest_version;
+                    if (displayVer) {
                         const versionDisplays = document.querySelectorAll('.server-version-display');
                         versionDisplays.forEach(el => {
-                            el.textContent = vData.latest_version;
+                            el.textContent = displayVer;
                         });
                     }
                     const box = document.getElementById('docker-container-box');
@@ -1033,18 +1034,18 @@ function toggleTheme() {
             const tunnels = currentUser.tunnels || [];
             renderTable('tunnels-table-body', tunnels, t => {
                 const tunnelJsonEncoded = encodeURIComponent(JSON.stringify(t));
-                const actionButtons = `
-                    <button class="btn btn-outline" style="padding: 4px 8px; margin: 0; font-size: 13px;" onclick="openTunnelDetailsModal('${tunnelJsonEncoded}')">Details</button>
-                    ${isAdmin ? `<button class="btn" style="padding: 4px 8px; margin: 0; margin-left: 6px; font-size: 13px; color: var(--danger); border-color: var(--danger);" onclick="kickActiveTunnel('${escapeHTML(t.subdomain_prefix)}')">Kick</button>` : ''}
-                `;
                 return `
                     <tr>
                         <td style="font-weight: 500;">${escapeHTML(t.subdomain_prefix)}</td>
                         <td><a href="https://${escapeHTML(t.full_host)}" target="_blank" style="color: var(--primary); text-decoration: none;">${escapeHTML(t.full_host)}</a></td>
                         <td><span class="badge ${t.status === 'up' ? 'success' : ''}">${escapeHTML(t.status)}</span></td>
                         <td>
-                            <div style="display: flex; gap: 6px; align-items: center;">
-                                ${actionButtons}
+                            <div class="action-menu">
+                                <button class="action-menu-btn" onclick="toggleActionMenu('menu-tunnel-${escapeHTML(t.subdomain_prefix)}', event)">⋮</button>
+                                <div id="menu-tunnel-${escapeHTML(t.subdomain_prefix)}" class="action-menu-dropdown">
+                                    <button class="action-menu-item" onclick="openTunnelDetailsModal('${tunnelJsonEncoded}')">Details</button>
+                                    ${isAdmin ? `<button class="action-menu-item danger" onclick="kickActiveTunnel('${escapeHTML(t.subdomain_prefix)}')">Kick</button>` : ''}
+                                </div>
                             </div>
                         </td>
                     </tr>
@@ -1251,17 +1252,19 @@ function toggleTheme() {
                         statusBadge = `<span class="badge success">Active</span>`;
                     }
 
-                    const extendBtns = (isAdminOrOwner && !isRevoked) ? `
-                        <div style="display: flex; gap: 4px; align-items: center;">
-                            <button class="btn btn-outline" style="padding: 4px 8px; margin: 0; font-size: 11px; color: #fbbf24; border-color: #fbbf24;" onclick="extendToken(${t.id}, 30)">+30d</button>
-                            <button class="btn btn-outline" style="padding: 4px 8px; margin: 0; font-size: 11px; color: #fbbf24; border-color: #fbbf24;" onclick="extendToken(${t.id}, 90)">+90d</button>
-                            <button class="btn btn-outline" style="padding: 4px 8px; margin: 0; font-size: 11px; color: #fbbf24; border-color: #fbbf24;" onclick="extendToken(${t.id}, 0)">Permanent</button>
+                    const actionMenuHtml = !isRevoked ? `
+                        <div class="action-menu">
+                            <button class="action-menu-btn" onclick="toggleActionMenu('menu-token-${t.id}', event)">⋮</button>
+                            <div id="menu-token-${t.id}" class="action-menu-dropdown">
+                                ${isAdminOrOwner ? `
+                                    <button class="action-menu-item" onclick="extendToken(${t.id}, 30)">Extend +30d</button>
+                                    <button class="action-menu-item" onclick="extendToken(${t.id}, 90)">Extend +90d</button>
+                                    <button class="action-menu-item" onclick="extendToken(${t.id}, 0)">Extend Permanent</button>
+                                ` : ''}
+                                <button class="action-menu-item danger" onclick="revokeToken(${t.id})">Revoke</button>
+                            </div>
                         </div>
                     ` : '';
-
-                    const revokeBtn = isRevoked ? '' : `
-                        <button class="btn btn-outline" style="padding: 4px 8px; margin: 0; font-size: 11px; color: var(--danger); border-color: var(--danger);" onclick="revokeToken(${t.id})">Revoke</button>
-                    `;
 
                     return `
                         <tr>
@@ -1273,10 +1276,7 @@ function toggleTheme() {
                             <td>${formatTimeRemaining(t.expires_at, isRevoked)}</td>
                             <td>${statusBadge}</td>
                             <td style="text-align: right;">
-                                <div style="display: flex; gap: 6px; justify-content: flex-end; align-items: center;">
-                                    ${extendBtns}
-                                    ${revokeBtn}
-                                </div>
+                                ${actionMenuHtml}
                             </td>
                         </tr>
                     `;
@@ -1452,17 +1452,28 @@ function toggleTheme() {
                         <td>${quotaCell}</td>
                         <td>${lastSeenText}</td>
                         <td>
-                            ${(!isSelf && u.status !== 'approved') ? `<button class="btn" style="padding: 4px 8px; margin: 0 4px 0 0;" onclick="approveUser('${u.id}')">Approve</button>` : ''}
-                            ${(!isSelf && u.status !== 'revoked') ? `<button class="btn" style="padding: 4px 8px; margin: 0 4px 0 0; color: var(--danger); border-color: var(--danger);" onclick="revokeUser('${u.id}')">Revoke</button>` : ''}
-                            ${(!isSelf && u.status === 'approved') ? `<button class="btn" style="padding: 4px 8px; margin: 0 4px 0 0; color: #3b82f6; border-color: #3b82f6;" onclick="promptTargetedMessage('${u.id}', '${escapeHTML(u.email)}')">Message</button>` : ''}
-                            ${(!isSelf && u.status === 'approved') ? `<button class="btn" style="padding: 4px 8px; margin: 0 4px 0 0; color: #8b5cf6; border-color: #8b5cf6;" onclick="openUserQuotaModal('${escapeHTML(u.email)}', ${u.rate_limit || 0})">Set Quota</button>` : ''}
-                            ${(!isSelf && u.status === 'approved') ? `<button class="btn" style="padding: 4px 8px; margin: 0 4px 0 0; color: #f59e0b; border-color: #f59e0b;" onclick="openUserResLimitModal('${escapeHTML(u.email)}', ${u.max_reservations !== undefined && u.max_reservations !== null ? u.max_reservations : ''})">Set Quota Limit</button>` : ''}
-                            ${(!isSelf && u.status === 'approved') ? `<button class="btn" style="padding: 4px 8px; margin: 0 4px 0 0; color: #06b6d4; border-color: #06b6d4;" onclick="openUserTunnelsLimitModal('${escapeHTML(u.email)}', ${u.max_tunnels !== undefined && u.max_tunnels !== null ? u.max_tunnels : ''})">Set Tunnels Limit</button>` : ''}
-                            ${(!isSelf && u.status === 'approved' && u.role === 'admin') ? `<button class="btn" style="padding: 4px 8px; margin: 0 4px 0 0; color: #84cc16; border-color: #84cc16;" onclick="changeUserRole('${escapeHTML(u.email)}', 'user')">Demote</button>` : ''}
-                            ${(!isSelf && u.status === 'approved' && u.role === 'user') ? `<button class="btn" style="padding: 4px 8px; margin: 0 4px 0 0; color: #84cc16; border-color: #84cc16;" onclick="changeUserRole('${escapeHTML(u.email)}', 'admin')">Promote</button>` : ''}
-                            ${(!isSelf && u.totp_enabled) ? `<button class="btn" style="padding: 4px 8px; margin: 0 4px 0 0; color: #d97706; border-color: #d97706;" onclick="adminResetMFA('${escapeHTML(u.email)}')">Reset MFA</button>` : ''}
-                            ${!isSelf ? `<button class="btn" style="padding: 4px 8px; margin: 0 4px 0 0; color: #f43f5e; border-color: #f43f5e;" onclick="adminDeleteUser('${escapeHTML(u.email)}')">Delete</button>` : ''}
-                            ${isSelf ? '<span style="font-size: 12px; color: var(--text-muted);">No actions</span>' : ''}
+                            ${isSelf ? '<span style="font-size: 12px; color: var(--text-muted);">No actions</span>' : `
+                                <div class="action-menu">
+                                    <button class="action-menu-btn" onclick="toggleActionMenu('menu-user-${u.id}', event)">⋮</button>
+                                    <div id="menu-user-${u.id}" class="action-menu-dropdown">
+                                        ${u.status !== 'approved' ? `<button class="action-menu-item" onclick="approveUser('${u.id}')">Approve</button>` : ''}
+                                        ${u.status !== 'revoked' ? `<button class="action-menu-item danger" onclick="revokeUser('${u.id}')">Revoke</button>` : ''}
+                                        ${u.status === 'approved' ? `
+                                            <button class="action-menu-item" onclick="promptTargetedMessage('${u.id}', '${escapeHTML(u.email)}')">Message</button>
+                                            <button class="action-menu-item" onclick="openUserQuotaModal('${escapeHTML(u.email)}', ${u.rate_limit || 0})">Set Bandwidth Limit</button>
+                                            <button class="action-menu-item" onclick="openUserResLimitModal('${escapeHTML(u.email)}', ${u.max_reservations !== undefined && u.max_reservations !== null ? u.max_reservations : ''})">Set Subdomain Limit</button>
+                                            <button class="action-menu-item" onclick="openUserTunnelsLimitModal('${escapeHTML(u.email)}', ${u.max_tunnels !== undefined && u.max_tunnels !== null ? u.max_tunnels : ''})">Set Tunnels Limit</button>
+                                            ${u.role === 'admin' ? `
+                                                <button class="action-menu-item" onclick="changeUserRole('${escapeHTML(u.email)}', 'user')">Demote to User</button>
+                                            ` : `
+                                                <button class="action-menu-item" onclick="changeUserRole('${escapeHTML(u.email)}', 'admin')">Promote to Admin</button>
+                                            `}
+                                        ` : ''}
+                                        ${u.totp_enabled ? `<button class="action-menu-item" onclick="adminResetMFA('${escapeHTML(u.email)}')">Reset MFA</button>` : ''}
+                                        <button class="action-menu-item danger" onclick="adminDeleteUser('${escapeHTML(u.email)}')">Delete</button>
+                                    </div>
+                                </div>
+                            `}
                         </td>
                     </tr>
                     `;
@@ -1491,8 +1502,13 @@ function toggleTheme() {
                         <td>${escapeHTML(u.first_name)} ${escapeHTML(u.last_name)}</td>
                         <td>${renderTimestamp(u.created_at)}</td>
                         <td>
-                            <button class="btn btn-primary" style="padding: 4px 8px; margin: 0 4px 0 0;" onclick="approveRegistration('${u.id}')">Approve</button>
-                            <button class="btn" style="padding: 4px 8px; margin: 0; color: var(--danger); border-color: var(--danger);" onclick="denyRegistration('${u.id}')">Deny</button>
+                            <div class="action-menu">
+                                <button class="action-menu-btn" onclick="toggleActionMenu('menu-reg-${u.id}', event)">⋮</button>
+                                <div id="menu-reg-${u.id}" class="action-menu-dropdown">
+                                    <button class="action-menu-item" onclick="approveRegistration('${u.id}')">Approve</button>
+                                    <button class="action-menu-item danger" onclick="denyRegistration('${u.id}')">Deny</button>
+                                </div>
+                            </div>
                         </td>
                     </tr>
                     `;
@@ -1543,7 +1559,12 @@ function toggleTheme() {
                         <td>${escapeHTML(b.reason)}</td>
                         <td>${renderTimestamp(b.banned_at)}</td>
                         <td>
-                            <button class="btn" style="padding: 4px 8px; margin: 0; color: var(--danger); border-color: var(--danger);" onclick="deleteBlacklist('${b.ip_address}')">Remove</button>
+                            <div class="action-menu">
+                                <button class="action-menu-btn" onclick="toggleActionMenu('menu-blacklist-${b.ip_address.replace(/\./g, '-')}', event)">⋮</button>
+                                <div id="menu-blacklist-${b.ip_address.replace(/\./g, '-')}" class="action-menu-dropdown">
+                                    <button class="action-menu-item danger" onclick="deleteBlacklist('${b.ip_address}')">Remove</button>
+                                </div>
+                            </div>
                         </td>
                     </tr>
                 `);
@@ -2851,9 +2872,7 @@ function toggleTheme() {
                             }
                         }
 
-                        const extButton = (item.expires_at && !item.extension_requested) 
-                            ? `<button class="btn btn-outline" style="padding: 4px 8px; margin: 0; font-size: 12px; color: #fbbf24; border-color: #fbbf24;" onclick="requestExtension('${item.id}')">Extend</button>`
-                            : '';
+                        const canExtend = !!(item.expires_at && !item.extension_requested);
 
                         const host = `${item.subdomain}.${item.domain}`;
                         const hostLink = `<a href="https://${host}" target="_blank" class="host-link" style="color: var(--primary); font-family: monospace; font-weight: 600; text-decoration: none;">${escapeHTML(host)}</a>`;
@@ -2875,9 +2894,12 @@ function toggleTheme() {
                                 <td>${statusText}</td>
                                 <td>${expiresText}</td>
                                 <td style="text-align: right;">
-                                    <div style="display: flex; gap: 6px; justify-content: flex-end; align-items: center;">
-                                        ${extButton}
-                                        <button class="btn btn-outline" style="padding: 4px 8px; margin: 0; font-size: 12px; color: var(--danger); border-color: var(--danger);" onclick="releaseReservation('${item.id}', '${escapeHTML(host)}')">Release</button>
+                                    <div class="action-menu">
+                                        <button class="action-menu-btn" onclick="toggleActionMenu('menu-reservation-${item.id}', event)">⋮</button>
+                                        <div id="menu-reservation-${item.id}" class="action-menu-dropdown">
+                                            ${canExtend ? `<button class="action-menu-item" onclick="requestExtension('${item.id}')">Extend</button>` : ''}
+                                            <button class="action-menu-item danger" onclick="releaseReservation('${item.id}', '${escapeHTML(host)}')">Release</button>
+                                        </div>
                                     </div>
                                 </td>
                             </tr>
@@ -2992,10 +3014,13 @@ function toggleTheme() {
                                     <td style="font-family: monospace;">${escapeHTML(item.domain)}</td>
                                     <td>${expiresVal}</td>
                                     <td style="text-align: right;">
-                                        <div style="display: flex; gap: 6px; justify-content: flex-end; align-items: center;">
-                                            <button class="btn" style="padding: 4px 8px; margin: 0; font-size: 12px; color: #10b981; border-color: #10b981;" onclick="approveExtension('${item.id}', 30, false)">+30 Days</button>
-                                            <button class="btn" style="padding: 4px 8px; margin: 0; font-size: 12px; color: #8b5cf6; border-color: #8b5cf6;" onclick="approveExtension('${item.id}', 0, true)">Permanent</button>
-                                            <button class="btn" style="padding: 4px 8px; margin: 0; font-size: 12px; color: #f59e0b; border-color: #f59e0b;" onclick="demoteReservation('${item.id}')">Demote</button>
+                                        <div class="action-menu">
+                                            <button class="action-menu-btn" onclick="toggleActionMenu('menu-admin-ext-${item.id}', event)">⋮</button>
+                                            <div id="menu-admin-ext-${item.id}" class="action-menu-dropdown">
+                                                <button class="action-menu-item" onclick="approveExtension('${item.id}', 30, false)">Approve +30 Days</button>
+                                                <button class="action-menu-item" onclick="approveExtension('${item.id}', 0, true)">Approve Permanent</button>
+                                                <button class="action-menu-item danger" onclick="demoteReservation('${item.id}')">Demote</button>
+                                            </div>
                                         </div>
                                     </td>
                                 </tr>
@@ -3236,3 +3261,31 @@ function toggleTheme() {
             }
         }
         window.exportTokensCSV = exportTokensCSV;
+
+        window.toggleActionMenu = function(menuId, event) {
+            if (event) event.stopPropagation();
+            const menu = document.getElementById(menuId);
+            const show = menu && !menu.classList.contains('show');
+            
+            // Close all other dropdowns
+            document.querySelectorAll('.action-menu-dropdown').forEach(el => el.classList.remove('show'));
+            
+            if (menu && show) {
+                menu.classList.add('show');
+                
+                // Adjust position if it overflows the window
+                const rect = menu.getBoundingClientRect();
+                if (rect.left < 0) {
+                    menu.style.left = '0';
+                    menu.style.right = 'auto';
+                }
+                if (rect.right > window.innerWidth) {
+                    menu.style.left = 'auto';
+                    menu.style.right = '0';
+                }
+            }
+        };
+
+        window.addEventListener('click', () => {
+            document.querySelectorAll('.action-menu-dropdown').forEach(el => el.classList.remove('show'));
+        });

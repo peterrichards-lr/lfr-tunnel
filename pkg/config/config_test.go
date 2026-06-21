@@ -24,6 +24,8 @@ chisel_bind_addr: ":8082"
 ssl_cert_file: "/path/to/cert"
 ssl_key_file: "/path/to/key"
 docker_image: "peterjrichards/lfr-tunnel:latest"
+min_client_version: "v1.0.1"
+latest_client_version: "v1.2.0"
 client_platforms:
   macos_arm64:
     url: "http://example.com/darwin-arm64"
@@ -50,6 +52,12 @@ client_platforms:
 	if cfg.DockerImage != "peterjrichards/lfr-tunnel:latest" {
 		t.Errorf("expected DockerImage to be peterjrichards/lfr-tunnel:latest, got %s", cfg.DockerImage)
 	}
+	if cfg.MinClientVersion != "v1.0.1" {
+		t.Errorf("expected MinClientVersion to be v1.0.1, got %s", cfg.MinClientVersion)
+	}
+	if cfg.LatestClientVersion != "v1.2.0" {
+		t.Errorf("expected LatestClientVersion to be v1.2.0, got %s", cfg.LatestClientVersion)
+	}
 	if cfg.ClientPlatforms == nil || cfg.ClientPlatforms["macos_arm64"].URL != "http://example.com/darwin-arm64" {
 		t.Errorf("expected ClientPlatforms macos_arm64 URL to be http://example.com/darwin-arm64, got %v", cfg.ClientPlatforms)
 	}
@@ -64,10 +72,14 @@ client_platforms:
 	os.Setenv("LFT_DOMAINS", "env.com")                    //nolint:errcheck
 	os.Setenv("LFT_BIND_ADDR", ":9443")                    //nolint:errcheck
 	os.Setenv("LFT_DOCKER_IMAGE", "override/image:latest") //nolint:errcheck
+	os.Setenv("LFT_MIN_CLIENT_VERSION", "v2.0.0")          //nolint:errcheck
+	os.Setenv("LFT_LATEST_CLIENT_VERSION", "v2.1.0")       //nolint:errcheck
 	defer func() {
-		os.Unsetenv("LFT_DOMAINS")      //nolint:errcheck
-		os.Unsetenv("LFT_BIND_ADDR")    //nolint:errcheck
-		os.Unsetenv("LFT_DOCKER_IMAGE") //nolint:errcheck
+		os.Unsetenv("LFT_DOMAINS")               //nolint:errcheck
+		os.Unsetenv("LFT_BIND_ADDR")             //nolint:errcheck
+		os.Unsetenv("LFT_DOCKER_IMAGE")          //nolint:errcheck
+		os.Unsetenv("LFT_MIN_CLIENT_VERSION")    //nolint:errcheck
+		os.Unsetenv("LFT_LATEST_CLIENT_VERSION") //nolint:errcheck
 	}()
 
 	cfgEnv, err := LoadServerConfig(tmpFile.Name())
@@ -83,6 +95,12 @@ client_platforms:
 	}
 	if cfgEnv.DockerImage != "override/image:latest" {
 		t.Errorf("expected DockerImage override to be override/image:latest, got %s", cfgEnv.DockerImage)
+	}
+	if cfgEnv.MinClientVersion != "v2.0.0" {
+		t.Errorf("expected MinClientVersion override to be v2.0.0, got %s", cfgEnv.MinClientVersion)
+	}
+	if cfgEnv.LatestClientVersion != "v2.1.0" {
+		t.Errorf("expected LatestClientVersion override to be v2.1.0, got %s", cfgEnv.LatestClientVersion)
 	}
 }
 

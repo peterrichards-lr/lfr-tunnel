@@ -20,6 +20,14 @@ echo "BUILDING" > "$SIGNAL_FILE"
 # Make sure we write FAILED or SUCCESS on exit
 cleanup() {
     EXIT_CODE=$?
+    echo "=== Cleaning up E2E resources ==="
+    if [ -n "$CLIENT_CONTAINER_ID" ]; then
+        echo "Stopping and removing client container: $CLIENT_CONTAINER_ID"
+        docker stop "$CLIENT_CONTAINER_ID" >/dev/null 2>&1 || true
+        docker rm "$CLIENT_CONTAINER_ID" >/dev/null 2>&1 || true
+    fi
+    docker-compose down -v --remove-orphans >/dev/null 2>&1 || true
+
     if [ $EXIT_CODE -eq 0 ]; then
         echo "SUCCESS" > "$SIGNAL_FILE"
     else

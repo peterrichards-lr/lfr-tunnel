@@ -285,4 +285,3 @@ The solution will consist of:
 - [ ] Integrate tunnel provisioning directly into Liferay Development Manager (LDM) execution loops.
 - [ ] Implement live WebSocket-driven telemetry updates in the portal Admin Web Dashboard.
 - [ ] Integrate a lightweight Web Application Firewall (WAF) shield on the gateway to filter basic exploit payloads during public presentations.
-

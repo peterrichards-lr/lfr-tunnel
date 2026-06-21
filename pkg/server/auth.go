@@ -36,6 +36,8 @@ type TunnelLease struct {
 	Status          string               `json:"status"` // e.g., "up", "maintenance", "down"
 	BytesIn         uint64               `json:"bytes_in"`
 	BytesOut        uint64               `json:"bytes_out"`
+	LastBytesIn     uint64               `json:"-"`
+	LastBytesOut    uint64               `json:"-"`
 	CreatedAt       time.Time            `json:"created_at"`
 	VisitorIPsMu    sync.Mutex           `json:"-"`
 	VisitorIPs      map[string]time.Time `json:"-"`

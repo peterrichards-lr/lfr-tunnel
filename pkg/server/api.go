@@ -105,6 +105,8 @@ func (s *Server) handleGetMe(w http.ResponseWriter, r *http.Request) {
 		"last_login_ip":       user.LastLoginIP,
 		"tunnels":             activeLeases,
 		"totp_enabled":        user.TOTPEnabled,
+		"last_client_version": user.LastClientVersion,
+		"last_client_os":      user.LastClientOS,
 	}
 
 	cookie, err := r.Cookie("lfr_session")

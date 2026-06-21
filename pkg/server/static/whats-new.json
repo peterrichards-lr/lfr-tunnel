@@ -4,7 +4,8 @@
   "features": [
     "Fix zero-value RecordedAt timestamp bug causing empty System Analytics reports.",
     "Implement differential bandwidth logging delta tracking to prevent over-counting in analytics.",
-    "Increase default VisitorTimeout to 5 minutes so active connections remain visible in details modal."
+    "Increase default VisitorTimeout to 5 minutes so active connections remain visible in details modal.",
+    "Fix dashboard client status banner displaying 'Never Connected' for active/previously connected Docker and native CLI clients."
   ]
 }
 

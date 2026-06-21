@@ -538,10 +538,7 @@ html[dir="rtl"] td, html[dir="rtl"] th {
 }
 
 .action-menu-dropdown {
-    position: absolute;
-    right: 0;
-    top: 100%;
-    margin-top: 4px;
+    position: fixed;
     background: var(--bg-base);
     border: 1px solid var(--border);
     border-radius: 8px;

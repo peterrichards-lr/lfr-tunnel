@@ -384,6 +384,7 @@ The solution will consist of:
 - [x] Restore deleted release scripts and commit telemetry changes.
 - [x] Verify test execution via GitHub Actions CI to bypass local EDR restrictions.
 - [x] Fix errcheck linter warnings in telemetry files.
+- [x] Update whats-new.json with v1.12.0 release details.
 
 
 

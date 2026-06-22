@@ -16,6 +16,7 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/mattn/go-isatty"
 	"lfr-tunnel/pkg/client"
 	"lfr-tunnel/pkg/config"
 )
@@ -51,6 +52,7 @@ func main() {
 	versionFlag := flag.Bool("version", false, "Print client version")
 	checkVersionFlag := flag.Bool("check-version", false, "Check server API for version requirements and print as JSON")
 	upgradeFlag := flag.Bool("upgrade", false, "Self-upgrade client to the latest release")
+	noTUI := flag.Bool("no-tui", false, "Disable interactive terminal dashboard UI")
 
 	flag.Parse()
 
@@ -365,7 +367,17 @@ func main() {
 	// Set lease status and subdomains info on engine
 	engine.SetSubdomainDetails(sub, regResp.SubdomainPrefix, true, false)
 
+	// Check if TUI is enabled and if stdout/stderr are terminals (not redirected, not backgrounded)
+	tuiEnabled := !*noTUI && !*background && isatty.IsTerminal(os.Stdout.Fd()) && isatty.IsTerminal(os.Stderr.Fd())
+	var cleanupTUI func()
+	if tuiEnabled {
+		cleanupTUI = client.StartTUIDashboard(ctx, engine, publicURLs)
+	}
+
 	err = client.RunClient(ctx, cfg.ServerURL, regResp.SessionToken, regResp.Remotes, publicURLs, engine)
+	if cleanupTUI != nil {
+		cleanupTUI()
+	}
 	client.DeleteState(subHost)
 	if err != nil && ctx.Err() == nil {
 		log.Fatalf("[Client] Tunnel disconnected with error: %v", err)

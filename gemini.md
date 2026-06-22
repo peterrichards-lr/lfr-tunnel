@@ -368,6 +368,15 @@ The solution will consist of:
 - [x] Add unit tests for WAF detection rules and configuration toggles.
 - [x] Verify standard and Keycloak SSO E2E integration test suites pass.
 
+## Client Terminal UI (TUI) Dashboard (v1.11.0)
+- [ ] Add ActiveConnections tracking inside pkg/client/interceptor.go.
+- [ ] Add -no-tui CLI flag and isatty detection in cmd/lfr-tunnel/main.go.
+- [ ] Create pkg/client/tui.go with alt-screen rendering, stats, latency averages, and log redirection.
+- [ ] Integrate TUI execution loop inside cmd/lfr-tunnel/main.go.
+- [ ] Add unit tests for TUI lifecycle, rendering, and formatter helpers.
+- [ ] Verify standard and Keycloak SSO E2E integration test suites pass.
+
+
 
 
 

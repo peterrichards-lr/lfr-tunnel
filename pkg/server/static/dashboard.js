@@ -805,17 +805,142 @@ function toggleTheme() {
             document.getElementById('acc-notifications').checked = (currentUser.notification_prefs === 'enabled' || !currentUser.notification_prefs);
 
             // Apply theme from preference if not system
-            applyTheme(currentUser.theme_preference);
+applyTheme(currentUser.theme_preference);
 
             loadTokens();
             loadTunnels();
             renderMFAPanel();
-            
+
             // Route to initial tab based on URL hash
             const initialTab = window.location.hash ? window.location.hash.slice(1) : 'overview';
             showTab(initialTab, true);
             
-            startPolling();
+            connectTelemetryWS();
+        }
+
+        let telemetryWS = null;
+        let telemetryReconnectTimer = null;
+        let wsConnected = false;
+
+        function connectTelemetryWS() {
+            if (telemetryWS) {
+                try { telemetryWS.close(); } catch(e) {}
+            }
+            if (telemetryReconnectTimer) {
+                clearTimeout(telemetryReconnectTimer);
+                telemetryReconnectTimer = null;
+            }
+
+            const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+            const wsUrl = `${protocol}//${window.location.host}/api/portal/telemetry/ws`;
+
+            console.log("[Telemetry] Connecting to WebSocket:", wsUrl);
+            telemetryWS = new WebSocket(wsUrl);
+
+            telemetryWS.onopen = () => {
+                console.log("[Telemetry] WebSocket connected.");
+                wsConnected = true;
+                if (pollingInterval) {
+                    clearInterval(pollingInterval);
+                    pollingInterval = null;
+                }
+            };
+
+            telemetryWS.onmessage = (event) => {
+                try {
+                    const payload = JSON.parse(event.data);
+                    if (payload.type === 'telemetry') {
+                        handleTelemetryPayload(payload.data);
+                    }
+                } catch (e) {
+                    console.error("[Telemetry] Failed to parse message:", e);
+                }
+            };
+
+            telemetryWS.onclose = (event) => {
+                console.log("[Telemetry] WebSocket closed:", event.reason);
+                wsConnected = false;
+                if (document.getElementById('login-panel').style.display === 'none') {
+                    startPolling();
+                    telemetryReconnectTimer = setTimeout(connectTelemetryWS, 5000);
+                }
+            };
+
+            telemetryWS.onerror = (err) => {
+                console.error("[Telemetry] WebSocket error:", err);
+                telemetryWS.close();
+            };
+        }
+
+        function handleTelemetryPayload(data) {
+            currentUser = data;
+            loadTunnels();
+
+            if (activeDetailTunnelSubdomain) {
+                const freshTunnel = (currentUser.tunnels || []).find(t => t.subdomain_prefix === activeDetailTunnelSubdomain);
+                if (freshTunnel) {
+                    populateTunnelDetails(freshTunnel);
+                } else {
+                    showToast("Tunnel connection is no longer active.", "warning");
+                    closeTunnelDetailsModal();
+                }
+            }
+
+            const banner = document.getElementById('global-broadcast-banner');
+            if (data.broadcast_message) {
+                banner.innerText = data.broadcast_message;
+                banner.style.display = 'block';
+            } else {
+                banner.style.display = 'none';
+            }
+
+            const maintBanner = document.getElementById('global-maintenance-banner');
+            if (data.maintenance_mode === "pending") {
+                const secs = data.maintenance_seconds_left;
+                const mins = Math.floor(secs / 60);
+                const remSecs = secs % 60;
+                const timeStr = `${mins}:${remSecs < 10 ? '0' : ''}${remSecs}`;
+                maintBanner.innerHTML = `⚠️ <strong>Scheduled Maintenance starting in ${timeStr} minutes!</strong> All standard tunnels will be paused.`;
+                maintBanner.style.backgroundColor = '#f59e0b';
+                maintBanner.style.display = 'block';
+            } else if (data.maintenance_mode === "true") {
+                maintBanner.innerHTML = `🛠️ <strong>Gateway is currently undergoing Scheduled Maintenance!</strong> Tunnels are paused.`;
+                maintBanner.style.backgroundColor = '#ef4444';
+                maintBanner.style.display = 'block';
+                
+                if (currentUser && currentUser.role !== 'admin' && currentUser.role !== 'owner') {
+                    showToast("The portal has entered scheduled maintenance. Standard sessions are suspended.", "danger");
+                    logout();
+                }
+            } else {
+                maintBanner.style.display = 'none';
+            }
+
+            if (currentUser && (currentUser.role === 'admin' || currentUser.role === 'owner')) {
+                updateMaintenanceModeUI(data.maintenance_mode, data.iron_curtain);
+            }
+            
+            if (data.targeted_message && window.lastTargetedMessage !== data.targeted_message) {
+                window.lastTargetedMessage = data.targeted_message;
+                const tDiv = document.createElement('div');
+                tDiv.className = 'toast show';
+                tDiv.style.backgroundColor = 'var(--accent)';
+                tDiv.style.borderColor = 'var(--accent)';
+                tDiv.style.zIndex = '999999';
+                tDiv.innerHTML = `
+                    <div style="display: flex; flex-direction: column;">
+                        <div style="margin-bottom: 8px;"><strong>Admin Message:</strong> ${escapeHTML(data.targeted_message)}</div>
+                        <div style="text-align: right;">
+                            <button onclick="this.parentElement.parentElement.parentElement.remove(); acknowledgeTargetedMessage(); window.lastTargetedMessage = null;" class="btn" style="background: rgba(0,0,0,0.2); color: white; border: none; padding: 4px 8px; margin: 0; min-width: 0; width: auto; font-size: 12px;">Dismiss</button>
+                        </div>
+                    </div>
+                `;
+                document.getElementById('toast-container').appendChild(tDiv);
+            }
+            
+            if (data.killed_previous_session) {
+                showToast("Warning: You were previously logged in elsewhere. That session has been invalidated.");
+            }
         }
 
         let pollingInterval = null;
@@ -832,68 +957,12 @@ function toggleTheme() {
                     }
                     if (res.ok) {
                         const data = await res.json();
-                        const banner = document.getElementById('global-broadcast-banner');
-                        if (data.broadcast_message) {
-                            banner.innerText = data.broadcast_message;
-                            banner.style.display = 'block';
-                        } else {
-                            banner.style.display = 'none';
-                        }
-
-                        const maintBanner = document.getElementById('global-maintenance-banner');
-                        if (data.maintenance_mode === "pending") {
-                            const secs = data.maintenance_seconds_left;
-                            const mins = Math.floor(secs / 60);
-                            const remSecs = secs % 60;
-                            const timeStr = `${mins}:${remSecs < 10 ? '0' : ''}${remSecs}`;
-                            maintBanner.innerHTML = `⚠️ <strong>Scheduled Maintenance starting in ${timeStr} minutes!</strong> All standard tunnels will be paused.`;
-                            maintBanner.style.backgroundColor = '#f59e0b';
-                            maintBanner.style.display = 'block';
-                        } else if (data.maintenance_mode === "true") {
-                            maintBanner.innerHTML = `🛠️ <strong>Gateway is currently undergoing Scheduled Maintenance!</strong> Tunnels are paused.`;
-                            maintBanner.style.backgroundColor = '#ef4444';
-                            maintBanner.style.display = 'block';
-                            
-                            // If the current user is not admin/owner, force close/logout!
-                            if (currentUser && currentUser.role !== 'admin' && currentUser.role !== 'owner') {
-                                clearInterval(pollingInterval);
-                                showToast("The portal has entered scheduled maintenance. Standard sessions are suspended.", "danger");
-                                logout();
-                            }
-                        } else {
-                            maintBanner.style.display = 'none';
-                        }
-
-                        if (currentUser && (currentUser.role === 'admin' || currentUser.role === 'owner')) {
-                            updateMaintenanceModeUI(data.maintenance_mode, data.iron_curtain);
-                        }
-                        
-                        if (data.targeted_message && window.lastTargetedMessage !== data.targeted_message) {
-                            window.lastTargetedMessage = data.targeted_message;
-                            const tDiv = document.createElement('div');
-                            tDiv.className = 'toast show';
-                            tDiv.style.backgroundColor = 'var(--accent)';
-                            tDiv.style.borderColor = 'var(--accent)';
-                            tDiv.style.zIndex = '999999';
-                            tDiv.innerHTML = `
-                                <div style="display: flex; flex-direction: column;">
-                                    <div style="margin-bottom: 8px;"><strong>Admin Message:</strong> ${escapeHTML(data.targeted_message)}</div>
-                                    <div style="text-align: right;">
-                                        <button onclick="this.parentElement.parentElement.parentElement.remove(); acknowledgeTargetedMessage(); window.lastTargetedMessage = null;" class="btn" style="background: rgba(0,0,0,0.2); color: white; border: none; padding: 4px 8px; margin: 0; min-width: 0; width: auto; font-size: 12px;">Dismiss</button>
-                                    </div>
-                                </div>
-                            `;
-                            document.getElementById('toast-container').appendChild(tDiv);
-                        }
-                        
-                        if (data.killed_previous_session) {
-                            showToast("Warning: You were previously logged in elsewhere. That session has been invalidated.");
-                        }
+                        handleTelemetryPayload(data);
                     }
                 } catch (e) {
                     console.error("Polling error", e);
                 }
-            }, 10000); // 10 seconds for rapid testing, normally 30s
+            }, 10000);
         }
 
         async function setBroadcastMessage() {
@@ -2653,7 +2722,9 @@ function toggleTheme() {
             document.getElementById('tunnel-details-modal').style.display = 'flex';
 
             if (refreshIntervalId) clearInterval(refreshIntervalId);
-            refreshIntervalId = setInterval(() => refreshTunnelDetails(true), 3000);
+            if (!wsConnected) {
+                refreshIntervalId = setInterval(() => refreshTunnelDetails(true), 3000);
+            }
 
             // Asynchronously fetch fresh data to update metrics instantly on open
             try {

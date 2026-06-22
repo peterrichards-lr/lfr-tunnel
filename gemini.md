@@ -333,6 +333,12 @@ The solution will consist of:
 - [x] Verify that all unit tests compile and run successfully.
 
 
+## Checksums Branch Protection and Documentation
+- [x] Document the checksums branch persistent requirement in CONTRIBUTING.md.
+- [x] Create GitHub ruleset configuration for the checksums branch to block deletion.
+- [x] Update resources/github/README.md with instructions to apply the checksums ruleset.
+
+
 
 
 

@@ -1,0 +1,16 @@
+{
+  "name": "Protect Checksums Branch",
+  "target": "branch",
+  "enforcement": "active",
+  "conditions": {
+    "ref_name": {
+      "include": ["refs/heads/checksums"],
+      "exclude": []
+    }
+  },
+  "rules": [
+    {
+      "type": "deletion"
+    }
+  ]
+}

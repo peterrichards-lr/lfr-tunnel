@@ -25,7 +25,7 @@ We love new ideas! Please use the Feature Request template when opening a new is
    - **Roadmap / Pre-releases**: Complex roadmap components or experimental builds must use dedicated `roadmap/` or `release/` branches (e.g., `release/v1.7.7`).
    - **Conflict Resolution**: Before submitting a PR or merging it, pull the latest `master` into your branch to verify there are no merge conflicts. Resolve all conflicts locally prior to PR completion.
    - **Pass CI Gates**: PRs must pass all automated Github Actions checks, including unit tests, formatting, and lint rules, before they can be merged.
-   - **Cleanup**: Delete both local and remote feature/fix branches immediately after they are merged into `master`.
+   - **Cleanup**: Delete both local and remote feature/fix branches immediately after they are merged into `master`. **Do NOT delete the persistent `checksums` branch**, as it is an orphaned branch used by the release CI/CD workflow to host client binary signatures.
 3. If you are working on a stability or hardening task, please align with our **Hardening Workflow**.
 4. **Pass the Lint Check**: Before submitting, you MUST run the local checks:
 

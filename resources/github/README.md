@@ -26,3 +26,10 @@ This ruleset targets `v*` tags, blocking tag deletion and preventing force-updat
 ```bash
 gh api -X POST /repos/{owner}/{repo}/rulesets --input resources/github/tag_ruleset.json
 ```
+
+### 3. Apply Checksums Branch Protection Ruleset
+This ruleset targets the `checksums` branch, blocking branch deletion while still allowing force-pushes (necessary for the GitHub Actions release workflow):
+
+```bash
+gh api -X POST /repos/{owner}/{repo}/rulesets --input resources/github/checksums_ruleset.json
+```

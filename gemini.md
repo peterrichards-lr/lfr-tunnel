@@ -360,6 +360,15 @@ The solution will consist of:
 - [x] Add Replay Request button and javascript handler in pkg/client/inspector.html.
 - [x] Add unit tests for the replay endpoint.
 
+## Gateway Web Application Firewall (WAF) Shield (v1.10.0)
+- [ ] Implement EnableWAF config key in ServerConfig.
+- [ ] Create pkg/server/waf.go containing lightweight threat patterns (XSS, SQLi, Path Traversal, Command Injection) and body scanners.
+- [ ] Integrate WAF check into ProxyHandler's ServeHTTP before proxying requests.
+- [ ] Serve a beautiful, themed "Blocked by WAF" error page (similar to the Offline page) with HTTP 403 Forbidden.
+- [ ] Add unit tests for WAF detection rules and configuration toggles.
+- [ ] Verify standard and Keycloak SSO E2E integration test suites pass.
+
+
 
 
 

@@ -360,3 +360,35 @@ func redirectChiselLogger(c *chclient.Client, engine *InterceptorEngine) {
 	}
 	ptr.SetOutput(parser)
 }
+
+// IsLiferayWorkspace checks if a directory contains structural signals of a Liferay workspace
+// (such as client-extensions directory, gradlew, or gradle.properties).
+func IsLiferayWorkspace(dir string) bool {
+	// Check for client-extensions folder
+	if fi, err := os.Stat(filepath.Join(dir, "client-extensions")); err == nil && fi.IsDir() {
+		return true
+	}
+	// Check for gradlew file
+	if _, err := os.Stat(filepath.Join(dir, "gradlew")); err == nil {
+		return true
+	}
+	// Check for gradle.properties file
+	if _, err := os.Stat(filepath.Join(dir, "gradle.properties")); err == nil {
+		return true
+	}
+	return false
+}
+
+// ProbeLocalPorts scans the specified localhost ports and returns the ports that are active.
+func ProbeLocalPorts(ports []int) []int {
+	var active []int
+	for _, port := range ports {
+		address := net.JoinHostPort("127.0.0.1", strconv.Itoa(port))
+		conn, err := net.DialTimeout("tcp", address, 50*time.Millisecond)
+		if err == nil {
+			active = append(active, port)
+			_ = conn.Close()
+		}
+	}
+	return active
+}

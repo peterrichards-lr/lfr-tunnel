@@ -749,6 +749,30 @@ func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 
+		if r.Method == http.MethodGet && (r.URL.Path == "/install" || r.URL.Path == "/install.sh") {
+			w.Header().Set("Content-Type", "text/plain; charset=utf-8")
+			w.WriteHeader(http.StatusOK)
+			scriptBytes, err := staticFS.ReadFile("static/install.sh")
+			if err != nil {
+				http.Error(w, "Failed to read install script", http.StatusInternalServerError)
+				return
+			}
+			_, _ = w.Write(scriptBytes)
+			return
+		}
+
+		if r.Method == http.MethodGet && r.URL.Path == "/install.ps1" {
+			w.Header().Set("Content-Type", "text/plain; charset=utf-8")
+			w.WriteHeader(http.StatusOK)
+			scriptBytes, err := staticFS.ReadFile("static/install.ps1")
+			if err != nil {
+				http.Error(w, "Failed to read install script", http.StatusInternalServerError)
+				return
+			}
+			_, _ = w.Write(scriptBytes)
+			return
+		}
+
 		if strings.HasPrefix(r.URL.Path, "/static/") {
 			http.FileServer(http.FS(staticFS)).ServeHTTP(w, r)
 			return

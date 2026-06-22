@@ -607,21 +607,21 @@ function toggleTheme() {
                         "macos_arm64": {
                             "url": `${repoUrl}/releases/latest/download/lfr-tunnel-darwin-arm64`,
                             "cmd": "brew tap peterrichards-lr/tap && brew trust peterrichards-lr/tap && brew install lfr-tunnel",
-                            "cmd_fallback": `curl -sSfL ${rawUrl}/scripts/install.sh | sh`
+                            "cmd_fallback": `curl -fsSL ${window.location.origin}/install | sh`
                         },
                         "macos_amd64": {
                             "url": `${repoUrl}/releases/latest/download/lfr-tunnel-darwin-amd64`,
                             "cmd": "brew tap peterrichards-lr/tap && brew trust peterrichards-lr/tap && brew install lfr-tunnel",
-                            "cmd_fallback": `curl -sSfL ${rawUrl}/scripts/install.sh | sh`
+                            "cmd_fallback": `curl -fsSL ${window.location.origin}/install | sh`
                         },
                         "windows_amd64": {
                             "url": `${repoUrl}/releases/latest/download/lfr-tunnel-windows-amd64.exe`,
                             "cmd": "scoop bucket add peterrichards-lr https://github.com/peterrichards-lr/scoop-bucket && scoop install lfr-tunnel",
-                            "cmd_fallback": `iwr ${rawUrl}/scripts/install.ps1 | iex`
+                            "cmd_fallback": `irm ${window.location.origin}/install.ps1 | iex`
                         },
                         "linux_amd64": {
                             "url": `${repoUrl}/releases/latest/download/lfr-tunnel-linux-amd64`,
-                            "cmd": `curl -sSfL ${rawUrl}/scripts/install.sh | sh`,
+                            "cmd": `curl -fsSL ${window.location.origin}/install | sh`,
                             "cmd_fallback": ""
                         }
                     };

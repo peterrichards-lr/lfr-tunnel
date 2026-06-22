@@ -307,7 +307,7 @@ The solution will consist of:
 
 ## Future Roadmap Suggestions
 - [ ] Implement client-side Terminal UI (TUI) Dashboard for active connection metrics and scrolling request paths.
-- [ ] Create local Request Inspector & Replay web dashboard (similar to Ngrok's local interface) for debugging client extensions and webhooks.
+- [x] Create local Request Inspector & Replay web dashboard (similar to Ngrok's local interface) for debugging client extensions and webhooks.
 - [ ] Implement multi-region edge VPS gateways to reduce demo latency globally.
 - [ ] Integrate tunnel provisioning directly into Liferay Development Manager (LDM) execution loops.
 - [ ] Implement live WebSocket-driven telemetry updates in the portal Admin Web Dashboard.

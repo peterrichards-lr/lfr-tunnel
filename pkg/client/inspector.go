@@ -17,7 +17,8 @@ import (
 var inspectorHTML []byte
 
 // StartInspector starts the local web dashboard for the given engine.
-func StartInspector(port int, engine *InterceptorEngine) {
+// If the requested port is in use, it will auto-increment up to 10 times to find a free port.
+func StartInspector(port int, engine *InterceptorEngine) (int, error) {
 	mux := http.NewServeMux()
 
 	mux.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
@@ -177,13 +178,34 @@ func StartInspector(port int, engine *InterceptorEngine) {
 		bindIP = "0.0.0.0"
 	}
 
-	addr := fmt.Sprintf("%s:%d", bindIP, port)
+	var listener net.Listener
+	var err error
+	actualPort := port
+
+	for i := 0; i < 10; i++ {
+		addr := fmt.Sprintf("%s:%d", bindIP, actualPort)
+		listener, err = net.Listen("tcp", addr)
+		if err == nil {
+			break
+		}
+		if strings.Contains(err.Error(), "address already in use") {
+			actualPort++
+			continue
+		}
+		return 0, fmt.Errorf("failed to bind inspector on %s: %w", addr, err)
+	}
+	if err != nil {
+		return 0, fmt.Errorf("failed to find free inspector port starting from %d: %w", port, err)
+	}
+
 	go func() {
-		log.Printf("[Inspector] Local Dashboard running at http://%s\n", addr)
-		if err := http.ListenAndServe(addr, mux); err != nil {
-			log.Printf("[Inspector] Failed to start on %s: %v", addr, err)
+		log.Printf("[Inspector] Local Dashboard running at http://%s:%d\n", bindIP, actualPort)
+		if err := http.Serve(listener, mux); err != nil && !strings.Contains(err.Error(), "use of closed network connection") {
+			log.Printf("[Inspector] Failed to serve: %v", err)
 		}
 	}()
+
+	return actualPort, nil
 }
 
 // IsDocker checks if the application is running inside a Docker container.

@@ -59,7 +59,7 @@ func TestServer_TelemetryWS(t *testing.T) {
 	if err != nil {
 		t.Fatalf("failed to establish websocket connection: %v", err)
 	}
-	defer wsConn.Close()
+	defer func() { _ = wsConn.Close() }()
 
 	if resp.StatusCode != http.StatusSwitchingProtocols {
 		t.Errorf("expected switching protocols (101), got %d", resp.StatusCode)
@@ -71,7 +71,7 @@ func TestServer_TelemetryWS(t *testing.T) {
 		Data map[string]interface{} `json:"data"`
 	}
 
-	wsConn.SetReadDeadline(time.Now().Add(2 * time.Second))
+	_ = wsConn.SetReadDeadline(time.Now().Add(2 * time.Second))
 	_, p, err := wsConn.ReadMessage()
 	if err != nil {
 		t.Fatalf("failed to read initial telemetry message: %v", err)
@@ -95,7 +95,7 @@ func TestServer_TelemetryWS(t *testing.T) {
 
 	srv.PushUserTelemetryByID("test@example.com")
 
-	wsConn.SetReadDeadline(time.Now().Add(2 * time.Second))
+	_ = wsConn.SetReadDeadline(time.Now().Add(2 * time.Second))
 	_, p, err = wsConn.ReadMessage()
 	if err != nil {
 		t.Fatalf("failed to read targeted message update: %v", err)
@@ -119,7 +119,7 @@ func TestServer_TelemetryWS(t *testing.T) {
 
 	srv.BroadcastTelemetry()
 
-	wsConn.SetReadDeadline(time.Now().Add(2 * time.Second))
+	_ = wsConn.SetReadDeadline(time.Now().Add(2 * time.Second))
 	_, p, err = wsConn.ReadMessage()
 	if err != nil {
 		t.Fatalf("failed to read global broadcast message update: %v", err)

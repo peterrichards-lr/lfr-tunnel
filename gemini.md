@@ -383,6 +383,7 @@ The solution will consist of:
 - [x] Implement WebSocket-based live telemetry updates for the Admin Web Dashboard.
 - [ ] Restore deleted release scripts and commit telemetry changes.
 - [ ] Verify test execution via GitHub Actions CI to bypass local EDR restrictions.
+- [ ] Fix errcheck linter warnings in telemetry files.
 
 
 

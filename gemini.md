@@ -381,9 +381,9 @@ The solution will consist of:
 
 ## Live Telemetry & EDR Workaround (v1.12.0)
 - [x] Implement WebSocket-based live telemetry updates for the Admin Web Dashboard.
-- [ ] Restore deleted release scripts and commit telemetry changes.
-- [ ] Verify test execution via GitHub Actions CI to bypass local EDR restrictions.
-- [ ] Fix errcheck linter warnings in telemetry files.
+- [x] Restore deleted release scripts and commit telemetry changes.
+- [x] Verify test execution via GitHub Actions CI to bypass local EDR restrictions.
+- [x] Fix errcheck linter warnings in telemetry files.
 
 
 

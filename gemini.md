@@ -344,6 +344,11 @@ The solution will consist of:
 - [x] Wrap API rate limiters with access timestamps and run a background cleanup task to prune stale IP limiters.
 - [x] Add unit test coverage for the rate limiter cleanup routines.
 
+## Onboarding Experience Enhancements (Redirection Install & Port Auto-Detection)
+- [x] Implement /install and /install.ps1 endpoints on the server gateway to serve installer scripts.
+- [x] Implement smart port auto-detection (8080 / 13000) in the client CLI on zero-config startup.
+- [x] Write unit tests to cover auto-detection logic and server-side installer routes.
+
 
 
 

@@ -2,10 +2,12 @@ package client
 
 import (
 	"encoding/json"
+	"net"
 	"net/http"
 	"net/http/httptest"
 	"os"
 	"path/filepath"
+	"strconv"
 	"testing"
 )
 
@@ -113,5 +115,42 @@ func TestRegisterTunnel(t *testing.T) {
 	}
 	if len(resp.Remotes) != 1 || resp.Remotes[0] != "R:10001:localhost:8080" {
 		t.Errorf("unexpected remotes: %v", resp.Remotes)
+	}
+}
+
+func TestIsLiferayWorkspace(t *testing.T) {
+	tmpDir, err := os.MkdirTemp("", "lfr-ws-test-*")
+	if err != nil {
+		t.Fatalf("failed to create temp dir: %v", err)
+	}
+	defer os.RemoveAll(tmpDir) //nolint:errcheck
+
+	if IsLiferayWorkspace(tmpDir) {
+		t.Error("expected false for empty directory")
+	}
+
+	extDir := filepath.Join(tmpDir, "client-extensions")
+	if err := os.Mkdir(extDir, 0755); err != nil {
+		t.Fatalf("failed to create client-extensions folder: %v", err)
+	}
+
+	if !IsLiferayWorkspace(tmpDir) {
+		t.Error("expected true when client-extensions folder exists")
+	}
+}
+
+func TestProbeLocalPorts(t *testing.T) {
+	listener, err := net.Listen("tcp", "127.0.0.1:0")
+	if err != nil {
+		t.Fatalf("failed to start mock TCP listener: %v", err)
+	}
+	defer listener.Close() //nolint:errcheck
+
+	_, portStr, _ := net.SplitHostPort(listener.Addr().String())
+	port, _ := strconv.Atoi(portStr)
+
+	active := ProbeLocalPorts([]int{port, 9999})
+	if len(active) != 1 || active[0] != port {
+		t.Errorf("expected active port to be %d, got %v", port, active)
 	}
 }

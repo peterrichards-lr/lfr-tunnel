@@ -2030,3 +2030,38 @@ func TestServer_RateLimiterPruning(t *testing.T) {
 		t.Error("expected rate limiter to be deleted from proxy handler")
 	}
 }
+
+func TestServer_InstallerEndpoints(t *testing.T) {
+	srv, _, cleanup := setupTestServer(t)
+	defer cleanup()
+
+	// 1. Check /install endpoint
+	req1, _ := http.NewRequest("GET", "http://example.com/install", nil)
+	rec1 := httptest.NewRecorder()
+	srv.ServeHTTP(rec1, req1)
+	if rec1.Code != http.StatusOK {
+		t.Errorf("expected status 200 for /install, got %d", rec1.Code)
+	}
+	if !strings.Contains(rec1.Body.String(), "lfr-tunnel") {
+		t.Error("expected /install to return install script containing 'lfr-tunnel'")
+	}
+
+	// 2. Check /install.sh endpoint
+	req2, _ := http.NewRequest("GET", "http://example.com/install.sh", nil)
+	rec2 := httptest.NewRecorder()
+	srv.ServeHTTP(rec2, req2)
+	if rec2.Code != http.StatusOK {
+		t.Errorf("expected status 200 for /install.sh, got %d", rec2.Code)
+	}
+
+	// 3. Check /install.ps1 endpoint
+	req3, _ := http.NewRequest("GET", "http://example.com/install.ps1", nil)
+	rec3 := httptest.NewRecorder()
+	srv.ServeHTTP(rec3, req3)
+	if rec3.Code != http.StatusOK {
+		t.Errorf("expected status 200 for /install.ps1, got %d", rec3.Code)
+	}
+	if !strings.Contains(rec3.Body.String(), "Invoke-WebRequest") {
+		t.Error("expected /install.ps1 to return PowerShell script containing 'Invoke-WebRequest'")
+	}
+}

@@ -191,11 +191,32 @@ func main() {
 		}
 	} else {
 		// Auto-detect workspace ports
-		log.Println("[Client] Scanning workspace for Liferay Client Extensions...")
-		portMappings, err = client.DetectWorkspacePorts(".")
-		if err != nil {
-			log.Printf("[Warning] Failed to scan workspace: %v. Using defaults.", err)
-			portMappings = []client.PortMapping{{LocalPort: 8080}}
+		if client.IsLiferayWorkspace(".") {
+			log.Println("[Client] Liferay workspace detected. Scanning for Client Extensions...")
+			portMappings, err = client.DetectWorkspacePorts(".")
+			if err != nil {
+				log.Printf("[Warning] Failed to scan workspace: %v. Using defaults.", err)
+				portMappings = []client.PortMapping{{LocalPort: 8080}}
+			}
+		} else {
+			log.Println("[Client] No Liferay workspace detected in current directory. Probing typical ports (8080, 13000, 3000)...")
+			activePorts := client.ProbeLocalPorts([]int{8080, 13000, 3000})
+			if len(activePorts) > 0 {
+				log.Printf("[Client] Detected active local service ports: %v", activePorts)
+				for idx, port := range activePorts {
+					suffix := ""
+					if idx > 0 {
+						suffix = fmt.Sprintf("-%d", port)
+					}
+					portMappings = append(portMappings, client.PortMapping{
+						LocalPort:  port,
+						NameSuffix: suffix,
+					})
+				}
+			} else {
+				log.Println("[Client] No active local services found on typical ports. Defaulting to port 8080.")
+				portMappings = []client.PortMapping{{LocalPort: 8080}}
+			}
 		}
 	}
 

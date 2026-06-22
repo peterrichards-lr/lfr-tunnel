@@ -306,7 +306,7 @@ The solution will consist of:
 - [x] Document version management strategy in setup_guide.md.
 
 ## Future Roadmap Suggestions
-- [ ] Implement client-side Terminal UI (TUI) Dashboard for active connection metrics and scrolling request paths.
+- [x] Implement client-side Terminal UI (TUI) Dashboard for active connection metrics and scrolling request paths.
 - [x] Create local Request Inspector & Replay web dashboard (similar to Ngrok's local interface) for debugging client extensions and webhooks.
 - [ ] Implement multi-region edge VPS gateways to reduce demo latency globally.
 - [ ] Integrate tunnel provisioning directly into Liferay Development Manager (LDM) execution loops.
@@ -369,12 +369,12 @@ The solution will consist of:
 - [x] Verify standard and Keycloak SSO E2E integration test suites pass.
 
 ## Client Terminal UI (TUI) Dashboard (v1.11.0)
-- [ ] Add ActiveConnections tracking inside pkg/client/interceptor.go.
-- [ ] Add -no-tui CLI flag and isatty detection in cmd/lfr-tunnel/main.go.
-- [ ] Create pkg/client/tui.go with alt-screen rendering, stats, latency averages, and log redirection.
-- [ ] Integrate TUI execution loop inside cmd/lfr-tunnel/main.go.
-- [ ] Add unit tests for TUI lifecycle, rendering, and formatter helpers.
-- [ ] Verify standard and Keycloak SSO E2E integration test suites pass.
+- [x] Add ActiveConnections tracking inside pkg/client/interceptor.go.
+- [x] Add -no-tui CLI flag and isatty detection in cmd/lfr-tunnel/main.go.
+- [x] Create pkg/client/tui.go with alt-screen rendering, stats, latency averages, and log redirection.
+- [x] Integrate TUI execution loop inside cmd/lfr-tunnel/main.go.
+- [x] Add unit tests for TUI lifecycle, rendering, and formatter helpers.
+- [x] Verify standard and Keycloak SSO E2E integration test suites pass.
 
 
 

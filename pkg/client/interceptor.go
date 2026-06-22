@@ -14,6 +14,7 @@ import (
 	"strconv"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"time"
 )
 
@@ -58,9 +59,10 @@ type InterceptorEngine struct {
 	DestPort          int
 
 	// Traffic stats
-	RequestsTotal int64
-	BytesIn       int64
-	BytesOut      int64
+	RequestsTotal     int64
+	BytesIn           int64
+	BytesOut          int64
+	ActiveConnections int32
 }
 
 // NewInterceptorEngine creates a new state engine for traffic inspection.
@@ -231,6 +233,9 @@ type interceptorTransport struct {
 }
 
 func (t *interceptorTransport) RoundTrip(req *http.Request) (*http.Response, error) {
+	atomic.AddInt32(&t.engine.ActiveConnections, 1)
+	defer atomic.AddInt32(&t.engine.ActiveConnections, -1)
+
 	startTime := time.Now()
 
 	// Capture request body (up to 10KB)

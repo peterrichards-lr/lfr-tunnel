@@ -67,6 +67,9 @@ client_platforms:
 	if cfg.ClientPlatforms["macos_arm64"].CmdFallback != "curl" {
 		t.Errorf("expected ClientPlatforms macos_arm64 CmdFallback to be curl, got %s", cfg.ClientPlatforms["macos_arm64"].CmdFallback)
 	}
+	if !cfg.EnableWAF {
+		t.Errorf("expected default EnableWAF to be true, got false")
+	}
 
 	// 3. Set environment variables to override
 	os.Setenv("LFT_DOMAINS", "env.com")                    //nolint:errcheck
@@ -74,12 +77,14 @@ client_platforms:
 	os.Setenv("LFT_DOCKER_IMAGE", "override/image:latest") //nolint:errcheck
 	os.Setenv("LFT_MIN_CLIENT_VERSION", "v2.0.0")          //nolint:errcheck
 	os.Setenv("LFT_LATEST_CLIENT_VERSION", "v2.1.0")       //nolint:errcheck
+	os.Setenv("LFT_ENABLE_WAF", "false")                   //nolint:errcheck
 	defer func() {
 		os.Unsetenv("LFT_DOMAINS")               //nolint:errcheck
 		os.Unsetenv("LFT_BIND_ADDR")             //nolint:errcheck
 		os.Unsetenv("LFT_DOCKER_IMAGE")          //nolint:errcheck
 		os.Unsetenv("LFT_MIN_CLIENT_VERSION")    //nolint:errcheck
 		os.Unsetenv("LFT_LATEST_CLIENT_VERSION") //nolint:errcheck
+		os.Unsetenv("LFT_ENABLE_WAF")            //nolint:errcheck
 	}()
 
 	cfgEnv, err := LoadServerConfig(tmpFile.Name())
@@ -101,6 +106,9 @@ client_platforms:
 	}
 	if cfgEnv.LatestClientVersion != "v2.1.0" {
 		t.Errorf("expected LatestClientVersion override to be v2.1.0, got %s", cfgEnv.LatestClientVersion)
+	}
+	if cfgEnv.EnableWAF {
+		t.Errorf("expected EnableWAF override to be false, got true")
 	}
 }
 

@@ -311,7 +311,7 @@ The solution will consist of:
 - [ ] Implement multi-region edge VPS gateways to reduce demo latency globally.
 - [ ] Integrate tunnel provisioning directly into Liferay Development Manager (LDM) execution loops.
 - [ ] Implement live WebSocket-driven telemetry updates in the portal Admin Web Dashboard.
-- [ ] Integrate a lightweight Web Application Firewall (WAF) shield on the gateway to filter basic exploit payloads during public presentations.
+- [x] Integrate a lightweight Web Application Firewall (WAF) shield on the gateway to filter basic exploit payloads during public presentations.
 
 ## Dynamic Loopback Port Routing Fix (v1.9.4)
 - [x] Explicitly bind the reverse tunnel listening port on the server side to `127.0.0.1` by prefixing it in the dynamic remote format returned by `/api/register`.
@@ -361,12 +361,12 @@ The solution will consist of:
 - [x] Add unit tests for the replay endpoint.
 
 ## Gateway Web Application Firewall (WAF) Shield (v1.10.0)
-- [ ] Implement EnableWAF config key in ServerConfig.
-- [ ] Create pkg/server/waf.go containing lightweight threat patterns (XSS, SQLi, Path Traversal, Command Injection) and body scanners.
-- [ ] Integrate WAF check into ProxyHandler's ServeHTTP before proxying requests.
-- [ ] Serve a beautiful, themed "Blocked by WAF" error page (similar to the Offline page) with HTTP 403 Forbidden.
-- [ ] Add unit tests for WAF detection rules and configuration toggles.
-- [ ] Verify standard and Keycloak SSO E2E integration test suites pass.
+- [x] Implement EnableWAF config key in ServerConfig.
+- [x] Create pkg/server/waf.go containing lightweight threat patterns (XSS, SQLi, Path Traversal, Command Injection) and body scanners.
+- [x] Integrate WAF check into ProxyHandler's ServeHTTP before proxying requests.
+- [x] Serve a beautiful, themed "Blocked by WAF" error page (similar to the Offline page) with HTTP 403 Forbidden.
+- [x] Add unit tests for WAF detection rules and configuration toggles.
+- [x] Verify standard and Keycloak SSO E2E integration test suites pass.
 
 
 

@@ -1,6 +1,7 @@
 package server
 
 import (
+	"lfr-tunnel/pkg/config"
 	"net/http"
 	"net/http/httptest"
 	"net/url"
@@ -15,7 +16,7 @@ import (
 func TestProxyHandler_Offline(t *testing.T) {
 	chiselServer, _ := chserver.NewServer(&chserver.Config{Reverse: true})
 	reg := NewRegistry(chiselServer)
-	handler := NewProxyHandler(reg)
+	handler := NewProxyHandler(reg, config.DefaultServerConfig())
 
 	req := httptest.NewRequest("GET", "http://unknown-se.liferay.com/web/guest/home", nil)
 	req.Host = "unknown-se.liferay.com"
@@ -80,7 +81,7 @@ func TestProxyHandler_Online(t *testing.T) {
 	reg.Unlock()
 
 	// 3. Serve proxy request
-	handler := NewProxyHandler(reg)
+	handler := NewProxyHandler(reg, config.DefaultServerConfig())
 	req := httptest.NewRequest("GET", "http://online-se.liferay.com/web/guest", nil)
 	req.Host = "online-se.liferay.com"
 	rec := httptest.NewRecorder()

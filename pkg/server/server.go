@@ -128,7 +128,7 @@ func NewServer(cfg *config.ServerConfig) (*Server, error) {
 	}
 
 	registry := NewRegistry(chiselSrv)
-	proxyHandler := NewProxyHandler(registry)
+	proxyHandler := NewProxyHandler(registry, cfg)
 
 	// Setup internal reverse proxy to Chisel server
 	chiselURL, err := url.Parse("http://127.0.0.1:8081")

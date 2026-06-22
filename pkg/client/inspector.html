@@ -165,15 +165,23 @@
             const statusClass = req.status >= 500 ? 'var(--danger)' : req.status >= 400 ? 'var(--warning)' : req.status >= 300 ? '#3b82f6' : 'var(--success)';
 
             main.innerHTML = `
-                <div class="details-header">
-                    <h2>
-                        <span style="color: ${statusClass}">${req.status}</span>
-                        <span>${req.method} ${req.path}</span>
-                    </h2>
-                    <div class="details-meta">
-                        <span>Target: localhost:${req.target_port}</span>
-                        <span>Time: ${new Date(req.time).toLocaleTimeString()}</span>
-                        <span>Duration: ${req.duration_ms}ms</span>
+                <div class="details-header" style="display: flex; justify-content: space-between; align-items: flex-start;">
+                    <div>
+                        <h2>
+                            <span style="color: ${statusClass}">${req.status}</span>
+                            <span>${req.method} ${req.path}</span>
+                        </h2>
+                        <div class="details-meta">
+                            <span>Target: localhost:${req.target_port}</span>
+                            <span>Time: ${new Date(req.time).toLocaleTimeString()}</span>
+                            <span>Duration: ${req.duration_ms}ms</span>
+                        </div>
+                    </div>
+                    <div>
+                        <button id="replay-btn" onclick="replayRequest('${req.id}')" style="background: var(--primary); color: white; border: none; padding: 8px 16px; border-radius: 6px; font-weight: 600; cursor: pointer; display: flex; align-items: center; gap: 8px; transition: opacity 0.2s;">
+                            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21.5 2v6h-6M21.34 15.57a10 10 0 1 1-.57-8.38l5.67-5.67"/></svg>
+                            Replay Request
+                        </button>
                     </div>
                 </div>
                 <div class="details-content">
@@ -193,6 +201,40 @@
                     </div>
                 </div>
             `;
+        }
+
+        async function replayRequest(id) {
+            const btn = document.getElementById('replay-btn');
+            if (!btn) return;
+            
+            btn.disabled = true;
+            btn.style.opacity = '0.5';
+            btn.innerHTML = 'Replaying...';
+
+            try {
+                const res = await fetch('/api/replay', {
+                    method: 'POST',
+                    headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify({id: id})
+                });
+                const data = await res.json();
+                if (data.status === 'ok') {
+                    selectedId = data.new_id;
+                    await fetchState();
+                } else {
+                    alert('Replay failed: ' + (data.error || 'Unknown error'));
+                }
+            } catch(e) {
+                console.error("Error replaying request", e);
+                alert('Error replaying request: ' + e.message);
+            } finally {
+                btn.disabled = false;
+                btn.style.opacity = '1';
+                btn.innerHTML = `
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21.5 2v6h-6M21.34 15.57a10 10 0 1 1-.57-8.38l5.67-5.67"/></svg>
+                    Replay Request
+                `;
+            }
         }
 
         function escapeHtml(unsafe) {

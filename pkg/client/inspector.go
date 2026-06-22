@@ -1,9 +1,11 @@
 package client
 
 import (
+	"bytes"
 	_ "embed"
 	"encoding/json"
 	"fmt"
+	"io"
 	"lfr-tunnel/pkg/config"
 	"log"
 	"net"
@@ -171,6 +173,54 @@ func StartInspector(port int, engine *InterceptorEngine) (int, error) {
 		fmt.Fprintf(w, `{"status":"ok"}`) //nolint:errcheck
 	})
 
+	mux.HandleFunc("/api/replay", func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodPost {
+			http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+			return
+		}
+
+		var req struct {
+			ID string `json:"id"`
+		}
+		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+			http.Error(w, "Bad request", http.StatusBadRequest)
+			return
+		}
+
+		engine.mu.RLock()
+		var record *RequestRecord
+		for _, rec := range engine.History {
+			if rec.ID == req.ID {
+				record = rec
+				break
+			}
+		}
+		engine.mu.RUnlock()
+
+		if record == nil {
+			http.Error(w, "Request not found", http.StatusNotFound)
+			return
+		}
+
+		// Replay the request to local service
+		newRec, err := ReplayRequest(engine.TargetHost, record)
+		if err != nil {
+			w.Header().Set("Content-Type", "application/json")
+			w.WriteHeader(http.StatusInternalServerError)
+			_ = json.NewEncoder(w).Encode(map[string]string{"error": err.Error()})
+			return
+		}
+
+		engine.AddRecord(newRec)
+
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusOK)
+		_ = json.NewEncoder(w).Encode(map[string]interface{}{
+			"status": "ok",
+			"new_id": newRec.ID,
+		})
+	})
+
 	bindIP := "127.0.0.1"
 	if envBind := os.Getenv("LFT_INSPECTOR_BIND"); envBind != "" {
 		bindIP = envBind
@@ -226,4 +276,75 @@ func IsDocker() bool {
 		}
 	}
 	return false
+}
+
+// ReplayRequest handles copying and re-sending a recorded request to the target local host/port.
+func ReplayRequest(targetHost string, record *RequestRecord) (*RequestRecord, error) {
+	if targetHost == "" {
+		targetHost = "127.0.0.1"
+	}
+	targetURL := fmt.Sprintf("http://%s:%d%s", targetHost, record.TargetPort, record.Path)
+
+	startTime := time.Now()
+
+	var reqBodyReader io.Reader
+	if record.ReqBody != "" {
+		reqBodyReader = strings.NewReader(record.ReqBody)
+	}
+
+	req, err := http.NewRequest(record.Method, targetURL, reqBodyReader)
+	if err != nil {
+		return nil, err
+	}
+
+	// Copy headers
+	for k, v := range record.ReqHeaders {
+		req.Header.Set(k, v)
+	}
+
+	// Execute the request
+	client := &http.Client{
+		Timeout: 5 * time.Second,
+		CheckRedirect: func(req *http.Request, via []*http.Request) error {
+			return http.ErrUseLastResponse
+		},
+	}
+
+	res, err := client.Do(req)
+
+	rec := &RequestRecord{
+		ID:         fmt.Sprintf("%d", time.Now().UnixNano()),
+		Time:       startTime,
+		Method:     record.Method + " (Replay)",
+		Path:       record.Path,
+		ReqHeaders: record.ReqHeaders,
+		ReqBody:    record.ReqBody,
+		TargetPort: record.TargetPort,
+	}
+
+	if err != nil {
+		rec.Status = 502
+		rec.RespBody = fmt.Sprintf("Replay connection error: %v", err)
+		rec.DurationMs = time.Since(startTime).Milliseconds()
+		return rec, nil
+	}
+	defer res.Body.Close() //nolint:errcheck
+
+	rec.Status = res.StatusCode
+	rec.DurationMs = time.Since(startTime).Milliseconds()
+
+	// Capture response headers
+	respHeaders := make(map[string]string)
+	for k, v := range res.Header {
+		respHeaders[k] = strings.Join(v, ", ")
+	}
+	rec.RespHeaders = respHeaders
+
+	// Capture response body (up to 10KB)
+	var bodyBuf bytes.Buffer
+	limitReader := io.LimitReader(res.Body, 10240)
+	_, _ = io.Copy(&bodyBuf, limitReader)
+	rec.RespBody = bodyBuf.String()
+
+	return rec, nil
 }

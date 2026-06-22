@@ -69,6 +69,7 @@ type ServerConfig struct {
 	ClientPlatforms            map[string]PlatformConfig `yaml:"client_platforms"`
 	VisitorTimeout             time.Duration             `yaml:"visitor_timeout"`
 	PATRetentionDays           int                       `yaml:"pat_retention_days"`
+	EnableWAF                  bool                      `yaml:"enable_waf"`
 
 	// Dynamic SSO/OIDC Providers
 	SSOProviders []SSOProviderConfig `yaml:"sso_providers"`
@@ -134,6 +135,7 @@ func DefaultServerConfig() *ServerConfig {
 		DockerImage:             "peterjrichards/lfr-tunnel:latest",
 		DockerBypassURL:         "https://github.com/peterrichards-lr/lfr-tunnel/blob/master/docs/liferay-se-guide.md#using-the-docker-wrapper-edr-bypass",
 		VisitorTimeout:          5 * time.Minute,
+		EnableWAF:               true,
 		ClientPlatforms: map[string]PlatformConfig{
 			"macos_arm64": {
 				URL:              "/static/downloads/lfr-tunnel-darwin-arm64",
@@ -313,6 +315,9 @@ func LoadServerConfig(path string) (*ServerConfig, error) {
 		if days, err := strconv.Atoi(val); err == nil {
 			cfg.PATRetentionDays = days
 		}
+	}
+	if val := os.Getenv("LFT_ENABLE_WAF"); val != "" {
+		cfg.EnableWAF = strings.ToLower(val) == "true" || val == "1"
 	}
 
 	return cfg, nil

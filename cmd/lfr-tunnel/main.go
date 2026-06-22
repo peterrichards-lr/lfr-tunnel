@@ -46,6 +46,7 @@ func main() {
 	preserveHost := flag.Bool("preserve-host", false, "Preserve incoming Host header instead of rewriting to target host")
 	background := flag.Bool("background", false, "Run client in background")
 	status := flag.Bool("status", false, "Check status of the background tunnel")
+	statusJSON := flag.Bool("status-json", false, "Print JSON status of the background tunnel")
 	stop := flag.Bool("stop", false, "Stop the background tunnel")
 	versionFlag := flag.Bool("version", false, "Print client version")
 	checkVersionFlag := flag.Bool("check-version", false, "Check server API for version requirements and print as JSON")
@@ -60,39 +61,8 @@ func main() {
 		return
 	}
 
-	if len(os.Args) > 1 && os.Args[1] == "login" {
-		cfg, err := config.LoadClientConfig(*configPath)
-		if err != nil {
-			log.Fatalf("[Client] Failed to load configuration: %v", err)
-		}
-		if *serverURL != "" {
-			cfg.ServerURL = *serverURL
-		}
-		if err := client.RunLogin(cfg.ServerURL); err != nil {
-			log.Fatalf("[Error] Login failed: %v", err)
-		}
-		return
-	}
-
 	if *versionFlag {
 		fmt.Printf("lfr-tunnel version %s\n", config.Version)
-		return
-	}
-
-	if *checkVersionFlag {
-		cfg, err := config.LoadClientConfig(*configPath)
-		if err != nil {
-			log.Fatalf("[Client] Failed to load configuration: %v", err)
-		}
-		if *serverURL != "" {
-			cfg.ServerURL = *serverURL
-		}
-		info, err := client.CheckServerCompatibility(cfg.ServerURL)
-		if err != nil {
-			log.Fatalf("[Error] Failed to check server compatibility: %v", err)
-		}
-		b, _ := json.Marshal(info)
-		fmt.Println(string(b))
 		return
 	}
 
@@ -102,31 +72,6 @@ func main() {
 		}
 		return
 	}
-
-	if *stop {
-		handleStop()
-		return
-	}
-
-	if *status {
-		handleStatus()
-		return
-	}
-
-	// Start compatibility check asynchronously
-	compatChan := make(chan *client.ServerVersionInfo, 1)
-	go func() {
-		// Temporarily infer server URL before full load to start early
-		sURL := *serverURL
-		if sURL == "" {
-			tmpCfg, _ := config.LoadClientConfig(*configPath)
-			if tmpCfg != nil {
-				sURL = tmpCfg.ServerURL
-			}
-		}
-		info, _ := client.CheckServerCompatibility(sURL)
-		compatChan <- info
-	}()
 
 	// 1. Load config from file and environment variables
 	cfg, err := config.LoadClientConfig(*configPath)
@@ -157,10 +102,74 @@ func main() {
 		_ = os.Setenv("LFT_PRESERVE_HOST", "true")
 	}
 
-	if *background {
-		handleBackground()
+	// Determine if subdomain flag was explicitly passed
+	subdomainFlagPassed := false
+	flag.Visit(func(f *flag.Flag) {
+		if f.Name == "subdomain" {
+			subdomainFlagPassed = true
+		}
+	})
+
+	// Resolve subdomain prefix early (so background, stop, status checks know the subdomain name)
+	sub := cfg.Subdomain
+	if sub == "" {
+		hostname, err := os.Hostname()
+		if err == nil && hostname != "" {
+			sub = strings.ToLower(hostname)
+			if idx := strings.Index(sub, "."); idx != -1 {
+				sub = sub[:idx]
+			}
+			sub = strings.ReplaceAll(sub, " ", "-")
+			sub = strings.ReplaceAll(sub, "_", "-")
+		} else {
+			sub = "se-dev"
+		}
+	}
+	sub = strings.ToLower(strings.TrimSpace(sub))
+
+	if len(os.Args) > 1 && os.Args[1] == "login" {
+		if err := client.RunLogin(cfg.ServerURL); err != nil {
+			log.Fatalf("[Error] Login failed: %v", err)
+		}
 		return
 	}
+
+	if *checkVersionFlag {
+		info, err := client.CheckServerCompatibility(cfg.ServerURL)
+		if err != nil {
+			log.Fatalf("[Error] Failed to check server compatibility: %v", err)
+		}
+		b, _ := json.Marshal(info)
+		fmt.Println(string(b))
+		return
+	}
+
+	if *stop {
+		handleStop(sub, subdomainFlagPassed)
+		return
+	}
+
+	if *status {
+		handleStatus(sub, subdomainFlagPassed)
+		return
+	}
+
+	if *statusJSON {
+		handleStatusJSON(sub, subdomainFlagPassed)
+		return
+	}
+
+	if *background {
+		handleBackground(sub)
+		return
+	}
+
+	// Start compatibility check asynchronously
+	compatChan := make(chan *client.ServerVersionInfo, 1)
+	go func() {
+		info, _ := client.CheckServerCompatibility(cfg.ServerURL)
+		compatChan <- info
+	}()
 
 	var ports []int
 	if *portsStr != "" {
@@ -220,30 +229,19 @@ func main() {
 		}
 	}
 
-	// Start Interceptor Engine
-	engine := client.NewInterceptorEngine(cfg.TargetHost, addHeaders)
-	client.StartInspector(*inspectorPort, engine)
-
-	// 4. Resolve subdomain prefix
-	sub := cfg.Subdomain
-	if sub == "" {
-		// Use hostname or environment username as fallback
-		hostname, err := os.Hostname()
-		if err == nil && hostname != "" {
-			sub = strings.ToLower(hostname)
-			// Remove domain parts and replace unsafe characters
-			if idx := strings.Index(sub, "."); idx != -1 {
-				sub = sub[:idx]
-			}
-			sub = strings.ReplaceAll(sub, " ", "-")
-			sub = strings.ReplaceAll(sub, "_", "-")
-		} else {
-			sub = "se-dev"
-		}
+	// Copy original ports for status monitoring before we modify portMappings to point to Interceptor ports
+	var originalPorts []int
+	for _, pm := range portMappings {
+		originalPorts = append(originalPorts, pm.LocalPort)
 	}
 
-	// Sanity clean subdomain prefix
-	sub = strings.ToLower(strings.TrimSpace(sub))
+	// Start Interceptor Engine
+	engine := client.NewInterceptorEngine(cfg.TargetHost, addHeaders)
+	actualInspectorPort, err := client.StartInspector(*inspectorPort, engine)
+	if err != nil {
+		log.Fatalf("[Error] Failed to start Inspector dashboard: %v", err)
+	}
+	*inspectorPort = actualInspectorPort
 
 	log.Printf("[Client] Subdomain prefix: %s", sub)
 	log.Printf("[Client] Exposing ports:")
@@ -271,7 +269,7 @@ func main() {
 	}
 
 	// 5. Registration Handshake
-	fmt.Printf("[Client] Registering tunnel (%s) at %s...\n", cfg.Subdomain, cfg.ServerURL)
+	fmt.Printf("[Client] Registering tunnel (%s) at %s...\n", sub, cfg.ServerURL)
 	if cfg.RateLimit > 0 {
 		fmt.Printf("[Client] Requested Subdomain Rate Limit: %d req/s\n", cfg.RateLimit)
 	}
@@ -338,6 +336,20 @@ func main() {
 		}
 	}
 
+	// Write dynamic client state to file
+	state := &client.ClientState{
+		PID:           os.Getpid(),
+		InspectorPort: *inspectorPort,
+		InspectorURL:  fmt.Sprintf("http://127.0.0.1:%d", *inspectorPort),
+		Subdomain:     subHost,
+		PublicURLs:    publicURLs,
+		Ports:         originalPorts,
+		StartTime:     time.Now().Format(time.RFC3339),
+	}
+	if err := client.WriteState(subHost, state); err != nil {
+		log.Printf("[Warning] Failed to write state file: %v\n", err)
+	}
+
 	// 6. Run Client and wait for signals
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
@@ -353,13 +365,15 @@ func main() {
 	// Set lease status and subdomains info on engine
 	engine.SetSubdomainDetails(sub, regResp.SubdomainPrefix, true, false)
 
-	if err := client.RunClient(ctx, cfg.ServerURL, regResp.SessionToken, regResp.Remotes, publicURLs, engine); err != nil && ctx.Err() == nil {
+	err = client.RunClient(ctx, cfg.ServerURL, regResp.SessionToken, regResp.Remotes, publicURLs, engine)
+	client.DeleteState(subHost)
+	if err != nil && ctx.Err() == nil {
 		log.Fatalf("[Client] Tunnel disconnected with error: %v", err)
 	}
 	log.Println("[Client] Tunnel shutdown completed.")
 }
 
-func getPIDFilePath() (string, error) {
+func getPIDFilePath(subdomain string) (string, error) {
 	home, err := os.UserHomeDir()
 	if err != nil {
 		return "", err
@@ -368,19 +382,21 @@ func getPIDFilePath() (string, error) {
 	if err := os.MkdirAll(dir, 0700); err != nil {
 		return "", err
 	}
-	return filepath.Join(dir, "lfr-tunnel.pid"), nil
+	safeSub := strings.ReplaceAll(subdomain, "/", "-")
+	safeSub = strings.ReplaceAll(safeSub, "\\", "-")
+	return filepath.Join(dir, fmt.Sprintf("lfr-tunnel-%s.pid", safeSub)), nil
 }
 
-func writePID(pid int) error {
-	path, err := getPIDFilePath()
+func writePID(subdomain string, pid int) error {
+	path, err := getPIDFilePath(subdomain)
 	if err != nil {
 		return err
 	}
 	return os.WriteFile(path, []byte(strconv.Itoa(pid)), 0600)
 }
 
-func readPID() (int, error) {
-	path, err := getPIDFilePath()
+func readPID(subdomain string) (int, error) {
+	path, err := getPIDFilePath(subdomain)
 	if err != nil {
 		return 0, err
 	}
@@ -404,10 +420,34 @@ func isPIDRunning(pid int) bool {
 	return err == nil
 }
 
-func handleBackground() {
-	pid, err := readPID()
+func getActiveSubdomains() ([]string, error) {
+	home, err := os.UserHomeDir()
+	if err != nil {
+		return nil, err
+	}
+	dir := filepath.Join(home, ".lfr-tunnel")
+	files, err := os.ReadDir(dir)
+	if err != nil {
+		if os.IsNotExist(err) {
+			return nil, nil
+		}
+		return nil, err
+	}
+	var subs []string
+	for _, f := range files {
+		if !f.IsDir() && strings.HasPrefix(f.Name(), "lfr-tunnel-") && strings.HasSuffix(f.Name(), ".pid") {
+			sub := strings.TrimPrefix(f.Name(), "lfr-tunnel-")
+			sub = strings.TrimSuffix(sub, ".pid")
+			subs = append(subs, sub)
+		}
+	}
+	return subs, nil
+}
+
+func handleBackground(sub string) {
+	pid, err := readPID(sub)
 	if err == nil && pid > 0 && isPIDRunning(pid) {
-		log.Fatalf("[Client] A background tunnel is already running (PID: %d). Stop it first using: lfr-tunnel -stop\n", pid)
+		log.Fatalf("[Client] A background tunnel for subdomain '%s' is already running (PID: %d). Stop it first using: lfr-tunnel -stop -subdomain %s\n", sub, pid, sub)
 	}
 
 	home, err := os.UserHomeDir()
@@ -416,7 +456,7 @@ func handleBackground() {
 	}
 	logDir := filepath.Join(home, ".lfr-tunnel")
 	_ = os.MkdirAll(logDir, 0700)
-	logPath := filepath.Join(logDir, "client.log")
+	logPath := filepath.Join(logDir, fmt.Sprintf("client-%s.log", sub))
 
 	logFile, err := os.OpenFile(logPath, os.O_CREATE|os.O_WRONLY|os.O_TRUNC, 0600)
 	if err != nil {
@@ -446,64 +486,153 @@ func handleBackground() {
 		log.Fatalf("[Client] Failed to start background process: %v\n", err)
 	}
 
-	if err := writePID(cmd.Process.Pid); err != nil {
+	if err := writePID(sub, cmd.Process.Pid); err != nil {
 		log.Printf("[Warning] Failed to write PID file: %v\n", err)
 	}
 
-	log.Printf("[Client] Tunnel started in background (PID: %d).\n", cmd.Process.Pid)
+	log.Printf("[Client] Tunnel started in background for subdomain '%s' (PID: %d).\n", sub, cmd.Process.Pid)
 	log.Printf("[Client] Logs: %s\n", logPath)
-	log.Println("[Client] To stop the tunnel, run: lfr-tunnel -stop")
+	log.Printf("[Client] To stop this tunnel, run: lfr-tunnel -stop -subdomain %s\n", sub)
 }
 
-func handleStop() {
-	pid, err := readPID()
-	if err != nil || pid <= 0 {
-		log.Println("[Client] No background tunnel is active.")
-		return
-	}
-	if !isPIDRunning(pid) {
-		log.Printf("[Client] Stale PID file found. Process %d is not running.\n", pid)
-		pidPath, _ := getPIDFilePath()
-		_ = os.Remove(pidPath)
-		return
-	}
-	proc, err := os.FindProcess(pid)
-	if err != nil {
-		log.Fatalf("[Client] Failed to find process: %v\n", err)
-	}
-
-	log.Printf("[Client] Stopping background tunnel (PID: %d)...\n", pid)
-	_ = proc.Signal(syscall.SIGINT)
-
-	for i := 0; i < 10; i++ {
-		time.Sleep(200 * time.Millisecond)
-		if !isPIDRunning(pid) {
-			break
+func handleStop(sub string, targetSpecific bool) {
+	var subsToStop []string
+	if targetSpecific {
+		subsToStop = []string{sub}
+	} else {
+		var err error
+		subsToStop, err = getActiveSubdomains()
+		if err != nil {
+			log.Fatalf("[Error] Failed to read active subdomains: %v\n", err)
+		}
+		if len(subsToStop) == 0 {
+			log.Println("[Client] No active background tunnels found.")
+			return
 		}
 	}
 
-	if isPIDRunning(pid) {
-		log.Println("[Client] Process did not respond to SIGINT. Force terminating...")
-		_ = proc.Kill()
+	for _, s := range subsToStop {
+		pid, err := readPID(s)
+		if err != nil || pid <= 0 {
+			if targetSpecific {
+				log.Printf("[Client] No background tunnel is active for subdomain '%s'.\n", s)
+			}
+			continue
+		}
+		if !isPIDRunning(pid) {
+			log.Printf("[Client] Stale PID file found for subdomain '%s'. Process %d is not running. Cleaning up...\n", s, pid)
+			pidPath, _ := getPIDFilePath(s)
+			_ = os.Remove(pidPath)
+			client.DeleteState(s)
+			continue
+		}
+		proc, err := os.FindProcess(pid)
+		if err != nil {
+			log.Printf("[Warning] Failed to find process for subdomain '%s': %v\n", s, err)
+			continue
+		}
+
+		log.Printf("[Client] Stopping background tunnel for subdomain '%s' (PID: %d)...\n", s, pid)
+		_ = proc.Signal(syscall.SIGINT)
+
+		for i := 0; i < 10; i++ {
+			time.Sleep(200 * time.Millisecond)
+			if !isPIDRunning(pid) {
+				break
+			}
+		}
+
+		if isPIDRunning(pid) {
+			log.Printf("[Client] Process %d did not respond to SIGINT. Force terminating...\n", pid)
+			_ = proc.Kill()
+		}
+		pidPath, _ := getPIDFilePath(s)
+		_ = os.Remove(pidPath)
+		client.DeleteState(s)
+		log.Printf("[Client] Tunnel for subdomain '%s' stopped.\n", s)
 	}
-	pidPath, _ := getPIDFilePath()
-	_ = os.Remove(pidPath)
-	log.Println("[Client] Tunnel stopped.")
 }
 
-func handleStatus() {
-	pid, err := readPID()
-	if err != nil || pid <= 0 {
-		log.Println("[Client] No background tunnel is active.")
+func handleStatus(sub string, targetSpecific bool) {
+	var subsToCheck []string
+	if targetSpecific {
+		subsToCheck = []string{sub}
+	} else {
+		var err error
+		subsToCheck, err = getActiveSubdomains()
+		if err != nil {
+			log.Fatalf("[Error] Failed to read active subdomains: %v\n", err)
+		}
+		if len(subsToCheck) == 0 {
+			log.Println("[Client] No active background tunnels found.")
+			return
+		}
+	}
+
+	for _, s := range subsToCheck {
+		pid, err := readPID(s)
+		if err != nil || pid <= 0 {
+			if targetSpecific {
+				log.Printf("[Client] No background tunnel is active for subdomain '%s'.\n", s)
+			}
+			continue
+		}
+		if isPIDRunning(pid) {
+			log.Printf("[Client] Background tunnel for subdomain '%s' is active (PID: %d).\n", s, pid)
+			home, _ := os.UserHomeDir()
+			log.Printf("[Client] Logs: %s\n", filepath.Join(home, ".lfr-tunnel", fmt.Sprintf("client-%s.log", s)))
+		} else {
+			log.Printf("[Client] No background tunnel is active for subdomain '%s' (found stale PID file). Cleaning up...\n", s)
+			pidPath, _ := getPIDFilePath(s)
+			_ = os.Remove(pidPath)
+			client.DeleteState(s)
+		}
+	}
+}
+
+func handleStatusJSON(sub string, targetSpecific bool) {
+	if targetSpecific {
+		statePath, err := client.GetStateFilePath(sub)
+		if err != nil {
+			fmt.Println(`{"running":false}`)
+			return
+		}
+		bytes, err := client.QueryStatusJSON(statePath, isPIDRunning)
+		if err != nil {
+			fmt.Println(`{"running":false}`)
+			return
+		}
+		fmt.Println(string(bytes))
 		return
 	}
-	if isPIDRunning(pid) {
-		log.Printf("[Client] Background tunnel is active (PID: %d).\n", pid)
-		home, _ := os.UserHomeDir()
-		log.Printf("[Client] Logs: %s\n", filepath.Join(home, ".lfr-tunnel", "client.log"))
-	} else {
-		log.Println("[Client] No background tunnel is active (found stale PID file).")
-		pidPath, _ := getPIDFilePath()
-		_ = os.Remove(pidPath)
+
+	// Global query: print aggregated status list
+	subs, err := getActiveSubdomains()
+	if err != nil || len(subs) == 0 {
+		fmt.Println(`{"tunnels":[]}`)
+		return
 	}
+
+	type Response struct {
+		Tunnels []json.RawMessage `json:"tunnels"`
+	}
+	resp := Response{Tunnels: []json.RawMessage{}}
+
+	for _, s := range subs {
+		statePath, err := client.GetStateFilePath(s)
+		if err != nil {
+			continue
+		}
+		bytes, err := client.QueryStatusJSON(statePath, isPIDRunning)
+		if err == nil {
+			resp.Tunnels = append(resp.Tunnels, json.RawMessage(bytes))
+		}
+	}
+
+	outputBytes, err := json.MarshalIndent(resp, "", "  ")
+	if err != nil {
+		fmt.Println(`{"tunnels":[]}`)
+		return
+	}
+	fmt.Println(string(outputBytes))
 }

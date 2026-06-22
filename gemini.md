@@ -349,6 +349,12 @@ The solution will consist of:
 - [x] Implement smart port auto-detection (8080 / 13000) in the client CLI on zero-config startup.
 - [x] Write unit tests to cover auto-detection logic and server-side installer routes.
 
+## Client JSON State and LDM Integration (v1.9.7)
+- [x] Implement client-side JSON state file writing on startup.
+- [x] Implement status-json CLI query command.
+- [x] Add unit tests for JSON state serialization and CLI status querying.
+
+
 
 
 

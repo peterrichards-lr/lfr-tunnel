@@ -6,6 +6,7 @@ import (
 	"encoding/base64"
 	"fmt"
 	"io"
+	"lfr-tunnel/pkg/config"
 	"log"
 	"net"
 	"net/http"
@@ -21,16 +22,21 @@ import (
 //go:embed offline.html
 var offlineHTML []byte
 
+//go:embed blocked.html
+var blockedHTML []byte
+
 // ProxyHandler handles incoming HTTP/HTTPS proxy traffic, routing it to the active tunnel.
 type ProxyHandler struct {
 	registry *Registry
+	config   *config.ServerConfig
 	limiters sync.Map // Map of host -> *rate.Limiter
 }
 
 // NewProxyHandler creates a new ProxyHandler instance.
-func NewProxyHandler(registry *Registry) *ProxyHandler {
+func NewProxyHandler(registry *Registry, cfg *config.ServerConfig) *ProxyHandler {
 	return &ProxyHandler{
 		registry: registry,
+		config:   cfg,
 	}
 }
 
@@ -72,6 +78,16 @@ func (p *ProxyHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	if !exists {
 		p.serveOfflinePage(w, r, host, "No active tunnel registered for this subdomain.")
 		return
+	}
+
+	// 2.3 Web Application Firewall (WAF) Protection
+	if p.config != nil && p.config.EnableWAF {
+		if blocked, category, reason := IsMaliciousRequest(r); blocked {
+			clientIP := getClientIP(r)
+			log.Printf("[WAF] Blocked malicious request on %s from IP %s. Category: %s, Reason: %s", host, clientIP, category, reason)
+			p.serveBlockedPage(w, r, host, category, reason, clientIP)
+			return
+		}
 	}
 
 	// 2.5 HTTP Basic Auth Protection
@@ -154,6 +170,26 @@ func (p *ProxyHandler) serveOfflinePage(w http.ResponseWriter, r *http.Request, 
 	pageBytes := bytes.ReplaceAll(offlineHTML, []byte("loading..."), []byte(host))
 	if _, err := w.Write(pageBytes); err != nil {
 		log.Printf("[Proxy] Failed to write offline page: %v", err)
+	}
+}
+
+// serveBlockedPage renders the Liferay-themed WAF blocked warning page.
+func (p *ProxyHandler) serveBlockedPage(w http.ResponseWriter, r *http.Request, host, category, reason, ip string) {
+	w.Header().Set("Content-Type", "text/html; charset=utf-8")
+	w.WriteHeader(http.StatusForbidden)
+
+	txID := fmt.Sprintf("WAF-TX-%d", time.Now().UnixNano())
+
+	// Simple text-template replacement for blocked warning page
+	tmpl := string(blockedHTML)
+	tmpl = strings.ReplaceAll(tmpl, "{{.Host}}", host)
+	tmpl = strings.ReplaceAll(tmpl, "{{.Category}}", category)
+	tmpl = strings.ReplaceAll(tmpl, "{{.Reason}}", reason)
+	tmpl = strings.ReplaceAll(tmpl, "{{.IP}}", ip)
+	tmpl = strings.ReplaceAll(tmpl, "{{.TxID}}", txID)
+
+	if _, err := w.Write([]byte(tmpl)); err != nil {
+		log.Printf("[Proxy] Failed to write WAF blocked page: %v", err)
 	}
 }
 

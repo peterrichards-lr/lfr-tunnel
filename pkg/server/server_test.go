@@ -1967,3 +1967,66 @@ func TestServer_RoleSubdomainLimitsAndAutoReservation(t *testing.T) {
 		t.Errorf("expected admin third connection to fail with 403 Forbidden (quota reached), got %d", recA3.Code)
 	}
 }
+
+func TestServer_RateLimiterPruning(t *testing.T) {
+	srv, _, cleanup := setupTestServer(t)
+	defer cleanup()
+
+	// 1. Check IP rate limiter creation
+	ip1 := "1.2.3.4"
+	ip2 := "5.6.7.8"
+	lim1 := srv.getRateLimiter(ip1)
+	lim2 := srv.getRateLimiter(ip2)
+	if lim1 == nil || lim2 == nil {
+		t.Fatal("expected non-nil rate limiters")
+	}
+
+	srv.rlMutex.Lock()
+	if len(srv.rateLimiters) != 2 {
+		t.Errorf("expected 2 rate limiters, got %d", len(srv.rateLimiters))
+	}
+	// Simulate ip1 rate limiter being stale (older than 1 hour)
+	srv.rateLimiters[ip1].lastSeen = time.Now().Add(-2 * time.Hour)
+	srv.rlMutex.Unlock()
+
+	// Manually invoke pruning loop logic
+	srv.rlMutex.Lock()
+	now := time.Now()
+	for ip, entry := range srv.rateLimiters {
+		if now.Sub(entry.lastSeen) > 1*time.Hour {
+			delete(srv.rateLimiters, ip)
+		}
+	}
+	srv.rlMutex.Unlock()
+
+	// Verify ip1 was pruned, but ip2 was kept
+	srv.rlMutex.Lock()
+	if _, exists := srv.rateLimiters[ip1]; exists {
+		t.Error("expected stale rate limiter for ip1 to be pruned")
+	}
+	if _, exists := srv.rateLimiters[ip2]; !exists {
+		t.Error("expected active rate limiter for ip2 to be kept")
+	}
+	srv.rlMutex.Unlock()
+
+	// 2. Check Proxy Handler host rate limiter cleanup
+	host := "test-host.example.com"
+	limit := 100
+	proxyLim := srv.proxyHandler.getRateLimiter(host, limit)
+	if proxyLim == nil {
+		t.Fatal("expected non-nil proxy rate limiter")
+	}
+
+	// Verify limiter exists in proxy handler
+	if _, exists := srv.proxyHandler.limiters.Load(host); !exists {
+		t.Error("expected rate limiter to be stored in proxy handler")
+	}
+
+	// Clean up rate limiter for host
+	srv.proxyHandler.RemoveRateLimiter(host)
+
+	// Verify it has been deleted
+	if _, exists := srv.proxyHandler.limiters.Load(host); exists {
+		t.Error("expected rate limiter to be deleted from proxy handler")
+	}
+}

@@ -34,6 +34,11 @@ func NewProxyHandler(registry *Registry) *ProxyHandler {
 	}
 }
 
+// RemoveRateLimiter deletes the rate limiter associated with the given host.
+func (p *ProxyHandler) RemoveRateLimiter(host string) {
+	p.limiters.Delete(host)
+}
+
 // getRateLimiter retrieves or creates a rate limiter for a specific lease.
 func (p *ProxyHandler) getRateLimiter(host string, limit int) *rate.Limiter {
 	if limit <= 0 {

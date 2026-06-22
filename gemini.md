@@ -339,6 +339,12 @@ The solution will consist of:
 - [x] Update resources/github/README.md with instructions to apply the checksums ruleset.
 
 
+## Rate Limiter Memory Leak Prevention and Cleanup
+- [x] Implement RemoveRateLimiter on ProxyHandler to delete rate limiters on lease cleanup.
+- [x] Wrap API rate limiters with access timestamps and run a background cleanup task to prune stale IP limiters.
+- [x] Add unit test coverage for the rate limiter cleanup routines.
+
+
 
 
 

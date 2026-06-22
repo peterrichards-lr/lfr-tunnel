@@ -114,6 +114,8 @@ type Server struct {
 	maintAction        string
 	maintDuration      int
 	maintEndTime       time.Time
+	wsClients          map[*wsClient]bool
+	wsMutex            sync.RWMutex
 }
 
 // NewServer initializes and returns a new Server instance.
@@ -185,6 +187,7 @@ func NewServer(cfg *config.ServerConfig) (*Server, error) {
 		metricsQueue:       make(chan *db.TunnelMetric, 1000),
 		targetedMessages:   make(map[string]string),
 		lastPortalActivity: make(map[string]time.Time),
+		wsClients:          make(map[*wsClient]bool),
 	}
 
 	// Initialize i18n dynamic engine
@@ -218,6 +221,7 @@ func NewServer(cfg *config.ServerConfig) (*Server, error) {
 		if srv.proxyHandler != nil {
 			srv.proxyHandler.RemoveRateLimiter(lease.FullHost)
 		}
+		srv.BroadcastTelemetry()
 	}
 
 	// Load DB blacklist and unsubscribe secret into cache
@@ -552,6 +556,11 @@ func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 
 		if r.Method == http.MethodGet && r.URL.Path == "/api/check-subdomain" {
 			s.handleCheckSubdomain(w, r)
+			return
+		}
+
+		if r.Method == http.MethodGet && r.URL.Path == "/api/portal/telemetry/ws" {
+			s.handleTelemetryWS(w, r)
 			return
 		}
 
@@ -1038,6 +1047,8 @@ func (s *Server) handleRegister(w http.ResponseWriter, r *http.Request) {
 		warning = fmt.Sprintf("Version mismatch! Server is running %s but client is %s. Please consider upgrading using 'lfr-tunnel -upgrade'", config.Version, req.ClientVersion)
 	}
 
+	go s.BroadcastTelemetry()
+
 	respondJSON(w, http.StatusOK, RegisterResponse{
 		Status:          "success",
 		SessionToken:    sessionToken,
@@ -1141,6 +1152,9 @@ func (s *Server) handleCheckSubdomain(w http.ResponseWriter, r *http.Request) {
 
 // Start kicks off the background processes and listens for gateway traffic.
 func (s *Server) Start() error {
+	// Start telemetry WebSocket tick loop
+	s.StartTelemetryTicker()
+
 	// 1. Start Chisel Server on localhost:8081
 	go func() {
 		log.Println("[Server] Starting internal Chisel tunnel engine on 127.0.0.1:8081...")
@@ -2559,6 +2573,8 @@ func (s *Server) handleAdminBroadcast(w http.ResponseWriter, r *http.Request, ac
 	s.broadcastMessage = req.Message
 	s.broadcastMutex.Unlock()
 
+	s.BroadcastTelemetry()
+
 	s.writeAudit(actor, "admin.broadcast", "system", "all", "Admin updated global broadcast message", r)
 	respondJSON(w, http.StatusOK, map[string]string{"status": "ok"})
 }
@@ -2668,6 +2684,7 @@ func (s *Server) handleAdminMaintenance(w http.ResponseWriter, r *http.Request, 
 						}
 					}
 					log.Printf("[Server] Scheduled Soft Maintenance countdown hit 0. Soft Maintenance Mode is now ACTIVE.")
+					go s.BroadcastTelemetry()
 				})
 
 				action = "system.maintenance_scheduled"
@@ -2724,6 +2741,8 @@ func (s *Server) handleAdminMaintenance(w http.ResponseWriter, r *http.Request, 
 	}
 
 	hardActive := s.isNginxMaintenanceActive()
+
+	go s.BroadcastTelemetry()
 
 	respondJSON(w, http.StatusOK, map[string]interface{}{
 		"status":           "ok",
@@ -3216,6 +3235,8 @@ func (s *Server) handleAdminOverrideRateLimit(w http.ResponseWriter, r *http.Req
 		return
 	}
 
+	go s.BroadcastTelemetry()
+
 	// Log audit event
 	s.writeAudit(actor, "tunnel.rate_limit_overridden", "subdomain", req.Host, fmt.Sprintf("Overrode rate limit to %d RPS", req.RateLimit), r)
 
@@ -3563,6 +3584,8 @@ func (s *Server) handleAdminTargetedMessage(w http.ResponseWriter, r *http.Reque
 	}
 	s.targetedMutex.Unlock()
 
+	s.PushUserTelemetryByID(req.UserID)
+
 	s.writeAudit(actor, "admin.targeted_message", "user", req.UserID, "Admin sent targeted message", r)
 	respondJSON(w, http.StatusOK, map[string]string{"status": "ok"})
 }
@@ -3577,6 +3600,8 @@ func (s *Server) handleDismissMessage(w http.ResponseWriter, r *http.Request) {
 	s.targetedMutex.Lock()
 	delete(s.targetedMessages, user.ID)
 	s.targetedMutex.Unlock()
+
+	s.PushUserTelemetryByID(user.ID)
 
 	respondJSON(w, http.StatusOK, map[string]string{"status": "ok"})
 }

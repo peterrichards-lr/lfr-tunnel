@@ -12,6 +12,9 @@ Build an open-source, MIT-licensed tunneling solution tailored for Liferay's Sal
   - Load passphrases from secure environment variables or files that are not committed.
   - Instruct the user to run secure decryption or configuration commands locally on their system rather than sharing passwords in the chat.
   - Ensure all temporary certificate and private key files are completely deleted before making any git commits to prevent accidental exposure in the repository history.
+- **Local Binary Execution Constraints**: The local system EDR blocks unsigned `lfr-tunnel`/`lfr-tunneld` binaries and Go test run executables (`*.test`). However, execution is permitted within the `/private/tmp` directory. To run Go tests safely, set `TMPDIR=/private/tmp` so that the Go test binaries are built and executed inside the whitelisted `/private/tmp` path.
+
+
 
 ## Proposed Architecture
 The solution will consist of:
@@ -310,7 +313,7 @@ The solution will consist of:
 - [x] Create local Request Inspector & Replay web dashboard (similar to Ngrok's local interface) for debugging client extensions and webhooks.
 - [ ] Implement multi-region edge VPS gateways to reduce demo latency globally.
 - [ ] Integrate tunnel provisioning directly into Liferay Development Manager (LDM) execution loops.
-- [ ] Implement live WebSocket-driven telemetry updates in the portal Admin Web Dashboard.
+- [x] Implement live WebSocket-driven telemetry updates in the portal Admin Web Dashboard.
 - [x] Integrate a lightweight Web Application Firewall (WAF) shield on the gateway to filter basic exploit payloads during public presentations.
 
 ## Dynamic Loopback Port Routing Fix (v1.9.4)
@@ -375,6 +378,12 @@ The solution will consist of:
 - [x] Integrate TUI execution loop inside cmd/lfr-tunnel/main.go.
 - [x] Add unit tests for TUI lifecycle, rendering, and formatter helpers.
 - [x] Verify standard and Keycloak SSO E2E integration test suites pass.
+
+## Live Telemetry & EDR Workaround (v1.12.0)
+- [x] Implement WebSocket-based live telemetry updates for the Admin Web Dashboard.
+- [ ] Restore deleted release scripts and commit telemetry changes.
+- [ ] Verify test execution via GitHub Actions CI to bypass local EDR restrictions.
+- [ ] Fix errcheck linter warnings in telemetry files.
 
 
 

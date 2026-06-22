@@ -68,94 +68,13 @@ func (s *Server) handleGetMe(w http.ResponseWriter, r *http.Request) {
 	s.lastPortalActivity[user.ID] = time.Now()
 	s.portalActivityMu.Unlock()
 
-	var activeLeases []map[string]interface{}
-	if s.registry != nil {
-		leases := s.registry.ListLeases()
-		for _, l := range leases {
-			if l.UserID == user.ID || user.Role == "admin" || user.Role == "owner" {
-				activeLeases = append(activeLeases, map[string]interface{}{
-					"subdomain_prefix": l.SubdomainPrefix,
-					"full_host":        l.FullHost,
-					"status":           l.Status,
-					"bytes_in":         l.BytesIn,
-					"bytes_out":        l.BytesOut,
-					"rate_limit":       l.RateLimit,
-					"user_id":          l.UserID,
-					"client_ip":        l.ClientIP,
-					"created_at":       l.CreatedAt,
-					"visitor_ips":      l.GetActiveVisitorIPs(s.cfg.VisitorTimeout),
-				})
-			}
-		}
-	}
-
-	resp := map[string]interface{}{
-		"id":                  user.ID,
-		"email":               user.Email,
-		"first_name":          user.FirstName,
-		"last_name":           user.LastName,
-		"preferred_name":      user.PreferredName,
-		"role":                user.Role,
-		"status":              user.Status,
-		"timezone":            user.Timezone,
-		"auth_method":         user.AuthMethod,
-		"theme_preference":    user.ThemePreference,
-		"language_preference": user.LanguagePreference,
-		"notification_prefs":  user.NotificationPrefs,
-		"last_login_ip":       user.LastLoginIP,
-		"tunnels":             activeLeases,
-		"totp_enabled":        user.TOTPEnabled,
-		"last_client_version": user.LastClientVersion,
-		"last_client_os":      user.LastClientOS,
-	}
-
+	var sessionToken string
 	cookie, err := r.Cookie("lfr_session")
 	if err == nil {
-		if sessionRaw, ok := s.portalMap.Load("admin_session_" + cookie.Value); ok {
-			if sessionData, ok := sessionRaw.(PortalSessionData); ok {
-				if sessionData.PreviousLoginAt != nil {
-					resp["last_login_at"] = *sessionData.PreviousLoginAt
-				}
-				if sessionData.KilledPreviousSession {
-					resp["killed_previous_session"] = true
-					// Unset it so the UI only alerts once
-					sessionData.KilledPreviousSession = false
-					s.portalMap.Store("admin_session_"+cookie.Value, sessionData)
-				}
-			}
-		}
+		sessionToken = cookie.Value
 	}
 
-	s.broadcastMutex.RLock()
-	resp["broadcast_message"] = s.broadcastMessage
-	s.broadcastMutex.RUnlock()
-
-	s.targetedMutex.RLock()
-	if tm, ok := s.targetedMessages[user.ID]; ok && tm != "" {
-		resp["targeted_message"] = tm
-	}
-	s.targetedMutex.RUnlock()
-
-	s.maintMutex.RLock()
-	isMaint := s.maintenanceMode
-	maintScheduled := s.maintScheduledAt
-	s.maintMutex.RUnlock()
-
-	maintModeStr := "false"
-	var secondsLeft int
-	if isMaint {
-		maintModeStr = "true"
-	} else if !maintScheduled.IsZero() && time.Now().Before(maintScheduled) {
-		maintModeStr = "pending"
-		secondsLeft = int(time.Until(maintScheduled).Seconds())
-	}
-	resp["maintenance_mode"] = maintModeStr
-	if maintModeStr == "pending" {
-		resp["maintenance_seconds_left"] = secondsLeft
-	}
-
-	resp["iron_curtain"] = s.isNginxMaintenanceActive()
-
+	resp := s.getUserTelemetryData(user, sessionToken)
 	respondJSON(w, http.StatusOK, resp)
 }
 

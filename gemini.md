@@ -354,6 +354,12 @@ The solution will consist of:
 - [x] Implement status-json CLI query command.
 - [x] Add unit tests for JSON state serialization and CLI status querying.
 
+## Local Request Replay in the Inspector Web Dashboard (v1.9.8)
+- [x] Implement ReplayRequest logic in pkg/client/inspector.go.
+- [x] Add /api/replay HTTP endpoint.
+- [x] Add Replay Request button and javascript handler in pkg/client/inspector.html.
+- [x] Add unit tests for the replay endpoint.
+
 
 
 

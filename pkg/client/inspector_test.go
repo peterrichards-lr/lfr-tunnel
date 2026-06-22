@@ -1,12 +1,15 @@
 package client
 
 import (
+	"bytes"
 	"encoding/json"
 	"fmt"
 	"net"
 	"net/http"
 	"net/http/httptest"
+	"net/url"
 	"os"
+	"strconv"
 	"testing"
 	"time"
 )
@@ -236,4 +239,139 @@ func TestInspectorBindingConstraints(t *testing.T) {
 
 	_ = os.Setenv("LFT_INSPECTOR_BIND", "192.168.1.100")
 	// Verify env bind works as expected
+}
+
+func TestReplayRequestEndpoint(t *testing.T) {
+	// 1. Start mock downstream server
+	downstreamReceived := false
+	mockDownstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		downstreamReceived = true
+		if r.Method != "POST" {
+			t.Errorf("Expected method POST, got %s", r.Method)
+		}
+		if r.Header.Get("X-Test-Header") != "ReplayVal" {
+			t.Errorf("Expected X-Test-Header: ReplayVal, got %s", r.Header.Get("X-Test-Header"))
+		}
+		w.WriteHeader(http.StatusCreated)
+		_, _ = w.Write([]byte("Mock Replay Response"))
+	}))
+	defer mockDownstream.Close()
+
+	u, err := url.Parse(mockDownstream.URL)
+	if err != nil {
+		t.Fatalf("failed to parse downstream URL: %v", err)
+	}
+	_, portStr, _ := net.SplitHostPort(u.Host)
+	port, _ := strconv.Atoi(portStr)
+
+	// 2. Create engine and populate history
+	engine := NewInterceptorEngine("127.0.0.1", nil)
+	origRecord := &RequestRecord{
+		ID:         "orig-id-123",
+		Method:     "POST",
+		Path:       "/replay-test?foo=bar",
+		ReqHeaders: map[string]string{"X-Test-Header": "ReplayVal"},
+		ReqBody:    "payload data",
+		TargetPort: port,
+	}
+	engine.AddRecord(origRecord)
+
+	// 3. Set up routing
+	mux := http.NewServeMux()
+	mux.HandleFunc("/api/replay", func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodPost {
+			http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+			return
+		}
+
+		var req struct {
+			ID string `json:"id"`
+		}
+		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+			http.Error(w, "Bad request", http.StatusBadRequest)
+			return
+		}
+
+		engine.mu.RLock()
+		var record *RequestRecord
+		for _, rec := range engine.History {
+			if rec.ID == req.ID {
+				record = rec
+				break
+			}
+		}
+		engine.mu.RUnlock()
+
+		if record == nil {
+			http.Error(w, "Request not found", http.StatusNotFound)
+			return
+		}
+
+		newRec, err := ReplayRequest(engine.TargetHost, record)
+		if err != nil {
+			w.Header().Set("Content-Type", "application/json")
+			w.WriteHeader(http.StatusInternalServerError)
+			_ = json.NewEncoder(w).Encode(map[string]string{"error": err.Error()})
+			return
+		}
+
+		engine.AddRecord(newRec)
+
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusOK)
+		_ = json.NewEncoder(w).Encode(map[string]interface{}{
+			"status": "ok",
+			"new_id": newRec.ID,
+		})
+	})
+
+	// 4. Test case A: Successful Replay
+	bodyBytes, _ := json.Marshal(map[string]string{"id": "orig-id-123"})
+	rec := httptest.NewRecorder()
+	req := httptest.NewRequest("POST", "/api/replay", bytes.NewReader(bodyBytes))
+	mux.ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusOK {
+		t.Fatalf("Expected 200 OK, got %d", rec.Code)
+	}
+
+	var resMap map[string]interface{}
+	_ = json.NewDecoder(rec.Body).Decode(&resMap)
+	if resMap["status"] != "ok" {
+		t.Errorf("Expected status 'ok', got '%v'", resMap["status"])
+	}
+	newID := resMap["new_id"].(string)
+
+	if !downstreamReceived {
+		t.Error("Expected mock downstream to receive replayed request")
+	}
+
+	// Verify history updated
+	if len(engine.History) != 2 {
+		t.Fatalf("Expected 2 records in history, got %d", len(engine.History))
+	}
+
+	newRecord := engine.History[0]
+	if newRecord.ID != newID {
+		t.Errorf("Expected newly added record to match returned new ID: %s vs %s", newRecord.ID, newID)
+	}
+	if newRecord.Method != "POST (Replay)" {
+		t.Errorf("Expected Method to be 'POST (Replay)', got %s", newRecord.Method)
+	}
+	if newRecord.Status != http.StatusCreated {
+		t.Errorf("Expected replayed status to be 201, got %d", newRecord.Status)
+	}
+	if newRecord.RespBody != "Mock Replay Response" {
+		t.Errorf("Expected RespBody 'Mock Replay Response', got '%s'", newRecord.RespBody)
+	}
+
+	// Test case B: Request Not Found
+	bodyBytes2, _ := json.Marshal(map[string]string{"id": "non-existent-id"})
+	rec2 := httptest.NewRecorder()
+	req2 := httptest.NewRequest("POST", "/api/replay", bytes.NewReader(bodyBytes2))
+	mux.ServeHTTP(rec2, req2)
+
+	if rec2.Code != http.StatusNotFound {
+		t.Errorf("Expected 404 Not Found for invalid ID, got %d", rec2.Code)
+	}
 }

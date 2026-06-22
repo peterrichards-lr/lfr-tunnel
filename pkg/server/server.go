@@ -74,6 +74,12 @@ type CheckSubdomainResponse struct {
 	Suggestions []string `json:"suggestions,omitempty"`
 }
 
+// ipLimiter wraps a rate.Limiter and a lastSeen timestamp for stale entry cleanup.
+type ipLimiter struct {
+	limiter  *rate.Limiter
+	lastSeen time.Time
+}
+
 // Server coordinates the entire gateway operations.
 type Server struct {
 	cfg                *config.ServerConfig
@@ -85,7 +91,7 @@ type Server struct {
 	mailSender         mail.Sender
 	ctx                context.Context
 	cancel             context.CancelFunc
-	rateLimiters       map[string]*rate.Limiter
+	rateLimiters       map[string]*ipLimiter
 	rlMutex            sync.Mutex
 	violations         map[string]int
 	vMutex             sync.Mutex
@@ -174,7 +180,7 @@ func NewServer(cfg *config.ServerConfig) (*Server, error) {
 		mailSender:         mailSender,
 		ctx:                ctx,
 		cancel:             cancel,
-		rateLimiters:       make(map[string]*rate.Limiter),
+		rateLimiters:       make(map[string]*ipLimiter),
 		violations:         make(map[string]int),
 		metricsQueue:       make(chan *db.TunnelMetric, 1000),
 		targetedMessages:   make(map[string]string),
@@ -208,6 +214,9 @@ func NewServer(cfg *config.ServerConfig) (*Server, error) {
 				// Queue full, drop it
 				log.Printf("[Server] Metrics queue full, dropping metrics for %s", lease.FullHost)
 			}
+		}
+		if srv.proxyHandler != nil {
+			srv.proxyHandler.RemoveRateLimiter(lease.FullHost)
 		}
 	}
 
@@ -262,6 +271,7 @@ func NewServer(cfg *config.ServerConfig) (*Server, error) {
 	}
 
 	go srv.processMetricsQueue()
+	srv.startRateLimiterCleaner(ctx)
 
 	return srv, nil
 }
@@ -365,13 +375,41 @@ func (s *Server) startDatabaseBackupScheduler() {
 func (s *Server) getRateLimiter(ip string) *rate.Limiter {
 	s.rlMutex.Lock()
 	defer s.rlMutex.Unlock()
-	limiter, exists := s.rateLimiters[ip]
+	entry, exists := s.rateLimiters[ip]
 	if !exists {
 		// 10 requests per second, burst of 20
-		limiter = rate.NewLimiter(rate.Limit(10), 20)
-		s.rateLimiters[ip] = limiter
+		entry = &ipLimiter{
+			limiter:  rate.NewLimiter(rate.Limit(10), 20),
+			lastSeen: time.Now(),
+		}
+		s.rateLimiters[ip] = entry
+	} else {
+		entry.lastSeen = time.Now()
 	}
-	return limiter
+	return entry.limiter
+}
+
+// startRateLimiterCleaner runs a background routine that periodically prunes stale IP rate limiters.
+func (s *Server) startRateLimiterCleaner(ctx context.Context) {
+	ticker := time.NewTicker(10 * time.Minute)
+	go func() {
+		defer ticker.Stop()
+		for {
+			select {
+			case <-ctx.Done():
+				return
+			case <-ticker.C:
+				s.rlMutex.Lock()
+				now := time.Now()
+				for ip, entry := range s.rateLimiters {
+					if now.Sub(entry.lastSeen) > 1*time.Hour {
+						delete(s.rateLimiters, ip)
+					}
+				}
+				s.rlMutex.Unlock()
+			}
+		}
+	}()
 }
 
 // ServeHTTP multiplexes control plane (registration & chisel WebSocket) and data plane (tunnel routing).

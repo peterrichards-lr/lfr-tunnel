@@ -453,5 +453,11 @@ The solution will consist of:
 
 ## Release v1.14.1 Automation
 - [x] Create release automation script `scripts/create-release-tag.sh` to bump version in `whats-new.json`, create a branch/tag, push them, raise a PR, and enable auto-merge.
-- [ ] Run the release automation script to trigger the v1.14.1 release.
-- [ ] Deploy signed binaries and gateway changes of v1.14.1 to the VPS.
+- [x] Run the release automation script to trigger the v1.14.1 release.
+- [x] Deploy signed binaries and gateway changes of v1.14.1 to the VPS.
+
+## Post v1.14.1 Enhancements
+- [x] Add 5-second logout delay in `dashboard.js` when entering maintenance mode so users can read the red banner.
+- [x] Update dashboard buttons (`Download Binary` and `Other OSs`) to display OS-specific installer commands served from the VPS instead of binary files.
+- [x] Support config option to completely disable the `Download Binary` button on the dashboard.
+- [x] Support triggering a mock release warning/shutdown sequence for portal verification.

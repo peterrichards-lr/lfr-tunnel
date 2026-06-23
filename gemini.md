@@ -394,6 +394,10 @@ The solution will consist of:
 - [x] Make docs/infosec.md generic by removing specific developer names, VPS locations, and domain names.
 - [x] Add 1Password and Docker complexity generic explanations to workspace docs/infosec.md.
 
+## Release v1.13.0 & Deploy
+- [ ] Bump version to v1.13.0 in whats-new.json, tag, and push to trigger release CI workflow.
+- [ ] Deploy signed binaries and gateway changes to the VPS.
+
 
 
 

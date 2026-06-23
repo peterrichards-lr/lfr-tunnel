@@ -1,12 +1,10 @@
 {
-  "version": "v1.12.0",
-  "release_date": "2026-06-22",
+  "version": "v1.13.0",
+  "release_date": "2026-06-23",
   "features": [
-    "Implement Gateway Web Application Firewall (WAF) Shield to block malicious exploitation payloads (XSS, SQLi, Path Traversal, Cmd Injection).",
-    "Implement client-side interactive Terminal UI (TUI) Dashboard for real-time network and latency monitoring (-no-tui flag to disable).",
-    "Implement live WebSocket-driven telemetry updates for responsive, lower-overhead Admin Web Dashboard monitoring.",
-    "Add smart local service port auto-probing (8080/13000/3000) and installer redirect routes (/install and /install.ps1) for simplified developer onboarding.",
-    "Add client JSON status file generation and status-json CLI query command for LDM execution loop integration."
+    "Add SSO-only login lockdown capability (disable_email_login configuration flag) to restrict client registration and portal logins exclusively to OIDC/SSO.",
+    "Exclude pkg/server unit tests from local execution to avoid local macOS EDR blocking and terminal termination.",
+    "Introduce the comprehensive, generic InfoSec & EDR briefing document (docs/infosec.md) detailing client-side security architecture, trust verification, path exclusions, and gateway risk controls."
   ]
 }
 

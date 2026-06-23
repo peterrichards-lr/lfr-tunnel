@@ -549,20 +549,21 @@ func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 			}
 
 			respondJSON(w, http.StatusOK, map[string]interface{}{
-				"latest_version":         latestClientVer,
-				"min_version":            s.cfg.MinClientVersion,
-				"server_version":         config.Version,
-				"documentation_url":      s.cfg.DocumentationURL,
-				"repository_url":         s.cfg.RepositoryURL,
-				"privacy_policy_url":     privacyURL,
-				"cookie_policy_url":      cookieURL,
-				"maintenance_mode":       maintStr,
-				"enforce_policy_consent": consentStr,
-				"docker_image":           dockerImg,
-				"docker_bypass_url":      s.cfg.DockerBypassURL,
-				"client_platforms":       s.cfg.ClientPlatforms,
-				"start_time":             s.startTime.Format(time.RFC3339),
-				"uptime_seconds":         int(time.Since(s.startTime).Seconds()),
+				"latest_version":           latestClientVer,
+				"min_version":              s.cfg.MinClientVersion,
+				"server_version":           config.Version,
+				"documentation_url":        s.cfg.DocumentationURL,
+				"repository_url":           s.cfg.RepositoryURL,
+				"privacy_policy_url":       privacyURL,
+				"cookie_policy_url":        cookieURL,
+				"maintenance_mode":         maintStr,
+				"enforce_policy_consent":   consentStr,
+				"docker_image":             dockerImg,
+				"docker_bypass_url":        s.cfg.DockerBypassURL,
+				"client_platforms":         s.cfg.ClientPlatforms,
+				"disable_client_downloads": s.cfg.DisableClientDownloads,
+				"start_time":               s.startTime.Format(time.RFC3339),
+				"uptime_seconds":           int(time.Since(s.startTime).Seconds()),
 			})
 			return
 		}

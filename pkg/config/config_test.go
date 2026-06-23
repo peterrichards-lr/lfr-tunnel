@@ -78,13 +78,15 @@ client_platforms:
 	os.Setenv("LFT_MIN_CLIENT_VERSION", "v2.0.0")          //nolint:errcheck
 	os.Setenv("LFT_LATEST_CLIENT_VERSION", "v2.1.0")       //nolint:errcheck
 	os.Setenv("LFT_ENABLE_WAF", "false")                   //nolint:errcheck
+	os.Setenv("LFT_DISABLE_CLIENT_DOWNLOADS", "true")      //nolint:errcheck
 	defer func() {
-		os.Unsetenv("LFT_DOMAINS")               //nolint:errcheck
-		os.Unsetenv("LFT_BIND_ADDR")             //nolint:errcheck
-		os.Unsetenv("LFT_DOCKER_IMAGE")          //nolint:errcheck
-		os.Unsetenv("LFT_MIN_CLIENT_VERSION")    //nolint:errcheck
-		os.Unsetenv("LFT_LATEST_CLIENT_VERSION") //nolint:errcheck
-		os.Unsetenv("LFT_ENABLE_WAF")            //nolint:errcheck
+		os.Unsetenv("LFT_DOMAINS")                  //nolint:errcheck
+		os.Unsetenv("LFT_BIND_ADDR")                //nolint:errcheck
+		os.Unsetenv("LFT_DOCKER_IMAGE")             //nolint:errcheck
+		os.Unsetenv("LFT_MIN_CLIENT_VERSION")       //nolint:errcheck
+		os.Unsetenv("LFT_LATEST_CLIENT_VERSION")    //nolint:errcheck
+		os.Unsetenv("LFT_ENABLE_WAF")               //nolint:errcheck
+		os.Unsetenv("LFT_DISABLE_CLIENT_DOWNLOADS") //nolint:errcheck
 	}()
 
 	cfgEnv, err := LoadServerConfig(tmpFile.Name())
@@ -109,6 +111,9 @@ client_platforms:
 	}
 	if cfgEnv.EnableWAF {
 		t.Errorf("expected EnableWAF override to be false, got true")
+	}
+	if !cfgEnv.DisableClientDownloads {
+		t.Errorf("expected DisableClientDownloads override to be true, got false")
 	}
 }
 

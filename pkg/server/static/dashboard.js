@@ -592,6 +592,7 @@ function toggleTheme() {
                 const vRes = await fetch('/api/version');
                 if (vRes.ok) {
                     const vData = await vRes.json();
+                    window.latestVersionData = vData;
                     const latestVer = vData.latest_version;
                     const userVer = currentUser.last_client_version || '';
                     
@@ -643,10 +644,6 @@ function toggleTheme() {
                     };
 
                     let config = (vData.client_platforms && vData.client_platforms[platformKey]) || defaults[platformKey];
-                    let dlUrl = config ? config.url : `${repoUrl}/releases/latest`;
-                    let recommendedCmd = config ? config.cmd : '';
-                    let fallbackCmd = config ? config.cmd_fallback : '';
-
                     let binaryName = config && config.binary_name ? config.binary_name : '';
                     if (!binaryName) {
                         if (platformKey === 'macos_arm64') binaryName = 'lfr-tunnel-darwin-arm64';
@@ -655,12 +652,18 @@ function toggleTheme() {
                         else if (platformKey === 'linux_amd64') binaryName = 'lfr-tunnel-linux-amd64';
                     }
 
+                    let dlUrl = config && config.url ? config.url : `${window.location.origin}/static/downloads/${binaryName}`;
+                    let recommendedCmd = config ? config.cmd : '';
+                    let fallbackCmd = config ? config.cmd_fallback : '';
                     let staticSHA = config && config.sha256 ? config.sha256 : '';
 
                     // Determine visibility of download button
                     let showDownload = true;
                     if (config && config.show_download !== undefined && config.show_download !== null) {
                         showDownload = config.show_download;
+                    }
+                    if (vData.disable_client_downloads) {
+                        showDownload = false;
                     }
                     let downloadLabel = config && config.download_label ? config.download_label : '⬇️ Download Binary';
 
@@ -708,7 +711,7 @@ function toggleTheme() {
                                 </div>
                             </div>
                             <div style="display: flex; gap: 10px;">
-                                <a href="${otherUrl}" target="_blank" class="btn btn-secondary" style="white-space: nowrap;">Releases / Other OSs</a>
+                                <button class="btn btn-secondary" style="white-space: nowrap;" onclick="showInstallerGuideModal()">Releases / Other OSs</button>
                             </div>
                         `;
                     } else {
@@ -743,7 +746,7 @@ function toggleTheme() {
                             </div>
                             <div style="display: flex; flex-direction: column; gap: 10px; align-items: stretch; min-width: 140px;">
                                 ${showDownload ? `<a href="${dlUrl}" class="btn btn-primary" style="white-space: nowrap; text-align: center;">${downloadLabel}</a>` : ''}
-                                <a href="${otherUrl}" target="_blank" class="btn btn-secondary" style="white-space: nowrap; text-align: center;">Other OSs</a>
+                                <button class="btn btn-secondary" style="white-space: nowrap; text-align: center;" onclick="showInstallerGuideModal()">Other OSs</button>
                             </div>
                         `;
 
@@ -982,9 +985,12 @@ applyTheme(currentUser.theme_preference);
                     overviewMaintBox.style.display = 'flex';
                 }
                 
-                if (currentUser && currentUser.role !== 'admin' && currentUser.role !== 'owner') {
+                if (currentUser && currentUser.role !== 'admin' && currentUser.role !== 'owner' && !window.loggingOut) {
+                    window.loggingOut = true;
                     showToast("The portal has entered scheduled maintenance. Standard sessions are suspended.", "danger");
-                    logout();
+                    setTimeout(() => {
+                        logout();
+                    }, 5000);
                 }
             } else {
                 if (window.maintenanceInterval) {
@@ -2750,6 +2756,49 @@ applyTheme(currentUser.theme_preference);
 
         function closeUserDetailsModal() {
             document.getElementById('user-details-modal').style.display = 'none';
+        }
+ 
+        function showInstallerGuideModal() {
+            // Set the dynamic install URLs in guide modal templates to match the current origin
+            document.getElementById('guide-script-macos').innerText = `curl -fsSL ${window.location.origin}/install | sh`;
+            document.getElementById('guide-script-windows').innerText = `irm ${window.location.origin}/install.ps1 | iex`;
+            document.getElementById('guide-cmd-linux').innerText = `curl -fsSL ${window.location.origin}/install | sh`;
+ 
+            // If downloads are disabled, hide the direct download buttons in the guide modal
+            const isDlDisabled = window.latestVersionData && window.latestVersionData.disable_client_downloads;
+            document.getElementById('guide-dl-macos').style.display = isDlDisabled ? 'none' : 'flex';
+            document.getElementById('guide-dl-windows').style.display = isDlDisabled ? 'none' : 'block';
+            document.getElementById('guide-dl-linux').style.display = isDlDisabled ? 'none' : 'flex';
+ 
+            document.getElementById('installer-guide-modal').style.display = 'flex';
+            
+            // Auto-detect OS and switch tab
+            const ua = navigator.userAgent;
+            if (ua.includes('Windows')) {
+                switchInstallerTab('windows');
+            } else if (ua.includes('Linux')) {
+                switchInstallerTab('linux');
+            } else {
+                switchInstallerTab('macos');
+            }
+        }
+ 
+        function closeInstallerGuideModal() {
+            document.getElementById('installer-guide-modal').style.display = 'none';
+        }
+ 
+        function switchInstallerTab(os) {
+            const tabs = ['macos', 'windows', 'linux'];
+            tabs.forEach(t => {
+                const btn = document.getElementById('tab-btn-' + t);
+                const content = document.getElementById('tab-content-' + t);
+                if (btn && content) {
+                    btn.className = 'tab-btn' + (t === os ? ' active' : '');
+                    btn.style.color = (t === os ? 'var(--text)' : 'var(--text-muted)');
+                    btn.style.borderBottomColor = (t === os ? 'var(--primary)' : 'transparent');
+                    content.style.display = (t === os ? 'block' : 'none');
+                }
+            });
         }
 
         async function kickTunnelFromUserModal(subdomain, userJsonEncoded) {

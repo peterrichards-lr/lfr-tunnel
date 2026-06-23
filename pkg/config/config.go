@@ -71,6 +71,7 @@ type ServerConfig struct {
 	PATRetentionDays           int                       `yaml:"pat_retention_days"`
 	EnableWAF                  bool                      `yaml:"enable_waf"`
 	DisableEmailLogin          bool                      `yaml:"disable_email_login"`
+	DisableClientDownloads     bool                      `yaml:"disable_client_downloads"`
 
 	// Dynamic SSO/OIDC Providers
 	SSOProviders []SSOProviderConfig `yaml:"sso_providers"`
@@ -319,6 +320,12 @@ func LoadServerConfig(path string) (*ServerConfig, error) {
 	}
 	if val := os.Getenv("LFT_ENABLE_WAF"); val != "" {
 		cfg.EnableWAF = strings.ToLower(val) == "true" || val == "1"
+	}
+	if val := os.Getenv("LFT_DISABLE_EMAIL_LOGIN"); val != "" {
+		cfg.DisableEmailLogin = strings.ToLower(val) == "true" || val == "1"
+	}
+	if val := os.Getenv("LFT_DISABLE_CLIENT_DOWNLOADS"); val != "" {
+		cfg.DisableClientDownloads = strings.ToLower(val) == "true" || val == "1"
 	}
 
 	return cfg, nil

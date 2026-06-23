@@ -188,9 +188,9 @@ The solution will consist of:
 - [ ] Apply to SignPath Foundation for free Windows Authenticode signing (https://signpath.org).
 - [ ] Submit official release binary hashes to SentinelOne false-positive review portal.
 - [ ] Ask SentinelOne admin to configure path exclusions per SECURITY.md (Homebrew + direct-install paths).
-- [ ] Add ~/.ldm/bin/lfr-tunnel to SentinelOne exclusions in README.md and SECURITY.md.
+- [x] Add ~/.ldm/bin/lfr-tunnel to SentinelOne exclusions in README.md and SECURITY.md.
 - [x] Create docs/infosec.md documenting client-side security architecture, trust verification details (Publisher CN, Team ID, GPG public keys), path exclusions, and gateway administrative risk-reduction controls for corporate InfoSec review.
-- [ ] Implement no-backdoor SSO-only lockdown capability (disable_email_login config flag).
+- [x] Implement no-backdoor SSO-only lockdown capability (disable_email_login config flag).
 - [x] Support custom target installation directory override via LFT_INSTALL_DIR environment variable in install.sh and install.ps1.
 - [x] Change default canonical install path to ~/runningpoc/bin/lfr-tunnel (C:\Users\<username>\runningpoc\bin\lfr-tunnel.exe) across install.sh, install.ps1, README.md, and docs.
 

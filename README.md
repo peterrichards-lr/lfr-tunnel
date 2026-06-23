@@ -505,13 +505,13 @@ gh attestation verify ~/runningpoc/bin/lfr-tunnel --repo peterrichards-lr/lfr-tu
 
 ### Recommended SentinelOne Exclusion (for Admins)
 
-The canonical install location for `lfr-tunnel` is `~/runningpoc/bin/lfr-tunnel` on all platforms:
+The canonical install location for `lfr-tunnel` is `~/runningpoc/bin/lfr-tunnel` on all platforms (including supporting LDM execution paths):
 
-| Platform | Canonical Path |
-|---|---|
-| macOS | `/Users/*/runningpoc/bin/lfr-tunnel` |
-| Linux | `/home/*/runningpoc/bin/lfr-tunnel` |
-| Windows | `C:\Users\*\runningpoc\bin\lfr-tunnel.exe` |
+| Platform | Canonical Path | LDM Integration Path |
+|---|---|---|
+| macOS | `/Users/*/runningpoc/bin/lfr-tunnel` | `/Users/*/.ldm/bin/lfr-tunnel` |
+| Linux | `/home/*/runningpoc/bin/lfr-tunnel` | `/home/*/.ldm/bin/lfr-tunnel` |
+| Windows | `C:\Users\*\runningpoc\bin\lfr-tunnel.exe` | `C:\Users\*\.ldm\bin\lfr-tunnel.exe` |
 
 We recommend that your SentinelOne (or equivalent EDR) administrator add a **wildcard path exclusion** for the paths above. Because all users install to the same predictable location, a single wildcard rule covers the entire team without needing per-user or per-hash exceptions.
 

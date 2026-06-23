@@ -451,5 +451,7 @@ The solution will consist of:
 - [x] Add a link to status.lfr-demo.se Better Stack status page from the portal pages, fallback pages, and client connection errors.
 - [x] Create a release helper tag script scripts/create-release-tag.sh.
 
-
-
+## Release v1.14.1 Automation
+- [x] Create release automation script `scripts/create-release-tag.sh` to bump version in `whats-new.json`, create a branch/tag, push them, raise a PR, and enable auto-merge.
+- [ ] Run the release automation script to trigger the v1.14.1 release.
+- [ ] Deploy signed binaries and gateway changes of v1.14.1 to the VPS.

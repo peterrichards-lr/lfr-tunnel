@@ -463,5 +463,5 @@ The solution will consist of:
 - [x] Support triggering a mock release warning/shutdown sequence for portal verification.
 
 ## GitHub Actions CI Linter Fix
-- [ ] Fix CI linter job failure in `.github/workflows/ci.yml` by removing `install-mode: goinstall` to use precompiled binary installation.
+- [x] Fix CI linter job failure in `.github/workflows/ci.yml` by removing `install-mode: goinstall` to use precompiled binary installation.
 

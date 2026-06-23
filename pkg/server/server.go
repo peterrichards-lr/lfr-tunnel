@@ -1241,6 +1241,12 @@ func generateSecureToken() (string, error) {
 func (s *Server) handleRegisterRequest(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/json")
 
+	if s.cfg.DisableEmailLogin {
+		w.WriteHeader(http.StatusForbidden)
+		_ = json.NewEncoder(w).Encode(map[string]string{"error": "Registration via email is disabled. Please use SSO."})
+		return
+	}
+
 	if s.db == nil {
 		w.WriteHeader(http.StatusNotImplemented)
 		_ = json.NewEncoder(w).Encode(map[string]string{"error": "database storage not enabled"})
@@ -2041,6 +2047,11 @@ func (s *Server) handleAdminEndpoints(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) handleAdminMagicLink(w http.ResponseWriter, r *http.Request) {
+	if s.cfg.DisableEmailLogin {
+		respondJSON(w, http.StatusForbidden, map[string]string{"error": "Email login is disabled. Please use SSO."})
+		return
+	}
+
 	var req struct {
 		Email string `json:"email"`
 	}
@@ -2355,8 +2366,9 @@ func (s *Server) handleAuthProviders(w http.ResponseWriter, r *http.Request) {
 		})
 	}
 	respondJSON(w, http.StatusOK, map[string]interface{}{
-		"sso_enabled": len(providers) > 0,
-		"providers":   providers,
+		"sso_enabled":         len(providers) > 0,
+		"providers":           providers,
+		"disable_email_login": s.cfg.DisableEmailLogin,
 	})
 }
 

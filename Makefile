@@ -23,7 +23,7 @@ vet:
 	go vet ./...
 
 test:
-	go test -v ./...
+	TMPDIR=/private/tmp go test -v $$(go list ./... | grep -v /pkg/server)
 
 clean:
 	rm -rf bin

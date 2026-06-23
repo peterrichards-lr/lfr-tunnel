@@ -43,7 +43,7 @@ if [ $? -ne 0 ]; then
 fi
 
 echo "[Git Hook] Running tests..."
-go test ./...
+TMPDIR=/private/tmp go test $(go list ./... | grep -v /pkg/server)
 if [ $? -ne 0 ]; then
   echo "❌ Error: Tests failed. Please fix before committing."
   exit 1

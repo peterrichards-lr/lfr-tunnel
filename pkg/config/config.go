@@ -70,6 +70,7 @@ type ServerConfig struct {
 	VisitorTimeout             time.Duration             `yaml:"visitor_timeout"`
 	PATRetentionDays           int                       `yaml:"pat_retention_days"`
 	EnableWAF                  bool                      `yaml:"enable_waf"`
+	DisableEmailLogin          bool                      `yaml:"disable_email_login"`
 
 	// Dynamic SSO/OIDC Providers
 	SSOProviders []SSOProviderConfig `yaml:"sso_providers"`

@@ -449,6 +449,7 @@ The solution will consist of:
 - [x] Implement historical uptime record in database (gateway_runs table, startup/shutdown tracking) and expose via admin API.
 - [x] Fix golangci-lint errcheck errors in pkg/db/db.go and pkg/db/db_test.go.
 - [x] Add a link to status.lfr-demo.se Better Stack status page from the portal pages, fallback pages, and client connection errors.
+- [x] Create a release helper tag script scripts/create-release-tag.sh.
 
 
 

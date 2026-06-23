@@ -503,6 +503,11 @@ func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 
+		if r.Method == http.MethodPost && r.URL.Path == "/api/local/broadcast" {
+			s.handleLocalBroadcast(w, r)
+			return
+		}
+
 		if r.Method == http.MethodGet && r.URL.Path == "/api/version" {
 			privacyURL := s.cfg.PrivacyPolicyURL
 			if privacyURL == "" {
@@ -2588,6 +2593,40 @@ func (s *Server) handleAdminBroadcast(w http.ResponseWriter, r *http.Request, ac
 	s.BroadcastTelemetry()
 
 	s.writeAudit(actor, "admin.broadcast", "system", "all", "Admin updated global broadcast message", r)
+	respondJSON(w, http.StatusOK, map[string]string{"status": "ok"})
+}
+
+func (s *Server) handleLocalBroadcast(w http.ResponseWriter, r *http.Request) {
+	remoteHost, _, err := net.SplitHostPort(r.RemoteAddr)
+	if err != nil {
+		remoteHost = r.RemoteAddr
+	}
+
+	if remoteHost != "127.0.0.1" && remoteHost != "::1" && remoteHost != "localhost" {
+		http.Error(w, `{"error":"Forbidden: localhost access only"}`, http.StatusForbidden)
+		return
+	}
+
+	if r.Header.Get("X-Forwarded-For") != "" || r.Header.Get("X-Forwarded-Host") != "" || r.Header.Get("X-Real-IP") != "" {
+		http.Error(w, `{"error":"Forbidden: direct localhost connection required"}`, http.StatusForbidden)
+		return
+	}
+
+	var req struct {
+		Message string `json:"message"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		http.Error(w, `{"error":"Invalid payload"}`, http.StatusBadRequest)
+		return
+	}
+
+	s.broadcastMutex.Lock()
+	s.broadcastMessage = req.Message
+	s.broadcastMutex.Unlock()
+
+	s.BroadcastTelemetry()
+
+	s.writeAudit("system-local", "admin.broadcast", "system", "all", "Local localhost update to global broadcast message", r)
 	respondJSON(w, http.StatusOK, map[string]string{"status": "ok"})
 }
 

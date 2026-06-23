@@ -216,7 +216,7 @@ Developers run `lfr-tunnel` locally on their developer machines.
 
 ### Quick One-Line Installation
 
-The installer downloads the pre-compiled binary for your platform and places it in `~/bin/lfr-tunnel` — the single canonical install location. This consistent path makes it simple for your organisation's security team to apply exclusions.
+The installer downloads the pre-compiled binary for your platform and places it in `~/runningpoc/bin/lfr-tunnel` — the single canonical install location. This consistent path makes it simple for your organisation's security team to apply exclusions.
 
 #### macOS — Homebrew (Recommended)
 
@@ -245,7 +245,7 @@ Use this for Linux, CI/CD pipelines, or environments where Homebrew is not avail
 curl -sSfL https://raw.githubusercontent.com/peterrichards-lr/lfr-tunnel/master/scripts/install.sh | sh
 ```
 
-Places the binary at `~/bin/lfr-tunnel`. If `~/bin` is not yet in your `PATH`, the installer prints the one-line export to add to your shell profile.
+Places the binary at `~/runningpoc/bin/lfr-tunnel`. If `~/runningpoc/bin` is not yet in your `PATH`, the installer prints the one-line export to add to your shell profile.
 
 #### Windows — Direct Download, PowerShell (Fallback)
 
@@ -255,7 +255,7 @@ Use this for environments where Scoop is not available:
 iwr https://raw.githubusercontent.com/peterrichards-lr/lfr-tunnel/master/scripts/install.ps1 | iex
 ```
 
-Places the binary at `%USERPROFILE%\bin\lfr-tunnel.exe` and adds it to your user `PATH` automatically.
+Places the binary at `%USERPROFILE%\runningpoc\bin\lfr-tunnel.exe` and adds it to your user `PATH` automatically.
 
 #### Verifying Binary Integrity
 
@@ -263,7 +263,7 @@ All release binaries are covered by **GitHub Artifact Attestations** — cryptog
 
 Verify any downloaded binary using the GitHub CLI:
 ```bash
-gh attestation verify ~/bin/lfr-tunnel --repo peterrichards-lr/lfr-tunnel
+gh attestation verify ~/runningpoc/bin/lfr-tunnel --repo peterrichards-lr/lfr-tunnel
 ```
 
 SHA-256 checksums for each release are also available in `checksums.txt` on the [Releases](https://github.com/peterrichards-lr/lfr-tunnel/releases) page.
@@ -289,14 +289,14 @@ You can check the current version of the client or upgrade it to the latest rele
    ```
 2. **Move to the canonical install location**:
    ```bash
-   mkdir -p ~/bin && mv lfr-tunnel ~/bin/
-   # Ensure ~/bin is in your PATH:
-   export PATH="$HOME/bin:$PATH"
+   mkdir -p ~/runningpoc/bin && mv lfr-tunnel ~/runningpoc/bin/
+   # Ensure ~/runningpoc/bin is in your PATH:
+   export PATH="$HOME/runningpoc/bin:$PATH"
    ```
 
 ### Running via Docker (Alternative / EDR Bypass)
 
-The recommended approach for managing security endpoint agent (EDR) alerts is to install `lfr-tunnel` to `~/bin/` and ask your security admin to add a wildcard path exclusion for `/Users/*/bin/lfr-tunnel` (macOS) or `C:\Users\*\bin\lfr-tunnel.exe` (Windows). See the [Security & EDR Compatibility](#security--edr-compatibility) section for details.
+The recommended approach for managing security endpoint agent (EDR) alerts is to install `lfr-tunnel` to `~/runningpoc/bin/` and ask your security admin to add a wildcard path exclusion for `/Users/*/runningpoc/bin/lfr-tunnel` (macOS) or `C:\Users\*\runningpoc\bin\lfr-tunnel.exe` (Windows). See the [Security & EDR Compatibility](#security--edr-compatibility) section for details.
 
 If a path exclusion cannot be applied, running `lfr-tunnel` inside a Docker container is an alternative. 
 
@@ -500,18 +500,18 @@ Every release binary is also covered by a **GitHub Artifact Attestation** — a 
 
 Verify any downloaded binary with the GitHub CLI:
 ```bash
-gh attestation verify ~/bin/lfr-tunnel --repo peterrichards-lr/lfr-tunnel
+gh attestation verify ~/runningpoc/bin/lfr-tunnel --repo peterrichards-lr/lfr-tunnel
 ```
 
 ### Recommended SentinelOne Exclusion (for Admins)
 
-The canonical install location for `lfr-tunnel` is `~/bin/lfr-tunnel` on all platforms:
+The canonical install location for `lfr-tunnel` is `~/runningpoc/bin/lfr-tunnel` on all platforms (including supporting LDM execution paths):
 
-| Platform | Canonical Path |
-|---|---|
-| macOS | `/Users/*/bin/lfr-tunnel` |
-| Linux | `/home/*/bin/lfr-tunnel` |
-| Windows | `C:\Users\*\bin\lfr-tunnel.exe` |
+| Platform | Canonical Path | LDM Integration Path |
+|---|---|---|
+| macOS | `/Users/*/runningpoc/bin/lfr-tunnel` | `/Users/*/.ldm/bin/lfr-tunnel` |
+| Linux | `/home/*/runningpoc/bin/lfr-tunnel` | `/home/*/.ldm/bin/lfr-tunnel` |
+| Windows | `C:\Users\*\runningpoc\bin\lfr-tunnel.exe` | `C:\Users\*\.ldm\bin\lfr-tunnel.exe` |
 
 We recommend that your SentinelOne (or equivalent EDR) administrator add a **wildcard path exclusion** for the paths above. Because all users install to the same predictable location, a single wildcard rule covers the entire team without needing per-user or per-hash exceptions.
 

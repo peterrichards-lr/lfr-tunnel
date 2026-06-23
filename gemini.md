@@ -176,7 +176,7 @@ The solution will consist of:
 
 
 ## SentinelOne False Positive Mitigation
-- [x] Standardise canonical install path to ~/bin/lfr-tunnel across install.sh, install.ps1, README.md and docs.
+- [x] Standardise canonical install path to ~/runningpoc/bin/lfr-tunnel across install.sh, install.ps1, README.md and docs.
 - [x] Add -trimpath to all go build commands (Makefile + release.yml) to strip embedded local filesystem paths from binaries.
 - [x] Add GitHub Artifact Attestations (actions/attest-build-provenance@v2) to release.yml for free supply-chain provenance tied to GitHub OIDC.
 - [x] Create SECURITY.md documenting binary signing status, EDR compatibility, package manager trust signals, and canonical exclusion paths for admins.
@@ -188,9 +188,12 @@ The solution will consist of:
 - [ ] Apply to SignPath Foundation for free Windows Authenticode signing (https://signpath.org).
 - [ ] Submit official release binary hashes to SentinelOne false-positive review portal.
 - [ ] Ask SentinelOne admin to configure path exclusions per SECURITY.md (Homebrew + direct-install paths).
-- [ ] Add ~/.ldm/bin/lfr-tunnel to SentinelOne exclusions in README.md and SECURITY.md.
+- [x] Add ~/.ldm/bin/lfr-tunnel to SentinelOne exclusions in README.md and SECURITY.md.
 - [x] Create docs/infosec.md documenting client-side security architecture, trust verification details (Publisher CN, Team ID, GPG public keys), path exclusions, and gateway administrative risk-reduction controls for corporate InfoSec review.
-- [ ] Implement no-backdoor SSO-only lockdown capability (disable_email_login config flag).
+- [x] Implement no-backdoor SSO-only lockdown capability (disable_email_login config flag).
+- [x] Support custom target installation directory override via LFT_INSTALL_DIR environment variable in install.sh and install.ps1.
+- [x] Change default canonical install path to ~/runningpoc/bin/lfr-tunnel (C:\Users\<username>\runningpoc\bin\lfr-tunnel.exe) across install.sh, install.ps1, README.md, and docs.
+
 
 ## Bug Fixes
 - [x] Fix unit test TempDir cleanup race by sleeping 50ms before stopping the server
@@ -395,8 +398,12 @@ The solution will consist of:
 - [x] Add 1Password and Docker complexity generic explanations to workspace docs/infosec.md.
 
 ## Release v1.13.0 & Deploy
-- [ ] Bump version to v1.13.0 in whats-new.json, tag, and push to trigger release CI workflow.
-- [ ] Deploy signed binaries and gateway changes to the VPS.
+- [x] Implement local-only loopback broadcast endpoint (`/api/local/broadcast`) on the gateway.
+- [x] Add unit test coverage for loopback IP and proxy header validation checks.
+- [x] Update `scripts/deploy.sh` to accept optional `-w <seconds>` warning delay parameter.
+- [x] Integrate local SSH warning broadcast and countdown sleep sequence into `scripts/deploy.sh`.
+- [x] Bump version to v1.13.1 in whats-new.json, tag, and push to trigger release CI workflow.
+- [x] Deploy signed binaries and gateway changes to the VPS.
 
 ## Documentation Refinements
 - [x] Temporarily strikeout Method A in liferay-se-guide.md and add security team note.

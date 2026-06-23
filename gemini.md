@@ -405,6 +405,14 @@ The solution will consist of:
 - [x] Bump version to v1.13.1 in whats-new.json, tag, and push to trigger release CI workflow.
 - [x] Deploy signed binaries and gateway changes to the VPS.
 
+## Dashboard WebSocket Routing & JS Crash Fix (v1.13.2)
+- [x] Fix JS crash in `dashboard.js` by renaming `login-panel` reference to `login-screen`.
+- [ ] Add WebSocket Upgrade proxy headers to Nginx main domain `location /` configuration on the VPS.
+- [x] Include the maintenance countdown on the Overview screen under the Welcome message when it is active (pending or true).
+- [ ] Compile and deploy the updated static dashboard changes to the VPS.
+
+
+
 ## Documentation Refinements
 - [x] Temporarily strikeout Method A in liferay-se-guide.md and add security team note.
 - [x] Add comparison and usage examples for alternative providers (ngrok, cloudflared) in docs/liferay-se-guide.md.

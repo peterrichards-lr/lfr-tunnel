@@ -461,3 +461,7 @@ The solution will consist of:
 - [x] Update dashboard buttons (`Download Binary` and `Other OSs`) to display OS-specific installer commands served from the VPS instead of binary files.
 - [x] Support config option to completely disable the `Download Binary` button on the dashboard.
 - [x] Support triggering a mock release warning/shutdown sequence for portal verification.
+
+## GitHub Actions CI Linter Fix
+- [ ] Fix CI linter job failure in `.github/workflows/ci.yml` by removing `install-mode: goinstall` to use precompiled binary installation.
+

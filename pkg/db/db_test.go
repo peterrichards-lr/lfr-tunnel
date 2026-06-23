@@ -822,3 +822,52 @@ func TestGatewayRuns(t *testing.T) {
 		t.Errorf("expected current run EndTime to be nil, got %v", runs[0].EndTime)
 	}
 }
+
+func TestAnalyticsWithNullDates(t *testing.T) {
+	database, tmpDir := setupTestDB(t)
+	defer cleanupTestDB(database, tmpDir)
+
+	// Create user
+	user := &User{
+		ID:     "analyt-user",
+		Email:  "analytics-test@liferay.com",
+		Role:   "user",
+		Status: "approved",
+	}
+	if err := database.CreateUser(user); err != nil {
+		t.Fatalf("failed to create user: %v", err)
+	}
+
+	// Insert metric row with invalid recorded_at timestamp string (which strftime cannot parse, yielding NULL)
+	_, err := database.conn.Exec(`
+		INSERT INTO tunnel_metrics (user_id, subdomain_prefix, full_host, bytes_in, bytes_out, connected_at, recorded_at)
+		VALUES (?, ?, ?, ?, ?, ?, ?)
+	`, user.ID, "pjrtest", "pjrtest.example.com", 100, 200, time.Now().UTC(), "invalid-timestamp-string-value")
+	if err != nil {
+		t.Fatalf("failed to insert metric with invalid date: %v", err)
+	}
+
+	// Verify GetUserAnalytics runs successfully and parses invalid date as "Unknown"
+	userStats, err := database.GetUserAnalytics(user.ID, 30)
+	if err != nil {
+		t.Fatalf("GetUserAnalytics failed on invalid date: %v", err)
+	}
+	if len(userStats.Daily) != 1 {
+		t.Fatalf("expected 1 daily stats row, got %d", len(userStats.Daily))
+	}
+	if userStats.Daily[0].Date != "Unknown" {
+		t.Errorf("expected daily date to fallback to 'Unknown', got %q", userStats.Daily[0].Date)
+	}
+
+	// Verify GetGlobalAnalytics runs successfully and parses invalid date as "Unknown"
+	globalStats, err := database.GetGlobalAnalytics(30)
+	if err != nil {
+		t.Fatalf("GetGlobalAnalytics failed on invalid date: %v", err)
+	}
+	if len(globalStats.Daily) != 1 {
+		t.Fatalf("expected 1 global daily stats row, got %d", len(globalStats.Daily))
+	}
+	if globalStats.Daily[0].Date != "Unknown" {
+		t.Errorf("expected global daily date to fallback to 'Unknown', got %q", globalStats.Daily[0].Date)
+	}
+}

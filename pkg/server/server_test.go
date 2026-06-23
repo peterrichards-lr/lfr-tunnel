@@ -2111,4 +2111,29 @@ func TestServer_LocalBroadcastAPI(t *testing.T) {
 	if rec4.Code != http.StatusBadRequest {
 		t.Errorf("Expected 400 Bad Request for invalid payload, got %d", rec4.Code)
 	}
+
+	// 5. Success: Valid local request with countdown scheduling
+	rec5 := makeReq("POST", "/api/local/broadcast", `{"message":"Upgrade scheduling", "countdown_seconds": 1, "duration_minutes": 2}`, "127.0.0.1:12345", nil)
+	if rec5.Code != http.StatusOK {
+		t.Errorf("Expected 200 for countdown scheduling, got %d", rec5.Code)
+	}
+	srv.maintMutex.RLock()
+	scheduledAt := srv.maintScheduledAt
+	isMaintActiveBefore := srv.maintenanceMode
+	srv.maintMutex.RUnlock()
+	if scheduledAt.IsZero() {
+		t.Error("Expected maintScheduledAt to be set, got zero time")
+	}
+	if isMaintActiveBefore {
+		t.Error("Expected maintenanceMode to be false during countdown, got true")
+	}
+
+	// Wait for countdown to expire and verify it becomes active
+	time.Sleep(1200 * time.Millisecond)
+	srv.maintMutex.RLock()
+	isMaintActiveAfter := srv.maintenanceMode
+	srv.maintMutex.RUnlock()
+	if !isMaintActiveAfter {
+		t.Error("Expected maintenanceMode to be true after countdown expired, got false")
+	}
 }

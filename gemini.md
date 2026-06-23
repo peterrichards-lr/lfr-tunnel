@@ -409,9 +409,16 @@ The solution will consist of:
 
 ## Dashboard WebSocket Routing & JS Crash Fix (v1.13.2)
 - [x] Fix JS crash in `dashboard.js` by renaming `login-panel` reference to `login-screen`.
-- [ ] Add WebSocket Upgrade proxy headers to Nginx main domain `location /` configuration on the VPS.
+- [x] Add WebSocket Upgrade proxy headers to Nginx main domain `location /` configuration on the VPS.
 - [x] Include the maintenance countdown on the Overview screen under the Welcome message when it is active (pending or true).
-- [ ] Compile and deploy the updated static dashboard changes to the VPS.
+- [x] Compile and deploy the updated static dashboard changes to the VPS.
+
+## Integration of Deployment Warning Countdown (v1.13.3)
+- [ ] Support `countdown_seconds` and `duration_minutes` in local broadcast API (`pkg/server/server.go`).
+- [ ] Add unit test coverage for local-triggered soft maintenance scheduling (`pkg/server/server_test.go`).
+- [ ] Update `scripts/deploy.sh` to send warning seconds and duration to the local broadcast API.
+- [ ] Compile, tag, and deploy v1.13.3 to the VPS.
+
 
 
 

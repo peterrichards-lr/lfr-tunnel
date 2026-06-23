@@ -869,7 +869,7 @@ applyTheme(currentUser.theme_preference);
             telemetryWS.onclose = (event) => {
                 console.log("[Telemetry] WebSocket closed:", event.reason);
                 wsConnected = false;
-                if (document.getElementById('login-panel').style.display === 'none') {
+                if (document.getElementById('login-screen').style.display === 'none') {
                     startPolling();
                     telemetryReconnectTimer = setTimeout(connectTelemetryWS, 5000);
                 }
@@ -904,25 +904,90 @@ applyTheme(currentUser.theme_preference);
             }
 
             const maintBanner = document.getElementById('global-maintenance-banner');
+            const overviewMaintBox = document.getElementById('overview-maintenance-box');
+            const overviewMaintText = document.getElementById('overview-maintenance-text');
+
             if (data.maintenance_mode === "pending") {
-                const secs = data.maintenance_seconds_left;
-                const mins = Math.floor(secs / 60);
-                const remSecs = secs % 60;
-                const timeStr = `${mins}:${remSecs < 10 ? '0' : ''}${remSecs}`;
-                maintBanner.innerHTML = `⚠️ <strong>Scheduled Maintenance starting in ${timeStr} minutes!</strong> All standard tunnels will be paused.`;
-                maintBanner.style.backgroundColor = '#f59e0b';
-                maintBanner.style.display = 'block';
+                window.maintenanceSecondsLeft = data.maintenance_seconds_left;
+                
+                const updateCountdown = () => {
+                    const secs = window.maintenanceSecondsLeft;
+                    if (secs <= 0) {
+                        const activeHtml = `🛠️ <strong>Gateway is currently undergoing Scheduled Maintenance!</strong> Tunnels are paused.`;
+                        maintBanner.innerHTML = activeHtml;
+                        maintBanner.style.backgroundColor = '#ef4444';
+                        maintBanner.style.display = 'block';
+                        if (overviewMaintBox && overviewMaintText) {
+                            overviewMaintText.innerHTML = activeHtml;
+                            overviewMaintBox.style.borderLeft = '4px solid #ef4444';
+                            overviewMaintBox.style.background = 'rgba(239, 68, 68, 0.1)';
+                            overviewMaintBox.style.display = 'flex';
+                        }
+                        return;
+                    }
+                    const mins = Math.floor(secs / 60);
+                    const remSecs = secs % 60;
+                    const timeStr = `${mins}:${remSecs < 10 ? '0' : ''}${remSecs}`;
+                    const pendingHtml = `⚠️ <strong>Scheduled Maintenance starting in ${timeStr}!</strong> All standard tunnels will be paused.`;
+                    
+                    maintBanner.innerHTML = pendingHtml;
+                    maintBanner.style.backgroundColor = '#f59e0b';
+                    maintBanner.style.display = 'block';
+                    
+                    if (overviewMaintBox && overviewMaintText) {
+                        overviewMaintText.innerHTML = pendingHtml;
+                        overviewMaintBox.style.borderLeft = '4px solid #f59e0b';
+                        overviewMaintBox.style.background = 'rgba(245, 158, 11, 0.1)';
+                        overviewMaintBox.style.display = 'flex';
+                    }
+                };
+
+                updateCountdown();
+
+                if (window.maintenanceInterval) {
+                    clearInterval(window.maintenanceInterval);
+                }
+                window.maintenanceInterval = setInterval(() => {
+                    if (window.maintenanceSecondsLeft > 0) {
+                        window.maintenanceSecondsLeft--;
+                        updateCountdown();
+                    } else {
+                        clearInterval(window.maintenanceInterval);
+                        window.maintenanceInterval = null;
+                    }
+                }, 1000);
+
             } else if (data.maintenance_mode === "true") {
-                maintBanner.innerHTML = `🛠️ <strong>Gateway is currently undergoing Scheduled Maintenance!</strong> Tunnels are paused.`;
+                if (window.maintenanceInterval) {
+                    clearInterval(window.maintenanceInterval);
+                    window.maintenanceInterval = null;
+                }
+                const activeHtml = `🛠️ <strong>Gateway is currently undergoing Scheduled Maintenance!</strong> Tunnels are paused.`;
+                
+                maintBanner.innerHTML = activeHtml;
                 maintBanner.style.backgroundColor = '#ef4444';
                 maintBanner.style.display = 'block';
+                
+                if (overviewMaintBox && overviewMaintText) {
+                    overviewMaintText.innerHTML = activeHtml;
+                    overviewMaintBox.style.borderLeft = '4px solid #ef4444';
+                    overviewMaintBox.style.background = 'rgba(239, 68, 68, 0.1)';
+                    overviewMaintBox.style.display = 'flex';
+                }
                 
                 if (currentUser && currentUser.role !== 'admin' && currentUser.role !== 'owner') {
                     showToast("The portal has entered scheduled maintenance. Standard sessions are suspended.", "danger");
                     logout();
                 }
             } else {
+                if (window.maintenanceInterval) {
+                    clearInterval(window.maintenanceInterval);
+                    window.maintenanceInterval = null;
+                }
                 maintBanner.style.display = 'none';
+                if (overviewMaintBox) {
+                    overviewMaintBox.style.display = 'none';
+                }
             }
 
             if (currentUser && (currentUser.role === 'admin' || currentUser.role === 'owner')) {

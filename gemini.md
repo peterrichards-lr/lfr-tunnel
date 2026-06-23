@@ -13,6 +13,8 @@ Build an open-source, MIT-licensed tunneling solution tailored for Liferay's Sal
   - Instruct the user to run secure decryption or configuration commands locally on their system rather than sharing passwords in the chat.
   - Ensure all temporary certificate and private key files are completely deleted before making any git commits to prevent accidental exposure in the repository history.
 - **Local Binary Execution Constraints**: The local system EDR blocks unsigned `lfr-tunnel`/`lfr-tunneld` binaries and Go test run executables (`*.test`). However, execution is permitted within the `/private/tmp` directory. To run Go tests safely, set `TMPDIR=/private/tmp` so that the Go test binaries are built and executed inside the whitelisted `/private/tmp` path.
+- **Git Conflict Prevention & PR Management**: Because remote GitHub cannot evaluate custom merge drivers defined in `.gitattributes`, the AI assistant must always run `git fetch origin` followed by `git merge origin/master` locally to resolve any potential `gemini.md` conflict before pushing commits or creating/updating a PR.
+
 
 
 
@@ -404,6 +406,14 @@ The solution will consist of:
 - [x] Integrate local SSH warning broadcast and countdown sleep sequence into `scripts/deploy.sh`.
 - [x] Bump version to v1.13.1 in whats-new.json, tag, and push to trigger release CI workflow.
 - [x] Deploy signed binaries and gateway changes to the VPS.
+
+## Dashboard WebSocket Routing & JS Crash Fix (v1.13.2)
+- [x] Fix JS crash in `dashboard.js` by renaming `login-panel` reference to `login-screen`.
+- [ ] Add WebSocket Upgrade proxy headers to Nginx main domain `location /` configuration on the VPS.
+- [x] Include the maintenance countdown on the Overview screen under the Welcome message when it is active (pending or true).
+- [ ] Compile and deploy the updated static dashboard changes to the VPS.
+
+
 
 ## Documentation Refinements
 - [x] Temporarily strikeout Method A in liferay-se-guide.md and add security team note.

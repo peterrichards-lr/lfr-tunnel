@@ -414,10 +414,13 @@ The solution will consist of:
 - [x] Compile and deploy the updated static dashboard changes to the VPS.
 
 ## Integration of Deployment Warning Countdown (v1.13.3)
-- [ ] Support `countdown_seconds` and `duration_minutes` in local broadcast API (`pkg/server/server.go`).
-- [ ] Add unit test coverage for local-triggered soft maintenance scheduling (`pkg/server/server_test.go`).
-- [ ] Update `scripts/deploy.sh` to send warning seconds and duration to the local broadcast API.
-- [ ] Compile, tag, and deploy v1.13.3 to the VPS.
+- [x] Support `countdown_seconds` and `duration_minutes` in local broadcast API (`pkg/server/server.go`).
+- [x] Add unit test coverage for local-triggered soft maintenance scheduling (`pkg/server/server_test.go`).
+- [x] Update `scripts/deploy.sh` to send warning seconds and duration to the local broadcast API.
+- [x] Compile, tag, and deploy v1.13.3 to the VPS.
+- [x] Extend Playwright E2E UI tests to cover the Overview screen maintenance countdown widget (`tests/e2e/ui/tests/dashboard.spec.ts`).
+
+
 
 
 

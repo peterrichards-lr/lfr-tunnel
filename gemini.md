@@ -392,6 +392,7 @@ The solution will consist of:
 - [x] Export TMPDIR=/private/tmp in Makefile and pre-commit hook scripts to execute Go tests from the whitelisted temporary directory.
 - [x] Exclude pkg/server tests from local Makefile and pre-commit hook executions to avoid compiling/running server.test entirely.
 - [x] Make docs/infosec.md generic by removing specific developer names, VPS locations, and domain names.
+- [x] Add 1Password and Docker complexity generic explanations to workspace docs/infosec.md.
 
 
 

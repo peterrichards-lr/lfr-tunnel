@@ -66,6 +66,9 @@ Unlike generic reverse proxy utilities, `lfr-tunnel` has been engineered with st
 
 To support **Exclusion by Digital Subject (Publisher)** in EDR consoles (such as SentinelOne, Microsoft Defender, and CrowdStrike), release binaries are cryptographically signed.
 
+> [!IMPORTANT]
+> **Key Management & Secrets Security:** All private keys, certificates, and passphrases used during the build and codesigning cycles are stored securely inside a corporate **1Password vault**. The release scripts retrieve these secrets dynamically at runtime via the 1Password CLI (`op`), ensuring no credentials or key files are hardcoded in the codebase or stored in plain text on build systems.
+
 ### macOS (Apple Developer ID)
 
 * **Publisher Common Name (CN):** `Developer ID Application: <Your Developer Name> (TEAMID)` *(Note: Admin should verify the exact CN generated during local build signing)*
@@ -116,6 +119,9 @@ To simplify EDR administration and avoid wide path exclusions, the project enfor
 > [!NOTE]
 > Standardizing client downloads on the gateway ensures that developers use these specific directories instead of homebrew/scoop paths, making a single wildcard rule sufficient.
 
+> [!NOTE]
+> **Why Local Native Execution is Preferred Over Docker:** While a Docker sandbox fallback is provided for environments with strict local execution policies, running the tunnel natively is the recommended default. Running via Docker introduces substantial containerization overhead (increased CPU/memory footprint on developer laptops) and operational complexity (requiring Docker Desktop, managing container network bindings to map local Tomcat ports, and volume mapping config directories).
+
 ---
 
 ## 4. Gateway Governance & Data Plane Risk Controls
@@ -159,4 +165,4 @@ To authorize the tool with minimal impact on local endpoint alerts, we recommend
 1. **Verify Binary Authenticity:** Verify the checksum and GitHub OIDC attestation for the downloaded executables using the `gh attestation verify` command.
 2. **Apply Code Signing Exceptions:** Add the Apple Team ID / Developer ID CN and Windows Certificate CN to your EDR's trusted publisher list.
 3. **Apply Wildcard Path Exclusions:** Add the standardized installation path exclusions (`/Users/*/bin/lfr-tunnel` or `C:\Users\*\bin\lfr-tunnel.exe`) to the EDR profile.
-4. **Configure Docker Sandbox Fallback:** For strict environments where local execution is banned, utilize the Docker wrapper script (`lfr-tunnel.sh` or `lfr-tunnel.ps1`) to run the tunnel client in an isolated container sandbox.
+4. **Configure Docker Sandbox Fallback:** For strict environments where local execution is banned, utilize the Docker wrapper script (`lfr-tunnel.sh` or `lfr-tunnel.ps1`) to run the tunnel client in an isolated container sandbox using the audited public image **`your-docker-hub-user/lfr-tunnel`** (or `peterjrichards/lfr-tunnel` as a template) hosted on Docker Hub.

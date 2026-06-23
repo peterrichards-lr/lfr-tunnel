@@ -1,6 +1,6 @@
 # Liferay SE Team — Quick-Start Guide
 
-This guide is for **Liferay Sales Engineering team members** connecting to the shared, Liferay-operated `lfr-tunnel` gateway. It covers registration, credential setup, and usage examples with the real team domains.
+This guide is for **Liferay Sales Engineering team members** connecting to the shared, Liferay-operated `lfr-tunnel` gateway. It covers installation, authentication, and usage examples with the real team domains.
 
 For general architecture, self-hosting instructions, and configuration reference, see the main [README](../README.md) and [Architecture Guide](architecture.md).
 
@@ -23,42 +23,38 @@ Your tunnel will be reachable at:
 
 ## Step 1: Install the Client
 
-### macOS — Homebrew (Recommended)
+> [!WARNING]
+> **EDR Whitelist Constraint (SentinelOne):** Do NOT install the client using package managers like Homebrew or Scoop. These managers install binaries outside of whitelisted execution paths (e.g. in `/opt/homebrew/bin` or custom scoop buckets), which will trigger local EDR alarms and kill your terminal. 
+> 
+> You must use either **Method A (Native Installer)** or **Method B (Docker Container)** to run the client safely.
 
-```bash
-brew tap peterrichards-lr/tap
-brew trust peterrichards-lr/tap
-brew install lfr-tunnel
-```
+### Method A: Native Installer Script (Recommended Native)
+This script downloads the officially signed client binary directly into the EDR-whitelisted canonical installation directory (`~/bin/lfr-tunnel` or `C:\Users\<username>\bin\lfr-tunnel.exe`):
 
-Homebrew independently verifies the SHA-256 checksum and removes the macOS quarantine flag automatically.
+* **macOS / Linux:**
+  ```bash
+  curl -sSfL https://tunnel.lfr-demo.se/install.sh | sh
+  ```
+* **Windows (PowerShell):**
+  ```powershell
+  iwr https://tunnel.lfr-demo.se/install.ps1 | iex
+  ```
 
-### Windows — Scoop (Recommended)
-
-```powershell
-scoop bucket add peterrichards-lr https://github.com/peterrichards-lr/scoop-bucket
-scoop install lfr-tunnel
-```
-
-### macOS / Linux — Direct Download (Fallback)
-
-Use this on Linux, or on macOS if Homebrew is not available:
-
-```bash
-curl -sSfL https://raw.githubusercontent.com/peterrichards-lr/lfr-tunnel/master/scripts/install.sh | sh
-```
-
-### Windows — Direct Download (Fallback)
-
-Use this if Scoop is not available:
-
-```powershell
-iwr https://raw.githubusercontent.com/peterrichards-lr/lfr-tunnel/master/scripts/install.ps1 | iex
-```
-
-Verify the installation:
+*To verify your installation, open a new terminal window and run:*
 ```bash
 lfr-tunnel -version
+```
+
+### Method B: Standalone Docker Container (EDR Immune)
+For environments where local native binary execution is completely restricted, run our pre-built, multi-architecture client container directly from Docker Hub. This requires **zero local installation, zero compilation, and is 100% immune to EDR host-level blocks**:
+
+```bash
+docker run -d --name lfr-tunnel \
+  -e LFT_CLIENT_TOKEN="YOUR_PERSONAL_ACCESS_TOKEN" \
+  peterjrichards/lfr-tunnel:latest \
+  -server https://tunnel.lfr-demo.se \
+  -subdomain your-name-se \
+  -ports 8080
 ```
 
 ---
@@ -91,7 +87,6 @@ Access to the shared gateway is controlled by a **Personal Access Token (PAT)**.
 Save your PAT securely so the client loads it automatically on every run without needing any `-token` flags. There are two ways to do this:
 
 ### Option A: Automatic Browser Login (Highly Recommended)
-
 The client includes an interactive **Magic Handoff** flow that automatically completes token generation and saves it to your configuration directory with zero manual copying:
 
 1. In your terminal, run the login command:
@@ -105,10 +100,7 @@ The client includes an interactive **Magic Handoff** flow that automatically com
    ✅ Successfully authenticated! Your token has been saved securely to ~/.lfr-tunnel/token
    ```
 
----
-
 ### Option B: Manual Clipboard Configuration
-
 If you prefer to save your claimed token manually:
 
 ```bash
@@ -124,46 +116,7 @@ The client will now authenticate with this token automatically.
 
 ---
 
-## Step 4: Run the Tunnel
-
-### LDM / Liferay Workspace (Zero-Config)
-
-Navigate to your Liferay Workspace root and run:
-```bash
-lfr-tunnel -subdomain alpha-se
-```
-
-The client automatically scans `client-extension.yaml` files, detects all ports, and prints your live URLs:
-```
-[Client] Registration successful! Your public tunnel URLs are:
-  https://alpha-se.lfr-demo.se      -> local port 8080
-  https://alpha-se.lfr-demo.online  -> local port 8080
-```
-
-### Standalone Tomcat Bundle
-
-```bash
-lfr-tunnel -subdomain dev-tomcat -ports 8080
-```
-
-Then configure Liferay Virtual Host:
-1. Log into `http://localhost:8080`
-2. **Control Panel → Instance Settings → Virtual Hosts**
-3. Set Virtual Host to: `dev-tomcat.lfr-demo.se`
-
-### Multi-Port (Portal + Client Extension)
-
-```bash
-lfr-tunnel -subdomain alpha-se -ports 8080,3001
-```
-
-This yields:
-- `https://alpha-se.lfr-demo.se` → port `8080` (Liferay Portal)
-- `https://alpha-se-3001.lfr-demo.se` → port `3001` (Client Extension assets)
-
----
-
-## Step 5: Check Available Subdomains
+## Step 4: Check Available Subdomains
 
 Before picking a subdomain, you can check availability:
 
@@ -176,51 +129,102 @@ If the subdomain is taken, the server will suggest alternatives.
 
 ---
 
-## Configuration File (Recommended)
+## Step 5: Advanced Usage & Integration Runtimes
 
-Create a `~/.lfr-tunnel/client-config.yaml` to avoid typing the server URL every time:
+Depending on how you run Liferay and client extensions locally, use the appropriate examples below for the **Native Client** or the **Docker Client**.
 
-```yaml
-server_url: "https://tunnel.lfr-demo.se"
-subdomain: "your-name-se"
-```
+### 1. LDM (Liferay Development Manager) & Workspace Client Extensions
+If you are developing Liferay Client Extensions (CX) in a Liferay Workspace, the tunnel automatically scans `client-extension.yaml` files, maps ports (e.g., `8080` for portal and `3001` for assets), and prints clickable public URLs.
 
-Then simply run:
-```bash
-lfr-tunnel
-```
+* **Using the Native Client:**
+  Navigate to your Liferay Workspace root and run:
+  ```bash
+  lfr-tunnel -subdomain your-name-se
+  ```
+* **Using the Docker Client:**
+  Configure LDM to invoke the Docker client container by setting the runtime variable:
+  ```bash
+  LDM_TUNNEL_RUNTIME=docker ldm tunnel -subdomain your-name-se
+  ```
+  *(Note: LDM coordinates the container bindings automatically, scanning your workspace files and mounting paths as needed).*
 
----
+### 2. Standalone Liferay Tomcat Bundle (Running on Host)
+Use these configurations to expose a standard Liferay bundle unzipped and running natively on your host machine (e.g. at `http://localhost:8080`).
 
-## Targeting Local Domain Names (LDM & Proxy virtual hosts)
+* **Using the Native Client:**
+  Directly target your Tomcat port:
+  ```bash
+  lfr-tunnel -subdomain dev-tomcat -ports 8080
+  ```
+  *Then, configure Liferay Virtual Host: Log in to `http://localhost:8080` → **Control Panel → Instance Settings → Virtual Hosts** and set Virtual Host to: `dev-tomcat.lfr-demo.se`.*
 
-If your local setup resolves virtual hosts (e.g. LDM's local Nginx proxy configured for `my-project.local`), you can route tunnel traffic directly through that proxy instead of Tomcat (`8080`).
+* **Using the Docker Client:**
+  To route traffic from the Docker container back out to the host loopback port `8080`, utilize **`host.docker.internal`**:
+  * **macOS / Windows:**
+    ```bash
+    docker run -d --name lfr-tunnel \
+      -e LFT_CLIENT_TOKEN="lfr_pat_your-token" \
+      -e LFT_TARGET_HOST="host.docker.internal" \
+      peterjrichards/lfr-tunnel:latest \
+      -server https://tunnel.lfr-demo.se \
+      -subdomain dev-tomcat \
+      -ports 8080
+    ```
+  * **Linux:**
+    ```bash
+    docker run -d --name lfr-tunnel \
+      --add-host=host.docker.internal:host-gateway \
+      -e LFT_CLIENT_TOKEN="lfr_pat_your-token" \
+      -e LFT_TARGET_HOST="host.docker.internal" \
+      peterjrichards/lfr-tunnel:latest \
+      -server https://tunnel.lfr-demo.se \
+      -subdomain dev-tomcat \
+      -ports 8080
+    ```
 
-By setting a target host, `lfr-tunnel` automatically routes traffic to it and rewrites the incoming HTTP `Host` header to match:
+### 3. Exposing a Liferay Docker Container or Custom Image
+Use these configurations if Liferay itself is running as a Docker container.
 
-* **CLI flag**:
+* **Using the Native Client:**
+  If your Liferay container has port `8080` published on the host (`-p 8080:8080`), you can target it natively:
+  ```bash
+  lfr-tunnel -subdomain dev-docker -ports 8080
+  ```
+  If it runs behind a local domain name or Nginx reverse proxy (e.g., `my-project.local` on port `80`), specify the target host:
   ```bash
   lfr-tunnel -ports 80 -target-host my-project.local
   ```
-* **Configuration File (`~/.lfr-tunnel/client-config.yaml`)**:
+
+* **Using the Docker Client (Docker Compose Integration):**
+  Integrate the tunnel container directly into your Liferay `docker-compose.yml` to route traffic over the internal Docker network using container service names (no host ports need to be published):
   ```yaml
-  server_url: "https://tunnel.lfr-demo.se"
-  subdomain: "your-name-se"
-  target_host: "my-project.local"
-  ports:
-    - 80
+  version: "3.8"
+  services:
+    # Your Liferay service container
+    liferay:
+      image: liferay/portal:7.4.3.112-ga112
+      # Ports do not need to be published on the host!
+
+    # Tunnel client service container
+    tunnel:
+      image: peterjrichards/lfr-tunnel:latest
+      environment:
+        - LFT_CLIENT_SERVER=https://tunnel.lfr-demo.se
+        - LFT_CLIENT_TOKEN=lfr_pat_your-token
+        - LFT_CLIENT_SUBDOMAIN=my-liferay-demo
+        - LFT_TARGET_HOST=liferay  # Resolves to the liferay service container
+        - LFT_CLIENT_PORTS=8080
   ```
-* **Environment Variable**: Set `LFT_TARGET_HOST=my-project.local` before execution.
 
 ---
 
-## Running in the Background
+## Running in the Background (Native Client Only)
 
 ```bash
-# Start in background
-lfr-tunnel -background
+# Start in the background
+lfr-tunnel -background -subdomain your-name-se
 
-# Check status
+# Check connection status
 lfr-tunnel -status
 
 # Stop cleanly
@@ -229,69 +233,11 @@ lfr-tunnel -stop
 
 ---
 
-## Using the Docker Wrapper (EDR Bypass)
-
-If your machine is protected by security agents (SentinelOne, CrowdStrike, etc.) that flag Go binaries:
-
-### Option A: Direct Docker Hub Command (Zero-Install / Zero-Build Method)
-
-You can run our official pre-built, multi-architecture client container directly from Docker Hub! This requires absolutely **no local repository cloning, zero building, and is 100% immune to SentinelOne/EDR host-level alerts**:
-
-```bash
-docker run -d --name lfr-tunnel \
-  -e LFT_CLIENT_TOKEN="YOUR_PERSONAL_ACCESS_TOKEN" \
-  -p 8080:8080 \
-  peterrichards/lfr-tunnel:latest \
-  -server https://tunnel.lfr-demo.se \
-  -subdomain peter-dev \
-  -ports 8080
-```
-
-*   **`-d`**: Runs the tunnel in the background as an isolated daemon.
-*   **`-e LFT_CLIENT_TOKEN`**: Passes your secure developer PAT.
-*   **`-p 8080:8080`**: Exposes the port.
-*   **`peterrichards/lfr-tunnel:latest`**: Pulls the official, pre-scanned, and optimized image dynamically from Docker Hub (supporting both Apple Silicon M1/M2/M3 and Intel natively!).
-*   **`-server`**: Points to your production server gateway.
-*   **`-ports 8080`**: Explicitly routes the incoming wildcard traffic from the gateway back out of the tunnel container to your host Liferay port `8080`.
-
-### Option B: Local Repository Scripts (Clone & Build)
-
-1. Copy `.env.example` to `.env` and add your token:
-   ```
-   LFT_CLIENT_TOKEN=lfr_pat_your-token-here
-   LFT_SUBDOMAIN=your-name-se
-   ```
-
-2. Run the wrapper for your OS:
-   - **macOS/Linux**: `./lfr-tunnel.sh`
-   - **Windows CMD**: `lfr-tunnel.bat`
-   - **Windows PowerShell**: `.\lfr-tunnel.ps1`
-
-### Docker Container Environment Variable Contract
-When running `lfr-tunnel` directly as a Docker container (e.g. orchestrated by LDM or in a custom docker-compose file), the following environment variable contract is supported:
-
-| Environment Variable | Canonical | Fallbacks | Description | Example |
-| :--- | :--- | :--- | :--- | :--- |
-| **Server URL** | `LFT_CLIENT_SERVER` | `LFT_SERVER_URL`, `LFT_SERVER` | Gateway server endpoint | `https://tunnel.lfr-demo.se` |
-| **Auth Token** | `LFT_CLIENT_TOKEN` | `LFT_TOKEN` | Gateway developer PAT | `lfr_pat_...` |
-| **Subdomain** | `LFT_CLIENT_SUBDOMAIN` | `LFT_SUBDOMAIN` | Custom subdomain prefix | `pjrtest` |
-| **Target Host** | `LFT_TARGET_HOST` | — | Backend hostname or IP to route to | `liferay` (or `http://liferay:8080`) |
-| **Ports** | `LFT_CLIENT_PORTS` | — | Comma-separated list of ports | `8080,3000` |
-| **Inspector Bind** | `LFT_INSPECTOR_BIND` | — | Binding address for local inspector dashboard | `0.0.0.0` or `127.0.0.1` |
-
-> [!NOTE]
-> The target host parser is URL-aware: if a full URL with scheme/port (e.g. `http://liferay:8080`) is passed into `LFT_TARGET_HOST`, the client automatically cleans it to the raw hostname (`liferay`) to ensure correct routing.
->
-> Inside container/Docker environments, the inspector automatically binds to `0.0.0.0` instead of `127.0.0.1` by default to ensure port-forwarded traffic from the host machine is able to access the dashboard.
-
----
-
 ## Keeping the Client Up to Date
 
 ```bash
 lfr-tunnel -upgrade
 ```
-
 This fetches the latest release from GitHub, verifies the SHA256 checksum, and replaces the binary in place.
 
 ---

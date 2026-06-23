@@ -237,6 +237,86 @@ This fetches the latest release from GitHub, verifies the SHA256 checksum, and r
 
 ---
 
+## Alternative Sharing Providers (ngrok, cloudflared)
+
+If you need to share your local environment using an alternative provider, Liferay SEs have a choice of using **ngrok** or **Cloudflare Tunnels (cloudflared)** alongside `lfr-tunnel`.
+
+Below are usage examples for both options:
+
+### 1. Using Cloudflare Tunnels (cloudflared)
+Cloudflare Tunnels are free, highly reliable, and generally EDR-compliant since the `cloudflared` binaries are officially signed by Cloudflare.
+
+* **Using the Native Client:**
+  1. Install `cloudflared` on your system.
+  2. Start a tunnel pointing directly to Liferay (port 8080):
+     ```bash
+     cloudflared tunnel --url http://localhost:8080
+     ```
+  3. Copy the random public `.trycloudflare.com` URL generated in your terminal to share your demo.
+
+* **Using the Docker Client:**
+  Run the official Cloudflare tunnel container mapping to your host's Liferay:
+  * **macOS / Windows:**
+    ```bash
+    docker run -it --name cloudflare-tunnel \
+      cloudflare/cloudflared:latest tunnel --url http://host.docker.internal:8080
+    ```
+  * **Linux:**
+    ```bash
+    docker run -it --name cloudflare-tunnel \
+      --add-host=host.docker.internal:host-gateway \
+      cloudflare/cloudflared:latest tunnel --url http://host.docker.internal:8080
+    ```
+  * **Docker Compose Network Integration:**
+    Add it directly to your Liferay `docker-compose.yml` to route over the internal network using service names:
+    ```yaml
+    services:
+      liferay:
+        image: liferay/portal:7.4.3.112-ga112
+      tunnel:
+        image: cloudflare/cloudflared:latest
+        command: tunnel --url http://liferay:8080
+    ```
+
+---
+
+### 2. Using Ngrok
+Ngrok is a popular commercial tunnel provider. Note that running raw unsigned ngrok binaries may occasionally trigger local EDR warnings depending on your machine's configuration.
+
+* **Using the Native Client:**
+  1. Install `ngrok` and authenticate with your personal authtoken (`ngrok config add-authtoken <token>`).
+  2. Expose your Liferay instance:
+     ```bash
+     ngrok http 8080
+     ```
+* **Using the Docker Client:**
+  Expose your host's Liferay using the official ngrok container:
+  * **macOS / Windows:**
+    ```bash
+    docker run -it -e NGROK_AUTHTOKEN="YOUR_NGROK_TOKEN" \
+      ngrok/ngrok:latest http host.docker.internal:8080
+    ```
+  * **Linux:**
+    ```bash
+    docker run -it --add-host=host.docker.internal:host-gateway \
+      -e NGROK_AUTHTOKEN="YOUR_NGROK_TOKEN" \
+      ngrok/ngrok:latest http host.docker.internal:8080
+    ```
+  * **Docker Compose Network Integration:**
+    Add it directly to your Liferay `docker-compose.yml`:
+    ```yaml
+    services:
+      liferay:
+        image: liferay/portal:7.4.3.112-ga112
+      tunnel:
+        image: ngrok/ngrok:latest
+        environment:
+          - NGROK_AUTHTOKEN=YOUR_NGROK_TOKEN
+        command: http liferay:8080
+    ```
+
+---
+
 ## Getting Help
 
 - **Architecture & self-hosting**: [Architecture Guide](architecture.md)

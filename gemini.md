@@ -400,6 +400,11 @@ The solution will consist of:
 
 ## Documentation Refinements
 - [x] Temporarily strikeout Method A in liferay-se-guide.md and add security team note.
+- [x] Add comparison and usage examples for alternative providers (ngrok, cloudflared) in docs/liferay-se-guide.md.
+
+## Development Process Improvements
+- [x] Configure git union merge driver for gemini.md in .gitattributes to avoid PR merge conflicts.
+
 
 
 

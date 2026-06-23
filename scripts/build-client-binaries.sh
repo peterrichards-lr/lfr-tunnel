@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 set -e
 
-VERSION=$(git describe --tags --abbrev=0 --dirty 2>/dev/null || git describe --always --dirty 2>/dev/null || echo "dev")
+VERSION="${VERSION:-$(git describe --tags --abbrev=0 --dirty 2>/dev/null || git describe --always --dirty 2>/dev/null || echo "dev")}"
 
 # Linux
 GOOS=linux GOARCH=amd64 go build -ldflags="-s -w -X lfr-tunnel/pkg/config.Version=$VERSION" -trimpath -o dist/lfr-tunnel-linux-amd64 ./cmd/lfr-tunnel

@@ -1031,8 +1031,14 @@ func (db *DB) GetGlobalAnalytics(days int) (*GlobalAnalytics, error) {
 	daily := make([]DailyBandwidth, 0)
 	for rows.Next() {
 		var dbw DailyBandwidth
-		if err := rows.Scan(&dbw.Date, &dbw.BytesIn, &dbw.BytesOut); err != nil {
+		var dateNull sql.NullString
+		if err := rows.Scan(&dateNull, &dbw.BytesIn, &dbw.BytesOut); err != nil {
 			return nil, err
+		}
+		if dateNull.Valid {
+			dbw.Date = dateNull.String
+		} else {
+			dbw.Date = "Unknown"
 		}
 		daily = append(daily, dbw)
 	}
@@ -1055,8 +1061,14 @@ func (db *DB) GetGlobalAnalytics(days int) (*GlobalAnalytics, error) {
 	top := make([]UserBandwidth, 0)
 	for topRows.Next() {
 		var ub UserBandwidth
-		if err := topRows.Scan(&ub.Email, &ub.BytesIn, &ub.BytesOut); err != nil {
+		var emailNull sql.NullString
+		if err := topRows.Scan(&emailNull, &ub.BytesIn, &ub.BytesOut); err != nil {
 			return nil, err
+		}
+		if emailNull.Valid {
+			ub.Email = emailNull.String
+		} else {
+			ub.Email = "Unknown"
 		}
 		top = append(top, ub)
 	}
@@ -1084,8 +1096,14 @@ func (db *DB) GetUserAnalytics(userID string, days int) (*UserAnalytics, error) 
 	daily := make([]DailyBandwidth, 0)
 	for rows.Next() {
 		var dbw DailyBandwidth
-		if err := rows.Scan(&dbw.Date, &dbw.BytesIn, &dbw.BytesOut); err != nil {
+		var dateNull sql.NullString
+		if err := rows.Scan(&dateNull, &dbw.BytesIn, &dbw.BytesOut); err != nil {
 			return nil, err
+		}
+		if dateNull.Valid {
+			dbw.Date = dateNull.String
+		} else {
+			dbw.Date = "Unknown"
 		}
 		daily = append(daily, dbw)
 	}

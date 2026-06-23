@@ -972,6 +972,87 @@
         </div>
     </div>
 
+    <!-- INSTALLER GUIDE MODAL -->
+    <div id="installer-guide-modal" class="modal-overlay" style="display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.6); align-items: center; justify-content: center; z-index: 1000;">
+        <div class="glass" style="max-width: 650px; width: 100%; padding: 32px; border-radius: 16px; border: 1px solid var(--border); text-align: left; overflow: hidden; display: flex; flex-direction: column; max-height: 90vh;">
+            <h3 style="margin-bottom: 16px; font-size: 20px; display: flex; align-items: center; gap: 8px;">💻 Client Installation Guide</h3>
+            
+            <div style="font-size: 0.9rem; color: var(--text-muted); margin-bottom: 20px;">
+                Choose your Operating System below to see the recommended command-line installation or direct downloads.
+            </div>
+
+            <!-- Tab Headers -->
+            <div style="display: flex; border-bottom: 1px solid var(--border); margin-bottom: 20px; gap: 16px;">
+                <button id="tab-btn-macos" class="tab-btn active" style="background: none; border: none; color: var(--text); padding: 8px 16px; cursor: pointer; border-bottom: 2px solid var(--primary); font-weight: 500;" onclick="switchInstallerTab('macos')">macOS</button>
+                <button id="tab-btn-windows" class="tab-btn" style="background: none; border: none; color: var(--text-muted); padding: 8px 16px; cursor: pointer; border-bottom: 2px solid transparent; font-weight: 500;" onclick="switchInstallerTab('windows')">Windows</button>
+                <button id="tab-btn-linux" class="tab-btn" style="background: none; border: none; color: var(--text-muted); padding: 8px 16px; cursor: pointer; border-bottom: 2px solid transparent; font-weight: 500;" onclick="switchInstallerTab('linux')">Linux</button>
+            </div>
+
+            <!-- Tab Contents -->
+            <div style="flex-grow: 1; overflow-y: auto; padding-right: 4px; margin-bottom: 24px;">
+                <!-- macOS -->
+                <div id="tab-content-macos" class="tab-content">
+                    <h4 style="font-size: 14px; margin-bottom: 8px;">🚀 Apple Silicon (M1/M2/M3) & Intel Macs</h4>
+                    <div style="font-size: 0.8rem; font-weight: bold; margin-top: 10px; color: var(--text);">Recommended via Homebrew:</div>
+                    <div style="margin-top: 4px; margin-bottom: 12px; position: relative; background: #0d1117; color: #e6edf3; border-radius: 6px; border: 1px solid rgba(255,255,255,0.1); padding: 10px 40px 10px 12px; font-family: monospace; font-size: 0.8rem;">
+                        <span id="guide-cmd-macos">brew tap peterrichards-lr/tap && brew install lfr-tunnel</span>
+                        <button onclick="navigator.clipboard.writeText(document.getElementById('guide-cmd-macos').innerText); this.innerHTML='✓'; setTimeout(() => this.innerHTML='📋', 2000);" style="position: absolute; top: 6px; right: 6px; background: transparent; border: 1px solid rgba(255,255,255,0.2); color: #8b949e; border-radius: 4px; width: 22px; height: 22px; cursor: pointer;">📋</button>
+                    </div>
+
+                    <div style="font-size: 0.8rem; font-weight: bold; margin-top: 10px; color: var(--text-muted);">Direct Installation Script (Alternative):</div>
+                    <div style="margin-top: 4px; margin-bottom: 12px; position: relative; background: #0d1117; color: #e6edf3; border-radius: 6px; border: 1px solid rgba(255,255,255,0.1); padding: 10px 40px 10px 12px; font-family: monospace; font-size: 0.8rem;">
+                        <span id="guide-script-macos">curl -fsSL https://tunnel.lfr-demo.se/install | sh</span>
+                        <button onclick="navigator.clipboard.writeText(document.getElementById('guide-script-macos').innerText); this.innerHTML='✓'; setTimeout(() => this.innerHTML='📋', 2000);" style="position: absolute; top: 6px; right: 6px; background: transparent; border: 1px solid rgba(255,255,255,0.2); color: #8b949e; border-radius: 4px; width: 22px; height: 22px; cursor: pointer;">📋</button>
+                    </div>
+                    
+                    <div id="guide-dl-macos" style="margin-top: 16px; display: flex; gap: 12px;">
+                        <a href="/static/downloads/lfr-tunnel-darwin-arm64" class="btn btn-outline" style="font-size: 12px; padding: 6px 12px; width: auto; margin: 0;">Download arm64 (M1/M2/M3)</a>
+                        <a href="/static/downloads/lfr-tunnel-darwin-amd64" class="btn btn-outline" style="font-size: 12px; padding: 6px 12px; width: auto; margin: 0;">Download amd64 (Intel)</a>
+                    </div>
+                </div>
+
+                <!-- Windows -->
+                <div id="tab-content-windows" class="tab-content" style="display: none;">
+                    <h4 style="font-size: 14px; margin-bottom: 8px;">🚀 Windows 10 / 11 (64-bit)</h4>
+                    <div style="font-size: 0.8rem; font-weight: bold; margin-top: 10px; color: var(--text);">Recommended via Scoop:</div>
+                    <div style="margin-top: 4px; margin-bottom: 12px; position: relative; background: #0d1117; color: #e6edf3; border-radius: 6px; border: 1px solid rgba(255,255,255,0.1); padding: 10px 40px 10px 12px; font-family: monospace; font-size: 0.8rem;">
+                        <span id="guide-cmd-windows">scoop bucket add peterrichards-lr https://github.com/peterrichards-lr/scoop-bucket && scoop install lfr-tunnel</span>
+                        <button onclick="navigator.clipboard.writeText(document.getElementById('guide-cmd-windows').innerText); this.innerHTML='✓'; setTimeout(() => this.innerHTML='📋', 2000);" style="position: absolute; top: 6px; right: 6px; background: transparent; border: 1px solid rgba(255,255,255,0.2); color: #8b949e; border-radius: 4px; width: 22px; height: 22px; cursor: pointer;">📋</button>
+                    </div>
+
+                    <div style="font-size: 0.8rem; font-weight: bold; margin-top: 10px; color: var(--text-muted);">Direct Installation (PowerShell Script):</div>
+                    <div style="margin-top: 4px; margin-bottom: 12px; position: relative; background: #0d1117; color: #e6edf3; border-radius: 6px; border: 1px solid rgba(255,255,255,0.1); padding: 10px 40px 10px 12px; font-family: monospace; font-size: 0.8rem;">
+                        <span id="guide-script-windows">irm https://tunnel.lfr-demo.se/install.ps1 | iex</span>
+                        <button onclick="navigator.clipboard.writeText(document.getElementById('guide-script-windows').innerText); this.innerHTML='✓'; setTimeout(() => this.innerHTML='📋', 2000);" style="position: absolute; top: 6px; right: 6px; background: transparent; border: 1px solid rgba(255,255,255,0.2); color: #8b949e; border-radius: 4px; width: 22px; height: 22px; cursor: pointer;">📋</button>
+                    </div>
+
+                    <div id="guide-dl-windows" style="margin-top: 16px;">
+                        <a href="/static/downloads/lfr-tunnel-windows-amd64.exe" class="btn btn-outline" style="font-size: 12px; padding: 6px 12px; width: auto; margin: 0;">Download Windows Binary (.exe)</a>
+                    </div>
+                </div>
+
+                <!-- Linux -->
+                <div id="tab-content-linux" class="tab-content" style="display: none;">
+                    <h4 style="font-size: 14px; margin-bottom: 8px;">🚀 Linux (amd64 / arm64)</h4>
+                    <div style="font-size: 0.8rem; font-weight: bold; margin-top: 10px; color: var(--text);">Direct Installation Command:</div>
+                    <div style="margin-top: 4px; margin-bottom: 12px; position: relative; background: #0d1117; color: #e6edf3; border-radius: 6px; border: 1px solid rgba(255,255,255,0.1); padding: 10px 40px 10px 12px; font-family: monospace; font-size: 0.8rem;">
+                        <span id="guide-cmd-linux">curl -fsSL https://tunnel.lfr-demo.se/install | sh</span>
+                        <button onclick="navigator.clipboard.writeText(document.getElementById('guide-cmd-linux').innerText); this.innerHTML='✓'; setTimeout(() => this.innerHTML='📋', 2000);" style="position: absolute; top: 6px; right: 6px; background: transparent; border: 1px solid rgba(255,255,255,0.2); color: #8b949e; border-radius: 4px; width: 22px; height: 22px; cursor: pointer;">📋</button>
+                    </div>
+
+                    <div id="guide-dl-linux" style="margin-top: 16px; display: flex; gap: 12px;">
+                        <a href="/static/downloads/lfr-tunnel-linux-amd64" class="btn btn-outline" style="font-size: 12px; padding: 6px 12px; width: auto; margin: 0;">Download Linux amd64</a>
+                        <a href="/static/downloads/lfr-tunnel-linux-arm64" class="btn btn-outline" style="font-size: 12px; padding: 6px 12px; width: auto; margin: 0;">Download Linux arm64</a>
+                    </div>
+                </div>
+            </div>
+
+            <div style="display: flex; justify-content: flex-end;">
+                <button class="btn btn-primary" style="width: auto; margin: 0; padding: 8px 24px;" onclick="closeInstallerGuideModal()">Close</button>
+            </div>
+        </div>
+    </div>
+
     <div id="toast-container"></div>
     <script src="static/dashboard.js"></script>
 </body>

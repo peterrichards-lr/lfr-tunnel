@@ -855,6 +855,9 @@ func TestServer_UnsubscribeAndMaintenance(t *testing.T) {
 	if verResp["docker_image"] != "peterrichardslr/lfr-tunnel" {
 		t.Errorf("expected docker_image to be 'peterrichardslr/lfr-tunnel', got %q", verResp["docker_image"])
 	}
+	if verResp["disable_client_downloads"] != false {
+		t.Errorf("expected disable_client_downloads to be false, got %v", verResp["disable_client_downloads"])
+	}
 }
 
 func TestServer_GDPRDeleteAndAnonymization(t *testing.T) {

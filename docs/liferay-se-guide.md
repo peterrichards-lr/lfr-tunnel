@@ -284,6 +284,57 @@ When running `lfr-tunnel` directly as a Docker container (e.g. orchestrated by L
 >
 > Inside container/Docker environments, the inspector automatically binds to `0.0.0.0` instead of `127.0.0.1` by default to ensure port-forwarded traffic from the host machine is able to access the dashboard.
 
+### Advanced Target Routing (Docker Containers & Native Bundles)
+
+Depending on your local development setup, you can configure the tunnel to route to different environments:
+
+#### 1. Routing to a Liferay Docker Container (Compose Integration)
+If your Liferay instance runs inside Docker, you can run the tunnel client in the same Docker network. Setting `LFT_TARGET_HOST` to the Liferay container's service name routes traffic directly over the internal Docker bridge network without exposing host ports:
+
+```yaml
+version: "3.8"
+services:
+  liferay:
+    image: liferay/portal:7.4.3.112-ga112
+    # No ports mapping required if you only route through the tunnel!
+
+  tunnel:
+    image: peterjrichards/lfr-tunnel:latest
+    environment:
+      - LFT_CLIENT_SERVER=https://tunnel.lfr-demo.se
+      - LFT_CLIENT_TOKEN=lfr_pat_your-token
+      - LFT_CLIENT_SUBDOMAIN=my-liferay-demo
+      - LFT_TARGET_HOST=liferay
+      - LFT_CLIENT_PORTS=8080
+```
+
+#### 2. Routing to a Local Tomcat Bundle (Host Machine)
+If you run a native Tomcat bundle directly on your macOS or Windows host machine, the tunnel container can access your host's loopback interface (`localhost`) using **`host.docker.internal`**:
+
+* **macOS / Windows (Docker Desktop):**
+  ```bash
+  docker run -d --name lfr-tunnel \
+    -e LFT_CLIENT_TOKEN="lfr_pat_your-token" \
+    -e LFT_TARGET_HOST="host.docker.internal" \
+    peterjrichards/lfr-tunnel:latest \
+    -server https://tunnel.lfr-demo.se \
+    -subdomain my-local-bundle \
+    -ports 8080
+  ```
+
+* **Linux:**
+  Include the `--add-host` flag to resolve the host loopback gate:
+  ```bash
+  docker run -d --name lfr-tunnel \
+    --add-host=host.docker.internal:host-gateway \
+    -e LFT_CLIENT_TOKEN="lfr_pat_your-token" \
+    -e LFT_TARGET_HOST="host.docker.internal" \
+    peterjrichards/lfr-tunnel:latest \
+    -server https://tunnel.lfr-demo.se \
+    -subdomain my-local-bundle \
+    -ports 8080
+  ```
+
 ---
 
 ## Keeping the Client Up to Date

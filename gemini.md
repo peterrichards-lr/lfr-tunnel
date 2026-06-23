@@ -394,6 +394,9 @@ The solution will consist of:
 - [x] Make docs/infosec.md generic by removing specific developer names, VPS locations, and domain names.
 - [x] Add 1Password and Docker complexity generic explanations to workspace docs/infosec.md.
 
+## Documentation Refinements
+- [x] Document advanced target routing (Docker containers and native bundles) with code examples in docs/liferay-se-guide.md.
+
 
 
 

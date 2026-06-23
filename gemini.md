@@ -13,6 +13,8 @@ Build an open-source, MIT-licensed tunneling solution tailored for Liferay's Sal
   - Instruct the user to run secure decryption or configuration commands locally on their system rather than sharing passwords in the chat.
   - Ensure all temporary certificate and private key files are completely deleted before making any git commits to prevent accidental exposure in the repository history.
 - **Local Binary Execution Constraints**: The local system EDR blocks unsigned `lfr-tunnel`/`lfr-tunneld` binaries and Go test run executables (`*.test`). However, execution is permitted within the `/private/tmp` directory. To run Go tests safely, set `TMPDIR=/private/tmp` so that the Go test binaries are built and executed inside the whitelisted `/private/tmp` path.
+- **Git Conflict Prevention & PR Management**: Because remote GitHub cannot evaluate custom merge drivers defined in `.gitattributes`, the AI assistant must always run `git fetch origin` followed by `git merge origin/master` locally to resolve any potential `gemini.md` conflict before pushing commits or creating/updating a PR.
+
 
 
 

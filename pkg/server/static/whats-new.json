@@ -1,12 +1,9 @@
 {
-  "version": "v1.13.1",
+  "version": "v1.14.0",
   "release_date": "2026-06-23",
   "features": [
-    "Add SSO-only login lockdown capability (disable_email_login configuration flag) to restrict client registration and portal logins exclusively to OIDC/SSO.",
-    "Exclude pkg/server unit tests from local execution to avoid local macOS EDR blocking and terminal termination.",
-    "Introduce the comprehensive, generic InfoSec & EDR briefing document (docs/infosec.md) detailing client-side security architecture, trust verification, path exclusions, and gateway risk controls.",
-    "Add local-only loopback broadcast endpoint (/api/local/broadcast) to trigger dashboard/TUI alerts before maintenance.",
-    "Enhance scripts/deploy.sh with warning flags (-w <seconds>) and countdown timer sequence to warn users prior to gateway upgrades."
+    "Implement Gateway-First dynamic self-upgrade mechanism (lfr-tunnel -upgrade) which queries the gateway's /api/version endpoint directly to bypass GitHub API rate limits.",
+    "Support dynamic package manager instructions (Homebrew, Scoop, Custom Install Script) returned from the gateway instead of attempting in-place binary swaps."
   ]
 }
 

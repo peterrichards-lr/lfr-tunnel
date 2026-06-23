@@ -68,13 +68,6 @@ func main() {
 		return
 	}
 
-	if *upgradeFlag {
-		if err := client.SelfUpgrade(config.Version); err != nil {
-			log.Fatalf("[Error] Upgrade failed: %v", err)
-		}
-		return
-	}
-
 	// 1. Load config from file and environment variables
 	cfg, err := config.LoadClientConfig(*configPath)
 	if err != nil {
@@ -102,6 +95,13 @@ func main() {
 	}
 	if *preserveHost {
 		_ = os.Setenv("LFT_PRESERVE_HOST", "true")
+	}
+
+	if *upgradeFlag {
+		if err := client.SelfUpgrade(config.Version, cfg.ServerURL); err != nil {
+			log.Fatalf("[Error] Upgrade failed: %v", err)
+		}
+		return
 	}
 
 	// Determine if subdomain flag was explicitly passed

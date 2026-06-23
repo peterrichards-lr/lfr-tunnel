@@ -135,7 +135,7 @@ func TestSelfUpgrade(t *testing.T) {
 	targetExecPath = fakeExecPath
 	defer func() { targetExecPath = "" }()
 
-	err = SelfUpgrade("v1.0.2")
+	err = SelfUpgrade("v1.0.2", "")
 	if err != nil {
 		t.Fatalf("SelfUpgrade failed: %v", err)
 	}
@@ -222,7 +222,7 @@ func TestSelfUpgrade_ChecksumMismatch(t *testing.T) {
 	targetExecPath = fakeExecPath
 	defer func() { targetExecPath = "" }()
 
-	err = SelfUpgrade("v1.0.2")
+	err = SelfUpgrade("v1.0.2", "")
 	if err == nil {
 		t.Fatal("expected SelfUpgrade to fail due to checksum mismatch, but it succeeded")
 	}
@@ -264,5 +264,125 @@ func TestCompareVersions(t *testing.T) {
 		if got != tt.want {
 			t.Errorf("CompareVersions(%q, %q) = %d; want %d", tt.v1, tt.v2, got, tt.want)
 		}
+	}
+}
+
+func TestSelfUpgrade_GatewayFirst(t *testing.T) {
+	tmpDir, err := os.MkdirTemp("", "lfr-tunnel-test-*")
+	if err != nil {
+		t.Fatalf("failed to create temp dir: %v", err)
+	}
+	defer os.RemoveAll(tmpDir) //nolint:errcheck
+
+	execFilename := "lfr-tunnel-fake"
+	if runtime.GOOS == "windows" {
+		execFilename += ".exe"
+	}
+	fakeExecPath := filepath.Join(tmpDir, execFilename)
+
+	if err := os.WriteFile(fakeExecPath, []byte("fake-binary-old-content"), 0755); err != nil {
+		t.Fatalf("failed to write fake binary: %v", err)
+	}
+
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path == "/api/version" {
+			w.Header().Set("Content-Type", "application/json")
+			osKey := runtime.GOOS
+			if osKey == "darwin" {
+				osKey = "macos"
+			}
+			platformKey := fmt.Sprintf("%s_%s", osKey, runtime.GOARCH)
+
+			resp := ServerVersionInfo{
+				LatestVersion: "v1.0.3",
+				MinVersion:    "v1.0.0",
+				ClientPlatforms: map[string]ServerPlatformInfo{
+					platformKey: {
+						URL:         "/static/downloads/lfr-tunnel-fake",
+						BinaryName:  "lfr-tunnel-fake",
+						Recommended: "url",
+					},
+				},
+			}
+			_ = json.NewEncoder(w).Encode(resp)
+			return
+		}
+
+		if r.URL.Path == "/static/downloads/checksums.txt" {
+			w.WriteHeader(http.StatusOK)
+			h := sha256.Sum256([]byte("fake-binary-new-content"))
+			hexHash := hex.EncodeToString(h[:])
+			_, _ = fmt.Fprintf(w, "%s  lfr-tunnel-fake\n", hexHash)
+			return
+		}
+
+		if r.URL.Path == "/static/downloads/lfr-tunnel-fake" {
+			w.WriteHeader(http.StatusOK)
+			_, _ = w.Write([]byte("fake-binary-new-content"))
+			return
+		}
+
+		w.WriteHeader(http.StatusNotFound)
+	}))
+	defer srv.Close()
+
+	targetExecPath = fakeExecPath
+	defer func() { targetExecPath = "" }()
+
+	err = SelfUpgrade("v1.0.2", srv.URL)
+	if err != nil {
+		t.Fatalf("SelfUpgrade with gateway URL failed: %v", err)
+	}
+
+	newContent, err := os.ReadFile(fakeExecPath)
+	if err != nil {
+		t.Fatalf("failed to read fake binary after upgrade: %v", err)
+	}
+
+	if string(newContent) != "fake-binary-new-content" {
+		t.Errorf("expected new content 'fake-binary-new-content', got %s", string(newContent))
+	}
+}
+
+func TestSelfUpgrade_GatewayRecommendation(t *testing.T) {
+	tests := []struct {
+		rec         string
+		cmdVal      string
+		expectedMsg string
+	}{
+		{"brew", "", "Recommended upgrade method is via Homebrew"},
+		{"scoop", "", "Recommended upgrade method is via Scoop"},
+		{"cmd", "curl -sSfL custom | sh", "Recommended upgrade method is running the installation command"},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.rec, func(t *testing.T) {
+			srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				w.Header().Set("Content-Type", "application/json")
+				osKey := runtime.GOOS
+				if osKey == "darwin" {
+					osKey = "macos"
+				}
+				platformKey := fmt.Sprintf("%s_%s", osKey, runtime.GOARCH)
+
+				resp := ServerVersionInfo{
+					LatestVersion: "v1.0.3",
+					MinVersion:    "v1.0.0",
+					ClientPlatforms: map[string]ServerPlatformInfo{
+						platformKey: {
+							Recommended: tt.rec,
+							Cmd:         tt.cmdVal,
+						},
+					},
+				}
+				_ = json.NewEncoder(w).Encode(resp)
+			}))
+			defer srv.Close()
+
+			err := SelfUpgrade("v1.0.2", srv.URL)
+			if err != nil {
+				t.Fatalf("unexpected error for recommendation test: %v", err)
+			}
+		})
 	}
 }

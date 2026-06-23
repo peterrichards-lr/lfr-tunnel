@@ -284,7 +284,23 @@ func main() {
 	}
 	regResp, err := client.RegisterTunnel(cfg.ServerURL, cfg.AuthToken, sub, portMappings, cfg.RateLimit, cfg.BasicAuth, engine.AddedHeaders, clientOS)
 	if err != nil {
-		log.Fatalf("[Error] Failed to register: %v\n", err)
+		errStr := err.Error()
+		isGatewayIssue := false
+		if strings.Contains(errStr, "registration request failed") ||
+			strings.Contains(errStr, "gateway error (5") ||
+			strings.Contains(errStr, "gateway returned status 5") {
+			isGatewayIssue = true
+		}
+
+		if isGatewayIssue {
+			log.Printf("[Error] Failed to register: %v\n", err)
+			log.Println("[Client] Gateway appears to be offline or undergoing maintenance.")
+			log.Println("[Client] Check the service status page for active outages:")
+			log.Println("         👉 https://status.lfr-demo.se (Cmd/Ctrl+Click to open)")
+			os.Exit(1)
+		} else {
+			log.Fatalf("[Error] Failed to register: %v\n", err)
+		}
 	}
 
 	if regResp.Warning != "" {

@@ -441,3 +441,15 @@ The solution will consist of:
 - [x] Write unit tests to cover both gateway-based and GitHub-fallback upgrade paths.
 
 
+## Gateway Diagnostics & Troubleshooting
+- [x] Create scripts/diagnose-gateway.sh script for gateway diagnostics.
+- [x] Integrate VM6 Networks provider status check into scripts/diagnose-gateway.sh.
+- [x] Add Better Stack status badge to docs/liferay-se-guide.md.
+- [x] Implement gateway startup time tracking and display server uptime in the Admin Dashboard.
+- [x] Implement historical uptime record in database (gateway_runs table, startup/shutdown tracking) and expose via admin API.
+- [x] Fix golangci-lint errcheck errors in pkg/db/db.go and pkg/db/db_test.go.
+- [x] Add a link to status.lfr-demo.se Better Stack status page from the portal pages, fallback pages, and client connection errors.
+- [x] Create a release helper tag script scripts/create-release-tag.sh.
+
+
+

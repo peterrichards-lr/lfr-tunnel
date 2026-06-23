@@ -752,3 +752,73 @@ func TestSubdomainReservationCRUD(t *testing.T) {
 		t.Errorf("expected ErrNotFound after deletion, got %v", err)
 	}
 }
+
+func TestGatewayRuns(t *testing.T) {
+	tempDir, err := os.MkdirTemp("", "tunnel-db-test-*")
+	if err != nil {
+		t.Fatalf("failed to create temp dir: %v", err)
+	}
+	defer os.RemoveAll(tempDir) //nolint:errcheck
+
+	dbPath := filepath.Join(tempDir, "tunnel.db")
+	database, err := Open(dbPath)
+	if err != nil {
+		t.Fatalf("failed to open database: %v", err)
+	}
+	defer database.Close() //nolint:errcheck
+
+	// 1. Record first gateway start
+	t1 := time.Now().UTC().Add(-10 * time.Minute)
+	if err := database.RecordGatewayStart(t1); err != nil {
+		t.Fatalf("RecordGatewayStart failed: %v", err)
+	}
+
+	// Verify first run
+	runs, err := database.GetGatewayRuns(10)
+	if err != nil {
+		t.Fatalf("GetGatewayRuns failed: %v", err)
+	}
+	if len(runs) != 1 {
+		t.Fatalf("expected 1 run, got %d", len(runs))
+	}
+	if runs[0].EndTime != nil {
+		t.Errorf("expected EndTime to be nil for active run, got %v", runs[0].EndTime)
+	}
+
+	// 2. Record clean shutdown
+	if err := database.RecordGatewayCleanShutdown(); err != nil {
+		t.Fatalf("RecordGatewayCleanShutdown failed: %v", err)
+	}
+
+	// Verify run is closed
+	runs, _ = database.GetGatewayRuns(10)
+	if runs[0].EndTime == nil {
+		t.Error("expected EndTime to be populated after clean shutdown")
+	}
+
+	// 3. Record second start (simulating crash recovery)
+	// We start it without clean shutdown to test if RecordGatewayStart closes the previous open run
+	t2 := time.Now().UTC().Add(-5 * time.Minute)
+	// Make previous run open again by updating its end_time to NULL
+	_, _ = database.conn.Exec("UPDATE gateway_runs SET end_time = NULL")
+
+	if err := database.RecordGatewayStart(t2); err != nil {
+		t.Fatalf("RecordGatewayStart failed: %v", err)
+	}
+
+	// Verify
+	runs, _ = database.GetGatewayRuns(10)
+	if len(runs) != 2 {
+		t.Fatalf("expected 2 runs, got %d", len(runs))
+	}
+	// The oldest run (runs[1]) should have its EndTime set to the start time of the new run (t2)
+	if runs[1].EndTime == nil {
+		t.Error("expected previous run to be closed by new run start")
+	} else if !runs[1].EndTime.Equal(t2) {
+		t.Errorf("expected previous run EndTime to be %v, got %v", t2, runs[1].EndTime)
+	}
+	// The new run (runs[0]) should have nil EndTime
+	if runs[0].EndTime != nil {
+		t.Errorf("expected current run EndTime to be nil, got %v", runs[0].EndTime)
+	}
+}

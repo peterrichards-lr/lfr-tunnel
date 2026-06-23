@@ -87,6 +87,11 @@
             </form>
 
             <div style="margin-top: 24px; padding-top: 12px; border-top: 1px solid rgba(255,255,255,0.06); text-align: center; font-size: 11px; display: flex; justify-content: center; gap: 12px; align-items: center;">
+                <a href="https://status.lfr-demo.se" target="_blank" rel="noopener noreferrer" style="color: var(--text-muted); text-decoration: none; transition: 0.2s; display: flex; align-items: center; gap: 4px;" onmouseover="this.style.color='var(--primary)'" onmouseout="this.style.color='var(--text-muted)'">
+                    <span style="width: 6px; height: 6px; border-radius: 50%; background-color: #10b981; display: inline-block;"></span>
+                    <span data-i18n="system_status">System Status</span>
+                </a>
+                <span style="color: var(--text-muted); opacity: 0.5;">•</span>
                 <a href="/privacy" id="footer-privacy-link" style="color: var(--text-muted); text-decoration: none; transition: 0.2s;" onmouseover="this.style.color='var(--primary)'" onmouseout="this.style.color='var(--text-muted)'" data-i18n="privacy_title">Privacy Policy</a>
                 <span style="color: var(--text-muted); opacity: 0.5;">•</span>
                 <a href="/cookies" id="footer-cookie-link" style="color: var(--text-muted); text-decoration: none; transition: 0.2s;" onmouseover="this.style.color='var(--primary)'" onmouseout="this.style.color='var(--text-muted)'" data-i18n="cookie_title">Cookie Disclosure</a>
@@ -134,6 +139,10 @@
             
             <div id="nav-account" class="nav-item" onclick="showTab('account')" data-i18n="sidebar_account">Account Settings</div>
             <div class="nav-item" onclick="logout()">Logout</div>
+            <a href="https://status.lfr-demo.se" target="_blank" rel="noopener noreferrer" style="font-size: 11px; color: var(--text-muted); text-decoration: none; display: flex; align-items: center; gap: 6px; padding-left: 16px; margin-top: 12px; transition: 0.2s;" onmouseover="this.style.color='var(--primary)'" onmouseout="this.style.color='var(--text-muted)'">
+                <span style="width: 8px; height: 8px; border-radius: 50%; background-color: #10b981; display: inline-block;"></span>
+                <span data-i18n="system_status">System Status</span>
+            </a>
             <div style="font-size: 10px; color: var(--text-muted); opacity: 0.4; margin-top: 16px; padding-left: 16px; display: flex; flex-direction: column; gap: 2px;">
                 <div>Gateway: <span class="server-version-display"></span></div>
                 <div>Client: <span class="client-version-display"></span></div>

@@ -2137,3 +2137,95 @@ func TestServer_LocalBroadcastAPI(t *testing.T) {
 		t.Error("Expected maintenanceMode to be true after countdown expired, got false")
 	}
 }
+
+func TestAdminUptimeHistory(t *testing.T) {
+	tmpDir, err := os.MkdirTemp("", "tunnel-server-test-*")
+	if err != nil {
+		t.Fatalf("failed to create temp dir: %v", err)
+	}
+	defer os.RemoveAll(tmpDir) //nolint:errcheck
+
+	dbPath := filepath.Join(tmpDir, "test.db")
+	cfg := &config.ServerConfig{
+		Domains: []string{"example.com"},
+		DBPath:  dbPath,
+		Owner:   config.OwnerConfig{UserID: "admin@liferay.com"},
+	}
+
+	srv, err := NewServer(cfg)
+	if err != nil {
+		t.Fatalf("failed to create server: %v", err)
+	}
+	defer srv.Stop()
+
+	// Seed DB with admin user & PAT
+	adminUser := &db.User{
+		ID:     "admin@liferay.com",
+		Email:  "admin@liferay.com",
+		Role:   "admin",
+		Status: "approved",
+	}
+	_ = srv.db.CreateUser(adminUser)
+
+	adminToken := "lfr_pat_admin_static_token"
+	adminHashBytes := sha256.Sum256([]byte(adminToken))
+	_ = srv.db.CreatePAT(&db.PersonalAccessToken{
+		UserID:      "admin@liferay.com",
+		TokenHash:   hex.EncodeToString(adminHashBytes[:]),
+		TokenPrefix: "lfr_pat_admi",
+		Name:        "admin token",
+	})
+
+	// Seed standard user & PAT
+	normalUser := &db.User{
+		ID:     "user@liferay.com",
+		Email:  "user@liferay.com",
+		Role:   "user",
+		Status: "approved",
+	}
+	_ = srv.db.CreateUser(normalUser)
+
+	userToken := "lfr_pat_user_static_token"
+	userHashBytes := sha256.Sum256([]byte(userToken))
+	_ = srv.db.CreatePAT(&db.PersonalAccessToken{
+		UserID:      "user@liferay.com",
+		TokenHash:   hex.EncodeToString(userHashBytes[:]),
+		TokenPrefix: "lfr_pat_user",
+		Name:        "user token",
+	})
+
+	// 1. Request with no token
+	req1 := httptest.NewRequest("GET", "http://tunnel.example.com/api/admin/uptime-history", nil)
+	rec1 := httptest.NewRecorder()
+	srv.ServeHTTP(rec1, req1)
+	if rec1.Code != http.StatusUnauthorized {
+		t.Errorf("Expected 401 Unauthorized for no token, got %d", rec1.Code)
+	}
+
+	// 2. Request with normal user token
+	req2 := httptest.NewRequest("GET", "http://tunnel.example.com/api/admin/uptime-history", nil)
+	req2.Header.Set("Authorization", "Bearer lfr_pat_user_static_token")
+	rec2 := httptest.NewRecorder()
+	srv.ServeHTTP(rec2, req2)
+	if rec2.Code != http.StatusUnauthorized {
+		t.Errorf("Expected 401 Unauthorized for normal user token, got %d", rec2.Code)
+	}
+
+	// 3. Request with admin token
+	req3 := httptest.NewRequest("GET", "http://tunnel.example.com/api/admin/uptime-history", nil)
+	req3.Header.Set("Authorization", "Bearer lfr_pat_admin_static_token")
+	rec3 := httptest.NewRecorder()
+	srv.ServeHTTP(rec3, req3)
+	if rec3.Code != http.StatusOK {
+		t.Errorf("Expected 200 OK for admin token, got %d", rec3.Code)
+	}
+
+	var runs []*db.GatewayRun
+	if err := json.NewDecoder(rec3.Body).Decode(&runs); err != nil {
+		t.Fatalf("Failed to decode response: %v", err)
+	}
+
+	if len(runs) == 0 {
+		t.Error("Expected at least one gateway run record, got none")
+	}
+}

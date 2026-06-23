@@ -111,6 +111,12 @@ type PersonalAccessToken struct {
 	CreatedAt   time.Time  `json:"created_at"`
 }
 
+type GatewayRun struct {
+	ID        int64      `json:"id"`
+	StartTime time.Time  `json:"start_time"`
+	EndTime   *time.Time `json:"end_time"`
+}
+
 type DB struct {
 	conn *sql.DB
 }
@@ -273,6 +279,12 @@ func (db *DB) initSchema() error {
 	CREATE TABLE IF NOT EXISTS admin_settings (
 		key   TEXT PRIMARY KEY,
 		value TEXT NOT NULL
+	);
+
+	CREATE TABLE IF NOT EXISTS gateway_runs (
+		id INTEGER PRIMARY KEY AUTOINCREMENT,
+		start_time DATETIME NOT NULL,
+		end_time DATETIME
 	);
 	`
 
@@ -1334,4 +1346,57 @@ func (db *DB) DeleteExpiredSubdomainReservations(cutoff time.Time) error {
 		WHERE expires_at IS NOT NULL AND expires_at < ?
 	`, cutoff)
 	return err
+}
+
+// RecordGatewayStart handles the startup lifecycle of the gateway server.
+// It closes the previous run (if it was left open due to a crash or restart) by setting its end_time
+// to the current time, and then inserts a new run record.
+func (db *DB) RecordGatewayStart(startTime time.Time) error {
+	// 1. Close any open runs
+	queryClose := "UPDATE gateway_runs SET end_time = ? WHERE end_time IS NULL"
+	_, err := db.conn.Exec(queryClose, startTime)
+	if err != nil {
+		return err
+	}
+
+	// 2. Insert the new run record
+	queryInsert := "INSERT INTO gateway_runs (start_time, end_time) VALUES (?, NULL)"
+	_, err = db.conn.Exec(queryInsert, startTime)
+	return err
+}
+
+// RecordGatewayCleanShutdown updates the current run's end_time to the shutdown time.
+func (db *DB) RecordGatewayCleanShutdown() error {
+	queryClose := "UPDATE gateway_runs SET end_time = ? WHERE end_time IS NULL"
+	_, err := db.conn.Exec(queryClose, time.Now())
+	return err
+}
+
+// GetGatewayRuns retrieves the historical gateway runs up to a limit.
+func (db *DB) GetGatewayRuns(limit int) ([]*GatewayRun, error) {
+	rows, err := db.conn.Query(`
+		SELECT id, start_time, end_time
+		FROM gateway_runs
+		ORDER BY start_time DESC
+		LIMIT ?
+	`, limit)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close() //nolint:errcheck
+
+	var list []*GatewayRun
+	for rows.Next() {
+		var r GatewayRun
+		var endTime sql.NullTime
+		err := rows.Scan(&r.ID, &r.StartTime, &endTime)
+		if err != nil {
+			return nil, err
+		}
+		if endTime.Valid {
+			r.EndTime = &endTime.Time
+		}
+		list = append(list, &r)
+	}
+	return list, nil
 }

@@ -62,7 +62,7 @@ The attestation proves:
 
 **Verify any downloaded binary using the GitHub CLI:**
 ```bash
-gh attestation verify ~/bin/lfr-tunnel --repo peterrichards-lr/lfr-tunnel
+gh attestation verify ~/runningpoc/bin/lfr-tunnel --repo peterrichards-lr/lfr-tunnel
 ```
 
 #### SHA-256 Checksums
@@ -74,7 +74,7 @@ A `checksums.txt` file is generated for every release and is itself covered by t
 sha256sum -c checksums.txt
 
 # Or verify a single binary
-sha256sum ~/bin/lfr-tunnel
+sha256sum ~/runningpoc/bin/lfr-tunnel
 ```
 
 #### Package Manager Distribution (Homebrew & Scoop)
@@ -129,8 +129,8 @@ All of these are **false positives** for `lfr-tunnel`. The tool is open-source, 
 | Homebrew | macOS (Intel) | `/usr/local/bin/lfr-tunnel` |
 | Homebrew | Linux | `/home/linuxbrew/.linuxbrew/bin/lfr-tunnel` |
 | Scoop | Windows | `C:\Users\<username>\scoop\shims\lfr-tunnel.exe` |
-| Direct install script | macOS / Linux | `~/bin/lfr-tunnel` |
-| Direct install script | Windows | `C:\Users\<username>\bin\lfr-tunnel.exe` |
+| Direct install script | macOS / Linux | `~/runningpoc/bin/lfr-tunnel` |
+| Direct install script | Windows | `C:\Users\<username>\runningpoc\bin\lfr-tunnel.exe` |
 
 #### Recommended Exclusion (for Security Admins)
 
@@ -140,19 +140,19 @@ Add **wildcard path exclusions** in your EDR console covering both the package m
 ```
 /opt/homebrew/bin/lfr-tunnel
 /usr/local/bin/lfr-tunnel
-/Users/*/bin/lfr-tunnel
+/Users/*/runningpoc/bin/lfr-tunnel
 ```
 
 **Linux:**
 ```
 /home/linuxbrew/.linuxbrew/bin/lfr-tunnel
-/home/*/bin/lfr-tunnel
+/home/*/runningpoc/bin/lfr-tunnel
 ```
 
 **Windows:**
 ```
 C:\Users\*\scoop\shims\lfr-tunnel.exe
-C:\Users\*\bin\lfr-tunnel.exe
+C:\Users\*\runningpoc\bin\lfr-tunnel.exe
 ```
 
 Because all install methods produce a binary at a predictable, fixed path, these wildcard rules cover the entire team and survive binary upgrades without needing to be updated per version or per user.

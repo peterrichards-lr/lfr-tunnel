@@ -4,9 +4,10 @@ set -e
 VPS_USER="peterrichards"
 VPS_IP="lfr-demo.se"
 
-# Parse optional identity file
+# Parse optional parameters
 SSH_KEY=""
-while getopts "i:" opt; do
+WARN_SECS=""
+while getopts "i:w:" opt; do
   case $opt in
     i) 
       KEY_PATH="$OPTARG"
@@ -18,7 +19,10 @@ while getopts "i:" opt; do
       fi
       SSH_KEY="-i $KEY_PATH"
       ;;
-    *) echo "Usage: $0 [-i <identity_file>]" && exit 1 ;;
+    w)
+      WARN_SECS="$OPTARG"
+      ;;
+    *) echo "Usage: $0 [-i <identity_file>] [-w <warning_seconds>]" && exit 1 ;;
   esac
 done
 shift $((OPTIND - 1))
@@ -27,6 +31,23 @@ VERSION="${VERSION:-$(git describe --tags --abbrev=0 --dirty 2>/dev/null || git 
 
 echo "Building Linux binary (version: $VERSION) with path trimming..."
 GOOS=linux GOARCH=amd64 go build -ldflags="-s -w -X lfr-tunnel/pkg/config.Version=$VERSION" -trimpath -o bin/lfr-tunneld-linux ./cmd/lfr-tunneld
+
+if [ -n "$WARN_SECS" ]; then
+  if ! [[ "$WARN_SECS" =~ ^[0-9]+$ ]]; then
+    echo "Error: warning time must be a positive integer"
+    exit 1
+  fi
+
+  echo "Broadcasting maintenance warning to users via VPS localhost API..."
+  ssh $SSH_KEY $VPS_USER@$VPS_IP "curl -s -X POST -H 'Content-Type: application/json' -d '{\"message\":\"Gateway is restarting for updates in $WARN_SECS seconds. Active sessions will be temporarily invalidated.\"}' http://127.0.0.1:8080/api/local/broadcast"
+
+  echo "Waiting $WARN_SECS seconds before starting deploy..."
+  for ((i=WARN_SECS; i>0; i--)); do
+    printf "\rTime remaining: %d seconds... " "$i"
+    sleep 1
+  done
+  echo ""
+fi
 
 echo "Uploading binary to VPS..."
 scp $SSH_KEY bin/lfr-tunneld-linux $VPS_USER@$VPS_IP:/home/$VPS_USER/lfr-tunneld

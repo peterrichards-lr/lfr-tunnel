@@ -2065,3 +2065,50 @@ func TestServer_InstallerEndpoints(t *testing.T) {
 		t.Error("expected /install.ps1 to return PowerShell script containing 'Invoke-WebRequest'")
 	}
 }
+
+func TestServer_LocalBroadcastAPI(t *testing.T) {
+	srv, _, cleanup := setupTestServer(t)
+	defer cleanup()
+
+	makeReq := func(method, path string, body string, remoteAddr string, headers map[string]string) *httptest.ResponseRecorder {
+		req, _ := http.NewRequest(method, "http://localhost"+path, strings.NewReader(body))
+		req.RemoteAddr = remoteAddr
+		for k, v := range headers {
+			req.Header.Set(k, v)
+		}
+		rec := httptest.NewRecorder()
+		srv.ServeHTTP(rec, req)
+		return rec
+	}
+
+	// 1. Success: Valid local request
+	rec1 := makeReq("POST", "/api/local/broadcast", `{"message":"Deploy warning"}`, "127.0.0.1:12345", nil)
+	if rec1.Code != http.StatusOK {
+		t.Errorf("Expected 200 for local broadcast, got %d. Body: %s", rec1.Code, rec1.Body.String())
+	}
+	srv.broadcastMutex.RLock()
+	msg := srv.broadcastMessage
+	srv.broadcastMutex.RUnlock()
+	if msg != "Deploy warning" {
+		t.Errorf("Expected broadcastMessage to be 'Deploy warning', got '%s'", msg)
+	}
+
+	// 2. Failure: From non-loopback IP
+	rec2 := makeReq("POST", "/api/local/broadcast", `{"message":"Hack alert"}`, "8.8.8.8:12345", nil)
+	if rec2.Code != http.StatusForbidden {
+		t.Errorf("Expected 403 Forbidden for remote IP, got %d", rec2.Code)
+	}
+
+	// 3. Failure: From loopback, but carrying proxy headers
+	headers3 := map[string]string{"X-Forwarded-For": "8.8.8.8"}
+	rec3 := makeReq("POST", "/api/local/broadcast", `{"message":"Spoof alert"}`, "127.0.0.1:12345", headers3)
+	if rec3.Code != http.StatusForbidden {
+		t.Errorf("Expected 403 Forbidden for proxied loopback request, got %d", rec3.Code)
+	}
+
+	// 4. Failure: Invalid payload format
+	rec4 := makeReq("POST", "/api/local/broadcast", `invalid`, "127.0.0.1:12345", nil)
+	if rec4.Code != http.StatusBadRequest {
+		t.Errorf("Expected 400 Bad Request for invalid payload, got %d", rec4.Code)
+	}
+}

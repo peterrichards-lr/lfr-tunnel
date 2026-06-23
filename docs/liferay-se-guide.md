@@ -1,5 +1,7 @@
 # Liferay SE Team — Quick-Start Guide
 
+[![Better Stack Badge](https://uptime.betterstack.com/status-badges/v2/monitor/2q3sj.svg)](https://uptime.betterstack.com/?utm_source=status_badge)
+
 This guide is for **Liferay Sales Engineering team members** connecting to the shared, Liferay-operated `lfr-tunnel` gateway. It covers installation, authentication, and usage examples with the real team domains.
 
 For general architecture, self-hosting instructions, and configuration reference, see the main [README](../README.md) and [Architecture Guide](architecture.md).

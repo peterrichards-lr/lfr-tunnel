@@ -444,6 +444,7 @@ The solution will consist of:
 ## Gateway Diagnostics & Troubleshooting
 - [x] Create scripts/diagnose-gateway.sh script for gateway diagnostics.
 - [x] Integrate VM6 Networks provider status check into scripts/diagnose-gateway.sh.
+- [x] Add Better Stack status badge to docs/liferay-se-guide.md.
 
 
 

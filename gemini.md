@@ -433,12 +433,11 @@ The solution will consist of:
 ## Development Process Improvements
 - [x] Configure git union merge driver for gemini.md in .gitattributes to avoid PR merge conflicts.
 
-
-
-
-
-
-
-
+## Gateway-First Client Self-Upgrade (v1.14.0)
+- [x] Load client config to retrieve ServerURL before executing upgrade flag in main.go.
+- [x] Update pkg/client/upgrade.go to query the gateway's version endpoint for updates if ServerURL is present.
+- [x] Download latest binary and checksums directly from the gateway with SHA256 verification.
+- [x] Implement graceful fallback to GitHub Releases if ServerURL is missing or if the gateway check fails.
+- [x] Write unit tests to cover both gateway-based and GitHub-fallback upgrade paths.
 
 

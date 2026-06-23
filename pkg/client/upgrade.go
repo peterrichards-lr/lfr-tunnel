@@ -58,55 +58,144 @@ func CheckForUpdate(currentVersion string) (string, error) {
 }
 
 // SelfUpgrade performs the update process.
-func SelfUpgrade(currentVersion string) error {
-	fmt.Printf("[Update] Checking for updates (current version: %s)...\n", currentVersion)
-	client := &http.Client{Timeout: 15 * time.Second}
-	resp, err := client.Get(githubAPIBase + "/repos/peterrichards-lr/lfr-tunnel/releases/latest")
-	if err != nil {
-		return fmt.Errorf("failed to fetch latest release: %v", err)
-	}
-	defer resp.Body.Close() //nolint:errcheck
-
-	if resp.StatusCode != http.StatusOK {
-		return fmt.Errorf("github API returned status %d", resp.StatusCode)
-	}
-
-	var rel Release
-	if err := json.NewDecoder(resp.Body).Decode(&rel); err != nil {
-		return fmt.Errorf("failed to parse release metadata: %v", err)
-	}
-
-	latest := strings.TrimSpace(rel.TagName)
-	if latest == currentVersion {
-		fmt.Printf("[Update] You are already running the latest version (%s).\n", currentVersion)
-		return nil
-	}
-
-	fmt.Printf("[Update] New version found: %s. Preparing update...\n", latest)
-
-	// Determine matching asset name based on OS and architecture
-	expectedAsset := fmt.Sprintf("lfr-tunnel-%s-%s", runtime.GOOS, runtime.GOARCH)
-	if runtime.GOOS == "windows" {
-		expectedAsset += ".exe"
-	}
-
+// SelfUpgrade performs the update process.
+func SelfUpgrade(currentVersion string, serverURL string) error {
 	var downloadURL string
 	var checksumsURL string
-	for _, asset := range rel.Assets {
-		switch asset.Name {
-		case expectedAsset:
-			downloadURL = asset.DownloadURL
-		case "checksums.txt":
-			checksumsURL = asset.DownloadURL
+	var latest string
+	var expectedAsset string
+	var useGateway bool
+
+	client := &http.Client{Timeout: 15 * time.Second}
+
+	// 1. Try querying the Gateway first if serverURL is configured
+	if serverURL != "" {
+		fmt.Printf("[Update] Checking gateway for updates (current version: %s)...\n", currentVersion)
+		gatewayURL := strings.TrimRight(serverURL, "/") + "/api/version"
+		resp, err := client.Get(gatewayURL)
+		if err == nil && resp.StatusCode == http.StatusOK {
+			var svrVer ServerVersionInfo
+			if err := json.NewDecoder(resp.Body).Decode(&svrVer); err == nil {
+				latest = strings.TrimSpace(svrVer.LatestVersion)
+				if latest == currentVersion {
+					fmt.Printf("[Update] You are already running the latest version (%s).\n", currentVersion)
+					resp.Body.Close() //nolint:errcheck
+					return nil
+				}
+
+				// Resolve target platform key on gateway
+				osKey := runtime.GOOS
+				if osKey == "darwin" {
+					osKey = "macos"
+				}
+				platformKey := fmt.Sprintf("%s_%s", osKey, runtime.GOARCH)
+
+				if platInfo, ok := svrVer.ClientPlatforms[platformKey]; ok {
+					// Check recommendations
+					rec := strings.ToLower(platInfo.Recommended)
+					if rec == "brew" {
+						fmt.Printf("[Update] A newer version is available: %s\n", latest)
+						fmt.Println("[Update] Recommended upgrade method is via Homebrew:")
+						fmt.Println("[Update]   brew upgrade peterrichards-lr/homebrew-tap/lfr-tunnel")
+						resp.Body.Close() //nolint:errcheck
+						return nil
+					} else if rec == "scoop" {
+						fmt.Printf("[Update] A newer version is available: %s\n", latest)
+						fmt.Println("[Update] Recommended upgrade method is via Scoop:")
+						fmt.Println("[Update]   scoop update lfr-tunnel")
+						resp.Body.Close() //nolint:errcheck
+						return nil
+					} else if rec == "cmd" && platInfo.Cmd != "" {
+						fmt.Printf("[Update] A newer version is available: %s\n", latest)
+						fmt.Println("[Update] Recommended upgrade method is running the installation command:")
+						fmt.Printf("[Update]   %s\n", platInfo.Cmd)
+						resp.Body.Close() //nolint:errcheck
+						return nil
+					} else if rec == "cmd_fallback" && platInfo.CmdFallback != "" {
+						fmt.Printf("[Update] A newer version is available: %s\n", latest)
+						fmt.Println("[Update] Recommended upgrade method is running the fallback command:")
+						fmt.Printf("[Update]   %s\n", platInfo.CmdFallback)
+						resp.Body.Close() //nolint:errcheck
+						return nil
+					}
+
+					// Proceed with direct download URL from gateway
+					if platInfo.URL != "" {
+						if strings.HasPrefix(platInfo.URL, "http://") || strings.HasPrefix(platInfo.URL, "https://") {
+							downloadURL = platInfo.URL
+						} else {
+							downloadURL = strings.TrimRight(serverURL, "/") + "/" + strings.TrimLeft(platInfo.URL, "/")
+						}
+						// Dynamic checksum file served from the same static directory
+						checksumsURL = strings.TrimRight(serverURL, "/") + "/static/downloads/checksums.txt"
+						expectedAsset = platInfo.BinaryName
+						if expectedAsset == "" {
+							expectedAsset = fmt.Sprintf("lfr-tunnel-%s-%s", runtime.GOOS, runtime.GOARCH)
+							if runtime.GOOS == "windows" {
+								expectedAsset += ".exe"
+							}
+						}
+						useGateway = true
+						fmt.Printf("[Update] Gateway recommended update available: %s. Downloading from gateway...\n", latest)
+					}
+				}
+			}
+			resp.Body.Close() //nolint:errcheck
+		} else {
+			if resp != nil {
+				resp.Body.Close() //nolint:errcheck
+			}
+			fmt.Printf("[Update] Warning: Gateway upgrade check failed (err: %v). Falling back to GitHub...\n", err)
 		}
 	}
 
-	if downloadURL == "" {
-		return fmt.Errorf("no matching pre-built binary asset found for your platform (%s)", expectedAsset)
-	}
+	// 2. Fall back to GitHub Releases if no serverURL or gateway check was bypassed/failed
+	if !useGateway {
+		fmt.Printf("[Update] Checking GitHub Releases for updates...\n")
+		resp, err := client.Get(githubAPIBase + "/repos/peterrichards-lr/lfr-tunnel/releases/latest")
+		if err != nil {
+			return fmt.Errorf("failed to fetch latest release from GitHub: %v", err)
+		}
+		defer resp.Body.Close() //nolint:errcheck
 
-	if checksumsURL == "" {
-		return fmt.Errorf("release checksums file (checksums.txt) not found in latest release assets")
+		if resp.StatusCode != http.StatusOK {
+			return fmt.Errorf("github API returned status %d", resp.StatusCode)
+		}
+
+		var rel Release
+		if err := json.NewDecoder(resp.Body).Decode(&rel); err != nil {
+			return fmt.Errorf("failed to parse release metadata: %v", err)
+		}
+
+		latest = strings.TrimSpace(rel.TagName)
+		if latest == currentVersion {
+			fmt.Printf("[Update] You are already running the latest version (%s).\n", currentVersion)
+			return nil
+		}
+
+		fmt.Printf("[Update] New version found on GitHub: %s. Preparing update...\n", latest)
+
+		expectedAsset = fmt.Sprintf("lfr-tunnel-%s-%s", runtime.GOOS, runtime.GOARCH)
+		if runtime.GOOS == "windows" {
+			expectedAsset += ".exe"
+		}
+
+		for _, asset := range rel.Assets {
+			switch asset.Name {
+			case expectedAsset:
+				downloadURL = asset.DownloadURL
+			case "checksums.txt":
+				checksumsURL = asset.DownloadURL
+			}
+		}
+
+		if downloadURL == "" {
+			return fmt.Errorf("no matching pre-built binary asset found for your platform (%s)", expectedAsset)
+		}
+
+		if checksumsURL == "" {
+			return fmt.Errorf("release checksums file (checksums.txt) not found in latest release assets")
+		}
 	}
 
 	fmt.Println("[Update] Fetching release checksums...")
@@ -239,9 +328,21 @@ func computeSHA256(filePath string) (string, error) {
 	return hex.EncodeToString(h.Sum(nil)), nil
 }
 
+type ServerPlatformInfo struct {
+	URL              string `json:"url"`
+	BinaryName       string `json:"binary_name"`
+	SHA256           string `json:"sha256"`
+	Cmd              string `json:"cmd"`
+	CmdLabel         string `json:"cmd_label"`
+	CmdFallback      string `json:"cmd_fallback"`
+	CmdFallbackLabel string `json:"cmd_fallback_label"`
+	Recommended      string `json:"recommended"`
+}
+
 type ServerVersionInfo struct {
-	LatestVersion string `json:"latest_version"`
-	MinVersion    string `json:"min_version"`
+	LatestVersion   string                        `json:"latest_version"`
+	MinVersion      string                        `json:"min_version"`
+	ClientPlatforms map[string]ServerPlatformInfo `json:"client_platforms"`
 }
 
 func CheckServerCompatibility(serverURL string) (*ServerVersionInfo, error) {

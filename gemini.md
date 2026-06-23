@@ -402,7 +402,7 @@ The solution will consist of:
 - [x] Add unit test coverage for loopback IP and proxy header validation checks.
 - [x] Update `scripts/deploy.sh` to accept optional `-w <seconds>` warning delay parameter.
 - [x] Integrate local SSH warning broadcast and countdown sleep sequence into `scripts/deploy.sh`.
-- [ ] Bump version to v1.13.0 in whats-new.json, tag, and push to trigger release CI workflow.
+- [ ] Bump version to v1.13.1 in whats-new.json, tag, and push to trigger release CI workflow.
 - [x] Deploy signed binaries and gateway changes to the VPS.
 
 ## Documentation Refinements

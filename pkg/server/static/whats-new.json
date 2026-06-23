@@ -1,5 +1,5 @@
 {
-  "version": "v1.13.0",
+  "version": "v1.13.1",
   "release_date": "2026-06-23",
   "features": [
     "Add SSO-only login lockdown capability (disable_email_login configuration flag) to restrict client registration and portal logins exclusively to OIDC/SSO.",

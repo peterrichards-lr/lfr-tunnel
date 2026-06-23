@@ -2613,7 +2613,9 @@ func (s *Server) handleLocalBroadcast(w http.ResponseWriter, r *http.Request) {
 	}
 
 	var req struct {
-		Message string `json:"message"`
+		Message          string `json:"message"`
+		CountdownSeconds *int   `json:"countdown_seconds,omitempty"`
+		DurationMinutes  *int   `json:"duration_minutes,omitempty"`
 	}
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 		http.Error(w, `{"error":"Invalid payload"}`, http.StatusBadRequest)
@@ -2623,6 +2625,49 @@ func (s *Server) handleLocalBroadcast(w http.ResponseWriter, r *http.Request) {
 	s.broadcastMutex.Lock()
 	s.broadcastMessage = req.Message
 	s.broadcastMutex.Unlock()
+
+	if req.CountdownSeconds != nil && *req.CountdownSeconds > 0 {
+		duration := 5
+		if req.DurationMinutes != nil && *req.DurationMinutes > 0 {
+			duration = *req.DurationMinutes
+		}
+		s.maintMutex.Lock()
+		s.maintenanceMode = false
+		s.maintScheduledAt = time.Now().Add(time.Duration(*req.CountdownSeconds) * time.Second)
+		if s.maintTimer != nil {
+			s.maintTimer.Stop()
+		}
+		s.maintTimer = time.AfterFunc(time.Duration(*req.CountdownSeconds)*time.Second, func() {
+			s.maintMutex.Lock()
+			s.maintenanceMode = true
+			s.maintEndTime = time.Now().Add(time.Duration(duration) * time.Minute)
+			s.maintScheduledAt = time.Time{}
+			s.maintTimer = nil
+			s.maintMutex.Unlock()
+
+			// Kick standard tunnels
+			leases := s.registry.ListLeases()
+			for _, lease := range leases {
+				isLeaseAdmin := false
+				if s.db != nil {
+					if u, err := s.db.GetUserByEmail(lease.UserID); err == nil && u != nil {
+						if u.Role == "admin" || u.Role == "owner" {
+							isLeaseAdmin = true
+						}
+					}
+				}
+				if !isLeaseAdmin && s.cfg.Owner.UserID != "" && strings.EqualFold(lease.UserID, s.cfg.Owner.UserID) {
+					isLeaseAdmin = true
+				}
+				if !isLeaseAdmin {
+					s.registry.KickLease(lease.SubdomainPrefix)
+				}
+			}
+			log.Printf("[Server] Local-triggered Scheduled Soft Maintenance countdown hit 0. Soft Maintenance Mode is now ACTIVE.")
+			go s.BroadcastTelemetry()
+		})
+		s.maintMutex.Unlock()
+	}
 
 	s.BroadcastTelemetry()
 

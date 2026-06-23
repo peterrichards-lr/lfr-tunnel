@@ -39,7 +39,7 @@ if [ -n "$WARN_SECS" ]; then
   fi
 
   echo "Broadcasting maintenance warning to users via VPS localhost API..."
-  ssh $SSH_KEY $VPS_USER@$VPS_IP "curl -s -X POST -H 'Content-Type: application/json' -d '{\"message\":\"Gateway is restarting for updates in $WARN_SECS seconds. Active sessions will be temporarily invalidated.\"}' http://127.0.0.1:8080/api/local/broadcast"
+  ssh $SSH_KEY $VPS_USER@$VPS_IP "curl -s -X POST -H 'Content-Type: application/json' -d '{\"message\":\"Gateway is restarting for updates. Active sessions will be temporarily suspended.\", \"countdown_seconds\": $WARN_SECS, \"duration_minutes\": 5}' http://127.0.0.1:8080/api/local/broadcast"
 
   echo "Waiting $WARN_SECS seconds before starting deploy..."
   for ((i=WARN_SECS; i>0; i--)); do

@@ -397,8 +397,15 @@ function toggleTheme() {
                     const displayVer = vData.server_version || vData.latest_version;
                     if (displayVer) {
                         const versionDisplays = document.querySelectorAll('.server-version-display');
+                        let text = displayVer;
+                        if (vData.uptime_seconds !== undefined) {
+                            text += ` (Uptime: ${formatUptime(vData.uptime_seconds)})`;
+                        }
                         versionDisplays.forEach(el => {
-                            el.textContent = displayVer;
+                            el.textContent = text;
+                            if (vData.start_time) {
+                                el.title = `Started: ${new Date(vData.start_time).toLocaleString()}`;
+                            }
                         });
                     }
                     if (vData.latest_version) {
@@ -1955,6 +1962,20 @@ applyTheme(currentUser.theme_preference);
                 }
                 loadTokens();
             }
+        }
+
+        function formatUptime(seconds) {
+            if (seconds === undefined || seconds === null) return 'N/A';
+            const days = Math.floor(seconds / 86400);
+            const hours = Math.floor((seconds % 86400) / 3600);
+            const minutes = Math.floor((seconds % 3600) / 60);
+
+            const parts = [];
+            if (days > 0) parts.push(`${days}d`);
+            if (hours > 0) parts.push(`${hours}h`);
+            if (minutes > 0 || parts.length === 0) parts.push(`${minutes}m`);
+
+            return parts.join(' ');
         }
 
         function formatLocalTime(utcDateStr) {

@@ -116,6 +116,7 @@ type Server struct {
 	maintEndTime       time.Time
 	wsClients          map[*wsClient]bool
 	wsMutex            sync.RWMutex
+	startTime          time.Time
 }
 
 // NewServer initializes and returns a new Server instance.
@@ -188,6 +189,7 @@ func NewServer(cfg *config.ServerConfig) (*Server, error) {
 		targetedMessages:   make(map[string]string),
 		lastPortalActivity: make(map[string]time.Time),
 		wsClients:          make(map[*wsClient]bool),
+		startTime:          time.Now(),
 	}
 
 	// Initialize i18n dynamic engine
@@ -555,6 +557,8 @@ func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 				"docker_image":           dockerImg,
 				"docker_bypass_url":      s.cfg.DockerBypassURL,
 				"client_platforms":       s.cfg.ClientPlatforms,
+				"start_time":             s.startTime.Format(time.RFC3339),
+				"uptime_seconds":         int(time.Since(s.startTime).Seconds()),
 			})
 			return
 		}

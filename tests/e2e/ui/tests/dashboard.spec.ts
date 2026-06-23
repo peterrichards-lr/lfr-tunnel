@@ -177,4 +177,52 @@ test.describe('Dashboard UI Automation', () => {
     // Verify visual quota limit progress bar updates
     await expect(page.locator('#reservation-quota-text')).toContainText('subdomains reserved');
   });
+
+  test('Verify Telemetry Maintenance Countdown Widget', async ({ page }) => {
+    // 1. Login
+    await page.goto('/admin');
+    await page.click('#btn-show-email');
+    await page.fill('#email-input', adminEmail);
+    await page.click('button[type="submit"]');
+
+    const token = await getMagicLinkToken(adminEmail);
+    expect(token).toBeTruthy();
+    await page.goto(`/admin?token=${token}`);
+
+    // Wait for Dashboard to load
+    await expect(page.locator('h2:has-text("Dashboard Overview")')).toBeVisible();
+
+    // The maintenance countdown box should not be visible initially
+    await expect(page.locator('#overview-maintenance-box')).not.toBeVisible();
+    await expect(page.locator('#global-maintenance-banner')).not.toBeVisible();
+
+    // 2. Navigate to Gateway Maintenance and schedule a mock soft maintenance
+    await page.click('#nav-maintenance');
+    await expect(page.locator('h2:has-text("Gateway Maintenance")')).toBeVisible();
+
+    // Select countdown (e.g. 5 minutes)
+    await page.selectOption('#maint-countdown-select select', '5');
+    await page.fill('#maint-soft-reason', 'E2E Testing Maintenance');
+    await page.click('#btn-toggle-maint');
+
+    // Verify soft maintenance is now pending in control panel
+    await expect(page.locator('#maint-status-text')).toContainText('PENDING COUNTDOWN');
+
+    // 3. Navigate back to Overview and verify countdown box is visible
+    await page.click('#nav-overview');
+    await expect(page.locator('#overview-maintenance-box')).toBeVisible();
+    await expect(page.locator('#overview-maintenance-text')).toContainText('Scheduled Maintenance starting in');
+    await expect(page.locator('#global-maintenance-banner')).toBeVisible();
+
+    // 4. Cancel maintenance from Gateway Maintenance tab
+    await page.click('#nav-maintenance');
+    await page.click('#btn-toggle-maint');
+    await expect(page.locator('#maint-status-text')).toContainText('INACTIVE');
+
+    // 5. Verify Overview box and global banner disappear
+    await page.click('#nav-overview');
+    await expect(page.locator('#overview-maintenance-box')).not.toBeVisible();
+    await expect(page.locator('#global-maintenance-banner')).not.toBeVisible();
+  });
 });
+

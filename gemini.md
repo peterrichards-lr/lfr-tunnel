@@ -319,8 +319,9 @@ The solution will consist of:
 - [x] Implement client-side Terminal UI (TUI) Dashboard for active connection metrics and scrolling request paths.
 - [x] Create local Request Inspector & Replay web dashboard (similar to Ngrok's local interface) for debugging client extensions and webhooks.
 - [ ] Implement multi-region edge VPS gateways to reduce demo latency globally.
-- [ ] Integrate tunnel provisioning directly into Liferay Development Manager (LDM) execution loops.
+- [x] Integrate tunnel provisioning directly into Liferay Development Manager (LDM) execution loops.
 - [x] Implement live WebSocket-driven telemetry updates in the portal Admin Web Dashboard.
+
 - [x] Integrate a lightweight Web Application Firewall (WAF) shield on the gateway to filter basic exploit payloads during public presentations.
 
 ## Dynamic Loopback Port Routing Fix (v1.9.4)

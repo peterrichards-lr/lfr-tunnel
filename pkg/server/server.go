@@ -279,6 +279,10 @@ func NewServer(cfg *config.ServerConfig) (*Server, error) {
 	go srv.processMetricsQueue()
 	srv.startRateLimiterCleaner(ctx)
 
+	if srv.db != nil {
+		_ = srv.db.RecordGatewayStart(srv.startTime)
+	}
+
 	return srv, nil
 }
 
@@ -1713,6 +1717,7 @@ func (s *Server) Stop() {
 	s.cancel()
 	s.chiselServer.Close() //nolint:errcheck
 	if s.db != nil {
+		_ = s.db.RecordGatewayCleanShutdown()
 		s.db.Close() //nolint:errcheck
 	}
 }
@@ -1879,6 +1884,11 @@ func (s *Server) handleAdminEndpoints(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		respondJSON(w, http.StatusOK, stats)
+		return
+	}
+
+	if r.Method == http.MethodGet && r.URL.Path == "/api/admin/uptime-history" {
+		s.handleAdminGetUptimeHistory(w, r, actor)
 		return
 	}
 
@@ -2053,6 +2063,19 @@ func (s *Server) handleAdminEndpoints(w http.ResponseWriter, r *http.Request) {
 	}
 
 	http.NotFound(w, r)
+}
+
+func (s *Server) handleAdminGetUptimeHistory(w http.ResponseWriter, r *http.Request, actor string) {
+	if s.db == nil {
+		http.Error(w, `{"error":"Database not configured"}`, http.StatusNotImplemented)
+		return
+	}
+	runs, err := s.db.GetGatewayRuns(50)
+	if err != nil {
+		http.Error(w, `{"error":"Failed to retrieve uptime history"}`, http.StatusInternalServerError)
+		return
+	}
+	respondJSON(w, http.StatusOK, runs)
 }
 
 func (s *Server) handleAdminMagicLink(w http.ResponseWriter, r *http.Request) {

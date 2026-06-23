@@ -547,6 +547,15 @@ function toggleTheme() {
                 } else {
                     divider.style.display = 'none';
                 }
+
+                if (data.disable_email_login) {
+                    divider.style.display = 'none';
+                    document.getElementById('btn-show-email').classList.add('hidden');
+                    document.getElementById('btn-show-register').classList.add('hidden');
+                } else {
+                    document.getElementById('btn-show-email').classList.remove('hidden');
+                    document.getElementById('btn-show-register').classList.remove('hidden');
+                }
             } else {
                 document.getElementById('sso-divider').style.display = 'none';
             }

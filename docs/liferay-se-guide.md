@@ -28,22 +28,17 @@ Your tunnel will be reachable at:
 > 
 > You must use either **Method A (Native Installer)** or **Method B (Docker Container)** to run the client safely.
 
-### Method A: Native Installer Script (Recommended Native)
-This script downloads the officially signed client binary directly into the EDR-whitelisted canonical installation directory (`~/bin/lfr-tunnel` or `C:\Users\<username>\bin\lfr-tunnel.exe`):
+### ~~Method A: Native Installer Script (Recommended Native)~~
 
-* **macOS / Linux:**
-  ```bash
-  curl -sSfL https://tunnel.lfr-demo.se/install.sh | sh
-  ```
-* **Windows (PowerShell):**
-  ```powershell
-  iwr https://tunnel.lfr-demo.se/install.ps1 | iex
-  ```
+> [!IMPORTANT]
+> **Status Note:** We are currently talking with the **Liferay Security Teams** to get this native execution option fully approved and whitelisted. In the meantime, this option is temporarily disabled. **Please use Method B (Docker Container) below for all client operations.**
 
-*To verify your installation, open a new terminal window and run:*
-```bash
-lfr-tunnel -version
-```
+~~This script downloads the officially signed client binary directly into the EDR-whitelisted canonical installation directory (`~/bin/lfr-tunnel` or `C:\Users\<username>\bin\lfr-tunnel.exe`):~~
+
+* ~~**macOS / Linux:** `curl -sSfL https://tunnel.lfr-demo.se/install.sh | sh`~~
+* ~~**Windows (PowerShell):** `iwr https://tunnel.lfr-demo.se/install.ps1 | iex`~~
+
+~~To verify your installation, open a new terminal window and run: `lfr-tunnel -version`~~
 
 ### Method B: Standalone Docker Container (EDR Immune)
 For environments where local native binary execution is completely restricted, run our pre-built, multi-architecture client container directly from Docker Hub. This requires **zero local installation, zero compilation, and is 100% immune to EDR host-level blocks**:

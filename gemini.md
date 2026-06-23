@@ -398,6 +398,9 @@ The solution will consist of:
 - [ ] Bump version to v1.13.0 in whats-new.json, tag, and push to trigger release CI workflow.
 - [ ] Deploy signed binaries and gateway changes to the VPS.
 
+## Documentation Refinements
+- [x] Temporarily strikeout Method A in liferay-se-guide.md and add security team note.
+
 
 
 

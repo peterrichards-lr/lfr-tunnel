@@ -441,3 +441,9 @@ The solution will consist of:
 - [x] Write unit tests to cover both gateway-based and GitHub-fallback upgrade paths.
 
 
+## Gateway Diagnostics & Troubleshooting
+- [x] Create scripts/diagnose-gateway.sh script for gateway diagnostics.
+- [x] Integrate VM6 Networks provider status check into scripts/diagnose-gateway.sh.
+
+
+

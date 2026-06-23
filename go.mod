@@ -3,7 +3,7 @@ module lfr-tunnel
 go 1.25.0
 
 require (
-	github.com/coreos/go-oidc/v3 v3.18.0
+	github.com/coreos/go-oidc/v3 v3.19.0
 	github.com/gorilla/websocket v1.5.3
 	github.com/jpillora/chisel v1.11.6
 	github.com/mattn/go-isatty v0.0.22

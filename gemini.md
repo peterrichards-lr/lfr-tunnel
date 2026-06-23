@@ -450,6 +450,7 @@ The solution will consist of:
 - [x] Fix golangci-lint errcheck errors in pkg/db/db.go and pkg/db/db_test.go.
 - [x] Add a link to status.lfr-demo.se Better Stack status page from the portal pages, fallback pages, and client connection errors.
 - [x] Create a release helper tag script scripts/create-release-tag.sh.
+- [x] Bump version to v1.14.1 in whats-new.json and release tag it.
 
 
 

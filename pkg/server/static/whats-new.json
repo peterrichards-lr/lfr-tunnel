@@ -1,10 +1,9 @@
 {
-  "version": "v1.14.0",
+  "version": "v1.14.1",
   "release_date": "2026-06-23",
   "features": [
-    "Implement Gateway-First dynamic self-upgrade mechanism (lfr-tunnel -upgrade) which queries the gateway's /api/version endpoint directly to bypass GitHub API rate limits.",
-    "Support dynamic package manager instructions (Homebrew, Scoop, Custom Install Script) returned from the gateway instead of attempting in-place binary swaps."
+    "Add VM6 Networks VM status checks and Better Stack ping monitoring script (diagnose-gateway.sh).",
+    "Implement gateway startup recording, clean shutdown tracking, and administrative API endpoint (/api/admin/uptime-history) for tracking gateway runs over time.",
+    "Integrate Better Stack status.lfr-demo.se links across the portal UI footer, sidebar, fallback pages (offline/maintenance), and client registration errors."
   ]
 }
-
-

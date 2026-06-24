@@ -1,9 +1,12 @@
 package config
 
 import (
+	"bufio"
+	"fmt"
 	"net/url"
 	"os"
 	"path/filepath"
+	"runtime"
 	"strconv"
 	"strings"
 	"time"
@@ -363,7 +366,46 @@ func LoadClientConfig(path string) (*ClientConfig, error) {
 		}
 		if tokenFilePath != "" {
 			if data, err := os.ReadFile(tokenFilePath); err == nil {
-				cfg.AuthToken = strings.TrimSpace(string(data))
+				content := string(data)
+				if strings.Contains(content, "LFT_CLIENT_TOKEN") || strings.Contains(content, "LFT_TOKEN") {
+					if val, parseErr := parseSecretsFile(tokenFilePath); parseErr == nil && val != "" {
+						cfg.AuthToken = val
+					}
+				} else {
+					cfg.AuthToken = strings.TrimSpace(content)
+				}
+
+				if runtime.GOOS != "windows" {
+					if info, err := os.Stat(tokenFilePath); err == nil {
+						if info.Mode().Perm()&0077 != 0 {
+							fmt.Fprintf(os.Stderr, "Warning: Token file %s has insecure permissions %04o. For security, run 'chmod 600 %s'\n", tokenFilePath, info.Mode().Perm(), tokenFilePath)
+						}
+					}
+				}
+			}
+		}
+	}
+
+	// 2b. Load from LDM secrets file if still empty
+	if cfg.AuthToken == "" {
+		homeDir, err := os.UserHomeDir()
+		if err == nil {
+			paths := []string{
+				filepath.Join(homeDir, ".config", "lfr", "secrets"),
+				filepath.Join(homeDir, ".config", "lfr", "secrets.ps1"),
+			}
+			for _, p := range paths {
+				if val, parseErr := parseSecretsFile(p); parseErr == nil && val != "" {
+					cfg.AuthToken = val
+					if runtime.GOOS != "windows" {
+						if info, err := os.Stat(p); err == nil {
+							if info.Mode().Perm()&0077 != 0 {
+								fmt.Fprintf(os.Stderr, "Warning: Secrets file %s has insecure permissions %04o. For security, run 'chmod 600 %s'\n", p, info.Mode().Perm(), p)
+							}
+						}
+					}
+					break
+				}
 			}
 		}
 	}
@@ -426,4 +468,54 @@ func cleanTargetHost(target string) string {
 		return u.Hostname()
 	}
 	return target
+}
+
+// parseSecretsFile reads a restricted shell script or PowerShell file line by line
+// and parses LFT_CLIENT_TOKEN or LFT_TOKEN variables.
+func parseSecretsFile(path string) (string, error) {
+	file, err := os.Open(path)
+	if err != nil {
+		return "", err
+	}
+	defer file.Close() //nolint:errcheck
+
+	scanner := bufio.NewScanner(file)
+	for scanner.Scan() {
+		line := strings.TrimSpace(scanner.Text())
+		if line == "" || strings.HasPrefix(line, "#") {
+			continue
+		}
+
+		// Strip export syntax: export KEY=VALUE
+		if strings.HasPrefix(line, "export ") {
+			line = strings.TrimPrefix(line, "export ")
+			line = strings.TrimSpace(line)
+		}
+
+		// Strip PowerShell environment syntax: $env:KEY=VALUE
+		if strings.HasPrefix(line, "$env:") {
+			line = strings.TrimPrefix(line, "$env:")
+			line = strings.TrimSpace(line)
+		}
+
+		// Split on first '='
+		parts := strings.SplitN(line, "=", 2)
+		if len(parts) != 2 {
+			continue
+		}
+		key := strings.TrimSpace(parts[0])
+		val := strings.TrimSpace(parts[1])
+
+		if key == "LFT_CLIENT_TOKEN" || key == "LFT_TOKEN" {
+			// Strip surrounding quotes
+			if (strings.HasPrefix(val, "\"") && strings.HasSuffix(val, "\"")) ||
+				(strings.HasPrefix(val, "'") && strings.HasSuffix(val, "'")) {
+				if len(val) >= 2 {
+					val = val[1 : len(val)-1]
+				}
+			}
+			return val, nil
+		}
+	}
+	return "", scanner.Err()
 }

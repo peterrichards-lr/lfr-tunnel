@@ -1,8 +1,13 @@
 package config
 
 import (
+	"bytes"
+	"io"
 	"os"
+	"path/filepath"
 	"reflect"
+	"runtime"
+	"strings"
 	"testing"
 )
 
@@ -247,5 +252,114 @@ func TestLoadClientConfig_LDMOverridesAndTargetHost(t *testing.T) {
 	}
 	if cfg.TargetHost != "liferay" {
 		t.Errorf("expected TargetHost override to be cleaned to liferay, got %s", cfg.TargetHost)
+	}
+}
+
+func TestParseSecretsFile_Unix(t *testing.T) {
+	tmpDir := t.TempDir()
+	path := filepath.Join(tmpDir, "secrets")
+	content := "# Comment\nexport LFT_CLIENT_TOKEN=\"unix-secret-token\"\n"
+	if err := os.WriteFile(path, []byte(content), 0600); err != nil {
+		t.Fatalf("failed to write: %v", err)
+	}
+
+	val, err := parseSecretsFile(path)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if val != "unix-secret-token" {
+		t.Errorf("expected 'unix-secret-token', got %q", val)
+	}
+}
+
+func TestParseSecretsFile_PowerShell(t *testing.T) {
+	tmpDir := t.TempDir()
+	path := filepath.Join(tmpDir, "secrets.ps1")
+	content := "$env:LFT_TOKEN = 'ps-secret-token'\n"
+	if err := os.WriteFile(path, []byte(content), 0600); err != nil {
+		t.Fatalf("failed to write: %v", err)
+	}
+
+	val, err := parseSecretsFile(path)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if val != "ps-secret-token" {
+		t.Errorf("expected 'ps-secret-token', got %q", val)
+	}
+}
+
+func TestLoadClientConfig_SecretsFallback(t *testing.T) {
+	tmpDir := t.TempDir()
+
+	t.Setenv("HOME", tmpDir)
+	t.Setenv("USERPROFILE", tmpDir)
+	t.Setenv("LFT_TOKEN_FILE", "")
+	t.Setenv("LFT_CLIENT_TOKEN", "")
+	t.Setenv("LFT_TOKEN", "")
+
+	secretsDir := filepath.Join(tmpDir, ".config", "lfr")
+	if err := os.MkdirAll(secretsDir, 0700); err != nil {
+		t.Fatalf("failed to create secrets dir: %v", err)
+	}
+
+	secretsFile := filepath.Join(secretsDir, "secrets")
+	secretsContent := "export LFT_CLIENT_TOKEN=\"fallback-token-val\"\n"
+	if err := os.WriteFile(secretsFile, []byte(secretsContent), 0600); err != nil {
+		t.Fatalf("failed to write secrets file: %v", err)
+	}
+
+	cfg, err := LoadClientConfig("")
+	if err != nil {
+		t.Fatalf("failed to load client config: %v", err)
+	}
+
+	if cfg.AuthToken != "fallback-token-val" {
+		t.Errorf("expected AuthToken to be fallback-token-val, got %q", cfg.AuthToken)
+	}
+}
+
+func TestInsecurePermissionWarning(t *testing.T) {
+	tmpFile, err := os.CreateTemp("", "insecure-token-*")
+	if err != nil {
+		t.Fatalf("failed to create temp token: %v", err)
+	}
+	defer os.Remove(tmpFile.Name()) //nolint:errcheck
+
+	if _, err := tmpFile.Write([]byte("some-token")); err != nil {
+		t.Fatalf("failed to write: %v", err)
+	}
+	tmpFile.Close() //nolint:errcheck
+
+	if err := os.Chmod(tmpFile.Name(), 0644); err != nil {
+		t.Fatalf("failed to chmod: %v", err)
+	}
+
+	oldStderr := os.Stderr
+	r, w, _ := os.Pipe()
+	os.Stderr = w
+
+	t.Setenv("LFT_CLIENT_TOKEN", "")
+	t.Setenv("LFT_TOKEN", "")
+	t.Setenv("LFT_TOKEN_FILE", tmpFile.Name())
+
+	_, err = LoadClientConfig("")
+	if err != nil {
+		w.Close() //nolint:errcheck
+		os.Stderr = oldStderr
+		t.Fatalf("failed to load config: %v", err)
+	}
+
+	w.Close() //nolint:errcheck
+	os.Stderr = oldStderr
+
+	var buf bytes.Buffer
+	_, _ = io.Copy(&buf, r)
+	output := buf.String()
+
+	if runtime.GOOS != "windows" {
+		if !strings.Contains(output, "Warning: Token file") {
+			t.Errorf("expected warning output about insecure permissions, got: %q", output)
+		}
 	}
 }

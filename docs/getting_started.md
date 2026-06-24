@@ -167,6 +167,53 @@ Set-Content -Path "$Home\.lfr-tunnel\token" -Value "lfr_pat_your-token-here"
 
 ---
 
+### Option C: Restricted Secrets File (Advanced & Secure)
+
+This matches the security practices taken in LDM. Instead of storing the token raw in `~/.lfr-tunnel/token`, you store it in a restricted variables file which you source in your shell profile.
+
+#### On macOS / Linux (Bash or Zsh)
+1. Create the restricted folder and secrets file:
+   ```bash
+   mkdir -p ~/.config/lfr
+   touch ~/.config/lfr/secrets
+   chmod 600 ~/.config/lfr/secrets
+   ```
+2. Add your token variable to the file:
+   ```bash
+   echo 'export LFT_CLIENT_TOKEN="your_actual_token_here"' >> ~/.config/lfr/secrets
+   ```
+3. Source the file in your profile by adding this to the bottom of your `~/.zshrc` or `~/.bashrc`:
+   ```bash
+   [ -f ~/.config/lfr/secrets ] && source ~/.config/lfr/secrets
+   ```
+
+#### On Windows (PowerShell)
+1. Run these commands in PowerShell to create the secrets folder/file and restrict permissions to only your explicit user account:
+   ```powershell
+   New-Item -ItemType Directory -Path "$HOME\.config\lfr" -Force
+   $SecretFile = New-Item -ItemType File -Path "$HOME\.config\lfr\secrets.ps1" -Force
+
+   # Restrict permissions so ONLY you can access it
+   $Acl = Get-Acl $SecretFile.FullName
+   $Acl.SetAccessRuleProtection($true, $false)
+   $User = [System.Security.Principal.WindowsIdentity]::GetCurrent().Name
+   $Rule = New-Object System.Security.AccessControl.FileSystemAccessRule($User, "FullControl", "Allow")
+   $Acl.AddAccessRule($Rule)
+   Set-Acl $SecretFile.FullName $Acl
+   ```
+2. Add the token to the file:
+   ```powershell
+   Set-Content -Path "$HOME\.config\lfr\secrets.ps1" -Value '$env:LFT_CLIENT_TOKEN="your_actual_token_here"'
+   ```
+3. Load it automatically on shell startup. Open your PowerShell profile (`notepad $PROFILE`) and add:
+   ```powershell
+   if (Test-Path "$HOME\.config\lfr\secrets.ps1") { . "$HOME\.config\lfr\secrets.ps1" }
+   ```
+
+The client CLI (`lfr-tunnel`) will automatically load your token from these files if it is not configured via other mechanisms.
+
+---
+
 ## Step 4: Run Your First Tunnel
 
 Once your token is saved, you can run the client. By default, `lfr-tunnel` targets the primary Liferay port `8080` and scans for client extensions.

@@ -601,6 +601,12 @@ function toggleTheme() {
                         if (dl) dl.href = vData.documentation_url;
                     }
                     
+                    const repoUrl = vData.repository_url || 'https://github.com/peterrichards-lr/lfr-tunnel';
+                    const secureLink = document.getElementById('secure-token-guide-link');
+                    if (secureLink) {
+                        secureLink.href = `${repoUrl}/blob/master/docs/getting_started.md#option-c-restricted-secrets-file-advanced--secure`;
+                    }
+                    
                     let os = 'Unknown OS';
                     let platformKey = '';
                     const ua = navigator.userAgent;

@@ -1,5 +1,5 @@
 {
-  "version": "v1.14.2",
+  "version": "v1.14.3",
   "release_date": "2026-06-23",
   "features": [
     "Implement Gateway-First dynamic self-upgrade mechanism (lfr-tunnel -upgrade) which queries the gateway's /api/version endpoint directly to bypass GitHub API rate limits.",

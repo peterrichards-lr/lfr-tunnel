@@ -19,6 +19,7 @@ import (
 	"github.com/mattn/go-isatty"
 	"lfr-tunnel/pkg/client"
 	"lfr-tunnel/pkg/config"
+	"lfr-tunnel/pkg/mcp"
 )
 
 type arrayFlags []string
@@ -133,6 +134,11 @@ func main() {
 		if err := client.RunLogin(cfg.ServerURL); err != nil {
 			log.Fatalf("[Error] Login failed: %v", err)
 		}
+		return
+	}
+
+	if len(os.Args) > 1 && os.Args[1] == "mcp" {
+		mcp.StartMCPServer()
 		return
 	}
 

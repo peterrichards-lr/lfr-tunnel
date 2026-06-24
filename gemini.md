@@ -484,5 +484,10 @@ The solution will consist of:
 - [x] Deploy signed client binaries and checksums to the VPS downloads directory
 - [x] Cross-compile, deploy, and restart gateway server binary to VPS, verified via diagnostic tool
 
+## Playbook Alignment: Backlog Prioritization Engine
+- [x] Create Python parser script `scripts/prioritize_issues.py` to auto-label issues based on reaction counts
+- [x] Configure `.github/workflows/prioritize-issues.yml` scheduled Actions workflow with `issues: write` permission
+
+
 
 

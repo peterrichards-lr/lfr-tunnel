@@ -471,5 +471,10 @@ The solution will consist of:
 - [x] Populate `PortalURL` in register endpoint response on the server
 - [x] Update client to parse custom RegistrationError containing `PortalURL`
 - [x] Format and print a beautiful, clear instructions message in the CLI pointing to the portal URL on 403
+- [x] Create workspace operations skill `lfr-tunnel-ops` at `.agents/skills/lfr-tunnel-ops/SKILL.md`
+- [x] Compile multi-platform client binaries, update checksums, and sign/bypass GPG/OS keys
+- [x] Deploy signed client binaries and checksums to the VPS downloads directory
+- [x] Cross-compile, deploy, and restart gateway server binary to VPS, verified via diagnostic tool
+
 
 

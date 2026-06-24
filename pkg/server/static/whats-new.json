@@ -1,9 +1,9 @@
 {
   "version": "v1.14.3",
-  "release_date": "2026-06-23",
+  "release_date": "2026-06-24",
   "features": [
-    "Implement Gateway-First dynamic self-upgrade mechanism (lfr-tunnel -upgrade) which queries the gateway's /api/version endpoint directly to bypass GitHub API rate limits.",
-    "Support dynamic package manager instructions (Homebrew, Scoop, Custom Install Script) returned from the gateway instead of attempting in-place binary swaps."
+    "Implement Model Context Protocol (MCP) server supporting stdio JSON-RPC transport for seamless AI assistant integration (Cursor, Windsurf, Antigravity IDE).",
+    "Expose MCP tools for checking status (get_tunnel_status), starting/stopping tunnels, listing request intercepts (list_requests), and replaying HTTP requests (replay_request)."
   ]
 }
 

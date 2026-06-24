@@ -492,6 +492,14 @@ The solution will consist of:
 ## CI Test Suite Fix
 - [x] Fix TestTOTP flake on Ubuntu runners by ensuring the incorrect token choice does not match valid codes in the time drift window.
 
+## Secure Client PAT Loading (v1.14.3)
+- [x] Implement parser for restricted secrets file (~/.config/lfr/secrets and secrets.ps1).
+- [x] Load client PAT from restricted secrets files as fallbacks in LoadClientConfig.
+- [x] Implement POSIX permission warning check for token and secrets files on Unix-like systems.
+- [x] Add unit test coverage for secrets file loading and parsing.
+- [x] Add Option C (Restricted Secrets File) to docs/getting_started.md and link it from portal dashboard UI.
+- [x] Fix errcheck linter warnings in pkg/config/config_test.go.
+
 
 
 

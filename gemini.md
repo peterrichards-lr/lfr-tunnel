@@ -503,6 +503,12 @@ The solution will consist of:
 ## Model Context Protocol (MCP) Server Design (v1.15.0)
 - [x] Create design document docs/mcp.md for the MCP server integration.
 
+## Model Context Protocol (MCP) Server Implementation (v1.15.0)
+- [x] Implement pkg/mcp/server.go with JSON-RPC stdio handler and MCP tool schemas.
+- [x] Integrate mcp subcommand in cmd/lfr-tunnel/main.go.
+- [x] Add unit tests for MCP server tools and handler.
+- [x] Verify build and tests pass successfully.
+
 
 
 

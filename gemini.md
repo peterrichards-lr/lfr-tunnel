@@ -500,6 +500,9 @@ The solution will consist of:
 - [x] Add Option C (Restricted Secrets File) to docs/getting_started.md and link it from portal dashboard UI.
 - [x] Fix errcheck linter warnings in pkg/config/config_test.go.
 
+## Model Context Protocol (MCP) Server Design (v1.15.0)
+- [x] Create design document docs/mcp.md for the MCP server integration.
+
 
 
 

@@ -60,7 +60,21 @@ func TestTOTP(t *testing.T) {
 	}
 
 	// Verify incorrect code fails
-	if ValidateTOTP(secret, "999999") {
-		t.Error("expected random incorrect code to fail validation")
+	// Determine a code that is guaranteed to be incorrect by checking the 3 valid codes
+	correctCodes := map[string]bool{
+		calculateTOTP(key, currentStep-1): true,
+		calculateTOTP(key, currentStep):   true,
+		calculateTOTP(key, currentStep+1): true,
+	}
+	incorrectCode := "999999"
+	if correctCodes[incorrectCode] {
+		incorrectCode = "888888"
+		if correctCodes[incorrectCode] {
+			incorrectCode = "777777"
+		}
+	}
+
+	if ValidateTOTP(secret, incorrectCode) {
+		t.Errorf("expected incorrect code %s to fail validation", incorrectCode)
 	}
 }

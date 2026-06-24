@@ -1,0 +1,22 @@
+name: Prioritize Feature Backlog
+
+on:
+  schedule:
+    - cron: '0 */6 * * *' # Run every 6 hours
+  workflow_dispatch:      # Allow manual runs via Actions tab
+
+permissions:
+  issues: write           # Grants token permission to write/edit issue labels
+
+jobs:
+  prioritize:
+    name: Parse Reactions & Label Issues
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v7
+
+      - name: Run Prioritization Parser
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: python3 scripts/prioritize_issues.py

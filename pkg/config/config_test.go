@@ -31,6 +31,7 @@ client_platforms:
     url: "http://example.com/darwin-arm64"
     cmd: "brew install test"
     cmd_fallback: "curl"
+portal_url: "https://portal.example.com"
 `)
 	if _, err := tmpFile.Write(content); err != nil {
 		t.Fatalf("failed to write temp file: %v", err)
@@ -58,6 +59,9 @@ client_platforms:
 	if cfg.LatestClientVersion != "v1.2.0" {
 		t.Errorf("expected LatestClientVersion to be v1.2.0, got %s", cfg.LatestClientVersion)
 	}
+	if cfg.PortalURL != "https://portal.example.com" {
+		t.Errorf("expected PortalURL to be https://portal.example.com, got %s", cfg.PortalURL)
+	}
 	if cfg.ClientPlatforms == nil || cfg.ClientPlatforms["macos_arm64"].URL != "http://example.com/darwin-arm64" {
 		t.Errorf("expected ClientPlatforms macos_arm64 URL to be http://example.com/darwin-arm64, got %v", cfg.ClientPlatforms)
 	}
@@ -79,6 +83,7 @@ client_platforms:
 	os.Setenv("LFT_LATEST_CLIENT_VERSION", "v2.1.0")       //nolint:errcheck
 	os.Setenv("LFT_ENABLE_WAF", "false")                   //nolint:errcheck
 	os.Setenv("LFT_DISABLE_CLIENT_DOWNLOADS", "true")      //nolint:errcheck
+	os.Setenv("LFT_PORTAL_URL", "https://env-portal.com")  //nolint:errcheck
 	defer func() {
 		os.Unsetenv("LFT_DOMAINS")                  //nolint:errcheck
 		os.Unsetenv("LFT_BIND_ADDR")                //nolint:errcheck
@@ -87,6 +92,7 @@ client_platforms:
 		os.Unsetenv("LFT_LATEST_CLIENT_VERSION")    //nolint:errcheck
 		os.Unsetenv("LFT_ENABLE_WAF")               //nolint:errcheck
 		os.Unsetenv("LFT_DISABLE_CLIENT_DOWNLOADS") //nolint:errcheck
+		os.Unsetenv("LFT_PORTAL_URL")               //nolint:errcheck
 	}()
 
 	cfgEnv, err := LoadServerConfig(tmpFile.Name())
@@ -114,6 +120,9 @@ client_platforms:
 	}
 	if !cfgEnv.DisableClientDownloads {
 		t.Errorf("expected DisableClientDownloads override to be true, got false")
+	}
+	if cfgEnv.PortalURL != "https://env-portal.com" {
+		t.Errorf("expected PortalURL override to be https://env-portal.com, got %s", cfgEnv.PortalURL)
 	}
 }
 

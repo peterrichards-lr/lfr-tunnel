@@ -284,6 +284,21 @@ func main() {
 	}
 	regResp, err := client.RegisterTunnel(cfg.ServerURL, cfg.AuthToken, sub, portMappings, cfg.RateLimit, cfg.BasicAuth, engine.AddedHeaders, clientOS)
 	if err != nil {
+		if regErr, ok := err.(*client.RegistrationError); ok && regErr.StatusCode == 403 {
+			log.Printf("[Error] Failed to register: %s\n", regErr.Message)
+			portalURL := regErr.PortalURL
+			if portalURL == "" {
+				portalURL = strings.Replace(cfg.ServerURL, "tunnel.", "portal.", 1)
+				if !strings.Contains(portalURL, "portal.") {
+					portalURL = cfg.ServerURL + "/portal"
+				}
+			}
+			log.Println("[Client] Subdomain reservation or limit issue detected.")
+			log.Println("[Client] Please visit the User Portal to resolve it:")
+			log.Printf("         👉 %s (Cmd/Ctrl+Click to open)\n", portalURL)
+			os.Exit(1)
+		}
+
 		errStr := err.Error()
 		isGatewayIssue := false
 		if strings.Contains(errStr, "registration request failed") ||

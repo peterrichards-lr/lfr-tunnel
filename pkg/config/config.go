@@ -72,6 +72,7 @@ type ServerConfig struct {
 	EnableWAF                  bool                      `yaml:"enable_waf"`
 	DisableEmailLogin          bool                      `yaml:"disable_email_login"`
 	DisableClientDownloads     bool                      `yaml:"disable_client_downloads"`
+	PortalURL                  string                    `yaml:"portal_url"`
 
 	// Dynamic SSO/OIDC Providers
 	SSOProviders []SSOProviderConfig `yaml:"sso_providers"`
@@ -278,6 +279,9 @@ func LoadServerConfig(path string) (*ServerConfig, error) {
 	}
 	if val := os.Getenv("LFT_ENABLE_USER_PORTAL"); val != "" {
 		cfg.EnableUserPortal = strings.ToLower(val) == "true" || val == "1"
+	}
+	if val := os.Getenv("LFT_PORTAL_URL"); val != "" {
+		cfg.PortalURL = val
 	}
 	if val := os.Getenv("LFT_PORTAL_SESSION_DURATION"); val != "" {
 		if d, err := time.ParseDuration(val); err == nil {

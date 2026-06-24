@@ -64,6 +64,7 @@ type RegisterResponse struct {
 	Domains         []string `json:"domains,omitempty"`
 	Error           string   `json:"error,omitempty"`
 	Warning         string   `json:"warning,omitempty"`
+	PortalURL       string   `json:"portal_url,omitempty"`
 }
 
 // CheckSubdomainResponse represents the JSON response payload for subdomain checks.
@@ -845,14 +846,14 @@ func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 func (s *Server) handleRegister(w http.ResponseWriter, r *http.Request) {
 	var req RegisterRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		respondJSON(w, http.StatusBadRequest, RegisterResponse{Status: "error", Error: "invalid JSON payload"})
+		s.respondRegisterResponse(w, http.StatusBadRequest, r, RegisterResponse{Status: "error", Error: "invalid JSON payload"})
 		return
 	}
 
 	// Validate auth token
 	user, ok := s.isValidToken(req.AuthToken)
 	if !ok {
-		respondJSON(w, http.StatusUnauthorized, RegisterResponse{Status: "error", Error: "unauthorized"})
+		s.respondRegisterResponse(w, http.StatusUnauthorized, r, RegisterResponse{Status: "error", Error: "unauthorized"})
 		return
 	}
 
@@ -891,7 +892,7 @@ func (s *Server) handleRegister(w http.ResponseWriter, r *http.Request) {
 			}
 		}
 		if !found {
-			respondJSON(w, http.StatusInternalServerError, RegisterResponse{Status: "error", Error: "failed to generate unique random subdomain"})
+			s.respondRegisterResponse(w, http.StatusInternalServerError, r, RegisterResponse{Status: "error", Error: "failed to generate unique random subdomain"})
 			return
 		}
 	} else {
@@ -899,7 +900,7 @@ func (s *Server) handleRegister(w http.ResponseWriter, r *http.Request) {
 		// 1. Verify availability in registry (in-memory leases)
 		available, reason := s.registry.CheckSubdomain(req.SubdomainPrefix, activeDomains)
 		if !available {
-			respondJSON(w, http.StatusConflict, RegisterResponse{Status: "error", Error: "Subdomain is already taken: " + reason})
+			s.respondRegisterResponse(w, http.StatusConflict, r, RegisterResponse{Status: "error", Error: "Subdomain is already taken: " + reason})
 			return
 		}
 
@@ -913,7 +914,7 @@ func (s *Server) handleRegister(w http.ResponseWriter, r *http.Request) {
 						quarantineCutoff := existing.ExpiresAt.AddDate(0, 0, s.cfg.SubdomainQuarantineDays)
 						if time.Now().Before(quarantineCutoff) {
 							if existing.UserID != user.ID {
-								respondJSON(w, http.StatusConflict, RegisterResponse{Status: "error", Error: "Subdomain is currently in quarantine"})
+								s.respondRegisterResponse(w, http.StatusConflict, r, RegisterResponse{Status: "error", Error: "Subdomain is currently in quarantine"})
 								return
 							}
 							// Quarantined but belongs to this user. We need to extend/re-reserve it.
@@ -925,7 +926,7 @@ func (s *Server) handleRegister(w http.ResponseWriter, r *http.Request) {
 						}
 					} else {
 						if existing.UserID != user.ID {
-							respondJSON(w, http.StatusConflict, RegisterResponse{Status: "error", Error: "Subdomain is reserved by another user"})
+							s.respondRegisterResponse(w, http.StatusConflict, r, RegisterResponse{Status: "error", Error: "Subdomain is reserved by another user"})
 							return
 						}
 					}
@@ -934,7 +935,7 @@ func (s *Server) handleRegister(w http.ResponseWriter, r *http.Request) {
 					if s.cfg.AllowClientAutoReservation && userRec != nil && (userRec.Role == "admin" || userRec.Role == "owner") {
 						domainsToReserve = append(domainsToReserve, d)
 					} else {
-						respondJSON(w, http.StatusForbidden, RegisterResponse{Status: "error", Error: "Custom subdomains must be reserved in the portal prior to connecting"})
+						s.respondRegisterResponse(w, http.StatusForbidden, r, RegisterResponse{Status: "error", Error: "Custom subdomains must be reserved in the portal prior to connecting"})
 						return
 					}
 				}
@@ -959,7 +960,7 @@ func (s *Server) handleRegister(w http.ResponseWriter, r *http.Request) {
 
 				needed := len(domainsToReserve)
 				if limit >= 0 && activeCount+needed > limit {
-					respondJSON(w, http.StatusForbidden, RegisterResponse{Status: "error", Error: "Subdomain reservation quota limit reached"})
+					s.respondRegisterResponse(w, http.StatusForbidden, r, RegisterResponse{Status: "error", Error: "Subdomain reservation quota limit reached"})
 					return
 				}
 
@@ -1041,7 +1042,7 @@ func (s *Server) handleRegister(w http.ResponseWriter, r *http.Request) {
 		isReconnecting := uniqueSubs[req.SubdomainPrefix]
 
 		if maxTunnels > 0 && userTunnelsCount >= maxTunnels && !isReconnecting {
-			respondJSON(w, http.StatusForbidden, RegisterResponse{
+			s.respondRegisterResponse(w, http.StatusForbidden, r, RegisterResponse{
 				Status: "error",
 				Error:  fmt.Sprintf("Active tunnels concurrency limit reached (%d). Stop another active tunnel or ask an administrator to increase your limit.", maxTunnels),
 			})
@@ -1052,7 +1053,7 @@ func (s *Server) handleRegister(w http.ResponseWriter, r *http.Request) {
 	// Register in registry
 	sessionToken, remotes, err := s.registry.Register(user.ID, req.SubdomainPrefix, req.Ports, activeDomains, effectiveLimit, clientIP, req.BasicAuth, req.AddedHeaders)
 	if err != nil {
-		respondJSON(w, http.StatusConflict, RegisterResponse{Status: "error", Error: err.Error()})
+		s.respondRegisterResponse(w, http.StatusConflict, r, RegisterResponse{Status: "error", Error: err.Error()})
 		return
 	}
 
@@ -1063,7 +1064,7 @@ func (s *Server) handleRegister(w http.ResponseWriter, r *http.Request) {
 
 	go s.BroadcastTelemetry()
 
-	respondJSON(w, http.StatusOK, RegisterResponse{
+	s.respondRegisterResponse(w, http.StatusOK, r, RegisterResponse{
 		Status:          "success",
 		SessionToken:    sessionToken,
 		SubdomainPrefix: req.SubdomainPrefix,
@@ -1071,6 +1072,18 @@ func (s *Server) handleRegister(w http.ResponseWriter, r *http.Request) {
 		Domains:         activeDomains,
 		Warning:         warning,
 	})
+}
+
+// respondRegisterResponse sends a RegisterResponse with automated PortalURL enrichment.
+func (s *Server) respondRegisterResponse(w http.ResponseWriter, status int, r *http.Request, resp RegisterResponse) {
+	if resp.PortalURL == "" {
+		portalURL := s.cfg.PortalURL
+		if portalURL == "" {
+			portalURL = s.getPortalBaseURL(r) + "/portal"
+		}
+		resp.PortalURL = portalURL
+	}
+	respondJSON(w, status, resp)
 }
 
 // handleTunnelStatus updates the maintenance/health status of a client's tunnel.

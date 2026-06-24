@@ -508,4 +508,4 @@ The solution will consist of:
 - [x] Integrate mcp subcommand in cmd/lfr-tunnel/main.go.
 - [x] Add unit tests for MCP server tools and handler.
 - [x] Verify build and tests pass successfully.
-- [ ] Release, tag, and deploy v1.15.0 of lfr-tunnel to GitHub and VPS.
+- [x] Release, tag, and deploy v1.15.0 of lfr-tunnel to GitHub and VPS.

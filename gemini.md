@@ -174,7 +174,15 @@ The solution will consist of:
 - [x] Update default macOS command to download binary and copy directly to /usr/local/bin/lfr-tunnel
 - [x] Update scripts/install.sh to use the S1 whitelisted /tmp/lfr-tunnel staging path
 
+### Future Roadmap Extensions (Proposed)
 
+| Feature | Description | Risk | LOE | Business Value | Priority |
+| :--- | :--- | :--- | :--- | :--- | :--- |
+| **1. LDM & Liferay Auto-Discovery** | Detect running LDM/Docker Tomcat instances to eliminate configuration flags. | Low | Small | High | **High** |
+| **2. Traffic Web Inspector & Replayer** | Local embedded dashboard (`:4040`) for HTTP headers, payloads, and request replay. | Medium | Medium | High | **High** |
+| **3. Client-Initiated Access Control** | Gateway-level IP whitelisting or passcode screen on the public URL. | Low | Medium | High | **High** |
+| **4. Vanity Domain Routing (SNI)** | Route custom domains directly with on-the-fly gateway SSL provisioning. | High | Large | High | **Medium** |
+| **5. Latency & Bandwidth Simulation** | Throttle traffic and inject network latency from client CLI settings. | Medium | Small | Medium | **Medium** |
 
 
 ## SentinelOne False Positive Mitigation
@@ -475,6 +483,11 @@ The solution will consist of:
 - [x] Compile multi-platform client binaries, update checksums, and sign/bypass GPG/OS keys
 - [x] Deploy signed client binaries and checksums to the VPS downloads directory
 - [x] Cross-compile, deploy, and restart gateway server binary to VPS, verified via diagnostic tool
+
+## Playbook Alignment: Backlog Prioritization Engine
+- [x] Create Python parser script `scripts/prioritize_issues.py` to auto-label issues based on reaction counts
+- [x] Configure `.github/workflows/prioritize-issues.yml` scheduled Actions workflow with `issues: write` permission
+
 
 
 

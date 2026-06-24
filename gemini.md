@@ -489,6 +489,10 @@ The solution will consist of:
 - [x] Configure `.github/workflows/prioritize-issues.yml` scheduled Actions workflow with `issues: write` permission
 - [x] Add automatic label creation to `scripts/prioritize_issues.py` to prevent 'priority: p3' not found errors
 
+## CI Test Suite Fix
+- [x] Fix TestTOTP flake on Ubuntu runners by ensuring the incorrect token choice does not match valid codes in the time drift window.
+
+
 
 
 

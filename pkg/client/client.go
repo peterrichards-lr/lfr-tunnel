@@ -51,6 +51,20 @@ type RegisterResponse struct {
 	Domains         []string `json:"domains,omitempty"`
 	Error           string   `json:"error,omitempty"`
 	Warning         string   `json:"warning,omitempty"`
+	PortalURL       string   `json:"portal_url,omitempty"`
+}
+
+type RegistrationError struct {
+	StatusCode int
+	Message    string
+	PortalURL  string
+}
+
+func (e *RegistrationError) Error() string {
+	if e.PortalURL != "" {
+		return fmt.Sprintf("gateway error (%d): %s (Portal: %s)", e.StatusCode, e.Message, e.PortalURL)
+	}
+	return fmt.Sprintf("gateway error (%d): %s", e.StatusCode, e.Message)
 }
 
 // DetectWorkspacePorts walks the filesystem looking for client-extension.yaml files
@@ -169,9 +183,16 @@ func RegisterTunnel(serverURL string, authToken string, subdomain string, ports 
 
 	if resp.StatusCode != http.StatusOK {
 		if regResp.Error != "" {
-			return nil, fmt.Errorf("gateway error (%d): %s", resp.StatusCode, regResp.Error)
+			return nil, &RegistrationError{
+				StatusCode: resp.StatusCode,
+				Message:    regResp.Error,
+				PortalURL:  regResp.PortalURL,
+			}
 		}
-		return nil, fmt.Errorf("gateway returned status %d", resp.StatusCode)
+		return nil, &RegistrationError{
+			StatusCode: resp.StatusCode,
+			Message:    fmt.Sprintf("gateway returned status %d", resp.StatusCode),
+		}
 	}
 
 	if regResp.Status != "success" {

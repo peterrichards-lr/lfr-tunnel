@@ -2232,3 +2232,84 @@ func TestAdminUptimeHistory(t *testing.T) {
 		t.Error("Expected at least one gateway run record, got none")
 	}
 }
+
+func TestRegisterSubdomainReservationError_PortalURL(t *testing.T) {
+	cfg := config.DefaultServerConfig()
+	cfg.DBPath = filepath.Join(t.TempDir(), "test.db")
+	cfg.Domains = []string{"example.se"}
+	cfg.PortalURL = "https://custom-portal.example.com"
+	cfg.DisableBackupScheduler = true
+
+	srv, err := NewServer(cfg)
+	if err != nil {
+		t.Fatalf("failed to create server: %v", err)
+	}
+	defer func() {
+		// Sleep 50ms to prevent tempdir cleanup race
+		time.Sleep(50 * time.Millisecond)
+		srv.Stop()
+	}()
+
+	// Create a standard user (not admin/owner)
+	userEmail := "developer@example.com"
+	_ = srv.db.CreateUser(&db.User{
+		ID:     userEmail,
+		Email:  userEmail,
+		Role:   "user", // Standard role
+		Status: "approved",
+	})
+	patHashBytes := sha256.Sum256([]byte("developer-secret"))
+	_ = srv.db.CreatePAT(&db.PersonalAccessToken{
+		UserID:      userEmail,
+		TokenHash:   hex.EncodeToString(patHashBytes[:]),
+		TokenPrefix: "lfr_pat_dev_",
+	})
+
+	// Try to register a custom subdomain "unreserved-sub"
+	payload, _ := json.Marshal(RegisterRequest{
+		SubdomainPrefix: "unreserved-sub",
+		Ports:           []PortMapping{{LocalPort: 8080}},
+		AuthToken:       "developer-secret",
+	})
+
+	req := httptest.NewRequest("POST", "http://tunnel.example.se/api/register", bytes.NewReader(payload))
+	req.Host = "tunnel.example.se"
+	rec := httptest.NewRecorder()
+
+	srv.ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusForbidden {
+		t.Errorf("expected 403 Forbidden, got %d", rec.Code)
+	}
+
+	var resp RegisterResponse
+	if err := json.NewDecoder(rec.Body).Decode(&resp); err != nil {
+		t.Fatalf("failed to decode response: %v", err)
+	}
+
+	if resp.PortalURL != "https://custom-portal.example.com" {
+		t.Errorf("expected PortalURL 'https://custom-portal.example.com', got %q", resp.PortalURL)
+	}
+
+	// Now test dynamic construction of PortalURL when cfg.PortalURL is empty
+	cfg.PortalURL = ""
+	req2 := httptest.NewRequest("POST", "http://tunnel.example.se/api/register", bytes.NewReader(payload))
+	req2.Host = "tunnel.example.se"
+	rec2 := httptest.NewRecorder()
+
+	srv.ServeHTTP(rec2, req2)
+
+	if rec2.Code != http.StatusForbidden {
+		t.Errorf("expected 403 Forbidden, got %d", rec2.Code)
+	}
+
+	var resp2 RegisterResponse
+	if err := json.NewDecoder(rec2.Body).Decode(&resp2); err != nil {
+		t.Fatalf("failed to decode response: %v", err)
+	}
+
+	expectedDynamicURL := "http://tunnel.example.se/portal"
+	if resp2.PortalURL != expectedDynamicURL {
+		t.Errorf("expected PortalURL %q, got %q", expectedDynamicURL, resp2.PortalURL)
+	}
+}

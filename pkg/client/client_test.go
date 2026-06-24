@@ -154,3 +154,58 @@ func TestProbeLocalPorts(t *testing.T) {
 		t.Errorf("expected active port to be %d, got %v", port, active)
 	}
 }
+
+func TestRegistrationError(t *testing.T) {
+	errWithPortal := &RegistrationError{
+		StatusCode: 403,
+		Message:    "Custom subdomains must be reserved in the portal prior to connecting",
+		PortalURL:  "https://portal.lfr-demo.se",
+	}
+	expectedWithPortal := "gateway error (403): Custom subdomains must be reserved in the portal prior to connecting (Portal: https://portal.lfr-demo.se)"
+	if errWithPortal.Error() != expectedWithPortal {
+		t.Errorf("expected error %q, got %q", expectedWithPortal, errWithPortal.Error())
+	}
+
+	errWithoutPortal := &RegistrationError{
+		StatusCode: 403,
+		Message:    "Custom subdomains must be reserved in the portal prior to connecting",
+	}
+	expectedWithoutPortal := "gateway error (403): Custom subdomains must be reserved in the portal prior to connecting"
+	if errWithoutPortal.Error() != expectedWithoutPortal {
+		t.Errorf("expected error %q, got %q", expectedWithoutPortal, errWithoutPortal.Error())
+	}
+}
+
+func TestRegisterTunnel_Error(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusForbidden)
+		_ = json.NewEncoder(w).Encode(RegisterResponse{
+			Status:    "error",
+			Error:     "Custom subdomains must be reserved in the portal prior to connecting",
+			PortalURL: "https://portal.lfr-demo.se/portal",
+		})
+	}))
+	defer server.Close()
+
+	ports := []PortMapping{{LocalPort: 8080}}
+	_, err := RegisterTunnel(server.URL, "mysecret", "test-sub", ports, 0, "", nil, "linux")
+	if err == nil {
+		t.Fatal("expected RegisterTunnel to fail")
+	}
+
+	regErr, ok := err.(*RegistrationError)
+	if !ok {
+		t.Fatalf("expected error of type *RegistrationError, got %T: %v", err, err)
+	}
+
+	if regErr.StatusCode != http.StatusForbidden {
+		t.Errorf("expected status code 403, got %d", regErr.StatusCode)
+	}
+	if regErr.Message != "Custom subdomains must be reserved in the portal prior to connecting" {
+		t.Errorf("expected message 'Custom subdomains must be reserved...', got %q", regErr.Message)
+	}
+	if regErr.PortalURL != "https://portal.lfr-demo.se/portal" {
+		t.Errorf("expected portal URL 'https://portal.lfr-demo.se/portal', got %q", regErr.PortalURL)
+	}
+}

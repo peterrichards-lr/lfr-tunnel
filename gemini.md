@@ -465,3 +465,11 @@ The solution will consist of:
 ## GitHub Actions CI Linter Fix
 - [x] Fix CI linter job failure in `.github/workflows/ci.yml` by removing `install-mode: goinstall` to use precompiled binary installation.
 
+## Subdomain Reservation Error Enhancement (v1.14.2)
+- [x] Add `portal_url` to server config struct and environment parsing (LFT_PORTAL_URL)
+- [x] Add `portal_url` field to `RegisterResponse` struct in client and server
+- [x] Populate `PortalURL` in register endpoint response on the server
+- [x] Update client to parse custom RegistrationError containing `PortalURL`
+- [x] Format and print a beautiful, clear instructions message in the CLI pointing to the portal URL on 403
+
+

@@ -11,9 +11,15 @@ First off, thank you for considering contributing to Liferay Tunnel! It's people
 
 Before creating bug reports, please check our [Issue Tracker](https://github.com/peterrichards-lr/lfr-tunnel/issues) to see if the problem has already been reported.
 
-### Suggesting Enhancements
+### Suggesting Enhancements & Voting
 
 We love new ideas! Please use the Feature Request template when opening a new issue.
+
+#### Feature Request Voting & Backlog Prioritization
+To ensure we build the capabilities that provide the highest impact for the Sales Engineering team, we utilize a reaction-based voting system:
+1. **Submit**: Any team member can submit a feature request using the Feature Request template.
+2. **Vote**: Show support for a feature by adding a 👍 reaction to the original description of the issue.
+3. **Prioritization**: When planning the next release cycle, feature requests are sorted by the number of 👍 reactions. Features with the highest demand, low/medium risk, and clear business impact are moved to the top of the active sprint backlog.
 
 ### Pull Requests
 

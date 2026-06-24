@@ -93,8 +93,13 @@ else
     DEFAULT_NEXT=""
 fi
 
-# Prompt for version tag
-if [ -t 0 ]; then
+# Allow passing version as first argument or environment variable
+if [ -n "$1" ]; then
+    NEW_VER="$1"
+elif [ -n "$NEW_VER" ]; then
+    # Keep the environment variable
+    true
+elif [ -t 0 ]; then
     read -rp "Enter new version tag [default: $DEFAULT_NEXT]: " NEW_VER
 else
     NEW_VER=""

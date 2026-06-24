@@ -31,7 +31,28 @@ def update_issue_priority(issue_num, add_label, remove_labels):
     except subprocess.CalledProcessError as e:
         print(f"Error editing issue #{issue_num}: {e}", file=sys.stderr)
 
+def ensure_priority_labels():
+    labels_to_create = {
+        "priority: p1": ("d93f0b", "High priority feature backlog item"),
+        "priority: p2": ("e99695", "Medium priority feature backlog item"),
+        "priority: p3": ("fef2c0", "Low priority feature backlog item"),
+    }
+    try:
+        # Check if labels already exist
+        cmd = ["gh", "label", "list", "--json", "name"]
+        result = subprocess.run(cmd, capture_output=True, text=True, check=True)
+        existing_labels = {l.get("name") for l in json.loads(result.stdout)}
+        
+        for name, (color, desc) in labels_to_create.items():
+            if name not in existing_labels:
+                create_cmd = ["gh", "label", "create", name, "--color", color, "--description", desc]
+                subprocess.run(create_cmd, check=True)
+                print(f"Created label '{name}'")
+    except subprocess.CalledProcessError as e:
+        print(f"Error checking or creating labels: {e.stderr if e.stderr else e}", file=sys.stderr)
+
 def main():
+    ensure_priority_labels()
     issues = get_open_issues()
     if not issues:
         print("No open issues found or failed to fetch.")

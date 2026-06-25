@@ -4,7 +4,9 @@ import (
 	"bytes"
 	"context"
 	"crypto/rand"
+	"crypto/rsa"
 	"crypto/sha256"
+	"crypto/x509"
 	"embed"
 	"encoding/csv"
 	"encoding/hex"
@@ -101,6 +103,8 @@ type Server struct {
 	blacklist          sync.Map // memory cache for db blacklist
 	portalMap          sync.Map // memory cache for portal magic links and sessions
 	metricsQueue       chan *db.TunnelMetric
+	caCert             *x509.Certificate
+	caKey              *rsa.PrivateKey
 	broadcastMutex     sync.RWMutex
 	broadcastMessage   string
 	targetedMessages   map[string]string
@@ -174,6 +178,18 @@ func NewServer(cfg *config.ServerConfig) (*Server, error) {
 		cfg.PortalSessionDuration = 24 * time.Hour
 	}
 
+	var caCert *x509.Certificate
+	var caKey *rsa.PrivateKey
+	if cfg.ClientCAFile != "" && cfg.ClientCAKeyFile != "" {
+		var err error
+		caCert, caKey, err = LoadOrCreateCA(cfg.ClientCAFile, cfg.ClientCAKeyFile)
+		if err != nil {
+			log.Printf("[Server] Failed to load/create client CA: %v", err)
+		} else {
+			log.Printf("[Server] Loaded Client Root CA from certificate: %s", cfg.ClientCAFile)
+		}
+	}
+
 	ctx, cancel := context.WithCancel(context.Background())
 
 	srv := &Server{
@@ -193,7 +209,12 @@ func NewServer(cfg *config.ServerConfig) (*Server, error) {
 		lastPortalActivity: make(map[string]time.Time),
 		wsClients:          make(map[*wsClient]bool),
 		startTime:          time.Now(),
+		caCert:             caCert,
+		caKey:              caKey,
 	}
+
+	srv.proxyHandler.db = database
+	srv.proxyHandler.caCert = caCert
 
 	// Initialize i18n dynamic engine
 	if err := srv.initI18n(); err != nil {

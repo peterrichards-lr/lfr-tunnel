@@ -44,6 +44,11 @@ type ServerConfig struct {
 	SubdomainQuarantineDays    int                       `yaml:"subdomain_quarantine_days"`
 	SSLCertFile                string                    `yaml:"ssl_cert_file"`
 	SSLKeyFile                 string                    `yaml:"ssl_key_file"`
+	ClientCAFile               string                    `yaml:"client_ca_file"`
+	ClientCAKeyFile            string                    `yaml:"client_ca_key_file"`
+	ForceClientCert            bool                      `yaml:"force_client_cert"`
+	ForcePasscode              bool                      `yaml:"force_passcode"`
+	ForceIPWhitelist           bool                      `yaml:"force_ip_whitelist"`
 	DBPath                     string                    `yaml:"db_path"`
 	SMTPServer                 SMTPServerConfig          `yaml:"smtp_server"`
 	AdminNotificationEmail     string                    `yaml:"admin_notification_email"`
@@ -238,6 +243,21 @@ func LoadServerConfig(path string) (*ServerConfig, error) {
 	}
 	if val := os.Getenv("LFT_SSL_KEY"); val != "" {
 		cfg.SSLKeyFile = val
+	}
+	if val := os.Getenv("LFT_CLIENT_CA_FILE"); val != "" {
+		cfg.ClientCAFile = val
+	}
+	if val := os.Getenv("LFT_CLIENT_CA_KEY_FILE"); val != "" {
+		cfg.ClientCAKeyFile = val
+	}
+	if val := os.Getenv("LFT_FORCE_CLIENT_CERT"); val != "" {
+		cfg.ForceClientCert = strings.ToLower(val) == "true" || val == "1"
+	}
+	if val := os.Getenv("LFT_FORCE_PASSCODE"); val != "" {
+		cfg.ForcePasscode = strings.ToLower(val) == "true" || val == "1"
+	}
+	if val := os.Getenv("LFT_FORCE_IP_WHITELIST"); val != "" {
+		cfg.ForceIPWhitelist = strings.ToLower(val) == "true" || val == "1"
 	}
 	if val := os.Getenv("LFT_DB_PATH"); val != "" {
 		cfg.DBPath = val

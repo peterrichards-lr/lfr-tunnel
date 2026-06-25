@@ -2,11 +2,13 @@ package server
 
 import (
 	"bytes"
+	"crypto/x509"
 	_ "embed"
 	"encoding/base64"
 	"fmt"
 	"io"
 	"lfr-tunnel/pkg/config"
+	"lfr-tunnel/pkg/db"
 	"log"
 	"net"
 	"net/http"
@@ -30,6 +32,8 @@ type ProxyHandler struct {
 	registry *Registry
 	config   *config.ServerConfig
 	limiters sync.Map // Map of host -> *rate.Limiter
+	caCert   *x509.Certificate
+	db       *db.DB
 }
 
 // NewProxyHandler creates a new ProxyHandler instance.

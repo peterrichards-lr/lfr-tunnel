@@ -513,7 +513,7 @@ The solution will consist of:
 ## Client-Initiated Access Control & PKI Invitation System (v1.16.0) - Issue #173
 - [x] Implement database migrations on the server gateway to support `passcode`, `whitelist_ips`, and `access_mode` in the `subdomain_reservations` and `subdomain_acl` tables.
 - [x] Implement client-side CLI flags (`--passcode`, `--whitelist-ip`) and load them into `ClientConfig` with support for both YAML file and CLI options.
-- [ ] Implement Root CA generation, client certificate signing (PKCS#12 bundle `.p12` format creation), and database ACL verification on the gateway.
+- [x] Implement Root CA generation, client certificate signing (PKCS#12 bundle `.p12` format creation), and database ACL verification on the gateway.
 - [ ] Create the HTML templates for the Passcode Verification screen (`passcode.html`) and the "Access Denied" IP restriction screen (`unauthorized_ip.html`), serving them dynamically.
 - [ ] Implement the Guest Invitation workflow endpoints (invitations, magic enrollment link, browser certificate download).
 - [ ] Update the local Client Inspector dashboard to add an "Access Control" management panel that handles dynamic updates back to the gateway.

@@ -3679,15 +3679,15 @@ applyTheme(currentUser.theme_preference);
                         
                         let latText = isOnline ? `${h.latency_ms} ms` : '-';
                         let timeSince = h.last_check_at ? Math.floor((Date.now() / 1000) - h.last_check_at) + 's ago' : 'Never';
-                        let errMsg = h.error_message ? `<span style="color:var(--danger); font-size:12px;">${escapeHtml(h.error_message)}</span>` : '';
+                        let errMsg = h.error_message ? `<span style="color:var(--danger); font-size:12px;">${escapeHTML(h.error_message)}</span>` : '';
 
                         const tr = document.createElement('tr');
                         tr.innerHTML = `
-                            <td><strong>${escapeHtml(id)}</strong></td>
+                            <td><strong>${escapeHTML(id)}</strong></td>
                             <td>
                                 <span style="display:inline-flex; align-items:center; gap:6px;">
                                     <span style="width:8px; height:8px; border-radius:50%; background-color:${dotColor};"></span>
-                                    ${escapeHtml(h.status)}
+                                    ${escapeHTML(h.status)}
                                 </span>
                             </td>
                             <td>${latText}</td>

@@ -127,7 +127,7 @@ scp $SSH_KEY -r pkg/server/i18n $VPS_USER@$VPS_IP:/home/$VPS_USER/
 scp $SSH_KEY -r pkg/server/templates $VPS_USER@$VPS_IP:/home/$VPS_USER/
 
 echo "Uploading maintenance and backup scripts to VPS..."
-scp $SSH_KEY scripts/enable-maintenance.sh scripts/disable-maintenance.sh scripts/restore-with-maintenance.sh scripts/restore-backup.sh $VPS_USER@$VPS_IP:/home/$VPS_USER/
+scp $SSH_KEY scripts/enable-maintenance.sh scripts/disable-maintenance.sh scripts/restore-with-maintenance.sh scripts/restore-backup.sh scripts/sync-offsite-backups.sh scripts/sync-offsite-backups.service scripts/sync-offsite-backups.timer $VPS_USER@$VPS_IP:/home/$VPS_USER/
 
 echo "Executing remote deployment commands..."
 ssh $SSH_KEY $VPS_USER@$VPS_IP << REMOTE_SSH
@@ -143,6 +143,14 @@ ssh $SSH_KEY $VPS_USER@$VPS_IP << REMOTE_SSH
     sudo chmod +x /usr/local/bin/restore-with-maintenance.sh
     sudo mv /home/$VPS_USER/restore-backup.sh /usr/local/bin/restore-backup.sh
     sudo chmod +x /usr/local/bin/restore-backup.sh
+    sudo mv /home/$VPS_USER/sync-offsite-backups.sh /usr/local/bin/sync-offsite-backups.sh
+    sudo chmod +x /usr/local/bin/sync-offsite-backups.sh
+    
+    # Install offsite sync systemd files
+    sudo mv /home/$VPS_USER/sync-offsite-backups.service /etc/systemd/system/
+    sudo mv /home/$VPS_USER/sync-offsite-backups.timer /etc/systemd/system/
+    sudo systemctl daemon-reload
+    sudo systemctl enable --now sync-offsite-backups.timer
     
     sudo mkdir -p /var/www/lfr-tunnel/error_pages
     sudo cp -r /home/$VPS_USER/error_pages/* /var/www/lfr-tunnel/error_pages/

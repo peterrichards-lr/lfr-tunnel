@@ -320,6 +320,8 @@ func (s *Server) processMetricsQueue() {
 	ticker := time.NewTicker(5 * time.Minute)
 	defer ticker.Stop()
 
+	var localBuffer []*db.TunnelMetric
+
 	for {
 		select {
 		case <-s.ctx.Done():
@@ -329,6 +331,8 @@ func (s *Server) processMetricsQueue() {
 				if err := s.db.RecordTunnelMetric(m); err != nil {
 					log.Printf("[Server] Failed to record tunnel metrics for %s: %v", m.FullHost, err)
 				}
+			} else if s.cfg.ControlPlaneURL != "" && s.cfg.EdgeToken != "" {
+				localBuffer = append(localBuffer, m)
 			}
 		case <-ticker.C:
 			leases := s.registry.ListLeases()
@@ -355,10 +359,47 @@ func (s *Server) processMetricsQueue() {
 							lease.LastBytesIn = bytesIn
 							lease.LastBytesOut = bytesOut
 						}
+					} else if s.cfg.ControlPlaneURL != "" && s.cfg.EdgeToken != "" {
+						localBuffer = append(localBuffer, m)
+						lease.LastBytesIn = bytesIn
+						lease.LastBytesOut = bytesOut
 					}
 				}
 			}
+
+			if len(localBuffer) > 0 && s.db == nil && s.cfg.ControlPlaneURL != "" && s.cfg.EdgeToken != "" {
+				s.forwardMetricsToControlPlane(localBuffer)
+				localBuffer = nil
+			}
 		}
+	}
+}
+
+func (s *Server) forwardMetricsToControlPlane(metrics []*db.TunnelMetric) {
+	client := &http.Client{Timeout: 5 * time.Second}
+	payloadBytes, err := json.Marshal(metrics)
+	if err != nil {
+		log.Printf("[Server Edge] Failed to marshal metrics: %v", err)
+		return
+	}
+
+	req, err := http.NewRequest("POST", s.cfg.ControlPlaneURL+"/api/internal/edge-metrics", bytes.NewReader(payloadBytes))
+	if err != nil {
+		log.Printf("[Server Edge] Failed to create metrics request: %v", err)
+		return
+	}
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("X-Edge-Token", s.cfg.EdgeToken)
+
+	resp, err := client.Do(req)
+	if err != nil {
+		log.Printf("[Server Edge] Failed to forward metrics to control plane: %v", err)
+		return
+	}
+	defer resp.Body.Close() //nolint:errcheck
+
+	if resp.StatusCode != http.StatusOK {
+		log.Printf("[Server Edge] Control plane metrics returned status: %d", resp.StatusCode)
 	}
 }
 
@@ -531,6 +572,16 @@ func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 
 		if r.Method == http.MethodPost && r.URL.Path == "/api/internal/edge-register" {
 			s.handleEdgeRegister(w, r)
+			return
+		}
+
+		if r.Method == http.MethodPost && r.URL.Path == "/api/internal/edge-metrics" {
+			s.handleEdgeMetrics(w, r)
+			return
+		}
+
+		if r.Method == http.MethodPost && r.URL.Path == "/api/internal/edge-kick" {
+			s.handleEdgeKick(w, r)
 			return
 		}
 
@@ -2591,6 +2642,23 @@ func (s *Server) handleAdminListUsers(w http.ResponseWriter, r *http.Request, ac
 			}
 		}
 
+		s.edgeLeasesMu.Lock()
+		for _, el := range s.edgeLeases[u.ID] {
+			userLeases = append(userLeases, &TunnelLease{
+				UserID:          el.UserID,
+				SubdomainPrefix: el.Subdomain,
+				FullHost:        el.FullHost,
+				LocalPort:       el.LocalPort,
+				ClientIP:        el.ClientIP,
+				Status:          "up",
+				BytesIn:         el.BytesIn,
+				BytesOut:        el.BytesOut,
+				CreatedAt:       el.CreatedAt,
+				NodeID:          el.NodeID,
+			})
+		}
+		s.edgeLeasesMu.Unlock()
+
 		responseList = append(responseList, &AdminUserResponse{
 			User:          u,
 			PortalActive:  portalActive,
@@ -3436,9 +3504,27 @@ func (s *Server) handleAdminExtendToken(w http.ResponseWriter, r *http.Request, 
 }
 
 func (s *Server) handleAdminListLeases(w http.ResponseWriter, r *http.Request, actor string) {
-	// The registry must return a list of active leases
-	// I need to add a ListLeases() method to registry later
 	leases := s.registry.ListLeases()
+
+	s.edgeLeasesMu.Lock()
+	for _, userLeasesList := range s.edgeLeases {
+		for _, el := range userLeasesList {
+			leases = append(leases, &TunnelLease{
+				UserID:          el.UserID,
+				SubdomainPrefix: el.Subdomain,
+				FullHost:        el.FullHost,
+				LocalPort:       el.LocalPort,
+				ClientIP:        el.ClientIP,
+				Status:          "up",
+				BytesIn:         el.BytesIn,
+				BytesOut:        el.BytesOut,
+				CreatedAt:       el.CreatedAt,
+				NodeID:          el.NodeID,
+			})
+		}
+	}
+	s.edgeLeasesMu.Unlock()
+
 	_ = json.NewEncoder(w).Encode(leases)
 }
 
@@ -3449,6 +3535,75 @@ func (s *Server) handleAdminKickLease(w http.ResponseWriter, r *http.Request, ac
 		return
 	}
 
+	// 1. Check if the lease is hosted on an Edge server
+	var targetEdgeLease *EdgeLease
+	s.edgeLeasesMu.Lock()
+	for _, userLeasesList := range s.edgeLeases {
+		for _, el := range userLeasesList {
+			if el.Subdomain == subdomain {
+				targetEdgeLease = &el
+				break
+			}
+		}
+		if targetEdgeLease != nil {
+			break
+		}
+	}
+	s.edgeLeasesMu.Unlock()
+
+	if targetEdgeLease != nil {
+		// Found on Edge node! Look up node config to get the token hash
+		var nodeHash string
+		for _, node := range s.cfg.EdgeNodes {
+			if node.ID == targetEdgeLease.NodeID {
+				nodeHash = node.TokenHash
+				break
+			}
+		}
+
+		if nodeHash == "" {
+			respondJSON(w, http.StatusInternalServerError, map[string]string{"error": "Edge node config not found"})
+			return
+		}
+
+		// Parse the edge base domain from FullHost
+		edgeBaseDomain := targetEdgeLease.FullHost
+		prefix := targetEdgeLease.Subdomain + "."
+		edgeBaseDomain = strings.TrimPrefix(edgeBaseDomain, prefix)
+
+		// Send proxy kick request to Edge server
+		client := &http.Client{Timeout: 5 * time.Second}
+		payload, _ := json.Marshal(map[string]string{"subdomain": subdomain})
+		scheme := "https"
+		if strings.HasPrefix(edgeBaseDomain, "127.0.0.1") || strings.HasPrefix(edgeBaseDomain, "localhost") {
+			scheme = "http"
+		}
+		proxyReq, err := http.NewRequest("POST", scheme+"://"+edgeBaseDomain+"/api/internal/edge-kick", bytes.NewReader(payload))
+		if err != nil {
+			respondJSON(w, http.StatusInternalServerError, map[string]string{"error": "failed to create proxy kick request"})
+			return
+		}
+		proxyReq.Header.Set("Content-Type", "application/json")
+		proxyReq.Header.Set("X-Edge-Token-Hash", nodeHash)
+
+		resp, err := client.Do(proxyReq)
+		if err != nil {
+			respondJSON(w, http.StatusBadGateway, map[string]string{"error": "failed to contact Edge server: " + err.Error()})
+			return
+		}
+		defer resp.Body.Close() //nolint:errcheck
+
+		if resp.StatusCode != http.StatusOK {
+			respondJSON(w, resp.StatusCode, map[string]string{"error": "Edge server failed to kick lease"})
+			return
+		}
+
+		s.writeAudit(actor, "lease.kicked", "lease", subdomain, "Proxied kick to edge server "+targetEdgeLease.NodeID, r)
+		respondJSON(w, http.StatusOK, map[string]string{"status": "success"})
+		return
+	}
+
+	// 2. Otherwise fall back to local registry kick (control plane)
 	found := s.registry.KickLease(subdomain)
 	if !found {
 		w.WriteHeader(http.StatusOK)
@@ -4058,19 +4213,29 @@ func (s *Server) handleVisitorGonePage(w http.ResponseWriter, r *http.Request, h
 }
 
 type EdgeLease struct {
-	NodeID    string `json:"node_id"`
-	Subdomain string `json:"subdomain"`
-	UserID    string `json:"user_id"`
+	NodeID        string    `json:"node_id"`
+	Subdomain     string    `json:"subdomain_prefix"`
+	UserID        string    `json:"user_id"`
+	FullHost      string    `json:"full_host"`
+	LocalPort     int       `json:"local_port"`
+	ClientIP      string    `json:"client_ip"`
+	ClientVersion string    `json:"client_version,omitempty"`
+	ClientOS      string    `json:"client_os,omitempty"`
+	BytesIn       uint64    `json:"bytes_in"`
+	BytesOut      uint64    `json:"bytes_out"`
+	CreatedAt     time.Time `json:"created_at"`
 }
 
 func (s *Server) handleEdgeRegisterProxy(w http.ResponseWriter, r *http.Request, req RegisterRequest) {
 	activeDomains := s.getActiveDomainsForRequest(r)
 	edgeReqPayload := struct {
 		RegisterRequest
-		Domains []string `json:"domains"`
+		Domains  []string `json:"domains"`
+		ClientIP string   `json:"client_ip"`
 	}{
 		RegisterRequest: req,
 		Domains:         activeDomains,
+		ClientIP:        getClientIP(r),
 	}
 
 	payloadBytes, err := json.Marshal(edgeReqPayload)
@@ -4195,7 +4360,8 @@ func (s *Server) handleEdgeRegister(w http.ResponseWriter, r *http.Request) {
 
 	var edgeReq struct {
 		RegisterRequest
-		Domains []string `json:"domains"`
+		Domains  []string `json:"domains"`
+		ClientIP string   `json:"client_ip"`
 	}
 
 	if err := json.NewDecoder(r.Body).Decode(&edgeReq); err != nil {
@@ -4409,10 +4575,38 @@ func (s *Server) handleEdgeRegister(w http.ResponseWriter, r *http.Request) {
 	}
 
 	s.edgeLeasesMu.Lock()
+	if leases, ok := s.edgeLeases[user.ID]; ok {
+		var filtered []EdgeLease
+		for _, el := range leases {
+			if el.Subdomain != finalSubdomain || el.NodeID != edgeNodeID {
+				filtered = append(filtered, el)
+			}
+		}
+		s.edgeLeases[user.ID] = filtered
+	}
+
+	fullHost := finalSubdomain
+	if len(edgeReq.Domains) > 0 {
+		fullHost = fmt.Sprintf("%s.%s", finalSubdomain, edgeReq.Domains[0])
+	}
+
+	localPort := 0
+	if len(edgeReq.Ports) > 0 {
+		localPort = edgeReq.Ports[0].LocalPort
+	}
+
 	s.edgeLeases[user.ID] = append(s.edgeLeases[user.ID], EdgeLease{
-		NodeID:    edgeNodeID,
-		Subdomain: finalSubdomain,
-		UserID:    user.ID,
+		NodeID:        edgeNodeID,
+		Subdomain:     finalSubdomain,
+		UserID:        user.ID,
+		FullHost:      fullHost,
+		LocalPort:     localPort,
+		ClientIP:      edgeReq.ClientIP,
+		ClientVersion: edgeReq.ClientVersion,
+		ClientOS:      edgeReq.ClientOS,
+		BytesIn:       0,
+		BytesOut:      0,
+		CreatedAt:     time.Now(),
 	})
 	s.edgeLeasesMu.Unlock()
 
@@ -4558,4 +4752,104 @@ func (s *Server) handleEdgeAuditLog(w http.ResponseWriter, r *http.Request) {
 	}
 
 	w.WriteHeader(http.StatusOK)
+}
+
+func (s *Server) handleEdgeMetrics(w http.ResponseWriter, r *http.Request) {
+	edgeToken := r.Header.Get("X-Edge-Token")
+	if edgeToken == "" {
+		respondJSON(w, http.StatusUnauthorized, map[string]string{"error": "missing edge token"})
+		return
+	}
+
+	hash := sha256.Sum256([]byte(edgeToken))
+	hashStr := hex.EncodeToString(hash[:])
+
+	authorized := false
+	var edgeNodeID string
+	for _, node := range s.cfg.EdgeNodes {
+		if node.TokenHash == hashStr {
+			authorized = true
+			edgeNodeID = node.ID
+			break
+		}
+	}
+
+	if !authorized {
+		respondJSON(w, http.StatusUnauthorized, map[string]string{"error": "invalid edge token"})
+		return
+	}
+
+	var edgeMetrics []db.TunnelMetric
+	if err := json.NewDecoder(r.Body).Decode(&edgeMetrics); err != nil {
+		respondJSON(w, http.StatusBadRequest, map[string]string{"error": "invalid JSON payload"})
+		return
+	}
+
+	if s.db != nil {
+		for _, m := range edgeMetrics {
+			m.NodeID = edgeNodeID
+			if err := s.db.RecordTunnelMetric(&m); err != nil {
+				log.Printf("[Server Control] Failed to write forwarded metric: %v", err)
+			}
+		}
+	}
+
+	// Update the in-memory edgeLeases statistics on the Control Plane so the dashboard gets the latest bytes transferred on-the-fly!
+	s.edgeLeasesMu.Lock()
+	for _, m := range edgeMetrics {
+		if leases, ok := s.edgeLeases[m.UserID]; ok {
+			for idx, el := range leases {
+				if el.Subdomain == m.SubdomainPrefix && el.NodeID == edgeNodeID {
+					leases[idx].BytesIn += uint64(m.BytesIn)
+					leases[idx].BytesOut += uint64(m.BytesOut)
+				}
+			}
+		}
+	}
+	s.edgeLeasesMu.Unlock()
+
+	w.WriteHeader(http.StatusOK)
+}
+
+func (s *Server) handleEdgeKick(w http.ResponseWriter, r *http.Request) {
+	// First check the signature header from control plane (X-Edge-Token-Hash)
+	tokenHash := r.Header.Get("X-Edge-Token-Hash")
+	authorized := false
+
+	if tokenHash != "" {
+		hash := sha256.Sum256([]byte(s.cfg.EdgeToken))
+		expectedHash := hex.EncodeToString(hash[:])
+		if tokenHash == expectedHash {
+			authorized = true
+		}
+	} else {
+		// Fallback to plaintext header check if needed
+		edgeToken := r.Header.Get("X-Edge-Token")
+		if edgeToken == s.cfg.EdgeToken && s.cfg.EdgeToken != "" {
+			authorized = true
+		}
+	}
+
+	if !authorized {
+		respondJSON(w, http.StatusUnauthorized, map[string]string{"error": "unauthorized"})
+		return
+	}
+
+	var kickReq struct {
+		Subdomain string `json:"subdomain"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&kickReq); err != nil {
+		respondJSON(w, http.StatusBadRequest, map[string]string{"error": "invalid JSON payload"})
+		return
+	}
+
+	if s.registry != nil {
+		found := s.registry.KickLease(kickReq.Subdomain)
+		if found {
+			respondJSON(w, http.StatusOK, map[string]string{"status": "success"})
+			return
+		}
+	}
+
+	respondJSON(w, http.StatusNotFound, map[string]string{"error": "lease not found"})
 }

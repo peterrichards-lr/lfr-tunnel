@@ -1217,10 +1217,19 @@ applyTheme(currentUser.theme_preference);
             const tunnels = currentUser.tunnels || [];
             renderTable('tunnels-table-body', tunnels, t => {
                 const tunnelJsonEncoded = encodeURIComponent(JSON.stringify(t));
+                let serverBadge = '';
+                if (t.node_id && t.node_id !== 'control') {
+                    serverBadge = `<span class="badge" style="background: rgba(139, 92, 246, 0.15); color: #c084fc; border: 1px solid rgba(139, 92, 246, 0.3); font-size: 10px; margin-left: 6px;">🌍 ${escapeHTML(t.node_id)}</span>`;
+                } else {
+                    serverBadge = `<span class="badge" style="background: rgba(59, 130, 246, 0.15); color: #60a5fa; border: 1px solid rgba(59, 130, 246, 0.3); font-size: 10px; margin-left: 6px;">🇬🇧 Control</span>`;
+                }
                 return `
                     <tr>
                         <td style="font-weight: 500;">${escapeHTML(t.subdomain_prefix)}</td>
-                        <td><a href="https://${escapeHTML(t.full_host)}" target="_blank" style="color: var(--primary); text-decoration: none;">${escapeHTML(t.full_host)}</a></td>
+                        <td>
+                            <a href="https://${escapeHTML(t.full_host)}" target="_blank" style="color: var(--primary); text-decoration: none;">${escapeHTML(t.full_host)}</a>
+                            ${serverBadge}
+                        </td>
                         <td><span class="badge ${t.status === 'up' ? 'success' : ''}">${escapeHTML(t.status)}</span></td>
                         <td>
                             <div class="action-menu">
@@ -2735,6 +2744,13 @@ applyTheme(currentUser.theme_preference);
                     const publicUrl = `https://${t.full_host}`;
                     const connectedTime = renderTimestamp(t.created_at);
                     
+                    let serverBadge = '';
+                    if (t.node_id && t.node_id !== 'control') {
+                        serverBadge = `<span class="badge" style="background: rgba(139, 92, 246, 0.15); color: #c084fc; border: 1px solid rgba(139, 92, 246, 0.3); font-size: 10px; margin-left: 6px;">🌍 ${escapeHTML(t.node_id)}</span>`;
+                    } else {
+                        serverBadge = `<span class="badge" style="background: rgba(59, 130, 246, 0.15); color: #60a5fa; border: 1px solid rgba(59, 130, 246, 0.3); font-size: 10px; margin-left: 6px;">🇬🇧 Control</span>`;
+                    }
+                    
                     tr.innerHTML = `
                         <td style="padding: 12px; vertical-align: middle;">
                             <div style="font-weight: 600; font-family: monospace; font-size: 13px; color: var(--text);">${escapeHTML(t.subdomain_prefix)}</div>
@@ -2742,6 +2758,7 @@ applyTheme(currentUser.theme_preference);
                         </td>
                         <td style="padding: 12px; vertical-align: middle;">
                             <a href="${publicUrl}" target="_blank" style="color: var(--primary); text-decoration: none; font-size: 13px; font-family: monospace; word-break: break-all;">${publicUrl}</a>
+                            ${serverBadge}
                             <div style="font-size: 11px; color: var(--text-muted); margin-top: 2px;">IP: ${escapeHTML(t.client_ip)} | Connected: ${connectedTime}</div>
                         </td>
                         <td style="padding: 12px; vertical-align: middle; font-size: 12px; color: var(--text-muted);">
@@ -2911,6 +2928,8 @@ applyTheme(currentUser.theme_preference);
             document.getElementById('detail-tunnel-bytes-in').innerText = formatBytes(t.bytes_in);
             document.getElementById('detail-tunnel-bytes-out').innerText = formatBytes(t.bytes_out);
             document.getElementById('detail-tunnel-client-ip').innerText = t.client_ip || 'N/A';
+            const nodeVal = t.node_id && t.node_id !== 'control' ? `🌍 ${t.node_id}` : '🇬🇧 Control';
+            document.getElementById('detail-tunnel-node-id').innerText = nodeVal;
 
             // Access Control population
             document.getElementById('detail-tunnel-passcode-status').innerHTML = t.passcode ? 

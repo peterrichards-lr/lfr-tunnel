@@ -31,6 +31,7 @@ type TunnelMetric struct {
 	BytesOut        int64     `json:"bytes_out"`
 	ConnectedAt     time.Time `json:"connected_at"`
 	RecordedAt      time.Time `json:"recorded_at"`
+	NodeID          string    `json:"node_id"`
 }
 
 // AuditFilter controls optional filtering for ListAuditEntries.
@@ -316,7 +317,8 @@ func (db *DB) initSchema() error {
 		bytes_in INTEGER NOT NULL,
 		bytes_out INTEGER NOT NULL,
 		connected_at DATETIME NOT NULL,
-		recorded_at DATETIME DEFAULT CURRENT_TIMESTAMP
+		recorded_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+		node_id TEXT DEFAULT 'control'
 	);
 
 	CREATE TABLE IF NOT EXISTS admin_settings (
@@ -360,6 +362,7 @@ func (db *DB) initSchema() error {
 	_, _ = db.conn.Exec("ALTER TABLE subdomain_reservations ADD COLUMN passcode TEXT DEFAULT ''")
 	_, _ = db.conn.Exec("ALTER TABLE subdomain_reservations ADD COLUMN whitelist_ips TEXT DEFAULT ''")
 	_, _ = db.conn.Exec("ALTER TABLE subdomain_reservations ADD COLUMN access_mode TEXT DEFAULT 'or'")
+	_, _ = db.conn.Exec("ALTER TABLE tunnel_metrics ADD COLUMN node_id TEXT DEFAULT 'control'")
 
 	return nil
 }
@@ -384,10 +387,18 @@ func (db *DB) GetAdminSetting(key string) (string, error) {
 
 // RecordTunnelMetric writes a single bandwidth metric to the database.
 func (db *DB) RecordTunnelMetric(m *TunnelMetric) error {
+	nodeID := m.NodeID
+	if nodeID == "" {
+		nodeID = "control"
+	}
+	recordedAt := m.RecordedAt
+	if recordedAt.IsZero() {
+		recordedAt = time.Now().UTC()
+	}
 	_, err := db.conn.Exec(`
-		INSERT INTO tunnel_metrics (user_id, subdomain_prefix, full_host, bytes_in, bytes_out, connected_at, recorded_at)
-		VALUES (?, ?, ?, ?, ?, ?, ?)
-	`, m.UserID, m.SubdomainPrefix, m.FullHost, m.BytesIn, m.BytesOut, m.ConnectedAt, m.RecordedAt)
+		INSERT INTO tunnel_metrics (user_id, subdomain_prefix, full_host, bytes_in, bytes_out, connected_at, recorded_at, node_id)
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+	`, m.UserID, m.SubdomainPrefix, m.FullHost, m.BytesIn, m.BytesOut, m.ConnectedAt, recordedAt, nodeID)
 	return err
 }
 

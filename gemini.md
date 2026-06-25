@@ -183,6 +183,7 @@ The solution will consist of:
 | **3. Client-Initiated Access Control** | Gateway-level IP whitelisting or passcode screen on the public URL. | Low | Medium | High | **High** |
 | **4. Vanity Domain Routing (SNI)** | Route custom domains directly with on-the-fly gateway SSL provisioning. | High | Large | High | **Medium** |
 | **5. Latency & Bandwidth Simulation** | Throttle traffic and inject network latency from client CLI settings. | Medium | Small | Medium | **Medium** |
+| **6. Edge Node Health & Heartbeat** | Stateless edge nodes ping central server for global uptime visibility in Admin Portal UI. | Low | Medium | High | **Medium** |
 
 
 ## SentinelOne False Positive Mitigation

@@ -553,3 +553,10 @@ The solution will consist of:
 - [x] Run validation tests locally.
 - [x] Commit, push branch, and create Pull Request linking to Issue #193.
 
+## Nginx Portal Redirect and Routing Updates
+- [x] Configure `tests/e2e/nginx.conf` control plane to proxy `/` to `lfr-tunneld:8080` (serving the portal).
+- [x] Configure `tests/e2e/nginx-edge.conf` control plane to proxy `/` to `lfr-tunneld-control:8080`.
+- [x] Update `docs/setup_guide.md` template to recommend proxying `/` to the daemon rather than redirecting to liferay.com.
+- [x] Verify local tests and E2E integration test suites.
+
+

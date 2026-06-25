@@ -218,9 +218,10 @@ func TestLoadClientConfig_TokenFile(t *testing.T) {
 	}
 	tmpTokenFile.Close() //nolint:errcheck
 
-	// 1. Point LFT_TOKEN_FILE to it
-	os.Setenv("LFT_TOKEN_FILE", tmpTokenFile.Name()) //nolint:errcheck
-	defer os.Unsetenv("LFT_TOKEN_FILE")              //nolint:errcheck
+	// 1. Point LFT_TOKEN_FILE to it and clear potential other token env variables
+	t.Setenv("LFT_TOKEN_FILE", tmpTokenFile.Name())
+	t.Setenv("LFT_CLIENT_TOKEN", "")
+	t.Setenv("LFT_TOKEN", "")
 
 	// 2. Load client config (without path to config yaml, so it uses default)
 	cfg, err := LoadClientConfig("")
@@ -234,8 +235,7 @@ func TestLoadClientConfig_TokenFile(t *testing.T) {
 	}
 
 	// 3. Environment variable LFT_CLIENT_TOKEN should override the token file
-	os.Setenv("LFT_CLIENT_TOKEN", "env-token-override") //nolint:errcheck
-	defer os.Unsetenv("LFT_CLIENT_TOKEN")               //nolint:errcheck
+	t.Setenv("LFT_CLIENT_TOKEN", "env-token-override")
 
 	cfgEnv, err := LoadClientConfig("")
 	if err != nil {
@@ -250,6 +250,7 @@ func TestLoadClientConfig_TokenFile(t *testing.T) {
 func TestLoadClientConfig_LDMOverridesAndTargetHost(t *testing.T) {
 	// Set environment variables for fallback LDM contract and URL cleaning
 	t.Setenv("LFT_SERVER_URL", "https://ldm-server-url.com")
+	t.Setenv("LFT_CLIENT_TOKEN", "")
 	t.Setenv("LFT_TOKEN", "ldm-token-override")
 	t.Setenv("LFT_SUBDOMAIN", "ldm-subdomain-override")
 	t.Setenv("LFT_TARGET_HOST", "http://liferay:8080")

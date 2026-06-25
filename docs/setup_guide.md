@@ -173,11 +173,39 @@ server {
     return 301 https://$host$request_uri;
 }
 
-# 2. Control Plane & Gateway Landing Page
+# 2. Regional Edge Redirect (us.yourdomain.com -> yourdomain.com)
 server {
     listen 443 ssl http2;
     listen [::]:443 ssl http2;
-    server_name yourdomain.com tunnel.yourdomain.com;
+    server_name us.yourdomain.com;
+
+    ssl_certificate /etc/letsencrypt/live/yourdomain.com/fullchain.pem;
+    ssl_certificate_key /etc/letsencrypt/live/yourdomain.com/privkey.pem;
+    include /etc/letsencrypt/options-ssl-nginx.conf;
+    ssl_dhparam /etc/letsencrypt/ssl-dhparams.pem;
+
+    return 301 https://yourdomain.com$request_uri;
+}
+
+# 3. Main Landing Redirect (yourdomain.com -> portal.yourdomain.com)
+server {
+    listen 443 ssl http2;
+    listen [::]:443 ssl http2;
+    server_name yourdomain.com;
+
+    ssl_certificate /etc/letsencrypt/live/yourdomain.com/fullchain.pem;
+    ssl_certificate_key /etc/letsencrypt/live/yourdomain.com/privkey.pem;
+    include /etc/letsencrypt/options-ssl-nginx.conf;
+    ssl_dhparam /etc/letsencrypt/ssl-dhparams.pem;
+
+    return 301 https://portal.yourdomain.com$request_uri;
+}
+
+# 4. Control Plane & Portal Server
+server {
+    listen 443 ssl http2;
+    listen [::]:443 ssl http2;
+    server_name portal.yourdomain.com tunnel.yourdomain.com;
 
     ssl_certificate /etc/letsencrypt/live/yourdomain.com/fullchain.pem;
     ssl_certificate_key /etc/letsencrypt/live/yourdomain.com/privkey.pem;
@@ -325,6 +353,8 @@ sudo nano /etc/lfr-tunneld/server-config.yaml
 Paste the following configurations:
 ```yaml
 domains:
+  - "portal.yourdomain.com"
+  - "tunnel.yourdomain.com"
   - "yourdomain.com"
 http_bind_addr: "0.0.0.0:8080"
 chisel_bind_addr: ":8081"

@@ -560,4 +560,10 @@ The solution will consist of:
 - [x] Update `docs/setup_guide.md` template to recommend proxying `/` to the daemon rather than redirecting to liferay.com.
 - [x] Verify local tests and E2E integration test suites.
 
+## Nginx Regional Edge and Landing Domain Redirects
+- [ ] Update VPS Nginx configuration to redirect `us.lfr-demo.se` and `us.lfr-demo.online` to `lfr-demo.se`.
+- [ ] Update VPS Nginx configuration to redirect `lfr-demo.se` (and `lfr-demo.online`) to `portal.lfr-demo.se`.
+- [ ] Add `portal.lfr-demo.se` and `portal.lfr-demo.online` (along with `tunnel` subdomains) to the Control Plane server block on VPS Nginx.
+- [ ] Add the portal and tunnel subdomains to the domains configuration in the VPS `server-config.yaml` and local E2E configurations.
+
 

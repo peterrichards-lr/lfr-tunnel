@@ -1,4 +1,6 @@
 domains:
+  - "portal.lfr-demo.local"
+  - "tunnel.lfr-demo.local"
   - "lfr-demo.local"
   - "us.lfr-demo.local"
   - "lfr-tunneld-control"

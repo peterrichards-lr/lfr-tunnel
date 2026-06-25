@@ -523,6 +523,7 @@ The solution will consist of:
 - [x] Write unit tests for access control validation, IP matching, PKCS#12 signing (E2E integration test verification pending).
 - [ ] Release, tag, and deploy v1.16.0 of lfr-tunnel to GitHub and VPS.
 - [x] Fix duplicate repoUrl declaration in pkg/server/static/dashboard.js to resolve stuck loading spinner.
+- [x] Update project rules in .agents/AGENTS.md and CONTRIBUTING.md to enforce GitHub issue linking for branches and PRs.
 
 
 

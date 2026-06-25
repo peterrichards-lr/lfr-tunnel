@@ -3699,7 +3699,7 @@ applyTheme(currentUser.theme_preference);
                 }
             } catch (err) {
                 console.error(err);
-                tbody.innerHTML = '<tr><td colspan="5" style="color:var(--danger);text-align:center;">Failed to load network health</td></tr>';
+                tbody.innerHTML = `<tr><td colspan="5" style="color:var(--danger);text-align:center;">Failed to load network health: ${escapeHTML(err.toString())}</td></tr>`;
             }
             
             // Auto refresh every 30 seconds if tab is still active

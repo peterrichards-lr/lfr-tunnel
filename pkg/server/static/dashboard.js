@@ -593,8 +593,11 @@ function toggleTheme() {
                 if (vRes.ok) {
                     const vData = await vRes.json();
                     window.latestVersionData = vData;
-                    const latestVer = vData.latest_version;
-                    const userVer = currentUser.last_client_version || '';
+                    const rawLatest = vData.latest_version || '';
+                    const rawUser = currentUser.last_client_version || '';
+                    
+                    const latestVer = rawLatest.startsWith('v') ? rawLatest : (rawLatest ? 'v' + rawLatest : '');
+                    const userVer = rawUser.startsWith('v') ? rawUser : (rawUser ? 'v' + rawUser : '');
                     
                     if (vData.documentation_url) {
                         const dl = document.getElementById('docs-link');
@@ -694,14 +697,31 @@ function toggleTheme() {
 
                     let titleText = 'CLI Client Installation';
                     let subText = `Run this command in your terminal to install the client for ${os}.`;
+
+                    function isOlderVersion(u, t) {
+                        if (!u || !t) return false;
+                        const uParts = u.replace(/^v/, '').split('-')[0].split('.').map(n => parseInt(n) || 0);
+                        const tParts = t.replace(/^v/, '').split('-')[0].split('.').map(n => parseInt(n) || 0);
+                        for (let i = 0; i < Math.max(uParts.length, tParts.length); i++) {
+                            const uVal = uParts[i] || 0;
+                            const tVal = tParts[i] || 0;
+                            if (uVal < tVal) return true;
+                            if (uVal > tVal) return false;
+                        }
+                        return false;
+                    }
+
                     if (!userVer) {
                         titleText = 'Get started with the CLI';
                         subText = `Run this command in your terminal to install the client for ${os}.`;
+                    } else if (isOlderVersion(userVer, latestVer)) {
+                        titleText = `Update Available (${latestVer})`;
+                        subText = `You are using an older client (${userVer}). Please update to the target release for ${os}.`;
                     } else if (userVer !== latestVer) {
-                        titleText = `Update Available (v${latestVer})`;
-                        subText = `You are using an older client (${userVer}). Please update to the latest release for ${os}.`;
+                        titleText = `CLI Client Installation`;
+                        subText = `Your client (${userVer}) is newer than the server target (${latestVer}).`;
                     } else {
-                        subText = `Your client is up to date (v${userVer}) for ${os}.`;
+                        subText = `Your client is up to date (${userVer}) for ${os}.`;
                     }
 
                     if (os === 'Unknown OS') {

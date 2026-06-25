@@ -266,7 +266,9 @@ The solution will consist of:
 - [x] Add HTML email templates and integrate outbound email triggers for reservation events in `pkg/mail/`.
 - [x] Update tunnel registration and check-subdomain checks to enforce reservations in `pkg/server/server.go`.
 - [x] Implement subdomain quarantine period and HTTP 410 Gone fallback page.
-- [x] Build portal UI dashboard panel and admin control views for reservation management in `pkg/server/static/dashboard.js`.
+- [x] Build portal UI dashboard panel and admin control views.
+- [x] Fix duplicate repoUrl declaration in pkg/server/static/dashboard.js to resolve stuck loading spinner.
+- [ ] Integrate Javascript syntax validation (node -c) into pre-commit-hook.sh and CI/CD ci.yml workflow.
 - [x] Restrict 'Never' API token expiration option to admin and owner roles on both server and client.
 - [x] Write unit and E2E integration tests for the reservation flow.
 - [x] Fix E2E integration tests failure by updating `tests/e2e/run.sh` to reserve the subdomain before tunnel connection.
@@ -520,6 +522,7 @@ The solution will consist of:
 - [x] Expose a read-only "Access Control" status display in the central Admin/User Portal Dashboard under the Tunnel Details Modal.
 - [x] Write unit tests for access control validation, IP matching, PKCS#12 signing (E2E integration test verification pending).
 - [ ] Release, tag, and deploy v1.16.0 of lfr-tunnel to GitHub and VPS.
+- [x] Fix duplicate repoUrl declaration in pkg/server/static/dashboard.js to resolve stuck loading spinner.
 - [x] Update project rules in .agents/AGENTS.md and CONTRIBUTING.md to enforce GitHub issue linking for branches and PRs.
 
 

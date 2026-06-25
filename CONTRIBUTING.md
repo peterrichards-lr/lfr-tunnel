@@ -23,7 +23,7 @@ To ensure we build the capabilities that provide the highest impact for the Sale
 
 ### Pull Requests
 
-1. **GitHub Issues**: A Github issue SHOULD be created for any bug fix or feature. This helps track progress and is required for generating the `CHANGELOG.md` entry.
+1. **GitHub Issues**: A GitHub issue SHOULD be created for any bug fix or feature. This helps track progress, acts as our roadmap/design transparency, and is required for generating the `CHANGELOG.md` entry. All Pull Requests must be linked to their corresponding issues by including standard closing keywords (e.g. `Closes #<issue_number>` or `Fixes #<issue_number>`) in the PR description. This links the branch, commits, and PR to the issue, and auto-closes it upon merge.
 2. **Branching Strategy & PR Workflow**:
    - **`master`**: Strictly for production-ready, stable releases. Direct pushes to `master` are blocked; all changes must go through a Pull Request (PR).
    - **Feature Branches**: Develop new features, visual dashboard updates, or configuration additions on branches prefixed with `feature/` (e.g., `feature/dashboard-version-indicator`).

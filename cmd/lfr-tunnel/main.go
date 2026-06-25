@@ -112,7 +112,8 @@ func main() {
 		cfg.Region = *region
 	}
 
-	resolveServerURL(cfg)
+	isExplicitServer := *serverURL != "" || os.Getenv("LFT_CLIENT_SERVER") != "" || os.Getenv("LFT_SERVER_URL") != "" || os.Getenv("LFT_SERVER") != ""
+	resolveServerURL(cfg, isExplicitServer)
 
 	if *upgradeFlag {
 		if err := client.SelfUpgrade(config.Version, cfg.ServerURL); err != nil {
@@ -710,9 +711,9 @@ func handleStatusJSON(sub string, targetSpecific bool) {
 	fmt.Println(string(outputBytes))
 }
 
-func resolveServerURL(cfg *config.ClientConfig) {
+func resolveServerURL(cfg *config.ClientConfig, isExplicitServer bool) {
 	if cfg.Region == "" {
-		if len(cfg.Regions) > 0 {
+		if !isExplicitServer && len(cfg.Regions) > 0 {
 			log.Printf("[Client] No region specified. Performing latency auto-probing across %d regions...", len(cfg.Regions))
 			bestRegion := probeFastestRegion(cfg.Regions)
 			if bestRegion != "" {

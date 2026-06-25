@@ -1,5 +1,5 @@
 {
-  "version": "v1.16.1",
+  "version": "v1.17.0",
   "release_date": "2026-06-24",
   "features": [
     "Implement Model Context Protocol (MCP) server supporting stdio JSON-RPC transport for seamless AI assistant integration (Cursor, Windsurf, Antigravity IDE).",

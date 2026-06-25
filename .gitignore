@@ -8,6 +8,7 @@ dist/
 # Configuration & Secrets
 .env
 client-config.yaml
+edge_nodes.txt
 
 # Logs
 *.log

@@ -1,3 +1,6 @@
 tests/e2e/ui/tests/utils/mailpit.ts:generic-api-key:21
 ldm-lfr-tunnel-test/docker-compose.yml:generic-api-key:63
 ldm-lfr-tunnel-test/data/hypersonic/lportal.script:generic-api-key:82506
+docs/edge_setup_guide.md:generic-api-key:108
+tests/e2e/server-config-control.yaml:generic-api-key:41
+

@@ -1,0 +1,8 @@
+domains:
+  - "us.lfr-demo.local"
+http_bind_addr: "0.0.0.0:8090"
+db_path: ""
+control_plane_url: "http://lfr-tunneld-control:8080"
+edge_token: "test-edge-token"
+docker_image: "peterjrichards/lfr-tunnel:latest"
+docker_bypass_url: "https://github.com/peterrichards-lr/lfr-tunnel/blob/master/docs/liferay-se-guide.md#using-the-docker-wrapper-edr-bypass"

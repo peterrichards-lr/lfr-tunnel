@@ -1,0 +1,83 @@
+domains:
+  - "lfr-demo.local"
+  - "us.lfr-demo.local"
+  - "lfr-tunneld-control"
+http_bind_addr: "0.0.0.0:8080"
+db_path: "/etc/lfr-tunneld/lfr-tunnel.db"
+smtp_server:
+  host: "mailpit"
+  port: 1025
+  from_address: "Liferay Tunnel <noreply@lfr-demo.local>"
+
+owner:
+  user_id: "admin@lfr-demo.local"
+  name: "Admin User"
+
+admin_notification_email: "admin@lfr-demo.local"
+enable_registration: true
+owner_max_reservations: -1
+allow_client_auto_reservation: true
+
+sso_providers:
+  - id: "keycloak"
+    name: "Liferay Keycloak"
+    client_id: "lfr-tunnel"
+    client_secret: "secret"
+    issuer_url: "http://keycloak:8080/realms/liferay"
+    icon: "key"
+
+prune_interval: 1m
+magic_link_expiry: 1m
+invite_link_expiry: 5m
+verification_link_expiry: 5m
+session_expiry: 5m
+pat_retention_days: 30
+
+docker_image: "peterjrichards/lfr-tunnel:latest"
+docker_bypass_url: "https://github.com/peterrichards-lr/lfr-tunnel/blob/master/docs/liferay-se-guide.md#using-the-docker-wrapper-edr-bypass"
+
+edge_nodes:
+  - id: "us-east-1"
+    token_hash: "4a2371ab6fbd2742e0fce40b2f3c1f94ecc8c02ad15f5455cd68bdf4e04f947a"
+
+client_platforms:
+  macos_arm64:
+    url: "http://lfr-demo.local:8080/static/downloads/lfr-tunnel-darwin-arm64"
+    cmd: "brew install lfr-tunnel-test"
+    cmd_label: "🚀 Recommended Installation:"
+    cmd_fallback: "curl -sSfL http://lfr-demo.local:8080/install.sh | sh"
+    cmd_fallback_label: "🛠️ Fallback Alternative:"
+    recommended: "cmd"
+    show_download: true
+    download_label: "⬇️ Download Signed Binary"
+    sha256: "6d4aef719dee798e611139e422d9231b226ec3538617d025fad08accf8fc63d6"
+  macos_amd64:
+    url: "http://lfr-demo.local:8080/static/downloads/lfr-tunnel-darwin-amd64"
+    cmd: "brew install lfr-tunnel-test"
+    cmd_label: "🚀 Recommended Installation:"
+    cmd_fallback: "curl -sSfL http://lfr-demo.local:8080/install.sh | sh"
+    cmd_fallback_label: "🛠️ Fallback Alternative:"
+    recommended: "cmd"
+    show_download: true
+    download_label: "⬇️ Download Signed Binary"
+    sha256: "6d4aef719dee798e611139e422d9231b226ec3538617d025fad08accf8fc63d6"
+  windows_amd64:
+    url: "http://lfr-demo.local:8080/static/downloads/lfr-tunnel-windows-amd64.exe"
+    cmd: "scoop install lfr-tunnel-test"
+    cmd_fallback: "powershell install"
+    cmd_label: "🚀 Recommended Installation:"
+    cmd_fallback_label: "🛠️ Fallback Alternative:"
+    recommended: "cmd"
+    show_download: true
+    download_label: "⬇️ Download Signed Binary"
+    sha256: "6d4aef719dee798e611139e422d9231b226ec3538617d025fad08accf8fc63d6"
+  linux_amd64:
+    url: "http://lfr-demo.local:8080/static/downloads/lfr-tunnel-linux-amd64"
+    cmd: "curl -sSfL http://lfr-demo.local:8080/install.sh | sh"
+    cmd_label: "🚀 Recommended Installation:"
+    cmd_fallback: "echo 'fallback test'"
+    cmd_fallback_label: "🛠️ Fallback Alternative:"
+    recommended: "cmd"
+    show_download: true
+    download_label: "⬇️ Download Signed Binary"
+    sha256: "6d4aef719dee798e611139e422d9231b226ec3538617d025fad08accf8fc63d6"

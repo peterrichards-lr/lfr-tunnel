@@ -58,11 +58,11 @@ VERSION="$(git describe --tags --abbrev=0 --dirty 2>/dev/null || git describe --
 echo "=> Compiling lfr-tunneld for Linux (amd64) with Version=$VERSION..."
 GOOS=linux GOARCH=amd64 go build -ldflags="-s -w -X lfr-tunnel/pkg/config.Version=$VERSION" -trimpath -o bin/lfr-tunneld-edge-linux ./cmd/lfr-tunneld
 
-# 2. Update and install packages on the remote VPS
-echo "=> Connecting to $VPS_IP to install dependencies (Nginx, Certbot)..."
+# 2. Update and install packages on the remote VPS (including security hardening packages)
+echo "=> Connecting to $VPS_IP to install dependencies (Nginx, Certbot, UFW, Fail2ban)..."
 ssh $SSH_KEY_ARG $SSH_USER@$VPS_IP << 'REMOTE_SSH'
   sudo apt-get update
-  sudo apt-get install -y nginx certbot python3-certbot-dns-cloudflare curl jq
+  sudo apt-get install -y nginx certbot python3-certbot-dns-cloudflare curl jq ufw fail2ban unattended-upgrades
 REMOTE_SSH
 
 # 3. Request wildcard Let's Encrypt certificates using Certbot Manual DNS-01 challenge
@@ -343,6 +343,22 @@ EOF
   # Enable DDNS timer (it will trigger but log a credential error until API token is updated)
   sudo systemctl enable --now cloudflare-ddns-edge.timer
 
+  # 9. Configure Local Security Hardening (UFW, Fail2ban, Auto Upgrades)
+  echo "=> Configuring UFW local firewall rules..."
+  sudo ufw default deny incoming
+  sudo ufw default allow outgoing
+  sudo ufw allow 22/tcp
+  sudo ufw allow 80/tcp
+  sudo ufw allow 443/tcp
+  sudo ufw --force enable
+
+  echo "=> Enabling fail2ban service..."
+  sudo systemctl enable --now fail2ban
+
+  echo "=> Setting up automated daily security upgrades..."
+  echo 'APT::Periodic::Update-Package-Lists "1";' | sudo tee /etc/apt/apt.conf.d/20auto-upgrades
+  echo 'APT::Periodic::Unattended-Upgrade "1";' | sudo tee -a /etc/apt/apt.conf.d/20auto-upgrades
+
   echo "=== Edge VPS Remote Setup Complete! ==="
   echo "=> Checking status of lfr-tunneld:"
   sudo systemctl status lfr-tunneld --no-pager
@@ -354,6 +370,6 @@ REMOTE_SSH
 echo "=========================================================="
 echo "🎉 Edge Node Setup Complete!"
 echo "Edge server is running and proxying requests to port $EDGE_PORT."
-echo "Watchdog and self-healing active timers are registered."
+echo "Watchdog, self-healing, and UFW/Fail2ban security guards are active."
 echo "Cloudflare DDNS service is active (placeholder created at /etc/letsencrypt/cloudflare.ini)."
 echo "=========================================================="

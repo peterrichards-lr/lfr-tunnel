@@ -1287,6 +1287,7 @@ applyTheme(currentUser.theme_preference);
             if (tabName === 'audit') loadAudit();
             if (tabName === 'magic') loadAdminMagicLinks();
             if (tabName === 'backups') loadBackups();
+            if (tabName === 'network-health') loadNetworkHealth();
             if (tabName === 'maintenance') loadMaintenanceStatus();
             if (tabName === 'tokens') loadTokens();
             if (tabName === 'tunnels') loadTunnels();
@@ -3653,3 +3654,58 @@ applyTheme(currentUser.theme_preference);
                 closeAllActionMenus();
             }
         });
+        // ----------------------------------------------------
+        // NETWORK HEALTH
+        // ----------------------------------------------------
+        async function loadNetworkHealth() {
+            if (!document.getElementById('nav-network-health').classList.contains('active')) return;
+            const tbody = document.getElementById('network-health-body');
+            try {
+                const res = await fetch('/api/portal/edge-health', {
+                    headers: { 'Authorization': `Bearer ${token}` }
+                });
+                if (res.status === 401) { logout(); return; }
+                const data = await res.json();
+                
+                tbody.innerHTML = '';
+                const keys = Object.keys(data || {});
+                if (keys.length === 0) {
+                    tbody.innerHTML = '<tr><td colspan="5" style="text-align:center; opacity:0.6;">No edge nodes configured</td></tr>';
+                } else {
+                    keys.sort().forEach(id => {
+                        const h = data[id];
+                        const isOnline = h.status === 'Online';
+                        const dotColor = isOnline ? '#10b981' : 'var(--danger)';
+                        
+                        let latText = isOnline ? `${h.latency_ms} ms` : '-';
+                        let timeSince = h.last_check_at ? Math.floor((Date.now() / 1000) - h.last_check_at) + 's ago' : 'Never';
+                        let errMsg = h.error_message ? `<span style="color:var(--danger); font-size:12px;">${escapeHtml(h.error_message)}</span>` : '';
+
+                        const tr = document.createElement('tr');
+                        tr.innerHTML = `
+                            <td><strong>${escapeHtml(id)}</strong></td>
+                            <td>
+                                <span style="display:inline-flex; align-items:center; gap:6px;">
+                                    <span style="width:8px; height:8px; border-radius:50%; background-color:${dotColor};"></span>
+                                    ${escapeHtml(h.status)}
+                                </span>
+                            </td>
+                            <td>${latText}</td>
+                            <td>${timeSince}</td>
+                            <td>${errMsg}</td>
+                        `;
+                        tbody.appendChild(tr);
+                    });
+                }
+            } catch (err) {
+                console.error(err);
+                tbody.innerHTML = '<tr><td colspan="5" style="color:var(--danger);text-align:center;">Failed to load network health</td></tr>';
+            }
+            
+            // Auto refresh every 30 seconds if tab is still active
+            setTimeout(() => {
+                if (document.getElementById('nav-network-health').classList.contains('active')) {
+                    loadNetworkHealth();
+                }
+            }, 30000);
+        }

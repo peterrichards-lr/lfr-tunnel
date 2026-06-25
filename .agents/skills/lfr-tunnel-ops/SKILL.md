@@ -41,7 +41,20 @@ Always run unit and E2E integration tests before proposing deployment.
 
 ---
 
-## 3. Signing Client Binaries
+## 3. Creating a Release & Bumping Version
+
+To automate the release lifecycle (bumping the version in `whats-new.json`, creating a branch and tag, pushing them, and raising an auto-merging Pull Request), use the automated release script.
+
+- **Run Release Automation**:
+  ```bash
+  ./scripts/create-release-tag.sh <NEW_VERSION_TAG>
+  ```
+  - `NEW_VERSION_TAG` must follow semantic versioning (e.g., `v1.17.0`).
+  - *Note: You must be on the `master` branch with a clean working tree (no uncommitted changes other than `gemini.md`) before running this script.*
+
+---
+
+## 4. Signing Client Binaries
 
 Before deploying client binaries or making releases, they must be signed.
 - **Run Signing Script**:

@@ -115,6 +115,7 @@ type SSOProviderConfig struct {
 type EdgeNodeConfig struct {
 	ID        string `yaml:"id"`
 	TokenHash string `yaml:"token_hash"`
+	URL       string `yaml:"url"`
 }
 
 // ClientConfig holds configuration settings for the lfr-tunnel client.

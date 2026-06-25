@@ -1,0 +1,9 @@
+[Unit]
+Description=Sync Liferay Tunnel Backups to Offsite Edge Node
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+User=root
+ExecStart=/usr/local/bin/sync-offsite-backups.sh

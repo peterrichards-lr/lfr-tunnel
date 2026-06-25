@@ -593,8 +593,11 @@ function toggleTheme() {
                 if (vRes.ok) {
                     const vData = await vRes.json();
                     window.latestVersionData = vData;
-                    const latestVer = vData.latest_version;
-                    const userVer = currentUser.last_client_version || '';
+                    const rawLatest = vData.latest_version || '';
+                    const rawUser = currentUser.last_client_version || '';
+                    
+                    const latestVer = rawLatest.startsWith('v') ? rawLatest : (rawLatest ? 'v' + rawLatest : '');
+                    const userVer = rawUser.startsWith('v') ? rawUser : (rawUser ? 'v' + rawUser : '');
                     
                     if (vData.documentation_url) {
                         const dl = document.getElementById('docs-link');
@@ -628,18 +631,18 @@ function toggleTheme() {
                     const defaults = {
                         "macos_arm64": {
                             "url": `${repoUrl}/releases/latest/download/lfr-tunnel-darwin-arm64`,
-                            "cmd": "brew tap peterrichards-lr/tap && brew trust peterrichards-lr/tap && brew install lfr-tunnel",
-                            "cmd_fallback": `curl -fsSL ${window.location.origin}/install | sh`
+                            "cmd": `curl -fsSL ${window.location.origin}/install | sh`,
+                            "cmd_fallback": ""
                         },
                         "macos_amd64": {
                             "url": `${repoUrl}/releases/latest/download/lfr-tunnel-darwin-amd64`,
-                            "cmd": "brew tap peterrichards-lr/tap && brew trust peterrichards-lr/tap && brew install lfr-tunnel",
-                            "cmd_fallback": `curl -fsSL ${window.location.origin}/install | sh`
+                            "cmd": `curl -fsSL ${window.location.origin}/install | sh`,
+                            "cmd_fallback": ""
                         },
                         "windows_amd64": {
                             "url": `${repoUrl}/releases/latest/download/lfr-tunnel-windows-amd64.exe`,
-                            "cmd": "scoop bucket add peterrichards-lr https://github.com/peterrichards-lr/scoop-bucket && scoop install lfr-tunnel",
-                            "cmd_fallback": `irm ${window.location.origin}/install.ps1 | iex`
+                            "cmd": `irm ${window.location.origin}/install.ps1 | iex`,
+                            "cmd_fallback": ""
                         },
                         "linux_amd64": {
                             "url": `${repoUrl}/releases/latest/download/lfr-tunnel-linux-amd64`,
@@ -673,7 +676,7 @@ function toggleTheme() {
                     let downloadLabel = config && config.download_label ? config.download_label : '⬇️ Download Binary';
 
                     // Custom labels
-                    let cmdLabel = config && config.cmd_label ? config.cmd_label : '🚀 Recommended (Package Manager):';
+                    let cmdLabel = config && config.cmd_label ? config.cmd_label : '🚀 Recommended Installation (EDR Whitelisted):';
                     let cmdFallbackLabel = config && config.cmd_fallback_label ? config.cmd_fallback_label : '🛠️ Direct Script Fallback:';
 
                     // Recommended flag positioning
@@ -694,14 +697,31 @@ function toggleTheme() {
 
                     let titleText = 'CLI Client Installation';
                     let subText = `Run this command in your terminal to install the client for ${os}.`;
+
+                    function isOlderVersion(u, t) {
+                        if (!u || !t) return false;
+                        const uParts = u.replace(/^v/, '').split('-')[0].split('.').map(n => parseInt(n) || 0);
+                        const tParts = t.replace(/^v/, '').split('-')[0].split('.').map(n => parseInt(n) || 0);
+                        for (let i = 0; i < Math.max(uParts.length, tParts.length); i++) {
+                            const uVal = uParts[i] || 0;
+                            const tVal = tParts[i] || 0;
+                            if (uVal < tVal) return true;
+                            if (uVal > tVal) return false;
+                        }
+                        return false;
+                    }
+
                     if (!userVer) {
                         titleText = 'Get started with the CLI';
                         subText = `Run this command in your terminal to install the client for ${os}.`;
+                    } else if (isOlderVersion(userVer, latestVer)) {
+                        titleText = `Update Available (${latestVer})`;
+                        subText = `You are using an older client (${userVer}). Please update to the target release for ${os}.`;
                     } else if (userVer !== latestVer) {
-                        titleText = `Update Available (v${latestVer})`;
-                        subText = `You are using an older client (${userVer}). Please update to the latest release for ${os}.`;
+                        titleText = `CLI Client Installation`;
+                        subText = `Your client (${userVer}) is newer than the server target (${latestVer}).`;
                     } else {
-                        subText = `Your client is up to date (v${userVer}) for ${os}.`;
+                        subText = `Your client is up to date (${userVer}) for ${os}.`;
                     }
 
                     if (os === 'Unknown OS') {
@@ -1267,6 +1287,7 @@ applyTheme(currentUser.theme_preference);
             if (tabName === 'audit') loadAudit();
             if (tabName === 'magic') loadAdminMagicLinks();
             if (tabName === 'backups') loadBackups();
+            if (tabName === 'network-health') loadNetworkHealth();
             if (tabName === 'maintenance') loadMaintenanceStatus();
             if (tabName === 'tokens') loadTokens();
             if (tabName === 'tunnels') loadTunnels();
@@ -3633,3 +3654,58 @@ applyTheme(currentUser.theme_preference);
                 closeAllActionMenus();
             }
         });
+        // ----------------------------------------------------
+        // NETWORK HEALTH
+        // ----------------------------------------------------
+        async function loadNetworkHealth() {
+            if (!document.getElementById('nav-network-health').classList.contains('active')) return;
+            const tbody = document.getElementById('network-health-body');
+            try {
+                const res = await fetch('/api/portal/edge-health', {
+                    headers: { 'Authorization': `Bearer ${token}` }
+                });
+                if (res.status === 401) { logout(); return; }
+                const data = await res.json();
+                
+                tbody.innerHTML = '';
+                const keys = Object.keys(data || {});
+                if (keys.length === 0) {
+                    tbody.innerHTML = '<tr><td colspan="5" style="text-align:center; opacity:0.6;">No edge nodes configured</td></tr>';
+                } else {
+                    keys.sort().forEach(id => {
+                        const h = data[id];
+                        const isOnline = h.status === 'Online';
+                        const dotColor = isOnline ? '#10b981' : 'var(--danger)';
+                        
+                        let latText = isOnline ? `${h.latency_ms} ms` : '-';
+                        let timeSince = h.last_check_at ? Math.floor((Date.now() / 1000) - h.last_check_at) + 's ago' : 'Never';
+                        let errMsg = h.error_message ? `<span style="color:var(--danger); font-size:12px;">${escapeHtml(h.error_message)}</span>` : '';
+
+                        const tr = document.createElement('tr');
+                        tr.innerHTML = `
+                            <td><strong>${escapeHtml(id)}</strong></td>
+                            <td>
+                                <span style="display:inline-flex; align-items:center; gap:6px;">
+                                    <span style="width:8px; height:8px; border-radius:50%; background-color:${dotColor};"></span>
+                                    ${escapeHtml(h.status)}
+                                </span>
+                            </td>
+                            <td>${latText}</td>
+                            <td>${timeSince}</td>
+                            <td>${errMsg}</td>
+                        `;
+                        tbody.appendChild(tr);
+                    });
+                }
+            } catch (err) {
+                console.error(err);
+                tbody.innerHTML = '<tr><td colspan="5" style="color:var(--danger);text-align:center;">Failed to load network health</td></tr>';
+            }
+            
+            // Auto refresh every 30 seconds if tab is still active
+            setTimeout(() => {
+                if (document.getElementById('nav-network-health').classList.contains('active')) {
+                    loadNetworkHealth();
+                }
+            }, 30000);
+        }

@@ -183,6 +183,7 @@ The solution will consist of:
 | **3. Client-Initiated Access Control** | Gateway-level IP whitelisting or passcode screen on the public URL. | Low | Medium | High | **High** |
 | **4. Vanity Domain Routing (SNI)** | Route custom domains directly with on-the-fly gateway SSL provisioning. | High | Large | High | **Medium** |
 | **5. Latency & Bandwidth Simulation** | Throttle traffic and inject network latency from client CLI settings. | Medium | Small | Medium | **Medium** |
+| **6. Edge Node Health & Heartbeat** | Stateless edge nodes ping central server for global uptime visibility in Admin Portal UI. | Low | Medium | High | **Medium** |
 
 
 ## SentinelOne False Positive Mitigation
@@ -255,6 +256,7 @@ The solution will consist of:
 - [x] Support dynamic inspector binding address based on Docker detection and LFT_INSPECTOR_BIND.
 - [x] Document LFT_INSPECTOR_BIND in setup guide / SE guide.
 - [x] Bump version to v1.7.13 in whats-new.json, tag, and push to trigger release CI workflow.
+- [x] Fix dashboard double 'v' prefix bug and false-positive "Update Available" warning for newer clients.
 
 ## Subdomain Reservation System (v1.8.0)
 - [x] Declutter Active Tunnels dashboard table by moving detailed fields into a new Tunnel Details Dialog Modal (with Copy Link, On-Demand Refresh, and Admin controls).
@@ -575,5 +577,11 @@ The solution will consist of:
 - [x] Restore the `client_platforms` block and `docker_image`/`docker_bypass_url` customizations in the central VPS `/etc/lfr-tunneld/server-config.yaml`.
 - [x] Verify standard unit tests run successfully (`make test`).
 - [x] Verify E2E integration test suites pass locally (`make e2e` and `make e2e-sso`).
+
+## Re-prioritise Installer Script and Docker over Package Managers (Liferay SE Only)
+- [x] Retain Homebrew/Scoop in open-source repository defaults (`pkg/server/static/dashboard.js`, `tests/e2e/*`) to avoid imposing SE security constraints on the community.
+- [x] Update `client_platforms` in `/etc/lfr-tunneld/server-config.yaml` on the central VPS to remove Homebrew/Scoop options for the SE team.
+- [x] Restart `lfr-tunneld` on the central VPS to apply the explicit configuration overrides.
+- [x] Design and PR Offsite Edge Node Backup Sync (`scripts/sync-offsite-backups.sh`)
 
 

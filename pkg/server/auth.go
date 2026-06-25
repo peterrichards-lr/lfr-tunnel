@@ -39,6 +39,7 @@ type TunnelLease struct {
 	LastBytesIn     uint64               `json:"-"`
 	LastBytesOut    uint64               `json:"-"`
 	CreatedAt       time.Time            `json:"created_at"`
+	NodeID          string               `json:"node_id,omitempty"`
 	VisitorIPsMu    sync.Mutex           `json:"-"`
 	VisitorIPs      map[string]time.Time `json:"-"`
 }
@@ -204,6 +205,7 @@ func (r *Registry) Register(userID string, subdomainPrefix string, ports []PortM
 				AddedHeaders:    addedHeaders,
 				Status:          "up",
 				CreatedAt:       time.Now(),
+				NodeID:          "control",
 				VisitorIPs:      make(map[string]time.Time),
 			}
 			r.leases[fullHost] = lease
@@ -449,6 +451,7 @@ func (r *Registry) ListLeases() []*TunnelLease {
 			BytesIn:         atomic.LoadUint64(&lease.BytesIn),
 			BytesOut:        atomic.LoadUint64(&lease.BytesOut),
 			CreatedAt:       lease.CreatedAt,
+			NodeID:          lease.NodeID,
 		}
 		snapshot = append(snapshot, lCopy)
 	}

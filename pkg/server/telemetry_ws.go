@@ -159,6 +159,7 @@ func (s *Server) getUserTelemetryData(user *db.User, sessionToken string) map[st
 					"user_id":          l.UserID,
 					"client_ip":        l.ClientIP,
 					"created_at":       l.CreatedAt,
+					"node_id":          l.NodeID,
 					"visitor_ips":      l.GetActiveVisitorIPs(s.cfg.VisitorTimeout),
 					"passcode":         passcode,
 					"whitelist_ips":    whitelistIPs,
@@ -167,6 +168,45 @@ func (s *Server) getUserTelemetryData(user *db.User, sessionToken string) map[st
 			}
 		}
 	}
+
+	s.edgeLeasesMu.Lock()
+	for userID, userLeasesList := range s.edgeLeases {
+		for _, el := range userLeasesList {
+			if userID == user.ID || user.Role == "admin" || user.Role == "owner" {
+				var passcode, whitelistIPs, accessMode string
+				if s.db != nil {
+					parts := strings.SplitN(el.FullHost, ".", 2)
+					if len(parts) == 2 {
+						domain := parts[1]
+						res, err := s.db.GetSubdomainReservationByName(el.Subdomain, domain)
+						if err == nil && res != nil {
+							passcode = res.Passcode
+							whitelistIPs = res.WhitelistIPs
+							accessMode = res.AccessMode
+						}
+					}
+				}
+
+				activeLeases = append(activeLeases, map[string]interface{}{
+					"subdomain_prefix": el.Subdomain,
+					"full_host":        el.FullHost,
+					"status":           "up",
+					"bytes_in":         el.BytesIn,
+					"bytes_out":        el.BytesOut,
+					"rate_limit":       0,
+					"user_id":          el.UserID,
+					"client_ip":        el.ClientIP,
+					"created_at":       el.CreatedAt,
+					"node_id":          el.NodeID,
+					"visitor_ips":      []string{},
+					"passcode":         passcode,
+					"whitelist_ips":    whitelistIPs,
+					"access_mode":      accessMode,
+				})
+			}
+		}
+	}
+	s.edgeLeasesMu.Unlock()
 
 	resp := map[string]interface{}{
 		"id":                  user.ID,

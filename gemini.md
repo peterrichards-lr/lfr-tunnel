@@ -540,6 +540,16 @@ The solution will consist of:
 - [x] Create setup documentation `docs/edge_setup_guide.md`.
 - [x] Automate Control Plane edge node config update via scripts/deploy.sh.
 - [x] Prevent client latency auto-probing if ServerURL is explicitly overridden.
+- [x] Create automated Edge VPS setup script scripts/setup-edge-vps.sh.
+- [x] Create and configure Cloudflare DDNS update service for Edge VPS.
 
-
+## Edge Server Analytics and Portal Integration (#193)
+- [x] Database Schema: Update `tunnel_metrics` to add a `node_id TEXT DEFAULT 'control'` column and implement migration.
+- [x] Data Collection / Metric Forwarding: Add `/api/internal/edge-metrics` POST endpoint and forward edge node lease bandwidth metrics.
+- [x] Portal Pages & Dashboard UI: Merge Edge leases, display hosting gateway node ID badges, and proxy administrative kicks.
+- [x] Fix golangci-lint compile/staticcheck issues:
+  - [x] Wrap `CreatePAT` call in `pkg/server/edge_test.go:L201` with error check.
+  - [x] Replace prefix check + TrimPrefix with unconditional `strings.TrimPrefix` in `pkg/server/server.go:L3572`.
+- [x] Run validation tests locally.
+- [ ] Commit, push branch, and create Pull Request linking to Issue #193.
 

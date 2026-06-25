@@ -1475,6 +1475,32 @@ func (db *DB) GetSubdomainACL(id int64) (*SubdomainACL, error) {
 	return &acl, nil
 }
 
+// GetSubdomainACLByName retrieves a subdomain ACL permission by its unique keys.
+func (db *DB) GetSubdomainACLByName(subdomain, domain, identity string) (*SubdomainACL, error) {
+	var acl SubdomainACL
+	var expiresAt sql.NullTime
+
+	err := db.conn.QueryRow(`
+		SELECT id, subdomain, domain, identity, name, email, expires_at, created_at
+		FROM subdomain_acl
+		WHERE subdomain = ? AND domain = ? AND identity = ?
+	`, subdomain, domain, identity).Scan(&acl.ID, &acl.Subdomain, &acl.Domain, &acl.Identity, &acl.Name, &acl.Email, &expiresAt, &acl.CreatedAt)
+	if err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			return nil, ErrNotFound
+		}
+		return nil, err
+	}
+
+	if expiresAt.Valid {
+		acl.ExpiresAt = &expiresAt.Time
+	} else {
+		acl.ExpiresAt = nil
+	}
+
+	return &acl, nil
+}
+
 // ListSubdomainACL lists all permissions configured for a subdomain.
 func (db *DB) ListSubdomainACL(subdomain, domain string) ([]*SubdomainACL, error) {
 	rows, err := db.conn.Query(`

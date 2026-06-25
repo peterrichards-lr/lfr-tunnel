@@ -518,10 +518,12 @@ The solution will consist of:
 - [x] Implement the Guest Invitation workflow endpoints (invitations, magic enrollment link, browser certificate download).
 - [x] Update the local Client Inspector dashboard to add an "Access Control" management panel that handles dynamic updates back to the gateway.
 - [x] Expose a read-only "Access Control" status display in the central Admin/User Portal Dashboard under the Tunnel Details Modal.
-- [/] Write unit tests for access control validation, IP matching, PKCS#12 signing (E2E integration test verification pending).
+- [x] Write unit tests for access control validation, IP matching, PKCS#12 signing (E2E integration test verification pending).
+- [ ] Release, tag, and deploy v1.16.0 of lfr-tunnel to GitHub and VPS.
 
 ## Centralize Logo and Favicon for Easy Branding Customization (v1.16.0) - Issue #182
 - [x] Extract the SVG vector logo to `pkg/server/static/logo.svg` and reference it via standard `<img>` tags across all templates and static HTML files.
 - [x] Verify favicon is properly referenced and served.
+
 
 

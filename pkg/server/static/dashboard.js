@@ -621,7 +621,6 @@ function toggleTheme() {
                         platformKey = 'linux_amd64';
                     }
 
-                    const repoUrl = vData.repository_url || 'https://github.com/peterrichards-lr/lfr-tunnel';
                     const otherUrl = `${repoUrl}/releases/latest`;
                     const rawUrl = repoUrl.replace('github.com', 'raw.githubusercontent.com') + '/master';
                     const checksumsUrl = repoUrl.replace('github.com', 'raw.githubusercontent.com') + '/checksums/checksums.txt';

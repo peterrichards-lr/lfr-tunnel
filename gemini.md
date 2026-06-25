@@ -520,6 +520,9 @@ The solution will consist of:
 - [x] Expose a read-only "Access Control" status display in the central Admin/User Portal Dashboard under the Tunnel Details Modal.
 - [x] Write unit tests for access control validation, IP matching, PKCS#12 signing (E2E integration test verification pending).
 - [ ] Release, tag, and deploy v1.16.0 of lfr-tunnel to GitHub and VPS.
+- [x] Fix duplicate repoUrl declaration in pkg/server/static/dashboard.js to resolve stuck loading spinner.
+
+
 
 ## Centralize Logo and Favicon for Easy Branding Customization (v1.16.0) - Issue #182
 - [x] Extract the SVG vector logo to `pkg/server/static/logo.svg` and reference it via standard `<img>` tags across all templates and static HTML files.

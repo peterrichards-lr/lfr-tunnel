@@ -551,5 +551,5 @@ The solution will consist of:
   - [x] Wrap `CreatePAT` call in `pkg/server/edge_test.go:L201` with error check.
   - [x] Replace prefix check + TrimPrefix with unconditional `strings.TrimPrefix` in `pkg/server/server.go:L3572`.
 - [x] Run validation tests locally.
-- [ ] Commit, push branch, and create Pull Request linking to Issue #193.
+- [x] Commit, push branch, and create Pull Request linking to Issue #193.
 

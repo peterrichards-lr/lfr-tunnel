@@ -95,8 +95,35 @@ type SubdomainReservation struct {
 	Domain             string     `json:"domain"`
 	ExpiresAt          *time.Time `json:"expires_at,omitempty"`
 	ExtensionRequested bool       `json:"extension_requested"`
+	Passcode           string     `json:"passcode"`
+	WhitelistIPs       string     `json:"whitelist_ips"`
+	AccessMode         string     `json:"access_mode"`
 	CreatedAt          time.Time  `json:"created_at"`
 	UpdatedAt          time.Time  `json:"updated_at"`
+}
+
+type SubdomainACL struct {
+	ID        int64      `json:"id"`
+	Subdomain string     `json:"subdomain"`
+	Domain    string     `json:"domain"`
+	Identity  string     `json:"identity"` // "user:<uuid>" or "guest:<uuid>"
+	Name      string     `json:"name"`
+	Email     string     `json:"email"`
+	ExpiresAt *time.Time `json:"expires_at,omitempty"`
+	CreatedAt time.Time  `json:"created_at"`
+}
+
+type GuestInvitation struct {
+	ID        int64      `json:"id"`
+	Token     string     `json:"token"`
+	Subdomain string     `json:"subdomain"`
+	Domain    string     `json:"domain"`
+	Name      string     `json:"name"`
+	Email     string     `json:"email"`
+	ExpiresAt time.Time  `json:"expires_at"`
+	CreatedBy string     `json:"created_by"`
+	ClaimedAt *time.Time `json:"claimed_at,omitempty"`
+	CreatedAt time.Time  `json:"created_at"`
 }
 
 type PersonalAccessToken struct {
@@ -202,11 +229,27 @@ func (db *DB) initSchema() error {
 		domain TEXT NOT NULL,
 		expires_at DATETIME,
 		extension_requested INTEGER DEFAULT 0,
+		passcode TEXT DEFAULT '',
+		whitelist_ips TEXT DEFAULT '',
+		access_mode TEXT DEFAULT 'or',
 		created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
 		updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
 		FOREIGN KEY(user_id) REFERENCES users(id) ON DELETE CASCADE
 	);
 	CREATE UNIQUE INDEX IF NOT EXISTS idx_subdomain_domain ON subdomain_reservations(subdomain, domain);
+
+	CREATE TABLE IF NOT EXISTS subdomain_acl (
+		id INTEGER PRIMARY KEY AUTOINCREMENT,
+		subdomain TEXT NOT NULL,
+		domain TEXT NOT NULL,
+		identity TEXT NOT NULL,
+		name TEXT DEFAULT '',
+		email TEXT DEFAULT '',
+		expires_at DATETIME,
+		created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
+	);
+	CREATE UNIQUE INDEX IF NOT EXISTS idx_subdomain_domain_identity ON subdomain_acl(subdomain, domain, identity);
+
 
 	CREATE TABLE IF NOT EXISTS personal_access_tokens (
 		id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -286,6 +329,19 @@ func (db *DB) initSchema() error {
 		start_time DATETIME NOT NULL,
 		end_time DATETIME
 	);
+
+	CREATE TABLE IF NOT EXISTS guest_invitations (
+		id INTEGER PRIMARY KEY AUTOINCREMENT,
+		token TEXT UNIQUE NOT NULL,
+		subdomain TEXT NOT NULL,
+		domain TEXT NOT NULL,
+		name TEXT NOT NULL,
+		email TEXT NOT NULL,
+		expires_at DATETIME NOT NULL,
+		created_by TEXT NOT NULL,
+		claimed_at DATETIME,
+		created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
+	);
 	`
 
 	_, err := db.conn.Exec(schema)
@@ -301,6 +357,9 @@ func (db *DB) initSchema() error {
 	_, _ = db.conn.Exec("ALTER TABLE users ADD COLUMN max_reservations INTEGER DEFAULT NULL")
 	_, _ = db.conn.Exec("ALTER TABLE users ADD COLUMN max_active_tunnels INTEGER DEFAULT NULL")
 	_, _ = db.conn.Exec("ALTER TABLE subdomain_reservations ADD COLUMN extension_requested INTEGER DEFAULT 0")
+	_, _ = db.conn.Exec("ALTER TABLE subdomain_reservations ADD COLUMN passcode TEXT DEFAULT ''")
+	_, _ = db.conn.Exec("ALTER TABLE subdomain_reservations ADD COLUMN whitelist_ips TEXT DEFAULT ''")
+	_, _ = db.conn.Exec("ALTER TABLE subdomain_reservations ADD COLUMN access_mode TEXT DEFAULT 'or'")
 
 	return nil
 }
@@ -1206,9 +1265,9 @@ func (db *DB) CreateSubdomainReservation(r *SubdomainReservation) error {
 	}
 
 	res, err := db.conn.Exec(`
-		INSERT INTO subdomain_reservations (user_id, subdomain, domain, expires_at, extension_requested, created_at, updated_at)
-		VALUES (?, ?, ?, ?, ?, ?, ?)
-	`, r.UserID, r.Subdomain, r.Domain, r.ExpiresAt, extReq, r.CreatedAt, r.UpdatedAt)
+		INSERT INTO subdomain_reservations (user_id, subdomain, domain, expires_at, extension_requested, passcode, whitelist_ips, access_mode, created_at, updated_at)
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+	`, r.UserID, r.Subdomain, r.Domain, r.ExpiresAt, extReq, r.Passcode, r.WhitelistIPs, r.AccessMode, r.CreatedAt, r.UpdatedAt)
 	if err != nil {
 		return err
 	}
@@ -1226,12 +1285,13 @@ func (db *DB) GetSubdomainReservation(id int64) (*SubdomainReservation, error) {
 	var r SubdomainReservation
 	var expiresAt sql.NullTime
 	var extReq int
+	var passcode, whitelistIPs, accessMode sql.NullString
 
 	err := db.conn.QueryRow(`
-		SELECT id, user_id, subdomain, domain, expires_at, extension_requested, created_at, updated_at
+		SELECT id, user_id, subdomain, domain, expires_at, extension_requested, passcode, whitelist_ips, access_mode, created_at, updated_at
 		FROM subdomain_reservations
 		WHERE id = ?
-	`, id).Scan(&r.ID, &r.UserID, &r.Subdomain, &r.Domain, &expiresAt, &extReq, &r.CreatedAt, &r.UpdatedAt)
+	`, id).Scan(&r.ID, &r.UserID, &r.Subdomain, &r.Domain, &expiresAt, &extReq, &passcode, &whitelistIPs, &accessMode, &r.CreatedAt, &r.UpdatedAt)
 	if err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
 			return nil, ErrNotFound
@@ -1245,6 +1305,12 @@ func (db *DB) GetSubdomainReservation(id int64) (*SubdomainReservation, error) {
 		r.ExpiresAt = nil
 	}
 	r.ExtensionRequested = extReq == 1
+	r.Passcode = passcode.String
+	r.WhitelistIPs = whitelistIPs.String
+	r.AccessMode = accessMode.String
+	if r.AccessMode == "" {
+		r.AccessMode = "or"
+	}
 
 	return &r, nil
 }
@@ -1254,12 +1320,13 @@ func (db *DB) GetSubdomainReservationByName(subdomain, domain string) (*Subdomai
 	var r SubdomainReservation
 	var expiresAt sql.NullTime
 	var extReq int
+	var passcode, whitelistIPs, accessMode sql.NullString
 
 	err := db.conn.QueryRow(`
-		SELECT id, user_id, subdomain, domain, expires_at, extension_requested, created_at, updated_at
+		SELECT id, user_id, subdomain, domain, expires_at, extension_requested, passcode, whitelist_ips, access_mode, created_at, updated_at
 		FROM subdomain_reservations
 		WHERE subdomain = ? AND domain = ?
-	`, subdomain, domain).Scan(&r.ID, &r.UserID, &r.Subdomain, &r.Domain, &expiresAt, &extReq, &r.CreatedAt, &r.UpdatedAt)
+	`, subdomain, domain).Scan(&r.ID, &r.UserID, &r.Subdomain, &r.Domain, &expiresAt, &extReq, &passcode, &whitelistIPs, &accessMode, &r.CreatedAt, &r.UpdatedAt)
 	if err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
 			return nil, ErrNotFound
@@ -1273,6 +1340,12 @@ func (db *DB) GetSubdomainReservationByName(subdomain, domain string) (*Subdomai
 		r.ExpiresAt = nil
 	}
 	r.ExtensionRequested = extReq == 1
+	r.Passcode = passcode.String
+	r.WhitelistIPs = whitelistIPs.String
+	r.AccessMode = accessMode.String
+	if r.AccessMode == "" {
+		r.AccessMode = "or"
+	}
 
 	return &r, nil
 }
@@ -1280,7 +1353,7 @@ func (db *DB) GetSubdomainReservationByName(subdomain, domain string) (*Subdomai
 // ListSubdomainReservationsByUserID lists all reservations held by a specific user.
 func (db *DB) ListSubdomainReservationsByUserID(userID string) ([]*SubdomainReservation, error) {
 	rows, err := db.conn.Query(`
-		SELECT id, user_id, subdomain, domain, expires_at, extension_requested, created_at, updated_at
+		SELECT id, user_id, subdomain, domain, expires_at, extension_requested, passcode, whitelist_ips, access_mode, created_at, updated_at
 		FROM subdomain_reservations
 		WHERE user_id = ?
 		ORDER BY created_at DESC
@@ -1295,13 +1368,20 @@ func (db *DB) ListSubdomainReservationsByUserID(userID string) ([]*SubdomainRese
 		var r SubdomainReservation
 		var expiresAt sql.NullTime
 		var extReq int
-		if err := rows.Scan(&r.ID, &r.UserID, &r.Subdomain, &r.Domain, &expiresAt, &extReq, &r.CreatedAt, &r.UpdatedAt); err != nil {
+		var passcode, whitelistIPs, accessMode sql.NullString
+		if err := rows.Scan(&r.ID, &r.UserID, &r.Subdomain, &r.Domain, &expiresAt, &extReq, &passcode, &whitelistIPs, &accessMode, &r.CreatedAt, &r.UpdatedAt); err != nil {
 			return nil, err
 		}
 		if expiresAt.Valid {
 			r.ExpiresAt = &expiresAt.Time
 		}
 		r.ExtensionRequested = extReq == 1
+		r.Passcode = passcode.String
+		r.WhitelistIPs = whitelistIPs.String
+		r.AccessMode = accessMode.String
+		if r.AccessMode == "" {
+			r.AccessMode = "or"
+		}
 		list = append(list, &r)
 	}
 	return list, nil
@@ -1310,7 +1390,7 @@ func (db *DB) ListSubdomainReservationsByUserID(userID string) ([]*SubdomainRese
 // ListAllSubdomainReservations returns all reservations in the system.
 func (db *DB) ListAllSubdomainReservations() ([]*SubdomainReservation, error) {
 	rows, err := db.conn.Query(`
-		SELECT id, user_id, subdomain, domain, expires_at, extension_requested, created_at, updated_at
+		SELECT id, user_id, subdomain, domain, expires_at, extension_requested, passcode, whitelist_ips, access_mode, created_at, updated_at
 		FROM subdomain_reservations
 		ORDER BY created_at DESC
 	`)
@@ -1324,13 +1404,20 @@ func (db *DB) ListAllSubdomainReservations() ([]*SubdomainReservation, error) {
 		var r SubdomainReservation
 		var expiresAt sql.NullTime
 		var extReq int
-		if err := rows.Scan(&r.ID, &r.UserID, &r.Subdomain, &r.Domain, &expiresAt, &extReq, &r.CreatedAt, &r.UpdatedAt); err != nil {
+		var passcode, whitelistIPs, accessMode sql.NullString
+		if err := rows.Scan(&r.ID, &r.UserID, &r.Subdomain, &r.Domain, &expiresAt, &extReq, &passcode, &whitelistIPs, &accessMode, &r.CreatedAt, &r.UpdatedAt); err != nil {
 			return nil, err
 		}
 		if expiresAt.Valid {
 			r.ExpiresAt = &expiresAt.Time
 		}
 		r.ExtensionRequested = extReq == 1
+		r.Passcode = passcode.String
+		r.WhitelistIPs = whitelistIPs.String
+		r.AccessMode = accessMode.String
+		if r.AccessMode == "" {
+			r.AccessMode = "or"
+		}
 		list = append(list, &r)
 	}
 	return list, nil
@@ -1345,9 +1432,9 @@ func (db *DB) UpdateSubdomainReservation(r *SubdomainReservation) error {
 	}
 	_, err := db.conn.Exec(`
 		UPDATE subdomain_reservations
-		SET expires_at = ?, extension_requested = ?, updated_at = ?
+		SET expires_at = ?, extension_requested = ?, passcode = ?, whitelist_ips = ?, access_mode = ?, updated_at = ?
 		WHERE id = ?
-	`, r.ExpiresAt, extReq, r.UpdatedAt, r.ID)
+	`, r.ExpiresAt, extReq, r.Passcode, r.WhitelistIPs, r.AccessMode, r.UpdatedAt, r.ID)
 	return err
 }
 
@@ -1361,6 +1448,123 @@ func (db *DB) DeleteSubdomainReservation(id int64) error {
 func (db *DB) DeleteExpiredSubdomainReservations(cutoff time.Time) error {
 	_, err := db.conn.Exec(`
 		DELETE FROM subdomain_reservations
+		WHERE expires_at IS NOT NULL AND expires_at < ?
+	`, cutoff)
+	return err
+}
+
+// CreateSubdomainACL registers a new ACL permission in the database.
+func (db *DB) CreateSubdomainACL(acl *SubdomainACL) error {
+	if acl.CreatedAt.IsZero() {
+		acl.CreatedAt = time.Now().UTC()
+	}
+
+	res, err := db.conn.Exec(`
+		INSERT INTO subdomain_acl (subdomain, domain, identity, name, email, expires_at, created_at)
+		VALUES (?, ?, ?, ?, ?, ?, ?)
+	`, acl.Subdomain, acl.Domain, acl.Identity, acl.Name, acl.Email, acl.ExpiresAt, acl.CreatedAt)
+	if err != nil {
+		return err
+	}
+
+	id, err := res.LastInsertId()
+	if err != nil {
+		return err
+	}
+	acl.ID = id
+	return nil
+}
+
+// GetSubdomainACL retrieves a subdomain ACL permission by its ID.
+func (db *DB) GetSubdomainACL(id int64) (*SubdomainACL, error) {
+	var acl SubdomainACL
+	var expiresAt sql.NullTime
+
+	err := db.conn.QueryRow(`
+		SELECT id, subdomain, domain, identity, name, email, expires_at, created_at
+		FROM subdomain_acl
+		WHERE id = ?
+	`, id).Scan(&acl.ID, &acl.Subdomain, &acl.Domain, &acl.Identity, &acl.Name, &acl.Email, &expiresAt, &acl.CreatedAt)
+	if err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			return nil, ErrNotFound
+		}
+		return nil, err
+	}
+
+	if expiresAt.Valid {
+		acl.ExpiresAt = &expiresAt.Time
+	} else {
+		acl.ExpiresAt = nil
+	}
+
+	return &acl, nil
+}
+
+// GetSubdomainACLByName retrieves a subdomain ACL permission by its unique keys.
+func (db *DB) GetSubdomainACLByName(subdomain, domain, identity string) (*SubdomainACL, error) {
+	var acl SubdomainACL
+	var expiresAt sql.NullTime
+
+	err := db.conn.QueryRow(`
+		SELECT id, subdomain, domain, identity, name, email, expires_at, created_at
+		FROM subdomain_acl
+		WHERE subdomain = ? AND domain = ? AND identity = ?
+	`, subdomain, domain, identity).Scan(&acl.ID, &acl.Subdomain, &acl.Domain, &acl.Identity, &acl.Name, &acl.Email, &expiresAt, &acl.CreatedAt)
+	if err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			return nil, ErrNotFound
+		}
+		return nil, err
+	}
+
+	if expiresAt.Valid {
+		acl.ExpiresAt = &expiresAt.Time
+	} else {
+		acl.ExpiresAt = nil
+	}
+
+	return &acl, nil
+}
+
+// ListSubdomainACL lists all permissions configured for a subdomain.
+func (db *DB) ListSubdomainACL(subdomain, domain string) ([]*SubdomainACL, error) {
+	rows, err := db.conn.Query(`
+		SELECT id, subdomain, domain, identity, name, email, expires_at, created_at
+		FROM subdomain_acl
+		WHERE subdomain = ? AND domain = ?
+		ORDER BY created_at DESC
+	`, subdomain, domain)
+	if err != nil {
+		return nil, err
+	}
+	defer func() { _ = rows.Close() }()
+
+	var list []*SubdomainACL
+	for rows.Next() {
+		var acl SubdomainACL
+		var expiresAt sql.NullTime
+		if err := rows.Scan(&acl.ID, &acl.Subdomain, &acl.Domain, &acl.Identity, &acl.Name, &acl.Email, &expiresAt, &acl.CreatedAt); err != nil {
+			return nil, err
+		}
+		if expiresAt.Valid {
+			acl.ExpiresAt = &expiresAt.Time
+		}
+		list = append(list, &acl)
+	}
+	return list, nil
+}
+
+// DeleteSubdomainACL removes a subdomain ACL record.
+func (db *DB) DeleteSubdomainACL(id int64) error {
+	_, err := db.conn.Exec("DELETE FROM subdomain_acl WHERE id = ?", id)
+	return err
+}
+
+// DeleteExpiredSubdomainACLs removes expired ACL records.
+func (db *DB) DeleteExpiredSubdomainACLs(cutoff time.Time) error {
+	_, err := db.conn.Exec(`
+		DELETE FROM subdomain_acl
 		WHERE expires_at IS NOT NULL AND expires_at < ?
 	`, cutoff)
 	return err
@@ -1417,4 +1621,167 @@ func (db *DB) GetGatewayRuns(limit int) ([]*GatewayRun, error) {
 		list = append(list, &r)
 	}
 	return list, nil
+}
+
+// CreateGuestInvitation saves a new invitation.
+func (db *DB) CreateGuestInvitation(invite *GuestInvitation) error {
+	if invite.CreatedAt.IsZero() {
+		invite.CreatedAt = time.Now().UTC()
+	}
+	res, err := db.conn.Exec(`
+		INSERT INTO guest_invitations (token, subdomain, domain, name, email, expires_at, created_by, claimed_at, created_at)
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+	`, invite.Token, invite.Subdomain, invite.Domain, invite.Name, invite.Email, invite.ExpiresAt, invite.CreatedBy, invite.ClaimedAt, invite.CreatedAt)
+	if err != nil {
+		return err
+	}
+	id, err := res.LastInsertId()
+	if err != nil {
+		return err
+	}
+	invite.ID = id
+	return nil
+}
+
+// GetGuestInvitationByToken retrieves an invitation by token.
+func (db *DB) GetGuestInvitationByToken(token string) (*GuestInvitation, error) {
+	var invite GuestInvitation
+	var claimedAt sql.NullTime
+
+	err := db.conn.QueryRow(`
+		SELECT id, token, subdomain, domain, name, email, expires_at, created_by, claimed_at, created_at
+		FROM guest_invitations
+		WHERE token = ?
+	`, token).Scan(&invite.ID, &invite.Token, &invite.Subdomain, &invite.Domain, &invite.Name, &invite.Email, &invite.ExpiresAt, &invite.CreatedBy, &claimedAt, &invite.CreatedAt)
+	if err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			return nil, ErrNotFound
+		}
+		return nil, err
+	}
+
+	if claimedAt.Valid {
+		invite.ClaimedAt = &claimedAt.Time
+	}
+	return &invite, nil
+}
+
+// MarkGuestInvitationClaimed marks an invitation as claimed.
+func (db *DB) MarkGuestInvitationClaimed(token string) error {
+	_, err := db.conn.Exec(`
+		UPDATE guest_invitations
+		SET claimed_at = ?
+		WHERE token = ?
+	`, time.Now().UTC(), token)
+	return err
+}
+
+// ListGuestInvitationsByCreator lists all guest invitations created by a user.
+func (db *DB) ListGuestInvitationsByCreator(createdBy string) ([]*GuestInvitation, error) {
+	rows, err := db.conn.Query(`
+		SELECT id, token, subdomain, domain, name, email, expires_at, created_by, claimed_at, created_at
+		FROM guest_invitations
+		WHERE created_by = ?
+		ORDER BY created_at DESC
+	`, createdBy)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close() //nolint:errcheck
+
+	var list []*GuestInvitation
+	for rows.Next() {
+		var invite GuestInvitation
+		var claimedAt sql.NullTime
+		err := rows.Scan(&invite.ID, &invite.Token, &invite.Subdomain, &invite.Domain, &invite.Name, &invite.Email, &invite.ExpiresAt, &invite.CreatedBy, &claimedAt, &invite.CreatedAt)
+		if err != nil {
+			return nil, err
+		}
+		if claimedAt.Valid {
+			invite.ClaimedAt = &claimedAt.Time
+		}
+		list = append(list, &invite)
+	}
+	return list, nil
+}
+
+// DeleteGuestInvitation deletes an invitation by ID and also cleans up any associated SubdomainACL entry.
+func (db *DB) DeleteGuestInvitation(id int64) error {
+	var token, subdomain, domain string
+	err := db.conn.QueryRow("SELECT token, subdomain, domain FROM guest_invitations WHERE id = ?", id).Scan(&token, &subdomain, &domain)
+	if err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			return nil
+		}
+		return err
+	}
+
+	tx, err := db.conn.Begin()
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback() //nolint:errcheck
+
+	_, err = tx.Exec("DELETE FROM guest_invitations WHERE id = ?", id)
+	if err != nil {
+		return err
+	}
+
+	_, err = tx.Exec("DELETE FROM subdomain_acl WHERE subdomain = ? AND domain = ? AND identity = ?", subdomain, domain, "guest:"+token)
+	if err != nil {
+		return err
+	}
+
+	return tx.Commit()
+}
+
+// ListAllGuestInvitations lists all invitations in the system.
+func (db *DB) ListAllGuestInvitations() ([]*GuestInvitation, error) {
+	rows, err := db.conn.Query(`
+		SELECT id, token, subdomain, domain, name, email, expires_at, created_by, claimed_at, created_at
+		FROM guest_invitations
+		ORDER BY created_at DESC
+	`)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close() //nolint:errcheck
+
+	var list []*GuestInvitation
+	for rows.Next() {
+		var invite GuestInvitation
+		var claimedAt sql.NullTime
+		err := rows.Scan(&invite.ID, &invite.Token, &invite.Subdomain, &invite.Domain, &invite.Name, &invite.Email, &invite.ExpiresAt, &invite.CreatedBy, &claimedAt, &invite.CreatedAt)
+		if err != nil {
+			return nil, err
+		}
+		if claimedAt.Valid {
+			invite.ClaimedAt = &claimedAt.Time
+		}
+		list = append(list, &invite)
+	}
+	return list, nil
+}
+
+// GetGuestInvitation retrieves an invitation by ID.
+func (db *DB) GetGuestInvitation(id int64) (*GuestInvitation, error) {
+	var invite GuestInvitation
+	var claimedAt sql.NullTime
+
+	err := db.conn.QueryRow(`
+		SELECT id, token, subdomain, domain, name, email, expires_at, created_by, claimed_at, created_at
+		FROM guest_invitations
+		WHERE id = ?
+	`, id).Scan(&invite.ID, &invite.Token, &invite.Subdomain, &invite.Domain, &invite.Name, &invite.Email, &invite.ExpiresAt, &invite.CreatedBy, &claimedAt, &invite.CreatedAt)
+	if err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			return nil, ErrNotFound
+		}
+		return nil, err
+	}
+
+	if claimedAt.Valid {
+		invite.ClaimedAt = &claimedAt.Time
+	}
+	return &invite, nil
 }

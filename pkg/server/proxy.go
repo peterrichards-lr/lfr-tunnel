@@ -2,15 +2,22 @@ package server
 
 import (
 	"bytes"
+	"crypto/hmac"
+	"crypto/rand"
+	"crypto/sha256"
+	"crypto/x509"
 	_ "embed"
 	"encoding/base64"
+	"encoding/hex"
 	"fmt"
 	"io"
 	"lfr-tunnel/pkg/config"
+	"lfr-tunnel/pkg/db"
 	"log"
 	"net"
 	"net/http"
 	"net/http/httputil"
+	"strconv"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -25,18 +32,30 @@ var offlineHTML []byte
 //go:embed blocked.html
 var blockedHTML []byte
 
+//go:embed passcode.html
+var passcodeHTML []byte
+
+//go:embed unauthorized_ip.html
+var unauthorizedIPHTML []byte
+
 // ProxyHandler handles incoming HTTP/HTTPS proxy traffic, routing it to the active tunnel.
 type ProxyHandler struct {
-	registry *Registry
-	config   *config.ServerConfig
-	limiters sync.Map // Map of host -> *rate.Limiter
+	registry     *Registry
+	config       *config.ServerConfig
+	limiters     sync.Map // Map of host -> *rate.Limiter
+	caCert       *x509.Certificate
+	db           *db.DB
+	cookieSecret []byte
 }
 
 // NewProxyHandler creates a new ProxyHandler instance.
 func NewProxyHandler(registry *Registry, cfg *config.ServerConfig) *ProxyHandler {
+	secret := make([]byte, 32)
+	_, _ = rand.Read(secret)
 	return &ProxyHandler{
-		registry: registry,
-		config:   cfg,
+		registry:     registry,
+		config:       cfg,
+		cookieSecret: secret,
 	}
 }
 
@@ -88,6 +107,11 @@ func (p *ProxyHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 			p.serveBlockedPage(w, r, host, category, reason, clientIP)
 			return
 		}
+	}
+
+	// 2.4 Access Control Checks (IP Whitelist, Passcode, Client Cert)
+	if !p.checkAccessControls(w, r, lease, host) {
+		return
 	}
 
 	// 2.5 HTTP Basic Auth Protection
@@ -235,4 +259,253 @@ func (r *trackingReadCloser) Read(p []byte) (int, error) {
 		r.addBytes(n)
 	}
 	return n, err
+}
+
+func (p *ProxyHandler) createSessionCookie(subdomain string) string {
+	expiration := time.Now().Add(24 * time.Hour).Unix()
+	payload := fmt.Sprintf("%s:%d", subdomain, expiration)
+
+	h := hmac.New(sha256.New, p.cookieSecret)
+	h.Write([]byte(payload))
+	signature := hex.EncodeToString(h.Sum(nil))
+
+	return fmt.Sprintf("%s:%s", payload, signature)
+}
+
+func (p *ProxyHandler) verifySessionCookie(cookieValue, subdomain string) bool {
+	parts := strings.Split(cookieValue, ":")
+	if len(parts) != 3 {
+		return false
+	}
+
+	cookieSubdomain := parts[0]
+	expStr := parts[1]
+	signature := parts[2]
+
+	if cookieSubdomain != subdomain {
+		return false
+	}
+
+	expiration, err := strconv.ParseInt(expStr, 10, 64)
+	if err != nil || time.Now().Unix() > expiration {
+		return false
+	}
+
+	payload := fmt.Sprintf("%s:%s", cookieSubdomain, expStr)
+	h := hmac.New(sha256.New, p.cookieSecret)
+	h.Write([]byte(payload))
+	expectedSignature := hex.EncodeToString(h.Sum(nil))
+
+	return hmac.Equal([]byte(signature), []byte(expectedSignature))
+}
+
+func (p *ProxyHandler) servePasscodePage(w http.ResponseWriter, r *http.Request, host, redirectURI, errStr string) {
+	w.Header().Set("Content-Type", "text/html; charset=utf-8")
+	w.WriteHeader(http.StatusUnauthorized)
+
+	tmpl := string(passcodeHTML)
+	tmpl = strings.ReplaceAll(tmpl, "{{.Host}}", host)
+	tmpl = strings.ReplaceAll(tmpl, "{{.RedirectURI}}", redirectURI)
+	if errStr != "" {
+		tmpl = strings.ReplaceAll(tmpl, "{{if .Error}}", "")
+		tmpl = strings.ReplaceAll(tmpl, "{{.Error}}", errStr)
+		tmpl = strings.ReplaceAll(tmpl, "{{end}}", "")
+	} else {
+		// Strip error section
+		idxStart := strings.Index(tmpl, "{{if .Error}}")
+		idxEnd := strings.Index(tmpl, "{{end}}")
+		if idxStart != -1 && idxEnd != -1 && idxEnd > idxStart {
+			tmpl = tmpl[:idxStart] + tmpl[idxEnd+7:]
+		}
+	}
+
+	if _, err := w.Write([]byte(tmpl)); err != nil {
+		log.Printf("[Proxy] Failed to write passcode page: %v", err)
+	}
+}
+
+func (p *ProxyHandler) serveUnauthorizedIPPage(w http.ResponseWriter, r *http.Request, host, ip string) {
+	w.Header().Set("Content-Type", "text/html; charset=utf-8")
+	w.WriteHeader(http.StatusForbidden)
+
+	tmpl := string(unauthorizedIPHTML)
+	tmpl = strings.ReplaceAll(tmpl, "{{.Host}}", host)
+	tmpl = strings.ReplaceAll(tmpl, "{{.IP}}", ip)
+
+	if _, err := w.Write([]byte(tmpl)); err != nil {
+		log.Printf("[Proxy] Failed to write unauthorized IP page: %v", err)
+	}
+}
+
+func (p *ProxyHandler) checkAccessControls(w http.ResponseWriter, r *http.Request, lease *TunnelLease, host string) bool {
+	// 1. Client Certificate validation bypass
+	if p.caCert != nil {
+		if cn, ok := VerifyClientCertificate(r, p.caCert); ok {
+			if cn == "user:"+lease.UserID {
+				return true
+			}
+			if p.db != nil {
+				parts := strings.SplitN(host, ".", 2)
+				if len(parts) == 2 {
+					domain := parts[1]
+					aclSub := lease.SubdomainPrefix
+
+					acl, err := p.db.GetSubdomainACLByName(aclSub, domain, cn)
+					if err == nil && acl != nil {
+						if acl.ExpiresAt == nil || acl.ExpiresAt.After(time.Now()) {
+							return true
+						}
+					}
+				}
+			}
+		}
+	}
+
+	// 2. Intercept passcode verification POST /lfr-tunnel-verify
+	if r.Method == "POST" && r.URL.Path == "/lfr-tunnel-verify" {
+		_ = r.ParseForm()
+		passcodeVal := r.FormValue("passcode")
+		redirectURI := r.FormValue("redirect_uri")
+		if redirectURI == "" {
+			redirectURI = "/"
+		}
+
+		passcodeRequired := ""
+		if p.db != nil {
+			parts := strings.SplitN(host, ".", 2)
+			if len(parts) == 2 {
+				domain := parts[1]
+				res, err := p.db.GetSubdomainReservationByName(lease.SubdomainPrefix, domain)
+				if err == nil && res != nil {
+					passcodeRequired = res.Passcode
+				}
+			}
+		}
+
+		if passcodeRequired != "" && passcodeVal == passcodeRequired {
+			parts := strings.SplitN(host, ".", 2)
+			subdomain := parts[0]
+			cookieVal := p.createSessionCookie(subdomain)
+
+			http.SetCookie(w, &http.Cookie{
+				Name:     "lfr_tunnel_session",
+				Value:    cookieVal,
+				Path:     "/",
+				MaxAge:   86400,
+				HttpOnly: true,
+				Secure:   true,
+				SameSite: http.SameSiteLaxMode,
+			})
+
+			http.Redirect(w, r, redirectURI, http.StatusSeeOther)
+			return false
+		}
+
+		p.servePasscodePage(w, r, host, redirectURI, "Incorrect passcode. Please try again.")
+		return false
+	}
+
+	// 3. Evaluate configured rules
+	var passcodeRequired string
+	var ipWhitelist string
+	accessMode := "or"
+
+	if p.db != nil {
+		parts := strings.SplitN(host, ".", 2)
+		if len(parts) == 2 {
+			domain := parts[1]
+			res, err := p.db.GetSubdomainReservationByName(lease.SubdomainPrefix, domain)
+			if err == nil && res != nil {
+				passcodeRequired = res.Passcode
+				ipWhitelist = res.WhitelistIPs
+				if res.AccessMode != "" {
+					accessMode = strings.ToLower(res.AccessMode)
+				}
+			}
+		}
+	}
+
+	// Apply enterprise force configs
+	if p.config != nil {
+		if p.config.ForceClientCert && p.caCert != nil {
+			p.serveUnauthorizedIPPage(w, r, host, getClientIP(r))
+			return false
+		}
+	}
+
+	hasPasscode := passcodeRequired != ""
+	hasIPWhitelist := ipWhitelist != ""
+
+	if !hasPasscode && !hasIPWhitelist {
+		return true
+	}
+
+	visitorIP := getClientIP(r)
+	ipAllowed := false
+	if hasIPWhitelist {
+		ipAllowed = checkIPInWhitelist(visitorIP, ipWhitelist)
+	}
+
+	passcodeAllowed := false
+	if hasPasscode {
+		if cookie, err := r.Cookie("lfr_tunnel_session"); err == nil {
+			parts := strings.SplitN(host, ".", 2)
+			subdomain := parts[0]
+			passcodeAllowed = p.verifySessionCookie(cookie.Value, subdomain)
+		}
+	}
+
+	if accessMode == "and" {
+		if hasIPWhitelist && !ipAllowed {
+			p.serveUnauthorizedIPPage(w, r, host, visitorIP)
+			return false
+		}
+		if hasPasscode && !passcodeAllowed {
+			p.servePasscodePage(w, r, host, r.RequestURI, "")
+			return false
+		}
+	} else {
+		if hasIPWhitelist && ipAllowed {
+			return true
+		}
+		if hasPasscode && passcodeAllowed {
+			return true
+		}
+		if hasPasscode {
+			p.servePasscodePage(w, r, host, r.RequestURI, "")
+			return false
+		}
+		if hasIPWhitelist && !ipAllowed {
+			p.serveUnauthorizedIPPage(w, r, host, visitorIP)
+			return false
+		}
+	}
+
+	return true
+}
+
+func checkIPInWhitelist(visitorIP, whitelist string) bool {
+	vIP := net.ParseIP(visitorIP)
+	if vIP == nil {
+		return false
+	}
+
+	ips := strings.Split(whitelist, ",")
+	for _, rawIP := range ips {
+		rawIP = strings.TrimSpace(rawIP)
+		if rawIP == "" {
+			continue
+		}
+		if _, ipNet, err := net.ParseCIDR(rawIP); err == nil {
+			if ipNet.Contains(vIP) {
+				return true
+			}
+		}
+		if targetIP := net.ParseIP(rawIP); targetIP != nil {
+			if targetIP.Equal(vIP) {
+				return true
+			}
+		}
+	}
+	return false
 }

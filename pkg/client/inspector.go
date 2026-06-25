@@ -40,6 +40,10 @@ func StartInspector(port int, engine *InterceptorEngine) (int, error) {
 			"maintenance_mode": engine.MaintenanceMode,
 			"added_headers":    engine.AddedHeaders,
 			"history":          engine.History,
+			"passcode":         engine.Passcode,
+			"whitelist_ips":    engine.WhitelistIPs,
+			"access_mode":      engine.AccessMode,
+			"assigned":         engine.SubdomainAss,
 		}
 
 		w.Header().Set("Content-Type", "application/json")
@@ -149,6 +153,83 @@ func StartInspector(port int, engine *InterceptorEngine) (int, error) {
 
 		w.Header().Set("Content-Type", "application/json")
 		_ = json.NewEncoder(w).Encode(info)
+	})
+
+	mux.HandleFunc("/api/access-control", func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodPost {
+			http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+			return
+		}
+
+		var req struct {
+			Passcode     string `json:"passcode"`
+			WhitelistIPs string `json:"whitelist_ips"`
+			AccessMode   string `json:"access_mode"`
+		}
+
+		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+			http.Error(w, "Invalid JSON payload", http.StatusBadRequest)
+			return
+		}
+
+		engine.mu.Lock()
+		engine.Passcode = req.Passcode
+		engine.WhitelistIPs = req.WhitelistIPs
+		engine.AccessMode = req.AccessMode
+		token := engine.Token
+		serverURL := engine.ServerURL
+		subdomainAss := engine.SubdomainAss
+		engine.mu.Unlock()
+
+		if token == "" || serverURL == "" || subdomainAss == "" {
+			http.Error(w, "Client connection state is not fully initialized", http.StatusBadRequest)
+			return
+		}
+
+		parts := strings.SplitN(subdomainAss, ".", 2)
+		if len(parts) != 2 {
+			http.Error(w, "Invalid assigned subdomain format", http.StatusBadRequest)
+			return
+		}
+		prefix := parts[0]
+		domain := parts[1]
+
+		updatePayload := map[string]string{
+			"subdomain":     prefix,
+			"domain":        domain,
+			"passcode":      req.Passcode,
+			"whitelist_ips": req.WhitelistIPs,
+			"access_mode":   req.AccessMode,
+		}
+
+		bodyBytes, _ := json.Marshal(updatePayload)
+		gatewayURL := fmt.Sprintf("%s/api/portal/reservations/access-control", serverURL)
+
+		reqHTTP, err := http.NewRequest(http.MethodPost, gatewayURL, bytes.NewReader(bodyBytes))
+		if err != nil {
+			http.Error(w, fmt.Sprintf("Failed to construct gateway request: %v", err), http.StatusInternalServerError)
+			return
+		}
+
+		reqHTTP.Header.Set("Content-Type", "application/json")
+		reqHTTP.Header.Set("X-Auth-Token", token)
+
+		clientHTTP := &http.Client{Timeout: 5 * time.Second}
+		resp, err := clientHTTP.Do(reqHTTP)
+		if err != nil {
+			http.Error(w, fmt.Sprintf("Gateway communication error: %v", err), http.StatusBadGateway)
+			return
+		}
+		defer resp.Body.Close() //nolint:errcheck
+
+		if resp.StatusCode != http.StatusOK {
+			respBody, _ := io.ReadAll(resp.Body)
+			http.Error(w, fmt.Sprintf("Gateway rejected update (HTTP %d): %s", resp.StatusCode, string(respBody)), http.StatusBadRequest)
+			return
+		}
+
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{"status":"ok"}`))
 	})
 
 	mux.HandleFunc("/api/maintenance", func(w http.ResponseWriter, r *http.Request) {

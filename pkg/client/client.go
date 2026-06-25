@@ -40,6 +40,8 @@ type RegisterRequest struct {
 	AddedHeaders    map[string]string `json:"added_headers,omitempty"`
 	ClientVersion   string            `json:"client_version,omitempty"`
 	ClientOS        string            `json:"client_os,omitempty"`
+	Passcode        string            `json:"passcode,omitempty"`
+	WhitelistIPs    string            `json:"whitelist_ips,omitempty"`
 }
 
 // RegisterResponse matches the server DTO for response.
@@ -144,7 +146,7 @@ func DetectWorkspacePorts(rootDir string) ([]PortMapping, error) {
 }
 
 // RegisterTunnel performs the handshake with the server's registration endpoint.
-func RegisterTunnel(serverURL string, authToken string, subdomain string, ports []PortMapping, rateLimit int, basicAuth string, addedHeaders map[string]string, clientOS string) (*RegisterResponse, error) {
+func RegisterTunnel(serverURL string, authToken string, subdomain string, ports []PortMapping, rateLimit int, basicAuth string, addedHeaders map[string]string, clientOS string, passcode string, whitelistIPs string) (*RegisterResponse, error) {
 	// Normalize server URL
 	if !strings.HasPrefix(serverURL, "http") {
 		serverURL = "http://" + serverURL
@@ -165,6 +167,8 @@ func RegisterTunnel(serverURL string, authToken string, subdomain string, ports 
 		AddedHeaders:    addedHeaders,
 		ClientVersion:   config.Version,
 		ClientOS:        clientOS,
+		Passcode:        passcode,
+		WhitelistIPs:    whitelistIPs,
 	})
 	if err != nil {
 		return nil, err

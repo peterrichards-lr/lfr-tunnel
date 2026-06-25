@@ -44,6 +44,11 @@ type ServerConfig struct {
 	SubdomainQuarantineDays    int                       `yaml:"subdomain_quarantine_days"`
 	SSLCertFile                string                    `yaml:"ssl_cert_file"`
 	SSLKeyFile                 string                    `yaml:"ssl_key_file"`
+	ClientCAFile               string                    `yaml:"client_ca_file"`
+	ClientCAKeyFile            string                    `yaml:"client_ca_key_file"`
+	ForceClientCert            bool                      `yaml:"force_client_cert"`
+	ForcePasscode              bool                      `yaml:"force_passcode"`
+	ForceIPWhitelist           bool                      `yaml:"force_ip_whitelist"`
 	DBPath                     string                    `yaml:"db_path"`
 	SMTPServer                 SMTPServerConfig          `yaml:"smtp_server"`
 	AdminNotificationEmail     string                    `yaml:"admin_notification_email"`
@@ -106,14 +111,16 @@ type SSOProviderConfig struct {
 
 // ClientConfig holds configuration settings for the lfr-tunnel client.
 type ClientConfig struct {
-	ServerURL  string `yaml:"server_url"`
-	AuthToken  string `yaml:"auth_token"`
-	Subdomain  string `yaml:"subdomain"`
-	Ports      []int  `yaml:"ports"`
-	TokenFile  string `yaml:"token_file"`
-	RateLimit  int    `yaml:"rate_limit"`
-	BasicAuth  string `yaml:"basic_auth"`
-	TargetHost string `yaml:"target_host"`
+	ServerURL    string `yaml:"server_url"`
+	AuthToken    string `yaml:"auth_token"`
+	Subdomain    string `yaml:"subdomain"`
+	Ports        []int  `yaml:"ports"`
+	TokenFile    string `yaml:"token_file"`
+	RateLimit    int    `yaml:"rate_limit"`
+	BasicAuth    string `yaml:"basic_auth"`
+	TargetHost   string `yaml:"target_host"`
+	Passcode     string `yaml:"passcode"`
+	WhitelistIPs string `yaml:"whitelist_ips"`
 }
 
 // DefaultServerConfig returns a ServerConfig with sensible default values.
@@ -236,6 +243,21 @@ func LoadServerConfig(path string) (*ServerConfig, error) {
 	}
 	if val := os.Getenv("LFT_SSL_KEY"); val != "" {
 		cfg.SSLKeyFile = val
+	}
+	if val := os.Getenv("LFT_CLIENT_CA_FILE"); val != "" {
+		cfg.ClientCAFile = val
+	}
+	if val := os.Getenv("LFT_CLIENT_CA_KEY_FILE"); val != "" {
+		cfg.ClientCAKeyFile = val
+	}
+	if val := os.Getenv("LFT_FORCE_CLIENT_CERT"); val != "" {
+		cfg.ForceClientCert = strings.ToLower(val) == "true" || val == "1"
+	}
+	if val := os.Getenv("LFT_FORCE_PASSCODE"); val != "" {
+		cfg.ForcePasscode = strings.ToLower(val) == "true" || val == "1"
+	}
+	if val := os.Getenv("LFT_FORCE_IP_WHITELIST"); val != "" {
+		cfg.ForceIPWhitelist = strings.ToLower(val) == "true" || val == "1"
 	}
 	if val := os.Getenv("LFT_DB_PATH"); val != "" {
 		cfg.DBPath = val
@@ -447,6 +469,18 @@ func LoadClientConfig(path string) (*ClientConfig, error) {
 
 	if val := os.Getenv("LFT_TARGET_HOST"); val != "" {
 		cfg.TargetHost = cleanTargetHost(val)
+	}
+
+	if val := os.Getenv("LFT_CLIENT_PASSCODE"); val != "" {
+		cfg.Passcode = val
+	} else if val := os.Getenv("LFT_PASSCODE"); val != "" {
+		cfg.Passcode = val
+	}
+
+	if val := os.Getenv("LFT_CLIENT_WHITELIST_IPS"); val != "" {
+		cfg.WhitelistIPs = val
+	} else if val := os.Getenv("LFT_WHITELIST_IPS"); val != "" {
+		cfg.WhitelistIPs = val
 	}
 
 	return cfg, nil

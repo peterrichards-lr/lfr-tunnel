@@ -753,6 +753,113 @@ func TestSubdomainReservationCRUD(t *testing.T) {
 	}
 }
 
+func TestSubdomainACL(t *testing.T) {
+	tempDir, err := os.MkdirTemp("", "tunnel-db-test-*")
+	if err != nil {
+		t.Fatalf("failed to create temp dir: %v", err)
+	}
+	defer os.RemoveAll(tempDir) //nolint:errcheck
+
+	dbPath := filepath.Join(tempDir, "tunnel.db")
+	database, err := Open(dbPath)
+	if err != nil {
+		t.Fatalf("Open failed: %v", err)
+	}
+	defer database.Close() //nolint:errcheck
+
+	// 1. Create ACL permissions
+	acl1 := &SubdomainACL{
+		Subdomain: "client-poc",
+		Domain:    "lfr-demo.se",
+		Identity:  "user:colleague-123",
+		Name:      "John Doe",
+		Email:     "john.doe@liferay.com",
+	}
+
+	if err := database.CreateSubdomainACL(acl1); err != nil {
+		t.Fatalf("CreateSubdomainACL failed: %v", err)
+	}
+	if acl1.ID == 0 {
+		t.Error("expected ACL entry ID to be populated")
+	}
+
+	// Test unique constraints (duplicate subdomain+domain+identity should fail)
+	aclDup := &SubdomainACL{
+		Subdomain: "client-poc",
+		Domain:    "lfr-demo.se",
+		Identity:  "user:colleague-123",
+	}
+	if err := database.CreateSubdomainACL(aclDup); err == nil {
+		t.Error("expected duplicate ACL to fail, but it succeeded")
+	}
+
+	// 2. Fetch ACL by ID
+	fetched, err := database.GetSubdomainACL(acl1.ID)
+	if err != nil {
+		t.Fatalf("GetSubdomainACL failed: %v", err)
+	}
+	if fetched.Identity != "user:colleague-123" {
+		t.Errorf("expected Identity to be user:colleague-123, got %s", fetched.Identity)
+	}
+
+	// 3. Create Expiring ACL (guest invitation)
+	expiry := time.Now().UTC().Add(1 * time.Hour)
+	aclGuest := &SubdomainACL{
+		Subdomain: "client-poc",
+		Domain:    "lfr-demo.se",
+		Identity:  "guest:token-456",
+		ExpiresAt: &expiry,
+	}
+	if err := database.CreateSubdomainACL(aclGuest); err != nil {
+		t.Fatalf("CreateSubdomainACL failed: %v", err)
+	}
+
+	// 4. List ACL entries for Subdomain
+	list, err := database.ListSubdomainACL("client-poc", "lfr-demo.se")
+	if err != nil {
+		t.Fatalf("ListSubdomainACL failed: %v", err)
+	}
+	if len(list) != 2 {
+		t.Errorf("expected 2 ACL entries, got %d", len(list))
+	}
+
+	// 5. Clean up expired ACLs
+	pastExpiry := time.Now().UTC().AddDate(0, 0, -4)
+	aclExpired := &SubdomainACL{
+		Subdomain: "client-poc",
+		Domain:    "lfr-demo.se",
+		Identity:  "guest:expired-789",
+		ExpiresAt: &pastExpiry,
+	}
+	if err := database.CreateSubdomainACL(aclExpired); err != nil {
+		t.Fatalf("CreateSubdomainACL failed: %v", err)
+	}
+
+	cutoff := time.Now().UTC().AddDate(0, 0, -3)
+	if err := database.DeleteExpiredSubdomainACLs(cutoff); err != nil {
+		t.Fatalf("DeleteExpiredSubdomainACLs failed: %v", err)
+	}
+
+	// Verify only the 4-day-old expired ACL was deleted (2 remain)
+	listAfter, err := database.ListSubdomainACL("client-poc", "lfr-demo.se")
+	if err != nil {
+		t.Fatalf("ListSubdomainACL failed: %v", err)
+	}
+	if len(listAfter) != 2 {
+		t.Errorf("expected 2 ACL entries after cleanup, got %d", len(listAfter))
+	}
+
+	// 6. Delete specific ACL
+	if err := database.DeleteSubdomainACL(acl1.ID); err != nil {
+		t.Fatalf("DeleteSubdomainACL failed: %v", err)
+	}
+
+	_, err = database.GetSubdomainACL(acl1.ID)
+	if !errors.Is(err, ErrNotFound) {
+		t.Errorf("expected ErrNotFound after deletion, got %v", err)
+	}
+}
+
 func TestGatewayRuns(t *testing.T) {
 	tempDir, err := os.MkdirTemp("", "tunnel-db-test-*")
 	if err != nil {

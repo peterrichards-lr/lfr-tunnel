@@ -4,7 +4,9 @@ import (
 	"bytes"
 	"context"
 	"crypto/rand"
+	"crypto/rsa"
 	"crypto/sha256"
+	"crypto/x509"
 	"embed"
 	"encoding/csv"
 	"encoding/hex"
@@ -53,6 +55,8 @@ type RegisterRequest struct {
 	AddedHeaders    map[string]string `json:"added_headers,omitempty"`
 	ClientVersion   string            `json:"client_version,omitempty"`
 	ClientOS        string            `json:"client_os,omitempty"`
+	Passcode        string            `json:"passcode,omitempty"`
+	WhitelistIPs    string            `json:"whitelist_ips,omitempty"`
 }
 
 // RegisterResponse represents the JSON response payload.
@@ -99,6 +103,8 @@ type Server struct {
 	blacklist          sync.Map // memory cache for db blacklist
 	portalMap          sync.Map // memory cache for portal magic links and sessions
 	metricsQueue       chan *db.TunnelMetric
+	caCert             *x509.Certificate
+	caKey              *rsa.PrivateKey
 	broadcastMutex     sync.RWMutex
 	broadcastMessage   string
 	targetedMessages   map[string]string
@@ -172,6 +178,18 @@ func NewServer(cfg *config.ServerConfig) (*Server, error) {
 		cfg.PortalSessionDuration = 24 * time.Hour
 	}
 
+	var caCert *x509.Certificate
+	var caKey *rsa.PrivateKey
+	if cfg.ClientCAFile != "" && cfg.ClientCAKeyFile != "" {
+		var err error
+		caCert, caKey, err = LoadOrCreateCA(cfg.ClientCAFile, cfg.ClientCAKeyFile)
+		if err != nil {
+			log.Printf("[Server] Failed to load/create client CA: %v", err)
+		} else {
+			log.Printf("[Server] Loaded Client Root CA from certificate: %s", cfg.ClientCAFile)
+		}
+	}
+
 	ctx, cancel := context.WithCancel(context.Background())
 
 	srv := &Server{
@@ -191,7 +209,12 @@ func NewServer(cfg *config.ServerConfig) (*Server, error) {
 		lastPortalActivity: make(map[string]time.Time),
 		wsClients:          make(map[*wsClient]bool),
 		startTime:          time.Now(),
+		caCert:             caCert,
+		caKey:              caKey,
 	}
+
+	srv.proxyHandler.db = database
+	srv.proxyHandler.caCert = caCert
 
 	// Initialize i18n dynamic engine
 	if err := srv.initI18n(); err != nil {
@@ -700,8 +723,38 @@ func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 
+		if r.Method == http.MethodPost && r.URL.Path == "/api/portal/reservations/access-control" {
+			s.handleUpdateReservationAccessControl(w, r)
+			return
+		}
+
 		if r.Method == http.MethodGet && r.URL.Path == "/api/portal/generate-subdomain" {
 			s.handleGenerateSubdomain(w, r)
+			return
+		}
+
+		if r.Method == http.MethodGet && r.URL.Path == "/api/portal/invitations" {
+			s.handleListInvitations(w, r)
+			return
+		}
+
+		if r.Method == http.MethodPost && r.URL.Path == "/api/portal/invitations" {
+			s.handleCreateInvitation(w, r)
+			return
+		}
+
+		if r.Method == http.MethodDelete && strings.HasPrefix(r.URL.Path, "/api/portal/invitations/") {
+			s.handleDeleteInvitation(w, r)
+			return
+		}
+
+		if r.Method == http.MethodGet && r.URL.Path == "/api/portal/invitations/claim" {
+			s.handleClaimInvitation(w, r)
+			return
+		}
+
+		if r.Method == http.MethodPost && r.URL.Path == "/api/portal/csr/sign" {
+			s.handleCSRSignInvitation(w, r)
 			return
 		}
 
@@ -979,6 +1032,29 @@ func (s *Server) handleRegister(w http.ResponseWriter, r *http.Request) {
 					}
 					if err := s.db.CreateSubdomainReservation(res); err != nil {
 						log.Printf("[Server] Failed to auto-create reservation for %s on %s: %v", req.SubdomainPrefix, d, err)
+					}
+				}
+			}
+		}
+	}
+
+	// Update reservation with registration passcode & whitelist_ips if specified
+	if s.db != nil {
+		for _, d := range activeDomains {
+			existing, err := s.db.GetSubdomainReservationByName(req.SubdomainPrefix, d)
+			if err == nil && existing != nil && existing.UserID == user.ID {
+				updated := false
+				if req.Passcode != "" {
+					existing.Passcode = req.Passcode
+					updated = true
+				}
+				if req.WhitelistIPs != "" {
+					existing.WhitelistIPs = req.WhitelistIPs
+					updated = true
+				}
+				if updated {
+					if err := s.db.UpdateSubdomainReservation(existing); err != nil {
+						log.Printf("[Server] Failed to update access controls on registration: %v", err)
 					}
 				}
 			}

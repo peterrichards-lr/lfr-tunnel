@@ -1,12 +1,14 @@
 package server
 
 import (
+	"crypto/rand"
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"fmt"
 	"html"
+	"io"
 	"log"
 	"net/http"
 	"net/url"
@@ -54,6 +56,34 @@ func (s *Server) getCurrentUser(r *http.Request) (*db.User, error) {
 		return nil, http.ErrNoCookie
 	}
 	return s.db.GetUserByEmail(sessionData.Email)
+}
+
+// getCurrentUserOrToken extracts the authenticated user from session cookie or X-Auth-Token/Bearer headers.
+func (s *Server) getCurrentUserOrToken(r *http.Request) (*db.User, error) {
+	if user, err := s.getCurrentUser(r); err == nil {
+		return user, nil
+	}
+
+	token := r.URL.Query().Get("token")
+	if token == "" {
+		token = r.URL.Query().Get("auth_token")
+	}
+	if token == "" {
+		token = r.Header.Get("X-Auth-Token")
+	}
+	if token == "" {
+		if authHeader := r.Header.Get("Authorization"); strings.HasPrefix(strings.ToLower(authHeader), "bearer ") {
+			token = authHeader[7:]
+		}
+	}
+
+	if token != "" {
+		if user, ok := s.isValidToken(token); ok && user != nil {
+			return user, nil
+		}
+	}
+
+	return nil, errors.New("unauthorized")
 }
 
 // handleGetMe returns the currently authenticated user's profile and role.
@@ -1486,4 +1516,444 @@ func (s *Server) handleGenerateSubdomain(w http.ResponseWriter, r *http.Request)
 	style := r.URL.Query().Get("style")
 	sub := s.generateRandomSubdomainPrefix(style)
 	respondJSON(w, http.StatusOK, map[string]string{"subdomain": sub})
+}
+
+type createInvitationRequest struct {
+	Subdomain    string `json:"subdomain"`
+	Domain       string `json:"domain"`
+	Name         string `json:"name"`
+	Email        string `json:"email"`
+	ValidityDays int    `json:"validity_days"`
+}
+
+// handleListInvitations lists the current user's invitations, or all if admin.
+func (s *Server) handleListInvitations(w http.ResponseWriter, r *http.Request) {
+	user, err := s.getCurrentUser(r)
+	if err != nil {
+		http.Error(w, `{"error":"Unauthorized"}`, http.StatusUnauthorized)
+		return
+	}
+
+	var list []*db.GuestInvitation
+	if user.Role == "admin" || user.Role == "owner" {
+		list, err = s.db.ListAllGuestInvitations()
+	} else {
+		list, err = s.db.ListGuestInvitationsByCreator(user.Email)
+	}
+
+	if err != nil {
+		log.Printf("[API] Failed to list invitations: %v", err)
+		http.Error(w, `{"error":"Failed to retrieve invitations"}`, http.StatusInternalServerError)
+		return
+	}
+
+	respondJSON(w, http.StatusOK, list)
+}
+
+// handleCreateInvitation creates a new guest invitation.
+func (s *Server) handleCreateInvitation(w http.ResponseWriter, r *http.Request) {
+	user, err := s.getCurrentUser(r)
+	if err != nil {
+		http.Error(w, `{"error":"Unauthorized"}`, http.StatusUnauthorized)
+		return
+	}
+
+	var req createInvitationRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		http.Error(w, `{"error":"Invalid request JSON"}`, http.StatusBadRequest)
+		return
+	}
+
+	req.Subdomain = strings.TrimSpace(strings.ToLower(req.Subdomain))
+	req.Domain = strings.TrimSpace(strings.ToLower(req.Domain))
+	req.Email = strings.TrimSpace(req.Email)
+	req.Name = strings.TrimSpace(req.Name)
+
+	if req.Subdomain == "" || req.Domain == "" || req.Email == "" || req.Name == "" {
+		http.Error(w, `{"error":"Missing required fields (subdomain, domain, email, name)"}`, http.StatusBadRequest)
+		return
+	}
+
+	if req.ValidityDays <= 0 {
+		req.ValidityDays = 7
+	}
+	if req.ValidityDays > 365 {
+		req.ValidityDays = 365
+	}
+
+	// Verify subdomain ownership
+	res, err := s.db.GetSubdomainReservationByName(req.Subdomain, req.Domain)
+	if err != nil {
+		if errors.Is(err, db.ErrNotFound) {
+			http.Error(w, `{"error":"Subdomain reservation not found"}`, http.StatusNotFound)
+		} else {
+			http.Error(w, `{"error":"Database error"}`, http.StatusInternalServerError)
+		}
+		return
+	}
+
+	if res.UserID != user.ID && user.Role != "admin" && user.Role != "owner" {
+		http.Error(w, `{"error":"Forbidden: you do not own this subdomain"}`, http.StatusForbidden)
+		return
+	}
+
+	token := generateToken(16)
+	expiresAt := time.Now().AddDate(0, 0, req.ValidityDays)
+
+	invite := &db.GuestInvitation{
+		Token:     token,
+		Subdomain: req.Subdomain,
+		Domain:    req.Domain,
+		Name:      req.Name,
+		Email:     req.Email,
+		ExpiresAt: expiresAt,
+		CreatedBy: user.Email,
+	}
+
+	if err := s.db.CreateGuestInvitation(invite); err != nil {
+		log.Printf("[API] Failed to create guest invitation: %v", err)
+		http.Error(w, `{"error":"Failed to create invitation"}`, http.StatusInternalServerError)
+		return
+	}
+
+	// Build the claim URL
+	baseURL := s.cfg.PortalURL
+	if baseURL == "" {
+		scheme := "https"
+		if r.TLS == nil {
+			scheme = "http"
+		}
+		baseURL = fmt.Sprintf("%s://%s", scheme, r.Host)
+	}
+	claimURL := fmt.Sprintf("%s/api/portal/invitations/claim?token=%s", baseURL, token)
+
+	_ = s.db.WriteAuditEntry(&db.AuditEntry{
+		ActorID:    user.Email,
+		Action:     "invitation.created",
+		TargetType: "subdomain",
+		TargetID:   fmt.Sprintf("%s.%s", req.Subdomain, req.Domain),
+		Details:    fmt.Sprintf("Guest invitation created for %s (%s), claim URL: %s", req.Name, req.Email, claimURL),
+		IPAddress:  getClientIP(r),
+		CreatedAt:  time.Now(),
+	})
+
+	respondJSON(w, http.StatusCreated, map[string]interface{}{
+		"invitation": invite,
+		"claim_url":  claimURL,
+	})
+}
+
+// handleDeleteInvitation revokes/deletes an invitation.
+func (s *Server) handleDeleteInvitation(w http.ResponseWriter, r *http.Request) {
+	user, err := s.getCurrentUser(r)
+	if err != nil {
+		http.Error(w, `{"error":"Unauthorized"}`, http.StatusUnauthorized)
+		return
+	}
+
+	idStr := strings.TrimPrefix(r.URL.Path, "/api/portal/invitations/")
+	id, err := strconv.ParseInt(idStr, 10, 64)
+	if err != nil {
+		http.Error(w, `{"error":"Invalid invitation ID"}`, http.StatusBadRequest)
+		return
+	}
+
+	invite, err := s.db.GetGuestInvitation(id)
+	if err != nil {
+		if errors.Is(err, db.ErrNotFound) {
+			http.Error(w, `{"error":"Invitation not found"}`, http.StatusNotFound)
+		} else {
+			http.Error(w, `{"error":"Database error"}`, http.StatusInternalServerError)
+		}
+		return
+	}
+
+	if invite.CreatedBy != user.Email && user.Role != "admin" && user.Role != "owner" {
+		http.Error(w, `{"error":"Forbidden: you do not own this invitation"}`, http.StatusForbidden)
+		return
+	}
+
+	if err := s.db.DeleteGuestInvitation(id); err != nil {
+		log.Printf("[API] Failed to delete invitation: %v", err)
+		http.Error(w, `{"error":"Failed to delete invitation"}`, http.StatusInternalServerError)
+		return
+	}
+
+	_ = s.db.WriteAuditEntry(&db.AuditEntry{
+		ActorID:    user.Email,
+		Action:     "invitation.deleted",
+		TargetType: "subdomain",
+		TargetID:   fmt.Sprintf("%s.%s", invite.Subdomain, invite.Domain),
+		Details:    fmt.Sprintf("Guest invitation revoked for %s (%s)", invite.Name, invite.Email),
+		IPAddress:  getClientIP(r),
+		CreatedAt:  time.Now(),
+	})
+
+	respondJSON(w, http.StatusOK, map[string]string{"status": "success"})
+}
+
+// handleClaimInvitation processes the invitation claim and downloads the PKCS#12 client cert bundle.
+func (s *Server) handleClaimInvitation(w http.ResponseWriter, r *http.Request) {
+	token := r.URL.Query().Get("token")
+	if token == "" {
+		http.Error(w, "Missing claim token", http.StatusBadRequest)
+		return
+	}
+
+	invite, err := s.db.GetGuestInvitationByToken(token)
+	if err != nil {
+		if errors.Is(err, db.ErrNotFound) {
+			http.Error(w, "Invalid or expired claim link", http.StatusNotFound)
+		} else {
+			http.Error(w, "Database error", http.StatusInternalServerError)
+		}
+		return
+	}
+
+	if invite.ExpiresAt.Before(time.Now()) {
+		http.Error(w, "This invitation link has expired", http.StatusGone)
+		return
+	}
+
+	if invite.ClaimedAt != nil {
+		http.Error(w, "This invitation link has already been claimed", http.StatusConflict)
+		return
+	}
+
+	if s.caCert == nil || s.caKey == nil {
+		http.Error(w, "Server Root CA is not initialized", http.StatusInternalServerError)
+		return
+	}
+
+	pfxPassword := r.URL.Query().Get("password")
+	if pfxPassword == "" {
+		pfxPassword = "tunnel"
+	}
+
+	validityDays := int(time.Until(invite.ExpiresAt).Hours() / 24)
+	if validityDays <= 0 {
+		validityDays = 1
+	}
+
+	identity := "guest:" + token
+	pfxBytes, err := GenerateClientP12(s.caCert, s.caKey, identity, invite.Email, invite.Name, validityDays, pfxPassword)
+	if err != nil {
+		log.Printf("[API] Failed to generate client PKCS#12 bundle: %v", err)
+		http.Error(w, "Failed to sign client certificate", http.StatusInternalServerError)
+		return
+	}
+
+	acl := &db.SubdomainACL{
+		Subdomain: invite.Subdomain,
+		Domain:    invite.Domain,
+		Identity:  identity,
+		Name:      invite.Name,
+		Email:     invite.Email,
+		ExpiresAt: &invite.ExpiresAt,
+	}
+	if err := s.db.CreateSubdomainACL(acl); err != nil {
+		log.Printf("[API] Failed to create subdomain ACL: %v", err)
+		http.Error(w, "Database error mapping access permission", http.StatusInternalServerError)
+		return
+	}
+
+	if err := s.db.MarkGuestInvitationClaimed(token); err != nil {
+		log.Printf("[API] Failed to mark invitation claimed: %v", err)
+	}
+
+	_ = s.db.WriteAuditEntry(&db.AuditEntry{
+		ActorID:    invite.Email,
+		Action:     "invitation.claimed",
+		TargetType: "subdomain",
+		TargetID:   fmt.Sprintf("%s.%s", invite.Subdomain, invite.Domain),
+		Details:    fmt.Sprintf("Guest invitation claimed by %s (%s) using identity CN %s", invite.Name, invite.Email, identity),
+		IPAddress:  getClientIP(r),
+		CreatedAt:  time.Now(),
+	})
+
+	w.Header().Set("Content-Type", "application/x-pkcs12")
+	w.Header().Set("Content-Disposition", fmt.Sprintf("attachment; filename=%s-guest.p12", invite.Subdomain))
+	w.Header().Set("Content-Length", strconv.Itoa(len(pfxBytes)))
+	_, _ = w.Write(pfxBytes)
+}
+
+// handleCSRSignInvitation handles a guest-generated CSR and returns the signed certificate PEM.
+func (s *Server) handleCSRSignInvitation(w http.ResponseWriter, r *http.Request) {
+	token := r.URL.Query().Get("token")
+	if token == "" {
+		http.Error(w, "Missing invitation token", http.StatusBadRequest)
+		return
+	}
+
+	invite, err := s.db.GetGuestInvitationByToken(token)
+	if err != nil {
+		if errors.Is(err, db.ErrNotFound) {
+			http.Error(w, "Invalid or expired invitation token", http.StatusNotFound)
+		} else {
+			http.Error(w, "Database error", http.StatusInternalServerError)
+		}
+		return
+	}
+
+	if invite.ExpiresAt.Before(time.Now()) {
+		http.Error(w, "This invitation link has expired", http.StatusGone)
+		return
+	}
+
+	if invite.ClaimedAt != nil {
+		http.Error(w, "This invitation has already been claimed", http.StatusConflict)
+		return
+	}
+
+	if s.caCert == nil || s.caKey == nil {
+		http.Error(w, "Server Root CA is not initialized", http.StatusInternalServerError)
+		return
+	}
+
+	var bodyBytes []byte
+	if r.Body != nil {
+		defer r.Body.Close() //nolint:errcheck
+		var err error
+		bodyBytes, err = io.ReadAll(r.Body)
+		if err != nil {
+			http.Error(w, "Failed to read request body", http.StatusBadRequest)
+			return
+		}
+	}
+	if len(bodyBytes) == 0 {
+		http.Error(w, "Empty CSR payload", http.StatusBadRequest)
+		return
+	}
+
+	validityDays := int(time.Until(invite.ExpiresAt).Hours() / 24)
+	if validityDays <= 0 {
+		validityDays = 1
+	}
+
+	identity := "guest:" + token
+	certBytes, err := SignClientCSR(s.caCert, s.caKey, bodyBytes, identity, validityDays)
+	if err != nil {
+		log.Printf("[API] CSR sign failure: %v", err)
+		http.Error(w, fmt.Sprintf("CSR signature/signing failure: %v", err), http.StatusBadRequest)
+		return
+	}
+
+	acl := &db.SubdomainACL{
+		Subdomain: invite.Subdomain,
+		Domain:    invite.Domain,
+		Identity:  identity,
+		Name:      invite.Name,
+		Email:     invite.Email,
+		ExpiresAt: &invite.ExpiresAt,
+	}
+	if err := s.db.CreateSubdomainACL(acl); err != nil {
+		log.Printf("[API] Failed to create subdomain ACL for signed CSR: %v", err)
+		http.Error(w, "Database error mapping access permission", http.StatusInternalServerError)
+		return
+	}
+
+	if err := s.db.MarkGuestInvitationClaimed(token); err != nil {
+		log.Printf("[API] Failed to mark invitation claimed: %v", err)
+	}
+
+	_ = s.db.WriteAuditEntry(&db.AuditEntry{
+		ActorID:    invite.Email,
+		Action:     "invitation.csr_claimed",
+		TargetType: "subdomain",
+		TargetID:   fmt.Sprintf("%s.%s", invite.Subdomain, invite.Domain),
+		Details:    fmt.Sprintf("Guest CSR signed for %s (%s) using identity CN %s", invite.Name, invite.Email, identity),
+		IPAddress:  getClientIP(r),
+		CreatedAt:  time.Now(),
+	})
+
+	w.Header().Set("Content-Type", "application/x-pem-file")
+	w.Header().Set("Content-Disposition", fmt.Sprintf("attachment; filename=%s-guest.crt", invite.Subdomain))
+	w.Header().Set("Content-Length", strconv.Itoa(len(certBytes)))
+	_, _ = w.Write(certBytes)
+}
+
+func generateToken(length int) string {
+	bytes := make([]byte, length)
+	if _, err := rand.Read(bytes); err != nil {
+		return fmt.Sprintf("%x", time.Now().UnixNano())
+	}
+	return hex.EncodeToString(bytes)
+}
+
+type updateAccessControlRequest struct {
+	Subdomain    string `json:"subdomain"`
+	Domain       string `json:"domain"`
+	Passcode     string `json:"passcode"`
+	WhitelistIPs string `json:"whitelist_ips"`
+	AccessMode   string `json:"access_mode"`
+}
+
+// handleUpdateReservationAccessControl dynamically updates passcode and whitelist settings on the gateway.
+func (s *Server) handleUpdateReservationAccessControl(w http.ResponseWriter, r *http.Request) {
+	user, err := s.getCurrentUserOrToken(r)
+	if err != nil {
+		http.Error(w, `{"error":"Unauthorized"}`, http.StatusUnauthorized)
+		return
+	}
+
+	var req updateAccessControlRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		http.Error(w, `{"error":"Invalid request JSON"}`, http.StatusBadRequest)
+		return
+	}
+
+	req.Subdomain = strings.TrimSpace(strings.ToLower(req.Subdomain))
+	req.Domain = strings.TrimSpace(strings.ToLower(req.Domain))
+	req.AccessMode = strings.TrimSpace(strings.ToLower(req.AccessMode))
+
+	if req.Subdomain == "" || req.Domain == "" {
+		http.Error(w, `{"error":"Missing subdomain or domain"}`, http.StatusBadRequest)
+		return
+	}
+
+	if req.AccessMode != "and" && req.AccessMode != "or" && req.AccessMode != "" {
+		http.Error(w, `{"error":"Access mode must be 'and' or 'or'"}`, http.StatusBadRequest)
+		return
+	}
+
+	res, err := s.db.GetSubdomainReservationByName(req.Subdomain, req.Domain)
+	if err != nil {
+		if errors.Is(err, db.ErrNotFound) {
+			http.Error(w, `{"error":"Reservation not found"}`, http.StatusNotFound)
+		} else {
+			http.Error(w, `{"error":"Database error"}`, http.StatusInternalServerError)
+		}
+		return
+	}
+
+	if res.UserID != user.ID && user.Role != "admin" && user.Role != "owner" {
+		http.Error(w, `{"error":"Forbidden: you do not own this reservation"}`, http.StatusForbidden)
+		return
+	}
+
+	res.Passcode = req.Passcode
+	res.WhitelistIPs = req.WhitelistIPs
+	if req.AccessMode != "" {
+		res.AccessMode = req.AccessMode
+	} else {
+		res.AccessMode = "or"
+	}
+
+	if err := s.db.UpdateSubdomainReservation(res); err != nil {
+		log.Printf("[API] Failed to update reservation access controls: %v", err)
+		http.Error(w, `{"error":"Failed to update access control configuration"}`, http.StatusInternalServerError)
+		return
+	}
+
+	_ = s.db.WriteAuditEntry(&db.AuditEntry{
+		ActorID:    user.Email,
+		Action:     "subdomain.access_control_updated",
+		TargetType: "subdomain",
+		TargetID:   fmt.Sprintf("%s.%s", req.Subdomain, req.Domain),
+		Details:    fmt.Sprintf("Access controls updated: Mode=%s, Passcode=%s, IPs=%s", res.AccessMode, res.Passcode, res.WhitelistIPs),
+		IPAddress:  getClientIP(r),
+		CreatedAt:  time.Now(),
+	})
+
+	respondJSON(w, http.StatusOK, map[string]string{"status": "success"})
 }

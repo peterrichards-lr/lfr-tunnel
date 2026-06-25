@@ -10,6 +10,7 @@ import (
 	"net/url"
 	"os"
 	"strconv"
+	"strings"
 	"testing"
 	"time"
 )
@@ -373,5 +374,156 @@ func TestReplayRequestEndpoint(t *testing.T) {
 
 	if rec2.Code != http.StatusNotFound {
 		t.Errorf("Expected 404 Not Found for invalid ID, got %d", rec2.Code)
+	}
+}
+
+func TestInspectorAccessControl(t *testing.T) {
+	// 1. Start a mock gateway server
+	gatewayMux := http.NewServeMux()
+	var gatewayReceived bool
+	var receivedToken string
+	var receivedBody map[string]interface{}
+
+	gatewayMux.HandleFunc("/api/portal/reservations/access-control", func(w http.ResponseWriter, r *http.Request) {
+		gatewayReceived = true
+		receivedToken = r.Header.Get("X-Auth-Token")
+		_ = json.NewDecoder(r.Body).Decode(&receivedBody)
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusOK)
+		_, _ = w.Write([]byte(`{"status":"success"}`))
+	})
+	gatewayServer := httptest.NewServer(gatewayMux)
+	defer gatewayServer.Close()
+
+	// 2. Setup InterceptorEngine
+	engine := NewInterceptorEngine("127.0.0.1", nil)
+	engine.Token = "test-auth-token"
+	engine.ServerURL = gatewayServer.URL
+	engine.SubdomainAss = "my-subdomain.lfr-demo.se"
+
+	// 3. Setup local inspector routes manually for testing
+	mux := http.NewServeMux()
+	mux.HandleFunc("/api/state", func(w http.ResponseWriter, r *http.Request) {
+		engine.mu.RLock()
+		defer engine.mu.RUnlock()
+
+		state := map[string]interface{}{
+			"passcode":      engine.Passcode,
+			"whitelist_ips": engine.WhitelistIPs,
+			"access_mode":   engine.AccessMode,
+			"assigned":      engine.SubdomainAss,
+		}
+
+		w.Header().Set("Content-Type", "application/json")
+		_ = json.NewEncoder(w).Encode(state)
+	})
+
+	mux.HandleFunc("/api/access-control", func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodPost {
+			http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+			return
+		}
+
+		var req struct {
+			Passcode     string `json:"passcode"`
+			WhitelistIPs string `json:"whitelist_ips"`
+			AccessMode   string `json:"access_mode"`
+		}
+
+		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+			http.Error(w, "Invalid JSON payload", http.StatusBadRequest)
+			return
+		}
+
+		engine.mu.Lock()
+		engine.Passcode = req.Passcode
+		engine.WhitelistIPs = req.WhitelistIPs
+		engine.AccessMode = req.AccessMode
+		token := engine.Token
+		serverURL := engine.ServerURL
+		subdomainAss := engine.SubdomainAss
+		engine.mu.Unlock()
+
+		parts := strings.SplitN(subdomainAss, ".", 2)
+		if len(parts) != 2 {
+			http.Error(w, "Invalid assigned subdomain format", http.StatusBadRequest)
+			return
+		}
+		prefix := parts[0]
+		domain := parts[1]
+
+		updatePayload := map[string]string{
+			"subdomain":     prefix,
+			"domain":        domain,
+			"passcode":      req.Passcode,
+			"whitelist_ips": req.WhitelistIPs,
+			"access_mode":   req.AccessMode,
+		}
+
+		bodyBytes, _ := json.Marshal(updatePayload)
+		gatewayURL := fmt.Sprintf("%s/api/portal/reservations/access-control", serverURL)
+
+		reqHTTP, err := http.NewRequest(http.MethodPost, gatewayURL, bytes.NewReader(bodyBytes))
+		if err != nil {
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+			return
+		}
+		reqHTTP.Header.Set("Content-Type", "application/json")
+		reqHTTP.Header.Set("X-Auth-Token", token)
+
+		clientHTTP := &http.Client{Timeout: 5 * time.Second}
+		resp, err := clientHTTP.Do(reqHTTP)
+		if err != nil {
+			http.Error(w, err.Error(), http.StatusBadGateway)
+			return
+		}
+		defer resp.Body.Close() //nolint:errcheck
+
+		if resp.StatusCode != http.StatusOK {
+			http.Error(w, "Gateway error", resp.StatusCode)
+			return
+		}
+
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{"status":"ok"}`))
+	})
+
+	// Test A: POST to /api/access-control
+	payload := map[string]string{
+		"passcode":      "new-passcode",
+		"whitelist_ips": "1.1.1.1",
+		"access_mode":   "and",
+	}
+	bodyBytes, _ := json.Marshal(payload)
+	req := httptest.NewRequest("POST", "/api/access-control", bytes.NewReader(bodyBytes))
+	rec := httptest.NewRecorder()
+
+	mux.ServeHTTP(rec, req)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("Expected 200 OK, got %d. Body: %s", rec.Code, rec.Body.String())
+	}
+
+	if !gatewayReceived {
+		t.Error("Expected request to be forwarded to mock gateway server")
+	}
+
+	if receivedToken != "test-auth-token" {
+		t.Errorf("Expected token 'test-auth-token', got '%s'", receivedToken)
+	}
+
+	if receivedBody["subdomain"] != "my-subdomain" || receivedBody["domain"] != "lfr-demo.se" {
+		t.Errorf("Expected payload to contain parsed prefix/domain, got %v", receivedBody)
+	}
+
+	// Test B: GET /api/state
+	req2 := httptest.NewRequest("GET", "/api/state", nil)
+	rec2 := httptest.NewRecorder()
+	mux.ServeHTTP(rec2, req2)
+
+	var state map[string]interface{}
+	_ = json.NewDecoder(rec2.Body).Decode(&state)
+
+	if state["passcode"] != "new-passcode" || state["whitelist_ips"] != "1.1.1.1" || state["access_mode"] != "and" {
+		t.Errorf("Expected state to be updated, got %v", state)
 	}
 }

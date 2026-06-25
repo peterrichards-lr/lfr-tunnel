@@ -63,6 +63,13 @@ type InterceptorEngine struct {
 	BytesIn           int64
 	BytesOut          int64
 	ActiveConnections int32
+
+	// Access Control & Server Settings
+	Token        string
+	ServerURL    string
+	Passcode     string
+	WhitelistIPs string
+	AccessMode   string
 }
 
 // NewInterceptorEngine creates a new state engine for traffic inspection.

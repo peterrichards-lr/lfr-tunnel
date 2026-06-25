@@ -2913,6 +2913,17 @@ applyTheme(currentUser.theme_preference);
             document.getElementById('detail-tunnel-bytes-out').innerText = formatBytes(t.bytes_out);
             document.getElementById('detail-tunnel-client-ip').innerText = t.client_ip || 'N/A';
 
+            // Access Control population
+            document.getElementById('detail-tunnel-passcode-status').innerHTML = t.passcode ? 
+                '<span class="badge success" style="background: rgba(16, 185, 129, 0.15); color: #34d399; border: 1px solid rgba(16, 185, 129, 0.3);">Enabled</span>' : 
+                '<span style="color: var(--text-muted); font-style: italic;">Disabled (Public)</span>';
+            
+            document.getElementById('detail-tunnel-access-mode').innerText = t.access_mode ? t.access_mode.toUpperCase() : 'OR';
+            
+            document.getElementById('detail-tunnel-whitelist-status').innerHTML = t.whitelist_ips ? 
+                escapeHTML(t.whitelist_ips) : 
+                '<span style="color: var(--text-muted); font-style: italic;">None</span>';
+
             // Populate active visitor IPs
             const visitorTbody = document.getElementById('detail-tunnel-visitor-ips-tbody');
             if (visitorTbody) {

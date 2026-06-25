@@ -54,6 +54,8 @@ func main() {
 	checkVersionFlag := flag.Bool("check-version", false, "Check server API for version requirements and print as JSON")
 	upgradeFlag := flag.Bool("upgrade", false, "Self-upgrade client to the latest release")
 	noTUI := flag.Bool("no-tui", false, "Disable interactive terminal dashboard UI")
+	passcode := flag.String("passcode", "", "Passcode to protect the public tunnel URLs")
+	whitelistIP := flag.String("whitelist-ip", "", "Comma-separated IP addresses allowed to access the tunnel")
 
 	flag.Parse()
 
@@ -96,6 +98,12 @@ func main() {
 	}
 	if *preserveHost {
 		_ = os.Setenv("LFT_PRESERVE_HOST", "true")
+	}
+	if *passcode != "" {
+		cfg.Passcode = *passcode
+	}
+	if *whitelistIP != "" {
+		cfg.WhitelistIPs = *whitelistIP
 	}
 
 	if *upgradeFlag {
@@ -245,6 +253,11 @@ func main() {
 
 	// Start Interceptor Engine
 	engine := client.NewInterceptorEngine(cfg.TargetHost, addHeaders)
+	engine.Token = cfg.AuthToken
+	engine.ServerURL = cfg.ServerURL
+	engine.Passcode = cfg.Passcode
+	engine.WhitelistIPs = cfg.WhitelistIPs
+	engine.AccessMode = "or"
 	actualInspectorPort, err := client.StartInspector(*inspectorPort, engine)
 	if err != nil {
 		log.Fatalf("[Error] Failed to start Inspector dashboard: %v", err)
@@ -281,14 +294,17 @@ func main() {
 	if cfg.RateLimit > 0 {
 		fmt.Printf("[Client] Requested Subdomain Rate Limit: %d req/s\n", cfg.RateLimit)
 	}
-	if cfg.BasicAuth != "" {
-		fmt.Printf("[Client] Data Plane HTTP Basic Auth is ENABLED\n")
+	if cfg.Passcode != "" {
+		fmt.Printf("[Client] Data Plane Passcode Protection is ENABLED\n")
+	}
+	if cfg.WhitelistIPs != "" {
+		fmt.Printf("[Client] Data Plane IP Whitelisting is ENABLED (%s)\n", cfg.WhitelistIPs)
 	}
 	clientOS := runtime.GOOS
 	if client.IsDocker() {
 		clientOS += " (Docker)"
 	}
-	regResp, err := client.RegisterTunnel(cfg.ServerURL, cfg.AuthToken, sub, portMappings, cfg.RateLimit, cfg.BasicAuth, engine.AddedHeaders, clientOS)
+	regResp, err := client.RegisterTunnel(cfg.ServerURL, cfg.AuthToken, sub, portMappings, cfg.RateLimit, cfg.BasicAuth, engine.AddedHeaders, clientOS, cfg.Passcode, cfg.WhitelistIPs)
 	if err != nil {
 		if regErr, ok := err.(*client.RegistrationError); ok && regErr.StatusCode == 403 {
 			log.Printf("[Error] Failed to register: %s\n", regErr.Message)

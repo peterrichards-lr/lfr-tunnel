@@ -53,6 +53,8 @@ type RegisterRequest struct {
 	AddedHeaders    map[string]string `json:"added_headers,omitempty"`
 	ClientVersion   string            `json:"client_version,omitempty"`
 	ClientOS        string            `json:"client_os,omitempty"`
+	Passcode        string            `json:"passcode,omitempty"`
+	WhitelistIPs    string            `json:"whitelist_ips,omitempty"`
 }
 
 // RegisterResponse represents the JSON response payload.
@@ -979,6 +981,29 @@ func (s *Server) handleRegister(w http.ResponseWriter, r *http.Request) {
 					}
 					if err := s.db.CreateSubdomainReservation(res); err != nil {
 						log.Printf("[Server] Failed to auto-create reservation for %s on %s: %v", req.SubdomainPrefix, d, err)
+					}
+				}
+			}
+		}
+	}
+
+	// Update reservation with registration passcode & whitelist_ips if specified
+	if s.db != nil {
+		for _, d := range activeDomains {
+			existing, err := s.db.GetSubdomainReservationByName(req.SubdomainPrefix, d)
+			if err == nil && existing != nil && existing.UserID == user.ID {
+				updated := false
+				if req.Passcode != "" {
+					existing.Passcode = req.Passcode
+					updated = true
+				}
+				if req.WhitelistIPs != "" {
+					existing.WhitelistIPs = req.WhitelistIPs
+					updated = true
+				}
+				if updated {
+					if err := s.db.UpdateSubdomainReservation(existing); err != nil {
+						log.Printf("[Server] Failed to update access controls on registration: %v", err)
 					}
 				}
 			}

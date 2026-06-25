@@ -106,14 +106,16 @@ type SSOProviderConfig struct {
 
 // ClientConfig holds configuration settings for the lfr-tunnel client.
 type ClientConfig struct {
-	ServerURL  string `yaml:"server_url"`
-	AuthToken  string `yaml:"auth_token"`
-	Subdomain  string `yaml:"subdomain"`
-	Ports      []int  `yaml:"ports"`
-	TokenFile  string `yaml:"token_file"`
-	RateLimit  int    `yaml:"rate_limit"`
-	BasicAuth  string `yaml:"basic_auth"`
-	TargetHost string `yaml:"target_host"`
+	ServerURL    string `yaml:"server_url"`
+	AuthToken    string `yaml:"auth_token"`
+	Subdomain    string `yaml:"subdomain"`
+	Ports        []int  `yaml:"ports"`
+	TokenFile    string `yaml:"token_file"`
+	RateLimit    int    `yaml:"rate_limit"`
+	BasicAuth    string `yaml:"basic_auth"`
+	TargetHost   string `yaml:"target_host"`
+	Passcode     string `yaml:"passcode"`
+	WhitelistIPs string `yaml:"whitelist_ips"`
 }
 
 // DefaultServerConfig returns a ServerConfig with sensible default values.
@@ -447,6 +449,18 @@ func LoadClientConfig(path string) (*ClientConfig, error) {
 
 	if val := os.Getenv("LFT_TARGET_HOST"); val != "" {
 		cfg.TargetHost = cleanTargetHost(val)
+	}
+
+	if val := os.Getenv("LFT_CLIENT_PASSCODE"); val != "" {
+		cfg.Passcode = val
+	} else if val := os.Getenv("LFT_PASSCODE"); val != "" {
+		cfg.Passcode = val
+	}
+
+	if val := os.Getenv("LFT_CLIENT_WHITELIST_IPS"); val != "" {
+		cfg.WhitelistIPs = val
+	} else if val := os.Getenv("LFT_WHITELIST_IPS"); val != "" {
+		cfg.WhitelistIPs = val
 	}
 
 	return cfg, nil

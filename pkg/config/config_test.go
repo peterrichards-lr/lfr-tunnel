@@ -146,6 +146,8 @@ subdomain: "test-sub"
 ports:
   - 80
   - 443
+passcode: "mypass"
+whitelist_ips: "10.0.0.1,10.0.0.2"
 `)
 	if _, err := tmpFile.Write(content); err != nil {
 		t.Fatalf("failed to write temp file: %v", err)
@@ -164,13 +166,23 @@ ports:
 	if !reflect.DeepEqual(cfg.Ports, []int{80, 443}) {
 		t.Errorf("expected Ports to be [80, 443], got %v", cfg.Ports)
 	}
+	if cfg.Passcode != "mypass" {
+		t.Errorf("expected Passcode to be mypass, got %s", cfg.Passcode)
+	}
+	if cfg.WhitelistIPs != "10.0.0.1,10.0.0.2" {
+		t.Errorf("expected WhitelistIPs to be 10.0.0.1,10.0.0.2, got %s", cfg.WhitelistIPs)
+	}
 
 	// 3. Set environment variables to override
 	os.Setenv("LFT_CLIENT_SERVER", "https://env-tunnel.com") //nolint:errcheck
 	os.Setenv("LFT_CLIENT_PORTS", "8080,9000")               //nolint:errcheck
+	os.Setenv("LFT_PASSCODE", "envpass")                     //nolint:errcheck
+	os.Setenv("LFT_WHITELIST_IPS", "192.168.1.1")            //nolint:errcheck
 	defer func() {
 		os.Unsetenv("LFT_CLIENT_SERVER") //nolint:errcheck
 		os.Unsetenv("LFT_CLIENT_PORTS")  //nolint:errcheck
+		os.Unsetenv("LFT_PASSCODE")      //nolint:errcheck
+		os.Unsetenv("LFT_WHITELIST_IPS") //nolint:errcheck
 	}()
 
 	cfgEnv, err := LoadClientConfig(tmpFile.Name())
@@ -183,6 +195,12 @@ ports:
 	}
 	if !reflect.DeepEqual(cfgEnv.Ports, []int{8080, 9000}) {
 		t.Errorf("expected Ports override to be [8080, 9000], got %v", cfgEnv.Ports)
+	}
+	if cfgEnv.Passcode != "envpass" {
+		t.Errorf("expected Passcode override to be envpass, got %s", cfgEnv.Passcode)
+	}
+	if cfgEnv.WhitelistIPs != "192.168.1.1" {
+		t.Errorf("expected WhitelistIPs override to be 192.168.1.1, got %s", cfgEnv.WhitelistIPs)
 	}
 }
 

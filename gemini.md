@@ -576,10 +576,10 @@ The solution will consist of:
 - [x] Verify standard unit tests run successfully (`make test`).
 - [x] Verify E2E integration test suites pass locally (`make e2e` and `make e2e-sso`).
 
-## Re-prioritise Installer Script and Docker over Package Managers
-- [x] Update defaults in `pkg/server/static/dashboard.js` to show the installer script as the primary recommended command and remove Homebrew/Scoop fallbacks.
-- [x] Update `client_platforms` configurations in local E2E configs (`tests/e2e/server-config.yaml`, etc.) to omit Homebrew/Scoop.
-- [x] Update `client_platforms` in `/etc/lfr-tunneld/server-config.yaml` on the central VPS to remove Homebrew/Scoop options.
-- [x] Deploy updated static files and binary to the central VPS and restart `lfr-tunneld`.
+## Re-prioritise Installer Script and Docker over Package Managers (Liferay SE Only)
+- [x] Retain Homebrew/Scoop in open-source repository defaults (`pkg/server/static/dashboard.js`, `tests/e2e/*`) to avoid imposing SE security constraints on the community.
+- [x] Update `client_platforms` in `/etc/lfr-tunneld/server-config.yaml` on the central VPS to remove Homebrew/Scoop options for the SE team.
+- [x] Restart `lfr-tunneld` on the central VPS to apply the explicit configuration overrides.
+- [x] Design and PR Offsite Edge Node Backup Sync (`scripts/sync-offsite-backups.sh`)
 
 

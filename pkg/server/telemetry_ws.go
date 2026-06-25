@@ -135,6 +135,20 @@ func (s *Server) getUserTelemetryData(user *db.User, sessionToken string) map[st
 		leases := s.registry.ListLeases()
 		for _, l := range leases {
 			if l.UserID == user.ID || user.Role == "admin" || user.Role == "owner" {
+				var passcode, whitelistIPs, accessMode string
+				if s.db != nil {
+					parts := strings.SplitN(l.FullHost, ".", 2)
+					if len(parts) == 2 {
+						domain := parts[1]
+						res, err := s.db.GetSubdomainReservationByName(l.SubdomainPrefix, domain)
+						if err == nil && res != nil {
+							passcode = res.Passcode
+							whitelistIPs = res.WhitelistIPs
+							accessMode = res.AccessMode
+						}
+					}
+				}
+
 				activeLeases = append(activeLeases, map[string]interface{}{
 					"subdomain_prefix": l.SubdomainPrefix,
 					"full_host":        l.FullHost,
@@ -146,6 +160,9 @@ func (s *Server) getUserTelemetryData(user *db.User, sessionToken string) map[st
 					"client_ip":        l.ClientIP,
 					"created_at":       l.CreatedAt,
 					"visitor_ips":      l.GetActiveVisitorIPs(s.cfg.VisitorTimeout),
+					"passcode":         passcode,
+					"whitelist_ips":    whitelistIPs,
+					"access_mode":      accessMode,
 				})
 			}
 		}

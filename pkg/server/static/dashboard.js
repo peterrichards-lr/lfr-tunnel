@@ -628,18 +628,18 @@ function toggleTheme() {
                     const defaults = {
                         "macos_arm64": {
                             "url": `${repoUrl}/releases/latest/download/lfr-tunnel-darwin-arm64`,
-                            "cmd": "brew tap peterrichards-lr/tap && brew trust peterrichards-lr/tap && brew install lfr-tunnel",
-                            "cmd_fallback": `curl -fsSL ${window.location.origin}/install | sh`
+                            "cmd": `curl -fsSL ${window.location.origin}/install | sh`,
+                            "cmd_fallback": ""
                         },
                         "macos_amd64": {
                             "url": `${repoUrl}/releases/latest/download/lfr-tunnel-darwin-amd64`,
-                            "cmd": "brew tap peterrichards-lr/tap && brew trust peterrichards-lr/tap && brew install lfr-tunnel",
-                            "cmd_fallback": `curl -fsSL ${window.location.origin}/install | sh`
+                            "cmd": `curl -fsSL ${window.location.origin}/install | sh`,
+                            "cmd_fallback": ""
                         },
                         "windows_amd64": {
                             "url": `${repoUrl}/releases/latest/download/lfr-tunnel-windows-amd64.exe`,
-                            "cmd": "scoop bucket add peterrichards-lr https://github.com/peterrichards-lr/scoop-bucket && scoop install lfr-tunnel",
-                            "cmd_fallback": `irm ${window.location.origin}/install.ps1 | iex`
+                            "cmd": `irm ${window.location.origin}/install.ps1 | iex`,
+                            "cmd_fallback": ""
                         },
                         "linux_amd64": {
                             "url": `${repoUrl}/releases/latest/download/lfr-tunnel-linux-amd64`,
@@ -673,7 +673,7 @@ function toggleTheme() {
                     let downloadLabel = config && config.download_label ? config.download_label : '⬇️ Download Binary';
 
                     // Custom labels
-                    let cmdLabel = config && config.cmd_label ? config.cmd_label : '🚀 Recommended (Package Manager):';
+                    let cmdLabel = config && config.cmd_label ? config.cmd_label : '🚀 Recommended Installation (EDR Whitelisted):';
                     let cmdFallbackLabel = config && config.cmd_fallback_label ? config.cmd_fallback_label : '🛠️ Direct Script Fallback:';
 
                     // Recommended flag positioning

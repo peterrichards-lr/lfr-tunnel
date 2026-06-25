@@ -35,6 +35,22 @@ if [ -n "$UNFORMATTED" ]; then
   exit 1
 fi
 
+echo "[Git Hook] Checking JavaScript syntax..."
+if command -v node &>/dev/null; then
+  for js_file in pkg/server/static/*.js; do
+    if [ -f "$js_file" ]; then
+      node -c "$js_file"
+      if [ $? -ne 0 ]; then
+        echo "❌ Error: JavaScript syntax check failed for $js_file."
+        exit 1
+      fi
+    fi
+  done
+  echo "✅ JavaScript syntax check passed."
+else
+  echo "⚠️ Warning: 'node' not found in PATH. Skipping JavaScript syntax check."
+fi
+
 echo "[Git Hook] Running go vet..."
 go vet ./...
 if [ $? -ne 0 ]; then

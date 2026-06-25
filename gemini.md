@@ -528,8 +528,8 @@ The solution will consist of:
 
 
 ## Centralize Logo and Favicon for Easy Branding Customization (v1.16.0) - Issue #182
-- [ ] Extract the SVG vector logo to `pkg/server/static/logo.svg` and reference it via standard `<img>` tags across all templates and static HTML files.
-- [ ] Verify favicon is properly referenced and served.
+- [x] Extract the SVG vector logo to `pkg/server/static/logo.svg` and reference it via standard `<img>` tags across all templates and static HTML files.
+- [x] Verify favicon is properly referenced and served.
 
 
 

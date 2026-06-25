@@ -539,7 +539,7 @@ The solution will consist of:
 - [x] Write unit and E2E integration tests.
 - [x] Create setup documentation `docs/edge_setup_guide.md`.
 - [x] Automate Control Plane edge node config update via scripts/deploy.sh.
-- [ ] Prevent client latency auto-probing if ServerURL is explicitly overridden.
+- [x] Prevent client latency auto-probing if ServerURL is explicitly overridden.
 
 
 

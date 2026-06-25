@@ -1,6 +1,4 @@
 domains:
-  - "portal.lfr-demo.local"
-  - "tunnel.lfr-demo.local"
   - "lfr-demo.local"
 http_bind_addr: "0.0.0.0:8080"
 db_path: "/etc/lfr-tunneld/lfr-tunnel.db"

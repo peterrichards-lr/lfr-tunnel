@@ -567,4 +567,13 @@ The solution will consist of:
 - [x] Add the portal and tunnel subdomains to the domains configuration in the VPS `server-config.yaml` and local E2E configurations.
 - [x] Update Nginx template in edge installation script `scripts/setup-edge-vps.sh` to include this redirect.
 
+## PR Build and E2E Failures Fix (v1.17.1)
+- [x] Update `scripts/deploy.sh` and `scripts/setup-edge-vps.sh` to back up `/etc/lfr-tunneld/server-config.yaml` on the server before overwriting.
+- [x] Fix fragile unit test `TestProxyHandler_AccessControls` in `pkg/server/proxy_test.go` by using dynamic loopback ports via `getFreePort()`.
+- [x] Revert `portal.lfr-demo.local` and `tunnel.lfr-demo.local` subdomains from `domains` configuration in `tests/e2e/server-config.yaml`, `server-config-control.yaml`, and `server-config-sso.yaml`.
+- [x] Revert `portal.` and `tunnel.` subdomains from `domains` in the central VPS `/etc/lfr-tunneld/server-config.yaml`, keeping only `lfr-demo.se` and `lfr-demo.online`.
+- [x] Restore the `client_platforms` block and `docker_image`/`docker_bypass_url` customizations in the central VPS `/etc/lfr-tunneld/server-config.yaml`.
+- [x] Verify standard unit tests run successfully (`make test`).
+- [x] Verify E2E integration test suites pass locally (`make e2e` and `make e2e-sso`).
+
 

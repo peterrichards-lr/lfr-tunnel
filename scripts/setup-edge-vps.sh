@@ -236,6 +236,9 @@ ssh $SSH_KEY_ARG $SSH_USER@$VPS_IP << REMOTE_SSH
 
   # Config setup
   sudo mkdir -p /etc/lfr-tunneld
+  if [ -f /etc/lfr-tunneld/server-config.yaml ]; then
+    sudo cp /etc/lfr-tunneld/server-config.yaml /etc/lfr-tunneld/server-config.yaml.backup-\$(date +%Y-%m-%d_%H-%M-%S)
+  fi
   sudo mv /home/$SSH_USER/server-config.yaml /etc/lfr-tunneld/server-config.yaml
   sudo chown -R lfr-tunnel:lfr-tunnel /etc/lfr-tunneld
   sudo chmod 700 /etc/lfr-tunneld

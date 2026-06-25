@@ -540,7 +540,8 @@ The solution will consist of:
 - [x] Create setup documentation `docs/edge_setup_guide.md`.
 - [x] Automate Control Plane edge node config update via scripts/deploy.sh.
 - [x] Prevent client latency auto-probing if ServerURL is explicitly overridden.
-- [x] Create automated Edge VPS setup script scripts/setup-edge-vps.sh.
+- [x] Create automated Edge VPS setup script scripts/setup-edge-vps.sh (including UFW, Fail2ban, and unattended-upgrades).
+- [x] Apply security hardening (UFW local firewall, Fail2ban, unattended security upgrades) on US Edge VPS.
 - [x] Create and configure Cloudflare DDNS update service for Edge VPS.
 
 ## Edge Server Analytics and Portal Integration (#193)

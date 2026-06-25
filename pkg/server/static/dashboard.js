@@ -3661,9 +3661,7 @@ applyTheme(currentUser.theme_preference);
             if (!document.getElementById('nav-network-health').classList.contains('active')) return;
             const tbody = document.getElementById('network-health-body');
             try {
-                const res = await fetch('/api/portal/edge-health', {
-                    headers: { 'Authorization': `Bearer ${token}` }
-                });
+                const res = await fetch('/api/portal/edge-health');
                 if (res.status === 401) { logout(); return; }
                 const data = await res.json();
                 
@@ -3699,7 +3697,7 @@ applyTheme(currentUser.theme_preference);
                 }
             } catch (err) {
                 console.error(err);
-                tbody.innerHTML = '<tr><td colspan="5" style="color:var(--danger);text-align:center;">Failed to load network health</td></tr>';
+                tbody.innerHTML = `<tr><td colspan="5" style="color:var(--danger);text-align:center;">Failed to load network health: ${escapeHTML(err.toString())}</td></tr>`;
             }
             
             // Auto refresh every 30 seconds if tab is still active

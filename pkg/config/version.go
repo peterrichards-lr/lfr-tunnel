@@ -1,4 +1,4 @@
 package config
 
-// Version defines the current application version (injected at build time via -ldflags)
-var Version = "dev"
+// Version represents the current version of the lfr-tunnel client and server
+var Version = "v1.19.3"

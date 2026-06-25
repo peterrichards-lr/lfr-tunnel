@@ -81,6 +81,25 @@
             </h1>
             <div style="font-size: 12px; color: var(--text-muted);">Listening on localhost:4040</div>
         </div>
+        <div class="access-control-panel" style="padding: 16px 20px; border-bottom: 1px solid var(--border); background: rgba(30, 41, 59, 0.4); display: flex; flex-direction: column; gap: 10px;">
+            <div style="font-size: 12px; font-weight: 600; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.05em;">Access Control</div>
+            <div style="display: flex; flex-direction: column; gap: 6px;">
+                <label style="font-size: 11px; color: var(--text-muted);">Passcode Protection</label>
+                <input type="password" id="ac-passcode" placeholder="No passcode set (Public)" style="background: rgba(0,0,0,0.3); border: 1px solid var(--border); color: white; padding: 6px 10px; border-radius: 4px; font-size: 12px; outline: none; width: 100%;">
+            </div>
+            <div style="display: flex; flex-direction: column; gap: 6px;">
+                <label style="font-size: 11px; color: var(--text-muted);">IP Address Whitelist</label>
+                <input type="text" id="ac-whitelist" placeholder="e.g. 192.168.1.1, 10.0.0.0/24" style="background: rgba(0,0,0,0.3); border: 1px solid var(--border); color: white; padding: 6px 10px; border-radius: 4px; font-size: 12px; outline: none; width: 100%;">
+            </div>
+            <div style="display: flex; flex-direction: column; gap: 6px;">
+                <label style="font-size: 11px; color: var(--text-muted);">Combinator Mode</label>
+                <select id="ac-mode" style="background: #1e293b; border: 1px solid var(--border); color: white; padding: 6px 10px; border-radius: 4px; font-size: 12px; outline: none; cursor: pointer; width: 100%;">
+                    <option value="or">Bypass passcode if IP matched (OR)</option>
+                    <option value="and">Require both passcode & IP match (AND)</option>
+                </select>
+            </div>
+            <button id="ac-save-btn" onclick="saveAccessControl()" style="background: var(--primary); color: white; border: none; padding: 8px 12px; border-radius: 4px; font-size: 12px; font-weight: 600; cursor: pointer; margin-top: 4px; transition: background 0.2s;">Save Access Control</button>
+        </div>
         <div class="req-list" id="req-list">
             <!-- Items injected by JS -->
         </div>
@@ -101,6 +120,20 @@
                 
                 document.getElementById('maint-toggle').checked = state.maintenance_mode;
                 
+                const passcodeEl = document.getElementById('ac-passcode');
+                const whitelistEl = document.getElementById('ac-whitelist');
+                const modeEl = document.getElementById('ac-mode');
+
+                if (document.activeElement !== passcodeEl) {
+                    passcodeEl.value = state.passcode || '';
+                }
+                if (document.activeElement !== whitelistEl) {
+                    whitelistEl.value = state.whitelist_ips || '';
+                }
+                if (document.activeElement !== modeEl) {
+                    modeEl.value = state.access_mode || 'or';
+                }
+
                 // Update requests if changed
                 if (JSON.stringify(requests.map(r => r.id)) !== JSON.stringify(state.history.map(r => r.id))) {
                     requests = state.history || [];
@@ -117,6 +150,55 @@
                 headers: {'Content-Type': 'application/json'},
                 body: JSON.stringify({enabled: isChecked})
             });
+        }
+
+        async function saveAccessControl() {
+            const btn = document.getElementById('ac-save-btn');
+            if (btn) {
+                btn.disabled = true;
+                btn.innerText = 'Saving...';
+            }
+            try {
+                const passcode = document.getElementById('ac-passcode').value;
+                const whitelist = document.getElementById('ac-whitelist').value;
+                const mode = document.getElementById('ac-mode').value;
+                
+                const res = await fetch('/api/access-control', {
+                    method: 'POST',
+                    headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify({
+                        passcode: passcode,
+                        whitelist_ips: whitelist,
+                        access_mode: mode
+                    })
+                });
+                
+                if (res.ok) {
+                    if (btn) {
+                        btn.style.background = 'var(--success)';
+                        btn.innerText = 'Saved!';
+                        setTimeout(() => {
+                            btn.style.background = 'var(--primary)';
+                            btn.innerText = 'Save Access Control';
+                            btn.disabled = false;
+                        }, 1500);
+                    }
+                } else {
+                    const errText = await res.text();
+                    alert('Failed to update access control: ' + errText);
+                    if (btn) {
+                        btn.innerText = 'Save Access Control';
+                        btn.disabled = false;
+                    }
+                }
+            } catch(e) {
+                console.error("Error saving access control", e);
+                alert('Error: ' + e.message);
+                if (btn) {
+                    btn.innerText = 'Save Access Control';
+                    btn.disabled = false;
+                }
+            }
         }
 
         function renderList() {

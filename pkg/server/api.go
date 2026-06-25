@@ -58,6 +58,34 @@ func (s *Server) getCurrentUser(r *http.Request) (*db.User, error) {
 	return s.db.GetUserByEmail(sessionData.Email)
 }
 
+// getCurrentUserOrToken extracts the authenticated user from session cookie or X-Auth-Token/Bearer headers.
+func (s *Server) getCurrentUserOrToken(r *http.Request) (*db.User, error) {
+	if user, err := s.getCurrentUser(r); err == nil {
+		return user, nil
+	}
+
+	token := r.URL.Query().Get("token")
+	if token == "" {
+		token = r.URL.Query().Get("auth_token")
+	}
+	if token == "" {
+		token = r.Header.Get("X-Auth-Token")
+	}
+	if token == "" {
+		if authHeader := r.Header.Get("Authorization"); strings.HasPrefix(strings.ToLower(authHeader), "bearer ") {
+			token = authHeader[7:]
+		}
+	}
+
+	if token != "" {
+		if user, ok := s.isValidToken(token); ok && user != nil {
+			return user, nil
+		}
+	}
+
+	return nil, errors.New("unauthorized")
+}
+
 // handleGetMe returns the currently authenticated user's profile and role.
 func (s *Server) handleGetMe(w http.ResponseWriter, r *http.Request) {
 	user, err := s.getCurrentUser(r)
@@ -1850,4 +1878,82 @@ func generateToken(length int) string {
 		return fmt.Sprintf("%x", time.Now().UnixNano())
 	}
 	return hex.EncodeToString(bytes)
+}
+
+type updateAccessControlRequest struct {
+	Subdomain    string `json:"subdomain"`
+	Domain       string `json:"domain"`
+	Passcode     string `json:"passcode"`
+	WhitelistIPs string `json:"whitelist_ips"`
+	AccessMode   string `json:"access_mode"`
+}
+
+// handleUpdateReservationAccessControl dynamically updates passcode and whitelist settings on the gateway.
+func (s *Server) handleUpdateReservationAccessControl(w http.ResponseWriter, r *http.Request) {
+	user, err := s.getCurrentUserOrToken(r)
+	if err != nil {
+		http.Error(w, `{"error":"Unauthorized"}`, http.StatusUnauthorized)
+		return
+	}
+
+	var req updateAccessControlRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		http.Error(w, `{"error":"Invalid request JSON"}`, http.StatusBadRequest)
+		return
+	}
+
+	req.Subdomain = strings.TrimSpace(strings.ToLower(req.Subdomain))
+	req.Domain = strings.TrimSpace(strings.ToLower(req.Domain))
+	req.AccessMode = strings.TrimSpace(strings.ToLower(req.AccessMode))
+
+	if req.Subdomain == "" || req.Domain == "" {
+		http.Error(w, `{"error":"Missing subdomain or domain"}`, http.StatusBadRequest)
+		return
+	}
+
+	if req.AccessMode != "and" && req.AccessMode != "or" && req.AccessMode != "" {
+		http.Error(w, `{"error":"Access mode must be 'and' or 'or'"}`, http.StatusBadRequest)
+		return
+	}
+
+	res, err := s.db.GetSubdomainReservationByName(req.Subdomain, req.Domain)
+	if err != nil {
+		if errors.Is(err, db.ErrNotFound) {
+			http.Error(w, `{"error":"Reservation not found"}`, http.StatusNotFound)
+		} else {
+			http.Error(w, `{"error":"Database error"}`, http.StatusInternalServerError)
+		}
+		return
+	}
+
+	if res.UserID != user.ID && user.Role != "admin" && user.Role != "owner" {
+		http.Error(w, `{"error":"Forbidden: you do not own this reservation"}`, http.StatusForbidden)
+		return
+	}
+
+	res.Passcode = req.Passcode
+	res.WhitelistIPs = req.WhitelistIPs
+	if req.AccessMode != "" {
+		res.AccessMode = req.AccessMode
+	} else {
+		res.AccessMode = "or"
+	}
+
+	if err := s.db.UpdateSubdomainReservation(res); err != nil {
+		log.Printf("[API] Failed to update reservation access controls: %v", err)
+		http.Error(w, `{"error":"Failed to update access control configuration"}`, http.StatusInternalServerError)
+		return
+	}
+
+	_ = s.db.WriteAuditEntry(&db.AuditEntry{
+		ActorID:    user.Email,
+		Action:     "subdomain.access_control_updated",
+		TargetType: "subdomain",
+		TargetID:   fmt.Sprintf("%s.%s", req.Subdomain, req.Domain),
+		Details:    fmt.Sprintf("Access controls updated: Mode=%s, Passcode=%s, IPs=%s", res.AccessMode, res.Passcode, res.WhitelistIPs),
+		IPAddress:  getClientIP(r),
+		CreatedAt:  time.Now(),
+	})
+
+	respondJSON(w, http.StatusOK, map[string]string{"status": "success"})
 }

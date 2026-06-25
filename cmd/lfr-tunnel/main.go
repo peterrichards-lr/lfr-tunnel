@@ -253,6 +253,11 @@ func main() {
 
 	// Start Interceptor Engine
 	engine := client.NewInterceptorEngine(cfg.TargetHost, addHeaders)
+	engine.Token = cfg.AuthToken
+	engine.ServerURL = cfg.ServerURL
+	engine.Passcode = cfg.Passcode
+	engine.WhitelistIPs = cfg.WhitelistIPs
+	engine.AccessMode = "or"
 	actualInspectorPort, err := client.StartInspector(*inspectorPort, engine)
 	if err != nil {
 		log.Fatalf("[Error] Failed to start Inspector dashboard: %v", err)

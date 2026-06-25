@@ -516,7 +516,7 @@ The solution will consist of:
 - [x] Implement Root CA generation, client certificate signing (PKCS#12 bundle `.p12` format creation), and database ACL verification on the gateway.
 - [x] Create the HTML templates for the Passcode Verification screen (`passcode.html`) and the "Access Denied" IP restriction screen (`unauthorized_ip.html`), serving them dynamically.
 - [x] Implement the Guest Invitation workflow endpoints (invitations, magic enrollment link, browser certificate download).
-- [ ] Update the local Client Inspector dashboard to add an "Access Control" management panel that handles dynamic updates back to the gateway.
+- [x] Update the local Client Inspector dashboard to add an "Access Control" management panel that handles dynamic updates back to the gateway.
 - [ ] Expose a read-only "Access Control" status display in the central Admin/User Portal Dashboard under the Tunnel Details Modal.
 - [/] Write unit tests for access control validation, IP matching, PKCS#12 signing (E2E integration test verification pending).
 

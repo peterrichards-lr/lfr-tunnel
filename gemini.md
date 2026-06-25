@@ -538,6 +538,7 @@ The solution will consist of:
 - [x] Add CLI flags and auto-latency probing in client CLI.
 - [x] Write unit and E2E integration tests.
 - [x] Create setup documentation `docs/edge_setup_guide.md`.
+- [ ] Automate Control Plane edge node config update via scripts/deploy.sh.
 
 
 

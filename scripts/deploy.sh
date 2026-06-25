@@ -7,7 +7,8 @@ VPS_IP="lfr-demo.se"
 # Parse optional parameters
 SSH_KEY=""
 WARN_SECS=""
-while getopts "i:w:" opt; do
+EDGE_NODES_FILE=""
+while getopts "i:w:f:" opt; do
   case $opt in
     i) 
       KEY_PATH="$OPTARG"
@@ -22,10 +23,73 @@ while getopts "i:w:" opt; do
     w)
       WARN_SECS="$OPTARG"
       ;;
-    *) echo "Usage: $0 [-i <identity_file>] [-w <warning_seconds>]" && exit 1 ;;
+    f)
+      EDGE_NODES_FILE="$OPTARG"
+      ;;
+    *) echo "Usage: $0 [-i <identity_file>] [-w <warning_seconds>] [-f <edge_nodes_file>]" && exit 1 ;;
   esac
 done
 shift $((OPTIND - 1))
+
+if [ -n "$EDGE_NODES_FILE" ]; then
+  if [[ "$EDGE_NODES_FILE" == "~/"* ]]; then
+    EDGE_NODES_FILE="${HOME}/${EDGE_NODES_FILE#~/}"
+  elif [[ "$EDGE_NODES_FILE" == "~" ]]; then
+    EDGE_NODES_FILE="${HOME}"
+  fi
+
+  if [ ! -f "$EDGE_NODES_FILE" ]; then
+    echo "Error: Edge nodes file '$EDGE_NODES_FILE' not found"
+    exit 1
+  fi
+
+  echo "Downloading current server-config.yaml from VPS..."
+  if ! scp $SSH_KEY $VPS_USER@$VPS_IP:/etc/lfr-tunneld/server-config.yaml /tmp/vps-server-config.yaml 2>/dev/null; then
+    echo "Warning: /etc/lfr-tunneld/server-config.yaml not found on VPS. Creating a new basic config."
+    echo "domains: []" > /tmp/vps-server-config.yaml
+  fi
+
+  echo "Updating server-config.yaml with edge nodes..."
+  python3 -c '
+import sys, yaml, hashlib
+
+config_path = "/tmp/vps-server-config.yaml"
+nodes_path = "'"$EDGE_NODES_FILE"'"
+
+try:
+    with open(config_path, "r") as f:
+        cfg = yaml.safe_load(f) or {}
+except Exception as e:
+    print(f"Error reading config: {e}", file=sys.stderr)
+    cfg = {}
+
+edge_nodes = []
+with open(nodes_path, "r") as f:
+    for line in f:
+        line = line.strip()
+        if not line or line.startswith("#"):
+            continue
+        parts = line.split(",", 1)
+        if len(parts) != 2:
+            parts = line.split(":", 1)
+        if len(parts) != 2:
+            print(f"Skipping invalid line: {line}", file=sys.stderr)
+            continue
+        node_id = parts[0].strip()
+        token = parts[1].strip()
+        token_hash = hashlib.sha256(token.encode()).hexdigest()
+        edge_nodes.append({"id": node_id, "token_hash": token_hash})
+
+cfg["edge_nodes"] = edge_nodes
+
+with open(config_path, "w") as f:
+    yaml.safe_dump(cfg, f, default_flow_style=False)
+'
+
+  echo "Uploading updated server-config.yaml to VPS staging..."
+  scp $SSH_KEY /tmp/vps-server-config.yaml $VPS_USER@$VPS_IP:/home/$VPS_USER/server-config.yaml
+  rm -f /tmp/vps-server-config.yaml
+fi
 
 VERSION="${VERSION:-$(git describe --tags --abbrev=0 --dirty 2>/dev/null || git describe --always --dirty 2>/dev/null || echo "dev")}"
 
@@ -93,6 +157,13 @@ ssh $SSH_KEY $VPS_USER@$VPS_IP << REMOTE_SSH
     
     # Clean up temporary home files
     rm -rf /home/$VPS_USER/error_pages /home/$VPS_USER/static /home/$VPS_USER/i18n /home/$VPS_USER/templates
+    
+    if [ -f /home/$VPS_USER/server-config.yaml ]; then
+        sudo mkdir -p /etc/lfr-tunneld
+        sudo mv /home/$VPS_USER/server-config.yaml /etc/lfr-tunneld/server-config.yaml
+        sudo chmod 600 /etc/lfr-tunneld/server-config.yaml
+        sudo chown lfr-tunnel:lfr-tunnel /etc/lfr-tunneld/server-config.yaml
+    fi
     
     sudo systemctl restart lfr-tunneld
 REMOTE_SSH

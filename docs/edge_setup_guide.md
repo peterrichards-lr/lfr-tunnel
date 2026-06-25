@@ -108,6 +108,22 @@ edge_nodes:
     token_hash: "4a2371ab6fbd2742e0fce40b2f3c1f94ecc8c02ad15f5455cd68bdf4e04f947a" # SHA-256 hash of plaintext token
 ```
 
+#### Automated Edge Node Configuration Deployment
+
+To automate updating the Control Plane configuration with your regional edge nodes list:
+1. Create a local `edge_nodes.txt` file in the root of the repository matching the format in [edge_nodes.txt.example](file:///Volumes/SanDisk/repos/lfr-tunnel/edge_nodes.txt.example):
+   ```text
+   us-east-1,my-plaintext-edge-token-us
+   apac-singapore:my-plaintext-edge-token-apac
+   ```
+2. Run the deployment script with the `-f` parameter:
+   ```bash
+   ./scripts/deploy.sh -i ~/.ssh/vps_key -f edge_nodes.txt
+   ```
+
+The script will automatically download the current configuration from the Control Plane VPS, calculate the SHA-256 hashes of the pre-shared tokens locally, append/update the `edge_nodes` section securely, upload it back to the VPS, apply restricted owner permissions, and restart `lfr-tunneld`.
+
+
 ### B. Regional Edge Gateway Configuration (`server-config.yaml`)
 
 On the stateless edge node VPS, configure connection settings pointing to the Control Plane:

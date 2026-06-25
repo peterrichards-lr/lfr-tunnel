@@ -81,6 +81,9 @@ type ServerConfig struct {
 	DisableEmailLogin          bool                      `yaml:"disable_email_login"`
 	DisableClientDownloads     bool                      `yaml:"disable_client_downloads"`
 	PortalURL                  string                    `yaml:"portal_url"`
+	ControlPlaneURL            string                    `yaml:"control_plane_url"`
+	EdgeToken                  string                    `yaml:"edge_token"`
+	EdgeNodes                  []EdgeNodeConfig          `yaml:"edge_nodes"`
 
 	// Dynamic SSO/OIDC Providers
 	SSOProviders []SSOProviderConfig `yaml:"sso_providers"`
@@ -109,18 +112,25 @@ type SSOProviderConfig struct {
 	SkipIssuerCheck bool   `yaml:"skip_issuer_check"`
 }
 
+type EdgeNodeConfig struct {
+	ID        string `yaml:"id"`
+	TokenHash string `yaml:"token_hash"`
+}
+
 // ClientConfig holds configuration settings for the lfr-tunnel client.
 type ClientConfig struct {
-	ServerURL    string `yaml:"server_url"`
-	AuthToken    string `yaml:"auth_token"`
-	Subdomain    string `yaml:"subdomain"`
-	Ports        []int  `yaml:"ports"`
-	TokenFile    string `yaml:"token_file"`
-	RateLimit    int    `yaml:"rate_limit"`
-	BasicAuth    string `yaml:"basic_auth"`
-	TargetHost   string `yaml:"target_host"`
-	Passcode     string `yaml:"passcode"`
-	WhitelistIPs string `yaml:"whitelist_ips"`
+	ServerURL    string            `yaml:"server_url"`
+	AuthToken    string            `yaml:"auth_token"`
+	Subdomain    string            `yaml:"subdomain"`
+	Ports        []int             `yaml:"ports"`
+	TokenFile    string            `yaml:"token_file"`
+	RateLimit    int               `yaml:"rate_limit"`
+	BasicAuth    string            `yaml:"basic_auth"`
+	TargetHost   string            `yaml:"target_host"`
+	Passcode     string            `yaml:"passcode"`
+	WhitelistIPs string            `yaml:"whitelist_ips"`
+	Region       string            `yaml:"region"`
+	Regions      map[string]string `yaml:"regions"`
 }
 
 // DefaultServerConfig returns a ServerConfig with sensible default values.
@@ -201,6 +211,10 @@ func DefaultClientConfig() *ClientConfig {
 	return &ClientConfig{
 		ServerURL: "https://tunnel.lfr-demo.se",
 		Ports:     []int{8080},
+		Regions: map[string]string{
+			"eu": "https://tunnel.lfr-demo.se",
+			"us": "https://us.lfr-demo.online",
+		},
 	}
 }
 
@@ -307,6 +321,12 @@ func LoadServerConfig(path string) (*ServerConfig, error) {
 	}
 	if val := os.Getenv("LFT_PORTAL_URL"); val != "" {
 		cfg.PortalURL = val
+	}
+	if val := os.Getenv("LFT_CONTROL_PLANE_URL"); val != "" {
+		cfg.ControlPlaneURL = val
+	}
+	if val := os.Getenv("LFT_EDGE_TOKEN"); val != "" {
+		cfg.EdgeToken = val
 	}
 	if val := os.Getenv("LFT_PORTAL_SESSION_DURATION"); val != "" {
 		if d, err := time.ParseDuration(val); err == nil {
@@ -481,6 +501,12 @@ func LoadClientConfig(path string) (*ClientConfig, error) {
 		cfg.WhitelistIPs = val
 	} else if val := os.Getenv("LFT_WHITELIST_IPS"); val != "" {
 		cfg.WhitelistIPs = val
+	}
+
+	if val := os.Getenv("LFT_CLIENT_REGION"); val != "" {
+		cfg.Region = val
+	} else if val := os.Getenv("LFT_REGION"); val != "" {
+		cfg.Region = val
 	}
 
 	return cfg, nil

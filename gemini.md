@@ -531,5 +531,13 @@ The solution will consist of:
 - [x] Extract the SVG vector logo to `pkg/server/static/logo.svg` and reference it via standard `<img>` tags across all templates and static HTML files.
 - [x] Verify favicon is properly referenced and served.
 
+## Multi-Region Edge VPS Gateways (v1.17.0) - Issue #183
+- [x] Add configuration structs for EdgeMode in `pkg/config/config.go`.
+- [x] Implement Control Plane validation endpoint `/api/internal/edge-register` in `pkg/server/server.go`.
+- [x] Implement validation proxying on Edge gateways in `pkg/server/server.go`.
+- [x] Add CLI flags and auto-latency probing in client CLI.
+- [x] Write unit and E2E integration tests.
+- [x] Create setup documentation `docs/edge_setup_guide.md`.
+
 
 

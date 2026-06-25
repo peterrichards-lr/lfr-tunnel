@@ -124,6 +124,8 @@ type Server struct {
 	wsClients          map[*wsClient]bool
 	wsMutex            sync.RWMutex
 	startTime          time.Time
+	edgeLeases         map[string][]EdgeLease
+	edgeLeasesMu       sync.Mutex
 }
 
 // NewServer initializes and returns a new Server instance.
@@ -211,6 +213,7 @@ func NewServer(cfg *config.ServerConfig) (*Server, error) {
 		startTime:          time.Now(),
 		caCert:             caCert,
 		caKey:              caKey,
+		edgeLeases:         make(map[string][]EdgeLease),
 	}
 
 	srv.proxyHandler.db = database
@@ -246,6 +249,9 @@ func NewServer(cfg *config.ServerConfig) (*Server, error) {
 		}
 		if srv.proxyHandler != nil {
 			srv.proxyHandler.RemoveRateLimiter(lease.FullHost)
+		}
+		if srv.cfg.ControlPlaneURL != "" {
+			go srv.notifyControlPlaneDeregister(lease.UserID, lease.SubdomainPrefix)
 		}
 		srv.BroadcastTelemetry()
 	}
@@ -520,6 +526,21 @@ func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		// Route control plane requests
 		if r.Method == http.MethodPost && r.URL.Path == "/api/register" {
 			s.handleRegister(w, r)
+			return
+		}
+
+		if r.Method == http.MethodPost && r.URL.Path == "/api/internal/edge-register" {
+			s.handleEdgeRegister(w, r)
+			return
+		}
+
+		if r.Method == http.MethodPost && r.URL.Path == "/api/internal/edge-deregister" {
+			s.handleEdgeDeregister(w, r)
+			return
+		}
+
+		if r.Method == http.MethodPost && r.URL.Path == "/api/internal/edge-audit-log" {
+			s.handleEdgeAuditLog(w, r)
 			return
 		}
 
@@ -850,6 +871,13 @@ func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 
+		if r.Method == http.MethodGet && r.URL.Path == "/api/healthz" {
+			w.Header().Set("Content-Type", "application/json")
+			w.WriteHeader(http.StatusOK)
+			_, _ = w.Write([]byte(`{"status":"healthy"}`))
+			return
+		}
+
 		if strings.HasPrefix(r.URL.Path, "/static/") {
 			http.FileServer(http.FS(staticFS)).ServeHTTP(w, r)
 			return
@@ -900,6 +928,11 @@ func (s *Server) handleRegister(w http.ResponseWriter, r *http.Request) {
 	var req RegisterRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 		s.respondRegisterResponse(w, http.StatusBadRequest, r, RegisterResponse{Status: "error", Error: "invalid JSON payload"})
+		return
+	}
+
+	if s.cfg.ControlPlaneURL != "" {
+		s.handleEdgeRegisterProxy(w, r, req)
 		return
 	}
 
@@ -1875,6 +1908,13 @@ func (s *Server) isValidToken(token string) (*db.User, bool) {
 
 func (s *Server) writeAudit(actorID, action, targetType, targetID string, details string, r *http.Request) {
 	if s.db == nil {
+		if s.cfg.ControlPlaneURL != "" {
+			ip := ""
+			if r != nil {
+				ip = r.RemoteAddr
+			}
+			go s.forwardAuditToControlPlane(actorID, action, targetType, targetID, details, ip)
+		}
 		return
 	}
 	entry := &db.AuditEntry{
@@ -4015,4 +4055,507 @@ func (s *Server) handleVisitorGonePage(w http.ResponseWriter, r *http.Request, h
 	htmlContent = strings.ReplaceAll(htmlContent, "{{.PortalURL}}", html.EscapeString(portalURL))
 
 	_, _ = w.Write([]byte(htmlContent))
+}
+
+type EdgeLease struct {
+	NodeID    string `json:"node_id"`
+	Subdomain string `json:"subdomain"`
+	UserID    string `json:"user_id"`
+}
+
+func (s *Server) handleEdgeRegisterProxy(w http.ResponseWriter, r *http.Request, req RegisterRequest) {
+	activeDomains := s.getActiveDomainsForRequest(r)
+	edgeReqPayload := struct {
+		RegisterRequest
+		Domains []string `json:"domains"`
+	}{
+		RegisterRequest: req,
+		Domains:         activeDomains,
+	}
+
+	payloadBytes, err := json.Marshal(edgeReqPayload)
+	if err != nil {
+		s.respondRegisterResponse(w, http.StatusInternalServerError, r, RegisterResponse{Status: "error", Error: "failed to marshal proxy request"})
+		return
+	}
+
+	client := &http.Client{Timeout: 5 * time.Second}
+	proxyReq, err := http.NewRequest("POST", s.cfg.ControlPlaneURL+"/api/internal/edge-register", bytes.NewReader(payloadBytes))
+	if err != nil {
+		s.respondRegisterResponse(w, http.StatusInternalServerError, r, RegisterResponse{Status: "error", Error: "failed to create proxy request"})
+		return
+	}
+	proxyReq.Header.Set("Content-Type", "application/json")
+	proxyReq.Header.Set("X-Edge-Token", s.cfg.EdgeToken)
+
+	resp, err := client.Do(proxyReq)
+	if err != nil {
+		s.respondRegisterResponse(w, http.StatusBadGateway, r, RegisterResponse{Status: "error", Error: "control plane connection failed: " + err.Error()})
+		return
+	}
+	defer resp.Body.Close() //nolint:errcheck
+
+	if resp.StatusCode != http.StatusOK {
+		var errResp struct {
+			Error string `json:"error"`
+		}
+		_ = json.NewDecoder(resp.Body).Decode(&errResp)
+		if errResp.Error == "" {
+			errResp.Error = fmt.Sprintf("control plane rejected request with status %d", resp.StatusCode)
+		}
+		s.respondRegisterResponse(w, resp.StatusCode, r, RegisterResponse{Status: "error", Error: errResp.Error})
+		return
+	}
+
+	var valResp struct {
+		UserID          string `json:"user_id"`
+		SubdomainPrefix string `json:"subdomain_prefix"`
+		RateLimit       int    `json:"rate_limit"`
+	}
+	if err := json.NewDecoder(resp.Body).Decode(&valResp); err != nil {
+		s.respondRegisterResponse(w, http.StatusInternalServerError, r, RegisterResponse{Status: "error", Error: "invalid response from control plane"})
+		return
+	}
+
+	clientIP := getClientIP(r)
+	sessionToken, remotes, err := s.registry.Register(valResp.UserID, valResp.SubdomainPrefix, req.Ports, activeDomains, valResp.RateLimit, clientIP, req.BasicAuth, req.AddedHeaders)
+	if err != nil {
+		s.respondRegisterResponse(w, http.StatusConflict, r, RegisterResponse{Status: "error", Error: err.Error()})
+		return
+	}
+
+	var warning string
+	if req.ClientVersion != "" && req.ClientVersion != config.Version {
+		warning = fmt.Sprintf("Version mismatch! Server is running %s but client is %s. Please consider upgrading using 'lfr-tunnel -upgrade'", config.Version, req.ClientVersion)
+	}
+
+	s.respondRegisterResponse(w, http.StatusOK, r, RegisterResponse{
+		Status:          "success",
+		SessionToken:    sessionToken,
+		SubdomainPrefix: valResp.SubdomainPrefix,
+		Remotes:         remotes,
+		Domains:         activeDomains,
+		Warning:         warning,
+	})
+}
+
+func (s *Server) notifyControlPlaneDeregister(userID, subdomain string) {
+	client := &http.Client{Timeout: 5 * time.Second}
+	payloadBytes, err := json.Marshal(map[string]string{
+		"user_id":   userID,
+		"subdomain": subdomain,
+	})
+	if err != nil {
+		return
+	}
+
+	req, err := http.NewRequest("POST", s.cfg.ControlPlaneURL+"/api/internal/edge-deregister", bytes.NewReader(payloadBytes))
+	if err != nil {
+		return
+	}
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("X-Edge-Token", s.cfg.EdgeToken)
+
+	resp, err := client.Do(req)
+	if err != nil {
+		log.Printf("[Server Edge] Failed to notify control plane deregister: %v", err)
+		return
+	}
+	defer resp.Body.Close() //nolint:errcheck
+
+	if resp.StatusCode != http.StatusOK {
+		log.Printf("[Server Edge] Control plane deregister returned status: %d", resp.StatusCode)
+	}
+}
+
+func (s *Server) handleEdgeRegister(w http.ResponseWriter, r *http.Request) {
+	edgeToken := r.Header.Get("X-Edge-Token")
+	if edgeToken == "" {
+		respondJSON(w, http.StatusUnauthorized, map[string]string{"error": "missing edge token"})
+		return
+	}
+
+	hash := sha256.Sum256([]byte(edgeToken))
+	hashStr := hex.EncodeToString(hash[:])
+
+	authorized := false
+	var edgeNodeID string
+	for _, node := range s.cfg.EdgeNodes {
+		if node.TokenHash == hashStr {
+			authorized = true
+			edgeNodeID = node.ID
+			break
+		}
+	}
+
+	if !authorized {
+		respondJSON(w, http.StatusUnauthorized, map[string]string{"error": "invalid edge token"})
+		return
+	}
+
+	var edgeReq struct {
+		RegisterRequest
+		Domains []string `json:"domains"`
+	}
+
+	if err := json.NewDecoder(r.Body).Decode(&edgeReq); err != nil {
+		respondJSON(w, http.StatusBadRequest, map[string]string{"error": "invalid JSON payload"})
+		return
+	}
+
+	user, ok := s.isValidToken(edgeReq.AuthToken)
+	if !ok {
+		respondJSON(w, http.StatusUnauthorized, map[string]string{"error": "unauthorized"})
+		return
+	}
+
+	var userRec *db.User
+	if s.db != nil {
+		userRec, _ = s.db.GetUser(user.ID)
+	}
+
+	finalSubdomain := edgeReq.SubdomainPrefix
+	requestedRandom := finalSubdomain == "" || finalSubdomain == "random"
+
+	if requestedRandom {
+		found := false
+		for attempt := 0; attempt < 10; attempt++ {
+			candidate := s.generateRandomSubdomainPrefix("liferay")
+			dbOk := true
+			if s.db != nil {
+				for _, d := range edgeReq.Domains {
+					existing, err := s.db.GetSubdomainReservationByName(candidate, d)
+					if err == nil && existing != nil {
+						dbOk = false
+						break
+					}
+				}
+			}
+			if dbOk {
+				finalSubdomain = candidate
+				found = true
+				break
+			}
+		}
+		if !found {
+			respondJSON(w, http.StatusInternalServerError, map[string]string{"error": "failed to generate unique random subdomain"})
+			return
+		}
+	} else {
+		if s.db != nil {
+			var domainsToReserve []string
+			for _, d := range edgeReq.Domains {
+				existing, err := s.db.GetSubdomainReservationByName(finalSubdomain, d)
+				if err == nil && existing != nil {
+					if existing.ExpiresAt != nil && existing.ExpiresAt.Before(time.Now()) {
+						quarantineCutoff := existing.ExpiresAt.AddDate(0, 0, s.cfg.SubdomainQuarantineDays)
+						if time.Now().Before(quarantineCutoff) {
+							if existing.UserID != user.ID {
+								respondJSON(w, http.StatusConflict, map[string]string{"error": "Subdomain is currently in quarantine"})
+								return
+							}
+							domainsToReserve = append(domainsToReserve, d)
+						} else {
+							_ = s.db.DeleteSubdomainReservation(existing.ID)
+							domainsToReserve = append(domainsToReserve, d)
+						}
+					} else {
+						if existing.UserID != user.ID {
+							respondJSON(w, http.StatusConflict, map[string]string{"error": "Subdomain is reserved by another user"})
+							return
+						}
+					}
+				} else {
+					if s.cfg.AllowClientAutoReservation && userRec != nil && (userRec.Role == "admin" || userRec.Role == "owner") {
+						domainsToReserve = append(domainsToReserve, d)
+					} else {
+						respondJSON(w, http.StatusForbidden, map[string]string{"error": "Custom subdomains must be reserved in the portal prior to connecting"})
+						return
+					}
+				}
+			}
+
+			if len(domainsToReserve) > 0 {
+				limit := s.cfg.DefaultMaxReservations
+				if userRec != nil {
+					limit = s.getUserMaxReservations(userRec)
+				}
+
+				list, err := s.db.ListSubdomainReservationsByUserID(user.ID)
+				activeCount := 0
+				if err == nil {
+					for _, res := range list {
+						if res.ExpiresAt == nil || res.ExpiresAt.After(time.Now()) {
+							activeCount++
+						}
+					}
+				}
+
+				needed := len(domainsToReserve)
+				if limit >= 0 && activeCount+needed > limit {
+					respondJSON(w, http.StatusForbidden, map[string]string{"error": "Subdomain reservation quota limit reached"})
+					return
+				}
+
+				for _, d := range domainsToReserve {
+					if existing, err := s.db.GetSubdomainReservationByName(finalSubdomain, d); err == nil && existing != nil {
+						_ = s.db.DeleteSubdomainReservation(existing.ID)
+					}
+					expiry := time.Now().AddDate(0, 0, 7)
+					res := &db.SubdomainReservation{
+						UserID:    user.ID,
+						Subdomain: finalSubdomain,
+						Domain:    d,
+						ExpiresAt: &expiry,
+					}
+					_ = s.db.CreateSubdomainReservation(res)
+				}
+			}
+		}
+	}
+
+	if s.db != nil {
+		for _, d := range edgeReq.Domains {
+			existing, err := s.db.GetSubdomainReservationByName(finalSubdomain, d)
+			if err == nil && existing != nil && existing.UserID == user.ID {
+				updated := false
+				if edgeReq.Passcode != "" {
+					existing.Passcode = edgeReq.Passcode
+					updated = true
+				}
+				if edgeReq.WhitelistIPs != "" {
+					existing.WhitelistIPs = edgeReq.WhitelistIPs
+					updated = true
+				}
+				if updated {
+					_ = s.db.UpdateSubdomainReservation(existing)
+				}
+			}
+		}
+	}
+
+	effectiveLimit := edgeReq.RateLimit
+	if userRec != nil && userRec.RateLimit > 0 {
+		if effectiveLimit <= 0 || effectiveLimit > userRec.RateLimit {
+			effectiveLimit = userRec.RateLimit
+		}
+	}
+	if s.cfg.MaxTunnelRateLimit > 0 {
+		if effectiveLimit <= 0 || effectiveLimit > s.cfg.MaxTunnelRateLimit {
+			effectiveLimit = s.cfg.MaxTunnelRateLimit
+		}
+	} else if effectiveLimit <= 0 {
+		effectiveLimit = 0
+	}
+
+	if (edgeReq.ClientVersion != "" || edgeReq.ClientOS != "") && userRec != nil {
+		changed := false
+		if edgeReq.ClientVersion != "" && userRec.LastClientVersion != edgeReq.ClientVersion {
+			userRec.LastClientVersion = edgeReq.ClientVersion
+			changed = true
+		}
+		if edgeReq.ClientOS != "" && userRec.LastClientOS != edgeReq.ClientOS {
+			userRec.LastClientOS = edgeReq.ClientOS
+			changed = true
+		}
+		if changed {
+			_ = s.db.UpdateUser(userRec)
+		}
+	}
+
+	s.edgeLeasesMu.Lock()
+	activeEdgeCount := len(s.edgeLeases[user.ID])
+	s.edgeLeasesMu.Unlock()
+
+	localCount := 0
+	isReconnecting := false
+	if s.registry != nil {
+		leases := s.registry.ListLeases()
+		uniqueSubs := make(map[string]bool)
+		for _, l := range leases {
+			if l.UserID == user.ID {
+				uniqueSubs[l.SubdomainPrefix] = true
+			}
+		}
+		localCount = len(uniqueSubs)
+		isReconnecting = uniqueSubs[finalSubdomain]
+	}
+
+	s.edgeLeasesMu.Lock()
+	for _, l := range s.edgeLeases[user.ID] {
+		if l.Subdomain == finalSubdomain {
+			isReconnecting = true
+			break
+		}
+	}
+	s.edgeLeasesMu.Unlock()
+
+	maxTunnels := s.cfg.DefaultMaxActiveTunnels
+	if user.Role == "admin" && s.cfg.AdminMaxActiveTunnels != nil {
+		maxTunnels = *s.cfg.AdminMaxActiveTunnels
+	} else if user.Role == "owner" && s.cfg.OwnerMaxActiveTunnels != nil {
+		maxTunnels = *s.cfg.OwnerMaxActiveTunnels
+	}
+
+	if userRec != nil && userRec.MaxTunnels != nil {
+		maxTunnels = *userRec.MaxTunnels
+	}
+
+	if maxTunnels > 0 && (activeEdgeCount+localCount) >= maxTunnels && !isReconnecting {
+		respondJSON(w, http.StatusForbidden, map[string]string{
+			"error": fmt.Sprintf("Active tunnels concurrency limit reached (%d). Stop another active tunnel or ask an administrator to increase your limit.", maxTunnels),
+		})
+		return
+	}
+
+	s.edgeLeasesMu.Lock()
+	s.edgeLeases[user.ID] = append(s.edgeLeases[user.ID], EdgeLease{
+		NodeID:    edgeNodeID,
+		Subdomain: finalSubdomain,
+		UserID:    user.ID,
+	})
+	s.edgeLeasesMu.Unlock()
+
+	respondJSON(w, http.StatusOK, map[string]interface{}{
+		"user_id":          user.ID,
+		"subdomain_prefix": finalSubdomain,
+		"rate_limit":       effectiveLimit,
+	})
+}
+
+func (s *Server) handleEdgeDeregister(w http.ResponseWriter, r *http.Request) {
+	edgeToken := r.Header.Get("X-Edge-Token")
+	if edgeToken == "" {
+		respondJSON(w, http.StatusUnauthorized, map[string]string{"error": "missing edge token"})
+		return
+	}
+
+	hash := sha256.Sum256([]byte(edgeToken))
+	hashStr := hex.EncodeToString(hash[:])
+
+	authorized := false
+	for _, node := range s.cfg.EdgeNodes {
+		if node.TokenHash == hashStr {
+			authorized = true
+			break
+		}
+	}
+
+	if !authorized {
+		respondJSON(w, http.StatusUnauthorized, map[string]string{"error": "invalid edge token"})
+		return
+	}
+
+	var edgeReq struct {
+		UserID    string `json:"user_id"`
+		Subdomain string `json:"subdomain"`
+	}
+
+	if err := json.NewDecoder(r.Body).Decode(&edgeReq); err != nil {
+		respondJSON(w, http.StatusBadRequest, map[string]string{"error": "invalid JSON payload"})
+		return
+	}
+
+	s.edgeLeasesMu.Lock()
+	defer s.edgeLeasesMu.Unlock()
+
+	leases, ok := s.edgeLeases[edgeReq.UserID]
+	if ok {
+		var newLeases []EdgeLease
+		for _, l := range leases {
+			if l.Subdomain != edgeReq.Subdomain {
+				newLeases = append(newLeases, l)
+			}
+		}
+		if len(newLeases) == 0 {
+			delete(s.edgeLeases, edgeReq.UserID)
+		} else {
+			s.edgeLeases[edgeReq.UserID] = newLeases
+		}
+	}
+
+	w.WriteHeader(http.StatusOK)
+}
+
+func (s *Server) forwardAuditToControlPlane(actorID, action, targetType, targetID, details, ip string) {
+	client := &http.Client{Timeout: 5 * time.Second}
+	payloadBytes, err := json.Marshal(map[string]string{
+		"actor_id":    actorID,
+		"action":      action,
+		"target_type": targetType,
+		"target_id":   targetID,
+		"details":     details,
+		"ip_address":  ip,
+	})
+	if err != nil {
+		return
+	}
+
+	req, err := http.NewRequest("POST", s.cfg.ControlPlaneURL+"/api/internal/edge-audit-log", bytes.NewReader(payloadBytes))
+	if err != nil {
+		return
+	}
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("X-Edge-Token", s.cfg.EdgeToken)
+
+	resp, err := client.Do(req)
+	if err != nil {
+		log.Printf("[Server Edge] Failed to forward audit log to control plane: %v", err)
+		return
+	}
+	defer resp.Body.Close() //nolint:errcheck
+}
+
+func (s *Server) handleEdgeAuditLog(w http.ResponseWriter, r *http.Request) {
+	edgeToken := r.Header.Get("X-Edge-Token")
+	if edgeToken == "" {
+		respondJSON(w, http.StatusUnauthorized, map[string]string{"error": "missing edge token"})
+		return
+	}
+
+	hash := sha256.Sum256([]byte(edgeToken))
+	hashStr := hex.EncodeToString(hash[:])
+
+	authorized := false
+	for _, node := range s.cfg.EdgeNodes {
+		if node.TokenHash == hashStr {
+			authorized = true
+			break
+		}
+	}
+
+	if !authorized {
+		respondJSON(w, http.StatusUnauthorized, map[string]string{"error": "invalid edge token"})
+		return
+	}
+
+	var edgeReq struct {
+		ActorID    string `json:"actor_id"`
+		Action     string `json:"action"`
+		TargetType string `json:"target_type"`
+		TargetID   string `json:"target_id"`
+		Details    string `json:"details"`
+		IPAddress  string `json:"ip_address"`
+	}
+
+	if err := json.NewDecoder(r.Body).Decode(&edgeReq); err != nil {
+		respondJSON(w, http.StatusBadRequest, map[string]string{"error": "invalid JSON payload"})
+		return
+	}
+
+	if s.db != nil {
+		entry := &db.AuditEntry{
+			ActorID:    edgeReq.ActorID,
+			Action:     edgeReq.Action,
+			TargetType: edgeReq.TargetType,
+			TargetID:   edgeReq.TargetID,
+			Details:    edgeReq.Details,
+			IPAddress:  edgeReq.IPAddress,
+		}
+		if err := s.db.WriteAuditEntry(entry); err != nil {
+			log.Printf("[Server Control] Failed to write forwarded audit entry: %v", err)
+		}
+	}
+
+	w.WriteHeader(http.StatusOK)
 }

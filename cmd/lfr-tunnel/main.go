@@ -6,6 +6,7 @@ import (
 	"flag"
 	"fmt"
 	"log"
+	"net/http"
 	"os"
 	"os/exec"
 	"os/signal"
@@ -13,6 +14,7 @@ import (
 	"runtime"
 	"strconv"
 	"strings"
+	"sync"
 	"syscall"
 	"time"
 
@@ -56,6 +58,7 @@ func main() {
 	noTUI := flag.Bool("no-tui", false, "Disable interactive terminal dashboard UI")
 	passcode := flag.String("passcode", "", "Passcode to protect the public tunnel URLs")
 	whitelistIP := flag.String("whitelist-ip", "", "Comma-separated IP addresses allowed to access the tunnel")
+	region := flag.String("region", "", "Gateway region to target (e.g. eu, us-east, us-west, latam, apac)")
 
 	flag.Parse()
 
@@ -105,6 +108,11 @@ func main() {
 	if *whitelistIP != "" {
 		cfg.WhitelistIPs = *whitelistIP
 	}
+	if *region != "" {
+		cfg.Region = *region
+	}
+
+	resolveServerURL(cfg)
 
 	if *upgradeFlag {
 		if err := client.SelfUpgrade(config.Version, cfg.ServerURL); err != nil {
@@ -700,4 +708,68 @@ func handleStatusJSON(sub string, targetSpecific bool) {
 		return
 	}
 	fmt.Println(string(outputBytes))
+}
+
+func resolveServerURL(cfg *config.ClientConfig) {
+	if cfg.Region == "" {
+		if len(cfg.Regions) > 0 {
+			log.Printf("[Client] No region specified. Performing latency auto-probing across %d regions...", len(cfg.Regions))
+			bestRegion := probeFastestRegion(cfg.Regions)
+			if bestRegion != "" {
+				cfg.Region = bestRegion
+				cfg.ServerURL = cfg.Regions[bestRegion]
+				log.Printf("[Client] Auto-detected best region: '%s' -> %s", bestRegion, cfg.ServerURL)
+			}
+		}
+		return
+	}
+
+	regionLower := strings.ToLower(strings.TrimSpace(cfg.Region))
+	if url, ok := cfg.Regions[regionLower]; ok {
+		cfg.ServerURL = url
+		log.Printf("[Client] Selected region '%s' -> %s", regionLower, url)
+	} else {
+		log.Printf("[Client] Warning: Unknown region '%s'. Using default server URL: %s", regionLower, cfg.ServerURL)
+	}
+}
+
+func probeFastestRegion(regions map[string]string) string {
+	type probeResult struct {
+		region string
+		url    string
+		rtt    time.Duration
+	}
+	ch := make(chan probeResult, len(regions))
+	client := &http.Client{
+		Timeout: 1500 * time.Millisecond,
+		CheckRedirect: func(req *http.Request, via []*http.Request) error {
+			return http.ErrUseLastResponse
+		},
+	}
+
+	var wg sync.WaitGroup
+	for reg, u := range regions {
+		wg.Add(1)
+		go func(r, targetURL string) {
+			defer wg.Done()
+			start := time.Now()
+			resp, err := client.Get(targetURL + "/api/healthz")
+			if err == nil {
+				_ = resp.Body.Close()
+				rtt := time.Since(start)
+				ch <- probeResult{region: r, url: targetURL, rtt: rtt}
+			}
+		}(reg, u)
+	}
+
+	go func() {
+		wg.Wait()
+		close(ch)
+	}()
+
+	first, ok := <-ch
+	if ok {
+		return first.region
+	}
+	return ""
 }

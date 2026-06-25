@@ -1,0 +1,77 @@
+version: '3.8'
+
+services:
+  # 1. Mock Liferay target instance
+  mock-target:
+    image: nginx:alpine
+    volumes:
+      - ./mock-html:/usr/share/nginx/html
+    expose:
+      - "80"
+
+  # 2. Mailpit SMTP catcher
+  mailpit:
+    image: axllent/mailpit
+    ports:
+      - "8025:8025" # Web UI / REST API
+    expose:
+      - "1025" # SMTP Port
+
+  # 3. Control Plane Gateway
+  lfr-tunneld-control:
+    build:
+      context: ../../
+      dockerfile: cmd/lfr-tunneld/Dockerfile
+    command: ["--config", "/etc/lfr-tunneld/server-config-control.yaml"]
+    volumes:
+      - ./server-config-control.yaml:/etc/lfr-tunneld/server-config-control.yaml:ro
+    expose:
+      - "8080"
+      - "8081"
+    depends_on:
+      - mailpit
+
+  # 3b. Stateless Edge Node Gateway
+  lfr-tunneld-edge:
+    build:
+      context: ../../
+      dockerfile: cmd/lfr-tunneld/Dockerfile
+    command: ["--config", "/etc/lfr-tunneld/server-config-edge.yaml"]
+    volumes:
+      - ./server-config-edge.yaml:/etc/lfr-tunneld/server-config-edge.yaml:ro
+    expose:
+      - "8090"
+      - "8091"
+    depends_on:
+      - lfr-tunneld-control
+
+  # 4. Nginx Reverse Proxy (VPS Mirror)
+  nginx-proxy:
+    image: nginx:alpine
+    volumes:
+      - ./nginx-edge.conf:/etc/nginx/nginx.conf:ro
+    ports:
+      - "8000:80"
+    networks:
+      default:
+        aliases:
+          - tunnel.lfr-demo.local
+          - lfr-demo.local
+          - us.lfr-demo.local
+    depends_on:
+      - lfr-tunneld-control
+      - lfr-tunneld-edge
+
+  # 5. Client CLI Container
+  lfr-tunnel:
+    build:
+      context: ../../
+      dockerfile: Dockerfile
+    environment:
+      - LFT_TARGET_HOST=mock-target
+      - LFT_TARGET_PORT=80
+    entrypoint: ["sleep", "infinity"]
+    volumes:
+      - ./client-config-edge.yaml:/root/client-config-edge.yaml:ro
+    depends_on:
+      - nginx-proxy

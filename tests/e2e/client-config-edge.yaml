@@ -1,0 +1,4 @@
+server_url: "http://tunnel.lfr-demo.local"
+regions:
+  eu: "http://tunnel.lfr-demo.local"
+  us: "http://us.lfr-demo.local"

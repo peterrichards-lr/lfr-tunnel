@@ -135,6 +135,11 @@ func TestProxyHandler_AccessControls(t *testing.T) {
 	}
 	_ = database.CreateSubdomainReservation(reservation)
 
+	freePort, err := getFreePort()
+	if err != nil {
+		t.Fatalf("failed to get free port: %v", err)
+	}
+
 	// 2. Setup registry with lease
 	chiselServer, _ := chserver.NewServer(&chserver.Config{Reverse: true})
 	reg := NewRegistry(chiselServer)
@@ -145,8 +150,8 @@ func TestProxyHandler_AccessControls(t *testing.T) {
 		SubdomainPrefix: "protected-se",
 		FullHost:        "protected-se.liferay.com",
 		SessionToken:    "test-token",
-		LocalPort:       8080,
-		TargetPort:      8080,
+		LocalPort:       freePort,
+		TargetPort:      freePort,
 		CreatedAt:       time.Now(),
 	}
 	reg.Unlock()

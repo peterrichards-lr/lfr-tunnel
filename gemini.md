@@ -183,6 +183,7 @@ The solution will consist of:
 | **3. Client-Initiated Access Control** | Gateway-level IP whitelisting or passcode screen on the public URL. | Low | Medium | High | **High** |
 | **4. Vanity Domain Routing (SNI)** | Route custom domains directly with on-the-fly gateway SSL provisioning. | High | Large | High | **Medium** |
 | **5. Latency & Bandwidth Simulation** | Throttle traffic and inject network latency from client CLI settings. | Medium | Small | Medium | **Medium** |
+| **6. Edge Node Health & Heartbeat** | Stateless edge nodes ping central server for global uptime visibility in Admin Portal UI. | Low | Medium | High | **Medium** |
 
 
 ## SentinelOne False Positive Mitigation
@@ -255,6 +256,7 @@ The solution will consist of:
 - [x] Support dynamic inspector binding address based on Docker detection and LFT_INSPECTOR_BIND.
 - [x] Document LFT_INSPECTOR_BIND in setup guide / SE guide.
 - [x] Bump version to v1.7.13 in whats-new.json, tag, and push to trigger release CI workflow.
+- [x] Fix dashboard double 'v' prefix bug and false-positive "Update Available" warning for newer clients.
 
 ## Subdomain Reservation System (v1.8.0)
 - [x] Declutter Active Tunnels dashboard table by moving detailed fields into a new Tunnel Details Dialog Modal (with Copy Link, On-Demand Refresh, and Admin controls).
@@ -553,4 +555,33 @@ The solution will consist of:
   - [x] Replace prefix check + TrimPrefix with unconditional `strings.TrimPrefix` in `pkg/server/server.go:L3572`.
 - [x] Run validation tests locally.
 - [x] Commit, push branch, and create Pull Request linking to Issue #193.
+
+## Nginx Portal Redirect and Routing Updates
+- [x] Configure `tests/e2e/nginx.conf` control plane to proxy `/` to `lfr-tunneld:8080` (serving the portal).
+- [x] Configure `tests/e2e/nginx-edge.conf` control plane to proxy `/` to `lfr-tunneld-control:8080`.
+- [x] Update `docs/setup_guide.md` template to recommend proxying `/` to the daemon rather than redirecting to liferay.com.
+- [x] Verify local tests and E2E integration test suites.
+
+## Nginx Regional Edge and Landing Domain Redirects
+- [x] Update VPS Nginx configuration to redirect `us.lfr-demo.se` and `us.lfr-demo.online` to `lfr-demo.se`.
+- [x] Update VPS Nginx configuration to redirect `lfr-demo.se` (and `lfr-demo.online`) to `portal.lfr-demo.se`.
+- [x] Add `portal.lfr-demo.se` and `portal.lfr-demo.online` (along with `tunnel` subdomains) to the Control Plane server block on VPS Nginx.
+- [x] Add the portal and tunnel subdomains to the domains configuration in the VPS `server-config.yaml` and local E2E configurations.
+- [x] Update Nginx template in edge installation script `scripts/setup-edge-vps.sh` to include this redirect.
+
+## PR Build and E2E Failures Fix (v1.17.1)
+- [x] Update `scripts/deploy.sh` and `scripts/setup-edge-vps.sh` to back up `/etc/lfr-tunneld/server-config.yaml` on the server before overwriting.
+- [x] Fix fragile unit test `TestProxyHandler_AccessControls` in `pkg/server/proxy_test.go` by using dynamic loopback ports via `getFreePort()`.
+- [x] Revert `portal.lfr-demo.local` and `tunnel.lfr-demo.local` subdomains from `domains` configuration in `tests/e2e/server-config.yaml`, `server-config-control.yaml`, and `server-config-sso.yaml`.
+- [x] Revert `portal.` and `tunnel.` subdomains from `domains` in the central VPS `/etc/lfr-tunneld/server-config.yaml`, keeping only `lfr-demo.se` and `lfr-demo.online`.
+- [x] Restore the `client_platforms` block and `docker_image`/`docker_bypass_url` customizations in the central VPS `/etc/lfr-tunneld/server-config.yaml`.
+- [x] Verify standard unit tests run successfully (`make test`).
+- [x] Verify E2E integration test suites pass locally (`make e2e` and `make e2e-sso`).
+
+## Re-prioritise Installer Script and Docker over Package Managers (Liferay SE Only)
+- [x] Retain Homebrew/Scoop in open-source repository defaults (`pkg/server/static/dashboard.js`, `tests/e2e/*`) to avoid imposing SE security constraints on the community.
+- [x] Update `client_platforms` in `/etc/lfr-tunneld/server-config.yaml` on the central VPS to remove Homebrew/Scoop options for the SE team.
+- [x] Restart `lfr-tunneld` on the central VPS to apply the explicit configuration overrides.
+- [x] Design and PR Offsite Edge Node Backup Sync (`scripts/sync-offsite-backups.sh`)
+
 

@@ -123,6 +123,7 @@
                 <div class="sidebar-label" style="margin-top: 24px;" data-i18n="sidebar_maintenance">Maintenance</div>
                 <div id="nav-maintenance" class="nav-item" onclick="showTab('maintenance')" data-i18n="sidebar_maintenance_mode">Gateway Maintenance</div>
                 <div id="nav-backups" class="nav-item" onclick="showTab('backups')" data-i18n="sidebar_backups">Database Backups</div>
+                <div id="nav-network-health" class="nav-item" onclick="showTab('network-health')">Network Health</div>
             </div>
             
             <div class="sidebar-spacer"></div>
@@ -565,6 +566,30 @@
                     <table>
                         <thead><tr><th data-sort="filename">Filename</th><th data-sort="size_bytes">Size</th><th data-sort="created_at">Created (UTC)</th></tr></thead>
                         <tbody id="backups-table-body"><tr><td colspan="3" style="text-align:center;opacity:0.6;">Loading...</td></tr></tbody>
+                    </table>
+                </div>
+            </div>
+
+            <!-- Network Health Tab -->
+            <div id="tab-network-health" class="hidden">
+                <div class="header">
+                    <h2>Network Health</h2>
+                    <button class="btn" onclick="loadNetworkHealth()">Refresh</button>
+                </div>
+                <div class="glass table-container">
+                    <table>
+                        <thead>
+                            <tr>
+                                <th>Region ID</th>
+                                <th>Status</th>
+                                <th>Latency</th>
+                                <th>Last Check</th>
+                                <th>Details</th>
+                            </tr>
+                        </thead>
+                        <tbody id="network-health-body">
+                            <tr><td colspan="5" style="text-align:center;opacity:0.6;">Loading...</td></tr>
+                        </tbody>
                     </table>
                 </div>
             </div>

@@ -137,6 +137,11 @@ server {
     include /etc/letsencrypt/options-ssl-nginx.conf;
     ssl_dhparam /etc/letsencrypt/ssl-dhparams.pem;
 
+    # Redirect root browser traffic to control plane landing page
+    location / {
+        return 301 https://lfr-demo.se\$request_uri;
+    }
+
     location /api/ {
         proxy_pass http://127.0.0.1:$EDGE_PORT;
         proxy_set_header Host \$http_host;
@@ -231,6 +236,9 @@ ssh $SSH_KEY_ARG $SSH_USER@$VPS_IP << REMOTE_SSH
 
   # Config setup
   sudo mkdir -p /etc/lfr-tunneld
+  if [ -f /etc/lfr-tunneld/server-config.yaml ]; then
+    sudo cp /etc/lfr-tunneld/server-config.yaml /etc/lfr-tunneld/server-config.yaml.backup-\$(date +%Y-%m-%d_%H-%M-%S)
+  fi
   sudo mv /home/$SSH_USER/server-config.yaml /etc/lfr-tunneld/server-config.yaml
   sudo chown -R lfr-tunnel:lfr-tunnel /etc/lfr-tunneld
   sudo chmod 700 /etc/lfr-tunneld

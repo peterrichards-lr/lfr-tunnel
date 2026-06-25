@@ -1,5 +1,5 @@
 {
-  "version": "v1.19.2",
+  "version": "v1.19.3",
   "release_date": "2026-06-25",
   "features": [
     "Fixed Network Health dashboard exception error rendering to provide detailed diagnostic information",

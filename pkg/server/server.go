@@ -85,6 +85,13 @@ type ipLimiter struct {
 	lastSeen time.Time
 }
 
+type EdgeHealthStatus struct {
+	Status       string `json:"status"`
+	LatencyMs    int64  `json:"latency_ms"`
+	LastCheckAt  int64  `json:"last_check_at"`
+	ErrorMessage string `json:"error_message,omitempty"`
+}
+
 // Server coordinates the entire gateway operations.
 type Server struct {
 	cfg                *config.ServerConfig
@@ -126,6 +133,8 @@ type Server struct {
 	startTime          time.Time
 	edgeLeases         map[string][]EdgeLease
 	edgeLeasesMu       sync.Mutex
+	edgeHealth         map[string]EdgeHealthStatus
+	edgeHealthMu       sync.RWMutex
 }
 
 // NewServer initializes and returns a new Server instance.
@@ -214,6 +223,7 @@ func NewServer(cfg *config.ServerConfig) (*Server, error) {
 		caCert:             caCert,
 		caKey:              caKey,
 		edgeLeases:         make(map[string][]EdgeLease),
+		edgeHealth:         make(map[string]EdgeHealthStatus),
 	}
 
 	srv.proxyHandler.db = database
@@ -767,6 +777,11 @@ func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 
 		if r.Method == http.MethodPost && r.URL.Path == "/api/me/delete-account" {
 			s.handleSelfDeleteAccount(w, r)
+			return
+		}
+
+		if r.Method == http.MethodGet && r.URL.Path == "/api/portal/edge-health" {
+			s.handleEdgeHealth(w, r)
 			return
 		}
 
@@ -1341,6 +1356,8 @@ func (s *Server) handleCheckSubdomain(w http.ResponseWriter, r *http.Request) {
 func (s *Server) Start() error {
 	// Start telemetry WebSocket tick loop
 	s.StartTelemetryTicker()
+
+	go s.monitorEdgeHealth()
 
 	// 1. Start Chisel Server on localhost:8081
 	go func() {
@@ -4852,4 +4869,57 @@ func (s *Server) handleEdgeKick(w http.ResponseWriter, r *http.Request) {
 	}
 
 	respondJSON(w, http.StatusNotFound, map[string]string{"error": "lease not found"})
+}
+
+func (s *Server) monitorEdgeHealth() {
+	for {
+		for _, edge := range s.cfg.EdgeNodes {
+			if edge.URL == "" {
+				continue
+			}
+
+			client := &http.Client{Timeout: 5 * time.Second}
+			start := time.Now()
+			req, err := http.NewRequest(http.MethodGet, edge.URL+"/api/healthz", nil)
+			if err != nil {
+				s.updateEdgeHealth(edge.ID, "Offline", 0, err.Error())
+				continue
+			}
+
+			req.Header.Set("User-Agent", "lfr-tunnel-health-monitor")
+
+			resp, err := client.Do(req)
+			latency := time.Since(start).Milliseconds()
+
+			if err != nil {
+				s.updateEdgeHealth(edge.ID, "Offline", latency, err.Error())
+				continue
+			}
+			_ = resp.Body.Close()
+
+			if resp.StatusCode == http.StatusOK {
+				s.updateEdgeHealth(edge.ID, "Online", latency, "")
+			} else {
+				s.updateEdgeHealth(edge.ID, "Offline", latency, fmt.Sprintf("HTTP %d", resp.StatusCode))
+			}
+		}
+		time.Sleep(60 * time.Second)
+	}
+}
+
+func (s *Server) updateEdgeHealth(id, status string, latency int64, errMsg string) {
+	s.edgeHealthMu.Lock()
+	defer s.edgeHealthMu.Unlock()
+	s.edgeHealth[id] = EdgeHealthStatus{
+		Status:       status,
+		LatencyMs:    latency,
+		LastCheckAt:  time.Now().Unix(),
+		ErrorMessage: errMsg,
+	}
+}
+
+func (s *Server) handleEdgeHealth(w http.ResponseWriter, r *http.Request) {
+	s.edgeHealthMu.RLock()
+	defer s.edgeHealthMu.RUnlock()
+	respondJSON(w, http.StatusOK, s.edgeHealth)
 }

@@ -183,6 +183,7 @@ The solution will consist of:
 | **3. Client-Initiated Access Control** | Gateway-level IP whitelisting or passcode screen on the public URL. | Low | Medium | High | **High** |
 | **4. Vanity Domain Routing (SNI)** | Route custom domains directly with on-the-fly gateway SSL provisioning. | High | Large | High | **Medium** |
 | **5. Latency & Bandwidth Simulation** | Throttle traffic and inject network latency from client CLI settings. | Medium | Small | Medium | **Medium** |
+| **6. Edge Node Health & Heartbeat** | Stateless edge nodes ping central server for global uptime visibility in Admin Portal UI. | Low | Medium | High | **Medium** |
 
 
 ## SentinelOne False Positive Mitigation
@@ -255,6 +256,7 @@ The solution will consist of:
 - [x] Support dynamic inspector binding address based on Docker detection and LFT_INSPECTOR_BIND.
 - [x] Document LFT_INSPECTOR_BIND in setup guide / SE guide.
 - [x] Bump version to v1.7.13 in whats-new.json, tag, and push to trigger release CI workflow.
+- [x] Fix dashboard double 'v' prefix bug and false-positive "Update Available" warning for newer clients.
 
 ## Subdomain Reservation System (v1.8.0)
 - [x] Declutter Active Tunnels dashboard table by moving detailed fields into a new Tunnel Details Dialog Modal (with Copy Link, On-Demand Refresh, and Admin controls).

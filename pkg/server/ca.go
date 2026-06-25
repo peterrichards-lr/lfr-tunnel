@@ -203,3 +203,53 @@ func GenerateClientP12(caCert *x509.Certificate, caKey *rsa.PrivateKey, identity
 
 	return pfxBytes, nil
 }
+
+// SignClientCSR parses a client CSR, signs it using the Root CA, and returns the PEM certificate.
+func SignClientCSR(caCert *x509.Certificate, caKey *rsa.PrivateKey, csrPEM []byte, identity string, validityDays int) ([]byte, error) {
+	block, _ := pem.Decode(csrPEM)
+	if block == nil || (block.Type != "CERTIFICATE REQUEST" && block.Type != "NEW CERTIFICATE REQUEST") {
+		return nil, fmt.Errorf("invalid CSR PEM format")
+	}
+
+	csr, err := x509.ParseCertificateRequest(block.Bytes)
+	if err != nil {
+		return nil, fmt.Errorf("failed to parse CSR: %w", err)
+	}
+
+	if err := csr.CheckSignature(); err != nil {
+		return nil, fmt.Errorf("CSR signature verification failed: %w", err)
+	}
+
+	serialNumberLimit := new(big.Int).Lsh(big.NewInt(1), 128)
+	serialNumber, err := rand.Int(rand.Reader, serialNumberLimit)
+	if err != nil {
+		return nil, fmt.Errorf("failed to generate client serial number: %w", err)
+	}
+
+	// Enforce CN to match identity
+	subject := csr.Subject
+	subject.CommonName = identity
+
+	template := &x509.Certificate{
+		SerialNumber:          serialNumber,
+		Subject:               subject,
+		NotBefore:             time.Now().Add(-5 * time.Minute),
+		NotAfter:              time.Now().AddDate(0, 0, validityDays),
+		KeyUsage:              x509.KeyUsageDigitalSignature | x509.KeyUsageKeyEncipherment,
+		ExtKeyUsage:           []x509.ExtKeyUsage{x509.ExtKeyUsageClientAuth},
+		BasicConstraintsValid: true,
+		IsCA:                  false,
+	}
+
+	derBytes, err := x509.CreateCertificate(rand.Reader, template, caCert, csr.PublicKey, caKey)
+	if err != nil {
+		return nil, fmt.Errorf("failed to sign client certificate from CSR: %w", err)
+	}
+
+	certPEM := pem.EncodeToMemory(&pem.Block{
+		Type:  "CERTIFICATE",
+		Bytes: derBytes,
+	})
+
+	return certPEM, nil
+}

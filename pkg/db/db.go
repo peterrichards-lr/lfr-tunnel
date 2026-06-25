@@ -113,6 +113,19 @@ type SubdomainACL struct {
 	CreatedAt time.Time  `json:"created_at"`
 }
 
+type GuestInvitation struct {
+	ID        int64      `json:"id"`
+	Token     string     `json:"token"`
+	Subdomain string     `json:"subdomain"`
+	Domain    string     `json:"domain"`
+	Name      string     `json:"name"`
+	Email     string     `json:"email"`
+	ExpiresAt time.Time  `json:"expires_at"`
+	CreatedBy string     `json:"created_by"`
+	ClaimedAt *time.Time `json:"claimed_at,omitempty"`
+	CreatedAt time.Time  `json:"created_at"`
+}
+
 type PersonalAccessToken struct {
 	ID          int64      `json:"id"`
 	UserID      string     `json:"user_id"`
@@ -315,6 +328,19 @@ func (db *DB) initSchema() error {
 		id INTEGER PRIMARY KEY AUTOINCREMENT,
 		start_time DATETIME NOT NULL,
 		end_time DATETIME
+	);
+
+	CREATE TABLE IF NOT EXISTS guest_invitations (
+		id INTEGER PRIMARY KEY AUTOINCREMENT,
+		token TEXT UNIQUE NOT NULL,
+		subdomain TEXT NOT NULL,
+		domain TEXT NOT NULL,
+		name TEXT NOT NULL,
+		email TEXT NOT NULL,
+		expires_at DATETIME NOT NULL,
+		created_by TEXT NOT NULL,
+		claimed_at DATETIME,
+		created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
 	);
 	`
 
@@ -1595,4 +1621,167 @@ func (db *DB) GetGatewayRuns(limit int) ([]*GatewayRun, error) {
 		list = append(list, &r)
 	}
 	return list, nil
+}
+
+// CreateGuestInvitation saves a new invitation.
+func (db *DB) CreateGuestInvitation(invite *GuestInvitation) error {
+	if invite.CreatedAt.IsZero() {
+		invite.CreatedAt = time.Now().UTC()
+	}
+	res, err := db.conn.Exec(`
+		INSERT INTO guest_invitations (token, subdomain, domain, name, email, expires_at, created_by, claimed_at, created_at)
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+	`, invite.Token, invite.Subdomain, invite.Domain, invite.Name, invite.Email, invite.ExpiresAt, invite.CreatedBy, invite.ClaimedAt, invite.CreatedAt)
+	if err != nil {
+		return err
+	}
+	id, err := res.LastInsertId()
+	if err != nil {
+		return err
+	}
+	invite.ID = id
+	return nil
+}
+
+// GetGuestInvitationByToken retrieves an invitation by token.
+func (db *DB) GetGuestInvitationByToken(token string) (*GuestInvitation, error) {
+	var invite GuestInvitation
+	var claimedAt sql.NullTime
+
+	err := db.conn.QueryRow(`
+		SELECT id, token, subdomain, domain, name, email, expires_at, created_by, claimed_at, created_at
+		FROM guest_invitations
+		WHERE token = ?
+	`, token).Scan(&invite.ID, &invite.Token, &invite.Subdomain, &invite.Domain, &invite.Name, &invite.Email, &invite.ExpiresAt, &invite.CreatedBy, &claimedAt, &invite.CreatedAt)
+	if err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			return nil, ErrNotFound
+		}
+		return nil, err
+	}
+
+	if claimedAt.Valid {
+		invite.ClaimedAt = &claimedAt.Time
+	}
+	return &invite, nil
+}
+
+// MarkGuestInvitationClaimed marks an invitation as claimed.
+func (db *DB) MarkGuestInvitationClaimed(token string) error {
+	_, err := db.conn.Exec(`
+		UPDATE guest_invitations
+		SET claimed_at = ?
+		WHERE token = ?
+	`, time.Now().UTC(), token)
+	return err
+}
+
+// ListGuestInvitationsByCreator lists all guest invitations created by a user.
+func (db *DB) ListGuestInvitationsByCreator(createdBy string) ([]*GuestInvitation, error) {
+	rows, err := db.conn.Query(`
+		SELECT id, token, subdomain, domain, name, email, expires_at, created_by, claimed_at, created_at
+		FROM guest_invitations
+		WHERE created_by = ?
+		ORDER BY created_at DESC
+	`, createdBy)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close() //nolint:errcheck
+
+	var list []*GuestInvitation
+	for rows.Next() {
+		var invite GuestInvitation
+		var claimedAt sql.NullTime
+		err := rows.Scan(&invite.ID, &invite.Token, &invite.Subdomain, &invite.Domain, &invite.Name, &invite.Email, &invite.ExpiresAt, &invite.CreatedBy, &claimedAt, &invite.CreatedAt)
+		if err != nil {
+			return nil, err
+		}
+		if claimedAt.Valid {
+			invite.ClaimedAt = &claimedAt.Time
+		}
+		list = append(list, &invite)
+	}
+	return list, nil
+}
+
+// DeleteGuestInvitation deletes an invitation by ID and also cleans up any associated SubdomainACL entry.
+func (db *DB) DeleteGuestInvitation(id int64) error {
+	var token, subdomain, domain string
+	err := db.conn.QueryRow("SELECT token, subdomain, domain FROM guest_invitations WHERE id = ?", id).Scan(&token, &subdomain, &domain)
+	if err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			return nil
+		}
+		return err
+	}
+
+	tx, err := db.conn.Begin()
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback() //nolint:errcheck
+
+	_, err = tx.Exec("DELETE FROM guest_invitations WHERE id = ?", id)
+	if err != nil {
+		return err
+	}
+
+	_, err = tx.Exec("DELETE FROM subdomain_acl WHERE subdomain = ? AND domain = ? AND identity = ?", subdomain, domain, "guest:"+token)
+	if err != nil {
+		return err
+	}
+
+	return tx.Commit()
+}
+
+// ListAllGuestInvitations lists all invitations in the system.
+func (db *DB) ListAllGuestInvitations() ([]*GuestInvitation, error) {
+	rows, err := db.conn.Query(`
+		SELECT id, token, subdomain, domain, name, email, expires_at, created_by, claimed_at, created_at
+		FROM guest_invitations
+		ORDER BY created_at DESC
+	`)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close() //nolint:errcheck
+
+	var list []*GuestInvitation
+	for rows.Next() {
+		var invite GuestInvitation
+		var claimedAt sql.NullTime
+		err := rows.Scan(&invite.ID, &invite.Token, &invite.Subdomain, &invite.Domain, &invite.Name, &invite.Email, &invite.ExpiresAt, &invite.CreatedBy, &claimedAt, &invite.CreatedAt)
+		if err != nil {
+			return nil, err
+		}
+		if claimedAt.Valid {
+			invite.ClaimedAt = &claimedAt.Time
+		}
+		list = append(list, &invite)
+	}
+	return list, nil
+}
+
+// GetGuestInvitation retrieves an invitation by ID.
+func (db *DB) GetGuestInvitation(id int64) (*GuestInvitation, error) {
+	var invite GuestInvitation
+	var claimedAt sql.NullTime
+
+	err := db.conn.QueryRow(`
+		SELECT id, token, subdomain, domain, name, email, expires_at, created_by, claimed_at, created_at
+		FROM guest_invitations
+		WHERE id = ?
+	`, id).Scan(&invite.ID, &invite.Token, &invite.Subdomain, &invite.Domain, &invite.Name, &invite.Email, &invite.ExpiresAt, &invite.CreatedBy, &claimedAt, &invite.CreatedAt)
+	if err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			return nil, ErrNotFound
+		}
+		return nil, err
+	}
+
+	if claimedAt.Valid {
+		invite.ClaimedAt = &claimedAt.Time
+	}
+	return &invite, nil
 }

@@ -514,11 +514,11 @@ The solution will consist of:
 - [x] Implement database migrations on the server gateway to support `passcode`, `whitelist_ips`, and `access_mode` in the `subdomain_reservations` and `subdomain_acl` tables.
 - [x] Implement client-side CLI flags (`--passcode`, `--whitelist-ip`) and load them into `ClientConfig` with support for both YAML file and CLI options.
 - [x] Implement Root CA generation, client certificate signing (PKCS#12 bundle `.p12` format creation), and database ACL verification on the gateway.
-- [ ] Create the HTML templates for the Passcode Verification screen (`passcode.html`) and the "Access Denied" IP restriction screen (`unauthorized_ip.html`), serving them dynamically.
-- [ ] Implement the Guest Invitation workflow endpoints (invitations, magic enrollment link, browser certificate download).
+- [x] Create the HTML templates for the Passcode Verification screen (`passcode.html`) and the "Access Denied" IP restriction screen (`unauthorized_ip.html`), serving them dynamically.
+- [x] Implement the Guest Invitation workflow endpoints (invitations, magic enrollment link, browser certificate download).
 - [ ] Update the local Client Inspector dashboard to add an "Access Control" management panel that handles dynamic updates back to the gateway.
 - [ ] Expose a read-only "Access Control" status display in the central Admin/User Portal Dashboard under the Tunnel Details Modal.
-- [ ] Write unit tests for access control validation, IP matching, PKCS#12 signing, and E2E integration test verification.
+- [/] Write unit tests for access control validation, IP matching, PKCS#12 signing (E2E integration test verification pending).
 
 ## Centralize Logo and Favicon for Easy Branding Customization (v1.16.0) - Issue #182
 - [x] Extract the SVG vector logo to `pkg/server/static/logo.svg` and reference it via standard `<img>` tags across all templates and static HTML files.

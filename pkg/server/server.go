@@ -728,6 +728,31 @@ func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 
+		if r.Method == http.MethodGet && r.URL.Path == "/api/portal/invitations" {
+			s.handleListInvitations(w, r)
+			return
+		}
+
+		if r.Method == http.MethodPost && r.URL.Path == "/api/portal/invitations" {
+			s.handleCreateInvitation(w, r)
+			return
+		}
+
+		if r.Method == http.MethodDelete && strings.HasPrefix(r.URL.Path, "/api/portal/invitations/") {
+			s.handleDeleteInvitation(w, r)
+			return
+		}
+
+		if r.Method == http.MethodGet && r.URL.Path == "/api/portal/invitations/claim" {
+			s.handleClaimInvitation(w, r)
+			return
+		}
+
+		if r.Method == http.MethodPost && r.URL.Path == "/api/portal/csr/sign" {
+			s.handleCSRSignInvitation(w, r)
+			return
+		}
+
 		if r.Method == http.MethodGet && r.URL.Path == "/api/mfa/setup" {
 			s.handleMFASetup(w, r)
 			return

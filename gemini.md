@@ -14,7 +14,7 @@ Build an open-source, MIT-licensed tunneling solution tailored for Liferay's Sal
   - Ensure all temporary certificate and private key files are completely deleted before making any git commits to prevent accidental exposure in the repository history.
 - **Local Binary Execution Constraints**: The local system EDR blocks unsigned `lfr-tunnel`/`lfr-tunneld` binaries and Go test run executables (`*.test`). However, execution is permitted within the `/private/tmp` directory. To run Go tests safely, set `TMPDIR=/private/tmp` so that the Go test binaries are built and executed inside the whitelisted `/private/tmp` path.
 - **Git Conflict Prevention & PR Management**: Because remote GitHub cannot evaluate custom merge drivers defined in `.gitattributes`, the AI assistant must always run `git fetch origin` followed by `git merge origin/master` locally to resolve any potential `gemini.md` conflict before pushing commits or creating/updating a PR.
-
+- **Strict Branch Protection Compliance**: The AI assistant must never use administrative privileges (e.g., `gh pr merge --admin`) to bypass branch protection rules or CI/CD status checks. The rules must be followed to the letter. All changes must be pushed to a branch, a PR raised, and the assistant must wait for the required CI checks to pass and for the user to explicitly approve or merge the PR.
 
 
 

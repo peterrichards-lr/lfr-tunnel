@@ -51,6 +51,7 @@ To automate the release lifecycle (bumping the version in `whats-new.json`, crea
   ```
   - `NEW_VERSION_TAG` must follow semantic versioning (e.g., `v1.17.0`).
   - *Note: You must be on the `master` branch with a clean working tree (no uncommitted changes other than `gemini.md`) before running this script.*
+  - **CRITICAL COMPLIANCE NOTE**: Never use `--admin` to bypass branch protection rules to merge the resulting PR, or any other PR. The AI assistant must let CI/CD checks pass naturally and follow the repository rules to the letter.
 
 ---
 

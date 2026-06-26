@@ -125,7 +125,7 @@ if git rev-parse "refs/tags/$NEW_VER" >/dev/null 2>&1; then
     echo "❌ Error: Git tag '$NEW_VER' already exists locally."
     exit 1
 fi
-git fetch origin --tags --quiet
+git fetch origin --tags --force --quiet
 if git ls-remote --tags origin "refs/tags/$NEW_VER" | grep -q "$NEW_VER"; then
     echo "❌ Error: Git tag '$NEW_VER' already exists on remote origin."
     exit 1

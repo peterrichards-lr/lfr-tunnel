@@ -270,7 +270,7 @@ The solution will consist of:
 - [x] Implement subdomain quarantine period and HTTP 410 Gone fallback page.
 - [x] Build portal UI dashboard panel and admin control views.
 - [x] Fix duplicate repoUrl declaration in pkg/server/static/dashboard.js to resolve stuck loading spinner.
-- [ ] Integrate Javascript syntax validation (node -c) into pre-commit-hook.sh and CI/CD ci.yml workflow.
+- [x] Integrate Javascript syntax validation (node -c) into pre-commit-hook.sh and CI/CD ci.yml workflow.
 - [x] Restrict 'Never' API token expiration option to admin and owner roles on both server and client.
 - [x] Write unit and E2E integration tests for the reservation flow.
 - [x] Fix E2E integration tests failure by updating `tests/e2e/run.sh` to reserve the subdomain before tunnel connection.
@@ -330,11 +330,12 @@ The solution will consist of:
 ## Future Roadmap Suggestions
 - [x] Implement client-side Terminal UI (TUI) Dashboard for active connection metrics and scrolling request paths.
 - [x] Create local Request Inspector & Replay web dashboard (similar to Ngrok's local interface) for debugging client extensions and webhooks.
-- [ ] Implement multi-region edge VPS gateways to reduce demo latency globally.
+- [x] Implement multi-region edge VPS gateways to reduce demo latency globally.
 - [x] Integrate tunnel provisioning directly into Liferay Development Manager (LDM) execution loops.
 - [x] Implement live WebSocket-driven telemetry updates in the portal Admin Web Dashboard.
 
 - [x] Integrate a lightweight Web Application Firewall (WAF) shield on the gateway to filter basic exploit payloads during public presentations.
+- [ ] Implement server-side configuration flag (force_mfa) to enforce TOTP MFA setup during onboarding.
 
 ## Dynamic Loopback Port Routing Fix (v1.9.4)
 - [x] Explicitly bind the reverse tunnel listening port on the server side to `127.0.0.1` by prefixing it in the dynamic remote format returned by `/api/register`.
@@ -523,7 +524,7 @@ The solution will consist of:
 - [x] Update the local Client Inspector dashboard to add an "Access Control" management panel that handles dynamic updates back to the gateway.
 - [x] Expose a read-only "Access Control" status display in the central Admin/User Portal Dashboard under the Tunnel Details Modal.
 - [x] Write unit tests for access control validation, IP matching, PKCS#12 signing (E2E integration test verification pending).
-- [ ] Release, tag, and deploy v1.16.0 of lfr-tunnel to GitHub and VPS.
+- [x] Release, tag, and deploy v1.16.0 of lfr-tunnel to GitHub and VPS.
 - [x] Fix duplicate repoUrl declaration in pkg/server/static/dashboard.js to resolve stuck loading spinner.
 - [x] Update project rules in .agents/AGENTS.md and CONTRIBUTING.md to enforce GitHub issue linking for branches and PRs.
 

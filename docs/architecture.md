@@ -1,6 +1,6 @@
 # Liferay Tunnel (lfr-tunnel) Routing & Architecture Guide
 
-This guide provides a detailed technical overview of how `lfr-tunnel` handles dynamic subdomain routing, SSL offloading, Liferay header injection, and connection resilience.
+This guide provides a detailed technical overview of how `lfr-tunnel` handles dynamic subdomain routing, SSL offloading, Liferay header injection, connection resilience, user authentication, and data plane security.
 
 ---
 
@@ -131,21 +131,9 @@ Here is how `lfr-tunnel` resolves this:
 
 ## 6. Configurable Domain Routing
 
-The `lfr-tunnel` routing system is designed to support any two domains you control. The gateway operator configures the domains via the `domain1` and `domain2` fields in `server-config.yaml`. All wildcard subdomain routing, registration validation, and public URL generation are driven by these two values.
+The `lfr-tunnel` routing system is designed to support any domains you control. The gateway operator configures the domains via the `domains` list parameter in `server-config.yaml`. All wildcard subdomain routing, registration validation, and public URL generation are driven by these values.
 
-```yaml
-# Example: a self-hosted instance
-domain1: "yourdomain.com"
-domain2: "yourdomain.org"
-```
-
-Any dynamic registration request (`/api/register`) with a `subdomain_prefix` will be mapped to wildcards on both configured domains. Requests arriving with a `Host` header that does not match either domain (or the tunnel control domain `tunnel.<domain1>`) are rejected by the routing plane.
-
-**Liferay SE hosted instance** uses the following configuration:
-*   `domain1`: **`lfr-demo.se`** — Primary domain for Sales Engineering demonstrations.
-*   `domain2`: **`lfr-demo.online`** — Secondary mirror domain.
-
-> See [Liferay SE Quick-Start Guide](liferay-se-guide.md) for team-specific registration and usage instructions.
+Any dynamic registration request (`/api/register`) with a `subdomain_prefix` will be mapped to wildcards on all configured domains. Requests arriving with a `Host` header that does not match either domain (or the tunnel control domain `tunnel.<domain1>`) are rejected by the routing plane.
 
 ---
 
@@ -167,20 +155,9 @@ Integrating web dashboards with `fail2ban` requires the Go application to execut
 2. **Subdomain Data Plane Limiting**: 
    A global Admin ceiling (`MaxTunnelRateLimit`) limits traffic flow across all tunnels. Furthermore, a developer can start the CLI with `lfr-tunnel -rate-limit 5` to restrict incoming traffic hitting their specific laptop to 5 requests per second, protecting fragile local runtime environments from sudden traffic surges.
 
-## 8. Admin Web Dashboard
-
-The gateway serves a native **Admin Web Dashboard** at `/admin`. To avoid complex deployment pipelines (like Node.js servers, npm builds, or asset servers), the frontend is a zero-dependency Vanilla HTML/CSS/JS Single Page Application (SPA).
-Using Go's `//go:embed` directive, the `admin.html` file is compiled directly into the `lfr-tunneld` binary, ensuring it executes purely from memory.
-
-**Key Dashboard Capabilities:**
-- **Secure Authentication**: The UI uses your static `Admin PAT` to authenticate API calls via the `Authorization: Bearer` header. No tokens or secrets are exposed in the HTML/JS.
-- **Lease Management**: Admins can view active tunnels (including the client's public IP) and forcefully terminate abusive connections.
-- **IPS / Defense Management**: Admins can manually add or unban IP addresses from the global IP Blacklist.
-- **Audit View**: A real-time timeline of `ip.blacklisted`, `user.registered`, and `lease.kicked` system events.
-
 ---
 
-## 9. Client-Side Interceptor Architecture
+## 8. Client-Side Interceptor Architecture
 
 To achieve absolute feature parity with premium tunneling solutions like `ngrok`, `lfr-tunnel` implements a highly capable **Client-Side Interceptor Engine** (`pkg/client/interceptor.go`). 
 Rather than passing the Chisel connection directly to the target local Liferay instance, the `lfr-tunnel` CLI transparently injects a reverse proxy on a dynamic local port *between* the tunnel and Tomcat.
@@ -189,16 +166,14 @@ Rather than passing the Chisel connection directly to the target local Liferay i
 
 1. **Header Manipulation (`-add-header`)**:
    SEs can inject arbitrary HTTP headers (e.g., `-add-header "X-Bypass-CORS: true"`) at runtime. The interceptor injects these into every incoming request before Liferay sees them, bypassing restrictive local domain configurations without touching Tomcat config files.
-
 2. **Local Traffic Inspector (`http://localhost:4040`)**:
    The interceptor buffers the last 100 HTTP requests and their corresponding responses (up to 10KB of body payloads each). It serves a rich, real-time SPA dashboard via `//go:embed` on `localhost:4040` (automatically binding to `0.0.0.0` inside containerized execution to support host port mapping, or custom interfaces via the `LFT_INSPECTOR_BIND` environment variable). SEs can watch Webhooks hit their local machine and inspect the exact JSON payloads natively.
-
 3. **Maintenance Mode**:
    From the Inspector dashboard, developers can instantly toggle **Maintenance Mode**. The interceptor ceases forwarding traffic to Tomcat and immediately returns a `503 Service Unavailable` with a Liferay-branded fallback HTML page. This allows SEs to reboot their local Tomcat without killing the `lfr-tunnel` process or losing their claimed subdomain.
 
 ---
 
-## 11. Client Release Integrity & Checksums Architecture
+## 9. Client Release Integrity & Checksums Architecture
 
 To ensure secure downloads and preserve binary integrity during client self-upgrades (`lfr-tunnel -upgrade`), `lfr-tunnel` compares the local binary's SHA256 hash against a centralized `checksums.txt` file generated during the automated build process.
 
@@ -209,22 +184,147 @@ Because of browser security policies and server-level routing constraints, this 
 2. **VPS Network Restrictions:** Bypassing this via a server-side proxy endpoint fails because the VPS gateway environment has strict network restrictions (or IP bans from GitHub DDoS defenses) that block outbound HTTPS traffic to `github.com` and `api.github.com` on port 443.
 
 ### The Solution: Decoupled 'checksums' CDN Branch
-To bridge this gap, the project utilizes a dedicated, unprotected **`checksums`** orphan branch on GitHub:
-1. **GitHub Actions Automation (`release.yml`):** During the automated release workflow, the runner compiles the binaries, calculates the SHA256 hashes, generates `checksums.txt`, and commits/pushes this file directly to the unprotected `checksums` branch (bypassing any `master` rulesets).
+To bridge this gap, the project utilizes a dedicated, unprotected **`checksums`** branch on GitHub:
+1. **GitHub Actions Automation (`release.yml`):** During the automated release workflow, the runner compiles the binaries, calculates the SHA256 hashes, generates `checksums.txt`, and commits/pushes this file directly to the unprotected `checksums` branch.
 2. **CORS-Enabled CDN Delivery:** Because Fastly's edge CDN for `raw.githubusercontent.com` natively supplies `Access-Control-Allow-Origin: *` CORS headers and is fully reachable by both the browser and the VPS, the client portal can safely fetch the checksums directly from `https://raw.githubusercontent.com/peterrichards-lr/lfr-tunnel/checksums/checksums.txt`.
 3. **Dynamic Verification:** The web portal dynamically parses this text file, matches the user's detected operating system to the correct binary filename, and displays the official SHA256 hash immediately below the installation terminal commands for manual or automated verification.
 
 ---
 
-## 10. Roadmap & Future Enhancements
+## 10. Authentication & User Lifecycle Architecture
 
-1. **Cloud User Portal (Requires SSO)**: 
-   Once Liferay SSO (OIDC) is integrated, the VPS Gateway will host a centralized web portal (e.g., `https://tunnel.lfr-demo.se/dashboard`) where authenticated Sales Engineers can manage their Long-Lived Developer Tokens, view their permanently reserved subdomains, and monitor their security status.
-2. **SSO Device Authorization Grant**:
-   To support "headless" autostart via the `install-service` feature, the SSO integration will generate a long-lived Developer Token (e.g., 90 days) instead of short-lived session cookies, allowing seamless, persistent background connections.
-3. **Configurable Email Alerting Engine**:
-   Extend the existing SMTP service into an event-driven notification hub. The Admin Dashboard will gain a "Settings" page to toggle specific admin alerts (e.g., *DDOS Auto-Bans*, *New User Registrations*). Once the Cloud User Portal is built, SEs will gain a similar UI to subscribe to their own specific tunnel events (e.g., *Tunnel Offline* or *Maintenance Mode Activated*).
-4. **Theming & Aesthetics Engine**:
-   Implement a global UI toggle allowing users (in both the Admin Dashboard and Local Inspector) to switch between a rich Dark Mode, a vibrant Light Mode, or automatically sync with their OS system preferences (time of day).
+To migrate `lfr-tunnel` from a single shared authentication token to a secure, multi-tenant system, the server gateway implements role-based access controls, dynamic OIDC logins, passwordless magic links, and per-user personal access tokens.
+
+```mermaid
+graph TD
+    subgraph DevMachine ["Developer Machine"]
+        CLI["lfr-tunnel CLI"]
+        Browser["System Browser"]
+    end
+
+    subgraph GWServer ["Gateway Server (lfr-tunneld)"]
+        API["Gateway Web Server"]
+        DB["SQLite / PostgreSQL"]
+        Chisel["Embedded Chisel Server"]
+    end
+
+    subgraph IdP ["Identity Provider"]
+        SSO["Liferay Portal SSO / OAuth2"]
+    end
+
+    CLI -->|"1. lfr-tunnel login"| API
+    API -->|"2. Redirect"| Browser
+    Browser -->|"3. Authenticate"| SSO
+    SSO -->|"4. Auth Code"| API
+    API -->|"5. Exchange Code & Sync User"| SSO
+    API -->|"6. Write User & Token"| DB
+    API -->|"7. Return PAT"| CLI
+    CLI -->|"8. Register Tunnel (with PAT)"| API
+    API -->|"9. Validate PAT"| DB
+    API -->|"10. Authorize Session"| Chisel
+```
+
+### 10.1. Self-Registration & Approval Flow
+Before Single Sign-On (SSO) is configured, developers can self-register. To prevent open-relay abuse, registrations go through an email-based administrative approval flow.
+Domain restrictions (e.g. `allowed_email_domains`) prevent registration from non-corporate email domains.
+
+```mermaid
+sequenceDiagram
+    autonumber
+    actor Dev as "Developer"
+    participant GW as "Gateway (lfr-tunneld)"
+    actor Admin as "Gateway Administrator"
+    
+    Dev->{GW}: "Visits /register (Enters Email, Name)"
+    Note over GW: Creates User with status='pending'
+    GW->>Admin: "Email Notification (Contains Approval Link)"
+    
+    Admin->>GW: "Clicks Approve Link (GET /admin/approve?user=dev&token=xyz)"
+    Note over GW: Updates status to 'approved'<br/>Generates Personal Access Token (PAT)
+    
+    GW->>Dev: "Email Notification (Contains Claim Link)"
+    Dev->>GW: "Visits /claim?token=abc to download PAT"
+```
+
+### 10.2. OAuth2/OIDC SSO Integration
+When OpenID Connect (OIDC) is enabled, the CLI login flow retrieves authorization codes and exchanges them with Keycloak, Google, or Liferay SSO, automatically provisioning the local `~/.lfr-tunnel/token` credentials.
+
+```mermaid
+sequenceDiagram
+    autonumber
+    actor Dev as "Developer"
+    participant CLI as "lfr-tunnel CLI"
+    participant Browser as "Default Browser"
+    participant GW as "Gateway (lfr-tunneld)"
+    participant SSO as "SSO Provider"
+
+    Dev->>CLI: "lfr-tunnel login"
+    Note over CLI: CLI starts local server on port 4444<br/>Generates PKCE verifier
+    CLI->>Browser: "Open browser to Gateway SSO Portal"
+    Browser->>GW: "GET /auth/login"
+    GW->>SSO: "Redirect to Identity Provider Auth"
+    Browser->>SSO: "User logs in"
+    SSO-->>Browser: "Redirect back to Gateway callback"
+    GW->>SSO: "POST token exchange request"
+    SSO-->>GW: "ID/Access Token payload"
+    Note over GW: Sync user and generate PAT
+    GW-->>Browser: "Redirect back to http://localhost:4444/callback?token=xxx"
+    Browser->>CLI: "Delivers PAT to local HTTP Listener"
+    Note over CLI: CLI saves token and shuts down listener
+    CLI-->>Dev: "Print Login Successful"
+```
+
+### 10.3. Passwordless Magic Link Authentication
+The Cloud User Portal and Admin Dashboard support passwordless magic links, sending short-lived (e.g. 10m) secure login tokens to users' email addresses. Clicking the verification link authorizes the browser session and automatically invalidates the token in the database.
 
 ---
+
+## 11. Database Schema (User, Roles, and Tokens)
+
+The server gateway utilizes a persistent database (SQLite or PostgreSQL) to track user profiles, personal access tokens, subdomains, and audit metrics.
+
+### Database Tables Schema
+
+```sql
+-- Users table storing profile data and registration states
+CREATE TABLE users (
+    id VARCHAR(64) PRIMARY KEY,
+    email VARCHAR(255) UNIQUE NOT NULL,
+    first_name VARCHAR(100),
+    last_name VARCHAR(100),
+    role VARCHAR(20) NOT NULL DEFAULT 'user',
+    status VARCHAR(20) NOT NULL DEFAULT 'pending',
+    created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
+
+-- Personal Access Tokens (PATs) table for client connections
+CREATE TABLE personal_access_tokens (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    user_id VARCHAR(64) NOT NULL,
+    token_hash VARCHAR(64) UNIQUE NOT NULL,
+    token_prefix VARCHAR(10) NOT NULL,
+    name VARCHAR(100) NOT NULL,
+    expires_at TIMESTAMP NULL,
+    revoked_at TIMESTAMP NULL,
+    last_used_at TIMESTAMP NULL,
+    created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY(user_id) REFERENCES users(id) ON DELETE CASCADE
+);
+
+-- Subdomain Reservations table
+CREATE TABLE subdomain_reservations (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    user_id VARCHAR(64) NOT NULL,
+    subdomain VARCHAR(100) NOT NULL,
+    domain VARCHAR(255) NOT NULL,
+    expires_at TIMESTAMP NULL,
+    extension_requested INTEGER DEFAULT 0,
+    passcode TEXT,
+    whitelist_ips TEXT,
+    access_mode VARCHAR(10) DEFAULT 'or',
+    created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY(user_id) REFERENCES users(id) ON DELETE CASCADE
+);
+```

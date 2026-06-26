@@ -3672,8 +3672,26 @@ applyTheme(currentUser.theme_preference);
             try {
                 const res = await fetch('/api/portal/edge-health');
                 if (res.status === 401) { logout(); return; }
-                const data = await res.json();
+                const payload = await res.json();
                 
+                const data = payload.nodes || payload;
+                const outboundOk = payload.outbound_ok !== false;
+
+                // Render or remove the gateway network error warning banner
+                let banner = document.getElementById('gateway-network-error-banner');
+                if (!outboundOk) {
+                    if (!banner) {
+                        banner = document.createElement('div');
+                        banner.id = 'gateway-network-error-banner';
+                        banner.className = 'glass';
+                        banner.style = 'padding: 16px; background: rgba(239, 68, 68, 0.1); border-left: 4px solid var(--danger); color: var(--danger); border-radius: 8px; margin-bottom: 24px; font-size: 13px; font-weight: 500; display: flex; align-items: center; gap: 8px;';
+                        banner.innerHTML = '⚠️ <strong>Gateway Network Error:</strong> The central gateway has lost outbound internet connectivity. Regional health checks are suspended.';
+                        tbody.parentNode.parentNode.insertBefore(banner, tbody.parentNode);
+                    }
+                } else if (banner) {
+                    banner.remove();
+                }
+
                 tbody.innerHTML = '';
                 const keys = Object.keys(data || {});
                 if (keys.length === 0) {

@@ -2314,6 +2314,87 @@ func TestRegisterSubdomainReservationError_PortalURL(t *testing.T) {
 	}
 }
 
+func TestServer_OutboundConnectivity(t *testing.T) {
+	cfg := config.DefaultServerConfig()
+	cfg.DBPath = filepath.Join(t.TempDir(), "test.db")
+	cfg.Domains = []string{"example.se"}
+	cfg.DisableBackupScheduler = true
+	cfg.EdgeNodes = []config.EdgeNodeConfig{
+		{ID: "us-edge", TokenHash: "somehash", URL: "http://127.0.0.1:9090"},
+	}
+
+	srv, err := NewServer(cfg)
+	if err != nil {
+		t.Fatalf("failed to create server: %v", err)
+	}
+	defer func() {
+		time.Sleep(50 * time.Millisecond)
+		srv.Stop()
+	}()
+
+	// 1. Initial State
+	srv.outboundMutex.RLock()
+	initOutbound := srv.outboundConnected
+	srv.outboundMutex.RUnlock()
+	if !initOutbound {
+		t.Error("expected initial outboundConnected to be true")
+	}
+
+	// 2. Test handler under normal conditions
+	req := httptest.NewRequest("GET", "http://tunnel.example.se/api/portal/edge-health", nil)
+	rec := httptest.NewRecorder()
+	srv.handleEdgeHealth(rec, req)
+
+	if rec.Code != http.StatusOK {
+		t.Errorf("expected 200 OK, got %d", rec.Code)
+	}
+
+	var resp struct {
+		OutboundOK bool                        `json:"outbound_ok"`
+		Nodes      map[string]EdgeHealthStatus `json:"nodes"`
+	}
+	if err := json.NewDecoder(rec.Body).Decode(&resp); err != nil {
+		t.Fatalf("failed to decode response: %v", err)
+	}
+	if !resp.OutboundOK {
+		t.Error("expected outbound_ok to be true")
+	}
+
+	// 3. Test checkOutboundConnectivity check behaves correctly
+	connected := srv.checkOutboundConnectivity()
+	t.Logf("checkOutboundConnectivity returned: %v", connected)
+
+	// 4. Simulate network drop and verify handler and status updates
+	srv.outboundMutex.Lock()
+	srv.outboundConnected = false
+	srv.outboundMutex.Unlock()
+
+	srv.updateEdgeHealth("us-edge", "Unknown", 0, "Gateway outbound connectivity check failed")
+
+	req2 := httptest.NewRequest("GET", "http://tunnel.example.se/api/portal/edge-health", nil)
+	rec2 := httptest.NewRecorder()
+	srv.handleEdgeHealth(rec2, req2)
+
+	var resp2 struct {
+		OutboundOK bool                        `json:"outbound_ok"`
+		Nodes      map[string]EdgeHealthStatus `json:"nodes"`
+	}
+	if err := json.NewDecoder(rec2.Body).Decode(&resp2); err != nil {
+		t.Fatalf("failed to decode response: %v", err)
+	}
+	if resp2.OutboundOK {
+		t.Error("expected outbound_ok to be false in JSON")
+	}
+
+	nodeStatus, exists := resp2.Nodes["us-edge"]
+	if !exists {
+		t.Fatal("expected us-edge node health to exist")
+	}
+	if nodeStatus.Status != "Unknown" || nodeStatus.ErrorMessage != "Gateway outbound connectivity check failed" {
+		t.Errorf("unexpected edge node status under simulated network drop: %+v", nodeStatus)
+	}
+}
+
 func TestServer_ForceMFA(t *testing.T) {
 	cfg := config.DefaultServerConfig()
 	cfg.DBPath = filepath.Join(t.TempDir(), "test.db")

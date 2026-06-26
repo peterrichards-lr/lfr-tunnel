@@ -159,17 +159,24 @@ func (p *ProxyHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 			// Log the proxied request visitor IP
 			log.Printf("[Proxy] Routing request on %s from visitor IP %s", host, clientIP)
 
-			// Inject standard proxy headers
-			req.Header.Set("X-Real-IP", clientIP)
-			req.Header.Set("X-Forwarded-For", clientIP)
-			req.Header.Set("X-Forwarded-Host", req.Host)
-
 			// Determine protocol
 			proto := "http"
 			if req.TLS != nil || strings.ToLower(req.Header.Get("X-Forwarded-Proto")) == "https" {
 				proto = "https"
 			}
-			req.Header.Set("X-Forwarded-Proto", proto)
+
+			// Inject configured custom headers or fall back to standard defaults
+			if p.config != nil && len(p.config.ProxyHeaders) > 0 {
+				for k, v := range p.config.ProxyHeaders {
+					interpolated := interpolateHeaderValue(v, clientIP, req.Host, proto)
+					req.Header.Set(k, interpolated)
+				}
+			} else {
+				req.Header.Set("X-Real-IP", clientIP)
+				req.Header.Set("X-Forwarded-For", clientIP)
+				req.Header.Set("X-Forwarded-Host", req.Host)
+				req.Header.Set("X-Forwarded-Proto", proto)
+			}
 		},
 		Transport: &trackingTransport{
 			roundTripper: http.DefaultTransport,
@@ -508,4 +515,12 @@ func checkIPInWhitelist(visitorIP, whitelist string) bool {
 		}
 	}
 	return false
+}
+
+func interpolateHeaderValue(val, clientIP, host, proto string) string {
+	val = strings.ReplaceAll(val, "$client_ip", clientIP)
+	val = strings.ReplaceAll(val, "$remote_addr", clientIP)
+	val = strings.ReplaceAll(val, "$host", host)
+	val = strings.ReplaceAll(val, "$proto", proto)
+	return val
 }

@@ -38,6 +38,9 @@ client_platforms:
     cmd_fallback: "curl"
 portal_url: "https://portal.example.com"
 force_mfa: true
+proxy_headers:
+  X-Custom-Header: "my-custom-val"
+  X-Client-IP: "$client_ip"
 `)
 	if _, err := tmpFile.Write(content); err != nil {
 		t.Fatalf("failed to write temp file: %v", err)
@@ -70,6 +73,9 @@ force_mfa: true
 	}
 	if !cfg.ForceMFA {
 		t.Errorf("expected ForceMFA to be true, got false")
+	}
+	if cfg.ProxyHeaders == nil || cfg.ProxyHeaders["X-Custom-Header"] != "my-custom-val" || cfg.ProxyHeaders["X-Client-IP"] != "$client_ip" {
+		t.Errorf("expected ProxyHeaders to be parsed correctly, got %v", cfg.ProxyHeaders)
 	}
 	if cfg.ClientPlatforms == nil || cfg.ClientPlatforms["macos_arm64"].URL != "http://example.com/darwin-arm64" {
 		t.Errorf("expected ClientPlatforms macos_arm64 URL to be http://example.com/darwin-arm64, got %v", cfg.ClientPlatforms)
@@ -137,6 +143,28 @@ force_mfa: true
 	}
 	if cfgEnv.ForceMFA {
 		t.Errorf("expected ForceMFA override to be false, got true")
+	}
+}
+
+func TestLoadServerConfig_ProxyHeadersEnv(t *testing.T) {
+	// A. JSON format
+	t.Setenv("LFT_PROXY_HEADERS", `{"X-Custom-Env": "$host", "X-Another": "static-val"}`)
+	cfg, err := LoadServerConfig("")
+	if err != nil {
+		t.Fatalf("failed to load: %v", err)
+	}
+	if cfg.ProxyHeaders == nil || cfg.ProxyHeaders["X-Custom-Env"] != "$host" || cfg.ProxyHeaders["X-Another"] != "static-val" {
+		t.Errorf("expected JSON proxy headers to be parsed, got %v", cfg.ProxyHeaders)
+	}
+
+	// B. Comma-separated format
+	t.Setenv("LFT_PROXY_HEADERS", "X-Header-One=$client_ip,X-Header-Two=$proto")
+	cfg, err = LoadServerConfig("")
+	if err != nil {
+		t.Fatalf("failed to load: %v", err)
+	}
+	if cfg.ProxyHeaders == nil || cfg.ProxyHeaders["X-Header-One"] != "$client_ip" || cfg.ProxyHeaders["X-Header-Two"] != "$proto" {
+		t.Errorf("expected comma-separated proxy headers to be parsed, got %v", cfg.ProxyHeaders)
 	}
 }
 

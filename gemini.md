@@ -607,9 +607,9 @@ The solution will consist of:
 - [x] Run full test suite, stage, commit, and create PR.
 
 ## Release v1.19.4 & Deployment
-- [ ] Update `scripts/create-release-tag.sh` to automatically bump version in `pkg/config/version.go`.
-- [ ] Run release automation script to trigger the `v1.19.4` release.
-- [ ] Deploy the updated server gateway `lfr-tunneld` to the central VPS and Edge nodes.
+- [x] Update `scripts/create-release-tag.sh` to automatically bump version in `pkg/config/version.go`.
+- [x] Run release automation script to trigger the `v1.19.4` release.
+- [x] Deploy the updated server gateway `lfr-tunneld` to the central VPS and Edge nodes.
 
 
 

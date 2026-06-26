@@ -602,8 +602,10 @@ The solution will consist of:
 
 - [x] Implement internal control WebSocket connection between edge nodes and control plane.
 - [x] Implement HMAC validation and pub/sub message broadcaster for blacklist updates and kicks.
-- [ ] Fix compiler errors and pass WebSocket integration tests.
-- [ ] Run full test suite, stage, commit, and create PR.
+- [x] Fix compiler errors and pass WebSocket integration tests.
+- [x] Fix golangci-lint/errcheck/staticcheck issues in edge_control_ws.go and edge_control_ws_test.go.
+- [x] Run full test suite, stage, commit, and create PR.
+
 
 
 

@@ -1,10 +1,11 @@
 {
-  "version": "v1.22.1",
+  "version": "v1.23.0",
   "release_date": "2026-06-26",
   "features": [
-    "Rename health check screen to Edge Gateways and display resolved IP (#227)",
-    "Implement bi-directional control WebSocket channel between Edge nodes and Control Plane (#218)",
-    "Enforce TOTP MFA setup during user onboarding on API and Dashboard (#216)",
-    "Implement gateway outbound connectivity health checks (#213)"
+    "Implement configurable server-side proxy header injection (#240)",
+    "Implement client-side latency and bandwidth simulation (#175)",
+    "Support vanity domain routing (SNI) on the gateway (#167)",
+    "Restructure documentation and README.md to be more concise and signpost-driven (#242)"
   ]
 }
+

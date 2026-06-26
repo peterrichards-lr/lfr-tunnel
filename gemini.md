@@ -665,14 +665,20 @@ The solution will consist of:
 - [x] Add `custom_domain` field to `RegisterRequest` in client (`pkg/client/client.go`) and server (`pkg/server/server.go`).
 - [x] Add `--domain` CLI flag to `cmd/lfr-tunnel/main.go` and map it to `CustomDomain` in client configuration.
 - [x] Update `Registry.Register` in `pkg/server/auth.go` to handle empty subdomain prefixes and map custom domains directly to leases.
-- [ ] Add database reservation and quarantine validation checks for custom domains in `handleRegister` (`pkg/server/server.go`).
+- [x] Add database reservation and quarantine validation checks for custom domains in `handleRegister` (`pkg/server/server.go`).
 - [x] Add `vanity_domain_hook` configuration parameter to server config (`pkg/config/config.go`) and execute it asynchronously upon registration/deregistration events in `pkg/server/server.go`.
 - [x] Create template script `scripts/lfr-vanity-hook.sh` for automated Nginx configuration and Certbot TLS certificate provisioning.
 - [x] Add unit tests for custom domain registration, mapping, and validation logic.
 
 ## Documentation Reorganization (v1.24.0)
-- [ ] Move server setup guides to a new `docs/server/` directory and restructure/clean up.
-- [ ] Merge `auth_architecture.md` into `docs/architecture.md` to unify visual routing and authentication details.
-- [ ] Merge `docs/TESTING.md` and `docs/test_plan.md` into the root `CONTRIBUTING.md`.
-- [ ] Delete/archive obsolete design files like `docs/subdomain_reservation_plan.md` and `docs/test_plan.md`.
-- [ ] Update `docs/README.md` index links to match the new structure.
+- [x] Move server setup guides to a new `docs/server/` directory and restructure/clean up.
+- [x] Merge `auth_architecture.md` into `docs/architecture.md` to unify visual routing and authentication details.
+- [x] Merge `docs/TESTING.md` and `docs/test_plan.md` into the root `CONTRIBUTING.md`.
+- [x] Delete/archive obsolete design files like `docs/subdomain_reservation_plan.md` and `docs/test_plan.md`.
+- [x] Update `docs/README.md` index links to match the new structure.
+
+## Configurable Server-side Proxy Header Injection (v1.25.0) (#240)
+- [x] Define proxy headers configuration structure in ServerConfig (`pkg/config/config.go`)
+- [x] Implement proxy header interpolation in proxy director (`pkg/server/proxy.go`)
+- [x] Add unit tests for custom header injection (`pkg/server/proxy_test.go`)
+

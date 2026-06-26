@@ -215,3 +215,77 @@ func TestProxyHandler_AccessControls(t *testing.T) {
 		}
 	})
 }
+
+func TestProxyHandler_CustomHeaders(t *testing.T) {
+	// 1. Create a dummy backend server
+	backend := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		// Verify custom headers are correctly injected
+		if r.Header.Get("X-Forwarded-Host") != "custom-se.liferay.com" {
+			t.Errorf("X-Forwarded-Host mismatch: got %s", r.Header.Get("X-Forwarded-Host"))
+		}
+		if r.Header.Get("X-Forwarded-Proto") != "http" {
+			t.Errorf("X-Forwarded-Proto mismatch: got %s", r.Header.Get("X-Forwarded-Proto"))
+		}
+		if r.Header.Get("X-Liferay-Custom") != "my-custom-value" {
+			t.Errorf("X-Liferay-Custom mismatch: got %s", r.Header.Get("X-Liferay-Custom"))
+		}
+		if r.Header.Get("X-Client-IP") == "" {
+			t.Error("X-Client-IP header was not set")
+		}
+		// Standard default header shouldn't be present since it is overridden
+		if r.Header.Get("X-Real-IP") != "" {
+			t.Errorf("X-Real-IP should not be present since it was overridden, got %s", r.Header.Get("X-Real-IP"))
+		}
+		w.WriteHeader(http.StatusOK)
+		_, _ = w.Write([]byte("Hello from Custom Proxy!"))
+	}))
+	defer backend.Close()
+
+	// Parse backend port
+	u, err := url.Parse(backend.URL)
+	if err != nil {
+		t.Fatalf("failed to parse backend URL: %v", err)
+	}
+	backendPort, err := strconv.Atoi(u.Port())
+	if err != nil {
+		t.Fatalf("failed to parse backend port: %v", err)
+	}
+
+	// 2. Setup registry with a manual lease pointing to backend port
+	chiselServer, _ := chserver.NewServer(&chserver.Config{Reverse: true})
+	reg := NewRegistry(chiselServer)
+
+	reg.Lock()
+	reg.leases["custom-se.liferay.com"] = &TunnelLease{
+		SubdomainPrefix: "custom-se",
+		FullHost:        "custom-se.liferay.com",
+		SessionToken:    "test-token",
+		LocalPort:       backendPort,
+		TargetPort:      8080,
+		CreatedAt:       time.Now(),
+	}
+	reg.Unlock()
+
+	// 3. Serve proxy request with custom headers config
+	cfg := config.DefaultServerConfig()
+	cfg.ProxyHeaders = map[string]string{
+		"X-Forwarded-Host":  "$host",
+		"X-Forwarded-Proto": "$proto",
+		"X-Liferay-Custom":  "my-custom-value",
+		"X-Client-IP":       "$client_ip",
+	}
+
+	handler := NewProxyHandler(reg, cfg)
+	req := httptest.NewRequest("GET", "http://custom-se.liferay.com/web/guest", nil)
+	req.Host = "custom-se.liferay.com"
+	rec := httptest.NewRecorder()
+
+	handler.ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusOK {
+		t.Errorf("expected 200 OK, got %d", rec.Code)
+	}
+	if rec.Body.String() != "Hello from Custom Proxy!" {
+		t.Errorf("unexpected body: %s", rec.Body.String())
+	}
+}

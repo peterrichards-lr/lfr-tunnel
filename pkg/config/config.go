@@ -2,6 +2,7 @@ package config
 
 import (
 	"bufio"
+	"encoding/json"
 	"fmt"
 	"net/url"
 	"os"
@@ -86,6 +87,7 @@ type ServerConfig struct {
 	EdgeToken                  string                    `yaml:"edge_token"`
 	EdgeNodes                  []EdgeNodeConfig          `yaml:"edge_nodes"`
 	VanityDomainHook           string                    `yaml:"vanity_domain_hook"`
+	ProxyHeaders               map[string]string         `yaml:"proxy_headers"`
 
 	// Dynamic SSO/OIDC Providers
 	SSOProviders []SSOProviderConfig `yaml:"sso_providers"`
@@ -382,6 +384,27 @@ func LoadServerConfig(path string) (*ServerConfig, error) {
 	}
 	if val := os.Getenv("LFT_DISABLE_CLIENT_DOWNLOADS"); val != "" {
 		cfg.DisableClientDownloads = strings.ToLower(val) == "true" || val == "1"
+	}
+	if val := os.Getenv("LFT_PROXY_HEADERS"); val != "" {
+		var m map[string]string
+		if strings.HasPrefix(strings.TrimSpace(val), "{") {
+			if err := json.Unmarshal([]byte(val), &m); err == nil {
+				cfg.ProxyHeaders = m
+			}
+		}
+		if len(cfg.ProxyHeaders) == 0 {
+			m = make(map[string]string)
+			pairs := strings.Split(val, ",")
+			for _, pair := range pairs {
+				kv := strings.SplitN(pair, "=", 2)
+				if len(kv) == 2 {
+					m[strings.TrimSpace(kv[0])] = strings.TrimSpace(kv[1])
+				}
+			}
+			if len(m) > 0 {
+				cfg.ProxyHeaders = m
+			}
+		}
 	}
 
 	return cfg, nil

@@ -606,6 +606,12 @@ The solution will consist of:
 - [x] Fix golangci-lint/errcheck/staticcheck issues in edge_control_ws.go and edge_control_ws_test.go.
 - [x] Run full test suite, stage, commit, and create PR.
 
+## Release v1.19.4 & Deployment
+- [ ] Update `scripts/create-release-tag.sh` to automatically bump version in `pkg/config/version.go`.
+- [ ] Run release automation script to trigger the `v1.19.4` release.
+- [ ] Deploy the updated server gateway `lfr-tunneld` to the central VPS and Edge nodes.
+
+
 
 
 

@@ -70,6 +70,7 @@ git pull origin master
 
 # 5. Extract and parse current version
 WHATS_NEW="pkg/server/static/whats-new.json"
+VERSION_GO="pkg/config/version.go"
 if [ ! -f "$WHATS_NEW" ]; then
     echo "❌ Error: Version details file $WHATS_NEW not found."
     exit 1
@@ -124,7 +125,7 @@ if git rev-parse "refs/tags/$NEW_VER" >/dev/null 2>&1; then
     echo "❌ Error: Git tag '$NEW_VER' already exists locally."
     exit 1
 fi
-git fetch origin --tags --quiet
+git fetch origin --tags --force --quiet
 if git ls-remote --tags origin "refs/tags/$NEW_VER" | grep -q "$NEW_VER"; then
     echo "❌ Error: Git tag '$NEW_VER' already exists on remote origin."
     exit 1
@@ -132,8 +133,11 @@ fi
 
 echo "Preparing release $NEW_VER..."
 
-# 7. Update whats-new.json using Perl
+# 7. Update whats-new.json and version.go using Perl
 perl -pi -e 's/"version": "[^"]*"/"version": "'"$NEW_VER"'"/g' "$WHATS_NEW"
+if [ -f "$VERSION_GO" ]; then
+    perl -pi -e 's/var Version = "[^"]*"/var Version = "'"$NEW_VER"'"/g' "$VERSION_GO"
+fi
 
 # 8. Create release branch
 BRANCH_NAME="release/$NEW_VER"
@@ -142,6 +146,9 @@ git checkout -b "$BRANCH_NAME"
 
 # 9. Stage, Commit and Tag
 git add "$WHATS_NEW"
+if [ -f "$VERSION_GO" ]; then
+    git add "$VERSION_GO"
+fi
 if git status --porcelain | grep -q "gemini.md"; then
     git add gemini.md
 fi

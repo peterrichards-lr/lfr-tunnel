@@ -1,9 +1,9 @@
 {
-  "version": "v1.19.3",
-  "release_date": "2026-06-25",
+  "version": "v1.19.4",
+  "release_date": "2026-06-26",
   "features": [
-    "Fixed Network Health dashboard exception error rendering to provide detailed diagnostic information",
-    "Implement Edge Node Health Monitoring with live latency checks across all gateway regions.",
-    "Add interactive Network Health visualization tab to the central admin dashboard."
+    "Implement bi-directional control WebSocket channel between Edge nodes and Control Plane (#218)",
+    "Enforce TOTP MFA setup during user onboarding on API and Dashboard (#216)",
+    "Implement gateway outbound connectivity health checks (#213)"
   ]
 }

@@ -131,7 +131,7 @@
                         <span class="sidebar-section-toggle">▼</span>
                     </div>
                     <div id="section-reporting" class="sidebar-section-content">
-                        <div id="nav-analytics" class="nav-item" onclick="showTab('analytics')" data-i18n="sidebar_analytics">System Analytics</div>
+                        <div id="nav-analytics" class="nav-item" onclick="showTab('analytics')" data-i18n="sidebar_analytics">Analytics</div>
                         <div id="nav-audit" class="nav-item" onclick="showTab('audit')" data-i18n="sidebar_audit">Audit Logs</div>
                         <div id="nav-magic" class="nav-item" onclick="showTab('magic')" data-i18n="sidebar_magic">Magic Links</div>
                     </div>
@@ -343,13 +343,13 @@
                 <div id="admin-analytics-section" style="display: none; margin-bottom: 32px;">
                     <h3 style="margin-bottom: 16px;">Global Overview</h3>
                     <div style="display: grid; grid-template-columns: 2fr 1fr; gap: 24px;">
-                        <div class="glass" style="padding: 16px;">
+                        <div class="glass" style="padding: 16px;" title="Shows the total bytes received (Data In) and sent (Data Out) across all tunnels over the last 30 days.">
                             <h4 style="margin-bottom: 12px; color: var(--text-muted); font-size: 14px; font-weight: 500;">Global Bandwidth Over Time</h4>
                             <div style="position: relative; height: 250px; width: 100%;">
                                 <canvas id="globalBandwidthChart"></canvas>
                             </div>
                         </div>
-                        <div class="glass" style="padding: 16px;">
+                        <div class="glass" style="padding: 16px;" title="Shows the top 10 users ranked by total bandwidth consumption over the last 30 days.">
                             <h4 style="margin-bottom: 12px; color: var(--text-muted); font-size: 14px; font-weight: 500;">Top Users</h4>
                             <div style="position: relative; height: 250px; width: 100%;">
                                 <canvas id="topUsersChart"></canvas>
@@ -371,13 +371,13 @@
                 <div>
                     <h3 style="margin-bottom: 16px;">My Usage</h3>
                     <div style="display: grid; grid-template-columns: 2fr 1fr; gap: 24px;">
-                        <div class="glass" style="padding: 16px;">
+                        <div class="glass" style="padding: 16px;" title="Shows your daily bandwidth usage (Data In vs Data Out) over the last 30 days.">
                             <h4 style="margin-bottom: 12px; color: var(--text-muted); font-size: 14px; font-weight: 500;">My Bandwidth Over Time</h4>
                             <div style="position: relative; height: 250px; width: 100%;">
                                 <canvas id="myBandwidthChart"></canvas>
                             </div>
                         </div>
-                        <div class="glass" style="padding: 16px;">
+                        <div class="glass" style="padding: 16px;" title="Shows the distribution of total bandwidth usage across your active tunnels.">
                             <h4 style="margin-bottom: 12px; color: var(--text-muted); font-size: 14px; font-weight: 500;">My Tunnels Breakdown</h4>
                             <div style="position: relative; height: 250px; width: 100%;">
                                 <canvas id="myTunnelsChart"></canvas>

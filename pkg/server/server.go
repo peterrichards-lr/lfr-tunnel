@@ -5017,7 +5017,33 @@ func (s *Server) updateEdgeHealth(id, status string, latency int64, errMsg strin
 
 func (s *Server) handleEdgeHealth(w http.ResponseWriter, r *http.Request) {
 	s.edgeHealthMu.RLock()
-	defer s.edgeHealthMu.RUnlock()
+	nodes := make(map[string]EdgeHealthStatus)
+	for k, v := range s.edgeHealth {
+		nodes[k] = v
+	}
+	s.edgeHealthMu.RUnlock()
+
+	s.edgeClientsMu.RLock()
+	for nodeID, conn := range s.edgeClients {
+		h, exists := nodes[nodeID]
+		if !exists {
+			h = EdgeHealthStatus{
+				Status:      "Online",
+				LastCheckAt: time.Now().Unix(),
+			}
+		} else {
+			h.Status = "Online"
+			h.ErrorMessage = ""
+		}
+		if h.ResolvedIP == "" && conn != nil {
+			if remoteAddr := conn.RemoteAddr(); remoteAddr != nil {
+				host, _, _ := net.SplitHostPort(remoteAddr.String())
+				h.ResolvedIP = host
+			}
+		}
+		nodes[nodeID] = h
+	}
+	s.edgeClientsMu.RUnlock()
 
 	s.outboundMutex.RLock()
 	outboundOk := s.outboundConnected
@@ -5025,7 +5051,7 @@ func (s *Server) handleEdgeHealth(w http.ResponseWriter, r *http.Request) {
 
 	response := map[string]interface{}{
 		"outbound_ok": outboundOk,
-		"nodes":       s.edgeHealth,
+		"nodes":       nodes,
 	}
 	respondJSON(w, http.StatusOK, response)
 }

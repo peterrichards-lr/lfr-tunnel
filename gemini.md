@@ -600,9 +600,10 @@ The solution will consist of:
 - [x] Enforce MFA setup on API and Dashboard interface for unverified users.
 - [x] Write tests and open PR.
 
-## Bi-directional Pub/Sub Control Channel over WebSockets (#218)
-- [ ] Implement internal control WebSocket connection between edge nodes and control plane.
-- [ ] Implement HMAC validation and pub/sub message broadcaster for blacklist updates and kicks.
-- [ ] Write integration tests and open PR.
+- [x] Implement internal control WebSocket connection between edge nodes and control plane.
+- [x] Implement HMAC validation and pub/sub message broadcaster for blacklist updates and kicks.
+- [ ] Fix compiler errors and pass WebSocket integration tests.
+- [ ] Run full test suite, stage, commit, and create PR.
+
 
 

@@ -33,6 +33,7 @@ import (
 	"lfr-tunnel/pkg/db"
 	"lfr-tunnel/pkg/mail"
 
+	"github.com/gorilla/websocket"
 	"github.com/jpillora/chisel/server"
 )
 
@@ -130,6 +131,8 @@ type Server struct {
 	maintEndTime       time.Time
 	wsClients          map[*wsClient]bool
 	wsMutex            sync.RWMutex
+	edgeClients        map[string]*websocket.Conn
+	edgeClientsMu      sync.RWMutex
 	startTime          time.Time
 	edgeLeases         map[string][]EdgeLease
 	edgeLeasesMu       sync.Mutex
@@ -221,6 +224,7 @@ func NewServer(cfg *config.ServerConfig) (*Server, error) {
 		targetedMessages:   make(map[string]string),
 		lastPortalActivity: make(map[string]time.Time),
 		wsClients:          make(map[*wsClient]bool),
+		edgeClients:        make(map[string]*websocket.Conn),
 		startTime:          time.Now(),
 		caCert:             caCert,
 		caKey:              caKey,
@@ -324,6 +328,10 @@ func NewServer(cfg *config.ServerConfig) (*Server, error) {
 
 	if srv.db != nil {
 		_ = srv.db.RecordGatewayStart(srv.startTime)
+	}
+
+	if srv.cfg.ControlPlaneURL != "" && srv.cfg.EdgeToken != "" {
+		go srv.runEdgeControlChannel()
 	}
 
 	return srv, nil
@@ -534,6 +542,7 @@ func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 				// Auto-ban!
 				log.Printf("[Defense] Auto-banning IP %s after 50 violations", ip)
 				s.blacklist.Store(ip, true)
+				s.BroadcastBlacklistUpdate("add", ip)
 				if s.db != nil {
 					_ = s.db.AddBlacklistIP(ip, "Auto-banned by Rate Limiter for DDOS")
 					s.writeAudit("system", "ip.blacklisted", "ip", ip, "Auto-banned by Rate Limiter for DDOS", r)
@@ -626,6 +635,11 @@ func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 
 		if r.Method == http.MethodPost && r.URL.Path == "/api/internal/edge-audit-log" {
 			s.handleEdgeAuditLog(w, r)
+			return
+		}
+
+		if r.URL.Path == "/api/internal/edge-control-ws" {
+			s.handleEdgeControlWS(w, r)
 			return
 		}
 
@@ -2912,6 +2926,8 @@ func (s *Server) handleLocalBroadcast(w http.ResponseWriter, r *http.Request) {
 			s.maintTimer = nil
 			s.maintMutex.Unlock()
 
+			s.BroadcastMaintenance("enable", duration, "System upgrade and maintenance")
+
 			// Kick standard tunnels
 			leases := s.registry.ListLeases()
 			for _, lease := range leases {
@@ -3028,6 +3044,8 @@ func (s *Server) handleAdminMaintenance(w http.ResponseWriter, r *http.Request, 
 					s.maintTimer = nil
 					s.maintMutex.Unlock()
 
+					s.BroadcastMaintenance("enable", req.Duration, req.Reason)
+
 					// Kick standard tunnels
 					leases := s.registry.ListLeases()
 					for _, lease := range leases {
@@ -3056,6 +3074,7 @@ func (s *Server) handleAdminMaintenance(w http.ResponseWriter, r *http.Request, 
 				s.maintenanceMode = true
 				s.maintEndTime = time.Now().Add(time.Duration(req.Duration) * time.Minute)
 				s.maintScheduledAt = time.Time{}
+				s.BroadcastMaintenance("enable", req.Duration, req.Reason)
 
 				// Kick standard tunnels
 				leases := s.registry.ListLeases()
@@ -3084,6 +3103,7 @@ func (s *Server) handleAdminMaintenance(w http.ResponseWriter, r *http.Request, 
 		// Deactivate
 		s.maintenanceMode = false
 		s.maintScheduledAt = time.Time{}
+		s.BroadcastMaintenance("disable", 0, "")
 		s.maintEndTime = time.Time{}
 		s.maintAction = ""
 		s.maintReason = ""
@@ -3614,6 +3634,12 @@ func (s *Server) handleAdminKickLease(w http.ResponseWriter, r *http.Request, ac
 		edgeBaseDomain = strings.TrimPrefix(edgeBaseDomain, prefix)
 
 		// Send proxy kick request to Edge server
+		if s.sendEdgeWSKick(targetEdgeLease.NodeID, subdomain) {
+			s.writeAudit(actor, "lease.kicked", "lease", subdomain, "Proxied kick to edge server via WebSocket: "+targetEdgeLease.NodeID, r)
+			respondJSON(w, http.StatusOK, map[string]string{"status": "success"})
+			return
+		}
+
 		client := &http.Client{Timeout: 5 * time.Second}
 		payload, _ := json.Marshal(map[string]string{"subdomain": subdomain})
 		scheme := "https"
@@ -3845,6 +3871,7 @@ func (s *Server) handleAdminBlacklist(w http.ResponseWriter, r *http.Request, ac
 			return
 		}
 		s.blacklist.Store(payload.IPAddress, true)
+		s.BroadcastBlacklistUpdate("add", payload.IPAddress)
 		s.writeAudit(actor, "ip.blacklisted", "ip", payload.IPAddress, payload.Reason, r)
 		s.sendAdminAlert("alert_notify_blacklist", "LFR Tunnel Alert: IP Banned", fmt.Sprintf("IP %s was manually banned by admin %s.", payload.IPAddress, actor))
 		_ = json.NewEncoder(w).Encode(map[string]string{"status": "success"})
@@ -3862,6 +3889,7 @@ func (s *Server) handleAdminBlacklist(w http.ResponseWriter, r *http.Request, ac
 			return
 		}
 		s.blacklist.Delete(ip)
+		s.BroadcastBlacklistUpdate("remove", ip)
 		s.writeAudit(actor, "ip.unblacklisted", "ip", ip, "", r)
 		_ = json.NewEncoder(w).Encode(map[string]string{"status": "success"})
 		return

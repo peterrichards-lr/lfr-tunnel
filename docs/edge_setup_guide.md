@@ -238,3 +238,10 @@ lfr-tunnel --subdomain my-tunnel --ports 8080
 [Client] Auto-detected best region: 'us' -> https://us.lfr-demo.online
 [Client] Connecting to gateway...
 ```
+
+---
+
+## 8. Asymmetric Outbound Routing Note
+
+If your Edge VPS or Control Plane gateway has multiple public IP addresses configured, ensure you pin default outbound traffic source to the primary IP as described in the [asymmetric routing guide](setup_guide.md#9-asymmetric-outbound-routing-workaround-dual-ip-vps). This ensures that edge-health heartbeat requests, SMTP connections, and Let's Encrypt validation checks are not dropped by the provider's firewall.
+

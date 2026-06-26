@@ -391,6 +391,10 @@ func (db *DB) RecordTunnelMetric(m *TunnelMetric) error {
 	if nodeID == "" {
 		nodeID = "control"
 	}
+	connectedAt := m.ConnectedAt
+	if connectedAt.IsZero() {
+		connectedAt = time.Now().UTC()
+	}
 	recordedAt := m.RecordedAt
 	if recordedAt.IsZero() {
 		recordedAt = time.Now().UTC()
@@ -398,7 +402,7 @@ func (db *DB) RecordTunnelMetric(m *TunnelMetric) error {
 	_, err := db.conn.Exec(`
 		INSERT INTO tunnel_metrics (user_id, subdomain_prefix, full_host, bytes_in, bytes_out, connected_at, recorded_at, node_id)
 		VALUES (?, ?, ?, ?, ?, ?, ?, ?)
-	`, m.UserID, m.SubdomainPrefix, m.FullHost, m.BytesIn, m.BytesOut, m.ConnectedAt, recordedAt, nodeID)
+	`, m.UserID, m.SubdomainPrefix, m.FullHost, m.BytesIn, m.BytesOut, connectedAt.Format("2006-01-02 15:04:05"), recordedAt.Format("2006-01-02 15:04:05"), nodeID)
 	return err
 }
 
@@ -1086,7 +1090,7 @@ func (db *DB) GetGlobalAnalytics(days int) (*GlobalAnalytics, error) {
 	timeLimit := time.Now().UTC().AddDate(0, 0, -days).Format("2006-01-02")
 
 	dailyQuery := `
-		SELECT strftime('%Y-%m-%d', recorded_at) as d, SUM(bytes_in), SUM(bytes_out)
+		SELECT COALESCE(strftime('%Y-%m-%d', recorded_at), CASE WHEN length(recorded_at) >= 10 AND substr(recorded_at, 5, 1) = '-' AND substr(recorded_at, 8, 1) = '-' THEN substr(recorded_at, 1, 10) END) as d, SUM(bytes_in), SUM(bytes_out)
 		FROM tunnel_metrics
 		WHERE recorded_at >= ?
 		GROUP BY d
@@ -1151,7 +1155,7 @@ func (db *DB) GetUserAnalytics(userID string, days int) (*UserAnalytics, error) 
 	timeLimit := time.Now().UTC().AddDate(0, 0, -days).Format("2006-01-02")
 
 	dailyQuery := `
-		SELECT strftime('%Y-%m-%d', recorded_at) as d, SUM(bytes_in), SUM(bytes_out)
+		SELECT COALESCE(strftime('%Y-%m-%d', recorded_at), CASE WHEN length(recorded_at) >= 10 AND substr(recorded_at, 5, 1) = '-' AND substr(recorded_at, 8, 1) = '-' THEN substr(recorded_at, 1, 10) END) as d, SUM(bytes_in), SUM(bytes_out)
 		FROM tunnel_metrics
 		WHERE user_id = ? AND recorded_at >= ?
 		GROUP BY d

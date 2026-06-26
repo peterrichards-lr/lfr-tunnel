@@ -705,3 +705,12 @@ The solution will consist of:
 - [x] Sign client binaries with LFT_SKIP_GPG=true
 - [x] Deploy corrected client binaries to VPS
 
+## Edge Gateways & Analytics Fixes (v1.23.1)
+- [x] Fix Edge Gateways row parsing and rendering to use clean inner HTML or insertAdjacentHTML to prevent browser foster parenting layout issues.
+- [x] Fix SQLite date parsing bug returning "Unknown" for daily metrics.
+- [x] Shorten "System Analytics" labels and translations to "Analytics".
+- [x] Add `title` hoverover attributes explaining what each graph shows.
+- [ ] Ensure all unit and E2E tests pass.
+
+
+

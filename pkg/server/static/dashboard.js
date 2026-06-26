@@ -2775,9 +2775,6 @@ applyTheme(currentUser.theme_preference);
                 tbody.innerHTML = `<tr><td colspan="4" style="text-align: center; padding: 24px; color: var(--text-muted); font-size: 13px;">No active tunnels connected.</td></tr>`;
             } else {
                 tunnels.forEach(t => {
-                    const tr = document.createElement('tr');
-                    tr.style.borderBottom = '1px solid rgba(255,255,255,0.03)';
-                    
                     const publicUrl = `https://${t.full_host}`;
                     const connectedTime = renderTimestamp(t.created_at);
                     
@@ -2788,25 +2785,27 @@ applyTheme(currentUser.theme_preference);
                         serverBadge = `<span class="badge" style="background: rgba(59, 130, 246, 0.15); color: #60a5fa; border: 1px solid rgba(59, 130, 246, 0.3); font-size: 10px; margin-left: 6px;">🇬🇧 Control</span>`;
                     }
                     
-                    tr.innerHTML = `
-                        <td style="padding: 12px; vertical-align: middle;">
-                            <div style="font-weight: 600; font-family: monospace; font-size: 13px; color: var(--text);">${escapeHTML(t.subdomain_prefix)}</div>
-                            <div style="font-size: 11px; color: var(--text-muted); margin-top: 2px;">Local Port: ${t.local_port}</div>
-                        </td>
-                        <td style="padding: 12px; vertical-align: middle;">
-                            <a href="${publicUrl}" target="_blank" style="color: var(--primary); text-decoration: none; font-size: 13px; font-family: monospace; word-break: break-all;">${publicUrl}</a>
-                            ${serverBadge}
-                            <div style="font-size: 11px; color: var(--text-muted); margin-top: 2px;">IP: ${escapeHTML(t.client_ip)} | Connected: ${connectedTime}</div>
-                        </td>
-                        <td style="padding: 12px; vertical-align: middle; font-size: 12px; color: var(--text-muted);">
-                            <div>📥 In: <strong style="color: var(--text);">${formatBytes(t.bytes_in)}</strong></div>
-                            <div style="margin-top: 2px;">📤 Out: <strong style="color: var(--text);">${formatBytes(t.bytes_out)}</strong></div>
-                        </td>
-                        <td style="padding: 12px; vertical-align: middle; text-align: right;">
-                            <button class="btn" style="padding: 4px 10px; font-size: 12px; color: var(--danger); border-color: var(--danger);" onclick="kickTunnelFromUserModal('${escapeHTML(t.subdomain_prefix)}', '${userJsonEncoded}')">Kick</button>
-                        </td>
+                    const trHtml = `
+                        <tr style="border-bottom: 1px solid rgba(255,255,255,0.03);">
+                            <td style="padding: 12px; vertical-align: middle;">
+                                <div style="font-weight: 600; font-family: monospace; font-size: 13px; color: var(--text);">${escapeHTML(t.subdomain_prefix)}</div>
+                                <div style="font-size: 11px; color: var(--text-muted); margin-top: 2px;">Local Port: ${t.local_port}</div>
+                            </td>
+                            <td style="padding: 12px; vertical-align: middle;">
+                                <a href="${publicUrl}" target="_blank" style="color: var(--primary); text-decoration: none; font-size: 13px; font-family: monospace; word-break: break-all;">${publicUrl}</a>
+                                ${serverBadge}
+                                <div style="font-size: 11px; color: var(--text-muted); margin-top: 2px;">IP: ${escapeHTML(t.client_ip)} | Connected: ${connectedTime}</div>
+                            </td>
+                            <td style="padding: 12px; vertical-align: middle; font-size: 12px; color: var(--text-muted);">
+                                <div>📥 In: <strong style="color: var(--text);">${formatBytes(t.bytes_in)}</strong></div>
+                                <div style="margin-top: 2px;">📤 Out: <strong style="color: var(--text);">${formatBytes(t.bytes_out)}</strong></div>
+                            </td>
+                            <td style="padding: 12px; vertical-align: middle; text-align: right;">
+                                <button class="btn" style="padding: 4px 10px; font-size: 12px; color: var(--danger); border-color: var(--danger);" onclick="kickTunnelFromUserModal('${escapeHTML(t.subdomain_prefix)}', '${userJsonEncoded}')">Kick</button>
+                            </td>
+                        </tr>
                     `;
-                    tbody.appendChild(tr);
+                    tbody.insertAdjacentHTML('beforeend', trHtml);
                 });
             }
             
@@ -3702,7 +3701,7 @@ applyTheme(currentUser.theme_preference);
                 tbody.innerHTML = '';
                 const keys = Object.keys(data || {});
                 if (keys.length === 0) {
-                    tbody.innerHTML = '<tr><td colspan="6" style="text-align:center; opacity:0.6;">No edge nodes configured</td></tr>';
+                    tbody.innerHTML = '<tr><td colspan="8" style="text-align:center; opacity:0.6;">No edge nodes configured</td></tr>';
                 } else {
                     keys.sort().forEach(id => {
                         const h = data[id];
@@ -3711,7 +3710,7 @@ applyTheme(currentUser.theme_preference);
                         
                         let resolvedIP = h.resolved_ip || '-';
                         let latText = isOnline ? `${h.latency_ms} ms` : '-';
-                        let timeSince = h.last_check_at ? Math.floor((Date.now() / 1000) - h.last_check_at) + 's ago' : 'Never';
+                        let timeSince = h.last_check_at ? Math.max(0, Math.floor((Date.now() / 1000) - h.last_check_at)) + 's ago' : 'Never';
                         let errMsg = h.error_message ? `<span style="color:var(--danger); font-size:12px;">${escapeHTML(h.error_message)}</span>` : '';
 
                         const verText = h.version || '-';
@@ -3734,23 +3733,24 @@ applyTheme(currentUser.theme_preference);
                             actionsMenuHtml = '-';
                         }
 
-                        const tr = document.createElement('tr');
-                        tr.innerHTML = `
-                            <td><strong>${escapeHTML(id)}</strong></td>
-                            <td><code style="font-family: monospace; font-size: 12px; background: rgba(255, 255, 255, 0.05); padding: 2px 6px; border-radius: 4px;">${escapeHTML(resolvedIP)}</code></td>
-                            <td>
-                                <span style="display:inline-flex; align-items:center; gap:6px;">
-                                    <span style="width:8px; height:8px; border-radius:50%; background-color:${dotColor};"></span>
-                                    ${escapeHTML(h.status)}
-                                </span>
-                            </td>
-                            <td>${latText}</td>
-                            <td>${timeSince}</td>
-                            <td><code style="font-family: monospace; font-size: 11px;">${escapeHTML(verText)}</code></td>
-                            <td>${errMsg}</td>
-                            <td style="text-align: right;">${actionsMenuHtml}</td>
+                        const trHtml = `
+                            <tr>
+                                <td><strong>${escapeHTML(id)}</strong></td>
+                                <td><code style="font-family: monospace; font-size: 12px; background: rgba(255, 255, 255, 0.05); padding: 2px 6px; border-radius: 4px;">${escapeHTML(resolvedIP)}</code></td>
+                                <td>
+                                    <span style="display:inline-flex; align-items:center; gap:6px;">
+                                        <span style="width:8px; height:8px; border-radius:50%; background-color:${dotColor};"></span>
+                                        ${escapeHTML(h.status)}
+                                    </span>
+                                </td>
+                                <td>${latText}</td>
+                                <td>${timeSince}</td>
+                                <td><code style="font-family: monospace; font-size: 11px;">${escapeHTML(verText)}</code></td>
+                                <td>${errMsg}</td>
+                                <td style="text-align: right;">${actionsMenuHtml}</td>
+                            </tr>
                         `;
-                        tbody.appendChild(tr);
+                        tbody.insertAdjacentHTML('beforeend', trHtml);
                     });
                 }
             } catch (err) {

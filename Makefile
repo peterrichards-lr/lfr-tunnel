@@ -1,6 +1,6 @@
 .PHONY: fmt vet test build deploy clean install-hook e2e e2e-sso help
 
-VERSION ?= $(shell git describe --tags --abbrev=0 --dirty 2>/dev/null || git describe --always --dirty 2>/dev/null || echo "dev")
+VERSION ?= $(shell grep -oE 'Version = "[^"]+"' pkg/config/version.go | cut -d'"' -f2)
 
 
 help:

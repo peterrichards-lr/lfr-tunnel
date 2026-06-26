@@ -54,7 +54,7 @@ fi
 echo "=== Starting Edge VPS Automation for IP: $VPS_IP ==="
 
 # 1. Build Linux amd64 binary locally (compatible with standard GCP e2-micro / AWS t3.nano x86_64)
-VERSION="$(git describe --tags --abbrev=0 --dirty 2>/dev/null || git describe --always --dirty 2>/dev/null || echo "dev")"
+VERSION="$(grep -oE 'Version = "[^"]+"' pkg/config/version.go | cut -d'"' -f2)"
 echo "=> Compiling lfr-tunneld for Linux (amd64) with Version=$VERSION..."
 GOOS=linux GOARCH=amd64 go build -ldflags="-s -w -X lfr-tunnel/pkg/config.Version=$VERSION" -trimpath -o bin/lfr-tunneld-edge-linux ./cmd/lfr-tunneld
 

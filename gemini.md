@@ -615,9 +615,15 @@ The solution will consist of:
 - [x] Recompile and deploy `lfr-tunneld` to the regional Edge VPS (us-central-1) and update its configuration.
 
 ## Edge Gateways Screen Rename & Resolved IP Address (v1.19.5)
-- [ ] Expose resolved IP addresses in the edge health monitoring API.
-- [ ] Rename the "Network Health" tab to "Edge Gateways" in `dashboard.html`.
-- [ ] Update `dashboard.js` to render the "IP Address" column and update loading/no-node colspan.
-- [ ] Add `sidebar_edge_gateways` and `edge_gateways_title` translation properties across all i18n files.
-- [ ] Verify standard unit tests pass locally with `TMPDIR=/private/tmp make test`.
-- [ ] Release, tag, and deploy v1.19.5 of lfr-tunneld.
+- [x] Expose resolved IP addresses in the edge health monitoring API.
+- [x] Rename the "Network Health" tab to "Edge Gateways" in `dashboard.html`.
+- [x] Update `dashboard.js` to render the "IP Address" column and update loading/no-node colspan.
+- [x] Add `sidebar_edge_gateways` and `edge_gateways_title` translation properties across all i18n files.
+- [x] Verify standard unit tests pass locally with `TMPDIR=/private/tmp make test`.
+- [x] Release, tag, and deploy v1.19.5 of lfr-tunneld.
+
+## Version Detection & Liferay SE Configuration Alignment (v1.19.6)
+- [ ] Update `Makefile`, `deploy.sh`, `build-client-binaries.sh`, and `setup-edge-vps.sh` to extract Version from `pkg/config/version.go` instead of `git describe`.
+- [ ] Update `/etc/lfr-tunneld/server-config.yaml` on the central VPS to remove Homebrew/Scoop client commands and enforce the EDR-whitelisted installer.
+- [ ] Rebuild and redeploy the gateway to the VPS to reflect the correct version (`v1.19.6`).
+

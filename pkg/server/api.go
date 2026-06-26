@@ -1957,3 +1957,73 @@ func (s *Server) handleUpdateReservationAccessControl(w http.ResponseWriter, r *
 
 	respondJSON(w, http.StatusOK, map[string]string{"status": "success"})
 }
+
+type EdgeActionRequest struct {
+	NodeID   string `json:"node_id"`
+	Action   string `json:"action"` // "restart", "maintenance_enable", "maintenance_disable", "kick_tunnels"
+	Reason   string `json:"reason,omitempty"`
+	Duration int    `json:"duration,omitempty"`
+}
+
+func (s *Server) handleEdgeAction(w http.ResponseWriter, r *http.Request) {
+	user, err := s.getCurrentUser(r)
+	if err != nil {
+		http.Error(w, `{"error":"Unauthorized"}`, http.StatusUnauthorized)
+		return
+	}
+
+	if user.Role != "admin" && user.Role != "owner" {
+		http.Error(w, `{"error":"Forbidden"}`, http.StatusForbidden)
+		return
+	}
+
+	var req EdgeActionRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		http.Error(w, `{"error":"Invalid request JSON"}`, http.StatusBadRequest)
+		return
+	}
+
+	if req.NodeID == "" {
+		http.Error(w, `{"error":"Missing node_id"}`, http.StatusBadRequest)
+		return
+	}
+
+	actor := user.Email
+	if actor == "" {
+		actor = user.ID
+	}
+
+	switch req.Action {
+	case "restart":
+		err = s.SendEdgeRestart(req.NodeID)
+		s.writeAudit(actor, "edge.restart", "node", req.NodeID, "Triggered regional daemon restart", r)
+	case "maintenance_enable":
+		reason := req.Reason
+		if reason == "" {
+			reason = "Administrative Maintenance"
+		}
+		duration := req.Duration
+		if duration <= 0 {
+			duration = 30
+		}
+		err = s.SendEdgeMaintenance(req.NodeID, "enable", duration, reason)
+		s.writeAudit(actor, "edge.maintenance", "node", req.NodeID, fmt.Sprintf("Enabled soft maintenance: %s (%d mins)", reason, duration), r)
+	case "maintenance_disable":
+		err = s.SendEdgeMaintenance(req.NodeID, "disable", 0, "")
+		s.writeAudit(actor, "edge.maintenance", "node", req.NodeID, "Disabled soft maintenance", r)
+	case "kick_tunnels":
+		err = s.SendEdgeKickAll(req.NodeID)
+		s.writeAudit(actor, "edge.kick_tunnels", "node", req.NodeID, "Kicked all active tunnels", r)
+	default:
+		http.Error(w, `{"error":"Unknown action"}`, http.StatusBadRequest)
+		return
+	}
+
+	if err != nil {
+		log.Printf("[API] Failed to perform edge action %s on %s: %v", req.Action, req.NodeID, err)
+		respondJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
+		return
+	}
+
+	respondJSON(w, http.StatusOK, map[string]string{"status": "success"})
+}

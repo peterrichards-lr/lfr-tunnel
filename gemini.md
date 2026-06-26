@@ -623,7 +623,23 @@ The solution will consist of:
 - [x] Release, tag, and deploy v1.19.5 of lfr-tunneld.
 
 ## Version Detection & Liferay SE Configuration Alignment (v1.19.6)
-- [ ] Update `Makefile`, `deploy.sh`, `build-client-binaries.sh`, and `setup-edge-vps.sh` to extract Version from `pkg/config/version.go` instead of `git describe`.
-- [ ] Update `/etc/lfr-tunneld/server-config.yaml` on the central VPS to remove Homebrew/Scoop client commands and enforce the EDR-whitelisted installer.
-- [ ] Rebuild and redeploy the gateway to the VPS to reflect the correct version (`v1.19.6`).
+- [x] Update `Makefile`, `deploy.sh`, `build-client-binaries.sh`, and `setup-edge-vps.sh` to extract Version from `pkg/config/version.go` instead of `git describe`.
+- [x] Update `/etc/lfr-tunneld/server-config.yaml` on the central VPS to remove Homebrew/Scoop client commands and enforce the EDR-whitelisted installer.
+- [x] Rebuild and redeploy the gateway to the VPS to reflect the correct version (`v1.19.6`).
+
+## JP Edge Node Activation & Alignment (v1.19.7)
+- [ ] Add `us-central-1` and `jp-tokyo-1` URLs and token hashes in `/etc/lfr-tunneld/server-config.yaml` on the Control Plane VPS.
+- [ ] Compile the Linux `lfr-tunneld` binary locally using `v1.19.5`.
+- [ ] Deploy the compiled binary to the JP edge VPS.
+- [ ] Configure the JP edge VPS `/etc/lfr-tunneld/server-config.yaml` with the prefix-aware `edge_token: "jp-tokyo-1-LFT_JP_EDGE_TOKEN_2026"`.
+- [ ] Restart `lfr-tunneld` on both Control Plane and JP Edge VPS.
+
+## Edge Gateways Version Probing & Action Menus (v1.20.0)
+- [x] Update `pkg/server/server.go` to track edge node versions, query `/api/version` on regional nodes, and expose version via `edge-health` API.
+- [x] Update `pkg/server/edge_control_ws.go` to transmit edge node version on handshake, support wildcard lease kicks, and exit on restart command.
+- [x] Implement administrative edge action handler `/api/portal/edge-action` on the central control plane.
+- [x] Convert Edge Gateways table in `dashboard.html` and `dashboard.js` to render client/daemon version and action menu dropdown (Restart, Maintenance Enable/Disable, Kick Tunnels).
+- [x] Run standard tests and verify compiler checks.
+
+
 

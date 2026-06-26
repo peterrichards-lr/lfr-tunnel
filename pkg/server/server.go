@@ -14,6 +14,7 @@ import (
 	"fmt"
 	"html"
 	"html/template"
+	"io"
 	"log"
 	"net"
 	"net/http"
@@ -92,6 +93,7 @@ type EdgeHealthStatus struct {
 	LastCheckAt  int64  `json:"last_check_at"`
 	ErrorMessage string `json:"error_message,omitempty"`
 	ResolvedIP   string `json:"resolved_ip,omitempty"`
+	Version      string `json:"version,omitempty"`
 }
 
 // Server coordinates the entire gateway operations.
@@ -133,6 +135,7 @@ type Server struct {
 	wsClients          map[*wsClient]bool
 	wsMutex            sync.RWMutex
 	edgeClients        map[string]*websocket.Conn
+	edgeVersions       map[string]string // node_id -> version
 	edgeClientsMu      sync.RWMutex
 	startTime          time.Time
 	edgeLeases         map[string][]EdgeLease
@@ -226,6 +229,7 @@ func NewServer(cfg *config.ServerConfig) (*Server, error) {
 		lastPortalActivity: make(map[string]time.Time),
 		wsClients:          make(map[*wsClient]bool),
 		edgeClients:        make(map[string]*websocket.Conn),
+		edgeVersions:       make(map[string]string),
 		startTime:          time.Now(),
 		caCert:             caCert,
 		caKey:              caKey,
@@ -822,6 +826,11 @@ func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 
 		if r.Method == http.MethodGet && r.URL.Path == "/api/portal/edge-health" {
 			s.handleEdgeHealth(w, r)
+			return
+		}
+
+		if r.Method == http.MethodPost && r.URL.Path == "/api/portal/edge-action" {
+			s.handleEdgeAction(w, r)
 			return
 		}
 
@@ -4956,15 +4965,15 @@ func (s *Server) monitorEdgeHealth() {
 			}
 
 			if !outboundOk {
-				s.updateEdgeHealth(edge.ID, "Unknown", 0, "Gateway outbound connectivity check failed")
+				s.updateEdgeHealth(edge.ID, "Unknown", 0, "Gateway outbound connectivity check failed", "")
 				continue
 			}
 
 			client := &http.Client{Timeout: 5 * time.Second}
 			start := time.Now()
-			req, err := http.NewRequest(http.MethodGet, edge.URL+"/api/healthz", nil)
+			req, err := http.NewRequest(http.MethodGet, edge.URL+"/api/version", nil)
 			if err != nil {
-				s.updateEdgeHealth(edge.ID, "Offline", 0, err.Error())
+				s.updateEdgeHealth(edge.ID, "Offline", 0, err.Error(), "")
 				continue
 			}
 
@@ -4974,22 +4983,33 @@ func (s *Server) monitorEdgeHealth() {
 			latency := time.Since(start).Milliseconds()
 
 			if err != nil {
-				s.updateEdgeHealth(edge.ID, "Offline", latency, err.Error())
+				s.updateEdgeHealth(edge.ID, "Offline", latency, err.Error(), "")
 				continue
+			}
+
+			var version string
+			if resp.StatusCode == http.StatusOK {
+				var versionResp struct {
+					ServerVersion string `json:"server_version"`
+				}
+				if bodyBytes, readErr := io.ReadAll(resp.Body); readErr == nil {
+					_ = json.Unmarshal(bodyBytes, &versionResp)
+					version = versionResp.ServerVersion
+				}
 			}
 			_ = resp.Body.Close()
 
 			if resp.StatusCode == http.StatusOK {
-				s.updateEdgeHealth(edge.ID, "Online", latency, "")
+				s.updateEdgeHealth(edge.ID, "Online", latency, "", version)
 			} else {
-				s.updateEdgeHealth(edge.ID, "Offline", latency, fmt.Sprintf("HTTP %d", resp.StatusCode))
+				s.updateEdgeHealth(edge.ID, "Offline", latency, fmt.Sprintf("HTTP %d", resp.StatusCode), "")
 			}
 		}
 		time.Sleep(60 * time.Second)
 	}
 }
 
-func (s *Server) updateEdgeHealth(id, status string, latency int64, errMsg string) {
+func (s *Server) updateEdgeHealth(id, status string, latency int64, errMsg string, version string) {
 	s.edgeHealthMu.Lock()
 	defer s.edgeHealthMu.Unlock()
 
@@ -5012,6 +5032,7 @@ func (s *Server) updateEdgeHealth(id, status string, latency int64, errMsg strin
 		LastCheckAt:  time.Now().Unix(),
 		ErrorMessage: errMsg,
 		ResolvedIP:   resolvedIP,
+		Version:      version,
 	}
 }
 
@@ -5034,6 +5055,9 @@ func (s *Server) handleEdgeHealth(w http.ResponseWriter, r *http.Request) {
 		} else {
 			h.Status = "Online"
 			h.ErrorMessage = ""
+		}
+		if h.Version == "" {
+			h.Version = s.edgeVersions[nodeID]
 		}
 		if h.ResolvedIP == "" && conn != nil {
 			if remoteAddr := conn.RemoteAddr(); remoteAddr != nil {

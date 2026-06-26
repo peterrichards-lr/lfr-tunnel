@@ -2369,7 +2369,7 @@ func TestServer_OutboundConnectivity(t *testing.T) {
 	srv.outboundConnected = false
 	srv.outboundMutex.Unlock()
 
-	srv.updateEdgeHealth("us-edge", "Unknown", 0, "Gateway outbound connectivity check failed")
+	srv.updateEdgeHealth("us-edge", "Unknown", 0, "Gateway outbound connectivity check failed", "")
 
 	req2 := httptest.NewRequest("GET", "http://tunnel.example.se/api/portal/edge-health", nil)
 	rec2 := httptest.NewRecorder()

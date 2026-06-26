@@ -3695,13 +3695,14 @@ applyTheme(currentUser.theme_preference);
                 tbody.innerHTML = '';
                 const keys = Object.keys(data || {});
                 if (keys.length === 0) {
-                    tbody.innerHTML = '<tr><td colspan="5" style="text-align:center; opacity:0.6;">No edge nodes configured</td></tr>';
+                    tbody.innerHTML = '<tr><td colspan="6" style="text-align:center; opacity:0.6;">No edge nodes configured</td></tr>';
                 } else {
                     keys.sort().forEach(id => {
                         const h = data[id];
                         const isOnline = h.status === 'Online';
                         const dotColor = isOnline ? '#10b981' : 'var(--danger)';
                         
+                        let resolvedIP = h.resolved_ip || '-';
                         let latText = isOnline ? `${h.latency_ms} ms` : '-';
                         let timeSince = h.last_check_at ? Math.floor((Date.now() / 1000) - h.last_check_at) + 's ago' : 'Never';
                         let errMsg = h.error_message ? `<span style="color:var(--danger); font-size:12px;">${escapeHTML(h.error_message)}</span>` : '';
@@ -3709,6 +3710,7 @@ applyTheme(currentUser.theme_preference);
                         const tr = document.createElement('tr');
                         tr.innerHTML = `
                             <td><strong>${escapeHTML(id)}</strong></td>
+                            <td><code style="font-family: monospace; font-size: 12px; background: rgba(255, 255, 255, 0.05); padding: 2px 6px; border-radius: 4px;">${escapeHTML(resolvedIP)}</code></td>
                             <td>
                                 <span style="display:inline-flex; align-items:center; gap:6px;">
                                     <span style="width:8px; height:8px; border-radius:50%; background-color:${dotColor};"></span>
@@ -3724,7 +3726,7 @@ applyTheme(currentUser.theme_preference);
                 }
             } catch (err) {
                 console.error(err);
-                tbody.innerHTML = `<tr><td colspan="5" style="color:var(--danger);text-align:center;">Failed to load network health: ${escapeHTML(err.toString())}</td></tr>`;
+                tbody.innerHTML = `<tr><td colspan="6" style="color:var(--danger);text-align:center;">Failed to load network health: ${escapeHTML(err.toString())}</td></tr>`;
             }
             
             // Auto refresh every 30 seconds if tab is still active

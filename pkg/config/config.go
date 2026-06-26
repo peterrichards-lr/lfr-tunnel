@@ -85,6 +85,7 @@ type ServerConfig struct {
 	ControlPlaneURL            string                    `yaml:"control_plane_url"`
 	EdgeToken                  string                    `yaml:"edge_token"`
 	EdgeNodes                  []EdgeNodeConfig          `yaml:"edge_nodes"`
+	VanityDomainHook           string                    `yaml:"vanity_domain_hook"`
 
 	// Dynamic SSO/OIDC Providers
 	SSOProviders []SSOProviderConfig `yaml:"sso_providers"`
@@ -124,6 +125,7 @@ type ClientConfig struct {
 	ServerURL    string            `yaml:"server_url"`
 	AuthToken    string            `yaml:"auth_token"`
 	Subdomain    string            `yaml:"subdomain"`
+	CustomDomain string            `yaml:"custom_domain"`
 	Ports        []int             `yaml:"ports"`
 	TokenFile    string            `yaml:"token_file"`
 	RateLimit    int               `yaml:"rate_limit"`
@@ -512,6 +514,12 @@ func LoadClientConfig(path string) (*ClientConfig, error) {
 		cfg.Region = val
 	} else if val := os.Getenv("LFT_REGION"); val != "" {
 		cfg.Region = val
+	}
+
+	if val := os.Getenv("LFT_CLIENT_CUSTOM_DOMAIN"); val != "" {
+		cfg.CustomDomain = val
+	} else if val := os.Getenv("LFT_CUSTOM_DOMAIN"); val != "" {
+		cfg.CustomDomain = val
 	}
 
 	return cfg, nil

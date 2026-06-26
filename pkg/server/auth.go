@@ -126,10 +126,10 @@ func (r *Registry) Register(userID string, subdomainPrefix string, ports []PortM
 	r.Lock()
 	defer r.Unlock()
 
-	if subdomainPrefix == "" {
+	if subdomainPrefix == "" && (len(domains) != 1 || domains[0] == "") {
 		return "", nil, fmt.Errorf("subdomain prefix cannot be empty")
 	}
-	if !isValidSubdomain(subdomainPrefix) {
+	if subdomainPrefix != "" && !isValidSubdomain(subdomainPrefix) {
 		return "", nil, fmt.Errorf("invalid or reserved subdomain prefix: %s", subdomainPrefix)
 	}
 	if len(ports) == 0 {
@@ -150,11 +150,20 @@ func (r *Registry) Register(userID string, subdomainPrefix string, ports []PortM
 		if suffix == "" {
 			subdomain = subdomainPrefix
 		} else {
-			subdomain = fmt.Sprintf("%s-%s", subdomainPrefix, suffix)
+			if subdomainPrefix == "" {
+				subdomain = strings.TrimPrefix(suffix, "-")
+			} else {
+				subdomain = fmt.Sprintf("%s-%s", subdomainPrefix, suffix)
+			}
 		}
 
 		for _, domain := range domains {
-			fullHost := fmt.Sprintf("%s.%s", subdomain, domain)
+			var fullHost string
+			if subdomain == "" {
+				fullHost = domain
+			} else {
+				fullHost = fmt.Sprintf("%s.%s", subdomain, domain)
+			}
 			if _, exists := r.leases[fullHost]; exists {
 				return "", nil, fmt.Errorf("host %s is already registered", fullHost)
 			}
@@ -181,7 +190,11 @@ func (r *Registry) Register(userID string, subdomainPrefix string, ports []PortM
 		if suffix == "" {
 			subdomain = subdomainPrefix
 		} else {
-			subdomain = fmt.Sprintf("%s-%s", subdomainPrefix, suffix)
+			if subdomainPrefix == "" {
+				subdomain = strings.TrimPrefix(suffix, "-")
+			} else {
+				subdomain = fmt.Sprintf("%s-%s", subdomainPrefix, suffix)
+			}
 		}
 
 		// Find a free local port
@@ -191,7 +204,12 @@ func (r *Registry) Register(userID string, subdomainPrefix string, ports []PortM
 		}
 
 		for _, domain := range domains {
-			fullHost := fmt.Sprintf("%s.%s", subdomain, domain)
+			var fullHost string
+			if subdomain == "" {
+				fullHost = domain
+			} else {
+				fullHost = fmt.Sprintf("%s.%s", subdomain, domain)
+			}
 			lease := &TunnelLease{
 				UserID:          userID,
 				SubdomainPrefix: subdomainPrefix,
@@ -495,6 +513,20 @@ func (r *Registry) UpdateLeaseStatus(sessionToken, status string) bool {
 		lease.Status = status
 	}
 	return true
+}
+
+// GetSessionLeases returns a copy of all leases associated with a session token.
+func (r *Registry) GetSessionLeases(sessionToken string) []*TunnelLease {
+	r.RLock()
+	defer r.RUnlock()
+
+	leases, exists := r.sessionLeases[sessionToken]
+	if !exists {
+		return nil
+	}
+	res := make([]*TunnelLease, len(leases))
+	copy(res, leases)
+	return res
 }
 
 // GetActiveVisitorIPs returns a slice of active visitor IPs that have made a request within the timeout.

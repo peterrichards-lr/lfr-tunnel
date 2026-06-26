@@ -59,6 +59,7 @@ func main() {
 	passcode := flag.String("passcode", "", "Passcode to protect the public tunnel URLs")
 	whitelistIP := flag.String("whitelist-ip", "", "Comma-separated IP addresses allowed to access the tunnel")
 	region := flag.String("region", "", "Gateway region to target (e.g. eu, us-east, us-west, latam, apac)")
+	domain := flag.String("domain", "", "Custom domain name (e.g. custom-client-site.com)")
 
 	flag.Parse()
 
@@ -110,6 +111,9 @@ func main() {
 	}
 	if *region != "" {
 		cfg.Region = *region
+	}
+	if *domain != "" {
+		cfg.CustomDomain = *domain
 	}
 
 	isExplicitServer := *serverURL != "" || os.Getenv("LFT_CLIENT_SERVER") != "" || os.Getenv("LFT_SERVER_URL") != "" || os.Getenv("LFT_SERVER") != ""
@@ -273,7 +277,11 @@ func main() {
 	}
 	*inspectorPort = actualInspectorPort
 
-	log.Printf("[Client] Subdomain prefix: %s", sub)
+	if cfg.CustomDomain != "" {
+		log.Printf("[Client] Custom domain: %s", cfg.CustomDomain)
+	} else {
+		log.Printf("[Client] Subdomain prefix: %s", sub)
+	}
 	log.Printf("[Client] Exposing ports:")
 	for _, pm := range portMappings {
 		suffixStr := " (Primary)"
@@ -299,7 +307,11 @@ func main() {
 	}
 
 	// 5. Registration Handshake
-	fmt.Printf("[Client] Registering tunnel (%s) at %s...\n", sub, cfg.ServerURL)
+	if cfg.CustomDomain != "" {
+		fmt.Printf("[Client] Registering tunnel (%s) at %s...\n", cfg.CustomDomain, cfg.ServerURL)
+	} else {
+		fmt.Printf("[Client] Registering tunnel (%s) at %s...\n", sub, cfg.ServerURL)
+	}
 	if cfg.RateLimit > 0 {
 		fmt.Printf("[Client] Requested Subdomain Rate Limit: %d req/s\n", cfg.RateLimit)
 	}
@@ -313,7 +325,7 @@ func main() {
 	if client.IsDocker() {
 		clientOS += " (Docker)"
 	}
-	regResp, err := client.RegisterTunnel(cfg.ServerURL, cfg.AuthToken, sub, portMappings, cfg.RateLimit, cfg.BasicAuth, engine.AddedHeaders, clientOS, cfg.Passcode, cfg.WhitelistIPs)
+	regResp, err := client.RegisterTunnel(cfg.ServerURL, cfg.AuthToken, sub, cfg.CustomDomain, portMappings, cfg.RateLimit, cfg.BasicAuth, engine.AddedHeaders, clientOS, cfg.Passcode, cfg.WhitelistIPs)
 	if err != nil {
 		if regErr, ok := err.(*client.RegistrationError); ok && regErr.StatusCode == 403 {
 			log.Printf("[Error] Failed to register: %s\n", regErr.Message)
@@ -383,18 +395,30 @@ func main() {
 	var publicURLs []string
 	log.Println("[Client] Registration successful! Your public tunnel URLs are:")
 	subHost := sub
-	if regResp.SubdomainPrefix != "" {
+	if cfg.CustomDomain != "" {
+		subHost = ""
+	} else if regResp.SubdomainPrefix != "" {
 		subHost = regResp.SubdomainPrefix
 	}
 	for _, domain := range regResp.Domains {
 		for _, pm := range portMappings {
-			var fullSubdomain string
-			if pm.NameSuffix == "" {
-				fullSubdomain = subHost
+			var urlStr string
+			if subHost == "" {
+				if pm.NameSuffix == "" {
+					urlStr = fmt.Sprintf("https://%s", domain)
+				} else {
+					cleanSuffix := strings.TrimPrefix(pm.NameSuffix, "-")
+					urlStr = fmt.Sprintf("https://%s.%s", cleanSuffix, domain)
+				}
 			} else {
-				fullSubdomain = fmt.Sprintf("%s-%s", subHost, pm.NameSuffix)
+				var fullSubdomain string
+				if pm.NameSuffix == "" {
+					fullSubdomain = subHost
+				} else {
+					fullSubdomain = fmt.Sprintf("%s-%s", subHost, pm.NameSuffix)
+				}
+				urlStr = fmt.Sprintf("https://%s.%s", fullSubdomain, domain)
 			}
-			urlStr := fmt.Sprintf("https://%s.%s", fullSubdomain, domain)
 			publicURLs = append(publicURLs, urlStr)
 			log.Printf("  %s -> local port %d", urlStr, pm.LocalPort)
 		}

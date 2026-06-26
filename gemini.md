@@ -699,3 +699,9 @@ The solution will consist of:
 - [x] Deploy client binaries to VPS: `./scripts/deploy-client-binaries.sh -i ~/.ssh/id_vm6_networks_vps`
 - [x] Trigger automated release tagging: `./scripts/create-release-tag.sh v1.23.0`
 - [x] Redeploy gateway binary to VPS: `./scripts/deploy.sh -i ~/.ssh/id_vm6_networks_vps -w 10`
+
+## Client Binary v1.23.0 Release Correction
+- [x] Rebuild client binaries on master (Version v1.23.0)
+- [x] Sign client binaries with LFT_SKIP_GPG=true
+- [x] Deploy corrected client binaries to VPS
+

@@ -137,6 +137,8 @@ type ClientConfig struct {
 	WhitelistIPs string            `yaml:"whitelist_ips"`
 	Region       string            `yaml:"region"`
 	Regions      map[string]string `yaml:"regions"`
+	Latency      time.Duration     `yaml:"latency"`
+	Bandwidth    string            `yaml:"bandwidth"`
 }
 
 // DefaultServerConfig returns a ServerConfig with sensible default values.
@@ -543,6 +545,22 @@ func LoadClientConfig(path string) (*ClientConfig, error) {
 		cfg.CustomDomain = val
 	} else if val := os.Getenv("LFT_CUSTOM_DOMAIN"); val != "" {
 		cfg.CustomDomain = val
+	}
+
+	if val := os.Getenv("LFT_CLIENT_LATENCY"); val != "" {
+		if d, err := time.ParseDuration(val); err == nil {
+			cfg.Latency = d
+		}
+	} else if val := os.Getenv("LFT_LATENCY"); val != "" {
+		if d, err := time.ParseDuration(val); err == nil {
+			cfg.Latency = d
+		}
+	}
+
+	if val := os.Getenv("LFT_CLIENT_BANDWIDTH"); val != "" {
+		cfg.Bandwidth = val
+	} else if val := os.Getenv("LFT_BANDWIDTH"); val != "" {
+		cfg.Bandwidth = val
 	}
 
 	return cfg, nil

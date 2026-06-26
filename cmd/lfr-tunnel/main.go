@@ -60,6 +60,8 @@ func main() {
 	whitelistIP := flag.String("whitelist-ip", "", "Comma-separated IP addresses allowed to access the tunnel")
 	region := flag.String("region", "", "Gateway region to target (e.g. eu, us-east, us-west, latam, apac)")
 	domain := flag.String("domain", "", "Custom domain name (e.g. custom-client-site.com)")
+	latency := flag.Duration("latency", 0, "Simulated network roundtrip latency (e.g. 200ms, 1s)")
+	bandwidth := flag.String("bandwidth", "", "Simulated bandwidth throttling limit (e.g. 512kbps, 2mbps)")
 
 	flag.Parse()
 
@@ -114,6 +116,12 @@ func main() {
 	}
 	if *domain != "" {
 		cfg.CustomDomain = *domain
+	}
+	if *latency > 0 {
+		cfg.Latency = *latency
+	}
+	if *bandwidth != "" {
+		cfg.Bandwidth = *bandwidth
 	}
 
 	isExplicitServer := *serverURL != "" || os.Getenv("LFT_CLIENT_SERVER") != "" || os.Getenv("LFT_SERVER_URL") != "" || os.Getenv("LFT_SERVER") != ""
@@ -271,6 +279,14 @@ func main() {
 	engine.Passcode = cfg.Passcode
 	engine.WhitelistIPs = cfg.WhitelistIPs
 	engine.AccessMode = "or"
+	engine.Latency = cfg.Latency
+	if cfg.Bandwidth != "" {
+		bwLimit, err := client.ParseBandwidth(cfg.Bandwidth)
+		if err != nil {
+			log.Fatalf("[Error] Invalid bandwidth value '%s': %v", cfg.Bandwidth, err)
+		}
+		engine.BandwidthLimit = bwLimit
+	}
 	actualInspectorPort, err := client.StartInspector(*inspectorPort, engine)
 	if err != nil {
 		log.Fatalf("[Error] Failed to start Inspector dashboard: %v", err)

@@ -626,4 +626,35 @@ The solution will consist of:
 - [ ] Update `Makefile`, `deploy.sh`, `build-client-binaries.sh`, and `setup-edge-vps.sh` to extract Version from `pkg/config/version.go` instead of `git describe`.
 - [ ] Update `/etc/lfr-tunneld/server-config.yaml` on the central VPS to remove Homebrew/Scoop client commands and enforce the EDR-whitelisted installer.
 - [ ] Rebuild and redeploy the gateway to the VPS to reflect the correct version (`v1.19.6`).
+- [x] Update `Makefile`, `deploy.sh`, `build-client-binaries.sh`, and `setup-edge-vps.sh` to extract Version from `pkg/config/version.go` instead of `git describe`.
+- [x] Update `/etc/lfr-tunneld/server-config.yaml` on the central VPS to remove Homebrew/Scoop client commands and enforce the EDR-whitelisted installer.
+- [x] Rebuild and redeploy the gateway to the VPS to reflect the correct version (`v1.19.6`).
+
+## JP Edge Node Activation & Alignment (v1.19.7)
+- [ ] Add `us-central-1` and `jp-tokyo-1` URLs and token hashes in `/etc/lfr-tunneld/server-config.yaml` on the Control Plane VPS.
+- [ ] Compile the Linux `lfr-tunneld` binary locally using `v1.19.5`.
+- [ ] Deploy the compiled binary to the JP edge VPS.
+- [ ] Configure the JP edge VPS `/etc/lfr-tunneld/server-config.yaml` with the prefix-aware `edge_token: "jp-tokyo-1-LFT_JP_EDGE_TOKEN_2026"`.
+- [ ] Restart `lfr-tunneld` on both Control Plane and JP Edge VPS.
+
+## Edge Gateways Version Probing & Action Menus (v1.20.0)
+- [x] Update `pkg/server/server.go` to track edge node versions, query `/api/version` on regional nodes, and expose version via `edge-health` API.
+- [x] Update `pkg/server/edge_control_ws.go` to transmit edge node version on handshake, support wildcard lease kicks, and exit on restart command.
+- [x] Implement administrative edge action handler `/api/portal/edge-action` on the central control plane.
+- [x] Convert Edge Gateways table in `dashboard.html` and `dashboard.js` to render client/daemon version and action menu dropdown (Restart, Maintenance Enable/Disable, Kick Tunnels).
+- [x] Run standard tests and verify compiler checks.
+
+## Collapsible Sidebar Sections (v1.21.0)
+- [x] Wrap sidebar groups into logically labeled, collapsible containers in dashboard.html.
+- [x] Add transition styling for collapsed/expanded sidebar drawers in dashboard.css.
+- [x] Implement toggle section functionality in dashboard.js and persist the states in localStorage.
+- [x] Fix existing Playwright E2E UI test failures (selector for maintenance countdown select and outdated fallback command assertion).
+- [x] Add immediate telemetry sync in dashboard.js upon toggling maintenance mode to resolve E2E test timing flakes.
+- [x] Fix main-content selector bug in showTab() to prevent hiding global banners and language container.
+- [x] Resolve merge conflict in dashboard.js by discarding edge actions but keeping collapsible sidebar logic.
+- [x] Verify Playwright UI E2E tests covering collapsible sidebar zones and state persistence pass.
+
+
+
+
 

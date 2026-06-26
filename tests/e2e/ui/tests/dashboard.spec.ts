@@ -135,8 +135,7 @@ test.describe('Dashboard UI Automation', () => {
 
     // 7. Verify dynamic platform configuration overrides render correctly on the Overview page
     await page.click('#nav-overview');
-    await expect(page.locator('text=🚀 Recommended Installation:')).toBeVisible();
-    await expect(page.locator('text=🛠️ Fallback Alternative:')).toBeVisible();
+    await expect(page.locator('text=🚀 Recommended Installation')).toBeVisible();
     await expect(page.locator('text=6d4aef719dee798e611139e422d9231b226ec3538617d025fad08accf8fc63d6')).toBeVisible();
     await expect(page.locator('text=⬇️ Download Signed Binary')).toBeVisible();
   });
@@ -196,12 +195,15 @@ test.describe('Dashboard UI Automation', () => {
     await expect(page.locator('#overview-maintenance-box')).not.toBeVisible();
     await expect(page.locator('#global-maintenance-banner')).not.toBeVisible();
 
+    // Register dialog handler to automatically accept confirmation prompts
+    page.on('dialog', dialog => dialog.accept());
+
     // 2. Navigate to Gateway Maintenance and schedule a mock soft maintenance
     await page.click('#nav-maintenance');
     await expect(page.locator('h2:has-text("Gateway Maintenance")')).toBeVisible();
 
     // Select countdown (e.g. 5 minutes)
-    await page.selectOption('#maint-countdown-select select', '5');
+    await page.selectOption('#maint-countdown-select', '5');
     await page.fill('#maint-soft-reason', 'E2E Testing Maintenance');
     await page.click('#btn-toggle-maint');
 
@@ -223,6 +225,42 @@ test.describe('Dashboard UI Automation', () => {
     await page.click('#nav-overview');
     await expect(page.locator('#overview-maintenance-box')).not.toBeVisible();
     await expect(page.locator('#global-maintenance-banner')).not.toBeVisible();
+  });
+
+  test('Verify Collapsible Sidebar Sections and Persistence', async ({ page }) => {
+    // 1. Login
+    await page.goto('/admin');
+    await page.click('#btn-show-email');
+    await page.fill('#email-input', adminEmail);
+    await page.click('button[type="submit"]');
+
+    const token = await getMagicLinkToken(adminEmail);
+    expect(token).toBeTruthy();
+    await page.goto(`/admin?token=${token}`);
+
+    // Wait for Dashboard to load
+    await expect(page.locator('h2:has-text("Dashboard Overview")')).toBeVisible();
+
+    // 2. Verify all sections are expanded initially
+    const personalSection = page.locator('#section-personal');
+    const adminSection = page.locator('#section-administration');
+    await expect(personalSection).toBeVisible();
+    await expect(adminSection).toBeVisible();
+    await expect(personalSection).not.toHaveClass(/collapsed/);
+    await expect(adminSection).not.toHaveClass(/collapsed/);
+
+    // 3. Click personal section header to collapse it
+    await page.click('.sidebar-section-header:has-text("Personal")');
+    await expect(personalSection).toHaveClass(/collapsed/);
+
+    // 4. Reload page and check that personal section remains collapsed
+    await page.reload();
+    await expect(page.locator('h2:has-text("Dashboard Overview")')).toBeVisible();
+    await expect(page.locator('#section-personal')).toHaveClass(/collapsed/);
+
+    // 5. Expand personal section again
+    await page.click('.sidebar-section-header:has-text("Personal")');
+    await expect(page.locator('#section-personal')).not.toHaveClass(/collapsed/);
   });
 });
 

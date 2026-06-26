@@ -529,6 +529,7 @@ function toggleTheme() {
             } catch (e) {
                 console.error("Failed to auto-detect and translate portal language", e);
             }
+            initSidebarSections();
         }
 
         async function showLogin() {
@@ -1278,7 +1279,7 @@ applyTheme(currentUser.theme_preference);
             if (window.closeAllActionMenus) {
                 window.closeAllActionMenus();
             }
-            document.querySelectorAll('.main-content > div').forEach(el => el.classList.add('hidden'));
+            document.querySelectorAll('.main-content > div[id^="tab-"]').forEach(el => el.classList.add('hidden'));
             document.querySelectorAll('.nav-item').forEach(el => el.classList.remove('active'));
             
             const tabEl = document.getElementById(`tab-${tabName}`);
@@ -2455,6 +2456,12 @@ applyTheme(currentUser.theme_preference);
                     updateMaintenanceModeUI(data.maintenance_mode, data.iron_curtain);
                     showToast(`Soft Maintenance Mode successfully updated!`, "success");
                     loadTunnels(); // Refresh tunnels lists in case they were kicked
+
+                    // Trigger immediate telemetry refresh
+                    fetch('/api/me')
+                        .then(r => r.json())
+                        .then(d => handleTelemetryPayload(d))
+                        .catch(e => console.error("Telemetry refresh failed", e));
                 } else {
                     const err = await res.json();
                     showToast(err.error || "Failed to update maintenance mode", "danger");
@@ -3735,4 +3742,28 @@ applyTheme(currentUser.theme_preference);
                     loadNetworkHealth();
                 }
             }, 30000);
+        }
+        window.toggleSidebarSection = function(sectionId) {
+            const content = document.getElementById('section-' + sectionId);
+            if (!content) return;
+            const header = content.previousElementSibling;
+            const isCollapsed = content.classList.toggle('collapsed');
+            if (header) {
+                header.classList.toggle('collapsed', isCollapsed);
+            }
+            localStorage.setItem('sidebar_collapsed_' + sectionId, isCollapsed ? 'true' : 'false');
+        };
+
+        function initSidebarSections() {
+            ['personal', 'administration', 'reporting', 'maintenance'].forEach(sectionId => {
+                const content = document.getElementById('section-' + sectionId);
+                if (!content) return;
+                const header = content.previousElementSibling;
+                const collapsedVal = localStorage.getItem('sidebar_collapsed_' + sectionId);
+                const shouldCollapse = collapsedVal === 'true';
+                content.classList.toggle('collapsed', shouldCollapse);
+                if (header) {
+                    header.classList.toggle('collapsed', shouldCollapse);
+                }
+            });
         }

@@ -1,5 +1,5 @@
 {
-  "version": "v1.19.3",
+  "version": "v1.19.4",
   "release_date": "2026-06-26",
   "features": [
     "Implement bi-directional control WebSocket channel between Edge nodes and Control Plane (#218)",

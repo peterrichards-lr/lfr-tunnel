@@ -2,6 +2,7 @@ package client
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -16,6 +17,8 @@ import (
 	"sync"
 	"sync/atomic"
 	"time"
+
+	"golang.org/x/time/rate"
 )
 
 // RequestRecord stores the captured HTTP traffic for the inspector.
@@ -70,6 +73,10 @@ type InterceptorEngine struct {
 	Passcode     string
 	WhitelistIPs string
 	AccessMode   string
+
+	// Latency & Bandwidth Simulation Settings
+	Latency        time.Duration
+	BandwidthLimit int64
 }
 
 // NewInterceptorEngine creates a new state engine for traffic inspection.
@@ -245,16 +252,28 @@ func (t *interceptorTransport) RoundTrip(req *http.Request) (*http.Response, err
 
 	startTime := time.Now()
 
+	// Inject request-phase latency (half of total roundtrip delay)
+	if t.engine.Latency > 0 {
+		time.Sleep(t.engine.Latency / 2)
+	}
+
 	// Capture request body (up to 10KB)
 	var reqBodyStr string
 	if req.Body != nil {
-		bodyBytes, _ := io.ReadAll(io.LimitReader(req.Body, 10240))
+		var bodyReader io.Reader = req.Body
+		var remainingReader io.Reader = req.Body
+		if t.engine.BandwidthLimit > 0 {
+			limiter := rate.NewLimiter(rate.Limit(t.engine.BandwidthLimit), int(getHostBurst(t.engine.BandwidthLimit)))
+			bodyReader = &throttledReader{r: req.Body, limiter: limiter}
+			remainingReader = &throttledReader{r: req.Body, limiter: limiter}
+		}
+		bodyBytes, _ := io.ReadAll(io.LimitReader(bodyReader, 10240))
 		reqBodyStr = string(bodyBytes)
 		req.Body = struct {
 			io.Reader
 			io.Closer
 		}{
-			Reader: io.MultiReader(bytes.NewReader(bodyBytes), req.Body),
+			Reader: io.MultiReader(bytes.NewReader(bodyBytes), remainingReader),
 			Closer: req.Body,
 		}
 	}
@@ -284,6 +303,11 @@ func (t *interceptorTransport) RoundTrip(req *http.Request) (*http.Response, err
 
 	// Forward Request
 	res, err := t.transport.RoundTrip(req)
+
+	// Inject response-phase latency (remaining half of total roundtrip delay)
+	if t.engine.Latency > 0 {
+		time.Sleep(t.engine.Latency / 2)
+	}
 	duration := time.Since(startTime).Milliseconds()
 
 	if err == nil && res != nil {
@@ -360,13 +384,20 @@ func (t *interceptorTransport) RoundTrip(req *http.Request) (*http.Response, err
 	// Capture response body (up to 10KB)
 	var respBodyStr string
 	if res.Body != nil {
-		bodyBytes, _ := io.ReadAll(io.LimitReader(res.Body, 10240))
+		var bodyReader io.Reader = res.Body
+		var remainingReader io.Reader = res.Body
+		if t.engine.BandwidthLimit > 0 {
+			limiter := rate.NewLimiter(rate.Limit(t.engine.BandwidthLimit), int(getHostBurst(t.engine.BandwidthLimit)))
+			bodyReader = &throttledReader{r: res.Body, limiter: limiter}
+			remainingReader = &throttledReader{r: res.Body, limiter: limiter}
+		}
+		bodyBytes, _ := io.ReadAll(io.LimitReader(bodyReader, 10240))
 		respBodyStr = string(bodyBytes)
 		res.Body = struct {
 			io.Reader
 			io.Closer
 		}{
-			Reader: io.MultiReader(bytes.NewReader(bodyBytes), res.Body),
+			Reader: io.MultiReader(bytes.NewReader(bodyBytes), remainingReader),
 			Closer: res.Body,
 		}
 	}
@@ -430,4 +461,94 @@ func getHostHeaderValue(host string, port int) string {
 		return host
 	}
 	return fmt.Sprintf("%s:%d", host, port)
+}
+
+func getHostBurst(limit int64) int64 {
+	if limit > 65536 {
+		return limit
+	}
+	return 65536
+}
+
+type throttledReader struct {
+	r       io.Reader
+	limiter *rate.Limiter
+}
+
+func (tr *throttledReader) Read(p []byte) (n int, err error) {
+	n, err = tr.r.Read(p)
+	if n > 0 && tr.limiter != nil {
+		burst := tr.limiter.Burst()
+		if burst <= 0 {
+			return n, err
+		}
+
+		rem := n
+		for rem > 0 {
+			chunk := rem
+			if chunk > burst {
+				chunk = burst
+			}
+			ctx := context.Background()
+			if waitErr := tr.limiter.WaitN(ctx, chunk); waitErr != nil {
+				return n - rem + chunk, waitErr
+			}
+			rem -= chunk
+		}
+	}
+	return n, err
+}
+
+func ParseBandwidth(bwStr string) (int64, error) {
+	bwStr = strings.ToLower(strings.TrimSpace(bwStr))
+	if bwStr == "" {
+		return 0, nil
+	}
+
+	if val, err := strconv.ParseInt(bwStr, 10, 64); err == nil {
+		return val, nil
+	}
+
+	var numStr string
+	var suffix string
+	for i, c := range bwStr {
+		if (c >= '0' && c <= '9') || c == '.' {
+			numStr += string(c)
+		} else {
+			suffix = bwStr[i:]
+			break
+		}
+	}
+
+	val, err := strconv.ParseFloat(numStr, 64)
+	if err != nil {
+		return 0, fmt.Errorf("invalid numeric bandwidth: %s", numStr)
+	}
+
+	suffix = strings.TrimSpace(suffix)
+	var multiplier float64
+	switch suffix {
+	case "b", "bps":
+		multiplier = 1.0 / 8.0
+	case "kb", "kbps", "kb/s":
+		multiplier = 1000.0 / 8.0
+	case "mb", "mbps", "mb/s":
+		multiplier = 1000.0 * 1000.0 / 8.0
+	case "gb", "gbps", "gb/s":
+		multiplier = 1000.0 * 1000.0 * 1000.0 / 8.0
+	case "b/s", "bytes/s":
+		multiplier = 1.0
+	case "kbytes/s", "kb/sec":
+		multiplier = 1000.0
+	case "mbytes/s", "mb/sec":
+		multiplier = 1000.0 * 1000.0
+	default:
+		return 0, fmt.Errorf("unknown bandwidth suffix: %s", suffix)
+	}
+
+	bytesPerSec := int64(val * multiplier)
+	if bytesPerSec <= 0 {
+		bytesPerSec = 1
+	}
+	return bytesPerSec, nil
 }

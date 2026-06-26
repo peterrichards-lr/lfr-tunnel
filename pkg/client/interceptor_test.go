@@ -10,6 +10,7 @@ import (
 	"net/http/httptest"
 	"strconv"
 	"testing"
+	"time"
 )
 
 func TestInterceptorEngine_HeaderInjection(t *testing.T) {
@@ -366,5 +367,86 @@ func TestInterceptorEngine_LargePayloads(t *testing.T) {
 	}
 	if len(rec.RespBody) != 10240 {
 		t.Errorf("Expected captured response body to be 10240 bytes, got %d", len(rec.RespBody))
+	}
+}
+
+func TestParseBandwidth(t *testing.T) {
+	tests := []struct {
+		input    string
+		expected int64
+		hasErr   bool
+	}{
+		{"", 0, false},
+		{"1024", 1024, false},
+		{"512kbps", 64000, false},
+		{"1mbps", 125000, false},
+		{"1mb/sec", 1000000, false},
+		{"10kb/s", 1250, false},
+		{"invalid", 0, true},
+	}
+
+	for _, tc := range tests {
+		res, err := ParseBandwidth(tc.input)
+		if tc.hasErr {
+			if err == nil {
+				t.Errorf("expected error for %q, got nil", tc.input)
+			}
+		} else {
+			if err != nil {
+				t.Errorf("unexpected error for %q: %v", tc.input, err)
+			}
+			if res != tc.expected {
+				t.Errorf("expected %d for %q, got %d", tc.expected, tc.input, res)
+			}
+		}
+	}
+}
+
+func TestThrottledReader_And_Latency(t *testing.T) {
+	// 1. Setup target server
+	targetServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "text/plain")
+		w.WriteHeader(http.StatusOK)
+		_, _ = w.Write([]byte("Hello Throttled!"))
+	}))
+	defer targetServer.Close()
+
+	// Extract target port
+	targetPort, _ := strconv.Atoi(targetServer.URL[len("http://127.0.0.1:"):])
+
+	// 2. Setup Interceptor Engine with simulated latency & bandwidth limit
+	engine := NewInterceptorEngine("127.0.0.1", nil)
+	engine.Latency = 100 * time.Millisecond // 100ms latency simulation
+	engine.BandwidthLimit = 100             // Throttled at 100 bytes/second
+
+	interceptPort, err := engine.InterceptPort(targetPort)
+	if err != nil {
+		t.Fatalf("Failed to intercept port: %v", err)
+	}
+
+	// 3. Make Request to Interceptor
+	proxyURL := fmt.Sprintf("http://127.0.0.1:%d", interceptPort)
+	startTime := time.Now()
+
+	resp, err := http.Get(proxyURL)
+	if err != nil {
+		t.Fatalf("Failed request: %v", err)
+	}
+	defer resp.Body.Close() //nolint:errcheck
+
+	body, err := io.ReadAll(resp.Body)
+	if err != nil {
+		t.Fatalf("Failed reading response: %v", err)
+	}
+
+	duration := time.Since(startTime)
+
+	if string(body) != "Hello Throttled!" {
+		t.Errorf("Expected 'Hello Throttled!', got %q", string(body))
+	}
+
+	// Latency is 100ms, so duration must be at least 100ms
+	if duration < 100*time.Millisecond {
+		t.Errorf("Expected request duration to be at least 100ms due to latency injection, got %v", duration)
 	}
 }

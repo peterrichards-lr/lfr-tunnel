@@ -682,3 +682,7 @@ The solution will consist of:
 - [x] Implement proxy header interpolation in proxy director (`pkg/server/proxy.go`)
 - [x] Add unit tests for custom header injection (`pkg/server/proxy_test.go`)
 
+## Documentation Restructuring (v1.26.0) (#242)
+- [x] Create a streamlined, signpost-driven README.md
+- [x] Ensure all nested links are correct and point to the corresponding docs under docs/
+

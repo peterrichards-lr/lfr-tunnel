@@ -253,7 +253,9 @@ func (s *Server) runEdgeControlChannel() {
 
 		nodeID := ""
 		parts := strings.Split(s.cfg.EdgeToken, "-")
-		if len(parts) > 0 {
+		if len(parts) > 1 {
+			nodeID = strings.Join(parts[:len(parts)-1], "-")
+		} else if len(parts) == 1 {
 			nodeID = parts[0]
 		}
 		if nodeID == "" {

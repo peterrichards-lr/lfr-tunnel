@@ -678,7 +678,7 @@ The solution will consist of:
 - [x] Update `docs/README.md` index links to match the new structure.
 
 ## Configurable Server-side Proxy Header Injection (v1.25.0) (#240)
-- [ ] Define proxy headers configuration structure in ServerConfig (`pkg/config/config.go`)
-- [ ] Implement proxy header interpolation in proxy director (`pkg/server/proxy.go`)
-- [ ] Add unit tests for custom header injection (`pkg/server/proxy_test.go`)
+- [x] Define proxy headers configuration structure in ServerConfig (`pkg/config/config.go`)
+- [x] Implement proxy header interpolation in proxy director (`pkg/server/proxy.go`)
+- [x] Add unit tests for custom header injection (`pkg/server/proxy_test.go`)
 

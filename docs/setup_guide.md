@@ -1013,3 +1013,51 @@ To prevent developers from seeing client CLI update warnings when you deploy cos
    - Update `/etc/lfr-tunneld/server-config.yaml` to set `latest_client_version: "v1.10.0"`.
    - Existing clients running `v1.9.x` will now be prompted with soft upgrade warnings to update to `v1.10.0`.
 
+---
+
+## 9. Asymmetric Outbound Routing Workaround (Dual-IP VPS)
+
+If your VPS hosting provider allocates multiple public IPv4/IPv6 addresses to a single virtual instance (for example, a primary IP and a secondary IP), you may encounter outbound routing issues.
+
+### 9.1. The Problem: Outbound Packet Drops
+By default, the Linux kernel's route selection algorithm may dynamically select the secondary IP address as the source IP for outbound packets. If the provider's firewall blocks or drops traffic that initiates from the secondary IP (or if asymmetric routing is detected and dropped at the network edge), tasks requiring outbound connectivity from the VPS (such as Let's Encrypt ACME renewals, SMTP mail sending, or regional edge latency health checks) will fail.
+
+### 9.2. The Solution: Pinned Route Source in Netplan
+To guarantee that outbound connections originating from the VPS are consistently pinned to the primary IP, you must configure a persistent static default route specifying the primary IP as the source (`from`) in Netplan.
+
+1. Open your Netplan configuration file (usually located at `/etc/netplan/` e.g., `/etc/netplan/50-cloud-init.yaml`):
+   ```bash
+   sudo nano /etc/netplan/50-cloud-init.yaml
+   ```
+
+2. Locate your network interface configuration and add the `routes` block under your interface (e.g., `eth0`). Specify your gateway IP under `via` and your primary IP (`82.39.133.178`) under `from`:
+   ```yaml
+   network:
+     version: 2
+     ethernets:
+       eth0:
+         dhcp4: no
+         addresses:
+           - 82.39.133.178/24  # Primary IP
+           - 82.39.133.179/24  # Secondary IP
+         routes:
+           - to: default
+             via: 82.39.133.1   # Gateway IP (check via `ip route show`)
+             from: 82.39.133.178 # Force primary IP as source for outbound traffic
+   ```
+
+3. Validate the Netplan configuration:
+   ```bash
+   sudo netplan try
+   ```
+
+4. Apply the routing changes:
+   ```bash
+   sudo netplan apply
+   ```
+
+5. Verify that outbound traffic is routing via the correct primary IP:
+   ```bash
+   curl https://ifconfig.me
+   # Output should match your primary IP: 82.39.133.178
+   ```

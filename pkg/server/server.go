@@ -91,6 +91,7 @@ type EdgeHealthStatus struct {
 	LatencyMs    int64  `json:"latency_ms"`
 	LastCheckAt  int64  `json:"last_check_at"`
 	ErrorMessage string `json:"error_message,omitempty"`
+	ResolvedIP   string `json:"resolved_ip,omitempty"`
 }
 
 // Server coordinates the entire gateway operations.
@@ -4991,11 +4992,26 @@ func (s *Server) monitorEdgeHealth() {
 func (s *Server) updateEdgeHealth(id, status string, latency int64, errMsg string) {
 	s.edgeHealthMu.Lock()
 	defer s.edgeHealthMu.Unlock()
+
+	var resolvedIP string
+	for _, edge := range s.cfg.EdgeNodes {
+		if edge.ID == id && edge.URL != "" {
+			if u, err := url.Parse(edge.URL); err == nil {
+				host := u.Hostname()
+				if ips, err := net.LookupHost(host); err == nil && len(ips) > 0 {
+					resolvedIP = ips[0]
+				}
+			}
+			break
+		}
+	}
+
 	s.edgeHealth[id] = EdgeHealthStatus{
 		Status:       status,
 		LatencyMs:    latency,
 		LastCheckAt:  time.Now().Unix(),
 		ErrorMessage: errMsg,
+		ResolvedIP:   resolvedIP,
 	}
 }
 

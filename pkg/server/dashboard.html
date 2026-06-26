@@ -123,7 +123,7 @@
                 <div class="sidebar-label" style="margin-top: 24px;" data-i18n="sidebar_maintenance">Maintenance</div>
                 <div id="nav-maintenance" class="nav-item" onclick="showTab('maintenance')" data-i18n="sidebar_maintenance_mode">Gateway Maintenance</div>
                 <div id="nav-backups" class="nav-item" onclick="showTab('backups')" data-i18n="sidebar_backups">Database Backups</div>
-                <div id="nav-network-health" class="nav-item" onclick="showTab('network-health')">Network Health</div>
+                <div id="nav-network-health" class="nav-item" onclick="showTab('network-health')" data-i18n="sidebar_edge_gateways">Edge Gateways</div>
             </div>
             
             <div class="sidebar-spacer"></div>
@@ -573,7 +573,7 @@
             <!-- Network Health Tab -->
             <div id="tab-network-health" class="hidden">
                 <div class="header">
-                    <h2>Network Health</h2>
+                    <h2 data-i18n="edge_gateways_title">Edge Gateways</h2>
                     <button class="btn btn-secondary" style="width: auto; margin: 0;" onclick="loadNetworkHealth()">Refresh</button>
                 </div>
                 <div class="glass table-container">
@@ -581,6 +581,7 @@
                         <thead>
                             <tr>
                                 <th>Region ID</th>
+                                <th>IP Address</th>
                                 <th>Status</th>
                                 <th>Latency</th>
                                 <th>Last Check</th>
@@ -588,7 +589,7 @@
                             </tr>
                         </thead>
                         <tbody id="network-health-body">
-                            <tr><td colspan="5" style="text-align:center;opacity:0.6;">Loading...</td></tr>
+                            <tr><td colspan="6" style="text-align:center;opacity:0.6;">Loading...</td></tr>
                         </tbody>
                     </table>
                 </div>

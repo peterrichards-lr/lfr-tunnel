@@ -44,7 +44,7 @@ if [ -n "$EDGE_NODES_FILE" ]; then
   fi
 
   echo "Downloading current server-config.yaml from VPS..."
-  if ssh $SSH_KEY $VPS_USER@$VPS_IP "[ -f /etc/lfr-tunneld/server-config.yaml ]"; then
+  if ssh $SSH_KEY $VPS_USER@$VPS_IP "sudo [ -f /etc/lfr-tunneld/server-config.yaml ]"; then
     echo "Remote configuration found. Copying to temporary path..."
     ssh $SSH_KEY $VPS_USER@$VPS_IP "sudo cp /etc/lfr-tunneld/server-config.yaml /tmp/tmp-server-config.yaml && sudo chown $VPS_USER:$VPS_USER /tmp/tmp-server-config.yaml"
     

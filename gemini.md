@@ -610,11 +610,14 @@ The solution will consist of:
 - [x] Update `scripts/create-release-tag.sh` to automatically bump version in `pkg/config/version.go`.
 - [x] Run release automation script to trigger the `v1.19.4` release.
 - [x] Deploy the updated server gateway `lfr-tunneld` to the central VPS and Edge nodes.
-- [ ] Fix configuration overwrite permission bug in `scripts/deploy.sh`.
-- [ ] Fix node ID prefix extraction in `pkg/server/edge_control_ws.go` to support hyphens in Node IDs.
-- [ ] Recompile and deploy `lfr-tunneld` to the regional Edge VPS (us-central-1) and update its configuration.
+- [x] Fix configuration overwrite permission bug in `scripts/deploy.sh`.
+- [x] Fix node ID prefix extraction in `pkg/server/edge_control_ws.go` to support hyphens in Node IDs.
+- [x] Recompile and deploy `lfr-tunneld` to the regional Edge VPS (us-central-1) and update its configuration.
 
-
-
-
-
+## Edge Gateways Screen Rename & Resolved IP Address (v1.19.5)
+- [ ] Expose resolved IP addresses in the edge health monitoring API.
+- [ ] Rename the "Network Health" tab to "Edge Gateways" in `dashboard.html`.
+- [ ] Update `dashboard.js` to render the "IP Address" column and update loading/no-node colspan.
+- [ ] Add `sidebar_edge_gateways` and `edge_gateways_title` translation properties across all i18n files.
+- [ ] Verify standard unit tests pass locally with `TMPDIR=/private/tmp make test`.
+- [ ] Release, tag, and deploy v1.19.5 of lfr-tunneld.

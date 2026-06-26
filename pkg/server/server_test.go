@@ -11,6 +11,7 @@ import (
 	"net/url"
 	"os"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"testing"
 	"time"
@@ -2479,11 +2480,18 @@ func TestServer_ForceMFA(t *testing.T) {
 func TestServer_CustomDomain(t *testing.T) {
 	// Create a mock hook script
 	tmpDir := t.TempDir()
-	hookPath := filepath.Join(tmpDir, "mock-hook.sh")
 	logPath := filepath.Join(tmpDir, "hook.log")
-	hookContent := fmt.Sprintf(`#!/bin/sh
+	var hookPath string
+	var hookContent string
+	if runtime.GOOS == "windows" {
+		hookPath = filepath.Join(tmpDir, "mock-hook.bat")
+		hookContent = fmt.Sprintf("@echo %%1 %%2 >> \"%s\"\r\n", logPath)
+	} else {
+		hookPath = filepath.Join(tmpDir, "mock-hook.sh")
+		hookContent = fmt.Sprintf(`#!/bin/sh
 echo "$1 $2" >> "%s"
 `, logPath)
+	}
 	if err := os.WriteFile(hookPath, []byte(hookContent), 0755); err != nil {
 		t.Fatalf("failed to write mock hook: %v", err)
 	}

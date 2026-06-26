@@ -667,6 +667,12 @@ The solution will consist of:
 - [x] Update `Registry.Register` in `pkg/server/auth.go` to handle empty subdomain prefixes and map custom domains directly to leases.
 - [ ] Add database reservation and quarantine validation checks for custom domains in `handleRegister` (`pkg/server/server.go`).
 - [x] Add `vanity_domain_hook` configuration parameter to server config (`pkg/config/config.go`) and execute it asynchronously upon registration/deregistration events in `pkg/server/server.go`.
-- [ ] Create template script `scripts/lfr-vanity-hook.sh` for automated Nginx configuration and Certbot TLS certificate provisioning.
-- [ ] Add unit tests for custom domain registration, mapping, and validation logic.
+- [x] Create template script `scripts/lfr-vanity-hook.sh` for automated Nginx configuration and Certbot TLS certificate provisioning.
+- [x] Add unit tests for custom domain registration, mapping, and validation logic.
 
+## Documentation Reorganization (v1.24.0)
+- [ ] Move server setup guides to a new `docs/server/` directory and restructure/clean up.
+- [ ] Merge `auth_architecture.md` into `docs/architecture.md` to unify visual routing and authentication details.
+- [ ] Merge `docs/TESTING.md` and `docs/test_plan.md` into the root `CONTRIBUTING.md`.
+- [ ] Delete/archive obsolete design files like `docs/subdomain_reservation_plan.md` and `docs/test_plan.md`.
+- [ ] Update `docs/README.md` index links to match the new structure.

@@ -3776,6 +3776,25 @@ applyTheme(currentUser.theme_preference);
             localStorage.setItem('sidebar_collapsed_' + sectionId, isCollapsed ? 'true' : 'false');
         };
 
+        window.toggleSidebar = function() {
+            const screen = document.getElementById('dashboard-screen');
+            const sidebar = document.querySelector('.sidebar');
+            if (!screen || !sidebar) return;
+            const isCollapsed = screen.classList.toggle('sidebar-collapsed');
+            sidebar.classList.toggle('collapsed', isCollapsed);
+            localStorage.setItem('sidebar_collapsed', isCollapsed ? 'true' : 'false');
+        };
+
+        function initSidebarCollapse() {
+            const isCollapsed = localStorage.getItem('sidebar_collapsed') === 'true';
+            const screen = document.getElementById('dashboard-screen');
+            const sidebar = document.querySelector('.sidebar');
+            if (screen && sidebar && isCollapsed) {
+                screen.classList.add('sidebar-collapsed');
+                sidebar.classList.add('collapsed');
+            }
+        }
+
         function initSidebarSections() {
             ['personal', 'administration', 'reporting', 'maintenance'].forEach(sectionId => {
                 const content = document.getElementById('section-' + sectionId);
@@ -3788,6 +3807,7 @@ applyTheme(currentUser.theme_preference);
                     header.classList.toggle('collapsed', shouldCollapse);
                 }
             });
+            initSidebarCollapse();
         }
 
         async function triggerEdgeAction(nodeId, action, reason = '', duration = 0) {

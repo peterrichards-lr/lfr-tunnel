@@ -654,7 +654,9 @@ The solution will consist of:
 - [x] Resolve merge conflict in dashboard.js by discarding edge actions but keeping collapsible sidebar logic.
 - [x] Verify Playwright UI E2E tests covering collapsible sidebar zones and state persistence pass.
 
-
-
-
-
+## Scrollable and Collapsible Sidebar Layout (v1.22.0)
+- [ ] Structure the sidebar in `pkg/server/dashboard.html` to separate the header, scrollable nav menu, and static footer.
+- [ ] Add sidebar toggle button to `pkg/server/dashboard.html` positioned in the top-left of the main content area.
+- [ ] Add CSS classes in `pkg/server/static/dashboard.css` to handle scrollable inner content, flex alignment, and transition-based collapse states for LTR and RTL.
+- [ ] Implement sidebar collapse toggle script in `pkg/server/static/dashboard.js` and persist the collapsed state in localStorage.
+- [ ] Verify unit tests and E2E dashboard behaviors.

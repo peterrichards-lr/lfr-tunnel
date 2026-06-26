@@ -103,27 +103,47 @@
                 <span style="font-weight: bold; font-size: 16px; color: var(--text-color); letter-spacing: 0.5px;">Liferay Tunnel</span>
             </div>
             
-            <div class="sidebar-label" data-i18n="sidebar_personal">Personal</div>
-            <div id="nav-overview" class="nav-item active" onclick="showTab('overview')" data-i18n="sidebar_overview">Overview</div>
-            <div id="nav-tokens" class="nav-item" onclick="showTab('tokens')" data-i18n="sidebar_tokens">API Tokens</div>
-            <div id="nav-tunnels" class="nav-item" onclick="showTab('tunnels')" data-i18n="sidebar_tunnels">Active Tunnels</div>
-            <div id="nav-reservations" class="nav-item" onclick="showTab('reservations')" data-i18n="sidebar_reservations">Reservations</div>
+            <div class="sidebar-section-header" onclick="toggleSidebarSection('personal')">
+                <span class="sidebar-label" data-i18n="sidebar_personal">Personal</span>
+                <span class="sidebar-section-toggle">▼</span>
+            </div>
+            <div id="section-personal" class="sidebar-section-content">
+                <div id="nav-overview" class="nav-item active" onclick="showTab('overview')" data-i18n="sidebar_overview">Overview</div>
+                <div id="nav-tokens" class="nav-item" onclick="showTab('tokens')" data-i18n="sidebar_tokens">API Tokens</div>
+                <div id="nav-tunnels" class="nav-item" onclick="showTab('tunnels')" data-i18n="sidebar_tunnels">Active Tunnels</div>
+                <div id="nav-reservations" class="nav-item" onclick="showTab('reservations')" data-i18n="sidebar_reservations">Reservations</div>
+            </div>
             
             <div id="admin-sidebar-group" class="hidden">
-                <div class="sidebar-label" style="margin-top: 24px;" data-i18n="sidebar_administration">Administration</div>
-                <div id="nav-registrations" class="nav-item" onclick="showTab('registrations')"><span data-i18n="sidebar_registrations">Registrations</span> <span id="reg-badge" class="badge" style="display:none; background: var(--danger); color: white; margin-left: 8px;">0</span></div>
-                <div id="nav-users" class="nav-item" onclick="showTab('users')" data-i18n="sidebar_users">Users</div>
-                <div id="nav-blacklist" class="nav-item" onclick="showTab('blacklist')" data-i18n="sidebar_blacklist">IP Blacklist</div>
+                <div class="sidebar-section-header" onclick="toggleSidebarSection('administration')">
+                    <span class="sidebar-label" data-i18n="sidebar_administration">Administration</span>
+                    <span class="sidebar-section-toggle">▼</span>
+                </div>
+                <div id="section-administration" class="sidebar-section-content">
+                    <div id="nav-registrations" class="nav-item" onclick="showTab('registrations')"><span data-i18n="sidebar_registrations">Registrations</span> <span id="reg-badge" class="badge" style="display:none; background: var(--danger); color: white; margin-left: 8px;">0</span></div>
+                    <div id="nav-users" class="nav-item" onclick="showTab('users')" data-i18n="sidebar_users">Users</div>
+                    <div id="nav-blacklist" class="nav-item" onclick="showTab('blacklist')" data-i18n="sidebar_blacklist">IP Blacklist</div>
+                </div>
 
-                <div class="sidebar-label" style="margin-top: 24px;" data-i18n="sidebar_reporting">Reporting</div>
-                <div id="nav-analytics" class="nav-item" onclick="showTab('analytics')" data-i18n="sidebar_analytics">System Analytics</div>
-                <div id="nav-audit" class="nav-item" onclick="showTab('audit')" data-i18n="sidebar_audit">Audit Logs</div>
-                <div id="nav-magic" class="nav-item" onclick="showTab('magic')" data-i18n="sidebar_magic">Magic Links</div>
+                <div class="sidebar-section-header" onclick="toggleSidebarSection('reporting')">
+                    <span class="sidebar-label" data-i18n="sidebar_reporting">Reporting</span>
+                    <span class="sidebar-section-toggle">▼</span>
+                </div>
+                <div id="section-reporting" class="sidebar-section-content">
+                    <div id="nav-analytics" class="nav-item" onclick="showTab('analytics')" data-i18n="sidebar_analytics">System Analytics</div>
+                    <div id="nav-audit" class="nav-item" onclick="showTab('audit')" data-i18n="sidebar_audit">Audit Logs</div>
+                    <div id="nav-magic" class="nav-item" onclick="showTab('magic')" data-i18n="sidebar_magic">Magic Links</div>
+                </div>
 
-                <div class="sidebar-label" style="margin-top: 24px;" data-i18n="sidebar_maintenance">Maintenance</div>
-                <div id="nav-maintenance" class="nav-item" onclick="showTab('maintenance')" data-i18n="sidebar_maintenance_mode">Gateway Maintenance</div>
-                <div id="nav-backups" class="nav-item" onclick="showTab('backups')" data-i18n="sidebar_backups">Database Backups</div>
-                <div id="nav-network-health" class="nav-item" onclick="showTab('network-health')" data-i18n="sidebar_edge_gateways">Edge Gateways</div>
+                <div class="sidebar-section-header" onclick="toggleSidebarSection('maintenance')">
+                    <span class="sidebar-label" data-i18n="sidebar_maintenance">Maintenance</span>
+                    <span class="sidebar-section-toggle">▼</span>
+                </div>
+                <div id="section-maintenance" class="sidebar-section-content">
+                    <div id="nav-maintenance" class="nav-item" onclick="showTab('maintenance')" data-i18n="sidebar_maintenance_mode">Gateway Maintenance</div>
+                    <div id="nav-backups" class="nav-item" onclick="showTab('backups')" data-i18n="sidebar_backups">Database Backups</div>
+                    <div id="nav-network-health" class="nav-item" onclick="showTab('network-health')" data-i18n="sidebar_edge_gateways">Edge Gateways</div>
+                </div>
             </div>
             
             <div class="sidebar-spacer"></div>

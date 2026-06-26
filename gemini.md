@@ -692,4 +692,10 @@ The solution will consist of:
 - [x] Implement rate-limiting and delay wrapper around client interceptor connection streams (`pkg/client/interceptor.go`)
 - [x] Add unit tests for latency and bandwidth simulation (`pkg/client/interceptor_test.go`)
 
-
+## Release v1.23.0 Plan
+- [x] Prepare release notes in `pkg/server/static/whats-new.json`
+- [x] Build client binaries: `./scripts/build-client-binaries.sh`
+- [x] Sign client binaries: `./scripts/sign-client-binaries.sh` with `LFT_SKIP_GPG=true`
+- [ ] Deploy client binaries to VPS: `./scripts/deploy-client-binaries.sh -i ~/.ssh/id_vm6_networks_vps`
+- [ ] Trigger automated release tagging: `./scripts/create-release-tag.sh v1.23.0`
+- [ ] Redeploy gateway binary to VPS: `./scripts/deploy.sh -i ~/.ssh/id_vm6_networks_vps -w 10`

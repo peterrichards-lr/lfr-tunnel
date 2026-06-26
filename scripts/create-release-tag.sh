@@ -49,7 +49,7 @@ while IFS= read -r line; do
     clean_path=$(echo "$file_path" | xargs)
     lower_path=$(echo "$clean_path" | tr '[:upper:]' '[:lower:]')
 
-    if [ "$lower_path" != "gemini.md" ]; then # GEMINI.md is normalized to gemini.md under tr
+    if [ "$lower_path" != "gemini.md" ] && [ "$lower_path" != "pkg/server/static/whats-new.json" ] && [ "$lower_path" != "scripts/create-release-tag.sh" ]; then # GEMINI.md is normalized to gemini.md under tr
         PND_ERR=1
         PND_FILES+=("$clean_path")
     fi
@@ -151,6 +151,9 @@ if [ -f "$VERSION_GO" ]; then
 fi
 if git status --porcelain | grep -q "gemini.md"; then
     git add gemini.md
+fi
+if git status --porcelain | grep -q "scripts/create-release-tag.sh"; then
+    git add scripts/create-release-tag.sh
 fi
 
 git commit -m "chore: bump version to $NEW_VER"

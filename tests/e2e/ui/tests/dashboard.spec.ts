@@ -262,5 +262,37 @@ test.describe('Dashboard UI Automation', () => {
     await page.click('.sidebar-section-header:has-text("Personal")');
     await expect(page.locator('#section-personal')).not.toHaveClass(/collapsed/);
   });
+
+  test('Verify Collapsible Sidebar Toggle and Persistence', async ({ page }) => {
+    // 1. Login
+    await page.goto('/admin');
+    await page.click('#btn-show-email');
+    await page.fill('#email-input', adminEmail);
+    await page.click('button[type="submit"]');
+
+    const token = await getMagicLinkToken(adminEmail);
+    expect(token).toBeTruthy();
+    await page.goto(`/admin?token=${token}`);
+
+    // Wait for Dashboard to load
+    await expect(page.locator('h2:has-text("Dashboard Overview")')).toBeVisible();
+
+    // 2. Verify sidebar is expanded initially
+    const sidebar = page.locator('.sidebar');
+    await expect(sidebar).not.toHaveClass(/collapsed/);
+
+    // 3. Click sidebar toggle button to collapse it
+    await page.click('#sidebar-toggle-btn');
+    await expect(sidebar).toHaveClass(/collapsed/);
+
+    // 4. Reload page and check that sidebar remains collapsed
+    await page.reload();
+    await expect(page.locator('h2:has-text("Dashboard Overview")')).toBeVisible();
+    await expect(page.locator('.sidebar')).toHaveClass(/collapsed/);
+
+    // 5. Expand sidebar again
+    await page.click('#sidebar-toggle-btn');
+    await expect(page.locator('.sidebar')).not.toHaveClass(/collapsed/);
+  });
 });
 

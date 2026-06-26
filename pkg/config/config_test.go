@@ -37,6 +37,7 @@ client_platforms:
     cmd: "brew install test"
     cmd_fallback: "curl"
 portal_url: "https://portal.example.com"
+force_mfa: true
 `)
 	if _, err := tmpFile.Write(content); err != nil {
 		t.Fatalf("failed to write temp file: %v", err)
@@ -67,6 +68,9 @@ portal_url: "https://portal.example.com"
 	if cfg.PortalURL != "https://portal.example.com" {
 		t.Errorf("expected PortalURL to be https://portal.example.com, got %s", cfg.PortalURL)
 	}
+	if !cfg.ForceMFA {
+		t.Errorf("expected ForceMFA to be true, got false")
+	}
 	if cfg.ClientPlatforms == nil || cfg.ClientPlatforms["macos_arm64"].URL != "http://example.com/darwin-arm64" {
 		t.Errorf("expected ClientPlatforms macos_arm64 URL to be http://example.com/darwin-arm64, got %v", cfg.ClientPlatforms)
 	}
@@ -89,6 +93,7 @@ portal_url: "https://portal.example.com"
 	os.Setenv("LFT_ENABLE_WAF", "false")                   //nolint:errcheck
 	os.Setenv("LFT_DISABLE_CLIENT_DOWNLOADS", "true")      //nolint:errcheck
 	os.Setenv("LFT_PORTAL_URL", "https://env-portal.com")  //nolint:errcheck
+	os.Setenv("LFT_FORCE_MFA", "false")                    //nolint:errcheck
 	defer func() {
 		os.Unsetenv("LFT_DOMAINS")                  //nolint:errcheck
 		os.Unsetenv("LFT_BIND_ADDR")                //nolint:errcheck
@@ -98,6 +103,7 @@ portal_url: "https://portal.example.com"
 		os.Unsetenv("LFT_ENABLE_WAF")               //nolint:errcheck
 		os.Unsetenv("LFT_DISABLE_CLIENT_DOWNLOADS") //nolint:errcheck
 		os.Unsetenv("LFT_PORTAL_URL")               //nolint:errcheck
+		os.Unsetenv("LFT_FORCE_MFA")                //nolint:errcheck
 	}()
 
 	cfgEnv, err := LoadServerConfig(tmpFile.Name())
@@ -128,6 +134,9 @@ portal_url: "https://portal.example.com"
 	}
 	if cfgEnv.PortalURL != "https://env-portal.com" {
 		t.Errorf("expected PortalURL override to be https://env-portal.com, got %s", cfgEnv.PortalURL)
+	}
+	if cfgEnv.ForceMFA {
+		t.Errorf("expected ForceMFA override to be false, got true")
 	}
 }
 

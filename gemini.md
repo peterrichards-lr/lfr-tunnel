@@ -335,7 +335,7 @@ The solution will consist of:
 - [x] Implement live WebSocket-driven telemetry updates in the portal Admin Web Dashboard.
 
 - [x] Integrate a lightweight Web Application Firewall (WAF) shield on the gateway to filter basic exploit payloads during public presentations.
-- [ ] Implement server-side configuration flag (force_mfa) to enforce TOTP MFA setup during onboarding.
+- [x] Implement server-side configuration flag (force_mfa) to enforce TOTP MFA setup during onboarding.
 
 ## Dynamic Loopback Port Routing Fix (v1.9.4)
 - [x] Explicitly bind the reverse tunnel listening port on the server side to `127.0.0.1` by prefixing it in the dynamic remote format returned by `/api/register`.
@@ -584,5 +584,25 @@ The solution will consist of:
 - [x] Update `client_platforms` in `/etc/lfr-tunneld/server-config.yaml` on the central VPS to remove Homebrew/Scoop options for the SE team.
 - [x] Restart `lfr-tunneld` on the central VPS to apply the explicit configuration overrides.
 - [x] Design and PR Offsite Edge Node Backup Sync (`scripts/sync-offsite-backups.sh`)
+
+## Outbound Connectivity Health Checks (#213)
+- [x] Implement outbound connectivity checks (ping 1.1.1.1 and google.com) in Server.
+- [x] Integrate gateway network warning banner in Admin Web Dashboard.
+- [x] Add unit test coverage and open PR.
+
+## Asymmetric Outbound Routing Workaround (Dual-IP VPS) (#214)
+- [x] Add setup documentation for persistent Netplan source route pinning in setup_guide.md.
+- [x] Add matching routing note in edge_setup_guide.md.
+- [x] Commit, push branch, and create Pull Request linking to Issue #214.
+
+## Force TOTP MFA During User Onboarding (#216)
+- [x] Add force_mfa configuration option in ServerConfig.
+- [x] Enforce MFA setup on API and Dashboard interface for unverified users.
+- [x] Write tests and open PR.
+
+## Bi-directional Pub/Sub Control Channel over WebSockets (#218)
+- [ ] Implement internal control WebSocket connection between edge nodes and control plane.
+- [ ] Implement HMAC validation and pub/sub message broadcaster for blacklist updates and kicks.
+- [ ] Write integration tests and open PR.
 
 

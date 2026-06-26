@@ -52,3 +52,59 @@ We encourage the use of AI to help improve Liferay Tunnel.
 - **Guidance**: You are free to use other AI tools (like Copilot or ChatGPT), but you **MUST** ensure that your tool adheres to the architectural and engineering standards defined in [`.gemini/gemini.md`](.gemini/gemini.md).
 - **Verification**: AI-generated code must still pass all local linting and unit tests (`make test`) before being submitted.
 - **Documentation**: AI-assisted changes MUST include corresponding documentation updates where applicable (e.g., README updates for new flags or behavior changes).
+
+## 🧪 Testing & Verification Protocol
+
+To ensure the stability and security of the `lfr-tunnel` gateway, all contributions must undergo both automated testing and manual verification before merging.
+
+### Automated Testing
+We maintain a robust suite of automated tests including unit, integration, and E2E UI tests:
+- **Unit & Integration Tests**: Run locally via:
+  ```bash
+  TMPDIR=/private/tmp go test ./...
+  ```
+- **Standard E2E Integration Tests (Docker)**: Run the E2E client/server docker compose integration loop via:
+  ```bash
+  make e2e
+  ```
+- **SSO E2E Integration Tests (Keycloak)**: Run Keycloak SSO and OpenID Connect flows in an isolated Docker sandbox via:
+  ```bash
+  make e2e-sso
+  ```
+
+### Manual Verification Protocol
+The following manual test scenarios cover edge cases, UI states, and environmental configurations. These should be verified against a local setup or a staging instance:
+
+#### 1. Cloud User Portal & Magic Link Flow
+- **Step 1**: Ensure your email is in the approved `users` table via the admin endpoints (or use your existing developer token profile).
+- **Step 2**: Open a web browser and navigate to `/portal`.
+- **Step 3**: Enter your email address and click "Send Magic Link".
+- **Step 4**: Check your inbox (or local SMTP capture). You should receive a modern HTML email containing your Client IP address and two links.
+- **Step 5**: Click the primary "Log In to Portal" link. You should instantly be authenticated and redirected to the dashboard UI. Verify the dark mode layout renders correctly.
+
+#### 2. Abuse Reporting Security
+- **Step 1**: Go to the portal and request a *second* Magic Link.
+- **Step 2**: Open the new email, but instead of logging in, click the secondary security link (*"click here to report"*).
+- **Step 3**: You should see a green "Report Submitted ✅" HTML confirmation page.
+- **Step 4**: Try clicking the primary "Log In" link. It should securely block you with an "Invalid or expired token" error.
+- **Step 5**: Check the backend audit log to verify the `portal.magic_link_abuse_reported` event is recorded.
+
+#### 3. Sliding Session Expiration (90-Minute Window)
+- **Step 1**: Log into the portal using a valid Magic Link.
+- **Step 2**: Refresh the dashboard page once (this resets the 90-minute timer).
+- **Step 3**: Wait 91 minutes without interacting with the portal page.
+- **Step 4**: Attempt to refresh the dashboard page.
+- **Step 5**: You should be automatically logged out and redirected to the login screen.
+
+#### 4. CLI Version Compatibility Checks
+- **Step 1 (Raw Output)**: Build the current CLI (`make build`) and run `./bin/lfr-tunnel -check-version`. Ensure it outputs pure JSON mapping to the server's version API.
+- **Step 2 (Hard Block)**: Temporarily edit `pkg/config/version.go` locally to a lower version (e.g. `v0.9.0`), run `make build`, and attempt to start the tunnel. It should fail immediately with the **Hard Blocker** message ("*Minimum required version is v1.0.0*").
+- **Step 3 (Soft Warning)**: Set `version.go` to a version lower than the latest but above the minimum (e.g. `v1.2.0`), build, and run. It should connect but output a yellow **Soft Warning** recommending an upgrade.
+
+### Portal Management Test Plan
+Verify these administrative control flows on the Portal Dashboard:
+- **First Owner Login**: Logging in with the owner email automatically bypasses the registration queue, populates the owner profile, and sets up the Client Setup Banner.
+- **New User Registration & Approval**: Creating a pending user profile, receiving approval emails, approving them via the admin's **Registrations** tab, and logging in from the approved profile.
+- **Strict Concurrency (Takeover & Kick)**: Logging in on a second browser/device terminates the older session. The older browser should proactively detect the kick via polling and display a toast alert.
+- **IP Blacklisting & DDoS IPS**: Banning IPs from the **IP Blacklist** tab. Flooding endpoints should auto-blacklist the client and log `system.auto_blacklisted` in the audit ledger.
+- **Global Broadcast Messaging**: Typing a global message in the admin panel and verifying a red notification banner displays on all active client browsers within 10 seconds.

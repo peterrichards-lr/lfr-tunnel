@@ -44,7 +44,17 @@ if [ -n "$EDGE_NODES_FILE" ]; then
   fi
 
   echo "Downloading current server-config.yaml from VPS..."
-  if ! scp $SSH_KEY $VPS_USER@$VPS_IP:/etc/lfr-tunneld/server-config.yaml /tmp/vps-server-config.yaml 2>/dev/null; then
+  if ssh $SSH_KEY $VPS_USER@$VPS_IP "[ -f /etc/lfr-tunneld/server-config.yaml ]"; then
+    echo "Remote configuration found. Copying to temporary path..."
+    ssh $SSH_KEY $VPS_USER@$VPS_IP "sudo cp /etc/lfr-tunneld/server-config.yaml /tmp/tmp-server-config.yaml && sudo chown $VPS_USER:$VPS_USER /tmp/tmp-server-config.yaml"
+    
+    if ! scp $SSH_KEY $VPS_USER@$VPS_IP:/tmp/tmp-server-config.yaml /tmp/vps-server-config.yaml 2>/dev/null; then
+      echo "❌ Error: Failed to download server-config.yaml from VPS."
+      ssh $SSH_KEY $VPS_USER@$VPS_IP "rm -f /tmp/tmp-server-config.yaml"
+      exit 1
+    fi
+    ssh $SSH_KEY $VPS_USER@$VPS_IP "rm -f /tmp/tmp-server-config.yaml"
+  else
     echo "Warning: /etc/lfr-tunneld/server-config.yaml not found on VPS. Creating a new basic config."
     echo "domains: []" > /tmp/vps-server-config.yaml
   fi

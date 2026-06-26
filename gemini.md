@@ -610,6 +610,9 @@ The solution will consist of:
 - [x] Update `scripts/create-release-tag.sh` to automatically bump version in `pkg/config/version.go`.
 - [x] Run release automation script to trigger the `v1.19.4` release.
 - [x] Deploy the updated server gateway `lfr-tunneld` to the central VPS and Edge nodes.
+- [ ] Fix configuration overwrite permission bug in `scripts/deploy.sh`.
+- [ ] Fix node ID prefix extraction in `pkg/server/edge_control_ws.go` to support hyphens in Node IDs.
+- [ ] Recompile and deploy `lfr-tunneld` to the regional Edge VPS (us-central-1) and update its configuration.
 
 
 

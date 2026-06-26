@@ -23,7 +23,7 @@ func TestServer_EdgeControlWS_AuthenticationAndPubSub(t *testing.T) {
 	cfgControl.DisableBackupScheduler = true
 
 	// Configure authorized edge node
-	edgeToken := "usedge-my-secret-token-value"
+	edgeToken := "usedge-mysecrettokenvalue"
 	tokenHashBytes := sha256.Sum256([]byte(edgeToken))
 	cfgControl.EdgeNodes = []config.EdgeNodeConfig{
 		{ID: "usedge", TokenHash: hex.EncodeToString(tokenHashBytes[:])},

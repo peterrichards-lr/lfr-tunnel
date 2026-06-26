@@ -3707,6 +3707,26 @@ applyTheme(currentUser.theme_preference);
                         let timeSince = h.last_check_at ? Math.floor((Date.now() / 1000) - h.last_check_at) + 's ago' : 'Never';
                         let errMsg = h.error_message ? `<span style="color:var(--danger); font-size:12px;">${escapeHTML(h.error_message)}</span>` : '';
 
+                        const verText = h.version || '-';
+                        const isAdmin = currentUser && (currentUser.role === 'admin' || currentUser.role === 'owner');
+                        
+                        let actionsMenuHtml = '';
+                        if (isAdmin) {
+                            actionsMenuHtml = `
+                                <div class="action-menu">
+                                    <button class="action-menu-btn" onclick="toggleActionMenu('menu-edge-${escapeHTML(id)}', event)">⋮</button>
+                                    <div id="menu-edge-${escapeHTML(id)}" class="action-menu-dropdown">
+                                        <button class="action-menu-item" onclick="restartEdgeDaemon('${escapeHTML(id)}')">Restart Daemon</button>
+                                        <button class="action-menu-item" onclick="enableEdgeMaintenance('${escapeHTML(id)}')">Enable Maintenance</button>
+                                        <button class="action-menu-item" onclick="disableEdgeMaintenance('${escapeHTML(id)}')">Disable Maintenance</button>
+                                        <button class="action-menu-item danger" onclick="kickEdgeTunnels('${escapeHTML(id)}')">Kick All Tunnels</button>
+                                    </div>
+                                </div>
+                            `;
+                        } else {
+                            actionsMenuHtml = '-';
+                        }
+
                         const tr = document.createElement('tr');
                         tr.innerHTML = `
                             <td><strong>${escapeHTML(id)}</strong></td>
@@ -3719,14 +3739,16 @@ applyTheme(currentUser.theme_preference);
                             </td>
                             <td>${latText}</td>
                             <td>${timeSince}</td>
+                            <td><code style="font-family: monospace; font-size: 11px;">${escapeHTML(verText)}</code></td>
                             <td>${errMsg}</td>
+                            <td style="text-align: right;">${actionsMenuHtml}</td>
                         `;
                         tbody.appendChild(tr);
                     });
                 }
             } catch (err) {
                 console.error(err);
-                tbody.innerHTML = `<tr><td colspan="6" style="color:var(--danger);text-align:center;">Failed to load network health: ${escapeHTML(err.toString())}</td></tr>`;
+                tbody.innerHTML = `<tr><td colspan="8" style="color:var(--danger);text-align:center;">Failed to load network health: ${escapeHTML(err.toString())}</td></tr>`;
             }
             
             // Auto refresh every 30 seconds if tab is still active
@@ -3736,3 +3758,62 @@ applyTheme(currentUser.theme_preference);
                 }
             }, 30000);
         }
+
+        async function triggerEdgeAction(nodeId, action, reason = '', duration = 0) {
+            try {
+                const res = await fetch('/api/portal/edge-action', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        node_id: nodeId,
+                        action: action,
+                        reason: reason,
+                        duration: parseInt(duration, 10) || 0
+                    })
+                });
+
+                if (res.status === 401) { logout(); return; }
+                const data = await res.json();
+                if (res.ok) {
+                    showToast("Action executed successfully.");
+                    loadNetworkHealth();
+                } else {
+                    showToast("Error: " + (data.error || "Action failed."));
+                }
+            } catch (err) {
+                console.error(err);
+                showToast("Network error: " + err.toString());
+            }
+        }
+
+        window.restartEdgeDaemon = function(nodeId) {
+            if (confirm("Are you sure you want to restart the edge daemon for " + nodeId + "?")) {
+                triggerEdgeAction(nodeId, "restart");
+            }
+        };
+
+        window.kickEdgeTunnels = function(nodeId) {
+            if (confirm("Are you sure you want to kick ALL active tunnels on edge node " + nodeId + "?")) {
+                triggerEdgeAction(nodeId, "kick_tunnels");
+            }
+        };
+
+        window.enableEdgeMaintenance = function(nodeId) {
+            const reason = prompt("Enter a reason for enabling soft maintenance on " + nodeId + ":", "Edge Server Maintenance");
+            if (reason === null) return; // Cancelled
+            const durationStr = prompt("Enter duration in minutes for maintenance on " + nodeId + ":", "30");
+            if (durationStr === null) return; // Cancelled
+            const duration = parseInt(durationStr, 10);
+            if (isNaN(duration) || duration <= 0) {
+                showToast("Invalid duration.");
+                return;
+            }
+            triggerEdgeAction(nodeId, "maintenance_enable", reason, duration);
+        };
+
+        window.disableEdgeMaintenance = function(nodeId) {
+            if (confirm("Are you sure you want to disable maintenance on " + nodeId + "?")) {
+                triggerEdgeAction(nodeId, "maintenance_disable");
+            }
+        };
+

@@ -4,6 +4,7 @@ import (
 	"crypto/hmac"
 	"crypto/sha256"
 	"encoding/hex"
+	"encoding/json"
 	"fmt"
 	"net/http/httptest"
 	"net/url"
@@ -201,5 +202,97 @@ func TestServer_EdgeControlWS_HMACFail(t *testing.T) {
 
 	if result.Type != "auth_failed" {
 		t.Errorf("expected Type auth_failed, got %s", result.Type)
+	}
+}
+
+func TestServer_EdgeActions(t *testing.T) {
+	// Start Control Plane Server
+	cfgControl := config.DefaultServerConfig()
+	cfgControl.DBPath = filepath.Join(t.TempDir(), "control.db")
+	cfgControl.Domains = []string{"example.se"}
+	cfgControl.DisableBackupScheduler = true
+
+	// Configure authorized edge node
+	edgeToken := "usedge-mysecrettokenvalue"
+	tokenHashBytes := sha256.Sum256([]byte(edgeToken))
+	cfgControl.EdgeNodes = []config.EdgeNodeConfig{
+		{ID: "usedge", TokenHash: hex.EncodeToString(tokenHashBytes[:])},
+	}
+
+	controlSrv, err := NewServer(cfgControl)
+	if err != nil {
+		t.Fatalf("failed to create control server: %v", err)
+	}
+	defer func() {
+		time.Sleep(50 * time.Millisecond)
+		controlSrv.Stop()
+	}()
+
+	ts := httptest.NewServer(controlSrv)
+	defer ts.Close()
+
+	// Start mock Edge Server
+	cfgEdge := config.DefaultServerConfig()
+	cfgEdge.DBPath = "" // Edge mode
+	cfgEdge.Domains = []string{"usedge.example.se"}
+	cfgEdge.ControlPlaneURL = ts.URL
+	cfgEdge.EdgeToken = edgeToken
+	cfgEdge.DisableBackupScheduler = true
+
+	edgeSrv, err := NewServer(cfgEdge)
+	if err != nil {
+		t.Fatalf("failed to create edge server: %v", err)
+	}
+	defer func() {
+		time.Sleep(50 * time.Millisecond)
+		edgeSrv.Stop()
+	}()
+
+	// Give a moment for connection
+	time.Sleep(200 * time.Millisecond)
+
+	// Verify version was registered
+	controlSrv.edgeClientsMu.RLock()
+	ver, ok := controlSrv.edgeVersions["usedge"]
+	controlSrv.edgeClientsMu.RUnlock()
+	if !ok || ver != config.Version {
+		t.Errorf("expected version %s, got %s (ok=%v)", config.Version, ver, ok)
+	}
+
+	// Create a mock session to test SendEdgeKickAll
+	_, _, err = edgeSrv.registry.Register("user-1", "test-kick-wildcard", []PortMapping{{LocalPort: 8080}}, []string{"usedge.example.se"}, 100, "127.0.0.1", "", nil)
+	if err != nil {
+		t.Fatalf("failed to register lease: %v", err)
+	}
+
+	// Trigger Kick All via helper
+	err = controlSrv.SendEdgeKickAll("usedge")
+	if err != nil {
+		t.Fatalf("failed to send edge kick all: %v", err)
+	}
+	time.Sleep(100 * time.Millisecond)
+
+	// Lease should be gone
+	if len(edgeSrv.registry.ListLeases()) != 0 {
+		t.Error("expected all leases to be kicked on edge node")
+	}
+
+	// Verify edge-health response includes version
+	req := httptest.NewRequest("GET", "http://tunnel.example.se/api/portal/edge-health", nil)
+	rec := httptest.NewRecorder()
+	controlSrv.handleEdgeHealth(rec, req)
+
+	var resp struct {
+		Nodes map[string]EdgeHealthStatus `json:"nodes"`
+	}
+	if err := json.NewDecoder(rec.Body).Decode(&resp); err != nil {
+		t.Fatalf("failed to decode edge-health response: %v", err)
+	}
+	node, exists := resp.Nodes["usedge"]
+	if !exists {
+		t.Fatal("expected 'usedge' node in health status")
+	}
+	if node.Version != config.Version {
+		t.Errorf("expected node version %s, got %s", config.Version, node.Version)
 	}
 }

@@ -12,6 +12,7 @@ import (
 	"log"
 	"net/http"
 	"net/url"
+	"os"
 	"strings"
 	"time"
 
@@ -39,6 +40,7 @@ func (s *Server) handleEdgeControlWS(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "missing node_id", http.StatusBadRequest)
 		return
 	}
+	version := r.URL.Query().Get("version")
 
 	conn, err := upgrader.Upgrade(w, r, nil)
 	if err != nil {
@@ -124,6 +126,11 @@ func (s *Server) handleEdgeControlWS(w http.ResponseWriter, r *http.Request) {
 		_ = oldConn.Close()
 	}
 	s.edgeClients[nodeID] = conn
+	if version != "" {
+		s.edgeVersions[nodeID] = version
+	} else {
+		s.edgeVersions[nodeID] = "Unknown"
+	}
 	s.edgeClientsMu.Unlock()
 
 	log.Printf("[Edge WS] Edge node %s successfully authenticated.", nodeID)
@@ -135,6 +142,7 @@ func (s *Server) handleEdgeControlWS(w http.ResponseWriter, r *http.Request) {
 			s.edgeClientsMu.Lock()
 			if activeConn, exists := s.edgeClients[nodeID]; exists && activeConn == conn {
 				delete(s.edgeClients, nodeID)
+				delete(s.edgeVersions, nodeID)
 			}
 			s.edgeClientsMu.Unlock()
 			_ = conn.Close()
@@ -221,6 +229,58 @@ func (s *Server) sendEdgeWSKick(nodeID, subdomain string) bool {
 	return err == nil
 }
 
+// SendEdgeRestart sends a restart command to a specific edge node.
+func (s *Server) SendEdgeRestart(nodeID string) error {
+	s.edgeClientsMu.RLock()
+	conn, exists := s.edgeClients[nodeID]
+	s.edgeClientsMu.RUnlock()
+
+	if !exists || conn == nil {
+		return fmt.Errorf("edge node %s is offline or not connected", nodeID)
+	}
+
+	msg := ControlMessage{
+		Type: "restart",
+	}
+	return conn.WriteJSON(msg)
+}
+
+// SendEdgeMaintenance sends a maintenance mode trigger to a specific edge node.
+func (s *Server) SendEdgeMaintenance(nodeID string, action string, duration int, reason string) error {
+	s.edgeClientsMu.RLock()
+	conn, exists := s.edgeClients[nodeID]
+	s.edgeClientsMu.RUnlock()
+
+	if !exists || conn == nil {
+		return fmt.Errorf("edge node %s is offline or not connected", nodeID)
+	}
+
+	msg := ControlMessage{
+		Type:     "maintenance_trigger",
+		Action:   action,
+		Duration: duration,
+		Reason:   reason,
+	}
+	return conn.WriteJSON(msg)
+}
+
+// SendEdgeKickAll kicks all active leases/tunnels on a specific edge node.
+func (s *Server) SendEdgeKickAll(nodeID string) error {
+	s.edgeClientsMu.RLock()
+	conn, exists := s.edgeClients[nodeID]
+	s.edgeClientsMu.RUnlock()
+
+	if !exists || conn == nil {
+		return fmt.Errorf("edge node %s is offline or not connected", nodeID)
+	}
+
+	msg := ControlMessage{
+		Type:      "lease_kick",
+		Subdomain: "*",
+	}
+	return conn.WriteJSON(msg)
+}
+
 // kickAllLocalLeases terminates all tunnels hosted locally on this server instance.
 func (s *Server) kickAllLocalLeases() {
 	if s.registry == nil {
@@ -266,7 +326,7 @@ func (s *Server) runEdgeControlChannel() {
 		if u.Scheme == "https" {
 			scheme = "wss"
 		}
-		wsURL := fmt.Sprintf("%s://%s/api/internal/edge-control-ws?node_id=%s", scheme, u.Host, nodeID)
+		wsURL := fmt.Sprintf("%s://%s/api/internal/edge-control-ws?node_id=%s&version=%s", scheme, u.Host, nodeID, url.QueryEscape(config.Version))
 
 		log.Printf("[Edge Control] Connecting to Control Plane at %s...", wsURL)
 
@@ -389,6 +449,9 @@ func (s *Server) runEdgeControlChannel() {
 			}
 
 			switch msg.Type {
+			case "restart":
+				log.Printf("[Edge Control] Restart request received from Control Plane. Exiting...")
+				os.Exit(1)
 			case "blacklist_update":
 				switch msg.Action {
 				case "add":
@@ -411,8 +474,13 @@ func (s *Server) runEdgeControlChannel() {
 				}
 				s.maintMutex.Unlock()
 			case "lease_kick":
-				log.Printf("[Edge Control] Kicking lease for subdomain %s", msg.Subdomain)
-				s.registry.KickLease(msg.Subdomain)
+				if msg.Subdomain == "*" || msg.Subdomain == "" {
+					log.Printf("[Edge Control] Kicking ALL leases on this edge node")
+					s.kickAllLocalLeases()
+				} else {
+					log.Printf("[Edge Control] Kicking lease for subdomain %s", msg.Subdomain)
+					s.registry.KickLease(msg.Subdomain)
+				}
 			}
 		}
 

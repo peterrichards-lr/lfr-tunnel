@@ -593,6 +593,15 @@ function toggleTheme() {
                 if (vRes.ok) {
                     const vData = await vRes.json();
                     window.latestVersionData = vData;
+                    
+                    if (vData.force_mfa && !currentUser.totp_enabled) {
+                        startMFASetup();
+                        const cancelBtn = document.getElementById('mfa-cancel-btn');
+                        if (cancelBtn) cancelBtn.style.display = 'none';
+                    } else {
+                        const cancelBtn = document.getElementById('mfa-cancel-btn');
+                        if (cancelBtn) cancelBtn.style.display = 'inline-block';
+                    }
                     const rawLatest = vData.latest_version || '';
                     const rawUser = currentUser.last_client_version || '';
                     

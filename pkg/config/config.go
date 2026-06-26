@@ -49,6 +49,7 @@ type ServerConfig struct {
 	ForceClientCert            bool                      `yaml:"force_client_cert"`
 	ForcePasscode              bool                      `yaml:"force_passcode"`
 	ForceIPWhitelist           bool                      `yaml:"force_ip_whitelist"`
+	ForceMFA                   bool                      `yaml:"force_mfa"`
 	DBPath                     string                    `yaml:"db_path"`
 	SMTPServer                 SMTPServerConfig          `yaml:"smtp_server"`
 	AdminNotificationEmail     string                    `yaml:"admin_notification_email"`
@@ -273,6 +274,9 @@ func LoadServerConfig(path string) (*ServerConfig, error) {
 	}
 	if val := os.Getenv("LFT_FORCE_IP_WHITELIST"); val != "" {
 		cfg.ForceIPWhitelist = strings.ToLower(val) == "true" || val == "1"
+	}
+	if val := os.Getenv("LFT_FORCE_MFA"); val != "" {
+		cfg.ForceMFA = strings.ToLower(val) == "true" || val == "1"
 	}
 	if val := os.Getenv("LFT_DB_PATH"); val != "" {
 		cfg.DBPath = val

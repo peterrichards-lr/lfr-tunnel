@@ -2313,3 +2313,84 @@ func TestRegisterSubdomainReservationError_PortalURL(t *testing.T) {
 		t.Errorf("expected PortalURL %q, got %q", expectedDynamicURL, resp2.PortalURL)
 	}
 }
+
+func TestServer_ForceMFA(t *testing.T) {
+	cfg := config.DefaultServerConfig()
+	cfg.DBPath = filepath.Join(t.TempDir(), "test.db")
+	cfg.Domains = []string{"example.se"}
+	cfg.ForceMFA = true
+	cfg.DisableBackupScheduler = true
+
+	srv, err := NewServer(cfg)
+	if err != nil {
+		t.Fatalf("failed to create server: %v", err)
+	}
+	defer func() {
+		time.Sleep(50 * time.Millisecond)
+		srv.Stop()
+	}()
+
+	userEmail := "mfa-tester@example.com"
+	_ = srv.db.CreateUser(&db.User{
+		ID:          userEmail,
+		Email:       userEmail,
+		Role:        "user",
+		Status:      "approved",
+		TOTPEnabled: false, // MFA not enabled yet
+	})
+
+	// Create a session in portalMap to simulate logged-in session
+	sessionToken := "test-session-mfa-123"
+	srv.portalMap.Store("admin_session_"+sessionToken, PortalSessionData{
+		Email:     userEmail,
+		ExpiresAt: time.Now().Add(1 * time.Hour),
+	})
+
+	// Helper to send request with session cookie
+	sendRequest := func(method, path string) *httptest.ResponseRecorder {
+		req := httptest.NewRequest(method, "http://portal.example.se"+path, nil)
+		req.Host = "portal.example.se"
+		req.AddCookie(&http.Cookie{Name: "lfr_session", Value: sessionToken})
+		rec := httptest.NewRecorder()
+		srv.ServeHTTP(rec, req)
+		return rec
+	}
+
+	// 1. Assert that restricted APIs return 403 Forbidden
+	recForbidden := sendRequest("GET", "/api/portal/reservations")
+	if recForbidden.Code != http.StatusForbidden {
+		t.Errorf("expected 403 Forbidden on restricted route, got %d", recForbidden.Code)
+	}
+	var errResp map[string]interface{}
+	if err := json.NewDecoder(recForbidden.Body).Decode(&errResp); err != nil {
+		t.Fatalf("failed to decode error body: %v", err)
+	}
+	if errResp["error"] != "MFA setup required" || errResp["mfa_required"] != true {
+		t.Errorf("expected error details, got %v", errResp)
+	}
+
+	// 2. Assert that allowed APIs do not return 403 Forbidden
+	// /api/me should be allowed
+	recMe := sendRequest("GET", "/api/me")
+	if recMe.Code == http.StatusForbidden {
+		t.Errorf("expected /api/me to be allowed, but got 403 Forbidden")
+	}
+
+	// /api/mfa/setup should be allowed
+	recSetup := sendRequest("GET", "/api/mfa/setup")
+	if recSetup.Code == http.StatusForbidden {
+		t.Errorf("expected /api/mfa/setup to be allowed, but got 403 Forbidden")
+	}
+
+	// /api/mfa/enable should be allowed
+	recEnable := sendRequest("POST", "/api/mfa/enable")
+	if recEnable.Code == http.StatusForbidden {
+		t.Errorf("expected /api/mfa/enable to be allowed, but got 403 Forbidden")
+	}
+
+	// /api/auth/logout should be allowed
+	recLogout := sendRequest("POST", "/api/auth/logout")
+	if recLogout.Code == http.StatusForbidden {
+		t.Errorf("expected /api/auth/logout to be allowed, but got 403 Forbidden")
+	}
+}

@@ -696,6 +696,6 @@ The solution will consist of:
 - [x] Prepare release notes in `pkg/server/static/whats-new.json`
 - [x] Build client binaries: `./scripts/build-client-binaries.sh`
 - [x] Sign client binaries: `./scripts/sign-client-binaries.sh` with `LFT_SKIP_GPG=true`
-- [ ] Deploy client binaries to VPS: `./scripts/deploy-client-binaries.sh -i ~/.ssh/id_vm6_networks_vps`
-- [ ] Trigger automated release tagging: `./scripts/create-release-tag.sh v1.23.0`
-- [ ] Redeploy gateway binary to VPS: `./scripts/deploy.sh -i ~/.ssh/id_vm6_networks_vps -w 10`
+- [x] Deploy client binaries to VPS: `./scripts/deploy-client-binaries.sh -i ~/.ssh/id_vm6_networks_vps`
+- [x] Trigger automated release tagging: `./scripts/create-release-tag.sh v1.23.0`
+- [x] Redeploy gateway binary to VPS: `./scripts/deploy.sh -i ~/.ssh/id_vm6_networks_vps -w 10`

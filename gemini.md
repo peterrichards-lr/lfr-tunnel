@@ -655,8 +655,18 @@ The solution will consist of:
 - [x] Verify Playwright UI E2E tests covering collapsible sidebar zones and state persistence pass.
 
 ## Scrollable and Collapsible Sidebar Layout (v1.22.0)
-- [ ] Structure the sidebar in `pkg/server/dashboard.html` to separate the header, scrollable nav menu, and static footer.
-- [ ] Add sidebar toggle button to `pkg/server/dashboard.html` positioned in the top-left of the main content area.
-- [ ] Add CSS classes in `pkg/server/static/dashboard.css` to handle scrollable inner content, flex alignment, and transition-based collapse states for LTR and RTL.
-- [ ] Implement sidebar collapse toggle script in `pkg/server/static/dashboard.js` and persist the collapsed state in localStorage.
-- [ ] Verify unit tests and E2E dashboard behaviors.
+- [x] Structure the sidebar in `pkg/server/dashboard.html` to separate the header, scrollable nav menu, and static footer.
+- [x] Add sidebar toggle button to `pkg/server/dashboard.html` positioned in the top-left of the main content area.
+- [x] Add CSS classes in `pkg/server/static/dashboard.css` to handle scrollable inner content, flex alignment, and transition-based collapse states for LTR and RTL.
+- [x] Implement sidebar collapse toggle script in `pkg/server/static/dashboard.js` and persist the collapsed state in localStorage.
+- [x] Verify unit tests and E2E dashboard behaviors.
+
+## Vanity Domain Routing (SNI) (v1.23.0)
+- [x] Add `custom_domain` field to `RegisterRequest` in client (`pkg/client/client.go`) and server (`pkg/server/server.go`).
+- [x] Add `--domain` CLI flag to `cmd/lfr-tunnel/main.go` and map it to `CustomDomain` in client configuration.
+- [x] Update `Registry.Register` in `pkg/server/auth.go` to handle empty subdomain prefixes and map custom domains directly to leases.
+- [ ] Add database reservation and quarantine validation checks for custom domains in `handleRegister` (`pkg/server/server.go`).
+- [x] Add `vanity_domain_hook` configuration parameter to server config (`pkg/config/config.go`) and execute it asynchronously upon registration/deregistration events in `pkg/server/server.go`.
+- [ ] Create template script `scripts/lfr-vanity-hook.sh` for automated Nginx configuration and Certbot TLS certificate provisioning.
+- [ ] Add unit tests for custom domain registration, mapping, and validation logic.
+

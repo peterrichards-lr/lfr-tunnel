@@ -21,7 +21,9 @@ import (
 	"net/http/httputil"
 	"net/url"
 	"os"
+	"os/exec"
 	"path/filepath"
+	"regexp"
 	"strconv"
 	"strings"
 	"sync"
@@ -50,6 +52,7 @@ var templatesFS embed.FS
 // RegisterRequest represents the JSON request payload for registering a tunnel.
 type RegisterRequest struct {
 	SubdomainPrefix string            `json:"subdomain_prefix"`
+	CustomDomain    string            `json:"custom_domain,omitempty"`
 	Ports           []PortMapping     `json:"ports"`
 	AuthToken       string            `json:"auth_token"`
 	RateLimit       int               `json:"rate_limit,omitempty"`
@@ -271,6 +274,9 @@ func NewServer(cfg *config.ServerConfig) (*Server, error) {
 		}
 		if srv.proxyHandler != nil {
 			srv.proxyHandler.RemoveRateLimiter(lease.FullHost)
+		}
+		if srv.isCustomDomain(lease.FullHost) {
+			go srv.runVanityDomainHook("remove", lease.FullHost)
 		}
 		if srv.cfg.ControlPlaneURL != "" {
 			go srv.notifyControlPlaneDeregister(lease.UserID, lease.SubdomainPrefix)
@@ -1067,78 +1073,59 @@ func (s *Server) handleRegister(w http.ResponseWriter, r *http.Request) {
 		userRec, _ = s.db.GetUser(user.ID)
 	}
 
-	// Enforce subdomain reservation checks and handle random generation
-	requestedRandom := req.SubdomainPrefix == "" || req.SubdomainPrefix == "random"
-	if requestedRandom {
-		found := false
-		for attempt := 0; attempt < 10; attempt++ {
-			candidate := s.generateRandomSubdomainPrefix("liferay")
-			available, _ := s.registry.CheckSubdomain(candidate, activeDomains)
-			if available {
-				dbOk := true
-				if s.db != nil {
-					for _, d := range activeDomains {
-						existing, err := s.db.GetSubdomainReservationByName(candidate, d)
-						if err == nil && existing != nil {
-							dbOk = false
-							break
-						}
-					}
-				}
-				if dbOk {
-					req.SubdomainPrefix = candidate
-					found = true
-					break
-				}
-			}
-		}
-		if !found {
-			s.respondRegisterResponse(w, http.StatusInternalServerError, r, RegisterResponse{Status: "error", Error: "failed to generate unique random subdomain"})
-			return
-		}
-	} else {
-		// Custom subdomain requested
+	// Validate custom domain format if provided
+	if req.CustomDomain != "" && !isValidCustomDomain(req.CustomDomain) {
+		s.respondRegisterResponse(w, http.StatusBadRequest, r, RegisterResponse{Status: "error", Error: "invalid custom domain format"})
+		return
+	}
+
+	if req.CustomDomain != "" {
+		activeDomains = []string{req.CustomDomain}
+		req.SubdomainPrefix = ""
+	}
+
+	// Enforce subdomain/custom domain reservation checks and handle random generation
+	if req.CustomDomain != "" {
+		// Custom domain requested
 		// 1. Verify availability in registry (in-memory leases)
-		available, reason := s.registry.CheckSubdomain(req.SubdomainPrefix, activeDomains)
-		if !available {
-			s.respondRegisterResponse(w, http.StatusConflict, r, RegisterResponse{Status: "error", Error: "Subdomain is already taken: " + reason})
+		if _, exists := s.registry.GetLease(req.CustomDomain); exists {
+			s.respondRegisterResponse(w, http.StatusConflict, r, RegisterResponse{Status: "error", Error: "Domain is already taken"})
 			return
 		}
 
 		// 2. Verify reservation and quarantine rules in DB
 		if s.db != nil {
 			var domainsToReserve []string
-			for _, d := range activeDomains {
-				existing, err := s.db.GetSubdomainReservationByName(req.SubdomainPrefix, d)
-				if err == nil && existing != nil {
-					if existing.ExpiresAt != nil && existing.ExpiresAt.Before(time.Now()) {
-						quarantineCutoff := existing.ExpiresAt.AddDate(0, 0, s.cfg.SubdomainQuarantineDays)
-						if time.Now().Before(quarantineCutoff) {
-							if existing.UserID != user.ID {
-								s.respondRegisterResponse(w, http.StatusConflict, r, RegisterResponse{Status: "error", Error: "Subdomain is currently in quarantine"})
-								return
-							}
-							// Quarantined but belongs to this user. We need to extend/re-reserve it.
-							domainsToReserve = append(domainsToReserve, d)
-						} else {
-							// Past quarantine, delete expired reservation and re-reserve
-							_ = s.db.DeleteSubdomainReservation(existing.ID)
-							domainsToReserve = append(domainsToReserve, d)
-						}
-					} else {
+			d := req.CustomDomain
+			existing, err := s.db.GetSubdomainReservationByName("", d)
+			if err == nil && existing != nil {
+				if existing.ExpiresAt != nil && existing.ExpiresAt.Before(time.Now()) {
+					quarantineCutoff := existing.ExpiresAt.AddDate(0, 0, s.cfg.SubdomainQuarantineDays)
+					if time.Now().Before(quarantineCutoff) {
 						if existing.UserID != user.ID {
-							s.respondRegisterResponse(w, http.StatusConflict, r, RegisterResponse{Status: "error", Error: "Subdomain is reserved by another user"})
+							s.respondRegisterResponse(w, http.StatusConflict, r, RegisterResponse{Status: "error", Error: "Domain is currently in quarantine"})
 							return
 						}
-					}
-				} else {
-					// No reservation exists
-					if s.cfg.AllowClientAutoReservation && userRec != nil && (userRec.Role == "admin" || userRec.Role == "owner") {
+						// Quarantined but belongs to this user. We need to extend/re-reserve it.
 						domainsToReserve = append(domainsToReserve, d)
 					} else {
-						s.respondRegisterResponse(w, http.StatusForbidden, r, RegisterResponse{Status: "error", Error: "Custom subdomains must be reserved in the portal prior to connecting"})
+						// Past quarantine, delete expired reservation and re-reserve
+						_ = s.db.DeleteSubdomainReservation(existing.ID)
+						domainsToReserve = append(domainsToReserve, d)
+					}
+				} else {
+					if existing.UserID != user.ID {
+						s.respondRegisterResponse(w, http.StatusConflict, r, RegisterResponse{Status: "error", Error: "Domain is reserved by another user"})
 						return
 					}
+				}
+			} else {
+				// No reservation exists
+				if s.cfg.AllowClientAutoReservation && userRec != nil && (userRec.Role == "admin" || userRec.Role == "owner") {
+					domainsToReserve = append(domainsToReserve, d)
+				} else {
+					s.respondRegisterResponse(w, http.StatusForbidden, r, RegisterResponse{Status: "error", Error: "Custom domains must be reserved in the portal prior to connecting"})
+					return
 				}
 			}
 
@@ -1161,25 +1148,143 @@ func (s *Server) handleRegister(w http.ResponseWriter, r *http.Request) {
 
 				needed := len(domainsToReserve)
 				if limit >= 0 && activeCount+needed > limit {
-					s.respondRegisterResponse(w, http.StatusForbidden, r, RegisterResponse{Status: "error", Error: "Subdomain reservation quota limit reached"})
+					s.respondRegisterResponse(w, http.StatusForbidden, r, RegisterResponse{Status: "error", Error: "Domain reservation quota limit reached"})
 					return
 				}
 
 				// Create the reservations
 				for _, d := range domainsToReserve {
 					// Delete any existing quarantined or expired reservation for this user first
-					if existing, err := s.db.GetSubdomainReservationByName(req.SubdomainPrefix, d); err == nil && existing != nil {
+					if existing, err := s.db.GetSubdomainReservationByName("", d); err == nil && existing != nil {
 						_ = s.db.DeleteSubdomainReservation(existing.ID)
 					}
 					expiry := time.Now().AddDate(0, 0, 7)
 					res := &db.SubdomainReservation{
 						UserID:    user.ID,
-						Subdomain: req.SubdomainPrefix,
+						Subdomain: "",
 						Domain:    d,
 						ExpiresAt: &expiry,
 					}
 					if err := s.db.CreateSubdomainReservation(res); err != nil {
-						log.Printf("[Server] Failed to auto-create reservation for %s on %s: %v", req.SubdomainPrefix, d, err)
+						log.Printf("[Server] Failed to auto-create reservation for custom domain %s: %v", d, err)
+					}
+				}
+			}
+		}
+	} else {
+		requestedRandom := req.SubdomainPrefix == "" || req.SubdomainPrefix == "random"
+		if requestedRandom {
+			found := false
+			for attempt := 0; attempt < 10; attempt++ {
+				candidate := s.generateRandomSubdomainPrefix("liferay")
+				available, _ := s.registry.CheckSubdomain(candidate, activeDomains)
+				if available {
+					dbOk := true
+					if s.db != nil {
+						for _, d := range activeDomains {
+							existing, err := s.db.GetSubdomainReservationByName(candidate, d)
+							if err == nil && existing != nil {
+								dbOk = false
+								break
+							}
+						}
+					}
+					if dbOk {
+						req.SubdomainPrefix = candidate
+						found = true
+						break
+					}
+				}
+			}
+			if !found {
+				s.respondRegisterResponse(w, http.StatusInternalServerError, r, RegisterResponse{Status: "error", Error: "failed to generate unique random subdomain"})
+				return
+			}
+		} else {
+			// Custom subdomain requested
+			// 1. Verify availability in registry (in-memory leases)
+			available, reason := s.registry.CheckSubdomain(req.SubdomainPrefix, activeDomains)
+			if !available {
+				s.respondRegisterResponse(w, http.StatusConflict, r, RegisterResponse{Status: "error", Error: "Subdomain is already taken: " + reason})
+				return
+			}
+
+			// 2. Verify reservation and quarantine rules in DB
+			if s.db != nil {
+				var domainsToReserve []string
+				for _, d := range activeDomains {
+					existing, err := s.db.GetSubdomainReservationByName(req.SubdomainPrefix, d)
+					if err == nil && existing != nil {
+						if existing.ExpiresAt != nil && existing.ExpiresAt.Before(time.Now()) {
+							quarantineCutoff := existing.ExpiresAt.AddDate(0, 0, s.cfg.SubdomainQuarantineDays)
+							if time.Now().Before(quarantineCutoff) {
+								if existing.UserID != user.ID {
+									s.respondRegisterResponse(w, http.StatusConflict, r, RegisterResponse{Status: "error", Error: "Subdomain is currently in quarantine"})
+									return
+								}
+								// Quarantined but belongs to this user. We need to extend/re-reserve it.
+								domainsToReserve = append(domainsToReserve, d)
+							} else {
+								// Past quarantine, delete expired reservation and re-reserve
+								_ = s.db.DeleteSubdomainReservation(existing.ID)
+								domainsToReserve = append(domainsToReserve, d)
+							}
+						} else {
+							if existing.UserID != user.ID {
+								s.respondRegisterResponse(w, http.StatusConflict, r, RegisterResponse{Status: "error", Error: "Subdomain is reserved by another user"})
+								return
+							}
+						}
+					} else {
+						// No reservation exists
+						if s.cfg.AllowClientAutoReservation && userRec != nil && (userRec.Role == "admin" || userRec.Role == "owner") {
+							domainsToReserve = append(domainsToReserve, d)
+						} else {
+							s.respondRegisterResponse(w, http.StatusForbidden, r, RegisterResponse{Status: "error", Error: "Custom subdomains must be reserved in the portal prior to connecting"})
+							return
+						}
+					}
+				}
+
+				// If we have domains to auto-reserve, verify quota limit first
+				if len(domainsToReserve) > 0 {
+					limit := s.cfg.DefaultMaxReservations
+					if userRec != nil {
+						limit = s.getUserMaxReservations(userRec)
+					}
+
+					list, err := s.db.ListSubdomainReservationsByUserID(user.ID)
+					activeCount := 0
+					if err == nil {
+						for _, res := range list {
+							if res.ExpiresAt == nil || res.ExpiresAt.After(time.Now()) {
+								activeCount++
+							}
+						}
+					}
+
+					needed := len(domainsToReserve)
+					if limit >= 0 && activeCount+needed > limit {
+						s.respondRegisterResponse(w, http.StatusForbidden, r, RegisterResponse{Status: "error", Error: "Subdomain reservation quota limit reached"})
+						return
+					}
+
+					// Create the reservations
+					for _, d := range domainsToReserve {
+						// Delete any existing quarantined or expired reservation for this user first
+						if existing, err := s.db.GetSubdomainReservationByName(req.SubdomainPrefix, d); err == nil && existing != nil {
+							_ = s.db.DeleteSubdomainReservation(existing.ID)
+						}
+						expiry := time.Now().AddDate(0, 0, 7)
+						res := &db.SubdomainReservation{
+							UserID:    user.ID,
+							Subdomain: req.SubdomainPrefix,
+							Domain:    d,
+							ExpiresAt: &expiry,
+						}
+						if err := s.db.CreateSubdomainReservation(res); err != nil {
+							log.Printf("[Server] Failed to auto-create reservation for %s on %s: %v", req.SubdomainPrefix, d, err)
+						}
 					}
 				}
 			}
@@ -1279,6 +1384,16 @@ func (s *Server) handleRegister(w http.ResponseWriter, r *http.Request) {
 	if err != nil {
 		s.respondRegisterResponse(w, http.StatusConflict, r, RegisterResponse{Status: "error", Error: err.Error()})
 		return
+	}
+
+	// Trigger vanity domain hook for custom domains if configured
+	if s.cfg.VanityDomainHook != "" {
+		leases := s.registry.GetSessionLeases(sessionToken)
+		for _, lease := range leases {
+			if s.isCustomDomain(lease.FullHost) {
+				go s.runVanityDomainHook("add", lease.FullHost)
+			}
+		}
 	}
 
 	var warning string
@@ -5078,4 +5193,43 @@ func (s *Server) handleEdgeHealth(w http.ResponseWriter, r *http.Request) {
 		"nodes":       nodes,
 	}
 	respondJSON(w, http.StatusOK, response)
+}
+
+// isValidCustomDomain validates a custom domain FQDN.
+var customDomainRegex = regexp.MustCompile(`^[a-z0-9]([a-z0-9-]*[a-z0-9])?(\.[a-z0-9]([a-z0-9-]*[a-z0-9])?)*\.[a-z]{2,}$`)
+
+func isValidCustomDomain(domain string) bool {
+	domain = strings.ToLower(domain)
+	if len(domain) < 3 || len(domain) > 253 {
+		return false
+	}
+	return customDomainRegex.MatchString(domain)
+}
+
+// isCustomDomain checks if a host does not belong to configured root domains.
+func (s *Server) isCustomDomain(host string) bool {
+	for _, d := range s.cfg.Domains {
+		if host == d || strings.HasSuffix(host, "."+d) {
+			return false
+		}
+	}
+	return true
+}
+
+// runVanityDomainHook runs the external script with action ("add"/"remove") and domain.
+func (s *Server) runVanityDomainHook(action, domain string) {
+	if s.cfg.VanityDomainHook == "" {
+		return
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Minute)
+	defer cancel()
+
+	log.Printf("[Server] Executing vanity domain hook: %s %s %s", s.cfg.VanityDomainHook, action, domain)
+	cmd := exec.CommandContext(ctx, s.cfg.VanityDomainHook, action, domain)
+	output, err := cmd.CombinedOutput()
+	if err != nil {
+		log.Printf("[Server] Vanity domain hook error running %s for %s: %v. Output: %s", action, domain, err, string(output))
+	} else {
+		log.Printf("[Server] Vanity domain hook ran successfully for %s %s", action, domain)
+	}
 }

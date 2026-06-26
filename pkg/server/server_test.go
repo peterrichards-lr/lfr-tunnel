@@ -2475,3 +2475,127 @@ func TestServer_ForceMFA(t *testing.T) {
 		t.Errorf("expected /api/auth/logout to be allowed, but got 403 Forbidden")
 	}
 }
+
+func TestServer_CustomDomain(t *testing.T) {
+	// Create a mock hook script
+	tmpDir := t.TempDir()
+	hookPath := filepath.Join(tmpDir, "mock-hook.sh")
+	logPath := filepath.Join(tmpDir, "hook.log")
+	hookContent := fmt.Sprintf(`#!/bin/sh
+echo "$1 $2" >> "%s"
+`, logPath)
+	if err := os.WriteFile(hookPath, []byte(hookContent), 0755); err != nil {
+		t.Fatalf("failed to write mock hook: %v", err)
+	}
+
+	cfg := &config.ServerConfig{
+		Domains:                    []string{"example.com"},
+		DisableBackupScheduler:     true,
+		AllowClientAutoReservation: true,
+		VanityDomainHook:           hookPath,
+		DBPath:                     filepath.Join(tmpDir, "test.db"),
+	}
+
+	srv, err := NewServer(cfg)
+	if err != nil {
+		t.Fatalf("failed to create server: %v", err)
+	}
+	defer func() {
+		time.Sleep(50 * time.Millisecond)
+		srv.Stop()
+	}()
+
+	_ = srv.db.CreateUser(&db.User{ID: "test@example.com", Email: "test@example.com", Role: "admin", Status: "approved"})
+	patHashBytes := sha256.Sum256([]byte("lfr_pat_mysecret"))
+	_ = srv.db.CreatePAT(&db.PersonalAccessToken{UserID: "test@example.com", TokenHash: hex.EncodeToString(patHashBytes[:]), TokenPrefix: "lfr_pat_myse"})
+
+	// 1. Invalid custom domain format
+	badPayload, _ := json.Marshal(RegisterRequest{
+		CustomDomain: "invalid_domain",
+		Ports:        []PortMapping{{LocalPort: 8080}},
+		AuthToken:    "lfr_pat_mysecret",
+	})
+	req := httptest.NewRequest("POST", "http://example.com/api/register", bytes.NewReader(badPayload))
+	rec := httptest.NewRecorder()
+	srv.ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusBadRequest {
+		t.Errorf("expected 400 Bad Request for invalid custom domain, got %d", rec.Code)
+	}
+
+	// 2. Valid custom domain format
+	goodPayload, _ := json.Marshal(RegisterRequest{
+		CustomDomain: "custom-site.org",
+		Ports:        []PortMapping{{LocalPort: 8080}},
+		AuthToken:    "lfr_pat_mysecret",
+	})
+	req2 := httptest.NewRequest("POST", "http://example.com/api/register", bytes.NewReader(goodPayload))
+	rec2 := httptest.NewRecorder()
+	srv.ServeHTTP(rec2, req2)
+
+	if rec2.Code != http.StatusOK {
+		t.Errorf("expected 200 OK for valid custom domain registration, got %d. Body: %s", rec2.Code, rec2.Body.String())
+	}
+
+	var registerResp RegisterResponse
+	if err := json.Unmarshal(rec2.Body.Bytes(), &registerResp); err != nil {
+		t.Fatalf("failed to decode register response: %v", err)
+	}
+	if registerResp.Status != "success" {
+		t.Errorf("expected status success, got %s", registerResp.Status)
+	}
+
+	// Verify the reservation was created in DB
+	res, err := srv.db.GetSubdomainReservationByName("", "custom-site.org")
+	if err != nil {
+		t.Errorf("failed to retrieve reservation: %v", err)
+	}
+	if res == nil || res.Domain != "custom-site.org" {
+		t.Errorf("expected reservation for custom-site.org, got %v", res)
+	}
+
+	// Wait up to 3 seconds for the async hook to execute
+	var logContent string
+	var readErr error
+	for i := 0; i < 30; i++ {
+		var logBytes []byte
+		logBytes, readErr = os.ReadFile(logPath)
+		if readErr == nil {
+			logContent = strings.TrimSpace(string(logBytes))
+			if logContent == "add custom-site.org" {
+				break
+			}
+		}
+		time.Sleep(100 * time.Millisecond)
+	}
+	if readErr != nil {
+		t.Fatalf("failed to read hook log: %v", readErr)
+	}
+	expectedLog := "add custom-site.org"
+	if logContent != expectedLog {
+		t.Errorf("expected hook log to be %q, got %q", expectedLog, logContent)
+	}
+
+	// Clean up lease and verify hook is called with "remove"
+	srv.registry.CleanLease(registerResp.SessionToken)
+
+	var logContent2 string
+	var readErr2 error
+	for i := 0; i < 30; i++ {
+		var logBytes2 []byte
+		logBytes2, readErr2 = os.ReadFile(logPath)
+		if readErr2 == nil {
+			logContent2 = string(logBytes2)
+			if strings.Contains(logContent2, "remove custom-site.org") {
+				break
+			}
+		}
+		time.Sleep(100 * time.Millisecond)
+	}
+	if readErr2 != nil {
+		t.Fatalf("failed to read hook log for remove: %v", readErr2)
+	}
+	if !strings.Contains(logContent2, "remove custom-site.org") {
+		t.Errorf("expected hook log to contain remove action, got %q", logContent2)
+	}
+}

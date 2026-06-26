@@ -135,6 +135,8 @@ type Server struct {
 	edgeLeasesMu       sync.Mutex
 	edgeHealth         map[string]EdgeHealthStatus
 	edgeHealthMu       sync.RWMutex
+	outboundConnected  bool
+	outboundMutex      sync.RWMutex
 }
 
 // NewServer initializes and returns a new Server instance.
@@ -224,6 +226,7 @@ func NewServer(cfg *config.ServerConfig) (*Server, error) {
 		caKey:              caKey,
 		edgeLeases:         make(map[string][]EdgeLease),
 		edgeHealth:         make(map[string]EdgeHealthStatus),
+		outboundConnected:  true,
 	}
 
 	srv.proxyHandler.db = database
@@ -4871,10 +4874,38 @@ func (s *Server) handleEdgeKick(w http.ResponseWriter, r *http.Request) {
 	respondJSON(w, http.StatusNotFound, map[string]string{"error": "lease not found"})
 }
 
+// checkOutboundConnectivity checks outbound internet access by hitting highly available public endpoints.
+func (s *Server) checkOutboundConnectivity() bool {
+	targets := []string{"https://1.1.1.1", "https://www.google.com"}
+	client := &http.Client{Timeout: 2 * time.Second}
+	for _, target := range targets {
+		req, err := http.NewRequest(http.MethodGet, target, nil)
+		if err != nil {
+			continue
+		}
+		resp, err := client.Do(req)
+		if err == nil {
+			_ = resp.Body.Close()
+			return true
+		}
+	}
+	return false
+}
+
 func (s *Server) monitorEdgeHealth() {
 	for {
+		outboundOk := s.checkOutboundConnectivity()
+		s.outboundMutex.Lock()
+		s.outboundConnected = outboundOk
+		s.outboundMutex.Unlock()
+
 		for _, edge := range s.cfg.EdgeNodes {
 			if edge.URL == "" {
+				continue
+			}
+
+			if !outboundOk {
+				s.updateEdgeHealth(edge.ID, "Unknown", 0, "Gateway outbound connectivity check failed")
 				continue
 			}
 
@@ -4921,5 +4952,14 @@ func (s *Server) updateEdgeHealth(id, status string, latency int64, errMsg strin
 func (s *Server) handleEdgeHealth(w http.ResponseWriter, r *http.Request) {
 	s.edgeHealthMu.RLock()
 	defer s.edgeHealthMu.RUnlock()
-	respondJSON(w, http.StatusOK, s.edgeHealth)
+
+	s.outboundMutex.RLock()
+	outboundOk := s.outboundConnected
+	s.outboundMutex.RUnlock()
+
+	response := map[string]interface{}{
+		"outbound_ok": outboundOk,
+		"nodes":       s.edgeHealth,
+	}
+	respondJSON(w, http.StatusOK, response)
 }

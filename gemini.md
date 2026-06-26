@@ -687,9 +687,9 @@ The solution will consist of:
 - [x] Ensure all nested links are correct and point to the corresponding docs under docs/
 
 ## Latency & Bandwidth Simulation (v1.27.0) (#175)
-- [ ] Define Latency and Bandwidth properties in ClientConfig (`pkg/config/config.go`)
-- [ ] Add CLI flags to parse latency and bandwidth settings (`cmd/lfr-tunnel/main.go`)
-- [ ] Implement rate-limiting and delay wrapper around client interceptor connection streams (`pkg/client/interceptor.go`)
-- [ ] Add unit tests for latency and bandwidth simulation (`pkg/client/interceptor_test.go`)
+- [x] Define Latency and Bandwidth properties in ClientConfig (`pkg/config/config.go`)
+- [x] Add CLI flags to parse latency and bandwidth settings (`cmd/lfr-tunnel/main.go`)
+- [x] Implement rate-limiting and delay wrapper around client interceptor connection streams (`pkg/client/interceptor.go`)
+- [x] Add unit tests for latency and bandwidth simulation (`pkg/client/interceptor_test.go`)
 
 

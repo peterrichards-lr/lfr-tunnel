@@ -1,4 +1,4 @@
 package config
 
 // Version represents the current version of the lfr-tunnel client and server
-var Version = "v1.23.4"
+var Version = "v1.23.6"

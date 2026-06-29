@@ -1,11 +1,11 @@
 {
-  "version": "v1.23.4",
-  "release_date": "2026-06-26",
+  "version": "v1.23.6",
+  "release_date": "2026-06-29",
   "features": [
-    "Implement configurable server-side proxy header injection (#240)",
-    "Implement client-side latency and bandwidth simulation (#175)",
-    "Support vanity domain routing (SNI) on the gateway (#167)",
-    "Restructure documentation and README.md to be more concise and signpost-driven (#242)"
+    "Introduce interactive dashboard onboarding tour (Driver.js) with i18n support (#268)",
+    "Implement server-side onboarding status telemetry & database persistence",
+    "Expose detailed onboarding metrics in administrator user detail panel",
+    "Add configurable external quick links to server settings (#269)"
   ]
 }
 

@@ -694,7 +694,7 @@ func (s *Server) handleAdminDeleteUser(w http.ResponseWriter, r *http.Request, a
 func (s *Server) getPortalBaseURL(r *http.Request) string {
 	if r == nil {
 		if len(s.cfg.Domains) > 0 {
-			return "https://" + s.cfg.Domains[0]
+			return "https://tunnel." + s.cfg.Domains[0]
 		}
 		return "https://localhost"
 	}
@@ -703,6 +703,21 @@ func (s *Server) getPortalBaseURL(r *http.Request) string {
 	if r.TLS == nil && r.Header.Get("X-Forwarded-Proto") != "https" {
 		scheme = "http"
 	}
+
+	// If the request Host is a subdomain (other than tunnel. or the raw apex domain),
+	// rewrite it to tunnel.<apex_domain> so that links point to the portal.
+	for _, domain := range s.cfg.Domains {
+		if host == domain {
+			return fmt.Sprintf("%s://tunnel.%s", scheme, domain)
+		}
+		if strings.HasSuffix(host, "."+domain) {
+			prefix := strings.TrimSuffix(host, "."+domain)
+			if prefix != "tunnel" {
+				return fmt.Sprintf("%s://tunnel.%s", scheme, domain)
+			}
+		}
+	}
+
 	return fmt.Sprintf("%s://%s", scheme, host)
 }
 

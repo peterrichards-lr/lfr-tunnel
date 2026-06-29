@@ -758,7 +758,7 @@ The solution will consist of:
 - [x] Add unit test coverage verifying customizable links REST response (`pkg/server/server_test.go`).
 - [x] Raise GitHub feature request issue (#268) for dashboard onboarding tutorial.
 - [x] Raise GitHub feature request issue (#269) for configurable quick links.
-- [ ] Tag and release v1.23.5.
-- [ ] Deploy version v1.23.5 to the VPS gateway.
-- [ ] Run remote diagnostics verifying version, ports, and functionality on the VPS.
+- [x] Tag and release v1.23.6.
+- [x] Deploy version v1.23.6 to the VPS gateway.
+- [x] Run remote diagnostics verifying version, ports, and functionality on the VPS.
 

@@ -734,6 +734,6 @@ The solution will consist of:
 - [x] Implement center-aligned security setup layout `intercept-screen` in `dashboard.html`.
 - [x] Integrate post-login setup interception logic blocking dashboard navigation until required setups (like MFA) are completed (`dashboard.js`).
 - [x] Add unit test coverage for configurable role limits and lifetimes (`pkg/server/server_test.go`).
-- [ ] Tag and release v1.23.4.
-- [ ] Deploy version v1.23.4 to the VPS gateway.
-- [ ] Run remote diagnostics verifying version, ports, and functionality on the VPS.
+- [x] Tag and release v1.23.4.
+- [x] Deploy version v1.23.4 to the VPS gateway.
+- [x] Run remote diagnostics verifying version, ports, and functionality on the VPS.

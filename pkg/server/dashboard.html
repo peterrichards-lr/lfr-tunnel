@@ -82,7 +82,7 @@
             </form>
 
             <div style="margin-top: 24px; padding-top: 12px; border-top: 1px solid rgba(255,255,255,0.06); text-align: center; font-size: 11px; display: flex; justify-content: center; gap: 12px; align-items: center;">
-                <a href="https://status.lfr-demo.se" target="_blank" rel="noopener noreferrer" style="color: var(--text-muted); text-decoration: none; transition: 0.2s; display: flex; align-items: center; gap: 4px;" onmouseover="this.style.color='var(--primary)'" onmouseout="this.style.color='var(--text-muted)'">
+                <a id="status-page-link" href="https://status.lfr-demo.se" target="_blank" rel="noopener noreferrer" style="color: var(--text-muted); text-decoration: none; transition: 0.2s; display: flex; align-items: center; gap: 4px;" onmouseover="this.style.color='var(--primary)'" onmouseout="this.style.color='var(--text-muted)'">
                     <span style="width: 6px; height: 6px; border-radius: 50%; background-color: #10b981; display: inline-block;"></span>
                     <span data-i18n="system_status">System Status</span>
                 </a>
@@ -239,8 +239,8 @@
                         <div class="glass" style="padding: 24px; border-radius: 8px;">
                             <h3 style="margin-bottom: 16px; font-size: 18px;">Quick Links</h3>
                             <div style="display: flex; flex-direction: column; gap: 12px;">
-                                <a href="#" onclick="showTab('tokens')" style="color: var(--primary); text-decoration: none; font-weight: 500;">→ Generate a new CLI Token</a>
-                                <a href="#" onclick="showTab('tunnels')" style="color: var(--primary); text-decoration: none; font-weight: 500;">→ View your Active Tunnels</a>
+                                <a href="#" onclick="showTab('tokens'); return false;" style="color: var(--primary); text-decoration: none; font-weight: 500;">→ Generate a new CLI Token</a>
+                                <a href="#" onclick="showTab('tunnels'); return false;" style="color: var(--primary); text-decoration: none; font-weight: 500;">→ View your Active Tunnels</a>
                                 <a id="docs-link" href="#" target="_blank" style="color: var(--primary); text-decoration: none; font-weight: 500;">→ Read the Documentation</a>
                                 <a id="secure-token-guide-link" href="#" target="_blank" style="color: var(--primary); text-decoration: none; font-weight: 500;">→ Secure Token Storage (LDM-Style)</a>
                             </div>

@@ -65,6 +65,9 @@ type ServerConfig struct {
 	LatestClientVersion        string                    `yaml:"latest_client_version"`
 	DocumentationURL           string                    `yaml:"documentation_url"`
 	RepositoryURL              string                    `yaml:"repository_url"`
+	SecureTokenGuideURL        string                    `yaml:"secure_token_guide_url"`
+	DockerHubURL               string                    `yaml:"docker_hub_url"`
+	StatusPageURL              string                    `yaml:"status_page_url"`
 	PruneInterval              time.Duration             `yaml:"prune_interval"`
 	MagicLinkExpiry            time.Duration             `yaml:"magic_link_expiry"`
 	InviteLinkExpiry           time.Duration             `yaml:"invite_link_expiry"`
@@ -164,6 +167,9 @@ func DefaultServerConfig() *ServerConfig {
 		LatestClientVersion:     "",
 		DocumentationURL:        "https://github.com/peterrichards-lr/lfr-tunnel/tree/master/docs",
 		RepositoryURL:           "https://github.com/peterrichards-lr/lfr-tunnel",
+		SecureTokenGuideURL:     "https://github.com/peterrichards-lr/lfr-tunnel/blob/master/docs/getting_started.md#option-c-restricted-secrets-file-advanced--secure",
+		DockerHubURL:            "https://hub.docker.com/r/peterjrichards/lfr-tunnel",
+		StatusPageURL:           "https://status.lfr-demo.se",
 		PruneInterval:           1 * time.Hour,
 		MagicLinkExpiry:         15 * time.Minute,
 		PATRetentionDays:        30,

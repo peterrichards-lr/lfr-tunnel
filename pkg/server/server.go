@@ -1525,6 +1525,24 @@ func (s *Server) Start() error {
 
 	go s.monitorEdgeHealth()
 
+	// Periodic task: Prune and check expiring reservations every hour
+	go func() {
+		ticker := time.NewTicker(s.cfg.PruneInterval)
+		defer ticker.Stop()
+		for {
+			select {
+			case <-s.ctx.Done():
+				return
+			case <-ticker.C:
+				if s.db != nil {
+					_ = s.db.PruneExpiredMagicLinks()
+					_ = s.db.PruneExpiredOrRevokedPATs(s.cfg.PATRetentionDays)
+					s.checkExpiringReservations()
+				}
+			}
+		}
+	}()
+
 	// 1. Start Chisel Server on localhost:8081
 	go func() {
 		log.Println("[Server] Starting internal Chisel tunnel engine on 127.0.0.1:8081...")
@@ -1571,23 +1589,6 @@ func (s *Server) Start() error {
 		Addr:    s.cfg.HTTPBindAddr,
 		Handler: s,
 	}
-	// Periodic task: Prune expired magic links and old PATs every hour
-	go func() {
-		ticker := time.NewTicker(s.cfg.PruneInterval)
-		defer ticker.Stop()
-		for {
-			select {
-			case <-s.ctx.Done():
-				return
-			case <-ticker.C:
-				if s.db != nil {
-					_ = s.db.PruneExpiredMagicLinks()
-					_ = s.db.PruneExpiredOrRevokedPATs(s.cfg.PATRetentionDays)
-				}
-			}
-		}
-	}()
-
 	return srv.ListenAndServe()
 }
 
@@ -5236,5 +5237,117 @@ func (s *Server) runVanityDomainHook(action, domain string) {
 		log.Printf("[Server] Vanity domain hook error running %s for %s: %v. Output: %s", action, domain, err, string(output))
 	} else {
 		log.Printf("[Server] Vanity domain hook ran successfully for %s %s", action, domain)
+	}
+}
+
+// checkExpiringReservations scans for expiring or expired subdomain reservations and triggers email notifications.
+func (s *Server) checkExpiringReservations() {
+	if s.mailSender == nil {
+		return
+	}
+
+	now := time.Now()
+	// Warning window of 48 hours
+	warningThreshold := now.Add(48 * time.Hour)
+
+	expiring, err := s.db.GetExpiringSubdomainReservations(now, warningThreshold)
+	if err != nil {
+		log.Printf("[Server] Failed to fetch expiring subdomain reservations: %v", err)
+		return
+	}
+
+	for _, res := range expiring {
+		user, err := s.db.GetUser(res.UserID)
+		if err != nil {
+			log.Printf("[Server] Failed to retrieve user %s for expiring reservation: %v", res.UserID, err)
+			continue
+		}
+
+		if user.NotificationPrefs == "disabled" {
+			continue
+		}
+
+		lang := user.LanguagePreference
+		baseURL := s.getPortalBaseURL(nil)
+		portalLink := baseURL + "/portal"
+
+		if res.ExpiresAt != nil && res.ExpiresAt.Before(now) {
+			// Stage 2: Already expired and quarantined
+			releasedAt := res.ExpiresAt.AddDate(0, 0, s.cfg.SubdomainQuarantineDays)
+			releasedStr := releasedAt.Format("2006-01-02 15:04:05 MST")
+
+			body, err := s.renderEmailTemplate(lang, "subdomain_expired.html", map[string]interface{}{
+				"Name":       user.FirstName,
+				"Subdomain":  res.Subdomain,
+				"Domain":     res.Domain,
+				"ReleasedAt": releasedStr,
+				"PortalLink": portalLink,
+			})
+			if err != nil {
+				log.Printf("[Server] Failed to render subdomain_expired email template: %v", err)
+				body = fmt.Sprintf("<p>Hi %s,</p>"+
+					"<p>Your subdomain reservation <strong>%s.%s</strong> has expired and entered a %d-day quarantine period.</p>"+
+					"<p>If you take no action, it will be released to the public pool on <strong>%s</strong>.</p>"+
+					"<p><a href=\"%s\">Go to Portal</a></p>",
+					html.EscapeString(user.FirstName), html.EscapeString(res.Subdomain), html.EscapeString(res.Domain),
+					s.cfg.SubdomainQuarantineDays, releasedStr, portalLink)
+			}
+
+			plainBody := fmt.Sprintf("Hi %s,\n\nYour subdomain reservation %s.%s has expired and entered quarantine. It will be released to the public pool on %s.\n\nGo to the portal to manage it:\n%s",
+				user.FirstName, res.Subdomain, res.Domain, releasedStr, portalLink)
+
+			subject := s.GetTranslation(lang, "subdomain_expired_subject")
+			if subject == "" {
+				subject = fmt.Sprintf("Subdomain Expired & Quarantined: %s.%s", res.Subdomain, res.Domain)
+			}
+
+			if err := s.mailSender.Send(user.Email, subject, body, plainBody); err != nil {
+				log.Printf("[Server] Failed to send subdomain expired email to %s: %v", user.Email, err)
+				continue
+			}
+
+			res.ExpiryWarningSent = 2
+			if err := s.db.UpdateSubdomainReservation(res); err != nil {
+				log.Printf("[Server] Failed to update expiry warning state for reservation %d: %v", res.ID, err)
+			}
+		} else if res.ExpiresAt != nil {
+			// Stage 1: Expiring soon (< 48 hours remaining)
+			expiresStr := res.ExpiresAt.Format("2006-01-02 15:04:05 MST")
+
+			body, err := s.renderEmailTemplate(lang, "subdomain_expiring.html", map[string]interface{}{
+				"Name":       user.FirstName,
+				"Subdomain":  res.Subdomain,
+				"Domain":     res.Domain,
+				"ExpiresAt":  expiresStr,
+				"PortalLink": portalLink,
+			})
+			if err != nil {
+				log.Printf("[Server] Failed to render subdomain_expiring email template: %v", err)
+				body = fmt.Sprintf("<p>Hi %s,</p>"+
+					"<p>Your subdomain reservation <strong>%s.%s</strong> is expiring soon on <strong>%s</strong>.</p>"+
+					"<p>To avoid service disruption, please renew your reservation or request an extension in the Liferay Tunnel Portal.</p>"+
+					"<p><a href=\"%s\">Go to Portal</a></p>",
+					html.EscapeString(user.FirstName), html.EscapeString(res.Subdomain), html.EscapeString(res.Domain),
+					expiresStr, portalLink)
+			}
+
+			plainBody := fmt.Sprintf("Hi %s,\n\nYour subdomain reservation %s.%s is expiring soon on %s.\n\nPlease renew or request an extension in the portal:\n%s",
+				user.FirstName, res.Subdomain, res.Domain, expiresStr, portalLink)
+
+			subject := s.GetTranslation(lang, "subdomain_expiring_subject")
+			if subject == "" {
+				subject = fmt.Sprintf("Subdomain Expiring Soon: %s.%s", res.Subdomain, res.Domain)
+			}
+
+			if err := s.mailSender.Send(user.Email, subject, body, plainBody); err != nil {
+				log.Printf("[Server] Failed to send subdomain expiring email to %s: %v", user.Email, err)
+				continue
+			}
+
+			res.ExpiryWarningSent = 1
+			if err := s.db.UpdateSubdomainReservation(res); err != nil {
+				log.Printf("[Server] Failed to update expiry warning state for reservation %d: %v", res.ID, err)
+			}
+		}
 	}
 }

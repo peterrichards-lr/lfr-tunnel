@@ -2607,3 +2607,112 @@ echo "$1 $2" >> "%s"
 		t.Errorf("expected hook log to contain remove action, got %q", logContent2)
 	}
 }
+
+func TestServer_SubdomainExpirationNotifications(t *testing.T) {
+	srv, mockMail, cleanup := setupTestServer(t)
+	defer cleanup()
+
+	// Create user
+	email := "dev@example.com"
+	u := &db.User{
+		ID:                 email,
+		Email:              email,
+		FirstName:          "Dev",
+		Role:               "user",
+		Status:             "approved",
+		LanguagePreference: "en",
+	}
+	if err := srv.db.CreateUser(u); err != nil {
+		t.Fatalf("failed to create user: %v", err)
+	}
+
+	// Create reservation expiring in 36 hours (which is within the 48h warning threshold)
+	expiresAt := time.Now().Add(36 * time.Hour)
+	res := &db.SubdomainReservation{
+		UserID:            email,
+		Subdomain:         "warn-soon",
+		Domain:            "example.com",
+		ExpiresAt:         &expiresAt,
+		ExpiryWarningSent: 0,
+		CreatedAt:         time.Now(),
+		UpdatedAt:         time.Now(),
+	}
+	if err := srv.db.CreateSubdomainReservation(res); err != nil {
+		t.Fatalf("failed to create reservation: %v", err)
+	}
+
+	// 1. Run warning checker: should trigger "expiring" email alert
+	srv.checkExpiringReservations()
+
+	// Verify email sent
+	if mockMail.sentTo != email {
+		t.Errorf("expected email to be sent to %s, got %s", email, mockMail.sentTo)
+	}
+	if !strings.Contains(mockMail.sentSubject, "Expiring Soon") {
+		t.Errorf("expected email subject to contain 'Expiring Soon', got %q", mockMail.sentSubject)
+	}
+
+	// Verify DB state updated to 1
+	updated, err := srv.db.GetSubdomainReservation(res.ID)
+	if err != nil {
+		t.Fatalf("failed to get updated reservation: %v", err)
+	}
+	if updated.ExpiryWarningSent != 1 {
+		t.Errorf("expected ExpiryWarningSent to be 1, got %d", updated.ExpiryWarningSent)
+	}
+
+	// Reset mockMail
+	mockMail.sentTo = ""
+	mockMail.sentSubject = ""
+
+	// 2. Run warning checker again: should not send duplicate email
+	srv.checkExpiringReservations()
+	if mockMail.sentTo != "" {
+		t.Errorf("expected no duplicate warning email, but got email to %s", mockMail.sentTo)
+	}
+
+	// 3. Move expiration time to the past (expired and quarantined)
+	expiredTime := time.Now().Add(-1 * time.Hour)
+	updated.ExpiresAt = &expiredTime
+	if err := srv.db.UpdateSubdomainReservation(updated); err != nil {
+		t.Fatalf("failed to update reservation to expired: %v", err)
+	}
+
+	// Run warning checker: should trigger "expired/quarantined" email alert
+	srv.checkExpiringReservations()
+
+	if mockMail.sentTo != email {
+		t.Errorf("expected expired email to be sent to %s, got %s", email, mockMail.sentTo)
+	}
+	if !strings.Contains(mockMail.sentSubject, "Expired") {
+		t.Errorf("expected email subject to contain 'Expired', got %q", mockMail.sentSubject)
+	}
+
+	// Verify DB state updated to 2
+	updated, err = srv.db.GetSubdomainReservation(res.ID)
+	if err != nil {
+		t.Fatalf("failed to get updated reservation: %v", err)
+	}
+	if updated.ExpiryWarningSent != 2 {
+		t.Errorf("expected ExpiryWarningSent to be 2, got %d", updated.ExpiryWarningSent)
+	}
+
+	// 4. Test notification prefs disabling email alerts
+	u.NotificationPrefs = "disabled"
+	if err := srv.db.UpdateUser(u); err != nil {
+		t.Fatalf("failed to update user notifications: %v", err)
+	}
+
+	mockMail.sentTo = ""
+	// Reset ExpiryWarningSent to 0 and set expires back to 36 hours
+	updated.ExpiresAt = &expiresAt
+	updated.ExpiryWarningSent = 0
+	if err := srv.db.UpdateSubdomainReservation(updated); err != nil {
+		t.Fatalf("failed to reset reservation: %v", err)
+	}
+
+	srv.checkExpiringReservations()
+	if mockMail.sentTo != "" {
+		t.Errorf("expected no email when NotificationPrefs is disabled, but got email to %s", mockMail.sentTo)
+	}
+}

@@ -99,6 +99,7 @@ type SubdomainReservation struct {
 	Passcode           string     `json:"passcode"`
 	WhitelistIPs       string     `json:"whitelist_ips"`
 	AccessMode         string     `json:"access_mode"`
+	ExpiryWarningSent  int        `json:"expiry_warning_sent"`
 	CreatedAt          time.Time  `json:"created_at"`
 	UpdatedAt          time.Time  `json:"updated_at"`
 }
@@ -362,6 +363,7 @@ func (db *DB) initSchema() error {
 	_, _ = db.conn.Exec("ALTER TABLE subdomain_reservations ADD COLUMN passcode TEXT DEFAULT ''")
 	_, _ = db.conn.Exec("ALTER TABLE subdomain_reservations ADD COLUMN whitelist_ips TEXT DEFAULT ''")
 	_, _ = db.conn.Exec("ALTER TABLE subdomain_reservations ADD COLUMN access_mode TEXT DEFAULT 'or'")
+	_, _ = db.conn.Exec("ALTER TABLE subdomain_reservations ADD COLUMN expiry_warning_sent INTEGER DEFAULT 0")
 	_, _ = db.conn.Exec("ALTER TABLE tunnel_metrics ADD COLUMN node_id TEXT DEFAULT 'control'")
 
 	return nil
@@ -1280,9 +1282,9 @@ func (db *DB) CreateSubdomainReservation(r *SubdomainReservation) error {
 	}
 
 	res, err := db.conn.Exec(`
-		INSERT INTO subdomain_reservations (user_id, subdomain, domain, expires_at, extension_requested, passcode, whitelist_ips, access_mode, created_at, updated_at)
-		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-	`, r.UserID, r.Subdomain, r.Domain, r.ExpiresAt, extReq, r.Passcode, r.WhitelistIPs, r.AccessMode, r.CreatedAt, r.UpdatedAt)
+		INSERT INTO subdomain_reservations (user_id, subdomain, domain, expires_at, extension_requested, passcode, whitelist_ips, access_mode, expiry_warning_sent, created_at, updated_at)
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+	`, r.UserID, r.Subdomain, r.Domain, r.ExpiresAt, extReq, r.Passcode, r.WhitelistIPs, r.AccessMode, r.ExpiryWarningSent, r.CreatedAt, r.UpdatedAt)
 	if err != nil {
 		return err
 	}
@@ -1299,14 +1301,14 @@ func (db *DB) CreateSubdomainReservation(r *SubdomainReservation) error {
 func (db *DB) GetSubdomainReservation(id int64) (*SubdomainReservation, error) {
 	var r SubdomainReservation
 	var expiresAt sql.NullTime
-	var extReq int
+	var extReq, warnSent int
 	var passcode, whitelistIPs, accessMode sql.NullString
 
 	err := db.conn.QueryRow(`
-		SELECT id, user_id, subdomain, domain, expires_at, extension_requested, passcode, whitelist_ips, access_mode, created_at, updated_at
+		SELECT id, user_id, subdomain, domain, expires_at, extension_requested, passcode, whitelist_ips, access_mode, expiry_warning_sent, created_at, updated_at
 		FROM subdomain_reservations
 		WHERE id = ?
-	`, id).Scan(&r.ID, &r.UserID, &r.Subdomain, &r.Domain, &expiresAt, &extReq, &passcode, &whitelistIPs, &accessMode, &r.CreatedAt, &r.UpdatedAt)
+	`, id).Scan(&r.ID, &r.UserID, &r.Subdomain, &r.Domain, &expiresAt, &extReq, &passcode, &whitelistIPs, &accessMode, &warnSent, &r.CreatedAt, &r.UpdatedAt)
 	if err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
 			return nil, ErrNotFound
@@ -1326,6 +1328,7 @@ func (db *DB) GetSubdomainReservation(id int64) (*SubdomainReservation, error) {
 	if r.AccessMode == "" {
 		r.AccessMode = "or"
 	}
+	r.ExpiryWarningSent = warnSent
 
 	return &r, nil
 }
@@ -1334,14 +1337,14 @@ func (db *DB) GetSubdomainReservation(id int64) (*SubdomainReservation, error) {
 func (db *DB) GetSubdomainReservationByName(subdomain, domain string) (*SubdomainReservation, error) {
 	var r SubdomainReservation
 	var expiresAt sql.NullTime
-	var extReq int
+	var extReq, warnSent int
 	var passcode, whitelistIPs, accessMode sql.NullString
 
 	err := db.conn.QueryRow(`
-		SELECT id, user_id, subdomain, domain, expires_at, extension_requested, passcode, whitelist_ips, access_mode, created_at, updated_at
+		SELECT id, user_id, subdomain, domain, expires_at, extension_requested, passcode, whitelist_ips, access_mode, expiry_warning_sent, created_at, updated_at
 		FROM subdomain_reservations
 		WHERE subdomain = ? AND domain = ?
-	`, subdomain, domain).Scan(&r.ID, &r.UserID, &r.Subdomain, &r.Domain, &expiresAt, &extReq, &passcode, &whitelistIPs, &accessMode, &r.CreatedAt, &r.UpdatedAt)
+	`, subdomain, domain).Scan(&r.ID, &r.UserID, &r.Subdomain, &r.Domain, &expiresAt, &extReq, &passcode, &whitelistIPs, &accessMode, &warnSent, &r.CreatedAt, &r.UpdatedAt)
 	if err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
 			return nil, ErrNotFound
@@ -1361,6 +1364,7 @@ func (db *DB) GetSubdomainReservationByName(subdomain, domain string) (*Subdomai
 	if r.AccessMode == "" {
 		r.AccessMode = "or"
 	}
+	r.ExpiryWarningSent = warnSent
 
 	return &r, nil
 }
@@ -1368,7 +1372,7 @@ func (db *DB) GetSubdomainReservationByName(subdomain, domain string) (*Subdomai
 // ListSubdomainReservationsByUserID lists all reservations held by a specific user.
 func (db *DB) ListSubdomainReservationsByUserID(userID string) ([]*SubdomainReservation, error) {
 	rows, err := db.conn.Query(`
-		SELECT id, user_id, subdomain, domain, expires_at, extension_requested, passcode, whitelist_ips, access_mode, created_at, updated_at
+		SELECT id, user_id, subdomain, domain, expires_at, extension_requested, passcode, whitelist_ips, access_mode, expiry_warning_sent, created_at, updated_at
 		FROM subdomain_reservations
 		WHERE user_id = ?
 		ORDER BY created_at DESC
@@ -1382,9 +1386,9 @@ func (db *DB) ListSubdomainReservationsByUserID(userID string) ([]*SubdomainRese
 	for rows.Next() {
 		var r SubdomainReservation
 		var expiresAt sql.NullTime
-		var extReq int
+		var extReq, warnSent int
 		var passcode, whitelistIPs, accessMode sql.NullString
-		if err := rows.Scan(&r.ID, &r.UserID, &r.Subdomain, &r.Domain, &expiresAt, &extReq, &passcode, &whitelistIPs, &accessMode, &r.CreatedAt, &r.UpdatedAt); err != nil {
+		if err := rows.Scan(&r.ID, &r.UserID, &r.Subdomain, &r.Domain, &expiresAt, &extReq, &passcode, &whitelistIPs, &accessMode, &warnSent, &r.CreatedAt, &r.UpdatedAt); err != nil {
 			return nil, err
 		}
 		if expiresAt.Valid {
@@ -1397,6 +1401,7 @@ func (db *DB) ListSubdomainReservationsByUserID(userID string) ([]*SubdomainRese
 		if r.AccessMode == "" {
 			r.AccessMode = "or"
 		}
+		r.ExpiryWarningSent = warnSent
 		list = append(list, &r)
 	}
 	return list, nil
@@ -1405,7 +1410,7 @@ func (db *DB) ListSubdomainReservationsByUserID(userID string) ([]*SubdomainRese
 // ListAllSubdomainReservations returns all reservations in the system.
 func (db *DB) ListAllSubdomainReservations() ([]*SubdomainReservation, error) {
 	rows, err := db.conn.Query(`
-		SELECT id, user_id, subdomain, domain, expires_at, extension_requested, passcode, whitelist_ips, access_mode, created_at, updated_at
+		SELECT id, user_id, subdomain, domain, expires_at, extension_requested, passcode, whitelist_ips, access_mode, expiry_warning_sent, created_at, updated_at
 		FROM subdomain_reservations
 		ORDER BY created_at DESC
 	`)
@@ -1418,9 +1423,9 @@ func (db *DB) ListAllSubdomainReservations() ([]*SubdomainReservation, error) {
 	for rows.Next() {
 		var r SubdomainReservation
 		var expiresAt sql.NullTime
-		var extReq int
+		var extReq, warnSent int
 		var passcode, whitelistIPs, accessMode sql.NullString
-		if err := rows.Scan(&r.ID, &r.UserID, &r.Subdomain, &r.Domain, &expiresAt, &extReq, &passcode, &whitelistIPs, &accessMode, &r.CreatedAt, &r.UpdatedAt); err != nil {
+		if err := rows.Scan(&r.ID, &r.UserID, &r.Subdomain, &r.Domain, &expiresAt, &extReq, &passcode, &whitelistIPs, &accessMode, &warnSent, &r.CreatedAt, &r.UpdatedAt); err != nil {
 			return nil, err
 		}
 		if expiresAt.Valid {
@@ -1433,6 +1438,7 @@ func (db *DB) ListAllSubdomainReservations() ([]*SubdomainReservation, error) {
 		if r.AccessMode == "" {
 			r.AccessMode = "or"
 		}
+		r.ExpiryWarningSent = warnSent
 		list = append(list, &r)
 	}
 	return list, nil
@@ -1447,9 +1453,9 @@ func (db *DB) UpdateSubdomainReservation(r *SubdomainReservation) error {
 	}
 	_, err := db.conn.Exec(`
 		UPDATE subdomain_reservations
-		SET expires_at = ?, extension_requested = ?, passcode = ?, whitelist_ips = ?, access_mode = ?, updated_at = ?
+		SET expires_at = ?, extension_requested = ?, passcode = ?, whitelist_ips = ?, access_mode = ?, expiry_warning_sent = ?, updated_at = ?
 		WHERE id = ?
-	`, r.ExpiresAt, extReq, r.Passcode, r.WhitelistIPs, r.AccessMode, r.UpdatedAt, r.ID)
+	`, r.ExpiresAt, extReq, r.Passcode, r.WhitelistIPs, r.AccessMode, r.ExpiryWarningSent, r.UpdatedAt, r.ID)
 	return err
 }
 
@@ -1457,6 +1463,47 @@ func (db *DB) UpdateSubdomainReservation(r *SubdomainReservation) error {
 func (db *DB) DeleteSubdomainReservation(id int64) error {
 	_, err := db.conn.Exec("DELETE FROM subdomain_reservations WHERE id = ?", id)
 	return err
+}
+
+// GetExpiringSubdomainReservations retrieves all reservations expiring before 'before'
+// that have not yet sent the warning or expiry alert corresponding to their state.
+func (db *DB) GetExpiringSubdomainReservations(now time.Time, before time.Time) ([]*SubdomainReservation, error) {
+	rows, err := db.conn.Query(`
+		SELECT id, user_id, subdomain, domain, expires_at, extension_requested, passcode, whitelist_ips, access_mode, expiry_warning_sent, created_at, updated_at
+		FROM subdomain_reservations
+		WHERE expires_at IS NOT NULL AND (
+			(expires_at <= ? AND expires_at > ? AND expiry_warning_sent = 0) OR
+			(expires_at <= ? AND expiry_warning_sent < 2)
+		)
+	`, before, now, now)
+	if err != nil {
+		return nil, err
+	}
+	defer func() { _ = rows.Close() }()
+
+	var list []*SubdomainReservation
+	for rows.Next() {
+		var r SubdomainReservation
+		var expiresAt sql.NullTime
+		var extReq, warnSent int
+		var passcode, whitelistIPs, accessMode sql.NullString
+		if err := rows.Scan(&r.ID, &r.UserID, &r.Subdomain, &r.Domain, &expiresAt, &extReq, &passcode, &whitelistIPs, &accessMode, &warnSent, &r.CreatedAt, &r.UpdatedAt); err != nil {
+			return nil, err
+		}
+		if expiresAt.Valid {
+			r.ExpiresAt = &expiresAt.Time
+		}
+		r.ExtensionRequested = extReq == 1
+		r.Passcode = passcode.String
+		r.WhitelistIPs = whitelistIPs.String
+		r.AccessMode = accessMode.String
+		if r.AccessMode == "" {
+			r.AccessMode = "or"
+		}
+		r.ExpiryWarningSent = warnSent
+		list = append(list, &r)
+	}
+	return list, nil
 }
 
 // DeleteExpiredSubdomainReservations removes reservations that expired before the cutoff.

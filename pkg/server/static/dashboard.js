@@ -626,6 +626,7 @@ function toggleTheme() {
                     const vData = await vRes.json();
                     window.latestVersionData = vData;
                     
+                    const repoUrl = vData.repository_url || 'https://github.com/peterrichards-lr/lfr-tunnel';
                     const cancelBtn = document.getElementById('mfa-cancel-btn');
                     if (cancelBtn) cancelBtn.style.display = 'inline-block';
                     const rawLatest = vData.latest_version || '';
@@ -644,7 +645,6 @@ function toggleTheme() {
                         if (vData.secure_token_guide_url) {
                             secureLink.href = vData.secure_token_guide_url;
                         } else {
-                            const repoUrl = vData.repository_url || 'https://github.com/peterrichards-lr/lfr-tunnel';
                             secureLink.href = `${repoUrl}/blob/master/docs/getting_started.md#option-c-restricted-secrets-file-advanced--secure`;
                         }
                     }
@@ -983,8 +983,6 @@ applyTheme(currentUser.theme_preference);
             }
 
             const maintBanner = document.getElementById('global-maintenance-banner');
-            const overviewMaintBox = document.getElementById('overview-maintenance-box');
-            const overviewMaintText = document.getElementById('overview-maintenance-text');
 
             if (data.maintenance_mode === "pending") {
                 window.maintenanceSecondsLeft = data.maintenance_seconds_left;
@@ -996,12 +994,6 @@ applyTheme(currentUser.theme_preference);
                         maintBanner.innerHTML = activeHtml;
                         maintBanner.style.backgroundColor = '#ef4444';
                         maintBanner.style.display = 'block';
-                        if (overviewMaintBox && overviewMaintText) {
-                            overviewMaintText.innerHTML = activeHtml;
-                            overviewMaintBox.style.borderLeft = '4px solid #ef4444';
-                            overviewMaintBox.style.background = 'rgba(239, 68, 68, 0.1)';
-                            overviewMaintBox.style.display = 'flex';
-                        }
                         return;
                     }
                     const mins = Math.floor(secs / 60);
@@ -1012,13 +1004,6 @@ applyTheme(currentUser.theme_preference);
                     maintBanner.innerHTML = pendingHtml;
                     maintBanner.style.backgroundColor = '#f59e0b';
                     maintBanner.style.display = 'block';
-                    
-                    if (overviewMaintBox && overviewMaintText) {
-                        overviewMaintText.innerHTML = pendingHtml;
-                        overviewMaintBox.style.borderLeft = '4px solid #f59e0b';
-                        overviewMaintBox.style.background = 'rgba(245, 158, 11, 0.1)';
-                        overviewMaintBox.style.display = 'flex';
-                    }
                 };
 
                 updateCountdown();
@@ -1047,13 +1032,6 @@ applyTheme(currentUser.theme_preference);
                 maintBanner.style.backgroundColor = '#ef4444';
                 maintBanner.style.display = 'block';
                 
-                if (overviewMaintBox && overviewMaintText) {
-                    overviewMaintText.innerHTML = activeHtml;
-                    overviewMaintBox.style.borderLeft = '4px solid #ef4444';
-                    overviewMaintBox.style.background = 'rgba(239, 68, 68, 0.1)';
-                    overviewMaintBox.style.display = 'flex';
-                }
-                
                 if (currentUser && currentUser.role !== 'admin' && currentUser.role !== 'owner' && !window.loggingOut) {
                     window.loggingOut = true;
                     showToast("The portal has entered scheduled maintenance. Standard sessions are suspended.", "danger");
@@ -1067,9 +1045,6 @@ applyTheme(currentUser.theme_preference);
                     window.maintenanceInterval = null;
                 }
                 maintBanner.style.display = 'none';
-                if (overviewMaintBox) {
-                    overviewMaintBox.style.display = 'none';
-                }
             }
 
             if (currentUser && (currentUser.role === 'admin' || currentUser.role === 'owner')) {

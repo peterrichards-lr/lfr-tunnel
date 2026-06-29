@@ -72,6 +72,7 @@ type ServerConfig struct {
 	PrivacyPolicyURL           string                    `yaml:"privacy_policy_url"`
 	CookiePolicyURL            string                    `yaml:"cookie_policy_url"`
 	EnforcePolicyConsent       bool                      `yaml:"enforce_policy_consent"`
+	EnableOnboarding           bool                      `yaml:"enable_onboarding"`
 	DisableBackupScheduler     bool                      `yaml:"disable_backup_scheduler"`
 	DockerImage                string                    `yaml:"docker_image"`
 	DockerBypassURL            string                    `yaml:"docker_bypass_url"`
@@ -159,6 +160,7 @@ func DefaultServerConfig() *ServerConfig {
 		SubdomainQuarantineDays: 3,
 		MaxTunnelRateLimit:      100,
 		EnableUserPortal:        true,
+		EnableOnboarding:        true,
 		PortalSessionDuration:   24 * time.Hour,
 		MinClientVersion:        "v1.0.0",
 		LatestClientVersion:     "",

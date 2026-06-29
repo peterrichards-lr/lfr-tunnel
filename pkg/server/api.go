@@ -160,6 +160,38 @@ func (s *Server) handleUpdateMe(w http.ResponseWriter, r *http.Request) {
 	respondJSON(w, http.StatusOK, map[string]string{"status": "ok"})
 }
 
+func (s *Server) handleUpdateOnboarding(w http.ResponseWriter, r *http.Request) {
+	user, err := s.getCurrentUser(r)
+	if err != nil {
+		http.Error(w, `{"error":"Unauthorized"}`, http.StatusUnauthorized)
+		return
+	}
+
+	var req struct {
+		Status   string `json:"status"`
+		LastStep string `json:"last_step"`
+		IsRerun  bool   `json:"is_rerun"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		http.Error(w, `{"error":"Invalid request payload"}`, http.StatusBadRequest)
+		return
+	}
+
+	if req.Status == "" {
+		http.Error(w, `{"error":"Missing status"}`, http.StatusBadRequest)
+		return
+	}
+
+	if err := s.db.UpdateUserOnboarding(user.ID, req.Status, req.LastStep, req.IsRerun); err != nil {
+		http.Error(w, `{"error":"Failed to update onboarding progress"}`, http.StatusInternalServerError)
+		return
+	}
+
+	s.writeAudit(user.Email, "user.onboarding_updated", "user", user.ID, fmt.Sprintf("Onboarding status updated to %s (last step: %s, rerun: %t)", req.Status, req.LastStep, req.IsRerun), r)
+
+	respondJSON(w, http.StatusOK, map[string]string{"status": "ok"})
+}
+
 // handleListTokens returns the current user's PATs (or all PATs for admin/owner).
 func (s *Server) handleListTokens(w http.ResponseWriter, r *http.Request) {
 	user, err := s.getCurrentUser(r)

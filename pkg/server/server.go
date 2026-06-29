@@ -603,7 +603,7 @@ func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		if s.cfg.ForceMFA && strings.HasPrefix(r.URL.Path, "/api/") {
 			bypass := false
 			switch r.URL.Path {
-			case "/api/me", "/api/mfa/setup", "/api/mfa/enable", "/api/auth/logout", "/api/version", "/api/i18n", "/api/complete-setup":
+			case "/api/me", "/api/me/onboarding", "/api/mfa/setup", "/api/mfa/enable", "/api/auth/logout", "/api/version", "/api/i18n", "/api/complete-setup":
 				bypass = true
 			}
 			if strings.HasPrefix(r.URL.Path, "/api/auth/") && r.URL.Path != "/api/auth/login" {
@@ -722,6 +722,7 @@ func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 				"start_time":               s.startTime.Format(time.RFC3339),
 				"uptime_seconds":           int(time.Since(s.startTime).Seconds()),
 				"force_mfa":                s.cfg.ForceMFA,
+				"enable_onboarding":        s.cfg.EnableOnboarding,
 			})
 			return
 		}
@@ -829,6 +830,11 @@ func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 
 		if r.Method == http.MethodPost && r.URL.Path == "/api/me/delete-account" {
 			s.handleSelfDeleteAccount(w, r)
+			return
+		}
+
+		if r.Method == http.MethodPost && r.URL.Path == "/api/me/onboarding" {
+			s.handleUpdateOnboarding(w, r)
 			return
 		}
 

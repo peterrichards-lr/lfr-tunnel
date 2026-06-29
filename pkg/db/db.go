@@ -87,6 +87,9 @@ type User struct {
 	RateLimit          int        `json:"rate_limit"`
 	MaxReservations    *int       `json:"max_reservations,omitempty"`
 	MaxTunnels         *int       `json:"max_tunnels,omitempty"`
+	OnboardingStatus   string     `json:"onboarding_status"`
+	OnboardingLastStep string     `json:"onboarding_last_step"`
+	OnboardingReruns   int        `json:"onboarding_reruns"`
 }
 
 type SubdomainReservation struct {
@@ -220,6 +223,9 @@ func (db *DB) initSchema() error {
 		rate_limit INTEGER DEFAULT 0,
 		max_reservations INTEGER DEFAULT NULL,
 		max_active_tunnels INTEGER DEFAULT NULL,
+		onboarding_status TEXT NOT NULL DEFAULT 'pending',
+		onboarding_last_step TEXT DEFAULT '',
+		onboarding_reruns INTEGER NOT NULL DEFAULT 0,
 		created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
 		updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
 	);
@@ -365,6 +371,9 @@ func (db *DB) initSchema() error {
 	_, _ = db.conn.Exec("ALTER TABLE subdomain_reservations ADD COLUMN access_mode TEXT DEFAULT 'or'")
 	_, _ = db.conn.Exec("ALTER TABLE subdomain_reservations ADD COLUMN expiry_warning_sent INTEGER DEFAULT 0")
 	_, _ = db.conn.Exec("ALTER TABLE tunnel_metrics ADD COLUMN node_id TEXT DEFAULT 'control'")
+	_, _ = db.conn.Exec("ALTER TABLE users ADD COLUMN onboarding_status TEXT NOT NULL DEFAULT 'pending'")
+	_, _ = db.conn.Exec("ALTER TABLE users ADD COLUMN onboarding_last_step TEXT DEFAULT ''")
+	_, _ = db.conn.Exec("ALTER TABLE users ADD COLUMN onboarding_reruns INTEGER NOT NULL DEFAULT 0")
 
 	return nil
 }
@@ -448,10 +457,14 @@ func (db *DB) CreateUser(u *User) error {
 		u.LanguagePreference = "en"
 	}
 
+	if u.OnboardingStatus == "" {
+		u.OnboardingStatus = "pending"
+	}
+
 	_, err := db.conn.Exec(`
-		INSERT INTO users (id, email, first_name, last_name, preferred_name, role, status, verification_token, approval_token, claim_token, timezone, auth_method, theme_preference, notification_prefs, created_at, updated_at, last_client_version, last_client_os, totp_secret, totp_enabled, policy_consent_at, language_preference, rate_limit, max_reservations, max_active_tunnels)
-		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-	`, u.ID, u.Email, u.FirstName, u.LastName, u.PreferredName, u.Role, u.Status, u.VerificationToken, u.ApprovalToken, u.ClaimToken, u.Timezone, u.AuthMethod, u.ThemePreference, u.NotificationPrefs, u.CreatedAt, u.UpdatedAt, u.LastClientVersion, u.LastClientOS, u.TOTPSecret, totpEnabledVal, u.PolicyConsentAt, u.LanguagePreference, u.RateLimit, u.MaxReservations, u.MaxTunnels)
+		INSERT INTO users (id, email, first_name, last_name, preferred_name, role, status, verification_token, approval_token, claim_token, timezone, auth_method, theme_preference, notification_prefs, created_at, updated_at, last_client_version, last_client_os, totp_secret, totp_enabled, policy_consent_at, language_preference, rate_limit, max_reservations, max_active_tunnels, onboarding_status, onboarding_last_step, onboarding_reruns)
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+	`, u.ID, u.Email, u.FirstName, u.LastName, u.PreferredName, u.Role, u.Status, u.VerificationToken, u.ApprovalToken, u.ClaimToken, u.Timezone, u.AuthMethod, u.ThemePreference, u.NotificationPrefs, u.CreatedAt, u.UpdatedAt, u.LastClientVersion, u.LastClientOS, u.TOTPSecret, totpEnabledVal, u.PolicyConsentAt, u.LanguagePreference, u.RateLimit, u.MaxReservations, u.MaxTunnels, u.OnboardingStatus, u.OnboardingLastStep, u.OnboardingReruns)
 	return err
 }
 
@@ -470,7 +483,7 @@ func (db *DB) fetchUserByQuery(query string, arg interface{}) (*User, error) {
 	var maxReservationsVal sql.NullInt64
 	var maxActiveTunnelsVal sql.NullInt64
 	err := db.conn.QueryRow(query, arg).Scan(
-		&u.ID, &u.Email, &u.FirstName, &u.LastName, &u.PreferredName, &u.Role, &u.Status, &vt, &at, &ct, &u.Timezone, &u.AuthMethod, &u.ThemePreference, &u.NotificationPrefs, &u.CreatedAt, &u.UpdatedAt, &lastLogin, &u.LastLoginIP, &lastClientVersion, &lastClientOS, &totpSecret, &totpEnabled, &policyConsentAt, &langPref, &rateLimitVal, &maxReservationsVal, &maxActiveTunnelsVal,
+		&u.ID, &u.Email, &u.FirstName, &u.LastName, &u.PreferredName, &u.Role, &u.Status, &vt, &at, &ct, &u.Timezone, &u.AuthMethod, &u.ThemePreference, &u.NotificationPrefs, &u.CreatedAt, &u.UpdatedAt, &lastLogin, &u.LastLoginIP, &lastClientVersion, &lastClientOS, &totpSecret, &totpEnabled, &policyConsentAt, &langPref, &rateLimitVal, &maxReservationsVal, &maxActiveTunnelsVal, &u.OnboardingStatus, &u.OnboardingLastStep, &u.OnboardingReruns,
 	)
 	if err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
@@ -514,27 +527,27 @@ func (db *DB) fetchUserByQuery(query string, arg interface{}) (*User, error) {
 
 // GetUser fetches a user by their ID.
 func (db *DB) GetUser(id string) (*User, error) {
-	return db.fetchUserByQuery(`SELECT id, email, first_name, last_name, preferred_name, role, status, verification_token, approval_token, claim_token, timezone, auth_method, theme_preference, notification_prefs, created_at, updated_at, last_login_at, last_login_ip, last_client_version, last_client_os, totp_secret, totp_enabled, policy_consent_at, language_preference, rate_limit, max_reservations, max_active_tunnels FROM users WHERE id = ?`, id)
+	return db.fetchUserByQuery(`SELECT id, email, first_name, last_name, preferred_name, role, status, verification_token, approval_token, claim_token, timezone, auth_method, theme_preference, notification_prefs, created_at, updated_at, last_login_at, last_login_ip, last_client_version, last_client_os, totp_secret, totp_enabled, policy_consent_at, language_preference, rate_limit, max_reservations, max_active_tunnels, onboarding_status, onboarding_last_step, onboarding_reruns FROM users WHERE id = ?`, id)
 }
 
 // GetUserByEmail fetches a user by their email address.
 func (db *DB) GetUserByEmail(email string) (*User, error) {
-	return db.fetchUserByQuery(`SELECT id, email, first_name, last_name, preferred_name, role, status, verification_token, approval_token, claim_token, timezone, auth_method, theme_preference, notification_prefs, created_at, updated_at, last_login_at, last_login_ip, last_client_version, last_client_os, totp_secret, totp_enabled, policy_consent_at, language_preference, rate_limit, max_reservations, max_active_tunnels FROM users WHERE email = ?`, email)
+	return db.fetchUserByQuery(`SELECT id, email, first_name, last_name, preferred_name, role, status, verification_token, approval_token, claim_token, timezone, auth_method, theme_preference, notification_prefs, created_at, updated_at, last_login_at, last_login_ip, last_client_version, last_client_os, totp_secret, totp_enabled, policy_consent_at, language_preference, rate_limit, max_reservations, max_active_tunnels, onboarding_status, onboarding_last_step, onboarding_reruns FROM users WHERE email = ?`, email)
 }
 
 // GetUserByVerificationToken finds a user by their verification token.
 func (db *DB) GetUserByVerificationToken(token string) (*User, error) {
-	return db.fetchUserByQuery(`SELECT id, email, first_name, last_name, preferred_name, role, status, verification_token, approval_token, claim_token, timezone, auth_method, theme_preference, notification_prefs, created_at, updated_at, last_login_at, last_login_ip, last_client_version, last_client_os, totp_secret, totp_enabled, policy_consent_at, language_preference, rate_limit, max_reservations, max_active_tunnels FROM users WHERE verification_token = ?`, token)
+	return db.fetchUserByQuery(`SELECT id, email, first_name, last_name, preferred_name, role, status, verification_token, approval_token, claim_token, timezone, auth_method, theme_preference, notification_prefs, created_at, updated_at, last_login_at, last_login_ip, last_client_version, last_client_os, totp_secret, totp_enabled, policy_consent_at, language_preference, rate_limit, max_reservations, max_active_tunnels, onboarding_status, onboarding_last_step, onboarding_reruns FROM users WHERE verification_token = ?`, token)
 }
 
 // GetUserByApprovalToken fetches a user by their approval token.
 func (db *DB) GetUserByApprovalToken(token string) (*User, error) {
-	return db.fetchUserByQuery(`SELECT id, email, first_name, last_name, preferred_name, role, status, verification_token, approval_token, claim_token, timezone, auth_method, theme_preference, notification_prefs, created_at, updated_at, last_login_at, last_login_ip, last_client_version, last_client_os, totp_secret, totp_enabled, policy_consent_at, language_preference, rate_limit, max_reservations, max_active_tunnels FROM users WHERE approval_token = ?`, token)
+	return db.fetchUserByQuery(`SELECT id, email, first_name, last_name, preferred_name, role, status, verification_token, approval_token, claim_token, timezone, auth_method, theme_preference, notification_prefs, created_at, updated_at, last_login_at, last_login_ip, last_client_version, last_client_os, totp_secret, totp_enabled, policy_consent_at, language_preference, rate_limit, max_reservations, max_active_tunnels, onboarding_status, onboarding_last_step, onboarding_reruns FROM users WHERE approval_token = ?`, token)
 }
 
 // GetUserByClaimToken fetches a user by their claim token.
 func (db *DB) GetUserByClaimToken(token string) (*User, error) {
-	return db.fetchUserByQuery(`SELECT id, email, first_name, last_name, preferred_name, role, status, verification_token, approval_token, claim_token, timezone, auth_method, theme_preference, notification_prefs, created_at, updated_at, last_login_at, last_login_ip, last_client_version, last_client_os, totp_secret, totp_enabled, policy_consent_at, language_preference, rate_limit, max_reservations, max_active_tunnels FROM users WHERE claim_token = ?`, token)
+	return db.fetchUserByQuery(`SELECT id, email, first_name, last_name, preferred_name, role, status, verification_token, approval_token, claim_token, timezone, auth_method, theme_preference, notification_prefs, created_at, updated_at, last_login_at, last_login_ip, last_client_version, last_client_os, totp_secret, totp_enabled, policy_consent_at, language_preference, rate_limit, max_reservations, max_active_tunnels, onboarding_status, onboarding_last_step, onboarding_reruns FROM users WHERE claim_token = ?`, token)
 }
 
 // DeleteUser removes a user from the database.
@@ -579,9 +592,34 @@ func (db *DB) UpdateUser(u *User) error {
 			language_preference = ?,
 			rate_limit = ?,
 			max_reservations = ?,
-			max_active_tunnels = ?
+			max_active_tunnels = ?,
+			onboarding_status = ?,
+			onboarding_last_step = ?,
+			onboarding_reruns = ?
 	          WHERE id = ?`
-	res, err := db.conn.Exec(query, u.Email, u.FirstName, u.LastName, u.PreferredName, u.Role, u.Status, vtVal, approvalTokenVal, claimTokenVal, u.Timezone, u.AuthMethod, u.ThemePreference, u.NotificationPrefs, u.UpdatedAt, lastLoginVal, u.LastLoginIP, u.LastClientVersion, u.LastClientOS, u.TOTPSecret, totpEnabledVal, u.PolicyConsentAt, u.LanguagePreference, u.RateLimit, u.MaxReservations, u.MaxTunnels, u.ID)
+	res, err := db.conn.Exec(query, u.Email, u.FirstName, u.LastName, u.PreferredName, u.Role, u.Status, vtVal, approvalTokenVal, claimTokenVal, u.Timezone, u.AuthMethod, u.ThemePreference, u.NotificationPrefs, u.UpdatedAt, lastLoginVal, u.LastLoginIP, u.LastClientVersion, u.LastClientOS, u.TOTPSecret, totpEnabledVal, u.PolicyConsentAt, u.LanguagePreference, u.RateLimit, u.MaxReservations, u.MaxTunnels, u.OnboardingStatus, u.OnboardingLastStep, u.OnboardingReruns, u.ID)
+	if err != nil {
+		return err
+	}
+	rows, err := res.RowsAffected()
+	if err != nil {
+		return err
+	}
+	if rows == 0 {
+		return ErrNotFound
+	}
+	return nil
+}
+
+// UpdateUserOnboarding updates a user's onboarding progress.
+func (db *DB) UpdateUserOnboarding(userID string, status string, lastStep string, incReruns bool) error {
+	var query string
+	if incReruns {
+		query = `UPDATE users SET onboarding_status = ?, onboarding_last_step = ?, onboarding_reruns = onboarding_reruns + 1, updated_at = CURRENT_TIMESTAMP WHERE id = ?`
+	} else {
+		query = `UPDATE users SET onboarding_status = ?, onboarding_last_step = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?`
+	}
+	res, err := db.conn.Exec(query, status, lastStep, userID)
 	if err != nil {
 		return err
 	}
@@ -597,7 +635,7 @@ func (db *DB) UpdateUser(u *User) error {
 
 // ListUsers lists all registered users.
 func (db *DB) ListUsers() ([]*User, error) {
-	query := `SELECT id, email, first_name, last_name, preferred_name, role, status, verification_token, approval_token, claim_token, timezone, auth_method, theme_preference, notification_prefs, created_at, updated_at, last_login_at, last_login_ip, last_client_version, last_client_os, totp_secret, totp_enabled, policy_consent_at, language_preference, rate_limit, max_reservations, max_active_tunnels FROM users`
+	query := `SELECT id, email, first_name, last_name, preferred_name, role, status, verification_token, approval_token, claim_token, timezone, auth_method, theme_preference, notification_prefs, created_at, updated_at, last_login_at, last_login_ip, last_client_version, last_client_os, totp_secret, totp_enabled, policy_consent_at, language_preference, rate_limit, max_reservations, max_active_tunnels, onboarding_status, onboarding_last_step, onboarding_reruns FROM users`
 	rows, err := db.conn.Query(query)
 	if err != nil {
 		return nil, err
@@ -618,7 +656,7 @@ func (db *DB) ListUsers() ([]*User, error) {
 		var rateLimitVal int
 		var maxReservationsVal sql.NullInt64
 		var maxActiveTunnelsVal sql.NullInt64
-		if err := rows.Scan(&u.ID, &u.Email, &u.FirstName, &u.LastName, &u.PreferredName, &u.Role, &u.Status, &vt, &at, &ct, &u.Timezone, &u.AuthMethod, &u.ThemePreference, &u.NotificationPrefs, &u.CreatedAt, &u.UpdatedAt, &lastLogin, &u.LastLoginIP, &lastClientVersion, &lastClientOS, &totpSecret, &totpEnabled, &policyConsentAt, &langPref, &rateLimitVal, &maxReservationsVal, &maxActiveTunnelsVal); err != nil {
+		if err := rows.Scan(&u.ID, &u.Email, &u.FirstName, &u.LastName, &u.PreferredName, &u.Role, &u.Status, &vt, &at, &ct, &u.Timezone, &u.AuthMethod, &u.ThemePreference, &u.NotificationPrefs, &u.CreatedAt, &u.UpdatedAt, &lastLogin, &u.LastLoginIP, &lastClientVersion, &lastClientOS, &totpSecret, &totpEnabled, &policyConsentAt, &langPref, &rateLimitVal, &maxReservationsVal, &maxActiveTunnelsVal, &u.OnboardingStatus, &u.OnboardingLastStep, &u.OnboardingReruns); err != nil {
 			return nil, err
 		}
 		u.VerificationToken = vt.String

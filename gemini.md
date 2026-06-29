@@ -737,3 +737,17 @@ The solution will consist of:
 - [x] Tag and release v1.23.4.
 - [x] Deploy version v1.23.4 to the VPS gateway.
 - [x] Run remote diagnostics verifying version, ports, and functionality on the VPS.
+
+## Onboarding Tutorial (v1.23.6) (#268)
+- [x] Add onboarding status fields to database schema and migrations (`pkg/db/db.go`).
+- [x] Implement UpdateUserOnboarding and ListUsers updates in DB.
+- [x] Add enable_onboarding server configuration parameter.
+- [x] Map enable_onboarding in version REST API endpoint.
+- [x] Add POST /api/me/onboarding route and REST handler to store onboarding state in database.
+- [x] Import Driver.js style & scripts and inject custom glassmorphic CSS rules.
+- [x] Add Start Onboarding Tour button in Account tab.
+- [x] Translate tour step titles and descriptions in Language.properties and bind them dynamically.
+- [x] Map automatic onboarding launch on login.
+- [x] Implement unit tests validating onboarding state updates and version properties.
+- [x] Verify all database and server unit tests pass.
+

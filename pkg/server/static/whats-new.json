@@ -1,5 +1,5 @@
 {
-  "version": "v1.23.2",
+  "version": "v1.23.3",
   "release_date": "2026-06-26",
   "features": [
     "Implement configurable server-side proxy header injection (#240)",

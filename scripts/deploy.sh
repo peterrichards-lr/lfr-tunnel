@@ -79,16 +79,17 @@ with open(nodes_path, "r") as f:
         line = line.strip()
         if not line or line.startswith("#"):
             continue
-        parts = line.split(",", 1)
-        if len(parts) != 2:
-            parts = line.split(":", 1)
-        if len(parts) != 2:
+        parts = [p.strip() for p in line.split(",")]
+        if len(parts) < 2:
+            parts = [p.strip() for p in line.split(":")]
+        if len(parts) < 2:
             print(f"Skipping invalid line: {line}", file=sys.stderr)
             continue
-        node_id = parts[0].strip()
-        token = parts[1].strip()
+        node_id = parts[0]
+        token = parts[1]
+        url = parts[2] if len(parts) > 2 else ""
         token_hash = hashlib.sha256(token.encode()).hexdigest()
-        edge_nodes.append({"id": node_id, "token_hash": token_hash})
+        edge_nodes.append({"id": node_id, "token_hash": token_hash, "url": url})
 
 cfg["edge_nodes"] = edge_nodes
 

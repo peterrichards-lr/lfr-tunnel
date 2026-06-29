@@ -710,7 +710,11 @@ The solution will consist of:
 - [x] Fix SQLite date parsing bug returning "Unknown" for daily metrics.
 - [x] Shorten "System Analytics" labels and translations to "Analytics".
 - [x] Add `title` hoverover attributes explaining what each graph shows.
-- [ ] Ensure all unit and E2E tests pass.
+- [x] Ensure all unit and E2E tests pass.
 
-
-
+## Edge Gateways Diagnostics & IP/Version Resolution (v1.23.2) (#253)
+- [x] Add `edgeIPs` map to `Server` and extract edge node public IP address from WebSocket handshake HTTP headers (`X-Real-IP`/`X-Forwarded-For`).
+- [x] Update `handleEdgeHealth` to report the extracted public IP instead of proxy loopback/local IP.
+- [x] Update `scripts/deploy.sh` to support optional URL parameters in `edge_nodes.txt` format (`node_id,token,url`).
+- [ ] Re-compile, sign, and deploy v1.23.2 edge daemon binaries to regional VPS edge servers to enable passive handshake version reporting.
+- [x] Document edge node URL provisioning format in `docs/server/edge_setup_guide.md`.

@@ -718,3 +718,11 @@ The solution will consist of:
 - [x] Update `scripts/deploy.sh` to support optional URL parameters in `edge_nodes.txt` format (`node_id,token,url`).
 - [x] Re-compile, sign, and deploy v1.23.2 edge daemon binaries to regional VPS edge servers to enable passive handshake version reporting.
 - [x] Document edge node URL provisioning format in `docs/server/edge_setup_guide.md`.
+
+## Subdomain Expiration Notifications & Gone Page Fix (v1.23.3) (#258)
+- [x] Fix broken user portal link on quarantined `gone.html` page by rewriting subdomain requests back to control plane URL in `getPortalBaseURL`.
+- [x] Implement database schema migration adding `expiry_warning_sent` status to `subdomain_reservations` SQLite table.
+- [x] Create localized expiration warning HTML templates (`subdomain_expiring.html`).
+- [x] Implement background checker scheduler running hourly to email warning alerts (48h before) and quarantine notifications (upon expiry) to developers.
+- [x] Trigger automated release tagging and deploy version `v1.23.3` to the VPS gateway.
+- [x] Run remote diagnostics checking version endpoints, ports, and DNS.

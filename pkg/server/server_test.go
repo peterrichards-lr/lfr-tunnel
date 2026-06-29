@@ -2826,3 +2826,71 @@ func TestServer_ConfigurableLinks(t *testing.T) {
 		t.Errorf("expected status_page_url to be https://custom-status.example.com, got %v", resp["status_page_url"])
 	}
 }
+
+func TestServer_OnboardingTelemetry(t *testing.T) {
+	cfg := &config.ServerConfig{
+		Domains:                []string{"example.com"},
+		DisableBackupScheduler: true,
+		EnableOnboarding:       true,
+	}
+	cfg.DBPath = filepath.Join(t.TempDir(), "test.db")
+
+	srv, err := NewServer(cfg)
+	if err != nil {
+		t.Fatalf("failed to create server: %v", err)
+	}
+	defer func() {
+		time.Sleep(50 * time.Millisecond)
+		srv.Stop()
+	}()
+
+	// 1. Create a user
+	uEmail := "test-user-onboarding@example.com"
+	u := &db.User{
+		ID:               uEmail,
+		Email:            uEmail,
+		Role:             "user",
+		Status:           "approved",
+		OnboardingStatus: "pending",
+		CreatedAt:        time.Now().UTC(),
+		UpdatedAt:        time.Now().UTC(),
+	}
+	if err := srv.db.CreateUser(u); err != nil {
+		t.Fatalf("failed to create user: %v", err)
+	}
+
+	// 2. Set up authenticated session
+	sessionToken := "user-session-onboarding-123"
+	srv.portalMap.Store("admin_session_"+sessionToken, PortalSessionData{
+		Email:     uEmail,
+		ExpiresAt: time.Now().Add(1 * time.Hour),
+	})
+
+	// 3. Forge a POST request to /api/me/onboarding
+	payload := `{"status":"in_progress","last_step":"welcome","is_rerun":true}`
+	req, _ := http.NewRequest("POST", "http://example.com/api/me/onboarding", strings.NewReader(payload))
+	req.Header.Set("Content-Type", "application/json")
+	req.AddCookie(&http.Cookie{Name: "lfr_session", Value: sessionToken})
+
+	rec := httptest.NewRecorder()
+	srv.ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusOK {
+		t.Fatalf("expected status 200 OK, got %d. Body: %s", rec.Code, rec.Body.String())
+	}
+
+	// 4. Verify user was updated in DB
+	updatedUser, err := srv.db.GetUserByEmail(uEmail)
+	if err != nil {
+		t.Fatalf("failed to retrieve user: %v", err)
+	}
+	if updatedUser.OnboardingStatus != "in_progress" {
+		t.Errorf("expected onboarding_status to be 'in_progress', got %s", updatedUser.OnboardingStatus)
+	}
+	if updatedUser.OnboardingLastStep != "welcome" {
+		t.Errorf("expected onboarding_last_step to be 'welcome', got %s", updatedUser.OnboardingLastStep)
+	}
+	if updatedUser.OnboardingReruns != 1 {
+		t.Errorf("expected onboarding_reruns to be 1, got %d", updatedUser.OnboardingReruns)
+	}
+}

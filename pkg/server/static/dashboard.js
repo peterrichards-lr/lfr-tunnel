@@ -1,4 +1,11 @@
 // Setup initial theme based on local storage or system preference
+        function t(key, defaultVal) {
+            if (window.translations && window.translations[key]) {
+                return window.translations[key];
+            }
+            return defaultVal || key;
+        }
+
         const savedTheme = localStorage.getItem('theme');
         if (savedTheme) {
             document.documentElement.setAttribute('data-theme', savedTheme);
@@ -498,6 +505,7 @@ function toggleTheme() {
                 const res = await fetch('/api/i18n');
                 if (res.ok) {
                     const bundle = await res.json();
+                    window.translations = bundle;
                     
                     // Deduce resolved language by scanning typical strings
                     let resolvedLang = "en";
@@ -890,6 +898,11 @@ applyTheme(currentUser.theme_preference);
             const initialTab = window.location.hash ? window.location.hash.slice(1) : 'overview';
             showTab(initialTab, true);
             
+            // Trigger onboarding walkthrough if user onboarding_status is pending and enabled by server
+            if (window.latestVersionData && window.latestVersionData.enable_onboarding && currentUser.onboarding_status === 'pending') {
+                setTimeout(() => window.startTutorial(false), 1200);
+            }
+
             connectTelemetryWS();
         }
 
@@ -2653,6 +2666,7 @@ applyTheme(currentUser.theme_preference);
                 const res = await fetch('/api/i18n?lang=' + encodeURIComponent(lang));
                 if (res.ok) {
                     const bundle = await res.json();
+                    window.translations = bundle;
                     document.querySelectorAll('[data-i18n]').forEach(el => {
                         const key = el.getAttribute('data-i18n');
                         if (bundle[key]) {
@@ -2784,6 +2798,24 @@ applyTheme(currentUser.theme_preference);
             
             // API Quota
             document.getElementById('detail-user-quota').innerText = u.rate_limit ? `${u.rate_limit} RPS` : 'Unlimited';
+
+            // Onboarding Tour Analytics
+            const obStatus = u.onboarding_status || 'pending';
+            let obBadgeHTML = '';
+            if (obStatus === 'completed') {
+                obBadgeHTML = '<span class="badge success">Completed</span>';
+            } else if (obStatus === 'in_progress') {
+                obBadgeHTML = '<span class="badge" style="background: rgba(59, 130, 246, 0.15); color: #60a5fa; border: 1px solid rgba(59,130,246,0.3);">In Progress</span>';
+            } else if (obStatus === 'aborted') {
+                obBadgeHTML = '<span class="badge danger">Aborted</span>';
+            } else {
+                obBadgeHTML = '<span class="badge warning">Pending</span>';
+            }
+            document.getElementById('detail-user-onboarding-status').innerHTML = obBadgeHTML;
+            
+            const lastStep = u.onboarding_last_step || 'N/A';
+            const reruns = u.onboarding_reruns || 0;
+            document.getElementById('detail-user-onboarding-detail').innerText = `Last Step: ${lastStep} | Reruns: ${reruns}`;
 
             // Connected Tunnels Table
             const tunnels = u.active_tunnels || [];
@@ -3938,4 +3970,135 @@ applyTheme(currentUser.theme_preference);
             } catch (err) {
                 showToast("Network error verifying MFA.", "danger");
             }
+        };
+
+        window.startTutorial = async function(isRerun = false) {
+            if (typeof window.driver === 'undefined') {
+                console.error("Driver.js is not loaded.");
+                return;
+            }
+
+            // Report to telemetry that tour is starting
+            try {
+                await fetch('/api/me/onboarding', {
+                    method: 'POST',
+                    headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify({ status: 'in_progress', last_step: 'welcome', is_rerun: isRerun })
+                });
+            } catch (e) {
+                console.error("Failed to report onboarding start telemetry", e);
+            }
+
+            // Temporarily switch to Overview tab to start the tour
+            showTab('overview');
+
+            const driverObj = window.driver.js.driver({
+                showProgress: true,
+                className: 'driverjs-theme',
+                steps: [
+                    {
+                        element: '#dashboard-screen',
+                        popover: {
+                            title: t('tour_welcome_title', 'Welcome to Liferay Tunnel!'),
+                            description: t('tour_welcome_desc', "Let's take a quick 1-minute interactive tour of your developer dashboard to show you how to manage your subdomains and tunnels."),
+                            side: "over",
+                            align: "center"
+                        }
+                    },
+                    {
+                        element: '.sidebar',
+                        popover: {
+                            title: t('tour_sidebar_title', 'Navigation Sidebar'),
+                            description: t('tour_sidebar_desc', 'Use the sidebar to jump between the Overview, API Tokens, Subdomain Reservations, Active Tunnels, and Analytics tabs.'),
+                            side: "right",
+                            align: "start"
+                        }
+                    },
+                    {
+                        element: '#nav-reservations',
+                        popover: {
+                            title: t('tour_reservations_title', 'Subdomain Reservations'),
+                            description: t('tour_reservations_desc', 'Here you can reserve wildcard subdomains on our public domains (e.g. lfr-demo.se), view expiration dates, and request lease extensions.'),
+                            side: "right",
+                            align: "start"
+                        },
+                        onHighlightStarted: () => {
+                            showTab('reservations');
+                        }
+                    },
+                    {
+                        element: '#nav-tokens',
+                        popover: {
+                            title: t('tour_tokens_title', 'Personal Access Tokens'),
+                            description: t('tour_tokens_desc', 'Generate secure CLI tokens here. You will need to configure your local CLI client with one of these tokens to connect.'),
+                            side: "right",
+                            align: "start"
+                        },
+                        onHighlightStarted: () => {
+                            showTab('tokens');
+                        }
+                    },
+                    {
+                        element: '#nav-tunnels',
+                        popover: {
+                            title: t('tour_tunnels_title', 'Active Tunnels'),
+                            description: t('tour_tunnels_desc', 'Inspect your currently connected client tunnels in real-time. View live traffic metrics, latency, and kick inactive leases if needed.'),
+                            side: "right",
+                            align: "start"
+                        },
+                        onHighlightStarted: () => {
+                            showTab('tunnels');
+                        }
+                    },
+                    {
+                        element: '#nav-analytics',
+                        popover: {
+                            title: t('tour_analytics_title', 'Traffic Analytics'),
+                            description: t('tour_analytics_desc', 'Monitor your total bandwidth utilization (bytes uploaded/downloaded) over time in a beautiful responsive chart.'),
+                            side: "right",
+                            align: "start"
+                        },
+                        onHighlightStarted: () => {
+                            showTab('analytics');
+                        }
+                    },
+                    {
+                        element: '#nav-account',
+                        popover: {
+                            title: t('tour_settings_title', 'Account Settings'),
+                            description: t('tour_settings_desc', 'Update your preferred name, language, theme preference, and configure Multi-Factor Authentication (MFA) for added security.'),
+                            side: "right",
+                            align: "start"
+                        },
+                        onHighlightStarted: () => {
+                            showTab('account');
+                        }
+                    },
+                    {
+                        element: '#dashboard-screen',
+                        popover: {
+                            title: t('tour_end_title', 'Onboarding Complete!'),
+                            description: t('tour_end_desc', 'You are all set. Go ahead and start using Liferay Tunnel!'),
+                            side: "over",
+                            align: "center"
+                        }
+                    }
+                ],
+                onDestroyed: (el) => {
+                    const stepIdx = driverObj.getActiveIndex();
+                    const totalSteps = driverObj.getConfig().steps.length;
+                    const status = (driverObj.isLastStep() || (stepIdx !== undefined && stepIdx >= totalSteps - 1)) ? 'completed' : 'aborted';
+                    
+                    fetch('/api/me/onboarding', {
+                        method: 'POST',
+                        headers: {'Content-Type': 'application/json'},
+                        body: JSON.stringify({ status: status, last_step: stepIdx !== undefined ? 'step_' + stepIdx : 'unknown', is_rerun: false })
+                    }).catch(err => console.error("Failed to report onboarding completion/abort telemetry", err));
+
+                    // Return to overview tab on exit
+                    showTab('overview');
+                }
+            });
+
+            driverObj.drive();
         };

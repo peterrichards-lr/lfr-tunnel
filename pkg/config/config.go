@@ -88,9 +88,15 @@ type ServerConfig struct {
 	EdgeNodes                  []EdgeNodeConfig          `yaml:"edge_nodes"`
 	VanityDomainHook           string                    `yaml:"vanity_domain_hook"`
 	ProxyHeaders               map[string]string         `yaml:"proxy_headers"`
+	RoleSettings               map[string]RoleSetting    `yaml:"role_settings"`
 
 	// Dynamic SSO/OIDC Providers
 	SSOProviders []SSOProviderConfig `yaml:"sso_providers"`
+}
+
+type RoleSetting struct {
+	MaxReservations     *int `yaml:"max_reservations" json:"max_reservations"`
+	SubdomainExpiryDays *int `yaml:"subdomain_expiry_days" json:"subdomain_expiry_days"`
 }
 
 type PlatformConfig struct {

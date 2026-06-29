@@ -2716,3 +2716,65 @@ func TestServer_SubdomainExpirationNotifications(t *testing.T) {
 		t.Errorf("expected no email when NotificationPrefs is disabled, but got email to %s", mockMail.sentTo)
 	}
 }
+
+func TestServer_RoleSettingsConfig(t *testing.T) {
+	twoVal := 2
+	fiveVal := 5
+	zeroVal := 0
+	minusOneVal := -1
+
+	cfg := &config.ServerConfig{
+		Domains:                    []string{"example.com"},
+		DisableBackupScheduler:     true,
+		AllowClientAutoReservation: true,
+		RoleSettings: map[string]config.RoleSetting{
+			"owner": {
+				MaxReservations:     &minusOneVal,
+				SubdomainExpiryDays: &zeroVal,
+			},
+			"user": {
+				MaxReservations:     &twoVal,
+				SubdomainExpiryDays: &fiveVal,
+			},
+		},
+	}
+
+	if cfg.DBPath == "" {
+		cfg.DBPath = filepath.Join(t.TempDir(), "test.db")
+	}
+	srv, err := NewServer(cfg)
+	if err != nil {
+		t.Fatalf("failed to create server: %v", err)
+	}
+	defer func() {
+		time.Sleep(50 * time.Millisecond)
+		srv.Stop()
+	}()
+
+	ownerRec := &db.User{ID: "owner@example.com", Email: "owner@example.com", Role: "owner"}
+	userRec := &db.User{ID: "user@example.com", Email: "user@example.com", Role: "user"}
+
+	// 1. Verify owner has -1 limit and nil (permanent) expiry
+	ownerLimit := srv.getUserMaxReservations(ownerRec)
+	if ownerLimit != -1 {
+		t.Errorf("expected owner limit to be -1, got %d", ownerLimit)
+	}
+	ownerExpiry := srv.getUserSubdomainExpiry(ownerRec)
+	if ownerExpiry != nil {
+		t.Errorf("expected owner expiry to be nil (permanent), got %v", ownerExpiry)
+	}
+
+	// 2. Verify standard user has 2 limit and ~5 days expiry
+	userLimit := srv.getUserMaxReservations(userRec)
+	if userLimit != 2 {
+		t.Errorf("expected user limit to be 2, got %d", userLimit)
+	}
+	userExpiry := srv.getUserSubdomainExpiry(userRec)
+	if userExpiry == nil {
+		t.Fatal("expected user expiry to be non-nil")
+	}
+	diff := time.Until(*userExpiry)
+	if diff < 4*24*time.Hour || diff > 6*24*time.Hour {
+		t.Errorf("expected user expiry to be around 5 days, got %v", diff)
+	}
+}

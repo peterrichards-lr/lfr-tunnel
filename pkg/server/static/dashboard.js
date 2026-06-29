@@ -570,8 +570,23 @@ function toggleTheme() {
         }
 
         async function showDashboard() {
+            try {
+                const vRes = await fetch('/api/version');
+                if (vRes.ok) {
+                    const vData = await vRes.json();
+                    window.latestVersionData = vData;
+                    if (vData.force_mfa && !currentUser.totp_enabled) {
+                        showIntercept('mfa_setup');
+                        return;
+                    }
+                }
+            } catch (e) {
+                console.error("Failed to load version details before dashboard display", e);
+            }
+
             document.getElementById('loader').style.display = 'none';
             document.getElementById('login-screen').style.display = 'none';
+            document.getElementById('intercept-screen').style.display = 'none';
             document.getElementById('dashboard-screen').style.display = 'flex';
 
             if (currentUser.killed_previous_session) {
@@ -595,14 +610,8 @@ function toggleTheme() {
                     const vData = await vRes.json();
                     window.latestVersionData = vData;
                     
-                    if (vData.force_mfa && !currentUser.totp_enabled) {
-                        startMFASetup();
-                        const cancelBtn = document.getElementById('mfa-cancel-btn');
-                        if (cancelBtn) cancelBtn.style.display = 'none';
-                    } else {
-                        const cancelBtn = document.getElementById('mfa-cancel-btn');
-                        if (cancelBtn) cancelBtn.style.display = 'inline-block';
-                    }
+                    const cancelBtn = document.getElementById('mfa-cancel-btn');
+                    if (cancelBtn) cancelBtn.style.display = 'inline-block';
                     const rawLatest = vData.latest_version || '';
                     const rawUser = currentUser.last_client_version || '';
                     
@@ -3865,5 +3874,56 @@ applyTheme(currentUser.theme_preference);
         window.disableEdgeMaintenance = function(nodeId) {
             if (confirm("Are you sure you want to disable maintenance on " + nodeId + "?")) {
                 triggerEdgeAction(nodeId, "maintenance_disable");
+            }
+        };
+
+        window.showIntercept = async function(type) {
+            document.getElementById('loader').style.display = 'none';
+            document.getElementById('login-screen').style.display = 'none';
+            document.getElementById('dashboard-screen').style.display = 'none';
+            document.getElementById('intercept-screen').style.display = 'flex';
+            
+            if (type === 'mfa_setup') {
+                try {
+                    const res = await fetch('/api/mfa/setup');
+                    if (res.ok) {
+                        const data = await res.json();
+                        window.interceptMfaSecret = data.secret;
+                        document.getElementById('intercept-mfa-secret-display').innerText = data.secret;
+                        document.getElementById('intercept-mfa-qr-display').src = `https://api.qrserver.com/v1/create-qr-code/?size=180x180&data=${encodeURIComponent(data.otpauth_url)}`;
+                        document.getElementById('intercept-mfa-verify-code').value = '';
+                    } else {
+                        showToast("Failed to fetch MFA setup details.", "danger");
+                    }
+                } catch (err) {
+                    showToast("Network error initiating MFA setup.", "danger");
+                }
+            }
+        };
+
+        window.confirmInterceptMFA = async function() {
+            const code = document.getElementById('intercept-mfa-verify-code').value.trim();
+            if (code.length !== 6) {
+                return showToast("Please enter a 6-digit code.", "warning");
+            }
+
+            try {
+                const res = await fetch('/api/mfa/enable', {
+                    method: 'POST',
+                    headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify({ secret: window.interceptMfaSecret, code: code })
+                });
+
+                if (res.ok) {
+                    currentUser.totp_enabled = true;
+                    document.getElementById('intercept-screen').style.display = 'none';
+                    showToast("MFA enabled successfully! Redirecting to dashboard...", "success");
+                    await showDashboard();
+                } else {
+                    const err = await res.json();
+                    showToast(err.error || "Verification failed.", "danger");
+                }
+            } catch (err) {
+                showToast("Network error verifying MFA.", "danger");
             }
         };

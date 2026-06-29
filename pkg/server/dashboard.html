@@ -95,6 +95,35 @@
         </div>
     </div>
 
+    <!-- INTERCEPT SCREEN -->
+    <div id="intercept-screen" style="display: none; min-height: 100vh; align-items: center; justify-content: center; padding: 24px; width: 100%;">
+        <div class="glass modal" style="max-width: 440px; width: 100%; padding: 40px; border-radius: 16px; box-shadow: 0 10px 25px rgba(0,0,0,0.2); text-align: center; margin-left: auto; margin-right: auto;">
+            <h3 style="margin-bottom: 12px; font-size: 20px;">🔒 Multi-Factor Authentication Required</h3>
+            <p style="font-size: 14px; color: var(--text-muted); margin-bottom: 24px; line-height: 1.5; text-align: left;">
+                Your administrator requires Multi-Factor Authentication (MFA) to be enabled on your account. Please set up MFA now to access the dashboard.
+            </p>
+            
+            <div id="intercept-mfa-step">
+                <p style="font-size: 14px; color: var(--text-muted); margin-bottom: 16px; text-align: left; line-height: 1.5;">
+                    1. Scan this QR code in your authenticator app (Google Authenticator, Microsoft Authenticator, 1Password, etc.):
+                </p>
+                <div style="display: flex; justify-content: center; margin-bottom: 16px; background: white; padding: 12px; border-radius: 8px; width: fit-content; margin-left: auto; margin-right: auto; border: 1px solid rgba(0,0,0,0.1);">
+                    <img id="intercept-mfa-qr-display" src="" alt="MFA QR Code" style="width: 180px; height: 180px; display: block;">
+                </div>
+                <p style="font-size: 13px; color: var(--text-muted); margin-bottom: 8px; text-align: left;">
+                    Or enter this secret key manually inside your app:
+                </p>
+                <div class="copy-box" id="intercept-mfa-secret-display" style="font-family: monospace; letter-spacing: 2px; text-align: center; margin-bottom: 16px; user-select: all; padding: 8px; background: rgba(255,255,255,0.05); border-radius: 4px; font-weight: bold; border: 1px solid rgba(255,255,255,0.1);"></div>
+                
+                <p style="font-size: 14px; color: var(--text-muted); margin-bottom: 8px; text-align: left; line-height: 1.5;">
+                    2. Enter the 6-digit code from your app to verify setup:
+                </p>
+                <input type="text" id="intercept-mfa-verify-code" class="input-field" placeholder="123456" pattern="[0-9]{6}" maxlength="6" inputmode="numeric" style="text-align: center; font-size: 18px; font-weight: bold; letter-spacing: 4px; margin-bottom: 16px; background: rgba(255,255,255,0.05); border: 1px solid rgba(255,255,255,0.1); border-radius: 6px; color: var(--text-color);">
+                <button class="btn btn-primary" onclick="confirmInterceptMFA()" style="width: 100%; margin-bottom: 8px;">Verify & Enable</button>
+            </div>
+        </div>
+    </div>
+
     <!-- DASHBOARD SCREEN -->
     <div id="dashboard-screen">
         <div class="sidebar">

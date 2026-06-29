@@ -1160,12 +1160,11 @@ func (s *Server) handleRegister(w http.ResponseWriter, r *http.Request) {
 					if existing, err := s.db.GetSubdomainReservationByName("", d); err == nil && existing != nil {
 						_ = s.db.DeleteSubdomainReservation(existing.ID)
 					}
-					expiry := time.Now().AddDate(0, 0, 7)
 					res := &db.SubdomainReservation{
 						UserID:    user.ID,
 						Subdomain: "",
 						Domain:    d,
-						ExpiresAt: &expiry,
+						ExpiresAt: s.getUserSubdomainExpiry(user),
 					}
 					if err := s.db.CreateSubdomainReservation(res); err != nil {
 						log.Printf("[Server] Failed to auto-create reservation for custom domain %s: %v", d, err)
@@ -1277,12 +1276,11 @@ func (s *Server) handleRegister(w http.ResponseWriter, r *http.Request) {
 						if existing, err := s.db.GetSubdomainReservationByName(req.SubdomainPrefix, d); err == nil && existing != nil {
 							_ = s.db.DeleteSubdomainReservation(existing.ID)
 						}
-						expiry := time.Now().AddDate(0, 0, 7)
 						res := &db.SubdomainReservation{
 							UserID:    user.ID,
 							Subdomain: req.SubdomainPrefix,
 							Domain:    d,
-							ExpiresAt: &expiry,
+							ExpiresAt: s.getUserSubdomainExpiry(user),
 						}
 						if err := s.db.CreateSubdomainReservation(res); err != nil {
 							log.Printf("[Server] Failed to auto-create reservation for %s on %s: %v", req.SubdomainPrefix, d, err)
@@ -4665,12 +4663,11 @@ func (s *Server) handleEdgeRegister(w http.ResponseWriter, r *http.Request) {
 					if existing, err := s.db.GetSubdomainReservationByName(finalSubdomain, d); err == nil && existing != nil {
 						_ = s.db.DeleteSubdomainReservation(existing.ID)
 					}
-					expiry := time.Now().AddDate(0, 0, 7)
 					res := &db.SubdomainReservation{
 						UserID:    user.ID,
 						Subdomain: finalSubdomain,
 						Domain:    d,
-						ExpiresAt: &expiry,
+						ExpiresAt: s.getUserSubdomainExpiry(user),
 					}
 					_ = s.db.CreateSubdomainReservation(res)
 				}

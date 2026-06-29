@@ -849,6 +849,15 @@ func (s *Server) getUserMaxReservations(user *db.User) int {
 	if user.MaxReservations != nil {
 		return *user.MaxReservations
 	}
+
+	if s.cfg.RoleSettings != nil {
+		if setting, ok := s.cfg.RoleSettings[user.Role]; ok {
+			if setting.MaxReservations != nil {
+				return *setting.MaxReservations
+			}
+		}
+	}
+
 	if user.Role == "admin" {
 		if s.cfg.AdminMaxReservations != nil {
 			return *s.cfg.AdminMaxReservations
@@ -859,9 +868,34 @@ func (s *Server) getUserMaxReservations(user *db.User) int {
 		if s.cfg.OwnerMaxReservations != nil {
 			return *s.cfg.OwnerMaxReservations
 		}
-		return 3
+		return -1 // Default infinite for owner!
 	}
 	return s.cfg.DefaultMaxReservations
+}
+
+// getUserSubdomainExpiry computes the default expiry date for a subdomain reservation.
+// Returns nil if the reservation should be permanent (no expiration).
+func (s *Server) getUserSubdomainExpiry(user *db.User) *time.Time {
+	days := 7 // default fallback
+
+	if s.cfg.RoleSettings != nil {
+		if setting, ok := s.cfg.RoleSettings[user.Role]; ok {
+			if setting.SubdomainExpiryDays != nil {
+				if *setting.SubdomainExpiryDays <= 0 {
+					return nil // Permanent
+				}
+				days = *setting.SubdomainExpiryDays
+			}
+		}
+	} else {
+		// Default fallback for owner if RoleSettings not defined
+		if user.Role == "owner" {
+			return nil // Owner subdomains do not expire by default
+		}
+	}
+
+	expiry := time.Now().AddDate(0, 0, days)
+	return &expiry
 }
 
 // handleListReservations returns a list of reservations held by the current user.
@@ -998,13 +1032,13 @@ func (s *Server) handleCreateReservation(w http.ResponseWriter, r *http.Request)
 		}
 	}
 
-	// Create reservation for 7 days
-	expiresAt := time.Now().AddDate(0, 0, 7)
+	// Create reservation
+	expiry := s.getUserSubdomainExpiry(user)
 	res := &db.SubdomainReservation{
 		UserID:    user.ID,
 		Subdomain: req.Subdomain,
 		Domain:    req.Domain,
-		ExpiresAt: &expiresAt,
+		ExpiresAt: expiry,
 		CreatedAt: time.Now(),
 		UpdatedAt: time.Now(),
 	}
@@ -1020,12 +1054,12 @@ func (s *Server) handleCreateReservation(w http.ResponseWriter, r *http.Request)
 		Action:     "subdomain.reserved",
 		TargetType: "subdomain",
 		TargetID:   fmt.Sprintf("%s.%s", req.Subdomain, req.Domain),
-		Details:    "Subdomain reserved for 7 days",
+		Details:    fmt.Sprintf("Subdomain reserved. ExpiresAt: %v", expiry),
 		IPAddress:  getClientIP(r),
 		CreatedAt:  time.Now(),
 	})
 
-	s.sendSubdomainReservedEmail(user, req.Subdomain, req.Domain, &expiresAt, r)
+	s.sendSubdomainReservedEmail(user, req.Subdomain, req.Domain, expiry, r)
 
 	respondJSON(w, http.StatusOK, res)
 }
@@ -1221,12 +1255,12 @@ func (s *Server) handlePromoteReservation(w http.ResponseWriter, r *http.Request
 		_ = s.db.DeleteSubdomainReservation(existing.ID)
 	}
 
-	expiresAt := time.Now().AddDate(0, 0, 7)
+	expiry := s.getUserSubdomainExpiry(user)
 	res := &db.SubdomainReservation{
 		UserID:    user.ID,
 		Subdomain: req.Subdomain,
 		Domain:    domain,
-		ExpiresAt: &expiresAt,
+		ExpiresAt: expiry,
 		CreatedAt: time.Now(),
 		UpdatedAt: time.Now(),
 	}
@@ -1247,7 +1281,7 @@ func (s *Server) handlePromoteReservation(w http.ResponseWriter, r *http.Request
 		CreatedAt:  time.Now(),
 	})
 
-	s.sendSubdomainReservedEmail(user, req.Subdomain, domain, &expiresAt, r)
+	s.sendSubdomainReservedEmail(user, req.Subdomain, domain, expiry, r)
 
 	respondJSON(w, http.StatusOK, res)
 }
@@ -1380,8 +1414,12 @@ func (s *Server) handleAdminDemoteReservation(w http.ResponseWriter, r *http.Req
 		return
 	}
 
-	expiresAt := time.Now().AddDate(0, 0, 7)
-	res.ExpiresAt = &expiresAt
+	resOwner, err := s.db.GetUser(res.UserID)
+	if err != nil {
+		http.Error(w, `{"error":"Failed to retrieve reservation owner"}`, http.StatusInternalServerError)
+		return
+	}
+	res.ExpiresAt = s.getUserSubdomainExpiry(resOwner)
 	res.ExtensionRequested = false
 	res.ExpiryWarningSent = 0
 
@@ -1396,14 +1434,13 @@ func (s *Server) handleAdminDemoteReservation(w http.ResponseWriter, r *http.Req
 		Action:     "subdomain.demoted",
 		TargetType: "subdomain",
 		TargetID:   fmt.Sprintf("%s.%s", res.Subdomain, res.Domain),
-		Details:    "Permanent reservation demoted back to 7-day expiration",
+		Details:    fmt.Sprintf("Permanent reservation demoted. ExpiresAt: %v", res.ExpiresAt),
 		IPAddress:  getClientIP(r),
 		CreatedAt:  time.Now(),
 	})
 
-	user, err := s.db.GetUser(res.UserID)
-	if err == nil && user != nil {
-		s.sendSubdomainDemotedEmail(user, res.Subdomain, res.Domain, &expiresAt, r)
+	if resOwner != nil {
+		s.sendSubdomainDemotedEmail(resOwner, res.Subdomain, res.Domain, res.ExpiresAt, r)
 	}
 
 	respondJSON(w, http.StatusOK, res)

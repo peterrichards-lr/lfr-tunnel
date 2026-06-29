@@ -2778,3 +2778,51 @@ func TestServer_RoleSettingsConfig(t *testing.T) {
 		t.Errorf("expected user expiry to be around 5 days, got %v", diff)
 	}
 }
+
+func TestServer_ConfigurableLinks(t *testing.T) {
+	cfg := &config.ServerConfig{
+		Domains:                []string{"example.com"},
+		DisableBackupScheduler: true,
+		DocumentationURL:       "https://custom-doc.example.com",
+		SecureTokenGuideURL:    "https://custom-token.example.com",
+		DockerHubURL:           "https://custom-hub.example.com",
+		StatusPageURL:          "https://custom-status.example.com",
+	}
+	if cfg.DBPath == "" {
+		cfg.DBPath = filepath.Join(t.TempDir(), "test.db")
+	}
+	srv, err := NewServer(cfg)
+	if err != nil {
+		t.Fatalf("failed to create server: %v", err)
+	}
+	defer func() {
+		time.Sleep(50 * time.Millisecond)
+		srv.Stop()
+	}()
+
+	req := httptest.NewRequest("GET", "/api/version", nil)
+	rr := httptest.NewRecorder()
+	srv.ServeHTTP(rr, req)
+
+	if rr.Code != http.StatusOK {
+		t.Fatalf("expected status 200, got %d", rr.Code)
+	}
+
+	var resp map[string]interface{}
+	if err := json.Unmarshal(rr.Body.Bytes(), &resp); err != nil {
+		t.Fatalf("failed to parse JSON response: %v", err)
+	}
+
+	if resp["documentation_url"] != "https://custom-doc.example.com" {
+		t.Errorf("expected documentation_url to be https://custom-doc.example.com, got %v", resp["documentation_url"])
+	}
+	if resp["secure_token_guide_url"] != "https://custom-token.example.com" {
+		t.Errorf("expected secure_token_guide_url to be https://custom-token.example.com, got %v", resp["secure_token_guide_url"])
+	}
+	if resp["docker_hub_url"] != "https://custom-hub.example.com" {
+		t.Errorf("expected docker_hub_url to be https://custom-hub.example.com, got %v", resp["docker_hub_url"])
+	}
+	if resp["status_page_url"] != "https://custom-status.example.com" {
+		t.Errorf("expected status_page_url to be https://custom-status.example.com, got %v", resp["status_page_url"])
+	}
+}

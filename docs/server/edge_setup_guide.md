@@ -113,7 +113,8 @@ edge_nodes:
 To automate updating the Control Plane configuration with your regional edge nodes list:
 1. Create a local `edge_nodes.txt` file in the root of the repository matching the format in [edge_nodes.txt.example](file:///Volumes/SanDisk/repos/lfr-tunnel/edge_nodes.txt.example):
    ```text
-   us-east-1,my-plaintext-edge-token-us
+   # Format: node_id,plaintext_token[,optional_public_url]
+   us-east-1,my-plaintext-edge-token-us,https://us.lfr-demo.se
    apac-singapore:my-plaintext-edge-token-apac
    ```
 2. Run the deployment script with the `-f` parameter:

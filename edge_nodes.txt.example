@@ -1,10 +1,10 @@
 # List of regional edge nodes to configure on the central Control Plane.
-# Format: node_id,plaintext_token  OR  node_id:plaintext_token
+# Format: node_id,plaintext_token[,optional_public_url]  OR  node_id:plaintext_token[:optional_public_url]
 # Note:
 #  - Lines starting with '#' and empty lines are ignored.
 #  - Pre-shared plaintext tokens are automatically hashed using SHA-256 locally
 #    before configuration upload. Plaintext secrets are never uploaded.
 #
 # Examples:
-# us-east-1,my-super-secure-edge-token-us
+# us-east-1,my-super-secure-edge-token-us,https://us.lfr-demo.se
 # apac-singapore:my-super-secure-edge-token-apac

@@ -10,6 +10,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"log"
+	"net"
 	"net/http"
 	"net/url"
 	"os"
@@ -41,6 +42,17 @@ func (s *Server) handleEdgeControlWS(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	version := r.URL.Query().Get("version")
+
+	var clientIP string
+	if xrip := r.Header.Get("X-Real-IP"); xrip != "" {
+		clientIP = xrip
+	} else if xff := r.Header.Get("X-Forwarded-For"); xff != "" {
+		parts := strings.Split(xff, ",")
+		clientIP = strings.TrimSpace(parts[0])
+	} else {
+		host, _, _ := net.SplitHostPort(r.RemoteAddr)
+		clientIP = host
+	}
 
 	conn, err := upgrader.Upgrade(w, r, nil)
 	if err != nil {
@@ -131,6 +143,7 @@ func (s *Server) handleEdgeControlWS(w http.ResponseWriter, r *http.Request) {
 	} else {
 		s.edgeVersions[nodeID] = "Unknown"
 	}
+	s.edgeIPs[nodeID] = clientIP
 	s.edgeClientsMu.Unlock()
 
 	log.Printf("[Edge WS] Edge node %s successfully authenticated.", nodeID)
@@ -143,6 +156,7 @@ func (s *Server) handleEdgeControlWS(w http.ResponseWriter, r *http.Request) {
 			if activeConn, exists := s.edgeClients[nodeID]; exists && activeConn == conn {
 				delete(s.edgeClients, nodeID)
 				delete(s.edgeVersions, nodeID)
+				delete(s.edgeIPs, nodeID)
 			}
 			s.edgeClientsMu.Unlock()
 			_ = conn.Close()

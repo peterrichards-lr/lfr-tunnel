@@ -6,6 +6,7 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
+	"net/http"
 	"net/http/httptest"
 	"net/url"
 	"path/filepath"
@@ -294,5 +295,96 @@ func TestServer_EdgeActions(t *testing.T) {
 	}
 	if node.Version != config.Version {
 		t.Errorf("expected node version %s, got %s", config.Version, node.Version)
+	}
+}
+
+func TestServer_EdgeControlWS_ProxyIP(t *testing.T) {
+	cfgControl := config.DefaultServerConfig()
+	cfgControl.DBPath = filepath.Join(t.TempDir(), "control.db")
+	cfgControl.Domains = []string{"example.se"}
+	cfgControl.DisableBackupScheduler = true
+
+	edgeToken := "usedge-token"
+	tokenHashBytes := sha256.Sum256([]byte(edgeToken))
+	cfgControl.EdgeNodes = []config.EdgeNodeConfig{
+		{ID: "usedge", TokenHash: hex.EncodeToString(tokenHashBytes[:])},
+	}
+
+	controlSrv, err := NewServer(cfgControl)
+	if err != nil {
+		t.Fatalf("failed to create control server: %v", err)
+	}
+	defer controlSrv.Stop()
+
+	ts := httptest.NewServer(controlSrv)
+	defer ts.Close()
+
+	u, _ := url.Parse(ts.URL)
+	wsURL := fmt.Sprintf("ws://%s/api/internal/edge-control-ws?node_id=usedge&version=v1.23.2", u.Host)
+
+	header := make(http.Header)
+	header.Set("X-Real-IP", "203.0.113.195")
+
+	conn, _, err := websocket.DefaultDialer.Dial(wsURL, header)
+	if err != nil {
+		t.Fatalf("failed to dial: %v", err)
+	}
+	defer func() { _ = conn.Close() }()
+
+	var challengeMsg struct {
+		Type  string `json:"type"`
+		Nonce string `json:"nonce"`
+	}
+	if err := conn.ReadJSON(&challengeMsg); err != nil {
+		t.Fatalf("failed to read challenge: %v", err)
+	}
+
+	keyBytes := tokenHashBytes[:]
+	mac := hmac.New(sha256.New, keyBytes)
+	mac.Write([]byte(challengeMsg.Nonce))
+	respHex := hex.EncodeToString(mac.Sum(nil))
+
+	authMsg := map[string]string{
+		"type":     "auth",
+		"response": respHex,
+	}
+	if err := conn.WriteJSON(authMsg); err != nil {
+		t.Fatalf("failed to write auth: %v", err)
+	}
+
+	var result struct {
+		Type string `json:"type"`
+	}
+	if err := conn.ReadJSON(&result); err != nil {
+		t.Fatalf("failed to read result: %v", err)
+	}
+	if result.Type != "auth_success" {
+		t.Fatalf("expected auth_success, got %s", result.Type)
+	}
+
+	controlSrv.edgeClientsMu.RLock()
+	trackedIP := controlSrv.edgeIPs["usedge"]
+	controlSrv.edgeClientsMu.RUnlock()
+
+	if trackedIP != "203.0.113.195" {
+		t.Errorf("expected tracked IP 203.0.113.195, got %s", trackedIP)
+	}
+
+	rec := httptest.NewRecorder()
+	req := httptest.NewRequest("GET", "http://tunnel.example.se/api/portal/edge-health", nil)
+	controlSrv.handleEdgeHealth(rec, req)
+
+	var resp struct {
+		Nodes map[string]EdgeHealthStatus `json:"nodes"`
+	}
+	if err := json.NewDecoder(rec.Body).Decode(&resp); err != nil {
+		t.Fatalf("failed to decode: %v", err)
+	}
+	node, exists := resp.Nodes["usedge"]
+	if !exists {
+		t.Fatal("expected usedge node in health status")
+	}
+	if node.ResolvedIP != "203.0.113.195" {
+		t.Errorf("expected ResolvedIP 203.0.113.195, got %s", node.ResolvedIP)
 	}
 }

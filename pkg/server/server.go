@@ -139,6 +139,7 @@ type Server struct {
 	wsMutex            sync.RWMutex
 	edgeClients        map[string]*websocket.Conn
 	edgeVersions       map[string]string // node_id -> version
+	edgeIPs            map[string]string // node_id -> public IP
 	edgeClientsMu      sync.RWMutex
 	startTime          time.Time
 	edgeLeases         map[string][]EdgeLease
@@ -233,6 +234,7 @@ func NewServer(cfg *config.ServerConfig) (*Server, error) {
 		wsClients:          make(map[*wsClient]bool),
 		edgeClients:        make(map[string]*websocket.Conn),
 		edgeVersions:       make(map[string]string),
+		edgeIPs:            make(map[string]string),
 		startTime:          time.Now(),
 		caCert:             caCert,
 		caKey:              caKey,
@@ -5173,6 +5175,9 @@ func (s *Server) handleEdgeHealth(w http.ResponseWriter, r *http.Request) {
 		}
 		if h.Version == "" {
 			h.Version = s.edgeVersions[nodeID]
+		}
+		if h.ResolvedIP == "" {
+			h.ResolvedIP = s.edgeIPs[nodeID]
 		}
 		if h.ResolvedIP == "" && conn != nil {
 			if remoteAddr := conn.RemoteAddr(); remoteAddr != nil {

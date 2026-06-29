@@ -726,3 +726,14 @@ The solution will consist of:
 - [x] Implement background checker scheduler running hourly to email warning alerts (48h before) and quarantine notifications (upon expiry) to developers.
 - [x] Trigger automated release tagging and deploy version `v1.23.3` to the VPS gateway.
 - [x] Run remote diagnostics checking version endpoints, ports, and DNS.
+
+## Configurable Role-Based Settings & MFA Interception Flow (v1.23.4) (#263, #264)
+- [x] Add `role_settings` configuration mapping in server YAML configuration (`pkg/config/config.go`).
+- [x] Implement dynamic role-based limit and default expiration duration resolver (`getUserMaxReservations`, `getUserSubdomainExpiry` in `pkg/server/api.go`).
+- [x] Integrate role-based expiration helper across manual, proxy, and auto-registration points (`api.go`, `server.go`).
+- [x] Implement center-aligned security setup layout `intercept-screen` in `dashboard.html`.
+- [x] Integrate post-login setup interception logic blocking dashboard navigation until required setups (like MFA) are completed (`dashboard.js`).
+- [x] Add unit test coverage for configurable role limits and lifetimes (`pkg/server/server_test.go`).
+- [ ] Tag and release v1.23.4.
+- [ ] Deploy version v1.23.4 to the VPS gateway.
+- [ ] Run remote diagnostics verifying version, ports, and functionality on the VPS.

@@ -713,8 +713,8 @@ The solution will consist of:
 - [x] Ensure all unit and E2E tests pass.
 
 ## Edge Gateways Diagnostics & IP/Version Resolution (v1.23.2) (#253)
-- [ ] Add `edgeIPs` map to `Server` and extract edge node public IP address from WebSocket handshake HTTP headers (`X-Real-IP`/`X-Forwarded-For`).
-- [ ] Update `handleEdgeHealth` to report the extracted public IP instead of proxy loopback/local IP.
-- [ ] Update `scripts/deploy.sh` to support optional URL parameters in `edge_nodes.txt` format (`node_id,token,url`).
+- [x] Add `edgeIPs` map to `Server` and extract edge node public IP address from WebSocket handshake HTTP headers (`X-Real-IP`/`X-Forwarded-For`).
+- [x] Update `handleEdgeHealth` to report the extracted public IP instead of proxy loopback/local IP.
+- [x] Update `scripts/deploy.sh` to support optional URL parameters in `edge_nodes.txt` format (`node_id,token,url`).
 - [ ] Re-compile, sign, and deploy v1.23.2 edge daemon binaries to regional VPS edge servers to enable passive handshake version reporting.
-- [ ] Document edge node URL provisioning format in `docs/server/edge_setup_guide.md`.
+- [x] Document edge node URL provisioning format in `docs/server/edge_setup_guide.md`.

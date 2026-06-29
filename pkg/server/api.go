@@ -1326,6 +1326,7 @@ func (s *Server) handleAdminApproveExtension(w http.ResponseWriter, r *http.Requ
 		res.ExpiresAt = &extended
 	}
 
+	res.ExpiryWarningSent = 0
 	if err := s.db.UpdateSubdomainReservation(res); err != nil {
 		log.Printf("[API] Failed to update reservation: %v", err)
 		http.Error(w, `{"error":"Failed to approve extension"}`, http.StatusInternalServerError)
@@ -1382,6 +1383,7 @@ func (s *Server) handleAdminDemoteReservation(w http.ResponseWriter, r *http.Req
 	expiresAt := time.Now().AddDate(0, 0, 7)
 	res.ExpiresAt = &expiresAt
 	res.ExtensionRequested = false
+	res.ExpiryWarningSent = 0
 
 	if err := s.db.UpdateSubdomainReservation(res); err != nil {
 		log.Printf("[API] Failed to update reservation: %v", err)

@@ -750,4 +750,15 @@ The solution will consist of:
 - [x] Map automatic onboarding launch on login.
 - [x] Implement unit tests validating onboarding state updates and version properties.
 - [x] Verify all database and server unit tests pass.
+## Configurable Quick Links & Onboarding Feature Request (v1.23.5) (#268, #269)
+- [x] Add new properties to `ServerConfig` for `SecureTokenGuideURL`, `DockerHubURL`, and `StatusPageURL` (`pkg/config/config.go`).
+- [x] Map new URL configuration parameters in `/api/version` JSON response (`pkg/server/server.go`).
+- [x] Add IDs and default fallback URLs for documentation, guide, Docker Hub, and system status links (`pkg/server/dashboard.html`).
+- [x] Update frontend link binding logic to apply configurable guide, status, and Docker Hub URLs dynamically (`pkg/server/static/dashboard.js`).
+- [x] Add unit test coverage verifying customizable links REST response (`pkg/server/server_test.go`).
+- [x] Raise GitHub feature request issue (#268) for dashboard onboarding tutorial.
+- [x] Raise GitHub feature request issue (#269) for configurable quick links.
+- [ ] Tag and release v1.23.5.
+- [ ] Deploy version v1.23.5 to the VPS gateway.
+- [ ] Run remote diagnostics verifying version, ports, and functionality on the VPS.
 

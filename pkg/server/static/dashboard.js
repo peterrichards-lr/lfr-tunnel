@@ -401,6 +401,10 @@ function toggleTheme() {
                         const cl = document.getElementById('footer-cookie-link');
                         if (cl) cl.href = vData.cookie_policy_url;
                     }
+                    const statusLink = document.getElementById('status-page-link');
+                    if (statusLink && vData.status_page_url) {
+                        statusLink.href = vData.status_page_url;
+                    }
                     const displayVer = vData.server_version || vData.latest_version;
                     if (displayVer) {
                         const versionDisplays = document.querySelectorAll('.server-version-display');
@@ -411,7 +415,7 @@ function toggleTheme() {
                         versionDisplays.forEach(el => {
                             el.textContent = text;
                             if (vData.start_time) {
-                                el.title = `Started: ${new Date(vData.start_time).toLocaleString()}`;
+                                  el.title = `Started: ${new Date(vData.start_time).toLocaleString()}`;
                             }
                         });
                     }
@@ -428,8 +432,12 @@ function toggleTheme() {
                         if (text) text.textContent = `docker pull ${vData.docker_image}`;
                         const link = document.getElementById('docker-hub-link');
                         if (link) {
-                            const repoOnly = vData.docker_image.split(':')[0];
-                            link.href = `https://hub.docker.com/r/${repoOnly}`;
+                            if (vData.docker_hub_url) {
+                                link.href = vData.docker_hub_url;
+                            } else {
+                                const repoOnly = vData.docker_image.split(':')[0];
+                                link.href = `https://hub.docker.com/r/${repoOnly}`;
+                            }
                         }
                         const bypassLink = document.getElementById('docker-bypass-link');
                         if (bypassLink && vData.docker_bypass_url) {
@@ -631,10 +639,14 @@ function toggleTheme() {
                         if (dl) dl.href = vData.documentation_url;
                     }
                     
-                    const repoUrl = vData.repository_url || 'https://github.com/peterrichards-lr/lfr-tunnel';
                     const secureLink = document.getElementById('secure-token-guide-link');
                     if (secureLink) {
-                        secureLink.href = `${repoUrl}/blob/master/docs/getting_started.md#option-c-restricted-secrets-file-advanced--secure`;
+                        if (vData.secure_token_guide_url) {
+                            secureLink.href = vData.secure_token_guide_url;
+                        } else {
+                            const repoUrl = vData.repository_url || 'https://github.com/peterrichards-lr/lfr-tunnel';
+                            secureLink.href = `${repoUrl}/blob/master/docs/getting_started.md#option-c-restricted-secrets-file-advanced--secure`;
+                        }
                     }
                     
                     let os = 'Unknown OS';

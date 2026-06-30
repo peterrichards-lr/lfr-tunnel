@@ -1770,7 +1770,18 @@ func (s *Server) handleCompleteSetup(w http.ResponseWriter, r *http.Request) {
 				scheme = "https"
 			}
 			approveURL := fmt.Sprintf("%s://%s/api/admin/approve?email=%s&token=%s", scheme, r.Host, url.QueryEscape(user.Email), user.ApprovalToken)
-			body := fmt.Sprintf("<p>New registration request (Email Verified & Setup Complete):</p><ul><li>Name: %s %s</li><li>Email: %s</li></ul><p><a href=\"%s\">Click here to approve this request</a></p>", user.FirstName, user.LastName, user.Email, approveURL)
+
+			body, err := s.renderEmailTemplate("en", "admin_registration_request.html", map[string]interface{}{
+				"FirstName":  user.FirstName,
+				"LastName":   user.LastName,
+				"Email":      user.Email,
+				"ApproveURL": approveURL,
+				"Status":     "Email Verified & Setup Complete",
+			})
+			if err != nil {
+				log.Printf("[Server] Failed to render admin_registration_request template: %v", err)
+				body = fmt.Sprintf("<p>New registration request (Email Verified & Setup Complete):</p><ul><li>Name: %s %s</li><li>Email: %s</li></ul><p><a href=\"%s\">Click here to approve this request</a></p>", user.FirstName, user.LastName, user.Email, approveURL)
+			}
 
 			plainBody := fmt.Sprintf("New user registered: %s. Approve here: %s", user.Email, approveURL)
 			go func() { _ = s.notifications.Sender().Send(s.cfg.AdminNotificationEmail, subject, body, plainBody) }()
@@ -1829,7 +1840,17 @@ func (s *Server) handleVerifyEmail(w http.ResponseWriter, r *http.Request) {
 		}
 		host := r.Host
 		approveURL := fmt.Sprintf("%s://%s/api/admin/approve?email=%s&token=%s", scheme, host, url.QueryEscape(user.Email), user.ApprovalToken)
-		body := fmt.Sprintf("<p>New registration request (Email Verified):</p><ul><li>Name: %s %s</li><li>Email: %s</li></ul><p><a href=\"%s\">Click here to approve this request</a></p>", user.FirstName, user.LastName, user.Email, approveURL)
+		body, err := s.renderEmailTemplate("en", "admin_registration_request.html", map[string]interface{}{
+			"FirstName":  user.FirstName,
+			"LastName":   user.LastName,
+			"Email":      user.Email,
+			"ApproveURL": approveURL,
+			"Status":     "Email Verified",
+		})
+		if err != nil {
+			log.Printf("[Server] Failed to render admin_registration_request template: %v", err)
+			body = fmt.Sprintf("<p>New registration request (Email Verified):</p><ul><li>Name: %s %s</li><li>Email: %s</li></ul><p><a href=\"%s\">Click here to approve this request</a></p>", user.FirstName, user.LastName, user.Email, approveURL)
+		}
 
 		go func() {
 			plainBody := fmt.Sprintf("A new user (%s) requires approval. Approve here: %s", user.Email, approveURL)
@@ -1840,7 +1861,12 @@ func (s *Server) handleVerifyEmail(w http.ResponseWriter, r *http.Request) {
 	}
 
 	w.Header().Set("Content-Type", "text/html")
-	_, _ = w.Write([]byte(`<html><head><title>Email Verified</title><style>body{font-family:sans-serif;text-align:center;padding:50px;color:#333;background:#f8fafc;}h1{color:#10b981;}</style></head><body><h1>Email Verified! ✅</h1><p>Your email has been verified successfully. An administrator has been notified to review and approve your account.</p></body></html>`))
+	htmlBytes, err := staticFS.ReadFile("static/email_verified.html")
+	if err != nil {
+		_, _ = w.Write([]byte(`<html><head><title>Email Verified</title><style>body{font-family:sans-serif;text-align:center;padding:50px;color:#333;background:#f8fafc;}h1{color:#10b981;}</style></head><body><h1>Email Verified! ✅</h1><p>Your email has been verified successfully. An administrator has been notified to review and approve your account.</p></body></html>`))
+		return
+	}
+	_, _ = w.Write(htmlBytes)
 }
 
 // handleApproveUser handles admin clicks on approval links.

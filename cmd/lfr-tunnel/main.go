@@ -35,47 +35,41 @@ func (i *arrayFlags) Set(value string) error {
 	return nil
 }
 
-func main() {
-	configPath := flag.String("config", "", "Path to client-config.yaml")
-	serverURL := flag.String("server", "", "Gateway server URL (e.g. https://tunnel.liferay.com)")
-	token := flag.String("token", "", "Gateway auth token")
-	subdomain := flag.String("subdomain", "", "Requested subdomain prefix (e.g. alpha-se)")
-	portsStr := flag.String("ports", "", "Comma-separated ports to expose (e.g. 8080,3000)")
-	basicAuth := flag.String("basic-auth", "", "Require HTTP Basic Auth (format: 'username:password')")
-	inspectorPort := flag.Int("inspector-port", 4040, "Local port for the Inspector Web UI")
-	var addHeaders arrayFlags
+// Package-level command-line flags
+var (
+	configPath       = flag.String("config", "", "Path to client-config.yaml")
+	serverURL        = flag.String("server", "", "Gateway server URL (e.g. https://tunnel.liferay.com)")
+	token            = flag.String("token", "", "Gateway auth token")
+	subdomain        = flag.String("subdomain", "", "Requested subdomain prefix (e.g. alpha-se)")
+	portsStr         = flag.String("ports", "", "Comma-separated ports to expose (e.g. 8080,3000)")
+	basicAuth        = flag.String("basic-auth", "", "Require HTTP Basic Auth (format: 'username:password')")
+	inspectorPort    = flag.Int("inspector-port", 4040, "Local port for the Inspector Web UI")
+	addHeaders       arrayFlags
+	rateLimit        = flag.Int("rate-limit", 0, "Max requests per second for your subdomains (0 = unlimited)")
+	targetHost       = flag.String("target-host", "", "Target hostname or IP to route traffic to (e.g. my-project.local)")
+	preserveHost     = flag.Bool("preserve-host", false, "Preserve incoming Host header instead of rewriting to target host")
+	background       = flag.Bool("background", false, "Run client in background")
+	status           = flag.Bool("status", false, "Check status of the background tunnel")
+	statusJSON       = flag.Bool("status-json", false, "Print JSON status of the background tunnel")
+	stop             = flag.Bool("stop", false, "Stop the background tunnel")
+	versionFlag      = flag.Bool("version", false, "Print client version")
+	checkVersionFlag = flag.Bool("check-version", false, "Check server API for version requirements and print as JSON")
+	upgradeFlag      = flag.Bool("upgrade", false, "Self-upgrade client to the latest release")
+	noTUI            = flag.Bool("no-tui", false, "Disable interactive terminal dashboard UI")
+	passcode         = flag.String("passcode", "", "Passcode to protect the public tunnel URLs")
+	whitelistIP      = flag.String("whitelist-ip", "", "Comma-separated IP addresses allowed to access the tunnel")
+	region           = flag.String("region", "", "Gateway region to target (e.g. eu, us-east, us-west, latam, apac)")
+	domain           = flag.String("domain", "", "Custom domain name (e.g. custom-client-site.com)")
+	latency          = flag.Duration("latency", 0, "Simulated network roundtrip latency (e.g. 200ms, 1s)")
+	bandwidth        = flag.String("bandwidth", "", "Simulated bandwidth throttling limit (e.g. 512kbps, 2mbps)")
+)
+
+func init() {
 	flag.Var(&addHeaders, "add-header", "Inject HTTP header (e.g. 'X-Bypass-CORS: true')")
-	rateLimit := flag.Int("rate-limit", 0, "Max requests per second for your subdomains (0 = unlimited)")
-	targetHost := flag.String("target-host", "", "Target hostname or IP to route traffic to (e.g. my-project.local)")
-	preserveHost := flag.Bool("preserve-host", false, "Preserve incoming Host header instead of rewriting to target host")
-	background := flag.Bool("background", false, "Run client in background")
-	status := flag.Bool("status", false, "Check status of the background tunnel")
-	statusJSON := flag.Bool("status-json", false, "Print JSON status of the background tunnel")
-	stop := flag.Bool("stop", false, "Stop the background tunnel")
-	versionFlag := flag.Bool("version", false, "Print client version")
-	checkVersionFlag := flag.Bool("check-version", false, "Check server API for version requirements and print as JSON")
-	upgradeFlag := flag.Bool("upgrade", false, "Self-upgrade client to the latest release")
-	noTUI := flag.Bool("no-tui", false, "Disable interactive terminal dashboard UI")
-	passcode := flag.String("passcode", "", "Passcode to protect the public tunnel URLs")
-	whitelistIP := flag.String("whitelist-ip", "", "Comma-separated IP addresses allowed to access the tunnel")
-	region := flag.String("region", "", "Gateway region to target (e.g. eu, us-east, us-west, latam, apac)")
-	domain := flag.String("domain", "", "Custom domain name (e.g. custom-client-site.com)")
-	latency := flag.Duration("latency", 0, "Simulated network roundtrip latency (e.g. 200ms, 1s)")
-	bandwidth := flag.String("bandwidth", "", "Simulated bandwidth throttling limit (e.g. 512kbps, 2mbps)")
+}
 
+func main() {
 	flag.Parse()
-
-	if len(os.Args) > 1 && os.Args[1] == "install-service" {
-		if err := client.InstallService(); err != nil {
-			log.Fatalf("[Error] Failed to install service: %v", err)
-		}
-		return
-	}
-
-	if *versionFlag {
-		fmt.Printf("lfr-tunnel version %s\n", config.Version)
-		return
-	}
 
 	// 1. Load config from file and environment variables
 	cfg, err := config.LoadClientConfig(*configPath)
@@ -84,55 +78,10 @@ func main() {
 	}
 
 	// 2. Override with CLI flags
-	if *serverURL != "" {
-		cfg.ServerURL = *serverURL
-	}
-	if *token != "" {
-		cfg.AuthToken = *token
-	}
-	if *subdomain != "" {
-		cfg.Subdomain = *subdomain
-	}
-	if *rateLimit > 0 {
-		cfg.RateLimit = *rateLimit
-	}
-	if *basicAuth != "" {
-		cfg.BasicAuth = *basicAuth
-	}
-	if *targetHost != "" {
-		cfg.TargetHost = *targetHost
-	}
-	if *preserveHost {
-		_ = os.Setenv("LFT_PRESERVE_HOST", "true")
-	}
-	if *passcode != "" {
-		cfg.Passcode = *passcode
-	}
-	if *whitelistIP != "" {
-		cfg.WhitelistIPs = *whitelistIP
-	}
-	if *region != "" {
-		cfg.Region = *region
-	}
-	if *domain != "" {
-		cfg.CustomDomain = *domain
-	}
-	if *latency > 0 {
-		cfg.Latency = *latency
-	}
-	if *bandwidth != "" {
-		cfg.Bandwidth = *bandwidth
-	}
+	overrideConfigWithFlags(cfg)
 
 	isExplicitServer := *serverURL != "" || os.Getenv("LFT_CLIENT_SERVER") != "" || os.Getenv("LFT_SERVER_URL") != "" || os.Getenv("LFT_SERVER") != ""
 	resolveServerURL(cfg, isExplicitServer)
-
-	if *upgradeFlag {
-		if err := client.SelfUpgrade(config.Version, cfg.ServerURL); err != nil {
-			log.Fatalf("[Error] Upgrade failed: %v", err)
-		}
-		return
-	}
 
 	// Determine if subdomain flag was explicitly passed
 	subdomainFlagPassed := false
@@ -159,45 +108,8 @@ func main() {
 	}
 	sub = strings.ToLower(strings.TrimSpace(sub))
 
-	if len(os.Args) > 1 && os.Args[1] == "login" {
-		if err := client.RunLogin(cfg.ServerURL); err != nil {
-			log.Fatalf("[Error] Login failed: %v", err)
-		}
-		return
-	}
-
-	if len(os.Args) > 1 && os.Args[1] == "mcp" {
-		mcp.StartMCPServer()
-		return
-	}
-
-	if *checkVersionFlag {
-		info, err := client.CheckServerCompatibility(cfg.ServerURL)
-		if err != nil {
-			log.Fatalf("[Error] Failed to check server compatibility: %v", err)
-		}
-		b, _ := json.Marshal(info)
-		fmt.Println(string(b))
-		return
-	}
-
-	if *stop {
-		handleStop(sub, subdomainFlagPassed)
-		return
-	}
-
-	if *status {
-		handleStatus(sub, subdomainFlagPassed)
-		return
-	}
-
-	if *statusJSON {
-		handleStatusJSON(sub, subdomainFlagPassed)
-		return
-	}
-
-	if *background {
-		handleBackground(sub)
+	// Execute subcommands if any matching arguments or flags are passed
+	if executeSubcommands(cfg, sub, subdomainFlagPassed) {
 		return
 	}
 
@@ -208,63 +120,8 @@ func main() {
 		compatChan <- info
 	}()
 
-	var ports []int
-	if *portsStr != "" {
-		parts := strings.Split(*portsStr, ",")
-		for _, part := range parts {
-			part = strings.TrimSpace(part)
-			if p, err := strconv.Atoi(part); err == nil {
-				ports = append(ports, p)
-			}
-		}
-	} else {
-		ports = cfg.Ports
-	}
-
 	// 3. Resolve port mappings
-	var portMappings []client.PortMapping
-	if len(ports) > 0 && *portsStr != "" {
-		// Ports were explicitly requested via flag
-		for idx, port := range ports {
-			suffix := ""
-			if idx > 0 {
-				suffix = fmt.Sprintf("-%d", port)
-			}
-			portMappings = append(portMappings, client.PortMapping{
-				LocalPort:  port,
-				NameSuffix: suffix,
-			})
-		}
-	} else {
-		// Auto-detect workspace ports
-		if client.IsLiferayWorkspace(".") {
-			log.Println("[Client] Liferay workspace detected. Scanning for Client Extensions...")
-			portMappings, err = client.DetectWorkspacePorts(".")
-			if err != nil {
-				log.Printf("[Warning] Failed to scan workspace: %v. Using defaults.", err)
-				portMappings = []client.PortMapping{{LocalPort: 8080}}
-			}
-		} else {
-			log.Println("[Client] No Liferay workspace detected in current directory. Probing typical ports (8080, 13000, 3000)...")
-			activePorts := client.ProbeLocalPorts([]int{8080, 13000, 3000})
-			if len(activePorts) > 0 {
-				log.Printf("[Client] Detected active local service ports: %v", activePorts)
-				for idx, port := range activePorts {
-					suffix := ""
-					if idx > 0 {
-						suffix = fmt.Sprintf("-%d", port)
-					}
-					portMappings = append(portMappings, client.PortMapping{
-						LocalPort:  port,
-						NameSuffix: suffix,
-					})
-				}
-			} else {
-				log.Println("[Client] No active local services found on typical ports. Defaulting to port 8080.")
-				portMappings = []client.PortMapping{{LocalPort: 8080}}
-			}
-		}
-	}
+	portMappings := resolvePortsAndMappings(cfg)
 
 	// Copy original ports for status monitoring before we modify portMappings to point to Interceptor ports
 	var originalPorts []int
@@ -337,49 +194,8 @@ func main() {
 	if cfg.WhitelistIPs != "" {
 		fmt.Printf("[Client] Data Plane IP Whitelisting is ENABLED (%s)\n", cfg.WhitelistIPs)
 	}
-	clientOS := runtime.GOOS
-	if client.IsDocker() {
-		clientOS += " (Docker)"
-	}
-	regResp, err := client.RegisterTunnel(cfg.ServerURL, cfg.AuthToken, sub, cfg.CustomDomain, portMappings, cfg.RateLimit, cfg.BasicAuth, engine.AddedHeaders, clientOS, cfg.Passcode, cfg.WhitelistIPs)
-	if err != nil {
-		if regErr, ok := err.(*client.RegistrationError); ok && regErr.StatusCode == 403 {
-			log.Printf("[Error] Failed to register: %s\n", regErr.Message)
-			portalURL := regErr.PortalURL
-			if portalURL == "" {
-				portalURL = strings.Replace(cfg.ServerURL, "tunnel.", "portal.", 1)
-				if !strings.Contains(portalURL, "portal.") {
-					portalURL = cfg.ServerURL + "/portal"
-				}
-			}
-			log.Println("[Client] Subdomain reservation or limit issue detected.")
-			log.Println("[Client] Please visit the User Portal to resolve it:")
-			log.Printf("         👉 %s (Cmd/Ctrl+Click to open)\n", portalURL)
-			os.Exit(1)
-		}
 
-		errStr := err.Error()
-		isGatewayIssue := false
-		if strings.Contains(errStr, "registration request failed") ||
-			strings.Contains(errStr, "gateway error (5") ||
-			strings.Contains(errStr, "gateway returned status 5") {
-			isGatewayIssue = true
-		}
-
-		if isGatewayIssue {
-			log.Printf("[Error] Failed to register: %v\n", err)
-			log.Println("[Client] Gateway appears to be offline or undergoing maintenance.")
-			log.Println("[Client] Check the service status page for active outages:")
-			log.Println("         👉 https://status.lfr-demo.se (Cmd/Ctrl+Click to open)")
-			os.Exit(1)
-		} else {
-			log.Fatalf("[Error] Failed to register: %v\n", err)
-		}
-	}
-
-	if regResp.Warning != "" {
-		log.Printf("\n[WARNING] %s\n\n", regResp.Warning)
-	}
+	regResp := performRegistrationHandshake(cfg, portMappings, sub, engine.AddedHeaders)
 
 	// Modify portMappings to point to dynamic Interceptor ports
 	portMap := make(map[int]int)
@@ -394,51 +210,16 @@ func main() {
 		portMap[targetPort] = interceptPort
 	}
 
-	// Rewrite remotes to route through interceptor ports
-	for idx, remote := range regResp.Remotes {
-		parts := strings.Split(remote, ":")
-		if len(parts) >= 4 {
-			lastPart := parts[len(parts)-1]
-			if targetP, err := strconv.Atoi(lastPart); err == nil {
-				if intP, exists := portMap[targetP]; exists {
-					parts[len(parts)-1] = strconv.Itoa(intP)
-					regResp.Remotes[idx] = strings.Join(parts, ":")
-				}
-			}
-		}
-	}
+	rewriteRemotes(regResp, portMap)
 
-	var publicURLs []string
-	log.Println("[Client] Registration successful! Your public tunnel URLs are:")
 	subHost := sub
 	if cfg.CustomDomain != "" {
 		subHost = ""
 	} else if regResp.SubdomainPrefix != "" {
 		subHost = regResp.SubdomainPrefix
 	}
-	for _, domain := range regResp.Domains {
-		for _, pm := range portMappings {
-			var urlStr string
-			if subHost == "" {
-				if pm.NameSuffix == "" {
-					urlStr = fmt.Sprintf("https://%s", domain)
-				} else {
-					cleanSuffix := strings.TrimPrefix(pm.NameSuffix, "-")
-					urlStr = fmt.Sprintf("https://%s.%s", cleanSuffix, domain)
-				}
-			} else {
-				var fullSubdomain string
-				if pm.NameSuffix == "" {
-					fullSubdomain = subHost
-				} else {
-					fullSubdomain = fmt.Sprintf("%s-%s", subHost, pm.NameSuffix)
-				}
-				urlStr = fmt.Sprintf("https://%s.%s", fullSubdomain, domain)
-			}
-			publicURLs = append(publicURLs, urlStr)
-			log.Printf("  %s -> local port %d", urlStr, pm.LocalPort)
-		}
-	}
+
+	publicURLs := printAndCollectPublicURLs(cfg, regResp, portMappings, subHost)
 
 	// Write dynamic client state to file
 	state := &client.ClientState{
@@ -487,6 +268,219 @@ func main() {
 	log.Println("[Client] Tunnel shutdown completed.")
 }
 
+func overrideConfigWithFlags(cfg *config.ClientConfig) {
+	if *serverURL != "" {
+		cfg.ServerURL = *serverURL
+	}
+	if *token != "" {
+		cfg.AuthToken = *token
+	}
+	if *subdomain != "" {
+		cfg.Subdomain = *subdomain
+	}
+	if *rateLimit > 0 {
+		cfg.RateLimit = *rateLimit
+	}
+	if *basicAuth != "" {
+		cfg.BasicAuth = *basicAuth
+	}
+	if *targetHost != "" {
+		cfg.TargetHost = *targetHost
+	}
+	if *preserveHost {
+		_ = os.Setenv("LFT_PRESERVE_HOST", "true")
+	}
+	if *passcode != "" {
+		cfg.Passcode = *passcode
+	}
+	if *whitelistIP != "" {
+		cfg.WhitelistIPs = *whitelistIP
+	}
+	if *region != "" {
+		cfg.Region = *region
+	}
+	if *domain != "" {
+		cfg.CustomDomain = *domain
+	}
+	if *latency > 0 {
+		cfg.Latency = *latency
+	}
+	if *bandwidth != "" {
+		cfg.Bandwidth = *bandwidth
+	}
+}
+
+func executeSubcommands(cfg *config.ClientConfig, sub string, subdomainFlagPassed bool) bool {
+	if len(os.Args) > 1 && os.Args[1] == "install-service" {
+		if err := client.InstallService(); err != nil {
+			log.Fatalf("[Error] Failed to install service: %v", err)
+		}
+		return true
+	}
+
+	if *versionFlag {
+		fmt.Printf("lfr-tunnel version %s\n", config.Version)
+		return true
+	}
+
+	if *upgradeFlag {
+		if err := client.SelfUpgrade(config.Version, cfg.ServerURL); err != nil {
+			log.Fatalf("[Error] Upgrade failed: %v", err)
+		}
+		return true
+	}
+
+	if len(os.Args) > 1 && os.Args[1] == "login" {
+		if err := client.RunLogin(cfg.ServerURL); err != nil {
+			log.Fatalf("[Error] Login failed: %v", err)
+		}
+		return true
+	}
+
+	if len(os.Args) > 1 && os.Args[1] == "mcp" {
+		mcp.StartMCPServer()
+		return true
+	}
+
+	if *checkVersionFlag {
+		info, err := client.CheckServerCompatibility(cfg.ServerURL)
+		if err != nil {
+			log.Fatalf("[Error] Failed to check server compatibility: %v", err)
+		}
+		b, _ := json.Marshal(info)
+		fmt.Println(string(b))
+		return true
+	}
+
+	if *stop {
+		handleStop(sub, subdomainFlagPassed)
+		return true
+	}
+
+	if *status {
+		handleStatus(sub, subdomainFlagPassed)
+		return true
+	}
+
+	if *statusJSON {
+		handleStatusJSON(sub, subdomainFlagPassed)
+		return true
+	}
+
+	if *background {
+		handleBackground(sub)
+		return true
+	}
+
+	return false
+}
+
+func resolvePortsAndMappings(cfg *config.ClientConfig) []client.PortMapping {
+	var ports []int
+	var err error
+	if *portsStr != "" {
+		parts := strings.Split(*portsStr, ",")
+		for _, part := range parts {
+			part = strings.TrimSpace(part)
+			if p, err := strconv.Atoi(part); err == nil {
+				ports = append(ports, p)
+			}
+		}
+	} else {
+		ports = cfg.Ports
+	}
+
+	var portMappings []client.PortMapping
+	if len(ports) > 0 && *portsStr != "" {
+		for idx, port := range ports {
+			suffix := ""
+			if idx > 0 {
+				suffix = fmt.Sprintf("-%d", port)
+			}
+			portMappings = append(portMappings, client.PortMapping{
+				LocalPort:  port,
+				NameSuffix: suffix,
+			})
+		}
+	} else {
+		if client.IsLiferayWorkspace(".") {
+			log.Println("[Client] Liferay workspace detected. Scanning for Client Extensions...")
+			portMappings, err = client.DetectWorkspacePorts(".")
+			if err != nil {
+				log.Printf("[Warning] Failed to scan workspace: %v. Using defaults.", err)
+				portMappings = []client.PortMapping{{LocalPort: 8080}}
+			}
+		} else {
+			log.Println("[Client] No Liferay workspace detected in current directory. Probing typical ports (8080, 13000, 3000)...")
+			activePorts := client.ProbeLocalPorts([]int{8080, 13000, 3000})
+			if len(activePorts) > 0 {
+				log.Printf("[Client] Detected active local service ports: %v", activePorts)
+				for idx, port := range activePorts {
+					suffix := ""
+					if idx > 0 {
+						suffix = fmt.Sprintf("-%d", port)
+					}
+					portMappings = append(portMappings, client.PortMapping{
+						LocalPort:  port,
+						NameSuffix: suffix,
+					})
+				}
+			} else {
+				log.Println("[Client] No active local services found on typical ports. Defaulting to port 8080.")
+				portMappings = []client.PortMapping{{LocalPort: 8080}}
+			}
+		}
+	}
+	return portMappings
+}
+
+func performRegistrationHandshake(cfg *config.ClientConfig, portMappings []client.PortMapping, sub string, addedHeaders map[string]string) *client.RegisterResponse {
+	clientOS := runtime.GOOS
+	if client.IsDocker() {
+		clientOS += " (Docker)"
+	}
+	regResp, err := client.RegisterTunnel(cfg.ServerURL, cfg.AuthToken, sub, cfg.CustomDomain, portMappings, cfg.RateLimit, cfg.BasicAuth, addedHeaders, clientOS, cfg.Passcode, cfg.WhitelistIPs)
+	if err != nil {
+		if regErr, ok := err.(*client.RegistrationError); ok && regErr.StatusCode == 403 {
+			log.Printf("[Error] Failed to register: %s\n", regErr.Message)
+			portalURL := regErr.PortalURL
+			if portalURL == "" {
+				portalURL = strings.Replace(cfg.ServerURL, "tunnel.", "portal.", 1)
+				if !strings.Contains(portalURL, "portal.") {
+					portalURL = cfg.ServerURL + "/portal"
+				}
+			}
+			log.Println("[Client] Subdomain reservation or limit issue detected.")
+			log.Println("[Client] Please visit the User Portal to resolve it:")
+			log.Printf("         👉 %s (Cmd/Ctrl+Click to open)\n", portalURL)
+			os.Exit(1)
+		}
+
+		errStr := err.Error()
+		isGatewayIssue := false
+		if strings.Contains(errStr, "registration request failed") ||
+			strings.Contains(errStr, "gateway error (5") ||
+			strings.Contains(errStr, "gateway returned status 5") {
+			isGatewayIssue = true
+		}
+
+		if isGatewayIssue {
+			log.Printf("[Error] Failed to register: %v\n", err)
+			log.Println("[Client] Gateway appears to be offline or undergoing maintenance.")
+			log.Println("[Client] Check the service status page for active outages:")
+			log.Println("         👉 https://status.lfr-demo.se (Cmd/Ctrl+Click to open)")
+			os.Exit(1)
+		} else {
+			log.Fatalf("[Error] Failed to register: %v\n", err)
+		}
+	}
+
+	if regResp.Warning != "" {
+		log.Printf("\n[WARNING] %s\n\n", regResp.Warning)
+	}
+	return regResp
+}
+
 func getPIDFilePath(subdomain string) (string, error) {
 	home, err := os.UserHomeDir()
 	if err != nil {
@@ -523,15 +517,7 @@ func readPID(subdomain string) (int, error) {
 }
 
 func isPIDRunning(pid int) bool {
-	if pid <= 0 {
-		return false
-	}
-	proc, err := os.FindProcess(pid)
-	if err != nil {
-		return false
-	}
-	err = proc.Signal(syscall.Signal(0))
-	return err == nil
+	return client.IsPIDRunning(pid)
 }
 
 func getActiveSubdomains() ([]string, error) {
@@ -813,4 +799,48 @@ func probeFastestRegion(regions map[string]string) string {
 		return first.region
 	}
 	return ""
+}
+
+func rewriteRemotes(regResp *client.RegisterResponse, portMap map[int]int) {
+	for idx, remote := range regResp.Remotes {
+		parts := strings.Split(remote, ":")
+		if len(parts) >= 4 {
+			lastPart := parts[len(parts)-1]
+			if targetP, err := strconv.Atoi(lastPart); err == nil {
+				if intP, exists := portMap[targetP]; exists {
+					parts[len(parts)-1] = strconv.Itoa(intP)
+					regResp.Remotes[idx] = strings.Join(parts, ":")
+				}
+			}
+		}
+	}
+}
+
+func printAndCollectPublicURLs(cfg *config.ClientConfig, regResp *client.RegisterResponse, portMappings []client.PortMapping, subHost string) []string {
+	var publicURLs []string
+	log.Println("[Client] Registration successful! Your public tunnel URLs are:")
+	for _, domain := range regResp.Domains {
+		for _, pm := range portMappings {
+			var urlStr string
+			if subHost == "" {
+				if pm.NameSuffix == "" {
+					urlStr = fmt.Sprintf("https://%s", domain)
+				} else {
+					cleanSuffix := strings.TrimPrefix(pm.NameSuffix, "-")
+					urlStr = fmt.Sprintf("https://%s.%s", cleanSuffix, domain)
+				}
+			} else {
+				var fullSubdomain string
+				if pm.NameSuffix == "" {
+					fullSubdomain = subHost
+				} else {
+					fullSubdomain = fmt.Sprintf("%s-%s", subHost, pm.NameSuffix)
+				}
+				urlStr = fmt.Sprintf("https://%s.%s", fullSubdomain, domain)
+			}
+			publicURLs = append(publicURLs, urlStr)
+			log.Printf("  %s -> local port %d", urlStr, pm.LocalPort)
+		}
+	}
+	return publicURLs
 }

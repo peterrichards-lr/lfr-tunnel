@@ -1,0 +1,88 @@
+version: "2"
+
+linters:
+  enable:
+    - dupl
+    - funlen
+    - goconst
+    - gocyclo
+    - gocognit
+    - errcheck
+    - govet
+    - ineffassign
+    - staticcheck
+    - unused
+
+  exclusions:
+    rules:
+      # Exclude all test files from complexity, length, duplication, and constant checks
+      - path: _test\.go
+        linters:
+          - funlen
+          - gocyclo
+          - gocognit
+          - dupl
+          - goconst
+      # Exclude main.go from gocognit, gocyclo, and funlen due to orchestrating CLI setup
+      - path: cmd/lfr-tunnel/main\.go
+        linters:
+          - gocognit
+          - gocyclo
+          - funlen
+      # Exclude legacy package directories from these strict checks
+      - path: pkg/client/.*
+        linters:
+          - funlen
+          - gocyclo
+          - gocognit
+          - dupl
+          - goconst
+      - path: pkg/config/.*
+        linters:
+          - funlen
+          - gocyclo
+          - gocognit
+          - dupl
+          - goconst
+      - path: pkg/server/.*
+        linters:
+          - funlen
+          - gocyclo
+          - gocognit
+          - dupl
+          - goconst
+      - path: pkg/db/.*
+        linters:
+          - funlen
+          - gocyclo
+          - gocognit
+          - dupl
+          - goconst
+      - path: pkg/mail/.*
+        linters:
+          - funlen
+          - gocyclo
+          - gocognit
+          - dupl
+          - goconst
+      - path: pkg/mcp/.*
+        linters:
+          - funlen
+          - gocyclo
+          - gocognit
+          - dupl
+          - goconst
+
+  settings:
+    funlen:
+      lines: 100
+      statements: 50
+    gocyclo:
+      min-complexity: 20
+    gocognit:
+      min-complexity: 30
+    dupl:
+      threshold: 100
+    goconst:
+      min-len: 3
+      min-occurrences: 3

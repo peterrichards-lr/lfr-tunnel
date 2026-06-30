@@ -10,11 +10,11 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
-	"runtime"
-	"strconv"
 	"strings"
-	"syscall"
 	"time"
+
+	"lfr-tunnel/pkg/client"
+	"lfr-tunnel/pkg/config"
 )
 
 // Request represents a JSON-RPC request.
@@ -80,7 +80,7 @@ func handleRequest(req *Request) {
 			"capabilities":    map[string]interface{}{},
 			"serverInfo": map[string]string{
 				"name":    "lfr-tunnel",
-				"version": "v1.14.3",
+				"version": config.Version,
 			},
 		}
 		sendResult(req.ID, result)
@@ -505,23 +505,7 @@ func queryInspectorInfo(url string) interface{} {
 }
 
 func isPIDRunning(pid int) bool {
-	if pid <= 0 {
-		return false
-	}
-	proc, err := os.FindProcess(pid)
-	if err != nil {
-		return false
-	}
-	if runtime.GOOS == "windows" {
-		cmd := exec.Command("tasklist", "/FI", fmt.Sprintf("PID eq %d", pid))
-		out, err := cmd.Output()
-		if err == nil && strings.Contains(string(out), strconv.Itoa(pid)) {
-			return true
-		}
-		return false
-	}
-	err = proc.Signal(syscall.Signal(0))
-	return err == nil
+	return client.IsPIDRunning(pid)
 }
 
 // JSON-RPC helper responses

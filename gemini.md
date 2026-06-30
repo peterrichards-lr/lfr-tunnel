@@ -762,3 +762,12 @@ The solution will consist of:
 - [ ] Deploy version v1.23.5 to the VPS gateway.
 - [ ] Run remote diagnostics verifying version, ports, and functionality on the VPS.
 
+## Codebase Review & Refactoring for Technical Debt (v1.23.7) - Issue #274
+- [x] Create Phase 1 Audit Report outlining codebase review findings.
+- [x] Implement `checkInsecurePermissions` helper in `pkg/config/config.go` and deduplicate POSIX permission check logic.
+- [x] Move `IsPIDRunning` into `pkg/client/state.go` with Windows compatibility fallback, removing duplicate local functions in `main.go` and `pkg/mcp/server.go`.
+- [x] Use `config.Version` in `pkg/mcp/server.go` instead of hardcoded version string.
+- [x] Refactor `cmd/lfr-tunnel/main.go` `main()` function to extract helper functions and reduce method size/complexity.
+- [x] Run unit and E2E tests to verify zero behavioral changes.
+
+

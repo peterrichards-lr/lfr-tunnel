@@ -463,13 +463,7 @@ func LoadClientConfig(path string) (*ClientConfig, error) {
 					cfg.AuthToken = strings.TrimSpace(content)
 				}
 
-				if runtime.GOOS != "windows" {
-					if info, err := os.Stat(tokenFilePath); err == nil {
-						if info.Mode().Perm()&0077 != 0 {
-							fmt.Fprintf(os.Stderr, "Warning: Token file %s has insecure permissions %04o. For security, run 'chmod 600 %s'\n", tokenFilePath, info.Mode().Perm(), tokenFilePath)
-						}
-					}
-				}
+				checkInsecurePermissions(tokenFilePath, "Token")
 			}
 		}
 	}
@@ -485,13 +479,7 @@ func LoadClientConfig(path string) (*ClientConfig, error) {
 			for _, p := range paths {
 				if val, parseErr := parseSecretsFile(p); parseErr == nil && val != "" {
 					cfg.AuthToken = val
-					if runtime.GOOS != "windows" {
-						if info, err := os.Stat(p); err == nil {
-							if info.Mode().Perm()&0077 != 0 {
-								fmt.Fprintf(os.Stderr, "Warning: Secrets file %s has insecure permissions %04o. For security, run 'chmod 600 %s'\n", p, info.Mode().Perm(), p)
-							}
-						}
-					}
+					checkInsecurePermissions(p, "Secrets")
 					break
 				}
 			}
@@ -646,4 +634,16 @@ func parseSecretsFile(path string) (string, error) {
 		}
 	}
 	return "", scanner.Err()
+}
+
+// checkInsecurePermissions checks if a file has insecure permissions (0077 mask check) on Unix systems.
+func checkInsecurePermissions(path string, label string) {
+	if runtime.GOOS == "windows" {
+		return
+	}
+	if info, err := os.Stat(path); err == nil {
+		if info.Mode().Perm()&0077 != 0 {
+			fmt.Fprintf(os.Stderr, "Warning: %s file %s has insecure permissions %04o. For security, run 'chmod 600 %s'\n", label, path, info.Mode().Perm(), path)
+		}
+	}
 }

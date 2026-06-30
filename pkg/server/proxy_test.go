@@ -12,7 +12,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/jpillora/chisel/server"
+	chserver "github.com/jpillora/chisel/server"
 )
 
 func TestProxyHandler_Offline(t *testing.T) {

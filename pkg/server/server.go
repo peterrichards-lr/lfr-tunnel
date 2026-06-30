@@ -16,6 +16,7 @@ import (
 	"html/template"
 	"io"
 	"log"
+	"log/slog"
 	"net"
 	"net/http"
 	"net/http/httputil"
@@ -38,7 +39,7 @@ import (
 	"lfr-tunnel/pkg/nginx"
 
 	"github.com/gorilla/websocket"
-	"github.com/jpillora/chisel/server"
+	chserver "github.com/jpillora/chisel/server"
 )
 
 //go:embed dashboard.html
@@ -211,9 +212,9 @@ func NewServer(cfg *config.ServerConfig) (*Server, error) {
 		var err error
 		caCert, caKey, err = LoadOrCreateCA(cfg.ClientCAFile, cfg.ClientCAKeyFile)
 		if err != nil {
-			log.Printf("[Server] Failed to load/create client CA: %v", err)
+			slog.Info(fmt.Sprintf("[Server] Failed to load/create client CA: %v", err))
 		} else {
-			log.Printf("[Server] Loaded Client Root CA from certificate: %s", cfg.ClientCAFile)
+			slog.Info(fmt.Sprintf("[Server] Loaded Client Root CA from certificate: %s", cfg.ClientCAFile))
 		}
 	}
 
@@ -371,7 +372,7 @@ func (s *Server) BackupDatabase() error {
 		return fmt.Errorf("failed to execute SQLite hot online backup: %v", err)
 	}
 
-	log.Printf("[Server] SQLite hot online database backup completed successfully: %s", backupPath)
+	slog.Info(fmt.Sprintf("[Server] SQLite hot online database backup completed successfully: %s", backupPath))
 	return nil
 }
 
@@ -383,7 +384,7 @@ func (s *Server) startDatabaseBackupScheduler() {
 
 		// Execute initial database backup on server startup
 		if err := s.BackupDatabase(); err != nil {
-			log.Printf("[Warning] Initial database startup backup failed: %v", err)
+			slog.Info(fmt.Sprintf("[Warning] Initial database startup backup failed: %v", err))
 		}
 
 		for {
@@ -392,7 +393,7 @@ func (s *Server) startDatabaseBackupScheduler() {
 				return
 			case <-ticker.C:
 				if err := s.BackupDatabase(); err != nil {
-					log.Printf("[Error] Scheduled daily database backup failed: %v", err)
+					slog.Info(fmt.Sprintf("[Error] Scheduled daily database backup failed: %v", err))
 				}
 			}
 		}
@@ -466,7 +467,7 @@ func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 
 			if vCount >= 50 {
 				// Auto-ban!
-				log.Printf("[Defense] Auto-banning IP %s after 50 violations", ip)
+				slog.Info(fmt.Sprintf("[Defense] Auto-banning IP %s after 50 violations", ip))
 				s.blacklist.Store(ip, true)
 				s.BroadcastBlacklistUpdate("add", ip)
 				if s.db != nil {
@@ -1089,7 +1090,7 @@ func (s *Server) handleRegister(w http.ResponseWriter, r *http.Request) {
 						ExpiresAt: s.getUserSubdomainExpiry(user),
 					}
 					if err := s.db.CreateSubdomainReservation(res); err != nil {
-						log.Printf("[Server] Failed to auto-create reservation for custom domain %s: %v", d, err)
+						slog.Info(fmt.Sprintf("[Server] Failed to auto-create reservation for custom domain %s: %v", d, err))
 					}
 				}
 			}
@@ -1205,7 +1206,7 @@ func (s *Server) handleRegister(w http.ResponseWriter, r *http.Request) {
 							ExpiresAt: s.getUserSubdomainExpiry(user),
 						}
 						if err := s.db.CreateSubdomainReservation(res); err != nil {
-							log.Printf("[Server] Failed to auto-create reservation for %s on %s: %v", req.SubdomainPrefix, d, err)
+							slog.Info(fmt.Sprintf("[Server] Failed to auto-create reservation for %s on %s: %v", req.SubdomainPrefix, d, err))
 						}
 					}
 				}
@@ -1229,7 +1230,7 @@ func (s *Server) handleRegister(w http.ResponseWriter, r *http.Request) {
 				}
 				if updated {
 					if err := s.db.UpdateSubdomainReservation(existing); err != nil {
-						log.Printf("[Server] Failed to update access controls on registration: %v", err)
+						slog.Info(fmt.Sprintf("[Server] Failed to update access controls on registration: %v", err))
 					}
 				}
 			}
@@ -1378,7 +1379,7 @@ func (s *Server) handleDomains(w http.ResponseWriter, r *http.Request) {
 	}
 	w.WriteHeader(http.StatusOK)
 	if err := json.NewEncoder(w).Encode(domains); err != nil {
-		log.Printf("[Server] Failed to encode domains response: %v", err)
+		slog.Info(fmt.Sprintf("[Server] Failed to encode domains response: %v", err))
 	}
 }
 
@@ -1404,7 +1405,7 @@ func (s *Server) handleCheckSubdomain(w http.ResponseWriter, r *http.Request) {
 	if !ok || user == nil {
 		w.WriteHeader(http.StatusUnauthorized)
 		if err := json.NewEncoder(w).Encode(map[string]string{"error": "unauthorized"}); err != nil {
-			log.Printf("[Server] Failed to encode unauthorized response: %v", err)
+			slog.Info(fmt.Sprintf("[Server] Failed to encode unauthorized response: %v", err))
 		}
 		return
 	}
@@ -1413,7 +1414,7 @@ func (s *Server) handleCheckSubdomain(w http.ResponseWriter, r *http.Request) {
 	if subdomain == "" {
 		w.WriteHeader(http.StatusBadRequest)
 		if err := json.NewEncoder(w).Encode(map[string]string{"error": "missing subdomain parameter"}); err != nil {
-			log.Printf("[Server] Failed to encode missing subdomain response: %v", err)
+			slog.Info(fmt.Sprintf("[Server] Failed to encode missing subdomain response: %v", err))
 		}
 		return
 	}
@@ -1434,7 +1435,7 @@ func (s *Server) handleCheckSubdomain(w http.ResponseWriter, r *http.Request) {
 
 	w.WriteHeader(http.StatusOK)
 	if err := json.NewEncoder(w).Encode(resp); err != nil {
-		log.Printf("[Server] Failed to encode check subdomain response: %v", err)
+		slog.Info(fmt.Sprintf("[Server] Failed to encode check subdomain response: %v", err))
 	}
 }
 
@@ -1465,7 +1466,7 @@ func (s *Server) Start() error {
 
 	// 1. Start Chisel Server on localhost:8081
 	go func() {
-		log.Println("[Server] Starting internal Chisel tunnel engine on 127.0.0.1:8081...")
+		slog.Info("[Server] Starting internal Chisel tunnel engine on 127.0.0.1:8081...")
 		if err := s.chiselServer.StartContext(s.ctx, "127.0.0.1", "8081"); err != nil {
 			log.Fatalf("[Server] Internal Chisel server crashed: %v", err)
 		}
@@ -1478,8 +1479,8 @@ func (s *Server) Start() error {
 	if s.cfg.SSLCertFile != "" && s.cfg.SSLKeyFile != "" {
 		// HTTP redirect server
 		go func() {
-			log.Printf("[Server] Loaded config: Bind=%s, HTTPBind=%s, Domains=%v, DB=%s",
-				s.cfg.BindAddr, s.cfg.HTTPBindAddr, s.cfg.Domains, s.cfg.DBPath)
+			slog.Info(fmt.Sprintf("[Server] Loaded config: Bind=%s, HTTPBind=%s, Domains=%v, DB=%s",
+				s.cfg.BindAddr, s.cfg.HTTPBindAddr, s.cfg.Domains, s.cfg.DBPath))
 			redirectSrv := &http.Server{
 				Addr: s.cfg.HTTPBindAddr,
 				Handler: http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -1495,7 +1496,7 @@ func (s *Server) Start() error {
 			}
 		}()
 
-		log.Printf("[Server] Starting HTTPS gateway on %s (TLS offloaded)...", s.cfg.BindAddr)
+		slog.Info(fmt.Sprintf("[Server] Starting HTTPS gateway on %s (TLS offloaded)...", s.cfg.BindAddr))
 		srv := &http.Server{
 			Addr:    s.cfg.BindAddr,
 			Handler: s,
@@ -1504,7 +1505,7 @@ func (s *Server) Start() error {
 	}
 
 	// HTTP-only mode
-	log.Printf("[Server] Starting HTTP gateway on %s (TLS disabled)...", s.cfg.HTTPBindAddr)
+	slog.Info(fmt.Sprintf("[Server] Starting HTTP gateway on %s (TLS disabled)...", s.cfg.HTTPBindAddr))
 	srv := &http.Server{
 		Addr:    s.cfg.HTTPBindAddr,
 		Handler: s,
@@ -1669,7 +1670,7 @@ Liferay Tunnel Team`, html.EscapeString(greetingName), verifyURL, clientIP, repo
 		go func() {
 			plainBody := fmt.Sprintf("Hi %s,\n\nPlease complete your registration by visiting: %s\n\nIf you did not request this, you can report it at: %s", greetingName, verifyURL, reportLink)
 			if err := s.notifications.Sender().Send(user.Email, subject, body, plainBody); err != nil {
-				log.Printf("[Mail] Failed to send verification email to %s: %v", user.Email, err)
+				slog.Info(fmt.Sprintf("[Mail] Failed to send verification email to %s: %v", user.Email, err))
 			}
 		}()
 	}
@@ -1682,7 +1683,7 @@ Liferay Tunnel Team`, html.EscapeString(greetingName), verifyURL, clientIP, repo
 func (s *Server) handleSetupPage(w http.ResponseWriter, r *http.Request) {
 	data, err := staticFS.ReadFile("static/setup.html")
 	if err != nil {
-		log.Printf("[Server] Failed to read setup.html from embedded FS: %v", err)
+		slog.Info(fmt.Sprintf("[Server] Failed to read setup.html from embedded FS: %v", err))
 		http.Error(w, "Internal Server Error", http.StatusInternalServerError)
 		return
 	}
@@ -1779,7 +1780,7 @@ func (s *Server) handleCompleteSetup(w http.ResponseWriter, r *http.Request) {
 				"Status":     "Email Verified & Setup Complete",
 			})
 			if err != nil {
-				log.Printf("[Server] Failed to render admin_registration_request template: %v", err)
+				slog.Info(fmt.Sprintf("[Server] Failed to render admin_registration_request template: %v", err))
 				body = fmt.Sprintf("<p>New registration request (Email Verified & Setup Complete):</p><ul><li>Name: %s %s</li><li>Email: %s</li></ul><p><a href=\"%s\">Click here to approve this request</a></p>", user.FirstName, user.LastName, user.Email, approveURL)
 			}
 
@@ -1848,14 +1849,14 @@ func (s *Server) handleVerifyEmail(w http.ResponseWriter, r *http.Request) {
 			"Status":     "Email Verified",
 		})
 		if err != nil {
-			log.Printf("[Server] Failed to render admin_registration_request template: %v", err)
+			slog.Info(fmt.Sprintf("[Server] Failed to render admin_registration_request template: %v", err))
 			body = fmt.Sprintf("<p>New registration request (Email Verified):</p><ul><li>Name: %s %s</li><li>Email: %s</li></ul><p><a href=\"%s\">Click here to approve this request</a></p>", user.FirstName, user.LastName, user.Email, approveURL)
 		}
 
 		go func() {
 			plainBody := fmt.Sprintf("A new user (%s) requires approval. Approve here: %s", user.Email, approveURL)
 			if err := s.notifications.Sender().Send(s.cfg.AdminNotificationEmail, subject, body, plainBody); err != nil {
-				log.Printf("[Server] Failed to send admin alert email: %v", err)
+				slog.Info(fmt.Sprintf("[Server] Failed to send admin alert email: %v", err))
 			}
 		}()
 	}
@@ -1946,7 +1947,7 @@ func (s *Server) handleApproveUser(w http.ResponseWriter, r *http.Request) {
 		body := fmt.Sprintf("<p>Your registration request has been approved!</p><p><a href=\"%s\">Click here to claim your personal access token</a></p><p>Note: this link can only be used once.</p>", claimURL)
 		plainBody := fmt.Sprintf("Your registration has been approved. Claim your token here: %s", claimURL)
 		if err := s.notifications.Sender().Send(user.Email, subject, body, plainBody); err != nil {
-			log.Printf("[Server] Failed to send developer approval email: %v", err)
+			slog.Info(fmt.Sprintf("[Server] Failed to send developer approval email: %v", err))
 		}
 	}
 
@@ -2075,7 +2076,7 @@ func (s *Server) isValidToken(token string) (*db.User, bool) {
 					// Update last used asynchronously
 					go func(patID int64) {
 						if err := s.db.UpdatePATUsed(patID); err != nil {
-							log.Printf("[Server] Failed to update PAT last used time: %v", err)
+							slog.Info(fmt.Sprintf("[Server] Failed to update PAT last used time: %v", err))
 						}
 					}(pat.ID)
 					return user, true
@@ -2109,7 +2110,7 @@ func (s *Server) writeAudit(actorID, action, targetType, targetID string, detail
 	// Run in a goroutine so it doesn't block the HTTP response
 	go func() {
 		if err := s.db.WriteAuditEntry(entry); err != nil {
-			log.Printf("[Server] Failed to write audit log: %v", err)
+			slog.Info(fmt.Sprintf("[Server] Failed to write audit log: %v", err))
 		}
 	}()
 }
@@ -2499,7 +2500,7 @@ func (s *Server) handleAdminMagicLink(w http.ResponseWriter, r *http.Request) {
 			"ReportLink": reportLink,
 		})
 		if err != nil {
-			log.Printf("[Server] Failed to render magic link email template: %v", err)
+			slog.Info(fmt.Sprintf("[Server] Failed to render magic link email template: %v", err))
 			// Hardcoded fallback
 			body = fmt.Sprintf("<p>Hi %s,</p>"+
 				"<p>You requested a magic link to log into the Liferay Tunnel Portal.</p>"+
@@ -2513,7 +2514,7 @@ func (s *Server) handleAdminMagicLink(w http.ResponseWriter, r *http.Request) {
 
 		go s.notifications.Sender().Send(req.Email, subject, body, plainBody) //nolint:errcheck
 	} else {
-		log.Printf("[Admin] Magic Link for %s: /admin?token=%s", req.Email, magicToken)
+		slog.Info(fmt.Sprintf("[Admin] Magic Link for %s: /admin?token=%s", req.Email, magicToken))
 	}
 
 	respondJSON(w, http.StatusOK, map[string]string{"status": "ok"})
@@ -2896,7 +2897,7 @@ func (s *Server) handleAdminInviteUser(w http.ResponseWriter, r *http.Request, a
 		"DeclineLink": declineLink,
 	})
 	if err != nil {
-		log.Printf("[Server] Failed to render invitation email template: %v", err)
+		slog.Info(fmt.Sprintf("[Server] Failed to render invitation email template: %v", err))
 		// Hardcoded fallback
 		body = fmt.Sprintf(`Hi there,
 
@@ -3020,7 +3021,7 @@ func (s *Server) handleLocalBroadcast(w http.ResponseWriter, r *http.Request) {
 					s.registry.KickLease(lease.SubdomainPrefix)
 				}
 			}
-			log.Printf("[Server] Local-triggered Scheduled Soft Maintenance countdown hit 0. Soft Maintenance Mode is now ACTIVE.")
+			slog.Info("[Server] Local-triggered Scheduled Soft Maintenance countdown hit 0. Soft Maintenance Mode is now ACTIVE.")
 			go s.BroadcastTelemetry()
 		})
 		s.maintMutex.Unlock()
@@ -3101,7 +3102,7 @@ func (s *Server) handleAdminMaintenance(w http.ResponseWriter, r *http.Request, 
 			if err == nil {
 				s.nginxManager.Enable(req.Action, req.Reason, req.Duration, s.maintEndTime, string(templateBytes))
 			} else {
-				log.Printf("[Server] Failed to load maintenance template: %v", err)
+				slog.Info(fmt.Sprintf("[Server] Failed to load maintenance template: %v", err))
 			}
 
 			action = "system.nginx_maintenance_enabled"
@@ -3144,7 +3145,7 @@ func (s *Server) handleAdminMaintenance(w http.ResponseWriter, r *http.Request, 
 							s.registry.KickLease(lease.SubdomainPrefix)
 						}
 					}
-					log.Printf("[Server] Scheduled Soft Maintenance countdown hit 0. Soft Maintenance Mode is now ACTIVE.")
+					slog.Info("[Server] Scheduled Soft Maintenance countdown hit 0. Soft Maintenance Mode is now ACTIVE.")
 					go s.BroadcastTelemetry()
 				})
 
@@ -3936,7 +3937,7 @@ func (s *Server) handleAdminSettings(w http.ResponseWriter, r *http.Request, act
 			// Validate keys to prevent spamming db
 			if key == "alert_notify_registration" || key == "alert_notify_blacklist" || key == "alert_notify_tunnel_offline" {
 				if err := s.db.SetAdminSetting(key, value); err != nil {
-					log.Printf("[Admin] Failed to save setting %s: %v", key, err)
+					slog.Info(fmt.Sprintf("[Admin] Failed to save setting %s: %v", key, err))
 				}
 			}
 		}
@@ -3957,7 +3958,7 @@ func respondJSON(w http.ResponseWriter, status int, payload interface{}) {
 	w.Header().Set("Expires", "0")
 	w.WriteHeader(status)
 	if err := json.NewEncoder(w).Encode(payload); err != nil {
-		log.Printf("[Server] Failed to encode JSON response: %v", err)
+		slog.Info(fmt.Sprintf("[Server] Failed to encode JSON response: %v", err))
 	}
 }
 
@@ -4057,7 +4058,7 @@ func (s *Server) handlePrivacyFallback(w http.ResponseWriter, r *http.Request) {
 		"Title": title,
 	})
 	if err != nil {
-		log.Printf("[Server] Failed to render privacy policy template: %v", err)
+		slog.Info(fmt.Sprintf("[Server] Failed to render privacy policy template: %v", err))
 		// Hardcoded basic fallback
 		_, _ = w.Write([]byte(`<html><body><h1>Privacy Policy</h1><p>Under maintenance.</p></body></html>`))
 		return
@@ -4081,7 +4082,7 @@ func (s *Server) handleCookiesFallback(w http.ResponseWriter, r *http.Request) {
 		"Title": title,
 	})
 	if err != nil {
-		log.Printf("[Server] Failed to render cookie disclosure template: %v", err)
+		slog.Info(fmt.Sprintf("[Server] Failed to render cookie disclosure template: %v", err))
 		// Hardcoded basic fallback
 		_, _ = w.Write([]byte(`<html><body><h1>Cookie Disclosure</h1><p>Under maintenance.</p></body></html>`))
 		return
@@ -4351,13 +4352,13 @@ func (s *Server) notifyControlPlaneDeregister(userID, subdomain string) {
 
 	resp, err := client.Do(req)
 	if err != nil {
-		log.Printf("[Server Edge] Failed to notify control plane deregister: %v", err)
+		slog.Info(fmt.Sprintf("[Server Edge] Failed to notify control plane deregister: %v", err))
 		return
 	}
 	defer resp.Body.Close() //nolint:errcheck
 
 	if resp.StatusCode != http.StatusOK {
-		log.Printf("[Server Edge] Control plane deregister returned status: %d", resp.StatusCode)
+		slog.Info(fmt.Sprintf("[Server Edge] Control plane deregister returned status: %d", resp.StatusCode))
 	}
 }
 
@@ -4721,7 +4722,7 @@ func (s *Server) forwardAuditToControlPlane(actorID, action, targetType, targetI
 
 	resp, err := client.Do(req)
 	if err != nil {
-		log.Printf("[Server Edge] Failed to forward audit log to control plane: %v", err)
+		slog.Info(fmt.Sprintf("[Server Edge] Failed to forward audit log to control plane: %v", err))
 		return
 	}
 	defer resp.Body.Close() //nolint:errcheck
@@ -4774,7 +4775,7 @@ func (s *Server) handleEdgeAuditLog(w http.ResponseWriter, r *http.Request) {
 			IPAddress:  edgeReq.IPAddress,
 		}
 		if err := s.db.WriteAuditEntry(entry); err != nil {
-			log.Printf("[Server Control] Failed to write forwarded audit entry: %v", err)
+			slog.Info(fmt.Sprintf("[Server Control] Failed to write forwarded audit entry: %v", err))
 		}
 	}
 
@@ -4816,7 +4817,7 @@ func (s *Server) handleEdgeMetrics(w http.ResponseWriter, r *http.Request) {
 		for _, m := range edgeMetrics {
 			m.NodeID = edgeNodeID
 			if err := s.db.RecordTunnelMetric(&m); err != nil {
-				log.Printf("[Server Control] Failed to write forwarded metric: %v", err)
+				slog.Info(fmt.Sprintf("[Server Control] Failed to write forwarded metric: %v", err))
 			}
 		}
 	}
@@ -5059,13 +5060,13 @@ func (s *Server) runVanityDomainHook(action, domain string) {
 	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Minute)
 	defer cancel()
 
-	log.Printf("[Server] Executing vanity domain hook: %s %s %s", s.cfg.VanityDomainHook, action, domain)
+	slog.Info(fmt.Sprintf("[Server] Executing vanity domain hook: %s %s %s", s.cfg.VanityDomainHook, action, domain))
 	cmd := exec.CommandContext(ctx, s.cfg.VanityDomainHook, action, domain)
 	output, err := cmd.CombinedOutput()
 	if err != nil {
-		log.Printf("[Server] Vanity domain hook error running %s for %s: %v. Output: %s", action, domain, err, string(output))
+		slog.Info(fmt.Sprintf("[Server] Vanity domain hook error running %s for %s: %v. Output: %s", action, domain, err, string(output)))
 	} else {
-		log.Printf("[Server] Vanity domain hook ran successfully for %s %s", action, domain)
+		slog.Info(fmt.Sprintf("[Server] Vanity domain hook ran successfully for %s %s", action, domain))
 	}
 }
 
@@ -5081,14 +5082,14 @@ func (s *Server) checkExpiringReservations() {
 
 	expiring, err := s.db.GetExpiringSubdomainReservations(now, warningThreshold)
 	if err != nil {
-		log.Printf("[Server] Failed to fetch expiring subdomain reservations: %v", err)
+		slog.Info(fmt.Sprintf("[Server] Failed to fetch expiring subdomain reservations: %v", err))
 		return
 	}
 
 	for _, res := range expiring {
 		user, err := s.db.GetUser(res.UserID)
 		if err != nil {
-			log.Printf("[Server] Failed to retrieve user %s for expiring reservation: %v", res.UserID, err)
+			slog.Info(fmt.Sprintf("[Server] Failed to retrieve user %s for expiring reservation: %v", res.UserID, err))
 			continue
 		}
 
@@ -5113,7 +5114,7 @@ func (s *Server) checkExpiringReservations() {
 				"PortalLink": portalLink,
 			})
 			if err != nil {
-				log.Printf("[Server] Failed to render subdomain_expired email template: %v", err)
+				slog.Info(fmt.Sprintf("[Server] Failed to render subdomain_expired email template: %v", err))
 				body = fmt.Sprintf("<p>Hi %s,</p>"+
 					"<p>Your subdomain reservation <strong>%s.%s</strong> has expired and entered a %d-day quarantine period.</p>"+
 					"<p>If you take no action, it will be released to the public pool on <strong>%s</strong>.</p>"+
@@ -5131,13 +5132,13 @@ func (s *Server) checkExpiringReservations() {
 			}
 
 			if err := s.notifications.Sender().Send(user.Email, subject, body, plainBody); err != nil {
-				log.Printf("[Server] Failed to send subdomain expired email to %s: %v", user.Email, err)
+				slog.Info(fmt.Sprintf("[Server] Failed to send subdomain expired email to %s: %v", user.Email, err))
 				continue
 			}
 
 			res.ExpiryWarningSent = 2
 			if err := s.db.UpdateSubdomainReservation(res); err != nil {
-				log.Printf("[Server] Failed to update expiry warning state for reservation %d: %v", res.ID, err)
+				slog.Info(fmt.Sprintf("[Server] Failed to update expiry warning state for reservation %d: %v", res.ID, err))
 			}
 		} else if res.ExpiresAt != nil {
 			// Stage 1: Expiring soon (< 48 hours remaining)
@@ -5151,7 +5152,7 @@ func (s *Server) checkExpiringReservations() {
 				"PortalLink": portalLink,
 			})
 			if err != nil {
-				log.Printf("[Server] Failed to render subdomain_expiring email template: %v", err)
+				slog.Info(fmt.Sprintf("[Server] Failed to render subdomain_expiring email template: %v", err))
 				body = fmt.Sprintf("<p>Hi %s,</p>"+
 					"<p>Your subdomain reservation <strong>%s.%s</strong> is expiring soon on <strong>%s</strong>.</p>"+
 					"<p>To avoid service disruption, please renew your reservation or request an extension in the Liferay Tunnel Portal.</p>"+
@@ -5169,13 +5170,13 @@ func (s *Server) checkExpiringReservations() {
 			}
 
 			if err := s.notifications.Sender().Send(user.Email, subject, body, plainBody); err != nil {
-				log.Printf("[Server] Failed to send subdomain expiring email to %s: %v", user.Email, err)
+				slog.Info(fmt.Sprintf("[Server] Failed to send subdomain expiring email to %s: %v", user.Email, err))
 				continue
 			}
 
 			res.ExpiryWarningSent = 1
 			if err := s.db.UpdateSubdomainReservation(res); err != nil {
-				log.Printf("[Server] Failed to update expiry warning state for reservation %d: %v", res.ID, err)
+				slog.Info(fmt.Sprintf("[Server] Failed to update expiry warning state for reservation %d: %v", res.ID, err))
 			}
 		}
 	}

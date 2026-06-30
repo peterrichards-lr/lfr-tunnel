@@ -31,7 +31,7 @@
     {
       "title": "Integrate structured logger using log/slog",
       "body": "### Problem\nThe codebase uses standard `log.Print` / `log.Printf` logging, which lacks level filtering (debug/info/warn/error) and structured formats (like JSON).\n\n\n### Plan\n1. Introduce standard `log/slog` structured logging throughout the codebase.\n2. Enable configurable log formatting (JSON in production, text/colors in dev) and level filtering.",
-      "completed": false,
+      "completed": true,
       "labels": ["enhancement"]
     }
   ]

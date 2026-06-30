@@ -1,5 +1,5 @@
 {
-  "version": "v1.23.6",
+  "version": "v1.24.0",
   "release_date": "2026-06-29",
   "features": [
     "Introduce interactive dashboard onboarding tour (Driver.js) with i18n support (#268)",

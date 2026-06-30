@@ -5,12 +5,11 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"github.com/jpillora/chisel/client"
-	"gopkg.in/yaml.v3"
 	"io"
 	"io/fs"
 	"lfr-tunnel/pkg/config"
 	"log"
+	"log/slog"
 	"net"
 	"net/http"
 	"net/url"
@@ -22,6 +21,9 @@ import (
 	"strings"
 	"time"
 	"unsafe"
+
+	chclient "github.com/jpillora/chisel/client"
+	"gopkg.in/yaml.v3"
 )
 
 // PortMapping matches the server DTO for port allocations.
@@ -135,7 +137,7 @@ func DetectWorkspacePorts(rootDir string) ([]PortMapping, error) {
 							LocalPort:  port,
 							NameSuffix: extKey,
 						})
-						log.Printf("[Client] Detected Liferay Client Extension port %d from: %s", port, path)
+						slog.Info(fmt.Sprintf("[Client] Detected Liferay Client Extension port %d from: %s", port, path))
 					}
 				}
 			}
@@ -234,9 +236,9 @@ func RunClient(ctx context.Context, serverURL string, token string, remotes []st
 	redirectChiselLogger(c, engine)
 
 	// Log client status
-	log.Printf("[Client] Establised lease. Connecting tunnels to %s...", serverURL)
+	slog.Info(fmt.Sprintf("[Client] Establised lease. Connecting tunnels to %s...", serverURL))
 	for _, remote := range remotes {
-		log.Printf("[Client] Forwarding remote port: %s", remote)
+		slog.Info(fmt.Sprintf("[Client] Forwarding remote port: %s", remote))
 	}
 
 	// Start background latency tracker
@@ -295,13 +297,13 @@ func RunClient(ctx context.Context, serverURL string, token string, remotes []st
 	go func() {
 		time.Sleep(500 * time.Millisecond)
 		if ctx.Err() == nil {
-			log.Println("[Client] ========================================================")
-			log.Println("[Client] Tunnel is active and fully online!")
-			log.Println("[Client] You can access your local environment at:")
+			slog.Info("[Client] ========================================================")
+			slog.Info("[Client] Tunnel is active and fully online!")
+			slog.Info("[Client] You can access your local environment at:")
 			for _, u := range publicURLs {
-				log.Printf("  %s", u)
+				slog.Info(fmt.Sprintf("  %s", u))
 			}
-			log.Println("[Client] ========================================================")
+			slog.Info("[Client] ========================================================")
 		}
 	}()
 

@@ -4,7 +4,8 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
-	"log"
+	"fmt"
+	"log/slog"
 	"net/http"
 	"sync/atomic"
 	"time"
@@ -36,7 +37,7 @@ func (c *MetricsCollector) Queue(m *db.TunnelMetric) {
 	select {
 	case c.queue <- m:
 	default:
-		log.Printf("[MetricsCollector] Queue full; dropping metric for %s", m.FullHost)
+		slog.Info(fmt.Sprintf("[MetricsCollector] Queue full; dropping metric for %s", m.FullHost))
 	}
 }
 
@@ -54,7 +55,7 @@ func (c *MetricsCollector) Start(ctx context.Context) {
 		case m := <-c.queue:
 			if c.db != nil {
 				if err := c.db.RecordTunnelMetric(m); err != nil {
-					log.Printf("[MetricsCollector] Failed to record tunnel metrics for %s: %v", m.FullHost, err)
+					slog.Info(fmt.Sprintf("[MetricsCollector] Failed to record tunnel metrics for %s: %v", m.FullHost, err))
 				}
 			} else if c.cfg.ControlPlaneURL != "" && c.cfg.EdgeToken != "" {
 				localBuffer = append(localBuffer, m)
@@ -79,7 +80,7 @@ func (c *MetricsCollector) Start(ctx context.Context) {
 					}
 					if c.db != nil {
 						if err := c.db.RecordTunnelMetric(m); err != nil {
-							log.Printf("[MetricsCollector] Failed to periodically record tunnel metrics for %s: %v", m.FullHost, err)
+							slog.Info(fmt.Sprintf("[MetricsCollector] Failed to periodically record tunnel metrics for %s: %v", m.FullHost, err))
 						} else {
 							lease.LastBytesIn = bytesIn
 							lease.LastBytesOut = bytesOut
@@ -104,13 +105,13 @@ func (c *MetricsCollector) forwardToControlPlane(metrics []*db.TunnelMetric) {
 	client := &http.Client{Timeout: 5 * time.Second}
 	payloadBytes, err := json.Marshal(metrics)
 	if err != nil {
-		log.Printf("[MetricsCollector] Failed to marshal metrics: %v", err)
+		slog.Info(fmt.Sprintf("[MetricsCollector] Failed to marshal metrics: %v", err))
 		return
 	}
 
 	req, err := http.NewRequest("POST", c.cfg.ControlPlaneURL+"/api/internal/edge-metrics", bytes.NewReader(payloadBytes))
 	if err != nil {
-		log.Printf("[MetricsCollector] Failed to create metrics request: %v", err)
+		slog.Info(fmt.Sprintf("[MetricsCollector] Failed to create metrics request: %v", err))
 		return
 	}
 	req.Header.Set("Content-Type", "application/json")
@@ -118,12 +119,12 @@ func (c *MetricsCollector) forwardToControlPlane(metrics []*db.TunnelMetric) {
 
 	resp, err := client.Do(req)
 	if err != nil {
-		log.Printf("[MetricsCollector] Failed to forward metrics to control plane: %v", err)
+		slog.Info(fmt.Sprintf("[MetricsCollector] Failed to forward metrics to control plane: %v", err))
 		return
 	}
 	defer resp.Body.Close() //nolint:errcheck
 
 	if resp.StatusCode != http.StatusOK {
-		log.Printf("[MetricsCollector] Control plane metrics returned status: %d", resp.StatusCode)
+		slog.Info(fmt.Sprintf("[MetricsCollector] Control plane metrics returned status: %d", resp.StatusCode))
 	}
 }

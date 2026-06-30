@@ -4,7 +4,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/jpillora/chisel/server"
+	chserver "github.com/jpillora/chisel/server"
 )
 
 func TestRegistryRegister(t *testing.T) {

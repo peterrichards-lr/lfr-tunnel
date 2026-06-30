@@ -1,7 +1,8 @@
 package server
 
 import (
-	"log"
+	"fmt"
+	"log/slog"
 
 	"lfr-tunnel/pkg/config"
 	"lfr-tunnel/pkg/db"
@@ -37,7 +38,7 @@ func (n *NotificationService) SendAdminAlert(settingKey, subject, htmlBody strin
 
 	val, err := n.db.GetAdminSetting(settingKey)
 	if err != nil {
-		log.Printf("[Warning] Failed to fetch admin setting %s: %v", settingKey, err)
+		slog.Info(fmt.Sprintf("[Warning] Failed to fetch admin setting %s: %v", settingKey, err))
 		return
 	}
 
@@ -58,7 +59,7 @@ func (n *NotificationService) SendAdminAlert(settingKey, subject, htmlBody strin
 
 	go func() {
 		if err := n.sender.Send(n.cfg.AdminNotificationEmail, subject, htmlBody, "An alert has been triggered."); err != nil {
-			log.Printf("[Mail] Failed to send admin alert %s: %v", settingKey, err)
+			slog.Info(fmt.Sprintf("[Mail] Failed to send admin alert %s: %v", settingKey, err))
 		}
 	}()
 }

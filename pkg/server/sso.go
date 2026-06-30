@@ -4,7 +4,8 @@ import (
 	"context"
 	"crypto/rand"
 	"encoding/base64"
-	"log"
+	"fmt"
+	"log/slog"
 	"net/http"
 	"strings"
 	"time"
@@ -66,7 +67,7 @@ func (s *Server) handleSSOLogin(w http.ResponseWriter, r *http.Request) {
 
 	_, oauth2Config, _, err := getOIDCConfig(s.cfg, providerID, r)
 	if err != nil {
-		log.Printf("[SSO] Config error: %v", err)
+		slog.Info(fmt.Sprintf("[SSO] Config error: %v", err))
 		http.Error(w, `{"error":"Invalid provider configuration"}`, http.StatusInternalServerError)
 		return
 	}
@@ -184,14 +185,14 @@ func (s *Server) handleSSOCallback(w http.ResponseWriter, r *http.Request) {
 			user.Role = "admin"
 		}
 		if err := s.db.CreateUser(user); err != nil {
-			log.Printf("[SSO] Failed to create user %s: %v", email, err)
+			slog.Info(fmt.Sprintf("[SSO] Failed to create user %s: %v", email, err))
 			http.Error(w, "Failed to create user", http.StatusInternalServerError)
 			return
 		}
 	} else if user.Status != "approved" {
 		user.Status = "approved"
 		if err := s.db.UpdateUser(user); err != nil {
-			log.Printf("Failed to update user tokens after SSO login: %v", err)
+			slog.Info(fmt.Sprintf("Failed to update user tokens after SSO login: %v", err))
 		}
 	}
 

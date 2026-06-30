@@ -13,7 +13,7 @@ import (
 	"io"
 	"lfr-tunnel/pkg/config"
 	"lfr-tunnel/pkg/db"
-	"log"
+	"log/slog"
 	"net"
 	"net/http"
 	"net/http/httputil"
@@ -103,7 +103,7 @@ func (p *ProxyHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	if p.config != nil && p.config.EnableWAF {
 		if blocked, category, reason := IsMaliciousRequest(r); blocked {
 			clientIP := getClientIP(r)
-			log.Printf("[WAF] Blocked malicious request on %s from IP %s. Category: %s, Reason: %s", host, clientIP, category, reason)
+			slog.Info(fmt.Sprintf("[WAF] Blocked malicious request on %s from IP %s. Category: %s, Reason: %s", host, clientIP, category, reason))
 			p.serveBlockedPage(w, r, host, category, reason, clientIP)
 			return
 		}
@@ -157,7 +157,7 @@ func (p *ProxyHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 			lease.VisitorIPsMu.Unlock()
 
 			// Log the proxied request visitor IP
-			log.Printf("[Proxy] Routing request on %s from visitor IP %s", host, clientIP)
+			slog.Info(fmt.Sprintf("[Proxy] Routing request on %s from visitor IP %s", host, clientIP))
 
 			// Determine protocol
 			proto := "http"
@@ -183,7 +183,7 @@ func (p *ProxyHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 			lease:        lease,
 		},
 		ErrorHandler: func(w http.ResponseWriter, req *http.Request, err error) {
-			log.Printf("[Proxy] Routing failure to %s (127.0.0.1:%d): %v", host, lease.LocalPort, err)
+			slog.Info(fmt.Sprintf("[Proxy] Routing failure to %s (127.0.0.1:%d): %v", host, lease.LocalPort, err))
 			p.serveOfflinePage(w, req, host, err.Error())
 		},
 	}
@@ -200,7 +200,7 @@ func (p *ProxyHandler) serveOfflinePage(w http.ResponseWriter, r *http.Request, 
 	// Replace placeholder host in embedded HTML
 	pageBytes := bytes.ReplaceAll(offlineHTML, []byte("loading..."), []byte(host))
 	if _, err := w.Write(pageBytes); err != nil {
-		log.Printf("[Proxy] Failed to write offline page: %v", err)
+		slog.Info(fmt.Sprintf("[Proxy] Failed to write offline page: %v", err))
 	}
 }
 
@@ -220,7 +220,7 @@ func (p *ProxyHandler) serveBlockedPage(w http.ResponseWriter, r *http.Request, 
 	tmpl = strings.ReplaceAll(tmpl, "{{.TxID}}", txID)
 
 	if _, err := w.Write([]byte(tmpl)); err != nil {
-		log.Printf("[Proxy] Failed to write WAF blocked page: %v", err)
+		slog.Info(fmt.Sprintf("[Proxy] Failed to write WAF blocked page: %v", err))
 	}
 }
 
@@ -327,7 +327,7 @@ func (p *ProxyHandler) servePasscodePage(w http.ResponseWriter, r *http.Request,
 	}
 
 	if _, err := w.Write([]byte(tmpl)); err != nil {
-		log.Printf("[Proxy] Failed to write passcode page: %v", err)
+		slog.Info(fmt.Sprintf("[Proxy] Failed to write passcode page: %v", err))
 	}
 }
 
@@ -340,7 +340,7 @@ func (p *ProxyHandler) serveUnauthorizedIPPage(w http.ResponseWriter, r *http.Re
 	tmpl = strings.ReplaceAll(tmpl, "{{.IP}}", ip)
 
 	if _, err := w.Write([]byte(tmpl)); err != nil {
-		log.Printf("[Proxy] Failed to write unauthorized IP page: %v", err)
+		slog.Info(fmt.Sprintf("[Proxy] Failed to write unauthorized IP page: %v", err))
 	}
 }
 

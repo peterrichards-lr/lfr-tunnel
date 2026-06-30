@@ -8,7 +8,7 @@ import (
 	"fmt"
 	"html"
 	"io"
-	"log"
+	"log/slog"
 	"net/http"
 	"net/url"
 	"path"
@@ -265,7 +265,7 @@ func (s *Server) handleCreateToken(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if err := s.db.CreatePAT(pat); err != nil {
-		log.Printf("[API] Failed to save PAT: %v", err)
+		slog.Info(fmt.Sprintf("[API] Failed to save PAT: %v", err))
 		http.Error(w, `{"error":"Failed to create token"}`, http.StatusInternalServerError)
 		return
 	}
@@ -345,14 +345,14 @@ func (s *Server) handleDeleteToken(w http.ResponseWriter, r *http.Request) {
 // handleGetAnalytics returns analytics data for the authenticated user and globally if admin.
 func (s *Server) handleGetAnalytics(w http.ResponseWriter, r *http.Request) {
 	if s.db == nil {
-		log.Printf("handleGetAnalytics: db is nil")
+		slog.Info("handleGetAnalytics: db is nil")
 		http.Error(w, `{"error":"Database not enabled"}`, http.StatusNotImplemented)
 		return
 	}
 
 	user, err := s.getCurrentUser(r)
 	if err != nil {
-		log.Printf("handleGetAnalytics: getCurrentUser failed: %v", err)
+		slog.Info(fmt.Sprintf("handleGetAnalytics: getCurrentUser failed: %v", err))
 		http.Error(w, `{"error":"Unauthorized"}`, http.StatusUnauthorized)
 		return
 	}
@@ -360,11 +360,11 @@ func (s *Server) handleGetAnalytics(w http.ResponseWriter, r *http.Request) {
 	days := 30
 	isAdmin := user.Role == "admin" || user.Role == "owner"
 
-	log.Printf("handleGetAnalytics: user=%s, role=%s, isAdmin=%v", user.Email, user.Role, isAdmin)
+	slog.Info(fmt.Sprintf("handleGetAnalytics: user=%s, role=%s, isAdmin=%v", user.Email, user.Role, isAdmin))
 
 	userStats, err := s.db.GetUserAnalytics(user.ID, days)
 	if err != nil {
-		log.Printf("handleGetAnalytics: GetUserAnalytics failed: %v", err)
+		slog.Info(fmt.Sprintf("handleGetAnalytics: GetUserAnalytics failed: %v", err))
 		http.Error(w, `{"error":"Failed to fetch user analytics"}`, http.StatusInternalServerError)
 		return
 	}
@@ -376,11 +376,11 @@ func (s *Server) handleGetAnalytics(w http.ResponseWriter, r *http.Request) {
 	if isAdmin {
 		globalStats, err := s.db.GetGlobalAnalytics(days)
 		if err != nil {
-			log.Printf("handleGetAnalytics: GetGlobalAnalytics failed: %v", err)
+			slog.Info(fmt.Sprintf("handleGetAnalytics: GetGlobalAnalytics failed: %v", err))
 			http.Error(w, `{"error":"Failed to fetch global analytics"}`, http.StatusInternalServerError)
 			return
 		}
-		log.Printf("handleGetAnalytics: globalStats loaded successfully (TopUsers: %d, Daily: %d)", len(globalStats.TopUsers), len(globalStats.Daily))
+		slog.Info(fmt.Sprintf("handleGetAnalytics: globalStats loaded successfully (TopUsers: %d, Daily: %d)", len(globalStats.TopUsers), len(globalStats.Daily)))
 		resp["global"] = globalStats
 	}
 
@@ -698,7 +698,7 @@ func (s *Server) sendSubdomainReservedEmail(user *db.User, subdomain, domain str
 		"PortalLink": portalLink,
 	})
 	if err != nil {
-		log.Printf("[Server] Failed to render subdomain_reserved email: %v", err)
+		slog.Info(fmt.Sprintf("[Server] Failed to render subdomain_reserved email: %v", err))
 		return
 	}
 	subject := fmt.Sprintf("Subdomain Reserved: %s.%s", subdomain, domain)
@@ -731,7 +731,7 @@ func (s *Server) sendExtensionApprovedEmail(user *db.User, subdomain, domain str
 		"PortalLink":  portalLink,
 	})
 	if err != nil {
-		log.Printf("[Server] Failed to render extension_approved email: %v", err)
+		slog.Info(fmt.Sprintf("[Server] Failed to render extension_approved email: %v", err))
 		return
 	}
 	subject := fmt.Sprintf("Extension Approved: %s.%s", subdomain, domain)
@@ -761,7 +761,7 @@ func (s *Server) sendSubdomainDemotedEmail(user *db.User, subdomain, domain stri
 		"PortalLink": portalLink,
 	})
 	if err != nil {
-		log.Printf("[Server] Failed to render subdomain_demoted email: %v", err)
+		slog.Info(fmt.Sprintf("[Server] Failed to render subdomain_demoted email: %v", err))
 		return
 	}
 	subject := fmt.Sprintf("Subdomain Demoted: %s.%s", subdomain, domain)
@@ -1281,7 +1281,7 @@ func (s *Server) handleClaimInvitation(w http.ResponseWriter, r *http.Request) {
 				return
 			}
 		}
-		log.Printf("[API] Failed to claim invitation: %v", err)
+		slog.Info(fmt.Sprintf("[API] Failed to claim invitation: %v", err))
 		http.Error(w, "Failed to sign client certificate or database error", http.StatusInternalServerError)
 		return
 	}
@@ -1335,7 +1335,7 @@ func (s *Server) handleCSRSignInvitation(w http.ResponseWriter, r *http.Request)
 				return
 			}
 		}
-		log.Printf("[API] Failed to sign CSR: %v", err)
+		slog.Info(fmt.Sprintf("[API] Failed to sign CSR: %v", err))
 		http.Error(w, fmt.Sprintf("Failed to sign CSR or database error: %v", err), http.StatusInternalServerError)
 		return
 	}
@@ -1460,7 +1460,7 @@ func (s *Server) handleEdgeAction(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if err != nil {
-		log.Printf("[API] Failed to perform edge action %s on %s: %v", req.Action, req.NodeID, err)
+		slog.Info(fmt.Sprintf("[API] Failed to perform edge action %s on %s: %v", req.Action, req.NodeID, err))
 		respondJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
 		return
 	}

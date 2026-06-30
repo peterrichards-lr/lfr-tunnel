@@ -4,7 +4,7 @@ import (
 	"crypto/rand"
 	"encoding/hex"
 	"fmt"
-	"log"
+	"log/slog"
 	"net"
 	"regexp"
 	"strings"
@@ -12,7 +12,7 @@ import (
 	"sync/atomic"
 	"time"
 
-	"github.com/jpillora/chisel/server"
+	chserver "github.com/jpillora/chisel/server"
 )
 
 // PortMapping defines a local-to-remote port mapping request.
@@ -388,7 +388,7 @@ func (r *Registry) CleanLease(sessionToken string) {
 		}
 		delete(r.leases, lease.FullHost)
 		delete(r.usedPorts, lease.LocalPort)
-		log.Printf("[Server] Cleaned up lease for host %s (local port %d)", lease.FullHost, lease.LocalPort)
+		slog.Info(fmt.Sprintf("[Server] Cleaned up lease for host %s (local port %d)", lease.FullHost, lease.LocalPort))
 	}
 
 	delete(r.sessionLeases, sessionToken)
@@ -438,7 +438,7 @@ func (r *Registry) cleanupOrphanLeases() {
 		conn, err := net.DialTimeout("tcp", address, 50*time.Millisecond)
 		if err != nil {
 			// TCP port is not listening. The tunnel has disconnected!
-			log.Printf("[Server] Tunnel session %s appears offline, cleaning up...", token)
+			slog.Info(fmt.Sprintf("[Server] Tunnel session %s appears offline, cleaning up...", token))
 			r.CleanLease(token)
 		} else {
 			conn.Close() //nolint:errcheck

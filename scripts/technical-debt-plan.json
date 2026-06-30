@@ -19,7 +19,7 @@
     {
       "title": "Decouple REST endpoint logic from API routing in pkg/server/api.go",
       "body": "### Problem\nAPI handler routines inside `pkg/server/api.go` mix request body mapping, parameters validation, database calls, email delivery trigger, and HTTP header writes.\n\n### Plan\n1. Separate HTTP routing and JSON serialization from core business logic rules.\n2. Introduce service interfaces/routines to handle business validation and DB orchestration independently from HTTP contexts.",
-      "completed": false,
+      "completed": true,
       "labels": ["enhancement"]
     },
     {

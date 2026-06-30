@@ -13,7 +13,7 @@
     {
       "title": "Isolate database logic and SQL operations in pkg/db/db.go",
       "body": "### Problem\nMigrations, schema declarations, and raw SQLite query routines are all coupled directly inside `pkg/db/db.go`.\n\n### Plan\n1. Introduce a Repository Pattern defining interfaces (e.g. `UserRepository`, `SubdomainRepository`).\n2. Implement these interfaces using SQLite specific database handlers.\n3. Move migrations and schema statements to independent files or a sub-folder `pkg/db/migrations/`.",
-      "completed": false,
+      "completed": true,
       "labels": ["enhancement"]
     },
     {

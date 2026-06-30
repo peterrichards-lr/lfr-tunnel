@@ -1,9 +1,29 @@
-# Liferay Tunnel Project Rules
+# GitHub Issue Sync Workflow Rules
 
-These are workspace-specific rules that apply to the development of the Liferay Tunnel project.
+When planning or implementing new features, you must use the automated JSON-driven issue sync tool located at `scripts/gh-issue-sync.cjs` to synchronize your task checklist with the GitHub issue tracker.
 
-## GitHub Issue & PR Linking
-1. **Always Link PRs to Issues**: Every Pull Request (PR) must be linked to its corresponding GitHub issue. You must explicitly include `Closes #<issue-id>` or `Fixes #<issue-id>` in the PR description so that GitHub links the PR and branch to the issue and closes it automatically upon squash merge.
-2. **Commit References**: All commit messages must reference the issue number suffix (e.g., `feat: access control enhancements (#173)`) to maintain a clean git history and link the commits to the issue.
-3. **No Direct Master Pushes**: Direct pushes to the `master` branch are strictly prohibited. All changes must be developed on a branch, verified with unit tests and lint checks, and merged via a Pull Request.
-4. **No Admin Bypass of Branch Protection**: Do NOT use `--admin` flags (e.g., in `gh pr merge --admin`) or any other administrative privileges to bypass branch protection rules or CI/CD checks. You must wait for all required status checks to pass and for explicit approval/merge actions from the user. Rules must be followed to the letter without exception.
+## 1. Tool Setup & Location
+- Script: `scripts/gh-issue-sync.cjs` (executable Node.js script)
+- Sample Config: `scripts/issues.sample.json`
+
+## 2. Issue Tracking Workflow
+Before writing code for any feature or logic change:
+1. **Plan & Draft**: Create a temporary JSON file (e.g., `scripts/feature-xyz-plan.json`) containing the Epic description and target sub-issues. Follow the schema defined in `scripts/issues.sample.json`.
+2. **Dry Run**: Preview the CLI commands that will run:
+   ```bash
+   node scripts/gh-issue-sync.cjs scripts/feature-xyz-plan.json --dry-run
+   ```
+3. **Apply & Link**: Generate the Epic and sub-issues on GitHub:
+   ```bash
+   node scripts/gh-issue-sync.cjs scripts/feature-xyz-plan.json
+   ```
+   *Note: The script automatically links all sub-issues to the parent Epic.*
+
+## 3. Resolving and Closing Tasks
+As you complete individual sub-issues:
+1. Update the target JSON file, changing the sub-issue's `"completed"` property to `true`.
+2. Execute the sync utility again:
+   ```bash
+   node scripts/gh-issue-sync.cjs scripts/feature-xyz-plan.json
+   ```
+   *The utility will automatically detect the completed state, post a reference comment with the current git commit hash, and close the issue on GitHub.*

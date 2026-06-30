@@ -25,7 +25,7 @@
     {
       "title": "Externalize and Embed HTML/CSS templates",
       "body": "### Problem\nMulti-line raw string literals are used in `pkg/server/server.go` (emails) and `pkg/server/proxy.go` (error screen fallbacks) to render HTML and CSS layouts.\n\n### Plan\n1. Extract nested HTML strings into standalone `.html` template files.\n2. Use Go's native `embed` package to bundle and parse the templates at runtime.",
-      "completed": false,
+      "completed": true,
       "labels": ["enhancement"]
     },
     {

@@ -108,6 +108,7 @@ type Server struct {
 	proxyHandler       *ProxyHandler
 	chiselProxy        *httputil.ReverseProxy
 	db                 *db.DB
+	portalService      PortalService
 	notifications      *NotificationService
 	ctx                context.Context
 	cancel             context.CancelFunc
@@ -248,6 +249,7 @@ func NewServer(cfg *config.ServerConfig) (*Server, error) {
 
 	srv.proxyHandler.db = database
 	srv.proxyHandler.caCert = caCert
+	srv.portalService = NewPortalService(srv.db, srv.cfg, srv.notifications, &srv.portalMap, caCert, caKey)
 
 	// Initialize i18n dynamic engine
 	if err := srv.initI18n(); err != nil {

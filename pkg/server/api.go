@@ -613,7 +613,7 @@ func (s *Server) performGDPRDeletionAndAnonymization(email string, r *http.Reque
 	}
 
 	// 5. Send a final GDPR-deleted/anonymized confirmation email BEFORE purging profile
-	if s.mailSender != nil {
+	if s.notifications != nil && s.notifications.Sender() != nil {
 		subject := s.GetTranslation(user.LanguagePreference, "account_deleted_subject")
 		greetingName := user.FirstName
 		if greetingName == "" {
@@ -626,7 +626,7 @@ Best regards,<br/>
 Liferay Tunnel Team`, html.EscapeString(greetingName))
 
 		plainBody := fmt.Sprintf("Hi %s,\n\nYour Liferay Tunnel account has been successfully deleted and anonymised under GDPR.\n\nBest regards,\nLiferay Tunnel Team", greetingName)
-		_ = s.mailSender.Send(user.Email, subject, body, plainBody)
+		_ = s.notifications.Sender().Send(user.Email, subject, body, plainBody)
 	}
 
 	// 6. Delete the actual profile record from the users database entirely
@@ -754,7 +754,7 @@ func (s *Server) getPortalBaseURL(r *http.Request) string {
 }
 
 func (s *Server) sendSubdomainReservedEmail(user *db.User, subdomain, domain string, expiresAt *time.Time, r *http.Request) {
-	if s.mailSender == nil {
+	if s.notifications == nil || s.notifications.Sender() == nil {
 		return
 	}
 	lang := user.LanguagePreference
@@ -780,11 +780,11 @@ func (s *Server) sendSubdomainReservedEmail(user *db.User, subdomain, domain str
 	subject := fmt.Sprintf("Subdomain Reserved: %s.%s", subdomain, domain)
 	plain := fmt.Sprintf("Hi %s,\n\nYou have reserved the subdomain %s.%s.\nExpires on: %s\nPortal: %s", user.FirstName, subdomain, domain, formattedExpiry, portalLink)
 
-	go func() { _ = s.mailSender.Send(user.Email, subject, body, plain) }()
+	go func() { _ = s.notifications.Sender().Send(user.Email, subject, body, plain) }()
 }
 
 func (s *Server) sendExtensionApprovedEmail(user *db.User, subdomain, domain string, expiresAt *time.Time, r *http.Request) {
-	if s.mailSender == nil {
+	if s.notifications == nil || s.notifications.Sender() == nil {
 		return
 	}
 	lang := user.LanguagePreference
@@ -813,11 +813,11 @@ func (s *Server) sendExtensionApprovedEmail(user *db.User, subdomain, domain str
 	subject := fmt.Sprintf("Extension Approved: %s.%s", subdomain, domain)
 	plain := fmt.Sprintf("Hi %s,\n\nYour extension request for %s.%s has been approved.\nNew Expiration: %s\nPortal: %s", user.FirstName, subdomain, domain, formattedExpiry, portalLink)
 
-	go func() { _ = s.mailSender.Send(user.Email, subject, body, plain) }()
+	go func() { _ = s.notifications.Sender().Send(user.Email, subject, body, plain) }()
 }
 
 func (s *Server) sendSubdomainDemotedEmail(user *db.User, subdomain, domain string, expiresAt *time.Time, r *http.Request) {
-	if s.mailSender == nil {
+	if s.notifications == nil || s.notifications.Sender() == nil {
 		return
 	}
 	lang := user.LanguagePreference
@@ -843,12 +843,12 @@ func (s *Server) sendSubdomainDemotedEmail(user *db.User, subdomain, domain stri
 	subject := fmt.Sprintf("Subdomain Demoted: %s.%s", subdomain, domain)
 	plain := fmt.Sprintf("Hi %s,\n\nYour permanent subdomain reservation %s.%s has been demoted back to a standard reservation.\nNew Expiration: %s\nPortal: %s", user.FirstName, subdomain, domain, formattedExpiry, portalLink)
 
-	go func() { _ = s.mailSender.Send(user.Email, subject, body, plain) }()
+	go func() { _ = s.notifications.Sender().Send(user.Email, subject, body, plain) }()
 }
 
 /*
 func (s *Server) sendSubdomainExpiredEmail(user *db.User, subdomain, domain string, releasedAt time.Time, r *http.Request) {
-	if s.mailSender == nil {
+	if s.notifications == nil || s.notifications.Sender() == nil {
 		return
 	}
 	lang := user.LanguagePreference
@@ -871,7 +871,7 @@ func (s *Server) sendSubdomainExpiredEmail(user *db.User, subdomain, domain stri
 	subject := fmt.Sprintf("Subdomain Expired: %s.%s", subdomain, domain)
 	plain := fmt.Sprintf("Hi %s,\n\nYour subdomain reservation %s.%s has expired.\nIt will be released to the public pool on: %s\nPortal: %s", user.FirstName, subdomain, domain, formattedRelease, portalLink)
 
-	go func() { _ = s.mailSender.Send(user.Email, subject, body, plain) }()
+	go func() { _ = s.notifications.Sender().Send(user.Email, subject, body, plain) }()
 }
 */
 
@@ -1202,7 +1202,7 @@ func (s *Server) handleRequestExtension(w http.ResponseWriter, r *http.Request) 
 		CreatedAt:  time.Now(),
 	})
 
-	s.sendAdminAlert("alert_notify_extension_requested", "LFR Tunnel Alert: Subdomain Extension Requested",
+	s.notifications.SendAdminAlert("alert_notify_extension_requested", "LFR Tunnel Alert: Subdomain Extension Requested",
 		fmt.Sprintf("User %s has requested an extension for subdomain %s.%s.", user.Email, res.Subdomain, res.Domain))
 
 	respondJSON(w, http.StatusOK, res)

@@ -272,7 +272,7 @@ func (s *Server) getUserTelemetryData(user *db.User, sessionToken string) map[st
 		resp["maintenance_seconds_left"] = secondsLeft
 	}
 
-	resp["iron_curtain"] = s.isNginxMaintenanceActive()
+	resp["iron_curtain"] = s.nginxManager.IsActive()
 
 	return resp
 }

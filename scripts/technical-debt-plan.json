@@ -1,0 +1,38 @@
+{
+  "epicNumber": "274",
+  "title": "Codebase Review & Refactoring for Technical Debt",
+  "body": "Detailed epic description of codebase refactoring targets.",
+  "labels": ["enhancement"],
+  "issues": [
+    {
+      "title": "Refactor pkg/server/server.go God Object (SRP Violation)",
+      "body": "### Problem\n`pkg/server/server.go` contains over 5,200 lines of code, violating the Single Responsibility Principle. It mixes gateway HTTP routing, SQLite operations, metrics collection, email sending, Nginx control, and WebSocket monitors.\n\n### Plan\n1. Identify and group independent domains.\n2. Extract Nginx-specific maintenance file operations into a separate service or package.\n3. Extract metrics collection queue processing into a `MetricsCollector` routine.\n4. Extract email generation and SMTP triggering into a dedicated notification service.\n5. Keep `server.go` strictly focused on gateway routing and connection multiplexing.",
+      "completed": false,
+      "labels": ["enhancement"]
+    },
+    {
+      "title": "Isolate database logic and SQL operations in pkg/db/db.go",
+      "body": "### Problem\nMigrations, schema declarations, and raw SQLite query routines are all coupled directly inside `pkg/db/db.go`.\n\n### Plan\n1. Introduce a Repository Pattern defining interfaces (e.g. `UserRepository`, `SubdomainRepository`).\n2. Implement these interfaces using SQLite specific database handlers.\n3. Move migrations and schema statements to independent files or a sub-folder `pkg/db/migrations/`.",
+      "completed": false,
+      "labels": ["enhancement"]
+    },
+    {
+      "title": "Decouple REST endpoint logic from API routing in pkg/server/api.go",
+      "body": "### Problem\nAPI handler routines inside `pkg/server/api.go` mix request body mapping, parameters validation, database calls, email delivery trigger, and HTTP header writes.\n\n### Plan\n1. Separate HTTP routing and JSON serialization from core business logic rules.\n2. Introduce service interfaces/routines to handle business validation and DB orchestration independently from HTTP contexts.",
+      "completed": false,
+      "labels": ["enhancement"]
+    },
+    {
+      "title": "Externalize and Embed HTML/CSS templates",
+      "body": "### Problem\nMulti-line raw string literals are used in `pkg/server/server.go` (emails) and `pkg/server/proxy.go` (error screen fallbacks) to render HTML and CSS layouts.\n\n### Plan\n1. Extract nested HTML strings into standalone `.html` template files.\n2. Use Go's native `embed` package to bundle and parse the templates at runtime.",
+      "completed": false,
+      "labels": ["enhancement"]
+    },
+    {
+      "title": "Integrate structured logger using log/slog",
+      "body": "### Problem\nThe codebase uses standard `log.Print` / `log.Printf` logging, which lacks level filtering (debug/info/warn/error) and structured formats (like JSON).\n\n\n### Plan\n1. Introduce standard `log/slog` structured logging throughout the codebase.\n2. Enable configurable log formatting (JSON in production, text/colors in dev) and level filtering.",
+      "completed": false,
+      "labels": ["enhancement"]
+    }
+  ]
+}

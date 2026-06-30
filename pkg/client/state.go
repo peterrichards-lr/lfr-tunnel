@@ -5,8 +5,12 @@ import (
 	"fmt"
 	"net/http"
 	"os"
+	"os/exec"
 	"path/filepath"
+	"runtime"
+	"strconv"
 	"strings"
+	"syscall"
 	"time"
 )
 
@@ -132,4 +136,26 @@ func QueryStatusJSON(statePath string, isRunningFunc func(int) bool) ([]byte, er
 	}
 
 	return json.MarshalIndent(out, "", "  ")
+}
+
+// IsPIDRunning checks if a process with the given PID is currently active.
+// It uses a syscall signal on Unix and tasklist execution on Windows.
+func IsPIDRunning(pid int) bool {
+	if pid <= 0 {
+		return false
+	}
+	proc, err := os.FindProcess(pid)
+	if err != nil {
+		return false
+	}
+	if runtime.GOOS == "windows" {
+		cmd := exec.Command("tasklist", "/FI", fmt.Sprintf("PID eq %d", pid))
+		out, err := cmd.Output()
+		if err == nil && strings.Contains(string(out), strconv.Itoa(pid)) {
+			return true
+		}
+		return false
+	}
+	err = proc.Signal(syscall.Signal(0))
+	return err == nil
 }

@@ -348,7 +348,7 @@ func TestServer_RegistrationFlow(t *testing.T) {
 	}()
 
 	mockMail := &mockMailSender{}
-	srv.mailSender = mockMail
+	srv.notifications = NewNotificationService(mockMail, srv.db, srv.cfg)
 
 	// 1. Submit registration request
 	reqBody, _ := json.Marshal(RegisterRequestPayload{
@@ -981,7 +981,7 @@ func setupTestServer(t *testing.T) (*Server, *mockMailSender, func()) {
 	}
 
 	mockMail := &mockMailSender{}
-	srv.mailSender = mockMail
+	srv.notifications = NewNotificationService(mockMail, srv.db, srv.cfg)
 
 	cleanup := func() {
 		srv.Stop()

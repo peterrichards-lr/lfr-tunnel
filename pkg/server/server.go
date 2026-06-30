@@ -35,6 +35,7 @@ import (
 	"lfr-tunnel/pkg/config"
 	"lfr-tunnel/pkg/db"
 	"lfr-tunnel/pkg/mail"
+	"lfr-tunnel/pkg/nginx"
 
 	"github.com/gorilla/websocket"
 	"github.com/jpillora/chisel/server"
@@ -107,7 +108,7 @@ type Server struct {
 	proxyHandler       *ProxyHandler
 	chiselProxy        *httputil.ReverseProxy
 	db                 *db.DB
-	mailSender         mail.Sender
+	notifications      *NotificationService
 	ctx                context.Context
 	cancel             context.CancelFunc
 	rateLimiters       map[string]*ipLimiter
@@ -116,7 +117,8 @@ type Server struct {
 	vMutex             sync.Mutex
 	blacklist          sync.Map // memory cache for db blacklist
 	portalMap          sync.Map // memory cache for portal magic links and sessions
-	metricsQueue       chan *db.TunnelMetric
+	metrics            *MetricsCollector
+	nginxManager       *nginx.MaintenanceManager
 	caCert             *x509.Certificate
 	caKey              *rsa.PrivateKey
 	broadcastMutex     sync.RWMutex
@@ -223,12 +225,13 @@ func NewServer(cfg *config.ServerConfig) (*Server, error) {
 		proxyHandler:       proxyHandler,
 		chiselProxy:        chiselProxy,
 		db:                 database,
-		mailSender:         mailSender,
+		notifications:      NewNotificationService(mailSender, database, cfg),
 		ctx:                ctx,
 		cancel:             cancel,
 		rateLimiters:       make(map[string]*ipLimiter),
 		violations:         make(map[string]int),
-		metricsQueue:       make(chan *db.TunnelMetric, 1000),
+		metrics:            NewMetricsCollector(database, cfg, registry),
+		nginxManager:       nginx.NewMaintenanceManager(cfg.MaintenanceTriggerPath),
 		targetedMessages:   make(map[string]string),
 		lastPortalActivity: make(map[string]time.Time),
 		wsClients:          make(map[*wsClient]bool),
@@ -267,12 +270,7 @@ func NewServer(cfg *config.ServerConfig) (*Server, error) {
 				ConnectedAt:     lease.CreatedAt,
 				RecordedAt:      time.Now().UTC(),
 			}
-			select {
-			case srv.metricsQueue <- m:
-			default:
-				// Queue full, drop it
-				log.Printf("[Server] Metrics queue full, dropping metrics for %s", lease.FullHost)
-			}
+			srv.metrics.Queue(m)
 		}
 		if srv.proxyHandler != nil {
 			srv.proxyHandler.RemoveRateLimiter(lease.FullHost)
@@ -336,7 +334,7 @@ func NewServer(cfg *config.ServerConfig) (*Server, error) {
 		srv.startDatabaseBackupScheduler()
 	}
 
-	go srv.processMetricsQueue()
+	go srv.metrics.Start(ctx)
 	srv.startRateLimiterCleaner(ctx)
 
 	if srv.db != nil {
@@ -348,93 +346,6 @@ func NewServer(cfg *config.ServerConfig) (*Server, error) {
 	}
 
 	return srv, nil
-}
-
-func (s *Server) processMetricsQueue() {
-	ticker := time.NewTicker(5 * time.Minute)
-	defer ticker.Stop()
-
-	var localBuffer []*db.TunnelMetric
-
-	for {
-		select {
-		case <-s.ctx.Done():
-			return
-		case m := <-s.metricsQueue:
-			if s.db != nil {
-				if err := s.db.RecordTunnelMetric(m); err != nil {
-					log.Printf("[Server] Failed to record tunnel metrics for %s: %v", m.FullHost, err)
-				}
-			} else if s.cfg.ControlPlaneURL != "" && s.cfg.EdgeToken != "" {
-				localBuffer = append(localBuffer, m)
-			}
-		case <-ticker.C:
-			leases := s.registry.ListLeases()
-			for _, lease := range leases {
-				bytesIn := atomic.LoadUint64(&lease.BytesIn)
-				bytesOut := atomic.LoadUint64(&lease.BytesOut)
-				diffIn := int64(bytesIn - lease.LastBytesIn)
-				diffOut := int64(bytesOut - lease.LastBytesOut)
-
-				if diffIn > 0 || diffOut > 0 {
-					m := &db.TunnelMetric{
-						UserID:          lease.UserID,
-						SubdomainPrefix: lease.SubdomainPrefix,
-						FullHost:        lease.FullHost,
-						BytesIn:         diffIn,
-						BytesOut:        diffOut,
-						ConnectedAt:     lease.CreatedAt,
-						RecordedAt:      time.Now().UTC(),
-					}
-					if s.db != nil {
-						if err := s.db.RecordTunnelMetric(m); err != nil {
-							log.Printf("[Server] Failed to periodically record tunnel metrics for %s: %v", m.FullHost, err)
-						} else {
-							lease.LastBytesIn = bytesIn
-							lease.LastBytesOut = bytesOut
-						}
-					} else if s.cfg.ControlPlaneURL != "" && s.cfg.EdgeToken != "" {
-						localBuffer = append(localBuffer, m)
-						lease.LastBytesIn = bytesIn
-						lease.LastBytesOut = bytesOut
-					}
-				}
-			}
-
-			if len(localBuffer) > 0 && s.db == nil && s.cfg.ControlPlaneURL != "" && s.cfg.EdgeToken != "" {
-				s.forwardMetricsToControlPlane(localBuffer)
-				localBuffer = nil
-			}
-		}
-	}
-}
-
-func (s *Server) forwardMetricsToControlPlane(metrics []*db.TunnelMetric) {
-	client := &http.Client{Timeout: 5 * time.Second}
-	payloadBytes, err := json.Marshal(metrics)
-	if err != nil {
-		log.Printf("[Server Edge] Failed to marshal metrics: %v", err)
-		return
-	}
-
-	req, err := http.NewRequest("POST", s.cfg.ControlPlaneURL+"/api/internal/edge-metrics", bytes.NewReader(payloadBytes))
-	if err != nil {
-		log.Printf("[Server Edge] Failed to create metrics request: %v", err)
-		return
-	}
-	req.Header.Set("Content-Type", "application/json")
-	req.Header.Set("X-Edge-Token", s.cfg.EdgeToken)
-
-	resp, err := client.Do(req)
-	if err != nil {
-		log.Printf("[Server Edge] Failed to forward metrics to control plane: %v", err)
-		return
-	}
-	defer resp.Body.Close() //nolint:errcheck
-
-	if resp.StatusCode != http.StatusOK {
-		log.Printf("[Server Edge] Control plane metrics returned status: %d", resp.StatusCode)
-	}
 }
 
 // BackupDatabase clones the active SQLite database to a secure backups folder.
@@ -559,7 +470,7 @@ func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 				if s.db != nil {
 					_ = s.db.AddBlacklistIP(ip, "Auto-banned by Rate Limiter for DDOS")
 					s.writeAudit("system", "ip.blacklisted", "ip", ip, "Auto-banned by Rate Limiter for DDOS", r)
-					s.sendAdminAlert("alert_notify_blacklist", "LFR Tunnel Alert: IP Auto-Banned", fmt.Sprintf("IP %s was auto-banned by the Rate Limiter for exceeding thresholds.", ip))
+					s.notifications.SendAdminAlert("alert_notify_blacklist", "LFR Tunnel Alert: IP Auto-Banned", fmt.Sprintf("IP %s was auto-banned by the Rate Limiter for exceeding thresholds.", ip))
 				}
 
 				http.Error(w, "Forbidden", http.StatusForbidden)
@@ -1447,7 +1358,7 @@ func (s *Server) handleTunnelStatus(w http.ResponseWriter, r *http.Request) {
 
 	if s.registry.UpdateLeaseStatus(req.SessionToken, req.Status) {
 		if req.Status == "down" {
-			s.sendAdminAlert("alert_notify_tunnel_offline", "LFR Tunnel Alert: Tunnel Offline", "A client tunnel has reported its status as offline/down.")
+			s.notifications.SendAdminAlert("alert_notify_tunnel_offline", "LFR Tunnel Alert: Tunnel Offline", "A client tunnel has reported its status as offline/down.")
 		}
 		w.WriteHeader(http.StatusOK)
 	} else {
@@ -1717,7 +1628,7 @@ func (s *Server) handleRegisterRequest(w http.ResponseWriter, r *http.Request) {
 	s.writeAudit(user.Email, "user.registered", "user", user.Email, "", r)
 
 	// Send verification email to the user
-	if s.mailSender != nil {
+	if s.notifications != nil && s.notifications.Sender() != nil {
 		scheme := "https"
 		if r.TLS == nil && r.Header.Get("X-Forwarded-Proto") != "https" {
 			scheme = "http"
@@ -1755,7 +1666,7 @@ Liferay Tunnel Team`, html.EscapeString(greetingName), verifyURL, clientIP, repo
 
 		go func() {
 			plainBody := fmt.Sprintf("Hi %s,\n\nPlease complete your registration by visiting: %s\n\nIf you did not request this, you can report it at: %s", greetingName, verifyURL, reportLink)
-			if err := s.mailSender.Send(user.Email, subject, body, plainBody); err != nil {
+			if err := s.notifications.Sender().Send(user.Email, subject, body, plainBody); err != nil {
 				log.Printf("[Mail] Failed to send verification email to %s: %v", user.Email, err)
 			}
 		}()
@@ -1835,10 +1746,10 @@ func (s *Server) handleCompleteSetup(w http.ResponseWriter, r *http.Request) {
 	}
 
 	s.writeAudit(user.Email, "user.verified", "user", user.Email, "User completed setup and is pending approval", r)
-	s.sendAdminAlert("alert_notify_registration", "LFR Tunnel Alert: New User Registration", fmt.Sprintf("A new user (%s %s - %s) has verified their email and requires approval.", user.FirstName, user.LastName, user.Email))
+	s.notifications.SendAdminAlert("alert_notify_registration", "LFR Tunnel Alert: New User Registration", fmt.Sprintf("A new user (%s %s - %s) has verified their email and requires approval.", user.FirstName, user.LastName, user.Email))
 
 	// Send approval email to admin
-	if s.mailSender != nil && s.cfg.AdminNotificationEmail != "" {
+	if s.notifications != nil && s.notifications.Sender() != nil && s.cfg.AdminNotificationEmail != "" {
 		sendAdminEmail := true
 		adminLang := "en"
 		if s.db != nil {
@@ -1860,7 +1771,7 @@ func (s *Server) handleCompleteSetup(w http.ResponseWriter, r *http.Request) {
 			body := fmt.Sprintf("<p>New registration request (Email Verified & Setup Complete):</p><ul><li>Name: %s %s</li><li>Email: %s</li></ul><p><a href=\"%s\">Click here to approve this request</a></p>", user.FirstName, user.LastName, user.Email, approveURL)
 
 			plainBody := fmt.Sprintf("New user registered: %s. Approve here: %s", user.Email, approveURL)
-			go func() { _ = s.mailSender.Send(s.cfg.AdminNotificationEmail, subject, body, plainBody) }()
+			go func() { _ = s.notifications.Sender().Send(s.cfg.AdminNotificationEmail, subject, body, plainBody) }()
 		}
 	}
 
@@ -1899,10 +1810,10 @@ func (s *Server) handleVerifyEmail(w http.ResponseWriter, r *http.Request) {
 	}
 
 	s.writeAudit(user.Email, "user.verified", "user", user.Email, "", r)
-	s.sendAdminAlert("alert_notify_registration", "LFR Tunnel Alert: New User Registration", fmt.Sprintf("A new user (%s) has verified their email and requires approval.", user.Email))
+	s.notifications.SendAdminAlert("alert_notify_registration", "LFR Tunnel Alert: New User Registration", fmt.Sprintf("A new user (%s) has verified their email and requires approval.", user.Email))
 
 	// Also send the original admin approval email now
-	if s.mailSender != nil && s.cfg.AdminNotificationEmail != "" {
+	if s.notifications != nil && s.notifications.Sender() != nil && s.cfg.AdminNotificationEmail != "" {
 		adminLang := "en"
 		if s.db != nil {
 			if adminUser, err := s.db.GetUserByEmail(s.cfg.AdminNotificationEmail); err == nil && adminUser != nil {
@@ -1920,7 +1831,7 @@ func (s *Server) handleVerifyEmail(w http.ResponseWriter, r *http.Request) {
 
 		go func() {
 			plainBody := fmt.Sprintf("A new user (%s) requires approval. Approve here: %s", user.Email, approveURL)
-			if err := s.mailSender.Send(s.cfg.AdminNotificationEmail, subject, body, plainBody); err != nil {
+			if err := s.notifications.Sender().Send(s.cfg.AdminNotificationEmail, subject, body, plainBody); err != nil {
 				log.Printf("[Server] Failed to send admin alert email: %v", err)
 			}
 		}()
@@ -1996,7 +1907,7 @@ func (s *Server) handleApproveUser(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Send approval email to developer with claim link
-	if s.mailSender != nil {
+	if s.notifications != nil && s.notifications.Sender() != nil {
 		subject := "[Liferay Tunnel] Registration Approved!"
 		scheme := "http"
 		if s.cfg.SSLCertFile != "" {
@@ -2006,7 +1917,7 @@ func (s *Server) handleApproveUser(w http.ResponseWriter, r *http.Request) {
 		claimURL := fmt.Sprintf("%s://%s/api/claim?token=%s", scheme, host, claimToken)
 		body := fmt.Sprintf("<p>Your registration request has been approved!</p><p><a href=\"%s\">Click here to claim your personal access token</a></p><p>Note: this link can only be used once.</p>", claimURL)
 		plainBody := fmt.Sprintf("Your registration has been approved. Claim your token here: %s", claimURL)
-		if err := s.mailSender.Send(user.Email, subject, body, plainBody); err != nil {
+		if err := s.notifications.Sender().Send(user.Email, subject, body, plainBody); err != nil {
 			log.Printf("[Server] Failed to send developer approval email: %v", err)
 		}
 	}
@@ -2531,7 +2442,7 @@ func (s *Server) handleAdminMagicLink(w http.ResponseWriter, r *http.Request) {
 
 	s.writeAudit(req.Email, "auth.magic_link_requested", "system", "auth", "Requested portal login link", r)
 
-	if s.mailSender != nil {
+	if s.notifications != nil && s.notifications.Sender() != nil {
 		// Determine target locale for the email subject (welcome page explicit override takes precedence)
 		lang := r.URL.Query().Get("lang")
 		if lang == "" {
@@ -2572,7 +2483,7 @@ func (s *Server) handleAdminMagicLink(w http.ResponseWriter, r *http.Request) {
 		plainBody := fmt.Sprintf("Hi %s,\n\nUse this link to log in (expires in 15 minutes):\n%s\n\nReport abuse here:\n%s", greetingName, link, reportLink)
 		subject := s.GetTranslation(lang, "magic_link_subject")
 
-		go s.mailSender.Send(req.Email, subject, body, plainBody) //nolint:errcheck
+		go s.notifications.Sender().Send(req.Email, subject, body, plainBody) //nolint:errcheck
 	} else {
 		log.Printf("[Admin] Magic Link for %s: /admin?token=%s", req.Email, magicToken)
 	}
@@ -2983,9 +2894,9 @@ Best regards,
 Liferay Tunnel Team`, actor, inviteLink, actor, declineLink)
 	}
 
-	if s.mailSender != nil {
+	if s.notifications != nil && s.notifications.Sender() != nil {
 		plainBody := fmt.Sprintf("Hi there,\n\nYou have been invited by an administrator to use the Liferay Tunnel portal.\n\nLog in here: %s\n\nDecline here: %s", inviteLink, declineLink)
-		go func() { _ = s.mailSender.Send(req.Email, subject, body, plainBody) }()
+		go func() { _ = s.notifications.Sender().Send(req.Email, subject, body, plainBody) }()
 	}
 
 	s.writeAudit(actor, "user.invited", "user", req.Email, "Admin invited new user", r)
@@ -3157,7 +3068,13 @@ func (s *Server) handleAdminMaintenance(w http.ResponseWriter, r *http.Request, 
 		if req.IronCurtain {
 			// Nginx Hard Maintenance (Iron Curtain)
 			s.maintEndTime = time.Now().Add(time.Duration(req.Duration) * time.Minute)
-			s.writeNginxMaintenanceFiles(req.Action, req.Reason, req.Duration, s.maintEndTime)
+
+			templateBytes, err := staticFS.ReadFile("static/maintenance.html")
+			if err == nil {
+				s.nginxManager.Enable(req.Action, req.Reason, req.Duration, s.maintEndTime, string(templateBytes))
+			} else {
+				log.Printf("[Server] Failed to load maintenance template: %v", err)
+			}
 
 			action = "system.nginx_maintenance_enabled"
 			desc = fmt.Sprintf("Owner enabled Nginx Iron Curtain maintenance mode immediate: %s (%s)", req.Action, req.Reason)
@@ -3245,7 +3162,7 @@ func (s *Server) handleAdminMaintenance(w http.ResponseWriter, r *http.Request, 
 		s.maintDuration = 0
 
 		if req.IronCurtain {
-			s.removeNginxMaintenanceFiles()
+			s.nginxManager.Disable()
 		}
 	}
 
@@ -3258,7 +3175,7 @@ func (s *Server) handleAdminMaintenance(w http.ResponseWriter, r *http.Request, 
 		maintStr = "pending"
 	}
 
-	hardActive := s.isNginxMaintenanceActive()
+	hardActive := s.nginxManager.IsActive()
 
 	go s.BroadcastTelemetry()
 
@@ -3309,95 +3226,6 @@ func (s *Server) handleVisitorMaintenancePage(w http.ResponseWriter, r *http.Req
 	htmlContent = strings.ReplaceAll(htmlContent, "__END_TIME__", strconv.FormatInt(epochSecs, 10))
 
 	_, _ = w.Write([]byte(htmlContent))
-}
-
-func (s *Server) writeNginxMaintenanceFiles(action, reason string, duration int, endTime time.Time) {
-	triggerPath := s.cfg.MaintenanceTriggerPath
-	if triggerPath == "" {
-		if fi, err := os.Stat("/var/lib/lfr-tunneld"); err == nil && fi.IsDir() {
-			triggerPath = "/var/lib/lfr-tunneld/maintenance.enable"
-		}
-	}
-	if triggerPath == "" {
-		log.Printf("[Server] Nginx maintenance trigger path not resolved; skipping Nginx hard maintenance.")
-		return
-	}
-
-	triggerDir := filepath.Dir(triggerPath)
-	if err := os.MkdirAll(triggerDir, 0755); err != nil {
-		log.Printf("[Server] Failed to create trigger directory: %v", err)
-		return
-	}
-	if err := os.WriteFile(triggerPath, []byte("enabled"), 0644); err != nil {
-		log.Printf("[Server] Failed to write Nginx maintenance trigger file: %v", err)
-		return
-	}
-
-	htmlBytes, err := staticFS.ReadFile("static/maintenance.html")
-	if err != nil {
-		log.Printf("[Server] Failed to read static template: %v", err)
-		return
-	}
-
-	htmlContent := string(htmlBytes)
-	durationStr := fmt.Sprintf("%d minutes", duration)
-	if duration >= 60 {
-		durationStr = fmt.Sprintf("%d hour(s)", (duration+59)/60)
-	}
-
-	htmlContent = strings.ReplaceAll(htmlContent, "__ACTION__", action)
-	htmlContent = strings.ReplaceAll(htmlContent, "__REASON__", reason)
-	htmlContent = strings.ReplaceAll(htmlContent, "__DURATION__", durationStr)
-	htmlContent = strings.ReplaceAll(htmlContent, "__END_TIME__", strconv.FormatInt(endTime.Unix(), 10))
-
-	htmlDestPath := filepath.Join(triggerDir, "maintenance.html")
-	if err := os.WriteFile(htmlDestPath, []byte(htmlContent), 0644); err != nil {
-		log.Printf("[Server] Failed to write Nginx maintenance HTML file: %v", err)
-	} else {
-		log.Printf("[Server] Nginx maintenance HTML written successfully to %s", htmlDestPath)
-	}
-
-	vpsWebRoot := "/var/www/lfr-tunnel"
-	if fi, err := os.Stat(vpsWebRoot); err == nil && fi.IsDir() {
-		destFilePath := filepath.Join(vpsWebRoot, "maintenance.html")
-		if err := os.WriteFile(destFilePath, []byte(htmlContent), 0644); err != nil {
-			log.Printf("[Server] Could not write directly to %s: %v", destFilePath, err)
-		} else {
-			log.Printf("[Server] Custom maintenance page successfully copied to %s", destFilePath)
-		}
-	}
-}
-
-func (s *Server) removeNginxMaintenanceFiles() {
-	triggerPath := s.cfg.MaintenanceTriggerPath
-	if triggerPath == "" {
-		if fi, err := os.Stat("/var/lib/lfr-tunneld"); err == nil && fi.IsDir() {
-			triggerPath = "/var/lib/lfr-tunneld/maintenance.enable"
-		}
-	}
-	if triggerPath == "" {
-		return
-	}
-
-	_ = os.Remove(triggerPath)
-	triggerDir := filepath.Dir(triggerPath)
-	_ = os.Remove(filepath.Join(triggerDir, "maintenance.html"))
-	_ = os.Remove("/var/www/lfr-tunnel/maintenance.html")
-}
-
-func (s *Server) isNginxMaintenanceActive() bool {
-	triggerPath := s.cfg.MaintenanceTriggerPath
-	if triggerPath == "" {
-		if fi, err := os.Stat("/var/lib/lfr-tunneld"); err == nil && fi.IsDir() {
-			triggerPath = "/var/lib/lfr-tunneld/maintenance.enable"
-		}
-	}
-	if triggerPath != "" {
-		if _, err := os.Stat(triggerPath); err == nil {
-			return true
-		}
-	}
-	return false
 }
 
 func (s *Server) handleAdminGetUser(w http.ResponseWriter, r *http.Request, actor string) {
@@ -3545,7 +3373,7 @@ func (s *Server) handleAdminPatchUser(w http.ResponseWriter, r *http.Request, ac
 	}
 
 	// Send status update/revocation email notification if configured
-	if req.Status != nil && s.mailSender != nil {
+	if req.Status != nil && s.notifications != nil && s.notifications.Sender() != nil {
 		subject := s.GetTranslation(user.LanguagePreference, "access_suspended_subject")
 		greetingName := user.FirstName
 		if greetingName == "" {
@@ -3561,12 +3389,12 @@ Best regards,<br/>
 Liferay Tunnel Team`, html.EscapeString(greetingName))
 
 			plainBody := fmt.Sprintf("Hi %s,\n\nYour access on Liferay Tunnel has been suspended by an administrator.\n\nBest regards,\nLiferay Tunnel Team", greetingName)
-			go func() { _ = s.mailSender.Send(user.Email, subject, body, plainBody) }()
+			go func() { _ = s.notifications.Sender().Send(user.Email, subject, body, plainBody) }()
 		}
 	}
 
 	// Send role update email notification if configured and user has not unsubscribed
-	if req.Role != nil && s.mailSender != nil && user.NotificationPrefs != "disabled" {
+	if req.Role != nil && s.notifications != nil && s.notifications.Sender() != nil && user.NotificationPrefs != "disabled" {
 		subject := s.GetTranslation(user.LanguagePreference, "role_updated_subject")
 		greetingName := user.FirstName
 		if greetingName == "" {
@@ -3596,7 +3424,7 @@ Liferay Tunnel Team<br/><br/>
 		}
 
 		plainBody := fmt.Sprintf("Hi %s,\n\nYour account role has been updated on Liferay Tunnel to: %s.\n\nUnsubscribe from optional emails here: %s\n\nBest regards,\nLiferay Tunnel Team", greetingName, *req.Role, unsubLink)
-		go func() { _ = s.mailSender.Send(user.Email, subject, body, plainBody) }()
+		go func() { _ = s.notifications.Sender().Send(user.Email, subject, body, plainBody) }()
 	}
 
 	detailsBytes, _ := json.Marshal(details)
@@ -4008,7 +3836,7 @@ func (s *Server) handleAdminBlacklist(w http.ResponseWriter, r *http.Request, ac
 		s.blacklist.Store(payload.IPAddress, true)
 		s.BroadcastBlacklistUpdate("add", payload.IPAddress)
 		s.writeAudit(actor, "ip.blacklisted", "ip", payload.IPAddress, payload.Reason, r)
-		s.sendAdminAlert("alert_notify_blacklist", "LFR Tunnel Alert: IP Banned", fmt.Sprintf("IP %s was manually banned by admin %s.", payload.IPAddress, actor))
+		s.notifications.SendAdminAlert("alert_notify_blacklist", "LFR Tunnel Alert: IP Banned", fmt.Sprintf("IP %s was manually banned by admin %s.", payload.IPAddress, actor))
 		_ = json.NewEncoder(w).Encode(map[string]string{"status": "success"})
 		return
 	}
@@ -4091,39 +3919,6 @@ func (s *Server) handleAdminSettings(w http.ResponseWriter, r *http.Request, act
 	}
 
 	http.Error(w, `{"error":"Method not allowed"}`, http.StatusMethodNotAllowed)
-}
-
-func (s *Server) sendAdminAlert(settingKey, subject, htmlBody string) {
-	if s.db == nil || s.mailSender == nil || s.cfg.AdminNotificationEmail == "" {
-		return
-	}
-
-	val, err := s.db.GetAdminSetting(settingKey)
-	if err != nil {
-		log.Printf("[Warning] Failed to fetch admin setting %s: %v", settingKey, err)
-		return
-	}
-
-	// Default true for "alert_notify_registration" and "alert_notify_blacklist"
-	if val == "false" {
-		return
-	}
-	if val == "" && settingKey == "alert_notify_tunnel_offline" {
-		return // default false
-	}
-
-	// Check the admin user's personal notification preferences
-	if adminUser, err := s.db.GetUserByEmail(s.cfg.AdminNotificationEmail); err == nil && adminUser != nil {
-		if adminUser.NotificationPrefs == "disabled" {
-			return
-		}
-	}
-
-	go func() {
-		if err := s.mailSender.Send(s.cfg.AdminNotificationEmail, subject, htmlBody, "An IP address has been blacklisted."); err != nil {
-			log.Printf("[Mail] Failed to send admin alert %s: %v", settingKey, err)
-		}
-	}()
 }
 
 // respondJSON is a DRY helper for sending JSON API responses
@@ -5248,7 +5043,7 @@ func (s *Server) runVanityDomainHook(action, domain string) {
 
 // checkExpiringReservations scans for expiring or expired subdomain reservations and triggers email notifications.
 func (s *Server) checkExpiringReservations() {
-	if s.mailSender == nil {
+	if s.notifications == nil || s.notifications.Sender() == nil {
 		return
 	}
 
@@ -5307,7 +5102,7 @@ func (s *Server) checkExpiringReservations() {
 				subject = fmt.Sprintf("Subdomain Expired & Quarantined: %s.%s", res.Subdomain, res.Domain)
 			}
 
-			if err := s.mailSender.Send(user.Email, subject, body, plainBody); err != nil {
+			if err := s.notifications.Sender().Send(user.Email, subject, body, plainBody); err != nil {
 				log.Printf("[Server] Failed to send subdomain expired email to %s: %v", user.Email, err)
 				continue
 			}
@@ -5345,7 +5140,7 @@ func (s *Server) checkExpiringReservations() {
 				subject = fmt.Sprintf("Subdomain Expiring Soon: %s.%s", res.Subdomain, res.Domain)
 			}
 
-			if err := s.mailSender.Send(user.Email, subject, body, plainBody); err != nil {
+			if err := s.notifications.Sender().Send(user.Email, subject, body, plainBody); err != nil {
 				log.Printf("[Server] Failed to send subdomain expiring email to %s: %v", user.Email, err)
 				continue
 			}

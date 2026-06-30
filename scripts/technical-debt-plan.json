@@ -7,7 +7,7 @@
     {
       "title": "Refactor pkg/server/server.go God Object (SRP Violation)",
       "body": "### Problem\n`pkg/server/server.go` contains over 5,200 lines of code, violating the Single Responsibility Principle. It mixes gateway HTTP routing, SQLite operations, metrics collection, email sending, Nginx control, and WebSocket monitors.\n\n### Plan\n1. Identify and group independent domains.\n2. Extract Nginx-specific maintenance file operations into a separate service or package.\n3. Extract metrics collection queue processing into a `MetricsCollector` routine.\n4. Extract email generation and SMTP triggering into a dedicated notification service.\n5. Keep `server.go` strictly focused on gateway routing and connection multiplexing.",
-      "completed": false,
+      "completed": true,
       "labels": ["enhancement"]
     },
     {

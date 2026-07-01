@@ -1,5 +1,5 @@
 {
-  "version": "v1.26.1",
+  "version": "v1.27.0",
   "release_date": "2026-07-01",
   "features": [
     "Hotfix: Custom headers now dynamically propagate to Regional Edge nodes without restarting tunnels",

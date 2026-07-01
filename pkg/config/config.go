@@ -233,11 +233,7 @@ func DefaultClientConfig() *ClientConfig {
 	return &ClientConfig{
 		ServerURL: "https://tunnel.lfr-demo.se",
 		Ports:     []int{8080},
-		Regions: map[string]string{
-			"eu": "https://tunnel.lfr-demo.se",
-			"us": "https://us.lfr-demo.online",
-			"jp": "https://jp.lfr-demo.se",
-		},
+		Regions:   map[string]string{}, // Regions are now fetched dynamically from the Control Plane at runtime
 	}
 }
 

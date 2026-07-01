@@ -1,0 +1,19 @@
+{
+  "title": "Increase Unit Test Coverage (Target >60%)",
+  "body": "Following the `v1.25.0` release, we need to significantly improve our Go unit test coverage across the server application to improve maintainability and reliability.",
+      "labels": ["enhancement"],
+  "sub_issues": [
+    {
+      "title": "Test Coverage: API Endpoints",
+      "body": "Write HTTP tests for untested endpoints in `server.go` and `api_service_*.go` (e.g. admin settings, blacklist, telemetry hooks).",
+      "completed": false,
+      "labels": ["enhancement"]
+    },
+    {
+      "title": "Test Coverage: SSO & OAuth",
+      "body": "Add unit tests to `sso.go` mimicking typical OAuth workflows and mock provider responses.",
+      "completed": false,
+      "labels": ["enhancement"]
+    }
+  ]
+}

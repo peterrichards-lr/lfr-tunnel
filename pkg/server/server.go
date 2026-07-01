@@ -795,6 +795,11 @@ func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 
+		if r.Method == http.MethodPost && r.URL.Path == "/api/portal/reservations/headers" {
+			s.handleUpdateReservationHeaders(w, r)
+			return
+		}
+
 		if r.Method == http.MethodGet && r.URL.Path == "/api/portal/generate-subdomain" {
 			s.handleGenerateSubdomain(w, r)
 			return

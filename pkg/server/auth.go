@@ -274,6 +274,20 @@ func (r *Registry) GetLease(host string) (*TunnelLease, bool) {
 	return lease, true
 }
 
+// UpdateLeaseHeaders dynamically overrides the AddedHeaders of an active host.
+func (r *Registry) UpdateLeaseHeaders(fullHost string, newHeaders map[string]string) error {
+	r.Lock()
+	defer r.Unlock()
+
+	lease, ok := r.leases[fullHost]
+	if !ok {
+		return fmt.Errorf("active tunnel host %q not found", fullHost)
+	}
+
+	lease.AddedHeaders = newHeaders
+	return nil
+}
+
 // UpdateLeaseRateLimit dynamically overrides the requests rate limit of an active host.
 func (r *Registry) UpdateLeaseRateLimit(fullHost string, newLimit int) error {
 	r.Lock()

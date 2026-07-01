@@ -2,7 +2,7 @@ package client
 
 import (
 	"fmt"
-	"log"
+	"log/slog"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -68,7 +68,7 @@ func installDarwin(exePath string) error {
 	// Load the service
 	cmd := exec.Command("launchctl", "load", "-w", plistPath)
 	if err := cmd.Run(); err != nil {
-		log.Printf("[Warning] Failed to load launchctl, you may need to run: launchctl load -w %s\n", plistPath)
+		slog.Info(fmt.Sprintf("[Warning] Failed to load launchctl, you may need to run: launchctl load -w %s\n", plistPath))
 	}
 
 	fmt.Printf("[Success] Installed macOS LaunchAgent to %s\n", plistPath)

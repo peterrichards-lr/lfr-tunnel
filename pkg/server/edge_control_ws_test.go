@@ -13,8 +13,9 @@ import (
 	"testing"
 	"time"
 
-	"github.com/gorilla/websocket"
 	"lfr-tunnel/pkg/config"
+
+	"github.com/gorilla/websocket"
 )
 
 func TestServer_EdgeControlWS_AuthenticationAndPubSub(t *testing.T) {

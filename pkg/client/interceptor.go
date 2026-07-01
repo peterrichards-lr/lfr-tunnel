@@ -6,7 +6,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
-	"log"
+	"log/slog"
 	"net"
 	"net/http"
 	"net/http/httputil"
@@ -73,6 +73,7 @@ type InterceptorEngine struct {
 	Passcode     string
 	WhitelistIPs string
 	AccessMode   string
+	PublicURLs   []string
 
 	// Latency & Bandwidth Simulation Settings
 	Latency        time.Duration
@@ -232,7 +233,7 @@ func (e *InterceptorEngine) InterceptPort(targetPort int) (int, error) {
 	// Run in background
 	go func() {
 		if err := http.Serve(listener, handler); err != nil {
-			log.Printf("[Interceptor] Proxy on port %d crashed: %v", listenPort, err)
+			slog.Info(fmt.Sprintf("[Interceptor] Proxy on port %d crashed: %v", listenPort, err))
 		}
 	}()
 

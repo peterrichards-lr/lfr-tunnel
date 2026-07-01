@@ -1,7 +1,6 @@
 package server
 
 import (
-	"crypto/rand"
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
@@ -9,7 +8,7 @@ import (
 	"fmt"
 	"html"
 	"io"
-	"log"
+	"log/slog"
 	"net/http"
 	"net/url"
 	"path"
@@ -266,7 +265,7 @@ func (s *Server) handleCreateToken(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if err := s.db.CreatePAT(pat); err != nil {
-		log.Printf("[API] Failed to save PAT: %v", err)
+		slog.Info(fmt.Sprintf("[API] Failed to save PAT: %v", err))
 		http.Error(w, `{"error":"Failed to create token"}`, http.StatusInternalServerError)
 		return
 	}
@@ -346,14 +345,14 @@ func (s *Server) handleDeleteToken(w http.ResponseWriter, r *http.Request) {
 // handleGetAnalytics returns analytics data for the authenticated user and globally if admin.
 func (s *Server) handleGetAnalytics(w http.ResponseWriter, r *http.Request) {
 	if s.db == nil {
-		log.Printf("handleGetAnalytics: db is nil")
+		slog.Info("handleGetAnalytics: db is nil")
 		http.Error(w, `{"error":"Database not enabled"}`, http.StatusNotImplemented)
 		return
 	}
 
 	user, err := s.getCurrentUser(r)
 	if err != nil {
-		log.Printf("handleGetAnalytics: getCurrentUser failed: %v", err)
+		slog.Info(fmt.Sprintf("handleGetAnalytics: getCurrentUser failed: %v", err))
 		http.Error(w, `{"error":"Unauthorized"}`, http.StatusUnauthorized)
 		return
 	}
@@ -361,11 +360,11 @@ func (s *Server) handleGetAnalytics(w http.ResponseWriter, r *http.Request) {
 	days := 30
 	isAdmin := user.Role == "admin" || user.Role == "owner"
 
-	log.Printf("handleGetAnalytics: user=%s, role=%s, isAdmin=%v", user.Email, user.Role, isAdmin)
+	slog.Info(fmt.Sprintf("handleGetAnalytics: user=%s, role=%s, isAdmin=%v", user.Email, user.Role, isAdmin))
 
 	userStats, err := s.db.GetUserAnalytics(user.ID, days)
 	if err != nil {
-		log.Printf("handleGetAnalytics: GetUserAnalytics failed: %v", err)
+		slog.Info(fmt.Sprintf("handleGetAnalytics: GetUserAnalytics failed: %v", err))
 		http.Error(w, `{"error":"Failed to fetch user analytics"}`, http.StatusInternalServerError)
 		return
 	}
@@ -377,11 +376,11 @@ func (s *Server) handleGetAnalytics(w http.ResponseWriter, r *http.Request) {
 	if isAdmin {
 		globalStats, err := s.db.GetGlobalAnalytics(days)
 		if err != nil {
-			log.Printf("handleGetAnalytics: GetGlobalAnalytics failed: %v", err)
+			slog.Info(fmt.Sprintf("handleGetAnalytics: GetGlobalAnalytics failed: %v", err))
 			http.Error(w, `{"error":"Failed to fetch global analytics"}`, http.StatusInternalServerError)
 			return
 		}
-		log.Printf("handleGetAnalytics: globalStats loaded successfully (TopUsers: %d, Daily: %d)", len(globalStats.TopUsers), len(globalStats.Daily))
+		slog.Info(fmt.Sprintf("handleGetAnalytics: globalStats loaded successfully (TopUsers: %d, Daily: %d)", len(globalStats.TopUsers), len(globalStats.Daily)))
 		resp["global"] = globalStats
 	}
 
@@ -396,14 +395,11 @@ func (s *Server) handleMFASetup(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	secret, err := GenerateTOTPSecret()
+	secret, otpauthURL, err := s.portalService.MFASetup(u)
 	if err != nil {
-		http.Error(w, `{"error":"Failed to generate secret"}`, http.StatusInternalServerError)
+		respondWithError(w, err)
 		return
 	}
-
-	// URL format compliant with standard authenticator apps (Google/Microsoft Auth, 1Password, etc.)
-	otpauthURL := fmt.Sprintf("otpauth://totp/Liferay%%20Tunnel:%s?secret=%s&issuer=Liferay%%20Tunnel", u.Email, secret)
 
 	respondJSON(w, http.StatusOK, map[string]string{
 		"secret":      secret,
@@ -428,19 +424,13 @@ func (s *Server) handleMFAEnable(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if !ValidateTOTP(req.Secret, req.Code) {
-		http.Error(w, `{"error":"Invalid verification code"}`, http.StatusBadRequest)
-		return
-	}
-
-	if s.db != nil {
-		u.TOTPSecret = req.Secret
-		u.TOTPEnabled = true
-		if err := s.db.UpdateUser(u); err != nil {
-			http.Error(w, `{"error":"Failed to enable MFA"}`, http.StatusInternalServerError)
+	if err := s.portalService.MFAEnable(u, req.Secret, req.Code, getClientIP(r)); err != nil {
+		if err == ErrInvalidRequest {
+			http.Error(w, `{"error":"Invalid verification code"}`, http.StatusBadRequest)
 			return
 		}
-		s.writeAudit(u.Email, "user.mfa_enabled", "user", u.Email, "", r)
+		respondWithError(w, err)
+		return
 	}
 
 	respondJSON(w, http.StatusOK, map[string]string{"status": "success"})
@@ -462,19 +452,13 @@ func (s *Server) handleMFADisable(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if !ValidateTOTP(u.TOTPSecret, req.Code) {
-		http.Error(w, `{"error":"Invalid verification code"}`, http.StatusBadRequest)
-		return
-	}
-
-	if s.db != nil {
-		u.TOTPSecret = ""
-		u.TOTPEnabled = false
-		if err := s.db.UpdateUser(u); err != nil {
-			http.Error(w, `{"error":"Failed to disable MFA"}`, http.StatusInternalServerError)
+	if err := s.portalService.MFADisable(u, req.Code, getClientIP(r)); err != nil {
+		if err == ErrInvalidRequest {
+			http.Error(w, `{"error":"Invalid verification code"}`, http.StatusBadRequest)
 			return
 		}
-		s.writeAudit(u.Email, "user.mfa_disabled", "user", u.Email, "", r)
+		respondWithError(w, err)
+		return
 	}
 
 	respondJSON(w, http.StatusOK, map[string]string{"status": "success"})
@@ -491,75 +475,15 @@ func (s *Server) handleMFAVerify(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	val, ok := s.portalMap.LoadAndDelete("pre_auth_" + req.TempToken)
-	if !ok {
-		http.Error(w, `{"error":"Session expired or invalid"}`, http.StatusUnauthorized)
-		return
-	}
-
-	preAuth := val.(PortalSessionData)
-	if time.Now().After(preAuth.ExpiresAt) {
-		http.Error(w, `{"error":"Session has expired"}`, http.StatusUnauthorized)
-		return
-	}
-
-	if s.db == nil {
-		http.Error(w, `{"error":"Database not configured"}`, http.StatusInternalServerError)
-		return
-	}
-
-	user, err := s.db.GetUserByEmail(preAuth.Email)
+	_, sessionToken, err := s.portalService.MFAVerify(req.TempToken, req.Code, getClientIP(r))
 	if err != nil {
-		http.Error(w, `{"error":"User not found"}`, http.StatusUnauthorized)
-		return
-	}
-
-	if !ValidateTOTP(user.TOTPSecret, req.Code) {
-		// Put the pre-auth session back so they can try again (with a fresh 5 minute lifetime)
-		preAuth.ExpiresAt = time.Now().Add(5 * time.Minute)
-		s.portalMap.Store("pre_auth_"+req.TempToken, preAuth)
-		http.Error(w, `{"error":"Invalid verification code"}`, http.StatusUnauthorized)
-		return
-	}
-
-	// MFA Validation Success -> Issue Portal Session
-	sessionToken, _ := generateSecureToken()
-	clientIP := getClientIP(r)
-
-	var previousLoginAt *time.Time
-	if user.LastLoginAt != nil {
-		prev := *user.LastLoginAt
-		previousLoginAt = &prev
-	}
-
-	// Update user login audit metrics
-	now := time.Now().UTC()
-	user.LastLoginAt = &now
-	user.LastLoginIP = clientIP
-	_ = s.db.UpdateUser(user)
-
-	killedPreviousSession := false
-	s.portalMap.Range(func(key, value interface{}) bool {
-		k := key.(string)
-		if strings.HasPrefix(k, "admin_session_") {
-			sessionData := value.(PortalSessionData)
-			if sessionData.Email == user.Email {
-				s.portalMap.Delete(k)
-				killedPreviousSession = true
-			}
+		if err == ErrUnauthorized {
+			http.Error(w, `{"error":"Invalid verification code or session"}`, http.StatusUnauthorized)
+			return
 		}
-		return true
-	})
-
-	s.portalMap.Store("admin_session_"+sessionToken, PortalSessionData{
-		Email:                 user.Email,
-		ExpiresAt:             time.Now().Add(s.cfg.PortalSessionDuration),
-		ClientIP:              clientIP,
-		PreviousLoginAt:       previousLoginAt,
-		KilledPreviousSession: killedPreviousSession,
-	})
-
-	s.writeAudit(user.Email, "admin.login", "system", "admin", "Admin logged into dashboard via magic link + MFA", r)
+		respondWithError(w, err)
+		return
+	}
 
 	cookie := &http.Cookie{
 		Name:     "lfr_session",
@@ -774,7 +698,7 @@ func (s *Server) sendSubdomainReservedEmail(user *db.User, subdomain, domain str
 		"PortalLink": portalLink,
 	})
 	if err != nil {
-		log.Printf("[Server] Failed to render subdomain_reserved email: %v", err)
+		slog.Info(fmt.Sprintf("[Server] Failed to render subdomain_reserved email: %v", err))
 		return
 	}
 	subject := fmt.Sprintf("Subdomain Reserved: %s.%s", subdomain, domain)
@@ -807,7 +731,7 @@ func (s *Server) sendExtensionApprovedEmail(user *db.User, subdomain, domain str
 		"PortalLink":  portalLink,
 	})
 	if err != nil {
-		log.Printf("[Server] Failed to render extension_approved email: %v", err)
+		slog.Info(fmt.Sprintf("[Server] Failed to render extension_approved email: %v", err))
 		return
 	}
 	subject := fmt.Sprintf("Extension Approved: %s.%s", subdomain, domain)
@@ -837,7 +761,7 @@ func (s *Server) sendSubdomainDemotedEmail(user *db.User, subdomain, domain stri
 		"PortalLink": portalLink,
 	})
 	if err != nil {
-		log.Printf("[Server] Failed to render subdomain_demoted email: %v", err)
+		slog.Info(fmt.Sprintf("[Server] Failed to render subdomain_demoted email: %v", err))
 		return
 	}
 	subject := fmt.Sprintf("Subdomain Demoted: %s.%s", subdomain, domain)
@@ -938,31 +862,11 @@ func (s *Server) handleListReservations(w http.ResponseWriter, r *http.Request) 
 		return
 	}
 
-	var list []*db.SubdomainReservation
-	if user.Role == "admin" || user.Role == "owner" {
-		list, err = s.db.ListAllSubdomainReservations()
-	} else {
-		list, err = s.db.ListSubdomainReservationsByUserID(user.ID)
-	}
+	list, limit, usedCount, err := s.portalService.ListReservations(user)
 	if err != nil {
-		log.Printf("[API] Failed to list reservations: %v", err)
-		http.Error(w, `{"error":"Failed to retrieve reservations"}`, http.StatusInternalServerError)
+		respondWithError(w, err)
 		return
 	}
-
-	var usedCount int
-	if user.Role == "admin" || user.Role == "owner" {
-		ownList, err := s.db.ListSubdomainReservationsByUserID(user.ID)
-		if err == nil {
-			usedCount = len(ownList)
-		} else {
-			usedCount = 0
-		}
-	} else {
-		usedCount = len(list)
-	}
-
-	limit := s.getUserMaxReservations(user)
 
 	respondJSON(w, http.StatusOK, map[string]interface{}{
 		"reservations": list,
@@ -988,110 +892,13 @@ func (s *Server) handleCreateReservation(w http.ResponseWriter, r *http.Request)
 		return
 	}
 
-	req.Subdomain = strings.ToLower(strings.TrimSpace(req.Subdomain))
-	req.Domain = strings.ToLower(strings.TrimSpace(req.Domain))
-
-	if req.Subdomain == "" || req.Domain == "" {
-		http.Error(w, `{"error":"Subdomain and domain are required"}`, http.StatusBadRequest)
-		return
-	}
-
-	// Validate subdomain format
-	if !isValidSubdomain(req.Subdomain) {
-		http.Error(w, `{"error":"Invalid or reserved subdomain format"}`, http.StatusBadRequest)
-		return
-	}
-
-	// Verify requested domain is supported
-	domainSupported := false
-	for _, d := range s.cfg.Domains {
-		if strings.EqualFold(d, req.Domain) {
-			domainSupported = true
-			break
-		}
-	}
-	if !domainSupported {
-		http.Error(w, `{"error":"Domain is not supported by this gateway"}`, http.StatusBadRequest)
-		return
-	}
-
-	// Enforce quota limits
-	limit := s.getUserMaxReservations(user)
-
-	list, err := s.db.ListSubdomainReservationsByUserID(user.ID)
+	res, err := s.portalService.CreateReservation(user, req.Subdomain, req.Domain, getClientIP(r))
 	if err != nil {
-		log.Printf("[API] Failed to check reservations: %v", err)
-		http.Error(w, `{"error":"Server error"}`, http.StatusInternalServerError)
+		respondWithError(w, err)
 		return
 	}
 
-	// Filter out expired reservations that are not in quarantine
-	activeCount := 0
-	for _, res := range list {
-		if res.ExpiresAt == nil || res.ExpiresAt.After(time.Now()) {
-			activeCount++
-		}
-	}
-
-	if limit >= 0 && activeCount >= limit {
-		http.Error(w, `{"error":"Subdomain reservation quota limit reached"}`, http.StatusBadRequest)
-		return
-	}
-
-	// Check if already reserved
-	existing, err := s.db.GetSubdomainReservationByName(req.Subdomain, req.Domain)
-	if err == nil && existing != nil {
-		// Check if expired
-		if existing.ExpiresAt != nil && existing.ExpiresAt.Before(time.Now()) {
-			// Check quarantine
-			quarantineCutoff := existing.ExpiresAt.AddDate(0, 0, s.cfg.SubdomainQuarantineDays)
-			if time.Now().Before(quarantineCutoff) {
-				// Quarantined! Can only reclaim if previous owner is the same user
-				if existing.UserID != user.ID {
-					http.Error(w, `{"error":"Subdomain is currently quarantined by another user"}`, http.StatusConflict)
-					return
-				}
-				// Reclaimable! Delete the expired one first
-				_ = s.db.DeleteSubdomainReservation(existing.ID)
-			} else {
-				// Past quarantine, delete expired reservation
-				_ = s.db.DeleteSubdomainReservation(existing.ID)
-			}
-		} else {
-			// Active reservation by someone else
-			http.Error(w, `{"error":"Subdomain is already reserved"}`, http.StatusConflict)
-			return
-		}
-	}
-
-	// Create reservation
-	expiry := s.getUserSubdomainExpiry(user)
-	res := &db.SubdomainReservation{
-		UserID:    user.ID,
-		Subdomain: req.Subdomain,
-		Domain:    req.Domain,
-		ExpiresAt: expiry,
-		CreatedAt: time.Now(),
-		UpdatedAt: time.Now(),
-	}
-
-	if err := s.db.CreateSubdomainReservation(res); err != nil {
-		log.Printf("[API] Failed to save reservation: %v", err)
-		http.Error(w, `{"error":"Failed to create reservation"}`, http.StatusInternalServerError)
-		return
-	}
-
-	_ = s.db.WriteAuditEntry(&db.AuditEntry{
-		ActorID:    user.Email,
-		Action:     "subdomain.reserved",
-		TargetType: "subdomain",
-		TargetID:   fmt.Sprintf("%s.%s", req.Subdomain, req.Domain),
-		Details:    fmt.Sprintf("Subdomain reserved. ExpiresAt: %v", expiry),
-		IPAddress:  getClientIP(r),
-		CreatedAt:  time.Now(),
-	})
-
-	s.sendSubdomainReservedEmail(user, req.Subdomain, req.Domain, expiry, r)
+	s.sendSubdomainReservedEmail(user, req.Subdomain, req.Domain, res.ExpiresAt, r)
 
 	respondJSON(w, http.StatusOK, res)
 }
@@ -1105,42 +912,10 @@ func (s *Server) handleDeleteReservation(w http.ResponseWriter, r *http.Request)
 	}
 
 	idStr := strings.TrimPrefix(r.URL.Path, "/api/portal/reservations/")
-	id, err := strconv.ParseInt(idStr, 10, 64)
-	if err != nil {
-		http.Error(w, `{"error":"Invalid reservation ID"}`, http.StatusBadRequest)
+	if err := s.portalService.DeleteReservation(user, idStr, getClientIP(r)); err != nil {
+		respondWithError(w, err)
 		return
 	}
-
-	res, err := s.db.GetSubdomainReservation(id)
-	if err != nil {
-		if errors.Is(err, db.ErrNotFound) {
-			http.Error(w, `{"error":"Reservation not found"}`, http.StatusNotFound)
-		} else {
-			http.Error(w, `{"error":"Database error"}`, http.StatusInternalServerError)
-		}
-		return
-	}
-
-	if res.UserID != user.ID && user.Role != "admin" && user.Role != "owner" {
-		http.Error(w, `{"error":"Forbidden: cannot delete other user's reservation"}`, http.StatusForbidden)
-		return
-	}
-
-	if err := s.db.DeleteSubdomainReservation(id); err != nil {
-		log.Printf("[API] Failed to delete reservation: %v", err)
-		http.Error(w, `{"error":"Failed to delete reservation"}`, http.StatusInternalServerError)
-		return
-	}
-
-	_ = s.db.WriteAuditEntry(&db.AuditEntry{
-		ActorID:    user.Email,
-		Action:     "subdomain.released",
-		TargetType: "subdomain",
-		TargetID:   fmt.Sprintf("%s.%s", res.Subdomain, res.Domain),
-		Details:    "Subdomain reservation deleted / released by owner",
-		IPAddress:  getClientIP(r),
-		CreatedAt:  time.Now(),
-	})
 
 	respondJSON(w, http.StatusOK, map[string]string{"status": "success"})
 }
@@ -1159,51 +934,12 @@ func (s *Server) handleRequestExtension(w http.ResponseWriter, r *http.Request) 
 		http.Error(w, `{"error":"Invalid reservation ID"}`, http.StatusBadRequest)
 		return
 	}
-	id, err := strconv.ParseInt(parts[0], 10, 64)
+
+	res, err := s.portalService.RequestExtension(user, parts[0], getClientIP(r))
 	if err != nil {
-		http.Error(w, `{"error":"Invalid reservation ID"}`, http.StatusBadRequest)
+		respondWithError(w, err)
 		return
 	}
-
-	res, err := s.db.GetSubdomainReservation(id)
-	if err != nil {
-		if errors.Is(err, db.ErrNotFound) {
-			http.Error(w, `{"error":"Reservation not found"}`, http.StatusNotFound)
-		} else {
-			http.Error(w, `{"error":"Database error"}`, http.StatusInternalServerError)
-		}
-		return
-	}
-
-	if res.UserID != user.ID && user.Role != "admin" && user.Role != "owner" {
-		http.Error(w, `{"error":"Forbidden: cannot extend other user's reservation"}`, http.StatusForbidden)
-		return
-	}
-
-	if res.ExpiresAt == nil {
-		http.Error(w, `{"error":"Permanent reservations cannot be extended"}`, http.StatusBadRequest)
-		return
-	}
-
-	res.ExtensionRequested = true
-	if err := s.db.UpdateSubdomainReservation(res); err != nil {
-		log.Printf("[API] Failed to update reservation: %v", err)
-		http.Error(w, `{"error":"Failed to request extension"}`, http.StatusInternalServerError)
-		return
-	}
-
-	_ = s.db.WriteAuditEntry(&db.AuditEntry{
-		ActorID:    user.Email,
-		Action:     "subdomain.extension_requested",
-		TargetType: "subdomain",
-		TargetID:   fmt.Sprintf("%s.%s", res.Subdomain, res.Domain),
-		Details:    "Extension requested for subdomain reservation",
-		IPAddress:  getClientIP(r),
-		CreatedAt:  time.Now(),
-	})
-
-	s.notifications.SendAdminAlert("alert_notify_extension_requested", "LFR Tunnel Alert: Subdomain Extension Requested",
-		fmt.Sprintf("User %s has requested an extension for subdomain %s.%s.", user.Email, res.Subdomain, res.Domain))
 
 	respondJSON(w, http.StatusOK, res)
 }
@@ -1252,111 +988,32 @@ func (s *Server) handlePromoteReservation(w http.ResponseWriter, r *http.Request
 		domain = parts[1]
 	}
 
-	limit := s.getUserMaxReservations(user)
-
-	list, err := s.db.ListSubdomainReservationsByUserID(user.ID)
+	res, err := s.portalService.PromoteReservation(user, req.Subdomain, domain, getClientIP(r))
 	if err != nil {
-		log.Printf("[API] Failed to check reservations: %v", err)
-		http.Error(w, `{"error":"Server error"}`, http.StatusInternalServerError)
+		respondWithError(w, err)
 		return
 	}
 
-	// Filter out expired reservations that are not in quarantine
-	activeCount := 0
-	for _, res := range list {
-		if res.ExpiresAt == nil || res.ExpiresAt.After(time.Now()) {
-			activeCount++
-		}
-	}
-
-	if limit >= 0 && activeCount >= limit {
-		http.Error(w, `{"error":"Quota limit reached: cannot promote to reservation"}`, http.StatusBadRequest)
-		return
-	}
-
-	existing, err := s.db.GetSubdomainReservationByName(req.Subdomain, domain)
-	if err == nil && existing != nil {
-		if existing.ExpiresAt == nil || existing.ExpiresAt.After(time.Now()) {
-			if existing.UserID != user.ID {
-				http.Error(w, `{"error":"Subdomain is already reserved by another user"}`, http.StatusConflict)
-				return
-			}
-			respondJSON(w, http.StatusOK, existing)
-			return
-		}
-		_ = s.db.DeleteSubdomainReservation(existing.ID)
-	}
-
-	expiry := s.getUserSubdomainExpiry(user)
-	res := &db.SubdomainReservation{
-		UserID:    user.ID,
-		Subdomain: req.Subdomain,
-		Domain:    domain,
-		ExpiresAt: expiry,
-		CreatedAt: time.Now(),
-		UpdatedAt: time.Now(),
-	}
-
-	if err := s.db.CreateSubdomainReservation(res); err != nil {
-		log.Printf("[API] Failed to promote subdomain: %v", err)
-		http.Error(w, `{"error":"Failed to save reservation"}`, http.StatusInternalServerError)
-		return
-	}
-
-	_ = s.db.WriteAuditEntry(&db.AuditEntry{
-		ActorID:    user.Email,
-		Action:     "subdomain.promoted",
-		TargetType: "subdomain",
-		TargetID:   fmt.Sprintf("%s.%s", req.Subdomain, domain),
-		Details:    "Subdomain promoted from active random lease to standard reservation",
-		IPAddress:  getClientIP(r),
-		CreatedAt:  time.Now(),
-	})
-
-	s.sendSubdomainReservedEmail(user, req.Subdomain, domain, expiry, r)
+	s.sendSubdomainReservedEmail(user, req.Subdomain, domain, res.ExpiresAt, r)
 
 	respondJSON(w, http.StatusOK, res)
 }
 
 // handleAdminListExtensions lists reservations requesting extension.
 func (s *Server) handleAdminListExtensions(w http.ResponseWriter, r *http.Request, actor string) {
-	if s.db == nil {
-		http.Error(w, `{"error":"Database not configured"}`, http.StatusNotImplemented)
-		return
-	}
-
-	all, err := s.db.ListAllSubdomainReservations()
+	list, err := s.portalService.AdminListExtensions()
 	if err != nil {
-		log.Printf("[API] Failed to list reservations for admin: %v", err)
-		http.Error(w, `{"error":"Failed to retrieve reservations"}`, http.StatusInternalServerError)
+		respondWithError(w, err)
 		return
 	}
-
-	var list []*db.SubdomainReservation
-	for _, res := range all {
-		if res.ExtensionRequested {
-			list = append(list, res)
-		}
-	}
-
 	respondJSON(w, http.StatusOK, list)
 }
 
 // handleAdminApproveExtension approves an extension request.
 func (s *Server) handleAdminApproveExtension(w http.ResponseWriter, r *http.Request, actor string) {
-	if s.db == nil {
-		http.Error(w, `{"error":"Database not configured"}`, http.StatusNotImplemented)
-		return
-	}
-
 	suffix := strings.TrimPrefix(r.URL.Path, "/api/admin/reservations/")
 	parts := strings.Split(suffix, "/")
 	if len(parts) == 0 {
-		http.Error(w, `{"error":"Invalid reservation ID"}`, http.StatusBadRequest)
-		return
-	}
-	id, err := strconv.ParseInt(parts[0], 10, 64)
-	if err != nil {
 		http.Error(w, `{"error":"Invalid reservation ID"}`, http.StatusBadRequest)
 		return
 	}
@@ -1370,44 +1027,11 @@ func (s *Server) handleAdminApproveExtension(w http.ResponseWriter, r *http.Requ
 		return
 	}
 
-	res, err := s.db.GetSubdomainReservation(id)
+	res, err := s.portalService.AdminApproveExtension(actor, parts[0], req.Days, req.Permanent, getClientIP(r))
 	if err != nil {
-		if errors.Is(err, db.ErrNotFound) {
-			http.Error(w, `{"error":"Reservation not found"}`, http.StatusNotFound)
-		} else {
-			http.Error(w, `{"error":"Database error"}`, http.StatusInternalServerError)
-		}
+		respondWithError(w, err)
 		return
 	}
-
-	res.ExtensionRequested = false
-	if req.Permanent {
-		res.ExpiresAt = nil
-	} else {
-		baseTime := time.Now()
-		if res.ExpiresAt != nil && res.ExpiresAt.After(time.Now()) {
-			baseTime = *res.ExpiresAt
-		}
-		extended := baseTime.AddDate(0, 0, req.Days)
-		res.ExpiresAt = &extended
-	}
-
-	res.ExpiryWarningSent = 0
-	if err := s.db.UpdateSubdomainReservation(res); err != nil {
-		log.Printf("[API] Failed to update reservation: %v", err)
-		http.Error(w, `{"error":"Failed to approve extension"}`, http.StatusInternalServerError)
-		return
-	}
-
-	_ = s.db.WriteAuditEntry(&db.AuditEntry{
-		ActorID:    actor,
-		Action:     "subdomain.extension_approved",
-		TargetType: "subdomain",
-		TargetID:   fmt.Sprintf("%s.%s", res.Subdomain, res.Domain),
-		Details:    fmt.Sprintf("Extension approved. Permanent: %t, Days: %d", req.Permanent, req.Days),
-		IPAddress:  getClientIP(r),
-		CreatedAt:  time.Now(),
-	})
 
 	user, err := s.db.GetUser(res.UserID)
 	if err == nil && user != nil {
@@ -1419,59 +1043,21 @@ func (s *Server) handleAdminApproveExtension(w http.ResponseWriter, r *http.Requ
 
 // handleAdminDemoteReservation demotes a permanent reservation.
 func (s *Server) handleAdminDemoteReservation(w http.ResponseWriter, r *http.Request, actor string) {
-	if s.db == nil {
-		http.Error(w, `{"error":"Database not configured"}`, http.StatusNotImplemented)
-		return
-	}
-
 	suffix := strings.TrimPrefix(r.URL.Path, "/api/admin/reservations/")
 	parts := strings.Split(suffix, "/")
 	if len(parts) == 0 {
 		http.Error(w, `{"error":"Invalid reservation ID"}`, http.StatusBadRequest)
 		return
 	}
-	id, err := strconv.ParseInt(parts[0], 10, 64)
-	if err != nil {
-		http.Error(w, `{"error":"Invalid reservation ID"}`, http.StatusBadRequest)
-		return
-	}
 
-	res, err := s.db.GetSubdomainReservation(id)
+	res, err := s.portalService.AdminDemoteReservation(actor, parts[0], getClientIP(r))
 	if err != nil {
-		if errors.Is(err, db.ErrNotFound) {
-			http.Error(w, `{"error":"Reservation not found"}`, http.StatusNotFound)
-		} else {
-			http.Error(w, `{"error":"Database error"}`, http.StatusInternalServerError)
-		}
+		respondWithError(w, err)
 		return
 	}
 
 	resOwner, err := s.db.GetUser(res.UserID)
-	if err != nil {
-		http.Error(w, `{"error":"Failed to retrieve reservation owner"}`, http.StatusInternalServerError)
-		return
-	}
-	res.ExpiresAt = s.getUserSubdomainExpiry(resOwner)
-	res.ExtensionRequested = false
-	res.ExpiryWarningSent = 0
-
-	if err := s.db.UpdateSubdomainReservation(res); err != nil {
-		log.Printf("[API] Failed to update reservation: %v", err)
-		http.Error(w, `{"error":"Failed to demote reservation"}`, http.StatusInternalServerError)
-		return
-	}
-
-	_ = s.db.WriteAuditEntry(&db.AuditEntry{
-		ActorID:    actor,
-		Action:     "subdomain.demoted",
-		TargetType: "subdomain",
-		TargetID:   fmt.Sprintf("%s.%s", res.Subdomain, res.Domain),
-		Details:    fmt.Sprintf("Permanent reservation demoted. ExpiresAt: %v", res.ExpiresAt),
-		IPAddress:  getClientIP(r),
-		CreatedAt:  time.Now(),
-	})
-
-	if resOwner != nil {
+	if err == nil && resOwner != nil {
 		s.sendSubdomainDemotedEmail(resOwner, res.Subdomain, res.Domain, res.ExpiresAt, r)
 	}
 
@@ -1480,11 +1066,6 @@ func (s *Server) handleAdminDemoteReservation(w http.ResponseWriter, r *http.Req
 
 // handleAdminOverrideLimit overrides a user's maximum reservation limit.
 func (s *Server) handleAdminOverrideLimit(w http.ResponseWriter, r *http.Request, actor string) {
-	if s.db == nil {
-		http.Error(w, `{"error":"Database not configured"}`, http.StatusNotImplemented)
-		return
-	}
-
 	suffix := strings.TrimPrefix(r.URL.Path, "/api/admin/users/")
 	parts := strings.Split(suffix, "/")
 	if len(parts) < 2 || parts[1] != "limit" {
@@ -1505,46 +1086,27 @@ func (s *Server) handleAdminOverrideLimit(w http.ResponseWriter, r *http.Request
 		return
 	}
 
-	user, err := s.db.GetUserByEmail(email)
+	user, err := s.portalService.AdminOverrideLimit(actor, email, req.MaxReservations, getClientIP(r))
 	if err != nil {
-		if errors.Is(err, db.ErrNotFound) {
+		if err == ErrNotFound {
 			http.Error(w, `{"error":"User not found"}`, http.StatusNotFound)
-		} else {
-			http.Error(w, `{"error":"Database error"}`, http.StatusInternalServerError)
+			return
 		}
+		respondWithError(w, err)
 		return
 	}
 
-	user.MaxReservations = req.MaxReservations
-	if err := s.db.UpdateUser(user); err != nil {
-		log.Printf("[API] Failed to update user reservations limit: %v", err)
-		http.Error(w, `{"error":"Failed to update quota limit"}`, http.StatusInternalServerError)
-		return
-	}
-
-	_ = s.db.WriteAuditEntry(&db.AuditEntry{
-		ActorID:    actor,
-		Action:     "user.limit_changed",
-		TargetType: "user",
-		TargetID:   user.Email,
-		Details:    fmt.Sprintf("Max reservations limit overridden. Value: %v", req.MaxReservations),
-		IPAddress:  getClientIP(r),
-		CreatedAt:  time.Now(),
+	respondJSON(w, http.StatusOK, map[string]interface{}{
+		"status":           "success",
+		"max_reservations": user.MaxReservations,
 	})
-
-	respondJSON(w, http.StatusOK, map[string]string{"status": "success"})
 }
 
 // handleAdminOverrideTunnelsLimit overrides a user's maximum active tunnels limit.
 func (s *Server) handleAdminOverrideTunnelsLimit(w http.ResponseWriter, r *http.Request, actor string) {
-	if s.db == nil {
-		http.Error(w, `{"error":"Database not configured"}`, http.StatusNotImplemented)
-		return
-	}
-
 	suffix := strings.TrimPrefix(r.URL.Path, "/api/admin/users/")
 	parts := strings.Split(suffix, "/")
-	if len(parts) < 2 || parts[1] != "tunnels-limit" {
+	if len(parts) < 2 || parts[1] != "tunnels_limit" {
 		http.Error(w, `{"error":"Invalid URL path"}`, http.StatusBadRequest)
 		return
 	}
@@ -1562,34 +1124,20 @@ func (s *Server) handleAdminOverrideTunnelsLimit(w http.ResponseWriter, r *http.
 		return
 	}
 
-	user, err := s.db.GetUserByEmail(email)
+	user, err := s.portalService.AdminOverrideTunnelsLimit(actor, email, req.MaxTunnels, getClientIP(r))
 	if err != nil {
-		if errors.Is(err, db.ErrNotFound) {
+		if err == ErrNotFound {
 			http.Error(w, `{"error":"User not found"}`, http.StatusNotFound)
-		} else {
-			http.Error(w, `{"error":"Database error"}`, http.StatusInternalServerError)
+			return
 		}
+		respondWithError(w, err)
 		return
 	}
 
-	user.MaxTunnels = req.MaxTunnels
-	if err := s.db.UpdateUser(user); err != nil {
-		log.Printf("[API] Failed to update user active tunnels limit: %v", err)
-		http.Error(w, `{"error":"Failed to update quota limit"}`, http.StatusInternalServerError)
-		return
-	}
-
-	_ = s.db.WriteAuditEntry(&db.AuditEntry{
-		ActorID:    actor,
-		Action:     "user.tunnels_limit_changed",
-		TargetType: "user",
-		TargetID:   user.Email,
-		Details:    fmt.Sprintf("Max active tunnels limit overridden. Value: %v", req.MaxTunnels),
-		IPAddress:  getClientIP(r),
-		CreatedAt:  time.Now(),
+	respondJSON(w, http.StatusOK, map[string]interface{}{
+		"status":             "success",
+		"max_active_tunnels": user.MaxTunnels,
 	})
-
-	respondJSON(w, http.StatusOK, map[string]string{"status": "success"})
 }
 
 // handleGenerateSubdomain generates a random subdomain prefix.
@@ -1620,16 +1168,9 @@ func (s *Server) handleListInvitations(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	var list []*db.GuestInvitation
-	if user.Role == "admin" || user.Role == "owner" {
-		list, err = s.db.ListAllGuestInvitations()
-	} else {
-		list, err = s.db.ListGuestInvitationsByCreator(user.Email)
-	}
-
+	list, err := s.portalService.ListInvitations(user)
 	if err != nil {
-		log.Printf("[API] Failed to list invitations: %v", err)
-		http.Error(w, `{"error":"Failed to retrieve invitations"}`, http.StatusInternalServerError)
+		respondWithError(w, err)
 		return
 	}
 
@@ -1650,78 +1191,27 @@ func (s *Server) handleCreateInvitation(w http.ResponseWriter, r *http.Request) 
 		return
 	}
 
-	req.Subdomain = strings.TrimSpace(strings.ToLower(req.Subdomain))
-	req.Domain = strings.TrimSpace(strings.ToLower(req.Domain))
-	req.Email = strings.TrimSpace(req.Email)
-	req.Name = strings.TrimSpace(req.Name)
-
-	if req.Subdomain == "" || req.Domain == "" || req.Email == "" || req.Name == "" {
-		http.Error(w, `{"error":"Missing required fields (subdomain, domain, email, name)"}`, http.StatusBadRequest)
-		return
+	scheme := "https"
+	if r.TLS == nil {
+		scheme = "http"
 	}
 
-	if req.ValidityDays <= 0 {
-		req.ValidityDays = 7
-	}
-	if req.ValidityDays > 365 {
-		req.ValidityDays = 365
-	}
-
-	// Verify subdomain ownership
-	res, err := s.db.GetSubdomainReservationByName(req.Subdomain, req.Domain)
+	invite, claimURL, err := s.portalService.CreateInvitation(
+		user, req.Subdomain, req.Domain, req.Name, req.Email, req.ValidityDays,
+		getClientIP(r), s.cfg.PortalURL, scheme, r.Host,
+	)
 	if err != nil {
-		if errors.Is(err, db.ErrNotFound) {
+		if err == ErrNotFound {
 			http.Error(w, `{"error":"Subdomain reservation not found"}`, http.StatusNotFound)
-		} else {
-			http.Error(w, `{"error":"Database error"}`, http.StatusInternalServerError)
+			return
 		}
-		return
-	}
-
-	if res.UserID != user.ID && user.Role != "admin" && user.Role != "owner" {
-		http.Error(w, `{"error":"Forbidden: you do not own this subdomain"}`, http.StatusForbidden)
-		return
-	}
-
-	token := generateToken(16)
-	expiresAt := time.Now().AddDate(0, 0, req.ValidityDays)
-
-	invite := &db.GuestInvitation{
-		Token:     token,
-		Subdomain: req.Subdomain,
-		Domain:    req.Domain,
-		Name:      req.Name,
-		Email:     req.Email,
-		ExpiresAt: expiresAt,
-		CreatedBy: user.Email,
-	}
-
-	if err := s.db.CreateGuestInvitation(invite); err != nil {
-		log.Printf("[API] Failed to create guest invitation: %v", err)
-		http.Error(w, `{"error":"Failed to create invitation"}`, http.StatusInternalServerError)
-		return
-	}
-
-	// Build the claim URL
-	baseURL := s.cfg.PortalURL
-	if baseURL == "" {
-		scheme := "https"
-		if r.TLS == nil {
-			scheme = "http"
+		if err == ErrForbidden {
+			http.Error(w, `{"error":"Forbidden: you do not own this subdomain"}`, http.StatusForbidden)
+			return
 		}
-		baseURL = fmt.Sprintf("%s://%s", scheme, r.Host)
+		respondWithError(w, err)
+		return
 	}
-	claimURL := fmt.Sprintf("%s/api/portal/invitations/claim?token=%s", baseURL, token)
-
-	_ = s.db.WriteAuditEntry(&db.AuditEntry{
-		ActorID:    user.Email,
-		Action:     "invitation.created",
-		TargetType: "subdomain",
-		TargetID:   fmt.Sprintf("%s.%s", req.Subdomain, req.Domain),
-		Details:    fmt.Sprintf("Guest invitation created for %s (%s), claim URL: %s", req.Name, req.Email, claimURL),
-		IPAddress:  getClientIP(r),
-		CreatedAt:  time.Now(),
-	})
 
 	respondJSON(w, http.StatusCreated, map[string]interface{}{
 		"invitation": invite,
@@ -1738,42 +1228,22 @@ func (s *Server) handleDeleteInvitation(w http.ResponseWriter, r *http.Request) 
 	}
 
 	idStr := strings.TrimPrefix(r.URL.Path, "/api/portal/invitations/")
-	id, err := strconv.ParseInt(idStr, 10, 64)
-	if err != nil {
-		http.Error(w, `{"error":"Invalid invitation ID"}`, http.StatusBadRequest)
-		return
-	}
-
-	invite, err := s.db.GetGuestInvitation(id)
-	if err != nil {
-		if errors.Is(err, db.ErrNotFound) {
-			http.Error(w, `{"error":"Invitation not found"}`, http.StatusNotFound)
-		} else {
-			http.Error(w, `{"error":"Database error"}`, http.StatusInternalServerError)
+	if err := s.portalService.DeleteInvitation(user, idStr, getClientIP(r)); err != nil {
+		if err == ErrInvalidRequest {
+			http.Error(w, `{"error":"Invalid invitation ID"}`, http.StatusBadRequest)
+			return
 		}
+		if err == ErrNotFound {
+			http.Error(w, `{"error":"Invitation not found"}`, http.StatusNotFound)
+			return
+		}
+		if err == ErrForbidden {
+			http.Error(w, `{"error":"Forbidden: you do not own this invitation"}`, http.StatusForbidden)
+			return
+		}
+		respondWithError(w, err)
 		return
 	}
-
-	if invite.CreatedBy != user.Email && user.Role != "admin" && user.Role != "owner" {
-		http.Error(w, `{"error":"Forbidden: you do not own this invitation"}`, http.StatusForbidden)
-		return
-	}
-
-	if err := s.db.DeleteGuestInvitation(id); err != nil {
-		log.Printf("[API] Failed to delete invitation: %v", err)
-		http.Error(w, `{"error":"Failed to delete invitation"}`, http.StatusInternalServerError)
-		return
-	}
-
-	_ = s.db.WriteAuditEntry(&db.AuditEntry{
-		ActorID:    user.Email,
-		Action:     "invitation.deleted",
-		TargetType: "subdomain",
-		TargetID:   fmt.Sprintf("%s.%s", invite.Subdomain, invite.Domain),
-		Details:    fmt.Sprintf("Guest invitation revoked for %s (%s)", invite.Name, invite.Email),
-		IPAddress:  getClientIP(r),
-		CreatedAt:  time.Now(),
-	})
 
 	respondJSON(w, http.StatusOK, map[string]string{"status": "success"})
 }
@@ -1786,76 +1256,35 @@ func (s *Server) handleClaimInvitation(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	invite, err := s.db.GetGuestInvitationByToken(token)
-	if err != nil {
-		if errors.Is(err, db.ErrNotFound) {
-			http.Error(w, "Invalid or expired claim link", http.StatusNotFound)
-		} else {
-			http.Error(w, "Database error", http.StatusInternalServerError)
-		}
-		return
-	}
-
-	if invite.ExpiresAt.Before(time.Now()) {
-		http.Error(w, "This invitation link has expired", http.StatusGone)
-		return
-	}
-
-	if invite.ClaimedAt != nil {
-		http.Error(w, "This invitation link has already been claimed", http.StatusConflict)
-		return
-	}
-
-	if s.caCert == nil || s.caKey == nil {
-		http.Error(w, "Server Root CA is not initialized", http.StatusInternalServerError)
-		return
-	}
-
 	pfxPassword := r.URL.Query().Get("password")
 	if pfxPassword == "" {
 		pfxPassword = "tunnel"
 	}
 
-	validityDays := int(time.Until(invite.ExpiresAt).Hours() / 24)
-	if validityDays <= 0 {
-		validityDays = 1
-	}
-
-	identity := "guest:" + token
-	pfxBytes, err := GenerateClientP12(s.caCert, s.caKey, identity, invite.Email, invite.Name, validityDays, pfxPassword)
+	pfxBytes, invite, err := s.portalService.ClaimInvitation(token, pfxPassword, getClientIP(r))
 	if err != nil {
-		log.Printf("[API] Failed to generate client PKCS#12 bundle: %v", err)
-		http.Error(w, "Failed to sign client certificate", http.StatusInternalServerError)
+		if err == ErrNotFound {
+			http.Error(w, "Invalid or expired claim link", http.StatusNotFound)
+			return
+		}
+		if invite != nil {
+			if err.Error() == "invitation expired" {
+				http.Error(w, "This invitation link has expired", http.StatusGone)
+				return
+			}
+			if err.Error() == "invitation already claimed" {
+				http.Error(w, "This invitation link has already been claimed", http.StatusConflict)
+				return
+			}
+			if err.Error() == "server CA not initialized" {
+				http.Error(w, "Server Root CA is not initialized", http.StatusInternalServerError)
+				return
+			}
+		}
+		slog.Info(fmt.Sprintf("[API] Failed to claim invitation: %v", err))
+		http.Error(w, "Failed to sign client certificate or database error", http.StatusInternalServerError)
 		return
 	}
-
-	acl := &db.SubdomainACL{
-		Subdomain: invite.Subdomain,
-		Domain:    invite.Domain,
-		Identity:  identity,
-		Name:      invite.Name,
-		Email:     invite.Email,
-		ExpiresAt: &invite.ExpiresAt,
-	}
-	if err := s.db.CreateSubdomainACL(acl); err != nil {
-		log.Printf("[API] Failed to create subdomain ACL: %v", err)
-		http.Error(w, "Database error mapping access permission", http.StatusInternalServerError)
-		return
-	}
-
-	if err := s.db.MarkGuestInvitationClaimed(token); err != nil {
-		log.Printf("[API] Failed to mark invitation claimed: %v", err)
-	}
-
-	_ = s.db.WriteAuditEntry(&db.AuditEntry{
-		ActorID:    invite.Email,
-		Action:     "invitation.claimed",
-		TargetType: "subdomain",
-		TargetID:   fmt.Sprintf("%s.%s", invite.Subdomain, invite.Domain),
-		Details:    fmt.Sprintf("Guest invitation claimed by %s (%s) using identity CN %s", invite.Name, invite.Email, identity),
-		IPAddress:  getClientIP(r),
-		CreatedAt:  time.Now(),
-	})
 
 	w.Header().Set("Content-Type", "application/x-pkcs12")
 	w.Header().Set("Content-Disposition", fmt.Sprintf("attachment; filename=%s-guest.p12", invite.Subdomain))
@@ -1868,31 +1297,6 @@ func (s *Server) handleCSRSignInvitation(w http.ResponseWriter, r *http.Request)
 	token := r.URL.Query().Get("token")
 	if token == "" {
 		http.Error(w, "Missing invitation token", http.StatusBadRequest)
-		return
-	}
-
-	invite, err := s.db.GetGuestInvitationByToken(token)
-	if err != nil {
-		if errors.Is(err, db.ErrNotFound) {
-			http.Error(w, "Invalid or expired invitation token", http.StatusNotFound)
-		} else {
-			http.Error(w, "Database error", http.StatusInternalServerError)
-		}
-		return
-	}
-
-	if invite.ExpiresAt.Before(time.Now()) {
-		http.Error(w, "This invitation link has expired", http.StatusGone)
-		return
-	}
-
-	if invite.ClaimedAt != nil {
-		http.Error(w, "This invitation has already been claimed", http.StatusConflict)
-		return
-	}
-
-	if s.caCert == nil || s.caKey == nil {
-		http.Error(w, "Server Root CA is not initialized", http.StatusInternalServerError)
 		return
 	}
 
@@ -1911,59 +1315,35 @@ func (s *Server) handleCSRSignInvitation(w http.ResponseWriter, r *http.Request)
 		return
 	}
 
-	validityDays := int(time.Until(invite.ExpiresAt).Hours() / 24)
-	if validityDays <= 0 {
-		validityDays = 1
-	}
-
-	identity := "guest:" + token
-	certBytes, err := SignClientCSR(s.caCert, s.caKey, bodyBytes, identity, validityDays)
+	certBytes, invite, err := s.portalService.CSRSignInvitation(token, bodyBytes, getClientIP(r))
 	if err != nil {
-		log.Printf("[API] CSR sign failure: %v", err)
-		http.Error(w, fmt.Sprintf("CSR signature/signing failure: %v", err), http.StatusBadRequest)
+		if err == ErrNotFound {
+			http.Error(w, "Invalid or expired invitation token", http.StatusNotFound)
+			return
+		}
+		if invite != nil {
+			if err.Error() == "invitation expired" {
+				http.Error(w, "This invitation link has expired", http.StatusGone)
+				return
+			}
+			if err.Error() == "invitation already claimed" {
+				http.Error(w, "This invitation has already been claimed", http.StatusConflict)
+				return
+			}
+			if err.Error() == "server CA not initialized" {
+				http.Error(w, "Server Root CA is not initialized", http.StatusInternalServerError)
+				return
+			}
+		}
+		slog.Info(fmt.Sprintf("[API] Failed to sign CSR: %v", err))
+		http.Error(w, fmt.Sprintf("Failed to sign CSR or database error: %v", err), http.StatusInternalServerError)
 		return
 	}
-
-	acl := &db.SubdomainACL{
-		Subdomain: invite.Subdomain,
-		Domain:    invite.Domain,
-		Identity:  identity,
-		Name:      invite.Name,
-		Email:     invite.Email,
-		ExpiresAt: &invite.ExpiresAt,
-	}
-	if err := s.db.CreateSubdomainACL(acl); err != nil {
-		log.Printf("[API] Failed to create subdomain ACL for signed CSR: %v", err)
-		http.Error(w, "Database error mapping access permission", http.StatusInternalServerError)
-		return
-	}
-
-	if err := s.db.MarkGuestInvitationClaimed(token); err != nil {
-		log.Printf("[API] Failed to mark invitation claimed: %v", err)
-	}
-
-	_ = s.db.WriteAuditEntry(&db.AuditEntry{
-		ActorID:    invite.Email,
-		Action:     "invitation.csr_claimed",
-		TargetType: "subdomain",
-		TargetID:   fmt.Sprintf("%s.%s", invite.Subdomain, invite.Domain),
-		Details:    fmt.Sprintf("Guest CSR signed for %s (%s) using identity CN %s", invite.Name, invite.Email, identity),
-		IPAddress:  getClientIP(r),
-		CreatedAt:  time.Now(),
-	})
 
 	w.Header().Set("Content-Type", "application/x-pem-file")
 	w.Header().Set("Content-Disposition", fmt.Sprintf("attachment; filename=%s-guest.crt", invite.Subdomain))
 	w.Header().Set("Content-Length", strconv.Itoa(len(certBytes)))
 	_, _ = w.Write(certBytes)
-}
-
-func generateToken(length int) string {
-	bytes := make([]byte, length)
-	if _, err := rand.Read(bytes); err != nil {
-		return fmt.Sprintf("%x", time.Now().UnixNano())
-	}
-	return hex.EncodeToString(bytes)
 }
 
 type updateAccessControlRequest struct {
@@ -2002,44 +1382,18 @@ func (s *Server) handleUpdateReservationAccessControl(w http.ResponseWriter, r *
 		return
 	}
 
-	res, err := s.db.GetSubdomainReservationByName(req.Subdomain, req.Domain)
-	if err != nil {
-		if errors.Is(err, db.ErrNotFound) {
+	if err := s.portalService.UpdateReservationAccessControl(user, req.Subdomain, req.Domain, req.AccessMode, req.Passcode, req.WhitelistIPs, getClientIP(r)); err != nil {
+		if err == ErrNotFound {
 			http.Error(w, `{"error":"Reservation not found"}`, http.StatusNotFound)
-		} else {
-			http.Error(w, `{"error":"Database error"}`, http.StatusInternalServerError)
+			return
 		}
+		if err == ErrForbidden {
+			http.Error(w, `{"error":"Forbidden: you do not own this reservation"}`, http.StatusForbidden)
+			return
+		}
+		respondWithError(w, err)
 		return
 	}
-
-	if res.UserID != user.ID && user.Role != "admin" && user.Role != "owner" {
-		http.Error(w, `{"error":"Forbidden: you do not own this reservation"}`, http.StatusForbidden)
-		return
-	}
-
-	res.Passcode = req.Passcode
-	res.WhitelistIPs = req.WhitelistIPs
-	if req.AccessMode != "" {
-		res.AccessMode = req.AccessMode
-	} else {
-		res.AccessMode = "or"
-	}
-
-	if err := s.db.UpdateSubdomainReservation(res); err != nil {
-		log.Printf("[API] Failed to update reservation access controls: %v", err)
-		http.Error(w, `{"error":"Failed to update access control configuration"}`, http.StatusInternalServerError)
-		return
-	}
-
-	_ = s.db.WriteAuditEntry(&db.AuditEntry{
-		ActorID:    user.Email,
-		Action:     "subdomain.access_control_updated",
-		TargetType: "subdomain",
-		TargetID:   fmt.Sprintf("%s.%s", req.Subdomain, req.Domain),
-		Details:    fmt.Sprintf("Access controls updated: Mode=%s, Passcode=%s, IPs=%s", res.AccessMode, res.Passcode, res.WhitelistIPs),
-		IPAddress:  getClientIP(r),
-		CreatedAt:  time.Now(),
-	})
 
 	respondJSON(w, http.StatusOK, map[string]string{"status": "success"})
 }
@@ -2106,7 +1460,7 @@ func (s *Server) handleEdgeAction(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if err != nil {
-		log.Printf("[API] Failed to perform edge action %s on %s: %v", req.Action, req.NodeID, err)
+		slog.Info(fmt.Sprintf("[API] Failed to perform edge action %s on %s: %v", req.Action, req.NodeID, err))
 		respondJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
 		return
 	}

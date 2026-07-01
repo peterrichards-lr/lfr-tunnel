@@ -9,7 +9,7 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
-	"log"
+	"log/slog"
 	"net"
 	"net/http"
 	"net/url"
@@ -17,8 +17,9 @@ import (
 	"strings"
 	"time"
 
-	"github.com/gorilla/websocket"
 	"lfr-tunnel/pkg/config"
+
+	"github.com/gorilla/websocket"
 )
 
 // ControlMessage represents the JSON schema for websocket communication.
@@ -56,7 +57,7 @@ func (s *Server) handleEdgeControlWS(w http.ResponseWriter, r *http.Request) {
 
 	conn, err := upgrader.Upgrade(w, r, nil)
 	if err != nil {
-		log.Printf("[Edge WS] Failed to upgrade WebSocket: %v", err)
+		slog.Info(fmt.Sprintf("[Edge WS] Failed to upgrade WebSocket: %v", err))
 		return
 	}
 
@@ -71,7 +72,7 @@ func (s *Server) handleEdgeControlWS(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if err := conn.WriteJSON(challenge); err != nil {
-		log.Printf("[Edge WS] Failed to send challenge to %s: %v", nodeID, err)
+		slog.Info(fmt.Sprintf("[Edge WS] Failed to send challenge to %s: %v", nodeID, err))
 		_ = conn.Close()
 		return
 	}
@@ -80,13 +81,13 @@ func (s *Server) handleEdgeControlWS(w http.ResponseWriter, r *http.Request) {
 	_ = conn.SetReadDeadline(time.Now().Add(5 * time.Second))
 	var authMsg ControlMessage
 	if err := conn.ReadJSON(&authMsg); err != nil {
-		log.Printf("[Edge WS] Failed to read auth message from %s: %v", nodeID, err)
+		slog.Info(fmt.Sprintf("[Edge WS] Failed to read auth message from %s: %v", nodeID, err))
 		_ = conn.Close()
 		return
 	}
 
 	if authMsg.Type != "auth" {
-		log.Printf("[Edge WS] Expected auth message from %s, got %s", nodeID, authMsg.Type)
+		slog.Info(fmt.Sprintf("[Edge WS] Expected auth message from %s, got %s", nodeID, authMsg.Type))
 		_ = conn.WriteJSON(ControlMessage{Type: "auth_failed", Reason: "unexpected message type"})
 		_ = conn.Close()
 		return
@@ -102,7 +103,7 @@ func (s *Server) handleEdgeControlWS(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if nodeConfig == nil {
-		log.Printf("[Edge WS] Unknown edge node ID: %s", nodeID)
+		slog.Info(fmt.Sprintf("[Edge WS] Unknown edge node ID: %s", nodeID))
 		_ = conn.WriteJSON(ControlMessage{Type: "auth_failed", Reason: "unknown node_id"})
 		_ = conn.Close()
 		return
@@ -110,7 +111,7 @@ func (s *Server) handleEdgeControlWS(w http.ResponseWriter, r *http.Request) {
 
 	keyBytes, err := hex.DecodeString(nodeConfig.TokenHash)
 	if err != nil {
-		log.Printf("[Edge WS] Invalid token hash configured for %s", nodeID)
+		slog.Info(fmt.Sprintf("[Edge WS] Invalid token hash configured for %s", nodeID))
 		_ = conn.WriteJSON(ControlMessage{Type: "auth_failed", Reason: "invalid token hash"})
 		_ = conn.Close()
 		return
@@ -122,7 +123,7 @@ func (s *Server) handleEdgeControlWS(w http.ResponseWriter, r *http.Request) {
 
 	respMAC, err := hex.DecodeString(authMsg.Response)
 	if err != nil || subtle.ConstantTimeCompare(respMAC, expectedMAC) != 1 {
-		log.Printf("[Edge WS] HMAC verification failed for %s", nodeID)
+		slog.Info(fmt.Sprintf("[Edge WS] HMAC verification failed for %s", nodeID))
 		_ = conn.WriteJSON(ControlMessage{Type: "auth_failed", Reason: "invalid signature"})
 		_ = conn.Close()
 		return
@@ -146,7 +147,7 @@ func (s *Server) handleEdgeControlWS(w http.ResponseWriter, r *http.Request) {
 	s.edgeIPs[nodeID] = clientIP
 	s.edgeClientsMu.Unlock()
 
-	log.Printf("[Edge WS] Edge node %s successfully authenticated.", nodeID)
+	slog.Info(fmt.Sprintf("[Edge WS] Edge node %s successfully authenticated.", nodeID))
 	_ = conn.WriteJSON(ControlMessage{Type: "auth_success"})
 
 	// Start read pump to keep alive and detect disconnects
@@ -160,7 +161,7 @@ func (s *Server) handleEdgeControlWS(w http.ResponseWriter, r *http.Request) {
 			}
 			s.edgeClientsMu.Unlock()
 			_ = conn.Close()
-			log.Printf("[Edge WS] Edge node %s disconnected.", nodeID)
+			slog.Info(fmt.Sprintf("[Edge WS] Edge node %s disconnected.", nodeID))
 		}()
 
 		// Set read limit and pong handler
@@ -302,7 +303,7 @@ func (s *Server) kickAllLocalLeases() {
 	}
 	leases := s.registry.ListLeases()
 	for _, l := range leases {
-		log.Printf("[Edge Control] Terminating lease for %s", l.FullHost)
+		slog.Info(fmt.Sprintf("[Edge Control] Terminating lease for %s", l.FullHost))
 		s.registry.KickLease(l.SubdomainPrefix)
 	}
 }
@@ -320,7 +321,7 @@ func (s *Server) runEdgeControlChannel() {
 
 		u, err := url.Parse(s.cfg.ControlPlaneURL)
 		if err != nil {
-			log.Printf("[Edge Control] Invalid ControlPlaneURL: %v", err)
+			slog.Info(fmt.Sprintf("[Edge Control] Invalid ControlPlaneURL: %v", err))
 			time.Sleep(10 * time.Second)
 			continue
 		}
@@ -342,7 +343,7 @@ func (s *Server) runEdgeControlChannel() {
 		}
 		wsURL := fmt.Sprintf("%s://%s/api/internal/edge-control-ws?node_id=%s&version=%s", scheme, u.Host, nodeID, url.QueryEscape(config.Version))
 
-		log.Printf("[Edge Control] Connecting to Control Plane at %s...", wsURL)
+		slog.Info(fmt.Sprintf("[Edge Control] Connecting to Control Plane at %s...", wsURL))
 
 		dialer := websocket.DefaultDialer
 		dialer.HandshakeTimeout = 5 * time.Second
@@ -353,11 +354,11 @@ func (s *Server) runEdgeControlChannel() {
 
 		conn, _, err := dialer.Dial(wsURL, nil)
 		if err != nil {
-			log.Printf("[Edge Control] Connection failed: %v", err)
+			slog.Info(fmt.Sprintf("[Edge Control] Connection failed: %v", err))
 			if lostAt.IsZero() {
 				lostAt = time.Now()
 			} else if time.Since(lostAt) > 3*time.Minute {
-				log.Printf("[Edge Control] Connection lost for >3 minutes. Terminating all active tunnels...")
+				slog.Info("[Edge Control] Connection lost for >3 minutes. Terminating all active tunnels...")
 				s.kickAllLocalLeases()
 			}
 			time.Sleep(10 * time.Second)
@@ -370,14 +371,14 @@ func (s *Server) runEdgeControlChannel() {
 		// 1. Receive challenge
 		var challengeMsg ControlMessage
 		if err := conn.ReadJSON(&challengeMsg); err != nil {
-			log.Printf("[Edge Control] Failed to read challenge: %v", err)
+			slog.Info(fmt.Sprintf("[Edge Control] Failed to read challenge: %v", err))
 			_ = conn.Close()
 			time.Sleep(5 * time.Second)
 			continue
 		}
 
 		if challengeMsg.Type != "challenge" {
-			log.Printf("[Edge Control] Expected challenge message, got %s", challengeMsg.Type)
+			slog.Info(fmt.Sprintf("[Edge Control] Expected challenge message, got %s", challengeMsg.Type))
 			_ = conn.Close()
 			time.Sleep(5 * time.Second)
 			continue
@@ -394,7 +395,7 @@ func (s *Server) runEdgeControlChannel() {
 			Response: respHex,
 		}
 		if err := conn.WriteJSON(authMsg); err != nil {
-			log.Printf("[Edge Control] Failed to send auth response: %v", err)
+			slog.Info(fmt.Sprintf("[Edge Control] Failed to send auth response: %v", err))
 			_ = conn.Close()
 			time.Sleep(5 * time.Second)
 			continue
@@ -403,20 +404,20 @@ func (s *Server) runEdgeControlChannel() {
 		// 3. Receive auth result
 		var authResult ControlMessage
 		if err := conn.ReadJSON(&authResult); err != nil {
-			log.Printf("[Edge Control] Failed to read auth result: %v", err)
+			slog.Info(fmt.Sprintf("[Edge Control] Failed to read auth result: %v", err))
 			_ = conn.Close()
 			time.Sleep(5 * time.Second)
 			continue
 		}
 
 		if authResult.Type != "auth_success" {
-			log.Printf("[Edge Control] Authentication failed: %s", authResult.Reason)
+			slog.Info(fmt.Sprintf("[Edge Control] Authentication failed: %s", authResult.Reason))
 			_ = conn.Close()
 			time.Sleep(10 * time.Second)
 			continue
 		}
 
-		log.Printf("[Edge Control] Successfully connected and authenticated with Control Plane.")
+		slog.Info("[Edge Control] Successfully connected and authenticated with Control Plane.")
 
 		// Start ticker to send ping messages
 		ticker := time.NewTicker(30 * time.Second)
@@ -458,41 +459,41 @@ func (s *Server) runEdgeControlChannel() {
 			}
 
 			if readErr != nil {
-				log.Printf("[Edge Control] Connection closed or read failed: %v", readErr)
+				slog.Info(fmt.Sprintf("[Edge Control] Connection closed or read failed: %v", readErr))
 				break
 			}
 
 			switch msg.Type {
 			case "restart":
-				log.Printf("[Edge Control] Restart request received from Control Plane. Exiting...")
+				slog.Info("[Edge Control] Restart request received from Control Plane. Exiting...")
 				os.Exit(1)
 			case "blacklist_update":
 				switch msg.Action {
 				case "add":
-					log.Printf("[Edge Control] Blacklisting IP: %s", msg.IP)
+					slog.Info(fmt.Sprintf("[Edge Control] Blacklisting IP: %s", msg.IP))
 					s.blacklist.Store(msg.IP, true)
 				case "remove":
-					log.Printf("[Edge Control] Unblacklisting IP: %s", msg.IP)
+					slog.Info(fmt.Sprintf("[Edge Control] Unblacklisting IP: %s", msg.IP))
 					s.blacklist.Delete(msg.IP)
 				}
 			case "maintenance_trigger":
 				s.maintMutex.Lock()
 				switch msg.Action {
 				case "enable":
-					log.Printf("[Edge Control] Maintenance enabled: %s (duration: %d mins)", msg.Reason, msg.Duration)
+					slog.Info(fmt.Sprintf("[Edge Control] Maintenance enabled: %s (duration: %d mins)", msg.Reason, msg.Duration))
 					s.maintenanceMode = true
 					s.kickAllLocalLeases()
 				case "disable":
-					log.Printf("[Edge Control] Maintenance disabled.")
+					slog.Info("[Edge Control] Maintenance disabled.")
 					s.maintenanceMode = false
 				}
 				s.maintMutex.Unlock()
 			case "lease_kick":
 				if msg.Subdomain == "*" || msg.Subdomain == "" {
-					log.Printf("[Edge Control] Kicking ALL leases on this edge node")
+					slog.Info("[Edge Control] Kicking ALL leases on this edge node")
 					s.kickAllLocalLeases()
 				} else {
-					log.Printf("[Edge Control] Kicking lease for subdomain %s", msg.Subdomain)
+					slog.Info(fmt.Sprintf("[Edge Control] Kicking lease for subdomain %s", msg.Subdomain))
 					s.registry.KickLease(msg.Subdomain)
 				}
 			}

@@ -6,6 +6,7 @@ import (
 	"flag"
 	"fmt"
 	"log"
+	"log/slog"
 	"net/http"
 	"os"
 	"os/exec"
@@ -18,10 +19,11 @@ import (
 	"syscall"
 	"time"
 
-	"github.com/mattn/go-isatty"
 	"lfr-tunnel/pkg/client"
 	"lfr-tunnel/pkg/config"
 	"lfr-tunnel/pkg/mcp"
+
+	"github.com/mattn/go-isatty"
 )
 
 type arrayFlags []string
@@ -151,17 +153,17 @@ func main() {
 	*inspectorPort = actualInspectorPort
 
 	if cfg.CustomDomain != "" {
-		log.Printf("[Client] Custom domain: %s", cfg.CustomDomain)
+		slog.Info("[Client] Custom domain: " + cfg.CustomDomain)
 	} else {
-		log.Printf("[Client] Subdomain prefix: %s", sub)
+		slog.Info("[Client] Subdomain prefix: " + sub)
 	}
-	log.Printf("[Client] Exposing ports:")
+	slog.Info("[Client] Exposing ports:")
 	for _, pm := range portMappings {
 		suffixStr := " (Primary)"
 		if pm.NameSuffix != "" {
 			suffixStr = fmt.Sprintf(" (Suffix: -%s)", pm.NameSuffix)
 		}
-		log.Printf("  - Local port %d%s", pm.LocalPort, suffixStr)
+		slog.Info(fmt.Sprintf("  - Local port %d%s", pm.LocalPort, suffixStr))
 	}
 
 	// Check compatibility result with 500ms timeout
@@ -172,7 +174,7 @@ func main() {
 				log.Fatalf("[Error] Your Liferay Tunnel client is too old to connect to the server. Minimum required version is %s.", info.MinVersion)
 			}
 			if client.CompareVersions(config.Version, info.LatestVersion) < 0 {
-				log.Printf("[Warning] A new version of Liferay Tunnel (%s) is available. You are running %s.", info.LatestVersion, config.Version)
+				slog.Info(fmt.Sprintf("[Warning] A new version of Liferay Tunnel (%s) is available. You are running %s.", info.LatestVersion, config.Version))
 			}
 		}
 	case <-time.After(500 * time.Millisecond):
@@ -220,6 +222,7 @@ func main() {
 	}
 
 	publicURLs := printAndCollectPublicURLs(cfg, regResp, portMappings, subHost)
+	engine.PublicURLs = publicURLs
 
 	// Write dynamic client state to file
 	state := &client.ClientState{
@@ -232,7 +235,7 @@ func main() {
 		StartTime:     time.Now().Format(time.RFC3339),
 	}
 	if err := client.WriteState(subHost, state); err != nil {
-		log.Printf("[Warning] Failed to write state file: %v\n", err)
+		slog.Info(fmt.Sprintf("[Warning] Failed to write state file: %v\n", err))
 	}
 
 	// 6. Run Client and wait for signals
@@ -243,7 +246,7 @@ func main() {
 	signal.Notify(sigs, syscall.SIGINT, syscall.SIGTERM)
 	go func() {
 		<-sigs
-		log.Println("[Client] Shutdown signal received, closing tunnel...")
+		slog.Info("[Client] Shutdown signal received, closing tunnel...")
 		cancel()
 	}()
 
@@ -265,7 +268,7 @@ func main() {
 	if err != nil && ctx.Err() == nil {
 		log.Fatalf("[Client] Tunnel disconnected with error: %v", err)
 	}
-	log.Println("[Client] Tunnel shutdown completed.")
+	slog.Info("[Client] Tunnel shutdown completed.")
 }
 
 func overrideConfigWithFlags(cfg *config.ClientConfig) {
@@ -404,17 +407,17 @@ func resolvePortsAndMappings(cfg *config.ClientConfig) []client.PortMapping {
 		}
 	} else {
 		if client.IsLiferayWorkspace(".") {
-			log.Println("[Client] Liferay workspace detected. Scanning for Client Extensions...")
+			slog.Info("[Client] Liferay workspace detected. Scanning for Client Extensions...")
 			portMappings, err = client.DetectWorkspacePorts(".")
 			if err != nil {
-				log.Printf("[Warning] Failed to scan workspace: %v. Using defaults.", err)
+				slog.Info(fmt.Sprintf("[Warning] Failed to scan workspace: %v. Using defaults.", err))
 				portMappings = []client.PortMapping{{LocalPort: 8080}}
 			}
 		} else {
-			log.Println("[Client] No Liferay workspace detected in current directory. Probing typical ports (8080, 13000, 3000)...")
+			slog.Info("[Client] No Liferay workspace detected in current directory. Probing typical ports (8080, 13000, 3000)...")
 			activePorts := client.ProbeLocalPorts([]int{8080, 13000, 3000})
 			if len(activePorts) > 0 {
-				log.Printf("[Client] Detected active local service ports: %v", activePorts)
+				slog.Info(fmt.Sprintf("[Client] Detected active local service ports: %v", activePorts))
 				for idx, port := range activePorts {
 					suffix := ""
 					if idx > 0 {
@@ -426,7 +429,7 @@ func resolvePortsAndMappings(cfg *config.ClientConfig) []client.PortMapping {
 					})
 				}
 			} else {
-				log.Println("[Client] No active local services found on typical ports. Defaulting to port 8080.")
+				slog.Info("[Client] No active local services found on typical ports. Defaulting to port 8080.")
 				portMappings = []client.PortMapping{{LocalPort: 8080}}
 			}
 		}
@@ -442,7 +445,7 @@ func performRegistrationHandshake(cfg *config.ClientConfig, portMappings []clien
 	regResp, err := client.RegisterTunnel(cfg.ServerURL, cfg.AuthToken, sub, cfg.CustomDomain, portMappings, cfg.RateLimit, cfg.BasicAuth, addedHeaders, clientOS, cfg.Passcode, cfg.WhitelistIPs)
 	if err != nil {
 		if regErr, ok := err.(*client.RegistrationError); ok && regErr.StatusCode == 403 {
-			log.Printf("[Error] Failed to register: %s\n", regErr.Message)
+			slog.Info(fmt.Sprintf("[Error] Failed to register: %s\n", regErr.Message))
 			portalURL := regErr.PortalURL
 			if portalURL == "" {
 				portalURL = strings.Replace(cfg.ServerURL, "tunnel.", "portal.", 1)
@@ -450,9 +453,9 @@ func performRegistrationHandshake(cfg *config.ClientConfig, portMappings []clien
 					portalURL = cfg.ServerURL + "/portal"
 				}
 			}
-			log.Println("[Client] Subdomain reservation or limit issue detected.")
-			log.Println("[Client] Please visit the User Portal to resolve it:")
-			log.Printf("         👉 %s (Cmd/Ctrl+Click to open)\n", portalURL)
+			slog.Info("[Client] Subdomain reservation or limit issue detected.")
+			slog.Info("[Client] Please visit the User Portal to resolve it:")
+			slog.Info(fmt.Sprintf("         👉 %s (Cmd/Ctrl+Click to open)\n", portalURL))
 			os.Exit(1)
 		}
 
@@ -465,10 +468,10 @@ func performRegistrationHandshake(cfg *config.ClientConfig, portMappings []clien
 		}
 
 		if isGatewayIssue {
-			log.Printf("[Error] Failed to register: %v\n", err)
-			log.Println("[Client] Gateway appears to be offline or undergoing maintenance.")
-			log.Println("[Client] Check the service status page for active outages:")
-			log.Println("         👉 https://status.lfr-demo.se (Cmd/Ctrl+Click to open)")
+			slog.Info(fmt.Sprintf("[Error] Failed to register: %v\n", err))
+			slog.Info("[Client] Gateway appears to be offline or undergoing maintenance.")
+			slog.Info("[Client] Check the service status page for active outages:")
+			slog.Info("         👉 https://status.lfr-demo.se (Cmd/Ctrl+Click to open)")
 			os.Exit(1)
 		} else {
 			log.Fatalf("[Error] Failed to register: %v\n", err)
@@ -476,7 +479,7 @@ func performRegistrationHandshake(cfg *config.ClientConfig, portMappings []clien
 	}
 
 	if regResp.Warning != "" {
-		log.Printf("\n[WARNING] %s\n\n", regResp.Warning)
+		slog.Info(fmt.Sprintf("\n[WARNING] %s\n\n", regResp.Warning))
 	}
 	return regResp
 }
@@ -587,12 +590,12 @@ func handleBackground(sub string) {
 	}
 
 	if err := writePID(sub, cmd.Process.Pid); err != nil {
-		log.Printf("[Warning] Failed to write PID file: %v\n", err)
+		slog.Info(fmt.Sprintf("[Warning] Failed to write PID file: %v\n", err))
 	}
 
-	log.Printf("[Client] Tunnel started in background for subdomain '%s' (PID: %d).\n", sub, cmd.Process.Pid)
-	log.Printf("[Client] Logs: %s\n", logPath)
-	log.Printf("[Client] To stop this tunnel, run: lfr-tunnel -stop -subdomain %s\n", sub)
+	slog.Info(fmt.Sprintf("[Client] Tunnel started in background for subdomain '%s' (PID: %d).\n", sub, cmd.Process.Pid))
+	slog.Info(fmt.Sprintf("[Client] Logs: %s\n", logPath))
+	slog.Info(fmt.Sprintf("[Client] To stop this tunnel, run: lfr-tunnel -stop -subdomain %s\n", sub))
 }
 
 func handleStop(sub string, targetSpecific bool) {
@@ -606,7 +609,7 @@ func handleStop(sub string, targetSpecific bool) {
 			log.Fatalf("[Error] Failed to read active subdomains: %v\n", err)
 		}
 		if len(subsToStop) == 0 {
-			log.Println("[Client] No active background tunnels found.")
+			slog.Info("[Client] No active background tunnels found.")
 			return
 		}
 	}
@@ -615,12 +618,12 @@ func handleStop(sub string, targetSpecific bool) {
 		pid, err := readPID(s)
 		if err != nil || pid <= 0 {
 			if targetSpecific {
-				log.Printf("[Client] No background tunnel is active for subdomain '%s'.\n", s)
+				slog.Info(fmt.Sprintf("[Client] No background tunnel is active for subdomain '%s'.\n", s))
 			}
 			continue
 		}
 		if !isPIDRunning(pid) {
-			log.Printf("[Client] Stale PID file found for subdomain '%s'. Process %d is not running. Cleaning up...\n", s, pid)
+			slog.Info(fmt.Sprintf("[Client] Stale PID file found for subdomain '%s'. Process %d is not running. Cleaning up...\n", s, pid))
 			pidPath, _ := getPIDFilePath(s)
 			_ = os.Remove(pidPath)
 			client.DeleteState(s)
@@ -628,11 +631,11 @@ func handleStop(sub string, targetSpecific bool) {
 		}
 		proc, err := os.FindProcess(pid)
 		if err != nil {
-			log.Printf("[Warning] Failed to find process for subdomain '%s': %v\n", s, err)
+			slog.Info(fmt.Sprintf("[Warning] Failed to find process for subdomain '%s': %v\n", s, err))
 			continue
 		}
 
-		log.Printf("[Client] Stopping background tunnel for subdomain '%s' (PID: %d)...\n", s, pid)
+		slog.Info(fmt.Sprintf("[Client] Stopping background tunnel for subdomain '%s' (PID: %d)...\n", s, pid))
 		_ = proc.Signal(syscall.SIGINT)
 
 		for i := 0; i < 10; i++ {
@@ -643,13 +646,13 @@ func handleStop(sub string, targetSpecific bool) {
 		}
 
 		if isPIDRunning(pid) {
-			log.Printf("[Client] Process %d did not respond to SIGINT. Force terminating...\n", pid)
+			slog.Info(fmt.Sprintf("[Client] Process %d did not respond to SIGINT. Force terminating...\n", pid))
 			_ = proc.Kill()
 		}
 		pidPath, _ := getPIDFilePath(s)
 		_ = os.Remove(pidPath)
 		client.DeleteState(s)
-		log.Printf("[Client] Tunnel for subdomain '%s' stopped.\n", s)
+		slog.Info(fmt.Sprintf("[Client] Tunnel for subdomain '%s' stopped.\n", s))
 	}
 }
 
@@ -664,7 +667,7 @@ func handleStatus(sub string, targetSpecific bool) {
 			log.Fatalf("[Error] Failed to read active subdomains: %v\n", err)
 		}
 		if len(subsToCheck) == 0 {
-			log.Println("[Client] No active background tunnels found.")
+			slog.Info("[Client] No active background tunnels found.")
 			return
 		}
 	}
@@ -673,16 +676,16 @@ func handleStatus(sub string, targetSpecific bool) {
 		pid, err := readPID(s)
 		if err != nil || pid <= 0 {
 			if targetSpecific {
-				log.Printf("[Client] No background tunnel is active for subdomain '%s'.\n", s)
+				slog.Info(fmt.Sprintf("[Client] No background tunnel is active for subdomain '%s'.\n", s))
 			}
 			continue
 		}
 		if isPIDRunning(pid) {
-			log.Printf("[Client] Background tunnel for subdomain '%s' is active (PID: %d).\n", s, pid)
+			slog.Info(fmt.Sprintf("[Client] Background tunnel for subdomain '%s' is active (PID: %d).\n", s, pid))
 			home, _ := os.UserHomeDir()
-			log.Printf("[Client] Logs: %s\n", filepath.Join(home, ".lfr-tunnel", fmt.Sprintf("client-%s.log", s)))
+			slog.Info(fmt.Sprintf("[Client] Logs: %s\n", filepath.Join(home, ".lfr-tunnel", fmt.Sprintf("client-%s.log", s))))
 		} else {
-			log.Printf("[Client] No background tunnel is active for subdomain '%s' (found stale PID file). Cleaning up...\n", s)
+			slog.Info(fmt.Sprintf("[Client] No background tunnel is active for subdomain '%s' (found stale PID file). Cleaning up...\n", s))
 			pidPath, _ := getPIDFilePath(s)
 			_ = os.Remove(pidPath)
 			client.DeleteState(s)
@@ -740,12 +743,12 @@ func handleStatusJSON(sub string, targetSpecific bool) {
 func resolveServerURL(cfg *config.ClientConfig, isExplicitServer bool) {
 	if cfg.Region == "" {
 		if !isExplicitServer && len(cfg.Regions) > 0 {
-			log.Printf("[Client] No region specified. Performing latency auto-probing across %d regions...", len(cfg.Regions))
+			slog.Info(fmt.Sprintf("[Client] No region specified. Performing latency auto-probing across %d regions...", len(cfg.Regions)))
 			bestRegion := probeFastestRegion(cfg.Regions)
 			if bestRegion != "" {
 				cfg.Region = bestRegion
 				cfg.ServerURL = cfg.Regions[bestRegion]
-				log.Printf("[Client] Auto-detected best region: '%s' -> %s", bestRegion, cfg.ServerURL)
+				slog.Info(fmt.Sprintf("[Client] Auto-detected best region: '%s' -> %s", bestRegion, cfg.ServerURL))
 			}
 		}
 		return
@@ -754,9 +757,9 @@ func resolveServerURL(cfg *config.ClientConfig, isExplicitServer bool) {
 	regionLower := strings.ToLower(strings.TrimSpace(cfg.Region))
 	if url, ok := cfg.Regions[regionLower]; ok {
 		cfg.ServerURL = url
-		log.Printf("[Client] Selected region '%s' -> %s", regionLower, url)
+		slog.Info(fmt.Sprintf("[Client] Selected region '%s' -> %s", regionLower, url))
 	} else {
-		log.Printf("[Client] Warning: Unknown region '%s'. Using default server URL: %s", regionLower, cfg.ServerURL)
+		slog.Info(fmt.Sprintf("[Client] Warning: Unknown region '%s'. Using default server URL: %s", regionLower, cfg.ServerURL))
 	}
 }
 
@@ -818,7 +821,7 @@ func rewriteRemotes(regResp *client.RegisterResponse, portMap map[int]int) {
 
 func printAndCollectPublicURLs(cfg *config.ClientConfig, regResp *client.RegisterResponse, portMappings []client.PortMapping, subHost string) []string {
 	var publicURLs []string
-	log.Println("[Client] Registration successful! Your public tunnel URLs are:")
+	slog.Info("[Client] Registration successful! Your public tunnel URLs are:")
 	for _, domain := range regResp.Domains {
 		for _, pm := range portMappings {
 			var urlStr string
@@ -839,7 +842,7 @@ func printAndCollectPublicURLs(cfg *config.ClientConfig, regResp *client.Registe
 				urlStr = fmt.Sprintf("https://%s.%s", fullSubdomain, domain)
 			}
 			publicURLs = append(publicURLs, urlStr)
-			log.Printf("  %s -> local port %d", urlStr, pm.LocalPort)
+			slog.Info(fmt.Sprintf("  %s -> local port %d", urlStr, pm.LocalPort))
 		}
 	}
 	return publicURLs

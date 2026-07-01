@@ -12,7 +12,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/jpillora/chisel/server"
+	chserver "github.com/jpillora/chisel/server"
 )
 
 func TestProxyHandler_Offline(t *testing.T) {
@@ -229,6 +229,9 @@ func TestProxyHandler_CustomHeaders(t *testing.T) {
 		if r.Header.Get("X-Liferay-Custom") != "my-custom-value" {
 			t.Errorf("X-Liferay-Custom mismatch: got %s", r.Header.Get("X-Liferay-Custom"))
 		}
+		if r.Header.Get("X-Lease-Custom") != "lease-value" {
+			t.Errorf("X-Lease-Custom mismatch: got %s", r.Header.Get("X-Lease-Custom"))
+		}
 		if r.Header.Get("X-Client-IP") == "" {
 			t.Error("X-Client-IP header was not set")
 		}
@@ -263,6 +266,9 @@ func TestProxyHandler_CustomHeaders(t *testing.T) {
 		LocalPort:       backendPort,
 		TargetPort:      8080,
 		CreatedAt:       time.Now(),
+		AddedHeaders: map[string]string{
+			"X-Lease-Custom": "lease-value",
+		},
 	}
 	reg.Unlock()
 

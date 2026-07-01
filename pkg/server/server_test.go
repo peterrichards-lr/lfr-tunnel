@@ -2772,6 +2772,7 @@ func TestServer_RoleSettingsConfig(t *testing.T) {
 	userExpiry := srv.getUserSubdomainExpiry(userRec)
 	if userExpiry == nil {
 		t.Fatal("expected user expiry to be non-nil")
+		return
 	}
 	diff := time.Until(*userExpiry)
 	if diff < 4*24*time.Hour || diff > 6*24*time.Hour {

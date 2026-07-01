@@ -99,6 +99,17 @@ func (p *ProxyHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// 2.2 Handle CORS Preflight unconditionally for authorized domains
+	if r.Method == http.MethodOptions {
+		origin := r.Header.Get("Origin")
+		if origin != "" && p.isOriginAllowed(origin) {
+			p.injectCORSHeaders(w.Header(), origin)
+			w.Header().Set("Access-Control-Max-Age", "86400")
+			w.WriteHeader(http.StatusNoContent)
+			return
+		}
+	}
+
 	// 2.3 Web Application Firewall (WAF) Protection
 	if p.config != nil && p.config.EnableWAF {
 		if blocked, category, reason := IsMaliciousRequest(r); blocked {
@@ -177,6 +188,21 @@ func (p *ProxyHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 				req.Header.Set("X-Forwarded-Host", req.Host)
 				req.Header.Set("X-Forwarded-Proto", proto)
 			}
+
+			// Inject dynamic lease headers from portal configuration
+			if len(lease.AddedHeaders) > 0 {
+				for k, v := range lease.AddedHeaders {
+					interpolated := interpolateHeaderValue(v, clientIP, req.Host, proto)
+					req.Header.Set(k, interpolated)
+				}
+			}
+		},
+		ModifyResponse: func(resp *http.Response) error {
+			origin := r.Header.Get("Origin")
+			if origin != "" && p.isOriginAllowed(origin) {
+				p.injectCORSHeaders(resp.Header, origin)
+			}
+			return nil
 		},
 		Transport: &trackingTransport{
 			roundTripper: http.DefaultTransport,
@@ -203,6 +229,24 @@ func (p *ProxyHandler) serveOfflinePage(w http.ResponseWriter, r *http.Request, 
 	if _, err := w.Write(pageBytes); err != nil {
 		slog.Info(fmt.Sprintf("[Proxy] Failed to write offline page: %v", err))
 	}
+}
+
+func (p *ProxyHandler) isOriginAllowed(origin string) bool {
+	if p.config == nil {
+		return false
+	}
+	for _, domain := range p.config.Domains {
+		if strings.HasSuffix(origin, "."+domain) || origin == "http://"+domain || origin == "https://"+domain {
+			return true
+		}
+	}
+	return false
+}
+
+func (p *ProxyHandler) injectCORSHeaders(h http.Header, origin string) {
+	h.Set("Access-Control-Allow-Origin", origin)
+	h.Set("Access-Control-Allow-Methods", "GET, POST, PUT, DELETE, PATCH, OPTIONS")
+	h.Set("Access-Control-Allow-Headers", "*")
 }
 
 // serveBlockedPage renders the Liferay-themed WAF blocked warning page.

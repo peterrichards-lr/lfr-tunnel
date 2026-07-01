@@ -1,0 +1,13 @@
+{
+  "title": "[Feature] Native CORS Handling for Authorized Domains",
+  "body": "Automatically intercept OPTIONS requests and inject CORS headers into proxy responses. Instead of using a wildcard (*), dynamically validate the incoming `Origin` header against the gateway's configured root domains (e.g., `lfr-demo.se`). If it matches, mirror the Origin back in the `Access-Control-Allow-Origin` header.",
+  "labels": ["enhancement"],
+  "issues": [
+    {
+      "title": "Backend: Implement Secure CORS Proxy Injection",
+      "body": "Modify `pkg/server/proxy.go` to intercept `OPTIONS` requests and inject `Access-Control-Allow-Origin` (restricted to configured domains), `Access-Control-Allow-Methods`, and `Access-Control-Allow-Headers`.",
+      "completed": true,
+      "labels": ["enhancement"]
+    }
+  ]
+}

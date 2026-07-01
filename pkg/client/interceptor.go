@@ -73,6 +73,7 @@ type InterceptorEngine struct {
 	Passcode     string
 	WhitelistIPs string
 	AccessMode   string
+	PublicURLs   []string
 
 	// Latency & Bandwidth Simulation Settings
 	Latency        time.Duration

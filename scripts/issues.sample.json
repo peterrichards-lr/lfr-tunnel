@@ -1,4 +1,5 @@
 {
+  "epicNumber": "12",
   "title": "[Epic Name] Reusable Epic Title example",
   "body": "Detailed epic description goes here.",
   "labels": ["enhancement"],
@@ -7,6 +8,8 @@
       "title": "Sub-Issue #1: Task A description",
       "body": "Steps to resolve task A.",
       "completed": true,
+      "issueNumber": "13",
+      "closed": true,
       "labels": ["enhancement"]
     },
     {

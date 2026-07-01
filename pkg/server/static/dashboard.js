@@ -3008,6 +3008,35 @@ applyTheme(currentUser.theme_preference);
 
             // Populate active visitor IPs
             const visitorTbody = document.getElementById('detail-tunnel-visitor-ips-tbody');
+
+            // Populate headers
+            const headersContainer = document.getElementById('detail-tunnel-headers-container');
+            if (headersContainer) {
+                headersContainer.innerHTML = '';
+                const headers = t.added_headers || {};
+                const keys = Object.keys(headers);
+                if (keys.length === 0) {
+                    headersContainer.innerHTML = '<div style="color: var(--text-muted); font-style: italic;">No custom headers injected.</div>';
+                } else {
+                    const table = document.createElement('table');
+                    table.style.width = '100%';
+                    table.style.borderCollapse = 'collapse';
+                    keys.forEach(k => {
+                        const tr = document.createElement('tr');
+                        tr.style.borderBottom = '1px solid rgba(255,255,255,0.05)';
+                        tr.innerHTML = `
+                            <td style="padding: 4px 0; font-family: monospace; color: var(--primary);">${escapeHTML(k)}</td>
+                            <td style="padding: 4px 0; word-break: break-all;">${escapeHTML(headers[k])}</td>
+                            <td style="padding: 4px 0; text-align: right;">
+                                <button class="btn btn-outline" style="padding: 2px 6px; font-size: 11px; margin: 0; min-width: auto; width: auto; color: var(--danger); border-color: var(--danger);" onclick="removeTunnelHeader('${escapeHTML(k)}')">Remove</button>
+                            </td>
+                        `;
+                        table.appendChild(tr);
+                    });
+                    headersContainer.appendChild(table);
+                }
+            }
+
             if (visitorTbody) {
                 visitorTbody.innerHTML = '';
                 const ips = t.visitor_ips || [];
@@ -3086,6 +3115,69 @@ applyTheme(currentUser.theme_preference);
         function kickFromDetails() {
             if (activeDetailTunnelSubdomain) {
                 kickActiveTunnel(activeDetailTunnelSubdomain);
+            }
+        }
+
+        async function addTunnelHeader() {
+            if (!activeDetailTunnelSubdomain) return;
+            const t = (currentUser.tunnels || []).find(x => x.subdomain_prefix === activeDetailTunnelSubdomain);
+            if (!t) return;
+
+            const keyInput = document.getElementById('detail-tunnel-header-key');
+            const valInput = document.getElementById('detail-tunnel-header-value');
+            const key = keyInput.value.trim();
+            const val = valInput.value.trim();
+
+            if (!key || !val) {
+                showToast("Header name and value are required.", "warning");
+                return;
+            }
+
+            const currentHeaders = t.added_headers || {};
+            currentHeaders[key] = val;
+
+            await updateTunnelHeadersAPI(t, currentHeaders);
+            keyInput.value = '';
+            valInput.value = '';
+        }
+
+        async function removeTunnelHeader(key) {
+            if (!activeDetailTunnelSubdomain) return;
+            const t = (currentUser.tunnels || []).find(x => x.subdomain_prefix === activeDetailTunnelSubdomain);
+            if (!t) return;
+
+            const currentHeaders = t.added_headers || {};
+            delete currentHeaders[key];
+
+            await updateTunnelHeadersAPI(t, currentHeaders);
+        }
+
+        async function updateTunnelHeadersAPI(tunnel, headers) {
+            try {
+                const parts = tunnel.full_host.split('.');
+                const subdomain = parts[0];
+                const domain = parts.slice(1).join('.');
+
+                const res = await fetch('/api/portal/reservations/headers', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        subdomain: subdomain,
+                        domain: domain,
+                        added_headers: headers
+                    })
+                });
+
+                if (res.ok) {
+                    showToast("Custom headers updated!", "success");
+                    refreshTunnelDetails(true);
+                } else {
+                    const err = await res.json();
+                    showToast("Failed to update headers: " + (err.error || 'Unknown error'), "danger");
+                }
+            } catch (e) {
+                console.error(e);
+                showToast("Network error updating headers.", "danger");
             }
         }
 

@@ -1,9 +1,9 @@
 {
-  "version": "v1.26.0",
+  "version": "v1.26.1",
   "release_date": "2026-07-01",
   "features": [
-    "Native CORS proxy handling for authorized root domains (#339)",
-    "Dynamic custom header injection for proxied local extension routes (#337)"
+    "Hotfix: Custom headers now dynamically propagate to Regional Edge nodes without restarting tunnels",
+    "Hotfix: Prevent duplicate github issues during script sync"
   ]
 }
 

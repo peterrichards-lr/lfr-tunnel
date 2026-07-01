@@ -1,0 +1,25 @@
+{
+  "title": "Hotfix: Propagate Custom Headers to Edge Nodes",
+  "body": "The Custom Headers feature (v1.26.0) updates the Control Plane memory but fails to propagate those headers to Regional Edge nodes, meaning they don't apply to active tunnels on the edge.",
+  "labels": ["bug"],
+  "sub_issues": [
+    {
+      "title": "Hotfix: ControlMessage Schema and WS Sender",
+      "body": "Add `Headers` to `ControlMessage` and implement `sendEdgeWSHeaders`.",
+      "completed": true,
+      "labels": ["bug"]
+    },
+    {
+      "title": "Hotfix: Edge Node WS Receiver",
+      "body": "Implement edge-side WS listener to handle `lease_headers` and call `s.registry.UpdateLeaseHeaders`.",
+      "completed": true,
+      "labels": ["bug"]
+    },
+    {
+      "title": "Hotfix: Trigger WS Broadcast from API",
+      "body": "Update `handleUpdateReservationHeaders` in `api.go` to invoke `sendEdgeWSHeaders` when the lease is held on an Edge Node.",
+      "completed": true,
+      "labels": ["bug"]
+    }
+  ]
+}

@@ -1,5 +1,5 @@
 {
-  "version": "v1.24.0",
+  "version": "v1.25.0",
   "release_date": "2026-07-01",
   "features": [
     "Native CORS proxy handling for authorized root domains (#339)",

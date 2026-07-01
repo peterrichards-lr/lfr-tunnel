@@ -741,6 +741,8 @@ func handleStatusJSON(sub string, targetSpecific bool) {
 }
 
 func resolveServerURL(cfg *config.ClientConfig, isExplicitServer bool) {
+	fetchRemoteRegions(cfg)
+
 	if cfg.Region == "" {
 		if !isExplicitServer && len(cfg.Regions) > 0 {
 			slog.Info(fmt.Sprintf("[Client] No region specified. Performing latency auto-probing across %d regions...", len(cfg.Regions)))
@@ -760,6 +762,29 @@ func resolveServerURL(cfg *config.ClientConfig, isExplicitServer bool) {
 		slog.Info(fmt.Sprintf("[Client] Selected region '%s' -> %s", regionLower, url))
 	} else {
 		slog.Info(fmt.Sprintf("[Client] Warning: Unknown region '%s'. Using default server URL: %s", regionLower, cfg.ServerURL))
+	}
+}
+
+func fetchRemoteRegions(cfg *config.ClientConfig) {
+	client := &http.Client{
+		Timeout: 2 * time.Second,
+	}
+	apiURL := strings.TrimRight(cfg.ServerURL, "/") + "/api/version"
+	resp, err := client.Get(apiURL)
+	if err != nil {
+		return // Silently fall back to built-in defaults
+	}
+	defer func() {
+		_ = resp.Body.Close()
+	}()
+
+	if resp.StatusCode == http.StatusOK {
+		var payload struct {
+			Regions map[string]string `json:"regions"`
+		}
+		if err := json.NewDecoder(resp.Body).Decode(&payload); err == nil && len(payload.Regions) > 0 {
+			cfg.Regions = payload.Regions
+		}
 	}
 }
 

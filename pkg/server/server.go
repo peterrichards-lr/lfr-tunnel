@@ -619,6 +619,18 @@ func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 				latestClientVer = config.Version
 			}
 
+			regions := make(map[string]string)
+			if len(s.cfg.Domains) > 0 {
+				regions["eu"] = "https://tunnel." + s.cfg.Domains[0]
+			}
+			for _, edge := range s.cfg.EdgeNodes {
+				parts := strings.Split(edge.ID, "-")
+				regionName := parts[0]
+				if regionName != "" {
+					regions[regionName] = edge.URL
+				}
+			}
+
 			respondJSON(w, http.StatusOK, map[string]interface{}{
 				"latest_version":           latestClientVer,
 				"min_version":              s.cfg.MinClientVersion,
@@ -635,6 +647,7 @@ func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 				"docker_image":             dockerImg,
 				"docker_bypass_url":        s.cfg.DockerBypassURL,
 				"client_platforms":         s.cfg.ClientPlatforms,
+				"regions":                  regions,
 				"disable_client_downloads": s.cfg.DisableClientDownloads,
 				"start_time":               s.startTime.Format(time.RFC3339),
 				"uptime_seconds":           int(time.Since(s.startTime).Seconds()),

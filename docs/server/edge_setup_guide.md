@@ -220,6 +220,7 @@ server_url: "https://tunnel.lfr-demo.se"
 regions:
   eu: "https://tunnel.lfr-demo.se"
   us: "https://us.lfr-demo.online"
+  jp: "https://jp.lfr-demo.se"
 ```
 
 ### Option A: Explicit Region Target

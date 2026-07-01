@@ -236,6 +236,7 @@ func DefaultClientConfig() *ClientConfig {
 		Regions: map[string]string{
 			"eu": "https://tunnel.lfr-demo.se",
 			"us": "https://us.lfr-demo.online",
+			"jp": "https://jp.lfr-demo.se",
 		},
 	}
 }

@@ -44,6 +44,7 @@ func StartInspector(port int, engine *InterceptorEngine) (int, error) {
 			"whitelist_ips":    engine.WhitelistIPs,
 			"access_mode":      engine.AccessMode,
 			"assigned":         engine.SubdomainAss,
+			"public_urls":      engine.PublicURLs,
 		}
 
 		w.Header().Set("Content-Type", "application/json")
@@ -134,10 +135,11 @@ func StartInspector(port int, engine *InterceptorEngine) (int, error) {
 				"error_message": authErrMsg,
 			},
 			"subdomain": map[string]interface{}{
-				"requested": engine.SubdomainReq,
-				"assigned":  engine.SubdomainAss,
-				"leased":    engine.SubdomainLeased,
-				"conflict":  engine.SubdomainConflict,
+				"requested":   engine.SubdomainReq,
+				"assigned":    engine.SubdomainAss,
+				"leased":      engine.SubdomainLeased,
+				"conflict":    engine.SubdomainConflict,
+				"public_urls": engine.PublicURLs,
 			},
 			"destination": map[string]interface{}{
 				"host":       engine.TargetHost,

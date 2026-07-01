@@ -100,6 +100,12 @@
             </div>
             <button id="ac-save-btn" onclick="saveAccessControl()" style="background: var(--primary); color: white; border: none; padding: 8px 12px; border-radius: 4px; font-size: 12px; font-weight: 600; cursor: pointer; margin-top: 4px; transition: background 0.2s;">Save Access Control</button>
         </div>
+        <div class="public-urls-panel" style="padding: 16px 20px; border-bottom: 1px solid var(--border); background: rgba(30, 41, 59, 0.4); display: flex; flex-direction: column; gap: 10px;">
+            <div style="font-size: 12px; font-weight: 600; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.05em;">Public Endpoints</div>
+            <div id="public-urls-list" style="display: flex; flex-direction: column; gap: 8px;">
+                <!-- Injected via JS -->
+            </div>
+        </div>
         <div class="req-list" id="req-list">
             <!-- Items injected by JS -->
         </div>
@@ -139,6 +145,18 @@
                     requests = state.history || [];
                     renderList();
                     if(selectedId) renderDetails(requests.find(r => r.id === selectedId));
+                }
+
+                // Update public URLs
+                if (state.public_urls && state.public_urls.length > 0) {
+                    const urlsEl = document.getElementById('public-urls-list');
+                    let urlsHtml = '';
+                    state.public_urls.forEach(url => {
+                        urlsHtml += `<a href="${url}" target="_blank" style="font-size: 11px; color: var(--primary); text-decoration: none; word-break: break-all; background: rgba(0,0,0,0.2); padding: 6px; border-radius: 4px; border: 1px solid var(--border); display: block;">${url}</a>`;
+                    });
+                    if (urlsEl.innerHTML !== urlsHtml) {
+                        urlsEl.innerHTML = urlsHtml;
+                    }
                 }
             } catch(e) { console.error("Error fetching state", e); }
         }

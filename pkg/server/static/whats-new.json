@@ -1,11 +1,9 @@
 {
   "version": "v1.24.0",
-  "release_date": "2026-06-29",
+  "release_date": "2026-07-01",
   "features": [
-    "Introduce interactive dashboard onboarding tour (Driver.js) with i18n support (#268)",
-    "Implement server-side onboarding status telemetry & database persistence",
-    "Expose detailed onboarding metrics in administrator user detail panel",
-    "Add configurable external quick links to server settings (#269)"
+    "Native CORS proxy handling for authorized root domains (#339)",
+    "Dynamic custom header injection for proxied local extension routes (#337)"
   ]
 }
 

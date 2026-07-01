@@ -222,6 +222,7 @@ func main() {
 	}
 
 	publicURLs := printAndCollectPublicURLs(cfg, regResp, portMappings, subHost)
+	engine.PublicURLs = publicURLs
 
 	// Write dynamic client state to file
 	state := &client.ClientState{

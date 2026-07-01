@@ -1398,6 +1398,63 @@ func (s *Server) handleUpdateReservationAccessControl(w http.ResponseWriter, r *
 	respondJSON(w, http.StatusOK, map[string]string{"status": "success"})
 }
 
+type updateHeadersRequest struct {
+	Subdomain    string            `json:"subdomain"`
+	Domain       string            `json:"domain"`
+	AddedHeaders map[string]string `json:"added_headers"`
+}
+
+// handleUpdateReservationHeaders dynamically updates the AddedHeaders map of an active tunnel lease.
+func (s *Server) handleUpdateReservationHeaders(w http.ResponseWriter, r *http.Request) {
+	user, err := s.getCurrentUserOrToken(r)
+	if err != nil {
+		http.Error(w, `{"error":"Unauthorized"}`, http.StatusUnauthorized)
+		return
+	}
+
+	var req updateHeadersRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		http.Error(w, `{"error":"Invalid request JSON"}`, http.StatusBadRequest)
+		return
+	}
+
+	req.Subdomain = strings.TrimSpace(strings.ToLower(req.Subdomain))
+	req.Domain = strings.TrimSpace(strings.ToLower(req.Domain))
+	if req.Subdomain == "" || req.Domain == "" {
+		http.Error(w, `{"error":"Missing subdomain or domain"}`, http.StatusBadRequest)
+		return
+	}
+
+	fullHost := fmt.Sprintf("%s.%s", req.Subdomain, req.Domain)
+	lease, exists := s.registry.GetLease(fullHost)
+	if !exists {
+		http.Error(w, `{"error":"Active tunnel not found"}`, http.StatusNotFound)
+		return
+	}
+
+	if lease.UserID != user.ID && user.Role != "admin" && user.Role != "owner" {
+		http.Error(w, `{"error":"Forbidden: you do not own this tunnel"}`, http.StatusForbidden)
+		return
+	}
+
+	if err := s.registry.UpdateLeaseHeaders(fullHost, req.AddedHeaders); err != nil {
+		respondWithError(w, ErrInternalError)
+		return
+	}
+
+	_ = s.db.WriteAuditEntry(&db.AuditEntry{
+		ActorID:    user.Email,
+		Action:     "lease.headers_updated",
+		TargetType: "lease",
+		TargetID:   fullHost,
+		Details:    "Custom headers updated dynamically",
+		IPAddress:  getClientIP(r),
+		CreatedAt:  time.Now(),
+	})
+
+	respondJSON(w, http.StatusOK, map[string]string{"status": "success"})
+}
+
 type EdgeActionRequest struct {
 	NodeID   string `json:"node_id"`
 	Action   string `json:"action"` // "restart", "maintenance_enable", "maintenance_disable", "kick_tunnels"

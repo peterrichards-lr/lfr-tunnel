@@ -999,6 +999,19 @@
                         </div>
                     </div>
                 </div>
+                <div style="grid-column: span 2; border-top: 1px solid rgba(255,255,255,0.05); padding-top: 12px; margin-top: 4px;">
+                    <label style="display:flex; justify-content: space-between; align-items: center; color: var(--text-muted); font-size: 11px; text-transform: uppercase; font-weight: 600; margin-bottom: 8px;">
+                        Custom Headers Injection
+                    </label>
+                    <div id="detail-tunnel-headers-container" style="margin-bottom: 8px; font-size: 13px;">
+                        <!-- Headers list here -->
+                    </div>
+                    <div style="display: flex; gap: 8px;">
+                        <input type="text" id="detail-tunnel-header-key" placeholder="Header Name (e.g. X-Frame-Options)" class="form-control" style="flex: 1; padding: 6px 8px; font-size: 12px; height: 30px;">
+                        <input type="text" id="detail-tunnel-header-value" placeholder="Value" class="form-control" style="flex: 1; padding: 6px 8px; font-size: 12px; height: 30px;">
+                        <button class="btn btn-primary" style="margin: 0; padding: 0 12px; height: 30px; font-size: 12px; width: auto;" onclick="addTunnelHeader()">Add</button>
+                    </div>
+                </div>
                 <div style="grid-column: span 2;">
                     <label style="display:block; color: var(--text-muted); font-size: 11px; text-transform: uppercase; font-weight: 600; margin-bottom: 8px;">Active Visitor IPs</label>
                     <div class="glass" style="max-height: 120px; overflow-y: auto; padding: 12px; border-radius: 6px; border: 1px solid var(--border);">

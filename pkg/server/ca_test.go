@@ -26,6 +26,7 @@ func TestLoadOrCreateCAAndSignClientCert(t *testing.T) {
 
 	if caCert == nil || caKey == nil {
 		t.Fatal("expected non-nil CA cert and key")
+		return
 	}
 
 	if caCert.Subject.CommonName != "Liferay Tunnel Root CA" {

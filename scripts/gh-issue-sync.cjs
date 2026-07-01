@@ -62,6 +62,8 @@ try {
   // Silent fallback
 }
 
+let needsSave = false;
+
 log(`=== Reusable GitHub Issue Sync ${dryRun ? '(DRY RUN)' : ''} ===`, 'info');
 log(`Referencing commit: ${commitHash}`, 'info');
 
@@ -82,6 +84,8 @@ if (epicNumber) {
   } else {
     const epicUrl = execFileSync('gh', args, { encoding: 'utf8' }).trim();
     epicNumber = epicUrl.split('/').pop();
+    config.epicNumber = epicNumber;
+    needsSave = true;
     log(
       `Epic created successfully: Issue #${epicNumber} (${epicUrl})`,
       'success'
@@ -104,25 +108,39 @@ if (config.issues && config.issues.length > 0) {
 
     if (dryRun) {
       log(`[DRY RUN] Would execute: gh ${args.join(' ')}`, 'success');
-      if (issue.completed) {
+      if (issue.completed && !issue.closed) {
         log(`[DRY RUN] Would comment and close sub-issue.`, 'success');
       }
     } else {
-      const subIssueUrl = execFileSync('gh', args, { encoding: 'utf8' }).trim();
-      const subIssueNumber = subIssueUrl.split('/').pop();
-      log(
-        `Sub-issue created: Issue #${subIssueNumber} (${subIssueUrl})`,
-        'success'
-      );
+      let subIssueNumber = issue.issueNumber;
+      if (subIssueNumber) {
+        log(`Reusing sub-issue: #${subIssueNumber}`, 'info');
+      } else {
+        const subIssueUrl = execFileSync('gh', args, { encoding: 'utf8' }).trim();
+        subIssueNumber = subIssueUrl.split('/').pop();
+        issue.issueNumber = subIssueNumber;
+        needsSave = true;
+        log(
+          `Sub-issue created: Issue #${subIssueNumber} (${subIssueUrl})`,
+          'success'
+        );
+      }
 
-      if (issue.completed) {
+      if (issue.completed && !issue.closed) {
         log(`Closing completed sub-issue #${subIssueNumber}...`, 'info');
         execFileSync('gh', ['issue', 'comment', subIssueNumber, '--body', `This issue was successfully implemented and verified in commit ${commitHash}. Closing.`]);
         execFileSync('gh', ['issue', 'close', subIssueNumber]);
+        issue.closed = true;
+        needsSave = true;
         log(`Issue #${subIssueNumber} closed successfully.`, 'success');
       }
     }
   });
+}
+
+if (needsSave && !dryRun) {
+  fs.writeFileSync(jsonPath, JSON.stringify(config, null, 2), 'utf8');
+  log('\nUpdated JSON file with issue numbers.', 'info');
 }
 
 log('\nAll sync operations completed!', 'success');

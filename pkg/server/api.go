@@ -1442,6 +1442,12 @@ func (s *Server) handleUpdateReservationHeaders(w http.ResponseWriter, r *http.R
 		return
 	}
 
+	if lease.NodeID != "" && lease.NodeID != "local" {
+		if !s.sendEdgeWSHeaders(lease.NodeID, fullHost, req.AddedHeaders) {
+			slog.Warn(fmt.Sprintf("[API] Failed to propagate headers for %s to edge node %s", fullHost, lease.NodeID))
+		}
+	}
+
 	_ = s.db.WriteAuditEntry(&db.AuditEntry{
 		ActorID:    user.Email,
 		Action:     "lease.headers_updated",

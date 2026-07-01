@@ -24,15 +24,16 @@ import (
 
 // ControlMessage represents the JSON schema for websocket communication.
 type ControlMessage struct {
-	Type      string `json:"type"`
-	Nonce     string `json:"nonce,omitempty"`
-	Response  string `json:"response,omitempty"`
-	IP        string `json:"ip,omitempty"`
-	Action    string `json:"action,omitempty"`
-	Reason    string `json:"reason,omitempty"`
-	Duration  int    `json:"duration,omitempty"`
-	UserID    string `json:"user_id,omitempty"`
-	Subdomain string `json:"subdomain,omitempty"`
+	Type      string            `json:"type"`
+	Nonce     string            `json:"nonce,omitempty"`
+	Response  string            `json:"response,omitempty"`
+	IP        string            `json:"ip,omitempty"`
+	Action    string            `json:"action,omitempty"`
+	Reason    string            `json:"reason,omitempty"`
+	Duration  int               `json:"duration,omitempty"`
+	UserID    string            `json:"user_id,omitempty"`
+	Subdomain string            `json:"subdomain,omitempty"`
+	Headers   map[string]string `json:"headers,omitempty"`
 }
 
 // handleEdgeControlWS handles control plane WebSocket connections from Edge nodes.
@@ -238,6 +239,27 @@ func (s *Server) sendEdgeWSKick(nodeID, subdomain string) bool {
 	msg := ControlMessage{
 		Type:      "lease_kick",
 		Subdomain: subdomain,
+	}
+
+	err := conn.WriteJSON(msg)
+	return err == nil
+}
+
+// sendEdgeWSHeaders sends a lease headers update to a specific Edge node via WebSocket.
+// Returns true if the message was sent successfully.
+func (s *Server) sendEdgeWSHeaders(nodeID, fullHost string, headers map[string]string) bool {
+	s.edgeClientsMu.RLock()
+	conn, exists := s.edgeClients[nodeID]
+	s.edgeClientsMu.RUnlock()
+
+	if !exists {
+		return false
+	}
+
+	msg := ControlMessage{
+		Type:      "lease_headers",
+		Subdomain: fullHost,
+		Headers:   headers,
 	}
 
 	err := conn.WriteJSON(msg)
@@ -495,6 +517,11 @@ func (s *Server) runEdgeControlChannel() {
 				} else {
 					slog.Info(fmt.Sprintf("[Edge Control] Kicking lease for subdomain %s", msg.Subdomain))
 					s.registry.KickLease(msg.Subdomain)
+				}
+			case "lease_headers":
+				slog.Info(fmt.Sprintf("[Edge Control] Updating custom headers for lease %s", msg.Subdomain))
+				if err := s.registry.UpdateLeaseHeaders(msg.Subdomain, msg.Headers); err != nil {
+					slog.Error(fmt.Sprintf("[Edge Control] Failed to update lease headers for %s: %v", msg.Subdomain, err))
 				}
 			}
 		}

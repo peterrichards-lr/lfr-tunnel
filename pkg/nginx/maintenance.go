@@ -2,7 +2,7 @@ package nginx
 
 import (
 	"fmt"
-	"log"
+	"log/slog"
 	"os"
 	"path/filepath"
 	"strconv"
@@ -36,17 +36,17 @@ func (m *MaintenanceManager) getResolvedTriggerPath() string {
 func (m *MaintenanceManager) Enable(action, reason string, duration int, endTime time.Time, templateContent string) {
 	triggerPath := m.getResolvedTriggerPath()
 	if triggerPath == "" {
-		log.Printf("[Nginx] Maintenance trigger path not resolved; skipping Nginx hard maintenance.")
+		slog.Info("[Nginx] Maintenance trigger path not resolved; skipping Nginx hard maintenance.")
 		return
 	}
 
 	triggerDir := filepath.Dir(triggerPath)
 	if err := os.MkdirAll(triggerDir, 0755); err != nil {
-		log.Printf("[Nginx] Failed to create trigger directory: %v", err)
+		slog.Info(fmt.Sprintf("[Nginx] Failed to create trigger directory: %v", err))
 		return
 	}
 	if err := os.WriteFile(triggerPath, []byte("enabled"), 0644); err != nil {
-		log.Printf("[Nginx] Failed to write Nginx maintenance trigger file: %v", err)
+		slog.Info(fmt.Sprintf("[Nginx] Failed to write Nginx maintenance trigger file: %v", err))
 		return
 	}
 
@@ -63,18 +63,18 @@ func (m *MaintenanceManager) Enable(action, reason string, duration int, endTime
 
 	htmlDestPath := filepath.Join(triggerDir, "maintenance.html")
 	if err := os.WriteFile(htmlDestPath, []byte(htmlContent), 0644); err != nil {
-		log.Printf("[Nginx] Failed to write Nginx maintenance HTML file: %v", err)
+		slog.Info(fmt.Sprintf("[Nginx] Failed to write Nginx maintenance HTML file: %v", err))
 	} else {
-		log.Printf("[Nginx] Maintenance HTML written successfully to %s", htmlDestPath)
+		slog.Info(fmt.Sprintf("[Nginx] Maintenance HTML written successfully to %s", htmlDestPath))
 	}
 
 	vpsWebRoot := "/var/www/lfr-tunnel"
 	if fi, err := os.Stat(vpsWebRoot); err == nil && fi.IsDir() {
 		destFilePath := filepath.Join(vpsWebRoot, "maintenance.html")
 		if err := os.WriteFile(destFilePath, []byte(htmlContent), 0644); err != nil {
-			log.Printf("[Nginx] Could not write directly to %s: %v", destFilePath, err)
+			slog.Info(fmt.Sprintf("[Nginx] Could not write directly to %s: %v", destFilePath, err))
 		} else {
-			log.Printf("[Nginx] Custom maintenance page successfully copied to %s", destFilePath)
+			slog.Info(fmt.Sprintf("[Nginx] Custom maintenance page successfully copied to %s", destFilePath))
 		}
 	}
 }

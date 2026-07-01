@@ -2,14 +2,16 @@ package server
 
 import (
 	"encoding/json"
-	"log"
+	"fmt"
+	"log/slog"
 	"net/http"
 	"strings"
 	"sync/atomic"
 	"time"
 
-	"github.com/gorilla/websocket"
 	"lfr-tunnel/pkg/db"
+
+	"github.com/gorilla/websocket"
 )
 
 var upgrader = websocket.Upgrader{
@@ -107,7 +109,7 @@ func (s *Server) handleTelemetryWS(w http.ResponseWriter, r *http.Request) {
 
 	conn, err := upgrader.Upgrade(w, r, nil)
 	if err != nil {
-		log.Printf("[WS] Upgrade error: %v", err)
+		slog.Info(fmt.Sprintf("[WS] Upgrade error: %v", err))
 		return
 	}
 

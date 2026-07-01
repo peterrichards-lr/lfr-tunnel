@@ -1,0 +1,13 @@
+{
+  "title": "[Bug] Fix static assets on offline and gateway error pages",
+  "body": "When a tunnel goes offline, the gateway serves an offline.html page on the wildcard subdomain. This causes relative static asset paths (like `/favicon.ico` or `/static/logo.svg`) to also route to the offline handler, breaking the images and styling.",
+  "labels": ["bug"],
+  "issues": [
+    {
+      "title": "Inject base tag to route static assets through control plane",
+      "body": "Add logic in proxy.go and server.go to dynamically inject a base tag into the head of offline and error pages.",
+      "completed": true,
+      "labels": ["bug"]
+    }
+  ]
+}

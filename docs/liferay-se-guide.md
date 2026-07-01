@@ -145,6 +145,21 @@ If you are developing Liferay Client Extensions (CX) in a Liferay Workspace, the
   ```
   *(Note: LDM coordinates the container bindings automatically, scanning your workspace files and mounting paths as needed).*
 
+#### Client Extension Naming & Routing Convention (For LDM Configuration)
+When client extensions are exposed via the tunnel, the gateway assigns them URLs using a **hyphenated prefix format**:
+`https://[tunnel-subdomain]-[extension-id].[domain]` 
+
+*(Example: `https://your-name-se-ai-commerce.lfr-demo.online`)*
+
+**Why this format?**
+1. **Wildcard SSL Constraints:** The gateway uses standard Wildcard SSL certificates (`*.lfr-demo.online`). These certificates strictly protect only *one level* of subdomains. If we used nested domains like `extension.pjrtest.domain.com`, the browser would block the connection with an SSL/TLS security error. 
+2. **Alphabetical Grouping:** By placing the `[tunnel-subdomain]` first, all your Liferay environments and associated client extensions are cleanly grouped together in dashboards, DNS logs, and browser auto-complete history.
+3. **Collision Clarity:** If multiple developers run an extension with the same ID, the prefix makes ownership immediately obvious (`pjrtest-ai-commerce` vs `jdoe-ai-commerce`).
+
+**LDM Prompt Helper:**
+If you use an AI assistant to configure your LDM workspace or client extensions, you can provide this prompt to align its configuration:
+> "The `lfr-tunnel` public gateway uses a specific routing convention to support Wildcard SSL certificates. When generating or expecting public URLs for client extensions, the tunnel flattens the subdomain using a hyphen instead of nesting it. It uses the format `[tunnel-subdomain]-[extension-id].domain.com` (e.g., `https://pjrtest-my-extension.lfr-demo.online`). Please ensure your local CORS configurations and LDM properties expect this hyphenated format for all client extension public URLs."
+
 ### 2. Standalone Liferay Tomcat Bundle (Running on Host)
 Use these configurations to expose a standard Liferay bundle unzipped and running natively on your host machine (e.g. at `http://localhost:8080`).
 

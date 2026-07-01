@@ -125,13 +125,15 @@ func TestInvitationAPIEndpoints(t *testing.T) {
 		t.Fatalf("LoadOrCreateCA failed: %v", err)
 	}
 
+	cfg := config.DefaultServerConfig()
 	srv := &Server{
 		db:        database,
 		caCert:    caCert,
 		caKey:     caKey,
-		cfg:       config.DefaultServerConfig(),
+		cfg:       cfg,
 		startTime: time.Now(),
 	}
+	srv.portalService = NewPortalService(srv.db, srv.cfg, nil, &srv.portalMap, srv.caCert, srv.caKey)
 
 	// Mock session loader
 	sessionToken := "test-session-token"

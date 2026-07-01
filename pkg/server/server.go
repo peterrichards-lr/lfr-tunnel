@@ -623,13 +623,17 @@ func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 			if len(s.cfg.Domains) > 0 {
 				regions["eu"] = "https://tunnel." + s.cfg.Domains[0]
 			}
+			s.edgeClientsMu.RLock()
 			for _, edge := range s.cfg.EdgeNodes {
-				parts := strings.Split(edge.ID, "-")
-				regionName := parts[0]
-				if regionName != "" {
-					regions[regionName] = edge.URL
+				if _, isUp := s.edgeClients[edge.ID]; isUp {
+					parts := strings.Split(edge.ID, "-")
+					regionName := parts[0]
+					if regionName != "" {
+						regions[regionName] = edge.URL
+					}
 				}
 			}
+			s.edgeClientsMu.RUnlock()
 
 			respondJSON(w, http.StatusOK, map[string]interface{}{
 				"latest_version":           latestClientVer,

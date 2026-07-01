@@ -3254,7 +3254,8 @@ func (s *Server) handleVisitorMaintenancePage(w http.ResponseWriter, r *http.Req
 	}
 	htmlContent = strings.ReplaceAll(htmlContent, "__END_TIME__", strconv.FormatInt(epochSecs, 10))
 
-	_, _ = w.Write([]byte(htmlContent))
+	finalBytes := s.injectBaseTag([]byte(htmlContent), r)
+	_, _ = w.Write(finalBytes)
 }
 
 func (s *Server) handleAdminGetUser(w http.ResponseWriter, r *http.Request, actor string) {
@@ -4238,7 +4239,14 @@ func (s *Server) handleVisitorGonePage(w http.ResponseWriter, r *http.Request, h
 	htmlContent = strings.ReplaceAll(htmlContent, "{{.ReleaseDate}}", html.EscapeString(releaseDate))
 	htmlContent = strings.ReplaceAll(htmlContent, "{{.PortalURL}}", html.EscapeString(portalURL))
 
-	_, _ = w.Write([]byte(htmlContent))
+	finalBytes := s.injectBaseTag([]byte(htmlContent), r)
+	_, _ = w.Write(finalBytes)
+}
+
+func (s *Server) injectBaseTag(htmlBytes []byte, r *http.Request) []byte {
+	baseURL := s.getPortalBaseURL(r)
+	baseTag := []byte(fmt.Sprintf("<head>\n    <base href=\"%s/\">", baseURL))
+	return bytes.Replace(htmlBytes, []byte("<head>"), baseTag, 1)
 }
 
 type EdgeLease struct {

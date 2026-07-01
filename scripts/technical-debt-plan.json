@@ -19,19 +19,19 @@
     {
       "title": "Decouple REST endpoint logic from API routing in pkg/server/api.go",
       "body": "### Problem\nAPI handler routines inside `pkg/server/api.go` mix request body mapping, parameters validation, database calls, email delivery trigger, and HTTP header writes.\n\n### Plan\n1. Separate HTTP routing and JSON serialization from core business logic rules.\n2. Introduce service interfaces/routines to handle business validation and DB orchestration independently from HTTP contexts.",
-      "completed": false,
+      "completed": true,
       "labels": ["enhancement"]
     },
     {
       "title": "Externalize and Embed HTML/CSS templates",
       "body": "### Problem\nMulti-line raw string literals are used in `pkg/server/server.go` (emails) and `pkg/server/proxy.go` (error screen fallbacks) to render HTML and CSS layouts.\n\n### Plan\n1. Extract nested HTML strings into standalone `.html` template files.\n2. Use Go's native `embed` package to bundle and parse the templates at runtime.",
-      "completed": false,
+      "completed": true,
       "labels": ["enhancement"]
     },
     {
       "title": "Integrate structured logger using log/slog",
       "body": "### Problem\nThe codebase uses standard `log.Print` / `log.Printf` logging, which lacks level filtering (debug/info/warn/error) and structured formats (like JSON).\n\n\n### Plan\n1. Introduce standard `log/slog` structured logging throughout the codebase.\n2. Enable configurable log formatting (JSON in production, text/colors in dev) and level filtering.",
-      "completed": false,
+      "completed": true,
       "labels": ["enhancement"]
     }
   ]

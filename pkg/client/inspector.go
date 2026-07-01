@@ -7,7 +7,7 @@ import (
 	"fmt"
 	"io"
 	"lfr-tunnel/pkg/config"
-	"log"
+	"log/slog"
 	"net"
 	"net/http"
 	"os"
@@ -44,6 +44,7 @@ func StartInspector(port int, engine *InterceptorEngine) (int, error) {
 			"whitelist_ips":    engine.WhitelistIPs,
 			"access_mode":      engine.AccessMode,
 			"assigned":         engine.SubdomainAss,
+			"public_urls":      engine.PublicURLs,
 		}
 
 		w.Header().Set("Content-Type", "application/json")
@@ -134,10 +135,11 @@ func StartInspector(port int, engine *InterceptorEngine) (int, error) {
 				"error_message": authErrMsg,
 			},
 			"subdomain": map[string]interface{}{
-				"requested": engine.SubdomainReq,
-				"assigned":  engine.SubdomainAss,
-				"leased":    engine.SubdomainLeased,
-				"conflict":  engine.SubdomainConflict,
+				"requested":   engine.SubdomainReq,
+				"assigned":    engine.SubdomainAss,
+				"leased":      engine.SubdomainLeased,
+				"conflict":    engine.SubdomainConflict,
+				"public_urls": engine.PublicURLs,
 			},
 			"destination": map[string]interface{}{
 				"host":       engine.TargetHost,
@@ -330,9 +332,9 @@ func StartInspector(port int, engine *InterceptorEngine) (int, error) {
 	}
 
 	go func() {
-		log.Printf("[Inspector] Local Dashboard running at http://%s:%d\n", bindIP, actualPort)
+		slog.Info(fmt.Sprintf("[Inspector] Local Dashboard running at http://%s:%d\n", bindIP, actualPort))
 		if err := http.Serve(listener, mux); err != nil && !strings.Contains(err.Error(), "use of closed network connection") {
-			log.Printf("[Inspector] Failed to serve: %v", err)
+			slog.Info(fmt.Sprintf("[Inspector] Failed to serve: %v", err))
 		}
 	}()
 

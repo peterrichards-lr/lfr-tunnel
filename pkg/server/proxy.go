@@ -13,7 +13,7 @@ import (
 	"io"
 	"lfr-tunnel/pkg/config"
 	"lfr-tunnel/pkg/db"
-	"log"
+	"log/slog"
 	"net"
 	"net/http"
 	"net/http/httputil"
@@ -99,11 +99,22 @@ func (p *ProxyHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// 2.2 Handle CORS Preflight unconditionally for authorized domains
+	if r.Method == http.MethodOptions {
+		origin := r.Header.Get("Origin")
+		if origin != "" && p.isOriginAllowed(origin) {
+			p.injectCORSHeaders(w.Header(), origin)
+			w.Header().Set("Access-Control-Max-Age", "86400")
+			w.WriteHeader(http.StatusNoContent)
+			return
+		}
+	}
+
 	// 2.3 Web Application Firewall (WAF) Protection
 	if p.config != nil && p.config.EnableWAF {
 		if blocked, category, reason := IsMaliciousRequest(r); blocked {
 			clientIP := getClientIP(r)
-			log.Printf("[WAF] Blocked malicious request on %s from IP %s. Category: %s, Reason: %s", host, clientIP, category, reason)
+			slog.Info(fmt.Sprintf("[WAF] Blocked malicious request on %s from IP %s. Category: %s, Reason: %s", host, clientIP, category, reason))
 			p.serveBlockedPage(w, r, host, category, reason, clientIP)
 			return
 		}
@@ -157,7 +168,7 @@ func (p *ProxyHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 			lease.VisitorIPsMu.Unlock()
 
 			// Log the proxied request visitor IP
-			log.Printf("[Proxy] Routing request on %s from visitor IP %s", host, clientIP)
+			slog.Info(fmt.Sprintf("[Proxy] Routing request on %s from visitor IP %s", host, clientIP))
 
 			// Determine protocol
 			proto := "http"
@@ -177,13 +188,28 @@ func (p *ProxyHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 				req.Header.Set("X-Forwarded-Host", req.Host)
 				req.Header.Set("X-Forwarded-Proto", proto)
 			}
+
+			// Inject dynamic lease headers from portal configuration
+			if len(lease.AddedHeaders) > 0 {
+				for k, v := range lease.AddedHeaders {
+					interpolated := interpolateHeaderValue(v, clientIP, req.Host, proto)
+					req.Header.Set(k, interpolated)
+				}
+			}
+		},
+		ModifyResponse: func(resp *http.Response) error {
+			origin := r.Header.Get("Origin")
+			if origin != "" && p.isOriginAllowed(origin) {
+				p.injectCORSHeaders(resp.Header, origin)
+			}
+			return nil
 		},
 		Transport: &trackingTransport{
 			roundTripper: http.DefaultTransport,
 			lease:        lease,
 		},
 		ErrorHandler: func(w http.ResponseWriter, req *http.Request, err error) {
-			log.Printf("[Proxy] Routing failure to %s (127.0.0.1:%d): %v", host, lease.LocalPort, err)
+			slog.Info(fmt.Sprintf("[Proxy] Routing failure to %s (127.0.0.1:%d): %v", host, lease.LocalPort, err))
 			p.serveOfflinePage(w, req, host, err.Error())
 		},
 	}
@@ -199,9 +225,28 @@ func (p *ProxyHandler) serveOfflinePage(w http.ResponseWriter, r *http.Request, 
 
 	// Replace placeholder host in embedded HTML
 	pageBytes := bytes.ReplaceAll(offlineHTML, []byte("loading..."), []byte(host))
+	pageBytes = p.injectBaseTag(pageBytes, r, host)
 	if _, err := w.Write(pageBytes); err != nil {
-		log.Printf("[Proxy] Failed to write offline page: %v", err)
+		slog.Info(fmt.Sprintf("[Proxy] Failed to write offline page: %v", err))
 	}
+}
+
+func (p *ProxyHandler) isOriginAllowed(origin string) bool {
+	if p.config == nil {
+		return false
+	}
+	for _, domain := range p.config.Domains {
+		if strings.HasSuffix(origin, "."+domain) || origin == "http://"+domain || origin == "https://"+domain {
+			return true
+		}
+	}
+	return false
+}
+
+func (p *ProxyHandler) injectCORSHeaders(h http.Header, origin string) {
+	h.Set("Access-Control-Allow-Origin", origin)
+	h.Set("Access-Control-Allow-Methods", "GET, POST, PUT, DELETE, PATCH, OPTIONS")
+	h.Set("Access-Control-Allow-Headers", "*")
 }
 
 // serveBlockedPage renders the Liferay-themed WAF blocked warning page.
@@ -219,8 +264,9 @@ func (p *ProxyHandler) serveBlockedPage(w http.ResponseWriter, r *http.Request, 
 	tmpl = strings.ReplaceAll(tmpl, "{{.IP}}", ip)
 	tmpl = strings.ReplaceAll(tmpl, "{{.TxID}}", txID)
 
-	if _, err := w.Write([]byte(tmpl)); err != nil {
-		log.Printf("[Proxy] Failed to write WAF blocked page: %v", err)
+	pageBytes := p.injectBaseTag([]byte(tmpl), r, host)
+	if _, err := w.Write(pageBytes); err != nil {
+		slog.Info(fmt.Sprintf("[Proxy] Failed to write WAF blocked page: %v", err))
 	}
 }
 
@@ -326,8 +372,9 @@ func (p *ProxyHandler) servePasscodePage(w http.ResponseWriter, r *http.Request,
 		}
 	}
 
-	if _, err := w.Write([]byte(tmpl)); err != nil {
-		log.Printf("[Proxy] Failed to write passcode page: %v", err)
+	pageBytes := p.injectBaseTag([]byte(tmpl), r, host)
+	if _, err := w.Write(pageBytes); err != nil {
+		slog.Info(fmt.Sprintf("[Proxy] Failed to write passcode page: %v", err))
 	}
 }
 
@@ -339,8 +386,9 @@ func (p *ProxyHandler) serveUnauthorizedIPPage(w http.ResponseWriter, r *http.Re
 	tmpl = strings.ReplaceAll(tmpl, "{{.Host}}", host)
 	tmpl = strings.ReplaceAll(tmpl, "{{.IP}}", ip)
 
-	if _, err := w.Write([]byte(tmpl)); err != nil {
-		log.Printf("[Proxy] Failed to write unauthorized IP page: %v", err)
+	pageBytes := p.injectBaseTag([]byte(tmpl), r, host)
+	if _, err := w.Write(pageBytes); err != nil {
+		slog.Info(fmt.Sprintf("[Proxy] Failed to write unauthorized IP page: %v", err))
 	}
 }
 
@@ -523,4 +571,29 @@ func interpolateHeaderValue(val, clientIP, host, proto string) string {
 	val = strings.ReplaceAll(val, "$host", host)
 	val = strings.ReplaceAll(val, "$proto", proto)
 	return val
+}
+
+func (p *ProxyHandler) getPortalBaseURL(r *http.Request, host string) string {
+	scheme := "https"
+	if r != nil && r.TLS == nil && r.Header.Get("X-Forwarded-Proto") != "https" {
+		scheme = "http"
+	}
+
+	if p.config != nil {
+		for _, domain := range p.config.Domains {
+			if host == domain || strings.HasSuffix(host, "."+domain) {
+				return fmt.Sprintf("%s://tunnel.%s", scheme, domain)
+			}
+		}
+		if len(p.config.Domains) > 0 {
+			return fmt.Sprintf("%s://tunnel.%s", scheme, p.config.Domains[0])
+		}
+	}
+	return scheme + "://localhost"
+}
+
+func (p *ProxyHandler) injectBaseTag(htmlBytes []byte, r *http.Request, host string) []byte {
+	baseURL := p.getPortalBaseURL(r, host)
+	baseTag := []byte(fmt.Sprintf("<head>\n    <base href=\"%s/\">", baseURL))
+	return bytes.Replace(htmlBytes, []byte("<head>"), baseTag, 1)
 }

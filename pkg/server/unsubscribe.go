@@ -78,7 +78,14 @@ func (s *Server) handleUnsubscribe(w http.ResponseWriter, r *http.Request) {
 	if err != nil {
 		w.Header().Set("Content-Type", "text/html; charset=utf-8")
 		w.WriteHeader(http.StatusUnauthorized)
-		_, _ = fmt.Fprintf(w, `<html><head><title>Unsubscribe Failed</title><style>body{font-family:sans-serif;text-align:center;padding:50px;color:#333;background:#f8fafc;}h1{color:#ef4444;}</style></head><body><h1>Unsubscribe Failed ❌</h1><p>%s</p><p><a href="/">Return to Portal</a></p></body></html>`, htmlEscape(err.Error()))
+		htmlBytes, errFS := staticFS.ReadFile("static/unsubscribe_failed.html")
+		if errFS != nil {
+			_, _ = fmt.Fprintf(w, `<html><head><title>Unsubscribe Failed</title><style>body{font-family:sans-serif;text-align:center;padding:50px;color:#333;background:#f8fafc;}h1{color:#ef4444;}</style></head><body><h1>Unsubscribe Failed ❌</h1><p>%s</p><p><a href="/">Return to Portal</a></p></body></html>`, htmlEscape(err.Error()))
+			return
+		}
+
+		tmpl := strings.ReplaceAll(string(htmlBytes), "{{.Error}}", htmlEscape(err.Error()))
+		_, _ = fmt.Fprint(w, tmpl)
 		return
 	}
 
@@ -93,7 +100,12 @@ func (s *Server) handleUnsubscribe(w http.ResponseWriter, r *http.Request) {
 
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
 	w.WriteHeader(http.StatusOK)
-	_, _ = fmt.Fprint(w, `<html><head><title>Unsubscribed Successfully</title><style>body{font-family:sans-serif;text-align:center;padding:50px;color:#333;background:#f8fafc;}h1{color:#10b981;}</style></head><body><h1>Successfully Unsubscribed! ✅</h1><p>Your email preferences have been updated. You will no longer receive optional administrative notifications, broadcasts, or lease alert emails.</p><p>You can opt-back-in at any time from your Account Settings panel on the dashboard.</p><p><a href="/">Return to Portal</a></p></body></html>`)
+	htmlBytes, errFS := staticFS.ReadFile("static/unsubscribe_success.html")
+	if errFS != nil {
+		_, _ = fmt.Fprint(w, `<html><head><title>Unsubscribed Successfully</title><style>body{font-family:sans-serif;text-align:center;padding:50px;color:#333;background:#f8fafc;}h1{color:#10b981;}</style></head><body><h1>Successfully Unsubscribed! ✅</h1><p>Your email preferences have been updated. You will no longer receive optional administrative notifications, broadcasts, or lease alert emails.</p><p>You can opt-back-in at any time from your Account Settings panel on the dashboard.</p><p><a href="/">Return to Portal</a></p></body></html>`)
+		return
+	}
+	_, _ = w.Write(htmlBytes)
 }
 
 func htmlEscape(s string) string {

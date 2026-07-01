@@ -9,9 +9,10 @@ import (
 	"testing"
 	"time"
 
-	"github.com/gorilla/websocket"
 	"lfr-tunnel/pkg/config"
 	"lfr-tunnel/pkg/db"
+
+	"github.com/gorilla/websocket"
 )
 
 func TestServer_TelemetryWS(t *testing.T) {

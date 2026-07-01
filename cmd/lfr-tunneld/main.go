@@ -3,6 +3,7 @@ package main
 import (
 	"flag"
 	"log"
+	"log/slog"
 	"os"
 	"os/signal"
 	"strings"
@@ -65,13 +66,13 @@ func main() {
 	signal.Notify(sigs, syscall.SIGINT, syscall.SIGTERM)
 	go func() {
 		<-sigs
-		log.Println("[Server] Shutdown signal received, stopping...")
+		slog.Info("[Server] Shutdown signal received, stopping...")
 		srv.Stop()
 		os.Exit(0)
 	}()
 
 	// 6. Start server
-	log.Println("[Server] Initializing Liferay Tunnel Gateway daemon...")
+	slog.Info("[Server] Initializing Liferay Tunnel Gateway daemon...")
 	if err := srv.Start(); err != nil {
 		log.Fatalf("[Server] Server stopped with error: %v", err)
 	}

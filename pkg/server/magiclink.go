@@ -3,7 +3,8 @@ package server
 import (
 	"crypto/sha256"
 	"encoding/hex"
-	"log"
+	"fmt"
+	"log/slog"
 	"net/http"
 )
 
@@ -43,7 +44,7 @@ func (s *Server) handleAuthReport(w http.ResponseWriter, r *http.Request) {
 	_ = s.db.AddBlacklistIP(link.ClientIP, "Reported via Magic Link email")
 	s.blacklist.Store(link.ClientIP, true)
 
-	log.Printf("[Auth] Magic link reported by %s. IP %s has been blacklisted.", link.Email, link.ClientIP)
+	slog.Info(fmt.Sprintf("[Auth] Magic link reported by %s. IP %s has been blacklisted.", link.Email, link.ClientIP))
 
 	w.Header().Set("Content-Type", "text/html")
 	_, _ = w.Write([]byte("Thank you. This login link has been deactivated, and the request has been reported to our security team."))

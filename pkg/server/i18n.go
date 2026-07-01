@@ -3,7 +3,7 @@ package server
 import (
 	"embed"
 	"fmt"
-	"log"
+	"log/slog"
 	"net/http"
 	"os"
 	"path/filepath"
@@ -63,7 +63,7 @@ func (s *Server) initI18n() error {
 			if err == nil {
 				content = string(data)
 				loadedExternal = true
-				log.Printf("[i18n] Loaded runtime custom properties override for locale %q: %s", locale, extPath)
+				slog.Info(fmt.Sprintf("[i18n] Loaded runtime custom properties override for locale %q: %s", locale, extPath))
 			}
 		}
 
@@ -71,7 +71,7 @@ func (s *Server) initI18n() error {
 		if !loadedExternal {
 			data, err := i18nFS.ReadFile(fmt.Sprintf("i18n/%s", filename))
 			if err != nil {
-				log.Printf("[i18n] Warning: failed to load embedded properties for locale %q: %v", locale, err)
+				slog.Info(fmt.Sprintf("[i18n] Warning: failed to load embedded properties for locale %q: %v", locale, err))
 				continue
 			}
 			content = string(data)
@@ -81,7 +81,7 @@ func (s *Server) initI18n() error {
 		s.translations[locale] = parseProperties(content)
 	}
 
-	log.Printf("[i18n] Successfully initialized dynamic i18n engine with %d locales.", len(s.translations))
+	slog.Info(fmt.Sprintf("[i18n] Successfully initialized dynamic i18n engine with %d locales.", len(s.translations)))
 	return nil
 }
 

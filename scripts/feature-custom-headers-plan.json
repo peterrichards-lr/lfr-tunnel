@@ -1,0 +1,31 @@
+{
+  "title": "[Feature] Dynamic Gateway Header Injection",
+  "body": "Allow administrators to dynamically inject custom HTTP headers (such as CORS headers or API keys) into client extension traffic directly from the gateway portal.",
+  "labels": ["enhancement"],
+  "issues": [
+    {
+      "title": "Backend: Apply Custom Headers in Proxy",
+      "body": "Modify `pkg/server/proxy.go` to inject `lease.AddedHeaders` into the HTTP request before forwarding it down the tunnel.",
+      "completed": true,
+      "labels": ["enhancement"]
+    },
+    {
+      "title": "Backend: Custom Headers API Endpoint",
+      "body": "Create a new secure endpoint (`POST /api/portal/reservations/headers`) in `pkg/server/api_service_reservation.go` to allow users to update the `AddedHeaders` map for a specific active subdomain lease.",
+      "completed": false,
+      "labels": ["enhancement"]
+    },
+    {
+      "title": "Frontend: Portal UI Headers Configuration",
+      "body": "Enhance the Gateway Dashboard UI (`pkg/server/static/dashboard.html` and `dashboard.js`) to include a 'Custom Headers' section within the Tunnel Details modal, allowing dynamic addition and removal of headers.",
+      "completed": false,
+      "labels": ["enhancement"]
+    },
+    {
+      "title": "Frontend: Expose Public URLs in Inspector UI and API",
+      "body": "Update `pkg/client/inspector.go` to include `public_urls` in `/api/info` and display them in a new sidebar panel in `inspector.html`.",
+      "completed": true,
+      "labels": ["enhancement"]
+    }
+  ]
+}

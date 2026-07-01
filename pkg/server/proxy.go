@@ -199,6 +199,7 @@ func (p *ProxyHandler) serveOfflinePage(w http.ResponseWriter, r *http.Request, 
 
 	// Replace placeholder host in embedded HTML
 	pageBytes := bytes.ReplaceAll(offlineHTML, []byte("loading..."), []byte(host))
+	pageBytes = p.injectBaseTag(pageBytes, r, host)
 	if _, err := w.Write(pageBytes); err != nil {
 		slog.Info(fmt.Sprintf("[Proxy] Failed to write offline page: %v", err))
 	}
@@ -219,7 +220,8 @@ func (p *ProxyHandler) serveBlockedPage(w http.ResponseWriter, r *http.Request, 
 	tmpl = strings.ReplaceAll(tmpl, "{{.IP}}", ip)
 	tmpl = strings.ReplaceAll(tmpl, "{{.TxID}}", txID)
 
-	if _, err := w.Write([]byte(tmpl)); err != nil {
+	pageBytes := p.injectBaseTag([]byte(tmpl), r, host)
+	if _, err := w.Write(pageBytes); err != nil {
 		slog.Info(fmt.Sprintf("[Proxy] Failed to write WAF blocked page: %v", err))
 	}
 }
@@ -326,7 +328,8 @@ func (p *ProxyHandler) servePasscodePage(w http.ResponseWriter, r *http.Request,
 		}
 	}
 
-	if _, err := w.Write([]byte(tmpl)); err != nil {
+	pageBytes := p.injectBaseTag([]byte(tmpl), r, host)
+	if _, err := w.Write(pageBytes); err != nil {
 		slog.Info(fmt.Sprintf("[Proxy] Failed to write passcode page: %v", err))
 	}
 }
@@ -339,7 +342,8 @@ func (p *ProxyHandler) serveUnauthorizedIPPage(w http.ResponseWriter, r *http.Re
 	tmpl = strings.ReplaceAll(tmpl, "{{.Host}}", host)
 	tmpl = strings.ReplaceAll(tmpl, "{{.IP}}", ip)
 
-	if _, err := w.Write([]byte(tmpl)); err != nil {
+	pageBytes := p.injectBaseTag([]byte(tmpl), r, host)
+	if _, err := w.Write(pageBytes); err != nil {
 		slog.Info(fmt.Sprintf("[Proxy] Failed to write unauthorized IP page: %v", err))
 	}
 }
@@ -523,4 +527,29 @@ func interpolateHeaderValue(val, clientIP, host, proto string) string {
 	val = strings.ReplaceAll(val, "$host", host)
 	val = strings.ReplaceAll(val, "$proto", proto)
 	return val
+}
+
+func (p *ProxyHandler) getPortalBaseURL(r *http.Request, host string) string {
+	scheme := "https"
+	if r != nil && r.TLS == nil && r.Header.Get("X-Forwarded-Proto") != "https" {
+		scheme = "http"
+	}
+
+	if p.config != nil {
+		for _, domain := range p.config.Domains {
+			if host == domain || strings.HasSuffix(host, "."+domain) {
+				return fmt.Sprintf("%s://tunnel.%s", scheme, domain)
+			}
+		}
+		if len(p.config.Domains) > 0 {
+			return fmt.Sprintf("%s://tunnel.%s", scheme, p.config.Domains[0])
+		}
+	}
+	return scheme + "://localhost"
+}
+
+func (p *ProxyHandler) injectBaseTag(htmlBytes []byte, r *http.Request, host string) []byte {
+	baseURL := p.getPortalBaseURL(r, host)
+	baseTag := []byte(fmt.Sprintf("<head>\n    <base href=\"%s/\">", baseURL))
+	return bytes.Replace(htmlBytes, []byte("<head>"), baseTag, 1)
 }

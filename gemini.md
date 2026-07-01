@@ -257,6 +257,7 @@ The solution will consist of:
 - [x] Document LFT_INSPECTOR_BIND in setup guide / SE guide.
 - [x] Bump version to v1.7.13 in whats-new.json, tag, and push to trigger release CI workflow.
 - [x] Fix dashboard double 'v' prefix bug and false-positive "Update Available" warning for newer clients.
+- [x] Fix static asset URLs on offline and gateway error pages.
 
 ## Subdomain Reservation System (v1.8.0)
 - [x] Declutter Active Tunnels dashboard table by moving detailed fields into a new Tunnel Details Dialog Modal (with Copy Link, On-Demand Refresh, and Admin controls).

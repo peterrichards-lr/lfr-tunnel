@@ -10,6 +10,7 @@ import (
 
 func TestServer_MiscCoverage8(t *testing.T) {
 	srv := setupTestServerForAPI(t)
+	defer srv.Stop()
 	srv.cfg.EdgeNodes = append(srv.cfg.EdgeNodes, config.EdgeNodeConfig{
 		ID:  "edge-1",
 		URL: "http://127.0.0.1:9999",

@@ -1,9 +1,8 @@
 {
-  "version": "v1.27.0",
-  "release_date": "2026-07-01",
+  "version": "v1.28.0",
+  "release_date": "2026-07-02",
   "features": [
-    "Hotfix: Custom headers now dynamically propagate to Regional Edge nodes without restarting tunnels",
-    "Hotfix: Prevent duplicate github issues during script sync"
+    "Feature: LDM & Liferay Auto-Discovery - Detect running LDM/Docker Tomcat instances automatically to eliminate manual configuration flags"
   ]
 }
 

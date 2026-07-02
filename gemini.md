@@ -178,7 +178,7 @@ The solution will consist of:
 
 | Feature | Description | Risk | LOE | Business Value | Priority |
 | :--- | :--- | :--- | :--- | :--- | :--- |
-| **1. LDM & Liferay Auto-Discovery** | Detect running LDM/Docker Tomcat instances to eliminate configuration flags. | Low | Small | High | **High** |
+| **1. LDM & Liferay Auto-Discovery** | Detect running LDM/Docker Tomcat instances to eliminate configuration flags. | Low | Small | High | **Done** |
 | **2. Traffic Web Inspector & Replayer** | Local embedded dashboard (`:4040`) for HTTP headers, payloads, and request replay. | Medium | Medium | High | **High** |
 | **3. Client-Initiated Access Control** | Gateway-level IP whitelisting or passcode screen on the public URL. | Low | Medium | High | **High** |
 | **4. Vanity Domain Routing (SNI)** | Route custom domains directly with on-the-fly gateway SSL provisioning. | High | Large | High | **Medium** |

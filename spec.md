@@ -157,3 +157,8 @@ ports:
   - *Mitigation*: We will reuse ports. Once a client disconnects, its port is put back into a pool of available ports. The server will keep a registry and release ports after connection timeouts.
 - **Failure 2: Port conflicts on local developer machines.**
   - *Mitigation*: The client CLI will verify if the target ports (e.g. `8080`, `3000`) are active locally before opening the tunnel. If not, it will warn the developer.
+
+
+<!-- markdownlint-disable MD049 -->
+---
+*Last Updated: 2026-07-02* | *Last Reviewed: 2026-07-02*

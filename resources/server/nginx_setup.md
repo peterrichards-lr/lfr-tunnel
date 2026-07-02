@@ -372,3 +372,8 @@ An active watchdog runs every minute to verify Nginx and `lfr-tunneld` ports, an
     sudo systemctl enable --now gateway-watchdog.timer
     ```
 
+
+
+<!-- markdownlint-disable MD049 -->
+---
+*Last Updated: 2026-07-02* | *Last Reviewed: 2026-07-02*

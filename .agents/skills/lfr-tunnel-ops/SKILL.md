@@ -119,3 +119,8 @@ Run remote diagnostic checks on the VPS (checking system stats, systemd service 
 ```bash
 ./scripts/diagnose-gateway.sh -i ~/.ssh/id_vm6_networks_vps
 ```
+
+
+<!-- markdownlint-disable MD049 -->
+---
+*Last Updated: 2026-07-02* | *Last Reviewed: 2026-07-02*

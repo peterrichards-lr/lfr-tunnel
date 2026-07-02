@@ -183,6 +183,7 @@ Security patches are applied to the **latest release only**. We do not backport 
 
 Always run `lfr-tunnel -upgrade` to ensure you are on the latest version.
 
+
+<!-- markdownlint-disable MD049 -->
 ---
-*Last Updated: 2026-07-02*  
-*Last Reviewed: 2026-07-02*
+*Last Updated: 2026-07-02* | *Last Reviewed: 2026-07-02*

@@ -340,6 +340,7 @@ Ngrok is a popular commercial tunnel provider. Note that running raw unsigned ng
 - **GitHub Issues**: [github.com/peterrichards-lr/lfr-tunnel/issues](https://github.com/peterrichards-lr/lfr-tunnel/issues)
 - **Slack**: Reach out in the Liferay SE Slack channel for token issues or gateway access problems.
 
+
+<!-- markdownlint-disable MD049 -->
 ---
-*Last Updated: 2026-07-02*  
-*Last Reviewed: 2026-07-02*
+*Last Updated: 2026-07-02* | *Last Reviewed: 2026-07-02*

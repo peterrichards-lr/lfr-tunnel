@@ -179,6 +179,7 @@ This uses our existing E2E Keycloak Docker setup to run a local OIDC Identity Pr
        icon: "key"
    ```
 
+
+<!-- markdownlint-disable MD049 -->
 ---
-*Last Updated: 2026-07-02*  
-*Last Reviewed: 2026-07-02*
+*Last Updated: 2026-07-02* | *Last Reviewed: 2026-07-02*

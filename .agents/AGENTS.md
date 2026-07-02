@@ -48,3 +48,8 @@ As you complete individual sub-issues:
 
 If you ever ask the AI to "review the project documentation for outdated files", it will automatically know to look for or construct these scripts.
 
+
+
+<!-- markdownlint-disable MD049 -->
+---
+*Last Updated: 2026-07-02* | *Last Reviewed: 2026-07-02*

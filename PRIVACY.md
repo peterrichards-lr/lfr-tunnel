@@ -73,6 +73,7 @@ Liferay Tunnel is fully self-hostable. If you run your own private instance of `
 * The gateway's default built-in web portal serves these standardized, generic disclosures at `/privacy` and `/cookies` automatically.
 * You can easily override these legal footers to point to your company's own custom disclosures using the `privacy_policy_url` and `cookie_policy_url` fields inside your `/etc/lfr-tunneld/server-config.yaml`.
 
+
+<!-- markdownlint-disable MD049 -->
 ---
-*Last Updated: 2026-07-02*  
-*Last Reviewed: 2026-07-02*
+*Last Updated: 2026-07-02* | *Last Reviewed: 2026-07-02*

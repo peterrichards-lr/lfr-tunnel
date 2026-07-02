@@ -114,6 +114,7 @@ Verify these administrative control flows on the Portal Dashboard:
 - **IP Blacklisting & DDoS IPS**: Banning IPs from the **IP Blacklist** tab. Flooding endpoints should auto-blacklist the client and log `system.auto_blacklisted` in the audit ledger.
 - **Global Broadcast Messaging**: Typing a global message in the admin panel and verifying a red notification banner displays on all active client browsers within 10 seconds.
 
+
+<!-- markdownlint-disable MD049 -->
 ---
-*Last Updated: 2026-07-02*  
-*Last Reviewed: 2026-07-02*
+*Last Updated: 2026-07-02* | *Last Reviewed: 2026-07-02*

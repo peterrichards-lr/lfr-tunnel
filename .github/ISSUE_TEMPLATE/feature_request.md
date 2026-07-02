@@ -28,3 +28,7 @@ A clear and concise description of any alternative workarounds or tools you've c
 
 **Additional context**
 Add any other context or screenshots about the feature request here.
+
+<!-- markdownlint-disable MD049 -->
+---
+*Last Updated: 2026-07-02* | *Last Reviewed: 2026-07-02*

@@ -182,3 +182,7 @@ Security patches are applied to the **latest release only**. We do not backport 
 | Older releases | ❌ No |
 
 Always run `lfr-tunnel -upgrade` to ensure you are on the latest version.
+
+---
+*Last Updated: 2026-07-02*  
+*Last Reviewed: 2026-07-02*

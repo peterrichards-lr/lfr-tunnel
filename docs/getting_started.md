@@ -247,3 +247,7 @@ lfr-tunnel -subdomain your-name-se -ports 8080
 * **Detailed Guides:**
   * For advanced setup and Liferay virtual host configurations, see the [Liferay SE Guide](liferay-se-guide.md).
   * For details on self-hosting your own gateway, see the [Server Setup Guide](setup_guide.md).
+
+---
+*Last Updated: 2026-07-02*  
+*Last Reviewed: 2026-07-02*

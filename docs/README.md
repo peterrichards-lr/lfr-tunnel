@@ -24,3 +24,7 @@ All operator deployment and configuration resources are organized under the `doc
 
 - **[Contributing Guide](../CONTRIBUTING.md)**: General contribution rules, git branching conventions, code style checks, and release checklists.
 - **[Testing Protocol](../CONTRIBUTING.md#-testing--verification-protocol)**: Detailed instructions for running automated unit/E2E tests locally and manual exploratory test scenarios.
+
+---
+*Last Updated: 2026-07-02*  
+*Last Reviewed: 2026-07-02*

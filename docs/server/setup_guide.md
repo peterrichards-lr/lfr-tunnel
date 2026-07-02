@@ -1061,3 +1061,7 @@ To guarantee that outbound connections originating from the VPS are consistently
    curl https://ifconfig.me
    # Output should match your primary IP: 82.39.133.178
    ```
+
+---
+*Last Updated: 2026-07-02*  
+*Last Reviewed: 2026-07-02*

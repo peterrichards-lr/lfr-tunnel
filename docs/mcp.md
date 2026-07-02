@@ -184,3 +184,7 @@ Add this to your `mcp` settings:
   }
 }
 ```
+
+---
+*Last Updated: 2026-07-02*  
+*Last Reviewed: 2026-07-02*

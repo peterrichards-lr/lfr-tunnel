@@ -1,0 +1,31 @@
+{
+  "title": "[Epic] Add review timestamps to Markdown documentation",
+  "body": "Add timestamps to the footer of the MD files to indicate when they were last updated and reviewed. This will help manage the documentation more efficiently.",
+  "labels": [
+    "documentation",
+    "enhancement"
+  ],
+  "issues": [
+    {
+      "title": "Sub-Issue #1: Add timestamps to root Markdown files",
+      "body": "Add 'Last Updated' and 'Last Reviewed' timestamps to the footer of the root-level documentation files such as README.md, CONTRIBUTING.md, CODE_OF_CONDUCT.md, PRIVACY.md, SECURITY.md, etc.",
+      "completed": true,
+      "labels": [
+        "documentation"
+      ],
+      "issueNumber": "359",
+      "closed": true
+    },
+    {
+      "title": "Sub-Issue #2: Add timestamps to docs/ directory Markdown files",
+      "body": "Add 'Last Updated' and 'Last Reviewed' timestamps to the footer of the Markdown files located within the `docs/` and `docs/server/` directories.",
+      "completed": true,
+      "labels": [
+        "documentation"
+      ],
+      "issueNumber": "360",
+      "closed": true
+    }
+  ],
+  "epicNumber": "358"
+}

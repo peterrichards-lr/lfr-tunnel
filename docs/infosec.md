@@ -166,3 +166,8 @@ To authorize the tool with minimal impact on local endpoint alerts, we recommend
 2. **Apply Code Signing Exceptions:** Add the Apple Team ID / Developer ID CN and Windows Certificate CN to your EDR's trusted publisher list.
 3. **Apply Wildcard Path Exclusions:** Add the standardized installation path exclusions (`/Users/*/runningpoc/bin/lfr-tunnel` or `C:\Users\*\runningpoc\bin\lfr-tunnel.exe`) to the EDR profile.
 4. **Configure Docker Sandbox Fallback:** For strict environments where local execution is banned, utilize the Docker wrapper script (`lfr-tunnel.sh` or `lfr-tunnel.ps1`) to run the tunnel client in an isolated container sandbox using the audited public image **`your-docker-hub-user/lfr-tunnel`** (or `peterjrichards/lfr-tunnel` as a template) hosted on Docker Hub.
+
+
+<!-- markdownlint-disable MD049 -->
+---
+*Last Updated: 2026-07-02* | *Last Reviewed: 2026-07-02*

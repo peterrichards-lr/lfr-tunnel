@@ -97,3 +97,8 @@ Configure the runtime execution using these environment variables:
 The code for this agent is open source. You can view the implementation, report bugs, or request features at the official repository:
 
 👉 [github.com/peterrichards-lr/lfr-tunnel](https://github.com/peterrichards-lr/lfr-tunnel)
+
+
+<!-- markdownlint-disable MD049 -->
+---
+*Last Updated: 2026-07-02* | *Last Reviewed: 2026-07-02*

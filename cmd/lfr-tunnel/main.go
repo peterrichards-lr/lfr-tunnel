@@ -394,7 +394,7 @@ func resolvePortsAndMappings(cfg *config.ClientConfig) []client.PortMapping {
 	}
 
 	var portMappings []client.PortMapping
-	if len(ports) > 0 && *portsStr != "" {
+	if len(ports) > 0 {
 		for idx, port := range ports {
 			suffix := ""
 			if idx > 0 {
@@ -414,11 +414,17 @@ func resolvePortsAndMappings(cfg *config.ClientConfig) []client.PortMapping {
 				portMappings = []client.PortMapping{{LocalPort: 8080}}
 			}
 		} else {
-			slog.Info("[Client] No Liferay workspace detected in current directory. Probing typical ports (8080, 13000, 3000)...")
-			activePorts := client.ProbeLocalPorts([]int{8080, 13000, 3000})
-			if len(activePorts) > 0 {
-				slog.Info(fmt.Sprintf("[Client] Detected active local service ports: %v", activePorts))
-				for idx, port := range activePorts {
+			slog.Info("[Client] No explicit ports provided. Auto-discovering Liferay / LDM instances...")
+			discoveryResult, err := client.AutoDiscoverTarget()
+			if err == nil && discoveryResult != nil {
+				slog.Info(fmt.Sprintf("[Client] Auto-discovered %s target on host '%s' with ports: %v", discoveryResult.Type, discoveryResult.Host, discoveryResult.Ports))
+
+				// Automatically update the target host if it wasn't explicitly set via flags
+				if *targetHost == "localhost" {
+					cfg.TargetHost = discoveryResult.Host
+				}
+
+				for idx, port := range discoveryResult.Ports {
 					suffix := ""
 					if idx > 0 {
 						suffix = fmt.Sprintf("-%d", port)
@@ -429,7 +435,7 @@ func resolvePortsAndMappings(cfg *config.ClientConfig) []client.PortMapping {
 					})
 				}
 			} else {
-				slog.Info("[Client] No active local services found on typical ports. Defaulting to port 8080.")
+				slog.Info("[Client] No active LDM/Liferay instances discovered. Defaulting to port 8080.")
 				portMappings = []client.PortMapping{{LocalPort: 8080}}
 			}
 		}

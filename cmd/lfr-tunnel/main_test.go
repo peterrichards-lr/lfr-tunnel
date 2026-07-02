@@ -92,6 +92,10 @@ func TestRewriteRemotes(t *testing.T) {
 }
 
 func TestResolvePortsAndMappings(t *testing.T) {
+	oldPortsStr := *portsStr
+	*portsStr = ""
+	defer func() { *portsStr = oldPortsStr }()
+
 	cfg := &config.ClientConfig{
 		Ports: []int{8080},
 	}

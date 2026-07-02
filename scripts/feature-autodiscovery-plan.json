@@ -1,0 +1,26 @@
+{
+  "title": "Feature: LDM & Liferay Auto-Discovery",
+  "body": "Detect running LDM/Docker Tomcat instances locally to eliminate the need for manual configuration flags such as `LFT_TARGET_HOST` or explicit port specifications.",
+  "labels": [
+    "enhancement"
+  ],
+  "sub_issues": [
+    {
+      "title": "Implement Auto-Discovery Logic",
+      "body": "Create an auto-discovery module that can detect running LDM docker containers or native Liferay Tomcat bundles bound to localhost by probing standard ports and docker socket.",
+      "completed": true,
+      "labels": [
+        "enhancement"
+      ]
+    },
+    {
+      "title": "Integrate Auto-Discovery into CLI",
+      "body": "Update the CLI startup logic to automatically fall back to the auto-discovery mechanism if the target port or host is not explicitly provided.",
+      "completed": false,
+      "labels": [
+        "enhancement"
+      ]
+    }
+  ],
+  "epicNumber": "368"
+}

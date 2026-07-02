@@ -1,0 +1,20 @@
+{
+  "title": "[Epic] Enforce Documentation Timestamps Locally",
+  "body": "Add local agent rules to strictly enforce the presence of Last Updated and Last Reviewed timestamps on all markdown documentation.",
+  "labels": [
+    "documentation"
+  ],
+  "issues": [
+    {
+      "title": "Sub-Issue #1: Add timestamp rules to local agent rules",
+      "body": "Append the Global Documentation Timestamps Rule to `.agents/AGENTS.md` to ensure any AI agent working on the repository adheres to the rules.",
+      "completed": true,
+      "labels": [
+        "documentation"
+      ],
+      "issueNumber": "365",
+      "closed": true
+    }
+  ],
+  "epicNumber": "364"
+}

@@ -37,3 +37,8 @@ Create `pkg/client/client.go` and `cmd/lfr-tunnel/main.go` to implement:
 ## Step 7: Testing & Verification
 - Write unit tests for the registry and proxy.
 - Provide a step-by-step validation guide.
+
+
+<!-- markdownlint-disable MD049 -->
+---
+*Last Updated: 2026-07-02* | *Last Reviewed: 2026-07-02*

@@ -386,3 +386,11 @@ func TestSelfUpgrade_GatewayRecommendation(t *testing.T) {
 		})
 	}
 }
+
+func TestCheckServerCompatibility(t *testing.T) {
+	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		_, _ = w.Write([]byte(`{"server_version":"v1.27.0", "min_client_version":"v1.20.0"}`)) //nolint:errcheck
+	}))
+	defer ts.Close()
+	_, _ = CheckServerCompatibility(ts.URL) //nolint:errcheck
+}

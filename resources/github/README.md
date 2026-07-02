@@ -33,3 +33,8 @@ This ruleset targets the `checksums` branch, blocking branch deletion while stil
 ```bash
 gh api -X POST /repos/{owner}/{repo}/rulesets --input resources/github/checksums_ruleset.json
 ```
+
+
+<!-- markdownlint-disable MD049 -->
+---
+*Last Updated: 2026-07-02* | *Last Reviewed: 2026-07-02*

@@ -4983,7 +4983,11 @@ func (s *Server) monitorEdgeHealth() {
 				s.updateEdgeHealth(edge.ID, "Offline", latency, fmt.Sprintf("HTTP %d", resp.StatusCode), "")
 			}
 		}
-		time.Sleep(60 * time.Second)
+		select {
+		case <-s.ctx.Done():
+			return
+		case <-time.After(60 * time.Second):
+		}
 	}
 }
 

@@ -1,0 +1,21 @@
+{
+  "title": "[Epic] Documentation Review Tracking Scripts",
+  "body": "Create scripts to identify which documentation files need review based on their 'Last Updated' and 'Last Reviewed' timestamps.",
+  "labels": [
+    "documentation",
+    "enhancement"
+  ],
+  "issues": [
+    {
+      "title": "Sub-Issue #1: Create documentation review tracking script",
+      "body": "Develop a script (e.g. Python or Node.js) that parses the markdown footers and reports files that haven't been reviewed in X days, or where the 'Last Updated' date is significantly newer than the 'Last Reviewed' date.",
+      "completed": true,
+      "labels": [
+        "documentation"
+      ],
+      "issueNumber": "363",
+      "closed": true
+    }
+  ],
+  "epicNumber": "362"
+}

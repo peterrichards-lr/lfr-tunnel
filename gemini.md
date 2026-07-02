@@ -174,7 +174,6 @@ The solution will consist of:
 - [x] Update default macOS command to download binary and copy directly to /usr/local/bin/lfr-tunnel
 - [x] Update scripts/install.sh to use the S1 whitelisted /tmp/lfr-tunnel staging path
 
-### Future Roadmap Extensions (Proposed)
 
 | Feature | Description | Risk | LOE | Business Value | Priority |
 | :--- | :--- | :--- | :--- | :--- | :--- |
@@ -624,19 +623,17 @@ The solution will consist of:
 - [x] Release, tag, and deploy v1.19.5 of lfr-tunneld.
 
 ## Version Detection & Liferay SE Configuration Alignment (v1.19.6)
-- [ ] Update `Makefile`, `deploy.sh`, `build-client-binaries.sh`, and `setup-edge-vps.sh` to extract Version from `pkg/config/version.go` instead of `git describe`.
-- [ ] Update `/etc/lfr-tunneld/server-config.yaml` on the central VPS to remove Homebrew/Scoop client commands and enforce the EDR-whitelisted installer.
-- [ ] Rebuild and redeploy the gateway to the VPS to reflect the correct version (`v1.19.6`).
+
 - [x] Update `Makefile`, `deploy.sh`, `build-client-binaries.sh`, and `setup-edge-vps.sh` to extract Version from `pkg/config/version.go` instead of `git describe`.
 - [x] Update `/etc/lfr-tunneld/server-config.yaml` on the central VPS to remove Homebrew/Scoop client commands and enforce the EDR-whitelisted installer.
 - [x] Rebuild and redeploy the gateway to the VPS to reflect the correct version (`v1.19.6`).
 
 ## JP Edge Node Activation & Alignment (v1.19.7)
-- [ ] Add `us-central-1` and `jp-tokyo-1` URLs and token hashes in `/etc/lfr-tunneld/server-config.yaml` on the Control Plane VPS.
-- [ ] Compile the Linux `lfr-tunneld` binary locally using `v1.19.5`.
-- [ ] Deploy the compiled binary to the JP edge VPS.
-- [ ] Configure the JP edge VPS `/etc/lfr-tunneld/server-config.yaml` with the prefix-aware `edge_token: "jp-tokyo-1-LFT_JP_EDGE_TOKEN_2026"`.
-- [ ] Restart `lfr-tunneld` on both Control Plane and JP Edge VPS.
+- [x] Add `us-central-1` and `jp-tokyo-1` URLs and token hashes in `/etc/lfr-tunneld/server-config.yaml` on the Control Plane VPS.
+- [x] Compile the Linux `lfr-tunneld` binary locally using `v1.19.5`.
+- [x] Deploy the compiled binary to the JP edge VPS.
+- [x] Configure the JP edge VPS `/etc/lfr-tunneld/server-config.yaml` with the prefix-aware `edge_token: "jp-tokyo-1-LFT_JP_EDGE_TOKEN_2026"`.
+- [x] Restart `lfr-tunneld` on both Control Plane and JP Edge VPS.
 
 ## Edge Gateways Version Probing & Action Menus (v1.20.0)
 - [x] Update `pkg/server/server.go` to track edge node versions, query `/api/version` on regional nodes, and expose version via `edge-health` API.
@@ -759,9 +756,9 @@ The solution will consist of:
 - [x] Add unit test coverage verifying customizable links REST response (`pkg/server/server_test.go`).
 - [x] Raise GitHub feature request issue (#268) for dashboard onboarding tutorial.
 - [x] Raise GitHub feature request issue (#269) for configurable quick links.
-- [ ] Tag and release v1.23.5.
-- [ ] Deploy version v1.23.5 to the VPS gateway.
-- [ ] Run remote diagnostics verifying version, ports, and functionality on the VPS.
+- [x] Tag and release v1.23.5.
+- [x] Deploy version v1.23.5 to the VPS gateway.
+- [x] Run remote diagnostics verifying version, ports, and functionality on the VPS.
 
 ## Codebase Review & Refactoring for Technical Debt (v1.23.7) - Issue #274
 - [x] Create Phase 1 Audit Report outlining codebase review findings.

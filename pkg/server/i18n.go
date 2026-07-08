@@ -40,7 +40,7 @@ func parseProperties(content string) map[string]string {
 // initI18n loads dynamic translation property bundles into server memory.
 func (s *Server) initI18n() error {
 	s.translations = make(map[string]map[string]string)
-	locales := []string{"en", "es", "fr", "de", "pt", "ko", "ja", "zh", "ro"}
+	locales := []string{"en", "es", "fr", "de", "pt", "ko", "ja", "zh", "ro", "ar"}
 
 	// Local filesystem override directory
 	externalDir := "/etc/lfr-tunneld/i18n"
@@ -113,7 +113,7 @@ func (s *Server) GetTranslation(lang, key string) string {
 // ResolveLocale parses incoming HTTP request headers or query parameters to extract the best matching locale.
 func (s *Server) ResolveLocale(r *http.Request) string {
 	supported := map[string]bool{
-		"en": true, "es": true, "fr": true, "de": true, "pt": true, "ko": true, "ja": true, "zh": true, "ro": true,
+		"en": true, "es": true, "fr": true, "de": true, "pt": true, "ko": true, "ja": true, "zh": true, "ro": true, "ar": true,
 	}
 
 	// 1. Check explicit query parameter first (e.g. ?lang=ro)

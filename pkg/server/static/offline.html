@@ -225,23 +225,23 @@
                 <img src="/static/logo.svg" alt="Liferay Tunnel" class="logo-icon" width="44" height="44">
                 <div class="pulse-dot"></div>
             </div>
-            <h1>Environment Offline</h1>
-            <p class="description">
+            <h1 data-i18n="title">Environment Offline</h1>
+            <p class="description" data-i18n="desc">
                 The Sales Engineering tunnel client is not connected, or the local Liferay instance is currently powered off.
             </p>
             
             <div class="details-table">
                 <div class="detail-row">
-                    <span class="detail-label">Requested Host</span>
+                    <span class="detail-label" data-i18n="hostLabel">Requested Host</span>
                     <span class="detail-value" id="host-placeholder">loading...</span>
                 </div>
                 <div class="detail-row">
-                    <span class="detail-label">Gateway Status</span>
-                    <span class="detail-value" style="color: var(--alert-red);">502 Bad Gateway</span>
+                    <span class="detail-label" data-i18n="statusLabel">Gateway Status</span>
+                    <span class="detail-value" style="color: var(--alert-red);" data-i18n="statusVal">502 Bad Gateway</span>
                 </div>
                 <div class="detail-row">
-                    <span class="detail-label">Service</span>
-                    <span class="detail-value">Liferay Development Manager</span>
+                    <span class="detail-label" data-i18n="serviceLabel">Service</span>
+                    <span class="detail-value" data-i18n="serviceVal">Liferay Development Manager</span>
                 </div>
             </div>
 
@@ -250,11 +250,11 @@
             </button>
         </div>
         <div class="footer" style="margin-top: 24px; font-size: 11px; opacity: 0.6; display: flex; justify-content: center; gap: 12px; align-items: center; width: 100%;">
-            <a href="https://status.lfr-demo.se" target="_blank" rel="noopener noreferrer" style="color: var(--text-secondary); text-decoration: none; transition: 0.2s;" onmouseover="this.style.color='var(--liferay-blue)'" onmouseout="this.style.color='var(--text-secondary)'">System Status</a>
+            <a href="https://status.lfr-demo.se" target="_blank" rel="noopener noreferrer" style="color: var(--text-secondary); text-decoration: none; transition: 0.2s;" onmouseover="this.style.color='var(--liferay-blue)'" onmouseout="this.style.color='var(--text-secondary)'" data-i18n="systemStatus">System Status</a>
             <span style="opacity: 0.5;">•</span>
-            <a href="/privacy" style="color: var(--text-secondary); text-decoration: none; transition: 0.2s;" onmouseover="this.style.color='var(--liferay-blue)'" onmouseout="this.style.color='var(--text-secondary)'">Privacy Policy</a>
+            <a href="/privacy" style="color: var(--text-secondary); text-decoration: none; transition: 0.2s;" onmouseover="this.style.color='var(--liferay-blue)'" onmouseout="this.style.color='var(--text-secondary)'" data-i18n="privacy">Privacy Policy</a>
             <span style="opacity: 0.5;">•</span>
-            <a href="/cookies" style="color: var(--text-secondary); text-decoration: none; transition: 0.2s;" onmouseover="this.style.color='var(--liferay-blue)'" onmouseout="this.style.color='var(--text-secondary)'">Cookie Disclosure</a>
+            <a href="/cookies" style="color: var(--text-secondary); text-decoration: none; transition: 0.2s;" onmouseover="this.style.color='var(--liferay-blue)'" onmouseout="this.style.color='var(--text-secondary)'" data-i18n="cookies">Cookie Disclosure</a>
         </div>
     </div>
 
@@ -262,5 +262,163 @@
         // Dynamically show the current domain host
         document.getElementById('host-placeholder').textContent = window.location.hostname;
     </script>
+
+    <script>
+        const translations = {
+            en: {
+                title: "Environment Offline",
+                desc: "The developer's environment is currently offline or unreachable. Please try again later once they start up LDM.",
+                hostLabel: "Requested Host",
+                statusLabel: "Gateway Status",
+                statusVal: "502 Bad Gateway",
+                serviceLabel: "Service",
+                serviceVal: "Liferay Development Manager",
+                systemStatus: "System Status",
+                privacy: "Privacy Policy",
+                cookies: "Cookie Disclosure",
+                tryBtn: "Try Again"
+            },
+            es: {
+                title: "Entorno Desconectado",
+                desc: "El entorno del desarrollador está actualmente fuera de línea o inalcanzable. Vuelve a intentarlo más tarde.",
+                hostLabel: "Host Solicitado",
+                statusLabel: "Estado de la Puerta de Enlace",
+                statusVal: "502 Puerta de Enlace Incorrecta",
+                serviceLabel: "Servicio",
+                serviceVal: "Liferay Development Manager",
+                systemStatus: "Estado del Sistema",
+                privacy: "Política de Privacidad",
+                cookies: "Divulgación de Cookies",
+                tryBtn: "Intentar de Nuevo"
+            },
+            fr: {
+                title: "Environnement Hors Ligne",
+                desc: "L'environnement du développeur est actuellement hors ligne ou inaccessible. Veuillez réessayer plus tard.",
+                hostLabel: "Hôte Demandé",
+                statusLabel: "État de la Passerelle",
+                statusVal: "502 Mauvaise Passerelle",
+                serviceLabel: "Service",
+                serviceVal: "Liferay Development Manager",
+                systemStatus: "État du Système",
+                privacy: "Politique de Confidentialité",
+                cookies: "Divulgation des Cookies",
+                tryBtn: "Réessayer"
+            },
+            de: {
+                title: "Umgebung Offline",
+                desc: "Die Entwicklerumgebung ist derzeit offline oder nicht erreichbar. Bitte versuchen Sie es später erneut.",
+                hostLabel: "Angefragter Host",
+                statusLabel: "Gateway-Status",
+                statusVal: "502 Bad Gateway",
+                serviceLabel: "Dienst",
+                serviceVal: "Liferay Development Manager",
+                systemStatus: "Systemstatus",
+                privacy: "Datenschutzrichtlinie",
+                cookies: "Cookie-Offenlegung",
+                tryBtn: "Erneut Versuchen"
+            },
+            pt: {
+                title: "Ambiente Offline",
+                desc: "O ambiente do desenvolvedor está offline ou inacessível. Tente novamente mais tarde.",
+                hostLabel: "Host Solicitado",
+                statusLabel: "Status do Gateway",
+                statusVal: "502 Bad Gateway",
+                serviceLabel: "Serviço",
+                serviceVal: "Liferay Development Manager",
+                systemStatus: "Status do Sistema",
+                privacy: "Política de Privacidade",
+                cookies: "Divulgação de Cookies",
+                tryBtn: "Tentar Novamente"
+            },
+            ro: {
+                title: "Mediu Offline",
+                desc: "Mediul dezvoltatorului este offline sau inaccesibil. Vă rugăm să încercați din nou mai târziu.",
+                hostLabel: "Host Solicitat",
+                statusLabel: "Stare Gateway",
+                statusVal: "502 Bad Gateway",
+                serviceLabel: "Serviciu",
+                serviceVal: "Liferay Development Manager",
+                systemStatus: "Stare Sistem",
+                privacy: "Politica de Confidențialitate",
+                cookies: "Divulgare Cookie-uri",
+                tryBtn: "Încearcă din Nou"
+            },
+            ja: {
+                title: "環境オフライン",
+                desc: "開発者の環境は現在オフラインまたはアクセス不能です。後でもう一度お試しください。",
+                hostLabel: "リクエストされたホスト",
+                statusLabel: "ゲートウェイのステータス",
+                statusVal: "502 Bad Gateway",
+                serviceLabel: "サービス",
+                serviceVal: "Liferay Development Manager",
+                systemStatus: "システムステータス",
+                privacy: "プライバシーポリシー",
+                cookies: "クッキーの開示",
+                tryBtn: "再試行"
+            },
+            ko: {
+                title: "환경 오프라인",
+                desc: "개발자의 환경이 현재 오프라인이거나 연결할 수 없습니다. 나중에 다시 시도해 주세요.",
+                hostLabel: "요청된 호스트",
+                statusLabel: "게이트웨이 상태",
+                statusVal: "502 Bad Gateway",
+                serviceLabel: "서비스",
+                serviceVal: "Liferay Development Manager",
+                systemStatus: "시스템 상태",
+                privacy: "개인정보 처리방침",
+                cookies: "쿠키 정책",
+                tryBtn: "다시 시도"
+            },
+            zh: {
+                title: "环境离线",
+                desc: "开发者的环境当前处于离线状态或无法访问。请稍后再试。",
+                hostLabel: "请求的主机",
+                statusLabel: "网关状态",
+                statusVal: "502 错误网关",
+                serviceLabel: "服务",
+                serviceVal: "Liferay Development Manager",
+                systemStatus: "系统状态",
+                privacy: "隐私政策",
+                cookies: "Cookie 声明",
+                tryBtn: "重试"
+            },
+            ar: {
+                title: "البيئة غير متصلة",
+                desc: "بيئة المطور غير متصلة حاليًا أو لا يمكن الوصول إليها. يرجى المحاولة مرة أخرى لاحقًا.",
+                hostLabel: "المضيف المطلوب",
+                statusLabel: "حالة البوابة",
+                statusVal: "502 بوابة غير صالحة",
+                serviceLabel: "الخدمة",
+                serviceVal: "Liferay Development Manager",
+                systemStatus: "حالة النظام",
+                privacy: "سياسة الخصوصية",
+                cookies: "إفصاح ملفات تعريف الارتباط",
+                tryBtn: "حاول مرة أخرى"
+            }
+        };
+
+        function detectLanguage() {
+            const userLang = (navigator.language || navigator.userLanguage || "en").toLowerCase();
+            const prefix = userLang.split("-")[0];
+            return translations[prefix] ? prefix : "en";
+        }
+
+        function initI18n() {
+            const lang = detectLanguage();
+            if (lang === 'ar') {
+                document.body.style.direction = "rtl";
+            }
+            document.querySelectorAll("[data-i18n]").forEach(el => {
+                const key = el.getAttribute("data-i18n");
+                if (translations[lang] && translations[lang][key]) {
+                    el.textContent = translations[lang][key];
+                }
+            });
+        }
+        
+        // Inject into document load or run immediately since script is at the bottom
+        initI18n();
+    </script>
+
 </body>
 </html>

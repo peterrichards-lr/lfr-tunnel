@@ -1,5 +1,5 @@
 {
-  "version": "v1.28.0",
+  "version": "v1.29.0",
   "release_date": "2026-07-02",
   "features": [
     "Feature: LDM & Liferay Auto-Discovery - Detect running LDM/Docker Tomcat instances automatically to eliminate manual configuration flags"

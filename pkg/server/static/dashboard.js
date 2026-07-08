@@ -2360,8 +2360,8 @@ applyTheme(currentUser.theme_preference);
 
             if (statusText && toggleBtn) {
                 if (active === "true") {
-                    statusText.innerHTML = `Status: <span style="color: #ef4444; font-weight: 600;">ACTIVE (Bouncer checking IDs) 🔴</span>`;
-                    toggleBtn.innerText = "Disable Soft Maintenance";
+                    statusText.innerHTML = (window.translations && window.translations["maint_status_active"]) ? window.translations["maint_status_active"] : `Status: <span style=\"color: #ef4444; font-weight: 600;\">ACTIVE 🔴</span>`;
+                    toggleBtn.innerHTML = (window.translations && window.translations["maint_btn_disable_soft"]) ? window.translations["maint_btn_disable_soft"] : `Disable Soft Maintenance`;
                     toggleBtn.className = "btn btn-outline";
                     toggleBtn.style.color = "var(--success)";
                     toggleBtn.style.borderColor = "var(--success)";
@@ -2369,8 +2369,8 @@ applyTheme(currentUser.theme_preference);
                     if (countdownSelect) countdownSelect.style.display = "none";
                     if (softInputs) softInputs.style.display = "none";
                 } else if (active === "pending") {
-                    statusText.innerHTML = `Status: <span style="color: #f59e0b; font-weight: 600;">PENDING COUNTDOWN ⏳</span>`;
-                    toggleBtn.innerText = "Cancel Soft Maintenance";
+                    statusText.innerHTML = (window.translations && window.translations["maint_status_scheduled"]) ? window.translations["maint_status_scheduled"] : `Status: <span style=\"color: #f59e0b; font-weight: 600;\">SCHEDULED 🟡</span>`;
+                    toggleBtn.innerHTML = (window.translations && window.translations["maint_btn_disable_soft"]) ? window.translations["maint_btn_disable_soft"] : `Disable Soft Maintenance`;
                     toggleBtn.className = "btn btn-outline";
                     toggleBtn.style.color = "var(--danger)";
                     toggleBtn.style.borderColor = "var(--danger)";
@@ -2378,8 +2378,8 @@ applyTheme(currentUser.theme_preference);
                     if (countdownSelect) countdownSelect.style.display = "none";
                     if (softInputs) softInputs.style.display = "none";
                 } else {
-                    statusText.innerHTML = `Status: <span style="color: var(--text-muted);">INACTIVE (All welcome) 🟢</span>`;
-                    toggleBtn.innerText = "Enable Soft Maintenance";
+                    statusText.innerHTML = (window.translations && window.translations["maint_status_inactive"]) ? window.translations["maint_status_inactive"] : `Status: <span style=\"color: var(--text-muted);\">INACTIVE (All welcome) 🟢</span>`;
+                    toggleBtn.innerHTML = (window.translations && window.translations["maint_btn_enable_soft"]) ? window.translations["maint_btn_enable_soft"] : `Enable Soft Maintenance`;
                     toggleBtn.className = "btn btn-primary";
                     toggleBtn.style.color = "white";
                     toggleBtn.style.borderColor = "var(--primary)";
@@ -2396,16 +2396,16 @@ applyTheme(currentUser.theme_preference);
 
             if (hardStatusText && hardToggleBtn) {
                 if (hardActive) {
-                    hardStatusText.innerHTML = `Status: <span style="color: #ef4444; font-weight: 600;">ACTIVE (Fire Curtain down) 🔴</span>`;
-                    hardToggleBtn.innerText = "Disable Iron Curtain";
+                    hardStatusText.innerHTML = (window.translations && window.translations["maint_iron_active"]) ? window.translations["maint_iron_active"] : `Status: <span style=\"color: #ef4444; font-weight: 600;\">ACTIVE 🔴</span>`;
+                    hardToggleBtn.innerHTML = (window.translations && window.translations["maint_btn_disable_hard"]) ? window.translations["maint_btn_disable_hard"] : `Disable Iron Curtain`;
                     hardToggleBtn.className = "btn btn-outline";
                     hardToggleBtn.style.color = "var(--success)";
                     hardToggleBtn.style.borderColor = "var(--success)";
                     hardToggleBtn.style.background = "none";
                     if (hardInputs) hardInputs.style.display = "none";
                 } else {
-                    hardStatusText.innerHTML = `Status: <span style="color: var(--text-muted);">INACTIVE (Open gate) 🟢</span>`;
-                    hardToggleBtn.innerText = "Enable Iron Curtain";
+                    hardStatusText.innerHTML = (window.translations && window.translations["maint_iron_inactive"]) ? window.translations["maint_iron_inactive"] : `Status: <span style=\"color: var(--text-muted);\">INACTIVE 🟢</span>`;
+                    hardToggleBtn.innerHTML = (window.translations && window.translations["maint_btn_enable_hard"]) ? window.translations["maint_btn_enable_hard"] : `Enable Iron Curtain`;
                     hardToggleBtn.className = "btn";
                     hardToggleBtn.style.color = "white";
                     hardToggleBtn.style.borderColor = "var(--danger)";

@@ -147,6 +147,10 @@ The solution will consist of:
 - [x] Create automated dev restart shell scripts to accelerate developer iteration loop.
 
 ## Roadmap (Post Public Visibility PR Flow)
+- [x] Dashboard Localization Sweep (Epic #400)
+  - [x] Localize Onboarding Tour (DE) and MFA Setup & Status Panel (#401)
+  - [x] Localize Client Installation Guide Modal (#402)
+  - [x] Localize Administrative Overlays & Broadcast Banners (#403)
 - [x] Increase pkg/server Admin API Test Coverage (Epic #389)
 - [x] Implement targeted user messaging (selectively target individual active users from the dashboard with custom alerts).
 - [x] Implement Playwright UI E2E test automation for full, deterministic Dashboard test coverage.
@@ -776,4 +780,4 @@ The solution will consist of:
 
 <!-- markdownlint-disable MD049 -->
 ---
-*Last Updated: 2026-07-02* | *Last Reviewed: 2026-07-02*
+*Last Updated: 2026-07-08* | *Last Reviewed: 2026-07-08*

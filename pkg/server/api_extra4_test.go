@@ -15,13 +15,35 @@ func TestServer_HandleGetI18n(t *testing.T) {
 	srv := setupTestServerForAPI(t)
 	defer srv.Stop()
 
-	req, _ := http.NewRequest(http.MethodGet, "http://example.com/api/i18n/en", nil)
+	// Test English
+	req, _ := http.NewRequest(http.MethodGet, "http://example.com/api/i18n?lang=en", nil)
 	w := httptest.NewRecorder()
-
 	srv.handleGetI18n(w, req)
+	if w.Code != http.StatusOK {
+		t.Errorf("expected 200 OK, got %d", w.Code)
+	}
 
-	if w.Code != http.StatusOK && w.Code != http.StatusNotFound {
-		t.Errorf("expected 200 OK or 404 Not Found, got %d", w.Code)
+	var enBundle map[string]string
+	_ = json.Unmarshal(w.Body.Bytes(), &enBundle)
+	if enBundle["onboarding_guide_title"] != "👋 Onboarding Tour" {
+		t.Errorf("expected English tour title, got %s", enBundle["onboarding_guide_title"])
+	}
+
+	// Test German
+	reqDE, _ := http.NewRequest(http.MethodGet, "http://example.com/api/i18n?lang=de", nil)
+	wDE := httptest.NewRecorder()
+	srv.handleGetI18n(wDE, reqDE)
+	if wDE.Code != http.StatusOK {
+		t.Errorf("expected 200 OK, got %d", wDE.Code)
+	}
+
+	var deBundle map[string]string
+	_ = json.Unmarshal(wDE.Body.Bytes(), &deBundle)
+	if deBundle["onboarding_guide_title"] != "👋 Onboarding-Tour" {
+		t.Errorf("expected German tour title, got %s", deBundle["onboarding_guide_title"])
+	}
+	if deBundle["mfa_setup_title"] != "🔒 Multi-Faktor-Authentisierung einrichten" {
+		t.Errorf("expected German MFA setup title, got %s", deBundle["mfa_setup_title"])
 	}
 }
 

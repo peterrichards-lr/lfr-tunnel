@@ -12,7 +12,8 @@
       "labels": [
         "enhancement"
       ],
-      "issueNumber": "378"
+      "issueNumber": "378",
+      "closed": true
     },
     {
       "title": "AI Translation of UI dictionaries",
@@ -21,7 +22,8 @@
       "labels": [
         "enhancement"
       ],
-      "issueNumber": "379"
+      "issueNumber": "379",
+      "closed": true
     },
     {
       "title": "Real-time language switcher UI",
@@ -30,7 +32,8 @@
       "labels": [
         "enhancement"
       ],
-      "issueNumber": "380"
+      "issueNumber": "380",
+      "closed": true
     }
   ],
   "epicNumber": "377"

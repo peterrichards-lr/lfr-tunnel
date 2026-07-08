@@ -43,7 +43,7 @@ while IFS= read -r line; do
     if [ -n "$host" ]; then
       echo "Deploying to Edge Node: $host..."
       scp -o StrictHostKeyChecking=no $SSH_KEY bin/lfr-tunneld-linux $SSH_USER@$host:/home/$SSH_USER/lfr-tunneld
-      ssh -o StrictHostKeyChecking=no $SSH_KEY $SSH_USER@$host "sudo mv /home/$SSH_USER/lfr-tunneld /usr/local/bin/lfr-tunneld && sudo chmod +x /usr/local/bin/lfr-tunneld && sudo systemctl restart lfr-tunneld"
+      ssh -n -o StrictHostKeyChecking=no $SSH_KEY $SSH_USER@$host "sudo mv /home/$SSH_USER/lfr-tunneld /usr/local/bin/lfr-tunneld && sudo chmod +x /usr/local/bin/lfr-tunneld && sudo systemctl restart lfr-tunneld"
       echo "✅ Successfully deployed to $host."
     fi
   fi

@@ -26,7 +26,7 @@
     {
       "title": "Add test coverage for `handleAdminListUsers`",
       "body": "Write unit tests for `handleAdminListUsers`. Verify correct returned payload, handling of search parameters, and JSON response structure.",
-      "completed": false,
+      "completed": true,
       "labels": [
         "enhancement"
       ],

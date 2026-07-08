@@ -1,0 +1,46 @@
+{
+  "title": "[Epic] Increase pkg/server Admin API Test Coverage",
+  "body": "Increase the test coverage for critical admin-facing API endpoints in `pkg/server` (currently ~60%). Focus areas include Audit Logging, Token Management, User Management, and Setup/Overrides.",
+  "labels": [
+    "enhancement"
+  ],
+  "issues": [
+    {
+      "title": "Add test coverage for `handleAdminAuditLog` & `handleAdminAuditExport`",
+      "body": "Write unit tests in `pkg/server` to cover `handleAdminAuditLog` and `handleAdminAuditExport`. Ensure pagination, search, and CSV/PDF export modes are properly mocked and validated.",
+      "completed": true,
+      "labels": [
+        "enhancement"
+      ],
+      "issueNumber": "390"
+    },
+    {
+      "title": "Add test coverage for `handleDeleteToken` & `handleAdminDeleteToken`",
+      "body": "Write unit tests for `handleDeleteToken` and `handleAdminDeleteToken`. Verify correct token revocation behavior and proper response codes for valid and invalid inputs.",
+      "completed": false,
+      "labels": [
+        "enhancement"
+      ],
+      "issueNumber": "391"
+    },
+    {
+      "title": "Add test coverage for `handleAdminListUsers`",
+      "body": "Write unit tests for `handleAdminListUsers`. Verify correct returned payload, handling of search parameters, and JSON response structure.",
+      "completed": false,
+      "labels": [
+        "enhancement"
+      ],
+      "issueNumber": "392"
+    },
+    {
+      "title": "Add test coverage for Setup endpoints (`handleSetupPage` & `handleCompleteSetup`)",
+      "body": "Write unit tests for `handleSetupPage` and `handleCompleteSetup` to ensure they handle the initial installation flow securely and prevent re-setup.",
+      "completed": false,
+      "labels": [
+        "enhancement"
+      ],
+      "issueNumber": "393"
+    }
+  ],
+  "epicNumber": "389"
+}

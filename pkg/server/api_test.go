@@ -28,6 +28,10 @@ func setupTestServerForAPI(t *testing.T) *Server {
 		t.Fatalf("failed to create server: %v", err)
 	}
 
+	t.Cleanup(func() {
+		time.Sleep(50 * time.Millisecond) // prevent SQLite TempDir cleanup races
+	})
+
 	return srv
 }
 

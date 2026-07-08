@@ -1,0 +1,37 @@
+{
+  "epicNumber": "400",
+  "title": "[Epic] Dashboard Localization Sweep",
+  "body": "**Epic Description:**\nRun a comprehensive sweep of the developer and admin dashboard to localize all remaining hardcoded user-facing English strings. This includes the Onboarding Tour (German translation), Multi-Factor Authentication (MFA) setup/deactivation modals and toast messages, the Client Installation Guide, and all administrative overlays (User Profile Details, IP Blacklist, Tunnel Details, and Broadcast Alerts).\n\n**Implementation Plan:**\n1. Translate the Onboarding Tour to German and localize the Multi-Factor Authentication (MFA) dashboard section.\n2. Localize the multi-platform Client Installation Guide modal.\n3. Localize all administrative overlay modals (User Profile Details, Tunnel Details dialog, IP Ban form, and Broadcast controls).",
+  "labels": [
+    "enhancement"
+  ],
+  "issues": [
+    {
+      "title": "Localize Onboarding Tour (DE) and MFA Setup & Status Panel",
+      "body": "1. Add missing German translations for `tour_*` keys in `Language_de.properties`.\n2. Define translation keys for all MFA setup instructions, status panel elements, buttons, and toast messages in `Language.properties` and `Language_de.properties`.\n3. Update `dashboard.html` using `data-i18n` and `dashboard.js` using `t(...)` for dynamic rendering.",
+      "completed": false,
+      "labels": [
+        "enhancement"
+      ],
+      "issueNumber": "401"
+    },
+    {
+      "title": "Localize Client Installation Guide Modal",
+      "body": "1. Extract all hardcoded strings from the Client Installation Guide modal in `dashboard.html` (OS tabs, command instructions, direct download links, and descriptions) into translation keys.\n2. Add translations to `Language.properties` and `Language_de.properties`.\n3. Bind HTML elements to keys using `data-i18n` attributes.",
+      "completed": false,
+      "labels": [
+        "enhancement"
+      ],
+      "issueNumber": "402"
+    },
+    {
+      "title": "Localize Administrative Overlays & Broadcast Banners",
+      "body": "1. Extract hardcoded strings from the User Details modal, Tunnel Details dialog, IP Blacklist (Ban IP) form, and Broadcast controls into translation keys.\n2. Localize targeted message alerts and live countdown warning banners.\n3. Add translations to `Language.properties` and `Language_de.properties`, and hook up elements using `data-i18n` / `t(...)` in HTML and JS.",
+      "completed": false,
+      "labels": [
+        "enhancement"
+      ],
+      "issueNumber": "403"
+    }
+  ]
+}

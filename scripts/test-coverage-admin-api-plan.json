@@ -12,7 +12,8 @@
       "labels": [
         "enhancement"
       ],
-      "issueNumber": "390"
+      "issueNumber": "390",
+      "closed": true
     },
     {
       "title": "Add test coverage for `handleDeleteToken` & `handleAdminDeleteToken`",
@@ -21,7 +22,8 @@
       "labels": [
         "enhancement"
       ],
-      "issueNumber": "391"
+      "issueNumber": "391",
+      "closed": true
     },
     {
       "title": "Add test coverage for `handleAdminListUsers`",
@@ -30,16 +32,18 @@
       "labels": [
         "enhancement"
       ],
-      "issueNumber": "392"
+      "issueNumber": "392",
+      "closed": true
     },
     {
       "title": "Add test coverage for Setup endpoints (`handleSetupPage` & `handleCompleteSetup`)",
       "body": "Write unit tests for `handleSetupPage` and `handleCompleteSetup` to ensure they handle the initial installation flow securely and prevent re-setup.",
-      "completed": false,
+      "completed": true,
       "labels": [
         "enhancement"
       ],
-      "issueNumber": "393"
+      "issueNumber": "393",
+      "closed": true
     }
   ],
   "epicNumber": "389"

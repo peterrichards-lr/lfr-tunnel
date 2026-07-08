@@ -1,0 +1,20 @@
+{
+  "title": "[Bug] Owners cannot auto-reserve subdomains when AllowClientAutoReservation is disabled",
+  "body": "**Issue Analysis:**\nCurrently, the CLI client fails to auto-reserve subdomains (e.g., `peters-mbp`) for users with `owner` or `admin` roles if the global server setting `AllowClientAutoReservation` is disabled. The server returns: `Custom subdomains must be reserved in the portal prior to connecting`.\n\nUpon reviewing `pkg/server/server.go`, the condition in `handleRegister` and `handleEdgeRegister` strictly requires both `AllowClientAutoReservation` AND an admin/owner role (`s.cfg.AllowClientAutoReservation && userRec != nil && (userRec.Role == \"admin\" || userRec.Role == \"owner\")`).\n\n**Implementation Plan:**\n1. Modify the condition in `handleRegister` (in `pkg/server/server.go`) to use `||` instead of `&&` so that Admin/Owner roles can bypass the global `AllowClientAutoReservation` restriction.\n2. Apply the same logic fix to `handleEdgeRegister`.",
+  "labels": [
+    "bug"
+  ],
+  "issues": [
+    {
+      "title": "Fix AllowClientAutoReservation logic in server handlers",
+      "body": "Update `handleRegister` and `handleEdgeRegister` in `pkg/server/server.go` to correctly evaluate the logical OR condition for Admin/Owner auto-reservation overrides.",
+      "completed": true,
+      "labels": [
+        "bug"
+      ],
+      "issueNumber": "376",
+      "closed": true
+    }
+  ],
+  "epicNumber": "375"
+}

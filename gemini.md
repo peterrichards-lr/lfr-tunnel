@@ -12,7 +12,9 @@ Build an open-source, MIT-licensed tunneling solution tailored for Liferay's Sal
   - Load passphrases from secure environment variables or files that are not committed.
   - Instruct the user to run secure decryption or configuration commands locally on their system rather than sharing passwords in the chat.
   - Ensure all temporary certificate and private key files are completely deleted before making any git commits to prevent accidental exposure in the repository history.
-- **Local Binary Execution Constraints**: The local system EDR blocks unsigned `lfr-tunnel`/`lfr-tunneld` binaries and Go test run executables (`*.test`). However, execution is permitted within the `/private/tmp` directory. To run Go tests safely, set `TMPDIR=/private/tmp` so that the Go test binaries are built and executed inside the whitelisted `/private/tmp` path.
+- **Local Binary Execution Constraints**: The local system EDR (SentinelOne) blocks unsigned `lfr-tunnel`/`lfr-tunneld` binaries and dynamic Go test run executables (`*.test`). InfoSec has granted a specific "Agent Interoperability rule" exclusively for the **exact file path** `/private/tmp/lfr-tunnel`. 
+  - Do NOT simply use `TMPDIR=/private/tmp` as `go test` creates nested directories which SentinelOne will quarantine, bringing down local toolchains. 
+  - To run Go tests safely, you must iterate over packages and explicitly compile the test binary to the exact whitelisted file before executing it: `go test -c -o /private/tmp/lfr-tunnel <pkg> && /private/tmp/lfr-tunnel`. (This logic is codified in the `Makefile` and `pre-commit-hook.sh`).
 - **Git Conflict Prevention & PR Management**: Because remote GitHub cannot evaluate custom merge drivers defined in `.gitattributes`, the AI assistant must always run `git fetch origin` followed by `git merge origin/master` locally to resolve any potential `gemini.md` conflict before pushing commits or creating/updating a PR.
 - **Strict Branch Protection Compliance**: The AI assistant must never use administrative privileges (e.g., `gh pr merge --admin`) to bypass branch protection rules or CI/CD status checks. The rules must be followed to the letter. All changes must be pushed to a branch, a PR raised, and the assistant must wait for the required CI checks to pass and for the user to explicitly approve or merge the PR.
 
@@ -195,7 +197,7 @@ The solution will consist of:
 - [x] Update release.yml with Update Homebrew Tap & Scoop Bucket step (requires TAP_BUCKET_PAT secret).
 - [x] Update README.md and docs/liferay-se-guide.md to lead with Homebrew/Scoop as recommended install methods.
 - [x] Add TAP_BUCKET_PAT secret to lfr-tunnel repo (GitHub PAT, contents:write on homebrew-tap and scoop-bucket).
-- [ ] Apply to SignPath Foundation for free Windows Authenticode signing (https://signpath.org).
+- [ ] ~~Apply to SignPath Foundation for free Windows Authenticode signing (https://signpath.org).~~ (Ruled out, sticking to file/folder exclusions)
 - [ ] Submit official release binary hashes to SentinelOne false-positive review portal.
 - [ ] Ask SentinelOne admin to configure path exclusions per SECURITY.md (Homebrew + direct-install paths).
 - [x] Add ~/.ldm/bin/lfr-tunnel to SentinelOne exclusions in README.md and SECURITY.md.

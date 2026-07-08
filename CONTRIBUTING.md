@@ -66,7 +66,7 @@ To ensure the stability and security of the `lfr-tunnel` gateway, all contributi
 We maintain a robust suite of automated tests including unit, integration, and E2E UI tests:
 - **Unit & Integration Tests**: Run locally via:
   ```bash
-  TMPDIR=/private/tmp go test ./...
+  make test
   ```
 - **Standard E2E Integration Tests (Docker)**: Run the E2E client/server docker compose integration loop via:
   ```bash

@@ -1,0 +1,40 @@
+{
+  "title": "[Feature] Real-time Portal UI Localization (i18n)",
+  "body": "**Epic Description:**\nCurrently, the portal UI pages are hardcoded in English and lack full localization. We need to implement a comprehensive i18n system that allows the portal to support multiple languages and switch between them in real-time without page reloads.\n\n**Implementation Plan:**\n1. Introduce an i18n utility on the frontend to manage translation dictionaries.\n2. Extract all hardcoded English strings from the portal UI into a base English dictionary.\n3. **Use AI to translate** the base English dictionary into the target supported languages.\n4. Add a language selector dropdown or toggle in the UI to allow real-time language switching.",
+  "labels": [
+    "enhancement"
+  ],
+  "issues": [
+    {
+      "title": "Extract portal UI strings and setup i18n engine",
+      "body": "Implement the frontend i18n logic and extract all hardcoded UI strings into a base `en` JSON dictionary.",
+      "completed": true,
+      "labels": [
+        "enhancement"
+      ],
+      "issueNumber": "378",
+      "closed": true
+    },
+    {
+      "title": "AI Translation of UI dictionaries",
+      "body": "Use AI to translate the base English UI dictionary into the target supported languages.",
+      "completed": true,
+      "labels": [
+        "enhancement"
+      ],
+      "issueNumber": "379",
+      "closed": true
+    },
+    {
+      "title": "Real-time language switcher UI",
+      "body": "Implement a language selector in the portal dashboard to allow real-time switching without full page reloads.",
+      "completed": true,
+      "labels": [
+        "enhancement"
+      ],
+      "issueNumber": "380",
+      "closed": true
+    }
+  ],
+  "epicNumber": "377"
+}

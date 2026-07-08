@@ -27,7 +27,7 @@ This is a deliberate, cost-driven decision for an open-source, internal tooling 
 | Signing Type | Requirement | Status |
 |---|---|---|
 | **Apple Developer ID** (macOS `Type=Signed`) | $99/year Apple Developer Program membership. Apple is the sole issuer — no alternative CA can produce this certificate type. | Not held |
-| **Windows Authenticode** | Commercial CA certificate stored on a hardware HSM. Recurring annual cost. | Not held (see [SignPath](#windows-authenticode--signpath-foundation) below) |
+| **Windows Authenticode** | Commercial CA certificate stored on a hardware HSM. Recurring annual cost. | Not held |
 | **Let's Encrypt / TLS certificates** | Free, domain-validated TLS certificates for HTTPS web servers only. | Wrong certificate type — cannot be used for executable signing |
 
 **Neither an Apple Developer ID nor a Windows Authenticode certificate is required to use `lfr-tunnel`.** They are trust signals consumed by the OS loader and by Endpoint Detection and Response (EDR) engines. The absence of these certificates does not make the binary unsafe.
@@ -96,16 +96,7 @@ What package managers add that a direct download does not:
 > [!NOTE]
 > Package managers **do not sign the binary**. The binary remains `Type=Unsigned` from an EDR perspective. However, the consistent, auditable install process and predictable install paths give security teams a stronger basis for applying a policy exclusion.
 
----
 
-### Windows Authenticode — SignPath Foundation
-
-The [SignPath Foundation](https://signpath.org) offers **free Windows Authenticode code signing** for qualifying open-source projects. `lfr-tunnel` meets the eligibility criteria (MIT license, public repository, actively maintained). We intend to apply for this programme. When approved, Windows release binaries will carry an Authenticode signature and will no longer appear as unsigned on Windows.
-
-> [!NOTE]
-> SignPath covers **Windows only**. macOS signing requires Apple's proprietary Developer ID certificate, which SignPath cannot provide.
-
----
 
 ### EDR & Endpoint Security Agent Compatibility
 

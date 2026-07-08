@@ -531,6 +531,10 @@ function toggleTheme() {
                         const key = el.getAttribute('data-i18n');
                         if (bundle[key]) el.innerText = bundle[key];
                     });
+                    document.querySelectorAll('[data-i18n-placeholder]').forEach(el => {
+                        const key = el.getAttribute('data-i18n-placeholder');
+                        if (bundle[key]) el.placeholder = bundle[key];
+                    });
 
                     // Dynamically update the footer privacy/cookie links with ?lang=...
                     const pl = document.getElementById('footer-privacy-link');
@@ -1103,8 +1107,8 @@ applyTheme(currentUser.theme_preference);
                 headers: {'Content-Type': 'application/json'},
                 body: JSON.stringify({ message: msg })
             });
-            if (res.ok) showToast("Broadcast message sent!");
-            else showToast("Failed to send broadcast");
+            if (res.ok) showToast(t('toast_broadcast_sent', 'Broadcast message sent!'));
+            else showToast(t('toast_broadcast_send_failed', 'Failed to send broadcast'));
         }
 
         async function clearBroadcastMessage() {
@@ -1114,8 +1118,8 @@ applyTheme(currentUser.theme_preference);
                 headers: {'Content-Type': 'application/json'},
                 body: JSON.stringify({ message: "" })
             });
-            if (res.ok) showToast("Broadcast message cleared!");
-            else showToast("Failed to clear broadcast");
+            if (res.ok) showToast(t('toast_broadcast_cleared', 'Broadcast message cleared!'));
+            else showToast(t('toast_broadcast_clear_failed', 'Failed to clear broadcast'));
         }
 
         function applyTheme(pref) {
@@ -2119,7 +2123,7 @@ applyTheme(currentUser.theme_preference);
         async function sendTargetedMessage() {
             const uid = document.getElementById('targeted-message-userid').value;
             const msg = document.getElementById('targeted-message-input').value.trim();
-            if (!msg) return showToast("Please enter a message.");
+            if (!msg) return showToast(t('toast_enter_message', 'Please enter a message.'));
 
             const res = await fetch('/api/admin/targeted-message', {
                 method: 'POST',
@@ -2127,10 +2131,10 @@ applyTheme(currentUser.theme_preference);
                 body: JSON.stringify({ user_id: uid, message: msg })
             });
             if (res.ok) {
-                showToast("Targeted message sent!");
+                showToast(t('toast_targeted_sent', 'Targeted message sent!'));
                 closeTargetedModal();
             } else {
-                showToast("Failed to send message.");
+                showToast(t('toast_targeted_send_failed', 'Failed to send message.'));
             }
         }
 
@@ -2142,10 +2146,10 @@ applyTheme(currentUser.theme_preference);
                 body: JSON.stringify({ user_id: uid, message: "" })
             });
             if (res.ok) {
-                showToast("Targeted message cleared!");
+                showToast(t('toast_targeted_cleared', 'Targeted message cleared!'));
                 closeTargetedModal();
             } else {
-                showToast("Failed to clear message.");
+                showToast(t('toast_targeted_clear_failed', 'Failed to clear message.'));
             }
         }
 
@@ -2164,21 +2168,21 @@ applyTheme(currentUser.theme_preference);
             if (currentUser.totp_enabled) {
                 container.innerHTML = `
                     <div style="display: flex; align-items: center; justify-content: space-between; padding: 12px; background: rgba(46,160,67,0.1); border: 1px solid rgba(46,160,67,0.25); border-radius: 6px; color: #2ea043; font-weight: 500; margin-bottom: 16px;">
-                        <span>✓ Multi-Factor Authentication is currently Active</span>
+                        <span>✓ ${t('mfa_status_active', 'Multi-Factor Authentication is currently Active')}</span>
                     </div>
                     <div style="margin-top: 16px;">
-                        <p style="font-size: 13px; color: var(--text-muted); margin-bottom: 8px;">To deactivate MFA, please enter your 6-digit authenticator code below:</p>
+                        <p style="font-size: 13px; color: var(--text-muted); margin-bottom: 8px;">${t('mfa_deactivate_desc', 'To deactivate MFA, please enter your 6-digit authenticator code below:')}</p>
                         <div style="display: flex; gap: 12px; max-width: 320px; align-items: center;">
                             <input type="text" id="mfa-disable-code" class="input-field" placeholder="123456" maxlength="6" style="text-align: center; letter-spacing: 2px; font-weight: bold; width: 140px; margin: 0;">
-                            <button class="btn" style="color: var(--danger); border-color: var(--danger); margin: 0; padding: 8px 16px; width: auto;" onclick="disableMFA()">Disable MFA</button>
+                            <button class="btn" style="color: var(--danger); border-color: var(--danger); margin: 0; padding: 8px 16px; width: auto;" onclick="disableMFA()">${t('btn_disable_mfa', 'Disable MFA')}</button>
                         </div>
                     </div>
                 `;
             } else {
                 container.innerHTML = `
                     <div style="display: flex; align-items: center; justify-content: space-between; padding: 12px; background: rgba(255,255,255,0.02); border: 1px solid rgba(255,255,255,0.08); border-radius: 6px; color: var(--text-muted);">
-                        <span>MFA is currently Disabled</span>
-                        <button class="btn btn-primary" style="margin: 0; width: auto; padding: 6px 16px;" onclick="startMFASetup()">Enable MFA</button>
+                        <span>${t('mfa_status_disabled', 'MFA is currently Disabled')}</span>
+                        <button class="btn btn-primary" style="margin: 0; width: auto; padding: 6px 16px;" onclick="startMFASetup()">${t('btn_enable_mfa', 'Enable MFA')}</button>
                     </div>
                 `;
             }
@@ -2197,10 +2201,10 @@ applyTheme(currentUser.theme_preference);
                     document.getElementById('mfa-verify-code').value = '';
                     document.getElementById('mfa-modal').style.display = 'flex';
                 } else {
-                    showToast("Failed to fetch MFA setup details.", "danger");
+                    showToast(t('mfa_toast_setup_fetch_failed', 'Failed to fetch MFA setup details.'), "danger");
                 }
             } catch (err) {
-                showToast("Network error initiating MFA setup.", "danger");
+                showToast(t('mfa_toast_setup_network_error', 'Network error initiating MFA setup.'), "danger");
             }
         }
 
@@ -2211,7 +2215,7 @@ applyTheme(currentUser.theme_preference);
         async function confirmEnableMFA() {
             const code = document.getElementById('mfa-verify-code').value.trim();
             if (code.length !== 6) {
-                return showToast("Please enter a 6-digit code.", "warning");
+                return showToast(t('mfa_toast_enter_code', 'Please enter a 6-digit code.'), "warning");
             }
 
             try {
@@ -2225,20 +2229,20 @@ applyTheme(currentUser.theme_preference);
                     currentUser.totp_enabled = true;
                     renderMFAPanel();
                     closeMFAModal();
-                    showToast("MFA enabled successfully!", "success");
+                    showToast(t('mfa_toast_enabled_success', 'MFA enabled successfully!'), "success");
                 } else {
                     const err = await res.json();
-                    showToast(err.error || "Failed to verify setup code.", "danger");
+                    showToast(err.error || t('mfa_toast_verification_failed', 'Verification failed.'), "danger");
                 }
             } catch (err) {
-                showToast("Network error completing setup.", "danger");
+                showToast(t('mfa_toast_setup_network_error', 'Network error completing setup.'), "danger");
             }
         }
 
         async function disableMFA() {
             const code = document.getElementById('mfa-disable-code').value.trim();
             if (code.length !== 6) {
-                return showToast("Please enter your 6-digit authenticator code.", "warning");
+                return showToast(t('mfa_toast_enter_deactivate_code', 'Please enter your 6-digit authenticator code.'), "warning");
             }
 
             try {
@@ -2251,13 +2255,13 @@ applyTheme(currentUser.theme_preference);
                 if (res.ok) {
                     currentUser.totp_enabled = false;
                     renderMFAPanel();
-                    showToast("MFA disabled successfully.", "success");
+                    showToast(t('mfa_toast_disabled_success', 'MFA disabled successfully.'), "success");
                 } else {
                     const err = await res.json();
-                    showToast(err.error || "Failed to disable MFA.", "danger");
+                    showToast(err.error || t('mfa_toast_disabled_failed', 'Failed to disable MFA.'), "danger");
                 }
             } catch (err) {
-                showToast("Network error deactivating MFA.", "danger");
+                showToast(t('mfa_toast_deactivate_network_error', 'Network error deactivating MFA.'), "danger");
             }
         }
 
@@ -2646,6 +2650,12 @@ applyTheme(currentUser.theme_preference);
                         const key = el.getAttribute('data-i18n');
                         if (bundle[key]) {
                             el.innerText = bundle[key];
+                        }
+                    });
+                    document.querySelectorAll('[data-i18n-placeholder]').forEach(el => {
+                        const key = el.getAttribute('data-i18n-placeholder');
+                        if (bundle[key]) {
+                            el.placeholder = bundle[key];
                         }
                     });
 
@@ -4004,10 +4014,10 @@ applyTheme(currentUser.theme_preference);
                         document.getElementById('intercept-mfa-qr-display').src = `https://api.qrserver.com/v1/create-qr-code/?size=180x180&data=${encodeURIComponent(data.otpauth_url)}`;
                         document.getElementById('intercept-mfa-verify-code').value = '';
                     } else {
-                        showToast("Failed to fetch MFA setup details.", "danger");
+                        showToast(t('mfa_toast_setup_fetch_failed', 'Failed to fetch MFA setup details.'), "danger");
                     }
                 } catch (err) {
-                    showToast("Network error initiating MFA setup.", "danger");
+                    showToast(t('mfa_toast_setup_network_error', 'Network error initiating MFA setup.'), "danger");
                 }
             }
         };
@@ -4015,7 +4025,7 @@ applyTheme(currentUser.theme_preference);
         window.confirmInterceptMFA = async function() {
             const code = document.getElementById('intercept-mfa-verify-code').value.trim();
             if (code.length !== 6) {
-                return showToast("Please enter a 6-digit code.", "warning");
+                return showToast(t('mfa_toast_enter_code', 'Please enter a 6-digit code.'), "warning");
             }
 
             try {
@@ -4028,14 +4038,14 @@ applyTheme(currentUser.theme_preference);
                 if (res.ok) {
                     currentUser.totp_enabled = true;
                     document.getElementById('intercept-screen').style.display = 'none';
-                    showToast("MFA enabled successfully! Redirecting to dashboard...", "success");
+                    showToast(t('mfa_toast_enabled_redirect', 'MFA enabled successfully! Redirecting to dashboard...'), "success");
                     await showDashboard();
                 } else {
                     const err = await res.json();
-                    showToast(err.error || "Verification failed.", "danger");
+                    showToast(err.error || t('mfa_toast_verification_failed', 'Verification failed.'), "danger");
                 }
             } catch (err) {
-                showToast("Network error verifying MFA.", "danger");
+                showToast(t('mfa_toast_verify_network_error', 'Network error verifying MFA.'), "danger");
             }
         };
 

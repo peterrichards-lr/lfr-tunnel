@@ -9,29 +9,32 @@
     {
       "title": "Localize Onboarding Tour (DE) and MFA Setup & Status Panel",
       "body": "1. Add missing German translations for `tour_*` keys in `Language_de.properties`.\n2. Define translation keys for all MFA setup instructions, status panel elements, buttons, and toast messages in `Language.properties` and `Language_de.properties`.\n3. Update `dashboard.html` using `data-i18n` and `dashboard.js` using `t(...)` for dynamic rendering.",
-      "completed": false,
+      "completed": true,
       "labels": [
         "enhancement"
       ],
-      "issueNumber": "401"
+      "issueNumber": "401",
+      "closed": true
     },
     {
       "title": "Localize Client Installation Guide Modal",
       "body": "1. Extract all hardcoded strings from the Client Installation Guide modal in `dashboard.html` (OS tabs, command instructions, direct download links, and descriptions) into translation keys.\n2. Add translations to `Language.properties` and `Language_de.properties`.\n3. Bind HTML elements to keys using `data-i18n` attributes.",
-      "completed": false,
+      "completed": true,
       "labels": [
         "enhancement"
       ],
-      "issueNumber": "402"
+      "issueNumber": "402",
+      "closed": true
     },
     {
       "title": "Localize Administrative Overlays & Broadcast Banners",
       "body": "1. Extract hardcoded strings from the User Details modal, Tunnel Details dialog, IP Blacklist (Ban IP) form, and Broadcast controls into translation keys.\n2. Localize targeted message alerts and live countdown warning banners.\n3. Add translations to `Language.properties` and `Language_de.properties`, and hook up elements using `data-i18n` / `t(...)` in HTML and JS.",
-      "completed": false,
+      "completed": true,
       "labels": [
         "enhancement"
       ],
-      "issueNumber": "403"
+      "issueNumber": "403",
+      "closed": true
     }
   ]
 }

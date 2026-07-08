@@ -18,13 +18,13 @@
     <!-- TARGETED MESSAGE MODAL -->
     <div id="targeted-message-modal" class="modal-overlay">
         <div class="glass modal">
-            <h3>Targeted Message</h3>
+            <h3 data-i18n="targeted_msg_title">Targeted Message</h3>
             <p id="targeted-message-desc" style="color: var(--text-muted); margin-bottom: 16px; font-size: 14px;"></p>
             <input type="hidden" id="targeted-message-userid">
-            <input type="text" id="targeted-message-input" class="input-field" placeholder="Enter message to send..." required>
-            <button class="btn btn-primary" onclick="sendTargetedMessage()">Send Message</button>
-            <button class="btn" style="color: var(--danger); border-color: var(--danger);" onclick="clearTargetedMessage()">Clear Existing Alert</button>
-            <button class="btn" onclick="closeTargetedModal()">Cancel</button>
+            <input type="text" id="targeted-message-input" class="input-field" data-i18n-placeholder="targeted_msg_placeholder" placeholder="Enter message to send..." required>
+            <button class="btn btn-primary" onclick="sendTargetedMessage()" data-i18n="btn_send_message">Send Message</button>
+            <button class="btn" style="color: var(--danger); border-color: var(--danger);" onclick="clearTargetedMessage()" data-i18n="btn_clear_alert">Clear Existing Alert</button>
+            <button class="btn" onclick="closeTargetedModal()" data-i18n="btn_cancel">Cancel</button>
         </div>
     </div>
 
@@ -99,28 +99,28 @@
     <!-- INTERCEPT SCREEN -->
     <div id="intercept-screen" style="display: none; min-height: 100vh; align-items: center; justify-content: center; padding: 24px; width: 100%;">
         <div class="glass modal" style="max-width: 440px; width: 100%; padding: 40px; border-radius: 16px; box-shadow: 0 10px 25px rgba(0,0,0,0.2); text-align: center; margin-left: auto; margin-right: auto;">
-            <h3 style="margin-bottom: 12px; font-size: 20px;">🔒 Multi-Factor Authentication Required</h3>
-            <p style="font-size: 14px; color: var(--text-muted); margin-bottom: 24px; line-height: 1.5; text-align: left;">
+            <h3 data-i18n="mfa_intercept_title" style="margin-bottom: 12px; font-size: 20px;">🔒 Multi-Factor Authentication Required</h3>
+            <p data-i18n="mfa_intercept_desc" style="font-size: 14px; color: var(--text-muted); margin-bottom: 24px; line-height: 1.5; text-align: left;">
                 Your administrator requires Multi-Factor Authentication (MFA) to be enabled on your account. Please set up MFA now to access the dashboard.
             </p>
             
             <div id="intercept-mfa-step">
-                <p style="font-size: 14px; color: var(--text-muted); margin-bottom: 16px; text-align: left; line-height: 1.5;">
+                <p data-i18n="mfa_setup_step1" style="font-size: 14px; color: var(--text-muted); margin-bottom: 16px; text-align: left; line-height: 1.5;">
                     1. Scan this QR code in your authenticator app (Google Authenticator, Microsoft Authenticator, 1Password, etc.):
                 </p>
                 <div style="display: flex; justify-content: center; margin-bottom: 16px; background: white; padding: 12px; border-radius: 8px; width: fit-content; margin-left: auto; margin-right: auto; border: 1px solid rgba(0,0,0,0.1);">
                     <img id="intercept-mfa-qr-display" src="" alt="MFA QR Code" style="width: 180px; height: 180px; display: block;">
                 </div>
-                <p style="font-size: 13px; color: var(--text-muted); margin-bottom: 8px; text-align: left;">
+                <p data-i18n="mfa_setup_manual" style="font-size: 13px; color: var(--text-muted); margin-bottom: 8px; text-align: left;">
                     Or enter this secret key manually inside your app:
                 </p>
                 <div class="copy-box" id="intercept-mfa-secret-display" style="font-family: monospace; letter-spacing: 2px; text-align: center; margin-bottom: 16px; user-select: all; padding: 8px; background: rgba(255,255,255,0.05); border-radius: 4px; font-weight: bold; border: 1px solid rgba(255,255,255,0.1);"></div>
                 
-                <p style="font-size: 14px; color: var(--text-muted); margin-bottom: 8px; text-align: left; line-height: 1.5;">
+                <p data-i18n="mfa_setup_step2" style="font-size: 14px; color: var(--text-muted); margin-bottom: 8px; text-align: left; line-height: 1.5;">
                     2. Enter the 6-digit code from your app to verify setup:
                 </p>
                 <input type="text" id="intercept-mfa-verify-code" class="input-field" placeholder="123456" pattern="[0-9]{6}" maxlength="6" inputmode="numeric" style="text-align: center; font-size: 18px; font-weight: bold; letter-spacing: 4px; margin-bottom: 16px; background: rgba(255,255,255,0.05); border: 1px solid rgba(255,255,255,0.1); border-radius: 6px; color: var(--text-color);">
-                <button class="btn btn-primary" onclick="confirmInterceptMFA()" style="width: 100%; margin-bottom: 8px;">Verify & Enable</button>
+                <button data-i18n="mfa_setup_verify" class="btn btn-primary" onclick="confirmInterceptMFA()" style="width: 100%; margin-bottom: 8px;">Verify & Enable</button>
             </div>
         </div>
     </div>
@@ -558,15 +558,15 @@
             <!-- Users Tab -->
             <div id="tab-users" class="hidden">
                 <div class="header">
-                    <h2>Users</h2>
-                    <button class="btn btn-primary" style="width: auto; margin:0;" onclick="openInviteModal()">Invite User</button>
+                    <h2 data-i18n="tab_users_title">Users</h2>
+                    <button class="btn btn-primary" style="width: auto; margin:0;" onclick="openInviteModal()" data-i18n="btn_invite_user">Invite User</button>
                 </div>
                 <div class="glass" style="padding: 16px; margin-bottom: 24px;">
-                    <h4 style="margin-bottom: 8px; color: var(--text-muted); font-size: 14px; font-weight: 500;">Global Broadcast Message</h4>
+                    <h4 style="margin-bottom: 8px; color: var(--text-muted); font-size: 14px; font-weight: 500;" data-i18n="lbl_global_broadcast">Global Broadcast Message</h4>
                     <div style="display: flex; gap: 12px;">
-                        <input type="text" id="admin-broadcast-input" placeholder="e.g. Server is going down for maintenance in 5 minutes..." style="flex: 1;" />
-                        <button class="btn btn-primary" style="width: auto; margin: 0;" onclick="setBroadcastMessage()">Broadcast</button>
-                        <button class="btn btn-secondary" style="width: auto; margin: 0;" onclick="clearBroadcastMessage()">Clear</button>
+                        <input type="text" id="admin-broadcast-input" data-i18n-placeholder="broadcast_input_placeholder" placeholder="e.g. Server is going down for maintenance in 5 minutes..." style="flex: 1;" />
+                        <button class="btn btn-primary" style="width: auto; margin: 0;" onclick="setBroadcastMessage()" data-i18n="btn_broadcast">Broadcast</button>
+                        <button class="btn btn-secondary" style="width: auto; margin: 0;" onclick="clearBroadcastMessage()" data-i18n="btn_clear">Clear</button>
                     </div>
                 </div>
                 <div class="glass table-container">
@@ -764,23 +764,23 @@
     <!-- BLACKLIST MODAL -->
     <div id="blacklist-modal" class="modal-overlay">
         <div class="glass modal">
-            <h3>Ban IP Address</h3>
-            <input type="text" id="blacklist-ip" class="input-field" placeholder="192.168.1.1" required>
-            <input type="text" id="blacklist-reason" class="input-field" placeholder="Reason (e.g. Malicious Activity)" required>
-            <button class="btn btn-primary" style="background-color: var(--danger);" onclick="submitBlacklist()">Ban IP</button>
-            <button class="btn" onclick="closeBlacklistModal()">Cancel</button>
+            <h3 data-i18n="ban_ip_title">Ban IP Address</h3>
+            <input type="text" id="blacklist-ip" class="input-field" data-i18n-placeholder="ban_ip_placeholder" placeholder="192.168.1.1" required>
+            <input type="text" id="blacklist-reason" class="input-field" data-i18n-placeholder="ban_ip_reason_placeholder" placeholder="Reason (e.g. Malicious Activity)" required>
+            <button class="btn btn-primary" style="background-color: var(--danger);" onclick="submitBlacklist()" data-i18n="btn_ban_ip">Ban IP</button>
+            <button class="btn" onclick="closeBlacklistModal()" data-i18n="btn_cancel">Cancel</button>
         </div>
     </div>
 
     <!-- INVITE USER MODAL -->
     <div id="invite-modal" class="modal-overlay">
         <div class="glass modal">
-            <h3>Invite User</h3>
-            <input type="email" id="invite-email" class="input-field" placeholder="Email Address" required>
-            <input type="text" id="invite-first-name" class="input-field" placeholder="First Name" required>
-            <input type="text" id="invite-last-name" class="input-field" placeholder="Last Name" required>
+            <h3 data-i18n="invite_user_title">Invite User</h3>
+            <input type="email" id="invite-email" class="input-field" data-i18n-placeholder="invite_email_placeholder" placeholder="Email Address" required>
+            <input type="text" id="invite-first-name" class="input-field" data-i18n-placeholder="invite_first_name_placeholder" placeholder="First Name" required>
+            <input type="text" id="invite-last-name" class="input-field" data-i18n-placeholder="invite_last_name_placeholder" placeholder="Last Name" required>
             <div style="margin-bottom: 16px; text-align: left;">
-                <label style="display:block; margin-bottom: 8px; color: var(--text-muted); font-size: 13px;">Onboarding Language</label>
+                <label style="display:block; margin-bottom: 8px; color: var(--text-muted); font-size: 13px;" data-i18n="invite_lbl_onboarding_lang">Onboarding Language</label>
                 <select id="invite-language" class="input-field" style="background: #161b22; color: var(--text-color); border: 1px solid var(--border); border-radius: 6px; padding: 10px; font-weight: 500; height: 38px; box-sizing: border-box; width: 100%;">
                     <option value="en" selected>English</option>
                     <option value="ar">العربية (Arabic)</option>
@@ -794,34 +794,34 @@
                     <option value="zh">简体中文 (Simplified Chinese)</option>
                 </select>
             </div>
-            <button class="btn btn-primary" onclick="submitInviteUser()">Send Invite</button>
-            <button class="btn" onclick="closeInviteModal()">Cancel</button>
+            <button class="btn btn-primary" onclick="submitInviteUser()" data-i18n="btn_send_invite">Send Invite</button>
+            <button class="btn" onclick="closeInviteModal()" data-i18n="btn_cancel">Cancel</button>
         </div>
     </div>
 
     <!-- MFA SETUP MODAL -->
     <div id="mfa-modal" class="modal-overlay">
         <div class="glass modal" style="max-width: 440px; text-align: center;">
-            <h3 style="margin-bottom: 12px; font-size: 18px;">🔒 Set Up Multi-Factor Authentication</h3>
+            <h3 data-i18n="mfa_setup_title" style="margin-bottom: 12px; font-size: 18px;">🔒 Set Up Multi-Factor Authentication</h3>
             
             <div id="mfa-form-step">
-                <p style="font-size: 14px; color: var(--text-muted); margin-bottom: 16px; text-align: left; line-height: 1.5;">
+                <p data-i18n="mfa_setup_step1" style="font-size: 14px; color: var(--text-muted); margin-bottom: 16px; text-align: left; line-height: 1.5;">
                     1. Scan this QR code in your authenticator app (Google Authenticator, Microsoft Authenticator, 1Password, etc.):
                 </p>
                 <div style="display: flex; justify-content: center; margin-bottom: 16px; background: white; padding: 12px; border-radius: 8px; width: fit-content; margin-left: auto; margin-right: auto; border: 1px solid rgba(0,0,0,0.1);">
                     <img id="mfa-qr-display" src="" alt="MFA QR Code" style="width: 180px; height: 180px; display: block;">
                 </div>
-                <p style="font-size: 13px; color: var(--text-muted); margin-bottom: 8px; text-align: left;">
+                <p data-i18n="mfa_setup_manual" style="font-size: 13px; color: var(--text-muted); margin-bottom: 8px; text-align: left;">
                     Or enter this secret key manually inside your app:
                 </p>
                 <div class="copy-box" id="mfa-secret-display" style="font-family: monospace; letter-spacing: 2px; text-align: center; margin-bottom: 16px; user-select: all; padding: 8px; background: rgba(255,255,255,0.05); border-radius: 4px; font-weight: bold; border: 1px solid rgba(255,255,255,0.1);"></div>
                 
-                <p style="font-size: 14px; color: var(--text-muted); margin-bottom: 8px; text-align: left; line-height: 1.5;">
+                <p data-i18n="mfa_setup_step2" style="font-size: 14px; color: var(--text-muted); margin-bottom: 8px; text-align: left; line-height: 1.5;">
                     2. Enter the 6-digit code from your app to verify setup:
                 </p>
                 <input type="text" id="mfa-verify-code" class="input-field" placeholder="123456" pattern="[0-9]{6}" maxlength="6" inputmode="numeric" style="text-align: center; font-size: 18px; font-weight: bold; letter-spacing: 4px; margin-bottom: 16px;">
-                <button class="btn btn-primary" onclick="confirmEnableMFA()" style="margin-bottom: 8px;">Verify & Enable</button>
-                <button class="btn" id="mfa-cancel-btn" onclick="closeMFAModal()">Cancel</button>
+                <button data-i18n="mfa_setup_verify" class="btn btn-primary" onclick="confirmEnableMFA()" style="margin-bottom: 8px;">Verify & Enable</button>
+                <button data-i18n="btn_cancel" class="btn" id="mfa-cancel-btn" onclick="closeMFAModal()">Cancel</button>
             </div>
         </div>
     </div>
@@ -925,93 +925,93 @@
     <!-- TUNNEL DETAILS MODAL -->
     <div id="tunnel-details-modal" class="modal-overlay" style="display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.6); align-items: center; justify-content: center; z-index: 1000;">
         <div class="glass" style="max-width: 500px; width: 100%; padding: 32px; border-radius: 16px; border: 1px solid var(--border); text-align: left;">
-            <h3 style="margin-bottom: 20px; font-size: 20px; display: flex; align-items: center; gap: 8px;">🔌 Tunnel Details</h3>
+            <h3 data-i18n="detail_modal_title" style="margin-bottom: 20px; font-size: 20px; display: flex; align-items: center; gap: 8px;">🔌 Tunnel Details</h3>
             
             <div style="display: grid; grid-template-columns: repeat(2, 1fr); gap: 16px; margin-bottom: 24px;">
                 <div style="grid-column: span 2;">
-                    <label style="display:block; color: var(--text-muted); font-size: 11px; text-transform: uppercase; font-weight: 600;">Full Host / URL</label>
+                    <label data-i18n="detail_lbl_url" style="display:block; color: var(--text-muted); font-size: 11px; text-transform: uppercase; font-weight: 600;">Full Host / URL</label>
                     <div style="display: flex; align-items: center; gap: 8px; margin-top: 4px;">
                         <a id="detail-tunnel-host" href="#" target="_blank" style="color: var(--primary); text-decoration: none; font-weight: 500; word-break: break-all; flex-grow: 1;"></a>
-                        <button class="btn btn-outline" style="padding: 2px 8px; font-size: 11px; margin: 0; min-width: auto; width: auto;" onclick="copyTunnelUrlToClipboard()">Copy URL</button>
+                        <button data-i18n="btn_copy_url" class="btn btn-outline" style="padding: 2px 8px; font-size: 11px; margin: 0; min-width: auto; width: auto;" onclick="copyTunnelUrlToClipboard()">Copy URL</button>
                     </div>
                 </div>
                 <div>
-                    <label style="display:block; color: var(--text-muted); font-size: 11px; text-transform: uppercase; font-weight: 600;">Subdomain Prefix</label>
+                    <label data-i18n="detail_lbl_subdomain" style="display:block; color: var(--text-muted); font-size: 11px; text-transform: uppercase; font-weight: 600;">Subdomain Prefix</label>
                     <span id="detail-tunnel-subdomain" style="font-weight: 500;"></span>
                 </div>
                 <div>
-                    <label style="display:block; color: var(--text-muted); font-size: 11px; text-transform: uppercase; font-weight: 600;">Status</label>
+                    <label data-i18n="lbl_status" style="display:block; color: var(--text-muted); font-size: 11px; text-transform: uppercase; font-weight: 600;">Status</label>
                     <div style="margin-top: 4px;">
                         <span id="detail-tunnel-status" class="badge"></span>
                     </div>
                 </div>
                 <div id="detail-tunnel-owner-container" style="grid-column: span 2;">
-                    <label style="display:block; color: var(--text-muted); font-size: 11px; text-transform: uppercase; font-weight: 600;">Owner (User ID)</label>
+                    <label data-i18n="detail_lbl_owner" style="display:block; color: var(--text-muted); font-size: 11px; text-transform: uppercase; font-weight: 600;">Owner (User ID)</label>
                     <span id="detail-tunnel-owner" style="font-family: monospace; font-size: 13px;"></span>
                 </div>
                 <div>
-                    <label style="display:block; color: var(--text-muted); font-size: 11px; text-transform: uppercase; font-weight: 600;">Rate Limit</label>
+                    <label data-i18n="detail_lbl_rate_limit" style="display:block; color: var(--text-muted); font-size: 11px; text-transform: uppercase; font-weight: 600;">Rate Limit</label>
                     <div style="display: flex; align-items: center; gap: 8px; margin-top: 4px;">
                         <span id="detail-tunnel-limit" class="badge" style="font-weight: bold; background: rgba(139,92,246,0.15); color: #a78bfa; border: 1px solid rgba(139,92,246,0.3);"></span>
-                        <button id="detail-tunnel-override-btn" class="btn btn-outline" style="padding: 2px 6px; font-size: 11px; margin: 0; min-width: auto; width: auto; color: #d97706; border-color: #d97706;" onclick="openOverrideFromDetails()">Override</button>
+                        <button id="detail-tunnel-override-btn" class="btn btn-outline" style="padding: 2px 6px; font-size: 11px; margin: 0; min-width: auto; width: auto; color: #d97706; border-color: #d97706;" onclick="openOverrideFromDetails()" data-i18n="btn_override">Override</button>
                     </div>
                 </div>
                 <div>
-                    <label style="display:block; color: var(--text-muted); font-size: 11px; text-transform: uppercase; font-weight: 600;">Connected At</label>
+                    <label data-i18n="detail_lbl_connected_at" style="display:block; color: var(--text-muted); font-size: 11px; text-transform: uppercase; font-weight: 600;">Connected At</label>
                     <span id="detail-tunnel-connected" style="font-size: 13px; display: inline-block; margin-top: 4px;"></span>
                 </div>
                 <div>
-                    <label style="display:block; color: var(--text-muted); font-size: 11px; text-transform: uppercase; font-weight: 600;">Data In (Received)</label>
+                    <label data-i18n="detail_lbl_data_in" style="display:block; color: var(--text-muted); font-size: 11px; text-transform: uppercase; font-weight: 600;">Data In (Received)</label>
                     <span id="detail-tunnel-bytes-in" style="font-weight: 500;"></span>
                 </div>
                 <div>
-                    <label style="display:block; color: var(--text-muted); font-size: 11px; text-transform: uppercase; font-weight: 600;">Data Out (Sent)</label>
+                    <label data-i18n="detail_lbl_data_out" style="display:block; color: var(--text-muted); font-size: 11px; text-transform: uppercase; font-weight: 600;">Data Out (Sent)</label>
                     <span id="detail-tunnel-bytes-out" style="font-weight: 500;"></span>
                 </div>
                 <div>
-                    <label style="display:block; color: var(--text-muted); font-size: 11px; text-transform: uppercase; font-weight: 600;">Client IP Address</label>
+                    <label data-i18n="detail_lbl_client_ip" style="display:block; color: var(--text-muted); font-size: 11px; text-transform: uppercase; font-weight: 600;">Client IP Address</label>
                     <span id="detail-tunnel-client-ip" style="font-family: monospace; font-size: 13px; font-weight: 500;"></span>
                 </div>
                 <div>
-                    <label style="display:block; color: var(--text-muted); font-size: 11px; text-transform: uppercase; font-weight: 600;">Hosting Gateway Server</label>
+                    <label data-i18n="detail_lbl_hosting_gateway" style="display:block; color: var(--text-muted); font-size: 11px; text-transform: uppercase; font-weight: 600;">Hosting Gateway Server</label>
                     <span id="detail-tunnel-node-id" style="font-size: 13px; font-weight: 500;"></span>
                 </div>
                 <div style="grid-column: span 2; border-top: 1px solid rgba(255,255,255,0.05); padding-top: 12px; margin-top: 4px;">
-                    <label style="display:block; color: var(--text-muted); font-size: 11px; text-transform: uppercase; font-weight: 600; margin-bottom: 8px;">Access Control</label>
+                    <label data-i18n="detail_lbl_access_control" style="display:block; color: var(--text-muted); font-size: 11px; text-transform: uppercase; font-weight: 600; margin-bottom: 8px;">Access Control</label>
                     <div style="display: grid; grid-template-columns: repeat(2, 1fr); gap: 12px; font-size: 13px;">
                         <div>
-                            <span style="color: var(--text-muted); font-size: 11px; display: block;">Passcode Protection</span>
+                            <span data-i18n="detail_lbl_passcode_protection" style="color: var(--text-muted); font-size: 11px; display: block;">Passcode Protection</span>
                             <span id="detail-tunnel-passcode-status" style="font-weight: 500;"></span>
                         </div>
                         <div>
-                            <span style="color: var(--text-muted); font-size: 11px; display: block;">Combinator Mode</span>
+                            <span data-i18n="detail_lbl_combinator_mode" style="color: var(--text-muted); font-size: 11px; display: block;">Combinator Mode</span>
                             <span id="detail-tunnel-access-mode" style="font-weight: 500;"></span>
                         </div>
                         <div style="grid-column: span 2;">
-                            <span style="color: var(--text-muted); font-size: 11px; display: block;">IP Whitelist</span>
+                            <span data-i18n="detail_lbl_ip_whitelist" style="color: var(--text-muted); font-size: 11px; display: block;">IP Whitelist</span>
                             <span id="detail-tunnel-whitelist-status" style="font-family: monospace; font-size: 12px; word-break: break-all;"></span>
                         </div>
                     </div>
                 </div>
                 <div style="grid-column: span 2; border-top: 1px solid rgba(255,255,255,0.05); padding-top: 12px; margin-top: 4px;">
-                    <label style="display:flex; justify-content: space-between; align-items: center; color: var(--text-muted); font-size: 11px; text-transform: uppercase; font-weight: 600; margin-bottom: 8px;">
+                    <label data-i18n="detail_lbl_custom_headers" style="display:flex; justify-content: space-between; align-items: center; color: var(--text-muted); font-size: 11px; text-transform: uppercase; font-weight: 600; margin-bottom: 8px;">
                         Custom Headers Injection
                     </label>
                     <div id="detail-tunnel-headers-container" style="margin-bottom: 8px; font-size: 13px;">
                         <!-- Headers list here -->
                     </div>
                     <div style="display: flex; gap: 8px;">
-                        <input type="text" id="detail-tunnel-header-key" placeholder="Header Name (e.g. X-Frame-Options)" class="form-control" style="flex: 1; padding: 6px 8px; font-size: 12px; height: 30px;">
-                        <input type="text" id="detail-tunnel-header-value" placeholder="Value" class="form-control" style="flex: 1; padding: 6px 8px; font-size: 12px; height: 30px;">
-                        <button class="btn btn-primary" style="margin: 0; padding: 0 12px; height: 30px; font-size: 12px; width: auto;" onclick="addTunnelHeader()">Add</button>
+                        <input type="text" id="detail-tunnel-header-key" data-i18n-placeholder="detail_header_key_placeholder" placeholder="Header Name (e.g. X-Frame-Options)" class="form-control" style="flex: 1; padding: 6px 8px; font-size: 12px; height: 30px;">
+                        <input type="text" id="detail-tunnel-header-value" data-i18n-placeholder="detail_header_value_placeholder" placeholder="Value" class="form-control" style="flex: 1; padding: 6px 8px; font-size: 12px; height: 30px;">
+                        <button class="btn btn-primary" style="margin: 0; padding: 0 12px; height: 30px; font-size: 12px; width: auto;" onclick="addTunnelHeader()" data-i18n="btn_add">Add</button>
                     </div>
                 </div>
                 <div style="grid-column: span 2;">
-                    <label style="display:block; color: var(--text-muted); font-size: 11px; text-transform: uppercase; font-weight: 600; margin-bottom: 8px;">Active Visitor IPs</label>
+                    <label data-i18n="detail_lbl_active_visitor_ips" style="display:block; color: var(--text-muted); font-size: 11px; text-transform: uppercase; font-weight: 600; margin-bottom: 8px;">Active Visitor IPs</label>
                     <div class="glass" style="max-height: 120px; overflow-y: auto; padding: 12px; border-radius: 6px; border: 1px solid var(--border);">
                         <table style="width: 100%; font-size: 13px;">
                             <tbody id="detail-tunnel-visitor-ips-tbody">
-                                <tr><td style="color: var(--text-muted); text-align: center; padding: 8px 0;">No active visitor connections (last 30s)</td></tr>
+                                <tr><td data-i18n="detail_visitor_none" style="color: var(--text-muted); text-align: center; padding: 8px 0;">No active visitor connections (last 30s)</td></tr>
                             </tbody>
                         </table>
                     </div>
@@ -1019,9 +1019,9 @@
             </div>
 
             <div style="display: flex; gap: 12px; justify-content: flex-end; border-top: 1px solid rgba(255,255,255,0.08); padding-top: 16px;">
-                <button class="btn btn-outline" style="width: auto; margin: 0; padding: 8px 16px;" onclick="refreshTunnelDetails()">Refresh</button>
-                <button id="detail-tunnel-kick-btn" class="btn" style="width: auto; margin: 0; color: var(--danger); border-color: var(--danger);" onclick="kickFromDetails()">Kick Tunnel</button>
-                <button class="btn btn-primary" style="width: auto; margin: 0; padding: 8px 24px;" onclick="closeTunnelDetailsModal()">Close</button>
+                <button class="btn btn-outline" style="width: auto; margin: 0; padding: 8px 16px;" onclick="refreshTunnelDetails()" data-i18n="btn_refresh">Refresh</button>
+                <button id="detail-tunnel-kick-btn" class="btn" style="width: auto; margin: 0; color: var(--danger); border-color: var(--danger);" onclick="kickFromDetails()" data-i18n="btn_kick_tunnel">Kick Tunnel</button>
+                <button class="btn btn-primary" style="width: auto; margin: 0; padding: 8px 24px;" onclick="closeTunnelDetailsModal()" data-i18n="btn_close">Close</button>
             </div>
         </div>
     </div>
@@ -1029,49 +1029,49 @@
     <!-- USER DETAILS & TUNNELS MODAL -->
     <div id="user-details-modal" class="modal-overlay" style="display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.6); align-items: center; justify-content: center; z-index: 1000;">
         <div class="glass" style="max-width: 720px; width: 100%; padding: 32px; border-radius: 16px; border: 1px solid var(--border); text-align: left;">
-            <h3 style="margin-bottom: 16px; font-size: 20px; display: flex; align-items: center; gap: 8px;">👤 User Profile & Tunnels</h3>
+            <h3 data-i18n="user_modal_title" style="margin-bottom: 16px; font-size: 20px; display: flex; align-items: center; gap: 8px;">👤 User Profile & Tunnels</h3>
             
             <!-- User General Profile Grid -->
             <div style="display: grid; grid-template-columns: repeat(2, 1fr); gap: 16px; margin-bottom: 24px; padding-bottom: 16px; border-bottom: 1px solid rgba(255,255,255,0.08);">
                 <div>
-                    <label style="display:block; color: var(--text-muted); font-size: 11px; text-transform: uppercase; font-weight: 600;">Email Address</label>
+                    <label data-i18n="user_lbl_email" style="display:block; color: var(--text-muted); font-size: 11px; text-transform: uppercase; font-weight: 600;">Email Address</label>
                     <span id="detail-user-email" style="font-weight: 500; font-family: monospace;"></span>
                 </div>
                 <div>
-                    <label style="display:block; color: var(--text-muted); font-size: 11px; text-transform: uppercase; font-weight: 600;">Full Name</label>
+                    <label data-i18n="user_lbl_name" style="display:block; color: var(--text-muted); font-size: 11px; text-transform: uppercase; font-weight: 600;">Full Name</label>
                     <span id="detail-user-name" style="font-weight: 500;"></span>
                 </div>
                 <div>
-                    <label style="display:block; color: var(--text-muted); font-size: 11px; text-transform: uppercase; font-weight: 600;">Role & Status</label>
+                    <label data-i18n="user_lbl_role_status" style="display:block; color: var(--text-muted); font-size: 11px; text-transform: uppercase; font-weight: 600;">Role & Status</label>
                     <div style="display: flex; gap: 8px; margin-top: 4px;">
                         <span id="detail-user-role" class="badge"></span>
                         <span id="detail-user-status" class="badge"></span>
                     </div>
                 </div>
                 <div>
-                    <label style="display:block; color: var(--text-muted); font-size: 11px; text-transform: uppercase; font-weight: 600;">Account Origin</label>
+                    <label data-i18n="user_lbl_origin" style="display:block; color: var(--text-muted); font-size: 11px; text-transform: uppercase; font-weight: 600;">Account Origin</label>
                     <span id="detail-user-origin" style="display: inline-block; margin-top: 4px;"></span>
                 </div>
                 <div>
-                    <label style="display:block; color: var(--text-muted); font-size: 11px; text-transform: uppercase; font-weight: 600;">Joined Date</label>
+                    <label data-i18n="user_lbl_joined" style="display:block; color: var(--text-muted); font-size: 11px; text-transform: uppercase; font-weight: 600;">Joined Date</label>
                     <span id="detail-user-joined" style="font-size: 13px;"></span>
                 </div>
                 <div>
-                    <label style="display:block; color: var(--text-muted); font-size: 11px; text-transform: uppercase; font-weight: 600;">API Quota</label>
+                    <label data-i18n="user_lbl_quota" style="display:block; color: var(--text-muted); font-size: 11px; text-transform: uppercase; font-weight: 600;">API Quota</label>
                     <span id="detail-user-quota" class="badge" style="background: rgba(139,92,246,0.15); color: #a78bfa; border: 1px solid rgba(139,92,246,0.3); font-weight: bold; margin-top: 4px;"></span>
                 </div>
                 <div>
-                    <label style="display:block; color: var(--text-muted); font-size: 11px; text-transform: uppercase; font-weight: 600;">Onboarding Tour Status</label>
+                    <label data-i18n="user_lbl_tour_status" style="display:block; color: var(--text-muted); font-size: 11px; text-transform: uppercase; font-weight: 600;">Onboarding Tour Status</label>
                     <span id="detail-user-onboarding-status" style="display: inline-block; margin-top: 4px;"></span>
                 </div>
                 <div>
-                    <label style="display:block; color: var(--text-muted); font-size: 11px; text-transform: uppercase; font-weight: 600;">Onboarding Tour Detail</label>
+                    <label data-i18n="user_lbl_tour_detail" style="display:block; color: var(--text-muted); font-size: 11px; text-transform: uppercase; font-weight: 600;">Onboarding Tour Detail</label>
                     <span id="detail-user-onboarding-detail" style="font-size: 13px; display: inline-block; margin-top: 4px; font-weight: 500;"></span>
                 </div>
             </div>
 
             <!-- Active Tunnels Section -->
-            <h4 style="font-size: 15px; font-weight: 600; margin-bottom: 12px; display: flex; align-items: center; gap: 6px;">🔌 Connected Tunnels (<span id="detail-user-tunnels-count">0</span>)</h4>
+            <h4 style="font-size: 15px; font-weight: 600; margin-bottom: 12px; display: flex; align-items: center; gap: 6px;"><span data-i18n="user_lbl_connected_tunnels">🔌 Connected Tunnels</span> (<span id="detail-user-tunnels-count">0</span>)</h4>
             <div style="max-height: 240px; overflow-y: auto; margin-bottom: 24px; border: 1px solid rgba(255,255,255,0.05); border-radius: 8px; background: rgba(0,0,0,0.1);">
                 <table class="dashboard-table" style="width: 100%; border-collapse: collapse; min-width: 100%;">
                     <thead>
@@ -1089,7 +1089,7 @@
             </div>
 
             <div style="display: flex; gap: 12px; justify-content: flex-end;">
-                <button class="btn btn-primary" style="width: auto; margin: 0; padding: 8px 24px;" onclick="closeUserDetailsModal()">Close</button>
+                <button class="btn btn-primary" style="width: auto; margin: 0; padding: 8px 24px;" onclick="closeUserDetailsModal()" data-i18n="btn_close">Close</button>
             </div>
         </div>
     </div>
@@ -1097,80 +1097,80 @@
     <!-- INSTALLER GUIDE MODAL -->
     <div id="installer-guide-modal" class="modal-overlay" style="display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.6); align-items: center; justify-content: center; z-index: 1000;">
         <div class="glass" style="max-width: 650px; width: 100%; padding: 32px; border-radius: 16px; border: 1px solid var(--border); text-align: left; overflow: hidden; display: flex; flex-direction: column; max-height: 90vh;">
-            <h3 style="margin-bottom: 16px; font-size: 20px; display: flex; align-items: center; gap: 8px;">💻 Client Installation Guide</h3>
+            <h3 data-i18n="guide_title" style="margin-bottom: 16px; font-size: 20px; display: flex; align-items: center; gap: 8px;">💻 Client Installation Guide</h3>
             
-            <div style="font-size: 0.9rem; color: var(--text-muted); margin-bottom: 20px;">
+            <div data-i18n="guide_desc" style="font-size: 0.9rem; color: var(--text-muted); margin-bottom: 20px;">
                 Choose your Operating System below to see the recommended command-line installation or direct downloads.
             </div>
 
             <!-- Tab Headers -->
             <div style="display: flex; border-bottom: 1px solid var(--border); margin-bottom: 20px; gap: 16px;">
-                <button id="tab-btn-macos" class="tab-btn active" style="background: none; border: none; color: var(--text); padding: 8px 16px; cursor: pointer; border-bottom: 2px solid var(--primary); font-weight: 500;" onclick="switchInstallerTab('macos')">macOS</button>
-                <button id="tab-btn-windows" class="tab-btn" style="background: none; border: none; color: var(--text-muted); padding: 8px 16px; cursor: pointer; border-bottom: 2px solid transparent; font-weight: 500;" onclick="switchInstallerTab('windows')">Windows</button>
-                <button id="tab-btn-linux" class="tab-btn" style="background: none; border: none; color: var(--text-muted); padding: 8px 16px; cursor: pointer; border-bottom: 2px solid transparent; font-weight: 500;" onclick="switchInstallerTab('linux')">Linux</button>
+                <button id="tab-btn-macos" class="tab-btn active" style="background: none; border: none; color: var(--text); padding: 8px 16px; cursor: pointer; border-bottom: 2px solid var(--primary); font-weight: 500;" onclick="switchInstallerTab('macos')" data-i18n="guide_tab_macos">macOS</button>
+                <button id="tab-btn-windows" class="tab-btn" style="background: none; border: none; color: var(--text-muted); padding: 8px 16px; cursor: pointer; border-bottom: 2px solid transparent; font-weight: 500;" onclick="switchInstallerTab('windows')" data-i18n="guide_tab_windows">Windows</button>
+                <button id="tab-btn-linux" class="tab-btn" style="background: none; border: none; color: var(--text-muted); padding: 8px 16px; cursor: pointer; border-bottom: 2px solid transparent; font-weight: 500;" onclick="switchInstallerTab('linux')" data-i18n="guide_tab_linux">Linux</button>
             </div>
 
             <!-- Tab Contents -->
             <div style="flex-grow: 1; overflow-y: auto; padding-right: 4px; margin-bottom: 24px;">
                 <!-- macOS -->
                 <div id="tab-content-macos" class="tab-content">
-                    <h4 style="font-size: 14px; margin-bottom: 8px;">🚀 Apple Silicon (M1/M2/M3) & Intel Macs</h4>
-                    <div style="font-size: 0.8rem; font-weight: bold; margin-top: 10px; color: var(--text);">Recommended via Homebrew:</div>
+                    <h4 data-i18n="guide_macos_title" style="font-size: 14px; margin-bottom: 8px;">🚀 Apple Silicon (M1/M2/M3) & Intel Macs</h4>
+                    <div data-i18n="guide_macos_brew" style="font-size: 0.8rem; font-weight: bold; margin-top: 10px; color: var(--text);">Recommended via Homebrew:</div>
                     <div style="margin-top: 4px; margin-bottom: 12px; position: relative; background: #0d1117; color: #e6edf3; border-radius: 6px; border: 1px solid rgba(255,255,255,0.1); padding: 10px 40px 10px 12px; font-family: monospace; font-size: 0.8rem;">
                         <span id="guide-cmd-macos">brew tap peterrichards-lr/tap && brew install lfr-tunnel</span>
                         <button onclick="navigator.clipboard.writeText(document.getElementById('guide-cmd-macos').innerText); this.innerHTML='✓'; setTimeout(() => this.innerHTML='📋', 2000);" style="position: absolute; top: 6px; right: 6px; background: transparent; border: 1px solid rgba(255,255,255,0.2); color: #8b949e; border-radius: 4px; width: 22px; height: 22px; cursor: pointer;">📋</button>
                     </div>
 
-                    <div style="font-size: 0.8rem; font-weight: bold; margin-top: 10px; color: var(--text-muted);">Direct Installation Script (Alternative):</div>
+                    <div data-i18n="guide_macos_direct" style="font-size: 0.8rem; font-weight: bold; margin-top: 10px; color: var(--text-muted);">Direct Installation Script (Alternative):</div>
                     <div style="margin-top: 4px; margin-bottom: 12px; position: relative; background: #0d1117; color: #e6edf3; border-radius: 6px; border: 1px solid rgba(255,255,255,0.1); padding: 10px 40px 10px 12px; font-family: monospace; font-size: 0.8rem;">
                         <span id="guide-script-macos">curl -fsSL https://tunnel.lfr-demo.se/install | sh</span>
                         <button onclick="navigator.clipboard.writeText(document.getElementById('guide-script-macos').innerText); this.innerHTML='✓'; setTimeout(() => this.innerHTML='📋', 2000);" style="position: absolute; top: 6px; right: 6px; background: transparent; border: 1px solid rgba(255,255,255,0.2); color: #8b949e; border-radius: 4px; width: 22px; height: 22px; cursor: pointer;">📋</button>
                     </div>
                     
                     <div id="guide-dl-macos" style="margin-top: 16px; display: flex; gap: 12px;">
-                        <a href="/static/downloads/lfr-tunnel-darwin-arm64" class="btn btn-outline" style="font-size: 12px; padding: 6px 12px; width: auto; margin: 0;">Download arm64 (M1/M2/M3)</a>
-                        <a href="/static/downloads/lfr-tunnel-darwin-amd64" class="btn btn-outline" style="font-size: 12px; padding: 6px 12px; width: auto; margin: 0;">Download amd64 (Intel)</a>
+                        <a href="/static/downloads/lfr-tunnel-darwin-arm64" class="btn btn-outline" style="font-size: 12px; padding: 6px 12px; width: auto; margin: 0;" data-i18n="guide_macos_dl_arm">Download arm64 (M1/M2/M3)</a>
+                        <a href="/static/downloads/lfr-tunnel-darwin-amd64" class="btn btn-outline" style="font-size: 12px; padding: 6px 12px; width: auto; margin: 0;" data-i18n="guide_macos_dl_intel">Download amd64 (Intel)</a>
                     </div>
                 </div>
 
                 <!-- Windows -->
                 <div id="tab-content-windows" class="tab-content" style="display: none;">
-                    <h4 style="font-size: 14px; margin-bottom: 8px;">🚀 Windows 10 / 11 (64-bit)</h4>
-                    <div style="font-size: 0.8rem; font-weight: bold; margin-top: 10px; color: var(--text);">Recommended via Scoop:</div>
+                    <h4 data-i18n="guide_windows_title" style="font-size: 14px; margin-bottom: 8px;">🚀 Windows 10 / 11 (64-bit)</h4>
+                    <div data-i18n="guide_windows_scoop" style="font-size: 0.8rem; font-weight: bold; margin-top: 10px; color: var(--text);">Recommended via Scoop:</div>
                     <div style="margin-top: 4px; margin-bottom: 12px; position: relative; background: #0d1117; color: #e6edf3; border-radius: 6px; border: 1px solid rgba(255,255,255,0.1); padding: 10px 40px 10px 12px; font-family: monospace; font-size: 0.8rem;">
                         <span id="guide-cmd-windows">scoop bucket add peterrichards-lr https://github.com/peterrichards-lr/scoop-bucket && scoop install lfr-tunnel</span>
                         <button onclick="navigator.clipboard.writeText(document.getElementById('guide-cmd-windows').innerText); this.innerHTML='✓'; setTimeout(() => this.innerHTML='📋', 2000);" style="position: absolute; top: 6px; right: 6px; background: transparent; border: 1px solid rgba(255,255,255,0.2); color: #8b949e; border-radius: 4px; width: 22px; height: 22px; cursor: pointer;">📋</button>
                     </div>
 
-                    <div style="font-size: 0.8rem; font-weight: bold; margin-top: 10px; color: var(--text-muted);">Direct Installation (PowerShell Script):</div>
+                    <div data-i18n="guide_windows_direct" style="font-size: 0.8rem; font-weight: bold; margin-top: 10px; color: var(--text-muted);">Direct Installation (PowerShell Script):</div>
                     <div style="margin-top: 4px; margin-bottom: 12px; position: relative; background: #0d1117; color: #e6edf3; border-radius: 6px; border: 1px solid rgba(255,255,255,0.1); padding: 10px 40px 10px 12px; font-family: monospace; font-size: 0.8rem;">
                         <span id="guide-script-windows">irm https://tunnel.lfr-demo.se/install.ps1 | iex</span>
                         <button onclick="navigator.clipboard.writeText(document.getElementById('guide-script-windows').innerText); this.innerHTML='✓'; setTimeout(() => this.innerHTML='📋', 2000);" style="position: absolute; top: 6px; right: 6px; background: transparent; border: 1px solid rgba(255,255,255,0.2); color: #8b949e; border-radius: 4px; width: 22px; height: 22px; cursor: pointer;">📋</button>
                     </div>
 
                     <div id="guide-dl-windows" style="margin-top: 16px;">
-                        <a href="/static/downloads/lfr-tunnel-windows-amd64.exe" class="btn btn-outline" style="font-size: 12px; padding: 6px 12px; width: auto; margin: 0;">Download Windows Binary (.exe)</a>
+                        <a href="/static/downloads/lfr-tunnel-windows-amd64.exe" class="btn btn-outline" style="font-size: 12px; padding: 6px 12px; width: auto; margin: 0;" data-i18n="guide_windows_dl">Download Windows Binary (.exe)</a>
                     </div>
                 </div>
 
                 <!-- Linux -->
                 <div id="tab-content-linux" class="tab-content" style="display: none;">
-                    <h4 style="font-size: 14px; margin-bottom: 8px;">🚀 Linux (amd64 / arm64)</h4>
-                    <div style="font-size: 0.8rem; font-weight: bold; margin-top: 10px; color: var(--text);">Direct Installation Command:</div>
+                    <h4 data-i18n="guide_linux_title" style="font-size: 14px; margin-bottom: 8px;">🚀 Linux (amd64 / arm64)</h4>
+                    <div data-i18n="guide_linux_direct" style="font-size: 0.8rem; font-weight: bold; margin-top: 10px; color: var(--text);">Direct Installation Command:</div>
                     <div style="margin-top: 4px; margin-bottom: 12px; position: relative; background: #0d1117; color: #e6edf3; border-radius: 6px; border: 1px solid rgba(255,255,255,0.1); padding: 10px 40px 10px 12px; font-family: monospace; font-size: 0.8rem;">
                         <span id="guide-cmd-linux">curl -fsSL https://tunnel.lfr-demo.se/install | sh</span>
                         <button onclick="navigator.clipboard.writeText(document.getElementById('guide-cmd-linux').innerText); this.innerHTML='✓'; setTimeout(() => this.innerHTML='📋', 2000);" style="position: absolute; top: 6px; right: 6px; background: transparent; border: 1px solid rgba(255,255,255,0.2); color: #8b949e; border-radius: 4px; width: 22px; height: 22px; cursor: pointer;">📋</button>
                     </div>
 
                     <div id="guide-dl-linux" style="margin-top: 16px; display: flex; gap: 12px;">
-                        <a href="/static/downloads/lfr-tunnel-linux-amd64" class="btn btn-outline" style="font-size: 12px; padding: 6px 12px; width: auto; margin: 0;">Download Linux amd64</a>
-                        <a href="/static/downloads/lfr-tunnel-linux-arm64" class="btn btn-outline" style="font-size: 12px; padding: 6px 12px; width: auto; margin: 0;">Download Linux arm64</a>
+                        <a href="/static/downloads/lfr-tunnel-linux-amd64" class="btn btn-outline" style="font-size: 12px; padding: 6px 12px; width: auto; margin: 0;" data-i18n="guide_linux_dl_amd">Download Linux amd64</a>
+                        <a href="/static/downloads/lfr-tunnel-linux-arm64" class="btn btn-outline" style="font-size: 12px; padding: 6px 12px; width: auto; margin: 0;" data-i18n="guide_linux_dl_arm">Download Linux arm64</a>
                     </div>
                 </div>
             </div>
 
             <div style="display: flex; justify-content: flex-end;">
-                <button class="btn btn-primary" style="width: auto; margin: 0; padding: 8px 24px;" onclick="closeInstallerGuideModal()">Close</button>
+                <button class="btn btn-primary" style="width: auto; margin: 0; padding: 8px 24px;" onclick="closeInstallerGuideModal()" data-i18n="btn_close">Close</button>
             </div>
         </div>
     </div>

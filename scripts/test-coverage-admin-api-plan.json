@@ -17,7 +17,7 @@
     {
       "title": "Add test coverage for `handleDeleteToken` & `handleAdminDeleteToken`",
       "body": "Write unit tests for `handleDeleteToken` and `handleAdminDeleteToken`. Verify correct token revocation behavior and proper response codes for valid and invalid inputs.",
-      "completed": false,
+      "completed": true,
       "labels": [
         "enhancement"
       ],

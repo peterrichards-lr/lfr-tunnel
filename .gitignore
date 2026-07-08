@@ -10,8 +10,9 @@ dist/
 client-config.yaml
 edge_nodes.txt
 
-# Logs
+# Logs & Coverage
 *.log
+coverage.out
 
 # Database
 *.db

@@ -1,0 +1,19 @@
+{
+  "title": "[Feature] Role-based configuration for AllowClientAutoReservation",
+  "body": "**Epic Description:**\nThe current bypass for `AllowClientAutoReservation` is hardcoded to `admin` and `owner` roles. This should be made configurable via `RoleSettings` in the configuration.\n\n**Implementation Plan:**\n1. Add `AllowAutoReservation *bool` to `RoleSetting` struct.\n2. Update `DefaultServerConfig` to include default role settings for `admin` and `owner`.\n3. Update `server.go` to evaluate the role-specific override when determining auto-reservation allowance.",
+  "labels": [
+    "enhancement"
+  ],
+  "issues": [
+    {
+      "title": "Make AllowClientAutoReservation bypass configurable by role",
+      "body": "Update `config.go` and `server.go` to use `RoleSettings` for the `AllowClientAutoReservation` bypass.",
+      "completed": false,
+      "labels": [
+        "enhancement"
+      ],
+      "issueNumber": "383"
+    }
+  ],
+  "epicNumber": "382"
+}

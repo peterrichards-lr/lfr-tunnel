@@ -99,8 +99,9 @@ type ServerConfig struct {
 }
 
 type RoleSetting struct {
-	MaxReservations     *int `yaml:"max_reservations" json:"max_reservations"`
-	SubdomainExpiryDays *int `yaml:"subdomain_expiry_days" json:"subdomain_expiry_days"`
+	MaxReservations      *int  `yaml:"max_reservations" json:"max_reservations"`
+	SubdomainExpiryDays  *int  `yaml:"subdomain_expiry_days" json:"subdomain_expiry_days"`
+	AllowAutoReservation *bool `yaml:"allow_auto_reservation" json:"allow_auto_reservation"`
 }
 
 type PlatformConfig struct {
@@ -181,6 +182,14 @@ func DefaultServerConfig() *ServerConfig {
 		DockerBypassURL:         "https://github.com/peterrichards-lr/lfr-tunnel/blob/master/docs/liferay-se-guide.md#using-the-docker-wrapper-edr-bypass",
 		VisitorTimeout:          5 * time.Minute,
 		EnableWAF:               true,
+		RoleSettings: map[string]RoleSetting{
+			"admin": {
+				AllowAutoReservation: &trueVal,
+			},
+			"owner": {
+				AllowAutoReservation: &trueVal,
+			},
+		},
 		ClientPlatforms: map[string]PlatformConfig{
 			"macos_arm64": {
 				URL:              "/static/downloads/lfr-tunnel-darwin-arm64",

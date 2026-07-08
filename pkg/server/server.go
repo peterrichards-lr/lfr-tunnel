@@ -992,6 +992,15 @@ func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 }
 
 // handleRegister parses registration request and responds with leases.
+func (s *Server) canUserAutoReserve(userRec *db.User) bool {
+	if userRec != nil && s.cfg.RoleSettings != nil {
+		if rs, ok := s.cfg.RoleSettings[userRec.Role]; ok && rs.AllowAutoReservation != nil {
+			return *rs.AllowAutoReservation
+		}
+	}
+	return s.cfg.AllowClientAutoReservation
+}
+
 func (s *Server) handleRegister(w http.ResponseWriter, r *http.Request) {
 	var req RegisterRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
@@ -1068,7 +1077,7 @@ func (s *Server) handleRegister(w http.ResponseWriter, r *http.Request) {
 				}
 			} else {
 				// No reservation exists
-				if s.cfg.AllowClientAutoReservation || (userRec != nil && (userRec.Role == "admin" || userRec.Role == "owner")) {
+				if s.canUserAutoReserve(userRec) {
 					domainsToReserve = append(domainsToReserve, d)
 				} else {
 					s.respondRegisterResponse(w, http.StatusForbidden, r, RegisterResponse{Status: "error", Error: "Custom domains must be reserved in the portal prior to connecting"})
@@ -1183,7 +1192,7 @@ func (s *Server) handleRegister(w http.ResponseWriter, r *http.Request) {
 						}
 					} else {
 						// No reservation exists
-						if s.cfg.AllowClientAutoReservation || (userRec != nil && (userRec.Role == "admin" || userRec.Role == "owner")) {
+						if s.canUserAutoReserve(userRec) {
 							domainsToReserve = append(domainsToReserve, d)
 						} else {
 							s.respondRegisterResponse(w, http.StatusForbidden, r, RegisterResponse{Status: "error", Error: "Custom subdomains must be reserved in the portal prior to connecting"})
@@ -4491,7 +4500,7 @@ func (s *Server) handleEdgeRegister(w http.ResponseWriter, r *http.Request) {
 						}
 					}
 				} else {
-					if s.cfg.AllowClientAutoReservation || (userRec != nil && (userRec.Role == "admin" || userRec.Role == "owner")) {
+					if s.canUserAutoReserve(userRec) {
 						domainsToReserve = append(domainsToReserve, d)
 					} else {
 						respondJSON(w, http.StatusForbidden, map[string]string{"error": "Custom subdomains must be reserved in the portal prior to connecting"})

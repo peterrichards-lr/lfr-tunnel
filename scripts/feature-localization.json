@@ -8,7 +8,7 @@
     {
       "title": "Extract portal UI strings and setup i18n engine",
       "body": "Implement the frontend i18n logic and extract all hardcoded UI strings into a base `en` JSON dictionary.",
-      "completed": false,
+      "completed": true,
       "labels": [
         "enhancement"
       ],
@@ -17,7 +17,7 @@
     {
       "title": "AI Translation of UI dictionaries",
       "body": "Use AI to translate the base English UI dictionary into the target supported languages.",
-      "completed": false,
+      "completed": true,
       "labels": [
         "enhancement"
       ],
@@ -26,7 +26,7 @@
     {
       "title": "Real-time language switcher UI",
       "body": "Implement a language selector in the portal dashboard to allow real-time switching without full page reloads.",
-      "completed": false,
+      "completed": true,
       "labels": [
         "enhancement"
       ],

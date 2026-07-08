@@ -276,7 +276,7 @@
                 <p style="color: var(--text-muted); margin-bottom: 24px; font-size: 14px;" data-i18n="tokens_desc">Tokens allow your CLI to authenticate with the gateway.</p>
                 <div class="glass table-container">
                     <table>
-                        <thead id="tokens-table-headers"><tr><th data-sort="name">Name</th><th data-sort="token_prefix">Prefix</th><th data-sort="created_at">Created</th><th data-sort="expires_at">Expires</th><th>Expires In</th><th>Status</th><th>Action</th></tr></thead>
+                        <thead id="tokens-table-headers"><tr><th data-sort="name" data-i18n="th_name">Name</th><th data-sort="token_prefix" data-i18n="th_prefix">Prefix</th><th data-sort="created_at" data-i18n="th_created">Created</th><th data-sort="expires_at" data-i18n="th_expires">Expires</th><th data-i18n="th_expires_in">Expires In</th><th data-i18n="th_status">Status</th><th data-i18n="th_action">Action</th></tr></thead>
                         <tbody id="tokens-table-body"></tbody>
                     </table>
                 </div>
@@ -398,7 +398,7 @@
                             <h4 style="margin-bottom: 12px; color: var(--text-muted); font-size: 14px; font-weight: 500;">Client Version Distribution</h4>
                             <div class="table-container" style="max-height: 250px; overflow-y: auto;">
                                 <table>
-                                    <thead><tr><th data-sort="version">Version</th><th data-sort="os">OS</th><th data-sort="count">User Count</th></tr></thead>
+                                    <thead><tr><th data-sort="version" data-i18n="th_version">Version</th><th data-sort="os" data-i18n="th_os">OS</th><th data-sort="count" data-i18n="th_user_count">User Count</th></tr></thead>
                                     <tbody id="client-stats-table-body"></tbody>
                                 </table>
                             </div>
@@ -501,11 +501,11 @@
                     <table>
                         <thead id="reservations-table-headers">
                             <tr>
-                                <th>Subdomain</th>
-                                <th>Domain</th>
-                                <th>Status</th>
-                                <th>Expires At (Local)</th>
-                                <th style="text-align: right;">Actions</th>
+                                <th data-i18n="th_subdomain">Subdomain</th>
+                                <th data-i18n="th_domain">Domain</th>
+                                <th data-i18n="th_status">Status</th>
+                                <th data-i18n="th_expires_at_local">Expires At (Local)</th>
+                                <th style="text-align: right;" data-i18n="th_actions">Actions</th>
                             </tr>
                         </thead>
                         <tbody id="reservations-table-body">
@@ -525,11 +525,11 @@
                           <table>
                               <thead>
                                   <tr>
-                                      <th>User Email</th>
-                                      <th>Subdomain</th>
-                                      <th>Domain</th>
-                                      <th>Expires At</th>
-                                      <th style="text-align: right;">Actions</th>
+                                      <th data-i18n="th_user_email">User Email</th>
+                                      <th data-i18n="th_subdomain">Subdomain</th>
+                                      <th data-i18n="th_domain">Domain</th>
+                                      <th data-i18n="th_expires_at">Expires At</th>
+                                      <th style="text-align: right;" data-i18n="th_actions">Actions</th>
                                   </tr>
                               </thead>
                               <tbody id="admin-extensions-table-body">
@@ -549,7 +549,7 @@
                 </div>
                 <div class="glass table-container">
                     <table>
-                        <thead><tr><th data-sort="email">Email</th><th data-sort="first_name">Name</th><th data-sort="created_at">Requested At (UTC)</th><th>Actions</th></tr></thead>
+                        <thead><tr><th data-sort="email" data-i18n="th_email">Email</th><th data-sort="first_name" data-i18n="th_name">Name</th><th data-sort="created_at" data-i18n="th_requested_at_utc">Requested At (UTC)</th><th data-i18n="th_actions">Actions</th></tr></thead>
                         <tbody id="registrations-table-body"></tbody>
                     </table>
                 </div>
@@ -571,7 +571,7 @@
                 </div>
                 <div class="glass table-container">
                     <table>
-                        <thead><tr><th data-sort="email">Email</th><th data-sort="first_name">Name</th><th data-sort="role">Role</th><th data-sort="status">Status</th><th style="min-width: 140px;">Quotas</th><th data-sort="last_login_at">Last Seen</th><th>Actions</th></tr></thead>
+                        <thead><tr><th data-sort="email" data-i18n="th_email">Email</th><th data-sort="first_name" data-i18n="th_name">Name</th><th data-sort="role" data-i18n="th_role">Role</th><th data-sort="status" data-i18n="th_status">Status</th><th style="min-width: 140px;" data-i18n="th_quotas">Quotas</th><th data-sort="last_login_at" data-i18n="th_last_seen">Last Seen</th><th data-i18n="th_actions">Actions</th></tr></thead>
                         <tbody id="users-table-body"></tbody>
                     </table>
                 </div>
@@ -585,7 +585,7 @@
                 </div>
                 <div class="glass table-container">
                     <table>
-                        <thead><tr><th data-sort="ip_address">IP Address</th><th data-sort="reason">Reason</th><th data-sort="banned_at">Banned At</th><th>Actions</th></tr></thead>
+                        <thead><tr><th data-sort="ip_address" data-i18n="th_ip_address">IP Address</th><th data-sort="reason" data-i18n="th_reason">Reason</th><th data-sort="banned_at" data-i18n="th_banned_at">Banned At</th><th data-i18n="th_actions">Actions</th></tr></thead>
                         <tbody id="blacklist-table-body"></tbody>
                     </table>
                 </div>
@@ -599,7 +599,7 @@
                 </div>
                 <div class="glass table-container">
                     <table>
-                        <thead><tr><th data-sort="created_at">Timestamp</th><th data-sort="action">Event</th><th data-sort="actor_id">Actor</th><th data-sort="target_id">Target</th><th data-sort="ip_address">IP</th><th>Details</th></tr></thead>
+                        <thead><tr><th data-sort="created_at" data-i18n="th_timestamp">Timestamp</th><th data-sort="action" data-i18n="th_event">Event</th><th data-sort="actor_id" data-i18n="th_actor">Actor</th><th data-sort="target_id" data-i18n="th_target">Target</th><th data-sort="ip_address" data-i18n="th_ip">IP</th><th data-i18n="th_details">Details</th></tr></thead>
                         <tbody id="audit-table-body"></tbody>
                     </table>
                 </div>
@@ -612,7 +612,7 @@
                 </div>
                 <div class="glass table-container">
                     <table>
-                        <thead><tr><th data-sort="email">Email</th><th data-sort="client_ip">IP Address</th><th data-sort="expires_at">Expires</th><th data-sort="used_at">Used At</th></tr></thead>
+                        <thead><tr><th data-sort="email" data-i18n="th_email">Email</th><th data-sort="client_ip" data-i18n="th_ip_address">IP Address</th><th data-sort="expires_at" data-i18n="th_expires">Expires</th><th data-sort="used_at" data-i18n="th_used_at">Used At</th></tr></thead>
                         <tbody id="magic-table-body"></tbody>
                     </table>
                 </div>
@@ -631,7 +631,7 @@
                 </div>
                 <div class="glass table-container">
                     <table>
-                        <thead><tr><th data-sort="filename">Filename</th><th data-sort="size_bytes">Size</th><th data-sort="created_at">Created (UTC)</th></tr></thead>
+                        <thead><tr><th data-sort="filename" data-i18n="th_filename">Filename</th><th data-sort="size_bytes" data-i18n="th_size">Size</th><th data-sort="created_at" data-i18n="th_created_utc">Created (UTC)</th></tr></thead>
                         <tbody id="backups-table-body"><tr><td colspan="3" style="text-align:center;opacity:0.6;">Loading...</td></tr></tbody>
                     </table>
                 </div>
@@ -647,14 +647,14 @@
                     <table>
                         <thead>
                             <tr>
-                                <th>Region ID</th>
-                                <th>IP Address</th>
-                                <th>Status</th>
-                                <th>Latency</th>
-                                <th>Last Check</th>
-                                <th>Version</th>
-                                <th>Details</th>
-                                <th style="text-align: right;">Actions</th>
+                                <th data-i18n="th_region_id">Region ID</th>
+                                <th data-i18n="th_ip_address">IP Address</th>
+                                <th data-i18n="th_status">Status</th>
+                                <th data-i18n="th_latency">Latency</th>
+                                <th data-i18n="th_last_check">Last Check</th>
+                                <th data-i18n="th_version">Version</th>
+                                <th data-i18n="th_details">Details</th>
+                                <th style="text-align: right;" data-i18n="th_actions">Actions</th>
                             </tr>
                         </thead>
                         <tbody id="network-health-body">
@@ -1082,10 +1082,10 @@
                 <table class="dashboard-table" style="width: 100%; border-collapse: collapse; min-width: 100%;">
                     <thead>
                         <tr style="border-bottom: 1px solid var(--border); text-align: left; background: rgba(255,255,255,0.02);">
-                            <th style="padding: 10px 12px; color: var(--text-muted); font-size: 12px; font-weight: 500;">Subdomain Prefix</th>
-                            <th style="padding: 10px 12px; color: var(--text-muted); font-size: 12px; font-weight: 500;">Public Target Link</th>
-                            <th style="padding: 10px 12px; color: var(--text-muted); font-size: 12px; font-weight: 500;">Bandwidth Transfer</th>
-                            <th style="padding: 10px 12px; color: var(--text-muted); font-size: 12px; font-weight: 500; text-align: right;">Action</th>
+                            <th style="padding: 10px 12px; color: var(--text-muted); font-size: 12px; font-weight: 500;" data-i18n="th_subdomain_prefix">Subdomain Prefix</th>
+                            <th style="padding: 10px 12px; color: var(--text-muted); font-size: 12px; font-weight: 500;" data-i18n="th_public_target_link">Public Target Link</th>
+                            <th style="padding: 10px 12px; color: var(--text-muted); font-size: 12px; font-weight: 500;" data-i18n="th_bandwidth_transfer">Bandwidth Transfer</th>
+                            <th style="padding: 10px 12px; color: var(--text-muted); font-size: 12px; font-weight: 500; text-align: right;" data-i18n="th_action">Action</th>
                         </tr>
                     </thead>
                     <tbody id="detail-user-tunnels-tbody">

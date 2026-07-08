@@ -8,11 +8,12 @@
     {
       "title": "Make AllowClientAutoReservation bypass configurable by role",
       "body": "Update `config.go` and `server.go` to use `RoleSettings` for the `AllowClientAutoReservation` bypass.",
-      "completed": false,
+      "completed": true,
       "labels": [
         "enhancement"
       ],
-      "issueNumber": "383"
+      "issueNumber": "383",
+      "closed": true
     }
   ],
   "epicNumber": "382"

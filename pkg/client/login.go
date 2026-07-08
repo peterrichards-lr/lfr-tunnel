@@ -51,7 +51,7 @@ func RunLogin(serverURL string) error {
 	}
 
 	fmt.Println("Opening your browser to authenticate...")
-	_ = openBrowser(portalURL)
+	_ = openBrowserFunc(portalURL)
 
 	fmt.Println("Waiting for token delivery...")
 	fmt.Print("If your browser didn't open or handoff fails, paste your token here: ")
@@ -90,6 +90,8 @@ func RunLogin(serverURL string) error {
 	fmt.Println("\n✅ Successfully authenticated! Your token has been saved securely to ~/.lfr-tunnel/token")
 	return nil
 }
+
+var openBrowserFunc = openBrowser
 
 func openBrowser(url string) error {
 	var cmd string

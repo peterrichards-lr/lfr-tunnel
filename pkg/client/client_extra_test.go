@@ -55,6 +55,10 @@ func TestRedirectChiselLogger(t *testing.T) {
 }
 
 func TestRunLogin(t *testing.T) {
+	oldOpenBrowserFunc := openBrowserFunc
+	openBrowserFunc = func(url string) error { return nil }
+	defer func() { openBrowserFunc = oldOpenBrowserFunc }()
+
 	go func() {
 		time.Sleep(100 * time.Millisecond)
 		_, _ = http.Post("http://127.0.0.1:4444/handoff", "text/plain", strings.NewReader("dummy-token")) //nolint:errcheck

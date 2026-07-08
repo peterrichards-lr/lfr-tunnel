@@ -83,7 +83,7 @@ To support **Exclusion by Digital Subject (Publisher)** in EDR consoles (such as
 
 * **Publisher Common Name (CN):** `CN=[Insert Organization/Publisher Name here]`
 * **Certificate Thumbprint (SHA-256):** `[Insert Certificate Thumbprint here]`
-* **Windows Publisher CA:** Enterprise CA (or [SignPath Foundation](https://signpath.org) for open-source releases).
+* **Windows Publisher CA:** Enterprise CA (if an internal corporate code signing certificate is utilized in the future).
 
 ### Linux (GPG Detached Signatures)
 

@@ -1068,7 +1068,7 @@ func (s *Server) handleRegister(w http.ResponseWriter, r *http.Request) {
 				}
 			} else {
 				// No reservation exists
-				if s.cfg.AllowClientAutoReservation && userRec != nil && (userRec.Role == "admin" || userRec.Role == "owner") {
+				if s.cfg.AllowClientAutoReservation || (userRec != nil && (userRec.Role == "admin" || userRec.Role == "owner")) {
 					domainsToReserve = append(domainsToReserve, d)
 				} else {
 					s.respondRegisterResponse(w, http.StatusForbidden, r, RegisterResponse{Status: "error", Error: "Custom domains must be reserved in the portal prior to connecting"})
@@ -1183,7 +1183,7 @@ func (s *Server) handleRegister(w http.ResponseWriter, r *http.Request) {
 						}
 					} else {
 						// No reservation exists
-						if s.cfg.AllowClientAutoReservation && userRec != nil && (userRec.Role == "admin" || userRec.Role == "owner") {
+						if s.cfg.AllowClientAutoReservation || (userRec != nil && (userRec.Role == "admin" || userRec.Role == "owner")) {
 							domainsToReserve = append(domainsToReserve, d)
 						} else {
 							s.respondRegisterResponse(w, http.StatusForbidden, r, RegisterResponse{Status: "error", Error: "Custom subdomains must be reserved in the portal prior to connecting"})
@@ -4491,7 +4491,7 @@ func (s *Server) handleEdgeRegister(w http.ResponseWriter, r *http.Request) {
 						}
 					}
 				} else {
-					if s.cfg.AllowClientAutoReservation && userRec != nil && (userRec.Role == "admin" || userRec.Role == "owner") {
+					if s.cfg.AllowClientAutoReservation || (userRec != nil && (userRec.Role == "admin" || userRec.Role == "owner")) {
 						domainsToReserve = append(domainsToReserve, d)
 					} else {
 						respondJSON(w, http.StatusForbidden, map[string]string{"error": "Custom subdomains must be reserved in the portal prior to connecting"})

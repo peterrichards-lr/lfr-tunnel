@@ -23,7 +23,13 @@ vet:
 	go vet ./...
 
 test:
-	TMPDIR=/private/tmp go test -v $$(go list ./... | grep -v /pkg/server)
+	@for pkg in $$(go list ./... | grep -v /pkg/server); do \
+		rm -f /private/tmp/lfr-tunnel; \
+		go test -c -o /private/tmp/lfr-tunnel $$pkg; \
+		if [ -f /private/tmp/lfr-tunnel ]; then \
+			/private/tmp/lfr-tunnel || exit 1; \
+		fi; \
+	done
 
 clean:
 	rm -rf bin

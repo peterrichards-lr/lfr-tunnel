@@ -195,7 +195,7 @@ The solution will consist of:
 - [x] Update release.yml with Update Homebrew Tap & Scoop Bucket step (requires TAP_BUCKET_PAT secret).
 - [x] Update README.md and docs/liferay-se-guide.md to lead with Homebrew/Scoop as recommended install methods.
 - [x] Add TAP_BUCKET_PAT secret to lfr-tunnel repo (GitHub PAT, contents:write on homebrew-tap and scoop-bucket).
-- [ ] Apply to SignPath Foundation for free Windows Authenticode signing (https://signpath.org).
+- [ ] ~~Apply to SignPath Foundation for free Windows Authenticode signing (https://signpath.org).~~ (Ruled out, sticking to file/folder exclusions)
 - [ ] Submit official release binary hashes to SentinelOne false-positive review portal.
 - [ ] Ask SentinelOne admin to configure path exclusions per SECURITY.md (Homebrew + direct-install paths).
 - [x] Add ~/.ldm/bin/lfr-tunnel to SentinelOne exclusions in README.md and SECURITY.md.

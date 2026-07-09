@@ -2878,13 +2878,11 @@ func (s *Server) handleAdminInviteUser(w http.ResponseWriter, r *http.Request, a
 		}
 	}
 
-	// Check if exists
 	if _, err := s.db.GetUserByEmail(req.Email); err == nil {
 		http.Error(w, `{"error":"User already exists or registration is pending"}`, http.StatusConflict)
 		return
 	}
 
-	// Create User
 	user := &db.User{
 		ID:                 req.Email,
 		Email:              req.Email,

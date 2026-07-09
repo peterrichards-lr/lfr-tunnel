@@ -61,7 +61,6 @@ func CheckForUpdate(currentVersion string) (string, error) {
 }
 
 // SelfUpgrade performs the update process.
-// SelfUpgrade performs the update process.
 func SelfUpgrade(currentVersion string, serverURL string) error {
 	var downloadURL string
 	var checksumsURL string

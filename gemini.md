@@ -814,6 +814,13 @@ The solution will consist of:
 - [x] Configure cleanup handler callback to restore `os.Stderr` and release resource file descriptors on close.
 - [x] Update `TestRedirectChiselLogger` to verify logger interception and parsing state transitions.
 - [x] Verify all unit tests pass successfully.
+## Implement Cryptographic Signature Verification for Self-Upgrades (v1.23.11) - Issue #409
+- [x] Import `go-minisign` library.
+- [x] Declare `MinisignPublicKey` variable in `pkg/client/upgrade.go` containing the default release signature verification public key.
+- [x] Download signature file `checksums.txt.minisig` during self-upgrade process.
+- [x] Verify signature of `checksums.txt` file content using the public key before reading it.
+- [x] Abort upgrade if signature is invalid/tampered or parsing fails.
+- [x] Add unit tests covering successful verification and invalid signature verification aborts.
 
 <!-- markdownlint-disable MD049 -->
 ---

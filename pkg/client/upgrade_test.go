@@ -12,7 +12,12 @@ import (
 	"runtime"
 	"strings"
 	"testing"
+
+	"github.com/jedisct1/go-minisign"
 )
+
+const testSK = `untrusted comment: minisign encrypted secret key
+RWQAAEIyAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAOItWpGuGQbG4C9WXaxEYLgZ2xxuqfbuZmDgAhQ8Unot8t7SyxZ0nVh0gESesJ6Ay57fGFJ9T1ajVmanT7MFMCCDbPZ8uqDcSAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=`
 
 func TestCheckForUpdate_NewerVersion(t *testing.T) {
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -100,6 +105,10 @@ func TestSelfUpgrade(t *testing.T) {
 						Name:        "checksums.txt",
 						DownloadURL: fmt.Sprintf("http://%s/download/checksums", r.Host),
 					},
+					{
+						Name:        "checksums.txt.minisig",
+						DownloadURL: fmt.Sprintf("http://%s/download/signature", r.Host),
+					},
 				},
 			}
 			_ = json.NewEncoder(w).Encode(rel)
@@ -115,6 +124,28 @@ func TestSelfUpgrade(t *testing.T) {
 			h := sha256.Sum256([]byte("fake-binary-new-content"))
 			hexHash := hex.EncodeToString(h[:])
 			_, _ = fmt.Fprintf(w, "%s  %s\n", hexHash, assetName)
+			return
+		}
+
+		if r.URL.Path == "/download/signature" {
+			w.WriteHeader(http.StatusOK)
+			sk, err := minisign.DecodePrivateKey(testSK)
+			if err != nil {
+				t.Fatalf("failed to decode private key: %v", err)
+			}
+			assetName := fmt.Sprintf("lfr-tunnel-%s-%s", runtime.GOOS, runtime.GOARCH)
+			if runtime.GOOS == "windows" {
+				assetName += ".exe"
+			}
+			h := sha256.Sum256([]byte("fake-binary-new-content"))
+			hexHash := hex.EncodeToString(h[:])
+			checksumsText := fmt.Sprintf("%s  %s\n", hexHash, assetName)
+
+			sig, err := sk.Sign([]byte(checksumsText), minisign.SignOptions{Hashed: true})
+			if err != nil {
+				t.Fatalf("failed to sign checksums: %v", err)
+			}
+			_, _ = w.Write(sig.Encode())
 			return
 		}
 
@@ -188,6 +219,10 @@ func TestSelfUpgrade_ChecksumMismatch(t *testing.T) {
 						Name:        "checksums.txt",
 						DownloadURL: fmt.Sprintf("http://%s/download/checksums", r.Host),
 					},
+					{
+						Name:        "checksums.txt.minisig",
+						DownloadURL: fmt.Sprintf("http://%s/download/signature", r.Host),
+					},
 				},
 			}
 			_ = json.NewEncoder(w).Encode(rel)
@@ -202,6 +237,27 @@ func TestSelfUpgrade_ChecksumMismatch(t *testing.T) {
 			}
 			// Write an incorrect checksum
 			_, _ = fmt.Fprintf(w, "%s  %s\n", "badchecksum1234567890", assetName)
+			return
+		}
+
+		if r.URL.Path == "/download/signature" {
+			w.WriteHeader(http.StatusOK)
+			sk, err := minisign.DecodePrivateKey(testSK)
+			if err != nil {
+				t.Fatalf("failed to decode private key: %v", err)
+			}
+			assetName := fmt.Sprintf("lfr-tunnel-%s-%s", runtime.GOOS, runtime.GOARCH)
+			if runtime.GOOS == "windows" {
+				assetName += ".exe"
+			}
+			// Sign exactly the bad checksums content we serve above
+			checksumsText := fmt.Sprintf("%s  %s\n", "badchecksum1234567890", assetName)
+
+			sig, err := sk.Sign([]byte(checksumsText), minisign.SignOptions{Hashed: true})
+			if err != nil {
+				t.Fatalf("failed to sign checksums: %v", err)
+			}
+			_, _ = w.Write(sig.Encode())
 			return
 		}
 
@@ -316,6 +372,24 @@ func TestSelfUpgrade_GatewayFirst(t *testing.T) {
 			return
 		}
 
+		if r.URL.Path == "/static/downloads/checksums.txt.minisig" {
+			w.WriteHeader(http.StatusOK)
+			sk, err := minisign.DecodePrivateKey(testSK)
+			if err != nil {
+				t.Fatalf("failed to decode private key: %v", err)
+			}
+			h := sha256.Sum256([]byte("fake-binary-new-content"))
+			hexHash := hex.EncodeToString(h[:])
+			checksumsText := fmt.Sprintf("%s  lfr-tunnel-fake\n", hexHash)
+
+			sig, err := sk.Sign([]byte(checksumsText), minisign.SignOptions{Hashed: true})
+			if err != nil {
+				t.Fatalf("failed to sign checksums: %v", err)
+			}
+			_, _ = w.Write(sig.Encode())
+			return
+		}
+
 		if r.URL.Path == "/static/downloads/lfr-tunnel-fake" {
 			w.WriteHeader(http.StatusOK)
 			_, _ = w.Write([]byte("fake-binary-new-content"))
@@ -393,4 +467,98 @@ func TestCheckServerCompatibility(t *testing.T) {
 	}))
 	defer ts.Close()
 	_, _ = CheckServerCompatibility(ts.URL) //nolint:errcheck
+}
+
+func TestSelfUpgrade_InvalidSignature(t *testing.T) {
+	tmpDir, err := os.MkdirTemp("", "lfr-tunnel-test-*")
+	if err != nil {
+		t.Fatalf("failed to create temp dir: %v", err)
+	}
+	defer os.RemoveAll(tmpDir) //nolint:errcheck
+
+	execFilename := "lfr-tunnel-fake"
+	if runtime.GOOS == "windows" {
+		execFilename += ".exe"
+	}
+	fakeExecPath := filepath.Join(tmpDir, execFilename)
+
+	if err := os.WriteFile(fakeExecPath, []byte("fake-binary-old-content"), 0755); err != nil {
+		t.Fatalf("failed to write fake binary: %v", err)
+	}
+
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path == "/repos/peterrichards-lr/lfr-tunnel/releases/latest" {
+			w.Header().Set("Content-Type", "application/json")
+			assetName := fmt.Sprintf("lfr-tunnel-%s-%s", runtime.GOOS, runtime.GOARCH)
+			if runtime.GOOS == "windows" {
+				assetName += ".exe"
+			}
+			rel := Release{
+				TagName: "v1.0.3",
+				Assets: []struct {
+					Name        string `json:"name"`
+					DownloadURL string `json:"browser_download_url"`
+				}{
+					{
+						Name:        assetName,
+						DownloadURL: fmt.Sprintf("http://%s/download/asset", r.Host),
+					},
+					{
+						Name:        "checksums.txt",
+						DownloadURL: fmt.Sprintf("http://%s/download/checksums", r.Host),
+					},
+					{
+						Name:        "checksums.txt.minisig",
+						DownloadURL: fmt.Sprintf("http://%s/download/signature", r.Host),
+					},
+				},
+			}
+			_ = json.NewEncoder(w).Encode(rel)
+			return
+		}
+
+		if r.URL.Path == "/download/checksums" {
+			w.WriteHeader(http.StatusOK)
+			assetName := fmt.Sprintf("lfr-tunnel-%s-%s", runtime.GOOS, runtime.GOARCH)
+			if runtime.GOOS == "windows" {
+				assetName += ".exe"
+			}
+			h := sha256.Sum256([]byte("fake-binary-new-content"))
+			hexHash := hex.EncodeToString(h[:])
+			_, _ = fmt.Fprintf(w, "%s  %s\n", hexHash, assetName)
+			return
+		}
+
+		if r.URL.Path == "/download/signature" {
+			w.WriteHeader(http.StatusOK)
+			// Return a garbage/invalid signature string!
+			_, _ = w.Write([]byte("untrusted comment: minisign signature\nGARBAGESIGNATUREBASE64"))
+			return
+		}
+
+		if r.URL.Path == "/download/asset" {
+			w.WriteHeader(http.StatusOK)
+			_, _ = w.Write([]byte("fake-binary-new-content"))
+			return
+		}
+
+		w.WriteHeader(http.StatusNotFound)
+	}))
+	defer srv.Close()
+
+	oldBase := githubAPIBase
+	githubAPIBase = srv.URL
+	defer func() { githubAPIBase = oldBase }()
+
+	targetExecPath = fakeExecPath
+	defer func() { targetExecPath = "" }()
+
+	err = SelfUpgrade("v1.0.2", "")
+	if err == nil {
+		t.Fatal("expected SelfUpgrade to fail due to invalid signature, but it succeeded")
+	}
+
+	if !strings.Contains(err.Error(), "signature verification failed") && !strings.Contains(err.Error(), "failed to decode signature") {
+		t.Errorf("expected signature verification or decoding failure, got: %v", err)
+	}
 }

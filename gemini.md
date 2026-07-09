@@ -801,6 +801,7 @@ The solution will consist of:
 ## Add Health Check Configurations to Liferay Compose Stack (v1.23.13) - Issue #411
 - [x] Add lightweight curl-based healthcheck to Liferay container service block in `liferay-ai-commerce-accelerator/docker-compose.yml`.
 - [x] Verify Docker Compose syntax.
+
 ## Implement Schema Migration Versioning System for SQLite (v1.23.12) - Issue #412
 - [x] Create `schema_version` table tracking schema changes.
 - [x] Implement transactional, version-checked migrations array.
@@ -812,6 +813,21 @@ The solution will consist of:
 - [x] Limit request body inspection strictly to write methods (POST, PUT, PATCH) and explicit form/JSON/XML content types.
 - [x] Implement fast substring check helpers to bypass regular expression evaluation for clean parameters/headers/bodies.
 - [x] Ensure that all server and WAF tests pass successfully.
+
+## Refactor Reflective Chisel Logger Hook to use Standard io.Writer Injection (v1.23.14) - Issue #406
+- [x] Remove `"reflect"` and `"unsafe"` dependencies from Chisel logger interception.
+- [x] Implement standard `os.Pipe` pipeline redirection wrapper for `os.Stderr`.
+- [x] Configure cleanup handler callback to restore `os.Stderr` and release resource file descriptors on close.
+- [x] Update `TestRedirectChiselLogger` to verify logger interception and parsing state transitions.
+- [x] Verify all unit tests pass successfully.
+
+## Implement Cryptographic Signature Verification for Self-Upgrades (v1.23.11) - Issue #409
+- [x] Import `go-minisign` library.
+- [x] Declare `MinisignPublicKey` variable in `pkg/client/upgrade.go` containing the default release signature verification public key.
+- [x] Download signature file `checksums.txt.minisig` during self-upgrade process.
+- [x] Verify signature of `checksums.txt` file content using the public key before reading it.
+- [x] Abort upgrade if signature is invalid/tampered or parsing fails.
+- [x] Add unit tests covering successful verification and invalid signature verification aborts.
 
 <!-- markdownlint-disable MD049 -->
 ---

@@ -12,11 +12,14 @@ import (
 	"runtime"
 	"strings"
 	"time"
+
+	"github.com/jedisct1/go-minisign"
 )
 
 var (
-	githubAPIBase  = "https://api.github.com"
-	targetExecPath = ""
+	githubAPIBase     = "https://api.github.com"
+	targetExecPath    = ""
+	MinisignPublicKey = "RWQ4i1aka4ZBsR0gESesJ6Ay57fGFJ9T1ajVmanT7MFMCCDbPZ8uqDcS"
 )
 
 // Release represents GitHub release metadata
@@ -62,6 +65,7 @@ func CheckForUpdate(currentVersion string) (string, error) {
 func SelfUpgrade(currentVersion string, serverURL string) error {
 	var downloadURL string
 	var checksumsURL string
+	var minisigURL string
 	var latest string
 	var expectedAsset string
 	var useGateway bool
@@ -128,6 +132,7 @@ func SelfUpgrade(currentVersion string, serverURL string) error {
 						}
 						// Dynamic checksum file served from the same static directory
 						checksumsURL = strings.TrimRight(serverURL, "/") + "/static/downloads/checksums.txt"
+						minisigURL = checksumsURL + ".minisig"
 						expectedAsset = platInfo.BinaryName
 						if expectedAsset == "" {
 							expectedAsset = fmt.Sprintf("lfr-tunnel-%s-%s", runtime.GOOS, runtime.GOARCH)
@@ -186,6 +191,8 @@ func SelfUpgrade(currentVersion string, serverURL string) error {
 				downloadURL = asset.DownloadURL
 			case "checksums.txt":
 				checksumsURL = asset.DownloadURL
+			case "checksums.txt.minisig":
+				minisigURL = asset.DownloadURL
 			}
 		}
 
@@ -214,6 +221,48 @@ func SelfUpgrade(currentVersion string, serverURL string) error {
 		return fmt.Errorf("failed to read release checksums content: %v", err)
 	}
 	chkResp.Body.Close() //nolint:errcheck
+
+	if minisigURL == "" {
+		minisigURL = checksumsURL + ".minisig"
+	}
+
+	fmt.Println("[Update] Fetching release checksum signature...")
+	sigResp, err := client.Get(minisigURL)
+	if err != nil {
+		return fmt.Errorf("failed to download release checksum signature: %v", err)
+	}
+	defer sigResp.Body.Close() //nolint:errcheck
+
+	if sigResp.StatusCode != http.StatusOK {
+		return fmt.Errorf("failed downloading signature: server returned status %d", sigResp.StatusCode)
+	}
+
+	sigContent, err := io.ReadAll(sigResp.Body)
+	if err != nil {
+		return fmt.Errorf("failed to read release checksum signature content: %v", err)
+	}
+	sigResp.Body.Close() //nolint:errcheck
+
+	// Verify the signature of the checksums file using the embedded public key
+	pubKey, err := minisign.NewPublicKey(MinisignPublicKey)
+	if err != nil {
+		return fmt.Errorf("failed to parse embedded public key: %v", err)
+	}
+
+	sig, err := minisign.DecodeSignature(string(sigContent))
+	if err != nil {
+		return fmt.Errorf("failed to decode signature: %v", err)
+	}
+
+	valid, err := pubKey.Verify(checksumsContent, sig)
+	if err != nil {
+		return fmt.Errorf("signature verification failed: %v", err)
+	}
+	if !valid {
+		return fmt.Errorf("signature verification failed: signature is invalid")
+	}
+
+	fmt.Println("[Update] Checksums file signature verified successfully.")
 
 	// Resolve running executable path
 	execPath := targetExecPath

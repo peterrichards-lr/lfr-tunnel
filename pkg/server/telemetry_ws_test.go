@@ -6,6 +6,7 @@ import (
 	"net/http/httptest"
 	"path/filepath"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 
@@ -136,4 +137,59 @@ func TestServer_TelemetryWS(t *testing.T) {
 	if bm, ok := msg3.Data["broadcast_message"].(string); !ok || bm != "Alert System Update" {
 		t.Errorf("expected broadcast message 'Alert System Update', got '%v'", msg3.Data["broadcast_message"])
 	}
+}
+
+func TestServer_TelemetryWS_ChannelCloseRace(t *testing.T) {
+	cfg := &config.ServerConfig{
+		Domains:                []string{"example.com"},
+		DisableBackupScheduler: true,
+	}
+	cfg.DBPath = filepath.Join(t.TempDir(), "test_ws_race.db")
+
+	srv, err := NewServer(cfg)
+	if err != nil {
+		t.Fatalf("failed to create server: %v", err)
+	}
+	defer srv.Stop()
+
+	// Create a dummy client without actual connection to isolate the channel logic
+	client := &wsClient{
+		server: srv,
+		userID: "test@example.com",
+		email:  "test@example.com",
+		send:   make(chan []byte, 2),
+		done:   make(chan struct{}),
+	}
+
+	srv.registerWSClient(client)
+
+	// Spin up multiple goroutines pushing telemetry and unregistering/closing the client
+	// to see if we can trigger any write-on-closed-channel panic.
+	var wg sync.WaitGroup
+	wg.Add(3)
+
+	go func() {
+		defer wg.Done()
+		for i := 0; i < 50; i++ {
+			srv.pushUserTelemetry(client)
+			time.Sleep(1 * time.Millisecond)
+		}
+	}()
+
+	go func() {
+		defer wg.Done()
+		for i := 0; i < 50; i++ {
+			srv.BroadcastTelemetry()
+			time.Sleep(1 * time.Millisecond)
+		}
+	}()
+
+	go func() {
+		defer wg.Done()
+		time.Sleep(10 * time.Millisecond)
+		srv.unregisterWSClient(client)
+		client.close()
+	}()
+
+	wg.Wait()
 }

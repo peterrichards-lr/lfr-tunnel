@@ -785,6 +785,12 @@ The solution will consist of:
 - [x] Review PR #415 (Wrap GDPR User Anonymization in a Database Transaction)
 - [x] Implement `scripts/pr-monitor.js` background polling helper.
 - [x] Start background PR monitoring loop.
+## Fix WebSocket Client Unregistration Channel Close Panic (v1.23.8) - Issue #407
+- [ ] Add `done chan struct{}` and `once sync.Once` to `wsClient` in `pkg/server/telemetry_ws.go`.
+- [ ] Implement thread-safe `close()` method on `wsClient`.
+- [ ] Remove `close(c.send)` from `unregisterWSClient` to prevent write-after-close panics.
+- [ ] Use `select` block in `pushUserTelemetry` and `writePump` to handle connection/done channel closure.
+- [ ] Verify unit tests pass.
 
 <!-- markdownlint-disable MD049 -->
 ---

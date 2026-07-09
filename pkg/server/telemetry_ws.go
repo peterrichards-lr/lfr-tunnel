@@ -6,6 +6,7 @@ import (
 	"log/slog"
 	"net/http"
 	"strings"
+	"sync"
 	"sync/atomic"
 	"time"
 
@@ -30,12 +31,23 @@ type wsClient struct {
 	role   string
 	email  string
 	send   chan []byte
+	done   chan struct{}
+	once   sync.Once
+}
+
+func (c *wsClient) close() {
+	c.once.Do(func() {
+		close(c.done)
+		if c.conn != nil {
+			_ = c.conn.Close()
+		}
+	})
 }
 
 func (c *wsClient) readPump() {
 	defer func() {
 		c.server.unregisterWSClient(c)
-		_ = c.conn.Close()
+		c.close()
 	}()
 	c.conn.SetReadLimit(512)
 	_ = c.conn.SetReadDeadline(time.Now().Add(60 * time.Second))
@@ -55,16 +67,14 @@ func (c *wsClient) writePump() {
 	ticker := time.NewTicker(30 * time.Second)
 	defer func() {
 		ticker.Stop()
-		_ = c.conn.Close()
+		c.close()
 	}()
 	for {
 		select {
-		case msg, ok := <-c.send:
+		case <-c.done:
+			return
+		case msg := <-c.send:
 			_ = c.conn.SetWriteDeadline(time.Now().Add(10 * time.Second))
-			if !ok {
-				_ = c.conn.WriteMessage(websocket.CloseMessage, []byte{})
-				return
-			}
 			w, err := c.conn.NextWriter(websocket.TextMessage)
 			if err != nil {
 				return
@@ -92,10 +102,7 @@ func (s *Server) registerWSClient(c *wsClient) {
 
 func (s *Server) unregisterWSClient(c *wsClient) {
 	s.wsMutex.Lock()
-	if _, ok := s.wsClients[c]; ok {
-		delete(s.wsClients, c)
-		close(c.send)
-	}
+	delete(s.wsClients, c)
 	s.wsMutex.Unlock()
 }
 
@@ -120,6 +127,7 @@ func (s *Server) handleTelemetryWS(w http.ResponseWriter, r *http.Request) {
 		role:   user.Role,
 		email:  user.Email,
 		send:   make(chan []byte, 256),
+		done:   make(chan struct{}),
 	}
 
 	s.registerWSClient(client)
@@ -311,10 +319,12 @@ func (s *Server) pushUserTelemetry(c *wsClient) {
 	}
 
 	select {
+	case <-c.done:
+		return
 	case c.send <- msg:
 	default:
 		// Client is slow, drop connection
-		_ = c.conn.Close()
+		c.close()
 	}
 }
 

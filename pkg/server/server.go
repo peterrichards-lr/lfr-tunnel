@@ -152,6 +152,7 @@ type Server struct {
 	edgeHealthMu       sync.RWMutex
 	outboundConnected  bool
 	outboundMutex      sync.RWMutex
+	userCache          sync.Map // email -> *db.User cache to prevent SQLite read contention
 }
 
 // NewServer initializes and returns a new Server instance.

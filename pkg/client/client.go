@@ -8,19 +8,16 @@ import (
 	"io"
 	"io/fs"
 	"lfr-tunnel/pkg/config"
-	"log"
 	"log/slog"
 	"net"
 	"net/http"
 	"net/url"
 	"os"
 	"path/filepath"
-	"reflect"
 	"regexp"
 	"strconv"
 	"strings"
 	"time"
-	"unsafe"
 
 	chclient "github.com/jpillora/chisel/client"
 	"gopkg.in/yaml.v3"
@@ -212,6 +209,13 @@ func RegisterTunnel(serverURL string, authToken string, subdomain string, custom
 
 // RunClient runs the embedded Chisel client.
 func RunClient(ctx context.Context, serverURL string, token string, remotes []string, publicURLs []string, engine *InterceptorEngine) error {
+	// Intercept logger to monitor connection state
+	cleanup, err := redirectChiselLogger(engine)
+	if err != nil {
+		return err
+	}
+	defer cleanup()
+
 	// 1. Ensure server URL starts with http/https
 	if !strings.HasPrefix(serverURL, "http") {
 		serverURL = "http://" + serverURL
@@ -231,9 +235,6 @@ func RunClient(ctx context.Context, serverURL string, token string, remotes []st
 	if err != nil {
 		return fmt.Errorf("failed to initialize chisel client: %v", err)
 	}
-
-	// Intercept logger to monitor connection state
-	redirectChiselLogger(c, engine)
 
 	// Log client status
 	slog.Info(fmt.Sprintf("[Client] Establised lease. Connecting tunnels to %s...", serverURL))
@@ -366,28 +367,31 @@ func (w *logParserWriter) parseMessage(msg string) {
 	}
 }
 
-func redirectChiselLogger(c *chclient.Client, engine *InterceptorEngine) {
-	if c == nil || c.Logger == nil {
-		return
+func redirectChiselLogger(engine *InterceptorEngine) (func(), error) {
+	r, w, err := os.Pipe()
+	if err != nil {
+		return nil, fmt.Errorf("failed to create pipe for stderr redirect: %w", err)
 	}
 
-	val := reflect.ValueOf(c.Logger).Elem()
-	loggerField := val.FieldByName("logger")
-	if !loggerField.IsValid() {
-		return
+	originalStderr := os.Stderr
+	os.Stderr = w
+
+	// Start a background goroutine to parse messages from pipe and write to originalStderr
+	go func() {
+		parser := &logParserWriter{
+			original: originalStderr,
+			engine:   engine,
+		}
+		_, _ = io.Copy(parser, r)
+	}()
+
+	cleanup := func() {
+		os.Stderr = originalStderr
+		_ = w.Close()
+		_ = r.Close()
 	}
 
-	ptrPtr := (**log.Logger)(unsafe.Pointer(loggerField.UnsafeAddr()))
-	if ptrPtr == nil || *ptrPtr == nil {
-		return
-	}
-	ptr := *ptrPtr
-
-	parser := &logParserWriter{
-		original: os.Stderr,
-		engine:   engine,
-	}
-	ptr.SetOutput(parser)
+	return cleanup, nil
 }
 
 // IsLiferayWorkspace checks if a directory contains structural signals of a Liferay workspace

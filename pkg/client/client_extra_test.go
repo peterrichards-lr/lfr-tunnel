@@ -2,6 +2,7 @@ package client
 
 import (
 	"context"
+	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -51,7 +52,14 @@ func TestIsPIDRunning(t *testing.T) {
 }
 
 func TestRedirectChiselLogger(t *testing.T) {
-	redirectChiselLogger(nil, nil)
+	engine := &InterceptorEngine{}
+	cleanup, err := redirectChiselLogger(engine)
+	if err != nil {
+		t.Fatalf("failed to redirect: %v", err)
+	}
+	defer cleanup()
+
+	_, _ = fmt.Fprintln(os.Stderr, "Connected (Latency 15ms)")
 }
 
 func TestRunLogin(t *testing.T) {

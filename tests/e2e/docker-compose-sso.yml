@@ -30,6 +30,8 @@ services:
   # 2. Mailpit SMTP catcher (for any server-side emails)
   mailpit:
     image: axllent/mailpit
+    ports:
+      - "${E2E_MAILPIT_PORT:-8025}:8025"
     expose:
       - "1025"
 

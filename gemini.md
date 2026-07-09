@@ -835,6 +835,11 @@ The solution will consist of:
 - [x] Dynamically patch and restore Keycloak realm redirect URIs on execution callback setups.
 - [x] Verify standard and SSO E2E test suites pass successfully.
 
+## Prune Redundant and Duplicate Code Comments (v1.30.3)
+- [x] Remove duplicate SelfUpgrade comment block in `pkg/client/upgrade.go`.
+- [x] Remove redundant database check and user creation comments in `pkg/server/server.go`.
+- [x] Verify compilation and run all tests (`make test`).
+
 <!-- markdownlint-disable MD049 -->
 ---
 *Last Updated: 2026-07-09* | *Last Reviewed: 2026-07-09*

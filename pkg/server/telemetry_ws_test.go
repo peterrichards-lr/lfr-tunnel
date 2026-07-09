@@ -193,3 +193,61 @@ func TestServer_TelemetryWS_ChannelCloseRace(t *testing.T) {
 
 	wg.Wait()
 }
+
+func TestServer_TelemetryCache(t *testing.T) {
+	cfg := &config.ServerConfig{
+		Domains:                []string{"example.com"},
+		DisableBackupScheduler: true,
+	}
+	cfg.DBPath = filepath.Join(t.TempDir(), "test_cache.db")
+
+	srv, err := NewServer(cfg)
+	if err != nil {
+		t.Fatalf("failed to create server: %v", err)
+	}
+	defer srv.Stop()
+
+	email := "cachetest@example.com"
+	user := &db.User{
+		ID:        email,
+		Email:     email,
+		FirstName: "Initial",
+		Role:      "user",
+		Status:    "approved",
+	}
+	_ = srv.db.CreateUser(user)
+
+	// 1. Initial lookup - should cache the user
+	u1, err := srv.getCachedUser(email)
+	if err != nil {
+		t.Fatalf("failed to get cached user: %v", err)
+	}
+	if u1.FirstName != "Initial" {
+		t.Errorf("expected first name 'Initial', got '%s'", u1.FirstName)
+	}
+
+	// 2. Modify DB directly (without updating cache)
+	user.FirstName = "Modified"
+	_ = srv.db.UpdateUser(user)
+
+	// 3. Second lookup - should hit cache and still return 'Initial'
+	u2, err := srv.getCachedUser(email)
+	if err != nil {
+		t.Fatalf("failed to get cached user: %v", err)
+	}
+	if u2.FirstName != "Initial" {
+		t.Errorf("expected cached hit to return old name 'Initial', got '%s'", u2.FirstName)
+	}
+
+	// 4. Invalidate cache
+	srv.invalidateUserCache(email)
+
+	// 5. Third lookup - should query DB and return 'Modified'
+	u3, err := srv.getCachedUser(email)
+	if err != nil {
+		t.Fatalf("failed to get cached user: %v", err)
+	}
+	if u3.FirstName != "Modified" {
+		t.Errorf("expected cache miss to return updated name 'Modified', got '%s'", u3.FirstName)
+	}
+}

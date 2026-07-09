@@ -13,7 +13,7 @@ services:
   mailpit:
     image: axllent/mailpit
     ports:
-      - "8025:8025" # Web UI / REST API
+      - "${E2E_MAILPIT_PORT:-8025}:8025" # Web UI / REST API
     expose:
       - "1025" # SMTP Port
 
@@ -43,7 +43,7 @@ services:
     volumes:
       - ./nginx.conf:/etc/nginx/nginx.conf:ro
     ports:
-      - "8000:80"
+      - "${E2E_PROXY_PORT:-8000}:80"
     networks:
       default:
         aliases:

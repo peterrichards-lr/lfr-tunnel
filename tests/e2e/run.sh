@@ -1,12 +1,30 @@
 #!/bin/bash
 set -e
 
-# Fallback to "docker compose" if "docker-compose" is not installed
-if ! command -v docker-compose >/dev/null 2>&1; then
-    docker-compose() {
-        docker compose "$@"
-    }
+# Generate a unique project name to avoid container collisions between agents
+if [ -z "$E2E_PROJECT_NAME" ]; then
+    E2E_PROJECT_NAME="lfr-tunnel-e2e-$$"
 fi
+export E2E_PROJECT_NAME
+
+# Fallback to "docker compose" if "docker-compose" is not installed, wrapping with project name
+docker-compose() {
+    if docker compose version >/dev/null 2>&1; then
+        docker compose -p "$E2E_PROJECT_NAME" "$@"
+    else
+        command docker-compose -p "$E2E_PROJECT_NAME" "$@"
+    fi
+}
+
+# Resolve dynamic host ports to avoid port binding collisions
+if [ -z "$E2E_PROXY_PORT" ]; then
+    E2E_PROXY_PORT=$(python3 -c 'import socket; s=socket.socket(); s.bind(("", 0)); print(s.getsockname()[1]); s.close()')
+fi
+if [ -z "$E2E_MAILPIT_PORT" ]; then
+    E2E_MAILPIT_PORT=$(python3 -c 'import socket; s=socket.socket(); s.bind(("", 0)); print(s.getsockname()[1]); s.close()')
+fi
+export E2E_PROXY_PORT
+export E2E_MAILPIT_PORT
 
 # Change directory to script location
 CDPATH= cd -- "$(dirname -- "$0")"
@@ -50,7 +68,7 @@ echo "WAITING_HEALTHY" > "$SIGNAL_FILE"
 # Wait for Mailpit to be fully online
 echo "=== Waiting for Mailpit to be ready ==="
 for i in {1..15}; do
-    if curl -s http://localhost:8025/api/v1/messages > /dev/null; then
+    if curl -s http://localhost:$E2E_MAILPIT_PORT/api/v1/messages > /dev/null; then
         echo "Mailpit is ready!"
         break
     fi
@@ -61,7 +79,7 @@ done
 # Wait for Nginx proxy to be fully online
 echo "=== Waiting for Nginx proxy to be ready ==="
 for i in {1..30}; do
-    if curl -s -f http://localhost:8000/api/domains > /dev/null; then
+    if curl -s -f http://localhost:$E2E_PROXY_PORT/api/domains > /dev/null; then
         echo "Nginx proxy is ready!"
         break
     fi
@@ -74,7 +92,7 @@ echo "=== Submitting registration request ==="
 echo "TESTING" > "$SIGNAL_FILE"
 REG_REQ_RESP=$(curl -s -X POST -H "Content-Type: application/json" \
      -d '{"email": "developer@lfr-demo.local", "requested_subdomain": "peter-dev"}' \
-     "http://localhost:8000/api/register-request")
+     "http://localhost:$E2E_PROXY_PORT/api/register-request")
 
 echo "Registration request response: $REG_REQ_RESP"
 sleep 2
@@ -82,15 +100,16 @@ sleep 2
 # 2. Extract verification token from Mailpit
 echo "=== Extracting verification token ==="
 VERIFICATION_TOKEN=$(python3 -c '
-import urllib.request, json, re
+import urllib.request, json, re, os
+port = os.environ.get("E2E_MAILPIT_PORT", "8025")
 try:
-    data = json.loads(urllib.request.urlopen("http://localhost:8025/api/v1/messages").read())
+    data = json.loads(urllib.request.urlopen(f"http://localhost:{port}/api/v1/messages").read())
     if not data["messages"]:
         print("")
         exit(0)
     for m in data["messages"]:
         msg_id = m.get("ID")
-        msg = json.loads(urllib.request.urlopen("http://localhost:8025/api/v1/message/" + msg_id).read())
+        msg = json.loads(urllib.request.urlopen(f"http://localhost:{port}/api/v1/message/" + msg_id).read())
         body = (msg.get("HTML") or "") + "\n" + (msg.get("Text") or "")
         match = re.search(r"setup\?token=([a-f0-9A-Z]+)", body, re.IGNORECASE)
         if match:
@@ -108,7 +127,7 @@ if [ -z "$VERIFICATION_TOKEN" ]; then
     echo "=== lfr-tunneld logs ==="
     docker-compose logs lfr-tunneld
     echo "=== Mailpit messages ==="
-    curl -s http://localhost:8025/api/v1/messages
+    curl -s http://localhost:$E2E_MAILPIT_PORT/api/v1/messages
     docker-compose down -v
     exit 1
 fi
@@ -116,7 +135,7 @@ echo "Extracted Verification Token: $VERIFICATION_TOKEN"
 
 # 2.5. Call Verification endpoint
 echo "=== Verifying developer email ==="
-VERIFY_RESP=$(curl -s "http://localhost:8000/api/verify-email?token=${VERIFICATION_TOKEN}")
+VERIFY_RESP=$(curl -s "http://localhost:$E2E_PROXY_PORT/api/verify-email?token=${VERIFICATION_TOKEN}")
 echo "Verify response: $VERIFY_RESP"
 sleep 2
 
@@ -124,15 +143,16 @@ sleep 2
 # 3. Extract admin approval token from Mailpit
 echo "=== Extracting admin approval token ==="
 APPROVAL_TOKEN=$(python3 -c '
-import urllib.request, json, re
+import urllib.request, json, re, os
+port = os.environ.get("E2E_MAILPIT_PORT", "8025")
 try:
-    data = json.loads(urllib.request.urlopen("http://localhost:8025/api/v1/messages").read())
+    data = json.loads(urllib.request.urlopen(f"http://localhost:{port}/api/v1/messages").read())
     if not data["messages"]:
         print("")
         exit(0)
     for m in data["messages"]:
         msg_id = m.get("ID")
-        msg = json.loads(urllib.request.urlopen("http://localhost:8025/api/v1/message/" + msg_id).read())
+        msg = json.loads(urllib.request.urlopen(f"http://localhost:{port}/api/v1/message/" + msg_id).read())
         body = (msg.get("HTML") or "") + "\n" + (msg.get("Text") or "")
         match = re.search(r"approve\?email=[^&]+&token=([a-f0-9]+)", body)
         if match:
@@ -154,19 +174,20 @@ echo "Extracted Approval Token: $APPROVAL_TOKEN"
 
 # 3.5. Call Admin Approval endpoint
 echo "=== Approving developer request ==="
-APPROVE_RESP=$(curl -s "http://localhost:8000/api/admin/approve?email=developer@lfr-demo.local&token=${APPROVAL_TOKEN}")
+APPROVE_RESP=$(curl -s "http://localhost:$E2E_PROXY_PORT/api/admin/approve?email=developer@lfr-demo.local&token=${APPROVAL_TOKEN}")
 echo "Approval response: $APPROVE_RESP"
 sleep 2
 
 # 4. Extract claim token from Mailpit
 echo "=== Extracting token claim token ==="
 CLAIM_TOKEN=$(python3 -c '
-import urllib.request, json, re
+import urllib.request, json, re, os
+port = os.environ.get("E2E_MAILPIT_PORT", "8025")
 try:
-    data = json.loads(urllib.request.urlopen("http://localhost:8025/api/v1/messages").read())
+    data = json.loads(urllib.request.urlopen(f"http://localhost:{port}/api/v1/messages").read())
     for m in data["messages"]:
         msg_id = m.get("ID")
-        msg = json.loads(urllib.request.urlopen("http://localhost:8025/api/v1/message/" + msg_id).read())
+        msg = json.loads(urllib.request.urlopen(f"http://localhost:{port}/api/v1/message/" + msg_id).read())
         body = (msg.get("HTML") or "") + "\n" + (msg.get("Text") or "")
         match = re.search(r"claim\?token=([a-f0-9]+)", body)
         if match:
@@ -184,7 +205,7 @@ if [ -z "$CLAIM_TOKEN" ]; then
     echo "=== lfr-tunneld logs ==="
     docker-compose logs lfr-tunneld
     echo "=== Mailpit messages ==="
-    curl -s http://localhost:8025/api/v1/messages
+    curl -s http://localhost:$E2E_MAILPIT_PORT/api/v1/messages
     docker-compose down -v
     exit 1
 fi
@@ -192,7 +213,7 @@ echo "Extracted Claim Token: $CLAIM_TOKEN"
 
 # 5. Claim Personal Access Token (PAT)
 echo "=== Claiming Personal Access Token (PAT) ==="
-CLAIM_RESP=$(curl -s "http://localhost:8000/api/claim?token=${CLAIM_TOKEN}")
+CLAIM_RESP=$(curl -s "http://localhost:$E2E_PROXY_PORT/api/claim?token=${CLAIM_TOKEN}")
 echo "Claim response: $CLAIM_RESP"
 
 DEVELOPER_PAT=$(echo "$CLAIM_RESP" | python3 -c '
@@ -215,16 +236,17 @@ echo "Developer PAT claimed successfully: $DEVELOPER_PAT"
 echo "=== Requesting magic link for developer ==="
 curl -s -X POST -H "Content-Type: application/json" \
      -d '{"email": "developer@lfr-demo.local"}' \
-     "http://localhost:8000/api/auth/magic-link"
+     "http://localhost:$E2E_PROXY_PORT/api/auth/magic-link"
 sleep 2
 
 echo "=== Extracting developer magic link token ==="
 DEV_ML_TOKEN=$(python3 -c '
-import urllib.request, json, re
+import urllib.request, json, re, os
+port = os.environ.get("E2E_MAILPIT_PORT", "8025")
 try:
-    data = json.loads(urllib.request.urlopen("http://localhost:8025/api/v1/messages").read())
+    data = json.loads(urllib.request.urlopen(f"http://localhost:{port}/api/v1/messages").read())
     for m in (data.get("messages") or []):
-        msg = json.loads(urllib.request.urlopen("http://localhost:8025/api/v1/message/" + m["ID"]).read())
+        msg = json.loads(urllib.request.urlopen(f"http://localhost:{port}/api/v1/message/" + m["ID"]).read())
         body = msg.get("Text","") or msg.get("HTML","")
         match = re.search(r"token=([a-f0-9]+)", body, re.IGNORECASE)
         if match:
@@ -244,12 +266,12 @@ echo "Developer Magic Link Token: $DEV_ML_TOKEN"
 echo "=== Logging in to Portal to establish session ==="
 curl -s -c /tmp/dev-session.txt -X POST -H "Content-Type: application/json" \
      -d "{\"token\": \"$DEV_ML_TOKEN\"}" \
-     "http://localhost:8000/api/auth/verify"
+     "http://localhost:$E2E_PROXY_PORT/api/auth/verify"
 
 echo "=== Reserving subdomain peter-dev ==="
 RESERVE_RESP=$(curl -s -b /tmp/dev-session.txt -X POST -H "Content-Type: application/json" \
      -d '{"subdomain": "peter-dev", "domain": "lfr-demo.local"}' \
-     "http://localhost:8000/api/portal/reservations")
+     "http://localhost:$E2E_PROXY_PORT/api/portal/reservations")
 echo "Reservation response: $RESERVE_RESP"
 
 # 6. Start the Client Tunnel inside the container with the PAT using docker-compose run
@@ -268,7 +290,7 @@ echo "Client container ID: $CLIENT_CONTAINER_ID"
 echo "=== Waiting for tunnel connection ==="
 TUNNEL_READY=false
 for i in {1..20}; do
-    RESPONSE_CODE=$(curl -s -o /dev/null -w "%{http_code}" -H "Host: peter-dev.lfr-demo.local" http://localhost:8000/ || true)
+    RESPONSE_CODE=$(curl -s -o /dev/null -w "%{http_code}" -H "Host: peter-dev.lfr-demo.local" http://localhost:$E2E_PROXY_PORT/ || true)
     if [ "$RESPONSE_CODE" = "200" ]; then
         echo "Tunnel is ready!"
         TUNNEL_READY=true
@@ -294,7 +316,7 @@ docker logs "$CLIENT_CONTAINER_ID"
 
 # 7. Query mock target subdomain through nginx-proxy
 echo "=== Verifying routing through tunnel ==="
-RESPONSE=$(curl -s -H "Host: peter-dev.lfr-demo.local" http://localhost:8000/)
+RESPONSE=$(curl -s -H "Host: peter-dev.lfr-demo.local" http://localhost:$E2E_PROXY_PORT/)
 
 echo "=== Response received ==="
 echo "$RESPONSE"

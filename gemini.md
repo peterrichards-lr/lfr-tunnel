@@ -829,6 +829,12 @@ The solution will consist of:
 - [x] Abort upgrade if signature is invalid/tampered or parsing fails.
 - [x] Add unit tests covering successful verification and invalid signature verification aborts.
 
+## Prevent E2E Docker Ports and Containers Collisions (v1.30.2)
+- [x] Configure dynamic port assignment for Nginx, Mailpit, and Keycloak in E2E compose files.
+- [x] Integrate process-level unique namespace (`E2E_PROJECT_NAME`) for concurrent agent executions.
+- [x] Dynamically patch and restore Keycloak realm redirect URIs on execution callback setups.
+- [x] Verify standard and SSO E2E test suites pass successfully.
+
 <!-- markdownlint-disable MD049 -->
 ---
 *Last Updated: 2026-07-09* | *Last Reviewed: 2026-07-09*

@@ -16,12 +16,34 @@ set -e
 #   7. Teardown
 # ==============================================================================
 
-# Fallback to "docker compose" if "docker-compose" is not installed
-if ! command -v docker-compose > /dev/null 2>&1; then
-    docker-compose() {
-        docker compose "$@"
-    }
+# Generate a unique project name to avoid container collisions between agents
+if [ -z "$E2E_PROJECT_NAME" ]; then
+    E2E_PROJECT_NAME="lfr-tunnel-e2e-sso-$$"
 fi
+export E2E_PROJECT_NAME
+
+# Fallback to "docker compose" if "docker-compose" is not installed, wrapping with project name
+docker-compose() {
+    if docker compose version >/dev/null 2>&1; then
+        docker compose -p "$E2E_PROJECT_NAME" "$@"
+    else
+        command docker-compose -p "$E2E_PROJECT_NAME" "$@"
+    fi
+}
+
+# Resolve dynamic host ports to avoid port binding collisions
+if [ -z "$E2E_PROXY_PORT" ]; then
+    E2E_PROXY_PORT=$(python3 -c 'import socket; s=socket.socket(); s.bind(("", 0)); print(s.getsockname()[1]); s.close()')
+fi
+if [ -z "$E2E_KEYCLOAK_PORT" ]; then
+    E2E_KEYCLOAK_PORT=$(python3 -c 'import socket; s=socket.socket(); s.bind(("", 0)); print(s.getsockname()[1]); s.close()')
+fi
+if [ -z "$E2E_MAILPIT_PORT" ]; then
+    E2E_MAILPIT_PORT=$(python3 -c 'import socket; s=socket.socket(); s.bind(("", 0)); print(s.getsockname()[1]); s.close()')
+fi
+export E2E_PROXY_PORT
+export E2E_KEYCLOAK_PORT
+export E2E_MAILPIT_PORT
 
 CDPATH= cd -- "$(dirname -- "$0")"
 
@@ -34,6 +56,9 @@ echo "BUILDING" > "$SIGNAL_FILE"
 # Make sure we write FAILED or SUCCESS on exit
 cleanup() {
     EXIT_CODE=$?
+    if [ -f "keycloak-realm.json.bak" ]; then
+        mv keycloak-realm.json.bak keycloak-realm.json
+    fi
     if [ $EXIT_CODE -eq 0 ]; then
         echo "SUCCESS" > "$SIGNAL_FILE"
     else
@@ -43,8 +68,8 @@ cleanup() {
 trap cleanup EXIT INT TERM ERR
 
 COMPOSE_FILE="docker-compose-sso.yml"
-TUNNEL_BASE="http://localhost:8000"
-KEYCLOAK_BASE="http://localhost:8088"
+TUNNEL_BASE="http://localhost:$E2E_PROXY_PORT"
+KEYCLOAK_BASE="http://localhost:$E2E_KEYCLOAK_PORT"
 KEYCLOAK_REALM="liferay"
 KEYCLOAK_CLIENT_ID="lfr-tunnel"
 KEYCLOAK_CLIENT_SECRET="secret"
@@ -72,6 +97,9 @@ echo ""
 
 # ── Clean previous run ────────────────────────────────────────────────────────
 docker-compose -f "$COMPOSE_FILE" down -v --remove-orphans || true
+
+# Dynamically update redirect URIs port to E2E_PROXY_PORT in keycloak-realm.json
+sed -i.bak "s/localhost:8000/localhost:$E2E_PROXY_PORT/g" keycloak-realm.json
 
 # ── Start environment ─────────────────────────────────────────────────────────
 echo "[1/7] Starting Docker environment (Keycloak, lfr-tunneld, nginx)..."
@@ -130,7 +158,7 @@ if [ -z "$KC_LOGIN_URL" ]; then
     fail "lfr-tunneld did not redirect to Keycloak login page. Is SSO configured?"
 fi
 echo "  Keycloak login URL obtained (${#KC_LOGIN_URL} chars)"
-KC_LOGIN_URL=$(echo "$KC_LOGIN_URL" | sed 's/keycloak:8080/localhost:8088/g')
+KC_LOGIN_URL=$(echo "$KC_LOGIN_URL" | sed "s/keycloak:8080/localhost:$E2E_KEYCLOAK_PORT/g")
 
 # 4b. Fetch the Keycloak login page HTML and extract the form action URL.
 #     Keycloak embeds a signed action URL that includes the session/tab IDs.
@@ -148,7 +176,7 @@ if [ -z "$KC_ACTION" ]; then
     fail "Could not extract Keycloak form action URL from login page HTML"
 fi
 echo "  Keycloak form action extracted"
-KC_ACTION=$(echo "$KC_ACTION" | sed 's/keycloak:8080/localhost:8088/g')
+KC_ACTION=$(echo "$KC_ACTION" | sed "s/keycloak:8080/localhost:$E2E_KEYCLOAK_PORT/g")
 
 # 4c. POST credentials to Keycloak login form.
 #     Keycloak will redirect back to our callback with ?code=...
@@ -223,9 +251,9 @@ sleep 2
 ADMIN_ML_TOKEN=$(python3 -c '
 import urllib.request, json, re
 try:
-    data = json.loads(urllib.request.urlopen("http://localhost:8025/api/v1/messages").read())
+    data = json.loads(urllib.request.urlopen("http://localhost:$E2E_MAILPIT_PORT/api/v1/messages").read())
     for m in (data.get("messages") or []):
-        msg = json.loads(urllib.request.urlopen("http://localhost:8025/api/v1/message/" + m["ID"]).read())
+        msg = json.loads(urllib.request.urlopen("http://localhost:$E2E_MAILPIT_PORT/api/v1/message/" + m["ID"]).read())
         body = msg.get("Text","")
         match = re.search(r"verify\?token=([a-f0-9]+)", body, re.IGNORECASE)
         if match:

@@ -783,8 +783,8 @@ The solution will consist of:
 ## Automated PR Review Agent Loop (v1.23.11)
 - [x] Review PR #414 (Fix WebSocket Client Unregistration Channel Close Panic)
 - [x] Review PR #415 (Wrap GDPR User Anonymization in a Database Transaction)
-- [ ] Implement `scripts/pr-monitor.js` background polling helper.
-- [ ] Start background PR monitoring loop.
+- [x] Implement `scripts/pr-monitor.js` background polling helper.
+- [x] Start background PR monitoring loop.
 
 <!-- markdownlint-disable MD049 -->
 ---

@@ -808,6 +808,11 @@ The solution will consist of:
 - [x] Add unit test `TestSchemaMigrationVersioning` to verify migration execution and downgrade logic.
 - [x] Verify database and server tests pass successfully.
 
+## Optimize WAF Regex Engines and Scan Boundaries to Mitigate ReDoS (v1.23.15) - Issue #413
+- [x] Limit request body inspection strictly to write methods (POST, PUT, PATCH) and explicit form/JSON/XML content types.
+- [x] Implement fast substring check helpers to bypass regular expression evaluation for clean parameters/headers/bodies.
+- [x] Ensure that all server and WAF tests pass successfully.
+
 <!-- markdownlint-disable MD049 -->
 ---
 *Last Updated: 2026-07-09* | *Last Reviewed: 2026-07-09*

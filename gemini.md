@@ -798,6 +798,10 @@ The solution will consist of:
 - [x] Invalidate or write through the cache upon user edits / new logins.
 - [x] Verify that all server tests pass successfully.
 
+## Add Health Check Configurations to Liferay Compose Stack (v1.23.13) - Issue #411
+- [x] Add lightweight curl-based healthcheck to Liferay container service block in `liferay-ai-commerce-accelerator/docker-compose.yml`.
+- [x] Verify Docker Compose syntax.
+
 <!-- markdownlint-disable MD049 -->
 ---
 *Last Updated: 2026-07-09* | *Last Reviewed: 2026-07-09*

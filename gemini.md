@@ -775,6 +775,16 @@ The solution will consist of:
 - [x] Refactor `cmd/lfr-tunnel/main.go` `main()` function to extract helper functions and reduce method size/complexity.
 - [x] Run unit and E2E tests to verify zero behavioral changes.
 
+## Wrap GDPR User Anonymization in a Database Transaction (v1.23.9) - Issue #410
+- [x] Implement database transaction inside `AnonymizeUserData` in `pkg/db/user.go`.
+- [x] Add rollback support if any individual UPDATE statement fails.
+- [x] Verify that all user database tests pass successfully.
+
+## Automated PR Review Agent Loop (v1.23.11)
+- [x] Review PR #414 (Fix WebSocket Client Unregistration Channel Close Panic)
+- [x] Review PR #415 (Wrap GDPR User Anonymization in a Database Transaction)
+- [x] Implement `scripts/pr-monitor.js` background polling helper.
+- [x] Start background PR monitoring loop.
 ## Fix WebSocket Client Unregistration Channel Close Panic (v1.23.8) - Issue #407
 - [ ] Add `done chan struct{}` and `once sync.Once` to `wsClient` in `pkg/server/telemetry_ws.go`.
 - [ ] Implement thread-safe `close()` method on `wsClient`.
@@ -785,3 +795,4 @@ The solution will consist of:
 <!-- markdownlint-disable MD049 -->
 ---
 *Last Updated: 2026-07-09* | *Last Reviewed: 2026-07-09*
+

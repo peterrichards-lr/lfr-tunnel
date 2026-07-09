@@ -978,3 +978,52 @@ func TestAnalyticsWithNullDates(t *testing.T) {
 		t.Errorf("expected global daily date to fallback to 'Unknown', got %q", globalStats.Daily[0].Date)
 	}
 }
+
+func TestAnonymizeUserDataTransaction(t *testing.T) {
+	database, tmpDir := setupTestDB(t)
+	defer cleanupTestDB(database, tmpDir)
+
+	// Create user
+	userID := "test-user-gdpr"
+	email := "test-gdpr@example.com"
+	user := &User{
+		ID:     userID,
+		Email:  email,
+		Role:   "user",
+		Status: "approved",
+	}
+	if err := database.CreateUser(user); err != nil {
+		t.Fatalf("failed to create user: %v", err)
+	}
+
+	// Insert a record into tunnel_audit_logs directly
+	_, err := database.conn.Exec("INSERT INTO tunnel_audit_logs (user_id, subdomain_prefix, ports, remote_ip) VALUES (?, ?, ?, ?)", userID, "sub", "8080", "127.0.0.1")
+	if err != nil {
+		t.Fatalf("failed to insert audit entry: %v", err)
+	}
+
+	// To simulate a database error/interruption mid-transaction:
+	// We can delete the admin_audit_log table, which will make the 3rd and 4th updates fail!
+	_, err = database.conn.Exec("DROP TABLE admin_audit_log")
+	if err != nil {
+		t.Fatalf("failed to drop table: %v", err)
+	}
+
+	// Now try to run AnonymizeUserData. It should fail and roll back!
+	err = database.AnonymizeUserData(userID, "anonymized-gdpr-id")
+	if err == nil {
+		t.Fatal("expected AnonymizeUserData to fail due to dropped table, but it succeeded")
+	}
+
+	// Since it rolled back, the first update (tunnel_metrics) or second update (tunnel_audit_logs)
+	// should have rolled back. Let's verify that the audit entry still has the original userID
+	// rather than the anonymized ID!
+	var count int
+	err = database.conn.QueryRow("SELECT COUNT(*) FROM tunnel_audit_logs WHERE user_id = ?", userID).Scan(&count)
+	if err != nil {
+		t.Fatalf("failed to query tunnel_audit_logs: %v", err)
+	}
+	if count != 1 {
+		t.Errorf("expected 1 audit entry for %q (rolled back), got %d", userID, count)
+	}
+}

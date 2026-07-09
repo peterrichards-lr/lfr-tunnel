@@ -805,6 +805,14 @@ The solution will consist of:
 - [x] Add unit test `TestSchemaMigrationVersioning` to verify migration execution and downgrade logic.
 - [x] Verify database and server tests pass successfully.
 
+## Implement Cryptographic Signature Verification for Self-Upgrades (v1.23.11) - Issue #409
+- [x] Import `go-minisign` library.
+- [x] Declare `MinisignPublicKey` variable in `pkg/client/upgrade.go` containing the default release signature verification public key.
+- [x] Download signature file `checksums.txt.minisig` during self-upgrade process.
+- [x] Verify signature of `checksums.txt` file content using the public key before reading it.
+- [x] Abort upgrade if signature is invalid/tampered or parsing fails.
+- [x] Add unit tests covering successful verification and invalid signature verification aborts.
+
 <!-- markdownlint-disable MD049 -->
 ---
 *Last Updated: 2026-07-09* | *Last Reviewed: 2026-07-09*

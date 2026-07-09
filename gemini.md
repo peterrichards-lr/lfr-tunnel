@@ -808,6 +808,13 @@ The solution will consist of:
 - [x] Add unit test `TestSchemaMigrationVersioning` to verify migration execution and downgrade logic.
 - [x] Verify database and server tests pass successfully.
 
+## Refactor Reflective Chisel Logger Hook to use Standard io.Writer Injection (v1.23.14) - Issue #406
+- [x] Remove `"reflect"` and `"unsafe"` dependencies from Chisel logger interception.
+- [x] Implement standard `os.Pipe` pipeline redirection wrapper for `os.Stderr`.
+- [x] Configure cleanup handler callback to restore `os.Stderr` and release resource file descriptors on close.
+- [x] Update `TestRedirectChiselLogger` to verify logger interception and parsing state transitions.
+- [x] Verify all unit tests pass successfully.
+
 <!-- markdownlint-disable MD049 -->
 ---
 *Last Updated: 2026-07-09* | *Last Reviewed: 2026-07-09*

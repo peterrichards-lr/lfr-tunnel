@@ -1,5 +1,9 @@
 package db
 
+import (
+	"strings"
+)
+
 // initSchema applies the core tables and runs inline migrations
 func (db *DB) initSchema() error {
 	schema := `
@@ -161,22 +165,73 @@ func (db *DB) initSchema() error {
 		return err
 	}
 
-	// Migrations
-	_, _ = db.conn.Exec("ALTER TABLE users ADD COLUMN verification_token TEXT")
-	_, _ = db.conn.Exec("ALTER TABLE users ADD COLUMN last_client_version TEXT")
-	_, _ = db.conn.Exec("ALTER TABLE users ADD COLUMN last_client_os TEXT")
-	_, _ = db.conn.Exec("ALTER TABLE users ADD COLUMN rate_limit INTEGER DEFAULT 0")
-	_, _ = db.conn.Exec("ALTER TABLE users ADD COLUMN max_reservations INTEGER DEFAULT NULL")
-	_, _ = db.conn.Exec("ALTER TABLE users ADD COLUMN max_active_tunnels INTEGER DEFAULT NULL")
-	_, _ = db.conn.Exec("ALTER TABLE subdomain_reservations ADD COLUMN extension_requested INTEGER DEFAULT 0")
-	_, _ = db.conn.Exec("ALTER TABLE subdomain_reservations ADD COLUMN passcode TEXT DEFAULT ''")
-	_, _ = db.conn.Exec("ALTER TABLE subdomain_reservations ADD COLUMN whitelist_ips TEXT DEFAULT ''")
-	_, _ = db.conn.Exec("ALTER TABLE subdomain_reservations ADD COLUMN access_mode TEXT DEFAULT 'or'")
-	_, _ = db.conn.Exec("ALTER TABLE subdomain_reservations ADD COLUMN expiry_warning_sent INTEGER DEFAULT 0")
-	_, _ = db.conn.Exec("ALTER TABLE tunnel_metrics ADD COLUMN node_id TEXT DEFAULT 'control'")
-	_, _ = db.conn.Exec("ALTER TABLE users ADD COLUMN onboarding_status TEXT NOT NULL DEFAULT 'pending'")
-	_, _ = db.conn.Exec("ALTER TABLE users ADD COLUMN onboarding_last_step TEXT DEFAULT ''")
-	_, _ = db.conn.Exec("ALTER TABLE users ADD COLUMN onboarding_reruns INTEGER NOT NULL DEFAULT 0")
+	// Create schema_version table if not exists
+	_, err = db.conn.Exec(`
+		CREATE TABLE IF NOT EXISTS schema_version (
+			version INTEGER PRIMARY KEY,
+			applied_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
+		);
+	`)
+	if err != nil {
+		return err
+	}
 
-	return nil
+	tx, err := db.conn.Begin()
+	if err != nil {
+		return err
+	}
+	defer func() {
+		_ = tx.Rollback()
+	}()
+
+	var currentVersion int
+	err = tx.QueryRow("SELECT COALESCE(MAX(version), 0) FROM schema_version").Scan(&currentVersion)
+	if err != nil {
+		return err
+	}
+
+	for _, m := range migrations {
+		if m.version <= currentVersion {
+			continue
+		}
+
+		_, err := tx.Exec(m.query)
+		if err != nil {
+			// If column already exists (e.g. legacy DB that had columns added ad-hoc),
+			// we skip error but still record the version to prevent future attempts.
+			if !strings.Contains(strings.ToLower(err.Error()), "duplicate column name") {
+				return err
+			}
+		}
+
+		_, err = tx.Exec("INSERT INTO schema_version (version) VALUES (?)", m.version)
+		if err != nil {
+			return err
+		}
+	}
+
+	return tx.Commit()
+}
+
+type migration struct {
+	version int
+	query   string
+}
+
+var migrations = []migration{
+	{1, "ALTER TABLE users ADD COLUMN verification_token TEXT"},
+	{2, "ALTER TABLE users ADD COLUMN last_client_version TEXT"},
+	{3, "ALTER TABLE users ADD COLUMN last_client_os TEXT"},
+	{4, "ALTER TABLE users ADD COLUMN rate_limit INTEGER DEFAULT 0"},
+	{5, "ALTER TABLE users ADD COLUMN max_reservations INTEGER DEFAULT NULL"},
+	{6, "ALTER TABLE users ADD COLUMN max_active_tunnels INTEGER DEFAULT NULL"},
+	{7, "ALTER TABLE subdomain_reservations ADD COLUMN extension_requested INTEGER DEFAULT 0"},
+	{8, "ALTER TABLE subdomain_reservations ADD COLUMN passcode TEXT DEFAULT ''"},
+	{9, "ALTER TABLE subdomain_reservations ADD COLUMN whitelist_ips TEXT DEFAULT ''"},
+	{10, "ALTER TABLE subdomain_reservations ADD COLUMN access_mode TEXT DEFAULT 'or'"},
+	{11, "ALTER TABLE subdomain_reservations ADD COLUMN expiry_warning_sent INTEGER DEFAULT 0"},
+	{12, "ALTER TABLE tunnel_metrics ADD COLUMN node_id TEXT DEFAULT 'control'"},
+	{13, "ALTER TABLE users ADD COLUMN onboarding_status TEXT NOT NULL DEFAULT 'pending'"},
+	{14, "ALTER TABLE users ADD COLUMN onboarding_last_step TEXT DEFAULT ''"},
+	{15, "ALTER TABLE users ADD COLUMN onboarding_reruns INTEGER NOT NULL DEFAULT 0"},
 }

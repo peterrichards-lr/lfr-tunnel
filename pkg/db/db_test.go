@@ -1027,3 +1027,52 @@ func TestAnonymizeUserDataTransaction(t *testing.T) {
 		t.Errorf("expected 1 audit entry for %q (rolled back), got %d", userID, count)
 	}
 }
+
+func TestSchemaMigrationVersioning(t *testing.T) {
+	database, tmpDir := setupTestDB(t)
+	defer cleanupTestDB(database, tmpDir)
+
+	// 1. Verify that schema_version table is created and populated with version 15
+	var maxVersion int
+	err := database.conn.QueryRow("SELECT COALESCE(MAX(version), 0) FROM schema_version").Scan(&maxVersion)
+	if err != nil {
+		t.Fatalf("failed to query schema_version: %v", err)
+	}
+	if maxVersion != 15 {
+		t.Errorf("expected max schema version to be 15, got %d", maxVersion)
+	}
+
+	// Count number of rows in schema_version. It should be 15.
+	var count int
+	err = database.conn.QueryRow("SELECT COUNT(*) FROM schema_version").Scan(&count)
+	if err != nil {
+		t.Fatalf("failed to count schema_version rows: %v", err)
+	}
+	if count != 15 {
+		t.Errorf("expected 15 applied migrations in table, got %d", count)
+	}
+
+	// 2. Manually delete version 15 from schema_version
+	_, err = database.conn.Exec("DELETE FROM schema_version WHERE version = 15")
+	if err != nil {
+		t.Fatalf("failed to delete migration version: %v", err)
+	}
+
+	// 3. Re-run initSchema. It should detect version 14 as current max,
+	// and try to re-run migration 15.
+	// Since the column 'onboarding_reruns' already exists, it will return "duplicate column name" error,
+	// which our migration system catches and handles by successfully marking it as applied again.
+	err = database.initSchema()
+	if err != nil {
+		t.Fatalf("re-running initSchema failed: %v", err)
+	}
+
+	// 4. Verify version 15 has been recorded as applied again
+	err = database.conn.QueryRow("SELECT COUNT(*) FROM schema_version WHERE version = 15").Scan(&count)
+	if err != nil {
+		t.Fatalf("failed to query schema_version for version 15: %v", err)
+	}
+	if count != 1 {
+		t.Errorf("expected migration 15 to be recorded as applied again, got %d", count)
+	}
+}

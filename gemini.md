@@ -775,9 +775,13 @@ The solution will consist of:
 - [x] Refactor `cmd/lfr-tunnel/main.go` `main()` function to extract helper functions and reduce method size/complexity.
 - [x] Run unit and E2E tests to verify zero behavioral changes.
 
-
-
+## Fix WebSocket Client Unregistration Channel Close Panic (v1.23.8) - Issue #407
+- [ ] Add `done chan struct{}` and `once sync.Once` to `wsClient` in `pkg/server/telemetry_ws.go`.
+- [ ] Implement thread-safe `close()` method on `wsClient`.
+- [ ] Remove `close(c.send)` from `unregisterWSClient` to prevent write-after-close panics.
+- [ ] Use `select` block in `pushUserTelemetry` and `writePump` to handle connection/done channel closure.
+- [ ] Verify unit tests pass.
 
 <!-- markdownlint-disable MD049 -->
 ---
-*Last Updated: 2026-07-08* | *Last Reviewed: 2026-07-08*
+*Last Updated: 2026-07-09* | *Last Reviewed: 2026-07-09*

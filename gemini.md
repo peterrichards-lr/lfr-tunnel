@@ -792,6 +792,13 @@ The solution will consist of:
 - [ ] Use `select` block in `pushUserTelemetry` and `writePump` to handle connection/done channel closure.
 - [ ] Verify unit tests pass.
 
+## Implement Schema Migration Versioning System for SQLite (v1.23.12) - Issue #412
+- [x] Create `schema_version` table tracking schema changes.
+- [x] Implement transactional, version-checked migrations array.
+- [x] Catch duplicate column name SQLite errors to support legacy databases.
+- [x] Add unit test `TestSchemaMigrationVersioning` to verify migration execution and downgrade logic.
+- [x] Verify database and server tests pass successfully.
+
 <!-- markdownlint-disable MD049 -->
 ---
 *Last Updated: 2026-07-09* | *Last Reviewed: 2026-07-09*

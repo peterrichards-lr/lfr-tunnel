@@ -2106,8 +2106,9 @@ func (s *Server) isValidToken(token string) (*db.User, bool) {
 				user, err := s.db.GetUser(pat.UserID)
 				if err == nil && user.Status == "approved" {
 					// Update last used asynchronously
+					dbConn := s.db
 					go func(patID int64) {
-						if err := s.db.UpdatePATUsed(patID); err != nil {
+						if err := dbConn.UpdatePATUsed(patID); err != nil {
 							slog.Info(fmt.Sprintf("[Server] Failed to update PAT last used time: %v", err))
 						}
 					}(pat.ID)
@@ -2139,9 +2140,10 @@ func (s *Server) writeAudit(actorID, action, targetType, targetID string, detail
 		Details:    details,
 		IPAddress:  r.RemoteAddr,
 	}
+	dbConn := s.db
 	// Run in a goroutine so it doesn't block the HTTP response
 	go func() {
-		if err := s.db.WriteAuditEntry(entry); err != nil {
+		if err := dbConn.WriteAuditEntry(entry); err != nil {
 			slog.Info(fmt.Sprintf("[Server] Failed to write audit log: %v", err))
 		}
 	}()

@@ -220,7 +220,6 @@ func SelfUpgrade(currentVersion string, serverURL string) error {
 	if err != nil {
 		return fmt.Errorf("failed to read release checksums content: %v", err)
 	}
-	chkResp.Body.Close() //nolint:errcheck
 
 	if minisigURL == "" {
 		minisigURL = checksumsURL + ".minisig"
@@ -241,7 +240,6 @@ func SelfUpgrade(currentVersion string, serverURL string) error {
 	if err != nil {
 		return fmt.Errorf("failed to read release checksum signature content: %v", err)
 	}
-	sigResp.Body.Close() //nolint:errcheck
 
 	// Verify the signature of the checksums file using the embedded public key
 	pubKey, err := minisign.NewPublicKey(MinisignPublicKey)

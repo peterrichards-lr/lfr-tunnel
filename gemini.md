@@ -786,11 +786,11 @@ The solution will consist of:
 - [x] Implement `scripts/pr-monitor.js` background polling helper.
 - [x] Start background PR monitoring loop.
 ## Fix WebSocket Client Unregistration Channel Close Panic (v1.23.8) - Issue #407
-- [ ] Add `done chan struct{}` and `once sync.Once` to `wsClient` in `pkg/server/telemetry_ws.go`.
-- [ ] Implement thread-safe `close()` method on `wsClient`.
-- [ ] Remove `close(c.send)` from `unregisterWSClient` to prevent write-after-close panics.
-- [ ] Use `select` block in `pushUserTelemetry` and `writePump` to handle connection/done channel closure.
-- [ ] Verify unit tests pass.
+- [x] Add `done chan struct{}` and `once sync.Once` to `wsClient` in `pkg/server/telemetry_ws.go`.
+- [x] Implement thread-safe `close()` method on `wsClient`.
+- [x] Remove `close(c.send)` from `unregisterWSClient` to prevent write-after-close panics.
+- [x] Use `select` block in `pushUserTelemetry` and `writePump` to handle connection/done channel closure.
+- [x] Verify unit tests pass.
 ## Cache User Telemetry Metadata to Prevent SQLite Read Contention (v1.23.10) - Issue #408
 - [x] Add `userCache sync.Map` to `Server` in `pkg/server/server.go`.
 - [x] Implement `getCachedUser(email)` helper method in `pkg/server/telemetry_ws.go`.

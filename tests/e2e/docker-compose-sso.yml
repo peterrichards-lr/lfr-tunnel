@@ -49,6 +49,12 @@ services:
         condition: service_healthy
       mailpit:
         condition: service_started
+    healthcheck:
+      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://127.0.0.1:8080/api/version"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+      start_period: 5s
 
   # 4. Nginx Reverse Proxy (VPS Mirror)
   nginx-proxy:
@@ -63,4 +69,5 @@ services:
           - tunnel.lfr-demo.local
           - lfr-demo.local
     depends_on:
-      - lfr-tunneld
+      lfr-tunneld:
+        condition: service_healthy

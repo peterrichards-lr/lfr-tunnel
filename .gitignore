@@ -38,3 +38,7 @@ tests/e2e/ui/playwright/.cache/
 
 # Local Release Scripts
 scripts/release-client-local.sh
+
+# Liferay Commerce Accelerator
+liferay-ai-commerce-accelerator/*
+!liferay-ai-commerce-accelerator/docker-compose.yml

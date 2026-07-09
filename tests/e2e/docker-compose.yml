@@ -30,6 +30,12 @@ services:
       - "8081"
     depends_on:
       - mailpit
+    healthcheck:
+      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://127.0.0.1:8080/api/version"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+      start_period: 5s
 
   # 4. Nginx Reverse Proxy (VPS Mirror)
   nginx-proxy:
@@ -44,7 +50,8 @@ services:
           - tunnel.lfr-demo.local
           - lfr-demo.local
     depends_on:
-      - lfr-tunneld
+      lfr-tunneld:
+        condition: service_healthy
 
   # 5. Client CLI Container
   lfr-tunnel:
@@ -57,4 +64,7 @@ services:
     # Stalled entrypoint so the container is running and we can execute commands inside it
     entrypoint: ["sleep", "infinity"]
     depends_on:
-      - nginx-proxy
+      nginx-proxy:
+        condition: service_started
+      lfr-tunneld:
+        condition: service_healthy

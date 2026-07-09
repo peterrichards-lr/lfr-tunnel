@@ -20,17 +20,34 @@ var (
 	cmdInjectionPattern = regexp.MustCompile(`(?i)(;|\&\&|\|\|)\s*(whoami|id|uname|cat|ls|ping|curl|wget)\b`)
 )
 
+func hasSQLPotential(s string) bool {
+	return strings.Contains(s, " ") || strings.Contains(s, "'") || strings.Contains(s, "--")
+}
+
+func hasXSSPotential(s string) bool {
+	return strings.Contains(s, "<") || strings.Contains(s, ":") || strings.Contains(s, "=")
+}
+
+func hasPathTraversalPotential(s string) bool {
+	return strings.Contains(s, "..") || strings.Contains(s, "passwd") || strings.Contains(s, "ini")
+}
+
+func hasCmdPotential(s string) bool {
+	return strings.Contains(s, ";") || strings.Contains(s, "&") || strings.Contains(s, "|")
+}
+
 // IsMaliciousRequest scans the request parameters, headers, and body for common exploit signatures.
 // Returns true, rule category, and description if a vulnerability is detected.
 func IsMaliciousRequest(r *http.Request) (bool, string, string) {
 	// 1. Scan URL Path
-	if pathTraversalPattern.MatchString(r.URL.Path) {
+	path := r.URL.Path
+	if hasPathTraversalPotential(path) && pathTraversalPattern.MatchString(path) {
 		return true, "Path Traversal", "Path Traversal / Local File Inclusion detected in URL path"
 	}
-	if sqlPattern.MatchString(r.URL.Path) {
+	if hasSQLPotential(path) && sqlPattern.MatchString(path) {
 		return true, "SQL Injection", "SQL Injection payload detected in URL path"
 	}
-	if xssPattern.MatchString(r.URL.Path) {
+	if hasXSSPotential(path) && xssPattern.MatchString(path) {
 		return true, "Cross-Site Scripting", "Cross-Site Scripting payload detected in URL path"
 	}
 
@@ -41,50 +58,52 @@ func IsMaliciousRequest(r *http.Request) (bool, string, string) {
 			if err != nil {
 				unescaped = val
 			}
-			if pathTraversalPattern.MatchString(unescaped) {
+			if hasPathTraversalPotential(unescaped) && pathTraversalPattern.MatchString(unescaped) {
 				return true, "Path Traversal", "Path Traversal detected in query parameter: " + key
 			}
-			if sqlPattern.MatchString(unescaped) {
+			if hasSQLPotential(unescaped) && sqlPattern.MatchString(unescaped) {
 				return true, "SQL Injection", "SQL Injection payload detected in query parameter: " + key
 			}
-			if xssPattern.MatchString(unescaped) {
+			if hasXSSPotential(unescaped) && xssPattern.MatchString(unescaped) {
 				return true, "Cross-Site Scripting", "Cross-Site Scripting payload detected in query parameter: " + key
 			}
-			if cmdInjectionPattern.MatchString(unescaped) {
+			if hasCmdPotential(unescaped) && cmdInjectionPattern.MatchString(unescaped) {
 				return true, "Command Injection", "Command Injection payload detected in query parameter: " + key
 			}
 		}
 	}
 
 	// 3. Scan Headers (User-Agent, Cookie)
-	if sqlPattern.MatchString(r.UserAgent()) {
+	ua := r.UserAgent()
+	if hasSQLPotential(ua) && sqlPattern.MatchString(ua) {
 		return true, "SQL Injection", "SQL Injection payload detected in User-Agent header"
 	}
-	if xssPattern.MatchString(r.UserAgent()) {
+	if hasXSSPotential(ua) && xssPattern.MatchString(ua) {
 		return true, "Cross-Site Scripting", "Cross-Site Scripting payload detected in User-Agent header"
 	}
-	if cmdInjectionPattern.MatchString(r.UserAgent()) {
+	if hasCmdPotential(ua) && cmdInjectionPattern.MatchString(ua) {
 		return true, "Command Injection", "Command Injection payload detected in User-Agent header"
 	}
 
 	for _, cookie := range r.Cookies() {
-		if sqlPattern.MatchString(cookie.Value) {
+		val := cookie.Value
+		if hasSQLPotential(val) && sqlPattern.MatchString(val) {
 			return true, "SQL Injection", "SQL Injection payload detected in Cookie: " + cookie.Name
 		}
-		if xssPattern.MatchString(cookie.Value) {
+		if hasXSSPotential(val) && xssPattern.MatchString(val) {
 			return true, "Cross-Site Scripting", "Cross-Site Scripting payload detected in Cookie: " + cookie.Name
 		}
 	}
 
-	// 4. Scan Request Body (limit to text-like media types and max 8KB to avoid overhead/DOS)
+	// 4. Scan Request Body (limit to write methods, text-like media types, and max 8KB to avoid overhead/DOS)
+	isWriteMethod := r.Method == http.MethodPost || r.Method == http.MethodPut || r.Method == http.MethodPatch
 	contentType := r.Header.Get("Content-Type")
-	isText := contentType == "" ||
-		strings.HasPrefix(contentType, "application/x-www-form-urlencoded") ||
+	isText := strings.HasPrefix(contentType, "application/x-www-form-urlencoded") ||
 		strings.HasPrefix(contentType, "application/json") ||
 		strings.HasPrefix(contentType, "application/xml") ||
 		strings.HasPrefix(contentType, "text/")
 
-	if isText && r.Body != nil && r.Body != http.NoBody {
+	if isWriteMethod && isText && r.Body != nil && r.Body != http.NoBody {
 		bodyBytes, err := io.ReadAll(io.LimitReader(r.Body, 8192))
 		if err == nil {
 			// Restore request body reader so the actual reverse proxy can read it downstream
@@ -97,16 +116,16 @@ func IsMaliciousRequest(r *http.Request) (bool, string, string) {
 				}
 			}
 
-			if pathTraversalPattern.MatchString(bodyStr) {
+			if hasPathTraversalPotential(bodyStr) && pathTraversalPattern.MatchString(bodyStr) {
 				return true, "Path Traversal", "Path Traversal detected in request body"
 			}
-			if sqlPattern.MatchString(bodyStr) {
+			if hasSQLPotential(bodyStr) && sqlPattern.MatchString(bodyStr) {
 				return true, "SQL Injection", "SQL Injection payload detected in request body"
 			}
-			if xssPattern.MatchString(bodyStr) {
+			if hasXSSPotential(bodyStr) && xssPattern.MatchString(bodyStr) {
 				return true, "Cross-Site Scripting", "Cross-Site Scripting payload detected in request body"
 			}
-			if cmdInjectionPattern.MatchString(bodyStr) {
+			if hasCmdPotential(bodyStr) && cmdInjectionPattern.MatchString(bodyStr) {
 				return true, "Command Injection", "Command Injection payload detected in request body"
 			}
 		}

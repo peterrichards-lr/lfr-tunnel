@@ -59,6 +59,9 @@ cleanup() {
     if [ -f "keycloak-realm.json.bak" ]; then
         mv keycloak-realm.json.bak keycloak-realm.json
     fi
+    echo "=== Tearing down Docker environment ==="
+    docker-compose -f "$COMPOSE_FILE" down -v --remove-orphans >/dev/null 2>&1 || true
+    rm -f /tmp/kc-cookies.txt /tmp/sso-session.txt /tmp/admin-session.txt
     if [ $EXIT_CODE -eq 0 ]; then
         echo "SUCCESS" > "$SIGNAL_FILE"
     else
@@ -88,7 +91,6 @@ fail() {
     docker-compose -f "$COMPOSE_FILE" logs lfr-tunneld
     echo "=== Keycloak logs (tail) ==="
     docker-compose -f "$COMPOSE_FILE" logs --tail=30 keycloak
-    docker-compose -f "$COMPOSE_FILE" down -v
     exit 1
 }
 
@@ -246,28 +248,37 @@ ADMIN_ML_RESP=$(curl -sf -X POST \
   "${TUNNEL_BASE}/api/auth/magic-link" 2>/dev/null || true)
 echo "  Admin magic-link request: $ADMIN_ML_RESP"
 
-# Get the token from Mailpit
-sleep 2
-ADMIN_ML_TOKEN=$(python3 -c '
-import urllib.request, json, re
+# Get the token from Mailpit (poll up to 10s for async email delivery)
+ADMIN_ML_TOKEN=""
+for attempt in $(seq 1 10); do
+    ADMIN_ML_TOKEN=$(python3 -c '
+import urllib.request, json, re, os
+port = os.environ.get("E2E_MAILPIT_PORT", "8025")
 try:
-    data = json.loads(urllib.request.urlopen("http://localhost:$E2E_MAILPIT_PORT/api/v1/messages").read())
+    data = json.loads(urllib.request.urlopen(f"http://localhost:{port}/api/v1/messages").read())
     for m in (data.get("messages") or []):
-        msg = json.loads(urllib.request.urlopen("http://localhost:$E2E_MAILPIT_PORT/api/v1/message/" + m["ID"]).read())
+        msg = json.loads(urllib.request.urlopen(f"http://localhost:{port}/api/v1/message/" + m["ID"]).read())
         body = msg.get("Text","")
-        match = re.search(r"verify\?token=([a-f0-9]+)", body, re.IGNORECASE)
+        match = re.search(r"token=([a-f0-9]+)", body, re.IGNORECASE)
         if match:
             print(match.group(1))
             break
-except Exception as e:
-    import sys; print(f"Error: {e}", file=sys.stderr)
+except Exception:
+    pass
 ' 2>/dev/null || true)
+    if [ -n "$ADMIN_ML_TOKEN" ]; then
+        echo "  Admin magic link token extracted (attempt $attempt)"
+        break
+    fi
+    sleep 1
+done
 
 ADMIN_SESSION=""
 if [ -n "$ADMIN_ML_TOKEN" ]; then
-    # Redeem the magic link to get admin session
-    curl -sc /tmp/admin-session.txt \
-      "${TUNNEL_BASE}/api/auth/verify?token=${ADMIN_ML_TOKEN}" > /dev/null 2>&1 || true
+    # Redeem the magic link to get admin session (POST with JSON body)
+    curl -s -c /tmp/admin-session.txt -X POST -H "Content-Type: application/json" \
+      -d "{\"token\": \"${ADMIN_ML_TOKEN}\"}" \
+      "${TUNNEL_BASE}/api/auth/verify" > /dev/null 2>&1 || true
     ADMIN_SESSION=$(grep 'lfr_session' /tmp/admin-session.txt 2>/dev/null | awk '{print $NF}' | tr -d '\r\n' || true)
 fi
 
@@ -291,12 +302,12 @@ for u in users:
     fi
 else
     echo "  ⚠️  Skipping admin list check — Mailpit not available for admin magic link"
+    echo "=== lfr-tunneld logs ==="
+    docker-compose -f "$COMPOSE_FILE" logs lfr-tunneld
 fi
 
 # ── Step 7: Teardown ──────────────────────────────────────────────────────────
-echo "[7/7] Tearing down Docker environment..."
-docker-compose -f "$COMPOSE_FILE" down -v
-rm -f /tmp/kc-cookies.txt /tmp/sso-session.txt /tmp/admin-session.txt
+echo "[7/7] Teardown handled by cleanup trap"
 
 echo ""
 echo "✅ SSO / Keycloak E2E Integration Test PASSED!"

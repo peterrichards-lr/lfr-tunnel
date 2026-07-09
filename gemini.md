@@ -775,9 +775,11 @@ The solution will consist of:
 - [x] Refactor `cmd/lfr-tunnel/main.go` `main()` function to extract helper functions and reduce method size/complexity.
 - [x] Run unit and E2E tests to verify zero behavioral changes.
 
-
-
+## Wrap GDPR User Anonymization in a Database Transaction (v1.23.9) - Issue #410
+- [ ] Implement database transaction inside `AnonymizeUserData` in `pkg/db/user.go`.
+- [ ] Add rollback support if any individual UPDATE statement fails.
+- [ ] Verify that all user database tests pass successfully.
 
 <!-- markdownlint-disable MD049 -->
 ---
-*Last Updated: 2026-07-08* | *Last Reviewed: 2026-07-08*
+*Last Updated: 2026-07-09* | *Last Reviewed: 2026-07-09*

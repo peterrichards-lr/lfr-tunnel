@@ -291,24 +291,29 @@ func (repo *SQLiteUserRepo) CountAdmins() (int, error) {
 
 // AnonymizeUserData obfuscates all audit logs and metrics associated with a deleted user.
 func (repo *SQLiteUserRepo) AnonymizeUserData(userID, anonymizedID string) error {
+	tx, err := repo.conn.Begin()
+	if err != nil {
+		return err
+	}
+	defer func() {
+		_ = tx.Rollback()
+	}()
 
-	_, err1 := repo.conn.Exec("UPDATE tunnel_metrics SET user_id = ? WHERE user_id = ?", anonymizedID, userID)
+	if _, err := tx.Exec("UPDATE tunnel_metrics SET user_id = ? WHERE user_id = ?", anonymizedID, userID); err != nil {
+		return err
+	}
 
-	_, err2 := repo.conn.Exec("UPDATE tunnel_audit_logs SET user_id = ? WHERE user_id = ?", anonymizedID, userID)
+	if _, err := tx.Exec("UPDATE tunnel_audit_logs SET user_id = ? WHERE user_id = ?", anonymizedID, userID); err != nil {
+		return err
+	}
 
-	_, err3 := repo.conn.Exec("UPDATE admin_audit_log SET actor_id = ? WHERE actor_id = ?", anonymizedID, userID)
-	_, err4 := repo.conn.Exec("UPDATE admin_audit_log SET target_id = ? WHERE target_id = ?", anonymizedID, userID)
-	if err1 != nil {
-		return err1
+	if _, err := tx.Exec("UPDATE admin_audit_log SET actor_id = ? WHERE actor_id = ?", anonymizedID, userID); err != nil {
+		return err
 	}
-	if err2 != nil {
-		return err2
+
+	if _, err := tx.Exec("UPDATE admin_audit_log SET target_id = ? WHERE target_id = ?", anonymizedID, userID); err != nil {
+		return err
 	}
-	if err3 != nil {
-		return err3
-	}
-	if err4 != nil {
-		return err4
-	}
-	return nil
+
+	return tx.Commit()
 }

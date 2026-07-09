@@ -159,8 +159,29 @@ Integrating web dashboards with `fail2ban` requires the Go application to execut
 
 ## 8. Client-Side Interceptor Architecture
 
-To achieve absolute feature parity with premium tunneling solutions like `ngrok`, `lfr-tunnel` implements a highly capable **Client-Side Interceptor Engine** (`pkg/client/interceptor.go`). 
+To achieve feature parity with premium tunneling solutions like `ngrok`, `lfr-tunnel` implements a highly capable **Client-Side Interceptor Engine** (`pkg/client/interceptor.go`). 
 Rather than passing the Chisel connection directly to the target local Liferay instance, the `lfr-tunnel` CLI transparently injects a reverse proxy on a dynamic local port *between* the tunnel and Tomcat.
+
+```mermaid
+graph TD
+    subgraph Gateway ["lfr-tunneld Gateway (VPS)"]
+        Visitor["Visitor Request"] --> GWProxy["Gateway Proxy"]
+    end
+    
+    subgraph ClientMachine ["Local Developer Machine"]
+        GWProxy -->|"Encrypted Tunnel"| CLIChisel["Chisel Client Connection"]
+        CLIChisel --> Interceptor["Interceptor Reverse Proxy (Dynamic Port)"]
+        
+        Interceptor -->|"Buffer Request/Response"| InspectorDB["In-Memory Payload History"]
+        InspectorDB -->|"Serve SPA UI"| InspectorUI["Inspector Dashboard (localhost:4040)"]
+        
+        Interceptor -->|Is Maintenance Mode?| Decision{Check state}
+        Decision -->|Yes| MaintPage["Return 503 Maintenance HTML (Liferay themed)"]
+        Decision -->|No| HeaderMod["Inject Custom Headers (-add-header)"]
+        
+        HeaderMod -->|"Forward Request"| Tomcat["Local Liferay/Tomcat (localhost:8080)"]
+    end
+```
 
 ### Key Capabilities
 
@@ -329,7 +350,38 @@ CREATE TABLE subdomain_reservations (
 );
 ```
 
+---
+
+## 12. Control Plane & Stateless Edge Nodes State Synchronization
+
+This sequence diagram visualizes how administrative actions (e.g., kicking a tunnel, updating rate limits) propagate from the Control Plane database to stateless Edge Nodes in real-time over the `edge_control_ws.go` WebSocket control channel.
+
+```mermaid
+sequenceDiagram
+    autonumber
+    actor Admin as Gateway Admin Dashboard
+    participant CP as Control Plane (lfr-tunneld DB)
+    participant EConn as Edge Control Connection (edge_control_ws.go)
+    participant Edge as Regional Edge Node (Stateless lfr-tunneld)
+    participant Tun as Active Tunnel Connection
+    
+    Admin->>CP: Trigger Admin Action (e.g. Kick Session / Update Rate Limits)
+    Note over CP: Commits state change to SQLite DB
+    
+    CP->>EConn: Publish state update message
+    EConn->>Edge: Deliver message over WebSocket Control Channel
+    
+    Note over Edge: Matches active session in memory registry
+    
+    alt Kick Tunnel Action
+        Edge->>Tun: Close Chisel WebSocket connection
+        Note over Edge: Disconnects client CLI immediately
+    else Rate Limit Update Action
+        Edge->>Edge: Update dynamic traffic/DDOS bucket settings in memory
+        Note over Edge: Policy applied instantly to traffic plane
+    end
+```
 
 <!-- markdownlint-disable MD049 -->
 ---
-*Last Updated: 2026-07-02* | *Last Reviewed: 2026-07-02*
+*Last Updated: 2026-07-09* | *Last Reviewed: 2026-07-09*

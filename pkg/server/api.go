@@ -155,6 +155,7 @@ func (s *Server) handleUpdateMe(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, `{"error":"Failed to update profile"}`, http.StatusInternalServerError)
 		return
 	}
+	s.invalidateUserCache(user.Email)
 
 	respondJSON(w, http.StatusOK, map[string]string{"status": "ok"})
 }
@@ -185,6 +186,7 @@ func (s *Server) handleUpdateOnboarding(w http.ResponseWriter, r *http.Request) 
 		http.Error(w, `{"error":"Failed to update onboarding progress"}`, http.StatusInternalServerError)
 		return
 	}
+	s.invalidateUserCache(user.Email)
 
 	s.writeAudit(user.Email, "user.onboarding_updated", "user", user.ID, fmt.Sprintf("Onboarding status updated to %s (last step: %s, rerun: %t)", req.Status, req.LastStep, req.IsRerun), r)
 
@@ -432,6 +434,7 @@ func (s *Server) handleMFAEnable(w http.ResponseWriter, r *http.Request) {
 		respondWithError(w, err)
 		return
 	}
+	s.invalidateUserCache(u.Email)
 
 	respondJSON(w, http.StatusOK, map[string]string{"status": "success"})
 }
@@ -460,6 +463,7 @@ func (s *Server) handleMFADisable(w http.ResponseWriter, r *http.Request) {
 		respondWithError(w, err)
 		return
 	}
+	s.invalidateUserCache(u.Email)
 
 	respondJSON(w, http.StatusOK, map[string]string{"status": "success"})
 }
@@ -475,7 +479,7 @@ func (s *Server) handleMFAVerify(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	_, sessionToken, err := s.portalService.MFAVerify(req.TempToken, req.Code, getClientIP(r))
+	user, sessionToken, err := s.portalService.MFAVerify(req.TempToken, req.Code, getClientIP(r))
 	if err != nil {
 		if err == ErrUnauthorized {
 			http.Error(w, `{"error":"Invalid verification code or session"}`, http.StatusUnauthorized)
@@ -484,6 +488,7 @@ func (s *Server) handleMFAVerify(w http.ResponseWriter, r *http.Request) {
 		respondWithError(w, err)
 		return
 	}
+	s.invalidateUserCache(user.Email)
 
 	cookie := &http.Cookie{
 		Name:     "lfr_session",
@@ -558,6 +563,7 @@ Liferay Tunnel Team`, html.EscapeString(greetingName))
 	if err != nil {
 		return err
 	}
+	s.invalidateUserCache(user.Email)
 
 	// 7. Write an anonymous audit log confirming account deletion
 	s.writeAudit("system", "user.gdpr_deleted", "user", anonymizedID, "User account successfully deleted and anonymised", r)
@@ -1095,6 +1101,7 @@ func (s *Server) handleAdminOverrideLimit(w http.ResponseWriter, r *http.Request
 		respondWithError(w, err)
 		return
 	}
+	s.invalidateUserCache(user.Email)
 
 	respondJSON(w, http.StatusOK, map[string]interface{}{
 		"status":           "success",
@@ -1133,6 +1140,7 @@ func (s *Server) handleAdminOverrideTunnelsLimit(w http.ResponseWriter, r *http.
 		respondWithError(w, err)
 		return
 	}
+	s.invalidateUserCache(user.Email)
 
 	respondJSON(w, http.StatusOK, map[string]interface{}{
 		"status":             "success",

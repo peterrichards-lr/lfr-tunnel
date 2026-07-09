@@ -791,6 +791,12 @@ The solution will consist of:
 - [ ] Remove `close(c.send)` from `unregisterWSClient` to prevent write-after-close panics.
 - [ ] Use `select` block in `pushUserTelemetry` and `writePump` to handle connection/done channel closure.
 - [ ] Verify unit tests pass.
+## Cache User Telemetry Metadata to Prevent SQLite Read Contention (v1.23.10) - Issue #408
+- [x] Add `userCache sync.Map` to `Server` in `pkg/server/server.go`.
+- [x] Implement `getCachedUser(email)` helper method in `pkg/server/telemetry_ws.go`.
+- [x] Replace `s.db.GetUserByEmail(c.email)` with `s.getCachedUser(c.email)`.
+- [x] Invalidate or write through the cache upon user edits / new logins.
+- [x] Verify that all server tests pass successfully.
 
 <!-- markdownlint-disable MD049 -->
 ---

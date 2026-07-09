@@ -287,11 +287,29 @@ func (s *Server) getUserTelemetryData(user *db.User, sessionToken string) map[st
 	return resp
 }
 
+func (s *Server) getCachedUser(email string) (*db.User, error) {
+	email = strings.ToLower(email)
+	if val, ok := s.userCache.Load(email); ok {
+		return val.(*db.User), nil
+	}
+	u, err := s.db.GetUserByEmail(email)
+	if err == nil {
+		s.userCache.Store(email, u)
+	}
+	return u, err
+}
+
+func (s *Server) invalidateUserCache(email string) {
+	if email != "" {
+		s.userCache.Delete(strings.ToLower(email))
+	}
+}
+
 func (s *Server) pushUserTelemetry(c *wsClient) {
 	var u *db.User
 	var err error
 	if s.db != nil {
-		u, err = s.db.GetUserByEmail(c.email)
+		u, err = s.getCachedUser(c.email)
 	}
 	if err != nil || u == nil {
 		// Fallback for owner / artificial user

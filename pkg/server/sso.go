@@ -193,6 +193,8 @@ func (s *Server) handleSSOCallback(w http.ResponseWriter, r *http.Request) {
 		user.Status = "approved"
 		if err := s.db.UpdateUser(user); err != nil {
 			slog.Info(fmt.Sprintf("Failed to update user tokens after SSO login: %v", err))
+		} else {
+			s.invalidateUserCache(user.Email)
 		}
 	}
 

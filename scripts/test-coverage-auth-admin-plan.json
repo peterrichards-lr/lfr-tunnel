@@ -1,0 +1,50 @@
+{
+  "title": "[Epic] Increase pkg/server Authentication & Admin API Test Coverage",
+  "body": "Increase the test coverage for critical authentication, MFA, administrative limits, and subdomain security APIs in `pkg/server/api.go` to ensure stability and secure edge case handling.",
+  "labels": [
+    "enhancement"
+  ],
+  "issues": [
+    {
+      "title": "Add test coverage for MFA handlers & session resolution",
+      "body": "Write unit tests for `handleMFAEnable` (37.5%), `handleMFAVerify` (46.7%), `handleMFADisable` (50.0%), and `getCurrentUserOrToken` (14.3%). Test valid/invalid TOTP codes, active/expired bearer tokens, cookie-based session fallbacks, and error reporting.",
+      "completed": true,
+      "labels": [
+        "enhancement"
+      ],
+      "issueNumber": "437",
+      "closed": true
+    },
+    {
+      "title": "Add test coverage for Admin overrides & user deletion",
+      "body": "Write unit tests for `handleAdminOverrideTunnelsLimit` (22.7%) and `handleAdminDeleteUser` (44.4%). Test payload validation edge cases, database transactions, audit logging triggers, and preventing deletion of the owner role.",
+      "completed": true,
+      "labels": [
+        "enhancement"
+      ],
+      "issueNumber": "438",
+      "closed": true
+    },
+    {
+      "title": "Add test coverage for Subdomain Access Control & Custom Headers",
+      "body": "Write unit tests for `handleUpdateReservationAccessControl` (48.1%) and `handleUpdateReservationHeaders` (48.3%). Verify passcode hashing validation, IP whitelist format checks, and custom HTTP proxy header validations.",
+      "completed": true,
+      "labels": [
+        "enhancement"
+      ],
+      "issueNumber": "439",
+      "closed": true
+    },
+    {
+      "title": "Add test coverage for Invitation & Registration flows",
+      "body": "Write unit tests for `handleCreateInvitation` (45.5%), `handleDeleteInvitation` (38.9%), and `handleCSRSignInvitation` (45.9%). Verify invitation expiration checks, admin permission checks, and CSR format rejection tests.",
+      "completed": true,
+      "labels": [
+        "enhancement"
+      ],
+      "issueNumber": "440",
+      "closed": true
+    }
+  ],
+  "epicNumber": "436"
+}

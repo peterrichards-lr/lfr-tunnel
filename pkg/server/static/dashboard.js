@@ -164,7 +164,7 @@
             menu.style.display = menu.style.display === 'none' ? 'block' : 'none';
         }
 
-        document.addEventListener('click', (e) => {
+        const handleOutsideDropdownClick = (e) => {
             const customTrigger = document.getElementById('portal-custom-dropdown');
             if (customTrigger && !customTrigger.contains(e.target)) {
                 const menu = document.getElementById('custom-dropdown-menu');
@@ -175,7 +175,9 @@
                 const menu = document.getElementById('acc-custom-menu');
                 if (menu) menu.style.display = 'none';
             }
-        });
+        };
+        document.addEventListener('click', handleOutsideDropdownClick);
+        document.addEventListener('touchstart', handleOutsideDropdownClick, { passive: true });
 
         let tableInstances = {};
 
@@ -3841,6 +3843,45 @@ applyTheme(currentUser.theme_preference);
                 closeAllActionMenus();
             }
         });
+
+        // Touch & Click-outside support to close modals by tapping/clicking on the backdrop overlay
+        const handleModalOverlayClick = (e) => {
+            if (e.target.classList.contains('modal-overlay')) {
+                // Trigger specific close callbacks if they exist
+                if (e.target.id === 'token-modal') {
+                    closeModal();
+                    loadTokens();
+                } else if (e.target.id === 'mfa-modal') {
+                    closeMFAModal();
+                } else if (e.target.id === 'blacklist-modal') {
+                    closeBlacklistModal();
+                } else if (e.target.id === 'invite-modal') {
+                    closeInviteModal();
+                } else if (e.target.id === 'delete-account-modal') {
+                    closeDeleteAccountModal();
+                } else if (e.target.id === 'user-quota-modal') {
+                    closeUserQuotaModal();
+                } else if (e.target.id === 'user-res-limit-modal') {
+                    closeUserResLimitModal();
+                } else if (e.target.id === 'user-tunnels-limit-modal') {
+                    closeUserTunnelsLimitModal();
+                } else if (e.target.id === 'tunnel-override-modal') {
+                    closeTunnelOverrideModal();
+                } else if (e.target.id === 'tunnel-details-modal') {
+                    closeTunnelDetailsModal();
+                } else if (e.target.id === 'user-details-modal') {
+                    closeUserDetailsModal();
+                } else if (e.target.id === 'installer-guide-modal') {
+                    closeInstallerGuideModal();
+                } else if (e.target.id === 'targeted-message-modal') {
+                    closeTargetedModal();
+                } else {
+                    e.target.style.display = 'none';
+                }
+            }
+        };
+        window.addEventListener('click', handleModalOverlayClick);
+        window.addEventListener('touchstart', handleModalOverlayClick, { passive: true });
         // ----------------------------------------------------
         // NETWORK HEALTH
         // ----------------------------------------------------

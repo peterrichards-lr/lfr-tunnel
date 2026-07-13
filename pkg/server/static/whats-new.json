@@ -1,5 +1,5 @@
 {
-  "version": "v1.31.2",
+  "version": "v1.31.3",
   "release_date": "2026-07-13",
   "features": [
     "Feature: Configurable Scoop & Homebrew package manager options in the installation guide",
@@ -8,6 +8,7 @@
     "Feature: API rate-limiting bypass configuration flag (`disable_api_rate_limit`) for E2E automation environments",
     "Enhancement: Dynamic recommended installer label adjustments based on Scoop/Brew configurations in the guide modal",
     "Enhancement: Renamed overview button labels to 'Other Operating Systems' for improved clarity",
-    "Fix: Improved toaster text readability and fixed mobile touch backdrop closing gestures"
+    "Fix: Improved toaster text readability and fixed mobile touch backdrop closing gestures",
+    "Feature: Password manager autofill & autocomplete support for login/registration form fields"
   ]
 }

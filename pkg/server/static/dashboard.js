@@ -732,11 +732,9 @@ function toggleTheme() {
                     }
 
                     const bannerDiv = document.createElement('div');
-                    bannerDiv.className = 'alert alert-info';
-                    bannerDiv.style.marginTop = '1rem';
-                    bannerDiv.style.display = 'flex';
-                    bannerDiv.style.alignItems = 'center';
-                    bannerDiv.style.justifyContent = 'space-between';
+                    bannerDiv.className = 'glass';
+                    bannerDiv.style.padding = '24px';
+                    bannerDiv.style.borderRadius = '8px';
 
                     let titleText = 'CLI Client Installation';
                     let subText = `Run this command in your terminal to install the client for ${os}.`;
@@ -760,61 +758,77 @@ function toggleTheme() {
                     } else if (isOlderVersion(userVer, latestVer)) {
                         titleText = `Update Available (${latestVer})`;
                         subText = `You are using an older client (${userVer}). Please update to the target release for ${os}.`;
+                        recommendedCmd = 'lfr-tunnel -upgrade';
+                        cmdLabel = '🚀 Upgrade Command:';
+                        showDownload = false;
                     } else if (userVer !== latestVer) {
-                        titleText = `CLI Client Installation`;
+                        titleText = `CLI Client Info`;
                         subText = `Your client (${userVer}) is newer than the server target (${latestVer}).`;
+                        recommendedCmd = '';
+                        showDownload = false;
                     } else {
+                        titleText = `CLI Client Up to Date`;
                         subText = `Your client is up to date (${userVer}) for ${os}.`;
+                        recommendedCmd = '';
+                        showDownload = false;
                     }
 
                     if (os === 'Unknown OS') {
                         bannerDiv.innerHTML = `
-                            <div>
-                                <strong>${titleText}</strong> <br/>
-                                <span style="font-size: 0.9rem; color: var(--text-muted);">${subText}</span>
-                                <div style="font-size: 0.8rem; margin-top: 8px; display: flex; flex-wrap: wrap; gap: 16px; color: var(--text-muted); opacity: 0.85;">
-                                    <span>🖥️ <strong>Server Gateway:</strong> ${vData.server_version || latestVer}</span>
-                                    <span>🔌 <strong>Your Client:</strong> ${userVer || 'Never Connected'}</span>
-                                    <span>🏷️ <strong>Latest Client Target:</strong> ${latestVer}</span>
+                            <div style="display: flex; flex-direction: column; gap: 12px;">
+                                <div style="font-weight: bold; font-size: 1.05rem; color: var(--text);">${titleText}</div>
+                                <div style="font-size: 0.9rem; color: var(--text-muted); line-height: 1.4;">${subText}</div>
+                                <div style="font-size: 0.8rem; margin-top: 12px; color: var(--text-muted); display: flex; flex-direction: column; gap: 4px; border-top: 1px solid rgba(255,255,255,0.05); padding-top: 12px;">
+                                    <div>🖥️ <strong>Server Gateway:</strong> ${vData.server_version || latestVer}</div>
+                                    <div>🔌 <strong>Your Client:</strong> ${userVer || 'Never Connected'}</div>
+                                    <div>🏷️ <strong>Latest Client Target:</strong> ${latestVer}</div>
                                 </div>
-                            </div>
-                            <div style="display: flex; gap: 10px;">
-                                <button class="btn btn-secondary" style="white-space: nowrap;" onclick="showInstallerGuideModal()">Releases / Other OSs</button>
+                                <div style="display: flex; gap: 10px; margin-top: 8px;">
+                                    <button class="btn btn-secondary" style="white-space: nowrap; text-align: center; flex: 1; margin: 0;" onclick="showInstallerGuideModal()">Releases / Other OSs</button>
+                                </div>
                             </div>
                         `;
                     } else {
                         const hashSpanId = 'hash-' + Math.random().toString(36).substr(2, 9);
                         bannerDiv.innerHTML = `
-                            <div style="flex-grow: 1; overflow: hidden; padding-right: 20px;">
-                                <strong>${titleText}</strong> <br/>
-                                <span style="font-size: 0.9rem; color: var(--text-muted);">${subText}</span>
-                                <div style="font-size: 0.8rem; margin-top: 8px; margin-bottom: 8px; display: flex; flex-wrap: wrap; gap: 16px; color: var(--text-muted); opacity: 0.85;">
-                                    <span>🖥️ <strong>Server Gateway:</strong> ${vData.server_version || latestVer}</span>
-                                    <span>🔌 <strong>Your Client:</strong> ${userVer || 'Never Connected'}</span>
-                                    <span>🏷️ <strong>Latest Client Target:</strong> ${latestVer}</span>
+                            <div style="display: flex; flex-direction: column; gap: 16px;">
+                                <div>
+                                    <div style="font-weight: bold; font-size: 1.05rem; margin-bottom: 6px; color: var(--text);">${titleText}</div>
+                                    <div style="font-size: 0.9rem; color: var(--text-muted); line-height: 1.4;">${subText}</div>
                                 </div>
                                 
                                 ${recommendedCmd ? `
-                                <div style="margin-top: 10px; font-size: 0.8rem; font-weight: bold; color: var(--text);">${cmdLabel}</div>
-                                <div style="margin-top: 4px; margin-bottom: 8px; position: relative; background: #0d1117; color: #e6edf3; border-radius: 6px; border: 1px solid rgba(255,255,255,0.1); padding: 10px 40px 10px 12px; font-family: ui-monospace, SFMono-Regular, Consolas, monospace; font-size: 0.8rem; overflow-x: auto;">
-                                    <span style="user-select: all;">${recommendedCmd}</span>
-                                    <button onclick="navigator.clipboard.writeText('${recommendedCmd}'); this.innerHTML='<span style=\\'font-size:12px;\\'>✓</span>'; setTimeout(() => this.innerHTML='📋', 2000);" style="position: absolute; top: 6px; right: 6px; background: transparent; border: 1px solid rgba(255,255,255,0.2); color: #8b949e; border-radius: 4px; width: 22px; height: 22px; display: flex; align-items: center; justify-content: center; cursor: pointer; transition: 0.2s;" onmouseover="this.style.color='#c9d1d9'; this.style.borderColor='rgba(255,255,255,0.4)';" onmouseout="this.style.color='#8b949e'; this.style.borderColor='rgba(255,255,255,0.2)';">📋</button>
+                                <div>
+                                    <div style="font-size: 0.8rem; font-weight: bold; color: var(--text);">${cmdLabel}</div>
+                                    <div style="margin-top: 4px; position: relative; background: #0d1117; color: #e6edf3; border-radius: 6px; border: 1px solid rgba(255,255,255,0.1); padding: 10px 40px 10px 12px; font-family: ui-monospace, SFMono-Regular, Consolas, monospace; font-size: 0.8rem; overflow-x: auto;">
+                                        <span style="user-select: all;">${recommendedCmd}</span>
+                                        <button onclick="navigator.clipboard.writeText('${recommendedCmd}'); this.innerHTML='<span style=\\'font-size:12px;\\'>✓</span>'; setTimeout(() => this.innerHTML='📋', 2000);" style="position: absolute; top: 6px; right: 6px; background: transparent; border: 1px solid rgba(255,255,255,0.2); color: #8b949e; border-radius: 4px; width: 22px; height: 22px; display: flex; align-items: center; justify-content: center; cursor: pointer; transition: 0.2s;" onmouseover="this.style.color='#c9d1d9'; this.style.borderColor='rgba(255,255,255,0.4)';" onmouseout="this.style.color='#8b949e'; this.style.borderColor='rgba(255,255,255,0.2)';">📋</button>
+                                    </div>
                                 </div>
                                 ` : ''}
- 
+
                                 ${fallbackCmd ? `
-                                <div style="margin-top: 10px; font-size: 0.8rem; font-weight: bold; color: var(--text-muted);">${cmdFallbackLabel}</div>
-                                <div style="margin-top: 4px; margin-bottom: 8px; position: relative; background: #0d1117; color: #e6edf3; border-radius: 6px; border: 1px solid rgba(255,255,255,0.1); padding: 10px 40px 10px 12px; font-family: ui-monospace, SFMono-Regular, Consolas, monospace; font-size: 0.8rem; overflow-x: auto;">
-                                    <span style="user-select: all;">${fallbackCmd}</span>
-                                    <button onclick="navigator.clipboard.writeText('${fallbackCmd}'); this.innerHTML='<span style=\\'font-size:12px;\\'>✓</span>'; setTimeout(() => this.innerHTML='📋', 2000);" style="position: absolute; top: 6px; right: 6px; background: transparent; border: 1px solid rgba(255,255,255,0.2); color: #8b949e; border-radius: 4px; width: 22px; height: 22px; display: flex; align-items: center; justify-content: center; cursor: pointer; transition: 0.2s;" onmouseover="this.style.color='#c9d1d9'; this.style.borderColor='rgba(255,255,255,0.4)';" onmouseout="this.style.color='#8b949e'; this.style.borderColor='rgba(255,255,255,0.2)';">📋</button>
+                                <div>
+                                    <div style="font-size: 0.8rem; font-weight: bold; color: var(--text-muted);">${cmdFallbackLabel}</div>
+                                    <div style="margin-top: 4px; position: relative; background: #0d1117; color: #e6edf3; border-radius: 6px; border: 1px solid rgba(255,255,255,0.1); padding: 10px 40px 10px 12px; font-family: ui-monospace, SFMono-Regular, Consolas, monospace; font-size: 0.8rem; overflow-x: auto;">
+                                        <span style="user-select: all;">${fallbackCmd}</span>
+                                        <button onclick="navigator.clipboard.writeText('${fallbackCmd}'); this.innerHTML='<span style=\\'font-size:12px;\\'>✓</span>'; setTimeout(() => this.innerHTML='📋', 2000);" style="position: absolute; top: 6px; right: 6px; background: transparent; border: 1px solid rgba(255,255,255,0.2); color: #8b949e; border-radius: 4px; width: 22px; height: 22px; display: flex; align-items: center; justify-content: center; cursor: pointer; transition: 0.2s;" onmouseover="this.style.color='#c9d1d9'; this.style.borderColor='rgba(255,255,255,0.4)';" onmouseout="this.style.color='#8b949e'; this.style.borderColor='rgba(255,255,255,0.2)';">📋</button>
+                                    </div>
                                 </div>
                                 ` : ''}
- 
+
+                                <div style="font-size: 0.8rem; color: var(--text-muted); display: flex; flex-direction: column; gap: 4px; border-top: 1px solid rgba(255,255,255,0.05); padding-top: 12px;">
+                                    <div>🖥️ <strong>Server Gateway:</strong> ${vData.server_version || latestVer}</div>
+                                    <div>🔌 <strong>Your Client:</strong> ${userVer || 'Never Connected'}</div>
+                                    <div>🏷️ <strong>Latest Client Target:</strong> ${latestVer}</div>
+                                </div>
+
                                 ${(staticSHA || binaryName) ? `<div style="font-size: 0.75rem; color: var(--text-muted); font-family: monospace;">SHA256: <span id="${hashSpanId}">loading...</span></div>` : ''}
-                            </div>
-                            <div style="display: flex; flex-direction: column; gap: 10px; align-items: stretch; min-width: 140px;">
-                                ${showDownload ? `<a href="${dlUrl}" class="btn btn-primary" style="white-space: nowrap; text-align: center;">${downloadLabel}</a>` : ''}
-                                <button class="btn btn-secondary" style="white-space: nowrap; text-align: center;" onclick="showInstallerGuideModal()">Other OSs</button>
+
+                                <div style="display: flex; gap: 10px; margin-top: 8px;">
+                                    ${showDownload ? `<a href="${dlUrl}" class="btn btn-primary" style="white-space: nowrap; text-align: center; flex: 1; margin: 0;">${downloadLabel}</a>` : ''}
+                                    <button class="btn btn-secondary" style="white-space: nowrap; text-align: center; flex: 1; margin: 0;" onclick="showInstallerGuideModal()">Other OSs</button>
+                                </div>
                             </div>
                         `;
 
@@ -845,7 +859,11 @@ function toggleTheme() {
                                 });
                         }
                     }
-                    document.getElementById('last-login-banner').after(bannerDiv);
+                    const container = document.getElementById('cli-client-banner-container');
+                    if (container) {
+                        container.innerHTML = '';
+                        container.appendChild(bannerDiv);
+                    }
                 }
             } catch (e) {
                 console.error("Failed to check version", e);
@@ -2865,6 +2883,12 @@ applyTheme(currentUser.theme_preference);
             document.getElementById('guide-dl-macos').style.display = isDlDisabled ? 'none' : 'flex';
             document.getElementById('guide-dl-windows').style.display = isDlDisabled ? 'none' : 'block';
             document.getElementById('guide-dl-linux').style.display = isDlDisabled ? 'none' : 'flex';
+
+            // If Scoop or Brew are disabled, hide them
+            const isBrewDisabled = window.latestVersionData && window.latestVersionData.disable_brew;
+            const isScoopDisabled = window.latestVersionData && window.latestVersionData.disable_scoop;
+            document.getElementById('guide-macos-brew-section').style.display = isBrewDisabled ? 'none' : 'block';
+            document.getElementById('guide-windows-scoop-section').style.display = isScoopDisabled ? 'none' : 'block';
  
             document.getElementById('installer-guide-modal').style.display = 'flex';
             

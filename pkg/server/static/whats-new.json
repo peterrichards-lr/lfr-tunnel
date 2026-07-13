@@ -1,8 +1,10 @@
 {
-  "version": "v1.30.2",
-  "release_date": "2026-07-02",
+  "version": "v1.31.0",
+  "release_date": "2026-07-13",
   "features": [
-    "Feature: LDM & Liferay Auto-Discovery - Detect running LDM/Docker Tomcat instances automatically to eliminate manual configuration flags"
+    "Feature: Configurable Scoop & Homebrew package manager options in the installation guide",
+    "Feature: Dynamic local client upgrade command recommendation (`lfr-tunnel -upgrade`) for returning users",
+    "Enhancement: Balanced two-column dashboard overview grid layout and spacing improvements",
+    "Feature: API rate-limiting bypass configuration flag (`disable_api_rate_limit`) for E2E automation environments"
   ]
 }
-

@@ -844,7 +844,16 @@ The solution will consist of:
 - [x] Update `CONTRIBUTING.md` to mandate GitHub issues for all enhancements/bugs.
 - [x] Enforce implementation planning, PR linking, and mandatory reviews.
 
+## Dashboard Client Installation and Update UX Improvements (v1.31.0) - Epic #442
+- [x] Declare `DisableBrew` and `DisableScoop` configuration fields and support loading them from environment variables.
+- [x] Expose `disable_brew` and `disable_scoop` in the `/api/version` JSON response.
+- [x] Support disabling API rate limiting via `disable_api_rate_limit` configuration flag to prevent fragile E2E test failures.
+- [x] Redesign Overview dashboard layout to a balanced two-column grid.
+- [x] Render client installer dynamic banner: use `lfr-tunnel -upgrade` for existing clients, and reposition version metadata to the bottom.
+- [x] Hide Homebrew and Scoop tabs/guides in the guide modal if configured.
+- [x] Update Playwright E2E UI automation test assertions and verify all tests pass.
+
 <!-- markdownlint-disable MD049 -->
 ---
-*Last Updated: 2026-07-10* | *Last Reviewed: 2026-07-10*
+*Last Updated: 2026-07-13* | *Last Reviewed: 2026-07-13*
 

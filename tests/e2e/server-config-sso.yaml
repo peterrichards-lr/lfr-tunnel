@@ -35,6 +35,10 @@ pat_retention_days: 30
 
 docker_image: "peterjrichards/lfr-tunnel:latest"
 docker_bypass_url: "https://github.com/peterrichards-lr/lfr-tunnel/blob/master/docs/liferay-se-guide.md#using-the-docker-wrapper-edr-bypass"
+disable_client_downloads: true
+disable_brew: true
+disable_scoop: true
+disable_api_rate_limit: true
 
 client_platforms:
   macos_arm64:

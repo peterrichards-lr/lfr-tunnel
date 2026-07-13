@@ -786,7 +786,7 @@ function toggleTheme() {
                                     <div>🏷️ <strong>Latest Client Target:</strong> ${latestVer}</div>
                                 </div>
                                 <div style="display: flex; gap: 10px; margin-top: 8px;">
-                                    <button class="btn btn-secondary" style="white-space: nowrap; text-align: center; flex: 1; margin: 0;" onclick="showInstallerGuideModal()">Releases / Other Operating Systems</button>
+                                    <button class="btn btn-secondary" style="white-space: nowrap; text-align: center; flex: 1; margin: 0;" onclick="showInstallerGuideModal()">Other Operating Systems</button>
                                 </div>
                             </div>
                         `;
@@ -829,7 +829,7 @@ function toggleTheme() {
 
                                 <div style="display: flex; gap: 10px; margin-top: 8px;">
                                     ${showDownload ? `<a href="${dlUrl}" class="btn btn-primary" style="white-space: nowrap; text-align: center; flex: 1; margin: 0;">${downloadLabel}</a>` : ''}
-                                    <button class="btn btn-secondary" style="white-space: nowrap; text-align: center; flex: 1; margin: 0;" onclick="showInstallerGuideModal()">Releases / Other Operating Systems</button>
+                                    <button class="btn btn-secondary" style="white-space: nowrap; text-align: center; flex: 1; margin: 0;" onclick="showInstallerGuideModal()">Other Operating Systems</button>
                                 </div>
                             </div>
                         `;

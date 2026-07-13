@@ -145,7 +145,7 @@ test.describe('Dashboard UI Automation', () => {
     await expect(page.locator('text=⬇️ Download Signed Binary')).not.toBeVisible();
 
     // Verify package manager sections (Brew, Scoop) are hidden in the guide modal
-    await page.click('button:has-text("Other OSs")');
+    await page.click('button:has-text("Releases / Other Operating Systems")');
     await expect(page.locator('#installer-guide-modal')).toBeVisible();
     await expect(page.locator('#guide-macos-brew-section')).not.toBeVisible();
     

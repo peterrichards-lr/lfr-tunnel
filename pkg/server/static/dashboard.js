@@ -164,7 +164,7 @@
             menu.style.display = menu.style.display === 'none' ? 'block' : 'none';
         }
 
-        document.addEventListener('click', (e) => {
+        const handleOutsideDropdownClick = (e) => {
             const customTrigger = document.getElementById('portal-custom-dropdown');
             if (customTrigger && !customTrigger.contains(e.target)) {
                 const menu = document.getElementById('custom-dropdown-menu');
@@ -175,7 +175,9 @@
                 const menu = document.getElementById('acc-custom-menu');
                 if (menu) menu.style.display = 'none';
             }
-        });
+        };
+        document.addEventListener('click', handleOutsideDropdownClick);
+        document.addEventListener('touchstart', handleOutsideDropdownClick, { passive: true });
 
         let tableInstances = {};
 
@@ -784,7 +786,7 @@ function toggleTheme() {
                                     <div>🏷️ <strong>Latest Client Target:</strong> ${latestVer}</div>
                                 </div>
                                 <div style="display: flex; gap: 10px; margin-top: 8px;">
-                                    <button class="btn btn-secondary" style="white-space: nowrap; text-align: center; flex: 1; margin: 0;" onclick="showInstallerGuideModal()">Releases / Other OSs</button>
+                                    <button class="btn btn-secondary" style="white-space: nowrap; text-align: center; flex: 1; margin: 0;" onclick="showInstallerGuideModal()">Releases / Other Operating Systems</button>
                                 </div>
                             </div>
                         `;
@@ -827,7 +829,7 @@ function toggleTheme() {
 
                                 <div style="display: flex; gap: 10px; margin-top: 8px;">
                                     ${showDownload ? `<a href="${dlUrl}" class="btn btn-primary" style="white-space: nowrap; text-align: center; flex: 1; margin: 0;">${downloadLabel}</a>` : ''}
-                                    <button class="btn btn-secondary" style="white-space: nowrap; text-align: center; flex: 1; margin: 0;" onclick="showInstallerGuideModal()">Other OSs</button>
+                                    <button class="btn btn-secondary" style="white-space: nowrap; text-align: center; flex: 1; margin: 0;" onclick="showInstallerGuideModal()">Releases / Other Operating Systems</button>
                                 </div>
                             </div>
                         `;
@@ -2890,6 +2892,24 @@ applyTheme(currentUser.theme_preference);
             document.getElementById('guide-macos-brew-section').style.display = isBrewDisabled ? 'none' : 'block';
             document.getElementById('guide-windows-scoop-section').style.display = isScoopDisabled ? 'none' : 'block';
  
+            // Dynamically update Direct script installer labels if Homebrew/Scoop are disabled
+            const macosDirectLabel = document.querySelector('[data-i18n="guide_macos_direct"]');
+            if (macosDirectLabel) {
+                if (isBrewDisabled) {
+                    macosDirectLabel.innerHTML = (window.translations && window.translations["guide_macos_direct_recommended"]) ? window.translations["guide_macos_direct_recommended"] : "Recommended via Shell Script:";
+                } else {
+                    macosDirectLabel.innerHTML = (window.translations && window.translations["guide_macos_direct"]) ? window.translations["guide_macos_direct"] : "Direct Installation Script (Alternative):";
+                }
+            }
+            const windowsDirectLabel = document.querySelector('[data-i18n="guide_windows_direct"]');
+            if (windowsDirectLabel) {
+                if (isScoopDisabled) {
+                    windowsDirectLabel.innerHTML = (window.translations && window.translations["guide_windows_direct_recommended"]) ? window.translations["guide_windows_direct_recommended"] : "Recommended via PowerShell Script:";
+                } else {
+                    windowsDirectLabel.innerHTML = (window.translations && window.translations["guide_windows_direct"]) ? window.translations["guide_windows_direct"] : "Direct Installation (PowerShell Script):";
+                }
+            }
+
             document.getElementById('installer-guide-modal').style.display = 'flex';
             
             // Auto-detect OS and switch tab
@@ -3823,6 +3843,45 @@ applyTheme(currentUser.theme_preference);
                 closeAllActionMenus();
             }
         });
+
+        // Touch & Click-outside support to close modals by tapping/clicking on the backdrop overlay
+        const handleModalOverlayClick = (e) => {
+            if (e.target.classList.contains('modal-overlay')) {
+                // Trigger specific close callbacks if they exist
+                if (e.target.id === 'token-modal') {
+                    closeModal();
+                    loadTokens();
+                } else if (e.target.id === 'mfa-modal') {
+                    closeMFAModal();
+                } else if (e.target.id === 'blacklist-modal') {
+                    closeBlacklistModal();
+                } else if (e.target.id === 'invite-modal') {
+                    closeInviteModal();
+                } else if (e.target.id === 'delete-account-modal') {
+                    closeDeleteAccountModal();
+                } else if (e.target.id === 'user-quota-modal') {
+                    closeUserQuotaModal();
+                } else if (e.target.id === 'user-res-limit-modal') {
+                    closeUserResLimitModal();
+                } else if (e.target.id === 'user-tunnels-limit-modal') {
+                    closeUserTunnelsLimitModal();
+                } else if (e.target.id === 'tunnel-override-modal') {
+                    closeTunnelOverrideModal();
+                } else if (e.target.id === 'tunnel-details-modal') {
+                    closeTunnelDetailsModal();
+                } else if (e.target.id === 'user-details-modal') {
+                    closeUserDetailsModal();
+                } else if (e.target.id === 'installer-guide-modal') {
+                    closeInstallerGuideModal();
+                } else if (e.target.id === 'targeted-message-modal') {
+                    closeTargetedModal();
+                } else {
+                    e.target.style.display = 'none';
+                }
+            }
+        };
+        window.addEventListener('click', handleModalOverlayClick);
+        window.addEventListener('touchstart', handleModalOverlayClick, { passive: true });
         // ----------------------------------------------------
         // NETWORK HEALTH
         // ----------------------------------------------------

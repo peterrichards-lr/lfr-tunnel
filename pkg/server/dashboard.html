@@ -63,20 +63,20 @@
             <button class="btn btn-outline" id="btn-show-register" style="margin-top: 8px;" data-i18n="btn_register_account">Create Account</button>
             
             <form id="email-form" class="hidden" style="margin-top: 16px;">
-                <input type="email" id="email-input" class="input-field" placeholder="name@liferay.com" required>
+                <input type="email" id="email-input" name="email" autocomplete="email" class="input-field" placeholder="name@liferay.com" required>
                 <button type="submit" class="btn btn-primary" id="btn-magic-link" data-i18n="btn_send_magic_link">Send Magic Link</button>
                 <div id="email-msg" style="margin-top: 12px; font-size: 13px;"></div>
             </form>
 
             <form id="register-form" class="hidden" style="margin-top: 16px;">
-                <input type="email" id="reg-email" class="input-field" placeholder="name@liferay.com" required>
+                <input type="email" id="reg-email" name="email" autocomplete="email" class="input-field" placeholder="name@liferay.com" required>
                 <button type="submit" class="btn btn-primary" id="btn-register" data-i18n="btn_register_account">Register Account</button>
                 <div id="reg-msg" style="margin-top: 12px; font-size: 13px;"></div>
             </form>
 
             <form id="mfa-form" class="hidden" style="margin-top: 16px;">
                 <p style="font-size: 13px; color: var(--text-muted); margin-bottom: 12px; line-height: 1.5; text-align: left;" data-i18n="mfa_verify_desc">Your account is protected with Multi-Factor Authentication. Please enter the 6-digit code from your authenticator app to complete your login:</p>
-                <input type="text" id="mfa-code-input" class="input-field" placeholder="123456" pattern="[0-9]{6}" maxlength="6" inputmode="numeric" required style="letter-spacing: 8px; text-align: center; font-size: 18px; font-weight: bold;">
+                <input type="text" id="mfa-code-input" name="code" autocomplete="one-time-code" class="input-field" placeholder="123456" pattern="[0-9]{6}" maxlength="6" inputmode="numeric" required style="letter-spacing: 8px; text-align: center; font-size: 18px; font-weight: bold;">
                 <input type="hidden" id="mfa-temp-token">
                 <button type="submit" class="btn btn-primary" id="btn-verify-mfa" style="margin-top: 12px;" data-i18n="btn_verify_login">Verify & Login</button>
                 <div id="mfa-msg" style="margin-top: 12px; font-size: 13px; color: var(--danger);"></div>

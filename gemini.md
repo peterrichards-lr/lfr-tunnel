@@ -863,6 +863,9 @@ The solution will consist of:
 - [x] Enforce Liferay client download restrictions in production VPS server configuration.
 - [x] Update Playwright UI E2E test assertions and verify all tests pass.
 
+## Password Manager Autocomplete Fields Release (v1.31.3)
+- [x] Add name and autocomplete attributes to login, registration, and MFA input fields to support 1Password autofill.
+
 <!-- markdownlint-disable MD049 -->
 ---
 *Last Updated: 2026-07-13* | *Last Reviewed: 2026-07-13*

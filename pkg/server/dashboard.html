@@ -224,24 +224,9 @@
                 </div>
 
                 <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 24px;">
-                    <div class="glass" style="padding: 24px; border-radius: 8px;">
-                        <h3 id="whats-new-title" style="margin-bottom: 16px; font-size: 18px;" data-i18n="whats_new_title">What's New</h3>
-                        <ul id="whats-new-list" style="color: var(--text-muted); padding-left: 20px; line-height: 1.6; font-size: 14px;">
-                            <li>Loading updates...</li>
-                        </ul>
-                    </div>
-
+                    <!-- Left Column -->
                     <div style="display: flex; flex-direction: column; gap: 24px;">
-                        <div class="glass" style="padding: 24px; border-radius: 8px;">
-                            <h3 style="margin-bottom: 16px; font-size: 18px;" data-i18n="quick_links_title">Quick Links</h3>
-                            <div style="display: flex; flex-direction: column; gap: 12px;">
-                                <a href="#" onclick="showTab('tokens'); return false;" style="color: var(--primary); text-decoration: none; font-weight: 500;">→ Generate a new CLI Token</a>
-                                <a href="#" onclick="showTab('tunnels'); return false;" style="color: var(--primary); text-decoration: none; font-weight: 500;">→ View your Active Tunnels</a>
-                                <a href="#" onclick="startTutorial(true); return false;" style="color: var(--primary); text-decoration: none; font-weight: 500;">→ Run Dashboard Onboarding Tour</a>
-                                <a id="docs-link" href="#" target="_blank" style="color: var(--primary); text-decoration: none; font-weight: 500;">→ Read the Documentation</a>
-                                <a id="secure-token-guide-link" href="#" target="_blank" style="color: var(--primary); text-decoration: none; font-weight: 500;">→ Secure Token Storage (LDM-Style)</a>
-                            </div>
-                        </div>
+                        <div id="cli-client-banner-container"></div>
 
                         <div id="docker-container-box" class="glass" style="padding: 24px; border-radius: 8px; display: none;">
                             <h3 style="margin-bottom: 12px; font-size: 18px; display: flex; align-items: center; gap: 8px;">
@@ -258,6 +243,27 @@
                             <div style="display: flex; gap: 16px; margin-top: 8px; flex-wrap: wrap;">
                                 <a id="docker-hub-link" href="#" target="_blank" style="color: var(--primary); text-decoration: none; font-size: 14px; font-weight: 500; display: inline-block;">→ View on Docker Hub</a>
                                 <a id="docker-bypass-link" href="#" target="_blank" style="color: var(--primary); text-decoration: none; font-size: 14px; font-weight: 500; display: none;">→ EDR Bypass Guide</a>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Right Column -->
+                    <div style="display: flex; flex-direction: column; gap: 24px;">
+                        <div class="glass" style="padding: 24px; border-radius: 8px;">
+                            <h3 id="whats-new-title" style="margin-bottom: 16px; font-size: 18px;" data-i18n="whats_new_title">What's New</h3>
+                            <ul id="whats-new-list" style="color: var(--text-muted); padding-left: 20px; line-height: 1.6; font-size: 14px;">
+                                <li>Loading updates...</li>
+                            </ul>
+                        </div>
+
+                        <div class="glass" style="padding: 24px; border-radius: 8px;">
+                            <h3 style="margin-bottom: 16px; font-size: 18px;" data-i18n="quick_links_title">Quick Links</h3>
+                            <div style="display: flex; flex-direction: column; gap: 12px;">
+                                <a href="#" onclick="showTab('tokens'); return false;" style="color: var(--primary); text-decoration: none; font-weight: 500;">→ Generate a new CLI Token</a>
+                                <a href="#" onclick="showTab('tunnels'); return false;" style="color: var(--primary); text-decoration: none; font-weight: 500;">→ View your Active Tunnels</a>
+                                <a href="#" onclick="startTutorial(true); return false;" style="color: var(--primary); text-decoration: none; font-weight: 500;">→ Run Dashboard Onboarding Tour</a>
+                                <a id="docs-link" href="#" target="_blank" style="color: var(--primary); text-decoration: none; font-weight: 500;">→ Read the Documentation</a>
+                                <a id="secure-token-guide-link" href="#" target="_blank" style="color: var(--primary); text-decoration: none; font-weight: 500;">→ Secure Token Storage (LDM-Style)</a>
                             </div>
                         </div>
                     </div>
@@ -1115,10 +1121,12 @@
                 <!-- macOS -->
                 <div id="tab-content-macos" class="tab-content">
                     <h4 data-i18n="guide_macos_title" style="font-size: 14px; margin-bottom: 8px;">🚀 Apple Silicon (M1/M2/M3) & Intel Macs</h4>
-                    <div data-i18n="guide_macos_brew" style="font-size: 0.8rem; font-weight: bold; margin-top: 10px; color: var(--text);">Recommended via Homebrew:</div>
-                    <div style="margin-top: 4px; margin-bottom: 12px; position: relative; background: #0d1117; color: #e6edf3; border-radius: 6px; border: 1px solid rgba(255,255,255,0.1); padding: 10px 40px 10px 12px; font-family: monospace; font-size: 0.8rem;">
-                        <span id="guide-cmd-macos">brew tap peterrichards-lr/tap && brew install lfr-tunnel</span>
-                        <button onclick="navigator.clipboard.writeText(document.getElementById('guide-cmd-macos').innerText); this.innerHTML='✓'; setTimeout(() => this.innerHTML='📋', 2000);" style="position: absolute; top: 6px; right: 6px; background: transparent; border: 1px solid rgba(255,255,255,0.2); color: #8b949e; border-radius: 4px; width: 22px; height: 22px; cursor: pointer;">📋</button>
+                    <div id="guide-macos-brew-section">
+                        <div data-i18n="guide_macos_brew" style="font-size: 0.8rem; font-weight: bold; margin-top: 10px; color: var(--text);">Recommended via Homebrew:</div>
+                        <div style="margin-top: 4px; margin-bottom: 12px; position: relative; background: #0d1117; color: #e6edf3; border-radius: 6px; border: 1px solid rgba(255,255,255,0.1); padding: 10px 40px 10px 12px; font-family: monospace; font-size: 0.8rem;">
+                            <span id="guide-cmd-macos">brew tap peterrichards-lr/tap && brew install lfr-tunnel</span>
+                            <button onclick="navigator.clipboard.writeText(document.getElementById('guide-cmd-macos').innerText); this.innerHTML='✓'; setTimeout(() => this.innerHTML='📋', 2000);" style="position: absolute; top: 6px; right: 6px; background: transparent; border: 1px solid rgba(255,255,255,0.2); color: #8b949e; border-radius: 4px; width: 22px; height: 22px; cursor: pointer;">📋</button>
+                        </div>
                     </div>
 
                     <div data-i18n="guide_macos_direct" style="font-size: 0.8rem; font-weight: bold; margin-top: 10px; color: var(--text-muted);">Direct Installation Script (Alternative):</div>
@@ -1136,10 +1144,12 @@
                 <!-- Windows -->
                 <div id="tab-content-windows" class="tab-content" style="display: none;">
                     <h4 data-i18n="guide_windows_title" style="font-size: 14px; margin-bottom: 8px;">🚀 Windows 10 / 11 (64-bit)</h4>
-                    <div data-i18n="guide_windows_scoop" style="font-size: 0.8rem; font-weight: bold; margin-top: 10px; color: var(--text);">Recommended via Scoop:</div>
-                    <div style="margin-top: 4px; margin-bottom: 12px; position: relative; background: #0d1117; color: #e6edf3; border-radius: 6px; border: 1px solid rgba(255,255,255,0.1); padding: 10px 40px 10px 12px; font-family: monospace; font-size: 0.8rem;">
-                        <span id="guide-cmd-windows">scoop bucket add peterrichards-lr https://github.com/peterrichards-lr/scoop-bucket && scoop install lfr-tunnel</span>
-                        <button onclick="navigator.clipboard.writeText(document.getElementById('guide-cmd-windows').innerText); this.innerHTML='✓'; setTimeout(() => this.innerHTML='📋', 2000);" style="position: absolute; top: 6px; right: 6px; background: transparent; border: 1px solid rgba(255,255,255,0.2); color: #8b949e; border-radius: 4px; width: 22px; height: 22px; cursor: pointer;">📋</button>
+                    <div id="guide-windows-scoop-section">
+                        <div data-i18n="guide_windows_scoop" style="font-size: 0.8rem; font-weight: bold; margin-top: 10px; color: var(--text);">Recommended via Scoop:</div>
+                        <div style="margin-top: 4px; margin-bottom: 12px; position: relative; background: #0d1117; color: #e6edf3; border-radius: 6px; border: 1px solid rgba(255,255,255,0.1); padding: 10px 40px 10px 12px; font-family: monospace; font-size: 0.8rem;">
+                            <span id="guide-cmd-windows">scoop bucket add peterrichards-lr https://github.com/peterrichards-lr/scoop-bucket && scoop install lfr-tunnel</span>
+                            <button onclick="navigator.clipboard.writeText(document.getElementById('guide-cmd-windows').innerText); this.innerHTML='✓'; setTimeout(() => this.innerHTML='📋', 2000);" style="position: absolute; top: 6px; right: 6px; background: transparent; border: 1px solid rgba(255,255,255,0.2); color: #8b949e; border-radius: 4px; width: 22px; height: 22px; cursor: pointer;">📋</button>
+                        </div>
                     </div>
 
                     <div data-i18n="guide_windows_direct" style="font-size: 0.8rem; font-weight: bold; margin-top: 10px; color: var(--text-muted);">Direct Installation (PowerShell Script):</div>

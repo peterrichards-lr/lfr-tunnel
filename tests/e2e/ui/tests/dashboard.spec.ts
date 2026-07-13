@@ -135,9 +135,24 @@ test.describe('Dashboard UI Automation', () => {
 
     // 7. Verify dynamic platform configuration overrides render correctly on the Overview page
     await page.click('#nav-overview');
-    await expect(page.locator('text=🚀 Recommended Installation')).toBeVisible();
+    const bannerContainer = page.locator('#cli-client-banner-container');
+    await expect(bannerContainer).toBeVisible();
+    const textContent = await bannerContainer.innerText();
+    expect(textContent).toMatch(/(Recommended Installation|Upgrade Command|Client Up to Date|Client Info)/);
     await expect(page.locator('text=6d4aef719dee798e611139e422d9231b226ec3538617d025fad08accf8fc63d6')).toBeVisible();
-    await expect(page.locator('text=⬇️ Download Signed Binary')).toBeVisible();
+    
+    // Direct binary download is disabled in server-config.yaml, so the download button should NOT be visible
+    await expect(page.locator('text=⬇️ Download Signed Binary')).not.toBeVisible();
+
+    // Verify package manager sections (Brew, Scoop) are hidden in the guide modal
+    await page.click('button:has-text("Other OSs")');
+    await expect(page.locator('#installer-guide-modal')).toBeVisible();
+    await expect(page.locator('#guide-macos-brew-section')).not.toBeVisible();
+    
+    await page.click('#tab-btn-windows');
+    await expect(page.locator('#guide-windows-scoop-section')).not.toBeVisible();
+    
+    await page.click('#installer-guide-modal button:has-text("Close")');
   });
 
   test('Subdomain Reservations flow', async ({ page }) => {
@@ -208,22 +223,20 @@ test.describe('Dashboard UI Automation', () => {
     await page.click('#btn-toggle-maint');
 
     // Verify soft maintenance is now pending in control panel
-    await expect(page.locator('#maint-status-text')).toContainText('PENDING COUNTDOWN');
+    await expect(page.locator('#maint-status-text')).toContainText('SCHEDULED');
 
-    // 3. Navigate back to Overview and verify countdown box is visible
+    // 3. Navigate back to Overview and verify countdown banner is visible
     await page.click('#nav-overview');
-    await expect(page.locator('#overview-maintenance-box')).toBeVisible();
-    await expect(page.locator('#overview-maintenance-text')).toContainText('Scheduled Maintenance starting in');
     await expect(page.locator('#global-maintenance-banner')).toBeVisible();
+    await expect(page.locator('#global-maintenance-banner')).toContainText('Scheduled Maintenance starting in');
 
     // 4. Cancel maintenance from Gateway Maintenance tab
     await page.click('#nav-maintenance');
     await page.click('#btn-toggle-maint');
     await expect(page.locator('#maint-status-text')).toContainText('INACTIVE');
 
-    // 5. Verify Overview box and global banner disappear
+    // 5. Verify global banner disappears
     await page.click('#nav-overview');
-    await expect(page.locator('#overview-maintenance-box')).not.toBeVisible();
     await expect(page.locator('#global-maintenance-banner')).not.toBeVisible();
   });
 

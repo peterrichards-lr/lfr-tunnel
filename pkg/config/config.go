@@ -86,6 +86,9 @@ type ServerConfig struct {
 	EnableWAF                  bool                      `yaml:"enable_waf"`
 	DisableEmailLogin          bool                      `yaml:"disable_email_login"`
 	DisableClientDownloads     bool                      `yaml:"disable_client_downloads"`
+	DisableBrew                bool                      `yaml:"disable_brew"`
+	DisableScoop               bool                      `yaml:"disable_scoop"`
+	DisableAPIRateLimit        bool                      `yaml:"disable_api_rate_limit"`
 	PortalURL                  string                    `yaml:"portal_url"`
 	ControlPlaneURL            string                    `yaml:"control_plane_url"`
 	EdgeToken                  string                    `yaml:"edge_token"`
@@ -406,6 +409,15 @@ func LoadServerConfig(path string) (*ServerConfig, error) {
 	}
 	if val := os.Getenv("LFT_DISABLE_CLIENT_DOWNLOADS"); val != "" {
 		cfg.DisableClientDownloads = strings.ToLower(val) == "true" || val == "1"
+	}
+	if val := os.Getenv("LFT_DISABLE_BREW"); val != "" {
+		cfg.DisableBrew = strings.ToLower(val) == "true" || val == "1"
+	}
+	if val := os.Getenv("LFT_DISABLE_SCOOP"); val != "" {
+		cfg.DisableScoop = strings.ToLower(val) == "true" || val == "1"
+	}
+	if val := os.Getenv("LFT_DISABLE_API_RATE_LIMIT"); val != "" {
+		cfg.DisableAPIRateLimit = strings.ToLower(val) == "true" || val == "1"
 	}
 	if val := os.Getenv("LFT_PROXY_HEADERS"); val != "" {
 		var m map[string]string

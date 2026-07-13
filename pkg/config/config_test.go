@@ -98,6 +98,8 @@ proxy_headers:
 	os.Setenv("LFT_LATEST_CLIENT_VERSION", "v2.1.0")       //nolint:errcheck
 	os.Setenv("LFT_ENABLE_WAF", "false")                   //nolint:errcheck
 	os.Setenv("LFT_DISABLE_CLIENT_DOWNLOADS", "true")      //nolint:errcheck
+	os.Setenv("LFT_DISABLE_BREW", "true")                  //nolint:errcheck
+	os.Setenv("LFT_DISABLE_SCOOP", "true")                 //nolint:errcheck
 	os.Setenv("LFT_PORTAL_URL", "https://env-portal.com")  //nolint:errcheck
 	os.Setenv("LFT_FORCE_MFA", "false")                    //nolint:errcheck
 	defer func() {
@@ -108,6 +110,8 @@ proxy_headers:
 		os.Unsetenv("LFT_LATEST_CLIENT_VERSION")    //nolint:errcheck
 		os.Unsetenv("LFT_ENABLE_WAF")               //nolint:errcheck
 		os.Unsetenv("LFT_DISABLE_CLIENT_DOWNLOADS") //nolint:errcheck
+		os.Unsetenv("LFT_DISABLE_BREW")             //nolint:errcheck
+		os.Unsetenv("LFT_DISABLE_SCOOP")            //nolint:errcheck
 		os.Unsetenv("LFT_PORTAL_URL")               //nolint:errcheck
 		os.Unsetenv("LFT_FORCE_MFA")                //nolint:errcheck
 	}()
@@ -137,6 +141,12 @@ proxy_headers:
 	}
 	if !cfgEnv.DisableClientDownloads {
 		t.Errorf("expected DisableClientDownloads override to be true, got false")
+	}
+	if !cfgEnv.DisableBrew {
+		t.Errorf("expected DisableBrew override to be true, got false")
+	}
+	if !cfgEnv.DisableScoop {
+		t.Errorf("expected DisableScoop override to be true, got false")
 	}
 	if cfgEnv.PortalURL != "https://env-portal.com" {
 		t.Errorf("expected PortalURL override to be https://env-portal.com, got %s", cfgEnv.PortalURL)

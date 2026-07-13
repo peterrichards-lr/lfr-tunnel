@@ -1,0 +1,40 @@
+{
+  "title": "Epic: Dashboard Client Installation and Update UX Improvements",
+  "body": "Implements the following enhancements to the Liferay Tunnel Dashboard Overview and installation guide modal:\n1. Configurable package manager visibility (Brew/Scoop) via server-config.\n2. Dynamic CLI installation block displaying local upgrade commands (`lfr-tunnel -upgrade`) when an active client is detected.\n3. Styling/spacing fixes for the Update Available header and CLI details.",
+  "labels": [
+    "enhancement"
+  ],
+  "issues": [
+    {
+      "title": "Sub-Issue #1: Implement configurable package manager options (Homebrew, Scoop) on Server and UI",
+      "body": "Add configuration parameters to control the visibility of Scoop and Homebrew in the installation guide:\n- Add `disable_brew` and `disable_scoop` config options in `server-config.yaml` / Go struct.\n- Expose these configuration states in the `/api/version` JSON response.\n- Conditionally hide the corresponding Homebrew and Scoop sections/tabs in the frontend Dashboard UI installer guide modal based on these config settings.",
+      "completed": true,
+      "labels": [
+        "enhancement"
+      ],
+      "issueNumber": "443",
+      "closed": true
+    },
+    {
+      "title": "Sub-Issue #2: Implement dynamic upgrade command recommendation in Dashboard",
+      "body": "When a client has already connected and we detect a version mismatch:\n- Check if `currentUser.last_client_version` is present.\n- If present, show a simplified dynamic upgrade card with `lfr-tunnel -upgrade` instead of the full installation command script.\n- Retain the SHA256 checksum and the 'Other OSs' modal trigger.",
+      "completed": true,
+      "labels": [
+        "enhancement"
+      ],
+      "issueNumber": "444",
+      "closed": true
+    },
+    {
+      "title": "Sub-Issue #3: Correct layout spacing and styling in the CLI Client Installation dashboard block",
+      "body": "Improve the visual presentation of the dashboard overview client installation card:\n- Increase margins between the header ('Update Available') and the version subtext.\n- Fine-tune padding and line-heights for optimal readability.",
+      "completed": true,
+      "labels": [
+        "enhancement"
+      ],
+      "issueNumber": "445",
+      "closed": true
+    }
+  ],
+  "epicNumber": "442"
+}

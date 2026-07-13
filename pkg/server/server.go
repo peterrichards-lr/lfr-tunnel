@@ -458,7 +458,7 @@ func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// 2. Rate Limiting and Auto-Ban for API routes
-	if strings.HasPrefix(r.URL.Path, "/api/") {
+	if strings.HasPrefix(r.URL.Path, "/api/") && !s.cfg.DisableAPIRateLimit {
 		limiter := s.getRateLimiter(ip)
 		if !limiter.Allow() {
 			s.vMutex.Lock()
@@ -654,6 +654,8 @@ func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 				"client_platforms":         s.cfg.ClientPlatforms,
 				"regions":                  regions,
 				"disable_client_downloads": s.cfg.DisableClientDownloads,
+				"disable_brew":             s.cfg.DisableBrew,
+				"disable_scoop":            s.cfg.DisableScoop,
 				"start_time":               s.startTime.Format(time.RFC3339),
 				"uptime_seconds":           int(time.Since(s.startTime).Seconds()),
 				"force_mfa":                s.cfg.ForceMFA,

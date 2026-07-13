@@ -2788,6 +2788,8 @@ func TestServer_ConfigurableLinks(t *testing.T) {
 		SecureTokenGuideURL:    "https://custom-token.example.com",
 		DockerHubURL:           "https://custom-hub.example.com",
 		StatusPageURL:          "https://custom-status.example.com",
+		DisableBrew:            true,
+		DisableScoop:           true,
 	}
 	if cfg.DBPath == "" {
 		cfg.DBPath = filepath.Join(t.TempDir(), "test.db")
@@ -2825,6 +2827,12 @@ func TestServer_ConfigurableLinks(t *testing.T) {
 	}
 	if resp["status_page_url"] != "https://custom-status.example.com" {
 		t.Errorf("expected status_page_url to be https://custom-status.example.com, got %v", resp["status_page_url"])
+	}
+	if resp["disable_brew"] != true {
+		t.Errorf("expected disable_brew to be true, got %v", resp["disable_brew"])
+	}
+	if resp["disable_scoop"] != true {
+		t.Errorf("expected disable_scoop to be true, got %v", resp["disable_scoop"])
 	}
 }
 

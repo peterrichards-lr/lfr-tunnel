@@ -858,6 +858,11 @@ The solution will consist of:
 - [x] Dynamically update Direct script installation guide titles to "Recommended" when Homebrew or Scoop are disabled.
 - [x] Update Playwright UI E2E test assertions to match the new button label.
 
+## Button Rename and Touch Optimizations Release (v1.31.2)
+- [x] Rename the button label from "Releases / Other Operating Systems" to "Other Operating Systems".
+- [x] Enforce Liferay client download restrictions in production VPS server configuration.
+- [x] Update Playwright UI E2E test assertions and verify all tests pass.
+
 <!-- markdownlint-disable MD049 -->
 ---
 *Last Updated: 2026-07-13* | *Last Reviewed: 2026-07-13*

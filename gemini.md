@@ -853,6 +853,11 @@ The solution will consist of:
 - [x] Hide Homebrew and Scoop tabs/guides in the guide modal if configured.
 - [x] Update Playwright E2E UI automation test assertions and verify all tests pass.
 
+## Dynamic Installation Guide Labels & Other Operating Systems Text (v1.31.1)
+- [x] Change "Other OSs" button label to its fuller form "Releases / Other Operating Systems".
+- [x] Dynamically update Direct script installation guide titles to "Recommended" when Homebrew or Scoop are disabled.
+- [x] Update Playwright UI E2E test assertions to match the new button label.
+
 <!-- markdownlint-disable MD049 -->
 ---
 *Last Updated: 2026-07-13* | *Last Reviewed: 2026-07-13*

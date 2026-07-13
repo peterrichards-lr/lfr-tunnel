@@ -784,7 +784,7 @@ function toggleTheme() {
                                     <div>🏷️ <strong>Latest Client Target:</strong> ${latestVer}</div>
                                 </div>
                                 <div style="display: flex; gap: 10px; margin-top: 8px;">
-                                    <button class="btn btn-secondary" style="white-space: nowrap; text-align: center; flex: 1; margin: 0;" onclick="showInstallerGuideModal()">Releases / Other OSs</button>
+                                    <button class="btn btn-secondary" style="white-space: nowrap; text-align: center; flex: 1; margin: 0;" onclick="showInstallerGuideModal()">Releases / Other Operating Systems</button>
                                 </div>
                             </div>
                         `;
@@ -827,7 +827,7 @@ function toggleTheme() {
 
                                 <div style="display: flex; gap: 10px; margin-top: 8px;">
                                     ${showDownload ? `<a href="${dlUrl}" class="btn btn-primary" style="white-space: nowrap; text-align: center; flex: 1; margin: 0;">${downloadLabel}</a>` : ''}
-                                    <button class="btn btn-secondary" style="white-space: nowrap; text-align: center; flex: 1; margin: 0;" onclick="showInstallerGuideModal()">Other OSs</button>
+                                    <button class="btn btn-secondary" style="white-space: nowrap; text-align: center; flex: 1; margin: 0;" onclick="showInstallerGuideModal()">Releases / Other Operating Systems</button>
                                 </div>
                             </div>
                         `;
@@ -2890,6 +2890,24 @@ applyTheme(currentUser.theme_preference);
             document.getElementById('guide-macos-brew-section').style.display = isBrewDisabled ? 'none' : 'block';
             document.getElementById('guide-windows-scoop-section').style.display = isScoopDisabled ? 'none' : 'block';
  
+            // Dynamically update Direct script installer labels if Homebrew/Scoop are disabled
+            const macosDirectLabel = document.querySelector('[data-i18n="guide_macos_direct"]');
+            if (macosDirectLabel) {
+                if (isBrewDisabled) {
+                    macosDirectLabel.innerHTML = (window.translations && window.translations["guide_macos_direct_recommended"]) ? window.translations["guide_macos_direct_recommended"] : "Recommended via Shell Script:";
+                } else {
+                    macosDirectLabel.innerHTML = (window.translations && window.translations["guide_macos_direct"]) ? window.translations["guide_macos_direct"] : "Direct Installation Script (Alternative):";
+                }
+            }
+            const windowsDirectLabel = document.querySelector('[data-i18n="guide_windows_direct"]');
+            if (windowsDirectLabel) {
+                if (isScoopDisabled) {
+                    windowsDirectLabel.innerHTML = (window.translations && window.translations["guide_windows_direct_recommended"]) ? window.translations["guide_windows_direct_recommended"] : "Recommended via PowerShell Script:";
+                } else {
+                    windowsDirectLabel.innerHTML = (window.translations && window.translations["guide_windows_direct"]) ? window.translations["guide_windows_direct"] : "Direct Installation (PowerShell Script):";
+                }
+            }
+
             document.getElementById('installer-guide-modal').style.display = 'flex';
             
             // Auto-detect OS and switch tab

@@ -23,8 +23,11 @@ To ensure we build the capabilities that provide the highest impact for the Sale
 
 ### Pull Requests
 
-1. **GitHub Issues**: A GitHub issue SHOULD be created for any bug fix or feature. This helps track progress, acts as our roadmap/design transparency, and is required for generating the `CHANGELOG.md` entry. All Pull Requests must be linked to their corresponding issues by including standard closing keywords (e.g. `Closes #<issue_number>` or `Fixes #<issue_number>`) in the PR description. This links the branch, commits, and PR to the issue, and auto-closes it upon merge.
-2. **Branching Strategy & PR Workflow**:
+1. **GitHub Issues**: A GitHub issue **must** be created to record all bugs, enhancements, feature requests (FRs), and technical debt items. No coding should start without a corresponding issue.
+2. **Analysis & Implementation Planning**: For every issue, the contributor (whether a human or an agent) **must** perform a code analysis against the codebase and produce a detailed implementation plan. Work cannot proceed to execution until the plan is aligned/approved.
+3. **Mandatory Issue Linking**: All Pull Requests **must** link back to their corresponding GitHub issues by including standard closing keywords (e.g. `Closes #<issue_number>` or `Fixes #<issue_number>`) in the PR description.
+4. **Mandatory Peer Reviews**: All Pull Requests **must** be reviewed and approved by another contributor (either a human or an agent) before they can be merged. Direct merges are strictly prohibited.
+5. **Branching Strategy & PR Workflow**:
    - **`master`**: Strictly for production-ready, stable releases. Direct pushes to `master` are blocked; all changes must go through a Pull Request (PR).
    - **Feature Branches**: Develop new features, visual dashboard updates, or configuration additions on branches prefixed with `feature/` (e.g., `feature/dashboard-version-indicator`).
    - **Bug Fix Branches**: Develop bug fixes, logic corrections, or error patches on branches prefixed with `fix/` (e.g., `fix/api-me-missing-language-field`).
@@ -117,4 +120,4 @@ Verify these administrative control flows on the Portal Dashboard:
 
 <!-- markdownlint-disable MD049 -->
 ---
-*Last Updated: 2026-07-02* | *Last Reviewed: 2026-07-02*
+*Last Updated: 2026-07-10* | *Last Reviewed: 2026-07-10*

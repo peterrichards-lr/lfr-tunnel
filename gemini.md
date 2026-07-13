@@ -840,7 +840,11 @@ The solution will consist of:
 - [x] Remove redundant database check and user creation comments in `pkg/server/server.go`.
 - [x] Verify compilation and run all tests (`make test`).
 
+## Enforce Strict Contributor Standards (v1.30.4)
+- [x] Update `CONTRIBUTING.md` to mandate GitHub issues for all enhancements/bugs.
+- [x] Enforce implementation planning, PR linking, and mandatory reviews.
+
 <!-- markdownlint-disable MD049 -->
 ---
-*Last Updated: 2026-07-09* | *Last Reviewed: 2026-07-09*
+*Last Updated: 2026-07-10* | *Last Reviewed: 2026-07-10*
 

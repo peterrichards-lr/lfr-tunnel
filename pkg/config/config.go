@@ -29,6 +29,12 @@ type SMTPServerConfig struct {
 	FromAddress string `yaml:"from_address"`
 }
 
+type WebhookConfig struct {
+	Enabled  bool   `yaml:"enabled"`
+	SlackURL string `yaml:"slack_url"`
+	TeamsURL string `yaml:"teams_url"`
+}
+
 // ServerConfig holds configuration settings for the lfr-tunneld server.
 type ServerConfig struct {
 	Domains                    []string                  `yaml:"domains"`
@@ -53,6 +59,7 @@ type ServerConfig struct {
 	ForceMFA                   bool                      `yaml:"force_mfa"`
 	DBPath                     string                    `yaml:"db_path"`
 	SMTPServer                 SMTPServerConfig          `yaml:"smtp_server"`
+	Webhooks                   WebhookConfig             `yaml:"webhooks"`
 	AdminNotificationEmail     string                    `yaml:"admin_notification_email"`
 	InsecureSkipVerify         bool                      `yaml:"insecure_skip_verify"`
 	Owner                      OwnerConfig               `yaml:"owner"`

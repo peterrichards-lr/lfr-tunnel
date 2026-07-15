@@ -82,7 +82,11 @@ func (s *SMTPClient) Send(to string, subject string, body string, plainBody stri
 	if err := c.Mail(fromAddr); err != nil {
 		return fmt.Errorf("failed to set mail sender: %v", err)
 	}
-	if err := c.Rcpt(to); err != nil {
+	toAddr := to
+	if parsed, err := mail.ParseAddress(to); err == nil {
+		toAddr = parsed.Address
+	}
+	if err := c.Rcpt(toAddr); err != nil {
 		return fmt.Errorf("failed to add mail recipient: %v", err)
 	}
 

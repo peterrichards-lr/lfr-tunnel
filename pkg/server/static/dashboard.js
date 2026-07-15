@@ -1344,6 +1344,7 @@ applyTheme(currentUser.theme_preference);
             if (tabName === 'tunnels') loadTunnels();
             if (tabName === 'reservations') loadReservations();
             if (tabName === 'analytics') loadAnalytics();
+            if (tabName === 'settings') loadServerConfig();
             if (tabName === 'overview') {
                 loadWhatsNew();
                 loadVersionDetails();
@@ -4360,4 +4361,189 @@ applyTheme(currentUser.theme_preference);
             });
 
             driverObj.drive();
+        };
+
+        let rawServerConfig = null;
+
+        async function loadServerConfig() {
+            const card = document.getElementById('card-server-config');
+            const container = document.getElementById('config-tree-container');
+            if (!card || !container) return;
+
+            if (!currentUser || (currentUser.role !== 'owner' && currentUser.role !== 'admin')) {
+                card.style.display = 'none';
+                return;
+            }
+
+            try {
+                const res = await fetch('/api/admin/config-view');
+                if (res.status === 403) {
+                    card.style.display = 'none';
+                    return;
+                }
+                if (!res.ok) {
+                    container.innerHTML = `<div style="color: var(--danger);">Failed to load configuration (HTTP ${res.status})</div>`;
+                    card.style.display = 'block';
+                    return;
+                }
+
+                const data = await res.json();
+                rawServerConfig = data;
+                card.style.display = 'block';
+                renderConfigTree();
+            } catch (err) {
+                container.innerHTML = `<div style="color: var(--danger);">Network error loading configuration</div>`;
+                card.style.display = 'block';
+            }
+        }
+
+        function renderConfigTree() {
+            const container = document.getElementById('config-tree-container');
+            if (!container || !rawServerConfig) return;
+
+            container.innerHTML = '';
+            const searchInput = document.getElementById('config-search');
+            const filterText = searchInput ? searchInput.value.toLowerCase().trim() : '';
+
+            const treeEl = buildTreeHTML(rawServerConfig, filterText);
+            if (treeEl) {
+                container.appendChild(treeEl);
+            } else {
+                container.innerHTML = '<div style="color: var(--text-muted); text-align: center;">No matching configuration items found.</div>';
+            }
+        }
+
+        function buildTreeHTML(val, filterText, path = '') {
+            if (val === null) {
+                const span = document.createElement('span');
+                span.style.color = '#d4d4d4';
+                span.innerText = 'null';
+                return span;
+            }
+
+            if (typeof val === 'object') {
+                const isArray = Array.isArray(val);
+                const keys = isArray ? Object.keys(val) : Object.keys(val).sort();
+                
+                const childrenContainer = document.createElement('div');
+                childrenContainer.style.paddingLeft = '16px';
+                childrenContainer.style.borderLeft = '1px dashed rgba(255, 255, 255, 0.15)';
+                childrenContainer.style.marginLeft = '6px';
+                childrenContainer.style.marginTop = '2px';
+                childrenContainer.style.marginBottom = '2px';
+
+                let hasVisibleChildren = false;
+
+                for (const k of keys) {
+                    const childVal = val[k];
+                    const cleanPath = path ? `${path}.${k}` : k;
+
+                    const childNode = buildTreeHTML(childVal, filterText, cleanPath);
+                    if (childNode) {
+                        hasVisibleChildren = true;
+                        
+                        const row = document.createElement('div');
+                        row.style.display = 'flex';
+                        row.style.flexDirection = 'column';
+                        row.style.marginBottom = '4px';
+
+                        const keyLabel = document.createElement('div');
+                        keyLabel.style.display = 'flex';
+                        keyLabel.style.alignItems = 'baseline';
+
+                        const keySpan = document.createElement('span');
+                        keySpan.style.color = '#c586c0';
+                        keySpan.style.fontWeight = 'bold';
+                        keySpan.style.marginRight = '6px';
+                        keySpan.innerText = isArray ? `[${k}]` : k;
+
+                        if (filterText && k.toLowerCase().includes(filterText)) {
+                            keySpan.style.background = 'rgba(255, 255, 0, 0.3)';
+                        }
+
+                        keyLabel.appendChild(keySpan);
+
+                        if (typeof childVal === 'object' && childVal !== null) {
+                            const toggle = document.createElement('span');
+                            toggle.style.cursor = 'pointer';
+                            toggle.style.fontSize = '11px';
+                            toggle.style.color = 'var(--text-muted)';
+                            toggle.style.marginRight = '6px';
+                            toggle.style.userSelect = 'none';
+                            toggle.innerText = '▼';
+                            
+                            keyLabel.insertBefore(toggle, keySpan);
+
+                            const openBracket = document.createElement('span');
+                            openBracket.style.color = '#d4d4d4';
+                            openBracket.innerText = Array.isArray(childVal) ? '[' : '{';
+                            keyLabel.appendChild(openBracket);
+
+                            row.appendChild(keyLabel);
+
+                            const innerContainer = childNode;
+                            row.appendChild(innerContainer);
+
+                            const closeBracketRow = document.createElement('div');
+                            closeBracketRow.style.color = '#d4d4d4';
+                            closeBracketRow.style.paddingLeft = '6px';
+                            closeBracketRow.innerText = Array.isArray(childVal) ? ']' : '}';
+                            row.appendChild(closeBracketRow);
+
+                            toggle.onclick = (e) => {
+                                e.stopPropagation();
+                                if (innerContainer.style.display === 'none') {
+                                    innerContainer.style.display = 'block';
+                                    toggle.innerText = '▼';
+                                } else {
+                                    innerContainer.style.display = 'none';
+                                    toggle.innerText = '▶';
+                                }
+                            };
+                        } else {
+                            keyLabel.appendChild(childNode);
+                            row.appendChild(keyLabel);
+                        }
+
+                        childrenContainer.appendChild(row);
+                    }
+                }
+
+                if (filterText && !hasVisibleChildren) {
+                    return null;
+                }
+
+                return childrenContainer;
+            }
+
+            const valStr = String(val);
+            const valLower = valStr.toLowerCase();
+            const cleanPathLower = path.toLowerCase();
+
+            if (filterText && !cleanPathLower.includes(filterText) && !valLower.includes(filterText)) {
+                return null;
+            }
+
+            let color = '#ce9178';
+            if (valStr === '[MASKED]') {
+                color = '#569cd6';
+            } else if (typeof val === 'number') {
+                color = '#b5cea8';
+            } else if (typeof val === 'boolean') {
+                color = '#569cd6';
+            }
+
+            const valSpan = document.createElement('span');
+            valSpan.style.color = color;
+            valSpan.innerText = typeof val === 'string' ? `"${val}"` : valStr;
+
+            if (filterText && valLower.includes(filterText)) {
+                valSpan.style.background = 'rgba(255, 255, 0, 0.3)';
+            }
+
+            return valSpan;
+        }
+
+        window.filterConfigTree = function() {
+            renderConfigTree();
         };

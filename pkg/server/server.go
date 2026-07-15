@@ -2468,6 +2468,11 @@ func (s *Server) handleAdminEndpoints(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	if r.Method == http.MethodGet && r.URL.Path == "/api/admin/config-view" {
+		s.handleAdminConfigView(w, r, actor, role)
+		return
+	}
+
 	if r.Method == http.MethodGet && r.URL.Path == "/api/admin/magic-links" {
 		s.handleAdminListMagicLinks(w, r)
 		return
@@ -5353,6 +5358,73 @@ func (s *Server) checkExpiringReservations() {
 			res.ExpiryWarningSent = 1
 			if err := s.db.UpdateSubdomainReservation(res); err != nil {
 				slog.Info(fmt.Sprintf("[Server] Failed to update expiry warning state for reservation %d: %v", res.ID, err))
+			}
+		}
+	}
+}
+
+func (s *Server) handleAdminConfigView(w http.ResponseWriter, r *http.Request, actor, role string) {
+	allowedRole := strings.ToLower(s.cfg.ViewConfigAllowedRole)
+	if allowedRole == "" {
+		allowedRole = "owner"
+	}
+
+	isAuthorized := false
+	switch allowedRole {
+	case "owner":
+		if role == "owner" {
+			isAuthorized = true
+		}
+	case "admin":
+		if role == "owner" || role == "admin" {
+			isAuthorized = true
+		}
+	}
+
+	if !isAuthorized {
+		http.Error(w, `{"error":"You do not have the required role to view the server configuration"}`, http.StatusForbidden)
+		return
+	}
+
+	bodyBytes, err := json.Marshal(s.cfg)
+	if err != nil {
+		http.Error(w, `{"error":"Failed to copy configuration details"}`, http.StatusInternalServerError)
+		return
+	}
+
+	var configMap map[string]interface{}
+	if err := json.Unmarshal(bodyBytes, &configMap); err != nil {
+		http.Error(w, `{"error":"Failed to parse configuration structure"}`, http.StatusInternalServerError)
+		return
+	}
+
+	maskConfigMap(configMap)
+
+	respondJSON(w, http.StatusOK, configMap)
+}
+
+func maskConfigMap(m map[string]interface{}) {
+	for k, v := range m {
+		if subMap, ok := v.(map[string]interface{}); ok {
+			maskConfigMap(subMap)
+		} else if arr, ok := v.([]interface{}); ok {
+			for _, item := range arr {
+				if itemMap, ok := item.(map[string]interface{}); ok {
+					maskConfigMap(itemMap)
+				}
+			}
+		} else {
+			kl := strings.ToLower(k)
+			cleanKey := strings.ReplaceAll(strings.ReplaceAll(kl, "_", ""), "-", "")
+			if strings.Contains(cleanKey, "password") ||
+				strings.Contains(cleanKey, "clientsecret") ||
+				strings.Contains(cleanKey, "slackurl") ||
+				strings.Contains(cleanKey, "teamsurl") ||
+				strings.Contains(cleanKey, "edgetoken") ||
+				strings.Contains(cleanKey, "tokenhash") {
+				if _, ok := v.(string); ok {
+					m[k] = "[MASKED]"
+				}
 			}
 		}
 	}

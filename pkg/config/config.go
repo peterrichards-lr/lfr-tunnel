@@ -107,6 +107,8 @@ type ServerConfig struct {
 
 	// Dynamic SSO/OIDC Providers
 	SSOProviders []SSOProviderConfig `yaml:"sso_providers"`
+
+	ViewConfigAllowedRole string `yaml:"view_config_allowed_role"`
 }
 
 type RoleSetting struct {

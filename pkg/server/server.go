@@ -287,7 +287,7 @@ func NewServer(cfg *config.ServerConfig) (*Server, error) {
 
 	srv.proxyHandler.db = database
 	srv.proxyHandler.caCert = caCert
-	srv.webhooks = webhook.NewWebhookService(cfg.Webhooks)
+	srv.webhooks = webhook.NewWebhookService(cfg.Webhooks, database)
 	srv.portalService = NewPortalService(srv.db, srv.cfg, srv.notifications, &srv.portalMap, caCert, caKey)
 
 	// Initialize i18n dynamic engine
@@ -376,6 +376,15 @@ func NewServer(cfg *config.ServerConfig) (*Server, error) {
 	}
 
 	go srv.metrics.Start(ctx)
+
+	if srv.webhooks != nil {
+		interval := 10 * time.Second
+		if srv.cfg.Webhooks.BatchIntervalSeconds > 0 {
+			interval = time.Duration(srv.cfg.Webhooks.BatchIntervalSeconds) * time.Second
+		}
+		go srv.webhooks.StartQueueConsumer(ctx, interval)
+	}
+
 	srv.startRateLimiterCleaner(ctx)
 
 	if srv.db != nil {

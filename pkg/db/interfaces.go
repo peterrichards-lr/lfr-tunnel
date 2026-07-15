@@ -101,3 +101,18 @@ type SystemRepository interface {
 	Close() error
 	GetConnection() *sql.DB
 }
+
+type QueuedWebhookMessage struct {
+	ID          int64
+	Title       string
+	Description string
+	Color       string
+	Facts       string // JSON string
+	CreatedAt   time.Time
+}
+
+type WebhookQueueRepository interface {
+	EnqueueWebhookMessage(title, description, color, factsJSON string) error
+	DequeueWebhookMessages(limit int) ([]*QueuedWebhookMessage, error)
+	DeleteWebhookMessages(ids []int64) error
+}

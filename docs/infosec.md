@@ -59,6 +59,8 @@ Unlike generic reverse proxy utilities, `lfr-tunnel` has been engineered with st
     To satisfy strict corporate compliance and prevent bypass channels, the gateway supports a `disable_email_login` configuration flag. When active, it disables email-based magic link logins and registration requests globally at both the API and interface levels. This locks the application down so that federated OIDC corporate SSO is the **exclusive** method of entry.
 * **Single-Session Concurrency:**
     Lease mapping enforces strict single-session concurrency per token or subdomain. A token or reserved subdomain cannot be used to multiplex simultaneous connections across multiple machines, preventing credentials from being shared or hijacked.
+* **Secure Webhook Alerts (Outgoing-Only, Tokenized URLs):**
+    Administrative notification dispatches (e.g. registration requests, abuse reports, rate limiter bans) to Slack and Microsoft Teams are outgoing-only HTTP POST requests initiated by the central gateway. They do not open any inbound listener ports or expose administrative APIs. The integrations utilize platform-generated URLs with embedded cryptographic tokens (e.g., Slack's secret path keys) to authorize payloads, avoiding basic auth or OAuth token refresh management. These webhook URLs are stored strictly on the private server gateway (`server-config.yaml`) and are never sent to client daemons or developers, eliminating the risk of credential exposure.
 
 ---
 
@@ -170,4 +172,4 @@ To authorize the tool with minimal impact on local endpoint alerts, we recommend
 
 <!-- markdownlint-disable MD049 -->
 ---
-*Last Updated: 2026-07-02* | *Last Reviewed: 2026-07-02*
+*Last Updated: 2026-07-15* | *Last Reviewed: 2026-07-15*

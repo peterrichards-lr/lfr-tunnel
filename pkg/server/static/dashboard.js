@@ -4425,7 +4425,7 @@ applyTheme(currentUser.theme_preference);
         function buildTreeHTML(val, filterText, path = '') {
             if (val === null) {
                 const span = document.createElement('span');
-                span.style.color = '#d4d4d4';
+                span.className = 'config-tree-null';
                 span.innerText = 'null';
                 return span;
             }
@@ -4436,10 +4436,10 @@ applyTheme(currentUser.theme_preference);
                 
                 const childrenContainer = document.createElement('div');
                 childrenContainer.style.paddingLeft = '16px';
-                childrenContainer.style.borderLeft = '1px dashed rgba(255, 255, 255, 0.15)';
+                childrenContainer.style.borderLeft = '1px dashed var(--border)';
                 childrenContainer.style.marginLeft = '6px';
-                childrenContainer.style.marginTop = '2px';
-                childrenContainer.style.marginBottom = '2px';
+                childrenContainer.style.marginTop = '0px';
+                childrenContainer.style.marginBottom = '0px';
 
                 let hasVisibleChildren = false;
 
@@ -4454,15 +4454,14 @@ applyTheme(currentUser.theme_preference);
                         const row = document.createElement('div');
                         row.style.display = 'flex';
                         row.style.flexDirection = 'column';
-                        row.style.marginBottom = '4px';
+                        row.style.marginBottom = '6px';
 
                         const keyLabel = document.createElement('div');
                         keyLabel.style.display = 'flex';
                         keyLabel.style.alignItems = 'baseline';
 
                         const keySpan = document.createElement('span');
-                        keySpan.style.color = '#c586c0';
-                        keySpan.style.fontWeight = 'bold';
+                        keySpan.className = 'config-tree-key';
                         keySpan.style.marginRight = '6px';
                         keySpan.innerText = isArray ? `[${k}]` : k;
 
@@ -4484,7 +4483,7 @@ applyTheme(currentUser.theme_preference);
                             keyLabel.insertBefore(toggle, keySpan);
 
                             const openBracket = document.createElement('span');
-                            openBracket.style.color = '#d4d4d4';
+                            openBracket.className = 'config-tree-bracket';
                             openBracket.innerText = Array.isArray(childVal) ? '[' : '{';
                             keyLabel.appendChild(openBracket);
 
@@ -4494,7 +4493,7 @@ applyTheme(currentUser.theme_preference);
                             row.appendChild(innerContainer);
 
                             const closeBracketRow = document.createElement('div');
-                            closeBracketRow.style.color = '#d4d4d4';
+                            closeBracketRow.className = 'config-tree-bracket';
                             closeBracketRow.style.paddingLeft = '6px';
                             closeBracketRow.innerText = Array.isArray(childVal) ? ']' : '}';
                             row.appendChild(closeBracketRow);
@@ -4533,17 +4532,17 @@ applyTheme(currentUser.theme_preference);
                 return null;
             }
 
-            let color = '#ce9178';
+            let valClass = 'config-tree-string';
             if (valStr === '[MASKED]') {
-                color = '#569cd6';
+                valClass = 'config-tree-boolean';
             } else if (typeof val === 'number') {
-                color = '#b5cea8';
+                valClass = 'config-tree-number';
             } else if (typeof val === 'boolean') {
-                color = '#569cd6';
+                valClass = 'config-tree-boolean';
             }
 
             const valSpan = document.createElement('span');
-            valSpan.style.color = color;
+            valSpan.className = valClass;
             valSpan.innerText = typeof val === 'string' ? `"${val}"` : valStr;
 
             if (filterText && valLower.includes(filterText)) {

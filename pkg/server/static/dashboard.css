@@ -900,3 +900,45 @@ html[dir="rtl"] td, html[dir="rtl"] th {
         padding: 20px !important;
     }
 }
+
+/* Configuration Tree Styling */
+.config-tree-key {
+    color: #f43f5e; /* Vibrant rose for key in dark mode */
+    font-weight: 600;
+}
+.config-tree-string {
+    color: #fb923c; /* Bright orange for string */
+}
+.config-tree-number {
+    color: #34d399; /* Emerald for numbers */
+}
+.config-tree-boolean {
+    color: #38bdf8; /* Sky blue for booleans */
+}
+.config-tree-null {
+    color: #64748b; /* Cool grey for null values */
+    font-style: italic;
+}
+.config-tree-bracket {
+    color: #94a3b8; /* Brackets slate color */
+}
+
+/* Light mode overrides for high-contrast visibility */
+:root[data-theme="light"] .config-tree-key {
+    color: #b91c1c; /* Deep red */
+}
+:root[data-theme="light"] .config-tree-string {
+    color: #1e3a8a; /* Deep blue */
+}
+:root[data-theme="light"] .config-tree-number {
+    color: #047857; /* Forest green */
+}
+:root[data-theme="light"] .config-tree-boolean {
+    color: #0369a1; /* Ocean blue */
+}
+:root[data-theme="light"] .config-tree-null {
+    color: #94a3b8; /* Muted grey */
+}
+:root[data-theme="light"] .config-tree-bracket {
+    color: #475569; /* Slate grey */
+}

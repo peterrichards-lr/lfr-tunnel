@@ -8,20 +8,22 @@
     {
       "title": "Sub-Issue #1: Implement /api/admin/test-webhook endpoint with 30s rate limiting",
       "body": "### Tasks\n1. Define test webhook API route `/api/admin/test-webhook` in `pkg/server/server.go`.\n2. Apply administrator authentication and role verification checks.\n3. Create an in-memory rate-limiter tracker (e.g. map of last-tested timestamps per admin).\n4. Assemble and dispatch a formatted test payload containing the administrator's email and a dynamic timestamp.\n5. Write unit tests validating authentication, payload format, and 30-second rate-limit blocks.",
-      "completed": false,
+      "completed": true,
       "labels": [
         "enhancement"
       ],
-      "issueNumber": "505"
+      "issueNumber": "505",
+      "closed": true
     },
     {
       "title": "Sub-Issue #2: Add 'Test Integration' panel and trigger button in Admin Dashboard UI",
       "body": "### Tasks\n1. Add a 'Test Integrations' section in the settings container of `pkg/server/dashboard.html`.\n2. Implement a 'Send Test Alert' button with loading states in `pkg/server/static/dashboard.js`.\n3. Wire the button to make a POST request to `/api/admin/test-webhook` and handle rate limit (429) and success responses cleanly.",
-      "completed": false,
+      "completed": true,
       "labels": [
         "enhancement"
       ],
-      "issueNumber": "506"
+      "issueNumber": "506",
+      "closed": true
     }
   ],
   "epicNumber": "504"

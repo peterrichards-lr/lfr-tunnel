@@ -911,6 +911,19 @@ The solution will consist of:
 - [x] Verify standard and OIDC E2E integration test suites.
 - [x] Push branches and merge PR #481 on GitHub.
 
+## Minisign Packaging Support (v1.33.1)
+- [x] Implement a pure Go helper script to sign the checksums file using the release key (#484).
+- [x] Integrate the signing helper into `sign-client-binaries.sh` to generate `.minisig` signatures (#484).
+- [x] Update `deploy-client-binaries.sh` to copy `checksums.txt.minisig` to the VPS downloads directory (#484).
+- [x] Merge PR #484 on GitHub and deploy signatures to VPS downloads.
+
+## Desktop GUI Launch on Login / Autostart Integration (v1.34.0) - Epic #485
+- [x] Implement GUI service registration and uninstallation logic in `pkg/client/service_installer.go` (#486).
+- [x] Expose `install-gui-service` and `uninstall-gui-service` subcommands in `cmd/lfr-tunnel/main.go` (#487).
+- [x] Add interactive "Launch on Login" toggle checkbox inside the System Tray Menu in `pkg/gui/gui.go` (#488).
+- [x] Run full project unit test suite.
+- [x] Push branches and merge PR #489 on GitHub.
+
 <!-- markdownlint-disable MD049 -->
 ---
 *Last Updated: 2026-07-15* | *Last Reviewed: 2026-07-15*

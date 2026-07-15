@@ -38,8 +38,8 @@ if [ ! -d "$BIN_DIR" ] || [ ! -f "$BIN_DIR/checksums.txt" ]; then
 fi
 
 echo "Uploading files from $BIN_DIR to $VPS_USER@$VPS_IP..."
-# Copy all binaries, signatures (.asc), and checksums.txt to the home folder on the VPS first
-scp $SSH_KEY "$BIN_DIR"/lfr-tunnel-* "$BIN_DIR"/checksums.txt "$VPS_USER@$VPS_IP:/home/$VPS_USER/"
+# Copy all binaries, signatures (.asc), checksums.txt, and checksums.txt.minisig to the home folder on the VPS first
+scp $SSH_KEY "$BIN_DIR"/lfr-tunnel-* "$BIN_DIR"/checksums.txt "$BIN_DIR"/checksums.txt.minisig "$VPS_USER@$VPS_IP:/home/$VPS_USER/"
 
 echo "Moving files to secure web server downloads directory on VPS..."
 ssh $SSH_KEY "$VPS_USER@$VPS_IP" << REMOTE_SSH
@@ -47,11 +47,11 @@ ssh $SSH_KEY "$VPS_USER@$VPS_IP" << REMOTE_SSH
     sudo mkdir -p "$DOWNLOADS_DIR"
     
     # Move files and set correct permissions
-    sudo cp /home/$VPS_USER/lfr-tunnel-* /home/$VPS_USER/checksums.txt "$DOWNLOADS_DIR/"
+    sudo cp /home/$VPS_USER/lfr-tunnel-* /home/$VPS_USER/checksums.txt /home/$VPS_USER/checksums.txt.minisig "$DOWNLOADS_DIR/"
     sudo chmod -R +r "$DOWNLOADS_DIR"
     
     # Clean up temporary home folder copies
-    rm -f /home/$VPS_USER/lfr-tunnel-* /home/$VPS_USER/checksums.txt
+    rm -f /home/$VPS_USER/lfr-tunnel-* /home/$VPS_USER/checksums.txt /home/$VPS_USER/checksums.txt.minisig
 REMOTE_SSH
 
 echo "=== Client Binaries Deployment Complete! ==="

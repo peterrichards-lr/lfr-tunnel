@@ -873,6 +873,10 @@ The solution will consist of:
 - [x] Prevent header overlays and adjust modal layouts.
 - [x] Add Playwright UI E2E test coverage and verify all tests pass.
 
+## Tablet & Mobile Landscape Responsiveness Release (v1.31.5)
+- [x] Increase responsive media query and JS viewport breakpoint to 1024px to support mobile landscape and tablet orientations.
+- [x] Add word-break: break-all to SHA256 checksum card to prevent container stretching.
+
 <!-- markdownlint-disable MD049 -->
 ---
 *Last Updated: 2026-07-15* | *Last Reviewed: 2026-07-15*

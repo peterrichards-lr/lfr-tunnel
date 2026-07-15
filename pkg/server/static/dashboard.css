@@ -819,7 +819,7 @@ html[dir="rtl"] td, html[dir="rtl"] th {
     pointer-events: auto;
 }
 
-@media (max-width: 768px) {
+@media (max-width: 1024px) {
     /* 1. Sidebar slide-over layout */
     .sidebar {
         position: fixed !important;

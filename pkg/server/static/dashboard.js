@@ -825,7 +825,7 @@ function toggleTheme() {
                                     <div>🏷️ <strong>Latest Client Target:</strong> ${latestVer}</div>
                                 </div>
 
-                                ${(staticSHA || binaryName) ? `<div style="font-size: 0.75rem; color: var(--text-muted); font-family: monospace;">SHA256: <span id="${hashSpanId}">loading...</span></div>` : ''}
+                                ${(staticSHA || binaryName) ? `<div style="font-size: 0.75rem; color: var(--text-muted); font-family: monospace; word-break: break-all;">SHA256: <span id="${hashSpanId}">loading...</span></div>` : ''}
 
                                 <div style="display: flex; gap: 10px; margin-top: 8px;">
                                     ${showDownload ? `<a href="${dlUrl}" class="btn btn-primary" style="white-space: nowrap; text-align: center; flex: 1; margin: 0;">${downloadLabel}</a>` : ''}
@@ -1312,7 +1312,7 @@ applyTheme(currentUser.theme_preference);
             if (window.closeAllActionMenus) {
                 window.closeAllActionMenus();
             }
-            if (window.innerWidth <= 768) {
+            if (window.innerWidth <= 1024) {
                 const sidebar = document.querySelector('.sidebar');
                 const backdrop = document.getElementById('sidebar-backdrop');
                 if (sidebar && sidebar.classList.contains('active')) {
@@ -3843,7 +3843,7 @@ applyTheme(currentUser.theme_preference);
         // Hide dropdowns and clean up mobile sidebar states when window is resized
         window.addEventListener('resize', () => {
             closeAllActionMenus();
-            if (window.innerWidth > 768) {
+            if (window.innerWidth > 1024) {
                 const sidebar = document.querySelector('.sidebar');
                 const backdrop = document.getElementById('sidebar-backdrop');
                 if (sidebar) sidebar.classList.remove('active');
@@ -4009,7 +4009,7 @@ applyTheme(currentUser.theme_preference);
             const backdrop = document.getElementById('sidebar-backdrop');
             if (!screen || !sidebar) return;
             
-            if (window.innerWidth <= 768) {
+            if (window.innerWidth <= 1024) {
                 const isActive = sidebar.classList.toggle('active');
                 if (backdrop) {
                     backdrop.classList.toggle('visible', isActive);

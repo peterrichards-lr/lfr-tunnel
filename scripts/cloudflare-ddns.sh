@@ -148,17 +148,35 @@ for domain in "${DOMAINS[@]}"; do
             spf_content="${spf_content} -all"
 
             rec_resp=$(cf_api "GET" "zones/${zone_id}/dns_records?name=${domain}&type=TXT")
-            rec_id=$(echo "${rec_resp}" | jq -r '.result[] | select(.content | startswith("v=spf1")) | .id // empty' | head -n1)
-            current_spf=$(echo "${rec_resp}" | jq -r '.result[] | select(.content | startswith("v=spf1")) | .content // empty' | head -n1)
+            
+            # Extract IDs of all TXT records containing 'v=spf1' (handling quotes robustly)
+            rec_ids=($(echo "${rec_resp}" | jq -r '.result[] | select(.content | contains("v=spf1")) | .id // empty'))
 
-            if [ -z "${rec_id}" ]; then
-                echo "[DDNS] Creating SPF TXT record for ${domain}: ${spf_content}"
-                cf_api "POST" "zones/${zone_id}/dns_records" "{\"type\":\"TXT\",\"name\":\"${domain}\",\"content\":\"${spf_content}\",\"ttl\":120}" > /dev/null
-            elif [ "${current_spf}" != "${spf_content}" ]; then
-                echo "[DDNS] Updating SPF TXT record for ${domain}: ${current_spf} -> ${spf_content}"
-                cf_api "PUT" "zones/${zone_id}/dns_records/${rec_id}" "{\"type\":\"TXT\",\"name\":\"${domain}\",\"content\":\"${spf_content}\",\"ttl\":120}" > /dev/null
+            if [ ${#rec_ids[@]} -gt 0 ]; then
+                primary_id="${rec_ids[0]}"
+                current_spf=$(echo "${rec_resp}" | jq -r ".result[] | select(.id == \"${primary_id}\") | .content")
+                
+                # Strip leading/trailing double quotes from Cloudflare's returned content
+                current_spf=$(echo "${current_spf}" | sed -e 's/^"//' -e 's/"$//')
+
+                if [ "${current_spf}" != "${spf_content}" ]; then
+                    echo "[DDNS] Updating SPF TXT record for ${domain}: ${current_spf} -> ${spf_content}"
+                    cf_api "PUT" "zones/${zone_id}/dns_records/${primary_id}" "{\"type\":\"TXT\",\"name\":\"${domain}\",\"content\":\"\\\"${spf_content}\\\"\",\"ttl\":120}" > /dev/null
+                else
+                    echo "[DDNS] SPF record for ${domain} is up to date (${spf_content})."
+                fi
+
+                # Delete duplicate SPF records to keep domain configuration clean
+                if [ ${#rec_ids[@]} -gt 1 ]; then
+                    for ((i=1; i<${#rec_ids[@]}; i++)); do
+                        dup_id="${rec_ids[i]}"
+                        echo "[DDNS] Deleting duplicate SPF record (ID: ${dup_id}) on ${domain}"
+                        cf_api "DELETE" "zones/${zone_id}/dns_records/${dup_id}" > /dev/null
+                    done
+                fi
             else
-                echo "[DDNS] SPF record for ${domain} is up to date (${spf_content})."
+                echo "[DDNS] Creating SPF TXT record for ${domain}: ${spf_content}"
+                cf_api "POST" "zones/${zone_id}/dns_records" "{\"type\":\"TXT\",\"name\":\"${domain}\",\"content\":\"\\\"${spf_content}\\\"\",\"ttl\":120}" > /dev/null
             fi
         fi
     done

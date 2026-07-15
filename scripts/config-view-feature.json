@@ -8,20 +8,22 @@
     {
       "title": "Sub-Issue #1: Implement Server-Side Config View API with Masking and Access Options",
       "body": "### Tasks\n1. Add `ViewConfigAllowedRole` (`view_config_allowed_role`) to `ServerConfig` struct in `pkg/config/config.go` (defaulting to `owner`).\n2. Register `GET /api/admin/config-view` route inside `pkg/server/server.go`.\n3. Validate requester authorization role against the configured `ViewConfigAllowedRole` (returning `403 Forbidden` if unauthorized).\n4. Deep-copy the running configuration and mask all sensitive values with `[MASKED]` string values.\n5. Write unit tests verifying masking compliance and role authorization checks.",
-      "completed": false,
+      "completed": true,
       "labels": [
         "enhancement"
       ],
-      "issueNumber": "519"
+      "issueNumber": "519",
+      "closed": true
     },
     {
       "title": "Sub-Issue #2: Add Masked Config Tree View Panel in Admin Dashboard UI",
       "body": "### Tasks\n1. Create a styled collapsable config viewer container in the Admin Dashboard Settings view.\n2. Fetch configuration JSON from `/api/admin/config-view` dynamically (verifying role authorization capability beforehand).\n3. Render the JSON structure using a beautiful interactive nested tree node format (supporting collapse/expand tree toggles).\n4. Integrate dynamic search/filter capability across key-value configuration tree nodes.",
-      "completed": false,
+      "completed": true,
       "labels": [
         "enhancement"
       ],
-      "issueNumber": "520"
+      "issueNumber": "520",
+      "closed": true
     }
   ],
   "epicNumber": "518"

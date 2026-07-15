@@ -1,5 +1,5 @@
 {
-  "version": "v1.31.4",
+  "version": "v1.31.5",
   "release_date": "2026-07-15",
   "features": [
     "Feature: Configurable Scoop & Homebrew package manager options in the installation guide",
@@ -11,6 +11,8 @@
     "Fix: Improved toaster text readability and fixed mobile touch backdrop closing gestures",
     "Feature: Password manager autofill & autocomplete support for login/registration form fields",
     "Feature: Slide-over navigation drawer overlay and backdrop closing mechanics on mobile screens",
-    "Enhancement: Stackable layout grids, page paddings, and absolute button repositions for phone/tablet responsiveness"
+    "Enhancement: Stackable layout grids, page paddings, and absolute button repositions for phone/tablet responsiveness",
+    "Enhancement: Increased responsive breakpoint to 1024px to support landscape orientation on mobile/tablet devices",
+    "Fix: Added word-break text wrapping to the SHA256 checksum card element to prevent layout overflows"
   ]
 }

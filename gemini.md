@@ -186,6 +186,7 @@ The solution will consist of:
 - [x] Implement Slack and Microsoft Teams Webhook Alerts (Epic #476 / Issue #478)
 - [x] Support recipient name-formatted parsing for Slack channel generated email endpoints
 - [x] Close Issue #477, #478, and Epic #476 on GitHub
+- [x] Implement Secure Obfuscated Server Configuration Viewer (Epic #518 / Issue #519, #520)
 
 
 | Feature | Description | Risk | LOE | Business Value | Priority |

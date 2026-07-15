@@ -165,9 +165,36 @@ func (s *TempSettingsServer) Stop() {
 }
 
 var tempServer = NewTempSettingsServer(55556)
+var lockPath string
+
+func acquireGUILock() bool {
+	home, err := os.UserHomeDir()
+	if err != nil {
+		return false
+	}
+	lockPath = filepath.Join(home, ".lfr-tunnel", "gui.pid")
+
+	// Read existing PID
+	if data, err := os.ReadFile(lockPath); err == nil {
+		if pid, err := strconv.Atoi(strings.TrimSpace(string(data))); err == nil && pid > 0 {
+			if client.IsPIDRunning(pid) {
+				return false
+			}
+		}
+	}
+
+	// Write our PID
+	_ = os.WriteFile(lockPath, []byte(strconv.Itoa(os.Getpid())), 0644)
+	return true
+}
 
 // StartGUI initializes and runs the system tray UI.
 func StartGUI(cfg *config.ClientConfig) {
+	if !acquireGUILock() {
+		slog.Warn("Another instance of Liferay Tunnel GUI is already running. Exiting.")
+		return
+	}
+
 	tray := systray.New()
 	tray.SetIcon(IconInactive)
 	tray.SetTooltip("Liferay Tunnel")
@@ -270,6 +297,9 @@ func updateMenu(tray *systray.SystemTray, cfg *config.ClientConfig, isRunning bo
 	menu.Add("Quit", func() {
 		tray.Remove()
 		tempServer.Stop()
+		if lockPath != "" {
+			_ = os.Remove(lockPath)
+		}
 		os.Exit(0)
 	})
 

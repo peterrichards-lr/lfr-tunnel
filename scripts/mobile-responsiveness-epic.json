@@ -12,7 +12,8 @@
       "labels": [
         "enhancement"
       ],
-      "issueNumber": "455"
+      "issueNumber": "455",
+      "closed": true
     },
     {
       "title": "Responsive Content: Padding Adjustments & Grid Layout Stacking",
@@ -21,7 +22,8 @@
       "labels": [
         "enhancement"
       ],
-      "issueNumber": "456"
+      "issueNumber": "456",
+      "closed": true
     },
     {
       "title": "Responsive Dropdowns: Language Selector & Menu Overlay Positioning",
@@ -30,7 +32,8 @@
       "labels": [
         "enhancement"
       ],
-      "issueNumber": "457"
+      "issueNumber": "457",
+      "closed": true
     }
   ],
   "epicNumber": "454"

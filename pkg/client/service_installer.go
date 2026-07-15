@@ -220,8 +220,6 @@ func installDarwinGUI(exePath string) error {
     </array>
     <key>RunAtLoad</key>
     <true/>
-    <key>KeepAlive</key>
-    <true/>
     <key>StandardOutPath</key>
     <string>%s/.lfr-tunnel/gui_service.log</string>
     <key>StandardErrorPath</key>

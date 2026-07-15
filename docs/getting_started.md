@@ -239,6 +239,60 @@ lfr-tunnel -subdomain your-name-se -ports 8080
 
 ---
 
+## Running in the Background & Start on Login
+
+If you want the tunnel client to run silently or initialize automatically when you log into your machine, you can configure background execution and autostart configurations.
+
+### 1. Headless Background Execution (CLI)
+
+You can launch and manage the client in the background directly from your terminal using process control flags:
+
+* **Start in Background**: Runs the tunnel as a detached daemon process:
+  ```bash
+  lfr-tunnel -background -subdomain your-name-se
+  ```
+* **Check Status**: Verifies if the daemon is active and prints the running PID and leased public URLs:
+  ```bash
+  lfr-tunnel -status
+  ```
+* **Stop Daemon**: Terminates the background process cleanly:
+  ```bash
+  lfr-tunnel -stop
+  ```
+
+### 2. Autostart on Login
+
+You can install startup items that launch the client automatically when your user logs in.
+
+#### Headless CLI Client
+To configure the headless background tunnel daemon to launch on login:
+* **macOS / Linux / Windows**: Run the subcommand:
+  ```bash
+  lfr-tunnel install-service
+  ```
+
+* **System Details**:
+  * **macOS**: Creates a LaunchAgent plist at `~/Library/LaunchAgents/com.liferay.tunnel.plist`.
+  * **Windows**: Installs a hidden script at `~\AppData\Roaming\Microsoft\Windows\Start Menu\Programs\Startup\lfr-tunnel.vbs`.
+  * **Linux**: Creates and registers a systemd user service at `~/.config/systemd/user/lfr-tunnel.service`. You can monitor it using:
+    ```bash
+    systemctl --user status lfr-tunnel.service
+    ```
+
+#### System Tray GUI Client
+To configure the System Tray / Menu Bar utility to launch on login:
+* **Tray Toggle**: Simply open the system tray menu and click **Launch on Login** (displays a checkmark `✓` when enabled).
+* **CLI Command**: Alternatively, register the autostart items using subcommands:
+  * **Enable GUI autostart**: `lfr-tunnel install-gui-service`
+  * **Disable GUI autostart**: `lfr-tunnel uninstall-gui-service`
+
+* **System Details**:
+  * **macOS**: Registers `~/Library/LaunchAgents/com.liferay.tunnel.gui.plist`.
+  * **Windows**: Installs `~\AppData\Roaming\Microsoft\Windows\Start Menu\Programs\Startup\lfr-tunnel-gui.vbs`.
+  * **Linux**: Creates a desktop autostart entry at `~/.config/autostart/lfr-tunnel-gui.desktop`.
+
+---
+
 ## Need Help?
 
 * **Common Errors:**
@@ -251,4 +305,4 @@ lfr-tunnel -subdomain your-name-se -ports 8080
 
 <!-- markdownlint-disable MD049 -->
 ---
-*Last Updated: 2026-07-02* | *Last Reviewed: 2026-07-02*
+*Last Updated: 2026-07-15* | *Last Reviewed: 2026-07-15*

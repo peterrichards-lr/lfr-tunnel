@@ -188,6 +188,7 @@ The solution will consist of:
 - [x] Close Issue #477, #478, and Epic #476 on GitHub
 - [x] Implement Secure Obfuscated Server Configuration Viewer (Epic #518 / Issue #519, #520)
 - [x] Close Issue #519, #520, and Epic #518 on GitHub
+- [x] Implement Webhook Rate Limiting, Persistent Queue, and Message Batching (Epic #511)
 
 
 | Feature | Description | Risk | LOE | Business Value | Priority |

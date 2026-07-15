@@ -8,7 +8,7 @@
     {
       "title": "Sub-Issue #1: Implement SQLite webhook_queue table and repository layers",
       "body": "### Tasks\n1. Define `QueuedWebhookMessage` models and `WebhookQueueRepository` interfaces in `pkg/db/interfaces.go`.\n2. Write database migrations to add `webhook_queue` table in `pkg/db/schema.go`.\n3. Implement `webhook_queue.go` SQLite repository methods.\n4. Initialize queue repository in `pkg/db/db.go`.\n5. Write unit tests for queue enqueue/dequeue/delete operations in `pkg/db/db_test.go`.",
-      "completed": false,
+      "completed": true,
       "labels": [
         "enhancement"
       ],
@@ -17,7 +17,7 @@
     {
       "title": "Sub-Issue #2: Implement persistent WebhookService background batch consumer",
       "body": "### Tasks\n1. Modify `WebhookService` to accept the `Database` interface.\n2. Implement background batch consumer worker in `WebhookService` checking queue every N seconds.\n3. Group/coalesce multiple alerts in a single batch into a combined Slack Block Kit / Microsoft Teams JSON payload.\n4. Update calling event trigger methods (e.g. `SendRegistrationAlert`, `SendIPBlacklistAlert`) to write to queue database instead of immediate HTTP post.\n5. Update unit tests in `pkg/webhook/webhook_test.go` to assert batched message dispatching.",
-      "completed": false,
+      "completed": true,
       "labels": [
         "enhancement"
       ],

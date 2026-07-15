@@ -197,6 +197,9 @@ func main() {
 		fmt.Printf("[Client] Data Plane IP Whitelisting is ENABLED (%s)\n", cfg.WhitelistIPs)
 	}
 
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
 	regResp := performRegistrationHandshake(cfg, portMappings, sub, engine.AddedHeaders)
 
 	// Modify portMappings to point to dynamic Interceptor ports
@@ -207,7 +210,7 @@ func main() {
 		if err != nil {
 			log.Fatalf("[Error] Failed to start interceptor for port %d: %v", targetPort, err)
 		}
-		engine.StartHealthChecks(cfg.ServerURL, regResp.SessionToken, targetPort)
+		engine.StartHealthChecks(ctx, cfg.ServerURL, regResp.SessionToken, targetPort)
 		portMappings[i].LocalPort = interceptPort
 		portMap[targetPort] = interceptPort
 	}
@@ -239,9 +242,6 @@ func main() {
 	}
 
 	// 6. Run Client and wait for signals
-	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
-
 	sigs := make(chan os.Signal, 1)
 	signal.Notify(sigs, syscall.SIGINT, syscall.SIGTERM)
 	go func() {

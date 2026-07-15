@@ -835,14 +835,15 @@ html[dir="rtl"] td, html[dir="rtl"] th {
         padding: 24px !important;
         border-right: 1px solid var(--border) !important;
     }
-    .sidebar.active {
-        transform: translateX(0) !important;
-    }
     .sidebar.collapsed {
         width: 260px !important;
         transform: translateX(-100%) !important;
         opacity: 1 !important;
         pointer-events: auto !important;
+    }
+    .sidebar.active,
+    .sidebar.collapsed.active {
+        transform: translateX(0) !important;
     }
     
     /* 2. Main content area padding and adjustments */

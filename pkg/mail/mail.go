@@ -42,10 +42,12 @@ func (s *SMTPClient) Send(to string, subject string, body string, plainBody stri
 		InsecureSkipVerify: s.cfg.InsecureSkipVerify,
 	}
 
+	dialer := &net.Dialer{Timeout: 10 * time.Second}
+
 	if s.cfg.SMTPPort == 465 {
-		conn, err = tls.Dial("tcp", addr, tlsConfig)
+		conn, err = tls.DialWithDialer(dialer, "tcp", addr, tlsConfig)
 	} else {
-		conn, err = net.DialTimeout("tcp", addr, 10*time.Second)
+		conn, err = dialer.Dial("tcp", addr)
 	}
 	if err != nil {
 		return fmt.Errorf("failed to dial smtp server: %v", err)

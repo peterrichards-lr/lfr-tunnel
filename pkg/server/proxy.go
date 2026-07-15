@@ -5,6 +5,7 @@ import (
 	"crypto/hmac"
 	"crypto/rand"
 	"crypto/sha256"
+	"crypto/subtle"
 	"crypto/x509"
 	_ "embed"
 	"encoding/base64"
@@ -437,7 +438,7 @@ func (p *ProxyHandler) checkAccessControls(w http.ResponseWriter, r *http.Reques
 			}
 		}
 
-		if passcodeRequired != "" && passcodeVal == passcodeRequired {
+		if passcodeRequired != "" && VerifyPasscode(passcodeVal, passcodeRequired) {
 			parts := strings.SplitN(host, ".", 2)
 			subdomain := parts[0]
 			cookieVal := p.createSessionCookie(subdomain)
@@ -596,4 +597,24 @@ func (p *ProxyHandler) injectBaseTag(htmlBytes []byte, r *http.Request, host str
 	baseURL := p.getPortalBaseURL(r, host)
 	baseTag := []byte(fmt.Sprintf("<head>\n    <base href=\"%s/\">", baseURL))
 	return bytes.Replace(htmlBytes, []byte("<head>"), baseTag, 1)
+}
+
+func HashPasscode(passcode string) string {
+	if passcode == "" {
+		return ""
+	}
+	hash := sha256.Sum256([]byte(passcode))
+	return hex.EncodeToString(hash[:])
+}
+
+func VerifyPasscode(rawPasscode, hashedPasscode string) bool {
+	if hashedPasscode == "" {
+		return false
+	}
+	computed := HashPasscode(rawPasscode)
+	if subtle.ConstantTimeCompare([]byte(computed), []byte(hashedPasscode)) == 1 {
+		return true
+	}
+	// Legacy fallback to support plain-text comparison
+	return subtle.ConstantTimeCompare([]byte(rawPasscode), []byte(hashedPasscode)) == 1
 }

@@ -3,8 +3,43 @@ set -euo pipefail
 
 # Configuration
 TOKEN_FILE="/etc/letsencrypt/cloudflare.ini"
-DOMAINS=("lfr-demo.se" "lfr-demo.online")
+CONFIG_FILE="/etc/lfr-tunneld/server-config.yaml"
 RECORD_NAMES=("@" "*" "tunnel" "portal")
+
+# Extract dynamic domains list from server-config.yaml if it exists
+DOMAINS=()
+if [ -f "${CONFIG_FILE}" ]; then
+    DOMAINS_STR=$(python3 -c "
+import sys, re
+domains = []
+in_domains = False
+try:
+    for line in open('${CONFIG_FILE}'):
+        line_strip = line.strip()
+        if line_strip.startswith('domains:'):
+            in_domains = True
+            continue
+        if in_domains:
+            # Stop if we hit another top-level key
+            if line.strip() and not line.startswith(' ') and not line.startswith('-'):
+                break
+            match = re.search(r'-\s+([a-zA-Z0-9.-]+)', line_strip)
+            if match:
+                domains.append(match.group(1))
+    print(' '.join(domains))
+except Exception:
+    pass
+" 2>/dev/null || true)
+    if [ -n "${DOMAINS_STR}" ]; then
+        DOMAINS=(${DOMAINS_STR})
+        echo "[DDNS] Dynamically loaded domains from ${CONFIG_FILE}: ${DOMAINS[*]}"
+    fi
+fi
+
+# Fallback default domains if config doesn't exist or parsing returned empty
+if [ ${#DOMAINS[@]} -eq 0 ]; then
+    DOMAINS=("lfr-demo.se" "lfr-demo.online")
+fi
 
 # Extract API Token from cloudflare.ini
 API_TOKEN=$(grep -E "^dns_cloudflare_api_token[[:space:]]*=" "${TOKEN_FILE}" | cut -d'=' -f2 | tr -d ' "[:space:]')
@@ -98,6 +133,32 @@ for domain in "${DOMAINS[@]}"; do
                 cf_api "PUT" "zones/${zone_id}/dns_records/${rec_id}" "{\"type\":\"AAAA\",\"name\":\"${full_rname}\",\"content\":\"${IPV6}\",\"ttl\":120,\"proxied\":false}" > /dev/null
             else
                 echo "[DDNS] AAAA record for ${full_rname} is up to date (${IPV6})."
+            fi
+        fi
+
+        # 3. Update SPF (TXT Record for root @)
+        if [ "${rname}" = "@" ]; then
+            spf_content="v=spf1"
+            if [ -n "${IPV4}" ]; then
+                spf_content="${spf_content} ip4:${IPV4}"
+            fi
+            if [ -n "${IPV6}" ]; then
+                spf_content="${spf_content} ip6:${IPV6}"
+            fi
+            spf_content="${spf_content} -all"
+
+            rec_resp=$(cf_api "GET" "zones/${zone_id}/dns_records?name=${domain}&type=TXT")
+            rec_id=$(echo "${rec_resp}" | jq -r '.result[] | select(.content | startswith("v=spf1")) | .id // empty' | head -n1)
+            current_spf=$(echo "${rec_resp}" | jq -r '.result[] | select(.content | startswith("v=spf1")) | .content // empty' | head -n1)
+
+            if [ -z "${rec_id}" ]; then
+                echo "[DDNS] Creating SPF TXT record for ${domain}: ${spf_content}"
+                cf_api "POST" "zones/${zone_id}/dns_records" "{\"type\":\"TXT\",\"name\":\"${domain}\",\"content\":\"${spf_content}\",\"ttl\":120}" > /dev/null
+            elif [ "${current_spf}" != "${spf_content}" ]; then
+                echo "[DDNS] Updating SPF TXT record for ${domain}: ${current_spf} -> ${spf_content}"
+                cf_api "PUT" "zones/${zone_id}/dns_records/${rec_id}" "{\"type\":\"TXT\",\"name\":\"${domain}\",\"content\":\"${spf_content}\",\"ttl\":120}" > /dev/null
+            else
+                echo "[DDNS] SPF record for ${domain} is up to date (${spf_content})."
             fi
         fi
     done

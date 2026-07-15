@@ -18,11 +18,12 @@
     {
       "title": "Enhancement: Slack and Microsoft Teams Webhook Alerts",
       "body": "### Description\nImplement real-time administrative notification dispatches to corporate Slack and Microsoft Teams channels for critical security, abuse, and onboarding events.\n\n### Impact Analysis\n- **Operations & Security**: High. Administrators receive instant alerts for rate limit triggers (DDoS), IP blacklists, and new user registration requests directly on their collaboration platforms.\n- **Reliability**: Asynchronous dispatch ensures that notification failures do not affect HTTP client response times.\n- **Simplicity**: No external database dependencies; configuration is mapped strictly inside `server-config.yaml`.\n\n### Proposed Implementation Plan\n1. Define `webhook_url` and `webhook_enabled` in `pkg/config/config.go`.\n2. Implement a dedicated HTTP webhook client service `pkg/webhook/` to format payloads.\n3. Support rich block markdown layouts for Slack and message cards for Microsoft Teams.\n4. Inject webhook dispatch triggers into registration request, rate limiter auto-ban, IP blacklisting, and portal abuse report handlers.\n5. Write unit tests validating structured JSON payload assembly and asynchronous dispatcher loops.",
-      "completed": false,
+      "completed": true,
       "labels": [
         "enhancement"
       ],
-      "issueNumber": "478"
+      "issueNumber": "478",
+      "closed": true
     }
   ],
   "epicNumber": "476"

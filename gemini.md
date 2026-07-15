@@ -896,6 +896,21 @@ The solution will consist of:
 - [x] Verify all unit tests and E2E integration test runs.
 - [x] Tag, sign, and deploy v1.32.2 gateway and client binaries to VPS.
 
+## SSO Owner Role Mapping Patch (v1.32.3)
+- [x] Map SSO/Keycloak user creation to owner database role if email matches the configured owner email value (#475).
+- [x] Push branches and merge PR on GitHub.
+
+## Desktop System Tray / Menu Bar GUI Wrapper (v1.33.0) - Epic #476
+- [x] Add pure Go `gogpu/systray` dependency to `go.mod` (#477).
+- [x] Implement settings API GET/POST endpoints and token masking in `pkg/client/inspector.go` (#477).
+- [x] Add client settings form UI and tab navigator inside `pkg/client/inspector.html` (#477).
+- [x] Generate and embed active (green) and inactive (gray) tray PNG icons in `pkg/gui/assets.go` (#477).
+- [x] Implement dynamic tray context menu rebuilding and background process daemon launcher in `pkg/gui/gui.go` (#477).
+- [x] Add `-gui` flag check inside `cmd/lfr-tunnel/main.go` to divert execution path (#477).
+- [x] Write state resolution unit tests in `pkg/gui/gui_test.go` (#477).
+- [x] Verify standard and OIDC E2E integration test suites.
+- [x] Push branches and merge PR #481 on GitHub.
+
 <!-- markdownlint-disable MD049 -->
 ---
 *Last Updated: 2026-07-15* | *Last Reviewed: 2026-07-15*

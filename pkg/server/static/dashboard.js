@@ -2602,6 +2602,82 @@ applyTheme(currentUser.theme_preference);
             }
         }
 
+        let integrationTestCooldownTimer = null;
+
+        async function triggerIntegrationTest() {
+            const btn = document.getElementById('btn-test-integration');
+            const status = document.getElementById('test-integration-status');
+            if (!btn || !status) return;
+
+            btn.disabled = true;
+            btn.innerText = "Sending...";
+            status.style.display = "inline";
+            status.style.color = "var(--text-muted)";
+            status.innerText = "Dispatching test payloads...";
+
+            try {
+                const res = await fetch('/api/admin/test-webhook', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' }
+                });
+
+                if (res.ok) {
+                    showToast("Test integration message sent successfully!", "success");
+                    status.style.color = "#10b981";
+                    status.innerText = "Success: Test alert sent.";
+                    setTimeout(() => {
+                        btn.disabled = false;
+                        btn.innerText = "Send Test Alert";
+                        status.style.display = "none";
+                    }, 3000);
+                } else if (res.status === 429) {
+                    const data = await res.json();
+                    let retryAfter = parseInt(data.retry_after) || 30;
+                    showToast(data.error || "Rate limited. Please wait.", "warning");
+                    
+                    if (integrationTestCooldownTimer) {
+                        clearInterval(integrationTestCooldownTimer);
+                    }
+
+                    status.style.color = "#f59e0b";
+                    
+                    const updateCountdown = () => {
+                        if (retryAfter <= 0) {
+                            clearInterval(integrationTestCooldownTimer);
+                            integrationTestCooldownTimer = null;
+                            btn.disabled = false;
+                            btn.innerText = "Send Test Alert";
+                            status.style.display = "none";
+                        } else {
+                            btn.innerText = `Cooldown (${retryAfter}s)`;
+                            status.innerText = `Please wait ${retryAfter} seconds before sending another test request.`;
+                            retryAfter--;
+                        }
+                    };
+
+                    updateCountdown();
+                    integrationTestCooldownTimer = setInterval(updateCountdown, 1000);
+                } else {
+                    let errMsg = "Failed to dispatch test notification";
+                    try {
+                        const data = await res.json();
+                        errMsg = data.error || errMsg;
+                    } catch (e) {}
+                    showToast(errMsg, "danger");
+                    status.style.color = "#ef4444";
+                    status.innerText = `Error: ${errMsg}`;
+                    btn.disabled = false;
+                    btn.innerText = "Send Test Alert";
+                }
+            } catch (e) {
+                showToast("Network error dispatching test notification", "danger");
+                status.style.color = "#ef4444";
+                status.innerText = "Error: Network connection failed.";
+                btn.disabled = false;
+                btn.innerText = "Send Test Alert";
+            }
+        }
+
         function openDeleteAccountModal() {
             if (!currentUser) return;
             document.getElementById('delete-acc-email-hint').innerText = currentUser.email;

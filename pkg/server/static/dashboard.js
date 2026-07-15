@@ -1902,6 +1902,13 @@ applyTheme(currentUser.theme_preference);
                 if (res.ok) {
                     const data = await res.json();
                     updateMaintenanceModeUI(data.maintenance_mode, data.iron_curtain);
+                    
+                    const targetContainer = document.getElementById('test-integration-target-container');
+                    const targetEl = document.getElementById('test-integration-target');
+                    if (targetContainer && targetEl && data.test_target) {
+                        targetEl.innerText = data.test_target;
+                        targetContainer.style.display = 'block';
+                    }
                 }
             } catch (e) {
                 console.error("Failed to load maintenance status", e);

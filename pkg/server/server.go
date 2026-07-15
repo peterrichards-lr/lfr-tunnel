@@ -2351,9 +2351,19 @@ func (s *Server) handleAdminEndpoints(w http.ResponseWriter, r *http.Request) {
 			ironCurtain = true
 		}
 
+		testTarget := "Email: " + s.cfg.AdminNotificationEmail
+		if s.cfg.Webhooks.Enabled {
+			if s.cfg.Webhooks.SlackURL != "" {
+				testTarget = "Slack Channel (Webhook)"
+			} else if s.cfg.Webhooks.TeamsURL != "" {
+				testTarget = "Microsoft Teams Channel"
+			}
+		}
+
 		respondJSON(w, http.StatusOK, map[string]interface{}{
 			"maintenance_mode": maintStr,
 			"iron_curtain":     ironCurtain,
+			"test_target":      testTarget,
 		})
 		return
 	}

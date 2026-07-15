@@ -1,0 +1,28 @@
+{
+  "title": "Enhancement: Admin Webhook & Email Test Trigger with Rate Limiting",
+  "body": "### Description\nImplement an administrative control endpoint `/api/admin/test-webhook` and corresponding UI elements in the Settings tab to allow owners and admins to trigger on-demand test notifications to verified Slack, Teams, and email endpoints.\n\n### Requirements\n- **Role Protection**: Endpoints must be strictly restricted to users with `admin` or `owner` roles.\n- **Test Payload**: Message must contain a clear timestamp, the server's running version, and the email of the administrator who initiated the test.\n- **Spam Prevention**: Implement a server-side sliding window rate limiter allowing at most 1 test request every 30 seconds per administrator to prevent spamming collaboration channels.\n- **Dashboard Integration**: Add a 'Test Integrations' section under the Settings panel with an interactive trigger button showing loading state, success confirmations, and error alerts.",
+  "labels": [
+    "enhancement"
+  ],
+  "issues": [
+    {
+      "title": "Sub-Issue #1: Implement /api/admin/test-webhook endpoint with 30s rate limiting",
+      "body": "### Tasks\n1. Define test webhook API route `/api/admin/test-webhook` in `pkg/server/server.go`.\n2. Apply administrator authentication and role verification checks.\n3. Create an in-memory rate-limiter tracker (e.g. map of last-tested timestamps per admin).\n4. Assemble and dispatch a formatted test payload containing the administrator's email and a dynamic timestamp.\n5. Write unit tests validating authentication, payload format, and 30-second rate-limit blocks.",
+      "completed": false,
+      "labels": [
+        "enhancement"
+      ],
+      "issueNumber": "505"
+    },
+    {
+      "title": "Sub-Issue #2: Add 'Test Integration' panel and trigger button in Admin Dashboard UI",
+      "body": "### Tasks\n1. Add a 'Test Integrations' section in the settings container of `pkg/server/dashboard.html`.\n2. Implement a 'Send Test Alert' button with loading states in `pkg/server/static/dashboard.js`.\n3. Wire the button to make a POST request to `/api/admin/test-webhook` and handle rate limit (429) and success responses cleanly.",
+      "completed": false,
+      "labels": [
+        "enhancement"
+      ],
+      "issueNumber": "506"
+    }
+  ],
+  "epicNumber": "504"
+}

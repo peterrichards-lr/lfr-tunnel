@@ -166,8 +166,9 @@ func TestServer_HandleUpdateReservationAccessControl(t *testing.T) {
 		t.Fatalf("expected reservation, got error: %v", err)
 	}
 
-	if res.Passcode != "secret123" {
-		t.Errorf("expected passcode 'secret123', got '%s'", res.Passcode)
+	expectedHashed := HashPasscode("secret123")
+	if res.Passcode != expectedHashed {
+		t.Errorf("expected passcode '%s', got '%s'", expectedHashed, res.Passcode)
 	}
 	if res.WhitelistIPs != "192.168.1.1,10.0.0.1" {
 		t.Errorf("expected whitelist '192.168.1.1,10.0.0.1', got '%s'", res.WhitelistIPs)

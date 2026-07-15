@@ -8,8 +8,10 @@ import (
 	"io"
 	"net/http"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"runtime"
+	"strconv"
 	"strings"
 	"time"
 
@@ -334,29 +336,136 @@ func SelfUpgrade(currentVersion string, serverURL string) error {
 
 	fmt.Println("[Update] Binary integrity verified successfully.")
 
+	// Pre-upgrade: stop all active processes and services running the binary to release file handles and prevent EDR quarantine
+	plistToReload, restartSystemd := stopActiveProcessesAndServices()
+
 	// Perform replacement swap
+	var swapErr error
 	if runtime.GOOS == "windows" {
 		oldPath := execPath + ".old"
 		_ = os.Remove(oldPath) // Remove any previous leftovers
 		if err := os.Rename(execPath, oldPath); err != nil {
-			return fmt.Errorf("failed to rename running binary: %v (please make sure you have permissions)", err)
-		}
-		if err := os.Rename(tempPath, execPath); err != nil {
+			swapErr = fmt.Errorf("failed to rename running binary: %v (please make sure you have permissions)", err)
+		} else if err := os.Rename(tempPath, execPath); err != nil {
 			// Try to rollback rename
 			_ = os.Rename(oldPath, execPath)
-			return fmt.Errorf("failed to rename downloaded binary: %v", err)
+			swapErr = fmt.Errorf("failed to rename downloaded binary: %v", err)
+		} else {
+			fmt.Println("[Update] Upgrade successful! You are now running the latest version.")
+			fmt.Printf("[Update] Note: You can delete the backup file: %s\n", oldPath)
 		}
-		fmt.Println("[Update] Upgrade successful! You are now running the latest version.")
-		fmt.Printf("[Update] Note: You can delete the backup file: %s\n", oldPath)
 	} else {
 		// On Unix we can rename directly
 		if err := os.Rename(tempPath, execPath); err != nil {
-			return fmt.Errorf("failed to replace running binary: %v (if permission is denied, try running as sudo)", err)
+			swapErr = fmt.Errorf("failed to replace running binary: %v (if permission is denied, try running as sudo)", err)
+		} else {
+			fmt.Println("[Update] Upgrade successful! You are now running the latest version.")
 		}
-		fmt.Println("[Update] Upgrade successful! You are now running the latest version.")
+	}
+
+	// Post-upgrade: restart previously active processes and services
+	restartActiveProcessesAndServices(plistToReload, restartSystemd)
+
+	if swapErr != nil {
+		return swapErr
 	}
 
 	return nil
+}
+
+func stopActiveProcessesAndServices() ([]string, bool) {
+	var plistToReload []string
+	var restartSystemd bool
+	home, err := os.UserHomeDir()
+	if err != nil {
+		return nil, false
+	}
+
+	// 1. Unload LaunchAgents on macOS
+	if runtime.GOOS == "darwin" {
+		guiPlist := filepath.Join(home, "Library", "LaunchAgents", "com.liferay.tunnel.gui.plist")
+		if _, err := os.Stat(guiPlist); err == nil {
+			fmt.Println("[Update] Unloading macOS GUI LaunchAgent...")
+			_ = exec.Command("launchctl", "unload", guiPlist).Run()
+			plistToReload = append(plistToReload, guiPlist)
+		}
+		daemonPlist := filepath.Join(home, "Library", "LaunchAgents", "com.liferay.tunnel.plist")
+		if _, err := os.Stat(daemonPlist); err == nil {
+			fmt.Println("[Update] Unloading macOS CLI Daemon LaunchAgent...")
+			_ = exec.Command("launchctl", "unload", daemonPlist).Run()
+			plistToReload = append(plistToReload, daemonPlist)
+		}
+		if len(plistToReload) > 0 {
+			time.Sleep(500 * time.Millisecond)
+		}
+	}
+
+	// 2. Stop systemd services on Linux
+	if runtime.GOOS == "linux" {
+		cmd := exec.Command("systemctl", "--user", "is-active", "lfr-tunnel.service")
+		if err := cmd.Run(); err == nil {
+			fmt.Println("[Update] Stopping Linux systemd user service...")
+			_ = exec.Command("systemctl", "--user", "stop", "lfr-tunnel.service").Run()
+			restartSystemd = true
+			time.Sleep(500 * time.Millisecond)
+		}
+	}
+
+	// 3. Terminate active GUI PID
+	guiLock := filepath.Join(home, ".lfr-tunnel", "gui.pid")
+	if data, err := os.ReadFile(guiLock); err == nil {
+		if pid, err := strconv.Atoi(strings.TrimSpace(string(data))); err == nil && pid > 0 {
+			if IsPIDRunning(pid) {
+				fmt.Printf("[Update] Terminating active GUI process (PID: %d)...\n", pid)
+				if proc, err := os.FindProcess(pid); err == nil {
+					_ = proc.Kill()
+					_ = os.Remove(guiLock)
+				}
+			}
+		}
+	}
+
+	// 4. Terminate active background CLI PIDs
+	logDir := filepath.Join(home, ".lfr-tunnel")
+	if entries, err := os.ReadDir(logDir); err == nil {
+		for _, entry := range entries {
+			if !entry.IsDir() && strings.HasPrefix(entry.Name(), "client-") && strings.HasSuffix(entry.Name(), ".pid") {
+				pidPath := filepath.Join(logDir, entry.Name())
+				if data, err := os.ReadFile(pidPath); err == nil {
+					if pid, err := strconv.Atoi(strings.TrimSpace(string(data))); err == nil && pid > 0 {
+						if IsPIDRunning(pid) {
+							fmt.Printf("[Update] Terminating active background tunnel process (PID: %d)...\n", pid)
+							if proc, err := os.FindProcess(pid); err == nil {
+								_ = proc.Kill()
+								_ = os.Remove(pidPath)
+							}
+						}
+					}
+				}
+			}
+		}
+	}
+
+	// Wait briefly for all processes to fully die and release binary file handles
+	time.Sleep(500 * time.Millisecond)
+
+	return plistToReload, restartSystemd
+}
+
+func restartActiveProcessesAndServices(plistToReload []string, restartSystemd bool) {
+	// 1. Reload LaunchAgents on macOS
+	if runtime.GOOS == "darwin" {
+		for _, plist := range plistToReload {
+			fmt.Printf("[Update] Restarting macOS LaunchAgent: %s...\n", filepath.Base(plist))
+			_ = exec.Command("launchctl", "load", "-w", plist).Run()
+		}
+	}
+
+	// 2. Restart systemd services on Linux
+	if runtime.GOOS == "linux" && restartSystemd {
+		fmt.Println("[Update] Restarting Linux systemd user service...")
+		_ = exec.Command("systemctl", "--user", "start", "lfr-tunnel.service").Run()
+	}
 }
 
 func computeSHA256(filePath string) (string, error) {

@@ -369,9 +369,29 @@ admin_notification_email: "admin@yourdomain.com"
 enable_registration: true
 enable_user_portal: true
 
+# Collaboration & Webhook Alerts
+webhooks:
+  enabled: false                      # Set to true to activate Slack/Teams alerts
+  slack_url: "https://hooks.slack.com/services/T00/B00/X00"
+  teams_url: "https://liferay.webhook.office.com/webhookb2/..."
+
 # Versioning Controls (Optional)
 min_client_version: "v1.0.0"       # Minimum client version allowed to connect
 latest_client_version: "v1.9.3"    # Latest recommended client version (decouples server upgrades)
+
+> [!NOTE]
+> **Slack & Microsoft Teams Notifications Configuration**
+> Liferay Tunnel supports two secure options for routing gateway notification alerts (user registration requests, rate limit blocks, abuse reports, manual IP bans) directly to your Slack or Teams channels:
+> 
+> 1. **Incoming Webhook URL (Preferred)**:
+>    - Create an Incoming Webhook App inside your corporate Slack or Teams workspace mapped to a target channel (public or private).
+>    - Add the generated secret webhook URL to the `webhooks.slack_url` or `webhooks.teams_url` parameter in `server-config.yaml` and set `webhooks.enabled: true`.
+>    - This uses rich markdown formatting (Slack Block Kit or Office 365 Message Cards) to deliver beautiful notifications asynchronously.
+> 
+> 2. **Slack Channel Email Address (Alternative)**:
+>    - Generate an email address for your target Slack channel inside Slack channel settings (under *Integrations > Send emails to this channel*).
+>    - Configure `admin_notification_email` to point directly to that address in `server-config.yaml` (e.g. `admin_notification_email: '"lfr-tunnel-admin (Slack)" <lfr-tunnel-admin-xxx@liferay.slack.com>'`).
+>    - Our mail client fully parses name-formatted email recipients natively, ensuring standard SMTP notifications are safely delivered and displayed directly inside the channel without requiring Slack App authorization.
 
 > [!TIP]
 > **Native Multi-Factor Authentication (MFA / TOTP)**  

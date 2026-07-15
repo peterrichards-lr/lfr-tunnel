@@ -328,6 +328,20 @@ func executeSubcommands(cfg *config.ClientConfig, sub string, subdomainFlagPasse
 		return true
 	}
 
+	if len(os.Args) > 1 && os.Args[1] == "install-gui-service" {
+		if err := client.InstallGUIService(); err != nil {
+			log.Fatalf("[Error] Failed to install GUI service: %v", err)
+		}
+		return true
+	}
+
+	if len(os.Args) > 1 && os.Args[1] == "uninstall-gui-service" {
+		if err := client.UninstallGUIService(); err != nil {
+			log.Fatalf("[Error] Failed to uninstall GUI service: %v", err)
+		}
+		return true
+	}
+
 	if *versionFlag {
 		fmt.Printf("lfr-tunnel version %s\n", config.Version)
 		return true

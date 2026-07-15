@@ -255,6 +255,16 @@ func updateMenu(tray *systray.SystemTray, cfg *config.ClientConfig, isRunning bo
 		openBrowser("http://127.0.0.1:55556/settings")
 	})
 
+	var startOnLoginText string
+	if client.IsGUIServiceInstalled() {
+		startOnLoginText = "✓ Launch on Login"
+	} else {
+		startOnLoginText = "Launch on Login"
+	}
+	menu.Add(startOnLoginText, func() {
+		handleToggleLaunchOnLogin(tray, cfg, isRunning, activeURL)
+	})
+
 	menu.AddSeparator()
 
 	menu.Add("Quit", func() {
@@ -264,6 +274,19 @@ func updateMenu(tray *systray.SystemTray, cfg *config.ClientConfig, isRunning bo
 	})
 
 	tray.SetMenu(menu)
+}
+
+func handleToggleLaunchOnLogin(tray *systray.SystemTray, cfg *config.ClientConfig, isRunning bool, activeURL string) {
+	if client.IsGUIServiceInstalled() {
+		if err := client.UninstallGUIService(); err != nil {
+			slog.Error("Failed to uninstall GUI service", "error", err)
+		}
+	} else {
+		if err := client.InstallGUIService(); err != nil {
+			slog.Error("Failed to install GUI service", "error", err)
+		}
+	}
+	updateMenu(tray, cfg, isRunning, activeURL)
 }
 
 func handleToggle(cfg *config.ClientConfig) {

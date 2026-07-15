@@ -21,6 +21,7 @@ import (
 
 	"lfr-tunnel/pkg/client"
 	"lfr-tunnel/pkg/config"
+	"lfr-tunnel/pkg/gui"
 	"lfr-tunnel/pkg/mcp"
 
 	"github.com/mattn/go-isatty"
@@ -40,6 +41,7 @@ func (i *arrayFlags) Set(value string) error {
 // Package-level command-line flags
 var (
 	configPath       = flag.String("config", "", "Path to client-config.yaml")
+	guiFlag          = flag.Bool("gui", false, "Start client in system tray GUI mode")
 	serverURL        = flag.String("server", "", "Gateway server URL (e.g. https://tunnel.liferay.com)")
 	token            = flag.String("token", "", "Gateway auth token")
 	subdomain        = flag.String("subdomain", "", "Requested subdomain prefix (e.g. alpha-se)")
@@ -81,6 +83,11 @@ func main() {
 
 	// 2. Override with CLI flags
 	overrideConfigWithFlags(cfg)
+
+	if *guiFlag {
+		gui.StartGUI(cfg)
+		return
+	}
 
 	isExplicitServer := *serverURL != "" || os.Getenv("LFT_CLIENT_SERVER") != "" || os.Getenv("LFT_SERVER_URL") != "" || os.Getenv("LFT_SERVER") != ""
 	resolveServerURL(cfg, isExplicitServer)

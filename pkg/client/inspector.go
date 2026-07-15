@@ -16,7 +16,7 @@ import (
 )
 
 //go:embed inspector.html
-var inspectorHTML []byte
+var InspectorHTML []byte
 
 // StartInspector starts the local web dashboard for the given engine.
 // If the requested port is in use, it will auto-increment up to 10 times to find a free port.
@@ -24,12 +24,12 @@ func StartInspector(port int, engine *InterceptorEngine) (int, error) {
 	mux := http.NewServeMux()
 
 	mux.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
-		if r.URL.Path != "/" {
+		if r.URL.Path != "/" && r.URL.Path != "/settings" {
 			http.NotFound(w, r)
 			return
 		}
 		w.Header().Set("Content-Type", "text/html; charset=utf-8")
-		_, _ = w.Write(inspectorHTML)
+		_, _ = w.Write(InspectorHTML)
 	})
 
 	mux.HandleFunc("/api/state", func(w http.ResponseWriter, r *http.Request) {
@@ -155,6 +155,85 @@ func StartInspector(port int, engine *InterceptorEngine) (int, error) {
 
 		w.Header().Set("Content-Type", "application/json")
 		_ = json.NewEncoder(w).Encode(info)
+	})
+
+	mux.HandleFunc("/api/config", func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+
+		if r.Method == http.MethodGet {
+			cfg, err := config.LoadClientConfig("")
+			if err != nil {
+				cfg = config.DefaultClientConfig()
+			}
+			maskToken := func(t string) string {
+				if t == "" {
+					return ""
+				}
+				return "********"
+			}
+			destPort := 8080
+			if len(cfg.Ports) > 0 {
+				destPort = cfg.Ports[0]
+			}
+			resp := map[string]interface{}{
+				"server_url":    cfg.ServerURL,
+				"auth_token":    maskToken(cfg.AuthToken),
+				"target_host":   cfg.TargetHost,
+				"dest_port":     destPort,
+				"subdomain":     cfg.Subdomain,
+				"preserve_host": cfg.PreserveHost,
+				"passcode":      cfg.Passcode,
+				"rate_limit":    cfg.RateLimit,
+			}
+			_ = json.NewEncoder(w).Encode(resp)
+			return
+		}
+
+		if r.Method == http.MethodPost {
+			var req struct {
+				ServerURL    string `json:"server_url"`
+				AuthToken    string `json:"auth_token"`
+				TargetHost   string `json:"target_host"`
+				DestPort     int    `json:"dest_port"`
+				Subdomain    string `json:"subdomain"`
+				PreserveHost bool   `json:"preserve_host"`
+				Passcode     string `json:"passcode"`
+				RateLimit    int    `json:"rate_limit"`
+			}
+			if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+				w.WriteHeader(http.StatusBadRequest)
+				_, _ = w.Write([]byte(`{"error":"Invalid request JSON"}`))
+				return
+			}
+
+			cfg, err := config.LoadClientConfig("")
+			if err != nil {
+				cfg = config.DefaultClientConfig()
+			}
+
+			cfg.ServerURL = req.ServerURL
+			if req.AuthToken != "********" && req.AuthToken != "" {
+				cfg.AuthToken = req.AuthToken
+			}
+			cfg.TargetHost = req.TargetHost
+			cfg.Ports = []int{req.DestPort}
+			cfg.Subdomain = req.Subdomain
+			cfg.PreserveHost = req.PreserveHost
+			cfg.Passcode = req.Passcode
+			cfg.RateLimit = req.RateLimit
+
+			err = config.SaveClientConfig("", cfg)
+			if err != nil {
+				w.WriteHeader(http.StatusInternalServerError)
+				_ = json.NewEncoder(w).Encode(map[string]string{"error": "Failed to save configuration: " + err.Error()})
+				return
+			}
+
+			_, _ = w.Write([]byte(`{"status":"saved"}`))
+			return
+		}
+
+		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
 	})
 
 	mux.HandleFunc("/api/access-control", func(w http.ResponseWriter, r *http.Request) {

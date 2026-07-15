@@ -153,6 +153,7 @@ type ClientConfig struct {
 	Regions      map[string]string `yaml:"regions"`
 	Latency      time.Duration     `yaml:"latency"`
 	Bandwidth    string            `yaml:"bandwidth"`
+	PreserveHost bool              `yaml:"preserve_host"`
 }
 
 // DefaultServerConfig returns a ServerConfig with sensible default values.
@@ -444,9 +445,44 @@ func LoadServerConfig(path string) (*ServerConfig, error) {
 	return cfg, nil
 }
 
+// SaveClientConfig saves the client configuration to a YAML file.
+func SaveClientConfig(path string, cfg *ClientConfig) error {
+	if path == "" {
+		path = ResolveDefaultConfigPath()
+	}
+	dir := filepath.Dir(path)
+	if err := os.MkdirAll(dir, 0700); err != nil {
+		return err
+	}
+	file, err := os.OpenFile(path, os.O_WRONLY|os.O_CREATE|os.O_TRUNC, 0600)
+	if err != nil {
+		return err
+	}
+	defer file.Close() //nolint:errcheck
+	enc := yaml.NewEncoder(file)
+	defer enc.Close() //nolint:errcheck
+	return enc.Encode(cfg)
+}
+
+// ResolveDefaultConfigPath returns the canonical path to the user's config file.
+func ResolveDefaultConfigPath() string {
+	homeDir, err := os.UserHomeDir()
+	if err != nil {
+		return "client-config.yaml"
+	}
+	return filepath.Join(homeDir, ".lfr-tunnel", "config.yaml")
+}
+
 // LoadClientConfig loads the client configuration from a YAML file and/or environment variables.
 func LoadClientConfig(path string) (*ClientConfig, error) {
 	cfg := DefaultClientConfig()
+
+	if path == "" {
+		defaultPath := ResolveDefaultConfigPath()
+		if _, err := os.Stat(defaultPath); err == nil {
+			path = defaultPath
+		}
+	}
 
 	if path != "" {
 		file, err := os.Open(path)

@@ -142,3 +142,223 @@ Set WshShell = Nothing`, strings.ReplaceAll(exePath, "\\", "\\\\"))
 	fmt.Printf("[Success] lfr-tunnel will now start silently in the background on login.\n")
 	return nil
 }
+
+// InstallGUIService configures lfr-tunnel -gui to start on login automatically.
+func InstallGUIService() error {
+	exePath, err := os.Executable()
+	if err != nil {
+		return fmt.Errorf("failed to get executable path: %v", err)
+	}
+
+	switch runtime.GOOS {
+	case "darwin":
+		return installDarwinGUI(exePath)
+	case "linux":
+		return installLinuxGUI(exePath)
+	case "windows":
+		return installWindowsGUI(exePath)
+	default:
+		return fmt.Errorf("unsupported operating system: %s", runtime.GOOS)
+	}
+}
+
+// IsGUIServiceInstalled checks if the GUI autostart configuration exists.
+func IsGUIServiceInstalled() bool {
+	homeDir, err := os.UserHomeDir()
+	if err != nil {
+		return false
+	}
+	switch runtime.GOOS {
+	case "darwin":
+		plistPath := filepath.Join(homeDir, "Library", "LaunchAgents", "com.liferay.tunnel.gui.plist")
+		_, err := os.Stat(plistPath)
+		return err == nil
+	case "linux":
+		desktopPath := filepath.Join(homeDir, ".config", "autostart", "lfr-tunnel-gui.desktop")
+		_, err := os.Stat(desktopPath)
+		return err == nil
+	case "windows":
+		vbsPath := filepath.Join(homeDir, "AppData", "Roaming", "Microsoft", "Windows", "Start Menu", "Programs", "Startup", "lfr-tunnel-gui.vbs")
+		_, err := os.Stat(vbsPath)
+		return err == nil
+	default:
+		return false
+	}
+}
+
+// UninstallGUIService removes the GUI autostart configuration.
+func UninstallGUIService() error {
+	switch runtime.GOOS {
+	case "darwin":
+		return uninstallDarwinGUI()
+	case "linux":
+		return uninstallLinuxGUI()
+	case "windows":
+		return uninstallWindowsGUI()
+	default:
+		return fmt.Errorf("unsupported operating system: %s", runtime.GOOS)
+	}
+}
+
+func installDarwinGUI(exePath string) error {
+	homeDir, err := os.UserHomeDir()
+	if err != nil {
+		return err
+	}
+
+	plistPath := filepath.Join(homeDir, "Library", "LaunchAgents", "com.liferay.tunnel.gui.plist")
+	plistContent := fmt.Sprintf(`<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+    <key>Label</key>
+    <string>com.liferay.tunnel.gui</string>
+    <key>ProgramArguments</key>
+    <array>
+        <string>%s</string>
+        <string>-gui</string>
+    </array>
+    <key>RunAtLoad</key>
+    <true/>
+    <key>KeepAlive</key>
+    <true/>
+    <key>StandardOutPath</key>
+    <string>%s/.lfr-tunnel/gui_service.log</string>
+    <key>StandardErrorPath</key>
+    <string>%s/.lfr-tunnel/gui_service.err</string>
+</dict>
+</plist>`, exePath, homeDir, homeDir)
+
+	if err := os.MkdirAll(filepath.Dir(plistPath), 0755); err != nil {
+		return err
+	}
+	if err := os.WriteFile(plistPath, []byte(plistContent), 0644); err != nil {
+		return err
+	}
+
+	// Load the service
+	cmd := exec.Command("launchctl", "load", "-w", plistPath)
+	if err := cmd.Run(); err != nil {
+		slog.Info(fmt.Sprintf("[Warning] Failed to load launchctl, you may need to run: launchctl load -w %s\n", plistPath))
+	}
+
+	fmt.Printf("[Success] Installed macOS LaunchAgent to %s\n", plistPath)
+	fmt.Printf("[Success] lfr-tunnel (GUI Wrapper) will now start automatically on login.\n")
+	return nil
+}
+
+func uninstallDarwinGUI() error {
+	homeDir, err := os.UserHomeDir()
+	if err != nil {
+		return err
+	}
+
+	plistPath := filepath.Join(homeDir, "Library", "LaunchAgents", "com.liferay.tunnel.gui.plist")
+	if _, err := os.Stat(plistPath); os.IsNotExist(err) {
+		return nil
+	}
+
+	// Unload the service
+	cmd := exec.Command("launchctl", "unload", plistPath)
+	_ = cmd.Run()
+
+	if err := os.Remove(plistPath); err != nil {
+		return err
+	}
+
+	fmt.Printf("[Success] Uninstalled macOS LaunchAgent: %s\n", plistPath)
+	return nil
+}
+
+func installLinuxGUI(exePath string) error {
+	homeDir, err := os.UserHomeDir()
+	if err != nil {
+		return err
+	}
+
+	autostartDir := filepath.Join(homeDir, ".config", "autostart")
+	if err := os.MkdirAll(autostartDir, 0755); err != nil {
+		return err
+	}
+
+	desktopPath := filepath.Join(autostartDir, "lfr-tunnel-gui.desktop")
+	desktopContent := fmt.Sprintf(`[Desktop Entry]
+Type=Application
+Name=Liferay Tunnel GUI
+Comment=Liferay Tunnel System Tray Menu
+Exec=%s -gui
+Terminal=false
+Categories=Network;
+`, exePath)
+
+	if err := os.WriteFile(desktopPath, []byte(desktopContent), 0644); err != nil {
+		return err
+	}
+
+	fmt.Printf("[Success] Installed Linux autostart desktop entry to %s\n", desktopPath)
+	fmt.Printf("[Success] lfr-tunnel (GUI Wrapper) will now start automatically on login.\n")
+	return nil
+}
+
+func uninstallLinuxGUI() error {
+	homeDir, err := os.UserHomeDir()
+	if err != nil {
+		return err
+	}
+
+	desktopPath := filepath.Join(homeDir, ".config", "autostart", "lfr-tunnel-gui.desktop")
+	if _, err := os.Stat(desktopPath); os.IsNotExist(err) {
+		return nil
+	}
+
+	if err := os.Remove(desktopPath); err != nil {
+		return err
+	}
+
+	fmt.Printf("[Success] Uninstalled Linux autostart desktop entry: %s\n", desktopPath)
+	return nil
+}
+
+func installWindowsGUI(exePath string) error {
+	homeDir, err := os.UserHomeDir()
+	if err != nil {
+		return err
+	}
+
+	startupDir := filepath.Join(homeDir, "AppData", "Roaming", "Microsoft", "Windows", "Start Menu", "Programs", "Startup")
+	if err := os.MkdirAll(startupDir, 0755); err != nil {
+		return err
+	}
+
+	vbsPath := filepath.Join(startupDir, "lfr-tunnel-gui.vbs")
+	vbsContent := fmt.Sprintf(`Set WshShell = CreateObject("WScript.Shell")
+WshShell.Run chr(34) & "%s" & chr(34) & " -gui", 0
+Set WshShell = Nothing`, strings.ReplaceAll(exePath, "\\", "\\\\"))
+
+	if err := os.WriteFile(vbsPath, []byte(vbsContent), 0644); err != nil {
+		return err
+	}
+
+	fmt.Printf("[Success] Installed Windows startup script to %s\n", vbsPath)
+	fmt.Printf("[Success] lfr-tunnel (GUI Wrapper) will now start automatically on login.\n")
+	return nil
+}
+
+func uninstallWindowsGUI() error {
+	homeDir, err := os.UserHomeDir()
+	if err != nil {
+		return err
+	}
+
+	vbsPath := filepath.Join(homeDir, "AppData", "Roaming", "Microsoft", "Windows", "Start Menu", "Programs", "Startup", "lfr-tunnel-gui.vbs")
+	if _, err := os.Stat(vbsPath); os.IsNotExist(err) {
+		return nil
+	}
+
+	if err := os.Remove(vbsPath); err != nil {
+		return err
+	}
+
+	fmt.Printf("[Success] Uninstalled Windows startup script: %s\n", vbsPath)
+	return nil
+}

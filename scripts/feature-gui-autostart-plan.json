@@ -1,0 +1,37 @@
+{
+  "title": "Enhancement: Desktop GUI Launch on Login / Autostart Integration",
+  "body": "Implements automated start-on-login capabilities for the desktop system tray GUI wrapper wrapper on macOS, Windows, and Linux. Provides subcommands for direct CLI setup and a toggle item directly in the tray menu.",
+  "labels": [
+    "enhancement"
+  ],
+  "issues": [
+    {
+      "title": "Sub-Issue #1: Implement GUI Autostart Services in service_installer.go",
+      "body": "Define InstallGUIService, isLaunchOnLoginEnabled, and disableLaunchOnLogin in service_installer.go for macOS, Windows, and Linux.",
+      "completed": false,
+      "labels": [
+        "enhancement"
+      ],
+      "issueNumber": "486"
+    },
+    {
+      "title": "Sub-Issue #2: Expose install-gui-service and uninstall-gui-service subcommands in main.go",
+      "body": "Expose commands to register or deregister the autostart items via lfr-tunnel CLI.",
+      "completed": false,
+      "labels": [
+        "enhancement"
+      ],
+      "issueNumber": "487"
+    },
+    {
+      "title": "Sub-Issue #3: Add Launch on Login toggle item inside System Tray Menu in gui.go",
+      "body": "Add checkmarked toggle menu option in the GUI system tray for interactive autostart configuration.",
+      "completed": false,
+      "labels": [
+        "enhancement"
+      ],
+      "issueNumber": "488"
+    }
+  ],
+  "epicNumber": "485"
+}

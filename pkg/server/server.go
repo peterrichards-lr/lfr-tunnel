@@ -2225,8 +2225,17 @@ func (s *Server) requireAdmin(w http.ResponseWriter, r *http.Request) (string, s
 			if time.Now().Before(sessionData.ExpiresAt) {
 				actorEmail = sessionData.Email
 				actorRole = "admin"
-				if s.cfg.Owner.UserID != "" && strings.EqualFold(actorEmail, s.cfg.Owner.UserID) {
-					actorRole = "owner"
+				if s.db != nil {
+					if u, err := s.db.GetUserByEmail(actorEmail); err == nil && u != nil {
+						actorRole = u.Role
+					}
+				}
+				if actorRole == "" || actorRole == "user" {
+					if s.cfg.Owner.UserID != "" && strings.EqualFold(actorEmail, s.cfg.Owner.UserID) {
+						actorRole = "owner"
+					} else {
+						actorRole = "admin"
+					}
 				}
 				authenticated = true
 
@@ -2260,10 +2269,7 @@ func (s *Server) requireAdmin(w http.ResponseWriter, r *http.Request) (string, s
 					if err == nil && user.Status == "approved" && (user.Role == "admin" || user.Role == "owner") {
 						go func(patID int64) { _ = s.db.UpdatePATUsed(patID) }(pat.ID)
 						actorEmail = user.Email
-						actorRole = "admin"
-						if s.cfg.Owner.UserID != "" && strings.EqualFold(actorEmail, s.cfg.Owner.UserID) {
-							actorRole = "owner"
-						}
+						actorRole = user.Role
 						authenticated = true
 					}
 				}

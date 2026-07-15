@@ -877,6 +877,25 @@ The solution will consist of:
 - [x] Increase responsive media query and JS viewport breakpoint to 1024px to support mobile landscape and tablet orientations.
 - [x] Add word-break: break-all to SHA256 checksum card to prevent container stretching.
 
+## Technical Debt & Security Remediation Release (v1.32.1) - Epic #461
+- [x] Implement SQLite connection pooling (SetMaxOpenConns(1)) and enable WAL mode (#464).
+- [x] Resolve goroutine leak in client interceptor health checks using cancellation contexts (#462).
+- [x] Store http.Server references and perform graceful listener shutdown in Stop() (#463).
+- [x] Protect regional edge control WebSocket connections from concurrent write corruptions using thread-safe safeConn mutex wrappers (#465).
+- [x] Implement constant-time secure passcode hashing (SHA-256) and verification (subtle.ConstantTimeCompare) (#466).
+- [x] Mask passcodes in audit logs details to prevent sensitive credential exposure (#466).
+- [x] Propagate context cancellation down to rate limiter throttled readers (#467).
+- [x] Configure dial connection timeouts on SMTP client secure TLS dialing (#468).
+- [x] Fix case-sensitive owner matching checks across server handlers and SSO to prevent visibility issues.
+- [x] Resolve mobile sidebar drawer visibility glitches when toggled from desktop collapsed state.
+- [x] Verify all unit tests and Playwright E2E integration test runs.
+- [x] Tag, sign, and deploy v1.32.1 gateway and client binaries to VPS.
+
+## Owner Database Role Fallback Release (v1.32.2)
+- [x] Implement database owner role fallback check (`isOwner`) across list, get, and patch user endpoints.
+- [x] Verify all unit tests and E2E integration test runs.
+- [x] Tag, sign, and deploy v1.32.2 gateway and client binaries to VPS.
+
 <!-- markdownlint-disable MD049 -->
 ---
 *Last Updated: 2026-07-15* | *Last Reviewed: 2026-07-15*

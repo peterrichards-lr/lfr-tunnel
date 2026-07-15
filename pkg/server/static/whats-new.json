@@ -1,5 +1,5 @@
 {
-  "version": "v1.32.0",
+  "version": "v1.32.1",
   "release_date": "2026-07-15",
   "features": [
     "Feature: Configurable Scoop & Homebrew package manager options in the installation guide",

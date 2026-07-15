@@ -304,7 +304,7 @@
             transition: color 0.2s;
             flex-shrink: 0;
         }
-        .sidebar-section-header:first-of-type {
+        .sidebar-menu > .sidebar-section-header:first-of-type {
             margin-top: 0;
         }
         .sidebar-section-header:hover .sidebar-label,

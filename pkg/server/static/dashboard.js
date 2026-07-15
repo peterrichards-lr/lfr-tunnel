@@ -1339,12 +1339,14 @@ applyTheme(currentUser.theme_preference);
             if (tabName === 'magic') loadAdminMagicLinks();
             if (tabName === 'backups') loadBackups();
             if (tabName === 'network-health') loadNetworkHealth();
-            if (tabName === 'maintenance') loadMaintenanceStatus();
+            if (tabName === 'maintenance') {
+                loadMaintenanceStatus();
+                loadServerConfig();
+            }
             if (tabName === 'tokens') loadTokens();
             if (tabName === 'tunnels') loadTunnels();
             if (tabName === 'reservations') loadReservations();
             if (tabName === 'analytics') loadAnalytics();
-            if (tabName === 'settings') loadServerConfig();
             if (tabName === 'overview') {
                 loadWhatsNew();
                 loadVersionDetails();

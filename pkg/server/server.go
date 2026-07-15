@@ -2261,6 +2261,18 @@ func (s *Server) requireAdmin(w http.ResponseWriter, r *http.Request) (string, s
 	return actorEmail, actorRole, true
 }
 
+func (s *Server) isOwner(actor string) bool {
+	if s.cfg.Owner.UserID != "" && strings.EqualFold(actor, s.cfg.Owner.UserID) {
+		return true
+	}
+	if s.db != nil {
+		if u, err := s.db.GetUserByEmail(actor); err == nil && u != nil {
+			return u.Role == "owner"
+		}
+	}
+	return false
+}
+
 func (s *Server) handleAdminEndpoints(w http.ResponseWriter, r *http.Request) {
 	actor, role, ok := s.requireAdmin(w, r)
 	if !ok {
@@ -2807,14 +2819,15 @@ func (s *Server) handleAdminListUsers(w http.ResponseWriter, r *http.Request, ac
 		return
 	}
 
+	isOwner := s.isOwner(actor)
 	filtered := make([]*db.User, 0, len(users))
 	for _, u := range users {
-		if strings.EqualFold(actor, s.cfg.Owner.UserID) {
+		if isOwner {
 			filtered = append(filtered, u)
 		} else {
 			if strings.EqualFold(u.Email, actor) {
 				filtered = append(filtered, u)
-			} else if strings.EqualFold(u.Email, s.cfg.Owner.UserID) {
+			} else if strings.EqualFold(u.Email, s.cfg.Owner.UserID) || u.Role == "owner" {
 				continue
 			} else if u.Role == "admin" {
 				continue
@@ -3357,8 +3370,8 @@ func (s *Server) handleAdminGetUser(w http.ResponseWriter, r *http.Request, acto
 		return
 	}
 
-	if !strings.EqualFold(actor, s.cfg.Owner.UserID) {
-		if strings.EqualFold(user.Email, s.cfg.Owner.UserID) || (user.Role == "admin" && !strings.EqualFold(user.Email, actor)) {
+	if !s.isOwner(actor) {
+		if strings.EqualFold(user.Email, s.cfg.Owner.UserID) || user.Role == "owner" || (user.Role == "admin" && !strings.EqualFold(user.Email, actor)) {
 			http.Error(w, `{"error":"Forbidden: Cannot view this user"}`, http.StatusForbidden)
 			return
 		}
@@ -3413,12 +3426,12 @@ func (s *Server) handleAdminPatchUser(w http.ResponseWriter, r *http.Request, ac
 		return
 	}
 
-	if !strings.EqualFold(actor, s.cfg.Owner.UserID) {
-		if strings.EqualFold(user.Email, s.cfg.Owner.UserID) || user.Role == "admin" || strings.EqualFold(user.Email, actor) {
+	if !s.isOwner(actor) {
+		if strings.EqualFold(user.Email, s.cfg.Owner.UserID) || user.Role == "owner" || user.Role == "admin" || strings.EqualFold(user.Email, actor) {
 			http.Error(w, `{"error":"Forbidden: Cannot modify this user"}`, http.StatusForbidden)
 			return
 		}
-	} else if strings.EqualFold(user.Email, s.cfg.Owner.UserID) {
+	} else if strings.EqualFold(user.Email, s.cfg.Owner.UserID) || user.Role == "owner" {
 		http.Error(w, `{"error":"Forbidden: Cannot modify owner account status"}`, http.StatusForbidden)
 		return
 	}

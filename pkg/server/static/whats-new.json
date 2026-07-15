@@ -1,7 +1,8 @@
 {
-  "version": "v1.32.1",
+  "version": "v1.32.2",
   "release_date": "2026-07-15",
   "features": [
+    "Feature: Added database-based owner role fallback checks (isOwner) to prevent visibility issues for multiple owner emails",
     "Feature: Configurable Scoop & Homebrew package manager options in the installation guide",
     "Feature: Dynamic local client upgrade command recommendation (`lfr-tunnel -upgrade`) for returning users",
     "Enhancement: Balanced two-column dashboard overview grid layout and spacing improvements",

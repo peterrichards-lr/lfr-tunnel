@@ -392,6 +392,12 @@ smtp_server:
   from_address: "Liferay Tunnel <noreply@yourdomain.com>"
 ```
 
+> [!IMPORTANT]
+> **Owner Bootstrapping & Database Role Precedence**  
+> The `owner.user_id` and `owner.name` settings in the configuration file act solely as **bootstrap properties**. During the very first startup when the SQLite database is empty, the gateway automatically registers this email and name with the `owner` role.
+> * Once the database is initialized, changes to `owner.user_id` and `owner.name` configuration keys will **not** modify or overwrite existing user records or names in the database.
+> * The gateway code determines owner status by checking both the configured `owner.user_id` string and the user's role column in the database. Anyone assigned the `owner` role in the database gets full visibility privileges.
+
 Apply restricted file permissions:
 ```bash
 sudo chown -R lfr-tunnel:lfr-tunnel /etc/lfr-tunneld
@@ -1065,4 +1071,4 @@ To guarantee that outbound connections originating from the VPS are consistently
 
 <!-- markdownlint-disable MD049 -->
 ---
-*Last Updated: 2026-07-02* | *Last Reviewed: 2026-07-02*
+*Last Updated: 2026-07-15* | *Last Reviewed: 2026-07-15*

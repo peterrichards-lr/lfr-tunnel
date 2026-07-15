@@ -187,6 +187,7 @@ The solution will consist of:
 - [x] Support recipient name-formatted parsing for Slack channel generated email endpoints
 - [x] Close Issue #477, #478, and Epic #476 on GitHub
 - [x] Implement Secure Obfuscated Server Configuration Viewer (Epic #518 / Issue #519, #520)
+- [x] Close Issue #519, #520, and Epic #518 on GitHub
 
 
 | Feature | Description | Risk | LOE | Business Value | Priority |

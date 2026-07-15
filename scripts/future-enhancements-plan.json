@@ -1,0 +1,37 @@
+{
+  "title": "[Epic] Liferay Tunnel Future Gateway & Client Enhancements",
+  "body": "This Epic tracks the high-level future feature backlog and enhancements proposed to improve user experience, team collaboration, and security monitoring across the Liferay Sales Engineering (SE) team.",
+  "labels": [
+    "enhancement"
+  ],
+  "issues": [
+    {
+      "title": "Enhancement: Desktop System Tray / Menu Bar GUI Wrapper",
+      "body": "### Description\nCreate a lightweight, cross-platform system tray (Windows) and menu bar (macOS) GUI wrapper application for the `lfr-tunnel` CLI client.\n\n### Impact Analysis\n- **User Experience (UX)**: High. Removes command-line intimidation for non-technical team members and provides instant visual feedback.\n- **Performance**: High. We can use a lightweight Go native tray library (e.g., `github.com/getlantern/systray`) to keep the compile size small and avoid heavy runtimes like Electron.\n- **Maintainability**: Medium. Requires OS-specific bundle configurations (like `.app` bundles on macOS and `.exe` resource files on Windows) in our packaging workflows.\n\n### Proposed Implementation Plan\n1. Create `pkg/gui/` package using Lantern's `systray` library.\n2. Design the tray menu interface with options: status indicator, copy public URL, open Local Request Inspector, connection settings, and quit.\n3. Integrate local client config file loading/saving inside the GUI utility.\n4. Wire the toggle switch to execute the connection manager in a separate goroutine.\n5. Implement native OS notification triggers for successful connections and failover events.\n6. Update the release workflow to build platform-specific application packages.",
+      "completed": false,
+      "labels": [
+        "enhancement"
+      ],
+      "issueNumber": "477"
+    },
+    {
+      "title": "Enhancement: Slack and Microsoft Teams Webhook Alerts",
+      "body": "### Description\nImplement real-time administrative notification dispatches to corporate Slack and Microsoft Teams channels for critical security, abuse, and onboarding events.\n\n### Impact Analysis\n- **Operations & Security**: High. Administrators receive instant alerts for rate limit triggers (DDoS), IP blacklists, and new user registration requests directly on their collaboration platforms.\n- **Reliability**: Asynchronous dispatch ensures that notification failures do not affect HTTP client response times.\n- **Simplicity**: No external database dependencies; configuration is mapped strictly inside `server-config.yaml`.\n\n### Proposed Implementation Plan\n1. Define `webhook_url` and `webhook_enabled` in `pkg/config/config.go`.\n2. Implement a dedicated HTTP webhook client service `pkg/webhook/` to format payloads.\n3. Support rich block markdown layouts for Slack and message cards for Microsoft Teams.\n4. Inject webhook dispatch triggers into registration request, rate limiter auto-ban, IP blacklisting, and portal abuse report handlers.\n5. Write unit tests validating structured JSON payload assembly and asynchronous dispatcher loops.",
+      "completed": false,
+      "labels": [
+        "enhancement"
+      ],
+      "issueNumber": "478"
+    },
+    {
+      "title": "Enhancement: Collaborative Shared Tunneling (Multi-User Handoff)",
+      "body": "### Description\nAdd support for path-based HTTP routing to multiple local client destinations under the same public subdomain lease (e.g., routing `/api/*` to Developer A and `/static/*` to Developer B).\n\n### Impact Analysis\n- **Team Collaboration**: High. Allows frontend asset developers and backend Liferay developers to co-host and test integration demos on a single unified URL.\n- **Complexity**: High. The gateway multiplexer must coordinate and route traffic across multiple concurrent WebSocket client connections for a single subdomain.\n\n### Proposed Implementation Plan\n1. Update database schema and in-memory registry to support list-based target destinations per lease.\n2. Support client-side path registration flags (e.g. `lfr-tunnel -subdomain demo -path /assets/ -port 3000`).\n3. Update proxy Director handlers to parse incoming request paths and dynamically map them to the corresponding WebSocket channel.\n4. Gracefully serve themed offline pages if a specific collaborator's route target goes offline.\n5. Implement integration test suite verifying path routing conflicts and failover conditions.",
+      "completed": false,
+      "labels": [
+        "enhancement"
+      ],
+      "issueNumber": "479"
+    }
+  ],
+  "epicNumber": "476"
+}

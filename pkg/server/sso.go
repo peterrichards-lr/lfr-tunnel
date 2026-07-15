@@ -180,9 +180,9 @@ func (s *Server) handleSSOCallback(w http.ResponseWriter, r *http.Request) {
 			CreatedAt:  time.Now(),
 			UpdatedAt:  time.Now(),
 		}
-		// If they match the owner config, grant admin
+		// If they match the owner config, grant owner
 		if strings.EqualFold(user.Email, s.cfg.Owner.UserID) {
-			user.Role = "admin"
+			user.Role = "owner"
 		}
 		if err := s.db.CreateUser(user); err != nil {
 			slog.Info(fmt.Sprintf("[SSO] Failed to create user %s: %v", email, err))

@@ -1312,6 +1312,14 @@ applyTheme(currentUser.theme_preference);
             if (window.closeAllActionMenus) {
                 window.closeAllActionMenus();
             }
+            if (window.innerWidth <= 768) {
+                const sidebar = document.querySelector('.sidebar');
+                const backdrop = document.getElementById('sidebar-backdrop');
+                if (sidebar && sidebar.classList.contains('active')) {
+                    sidebar.classList.remove('active');
+                    if (backdrop) backdrop.classList.remove('visible');
+                }
+            }
             document.querySelectorAll('.main-content > div[id^="tab-"]').forEach(el => el.classList.add('hidden'));
             document.querySelectorAll('.nav-item').forEach(el => el.classList.remove('active'));
             
@@ -3832,9 +3840,15 @@ applyTheme(currentUser.theme_preference);
             closeAllActionMenus();
         }, { capture: true, passive: true });
 
-        // Hide dropdowns when window is resized to prevent floating detached menus
+        // Hide dropdowns and clean up mobile sidebar states when window is resized
         window.addEventListener('resize', () => {
             closeAllActionMenus();
+            if (window.innerWidth > 768) {
+                const sidebar = document.querySelector('.sidebar');
+                const backdrop = document.getElementById('sidebar-backdrop');
+                if (sidebar) sidebar.classList.remove('active');
+                if (backdrop) backdrop.classList.remove('visible');
+            }
         }, { passive: true });
 
         // Hide dropdowns when pressing Escape key
@@ -3992,10 +4006,19 @@ applyTheme(currentUser.theme_preference);
         window.toggleSidebar = function() {
             const screen = document.getElementById('dashboard-screen');
             const sidebar = document.querySelector('.sidebar');
+            const backdrop = document.getElementById('sidebar-backdrop');
             if (!screen || !sidebar) return;
-            const isCollapsed = screen.classList.toggle('sidebar-collapsed');
-            sidebar.classList.toggle('collapsed', isCollapsed);
-            localStorage.setItem('sidebar_collapsed', isCollapsed ? 'true' : 'false');
+            
+            if (window.innerWidth <= 768) {
+                const isActive = sidebar.classList.toggle('active');
+                if (backdrop) {
+                    backdrop.classList.toggle('visible', isActive);
+                }
+            } else {
+                const isCollapsed = screen.classList.toggle('sidebar-collapsed');
+                sidebar.classList.toggle('collapsed', isCollapsed);
+                localStorage.setItem('sidebar_collapsed', isCollapsed ? 'true' : 'false');
+            }
         };
 
         function initSidebarCollapse() {

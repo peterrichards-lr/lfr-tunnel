@@ -1,0 +1,37 @@
+{
+  "title": "[Epic] Portal UI Mobile and Tablet Responsiveness Enhancements",
+  "body": "This epic tracks the implementation of mobile and tablet responsive design updates for the Liferay Tunnel portal dashboard. Currently, the sidebar navigation, layout grids, and dropdown menus do not adapt well to screen sizes below 768px, causing layout clipping and rendering bugs on mobile devices.",
+  "labels": [
+    "enhancement"
+  ],
+  "issues": [
+    {
+      "title": "Responsive Layout: Sidebar Mobile Slide-Over Overlay & Backdrop",
+      "body": "### Analysis\nOn small screens (< 768px), the sidebar takes up a fixed 260px horizontal space, squishing the main dashboard content and causing text overlaps.\n\n### Implementation Plan\n1. In `pkg/server/static/dashboard.css`, add media queries for `@media (max-width: 768px)` to make `.sidebar`:\n   - Position: fixed overlay (top: 0, left: 0, bottom: 0, width: 260px, z-index: 1000).\n   - Use CSS transitions and transformations: `transform: translateX(-100%)` when collapsed, `transform: translateX(0)` when expanded.\n2. Add a semi-transparent sidebar backdrop element (`.sidebar-backdrop`) that appears when the sidebar is open on mobile.\n3. Bind click/touch events in `dashboard.js` to automatically close the sidebar when the backdrop is clicked.",
+      "completed": true,
+      "labels": [
+        "enhancement"
+      ],
+      "issueNumber": "455"
+    },
+    {
+      "title": "Responsive Content: Padding Adjustments & Grid Layout Stacking",
+      "body": "### Analysis\nThe dashboard overview page and analytics tab use two-column layouts and wide container paddings (40px 60px), which cause horizontal scrolling and element overlaps on mobile and tablet devices.\n\n### Implementation Plan\n1. In `pkg/server/static/dashboard.css`, under the `@media (max-width: 768px)` query:\n   - Reduce `.main-content` padding to `24px 16px`.\n   - Stack all grid columns (Overview cards, Analytics charts, and modal grids) to a single column (`grid-template-columns: 1fr !important`).\n   - Adjust modal sizes and margin/padding to look clean on smaller screens.\n2. Add a `responsive-grid` class to the inline grid elements in `pkg/server/dashboard.html` for clean layout management.",
+      "completed": true,
+      "labels": [
+        "enhancement"
+      ],
+      "issueNumber": "456"
+    },
+    {
+      "title": "Responsive Dropdowns: Language Selector & Menu Overlay Positioning",
+      "body": "### Analysis\nDropdown menus (like the language selector in the top-right header) overflow or are clipped under the sidebar/scroll-containers on small screens, making them hard to use or read.\n\n### Implementation Plan\n1. In `pkg/server/dashboard.html` and `dashboard.css`, adjust header elements layout for screen widths below 768px:\n   - Reposition the `#header-language-container` dynamically or absolute positions so it does not overlap with page headers or the sidebar hamburger button.\n   - Set proper stacking contexts and relative position bounds to prevent custom dropdown menus from clipping.",
+      "completed": true,
+      "labels": [
+        "enhancement"
+      ],
+      "issueNumber": "457"
+    }
+  ],
+  "epicNumber": "454"
+}

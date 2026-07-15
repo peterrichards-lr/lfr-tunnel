@@ -23,15 +23,6 @@
         "enhancement"
       ],
       "issueNumber": "478"
-    },
-    {
-      "title": "Enhancement: Collaborative Shared Tunneling (Multi-User Handoff)",
-      "body": "### Description\nAdd support for path-based HTTP routing to multiple local client destinations under the same public subdomain lease (e.g., routing `/api/*` to Developer A and `/static/*` to Developer B).\n\n### Impact Analysis\n- **Team Collaboration**: High. Allows frontend asset developers and backend Liferay developers to co-host and test integration demos on a single unified URL.\n- **Complexity**: High. The gateway multiplexer must coordinate and route traffic across multiple concurrent WebSocket client connections for a single subdomain.\n\n### Proposed Implementation Plan\n1. Update database schema and in-memory registry to support list-based target destinations per lease.\n2. Support client-side path registration flags (e.g. `lfr-tunnel -subdomain demo -path /assets/ -port 3000`).\n3. Update proxy Director handlers to parse incoming request paths and dynamically map them to the corresponding WebSocket channel.\n4. Gracefully serve themed offline pages if a specific collaborator's route target goes offline.\n5. Implement integration test suite verifying path routing conflicts and failover conditions.",
-      "completed": false,
-      "labels": [
-        "enhancement"
-      ],
-      "issueNumber": "479"
     }
   ],
   "epicNumber": "476"

@@ -147,9 +147,9 @@ The solution will consist of:
 - [x] Create automated dev restart shell scripts to accelerate developer iteration loop.
 
 ## Roadmap (Post Public Visibility PR Flow)
-- [ ] Admin Webhook & Email Test Trigger with Rate Limiting (Epic #504)
-  - [ ] Sub-Issue #1: Implement `/api/admin/test-webhook` endpoint with 30s rate limiting (#505)
-  - [ ] Sub-Issue #2: Add 'Test Integration' panel and trigger button in Admin Dashboard UI (#506)
+- [x] Admin Webhook & Email Test Trigger with Rate Limiting (Epic #504)
+  - [x] Sub-Issue #1: Implement `/api/admin/test-webhook` endpoint with 30s rate limiting (#505)
+  - [x] Sub-Issue #2: Add 'Test Integration' panel and trigger button in Admin Dashboard UI (#506)
 - [x] Dashboard Localization Sweep (Epic #400)
   - [x] Localize Onboarding Tour (DE) and MFA Setup & Status Panel (#401)
   - [x] Localize Client Installation Guide Modal (#402)

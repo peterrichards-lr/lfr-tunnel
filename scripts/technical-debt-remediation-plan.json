@@ -9,66 +9,73 @@
     {
       "title": "[Debt] Resolve Goroutine Leak in Client Interceptor Health Checks",
       "body": "The `StartHealthChecks` method on the `InterceptorEngine` runs a background verification loop that executes indefinitely because it lacks a cancellation context or done channel.\\n\\n### Technical Impact\\nOrphaned goroutines accumulate on the client machine during network reconnect cycles, leading to memory bloat and redundant TCP health check probes.\\n\\n### Proposed Remediation\\nModify `StartHealthChecks` to accept a `context.Context` and respect context cancellation:\\n\\n```go\\n// In pkg/client/interceptor.go\\nfunc (e *InterceptorEngine) StartHealthChecks(ctx context.Context, serverURL, sessionToken string, targetPort int) {\\n\\tgo func() {\\n\\t\\tticker := time.NewTicker(5 * time.Second)\\n\\t\\tdefer ticker.Stop()\\n\\t\\tfor {\\n\\t\\t\\tselect {\\n\\t\\t\\tcase <-ctx.Done():\\n\\t\\t\\t\\treturn\\n\\t\\t\\tcase <-ticker.C:\\n\\t\\t\\t\\t// health check logic...\\n\\t\\t\\t}\\n\\t\\t}\\n\\t}()\\n}\\n```",
-      "completed": false,
+      "completed": true,
       "labels": [
         "tech debt"
       ],
-      "issueNumber": "462"
+      "issueNumber": "462",
+      "closed": true
     },
     {
       "title": "[Refactor] Implement HTTP Server Lifecycle Management in Gateway",
       "body": "The gateway HTTP redirect server and HTTPS proxy servers are started as unreferenced local variables inside `Start()`. The `Stop()` method fails to shut them down cleanly.\\n\\n### Technical Impact\\nOrphaned TCP listeners are left bound in the kernel, causing `bind: address already in use` errors during programmatic hot restarts or test sweeps.\\n\\n### Proposed Remediation\\nStore references to the running `http.Server` instances in the `Server` struct and invoke `.Shutdown()` during teardown:\\n\\n```go\\n// In pkg/server/server.go\\ntype Server struct {\\n\\t// ...\\n\\thttpServer  *http.Server\\n\\tredirectSrv *http.Server\\n}\\n\\nfunc (s *Server) Stop() {\\n\\ts.cancel()\\n\\tctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)\\n\\tdefer cancel()\\n\\tif s.httpServer != nil {\\n\\t\\t_ = s.httpServer.Shutdown(ctx)\\n\\t}\\n\\tif s.redirectSrv != nil {\\n\\t\\t_ = s.redirectSrv.Shutdown(ctx)\\n\\t}\\n\\ts.chiselServer.Close()\\n\\t// ...\\n}\\n```",
-      "completed": false,
+      "completed": true,
       "labels": [
         "tech debt"
       ],
-      "issueNumber": "463"
+      "issueNumber": "463",
+      "closed": true
     },
     {
       "title": "[Refactor] Restrict SQLite Pool and Enable WAL Mode",
       "body": "The database connection pool allows concurrent connections to SQLite and fails to activate Write-Ahead Logging (`WAL` mode).\\n\\n### Technical Impact\\nConcurrent read-write traffic between active tunnels (writing metrics) and the portal dashboard (reading logs) frequently triggers `database is locked` errors.\\n\\n### Proposed Remediation\\nConfigure connection limits and execute WAL pragma on initialization:\\n\\n```go\\n// In pkg/db/db.go\\nfunc Open(dsn string) (*DB, error) {\\n\\tconn, err := sql.Open(\\\"sqlite\\\", dsn)\\n\\tif err != nil {\\n\\t\\treturn nil, err\\n\\t}\\n\\t\\n\\t// Limit to a single open write connection to prevent write conflicts\\n\\tconn.SetMaxOpenConns(1)\\n\\n\\t// Execute WAL mode pragma\\n\\tif _, err := conn.Exec(\\\"PRAGMA journal_mode = WAL; PRAGMA foreign_keys = ON; PRAGMA busy_timeout = 5000;\\\"); err != nil {\\n\\t\\tconn.Close()\\n\\t\\treturn nil, err\\n\\t}\\n\\t// ...\\n}\\n```",
-      "completed": false,
+      "completed": true,
       "labels": [
         "tech debt"
       ],
-      "issueNumber": "464"
+      "issueNumber": "464",
+      "closed": true
     },
     {
       "title": "[Security] Resolve Concurrent Write Race on Edge Control Websocket",
       "body": "Broadcast updates and lease-kick messages write concurrently to the same regional edge node Gorilla WebSocket connection without synchronization.\\n\\n### Technical Impact\\nSimultaneous writes corrupt the WebSocket frame buffer, resulting in socket crashes and edge node disconnections under high control-plane activity.\\n\\n### Proposed Remediation\\nWrap the `websocket.Conn` and protect writes with a mutual exclusion lock:\\n\\n```go\\n// In pkg/server/edge_control_ws.go\\ntype safeConn struct {\\n\\tmu   sync.Mutex\\n\\tconn *websocket.Conn\\n}\\n\\nfunc (s *safeConn) WriteJSON(v interface{}) error {\\n\\ts.mu.Lock()\\n\\tdefer s.mu.Unlock()\\n\\treturn s.conn.WriteJSON(v)\\n}\\n\\nfunc (s *safeConn) WriteMessage(messageType int, data []byte) error {\\n\\ts.mu.Lock()\\n\\tdefer s.mu.Unlock()\\n\\treturn s.conn.WriteMessage(messageType, data)\\n}\\n```",
-      "completed": false,
+      "completed": true,
       "labels": [
         "security",
         "tech debt"
       ],
-      "issueNumber": "465"
+      "issueNumber": "465",
+      "closed": true
     },
     {
       "title": "[Security] Secure Subdomain Passcode Storage and Mask Audit Logs",
       "body": "Passcodes are saved in plain text in the database, leaked directly inside audit logs, and checked using timing-sensitive string comparisons.\\n\\n### Technical Impact\\nExposes user credentials if the database or audit logs are compromised, and leaves the passcode open to timing-attack analysis.\\n\\n### Proposed Remediation\\nHash passcodes (e.g. using SHA-256 with salt or bcrypt) before saving, mask them in audit logging details, and verify using a constant-time equality check:\\n\\n```go\\n// Hashing passcode on save\\nfunc HashPasscode(passcode string) string {\n\\thash := sha256.Sum256([]byte(passcode))\n\\treturn hex.EncodeToString(hash[:])\n}\n\n// Verification in proxy.go\\nfunc (p *ProxyHandler) verifyPasscode(rawPasscode, hashedPasscode string) bool {\n\\tcomputed := HashPasscode(rawPasscode)\n\\treturn subtle.ConstantTimeCompare([]byte(computed), []byte(hashedPasscode)) == 1\n}\n```",
-      "completed": false,
+      "completed": true,
       "labels": [
         "security"
       ],
-      "issueNumber": "466"
+      "issueNumber": "466",
+      "closed": true
     },
     {
       "title": "[Debt] Thread-Safe Throttler Context Propagation",
-      "body": "The `throttledReader` uses a hardcoded `context.Background()` inside its read loop when waiting for rate limit tokens.\\n\\n### Technical Impact\\nIf the visitor closes the connection during a large write, the reader thread remains blocked on the rate limiter instead of canceling immediately.\\n\\n### Proposed Remediation\\nPass the request context down to the reader instance:\\n\n```go\\n// In pkg/client/interceptor.go\\ntype throttledReader struct {\\n\\tr       io.Reader\\n\\tlimiter *rate.Limiter\\n\\tctx     context.Context\\n}\\n\\nfunc (tr *throttledReader) Read(p []byte) (n int, err error) {\\n\\tn, err = tr.r.Read(p)\\n\\tif n > 0 && tr.limiter != nil {\\n\\t\\t// ...\\n\\t\\tif err := tr.limiter.WaitN(tr.ctx, chunk); err != nil {\\n\\t\\t\\treturn n - rem + chunk, err\\n\\t\\t}\\n\\t}\\n\\treturn n, err\\n}\\n```",
-      "completed": false,
+      "body": "The `throttledReader` uses a hardcoded `context.Background()` inside its read loop when waiting for rate limit tokens.\\n\\n### Technical Impact\\nIf the visitor closes the connection during a large write, the reader thread remains blocked on the rate limiter instead of canceling immediately.\\n\\n### Proposed Remediation\\nPass the request context down to the reader instance:\\n\n```go\\n// In pkg/client/interceptor.go\\ntype throttledReader struct {\\n\\tr       io.Reader\\n\\tlimiter *rate.Limiter\\n\\tctx     context.Context\\n}\\n\\nfunc (tr *throttledReader) Read(p []byte) (n int, err error) {\\n\\tn, err = tr.r.Read(p)\\n\\tif n > 0 && tr.limiter != nil {\\n\\t\\t// ...\\n\\t\\tif err := tr.limiter.WaitN(tr.ctx, chunk); err != nil {\\n\\t\\t  return n - rem + chunk, err\\n\\t\\t}\\n\\t}\\n\\treturn n, err\\n}\\n```",
+      "completed": true,
       "labels": [
         "tech debt"
       ],
-      "issueNumber": "467"
+      "issueNumber": "467",
+      "closed": true
     },
     {
       "title": "[Debt] Implement Dial Timeout for SMTP Client",
       "body": "Connecting on port 465 utilizes `tls.Dial` without a connection timeout parameter, which can block indefinitely.\\n\\n### Technical Impact\\nIf the mail gateway is down, the connection blocks for up to 2 minutes, leading to goroutine accumulation on registration requests.\\n\\n### Proposed Remediation\\nIncorporate a custom TCP Dialer with a timeout configuration:\\n\\n```go\\n// In pkg/mail/mail.go\\ndialer := &net.Dialer{Timeout: 10 * time.Second}\\nif s.cfg.SMTPPort == 465 {\\n\\tconn, err = tls.DialWithDialer(dialer, \"tcp\", addr, tlsConfig)\\n} else {\\n\\tdialer.Dial(\"tcp\", addr)\\n}\\n```",
-      "completed": false,
+      "completed": true,
       "labels": [
         "tech debt"
       ],
-      "issueNumber": "468"
+      "issueNumber": "468",
+      "closed": true
     }
   ],
   "epicNumber": "461"

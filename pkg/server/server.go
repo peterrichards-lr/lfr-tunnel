@@ -2809,12 +2809,12 @@ func (s *Server) handleAdminListUsers(w http.ResponseWriter, r *http.Request, ac
 
 	filtered := make([]*db.User, 0, len(users))
 	for _, u := range users {
-		if actor == s.cfg.Owner.UserID {
+		if strings.EqualFold(actor, s.cfg.Owner.UserID) {
 			filtered = append(filtered, u)
 		} else {
-			if u.Email == actor {
+			if strings.EqualFold(u.Email, actor) {
 				filtered = append(filtered, u)
-			} else if u.Email == s.cfg.Owner.UserID {
+			} else if strings.EqualFold(u.Email, s.cfg.Owner.UserID) {
 				continue
 			} else if u.Role == "admin" {
 				continue
@@ -3357,8 +3357,8 @@ func (s *Server) handleAdminGetUser(w http.ResponseWriter, r *http.Request, acto
 		return
 	}
 
-	if actor != s.cfg.Owner.UserID {
-		if user.Email == s.cfg.Owner.UserID || (user.Role == "admin" && user.Email != actor) {
+	if !strings.EqualFold(actor, s.cfg.Owner.UserID) {
+		if strings.EqualFold(user.Email, s.cfg.Owner.UserID) || (user.Role == "admin" && !strings.EqualFold(user.Email, actor)) {
 			http.Error(w, `{"error":"Forbidden: Cannot view this user"}`, http.StatusForbidden)
 			return
 		}
@@ -3413,12 +3413,12 @@ func (s *Server) handleAdminPatchUser(w http.ResponseWriter, r *http.Request, ac
 		return
 	}
 
-	if actor != s.cfg.Owner.UserID {
-		if user.Email == s.cfg.Owner.UserID || user.Role == "admin" || user.Email == actor {
+	if !strings.EqualFold(actor, s.cfg.Owner.UserID) {
+		if strings.EqualFold(user.Email, s.cfg.Owner.UserID) || user.Role == "admin" || strings.EqualFold(user.Email, actor) {
 			http.Error(w, `{"error":"Forbidden: Cannot modify this user"}`, http.StatusForbidden)
 			return
 		}
-	} else if user.Email == s.cfg.Owner.UserID {
+	} else if strings.EqualFold(user.Email, s.cfg.Owner.UserID) {
 		http.Error(w, `{"error":"Forbidden: Cannot modify owner account status"}`, http.StatusForbidden)
 		return
 	}

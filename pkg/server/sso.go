@@ -181,7 +181,7 @@ func (s *Server) handleSSOCallback(w http.ResponseWriter, r *http.Request) {
 			UpdatedAt:  time.Now(),
 		}
 		// If they match the owner config, grant admin
-		if user.Email == s.cfg.Owner.UserID {
+		if strings.EqualFold(user.Email, s.cfg.Owner.UserID) {
 			user.Role = "admin"
 		}
 		if err := s.db.CreateUser(user); err != nil {

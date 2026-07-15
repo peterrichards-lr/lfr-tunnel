@@ -37,6 +37,7 @@ import (
 	"lfr-tunnel/pkg/db"
 	"lfr-tunnel/pkg/mail"
 	"lfr-tunnel/pkg/nginx"
+	"lfr-tunnel/pkg/webhook"
 
 	"github.com/gorilla/websocket"
 	chserver "github.com/jpillora/chisel/server"
@@ -184,6 +185,7 @@ type Server struct {
 	userCache          sync.Map // email -> *db.User cache to prevent SQLite read contention
 	httpServer         *http.Server
 	redirectSrv        *http.Server
+	webhooks           *webhook.WebhookService
 }
 
 // NewServer initializes and returns a new Server instance.
@@ -282,6 +284,7 @@ func NewServer(cfg *config.ServerConfig) (*Server, error) {
 
 	srv.proxyHandler.db = database
 	srv.proxyHandler.caCert = caCert
+	srv.webhooks = webhook.NewWebhookService(cfg.Webhooks)
 	srv.portalService = NewPortalService(srv.db, srv.cfg, srv.notifications, &srv.portalMap, caCert, caKey)
 
 	// Initialize i18n dynamic engine
@@ -506,6 +509,7 @@ func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 					_ = s.db.AddBlacklistIP(ip, "Auto-banned by Rate Limiter for DDOS")
 					s.writeAudit("system", "ip.blacklisted", "ip", ip, "Auto-banned by Rate Limiter for DDOS", r)
 					s.notifications.SendAdminAlert("alert_notify_blacklist", "LFR Tunnel Alert: IP Auto-Banned", fmt.Sprintf("IP %s was auto-banned by the Rate Limiter for exceeding thresholds.", ip))
+					s.webhooks.SendRateLimitBanAlert(ip, 24*time.Hour, "Exceeded API rate limit (50 violations)")
 				}
 
 				http.Error(w, "Forbidden", http.StatusForbidden)
@@ -1818,6 +1822,7 @@ func (s *Server) handleCompleteSetup(w http.ResponseWriter, r *http.Request) {
 
 	s.writeAudit(user.Email, "user.verified", "user", user.Email, "User completed setup and is pending approval", r)
 	s.notifications.SendAdminAlert("alert_notify_registration", "LFR Tunnel Alert: New User Registration", fmt.Sprintf("A new user (%s %s - %s) has verified their email and requires approval.", user.FirstName, user.LastName, user.Email))
+	s.webhooks.SendRegistrationAlert(user.Email, "Pending admin approval")
 
 	// Send approval email to admin
 	if s.notifications != nil && s.notifications.Sender() != nil && s.cfg.AdminNotificationEmail != "" {
@@ -3958,6 +3963,7 @@ func (s *Server) handleAdminBlacklist(w http.ResponseWriter, r *http.Request, ac
 		s.BroadcastBlacklistUpdate("add", payload.IPAddress)
 		s.writeAudit(actor, "ip.blacklisted", "ip", payload.IPAddress, payload.Reason, r)
 		s.notifications.SendAdminAlert("alert_notify_blacklist", "LFR Tunnel Alert: IP Banned", fmt.Sprintf("IP %s was manually banned by admin %s.", payload.IPAddress, actor))
+		s.webhooks.SendIPBlacklistAlert(payload.IPAddress, fmt.Sprintf("%s (Banned by admin: %s)", payload.Reason, actor))
 		_ = json.NewEncoder(w).Encode(map[string]string{"status": "success"})
 		return
 	}

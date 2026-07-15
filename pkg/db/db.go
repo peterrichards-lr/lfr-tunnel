@@ -21,6 +21,7 @@ type DB struct {
 	GuestInviteRepository
 	SettingsRepository
 	SystemRepository
+	WebhookQueueRepository
 }
 
 func Open(dsn string) (*DB, error) {
@@ -43,17 +44,18 @@ func Open(dsn string) (*DB, error) {
 	}
 
 	d := &DB{
-		conn:                  conn,
-		UserRepository:        NewSQLiteUserRepo(conn),
-		PATRepository:         NewSQLitePATRepo(conn),
-		SubdomainRepository:   NewSQLiteSubdomainRepo(conn),
-		AuditRepository:       NewSQLiteAuditRepo(conn),
-		MetricRepository:      NewSQLiteMetricRepo(conn),
-		MagicLinkRepository:   NewSQLiteMagicLinkRepo(conn),
-		BlacklistRepository:   NewSQLiteBlacklistRepo(conn),
-		GuestInviteRepository: NewSQLiteInviteRepo(conn),
-		SettingsRepository:    NewSQLiteSettingsRepo(conn),
-		SystemRepository:      NewSQLiteSystemRepo(conn),
+		conn:                   conn,
+		UserRepository:         NewSQLiteUserRepo(conn),
+		PATRepository:          NewSQLitePATRepo(conn),
+		SubdomainRepository:    NewSQLiteSubdomainRepo(conn),
+		AuditRepository:        NewSQLiteAuditRepo(conn),
+		MetricRepository:       NewSQLiteMetricRepo(conn),
+		MagicLinkRepository:    NewSQLiteMagicLinkRepo(conn),
+		BlacklistRepository:    NewSQLiteBlacklistRepo(conn),
+		GuestInviteRepository:  NewSQLiteInviteRepo(conn),
+		SettingsRepository:     NewSQLiteSettingsRepo(conn),
+		SystemRepository:       NewSQLiteSystemRepo(conn),
+		WebhookQueueRepository: NewSQLiteWebhookQueueRepo(conn),
 	}
 
 	if err := d.initSchema(); err != nil {

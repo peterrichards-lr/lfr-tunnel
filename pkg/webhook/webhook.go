@@ -170,3 +170,15 @@ func (w *WebhookService) SendIPBlacklistAlert(ip string, reason string) {
 	slack, teams := w.buildPayloads(title, desc, colorDanger, facts)
 	w.sendPayload(slack, teams)
 }
+
+func (w *WebhookService) SendTestAlert(actor, timestamp, version string) {
+	title := "🧪 Liferay Tunnel Integration Test"
+	desc := fmt.Sprintf("This is a test notification dispatched from the Liferay Tunnel gateway.\n\n*Triggered By:* `%s`\n*Timestamp:* `%s`\n*Server Version:* `%s` ", actor, timestamp, version)
+	facts := []map[string]string{
+		{keyName: "Triggered By", keyValue: actor},
+		{keyName: "Timestamp", keyValue: timestamp},
+		{keyName: "Server Version", keyValue: version},
+	}
+	slack, teams := w.buildPayloads(title, desc, colorDefault, facts)
+	w.sendPayload(slack, teams)
+}

@@ -186,6 +186,8 @@ type Server struct {
 	httpServer         *http.Server
 	redirectSrv        *http.Server
 	webhooks           *webhook.WebhookService
+	lastTestTimes      map[string]time.Time
+	testLimiterMu      sync.Mutex
 }
 
 // NewServer initializes and returns a new Server instance.
@@ -280,6 +282,7 @@ func NewServer(cfg *config.ServerConfig) (*Server, error) {
 		edgeLeases:         make(map[string][]EdgeLease),
 		edgeHealth:         make(map[string]EdgeHealthStatus),
 		outboundConnected:  true,
+		lastTestTimes:      make(map[string]time.Time),
 	}
 
 	srv.proxyHandler.db = database
@@ -2451,6 +2454,11 @@ func (s *Server) handleAdminEndpoints(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	if r.Method == http.MethodPost && r.URL.Path == "/api/admin/test-webhook" {
+		s.handleAdminTestWebhook(w, r, actor)
+		return
+	}
+
 	if r.Method == http.MethodGet && r.URL.Path == "/api/admin/magic-links" {
 		s.handleAdminListMagicLinks(w, r)
 		return
@@ -4046,6 +4054,56 @@ func (s *Server) handleAdminSettings(w http.ResponseWriter, r *http.Request, act
 	}
 
 	http.Error(w, `{"error":"Method not allowed"}`, http.StatusMethodNotAllowed)
+}
+
+func (s *Server) handleAdminTestWebhook(w http.ResponseWriter, r *http.Request, actor string) {
+	w.Header().Set("Content-Type", "application/json")
+
+	// 1. Enforce sliding rate limiter per admin user
+	s.testLimiterMu.Lock()
+	lastTest, exists := s.lastTestTimes[actor]
+	if exists && time.Since(lastTest) < 30*time.Second {
+		remaining := int(30 - time.Since(lastTest).Seconds())
+		if remaining < 1 {
+			remaining = 1
+		}
+		s.testLimiterMu.Unlock()
+		w.WriteHeader(http.StatusTooManyRequests)
+		_ = json.NewEncoder(w).Encode(map[string]interface{}{
+			"error":       fmt.Sprintf("Rate limit exceeded. Please wait %d seconds before testing again.", remaining),
+			"retry_after": remaining,
+		})
+		return
+	}
+	s.lastTestTimes[actor] = time.Now()
+	s.testLimiterMu.Unlock()
+
+	// 2. Assemble test alert parameters
+	timestamp := time.Now().UTC().Format("2006-01-02 15:04:05 UTC")
+	version := config.Version
+
+	// 3. Dispatch webhooks
+	if s.webhooks != nil {
+		s.webhooks.SendTestAlert(actor, timestamp, version)
+	}
+
+	// 4. Dispatch Email alert
+	if s.notifications != nil && s.cfg.AdminNotificationEmail != "" {
+		s.notifications.SendAdminAlert(
+			"alert_notify_test",
+			"🧪 Liferay Tunnel Integration Test",
+			fmt.Sprintf("This is a test notification dispatched from the Liferay Tunnel gateway.\n\nTriggered By: %s\nTimestamp: %s\nServer Version: %s", actor, timestamp, version),
+		)
+	}
+
+	// 5. Record Audit log
+	s.writeAudit(actor, "admin.test_notification_dispatched", "system", "webhook_test", "Admin triggered an integration test notification", r)
+
+	w.WriteHeader(http.StatusOK)
+	_ = json.NewEncoder(w).Encode(map[string]string{
+		"status":  "success",
+		"message": "Test notifications dispatched successfully.",
+	})
 }
 
 // respondJSON is a DRY helper for sending JSON API responses

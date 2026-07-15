@@ -737,6 +737,18 @@
                         <button id="btn-toggle-hard-maint" class="btn" style="width: auto; margin: 0; padding: 6px 16px; font-weight: 500; background: var(--danger); color: white; border: none;" onclick="toggleHardMaintenanceMode()" data-i18n="maint_btn_enable_hard">Enable Iron Curtain</button>
                     </div>
                 </div>
+
+                <!-- Test Integrations Card -->
+                <div class="glass" style="padding: 24px; margin-top: 24px; border-left: 4px solid var(--primary);">
+                    <h4 style="margin-bottom: 8px; font-size: 15px; font-weight: 600; color: var(--primary);">🧪 Collaboration & Notification Integration Test</h4>
+                    <p style="color: var(--text-muted); font-size: 12px; margin-bottom: 16px; line-height: 1.4;">
+                        Trigger a test message to all configured collaboration and notification channels (Slack, Microsoft Teams, and Administrator Email relay) to verify that integration alerting is working correctly.
+                    </p>
+                    <div style="display: flex; gap: 12px; align-items: center; flex-wrap: wrap;">
+                        <button id="btn-test-integration" class="btn btn-primary" style="width: auto; margin: 0; padding: 6px 16px; font-weight: 500;" onclick="triggerIntegrationTest()">Send Test Alert</button>
+                        <span id="test-integration-status" style="font-size: 13px; color: var(--text-muted); display: none;"></span>
+                    </div>
+                </div>
             </div>
         </div>
     </div>

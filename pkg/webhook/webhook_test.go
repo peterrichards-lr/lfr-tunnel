@@ -52,6 +52,7 @@ func TestWebhookAlerts(t *testing.T) {
 	service.SendAbuseReportAlert("my-subdomain", "spamming", "127.0.0.1")
 	service.SendRateLimitBanAlert("127.0.0.1", 10*time.Minute, "DDOS")
 	service.SendIPBlacklistAlert("127.0.0.1", "spam")
+	service.SendTestAlert("admin@example.com", "2026-07-15 16:30:00 UTC", "v1.34.3")
 
 	// Wait for async goroutines to deliver payloads
 	time.Sleep(100 * time.Millisecond)
@@ -59,10 +60,10 @@ func TestWebhookAlerts(t *testing.T) {
 	mu.Lock()
 	defer mu.Unlock()
 
-	if len(receivedSlack) != 4 {
-		t.Errorf("expected 4 Slack alerts, got %d", len(receivedSlack))
+	if len(receivedSlack) != 5 {
+		t.Errorf("expected 5 Slack alerts, got %d", len(receivedSlack))
 	}
-	if len(receivedTeams) != 4 {
-		t.Errorf("expected 4 Teams alerts, got %d", len(receivedTeams))
+	if len(receivedTeams) != 5 {
+		t.Errorf("expected 5 Teams alerts, got %d", len(receivedTeams))
 	}
 }

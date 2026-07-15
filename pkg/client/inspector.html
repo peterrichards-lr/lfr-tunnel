@@ -64,6 +64,9 @@
         .header-val { color: var(--text-main); flex: 1; word-break: break-all; }
 
         .empty-state { display: flex; align-items: center; justify-content: center; height: 100%; color: var(--text-muted); font-size: 18px; }
+        .tab-item { flex: 1; text-align: center; padding: 12px; cursor: pointer; font-size: 13px; font-weight: 500; border-bottom: 2px solid transparent; color: var(--text-muted); transition: all 0.2s; }
+        .tab-item.active { border-bottom: 2px solid var(--primary); color: var(--text-main); font-weight: 600; }
+        .tab-item:hover { background: rgba(255,255,255,0.02); color: var(--text-main); }
     </style>
 </head>
 <body>
@@ -80,6 +83,10 @@
                 </div>
             </h1>
             <div style="font-size: 12px; color: var(--text-muted);">Listening on localhost:4040</div>
+        </div>
+        <div style="display: flex; border-bottom: 1px solid var(--border); background: rgba(0,0,0,0.1);">
+            <div id="tab-traffic" class="tab-item active" onclick="switchView('traffic')">Traffic Log</div>
+            <div id="tab-settings" class="tab-item" onclick="switchView('settings')">Settings</div>
         </div>
         <div class="access-control-panel" style="padding: 16px 20px; border-bottom: 1px solid var(--border); background: rgba(30, 41, 59, 0.4); display: flex; flex-direction: column; gap: 10px;">
             <div style="font-size: 12px; font-weight: 600; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.05em;">Access Control</div>
@@ -118,6 +125,7 @@
     <script>
         let requests = [];
         let selectedId = null;
+        let activeView = 'traffic';
 
         async function fetchState() {
             try {
@@ -144,7 +152,7 @@
                 if (JSON.stringify(requests.map(r => r.id)) !== JSON.stringify(state.history.map(r => r.id))) {
                     requests = state.history || [];
                     renderList();
-                    if(selectedId) renderDetails(requests.find(r => r.id === selectedId));
+                    if(selectedId && activeView !== 'settings') renderDetails(requests.find(r => r.id === selectedId));
                 }
 
                 // Update public URLs
@@ -345,6 +353,168 @@
                  .replace(/"/g, "&quot;")
                  .replace(/'/g, "&#039;");
         }
+
+        function switchView(view) {
+            activeView = view;
+            
+            const trafficTab = document.getElementById('tab-traffic');
+            const settingsTab = document.getElementById('tab-settings');
+            
+            const acPanel = document.querySelector('.access-control-panel');
+            const publicPanel = document.querySelector('.public-urls-panel');
+            const reqList = document.getElementById('req-list');
+            
+            if (view === 'settings') {
+                if (history.pushState) {
+                    history.pushState(null, null, '/settings');
+                }
+                trafficTab.classList.remove('active');
+                settingsTab.classList.add('active');
+                
+                acPanel.style.display = 'none';
+                publicPanel.style.display = 'none';
+                reqList.style.display = 'none';
+                
+                renderSettingsView();
+            } else {
+                if (history.pushState) {
+                    history.pushState(null, null, '/');
+                }
+                trafficTab.classList.add('active');
+                settingsTab.classList.remove('active');
+                
+                acPanel.style.display = 'flex';
+                publicPanel.style.display = 'flex';
+                reqList.style.display = 'block';
+                
+                const main = document.getElementById('main-view');
+                if (selectedId) {
+                    renderDetails(requests.find(r => r.id === selectedId));
+                } else {
+                    main.innerHTML = '<div class="empty-state">Select a request to view details</div>';
+                }
+            }
+        }
+
+        async function renderSettingsView() {
+            const main = document.getElementById('main-view');
+            main.innerHTML = `
+                <div class="details-header">
+                    <h2>Client Configuration</h2>
+                    <div class="details-meta">Manage your local Liferay Tunnel settings</div>
+                </div>
+                <div class="details-content" style="display: flex; justify-content: center; align-items: flex-start; padding: 30px;">
+                    <div class="panel" style="max-width: 600px; flex: initial; width: 100%;">
+                        <div class="panel-title">Settings</div>
+                        <div class="panel-body" style="display: flex; flex-direction: column; gap: 15px; padding: 20px;">
+                            <div id="settings-error" style="color: var(--danger); font-weight: 600; display: none; padding-bottom: 10px; font-size: 13px;"></div>
+                            <div id="settings-success" style="color: var(--success); font-weight: 600; display: none; padding-bottom: 10px; font-size: 13px;">Configuration saved successfully!</div>
+                            
+                            <div style="display: flex; flex-direction: column; gap: 6px;">
+                                <label style="font-weight: 500; color: var(--text-muted); font-size: 11px;">Server URL</label>
+                                <input type="text" id="cfg-server-url" style="background: rgba(0,0,0,0.3); border: 1px solid var(--border); color: white; padding: 10px; border-radius: 6px; font-size: 13px; outline: none; width: 100%;">
+                            </div>
+                            
+                            <div style="display: flex; flex-direction: column; gap: 6px;">
+                                <label style="font-weight: 500; color: var(--text-muted); font-size: 11px;">Authentication Token</label>
+                                <input type="password" id="cfg-auth-token" placeholder="Enter token (masked if set)" style="background: rgba(0,0,0,0.3); border: 1px solid var(--border); color: white; padding: 10px; border-radius: 6px; font-size: 13px; outline: none; width: 100%;">
+                            </div>
+                            
+                            <div style="display: flex; flex-direction: column; gap: 6px;">
+                                <label style="font-weight: 500; color: var(--text-muted); font-size: 11px;">Local Target Port</label>
+                                <input type="number" id="cfg-dest-port" style="background: rgba(0,0,0,0.3); border: 1px solid var(--border); color: white; padding: 10px; border-radius: 6px; font-size: 13px; outline: none; width: 100%;">
+                            </div>
+                            
+                            <div style="display: flex; flex-direction: column; gap: 6px;">
+                                <label style="font-weight: 500; color: var(--text-muted); font-size: 11px;">Local Target Host</label>
+                                <input type="text" id="cfg-target-host" placeholder="localhost" style="background: rgba(0,0,0,0.3); border: 1px solid var(--border); color: white; padding: 10px; border-radius: 6px; font-size: 13px; outline: none; width: 100%;">
+                            </div>
+                            
+                            <div style="display: flex; flex-direction: column; gap: 6px;">
+                                <label style="font-weight: 500; color: var(--text-muted); font-size: 11px;">Requested Subdomain (Optional)</label>
+                                <input type="text" id="cfg-subdomain" placeholder="e.g. peter" style="background: rgba(0,0,0,0.3); border: 1px solid var(--border); color: white; padding: 10px; border-radius: 6px; font-size: 13px; outline: none; width: 100%;">
+                            </div>
+
+                            <div style="display: flex; align-items: center; gap: 10px; margin-top: 10px;">
+                                <input type="checkbox" id="cfg-preserve-host" style="width: 16px; height: 16px; cursor: pointer;">
+                                <label for="cfg-preserve-host" style="font-weight: 500; color: var(--text-muted); cursor: pointer; font-size: 13px;">Preserve incoming Host header</label>
+                            </div>
+
+                            <button onclick="saveSettings()" style="background: var(--primary); color: white; border: none; padding: 12px; border-radius: 6px; font-size: 13px; font-weight: 600; cursor: pointer; margin-top: 10px; transition: background 0.2s;">Save Configuration</button>
+                        </div>
+                    </div>
+                </div>
+            `;
+            
+            try {
+                const res = await fetch('/api/config');
+                const cfg = await res.json();
+                document.getElementById('cfg-server-url').value = cfg.server_url || '';
+                document.getElementById('cfg-auth-token').value = cfg.auth_token || '';
+                document.getElementById('cfg-dest-port').value = cfg.dest_port || 8080;
+                document.getElementById('cfg-target-host').value = cfg.target_host || 'localhost';
+                document.getElementById('cfg-subdomain').value = cfg.subdomain || '';
+                document.getElementById('cfg-preserve-host').checked = !!cfg.preserve_host;
+            } catch(e) {
+                console.error("Error loading config", e);
+                document.getElementById('settings-error').innerText = 'Failed to load configuration: ' + e.message;
+                document.getElementById('settings-error').style.display = 'block';
+            }
+        }
+
+        async function saveSettings() {
+            const errEl = document.getElementById('settings-error');
+            const succEl = document.getElementById('settings-success');
+            
+            errEl.style.display = 'none';
+            succEl.style.display = 'none';
+            
+            try {
+                const serverUrl = document.getElementById('cfg-server-url').value;
+                const authToken = document.getElementById('cfg-auth-token').value;
+                const destPort = parseInt(document.getElementById('cfg-dest-port').value) || 8080;
+                const targetHost = document.getElementById('cfg-target-host').value;
+                const subdomain = document.getElementById('cfg-subdomain').value;
+                const preserveHost = document.getElementById('cfg-preserve-host').checked;
+                
+                const res = await fetch('/api/config', {
+                    method: 'POST',
+                    headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify({
+                        server_url: serverUrl,
+                        auth_token: authToken,
+                        dest_port: destPort,
+                        target_host: targetHost,
+                        subdomain: subdomain,
+                        preserve_host: preserveHost
+                    })
+                });
+                
+                if (res.ok) {
+                    succEl.style.display = 'block';
+                    setTimeout(() => { succEl.style.display = 'none'; }, 3000);
+                } else {
+                    const data = await res.json();
+                    errEl.innerText = data.error || 'Failed to save configuration';
+                    errEl.style.display = 'block';
+                }
+            } catch(e) {
+                console.error("Error saving config", e);
+                errEl.innerText = 'Error: ' + e.message;
+                errEl.style.display = 'block';
+            }
+        }
+
+        function initRouter() {
+            if (window.location.pathname === '/settings') {
+                switchView('settings');
+            } else {
+                switchView('traffic');
+            }
+        }
+
+        // Initialize Router
+        initRouter();
 
         // Poll every 1.5 seconds
         setInterval(fetchState, 1500);

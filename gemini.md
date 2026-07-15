@@ -866,7 +866,14 @@ The solution will consist of:
 ## Password Manager Autocomplete Fields Release (v1.31.3)
 - [x] Add name and autocomplete attributes to login, registration, and MFA input fields to support 1Password autofill.
 
+## Portal Mobile & Tablet Responsiveness Release (v1.31.4)
+- [x] Create GitHub Epic #454 and sub-issues #455, #456, and #457.
+- [x] Implement mobile navigation slide-over sidebar and translucent backdrop overlays.
+- [x] Make layout content paddings and inline column grids responsively stack on small screens.
+- [x] Prevent header overlays and adjust modal layouts.
+- [x] Add Playwright UI E2E test coverage and verify all tests pass.
+
 <!-- markdownlint-disable MD049 -->
 ---
-*Last Updated: 2026-07-13* | *Last Reviewed: 2026-07-13*
+*Last Updated: 2026-07-15* | *Last Reviewed: 2026-07-15*
 

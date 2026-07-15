@@ -1,0 +1,30 @@
+{
+  "title": "[Epic] Plain-Text ASCII Admin Notifications",
+  "body": "Introduces clean, concise plain-text ASCII templates for administrative alerts (auto-bans, registrations, offline notifications) to prevent strict corporate email/Slack parser blocks, while preserving rich HTML/UTF-8 emails for end users.",
+  "labels": [
+    "enhancement"
+  ],
+  "issues": [
+    {
+      "title": "Sub-Issue #1: Create Concise Plain-Text Notification Templates",
+      "body": "Create 5 new plain-text ASCII template files under pkg/server/templates/en/ for admin notifications.",
+      "completed": true,
+      "labels": [
+        "enhancement"
+      ],
+      "issueNumber": "536",
+      "closed": true
+    },
+    {
+      "title": "Sub-Issue #2: Integrate Plain-Text Template Rendering in server.go",
+      "body": "Implement renderNotificationTemplate using text/template in pkg/server/server.go and update SendAdminAlert calls to use them.",
+      "completed": true,
+      "labels": [
+        "enhancement"
+      ],
+      "issueNumber": "537",
+      "closed": true
+    }
+  ],
+  "epicNumber": "535"
+}

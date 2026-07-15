@@ -1,0 +1,1 @@
+[lfr-tunnel] New user registration: {{if .FirstName}}{{.FirstName}} {{.LastName}} ({{.Email}}){{else}}{{.Email}}{{end}} requires approval.

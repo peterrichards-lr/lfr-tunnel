@@ -197,9 +197,10 @@ func (db *DB) initSchema() error {
 
 		_, err := tx.Exec(m.query)
 		if err != nil {
-			// If column already exists (e.g. legacy DB that had columns added ad-hoc),
+			// If column or table already exists (e.g. legacy DB that had columns added ad-hoc),
 			// we skip error but still record the version to prevent future attempts.
-			if !strings.Contains(strings.ToLower(err.Error()), "duplicate column name") {
+			errStr := strings.ToLower(err.Error())
+			if !strings.Contains(errStr, "duplicate column name") && !strings.Contains(errStr, "already exists") {
 				return err
 			}
 		}
@@ -234,4 +235,5 @@ var migrations = []migration{
 	{13, "ALTER TABLE users ADD COLUMN onboarding_status TEXT NOT NULL DEFAULT 'pending'"},
 	{14, "ALTER TABLE users ADD COLUMN onboarding_last_step TEXT DEFAULT ''"},
 	{15, "ALTER TABLE users ADD COLUMN onboarding_reruns INTEGER NOT NULL DEFAULT 0"},
+	{16, "CREATE TABLE IF NOT EXISTS webhook_queue (id INTEGER PRIMARY KEY AUTOINCREMENT, title TEXT NOT NULL, description TEXT NOT NULL, color TEXT NOT NULL, facts TEXT NOT NULL, created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP)"},
 }

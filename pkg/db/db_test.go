@@ -1032,47 +1032,92 @@ func TestSchemaMigrationVersioning(t *testing.T) {
 	database, tmpDir := setupTestDB(t)
 	defer cleanupTestDB(database, tmpDir)
 
-	// 1. Verify that schema_version table is created and populated with version 15
+	// 1. Verify that schema_version table is created and populated with version 16
 	var maxVersion int
 	err := database.conn.QueryRow("SELECT COALESCE(MAX(version), 0) FROM schema_version").Scan(&maxVersion)
 	if err != nil {
 		t.Fatalf("failed to query schema_version: %v", err)
 	}
-	if maxVersion != 15 {
-		t.Errorf("expected max schema version to be 15, got %d", maxVersion)
+	if maxVersion != 16 {
+		t.Errorf("expected max schema version to be 16, got %d", maxVersion)
 	}
 
-	// Count number of rows in schema_version. It should be 15.
+	// Count number of rows in schema_version. It should be 16.
 	var count int
 	err = database.conn.QueryRow("SELECT COUNT(*) FROM schema_version").Scan(&count)
 	if err != nil {
 		t.Fatalf("failed to count schema_version rows: %v", err)
 	}
-	if count != 15 {
-		t.Errorf("expected 15 applied migrations in table, got %d", count)
+	if count != 16 {
+		t.Errorf("expected 16 applied migrations in table, got %d", count)
 	}
 
-	// 2. Manually delete version 15 from schema_version
-	_, err = database.conn.Exec("DELETE FROM schema_version WHERE version = 15")
+	// 2. Manually delete version 16 from schema_version
+	_, err = database.conn.Exec("DELETE FROM schema_version WHERE version = 16")
 	if err != nil {
 		t.Fatalf("failed to delete migration version: %v", err)
 	}
 
-	// 3. Re-run initSchema. It should detect version 14 as current max,
-	// and try to re-run migration 15.
-	// Since the column 'onboarding_reruns' already exists, it will return "duplicate column name" error,
+	// 3. Re-run initSchema. It should detect version 15 as current max,
+	// and try to re-run migration 16.
+	// Since the table 'webhook_queue' already exists, it will return "table already exists" error,
 	// which our migration system catches and handles by successfully marking it as applied again.
 	err = database.initSchema()
 	if err != nil {
 		t.Fatalf("re-running initSchema failed: %v", err)
 	}
 
-	// 4. Verify version 15 has been recorded as applied again
-	err = database.conn.QueryRow("SELECT COUNT(*) FROM schema_version WHERE version = 15").Scan(&count)
+	// 4. Verify version 16 has been recorded as applied again
+	err = database.conn.QueryRow("SELECT COUNT(*) FROM schema_version WHERE version = 16").Scan(&count)
 	if err != nil {
-		t.Fatalf("failed to query schema_version for version 15: %v", err)
+		t.Fatalf("failed to query schema_version for version 16: %v", err)
 	}
 	if count != 1 {
-		t.Errorf("expected migration 15 to be recorded as applied again, got %d", count)
+		t.Errorf("expected migration 16 to be recorded as applied again, got %d", count)
+	}
+}
+
+func TestWebhookQueue(t *testing.T) {
+	database, tmpDir := setupTestDB(t)
+	defer cleanupTestDB(database, tmpDir)
+
+	// 1. Enqueue
+	err := database.EnqueueWebhookMessage("Title 1", "Desc 1", "info", `{"key":"val"}`)
+	if err != nil {
+		t.Fatalf("failed to enqueue: %v", err)
+	}
+	err = database.EnqueueWebhookMessage("Title 2", "Desc 2", "warning", `[]`)
+	if err != nil {
+		t.Fatalf("failed to enqueue: %v", err)
+	}
+
+	// 2. Dequeue
+	msgs, err := database.DequeueWebhookMessages(10)
+	if err != nil {
+		t.Fatalf("failed to dequeue: %v", err)
+	}
+	if len(msgs) != 2 {
+		t.Fatalf("expected 2 messages, got %d", len(msgs))
+	}
+	if msgs[0].Title != "Title 1" || msgs[1].Title != "Title 2" {
+		t.Errorf("incorrect titles returned")
+	}
+
+	// 3. Delete
+	err = database.DeleteWebhookMessages([]int64{msgs[0].ID})
+	if err != nil {
+		t.Fatalf("failed to delete: %v", err)
+	}
+
+	// 4. Verify remaining
+	msgsRemaining, err := database.DequeueWebhookMessages(10)
+	if err != nil {
+		t.Fatalf("failed to dequeue: %v", err)
+	}
+	if len(msgsRemaining) != 1 {
+		t.Fatalf("expected 1 remaining message, got %d", len(msgsRemaining))
+	}
+	if msgsRemaining[0].Title != "Title 2" {
+		t.Errorf("incorrect remaining message title: %s", msgsRemaining[0].Title)
 	}
 }

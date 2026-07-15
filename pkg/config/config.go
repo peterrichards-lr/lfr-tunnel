@@ -30,9 +30,10 @@ type SMTPServerConfig struct {
 }
 
 type WebhookConfig struct {
-	Enabled  bool   `yaml:"enabled"`
-	SlackURL string `yaml:"slack_url"`
-	TeamsURL string `yaml:"teams_url"`
+	Enabled              bool   `yaml:"enabled"`
+	SlackURL             string `yaml:"slack_url"`
+	TeamsURL             string `yaml:"teams_url"`
+	BatchIntervalSeconds int    `yaml:"batch_interval_seconds"`
 }
 
 // ServerConfig holds configuration settings for the lfr-tunneld server.

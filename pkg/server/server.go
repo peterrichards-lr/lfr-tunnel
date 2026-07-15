@@ -29,6 +29,7 @@ import (
 	"strings"
 	"sync"
 	"sync/atomic"
+	texttemplate "text/template"
 	"time"
 
 	"golang.org/x/time/rate"
@@ -520,7 +521,8 @@ func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 				if s.db != nil {
 					_ = s.db.AddBlacklistIP(ip, "Auto-banned by Rate Limiter for DDOS")
 					s.writeAudit("system", "ip.blacklisted", "ip", ip, "Auto-banned by Rate Limiter for DDOS", r)
-					s.notifications.SendAdminAlert("alert_notify_blacklist", "LFR Tunnel Alert: IP Auto-Banned", fmt.Sprintf("IP %s was auto-banned by the Rate Limiter for exceeding thresholds.", ip))
+					body, _ := s.renderNotificationTemplate("en", "admin_ip_autobanned.txt", map[string]interface{}{"IP": ip})
+					s.notifications.SendAdminAlert("alert_notify_blacklist", "LFR Tunnel Alert: IP Auto-Banned", body)
 					s.webhooks.SendRateLimitBanAlert(ip, 24*time.Hour, "Exceeded API rate limit (50 violations)")
 				}
 
@@ -1442,7 +1444,8 @@ func (s *Server) handleTunnelStatus(w http.ResponseWriter, r *http.Request) {
 
 	if s.registry.UpdateLeaseStatus(req.SessionToken, req.Status) {
 		if req.Status == "down" {
-			s.notifications.SendAdminAlert("alert_notify_tunnel_offline", "LFR Tunnel Alert: Tunnel Offline", "A client tunnel has reported its status as offline/down.")
+			body, _ := s.renderNotificationTemplate("en", "admin_tunnel_offline.txt", nil)
+			s.notifications.SendAdminAlert("alert_notify_tunnel_offline", "LFR Tunnel Alert: Tunnel Offline", body)
 		}
 		w.WriteHeader(http.StatusOK)
 	} else {
@@ -1833,7 +1836,12 @@ func (s *Server) handleCompleteSetup(w http.ResponseWriter, r *http.Request) {
 	}
 
 	s.writeAudit(user.Email, "user.verified", "user", user.Email, "User completed setup and is pending approval", r)
-	s.notifications.SendAdminAlert("alert_notify_registration", "LFR Tunnel Alert: New User Registration", fmt.Sprintf("A new user (%s %s - %s) has verified their email and requires approval.", user.FirstName, user.LastName, user.Email))
+	body, _ := s.renderNotificationTemplate("en", "admin_registration_request.txt", map[string]interface{}{
+		"FirstName": user.FirstName,
+		"LastName":  user.LastName,
+		"Email":     user.Email,
+	})
+	s.notifications.SendAdminAlert("alert_notify_registration", "LFR Tunnel Alert: New User Registration", body)
 	s.webhooks.SendRegistrationAlert(user.Email, "Pending admin approval")
 
 	// Send approval email to admin
@@ -1909,7 +1917,10 @@ func (s *Server) handleVerifyEmail(w http.ResponseWriter, r *http.Request) {
 	}
 
 	s.writeAudit(user.Email, "user.verified", "user", user.Email, "", r)
-	s.notifications.SendAdminAlert("alert_notify_registration", "LFR Tunnel Alert: New User Registration", fmt.Sprintf("A new user (%s) has verified their email and requires approval.", user.Email))
+	body, _ := s.renderNotificationTemplate("en", "admin_registration_request.txt", map[string]interface{}{
+		"Email": user.Email,
+	})
+	s.notifications.SendAdminAlert("alert_notify_registration", "LFR Tunnel Alert: New User Registration", body)
 
 	// Also send the original admin approval email now
 	if s.notifications != nil && s.notifications.Sender() != nil && s.cfg.AdminNotificationEmail != "" {
@@ -4000,7 +4011,8 @@ func (s *Server) handleAdminBlacklist(w http.ResponseWriter, r *http.Request, ac
 		s.blacklist.Store(payload.IPAddress, true)
 		s.BroadcastBlacklistUpdate("add", payload.IPAddress)
 		s.writeAudit(actor, "ip.blacklisted", "ip", payload.IPAddress, payload.Reason, r)
-		s.notifications.SendAdminAlert("alert_notify_blacklist", "LFR Tunnel Alert: IP Banned", fmt.Sprintf("IP %s was manually banned by admin %s.", payload.IPAddress, actor))
+		body, _ := s.renderNotificationTemplate("en", "admin_ip_banned.txt", map[string]interface{}{"IP": payload.IPAddress, "Actor": actor})
+		s.notifications.SendAdminAlert("alert_notify_blacklist", "LFR Tunnel Alert: IP Banned", body)
 		s.webhooks.SendIPBlacklistAlert(payload.IPAddress, fmt.Sprintf("%s (Banned by admin: %s)", payload.Reason, actor))
 		_ = json.NewEncoder(w).Encode(map[string]string{"status": "success"})
 		return
@@ -4119,10 +4131,15 @@ func (s *Server) handleAdminTestWebhook(w http.ResponseWriter, r *http.Request, 
 
 	// 4. Dispatch Email alert
 	if s.notifications != nil && s.cfg.AdminNotificationEmail != "" {
+		body, _ := s.renderNotificationTemplate("en", "admin_test_integration.txt", map[string]interface{}{
+			"Actor":     actor,
+			"Timestamp": timestamp,
+			"Version":   version,
+		})
 		s.notifications.SendAdminAlert(
 			"alert_notify_test",
 			"Liferay Tunnel Integration Test",
-			fmt.Sprintf("This is a test notification dispatched from the Liferay Tunnel gateway.\n\nTriggered By: %s\nTimestamp: %s\nServer Version: %s", actor, timestamp, version),
+			body,
 		)
 	}
 
@@ -4349,6 +4366,65 @@ func (s *Server) renderEmailTemplate(lang, templateName string, data interface{}
 	}
 
 	return renderedHTML, nil
+}
+
+func (s *Server) renderNotificationTemplate(lang, templateName string, data interface{}) (string, error) {
+	lang = strings.ToLower(strings.TrimSpace(lang))
+	if len(lang) > 2 {
+		lang = lang[:2]
+	}
+
+	externalDir := "/etc/lfr-tunneld/templates"
+	var textContent string
+	loadedExternal := false
+
+	// 1. Try loading from external directory first (Runtime customization!)
+	extPath := filepath.Join(externalDir, lang, templateName)
+	if _, err := os.Stat(extPath); err == nil {
+		data, err := os.ReadFile(extPath)
+		if err == nil {
+			textContent = string(data)
+			loadedExternal = true
+		}
+	}
+	if !loadedExternal && lang != "en" {
+		// Try default en external override
+		extPathEn := filepath.Join(externalDir, "en", templateName)
+		if _, err := os.Stat(extPathEn); err == nil {
+			data, err := os.ReadFile(extPathEn)
+			if err == nil {
+				textContent = string(data)
+				loadedExternal = true
+			}
+		}
+	}
+
+	// 2. Fall back to Go-embedded assets second
+	if !loadedExternal {
+		// Try localized embedded template first
+		data, err := templatesFS.ReadFile(fmt.Sprintf("templates/%s/%s", lang, templateName))
+		if err != nil {
+			// Fall back to default English embedded template
+			data, err = templatesFS.ReadFile(fmt.Sprintf("templates/en/%s", templateName))
+			if err != nil {
+				return "", fmt.Errorf("failed to load embedded template %s: %w", templateName, err)
+			}
+		}
+		textContent = string(data)
+	}
+
+	// 3. Compile and execute using text/template
+	t, err := texttemplate.New(templateName).Parse(textContent)
+	if err != nil {
+		return "", fmt.Errorf("failed to parse template %s: %w", templateName, err)
+	}
+
+	var buf bytes.Buffer
+	if err := t.Execute(&buf, data); err != nil {
+		return "", fmt.Errorf("failed to execute template %s: %w", templateName, err)
+	}
+
+	return buf.String(), nil
 }
 
 var generatorAdjectives = []string{"clever", "dancing", "silent", "flying", "golden", "brave", "swift", "gentle", "happy", "bright", "cool", "smart", "bold", "wild", "ocean", "forest", "mountain", "cloud"}

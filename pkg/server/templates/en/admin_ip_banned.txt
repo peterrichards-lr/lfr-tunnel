@@ -1,0 +1,1 @@
+[lfr-tunnel] Manually banned IP: {{.IP}} by {{.Actor}}

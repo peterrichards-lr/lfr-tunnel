@@ -1,0 +1,1 @@
+[lfr-tunnel] Auto-banned IP: {{.IP}} (Rate limit exceeded)

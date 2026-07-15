@@ -145,7 +145,7 @@ for domain in "${DOMAINS[@]}"; do
             if [ -n "${IPV6}" ]; then
                 spf_content="${spf_content} ip6:${IPV6}"
             fi
-            spf_content="${spf_content} -all"
+            spf_content="${spf_content} include:spf.smtp2go.com -all"
 
             rec_resp=$(cf_api "GET" "zones/${zone_id}/dns_records?name=${domain}&type=TXT")
             

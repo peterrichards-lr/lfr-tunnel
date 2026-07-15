@@ -36,7 +36,7 @@ func TestStartHealthChecks(t *testing.T) {
 	port, _ := strconv.Atoi(portStr)
 	engine.DestPort = port
 
-	engine.StartHealthChecks("http://example.com", "dummy-token", port)
+	engine.StartHealthChecks(context.Background(), "http://example.com", "dummy-token", port)
 	time.Sleep(100 * time.Millisecond)
 }
 

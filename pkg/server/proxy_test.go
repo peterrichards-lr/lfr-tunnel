@@ -295,3 +295,37 @@ func TestProxyHandler_CustomHeaders(t *testing.T) {
 		t.Errorf("unexpected body: %s", rec.Body.String())
 	}
 }
+
+func TestPasscodeHashingAndConstantTimeVerification(t *testing.T) {
+	pass := "my-secure-passcode"
+	hashed := HashPasscode(pass)
+	if hashed == "" {
+		t.Error("expected non-empty hashed passcode")
+	}
+	if hashed == pass {
+		t.Error("expected hashed passcode to not equal raw passcode")
+	}
+
+	// 1. Success matching hashed
+	if !VerifyPasscode(pass, hashed) {
+		t.Error("expected raw passcode to verify successfully against hashed passcode")
+	}
+
+	// 2. Success matching legacy plaintext (fallback)
+	if !VerifyPasscode(pass, pass) {
+		t.Error("expected raw passcode to verify successfully against legacy plaintext passcode")
+	}
+
+	// 3. Fails wrong passcode
+	if VerifyPasscode("wrong-passcode", hashed) {
+		t.Error("expected validation to fail for incorrect passcode")
+	}
+
+	// 4. Fails empty raw or hashed
+	if VerifyPasscode("", hashed) {
+		t.Error("expected validation to fail for empty raw passcode")
+	}
+	if VerifyPasscode(pass, "") {
+		t.Error("expected validation to fail for empty hashed passcode")
+	}
+}

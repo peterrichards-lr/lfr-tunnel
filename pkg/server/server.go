@@ -101,6 +101,35 @@ type EdgeHealthStatus struct {
 	Version      string `json:"version,omitempty"`
 }
 
+type safeConn struct {
+	mu   sync.Mutex
+	conn *websocket.Conn
+}
+
+func (s *safeConn) WriteJSON(v interface{}) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return s.conn.WriteJSON(v)
+}
+
+func (s *safeConn) WriteMessage(messageType int, data []byte) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return s.conn.WriteMessage(messageType, data)
+}
+
+func (s *safeConn) Close() error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return s.conn.Close()
+}
+
+func (s *safeConn) RemoteAddr() net.Addr {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return s.conn.RemoteAddr()
+}
+
 // Server coordinates the entire gateway operations.
 type Server struct {
 	cfg                *config.ServerConfig
@@ -141,7 +170,7 @@ type Server struct {
 	maintEndTime       time.Time
 	wsClients          map[*wsClient]bool
 	wsMutex            sync.RWMutex
-	edgeClients        map[string]*websocket.Conn
+	edgeClients        map[string]*safeConn
 	edgeVersions       map[string]string // node_id -> version
 	edgeIPs            map[string]string // node_id -> public IP
 	edgeClientsMu      sync.RWMutex
@@ -153,6 +182,8 @@ type Server struct {
 	outboundConnected  bool
 	outboundMutex      sync.RWMutex
 	userCache          sync.Map // email -> *db.User cache to prevent SQLite read contention
+	httpServer         *http.Server
+	redirectSrv        *http.Server
 }
 
 // NewServer initializes and returns a new Server instance.
@@ -238,7 +269,7 @@ func NewServer(cfg *config.ServerConfig) (*Server, error) {
 		targetedMessages:   make(map[string]string),
 		lastPortalActivity: make(map[string]time.Time),
 		wsClients:          make(map[*wsClient]bool),
-		edgeClients:        make(map[string]*websocket.Conn),
+		edgeClients:        make(map[string]*safeConn),
 		edgeVersions:       make(map[string]string),
 		edgeIPs:            make(map[string]string),
 		startTime:          time.Now(),
@@ -1525,6 +1556,7 @@ func (s *Server) Start() error {
 					http.Redirect(w, r, target, http.StatusMovedPermanently)
 				}),
 			}
+			s.redirectSrv = redirectSrv
 			if err := redirectSrv.ListenAndServe(); err != nil && err != http.ErrServerClosed {
 				log.Fatalf("[Server] HTTP redirect server failed: %v", err)
 			}
@@ -1535,6 +1567,7 @@ func (s *Server) Start() error {
 			Addr:    s.cfg.BindAddr,
 			Handler: s,
 		}
+		s.httpServer = srv
 		return srv.ListenAndServeTLS(s.cfg.SSLCertFile, s.cfg.SSLKeyFile)
 	}
 
@@ -1544,6 +1577,7 @@ func (s *Server) Start() error {
 		Addr:    s.cfg.HTTPBindAddr,
 		Handler: s,
 	}
+	s.httpServer = srv
 	return srv.ListenAndServe()
 }
 
@@ -2054,6 +2088,16 @@ func (s *Server) handleClaimToken(w http.ResponseWriter, r *http.Request) {
 // Stop shuts down the server.
 func (s *Server) Stop() {
 	s.cancel()
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+
+	if s.httpServer != nil {
+		_ = s.httpServer.Shutdown(ctx)
+	}
+	if s.redirectSrv != nil {
+		_ = s.redirectSrv.Shutdown(ctx)
+	}
+
 	s.chiselServer.Close() //nolint:errcheck
 	if s.db != nil {
 		_ = s.db.RecordGatewayCleanShutdown()

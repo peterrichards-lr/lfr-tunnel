@@ -278,7 +278,11 @@ func (s *portalService) UpdateReservationAccessControl(user *db.User, subdomain,
 		return ErrForbidden
 	}
 
-	res.Passcode = passcode
+	if passcode != "" {
+		res.Passcode = HashPasscode(passcode)
+	} else {
+		res.Passcode = ""
+	}
 	res.WhitelistIPs = whitelistIPs
 	if accessMode != "" {
 		res.AccessMode = accessMode
@@ -295,7 +299,7 @@ func (s *portalService) UpdateReservationAccessControl(user *db.User, subdomain,
 		Action:     "subdomain.access_control_updated",
 		TargetType: "subdomain",
 		TargetID:   fmt.Sprintf("%s.%s", subdomain, domain),
-		Details:    fmt.Sprintf("Access controls updated: Mode=%s, Passcode=%s, IPs=%s", res.AccessMode, res.Passcode, res.WhitelistIPs),
+		Details:    fmt.Sprintf("Access controls updated: Mode=%s, Passcode=[MASKED], IPs=%s", res.AccessMode, res.WhitelistIPs),
 		IPAddress:  ip,
 		CreatedAt:  time.Now(),
 	})

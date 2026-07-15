@@ -35,7 +35,9 @@ func Open(dsn string) (*DB, error) {
 		return nil, fmt.Errorf("failed to open sqlite DB: %w", err)
 	}
 
-	if _, err := conn.Exec("PRAGMA foreign_keys = ON; PRAGMA busy_timeout = 5000;"); err != nil {
+	conn.SetMaxOpenConns(1)
+
+	if _, err := conn.Exec("PRAGMA journal_mode = WAL; PRAGMA foreign_keys = ON; PRAGMA busy_timeout = 5000;"); err != nil {
 		conn.Close() //nolint:errcheck
 		return nil, fmt.Errorf("failed to execute pragma: %w", err)
 	}

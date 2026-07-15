@@ -112,44 +112,53 @@ func NewInterceptorEngine(targetHost string, headers []string) *InterceptorEngin
 }
 
 // StartHealthChecks begins a background loop to verify Tomcat is responding and reports status to the Gateway.
-func (e *InterceptorEngine) StartHealthChecks(serverURL, sessionToken string, targetPort int) {
+func (e *InterceptorEngine) StartHealthChecks(ctx context.Context, serverURL, sessionToken string, targetPort int) {
 	go func() {
+		ticker := time.NewTicker(5 * time.Second)
+		defer ticker.Stop()
 		for {
-			time.Sleep(5 * time.Second)
+			select {
+			case <-ctx.Done():
+				return
+			case <-ticker.C:
+				// Determine actual status
+				e.mu.RLock()
+				isMaint := e.MaintenanceMode
+				e.mu.RUnlock()
 
-			// Determine actual status
-			e.mu.RLock()
-			isMaint := e.MaintenanceMode
-			e.mu.RUnlock()
-
-			newStatus := "up"
-			if isMaint {
-				newStatus = "maintenance"
-			} else {
-				// Simple dial test to the local target port
-				conn, err := net.DialTimeout("tcp", fmt.Sprintf("%s:%d", e.TargetHost, targetPort), 2*time.Second)
-				if err != nil {
-					newStatus = "down"
+				newStatus := "up"
+				if isMaint {
+					newStatus = "maintenance"
 				} else {
-					conn.Close() //nolint:errcheck
+					// Simple dial test to the local target port
+					conn, err := net.DialTimeout("tcp", fmt.Sprintf("%s:%d", e.TargetHost, targetPort), 2*time.Second)
+					if err != nil {
+						newStatus = "down"
+					} else {
+						conn.Close() //nolint:errcheck
+					}
 				}
-			}
 
-			// Update internal state and notify server if changed
-			e.mu.Lock()
-			changed := e.Status != newStatus
-			e.Status = newStatus
-			e.mu.Unlock()
+				// Update internal state and notify server if changed
+				e.mu.Lock()
+				changed := e.Status != newStatus
+				e.Status = newStatus
+				e.mu.Unlock()
 
-			if changed || newStatus == "maintenance" {
-				// Send status update to Gateway
-				payload, _ := json.Marshal(map[string]string{
-					"session_token": sessionToken,
-					"status":        newStatus,
-				})
-				resp, err := http.Post(fmt.Sprintf("%s/api/tunnel-status", serverURL), "application/json", bytes.NewBuffer(payload))
-				if err == nil {
-					_ = resp.Body.Close()
+				if changed || newStatus == "maintenance" {
+					// Send status update to Gateway
+					payload, _ := json.Marshal(map[string]string{
+						"session_token": sessionToken,
+						"status":        newStatus,
+					})
+					req, err := http.NewRequestWithContext(ctx, "POST", fmt.Sprintf("%s/api/tunnel-status", serverURL), bytes.NewBuffer(payload))
+					if err == nil {
+						req.Header.Set("Content-Type", "application/json")
+						resp, err := http.DefaultClient.Do(req)
+						if err == nil {
+							_ = resp.Body.Close()
+						}
+					}
 				}
 			}
 		}
@@ -265,8 +274,8 @@ func (t *interceptorTransport) RoundTrip(req *http.Request) (*http.Response, err
 		var remainingReader io.Reader = req.Body
 		if t.engine.BandwidthLimit > 0 {
 			limiter := rate.NewLimiter(rate.Limit(t.engine.BandwidthLimit), int(getHostBurst(t.engine.BandwidthLimit)))
-			bodyReader = &throttledReader{r: req.Body, limiter: limiter}
-			remainingReader = &throttledReader{r: req.Body, limiter: limiter}
+			bodyReader = &throttledReader{r: req.Body, limiter: limiter, ctx: req.Context()}
+			remainingReader = &throttledReader{r: req.Body, limiter: limiter, ctx: req.Context()}
 		}
 		bodyBytes, _ := io.ReadAll(io.LimitReader(bodyReader, 10240))
 		reqBodyStr = string(bodyBytes)
@@ -389,8 +398,8 @@ func (t *interceptorTransport) RoundTrip(req *http.Request) (*http.Response, err
 		var remainingReader io.Reader = res.Body
 		if t.engine.BandwidthLimit > 0 {
 			limiter := rate.NewLimiter(rate.Limit(t.engine.BandwidthLimit), int(getHostBurst(t.engine.BandwidthLimit)))
-			bodyReader = &throttledReader{r: res.Body, limiter: limiter}
-			remainingReader = &throttledReader{r: res.Body, limiter: limiter}
+			bodyReader = &throttledReader{r: res.Body, limiter: limiter, ctx: req.Context()}
+			remainingReader = &throttledReader{r: res.Body, limiter: limiter, ctx: req.Context()}
 		}
 		bodyBytes, _ := io.ReadAll(io.LimitReader(bodyReader, 10240))
 		respBodyStr = string(bodyBytes)
@@ -474,6 +483,7 @@ func getHostBurst(limit int64) int64 {
 type throttledReader struct {
 	r       io.Reader
 	limiter *rate.Limiter
+	ctx     context.Context
 }
 
 func (tr *throttledReader) Read(p []byte) (n int, err error) {
@@ -490,7 +500,10 @@ func (tr *throttledReader) Read(p []byte) (n int, err error) {
 			if chunk > burst {
 				chunk = burst
 			}
-			ctx := context.Background()
+			ctx := tr.ctx
+			if ctx == nil {
+				ctx = context.Background()
+			}
 			if waitErr := tr.limiter.WaitN(ctx, chunk); waitErr != nil {
 				return n - rem + chunk, waitErr
 			}

@@ -139,7 +139,7 @@ func (s *Server) handleEdgeControlWS(w http.ResponseWriter, r *http.Request) {
 		_ = oldConn.WriteJSON(ControlMessage{Type: "replaced", Reason: "new connection established"})
 		_ = oldConn.Close()
 	}
-	s.edgeClients[nodeID] = conn
+	s.edgeClients[nodeID] = &safeConn{conn: conn}
 	if version != "" {
 		s.edgeVersions[nodeID] = version
 	} else {
@@ -155,7 +155,7 @@ func (s *Server) handleEdgeControlWS(w http.ResponseWriter, r *http.Request) {
 	go func() {
 		defer func() {
 			s.edgeClientsMu.Lock()
-			if activeConn, exists := s.edgeClients[nodeID]; exists && activeConn == conn {
+			if activeConn, exists := s.edgeClients[nodeID]; exists && activeConn.conn == conn {
 				delete(s.edgeClients, nodeID)
 				delete(s.edgeVersions, nodeID)
 				delete(s.edgeIPs, nodeID)

@@ -307,5 +307,39 @@ test.describe('Dashboard UI Automation', () => {
     await page.click('#sidebar-toggle-btn');
     await expect(page.locator('.sidebar')).not.toHaveClass(/collapsed/);
   });
+
+  test('Verify Mobile Responsive Layout and Sidebar Slide-Over Drawer', async ({ page }) => {
+    // 1. Set viewport size to a mobile dimension
+    await page.setViewportSize({ width: 375, height: 812 });
+
+    // 2. Login
+    await page.goto('/admin');
+    await page.click('#btn-show-email');
+    await page.fill('#email-input', adminEmail);
+    await page.click('button[type="submit"]');
+
+    const token = await getMagicLinkToken(adminEmail);
+    expect(token).toBeTruthy();
+    await page.goto(`/admin?token=${token}`);
+
+    // Wait for Dashboard to load
+    await expect(page.locator('h2:has-text("Dashboard Overview")')).toBeVisible();
+
+    // 3. Verify that the sidebar is collapsed and backdrop not visible initially
+    const sidebar = page.locator('.sidebar');
+    const backdrop = page.locator('#sidebar-backdrop');
+    await expect(sidebar).not.toHaveClass(/active/);
+    await expect(backdrop).not.toHaveClass(/visible/);
+
+    // 4. Click sidebar toggle button to open it
+    await page.click('#sidebar-toggle-btn');
+    await expect(sidebar).toHaveClass(/active/);
+    await expect(backdrop).toHaveClass(/visible/);
+
+    // 5. Click the backdrop to close the sidebar
+    await backdrop.click();
+    await expect(sidebar).not.toHaveClass(/active/);
+    await expect(backdrop).not.toHaveClass(/visible/);
+  });
 });
 

@@ -799,4 +799,103 @@ html[dir="rtl"] td, html[dir="rtl"] th {
     }
 }
 
+/* Sidebar mobile backdrop overlay */
+.sidebar-backdrop {
+    position: fixed;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    background: rgba(0, 0, 0, 0.6);
+    backdrop-filter: blur(2px);
+    -webkit-backdrop-filter: blur(2px);
+    z-index: 999;
+    opacity: 0;
+    pointer-events: none;
+    transition: opacity 0.3s ease;
+}
+.sidebar-backdrop.visible {
+    opacity: 1;
+    pointer-events: auto;
+}
 
+@media (max-width: 768px) {
+    /* 1. Sidebar slide-over layout */
+    .sidebar {
+        position: fixed !important;
+        top: 0 !important;
+        left: 0 !important;
+        bottom: 0 !important;
+        width: 260px !important;
+        z-index: 1000 !important;
+        transform: translateX(-100%) !important;
+        transition: transform 0.3s cubic-bezier(0.4, 0, 0.2, 1) !important;
+        opacity: 1 !important;
+        pointer-events: auto !important;
+        padding: 24px !important;
+        border-right: 1px solid var(--border) !important;
+    }
+    .sidebar.active {
+        transform: translateX(0) !important;
+    }
+    .sidebar.collapsed {
+        width: 260px !important;
+        transform: translateX(-100%) !important;
+        opacity: 1 !important;
+        pointer-events: auto !important;
+    }
+    
+    /* 2. Main content area padding and adjustments */
+    .main-content {
+        padding: 60px 16px 40px 16px !important;
+        transition: none !important;
+    }
+    
+    /* 3. Header spacing & controls positioning */
+    .sidebar-toggle-btn {
+        left: 16px !important;
+        top: 16px !important;
+    }
+    #header-language-container {
+        right: 16px !important;
+        top: 16px !important;
+    }
+    
+    /* 4. Grid systems responsive stacking */
+    .responsive-grid,
+    #tab-overview > div[style*="display: grid"],
+    #admin-analytics-section > div[style*="display: grid"],
+    #tab-analytics > div > div[style*="display: grid"] {
+        grid-template-columns: 1fr !important;
+        gap: 16px !important;
+    }
+    #admin-analytics-section > div > div[style*="grid-column: span 2"] {
+        grid-column: span 1 !important;
+    }
+    
+    /* 5. Headers flex wrap on small screens */
+    .header {
+        flex-direction: column !important;
+        align-items: flex-start !important;
+        gap: 12px !important;
+        margin-bottom: 24px !important;
+    }
+    .header h2 {
+        font-size: 20px !important;
+    }
+    .header .btn {
+        width: 100% !important;
+    }
+    .header div[style*="display: flex"] {
+        width: 100% !important;
+        flex-direction: column !important;
+        gap: 8px !important;
+    }
+    
+    /* 6. Form modals stack fields */
+    .modal-content {
+        width: calc(100% - 32px) !important;
+        margin: 16px !important;
+        padding: 20px !important;
+    }
+}

@@ -370,4 +370,13 @@ find . -type f ! -name "checksums.txt" ! -name "*.asc" | sed 's|^\./||' | sort |
 }
 echo "Checksums updated in $BIN_DIR/checksums.txt"
 
+# Generate Minisign signature for checksums.txt
+if [ -f "$PROJECT_ROOT/scripts/minisign_helper.go" ]; then
+    echo "Generating Minisign signature for checksums.txt..."
+    go run "$PROJECT_ROOT/scripts/minisign_helper.go" "$BIN_DIR/checksums.txt" "$BIN_DIR/checksums.txt.minisig" || {
+        echo "ERROR: Minisign signature generation failed." >&2
+        exit 5
+    }
+fi
+
 echo "=== Client Signing Complete! ==="

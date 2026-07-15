@@ -4121,7 +4121,7 @@ func (s *Server) handleAdminTestWebhook(w http.ResponseWriter, r *http.Request, 
 	if s.notifications != nil && s.cfg.AdminNotificationEmail != "" {
 		s.notifications.SendAdminAlert(
 			"alert_notify_test",
-			"🧪 Liferay Tunnel Integration Test",
+			"Liferay Tunnel Integration Test",
 			fmt.Sprintf("This is a test notification dispatched from the Liferay Tunnel gateway.\n\nTriggered By: %s\nTimestamp: %s\nServer Version: %s", actor, timestamp, version),
 		)
 	}

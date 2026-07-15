@@ -924,6 +924,18 @@ The solution will consist of:
 - [x] Run full project unit test suite.
 - [x] Push branches and merge PR #489 on GitHub.
 
+## GUI Autostart Fixes (v1.34.1)
+- [x] Disable `<key>KeepAlive</key>` in macOS LaunchAgent plist template to prevent relaunch loops on Quit (#492).
+- [x] Implement cross-platform single-instance PID check using a `gui.pid` file on GUI startup (#492).
+- [x] Push branches and merge PR #492 on GitHub.
+
+## Self-Upgrade Process EDR Protection (v1.34.2)
+- [x] Implement automated pre-swap shutdown routine in `pkg/client/upgrade.go` targeting active LaunchAgents, systemd services, and background/GUI processes (#495).
+- [x] Implement automated post-swap restart routine to resume active services seamlessly (#495).
+- [x] Document CLI background process management and autostart capabilities in `docs/getting_started.md` (#493).
+- [x] Verify all unit tests and E2E integration test suites.
+- [x] Push branches and merge PR #495 on GitHub.
+
 <!-- markdownlint-disable MD049 -->
 ---
 *Last Updated: 2026-07-15* | *Last Reviewed: 2026-07-15*

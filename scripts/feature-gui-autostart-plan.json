@@ -8,29 +8,32 @@
     {
       "title": "Sub-Issue #1: Implement GUI Autostart Services in service_installer.go",
       "body": "Define InstallGUIService, isLaunchOnLoginEnabled, and disableLaunchOnLogin in service_installer.go for macOS, Windows, and Linux.",
-      "completed": false,
+      "completed": true,
       "labels": [
         "enhancement"
       ],
-      "issueNumber": "486"
+      "issueNumber": "486",
+      "closed": true
     },
     {
       "title": "Sub-Issue #2: Expose install-gui-service and uninstall-gui-service subcommands in main.go",
       "body": "Expose commands to register or deregister the autostart items via lfr-tunnel CLI.",
-      "completed": false,
+      "completed": true,
       "labels": [
         "enhancement"
       ],
-      "issueNumber": "487"
+      "issueNumber": "487",
+      "closed": true
     },
     {
       "title": "Sub-Issue #3: Add Launch on Login toggle item inside System Tray Menu in gui.go",
       "body": "Add checkmarked toggle menu option in the GUI system tray for interactive autostart configuration.",
-      "completed": false,
+      "completed": true,
       "labels": [
         "enhancement"
       ],
-      "issueNumber": "488"
+      "issueNumber": "488",
+      "closed": true
     }
   ],
   "epicNumber": "485"

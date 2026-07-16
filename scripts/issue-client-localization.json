@@ -1,0 +1,37 @@
+{
+  "title": "[Epic] Localize Client Inspector UI (i18n)",
+  "body": "## Goal\nBring the local Client UI (`inspector.html`) to full feature parity with the Server Admin Portal by implementing a Vanilla JS internationalization (i18n) engine.\n\n## Implementation Plan\n\n### 1. Translation Dictionary\n- Embed a JSON dictionary object at the top of the `<script>` block in `inspector.html` containing keys for supported languages: `en` (English), `es` (Spanish), `de` (German), `fr` (French), `pt` (Portuguese), `ja` (Japanese).\n\n### 2. DOM Updates\n- Tag all translatable HTML elements (labels, buttons, headers, table headers) with `data-i18n=\"key_name\"` attributes.\n- Update dynamic JavaScript rendering (e.g., connection status, tooltips) to use a `t('key_name')` helper function.\n\n### 3. Translation Engine\n- Implement `setLanguage(lang)` function that iterates over `[data-i18n]` elements and updates their `innerText`.\n- Persist the user's language selection in `localStorage` so it survives restarts.\n- Auto-detect the browser's default language using `navigator.language` on first load.\n\n### 4. Language Selector UI\n- Add a clean, minimal `<select>` dropdown next to the 'Maintenance' toggle in the sidebar header to allow users to switch languages on the fly.\n\n## Open Questions\n- Should we use the exact same dictionary keys as the Admin Portal where they overlap, or keep them perfectly isolated?\n- Are there any specific regional dialects you want to prioritize (e.g., pt-BR vs pt-PT)?",
+  "labels": [
+    "enhancement"
+  ],
+  "issues": [
+    {
+      "title": "Build i18n Translation Dictionary and Engine for Client UI",
+      "body": "Add the dictionary object, the `setLanguage` engine, and `localStorage` persistence logic to `inspector.html`.",
+      "completed": false,
+      "labels": [
+        "enhancement"
+      ],
+      "issueNumber": "559"
+    },
+    {
+      "title": "Tag HTML Elements and Update Dynamic Rendering",
+      "body": "Add `data-i18n` attributes to all static DOM elements and update dynamic JS templates to use the translation helper.",
+      "completed": false,
+      "labels": [
+        "enhancement"
+      ],
+      "issueNumber": "560"
+    },
+    {
+      "title": "Implement Language Selector Dropdown",
+      "body": "Add a language switcher dropdown to the sidebar header to allow users to dynamically change their UI language.",
+      "completed": false,
+      "labels": [
+        "enhancement"
+      ],
+      "issueNumber": "561"
+    }
+  ],
+  "epicNumber": "558"
+}

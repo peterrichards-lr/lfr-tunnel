@@ -55,6 +55,14 @@ func StartInspector(port int, engine *InterceptorEngine) (int, error) {
 	})
 
 	mux.HandleFunc("/api/state", func(w http.ResponseWriter, r *http.Request) {
+		if r.Method == http.MethodDelete {
+			engine.mu.Lock()
+			engine.History = make([]*RequestRecord, 0)
+			engine.mu.Unlock()
+			w.WriteHeader(http.StatusOK)
+			return
+		}
+
 		engine.mu.RLock()
 		defer engine.mu.RUnlock()
 

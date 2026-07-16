@@ -105,6 +105,33 @@ func TestResolvePortsAndMappings(t *testing.T) {
 	}
 }
 
+func TestOverrideConfigWithFlags(t *testing.T) {
+	// Reset flags explicitly for tests
+	origServer := *serverURL
+	origInsecure := *insecureSkipVerify
+	defer func() {
+		*serverURL = origServer
+		*insecureSkipVerify = origInsecure
+	}()
+
+	*serverURL = "https://test-override.com"
+	*insecureSkipVerify = true
+
+	cfg := &config.ClientConfig{
+		ServerURL:          "https://default.com",
+		InsecureSkipVerify: false,
+	}
+
+	overrideConfigWithFlags(cfg)
+
+	if cfg.ServerURL != "https://test-override.com" {
+		t.Errorf("Expected ServerURL override to be https://test-override.com, got %s", cfg.ServerURL)
+	}
+	if !cfg.InsecureSkipVerify {
+		t.Errorf("Expected InsecureSkipVerify override to be true, got %v", cfg.InsecureSkipVerify)
+	}
+}
+
 func TestMain_ValidationFailure(t *testing.T) {
 	if os.Getenv("BE_CRASHER_VALIDATION") == "1" {
 		os.Args = []string{"cmd", "-bandwidth", "invalid"}

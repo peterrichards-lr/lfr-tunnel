@@ -399,12 +399,20 @@ function setLanguage(lang) {
         let requests = [];
         let selectedId = null;
         let activeView = 'traffic';
+        let languageSynced = false;
 
         async function fetchState() {
             try {
                 const res = await fetch('/api/state');
                 const state = await res.json();
                 
+                if (!languageSynced && state.language_preference && clientTranslations[state.language_preference]) {
+                    languageSynced = true;
+                    if (!localStorage.getItem('lfr_client_lang')) {
+                        setLanguage(state.language_preference);
+                    }
+                }
+
                 document.getElementById('maint-toggle').checked = state.maintenance_mode;
                 
                 const passcodeEl = document.getElementById('ac-passcode');

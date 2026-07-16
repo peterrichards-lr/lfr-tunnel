@@ -39,7 +39,7 @@ func TestServer_Register(t *testing.T) {
 		srv.Stop()
 	}()
 	_ = srv.db.CreateUser(&db.User{ID: "peter.richards@liferay.com", Email: "peter.richards@liferay.com", Role: "owner", Status: "approved"})
-	_ = srv.db.CreateUser(&db.User{ID: "test@example.com", Email: "test@example.com", Role: "admin", Status: "approved"})
+	_ = srv.db.CreateUser(&db.User{ID: "test@example.com", Email: "test@example.com", Role: "admin", Status: "approved", LanguagePreference: "ja"})
 	patHashBytes := sha256.Sum256([]byte("lfr_pat_mysecret"))
 	_ = srv.db.CreatePAT(&db.PersonalAccessToken{UserID: "test@example.com", TokenHash: hex.EncodeToString(patHashBytes[:]), TokenPrefix: "lfr_pat_myse"})
 
@@ -88,6 +88,9 @@ func TestServer_Register(t *testing.T) {
 	}
 	if len(resp.Remotes) != 1 {
 		t.Errorf("expected 1 remote, got %d", len(resp.Remotes))
+	}
+	if resp.LanguagePreference != "ja" {
+		t.Errorf("expected LanguagePreference 'ja', got '%s'", resp.LanguagePreference)
 	}
 }
 

@@ -1,11 +1,7 @@
 {
-  "version": "v1.35.0",
-  "release_date": "2026-07-15",
+  "version": "v1.35.1",
+  "release_date": "2026-07-16",
   "features": [
-    "Feature: Persistent SQLite-backed webhook message queue table to prevent Slack/Teams rate limit blocks",
-    "Feature: Background queue batch consumer worker polling at configurable rate intervals (default: 10s)",
-    "Feature: Coalescence digest worker grouping multiple notifications into single summary posts",
-    "Enhancement: Checked/ignored rows.Close and stmt.Close database return error linter checks",
-    "Fix: Fast and standard fmt.Fprintf replacement for WriteString(fmt.Sprintf) in strings builders"
+    "Enhancement: Updated system tray icons to use the official Liferay Tunnel logo for active (color) and inactive (grayscale) states"
   ]
 }

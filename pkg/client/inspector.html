@@ -655,7 +655,7 @@ function setLanguage(lang) {
             
             btn.disabled = true;
             btn.style.opacity = '0.5';
-            btn.innerHTML = '${t('client_replaying')}';
+            btn.innerHTML = t('client_replaying');
 
             try {
                 const res = await fetch('/api/replay', {

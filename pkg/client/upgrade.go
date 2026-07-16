@@ -281,9 +281,11 @@ func SelfUpgrade(currentVersion string, serverURL string) error {
 	var tempPath string
 	if runtime.GOOS == "windows" {
 		tempPath = filepath.Join(os.TempDir(), "lfr-tunnel-update-tmp.exe")
-	} else {
-		// EDR (SentinelOne) whitelist requires specific exact path
+	} else if runtime.GOOS == "darwin" {
+		// EDR (SentinelOne) whitelist requires specific exact path on macOS
 		tempPath = "/private/tmp/lfr-tunnel"
+	} else {
+		tempPath = "/tmp/lfr-tunnel"
 	}
 	_ = os.Remove(tempPath) // Clean up any stale file
 

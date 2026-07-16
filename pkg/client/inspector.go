@@ -77,6 +77,7 @@ func StartInspector(port int, engine *InterceptorEngine) (int, error) {
 			"public_urls":         engine.PublicURLs,
 			"language_preference": engine.LanguagePreference,
 			"theme_preference":    engine.ThemePreference,
+			"preserve_host":       engine.PreserveHost,
 		}
 
 		w.Header().Set("Content-Type", "application/json")

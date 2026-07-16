@@ -1,0 +1,37 @@
+{
+  "title": "Enhance GUI Configuration with Tooltips & Insecure SSL Option",
+  "body": "This epic covers the addition of help tooltips (hover-over icons) to the Client UI, the addition of an explicit `insecure_skip_verify` configuration property to bypass TLS on local targets, and fixing the Host header rewrite logic for local proxying.",
+  "labels": [
+    "enhancement"
+  ],
+  "issues": [
+    {
+      "title": "Add InsecureSkipVerify option to configuration and Client Engine",
+      "body": "Add a boolean flag `InsecureSkipVerify` to the ClientConfig struct and expose it as a checkbox in the inspector HTML to bypass TLS certificate checking when connecting to local HTTPS targets (e.g., LDM on 443). Update the `interceptor.go` proxy to respect this new flag instead of checking unconditionally.",
+      "completed": false,
+      "labels": [
+        "enhancement"
+      ],
+      "issueNumber": "554"
+    },
+    {
+      "title": "Fix PreserveHost rewrite logic to support localhost rewrites",
+      "body": "Remove the hardcoded exception in `interceptor.go` that skips Host rewriting when the target is `localhost`. If `PreserveHost` is unchecked, it should strictly rewrite to `Local Target Host`, even if it is `localhost`.",
+      "completed": false,
+      "labels": [
+        "bug"
+      ],
+      "issueNumber": "555"
+    },
+    {
+      "title": "Add descriptive help tooltips to all Configuration fields",
+      "body": "Inject `?` hover-over icons with descriptive `title` attributes next to each configuration label in `inspector.html` to help users understand what `Preserve incoming Host header`, `Server URL`, and other fields do.",
+      "completed": false,
+      "labels": [
+        "enhancement"
+      ],
+      "issueNumber": "556"
+    }
+  ],
+  "epicNumber": "553"
+}

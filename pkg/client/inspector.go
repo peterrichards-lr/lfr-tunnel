@@ -176,11 +176,11 @@ func StartInspector(port int, engine *InterceptorEngine) (int, error) {
 				destPort = cfg.Ports[0]
 			}
 			resp := map[string]interface{}{
-				"server_url":    cfg.ServerURL,
-				"auth_token":    maskToken(cfg.AuthToken),
-				"target_host":   cfg.TargetHost,
-				"dest_port":     destPort,
-				"subdomain":     cfg.Subdomain,
+				"server_url":           cfg.ServerURL,
+				"auth_token":           maskToken(cfg.AuthToken),
+				"target_host":          cfg.TargetHost,
+				"dest_port":            destPort,
+				"subdomain":            cfg.Subdomain,
 				"preserve_host":        cfg.PreserveHost,
 				"insecure_skip_verify": cfg.InsecureSkipVerify,
 				"passcode":             cfg.Passcode,
@@ -192,10 +192,10 @@ func StartInspector(port int, engine *InterceptorEngine) (int, error) {
 
 		if r.Method == http.MethodPost {
 			var req struct {
-				ServerURL    string `json:"server_url"`
-				AuthToken    string `json:"auth_token"`
-				TargetHost   string `json:"target_host"`
-				DestPort     int    `json:"dest_port"`
+				ServerURL          string `json:"server_url"`
+				AuthToken          string `json:"auth_token"`
+				TargetHost         string `json:"target_host"`
+				DestPort           int    `json:"dest_port"`
 				Subdomain          string `json:"subdomain"`
 				PreserveHost       bool   `json:"preserve_host"`
 				InsecureSkipVerify bool   `json:"insecure_skip_verify"`

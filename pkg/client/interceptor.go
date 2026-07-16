@@ -39,14 +39,14 @@ type RequestRecord struct {
 
 // InterceptorEngine manages the traffic routing, modification, and capture.
 type InterceptorEngine struct {
-	mu              sync.RWMutex
-	MaintenanceMode bool
-	Status          string
-	AddedHeaders    map[string]string
-	History         []*RequestRecord
-	MaxHistory      int
-	TargetHost      string
-	PreserveHost    bool
+	mu                 sync.RWMutex
+	MaintenanceMode    bool
+	Status             string
+	AddedHeaders       map[string]string
+	History            []*RequestRecord
+	MaxHistory         int
+	TargetHost         string
+	PreserveHost       bool
 	InsecureSkipVerify bool
 
 	// Connection status and statistics
@@ -99,10 +99,10 @@ func NewInterceptorEngine(targetHost string, headers []string) *InterceptorEngin
 	preserveHost := os.Getenv("LFT_PRESERVE_HOST") == "true"
 
 	return &InterceptorEngine{
-		MaintenanceMode: false,
-		Status:          "up",
-		AddedHeaders:    headerMap,
-		History:         make([]*RequestRecord, 0),
+		MaintenanceMode:    false,
+		Status:             "up",
+		AddedHeaders:       headerMap,
+		History:            make([]*RequestRecord, 0),
 		MaxHistory:         100, // Keep last 100 requests
 		TargetHost:         targetHost,
 		PreserveHost:       preserveHost,

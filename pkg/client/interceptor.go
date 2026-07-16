@@ -3,6 +3,7 @@ package client
 import (
 	"bytes"
 	"context"
+	"crypto/tls"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -198,14 +199,23 @@ func (e *InterceptorEngine) InterceptPort(targetPort int) (int, error) {
 
 	listenPort := listener.Addr().(*net.TCPAddr).Port
 
-	targetURL, _ := url.Parse(fmt.Sprintf("http://%s:%d", e.TargetHost, targetPort))
+	scheme := "http"
+	if targetPort == 443 || targetPort == 8443 {
+		scheme = "https"
+	}
+	targetURL, _ := url.Parse(fmt.Sprintf("%s://%s:%d", scheme, e.TargetHost, targetPort))
 	proxy := httputil.NewSingleHostReverseProxy(targetURL)
+
+	customTransport := http.DefaultTransport.(*http.Transport).Clone()
+	if scheme == "https" {
+		customTransport.TLSClientConfig = &tls.Config{InsecureSkipVerify: true}
+	}
 
 	// Custom Transport to capture response and duration
 	proxy.Transport = &interceptorTransport{
 		engine:     e,
 		targetPort: targetPort,
-		transport:  http.DefaultTransport,
+		transport:  customTransport,
 	}
 
 	// Custom Director to inject headers

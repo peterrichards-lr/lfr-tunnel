@@ -46,6 +46,8 @@ func (s *TempSettingsServer) Start() {
 
 	mux := http.NewServeMux()
 	mux.HandleFunc("/", s.handleRoot)
+	mux.HandleFunc("/favicon.ico", s.handleFavicon)
+
 	mux.HandleFunc("/logs", s.handleLogs)
 	mux.HandleFunc("/api/state", s.handleState)
 	mux.HandleFunc("/api/config", s.handleConfig)
@@ -599,4 +601,10 @@ func getRunningState(configuredSub string) (*client.ClientState, string, bool) {
 	}
 
 	return nil, sub, false
+}
+
+func (s *TempSettingsServer) handleFavicon(w http.ResponseWriter, r *http.Request) {
+	w.Header().Set("Content-Type", "image/svg+xml")
+	w.Header().Set("Cache-Control", "public, max-age=86400")
+	_, _ = w.Write(client.GetEmbeddedFaviconSVG())
 }

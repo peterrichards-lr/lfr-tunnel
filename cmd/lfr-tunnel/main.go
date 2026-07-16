@@ -124,12 +124,24 @@ func main() {
 		return
 	}
 
-	// Start compatibility check asynchronously
-	compatChan := make(chan *client.ServerVersionInfo, 1)
-	go func() {
-		info, _ := client.CheckServerCompatibility(cfg.ServerURL)
-		compatChan <- info
-	}()
+	// 3. Synchronous Server Compatibility and Maintenance Check
+	info, err := client.CheckServerCompatibility(cfg.ServerURL)
+	if err == nil && info != nil {
+		if info.MaintenanceMode == "true" {
+			slog.Info("[Client] The Gateway server is currently undergoing maintenance.")
+			slog.Info("[Client] Check the service status page for active outages:")
+			slog.Info("         👉 https://status.lfr-demo.se (Cmd/Ctrl+Click to open)")
+			os.Exit(1)
+		}
+		if config.Version != "dev" {
+			if client.CompareVersions(config.Version, info.MinVersion) < 0 {
+				log.Fatalf("[Error] Your Liferay Tunnel client is too old to connect to the server. Minimum required version is %s.", info.MinVersion)
+			}
+			if client.CompareVersions(config.Version, info.LatestVersion) < 0 {
+				slog.Info(fmt.Sprintf("[Warning] A new version of Liferay Tunnel (%s) is available. You are running %s.", info.LatestVersion, config.Version))
+			}
+		}
+	}
 
 	// 3. Resolve port mappings
 	portMappings := resolvePortsAndMappings(cfg)
@@ -176,21 +188,6 @@ func main() {
 			suffixStr = fmt.Sprintf(" (Suffix: -%s)", pm.NameSuffix)
 		}
 		slog.Info(fmt.Sprintf("  - Local port %d%s", pm.LocalPort, suffixStr))
-	}
-
-	// Check compatibility result with 500ms timeout
-	select {
-	case info := <-compatChan:
-		if info != nil && config.Version != "dev" {
-			if client.CompareVersions(config.Version, info.MinVersion) < 0 {
-				log.Fatalf("[Error] Your Liferay Tunnel client is too old to connect to the server. Minimum required version is %s.", info.MinVersion)
-			}
-			if client.CompareVersions(config.Version, info.LatestVersion) < 0 {
-				slog.Info(fmt.Sprintf("[Warning] A new version of Liferay Tunnel (%s) is available. You are running %s.", info.LatestVersion, config.Version))
-			}
-		}
-	case <-time.After(500 * time.Millisecond):
-		// Silent timeout if server is slow or offline
 	}
 
 	// 5. Registration Handshake

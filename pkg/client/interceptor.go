@@ -79,6 +79,7 @@ type InterceptorEngine struct {
 	PublicURLs         []string
 	LanguagePreference string
 	ThemePreference    string
+	ServerVersion      string
 
 	// Latency & Bandwidth Simulation Settings
 	Latency        time.Duration

@@ -180,6 +180,8 @@
             </div>
             
             <div class="sidebar-footer">
+                <div id="nav-system" class="nav-item" onclick="showTab('system')" data-i18n="sidebar_system">System Settings</div>
+
                 <div id="nav-account" class="nav-item" onclick="showTab('account')" data-i18n="sidebar_account">Account Settings</div>
                 <div class="nav-item" onclick="logout()">Logout</div>
                 <a href="https://status.lfr-demo.se" target="_blank" rel="noopener noreferrer" style="font-size: 11px; color: var(--text-muted); text-decoration: none; display: flex; align-items: center; gap: 6px; padding-left: 16px; margin-top: 12px; transition: 0.2s;" onmouseover="this.style.color='var(--primary)'" onmouseout="this.style.color='var(--text-muted)'">
@@ -1091,6 +1093,12 @@
                     <span id="detail-user-origin" style="display: inline-block; margin-top: 4px;"></span>
                 </div>
                 <div>
+                    <label data-i18n="user_lbl_preferred_domain" style="display:block; color: var(--text-muted); font-size: 11px; text-transform: uppercase; font-weight: 600;">Preferred Domain</label>
+                    <select id="detail-user-preferred-domain" style="margin-top: 4px; background: rgba(0,0,0,0.2); border: 1px solid var(--border); color: var(--text); border-radius: 4px; padding: 2px 4px; font-size: 13px;" onchange="updateUserPreferredDomain()">
+                        <option value="">Default (Contextual)</option>
+                    </select>
+                </div>
+                <div>
                     <label data-i18n="user_lbl_joined" style="display:block; color: var(--text-muted); font-size: 11px; text-transform: uppercase; font-weight: 600;">Joined Date</label>
                     <span id="detail-user-joined" style="font-size: 13px;"></span>
                 </div>
@@ -1220,5 +1228,37 @@
     <div id="toast-container"></div>
     <script src="https://cdn.jsdelivr.net/npm/driver.js@1.3.1/dist/driver.js.iife.js"></script>
     <script src="static/dashboard.js"></script>
+
+        <div id="tab-system" class="tab-content" style="display: none; padding: 32px; max-width: 800px; margin: 0 auto;">
+            <div class="panel">
+                <h2 data-i18n="system_settings_title">System Settings</h2>
+                <p style="color: var(--text-muted); margin-bottom: 24px;" data-i18n="system_settings_desc">Configure global server behavior and defaults.</p>
+                
+                <div class="form-group" style="margin-bottom: 20px;">
+                    <label data-i18n="domain_allocation_rule">Domain Allocation Rule</label>
+                    <p style="font-size: 13px; color: var(--text-muted); margin-bottom: 8px;" data-i18n="domain_allocation_rule_desc">Determine how domains are selected when a user requests a new tunnel.</p>
+                    <select id="system-domain-allocation-rule" class="form-control" style="width: 100%; max-width: 400px; padding: 10px; border-radius: 6px; border: 1px solid var(--border-color); background: var(--bg-dark); color: var(--text-color);">
+                        <option value="contextual">Contextual (Match requesting domain)</option>
+                        <option value="preference">Preference (Use configured domain list order)</option>
+                        <option value="user-preference">User Preference (Use user's preferred domain)</option>
+                        <option value="round-robin">Round Robin (Sequential load balancing)</option>
+                        <option value="hashing">Deterministic Hashing (Consistent for user/IP)</option>
+                        <option value="least-connections">Least Connections (Load-based allocation)</option>
+                        <option value="random">Random Allocation</option>
+                    </select>
+                </div>
+
+                <div class="form-group" style="margin-bottom: 24px;">
+                    <label data-i18n="default_domain">Default Domain Fallback</label>
+                    <p style="font-size: 13px; color: var(--text-muted); margin-bottom: 8px;" data-i18n="default_domain_desc">The fallback domain to use if the allocation rule fails to make a decision.</p>
+                    <select id="system-default-domain" class="form-control" style="width: 100%; max-width: 400px; padding: 10px; border-radius: 6px; border: 1px solid var(--border-color); background: var(--bg-dark); color: var(--text-color);">
+                        <!-- Options populated via JS -->
+                    </select>
+                </div>
+
+                <button class="btn btn-primary" onclick="saveSystemSettings()" data-i18n="save_settings">Save Settings</button>
+            </div>
+        </div>
+    <script src="/static/dashboard.js"></script>
 </body>
 </html>

@@ -1538,3 +1538,86 @@ func (s *Server) handleEdgeAction(w http.ResponseWriter, r *http.Request) {
 
 	respondJSON(w, http.StatusOK, map[string]string{"status": "success"})
 }
+
+// handleAdminOverridePreferredDomain overrides a user's preferred domain.
+func (s *Server) handleAdminOverridePreferredDomain(w http.ResponseWriter, r *http.Request, actor string) {
+	suffix := strings.TrimPrefix(r.URL.Path, "/api/admin/users/")
+	parts := strings.Split(suffix, "/")
+	if len(parts) < 2 || parts[1] != "preferred-domain" {
+		http.Error(w, `{"error":"Invalid URL path"}`, http.StatusBadRequest)
+		return
+	}
+	email, err := url.PathUnescape(parts[0])
+	if err != nil {
+		http.Error(w, `{"error":"Invalid user email"}`, http.StatusBadRequest)
+		return
+	}
+
+	var req struct {
+		PreferredDomain string `json:"preferred_domain"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		http.Error(w, `{"error":"Invalid request"}`, http.StatusBadRequest)
+		return
+	}
+
+	user, err := s.portalService.AdminOverridePreferredDomain(actor, email, req.PreferredDomain, getClientIP(r))
+	if err != nil {
+		if err == ErrNotFound {
+			http.Error(w, `{"error":"User not found"}`, http.StatusNotFound)
+			return
+		}
+		http.Error(w, `{"error":"Failed to update user"}`, http.StatusInternalServerError)
+		return
+	}
+
+	s.writeAudit(actor, "user.updated", "user", email, "Preferred domain updated to "+req.PreferredDomain, r)
+
+	respondJSON(w, http.StatusOK, user)
+}
+
+// handleAdminGetSystemSettings retrieves the current system settings.
+func (s *Server) handleAdminGetSystemSettings(w http.ResponseWriter, r *http.Request, actor string) {
+	rule := s.cfg.DomainAllocationRule
+	defaultDomain := s.cfg.DefaultDomain
+
+	if s.db != nil {
+		if dbRule, err := s.db.GetAdminSetting("domain_allocation_rule"); err == nil && dbRule != "" {
+			rule = dbRule
+		}
+		if dbDef, err := s.db.GetAdminSetting("default_domain"); err == nil && dbDef != "" {
+			defaultDomain = dbDef
+		}
+	}
+
+	respondJSON(w, http.StatusOK, map[string]interface{}{
+		"domain_allocation_rule": rule,
+		"default_domain":         defaultDomain,
+	})
+}
+
+// handleAdminUpdateSystemSettings updates the system settings.
+func (s *Server) handleAdminUpdateSystemSettings(w http.ResponseWriter, r *http.Request, actor string) {
+	var req struct {
+		DomainAllocationRule string `json:"domain_allocation_rule"`
+		DefaultDomain        string `json:"default_domain"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		http.Error(w, `{"error":"Invalid request"}`, http.StatusBadRequest)
+		return
+	}
+
+	if s.db != nil {
+		if err := s.db.SetAdminSetting("domain_allocation_rule", req.DomainAllocationRule); err != nil {
+			http.Error(w, `{"error":"Failed to save domain allocation rule"}`, http.StatusInternalServerError)
+			return
+		}
+		if err := s.db.SetAdminSetting("default_domain", req.DefaultDomain); err != nil {
+			http.Error(w, `{"error":"Failed to save default domain"}`, http.StatusInternalServerError)
+			return
+		}
+		s.writeAudit(actor, "system.settings.updated", "system", "all", "Updated Domain Allocation Rule to "+req.DomainAllocationRule+" and Default Domain to "+req.DefaultDomain, r)
+	}
+
+	respondJSON(w, http.StatusOK, req)
+}

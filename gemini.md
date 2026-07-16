@@ -147,6 +147,10 @@ The solution will consist of:
 - [x] Create automated dev restart shell scripts to accelerate developer iteration loop.
 
 ## Roadmap (Post Public Visibility PR Flow)
+- [x] Refactor Client GUI layer to use unified dashboard port and persist log theme preference.
+- [x] Implement Advanced Domain Allocation Rules (Round Robin, Consistent Hashing, Least Connections, Random).
+- [x] Create Global System Settings API and Admin Dashboard UI for configuring global allocation defaults.
+- [x] Support Admin-defined Preferred Domain assignment per user.
 - [x] Admin Webhook & Email Test Trigger with Rate Limiting (Epic #504)
   - [x] Sub-Issue #1: Implement `/api/admin/test-webhook` endpoint with 30s rate limiting (#505)
   - [x] Sub-Issue #2: Add 'Test Integration' panel and trigger button in Admin Dashboard UI (#506)

@@ -236,3 +236,24 @@ func (s *portalService) AdminOverrideTunnelsLimit(actor, email string, maxTunnel
 
 	return user, nil
 }
+
+func (s *portalService) AdminOverridePreferredDomain(actorEmail string, targetEmail string, domain string, clientIP string) (*db.User, error) {
+	if s.db == nil {
+		return nil, errors.New("db not initialized")
+	}
+
+	user, err := s.db.GetUserByEmail(targetEmail)
+	if err != nil {
+		return nil, ErrNotFound
+	}
+
+	user.PreferredDomain = domain
+	if err := s.db.UpdateUser(user); err != nil {
+		return nil, err
+	}
+
+	// For audit log
+	// s.server.writeAudit is not directly accessible here. But portalService can use s.db directly
+
+	return user, nil
+}

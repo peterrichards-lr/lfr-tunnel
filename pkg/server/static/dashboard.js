@@ -2857,14 +2857,62 @@ applyTheme(currentUser.theme_preference);
                 showToast('Failed to override limit: ' + (err.error || 'Unknown error'), 'danger');
             }
         }
+        async function updateUserPreferredDomain() {
+            if (!_currentModalUserId) return;
+            const select = document.getElementById('detail-user-preferred-domain');
+            const domain = select.value;
+            
+            try {
+                const res = await fetch(`/api/admin/users/${_currentModalUserId}/preferred-domain`, {
+                    method: 'PUT',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'Authorization': `Bearer ${window.localStorage.getItem('token')}`
+                    },
+                    body: JSON.stringify({ preferred_domain: domain })
+                });
+                
+                if (res.ok) {
+                    showToast('Preferred domain updated successfully', 'success');
+                    loadUsers();
+                } else {
+                    const err = await res.json();
+                    showToast('Failed to update preferred domain: ' + (err.error || 'Unknown error'), 'danger');
+                }
+            } catch (e) {
+                console.error(e);
+                showToast('Network error updating preferred domain', 'danger');
+            }
+        }
 
         // USER DETAILS & TUNNELS MODAL CONTROLLERS
-        function openUserDetailsModal(userJsonEncoded) {
+        let _currentModalUserId = '';
+        async function openUserDetailsModal(userJsonEncoded) {
             const u = JSON.parse(decodeURIComponent(userJsonEncoded));
+            _currentModalUserId = u.id;
             
             // Set user email and name
             document.getElementById('detail-user-email').innerText = u.email;
             document.getElementById('detail-user-name').innerText = `${u.first_name || ''} ${u.last_name || ''}`.trim() || 'N/A';
+            
+            // Populate preferred domain
+            try {
+                const res = await fetch('/api/domains');
+                if (res.ok) {
+                    const domains = await res.json() || [];
+                    const select = document.getElementById('detail-user-preferred-domain');
+                    select.innerHTML = '<option value="">Default (Contextual)</option>';
+                    domains.forEach(d => {
+                        const opt = document.createElement('option');
+                        opt.value = d;
+                        opt.textContent = d;
+                        select.appendChild(opt);
+                    });
+                    select.value = u.preferred_domain || '';
+                }
+            } catch (e) {
+                console.error("Failed to load domains for user modal", e);
+            }
             
             // Set role and status badges
             const roleEl = document.getElementById('detail-user-role');
@@ -4555,3 +4603,62 @@ applyTheme(currentUser.theme_preference);
         window.filterConfigTree = function() {
             renderConfigTree();
         };
+
+async function loadSystemSettings() {
+    try {
+        const vRes = await fetch('/api/version');
+        if (vRes.ok) {
+            const vData = await vRes.json();
+            const domains = vData.supported_domains || [];
+            const select = document.getElementById('system-default-domain');
+            select.innerHTML = '<option value="">None (Force Error if Contextual Fails)</option>';
+            domains.forEach(d => {
+                const opt = document.createElement('option');
+                opt.value = d;
+                opt.textContent = d;
+                select.appendChild(opt);
+            });
+        }
+
+        const res = await fetch('/api/admin/system-settings');
+        if (res.ok) {
+            const data = await res.json();
+            const ruleSelect = document.getElementById('system-domain-allocation-rule');
+            if (data.domain_allocation_rule) {
+                ruleSelect.value = data.domain_allocation_rule;
+            }
+            const domSelect = document.getElementById('system-default-domain');
+            if (data.default_domain) {
+                domSelect.value = data.default_domain;
+            }
+        }
+    } catch (e) {
+        console.error("Failed to load system settings", e);
+    }
+}
+
+async function saveSystemSettings() {
+    const rule = document.getElementById('system-domain-allocation-rule').value;
+    const defaultDom = document.getElementById('system-default-domain').value;
+
+    try {
+        const res = await fetch('/api/admin/system-settings', {
+            method: 'PUT',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify({
+                domain_allocation_rule: rule,
+                default_domain: defaultDom
+            })
+        });
+
+        if (res.ok) {
+            alert(translate('settings_saved', 'System settings saved successfully.'));
+        } else {
+            const err = await res.json();
+            alert("Error: " + (err.error || 'Failed to save settings'));
+        }
+    } catch (e) {
+        console.error("Failed to save system settings", e);
+        alert("Error saving settings");
+    }
+}

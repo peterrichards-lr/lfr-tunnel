@@ -109,6 +109,9 @@ type ServerConfig struct {
 	SSOProviders []SSOProviderConfig `yaml:"sso_providers"`
 
 	ViewConfigAllowedRole string `yaml:"view_config_allowed_role"`
+
+	DomainAllocationRule string `yaml:"domain_allocation_rule"`
+	DefaultDomain        string `yaml:"default_domain"`
 }
 
 type RoleSetting struct {

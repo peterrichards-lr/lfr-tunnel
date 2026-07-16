@@ -17,6 +17,7 @@ import (
 	"io"
 	"log"
 	"log/slog"
+	mathrand "math/rand"
 	"net"
 	"net/http"
 	"net/http/httputil"
@@ -25,6 +26,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"regexp"
+	"sort"
 	"strconv"
 	"strings"
 	"sync"
@@ -80,6 +82,7 @@ type RegisterResponse struct {
 	PortalURL          string   `json:"portal_url,omitempty"`
 	LanguagePreference string   `json:"language_preference,omitempty"`
 	ThemePreference    string   `json:"theme_preference,omitempty"`
+	ServerVersion      string   `json:"server_version,omitempty"`
 }
 
 // CheckSubdomainResponse represents the JSON response payload for subdomain checks.
@@ -191,6 +194,7 @@ type Server struct {
 	webhooks           *webhook.WebhookService
 	lastTestTimes      map[string]time.Time
 	testLimiterMu      sync.Mutex
+	roundRobinCounter  uint64
 }
 
 // NewServer initializes and returns a new Server instance.
@@ -1074,14 +1078,14 @@ func (s *Server) handleRegister(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Determine active domains to register dynamically based on request Host
-	activeDomains := s.getActiveDomainsForRequest(r)
-
-	// Fetch database user record if available to enforce user-level quota
+	// Fetch database user record if available to enforce user-level quota and preferences
 	var userRec *db.User
 	if s.db != nil {
 		userRec, _ = s.db.GetUser(user.ID)
 	}
+
+	// Determine active domains to register dynamically based on rules and request Host
+	activeDomains := s.getActiveDomainsForRequest(r, userRec)
 
 	// Validate custom domain format if provided
 	if req.CustomDomain != "" && !isValidCustomDomain(req.CustomDomain) {
@@ -1210,13 +1214,27 @@ func (s *Server) handleRegister(w http.ResponseWriter, r *http.Request) {
 				return
 			}
 		} else {
-			// Custom subdomain requested
 			// 1. Verify availability in registry (in-memory leases)
-			available, reason := s.registry.CheckSubdomain(req.SubdomainPrefix, activeDomains)
+			var available bool
+			var reason string
+			var pickedDomain string
+
+			for _, d := range activeDomains {
+				avail, rsn := s.registry.CheckSubdomain(req.SubdomainPrefix, []string{d})
+				if avail {
+					available = true
+					pickedDomain = d
+					break
+				}
+				reason = rsn
+			}
+
 			if !available {
 				s.respondRegisterResponse(w, http.StatusConflict, r, RegisterResponse{Status: "error", Error: "Subdomain is already taken: " + reason})
 				return
 			}
+
+			activeDomains = []string{pickedDomain}
 
 			// 2. Verify reservation and quarantine rules in DB
 			if s.db != nil {
@@ -1427,6 +1445,7 @@ func (s *Server) handleRegister(w http.ResponseWriter, r *http.Request) {
 		Warning:            warning,
 		LanguagePreference: langPref,
 		ThemePreference:    themePref,
+		ServerVersion:      config.Version,
 	})
 }
 
@@ -1439,6 +1458,7 @@ func (s *Server) respondRegisterResponse(w http.ResponseWriter, status int, r *h
 		}
 		resp.PortalURL = portalURL
 	}
+	resp.ServerVersion = config.Version
 	respondJSON(w, status, resp)
 }
 
@@ -1514,10 +1534,31 @@ func (s *Server) handleCheckSubdomain(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Determine active domains to check dynamically based on request Host
-	activeDomains := s.getActiveDomainsForRequest(r)
+	var userRec *db.User
+	if s.db != nil {
+		userRec, _ = s.db.GetUser(user.ID)
+	}
 
-	available, reason := s.registry.CheckSubdomain(subdomain, activeDomains)
+	// Determine active domains to check dynamically based on request Host
+	activeDomains := s.getActiveDomainsForRequest(r, userRec)
+
+	var available bool
+	var reason string
+	var pickedDomain string
+
+	for _, d := range activeDomains {
+		avail, rsn := s.registry.CheckSubdomain(subdomain, []string{d})
+		if avail {
+			available = true
+			pickedDomain = d
+			break
+		}
+		reason = rsn
+	}
+
+	if available {
+		activeDomains = []string{pickedDomain}
+	}
 	resp := CheckSubdomainResponse{
 		Available: available,
 		Subdomain: subdomain,
@@ -2144,34 +2185,144 @@ func (s *Server) Stop() {
 	}
 }
 
-// getActiveDomainsForRequest extracts the requested root domain from the HTTP Host header.
-// It returns a slice with only the matched domain if the Host header matches Domain1 or Domain2,
-// keeping them independent. It falls back to all configured domains if no match is found.
-func (s *Server) getActiveDomainsForRequest(r *http.Request) []string {
+// getActiveDomainsForRequest evaluates the configured DomainAllocationRule to return a sorted slice of candidate domains.
+// It falls back to contextual or preference rules as necessary.
+func (s *Server) getActiveDomainsForRequest(r *http.Request, user *db.User) []string {
 	host := r.Host
 	if h, _, err := net.SplitHostPort(host); err == nil {
 		host = h
 	}
 	host = strings.ToLower(host)
 
-	var matchedDomain string
-	for _, d := range s.cfg.Domains {
-		if strings.Contains(host, strings.ToLower(d)) || host == strings.ToLower(d) {
-			matchedDomain = d
-			break
+	rule := s.cfg.DomainAllocationRule
+	if s.db != nil {
+		if dbRule, err := s.db.GetAdminSetting("domain_allocation_rule"); err == nil && dbRule != "" {
+			rule = dbRule
+		}
+	}
+	if rule == "" {
+		rule = "contextual"
+	}
+
+	if rule == "user-preference" {
+		if user != nil && user.PreferredDomain != "" {
+			for _, d := range s.cfg.Domains {
+				if d == user.PreferredDomain {
+					return []string{d}
+				}
+			}
+		}
+		// Fallback if no user pref or invalid pref
+		rule = "contextual"
+	}
+
+	if rule == "contextual" {
+		for _, d := range s.cfg.Domains {
+			if strings.Contains(host, strings.ToLower(d)) || host == strings.ToLower(d) {
+				return []string{d}
+			}
+		}
+		// Fallback to default domain if configured
+		defaultDom := s.cfg.DefaultDomain
+		if s.db != nil {
+			if dbDef, err := s.db.GetAdminSetting("default_domain"); err == nil && dbDef != "" {
+				defaultDom = dbDef
+			}
+		}
+		if defaultDom != "" {
+			for _, d := range s.cfg.Domains {
+				if d == defaultDom {
+					return []string{d}
+				}
+			}
+		}
+		// Fallback to preference
+		rule = "preference"
+	}
+
+	if rule == "hashing" {
+		if len(s.cfg.Domains) > 0 {
+			var hashStr string
+			if user != nil {
+				hashStr = user.ID
+			} else {
+				hashStr = getClientIP(r)
+			}
+			h := sha256.New()
+			h.Write([]byte(hashStr))
+			hashBytes := h.Sum(nil)
+			var idx uint64
+			for i := 0; i < 8; i++ {
+				idx = (idx << 8) | uint64(hashBytes[i])
+			}
+			startIdx := int(idx % uint64(len(s.cfg.Domains)))
+			var ordered []string
+			for i := 0; i < len(s.cfg.Domains); i++ {
+				ordered = append(ordered, s.cfg.Domains[(startIdx+i)%len(s.cfg.Domains)])
+			}
+			return ordered
 		}
 	}
 
-	if matchedDomain != "" {
-		return []string{matchedDomain}
+	if rule == "least-connections" {
+		if len(s.cfg.Domains) > 0 {
+			counts := make(map[string]int)
+			for _, d := range s.cfg.Domains {
+				counts[d] = 0
+			}
+
+			s.registry.RLock()
+			for host := range s.registry.leases {
+				for _, d := range s.cfg.Domains {
+					if strings.HasSuffix(host, "."+d) {
+						counts[d]++
+						break
+					}
+				}
+			}
+			s.registry.RUnlock()
+
+			activeDomains := make([]string, len(s.cfg.Domains))
+			copy(activeDomains, s.cfg.Domains)
+			sort.SliceStable(activeDomains, func(i, j int) bool {
+				return counts[activeDomains[i]] < counts[activeDomains[j]]
+			})
+			return activeDomains
+		}
 	}
 
-	activeDomains := make([]string, len(s.cfg.Domains))
-	copy(activeDomains, s.cfg.Domains)
-	if len(activeDomains) == 0 {
-		activeDomains = append(activeDomains, "localhost")
+	if rule == "round-robin" {
+		idx := atomic.AddUint64(&s.roundRobinCounter, 1)
+		if len(s.cfg.Domains) > 0 {
+			startIdx := int(idx) % len(s.cfg.Domains)
+			var ordered []string
+			for i := 0; i < len(s.cfg.Domains); i++ {
+				ordered = append(ordered, s.cfg.Domains[(startIdx+i)%len(s.cfg.Domains)])
+			}
+			return ordered
+		}
 	}
-	return activeDomains
+
+	if rule == "random" {
+		if len(s.cfg.Domains) > 0 {
+			activeDomains := make([]string, len(s.cfg.Domains))
+			copy(activeDomains, s.cfg.Domains)
+			mathrand.Shuffle(len(activeDomains), func(i, j int) {
+				activeDomains[i], activeDomains[j] = activeDomains[j], activeDomains[i]
+			})
+			return activeDomains
+		}
+	}
+
+	if rule == "preference" {
+		if len(s.cfg.Domains) > 0 {
+			activeDomains := make([]string, len(s.cfg.Domains))
+			copy(activeDomains, s.cfg.Domains)
+			return activeDomains
+		}
+	}
+
+	return []string{"localhost"}
 }
 
 // isValidToken checks if a token is valid, checking personal access tokens (PATs)
@@ -2431,6 +2582,11 @@ func (s *Server) handleAdminEndpoints(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	if r.Method == http.MethodPut && strings.HasPrefix(r.URL.Path, "/api/admin/users/") && strings.HasSuffix(r.URL.Path, "/preferred-domain") {
+		s.handleAdminOverridePreferredDomain(w, r, actor)
+		return
+	}
+
 	if r.Method == http.MethodGet && strings.HasPrefix(r.URL.Path, "/api/admin/users/") {
 		s.handleAdminGetUser(w, r, actor)
 		return
@@ -2443,6 +2599,16 @@ func (s *Server) handleAdminEndpoints(w http.ResponseWriter, r *http.Request) {
 
 	if r.Method == http.MethodDelete && strings.HasPrefix(r.URL.Path, "/api/admin/users/") {
 		s.handleAdminDeleteUser(w, r, actor)
+		return
+	}
+
+	if r.Method == http.MethodGet && r.URL.Path == "/api/admin/system-settings" {
+		s.handleAdminGetSystemSettings(w, r, actor)
+		return
+	}
+
+	if r.Method == http.MethodPut && r.URL.Path == "/api/admin/system-settings" {
+		s.handleAdminUpdateSystemSettings(w, r, actor)
 		return
 	}
 
@@ -4536,7 +4702,7 @@ type EdgeLease struct {
 }
 
 func (s *Server) handleEdgeRegisterProxy(w http.ResponseWriter, r *http.Request, req RegisterRequest) {
-	activeDomains := s.getActiveDomainsForRequest(r)
+	activeDomains := s.getActiveDomainsForRequest(r, nil)
 	edgeReqPayload := struct {
 		RegisterRequest
 		Domains  []string `json:"domains"`
@@ -4610,6 +4776,7 @@ func (s *Server) handleEdgeRegisterProxy(w http.ResponseWriter, r *http.Request,
 		Remotes:         remotes,
 		Domains:         activeDomains,
 		Warning:         warning,
+		ServerVersion:   config.Version,
 	})
 }
 

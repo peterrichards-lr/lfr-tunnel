@@ -139,7 +139,7 @@ func StartInspector(port int, engine *InterceptorEngine) (int, error) {
 			"status":           status,
 			"version":          config.Version,
 			"client_version":   config.Version,
-			"server_version":   "n/a",
+			"server_version":   engine.ServerVersion,
 			"server_url":       engine.ServerURL,
 			"client_subdomain": engine.ClientSubdomain,
 			"log_file":         logFile,

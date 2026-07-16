@@ -22,6 +22,13 @@ var InspectorHTML []byte
 //go:embed logs.html
 var LogsHTML []byte
 
+//go:embed favicon-light.svg
+var FaviconSVG []byte
+
+func GetEmbeddedFaviconSVG() []byte {
+	return FaviconSVG
+}
+
 // StartInspector starts the local web dashboard for the given engine.
 // If the requested port is in use, it will auto-increment up to 10 times to find a free port.
 func StartInspector(port int, engine *InterceptorEngine) (int, error) {
@@ -34,6 +41,12 @@ func StartInspector(port int, engine *InterceptorEngine) (int, error) {
 		}
 		w.Header().Set("Content-Type", "text/html; charset=utf-8")
 		_, _ = w.Write(InspectorHTML)
+	})
+
+	mux.HandleFunc("/favicon.ico", func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "image/svg+xml")
+		w.Header().Set("Cache-Control", "public, max-age=86400")
+		_, _ = w.Write(FaviconSVG)
 	})
 
 	mux.HandleFunc("/logs", func(w http.ResponseWriter, r *http.Request) {

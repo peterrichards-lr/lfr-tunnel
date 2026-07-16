@@ -531,8 +531,10 @@ type ServerPlatformInfo struct {
 }
 
 type ServerVersionInfo struct {
-	LatestVersion   string                        `json:"latest_version"`
-	MinVersion      string                        `json:"min_version"`
+	LatestVersion   string `json:"latest_version"`
+	MinVersion      string `json:"min_version"`
+	MaintenanceMode string `json:"maintenance_mode"`
+
 	ClientPlatforms map[string]ServerPlatformInfo `json:"client_platforms"`
 }
 

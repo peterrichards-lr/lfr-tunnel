@@ -853,8 +853,8 @@ function setLanguage(lang) {
                 document.getElementById('cfg-dest-port').value = cfg.dest_port || 8080;
                 document.getElementById('cfg-target-host').value = cfg.target_host || 'localhost';
                 document.getElementById('cfg-subdomain').value = cfg.subdomain || '';
-                document.getElementById('cfg-preserve-host').checked = cfg.preserve_host === "true";
-                document.getElementById('cfg-insecure-skip-verify').checked = cfg.insecure_skip_verify === "true";
+                document.getElementById('cfg-preserve-host').checked = !!cfg.preserve_host;
+                document.getElementById('cfg-insecure-skip-verify').checked = !!cfg.insecure_skip_verify;
                 document.getElementById('cfg-theme').value = localStorage.getItem('inspector_theme') || '';
                 
                 setLanguage(currentLang);

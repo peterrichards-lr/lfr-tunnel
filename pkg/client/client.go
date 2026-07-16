@@ -56,6 +56,7 @@ type RegisterResponse struct {
 	PortalURL          string   `json:"portal_url,omitempty"`
 	LanguagePreference string   `json:"language_preference,omitempty"`
 	ThemePreference    string   `json:"theme_preference,omitempty"`
+	ServerVersion      string   `json:"server_version,omitempty"`
 }
 
 type RegistrationError struct {

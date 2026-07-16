@@ -881,6 +881,19 @@ function setLanguage(lang) {
                 const preserveHost = document.getElementById('cfg-preserve-host').checked;
                 const insecureSkipVerify = document.getElementById('cfg-insecure-skip-verify').checked;
                 
+                if (!serverUrl.startsWith('http://') && !serverUrl.startsWith('https://')) {
+                    throw new Error('Server URL must start with http:// or https://');
+                }
+                if (destPort < 1 || destPort > 65535) {
+                    throw new Error('Destination Port must be between 1 and 65535');
+                }
+                if (!targetHost.trim()) {
+                    throw new Error('Target Host cannot be empty');
+                }
+                if (subdomain && !/^[a-zA-Z0-9\-]+$/.test(subdomain)) {
+                    throw new Error('Subdomain can only contain letters, numbers, and hyphens');
+                }
+                
                 const res = await fetch('/api/config', {
                     method: 'POST',
                     headers: {'Content-Type': 'application/json'},

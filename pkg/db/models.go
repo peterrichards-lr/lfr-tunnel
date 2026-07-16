@@ -63,6 +63,7 @@ type User struct {
 	ClaimToken         string     `json:"-"`
 	Timezone           string     `json:"timezone"`
 	AuthMethod         string     `json:"auth_method"`
+	PreferredDomain    string     `json:"preferred_domain"`
 	ThemePreference    string     `json:"theme_preference"`
 	NotificationPrefs  string     `json:"notification_prefs"`
 	CreatedAt          time.Time  `json:"created_at"`

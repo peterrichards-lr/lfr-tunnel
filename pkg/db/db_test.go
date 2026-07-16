@@ -1032,14 +1032,14 @@ func TestSchemaMigrationVersioning(t *testing.T) {
 	database, tmpDir := setupTestDB(t)
 	defer cleanupTestDB(database, tmpDir)
 
-	// 1. Verify that schema_version table is created and populated with version 16
+	// 1. Verify that schema_version table is created and populated with version 17
 	var maxVersion int
 	err := database.conn.QueryRow("SELECT COALESCE(MAX(version), 0) FROM schema_version").Scan(&maxVersion)
 	if err != nil {
 		t.Fatalf("failed to query schema_version: %v", err)
 	}
-	if maxVersion != 16 {
-		t.Errorf("expected max schema version to be 16, got %d", maxVersion)
+	if maxVersion != 17 {
+		t.Errorf("expected max schema version to be 17, got %d", maxVersion)
 	}
 
 	// Count number of rows in schema_version. It should be 16.
@@ -1048,32 +1048,32 @@ func TestSchemaMigrationVersioning(t *testing.T) {
 	if err != nil {
 		t.Fatalf("failed to count schema_version rows: %v", err)
 	}
-	if count != 16 {
-		t.Errorf("expected 16 applied migrations in table, got %d", count)
+	if count != 17 {
+		t.Errorf("expected 17 applied migrations in table, got %d", count)
 	}
 
-	// 2. Manually delete version 16 from schema_version
-	_, err = database.conn.Exec("DELETE FROM schema_version WHERE version = 16")
+	// 2. Manually delete version 17 from schema_version
+	_, err = database.conn.Exec("DELETE FROM schema_version WHERE version = 17")
 	if err != nil {
 		t.Fatalf("failed to delete migration version: %v", err)
 	}
 
-	// 3. Re-run initSchema. It should detect version 15 as current max,
-	// and try to re-run migration 16.
-	// Since the table 'webhook_queue' already exists, it will return "table already exists" error,
+	// 3. Re-run initSchema. It should detect version 16 as current max,
+	// and try to re-run migration 17.
+	// Since the column 'preferred_domain' already exists, it will return "duplicate column name" error,
 	// which our migration system catches and handles by successfully marking it as applied again.
 	err = database.initSchema()
 	if err != nil {
 		t.Fatalf("re-running initSchema failed: %v", err)
 	}
 
-	// 4. Verify version 16 has been recorded as applied again
-	err = database.conn.QueryRow("SELECT COUNT(*) FROM schema_version WHERE version = 16").Scan(&count)
+	// 4. Verify version 17 has been recorded as applied again
+	err = database.conn.QueryRow("SELECT COUNT(*) FROM schema_version WHERE version = 17").Scan(&count)
 	if err != nil {
-		t.Fatalf("failed to query schema_version for version 16: %v", err)
+		t.Fatalf("failed to query schema_version for version 17: %v", err)
 	}
 	if count != 1 {
-		t.Errorf("expected migration 16 to be recorded as applied again, got %d", count)
+		t.Errorf("expected migration 17 to be recorded as applied again, got %d", count)
 	}
 }
 

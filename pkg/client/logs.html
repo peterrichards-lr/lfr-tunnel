@@ -167,13 +167,13 @@
         const themeBtn = document.getElementById('theme-toggle');
         const root = document.documentElement;
         
-        let currentTheme = localStorage.getItem('lfr-theme') || 'dark';
+        let currentTheme = localStorage.getItem('inspector_theme') || 'dark';
         root.setAttribute('data-theme', currentTheme);
 
         themeBtn.addEventListener('click', () => {
             currentTheme = currentTheme === 'dark' ? 'light' : 'dark';
             root.setAttribute('data-theme', currentTheme);
-            localStorage.setItem('lfr-theme', currentTheme);
+            localStorage.setItem('inspector_theme', currentTheme);
         });
 
         autoScrollCheckbox.addEventListener('change', (e) => {

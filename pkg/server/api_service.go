@@ -42,6 +42,7 @@ type PortalService interface {
 	AdminDemoteReservation(actor, idStr, ip string) (*db.SubdomainReservation, error)
 	AdminOverrideLimit(actor, email string, maxReservations *int, ip string) (*db.User, error)
 	AdminOverrideTunnelsLimit(actor, email string, maxActiveTunnels *int, ip string) (*db.User, error)
+	AdminOverridePreferredDomain(actor, email, domain, ip string) (*db.User, error)
 }
 
 type portalService struct {

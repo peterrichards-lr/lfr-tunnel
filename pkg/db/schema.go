@@ -13,6 +13,7 @@ func (db *DB) initSchema() error {
 		first_name TEXT,
 		last_name TEXT,
 		preferred_name TEXT DEFAULT '',
+		preferred_domain TEXT DEFAULT '',
 		role TEXT NOT NULL DEFAULT 'user',
 		status TEXT NOT NULL DEFAULT 'pending',
 		approval_token TEXT,
@@ -236,4 +237,5 @@ var migrations = []migration{
 	{14, "ALTER TABLE users ADD COLUMN onboarding_last_step TEXT DEFAULT ''"},
 	{15, "ALTER TABLE users ADD COLUMN onboarding_reruns INTEGER NOT NULL DEFAULT 0"},
 	{16, "CREATE TABLE IF NOT EXISTS webhook_queue (id INTEGER PRIMARY KEY AUTOINCREMENT, title TEXT NOT NULL, description TEXT NOT NULL, color TEXT NOT NULL, facts TEXT NOT NULL, created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP)"},
+	{17, "ALTER TABLE users ADD COLUMN preferred_domain TEXT DEFAULT ''"},
 }

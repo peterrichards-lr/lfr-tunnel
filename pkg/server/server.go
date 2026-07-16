@@ -3420,11 +3420,30 @@ func (s *Server) handleAdminMaintenance(w http.ResponseWriter, r *http.Request, 
 			// Nginx Hard Maintenance (Iron Curtain)
 			s.maintEndTime = time.Now().Add(time.Duration(req.Duration) * time.Minute)
 
-			templateBytes, err := staticFS.ReadFile("static/maintenance.html")
-			if err == nil {
+			var templateBytes []byte
+			var err error
+			useCustom := false
+
+			if s.db != nil {
+				if customPath, errPath := s.db.GetAdminSetting("maintenance_page_path"); errPath == nil && customPath != "" {
+					if b, errRead := os.ReadFile(customPath); errRead == nil {
+						templateBytes = b
+						useCustom = true
+					} else {
+						slog.Error(fmt.Sprintf("[Server] Failed to read custom maintenance page %s: %v", customPath, errRead))
+					}
+				}
+			}
+
+			if !useCustom {
+				templateBytes, err = staticFS.ReadFile("static/maintenance.html")
+				if err != nil {
+					slog.Info(fmt.Sprintf("[Server] Failed to load maintenance template: %v", err))
+				}
+			}
+
+			if len(templateBytes) > 0 {
 				s.nginxManager.Enable(req.Action, req.Reason, req.Duration, s.maintEndTime, string(templateBytes))
-			} else {
-				slog.Info(fmt.Sprintf("[Server] Failed to load maintenance template: %v", err))
 			}
 
 			action = "system.nginx_maintenance_enabled"
@@ -3541,10 +3560,27 @@ func (s *Server) handleVisitorMaintenancePage(w http.ResponseWriter, r *http.Req
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
 	w.WriteHeader(http.StatusServiceUnavailable)
 
-	htmlBytes, err := staticFS.ReadFile("static/maintenance.html")
-	if err != nil {
-		_, _ = w.Write([]byte(`<h1>Scheduled Maintenance</h1><p>The gateway is undergoing administrative updates.</p>`))
-		return
+	var htmlBytes []byte
+	var err error
+	useCustom := false
+
+	if s.db != nil {
+		if customPath, errPath := s.db.GetAdminSetting("maintenance_page_path"); errPath == nil && customPath != "" {
+			if b, errRead := os.ReadFile(customPath); errRead == nil {
+				htmlBytes = b
+				useCustom = true
+			} else {
+				slog.Error(fmt.Sprintf("[Server] Failed to read custom maintenance page %s: %v", customPath, errRead))
+			}
+		}
+	}
+
+	if !useCustom {
+		htmlBytes, err = staticFS.ReadFile("static/maintenance.html")
+		if err != nil {
+			_, _ = w.Write([]byte(`<h1>Scheduled Maintenance</h1><p>The gateway is undergoing administrative updates.</p>`))
+			return
+		}
 	}
 
 	htmlContent := string(htmlBytes)

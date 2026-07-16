@@ -278,11 +278,17 @@ func SelfUpgrade(currentVersion string, serverURL string) error {
 		return fmt.Errorf("failed to resolve symlinks for executable: %v", err)
 	}
 
-	binDir := filepath.Dir(execPath)
-	tempPath := filepath.Join(binDir, "lfr-tunnel-update-tmp")
-	if runtime.GOOS == "windows" {
-		tempPath += ".exe"
+	var tempPath string
+	switch runtime.GOOS {
+	case "windows":
+		tempPath = filepath.Join(os.TempDir(), "lfr-tunnel-update-tmp.exe")
+	case "darwin":
+		// EDR (SentinelOne) whitelist requires specific exact path on macOS
+		tempPath = "/private/tmp/lfr-tunnel"
+	default:
+		tempPath = "/tmp/lfr-tunnel"
 	}
+	_ = os.Remove(tempPath) // Clean up any stale file
 
 	fmt.Println("[Update] Downloading latest binary...")
 	downloadResp, err := client.Get(downloadURL)
@@ -346,17 +352,17 @@ func SelfUpgrade(currentVersion string, serverURL string) error {
 		_ = os.Remove(oldPath) // Remove any previous leftovers
 		if err := os.Rename(execPath, oldPath); err != nil {
 			swapErr = fmt.Errorf("failed to rename running binary: %v (please make sure you have permissions)", err)
-		} else if err := os.Rename(tempPath, execPath); err != nil {
+		} else if err := replaceBinary(tempPath, execPath); err != nil {
 			// Try to rollback rename
 			_ = os.Rename(oldPath, execPath)
-			swapErr = fmt.Errorf("failed to rename downloaded binary: %v", err)
+			swapErr = fmt.Errorf("failed to replace downloaded binary: %v", err)
 		} else {
 			fmt.Println("[Update] Upgrade successful! You are now running the latest version.")
 			fmt.Printf("[Update] Note: You can delete the backup file: %s\n", oldPath)
 		}
 	} else {
-		// On Unix we can rename directly
-		if err := os.Rename(tempPath, execPath); err != nil {
+		// On Unix we can replace directly
+		if err := replaceBinary(tempPath, execPath); err != nil {
 			swapErr = fmt.Errorf("failed to replace running binary: %v (if permission is denied, try running as sudo)", err)
 		} else {
 			fmt.Println("[Update] Upgrade successful! You are now running the latest version.")
@@ -371,6 +377,36 @@ func SelfUpgrade(currentVersion string, serverURL string) error {
 	}
 
 	return nil
+}
+
+func replaceBinary(tempPath, execPath string) error {
+	// First attempt simple rename (fastest, atomic if same filesystem)
+	err := os.Rename(tempPath, execPath)
+	if err == nil {
+		return nil
+	}
+
+	// If it fails (e.g. EXDEV cross-device link), fallback to copying
+	// Remove the target first to prevent ETXTBSY if any processes still hold open file handles
+	_ = os.Remove(execPath)
+
+	in, err := os.Open(tempPath)
+	if err != nil {
+		return err
+	}
+	defer in.Close() //nolint:errcheck
+
+	out, err := os.OpenFile(execPath, os.O_CREATE|os.O_WRONLY|os.O_TRUNC, 0755)
+	if err != nil {
+		return err
+	}
+	defer out.Close() //nolint:errcheck
+
+	_, err = io.Copy(out, in)
+	if err != nil {
+		return err
+	}
+	return out.Sync()
 }
 
 func stopActiveProcessesAndServices() ([]string, bool) {

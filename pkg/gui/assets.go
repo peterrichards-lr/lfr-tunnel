@@ -1,5 +1,3 @@
-//go:build !windows
-
 package gui
 
 import _ "embed"

@@ -9,7 +9,6 @@ import (
 	"log/slog"
 	"net/http"
 	"os"
-	"os/exec"
 	"os/signal"
 	"path/filepath"
 	"runtime"
@@ -23,6 +22,7 @@ import (
 	"lfr-tunnel/pkg/config"
 	"lfr-tunnel/pkg/gui"
 	"lfr-tunnel/pkg/mcp"
+	"lfr-tunnel/pkg/osutil"
 
 	"github.com/mattn/go-isatty"
 )
@@ -595,6 +595,33 @@ func getActiveSubdomains() ([]string, error) {
 }
 
 func handleBackground(sub string) {
+	isGUI := false
+	var childArgs []string
+	for _, arg := range os.Args[1:] {
+		if arg == "-background" || arg == "--background" {
+			continue
+		}
+		if arg == "-gui" || arg == "--gui" {
+			isGUI = true
+		}
+		childArgs = append(childArgs, arg)
+	}
+
+	execPath, err := os.Executable()
+	if err != nil {
+		log.Fatalf("[Client] Failed to get executable path: %v\n", err)
+	}
+
+	if isGUI {
+		cmd := osutil.BackgroundCommand(execPath, childArgs...)
+		cmd.Dir = "."
+		if err := cmd.Start(); err != nil {
+			log.Fatalf("[Client] Failed to start GUI in background: %v\n", err)
+		}
+		fmt.Println("[Client] GUI started in background.")
+		return
+	}
+
 	pid, err := readPID(sub)
 	if err == nil && pid > 0 && isPIDRunning(pid) {
 		log.Fatalf("[Client] A background tunnel for subdomain '%s' is already running (PID: %d). Stop it first using: lfr-tunnel -stop -subdomain %s\n", sub, pid, sub)
@@ -614,20 +641,7 @@ func handleBackground(sub string) {
 	}
 	defer logFile.Close() //nolint:errcheck
 
-	execPath, err := os.Executable()
-	if err != nil {
-		log.Fatalf("[Client] Failed to get executable path: %v\n", err)
-	}
-
-	var childArgs []string
-	for _, arg := range os.Args[1:] {
-		if arg == "-background" || arg == "--background" {
-			continue
-		}
-		childArgs = append(childArgs, arg)
-	}
-
-	cmd := exec.Command(execPath, childArgs...)
+	cmd := osutil.BackgroundCommand(execPath, childArgs...)
 	cmd.Stdout = logFile
 	cmd.Stderr = logFile
 	cmd.Dir = "."

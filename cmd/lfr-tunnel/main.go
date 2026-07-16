@@ -50,14 +50,15 @@ var (
 	inspectorPort    = flag.Int("inspector-port", 4040, "Local port for the Inspector Web UI")
 	addHeaders       arrayFlags
 	rateLimit        = flag.Int("rate-limit", 0, "Max requests per second for your subdomains (0 = unlimited)")
-	targetHost       = flag.String("target-host", "", "Target hostname or IP to route traffic to (e.g. my-project.local)")
-	preserveHost     = flag.Bool("preserve-host", false, "Preserve incoming Host header instead of rewriting to target host")
-	background       = flag.Bool("background", false, "Run client in background")
-	status           = flag.Bool("status", false, "Check status of the background tunnel")
-	statusJSON       = flag.Bool("status-json", false, "Print JSON status of the background tunnel")
-	stop             = flag.Bool("stop", false, "Stop the background tunnel")
-	versionFlag      = flag.Bool("version", false, "Print client version")
-	checkVersionFlag = flag.Bool("check-version", false, "Check server API for version requirements and print as JSON")
+	targetHost         = flag.String("target-host", "", "Target hostname or IP to route traffic to (e.g. my-project.local)")
+	preserveHost       = flag.Bool("preserve-host", false, "Preserve incoming Host header instead of rewriting to target host")
+	insecureSkipVerify = flag.Bool("insecure-skip-verify", false, "Allow insecure local SSL (Skip TLS Verification)")
+	background         = flag.Bool("background", false, "Run client in background")
+	status             = flag.Bool("status", false, "Check status of the background tunnel")
+	statusJSON         = flag.Bool("status-json", false, "Print JSON status of the background tunnel")
+	stop               = flag.Bool("stop", false, "Stop the background tunnel")
+	versionFlag        = flag.Bool("version", false, "Print client version")
+	checkVersionFlag   = flag.Bool("check-version", false, "Check server API for version requirements and print as JSON")
 	upgradeFlag      = flag.Bool("upgrade", false, "Self-upgrade client to the latest release")
 	noTUI            = flag.Bool("no-tui", false, "Disable interactive terminal dashboard UI")
 	passcode         = flag.String("passcode", "", "Passcode to protect the public tunnel URLs")
@@ -304,6 +305,10 @@ func overrideConfigWithFlags(cfg *config.ClientConfig) {
 	}
 	if *preserveHost {
 		_ = os.Setenv("LFT_PRESERVE_HOST", "true")
+		cfg.PreserveHost = true
+	}
+	if *insecureSkipVerify {
+		cfg.InsecureSkipVerify = true
 	}
 	if *passcode != "" {
 		cfg.Passcode = *passcode

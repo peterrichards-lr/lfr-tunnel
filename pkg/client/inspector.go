@@ -11,12 +11,16 @@ import (
 	"net"
 	"net/http"
 	"os"
+	"path/filepath"
 	"strings"
 	"time"
 )
 
 //go:embed inspector.html
 var InspectorHTML []byte
+
+//go:embed logs.html
+var LogsHTML []byte
 
 // StartInspector starts the local web dashboard for the given engine.
 // If the requested port is in use, it will auto-increment up to 10 times to find a free port.
@@ -30,6 +34,11 @@ func StartInspector(port int, engine *InterceptorEngine) (int, error) {
 		}
 		w.Header().Set("Content-Type", "text/html; charset=utf-8")
 		_, _ = w.Write(InspectorHTML)
+	})
+
+	mux.HandleFunc("/logs", func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "text/html; charset=utf-8")
+		_, _ = w.Write(LogsHTML)
 	})
 
 	mux.HandleFunc("/api/state", func(w http.ResponseWriter, r *http.Request) {
@@ -120,9 +129,20 @@ func StartInspector(port int, engine *InterceptorEngine) (int, error) {
 			authErrMsg = engine.AuthErrorMessage
 		}
 
+		home, _ := os.UserHomeDir()
+		logFile := ""
+		if engine.ClientSubdomain != "" {
+			logFile = fmt.Sprintf("%s/.lfr-tunnel/client-%s.log", home, engine.ClientSubdomain)
+		}
+
 		info := map[string]interface{}{
-			"status":  status,
-			"version": config.Version,
+			"status":           status,
+			"version":          config.Version,
+			"client_version":   config.Version,
+			"server_version":   "n/a",
+			"server_url":       engine.ServerURL,
+			"client_subdomain": engine.ClientSubdomain,
+			"log_file":         logFile,
 			"connection": map[string]interface{}{
 				"state":          engine.ConnState,
 				"uptime_seconds": uptimeSeconds,
@@ -157,6 +177,24 @@ func StartInspector(port int, engine *InterceptorEngine) (int, error) {
 
 		w.Header().Set("Content-Type", "application/json")
 		_ = json.NewEncoder(w).Encode(info)
+	})
+
+	mux.HandleFunc("/api/logs", func(w http.ResponseWriter, r *http.Request) {
+		home, err := os.UserHomeDir()
+		if err != nil || engine.ClientSubdomain == "" {
+			http.Error(w, "Log file not found", http.StatusNotFound)
+			return
+		}
+		logFile := filepath.Join(home, ".lfr-tunnel", fmt.Sprintf("client-%s.log", engine.ClientSubdomain))
+
+		data, err := os.ReadFile(logFile)
+		if err != nil {
+			http.Error(w, "Failed to read log file", http.StatusInternalServerError)
+			return
+		}
+
+		w.Header().Set("Content-Type", "text/plain; charset=utf-8")
+		_, _ = w.Write(data)
 	})
 
 	mux.HandleFunc("/api/config", func(w http.ResponseWriter, r *http.Request) {

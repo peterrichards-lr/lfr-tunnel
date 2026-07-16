@@ -59,6 +59,7 @@ type InterceptorEngine struct {
 	AuthErrorMessage  string
 	SubdomainReq      string
 	SubdomainAss      string
+	ClientSubdomain   string
 	SubdomainLeased   bool
 	SubdomainConflict bool
 	DestPort          int

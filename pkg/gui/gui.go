@@ -40,8 +40,11 @@ func (s *TempSettingsServer) Start() {
 
 	mux := http.NewServeMux()
 	mux.HandleFunc("/", s.handleRoot)
+	mux.HandleFunc("/logs", s.handleLogs)
 	mux.HandleFunc("/api/state", s.handleState)
 	mux.HandleFunc("/api/config", s.handleConfig)
+	mux.HandleFunc("/api/info", s.handleInfo)
+	mux.HandleFunc("/api/logs", s.handleApiLogs)
 
 	s.server = &http.Server{
 		Addr:    fmt.Sprintf("127.0.0.1:%d", s.port),
@@ -62,6 +65,60 @@ func (s *TempSettingsServer) handleRoot(w http.ResponseWriter, r *http.Request) 
 	}
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
 	_, _ = w.Write(client.InspectorHTML)
+}
+
+func (s *TempSettingsServer) handleLogs(w http.ResponseWriter, r *http.Request) {
+	w.Header().Set("Content-Type", "text/html; charset=utf-8")
+	_, _ = w.Write(client.LogsHTML)
+}
+
+func (s *TempSettingsServer) handleInfo(w http.ResponseWriter, r *http.Request) {
+	w.Header().Set("Content-Type", "application/json")
+	cfg, _ := config.LoadClientConfig("")
+	sub := "unknown"
+	url := "unknown"
+	if cfg != nil {
+		sub = cfg.Subdomain
+		url = cfg.ServerURL
+	}
+	home, _ := os.UserHomeDir()
+	logFile := filepath.Join(home, ".lfr-tunnel", fmt.Sprintf("client-%s.log", sub))
+
+	info := map[string]interface{}{
+		"status":           "unhealthy",
+		"version":          config.Version,
+		"client_version":   config.Version,
+		"server_version":   "n/a",
+		"server_url":       url,
+		"client_subdomain": sub,
+		"log_file":         logFile,
+	}
+	_ = json.NewEncoder(w).Encode(info)
+}
+
+func (s *TempSettingsServer) handleApiLogs(w http.ResponseWriter, r *http.Request) {
+	cfg, _ := config.LoadClientConfig("")
+	sub := ""
+	if cfg != nil {
+		sub = cfg.Subdomain
+	}
+	if sub == "" {
+		http.Error(w, "Subdomain not configured", http.StatusNotFound)
+		return
+	}
+	home, err := os.UserHomeDir()
+	if err != nil {
+		http.Error(w, "Home dir not found", http.StatusInternalServerError)
+		return
+	}
+	logFile := filepath.Join(home, ".lfr-tunnel", fmt.Sprintf("client-%s.log", sub))
+	data, err := os.ReadFile(logFile)
+	if err != nil {
+		http.Error(w, "Failed to read log file", http.StatusInternalServerError)
+		return
+	}
+	w.Header().Set("Content-Type", "text/plain; charset=utf-8")
+	_, _ = w.Write(data)
 }
 
 func (s *TempSettingsServer) handleState(w http.ResponseWriter, r *http.Request) {
@@ -281,6 +338,10 @@ func updateMenu(tray *systray.SystemTray, cfg *config.ClientConfig, isRunning bo
 		handleOpenInspector(cfg)
 	})
 
+	menu.Add("Open Live Logs", func() {
+		handleOpenLogs(cfg)
+	})
+
 	menu.Add("Settings...", func() {
 		openBrowser("http://127.0.0.1:55556/settings")
 	})
@@ -362,6 +423,15 @@ func handleOpenInspector(cfg *config.ClientConfig) {
 		openBrowser(state.InspectorURL)
 	} else {
 		openBrowser("http://127.0.0.1:55556")
+	}
+}
+
+func handleOpenLogs(cfg *config.ClientConfig) {
+	state, _, isRunning := getRunningState(cfg.Subdomain)
+	if isRunning && state != nil && state.InspectorURL != "" {
+		openBrowser(state.InspectorURL + "/logs")
+	} else {
+		openBrowser("http://127.0.0.1:55556/logs")
 	}
 }
 

@@ -1,7 +1,8 @@
 {
-  "version": "v1.37.4",
+  "version": "v1.38.0",
   "release_date": "2026-07-16",
   "features": [
+    "Feature: Implement Live Logs UI in Client Inspector",
     "Fix: Resolve ignored background flag when gui flag is present",
     "Fix: Resolve client UI localization bugs in English and other languages",
     "Fix: Align and fix E2E automated test suite for Playwright container compatibility",

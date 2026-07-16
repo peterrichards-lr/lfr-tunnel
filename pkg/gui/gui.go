@@ -101,7 +101,7 @@ func (s *TempSettingsServer) handleInfo(w http.ResponseWriter, r *http.Request) 
 				_ = res.Body.Close()
 			}()
 			var vResp struct {
-				Version string `json:"version"`
+				Version string `json:"server_version"`
 			}
 			if json.NewDecoder(res.Body).Decode(&vResp) == nil && vResp.Version != "" {
 				serverVer = vResp.Version

@@ -1,5 +1,5 @@
 {
-  "version": "v1.39.2",
+  "version": "v1.39.3",
   "release_date": "2026-07-16",
   "features": [
     "Fix: Resolve 'Preserve Host Header' UI checkbox state persistence bug",

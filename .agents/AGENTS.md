@@ -20,13 +20,12 @@ Before writing code for any feature or logic change:
    *Note: The script automatically links all sub-issues to the parent Epic.*
 
 ## 3. Resolving and Closing Tasks
-As you complete individual sub-issues:
-1. Update the target JSON file, changing the sub-issue's `"completed"` property to `true`.
-2. Execute the sync utility again:
+- **Pull Request Flow (Preferred)**: When your tasks are tied to code changes, do **NOT** set `"completed": true` in the JSON. Leave it as `false`. Instead, include `Closes #<issue-number>` in your Pull Request body or commit message so GitHub automatically closes the issue when the PR merges.
+- **Manual/Standalone Tasks**: ONLY for operational tasks that do NOT involve a PR (e.g. running scripts, config changes), you may set `"completed": true` and run the sync utility again:
    ```bash
    node scripts/gh-issue-sync.cjs scripts/feature-xyz-plan.json
    ```
-   *The utility will automatically detect the completed state, post a reference comment with the current git commit hash, and close the issue on GitHub.*
+   *The utility will automatically detect the completed state, post a reference comment with the current git commit hash, and forcefully close the issue on GitHub.*
 
 ## 4. Edge Node Propagation & State Synchronization
 - **Stateless Edge Nodes**: Regional Edge nodes (`lfr-tunneld` running with no DB) rely entirely on the Control Plane for authentication and validation. However, they maintain their own active memory `registry` of live tunnels.
@@ -52,4 +51,4 @@ If you ever ask the AI to "review the project documentation for outdated files",
 
 <!-- markdownlint-disable MD049 -->
 ---
-*Last Updated: 2026-07-02* | *Last Reviewed: 2026-07-02*
+*Last Updated: 2026-07-16* | *Last Reviewed: 2026-07-16*

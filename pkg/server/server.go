@@ -70,14 +70,15 @@ type RegisterRequest struct {
 
 // RegisterResponse represents the JSON response payload.
 type RegisterResponse struct {
-	Status          string   `json:"status"`
-	SessionToken    string   `json:"session_token,omitempty"`
-	SubdomainPrefix string   `json:"subdomain_prefix,omitempty"`
-	Remotes         []string `json:"remotes,omitempty"`
-	Domains         []string `json:"domains,omitempty"`
-	Error           string   `json:"error,omitempty"`
-	Warning         string   `json:"warning,omitempty"`
-	PortalURL       string   `json:"portal_url,omitempty"`
+	Status             string   `json:"status"`
+	SessionToken       string   `json:"session_token,omitempty"`
+	SubdomainPrefix    string   `json:"subdomain_prefix,omitempty"`
+	Remotes            []string `json:"remotes,omitempty"`
+	Domains            []string `json:"domains,omitempty"`
+	Error              string   `json:"error,omitempty"`
+	Warning            string   `json:"warning,omitempty"`
+	PortalURL          string   `json:"portal_url,omitempty"`
+	LanguagePreference string   `json:"language_preference,omitempty"`
 }
 
 // CheckSubdomainResponse represents the JSON response payload for subdomain checks.
@@ -1409,13 +1410,19 @@ func (s *Server) handleRegister(w http.ResponseWriter, r *http.Request) {
 
 	go s.BroadcastTelemetry()
 
+	var langPref string
+	if userRec != nil {
+		langPref = userRec.LanguagePreference
+	}
+
 	s.respondRegisterResponse(w, http.StatusOK, r, RegisterResponse{
-		Status:          "success",
-		SessionToken:    sessionToken,
-		SubdomainPrefix: req.SubdomainPrefix,
-		Remotes:         remotes,
-		Domains:         activeDomains,
-		Warning:         warning,
+		Status:             "success",
+		SessionToken:       sessionToken,
+		SubdomainPrefix:    req.SubdomainPrefix,
+		Remotes:            remotes,
+		Domains:            activeDomains,
+		Warning:            warning,
+		LanguagePreference: langPref,
 	})
 }
 

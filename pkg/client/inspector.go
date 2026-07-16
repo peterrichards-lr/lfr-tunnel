@@ -37,14 +37,15 @@ func StartInspector(port int, engine *InterceptorEngine) (int, error) {
 		defer engine.mu.RUnlock()
 
 		state := map[string]interface{}{
-			"maintenance_mode": engine.MaintenanceMode,
-			"added_headers":    engine.AddedHeaders,
-			"history":          engine.History,
-			"passcode":         engine.Passcode,
-			"whitelist_ips":    engine.WhitelistIPs,
-			"access_mode":      engine.AccessMode,
-			"assigned":         engine.SubdomainAss,
-			"public_urls":      engine.PublicURLs,
+			"maintenance_mode":    engine.MaintenanceMode,
+			"added_headers":       engine.AddedHeaders,
+			"history":             engine.History,
+			"passcode":            engine.Passcode,
+			"whitelist_ips":       engine.WhitelistIPs,
+			"access_mode":         engine.AccessMode,
+			"assigned":            engine.SubdomainAss,
+			"public_urls":         engine.PublicURLs,
+			"language_preference": engine.LanguagePreference,
 		}
 
 		w.Header().Set("Content-Type", "application/json")

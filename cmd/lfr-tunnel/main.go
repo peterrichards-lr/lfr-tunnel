@@ -210,6 +210,9 @@ func main() {
 	defer cancel()
 
 	regResp := performRegistrationHandshake(cfg, portMappings, sub, engine.AddedHeaders)
+	if regResp.LanguagePreference != "" {
+		engine.LanguagePreference = regResp.LanguagePreference
+	}
 
 	// Modify portMappings to point to dynamic Interceptor ports
 	portMap := make(map[int]int)

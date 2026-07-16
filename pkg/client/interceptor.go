@@ -70,12 +70,13 @@ type InterceptorEngine struct {
 	ActiveConnections int32
 
 	// Access Control & Server Settings
-	Token        string
-	ServerURL    string
-	Passcode     string
-	WhitelistIPs string
-	AccessMode   string
-	PublicURLs   []string
+	Token              string
+	ServerURL          string
+	Passcode           string
+	WhitelistIPs       string
+	AccessMode         string
+	PublicURLs         []string
+	LanguagePreference string
 
 	// Latency & Bandwidth Simulation Settings
 	Latency        time.Duration

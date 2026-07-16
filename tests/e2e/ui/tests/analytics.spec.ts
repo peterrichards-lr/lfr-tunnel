@@ -55,7 +55,7 @@ test.describe('Analytics & Tunnel Automation', () => {
         await page.reload();
         await page.click('#nav-tunnels');
         // The table shows 'up' for active tunnels
-        await expect(page.locator('#tunnels-table-body td:has-text("up")')).toBeVisible({ timeout: 1000 });
+        await expect(page.locator('#tunnels-table-body td:has-text("up")').first()).toBeVisible({ timeout: 1000 });
     }).toPass({ timeout: 15000 });
 
     // Scrape the generated subdomain public URL

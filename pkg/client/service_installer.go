@@ -7,7 +7,6 @@ import (
 	"os/exec"
 	"path/filepath"
 	"runtime"
-	"strings"
 )
 
 // InstallService configures lfr-tunnel to start on login automatically.
@@ -130,9 +129,9 @@ func installWindows(exePath string) error {
 	vbsPath := filepath.Join(startupDir, "lfr-tunnel.vbs")
 
 	// Create a VBScript to run the executable silently without a cmd window
-	vbsContent := fmt.Sprintf(`Set WshShell = CreateObject("WScript.Shell")
-WshShell.Run chr(34) & "%s" & chr(34) & " -background", 0
-Set WshShell = Nothing`, strings.ReplaceAll(exePath, "\\", "\\\\"))
+	vbsContent := fmt.Sprintf("Set WshShell = CreateObject(\"WScript.Shell\")\r\n"+
+		"WshShell.Run chr(34) & \"%s\" & chr(34) & \" -background\", 0\r\n"+
+		"Set WshShell = Nothing", exePath)
 
 	if err := os.WriteFile(vbsPath, []byte(vbsContent), 0644); err != nil {
 		return err
@@ -329,9 +328,9 @@ func installWindowsGUI(exePath string) error {
 	}
 
 	vbsPath := filepath.Join(startupDir, "lfr-tunnel-gui.vbs")
-	vbsContent := fmt.Sprintf(`Set WshShell = CreateObject("WScript.Shell")
-WshShell.Run chr(34) & "%s" & chr(34) & " -gui", 0
-Set WshShell = Nothing`, strings.ReplaceAll(exePath, "\\", "\\\\"))
+	vbsContent := fmt.Sprintf("Set WshShell = CreateObject(\"WScript.Shell\")\r\n"+
+		"WshShell.Run chr(34) & \"%s\" & chr(34) & \" -gui\", 0\r\n"+
+		"Set WshShell = Nothing", exePath)
 
 	if err := os.WriteFile(vbsPath, []byte(vbsContent), 0644); err != nil {
 		return err

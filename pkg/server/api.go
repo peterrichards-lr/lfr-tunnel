@@ -1580,6 +1580,7 @@ func (s *Server) handleAdminOverridePreferredDomain(w http.ResponseWriter, r *ht
 func (s *Server) handleAdminGetSystemSettings(w http.ResponseWriter, r *http.Request, actor string) {
 	rule := s.cfg.DomainAllocationRule
 	defaultDomain := s.cfg.DefaultDomain
+	maintPagePath := ""
 
 	if s.db != nil {
 		if dbRule, err := s.db.GetAdminSetting("domain_allocation_rule"); err == nil && dbRule != "" {
@@ -1588,11 +1589,15 @@ func (s *Server) handleAdminGetSystemSettings(w http.ResponseWriter, r *http.Req
 		if dbDef, err := s.db.GetAdminSetting("default_domain"); err == nil && dbDef != "" {
 			defaultDomain = dbDef
 		}
+		if dbMaintPath, err := s.db.GetAdminSetting("maintenance_page_path"); err == nil {
+			maintPagePath = dbMaintPath
+		}
 	}
 
 	respondJSON(w, http.StatusOK, map[string]interface{}{
 		"domain_allocation_rule": rule,
 		"default_domain":         defaultDomain,
+		"maintenance_page_path":  maintPagePath,
 	})
 }
 
@@ -1601,6 +1606,7 @@ func (s *Server) handleAdminUpdateSystemSettings(w http.ResponseWriter, r *http.
 	var req struct {
 		DomainAllocationRule string `json:"domain_allocation_rule"`
 		DefaultDomain        string `json:"default_domain"`
+		MaintenancePagePath  string `json:"maintenance_page_path"`
 	}
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 		http.Error(w, `{"error":"Invalid request"}`, http.StatusBadRequest)
@@ -1616,7 +1622,11 @@ func (s *Server) handleAdminUpdateSystemSettings(w http.ResponseWriter, r *http.
 			http.Error(w, `{"error":"Failed to save default domain"}`, http.StatusInternalServerError)
 			return
 		}
-		s.writeAudit(actor, "system.settings.updated", "system", "all", "Updated Domain Allocation Rule to "+req.DomainAllocationRule+" and Default Domain to "+req.DefaultDomain, r)
+		if err := s.db.SetAdminSetting("maintenance_page_path", req.MaintenancePagePath); err != nil {
+			http.Error(w, `{"error":"Failed to save maintenance page path"}`, http.StatusInternalServerError)
+			return
+		}
+		s.writeAudit(actor, "system.settings.updated", "system", "all", "Updated Domain Allocation Rule to "+req.DomainAllocationRule+", Default Domain to "+req.DefaultDomain+", Maintenance Page Path to "+req.MaintenancePagePath, r)
 	}
 
 	respondJSON(w, http.StatusOK, req)

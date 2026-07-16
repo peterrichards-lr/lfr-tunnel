@@ -20,6 +20,12 @@ import (
 	"lfr-tunnel/pkg/config"
 )
 
+const (
+	osDarwin  = "darwin"
+	osWindows = "windows"
+	osLinux   = "linux"
+)
+
 // TempSettingsServer handles serving /settings when the tunnel is offline.
 type TempSettingsServer struct {
 	server *http.Server
@@ -342,6 +348,10 @@ func updateMenu(tray *systray.SystemTray, cfg *config.ClientConfig, isRunning bo
 		handleOpenLogs(cfg)
 	})
 
+	menu.Add("Copy Logs to Clipboard", func() {
+		handleCopyLogsToClipboard(cfg)
+	})
+
 	menu.Add("Settings...", func() {
 		openBrowser("http://127.0.0.1:55556/settings")
 	})
@@ -404,11 +414,11 @@ func handleToggle(cfg *config.ClientConfig) {
 func handleCopyURLString(urlStr string) {
 	var cmd *exec.Cmd
 	switch runtime.GOOS {
-	case "darwin":
+	case osDarwin:
 		cmd = exec.Command("pbcopy")
-	case "windows":
+	case osWindows:
 		cmd = exec.Command("clip")
-	case "linux":
+	case osLinux:
 		cmd = exec.Command("xclip", "-selection", "clipboard")
 	default:
 		return
@@ -435,14 +445,46 @@ func handleOpenLogs(cfg *config.ClientConfig) {
 	}
 }
 
+func handleCopyLogsToClipboard(cfg *config.ClientConfig) {
+	_, sub, _ := getRunningState(cfg.Subdomain)
+	home, err := os.UserHomeDir()
+	if err != nil {
+		slog.Error("Failed to get home dir", "error", err)
+		return
+	}
+	logFile := filepath.Join(home, ".lfr-tunnel", fmt.Sprintf("client-%s.log", sub))
+	data, err := os.ReadFile(logFile)
+	if err != nil {
+		slog.Error("Failed to read log file", "error", err)
+		return
+	}
+
+	var cmd *exec.Cmd
+	switch runtime.GOOS {
+	case osDarwin:
+		cmd = exec.Command("pbcopy")
+	case osWindows:
+		cmd = exec.Command("clip")
+	case osLinux:
+		cmd = exec.Command("xclip", "-selection", "clipboard")
+	default:
+		slog.Error("Unsupported OS for clipboard copy")
+		return
+	}
+	cmd.Stdin = strings.NewReader(string(data))
+	if err := cmd.Run(); err != nil {
+		slog.Error("Failed to copy to clipboard", "error", err)
+	}
+}
+
 func openBrowser(url string) {
 	var err error
 	switch runtime.GOOS {
-	case "linux":
+	case osLinux:
 		err = exec.Command("xdg-open", url).Start()
-	case "windows":
+	case osWindows:
 		err = exec.Command("rundll32", "url.dll,FileProtocolHandler", url).Start()
-	case "darwin":
+	case osDarwin:
 		err = exec.Command("open", url).Start()
 	default:
 		err = fmt.Errorf("unsupported platform")

@@ -27,7 +27,7 @@ test:
 		rm -f /private/tmp/lfr-tunnel; \
 		go test -c -o /private/tmp/lfr-tunnel $$pkg; \
 		if [ -f /private/tmp/lfr-tunnel ]; then \
-			/private/tmp/lfr-tunnel || exit 1; \
+			(cd $$(go list -f '{{.Dir}}' $$pkg) && /private/tmp/lfr-tunnel) || exit 1; \
 		fi; \
 	done
 

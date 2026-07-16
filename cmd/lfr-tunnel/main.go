@@ -53,6 +53,7 @@ var (
 	targetHost         = flag.String("target-host", "", "Target hostname or IP to route traffic to (e.g. my-project.local)")
 	preserveHost       = flag.Bool("preserve-host", false, "Preserve incoming Host header instead of rewriting to target host")
 	insecureSkipVerify = flag.Bool("insecure-skip-verify", false, "Allow insecure local SSL (Skip TLS Verification)")
+	themePref          = flag.String("theme", "", "Local UI theme preference (light, dark, system, time)")
 	background         = flag.Bool("background", false, "Run client in background")
 	status             = flag.Bool("status", false, "Check status of the background tunnel")
 	statusJSON         = flag.Bool("status-json", false, "Print JSON status of the background tunnel")
@@ -214,6 +215,11 @@ func main() {
 	if regResp.LanguagePreference != "" {
 		engine.LanguagePreference = regResp.LanguagePreference
 	}
+	if cfg.Theme != "" {
+		engine.ThemePreference = cfg.Theme
+	} else if regResp.ThemePreference != "" {
+		engine.ThemePreference = regResp.ThemePreference
+	}
 
 	// Modify portMappings to point to dynamic Interceptor ports
 	portMap := make(map[int]int)
@@ -315,6 +321,9 @@ func overrideConfigWithFlags(cfg *config.ClientConfig) {
 	}
 	if *whitelistIP != "" {
 		cfg.WhitelistIPs = *whitelistIP
+	}
+	if *themePref != "" {
+		cfg.Theme = *themePref
 	}
 	if *region != "" {
 		cfg.Region = *region

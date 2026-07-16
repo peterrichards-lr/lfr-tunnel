@@ -18,6 +18,18 @@
             --danger: #ef4444;
         }
 
+        :root[data-theme="light"] {
+            --bg-base: #f8fafc;
+            --bg-card: #ffffff;
+            --primary: #0B5FFF;
+            --text-main: #0f172a;
+            --text-muted: #64748b;
+            --border: rgba(0, 0, 0, 0.1);
+            --success: #059669;
+            --warning: #d97706;
+            --danger: #dc2626;
+        }
+
         * { box-sizing: border-box; margin: 0; padding: 0; font-family: 'Inter', sans-serif; }
         body { background: var(--bg-base); color: var(--text-main); display: flex; height: 100vh; overflow: hidden; }
 
@@ -70,6 +82,9 @@
         .tab-item { flex: 1; text-align: center; padding: 12px; cursor: pointer; font-size: 13px; font-weight: 500; border-bottom: 2px solid transparent; color: var(--text-muted); transition: all 0.2s; }
         .tab-item.active { border-bottom: 2px solid var(--primary); color: var(--text-main); font-weight: 600; }
         .tab-item:hover { background: rgba(255,255,255,0.02); color: var(--text-main); }
+        :root[data-theme="light"] .tab-item:hover { background: rgba(0,0,0,0.03); }
+
+        select option { background: var(--bg-card); color: var(--text-main); }
     </style>
 </head>
 <body>
@@ -165,7 +180,7 @@ const clientTranslations = {
         "client_local_host": "Local Target Host",
         "client_local_host_help": "The hostname of your local dev server. Usually 'localhost' or 'host.docker.internal' if proxying into a container.",
         "client_req_subdomain": "Requested Subdomain (Optional)",
-        "client_req_subdomain_help": "A custom name for your public URL (e.g. entering 'peter' gets peter.lfr-demo.online). If empty, a random one is assigned.",
+        "client_req_subdomain_help": "A custom name for your public URL. If empty, a random one is requested. Both are subject to your account permissions.",
         "client_preserve_host": "Preserve incoming Host header",
         "client_preserve_host_help": "If checked, forwards the public URL Host header to your local server instead of rewriting it to the Target Host. Useful for Liferay Virtual Instances.",
         "client_insecure_ssl": "Allow insecure local SSL (Skip TLS Verification)",
@@ -199,7 +214,7 @@ const clientTranslations = {
         "client_local_host": "Host de Destino",
         "client_local_host_help": "El nombre de host de su servidor local. Usualmente 'localhost' o 'host.docker.internal'.",
         "client_req_subdomain": "Subdominio Solicitado (Opcional)",
-        "client_req_subdomain_help": "Un nombre personalizado para su URL pública.",
+        "client_req_subdomain_help": "Un nombre personalizado para su URL pública (sujeto a permisos de la cuenta).",
         "client_preserve_host": "Preservar encabezado Host",
         "client_preserve_host_help": "Reenvía el encabezado Host de la URL pública a su servidor local.",
         "client_insecure_ssl": "Permitir SSL local inseguro",
@@ -233,7 +248,7 @@ const clientTranslations = {
         "client_local_host": "Lokaler Zielhost",
         "client_local_host_help": "Der Hostname Ihres lokalen Servers. Normalerweise 'localhost'.",
         "client_req_subdomain": "Gewünschte Subdomain (Optional)",
-        "client_req_subdomain_help": "Ein benutzerdefinierter Name für Ihre öffentliche URL.",
+        "client_req_subdomain_help": "Ein benutzerdefinierter Name für Ihre öffentliche URL (abhängig von Kontoberechtigungen).",
         "client_preserve_host": "Eingehenden Host-Header beibehalten",
         "client_preserve_host_help": "Leitet den Host-Header der öffentlichen URL an Ihren lokalen Server weiter.",
         "client_insecure_ssl": "Unsicheres lokales SSL zulassen",
@@ -267,7 +282,7 @@ const clientTranslations = {
         "client_local_host": "Hôte Local",
         "client_local_host_help": "Le nom d'hôte de votre serveur local. Généralement 'localhost'.",
         "client_req_subdomain": "Sous-domaine demandé (Optionnel)",
-        "client_req_subdomain_help": "Un nom personnalisé pour votre URL publique.",
+        "client_req_subdomain_help": "Un nom personnalisé pour votre URL publique (sous réserve des autorisations du compte).",
         "client_preserve_host": "Préserver l'en-tête Host",
         "client_preserve_host_help": "Transmet l'en-tête Host de l'URL publique à votre serveur local.",
         "client_insecure_ssl": "Autoriser SSL local non sécurisé",
@@ -301,7 +316,7 @@ const clientTranslations = {
         "client_local_host": "Host Local",
         "client_local_host_help": "O nome de host do seu servidor local. Geralmente 'localhost'.",
         "client_req_subdomain": "Subdomínio Solicitado (Opcional)",
-        "client_req_subdomain_help": "Um nome personalizado para sua URL pública.",
+        "client_req_subdomain_help": "Um nome personalizado para sua URL pública (sujeito às permissões da conta).",
         "client_preserve_host": "Preservar cabeçalho Host",
         "client_preserve_host_help": "Encaminha o cabeçalho Host da URL pública para o servidor local.",
         "client_insecure_ssl": "Permitir SSL local inseguro",
@@ -335,7 +350,7 @@ const clientTranslations = {
         "client_local_host": "ローカルターゲットホスト",
         "client_local_host_help": "ローカルサーバーのホスト名。通常は 'localhost'。",
         "client_req_subdomain": "希望するサブドメイン（オプション）",
-        "client_req_subdomain_help": "公開URLのカスタム名です。",
+        "client_req_subdomain_help": "公開URLのカスタム名です（アカウント権限に依存します）。",
         "client_preserve_host": "着信Hostヘッダーを保持する",
         "client_preserve_host_help": "公開URLのHostヘッダーをローカルサーバーに転送します。",
         "client_insecure_ssl": "安全でないローカルSSLを許可する",
@@ -400,6 +415,38 @@ function setLanguage(lang) {
         let selectedId = null;
         let activeView = 'traffic';
         let languageSynced = false;
+        let themeSynced = false;
+        let serverThemePref = 'system';
+
+        function applyTheme(theme) {
+            let mode = theme || 'system';
+            if (mode === 'system') {
+                if (window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches) {
+                    mode = 'dark';
+                } else {
+                    mode = 'light';
+                }
+            } else if (mode === 'time') {
+                const hour = new Date().getHours();
+                if (hour >= 8 && hour < 20) {
+                    mode = 'light';
+                } else {
+                    mode = 'dark';
+                }
+            }
+            if (mode === 'light') {
+                document.documentElement.setAttribute('data-theme', 'light');
+            } else {
+                document.documentElement.removeAttribute('data-theme');
+            }
+        }
+
+        if (window.matchMedia) {
+            window.matchMedia('(prefers-color-scheme: dark)').addEventListener('change', e => {
+                const currentTheme = localStorage.getItem('inspector_theme') || serverThemePref || 'system';
+                if (currentTheme === 'system') applyTheme('system');
+            });
+        }
 
         async function fetchState() {
             try {
@@ -410,6 +457,16 @@ function setLanguage(lang) {
                     languageSynced = true;
                     if (!localStorage.getItem('lfr_client_lang')) {
                         setLanguage(state.language_preference);
+                    }
+                }
+
+                if (!themeSynced && state.theme_preference) {
+                    themeSynced = true;
+                    serverThemePref = state.theme_preference;
+                    if (!localStorage.getItem('inspector_theme')) {
+                        applyTheme(serverThemePref);
+                    } else {
+                        applyTheme(localStorage.getItem('inspector_theme'));
                     }
                 }
 
@@ -712,8 +769,19 @@ function setLanguage(lang) {
                             </div>
                             
                             <div style="display: flex; flex-direction: column; gap: 6px;">
-                                <label style="font-weight: 500; color: var(--text-muted); font-size: 11px;" data-i18n="client_req_subdomain" data-i18n-help="client_req_subdomain_help">Requested Subdomain (Optional) <span class="help-icon" title="A custom name for your public URL (e.g. entering 'peter' gets peter.lfr-demo.online). If empty, a random one is assigned.">?</span></label>
+                                <label style="font-weight: 500; color: var(--text-muted); font-size: 11px;" data-i18n="client_req_subdomain" data-i18n-help="client_req_subdomain_help">Requested Subdomain (Optional) <span class="help-icon" title="A custom name for your public URL (subject to permissions).">?</span></label>
                                 <input type="text" id="cfg-subdomain" placeholder="e.g. peter" style="background: rgba(0,0,0,0.3); border: 1px solid var(--border); color: white; padding: 10px; border-radius: 6px; font-size: 13px; outline: none; width: 100%;">
+                            </div>
+
+                            <div style="display: flex; flex-direction: column; gap: 6px; margin-top: 5px;">
+                                <label style="font-weight: 500; color: var(--text-muted); font-size: 11px;">UI Theme Override <span class="help-icon" title="Overrides the Theme Preference set on your Server Account settings.">?</span></label>
+                                <select id="cfg-theme" style="background: rgba(0,0,0,0.3); border: 1px solid var(--border); color: white; padding: 10px; border-radius: 6px; font-size: 13px; outline: none; width: 100%;" onchange="const v = this.value; if(v){localStorage.setItem('inspector_theme', v); applyTheme(v);}else{localStorage.removeItem('inspector_theme'); applyTheme(serverThemePref);}">
+                                    <option value="">Server Default</option>
+                                    <option value="system">Follow System</option>
+                                    <option value="light">Light Mode</option>
+                                    <option value="dark">Dark Mode</option>
+                                    <option value="time">Time of Day (8am-8pm Light)</option>
+                                </select>
                             </div>
 
                             <div style="display: flex; align-items: center; gap: 10px; margin-top: 10px;">
@@ -740,8 +808,11 @@ function setLanguage(lang) {
                 document.getElementById('cfg-dest-port').value = cfg.dest_port || 8080;
                 document.getElementById('cfg-target-host').value = cfg.target_host || 'localhost';
                 document.getElementById('cfg-subdomain').value = cfg.subdomain || '';
-                document.getElementById('cfg-preserve-host').checked = !!cfg.preserve_host;
-                document.getElementById('cfg-insecure-skip-verify').checked = !!cfg.insecure_skip_verify;
+                document.getElementById('cfg-preserve-host').checked = cfg.preserve_host === "true";
+                document.getElementById('cfg-insecure-skip-verify').checked = cfg.insecure_skip_verify === "true";
+                document.getElementById('cfg-theme').value = localStorage.getItem('inspector_theme') || '';
+                
+                applyTranslations();
             } catch(e) {
                 console.error("Error loading config", e);
                 document.getElementById('settings-error').innerText = 'Failed to load configuration: ' + e.message;

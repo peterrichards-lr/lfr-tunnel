@@ -77,6 +77,7 @@ type InterceptorEngine struct {
 	AccessMode         string
 	PublicURLs         []string
 	LanguagePreference string
+	ThemePreference    string
 
 	// Latency & Bandwidth Simulation Settings
 	Latency        time.Duration

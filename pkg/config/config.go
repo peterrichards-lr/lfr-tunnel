@@ -164,7 +164,9 @@ type ClientConfig struct {
 	Latency            time.Duration     `yaml:"latency"`
 	Bandwidth          string            `yaml:"bandwidth"`
 	PreserveHost       bool              `yaml:"preserve_host"`
-	InsecureSkipVerify bool              `yaml:"insecure_skip_verify"`
+	BypassProxy        bool              `yaml:"bypass_proxy,omitempty"`
+	InsecureSkipVerify bool              `yaml:"insecure_skip_verify,omitempty"`
+	Theme              string            `yaml:"theme,omitempty"`
 }
 
 // DefaultServerConfig returns a ServerConfig with sensible default values.

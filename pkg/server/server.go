@@ -79,6 +79,7 @@ type RegisterResponse struct {
 	Warning            string   `json:"warning,omitempty"`
 	PortalURL          string   `json:"portal_url,omitempty"`
 	LanguagePreference string   `json:"language_preference,omitempty"`
+	ThemePreference    string   `json:"theme_preference,omitempty"`
 }
 
 // CheckSubdomainResponse represents the JSON response payload for subdomain checks.
@@ -1411,8 +1412,10 @@ func (s *Server) handleRegister(w http.ResponseWriter, r *http.Request) {
 	go s.BroadcastTelemetry()
 
 	var langPref string
+	var themePref string
 	if userRec != nil {
 		langPref = userRec.LanguagePreference
+		themePref = userRec.ThemePreference
 	}
 
 	s.respondRegisterResponse(w, http.StatusOK, r, RegisterResponse{
@@ -1423,6 +1426,7 @@ func (s *Server) handleRegister(w http.ResponseWriter, r *http.Request) {
 		Domains:            activeDomains,
 		Warning:            warning,
 		LanguagePreference: langPref,
+		ThemePreference:    themePref,
 	})
 }
 

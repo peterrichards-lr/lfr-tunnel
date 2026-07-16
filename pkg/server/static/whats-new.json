@@ -1,7 +1,9 @@
 {
-  "version": "v1.39.0",
+  "version": "v1.39.1",
   "release_date": "2026-07-16",
   "features": [
+    "Fix: Resolve 'Preserve Host Header' UI checkbox state persistence bug",
+    "Feature: Add visual status pill for Host header preservation in Client Inspector UI",
     "Feature: Custom Admin-defined Maintenance Pages for gateway",
     "Feature: Implement responsive 2-column UI settings layout",
     "Feature: Add light theme icon variant for client applications",

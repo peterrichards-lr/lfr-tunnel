@@ -64,7 +64,7 @@ for pkg in $(go list ./... | grep -v /pkg/server); do
   rm -f /private/tmp/lfr-tunnel
   go test -c -o /private/tmp/lfr-tunnel "$pkg"
   if [ -f /private/tmp/lfr-tunnel ]; then
-    /private/tmp/lfr-tunnel
+    (cd "$(go list -f '{{.Dir}}' "$pkg")" && /private/tmp/lfr-tunnel)
     if [ $? -ne 0 ]; then
       echo "❌ Error: Tests failed. Please fix before committing."
       exit 1

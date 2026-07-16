@@ -569,9 +569,9 @@ func LoadClientConfig(path string) (*ClientConfig, error) {
 	}
 
 	if val := os.Getenv("LFT_CLIENT_SUBDOMAIN"); val != "" {
-		cfg.Subdomain = val
+		cfg.Subdomain = cleanSubdomainPrefix(val)
 	} else if val := os.Getenv("LFT_SUBDOMAIN"); val != "" {
-		cfg.Subdomain = val
+		cfg.Subdomain = cleanSubdomainPrefix(val)
 	}
 
 	if val := os.Getenv("LFT_CLIENT_PORTS"); val != "" {
@@ -633,6 +633,17 @@ func LoadClientConfig(path string) (*ClientConfig, error) {
 	}
 
 	return cfg, nil
+}
+
+// cleanSubdomainPrefix extracts the subdomain from a URL or hostname.
+func cleanSubdomainPrefix(val string) string {
+	val = strings.TrimSpace(val)
+	val = strings.TrimPrefix(val, "http://")
+	val = strings.TrimPrefix(val, "https://")
+	if idx := strings.Index(val, "."); idx != -1 {
+		val = val[:idx]
+	}
+	return val
 }
 
 // cleanTargetHost extracts the hostname/IP from a URL (e.g. http://liferay:8080 -> liferay)

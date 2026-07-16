@@ -1,7 +1,8 @@
 {
-  "version": "v1.36.0",
+  "version": "v1.36.1",
   "release_date": "2026-07-16",
   "features": [
+    "Fix: Resolve JS syntax error in Inspector UI replay button preventing initialization on Windows",
     "Feature: Implement Client Inspector UI Localization with multi-language support (EN, DE, ES, IT, JA)",
     "Feature: Automatically sync user language preference from Server Account to local Inspector UI",
     "Feature: Expose new Inspector UI configurations directly via CLI flags (e.g. -insecure-skip-verify)"

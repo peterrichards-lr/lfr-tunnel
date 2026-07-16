@@ -162,7 +162,6 @@ func TestInterceptorEngine_CustomTargetHost(t *testing.T) {
 		t.Errorf("Expected Host header to be %s, got %s", expectedHost, receivedHost)
 	}
 
-
 }
 
 func TestInterceptorEngine_PreserveHost(t *testing.T) {

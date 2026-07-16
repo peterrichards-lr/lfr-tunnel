@@ -83,8 +83,9 @@ func (s *TempSettingsServer) handleLogs(w http.ResponseWriter, r *http.Request) 
 func (s *TempSettingsServer) handleInfo(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/json")
 	cfg, _ := config.LoadClientConfig("")
-	sub := "unknown"
-	url := "unknown"
+	const unknownStr = "unknown"
+	sub := unknownStr
+	url := unknownStr
 	if cfg != nil {
 		sub = cfg.Subdomain
 		url = cfg.ServerURL
@@ -92,11 +93,27 @@ func (s *TempSettingsServer) handleInfo(w http.ResponseWriter, r *http.Request) 
 	home, _ := os.UserHomeDir()
 	logFile := filepath.Join(home, ".lfr-tunnel", fmt.Sprintf("client-%s.log", sub))
 
+	serverVer := "n/a"
+	if url != unknownStr {
+		client := &http.Client{Timeout: 2 * time.Second}
+		if res, err := client.Get(fmt.Sprintf("%s/api/version", url)); err == nil {
+			defer func() {
+				_ = res.Body.Close()
+			}()
+			var vResp struct {
+				Version string `json:"version"`
+			}
+			if json.NewDecoder(res.Body).Decode(&vResp) == nil && vResp.Version != "" {
+				serverVer = vResp.Version
+			}
+		}
+	}
+
 	info := map[string]interface{}{
 		"status":           "unhealthy",
 		"version":          config.Version,
 		"client_version":   config.Version,
-		"server_version":   "n/a",
+		"server_version":   serverVer,
 		"server_url":       url,
 		"client_subdomain": sub,
 		"log_file":         logFile,

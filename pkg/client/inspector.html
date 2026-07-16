@@ -135,7 +135,11 @@
                     </label>
                 </div>
             </div>
-            <div style="font-size: 12px; color: var(--text-muted);"><span data-i18n="client_listening">Listening on localhost:4040</span></div>
+            </div>
+            <div style="display: flex; justify-content: space-between; align-items: center; margin-top: 5px;">
+                <div style="font-size: 12px; color: var(--text-muted);"><span data-i18n="client_listening">Listening on localhost:4040</span></div>
+                <div id="preserve-host-pill" style="display: none; padding: 2px 6px; border-radius: 4px; font-size: 10px; font-weight: 600;"></div>
+            </div>
         </div>
         <div style="display: flex; border-bottom: 1px solid var(--border); background: rgba(0,0,0,0.1);">
             <div id="tab-traffic" class="tab-item active" onclick="switchView('traffic')" data-i18n="client_traffic_log">Traffic Log</div>
@@ -184,6 +188,8 @@ const clientTranslations = {
     "en": {
         "client_inspector": "Inspector",
         "client_listening": "Listening on localhost:4040",
+        "client_host_preserved": "Host Preserved",
+        "client_host_rewritten": "Host Rewritten",
         "client_replay_req": "Replay Request",
         "client_req": "Request",
         "client_resp": "Response",
@@ -226,6 +232,8 @@ const clientTranslations = {
     "es": {
         "client_inspector": "Inspector",
         "client_listening": "Escuchando en localhost:4040",
+        "client_host_preserved": "Host Preservado",
+        "client_host_rewritten": "Host Reescribido",
         "client_maint": "Mantenimiento",
         "client_traffic_log": "Registro de Tráfico",
         "client_clear_traffic": "Limpiar",
@@ -264,6 +272,8 @@ const clientTranslations = {
     "de": {
         "client_inspector": "Inspektor",
         "client_listening": "Hört auf localhost:4040",
+        "client_host_preserved": "Host Beibehalten",
+        "client_host_rewritten": "Host Umgeschrieben",
         "client_maint": "Wartung",
         "client_traffic_log": "Verkehrsprotokoll",
         "client_clear_traffic": "Löschen",
@@ -302,6 +312,8 @@ const clientTranslations = {
     "fr": {
         "client_inspector": "Inspecteur",
         "client_listening": "En écoute sur localhost:4040",
+        "client_host_preserved": "Hôte Préservé",
+        "client_host_rewritten": "Hôte Réécrit",
         "client_maint": "Maintenance",
         "client_traffic_log": "Journal de Trafic",
         "client_clear_traffic": "Effacer",
@@ -340,6 +352,8 @@ const clientTranslations = {
     "pt": {
         "client_inspector": "Inspetor",
         "client_listening": "Ouvindo em localhost:4040",
+        "client_host_preserved": "Host Preservado",
+        "client_host_rewritten": "Host Reescrito",
         "client_maint": "Manutenção",
         "client_traffic_log": "Tráfego",
         "client_clear_traffic": "Limpar",
@@ -378,6 +392,8 @@ const clientTranslations = {
     "ja": {
         "client_inspector": "インスペクター",
         "client_listening": "localhost:4040 でリッスン中",
+        "client_host_preserved": "ホスト保持",
+        "client_host_rewritten": "ホスト書き換え",
         "client_maint": "メンテナンス",
         "client_traffic_log": "トラフィックログ",
         "client_clear_traffic": "クリア",
@@ -526,6 +542,25 @@ function setLanguage(lang) {
                 }
 
                 document.getElementById('maint-toggle').checked = state.maintenance_mode;
+                
+                const pill = document.getElementById('preserve-host-pill');
+                if (pill) {
+                    if (state.preserve_host) {
+                        pill.style.display = 'inline-block';
+                        pill.style.background = 'rgba(16, 185, 129, 0.2)';
+                        pill.style.color = '#10b981';
+                        pill.style.border = '1px solid rgba(16, 185, 129, 0.4)';
+                        pill.setAttribute('data-i18n', 'client_host_preserved');
+                        pill.innerText = clientTranslations[currentLang] ? (clientTranslations[currentLang]['client_host_preserved'] || 'Host Preserved') : 'Host Preserved';
+                    } else {
+                        pill.style.display = 'inline-block';
+                        pill.style.background = 'rgba(245, 158, 11, 0.2)';
+                        pill.style.color = '#f59e0b';
+                        pill.style.border = '1px solid rgba(245, 158, 11, 0.4)';
+                        pill.setAttribute('data-i18n', 'client_host_rewritten');
+                        pill.innerText = clientTranslations[currentLang] ? (clientTranslations[currentLang]['client_host_rewritten'] || 'Host Rewritten') : 'Host Rewritten';
+                    }
+                }
                 
                 const passcodeEl = document.getElementById('ac-passcode');
                 const whitelistEl = document.getElementById('ac-whitelist');

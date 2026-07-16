@@ -162,8 +162,9 @@ type ClientConfig struct {
 	Region       string            `yaml:"region"`
 	Regions      map[string]string `yaml:"regions"`
 	Latency      time.Duration     `yaml:"latency"`
-	Bandwidth    string            `yaml:"bandwidth"`
-	PreserveHost bool              `yaml:"preserve_host"`
+	Bandwidth          string            `yaml:"bandwidth"`
+	PreserveHost       bool              `yaml:"preserve_host"`
+	InsecureSkipVerify bool              `yaml:"insecure_skip_verify"`
 }
 
 // DefaultServerConfig returns a ServerConfig with sensible default values.

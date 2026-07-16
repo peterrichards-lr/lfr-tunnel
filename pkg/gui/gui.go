@@ -103,9 +103,10 @@ func (s *TempSettingsServer) handleConfigGet(w http.ResponseWriter) {
 		"target_host":   cfg.TargetHost,
 		"dest_port":     destPort,
 		"subdomain":     cfg.Subdomain,
-		"preserve_host": cfg.PreserveHost,
-		"passcode":      cfg.Passcode,
-		"rate_limit":    cfg.RateLimit,
+		"preserve_host":        cfg.PreserveHost,
+		"insecure_skip_verify": cfg.InsecureSkipVerify,
+		"passcode":             cfg.Passcode,
+		"rate_limit":           cfg.RateLimit,
 	}
 	_ = json.NewEncoder(w).Encode(resp)
 }
@@ -116,10 +117,11 @@ func (s *TempSettingsServer) handleConfigPost(w http.ResponseWriter, r *http.Req
 		AuthToken    string `json:"auth_token"`
 		TargetHost   string `json:"target_host"`
 		DestPort     int    `json:"dest_port"`
-		Subdomain    string `json:"subdomain"`
-		PreserveHost bool   `json:"preserve_host"`
-		Passcode     string `json:"passcode"`
-		RateLimit    int    `json:"rate_limit"`
+		Subdomain          string `json:"subdomain"`
+		PreserveHost       bool   `json:"preserve_host"`
+		InsecureSkipVerify bool   `json:"insecure_skip_verify"`
+		Passcode           string `json:"passcode"`
+		RateLimit          int    `json:"rate_limit"`
 	}
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 		w.WriteHeader(http.StatusBadRequest)
@@ -140,6 +142,7 @@ func (s *TempSettingsServer) handleConfigPost(w http.ResponseWriter, r *http.Req
 	cfg.Ports = []int{req.DestPort}
 	cfg.Subdomain = req.Subdomain
 	cfg.PreserveHost = req.PreserveHost
+	cfg.InsecureSkipVerify = req.InsecureSkipVerify
 	cfg.Passcode = req.Passcode
 	cfg.RateLimit = req.RateLimit
 

@@ -1,5 +1,5 @@
 {
-  "version": "v1.35.1",
+  "version": "v1.35.2",
   "release_date": "2026-07-16",
   "features": [
     "Enhancement: Updated system tray icons to use the official Liferay Tunnel logo for active (color) and inactive (grayscale) states"

@@ -86,14 +86,6 @@ func main() {
 	// 2. Override with CLI flags
 	overrideConfigWithFlags(cfg)
 
-	if *guiFlag {
-		gui.StartGUI(cfg)
-		return
-	}
-
-	isExplicitServer := *serverURL != "" || os.Getenv("LFT_CLIENT_SERVER") != "" || os.Getenv("LFT_SERVER_URL") != "" || os.Getenv("LFT_SERVER") != ""
-	resolveServerURL(cfg, isExplicitServer)
-
 	// Determine if subdomain flag was explicitly passed
 	subdomainFlagPassed := false
 	flag.Visit(func(f *flag.Flag) {
@@ -119,8 +111,16 @@ func main() {
 	}
 	sub = strings.ToLower(strings.TrimSpace(sub))
 
-	// Execute subcommands if any matching arguments or flags are passed
+	isExplicitServer := *serverURL != "" || os.Getenv("LFT_CLIENT_SERVER") != "" || os.Getenv("LFT_SERVER_URL") != "" || os.Getenv("LFT_SERVER") != ""
+	resolveServerURL(cfg, isExplicitServer)
+
+	// Execute subcommands if any matching arguments or flags are passed (e.g., -background)
 	if executeSubcommands(cfg, sub, subdomainFlagPassed) {
+		return
+	}
+
+	if *guiFlag {
+		gui.StartGUI(cfg)
 		return
 	}
 

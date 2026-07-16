@@ -35,7 +35,7 @@
         * { box-sizing: border-box; margin: 0; padding: 0; font-family: 'Inter', sans-serif; }
         body { background: var(--bg-base); color: var(--text-main); display: flex; height: 100vh; overflow: hidden; }
 
-        sidebar { width: 350px; border-right: 1px solid var(--border); display: flex; flex-direction: column; background: rgba(15, 23, 42, 0.8); }
+        sidebar { width: 350px; flex-shrink: 0; border-right: 1px solid var(--border); display: flex; flex-direction: column; background: rgba(15, 23, 42, 0.8); }
         :root[data-theme="light"] sidebar { background: #f8fafc; }
         
         .header-panel { padding: 20px; border-bottom: 1px solid var(--border); }
@@ -115,24 +115,26 @@
 <body>
     <sidebar>
         <div class="header-panel">
-            <h1>
+            <h1 style="margin-bottom: 15px;">
                 <span data-i18n="client_inspector">Inspector</span>
-                <div style="display: flex; align-items: center; gap: 10px; font-size: 13px; font-weight: normal;">
-                    <select id="lang-selector" onchange="setLanguage(this.value)" style="background: rgba(0,0,0,0.3); border: 1px solid var(--border); color: var(--text-muted); padding: 4px 8px; border-radius: 4px; font-size: 11px; outline: none; cursor: pointer; margin-right: 10px;">
-                        <option value="en">English</option>
-                        <option value="es">Español</option>
-                        <option value="de">Deutsch</option>
-                        <option value="fr">Français</option>
-                        <option value="pt">Português</option>
-                        <option value="ja">日本語</option>
-                    </select>
+            </h1>
+            <div style="display: flex; align-items: center; justify-content: space-between; font-size: 13px; font-weight: normal; margin-bottom: 10px;">
+                <select id="lang-selector" onchange="setLanguage(this.value)" style="background: rgba(0,0,0,0.3); border: 1px solid var(--border); color: var(--text-muted); padding: 4px 8px; border-radius: 4px; font-size: 11px; outline: none; cursor: pointer;">
+                    <option value="en">English</option>
+                    <option value="es">Español</option>
+                    <option value="de">Deutsch</option>
+                    <option value="fr">Français</option>
+                    <option value="pt">Português</option>
+                    <option value="ja">日本語</option>
+                </select>
+                <div style="display: flex; align-items: center; gap: 8px;">
                     <span id="maint-label" data-i18n="client_maint">Maintenance</span>
                     <label class="toggle-switch">
                         <input type="checkbox" id="maint-toggle" onchange="toggleMaintenance()">
                         <span class="slider"></span>
                     </label>
                 </div>
-            </h1>
+            </div>
             <div style="font-size: 12px; color: var(--text-muted);"><span data-i18n="client_listening">Listening on localhost:4040</span></div>
         </div>
         <div style="display: flex; border-bottom: 1px solid var(--border); background: rgba(0,0,0,0.1);">
@@ -177,6 +179,7 @@
 const clientTranslations = {
     "en": {
         "client_inspector": "Inspector",
+        "client_listening": "Listening on localhost:4040",
         "client_replay_req": "Replay Request",
         "client_req": "Request",
         "client_resp": "Response",
@@ -217,6 +220,7 @@ const clientTranslations = {
     },
     "es": {
         "client_inspector": "Inspector",
+        "client_listening": "Escuchando en localhost:4040",
         "client_maint": "Mantenimiento",
         "client_traffic_log": "Registro de Tráfico",
         "client_config_title": "Configuración del Cliente",
@@ -253,6 +257,7 @@ const clientTranslations = {
     },
     "de": {
         "client_inspector": "Inspektor",
+        "client_listening": "Hört auf localhost:4040",
         "client_maint": "Wartung",
         "client_traffic_log": "Verkehrsprotokoll",
         "client_config_title": "Client-Konfiguration",
@@ -289,6 +294,7 @@ const clientTranslations = {
     },
     "fr": {
         "client_inspector": "Inspecteur",
+        "client_listening": "En écoute sur localhost:4040",
         "client_maint": "Maintenance",
         "client_traffic_log": "Journal de Trafic",
         "client_config_title": "Configuration du Client",
@@ -325,6 +331,7 @@ const clientTranslations = {
     },
     "pt": {
         "client_inspector": "Inspetor",
+        "client_listening": "Ouvindo em localhost:4040",
         "client_maint": "Manutenção",
         "client_traffic_log": "Tráfego",
         "client_config_title": "Configuração do Cliente",
@@ -361,6 +368,7 @@ const clientTranslations = {
     },
     "ja": {
         "client_inspector": "インスペクター",
+        "client_listening": "localhost:4040 でリッスン中",
         "client_maint": "メンテナンス",
         "client_traffic_log": "トラフィックログ",
         "client_config_title": "クライアント設定",

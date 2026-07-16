@@ -1,7 +1,8 @@
 {
-  "version": "v1.38.0",
+  "version": "v1.38.1",
   "release_date": "2026-07-16",
   "features": [
+    "Fix: Resolve SentinelOne quarantine interference during self-upgrade by downloading to whitelisted path",
     "Feature: Implement Live Logs UI in Client Inspector",
     "Fix: Resolve ignored background flag when gui flag is present",
     "Fix: Resolve client UI localization bugs in English and other languages",

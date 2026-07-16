@@ -3,6 +3,7 @@ package client
 import (
 	"bytes"
 	"context"
+	"crypto/tls"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -38,14 +39,15 @@ type RequestRecord struct {
 
 // InterceptorEngine manages the traffic routing, modification, and capture.
 type InterceptorEngine struct {
-	mu              sync.RWMutex
-	MaintenanceMode bool
-	Status          string
-	AddedHeaders    map[string]string
-	History         []*RequestRecord
-	MaxHistory      int
-	TargetHost      string
-	PreserveHost    bool
+	mu                 sync.RWMutex
+	MaintenanceMode    bool
+	Status             string
+	AddedHeaders       map[string]string
+	History            []*RequestRecord
+	MaxHistory         int
+	TargetHost         string
+	PreserveHost       bool
+	InsecureSkipVerify bool
 
 	// Connection status and statistics
 	ConnState         string // "disconnected", "connecting", "connected", "reconnecting"
@@ -97,17 +99,18 @@ func NewInterceptorEngine(targetHost string, headers []string) *InterceptorEngin
 	preserveHost := os.Getenv("LFT_PRESERVE_HOST") == "true"
 
 	return &InterceptorEngine{
-		MaintenanceMode: false,
-		Status:          "up",
-		AddedHeaders:    headerMap,
-		History:         make([]*RequestRecord, 0),
-		MaxHistory:      100, // Keep last 100 requests
-		TargetHost:      targetHost,
-		PreserveHost:    preserveHost,
-		ConnState:       "disconnected",
-		AuthValid:       true,
-		DestPort:        8080, // Default Liferay port
-		LatencyHistory:  make([]int64, 0),
+		MaintenanceMode:    false,
+		Status:             "up",
+		AddedHeaders:       headerMap,
+		History:            make([]*RequestRecord, 0),
+		MaxHistory:         100, // Keep last 100 requests
+		TargetHost:         targetHost,
+		PreserveHost:       preserveHost,
+		InsecureSkipVerify: os.Getenv("LFT_INSECURE_SKIP_VERIFY") == "true",
+		ConnState:          "disconnected",
+		AuthValid:          true,
+		DestPort:           8080, // Default Liferay port
+		LatencyHistory:     make([]int64, 0),
 	}
 }
 
@@ -198,14 +201,23 @@ func (e *InterceptorEngine) InterceptPort(targetPort int) (int, error) {
 
 	listenPort := listener.Addr().(*net.TCPAddr).Port
 
-	targetURL, _ := url.Parse(fmt.Sprintf("http://%s:%d", e.TargetHost, targetPort))
+	scheme := "http"
+	if targetPort == 443 || targetPort == 8443 {
+		scheme = "https"
+	}
+	targetURL, _ := url.Parse(fmt.Sprintf("%s://%s:%d", scheme, e.TargetHost, targetPort))
 	proxy := httputil.NewSingleHostReverseProxy(targetURL)
+
+	customTransport := http.DefaultTransport.(*http.Transport).Clone()
+	if scheme == "https" && e.InsecureSkipVerify {
+		customTransport.TLSClientConfig = &tls.Config{InsecureSkipVerify: true}
+	}
 
 	// Custom Transport to capture response and duration
 	proxy.Transport = &interceptorTransport{
 		engine:     e,
 		targetPort: targetPort,
-		transport:  http.DefaultTransport,
+		transport:  customTransport,
 	}
 
 	// Custom Director to inject headers
@@ -213,8 +225,8 @@ func (e *InterceptorEngine) InterceptPort(targetPort int) (int, error) {
 	proxy.Director = func(req *http.Request) {
 		originalDirector(req)
 
-		// Rewrite Host header if target is a custom virtual host
-		if !e.PreserveHost && e.TargetHost != "localhost" && e.TargetHost != "127.0.0.1" && e.TargetHost != "host.docker.internal" {
+		// Rewrite Host header if PreserveHost is unchecked
+		if !e.PreserveHost {
 			req.Host = getHostHeaderValue(e.TargetHost, targetPort)
 		}
 

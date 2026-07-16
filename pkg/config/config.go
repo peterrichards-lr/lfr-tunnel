@@ -148,22 +148,23 @@ type EdgeNodeConfig struct {
 
 // ClientConfig holds configuration settings for the lfr-tunnel client.
 type ClientConfig struct {
-	ServerURL    string            `yaml:"server_url"`
-	AuthToken    string            `yaml:"auth_token"`
-	Subdomain    string            `yaml:"subdomain"`
-	CustomDomain string            `yaml:"custom_domain"`
-	Ports        []int             `yaml:"ports"`
-	TokenFile    string            `yaml:"token_file"`
-	RateLimit    int               `yaml:"rate_limit"`
-	BasicAuth    string            `yaml:"basic_auth"`
-	TargetHost   string            `yaml:"target_host"`
-	Passcode     string            `yaml:"passcode"`
-	WhitelistIPs string            `yaml:"whitelist_ips"`
-	Region       string            `yaml:"region"`
-	Regions      map[string]string `yaml:"regions"`
-	Latency      time.Duration     `yaml:"latency"`
-	Bandwidth    string            `yaml:"bandwidth"`
-	PreserveHost bool              `yaml:"preserve_host"`
+	ServerURL          string            `yaml:"server_url"`
+	AuthToken          string            `yaml:"auth_token"`
+	Subdomain          string            `yaml:"subdomain"`
+	CustomDomain       string            `yaml:"custom_domain"`
+	Ports              []int             `yaml:"ports"`
+	TokenFile          string            `yaml:"token_file"`
+	RateLimit          int               `yaml:"rate_limit"`
+	BasicAuth          string            `yaml:"basic_auth"`
+	TargetHost         string            `yaml:"target_host"`
+	Passcode           string            `yaml:"passcode"`
+	WhitelistIPs       string            `yaml:"whitelist_ips"`
+	Region             string            `yaml:"region"`
+	Regions            map[string]string `yaml:"regions"`
+	Latency            time.Duration     `yaml:"latency"`
+	Bandwidth          string            `yaml:"bandwidth"`
+	PreserveHost       bool              `yaml:"preserve_host"`
+	InsecureSkipVerify bool              `yaml:"insecure_skip_verify"`
 }
 
 // DefaultServerConfig returns a ServerConfig with sensible default values.

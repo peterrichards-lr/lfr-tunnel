@@ -1,7 +1,7 @@
 {
-  "version": "v1.35.3",
+  "version": "v1.35.4",
   "release_date": "2026-07-16",
   "features": [
-    "Enhancement: Updated system tray icons to use the official Liferay Tunnel logo for active (color) and inactive (grayscale) states"
+    "Feature: Auto-detect local HTTPS targets (ports 443/8443) and skip TLS validation to support direct local Traefik routing"
   ]
 }

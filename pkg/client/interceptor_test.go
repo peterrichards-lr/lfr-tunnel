@@ -162,25 +162,6 @@ func TestInterceptorEngine_CustomTargetHost(t *testing.T) {
 		t.Errorf("Expected Host header to be %s, got %s", expectedHost, receivedHost)
 	}
 
-	// Test case 2: Loopback/docker target (should NOT rewrite Host header, preserving public Host)
-	engineLoopback := NewInterceptorEngine("host.docker.internal", nil)
-	interceptPortLoopback, err := engineLoopback.InterceptPort(targetPort)
-	if err != nil {
-		t.Fatalf("Failed to intercept port: %v", err)
-	}
-
-	reqLoopback, _ := http.NewRequest("GET", fmt.Sprintf("http://127.0.0.1:%d", interceptPortLoopback), nil)
-	reqLoopback.Host = "public-subdomain.lfr-demo.se"
-	respLoopback, err := http.DefaultClient.Do(reqLoopback)
-	if err != nil {
-		t.Fatalf("Failed to make request: %v", err)
-	}
-	_ = respLoopback.Body.Close()
-
-	// The Host header should be preserved as the public domain name
-	if receivedHost != "public-subdomain.lfr-demo.se" {
-		t.Errorf("Expected Host header to be preserved as 'public-subdomain.lfr-demo.se', got %s", receivedHost)
-	}
 }
 
 func TestInterceptorEngine_PreserveHost(t *testing.T) {

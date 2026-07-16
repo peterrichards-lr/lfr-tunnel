@@ -176,14 +176,15 @@ func StartInspector(port int, engine *InterceptorEngine) (int, error) {
 				destPort = cfg.Ports[0]
 			}
 			resp := map[string]interface{}{
-				"server_url":    cfg.ServerURL,
-				"auth_token":    maskToken(cfg.AuthToken),
-				"target_host":   cfg.TargetHost,
-				"dest_port":     destPort,
-				"subdomain":     cfg.Subdomain,
-				"preserve_host": cfg.PreserveHost,
-				"passcode":      cfg.Passcode,
-				"rate_limit":    cfg.RateLimit,
+				"server_url":           cfg.ServerURL,
+				"auth_token":           maskToken(cfg.AuthToken),
+				"target_host":          cfg.TargetHost,
+				"dest_port":            destPort,
+				"subdomain":            cfg.Subdomain,
+				"preserve_host":        cfg.PreserveHost,
+				"insecure_skip_verify": cfg.InsecureSkipVerify,
+				"passcode":             cfg.Passcode,
+				"rate_limit":           cfg.RateLimit,
 			}
 			_ = json.NewEncoder(w).Encode(resp)
 			return
@@ -191,14 +192,15 @@ func StartInspector(port int, engine *InterceptorEngine) (int, error) {
 
 		if r.Method == http.MethodPost {
 			var req struct {
-				ServerURL    string `json:"server_url"`
-				AuthToken    string `json:"auth_token"`
-				TargetHost   string `json:"target_host"`
-				DestPort     int    `json:"dest_port"`
-				Subdomain    string `json:"subdomain"`
-				PreserveHost bool   `json:"preserve_host"`
-				Passcode     string `json:"passcode"`
-				RateLimit    int    `json:"rate_limit"`
+				ServerURL          string `json:"server_url"`
+				AuthToken          string `json:"auth_token"`
+				TargetHost         string `json:"target_host"`
+				DestPort           int    `json:"dest_port"`
+				Subdomain          string `json:"subdomain"`
+				PreserveHost       bool   `json:"preserve_host"`
+				InsecureSkipVerify bool   `json:"insecure_skip_verify"`
+				Passcode           string `json:"passcode"`
+				RateLimit          int    `json:"rate_limit"`
 			}
 			if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 				w.WriteHeader(http.StatusBadRequest)
@@ -219,6 +221,7 @@ func StartInspector(port int, engine *InterceptorEngine) (int, error) {
 			cfg.Ports = []int{req.DestPort}
 			cfg.Subdomain = req.Subdomain
 			cfg.PreserveHost = req.PreserveHost
+			cfg.InsecureSkipVerify = req.InsecureSkipVerify
 			cfg.Passcode = req.Passcode
 			cfg.RateLimit = req.RateLimit
 

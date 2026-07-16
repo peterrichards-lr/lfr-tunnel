@@ -144,6 +144,8 @@ func main() {
 	engine.ServerURL = cfg.ServerURL
 	engine.Passcode = cfg.Passcode
 	engine.WhitelistIPs = cfg.WhitelistIPs
+	engine.PreserveHost = cfg.PreserveHost
+	engine.InsecureSkipVerify = cfg.InsecureSkipVerify
 	engine.AccessMode = "or"
 	engine.Latency = cfg.Latency
 	if cfg.Bandwidth != "" {

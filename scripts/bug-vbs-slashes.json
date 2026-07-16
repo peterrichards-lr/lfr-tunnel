@@ -1,0 +1,20 @@
+{
+  "title": "[Bug] Windows VBScript Startup Install Path Generation Fails",
+  "body": "The Windows `InstallGUIService` and `InstallService` routines use `strings.ReplaceAll(exePath, \"\\\\\", \"\\\\\\\\\")` which incorrectly injects double backslashes into the `.vbs` startup script paths. In addition, the VBScript file uses Unix `\\n` line endings instead of Windows `\\r\\n` CRLF.",
+  "labels": [
+    "bug"
+  ],
+  "issues": [
+    {
+      "title": "Fix VBScript double backslashes and CRLF line endings",
+      "body": "Remove `strings.ReplaceAll` escaping for VBScript template paths in `pkg/client/service_installer.go` and replace raw string literals with concatenated strings containing explicit `\\r\\n` sequences.",
+      "completed": true,
+      "labels": [
+        "bug"
+      ],
+      "issueNumber": "544",
+      "closed": true
+    }
+  ],
+  "epicNumber": "543"
+}

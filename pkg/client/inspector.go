@@ -186,13 +186,13 @@ func StartInspector(port int, engine *InterceptorEngine) (int, error) {
 			return
 		}
 		logFile := filepath.Join(home, ".lfr-tunnel", fmt.Sprintf("client-%s.log", engine.ClientSubdomain))
-		
+
 		data, err := os.ReadFile(logFile)
 		if err != nil {
 			http.Error(w, "Failed to read log file", http.StatusInternalServerError)
 			return
 		}
-		
+
 		w.Header().Set("Content-Type", "text/plain; charset=utf-8")
 		_, _ = w.Write(data)
 	})

@@ -147,6 +147,7 @@ func main() {
 	engine.Passcode = cfg.Passcode
 	engine.WhitelistIPs = cfg.WhitelistIPs
 	engine.PreserveHost = cfg.PreserveHost
+	engine.ClientSubdomain = sub
 	engine.InsecureSkipVerify = cfg.InsecureSkipVerify
 	engine.AccessMode = "or"
 	engine.Latency = cfg.Latency

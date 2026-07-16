@@ -1,7 +1,10 @@
 {
-  "version": "v1.38.1",
+  "version": "v1.39.0",
   "release_date": "2026-07-16",
   "features": [
+    "Feature: Custom Admin-defined Maintenance Pages for gateway",
+    "Feature: Implement responsive 2-column UI settings layout",
+    "Feature: Add light theme icon variant for client applications",
     "Fix: Resolve 'Connect' failure in Windows 11 GUI caused by log file locks and console window flashing",
     "Fix: Resolve SentinelOne quarantine interference during self-upgrade by downloading to whitelisted path",
     "Feature: Implement Live Logs UI in Client Inspector",

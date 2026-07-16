@@ -1,0 +1,20 @@
+{
+  "title": "[Bug] Windows GUI crashes due to PNG tray icons",
+  "body": "The Windows implementation of `systray` requires `.ico` files to render the tray icon. We recently replaced the tray icons with `.png` files, which causes the application to fail to initialize the system tray on Windows environments.",
+  "labels": [
+    "bug"
+  ],
+  "issues": [
+    {
+      "title": "Provide native .ico files for Windows systray",
+      "body": "Convert `icon_active.png` and `icon_inactive.png` to `.ico` format. Implement conditional compilation (`//go:build windows`) to embed `.ico` files on Windows, while keeping `.png` for macOS and Linux.",
+      "completed": true,
+      "labels": [
+        "bug"
+      ],
+      "issueNumber": "547",
+      "closed": true
+    }
+  ],
+  "epicNumber": "546"
+}

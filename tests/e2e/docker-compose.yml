@@ -61,6 +61,8 @@ services:
     environment:
       - LFT_TARGET_HOST=mock-target
       - LFT_TARGET_PORT=80
+    ports:
+      - "4040:4040"
     # Stalled entrypoint so the container is running and we can execute commands inside it
     entrypoint: ["sleep", "infinity"]
     depends_on:

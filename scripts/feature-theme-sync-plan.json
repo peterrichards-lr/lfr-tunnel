@@ -1,0 +1,37 @@
+{
+  "epicNumber": "570",
+  "title": "[Epic] Client Inspector Theme Sync and Localization Updates",
+  "body": "Implement UI Theme Synchronization from Server to Client Inspector, add local theme override controls, fix CSS contrast issues, and update subdomain help tooltips across all localizations.",
+  "labels": [
+    "enhancement"
+  ],
+  "issues": [
+    {
+      "title": "Sub-Issue #1: Sync ThemePreference to Client",
+      "body": "Update Server Registration response to include Account ThemePreference and expose via Client `/api/state`.",
+      "completed": false,
+      "labels": [
+        "enhancement"
+      ],
+      "issueNumber": "571"
+    },
+    {
+      "title": "Sub-Issue #2: Client Inspector Theme Toggle UI",
+      "body": "Implement CSS variables for Light Mode and add Theme Override dropdown in Client Settings panel with JS reactivity.",
+      "completed": false,
+      "labels": [
+        "enhancement"
+      ],
+      "issueNumber": "572"
+    },
+    {
+      "title": "Sub-Issue #3: Subdomain Permission Tooltips",
+      "body": "Update subdomain help tooltips in all languages to explicitly mention account permissions.",
+      "completed": false,
+      "labels": [
+        "enhancement"
+      ],
+      "issueNumber": "573"
+    }
+  ]
+}

@@ -10,7 +10,7 @@ import (
 func TestVersionSync(t *testing.T) {
 	// Path to whats-new.json relative to pkg/config
 	path := filepath.Join("..", "server", "static", "whats-new.json")
-	
+
 	data, err := os.ReadFile(path)
 	if err != nil {
 		t.Fatalf("Failed to read %s: %v", path, err)

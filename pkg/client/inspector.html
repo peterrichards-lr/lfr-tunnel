@@ -166,6 +166,10 @@
                 <!-- Injected via JS -->
             </div>
         </div>
+        <div class="traffic-header" style="display: flex; justify-content: space-between; align-items: center; padding: 12px 16px; border-bottom: 1px solid var(--border); background: rgba(0,0,0,0.2);">
+            <div style="font-size: 12px; font-weight: 600; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.05em;" data-i18n="client_traffic_log">Traffic Log</div>
+            <button onclick="clearTraffic()" style="background: transparent; color: var(--danger); border: 1px solid rgba(255, 60, 60, 0.3); padding: 4px 8px; border-radius: 4px; font-size: 11px; cursor: pointer; transition: background 0.2s;" onmouseover="this.style.background='rgba(255, 60, 60, 0.1)'" onmouseout="this.style.background='transparent'" data-i18n="client_clear_traffic">Clear</button>
+        </div>
         <div class="req-list" id="req-list">
             <!-- Items injected by JS -->
         </div>
@@ -186,6 +190,7 @@ const clientTranslations = {
         "client_replaying": "Replaying...",
         "client_maint": "Maintenance",
         "client_traffic_log": "Traffic Log",
+        "client_clear_traffic": "Clear",
         "client_config_title": "Client Configuration",
         "client_config_subtitle": "Manage your local Liferay Tunnel settings",
         "client_settings": "Settings",
@@ -223,6 +228,7 @@ const clientTranslations = {
         "client_listening": "Escuchando en localhost:4040",
         "client_maint": "Mantenimiento",
         "client_traffic_log": "Registro de Tráfico",
+        "client_clear_traffic": "Limpiar",
         "client_config_title": "Configuración del Cliente",
         "client_config_subtitle": "Gestione la configuración local de Liferay Tunnel",
         "client_settings": "Ajustes",
@@ -260,6 +266,7 @@ const clientTranslations = {
         "client_listening": "Hört auf localhost:4040",
         "client_maint": "Wartung",
         "client_traffic_log": "Verkehrsprotokoll",
+        "client_clear_traffic": "Löschen",
         "client_config_title": "Client-Konfiguration",
         "client_config_subtitle": "Verwalten Sie Ihre lokalen Liferay Tunnel-Einstellungen",
         "client_settings": "Einstellungen",
@@ -297,6 +304,7 @@ const clientTranslations = {
         "client_listening": "En écoute sur localhost:4040",
         "client_maint": "Maintenance",
         "client_traffic_log": "Journal de Trafic",
+        "client_clear_traffic": "Effacer",
         "client_config_title": "Configuration du Client",
         "client_config_subtitle": "Gérez vos paramètres locaux Liferay Tunnel",
         "client_settings": "Paramètres",
@@ -334,6 +342,7 @@ const clientTranslations = {
         "client_listening": "Ouvindo em localhost:4040",
         "client_maint": "Manutenção",
         "client_traffic_log": "Tráfego",
+        "client_clear_traffic": "Limpar",
         "client_config_title": "Configuração do Cliente",
         "client_config_subtitle": "Gerencie suas configurações locais do Liferay Tunnel",
         "client_settings": "Configurações",
@@ -371,6 +380,7 @@ const clientTranslations = {
         "client_listening": "localhost:4040 でリッスン中",
         "client_maint": "メンテナンス",
         "client_traffic_log": "トラフィックログ",
+        "client_clear_traffic": "クリア",
         "client_config_title": "クライアント設定",
         "client_config_subtitle": "ローカルのLiferay Tunnel設定を管理します",
         "client_settings": "設定",
@@ -787,59 +797,74 @@ function setLanguage(lang) {
                     <div class="details-meta" data-i18n="client_config_subtitle">Manage your local Liferay Tunnel settings</div>
                 </div>
                 <div class="details-content" style="display: flex; justify-content: center; align-items: flex-start; padding: 30px;">
-                    <div class="panel" style="max-width: 600px; flex: initial; width: 100%;">
+                    <div class="panel" style="max-width: 800px; flex: initial; width: 100%;">
                         <div class="panel-title" data-i18n="client_settings">Settings</div>
-                        <div class="panel-body" style="display: flex; flex-direction: column; gap: 15px; padding: 20px;">
-                            <div id="settings-error" style="color: var(--danger); font-weight: 600; display: none; padding-bottom: 10px; font-size: 13px;"></div>
-                            <div id="settings-success" style="color: var(--success); font-weight: 600; display: none; padding-bottom: 10px; font-size: 13px;" data-i18n="client_config_saved">Configuration saved successfully!</div>
+                        <div class="panel-body" style="padding: 20px;">
+                            <div id="settings-error" style="color: var(--danger); font-weight: 600; display: none; margin-bottom: 20px; font-size: 13px; padding: 12px; background: rgba(255, 60, 60, 0.1); border-radius: 6px; border: 1px solid rgba(255, 60, 60, 0.3);"></div>
+                            <div id="settings-success" style="color: var(--success); font-weight: 600; display: none; margin-bottom: 20px; font-size: 13px; padding: 12px; background: rgba(46, 204, 113, 0.1); border-radius: 6px; border: 1px solid rgba(46, 204, 113, 0.3);" data-i18n="client_config_saved">Configuration saved successfully! Note: Changes to Target Host, Port, and SSL settings require you to restart the lfr-tunnel client process to take effect.</div>
                             
-                            <div style="display: flex; flex-direction: column; gap: 6px;">
-                                <label style="font-weight: 500; color: var(--text-muted); font-size: 11px;" data-i18n="client_server_url" data-i18n-help="client_server_url_help">Server URL <span class="help-icon" title="The public address of the remote Liferay Tunnel Gateway. E.g. https://tunnel.lfr-demo.se">?</span></label>
-                                <input type="text" id="cfg-server-url" style="background: rgba(0,0,0,0.3); border: 1px solid var(--border); color: white; padding: 10px; border-radius: 6px; font-size: 13px; outline: none; width: 100%;">
-                            </div>
-                            
-                            <div style="display: flex; flex-direction: column; gap: 6px;">
-                                <label style="font-weight: 500; color: var(--text-muted); font-size: 11px;" data-i18n="client_auth_token" data-i18n-help="client_auth_token_help">Authentication Token <span class="help-icon" title="Your personal token from the gateway to authenticate your tunnel. Leave blank to use a token file.">?</span></label>
-                                <input type="password" id="cfg-auth-token" placeholder="Enter token (masked if set)" data-i18n="client_auth_placeholder" style="background: rgba(0,0,0,0.3); border: 1px solid var(--border); color: white; padding: 10px; border-radius: 6px; font-size: 13px; outline: none; width: 100%;">
-                            </div>
-                            
-                            <div style="display: flex; flex-direction: column; gap: 6px;">
-                                <label style="font-weight: 500; color: var(--text-muted); font-size: 11px;" data-i18n="client_local_port" data-i18n-help="client_local_port_help">Local Target Port <span class="help-icon" title="The port of your local dev server running on your machine (e.g. 8080 for Liferay).">?</span></label>
-                                <input type="number" id="cfg-dest-port" style="background: rgba(0,0,0,0.3); border: 1px solid var(--border); color: white; padding: 10px; border-radius: 6px; font-size: 13px; outline: none; width: 100%;">
-                            </div>
-                            
-                            <div style="display: flex; flex-direction: column; gap: 6px;">
-                                <label style="font-weight: 500; color: var(--text-muted); font-size: 11px;" data-i18n="client_local_host" data-i18n-help="client_local_host_help">Local Target Host <span class="help-icon" title="The hostname of your local dev server. Usually 'localhost' or 'host.docker.internal' if proxying into a container.">?</span></label>
-                                <input type="text" id="cfg-target-host" placeholder="localhost" style="background: rgba(0,0,0,0.3); border: 1px solid var(--border); color: white; padding: 10px; border-radius: 6px; font-size: 13px; outline: none; width: 100%;">
-                            </div>
-                            
-                            <div style="display: flex; flex-direction: column; gap: 6px;">
-                                <label style="font-weight: 500; color: var(--text-muted); font-size: 11px;" data-i18n="client_req_subdomain" data-i18n-help="client_req_subdomain_help">Requested Subdomain (Optional) <span class="help-icon" title="A custom name for your public URL (subject to permissions).">?</span></label>
-                                <input type="text" id="cfg-subdomain" placeholder="e.g. peter" style="background: rgba(0,0,0,0.3); border: 1px solid var(--border); color: white; padding: 10px; border-radius: 6px; font-size: 13px; outline: none; width: 100%;">
+                            <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 24px; margin-bottom: 24px;">
+                                <!-- Column 1: Connection & Authentication -->
+                                <div style="display: flex; flex-direction: column; gap: 15px;">
+                                    <h3 style="margin-top: 0; margin-bottom: 5px; font-size: 14px; color: var(--text-color); border-bottom: 1px solid var(--border); padding-bottom: 8px;">Connection</h3>
+                                    
+                                    <div style="display: flex; flex-direction: column; gap: 6px;">
+                                        <label style="font-weight: 500; color: var(--text-muted); font-size: 11px;" data-i18n="client_server_url" data-i18n-help="client_server_url_help">Server URL <span class="help-icon" title="The public address of the remote Liferay Tunnel Gateway. E.g. https://tunnel.lfr-demo.se">?</span></label>
+                                        <input type="text" id="cfg-server-url" style="background: rgba(0,0,0,0.3); border: 1px solid var(--border); color: white; padding: 10px; border-radius: 6px; font-size: 13px; outline: none; width: 100%;">
+                                    </div>
+                                    
+                                    <div style="display: flex; flex-direction: column; gap: 6px;">
+                                        <label style="font-weight: 500; color: var(--text-muted); font-size: 11px;" data-i18n="client_auth_token" data-i18n-help="client_auth_token_help">Authentication Token <span class="help-icon" title="Your personal token from the gateway to authenticate your tunnel. Leave blank to use a token file.">?</span></label>
+                                        <input type="password" id="cfg-auth-token" placeholder="Enter token (masked if set)" data-i18n="client_auth_placeholder" style="background: rgba(0,0,0,0.3); border: 1px solid var(--border); color: white; padding: 10px; border-radius: 6px; font-size: 13px; outline: none; width: 100%;">
+                                    </div>
+                                    
+                                    <div style="display: flex; flex-direction: column; gap: 6px;">
+                                        <label style="font-weight: 500; color: var(--text-muted); font-size: 11px;" data-i18n="client_req_subdomain" data-i18n-help="client_req_subdomain_help">Requested Subdomain (Optional) <span class="help-icon" title="A custom name for your public URL (subject to permissions).">?</span></label>
+                                        <input type="text" id="cfg-subdomain" placeholder="e.g. peter" style="background: rgba(0,0,0,0.3); border: 1px solid var(--border); color: white; padding: 10px; border-radius: 6px; font-size: 13px; outline: none; width: 100%;">
+                                    </div>
+
+                                    <div style="display: flex; flex-direction: column; gap: 6px; margin-top: 5px;">
+                                        <label style="font-weight: 500; color: var(--text-muted); font-size: 11px;">UI Theme Override <span class="help-icon" title="Overrides the Theme Preference set on your Server Account settings.">?</span></label>
+                                        <select id="cfg-theme" style="background: rgba(0,0,0,0.3); border: 1px solid var(--border); color: white; padding: 10px; border-radius: 6px; font-size: 13px; outline: none; width: 100%;" onchange="const v = this.value; if(v){localStorage.setItem('inspector_theme', v); applyTheme(v);}else{localStorage.removeItem('inspector_theme'); applyTheme(serverThemePref);}">
+                                            <option value="">Server Default</option>
+                                            <option value="system">Follow System</option>
+                                            <option value="light">Light Mode</option>
+                                            <option value="dark">Dark Mode</option>
+                                            <option value="time">Time of Day (8am-8pm Light)</option>
+                                        </select>
+                                    </div>
+                                </div>
+                                
+                                <!-- Column 2: Local Target Configuration -->
+                                <div style="display: flex; flex-direction: column; gap: 15px;">
+                                    <h3 style="margin-top: 0; margin-bottom: 5px; font-size: 14px; color: var(--text-color); border-bottom: 1px solid var(--border); padding-bottom: 8px;">Local Target</h3>
+                                    
+                                    <div style="display: flex; flex-direction: column; gap: 6px;">
+                                        <label style="font-weight: 500; color: var(--text-muted); font-size: 11px;" data-i18n="client_local_host" data-i18n-help="client_local_host_help">Local Target Host <span class="help-icon" title="The hostname of your local dev server. Usually 'localhost' or 'host.docker.internal' if proxying into a container.">?</span></label>
+                                        <input type="text" id="cfg-target-host" placeholder="localhost" style="background: rgba(0,0,0,0.3); border: 1px solid var(--border); color: white; padding: 10px; border-radius: 6px; font-size: 13px; outline: none; width: 100%;">
+                                    </div>
+
+                                    <div style="display: flex; flex-direction: column; gap: 6px;">
+                                        <label style="font-weight: 500; color: var(--text-muted); font-size: 11px;" data-i18n="client_local_port" data-i18n-help="client_local_port_help">Local Target Port <span class="help-icon" title="The port of your local dev server running on your machine (e.g. 8080 for Liferay).">?</span></label>
+                                        <input type="number" id="cfg-dest-port" style="background: rgba(0,0,0,0.3); border: 1px solid var(--border); color: white; padding: 10px; border-radius: 6px; font-size: 13px; outline: none; width: 100%;">
+                                    </div>
+
+                                    <div style="display: flex; flex-direction: column; gap: 10px; margin-top: 5px; padding: 10px; background: rgba(255,255,255,0.02); border-radius: 6px; border: 1px solid var(--border);">
+                                        <div style="display: flex; align-items: center; gap: 10px;">
+                                            <input type="checkbox" id="cfg-preserve-host" style="width: 16px; height: 16px; cursor: pointer;">
+                                            <label for="cfg-preserve-host" style="font-weight: 500; color: var(--text-muted); cursor: pointer; font-size: 13px;" data-i18n="client_preserve_host" data-i18n-help="client_preserve_host_help">Preserve incoming Host header <span class="help-icon" title="If checked, forwards the public URL Host header to your local server instead of rewriting it to the Target Host. Useful for Liferay Virtual Instances.">?</span></label>
+                                        </div>
+                                        <div style="display: flex; align-items: center; gap: 10px;">
+                                            <input type="checkbox" id="cfg-insecure-skip-verify" style="width: 16px; height: 16px; cursor: pointer;">
+                                            <label for="cfg-insecure-skip-verify" style="font-weight: 500; color: var(--text-muted); cursor: pointer; font-size: 13px;" data-i18n="client_insecure_ssl" data-i18n-help="client_insecure_ssl_help">Allow insecure local SSL (Skip TLS Verification) <span class="help-icon" title="If checking against an HTTPS port (e.g. 443), this bypasses strict certificate checks. Required for most self-signed localhost certificates.">?</span></label>
+                                        </div>
+                                    </div>
+                                </div>
                             </div>
 
-                            <div style="display: flex; flex-direction: column; gap: 6px; margin-top: 5px;">
-                                <label style="font-weight: 500; color: var(--text-muted); font-size: 11px;">UI Theme Override <span class="help-icon" title="Overrides the Theme Preference set on your Server Account settings.">?</span></label>
-                                <select id="cfg-theme" style="background: rgba(0,0,0,0.3); border: 1px solid var(--border); color: white; padding: 10px; border-radius: 6px; font-size: 13px; outline: none; width: 100%;" onchange="const v = this.value; if(v){localStorage.setItem('inspector_theme', v); applyTheme(v);}else{localStorage.removeItem('inspector_theme'); applyTheme(serverThemePref);}">
-                                    <option value="">Server Default</option>
-                                    <option value="system">Follow System</option>
-                                    <option value="light">Light Mode</option>
-                                    <option value="dark">Dark Mode</option>
-                                    <option value="time">Time of Day (8am-8pm Light)</option>
-                                </select>
+                            <div style="border-top: 1px solid var(--border); padding-top: 20px; text-align: right;">
+                                <button onclick="saveSettings()" style="background: var(--primary); color: white; border: none; padding: 12px 24px; border-radius: 6px; font-size: 13px; font-weight: 600; cursor: pointer; transition: background 0.2s;" data-i18n="client_save_config">Save Configuration</button>
                             </div>
-
-                            <div style="display: flex; align-items: center; gap: 10px; margin-top: 10px;">
-                                <input type="checkbox" id="cfg-preserve-host" style="width: 16px; height: 16px; cursor: pointer;">
-                                <label for="cfg-preserve-host" style="font-weight: 500; color: var(--text-muted); cursor: pointer; font-size: 13px;" data-i18n="client_preserve_host" data-i18n-help="client_preserve_host_help">Preserve incoming Host header <span class="help-icon" title="If checked, forwards the public URL Host header to your local server instead of rewriting it to the Target Host. Useful for Liferay Virtual Instances.">?</span></label>
-                            </div>
-
-                            <div style="display: flex; align-items: center; gap: 10px; margin-top: 5px;">
-                                <input type="checkbox" id="cfg-insecure-skip-verify" style="width: 16px; height: 16px; cursor: pointer;">
-                                <label for="cfg-insecure-skip-verify" style="font-weight: 500; color: var(--text-muted); cursor: pointer; font-size: 13px;" data-i18n="client_insecure_ssl" data-i18n-help="client_insecure_ssl_help">Allow insecure local SSL (Skip TLS Verification) <span class="help-icon" title="If checking against an HTTPS port (e.g. 443), this bypasses strict certificate checks. Required for most self-signed localhost certificates.">?</span></label>
-                            </div>
-
-                            <button onclick="saveSettings()" style="background: var(--primary); color: white; border: none; padding: 12px; border-radius: 6px; font-size: 13px; font-weight: 600; cursor: pointer; margin-top: 10px; transition: background 0.2s;" data-i18n="client_save_config">Save Configuration</button>
                         </div>
                     </div>
                 </div>
@@ -853,8 +878,8 @@ function setLanguage(lang) {
                 document.getElementById('cfg-dest-port').value = cfg.dest_port || 8080;
                 document.getElementById('cfg-target-host').value = cfg.target_host || 'localhost';
                 document.getElementById('cfg-subdomain').value = cfg.subdomain || '';
-                document.getElementById('cfg-preserve-host').checked = cfg.preserve_host === "true";
-                document.getElementById('cfg-insecure-skip-verify').checked = cfg.insecure_skip_verify === "true";
+                document.getElementById('cfg-preserve-host').checked = !!cfg.preserve_host;
+                document.getElementById('cfg-insecure-skip-verify').checked = !!cfg.insecure_skip_verify;
                 document.getElementById('cfg-theme').value = localStorage.getItem('inspector_theme') || '';
                 
                 setLanguage(currentLang);
@@ -920,6 +945,20 @@ function setLanguage(lang) {
                 console.error("Error saving config", e);
                 errEl.innerText = 'Error: ' + e.message;
                 errEl.style.display = 'block';
+            }
+        }
+
+        async function clearTraffic() {
+            try {
+                await fetch('/api/state', { method: 'DELETE' });
+                requests = [];
+                renderList();
+                const main = document.getElementById('main-view');
+                if (main) {
+                    main.innerHTML = '<div class="empty-state" data-i18n="client_select_req">Select a request to view details</div>';
+                }
+            } catch(e) {
+                console.error("Failed to clear traffic", e);
             }
         }
 

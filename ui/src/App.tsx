@@ -6,6 +6,9 @@ import AdminRoute from './components/AdminRoute';
 import AdminSubdomains from './pages/AdminSubdomains';
 import AdminUsers from './pages/AdminUsers';
 import AdminSettings from './pages/AdminSettings';
+import AdminAuditLog from './pages/AdminAuditLog';
+import AdminBlacklist from './pages/AdminBlacklist';
+import AdminExtensions from './pages/AdminExtensions';
 
 function App() {
   return (
@@ -19,7 +22,10 @@ function App() {
           
           <Route element={<AdminRoute />}>
             <Route path="/admin/subdomains" element={<AdminSubdomains />} />
+            <Route path="/admin/extensions" element={<AdminExtensions />} />
             <Route path="/admin/users" element={<AdminUsers />} />
+            <Route path="/admin/audit" element={<AdminAuditLog />} />
+            <Route path="/admin/blacklist" element={<AdminBlacklist />} />
             <Route path="/admin/settings" element={<AdminSettings />} />
           </Route>
         </Route>

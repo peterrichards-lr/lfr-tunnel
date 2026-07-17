@@ -31,8 +31,17 @@ export default function Sidebar({ user }: SidebarProps) {
               <NavLink to="/admin/subdomains" className={({ isActive }) => `nav-item ${isActive ? 'active' : ''}`}>
                 Subdomains
               </NavLink>
+              <NavLink to="/admin/extensions" className={({ isActive }) => `nav-item ${isActive ? 'active' : ''}`}>
+                Extensions
+              </NavLink>
               <NavLink to="/admin/users" className={({ isActive }) => `nav-item ${isActive ? 'active' : ''}`}>
                 Users
+              </NavLink>
+              <NavLink to="/admin/audit" className={({ isActive }) => `nav-item ${isActive ? 'active' : ''}`}>
+                Audit Log
+              </NavLink>
+              <NavLink to="/admin/blacklist" className={({ isActive }) => `nav-item ${isActive ? 'active' : ''}`}>
+                IP Blacklist
               </NavLink>
               <NavLink to="/admin/settings" className={({ isActive }) => `nav-item ${isActive ? 'active' : ''}`}>
                 Settings

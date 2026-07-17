@@ -35,7 +35,7 @@ Always run unit and E2E integration tests before proposing deployment.
   *(Outputs `bin/lfr-tunnel` and `bin/lfr-tunneld`)*
 - **Build Multi-Platform Client Binaries**:
   ```bash
-  ./scripts/build-client-binaries.sh
+  go run ./cmd/lfr-tunnel-ops build
   ```
   *(Outputs to `dist/`: Darwin arm64/amd64, Linux arm64/amd64, and Windows amd64)*
 
@@ -60,7 +60,7 @@ To automate the release lifecycle (bumping the version in `whats-new.json`, crea
 Before deploying client binaries or making releases, they must be signed.
 - **Run Signing Script**:
   ```bash
-  ./scripts/sign-client-binaries.sh
+  go run ./cmd/lfr-tunnel-ops sign
   ```
   - **Environment Variables** (used to bypass interactive prompts):
     - `LFT_MACOS_IDENTITY`: macOS codesigning identity (e.g. from `security find-identity`).
@@ -78,18 +78,18 @@ Deployments require SSH access to the VPS. The private key is typically `~/.ssh/
 ### Deploying Client Binaries
 Copies the multi-platform binaries from `dist/` and `checksums.txt` to the VPS static downloads directory (`/var/www/lfr-tunnel/static/downloads`).
 ```bash
-./scripts/deploy-client-binaries.sh -i ~/.ssh/id_vm6_networks_vps
+go run ./cmd/lfr-tunnel-ops deploy-clients -i ~/.ssh/id_vm6_networks_vps
 ```
 
 ### Deploying Gateway Changes
 Cross-compiles the Linux `lfr-tunneld` binary and deploys it along with static assets, error pages, email templates, and translation resources to the VPS, restarting the systemd service.
 - **Deploy immediately**:
   ```bash
-  ./scripts/deploy.sh -i ~/.ssh/id_vm6_networks_vps
+  go run ./cmd/lfr-tunnel-ops deploy -i ~/.ssh/id_vm6_networks_vps
   ```
 - **Deploy with user countdown warning** (broadcasts alert message to active tunnels):
   ```bash
-  ./scripts/deploy.sh -i ~/.ssh/id_vm6_networks_vps -w 30
+  go run ./cmd/lfr-tunnel-ops deploy -i ~/.ssh/id_vm6_networks_vps -w 30
   ```
 
 ---
@@ -100,11 +100,11 @@ Manage Nginx maintenance mode or perform safe database backups/restores on the V
 
 - **Enable Maintenance Mode** (serves static Liferay-themed maintenance page):
   ```bash
-  ./scripts/enable-maintenance.sh -i ~/.ssh/id_vm6_networks_vps -a "Upgrade" -r "System Maintenance & Database Upgrade" -d "15m"
+  go run ./cmd/lfr-tunnel-ops maintenance enable -i ~/.ssh/id_vm6_networks_vps
   ```
 - **Disable Maintenance Mode**:
   ```bash
-  ./scripts/disable-maintenance.sh -i ~/.ssh/id_vm6_networks_vps
+  go run ./cmd/lfr-tunnel-ops maintenance disable -i ~/.ssh/id_vm6_networks_vps
   ```
 - **Safe Restore Backup** (automatically enables maintenance mode, restores DB, and disables maintenance):
   ```bash
@@ -117,7 +117,7 @@ Manage Nginx maintenance mode or perform safe database backups/restores on the V
 
 Run remote diagnostic checks on the VPS (checking system stats, systemd service status, Nginx configuration, database connection, and firewall rules):
 ```bash
-./scripts/diagnose-gateway.sh -i ~/.ssh/id_vm6_networks_vps
+go run ./cmd/lfr-tunnel-ops diagnose -i ~/.ssh/id_vm6_networks_vps
 ```
 
 

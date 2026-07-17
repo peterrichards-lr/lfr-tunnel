@@ -1,0 +1,9 @@
+### Tech Debt Analysis
+Currently, the client dashboard UI is tightly coupled inside `dashboard.js` and `dashboard.html`. DOM manipulation is handled procedurally, leading to overlapping state logic (such as banners colliding, modal overlapping, and tricky event listener bindings). Without a reactive framework, the codebase is fragile to scale.
+
+### Implementation Plan
+1. **Tooling & Setup**: Introduce a lightweight, buildless reactive framework (e.g., Alpine.js) or a minimal build step (e.g., Vite + Preact/React) to avoid rewriting the entire backend delivery mechanism.
+2. **Component Abstraction**: Break `dashboard.html` into logical components: `Navigation`, `TunnelList`, `SystemSettings`, `Inspector`, `Logs`, and `GlobalBanners`.
+3. **State Management**: Implement a centralized store or context for theme preferences, active tab state, and WebSocket connection status.
+4. **Data Binding**: Replace manual `document.getElementById` calls and `innerHTML` injections with reactive data binding.
+5. **Testing**: Write unit tests for individual components using Jest or Vitest, while maintaining the existing Playwright E2E suite for integration confidence.

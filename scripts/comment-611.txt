@@ -1,0 +1,12 @@
+### Tech Debt Analysis
+The `pkg/server` package has evolved from a simple reverse proxy to a complex control plane managing user authentication, email verification, active tunnels, and static assets. These concerns are currently mixed within the HTTP handlers, making the package difficult to read, unit test, and safely refactor.
+
+### Implementation Plan
+1. **Architecture Redesign**: Introduce a layered architecture by splitting `pkg/server` into:
+   - `handlers/`: HTTP request/response parsing and validation.
+   - `services/`: Core business logic (e.g., User Management, Tunnel Provisioning).
+   - `repositories/`: Database interaction and query execution.
+2. **Dependency Injection**: Refactor the server struct to accept services as interfaces, enabling mocked unit testing for HTTP handlers.
+3. **Refactor Iteration 1**: Extract User and Auth management logic from the main `server.go` file.
+4. **Refactor Iteration 2**: Extract WebSocket and Chisel reverse proxy logic into isolated networking services.
+5. **Testing**: Increase unit test coverage for the isolated `services/` logic.

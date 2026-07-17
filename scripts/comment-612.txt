@@ -1,0 +1,12 @@
+### Tech Debt Analysis
+Liferay Tunnel's repository contains multiple Bash scripts (`deploy.sh`, `sign-client-binaries.sh`, `build-client-binaries.sh`) and Python scripts. This creates a scattered developer experience, inconsistent argument parsing, cross-platform compatibility issues, and difficulty managing shared state (like paths and version strings).
+
+### Implementation Plan
+1. **CLI Scaffolding**: Create a new Go binary entry point `cmd/ops` using `cobra` to act as the central task runner.
+2. **Command Porting**: Migrate existing shell scripts into Go subcommands:
+   - `lfr-tunnel-ops build` (compiles cross-platform binaries)
+   - `lfr-tunnel-ops sign` (executes macOS/Windows/Linux signing logic)
+   - `lfr-tunnel-ops deploy` (handles SSH execution, copying, and systemd restarts)
+   - `lfr-tunnel-ops release` (bumps version and creates GH PRs)
+3. **Configuration**: Move hardcoded script paths into a unified `ops.yaml` configuration file for the ops tool.
+4. **Cleanup**: Deprecate and remove the old `scripts/` directory, updating GitHub Actions workflows to use the new `ops` binary.

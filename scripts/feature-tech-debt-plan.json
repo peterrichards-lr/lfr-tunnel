@@ -1,0 +1,46 @@
+{
+  "title": "Epic: Tech Debt Remediation & Codebase Modernization",
+  "body": "This Epic tracks the remediation of identified tech debt in the Liferay Tunnel project. As the codebase has grown, several areas require architectural refactoring to ensure long-term maintainability, including frontend componentization, backend decoupling, ops script consolidation, and stricter error handling.",
+  "labels": [
+    "enhancement"
+  ],
+  "issues": [
+    {
+      "title": "Refactor Dashboard UI: Componentize Vanilla JS Monolith",
+      "body": "The current dashboard UI relies on a single, massive Vanilla JavaScript file (`dashboard.js`) and a monolithic HTML file (`dashboard.html`). It uses procedural DOM manipulation which is fragile and hard to test. This issue involves migrating the UI logic into a modular, reactive approach.",
+      "completed": false,
+      "labels": [
+        "enhancement"
+      ],
+      "issueNumber": "610"
+    },
+    {
+      "title": "Decouple Server Package: Implement Standard Go Architecture",
+      "body": "The `pkg/server` package currently mixes HTTP handlers, WebSocket logic, database interactions, and static file serving. This issue tracks separating these concerns into standard Go layers (handlers, services, repositories) to isolate business logic from HTTP transport.",
+      "completed": false,
+      "labels": [
+        "enhancement"
+      ],
+      "issueNumber": "611"
+    },
+    {
+      "title": "Consolidate Operations: Replace Script Sprawl with Unified CLI / Task Runner",
+      "body": "The project relies on dozens of disjointed Bash and Python scripts for deployments, signing, maintenance, and CI syncing. This issue tracks migrating these into a unified Go-based administrative CLI or a structured task runner to centralize operations.",
+      "completed": false,
+      "labels": [
+        "enhancement"
+      ],
+      "issueNumber": "612"
+    },
+    {
+      "title": "Strict Error Handling: Audit and Resolve Suppressed I/O Errors",
+      "body": "Various basic I/O error checks (like `w.Write` in HTTP handlers) are currently suppressed using `_, _ =`. This issue involves auditing the codebase for suppressed errors and implementing proper connection failure handling.",
+      "completed": false,
+      "labels": [
+        "enhancement"
+      ],
+      "issueNumber": "613"
+    }
+  ],
+  "epicNumber": "609"
+}

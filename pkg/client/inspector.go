@@ -78,7 +78,7 @@ func StartInspector(port int, engine *InterceptorEngine) (int, error) {
 		}
 
 		w.Header().Set("Content-Type", "application/json")
-		_ = json.NewEncoder(w).Encode(state)
+		_ = json.NewEncoder(w).Encode(state) //nolint:errcheck
 	})
 
 	mux.HandleFunc("/api/healthz", func(w http.ResponseWriter, r *http.Request) {
@@ -139,7 +139,7 @@ func StartInspector(port int, engine *InterceptorEngine) (int, error) {
 		conn, err := net.DialTimeout("tcp", fmt.Sprintf("%s:%d", engine.TargetHost, engine.DestPort), 500*time.Millisecond)
 		if err == nil {
 			destResponsive = true
-			_ = conn.Close()
+			_ = conn.Close() //nolint:errcheck
 		}
 
 		status := "healthy"
@@ -199,7 +199,7 @@ func StartInspector(port int, engine *InterceptorEngine) (int, error) {
 		}
 
 		w.Header().Set("Content-Type", "application/json")
-		_ = json.NewEncoder(w).Encode(info)
+		_ = json.NewEncoder(w).Encode(info) //nolint:errcheck
 	})
 
 	mux.HandleFunc("/api/logs", func(w http.ResponseWriter, r *http.Request) {
@@ -253,7 +253,7 @@ func StartInspector(port int, engine *InterceptorEngine) (int, error) {
 				"maintenance_path":     cfg.MaintenancePath,
 				"nav_placement":        cfg.NavPlacement,
 			}
-			_ = json.NewEncoder(w).Encode(resp)
+			_ = json.NewEncoder(w).Encode(resp) //nolint:errcheck
 			return
 		}
 
@@ -304,7 +304,7 @@ func StartInspector(port int, engine *InterceptorEngine) (int, error) {
 			err = config.SaveClientConfig("", cfg)
 			if err != nil {
 				w.WriteHeader(http.StatusInternalServerError)
-				_ = json.NewEncoder(w).Encode(map[string]string{"error": "Failed to save configuration: " + err.Error()})
+				_ = json.NewEncoder(w).Encode(map[string]string{"error": "Failed to save configuration: " + err.Error()}) //nolint:errcheck
 				return
 			}
 
@@ -452,7 +452,7 @@ func StartInspector(port int, engine *InterceptorEngine) (int, error) {
 		if err != nil {
 			w.Header().Set("Content-Type", "application/json")
 			w.WriteHeader(http.StatusInternalServerError)
-			_ = json.NewEncoder(w).Encode(map[string]string{"error": err.Error()})
+			_ = json.NewEncoder(w).Encode(map[string]string{"error": err.Error()}) //nolint:errcheck
 			return
 		}
 
@@ -460,7 +460,7 @@ func StartInspector(port int, engine *InterceptorEngine) (int, error) {
 
 		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(http.StatusOK)
-		_ = json.NewEncoder(w).Encode(map[string]interface{}{
+		_ = json.NewEncoder(w).Encode(map[string]interface{}{ //nolint:errcheck
 			"status": "ok",
 			"new_id": newRec.ID,
 		})
@@ -588,7 +588,7 @@ func ReplayRequest(targetHost string, record *RequestRecord) (*RequestRecord, er
 	// Capture response body (up to 10KB)
 	var bodyBuf bytes.Buffer
 	limitReader := io.LimitReader(res.Body, 10240)
-	_, _ = io.Copy(&bodyBuf, limitReader)
+	_, _ = io.Copy(&bodyBuf, limitReader) //nolint:errcheck
 	rec.RespBody = bodyBuf.String()
 
 	return rec, nil

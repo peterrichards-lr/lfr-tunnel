@@ -16,7 +16,7 @@ func TestServer_HandleMFADisable(t *testing.T) {
 	defer srv.Stop()
 
 	dev := &db.User{ID: "dev@example.com", Email: "dev@example.com", Role: "developer", Status: "approved", TOTPEnabled: true}
-	_ = srv.db.CreateUser(dev)
+	_ = srv.db.CreateUser(dev) //nolint:errcheck
 
 	sessionToken := generateToken(16)
 	srv.portalMap.Store("admin_session_"+sessionToken, PortalSessionData{
@@ -48,7 +48,7 @@ func TestServer_HandleGetAnalytics(t *testing.T) {
 	defer srv.Stop()
 
 	admin := &db.User{ID: "admin@example.com", Email: "admin@example.com", Role: "admin", Status: "approved"}
-	_ = srv.db.CreateUser(admin)
+	_ = srv.db.CreateUser(admin) //nolint:errcheck
 
 	sessionToken := generateToken(16)
 	srv.portalMap.Store("admin_session_"+sessionToken, PortalSessionData{
@@ -72,7 +72,7 @@ func TestServer_HandleDeleteInvitation(t *testing.T) {
 	defer srv.Stop()
 
 	admin := &db.User{ID: "admin@example.com", Email: "admin@example.com", Role: "admin", Status: "approved"}
-	_ = srv.db.CreateUser(admin)
+	_ = srv.db.CreateUser(admin) //nolint:errcheck
 
 	sessionToken := generateToken(16)
 	srv.portalMap.Store("admin_session_"+sessionToken, PortalSessionData{

@@ -312,7 +312,7 @@ func overrideConfigWithFlags(cfg *config.ClientConfig) {
 		cfg.TargetHost = *targetHost
 	}
 	if *preserveHost {
-		_ = os.Setenv("LFT_PRESERVE_HOST", "true")
+		_ = os.Setenv("LFT_PRESERVE_HOST", "true") //nolint:errcheck
 		cfg.PreserveHost = true
 	}
 	if *insecureSkipVerify {
@@ -633,7 +633,7 @@ func handleBackground(sub string) {
 		log.Fatalf("[Client] Failed to resolve home directory: %v\n", err)
 	}
 	logDir := filepath.Join(home, ".lfr-tunnel")
-	_ = os.MkdirAll(logDir, 0700)
+	_ = os.MkdirAll(logDir, 0700) //nolint:errcheck
 	logPath := filepath.Join(logDir, fmt.Sprintf("client-%s.log", sub))
 
 	logFile, err := os.OpenFile(logPath, os.O_CREATE|os.O_WRONLY|os.O_TRUNC, 0600)
@@ -687,7 +687,7 @@ func handleStop(sub string, targetSpecific bool) {
 		if !isPIDRunning(pid) {
 			slog.Info(fmt.Sprintf("[Client] Stale PID file found for subdomain '%s'. Process %d is not running. Cleaning up...\n", s, pid))
 			pidPath, _ := getPIDFilePath(s)
-			_ = os.Remove(pidPath)
+			_ = os.Remove(pidPath) //nolint:errcheck
 			client.DeleteState(s)
 			continue
 		}
@@ -709,10 +709,10 @@ func handleStop(sub string, targetSpecific bool) {
 
 		if isPIDRunning(pid) {
 			slog.Info(fmt.Sprintf("[Client] Process %d did not respond to SIGINT. Force terminating...\n", pid))
-			_ = proc.Kill()
+			_ = proc.Kill() //nolint:errcheck
 		}
 		pidPath, _ := getPIDFilePath(s)
-		_ = os.Remove(pidPath)
+		_ = os.Remove(pidPath) //nolint:errcheck
 		client.DeleteState(s)
 		slog.Info(fmt.Sprintf("[Client] Tunnel for subdomain '%s' stopped.\n", s))
 	}
@@ -749,7 +749,7 @@ func handleStatus(sub string, targetSpecific bool) {
 		} else {
 			slog.Info(fmt.Sprintf("[Client] No background tunnel is active for subdomain '%s' (found stale PID file). Cleaning up...\n", s))
 			pidPath, _ := getPIDFilePath(s)
-			_ = os.Remove(pidPath)
+			_ = os.Remove(pidPath) //nolint:errcheck
 			client.DeleteState(s)
 		}
 	}
@@ -872,7 +872,7 @@ func probeFastestRegion(regions map[string]string) string {
 			start := time.Now()
 			resp, err := client.Get(targetURL + "/api/healthz")
 			if err == nil {
-				_ = resp.Body.Close()
+				_ = resp.Body.Close() //nolint:errcheck
 				rtt := time.Since(start)
 				ch <- probeResult{region: r, url: targetURL, rtt: rtt}
 			}

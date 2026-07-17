@@ -36,13 +36,13 @@ func (s *Server) handleAuthReport(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Invalidate the token
-	_ = s.db.MarkMagicLinkUsed(link.ID)
+	_ = s.db.MarkMagicLinkUsed(link.ID) //nolint:errcheck
 
 	// Audit Log
 	s.writeAudit(link.Email, "auth.magic_link_reported", "ip", link.ClientIP, "User reported unauthorized magic link request", r)
 
 	// Blacklist the IP
-	_ = s.db.AddBlacklistIP(link.ClientIP, "Reported via Magic Link email")
+	_ = s.db.AddBlacklistIP(link.ClientIP, "Reported via Magic Link email") //nolint:errcheck
 	s.blacklist.Store(link.ClientIP, true)
 	s.webhooks.SendAbuseReportAlert(link.Email, "Unauthorized magic link login attempt", link.ClientIP)
 
@@ -71,12 +71,12 @@ func (s *Server) handleAuthDecline(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Invalidate the token
-	_ = s.db.MarkMagicLinkUsed(link.ID)
+	_ = s.db.MarkMagicLinkUsed(link.ID) //nolint:errcheck
 
 	// Since they declined the invite, let's delete their user record (it was approved initially by the inviter)
 	user, err := s.db.GetUserByEmail(link.Email)
 	if err == nil {
-		_ = s.db.DeleteUser(user.ID)
+		_ = s.db.DeleteUser(user.ID) //nolint:errcheck
 	}
 
 	s.writeAudit(link.Email, "auth.invite_declined", "user", link.Email, "User declined administrator invitation", r)
@@ -101,7 +101,7 @@ func (s *Server) handleReportRegistration(w http.ResponseWriter, r *http.Request
 	}
 
 	// They reported the registration request as unauthorized
-	_ = s.db.DeleteUser(user.ID)
+	_ = s.db.DeleteUser(user.ID) //nolint:errcheck
 
 	s.writeAudit(user.Email, "auth.registration_reported", "user", user.Email, "User reported unauthorized registration request", r)
 	s.webhooks.SendAbuseReportAlert(user.Email, "Unauthorized registration request", getClientIP(r))

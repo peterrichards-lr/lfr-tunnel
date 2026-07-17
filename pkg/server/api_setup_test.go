@@ -102,7 +102,7 @@ func TestHandleCompleteSetup(t *testing.T) {
 					VerificationToken: "token_verified",
 					CreatedAt:         time.Now().UTC(),
 				}
-				_ = srv.db.CreateUser(u)
+				_ = srv.db.CreateUser(u) //nolint:errcheck
 				return "token_verified", nil
 			},
 			payload:        map[string]interface{}{"policy_consent": true},
@@ -118,7 +118,7 @@ func TestHandleCompleteSetup(t *testing.T) {
 					VerificationToken: "token_expired",
 					CreatedAt:         time.Now().UTC().Add(-3 * time.Hour), // expired (expiry is 2h)
 				}
-				_ = srv.db.CreateUser(u)
+				_ = srv.db.CreateUser(u) //nolint:errcheck
 				return "token_expired", nil
 			},
 			payload:        map[string]interface{}{"policy_consent": true},
@@ -141,7 +141,7 @@ func TestHandleCompleteSetup(t *testing.T) {
 					CreatedAt:         time.Now().UTC(),
 					ApprovalToken:     "approve_token_123",
 				}
-				_ = srv.db.CreateUser(u)
+				_ = srv.db.CreateUser(u) //nolint:errcheck
 				return "token_success", nil
 			},
 			payload: map[string]interface{}{
@@ -191,7 +191,7 @@ func TestHandleCompleteSetup(t *testing.T) {
 					Status:            "approved",
 					NotificationPrefs: "disabled",
 				}
-				_ = srv.db.CreateUser(admin)
+				_ = srv.db.CreateUser(admin) //nolint:errcheck
 
 				u := &db.User{
 					ID:                "success_no_notify@example.com",
@@ -200,9 +200,9 @@ func TestHandleCompleteSetup(t *testing.T) {
 					VerificationToken: "token_no_notify",
 					CreatedAt:         time.Now().UTC(),
 				}
-				_ = srv.db.CreateUser(u)
+				_ = srv.db.CreateUser(u) //nolint:errcheck
 				return "token_no_notify", func() {
-					_ = srv.db.DeleteUser("admin@example.com")
+					_ = srv.db.DeleteUser("admin@example.com") //nolint:errcheck
 				}
 			},
 			payload: map[string]interface{}{

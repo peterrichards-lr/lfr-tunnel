@@ -156,7 +156,7 @@ func TestWAF_RuleScanning(t *testing.T) {
 			// Verify that body can still be read afterwards (not drained)
 			if tt.body != "" {
 				buf := new(bytes.Buffer)
-				_, _ = buf.ReadFrom(req.Body)
+				_, _ = buf.ReadFrom(req.Body) //nolint:errcheck
 				if buf.String() != tt.body {
 					t.Errorf("Expected request body to be preserved: %q, got %q", tt.body, buf.String())
 				}

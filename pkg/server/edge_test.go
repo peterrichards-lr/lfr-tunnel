@@ -45,7 +45,7 @@ func TestEdgeValidationDeregisterAndAuditProxy(t *testing.T) {
 				SubdomainPrefix string   `json:"subdomain_prefix"`
 				Domains         []string `json:"domains"`
 			}
-			_ = json.NewDecoder(r.Body).Decode(&edgeReq)
+			_ = json.NewDecoder(r.Body).Decode(&edgeReq) //nolint:errcheck
 
 			if edgeReq.AuthToken != "user-pat-token" {
 				w.WriteHeader(http.StatusUnauthorized)
@@ -77,7 +77,7 @@ func TestEdgeValidationDeregisterAndAuditProxy(t *testing.T) {
 			var auditReq struct {
 				Details string `json:"details"`
 			}
-			_ = json.NewDecoder(r.Body).Decode(&auditReq)
+			_ = json.NewDecoder(r.Body).Decode(&auditReq) //nolint:errcheck
 			forwardedAuditDetails = auditReq.Details
 			w.WriteHeader(http.StatusOK)
 			return
@@ -123,7 +123,7 @@ func TestEdgeValidationDeregisterAndAuditProxy(t *testing.T) {
 	}
 
 	var regResp RegisterResponse
-	_ = json.NewDecoder(resp.Body).Decode(&regResp)
+	_ = json.NewDecoder(resp.Body).Decode(&regResp) //nolint:errcheck
 
 	if regResp.Status != "success" || regResp.SubdomainPrefix != "my-validated-sub" {
 		t.Fatalf("unexpected register response: %+v", regResp)

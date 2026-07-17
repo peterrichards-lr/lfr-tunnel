@@ -123,7 +123,7 @@ func (s *TempSettingsServer) handleInfo(w http.ResponseWriter, r *http.Request) 
 		"client_subdomain": sub,
 		"log_file":         logFile,
 	}
-	_ = json.NewEncoder(w).Encode(info)
+	_ = json.NewEncoder(w).Encode(info) //nolint:errcheck
 }
 
 func (s *TempSettingsServer) handleApiLogs(w http.ResponseWriter, r *http.Request) {
@@ -199,7 +199,7 @@ func (s *TempSettingsServer) handleConfigGet(w http.ResponseWriter) {
 		"passcode":             cfg.Passcode,
 		"rate_limit":           cfg.RateLimit,
 	}
-	_ = json.NewEncoder(w).Encode(resp)
+	_ = json.NewEncoder(w).Encode(resp) //nolint:errcheck
 }
 
 func (s *TempSettingsServer) handleConfigPost(w http.ResponseWriter, r *http.Request) {
@@ -242,7 +242,7 @@ func (s *TempSettingsServer) handleConfigPost(w http.ResponseWriter, r *http.Req
 	err = config.SaveClientConfig("", cfg)
 	if err != nil {
 		w.WriteHeader(http.StatusInternalServerError)
-		_ = json.NewEncoder(w).Encode(map[string]string{"error": err.Error()})
+		_ = json.NewEncoder(w).Encode(map[string]string{"error": err.Error()}) //nolint:errcheck
 		return
 	}
 	if _, err := w.Write([]byte(`{"status":"saved"}`)); err != nil {
@@ -258,7 +258,7 @@ func (s *TempSettingsServer) Stop() {
 	}
 	ctx, cancel := context.WithTimeout(context.Background(), 500*time.Millisecond)
 	defer cancel()
-	_ = s.server.Shutdown(ctx)
+	_ = s.server.Shutdown(ctx) //nolint:errcheck
 	s.server = nil
 }
 
@@ -282,7 +282,7 @@ func acquireGUILock() bool {
 	}
 
 	// Write our PID
-	_ = os.WriteFile(lockPath, []byte(strconv.Itoa(os.Getpid())), 0644)
+	_ = os.WriteFile(lockPath, []byte(strconv.Itoa(os.Getpid())), 0644) //nolint:errcheck
 	return true
 }
 
@@ -404,7 +404,7 @@ func updateMenu(tray *systray.SystemTray, cfg *config.ClientConfig, isRunning bo
 		tray.Remove()
 		tempServer.Stop()
 		if lockPath != "" {
-			_ = os.Remove(lockPath)
+			_ = os.Remove(lockPath) //nolint:errcheck
 		}
 		os.Exit(0)
 	})
@@ -436,10 +436,10 @@ func handleToggle(cfg *config.ClientConfig) {
 
 	if isRunning {
 		cmd := exec.Command(execPath, "-stop", "-subdomain", sub)
-		_ = cmd.Run()
+		_ = cmd.Run() //nolint:errcheck
 	} else {
 		cmd := exec.Command(execPath, "-background")
-		_ = cmd.Start()
+		_ = cmd.Start() //nolint:errcheck
 	}
 }
 
@@ -456,7 +456,7 @@ func handleCopyURLString(urlStr string) {
 		return
 	}
 	cmd.Stdin = strings.NewReader(urlStr)
-	_ = cmd.Run()
+	_ = cmd.Run() //nolint:errcheck
 }
 
 func handleOpenInspector(cfg *config.ClientConfig) {

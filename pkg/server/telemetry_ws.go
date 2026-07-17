@@ -39,7 +39,7 @@ func (c *wsClient) close() {
 	c.once.Do(func() {
 		close(c.done)
 		if c.conn != nil {
-			_ = c.conn.Close()
+			_ = c.conn.Close() //nolint:errcheck
 		}
 	})
 }
@@ -50,9 +50,9 @@ func (c *wsClient) readPump() {
 		c.close()
 	}()
 	c.conn.SetReadLimit(512)
-	_ = c.conn.SetReadDeadline(time.Now().Add(60 * time.Second))
+	_ = c.conn.SetReadDeadline(time.Now().Add(60 * time.Second)) //nolint:errcheck
 	c.conn.SetPongHandler(func(string) error {
-		_ = c.conn.SetReadDeadline(time.Now().Add(60 * time.Second))
+		_ = c.conn.SetReadDeadline(time.Now().Add(60 * time.Second)) //nolint:errcheck
 		return nil
 	})
 	for {
@@ -74,7 +74,7 @@ func (c *wsClient) writePump() {
 		case <-c.done:
 			return
 		case msg := <-c.send:
-			_ = c.conn.SetWriteDeadline(time.Now().Add(10 * time.Second))
+			_ = c.conn.SetWriteDeadline(time.Now().Add(10 * time.Second)) //nolint:errcheck
 			w, err := c.conn.NextWriter(websocket.TextMessage)
 			if err != nil {
 				return
@@ -86,7 +86,7 @@ func (c *wsClient) writePump() {
 				return
 			}
 		case <-ticker.C:
-			_ = c.conn.SetWriteDeadline(time.Now().Add(10 * time.Second))
+			_ = c.conn.SetWriteDeadline(time.Now().Add(10 * time.Second)) //nolint:errcheck
 			if err := c.conn.WriteMessage(websocket.PingMessage, nil); err != nil {
 				return
 			}

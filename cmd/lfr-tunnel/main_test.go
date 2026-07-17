@@ -71,7 +71,7 @@ func TestProbeFastestRegion(t *testing.T) {
 	}
 	// It will return an empty string or whatever is fastest (none in this case, meaning default/error)
 	// We just want to ensure it doesn't panic
-	_ = probeFastestRegion(regions)
+	_ = probeFastestRegion(regions) //nolint:errcheck
 }
 
 func TestRewriteRemotes(t *testing.T) {

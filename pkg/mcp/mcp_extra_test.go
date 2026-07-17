@@ -9,11 +9,11 @@ func TestMCPServer_Tools(t *testing.T) {
 
 	handleToolCall("123", "unknown_tool", []byte(`{}`))
 
-	_, _ = startTunnel("sub", "8080", "localhost")
-	_, _ = stopTunnel("sub")
-	_, _ = replayRequest("req-1")
+	_, _ = startTunnel("sub", "8080", "localhost") //nolint:errcheck
+	_, _ = stopTunnel("sub")                       //nolint:errcheck
+	_, _ = replayRequest("req-1")                  //nolint:errcheck
 }
 
 func TestMCPServer_queryInspectorInfo_Error(t *testing.T) {
-	_ = queryInspectorInfo("http://invalid-url-that-fails")
+	_ = queryInspectorInfo("http://invalid-url-that-fails") //nolint:errcheck
 }

@@ -69,7 +69,7 @@ func (s *portalService) CreateInvitation(user *db.User, subdomain, domain, name,
 	}
 	claimURL := fmt.Sprintf("%s/api/portal/invitations/claim?token=%s", baseURL, token)
 
-	_ = s.db.WriteAuditEntry(&db.AuditEntry{
+	_ = s.db.WriteAuditEntry(&db.AuditEntry{ //nolint:errcheck
 		ActorID:    user.Email,
 		Action:     "invitation.created",
 		TargetType: "subdomain",
@@ -104,7 +104,7 @@ func (s *portalService) DeleteInvitation(user *db.User, idStr, ip string) error 
 		return ErrInternalError
 	}
 
-	_ = s.db.WriteAuditEntry(&db.AuditEntry{
+	_ = s.db.WriteAuditEntry(&db.AuditEntry{ //nolint:errcheck
 		ActorID:    user.Email,
 		Action:     "invitation.deleted",
 		TargetType: "subdomain",
@@ -159,9 +159,9 @@ func (s *portalService) ClaimInvitation(token, pfxPassword, ip string) ([]byte, 
 		return nil, invite, ErrInternalError
 	}
 
-	_ = s.db.MarkGuestInvitationClaimed(token)
+	_ = s.db.MarkGuestInvitationClaimed(token) //nolint:errcheck
 
-	_ = s.db.WriteAuditEntry(&db.AuditEntry{
+	_ = s.db.WriteAuditEntry(&db.AuditEntry{ //nolint:errcheck
 		ActorID:    invite.Email,
 		Action:     "invitation.claimed",
 		TargetType: "subdomain",
@@ -216,9 +216,9 @@ func (s *portalService) CSRSignInvitation(token string, csr []byte, ip string) (
 		return nil, invite, ErrInternalError
 	}
 
-	_ = s.db.MarkGuestInvitationClaimed(token)
+	_ = s.db.MarkGuestInvitationClaimed(token) //nolint:errcheck
 
-	_ = s.db.WriteAuditEntry(&db.AuditEntry{
+	_ = s.db.WriteAuditEntry(&db.AuditEntry{ //nolint:errcheck
 		ActorID:    invite.Email,
 		Action:     "invitation.csr_claimed",
 		TargetType: "subdomain",

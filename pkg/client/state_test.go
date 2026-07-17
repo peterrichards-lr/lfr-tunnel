@@ -97,7 +97,7 @@ func TestQueryStatusJSON(t *testing.T) {
 	}
 
 	data, _ := json.Marshal(state)
-	_ = os.WriteFile(statePath, data, 0600)
+	_ = os.WriteFile(statePath, data, 0600) //nolint:errcheck
 
 	// Scenario 1: PID is running, and inspector is up
 	isRunningTrue := func(pid int) bool { return true }
@@ -129,7 +129,7 @@ func TestQueryStatusJSON(t *testing.T) {
 	}
 
 	var output2 StatusOutput
-	_ = json.Unmarshal(res2, &output2)
+	_ = json.Unmarshal(res2, &output2) //nolint:errcheck
 	if output2.Running {
 		t.Errorf("expected running to be false for non-running process")
 	}

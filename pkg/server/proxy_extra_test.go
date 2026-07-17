@@ -34,5 +34,5 @@ func TestEdgeControlWS_sendEdgeWSHeaders(t *testing.T) {
 
 func TestEdgeControlWS_SendEdgeMaintenance(t *testing.T) {
 	s := &Server{}
-	_ = s.SendEdgeMaintenance("nodeID", "action", 60, "reason")
+	_ = s.SendEdgeMaintenance("nodeID", "action", 60, "reason") //nolint:errcheck
 }

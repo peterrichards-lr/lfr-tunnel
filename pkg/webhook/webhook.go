@@ -101,7 +101,7 @@ func (w *WebhookService) postToURL(urlStr string, data interface{}, platform str
 		slog.Error("failed to send webhook request", "platform", platform, "error", err)
 		return err
 	}
-	defer func() { _ = resp.Body.Close() }()
+	defer func() { _ = resp.Body.Close() }() //nolint:errcheck
 
 	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
 		slog.Error("webhook endpoint returned failure status", "platform", platform, "status", resp.Status)

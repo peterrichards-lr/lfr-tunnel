@@ -42,7 +42,7 @@ func TestStartHealthChecks(t *testing.T) {
 }
 
 func TestIsDocker(t *testing.T) {
-	_ = IsDocker()
+	_ = IsDocker() //nolint:errcheck
 }
 
 func TestIsPIDRunning(t *testing.T) {
@@ -98,7 +98,7 @@ func TestRunClient_FailFast(t *testing.T) {
 
 	engine := NewInterceptorEngine("127.0.0.1", nil)
 	err := RunClient(ctx, srv.URL, "dummy-token", []string{"8080:localhost:8080"}, nil, engine)
-	_ = err // Context cancellation does not return error in chisel Run
+	_ = err // Context cancellation does not return error in chisel Run //nolint:errcheck
 }
 
 func TestInterceptorEngine_SetSubdomainDetails(t *testing.T) {

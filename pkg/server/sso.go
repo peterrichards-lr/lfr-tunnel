@@ -20,7 +20,7 @@ import (
 // generateRandomState generates a secure random state for OAuth2 CSRF protection
 func generateRandomState() string {
 	b := make([]byte, 32)
-	_, _ = rand.Read(b)
+	_, _ = rand.Read(b) //nolint:errcheck
 	return base64.RawURLEncoding.EncodeToString(b)
 }
 
@@ -231,7 +231,7 @@ func (s *Server) handleSSOCallback(w http.ResponseWriter, r *http.Request) {
 	})
 
 	// Inject an audit log
-	_ = s.db.WriteAuditEntry(&db.AuditEntry{
+	_ = s.db.WriteAuditEntry(&db.AuditEntry{ //nolint:errcheck
 		ActorID:    user.Email,
 		Action:     "user.login.sso",
 		TargetType: "user",

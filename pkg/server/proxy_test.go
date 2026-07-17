@@ -117,7 +117,7 @@ func TestProxyHandler_AccessControls(t *testing.T) {
 
 	// Seed database: User & Reservation
 	userID := "dev-user-id"
-	_ = database.CreateUser(&db.User{
+	_ = database.CreateUser(&db.User{ //nolint:errcheck
 		ID:        userID,
 		Email:     "dev@liferay.com",
 		Role:      "user",
@@ -136,7 +136,7 @@ func TestProxyHandler_AccessControls(t *testing.T) {
 		CreatedAt:    time.Now(),
 		UpdatedAt:    time.Now(),
 	}
-	_ = database.CreateSubdomainReservation(reservation)
+	_ = database.CreateSubdomainReservation(reservation) //nolint:errcheck
 
 	freePort, err := getFreePort()
 	if err != nil {

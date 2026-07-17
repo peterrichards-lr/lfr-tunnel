@@ -14,7 +14,7 @@ func TestInstallService(t *testing.T) {
 
 	_ = InstallService() //nolint:errcheck
 
-	_ = installDarwin(binPath) //nolint:errcheck
-	_ = installLinux(binPath)
-	_ = installWindows(binPath)
+	_ = installDarwin(binPath)  //nolint:errcheck
+	_ = installLinux(binPath)   //nolint:errcheck
+	_ = installWindows(binPath) //nolint:errcheck
 }

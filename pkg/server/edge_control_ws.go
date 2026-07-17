@@ -64,7 +64,7 @@ func (s *Server) handleEdgeControlWS(w http.ResponseWriter, r *http.Request) {
 
 	// 1. Generate challenge nonce
 	nonce := make([]byte, 16)
-	_, _ = rand.Read(nonce)
+	_, _ = rand.Read(nonce) //nolint:errcheck
 	nonceStr := hex.EncodeToString(nonce)
 
 	challenge := ControlMessage{
@@ -74,23 +74,23 @@ func (s *Server) handleEdgeControlWS(w http.ResponseWriter, r *http.Request) {
 
 	if err := conn.WriteJSON(challenge); err != nil {
 		slog.Info(fmt.Sprintf("[Edge WS] Failed to send challenge to %s: %v", nodeID, err))
-		_ = conn.Close()
+		_ = conn.Close() //nolint:errcheck
 		return
 	}
 
 	// 2. Wait for auth response
-	_ = conn.SetReadDeadline(time.Now().Add(5 * time.Second))
+	_ = conn.SetReadDeadline(time.Now().Add(5 * time.Second)) //nolint:errcheck
 	var authMsg ControlMessage
 	if err := conn.ReadJSON(&authMsg); err != nil {
 		slog.Info(fmt.Sprintf("[Edge WS] Failed to read auth message from %s: %v", nodeID, err))
-		_ = conn.Close()
+		_ = conn.Close() //nolint:errcheck
 		return
 	}
 
 	if authMsg.Type != "auth" {
 		slog.Info(fmt.Sprintf("[Edge WS] Expected auth message from %s, got %s", nodeID, authMsg.Type))
-		_ = conn.WriteJSON(ControlMessage{Type: "auth_failed", Reason: "unexpected message type"})
-		_ = conn.Close()
+		_ = conn.WriteJSON(ControlMessage{Type: "auth_failed", Reason: "unexpected message type"}) //nolint:errcheck
+		_ = conn.Close()                                                                           //nolint:errcheck
 		return
 	}
 
@@ -105,16 +105,16 @@ func (s *Server) handleEdgeControlWS(w http.ResponseWriter, r *http.Request) {
 
 	if nodeConfig == nil {
 		slog.Info(fmt.Sprintf("[Edge WS] Unknown edge node ID: %s", nodeID))
-		_ = conn.WriteJSON(ControlMessage{Type: "auth_failed", Reason: "unknown node_id"})
-		_ = conn.Close()
+		_ = conn.WriteJSON(ControlMessage{Type: "auth_failed", Reason: "unknown node_id"}) //nolint:errcheck
+		_ = conn.Close()                                                                   //nolint:errcheck
 		return
 	}
 
 	keyBytes, err := hex.DecodeString(nodeConfig.TokenHash)
 	if err != nil {
 		slog.Info(fmt.Sprintf("[Edge WS] Invalid token hash configured for %s", nodeID))
-		_ = conn.WriteJSON(ControlMessage{Type: "auth_failed", Reason: "invalid token hash"})
-		_ = conn.Close()
+		_ = conn.WriteJSON(ControlMessage{Type: "auth_failed", Reason: "invalid token hash"}) //nolint:errcheck
+		_ = conn.Close()                                                                      //nolint:errcheck
 		return
 	}
 
@@ -125,19 +125,19 @@ func (s *Server) handleEdgeControlWS(w http.ResponseWriter, r *http.Request) {
 	respMAC, err := hex.DecodeString(authMsg.Response)
 	if err != nil || subtle.ConstantTimeCompare(respMAC, expectedMAC) != 1 {
 		slog.Info(fmt.Sprintf("[Edge WS] HMAC verification failed for %s", nodeID))
-		_ = conn.WriteJSON(ControlMessage{Type: "auth_failed", Reason: "invalid signature"})
-		_ = conn.Close()
+		_ = conn.WriteJSON(ControlMessage{Type: "auth_failed", Reason: "invalid signature"}) //nolint:errcheck
+		_ = conn.Close()                                                                     //nolint:errcheck
 		return
 	}
 
 	// Reset read deadline
-	_ = conn.SetReadDeadline(time.Time{})
+	_ = conn.SetReadDeadline(time.Time{}) //nolint:errcheck
 
 	// Authenticated! Register edge client
 	s.edgeClientsMu.Lock()
 	if oldConn, exists := s.edgeClients[nodeID]; exists {
-		_ = oldConn.WriteJSON(ControlMessage{Type: "replaced", Reason: "new connection established"})
-		_ = oldConn.Close()
+		_ = oldConn.WriteJSON(ControlMessage{Type: "replaced", Reason: "new connection established"}) //nolint:errcheck
+		_ = oldConn.Close()                                                                           //nolint:errcheck
 	}
 	s.edgeClients[nodeID] = &safeConn{conn: conn}
 	if version != "" {
@@ -149,7 +149,7 @@ func (s *Server) handleEdgeControlWS(w http.ResponseWriter, r *http.Request) {
 	s.edgeClientsMu.Unlock()
 
 	slog.Info(fmt.Sprintf("[Edge WS] Edge node %s successfully authenticated.", nodeID))
-	_ = conn.WriteJSON(ControlMessage{Type: "auth_success"})
+	_ = conn.WriteJSON(ControlMessage{Type: "auth_success"}) //nolint:errcheck
 
 	// Start read pump to keep alive and detect disconnects
 	go func() {
@@ -161,15 +161,15 @@ func (s *Server) handleEdgeControlWS(w http.ResponseWriter, r *http.Request) {
 				delete(s.edgeIPs, nodeID)
 			}
 			s.edgeClientsMu.Unlock()
-			_ = conn.Close()
+			_ = conn.Close() //nolint:errcheck
 			slog.Info(fmt.Sprintf("[Edge WS] Edge node %s disconnected.", nodeID))
 		}()
 
 		// Set read limit and pong handler
 		conn.SetReadLimit(512)
-		_ = conn.SetReadDeadline(time.Now().Add(60 * time.Second))
+		_ = conn.SetReadDeadline(time.Now().Add(60 * time.Second)) //nolint:errcheck
 		conn.SetPongHandler(func(string) error {
-			_ = conn.SetReadDeadline(time.Now().Add(60 * time.Second))
+			_ = conn.SetReadDeadline(time.Now().Add(60 * time.Second)) //nolint:errcheck
 			return nil
 		})
 
@@ -199,7 +199,7 @@ func (s *Server) BroadcastBlacklistUpdate(action, ip string) {
 	defer s.edgeClientsMu.RUnlock()
 
 	for _, conn := range s.edgeClients {
-		_ = conn.WriteMessage(websocket.TextMessage, payload)
+		_ = conn.WriteMessage(websocket.TextMessage, payload) //nolint:errcheck
 	}
 }
 
@@ -221,7 +221,7 @@ func (s *Server) BroadcastMaintenance(action string, duration int, reason string
 	defer s.edgeClientsMu.RUnlock()
 
 	for _, conn := range s.edgeClients {
-		_ = conn.WriteMessage(websocket.TextMessage, payload)
+		_ = conn.WriteMessage(websocket.TextMessage, payload) //nolint:errcheck
 	}
 }
 
@@ -394,14 +394,14 @@ func (s *Server) runEdgeControlChannel() {
 		var challengeMsg ControlMessage
 		if err := conn.ReadJSON(&challengeMsg); err != nil {
 			slog.Info(fmt.Sprintf("[Edge Control] Failed to read challenge: %v", err))
-			_ = conn.Close()
+			_ = conn.Close() //nolint:errcheck
 			time.Sleep(5 * time.Second)
 			continue
 		}
 
 		if challengeMsg.Type != "challenge" {
 			slog.Info(fmt.Sprintf("[Edge Control] Expected challenge message, got %s", challengeMsg.Type))
-			_ = conn.Close()
+			_ = conn.Close() //nolint:errcheck
 			time.Sleep(5 * time.Second)
 			continue
 		}
@@ -418,7 +418,7 @@ func (s *Server) runEdgeControlChannel() {
 		}
 		if err := conn.WriteJSON(authMsg); err != nil {
 			slog.Info(fmt.Sprintf("[Edge Control] Failed to send auth response: %v", err))
-			_ = conn.Close()
+			_ = conn.Close() //nolint:errcheck
 			time.Sleep(5 * time.Second)
 			continue
 		}
@@ -427,14 +427,14 @@ func (s *Server) runEdgeControlChannel() {
 		var authResult ControlMessage
 		if err := conn.ReadJSON(&authResult); err != nil {
 			slog.Info(fmt.Sprintf("[Edge Control] Failed to read auth result: %v", err))
-			_ = conn.Close()
+			_ = conn.Close() //nolint:errcheck
 			time.Sleep(5 * time.Second)
 			continue
 		}
 
 		if authResult.Type != "auth_success" {
 			slog.Info(fmt.Sprintf("[Edge Control] Authentication failed: %s", authResult.Reason))
-			_ = conn.Close()
+			_ = conn.Close() //nolint:errcheck
 			time.Sleep(10 * time.Second)
 			continue
 		}
@@ -450,7 +450,7 @@ func (s *Server) runEdgeControlChannel() {
 			for {
 				select {
 				case <-ticker.C:
-					_ = conn.SetWriteDeadline(time.Now().Add(5 * time.Second))
+					_ = conn.SetWriteDeadline(time.Now().Add(5 * time.Second)) //nolint:errcheck
 					if err := conn.WriteMessage(websocket.PingMessage, nil); err != nil {
 						pingErrChan <- err
 						return
@@ -465,7 +465,7 @@ func (s *Server) runEdgeControlChannel() {
 		for {
 			var msg ControlMessage
 			// Reset read deadline on receiving messages
-			_ = conn.SetReadDeadline(time.Now().Add(75 * time.Second))
+			_ = conn.SetReadDeadline(time.Now().Add(75 * time.Second)) //nolint:errcheck
 
 			readErrChan := make(chan error, 1)
 			go func() {
@@ -527,7 +527,7 @@ func (s *Server) runEdgeControlChannel() {
 		}
 
 		ticker.Stop()
-		_ = conn.Close()
+		_ = conn.Close() //nolint:errcheck
 		lostAt = time.Now()
 	}
 }

@@ -25,7 +25,7 @@ func TestServer_GetCurrentUserOrToken(t *testing.T) {
 		Role:   "user",
 		Status: "approved",
 	}
-	_ = srv.db.CreateUser(user)
+	_ = srv.db.CreateUser(user) //nolint:errcheck
 
 	// 2. Setup a valid PAT
 	rawToken := "my-secret-pat-token-value"
@@ -107,7 +107,7 @@ func TestServer_HandleMFAEnable_Extra(t *testing.T) {
 		Role:   "user",
 		Status: "approved",
 	}
-	_ = srv.db.CreateUser(user)
+	_ = srv.db.CreateUser(user) //nolint:errcheck
 
 	sessionToken := generateToken(16)
 	srv.portalMap.Store("admin_session_"+sessionToken, PortalSessionData{
@@ -175,7 +175,7 @@ func TestServer_HandleMFADisable_Extra(t *testing.T) {
 		Role:   "user",
 		Status: "approved",
 	}
-	_ = srv.db.CreateUser(user)
+	_ = srv.db.CreateUser(user) //nolint:errcheck
 
 	sessionToken := generateToken(16)
 	srv.portalMap.Store("admin_session_"+sessionToken, PortalSessionData{
@@ -217,7 +217,7 @@ func TestServer_HandleAdminOverrideTunnelsLimit_Extra(t *testing.T) {
 		Role:   "user",
 		Status: "approved",
 	}
-	_ = srv.db.CreateUser(targetUser)
+	_ = srv.db.CreateUser(targetUser) //nolint:errcheck
 
 	// 2. Create admin session
 	adminUser := &db.User{
@@ -226,7 +226,7 @@ func TestServer_HandleAdminOverrideTunnelsLimit_Extra(t *testing.T) {
 		Role:   "admin",
 		Status: "approved",
 	}
-	_ = srv.db.CreateUser(adminUser)
+	_ = srv.db.CreateUser(adminUser) //nolint:errcheck
 
 	sessionToken := generateToken(16)
 	srv.portalMap.Store("admin_session_"+sessionToken, PortalSessionData{
@@ -293,7 +293,7 @@ func TestServer_HandleAdminDeleteUser_Extra(t *testing.T) {
 		Role:   "owner",
 		Status: "approved",
 	}
-	_ = srv.db.CreateUser(owner)
+	_ = srv.db.CreateUser(owner) //nolint:errcheck
 
 	admin := &db.User{
 		ID:     "admin@lfr-demo.local",
@@ -301,7 +301,7 @@ func TestServer_HandleAdminDeleteUser_Extra(t *testing.T) {
 		Role:   "admin",
 		Status: "approved",
 	}
-	_ = srv.db.CreateUser(admin)
+	_ = srv.db.CreateUser(admin) //nolint:errcheck
 
 	sessionToken := generateToken(16)
 	srv.portalMap.Store("admin_session_"+sessionToken, PortalSessionData{
@@ -338,7 +338,7 @@ func TestServer_HandleUpdateReservationAccessControl_Extra(t *testing.T) {
 		Role:   "user",
 		Status: "approved",
 	}
-	_ = srv.db.CreateUser(user)
+	_ = srv.db.CreateUser(user) //nolint:errcheck
 
 	sessionToken := generateToken(16)
 	srv.portalMap.Store("admin_session_"+sessionToken, PortalSessionData{
@@ -410,7 +410,7 @@ func TestServer_HandleUpdateReservationHeaders_Extra(t *testing.T) {
 		Role:   "user",
 		Status: "approved",
 	}
-	_ = srv.db.CreateUser(user)
+	_ = srv.db.CreateUser(user) //nolint:errcheck
 
 	sessionToken := generateToken(16)
 	srv.portalMap.Store("admin_session_"+sessionToken, PortalSessionData{
@@ -466,7 +466,7 @@ func TestServer_HandleInvitations_Extra(t *testing.T) {
 		Role:   "user",
 		Status: "approved",
 	}
-	_ = srv.db.CreateUser(user)
+	_ = srv.db.CreateUser(user) //nolint:errcheck
 
 	sessionToken := generateToken(16)
 	srv.portalMap.Store("admin_session_"+sessionToken, PortalSessionData{

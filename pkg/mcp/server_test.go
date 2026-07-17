@@ -134,7 +134,7 @@ func TestMCPServer_GetTunnelStatus_Online(t *testing.T) {
 
 	// Write a mock active state file with our mock server's URL and the current process PID (so it reports as running)
 	dir := filepath.Join(tmpDir, ".lfr-tunnel")
-	_ = os.MkdirAll(dir, 0700)
+	_ = os.MkdirAll(dir, 0700) //nolint:errcheck
 	state := ClientState{
 		PID:           os.Getpid(),
 		InspectorPort: 4040,
@@ -146,7 +146,7 @@ func TestMCPServer_GetTunnelStatus_Online(t *testing.T) {
 	}
 
 	b, _ := json.Marshal(state)
-	_ = os.WriteFile(filepath.Join(dir, "lfr-tunnel-mcp-test-subdomain.state"), b, 0600)
+	_ = os.WriteFile(filepath.Join(dir, "lfr-tunnel-mcp-test-subdomain.state"), b, 0600) //nolint:errcheck
 
 	input := `{"jsonrpc":"2.0","method":"tools/call","id":4,"params":{"name":"get_tunnel_status"}}` + "\n"
 	r := strings.NewReader(input)
@@ -155,7 +155,7 @@ func TestMCPServer_GetTunnelStatus_Online(t *testing.T) {
 	RunMCPLoop(r, &w)
 
 	var resp Response
-	_ = json.Unmarshal(w.Bytes(), &resp)
+	_ = json.Unmarshal(w.Bytes(), &resp) //nolint:errcheck
 	result := resp.Result.(map[string]interface{})
 	content := result["content"].([]interface{})
 	item := content[0].(map[string]interface{})
@@ -164,7 +164,7 @@ func TestMCPServer_GetTunnelStatus_Online(t *testing.T) {
 	var status struct {
 		ActiveTunnels []map[string]interface{} `json:"active_tunnels"`
 	}
-	_ = json.Unmarshal([]byte(text), &status)
+	_ = json.Unmarshal([]byte(text), &status) //nolint:errcheck
 
 	if len(status.ActiveTunnels) != 1 {
 		t.Errorf("expected 1 active tunnel, got %d", len(status.ActiveTunnels))
@@ -200,7 +200,7 @@ func TestMCPServer_ListRequests(t *testing.T) {
 
 	// Write mock state file pointing to our mock inspector
 	dir := filepath.Join(tmpDir, ".lfr-tunnel")
-	_ = os.MkdirAll(dir, 0700)
+	_ = os.MkdirAll(dir, 0700) //nolint:errcheck
 	state := ClientState{
 		PID:           os.Getpid(),
 		InspectorPort: 4040,
@@ -211,7 +211,7 @@ func TestMCPServer_ListRequests(t *testing.T) {
 		StartTime:     "2026-06-24T10:00:00Z",
 	}
 	b, _ := json.Marshal(state)
-	_ = os.WriteFile(filepath.Join(dir, "lfr-tunnel-mcp-test.state"), b, 0600)
+	_ = os.WriteFile(filepath.Join(dir, "lfr-tunnel-mcp-test.state"), b, 0600) //nolint:errcheck
 
 	input := `{"jsonrpc":"2.0","method":"tools/call","id":5,"params":{"name":"list_requests","arguments":{"limit":5}}}` + "\n"
 	r := strings.NewReader(input)
@@ -220,7 +220,7 @@ func TestMCPServer_ListRequests(t *testing.T) {
 	RunMCPLoop(r, &w)
 
 	var resp Response
-	_ = json.Unmarshal(w.Bytes(), &resp)
+	_ = json.Unmarshal(w.Bytes(), &resp) //nolint:errcheck
 	result := resp.Result.(map[string]interface{})
 	content := result["content"].([]interface{})
 	item := content[0].(map[string]interface{})
@@ -229,7 +229,7 @@ func TestMCPServer_ListRequests(t *testing.T) {
 	var list struct {
 		Requests []map[string]interface{} `json:"requests"`
 	}
-	_ = json.Unmarshal([]byte(text), &list)
+	_ = json.Unmarshal([]byte(text), &list) //nolint:errcheck
 
 	if len(list.Requests) != 1 {
 		t.Errorf("expected 1 request, got %d", len(list.Requests))

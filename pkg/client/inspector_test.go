@@ -33,7 +33,7 @@ func TestInspectorHealthzAndInfo(t *testing.T) {
 	})
 	mockDownstreamServer := &http.Server{Handler: mockDownstreamMux}
 	go func() {
-		_ = mockDownstreamServer.Serve(listener)
+		_ = mockDownstreamServer.Serve(listener) //nolint:errcheck
 	}()
 	defer mockDownstreamServer.Close() //nolint:errcheck
 
@@ -58,7 +58,7 @@ func TestInspectorHealthzAndInfo(t *testing.T) {
 		conn, err := net.DialTimeout("tcp", fmt.Sprintf("%s:%d", targetHost, targetPort), 500*time.Millisecond)
 		if err == nil {
 			destResponsive = true
-			_ = conn.Close()
+			_ = conn.Close() //nolint:errcheck
 		}
 
 		w.Header().Set("Content-Type", "application/json")
@@ -99,7 +99,7 @@ func TestInspectorHealthzAndInfo(t *testing.T) {
 		conn, err := net.DialTimeout("tcp", fmt.Sprintf("%s:%d", engine.TargetHost, engine.DestPort), 500*time.Millisecond)
 		if err == nil {
 			destResponsive = true
-			_ = conn.Close()
+			_ = conn.Close() //nolint:errcheck
 		}
 
 		status := "healthy"
@@ -147,7 +147,7 @@ func TestInspectorHealthzAndInfo(t *testing.T) {
 		}
 
 		w.Header().Set("Content-Type", "application/json")
-		_ = json.NewEncoder(w).Encode(info)
+		_ = json.NewEncoder(w).Encode(info) //nolint:errcheck
 	})
 
 	// Test case A: Unhealthy initial state (Disconnected)
@@ -160,7 +160,7 @@ func TestInspectorHealthzAndInfo(t *testing.T) {
 	}
 
 	var resMap map[string]string
-	_ = json.NewDecoder(rec.Body).Decode(&resMap)
+	_ = json.NewDecoder(rec.Body).Decode(&resMap) //nolint:errcheck
 	if resMap["status"] != "unhealthy" {
 		t.Errorf("Expected 'unhealthy' status, got '%s'", resMap["status"])
 	}
@@ -188,13 +188,13 @@ func TestInspectorHealthzAndInfo(t *testing.T) {
 		t.Errorf("Expected 200 OK, got %d", rec.Code)
 	}
 
-	_ = json.NewDecoder(rec.Body).Decode(&resMap)
+	_ = json.NewDecoder(rec.Body).Decode(&resMap) //nolint:errcheck
 	if resMap["status"] != "healthy" {
 		t.Errorf("Expected 'healthy' status, got '%s'", resMap["status"])
 	}
 
 	// Test case C: Downstream Mock Offline makes it Unhealthy
-	_ = mockDownstreamServer.Close()
+	_ = mockDownstreamServer.Close()  //nolint:errcheck
 	time.Sleep(50 * time.Millisecond) // wait for port release/cleanup
 
 	rec = httptest.NewRecorder()
@@ -215,7 +215,7 @@ func TestInspectorHealthzAndInfo(t *testing.T) {
 	}
 
 	var infoMap map[string]interface{}
-	_ = json.NewDecoder(rec.Body).Decode(&infoMap)
+	_ = json.NewDecoder(rec.Body).Decode(&infoMap) //nolint:errcheck
 
 	if infoMap["status"] != "unhealthy" { // because downstream is offline now
 		t.Errorf("Expected status to be unhealthy, got %v", infoMap["status"])
@@ -242,10 +242,10 @@ func TestInspectorBindingConstraints(t *testing.T) {
 	// Test environment bind config
 	origBind := os.Getenv("LFT_INSPECTOR_BIND")
 	defer func() {
-		_ = os.Setenv("LFT_INSPECTOR_BIND", origBind)
+		_ = os.Setenv("LFT_INSPECTOR_BIND", origBind) //nolint:errcheck
 	}()
 
-	_ = os.Setenv("LFT_INSPECTOR_BIND", "192.168.1.100")
+	_ = os.Setenv("LFT_INSPECTOR_BIND", "192.168.1.100") //nolint:errcheck
 	// Verify env bind works as expected
 }
 
@@ -321,7 +321,7 @@ func TestReplayRequestEndpoint(t *testing.T) {
 		if err != nil {
 			w.Header().Set("Content-Type", "application/json")
 			w.WriteHeader(http.StatusInternalServerError)
-			_ = json.NewEncoder(w).Encode(map[string]string{"error": err.Error()})
+			_ = json.NewEncoder(w).Encode(map[string]string{"error": err.Error()}) //nolint:errcheck
 			return
 		}
 
@@ -329,7 +329,7 @@ func TestReplayRequestEndpoint(t *testing.T) {
 
 		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(http.StatusOK)
-		_ = json.NewEncoder(w).Encode(map[string]interface{}{
+		_ = json.NewEncoder(w).Encode(map[string]interface{}{ //nolint:errcheck
 			"status": "ok",
 			"new_id": newRec.ID,
 		})
@@ -346,7 +346,7 @@ func TestReplayRequestEndpoint(t *testing.T) {
 	}
 
 	var resMap map[string]interface{}
-	_ = json.NewDecoder(rec.Body).Decode(&resMap)
+	_ = json.NewDecoder(rec.Body).Decode(&resMap) //nolint:errcheck
 	if resMap["status"] != "ok" {
 		t.Errorf("Expected status 'ok', got '%v'", resMap["status"])
 	}
@@ -396,7 +396,7 @@ func TestInspectorAccessControl(t *testing.T) {
 	gatewayMux.HandleFunc("/api/portal/reservations/access-control", func(w http.ResponseWriter, r *http.Request) {
 		gatewayReceived = true
 		receivedToken = r.Header.Get("X-Auth-Token")
-		_ = json.NewDecoder(r.Body).Decode(&receivedBody)
+		_ = json.NewDecoder(r.Body).Decode(&receivedBody) //nolint:errcheck
 		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(http.StatusOK)
 		if _, err := w.Write([]byte(`{"status":"success"}`)); err != nil {
@@ -426,7 +426,7 @@ func TestInspectorAccessControl(t *testing.T) {
 		}
 
 		w.Header().Set("Content-Type", "application/json")
-		_ = json.NewEncoder(w).Encode(state)
+		_ = json.NewEncoder(w).Encode(state) //nolint:errcheck
 	})
 
 	mux.HandleFunc("/api/access-control", func(w http.ResponseWriter, r *http.Request) {
@@ -534,7 +534,7 @@ func TestInspectorAccessControl(t *testing.T) {
 	mux.ServeHTTP(rec2, req2)
 
 	var state map[string]interface{}
-	_ = json.NewDecoder(rec2.Body).Decode(&state)
+	_ = json.NewDecoder(rec2.Body).Decode(&state) //nolint:errcheck
 
 	if state["passcode"] != "new-passcode" || state["whitelist_ips"] != "1.1.1.1" || state["access_mode"] != "and" {
 		t.Errorf("Expected state to be updated, got %v", state)

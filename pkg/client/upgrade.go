@@ -290,7 +290,7 @@ func SelfUpgrade(currentVersion string, serverURL string) error {
 	default:
 		tempPath = "/tmp/lfr-tunnel"
 	}
-	_ = os.Remove(tempPath) // Clean up any stale file
+	_ = os.Remove(tempPath) // Clean up any stale file //nolint:errcheck
 
 	fmt.Println("[Update] Downloading latest binary...")
 	downloadResp, err := client.Get(downloadURL)
@@ -310,7 +310,7 @@ func SelfUpgrade(currentVersion string, serverURL string) error {
 	}
 	defer func() {
 		tempFile.Close()        //nolint:errcheck
-		_ = os.Remove(tempPath) // Clean up temp file if not swapped
+		_ = os.Remove(tempPath) // Clean up temp file if not swapped //nolint:errcheck
 	}()
 
 	if _, err := io.Copy(tempFile, downloadResp.Body); err != nil {
@@ -369,15 +369,15 @@ func SelfUpgrade(currentVersion string, serverURL string) error {
 			}
 
 			fmt.Println("[Update] Binary migrated successfully. Cleaning up old binary...")
-			_ = os.Remove(execPath)
+			_ = os.Remove(execPath)   //nolint:errcheck
 			execPath = expectedTarget // Update execPath for restartActiveProcessesAndServices
 			migrated = true
 
 			// We need to re-register services pointing to the new path
 			fmt.Println("[Update] Re-registering background services to point to the new location...")
-			_ = exec.Command(execPath, "install-service").Run()
+			_ = exec.Command(execPath, "install-service").Run() //nolint:errcheck
 			if runtime.GOOS == "darwin" {
-				_ = exec.Command(execPath, "install-gui-service").Run()
+				_ = exec.Command(execPath, "install-gui-service").Run() //nolint:errcheck
 				// The install commands above generate new plists, so we must reload those instead of the old ones
 				home, _ := os.UserHomeDir()
 				plistToReload = []string{
@@ -393,12 +393,12 @@ func SelfUpgrade(currentVersion string, serverURL string) error {
 		// Perform replacement swap
 		if runtime.GOOS == "windows" {
 			oldPath := execPath + ".old"
-			_ = os.Remove(oldPath) // Remove any previous leftovers
+			_ = os.Remove(oldPath) // Remove any previous leftovers //nolint:errcheck
 			if err := os.Rename(execPath, oldPath); err != nil {
 				swapErr = fmt.Errorf("failed to rename running binary: %v (please make sure you have permissions)", err)
 			} else if err := replaceBinary(tempPath, execPath); err != nil {
 				// Try to rollback rename
-				_ = os.Rename(oldPath, execPath)
+				_ = os.Rename(oldPath, execPath) //nolint:errcheck
 				swapErr = fmt.Errorf("failed to replace downloaded binary: %v", err)
 			} else {
 				fmt.Println("[Update] Upgrade successful! You are now running the latest version.")
@@ -433,7 +433,7 @@ func replaceBinary(tempPath, execPath string) error {
 
 	// If it fails (e.g. EXDEV cross-device link), fallback to copying
 	// Remove the target first to prevent ETXTBSY if any processes still hold open file handles
-	_ = os.Remove(execPath)
+	_ = os.Remove(execPath) //nolint:errcheck
 
 	in, err := os.Open(tempPath)
 	if err != nil {
@@ -467,13 +467,13 @@ func stopActiveProcessesAndServices() ([]string, bool) {
 		guiPlist := filepath.Join(home, "Library", "LaunchAgents", "com.liferay.tunnel.gui.plist")
 		if _, err := os.Stat(guiPlist); err == nil {
 			fmt.Println("[Update] Unloading macOS GUI LaunchAgent...")
-			_ = exec.Command("launchctl", "unload", guiPlist).Run()
+			_ = exec.Command("launchctl", "unload", guiPlist).Run() //nolint:errcheck
 			plistToReload = append(plistToReload, guiPlist)
 		}
 		daemonPlist := filepath.Join(home, "Library", "LaunchAgents", "com.liferay.tunnel.plist")
 		if _, err := os.Stat(daemonPlist); err == nil {
 			fmt.Println("[Update] Unloading macOS CLI Daemon LaunchAgent...")
-			_ = exec.Command("launchctl", "unload", daemonPlist).Run()
+			_ = exec.Command("launchctl", "unload", daemonPlist).Run() //nolint:errcheck
 			plistToReload = append(plistToReload, daemonPlist)
 		}
 		if len(plistToReload) > 0 {
@@ -486,7 +486,7 @@ func stopActiveProcessesAndServices() ([]string, bool) {
 		cmd := exec.Command("systemctl", "--user", "is-active", "lfr-tunnel.service")
 		if err := cmd.Run(); err == nil {
 			fmt.Println("[Update] Stopping Linux systemd user service...")
-			_ = exec.Command("systemctl", "--user", "stop", "lfr-tunnel.service").Run()
+			_ = exec.Command("systemctl", "--user", "stop", "lfr-tunnel.service").Run() //nolint:errcheck
 			restartSystemd = true
 			time.Sleep(500 * time.Millisecond)
 		}
@@ -499,8 +499,8 @@ func stopActiveProcessesAndServices() ([]string, bool) {
 			if IsPIDRunning(pid) {
 				fmt.Printf("[Update] Terminating active GUI process (PID: %d)...\n", pid)
 				if proc, err := os.FindProcess(pid); err == nil {
-					_ = proc.Kill()
-					_ = os.Remove(guiLock)
+					_ = proc.Kill()        //nolint:errcheck
+					_ = os.Remove(guiLock) //nolint:errcheck
 				}
 			}
 		}
@@ -517,8 +517,8 @@ func stopActiveProcessesAndServices() ([]string, bool) {
 						if IsPIDRunning(pid) {
 							fmt.Printf("[Update] Terminating active background tunnel process (PID: %d)...\n", pid)
 							if proc, err := os.FindProcess(pid); err == nil {
-								_ = proc.Kill()
-								_ = os.Remove(pidPath)
+								_ = proc.Kill()        //nolint:errcheck
+								_ = os.Remove(pidPath) //nolint:errcheck
 							}
 						}
 					}
@@ -538,14 +538,14 @@ func restartActiveProcessesAndServices(plistToReload []string, restartSystemd bo
 	if runtime.GOOS == "darwin" {
 		for _, plist := range plistToReload {
 			fmt.Printf("[Update] Restarting macOS LaunchAgent: %s...\n", filepath.Base(plist))
-			_ = exec.Command("launchctl", "load", "-w", plist).Run()
+			_ = exec.Command("launchctl", "load", "-w", plist).Run() //nolint:errcheck
 		}
 	}
 
 	// 2. Restart systemd services on Linux
 	if runtime.GOOS == "linux" && restartSystemd {
 		fmt.Println("[Update] Restarting Linux systemd user service...")
-		_ = exec.Command("systemctl", "--user", "start", "lfr-tunnel.service").Run()
+		_ = exec.Command("systemctl", "--user", "start", "lfr-tunnel.service").Run() //nolint:errcheck
 	}
 }
 

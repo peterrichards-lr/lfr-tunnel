@@ -280,7 +280,7 @@ func TestPATRetentionPruning(t *testing.T) {
 		Name:        "Recent Revoked",
 		RevokedAt:   &recentTime,
 	}
-	_ = database.CreatePAT(p4)
+	_ = database.CreatePAT(p4) //nolint:errcheck
 
 	// 5. Active token (should be kept)
 	p5 := &PersonalAccessToken{
@@ -289,7 +289,7 @@ func TestPATRetentionPruning(t *testing.T) {
 		TokenPrefix: "prefix5",
 		Name:        "Active",
 	}
-	_ = database.CreatePAT(p5)
+	_ = database.CreatePAT(p5) //nolint:errcheck
 
 	// Run retention pruning (30 days retention)
 	if err := database.PruneExpiredOrRevokedPATs(30); err != nil {
@@ -462,8 +462,8 @@ func TestListAllPATsAndCountAdmins(t *testing.T) {
 
 	p1 := &PersonalAccessToken{UserID: "u1", TokenHash: "h1", TokenPrefix: "p1", Name: "n1"}
 	p2 := &PersonalAccessToken{UserID: "u3", TokenHash: "h2", TokenPrefix: "p2", Name: "n2"}
-	_ = database.CreatePAT(p1)
-	_ = database.CreatePAT(p2)
+	_ = database.CreatePAT(p1) //nolint:errcheck
+	_ = database.CreatePAT(p2) //nolint:errcheck
 
 	pats, err := database.ListAllPATs()
 	if err != nil {

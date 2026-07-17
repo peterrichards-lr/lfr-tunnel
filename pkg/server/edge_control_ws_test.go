@@ -117,7 +117,7 @@ func TestServer_EdgeControlWS_AuthenticationAndPubSub(t *testing.T) {
 
 	// 5. Test Maintenance Mode propagation
 	// Create another lease on Edge
-	_, _, _ = edgeSrv.registry.Register("user-1", "maint-lease", []PortMapping{{LocalPort: 8080}}, []string{"usedge.example.se"}, 100, "127.0.0.1", "", nil)
+	_, _, _ = edgeSrv.registry.Register("user-1", "maint-lease", []PortMapping{{LocalPort: 8080}}, []string{"usedge.example.se"}, 100, "127.0.0.1", "", nil) //nolint:errcheck
 
 	controlSrv.BroadcastMaintenance("enable", 10, "Upgrading control plane")
 	time.Sleep(100 * time.Millisecond)

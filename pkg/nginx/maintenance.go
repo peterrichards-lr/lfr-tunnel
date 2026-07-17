@@ -86,10 +86,10 @@ func (m *MaintenanceManager) Disable() {
 		return
 	}
 
-	_ = os.Remove(triggerPath)
+	_ = os.Remove(triggerPath) //nolint:errcheck
 	triggerDir := filepath.Dir(triggerPath)
-	_ = os.Remove(filepath.Join(triggerDir, "maintenance.html"))
-	_ = os.Remove("/var/www/lfr-tunnel/maintenance.html")
+	_ = os.Remove(filepath.Join(triggerDir, "maintenance.html")) //nolint:errcheck
+	_ = os.Remove("/var/www/lfr-tunnel/maintenance.html")        //nolint:errcheck
 }
 
 // IsActive checks if the Nginx maintenance trigger file is currently present.

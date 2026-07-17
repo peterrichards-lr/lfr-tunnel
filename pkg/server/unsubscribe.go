@@ -86,7 +86,7 @@ func (s *Server) handleUnsubscribe(w http.ResponseWriter, r *http.Request) {
 		}
 
 		tmpl := strings.ReplaceAll(string(htmlBytes), "{{.Error}}", htmlEscape(err.Error()))
-		_, _ = fmt.Fprint(w, tmpl)
+		_, _ = fmt.Fprint(w, tmpl) //nolint:errcheck
 		return
 	}
 
@@ -94,7 +94,7 @@ func (s *Server) handleUnsubscribe(w http.ResponseWriter, r *http.Request) {
 		user, err := s.db.GetUserByEmail(email)
 		if err == nil && user != nil {
 			user.NotificationPrefs = "disabled"
-			_ = s.db.UpdateUser(user)
+			_ = s.db.UpdateUser(user) //nolint:errcheck
 			s.writeAudit("system", "user.unsubscribed", "user", user.Email, "User unsubscribed via one-click email footer link", r)
 		}
 	}
@@ -103,7 +103,7 @@ func (s *Server) handleUnsubscribe(w http.ResponseWriter, r *http.Request) {
 	w.WriteHeader(http.StatusOK)
 	htmlBytes, errFS := staticFS.ReadFile("static/unsubscribe_success.html")
 	if errFS != nil {
-		_, _ = fmt.Fprint(w, `<html><head><title>Unsubscribed Successfully</title><style>body{font-family:sans-serif;text-align:center;padding:50px;color:#333;background:#f8fafc;}h1{color:#10b981;}</style></head><body><h1>Successfully Unsubscribed! ✅</h1><p>Your email preferences have been updated. You will no longer receive optional administrative notifications, broadcasts, or lease alert emails.</p><p>You can opt-back-in at any time from your Account Settings panel on the dashboard.</p><p><a href="/">Return to Portal</a></p></body></html>`)
+		_, _ = fmt.Fprint(w, `<html><head><title>Unsubscribed Successfully</title><style>body{font-family:sans-serif;text-align:center;padding:50px;color:#333;background:#f8fafc;}h1{color:#10b981;}</style></head><body><h1>Successfully Unsubscribed! ✅</h1><p>Your email preferences have been updated. You will no longer receive optional administrative notifications, broadcasts, or lease alert emails.</p><p>You can opt-back-in at any time from your Account Settings panel on the dashboard.</p><p><a href="/">Return to Portal</a></p></body></html>`) //nolint:errcheck
 		return
 	}
 	if _, err := w.Write(htmlBytes); err != nil {

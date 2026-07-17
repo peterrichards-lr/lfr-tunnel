@@ -774,7 +774,7 @@ func (s *Server) sendSubdomainDemotedEmail(user *db.User, subdomain, domain stri
 	subject := fmt.Sprintf("Subdomain Demoted: %s.%s", subdomain, domain)
 	plain := fmt.Sprintf("Hi %s,\n\nYour permanent subdomain reservation %s.%s has been demoted back to a standard reservation.\nNew Expiration: %s\nPortal: %s", user.FirstName, subdomain, domain, formattedExpiry, portalLink)
 
-	go func() { _ = s.notifications.Sender().Send(user.Email, subject, body, plain) }()
+	go func() { _ = s.notifications.Sender().Send(user.Email, subject, body, plain) }() //nolint:errcheck
 }
 
 /*

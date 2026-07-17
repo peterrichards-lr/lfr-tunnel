@@ -385,13 +385,13 @@ func redirectChiselLogger(engine *InterceptorEngine) (func(), error) {
 			original: originalStderr,
 			engine:   engine,
 		}
-		_, _ = io.Copy(parser, r)
+		_, _ = io.Copy(parser, r) //nolint:errcheck
 	}()
 
 	cleanup := func() {
 		os.Stderr = originalStderr
-		_ = w.Close()
-		_ = r.Close()
+		_ = w.Close() //nolint:errcheck
+		_ = r.Close() //nolint:errcheck
 	}
 
 	return cleanup, nil

@@ -26,7 +26,7 @@ func TestCheckForUpdate_NewerVersion(t *testing.T) {
 		rel := Release{
 			TagName: "v1.0.3",
 		}
-		_ = json.NewEncoder(w).Encode(rel)
+		_ = json.NewEncoder(w).Encode(rel) //nolint:errcheck
 	}))
 	defer srv.Close()
 
@@ -50,7 +50,7 @@ func TestCheckForUpdate_SameVersion(t *testing.T) {
 		rel := Release{
 			TagName: "v1.0.2",
 		}
-		_ = json.NewEncoder(w).Encode(rel)
+		_ = json.NewEncoder(w).Encode(rel) //nolint:errcheck
 	}))
 	defer srv.Close()
 
@@ -112,7 +112,7 @@ func TestSelfUpgrade(t *testing.T) {
 					},
 				},
 			}
-			_ = json.NewEncoder(w).Encode(rel)
+			_ = json.NewEncoder(w).Encode(rel) //nolint:errcheck
 			return
 		}
 
@@ -230,7 +230,7 @@ func TestSelfUpgrade_ChecksumMismatch(t *testing.T) {
 					},
 				},
 			}
-			_ = json.NewEncoder(w).Encode(rel)
+			_ = json.NewEncoder(w).Encode(rel) //nolint:errcheck
 			return
 		}
 
@@ -369,7 +369,7 @@ func TestSelfUpgrade_GatewayFirst(t *testing.T) {
 					},
 				},
 			}
-			_ = json.NewEncoder(w).Encode(resp)
+			_ = json.NewEncoder(w).Encode(resp) //nolint:errcheck
 			return
 		}
 
@@ -462,7 +462,7 @@ func TestSelfUpgrade_GatewayRecommendation(t *testing.T) {
 						},
 					},
 				}
-				_ = json.NewEncoder(w).Encode(resp)
+				_ = json.NewEncoder(w).Encode(resp) //nolint:errcheck
 			}))
 			defer srv.Close()
 
@@ -528,7 +528,7 @@ func TestSelfUpgrade_InvalidSignature(t *testing.T) {
 					},
 				},
 			}
-			_ = json.NewEncoder(w).Encode(rel)
+			_ = json.NewEncoder(w).Encode(rel) //nolint:errcheck
 			return
 		}
 

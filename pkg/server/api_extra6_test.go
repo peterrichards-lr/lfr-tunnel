@@ -16,7 +16,7 @@ func TestServer_AdminGetHandlers(t *testing.T) {
 	defer srv.Stop()
 
 	admin := &db.User{ID: "admin@example.com", Email: "admin@example.com", Role: "admin"}
-	_ = srv.db.CreateUser(admin)
+	_ = srv.db.CreateUser(admin) //nolint:errcheck
 
 	sessionToken := generateToken(16)
 	srv.portalMap.Store("admin_session_"+sessionToken, PortalSessionData{
@@ -105,7 +105,7 @@ func TestServer_AdminPostHandlers(t *testing.T) {
 	defer srv.Stop()
 
 	admin := &db.User{ID: "admin@example.com", Email: "admin@example.com", Role: "admin"}
-	_ = srv.db.CreateUser(admin)
+	_ = srv.db.CreateUser(admin) //nolint:errcheck
 
 	sessionToken := generateToken(16)
 	srv.portalMap.Store("admin_session_"+sessionToken, PortalSessionData{

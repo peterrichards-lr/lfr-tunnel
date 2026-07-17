@@ -420,7 +420,7 @@ func TestInsecurePermissionWarning(t *testing.T) {
 	os.Stderr = oldStderr
 
 	var buf bytes.Buffer
-	_, _ = io.Copy(&buf, r)
+	_, _ = io.Copy(&buf, r) //nolint:errcheck
 	output := buf.String()
 
 	if runtime.GOOS != "windows" {

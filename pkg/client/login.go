@@ -42,7 +42,7 @@ func RunLogin(serverURL string) error {
 
 	srv := &http.Server{Addr: "127.0.0.1:4444", Handler: mux}
 	go func() {
-		_ = srv.ListenAndServe()
+		_ = srv.ListenAndServe() //nolint:errcheck
 	}()
 
 	portalURL := strings.Replace(serverURL, "tunnel.", "portal.", 1)
@@ -70,7 +70,7 @@ func RunLogin(serverURL string) error {
 	// Shutdown server
 	ctx, cancel := context.WithTimeout(context.Background(), 1*time.Second)
 	defer cancel()
-	_ = srv.Shutdown(ctx)
+	_ = srv.Shutdown(ctx) //nolint:errcheck
 
 	// Save the token
 	home, err := os.UserHomeDir()

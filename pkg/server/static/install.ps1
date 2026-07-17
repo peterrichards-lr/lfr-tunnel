@@ -4,12 +4,21 @@ $ErrorActionPreference = 'Stop'
 $Arch = "amd64" # Windows only has amd64 release configured in release.yml
 
 $Binary = "lfr-tunnel-windows-amd64.exe"
-$Url = "https://github.com/peterrichards-lr/lfr-tunnel/releases/latest/download/$Binary"
 
-# Always install to ~/runningpoc/bin — the default canonical location, overridable via LFT_INSTALL_DIR
+$ServerUrl = "{{SERVER_URL}}"
+If ([string]::IsNullOrEmpty($ServerUrl) -or $ServerUrl -eq "{{SERVER_URL}}") {
+    $ServerUrl = "https://tunnel.lfr-demo.se"
+}
+$Url = "$ServerUrl/static/downloads/$Binary"
+
+$DefaultInstallDir = "{{WINDOWS_AMD64_INSTALL_DIR}}"
+If ([string]::IsNullOrEmpty($DefaultInstallDir) -or $DefaultInstallDir -eq "{{WINDOWS_AMD64_INSTALL_DIR}}") {
+    $DefaultInstallDir = "$Home\runningpoc\bin"
+}
+
 $InstallDir = $env:LFT_INSTALL_DIR
 If (-not $InstallDir) {
-    $InstallDir = "$Home\runningpoc\bin"
+    $InstallDir = $DefaultInstallDir
 }
 
 If (!(Test-Path $InstallDir)) {

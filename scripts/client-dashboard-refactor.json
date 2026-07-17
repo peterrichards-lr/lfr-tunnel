@@ -1,0 +1,38 @@
+{
+  "title": "[Epic] Client Dashboard UX Unification & Responsive Design",
+  "body": "Unify the isolated client dashboard pages (`inspector.html` and `logs.html`) into a single, cohesive, and responsive Single Page Application (SPA). Implement a master navigation menu, user-configurable layout (top vs sidebar), and mobile-friendly interactions (e.g., slide-over inspector details).",
+  "labels": [
+    "enhancement",
+    "ui"
+  ],
+  "issues": [
+    {
+      "title": "Merge Client UI into Single SPA",
+      "body": "Combine `inspector.html` and `logs.html` into a new `dashboard.html`. Update the Go backend (`inspector.go`) to serve this unified SPA across the `/`, `/settings`, and `/logs` endpoints.",
+      "completed": false,
+      "labels": [
+        "enhancement"
+      ],
+      "issueNumber": "603"
+    },
+    {
+      "title": "Implement Master Navigation & Layout Configuration",
+      "body": "Create a shared master navigation menu linking Inspector, Settings, and Logs. Add a new setting to allow users to toggle between a top navigation bar (default) and a left sidebar.",
+      "completed": false,
+      "labels": [
+        "enhancement"
+      ],
+      "issueNumber": "604"
+    },
+    {
+      "title": "Mobile Responsive Design & Slide-Over Inspector",
+      "body": "Add responsive CSS media queries. Implement a mobile-friendly slide-over screen for Inspector traffic details.",
+      "completed": false,
+      "labels": [
+        "enhancement"
+      ],
+      "issueNumber": "605"
+    }
+  ],
+  "epicNumber": "602"
+}

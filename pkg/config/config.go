@@ -123,6 +123,7 @@ type RoleSetting struct {
 type PlatformConfig struct {
 	URL              string `yaml:"url" json:"url"`
 	BinaryName       string `yaml:"binary_name" json:"binary_name"`
+	InstallDir       string `yaml:"install_dir" json:"install_dir"`
 	SHA256           string `yaml:"sha256" json:"sha256"`
 	Cmd              string `yaml:"cmd" json:"cmd"`
 	CmdLabel         string `yaml:"cmd_label" json:"cmd_label"`
@@ -157,6 +158,7 @@ type ClientConfig struct {
 	CustomDomain       string            `yaml:"custom_domain"`
 	Ports              []int             `yaml:"ports"`
 	TokenFile          string            `yaml:"token_file"`
+	MaintenancePath    string            `yaml:"maintenance_path"`
 	RateLimit          int               `yaml:"rate_limit"`
 	BasicAuth          string            `yaml:"basic_auth"`
 	TargetHost         string            `yaml:"target_host"`
@@ -170,6 +172,7 @@ type ClientConfig struct {
 	BypassProxy        bool              `yaml:"bypass_proxy,omitempty"`
 	InsecureSkipVerify bool              `yaml:"insecure_skip_verify,omitempty"`
 	Theme              string            `yaml:"theme,omitempty"`
+	NavPlacement       string            `yaml:"nav_placement,omitempty"`
 }
 
 // DefaultServerConfig returns a ServerConfig with sensible default values.

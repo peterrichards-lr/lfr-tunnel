@@ -154,6 +154,7 @@ func main() {
 
 	// Start Interceptor Engine
 	engine := client.NewInterceptorEngine(cfg.TargetHost, addHeaders)
+	engine.MaintenancePath = cfg.MaintenancePath
 	engine.Token = cfg.AuthToken
 	engine.ServerURL = cfg.ServerURL
 	engine.Passcode = cfg.Passcode
@@ -217,6 +218,9 @@ func main() {
 		engine.ThemePreference = cfg.Theme
 	} else if regResp.ThemePreference != "" {
 		engine.ThemePreference = regResp.ThemePreference
+	}
+	if cfg.NavPlacement != "" {
+		engine.NavPlacement = cfg.NavPlacement
 	}
 
 	// Modify portMappings to point to dynamic Interceptor ports

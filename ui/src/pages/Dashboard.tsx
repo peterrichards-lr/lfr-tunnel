@@ -1,6 +1,5 @@
-import React, { useEffect, useState } from 'react';
+import { useEffect, useState } from 'react';
 import { useOutletContext } from 'react-router-dom';
-import axios from 'axios';
 
 export default function Dashboard() {
   const { user } = useOutletContext<{ user: any }>();

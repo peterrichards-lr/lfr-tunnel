@@ -993,7 +993,7 @@ func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 					// SPA Fallback: Serve index.html
 					r.URL.Path = "/"
 				} else {
-					_ = f.Close()
+					_ = f.Close() //nolint:errcheck
 					r.URL.Path = "/" + cleanPath
 				}
 

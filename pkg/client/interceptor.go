@@ -463,7 +463,7 @@ func serveMaintenancePage(w http.ResponseWriter, path string) {
 		if content, err := os.ReadFile(path); err == nil {
 			w.Header().Set("Content-Type", "text/html; charset=utf-8")
 			w.WriteHeader(http.StatusServiceUnavailable)
-			w.Write(content)
+			_, _ = w.Write(content)
 			return
 		}
 	}

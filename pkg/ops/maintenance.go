@@ -4,8 +4,6 @@ import (
 	"fmt"
 )
 
-const defaultIdentityFile = "~/.ssh/id_vm6_networks_vps"
-
 // MaintenanceCommand toggles Nginx maintenance mode on the VPS.
 func MaintenanceCommand(args []string) {
 	if len(args) < 1 {

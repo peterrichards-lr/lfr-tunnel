@@ -48,6 +48,10 @@ jobs:
             fi
           done
 
+      - name: Create dummy UI dist for Go embed
+        run: mkdir -p pkg/server/ui-dist && touch pkg/server/ui-dist/index.html
+        shell: bash
+
       - name: Run Linter (golangci-lint)
         uses: golangci/golangci-lint-action@v9
         with:
@@ -69,6 +73,10 @@ jobs:
         with:
           go-version: '1.25'
           cache: true
+
+      - name: Create dummy UI dist for Go embed
+        run: mkdir -p pkg/server/ui-dist && touch pkg/server/ui-dist/index.html
+        shell: bash
 
       - name: Run Tests
         run: go test -v ./...

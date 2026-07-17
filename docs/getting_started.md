@@ -59,12 +59,12 @@ If package managers are not available on your system, use the direct installatio
 
 #### macOS / Linux
 ```bash
-curl -sSfL https://raw.githubusercontent.com/peterrichards-lr/lfr-tunnel/master/scripts/install.sh | sh
+curl -sSfL https://raw.githubusercontent.com/peterrichards-lr/lfr-tunnel/master/pkg/server/static/install.sh | sh
 ```
 
 #### Windows (PowerShell)
 ```powershell
-iwr https://raw.githubusercontent.com/peterrichards-lr/lfr-tunnel/master/scripts/install.ps1 | iex
+iwr https://raw.githubusercontent.com/peterrichards-lr/lfr-tunnel/master/pkg/server/static/install.ps1 | iex
 ```
 
 Verify your installation:

@@ -14,7 +14,6 @@ import (
 	"fmt"
 	"html"
 	"html/template"
-	"io"
 	"io/fs"
 	"log"
 	"log/slog"

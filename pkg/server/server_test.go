@@ -695,7 +695,7 @@ func TestAdminEndpoints(t *testing.T) {
 	if rec4.Code != http.StatusOK {
 		t.Errorf("expected 200 for patch user, got %d", rec4.Code)
 	}
-	u, _ := srv.db.GetUserByEmail("testuser@liferay.com")
+	u, _ := srv.db.GetUserByEmail("testuser@liferay.com") //nolint:errcheck
 	if u.Role != "admin" {
 		t.Errorf("expected user role to be admin, got %s", u.Role)
 	}
@@ -725,7 +725,7 @@ func TestAdminEndpoints(t *testing.T) {
 		t.Errorf("expected 200 for delete PAT, got %d", rec6.Code)
 	}
 
-	deletedPat, _ := srv.db.GetPATByHash(hex.EncodeToString(userHashBytes[:]))
+	deletedPat, _ := srv.db.GetPATByHash(hex.EncodeToString(userHashBytes[:])) //nolint:errcheck
 	if deletedPat.RevokedAt == nil {
 		t.Error("expected PAT to have a revoked_at timestamp")
 	}
@@ -1558,7 +1558,7 @@ func TestServer_DatabaseBackupScheduler(t *testing.T) {
 	}
 
 	// 6. Basic size check: backup should be reasonably close to DB size
-	dbInfo, _ := os.Stat(srv.cfg.DBPath)
+	dbInfo, _ := os.Stat(srv.cfg.DBPath) //nolint:errcheck
 	if bInfo.Size() < dbInfo.Size() {
 		t.Errorf("backup file size (%d) is significantly smaller than active DB size (%d)", bInfo.Size(), dbInfo.Size())
 	}
@@ -1713,7 +1713,7 @@ func TestServer_SubdomainReservations(t *testing.T) {
 	}
 
 	// Verify extension_requested flag is set in DB
-	resDb, _ := srv.db.GetSubdomainReservation(reservation.ID)
+	resDb, _ := srv.db.GetSubdomainReservation(reservation.ID) //nolint:errcheck
 	if !resDb.ExtensionRequested {
 		t.Error("expected ExtensionRequested to be true")
 	}
@@ -1748,7 +1748,7 @@ func TestServer_SubdomainReservations(t *testing.T) {
 		t.Fatalf("expected 200 OK approving extension, got %d", recApprove.Code)
 	}
 
-	resDb, _ = srv.db.GetSubdomainReservation(reservation.ID)
+	resDb, _ = srv.db.GetSubdomainReservation(reservation.ID) //nolint:errcheck
 	if resDb.ExtensionRequested {
 		t.Error("expected ExtensionRequested to be reset to false")
 	}
@@ -1898,14 +1898,14 @@ func TestServer_RoleSubdomainLimitsAndAutoReservation(t *testing.T) {
 	_ = srv.db.CreatePAT(&db.PersonalAccessToken{UserID: adminEmail, TokenHash: hex.EncodeToString(patAdmin[:]), TokenPrefix: "pat_admin"}) //nolint:errcheck
 
 	// 1. Verify owner has infinity limit (-1) resolved
-	ownerRec, _ := srv.db.GetUser(ownerEmail)
+	ownerRec, _ := srv.db.GetUser(ownerEmail) //nolint:errcheck
 	ownerLimit := srv.getUserMaxReservations(ownerRec)
 	if ownerLimit != -1 {
 		t.Errorf("expected owner limit to be -1 (infinity), got %d", ownerLimit)
 	}
 
 	// 2. Verify admin has limit of 2 resolved
-	adminRec, _ := srv.db.GetUser(adminEmail)
+	adminRec, _ := srv.db.GetUser(adminEmail) //nolint:errcheck
 	admLimit := srv.getUserMaxReservations(adminRec)
 	if admLimit != 2 {
 		t.Errorf("expected admin limit to be 2, got %d", admLimit)

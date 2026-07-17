@@ -61,7 +61,7 @@ func TestServer_TelemetryWS(t *testing.T) {
 	if err != nil {
 		t.Fatalf("failed to establish websocket connection: %v", err)
 	}
-	defer func() { _ = wsConn.Close() }()
+	defer func() { _ = wsConn.Close() }() //nolint:errcheck
 
 	if resp.StatusCode != http.StatusSwitchingProtocols {
 		t.Errorf("expected switching protocols (101), got %d", resp.StatusCode)

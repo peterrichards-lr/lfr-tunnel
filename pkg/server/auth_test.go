@@ -138,7 +138,7 @@ func TestRegistryValidation(t *testing.T) {
 }
 
 func TestRegistryCheckSubdomain(t *testing.T) {
-	chiselServer, _ := chserver.NewServer(&chserver.Config{Reverse: true})
+	chiselServer, _ := chserver.NewServer(&chserver.Config{Reverse: true}) //nolint:errcheck
 	reg := NewRegistry(chiselServer)
 	domains := []string{"liferay.com"}
 
@@ -186,7 +186,7 @@ func TestRegistryCheckSubdomain(t *testing.T) {
 }
 
 func TestRegistryGenerateSuggestions(t *testing.T) {
-	chiselServer, _ := chserver.NewServer(&chserver.Config{Reverse: true})
+	chiselServer, _ := chserver.NewServer(&chserver.Config{Reverse: true}) //nolint:errcheck
 	reg := NewRegistry(chiselServer)
 	domains := []string{"liferay.com"}
 

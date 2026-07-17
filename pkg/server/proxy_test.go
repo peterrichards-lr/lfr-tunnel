@@ -17,7 +17,7 @@ import (
 )
 
 func TestProxyHandler_Offline(t *testing.T) {
-	chiselServer, _ := chserver.NewServer(&chserver.Config{Reverse: true})
+	chiselServer, _ := chserver.NewServer(&chserver.Config{Reverse: true}) //nolint:errcheck
 	reg := NewRegistry(chiselServer)
 	handler := NewProxyHandler(reg, config.DefaultServerConfig())
 

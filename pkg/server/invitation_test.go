@@ -241,13 +241,13 @@ func TestInvitationAPIEndpoints(t *testing.T) {
 		_ = database.CreateGuestInvitation(invite) //nolint:errcheck
 
 		// Generate key and CSR
-		clientKey, _ := rsa.GenerateKey(rand.Reader, 2048)
+		clientKey, _ := rsa.GenerateKey(rand.Reader, 2048) //nolint:errcheck
 		csrTemplate := &x509.CertificateRequest{
 			Subject: pkix.Name{
 				CommonName: "guest:csr-invite-token",
 			},
 		}
-		csrBytes, _ := x509.CreateCertificateRequest(rand.Reader, csrTemplate, clientKey)
+		csrBytes, _ := x509.CreateCertificateRequest(rand.Reader, csrTemplate, clientKey) //nolint:errcheck
 		csrPEM := pem.EncodeToMemory(&pem.Block{
 			Type:  "CERTIFICATE REQUEST",
 			Bytes: csrBytes,

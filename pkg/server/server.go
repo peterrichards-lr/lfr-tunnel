@@ -527,7 +527,7 @@ func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 				if s.db != nil {
 					_ = s.db.AddBlacklistIP(ip, "Auto-banned by Rate Limiter for DDOS") //nolint:errcheck
 					s.writeAudit("system", "ip.blacklisted", "ip", ip, "Auto-banned by Rate Limiter for DDOS", r)
-					body, _ := s.renderNotificationTemplate("en", "admin_ip_autobanned.txt", map[string]interface{}{"IP": ip})
+					body, _ := s.renderNotificationTemplate("en", "admin_ip_autobanned.txt", map[string]interface{}{"IP": ip}) //nolint:errcheck
 					s.notifications.SendAdminAlert("alert_notify_blacklist", "LFR Tunnel Alert: IP Auto-Banned", body)
 					s.webhooks.SendRateLimitBanAlert(ip, 24*time.Hour, "Exceeded API rate limit (50 violations)")
 				}
@@ -1139,7 +1139,7 @@ func (s *Server) handleRegister(w http.ResponseWriter, r *http.Request) {
 	// Fetch database user record if available to enforce user-level quota and preferences
 	var userRec *db.User
 	if s.db != nil {
-		userRec, _ = s.db.GetUser(user.ID)
+		userRec, _ = s.db.GetUser(user.ID) //nolint:errcheck
 	}
 
 	// Determine active domains to register dynamically based on rules and request Host
@@ -1533,7 +1533,7 @@ func (s *Server) handleTunnelStatus(w http.ResponseWriter, r *http.Request) {
 
 	if s.registry.UpdateLeaseStatus(req.SessionToken, req.Status) {
 		if req.Status == "down" {
-			body, _ := s.renderNotificationTemplate("en", "admin_tunnel_offline.txt", nil)
+			body, _ := s.renderNotificationTemplate("en", "admin_tunnel_offline.txt", nil) //nolint:errcheck
 			s.notifications.SendAdminAlert("alert_notify_tunnel_offline", "LFR Tunnel Alert: Tunnel Offline", body)
 		}
 		w.WriteHeader(http.StatusOK)
@@ -1594,7 +1594,7 @@ func (s *Server) handleCheckSubdomain(w http.ResponseWriter, r *http.Request) {
 
 	var userRec *db.User
 	if s.db != nil {
-		userRec, _ = s.db.GetUser(user.ID)
+		userRec, _ = s.db.GetUser(user.ID) //nolint:errcheck
 	}
 
 	// Determine active domains to check dynamically based on request Host
@@ -1948,7 +1948,7 @@ func (s *Server) handleCompleteSetup(w http.ResponseWriter, r *http.Request) {
 	}
 
 	s.writeAudit(user.Email, "user.verified", "user", user.Email, "User completed setup and is pending approval", r)
-	body, _ := s.renderNotificationTemplate("en", "admin_registration_request.txt", map[string]interface{}{
+	body, _ := s.renderNotificationTemplate("en", "admin_registration_request.txt", map[string]interface{}{ //nolint:errcheck
 		"FirstName": user.FirstName,
 		"LastName":  user.LastName,
 		"Email":     user.Email,
@@ -1990,7 +1990,7 @@ func (s *Server) handleCompleteSetup(w http.ResponseWriter, r *http.Request) {
 			}
 
 			plainBody := fmt.Sprintf("New user registered: %s. Approve here: %s", user.Email, approveURL)
-			go func() { _ = s.notifications.Sender().Send(s.cfg.AdminNotificationEmail, subject, body, plainBody) }()
+			go func() { _ = s.notifications.Sender().Send(s.cfg.AdminNotificationEmail, subject, body, plainBody) }() //nolint:errcheck
 		}
 	}
 
@@ -2506,7 +2506,7 @@ func (s *Server) requireAdmin(w http.ResponseWriter, r *http.Request) (string, s
 				if pat.RevokedAt == nil && (pat.ExpiresAt == nil || pat.ExpiresAt.After(now)) {
 					user, err := s.db.GetUser(pat.UserID)
 					if err == nil && user.Status == "approved" && (user.Role == "admin" || user.Role == "owner") {
-						go func(patID int64) { _ = s.db.UpdatePATUsed(patID) }(pat.ID)
+						go func(patID int64) { _ = s.db.UpdatePATUsed(patID) }(pat.ID) //nolint:errcheck
 						actorEmail = user.Email
 						actorRole = user.Role
 						authenticated = true
@@ -3313,7 +3313,7 @@ Liferay Tunnel Team`, actor, inviteLink, actor, declineLink)
 
 	if s.notifications != nil && s.notifications.Sender() != nil {
 		plainBody := fmt.Sprintf("Hi there,\n\nYou have been invited by an administrator to use the Liferay Tunnel portal.\n\nLog in here: %s\n\nDecline here: %s", inviteLink, declineLink)
-		go func() { _ = s.notifications.Sender().Send(req.Email, subject, body, plainBody) }()
+		go func() { _ = s.notifications.Sender().Send(req.Email, subject, body, plainBody) }() //nolint:errcheck
 	}
 
 	s.writeAudit(actor, "user.invited", "user", req.Email, "Admin invited new user", r)
@@ -3847,7 +3847,7 @@ Best regards,<br/>
 Liferay Tunnel Team`, html.EscapeString(greetingName))
 
 			plainBody := fmt.Sprintf("Hi %s,\n\nYour access on Liferay Tunnel has been suspended by an administrator.\n\nBest regards,\nLiferay Tunnel Team", greetingName)
-			go func() { _ = s.notifications.Sender().Send(user.Email, subject, body, plainBody) }()
+			go func() { _ = s.notifications.Sender().Send(user.Email, subject, body, plainBody) }() //nolint:errcheck
 		}
 	}
 
@@ -4331,9 +4331,9 @@ func (s *Server) handleAdminSettings(w http.ResponseWriter, r *http.Request, act
 
 	if r.Method == http.MethodGet {
 		// Fetch settings
-		notifyReg, _ := s.db.GetAdminSetting("alert_notify_registration")
-		notifyBan, _ := s.db.GetAdminSetting("alert_notify_blacklist")
-		notifyOffline, _ := s.db.GetAdminSetting("alert_notify_tunnel_offline")
+		notifyReg, _ := s.db.GetAdminSetting("alert_notify_registration") //nolint:errcheck
+		notifyBan, _ := s.db.GetAdminSetting("alert_notify_blacklist") //nolint:errcheck
+		notifyOffline, _ := s.db.GetAdminSetting("alert_notify_tunnel_offline") //nolint:errcheck
 
 		// Default values if not set
 		if notifyReg == "" {
@@ -4973,7 +4973,7 @@ func (s *Server) handleEdgeRegister(w http.ResponseWriter, r *http.Request) {
 
 	var userRec *db.User
 	if s.db != nil {
-		userRec, _ = s.db.GetUser(user.ID)
+		userRec, _ = s.db.GetUser(user.ID) //nolint:errcheck
 	}
 
 	finalSubdomain := edgeReq.SubdomainPrefix

@@ -180,7 +180,7 @@ func TestWAF_IntegrationInProxyHandler(t *testing.T) {
 	}))
 	defer backend.Close()
 
-	u, _ := url.Parse(backend.URL)
+	u, _ := url.Parse(backend.URL) //nolint:errcheck
 	port := 80
 	if pStr := u.Port(); pStr != "" {
 		importPort := 0

@@ -83,8 +83,8 @@ type InterceptorEngine struct {
 	ServerVersion      string
 
 	// Latency & Bandwidth Simulation Settings
-	Latency        time.Duration
-	BandwidthLimit int64
+	Latency         time.Duration
+	BandwidthLimit  int64
 	MaintenancePath string
 }
 
@@ -467,7 +467,7 @@ func serveMaintenancePage(w http.ResponseWriter, path string) {
 			return
 		}
 	}
-	
+
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
 	w.WriteHeader(http.StatusServiceUnavailable)
 	w.Write([]byte(`<!DOCTYPE html>

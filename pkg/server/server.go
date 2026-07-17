@@ -1001,17 +1001,17 @@ func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 				http.Error(w, "Failed to read install script", http.StatusInternalServerError)
 				return
 			}
-			
+
 			scriptStr := string(scriptBytes)
 			scriptStr = strings.ReplaceAll(scriptStr, "{{SERVER_URL}}", strings.TrimRight(s.cfg.ControlPlaneURL, "/"))
-			
+
 			getInstallDir := func(platform string, fallback string) string {
 				if p, ok := s.cfg.ClientPlatforms[platform]; ok && p.InstallDir != "" {
 					return p.InstallDir
 				}
 				return fallback
 			}
-			
+
 			scriptStr = strings.ReplaceAll(scriptStr, "{{MACOS_AMD64_INSTALL_DIR}}", getInstallDir("macos_amd64", "/usr/local/bin"))
 			scriptStr = strings.ReplaceAll(scriptStr, "{{MACOS_ARM64_INSTALL_DIR}}", getInstallDir("macos_arm64", "/usr/local/bin"))
 			scriptStr = strings.ReplaceAll(scriptStr, "{{LINUX_AMD64_INSTALL_DIR}}", getInstallDir("linux_amd64", "/usr/local/bin"))
@@ -1028,17 +1028,17 @@ func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 				http.Error(w, "Failed to read install script", http.StatusInternalServerError)
 				return
 			}
-			
+
 			scriptStr := string(scriptBytes)
 			scriptStr = strings.ReplaceAll(scriptStr, "{{SERVER_URL}}", strings.TrimRight(s.cfg.ControlPlaneURL, "/"))
-			
+
 			getInstallDir := func(platform string, fallback string) string {
 				if p, ok := s.cfg.ClientPlatforms[platform]; ok && p.InstallDir != "" {
 					return p.InstallDir
 				}
 				return fallback
 			}
-			
+
 			scriptStr = strings.ReplaceAll(scriptStr, "{{WINDOWS_AMD64_INSTALL_DIR}}", getInstallDir("windows_amd64", "$env:LOCALAPPDATA\\Programs\\lfr-tunnel"))
 
 			_, _ = w.Write([]byte(scriptStr))

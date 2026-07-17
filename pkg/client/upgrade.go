@@ -353,26 +353,26 @@ func SelfUpgrade(currentVersion string, serverURL string) error {
 		if runtime.GOOS == "windows" {
 			expectedTarget += ".exe"
 		}
-		
+
 		if execPath != expectedTarget {
 			fmt.Printf("[Update] Binary is currently running from %s, but server policy requires %s.\n", execPath, expectedTarget)
 			fmt.Println("[Update] Migrating binary to the new directory...")
-			
+
 			// Ensure target directory exists
 			if err := os.MkdirAll(configuredInstallDir, 0755); err != nil {
 				return fmt.Errorf("failed to create target directory %s: %v (try running with sudo/Administrator)", configuredInstallDir, err)
 			}
-			
+
 			// Move temp binary to new location
 			if err := replaceBinary(tempPath, expectedTarget); err != nil {
 				return fmt.Errorf("failed to move binary to %s: %v (try running with sudo/Administrator)", expectedTarget, err)
 			}
-			
+
 			fmt.Println("[Update] Binary migrated successfully. Cleaning up old binary...")
 			_ = os.Remove(execPath)
 			execPath = expectedTarget // Update execPath for restartActiveProcessesAndServices
 			migrated = true
-			
+
 			// We need to re-register services pointing to the new path
 			fmt.Println("[Update] Re-registering background services to point to the new location...")
 			_ = exec.Command(execPath, "install-service").Run()

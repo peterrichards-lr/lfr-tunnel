@@ -284,7 +284,7 @@ func StartInspector(port int, engine *InterceptorEngine) (int, error) {
 			cfg.RateLimit = req.RateLimit
 			cfg.MaintenancePath = req.MaintenancePath
 			cfg.NavPlacement = req.NavPlacement
-			
+
 			engine.MaintenancePath = req.MaintenancePath
 			engine.NavPlacement = req.NavPlacement
 

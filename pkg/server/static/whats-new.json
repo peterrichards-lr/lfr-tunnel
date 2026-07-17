@@ -1,22 +1,33 @@
-{
-  "version": "v1.40.0",
-  "release_date": "2026-07-17",
-  "features": [
-    "Feature: LDM Integration API Bridge for seamless project synchronization",
-    "Feature: Client Dashboard UX Unification & Responsive Design",
-    "Fix: Resolve 'Preserve Host Header' UI checkbox state persistence bug",
-    "Feature: Add visual status pill for Host header preservation in Client Inspector UI",
-    "Feature: Custom Admin-defined Maintenance Pages for gateway",
-    "Feature: Implement responsive 2-column UI settings layout",
-    "Feature: Add light theme icon variant for client applications",
-    "Fix: Resolve 'Connect' failure in Windows 11 GUI caused by log file locks and console window flashing",
-    "Fix: Resolve SentinelOne quarantine interference during self-upgrade by downloading to whitelisted path",
-    "Feature: Implement Live Logs UI in Client Inspector",
-    "Fix: Resolve ignored background flag when gui flag is present",
-    "Fix: Resolve client UI localization bugs in English and other languages",
-    "Fix: Align and fix E2E automated test suite for Playwright container compatibility",
-    "Feature: Implement Client Inspector Theme Synchronization (Dark/Light mode) from Server Account to local UI",
-    "Feature: Add local UI Theme Override dropdown and '-theme' CLI flag to force specific display modes",
-    "Feature: Implement Client Inspector UI Localization with multi-language support (EN, DE, ES, IT, JA)"
-  ]
-}
+[
+  {
+    "version": "v1.40.0",
+    "release_date": "2026-07-17",
+    "features": [
+      "Feature: Client Dashboard UX Unification & Responsive Design",
+      "Feature: LDM Integration API Bridge for seamless project synchronization"
+    ]
+  },
+  {
+    "version": "v1.39.3",
+    "release_date": "2026-07-16",
+    "features": [
+      "Fix: Resolve 'Preserve Host Header' UI checkbox state persistence bug",
+      "Feature: Add visual status pill for Host header preservation in Client Inspector UI",
+      "Feature: Custom Admin-defined Maintenance Pages for gateway",
+      "Feature: Implement responsive 2-column UI settings layout",
+      "Feature: Add light theme icon variant for client applications"
+    ]
+  },
+  {
+    "version": "v1.39.2",
+    "release_date": "2026-07-15",
+    "features": [
+      "Fix: Resolve 'Connect' failure in Windows 11 GUI caused by log file locks and console window flashing",
+      "Fix: Resolve SentinelOne quarantine interference during self-upgrade by downloading to whitelisted path",
+      "Feature: Implement Live Logs UI in Client Inspector",
+      "Fix: Resolve ignored background flag when gui flag is present",
+      "Fix: Resolve client UI localization bugs in English and other languages",
+      "Fix: Align and fix E2E automated test suite for Playwright container compatibility"
+    ]
+  }
+]

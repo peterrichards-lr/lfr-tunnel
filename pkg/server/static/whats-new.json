@@ -1,5 +1,16 @@
 [
   {
+    "version": "v1.42.0",
+    "release_date": "2026-07-17",
+    "features": [
+      "Feature: Complete refactor of Client Dashboard UI to React SPA",
+      "Feature: Componentized monolithic vanilla JS architecture",
+      "Feature: Strict Error Handling audit and I/O resilience improvements",
+      "Feature: Decouple server package and implement standard Go architecture",
+      "Feature: Consolidate Operations to unified CLI task runner"
+    ]
+  },
+  {
     "version": "v1.40.0",
     "release_date": "2026-07-17",
     "features": [

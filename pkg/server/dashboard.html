@@ -1,0 +1,1275 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <link rel="icon" type="image/x-icon" href="/favicon.ico">
+
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Liferay Tunnel Identity</title>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="/static/dashboard.css">
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/driver.js@1.3.1/dist/driver.css">
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+</head>
+<body>
+
+    <div id="loader"><div class="spinner"></div></div>
+
+    <!-- TARGETED MESSAGE MODAL -->
+    <div id="targeted-message-modal" class="modal-overlay">
+        <div class="glass modal">
+            <h3 data-i18n="targeted_msg_title">Targeted Message</h3>
+            <p id="targeted-message-desc" style="color: var(--text-muted); margin-bottom: 16px; font-size: 14px;"></p>
+            <input type="hidden" id="targeted-message-userid">
+            <input type="text" id="targeted-message-input" class="input-field" data-i18n-placeholder="targeted_msg_placeholder" placeholder="Enter message to send..." required>
+            <button class="btn btn-primary" onclick="sendTargetedMessage()" data-i18n="btn_send_message">Send Message</button>
+            <button class="btn" style="color: var(--danger); border-color: var(--danger);" onclick="clearTargetedMessage()" data-i18n="btn_clear_alert">Clear Existing Alert</button>
+            <button class="btn" onclick="closeTargetedModal()" data-i18n="btn_cancel">Cancel</button>
+        </div>
+    </div>
+
+    <!-- TOAST ALERTS -->
+    <!-- LOGIN SCREEN -->
+    <div id="login-screen">
+        <div class="glass login-card" style="position: relative;">
+            <div style="position: absolute; top: 16px; right: 16px; display: flex; align-items: center; gap: 4px;">
+                <select id="portal-language-selector" style="background: transparent; border: none; color: var(--text-muted); font-size: 11px; cursor: pointer; outline: none; padding: 2px; font-weight: 500;" onchange="changePortalLanguage(this.value)">
+                    <option value="ar">🇸🇦 AR</option>
+                    <option value="de">🇩🇪 DE</option>
+                    <option value="en">🇺🇸 EN</option>
+                    <option value="es">🇪🇸 ES</option>
+                    <option value="fr">🇫🇷 FR</option>
+                    <option value="ja">🇯🇵 JA</option>
+                    <option value="ko">🇰🇷 KO</option>
+                    <option value="pt">🇵🇹 PT</option>
+                    <option value="ro">🇷🇴 RO</option>
+                    <option value="zh">🇨🇳 ZH</option>
+                </select>
+            </div>
+
+            <!-- Liferay Tunnel Vector Logo -->
+            <div style="display: flex; justify-content: center; margin-bottom: 12px; margin-top: 8px;">
+                <img src="/static/logo.svg" alt="Liferay Tunnel" width="48" height="48">
+            </div>
+
+            <h1 data-i18n="portal_welcome" style="margin-top: 0;">Welcome Back</h1>
+            <p data-i18n="portal_login_desc">Log in to access your dashboard</p>
+
+            <div id="sso-container"></div>
+
+            <div class="divider" id="sso-divider">or</div>
+
+            <button class="btn" id="btn-show-email" data-i18n="btn_login_with_email">Login with Email</button>
+            <button class="btn btn-outline" id="btn-show-register" style="margin-top: 8px;" data-i18n="btn_register_account">Create Account</button>
+            
+            <form id="email-form" class="hidden" style="margin-top: 16px;">
+                <input type="email" id="email-input" name="email" autocomplete="email" class="input-field" placeholder="name@liferay.com" required>
+                <button type="submit" class="btn btn-primary" id="btn-magic-link" data-i18n="btn_send_magic_link">Send Magic Link</button>
+                <div id="email-msg" style="margin-top: 12px; font-size: 13px;"></div>
+            </form>
+
+            <form id="register-form" class="hidden" style="margin-top: 16px;">
+                <input type="email" id="reg-email" name="email" autocomplete="email" class="input-field" placeholder="name@liferay.com" required>
+                <button type="submit" class="btn btn-primary" id="btn-register" data-i18n="btn_register_account">Register Account</button>
+                <div id="reg-msg" style="margin-top: 12px; font-size: 13px;"></div>
+            </form>
+
+            <form id="mfa-form" class="hidden" style="margin-top: 16px;">
+                <p style="font-size: 13px; color: var(--text-muted); margin-bottom: 12px; line-height: 1.5; text-align: left;" data-i18n="mfa_verify_desc">Your account is protected with Multi-Factor Authentication. Please enter the 6-digit code from your authenticator app to complete your login:</p>
+                <input type="text" id="mfa-code-input" name="code" autocomplete="one-time-code" class="input-field" placeholder="123456" pattern="[0-9]{6}" maxlength="6" inputmode="numeric" required style="letter-spacing: 8px; text-align: center; font-size: 18px; font-weight: bold;">
+                <input type="hidden" id="mfa-temp-token">
+                <button type="submit" class="btn btn-primary" id="btn-verify-mfa" style="margin-top: 12px;" data-i18n="btn_verify_login">Verify & Login</button>
+                <div id="mfa-msg" style="margin-top: 12px; font-size: 13px; color: var(--danger);"></div>
+            </form>
+
+            <div style="margin-top: 24px; padding-top: 12px; border-top: 1px solid rgba(255,255,255,0.06); text-align: center; font-size: 11px; display: flex; justify-content: center; gap: 12px; align-items: center;">
+                <a id="status-page-link" href="https://status.lfr-demo.se" target="_blank" rel="noopener noreferrer" style="color: var(--text-muted); text-decoration: none; transition: 0.2s; display: flex; align-items: center; gap: 4px;" onmouseover="this.style.color='var(--primary)'" onmouseout="this.style.color='var(--text-muted)'">
+                    <span style="width: 6px; height: 6px; border-radius: 50%; background-color: #10b981; display: inline-block;"></span>
+                    <span data-i18n="system_status">System Status</span>
+                </a>
+                <span style="color: var(--text-muted); opacity: 0.5;">•</span>
+                <a href="/privacy" id="footer-privacy-link" style="color: var(--text-muted); text-decoration: none; transition: 0.2s;" onmouseover="this.style.color='var(--primary)'" onmouseout="this.style.color='var(--text-muted)'" data-i18n="privacy_title">Privacy Policy</a>
+                <span style="color: var(--text-muted); opacity: 0.5;">•</span>
+                <a href="/cookies" id="footer-cookie-link" style="color: var(--text-muted); text-decoration: none; transition: 0.2s;" onmouseover="this.style.color='var(--primary)'" onmouseout="this.style.color='var(--text-muted)'" data-i18n="cookie_title">Cookie Disclosure</a>
+            </div>
+            <div style="text-align: center; font-size: 9px; color: var(--text-muted); opacity: 0.4; margin-top: 8px;">Gateway: <span class="server-version-display"></span></div>
+        </div>
+    </div>
+
+    <!-- INTERCEPT SCREEN -->
+    <div id="intercept-screen" style="display: none; min-height: 100vh; align-items: center; justify-content: center; padding: 24px; width: 100%;">
+        <div class="glass modal" style="max-width: 440px; width: 100%; padding: 40px; border-radius: 16px; box-shadow: 0 10px 25px rgba(0,0,0,0.2); text-align: center; margin-left: auto; margin-right: auto;">
+            <h3 data-i18n="mfa_intercept_title" style="margin-bottom: 12px; font-size: 20px;">🔒 Multi-Factor Authentication Required</h3>
+            <p data-i18n="mfa_intercept_desc" style="font-size: 14px; color: var(--text-muted); margin-bottom: 24px; line-height: 1.5; text-align: left;">
+                Your administrator requires Multi-Factor Authentication (MFA) to be enabled on your account. Please set up MFA now to access the dashboard.
+            </p>
+            
+            <div id="intercept-mfa-step">
+                <p data-i18n="mfa_setup_step1" style="font-size: 14px; color: var(--text-muted); margin-bottom: 16px; text-align: left; line-height: 1.5;">
+                    1. Scan this QR code in your authenticator app (Google Authenticator, Microsoft Authenticator, 1Password, etc.):
+                </p>
+                <div style="display: flex; justify-content: center; margin-bottom: 16px; background: white; padding: 12px; border-radius: 8px; width: fit-content; margin-left: auto; margin-right: auto; border: 1px solid rgba(0,0,0,0.1);">
+                    <img id="intercept-mfa-qr-display" src="" alt="MFA QR Code" style="width: 180px; height: 180px; display: block;">
+                </div>
+                <p data-i18n="mfa_setup_manual" style="font-size: 13px; color: var(--text-muted); margin-bottom: 8px; text-align: left;">
+                    Or enter this secret key manually inside your app:
+                </p>
+                <div class="copy-box" id="intercept-mfa-secret-display" style="font-family: monospace; letter-spacing: 2px; text-align: center; margin-bottom: 16px; user-select: all; padding: 8px; background: rgba(255,255,255,0.05); border-radius: 4px; font-weight: bold; border: 1px solid rgba(255,255,255,0.1);"></div>
+                
+                <p data-i18n="mfa_setup_step2" style="font-size: 14px; color: var(--text-muted); margin-bottom: 8px; text-align: left; line-height: 1.5;">
+                    2. Enter the 6-digit code from your app to verify setup:
+                </p>
+                <input type="text" id="intercept-mfa-verify-code" class="input-field" placeholder="123456" pattern="[0-9]{6}" maxlength="6" inputmode="numeric" style="text-align: center; font-size: 18px; font-weight: bold; letter-spacing: 4px; margin-bottom: 16px; background: rgba(255,255,255,0.05); border: 1px solid rgba(255,255,255,0.1); border-radius: 6px; color: var(--text-color);">
+                <button data-i18n="mfa_setup_verify" class="btn btn-primary" onclick="confirmInterceptMFA()" style="width: 100%; margin-bottom: 8px;">Verify & Enable</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- DASHBOARD SCREEN -->
+    <div id="dashboard-screen">
+        <div id="sidebar-backdrop" class="sidebar-backdrop" onclick="toggleSidebar()"></div>
+        <div class="sidebar">
+            <div class="sidebar-brand" style="display: flex; align-items: center; gap: 10px; padding: 12px 16px;">
+                <img src="/static/logo.svg" alt="Liferay Tunnel" width="28" height="28" style="flex-shrink: 0;">
+                <span style="font-weight: bold; font-size: 16px; color: var(--text-color); letter-spacing: 0.5px;">Liferay Tunnel</span>
+            </div>
+            
+            <div class="sidebar-menu">
+                <div class="sidebar-section-header" onclick="toggleSidebarSection('personal')">
+                    <span class="sidebar-label" data-i18n="sidebar_personal">Personal</span>
+                    <span class="sidebar-section-toggle">▼</span>
+                </div>
+                <div id="section-personal" class="sidebar-section-content">
+                    <div id="nav-overview" class="nav-item active" onclick="showTab('overview')" data-i18n="sidebar_overview">Overview</div>
+                    <div id="nav-tokens" class="nav-item" onclick="showTab('tokens')" data-i18n="sidebar_tokens">API Tokens</div>
+                    <div id="nav-reservations" class="nav-item" onclick="showTab('reservations')" data-i18n="sidebar_reservations">Reservations</div>
+                    <div id="nav-tunnels" class="nav-item" onclick="showTab('tunnels')" data-i18n="sidebar_tunnels">Active Tunnels</div>
+                </div>
+                
+                <div id="admin-sidebar-group" class="hidden">
+                    <div class="sidebar-section-header" onclick="toggleSidebarSection('administration')">
+                        <span class="sidebar-label" data-i18n="sidebar_administration">Administration</span>
+                        <span class="sidebar-section-toggle">▼</span>
+                    </div>
+                    <div id="section-administration" class="sidebar-section-content">
+                        <div id="nav-registrations" class="nav-item" onclick="showTab('registrations')"><span data-i18n="sidebar_registrations">Registrations</span> <span id="reg-badge" class="badge" style="display:none; background: var(--danger); color: white; margin-left: 8px;">0</span></div>
+                        <div id="nav-users" class="nav-item" onclick="showTab('users')" data-i18n="sidebar_users">Users</div>
+                        <div id="nav-blacklist" class="nav-item" onclick="showTab('blacklist')" data-i18n="sidebar_blacklist">IP Blacklist</div>
+                    </div>
+
+                    <div class="sidebar-section-header" onclick="toggleSidebarSection('reporting')">
+                        <span class="sidebar-label" data-i18n="sidebar_reporting">Reporting</span>
+                        <span class="sidebar-section-toggle">▼</span>
+                    </div>
+                    <div id="section-reporting" class="sidebar-section-content">
+                        <div id="nav-analytics" class="nav-item" onclick="showTab('analytics')" data-i18n="sidebar_analytics">Analytics</div>
+                        <div id="nav-audit" class="nav-item" onclick="showTab('audit')" data-i18n="sidebar_audit">Audit Logs</div>
+                        <div id="nav-magic" class="nav-item" onclick="showTab('magic')" data-i18n="sidebar_magic">Magic Links</div>
+                    </div>
+
+                    <div class="sidebar-section-header" onclick="toggleSidebarSection('maintenance')">
+                        <span class="sidebar-label" data-i18n="sidebar_maintenance">Maintenance</span>
+                        <span class="sidebar-section-toggle">▼</span>
+                    </div>
+                    <div id="section-maintenance" class="sidebar-section-content">
+                        <div id="nav-network-health" class="nav-item" onclick="showTab('network-health')" data-i18n="sidebar_edge_gateways">Edge Gateways</div>
+                        <div id="nav-backups" class="nav-item" onclick="showTab('backups')" data-i18n="sidebar_backups">Database Backups</div>
+                        <div id="nav-maintenance" class="nav-item" onclick="showTab('maintenance')" data-i18n="sidebar_maintenance_mode">Gateway Maintenance</div>
+                    </div>
+                </div>
+            </div>
+            
+            <div class="sidebar-footer">
+                <div id="nav-system" class="nav-item" onclick="showTab('system')" data-i18n="sidebar_system">System Settings</div>
+
+                <div id="nav-account" class="nav-item" onclick="showTab('account')" data-i18n="sidebar_account">Account Settings</div>
+                <div class="nav-item" onclick="logout()">Logout</div>
+                <a href="https://status.lfr-demo.se" target="_blank" rel="noopener noreferrer" style="font-size: 11px; color: var(--text-muted); text-decoration: none; display: flex; align-items: center; gap: 6px; padding-left: 16px; margin-top: 12px; transition: 0.2s;" onmouseover="this.style.color='var(--primary)'" onmouseout="this.style.color='var(--text-muted)'">
+                    <span style="width: 8px; height: 8px; border-radius: 50%; background-color: #10b981; display: inline-block;"></span>
+                    <span data-i18n="system_status">System Status</span>
+                </a>
+                <div style="font-size: 10px; color: var(--text-muted); opacity: 0.4; margin-top: 16px; padding-left: 16px; display: flex; flex-direction: column; gap: 2px;">
+                    <div>Gateway: <span class="server-version-display"></span></div>
+                    <div>Client: <span class="client-version-display"></span></div>
+                </div>
+            </div>
+        </div>
+        
+        <div class="main-content" style="position: relative; padding-top: 60px;">
+            <button id="sidebar-toggle-btn" class="sidebar-toggle-btn" onclick="toggleSidebar()" aria-label="Toggle Sidebar">
+                <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                    <rect x="3" y="3" width="18" height="18" rx="2" ry="2"></rect>
+                    <line x1="9" y1="3" x2="9" y2="21"></line>
+                </svg>
+            </button>
+            <div id="header-language-container" style="position: absolute; top: 16px; right: 24px; z-index: 100; display: flex; align-items: center; gap: 8px;">
+                <div class="custom-dropdown" id="portal-custom-dropdown" style="position: relative; user-select: none;">
+                    <div class="custom-dropdown-trigger" onclick="toggleCustomDropdown()" style="display: flex; align-items: center; gap: 8px; background: rgba(255,255,255,0.05); border: 1px solid rgba(255,255,255,0.1); padding: 6px 12px; border-radius: 6px; cursor: pointer; font-size: 13px; font-weight: 500; color: var(--text-color); transition: 0.2s; height: 32px; box-sizing: border-box;">
+                        <span id="custom-dropdown-flag"></span>
+                        <span id="custom-dropdown-label">English</span>
+                        <svg viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="currentColor" stroke-width="2" style="margin-left: 4px; transition: 0.2s;"><path d="M6 9l6 6 6-6"/></svg>
+                    </div>
+                    <div class="custom-dropdown-menu" id="custom-dropdown-menu" style="display: none; position: absolute; top: calc(100% + 6px); right: 0; background: #161b22; border: 1px solid rgba(255,255,255,0.15); border-radius: 6px; box-shadow: 0 8px 24px rgba(0,0,0,0.3); min-width: 160px; padding: 4px 0; z-index: 101;">
+                        <!-- Custom list items rendered dynamically in JS -->
+                    </div>
+                </div>
+            </div>
+            <div id="global-notification-banner" style="display:none; position: absolute; top: 0; left: 0; right: 0; z-index: 1000; padding: 12px 24px; text-align: center; font-weight: 500; box-shadow: 0 4px 12px rgba(0,0,0,0.2);"></div>
+            <!-- Overview Tab -->
+            <div id="tab-overview">
+                <div class="header">
+                    <h2 data-i18n="tab_overview_title">Dashboard Overview</h2>
+                </div>
+                
+                <div id="last-login-banner" class="glass" style="padding: 16px; border-radius: 8px; font-size: 14px; margin-bottom: 32px; display: none; align-items: center; justify-content: space-between; border-left: 4px solid var(--primary);">
+                    <span id="last-login-text"></span>
+                </div>
+
+                <div class="responsive-grid" style="display: grid; grid-template-columns: 1fr 1fr; gap: 24px;">
+                    <!-- Left Column -->
+                    <div style="display: flex; flex-direction: column; gap: 24px;">
+                        <div id="cli-client-banner-container"></div>
+
+                        <div id="docker-container-box" class="glass" style="padding: 24px; border-radius: 8px; display: none;">
+                            <h3 style="margin-bottom: 12px; font-size: 18px; display: flex; align-items: center; gap: 8px;">
+                                <svg viewBox="0 0 24 24" width="24" height="24" fill="currentColor"><path d="M13.983 11.078h2.119c.102 0 .186-.083.186-.185V8.99c0-.102-.084-.186-.186-.186h-2.119c-.103 0-.186.084-.186.186v1.903c0 .102.083.185.186.185zM11.261 11.078h2.119c.102 0 .186-.083.186-.185V8.99c0-.102-.084-.186-.186-.186h-2.119c-.103 0-.186.084-.186.186v1.903c0 .102.083.185.186.185zM8.539 11.078h2.119c.103 0 .187-.083.187-.185V8.99c0-.102-.084-.186-.187-.186H8.54c-.103 0-.186.084-.186.186v1.903c0 .102.083.185.186.185zm2.722-2.711h2.119c.102 0 .186-.083.186-.185V6.279c0-.102-.084-.186-.186-.186h-2.119c-.103 0-.186.084-.186.186v1.903c0 .102.083.185.186.185zM8.539 8.367h2.119c.103 0 .187-.083.187-.185V6.279c0-.102-.084-.186-.187-.186H8.54c-.103 0-.186.084-.186.186v1.903c0 .102.083.185.186.185zm5.444 0h2.119c.102 0 .186-.083.186-.185V6.279c0-.102-.084-.186-.186-.186h-2.119c-.103 0-.186.084-.186.186v1.903c0 .102.083.185.186.185zM5.817 11.078h2.119c.102 0 .186-.083.186-.185V8.99c0-.102-.084-.186-.186-.186H5.817c-.102 0-.186.084-.186.186v1.903c0 .102.084.185.186.185zM2.8 11.968c-.102 0-.186.083-.186.185v1.903c0 .102.084.186.186.186h2.119c.103 0 .186-.084.186-.186v-1.903c0-.102-.083-.185-.186-.185zm2.722-3.6h2.119c.102 0 .186-.084.186-.186V6.279c0-.102-.084-.186-.186-.186H5.817c-.102 0-.186.084-.186.186v1.903c0 .102.084.185.186.186zM22.047 12.3c-.027-.374-.108-.748-.242-1.116-.271-.741-.747-1.393-1.353-1.859-.607-.466-1.332-.733-2.082-.756-1.5-.045-3.003-.016-4.505-.016h-.123c-.108 0-.197.089-.197.198v1.9c0 .11.089.199.197.199h.286c1.196.012 2.392-.016 3.585.034.409.017.818.113 1.189.3.37.186.686.471.907.822.253.4.37.868.337 1.341-.073 1.055-.494 2.052-1.185 2.825a5.5 5.5 0 01-3.633 1.838c-1.312.188-2.64.137-3.931-.151a11.08 11.08 0 01-5.112-2.738 7.39 7.39 0 01-1.97-4.116C3.963 10.15 3.99 9.1 4.29 8.087a6.94 6.94 0 011.66-2.82A6.52 6.52 0 018.665 3.61c.148-.046.297-.089.448-.13a.194.194 0 00.143-.19v-2c0-.113-.095-.203-.207-.193-.312.029-.623.076-.932.14a8.91 8.91 0 00-3.687 1.8 9.32 9.32 0 00-2.802 3.65c-.563 1.25-.806 2.61-.715 3.978.114 1.706.775 3.322 1.876 4.636 1.1 1.314 2.58 2.247 4.2 2.68 1.944.52 3.974.52 5.918 0a11.1 11.1 0 004.912-2.58c1.378-1.206 2.338-2.84 2.709-4.634.331-1.6.241-3.26-.263-4.81z" fill="currentColor"/></svg>
+                                Docker Hub Image
+                            </h3>
+                            <p style="font-size: 13px; color: var(--text-muted); margin-bottom: 12px; line-height: 1.4;">
+                                You can pull the official Docker client image directly:
+                            </p>
+                            <div class="copy-box" id="docker-pull-cmd" style="font-family: monospace; font-size: 13px; cursor: pointer; display: flex; align-items: center; justify-content: space-between; padding: 12px; background: rgba(0,0,0,0.2); border-radius: 6px; border: 1px solid var(--border); word-break: break-all;" onclick="copyDockerCmd()">
+                                <span id="docker-pull-text"></span>
+                                <svg viewBox="0 0 24 24" width="16" height="16" stroke="currentColor" stroke-width="2" fill="none" style="flex-shrink:0; margin-left:8px; opacity:0.6;"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>
+                            </div>
+                            <div style="display: flex; gap: 16px; margin-top: 8px; flex-wrap: wrap;">
+                                <a id="docker-hub-link" href="#" target="_blank" style="color: var(--primary); text-decoration: none; font-size: 14px; font-weight: 500; display: inline-block;">→ View on Docker Hub</a>
+                                <a id="docker-bypass-link" href="#" target="_blank" style="color: var(--primary); text-decoration: none; font-size: 14px; font-weight: 500; display: none;">→ EDR Bypass Guide</a>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Right Column -->
+                    <div style="display: flex; flex-direction: column; gap: 24px;">
+                        <div class="glass" style="padding: 24px; border-radius: 8px;">
+                            <h3 id="whats-new-title" style="margin-bottom: 16px; font-size: 18px;" data-i18n="whats_new_title">What's New</h3>
+                            <div id="whats-new-list" style="color: var(--text-muted); padding-left: 20px; line-height: 1.6; font-size: 14px;">
+                                <div>Loading updates...</div>
+                            </div>
+                        </div>
+
+                        <div class="glass" style="padding: 24px; border-radius: 8px;">
+                            <h3 style="margin-bottom: 16px; font-size: 18px;" data-i18n="quick_links_title">Quick Links</h3>
+                            <div style="display: flex; flex-direction: column; gap: 12px;">
+                                <a href="#" onclick="showTab('tokens'); return false;" style="color: var(--primary); text-decoration: none; font-weight: 500;">→ Generate a new CLI Token</a>
+                                <a href="#" onclick="showTab('tunnels'); return false;" style="color: var(--primary); text-decoration: none; font-weight: 500;">→ View your Active Tunnels</a>
+                                <a href="#" onclick="startTutorial(true); return false;" style="color: var(--primary); text-decoration: none; font-weight: 500;">→ Run Dashboard Onboarding Tour</a>
+                                <a id="docs-link" href="#" target="_blank" style="color: var(--primary); text-decoration: none; font-weight: 500;">→ Read the Documentation</a>
+                                <a id="secure-token-guide-link" href="#" target="_blank" style="color: var(--primary); text-decoration: none; font-weight: 500;">→ Secure Token Storage (LDM-Style)</a>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Tokens Tab -->
+            <div id="tab-tokens" class="hidden">
+                <div class="header">
+                    <h2 data-i18n="tab_tokens_title">Personal Access Tokens</h2>
+                    <div style="display: flex; gap: 12px; align-items: center;">
+                        <button class="btn btn-secondary" style="width: auto; margin: 0;" onclick="exportTokensCSV()" data-i18n="btn_export_csv">Export CSV</button>
+                        <button class="btn btn-primary" style="width: auto; margin: 0;" onclick="openTokenModal()" data-i18n="btn_generate_token">Generate New Token</button>
+                    </div>
+                </div>
+                <p style="color: var(--text-muted); margin-bottom: 24px; font-size: 14px;" data-i18n="tokens_desc">Tokens allow your CLI to authenticate with the gateway.</p>
+                <div class="glass table-container">
+                    <table>
+                        <thead id="tokens-table-headers"><tr><th data-sort="name" data-i18n="th_name">Name</th><th data-sort="token_prefix" data-i18n="th_prefix">Prefix</th><th data-sort="created_at" data-i18n="th_created">Created</th><th data-sort="expires_at" data-i18n="th_expires">Expires</th><th data-i18n="th_expires_in">Expires In</th><th data-i18n="th_status">Status</th><th data-i18n="th_action">Action</th></tr></thead>
+                        <tbody id="tokens-table-body"></tbody>
+                    </table>
+                </div>
+            </div>
+
+            <!-- Account Tab -->
+            <div id="tab-account" class="hidden">
+                <div class="header">
+                    <h2 data-i18n="account_title">Account Settings</h2>
+                </div>
+                <div class="glass" style="padding: 24px; border-radius: 8px;">
+                    <form id="account-form">
+                        <div style="display: flex; gap: 16px; margin-bottom: 16px;">
+                            <div style="flex: 1;">
+                                <label style="display:block; margin-bottom: 8px; color: var(--text-muted); font-size: 14px;" data-i18n="label_first_name">First Name</label>
+                                <input type="text" id="acc-first-name" class="input-field">
+                            </div>
+                            <div style="flex: 1;">
+                                <label style="display:block; margin-bottom: 8px; color: var(--text-muted); font-size: 14px;" data-i18n="label_last_name">Last Name</label>
+                                <input type="text" id="acc-last-name" class="input-field">
+                            </div>
+                        </div>
+                        <div style="margin-bottom: 16px;">
+                            <label style="display:block; margin-bottom: 8px; color: var(--text-muted); font-size: 14px;" data-i18n="label_preferred_name">Preferred Name</label>
+                            <input type="text" id="acc-preferred-name" class="input-field" placeholder="How should we address you?">
+                        </div>
+                        <div style="margin-bottom: 16px;">
+                            <label style="display:block; margin-bottom: 8px; color: var(--text-muted); font-size: 14px;" data-i18n="label_theme">Theme Preference</label>
+                            <select id="acc-theme" class="input-field">
+                                <option value="system">System Default</option>
+                                <option value="light">Light Mode</option>
+                                <option value="dark">Dark Mode</option>
+                                <option value="time">Time of Day (Sunset/Sunrise)</option>
+                            </select>
+                        </div>
+                        <div style="margin-bottom: 16px;">
+                            <label style="display:block; margin-bottom: 8px; color: var(--text-muted); font-size: 14px;" data-i18n="label_language">Language Preference</label>
+                            <input type="hidden" id="acc-language" value="en" />
+                            <div class="custom-dropdown" id="acc-language-custom-dropdown" style="position: relative; user-select: none;">
+                                <div class="custom-dropdown-trigger" onclick="toggleAccDropdown()" style="display: flex; align-items: center; gap: 8px; background: rgba(255,255,255,0.05); border: 1px solid rgba(255,255,255,0.1); padding: 8px 12px; border-radius: 6px; cursor: pointer; font-size: 14px; font-weight: 500; color: var(--text-color); transition: 0.2s; height: 38px; box-sizing: border-box;">
+                                    <span id="acc-custom-flag"></span>
+                                    <span id="acc-custom-label">English</span>
+                                    <svg viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="currentColor" stroke-width="2" style="margin-left: auto; transition: 0.2s;"><path d="M6 9l6 6 6-6"/></svg>
+                                </div>
+                                <div class="custom-dropdown-menu" id="acc-custom-menu" style="display: none; position: absolute; top: calc(100% + 6px); left: 0; background: #161b22; border: 1px solid rgba(255,255,255,0.15); border-radius: 6px; box-shadow: 0 8px 24px rgba(0,0,0,0.3); width: 100%; padding: 4px 0; z-index: 101; max-height: 175px; overflow-y: auto;">
+                                    <!-- Custom list items rendered dynamically in JS -->
+                                </div>
+                            </div>
+                        </div>
+                        <div style="margin-bottom: 24px;">
+                            <div style="display: flex; align-items: center; gap: 12px; margin-bottom: 8px;">
+                                <label style="margin: 0; color: var(--text-muted); font-size: 14px;" data-i18n="label_notifications">Email Notifications</label>
+                                <label class="toggle-switch">
+                                    <input type="checkbox" id="acc-notifications">
+                                    <span class="toggle-slider"></span>
+                                </label>
+                            </div>
+                            <p style="font-size: 12px; color: var(--text-muted); margin-top: 6px;">Disabling this will suppress administrative alerts (like new registration notifications). Essential emails like Magic Links and account status updates cannot be disabled.</p>
+                        </div>
+                        <button type="submit" class="btn btn-primary" style="width: auto;" id="btn-save-account" data-i18n="btn_save_changes">Save Changes</button>
+                    </form>
+                </div>
+
+                <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 24px; margin-top: 24px;">
+                    <div class="glass" style="padding: 24px; border-radius: 8px; margin: 0; display: flex; flex-direction: column; justify-content: space-between;">
+                        <div>
+                            <h3 style="margin-bottom: 8px; font-size: 18px;" data-i18n="mfa_title">🔒 Multi-Factor Authentication (MFA)</h3>
+                            <p style="color: var(--text-muted); margin-bottom: 16px; font-size: 14px;">Secure your account by requiring a 6-digit verification code from your authenticator app (like Google Authenticator, Microsoft Authenticator, or 1Password) each time you log in via Magic Link.</p>
+                        </div>
+                        <div id="mfa-status-container" style="font-size: 14px; margin-top: auto;">
+                            <!-- Will be populated dynamically -->
+                        </div>
+                    </div>
+
+                    <div class="glass" style="padding: 24px; border-radius: 8px; margin: 0; display: flex; flex-direction: column; justify-content: space-between;">
+                        <div>
+                            <h3 style="margin-bottom: 8px; font-size: 18px;" data-i18n="onboarding_guide_title">👋 Onboarding Tour</h3>
+                            <p style="color: var(--text-muted); margin-bottom: 16px; font-size: 14px;">Want to review the layout and learn how to use Liferay Tunnel's dashboard again? You can run through the interactive walkthrough tutorial at any time.</p>
+                        </div>
+                        <div style="margin-top: auto;">
+                            <button class="btn btn-outline" style="width: auto;" onclick="startTutorial(true)">Start Onboarding Tour</button>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="glass" id="danger-zone-container" style="padding: 24px; border-radius: 8px; margin-top: 24px; border: 1px solid rgba(239, 68, 68, 0.2);">
+                    <h3 style="margin-bottom: 8px; font-size: 18px; color: #f43f5e;" data-i18n="danger_zone_title">⚠️ Danger Zone (GDPR / Right to Be Forgotten)</h3>
+                    <p style="color: var(--text-muted); margin-bottom: 16px; font-size: 14px;">Deleting your account will instantly and permanently revoke all of your personal access tokens, kick any active tunnel connections, and permanently purge your profile records from our systems. <strong>Any historical bandwidth metrics and logs will be permanently anonymised to protect your privacy.</strong></p>
+                    <button class="btn btn-outline" style="width: auto; color: #f43f5e; border-color: #f43f5e; background: transparent; transition: 0.2s;" onmouseover="this.style.background='rgba(244,63,94,0.1)'" onmouseout="this.style.background='transparent'" onclick="openDeleteAccountModal()">Delete Account...</button>
+                </div>
+            </div>
+
+            
+            <!-- Analytics Tab -->
+            <div id="tab-analytics" class="hidden">
+                <div class="header" style="display: flex; justify-content: space-between; align-items: center;">
+                    <h2 data-i18n="tab_analytics_title">Analytics & Monitoring</h2>
+                    <button class="btn btn-secondary print-hide" style="width: auto; margin: 0;" onclick="exportAnalyticsPDF()" data-i18n="btn_export_pdf">Export PDF</button>
+                </div>
+                <p style="color: var(--text-muted); margin-bottom: 24px; font-size: 14px;" data-i18n="analytics_desc">View your bandwidth utilization over the last 30 days.</p>
+                
+                <!-- Admin Only Section -->
+                <div id="admin-analytics-section" style="display: none; margin-bottom: 32px;">
+                    <h3 style="margin-bottom: 16px;">Global Overview</h3>
+                    <div class="responsive-grid" style="display: grid; grid-template-columns: 2fr 1fr; gap: 24px;">
+                        <div class="glass" style="padding: 16px;" title="Shows the total bytes received (Data In) and sent (Data Out) across all tunnels over the last 30 days.">
+                            <h4 style="margin-bottom: 12px; color: var(--text-muted); font-size: 14px; font-weight: 500;">Global Bandwidth Over Time</h4>
+                            <div style="position: relative; height: 250px; width: 100%;">
+                                <canvas id="globalBandwidthChart"></canvas>
+                            </div>
+                        </div>
+                        <div class="glass" style="padding: 16px;" title="Shows the top 10 users ranked by total bandwidth consumption over the last 30 days.">
+                            <h4 style="margin-bottom: 12px; color: var(--text-muted); font-size: 14px; font-weight: 500;">Top Users</h4>
+                            <div style="position: relative; height: 250px; width: 100%;">
+                                <canvas id="topUsersChart"></canvas>
+                            </div>
+                        </div>
+                        <div class="glass" style="padding: 16px; grid-column: span 2;">
+                            <h4 style="margin-bottom: 12px; color: var(--text-muted); font-size: 14px; font-weight: 500;">Client Version Distribution</h4>
+                            <div class="table-container" style="max-height: 250px; overflow-y: auto;">
+                                <table>
+                                    <thead><tr><th data-sort="version" data-i18n="th_version">Version</th><th data-sort="os" data-i18n="th_os">OS</th><th data-sort="count" data-i18n="th_user_count">User Count</th></tr></thead>
+                                    <tbody id="client-stats-table-body"></tbody>
+                                </table>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Personal Section -->
+                <div>
+                    <h3 style="margin-bottom: 16px;">My Usage</h3>
+                    <div class="responsive-grid" style="display: grid; grid-template-columns: 2fr 1fr; gap: 24px;">
+                        <div class="glass" style="padding: 16px;" title="Shows your daily bandwidth usage (Data In vs Data Out) over the last 30 days.">
+                            <h4 style="margin-bottom: 12px; color: var(--text-muted); font-size: 14px; font-weight: 500;">My Bandwidth Over Time</h4>
+                            <div style="position: relative; height: 250px; width: 100%;">
+                                <canvas id="myBandwidthChart"></canvas>
+                            </div>
+                        </div>
+                        <div class="glass" style="padding: 16px;" title="Shows the distribution of total bandwidth usage across your active tunnels.">
+                            <h4 style="margin-bottom: 12px; color: var(--text-muted); font-size: 14px; font-weight: 500;">My Tunnels Breakdown</h4>
+                            <div style="position: relative; height: 250px; width: 100%;">
+                                <canvas id="myTunnelsChart"></canvas>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Tunnels Tab -->
+            <div id="tab-tunnels" class="hidden">
+                <div class="header">
+                    <h2 data-i18n="tab_tunnels_title">Active Tunnels</h2>
+                </div>
+                <p style="color: var(--text-muted); margin-bottom: 24px; font-size: 14px;" data-i18n="tunnels_desc">These are your currently active Liferay tunnels.</p>
+                <div class="glass table-container">
+                    <table>
+                        <thead><tr id="tunnels-table-headers"></tr></thead>
+                        <tbody id="tunnels-table-body"></tbody>
+                    </table>
+                </div>
+            </div>
+
+            <!-- Reservations Tab -->
+            <div id="tab-reservations" class="hidden">
+                <div class="header">
+                    <h2 data-i18n="tab_reservations_title">Subdomain Reservations</h2>
+                </div>
+                <p style="color: var(--text-muted); margin-bottom: 24px; font-size: 14px;" data-i18n="reservations_desc">Reserve subdomains to prevent naming conflicts, enforce quotas, and manage lease extensions.</p>
+
+                <!-- Quota Visualization -->
+                <div class="glass" style="padding: 24px; border-radius: 8px; margin-bottom: 24px;">
+                    <div style="display: flex; justify-content: space-between; font-size: 14px; margin-bottom: 8px;">
+                        <span style="font-weight: 500;" data-i18n="res_quota_title">Reservations Quota</span>
+                        <span id="reservation-quota-text" style="color: var(--text-muted);">0 / 0 subdomains reserved</span>
+                    </div>
+                    <div style="width: 100%; height: 8px; background: rgba(255,255,255,0.05); border-radius: 4px; overflow: hidden; border: 1px solid var(--border);">
+                        <div id="reservation-quota-bar" style="width: 0%; height: 100%; background: var(--primary); transition: width 0.3s ease;"></div>
+                    </div>
+                </div>
+
+                <!-- Reserve Subdomain Panel -->
+                <div class="glass" style="padding: 24px; border-radius: 8px; margin-bottom: 24px;">
+                    <h3 style="margin-top: 0; margin-bottom: 16px; font-size: 18px;" data-i18n="res_reserve_title">Reserve a Subdomain</h3>
+                    <div id="reservation-form-container">
+                        <div style="display: flex; gap: 16px; margin-bottom: 16px; align-items: flex-end; flex-wrap: wrap;">
+                            <div style="flex: 2; min-width: 200px;">
+                                <label style="display:block; margin-bottom: 8px; color: var(--text-muted); font-size: 13px;">Subdomain Prefix</label>
+                                <input type="text" id="res-subdomain" class="input-field" placeholder="e.g. my-subdomain" style="width: 100%; box-sizing: border-box; margin-bottom: 0;">
+                            </div>
+                            <div style="flex: 1; min-width: 150px;">
+                                <label style="display:block; margin-bottom: 8px; color: var(--text-muted); font-size: 13px;">Domain</label>
+                                <select id="res-domain" class="input-field" style="width: 100%; box-sizing: border-box; margin-bottom: 0;"></select>
+                            </div>
+                            <button id="btn-reserve-subdomain" class="btn btn-primary" style="width: auto; margin: 0;" onclick="reserveSubdomain()">Reserve</button>
+                        </div>
+                        
+                        <hr style="border: 0; border-top: 1px solid var(--border); margin: 20px 0;">
+                        
+                        <div style="display: flex; gap: 16px; align-items: center; flex-wrap: wrap;">
+                            <span style="font-size: 13px; color: var(--text-muted);">Need inspiration?</span>
+                            <select id="res-style-select" class="input-field" style="width: auto; max-width: 200px; margin: 0;">
+                                <option value="random">Alphanumeric (8 chars)</option>
+                                <option value="words">What-Three-Words Style</option>
+                                <option value="heroku">Adjective-Noun-Number</option>
+                                <option value="liferay">Liferay SE style</option>
+                            </select>
+                            <button id="btn-generate-subdomain" class="btn btn-secondary" style="width: auto; margin: 0; padding: 6px 16px;" onclick="generateRandomSubdomain()">Generate Random</button>
+                        </div>
+                    </div>
+                    <div id="reservation-quota-warning" class="alert alert-warning hidden" style="margin-top: 16px; background: rgba(245, 158, 11, 0.1); border-color: rgba(245, 158, 11, 0.2); color: #fbbf24;">
+                        You have reached your subdomain reservation quota limit. Release an existing reservation to register a new one.
+                    </div>
+                </div>
+
+                <!-- Active Reservations Table -->
+                <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 16px;">
+                    <h3 id="reservations-title" style="margin: 0; font-size: 18px;" data-i18n="res_active_title">Your Reserved Subdomains</h3>
+                    <button class="btn btn-secondary" style="width: auto; margin: 0; padding: 6px 14px; font-size: 13px;" onclick="exportReservationsCSV()">Export CSV</button>
+                </div>
+                <div class="glass table-container" style="margin-bottom: 32px;">
+                    <table>
+                        <thead id="reservations-table-headers">
+                            <tr>
+                                <th data-i18n="th_subdomain">Subdomain</th>
+                                <th data-i18n="th_domain">Domain</th>
+                                <th data-i18n="th_status">Status</th>
+                                <th data-i18n="th_expires_at_local">Expires At (Local)</th>
+                                <th style="text-align: right;" data-i18n="th_actions">Actions</th>
+                            </tr>
+                        </thead>
+                        <tbody id="reservations-table-body">
+                            <tr>
+                                <td colspan="5" style="text-align: center; padding: 24px; color: var(--text-muted);">Loading reservations...</td>
+                            </tr>
+                        </tbody>
+                    </table>
+                </div>
+
+                <!-- Admin Section (Only for admin/owner) -->
+                <div id="admin-reservations-section" class="hidden">
+                    <div class="sidebar-label" style="padding-left: 0; margin-bottom: 16px; font-size: 16px; font-weight: bold; border-bottom: 1px solid var(--border); padding-bottom: 8px;">Administration Controls</div>
+                    
+                    <h3 style="margin-bottom: 16px; font-size: 18px;">Extension Requests</h3>
+                    <div class="glass table-container">
+                          <table>
+                              <thead>
+                                  <tr>
+                                      <th data-i18n="th_user_email">User Email</th>
+                                      <th data-i18n="th_subdomain">Subdomain</th>
+                                      <th data-i18n="th_domain">Domain</th>
+                                      <th data-i18n="th_expires_at">Expires At</th>
+                                      <th style="text-align: right;" data-i18n="th_actions">Actions</th>
+                                  </tr>
+                              </thead>
+                              <tbody id="admin-extensions-table-body">
+                                  <tr>
+                                      <td colspan="5" style="text-align: center; padding: 24px; color: var(--text-muted);">No extension requests pending.</td>
+                                  </tr>
+                              </tbody>
+                          </table>
+                      </div>
+                </div>
+            </div>
+
+            <!-- Registrations Tab -->
+            <div id="tab-registrations" class="hidden">
+                <div class="header">
+                    <h2>Pending Registrations</h2>
+                </div>
+                <div class="glass table-container">
+                    <table>
+                        <thead><tr><th data-sort="email" data-i18n="th_email">Email</th><th data-sort="first_name" data-i18n="th_name">Name</th><th data-sort="created_at" data-i18n="th_requested_at_utc">Requested At (UTC)</th><th data-i18n="th_actions">Actions</th></tr></thead>
+                        <tbody id="registrations-table-body"></tbody>
+                    </table>
+                </div>
+            </div>
+
+            <!-- Users Tab -->
+            <div id="tab-users" class="hidden">
+                <div class="header">
+                    <h2 data-i18n="tab_users_title">Users</h2>
+                    <button class="btn btn-primary" style="width: auto; margin:0;" onclick="openInviteModal()" data-i18n="btn_invite_user">Invite User</button>
+                </div>
+                <div class="glass" style="padding: 16px; margin-bottom: 24px;">
+                    <h4 style="margin-bottom: 8px; color: var(--text-muted); font-size: 14px; font-weight: 500;" data-i18n="lbl_global_broadcast">Global Broadcast Message</h4>
+                    <div style="display: flex; gap: 12px;">
+                        <input type="text" id="admin-broadcast-input" data-i18n-placeholder="broadcast_input_placeholder" placeholder="e.g. Server is going down for maintenance in 5 minutes..." style="flex: 1;" />
+                        <button class="btn btn-primary" style="width: auto; margin: 0;" onclick="setBroadcastMessage()" data-i18n="btn_broadcast">Broadcast</button>
+                        <button class="btn btn-secondary" style="width: auto; margin: 0;" onclick="clearBroadcastMessage()" data-i18n="btn_clear">Clear</button>
+                    </div>
+                </div>
+                <div class="glass table-container">
+                    <table>
+                        <thead><tr><th data-sort="email" data-i18n="th_email">Email</th><th data-sort="first_name" data-i18n="th_name">Name</th><th data-sort="role" data-i18n="th_role">Role</th><th data-sort="status" data-i18n="th_status">Status</th><th style="min-width: 140px;" data-i18n="th_quotas">Quotas</th><th data-sort="last_login_at" data-i18n="th_last_seen">Last Seen</th><th data-i18n="th_actions">Actions</th></tr></thead>
+                        <tbody id="users-table-body"></tbody>
+                    </table>
+                </div>
+            </div>
+
+            <!-- Blacklist Tab -->
+            <div id="tab-blacklist" class="hidden">
+                <div class="header">
+                    <h2>IP Blacklist</h2>
+                    <button class="btn btn-primary" style="width: auto; margin:0;" onclick="openBlacklistModal()">Ban IP</button>
+                </div>
+                <div class="glass table-container">
+                    <table>
+                        <thead><tr><th data-sort="ip_address" data-i18n="th_ip_address">IP Address</th><th data-sort="reason" data-i18n="th_reason">Reason</th><th data-sort="banned_at" data-i18n="th_banned_at">Banned At</th><th data-i18n="th_actions">Actions</th></tr></thead>
+                        <tbody id="blacklist-table-body"></tbody>
+                    </table>
+                </div>
+            </div>
+
+            <!-- Audit Logs Tab -->
+            <div id="tab-audit" class="hidden">
+                <div class="header" style="display: flex; justify-content: space-between; align-items: center;">
+                    <h2>Audit Logs</h2>
+                    <button class="btn btn-secondary" style="width: auto; margin: 0;" onclick="exportAuditLog()">Export CSV</button>
+                </div>
+                <div class="glass table-container">
+                    <table>
+                        <thead><tr><th data-sort="created_at" data-i18n="th_timestamp">Timestamp</th><th data-sort="action" data-i18n="th_event">Event</th><th data-sort="actor_id" data-i18n="th_actor">Actor</th><th data-sort="target_id" data-i18n="th_target">Target</th><th data-sort="ip_address" data-i18n="th_ip">IP</th><th data-i18n="th_details">Details</th></tr></thead>
+                        <tbody id="audit-table-body"></tbody>
+                    </table>
+                </div>
+            </div>
+            
+            <!-- Magic Links Tab -->
+            <div id="tab-magic" class="hidden">
+                <div class="header">
+                    <h2>Magic Links</h2>
+                </div>
+                <div class="glass table-container">
+                    <table>
+                        <thead><tr><th data-sort="email" data-i18n="th_email">Email</th><th data-sort="client_ip" data-i18n="th_ip_address">IP Address</th><th data-sort="expires_at" data-i18n="th_expires">Expires</th><th data-sort="used_at" data-i18n="th_used_at">Used At</th></tr></thead>
+                        <tbody id="magic-table-body"></tbody>
+                    </table>
+                </div>
+            </div>
+
+            <!-- Database Backups Tab -->
+            <div id="tab-backups" class="hidden">
+                <div class="header">
+                    <h2>Database Backups</h2>
+                </div>
+                <div class="glass" style="padding: 16px 20px; margin-bottom: 16px; border-left: 3px solid var(--accent);">
+                    <strong>&#x1F6E1; Restore via CLI only.</strong>
+                    To restore from a backup, SSH into the VPS and run the wrapper script:<br>
+                    <code style="display:inline-block; margin-top:8px; font-size:0.85em;">sudo ./scripts/restore-with-maintenance.sh</code><br>
+                    <span style="font-size:0.85em; opacity:0.75;">This wrapper automatically coordinates Nginx maintenance mode, stops the daemon, restores the database backup, and restarts the service.</span>
+                </div>
+                <div class="glass table-container">
+                    <table>
+                        <thead><tr><th data-sort="filename" data-i18n="th_filename">Filename</th><th data-sort="size_bytes" data-i18n="th_size">Size</th><th data-sort="created_at" data-i18n="th_created_utc">Created (UTC)</th></tr></thead>
+                        <tbody id="backups-table-body"><tr><td colspan="3" style="text-align:center;opacity:0.6;">Loading...</td></tr></tbody>
+                    </table>
+                </div>
+            </div>
+
+            <!-- Network Health Tab -->
+            <div id="tab-network-health" class="hidden">
+                <div class="header">
+                    <h2 data-i18n="edge_gateways_title">Edge Gateways</h2>
+                    <button class="btn btn-secondary" style="width: auto; margin: 0;" onclick="loadNetworkHealth()">Refresh</button>
+                </div>
+                <div class="glass table-container">
+                    <table>
+                        <thead>
+                            <tr>
+                                <th data-i18n="th_region_id">Region ID</th>
+                                <th data-i18n="th_ip_address">IP Address</th>
+                                <th data-i18n="th_status">Status</th>
+                                <th data-i18n="th_latency">Latency</th>
+                                <th data-i18n="th_last_check">Last Check</th>
+                                <th data-i18n="th_version">Version</th>
+                                <th data-i18n="th_details">Details</th>
+                                <th style="text-align: right;" data-i18n="th_actions">Actions</th>
+                            </tr>
+                        </thead>
+                        <tbody id="network-health-body">
+                            <tr><td colspan="8" style="text-align:center;opacity:0.6;">Loading...</td></tr>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+
+            <!-- Maintenance Tab -->
+            <div id="tab-maintenance" class="hidden">
+                <div class="header">
+                    <h2 data-i18n="maint_tab_title">Gateway Maintenance</h2>
+                </div>
+                <div class="glass" style="padding: 24px; margin-bottom: 24px; border-left: 4px solid #f59e0b;">
+                    <h4 data-i18n="maint_soft_title" style="margin-bottom: 4px; font-size: 15px; font-weight: 600; color: #f59e0b;">🛠️ Gateway Soft Maintenance Mode</h4>
+                    <p data-i18n="maint_soft_desc" style="color: var(--text-muted); font-size: 12px; margin-bottom: 16px; line-height: 1.4;">Activating Soft Maintenance Mode blocks standard user logins, rejects new tunnel connections, and kicks active standard tunnels. Visitors trying to access developer subdomains will receive a scheduled maintenance page. <strong>Administrators and Owners will remain fully unblocked so they can manage the portal and disable this mode from the dashboard.</strong></p>
+                    
+                    <div id="maint-soft-input-fields" style="display: flex; flex-direction: column; gap: 12px; margin-bottom: 16px; max-width: 500px;">
+                        <div style="display: flex; gap: 12px;">
+                            <div style="flex: 1;">
+                                <label style="display:block; color: var(--text-muted); font-size: 11px; text-transform: uppercase; font-weight: 600; margin-bottom: 4px;" data-i18n="maint_lbl_action">Action Name</label>
+                                <input type="text" id="maint-soft-action" class="input-field" value="Server Upgrade" style="width: 100%; box-sizing: border-box;" />
+                            </div>
+                            <div style="flex: 1;">
+                                <label style="display:block; color: var(--text-muted); font-size: 11px; text-transform: uppercase; font-weight: 600; margin-bottom: 4px;" data-i18n="maint_lbl_duration">Duration (Minutes)</label>
+                                <input type="number" id="maint-soft-duration" class="input-field" value="30" min="1" style="width: 100%; box-sizing: border-box;" />
+                            </div>
+                        </div>
+                        <div>
+                            <label style="display:block; color: var(--text-muted); font-size: 11px; text-transform: uppercase; font-weight: 600; margin-bottom: 4px;" data-i18n="maint_lbl_reason">Reason / Details</label>
+                            <input type="text" id="maint-soft-reason" class="input-field" value="System upgrade and maintenance" style="width: 100%; box-sizing: border-box;" />
+                        </div>
+                    </div>
+
+                    <div style="display: flex; gap: 12px; align-items: center; flex-wrap: wrap;">
+                        <span id="maint-status-text" data-i18n="maint_status_loading" style="font-weight: bold; font-size: 13px; color: var(--text-muted); margin-right: 12px;">Status: Loading...</span>
+                        <select id="maint-countdown-select" class="input-field" style="width: auto; margin: 0; padding: 6px 12px; font-size: 13px; height: auto; background: rgba(255,255,255,0.05); border-color: rgba(255,255,255,0.1);">
+                            <option value="0" data-i18n="maint_opt_0">Immediate Activation ⚡</option>
+                            <option value="1" data-i18n="maint_opt_1">Schedule in 1 Minute ⏳</option>
+                            <option value="5" selected data-i18n="maint_opt_5">Schedule in 5 Minutes ⏳</option>
+                            <option value="10" data-i18n="maint_opt_10">Schedule in 10 Minutes ⏳</option>
+                            <option value="30" data-i18n="maint_opt_30">Schedule in 30 Minutes ⏳</option>
+                        </select>
+                        <button id="btn-toggle-maint" class="btn" style="width: auto; margin: 0; padding: 6px 16px; font-weight: 500;" onclick="toggleSoftMaintenanceMode()" data-i18n="maint_btn_enable_soft">Enable Soft Maintenance</button>
+                    </div>
+                </div>
+
+
+                <div id="maint-iron-curtain-card" class="glass" style="display: none; padding: 24px; margin-bottom: 24px; border-left: 4px solid var(--danger);">
+                    <h4 data-i18n="maint_iron_title" style="margin-bottom: 4px; font-size: 15px; font-weight: 600; color: var(--danger);">🔒 Nginx Iron Curtain Mode (Hard Maintenance - Owner Only)</h4>
+                    <p data-i18n="maint_iron_desc" style="color: var(--text-muted); font-size: 12px; margin-bottom: 16px; line-height: 1.4;">Activating Nginx Iron Curtain Mode blocks all external incoming requests. <strong style="color: #ef4444;">Warning: You will be disconnected. It must be disabled via SSH.</strong></p>
+
+                    <div id="maint-hard-input-fields" style="display: flex; flex-direction: column; gap: 12px; margin-bottom: 16px; max-width: 500px;">
+                        <div style="display: flex; gap: 12px;">
+                            <div style="flex: 1;">
+                                <label style="display:block; color: var(--text-muted); font-size: 11px; text-transform: uppercase; font-weight: 600; margin-bottom: 4px;" data-i18n="maint_lbl_action">Action Name</label>
+                                <input type="text" id="maint-hard-action" class="input-field" value="Database Restoration" style="width: 100%; box-sizing: border-box;" />
+                            </div>
+                            <div style="flex: 1;">
+                                <label style="display:block; color: var(--text-muted); font-size: 11px; text-transform: uppercase; font-weight: 600; margin-bottom: 4px;" data-i18n="maint_lbl_duration">Duration (Minutes)</label>
+                                <input type="number" id="maint-hard-duration" class="input-field" value="60" min="1" style="width: 100%; box-sizing: border-box;" />
+                            </div>
+                        </div>
+                        <div>
+                            <label style="display:block; color: var(--text-muted); font-size: 11px; text-transform: uppercase; font-weight: 600; margin-bottom: 4px;" data-i18n="maint_lbl_reason">Reason / Details</label>
+                            <input type="text" id="maint-hard-reason" class="input-field" value="Performing database restore operations." style="width: 100%; box-sizing: border-box;" />
+                        </div>
+                    </div>
+
+                    <div style="display: flex; gap: 12px; align-items: center; flex-wrap: wrap;">
+                        <span id="maint-hard-status-text" style="font-weight: bold; font-size: 13px; color: var(--text-muted); margin-right: 12px;">Status: Inactive 🟢</span>
+                        <button id="btn-toggle-hard-maint" class="btn" style="width: auto; margin: 0; padding: 6px 16px; font-weight: 500; background: var(--danger); color: white; border: none;" onclick="toggleHardMaintenanceMode()" data-i18n="maint_btn_enable_hard">Enable Iron Curtain</button>
+                    </div>
+                </div>
+
+                                </div>
+            </div>
+
+
+            <!-- System Settings Tab -->
+                        <div id="tab-system" class="hidden">
+                <div class="header" style="flex-direction: column; align-items: flex-start; gap: 8px; margin-bottom: 32px;">
+                    <h2 data-i18n="system_settings_title">System Settings</h2>
+                    <p style="color: var(--text-muted); font-size: 14px;" data-i18n="system_settings_desc">Configure global server behavior and defaults.</p>
+                </div>
+                
+                <div class="responsive-grid" style="display: grid; grid-template-columns: repeat(auto-fit, minmax(400px, 1fr)); gap: 24px; margin-bottom: 24px;">
+                    <!-- Column 1: Domain Allocation -->
+                    <div class="glass" style="padding: 24px; border-top: 4px solid var(--primary); display: flex; flex-direction: column;">
+                        <h3 style="margin-bottom: 16px; font-size: 16px;">Domain Allocation</h3>
+                        <div class="form-group" style="margin-bottom: 20px;">
+                            <label data-i18n="domain_allocation_rule" style="display: block; margin-bottom: 4px; font-weight: 500;">Domain Allocation Rule</label>
+                            <p style="font-size: 13px; color: var(--text-muted); margin-bottom: 12px;" data-i18n="domain_allocation_rule_desc">Determine how domains are selected when a user requests a new tunnel.</p>
+                            <select id="system-domain-allocation-rule" class="form-control" style="width: 100%; padding: 10px; border-radius: 6px; border: 1px solid var(--border-color, rgba(255,255,255,0.1)); background: var(--bg-dark, rgba(0,0,0,0.2)); color: var(--text-color, inherit);">
+                                <option value="contextual">Contextual (Match requesting domain)</option>
+                                <option value="preference">Preference (Use configured domain list order)</option>
+                                <option value="user-preference">User Preference (Use user's preferred domain)</option>
+                                <option value="round-robin">Round Robin (Sequential load balancing)</option>
+                                <option value="hashing">Deterministic Hashing (Consistent for user/IP)</option>
+                                <option value="least-connections">Least Connections (Load-based allocation)</option>
+                                <option value="random">Random Allocation</option>
+                            </select>
+                        </div>
+
+                        <div class="form-group" style="margin-bottom: auto;">
+                            <label data-i18n="default_domain" style="display: block; margin-bottom: 4px; font-weight: 500;">Default Domain Fallback</label>
+                            <p style="font-size: 13px; color: var(--text-muted); margin-bottom: 12px;" data-i18n="default_domain_desc">The fallback domain to use if the allocation rule fails to make a decision.</p>
+                            <select id="system-default-domain" class="form-control" style="width: 100%; padding: 10px; border-radius: 6px; border: 1px solid var(--border-color, rgba(255,255,255,0.1)); background: var(--bg-dark, rgba(0,0,0,0.2)); color: var(--text-color, inherit);">
+                                <!-- Options populated via JS -->
+                            </select>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Test Integrations Card -->
+                <div class="glass" style="padding: 24px; margin-top: 24px; border-left: 4px solid var(--primary);">
+                    <h4 style="margin-bottom: 8px; font-size: 15px; font-weight: 600; color: var(--primary);">🧪 Collaboration & Notification Integration Test</h4>
+                    <p style="color: var(--text-muted); font-size: 12px; margin-bottom: 16px; line-height: 1.4;">
+                        Trigger a test message to all configured collaboration and notification channels (Slack, Microsoft Teams, and Administrator Email relay) to verify that integration alerting is working correctly.
+                    </p>
+                    <div style="display: flex; gap: 12px; align-items: center; flex-wrap: wrap;">
+                        <button id="btn-test-integration" class="btn btn-primary" style="width: auto; margin: 0; padding: 6px 16px; font-weight: 500;" onclick="triggerIntegrationTest()">Send Test Alert</button>
+                        <span id="test-integration-status" style="font-size: 13px; color: var(--text-muted); display: none;"></span>
+                    </div>
+                    <div id="test-integration-target-container" style="margin-top: 12px; font-size: 12px; color: var(--text-muted); display: none;">
+                        <span>Active Target: </span><strong id="test-integration-target" style="color: var(--text-main);"></strong>
+                    </div>
+                </div>
+
+                <!-- Server Gateway Configuration Card -->
+                <div id="card-server-config" class="glass" style="padding: 24px; margin-top: 24px; border-left: 4px solid var(--primary); display: none;">
+                    <h4 style="margin-bottom: 8px; font-size: 15px; font-weight: 600; color: var(--primary);">⚙️ Server Gateway Configuration</h4>
+                    <p style="color: var(--text-muted); font-size: 12px; margin-bottom: 16px; line-height: 1.4;">
+                        View the running configuration of the server. All sensitive fields are automatically masked.
+                    </p>
+                    
+                    <div style="margin-bottom: 16px;">
+                        <input type="text" id="config-search" class="input-field" placeholder="Search configuration keys or values..." style="width: 100%; max-width: 400px; box-sizing: border-box;" oninput="filterConfigTree()" />
+                    </div>
+
+                    <div id="config-tree-container" style="background: var(--copy-box-bg); border: 1px solid var(--border); border-radius: 6px; padding: 16px; max-height: 400px; overflow-y: auto; font-family: monospace; font-size: 13px; line-height: 1.6; color: var(--text-main);">
+                        <div style="text-align: center; color: var(--text-muted);">Loading server configuration...</div>
+                    </div>
+
+
+                <div style="border-top: 1px solid var(--border-color); padding-top: 24px; text-align: right;">
+                    <button class="btn btn-primary" onclick="saveSystemSettings()" data-i18n="save_settings">Save Settings</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- NEW TOKEN MODAL -->
+    <div id="token-modal" class="modal-overlay">
+        <div class="glass modal">
+            <h3 id="modal-title">Generate New Token</h3>
+            
+            <div id="token-form-step">
+                <input type="text" id="token-name" class="input-field" placeholder="What's this token for? (e.g. MacBook)" required>
+                <select id="token-expiry" class="input-field">
+                    <option value="30">30 Days</option>
+                    <option value="90">90 Days</option>
+                    <option value="365">1 Year</option>
+                    <option value="0" id="token-expiry-never">Never</option>
+                </select>
+                <button class="btn btn-primary" onclick="generateToken()">Generate Token</button>
+                <button class="btn" onclick="closeModal()">Cancel</button>
+            </div>
+
+            <div id="token-result-step" class="hidden">
+                <div id="handoff-alert" class="alert"></div>
+                <p style="font-size: 14px; color: var(--text-muted);">Make sure to copy your personal access token now. You won't be able to see it again!</p>
+                <div class="copy-box" id="raw-token-display"></div>
+                <button class="btn btn-primary" onclick="copyToken()">Copy to Clipboard</button>
+                <button class="btn" onclick="closeModal(); loadTokens();">Done</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- BLACKLIST MODAL -->
+    <div id="blacklist-modal" class="modal-overlay">
+        <div class="glass modal">
+            <h3 data-i18n="ban_ip_title">Ban IP Address</h3>
+            <input type="text" id="blacklist-ip" class="input-field" data-i18n-placeholder="ban_ip_placeholder" placeholder="192.168.1.1" required>
+            <input type="text" id="blacklist-reason" class="input-field" data-i18n-placeholder="ban_ip_reason_placeholder" placeholder="Reason (e.g. Malicious Activity)" required>
+            <button class="btn btn-primary" style="background-color: var(--danger);" onclick="submitBlacklist()" data-i18n="btn_ban_ip">Ban IP</button>
+            <button class="btn" onclick="closeBlacklistModal()" data-i18n="btn_cancel">Cancel</button>
+        </div>
+    </div>
+
+    <!-- INVITE USER MODAL -->
+    <div id="invite-modal" class="modal-overlay">
+        <div class="glass modal">
+            <h3 data-i18n="invite_user_title">Invite User</h3>
+            <input type="email" id="invite-email" class="input-field" data-i18n-placeholder="invite_email_placeholder" placeholder="Email Address" required>
+            <input type="text" id="invite-first-name" class="input-field" data-i18n-placeholder="invite_first_name_placeholder" placeholder="First Name" required>
+            <input type="text" id="invite-last-name" class="input-field" data-i18n-placeholder="invite_last_name_placeholder" placeholder="Last Name" required>
+            <div style="margin-bottom: 16px; text-align: left;">
+                <label style="display:block; margin-bottom: 8px; color: var(--text-muted); font-size: 13px;" data-i18n="invite_lbl_onboarding_lang">Onboarding Language</label>
+                <select id="invite-language" class="input-field" style="background: #161b22; color: var(--text-color); border: 1px solid var(--border); border-radius: 6px; padding: 10px; font-weight: 500; height: 38px; box-sizing: border-box; width: 100%;">
+                    <option value="en" selected>English</option>
+                    <option value="ar">العربية (Arabic)</option>
+                    <option value="ro">Română (Romanian)</option>
+                    <option value="es">Español (Spanish)</option>
+                    <option value="fr">Français (French)</option>
+                    <option value="de">Deutsch (German)</option>
+                    <option value="pt">Português (Portuguese)</option>
+                    <option value="ja">日本語 (Japanese)</option>
+                    <option value="ko">한국어 (Korean)</option>
+                    <option value="zh">简体中文 (Simplified Chinese)</option>
+                </select>
+            </div>
+            <button class="btn btn-primary" onclick="submitInviteUser()" data-i18n="btn_send_invite">Send Invite</button>
+            <button class="btn" onclick="closeInviteModal()" data-i18n="btn_cancel">Cancel</button>
+        </div>
+    </div>
+
+    <!-- MFA SETUP MODAL -->
+    <div id="mfa-modal" class="modal-overlay">
+        <div class="glass modal" style="max-width: 440px; text-align: center;">
+            <h3 data-i18n="mfa_setup_title" style="margin-bottom: 12px; font-size: 18px;">🔒 Set Up Multi-Factor Authentication</h3>
+            
+            <div id="mfa-form-step">
+                <p data-i18n="mfa_setup_step1" style="font-size: 14px; color: var(--text-muted); margin-bottom: 16px; text-align: left; line-height: 1.5;">
+                    1. Scan this QR code in your authenticator app (Google Authenticator, Microsoft Authenticator, 1Password, etc.):
+                </p>
+                <div style="display: flex; justify-content: center; margin-bottom: 16px; background: white; padding: 12px; border-radius: 8px; width: fit-content; margin-left: auto; margin-right: auto; border: 1px solid rgba(0,0,0,0.1);">
+                    <img id="mfa-qr-display" src="" alt="MFA QR Code" style="width: 180px; height: 180px; display: block;">
+                </div>
+                <p data-i18n="mfa_setup_manual" style="font-size: 13px; color: var(--text-muted); margin-bottom: 8px; text-align: left;">
+                    Or enter this secret key manually inside your app:
+                </p>
+                <div class="copy-box" id="mfa-secret-display" style="font-family: monospace; letter-spacing: 2px; text-align: center; margin-bottom: 16px; user-select: all; padding: 8px; background: rgba(255,255,255,0.05); border-radius: 4px; font-weight: bold; border: 1px solid rgba(255,255,255,0.1);"></div>
+                
+                <p data-i18n="mfa_setup_step2" style="font-size: 14px; color: var(--text-muted); margin-bottom: 8px; text-align: left; line-height: 1.5;">
+                    2. Enter the 6-digit code from your app to verify setup:
+                </p>
+                <input type="text" id="mfa-verify-code" class="input-field" placeholder="123456" pattern="[0-9]{6}" maxlength="6" inputmode="numeric" style="text-align: center; font-size: 18px; font-weight: bold; letter-spacing: 4px; margin-bottom: 16px;">
+                <button data-i18n="mfa_setup_verify" class="btn btn-primary" onclick="confirmEnableMFA()" style="margin-bottom: 8px;">Verify & Enable</button>
+                <button data-i18n="btn_cancel" class="btn" id="mfa-cancel-btn" onclick="closeMFAModal()">Cancel</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- DELETE ACCOUNT MODAL -->
+    <div id="delete-account-modal" class="modal-overlay" style="display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.6); align-items: center; justify-content: center; z-index: 1000;">
+        <div class="glass" style="max-width: 440px; width: 100%; padding: 32px; border-radius: 16px; border: 1px solid rgba(239,68,68,0.3); text-align: center;">
+            <h3 style="color: #f43f5e; margin-bottom: 12px; font-size: 20px;">Permanently Delete Account?</h3>
+            <p style="font-size: 14px; color: var(--text-muted); margin-bottom: 24px; line-height: 1.5; text-align: left;">
+                This action is irreversible. It will instantly revoke all tokens, drop active tunnels, and completely delete/anonymise your profile records from our databases.
+                <br/><br/>
+                Please type your email address <strong><span id="delete-acc-email-hint"></span></strong> to confirm deletion:
+            </p>
+            <input type="email" id="delete-acc-confirm-input" class="input-field" placeholder="you@liferay.com" required style="margin-bottom: 20px; width: 100%;">
+            <div style="display: flex; gap: 12px; justify-content: flex-end;">
+                <button class="btn btn-secondary" style="width: auto; margin: 0;" onclick="closeDeleteAccountModal()">Cancel</button>
+                <button class="btn" style="width: auto; margin: 0; background: #f43f5e; color: white; border: none;" onclick="submitSelfDeleteAccount()">Delete Permanently</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- EDIT USER QUOTA MODAL -->
+    <div id="user-quota-modal" class="modal-overlay" style="display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.6); align-items: center; justify-content: center; z-index: 1000;">
+        <div class="glass" style="max-width: 440px; width: 100%; padding: 32px; border-radius: 16px; border: 1px solid var(--border); text-align: left;">
+            <h3 style="margin-bottom: 12px; font-size: 20px;">Configure Bandwidth & Rate Limit</h3>
+            <p style="font-size: 14px; color: var(--text-muted); margin-bottom: 20px; line-height: 1.5;">
+                Configure the requests-per-second (RPS) quota limit for <strong><span id="user-quota-email-hint"></span></strong>. Any subdomains created by this user will be capped at this maximum rate.
+            </p>
+            <div style="margin-bottom: 20px;">
+                <label style="display:block; margin-bottom: 8px; color: var(--text-muted); font-size: 13px;">Requests Per Second Limit (RPS)</label>
+                <input type="number" id="user-quota-input" class="input-field" min="0" placeholder="0 (Unlimited)" style="width: 100%; box-sizing: border-box; font-size: 16px; font-weight: bold; padding: 10px;">
+                <span style="font-size: 11px; color: var(--text-muted); display: block; margin-top: 4px;">Set to 0 to grant unlimited requests.</span>
+            </div>
+            <div style="display: flex; gap: 12px; justify-content: flex-end;">
+                <button class="btn btn-secondary" style="width: auto; margin: 0;" onclick="closeUserQuotaModal()">Cancel</button>
+                <button class="btn btn-primary" style="width: auto; margin: 0;" onclick="submitUserQuota()">Save Quota</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- EDIT USER RESERVATION LIMIT MODAL -->
+    <div id="user-res-limit-modal" class="modal-overlay" style="display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.6); align-items: center; justify-content: center; z-index: 1000;">
+        <div class="glass" style="max-width: 440px; width: 100%; padding: 32px; border-radius: 16px; border: 1px solid var(--border); text-align: left;">
+            <h3 style="margin-bottom: 12px; font-size: 20px;">Configure Subdomain Reservations Limit</h3>
+            <p style="font-size: 14px; color: var(--text-muted); margin-bottom: 20px; line-height: 1.5;">
+                Configure the maximum subdomain reservations quota override for <strong><span id="user-res-limit-email-hint"></span></strong>.
+            </p>
+            <div style="margin-bottom: 20px;">
+                <label style="display:block; margin-bottom: 8px; color: var(--text-muted); font-size: 13px;">Max Subdomain Reservations Limit</label>
+                <input type="number" id="user-res-limit-input" class="input-field" min="1" placeholder="Use default value" style="width: 100%; box-sizing: border-box; font-size: 16px; font-weight: bold; padding: 10px;">
+                <span style="font-size: 11px; color: var(--text-muted); display: block; margin-top: 4px;">Leave blank/empty to reset and use gateway configuration default.</span>
+            </div>
+            <div style="display: flex; gap: 12px; justify-content: flex-end;">
+                <button class="btn btn-secondary" style="width: auto; margin: 0;" onclick="closeUserResLimitModal()">Cancel</button>
+                <button class="btn btn-primary" style="width: auto; margin: 0;" onclick="submitUserResLimit()">Save Limit</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- EDIT USER TUNNELS LIMIT MODAL -->
+    <div id="user-tunnels-limit-modal" class="modal-overlay" style="display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.6); align-items: center; justify-content: center; z-index: 1000;">
+        <div class="glass" style="max-width: 440px; width: 100%; padding: 32px; border-radius: 16px; border: 1px solid var(--border); text-align: left;">
+            <h3 style="margin-bottom: 12px; font-size: 20px;">Configure Active Tunnels Quota</h3>
+            <p style="font-size: 14px; color: var(--text-muted); margin-bottom: 20px; line-height: 1.5;">
+                Configure the maximum concurrent active tunnels quota override for <strong><span id="user-tunnels-limit-email-hint"></span></strong>.
+            </p>
+            <div style="margin-bottom: 20px;">
+                <label style="display:block; margin-bottom: 8px; color: var(--text-muted); font-size: 13px;">Max Active Tunnels Limit</label>
+                <input type="number" id="user-tunnels-limit-input" class="input-field" min="1" placeholder="Use default value" style="width: 100%; box-sizing: border-box; font-size: 16px; font-weight: bold; padding: 10px;">
+                <span style="font-size: 11px; color: var(--text-muted); display: block; margin-top: 4px;">Leave blank/empty to reset and use gateway configuration default.</span>
+            </div>
+            <div style="display: flex; gap: 12px; justify-content: flex-end;">
+                <button class="btn btn-secondary" style="width: auto; margin: 0;" onclick="closeUserTunnelsLimitModal()">Cancel</button>
+                <button class="btn btn-primary" style="width: auto; margin: 0;" onclick="submitUserTunnelsLimit()">Save Limit</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- ACTIVE TUNNEL OVERRIDE MODAL -->
+    <div id="tunnel-override-modal" class="modal-overlay" style="display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.6); align-items: center; justify-content: center; z-index: 1000;">
+        <div class="glass" style="max-width: 460px; width: 100%; padding: 32px; border-radius: 16px; border: 1px solid rgba(217,119,6,0.3); text-align: left;">
+            <h3 style="color: #d97706; margin-bottom: 12px; font-size: 20px; display: flex; align-items: center; gap: 8px;">⚠️ Override Tunnel Rate Limit</h3>
+            
+            <p style="font-size: 14px; color: var(--text-muted); margin-bottom: 20px; line-height: 1.5;">
+                You are overriding the requests-per-second (RPS) rate limit for active subdomain <strong><span id="tunnel-override-host-hint" style="font-family: monospace;"></span></strong>.
+                <br/><br/>
+                <span style="color: #f43f5e; font-weight: bold;">Warning:</span> Throttling an active developer tunnel may result in packet drops, slow response times, or asset delivery failures on Liferay Client Extensions (Portlets).
+            </p>
+            <div style="margin-bottom: 24px;">
+                <label style="display:block; margin-bottom: 8px; color: var(--text-muted); font-size: 13px;">Live Rate Limit Override (RPS)</label>
+                <input type="number" id="tunnel-override-input" class="input-field" min="0" placeholder="0 (Unlimited)" style="width: 100%; box-sizing: border-box; font-size: 16px; font-weight: bold; padding: 10px;">
+                <span style="font-size: 11px; color: var(--text-muted); display: block; margin-top: 4px;">Changes are dynamically applied in-memory and will throttle the proxy instantly.</span>
+            </div>
+            <div style="display: flex; gap: 12px; justify-content: flex-end;">
+                <button class="btn btn-secondary" style="width: auto; margin: 0;" onclick="closeTunnelOverrideModal()">Cancel</button>
+                <button class="btn" style="width: auto; margin: 0; background: #d97706; color: white; border: none;" onclick="submitTunnelOverride()">Apply Override</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- TUNNEL DETAILS MODAL -->
+    <div id="tunnel-details-modal" class="modal-overlay" style="display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.6); align-items: center; justify-content: center; z-index: 1000;">
+        <div class="glass" style="max-width: 500px; width: 100%; padding: 32px; border-radius: 16px; border: 1px solid var(--border); text-align: left;">
+            <h3 data-i18n="detail_modal_title" style="margin-bottom: 20px; font-size: 20px; display: flex; align-items: center; gap: 8px;">🔌 Tunnel Details</h3>
+            
+            <div style="display: grid; grid-template-columns: repeat(2, 1fr); gap: 16px; margin-bottom: 24px;">
+                <div style="grid-column: span 2;">
+                    <label data-i18n="detail_lbl_url" style="display:block; color: var(--text-muted); font-size: 11px; text-transform: uppercase; font-weight: 600;">Full Host / URL</label>
+                    <div style="display: flex; align-items: center; gap: 8px; margin-top: 4px;">
+                        <a id="detail-tunnel-host" href="#" target="_blank" style="color: var(--primary); text-decoration: none; font-weight: 500; word-break: break-all; flex-grow: 1;"></a>
+                        <button data-i18n="btn_copy_url" class="btn btn-outline" style="padding: 2px 8px; font-size: 11px; margin: 0; min-width: auto; width: auto;" onclick="copyTunnelUrlToClipboard()">Copy URL</button>
+                    </div>
+                </div>
+                <div>
+                    <label data-i18n="detail_lbl_subdomain" style="display:block; color: var(--text-muted); font-size: 11px; text-transform: uppercase; font-weight: 600;">Subdomain Prefix</label>
+                    <span id="detail-tunnel-subdomain" style="font-weight: 500;"></span>
+                </div>
+                <div>
+                    <label data-i18n="lbl_status" style="display:block; color: var(--text-muted); font-size: 11px; text-transform: uppercase; font-weight: 600;">Status</label>
+                    <div style="margin-top: 4px;">
+                        <span id="detail-tunnel-status" class="badge"></span>
+                    </div>
+                </div>
+                <div id="detail-tunnel-owner-container" style="grid-column: span 2;">
+                    <label data-i18n="detail_lbl_owner" style="display:block; color: var(--text-muted); font-size: 11px; text-transform: uppercase; font-weight: 600;">Owner (User ID)</label>
+                    <span id="detail-tunnel-owner" style="font-family: monospace; font-size: 13px;"></span>
+                </div>
+                <div>
+                    <label data-i18n="detail_lbl_rate_limit" style="display:block; color: var(--text-muted); font-size: 11px; text-transform: uppercase; font-weight: 600;">Rate Limit</label>
+                    <div style="display: flex; align-items: center; gap: 8px; margin-top: 4px;">
+                        <span id="detail-tunnel-limit" class="badge" style="font-weight: bold; background: rgba(139,92,246,0.15); color: #a78bfa; border: 1px solid rgba(139,92,246,0.3);"></span>
+                        <button id="detail-tunnel-override-btn" class="btn btn-outline" style="padding: 2px 6px; font-size: 11px; margin: 0; min-width: auto; width: auto; color: #d97706; border-color: #d97706;" onclick="openOverrideFromDetails()" data-i18n="btn_override">Override</button>
+                    </div>
+                </div>
+                <div>
+                    <label data-i18n="detail_lbl_connected_at" style="display:block; color: var(--text-muted); font-size: 11px; text-transform: uppercase; font-weight: 600;">Connected At</label>
+                    <span id="detail-tunnel-connected" style="font-size: 13px; display: inline-block; margin-top: 4px;"></span>
+                </div>
+                <div>
+                    <label data-i18n="detail_lbl_data_in" style="display:block; color: var(--text-muted); font-size: 11px; text-transform: uppercase; font-weight: 600;">Data In (Received)</label>
+                    <span id="detail-tunnel-bytes-in" style="font-weight: 500;"></span>
+                </div>
+                <div>
+                    <label data-i18n="detail_lbl_data_out" style="display:block; color: var(--text-muted); font-size: 11px; text-transform: uppercase; font-weight: 600;">Data Out (Sent)</label>
+                    <span id="detail-tunnel-bytes-out" style="font-weight: 500;"></span>
+                </div>
+                <div>
+                    <label data-i18n="detail_lbl_client_ip" style="display:block; color: var(--text-muted); font-size: 11px; text-transform: uppercase; font-weight: 600;">Client IP Address</label>
+                    <span id="detail-tunnel-client-ip" style="font-family: monospace; font-size: 13px; font-weight: 500;"></span>
+                </div>
+                <div>
+                    <label data-i18n="detail_lbl_hosting_gateway" style="display:block; color: var(--text-muted); font-size: 11px; text-transform: uppercase; font-weight: 600;">Hosting Gateway Server</label>
+                    <span id="detail-tunnel-node-id" style="font-size: 13px; font-weight: 500;"></span>
+                </div>
+                <div style="grid-column: span 2; border-top: 1px solid rgba(255,255,255,0.05); padding-top: 12px; margin-top: 4px;">
+                    <label data-i18n="detail_lbl_access_control" style="display:block; color: var(--text-muted); font-size: 11px; text-transform: uppercase; font-weight: 600; margin-bottom: 8px;">Access Control</label>
+                    <div style="display: grid; grid-template-columns: repeat(2, 1fr); gap: 12px; font-size: 13px;">
+                        <div>
+                            <span data-i18n="detail_lbl_passcode_protection" style="color: var(--text-muted); font-size: 11px; display: block;">Passcode Protection</span>
+                            <span id="detail-tunnel-passcode-status" style="font-weight: 500;"></span>
+                        </div>
+                        <div>
+                            <span data-i18n="detail_lbl_combinator_mode" style="color: var(--text-muted); font-size: 11px; display: block;">Combinator Mode</span>
+                            <span id="detail-tunnel-access-mode" style="font-weight: 500;"></span>
+                        </div>
+                        <div style="grid-column: span 2;">
+                            <span data-i18n="detail_lbl_ip_whitelist" style="color: var(--text-muted); font-size: 11px; display: block;">IP Whitelist</span>
+                            <span id="detail-tunnel-whitelist-status" style="font-family: monospace; font-size: 12px; word-break: break-all;"></span>
+                        </div>
+                    </div>
+                </div>
+                <div style="grid-column: span 2; border-top: 1px solid rgba(255,255,255,0.05); padding-top: 12px; margin-top: 4px;">
+                    <label data-i18n="detail_lbl_custom_headers" style="display:flex; justify-content: space-between; align-items: center; color: var(--text-muted); font-size: 11px; text-transform: uppercase; font-weight: 600; margin-bottom: 8px;">
+                        Custom Headers Injection
+                    </label>
+                    <div id="detail-tunnel-headers-container" style="margin-bottom: 8px; font-size: 13px;">
+                        <!-- Headers list here -->
+                    </div>
+                    <div style="display: flex; gap: 8px;">
+                        <input type="text" id="detail-tunnel-header-key" data-i18n-placeholder="detail_header_key_placeholder" placeholder="Header Name (e.g. X-Frame-Options)" class="form-control" style="flex: 1; padding: 6px 8px; font-size: 12px; height: 30px;">
+                        <input type="text" id="detail-tunnel-header-value" data-i18n-placeholder="detail_header_value_placeholder" placeholder="Value" class="form-control" style="flex: 1; padding: 6px 8px; font-size: 12px; height: 30px;">
+                        <button class="btn btn-primary" style="margin: 0; padding: 0 12px; height: 30px; font-size: 12px; width: auto;" onclick="addTunnelHeader()" data-i18n="btn_add">Add</button>
+                    </div>
+                </div>
+                <div style="grid-column: span 2;">
+                    <label data-i18n="detail_lbl_active_visitor_ips" style="display:block; color: var(--text-muted); font-size: 11px; text-transform: uppercase; font-weight: 600; margin-bottom: 8px;">Active Visitor IPs</label>
+                    <div class="glass" style="max-height: 120px; overflow-y: auto; padding: 12px; border-radius: 6px; border: 1px solid var(--border);">
+                        <table style="width: 100%; font-size: 13px;">
+                            <tbody id="detail-tunnel-visitor-ips-tbody">
+                                <tr><td data-i18n="detail_visitor_none" style="color: var(--text-muted); text-align: center; padding: 8px 0;">No active visitor connections (last 30s)</td></tr>
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+
+            <div style="display: flex; gap: 12px; justify-content: flex-end; border-top: 1px solid rgba(255,255,255,0.08); padding-top: 16px;">
+                <button class="btn btn-outline" style="width: auto; margin: 0; padding: 8px 16px;" onclick="refreshTunnelDetails()" data-i18n="btn_refresh">Refresh</button>
+                <button id="detail-tunnel-kick-btn" class="btn" style="width: auto; margin: 0; color: var(--danger); border-color: var(--danger);" onclick="kickFromDetails()" data-i18n="btn_kick_tunnel">Kick Tunnel</button>
+                <button class="btn btn-primary" style="width: auto; margin: 0; padding: 8px 24px;" onclick="closeTunnelDetailsModal()" data-i18n="btn_close">Close</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- USER DETAILS & TUNNELS MODAL -->
+    <div id="user-details-modal" class="modal-overlay" style="display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.6); align-items: center; justify-content: center; z-index: 1000;">
+        <div class="glass" style="max-width: 720px; width: 100%; padding: 32px; border-radius: 16px; border: 1px solid var(--border); text-align: left;">
+            <h3 data-i18n="user_modal_title" style="margin-bottom: 16px; font-size: 20px; display: flex; align-items: center; gap: 8px;">👤 User Profile & Tunnels</h3>
+            
+            <!-- User General Profile Grid -->
+            <div style="display: grid; grid-template-columns: repeat(2, 1fr); gap: 16px; margin-bottom: 24px; padding-bottom: 16px; border-bottom: 1px solid rgba(255,255,255,0.08);">
+                <div>
+                    <label data-i18n="user_lbl_email" style="display:block; color: var(--text-muted); font-size: 11px; text-transform: uppercase; font-weight: 600;">Email Address</label>
+                    <span id="detail-user-email" style="font-weight: 500; font-family: monospace;"></span>
+                </div>
+                <div>
+                    <label data-i18n="user_lbl_name" style="display:block; color: var(--text-muted); font-size: 11px; text-transform: uppercase; font-weight: 600;">Full Name</label>
+                    <span id="detail-user-name" style="font-weight: 500;"></span>
+                </div>
+                <div>
+                    <label data-i18n="user_lbl_role_status" style="display:block; color: var(--text-muted); font-size: 11px; text-transform: uppercase; font-weight: 600;">Role & Status</label>
+                    <div style="display: flex; gap: 8px; margin-top: 4px;">
+                        <span id="detail-user-role" class="badge"></span>
+                        <span id="detail-user-status" class="badge"></span>
+                    </div>
+                </div>
+                <div>
+                    <label data-i18n="user_lbl_origin" style="display:block; color: var(--text-muted); font-size: 11px; text-transform: uppercase; font-weight: 600;">Account Origin</label>
+                    <span id="detail-user-origin" style="display: inline-block; margin-top: 4px;"></span>
+                </div>
+                <div>
+                    <label data-i18n="user_lbl_preferred_domain" style="display:block; color: var(--text-muted); font-size: 11px; text-transform: uppercase; font-weight: 600;">Preferred Domain</label>
+                    <select id="detail-user-preferred-domain" style="margin-top: 4px; background: rgba(0,0,0,0.2); border: 1px solid var(--border); color: var(--text); border-radius: 4px; padding: 2px 4px; font-size: 13px;" onchange="updateUserPreferredDomain()">
+                        <option value="">Default (Contextual)</option>
+                    </select>
+                </div>
+                <div>
+                    <label data-i18n="user_lbl_joined" style="display:block; color: var(--text-muted); font-size: 11px; text-transform: uppercase; font-weight: 600;">Joined Date</label>
+                    <span id="detail-user-joined" style="font-size: 13px;"></span>
+                </div>
+                <div>
+                    <label data-i18n="user_lbl_quota" style="display:block; color: var(--text-muted); font-size: 11px; text-transform: uppercase; font-weight: 600;">API Quota</label>
+                    <span id="detail-user-quota" class="badge" style="background: rgba(139,92,246,0.15); color: #a78bfa; border: 1px solid rgba(139,92,246,0.3); font-weight: bold; margin-top: 4px;"></span>
+                </div>
+                <div>
+                    <label data-i18n="user_lbl_tour_status" style="display:block; color: var(--text-muted); font-size: 11px; text-transform: uppercase; font-weight: 600;">Onboarding Tour Status</label>
+                    <span id="detail-user-onboarding-status" style="display: inline-block; margin-top: 4px;"></span>
+                </div>
+                <div>
+                    <label data-i18n="user_lbl_tour_detail" style="display:block; color: var(--text-muted); font-size: 11px; text-transform: uppercase; font-weight: 600;">Onboarding Tour Detail</label>
+                    <span id="detail-user-onboarding-detail" style="font-size: 13px; display: inline-block; margin-top: 4px; font-weight: 500;"></span>
+                </div>
+            </div>
+
+            <!-- Active Tunnels Section -->
+            <h4 style="font-size: 15px; font-weight: 600; margin-bottom: 12px; display: flex; align-items: center; gap: 6px;"><span data-i18n="user_lbl_connected_tunnels">🔌 Connected Tunnels</span> (<span id="detail-user-tunnels-count">0</span>)</h4>
+            <div style="max-height: 240px; overflow-y: auto; margin-bottom: 24px; border: 1px solid rgba(255,255,255,0.05); border-radius: 8px; background: rgba(0,0,0,0.1);">
+                <table class="dashboard-table" style="width: 100%; border-collapse: collapse; min-width: 100%;">
+                    <thead>
+                        <tr style="border-bottom: 1px solid var(--border); text-align: left; background: rgba(255,255,255,0.02);">
+                            <th style="padding: 10px 12px; color: var(--text-muted); font-size: 12px; font-weight: 500;" data-i18n="th_subdomain_prefix">Subdomain Prefix</th>
+                            <th style="padding: 10px 12px; color: var(--text-muted); font-size: 12px; font-weight: 500;" data-i18n="th_public_target_link">Public Target Link</th>
+                            <th style="padding: 10px 12px; color: var(--text-muted); font-size: 12px; font-weight: 500;" data-i18n="th_bandwidth_transfer">Bandwidth Transfer</th>
+                            <th style="padding: 10px 12px; color: var(--text-muted); font-size: 12px; font-weight: 500; text-align: right;" data-i18n="th_action">Action</th>
+                        </tr>
+                    </thead>
+                    <tbody id="detail-user-tunnels-tbody">
+                        <!-- Populated dynamically via JS -->
+                    </tbody>
+                </table>
+            </div>
+
+            <div style="display: flex; gap: 12px; justify-content: flex-end;">
+                <button class="btn btn-primary" style="width: auto; margin: 0; padding: 8px 24px;" onclick="closeUserDetailsModal()" data-i18n="btn_close">Close</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- INSTALLER GUIDE MODAL -->
+    <div id="installer-guide-modal" class="modal-overlay" style="display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.6); align-items: center; justify-content: center; z-index: 1000;">
+        <div class="glass" style="max-width: 650px; width: 100%; padding: 32px; border-radius: 16px; border: 1px solid var(--border); text-align: left; overflow: hidden; display: flex; flex-direction: column; max-height: 90vh;">
+            <h3 data-i18n="guide_title" style="margin-bottom: 16px; font-size: 20px; display: flex; align-items: center; gap: 8px;">💻 Client Installation Guide</h3>
+            
+            <div data-i18n="guide_desc" style="font-size: 0.9rem; color: var(--text-muted); margin-bottom: 20px;">
+                Choose your Operating System below to see the recommended command-line installation or direct downloads.
+            </div>
+
+            <!-- Tab Headers -->
+            <div style="display: flex; border-bottom: 1px solid var(--border); margin-bottom: 20px; gap: 16px;">
+                <button id="tab-btn-macos" class="tab-btn active" style="background: none; border: none; color: var(--text); padding: 8px 16px; cursor: pointer; border-bottom: 2px solid var(--primary); font-weight: 500;" onclick="switchInstallerTab('macos')" data-i18n="guide_tab_macos">macOS</button>
+                <button id="tab-btn-windows" class="tab-btn" style="background: none; border: none; color: var(--text-muted); padding: 8px 16px; cursor: pointer; border-bottom: 2px solid transparent; font-weight: 500;" onclick="switchInstallerTab('windows')" data-i18n="guide_tab_windows">Windows</button>
+                <button id="tab-btn-linux" class="tab-btn" style="background: none; border: none; color: var(--text-muted); padding: 8px 16px; cursor: pointer; border-bottom: 2px solid transparent; font-weight: 500;" onclick="switchInstallerTab('linux')" data-i18n="guide_tab_linux">Linux</button>
+            </div>
+
+            <!-- Tab Contents -->
+            <div style="flex-grow: 1; overflow-y: auto; padding-right: 4px; margin-bottom: 24px;">
+                <!-- macOS -->
+                <div id="tab-content-macos" class="tab-content">
+                    <h4 data-i18n="guide_macos_title" style="font-size: 14px; margin-bottom: 8px;">🚀 Apple Silicon (M1/M2/M3) & Intel Macs</h4>
+                    <div id="guide-macos-brew-section">
+                        <div data-i18n="guide_macos_brew" style="font-size: 0.8rem; font-weight: bold; margin-top: 10px; color: var(--text);">Recommended via Homebrew:</div>
+                        <div style="margin-top: 4px; margin-bottom: 12px; position: relative; background: #0d1117; color: #e6edf3; border-radius: 6px; border: 1px solid rgba(255,255,255,0.1); padding: 10px 40px 10px 12px; font-family: monospace; font-size: 0.8rem;">
+                            <span id="guide-cmd-macos">brew tap peterrichards-lr/tap && brew install lfr-tunnel</span>
+                            <button onclick="navigator.clipboard.writeText(document.getElementById('guide-cmd-macos').innerText); this.innerHTML='✓'; setTimeout(() => this.innerHTML='📋', 2000);" style="position: absolute; top: 6px; right: 6px; background: transparent; border: 1px solid rgba(255,255,255,0.2); color: #8b949e; border-radius: 4px; width: 22px; height: 22px; cursor: pointer;">📋</button>
+                        </div>
+                    </div>
+
+                    <div data-i18n="guide_macos_direct" style="font-size: 0.8rem; font-weight: bold; margin-top: 10px; color: var(--text-muted);">Direct Installation Script (Alternative):</div>
+                    <div style="margin-top: 4px; margin-bottom: 12px; position: relative; background: #0d1117; color: #e6edf3; border-radius: 6px; border: 1px solid rgba(255,255,255,0.1); padding: 10px 40px 10px 12px; font-family: monospace; font-size: 0.8rem;">
+                        <span id="guide-script-macos">curl -fsSL https://tunnel.lfr-demo.se/install | sh</span>
+                        <button onclick="navigator.clipboard.writeText(document.getElementById('guide-script-macos').innerText); this.innerHTML='✓'; setTimeout(() => this.innerHTML='📋', 2000);" style="position: absolute; top: 6px; right: 6px; background: transparent; border: 1px solid rgba(255,255,255,0.2); color: #8b949e; border-radius: 4px; width: 22px; height: 22px; cursor: pointer;">📋</button>
+                    </div>
+                    
+                    <div id="guide-dl-macos" style="margin-top: 16px; display: flex; gap: 12px;">
+                        <a href="/static/downloads/lfr-tunnel-darwin-arm64" class="btn btn-outline" style="font-size: 12px; padding: 6px 12px; width: auto; margin: 0;" data-i18n="guide_macos_dl_arm">Download arm64 (M1/M2/M3)</a>
+                        <a href="/static/downloads/lfr-tunnel-darwin-amd64" class="btn btn-outline" style="font-size: 12px; padding: 6px 12px; width: auto; margin: 0;" data-i18n="guide_macos_dl_intel">Download amd64 (Intel)</a>
+                    </div>
+                </div>
+
+                <!-- Windows -->
+                <div id="tab-content-windows" class="tab-content" style="display: none;">
+                    <h4 data-i18n="guide_windows_title" style="font-size: 14px; margin-bottom: 8px;">🚀 Windows 10 / 11 (64-bit)</h4>
+                    <div id="guide-windows-scoop-section">
+                        <div data-i18n="guide_windows_scoop" style="font-size: 0.8rem; font-weight: bold; margin-top: 10px; color: var(--text);">Recommended via Scoop:</div>
+                        <div style="margin-top: 4px; margin-bottom: 12px; position: relative; background: #0d1117; color: #e6edf3; border-radius: 6px; border: 1px solid rgba(255,255,255,0.1); padding: 10px 40px 10px 12px; font-family: monospace; font-size: 0.8rem;">
+                            <span id="guide-cmd-windows">scoop bucket add peterrichards-lr https://github.com/peterrichards-lr/scoop-bucket && scoop install lfr-tunnel</span>
+                            <button onclick="navigator.clipboard.writeText(document.getElementById('guide-cmd-windows').innerText); this.innerHTML='✓'; setTimeout(() => this.innerHTML='📋', 2000);" style="position: absolute; top: 6px; right: 6px; background: transparent; border: 1px solid rgba(255,255,255,0.2); color: #8b949e; border-radius: 4px; width: 22px; height: 22px; cursor: pointer;">📋</button>
+                        </div>
+                    </div>
+
+                    <div data-i18n="guide_windows_direct" style="font-size: 0.8rem; font-weight: bold; margin-top: 10px; color: var(--text-muted);">Direct Installation (PowerShell Script):</div>
+                    <div style="margin-top: 4px; margin-bottom: 12px; position: relative; background: #0d1117; color: #e6edf3; border-radius: 6px; border: 1px solid rgba(255,255,255,0.1); padding: 10px 40px 10px 12px; font-family: monospace; font-size: 0.8rem;">
+                        <span id="guide-script-windows">irm https://tunnel.lfr-demo.se/install.ps1 | iex</span>
+                        <button onclick="navigator.clipboard.writeText(document.getElementById('guide-script-windows').innerText); this.innerHTML='✓'; setTimeout(() => this.innerHTML='📋', 2000);" style="position: absolute; top: 6px; right: 6px; background: transparent; border: 1px solid rgba(255,255,255,0.2); color: #8b949e; border-radius: 4px; width: 22px; height: 22px; cursor: pointer;">📋</button>
+                    </div>
+
+                    <div id="guide-dl-windows" style="margin-top: 16px;">
+                        <a href="/static/downloads/lfr-tunnel-windows-amd64.exe" class="btn btn-outline" style="font-size: 12px; padding: 6px 12px; width: auto; margin: 0;" data-i18n="guide_windows_dl">Download Windows Binary (.exe)</a>
+                    </div>
+                </div>
+
+                <!-- Linux -->
+                <div id="tab-content-linux" class="tab-content" style="display: none;">
+                    <h4 data-i18n="guide_linux_title" style="font-size: 14px; margin-bottom: 8px;">🚀 Linux (amd64 / arm64)</h4>
+                    <div data-i18n="guide_linux_direct" style="font-size: 0.8rem; font-weight: bold; margin-top: 10px; color: var(--text);">Direct Installation Command:</div>
+                    <div style="margin-top: 4px; margin-bottom: 12px; position: relative; background: #0d1117; color: #e6edf3; border-radius: 6px; border: 1px solid rgba(255,255,255,0.1); padding: 10px 40px 10px 12px; font-family: monospace; font-size: 0.8rem;">
+                        <span id="guide-cmd-linux">curl -fsSL https://tunnel.lfr-demo.se/install | sh</span>
+                        <button onclick="navigator.clipboard.writeText(document.getElementById('guide-cmd-linux').innerText); this.innerHTML='✓'; setTimeout(() => this.innerHTML='📋', 2000);" style="position: absolute; top: 6px; right: 6px; background: transparent; border: 1px solid rgba(255,255,255,0.2); color: #8b949e; border-radius: 4px; width: 22px; height: 22px; cursor: pointer;">📋</button>
+                    </div>
+
+                    <div id="guide-dl-linux" style="margin-top: 16px; display: flex; gap: 12px;">
+                        <a href="/static/downloads/lfr-tunnel-linux-amd64" class="btn btn-outline" style="font-size: 12px; padding: 6px 12px; width: auto; margin: 0;" data-i18n="guide_linux_dl_amd">Download Linux amd64</a>
+                        <a href="/static/downloads/lfr-tunnel-linux-arm64" class="btn btn-outline" style="font-size: 12px; padding: 6px 12px; width: auto; margin: 0;" data-i18n="guide_linux_dl_arm">Download Linux arm64</a>
+                    </div>
+                </div>
+            </div>
+
+            <div style="display: flex; justify-content: flex-end;">
+                <button class="btn btn-primary" style="width: auto; margin: 0; padding: 8px 24px;" onclick="closeInstallerGuideModal()" data-i18n="btn_close">Close</button>
+            </div>
+        </div>
+    </div>
+
+    <div id="toast-container"></div>
+    <script src="https://cdn.jsdelivr.net/npm/driver.js@1.3.1/dist/driver.js.iife.js"></script>
+    <script src="static/dashboard.js"></script>
+
+</body>
+</html>

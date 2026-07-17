@@ -78,7 +78,7 @@ func DeployCommand(args []string) {
 	rm -rf /home/` + vpsUser + `/error_pages /home/` + vpsUser + `/static /home/` + vpsUser + `/i18n /home/` + vpsUser + `/templates
 
 	if [ -x /usr/local/bin/enable-maintenance.sh ]; then
-		sudo /usr/local/bin/enable-maintenance.sh -a "System Upgrade" -r "Deploying new Gateway version" -d "2m" || true
+		sudo /usr/local/bin/enable-maintenance.sh "System Upgrade" "Deploying new Gateway version" 120 || true
 	fi
 
 	sudo systemctl restart lfr-tunneld

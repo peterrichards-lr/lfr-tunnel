@@ -5,6 +5,7 @@ import Layout from './components/Layout';
 import AdminRoute from './components/AdminRoute';
 import AdminSubdomains from './pages/AdminSubdomains';
 import AdminUsers from './pages/AdminUsers';
+import AdminSettings from './pages/AdminSettings';
 
 function App() {
   return (
@@ -19,6 +20,7 @@ function App() {
           <Route element={<AdminRoute />}>
             <Route path="/admin/subdomains" element={<AdminSubdomains />} />
             <Route path="/admin/users" element={<AdminUsers />} />
+            <Route path="/admin/settings" element={<AdminSettings />} />
           </Route>
         </Route>
 

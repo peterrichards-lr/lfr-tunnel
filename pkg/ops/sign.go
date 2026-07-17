@@ -23,13 +23,10 @@ func SignCommand(args []string) {
 	gpgPass := GetEnvOrDefault("LFT_GPG_PASS", "")
 	skipGPG := GetEnvOrDefault("LFT_SKIP_GPG", "")
 
-	const skipValue = "skip"
-	const archAmd64 = "amd64"
-
 	// 1. macOS Signing
-	if macosIdentity != "" && macosIdentity != skipValue {
+	if macosIdentity != "" && macosIdentity != "skip" {
 		fmt.Println("Signing macOS binaries...")
-		for _, arch := range []string{"arm64", archAmd64} {
+		for _, arch := range []string{"arm64", "amd64"} {
 			target := filepath.Join(binDir, fmt.Sprintf("lfr-tunnel-darwin-%s", arch))
 			err := RunCommand("codesign", "--force", "--options", "runtime", "--sign", macosIdentity, target)
 			CheckFatal(err, "macOS codesign failed for "+arch)
@@ -40,10 +37,10 @@ func SignCommand(args []string) {
 	}
 
 	// 2. Windows Signing
-	if signP12 != "" && signP12 != skipValue && fileExists(signP12) {
+	if signP12 != "" && signP12 != "skip" && fileExists(signP12) {
 		fmt.Println("Signing Windows binary...")
-		in := filepath.Join(binDir, "lfr-tunnel-windows-"+archAmd64+".exe")
-		out := filepath.Join(binDir, "lfr-tunnel-windows-"+archAmd64+"-signed.exe")
+		in := filepath.Join(binDir, "lfr-tunnel-windows-amd64.exe")
+		out := filepath.Join(binDir, "lfr-tunnel-windows-amd64-signed.exe")
 
 		err := RunCommand("osslsigncode", "sign", "-pkcs12", signP12, "-pass", signPass,
 			"-n", "Liferay Tunnel", "-i", "https://github.com/peterrichards-lr/lfr-tunnel",
@@ -58,9 +55,9 @@ func SignCommand(args []string) {
 	}
 
 	// 3. Linux GPG Signing
-	if skipGPG != "true" && gpgKey != skipValue {
+	if skipGPG != "true" && gpgKey != "skip" {
 		fmt.Println("Generating Linux detached GPG signature...")
-		target := filepath.Join(binDir, "lfr-tunnel-linux-"+archAmd64)
+		target := filepath.Join(binDir, "lfr-tunnel-linux-amd64")
 		sigPath := target + ".asc"
 		os.Remove(sigPath)
 

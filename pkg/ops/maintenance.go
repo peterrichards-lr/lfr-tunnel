@@ -2,6 +2,7 @@ package ops
 
 import (
 	"fmt"
+	"os"
 )
 
 // MaintenanceCommand toggles Nginx maintenance mode on the VPS.
@@ -12,7 +13,7 @@ func MaintenanceCommand(args []string) {
 	}
 
 	action := args[0]
-	identityFile := defaultIdentityFile
+	identityFile := "~/.ssh/id_vm6_networks_vps"
 	if len(args) > 1 && args[1] == "-i" && len(args) > 2 {
 		identityFile = args[2]
 	}
@@ -31,7 +32,8 @@ func MaintenanceCommand(args []string) {
 		err := RunCommand("ssh", "-i", identityFile, sshTarget, "sudo /usr/local/bin/disable-maintenance.sh")
 		CheckFatal(err, "Failed to disable maintenance mode")
 	default:
-		fmt.Printf("Unknown action: %q. Expected 'enable' or 'disable'\n", action)
+		fmt.Println("Usage: make maintenance action=enable|disable")
+		os.Exit(1)
 	}
 }
 

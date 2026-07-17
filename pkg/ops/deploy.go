@@ -5,13 +5,11 @@ import (
 	"os"
 )
 
-const defaultIdentityFile = "~/.ssh/id_vm6_networks_vps"
-
 // DeployCommand handles deploying server changes to the VPS.
 func DeployCommand(args []string) {
 	fmt.Println("=== Starting VPS Deployment ===")
 
-	identityFile := defaultIdentityFile
+	identityFile := "~/.ssh/id_vm6_networks_vps"
 	if len(args) > 0 && args[0] == "-i" && len(args) > 1 {
 		identityFile = args[1]
 	}
@@ -53,7 +51,7 @@ func DeployCommand(args []string) {
 	}
 	for _, script := range scripts {
 		if fileExists(script) {
-			err := RunCommand("scp", "-i", identityFile, script, sshTarget+":/home/"+vpsUser+"/")
+			err = RunCommand("scp", "-i", identityFile, script, sshTarget+":/home/"+vpsUser+"/")
 			CheckFatal(err, "Failed to SCP script: "+script)
 		}
 	}
@@ -102,7 +100,7 @@ func DeployCommand(args []string) {
 func DeployClientsCommand(args []string) {
 	fmt.Println("=== Deploying Client Binaries and Checksums to VPS ===")
 
-	identityFile := defaultIdentityFile
+	identityFile := "~/.ssh/id_vm6_networks_vps"
 	if len(args) > 0 && args[0] == "-i" && len(args) > 1 {
 		identityFile = args[1]
 	}

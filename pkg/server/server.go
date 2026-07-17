@@ -14,6 +14,7 @@ import (
 	"fmt"
 	"html"
 	"html/template"
+	"io/fs"
 	"log"
 	"log/slog"
 	mathrand "math/rand"
@@ -52,6 +53,9 @@ var staticFS embed.FS
 
 //go:embed templates/*
 var templatesFS embed.FS
+
+//go:embed ui-dist/*
+var uiDistFS embed.FS
 
 // RegisterRequest represents the JSON request payload for registering a tunnel.
 type RegisterRequest struct {
@@ -969,6 +973,34 @@ func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 
 		if strings.HasPrefix(r.URL.Path, "/static/") {
 			http.FileServer(http.FS(staticFS)).ServeHTTP(w, r)
+			return
+		}
+
+		if strings.HasPrefix(r.URL.Path, "/portal-v2") {
+			subFS, err := fs.Sub(uiDistFS, "ui-dist")
+			if err == nil {
+				// Strip /portal-v2 prefix
+				cleanPath := strings.TrimPrefix(r.URL.Path, "/portal-v2")
+				if cleanPath == "" || cleanPath == "/" {
+					cleanPath = "index.html"
+				} else {
+					cleanPath = strings.TrimPrefix(cleanPath, "/")
+				}
+
+				// Check if the file exists in the embedded FS
+				f, err := subFS.Open(cleanPath)
+				if err != nil {
+					// SPA Fallback: Serve index.html
+					r.URL.Path = "/"
+				} else {
+					_ = f.Close() //nolint:errcheck
+					r.URL.Path = "/" + cleanPath
+				}
+
+				http.FileServer(http.FS(subFS)).ServeHTTP(w, r)
+			} else {
+				http.Error(w, "UI not built. Run 'make build' first.", http.StatusInternalServerError)
+			}
 			return
 		}
 

@@ -1,4 +1,5 @@
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
+import Login from './pages/Login';
 
 function Dashboard() {
   return (
@@ -11,17 +12,6 @@ function Dashboard() {
         <h1>Dashboard</h1>
         <p>Welcome to the React Portal.</p>
       </main>
-    </div>
-  );
-}
-
-function Login() {
-  return (
-    <div id="login-screen">
-      <div className="glass login-card">
-        <h1>Liferay Tunnel</h1>
-        <p>Login placeholder</p>
-      </div>
     </div>
   );
 }

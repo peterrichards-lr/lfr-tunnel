@@ -1,0 +1,8 @@
+### Tech Debt Analysis
+During recent CI runs, the `golangci-lint` `errcheck` linter flagged ignored HTTP writer responses (`w.Write`). The codebase currently suppresses these explicitly with `_, _ = w.Write(...)`. While these rarely fail critically, it masks underlying connection issues, client disconnections, or partial writes, making debugging difficult.
+
+### Implementation Plan
+1. **Lint Configuration Update**: Update `.golangci.yml` to strictly enforce `errcheck` without allowing suppression via blank identifiers.
+2. **Audit & Fix Iteration 1**: Audit the `pkg/client` and `pkg/server` handlers to replace `_, _ =` with actual error checks.
+3. **Logging Enhancements**: When `w.Write` fails (usually due to a broken pipe or client disconnect), log it appropriately as a Warning or Debug trace rather than an application Error, to avoid spamming the logs during normal network hiccups.
+4. **Validation**: Ensure `make lint` and the GitHub Actions pipeline pass cleanly.

@@ -15,7 +15,7 @@ func TestHandleVerifyEmail_Failures(t *testing.T) {
 	w := httptest.NewRecorder()
 
 	defer func() {
-		_ = recover() // ignore panics //nolint:errcheck
+		_ = recover() //nolint:errcheck
 	}()
 	s.handleVerifyEmail(w, req)
 }

@@ -167,7 +167,7 @@ func TestWAF_RuleScanning(t *testing.T) {
 
 func TestWAF_IntegrationInProxyHandler(t *testing.T) {
 	// 1. Create registry and a mock backend server
-	chiselServer, _ := chserver.NewServer(&chserver.Config{Reverse: true})
+	chiselServer, _ := chserver.NewServer(&chserver.Config{Reverse: true}) //nolint:errcheck
 	reg := NewRegistry(chiselServer)
 
 	backendCalled := false

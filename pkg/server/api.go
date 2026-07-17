@@ -273,7 +273,7 @@ func (s *Server) handleCreateToken(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	_ = s.db.WriteAuditEntry(&db.AuditEntry{
+	_ = s.db.WriteAuditEntry(&db.AuditEntry{ //nolint:errcheck
 		ActorID:    user.Email,
 		Action:     "token.created",
 		TargetType: "token",
@@ -334,7 +334,7 @@ func (s *Server) handleDeleteToken(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	_ = s.db.WriteAuditEntry(&db.AuditEntry{
+	_ = s.db.WriteAuditEntry(&db.AuditEntry{ //nolint:errcheck
 		ActorID:    user.Email,
 		Action:     "token.revoked",
 		TargetType: "token",
@@ -528,7 +528,7 @@ func (s *Server) performGDPRDeletionAndAnonymization(email string, r *http.Reque
 	pats, err := s.db.ListPATs(user.ID)
 	if err == nil {
 		for _, pat := range pats {
-			_ = s.db.RevokePAT(pat.ID)
+			_ = s.db.RevokePAT(pat.ID) //nolint:errcheck
 		}
 	}
 
@@ -537,9 +537,9 @@ func (s *Server) performGDPRDeletionAndAnonymization(email string, r *http.Reque
 	anonymizedID := fmt.Sprintf("gdpr-deleted-user-%s", hex.EncodeToString(h[:8]))
 
 	// 4. Anonymize historical audit logs and bandwidth metrics
-	_ = s.db.AnonymizeUserData(user.ID, anonymizedID)
+	_ = s.db.AnonymizeUserData(user.ID, anonymizedID) //nolint:errcheck
 	if user.Email != user.ID {
-		_ = s.db.AnonymizeUserData(user.Email, anonymizedID)
+		_ = s.db.AnonymizeUserData(user.Email, anonymizedID) //nolint:errcheck
 	}
 
 	// 5. Send a final GDPR-deleted/anonymized confirmation email BEFORE purging profile
@@ -556,7 +556,7 @@ Best regards,<br/>
 Liferay Tunnel Team`, html.EscapeString(greetingName))
 
 		plainBody := fmt.Sprintf("Hi %s,\n\nYour Liferay Tunnel account has been successfully deleted and anonymised under GDPR.\n\nBest regards,\nLiferay Tunnel Team", greetingName)
-		_ = s.notifications.Sender().Send(user.Email, subject, body, plainBody)
+		_ = s.notifications.Sender().Send(user.Email, subject, body, plainBody) //nolint:errcheck
 	}
 
 	// 6. Delete the actual profile record from the users database entirely
@@ -711,7 +711,7 @@ func (s *Server) sendSubdomainReservedEmail(user *db.User, subdomain, domain str
 	subject := fmt.Sprintf("Subdomain Reserved: %s.%s", subdomain, domain)
 	plain := fmt.Sprintf("Hi %s,\n\nYou have reserved the subdomain %s.%s.\nExpires on: %s\nPortal: %s", user.FirstName, subdomain, domain, formattedExpiry, portalLink)
 
-	go func() { _ = s.notifications.Sender().Send(user.Email, subject, body, plain) }()
+	go func() { _ = s.notifications.Sender().Send(user.Email, subject, body, plain) }() //nolint:errcheck
 }
 
 func (s *Server) sendExtensionApprovedEmail(user *db.User, subdomain, domain string, expiresAt *time.Time, r *http.Request) {
@@ -744,7 +744,7 @@ func (s *Server) sendExtensionApprovedEmail(user *db.User, subdomain, domain str
 	subject := fmt.Sprintf("Extension Approved: %s.%s", subdomain, domain)
 	plain := fmt.Sprintf("Hi %s,\n\nYour extension request for %s.%s has been approved.\nNew Expiration: %s\nPortal: %s", user.FirstName, subdomain, domain, formattedExpiry, portalLink)
 
-	go func() { _ = s.notifications.Sender().Send(user.Email, subject, body, plain) }()
+	go func() { _ = s.notifications.Sender().Send(user.Email, subject, body, plain) }() //nolint:errcheck
 }
 
 func (s *Server) sendSubdomainDemotedEmail(user *db.User, subdomain, domain string, expiresAt *time.Time, r *http.Request) {
@@ -1461,7 +1461,7 @@ func (s *Server) handleUpdateReservationHeaders(w http.ResponseWriter, r *http.R
 		}
 	}
 
-	_ = s.db.WriteAuditEntry(&db.AuditEntry{
+	_ = s.db.WriteAuditEntry(&db.AuditEntry{ //nolint:errcheck
 		ActorID:    user.Email,
 		Action:     "lease.headers_updated",
 		TargetType: "lease",

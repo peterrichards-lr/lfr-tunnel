@@ -51,7 +51,7 @@ func RunLogin(serverURL string) error {
 	}
 
 	fmt.Println("Opening your browser to authenticate...")
-	_ = openBrowserFunc(portalURL)
+	_ = openBrowserFunc(portalURL) //nolint:errcheck
 
 	fmt.Println("Waiting for token delivery...")
 	fmt.Print("If your browser didn't open or handoff fails, paste your token here: ")

@@ -29,7 +29,7 @@ func TestServer_HandleDeleteToken(t *testing.T) {
 		TokenPrefix: "lfr_pat_dummy",
 		ExpiresAt:   &expires,
 	}
-	_ = srv.db.CreatePAT(pat)
+	_ = srv.db.CreatePAT(pat) //nolint:errcheck
 
 	sessionToken := generateToken(16)
 	srv.portalMap.Store("admin_session_"+sessionToken, PortalSessionData{
@@ -48,7 +48,7 @@ func TestServer_HandleDeleteToken(t *testing.T) {
 	}
 
 	// Verify deleted
-	tokens, _ := srv.db.ListPATs(dev.ID)
+	tokens, _ := srv.db.ListPATs(dev.ID) //nolint:errcheck
 	for _, tk := range tokens {
 		if tk.ID == pat.ID && tk.RevokedAt == nil {
 			t.Errorf("token should have been deleted (revoked), but it is not")

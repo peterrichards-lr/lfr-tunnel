@@ -37,7 +37,7 @@ func TestServer_GetCurrentUserOrToken(t *testing.T) {
 		TokenHash:   tokenHash,
 		TokenPrefix: "lfr_pat_",
 	}
-	_ = srv.db.CreatePAT(pat)
+	_ = srv.db.CreatePAT(pat) //nolint:errcheck
 
 	// 3. Test case: No auth info
 	req1, _ := http.NewRequest(http.MethodGet, "http://localhost/api/me", nil)

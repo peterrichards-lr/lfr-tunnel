@@ -11,7 +11,7 @@ func TestServer_AuthRegistry(t *testing.T) {
 
 	// UpdateLeaseHeaders
 	headers := map[string]string{"X-Test": "1"}
-	_ = srv.registry.UpdateLeaseHeaders("test-sub.example.com", headers)
+	_ = srv.registry.UpdateLeaseHeaders("test-sub.example.com", headers) //nolint:errcheck
 
 	// GetActiveVisitorIPs
 	lease := &TunnelLease{

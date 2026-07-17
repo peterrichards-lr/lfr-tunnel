@@ -12,7 +12,7 @@ func TestServer_StartAndStop(t *testing.T) {
 	go func() {
 		// This might block or return an error if certmagic fails,
 		// but we just want to hit the code paths.
-		_ = srv.Start()
+		_ = srv.Start() //nolint:errcheck
 	}()
 
 	time.Sleep(50 * time.Millisecond)

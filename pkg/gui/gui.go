@@ -103,7 +103,7 @@ func (s *TempSettingsServer) handleInfo(w http.ResponseWriter, r *http.Request) 
 		client := &http.Client{Timeout: 2 * time.Second}
 		if res, err := client.Get(fmt.Sprintf("%s/api/version", url)); err == nil {
 			defer func() {
-				_ = res.Body.Close()
+				_ = res.Body.Close() //nolint:errcheck
 			}()
 			var vResp struct {
 				Version string `json:"server_version"`

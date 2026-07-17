@@ -158,7 +158,7 @@ func TestInterceptorEngine_CustomTargetHost(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Failed to make request: %v", err)
 	}
-	_ = respCustom.Body.Close()
+	_ = respCustom.Body.Close() //nolint:errcheck
 
 	// The Host header should have been rewritten to the targetHost (my-project.local)
 	// (Since port is not 80/443, it will be my-project.local:targetPort)
@@ -218,7 +218,7 @@ func TestInterceptorEngine_PreserveHost(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Failed to make request: %v", err)
 	}
-	_ = resp.Body.Close()
+	_ = resp.Body.Close() //nolint:errcheck
 
 	// The Host header should be preserved as the public domain name
 	if receivedHost != "preserved-subdomain.lfr-demo.se" {

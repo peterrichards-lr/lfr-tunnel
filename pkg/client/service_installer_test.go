@@ -12,9 +12,9 @@ func TestInstallService(t *testing.T) {
 	f, _ := os.Create(binPath)
 	_ = f.Close() //nolint:errcheck
 
-	_ = InstallService()
+	_ = InstallService() //nolint:errcheck
 
-	_ = installDarwin(binPath)
+	_ = installDarwin(binPath) //nolint:errcheck
 	_ = installLinux(binPath)
 	_ = installWindows(binPath)
 }

@@ -55,10 +55,10 @@ func (w *WebhookService) sendPayload(slackData map[string]interface{}, teamsData
 
 	go func() {
 		if w.cfg.SlackURL != "" && slackData != nil {
-			_ = w.postToURL(w.cfg.SlackURL, slackData, "Slack")
+			_ = w.postToURL(w.cfg.SlackURL, slackData, "Slack") //nolint:errcheck
 		}
 		if w.cfg.TeamsURL != "" && teamsData != nil {
-			_ = w.postToURL(w.cfg.TeamsURL, teamsData, "Microsoft Teams")
+			_ = w.postToURL(w.cfg.TeamsURL, teamsData, "Microsoft Teams") //nolint:errcheck
 		}
 	}()
 }

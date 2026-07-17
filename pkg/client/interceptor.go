@@ -166,7 +166,7 @@ func (e *InterceptorEngine) StartHealthChecks(ctx context.Context, serverURL, se
 						req.Header.Set("Content-Type", "application/json")
 						resp, err := http.DefaultClient.Do(req)
 						if err == nil {
-							_ = resp.Body.Close()
+							_ = resp.Body.Close() //nolint:errcheck
 						}
 					}
 				}
@@ -212,7 +212,7 @@ func (e *InterceptorEngine) InterceptPort(targetPort int) (int, error) {
 	if targetPort == 443 || targetPort == 8443 {
 		scheme = "https"
 	}
-	targetURL, _ := url.Parse(fmt.Sprintf("%s://%s:%d", scheme, e.TargetHost, targetPort))
+	targetURL, _ := url.Parse(fmt.Sprintf("%s://%s:%d", scheme, e.TargetHost, targetPort)) //nolint:errcheck
 	proxy := httputil.NewSingleHostReverseProxy(targetURL)
 
 	customTransport := http.DefaultTransport.(*http.Transport).Clone()

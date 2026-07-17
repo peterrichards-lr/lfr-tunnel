@@ -95,7 +95,7 @@ func StartInspector(port int, engine *InterceptorEngine) (int, error) {
 		conn, err := net.DialTimeout("tcp", fmt.Sprintf("%s:%d", targetHost, targetPort), 500*time.Millisecond)
 		if err == nil {
 			destResponsive = true
-			_ = conn.Close()
+			_ = conn.Close() //nolint:errcheck
 		}
 
 		w.Header().Set("Content-Type", "application/json")

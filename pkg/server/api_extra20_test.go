@@ -10,7 +10,7 @@ import (
 )
 
 func TestMetricsCollector_Start(t *testing.T) {
-	database, _ := db.Open(":memory:")
+	database, _ := db.Open(":memory:") //nolint:errcheck
 	cfg := &config.ServerConfig{}
 	registry := NewRegistry(nil)
 	collector := NewMetricsCollector(database, cfg, registry)

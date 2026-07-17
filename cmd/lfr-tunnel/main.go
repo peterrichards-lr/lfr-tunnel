@@ -698,7 +698,7 @@ func handleStop(sub string, targetSpecific bool) {
 		}
 
 		slog.Info(fmt.Sprintf("[Client] Stopping background tunnel for subdomain '%s' (PID: %d)...\n", s, pid))
-		_ = proc.Signal(syscall.SIGINT)
+		_ = proc.Signal(syscall.SIGINT) //nolint:errcheck
 
 		for i := 0; i < 10; i++ {
 			time.Sleep(200 * time.Millisecond)
@@ -837,7 +837,7 @@ func fetchRemoteRegions(cfg *config.ClientConfig) {
 		return // Silently fall back to built-in defaults
 	}
 	defer func() {
-		_ = resp.Body.Close()
+		_ = resp.Body.Close() //nolint:errcheck
 	}()
 
 	if resp.StatusCode == http.StatusOK {

@@ -41,7 +41,7 @@ func TestServer_HandleUpdateMe(t *testing.T) {
 		t.Errorf("expected 200 OK, got %d", w.Code)
 	}
 
-	updated, _ := srv.db.GetUser(dev.ID)
+	updated, _ := srv.db.GetUser(dev.ID) //nolint:errcheck
 	if updated.FirstName != "Updated Dev Name" {
 		t.Errorf("expected first name to be updated, got %s", updated.FirstName)
 	}
@@ -127,7 +127,7 @@ func TestServer_HandlePromoteReservation(t *testing.T) {
 	_ = srv.db.CreateUser(admin)
 
 	expires := time.Now().Add(24 * time.Hour)
-	_ = srv.db.CreateSubdomainReservation(&db.SubdomainReservation{
+	_ = srv.db.CreateSubdomainReservation(&db.SubdomainReservation{ //nolint:errcheck
 		UserID:    admin.ID,
 		Subdomain: "test-promote",
 		Domain:    "example.com",

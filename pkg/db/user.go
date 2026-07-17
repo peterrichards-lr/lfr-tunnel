@@ -296,7 +296,7 @@ func (repo *SQLiteUserRepo) AnonymizeUserData(userID, anonymizedID string) error
 		return err
 	}
 	defer func() {
-		_ = tx.Rollback()
+		_ = tx.Rollback() //nolint:errcheck
 	}()
 
 	if _, err := tx.Exec("UPDATE tunnel_metrics SET user_id = ? WHERE user_id = ?", anonymizedID, userID); err != nil {

@@ -63,7 +63,7 @@ func (r *sqliteWebhookQueueRepo) DeleteWebhookMessages(ids []int64) error {
 	if err != nil {
 		return err
 	}
-	defer func() { _ = stmt.Close() }()
+	defer func() { _ = stmt.Close() }() //nolint:errcheck
 
 	for _, id := range ids {
 		if _, err := stmt.Exec(id); err != nil {

@@ -40,7 +40,7 @@ build: clean
 	go build -ldflags="-s -w -X lfr-tunnel/pkg/config.Version=$(VERSION)" -trimpath -o bin/lfr-tunneld ./cmd/lfr-tunneld
 
 deploy:
-	@./scripts/deploy.sh
+	@./scripts/deploy.sh $(if $(DELAY),-w $(DELAY),-w 30)
 
 e2e:
 	@./scripts/run-e2e.sh standard

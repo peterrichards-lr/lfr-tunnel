@@ -17,9 +17,35 @@ case "$ARCH" in
   *)            echo "Unsupported architecture: $ARCH"; exit 1 ;;
 esac
 
+# Server URL injected by Gateway
+SERVER_URL="{{SERVER_URL}}"
+if [ -z "$SERVER_URL" ] || [ "$SERVER_URL" = "{{SERVER_URL}}" ]; then
+  SERVER_URL="https://tunnel.lfr-demo.se"
+fi
+
 BINARY="lfr-tunnel-${OS}-${ARCH}"
-URL="https://github.com/peterrichards-lr/lfr-tunnel/releases/latest/download/${BINARY}"
-INSTALL_DIR="${LFT_INSTALL_DIR:-${HOME}/runningpoc/bin}"
+URL="${SERVER_URL}/static/downloads/${BINARY}"
+
+case "$OS" in
+  darwin)
+    case "$ARCH" in
+      amd64) DEFAULT_INSTALL_DIR="{{MACOS_AMD64_INSTALL_DIR}}" ;;
+      arm64) DEFAULT_INSTALL_DIR="{{MACOS_ARM64_INSTALL_DIR}}" ;;
+    esac
+    ;;
+  linux)
+    case "$ARCH" in
+      amd64) DEFAULT_INSTALL_DIR="{{LINUX_AMD64_INSTALL_DIR}}" ;;
+    esac
+    ;;
+esac
+
+# Fallback if templating failed or wasn't substituted
+if [ -z "$DEFAULT_INSTALL_DIR" ] || [ "$DEFAULT_INSTALL_DIR" = "{{MACOS_AMD64_INSTALL_DIR}}" ]; then
+  DEFAULT_INSTALL_DIR="${HOME}/runningpoc/bin"
+fi
+
+INSTALL_DIR="${LFT_INSTALL_DIR:-${DEFAULT_INSTALL_DIR}}"
 INSTALL_PATH="${INSTALL_DIR}/lfr-tunnel"
 
 echo "Downloading lfr-tunnel for ${OS}-${ARCH}..."

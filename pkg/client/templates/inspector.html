@@ -1,0 +1,1026 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Liferay Tunnel Inspector</title>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <style>
+        :root {
+            --bg-base: #0f172a;
+            --bg-card: rgba(30, 41, 59, 0.7);
+            --bg-solid: #1e293b;
+            --primary: #0B5FFF;
+            --text-main: #f8fafc;
+            --text-muted: #94a3b8;
+            --border: rgba(255, 255, 255, 0.1);
+            --success: #10b981;
+            --warning: #f59e0b;
+            --danger: #ef4444;
+        }
+
+        :root[data-theme="light"] {
+            --bg-base: #f8fafc;
+            --bg-card: #ffffff;
+            --bg-solid: #ffffff;
+            --primary: #0B5FFF;
+            --text-main: #0f172a;
+            --text-muted: #64748b;
+            --border: rgba(0, 0, 0, 0.1);
+            --success: #059669;
+            --warning: #d97706;
+            --danger: #dc2626;
+        }
+
+        * { box-sizing: border-box; margin: 0; padding: 0; font-family: 'Inter', sans-serif; }
+        body { background: var(--bg-base); color: var(--text-main); display: flex; height: 100vh; overflow: hidden; }
+
+        sidebar { width: 350px; flex-shrink: 0; border-right: 1px solid var(--border); display: flex; flex-direction: column; background: rgba(15, 23, 42, 0.8); }
+        :root[data-theme="light"] sidebar { background: #f8fafc; }
+        
+        .header-panel { padding: 20px; border-bottom: 1px solid var(--border); }
+        .header-panel h1 { font-size: 20px; font-weight: 700; margin-bottom: 15px; color: var(--text-main); display: flex; align-items: center; justify-content: space-between; }
+        
+        .toggle-switch { position: relative; display: inline-block; width: 44px; height: 24px; }
+        .toggle-switch input { opacity: 0; width: 0; height: 0; }
+        .slider { position: absolute; cursor: pointer; top: 0; left: 0; right: 0; bottom: 0; background-color: #334155; transition: .4s; border-radius: 24px; }
+        .slider:before { position: absolute; content: ""; height: 18px; width: 18px; left: 3px; bottom: 3px; background-color: white; transition: .4s; border-radius: 50%; }
+        input:checked + .slider { background-color: var(--warning); }
+        input:checked + .slider:before { transform: translateX(20px); }
+
+        .req-list { flex: 1; overflow-y: auto; }
+        .req-item { padding: 12px 16px; border-bottom: 1px solid var(--border); cursor: pointer; transition: background 0.2s; }
+        .req-item:hover { background: rgba(255,255,255,0.05); }
+        :root[data-theme="light"] .req-item:hover { background: rgba(0,0,0,0.03); }
+        .req-item.active { background: rgba(11, 95, 255, 0.15); border-left: 3px solid var(--primary); }
+        .req-method { font-weight: 700; font-size: 12px; margin-right: 8px; width: 45px; display: inline-block; }
+        .req-method.GET { color: var(--success); }
+        .req-method.POST { color: var(--warning); }
+        .req-method.PUT { color: #3b82f6; }
+        .req-method.DELETE { color: var(--danger); }
+        .req-path { font-size: 13px; color: var(--text-main); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; display: inline-block; max-width: 180px; vertical-align: bottom; }
+        .req-status { float: right; font-size: 12px; font-weight: 600; padding: 2px 6px; border-radius: 4px; }
+        .status-2xx { color: var(--success); background: rgba(16, 185, 129, 0.1); }
+        .status-3xx { color: #3b82f6; background: rgba(59, 130, 246, 0.1); }
+        .status-4xx { color: var(--warning); background: rgba(245, 158, 11, 0.1); }
+        .status-5xx { color: var(--danger); background: rgba(239, 68, 68, 0.1); }
+
+        main { flex: 1; display: flex; flex-direction: column; overflow: hidden; }
+        .details-header { padding: 20px; border-bottom: 1px solid var(--border); background: rgba(30, 41, 59, 0.4); }
+        :root[data-theme="light"] .details-header { background: #ffffff; }
+        .details-header h2 { font-size: 20px; font-weight: 600; display: flex; align-items: center; gap: 12px; margin-bottom: 8px; }
+        .details-meta { font-size: 13px; color: var(--text-muted); display: flex; gap: 20px; }
+
+        .details-content { flex: 1; padding: 20px; overflow-y: auto; display: flex; gap: 20px; }
+        .panel { flex: 1; background: var(--bg-card); border: 1px solid var(--border); border-radius: 8px; display: flex; flex-direction: column; overflow: hidden; }
+        .panel-title { padding: 12px 16px; font-size: 14px; font-weight: 600; background: rgba(0,0,0,0.2); border-bottom: 1px solid var(--border); }
+        :root[data-theme="light"] .panel-title { background: #f8fafc; }
+        .panel-body { padding: 16px; overflow-y: auto; flex: 1; font-size: 13px; }
+        
+        .help-icon { display: inline-flex; align-items: center; justify-content: center; width: 14px; height: 14px; border: 1px solid var(--primary); color: var(--primary); border-radius: 50%; font-size: 10px; font-weight: bold; cursor: help; margin-left: 5px; opacity: 0.8; transition: opacity 0.2s; }
+        .help-icon:hover { opacity: 1; background: rgba(11, 95, 255, 0.1); }
+        
+        .code-block { background: #000; color: #a5b4fc; padding: 12px; border-radius: 6px; font-family: monospace; white-space: pre-wrap; word-break: break-all; margin-top: 12px; }
+        :root[data-theme="light"] .code-block { background: #f1f5f9; color: #0f172a; }
+        .header-row { display: flex; margin-bottom: 6px; }
+        .header-key { font-weight: 600; color: var(--text-muted); width: 140px; }
+        .header-val { color: var(--text-main); flex: 1; word-break: break-all; }
+
+        .empty-state { display: flex; align-items: center; justify-content: center; height: 100%; color: var(--text-muted); font-size: 18px; }
+        .tab-item { flex: 1; text-align: center; padding: 12px; cursor: pointer; font-size: 13px; font-weight: 500; border-bottom: 2px solid transparent; color: var(--text-muted); transition: all 0.2s; }
+        .tab-item.active { border-bottom: 2px solid var(--primary); color: var(--text-main); font-weight: 600; }
+        .tab-item:hover { background: rgba(255,255,255,0.02); color: var(--text-main); }
+        :root[data-theme="light"] .tab-item:hover { background: rgba(0,0,0,0.03); }
+
+        select option { background: var(--bg-solid); color: var(--text-main); }
+        
+        .theme-toggle-btn { background: none; border: none; color: var(--text-muted); cursor: pointer; padding: 4px; display: flex; align-items: center; transition: color 0.2s; }
+        .theme-toggle-btn:hover { color: var(--text-main); }
+        :root[data-theme="light"] .icon-moon { display: block; }
+        :root[data-theme="light"] .icon-sun { display: none; }
+        :root:not([data-theme="light"]) .icon-moon { display: none; }
+        :root:not([data-theme="light"]) .icon-sun { display: block; }
+    </style>
+    <script>
+        document.addEventListener('DOMContentLoaded', () => {
+            const savedTheme = localStorage.getItem('inspector_theme');
+            if (savedTheme) {
+                document.documentElement.setAttribute('data-theme', savedTheme);
+            } else if (window.matchMedia && window.matchMedia('(prefers-color-scheme: light)').matches) {
+                document.documentElement.setAttribute('data-theme', 'light');
+            }
+        });
+    </script>
+</head>
+<body>
+    <sidebar>
+        <div class="header-panel">
+            <h1 style="margin-bottom: 15px;">
+                <span data-i18n="client_inspector">Inspector</span>
+            </h1>
+            <div style="display: flex; align-items: center; justify-content: space-between; font-size: 13px; font-weight: normal; margin-bottom: 10px;">
+                <select id="lang-selector" onchange="setLanguage(this.value)" style="background: rgba(0,0,0,0.3); border: 1px solid var(--border); color: var(--text-muted); padding: 4px 8px; border-radius: 4px; font-size: 11px; outline: none; cursor: pointer;">
+                    <option value="en">English</option>
+                    <option value="es">Español</option>
+                    <option value="de">Deutsch</option>
+                    <option value="fr">Français</option>
+                    <option value="pt">Português</option>
+                    <option value="ja">日本語</option>
+                </select>
+                <div style="display: flex; align-items: center; gap: 8px;">
+                    <span id="maint-label" data-i18n="client_maint">Maintenance</span>
+                    <label class="toggle-switch">
+                        <input type="checkbox" id="maint-toggle" onchange="toggleMaintenance()">
+                        <span class="slider"></span>
+                    </label>
+                </div>
+            </div>
+            </div>
+            <div style="display: flex; justify-content: space-between; align-items: center; margin-top: 5px;">
+                <div style="font-size: 12px; color: var(--text-muted);"><span data-i18n="client_listening">Listening on localhost:4040</span></div>
+                <div id="preserve-host-pill" style="display: none; padding: 2px 6px; border-radius: 4px; font-size: 10px; font-weight: 600;"></div>
+            </div>
+        </div>
+        <div style="display: flex; border-bottom: 1px solid var(--border); background: rgba(0,0,0,0.1);">
+            <div id="tab-traffic" class="tab-item active" onclick="switchView('traffic')" data-i18n="client_traffic_log">Traffic Log</div>
+            <div id="tab-settings" class="tab-item" onclick="switchView('settings')" data-i18n="client_settings">Settings</div>
+        </div>
+        <div class="access-control-panel" style="padding: 16px 20px; border-bottom: 1px solid var(--border); background: rgba(30, 41, 59, 0.4); display: flex; flex-direction: column; gap: 10px;">
+            <div style="font-size: 12px; font-weight: 600; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.05em;" data-i18n="client_access_control">Access Control</div>
+            <div style="display: flex; flex-direction: column; gap: 6px;">
+                <label style="font-size: 11px; color: var(--text-muted);" data-i18n="client_passcode">Passcode Protection</label>
+                <input type="password" id="ac-passcode" placeholder="No passcode set (Public)" data-i18n="client_passcode_placeholder" style="background: rgba(0,0,0,0.3); border: 1px solid var(--border); color: white; padding: 6px 10px; border-radius: 4px; font-size: 12px; outline: none; width: 100%;">
+            </div>
+            <div style="display: flex; flex-direction: column; gap: 6px;">
+                <label style="font-size: 11px; color: var(--text-muted);" data-i18n="client_ip_whitelist">IP Address Whitelist</label>
+                <input type="text" id="ac-whitelist" placeholder="e.g. 192.168.1.1, 10.0.0.0/24" data-i18n="client_ip_placeholder" style="background: rgba(0,0,0,0.3); border: 1px solid var(--border); color: white; padding: 6px 10px; border-radius: 4px; font-size: 12px; outline: none; width: 100%;">
+            </div>
+            <div style="display: flex; flex-direction: column; gap: 6px;">
+                <label style="font-size: 11px; color: var(--text-muted);" data-i18n="client_combinator">Combinator Mode</label>
+                <select id="ac-mode" style="background: #1e293b; border: 1px solid var(--border); color: white; padding: 6px 10px; border-radius: 4px; font-size: 12px; outline: none; cursor: pointer; width: 100%;">
+                    <option value="or" data-i18n="client_mode_or">Bypass passcode if IP matched (OR)</option>
+                    <option value="and" data-i18n="client_mode_and">Require both passcode & IP match (AND)</option>
+                </select>
+            </div>
+            <button id="ac-save-btn" onclick="saveAccessControl()" style="background: var(--primary); color: white; border: none; padding: 8px 12px; border-radius: 4px; font-size: 12px; font-weight: 600; cursor: pointer; margin-top: 4px; transition: background 0.2s;" data-i18n="client_save_access">Save Access Control</button>
+        </div>
+        <div class="public-urls-panel" style="padding: 16px 20px; border-bottom: 1px solid var(--border); background: rgba(30, 41, 59, 0.4); display: flex; flex-direction: column; gap: 10px;">
+            <div style="font-size: 12px; font-weight: 600; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.05em;" data-i18n="client_public_urls">Public Endpoints</div>
+            <div id="public-urls-list" style="display: flex; flex-direction: column; gap: 8px;">
+                <!-- Injected via JS -->
+            </div>
+        </div>
+        <div class="traffic-header" style="display: flex; justify-content: space-between; align-items: center; padding: 12px 16px; border-bottom: 1px solid var(--border); background: rgba(0,0,0,0.2);">
+            <div style="font-size: 12px; font-weight: 600; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.05em;" data-i18n="client_traffic_log">Traffic Log</div>
+            <button onclick="clearTraffic()" style="background: transparent; color: var(--danger); border: 1px solid rgba(255, 60, 60, 0.3); padding: 4px 8px; border-radius: 4px; font-size: 11px; cursor: pointer; transition: background 0.2s;" onmouseover="this.style.background='rgba(255, 60, 60, 0.1)'" onmouseout="this.style.background='transparent'" data-i18n="client_clear_traffic">Clear</button>
+        </div>
+        <div class="req-list" id="req-list">
+            <!-- Items injected by JS -->
+        </div>
+    </sidebar>
+
+    <main id="main-view">
+        <div class="empty-state" data-i18n="client_select_req">Select a request to view details</div>
+    </main>
+
+    <script>
+const clientTranslations = {
+    "en": {
+        "client_inspector": "Inspector",
+        "client_listening": "Listening on localhost:4040",
+        "client_host_preserved": "Host Preserved",
+        "client_host_rewritten": "Host Rewritten",
+        "client_replay_req": "Replay Request",
+        "client_req": "Request",
+        "client_resp": "Response",
+        "client_replaying": "Replaying...",
+        "client_maint": "Maintenance",
+        "client_traffic_log": "Traffic Log",
+        "client_clear_traffic": "Clear",
+        "client_config_title": "Client Configuration",
+        "client_config_subtitle": "Manage your local Liferay Tunnel settings",
+        "client_settings": "Settings",
+        "client_access_control": "Access Control",
+        "client_passcode": "Passcode Protection",
+        "client_passcode_placeholder": "No passcode set (Public)",
+        "client_ip_whitelist": "IP Address Whitelist",
+        "client_ip_placeholder": "e.g. 192.168.1.1, 10.0.0.0/24",
+        "client_combinator": "Combinator Mode",
+        "client_mode_or": "Bypass passcode if IP matched (OR)",
+        "client_mode_and": "Require both passcode & IP match (AND)",
+        "client_save_access": "Save Access Control",
+        "client_public_urls": "Public Endpoints",
+        "client_select_req": "Select a request to view details",
+        "client_server_url": "Server URL",
+        "client_server_url_help": "The public address of the remote Liferay Tunnel Gateway. E.g. https://tunnel.lfr-demo.se",
+        "client_auth_token": "Authentication Token",
+        "client_auth_token_help": "Your personal token from the gateway to authenticate your tunnel. Leave blank to use a token file.",
+        "client_auth_placeholder": "Enter token (masked if set)",
+        "client_local_port": "Local Target Port",
+        "client_local_port_help": "The port of your local dev server running on your machine (e.g. 8080 for Liferay).",
+        "client_local_host": "Local Target Host",
+        "client_local_host_help": "The hostname of your local dev server. Usually 'localhost' or 'host.docker.internal' if proxying into a container.",
+        "client_req_subdomain": "Requested Subdomain",
+        "client_req_subdomain_help": "The subdomain prefix for your public URL. If auto-reservation is enabled for your account, leaving this blank will assign a random subdomain.",
+        "client_preserve_host": "Preserve incoming Host header",
+        "client_preserve_host_help": "If checked, forwards the public URL Host header to your local server instead of rewriting it to the Target Host. Useful for Liferay Virtual Instances.",
+        "client_insecure_ssl": "Allow insecure local SSL (Skip TLS Verification)",
+        "client_insecure_ssl_help": "If checking against an HTTPS port (e.g. 443), this bypasses strict certificate checks. Required for most self-signed localhost certificates.",
+        "client_save_config": "Save Configuration",
+        "client_config_saved": "Configuration saved successfully!"
+    },
+    "es": {
+        "client_inspector": "Inspector",
+        "client_listening": "Escuchando en localhost:4040",
+        "client_host_preserved": "Host Preservado",
+        "client_host_rewritten": "Host Reescribido",
+        "client_maint": "Mantenimiento",
+        "client_traffic_log": "Registro de Tráfico",
+        "client_clear_traffic": "Limpiar",
+        "client_config_title": "Configuración del Cliente",
+        "client_config_subtitle": "Gestione la configuración local de Liferay Tunnel",
+        "client_settings": "Ajustes",
+        "client_access_control": "Control de Acceso",
+        "client_passcode": "Protección por Contraseña",
+        "client_passcode_placeholder": "Sin contraseña (Público)",
+        "client_ip_whitelist": "Lista Blanca de IP",
+        "client_ip_placeholder": "ej. 192.168.1.1, 10.0.0.0/24",
+        "client_combinator": "Modo Combinador",
+        "client_mode_or": "Ignorar contraseña si la IP coincide (O)",
+        "client_mode_and": "Requerir contraseña e IP (Y)",
+        "client_save_access": "Guardar Acceso",
+        "client_public_urls": "Endpoints Públicos",
+        "client_select_req": "Seleccione una solicitud para ver los detalles",
+        "client_server_url": "URL del Servidor",
+        "client_server_url_help": "La dirección pública del Gateway remoto. Ej. https://tunnel.lfr-demo.se",
+        "client_auth_token": "Token de Autenticación",
+        "client_auth_token_help": "Su token personal para autenticar el túnel. Deje en blanco para usar archivo.",
+        "client_auth_placeholder": "Ingrese el token (oculto)",
+        "client_local_port": "Puerto de Destino",
+        "client_local_port_help": "El puerto de su servidor local (ej. 8080 para Liferay).",
+        "client_local_host": "Host de Destino",
+        "client_local_host_help": "El nombre de host de su servidor local. Usualmente 'localhost' o 'host.docker.internal'.",
+        "client_req_subdomain": "Subdominio Solicitado (Opcional)",
+        "client_req_subdomain_help": "Un nombre personalizado para su URL pública (sujeto a permisos de la cuenta).",
+        "client_preserve_host": "Preservar encabezado Host",
+        "client_preserve_host_help": "Reenvía el encabezado Host de la URL pública a su servidor local.",
+        "client_insecure_ssl": "Permitir SSL local inseguro",
+        "client_insecure_ssl_help": "Omite las comprobaciones estrictas de certificados. Necesario para localhost.",
+        "client_save_config": "Guardar Configuración",
+        "client_config_saved": "¡Configuración guardada!"
+    },
+    "de": {
+        "client_inspector": "Inspektor",
+        "client_listening": "Hört auf localhost:4040",
+        "client_host_preserved": "Host Beibehalten",
+        "client_host_rewritten": "Host Umgeschrieben",
+        "client_maint": "Wartung",
+        "client_traffic_log": "Verkehrsprotokoll",
+        "client_clear_traffic": "Löschen",
+        "client_config_title": "Client-Konfiguration",
+        "client_config_subtitle": "Verwalten Sie Ihre lokalen Liferay Tunnel-Einstellungen",
+        "client_settings": "Einstellungen",
+        "client_access_control": "Zugangskontrolle",
+        "client_passcode": "Passwortschutz",
+        "client_passcode_placeholder": "Kein Passwort gesetzt (Öffentlich)",
+        "client_ip_whitelist": "IP-Whitelist",
+        "client_ip_placeholder": "z.B. 192.168.1.1, 10.0.0.0/24",
+        "client_combinator": "Kombinatormodus",
+        "client_mode_or": "Passwort überspringen wenn IP übereinstimmt (ODER)",
+        "client_mode_and": "Passwort & IP erforderlich (UND)",
+        "client_save_access": "Zugang speichern",
+        "client_public_urls": "Öffentliche Endpunkte",
+        "client_select_req": "Wählen Sie eine Anfrage aus",
+        "client_server_url": "Server-URL",
+        "client_server_url_help": "Die öffentliche Adresse des Remote-Gateways. Z.B. https://tunnel.lfr-demo.se",
+        "client_auth_token": "Authentifizierungstoken",
+        "client_auth_token_help": "Ihr persönliches Token zur Authentifizierung. Leer lassen für Token-Datei.",
+        "client_auth_placeholder": "Token eingeben (maskiert)",
+        "client_local_port": "Lokaler Zielport",
+        "client_local_port_help": "Der Port Ihres lokalen Servers (z.B. 8080 für Liferay).",
+        "client_local_host": "Lokaler Zielhost",
+        "client_local_host_help": "Der Hostname Ihres lokalen Servers. Normalerweise 'localhost'.",
+        "client_req_subdomain": "Gewünschte Subdomain (Optional)",
+        "client_req_subdomain_help": "Ein benutzerdefinierter Name für Ihre öffentliche URL (abhängig von Kontoberechtigungen).",
+        "client_preserve_host": "Eingehenden Host-Header beibehalten",
+        "client_preserve_host_help": "Leitet den Host-Header der öffentlichen URL an Ihren lokalen Server weiter.",
+        "client_insecure_ssl": "Unsicheres lokales SSL zulassen",
+        "client_insecure_ssl_help": "Überspringt Zertifikatsprüfungen. Erforderlich für localhost-Zertifikate.",
+        "client_save_config": "Konfiguration speichern",
+        "client_config_saved": "Konfiguration erfolgreich gespeichert!"
+    },
+    "fr": {
+        "client_inspector": "Inspecteur",
+        "client_listening": "En écoute sur localhost:4040",
+        "client_host_preserved": "Hôte Préservé",
+        "client_host_rewritten": "Hôte Réécrit",
+        "client_maint": "Maintenance",
+        "client_traffic_log": "Journal de Trafic",
+        "client_clear_traffic": "Effacer",
+        "client_config_title": "Configuration du Client",
+        "client_config_subtitle": "Gérez vos paramètres locaux Liferay Tunnel",
+        "client_settings": "Paramètres",
+        "client_access_control": "Contrôle d'Accès",
+        "client_passcode": "Code d'accès",
+        "client_passcode_placeholder": "Aucun code d'accès (Public)",
+        "client_ip_whitelist": "Liste Blanche IP",
+        "client_ip_placeholder": "ex. 192.168.1.1, 10.0.0.0/24",
+        "client_combinator": "Mode Combinateur",
+        "client_mode_or": "Ignorer le code si l'IP correspond (OU)",
+        "client_mode_and": "Code ET IP requis (ET)",
+        "client_save_access": "Enregistrer l'accès",
+        "client_public_urls": "Points de terminaison",
+        "client_select_req": "Sélectionnez une requête",
+        "client_server_url": "URL du Serveur",
+        "client_server_url_help": "L'adresse publique de la passerelle. Ex. https://tunnel.lfr-demo.se",
+        "client_auth_token": "Jeton d'authentification",
+        "client_auth_token_help": "Votre jeton personnel pour authentifier le tunnel.",
+        "client_auth_placeholder": "Entrez le jeton (masqué)",
+        "client_local_port": "Port Local",
+        "client_local_port_help": "Le port de votre serveur local (ex. 8080 pour Liferay).",
+        "client_local_host": "Hôte Local",
+        "client_local_host_help": "Le nom d'hôte de votre serveur local. Généralement 'localhost'.",
+        "client_req_subdomain": "Sous-domaine demandé (Optionnel)",
+        "client_req_subdomain_help": "Un nom personnalisé pour votre URL publique (sous réserve des autorisations du compte).",
+        "client_preserve_host": "Préserver l'en-tête Host",
+        "client_preserve_host_help": "Transmet l'en-tête Host de l'URL publique à votre serveur local.",
+        "client_insecure_ssl": "Autoriser SSL local non sécurisé",
+        "client_insecure_ssl_help": "Contourne les vérifications de certificats. Requis pour localhost.",
+        "client_save_config": "Enregistrer la Configuration",
+        "client_config_saved": "Configuration enregistrée avec succès !"
+    },
+    "pt": {
+        "client_inspector": "Inspetor",
+        "client_listening": "Ouvindo em localhost:4040",
+        "client_host_preserved": "Host Preservado",
+        "client_host_rewritten": "Host Reescrito",
+        "client_maint": "Manutenção",
+        "client_traffic_log": "Tráfego",
+        "client_clear_traffic": "Limpar",
+        "client_config_title": "Configuração do Cliente",
+        "client_config_subtitle": "Gerencie suas configurações locais do Liferay Tunnel",
+        "client_settings": "Configurações",
+        "client_access_control": "Controle de Acesso",
+        "client_passcode": "Senha de Proteção",
+        "client_passcode_placeholder": "Sem senha (Público)",
+        "client_ip_whitelist": "Lista Branca de IP",
+        "client_ip_placeholder": "ex. 192.168.1.1, 10.0.0.0/24",
+        "client_combinator": "Modo Combinador",
+        "client_mode_or": "Ignorar senha se o IP corresponder (OU)",
+        "client_mode_and": "Exigir senha e IP (E)",
+        "client_save_access": "Salvar Acesso",
+        "client_public_urls": "Endpoints Públicos",
+        "client_select_req": "Selecione uma solicitação",
+        "client_server_url": "URL do Servidor",
+        "client_server_url_help": "O endereço público do Gateway remoto. Ex. https://tunnel.lfr-demo.se",
+        "client_auth_token": "Token de Autenticação",
+        "client_auth_token_help": "Seu token pessoal para autenticar o túnel.",
+        "client_auth_placeholder": "Insira o token (oculto)",
+        "client_local_port": "Porta Local",
+        "client_local_port_help": "A porta do seu servidor local (ex. 8080 para Liferay).",
+        "client_local_host": "Host Local",
+        "client_local_host_help": "O nome de host do seu servidor local. Geralmente 'localhost'.",
+        "client_req_subdomain": "Subdomínio Solicitado (Opcional)",
+        "client_req_subdomain_help": "Um nome personalizado para sua URL pública (sujeito às permissões da conta).",
+        "client_preserve_host": "Preservar cabeçalho Host",
+        "client_preserve_host_help": "Encaminha o cabeçalho Host da URL pública para o servidor local.",
+        "client_insecure_ssl": "Permitir SSL local inseguro",
+        "client_insecure_ssl_help": "Ignora verificações rigorosas de certificado. Necessário para localhost.",
+        "client_save_config": "Salvar Configuração",
+        "client_config_saved": "Configuração salva com sucesso!"
+    },
+    "ja": {
+        "client_inspector": "インスペクター",
+        "client_listening": "localhost:4040 でリッスン中",
+        "client_host_preserved": "ホスト保持",
+        "client_host_rewritten": "ホスト書き換え",
+        "client_maint": "メンテナンス",
+        "client_traffic_log": "トラフィックログ",
+        "client_clear_traffic": "クリア",
+        "client_config_title": "クライアント設定",
+        "client_config_subtitle": "ローカルのLiferay Tunnel設定を管理します",
+        "client_settings": "設定",
+        "client_access_control": "アクセス制御",
+        "client_passcode": "パスコード保護",
+        "client_passcode_placeholder": "パスコードなし（公開）",
+        "client_ip_whitelist": "IPホワイトリスト",
+        "client_ip_placeholder": "例 192.168.1.1, 10.0.0.0/24",
+        "client_combinator": "コンビネーターモード",
+        "client_mode_or": "IPが一致すればパスコードをバイパス (OR)",
+        "client_mode_and": "パスコードとIPの両方が必要 (AND)",
+        "client_save_access": "アクセスを保存",
+        "client_public_urls": "パブリックエンドポイント",
+        "client_select_req": "詳細を表示するリクエストを選択してください",
+        "client_server_url": "サーバー URL",
+        "client_server_url_help": "リモートゲートウェイの公開アドレス。例 https://tunnel.lfr-demo.se",
+        "client_auth_token": "認証トークン",
+        "client_auth_token_help": "トンネルを認証するための個人のトークンです。",
+        "client_auth_placeholder": "トークンを入力（マスクされます）",
+        "client_local_port": "ローカルターゲットポート",
+        "client_local_port_help": "ローカルサーバーのポート（例 Liferayの8080）。",
+        "client_local_host": "ローカルターゲットホスト",
+        "client_local_host_help": "ローカルサーバーのホスト名。通常は 'localhost'。",
+        "client_req_subdomain": "希望するサブドメイン（オプション）",
+        "client_req_subdomain_help": "公開URLのカスタム名です（アカウント権限に依存します）。",
+        "client_preserve_host": "着信Hostヘッダーを保持する",
+        "client_preserve_host_help": "公開URLのHostヘッダーをローカルサーバーに転送します。",
+        "client_insecure_ssl": "安全でないローカルSSLを許可する",
+        "client_insecure_ssl_help": "厳密な証明書チェックをバイパスします。localhostに必要です。",
+        "client_save_config": "設定を保存",
+        "client_config_saved": "設定が正常に保存されました！"
+    }
+};
+
+let currentLang = localStorage.getItem('lfr_client_lang') || navigator.language.slice(0, 2) || 'en';
+if (!clientTranslations[currentLang]) currentLang = 'en';
+
+function t(key) {
+    if (clientTranslations[currentLang] && clientTranslations[currentLang][key]) {
+        return clientTranslations[currentLang][key];
+    }
+    if (clientTranslations['en'] && clientTranslations['en'][key]) {
+        return clientTranslations['en'][key];
+    }
+    return key;
+}
+
+function setLanguage(lang) {
+    if (clientTranslations[lang]) {
+        currentLang = lang;
+        localStorage.setItem('lfr_client_lang', lang);
+        
+        // Update static elements
+        document.querySelectorAll('[data-i18n]').forEach(el => {
+            const key = el.getAttribute('data-i18n');
+            if (el.tagName === 'INPUT' && (el.type === 'text' || el.type === 'password' || el.type === 'number')) {
+                el.placeholder = t(key);
+            } else {
+                // If it has children (like the help-icon span), preserve them
+                const helpIcon = el.querySelector('.help-icon');
+                if (helpIcon) {
+                    const textNode = Array.from(el.childNodes).find(n => n.nodeType === Node.TEXT_NODE);
+                    if (textNode) textNode.textContent = t(key) + " ";
+                    
+                    // Update the title attribute of the help icon
+                    const titleKey = el.getAttribute('data-i18n-help');
+                    if (titleKey) helpIcon.setAttribute('title', t(titleKey));
+                } else {
+                    el.innerText = t(key);
+                }
+            }
+        });
+
+        // Re-render empty state or dynamic text
+        const emptyState = document.querySelector('.empty-state');
+        if (emptyState) emptyState.innerText = t('client_select_req');
+
+        // Update language selector dropdown
+        const selector = document.getElementById('lang-selector');
+        if (selector && selector.value !== lang) {
+            selector.value = lang;
+        }
+    }
+}
+
+        let requests = [];
+        let selectedId = null;
+        let activeView = 'traffic';
+        let languageSynced = false;
+        let themeSynced = false;
+        let serverThemePref = 'system';
+
+        function applyTheme(theme) {
+            let mode = theme || 'system';
+            if (mode === 'system') {
+                if (window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches) {
+                    mode = 'dark';
+                } else {
+                    mode = 'light';
+                }
+            } else if (mode === 'time') {
+                const hour = new Date().getHours();
+                if (hour >= 8 && hour < 20) {
+                    mode = 'light';
+                } else {
+                    mode = 'dark';
+                }
+            }
+            if (mode === 'light') {
+                document.documentElement.setAttribute('data-theme', 'light');
+            } else {
+                document.documentElement.removeAttribute('data-theme');
+            }
+        }
+
+        if (window.matchMedia) {
+            window.matchMedia('(prefers-color-scheme: dark)').addEventListener('change', e => {
+                const currentTheme = localStorage.getItem('inspector_theme') || serverThemePref || 'system';
+                if (currentTheme === 'system') applyTheme('system');
+            });
+        }
+
+        async function fetchState() {
+            try {
+                const res = await fetch('/api/state');
+                const state = await res.json();
+                
+                if (!languageSynced && state.language_preference && clientTranslations[state.language_preference]) {
+                    languageSynced = true;
+                    if (!localStorage.getItem('lfr_client_lang')) {
+                        setLanguage(state.language_preference);
+                    }
+                }
+
+                if (!themeSynced && state.theme_preference) {
+                    themeSynced = true;
+                    serverThemePref = state.theme_preference;
+                    if (!localStorage.getItem('inspector_theme')) {
+                        applyTheme(serverThemePref);
+                    } else {
+                        applyTheme(localStorage.getItem('inspector_theme'));
+                    }
+                }
+
+                document.getElementById('maint-toggle').checked = state.maintenance_mode;
+                
+                const pill = document.getElementById('preserve-host-pill');
+                if (pill) {
+                    if (state.preserve_host) {
+                        pill.style.display = 'inline-block';
+                        pill.style.background = 'rgba(16, 185, 129, 0.2)';
+                        pill.style.color = '#10b981';
+                        pill.style.border = '1px solid rgba(16, 185, 129, 0.4)';
+                        pill.setAttribute('data-i18n', 'client_host_preserved');
+                        pill.innerText = clientTranslations[currentLang] ? (clientTranslations[currentLang]['client_host_preserved'] || 'Host Preserved') : 'Host Preserved';
+                    } else {
+                        pill.style.display = 'inline-block';
+                        pill.style.background = 'rgba(245, 158, 11, 0.2)';
+                        pill.style.color = '#f59e0b';
+                        pill.style.border = '1px solid rgba(245, 158, 11, 0.4)';
+                        pill.setAttribute('data-i18n', 'client_host_rewritten');
+                        pill.innerText = clientTranslations[currentLang] ? (clientTranslations[currentLang]['client_host_rewritten'] || 'Host Rewritten') : 'Host Rewritten';
+                    }
+                }
+                
+                const passcodeEl = document.getElementById('ac-passcode');
+                const whitelistEl = document.getElementById('ac-whitelist');
+                const modeEl = document.getElementById('ac-mode');
+
+                if (document.activeElement !== passcodeEl) {
+                    passcodeEl.value = state.passcode || '';
+                }
+                if (document.activeElement !== whitelistEl) {
+                    whitelistEl.value = state.whitelist_ips || '';
+                }
+                if (document.activeElement !== modeEl) {
+                    modeEl.value = state.access_mode || 'or';
+                }
+
+                // Update requests if changed
+                if (JSON.stringify(requests.map(r => r.id)) !== JSON.stringify(state.history.map(r => r.id))) {
+                    requests = state.history || [];
+                    renderList();
+                    if(selectedId && activeView !== 'settings') renderDetails(requests.find(r => r.id === selectedId));
+                }
+
+                // Update public URLs
+                if (state.public_urls && state.public_urls.length > 0) {
+                    const urlsEl = document.getElementById('public-urls-list');
+                    let urlsHtml = '';
+                    state.public_urls.forEach(url => {
+                        urlsHtml += `<a href="${url}" target="_blank" style="font-size: 11px; color: var(--primary); text-decoration: none; word-break: break-all; background: rgba(0,0,0,0.2); padding: 6px; border-radius: 4px; border: 1px solid var(--border); display: block;">${url}</a>`;
+                    });
+                    if (urlsEl.innerHTML !== urlsHtml) {
+                        urlsEl.innerHTML = urlsHtml;
+                    }
+                }
+            } catch(e) { console.error("Error fetching state", e); }
+        }
+
+        async function toggleMaintenance() {
+            const isChecked = document.getElementById('maint-toggle').checked;
+            await fetch('/api/maintenance', {
+                method: 'POST',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify({enabled: isChecked})
+            });
+        }
+
+        async function saveAccessControl() {
+            const btn = document.getElementById('ac-save-btn');
+            if (btn) {
+                btn.disabled = true;
+                btn.innerText = 'Saving...';
+            }
+            try {
+                const passcode = document.getElementById('ac-passcode').value;
+                const whitelist = document.getElementById('ac-whitelist').value;
+                const mode = document.getElementById('ac-mode').value;
+                
+                const res = await fetch('/api/access-control', {
+                    method: 'POST',
+                    headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify({
+                        passcode: passcode,
+                        whitelist_ips: whitelist,
+                        access_mode: mode
+                    })
+                });
+                
+                if (res.ok) {
+                    if (btn) {
+                        btn.style.background = 'var(--success)';
+                        btn.innerText = 'Saved!';
+                        setTimeout(() => {
+                            btn.style.background = 'var(--primary)';
+                            btn.innerText = 'Save Access Control';
+                            btn.disabled = false;
+                        }, 1500);
+                    }
+                } else {
+                    const errText = await res.text();
+                    alert('Failed to update access control: ' + errText);
+                    if (btn) {
+                        btn.innerText = 'Save Access Control';
+                        btn.disabled = false;
+                    }
+                }
+            } catch(e) {
+                console.error("Error saving access control", e);
+                alert('Error: ' + e.message);
+                if (btn) {
+                    btn.innerText = 'Save Access Control';
+                    btn.disabled = false;
+                }
+            }
+        }
+
+        function renderList() {
+            const listEl = document.getElementById('req-list');
+            listEl.innerHTML = '';
+            requests.forEach(req => {
+                const statusClass = req.status >= 500 ? 'status-5xx' : 
+                                  req.status >= 400 ? 'status-4xx' : 
+                                  req.status >= 300 ? 'status-3xx' : 'status-2xx';
+                
+                const div = document.createElement('div');
+                div.className = `req-item ${req.id === selectedId ? 'active' : ''}`;
+                div.onclick = () => selectRequest(req.id);
+                div.innerHTML = `
+                    <div>
+                        <span class="req-method ${req.method}">${req.method}</span>
+                        <span class="req-path">${req.path}</span>
+                        <span class="req-status ${statusClass}">${req.status}</span>
+                    </div>
+                `;
+                listEl.appendChild(div);
+            });
+        }
+
+        function selectRequest(id) {
+            selectedId = id;
+            renderList();
+            const req = requests.find(r => r.id === id);
+            renderDetails(req);
+        }
+
+        function renderDetails(req) {
+            if(!req) return;
+            const main = document.getElementById('main-view');
+            
+            let reqHeadersHtml = '';
+            for(let k in req.req_headers) {
+                reqHeadersHtml += `<div class="header-row"><div class="header-key">${k}</div><div class="header-val">${req.req_headers[k]}</div></div>`;
+            }
+
+            let respHeadersHtml = '';
+            for(let k in req.resp_headers) {
+                respHeadersHtml += `<div class="header-row"><div class="header-key">${k}</div><div class="header-val">${req.resp_headers[k]}</div></div>`;
+            }
+
+            const statusClass = req.status >= 500 ? 'var(--danger)' : req.status >= 400 ? 'var(--warning)' : req.status >= 300 ? '#3b82f6' : 'var(--success)';
+
+            main.innerHTML = `
+                <div class="details-header" style="display: flex; justify-content: space-between; align-items: flex-start;">
+                    <div>
+                        <h2>
+                            <span style="color: ${statusClass}">${req.status}</span>
+                            <span>${req.method} ${req.path}</span>
+                        </h2>
+                        <div class="details-meta">
+                            <span>Target: localhost:${req.target_port}</span>
+                            <span>Time: ${new Date(req.time).toLocaleTimeString()}</span>
+                            <span>Duration: ${req.duration_ms}ms</span>
+                        </div>
+                    </div>
+                    <div>
+                        <button id="replay-btn" onclick="replayRequest('${req.id}')" style="background: var(--primary); color: white; border: none; padding: 8px 16px; border-radius: 6px; font-weight: 600; cursor: pointer; display: flex; align-items: center; gap: 8px; transition: opacity 0.2s;">
+                            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21.5 2v6h-6M21.34 15.57a10 10 0 1 1-.57-8.38l5.67-5.67"/></svg>
+                            ${t('client_replay_req')}
+                        </button>
+                    </div>
+                </div>
+                <div class="details-content">
+                    <div class="panel">
+                        <div class="panel-title">${t('client_req')}</div>
+                        <div class="panel-body">
+                            ${reqHeadersHtml}
+                            ${req.req_body ? `<div class="code-block">${escapeHtml(req.req_body)}</div>` : ''}
+                        </div>
+                    </div>
+                    <div class="panel">
+                        <div class="panel-title">${t('client_resp')}</div>
+                        <div class="panel-body">
+                            ${respHeadersHtml}
+                            ${req.resp_body ? `<div class="code-block">${escapeHtml(req.resp_body)}</div>` : ''}
+                        </div>
+                    </div>
+                </div>
+            `;
+        }
+
+        async function replayRequest(id) {
+            const btn = document.getElementById('replay-btn');
+            if (!btn) return;
+            
+            btn.disabled = true;
+            btn.style.opacity = '0.5';
+            btn.innerHTML = t('client_replaying');
+
+            try {
+                const res = await fetch('/api/replay', {
+                    method: 'POST',
+                    headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify({id: id})
+                });
+                const data = await res.json();
+                if (data.status === 'ok') {
+                    selectedId = data.new_id;
+                    await fetchState();
+                } else {
+                    alert('Replay failed: ' + (data.error || 'Unknown error'));
+                }
+            } catch(e) {
+                console.error("Error replaying request", e);
+                alert('Error replaying request: ' + e.message);
+            } finally {
+                btn.disabled = false;
+                btn.style.opacity = '1';
+                btn.innerHTML = `
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21.5 2v6h-6M21.34 15.57a10 10 0 1 1-.57-8.38l5.67-5.67"/></svg>
+                    ${t('client_replay_req')}
+                `;
+            }
+        }
+
+        function escapeHtml(unsafe) {
+            return unsafe
+                 .replace(/&/g, "&amp;")
+                 .replace(/</g, "&lt;")
+                 .replace(/>/g, "&gt;")
+                 .replace(/"/g, "&quot;")
+                 .replace(/'/g, "&#039;");
+        }
+
+        function switchView(view) {
+            activeView = view;
+            
+            const trafficTab = document.getElementById('tab-traffic');
+            const settingsTab = document.getElementById('tab-settings');
+            
+            const acPanel = document.querySelector('.access-control-panel');
+            const publicPanel = document.querySelector('.public-urls-panel');
+            const reqList = document.getElementById('req-list');
+            
+            if (view === 'settings') {
+                if (history.pushState) {
+                    history.pushState(null, null, '/settings');
+                }
+                trafficTab.classList.remove('active');
+                settingsTab.classList.add('active');
+                
+                acPanel.style.display = 'none';
+                publicPanel.style.display = 'none';
+                reqList.style.display = 'none';
+                
+                renderSettingsView();
+            } else {
+                if (history.pushState) {
+                    history.pushState(null, null, '/');
+                }
+                trafficTab.classList.add('active');
+                settingsTab.classList.remove('active');
+                
+                acPanel.style.display = 'flex';
+                publicPanel.style.display = 'flex';
+                reqList.style.display = 'block';
+                
+                const main = document.getElementById('main-view');
+                if (selectedId) {
+                    renderDetails(requests.find(r => r.id === selectedId));
+                } else {
+                    main.innerHTML = '<div class="empty-state" data-i18n="client_select_req">Select a request to view details</div>';
+                }
+            }
+        }
+
+        async function renderSettingsView() {
+            const main = document.getElementById('main-view');
+            main.innerHTML = `
+                <div class="details-header">
+                    <h2 data-i18n="client_config_title">Client Configuration</h2>
+                    <div class="details-meta" data-i18n="client_config_subtitle">Manage your local Liferay Tunnel settings</div>
+                </div>
+                <div class="details-content" style="display: flex; justify-content: center; align-items: flex-start; padding: 30px;">
+                    <div class="panel" style="max-width: 800px; flex: initial; width: 100%;">
+                        <div class="panel-title" data-i18n="client_settings">Settings</div>
+                        <div class="panel-body" style="padding: 20px;">
+                            <div id="settings-error" style="color: var(--danger); font-weight: 600; display: none; margin-bottom: 20px; font-size: 13px; padding: 12px; background: rgba(255, 60, 60, 0.1); border-radius: 6px; border: 1px solid rgba(255, 60, 60, 0.3);"></div>
+                            <div id="settings-success" style="color: var(--success); font-weight: 600; display: none; margin-bottom: 20px; font-size: 13px; padding: 12px; background: rgba(46, 204, 113, 0.1); border-radius: 6px; border: 1px solid rgba(46, 204, 113, 0.3);" data-i18n="client_config_saved">Configuration saved successfully! Note: Changes to Target Host, Port, and SSL settings require you to restart the lfr-tunnel client process to take effect.</div>
+                            
+                            <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 24px; margin-bottom: 24px;">
+                                <!-- Column 1: Connection & Authentication -->
+                                <div style="display: flex; flex-direction: column; gap: 15px;">
+                                    <h3 style="margin-top: 0; margin-bottom: 5px; font-size: 14px; color: var(--text-color); border-bottom: 1px solid var(--border); padding-bottom: 8px;">Connection</h3>
+                                    
+                                    <div style="display: flex; flex-direction: column; gap: 6px;">
+                                        <label style="font-weight: 500; color: var(--text-muted); font-size: 11px;" data-i18n="client_server_url" data-i18n-help="client_server_url_help">Server URL <span class="help-icon" title="The public address of the remote Liferay Tunnel Gateway. E.g. https://tunnel.lfr-demo.se">?</span></label>
+                                        <input type="text" id="cfg-server-url" style="background: rgba(0,0,0,0.3); border: 1px solid var(--border); color: white; padding: 10px; border-radius: 6px; font-size: 13px; outline: none; width: 100%;">
+                                    </div>
+                                    
+                                    <div style="display: flex; flex-direction: column; gap: 6px;">
+                                        <label style="font-weight: 500; color: var(--text-muted); font-size: 11px;" data-i18n="client_auth_token" data-i18n-help="client_auth_token_help">Authentication Token <span class="help-icon" title="Your personal token from the gateway to authenticate your tunnel. Leave blank to use a token file.">?</span></label>
+                                        <input type="password" id="cfg-auth-token" placeholder="Enter token (masked if set)" data-i18n="client_auth_placeholder" style="background: rgba(0,0,0,0.3); border: 1px solid var(--border); color: white; padding: 10px; border-radius: 6px; font-size: 13px; outline: none; width: 100%;">
+                                    </div>
+                                    
+                                    <div style="display: flex; flex-direction: column; gap: 6px;">
+                                        <label style="font-weight: 500; color: var(--text-muted); font-size: 11px;" data-i18n="client_req_subdomain" data-i18n-help="client_req_subdomain_help">Requested Subdomain (Optional) <span class="help-icon" title="A custom name for your public URL (subject to permissions).">?</span></label>
+                                        <input type="text" id="cfg-subdomain" placeholder="e.g. peter" style="background: rgba(0,0,0,0.3); border: 1px solid var(--border); color: white; padding: 10px; border-radius: 6px; font-size: 13px; outline: none; width: 100%;">
+                                    </div>
+
+                                    <div style="display: flex; flex-direction: column; gap: 6px; margin-top: 5px;">
+                                        <label style="font-weight: 500; color: var(--text-muted); font-size: 11px;">UI Theme Override <span class="help-icon" title="Overrides the Theme Preference set on your Server Account settings.">?</span></label>
+                                        <select id="cfg-theme" style="background: rgba(0,0,0,0.3); border: 1px solid var(--border); color: white; padding: 10px; border-radius: 6px; font-size: 13px; outline: none; width: 100%;" onchange="const v = this.value; if(v){localStorage.setItem('inspector_theme', v); applyTheme(v);}else{localStorage.removeItem('inspector_theme'); applyTheme(serverThemePref);}">
+                                            <option value="">Server Default</option>
+                                            <option value="system">Follow System</option>
+                                            <option value="light">Light Mode</option>
+                                            <option value="dark">Dark Mode</option>
+                                            <option value="time">Time of Day (8am-8pm Light)</option>
+                                        </select>
+                                    </div>
+                                </div>
+                                
+                                <!-- Column 2: Local Target Configuration -->
+                                <div style="display: flex; flex-direction: column; gap: 15px;">
+                                    <h3 style="margin-top: 0; margin-bottom: 5px; font-size: 14px; color: var(--text-color); border-bottom: 1px solid var(--border); padding-bottom: 8px;">Local Target</h3>
+                                    
+                                    <div style="display: flex; flex-direction: column; gap: 6px;">
+                                        <label style="font-weight: 500; color: var(--text-muted); font-size: 11px;" data-i18n="client_local_host" data-i18n-help="client_local_host_help">Local Target Host <span class="help-icon" title="The hostname of your local dev server. Usually 'localhost' or 'host.docker.internal' if proxying into a container.">?</span></label>
+                                        <input type="text" id="cfg-target-host" placeholder="localhost" style="background: rgba(0,0,0,0.3); border: 1px solid var(--border); color: white; padding: 10px; border-radius: 6px; font-size: 13px; outline: none; width: 100%;">
+                                    </div>
+
+                                    <div style="display: flex; flex-direction: column; gap: 6px;">
+                                        <label style="font-weight: 500; color: var(--text-muted); font-size: 11px;" data-i18n="client_local_port" data-i18n-help="client_local_port_help">Local Target Port <span class="help-icon" title="The port of your local dev server running on your machine (e.g. 8080 for Liferay).">?</span></label>
+                                        <input type="number" id="cfg-dest-port" style="background: rgba(0,0,0,0.3); border: 1px solid var(--border); color: white; padding: 10px; border-radius: 6px; font-size: 13px; outline: none; width: 100%;">
+                                    </div>
+
+                                    <div style="display: flex; flex-direction: column; gap: 10px; margin-top: 5px; padding: 10px; background: rgba(255,255,255,0.02); border-radius: 6px; border: 1px solid var(--border);">
+                                        <div style="display: flex; align-items: center; gap: 10px;">
+                                            <input type="checkbox" id="cfg-preserve-host" style="width: 16px; height: 16px; cursor: pointer;">
+                                            <label for="cfg-preserve-host" style="font-weight: 500; color: var(--text-muted); cursor: pointer; font-size: 13px;" data-i18n="client_preserve_host" data-i18n-help="client_preserve_host_help">Preserve incoming Host header <span class="help-icon" title="If checked, forwards the public URL Host header to your local server instead of rewriting it to the Target Host. Useful for Liferay Virtual Instances.">?</span></label>
+                                        </div>
+                                        <div style="display: flex; align-items: center; gap: 10px;">
+                                            <input type="checkbox" id="cfg-insecure-skip-verify" style="width: 16px; height: 16px; cursor: pointer;">
+                                            <label for="cfg-insecure-skip-verify" style="font-weight: 500; color: var(--text-muted); cursor: pointer; font-size: 13px;" data-i18n="client_insecure_ssl" data-i18n-help="client_insecure_ssl_help">Allow insecure local SSL (Skip TLS Verification) <span class="help-icon" title="If checking against an HTTPS port (e.g. 443), this bypasses strict certificate checks. Required for most self-signed localhost certificates.">?</span></label>
+                                        </div>
+                                    </div>
+
+                                    <div style="display: flex; flex-direction: column; gap: 6px; margin-top: 5px;">
+                                        <label style="font-weight: 500; color: var(--text-muted); font-size: 11px;">Custom Maintenance Page <span class="help-icon" title="Optional path to a custom HTML file to show when maintenance mode is enabled.">?</span></label>
+                                        <input type="text" id="cfg-maintenance-path" placeholder="/path/to/custom-maintenance.html" style="background: rgba(0,0,0,0.3); border: 1px solid var(--border); color: white; padding: 10px; border-radius: 6px; font-size: 13px; outline: none; width: 100%;">
+                                    </div>
+                                </div>
+                            </div>
+
+                            <div style="border-top: 1px solid var(--border); padding-top: 20px; text-align: right;">
+                                <button onclick="saveSettings()" style="background: var(--primary); color: white; border: none; padding: 12px 24px; border-radius: 6px; font-size: 13px; font-weight: 600; cursor: pointer; transition: background 0.2s;" data-i18n="client_save_config">Save Configuration</button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            `;
+            
+            try {
+                const res = await fetch('/api/config');
+                const cfg = await res.json();
+                document.getElementById('cfg-server-url').value = cfg.server_url || '';
+                document.getElementById('cfg-auth-token').value = cfg.auth_token || '';
+                document.getElementById('cfg-dest-port').value = cfg.dest_port || 8080;
+                document.getElementById('cfg-target-host').value = cfg.target_host || 'localhost';
+                document.getElementById('cfg-subdomain').value = cfg.subdomain || '';
+                document.getElementById('cfg-preserve-host').checked = !!cfg.preserve_host;
+                document.getElementById('cfg-insecure-skip-verify').checked = !!cfg.insecure_skip_verify;
+                document.getElementById('cfg-maintenance-path').value = cfg.maintenance_path || '';
+                document.getElementById('cfg-theme').value = localStorage.getItem('inspector_theme') || '';
+                
+                setLanguage(currentLang);
+            } catch(e) {
+                console.error("Error loading config", e);
+                document.getElementById('settings-error').innerText = 'Failed to load configuration: ' + e.message;
+                document.getElementById('settings-error').style.display = 'block';
+            }
+        }
+
+        async function saveSettings() {
+            const errEl = document.getElementById('settings-error');
+            const succEl = document.getElementById('settings-success');
+            
+            errEl.style.display = 'none';
+            succEl.style.display = 'none';
+            
+            try {
+                const serverUrl = document.getElementById('cfg-server-url').value;
+                const authToken = document.getElementById('cfg-auth-token').value;
+                const destPort = parseInt(document.getElementById('cfg-dest-port').value) || 8080;
+                const targetHost = document.getElementById('cfg-target-host').value;
+                const subdomain = document.getElementById('cfg-subdomain').value;
+                const preserveHost = document.getElementById('cfg-preserve-host').checked;
+                const insecureSkipVerify = document.getElementById('cfg-insecure-skip-verify').checked;
+                const maintenancePath = document.getElementById('cfg-maintenance-path').value;
+                
+                if (!serverUrl.startsWith('http://') && !serverUrl.startsWith('https://')) {
+                    throw new Error('Server URL must start with http:// or https://');
+                }
+                if (destPort < 1 || destPort > 65535) {
+                    throw new Error('Destination Port must be between 1 and 65535');
+                }
+                if (!targetHost.trim()) {
+                    throw new Error('Target Host cannot be empty');
+                }
+                if (subdomain && !/^[a-zA-Z0-9\-]+$/.test(subdomain)) {
+                    throw new Error('Subdomain can only contain letters, numbers, and hyphens');
+                }
+                
+                const res = await fetch('/api/config', {
+                    method: 'POST',
+                    headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify({
+                        server_url: serverUrl,
+                        auth_token: authToken,
+                        target_host: targetHost,
+                        dest_port: destPort,
+                        subdomain: subdomain,
+                        preserve_host: preserveHost,
+                        insecure_skip_verify: insecureSkipVerify,
+                        passcode: "",
+                        rate_limit: 0,
+                        maintenance_path: maintenancePath
+                    })
+                });
+                
+                if (res.ok) {
+                    succEl.style.display = 'block';
+                    setTimeout(() => { succEl.style.display = 'none'; }, 3000);
+                } else {
+                    const data = await res.json();
+                    errEl.innerText = data.error || 'Failed to save configuration';
+                    errEl.style.display = 'block';
+                }
+            } catch(e) {
+                console.error("Error saving config", e);
+                errEl.innerText = 'Error: ' + e.message;
+                errEl.style.display = 'block';
+            }
+        }
+
+        async function clearTraffic() {
+            try {
+                await fetch('/api/state', { method: 'DELETE' });
+                requests = [];
+                renderList();
+                const main = document.getElementById('main-view');
+                if (main) {
+                    main.innerHTML = '<div class="empty-state" data-i18n="client_select_req">Select a request to view details</div>';
+                }
+            } catch(e) {
+                console.error("Failed to clear traffic", e);
+            }
+        }
+
+        function initRouter() {
+            if (window.location.pathname === '/settings') {
+                switchView('settings');
+            } else {
+                switchView('traffic');
+            }
+        }
+
+        // Initialize Router
+        initRouter();
+
+        // Poll every 1.5 seconds
+        setInterval(fetchState, 1500);
+        fetchState();
+    </script>
+</body>
+</html>

@@ -107,22 +107,31 @@ VERSION="${VERSION:-$(grep -oE 'Version = "[^"]+"' pkg/config/version.go | cut -
 echo "Building Linux binary (version: $VERSION) with path trimming..."
 GOOS=linux GOARCH=amd64 go build -ldflags="-s -w -X lfr-tunnel/pkg/config.Version=$VERSION" -trimpath -o bin/lfr-tunneld-linux ./cmd/lfr-tunneld
 
-if [ -n "$WARN_SECS" ]; then
-  if ! [[ "$WARN_SECS" =~ ^[0-9]+$ ]]; then
-    echo "Error: warning time must be a positive integer"
-    exit 1
-  fi
-
-  echo "Broadcasting maintenance warning to users via VPS localhost API..."
-  ssh $SSH_KEY $VPS_USER@$VPS_IP "curl -s -X POST -H 'Content-Type: application/json' -d '{\"message\":\"Gateway is restarting for updates. Active sessions will be temporarily suspended.\", \"countdown_seconds\": $WARN_SECS, \"duration_minutes\": 5}' http://127.0.0.1:8080/api/local/broadcast"
-
-  echo "Waiting $WARN_SECS seconds before starting deploy..."
-  for ((i=WARN_SECS; i>0; i--)); do
-    printf "\rTime remaining: %d seconds... " "$i"
-    sleep 1
-  done
-  echo ""
+# Default to 30 seconds if not provided or empty
+if [ -z "$WARN_SECS" ]; then
+  WARN_SECS=30
 fi
+
+if ! [[ "$WARN_SECS" =~ ^[0-9]+$ ]]; then
+  echo "Error: warning time must be a positive integer"
+  exit 1
+fi
+
+# Enforce a minimum of 30 seconds
+if [ "$WARN_SECS" -lt 30 ]; then
+  echo "Warning: Enforcing minimum deployment delay of 30 seconds."
+  WARN_SECS=30
+fi
+
+echo "Broadcasting maintenance warning to users via VPS localhost API..."
+ssh $SSH_KEY $VPS_USER@$VPS_IP "curl -s -X POST -H 'Content-Type: application/json' -d '{\"message\":\"Gateway is restarting for updates. Active sessions will be temporarily suspended.\", \"countdown_seconds\": $WARN_SECS, \"duration_minutes\": 5}' http://127.0.0.1:8080/api/local/broadcast" || true
+
+echo "Waiting $WARN_SECS seconds before starting deploy..."
+for ((i=WARN_SECS; i>0; i--)); do
+  printf "\rTime remaining: %d seconds... " "$i"
+  sleep 1
+done
+echo ""
 
 echo "Uploading binary to VPS..."
 scp $SSH_KEY bin/lfr-tunneld-linux $VPS_USER@$VPS_IP:/home/$VPS_USER/lfr-tunneld
@@ -187,7 +196,19 @@ ssh $SSH_KEY $VPS_USER@$VPS_IP << REMOTE_SSH
         sudo chown lfr-tunnel:lfr-tunnel /etc/lfr-tunneld/server-config.yaml
     fi
     
+    # Enable maintenance mode in Nginx so users see the offline screen instead of 502 Bad Gateway
+    if [ -x /usr/local/bin/enable-maintenance.sh ]; then
+        sudo /usr/local/bin/enable-maintenance.sh -a "System Upgrade" -r "Deploying new Gateway version" -d "2m" || true
+    fi
+    
     sudo systemctl restart lfr-tunneld
+    
+    # Disable maintenance mode once the service is back up
+    if [ -x /usr/local/bin/disable-maintenance.sh ]; then
+        # Small sleep to ensure lfr-tunneld is fully listening
+        sleep 2
+        sudo /usr/local/bin/disable-maintenance.sh || true
+    fi
 REMOTE_SSH
 
 echo "Deployment complete!"

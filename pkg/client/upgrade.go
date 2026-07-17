@@ -70,6 +70,7 @@ func SelfUpgrade(currentVersion string, serverURL string) error {
 	var latest string
 	var expectedAsset string
 	var useGateway bool
+	var configuredInstallDir string
 
 	client := &http.Client{Timeout: 15 * time.Second}
 
@@ -96,6 +97,7 @@ func SelfUpgrade(currentVersion string, serverURL string) error {
 				platformKey := fmt.Sprintf("%s_%s", osKey, runtime.GOARCH)
 
 				if platInfo, ok := svrVer.ClientPlatforms[platformKey]; ok {
+					configuredInstallDir = platInfo.InstallDir
 					// Check recommendations
 					rec := strings.ToLower(platInfo.Recommended)
 					if rec == "brew" {
@@ -345,27 +347,70 @@ func SelfUpgrade(currentVersion string, serverURL string) error {
 	// Pre-upgrade: stop all active processes and services running the binary to release file handles and prevent EDR quarantine
 	plistToReload, restartSystemd := stopActiveProcessesAndServices()
 
-	// Perform replacement swap
-	var swapErr error
-	if runtime.GOOS == "windows" {
-		oldPath := execPath + ".old"
-		_ = os.Remove(oldPath) // Remove any previous leftovers
-		if err := os.Rename(execPath, oldPath); err != nil {
-			swapErr = fmt.Errorf("failed to rename running binary: %v (please make sure you have permissions)", err)
-		} else if err := replaceBinary(tempPath, execPath); err != nil {
-			// Try to rollback rename
-			_ = os.Rename(oldPath, execPath)
-			swapErr = fmt.Errorf("failed to replace downloaded binary: %v", err)
-		} else {
-			fmt.Println("[Update] Upgrade successful! You are now running the latest version.")
-			fmt.Printf("[Update] Note: You can delete the backup file: %s\n", oldPath)
+	migrated := false
+	if configuredInstallDir != "" {
+		expectedTarget := filepath.Join(configuredInstallDir, "lfr-tunnel")
+		if runtime.GOOS == "windows" {
+			expectedTarget += ".exe"
 		}
-	} else {
-		// On Unix we can replace directly
-		if err := replaceBinary(tempPath, execPath); err != nil {
-			swapErr = fmt.Errorf("failed to replace running binary: %v (if permission is denied, try running as sudo)", err)
+
+		if execPath != expectedTarget {
+			fmt.Printf("[Update] Binary is currently running from %s, but server policy requires %s.\n", execPath, expectedTarget)
+			fmt.Println("[Update] Migrating binary to the new directory...")
+
+			// Ensure target directory exists
+			if err := os.MkdirAll(configuredInstallDir, 0755); err != nil {
+				return fmt.Errorf("failed to create target directory %s: %v (try running with sudo/Administrator)", configuredInstallDir, err)
+			}
+
+			// Move temp binary to new location
+			if err := replaceBinary(tempPath, expectedTarget); err != nil {
+				return fmt.Errorf("failed to move binary to %s: %v (try running with sudo/Administrator)", expectedTarget, err)
+			}
+
+			fmt.Println("[Update] Binary migrated successfully. Cleaning up old binary...")
+			_ = os.Remove(execPath)
+			execPath = expectedTarget // Update execPath for restartActiveProcessesAndServices
+			migrated = true
+
+			// We need to re-register services pointing to the new path
+			fmt.Println("[Update] Re-registering background services to point to the new location...")
+			_ = exec.Command(execPath, "install-service").Run()
+			if runtime.GOOS == "darwin" {
+				_ = exec.Command(execPath, "install-gui-service").Run()
+				// The install commands above generate new plists, so we must reload those instead of the old ones
+				home, _ := os.UserHomeDir()
+				plistToReload = []string{
+					filepath.Join(home, "Library", "LaunchAgents", "com.liferay.tunnel.plist"),
+					filepath.Join(home, "Library", "LaunchAgents", "com.liferay.tunnel.gui.plist"),
+				}
+			}
+		}
+	}
+
+	var swapErr error
+	if !migrated {
+		// Perform replacement swap
+		if runtime.GOOS == "windows" {
+			oldPath := execPath + ".old"
+			_ = os.Remove(oldPath) // Remove any previous leftovers
+			if err := os.Rename(execPath, oldPath); err != nil {
+				swapErr = fmt.Errorf("failed to rename running binary: %v (please make sure you have permissions)", err)
+			} else if err := replaceBinary(tempPath, execPath); err != nil {
+				// Try to rollback rename
+				_ = os.Rename(oldPath, execPath)
+				swapErr = fmt.Errorf("failed to replace downloaded binary: %v", err)
+			} else {
+				fmt.Println("[Update] Upgrade successful! You are now running the latest version.")
+				fmt.Printf("[Update] Note: You can delete the backup file: %s\n", oldPath)
+			}
 		} else {
-			fmt.Println("[Update] Upgrade successful! You are now running the latest version.")
+			// On Unix we can replace directly
+			if err := replaceBinary(tempPath, execPath); err != nil {
+				swapErr = fmt.Errorf("failed to replace running binary: %v (if permission is denied, try running as sudo)", err)
+			} else {
+				fmt.Println("[Update] Upgrade successful! You are now running the latest version.")
+			}
 		}
 	}
 
@@ -528,6 +573,7 @@ type ServerPlatformInfo struct {
 	CmdFallback      string `json:"cmd_fallback"`
 	CmdFallbackLabel string `json:"cmd_fallback_label"`
 	Recommended      string `json:"recommended"`
+	InstallDir       string `json:"install_dir"`
 }
 
 type ServerVersionInfo struct {

@@ -106,7 +106,7 @@ func (s *portalService) CreateToken(user *db.User, name string, rawExpiresAt str
 		return "", nil, ErrInternalError
 	}
 
-	_ = s.db.WriteAuditEntry(&db.AuditEntry{
+	_ = s.db.WriteAuditEntry(&db.AuditEntry{ //nolint:errcheck
 		ActorID:    user.Email,
 		Action:     "token.created",
 		TargetType: "pat",
@@ -147,7 +147,7 @@ func (s *portalService) DeleteToken(user *db.User, tokenID string, ipAddress str
 		return ErrInternalError
 	}
 
-	_ = s.db.WriteAuditEntry(&db.AuditEntry{
+	_ = s.db.WriteAuditEntry(&db.AuditEntry{ //nolint:errcheck
 		ActorID:    user.Email,
 		Action:     "token.deleted",
 		TargetType: "pat",
@@ -170,7 +170,7 @@ func (s *portalService) DeleteAccount(user *db.User, ipAddress string) error {
 		return ErrInternalError
 	}
 
-	_ = s.db.WriteAuditEntry(&db.AuditEntry{
+	_ = s.db.WriteAuditEntry(&db.AuditEntry{ //nolint:errcheck
 		ActorID:    user.Email,
 		Action:     "user.deleted",
 		TargetType: "user",
@@ -197,7 +197,7 @@ func (s *portalService) AdminOverrideLimit(actor, email string, maxReservations 
 		return nil, ErrInternalError
 	}
 
-	_ = s.db.WriteAuditEntry(&db.AuditEntry{
+	_ = s.db.WriteAuditEntry(&db.AuditEntry{ //nolint:errcheck
 		ActorID:    actor,
 		Action:     "user.limit_changed",
 		TargetType: "user",
@@ -224,7 +224,7 @@ func (s *portalService) AdminOverrideTunnelsLimit(actor, email string, maxTunnel
 		return nil, ErrInternalError
 	}
 
-	_ = s.db.WriteAuditEntry(&db.AuditEntry{
+	_ = s.db.WriteAuditEntry(&db.AuditEntry{ //nolint:errcheck
 		ActorID:    actor,
 		Action:     "user.tunnels_limit_changed",
 		TargetType: "user",

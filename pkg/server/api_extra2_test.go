@@ -17,7 +17,7 @@ func TestServer_HandleUpdateMe(t *testing.T) {
 	defer srv.Stop()
 
 	dev := &db.User{ID: "dev@example.com", Email: "dev@example.com", Role: "developer", Status: "approved", FirstName: "Old"}
-	_ = srv.db.CreateUser(dev)
+	_ = srv.db.CreateUser(dev) //nolint:errcheck
 
 	sessionToken := generateToken(16)
 	srv.portalMap.Store("admin_session_"+sessionToken, PortalSessionData{
@@ -41,7 +41,8 @@ func TestServer_HandleUpdateMe(t *testing.T) {
 		t.Errorf("expected 200 OK, got %d", w.Code)
 	}
 
-	updated, _ := srv.db.GetUser(dev.ID)
+	updated, _err := srv.db.GetUser(dev.ID)
+	_ = _err //nolint:errcheck
 	if updated.FirstName != "Updated Dev Name" {
 		t.Errorf("expected first name to be updated, got %s", updated.FirstName)
 	}
@@ -52,7 +53,7 @@ func TestServer_HandleSelfDeleteAccount(t *testing.T) {
 	defer srv.Stop()
 
 	dev := &db.User{ID: "dev@example.com", Email: "dev@example.com", Role: "developer", Status: "approved"}
-	_ = srv.db.CreateUser(dev)
+	_ = srv.db.CreateUser(dev) //nolint:errcheck
 
 	sessionToken := generateToken(16)
 	srv.portalMap.Store("admin_session_"+sessionToken, PortalSessionData{
@@ -86,10 +87,10 @@ func TestServer_HandleAdminDeleteUser(t *testing.T) {
 	defer srv.Stop()
 
 	admin := &db.User{ID: "admin@example.com", Email: "admin@example.com", Role: "admin", Status: "approved"}
-	_ = srv.db.CreateUser(admin)
+	_ = srv.db.CreateUser(admin) //nolint:errcheck
 
 	dev := &db.User{ID: "dev@example.com", Email: "dev@example.com", Role: "developer", Status: "approved"}
-	_ = srv.db.CreateUser(dev)
+	_ = srv.db.CreateUser(dev) //nolint:errcheck
 
 	sessionToken := generateToken(16)
 	srv.portalMap.Store("admin_session_"+sessionToken, PortalSessionData{
@@ -124,10 +125,10 @@ func TestServer_HandlePromoteReservation(t *testing.T) {
 	defer srv.Stop()
 
 	admin := &db.User{ID: "admin@example.com", Email: "admin@example.com", Role: "admin", Status: "approved"}
-	_ = srv.db.CreateUser(admin)
+	_ = srv.db.CreateUser(admin) //nolint:errcheck
 
 	expires := time.Now().Add(24 * time.Hour)
-	_ = srv.db.CreateSubdomainReservation(&db.SubdomainReservation{
+	_ = srv.db.CreateSubdomainReservation(&db.SubdomainReservation{ //nolint:errcheck
 		UserID:    admin.ID,
 		Subdomain: "test-promote",
 		Domain:    "example.com",

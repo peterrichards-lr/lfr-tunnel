@@ -92,7 +92,7 @@ func TestRegisterTunnel(t *testing.T) {
 
 		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(http.StatusOK)
-		_ = json.NewEncoder(w).Encode(RegisterResponse{
+		_ = json.NewEncoder(w).Encode(RegisterResponse{ //nolint:errcheck
 			Status:       "success",
 			SessionToken: "mock-session-token",
 			Remotes:      []string{"R:10001:localhost:8080"},
@@ -180,7 +180,7 @@ func TestRegisterTunnel_Error(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(http.StatusForbidden)
-		_ = json.NewEncoder(w).Encode(RegisterResponse{
+		_ = json.NewEncoder(w).Encode(RegisterResponse{ //nolint:errcheck
 			Status:    "error",
 			Error:     "Custom subdomains must be reserved in the portal prior to connecting",
 			PortalURL: "https://portal.lfr-demo.se/portal",

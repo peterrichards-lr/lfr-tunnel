@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"io"
 	"lfr-tunnel/pkg/config"
+	"log"
 	"log/slog"
 	"net"
 	"net/http"
@@ -37,13 +38,17 @@ func StartInspector(port int, engine *InterceptorEngine) (int, error) {
 			return
 		}
 		w.Header().Set("Content-Type", "text/html; charset=utf-8")
-		_, _ = w.Write(DashboardHTML)
+		if _, err := w.Write(DashboardHTML); err != nil {
+			log.Printf("[Warning] Failed to write response: %v", err)
+		}
 	})
 
 	mux.HandleFunc("/favicon.ico", func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "image/svg+xml")
 		w.Header().Set("Cache-Control", "public, max-age=86400")
-		_, _ = w.Write(FaviconSVG)
+		if _, err := w.Write(FaviconSVG); err != nil {
+			log.Printf("[Warning] Failed to write response: %v", err)
+		}
 	})
 
 	mux.HandleFunc("/api/state", func(w http.ResponseWriter, r *http.Request) {
@@ -73,7 +78,7 @@ func StartInspector(port int, engine *InterceptorEngine) (int, error) {
 		}
 
 		w.Header().Set("Content-Type", "application/json")
-		_ = json.NewEncoder(w).Encode(state)
+		_ = json.NewEncoder(w).Encode(state) //nolint:errcheck
 	})
 
 	mux.HandleFunc("/api/healthz", func(w http.ResponseWriter, r *http.Request) {
@@ -90,16 +95,20 @@ func StartInspector(port int, engine *InterceptorEngine) (int, error) {
 		conn, err := net.DialTimeout("tcp", fmt.Sprintf("%s:%d", targetHost, targetPort), 500*time.Millisecond)
 		if err == nil {
 			destResponsive = true
-			_ = conn.Close()
+			_ = conn.Close() //nolint:errcheck
 		}
 
 		w.Header().Set("Content-Type", "application/json")
 		if isWSConnected && isAuthValid && isLeased && destResponsive {
 			w.WriteHeader(http.StatusOK)
-			_, _ = w.Write([]byte(`{"status":"healthy"}`))
+			if _, err := w.Write([]byte(`{"status":"healthy"}`)); err != nil {
+				log.Printf("[Warning] Failed to write response: %v", err)
+			}
 		} else {
 			w.WriteHeader(http.StatusServiceUnavailable)
-			_, _ = w.Write([]byte(`{"status":"unhealthy"}`))
+			if _, err := w.Write([]byte(`{"status":"unhealthy"}`)); err != nil {
+				log.Printf("[Warning] Failed to write response: %v", err)
+			}
 		}
 	})
 
@@ -130,7 +139,7 @@ func StartInspector(port int, engine *InterceptorEngine) (int, error) {
 		conn, err := net.DialTimeout("tcp", fmt.Sprintf("%s:%d", engine.TargetHost, engine.DestPort), 500*time.Millisecond)
 		if err == nil {
 			destResponsive = true
-			_ = conn.Close()
+			_ = conn.Close() //nolint:errcheck
 		}
 
 		status := "healthy"
@@ -190,7 +199,7 @@ func StartInspector(port int, engine *InterceptorEngine) (int, error) {
 		}
 
 		w.Header().Set("Content-Type", "application/json")
-		_ = json.NewEncoder(w).Encode(info)
+		_ = json.NewEncoder(w).Encode(info) //nolint:errcheck
 	})
 
 	mux.HandleFunc("/api/logs", func(w http.ResponseWriter, r *http.Request) {
@@ -208,7 +217,9 @@ func StartInspector(port int, engine *InterceptorEngine) (int, error) {
 		}
 
 		w.Header().Set("Content-Type", "text/plain; charset=utf-8")
-		_, _ = w.Write(data)
+		if _, err := w.Write(data); err != nil {
+			log.Printf("[Warning] Failed to write response: %v", err)
+		}
 	})
 
 	mux.HandleFunc("/api/config", func(w http.ResponseWriter, r *http.Request) {
@@ -242,7 +253,7 @@ func StartInspector(port int, engine *InterceptorEngine) (int, error) {
 				"maintenance_path":     cfg.MaintenancePath,
 				"nav_placement":        cfg.NavPlacement,
 			}
-			_ = json.NewEncoder(w).Encode(resp)
+			_ = json.NewEncoder(w).Encode(resp) //nolint:errcheck
 			return
 		}
 
@@ -262,7 +273,9 @@ func StartInspector(port int, engine *InterceptorEngine) (int, error) {
 			}
 			if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 				w.WriteHeader(http.StatusBadRequest)
-				_, _ = w.Write([]byte(`{"error":"Invalid request JSON"}`))
+				if _, err := w.Write([]byte(`{"error":"Invalid request JSON"}`)); err != nil {
+					log.Printf("[Warning] Failed to write response: %v", err)
+				}
 				return
 			}
 
@@ -291,11 +304,13 @@ func StartInspector(port int, engine *InterceptorEngine) (int, error) {
 			err = config.SaveClientConfig("", cfg)
 			if err != nil {
 				w.WriteHeader(http.StatusInternalServerError)
-				_ = json.NewEncoder(w).Encode(map[string]string{"error": "Failed to save configuration: " + err.Error()})
+				_ = json.NewEncoder(w).Encode(map[string]string{"error": "Failed to save configuration: " + err.Error()}) //nolint:errcheck
 				return
 			}
 
-			_, _ = w.Write([]byte(`{"status":"saved"}`))
+			if _, err := w.Write([]byte(`{"status":"saved"}`)); err != nil {
+				log.Printf("[Warning] Failed to write response: %v", err)
+			}
 			return
 		}
 
@@ -376,7 +391,9 @@ func StartInspector(port int, engine *InterceptorEngine) (int, error) {
 		}
 
 		w.Header().Set("Content-Type", "application/json")
-		_, _ = w.Write([]byte(`{"status":"ok"}`))
+		if _, err := w.Write([]byte(`{"status":"ok"}`)); err != nil {
+			log.Printf("[Warning] Failed to write response: %v", err)
+		}
 	})
 
 	mux.HandleFunc("/api/maintenance", func(w http.ResponseWriter, r *http.Request) {
@@ -435,7 +452,7 @@ func StartInspector(port int, engine *InterceptorEngine) (int, error) {
 		if err != nil {
 			w.Header().Set("Content-Type", "application/json")
 			w.WriteHeader(http.StatusInternalServerError)
-			_ = json.NewEncoder(w).Encode(map[string]string{"error": err.Error()})
+			_ = json.NewEncoder(w).Encode(map[string]string{"error": err.Error()}) //nolint:errcheck
 			return
 		}
 
@@ -443,7 +460,7 @@ func StartInspector(port int, engine *InterceptorEngine) (int, error) {
 
 		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(http.StatusOK)
-		_ = json.NewEncoder(w).Encode(map[string]interface{}{
+		_ = json.NewEncoder(w).Encode(map[string]interface{}{ //nolint:errcheck
 			"status": "ok",
 			"new_id": newRec.ID,
 		})
@@ -571,7 +588,7 @@ func ReplayRequest(targetHost string, record *RequestRecord) (*RequestRecord, er
 	// Capture response body (up to 10KB)
 	var bodyBuf bytes.Buffer
 	limitReader := io.LimitReader(res.Body, 10240)
-	_, _ = io.Copy(&bodyBuf, limitReader)
+	_, _ = io.Copy(&bodyBuf, limitReader) //nolint:errcheck
 	rec.RespBody = bodyBuf.String()
 
 	return rec, nil

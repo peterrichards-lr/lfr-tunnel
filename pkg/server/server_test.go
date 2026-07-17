@@ -38,10 +38,10 @@ func TestServer_Register(t *testing.T) {
 		time.Sleep(50 * time.Millisecond)
 		srv.Stop()
 	}()
-	_ = srv.db.CreateUser(&db.User{ID: "peter.richards@liferay.com", Email: "peter.richards@liferay.com", Role: "owner", Status: "approved"})
-	_ = srv.db.CreateUser(&db.User{ID: "test@example.com", Email: "test@example.com", Role: "admin", Status: "approved", LanguagePreference: "ja"})
+	_ = srv.db.CreateUser(&db.User{ID: "peter.richards@liferay.com", Email: "peter.richards@liferay.com", Role: "owner", Status: "approved"})       //nolint:errcheck
+	_ = srv.db.CreateUser(&db.User{ID: "test@example.com", Email: "test@example.com", Role: "admin", Status: "approved", LanguagePreference: "ja"}) //nolint:errcheck
 	patHashBytes := sha256.Sum256([]byte("lfr_pat_mysecret"))
-	_ = srv.db.CreatePAT(&db.PersonalAccessToken{UserID: "test@example.com", TokenHash: hex.EncodeToString(patHashBytes[:]), TokenPrefix: "lfr_pat_myse"})
+	_ = srv.db.CreatePAT(&db.PersonalAccessToken{UserID: "test@example.com", TokenHash: hex.EncodeToString(patHashBytes[:]), TokenPrefix: "lfr_pat_myse"}) //nolint:errcheck
 
 	// 1. Unauthorized registration
 	badPayload, _ := json.Marshal(RegisterRequest{
@@ -108,10 +108,10 @@ func TestServer_ControlWelcomePage(t *testing.T) {
 		t.Fatalf("failed to create server: %v", err)
 	}
 	defer srv.Stop()
-	_ = srv.db.CreateUser(&db.User{ID: "peter.richards@liferay.com", Email: "peter.richards@liferay.com", Role: "owner", Status: "approved"})
-	_ = srv.db.CreateUser(&db.User{ID: "test@example.com", Email: "test@example.com", Role: "admin", Status: "approved"})
+	_ = srv.db.CreateUser(&db.User{ID: "peter.richards@liferay.com", Email: "peter.richards@liferay.com", Role: "owner", Status: "approved"}) //nolint:errcheck
+	_ = srv.db.CreateUser(&db.User{ID: "test@example.com", Email: "test@example.com", Role: "admin", Status: "approved"})                     //nolint:errcheck
 	patHashBytes := sha256.Sum256([]byte("lfr_pat_mysecret"))
-	_ = srv.db.CreatePAT(&db.PersonalAccessToken{UserID: "test@example.com", TokenHash: hex.EncodeToString(patHashBytes[:]), TokenPrefix: "lfr_pat_myse"})
+	_ = srv.db.CreatePAT(&db.PersonalAccessToken{UserID: "test@example.com", TokenHash: hex.EncodeToString(patHashBytes[:]), TokenPrefix: "lfr_pat_myse"}) //nolint:errcheck
 
 	req := httptest.NewRequest("GET", "http://example.com/", nil)
 	req.Host = "example.com"
@@ -143,10 +143,10 @@ func TestServer_Domains(t *testing.T) {
 		t.Fatalf("failed to create server: %v", err)
 	}
 	defer srv.Stop()
-	_ = srv.db.CreateUser(&db.User{ID: "peter.richards@liferay.com", Email: "peter.richards@liferay.com", Role: "owner", Status: "approved"})
-	_ = srv.db.CreateUser(&db.User{ID: "test@example.com", Email: "test@example.com", Role: "admin", Status: "approved"})
+	_ = srv.db.CreateUser(&db.User{ID: "peter.richards@liferay.com", Email: "peter.richards@liferay.com", Role: "owner", Status: "approved"}) //nolint:errcheck
+	_ = srv.db.CreateUser(&db.User{ID: "test@example.com", Email: "test@example.com", Role: "admin", Status: "approved"})                     //nolint:errcheck
 	patHashBytes := sha256.Sum256([]byte("lfr_pat_mysecret"))
-	_ = srv.db.CreatePAT(&db.PersonalAccessToken{UserID: "test@example.com", TokenHash: hex.EncodeToString(patHashBytes[:]), TokenPrefix: "lfr_pat_myse"})
+	_ = srv.db.CreatePAT(&db.PersonalAccessToken{UserID: "test@example.com", TokenHash: hex.EncodeToString(patHashBytes[:]), TokenPrefix: "lfr_pat_myse"}) //nolint:errcheck
 
 	req := httptest.NewRequest("GET", "http://example.se/api/domains", nil)
 	req.Host = "example.se"
@@ -185,10 +185,10 @@ func TestServer_CheckSubdomain(t *testing.T) {
 		time.Sleep(50 * time.Millisecond)
 		srv.Stop()
 	}()
-	_ = srv.db.CreateUser(&db.User{ID: "peter.richards@liferay.com", Email: "peter.richards@liferay.com", Role: "owner", Status: "approved"})
-	_ = srv.db.CreateUser(&db.User{ID: "test@example.com", Email: "test@example.com", Role: "admin", Status: "approved"})
+	_ = srv.db.CreateUser(&db.User{ID: "peter.richards@liferay.com", Email: "peter.richards@liferay.com", Role: "owner", Status: "approved"}) //nolint:errcheck
+	_ = srv.db.CreateUser(&db.User{ID: "test@example.com", Email: "test@example.com", Role: "admin", Status: "approved"})                     //nolint:errcheck
 	patHashBytes := sha256.Sum256([]byte("lfr_pat_mysecret"))
-	_ = srv.db.CreatePAT(&db.PersonalAccessToken{UserID: "test@example.com", TokenHash: hex.EncodeToString(patHashBytes[:]), TokenPrefix: "lfr_pat_myse"})
+	_ = srv.db.CreatePAT(&db.PersonalAccessToken{UserID: "test@example.com", TokenHash: hex.EncodeToString(patHashBytes[:]), TokenPrefix: "lfr_pat_myse"}) //nolint:errcheck
 
 	// 1. Missing token (Unauthorized)
 	req := httptest.NewRequest("GET", "http://example.com/api/check-subdomain?subdomain=alpha", nil)
@@ -278,14 +278,14 @@ func TestServer_CheckSubdomain(t *testing.T) {
 	}()
 
 	// Seed user and PAT for check-subdomain test
-	_ = srvDb.db.CreateUser(&db.User{
+	_ = srvDb.db.CreateUser(&db.User{ //nolint:errcheck
 		ID:     "peter.richards@liferay.com",
 		Email:  "peter.richards@liferay.com",
 		Role:   "admin",
 		Status: "approved",
 	})
 	patHashBytes = sha256.Sum256([]byte("lfr_pat_peter_token_abc"))
-	_ = srvDb.db.CreatePAT(&db.PersonalAccessToken{
+	_ = srvDb.db.CreatePAT(&db.PersonalAccessToken{ //nolint:errcheck
 		UserID:      "peter.richards@liferay.com",
 		TokenHash:   hex.EncodeToString(patHashBytes[:]),
 		TokenPrefix: "lfr_pat_pete",
@@ -528,10 +528,10 @@ func TestServer_DomainSeparation(t *testing.T) {
 		t.Fatalf("failed to create server: %v", err)
 	}
 	defer srv.Stop()
-	_ = srv.db.CreateUser(&db.User{ID: "peter.richards@liferay.com", Email: "peter.richards@liferay.com", Role: "owner", Status: "approved"})
-	_ = srv.db.CreateUser(&db.User{ID: "test@example.com", Email: "test@example.com", Role: "admin", Status: "approved"})
+	_ = srv.db.CreateUser(&db.User{ID: "peter.richards@liferay.com", Email: "peter.richards@liferay.com", Role: "owner", Status: "approved"}) //nolint:errcheck
+	_ = srv.db.CreateUser(&db.User{ID: "test@example.com", Email: "test@example.com", Role: "admin", Status: "approved"})                     //nolint:errcheck
 	patHashBytes := sha256.Sum256([]byte("lfr_pat_mysecret"))
-	_ = srv.db.CreatePAT(&db.PersonalAccessToken{UserID: "test@example.com", TokenHash: hex.EncodeToString(patHashBytes[:]), TokenPrefix: "lfr_pat_myse"})
+	_ = srv.db.CreatePAT(&db.PersonalAccessToken{UserID: "test@example.com", TokenHash: hex.EncodeToString(patHashBytes[:]), TokenPrefix: "lfr_pat_myse"}) //nolint:errcheck
 
 	// 1. Register with Host example.se
 	payload, _ := json.Marshal(RegisterRequest{
@@ -618,10 +618,10 @@ func TestAdminEndpoints(t *testing.T) {
 		t.Fatalf("failed to create server: %v", err)
 	}
 	defer srv.Stop()
-	_ = srv.db.CreateUser(&db.User{ID: "peter.richards@liferay.com", Email: "peter.richards@liferay.com", Role: "owner", Status: "approved"})
-	_ = srv.db.CreateUser(&db.User{ID: "test@example.com", Email: "test@example.com", Role: "admin", Status: "approved"})
+	_ = srv.db.CreateUser(&db.User{ID: "peter.richards@liferay.com", Email: "peter.richards@liferay.com", Role: "owner", Status: "approved"}) //nolint:errcheck
+	_ = srv.db.CreateUser(&db.User{ID: "test@example.com", Email: "test@example.com", Role: "admin", Status: "approved"})                     //nolint:errcheck
 	patHashBytes := sha256.Sum256([]byte("lfr_pat_mysecret"))
-	_ = srv.db.CreatePAT(&db.PersonalAccessToken{UserID: "test@example.com", TokenHash: hex.EncodeToString(patHashBytes[:]), TokenPrefix: "lfr_pat_myse"})
+	_ = srv.db.CreatePAT(&db.PersonalAccessToken{UserID: "test@example.com", TokenHash: hex.EncodeToString(patHashBytes[:]), TokenPrefix: "lfr_pat_myse"}) //nolint:errcheck
 
 	userAdmin := &db.User{
 		ID:     "admin@liferay.com",
@@ -629,11 +629,11 @@ func TestAdminEndpoints(t *testing.T) {
 		Role:   "admin",
 		Status: "approved",
 	}
-	_ = srv.db.CreateUser(userAdmin)
+	_ = srv.db.CreateUser(userAdmin) //nolint:errcheck
 
 	adminToken := "lfr_pat_admin_static_token"
 	adminHashBytes := sha256.Sum256([]byte(adminToken))
-	_ = srv.db.CreatePAT(&db.PersonalAccessToken{
+	_ = srv.db.CreatePAT(&db.PersonalAccessToken{ //nolint:errcheck
 		UserID:      "admin@liferay.com",
 		TokenHash:   hex.EncodeToString(adminHashBytes[:]),
 		TokenPrefix: "lfr_pat_admi",
@@ -650,7 +650,7 @@ func TestAdminEndpoints(t *testing.T) {
 		Role:   "user",
 		Status: "approved",
 	}
-	_ = srv.db.CreateUser(user)
+	_ = srv.db.CreateUser(user) //nolint:errcheck
 
 	pat := &db.PersonalAccessToken{
 		UserID:      "u1",
@@ -658,7 +658,7 @@ func TestAdminEndpoints(t *testing.T) {
 		TokenPrefix: "lfr_pat_user",
 		Name:        "test token",
 	}
-	_ = srv.db.CreatePAT(pat)
+	_ = srv.db.CreatePAT(pat) //nolint:errcheck
 
 	// 1. Test unauthorized access (No token)
 	req1 := httptest.NewRequest("GET", "http://tunnel.example.com/api/admin/users", nil)
@@ -695,7 +695,8 @@ func TestAdminEndpoints(t *testing.T) {
 	if rec4.Code != http.StatusOK {
 		t.Errorf("expected 200 for patch user, got %d", rec4.Code)
 	}
-	u, _ := srv.db.GetUserByEmail("testuser@liferay.com")
+	u, _err := srv.db.GetUserByEmail("testuser@liferay.com")
+	_ = _err //nolint:errcheck
 	if u.Role != "admin" {
 		t.Errorf("expected user role to be admin, got %s", u.Role)
 	}
@@ -711,7 +712,7 @@ func TestAdminEndpoints(t *testing.T) {
 		t.Errorf("expected 200 for audit log, got %d", rec5.Code)
 	}
 	var auditResp []db.AuditEntry
-	_ = json.NewDecoder(rec5.Body).Decode(&auditResp)
+	_ = json.NewDecoder(rec5.Body).Decode(&auditResp) //nolint:errcheck
 	if len(auditResp) == 0 {
 		t.Error("expected at least 1 audit entry for role change")
 	}
@@ -725,7 +726,8 @@ func TestAdminEndpoints(t *testing.T) {
 		t.Errorf("expected 200 for delete PAT, got %d", rec6.Code)
 	}
 
-	deletedPat, _ := srv.db.GetPATByHash(hex.EncodeToString(userHashBytes[:]))
+	deletedPat, _err := srv.db.GetPATByHash(hex.EncodeToString(userHashBytes[:]))
+	_ = _err //nolint:errcheck
 	if deletedPat.RevokedAt == nil {
 		t.Error("expected PAT to have a revoked_at timestamp")
 	}
@@ -746,10 +748,10 @@ func TestDefenseMiddleware(t *testing.T) {
 		t.Fatalf("failed to create server: %v", err)
 	}
 	defer srv.Stop()
-	_ = srv.db.CreateUser(&db.User{ID: "peter.richards@liferay.com", Email: "peter.richards@liferay.com", Role: "owner", Status: "approved"})
-	_ = srv.db.CreateUser(&db.User{ID: "test@example.com", Email: "test@example.com", Role: "admin", Status: "approved"})
+	_ = srv.db.CreateUser(&db.User{ID: "peter.richards@liferay.com", Email: "peter.richards@liferay.com", Role: "owner", Status: "approved"}) //nolint:errcheck
+	_ = srv.db.CreateUser(&db.User{ID: "test@example.com", Email: "test@example.com", Role: "admin", Status: "approved"})                     //nolint:errcheck
 	patHashBytes := sha256.Sum256([]byte("lfr_pat_mysecret"))
-	_ = srv.db.CreatePAT(&db.PersonalAccessToken{UserID: "test@example.com", TokenHash: hex.EncodeToString(patHashBytes[:]), TokenPrefix: "lfr_pat_myse"})
+	_ = srv.db.CreatePAT(&db.PersonalAccessToken{UserID: "test@example.com", TokenHash: hex.EncodeToString(patHashBytes[:]), TokenPrefix: "lfr_pat_myse"}) //nolint:errcheck
 
 	// 1. Test IP Blacklist
 	reqBlacklisted := httptest.NewRequest("GET", "http://tunnel.example.com/api/register", nil)
@@ -802,7 +804,7 @@ func TestServer_UnsubscribeAndMaintenance(t *testing.T) {
 	defer time.Sleep(50 * time.Millisecond) // prevent SQLite cleanup races
 
 	email := "dev-user@liferay.com"
-	_ = srv.db.CreateUser(&db.User{ID: email, Email: email, Role: "user", Status: "approved"})
+	_ = srv.db.CreateUser(&db.User{ID: email, Email: email, Role: "user", Status: "approved"}) //nolint:errcheck
 
 	// 1. Test stateless unsubscribe token generation and verification
 	token := srv.GenerateUnsubscribeToken(email)
@@ -884,10 +886,10 @@ func TestServer_GDPRDeleteAndAnonymization(t *testing.T) {
 	defer time.Sleep(50 * time.Millisecond) // prevent SQLite cleanup races
 
 	email := "gdpr-user@example.com"
-	_ = srv.db.CreateUser(&db.User{ID: email, Email: email, Role: "user", Status: "approved"})
+	_ = srv.db.CreateUser(&db.User{ID: email, Email: email, Role: "user", Status: "approved"}) //nolint:errcheck
 
 	// Create some audit entries for this user
-	_ = srv.db.WriteAuditEntry(&db.AuditEntry{
+	_ = srv.db.WriteAuditEntry(&db.AuditEntry{ //nolint:errcheck
 		ActorID:    email,
 		Action:     "tunnel.connected",
 		TargetType: "tunnel",
@@ -1558,7 +1560,8 @@ func TestServer_DatabaseBackupScheduler(t *testing.T) {
 	}
 
 	// 6. Basic size check: backup should be reasonably close to DB size
-	dbInfo, _ := os.Stat(srv.cfg.DBPath)
+	dbInfo, _err := os.Stat(srv.cfg.DBPath)
+	_ = _err //nolint:errcheck
 	if bInfo.Size() < dbInfo.Size() {
 		t.Errorf("backup file size (%d) is significantly smaller than active DB size (%d)", bInfo.Size(), dbInfo.Size())
 	}
@@ -1640,7 +1643,7 @@ func TestServer_SubdomainReservations(t *testing.T) {
 		Status:             "approved",
 		LanguagePreference: "en",
 	}
-	_ = srv.db.CreateUser(uUser)
+	_ = srv.db.CreateUser(uUser) //nolint:errcheck
 
 	emailAdmin := "admin@example.com"
 	uAdmin := &db.User{
@@ -1651,7 +1654,7 @@ func TestServer_SubdomainReservations(t *testing.T) {
 		Status:             "approved",
 		LanguagePreference: "en",
 	}
-	_ = srv.db.CreateUser(uAdmin)
+	_ = srv.db.CreateUser(uAdmin) //nolint:errcheck
 
 	// Setup portal sessions (cookies) with valid expiration times
 	sessionUser := "user-session-123"
@@ -1682,7 +1685,7 @@ func TestServer_SubdomainReservations(t *testing.T) {
 	}
 
 	var reservation db.SubdomainReservation
-	_ = json.NewDecoder(rec.Body).Decode(&reservation)
+	_ = json.NewDecoder(rec.Body).Decode(&reservation) //nolint:errcheck
 	if reservation.Subdomain != "my-subdomain" || reservation.Domain != "example.com" {
 		t.Errorf("unexpected reservation values: %+v", reservation)
 	}
@@ -1697,7 +1700,7 @@ func TestServer_SubdomainReservations(t *testing.T) {
 		t.Fatalf("expected 200 OK listing reservations, got %d", recList.Code)
 	}
 	var listResp map[string]interface{}
-	_ = json.NewDecoder(recList.Body).Decode(&listResp)
+	_ = json.NewDecoder(recList.Body).Decode(&listResp) //nolint:errcheck
 	if listResp["used"].(float64) != 1 {
 		t.Errorf("expected used count 1, got %v", listResp["used"])
 	}
@@ -1713,7 +1716,8 @@ func TestServer_SubdomainReservations(t *testing.T) {
 	}
 
 	// Verify extension_requested flag is set in DB
-	resDb, _ := srv.db.GetSubdomainReservation(reservation.ID)
+	resDb, _err := srv.db.GetSubdomainReservation(reservation.ID)
+	_ = _err //nolint:errcheck
 	if !resDb.ExtensionRequested {
 		t.Error("expected ExtensionRequested to be true")
 	}
@@ -1728,7 +1732,7 @@ func TestServer_SubdomainReservations(t *testing.T) {
 		t.Fatalf("expected 200 OK, got %d", recAdminExt.Code)
 	}
 	var extensionsList []db.SubdomainReservation
-	_ = json.NewDecoder(recAdminExt.Body).Decode(&extensionsList)
+	_ = json.NewDecoder(recAdminExt.Body).Decode(&extensionsList) //nolint:errcheck
 	if len(extensionsList) != 1 {
 		t.Errorf("expected 1 extension request, got %d", len(extensionsList))
 	}
@@ -1748,7 +1752,7 @@ func TestServer_SubdomainReservations(t *testing.T) {
 		t.Fatalf("expected 200 OK approving extension, got %d", recApprove.Code)
 	}
 
-	resDb, _ = srv.db.GetSubdomainReservation(reservation.ID)
+	resDb, _ = srv.db.GetSubdomainReservation(reservation.ID) //nolint:errcheck
 	if resDb.ExtensionRequested {
 		t.Error("expected ExtensionRequested to be reset to false")
 	}
@@ -1776,7 +1780,7 @@ func TestServer_SubdomainReservations(t *testing.T) {
 		TokenPrefix: "lfr_pat_user",
 		Name:        "User PAT",
 	}
-	_ = srv.db.CreatePAT(pat)
+	_ = srv.db.CreatePAT(pat) //nolint:errcheck
 
 	// Connecting using reserved subdomain prefix -> Should succeed
 	regPayload1, _ := json.Marshal(RegisterRequest{
@@ -1820,7 +1824,7 @@ func TestServer_SubdomainReservations(t *testing.T) {
 		t.Errorf("expected 200 OK for random subdomain connection, got %d", recReg3.Code)
 	}
 	var regResp3 RegisterResponse
-	_ = json.NewDecoder(recReg3.Body).Decode(&regResp3)
+	_ = json.NewDecoder(recReg3.Body).Decode(&regResp3) //nolint:errcheck
 	if regResp3.SubdomainPrefix == "" || regResp3.SubdomainPrefix == "random" {
 		t.Errorf("expected generated unique subdomain, got %s", regResp3.SubdomainPrefix)
 	}
@@ -1849,7 +1853,7 @@ func TestServer_SubdomainReservations(t *testing.T) {
 		CreatedAt: time.Now().Add(-8 * time.Hour),
 		UpdatedAt: time.Now().Add(-1 * time.Hour),
 	}
-	_ = srv.db.CreateSubdomainReservation(quarantineRes)
+	_ = srv.db.CreateSubdomainReservation(quarantineRes) //nolint:errcheck
 
 	reqGone := httptest.NewRequest("GET", "http://quarantine-sub.example.com/some/path", nil)
 	recGone := httptest.NewRecorder()
@@ -1889,23 +1893,25 @@ func TestServer_RoleSubdomainLimitsAndAutoReservation(t *testing.T) {
 	// Create an owner user and an admin user
 	ownerEmail := "owner@example.com"
 	adminEmail := "admin@example.com"
-	_ = srv.db.CreateUser(&db.User{ID: ownerEmail, Email: ownerEmail, Role: "owner", Status: "approved"})
-	_ = srv.db.CreateUser(&db.User{ID: adminEmail, Email: adminEmail, Role: "admin", Status: "approved"})
+	_ = srv.db.CreateUser(&db.User{ID: ownerEmail, Email: ownerEmail, Role: "owner", Status: "approved"}) //nolint:errcheck
+	_ = srv.db.CreateUser(&db.User{ID: adminEmail, Email: adminEmail, Role: "admin", Status: "approved"}) //nolint:errcheck
 
 	patOwner := sha256.Sum256([]byte("pat_owner"))
-	_ = srv.db.CreatePAT(&db.PersonalAccessToken{UserID: ownerEmail, TokenHash: hex.EncodeToString(patOwner[:]), TokenPrefix: "pat_owner"})
+	_ = srv.db.CreatePAT(&db.PersonalAccessToken{UserID: ownerEmail, TokenHash: hex.EncodeToString(patOwner[:]), TokenPrefix: "pat_owner"}) //nolint:errcheck
 	patAdmin := sha256.Sum256([]byte("pat_admin"))
-	_ = srv.db.CreatePAT(&db.PersonalAccessToken{UserID: adminEmail, TokenHash: hex.EncodeToString(patAdmin[:]), TokenPrefix: "pat_admin"})
+	_ = srv.db.CreatePAT(&db.PersonalAccessToken{UserID: adminEmail, TokenHash: hex.EncodeToString(patAdmin[:]), TokenPrefix: "pat_admin"}) //nolint:errcheck
 
 	// 1. Verify owner has infinity limit (-1) resolved
-	ownerRec, _ := srv.db.GetUser(ownerEmail)
+	ownerRec, _err := srv.db.GetUser(ownerEmail)
+	_ = _err //nolint:errcheck
 	ownerLimit := srv.getUserMaxReservations(ownerRec)
 	if ownerLimit != -1 {
 		t.Errorf("expected owner limit to be -1 (infinity), got %d", ownerLimit)
 	}
 
 	// 2. Verify admin has limit of 2 resolved
-	adminRec, _ := srv.db.GetUser(adminEmail)
+	adminRec, _err := srv.db.GetUser(adminEmail)
+	_ = _err //nolint:errcheck
 	admLimit := srv.getUserMaxReservations(adminRec)
 	if admLimit != 2 {
 		t.Errorf("expected admin limit to be 2, got %d", admLimit)
@@ -2172,11 +2178,11 @@ func TestAdminUptimeHistory(t *testing.T) {
 		Role:   "admin",
 		Status: "approved",
 	}
-	_ = srv.db.CreateUser(adminUser)
+	_ = srv.db.CreateUser(adminUser) //nolint:errcheck
 
 	adminToken := "lfr_pat_admin_static_token"
 	adminHashBytes := sha256.Sum256([]byte(adminToken))
-	_ = srv.db.CreatePAT(&db.PersonalAccessToken{
+	_ = srv.db.CreatePAT(&db.PersonalAccessToken{ //nolint:errcheck
 		UserID:      "admin@liferay.com",
 		TokenHash:   hex.EncodeToString(adminHashBytes[:]),
 		TokenPrefix: "lfr_pat_admi",
@@ -2190,11 +2196,11 @@ func TestAdminUptimeHistory(t *testing.T) {
 		Role:   "user",
 		Status: "approved",
 	}
-	_ = srv.db.CreateUser(normalUser)
+	_ = srv.db.CreateUser(normalUser) //nolint:errcheck
 
 	userToken := "lfr_pat_user_static_token"
 	userHashBytes := sha256.Sum256([]byte(userToken))
-	_ = srv.db.CreatePAT(&db.PersonalAccessToken{
+	_ = srv.db.CreatePAT(&db.PersonalAccessToken{ //nolint:errcheck
 		UserID:      "user@liferay.com",
 		TokenHash:   hex.EncodeToString(userHashBytes[:]),
 		TokenPrefix: "lfr_pat_user",
@@ -2256,14 +2262,14 @@ func TestRegisterSubdomainReservationError_PortalURL(t *testing.T) {
 
 	// Create a standard user (not admin/owner)
 	userEmail := "developer@example.com"
-	_ = srv.db.CreateUser(&db.User{
+	_ = srv.db.CreateUser(&db.User{ //nolint:errcheck
 		ID:     userEmail,
 		Email:  userEmail,
 		Role:   "user", // Standard role
 		Status: "approved",
 	})
 	patHashBytes := sha256.Sum256([]byte("developer-secret"))
-	_ = srv.db.CreatePAT(&db.PersonalAccessToken{
+	_ = srv.db.CreatePAT(&db.PersonalAccessToken{ //nolint:errcheck
 		UserID:      userEmail,
 		TokenHash:   hex.EncodeToString(patHashBytes[:]),
 		TokenPrefix: "lfr_pat_dev_",
@@ -2416,7 +2422,7 @@ func TestServer_ForceMFA(t *testing.T) {
 	}()
 
 	userEmail := "mfa-tester@example.com"
-	_ = srv.db.CreateUser(&db.User{
+	_ = srv.db.CreateUser(&db.User{ //nolint:errcheck
 		ID:          userEmail,
 		Email:       userEmail,
 		Role:        "user",
@@ -2516,9 +2522,9 @@ echo "$1 $2" >> "%s"
 		srv.Stop()
 	}()
 
-	_ = srv.db.CreateUser(&db.User{ID: "test@example.com", Email: "test@example.com", Role: "admin", Status: "approved"})
+	_ = srv.db.CreateUser(&db.User{ID: "test@example.com", Email: "test@example.com", Role: "admin", Status: "approved"}) //nolint:errcheck
 	patHashBytes := sha256.Sum256([]byte("lfr_pat_mysecret"))
-	_ = srv.db.CreatePAT(&db.PersonalAccessToken{UserID: "test@example.com", TokenHash: hex.EncodeToString(patHashBytes[:]), TokenPrefix: "lfr_pat_myse"})
+	_ = srv.db.CreatePAT(&db.PersonalAccessToken{UserID: "test@example.com", TokenHash: hex.EncodeToString(patHashBytes[:]), TokenPrefix: "lfr_pat_myse"}) //nolint:errcheck
 
 	// 1. Invalid custom domain format
 	badPayload, _ := json.Marshal(RegisterRequest{

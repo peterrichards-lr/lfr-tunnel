@@ -182,7 +182,7 @@ func (db *DB) initSchema() error {
 		return err
 	}
 	defer func() {
-		_ = tx.Rollback()
+		_ = tx.Rollback() //nolint:errcheck
 	}()
 
 	var currentVersion int

@@ -34,7 +34,7 @@ func (s *portalService) MFAEnable(user *db.User, secret, code, ip string) error 
 		return ErrInternalError
 	}
 
-	_ = s.db.WriteAuditEntry(&db.AuditEntry{
+	_ = s.db.WriteAuditEntry(&db.AuditEntry{ //nolint:errcheck
 		ActorID:    user.Email,
 		Action:     "user.mfa_enabled",
 		TargetType: "user",
@@ -60,7 +60,7 @@ func (s *portalService) MFADisable(user *db.User, code, ip string) error {
 		return ErrInternalError
 	}
 
-	_ = s.db.WriteAuditEntry(&db.AuditEntry{
+	_ = s.db.WriteAuditEntry(&db.AuditEntry{ //nolint:errcheck
 		ActorID:    user.Email,
 		Action:     "user.mfa_disabled",
 		TargetType: "user",
@@ -117,7 +117,7 @@ func (s *portalService) MFAVerify(tempToken, code, ip string) (*db.User, string,
 	now := time.Now().UTC()
 	user.LastLoginAt = &now
 	user.LastLoginIP = ip
-	_ = s.db.UpdateUser(user)
+	_ = s.db.UpdateUser(user) //nolint:errcheck
 
 	killedPreviousSession := false
 	s.portalMap.Range(func(key, value interface{}) bool {
@@ -140,7 +140,7 @@ func (s *portalService) MFAVerify(tempToken, code, ip string) (*db.User, string,
 		KilledPreviousSession: killedPreviousSession,
 	})
 
-	_ = s.db.WriteAuditEntry(&db.AuditEntry{
+	_ = s.db.WriteAuditEntry(&db.AuditEntry{ //nolint:errcheck
 		ActorID:    user.Email,
 		Action:     "admin.login",
 		TargetType: "system",

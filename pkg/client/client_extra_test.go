@@ -3,6 +3,7 @@ package client
 import (
 	"context"
 	"fmt"
+	"log"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -41,7 +42,7 @@ func TestStartHealthChecks(t *testing.T) {
 }
 
 func TestIsDocker(t *testing.T) {
-	_ = IsDocker()
+	_ = IsDocker() //nolint:errcheck
 }
 
 func TestIsPIDRunning(t *testing.T) {
@@ -59,7 +60,9 @@ func TestRedirectChiselLogger(t *testing.T) {
 	}
 	defer cleanup()
 
-	_, _ = fmt.Fprintln(os.Stderr, "Connected (Latency 15ms)")
+	if _, err := fmt.Fprintln(os.Stderr, "Connected (Latency 15ms)"); err != nil {
+		log.Printf("[Warning] Failed to write response: %v", err)
+	}
 }
 
 func TestRunLogin(t *testing.T) {
@@ -95,7 +98,7 @@ func TestRunClient_FailFast(t *testing.T) {
 
 	engine := NewInterceptorEngine("127.0.0.1", nil)
 	err := RunClient(ctx, srv.URL, "dummy-token", []string{"8080:localhost:8080"}, nil, engine)
-	_ = err // Context cancellation does not return error in chisel Run
+	_ = err // Context cancellation does not return error in chisel Run //nolint:errcheck
 }
 
 func TestInterceptorEngine_SetSubdomainDetails(t *testing.T) {

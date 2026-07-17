@@ -32,7 +32,7 @@ func TestServer_TelemetryWS(t *testing.T) {
 		srv.Stop()
 	}()
 
-	_ = srv.db.CreateUser(&db.User{ID: "test@example.com", Email: "test@example.com", Role: "admin", Status: "approved"})
+	_ = srv.db.CreateUser(&db.User{ID: "test@example.com", Email: "test@example.com", Role: "admin", Status: "approved"}) //nolint:errcheck
 
 	// Setup a mock test server using HTTP Server
 	testServer := httptest.NewServer(srv)
@@ -61,7 +61,7 @@ func TestServer_TelemetryWS(t *testing.T) {
 	if err != nil {
 		t.Fatalf("failed to establish websocket connection: %v", err)
 	}
-	defer func() { _ = wsConn.Close() }()
+	defer func() { _ = wsConn.Close() }() //nolint:errcheck
 
 	if resp.StatusCode != http.StatusSwitchingProtocols {
 		t.Errorf("expected switching protocols (101), got %d", resp.StatusCode)
@@ -73,7 +73,7 @@ func TestServer_TelemetryWS(t *testing.T) {
 		Data map[string]interface{} `json:"data"`
 	}
 
-	_ = wsConn.SetReadDeadline(time.Now().Add(2 * time.Second))
+	_ = wsConn.SetReadDeadline(time.Now().Add(2 * time.Second)) //nolint:errcheck
 	_, p, err := wsConn.ReadMessage()
 	if err != nil {
 		t.Fatalf("failed to read initial telemetry message: %v", err)
@@ -97,7 +97,7 @@ func TestServer_TelemetryWS(t *testing.T) {
 
 	srv.PushUserTelemetryByID("test@example.com")
 
-	_ = wsConn.SetReadDeadline(time.Now().Add(2 * time.Second))
+	_ = wsConn.SetReadDeadline(time.Now().Add(2 * time.Second)) //nolint:errcheck
 	_, p, err = wsConn.ReadMessage()
 	if err != nil {
 		t.Fatalf("failed to read targeted message update: %v", err)
@@ -121,7 +121,7 @@ func TestServer_TelemetryWS(t *testing.T) {
 
 	srv.BroadcastTelemetry()
 
-	_ = wsConn.SetReadDeadline(time.Now().Add(2 * time.Second))
+	_ = wsConn.SetReadDeadline(time.Now().Add(2 * time.Second)) //nolint:errcheck
 	_, p, err = wsConn.ReadMessage()
 	if err != nil {
 		t.Fatalf("failed to read global broadcast message update: %v", err)
@@ -215,7 +215,7 @@ func TestServer_TelemetryCache(t *testing.T) {
 		Role:      "user",
 		Status:    "approved",
 	}
-	_ = srv.db.CreateUser(user)
+	_ = srv.db.CreateUser(user) //nolint:errcheck
 
 	// 1. Initial lookup - should cache the user
 	u1, err := srv.getCachedUser(email)
@@ -228,7 +228,7 @@ func TestServer_TelemetryCache(t *testing.T) {
 
 	// 2. Modify DB directly (without updating cache)
 	user.FirstName = "Modified"
-	_ = srv.db.UpdateUser(user)
+	_ = srv.db.UpdateUser(user) //nolint:errcheck
 
 	// 3. Second lookup - should hit cache and still return 'Initial'
 	u2, err := srv.getCachedUser(email)

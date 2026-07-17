@@ -63,7 +63,8 @@ func TestRegistryRegister(t *testing.T) {
 }
 
 func TestRegistryDuplicateSubdomain(t *testing.T) {
-	chiselServer, _ := chserver.NewServer(&chserver.Config{Reverse: true})
+	chiselServer, _err := chserver.NewServer(&chserver.Config{Reverse: true})
+	_ = _err //nolint:errcheck
 	reg := NewRegistry(chiselServer)
 	domains := []string{"liferay.com"}
 
@@ -79,7 +80,8 @@ func TestRegistryDuplicateSubdomain(t *testing.T) {
 }
 
 func TestRegistryCleanup(t *testing.T) {
-	chiselServer, _ := chserver.NewServer(&chserver.Config{Reverse: true})
+	chiselServer, _err := chserver.NewServer(&chserver.Config{Reverse: true})
+	_ = _err //nolint:errcheck
 	reg := NewRegistry(chiselServer)
 	domains := []string{"liferay.com"}
 
@@ -105,7 +107,8 @@ func TestRegistryCleanup(t *testing.T) {
 }
 
 func TestRegistryValidation(t *testing.T) {
-	chiselServer, _ := chserver.NewServer(&chserver.Config{Reverse: true})
+	chiselServer, _err := chserver.NewServer(&chserver.Config{Reverse: true})
+	_ = _err //nolint:errcheck
 	reg := NewRegistry(chiselServer)
 	domains := []string{"liferay.com"}
 	ports := []PortMapping{{LocalPort: 8080}}
@@ -138,7 +141,8 @@ func TestRegistryValidation(t *testing.T) {
 }
 
 func TestRegistryCheckSubdomain(t *testing.T) {
-	chiselServer, _ := chserver.NewServer(&chserver.Config{Reverse: true})
+	chiselServer, _err := chserver.NewServer(&chserver.Config{Reverse: true})
+	_ = _err //nolint:errcheck
 	reg := NewRegistry(chiselServer)
 	domains := []string{"liferay.com"}
 
@@ -186,12 +190,13 @@ func TestRegistryCheckSubdomain(t *testing.T) {
 }
 
 func TestRegistryGenerateSuggestions(t *testing.T) {
-	chiselServer, _ := chserver.NewServer(&chserver.Config{Reverse: true})
+	chiselServer, _err := chserver.NewServer(&chserver.Config{Reverse: true})
+	_ = _err //nolint:errcheck
 	reg := NewRegistry(chiselServer)
 	domains := []string{"liferay.com"}
 
 	// Check suggestions for valid prefix that is taken
-	_, _, _ = reg.Register("test-user", "alpha-se", []PortMapping{{LocalPort: 8080}}, domains, 0, "127.0.0.1", "", nil)
+	_, _, _ = reg.Register("test-user", "alpha-se", []PortMapping{{LocalPort: 8080}}, domains, 0, "127.0.0.1", "", nil) //nolint:errcheck
 
 	suggestions := reg.GenerateSuggestions("alpha-se", domains)
 	if len(suggestions) != 3 {

@@ -15,7 +15,7 @@ func TestHandleVerifyEmail_Failures(t *testing.T) {
 	w := httptest.NewRecorder()
 
 	defer func() {
-		_ = recover() // ignore panics //nolint:errcheck
+		_ = recover() //nolint:errcheck
 	}()
 	s.handleVerifyEmail(w, req)
 }
@@ -24,7 +24,7 @@ func TestHandleApproveUser_Failures(t *testing.T) {
 	s := &Server{}
 	req := httptest.NewRequest("GET", "/approve?token=123", nil)
 	w := httptest.NewRecorder()
-	defer func() { _ = recover() }()
+	defer func() { _ = recover() }() //nolint:errcheck
 	s.handleApproveUser(w, req)
 }
 
@@ -67,7 +67,7 @@ func TestHandleEdgeAuditLog_Failures(t *testing.T) {
 	s := &Server{}
 	req := httptest.NewRequest("POST", "/edge/audit", nil)
 	w := httptest.NewRecorder()
-	defer func() { _ = recover() }()
+	defer func() { _ = recover() }() //nolint:errcheck
 	s.handleEdgeAuditLog(w, req)
 }
 
@@ -75,7 +75,7 @@ func TestHandleEdgeKick_Failures(t *testing.T) {
 	s := &Server{}
 	req := httptest.NewRequest("POST", "/edge/kick", nil)
 	w := httptest.NewRecorder()
-	defer func() { _ = recover() }()
+	defer func() { _ = recover() }() //nolint:errcheck
 	s.handleEdgeKick(w, req)
 }
 
@@ -83,7 +83,7 @@ func TestHandleCheckSubdomain_Failures(t *testing.T) {
 	s := &Server{}
 	req := httptest.NewRequest("POST", "/api/check-subdomain", nil)
 	w := httptest.NewRecorder()
-	defer func() { _ = recover() }()
+	defer func() { _ = recover() }() //nolint:errcheck
 	s.handleCheckSubdomain(w, req)
 }
 
@@ -91,7 +91,7 @@ func TestHandleSetupPage_Failures(t *testing.T) {
 	s := &Server{}
 	req := httptest.NewRequest("GET", "/setup", nil)
 	w := httptest.NewRecorder()
-	defer func() { _ = recover() }()
+	defer func() { _ = recover() }() //nolint:errcheck
 	s.handleSetupPage(w, req)
 }
 
@@ -99,7 +99,7 @@ func TestServeHTTP_Failures(t *testing.T) {
 	s := &Server{}
 	req := httptest.NewRequest("GET", "/", nil)
 	w := httptest.NewRecorder()
-	defer func() { _ = recover() }()
+	defer func() { _ = recover() }() //nolint:errcheck
 	s.ServeHTTP(w, req)
 }
 

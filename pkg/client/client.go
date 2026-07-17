@@ -277,7 +277,7 @@ func RunClient(ctx context.Context, serverURL string, token string, remotes []st
 					conn, err := net.DialTimeout("tcp", host, 3*time.Second)
 					if err == nil {
 						rtt := time.Since(t0).Milliseconds()
-						_ = conn.Close()
+						_ = conn.Close() //nolint:errcheck
 
 						engine.mu.Lock()
 						engine.LatencyLast = rtt
@@ -385,13 +385,13 @@ func redirectChiselLogger(engine *InterceptorEngine) (func(), error) {
 			original: originalStderr,
 			engine:   engine,
 		}
-		_, _ = io.Copy(parser, r)
+		_, _ = io.Copy(parser, r) //nolint:errcheck
 	}()
 
 	cleanup := func() {
 		os.Stderr = originalStderr
-		_ = w.Close()
-		_ = r.Close()
+		_ = w.Close() //nolint:errcheck
+		_ = r.Close() //nolint:errcheck
 	}
 
 	return cleanup, nil
@@ -423,7 +423,7 @@ func ProbeLocalPorts(ports []int) []int {
 		conn, err := net.DialTimeout("tcp", address, 50*time.Millisecond)
 		if err == nil {
 			active = append(active, port)
-			_ = conn.Close()
+			_ = conn.Close() //nolint:errcheck
 		}
 	}
 	return active

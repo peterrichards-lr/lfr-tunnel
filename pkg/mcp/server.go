@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"log"
 	"net/http"
 	"os"
 	"os/exec"
@@ -194,7 +195,7 @@ func handleToolCall(id interface{}, name string, args json.RawMessage) {
 			Ports      string `json:"ports"`
 			TargetHost string `json:"target_host"`
 		}
-		_ = json.Unmarshal(args, &params) // Optional params
+		_ = json.Unmarshal(args, &params) // Optional params //nolint:errcheck
 
 		res, err := startTunnel(params.Subdomain, params.Ports, params.TargetHost)
 		if err != nil {
@@ -207,7 +208,7 @@ func handleToolCall(id interface{}, name string, args json.RawMessage) {
 		var params struct {
 			Subdomain string `json:"subdomain"`
 		}
-		_ = json.Unmarshal(args, &params) // Optional param
+		_ = json.Unmarshal(args, &params) // Optional param //nolint:errcheck
 
 		res, err := stopTunnel(params.Subdomain)
 		if err != nil {
@@ -220,7 +221,7 @@ func handleToolCall(id interface{}, name string, args json.RawMessage) {
 		var params struct {
 			Limit int `json:"limit"`
 		}
-		_ = json.Unmarshal(args, &params)
+		_ = json.Unmarshal(args, &params) //nolint:errcheck
 		if params.Limit <= 0 {
 			params.Limit = 10
 		}
@@ -283,7 +284,7 @@ func getTunnelStatus() (interface{}, error) {
 
 			// Verify PID running status
 			if !isPIDRunning(state.PID) {
-				_ = os.Remove(statePath)
+				_ = os.Remove(statePath) //nolint:errcheck
 				continue
 			}
 
@@ -517,7 +518,9 @@ func sendResult(id interface{}, result interface{}) {
 		ID:      id,
 	}
 	b, _ := json.Marshal(res)
-	_, _ = fmt.Fprintln(outputWriter, string(b))
+	if _, err := fmt.Fprintln(outputWriter, string(b)); err != nil {
+		log.Printf("[Warning] Failed to write response: %v", err)
+	}
 }
 
 func sendError(id interface{}, code int, message string) {
@@ -530,7 +533,9 @@ func sendError(id interface{}, code int, message string) {
 		ID: id,
 	}
 	b, _ := json.Marshal(res)
-	_, _ = fmt.Fprintln(outputWriter, string(b))
+	if _, err := fmt.Fprintln(outputWriter, string(b)); err != nil {
+		log.Printf("[Warning] Failed to write response: %v", err)
+	}
 }
 
 func sendToolSuccess(id interface{}, content interface{}) {

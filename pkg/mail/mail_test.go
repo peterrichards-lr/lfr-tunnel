@@ -9,6 +9,7 @@ import (
 	"crypto/x509/pkix"
 	"encoding/pem"
 	"fmt"
+	"log"
 	"math/big"
 	"net"
 	"strings"
@@ -81,7 +82,7 @@ func handleMockConnection(t *testing.T, conn net.Conn, cert *tls.Certificate, da
 
 	respond := func(code int, msg string) {
 		_, _ = fmt.Fprintf(writer, "%d %s\r\n", code, msg)
-		_ = writer.Flush()
+		_ = writer.Flush() //nolint:errcheck
 	}
 
 	respond(220, "smtp.liferay-tunnel-test.local")
@@ -99,11 +100,15 @@ func handleMockConnection(t *testing.T, conn net.Conn, cert *tls.Certificate, da
 
 		if strings.HasPrefix(strings.ToUpper(line), "EHLO") || strings.HasPrefix(strings.ToUpper(line), "HELO") {
 			if !isTLS && cert != nil {
-				_, _ = writer.WriteString("250-smtp.liferay-tunnel-test.local\r\n250-STARTTLS\r\n250 AUTH PLAIN\r\n")
+				if _, err := writer.WriteString("250-smtp.liferay-tunnel-test.local\r\n250-STARTTLS\r\n250 AUTH PLAIN\r\n"); err != nil {
+					log.Printf("[Warning] Failed to write response: %v", err)
+				}
 			} else {
-				_, _ = writer.WriteString("250-smtp.liferay-tunnel-test.local\r\n250 AUTH PLAIN\r\n")
+				if _, err := writer.WriteString("250-smtp.liferay-tunnel-test.local\r\n250 AUTH PLAIN\r\n"); err != nil {
+					log.Printf("[Warning] Failed to write response: %v", err)
+				}
 			}
-			_ = writer.Flush()
+			_ = writer.Flush() //nolint:errcheck
 		} else if strings.ToUpper(line) == "STARTTLS" && cert != nil && !isTLS {
 			respond(220, "Ready to start TLS")
 
@@ -158,7 +163,7 @@ func TestSMTPClient_Send(t *testing.T) {
 		t.Fatalf("failed to split port: %v", err)
 	}
 	var port int
-	_, _ = fmt.Sscanf(portStr, "%d", &port)
+	_, _ = fmt.Sscanf(portStr, "%d", &port) //nolint:errcheck
 
 	cfg := &Config{
 		SMTPHost:           "127.0.0.1",

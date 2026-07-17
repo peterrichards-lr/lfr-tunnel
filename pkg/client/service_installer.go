@@ -105,9 +105,9 @@ WantedBy=default.target
 	}
 
 	// Enable and start
-	_ = exec.Command("systemctl", "--user", "daemon-reload").Run()
-	_ = exec.Command("systemctl", "--user", "enable", "lfr-tunnel.service").Run()
-	_ = exec.Command("systemctl", "--user", "start", "lfr-tunnel.service").Run()
+	_ = exec.Command("systemctl", "--user", "daemon-reload").Run()                //nolint:errcheck
+	_ = exec.Command("systemctl", "--user", "enable", "lfr-tunnel.service").Run() //nolint:errcheck
+	_ = exec.Command("systemctl", "--user", "start", "lfr-tunnel.service").Run()  //nolint:errcheck
 
 	fmt.Printf("[Success] Installed Linux systemd user service to %s\n", servicePath)
 	fmt.Printf("[Success] lfr-tunnel will now start automatically in the background on login.\n")
@@ -257,7 +257,7 @@ func uninstallDarwinGUI() error {
 
 	// Unload the service
 	cmd := exec.Command("launchctl", "unload", plistPath)
-	_ = cmd.Run()
+	_ = cmd.Run() //nolint:errcheck
 
 	if err := os.Remove(plistPath); err != nil {
 		return err

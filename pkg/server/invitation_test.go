@@ -95,7 +95,7 @@ func TestInvitationAPIEndpoints(t *testing.T) {
 	// Seed User
 	userID := "dev-user"
 	userEmail := "dev@liferay.com"
-	_ = database.CreateUser(&db.User{
+	_ = database.CreateUser(&db.User{ //nolint:errcheck
 		ID:        userID,
 		Email:     userEmail,
 		Role:      "user",
@@ -105,7 +105,7 @@ func TestInvitationAPIEndpoints(t *testing.T) {
 	})
 
 	// Seed Reservation
-	_ = database.CreateSubdomainReservation(&db.SubdomainReservation{
+	_ = database.CreateSubdomainReservation(&db.SubdomainReservation{ //nolint:errcheck
 		UserID:    userID,
 		Subdomain: "invite-sub",
 		Domain:    "liferay.com",
@@ -171,7 +171,7 @@ func TestInvitationAPIEndpoints(t *testing.T) {
 		}
 
 		var res map[string]interface{}
-		_ = json.Unmarshal(rec.Body.Bytes(), &res)
+		_ = json.Unmarshal(rec.Body.Bytes(), &res) //nolint:errcheck
 
 		claimToken := res["invitation"].(map[string]interface{})["token"].(string)
 		inviteToken = claimToken
@@ -192,7 +192,7 @@ func TestInvitationAPIEndpoints(t *testing.T) {
 		}
 
 		var list []interface{}
-		_ = json.Unmarshal(rec.Body.Bytes(), &list)
+		_ = json.Unmarshal(rec.Body.Bytes(), &list) //nolint:errcheck
 		if len(list) != 1 {
 			t.Errorf("expected 1 invitation, got %d", len(list))
 		}
@@ -238,16 +238,18 @@ func TestInvitationAPIEndpoints(t *testing.T) {
 			ExpiresAt: time.Now().AddDate(0, 0, 7),
 			CreatedBy: userEmail,
 		}
-		_ = database.CreateGuestInvitation(invite)
+		_ = database.CreateGuestInvitation(invite) //nolint:errcheck
 
 		// Generate key and CSR
-		clientKey, _ := rsa.GenerateKey(rand.Reader, 2048)
+		clientKey, _err := rsa.GenerateKey(rand.Reader, 2048)
+		_ = _err //nolint:errcheck
 		csrTemplate := &x509.CertificateRequest{
 			Subject: pkix.Name{
 				CommonName: "guest:csr-invite-token",
 			},
 		}
-		csrBytes, _ := x509.CreateCertificateRequest(rand.Reader, csrTemplate, clientKey)
+		csrBytes, _err := x509.CreateCertificateRequest(rand.Reader, csrTemplate, clientKey)
+		_ = _err //nolint:errcheck
 		csrPEM := pem.EncodeToMemory(&pem.Block{
 			Type:  "CERTIFICATE REQUEST",
 			Bytes: csrBytes,

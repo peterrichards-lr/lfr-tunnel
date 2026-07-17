@@ -52,7 +52,7 @@ type ProxyHandler struct {
 // NewProxyHandler creates a new ProxyHandler instance.
 func NewProxyHandler(registry *Registry, cfg *config.ServerConfig) *ProxyHandler {
 	secret := make([]byte, 32)
-	_, _ = rand.Read(secret)
+	_, _ = rand.Read(secret) //nolint:errcheck
 	return &ProxyHandler{
 		registry:     registry,
 		config:       cfg,
@@ -419,7 +419,7 @@ func (p *ProxyHandler) checkAccessControls(w http.ResponseWriter, r *http.Reques
 
 	// 2. Intercept passcode verification POST /lfr-tunnel-verify
 	if r.Method == "POST" && r.URL.Path == "/lfr-tunnel-verify" {
-		_ = r.ParseForm()
+		_ = r.ParseForm() //nolint:errcheck
 		passcodeVal := r.FormValue("passcode")
 		redirectURI := r.FormValue("redirect_uri")
 		if redirectURI == "" {

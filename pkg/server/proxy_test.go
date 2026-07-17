@@ -3,6 +3,7 @@ package server
 import (
 	"lfr-tunnel/pkg/config"
 	"lfr-tunnel/pkg/db"
+	"log"
 	"net/http"
 	"net/http/httptest"
 	"net/url"
@@ -16,7 +17,8 @@ import (
 )
 
 func TestProxyHandler_Offline(t *testing.T) {
-	chiselServer, _ := chserver.NewServer(&chserver.Config{Reverse: true})
+	chiselServer, _err := chserver.NewServer(&chserver.Config{Reverse: true})
+	_ = _err //nolint:errcheck
 	reg := NewRegistry(chiselServer)
 	handler := NewProxyHandler(reg, config.DefaultServerConfig())
 
@@ -53,7 +55,9 @@ func TestProxyHandler_Online(t *testing.T) {
 			t.Error("X-Real-IP header was not set")
 		}
 		w.WriteHeader(http.StatusOK)
-		_, _ = w.Write([]byte("Hello from Liferay Local!"))
+		if _, err := w.Write([]byte("Hello from Liferay Local!")); err != nil {
+			log.Printf("[Warning] Failed to write response: %v", err)
+		}
 	}))
 	defer backend.Close()
 
@@ -68,7 +72,8 @@ func TestProxyHandler_Online(t *testing.T) {
 	}
 
 	// 2. Setup registry with a manual lease pointing to backend port
-	chiselServer, _ := chserver.NewServer(&chserver.Config{Reverse: true})
+	chiselServer, _err := chserver.NewServer(&chserver.Config{Reverse: true})
+	_ = _err //nolint:errcheck
 	reg := NewRegistry(chiselServer)
 
 	reg.Lock()
@@ -114,7 +119,7 @@ func TestProxyHandler_AccessControls(t *testing.T) {
 
 	// Seed database: User & Reservation
 	userID := "dev-user-id"
-	_ = database.CreateUser(&db.User{
+	_ = database.CreateUser(&db.User{ //nolint:errcheck
 		ID:        userID,
 		Email:     "dev@liferay.com",
 		Role:      "user",
@@ -133,7 +138,7 @@ func TestProxyHandler_AccessControls(t *testing.T) {
 		CreatedAt:    time.Now(),
 		UpdatedAt:    time.Now(),
 	}
-	_ = database.CreateSubdomainReservation(reservation)
+	_ = database.CreateSubdomainReservation(reservation) //nolint:errcheck
 
 	freePort, err := getFreePort()
 	if err != nil {
@@ -141,7 +146,8 @@ func TestProxyHandler_AccessControls(t *testing.T) {
 	}
 
 	// 2. Setup registry with lease
-	chiselServer, _ := chserver.NewServer(&chserver.Config{Reverse: true})
+	chiselServer, _err := chserver.NewServer(&chserver.Config{Reverse: true})
+	_ = _err //nolint:errcheck
 	reg := NewRegistry(chiselServer)
 
 	reg.Lock()
@@ -240,7 +246,9 @@ func TestProxyHandler_CustomHeaders(t *testing.T) {
 			t.Errorf("X-Real-IP should not be present since it was overridden, got %s", r.Header.Get("X-Real-IP"))
 		}
 		w.WriteHeader(http.StatusOK)
-		_, _ = w.Write([]byte("Hello from Custom Proxy!"))
+		if _, err := w.Write([]byte("Hello from Custom Proxy!")); err != nil {
+			log.Printf("[Warning] Failed to write response: %v", err)
+		}
 	}))
 	defer backend.Close()
 
@@ -255,7 +263,8 @@ func TestProxyHandler_CustomHeaders(t *testing.T) {
 	}
 
 	// 2. Setup registry with a manual lease pointing to backend port
-	chiselServer, _ := chserver.NewServer(&chserver.Config{Reverse: true})
+	chiselServer, _err := chserver.NewServer(&chserver.Config{Reverse: true})
+	_ = _err //nolint:errcheck
 	reg := NewRegistry(chiselServer)
 
 	reg.Lock()

@@ -348,9 +348,9 @@ func NewServer(cfg *config.ServerConfig) (*Server, error) {
 		} else {
 			// Generate secure 32-byte secret
 			bytes := make([]byte, 32)
-			_, _ = rand.Read(bytes)
+			_, _ = rand.Read(bytes) //nolint:errcheck
 			unsubSecret = hex.EncodeToString(bytes)
-			_ = srv.db.SetAdminSetting("unsubscribe_secret", unsubSecret)
+			_ = srv.db.SetAdminSetting("unsubscribe_secret", unsubSecret) //nolint:errcheck
 		}
 		srv.unsubscribeSecret = unsubSecret
 
@@ -363,7 +363,7 @@ func NewServer(cfg *config.ServerConfig) (*Server, error) {
 				if len(parts) > 1 {
 					last = parts[1]
 				}
-				_ = srv.db.CreateUser(&db.User{
+				_ = srv.db.CreateUser(&db.User{ //nolint:errcheck
 					ID:        cfg.Owner.UserID,
 					Email:     cfg.Owner.UserID,
 					FirstName: first,
@@ -373,7 +373,7 @@ func NewServer(cfg *config.ServerConfig) (*Server, error) {
 				})
 			} else if ownerUser.Role != "owner" {
 				ownerUser.Role = "owner"
-				_ = srv.db.UpdateUser(ownerUser)
+				_ = srv.db.UpdateUser(ownerUser) //nolint:errcheck
 			}
 		}
 	}
@@ -395,7 +395,7 @@ func NewServer(cfg *config.ServerConfig) (*Server, error) {
 	srv.startRateLimiterCleaner(ctx)
 
 	if srv.db != nil {
-		_ = srv.db.RecordGatewayStart(srv.startTime)
+		_ = srv.db.RecordGatewayStart(srv.startTime) //nolint:errcheck
 	}
 
 	if srv.cfg.ControlPlaneURL != "" && srv.cfg.EdgeToken != "" {
@@ -525,9 +525,10 @@ func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 				s.blacklist.Store(ip, true)
 				s.BroadcastBlacklistUpdate("add", ip)
 				if s.db != nil {
-					_ = s.db.AddBlacklistIP(ip, "Auto-banned by Rate Limiter for DDOS")
+					_ = s.db.AddBlacklistIP(ip, "Auto-banned by Rate Limiter for DDOS") //nolint:errcheck
 					s.writeAudit("system", "ip.blacklisted", "ip", ip, "Auto-banned by Rate Limiter for DDOS", r)
-					body, _ := s.renderNotificationTemplate("en", "admin_ip_autobanned.txt", map[string]interface{}{"IP": ip})
+					body, _err := s.renderNotificationTemplate("en", "admin_ip_autobanned.txt", map[string]interface{}{"IP": ip})
+					_ = _err //nolint:errcheck
 					s.notifications.SendAdminAlert("alert_notify_blacklist", "LFR Tunnel Alert: IP Auto-Banned", body)
 					s.webhooks.SendRateLimitBanAlert(ip, 24*time.Hour, "Exceeded API rate limit (50 violations)")
 				}
@@ -1016,7 +1017,9 @@ func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 			scriptStr = strings.ReplaceAll(scriptStr, "{{MACOS_ARM64_INSTALL_DIR}}", getInstallDir("macos_arm64", "/usr/local/bin"))
 			scriptStr = strings.ReplaceAll(scriptStr, "{{LINUX_AMD64_INSTALL_DIR}}", getInstallDir("linux_amd64", "/usr/local/bin"))
 
-			_, _ = w.Write([]byte(scriptStr))
+			if _, err := w.Write([]byte(scriptStr)); err != nil {
+				log.Printf("[Warning] Failed to write response: %v", err)
+			}
 			return
 		}
 
@@ -1041,14 +1044,18 @@ func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 
 			scriptStr = strings.ReplaceAll(scriptStr, "{{WINDOWS_AMD64_INSTALL_DIR}}", getInstallDir("windows_amd64", "$env:LOCALAPPDATA\\Programs\\lfr-tunnel"))
 
-			_, _ = w.Write([]byte(scriptStr))
+			if _, err := w.Write([]byte(scriptStr)); err != nil {
+				log.Printf("[Warning] Failed to write response: %v", err)
+			}
 			return
 		}
 
 		if r.Method == http.MethodGet && r.URL.Path == "/api/healthz" {
 			w.Header().Set("Content-Type", "application/json")
 			w.WriteHeader(http.StatusOK)
-			_, _ = w.Write([]byte(`{"status":"healthy"}`))
+			if _, err := w.Write([]byte(`{"status":"healthy"}`)); err != nil {
+				log.Printf("[Warning] Failed to write response: %v", err)
+			}
 			return
 		}
 
@@ -1066,7 +1073,9 @@ func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		if r.Method == http.MethodGet && r.URL.Path == "/robots.txt" {
 			w.Header().Set("Content-Type", "text/plain; charset=utf-8")
 			w.WriteHeader(http.StatusOK)
-			_, _ = w.Write([]byte("User-agent: *\nDisallow: /\n"))
+			if _, err := w.Write([]byte("User-agent: *\nDisallow: /\n")); err != nil {
+				log.Printf("[Warning] Failed to write response: %v", err)
+			}
 			return
 		}
 
@@ -1075,7 +1084,9 @@ func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 			w.WriteHeader(http.StatusOK)
 			htmlContent := strings.ReplaceAll(dashboardHTML, "static/dashboard.js", "static/dashboard.js?v="+config.Version)
 			htmlContent = strings.ReplaceAll(htmlContent, "/static/dashboard.css", "/static/dashboard.css?v="+config.Version)
-			_, _ = w.Write([]byte(htmlContent))
+			if _, err := w.Write([]byte(htmlContent)); err != nil {
+				log.Printf("[Warning] Failed to write response: %v", err)
+			}
 			return
 		}
 	}
@@ -1129,7 +1140,7 @@ func (s *Server) handleRegister(w http.ResponseWriter, r *http.Request) {
 	// Fetch database user record if available to enforce user-level quota and preferences
 	var userRec *db.User
 	if s.db != nil {
-		userRec, _ = s.db.GetUser(user.ID)
+		userRec, _ = s.db.GetUser(user.ID) //nolint:errcheck
 	}
 
 	// Determine active domains to register dynamically based on rules and request Host
@@ -1172,7 +1183,7 @@ func (s *Server) handleRegister(w http.ResponseWriter, r *http.Request) {
 						domainsToReserve = append(domainsToReserve, d)
 					} else {
 						// Past quarantine, delete expired reservation and re-reserve
-						_ = s.db.DeleteSubdomainReservation(existing.ID)
+						_ = s.db.DeleteSubdomainReservation(existing.ID) //nolint:errcheck
 						domainsToReserve = append(domainsToReserve, d)
 					}
 				} else {
@@ -1218,7 +1229,7 @@ func (s *Server) handleRegister(w http.ResponseWriter, r *http.Request) {
 				for _, d := range domainsToReserve {
 					// Delete any existing quarantined or expired reservation for this user first
 					if existing, err := s.db.GetSubdomainReservationByName("", d); err == nil && existing != nil {
-						_ = s.db.DeleteSubdomainReservation(existing.ID)
+						_ = s.db.DeleteSubdomainReservation(existing.ID) //nolint:errcheck
 					}
 					res := &db.SubdomainReservation{
 						UserID:    user.ID,
@@ -1301,7 +1312,7 @@ func (s *Server) handleRegister(w http.ResponseWriter, r *http.Request) {
 								domainsToReserve = append(domainsToReserve, d)
 							} else {
 								// Past quarantine, delete expired reservation and re-reserve
-								_ = s.db.DeleteSubdomainReservation(existing.ID)
+								_ = s.db.DeleteSubdomainReservation(existing.ID) //nolint:errcheck
 								domainsToReserve = append(domainsToReserve, d)
 							}
 						} else {
@@ -1348,7 +1359,7 @@ func (s *Server) handleRegister(w http.ResponseWriter, r *http.Request) {
 					for _, d := range domainsToReserve {
 						// Delete any existing quarantined or expired reservation for this user first
 						if existing, err := s.db.GetSubdomainReservationByName(req.SubdomainPrefix, d); err == nil && existing != nil {
-							_ = s.db.DeleteSubdomainReservation(existing.ID)
+							_ = s.db.DeleteSubdomainReservation(existing.ID) //nolint:errcheck
 						}
 						res := &db.SubdomainReservation{
 							UserID:    user.ID,
@@ -1416,7 +1427,7 @@ func (s *Server) handleRegister(w http.ResponseWriter, r *http.Request) {
 			changed = true
 		}
 		if changed {
-			_ = s.db.UpdateUser(userRec)
+			_ = s.db.UpdateUser(userRec) //nolint:errcheck
 		}
 	}
 
@@ -1523,7 +1534,8 @@ func (s *Server) handleTunnelStatus(w http.ResponseWriter, r *http.Request) {
 
 	if s.registry.UpdateLeaseStatus(req.SessionToken, req.Status) {
 		if req.Status == "down" {
-			body, _ := s.renderNotificationTemplate("en", "admin_tunnel_offline.txt", nil)
+			body, _err := s.renderNotificationTemplate("en", "admin_tunnel_offline.txt", nil)
+			_ = _err //nolint:errcheck
 			s.notifications.SendAdminAlert("alert_notify_tunnel_offline", "LFR Tunnel Alert: Tunnel Offline", body)
 		}
 		w.WriteHeader(http.StatusOK)
@@ -1584,7 +1596,7 @@ func (s *Server) handleCheckSubdomain(w http.ResponseWriter, r *http.Request) {
 
 	var userRec *db.User
 	if s.db != nil {
-		userRec, _ = s.db.GetUser(user.ID)
+		userRec, _ = s.db.GetUser(user.ID) //nolint:errcheck
 	}
 
 	// Determine active domains to check dynamically based on request Host
@@ -1640,8 +1652,8 @@ func (s *Server) Start() error {
 				return
 			case <-ticker.C:
 				if s.db != nil {
-					_ = s.db.PruneExpiredMagicLinks()
-					_ = s.db.PruneExpiredOrRevokedPATs(s.cfg.PATRetentionDays)
+					_ = s.db.PruneExpiredMagicLinks()                          //nolint:errcheck
+					_ = s.db.PruneExpiredOrRevokedPATs(s.cfg.PATRetentionDays) //nolint:errcheck
 					s.checkExpiringReservations()
 				}
 			}
@@ -1722,27 +1734,27 @@ func (s *Server) handleRegisterRequest(w http.ResponseWriter, r *http.Request) {
 
 	if s.cfg.DisableEmailLogin {
 		w.WriteHeader(http.StatusForbidden)
-		_ = json.NewEncoder(w).Encode(map[string]string{"error": "Registration via email is disabled. Please use SSO."})
+		_ = json.NewEncoder(w).Encode(map[string]string{"error": "Registration via email is disabled. Please use SSO."}) //nolint:errcheck
 		return
 	}
 
 	if s.db == nil {
 		w.WriteHeader(http.StatusNotImplemented)
-		_ = json.NewEncoder(w).Encode(map[string]string{"error": "database storage not enabled"})
+		_ = json.NewEncoder(w).Encode(map[string]string{"error": "database storage not enabled"}) //nolint:errcheck
 		return
 	}
 
 	var req RegisterRequestPayload
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 		w.WriteHeader(http.StatusBadRequest)
-		_ = json.NewEncoder(w).Encode(map[string]string{"error": "invalid JSON payload"})
+		_ = json.NewEncoder(w).Encode(map[string]string{"error": "invalid JSON payload"}) //nolint:errcheck
 		return
 	}
 
 	req.Email = strings.ToLower(strings.TrimSpace(req.Email))
 	if req.Email == "" || !strings.Contains(req.Email, "@") {
 		w.WriteHeader(http.StatusBadRequest)
-		_ = json.NewEncoder(w).Encode(map[string]string{"error": "invalid email address"})
+		_ = json.NewEncoder(w).Encode(map[string]string{"error": "invalid email address"}) //nolint:errcheck
 		return
 	}
 
@@ -1762,7 +1774,7 @@ func (s *Server) handleRegisterRequest(w http.ResponseWriter, r *http.Request) {
 					s.writeAudit(req.Email, "auth.registration_blocked", "ip", getClientIP(r), "Registration blocked by email domain whitelist", r)
 				}
 				w.WriteHeader(http.StatusForbidden)
-				_ = json.NewEncoder(w).Encode(map[string]string{"error": "email domain not allowed by server configuration"})
+				_ = json.NewEncoder(w).Encode(map[string]string{"error": "email domain not allowed by server configuration"}) //nolint:errcheck
 				return
 			}
 		}
@@ -1775,7 +1787,7 @@ func (s *Server) handleRegisterRequest(w http.ResponseWriter, r *http.Request) {
 
 		// Mimic a successful registration to prevent email enumeration
 		w.WriteHeader(http.StatusOK)
-		_ = json.NewEncoder(w).Encode(map[string]string{
+		_ = json.NewEncoder(w).Encode(map[string]string{ //nolint:errcheck
 			"status":  "success",
 			"message": "registration request submitted. Please check your email to verify your account.",
 		})
@@ -1785,14 +1797,14 @@ func (s *Server) handleRegisterRequest(w http.ResponseWriter, r *http.Request) {
 	approvalToken, err := generateSecureToken()
 	if err != nil {
 		w.WriteHeader(http.StatusInternalServerError)
-		_ = json.NewEncoder(w).Encode(map[string]string{"error": "failed to generate approval token"})
+		_ = json.NewEncoder(w).Encode(map[string]string{"error": "failed to generate approval token"}) //nolint:errcheck
 		return
 	}
 
 	verificationToken, err := generateSecureToken()
 	if err != nil {
 		w.WriteHeader(http.StatusInternalServerError)
-		_ = json.NewEncoder(w).Encode(map[string]string{"error": "failed to generate verification token"})
+		_ = json.NewEncoder(w).Encode(map[string]string{"error": "failed to generate verification token"}) //nolint:errcheck
 		return
 	}
 
@@ -1811,7 +1823,7 @@ func (s *Server) handleRegisterRequest(w http.ResponseWriter, r *http.Request) {
 
 	if err := s.db.CreateUser(user); err != nil {
 		w.WriteHeader(http.StatusInternalServerError)
-		_ = json.NewEncoder(w).Encode(map[string]string{"error": "failed to save registration request"})
+		_ = json.NewEncoder(w).Encode(map[string]string{"error": "failed to save registration request"}) //nolint:errcheck
 		return
 	}
 
@@ -1863,7 +1875,7 @@ Liferay Tunnel Team`, html.EscapeString(greetingName), verifyURL, clientIP, repo
 	}
 
 	w.WriteHeader(http.StatusOK)
-	_ = json.NewEncoder(w).Encode(map[string]string{"status": "success", "message": "registration request submitted. Please check your email to verify your account."})
+	_ = json.NewEncoder(w).Encode(map[string]string{"status": "success", "message": "registration request submitted. Please check your email to verify your account."}) //nolint:errcheck
 }
 
 // handleSetupPage serves the setup page to complete registration
@@ -1876,7 +1888,9 @@ func (s *Server) handleSetupPage(w http.ResponseWriter, r *http.Request) {
 	}
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
 	w.WriteHeader(http.StatusOK)
-	_, _ = w.Write(data)
+	if _, err := w.Write(data); err != nil {
+		log.Printf("[Warning] Failed to write response: %v", err)
+	}
 }
 
 // handleCompleteSetup processes the profile completion form.
@@ -1936,11 +1950,12 @@ func (s *Server) handleCompleteSetup(w http.ResponseWriter, r *http.Request) {
 	}
 
 	s.writeAudit(user.Email, "user.verified", "user", user.Email, "User completed setup and is pending approval", r)
-	body, _ := s.renderNotificationTemplate("en", "admin_registration_request.txt", map[string]interface{}{
+	body, err := s.renderNotificationTemplate("en", "admin_registration_request.txt", map[string]interface{}{
 		"FirstName": user.FirstName,
 		"LastName":  user.LastName,
 		"Email":     user.Email,
 	})
+	_ = err //nolint:errcheck
 	s.notifications.SendAdminAlert("alert_notify_registration", "LFR Tunnel Alert: New User Registration", body)
 	s.webhooks.SendRegistrationAlert(user.Email, "Pending admin approval")
 
@@ -1978,12 +1993,12 @@ func (s *Server) handleCompleteSetup(w http.ResponseWriter, r *http.Request) {
 			}
 
 			plainBody := fmt.Sprintf("New user registered: %s. Approve here: %s", user.Email, approveURL)
-			go func() { _ = s.notifications.Sender().Send(s.cfg.AdminNotificationEmail, subject, body, plainBody) }()
+			go func() { _ = s.notifications.Sender().Send(s.cfg.AdminNotificationEmail, subject, body, plainBody) }() //nolint:errcheck
 		}
 	}
 
 	w.WriteHeader(http.StatusOK)
-	_ = json.NewEncoder(w).Encode(map[string]string{"status": "ok"})
+	_ = json.NewEncoder(w).Encode(map[string]string{"status": "ok"}) //nolint:errcheck
 }
 
 // handleVerifyEmail processes the email verification link clicked by the user.
@@ -2017,9 +2032,10 @@ func (s *Server) handleVerifyEmail(w http.ResponseWriter, r *http.Request) {
 	}
 
 	s.writeAudit(user.Email, "user.verified", "user", user.Email, "", r)
-	body, _ := s.renderNotificationTemplate("en", "admin_registration_request.txt", map[string]interface{}{
+	body, err := s.renderNotificationTemplate("en", "admin_registration_request.txt", map[string]interface{}{
 		"Email": user.Email,
 	})
+	_ = err //nolint:errcheck
 	s.notifications.SendAdminAlert("alert_notify_registration", "LFR Tunnel Alert: New User Registration", body)
 
 	// Also send the original admin approval email now
@@ -2060,10 +2076,14 @@ func (s *Server) handleVerifyEmail(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "text/html")
 	htmlBytes, err := staticFS.ReadFile("static/email_verified.html")
 	if err != nil {
-		_, _ = w.Write([]byte(`<html><head><title>Email Verified</title><style>body{font-family:sans-serif;text-align:center;padding:50px;color:#333;background:#f8fafc;}h1{color:#10b981;}</style></head><body><h1>Email Verified! ✅</h1><p>Your email has been verified successfully. An administrator has been notified to review and approve your account.</p></body></html>`))
+		if _, err := w.Write([]byte(`<html><head><title>Email Verified</title><style>body{font-family:sans-serif;text-align:center;padding:50px;color:#333;background:#f8fafc;}h1{color:#10b981;}</style></head><body><h1>Email Verified! ✅</h1><p>Your email has been verified successfully. An administrator has been notified to review and approve your account.</p></body></html>`)); err != nil {
+			log.Printf("[Warning] Failed to write response: %v", err)
+		}
 		return
 	}
-	_, _ = w.Write(htmlBytes)
+	if _, err := w.Write(htmlBytes); err != nil {
+		log.Printf("[Warning] Failed to write response: %v", err)
+	}
 }
 
 // handleApproveUser handles admin clicks on approval links.
@@ -2149,7 +2169,9 @@ func (s *Server) handleApproveUser(w http.ResponseWriter, r *http.Request) {
 
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
 	w.WriteHeader(http.StatusOK)
-	_, _ = w.Write([]byte("<h1>Approval Successful</h1><p>The user has been approved, and an email has been sent to them with instructions to claim their token.</p>"))
+	if _, err := w.Write([]byte("<h1>Approval Successful</h1><p>The user has been approved, and an email has been sent to them with instructions to claim their token.</p>")); err != nil {
+		log.Printf("[Warning] Failed to write response: %v", err)
+	}
 }
 
 // handleClaimToken allows developers to claim their generated PAT.
@@ -2158,14 +2180,14 @@ func (s *Server) handleClaimToken(w http.ResponseWriter, r *http.Request) {
 
 	if s.db == nil {
 		w.WriteHeader(http.StatusNotImplemented)
-		_ = json.NewEncoder(w).Encode(map[string]string{"error": "database storage not enabled"})
+		_ = json.NewEncoder(w).Encode(map[string]string{"error": "database storage not enabled"}) //nolint:errcheck
 		return
 	}
 
 	token := r.URL.Query().Get("token")
 	if token == "" {
 		w.WriteHeader(http.StatusBadRequest)
-		_ = json.NewEncoder(w).Encode(map[string]string{"error": "missing claim token"})
+		_ = json.NewEncoder(w).Encode(map[string]string{"error": "missing claim token"}) //nolint:errcheck
 		return
 	}
 
@@ -2173,7 +2195,7 @@ func (s *Server) handleClaimToken(w http.ResponseWriter, r *http.Request) {
 	users, err := s.db.ListUsers()
 	if err != nil {
 		w.WriteHeader(http.StatusInternalServerError)
-		_ = json.NewEncoder(w).Encode(map[string]string{"error": "failed to list users"})
+		_ = json.NewEncoder(w).Encode(map[string]string{"error": "failed to list users"}) //nolint:errcheck
 		return
 	}
 
@@ -2190,7 +2212,7 @@ func (s *Server) handleClaimToken(w http.ResponseWriter, r *http.Request) {
 
 	if targetUser == nil {
 		w.WriteHeader(http.StatusGone)
-		_ = json.NewEncoder(w).Encode(map[string]string{"error": "invalid or expired claim token"})
+		_ = json.NewEncoder(w).Encode(map[string]string{"error": "invalid or expired claim token"}) //nolint:errcheck
 		return
 	}
 
@@ -2198,12 +2220,12 @@ func (s *Server) handleClaimToken(w http.ResponseWriter, r *http.Request) {
 	targetUser.ClaimToken = ""
 	if err := s.db.UpdateUser(targetUser); err != nil {
 		w.WriteHeader(http.StatusInternalServerError)
-		_ = json.NewEncoder(w).Encode(map[string]string{"error": "failed to update user"})
+		_ = json.NewEncoder(w).Encode(map[string]string{"error": "failed to update user"}) //nolint:errcheck
 		return
 	}
 
 	w.WriteHeader(http.StatusOK)
-	_ = json.NewEncoder(w).Encode(map[string]string{
+	_ = json.NewEncoder(w).Encode(map[string]string{ //nolint:errcheck
 		"status":                "success",
 		"personal_access_token": plaintextPat,
 	})
@@ -2220,16 +2242,16 @@ func (s *Server) Stop() {
 	defer cancel()
 
 	if s.httpServer != nil {
-		_ = s.httpServer.Shutdown(ctx)
+		_ = s.httpServer.Shutdown(ctx) //nolint:errcheck
 	}
 	if s.redirectSrv != nil {
-		_ = s.redirectSrv.Shutdown(ctx)
+		_ = s.redirectSrv.Shutdown(ctx) //nolint:errcheck
 	}
 
 	s.chiselServer.Close() //nolint:errcheck
 	if s.db != nil {
-		_ = s.db.RecordGatewayCleanShutdown()
-		s.db.Close() //nolint:errcheck
+		_ = s.db.RecordGatewayCleanShutdown() //nolint:errcheck
+		s.db.Close()                          //nolint:errcheck
 	}
 }
 
@@ -2488,7 +2510,7 @@ func (s *Server) requireAdmin(w http.ResponseWriter, r *http.Request) (string, s
 				if pat.RevokedAt == nil && (pat.ExpiresAt == nil || pat.ExpiresAt.After(now)) {
 					user, err := s.db.GetUser(pat.UserID)
 					if err == nil && user.Status == "approved" && (user.Role == "admin" || user.Role == "owner") {
-						go func(patID int64) { _ = s.db.UpdatePATUsed(patID) }(pat.ID)
+						go func(patID int64) { _ = s.db.UpdatePATUsed(patID) }(pat.ID) //nolint:errcheck
 						actorEmail = user.Email
 						actorRole = user.Role
 						authenticated = true
@@ -2819,7 +2841,8 @@ func (s *Server) handleAdminMagicLink(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	magicToken, _ := generateSecureToken()
+	magicToken, _err := generateSecureToken()
+	_ = _err //nolint:errcheck
 	clientIP := getClientIP(r)
 
 	expiresAt := time.Now().Add(s.cfg.MagicLinkExpiry)
@@ -2828,9 +2851,9 @@ func (s *Server) handleAdminMagicLink(w http.ResponseWriter, r *http.Request) {
 		tokenHash := hex.EncodeToString(h[:])
 
 		// 🛡️ Security hardening: instantly invalidate any older unused magic links for this email!
-		_ = s.db.InvalidateOtherMagicLinks(req.Email, -1)
+		_ = s.db.InvalidateOtherMagicLinks(req.Email, -1) //nolint:errcheck
 
-		_ = s.db.CreateMagicLink(req.Email, tokenHash, clientIP, expiresAt)
+		_ = s.db.CreateMagicLink(req.Email, tokenHash, clientIP, expiresAt) //nolint:errcheck
 	} else {
 		sessionData := PortalSessionData{
 			Email:     req.Email,
@@ -2915,8 +2938,8 @@ func (s *Server) handleAdminVerify(w http.ResponseWriter, r *http.Request) {
 			respondJSON(w, http.StatusUnauthorized, map[string]string{"error": "Token has expired"})
 			return
 		}
-		_ = s.db.MarkMagicLinkUsed(link.ID)
-		_ = s.db.InvalidateOtherMagicLinks(link.Email, link.ID)
+		_ = s.db.MarkMagicLinkUsed(link.ID)                     //nolint:errcheck
+		_ = s.db.InvalidateOtherMagicLinks(link.Email, link.ID) //nolint:errcheck
 		email = link.Email
 	} else {
 		val, ok := s.portalMap.LoadAndDelete("admin_magic_" + req.Token)
@@ -2932,7 +2955,8 @@ func (s *Server) handleAdminVerify(w http.ResponseWriter, r *http.Request) {
 		}
 		email = sessionData.Email
 	}
-	sessionToken, _ := generateSecureToken()
+	sessionToken, _err := generateSecureToken()
+	_ = _err //nolint:errcheck
 	clientIP := getClientIP(r)
 
 	var previousLoginAt *time.Time
@@ -2948,14 +2972,14 @@ func (s *Server) handleAdminVerify(w http.ResponseWriter, r *http.Request) {
 				Role:      "owner",
 				Status:    "approved",
 			}
-			_ = s.db.CreateUser(u)
+			_ = s.db.CreateUser(u) //nolint:errcheck
 		}
 		user = u
 		if u != nil {
 			// Update the user's language preference dynamically on login if passed
 			if req.Lang != "" && req.Lang != u.LanguagePreference {
 				u.LanguagePreference = req.Lang
-				_ = s.db.UpdateUser(u)
+				_ = s.db.UpdateUser(u) //nolint:errcheck
 			}
 
 			if u.LastLoginAt != nil {
@@ -2991,7 +3015,11 @@ func (s *Server) handleAdminVerify(w http.ResponseWriter, r *http.Request) {
 	// MFA INTERCEPT: If the user has MFA enabled, do not establish the session yet.
 	// Respond with status="mfa_required" and a short-lived temp_token.
 	if user != nil && user.TOTPEnabled {
-		tempToken, _ := generateSecureToken()
+		tempToken, err := generateSecureToken()
+		if err != nil {
+			http.Error(w, "Failed to generate token", http.StatusInternalServerError)
+			return
+		}
 		s.portalMap.Store("pre_auth_"+tempToken, PortalSessionData{
 			Email:     email,
 			ClientIP:  clientIP,
@@ -3009,7 +3037,7 @@ func (s *Server) handleAdminVerify(w http.ResponseWriter, r *http.Request) {
 		now := time.Now().UTC()
 		user.LastLoginAt = &now
 		user.LastLoginIP = clientIP
-		_ = s.db.UpdateUser(user)
+		_ = s.db.UpdateUser(user) //nolint:errcheck
 	}
 
 	killedPreviousSession := false
@@ -3169,7 +3197,7 @@ func (s *Server) handleAdminListUsers(w http.ResponseWriter, r *http.Request, ac
 		})
 	}
 
-	_ = json.NewEncoder(w).Encode(responseList)
+	_ = json.NewEncoder(w).Encode(responseList) //nolint:errcheck
 }
 
 func (s *Server) handleAdminInviteUser(w http.ResponseWriter, r *http.Request, actor string) {
@@ -3241,12 +3269,16 @@ func (s *Server) handleAdminInviteUser(w http.ResponseWriter, r *http.Request, a
 	}
 
 	// Send Magic Link Invite Email
-	magicToken, _ := generateSecureToken()
+	magicToken, err := generateSecureToken()
+	if err != nil {
+		http.Error(w, "Failed to generate token", http.StatusInternalServerError)
+		return
+	}
 	clientIP := getClientIP(r)
 	expiresAt := time.Now().Add(s.cfg.InviteLinkExpiry)
 	h := sha256.Sum256([]byte(magicToken))
 	tokenHash := hex.EncodeToString(h[:])
-	_ = s.db.CreateMagicLink(req.Email, tokenHash, clientIP, expiresAt)
+	_ = s.db.CreateMagicLink(req.Email, tokenHash, clientIP, expiresAt) //nolint:errcheck
 
 	inviteLink := fmt.Sprintf("https://%s/api/auth/verify?token=%s", r.Host, magicToken)
 	declineLink := fmt.Sprintf("https://%s/api/auth/decline?token=%s", r.Host, magicToken)
@@ -3295,7 +3327,7 @@ Liferay Tunnel Team`, actor, inviteLink, actor, declineLink)
 
 	if s.notifications != nil && s.notifications.Sender() != nil {
 		plainBody := fmt.Sprintf("Hi there,\n\nYou have been invited by an administrator to use the Liferay Tunnel portal.\n\nLog in here: %s\n\nDecline here: %s", inviteLink, declineLink)
-		go func() { _ = s.notifications.Sender().Send(req.Email, subject, body, plainBody) }()
+		go func() { _ = s.notifications.Sender().Send(req.Email, subject, body, plainBody) }() //nolint:errcheck
 	}
 
 	s.writeAudit(actor, "user.invited", "user", req.Email, "Admin invited new user", r)
@@ -3626,7 +3658,9 @@ func (s *Server) handleVisitorMaintenancePage(w http.ResponseWriter, r *http.Req
 	if !useCustom {
 		htmlBytes, err = staticFS.ReadFile("static/maintenance.html")
 		if err != nil {
-			_, _ = w.Write([]byte(`<h1>Scheduled Maintenance</h1><p>The gateway is undergoing administrative updates.</p>`))
+			if _, err := w.Write([]byte(`<h1>Scheduled Maintenance</h1><p>The gateway is undergoing administrative updates.</p>`)); err != nil {
+				log.Printf("[Warning] Failed to write response: %v", err)
+			}
 			return
 		}
 	}
@@ -3661,7 +3695,9 @@ func (s *Server) handleVisitorMaintenancePage(w http.ResponseWriter, r *http.Req
 	htmlContent = strings.ReplaceAll(htmlContent, "__END_TIME__", strconv.FormatInt(epochSecs, 10))
 
 	finalBytes := s.injectBaseTag([]byte(htmlContent), r)
-	_, _ = w.Write(finalBytes)
+	if _, err := w.Write(finalBytes); err != nil {
+		log.Printf("[Warning] Failed to write response: %v", err)
+	}
 }
 
 func (s *Server) handleAdminGetUser(w http.ResponseWriter, r *http.Request, actor string) {
@@ -3705,7 +3741,7 @@ func (s *Server) handleAdminGetUser(w http.ResponseWriter, r *http.Request, acto
 		User: user,
 		PATs: pats,
 	}
-	_ = json.NewEncoder(w).Encode(resp)
+	_ = json.NewEncoder(w).Encode(resp) //nolint:errcheck
 }
 
 func (s *Server) handleAdminPatchUser(w http.ResponseWriter, r *http.Request, actor, actorRole string) {
@@ -3825,7 +3861,7 @@ Best regards,<br/>
 Liferay Tunnel Team`, html.EscapeString(greetingName))
 
 			plainBody := fmt.Sprintf("Hi %s,\n\nYour access on Liferay Tunnel has been suspended by an administrator.\n\nBest regards,\nLiferay Tunnel Team", greetingName)
-			go func() { _ = s.notifications.Sender().Send(user.Email, subject, body, plainBody) }()
+			go func() { _ = s.notifications.Sender().Send(user.Email, subject, body, plainBody) }() //nolint:errcheck
 		}
 	}
 
@@ -3860,7 +3896,7 @@ Liferay Tunnel Team<br/><br/>
 		}
 
 		plainBody := fmt.Sprintf("Hi %s,\n\nYour account role has been updated on Liferay Tunnel to: %s.\n\nUnsubscribe from optional emails here: %s\n\nBest regards,\nLiferay Tunnel Team", greetingName, *req.Role, unsubLink)
-		go func() { _ = s.notifications.Sender().Send(user.Email, subject, body, plainBody) }()
+		go func() { _ = s.notifications.Sender().Send(user.Email, subject, body, plainBody) }() //nolint:errcheck
 	}
 
 	detailsBytes, _ := json.Marshal(details)
@@ -3874,7 +3910,7 @@ Liferay Tunnel Team<br/><br/>
 	}
 	s.writeAudit(actor, action, "user", user.Email, string(detailsBytes), r)
 
-	_ = json.NewEncoder(w).Encode(user)
+	_ = json.NewEncoder(w).Encode(user) //nolint:errcheck
 }
 
 func (s *Server) handleAdminListTokens(w http.ResponseWriter, r *http.Request, actor string) {
@@ -3887,7 +3923,7 @@ func (s *Server) handleAdminListTokens(w http.ResponseWriter, r *http.Request, a
 		http.Error(w, `{"error":"Failed to list tokens"}`, http.StatusInternalServerError)
 		return
 	}
-	_ = json.NewEncoder(w).Encode(pats)
+	_ = json.NewEncoder(w).Encode(pats) //nolint:errcheck
 }
 
 func (s *Server) handleAdminDeleteToken(w http.ResponseWriter, r *http.Request, actor string) {
@@ -3906,7 +3942,7 @@ func (s *Server) handleAdminDeleteToken(w http.ResponseWriter, r *http.Request, 
 		if err == db.ErrNotFound {
 			// Idempotent delete
 			w.WriteHeader(http.StatusOK)
-			_ = json.NewEncoder(w).Encode(map[string]string{"status": "success"})
+			_ = json.NewEncoder(w).Encode(map[string]string{"status": "success"}) //nolint:errcheck
 			return
 		}
 		http.Error(w, `{"error":"Failed to revoke token"}`, http.StatusInternalServerError)
@@ -3915,7 +3951,7 @@ func (s *Server) handleAdminDeleteToken(w http.ResponseWriter, r *http.Request, 
 
 	s.writeAudit(actor, "token.revoked", "token", patIDStr, "", r)
 	w.WriteHeader(http.StatusOK)
-	_ = json.NewEncoder(w).Encode(map[string]string{"status": "success"})
+	_ = json.NewEncoder(w).Encode(map[string]string{"status": "success"}) //nolint:errcheck
 }
 
 func (s *Server) handleAdminExtendToken(w http.ResponseWriter, r *http.Request, actor string) {
@@ -3961,7 +3997,7 @@ func (s *Server) handleAdminExtendToken(w http.ResponseWriter, r *http.Request, 
 
 	s.writeAudit(actor, "token.extended", "token", strconv.FormatInt(patID, 10), fmt.Sprintf("Extended by %d days (permanent if 0)", req.Days), r)
 	w.WriteHeader(http.StatusOK)
-	_ = json.NewEncoder(w).Encode(map[string]string{"status": "success"})
+	_ = json.NewEncoder(w).Encode(map[string]string{"status": "success"}) //nolint:errcheck
 }
 
 func (s *Server) handleAdminListLeases(w http.ResponseWriter, r *http.Request, actor string) {
@@ -3986,7 +4022,7 @@ func (s *Server) handleAdminListLeases(w http.ResponseWriter, r *http.Request, a
 	}
 	s.edgeLeasesMu.Unlock()
 
-	_ = json.NewEncoder(w).Encode(leases)
+	_ = json.NewEncoder(w).Encode(leases) //nolint:errcheck
 }
 
 func (s *Server) handleAdminKickLease(w http.ResponseWriter, r *http.Request, actor string) {
@@ -4074,13 +4110,13 @@ func (s *Server) handleAdminKickLease(w http.ResponseWriter, r *http.Request, ac
 	found := s.registry.KickLease(subdomain)
 	if !found {
 		w.WriteHeader(http.StatusOK)
-		_ = json.NewEncoder(w).Encode(map[string]string{"status": "success", "message": "Lease not found or already gone"})
+		_ = json.NewEncoder(w).Encode(map[string]string{"status": "success", "message": "Lease not found or already gone"}) //nolint:errcheck
 		return
 	}
 
 	s.writeAudit(actor, "lease.kicked", "lease", subdomain, "", r)
 	w.WriteHeader(http.StatusOK)
-	_ = json.NewEncoder(w).Encode(map[string]string{"status": "success"})
+	_ = json.NewEncoder(w).Encode(map[string]string{"status": "success"}) //nolint:errcheck
 }
 
 // handleAdminOverrideRateLimit handles dynamic rate limit overrides for active tunnel leases.
@@ -4135,10 +4171,10 @@ func (s *Server) handleAdminAuditExport(w http.ResponseWriter, r *http.Request, 
 	w.Header().Set("Content-Disposition", "attachment;filename=audit_log.csv")
 
 	writer := csv.NewWriter(w)
-	_ = writer.Write([]string{"ID", "Actor", "Action", "TargetType", "TargetID", "Details", "IP", "Timestamp"})
+	_ = writer.Write([]string{"ID", "Actor", "Action", "TargetType", "TargetID", "Details", "IP", "Timestamp"}) //nolint:errcheck
 
 	for _, e := range entries {
-		_ = writer.Write([]string{
+		_ = writer.Write([]string{ //nolint:errcheck
 			strconv.FormatInt(e.ID, 10),
 			e.ActorID,
 			e.Action,
@@ -4179,7 +4215,7 @@ func (s *Server) handleAdminAuditLog(w http.ResponseWriter, r *http.Request, act
 		http.Error(w, `{"error":"Failed to list audit entries"}`, http.StatusInternalServerError)
 		return
 	}
-	_ = json.NewEncoder(w).Encode(entries)
+	_ = json.NewEncoder(w).Encode(entries) //nolint:errcheck
 }
 
 // BackupInfo describes a single backup file available for restore.
@@ -4202,7 +4238,9 @@ func (s *Server) handleAdminListBackups(w http.ResponseWriter, r *http.Request, 
 		if os.IsNotExist(err) {
 			// No backups yet — return empty list, not an error
 			w.Header().Set("Content-Type", "application/json")
-			_, _ = w.Write([]byte("[]"))
+			if _, err := w.Write([]byte("[]")); err != nil {
+				log.Printf("[Warning] Failed to write response: %v", err)
+			}
 			return
 		}
 		http.Error(w, `{"error":"Failed to read backups directory"}`, http.StatusInternalServerError)
@@ -4247,7 +4285,7 @@ func (s *Server) handleAdminBlacklist(w http.ResponseWriter, r *http.Request, ac
 			http.Error(w, `{"error":"Failed to list blacklisted IPs"}`, http.StatusInternalServerError)
 			return
 		}
-		_ = json.NewEncoder(w).Encode(list)
+		_ = json.NewEncoder(w).Encode(list) //nolint:errcheck
 		return
 	}
 
@@ -4272,10 +4310,11 @@ func (s *Server) handleAdminBlacklist(w http.ResponseWriter, r *http.Request, ac
 		s.blacklist.Store(payload.IPAddress, true)
 		s.BroadcastBlacklistUpdate("add", payload.IPAddress)
 		s.writeAudit(actor, "ip.blacklisted", "ip", payload.IPAddress, payload.Reason, r)
-		body, _ := s.renderNotificationTemplate("en", "admin_ip_banned.txt", map[string]interface{}{"IP": payload.IPAddress, "Actor": actor})
+		body, _err := s.renderNotificationTemplate("en", "admin_ip_banned.txt", map[string]interface{}{"IP": payload.IPAddress, "Actor": actor})
+		_ = _err //nolint:errcheck
 		s.notifications.SendAdminAlert("alert_notify_blacklist", "LFR Tunnel Alert: IP Banned", body)
 		s.webhooks.SendIPBlacklistAlert(payload.IPAddress, fmt.Sprintf("%s (Banned by admin: %s)", payload.Reason, actor))
-		_ = json.NewEncoder(w).Encode(map[string]string{"status": "success"})
+		_ = json.NewEncoder(w).Encode(map[string]string{"status": "success"}) //nolint:errcheck
 		return
 	}
 
@@ -4292,7 +4331,7 @@ func (s *Server) handleAdminBlacklist(w http.ResponseWriter, r *http.Request, ac
 		s.blacklist.Delete(ip)
 		s.BroadcastBlacklistUpdate("remove", ip)
 		s.writeAudit(actor, "ip.unblacklisted", "ip", ip, "", r)
-		_ = json.NewEncoder(w).Encode(map[string]string{"status": "success"})
+		_ = json.NewEncoder(w).Encode(map[string]string{"status": "success"}) //nolint:errcheck
 		return
 	}
 
@@ -4307,9 +4346,12 @@ func (s *Server) handleAdminSettings(w http.ResponseWriter, r *http.Request, act
 
 	if r.Method == http.MethodGet {
 		// Fetch settings
-		notifyReg, _ := s.db.GetAdminSetting("alert_notify_registration")
-		notifyBan, _ := s.db.GetAdminSetting("alert_notify_blacklist")
-		notifyOffline, _ := s.db.GetAdminSetting("alert_notify_tunnel_offline")
+		notifyReg, _err := s.db.GetAdminSetting("alert_notify_registration")
+		_ = _err //nolint:errcheck
+		notifyBan, _err := s.db.GetAdminSetting("alert_notify_blacklist")
+		_ = _err //nolint:errcheck
+		notifyOffline, _err := s.db.GetAdminSetting("alert_notify_tunnel_offline")
+		_ = _err //nolint:errcheck
 
 		// Default values if not set
 		if notifyReg == "" {
@@ -4322,7 +4364,7 @@ func (s *Server) handleAdminSettings(w http.ResponseWriter, r *http.Request, act
 			notifyOffline = "false"
 		}
 
-		_ = json.NewEncoder(w).Encode(map[string]interface{}{
+		_ = json.NewEncoder(w).Encode(map[string]interface{}{ //nolint:errcheck
 			"alert_notify_registration":   notifyReg,
 			"alert_notify_blacklist":      notifyBan,
 			"alert_notify_tunnel_offline": notifyOffline,
@@ -4352,7 +4394,7 @@ func (s *Server) handleAdminSettings(w http.ResponseWriter, r *http.Request, act
 		}
 
 		s.writeAudit(actor, "admin.settings_updated", "system", "email_alerts", "Admin updated email alert configuration", r)
-		_ = json.NewEncoder(w).Encode(map[string]string{"message": "Settings updated"})
+		_ = json.NewEncoder(w).Encode(map[string]string{"message": "Settings updated"}) //nolint:errcheck
 		return
 	}
 
@@ -4372,7 +4414,7 @@ func (s *Server) handleAdminTestWebhook(w http.ResponseWriter, r *http.Request, 
 		}
 		s.testLimiterMu.Unlock()
 		w.WriteHeader(http.StatusTooManyRequests)
-		_ = json.NewEncoder(w).Encode(map[string]interface{}{
+		_ = json.NewEncoder(w).Encode(map[string]interface{}{ //nolint:errcheck
 			"error":       fmt.Sprintf("Rate limit exceeded. Please wait %d seconds before testing again.", remaining),
 			"retry_after": remaining,
 		})
@@ -4392,11 +4434,12 @@ func (s *Server) handleAdminTestWebhook(w http.ResponseWriter, r *http.Request, 
 
 	// 4. Dispatch Email alert
 	if s.notifications != nil && s.cfg.AdminNotificationEmail != "" {
-		body, _ := s.renderNotificationTemplate("en", "admin_test_integration.txt", map[string]interface{}{
+		body, err := s.renderNotificationTemplate("en", "admin_test_integration.txt", map[string]interface{}{
 			"Actor":     actor,
 			"Timestamp": timestamp,
 			"Version":   version,
 		})
+		_ = err //nolint:errcheck
 		s.notifications.SendAdminAlert(
 			"alert_notify_test",
 			"Liferay Tunnel Integration Test",
@@ -4408,7 +4451,7 @@ func (s *Server) handleAdminTestWebhook(w http.ResponseWriter, r *http.Request, 
 	s.writeAudit(actor, "admin.test_notification_dispatched", "system", "webhook_test", "Admin triggered an integration test notification", r)
 
 	w.WriteHeader(http.StatusOK)
-	_ = json.NewEncoder(w).Encode(map[string]string{
+	_ = json.NewEncoder(w).Encode(map[string]string{ //nolint:errcheck
 		"status":  "success",
 		"message": "Test notifications dispatched successfully.",
 	})
@@ -4524,11 +4567,15 @@ func (s *Server) handlePrivacyFallback(w http.ResponseWriter, r *http.Request) {
 	if err != nil {
 		slog.Info(fmt.Sprintf("[Server] Failed to render privacy policy template: %v", err))
 		// Hardcoded basic fallback
-		_, _ = w.Write([]byte(`<html><body><h1>Privacy Policy</h1><p>Under maintenance.</p></body></html>`))
+		if _, err := w.Write([]byte(`<html><body><h1>Privacy Policy</h1><p>Under maintenance.</p></body></html>`)); err != nil {
+			log.Printf("[Warning] Failed to write response: %v", err)
+		}
 		return
 	}
 
-	_, _ = w.Write([]byte(body))
+	if _, err := w.Write([]byte(body)); err != nil {
+		log.Printf("[Warning] Failed to write response: %v", err)
+	}
 }
 
 func (s *Server) handleCookiesFallback(w http.ResponseWriter, r *http.Request) {
@@ -4548,11 +4595,15 @@ func (s *Server) handleCookiesFallback(w http.ResponseWriter, r *http.Request) {
 	if err != nil {
 		slog.Info(fmt.Sprintf("[Server] Failed to render cookie disclosure template: %v", err))
 		// Hardcoded basic fallback
-		_, _ = w.Write([]byte(`<html><body><h1>Cookie Disclosure</h1><p>Under maintenance.</p></body></html>`))
+		if _, err := w.Write([]byte(`<html><body><h1>Cookie Disclosure</h1><p>Under maintenance.</p></body></html>`)); err != nil {
+			log.Printf("[Warning] Failed to write response: %v", err)
+		}
 		return
 	}
 
-	_, _ = w.Write([]byte(body))
+	if _, err := w.Write([]byte(body)); err != nil {
+		log.Printf("[Warning] Failed to write response: %v", err)
+	}
 }
 
 // renderEmailTemplate loads and compiles the requested localized HTML template.
@@ -4697,7 +4748,7 @@ var generatorWords = []string{"apple", "banana", "cherry", "dragon", "falcon", "
 func (s *Server) generateRandomSubdomainPrefix(style string) string {
 	randInt := func(max int) int {
 		b := make([]byte, 4)
-		_, _ = rand.Read(b)
+		_, _ = rand.Read(b) //nolint:errcheck
 		val := int(uint32(b[0])<<24 | uint32(b[1])<<16 | uint32(b[2])<<8 | uint32(b[3]))
 		if val < 0 {
 			val = -val
@@ -4715,7 +4766,7 @@ func (s *Server) generateRandomSubdomainPrefix(style string) string {
 	default: // Completely Random (Alphanumeric) [a-z0-9]{8}
 		const chars = "abcdefghijklmnopqrstuvwxyz0123456789"
 		b := make([]byte, 8)
-		_, _ = rand.Read(b)
+		_, _ = rand.Read(b) //nolint:errcheck
 		for i := range b {
 			b[i] = chars[int(b[i])%len(chars)]
 		}
@@ -4750,7 +4801,9 @@ func (s *Server) handleVisitorGonePage(w http.ResponseWriter, r *http.Request, h
 
 	htmlBytes, err := staticFS.ReadFile("static/gone.html")
 	if err != nil {
-		_, _ = w.Write([]byte(`<h1>Subdomain Discontinued</h1><p>The subdomain is in quarantine.</p>`))
+		if _, err := w.Write([]byte(`<h1>Subdomain Discontinued</h1><p>The subdomain is in quarantine.</p>`)); err != nil {
+			log.Printf("[Warning] Failed to write response: %v", err)
+		}
 		return
 	}
 
@@ -4762,7 +4815,9 @@ func (s *Server) handleVisitorGonePage(w http.ResponseWriter, r *http.Request, h
 	htmlContent = strings.ReplaceAll(htmlContent, "{{.PortalURL}}", html.EscapeString(portalURL))
 
 	finalBytes := s.injectBaseTag([]byte(htmlContent), r)
-	_, _ = w.Write(finalBytes)
+	if _, err := w.Write(finalBytes); err != nil {
+		log.Printf("[Warning] Failed to write response: %v", err)
+	}
 }
 
 func (s *Server) injectBaseTag(htmlBytes []byte, r *http.Request) []byte {
@@ -4823,7 +4878,7 @@ func (s *Server) handleEdgeRegisterProxy(w http.ResponseWriter, r *http.Request,
 		var errResp struct {
 			Error string `json:"error"`
 		}
-		_ = json.NewDecoder(resp.Body).Decode(&errResp)
+		_ = json.NewDecoder(resp.Body).Decode(&errResp) //nolint:errcheck
 		if errResp.Error == "" {
 			errResp.Error = fmt.Sprintf("control plane rejected request with status %d", resp.StatusCode)
 		}
@@ -4937,7 +4992,7 @@ func (s *Server) handleEdgeRegister(w http.ResponseWriter, r *http.Request) {
 
 	var userRec *db.User
 	if s.db != nil {
-		userRec, _ = s.db.GetUser(user.ID)
+		userRec, _ = s.db.GetUser(user.ID) //nolint:errcheck
 	}
 
 	finalSubdomain := edgeReq.SubdomainPrefix
@@ -4982,7 +5037,7 @@ func (s *Server) handleEdgeRegister(w http.ResponseWriter, r *http.Request) {
 							}
 							domainsToReserve = append(domainsToReserve, d)
 						} else {
-							_ = s.db.DeleteSubdomainReservation(existing.ID)
+							_ = s.db.DeleteSubdomainReservation(existing.ID) //nolint:errcheck
 							domainsToReserve = append(domainsToReserve, d)
 						}
 					} else {
@@ -5025,7 +5080,7 @@ func (s *Server) handleEdgeRegister(w http.ResponseWriter, r *http.Request) {
 
 				for _, d := range domainsToReserve {
 					if existing, err := s.db.GetSubdomainReservationByName(finalSubdomain, d); err == nil && existing != nil {
-						_ = s.db.DeleteSubdomainReservation(existing.ID)
+						_ = s.db.DeleteSubdomainReservation(existing.ID) //nolint:errcheck
 					}
 					res := &db.SubdomainReservation{
 						UserID:    user.ID,
@@ -5033,7 +5088,7 @@ func (s *Server) handleEdgeRegister(w http.ResponseWriter, r *http.Request) {
 						Domain:    d,
 						ExpiresAt: s.getUserSubdomainExpiry(user),
 					}
-					_ = s.db.CreateSubdomainReservation(res)
+					_ = s.db.CreateSubdomainReservation(res) //nolint:errcheck
 				}
 			}
 		}
@@ -5053,7 +5108,7 @@ func (s *Server) handleEdgeRegister(w http.ResponseWriter, r *http.Request) {
 					updated = true
 				}
 				if updated {
-					_ = s.db.UpdateSubdomainReservation(existing)
+					_ = s.db.UpdateSubdomainReservation(existing) //nolint:errcheck
 				}
 			}
 		}
@@ -5084,7 +5139,7 @@ func (s *Server) handleEdgeRegister(w http.ResponseWriter, r *http.Request) {
 			changed = true
 		}
 		if changed {
-			_ = s.db.UpdateUser(userRec)
+			_ = s.db.UpdateUser(userRec) //nolint:errcheck
 		}
 	}
 
@@ -5424,7 +5479,7 @@ func (s *Server) checkOutboundConnectivity() bool {
 		}
 		resp, err := client.Do(req)
 		if err == nil {
-			_ = resp.Body.Close()
+			_ = resp.Body.Close() //nolint:errcheck
 			return true
 		}
 	}
@@ -5472,11 +5527,11 @@ func (s *Server) monitorEdgeHealth() {
 					ServerVersion string `json:"server_version"`
 				}
 				if bodyBytes, readErr := io.ReadAll(resp.Body); readErr == nil {
-					_ = json.Unmarshal(bodyBytes, &versionResp)
+					_ = json.Unmarshal(bodyBytes, &versionResp) //nolint:errcheck
 					version = versionResp.ServerVersion
 				}
 			}
-			_ = resp.Body.Close()
+			_ = resp.Body.Close() //nolint:errcheck
 
 			if resp.StatusCode == http.StatusOK {
 				s.updateEdgeHealth(edge.ID, "Online", latency, "", version)

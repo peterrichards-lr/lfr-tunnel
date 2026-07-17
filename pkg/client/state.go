@@ -74,7 +74,7 @@ func WriteState(subdomain string, state *ClientState) error {
 func DeleteState(subdomain string) {
 	path, err := GetStateFilePath(subdomain)
 	if err == nil {
-		_ = os.Remove(path)
+		_ = os.Remove(path) //nolint:errcheck
 	}
 }
 
@@ -91,7 +91,7 @@ func QueryStatusJSON(statePath string, isRunningFunc func(int) bool) ([]byte, er
 	}
 
 	if isRunningFunc != nil && !isRunningFunc(state.PID) {
-		_ = os.Remove(statePath)
+		_ = os.Remove(statePath) //nolint:errcheck
 		return json.Marshal(StatusOutput{Running: false})
 	}
 

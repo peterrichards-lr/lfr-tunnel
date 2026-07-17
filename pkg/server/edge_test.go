@@ -5,6 +5,7 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
+	"log"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -30,7 +31,9 @@ func TestEdgeValidationDeregisterAndAuditProxy(t *testing.T) {
 		edgeToken := r.Header.Get("X-Edge-Token")
 		if edgeToken != "my-edge-secret" {
 			w.WriteHeader(http.StatusUnauthorized)
-			_, _ = w.Write([]byte(`{"error":"unauthorized"}`))
+			if _, err := w.Write([]byte(`{"error":"unauthorized"}`)); err != nil {
+				log.Printf("[Warning] Failed to write response: %v", err)
+			}
 			return
 		}
 
@@ -42,20 +45,24 @@ func TestEdgeValidationDeregisterAndAuditProxy(t *testing.T) {
 				SubdomainPrefix string   `json:"subdomain_prefix"`
 				Domains         []string `json:"domains"`
 			}
-			_ = json.NewDecoder(r.Body).Decode(&edgeReq)
+			_ = json.NewDecoder(r.Body).Decode(&edgeReq) //nolint:errcheck
 
 			if edgeReq.AuthToken != "user-pat-token" {
 				w.WriteHeader(http.StatusUnauthorized)
-				_, _ = w.Write([]byte(`{"error":"invalid token"}`))
+				if _, err := w.Write([]byte(`{"error":"invalid token"}`)); err != nil {
+					log.Printf("[Warning] Failed to write response: %v", err)
+				}
 				return
 			}
 
 			w.WriteHeader(http.StatusOK)
-			_, _ = w.Write([]byte(`{
+			if _, err := w.Write([]byte(`{
 				"user_id": "test-user-id",
 				"subdomain_prefix": "my-validated-sub",
 				"rate_limit": 50
-			}`))
+			}`)); err != nil {
+				log.Printf("[Warning] Failed to write response: %v", err)
+			}
 			return
 		}
 
@@ -70,7 +77,7 @@ func TestEdgeValidationDeregisterAndAuditProxy(t *testing.T) {
 			var auditReq struct {
 				Details string `json:"details"`
 			}
-			_ = json.NewDecoder(r.Body).Decode(&auditReq)
+			_ = json.NewDecoder(r.Body).Decode(&auditReq) //nolint:errcheck
 			forwardedAuditDetails = auditReq.Details
 			w.WriteHeader(http.StatusOK)
 			return
@@ -116,7 +123,7 @@ func TestEdgeValidationDeregisterAndAuditProxy(t *testing.T) {
 	}
 
 	var regResp RegisterResponse
-	_ = json.NewDecoder(resp.Body).Decode(&regResp)
+	_ = json.NewDecoder(resp.Body).Decode(&regResp) //nolint:errcheck
 
 	if regResp.Status != "success" || regResp.SubdomainPrefix != "my-validated-sub" {
 		t.Fatalf("unexpected register response: %+v", regResp)
@@ -319,7 +326,9 @@ func TestEdgeMetricsAndKickIntegration(t *testing.T) {
 				return
 			}
 			w.WriteHeader(http.StatusOK)
-			_, _ = w.Write([]byte(`{"status":"success"}`))
+			if _, err := w.Write([]byte(`{"status":"success"}`)); err != nil {
+				log.Printf("[Warning] Failed to write response: %v", err)
+			}
 			return
 		}
 		w.WriteHeader(http.StatusNotFound)

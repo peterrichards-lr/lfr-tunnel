@@ -40,7 +40,8 @@ func TestPIDManagement(t *testing.T) {
 	}
 
 	// Clean up
-	path, _ := getPIDFilePath(sub)
+	path, _err := getPIDFilePath(sub)
+	_ = _err            //nolint:errcheck
 	_ = os.Remove(path) //nolint:errcheck
 }
 
@@ -71,7 +72,7 @@ func TestProbeFastestRegion(t *testing.T) {
 	}
 	// It will return an empty string or whatever is fastest (none in this case, meaning default/error)
 	// We just want to ensure it doesn't panic
-	_ = probeFastestRegion(regions)
+	_ = probeFastestRegion(regions) //nolint:errcheck
 }
 
 func TestRewriteRemotes(t *testing.T) {

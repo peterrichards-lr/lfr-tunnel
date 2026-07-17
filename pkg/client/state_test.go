@@ -2,6 +2,7 @@ package client
 
 import (
 	"encoding/json"
+	"log"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -61,7 +62,7 @@ func TestQueryStatusJSON(t *testing.T) {
 	mockMux.HandleFunc("/api/info", func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(http.StatusOK)
-		_, _ = w.Write([]byte(`{
+		if _, err := w.Write([]byte(`{
 			"status": "healthy",
 			"connection": {
 				"state": "connected"
@@ -71,7 +72,9 @@ func TestQueryStatusJSON(t *testing.T) {
 				"bytes_out": 456,
 				"requests_total": 789
 			}
-		}`))
+		}`)); err != nil {
+			log.Printf("[Warning] Failed to write response: %v", err)
+		}
 	})
 	server := httptest.NewServer(mockMux)
 	defer server.Close()
@@ -94,7 +97,7 @@ func TestQueryStatusJSON(t *testing.T) {
 	}
 
 	data, _ := json.Marshal(state)
-	_ = os.WriteFile(statePath, data, 0600)
+	_ = os.WriteFile(statePath, data, 0600) //nolint:errcheck
 
 	// Scenario 1: PID is running, and inspector is up
 	isRunningTrue := func(pid int) bool { return true }
@@ -126,7 +129,7 @@ func TestQueryStatusJSON(t *testing.T) {
 	}
 
 	var output2 StatusOutput
-	_ = json.Unmarshal(res2, &output2)
+	_ = json.Unmarshal(res2, &output2) //nolint:errcheck
 	if output2.Running {
 		t.Errorf("expected running to be false for non-running process")
 	}

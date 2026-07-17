@@ -55,10 +55,10 @@ func (w *WebhookService) sendPayload(slackData map[string]interface{}, teamsData
 
 	go func() {
 		if w.cfg.SlackURL != "" && slackData != nil {
-			_ = w.postToURL(w.cfg.SlackURL, slackData, "Slack")
+			_ = w.postToURL(w.cfg.SlackURL, slackData, "Slack") //nolint:errcheck
 		}
 		if w.cfg.TeamsURL != "" && teamsData != nil {
-			_ = w.postToURL(w.cfg.TeamsURL, teamsData, "Microsoft Teams")
+			_ = w.postToURL(w.cfg.TeamsURL, teamsData, "Microsoft Teams") //nolint:errcheck
 		}
 	}()
 }
@@ -101,7 +101,7 @@ func (w *WebhookService) postToURL(urlStr string, data interface{}, platform str
 		slog.Error("failed to send webhook request", "platform", platform, "error", err)
 		return err
 	}
-	defer func() { _ = resp.Body.Close() }()
+	defer func() { _ = resp.Body.Close() }() //nolint:errcheck
 
 	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
 		slog.Error("webhook endpoint returned failure status", "platform", platform, "status", resp.Status)

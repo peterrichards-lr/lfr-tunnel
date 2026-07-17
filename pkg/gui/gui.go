@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"log"
 	"log/slog"
 	"net/http"
 	"os"
@@ -72,12 +73,16 @@ func (s *TempSettingsServer) handleRoot(w http.ResponseWriter, r *http.Request) 
 		return
 	}
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
-	_, _ = w.Write(client.DashboardHTML)
+	if _, err := w.Write(client.DashboardHTML); err != nil {
+		log.Printf("[Warning] Failed to write response: %v", err)
+	}
 }
 
 func (s *TempSettingsServer) handleLogs(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
-	_, _ = w.Write(client.DashboardHTML)
+	if _, err := w.Write(client.DashboardHTML); err != nil {
+		log.Printf("[Warning] Failed to write response: %v", err)
+	}
 }
 
 func (s *TempSettingsServer) handleInfo(w http.ResponseWriter, r *http.Request) {
@@ -98,7 +103,7 @@ func (s *TempSettingsServer) handleInfo(w http.ResponseWriter, r *http.Request) 
 		client := &http.Client{Timeout: 2 * time.Second}
 		if res, err := client.Get(fmt.Sprintf("%s/api/version", url)); err == nil {
 			defer func() {
-				_ = res.Body.Close()
+				_ = res.Body.Close() //nolint:errcheck
 			}()
 			var vResp struct {
 				Version string `json:"server_version"`
@@ -118,7 +123,7 @@ func (s *TempSettingsServer) handleInfo(w http.ResponseWriter, r *http.Request) 
 		"client_subdomain": sub,
 		"log_file":         logFile,
 	}
-	_ = json.NewEncoder(w).Encode(info)
+	_ = json.NewEncoder(w).Encode(info) //nolint:errcheck
 }
 
 func (s *TempSettingsServer) handleApiLogs(w http.ResponseWriter, r *http.Request) {
@@ -143,12 +148,16 @@ func (s *TempSettingsServer) handleApiLogs(w http.ResponseWriter, r *http.Reques
 		return
 	}
 	w.Header().Set("Content-Type", "text/plain; charset=utf-8")
-	_, _ = w.Write(data)
+	if _, err := w.Write(data); err != nil {
+		log.Printf("[Warning] Failed to write response: %v", err)
+	}
 }
 
 func (s *TempSettingsServer) handleState(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/json")
-	_, _ = w.Write([]byte(`{"maintenance_mode":false,"added_headers":{},"history":[],"public_urls":[]}`))
+	if _, err := w.Write([]byte(`{"maintenance_mode":false,"added_headers":{},"history":[],"public_urls":[]}`)); err != nil {
+		log.Printf("[Warning] Failed to write response: %v", err)
+	}
 }
 
 func (s *TempSettingsServer) handleConfig(w http.ResponseWriter, r *http.Request) {
@@ -190,7 +199,7 @@ func (s *TempSettingsServer) handleConfigGet(w http.ResponseWriter) {
 		"passcode":             cfg.Passcode,
 		"rate_limit":           cfg.RateLimit,
 	}
-	_ = json.NewEncoder(w).Encode(resp)
+	_ = json.NewEncoder(w).Encode(resp) //nolint:errcheck
 }
 
 func (s *TempSettingsServer) handleConfigPost(w http.ResponseWriter, r *http.Request) {
@@ -207,7 +216,9 @@ func (s *TempSettingsServer) handleConfigPost(w http.ResponseWriter, r *http.Req
 	}
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 		w.WriteHeader(http.StatusBadRequest)
-		_, _ = w.Write([]byte(`{"error":"Invalid request JSON"}`))
+		if _, err := w.Write([]byte(`{"error":"Invalid request JSON"}`)); err != nil {
+			log.Printf("[Warning] Failed to write response: %v", err)
+		}
 		return
 	}
 
@@ -231,10 +242,12 @@ func (s *TempSettingsServer) handleConfigPost(w http.ResponseWriter, r *http.Req
 	err = config.SaveClientConfig("", cfg)
 	if err != nil {
 		w.WriteHeader(http.StatusInternalServerError)
-		_ = json.NewEncoder(w).Encode(map[string]string{"error": err.Error()})
+		_ = json.NewEncoder(w).Encode(map[string]string{"error": err.Error()}) //nolint:errcheck
 		return
 	}
-	_, _ = w.Write([]byte(`{"status":"saved"}`))
+	if _, err := w.Write([]byte(`{"status":"saved"}`)); err != nil {
+		log.Printf("[Warning] Failed to write response: %v", err)
+	}
 }
 
 func (s *TempSettingsServer) Stop() {
@@ -245,7 +258,7 @@ func (s *TempSettingsServer) Stop() {
 	}
 	ctx, cancel := context.WithTimeout(context.Background(), 500*time.Millisecond)
 	defer cancel()
-	_ = s.server.Shutdown(ctx)
+	_ = s.server.Shutdown(ctx) //nolint:errcheck
 	s.server = nil
 }
 
@@ -269,7 +282,7 @@ func acquireGUILock() bool {
 	}
 
 	// Write our PID
-	_ = os.WriteFile(lockPath, []byte(strconv.Itoa(os.Getpid())), 0644)
+	_ = os.WriteFile(lockPath, []byte(strconv.Itoa(os.Getpid())), 0644) //nolint:errcheck
 	return true
 }
 
@@ -391,7 +404,7 @@ func updateMenu(tray *systray.SystemTray, cfg *config.ClientConfig, isRunning bo
 		tray.Remove()
 		tempServer.Stop()
 		if lockPath != "" {
-			_ = os.Remove(lockPath)
+			_ = os.Remove(lockPath) //nolint:errcheck
 		}
 		os.Exit(0)
 	})
@@ -423,10 +436,10 @@ func handleToggle(cfg *config.ClientConfig) {
 
 	if isRunning {
 		cmd := exec.Command(execPath, "-stop", "-subdomain", sub)
-		_ = cmd.Run()
+		_ = cmd.Run() //nolint:errcheck
 	} else {
 		cmd := exec.Command(execPath, "-background")
-		_ = cmd.Start()
+		_ = cmd.Start() //nolint:errcheck
 	}
 }
 
@@ -443,7 +456,7 @@ func handleCopyURLString(urlStr string) {
 		return
 	}
 	cmd.Stdin = strings.NewReader(urlStr)
-	_ = cmd.Run()
+	_ = cmd.Run() //nolint:errcheck
 }
 
 func handleOpenInspector(cfg *config.ClientConfig) {
@@ -623,5 +636,7 @@ func getRunningState(configuredSub string) (*client.ClientState, string, bool) {
 func (s *TempSettingsServer) handleFavicon(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "image/svg+xml")
 	w.Header().Set("Cache-Control", "public, max-age=86400")
-	_, _ = w.Write(client.GetEmbeddedFaviconSVG())
+	if _, err := w.Write(client.GetEmbeddedFaviconSVG()); err != nil {
+		log.Printf("[Warning] Failed to write response: %v", err)
+	}
 }

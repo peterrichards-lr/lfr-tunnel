@@ -4,6 +4,7 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"fmt"
+	"log"
 	"log/slog"
 	"net/http"
 )
@@ -35,20 +36,22 @@ func (s *Server) handleAuthReport(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Invalidate the token
-	_ = s.db.MarkMagicLinkUsed(link.ID)
+	_ = s.db.MarkMagicLinkUsed(link.ID) //nolint:errcheck
 
 	// Audit Log
 	s.writeAudit(link.Email, "auth.magic_link_reported", "ip", link.ClientIP, "User reported unauthorized magic link request", r)
 
 	// Blacklist the IP
-	_ = s.db.AddBlacklistIP(link.ClientIP, "Reported via Magic Link email")
+	_ = s.db.AddBlacklistIP(link.ClientIP, "Reported via Magic Link email") //nolint:errcheck
 	s.blacklist.Store(link.ClientIP, true)
 	s.webhooks.SendAbuseReportAlert(link.Email, "Unauthorized magic link login attempt", link.ClientIP)
 
 	slog.Info(fmt.Sprintf("[Auth] Magic link reported by %s. IP %s has been blacklisted.", link.Email, link.ClientIP))
 
 	w.Header().Set("Content-Type", "text/html")
-	_, _ = w.Write([]byte("Thank you. This login link has been deactivated, and the request has been reported to our security team."))
+	if _, err := w.Write([]byte("Thank you. This login link has been deactivated, and the request has been reported to our security team.")); err != nil {
+		log.Printf("[Warning] Failed to write response: %v", err)
+	}
 }
 
 func (s *Server) handleAuthDecline(w http.ResponseWriter, r *http.Request) {
@@ -68,18 +71,20 @@ func (s *Server) handleAuthDecline(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Invalidate the token
-	_ = s.db.MarkMagicLinkUsed(link.ID)
+	_ = s.db.MarkMagicLinkUsed(link.ID) //nolint:errcheck
 
 	// Since they declined the invite, let's delete their user record (it was approved initially by the inviter)
 	user, err := s.db.GetUserByEmail(link.Email)
 	if err == nil {
-		_ = s.db.DeleteUser(user.ID)
+		_ = s.db.DeleteUser(user.ID) //nolint:errcheck
 	}
 
 	s.writeAudit(link.Email, "auth.invite_declined", "user", link.Email, "User declined administrator invitation", r)
 
 	w.Header().Set("Content-Type", "text/html")
-	_, _ = w.Write([]byte("Thank you. This invitation has been securely declined and the administrator will be notified."))
+	if _, err := w.Write([]byte("Thank you. This invitation has been securely declined and the administrator will be notified.")); err != nil {
+		log.Printf("[Warning] Failed to write response: %v", err)
+	}
 }
 
 func (s *Server) handleReportRegistration(w http.ResponseWriter, r *http.Request) {
@@ -96,11 +101,13 @@ func (s *Server) handleReportRegistration(w http.ResponseWriter, r *http.Request
 	}
 
 	// They reported the registration request as unauthorized
-	_ = s.db.DeleteUser(user.ID)
+	_ = s.db.DeleteUser(user.ID) //nolint:errcheck
 
 	s.writeAudit(user.Email, "auth.registration_reported", "user", user.Email, "User reported unauthorized registration request", r)
 	s.webhooks.SendAbuseReportAlert(user.Email, "Unauthorized registration request", getClientIP(r))
 
 	w.Header().Set("Content-Type", "text/html")
-	_, _ = w.Write([]byte("Thank you. This registration token has been instantly deactivated, preventing anyone from completing the sign-up process."))
+	if _, err := w.Write([]byte("Thank you. This registration token has been instantly deactivated, preventing anyone from completing the sign-up process.")); err != nil {
+		log.Printf("[Warning] Failed to write response: %v", err)
+	}
 }

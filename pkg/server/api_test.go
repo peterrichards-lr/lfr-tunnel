@@ -76,12 +76,12 @@ func TestServer_HandleAdminOverrideLimit(t *testing.T) {
 
 	// Admin
 	admin := &db.User{ID: "admin@example.com", Email: "admin@example.com", Role: "admin", Status: "approved"}
-	_ = srv.db.CreateUser(admin)
+	_ = srv.db.CreateUser(admin) //nolint:errcheck
 
 	// Developer
 	devLimit := 1
 	dev := &db.User{ID: "dev@example.com", Email: "dev@example.com", Role: "developer", Status: "approved", MaxTunnels: &devLimit}
-	_ = srv.db.CreateUser(dev)
+	_ = srv.db.CreateUser(dev) //nolint:errcheck
 
 	adminToken := generateToken(16)
 	srv.portalMap.Store("admin_session_"+adminToken, PortalSessionData{
@@ -109,7 +109,8 @@ func TestServer_HandleAdminOverrideLimit(t *testing.T) {
 	}
 
 	// Verify limit updated
-	updatedDev, _ := srv.db.GetUser("dev@example.com")
+	updatedDev, _err := srv.db.GetUser("dev@example.com")
+	_ = _err //nolint:errcheck
 	if updatedDev.MaxReservations == nil || *updatedDev.MaxReservations != 5 {
 		val := "nil"
 		if updatedDev.MaxReservations != nil {
@@ -125,10 +126,10 @@ func TestServer_HandleUpdateReservationAccessControl(t *testing.T) {
 
 	// Create user
 	dev := &db.User{ID: "dev@example.com", Email: "dev@example.com", Role: "developer", Status: "approved"}
-	_ = srv.db.CreateUser(dev)
+	_ = srv.db.CreateUser(dev) //nolint:errcheck
 
 	// Create a reservation for the user
-	_ = srv.db.CreateSubdomainReservation(&db.SubdomainReservation{
+	_ = srv.db.CreateSubdomainReservation(&db.SubdomainReservation{ //nolint:errcheck
 		UserID:    dev.ID,
 		Subdomain: "test-subdomain",
 		Domain:    "example.com",

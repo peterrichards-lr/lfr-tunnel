@@ -18,7 +18,7 @@ func TestServer_HandleDeleteToken(t *testing.T) {
 
 	// Developer
 	dev := &db.User{ID: "dev@example.com", Email: "dev@example.com", Role: "developer", Status: "approved"}
-	_ = srv.db.CreateUser(dev)
+	_ = srv.db.CreateUser(dev) //nolint:errcheck
 
 	// Create token
 	expires := time.Now().Add(24 * time.Hour)
@@ -29,7 +29,7 @@ func TestServer_HandleDeleteToken(t *testing.T) {
 		TokenPrefix: "lfr_pat_dummy",
 		ExpiresAt:   &expires,
 	}
-	_ = srv.db.CreatePAT(pat)
+	_ = srv.db.CreatePAT(pat) //nolint:errcheck
 
 	sessionToken := generateToken(16)
 	srv.portalMap.Store("admin_session_"+sessionToken, PortalSessionData{
@@ -48,7 +48,8 @@ func TestServer_HandleDeleteToken(t *testing.T) {
 	}
 
 	// Verify deleted
-	tokens, _ := srv.db.ListPATs(dev.ID)
+	tokens, _err := srv.db.ListPATs(dev.ID)
+	_ = _err //nolint:errcheck
 	for _, tk := range tokens {
 		if tk.ID == pat.ID && tk.RevokedAt == nil {
 			t.Errorf("token should have been deleted (revoked), but it is not")
@@ -62,7 +63,7 @@ func TestServer_HandleGenerateSubdomain(t *testing.T) {
 
 	// Developer
 	dev := &db.User{ID: "dev@example.com", Email: "dev@example.com", Role: "developer", Status: "approved"}
-	_ = srv.db.CreateUser(dev)
+	_ = srv.db.CreateUser(dev) //nolint:errcheck
 
 	sessionToken := generateToken(16)
 	srv.portalMap.Store("admin_session_"+sessionToken, PortalSessionData{
@@ -81,7 +82,7 @@ func TestServer_HandleGenerateSubdomain(t *testing.T) {
 	}
 
 	var resp map[string]string
-	_ = json.Unmarshal(w.Body.Bytes(), &resp)
+	_ = json.Unmarshal(w.Body.Bytes(), &resp) //nolint:errcheck
 	if resp["subdomain"] == "" {
 		t.Errorf("expected generated subdomain, got empty")
 	}
@@ -93,10 +94,10 @@ func TestServer_HandleListTokens(t *testing.T) {
 
 	// Developer
 	dev := &db.User{ID: "dev@example.com", Email: "dev@example.com", Role: "developer", Status: "approved"}
-	_ = srv.db.CreateUser(dev)
+	_ = srv.db.CreateUser(dev) //nolint:errcheck
 
 	expires := time.Now().Add(24 * time.Hour)
-	_ = srv.db.CreatePAT(&db.PersonalAccessToken{
+	_ = srv.db.CreatePAT(&db.PersonalAccessToken{ //nolint:errcheck
 		UserID:      dev.ID,
 		Name:        "Token 1",
 		TokenHash:   "hash1",
@@ -121,7 +122,7 @@ func TestServer_HandleListTokens(t *testing.T) {
 	}
 
 	var resp []db.PersonalAccessToken
-	_ = json.Unmarshal(w.Body.Bytes(), &resp)
+	_ = json.Unmarshal(w.Body.Bytes(), &resp) //nolint:errcheck
 	if len(resp) == 0 {
 		t.Errorf("expected tokens, got 0")
 	}
@@ -132,9 +133,9 @@ func TestServer_HandleDeleteReservation(t *testing.T) {
 	defer srv.Stop()
 
 	dev := &db.User{ID: "dev@example.com", Email: "dev@example.com", Role: "developer", Status: "approved"}
-	_ = srv.db.CreateUser(dev)
+	_ = srv.db.CreateUser(dev) //nolint:errcheck
 
-	_ = srv.db.CreateSubdomainReservation(&db.SubdomainReservation{
+	_ = srv.db.CreateSubdomainReservation(&db.SubdomainReservation{ //nolint:errcheck
 		UserID:    dev.ID,
 		Subdomain: "test-delete",
 		Domain:    "example.com",
@@ -151,7 +152,8 @@ func TestServer_HandleDeleteReservation(t *testing.T) {
 	}
 	bodyBytes, _ := json.Marshal(reqBody)
 
-	createdRes, _ := srv.db.GetSubdomainReservationByName("test-delete", "example.com")
+	createdRes, _err := srv.db.GetSubdomainReservationByName("test-delete", "example.com")
+	_ = _err //nolint:errcheck
 	req, _ := http.NewRequest(http.MethodDelete, fmt.Sprintf("http://example.com/api/portal/reservations/%d", createdRes.ID), bytes.NewBuffer(bodyBytes))
 	req.AddCookie(&http.Cookie{Name: "lfr_session", Value: sessionToken})
 
@@ -163,7 +165,8 @@ func TestServer_HandleDeleteReservation(t *testing.T) {
 	}
 
 	// Verify
-	res, _ := srv.db.GetSubdomainReservationByName("test-delete", "example.com")
+	res, _err := srv.db.GetSubdomainReservationByName("test-delete", "example.com")
+	_ = _err //nolint:errcheck
 	if res != nil {
 		t.Errorf("reservation should be deleted")
 	}

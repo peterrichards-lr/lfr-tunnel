@@ -5,6 +5,7 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
+	"log"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -25,7 +26,7 @@ func TestCheckForUpdate_NewerVersion(t *testing.T) {
 		rel := Release{
 			TagName: "v1.0.3",
 		}
-		_ = json.NewEncoder(w).Encode(rel)
+		_ = json.NewEncoder(w).Encode(rel) //nolint:errcheck
 	}))
 	defer srv.Close()
 
@@ -49,7 +50,7 @@ func TestCheckForUpdate_SameVersion(t *testing.T) {
 		rel := Release{
 			TagName: "v1.0.2",
 		}
-		_ = json.NewEncoder(w).Encode(rel)
+		_ = json.NewEncoder(w).Encode(rel) //nolint:errcheck
 	}))
 	defer srv.Close()
 
@@ -111,7 +112,7 @@ func TestSelfUpgrade(t *testing.T) {
 					},
 				},
 			}
-			_ = json.NewEncoder(w).Encode(rel)
+			_ = json.NewEncoder(w).Encode(rel) //nolint:errcheck
 			return
 		}
 
@@ -145,13 +146,17 @@ func TestSelfUpgrade(t *testing.T) {
 			if err != nil {
 				t.Fatalf("failed to sign checksums: %v", err)
 			}
-			_, _ = w.Write(sig.Encode())
+			if _, err := w.Write(sig.Encode()); err != nil {
+				log.Printf("[Warning] Failed to write response: %v", err)
+			}
 			return
 		}
 
 		if r.URL.Path == "/download/asset" {
 			w.WriteHeader(http.StatusOK)
-			_, _ = w.Write([]byte("fake-binary-new-content"))
+			if _, err := w.Write([]byte("fake-binary-new-content")); err != nil {
+				log.Printf("[Warning] Failed to write response: %v", err)
+			}
 			return
 		}
 
@@ -225,7 +230,7 @@ func TestSelfUpgrade_ChecksumMismatch(t *testing.T) {
 					},
 				},
 			}
-			_ = json.NewEncoder(w).Encode(rel)
+			_ = json.NewEncoder(w).Encode(rel) //nolint:errcheck
 			return
 		}
 
@@ -257,13 +262,17 @@ func TestSelfUpgrade_ChecksumMismatch(t *testing.T) {
 			if err != nil {
 				t.Fatalf("failed to sign checksums: %v", err)
 			}
-			_, _ = w.Write(sig.Encode())
+			if _, err := w.Write(sig.Encode()); err != nil {
+				log.Printf("[Warning] Failed to write response: %v", err)
+			}
 			return
 		}
 
 		if r.URL.Path == "/download/asset" {
 			w.WriteHeader(http.StatusOK)
-			_, _ = w.Write([]byte("fake-binary-new-content"))
+			if _, err := w.Write([]byte("fake-binary-new-content")); err != nil {
+				log.Printf("[Warning] Failed to write response: %v", err)
+			}
 			return
 		}
 
@@ -360,7 +369,7 @@ func TestSelfUpgrade_GatewayFirst(t *testing.T) {
 					},
 				},
 			}
-			_ = json.NewEncoder(w).Encode(resp)
+			_ = json.NewEncoder(w).Encode(resp) //nolint:errcheck
 			return
 		}
 
@@ -386,13 +395,17 @@ func TestSelfUpgrade_GatewayFirst(t *testing.T) {
 			if err != nil {
 				t.Fatalf("failed to sign checksums: %v", err)
 			}
-			_, _ = w.Write(sig.Encode())
+			if _, err := w.Write(sig.Encode()); err != nil {
+				log.Printf("[Warning] Failed to write response: %v", err)
+			}
 			return
 		}
 
 		if r.URL.Path == "/static/downloads/lfr-tunnel-fake" {
 			w.WriteHeader(http.StatusOK)
-			_, _ = w.Write([]byte("fake-binary-new-content"))
+			if _, err := w.Write([]byte("fake-binary-new-content")); err != nil {
+				log.Printf("[Warning] Failed to write response: %v", err)
+			}
 			return
 		}
 
@@ -449,7 +462,7 @@ func TestSelfUpgrade_GatewayRecommendation(t *testing.T) {
 						},
 					},
 				}
-				_ = json.NewEncoder(w).Encode(resp)
+				_ = json.NewEncoder(w).Encode(resp) //nolint:errcheck
 			}))
 			defer srv.Close()
 
@@ -463,7 +476,9 @@ func TestSelfUpgrade_GatewayRecommendation(t *testing.T) {
 
 func TestCheckServerCompatibility(t *testing.T) {
 	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		_, _ = w.Write([]byte(`{"server_version":"v1.27.0", "min_client_version":"v1.20.0"}`)) //nolint:errcheck
+		if _, err := w.Write([]byte(`{"server_version":"v1.27.0", "min_client_version":"v1.20.0"}`)); err != nil {
+			log.Printf("[Warning] Failed to write response: %v", err)
+		} //nolint:errcheck
 	}))
 	defer ts.Close()
 	_, _ = CheckServerCompatibility(ts.URL) //nolint:errcheck
@@ -513,7 +528,7 @@ func TestSelfUpgrade_InvalidSignature(t *testing.T) {
 					},
 				},
 			}
-			_ = json.NewEncoder(w).Encode(rel)
+			_ = json.NewEncoder(w).Encode(rel) //nolint:errcheck
 			return
 		}
 
@@ -532,13 +547,17 @@ func TestSelfUpgrade_InvalidSignature(t *testing.T) {
 		if r.URL.Path == "/download/signature" {
 			w.WriteHeader(http.StatusOK)
 			// Return a garbage/invalid signature string!
-			_, _ = w.Write([]byte("untrusted comment: minisign signature\nGARBAGESIGNATUREBASE64"))
+			if _, err := w.Write([]byte("untrusted comment: minisign signature\nGARBAGESIGNATUREBASE64")); err != nil {
+				log.Printf("[Warning] Failed to write response: %v", err)
+			}
 			return
 		}
 
 		if r.URL.Path == "/download/asset" {
 			w.WriteHeader(http.StatusOK)
-			_, _ = w.Write([]byte("fake-binary-new-content"))
+			if _, err := w.Write([]byte("fake-binary-new-content")); err != nil {
+				log.Printf("[Warning] Failed to write response: %v", err)
+			}
 			return
 		}
 

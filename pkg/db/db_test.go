@@ -250,7 +250,7 @@ func TestPATRetentionPruning(t *testing.T) {
 		Name:        "Old Expired",
 		ExpiresAt:   &oldTime,
 	}
-	_ = database.CreatePAT(p1)
+	_ = database.CreatePAT(p1) //nolint:errcheck
 
 	// 2. Recent expired token (should be kept)
 	p2 := &PersonalAccessToken{
@@ -260,7 +260,7 @@ func TestPATRetentionPruning(t *testing.T) {
 		Name:        "Recent Expired",
 		ExpiresAt:   &recentTime,
 	}
-	_ = database.CreatePAT(p2)
+	_ = database.CreatePAT(p2) //nolint:errcheck
 
 	// 3. Old revoked token (should be pruned)
 	p3 := &PersonalAccessToken{
@@ -270,7 +270,7 @@ func TestPATRetentionPruning(t *testing.T) {
 		Name:        "Old Revoked",
 		RevokedAt:   &oldTime,
 	}
-	_ = database.CreatePAT(p3)
+	_ = database.CreatePAT(p3) //nolint:errcheck
 
 	// 4. Recent revoked token (should be kept)
 	p4 := &PersonalAccessToken{
@@ -280,7 +280,7 @@ func TestPATRetentionPruning(t *testing.T) {
 		Name:        "Recent Revoked",
 		RevokedAt:   &recentTime,
 	}
-	_ = database.CreatePAT(p4)
+	_ = database.CreatePAT(p4) //nolint:errcheck
 
 	// 5. Active token (should be kept)
 	p5 := &PersonalAccessToken{
@@ -289,7 +289,7 @@ func TestPATRetentionPruning(t *testing.T) {
 		TokenPrefix: "prefix5",
 		Name:        "Active",
 	}
-	_ = database.CreatePAT(p5)
+	_ = database.CreatePAT(p5) //nolint:errcheck
 
 	// Run retention pruning (30 days retention)
 	if err := database.PruneExpiredOrRevokedPATs(30); err != nil {
@@ -399,7 +399,7 @@ func TestAuditLogWriteAndFilter(t *testing.T) {
 		TargetType: "token",
 		TargetID:   "123",
 	}
-	_ = database.WriteAuditEntry(e2)
+	_ = database.WriteAuditEntry(e2) //nolint:errcheck
 
 	e3 := &AuditEntry{
 		ActorID:    "other@test.com",
@@ -407,7 +407,7 @@ func TestAuditLogWriteAndFilter(t *testing.T) {
 		TargetType: "token",
 		TargetID:   "456",
 	}
-	_ = database.WriteAuditEntry(e3)
+	_ = database.WriteAuditEntry(e3) //nolint:errcheck
 
 	// Filter by Actor
 	entries, err := database.ListAuditEntries(AuditFilter{ActorID: "admin@test.com"})
@@ -448,9 +448,9 @@ func TestListAllPATsAndCountAdmins(t *testing.T) {
 	u2 := &User{ID: "u2", Email: "admin2@test.com", Role: "admin", Status: "pending"}
 	u3 := &User{ID: "u3", Email: "user@test.com", Role: "user", Status: "approved"}
 
-	_ = database.CreateUser(u1)
-	_ = database.CreateUser(u2)
-	_ = database.CreateUser(u3)
+	_ = database.CreateUser(u1) //nolint:errcheck
+	_ = database.CreateUser(u2) //nolint:errcheck
+	_ = database.CreateUser(u3) //nolint:errcheck
 
 	count, err := database.CountAdmins()
 	if err != nil {
@@ -462,8 +462,8 @@ func TestListAllPATsAndCountAdmins(t *testing.T) {
 
 	p1 := &PersonalAccessToken{UserID: "u1", TokenHash: "h1", TokenPrefix: "p1", Name: "n1"}
 	p2 := &PersonalAccessToken{UserID: "u3", TokenHash: "h2", TokenPrefix: "p2", Name: "n2"}
-	_ = database.CreatePAT(p1)
-	_ = database.CreatePAT(p2)
+	_ = database.CreatePAT(p1) //nolint:errcheck
+	_ = database.CreatePAT(p2) //nolint:errcheck
 
 	pats, err := database.ListAllPATs()
 	if err != nil {
@@ -898,7 +898,7 @@ func TestGatewayRuns(t *testing.T) {
 	}
 
 	// Verify run is closed
-	runs, _ = database.GetGatewayRuns(10)
+	runs, _ = database.GetGatewayRuns(10) //nolint:errcheck
 	if runs[0].EndTime == nil {
 		t.Error("expected EndTime to be populated after clean shutdown")
 	}
@@ -907,14 +907,14 @@ func TestGatewayRuns(t *testing.T) {
 	// We start it without clean shutdown to test if RecordGatewayStart closes the previous open run
 	t2 := time.Now().UTC().Add(-5 * time.Minute)
 	// Make previous run open again by updating its end_time to NULL
-	_, _ = database.conn.Exec("UPDATE gateway_runs SET end_time = NULL")
+	_, _ = database.conn.Exec("UPDATE gateway_runs SET end_time = NULL") //nolint:errcheck
 
 	if err := database.RecordGatewayStart(t2); err != nil {
 		t.Fatalf("RecordGatewayStart failed: %v", err)
 	}
 
 	// Verify
-	runs, _ = database.GetGatewayRuns(10)
+	runs, _ = database.GetGatewayRuns(10) //nolint:errcheck
 	if len(runs) != 2 {
 		t.Fatalf("expected 2 runs, got %d", len(runs))
 	}

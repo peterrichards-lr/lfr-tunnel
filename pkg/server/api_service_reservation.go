@@ -88,9 +88,9 @@ func (s *portalService) CreateReservation(user *db.User, subdomain, domain, ip s
 				if existing.UserID != user.ID {
 					return nil, ErrConflict
 				}
-				_ = s.db.DeleteSubdomainReservation(existing.ID)
+				_ = s.db.DeleteSubdomainReservation(existing.ID) //nolint:errcheck
 			} else {
-				_ = s.db.DeleteSubdomainReservation(existing.ID)
+				_ = s.db.DeleteSubdomainReservation(existing.ID) //nolint:errcheck
 			}
 		} else {
 			return nil, ErrConflict
@@ -111,7 +111,7 @@ func (s *portalService) CreateReservation(user *db.User, subdomain, domain, ip s
 		return nil, ErrInternalError
 	}
 
-	_ = s.db.WriteAuditEntry(&db.AuditEntry{
+	_ = s.db.WriteAuditEntry(&db.AuditEntry{ //nolint:errcheck
 		ActorID:    user.Email,
 		Action:     "subdomain.reserved",
 		TargetType: "subdomain",
@@ -147,7 +147,7 @@ func (s *portalService) DeleteReservation(user *db.User, idStr, ip string) error
 		return ErrInternalError
 	}
 
-	_ = s.db.WriteAuditEntry(&db.AuditEntry{
+	_ = s.db.WriteAuditEntry(&db.AuditEntry{ //nolint:errcheck
 		ActorID:    user.Email,
 		Action:     "subdomain.released",
 		TargetType: "subdomain",
@@ -188,7 +188,7 @@ func (s *portalService) RequestExtension(user *db.User, idStr, ip string) (*db.S
 		return nil, ErrInternalError
 	}
 
-	_ = s.db.WriteAuditEntry(&db.AuditEntry{
+	_ = s.db.WriteAuditEntry(&db.AuditEntry{ //nolint:errcheck
 		ActorID:    user.Email,
 		Action:     "subdomain.extension_requested",
 		TargetType: "subdomain",
@@ -234,7 +234,7 @@ func (s *portalService) PromoteReservation(user *db.User, subdomain, domain, ip 
 			}
 			return existing, nil
 		}
-		_ = s.db.DeleteSubdomainReservation(existing.ID)
+		_ = s.db.DeleteSubdomainReservation(existing.ID) //nolint:errcheck
 	}
 
 	expiry := s.getUserSubdomainExpiry(user)
@@ -251,7 +251,7 @@ func (s *portalService) PromoteReservation(user *db.User, subdomain, domain, ip 
 		return nil, ErrInternalError
 	}
 
-	_ = s.db.WriteAuditEntry(&db.AuditEntry{
+	_ = s.db.WriteAuditEntry(&db.AuditEntry{ //nolint:errcheck
 		ActorID:    user.Email,
 		Action:     "subdomain.promoted",
 		TargetType: "subdomain",
@@ -294,7 +294,7 @@ func (s *portalService) UpdateReservationAccessControl(user *db.User, subdomain,
 		return ErrInternalError
 	}
 
-	_ = s.db.WriteAuditEntry(&db.AuditEntry{
+	_ = s.db.WriteAuditEntry(&db.AuditEntry{ //nolint:errcheck
 		ActorID:    user.Email,
 		Action:     "subdomain.access_control_updated",
 		TargetType: "subdomain",
@@ -356,7 +356,7 @@ func (s *portalService) AdminApproveExtension(actor, idStr string, days int, per
 		return nil, ErrInternalError
 	}
 
-	_ = s.db.WriteAuditEntry(&db.AuditEntry{
+	_ = s.db.WriteAuditEntry(&db.AuditEntry{ //nolint:errcheck
 		ActorID:    actor,
 		Action:     "subdomain.extension_approved",
 		TargetType: "subdomain",
@@ -397,7 +397,7 @@ func (s *portalService) AdminDemoteReservation(actor, idStr, ip string) (*db.Sub
 		return nil, ErrInternalError
 	}
 
-	_ = s.db.WriteAuditEntry(&db.AuditEntry{
+	_ = s.db.WriteAuditEntry(&db.AuditEntry{ //nolint:errcheck
 		ActorID:    actor,
 		Action:     "subdomain.demoted",
 		TargetType: "subdomain",

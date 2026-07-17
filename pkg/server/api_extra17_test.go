@@ -16,7 +16,7 @@ func TestServer_MiscCoverage4(t *testing.T) {
 	defer srv.Stop()
 
 	admin := &db.User{ID: "admin@example.com", Email: "admin@example.com", Role: "admin"}
-	_ = srv.db.CreateUser(admin)
+	_ = srv.db.CreateUser(admin) //nolint:errcheck
 
 	sessionToken := generateToken(16)
 	srv.portalMap.Store("admin_session_"+sessionToken, PortalSessionData{
@@ -60,7 +60,7 @@ func TestServer_MiscCoverage4(t *testing.T) {
 	srv.handleUpdateReservationHeaders(w4, req4)
 
 	// handleAdminGetUser -> pass user with magic links
-	_ = srv.db.CreateMagicLink(admin.Email, "link-123", "127.0.0.1", time.Now().Add(time.Hour))
+	_ = srv.db.CreateMagicLink(admin.Email, "link-123", "127.0.0.1", time.Now().Add(time.Hour)) //nolint:errcheck
 	req5, _ := http.NewRequest(http.MethodGet, "http://example.com/api/admin/users/admin@example.com?magic_links=true", nil)
 	req5.AddCookie(&http.Cookie{Name: "lfr_session", Value: sessionToken})
 	w5 := httptest.NewRecorder()

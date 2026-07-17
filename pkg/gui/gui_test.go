@@ -17,13 +17,13 @@ func TestGetRunningState(t *testing.T) {
 		t.Fatalf("failed to create temp dir: %v", err)
 	}
 	defer func() {
-		_ = os.RemoveAll(tempDir)
+		_ = os.RemoveAll(tempDir) //nolint:errcheck
 	}()
 
 	oldHome := os.Getenv("HOME")
-	_ = os.Setenv("HOME", tempDir)
+	_ = os.Setenv("HOME", tempDir) //nolint:errcheck
 	defer func() {
-		_ = os.Setenv("HOME", oldHome)
+		_ = os.Setenv("HOME", oldHome) //nolint:errcheck
 	}()
 
 	sub := "test-gui-sub"

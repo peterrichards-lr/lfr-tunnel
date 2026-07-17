@@ -3,6 +3,7 @@ package server
 import (
 	"bytes"
 	"lfr-tunnel/pkg/config"
+	"log"
 	"net/http"
 	"net/http/httptest"
 	"net/url"
@@ -155,7 +156,7 @@ func TestWAF_RuleScanning(t *testing.T) {
 			// Verify that body can still be read afterwards (not drained)
 			if tt.body != "" {
 				buf := new(bytes.Buffer)
-				_, _ = buf.ReadFrom(req.Body)
+				_, _ = buf.ReadFrom(req.Body) //nolint:errcheck
 				if buf.String() != tt.body {
 					t.Errorf("Expected request body to be preserved: %q, got %q", tt.body, buf.String())
 				}
@@ -166,18 +167,22 @@ func TestWAF_RuleScanning(t *testing.T) {
 
 func TestWAF_IntegrationInProxyHandler(t *testing.T) {
 	// 1. Create registry and a mock backend server
-	chiselServer, _ := chserver.NewServer(&chserver.Config{Reverse: true})
+	chiselServer, _err := chserver.NewServer(&chserver.Config{Reverse: true})
+	_ = _err //nolint:errcheck
 	reg := NewRegistry(chiselServer)
 
 	backendCalled := false
 	backend := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		backendCalled = true
 		w.WriteHeader(http.StatusOK)
-		_, _ = w.Write([]byte("Target Service"))
+		if _, err := w.Write([]byte("Target Service")); err != nil {
+			log.Printf("[Warning] Failed to write response: %v", err)
+		}
 	}))
 	defer backend.Close()
 
-	u, _ := url.Parse(backend.URL)
+	u, _err := url.Parse(backend.URL)
+	_ = _err //nolint:errcheck
 	port := 80
 	if pStr := u.Port(); pStr != "" {
 		importPort := 0

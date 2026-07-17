@@ -24,7 +24,7 @@ func TestServer_HandleGetI18n(t *testing.T) {
 	}
 
 	var enBundle map[string]string
-	_ = json.Unmarshal(w.Body.Bytes(), &enBundle)
+	_ = json.Unmarshal(w.Body.Bytes(), &enBundle) //nolint:errcheck
 	if enBundle["onboarding_guide_title"] != "👋 Onboarding Tour" {
 		t.Errorf("expected English tour title, got %s", enBundle["onboarding_guide_title"])
 	}
@@ -38,7 +38,7 @@ func TestServer_HandleGetI18n(t *testing.T) {
 	}
 
 	var deBundle map[string]string
-	_ = json.Unmarshal(wDE.Body.Bytes(), &deBundle)
+	_ = json.Unmarshal(wDE.Body.Bytes(), &deBundle) //nolint:errcheck
 	if deBundle["onboarding_guide_title"] != "👋 Onboarding-Tour" {
 		t.Errorf("expected German tour title, got %s", deBundle["onboarding_guide_title"])
 	}
@@ -110,7 +110,7 @@ func TestServer_HandleAdminBroadcast(t *testing.T) {
 	defer srv.Stop()
 
 	admin := &db.User{ID: "admin@example.com", Email: "admin@example.com", Role: "admin"}
-	_ = srv.db.CreateUser(admin)
+	_ = srv.db.CreateUser(admin) //nolint:errcheck
 
 	sessionToken := generateToken(16)
 	srv.portalMap.Store("admin_session_"+sessionToken, PortalSessionData{
@@ -141,7 +141,7 @@ func TestServer_HandleAdminMaintenance(t *testing.T) {
 	defer srv.Stop()
 
 	admin := &db.User{ID: "admin@example.com", Email: "admin@example.com", Role: "admin"}
-	_ = srv.db.CreateUser(admin)
+	_ = srv.db.CreateUser(admin) //nolint:errcheck
 
 	sessionToken := generateToken(16)
 	srv.portalMap.Store("admin_session_"+sessionToken, PortalSessionData{
@@ -172,10 +172,10 @@ func TestServer_HandleAdminOverrideTunnelsLimit(t *testing.T) {
 	defer srv.Stop()
 
 	admin := &db.User{ID: "admin@example.com", Email: "admin@example.com", Role: "admin"}
-	_ = srv.db.CreateUser(admin)
+	_ = srv.db.CreateUser(admin) //nolint:errcheck
 
 	dev := &db.User{ID: "dev@example.com", Email: "dev@example.com", Role: "developer"}
-	_ = srv.db.CreateUser(dev)
+	_ = srv.db.CreateUser(dev) //nolint:errcheck
 
 	sessionToken := generateToken(16)
 	srv.portalMap.Store("admin_session_"+sessionToken, PortalSessionData{
@@ -204,7 +204,7 @@ func TestServer_HandleUpdateReservationHeaders(t *testing.T) {
 	defer srv.Stop()
 
 	admin := &db.User{ID: "admin@example.com", Email: "admin@example.com", Role: "admin"}
-	_ = srv.db.CreateUser(admin)
+	_ = srv.db.CreateUser(admin) //nolint:errcheck
 
 	sessionToken := generateToken(16)
 	srv.portalMap.Store("admin_session_"+sessionToken, PortalSessionData{

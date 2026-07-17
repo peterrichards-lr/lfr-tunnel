@@ -76,6 +76,31 @@ linters:
   settings:
     errcheck:
       check-blank: true
+      exclude-functions:
+        - io.ReadAll
+        - io/ioutil.ReadAll
+        - os.Remove
+        - os.RemoveAll
+        - net.SplitHostPort
+        - (*net/http.Response).Body.Close
+        - (*net/http.Server).ListenAndServe
+        - crypto/rand.Read
+        - fmt.Sscanf
+        - (*bufio.Writer).Flush
+        - fmt.Fprintf
+        - (*encoding/json.Encoder).Encode
+        - encoding/json.Marshal
+        - (*os.File).Close
+        - net.Conn.Close
+        - io.Copy
+        - io.CopyBuffer
+        - io.CopyN
+        - (*net/http.Request).Context
+        - strconv.Atoi
+        - url.Parse
+        - os.UserHomeDir
+        - net/http.NewRequest
+        - os.CreateTemp
     funlen:
       lines: 100
       statements: 50

@@ -45,7 +45,8 @@ test.describe('Analytics & Tunnel Automation', () => {
     
     // We execute the CLI inside the running e2e-lfr-tunnel-1 container
     // LFT_TARGET_HOST is already set in the container environment
-    const cmd = `docker exec e2e-lfr-tunnel-1 ./lfr-tunnel -token ${rawToken} -server http://tunnel.lfr-demo.local -ports 80 -background`;
+    const projectName = process.env.E2E_PROJECT_NAME || 'e2e';
+    const cmd = `docker exec ${projectName}-lfr-tunnel-1 ./lfr-tunnel -token ${rawToken} -server http://tunnel.lfr-demo.local -ports 80 -background`;
     const { stdout, stderr } = await execAsync(cmd);
     console.log("Tunnel CLI stdout: ", stdout);
     console.log("Tunnel CLI stderr: ", stderr);
@@ -71,11 +72,25 @@ test.describe('Analytics & Tunnel Automation', () => {
     const urlObj = new URL(publicUrl as string);
     const targetHost = urlObj.host;
 
-    for (let i = 0; i < 5; i++) {
-        const response = await page.request.get('http://localhost:8000', {
-            headers: { 'Host': targetHost }
-        });
-        expect(response.status()).toBe(200);
+    try {
+        await expect(async () => {
+            for (let i = 0; i < 5; i++) {
+                const response = await page.request.get('http://localhost:8000', {
+                    headers: { 'Host': targetHost }
+                });
+                expect(response.status()).toBe(200);
+            }
+        }).toPass({ timeout: 15000 });
+    } catch (e) {
+        console.error("Test failed, printing tunnel logs...");
+        const logCmd = `docker exec ${projectName}-lfr-tunnel-1 cat /root/.lfr-tunnel/client-${subdomain}.log`;
+        try {
+            const { stdout } = await execAsync(logCmd);
+            console.log("=== Tunnel Logs ===\n" + stdout);
+        } catch (err) {
+            console.error("Failed to fetch tunnel logs", err);
+        }
+        throw e;
     }
 
     // Wait a brief moment for bandwidth stats to flush and aggregate

@@ -1,0 +1,14 @@
+{
+  "epicNumber": "634",
+  "epic": {
+    "title": "Automated UI Verification"
+  },
+  "issues": [
+    {
+      "title": "Integrate Playwright UI Tests into CI",
+      "description": "Add missing Playwright E2E tests into GitHub Actions workflow and validate local UI bundle synchronization to prevent production blank screens.",
+      "completed": false,
+      "issueNumber": "634"
+    }
+  ]
+}

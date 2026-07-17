@@ -16,7 +16,7 @@ func TestVersionSync(t *testing.T) {
 		t.Fatalf("Failed to read %s: %v", path, err)
 	}
 
-	var whatsNew struct {
+	var whatsNew []struct {
 		Version string `json:"version"`
 	}
 
@@ -24,7 +24,11 @@ func TestVersionSync(t *testing.T) {
 		t.Fatalf("Failed to parse JSON from %s: %v", path, err)
 	}
 
-	if Version != whatsNew.Version {
-		t.Errorf("Version mismatch! config.Version = %q, but whats-new.json = %q. These must be kept in sync.", Version, whatsNew.Version)
+	if len(whatsNew) == 0 {
+		t.Fatalf("whats-new.json is empty")
+	}
+
+	if Version != whatsNew[0].Version {
+		t.Errorf("Version mismatch! config.Version = %q, but whats-new.json = %q. These must be kept in sync.", Version, whatsNew[0].Version)
 	}
 }

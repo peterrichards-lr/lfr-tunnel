@@ -2,6 +2,7 @@ package ops
 
 import (
 	"fmt"
+	"os"
 )
 
 // MaintenanceCommand toggles Nginx maintenance mode on the VPS.

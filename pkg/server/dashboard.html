@@ -214,8 +214,7 @@
                     </div>
                 </div>
             </div>
-            <div id="global-broadcast-banner" style="display:none; background: var(--danger); color: white; padding: 12px 24px; text-align: center; font-weight: 500; border-radius: 8px; margin-bottom: 24px; box-shadow: 0 4px 12px rgba(239, 68, 68, 0.3);"></div>
-            <div id="global-maintenance-banner" style="display:none; background: #f59e0b; color: white; padding: 12px 24px; text-align: center; font-weight: 500; border-radius: 8px; margin-bottom: 24px; box-shadow: 0 4px 12px rgba(245, 158, 11, 0.3);"></div>
+            <div id="global-notification-banner" style="display:none; position: absolute; top: 0; left: 0; right: 0; z-index: 1000; padding: 12px 24px; text-align: center; font-weight: 500; box-shadow: 0 4px 12px rgba(0,0,0,0.2);"></div>
             <!-- Overview Tab -->
             <div id="tab-overview">
                 <div class="header">
@@ -740,36 +739,9 @@
                     </div>
                 </div>
 
-                <!-- Test Integrations Card -->
-                <div class="glass" style="padding: 24px; margin-top: 24px; border-left: 4px solid var(--primary);">
-                    <h4 style="margin-bottom: 8px; font-size: 15px; font-weight: 600; color: var(--primary);">🧪 Collaboration & Notification Integration Test</h4>
-                    <p style="color: var(--text-muted); font-size: 12px; margin-bottom: 16px; line-height: 1.4;">
-                        Trigger a test message to all configured collaboration and notification channels (Slack, Microsoft Teams, and Administrator Email relay) to verify that integration alerting is working correctly.
-                    </p>
-                    <div style="display: flex; gap: 12px; align-items: center; flex-wrap: wrap;">
-                        <button id="btn-test-integration" class="btn btn-primary" style="width: auto; margin: 0; padding: 6px 16px; font-weight: 500;" onclick="triggerIntegrationTest()">Send Test Alert</button>
-                        <span id="test-integration-status" style="font-size: 13px; color: var(--text-muted); display: none;"></span>
-                    </div>
-                    <div id="test-integration-target-container" style="margin-top: 12px; font-size: 12px; color: var(--text-muted); display: none;">
-                        <span>Active Target: </span><strong id="test-integration-target" style="color: var(--text-main);"></strong>
-                    </div>
-                </div>
+                
 
-                <!-- Server Gateway Configuration Card -->
-                <div id="card-server-config" class="glass" style="padding: 24px; margin-top: 24px; border-left: 4px solid var(--primary); display: none;">
-                    <h4 style="margin-bottom: 8px; font-size: 15px; font-weight: 600; color: var(--primary);">⚙️ Server Gateway Configuration</h4>
-                    <p style="color: var(--text-muted); font-size: 12px; margin-bottom: 16px; line-height: 1.4;">
-                        View the running configuration of the server. All sensitive fields are automatically masked.
-                    </p>
-                    
-                    <div style="margin-bottom: 16px;">
-                        <input type="text" id="config-search" class="input-field" placeholder="Search configuration keys or values..." style="width: 100%; max-width: 400px; box-sizing: border-box;" oninput="filterConfigTree()" />
-                    </div>
-
-                    <div id="config-tree-container" style="background: var(--copy-box-bg); border: 1px solid var(--border); border-radius: 6px; padding: 16px; max-height: 400px; overflow-y: auto; font-family: monospace; font-size: 13px; line-height: 1.6; color: var(--text-main);">
-                        <div style="text-align: center; color: var(--text-muted);">Loading server configuration...</div>
-                    </div>
-                </div>
+                
             </div>
         </div>
     </div>

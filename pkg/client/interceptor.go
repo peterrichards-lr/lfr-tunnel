@@ -470,7 +470,7 @@ func serveMaintenancePage(w http.ResponseWriter, path string) {
 
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
 	w.WriteHeader(http.StatusServiceUnavailable)
-	w.Write([]byte(`<!DOCTYPE html>
+	_, _ = w.Write([]byte(`<!DOCTYPE html>
 <html>
 <head>
 	<title>Developer Maintenance Mode</title>

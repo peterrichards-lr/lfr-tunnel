@@ -1186,12 +1186,18 @@ applyTheme(currentUser.theme_preference);
 
         // Listen for system theme changes in real-time
         if (window.matchMedia) {
-            window.matchMedia('(prefers-color-scheme: light)').addEventListener('change', e => {
-                const pref = currentUser ? currentUser.theme_preference : localStorage.getItem('theme');
+            const mq = window.matchMedia('(prefers-color-scheme: light)');
+            const themeChangeHandler = e => {
+                const pref = typeof currentUser !== 'undefined' && currentUser ? currentUser.theme_preference : localStorage.getItem('theme');
                 if (!pref || pref === 'system') {
                     applyTheme('system');
                 }
-            });
+            };
+            if (mq && mq.addEventListener) {
+                mq.addEventListener('change', themeChangeHandler);
+            } else if (mq && mq.addListener) {
+                mq.addListener(themeChangeHandler);
+            }
         }
 
         // Periodically check the time of day theme if enabled

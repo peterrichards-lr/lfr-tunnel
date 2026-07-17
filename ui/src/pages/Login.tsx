@@ -92,7 +92,7 @@ export default function Login() {
   };
 
   return (
-    <div id="login-screen">
+    <div id="login-screen" style={{ display: 'flex' }}>
       <div className="glass login-card" style={{ position: 'relative' }}>
         <div style={{ display: 'flex', justifyContent: 'center', marginBottom: '12px', marginTop: '8px' }}>
           <img src="/static/logo.svg" alt="Liferay Tunnel" width="48" height="48" />

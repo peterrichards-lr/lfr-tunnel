@@ -9,3 +9,5 @@ tests/e2e/ui/playwright/.cache/
 *.db-journal
 *.log
 .DS_Store
+ui/node_modules/
+ui/dist/

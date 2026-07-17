@@ -12,7 +12,7 @@ import AdminExtensions from './pages/AdminExtensions';
 
 function App() {
   return (
-    <BrowserRouter>
+    <BrowserRouter basename="/portalv2">
       <Routes>
         <Route path="/login" element={<Login />} />
         

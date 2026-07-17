@@ -2,7 +2,7 @@ import { test, expect } from '@playwright/test';
 import { getMagicLinkToken, clearMailpit } from './utils/mailpit';
 
 test.describe('Portal v2 Login Flow', () => {
-  const adminEmail = 'admin@example.com';
+  const adminEmail = 'admin@lfr-demo.local';
 
   test.beforeEach(async () => {
     await clearMailpit();
@@ -10,7 +10,7 @@ test.describe('Portal v2 Login Flow', () => {
 
   test('React SPA Magic Link Login', async ({ page }) => {
     // 1. Trigger Magic Link from new React SPA
-    await page.goto('/portal-v2/');
+    await page.goto('/portalv2/');
     
     // Check if we are on the login screen
     await expect(page.locator('h1', { hasText: 'Welcome Back' })).toBeVisible();
@@ -29,10 +29,10 @@ test.describe('Portal v2 Login Flow', () => {
     expect(token).toBeTruthy();
 
     // 3. Login using Magic Link via React UI
-    await page.goto(`/portal-v2/login?token=${token}`);
+    await page.goto(`/portalv2/login?token=${token}`);
     
-    // It should verify the token and redirect to /portal-v2/dashboard
-    await page.waitForURL('**/portal-v2/dashboard');
+    // It should verify the token and redirect to /portalv2/dashboard
+    await page.waitForURL('**/portalv2/dashboard');
     await expect(page.locator('h2', { hasText: 'Dashboard' })).toBeVisible();
   });
 });

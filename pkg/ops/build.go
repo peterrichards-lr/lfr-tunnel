@@ -15,16 +15,21 @@ func BuildCommand(args []string) {
 		version = extractVersion()
 	}
 
+	const (
+		archAmd64 = "amd64"
+		archArm64 = "arm64"
+	)
+
 	targets := []struct {
 		GOOS   string
 		GOARCH string
 		Output string
 	}{
-		{"linux", "amd64", "dist/lfr-tunnel-linux-amd64"},
-		{"linux", "arm64", "dist/lfr-tunnel-linux-arm64"},
-		{"darwin", "amd64", "dist/lfr-tunnel-darwin-amd64"},
-		{"darwin", "arm64", "dist/lfr-tunnel-darwin-arm64"},
-		{"windows", "amd64", "dist/lfr-tunnel-windows-amd64.exe"},
+		{"linux", archAmd64, "dist/lfr-tunnel-linux-" + archAmd64},
+		{"linux", archArm64, "dist/lfr-tunnel-linux-" + archArm64},
+		{"darwin", archAmd64, "dist/lfr-tunnel-darwin-" + archAmd64},
+		{"darwin", archArm64, "dist/lfr-tunnel-darwin-" + archArm64},
+		{"windows", archAmd64, "dist/lfr-tunnel-windows-" + archAmd64 + ".exe"},
 	}
 
 	for _, target := range targets {

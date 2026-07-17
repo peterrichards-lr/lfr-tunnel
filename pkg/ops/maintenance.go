@@ -4,6 +4,8 @@ import (
 	"fmt"
 )
 
+const defaultIdentityFile = "~/.ssh/id_vm6_networks_vps"
+
 // MaintenanceCommand toggles Nginx maintenance mode on the VPS.
 func MaintenanceCommand(args []string) {
 	if len(args) < 1 {
@@ -12,7 +14,7 @@ func MaintenanceCommand(args []string) {
 	}
 
 	action := args[0]
-	identityFile := "~/.ssh/id_vm6_networks_vps"
+	identityFile := defaultIdentityFile
 	if len(args) > 1 && args[1] == "-i" && len(args) > 2 {
 		identityFile = args[2]
 	}
@@ -21,15 +23,16 @@ func MaintenanceCommand(args []string) {
 	vpsIP := GetEnvOrDefault("VPS_IP", "82.39.133.178")
 	sshTarget := fmt.Sprintf("%s@%s", vpsUser, vpsIP)
 
-	if action == "enable" {
+	switch action {
+	case "enable":
 		fmt.Println("Enabling maintenance mode on the VPS...")
 		err := RunCommand("ssh", "-i", identityFile, sshTarget, `sudo /usr/local/bin/enable-maintenance.sh -a "Maintenance" -r "System operations in progress" -d "15m"`)
 		CheckFatal(err, "Failed to enable maintenance mode")
-	} else if action == "disable" {
+	case "disable":
 		fmt.Println("Disabling maintenance mode on the VPS...")
 		err := RunCommand("ssh", "-i", identityFile, sshTarget, "sudo /usr/local/bin/disable-maintenance.sh")
 		CheckFatal(err, "Failed to disable maintenance mode")
-	} else {
+	default:
 		fmt.Printf("Unknown action: %q. Expected 'enable' or 'disable'\n", action)
 	}
 }

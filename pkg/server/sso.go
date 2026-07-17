@@ -199,7 +199,11 @@ func (s *Server) handleSSOCallback(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Issue the admin session cookie
-	sessionID, _ := generateSecureToken()
+	sessionID, err := generateSecureToken()
+	if err != nil {
+		http.Error(w, "Failed to generate session ID", http.StatusInternalServerError)
+		return
+	}
 	killedPreviousSession := false
 	s.portalMap.Range(func(key, value interface{}) bool {
 		k := key.(string)

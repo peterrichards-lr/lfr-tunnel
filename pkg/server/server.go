@@ -3009,7 +3009,11 @@ func (s *Server) handleAdminVerify(w http.ResponseWriter, r *http.Request) {
 	// MFA INTERCEPT: If the user has MFA enabled, do not establish the session yet.
 	// Respond with status="mfa_required" and a short-lived temp_token.
 	if user != nil && user.TOTPEnabled {
-		tempToken, _ := generateSecureToken() //nolint:errcheck
+		tempToken, err := generateSecureToken()
+		if err != nil {
+			http.Error(w, "Failed to generate token", http.StatusInternalServerError)
+			return
+		}
 		s.portalMap.Store("pre_auth_"+tempToken, PortalSessionData{
 			Email:     email,
 			ClientIP:  clientIP,
@@ -3259,7 +3263,11 @@ func (s *Server) handleAdminInviteUser(w http.ResponseWriter, r *http.Request, a
 	}
 
 	// Send Magic Link Invite Email
-	magicToken, _ := generateSecureToken() //nolint:errcheck
+	magicToken, err := generateSecureToken()
+	if err != nil {
+		http.Error(w, "Failed to generate token", http.StatusInternalServerError)
+		return
+	}
 	clientIP := getClientIP(r)
 	expiresAt := time.Now().Add(s.cfg.InviteLinkExpiry)
 	h := sha256.Sum256([]byte(magicToken))

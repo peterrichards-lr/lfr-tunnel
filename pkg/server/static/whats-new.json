@@ -1,7 +1,9 @@
 {
-  "version": "v1.39.3",
-  "release_date": "2026-07-16",
+  "version": "v1.40.0",
+  "release_date": "2026-07-17",
   "features": [
+    "Feature: LDM Integration API Bridge for seamless project synchronization",
+    "Feature: Client Dashboard UX Unification & Responsive Design",
     "Fix: Resolve 'Preserve Host Header' UI checkbox state persistence bug",
     "Feature: Add visual status pill for Host header preservation in Client Inspector UI",
     "Feature: Custom Admin-defined Maintenance Pages for gateway",

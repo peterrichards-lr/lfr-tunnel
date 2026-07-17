@@ -1,0 +1,14 @@
+{
+  "epicNumber": "618",
+  "epic": {
+    "title": "Refactor Dashboard UI: Admin Components"
+  },
+  "issues": [
+    {
+      "title": "Phase 4.5: Admin Settings and Configuration",
+      "description": "Implement the `/admin/settings` view in the React SPA. This includes System Settings, Server Configuration, Webhooks testing, and Maintenance mode controls.",
+      "completed": false,
+      "issueNumber": "626"
+    }
+  ]
+}

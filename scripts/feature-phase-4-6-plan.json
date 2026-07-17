@@ -1,0 +1,14 @@
+{
+  "epicNumber": "618",
+  "epic": {
+    "title": "Refactor Dashboard UI: Admin Components"
+  },
+  "issues": [
+    {
+      "title": "Phase 4.6: Personal Dashboard & Advanced Admin Tools",
+      "description": "Port the remaining User Dashboard panels (Tunnels, Reservations) and Admin Logs (Audit Log, IP Blacklist, Extension Approvals) to React.",
+      "completed": false,
+      "issueNumber": "628"
+    }
+  ]
+}

@@ -72,12 +72,12 @@ func (s *TempSettingsServer) handleRoot(w http.ResponseWriter, r *http.Request) 
 		return
 	}
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
-	_, _ = w.Write(client.InspectorHTML)
+	_, _ = w.Write(client.DashboardHTML)
 }
 
 func (s *TempSettingsServer) handleLogs(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
-	_, _ = w.Write(client.LogsHTML)
+	_, _ = w.Write(client.DashboardHTML)
 }
 
 func (s *TempSettingsServer) handleInfo(w http.ResponseWriter, r *http.Request) {

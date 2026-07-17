@@ -16,11 +16,8 @@ import (
 	"time"
 )
 
-//go:embed inspector.html
-var InspectorHTML []byte
-
-//go:embed logs.html
-var LogsHTML []byte
+//go:embed dashboard.html
+var DashboardHTML []byte
 
 //go:embed favicon-light.svg
 var FaviconSVG []byte
@@ -35,23 +32,18 @@ func StartInspector(port int, engine *InterceptorEngine) (int, error) {
 	mux := http.NewServeMux()
 
 	mux.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
-		if r.URL.Path != "/" && r.URL.Path != "/settings" {
+		if r.URL.Path != "/" && r.URL.Path != "/settings" && r.URL.Path != "/logs" {
 			http.NotFound(w, r)
 			return
 		}
 		w.Header().Set("Content-Type", "text/html; charset=utf-8")
-		_, _ = w.Write(InspectorHTML)
+		_, _ = w.Write(DashboardHTML)
 	})
 
 	mux.HandleFunc("/favicon.ico", func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "image/svg+xml")
 		w.Header().Set("Cache-Control", "public, max-age=86400")
 		_, _ = w.Write(FaviconSVG)
-	})
-
-	mux.HandleFunc("/logs", func(w http.ResponseWriter, r *http.Request) {
-		w.Header().Set("Content-Type", "text/html; charset=utf-8")
-		_, _ = w.Write(LogsHTML)
 	})
 
 	mux.HandleFunc("/api/state", func(w http.ResponseWriter, r *http.Request) {
@@ -247,6 +239,8 @@ func StartInspector(port int, engine *InterceptorEngine) (int, error) {
 				"insecure_skip_verify": cfg.InsecureSkipVerify,
 				"passcode":             cfg.Passcode,
 				"rate_limit":           cfg.RateLimit,
+				"maintenance_path":     cfg.MaintenancePath,
+				"nav_placement":        cfg.NavPlacement,
 			}
 			_ = json.NewEncoder(w).Encode(resp)
 			return
@@ -263,6 +257,8 @@ func StartInspector(port int, engine *InterceptorEngine) (int, error) {
 				InsecureSkipVerify bool   `json:"insecure_skip_verify"`
 				Passcode           string `json:"passcode"`
 				RateLimit          int    `json:"rate_limit"`
+				MaintenancePath    string `json:"maintenance_path"`
+				NavPlacement       string `json:"nav_placement"`
 			}
 			if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 				w.WriteHeader(http.StatusBadRequest)
@@ -286,6 +282,11 @@ func StartInspector(port int, engine *InterceptorEngine) (int, error) {
 			cfg.InsecureSkipVerify = req.InsecureSkipVerify
 			cfg.Passcode = req.Passcode
 			cfg.RateLimit = req.RateLimit
+			cfg.MaintenancePath = req.MaintenancePath
+			cfg.NavPlacement = req.NavPlacement
+			
+			engine.MaintenancePath = req.MaintenancePath
+			engine.NavPlacement = req.NavPlacement
 
 			err = config.SaveClientConfig("", cfg)
 			if err != nil {

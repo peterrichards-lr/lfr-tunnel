@@ -4631,10 +4631,6 @@ async function loadSystemSettings() {
             if (data.default_domain) {
                 domSelect.value = data.default_domain;
             }
-            const maintPath = document.getElementById('system-maintenance-path');
-            if (data.maintenance_page_path !== undefined) {
-                maintPath.value = data.maintenance_page_path;
-            }
         }
     } catch (e) {
         console.error("Failed to load system settings", e);
@@ -4644,7 +4640,6 @@ async function loadSystemSettings() {
 async function saveSystemSettings() {
     const rule = document.getElementById('system-domain-allocation-rule').value;
     const defaultDom = document.getElementById('system-default-domain').value;
-    const maintPath = document.getElementById('system-maintenance-path').value;
 
     try {
         const res = await fetch('/api/admin/system-settings', {
@@ -4652,8 +4647,7 @@ async function saveSystemSettings() {
             headers: {'Content-Type': 'application/json'},
             body: JSON.stringify({
                 domain_allocation_rule: rule,
-                default_domain: defaultDom,
-                maintenance_page_path: maintPath
+                default_domain: defaultDom
             })
         });
 

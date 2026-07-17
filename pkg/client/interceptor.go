@@ -79,11 +79,13 @@ type InterceptorEngine struct {
 	PublicURLs         []string
 	LanguagePreference string
 	ThemePreference    string
+	NavPlacement       string
 	ServerVersion      string
 
 	// Latency & Bandwidth Simulation Settings
 	Latency        time.Duration
 	BandwidthLimit int64
+	MaintenancePath string
 }
 
 // NewInterceptorEngine creates a new state engine for traffic inspection.
@@ -248,7 +250,7 @@ func (e *InterceptorEngine) InterceptPort(targetPort int) (int, error) {
 		e.mu.RUnlock()
 
 		if isMaint {
-			serveMaintenancePage(w)
+			serveMaintenancePage(w, e.MaintenancePath)
 			return
 		}
 
@@ -456,30 +458,41 @@ func (t *interceptorTransport) RoundTrip(req *http.Request) (*http.Response, err
 	return res, err
 }
 
-func serveMaintenancePage(w http.ResponseWriter) {
+func serveMaintenancePage(w http.ResponseWriter, path string) {
+	if path != "" {
+		if content, err := os.ReadFile(path); err == nil {
+			w.Header().Set("Content-Type", "text/html; charset=utf-8")
+			w.WriteHeader(http.StatusServiceUnavailable)
+			w.Write(content)
+			return
+		}
+	}
+	
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
 	w.WriteHeader(http.StatusServiceUnavailable)
-	_, _ = w.Write([]byte(`
-	<!DOCTYPE html>
-	<html>
-	<head>
-		<title>Maintenance Mode</title>
-		<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&display=swap" rel="stylesheet">
-		<style>
-			body { font-family: 'Inter', sans-serif; background: #0f172a; color: white; display: flex; align-items: center; justify-content: center; height: 100vh; margin: 0; }
-			.card { background: rgba(30,41,59,0.8); padding: 40px; border-radius: 12px; text-align: center; border: 1px solid rgba(255,255,255,0.1); max-width: 500px; }
-			h1 { color: #f59e0b; margin-top: 0; }
-			p { color: #94a3b8; line-height: 1.6; }
-		</style>
-	</head>
-	<body>
-		<div class="card">
-			<h1>Down for Maintenance</h1>
-			<p>The developer has temporarily paused this tunnel for maintenance. Please check back shortly.</p>
+	w.Write([]byte(`<!DOCTYPE html>
+<html>
+<head>
+	<title>Developer Maintenance Mode</title>
+	<link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;600;800&display=swap" rel="stylesheet">
+	<style>
+		body { font-family: 'Outfit', sans-serif; background: linear-gradient(135deg, #0f172a 0%, #1e1b4b 50%, #311042 100%); color: white; display: flex; align-items: center; justify-content: center; height: 100vh; margin: 0; }
+		.card { background: rgba(30, 41, 59, 0.7); padding: 48px 32px; border-radius: 24px; border: 1px solid rgba(255,255,255,0.08); text-align: center; max-width: 520px; box-shadow: 0 20px 40px rgba(0, 0, 0, 0.3); }
+		h1 { margin-top: 0; color: #38bdf8; font-size: 28px; font-weight: 800; }
+		p { color: #94a3b8; font-size: 16px; line-height: 1.6; }
+		.logo-container { margin-bottom: 24px; display: inline-flex; align-items: center; justify-content: center; width: 80px; height: 80px; border-radius: 20px; background: rgba(255, 255, 255, 0.03); border: 1px solid rgba(255, 255, 255, 0.05); }
+	</style>
+</head>
+<body>
+	<div class="card">
+		<div class="logo-container">
+			<svg width="44" height="44" viewBox="0 0 24 24" fill="white"><path d="M12 2L2 22h20L12 2zm0 3.8l7.5 14.2H4.5L12 5.8z"/></svg>
 		</div>
-	</body>
-	</html>
-	`))
+		<h1>Developer Maintenance</h1>
+		<p>The developer has temporarily paused this tunnel for maintenance. Please check back shortly.</p>
+	</div>
+</body>
+</html>`))
 }
 
 func getHostHeaderValue(host string, port int) string {

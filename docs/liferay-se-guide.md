@@ -35,7 +35,7 @@ Your tunnel will be reachable at:
 > [!IMPORTANT]
 > **Status Note:** We are currently talking with the **Liferay Security Teams** to get this native execution option fully approved and whitelisted. In the meantime, this option is temporarily disabled. **Please use Method B (Docker Container) below for all client operations.**
 
-~~This script downloads the officially signed client binary directly into the EDR-whitelisted canonical installation directory (`~/runningpoc/bin/lfr-tunnel` or `C:\Users\<username>\runningpoc\bin\lfr-tunnel.exe`):~~
+~~This script downloads the officially signed client binary directly into the EDR-whitelisted canonical installation directory (`/usr/local/bin/lfr-tunnel` or `%LOCALAPPDATA%\Programs\lfr-tunnel\lfr-tunnel.exe`):~~
 
 * ~~**macOS / Linux:** `curl -sSfL https://tunnel.lfr-demo.se/install.sh | sh`~~
 * ~~**Windows (PowerShell):** `iwr https://tunnel.lfr-demo.se/install.ps1 | iex`~~

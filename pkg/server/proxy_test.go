@@ -17,7 +17,7 @@ import (
 )
 
 func TestProxyHandler_Offline(t *testing.T) {
-	chiselServer, _ := chserver.NewServer(&chserver.Config{Reverse: true}) //nolint:errcheck
+	chiselServer, _ := chserver.NewServer(&chserver.Config{Reverse: true}) //nolint:errcheck //nolint:errcheck
 	reg := NewRegistry(chiselServer)
 	handler := NewProxyHandler(reg, config.DefaultServerConfig())
 
@@ -71,7 +71,7 @@ func TestProxyHandler_Online(t *testing.T) {
 	}
 
 	// 2. Setup registry with a manual lease pointing to backend port
-	chiselServer, _ := chserver.NewServer(&chserver.Config{Reverse: true})
+	chiselServer, _ := chserver.NewServer(&chserver.Config{Reverse: true}) //nolint:errcheck
 	reg := NewRegistry(chiselServer)
 
 	reg.Lock()
@@ -144,7 +144,7 @@ func TestProxyHandler_AccessControls(t *testing.T) {
 	}
 
 	// 2. Setup registry with lease
-	chiselServer, _ := chserver.NewServer(&chserver.Config{Reverse: true})
+	chiselServer, _ := chserver.NewServer(&chserver.Config{Reverse: true}) //nolint:errcheck
 	reg := NewRegistry(chiselServer)
 
 	reg.Lock()
@@ -260,7 +260,7 @@ func TestProxyHandler_CustomHeaders(t *testing.T) {
 	}
 
 	// 2. Setup registry with a manual lease pointing to backend port
-	chiselServer, _ := chserver.NewServer(&chserver.Config{Reverse: true})
+	chiselServer, _ := chserver.NewServer(&chserver.Config{Reverse: true}) //nolint:errcheck
 	reg := NewRegistry(chiselServer)
 
 	reg.Lock()

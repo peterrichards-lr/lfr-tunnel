@@ -40,8 +40,8 @@ func TestPIDManagement(t *testing.T) {
 	}
 
 	// Clean up
-	path, _ := getPIDFilePath(sub)
-	_ = os.Remove(path) //nolint:errcheck
+	path, _ := getPIDFilePath(sub) //nolint:errcheck
+	_ = os.Remove(path)            //nolint:errcheck
 }
 
 func TestIsPIDRunning(t *testing.T) {

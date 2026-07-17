@@ -2029,7 +2029,7 @@ func (s *Server) handleVerifyEmail(w http.ResponseWriter, r *http.Request) {
 	}
 
 	s.writeAudit(user.Email, "user.verified", "user", user.Email, "", r)
-	body, _ := s.renderNotificationTemplate("en", "admin_registration_request.txt", map[string]interface{}{
+	body, _ := s.renderNotificationTemplate("en", "admin_registration_request.txt", map[string]interface{}{ //nolint:errcheck
 		"Email": user.Email,
 	})
 	s.notifications.SendAdminAlert("alert_notify_registration", "LFR Tunnel Alert: New User Registration", body)
@@ -2837,7 +2837,7 @@ func (s *Server) handleAdminMagicLink(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	magicToken, _ := generateSecureToken()
+	magicToken, _ := generateSecureToken() //nolint:errcheck
 	clientIP := getClientIP(r)
 
 	expiresAt := time.Now().Add(s.cfg.MagicLinkExpiry)
@@ -2950,7 +2950,7 @@ func (s *Server) handleAdminVerify(w http.ResponseWriter, r *http.Request) {
 		}
 		email = sessionData.Email
 	}
-	sessionToken, _ := generateSecureToken()
+	sessionToken, _ := generateSecureToken() //nolint:errcheck
 	clientIP := getClientIP(r)
 
 	var previousLoginAt *time.Time
@@ -3882,7 +3882,7 @@ Liferay Tunnel Team<br/><br/>
 		}
 
 		plainBody := fmt.Sprintf("Hi %s,\n\nYour account role has been updated on Liferay Tunnel to: %s.\n\nUnsubscribe from optional emails here: %s\n\nBest regards,\nLiferay Tunnel Team", greetingName, *req.Role, unsubLink)
-		go func() { _ = s.notifications.Sender().Send(user.Email, subject, body, plainBody) }()
+		go func() { _ = s.notifications.Sender().Send(user.Email, subject, body, plainBody) }() //nolint:errcheck
 	}
 
 	detailsBytes, _ := json.Marshal(details)
@@ -4296,7 +4296,7 @@ func (s *Server) handleAdminBlacklist(w http.ResponseWriter, r *http.Request, ac
 		s.blacklist.Store(payload.IPAddress, true)
 		s.BroadcastBlacklistUpdate("add", payload.IPAddress)
 		s.writeAudit(actor, "ip.blacklisted", "ip", payload.IPAddress, payload.Reason, r)
-		body, _ := s.renderNotificationTemplate("en", "admin_ip_banned.txt", map[string]interface{}{"IP": payload.IPAddress, "Actor": actor})
+		body, _ := s.renderNotificationTemplate("en", "admin_ip_banned.txt", map[string]interface{}{"IP": payload.IPAddress, "Actor": actor}) //nolint:errcheck
 		s.notifications.SendAdminAlert("alert_notify_blacklist", "LFR Tunnel Alert: IP Banned", body)
 		s.webhooks.SendIPBlacklistAlert(payload.IPAddress, fmt.Sprintf("%s (Banned by admin: %s)", payload.Reason, actor))
 		_ = json.NewEncoder(w).Encode(map[string]string{"status": "success"}) //nolint:errcheck
@@ -4416,7 +4416,7 @@ func (s *Server) handleAdminTestWebhook(w http.ResponseWriter, r *http.Request, 
 
 	// 4. Dispatch Email alert
 	if s.notifications != nil && s.cfg.AdminNotificationEmail != "" {
-		body, _ := s.renderNotificationTemplate("en", "admin_test_integration.txt", map[string]interface{}{
+		body, _ := s.renderNotificationTemplate("en", "admin_test_integration.txt", map[string]interface{}{ //nolint:errcheck
 			"Actor":     actor,
 			"Timestamp": timestamp,
 			"Version":   version,

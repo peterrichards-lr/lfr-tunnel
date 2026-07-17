@@ -1,0 +1,27 @@
+{
+  "epic": {
+    "title": "Refactor Dashboard UI: Componentize Vanilla JS Monolith",
+    "description": "Migrating the Liferay Tunnel admin dashboard and user portal from a monolithic vanilla HTML/JS implementation to a React + Vite SPA."
+  },
+  "issues": [
+    {
+      "title": "Phase 4.1: Dashboard UI Refactoring SPA Scaffolding",
+      "description": "Scaffold the React + Vite SPA and integrate with the Go backend via go:embed.",
+      "completed": false,
+      "issueNumber": "619"
+    },
+    {
+      "title": "Phase 4.2: Magic Link Login Flow",
+      "description": "Implement Login component mirroring the vanilla logic and aesthetics.",
+      "completed": false,
+      "issueNumber": "620"
+    },
+    {
+      "title": "Phase 4.3: MFA Challenge & Dashboard Scaffolding",
+      "description": "Implement MFA Verification logic and base authenticated layout.",
+      "completed": false,
+      "issueNumber": "621"
+    }
+  ],
+  "epicNumber": "618"
+}

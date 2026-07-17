@@ -1,0 +1,15 @@
+{
+  "epic": {
+    "title": "Refactor Dashboard UI: Admin Components",
+    "description": "Migrating the Liferay Tunnel admin dashboard subdomains, users, and settings views from a monolithic vanilla HTML/JS implementation to a React + Vite SPA."
+  },
+  "issues": [
+    {
+      "title": "Phase 4.4: Admin Subdomains and Users Tables",
+      "description": "Implement the `/admin/subdomains` and `/admin/users` views in the React SPA. This includes fetching active leases, rendering interactive data tables, and integrating administrative actions (kick, approve, promote, suspend).",
+      "completed": false,
+      "issueNumber": "624"
+    }
+  ],
+  "epicNumber": "623"
+}

@@ -1,0 +1,14 @@
+{
+  "epicNumber": "618",
+  "epic": {
+    "title": "Refactor Dashboard UI: Admin Components"
+  },
+  "issues": [
+    {
+      "title": "Phase 5: Cutover & Legacy Cleanup",
+      "description": "Switch server routing to use React UI as the default dashboard and remove legacy HTML/JS files.",
+      "completed": false,
+      "issueNumber": "630"
+    }
+  ]
+}

@@ -3,6 +3,7 @@ package server
 import (
 	"lfr-tunnel/pkg/config"
 	"lfr-tunnel/pkg/db"
+	"log"
 	"net/http"
 	"net/http/httptest"
 	"net/url"
@@ -53,7 +54,9 @@ func TestProxyHandler_Online(t *testing.T) {
 			t.Error("X-Real-IP header was not set")
 		}
 		w.WriteHeader(http.StatusOK)
-		_, _ = w.Write([]byte("Hello from Liferay Local!"))
+		if _, err := w.Write([]byte("Hello from Liferay Local!")); err != nil {
+			log.Printf("[Warning] Failed to write response: %v", err)
+		}
 	}))
 	defer backend.Close()
 
@@ -240,7 +243,9 @@ func TestProxyHandler_CustomHeaders(t *testing.T) {
 			t.Errorf("X-Real-IP should not be present since it was overridden, got %s", r.Header.Get("X-Real-IP"))
 		}
 		w.WriteHeader(http.StatusOK)
-		_, _ = w.Write([]byte("Hello from Custom Proxy!"))
+		if _, err := w.Write([]byte("Hello from Custom Proxy!")); err != nil {
+			log.Printf("[Warning] Failed to write response: %v", err)
+		}
 	}))
 	defer backend.Close()
 

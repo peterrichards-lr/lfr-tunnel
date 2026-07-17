@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"log"
 	"net/http"
 	"os"
 	"os/exec"
@@ -517,7 +518,9 @@ func sendResult(id interface{}, result interface{}) {
 		ID:      id,
 	}
 	b, _ := json.Marshal(res)
-	_, _ = fmt.Fprintln(outputWriter, string(b))
+	if _, err := fmt.Fprintln(outputWriter, string(b)); err != nil {
+		log.Printf("[Warning] Failed to write response: %v", err)
+	}
 }
 
 func sendError(id interface{}, code int, message string) {
@@ -530,7 +533,9 @@ func sendError(id interface{}, code int, message string) {
 		ID: id,
 	}
 	b, _ := json.Marshal(res)
-	_, _ = fmt.Fprintln(outputWriter, string(b))
+	if _, err := fmt.Fprintln(outputWriter, string(b)); err != nil {
+		log.Printf("[Warning] Failed to write response: %v", err)
+	}
 }
 
 func sendToolSuccess(id interface{}, content interface{}) {

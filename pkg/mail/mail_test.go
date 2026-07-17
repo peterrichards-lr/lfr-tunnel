@@ -9,6 +9,7 @@ import (
 	"crypto/x509/pkix"
 	"encoding/pem"
 	"fmt"
+	"log"
 	"math/big"
 	"net"
 	"strings"
@@ -99,9 +100,13 @@ func handleMockConnection(t *testing.T, conn net.Conn, cert *tls.Certificate, da
 
 		if strings.HasPrefix(strings.ToUpper(line), "EHLO") || strings.HasPrefix(strings.ToUpper(line), "HELO") {
 			if !isTLS && cert != nil {
-				_, _ = writer.WriteString("250-smtp.liferay-tunnel-test.local\r\n250-STARTTLS\r\n250 AUTH PLAIN\r\n")
+				if _, err := writer.WriteString("250-smtp.liferay-tunnel-test.local\r\n250-STARTTLS\r\n250 AUTH PLAIN\r\n"); err != nil {
+					log.Printf("[Warning] Failed to write response: %v", err)
+				}
 			} else {
-				_, _ = writer.WriteString("250-smtp.liferay-tunnel-test.local\r\n250 AUTH PLAIN\r\n")
+				if _, err := writer.WriteString("250-smtp.liferay-tunnel-test.local\r\n250 AUTH PLAIN\r\n"); err != nil {
+					log.Printf("[Warning] Failed to write response: %v", err)
+				}
 			}
 			_ = writer.Flush()
 		} else if strings.ToUpper(line) == "STARTTLS" && cert != nil && !isTLS {

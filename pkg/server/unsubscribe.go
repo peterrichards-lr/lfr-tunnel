@@ -6,6 +6,7 @@ import (
 	"encoding/base64"
 	"errors"
 	"fmt"
+	"log"
 	"net/http"
 	"strconv"
 	"strings"
@@ -105,7 +106,9 @@ func (s *Server) handleUnsubscribe(w http.ResponseWriter, r *http.Request) {
 		_, _ = fmt.Fprint(w, `<html><head><title>Unsubscribed Successfully</title><style>body{font-family:sans-serif;text-align:center;padding:50px;color:#333;background:#f8fafc;}h1{color:#10b981;}</style></head><body><h1>Successfully Unsubscribed! ✅</h1><p>Your email preferences have been updated. You will no longer receive optional administrative notifications, broadcasts, or lease alert emails.</p><p>You can opt-back-in at any time from your Account Settings panel on the dashboard.</p><p><a href="/">Return to Portal</a></p></body></html>`)
 		return
 	}
-	_, _ = w.Write(htmlBytes)
+	if _, err := w.Write(htmlBytes); err != nil {
+		log.Printf("[Warning] Failed to write response: %v", err)
+	}
 }
 
 func htmlEscape(s string) string {

@@ -1016,7 +1016,9 @@ func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 			scriptStr = strings.ReplaceAll(scriptStr, "{{MACOS_ARM64_INSTALL_DIR}}", getInstallDir("macos_arm64", "/usr/local/bin"))
 			scriptStr = strings.ReplaceAll(scriptStr, "{{LINUX_AMD64_INSTALL_DIR}}", getInstallDir("linux_amd64", "/usr/local/bin"))
 
-			_, _ = w.Write([]byte(scriptStr))
+			if _, err := w.Write([]byte(scriptStr)); err != nil {
+				log.Printf("[Warning] Failed to write response: %v", err)
+			}
 			return
 		}
 
@@ -1041,14 +1043,18 @@ func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 
 			scriptStr = strings.ReplaceAll(scriptStr, "{{WINDOWS_AMD64_INSTALL_DIR}}", getInstallDir("windows_amd64", "$env:LOCALAPPDATA\\Programs\\lfr-tunnel"))
 
-			_, _ = w.Write([]byte(scriptStr))
+			if _, err := w.Write([]byte(scriptStr)); err != nil {
+				log.Printf("[Warning] Failed to write response: %v", err)
+			}
 			return
 		}
 
 		if r.Method == http.MethodGet && r.URL.Path == "/api/healthz" {
 			w.Header().Set("Content-Type", "application/json")
 			w.WriteHeader(http.StatusOK)
-			_, _ = w.Write([]byte(`{"status":"healthy"}`))
+			if _, err := w.Write([]byte(`{"status":"healthy"}`)); err != nil {
+				log.Printf("[Warning] Failed to write response: %v", err)
+			}
 			return
 		}
 
@@ -1066,7 +1072,9 @@ func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		if r.Method == http.MethodGet && r.URL.Path == "/robots.txt" {
 			w.Header().Set("Content-Type", "text/plain; charset=utf-8")
 			w.WriteHeader(http.StatusOK)
-			_, _ = w.Write([]byte("User-agent: *\nDisallow: /\n"))
+			if _, err := w.Write([]byte("User-agent: *\nDisallow: /\n")); err != nil {
+				log.Printf("[Warning] Failed to write response: %v", err)
+			}
 			return
 		}
 
@@ -1075,7 +1083,9 @@ func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 			w.WriteHeader(http.StatusOK)
 			htmlContent := strings.ReplaceAll(dashboardHTML, "static/dashboard.js", "static/dashboard.js?v="+config.Version)
 			htmlContent = strings.ReplaceAll(htmlContent, "/static/dashboard.css", "/static/dashboard.css?v="+config.Version)
-			_, _ = w.Write([]byte(htmlContent))
+			if _, err := w.Write([]byte(htmlContent)); err != nil {
+				log.Printf("[Warning] Failed to write response: %v", err)
+			}
 			return
 		}
 	}
@@ -1876,7 +1886,9 @@ func (s *Server) handleSetupPage(w http.ResponseWriter, r *http.Request) {
 	}
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
 	w.WriteHeader(http.StatusOK)
-	_, _ = w.Write(data)
+	if _, err := w.Write(data); err != nil {
+		log.Printf("[Warning] Failed to write response: %v", err)
+	}
 }
 
 // handleCompleteSetup processes the profile completion form.
@@ -2060,10 +2072,14 @@ func (s *Server) handleVerifyEmail(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "text/html")
 	htmlBytes, err := staticFS.ReadFile("static/email_verified.html")
 	if err != nil {
-		_, _ = w.Write([]byte(`<html><head><title>Email Verified</title><style>body{font-family:sans-serif;text-align:center;padding:50px;color:#333;background:#f8fafc;}h1{color:#10b981;}</style></head><body><h1>Email Verified! ✅</h1><p>Your email has been verified successfully. An administrator has been notified to review and approve your account.</p></body></html>`))
+		if _, err := w.Write([]byte(`<html><head><title>Email Verified</title><style>body{font-family:sans-serif;text-align:center;padding:50px;color:#333;background:#f8fafc;}h1{color:#10b981;}</style></head><body><h1>Email Verified! ✅</h1><p>Your email has been verified successfully. An administrator has been notified to review and approve your account.</p></body></html>`)); err != nil {
+			log.Printf("[Warning] Failed to write response: %v", err)
+		}
 		return
 	}
-	_, _ = w.Write(htmlBytes)
+	if _, err := w.Write(htmlBytes); err != nil {
+		log.Printf("[Warning] Failed to write response: %v", err)
+	}
 }
 
 // handleApproveUser handles admin clicks on approval links.
@@ -2149,7 +2165,9 @@ func (s *Server) handleApproveUser(w http.ResponseWriter, r *http.Request) {
 
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
 	w.WriteHeader(http.StatusOK)
-	_, _ = w.Write([]byte("<h1>Approval Successful</h1><p>The user has been approved, and an email has been sent to them with instructions to claim their token.</p>"))
+	if _, err := w.Write([]byte("<h1>Approval Successful</h1><p>The user has been approved, and an email has been sent to them with instructions to claim their token.</p>")); err != nil {
+		log.Printf("[Warning] Failed to write response: %v", err)
+	}
 }
 
 // handleClaimToken allows developers to claim their generated PAT.
@@ -3626,7 +3644,9 @@ func (s *Server) handleVisitorMaintenancePage(w http.ResponseWriter, r *http.Req
 	if !useCustom {
 		htmlBytes, err = staticFS.ReadFile("static/maintenance.html")
 		if err != nil {
-			_, _ = w.Write([]byte(`<h1>Scheduled Maintenance</h1><p>The gateway is undergoing administrative updates.</p>`))
+			if _, err := w.Write([]byte(`<h1>Scheduled Maintenance</h1><p>The gateway is undergoing administrative updates.</p>`)); err != nil {
+				log.Printf("[Warning] Failed to write response: %v", err)
+			}
 			return
 		}
 	}
@@ -3661,7 +3681,9 @@ func (s *Server) handleVisitorMaintenancePage(w http.ResponseWriter, r *http.Req
 	htmlContent = strings.ReplaceAll(htmlContent, "__END_TIME__", strconv.FormatInt(epochSecs, 10))
 
 	finalBytes := s.injectBaseTag([]byte(htmlContent), r)
-	_, _ = w.Write(finalBytes)
+	if _, err := w.Write(finalBytes); err != nil {
+		log.Printf("[Warning] Failed to write response: %v", err)
+	}
 }
 
 func (s *Server) handleAdminGetUser(w http.ResponseWriter, r *http.Request, actor string) {
@@ -4202,7 +4224,9 @@ func (s *Server) handleAdminListBackups(w http.ResponseWriter, r *http.Request, 
 		if os.IsNotExist(err) {
 			// No backups yet — return empty list, not an error
 			w.Header().Set("Content-Type", "application/json")
-			_, _ = w.Write([]byte("[]"))
+			if _, err := w.Write([]byte("[]")); err != nil {
+				log.Printf("[Warning] Failed to write response: %v", err)
+			}
 			return
 		}
 		http.Error(w, `{"error":"Failed to read backups directory"}`, http.StatusInternalServerError)
@@ -4524,11 +4548,15 @@ func (s *Server) handlePrivacyFallback(w http.ResponseWriter, r *http.Request) {
 	if err != nil {
 		slog.Info(fmt.Sprintf("[Server] Failed to render privacy policy template: %v", err))
 		// Hardcoded basic fallback
-		_, _ = w.Write([]byte(`<html><body><h1>Privacy Policy</h1><p>Under maintenance.</p></body></html>`))
+		if _, err := w.Write([]byte(`<html><body><h1>Privacy Policy</h1><p>Under maintenance.</p></body></html>`)); err != nil {
+			log.Printf("[Warning] Failed to write response: %v", err)
+		}
 		return
 	}
 
-	_, _ = w.Write([]byte(body))
+	if _, err := w.Write([]byte(body)); err != nil {
+		log.Printf("[Warning] Failed to write response: %v", err)
+	}
 }
 
 func (s *Server) handleCookiesFallback(w http.ResponseWriter, r *http.Request) {
@@ -4548,11 +4576,15 @@ func (s *Server) handleCookiesFallback(w http.ResponseWriter, r *http.Request) {
 	if err != nil {
 		slog.Info(fmt.Sprintf("[Server] Failed to render cookie disclosure template: %v", err))
 		// Hardcoded basic fallback
-		_, _ = w.Write([]byte(`<html><body><h1>Cookie Disclosure</h1><p>Under maintenance.</p></body></html>`))
+		if _, err := w.Write([]byte(`<html><body><h1>Cookie Disclosure</h1><p>Under maintenance.</p></body></html>`)); err != nil {
+			log.Printf("[Warning] Failed to write response: %v", err)
+		}
 		return
 	}
 
-	_, _ = w.Write([]byte(body))
+	if _, err := w.Write([]byte(body)); err != nil {
+		log.Printf("[Warning] Failed to write response: %v", err)
+	}
 }
 
 // renderEmailTemplate loads and compiles the requested localized HTML template.
@@ -4750,7 +4782,9 @@ func (s *Server) handleVisitorGonePage(w http.ResponseWriter, r *http.Request, h
 
 	htmlBytes, err := staticFS.ReadFile("static/gone.html")
 	if err != nil {
-		_, _ = w.Write([]byte(`<h1>Subdomain Discontinued</h1><p>The subdomain is in quarantine.</p>`))
+		if _, err := w.Write([]byte(`<h1>Subdomain Discontinued</h1><p>The subdomain is in quarantine.</p>`)); err != nil {
+			log.Printf("[Warning] Failed to write response: %v", err)
+		}
 		return
 	}
 
@@ -4762,7 +4796,9 @@ func (s *Server) handleVisitorGonePage(w http.ResponseWriter, r *http.Request, h
 	htmlContent = strings.ReplaceAll(htmlContent, "{{.PortalURL}}", html.EscapeString(portalURL))
 
 	finalBytes := s.injectBaseTag([]byte(htmlContent), r)
-	_, _ = w.Write(finalBytes)
+	if _, err := w.Write(finalBytes); err != nil {
+		log.Printf("[Warning] Failed to write response: %v", err)
+	}
 }
 
 func (s *Server) injectBaseTag(htmlBytes []byte, r *http.Request) []byte {

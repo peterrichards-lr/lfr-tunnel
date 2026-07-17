@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"encoding/json"
 	"fmt"
+	"log"
 	"net"
 	"net/http"
 	"net/http/httptest"
@@ -26,7 +27,9 @@ func TestInspectorHealthzAndInfo(t *testing.T) {
 	mockDownstreamMux := http.NewServeMux()
 	mockDownstreamMux.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusOK)
-		_, _ = w.Write([]byte("Liferay Mock"))
+		if _, err := w.Write([]byte("Liferay Mock")); err != nil {
+			log.Printf("[Warning] Failed to write response: %v", err)
+		}
 	})
 	mockDownstreamServer := &http.Server{Handler: mockDownstreamMux}
 	go func() {
@@ -61,10 +64,14 @@ func TestInspectorHealthzAndInfo(t *testing.T) {
 		w.Header().Set("Content-Type", "application/json")
 		if isWSConnected && isAuthValid && isLeased && destResponsive {
 			w.WriteHeader(http.StatusOK)
-			_, _ = w.Write([]byte(`{"status":"healthy"}`))
+			if _, err := w.Write([]byte(`{"status":"healthy"}`)); err != nil {
+				log.Printf("[Warning] Failed to write response: %v", err)
+			}
 		} else {
 			w.WriteHeader(http.StatusServiceUnavailable)
-			_, _ = w.Write([]byte(`{"status":"unhealthy"}`))
+			if _, err := w.Write([]byte(`{"status":"unhealthy"}`)); err != nil {
+				log.Printf("[Warning] Failed to write response: %v", err)
+			}
 		}
 	})
 
@@ -254,7 +261,9 @@ func TestReplayRequestEndpoint(t *testing.T) {
 			t.Errorf("Expected X-Test-Header: ReplayVal, got %s", r.Header.Get("X-Test-Header"))
 		}
 		w.WriteHeader(http.StatusCreated)
-		_, _ = w.Write([]byte("Mock Replay Response"))
+		if _, err := w.Write([]byte("Mock Replay Response")); err != nil {
+			log.Printf("[Warning] Failed to write response: %v", err)
+		}
 	}))
 	defer mockDownstream.Close()
 
@@ -390,7 +399,9 @@ func TestInspectorAccessControl(t *testing.T) {
 		_ = json.NewDecoder(r.Body).Decode(&receivedBody)
 		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(http.StatusOK)
-		_, _ = w.Write([]byte(`{"status":"success"}`))
+		if _, err := w.Write([]byte(`{"status":"success"}`)); err != nil {
+			log.Printf("[Warning] Failed to write response: %v", err)
+		}
 	})
 	gatewayServer := httptest.NewServer(gatewayMux)
 	defer gatewayServer.Close()
@@ -485,7 +496,9 @@ func TestInspectorAccessControl(t *testing.T) {
 		}
 
 		w.Header().Set("Content-Type", "application/json")
-		_, _ = w.Write([]byte(`{"status":"ok"}`))
+		if _, err := w.Write([]byte(`{"status":"ok"}`)); err != nil {
+			log.Printf("[Warning] Failed to write response: %v", err)
+		}
 	})
 
 	// Test A: POST to /api/access-control

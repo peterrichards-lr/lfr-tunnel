@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"encoding/json"
 	"fmt"
+	"log"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -122,7 +123,9 @@ func TestMCPServer_GetTunnelStatus_Online(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.URL.Path == "/api/info" {
 			w.Header().Set("Content-Type", "application/json")
-			_, _ = w.Write([]byte(`{"status":"healthy","connection":{"state":"connected"}}`))
+			if _, err := w.Write([]byte(`{"status":"healthy","connection":{"state":"connected"}}`)); err != nil {
+				log.Printf("[Warning] Failed to write response: %v", err)
+			}
 			return
 		}
 		http.NotFound(w, r)
@@ -186,7 +189,9 @@ func TestMCPServer_ListRequests(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.URL.Path == "/api/state" {
 			w.Header().Set("Content-Type", "application/json")
-			_, _ = w.Write([]byte(`{"history":[{"id":"req_1","method":"GET","path":"/test"}]}`))
+			if _, err := w.Write([]byte(`{"history":[{"id":"req_1","method":"GET","path":"/test"}]}`)); err != nil {
+				log.Printf("[Warning] Failed to write response: %v", err)
+			}
 			return
 		}
 		http.NotFound(w, r)

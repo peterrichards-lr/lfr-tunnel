@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"html"
 	"io"
+	"log"
 	"log/slog"
 	"net/http"
 	"net/url"
@@ -1297,7 +1298,9 @@ func (s *Server) handleClaimInvitation(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/x-pkcs12")
 	w.Header().Set("Content-Disposition", fmt.Sprintf("attachment; filename=%s-guest.p12", invite.Subdomain))
 	w.Header().Set("Content-Length", strconv.Itoa(len(pfxBytes)))
-	_, _ = w.Write(pfxBytes)
+	if _, err := w.Write(pfxBytes); err != nil {
+		log.Printf("[Warning] Failed to write response: %v", err)
+	}
 }
 
 // handleCSRSignInvitation handles a guest-generated CSR and returns the signed certificate PEM.
@@ -1351,7 +1354,9 @@ func (s *Server) handleCSRSignInvitation(w http.ResponseWriter, r *http.Request)
 	w.Header().Set("Content-Type", "application/x-pem-file")
 	w.Header().Set("Content-Disposition", fmt.Sprintf("attachment; filename=%s-guest.crt", invite.Subdomain))
 	w.Header().Set("Content-Length", strconv.Itoa(len(certBytes)))
-	_, _ = w.Write(certBytes)
+	if _, err := w.Write(certBytes); err != nil {
+		log.Printf("[Warning] Failed to write response: %v", err)
+	}
 }
 
 type updateAccessControlRequest struct {

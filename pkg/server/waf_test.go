@@ -3,6 +3,7 @@ package server
 import (
 	"bytes"
 	"lfr-tunnel/pkg/config"
+	"log"
 	"net/http"
 	"net/http/httptest"
 	"net/url"
@@ -173,7 +174,9 @@ func TestWAF_IntegrationInProxyHandler(t *testing.T) {
 	backend := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		backendCalled = true
 		w.WriteHeader(http.StatusOK)
-		_, _ = w.Write([]byte("Target Service"))
+		if _, err := w.Write([]byte("Target Service")); err != nil {
+			log.Printf("[Warning] Failed to write response: %v", err)
+		}
 	}))
 	defer backend.Close()
 

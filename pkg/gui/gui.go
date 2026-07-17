@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"log"
 	"log/slog"
 	"net/http"
 	"os"
@@ -72,12 +73,16 @@ func (s *TempSettingsServer) handleRoot(w http.ResponseWriter, r *http.Request) 
 		return
 	}
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
-	_, _ = w.Write(client.DashboardHTML)
+	if _, err := w.Write(client.DashboardHTML); err != nil {
+		log.Printf("[Warning] Failed to write response: %v", err)
+	}
 }
 
 func (s *TempSettingsServer) handleLogs(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
-	_, _ = w.Write(client.DashboardHTML)
+	if _, err := w.Write(client.DashboardHTML); err != nil {
+		log.Printf("[Warning] Failed to write response: %v", err)
+	}
 }
 
 func (s *TempSettingsServer) handleInfo(w http.ResponseWriter, r *http.Request) {
@@ -143,12 +148,16 @@ func (s *TempSettingsServer) handleApiLogs(w http.ResponseWriter, r *http.Reques
 		return
 	}
 	w.Header().Set("Content-Type", "text/plain; charset=utf-8")
-	_, _ = w.Write(data)
+	if _, err := w.Write(data); err != nil {
+		log.Printf("[Warning] Failed to write response: %v", err)
+	}
 }
 
 func (s *TempSettingsServer) handleState(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/json")
-	_, _ = w.Write([]byte(`{"maintenance_mode":false,"added_headers":{},"history":[],"public_urls":[]}`))
+	if _, err := w.Write([]byte(`{"maintenance_mode":false,"added_headers":{},"history":[],"public_urls":[]}`)); err != nil {
+		log.Printf("[Warning] Failed to write response: %v", err)
+	}
 }
 
 func (s *TempSettingsServer) handleConfig(w http.ResponseWriter, r *http.Request) {
@@ -207,7 +216,9 @@ func (s *TempSettingsServer) handleConfigPost(w http.ResponseWriter, r *http.Req
 	}
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 		w.WriteHeader(http.StatusBadRequest)
-		_, _ = w.Write([]byte(`{"error":"Invalid request JSON"}`))
+		if _, err := w.Write([]byte(`{"error":"Invalid request JSON"}`)); err != nil {
+			log.Printf("[Warning] Failed to write response: %v", err)
+		}
 		return
 	}
 
@@ -234,7 +245,9 @@ func (s *TempSettingsServer) handleConfigPost(w http.ResponseWriter, r *http.Req
 		_ = json.NewEncoder(w).Encode(map[string]string{"error": err.Error()})
 		return
 	}
-	_, _ = w.Write([]byte(`{"status":"saved"}`))
+	if _, err := w.Write([]byte(`{"status":"saved"}`)); err != nil {
+		log.Printf("[Warning] Failed to write response: %v", err)
+	}
 }
 
 func (s *TempSettingsServer) Stop() {
@@ -623,5 +636,7 @@ func getRunningState(configuredSub string) (*client.ClientState, string, bool) {
 func (s *TempSettingsServer) handleFavicon(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "image/svg+xml")
 	w.Header().Set("Cache-Control", "public, max-age=86400")
-	_, _ = w.Write(client.GetEmbeddedFaviconSVG())
+	if _, err := w.Write(client.GetEmbeddedFaviconSVG()); err != nil {
+		log.Printf("[Warning] Failed to write response: %v", err)
+	}
 }

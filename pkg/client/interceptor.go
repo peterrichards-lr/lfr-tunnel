@@ -7,6 +7,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"log"
 	"log/slog"
 	"net"
 	"net/http"
@@ -463,14 +464,16 @@ func serveMaintenancePage(w http.ResponseWriter, path string) {
 		if content, err := os.ReadFile(path); err == nil {
 			w.Header().Set("Content-Type", "text/html; charset=utf-8")
 			w.WriteHeader(http.StatusServiceUnavailable)
-			_, _ = w.Write(content)
+			if _, err := w.Write(content); err != nil {
+				log.Printf("[Warning] Failed to write response: %v", err)
+			}
 			return
 		}
 	}
 
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
 	w.WriteHeader(http.StatusServiceUnavailable)
-	_, _ = w.Write([]byte(`<!DOCTYPE html>
+	if _, err := w.Write([]byte(`<!DOCTYPE html>
 <html>
 <head>
 	<title>Developer Maintenance Mode</title>
@@ -492,7 +495,9 @@ func serveMaintenancePage(w http.ResponseWriter, path string) {
 		<p>The developer has temporarily paused this tunnel for maintenance. Please check back shortly.</p>
 	</div>
 </body>
-</html>`))
+</html>`)); err != nil {
+		log.Printf("[Warning] Failed to write response: %v", err)
+	}
 }
 
 func getHostHeaderValue(host string, port int) string {

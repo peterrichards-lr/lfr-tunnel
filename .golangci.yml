@@ -74,6 +74,8 @@ linters:
           - goconst
 
   settings:
+    errcheck:
+      check-blank: true
     funlen:
       lines: 100
       statements: 50

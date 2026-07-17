@@ -3,6 +3,7 @@ package client
 import (
 	"context"
 	"fmt"
+	"log"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -59,7 +60,9 @@ func TestRedirectChiselLogger(t *testing.T) {
 	}
 	defer cleanup()
 
-	_, _ = fmt.Fprintln(os.Stderr, "Connected (Latency 15ms)")
+	if _, err := fmt.Fprintln(os.Stderr, "Connected (Latency 15ms)"); err != nil {
+		log.Printf("[Warning] Failed to write response: %v", err)
+	}
 }
 
 func TestRunLogin(t *testing.T) {

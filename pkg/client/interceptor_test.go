@@ -5,6 +5,7 @@ import (
 	"context"
 	"fmt"
 	"io"
+	"log"
 	"net"
 	"net/http"
 	"net/http/httptest"
@@ -23,7 +24,9 @@ func TestInterceptorEngine_HeaderInjection(t *testing.T) {
 			t.Errorf("Expected X-Injected header to be 'true'")
 		}
 		w.WriteHeader(http.StatusOK)
-		_, _ = w.Write([]byte("Target Response"))
+		if _, err := w.Write([]byte("Target Response")); err != nil {
+			log.Printf("[Warning] Failed to write response: %v", err)
+		}
 	}))
 	defer targetServer.Close()
 
@@ -119,7 +122,9 @@ func TestInterceptorEngine_CustomTargetHost(t *testing.T) {
 	targetServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		receivedHost = r.Host
 		w.WriteHeader(http.StatusOK)
-		_, _ = w.Write([]byte("OK"))
+		if _, err := w.Write([]byte("OK")); err != nil {
+			log.Printf("[Warning] Failed to write response: %v", err)
+		}
 	}))
 	defer targetServer.Close()
 
@@ -170,7 +175,9 @@ func TestInterceptorEngine_PreserveHost(t *testing.T) {
 	targetServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		receivedHost = r.Host
 		w.WriteHeader(http.StatusOK)
-		_, _ = w.Write([]byte("OK"))
+		if _, err := w.Write([]byte("OK")); err != nil {
+			log.Printf("[Warning] Failed to write response: %v", err)
+		}
 	}))
 	defer targetServer.Close()
 
@@ -295,7 +302,9 @@ func TestInterceptorEngine_LargePayloads(t *testing.T) {
 		}
 		w.Header().Set("Content-Type", "text/plain")
 		w.WriteHeader(http.StatusOK)
-		_, _ = w.Write(largePayload)
+		if _, err := w.Write(largePayload); err != nil {
+			log.Printf("[Warning] Failed to write response: %v", err)
+		}
 	}))
 	defer targetServer.Close()
 
@@ -388,7 +397,9 @@ func TestThrottledReader_And_Latency(t *testing.T) {
 	targetServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "text/plain")
 		w.WriteHeader(http.StatusOK)
-		_, _ = w.Write([]byte("Hello Throttled!"))
+		if _, err := w.Write([]byte("Hello Throttled!")); err != nil {
+			log.Printf("[Warning] Failed to write response: %v", err)
+		}
 	}))
 	defer targetServer.Close()
 

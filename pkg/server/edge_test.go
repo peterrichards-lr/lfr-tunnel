@@ -5,6 +5,7 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
+	"log"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -30,7 +31,9 @@ func TestEdgeValidationDeregisterAndAuditProxy(t *testing.T) {
 		edgeToken := r.Header.Get("X-Edge-Token")
 		if edgeToken != "my-edge-secret" {
 			w.WriteHeader(http.StatusUnauthorized)
-			_, _ = w.Write([]byte(`{"error":"unauthorized"}`))
+			if _, err := w.Write([]byte(`{"error":"unauthorized"}`)); err != nil {
+				log.Printf("[Warning] Failed to write response: %v", err)
+			}
 			return
 		}
 
@@ -46,16 +49,20 @@ func TestEdgeValidationDeregisterAndAuditProxy(t *testing.T) {
 
 			if edgeReq.AuthToken != "user-pat-token" {
 				w.WriteHeader(http.StatusUnauthorized)
-				_, _ = w.Write([]byte(`{"error":"invalid token"}`))
+				if _, err := w.Write([]byte(`{"error":"invalid token"}`)); err != nil {
+					log.Printf("[Warning] Failed to write response: %v", err)
+				}
 				return
 			}
 
 			w.WriteHeader(http.StatusOK)
-			_, _ = w.Write([]byte(`{
+			if _, err := w.Write([]byte(`{
 				"user_id": "test-user-id",
 				"subdomain_prefix": "my-validated-sub",
 				"rate_limit": 50
-			}`))
+			}`)); err != nil {
+				log.Printf("[Warning] Failed to write response: %v", err)
+			}
 			return
 		}
 
@@ -319,7 +326,9 @@ func TestEdgeMetricsAndKickIntegration(t *testing.T) {
 				return
 			}
 			w.WriteHeader(http.StatusOK)
-			_, _ = w.Write([]byte(`{"status":"success"}`))
+			if _, err := w.Write([]byte(`{"status":"success"}`)); err != nil {
+				log.Printf("[Warning] Failed to write response: %v", err)
+			}
 			return
 		}
 		w.WriteHeader(http.StatusNotFound)

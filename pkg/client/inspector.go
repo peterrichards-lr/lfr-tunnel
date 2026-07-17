@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"io"
 	"lfr-tunnel/pkg/config"
+	"log"
 	"log/slog"
 	"net"
 	"net/http"
@@ -37,13 +38,17 @@ func StartInspector(port int, engine *InterceptorEngine) (int, error) {
 			return
 		}
 		w.Header().Set("Content-Type", "text/html; charset=utf-8")
-		_, _ = w.Write(DashboardHTML)
+		if _, err := w.Write(DashboardHTML); err != nil {
+			log.Printf("[Warning] Failed to write response: %v", err)
+		}
 	})
 
 	mux.HandleFunc("/favicon.ico", func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "image/svg+xml")
 		w.Header().Set("Cache-Control", "public, max-age=86400")
-		_, _ = w.Write(FaviconSVG)
+		if _, err := w.Write(FaviconSVG); err != nil {
+			log.Printf("[Warning] Failed to write response: %v", err)
+		}
 	})
 
 	mux.HandleFunc("/api/state", func(w http.ResponseWriter, r *http.Request) {
@@ -96,10 +101,14 @@ func StartInspector(port int, engine *InterceptorEngine) (int, error) {
 		w.Header().Set("Content-Type", "application/json")
 		if isWSConnected && isAuthValid && isLeased && destResponsive {
 			w.WriteHeader(http.StatusOK)
-			_, _ = w.Write([]byte(`{"status":"healthy"}`))
+			if _, err := w.Write([]byte(`{"status":"healthy"}`)); err != nil {
+				log.Printf("[Warning] Failed to write response: %v", err)
+			}
 		} else {
 			w.WriteHeader(http.StatusServiceUnavailable)
-			_, _ = w.Write([]byte(`{"status":"unhealthy"}`))
+			if _, err := w.Write([]byte(`{"status":"unhealthy"}`)); err != nil {
+				log.Printf("[Warning] Failed to write response: %v", err)
+			}
 		}
 	})
 
@@ -208,7 +217,9 @@ func StartInspector(port int, engine *InterceptorEngine) (int, error) {
 		}
 
 		w.Header().Set("Content-Type", "text/plain; charset=utf-8")
-		_, _ = w.Write(data)
+		if _, err := w.Write(data); err != nil {
+			log.Printf("[Warning] Failed to write response: %v", err)
+		}
 	})
 
 	mux.HandleFunc("/api/config", func(w http.ResponseWriter, r *http.Request) {
@@ -262,7 +273,9 @@ func StartInspector(port int, engine *InterceptorEngine) (int, error) {
 			}
 			if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 				w.WriteHeader(http.StatusBadRequest)
-				_, _ = w.Write([]byte(`{"error":"Invalid request JSON"}`))
+				if _, err := w.Write([]byte(`{"error":"Invalid request JSON"}`)); err != nil {
+					log.Printf("[Warning] Failed to write response: %v", err)
+				}
 				return
 			}
 
@@ -295,7 +308,9 @@ func StartInspector(port int, engine *InterceptorEngine) (int, error) {
 				return
 			}
 
-			_, _ = w.Write([]byte(`{"status":"saved"}`))
+			if _, err := w.Write([]byte(`{"status":"saved"}`)); err != nil {
+				log.Printf("[Warning] Failed to write response: %v", err)
+			}
 			return
 		}
 
@@ -376,7 +391,9 @@ func StartInspector(port int, engine *InterceptorEngine) (int, error) {
 		}
 
 		w.Header().Set("Content-Type", "application/json")
-		_, _ = w.Write([]byte(`{"status":"ok"}`))
+		if _, err := w.Write([]byte(`{"status":"ok"}`)); err != nil {
+			log.Printf("[Warning] Failed to write response: %v", err)
+		}
 	})
 
 	mux.HandleFunc("/api/maintenance", func(w http.ResponseWriter, r *http.Request) {

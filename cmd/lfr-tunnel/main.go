@@ -687,7 +687,7 @@ func handleStop(sub string, targetSpecific bool) {
 		if !isPIDRunning(pid) {
 			slog.Info(fmt.Sprintf("[Client] Stale PID file found for subdomain '%s'. Process %d is not running. Cleaning up...\n", s, pid))
 			pidPath, _ := getPIDFilePath(s) //nolint:errcheck
-			_ = os.Remove(pidPath) //nolint:errcheck
+			_ = os.Remove(pidPath)          //nolint:errcheck
 			client.DeleteState(s)
 			continue
 		}
@@ -712,7 +712,7 @@ func handleStop(sub string, targetSpecific bool) {
 			_ = proc.Kill() //nolint:errcheck
 		}
 		pidPath, _ := getPIDFilePath(s) //nolint:errcheck
-		_ = os.Remove(pidPath) //nolint:errcheck
+		_ = os.Remove(pidPath)          //nolint:errcheck
 		client.DeleteState(s)
 		slog.Info(fmt.Sprintf("[Client] Tunnel for subdomain '%s' stopped.\n", s))
 	}
@@ -749,7 +749,7 @@ func handleStatus(sub string, targetSpecific bool) {
 		} else {
 			slog.Info(fmt.Sprintf("[Client] No background tunnel is active for subdomain '%s' (found stale PID file). Cleaning up...\n", s))
 			pidPath, _ := getPIDFilePath(s) //nolint:errcheck
-			_ = os.Remove(pidPath) //nolint:errcheck
+			_ = os.Remove(pidPath)          //nolint:errcheck
 			client.DeleteState(s)
 		}
 	}

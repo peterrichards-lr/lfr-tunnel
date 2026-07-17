@@ -4331,8 +4331,8 @@ func (s *Server) handleAdminSettings(w http.ResponseWriter, r *http.Request, act
 
 	if r.Method == http.MethodGet {
 		// Fetch settings
-		notifyReg, _ := s.db.GetAdminSetting("alert_notify_registration") //nolint:errcheck
-		notifyBan, _ := s.db.GetAdminSetting("alert_notify_blacklist") //nolint:errcheck
+		notifyReg, _ := s.db.GetAdminSetting("alert_notify_registration")       //nolint:errcheck
+		notifyBan, _ := s.db.GetAdminSetting("alert_notify_blacklist")          //nolint:errcheck
 		notifyOffline, _ := s.db.GetAdminSetting("alert_notify_tunnel_offline") //nolint:errcheck
 
 		// Default values if not set

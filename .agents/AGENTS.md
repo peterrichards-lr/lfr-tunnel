@@ -1,6 +1,12 @@
 # GitHub Issue Sync Workflow Rules
 
 ## 0. SentinelOne Execution Constraints (CRITICAL)
+
+> [!CAUTION]
+> **DO NOT EVER RUN `go test ./...` OR `go test` DIRECTLY.**
+> **SENTINELONE WILL DETECT THE DYNAMIC TEST EXECUTABLE (`*.test`), QUARANTINE IT, AND KILL ADJACENT SYSTEM PROCESSES (BREW, JENV, LDM). THIS CAN CRASH THE AGENT AND DESTROY THE USER'S LOCAL WORK ENVIRONMENT.**
+> **ALWAYS, STRICTLY, WITHOUT EXCEPTION, USE `make test` FOR ANY GO TESTING.**
+
 - **Local Binary Execution Constraints**: The local system EDR (SentinelOne) blocks unsigned `lfr-tunnel` binaries and dynamic Go test run executables (`*.test`). **This will crash the AI Agent.** 
 - Do NOT run `go test ./...` or `go test` directly. 
 - To run Go tests safely, you must iterate over packages and explicitly compile the test binary to the exact whitelisted file before executing it: `go test -c -o /private/tmp/lfr-tunnel <pkg> && /private/tmp/lfr-tunnel`. (This logic is codified in the `Makefile` and `pre-commit-hook.sh`).

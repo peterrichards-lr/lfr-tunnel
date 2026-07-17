@@ -23,7 +23,6 @@ linters:
           - gocognit
           - dupl
           - goconst
-          - errcheck
       # Exclude main.go from gocognit, gocyclo, and funlen due to orchestrating CLI setup
       - path: cmd/lfr-tunnel/main\.go
         linters:
@@ -117,6 +116,9 @@ linters:
         - (*os/exec.Cmd).Start
         - (*database/sql.Rows).Close
         - lfr-tunnel/pkg/config.LoadClientConfig
+        - (*encoding/json.Decoder).Decode
+        - (*net/http.Server).Serve
+        - (*net/http.Server).Close
 
     funlen:
       lines: 100

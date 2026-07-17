@@ -40,13 +40,25 @@ jobs:
         with:
           node-version: '20'
 
-      - name: Check JavaScript Syntax
+      - name: Check Vanilla JavaScript Syntax
         run: |
           for file in pkg/server/static/*.js; do
             if [ -f "$file" ]; then
               node -c "$file"
             fi
           done
+
+      - name: Install pnpm
+        uses: pnpm/action-setup@v3
+        with:
+          version: 8
+
+      - name: Check React UI Syntax & Types
+        run: |
+          cd ui
+          pnpm install
+          pnpm run lint
+          pnpm run build
 
       - name: Create dummy UI dist for Go embed
         run: mkdir -p pkg/server/ui-dist && touch pkg/server/ui-dist/index.html

@@ -48,7 +48,8 @@ func TestServer_HandleDeleteToken(t *testing.T) {
 	}
 
 	// Verify deleted
-	tokens, _ := srv.db.ListPATs(dev.ID) //nolint:errcheck
+	tokens, _err := srv.db.ListPATs(dev.ID)
+	_ = _err //nolint:errcheck
 	for _, tk := range tokens {
 		if tk.ID == pat.ID && tk.RevokedAt == nil {
 			t.Errorf("token should have been deleted (revoked), but it is not")
@@ -151,7 +152,8 @@ func TestServer_HandleDeleteReservation(t *testing.T) {
 	}
 	bodyBytes, _ := json.Marshal(reqBody)
 
-	createdRes, _ := srv.db.GetSubdomainReservationByName("test-delete", "example.com") //nolint:errcheck
+	createdRes, _err := srv.db.GetSubdomainReservationByName("test-delete", "example.com")
+	_ = _err //nolint:errcheck
 	req, _ := http.NewRequest(http.MethodDelete, fmt.Sprintf("http://example.com/api/portal/reservations/%d", createdRes.ID), bytes.NewBuffer(bodyBytes))
 	req.AddCookie(&http.Cookie{Name: "lfr_session", Value: sessionToken})
 
@@ -163,7 +165,8 @@ func TestServer_HandleDeleteReservation(t *testing.T) {
 	}
 
 	// Verify
-	res, _ := srv.db.GetSubdomainReservationByName("test-delete", "example.com") //nolint:errcheck
+	res, _err := srv.db.GetSubdomainReservationByName("test-delete", "example.com")
+	_ = _err //nolint:errcheck
 	if res != nil {
 		t.Errorf("reservation should be deleted")
 	}

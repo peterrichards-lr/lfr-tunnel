@@ -109,7 +109,8 @@ func TestServer_HandleAdminOverrideLimit(t *testing.T) {
 	}
 
 	// Verify limit updated
-	updatedDev, _ := srv.db.GetUser("dev@example.com") //nolint:errcheck
+	updatedDev, _err := srv.db.GetUser("dev@example.com")
+	_ = _err //nolint:errcheck
 	if updatedDev.MaxReservations == nil || *updatedDev.MaxReservations != 5 {
 		val := "nil"
 		if updatedDev.MaxReservations != nil {

@@ -212,7 +212,8 @@ func (e *InterceptorEngine) InterceptPort(targetPort int) (int, error) {
 	if targetPort == 443 || targetPort == 8443 {
 		scheme = "https"
 	}
-	targetURL, _ := url.Parse(fmt.Sprintf("%s://%s:%d", scheme, e.TargetHost, targetPort)) //nolint:errcheck
+	targetURL, _err := url.Parse(fmt.Sprintf("%s://%s:%d", scheme, e.TargetHost, targetPort))
+	_ = _err //nolint:errcheck
 	proxy := httputil.NewSingleHostReverseProxy(targetURL)
 
 	customTransport := http.DefaultTransport.(*http.Transport).Clone()

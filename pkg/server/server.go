@@ -527,7 +527,8 @@ func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 				if s.db != nil {
 					_ = s.db.AddBlacklistIP(ip, "Auto-banned by Rate Limiter for DDOS") //nolint:errcheck
 					s.writeAudit("system", "ip.blacklisted", "ip", ip, "Auto-banned by Rate Limiter for DDOS", r)
-					body, _ := s.renderNotificationTemplate("en", "admin_ip_autobanned.txt", map[string]interface{}{"IP": ip}) //nolint:errcheck
+					body, _err := s.renderNotificationTemplate("en", "admin_ip_autobanned.txt", map[string]interface{}{"IP": ip})
+					_ = _err //nolint:errcheck
 					s.notifications.SendAdminAlert("alert_notify_blacklist", "LFR Tunnel Alert: IP Auto-Banned", body)
 					s.webhooks.SendRateLimitBanAlert(ip, 24*time.Hour, "Exceeded API rate limit (50 violations)")
 				}
@@ -1533,7 +1534,8 @@ func (s *Server) handleTunnelStatus(w http.ResponseWriter, r *http.Request) {
 
 	if s.registry.UpdateLeaseStatus(req.SessionToken, req.Status) {
 		if req.Status == "down" {
-			body, _ := s.renderNotificationTemplate("en", "admin_tunnel_offline.txt", nil) //nolint:errcheck
+			body, _err := s.renderNotificationTemplate("en", "admin_tunnel_offline.txt", nil)
+			_ = _err //nolint:errcheck
 			s.notifications.SendAdminAlert("alert_notify_tunnel_offline", "LFR Tunnel Alert: Tunnel Offline", body)
 		}
 		w.WriteHeader(http.StatusOK)
@@ -1948,11 +1950,12 @@ func (s *Server) handleCompleteSetup(w http.ResponseWriter, r *http.Request) {
 	}
 
 	s.writeAudit(user.Email, "user.verified", "user", user.Email, "User completed setup and is pending approval", r)
-	body, _ := s.renderNotificationTemplate("en", "admin_registration_request.txt", map[string]interface{}{ //nolint:errcheck
+	body, err := s.renderNotificationTemplate("en", "admin_registration_request.txt", map[string]interface{}{
 		"FirstName": user.FirstName,
 		"LastName":  user.LastName,
 		"Email":     user.Email,
 	})
+	_ = err //nolint:errcheck
 	s.notifications.SendAdminAlert("alert_notify_registration", "LFR Tunnel Alert: New User Registration", body)
 	s.webhooks.SendRegistrationAlert(user.Email, "Pending admin approval")
 
@@ -2029,9 +2032,10 @@ func (s *Server) handleVerifyEmail(w http.ResponseWriter, r *http.Request) {
 	}
 
 	s.writeAudit(user.Email, "user.verified", "user", user.Email, "", r)
-	body, _ := s.renderNotificationTemplate("en", "admin_registration_request.txt", map[string]interface{}{ //nolint:errcheck
+	body, err := s.renderNotificationTemplate("en", "admin_registration_request.txt", map[string]interface{}{
 		"Email": user.Email,
 	})
+	_ = err //nolint:errcheck
 	s.notifications.SendAdminAlert("alert_notify_registration", "LFR Tunnel Alert: New User Registration", body)
 
 	// Also send the original admin approval email now
@@ -2837,7 +2841,8 @@ func (s *Server) handleAdminMagicLink(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	magicToken, _ := generateSecureToken() //nolint:errcheck
+	magicToken, _err := generateSecureToken()
+	_ = _err //nolint:errcheck
 	clientIP := getClientIP(r)
 
 	expiresAt := time.Now().Add(s.cfg.MagicLinkExpiry)
@@ -2950,7 +2955,8 @@ func (s *Server) handleAdminVerify(w http.ResponseWriter, r *http.Request) {
 		}
 		email = sessionData.Email
 	}
-	sessionToken, _ := generateSecureToken() //nolint:errcheck
+	sessionToken, _err := generateSecureToken()
+	_ = _err //nolint:errcheck
 	clientIP := getClientIP(r)
 
 	var previousLoginAt *time.Time
@@ -4304,7 +4310,8 @@ func (s *Server) handleAdminBlacklist(w http.ResponseWriter, r *http.Request, ac
 		s.blacklist.Store(payload.IPAddress, true)
 		s.BroadcastBlacklistUpdate("add", payload.IPAddress)
 		s.writeAudit(actor, "ip.blacklisted", "ip", payload.IPAddress, payload.Reason, r)
-		body, _ := s.renderNotificationTemplate("en", "admin_ip_banned.txt", map[string]interface{}{"IP": payload.IPAddress, "Actor": actor}) //nolint:errcheck
+		body, _err := s.renderNotificationTemplate("en", "admin_ip_banned.txt", map[string]interface{}{"IP": payload.IPAddress, "Actor": actor})
+		_ = _err //nolint:errcheck
 		s.notifications.SendAdminAlert("alert_notify_blacklist", "LFR Tunnel Alert: IP Banned", body)
 		s.webhooks.SendIPBlacklistAlert(payload.IPAddress, fmt.Sprintf("%s (Banned by admin: %s)", payload.Reason, actor))
 		_ = json.NewEncoder(w).Encode(map[string]string{"status": "success"}) //nolint:errcheck
@@ -4339,9 +4346,12 @@ func (s *Server) handleAdminSettings(w http.ResponseWriter, r *http.Request, act
 
 	if r.Method == http.MethodGet {
 		// Fetch settings
-		notifyReg, _ := s.db.GetAdminSetting("alert_notify_registration")       //nolint:errcheck
-		notifyBan, _ := s.db.GetAdminSetting("alert_notify_blacklist")          //nolint:errcheck
-		notifyOffline, _ := s.db.GetAdminSetting("alert_notify_tunnel_offline") //nolint:errcheck
+		notifyReg, _err := s.db.GetAdminSetting("alert_notify_registration")
+		_ = _err //nolint:errcheck
+		notifyBan, _err := s.db.GetAdminSetting("alert_notify_blacklist")
+		_ = _err //nolint:errcheck
+		notifyOffline, _err := s.db.GetAdminSetting("alert_notify_tunnel_offline")
+		_ = _err //nolint:errcheck
 
 		// Default values if not set
 		if notifyReg == "" {
@@ -4424,11 +4434,12 @@ func (s *Server) handleAdminTestWebhook(w http.ResponseWriter, r *http.Request, 
 
 	// 4. Dispatch Email alert
 	if s.notifications != nil && s.cfg.AdminNotificationEmail != "" {
-		body, _ := s.renderNotificationTemplate("en", "admin_test_integration.txt", map[string]interface{}{ //nolint:errcheck
+		body, err := s.renderNotificationTemplate("en", "admin_test_integration.txt", map[string]interface{}{
 			"Actor":     actor,
 			"Timestamp": timestamp,
 			"Version":   version,
 		})
+		_ = err //nolint:errcheck
 		s.notifications.SendAdminAlert(
 			"alert_notify_test",
 			"Liferay Tunnel Integration Test",

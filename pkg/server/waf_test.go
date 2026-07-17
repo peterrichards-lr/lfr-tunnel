@@ -167,7 +167,8 @@ func TestWAF_RuleScanning(t *testing.T) {
 
 func TestWAF_IntegrationInProxyHandler(t *testing.T) {
 	// 1. Create registry and a mock backend server
-	chiselServer, _ := chserver.NewServer(&chserver.Config{Reverse: true}) //nolint:errcheck
+	chiselServer, _err := chserver.NewServer(&chserver.Config{Reverse: true})
+	_ = _err //nolint:errcheck
 	reg := NewRegistry(chiselServer)
 
 	backendCalled := false
@@ -180,7 +181,8 @@ func TestWAF_IntegrationInProxyHandler(t *testing.T) {
 	}))
 	defer backend.Close()
 
-	u, _ := url.Parse(backend.URL) //nolint:errcheck
+	u, _err := url.Parse(backend.URL)
+	_ = _err //nolint:errcheck
 	port := 80
 	if pStr := u.Port(); pStr != "" {
 		importPort := 0

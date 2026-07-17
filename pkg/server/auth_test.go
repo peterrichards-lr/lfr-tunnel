@@ -63,7 +63,8 @@ func TestRegistryRegister(t *testing.T) {
 }
 
 func TestRegistryDuplicateSubdomain(t *testing.T) {
-	chiselServer, _ := chserver.NewServer(&chserver.Config{Reverse: true}) //nolint:errcheck
+	chiselServer, _err := chserver.NewServer(&chserver.Config{Reverse: true})
+	_ = _err //nolint:errcheck
 	reg := NewRegistry(chiselServer)
 	domains := []string{"liferay.com"}
 
@@ -79,7 +80,8 @@ func TestRegistryDuplicateSubdomain(t *testing.T) {
 }
 
 func TestRegistryCleanup(t *testing.T) {
-	chiselServer, _ := chserver.NewServer(&chserver.Config{Reverse: true}) //nolint:errcheck
+	chiselServer, _err := chserver.NewServer(&chserver.Config{Reverse: true})
+	_ = _err //nolint:errcheck
 	reg := NewRegistry(chiselServer)
 	domains := []string{"liferay.com"}
 
@@ -105,7 +107,8 @@ func TestRegistryCleanup(t *testing.T) {
 }
 
 func TestRegistryValidation(t *testing.T) {
-	chiselServer, _ := chserver.NewServer(&chserver.Config{Reverse: true}) //nolint:errcheck
+	chiselServer, _err := chserver.NewServer(&chserver.Config{Reverse: true})
+	_ = _err //nolint:errcheck
 	reg := NewRegistry(chiselServer)
 	domains := []string{"liferay.com"}
 	ports := []PortMapping{{LocalPort: 8080}}
@@ -138,7 +141,8 @@ func TestRegistryValidation(t *testing.T) {
 }
 
 func TestRegistryCheckSubdomain(t *testing.T) {
-	chiselServer, _ := chserver.NewServer(&chserver.Config{Reverse: true}) //nolint:errcheck
+	chiselServer, _err := chserver.NewServer(&chserver.Config{Reverse: true})
+	_ = _err //nolint:errcheck
 	reg := NewRegistry(chiselServer)
 	domains := []string{"liferay.com"}
 
@@ -186,7 +190,8 @@ func TestRegistryCheckSubdomain(t *testing.T) {
 }
 
 func TestRegistryGenerateSuggestions(t *testing.T) {
-	chiselServer, _ := chserver.NewServer(&chserver.Config{Reverse: true}) //nolint:errcheck
+	chiselServer, _err := chserver.NewServer(&chserver.Config{Reverse: true})
+	_ = _err //nolint:errcheck
 	reg := NewRegistry(chiselServer)
 	domains := []string{"liferay.com"}
 

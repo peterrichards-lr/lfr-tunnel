@@ -41,7 +41,8 @@ func TestServer_HandleUpdateMe(t *testing.T) {
 		t.Errorf("expected 200 OK, got %d", w.Code)
 	}
 
-	updated, _ := srv.db.GetUser(dev.ID) //nolint:errcheck
+	updated, _err := srv.db.GetUser(dev.ID)
+	_ = _err //nolint:errcheck
 	if updated.FirstName != "Updated Dev Name" {
 		t.Errorf("expected first name to be updated, got %s", updated.FirstName)
 	}

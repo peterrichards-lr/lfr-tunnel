@@ -161,7 +161,8 @@ func TestServer_EdgeControlWS_HMACFail(t *testing.T) {
 	defer ts.Close()
 
 	// Dial WS manually with invalid HMAC to verify rejection
-	u, _ := url.Parse(ts.URL) //nolint:errcheck
+	u, _err := url.Parse(ts.URL)
+	_ = _err //nolint:errcheck
 	wsURL := fmt.Sprintf("ws://%s/api/internal/edge-control-ws?node_id=usedge", u.Host)
 
 	conn, _, err := websocket.DefaultDialer.Dial(wsURL, nil)
@@ -320,7 +321,8 @@ func TestServer_EdgeControlWS_ProxyIP(t *testing.T) {
 	ts := httptest.NewServer(controlSrv)
 	defer ts.Close()
 
-	u, _ := url.Parse(ts.URL) //nolint:errcheck
+	u, _err := url.Parse(ts.URL)
+	_ = _err //nolint:errcheck
 	wsURL := fmt.Sprintf("ws://%s/api/internal/edge-control-ws?node_id=usedge&version=v1.23.2", u.Host)
 
 	header := make(http.Header)

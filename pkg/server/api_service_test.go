@@ -24,7 +24,8 @@ func TestPortalService_User(t *testing.T) {
 	_, _ = srv.portalService.ListTokens(dev) //nolint:errcheck
 
 	// CreateToken
-	_, pat, _ := srv.portalService.CreateToken(dev, "My Token", "2030-01-01", "127.0.0.1") //nolint:errcheck
+	_, pat, _err := srv.portalService.CreateToken(dev, "My Token", "2030-01-01", "127.0.0.1")
+	_ = _err //nolint:errcheck
 	if pat != nil {
 		// DeleteToken
 		_ = srv.portalService.DeleteToken(dev, strconv.FormatInt(pat.ID, 10), "127.0.0.1") //nolint:errcheck

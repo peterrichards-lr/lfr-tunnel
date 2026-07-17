@@ -1,28 +1,20 @@
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
 import Login from './pages/Login';
-
-function Dashboard() {
-  return (
-    <div className="container">
-      <nav className="sidebar">
-        {/* Placeholder for sidebar */}
-        <h2>Liferay Tunnel</h2>
-      </nav>
-      <main className="content">
-        <h1>Dashboard</h1>
-        <p>Welcome to the React Portal.</p>
-      </main>
-    </div>
-  );
-}
+import Dashboard from './pages/Dashboard';
+import Layout from './components/Layout';
 
 function App() {
-  // Use basename to match the Vite base URL configuration
   return (
     <BrowserRouter basename="/portal-v2">
       <Routes>
         <Route path="/login" element={<Login />} />
-        <Route path="/dashboard" element={<Dashboard />} />
+        
+        {/* Protected Routes wrapped in Layout */}
+        <Route element={<Layout />}>
+          <Route path="/dashboard" element={<Dashboard />} />
+          {/* We will add Admin routes later */}
+        </Route>
+
         <Route path="/" element={<Navigate to="/dashboard" replace />} />
       </Routes>
     </BrowserRouter>

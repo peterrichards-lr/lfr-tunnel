@@ -1,4 +1,4 @@
 package config
 
 // Version represents the current build version of the application
-var Version = "v1.41.0"
+var Version = "v1.42.0"

@@ -1,6 +1,6 @@
 [
   {
-    "version": "v1.41.0",
+    "version": "v1.42.0",
     "release_date": "2026-07-17",
     "features": [
       "Feature: Complete refactor of Client Dashboard UI to React SPA",

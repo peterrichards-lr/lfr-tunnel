@@ -38,7 +38,7 @@ clean:
 build: clean
 	mkdir -p bin
 	@echo "Building UI..."
-	./scripts/build-ui.sh
+	cd ui && pnpm install && pnpm run build
 	rm -rf pkg/server/ui-dist
 	cp -r ui/dist pkg/server/ui-dist
 	go build -ldflags="-s -w -X lfr-tunnel/pkg/config.Version=$(VERSION)" -trimpath -o bin/lfr-tunnel ./cmd/lfr-tunnel

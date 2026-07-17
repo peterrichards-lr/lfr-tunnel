@@ -186,7 +186,7 @@ The solution will consist of:
 - [x] Document client platform overrides in Docs
 - [x] Create automated sign-release.sh script in scripts/ supporting environment configuration and secure terminal prompting for macOS, Windows, and Linux signing
 - [x] Update default macOS command to download binary and copy directly to /usr/local/bin/lfr-tunnel
-- [x] Update scripts/install.sh to use the S1 whitelisted /tmp/lfr-tunnel staging path
+- [x] Update pkg/server/static/install.sh to use the S1 whitelisted /tmp/lfr-tunnel staging path
 - [x] Implement Slack and Microsoft Teams Webhook Alerts (Epic #476 / Issue #478)
 - [x] Support recipient name-formatted parsing for Slack channel generated email endpoints
 - [x] Close Issue #477, #478, and Epic #476 on GitHub

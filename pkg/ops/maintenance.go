@@ -21,16 +21,18 @@ func MaintenanceCommand(args []string) {
 	vpsIP := GetEnvOrDefault("VPS_IP", "82.39.133.178")
 	sshTarget := fmt.Sprintf("%s@%s", vpsUser, vpsIP)
 
-	if action == "enable" {
+	switch action {
+	case "enable":
 		fmt.Println("Enabling maintenance mode on the VPS...")
 		err := RunCommand("ssh", "-i", identityFile, sshTarget, `sudo /usr/local/bin/enable-maintenance.sh -a "Maintenance" -r "System operations in progress" -d "15m"`)
 		CheckFatal(err, "Failed to enable maintenance mode")
-	} else if action == "disable" {
+	case "disable":
 		fmt.Println("Disabling maintenance mode on the VPS...")
 		err := RunCommand("ssh", "-i", identityFile, sshTarget, "sudo /usr/local/bin/disable-maintenance.sh")
 		CheckFatal(err, "Failed to disable maintenance mode")
-	} else {
-		fmt.Printf("Unknown action: %q. Expected 'enable' or 'disable'\n", action)
+	default:
+		fmt.Println("Usage: make maintenance action=enable|disable")
+		os.Exit(1)
 	}
 }
 

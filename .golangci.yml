@@ -72,6 +72,13 @@ linters:
           - gocognit
           - dupl
           - goconst
+      - path: pkg/ops/.*
+        linters:
+          - funlen
+          - gocyclo
+          - gocognit
+          - dupl
+          - goconst
 
   settings:
     errcheck:

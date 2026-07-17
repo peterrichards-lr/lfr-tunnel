@@ -33,10 +33,14 @@ func DeployCommand(args []string) {
 	CheckFatal(err, "Failed to SCP binary")
 
 	fmt.Println("Uploading error pages, static assets, translations, and templates...")
-	RunCommand("scp", "-i", identityFile, "-r", "resources/server/error_pages", sshTarget+":/home/"+vpsUser+"/")
-	RunCommand("scp", "-i", identityFile, "-r", "pkg/server/static", sshTarget+":/home/"+vpsUser+"/")
-	RunCommand("scp", "-i", identityFile, "-r", "pkg/server/i18n", sshTarget+":/home/"+vpsUser+"/")
-	RunCommand("scp", "-i", identityFile, "-r", "pkg/server/templates", sshTarget+":/home/"+vpsUser+"/")
+	err = RunCommand("scp", "-i", identityFile, "-r", "resources/server/error_pages", sshTarget+":/home/"+vpsUser+"/")
+	CheckFatal(err, "Failed to SCP error_pages")
+	err = RunCommand("scp", "-i", identityFile, "-r", "pkg/server/static", sshTarget+":/home/"+vpsUser+"/")
+	CheckFatal(err, "Failed to SCP static")
+	err = RunCommand("scp", "-i", identityFile, "-r", "pkg/server/i18n", sshTarget+":/home/"+vpsUser+"/")
+	CheckFatal(err, "Failed to SCP i18n")
+	err = RunCommand("scp", "-i", identityFile, "-r", "pkg/server/templates", sshTarget+":/home/"+vpsUser+"/")
+	CheckFatal(err, "Failed to SCP templates")
 
 	fmt.Println("Uploading maintenance and backup scripts...")
 	scripts := []string{
@@ -47,7 +51,8 @@ func DeployCommand(args []string) {
 	}
 	for _, script := range scripts {
 		if fileExists(script) {
-			RunCommand("scp", "-i", identityFile, script, sshTarget+":/home/"+vpsUser+"/")
+			err = RunCommand("scp", "-i", identityFile, script, sshTarget+":/home/"+vpsUser+"/")
+			CheckFatal(err, "Failed to SCP script: "+script)
 		}
 	}
 

@@ -46,9 +46,21 @@ if command -v node &>/dev/null; then
       fi
     fi
   done
-  echo "✅ JavaScript syntax check passed."
+  echo "✅ Vanilla JavaScript syntax check passed."
 else
-  echo "⚠️ Warning: 'node' not found in PATH. Skipping JavaScript syntax check."
+  echo "⚠️ Warning: 'node' not found in PATH. Skipping Vanilla JavaScript syntax check."
+fi
+
+echo "[Git Hook] Checking React UI syntax and types..."
+if command -v pnpm &>/dev/null; then
+  (cd ui && pnpm install && pnpm run lint && pnpm run build)
+  if [ $? -ne 0 ]; then
+    echo "❌ Error: React UI lint or build failed. Please fix before committing."
+    exit 1
+  fi
+  echo "✅ React UI checks passed."
+else
+  echo "⚠️ Warning: 'pnpm' not found in PATH. Skipping React UI checks."
 fi
 
 echo "[Git Hook] Running go vet..."

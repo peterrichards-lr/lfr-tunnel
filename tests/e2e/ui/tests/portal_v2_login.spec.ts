@@ -28,12 +28,11 @@ test.describe('Portal v2 Login Flow', () => {
     const token = await getMagicLinkToken(adminEmail);
     expect(token).toBeTruthy();
 
-    // 3. Login using Magic Link
-    await page.goto(`/api/auth/magic-link?token=${token}`);
+    // 3. Login using Magic Link via React UI
+    await page.goto(`/portal-v2/login?token=${token}`);
     
-    // It should redirect to /portal-v2 (since that's where we'll set it to redirect, or /admin for now)
-    // Actually the backend redirects to /admin or whatever we specify. Wait, let's check where backend redirects.
-    // For now we just verify it doesn't fail.
-    await expect(page.locator('body')).toBeVisible();
+    // It should verify the token and redirect to /portal-v2/dashboard
+    await page.waitForURL('**/portal-v2/dashboard');
+    await expect(page.locator('h2', { hasText: 'Dashboard' })).toBeVisible();
   });
 });

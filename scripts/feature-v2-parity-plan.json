@@ -9,7 +9,7 @@
     {
       "title": "V2 Parity: Restore System Analytics & Charts Dashboard",
       "body": "Re-implement the Analytics tab using Chart.js to render bandwidth, active connections, and historical tunnel usage data from `/api/analytics` and `/api/admin/analytics/clients`. Include the PDF Export functionality.",
-      "completed": false,
+      "completed": true,
       "labels": [
         "enhancement",
         "ui"

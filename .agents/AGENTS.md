@@ -20,6 +20,10 @@ The monolithic rules have been broken down into modular skills so that they can 
 - **Edge Node Synchronization**: [`.agents/skills/edge-sync/SKILL.md`](skills/edge-sync/SKILL.md)
   *Must be loaded when modifying the control plane's tunnel state to ensure it propagates to edge nodes.*
 
+## Active Runtime Constraints (CRITICAL)
+
+- **EDR Whitelist Restrictions**: Do NOT run the `lfr-tunnel` or `lfr-tunneld` binaries outside the whitelisted directory (`/private/tmp/lfr-tunnel`). Doing so will trigger SentinelOne (S1), which will forcefully kill the process, Homebrew, and the Antigravity agent itself. Rely on automated GitHub workflows or explicit whitelist paths for testing.
+
 ## Internal Tools & Customization
 
 The `.agents/skills` directory also contains operational scripts and infrastructure logic:

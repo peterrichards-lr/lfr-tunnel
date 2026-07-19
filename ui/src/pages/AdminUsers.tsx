@@ -12,12 +12,37 @@ interface User {
   auth_method: string;
   portal_active: boolean;
   rate_limit?: number;
+  preferred_domain?: string;
+  created_at?: string;
+  onboarding_status?: string;
+  onboarding_last_step?: string;
+  onboarding_reruns?: number;
+  active_tunnels?: Array<{
+    subdomain_prefix: string;
+    full_host: string;
+    local_port: number;
+    client_ip: string;
+    bytes_in: number;
+    bytes_out: number;
+    created_at: string;
+    node_id: string;
+  }>;
 }
+
+const formatBytes = (bytes: number, decimals = 2) => {
+  if (!+bytes) return '0 Bytes';
+  const k = 1024;
+  const dm = decimals < 0 ? 0 : decimals;
+  const sizes = ['Bytes', 'KB', 'MB', 'GB', 'TB'];
+  const i = Math.floor(Math.log(bytes) / Math.log(k));
+  return `${parseFloat((bytes / Math.pow(k, i)).toFixed(dm))} ${sizes[i]}`;
+};
 
 export default function AdminUsers() {
   const { user: currentUser } = useOutletContext<{ user: any }>();
   const [users, setUsers] = useState<User[]>([]);
   const [loading, setLoading] = useState(true);
+  const [selectedUser, setSelectedUser] = useState<User | null>(null);
 
   const fetchUsers = async () => {
     try {
@@ -67,6 +92,21 @@ export default function AdminUsers() {
     }
   };
 
+  const kickTunnel = async (subdomain: string) => {
+    if (!confirm(`Are you sure you want to kick the tunnel lease for subdomain "${subdomain}"?`)) return;
+    try {
+      await axios.delete(`/api/admin/leases/${encodeURIComponent(subdomain)}`);
+      // Update selectedUser if open
+      setSelectedUser(prev => prev ? {
+        ...prev,
+        active_tunnels: prev.active_tunnels?.filter(t => t.subdomain_prefix !== subdomain)
+      } : null);
+      fetchUsers();
+    } catch {
+      alert(`Failed to kick tunnel ${subdomain}`);
+    }
+  };
+
   if (loading) return <div>Loading users...</div>;
 
   return (
@@ -93,8 +133,30 @@ export default function AdminUsers() {
                 return (
                   <tr key={u.email} style={isSelf ? { opacity: 0.6 } : {}}>
                     <td>
-                      <div style={{ fontWeight: 500 }}>{u.first_name} {u.last_name}</div>
-                      <div style={{ fontSize: '12px', color: 'var(--text-muted)' }}>{u.email}</div>
+                      <div style={{ fontWeight: 500 }}>
+                        {u.first_name} {u.last_name}
+                      </div>
+                      <div style={{ fontSize: '12px', color: 'var(--text-muted)' }}>
+                        <a 
+                          href="#" 
+                          onClick={(e) => { e.preventDefault(); setSelectedUser(u); }}
+                          style={{ fontWeight: 500, textDecoration: 'none', color: 'inherit', cursor: 'pointer', transition: 'opacity 0.2s' }}
+                          onMouseOver={(e) => (e.currentTarget.style.opacity = '0.8')}
+                          onMouseOut={(e) => (e.currentTarget.style.opacity = '1')}
+                        >
+                          {u.email}
+                        </a>
+                        {(u.active_tunnels?.length || 0) > 0 && (
+                          <span 
+                            className="badge" 
+                            onClick={() => setSelectedUser(u)}
+                            style={{ cursor: 'pointer', background: 'rgba(99,102,241,0.15)', color: '#818cf8', border: '1px solid rgba(99,102,241,0.3)', padding: '2px 6px', fontSize: '11px', marginLeft: '8px' }}
+                            title="Click to view tunnels"
+                          >
+                            🔌 {u.active_tunnels!.length} Tunnel{(u.active_tunnels!.length) > 1 ? 's' : ''}
+                          </span>
+                        )}
+                      </div>
                     </td>
                     <td><span className="badge">{u.role}</span></td>
                     <td>
@@ -145,6 +207,104 @@ export default function AdminUsers() {
           </table>
         </div>
       </div>
+      {selectedUser && (
+        <div style={{
+          position: 'fixed', top: 0, left: 0, width: '100%', height: '100%', 
+          backgroundColor: 'rgba(0,0,0,0.5)', zIndex: 1000, 
+          display: 'flex', justifyContent: 'center', alignItems: 'center', padding: '20px'
+        }}>
+          <div className="card" style={{ width: '100%', maxWidth: '800px', maxHeight: '90vh', overflowY: 'auto' }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px' }}>
+              <h3 style={{ margin: 0 }}>User Details & Tunnels</h3>
+              <button onClick={() => setSelectedUser(null)} style={{ background: 'none', border: 'none', color: 'var(--text-muted)', cursor: 'pointer', fontSize: '20px' }}>✕</button>
+            </div>
+            
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '20px', marginBottom: '24px' }}>
+              <div>
+                <div style={{ fontSize: '12px', color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '1px', marginBottom: '4px' }}>Name</div>
+                <div style={{ fontWeight: 500 }}>{selectedUser.first_name} {selectedUser.last_name}</div>
+              </div>
+              <div>
+                <div style={{ fontSize: '12px', color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '1px', marginBottom: '4px' }}>Email</div>
+                <div style={{ fontWeight: 500, fontFamily: 'monospace' }}>{selectedUser.email}</div>
+              </div>
+              <div>
+                <div style={{ fontSize: '12px', color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '1px', marginBottom: '4px' }}>Status & Role</div>
+                <div>
+                  <span className={`badge ${selectedUser.status === 'approved' ? 'success' : (selectedUser.status === 'revoked' ? 'danger' : 'warning')}`} style={{ marginRight: '8px' }}>
+                    {selectedUser.status}
+                  </span>
+                  <span className={`badge ${selectedUser.role === 'admin' ? 'success' : ''}`}>
+                    {selectedUser.role}
+                  </span>
+                </div>
+              </div>
+              <div>
+                <div style={{ fontSize: '12px', color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '1px', marginBottom: '4px' }}>Origin</div>
+                <div style={{ fontWeight: 500, textTransform: 'capitalize' }}>{selectedUser.auth_method || 'Magic Link'}</div>
+              </div>
+              <div>
+                <div style={{ fontSize: '12px', color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '1px', marginBottom: '4px' }}>Joined Date</div>
+                <div style={{ fontWeight: 500 }}>{selectedUser.created_at ? new Date(selectedUser.created_at).toLocaleString() : 'N/A'}</div>
+              </div>
+              <div>
+                <div style={{ fontSize: '12px', color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '1px', marginBottom: '4px' }}>API Quota</div>
+                <div style={{ fontWeight: 500 }}>{selectedUser.rate_limit ? `${selectedUser.rate_limit} RPS` : 'Unlimited'}</div>
+              </div>
+            </div>
+
+            <h4 style={{ marginTop: '24px', marginBottom: '16px', borderBottom: '1px solid var(--border-color)', paddingBottom: '8px' }}>
+              Connected Tunnels <span className="badge" style={{ marginLeft: '8px' }}>{(selectedUser.active_tunnels || []).length}</span>
+            </h4>
+            
+            <div className="table-responsive" style={{ border: '1px solid var(--border-color)', borderRadius: '6px' }}>
+              <table style={{ margin: 0 }}>
+                <tbody>
+                  {!(selectedUser.active_tunnels || []).length && (
+                    <tr>
+                      <td colSpan={4} style={{ textAlign: 'center', padding: '24px', color: 'var(--text-muted)' }}>No active tunnels connected.</td>
+                    </tr>
+                  )}
+                  {(selectedUser.active_tunnels || []).map((t) => {
+                    const publicUrl = `https://${t.full_host}`;
+                    return (
+                      <tr key={t.subdomain_prefix} style={{ borderBottom: '1px solid rgba(255,255,255,0.03)' }}>
+                        <td style={{ padding: '12px', verticalAlign: 'middle' }}>
+                          <div style={{ fontWeight: 600, fontFamily: 'monospace', fontSize: '13px', color: 'var(--text)' }}>{t.subdomain_prefix}</div>
+                          <div style={{ fontSize: '11px', color: 'var(--text-muted)', marginTop: '2px' }}>Local Port: {t.local_port}</div>
+                        </td>
+                        <td style={{ padding: '12px', verticalAlign: 'middle' }}>
+                          <a href={publicUrl} target="_blank" rel="noreferrer" style={{ color: 'var(--primary)', textDecoration: 'none', fontSize: '13px', fontFamily: 'monospace', wordBreak: 'break-all' }}>{publicUrl}</a>
+                          {t.node_id && t.node_id !== 'control' ? (
+                            <span className="badge" style={{ background: 'rgba(139, 92, 246, 0.15)', color: '#c084fc', border: '1px solid rgba(139, 92, 246, 0.3)', fontSize: '10px', marginLeft: '6px' }}>
+                              🌍 {t.node_id}
+                            </span>
+                          ) : (
+                            <span className="badge" style={{ background: 'rgba(59, 130, 246, 0.15)', color: '#60a5fa', border: '1px solid rgba(59, 130, 246, 0.3)', fontSize: '10px', marginLeft: '6px' }}>
+                              🇬🇧 Control
+                            </span>
+                          )}
+                          <div style={{ fontSize: '11px', color: 'var(--text-muted)', marginTop: '2px' }}>
+                            IP: {t.client_ip} | Connected: {new Date(t.created_at).toLocaleString()}
+                          </div>
+                        </td>
+                        <td style={{ padding: '12px', verticalAlign: 'middle', fontSize: '12px', color: 'var(--text-muted)' }}>
+                          <div>📥 In: <strong style={{ color: 'var(--text)' }}>{formatBytes(t.bytes_in)}</strong></div>
+                          <div style={{ marginTop: '2px' }}>📤 Out: <strong style={{ color: 'var(--text)' }}>{formatBytes(t.bytes_out)}</strong></div>
+                        </td>
+                        <td style={{ padding: '12px', verticalAlign: 'middle', textAlign: 'right' }}>
+                          <button className="btn btn-danger" style={{ padding: '4px 10px', fontSize: '12px' }} onClick={() => kickTunnel(t.subdomain_prefix)}>Kick</button>
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+
+          </div>
+        </div>
+      )}
     </div>
   );
 }

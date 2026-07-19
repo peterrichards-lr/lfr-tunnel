@@ -4116,16 +4116,16 @@ func (s *Server) handleAdminDownloadBackup(w http.ResponseWriter, r *http.Reques
 		http.Error(w, "Invalid backup filename", http.StatusBadRequest)
 		return
 	}
-	
+
 	backupsDir := filepath.Join(filepath.Dir(s.cfg.DBPath), "backups")
 	filePath := filepath.Join(backupsDir, filename)
-	
+
 	// Check if file exists
 	if _, err := os.Stat(filePath); os.IsNotExist(err) {
 		http.Error(w, "Backup file not found", http.StatusNotFound)
 		return
 	}
-	
+
 	slog.Info(fmt.Sprintf("[Audit] Administrator %s downloaded database backup: %s", actor, filename))
 	w.Header().Set("Content-Disposition", fmt.Sprintf("attachment; filename=%s", filename))
 	w.Header().Set("Content-Type", "application/octet-stream")

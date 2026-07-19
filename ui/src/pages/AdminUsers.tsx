@@ -45,6 +45,11 @@ export default function AdminUsers() {
   const [users, setUsers] = useState<User[]>([]);
   const [loading, setLoading] = useState(true);
   const [selectedUser, setSelectedUser] = useState<User | null>(null);
+  
+  // Targeted Message State
+  const [targetedUserId, setTargetedUserId] = useState('');
+  const [targetedMessage, setTargetedMessage] = useState('');
+  const [isSendingTargeted, setIsSendingTargeted] = useState(false);
 
   const [showInviteModal, setShowInviteModal] = useState(false);
   const [inviteForm, setInviteForm] = useState({ email: '', first_name: '', last_name: '', language_preference: 'en' });
@@ -96,6 +101,23 @@ export default function AdminUsers() {
       fetchUsers();
     } catch {
       alert('Failed to delete user');
+    }
+  };
+
+  const sendTargetedMessage = async () => {
+    if (!targetedMessage.trim()) return;
+    try {
+      setIsSendingTargeted(true);
+      await axios.post('/api/admin/targeted-message', {
+        user_id: targetedUserId,
+        message: targetedMessage
+      });
+      alert('Message sent successfully.');
+      setTargetedUserId('');
+    } catch (e: any) {
+      alert(`Failed to send message: ${e.response?.data?.error || 'Unknown error'}`);
+    } finally {
+      setIsSendingTargeted(false);
     }
   };
 
@@ -277,6 +299,10 @@ export default function AdminUsers() {
               </div>
             </div>
 
+            <div style={{ display: 'flex', justifyContent: 'flex-start', marginBottom: '24px' }}>
+              <button className="btn btn-primary" onClick={() => setTargetedUserId(selectedUser.id)}>💬 Direct Message</button>
+            </div>
+
             <h4 style={{ marginTop: '24px', marginBottom: '16px', borderBottom: '1px solid var(--border-color)', paddingBottom: '8px' }}>
               Connected Tunnels <span className="badge" style={{ marginLeft: '8px' }}>{(selectedUser.active_tunnels || []).length}</span>
             </h4>
@@ -326,6 +352,39 @@ export default function AdminUsers() {
               </table>
             </div>
 
+          </div>
+        </div>
+      )}
+
+      {targetedUserId && (
+        <div style={{
+          position: 'fixed', top: 0, left: 0, width: '100%', height: '100%',
+          backgroundColor: 'rgba(0,0,0,0.5)', zIndex: 1010,
+          display: 'flex', justifyContent: 'center', alignItems: 'center', padding: '20px'
+        }}>
+          <div className="card" style={{ width: '100%', maxWidth: '500px' }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px' }}>
+              <h3 style={{ margin: 0 }}>Send Direct Message</h3>
+              <button onClick={() => setTargetedUserId('')} style={{ background: 'none', border: 'none', color: 'var(--text-muted)', cursor: 'pointer', fontSize: '20px' }}>✕</button>
+            </div>
+            <p style={{ fontSize: '14px', color: 'var(--text-muted)', marginBottom: '16px' }}>
+              Push a real-time banner alert to this specific active developer session.
+            </p>
+            <div className="form-group" style={{ marginBottom: '16px' }}>
+              <textarea
+                className="form-control"
+                placeholder="Enter your message..."
+                rows={3}
+                value={targetedMessage}
+                onChange={(e) => setTargetedMessage(e.target.value)}
+              />
+            </div>
+            <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '8px' }}>
+              <button className="btn btn-secondary" onClick={() => setTargetedUserId('')}>Cancel</button>
+              <button className="btn btn-primary" disabled={isSendingTargeted || !targetedMessage.trim()} onClick={sendTargetedMessage}>
+                {isSendingTargeted ? 'Sending...' : 'Send Message'}
+              </button>
+            </div>
           </div>
         </div>
       )}

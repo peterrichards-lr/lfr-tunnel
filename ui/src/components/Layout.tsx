@@ -12,13 +12,22 @@ export default function Layout() {
   const navigate = useNavigate();
   const { t } = useI18n();
 
+  const dismissTargetedMessage = async () => {
+    try {
+      await axios.post('/api/me/dismiss-message');
+      setUser((prev: any) => ({ ...prev, targeted_message: '' }));
+    } catch (e) {
+      console.error('Failed to dismiss message', e);
+    }
+  };
+
   useEffect(() => {
-    // Fetch current user and version info in parallel
-    Promise.all([
-      axios.get('/api/me'),
-      axios.get('/api/version').catch(() => ({ data: {} }))
-    ])
-      .then(([userRes, versionRes]) => {
+    const fetchInitial = async () => {
+      try {
+        const [userRes, versionRes] = await Promise.all([
+          axios.get('/api/me'),
+          axios.get('/api/version').catch(() => ({ data: {} }))
+        ]);
         setUser(userRes.data);
         
         // Calculate Uptime
@@ -29,14 +38,28 @@ export default function Layout() {
           const m = Math.floor(seconds % 3600 / 60);
           setUptime(`${d}d ${h}h ${m}m`);
         }
-      })
-      .catch(() => {
-        // Not authenticated
-        navigate('/login');
-      })
-      .finally(() => {
+      } catch (err: any) {
+        if (err.response?.status === 401) {
+          navigate('/login');
+        }
+      } finally {
         setLoading(false);
+      }
+    };
+
+    fetchInitial();
+
+    const interval = setInterval(() => {
+      axios.get('/api/me').then(res => {
+        setUser(res.data);
+      }).catch(err => {
+        if (err.response?.status === 401) {
+          navigate('/login');
+        }
       });
+    }, 10000);
+
+    return () => clearInterval(interval);
   }, [navigate]);
 
   if (loading) {
@@ -62,6 +85,27 @@ export default function Layout() {
       </div>
 
       <div className="main-content">
+        {user.broadcast_message && (
+          <div style={{ background: 'var(--accent)', color: '#fff', padding: '12px 16px', borderRadius: '8px', marginBottom: '24px', display: 'flex', alignItems: 'center', gap: '12px', boxShadow: '0 4px 12px rgba(0,0,0,0.1)' }}>
+            <span style={{ fontSize: '18px' }}>📢</span>
+            <div style={{ flex: 1, fontSize: '14px' }}>
+              <strong>{t('broadcast_alert', 'System Broadcast')}:</strong> {user.broadcast_message}
+            </div>
+          </div>
+        )}
+
+        {user.targeted_message && (
+          <div style={{ background: 'var(--primary)', color: '#fff', padding: '12px 16px', borderRadius: '8px', marginBottom: '24px', display: 'flex', alignItems: 'center', gap: '12px', boxShadow: '0 4px 12px rgba(0,0,0,0.1)' }}>
+            <span style={{ fontSize: '18px' }}>💬</span>
+            <div style={{ flex: 1, fontSize: '14px' }}>
+              <strong>{t('admin_message', 'Admin Message')}:</strong> {user.targeted_message}
+            </div>
+            <button onClick={dismissTargetedMessage} className="btn" style={{ background: 'rgba(0,0,0,0.2)', color: 'white', border: 'none', padding: '4px 12px', fontSize: '12px' }}>
+              {t('dismiss', 'Dismiss')}
+            </button>
+          </div>
+        )}
+
         <header className="content-header" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '32px' }}>
           <div>
             <h2 style={{ margin: 0 }}>{t('dashboard', 'Dashboard')}</h2>

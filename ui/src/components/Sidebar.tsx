@@ -61,6 +61,9 @@ export default function Sidebar({ user, isOpen, onClose }: SidebarProps) {
                 <NavLink to="/admin/blacklist" onClick={onClose} className={({ isActive }) => `nav-item ${isActive ? 'active' : ''}`}>
                   {t('ip_blacklist', 'IP Blacklist')}
                 </NavLink>
+                <NavLink to="/admin/magic-links" onClick={onClose} className={({ isActive }) => `nav-item ${isActive ? 'active' : ''}`}>
+                  {t('magic_links', 'Magic Links')}
+                </NavLink>
                 <NavLink to="/admin/settings" onClick={onClose} className={({ isActive }) => `nav-item ${isActive ? 'active' : ''}`}>
                   {t('settings', 'Settings')}
                 </NavLink>

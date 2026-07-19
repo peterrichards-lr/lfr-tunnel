@@ -18,6 +18,11 @@ export default function AccountSettings() {
   const [mfaCode, setMfaCode] = useState('');
   const [mfaError, setMfaError] = useState('');
 
+  const [isDeleteModalOpen, setIsDeleteModalOpen] = useState(false);
+  const [deleteConfirmEmail, setDeleteConfirmEmail] = useState('');
+  const [isDeleting, setIsDeleting] = useState(false);
+  const [deleteError, setDeleteError] = useState('');
+
   const handleSaveProfile = async (e: React.FormEvent) => {
     e.preventDefault();
     setSaving(true);
@@ -54,6 +59,23 @@ export default function AccountSettings() {
       setMfaError('');
     } catch (err) {
       setMfaError(t('error_mfa_invalid', 'Invalid passcode, please try again.'));
+    }
+  };
+
+  const handleDeleteAccount = async () => {
+    setDeleteError('');
+    if (deleteConfirmEmail !== user?.email) {
+      setDeleteError(t('error_email_mismatch', 'Email does not match.'));
+      return;
+    }
+    
+    setIsDeleting(true);
+    try {
+      await axios.post('/api/me/delete-account');
+      window.location.href = '/login'; // Force full redirect to clear state and re-auth
+    } catch (err: any) {
+      setDeleteError(err.response?.data?.error || t('error_delete_account', 'Failed to delete account.'));
+      setIsDeleting(false);
     }
   };
 
@@ -181,9 +203,69 @@ export default function AccountSettings() {
               </div>
             )}
           </div>
+
+          {user?.role !== 'owner' && (
+            <div style={{ padding: '24px', borderRadius: '8px', marginTop: '24px', border: '1px solid rgba(239, 68, 68, 0.2)', background: 'var(--bg-card)' }}>
+              <h3 style={{ margin: '0 0 8px 0', fontSize: '18px', color: '#f43f5e' }}>
+                ⚠️ {t('danger_zone_title', 'Danger Zone (GDPR / Right to Be Forgotten)')}
+              </h3>
+              <p style={{ color: 'var(--text-muted)', marginBottom: '16px', fontSize: '14px' }}>
+                {t('danger_zone_desc', 'Deleting your account will instantly and permanently revoke all of your personal access tokens, kick any active tunnel connections, and permanently purge your profile records from our systems. Any historical bandwidth metrics and logs will be permanently anonymised to protect your privacy.')}
+              </p>
+              <button 
+                className="btn btn-outline" 
+                style={{ width: 'auto', color: '#f43f5e', borderColor: '#f43f5e', background: 'transparent' }}
+                onMouseOver={e => e.currentTarget.style.background = 'rgba(244,63,94,0.1)'}
+                onMouseOut={e => e.currentTarget.style.background = 'transparent'}
+                onClick={() => setIsDeleteModalOpen(true)}
+              >
+                {t('delete_account', 'Delete Account...')}
+              </button>
+            </div>
+          )}
+
         </div>
 
       </div>
+
+      {isDeleteModalOpen && (
+        <div className="modal-overlay" style={{ display: 'flex', position: 'fixed', top: 0, left: 0, width: '100%', height: '100%', background: 'rgba(0,0,0,0.6)', alignItems: 'center', justifyContent: 'center', zIndex: 1000 }}>
+          <div className="glass" style={{ maxWidth: '500px', width: '100%', padding: '32px', borderRadius: '16px', border: '1px solid var(--border)' }}>
+            <h3 style={{ margin: '0 0 16px 0', fontSize: '20px', color: '#f43f5e' }}>{t('confirm_delete_title', 'Delete Account?')}</h3>
+            <p style={{ color: 'var(--text-muted)', marginBottom: '24px', fontSize: '15px' }}>
+              {t('confirm_delete_desc', 'This action is absolutely irreversible. Please type your email address to confirm.')}
+              <br /><br />
+              <strong>{user?.email}</strong>
+            </p>
+            
+            <input 
+              type="email" 
+              className="input-field" 
+              placeholder={user?.email} 
+              value={deleteConfirmEmail}
+              onChange={(e) => setDeleteConfirmEmail(e.target.value)}
+              style={{ marginBottom: '16px', width: '100%' }}
+            />
+            
+            {deleteError && <div className="alert alert-error" style={{ marginBottom: '16px' }}>{deleteError}</div>}
+
+            <div style={{ display: 'flex', gap: '12px', justifyContent: 'flex-end' }}>
+              <button className="btn btn-secondary" style={{ width: 'auto' }} onClick={() => { setIsDeleteModalOpen(false); setDeleteConfirmEmail(''); setDeleteError(''); }}>
+                {t('cancel', 'Cancel')}
+              </button>
+              <button 
+                className="btn btn-primary" 
+                style={{ width: 'auto', background: '#f43f5e', color: 'white', borderColor: '#f43f5e' }}
+                onClick={handleDeleteAccount}
+                disabled={isDeleting || deleteConfirmEmail !== user?.email}
+              >
+                {isDeleting ? t('deleting', 'Deleting...') : t('confirm_delete', 'Confirm Deletion')}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
     </div>
   );
 }

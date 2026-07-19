@@ -3,12 +3,15 @@ import { useOutletContext } from 'react-router-dom';
 import TunnelsPanel from '../components/TunnelsPanel';
 import ReservationsPanel from '../components/ReservationsPanel';
 import WhatsNewPanel from '../components/WhatsNewPanel';
+import ClientInstallationModal from '../components/ClientInstallationModal';
+import OnboardingTour from '../components/OnboardingTour';
 import { useSettings } from '../contexts/SettingsContext';
 import { useI18n } from '../contexts/I18nContext';
 
 export default function Dashboard() {
   const { user } = useOutletContext<{ user: any }>();
   const [tokens, setTokens] = useState<any[]>([]);
+  const [isInstallModalOpen, setIsInstallModalOpen] = useState(false);
   const { formatDate } = useSettings();
   const { t } = useI18n();
 
@@ -25,9 +28,24 @@ export default function Dashboard() {
 
       <TunnelsPanel tunnels={user.tunnels || []} />
       
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(400px, 1fr))', gap: '24px', alignItems: 'start' }}>
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(400px, 1fr))', gap: '24px', alignItems: 'start', marginBottom: '24px' }}>
         <ReservationsPanel />
         <WhatsNewPanel />
+        
+        <div className="card">
+          <h3 style={{ margin: '0 0 16px 0', fontSize: '20px', fontWeight: 700 }}>{t('help_resources', 'Help & Resources')}</h3>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
+            <button className="btn btn-outline" style={{ justifyContent: 'flex-start', textAlign: 'left' }} onClick={() => setIsInstallModalOpen(true)}>
+              💻 {t('guide_title', 'Client Installation Guide')}
+            </button>
+            <button className="btn btn-outline" style={{ justifyContent: 'flex-start', textAlign: 'left' }} onClick={() => {
+              // Trigger a global event to start the tour
+              window.dispatchEvent(new CustomEvent('start-onboarding-tour'));
+            }}>
+              🧭 {t('onboarding_guide_title', 'Run Dashboard Onboarding Tour')}
+            </button>
+          </div>
+        </div>
       </div>
 
       <div className="card" style={{ marginBottom: '24px', animationDelay: '0.2s' }}>
@@ -82,6 +100,9 @@ export default function Dashboard() {
           </div>
         )}
       </div>
+
+      <ClientInstallationModal isOpen={isInstallModalOpen} onClose={() => setIsInstallModalOpen(false)} />
+      <OnboardingTour user={user} />
     </div>
   );
 }

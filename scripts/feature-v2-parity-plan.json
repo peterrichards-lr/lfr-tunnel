@@ -1,0 +1,91 @@
+{
+  "title": "Epic: V2 React Feature Parity",
+  "body": "The migration to the v2 React SPA introduced a number of functional regressions where features present in the v1 Vanilla JS portal were not ported over. This Epic tracks the restoration of these administrative tools and user views to achieve full feature parity.",
+  "labels": [
+    "enhancement",
+    "ui"
+  ],
+  "issues": [
+    {
+      "title": "V2 Parity: Restore System Analytics & Charts Dashboard",
+      "body": "Re-implement the Analytics tab using Chart.js to render bandwidth, active connections, and historical tunnel usage data from `/api/analytics` and `/api/admin/analytics/clients`. Include the PDF Export functionality.",
+      "completed": false,
+      "labels": [
+        "enhancement",
+        "ui"
+      ],
+      "issueNumber": "650"
+    },
+    {
+      "title": "V2 Parity: Restore Unified User Details & Tunnel Kick Modal",
+      "body": "Update `AdminUsers.tsx` so that clicking on a user opens a Unified User Details Modal. This modal must display the specific user's active tunnels and provide a direct action button to kick their leases.",
+      "completed": true,
+      "labels": [
+        "enhancement",
+        "ui"
+      ],
+      "issueNumber": "651"
+    },
+    {
+      "title": "V2 Parity: Restore Admin User Invitations",
+      "body": "Implement UI controls in the Admin panel to trigger the `/api/admin/invite` endpoint, allowing administrators to send direct email invitations to onboard new users.",
+      "completed": false,
+      "labels": [
+        "enhancement",
+        "ui"
+      ],
+      "issueNumber": "652"
+    },
+    {
+      "title": "V2 Parity: Restore Global Broadcast & Targeted Messaging",
+      "body": "Implement UI controls and real-time frontend listening for the `/api/admin/broadcast` and `/api/admin/targeted-message` endpoints. Administrators must be able to push real-time, dismissible banner alerts globally or to specific active user sessions.",
+      "completed": false,
+      "labels": [
+        "enhancement",
+        "ui"
+      ],
+      "issueNumber": "653"
+    },
+    {
+      "title": "V2 Parity: Restore Database Backups Management UI",
+      "body": "Re-implement the Backups panel in `AdminSettings.tsx` (or a dedicated tab) that calls `/api/admin/backups` to allow administrators to view, trigger, and download SQLite database snapshots.",
+      "completed": false,
+      "labels": [
+        "enhancement",
+        "ui"
+      ],
+      "issueNumber": "654"
+    },
+    {
+      "title": "V2 Parity: Restore Network Edge Health Monitoring UI",
+      "body": "Re-implement the Network Health tab querying `/api/portal/edge-health` to allow administrators to monitor the real-time status, latency, and uptime of regional stateless edge nodes.",
+      "completed": false,
+      "labels": [
+        "enhancement",
+        "ui"
+      ],
+      "issueNumber": "655"
+    },
+    {
+      "title": "V2 Parity: Restore Active Magic Links Tracking UI",
+      "body": "Re-implement the table view for administrators to track and revoke pending, unredeemed magic links via the `/api/admin/magic-links` endpoint.",
+      "completed": false,
+      "labels": [
+        "enhancement",
+        "ui"
+      ],
+      "issueNumber": "656"
+    },
+    {
+      "title": "V2 Parity: Restore What's New / Release Notes Viewer",
+      "body": "Update the User Dashboard overview to dynamically fetch and display the latest project release notes and updates from `/static/whats-new.json`.",
+      "completed": false,
+      "labels": [
+        "enhancement",
+        "ui"
+      ],
+      "issueNumber": "657"
+    }
+  ],
+  "epicNumber": "649"
+}

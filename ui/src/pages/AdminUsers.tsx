@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import axios from 'axios';
 import { useOutletContext } from 'react-router-dom';
+import { useI18n } from '../contexts/I18nContext';
 
 interface User {
   id: string;
@@ -39,6 +40,7 @@ const formatBytes = (bytes: number, decimals = 2) => {
 };
 
 export default function AdminUsers() {
+  const { t } = useI18n();
   const { user: currentUser } = useOutletContext<{ user: any }>();
   const [users, setUsers] = useState<User[]>([]);
   const [loading, setLoading] = useState(true);
@@ -48,6 +50,11 @@ export default function AdminUsers() {
   const [targetedUserId, setTargetedUserId] = useState('');
   const [targetedMessage, setTargetedMessage] = useState('');
   const [isSendingTargeted, setIsSendingTargeted] = useState(false);
+
+  const [showInviteModal, setShowInviteModal] = useState(false);
+  const [inviteForm, setInviteForm] = useState({ email: '', first_name: '', last_name: '', language_preference: 'en' });
+  const [inviteError, setInviteError] = useState('');
+  const [isInviting, setIsInviting] = useState(false);
 
   const fetchUsers = async () => {
     try {
@@ -129,12 +136,29 @@ export default function AdminUsers() {
     }
   };
 
+  const submitInvite = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setInviteError('');
+    setIsInviting(true);
+    try {
+      await axios.post('/api/admin/invite', inviteForm);
+      setShowInviteModal(false);
+      setInviteForm({ email: '', first_name: '', last_name: '', language_preference: 'en' });
+      fetchUsers();
+    } catch (err: any) {
+      setInviteError(err.response?.data?.error || 'Failed to invite user');
+    } finally {
+      setIsInviting(false);
+    }
+  };
+
   if (loading) return <div>Loading users...</div>;
 
   return (
     <div>
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '24px' }}>
-        <h3>User Management</h3>
+        <h3>{t('user_management', 'User Management')}</h3>
+        <button className="btn btn-primary" onClick={() => setShowInviteModal(true)}>+ {t('invite_user', 'Invite User')}</button>
       </div>
       <div className="card" style={{ padding: '0' }}>
         <div className="table-responsive">
@@ -361,6 +385,52 @@ export default function AdminUsers() {
                 {isSendingTargeted ? 'Sending...' : 'Send Message'}
               </button>
             </div>
+          </div>
+        </div>
+      )}
+
+      {showInviteModal && (
+        <div style={{
+          position: 'fixed', top: 0, left: 0, width: '100%', height: '100%', 
+          backgroundColor: 'rgba(0,0,0,0.5)', zIndex: 1000, 
+          display: 'flex', justifyContent: 'center', alignItems: 'center', padding: '20px'
+        }}>
+          <div className="card" style={{ width: '100%', maxWidth: '400px' }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px' }}>
+              <h3 style={{ margin: 0 }}>{t('invite_user', 'Invite User')}</h3>
+              <button onClick={() => setShowInviteModal(false)} style={{ background: 'none', border: 'none', color: 'var(--text-muted)', cursor: 'pointer', fontSize: '20px' }}>✕</button>
+            </div>
+            {inviteError && <div className="alert alert-danger" style={{ marginBottom: '16px' }}>{inviteError}</div>}
+            <form onSubmit={submitInvite}>
+              <div className="form-group" style={{ marginBottom: '16px' }}>
+                <label>{t('email_address', 'Email Address')}</label>
+                <input type="email" required className="form-control" value={inviteForm.email} onChange={(e) => setInviteForm({...inviteForm, email: e.target.value})} placeholder="user@company.com" />
+              </div>
+              <div className="form-group" style={{ marginBottom: '16px' }}>
+                <label>{t('first_name', 'First Name')}</label>
+                <input type="text" required className="form-control" value={inviteForm.first_name} onChange={(e) => setInviteForm({...inviteForm, first_name: e.target.value})} placeholder={t('first_name_placeholder', 'John')} />
+              </div>
+              <div className="form-group" style={{ marginBottom: '16px' }}>
+                <label>{t('last_name', 'Last Name')}</label>
+                <input type="text" required className="form-control" value={inviteForm.last_name} onChange={(e) => setInviteForm({...inviteForm, last_name: e.target.value})} placeholder={t('last_name_placeholder', 'Doe')} />
+              </div>
+              <div className="form-group" style={{ marginBottom: '24px' }}>
+                <label>{t('language_preference', 'Language Preference')}</label>
+                <select className="form-control" value={inviteForm.language_preference} onChange={(e) => setInviteForm({...inviteForm, language_preference: e.target.value})}>
+                  <option value="en">English (UK)</option>
+                  <option value="en-us">English (US)</option>
+                  <option value="de">Deutsch (DE)</option>
+                  <option value="es">Español (ES)</option>
+                  <option value="fr">Français (FR)</option>
+                </select>
+              </div>
+              <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '8px' }}>
+                <button type="button" className="btn" onClick={() => setShowInviteModal(false)}>{t('cancel', 'Cancel')}</button>
+                <button type="submit" className="btn btn-primary" disabled={isInviting}>
+                  {isInviting ? t('sending', 'Sending...') : t('send_invitation', 'Send Invitation')}
+                </button>
+              </div>
+            </form>
           </div>
         </div>
       )}

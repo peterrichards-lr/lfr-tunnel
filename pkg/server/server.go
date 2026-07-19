@@ -2685,7 +2685,12 @@ func (s *Server) handleAdminMagicLink(w http.ResponseWriter, r *http.Request) {
 		if r.TLS == nil && r.Header.Get("X-Forwarded-Proto") != "https" {
 			scheme = "http"
 		}
-		link := fmt.Sprintf("%s://%s/portal?token=%s&lang=%s", scheme, host, magicToken, lang)
+		var link string
+		if strings.Contains(r.Referer(), "/portalv2") {
+			link = fmt.Sprintf("%s://%s/portalv2/login?token=%s&lang=%s", scheme, host, magicToken, lang)
+		} else {
+			link = fmt.Sprintf("%s://%s/portal?token=%s&lang=%s", scheme, host, magicToken, lang)
+		}
 		reportLink := fmt.Sprintf("%s://%s/api/auth/report?token=%s", scheme, host, magicToken)
 
 		// Render localized dynamic HTML template from properties / external folder

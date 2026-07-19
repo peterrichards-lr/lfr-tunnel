@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
 import axios from 'axios';
+import { useSettings } from '../contexts/SettingsContext';
 
 interface AuditEvent {
   event_id: string;
@@ -14,6 +15,7 @@ interface AuditEvent {
 export default function AdminAuditLog() {
   const [events, setEvents] = useState<AuditEvent[]>([]);
   const [loading, setLoading] = useState(true);
+  const { formatDate } = useSettings();
 
   const fetchEvents = async () => {
     try {
@@ -65,7 +67,7 @@ export default function AdminAuditLog() {
               ) : (
                 events.map(e => (
                   <tr key={e.event_id}>
-                    <td style={{ whiteSpace: 'nowrap' }}>{new Date(e.created_at).toLocaleString()}</td>
+                    <td style={{ whiteSpace: 'nowrap' }}>{formatDate(e.created_at)}</td>
                     <td>{e.actor}</td>
                     <td><span className="badge" style={{ background: 'var(--primary-dark)', color: 'white' }}>{e.action}</span></td>
                     <td>{e.resource}</td>

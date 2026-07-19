@@ -18,8 +18,8 @@ export async function getMagicLinkToken(email: string): Promise<string> {
       const msgData = await msgRes.json();
       
       const body = msgData.Text || '';
-      // Look for magic link: /portal?token=dummy_token_123
-      const match = body.match(/\/portal\?token=([a-zA-Z0-9]+)/);
+      // Look for magic link: /portal?token=dummy_token_123 or /portalv2/login?token=...
+      const match = body.match(/\/portal(?:v2\/login)?\?token=([a-zA-Z0-9]+)/);
       if (match && match[1]) {
         return match[1];
       }

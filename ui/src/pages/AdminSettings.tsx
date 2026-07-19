@@ -1,9 +1,11 @@
 import { useEffect, useState } from 'react';
 import axios from 'axios';
 import { useOutletContext } from 'react-router-dom';
+import { useSettings } from '../contexts/SettingsContext';
 
 export default function AdminSettings() {
   const { user } = useOutletContext<{ user: any }>();
+  const { formatDate } = useSettings();
   const [loading, setLoading] = useState(true);
 
   // System Settings state
@@ -140,7 +142,7 @@ export default function AdminSettings() {
             <div style={{ fontWeight: 'bold', color: 'var(--danger)', marginBottom: '4px' }}>MAINTENANCE MODE IS ACTIVE</div>
             <div style={{ fontSize: '12px', color: 'var(--text-main)' }}>Action: {maintenance.action}</div>
             <div style={{ fontSize: '12px', color: 'var(--text-main)' }}>Reason: {maintenance.reason}</div>
-            <div style={{ fontSize: '12px', color: 'var(--text-main)' }}>Started: {new Date(maintenance.start_time).toLocaleString()}</div>
+            <div style={{ fontSize: '12px', color: 'var(--text-main)' }}>Started: {formatDate(maintenance.start_time)}</div>
           </div>
         )}
 

@@ -1,66 +1,31 @@
-# GitHub Issue Sync Workflow Rules
+# Liferay Tunnel Agents Ecosystem
 
-## 0. SentinelOne Execution Constraints (CRITICAL)
+This directory contains the central repository of rules, constraints, and operational patterns for AI Agents working on the `lfr-tunnel` project.
 
-> [!CAUTION]
-> **DO NOT EVER RUN `go test ./...` OR `go test` DIRECTLY.**
-> **SENTINELONE WILL DETECT THE DYNAMIC TEST EXECUTABLE (`*.test`), QUARANTINE IT, AND KILL ADJACENT SYSTEM PROCESSES (BREW, JENV, LDM). THIS CAN CRASH THE AGENT AND DESTROY THE USER'S LOCAL WORK ENVIRONMENT.**
-> **ALWAYS, STRICTLY, WITHOUT EXCEPTION, USE `make test` FOR ANY GO TESTING.**
+> **Note to Agents**: This file acts as a routing index. When you are performing specific actions, you must review the dedicated SKILL or module listed below.
 
-- **Local Binary Execution Constraints**: The local system EDR (SentinelOne) blocks unsigned `lfr-tunnel` binaries and dynamic Go test run executables (`*.test`). **This will crash the AI Agent.** 
-- Do NOT run `go test ./...` or `go test` directly. 
-- To run Go tests safely, you must iterate over packages and explicitly compile the test binary to the exact whitelisted file before executing it: `go test -c -o /private/tmp/lfr-tunnel <pkg> && /private/tmp/lfr-tunnel`. (This logic is codified in the `Makefile` and `pre-commit-hook.sh`).
-- Use `make test` instead of `go test`.
+## Modular Skills & Operational Directives
 
-When planning or implementing new features, you must use the automated JSON-driven issue sync tool located at `scripts/gh-issue-sync.cjs` to synchronize your task checklist with the GitHub issue tracker.
+The monolithic rules have been broken down into modular skills so that they can be loaded contextually. Always check the `skills` directory for relevant operational directives before executing complex workflows.
 
-## 1. Tool Setup & Location
-- Script: `scripts/gh-issue-sync.cjs` (executable Node.js script)
-- Sample Config: `scripts/issues.sample.json`
+- **GitHub Issue Sync & PRs**: [`.agents/skills/github-workflow/SKILL.md`](skills/github-workflow/SKILL.md)
+  *Must be loaded when planning tasks, creating GitHub issues, or opening Pull Requests. Includes the mandatory `Closes #<issue>` constraint.*
 
-## 2. Issue Tracking Workflow
-Before writing code for any feature or logic change:
-1. **Plan & Draft**: Create a temporary JSON file (e.g., `scripts/feature-xyz-plan.json`) containing the Epic description and target sub-issues. Follow the schema defined in `scripts/issues.sample.json`.
-2. **Dry Run**: Preview the CLI commands that will run:
-   ```bash
-   node scripts/gh-issue-sync.cjs scripts/feature-xyz-plan.json --dry-run
-   ```
-3. **Apply & Link**: Generate the Epic and sub-issues on GitHub:
-   ```bash
-   node scripts/gh-issue-sync.cjs scripts/feature-xyz-plan.json
-   ```
-   *Note: The script automatically links all sub-issues to the parent Epic.*
+- **SentinelOne & EDR Constraints**: [`.agents/skills/edr-constraints/SKILL.md`](skills/edr-constraints/SKILL.md)
+  *Must be loaded when running Go tests or local binaries to prevent SentinelOne from crashing your environment.*
 
-## 3. Resolving and Closing Tasks
-- **Pull Request Flow (Preferred)**: When your tasks are tied to code changes, do **NOT** set `"completed": true` in the JSON. Leave it as `false`. Instead, include `Closes #<issue-number>` in your Pull Request body or commit message so GitHub automatically closes the issue when the PR merges.
-- **Manual/Standalone Tasks**: ONLY for operational tasks that do NOT involve a PR (e.g. running scripts, config changes), you may set `"completed": true` and run the sync utility again:
-   ```bash
-   node scripts/gh-issue-sync.cjs scripts/feature-xyz-plan.json
-   ```
-   *The utility will automatically detect the completed state, post a reference comment with the current git commit hash, and forcefully close the issue on GitHub.*
+- **Documentation Timestamps**: [`.agents/skills/global-docs/SKILL.md`](skills/global-docs/SKILL.md)
+  *Must be loaded when reviewing, creating, or modifying markdown documentation.*
 
-## 4. Edge Node Propagation & State Synchronization
-- **Stateless Edge Nodes**: Regional Edge nodes (`lfr-tunneld` running with no DB) rely entirely on the Control Plane for authentication and validation. However, they maintain their own active memory `registry` of live tunnels.
-- **State Changes**: ANY feature or API endpoint that modifies the active tunnel lease state in memory on the Control Plane (e.g., custom headers, rate limits, kicks) **MUST** include logic to propagate that state change to the specific Edge Node hosting the tunnel via the `edge_control_ws.go` WebSocket channel. Failure to do so will result in split-brain behavior where Edge nodes do not enforce the new policies.
+- **Edge Node Synchronization**: [`.agents/skills/edge-sync/SKILL.md`](skills/edge-sync/SKILL.md)
+  *Must be loaded when modifying the control plane's tunnel state to ensure it propagates to edge nodes.*
 
+## Internal Tools & Customization
 
-## Global Documentation Timestamps Rule
-
-**Objective**: Ensure that all markdown documents across all projects maintain a consistent "Last Updated" and "Last Reviewed" timestamp footer to track documentation decay and relevance.
-
-**Rules**:
-1. Every time you create or modify a Markdown (`.md`) file, you MUST ensure it has a footer block at the very end in the exact format:
-   `<!-- markdownlint-disable MD049 -->`
-   `---`
-   `*Last Updated: YYYY-MM-DD* | *Last Reviewed: YYYY-MM-DD*`
-2. If working in a new repository without these footers, implement a Python script named `scripts/append_timestamps.py` using `Path.rglob` to recursively scan all `.md` files (ignoring `.venv`, `node_modules`, `.smoke_venv` etc.) and append this block if it does not exist.
-3. You must also establish a `scripts/check_docs_review.py` script that parses this footer using the regex `r"\*Last Updated: ([\d\-]+)\* \| \*Last Reviewed: ([\d\-]+)\*"` and accepts arguments for `--max-review-days`, `--max-update-days`, and `--max-gap-days`. 
-4. The script should alert the user via `sys.exit(1)` if any documents have exceeded these threshold values.
-
-If you ever ask the AI to "review the project documentation for outdated files", it will automatically know to look for or construct these scripts.
-
-
+The `.agents/skills` directory also contains operational scripts and infrastructure logic:
+- `lfr-tunnel-ops`: Scripts and commands for deploying the Gateway to the VPS.
+- `jira_tracker`: Logic for categorizing JIRA bugs and upstream constraints.
 
 <!-- markdownlint-disable MD049 -->
 ---
-*Last Updated: 2026-07-16* | *Last Reviewed: 2026-07-16*
+*Last Updated: 2026-07-19* | *Last Reviewed: 2026-07-19*

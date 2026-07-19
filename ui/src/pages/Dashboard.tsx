@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import { useOutletContext } from 'react-router-dom';
 import TunnelsPanel from '../components/TunnelsPanel';
 import ReservationsPanel from '../components/ReservationsPanel';
+import WhatsNewPanel from '../components/WhatsNewPanel';
 import { useSettings } from '../contexts/SettingsContext';
 import { useI18n } from '../contexts/I18nContext';
 
@@ -24,7 +25,10 @@ export default function Dashboard() {
 
       <TunnelsPanel tunnels={user.tunnels || []} />
       
-      <ReservationsPanel />
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(400px, 1fr))', gap: '24px', alignItems: 'start' }}>
+        <ReservationsPanel />
+        <WhatsNewPanel />
+      </div>
 
       <div className="card" style={{ marginBottom: '24px', animationDelay: '0.2s' }}>
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '24px' }}>

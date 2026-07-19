@@ -39,7 +39,7 @@
     {
       "title": "V2 Parity: Restore Global Broadcast & Targeted Messaging",
       "body": "Implement UI controls and real-time frontend listening for the `/api/admin/broadcast` and `/api/admin/targeted-message` endpoints. Administrators must be able to push real-time, dismissible banner alerts globally or to specific active user sessions.",
-      "completed": false,
+      "completed": true,
       "labels": [
         "enhancement",
         "ui"
@@ -49,7 +49,7 @@
     {
       "title": "V2 Parity: Restore Database Backups Management UI",
       "body": "Re-implement the Backups panel in `AdminSettings.tsx` (or a dedicated tab) that calls `/api/admin/backups` to allow administrators to view, trigger, and download SQLite database snapshots.",
-      "completed": false,
+      "completed": true,
       "labels": [
         "enhancement",
         "ui"

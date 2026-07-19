@@ -22,6 +22,10 @@ export default function AdminSettings() {
 
   const [webhookTesting, setWebhookTesting] = useState(false);
 
+  // Broadcast state
+  const [broadcastMessage, setBroadcastMessage] = useState('');
+  const [broadcastSending, setBroadcastSending] = useState(false);
+
   const fetchAllData = async () => {
     try {
       const vRes = await axios.get('/api/version');
@@ -99,6 +103,31 @@ export default function AdminSettings() {
     }
   };
 
+  const sendBroadcast = async () => {
+    try {
+      setBroadcastSending(true);
+      await axios.post('/api/admin/broadcast', { message: broadcastMessage });
+      alert('Broadcast message sent successfully.');
+    } catch (e: any) {
+      alert(`Failed to send broadcast: ${e.response?.data?.error || 'Unknown error'}`);
+    } finally {
+      setBroadcastSending(false);
+    }
+  };
+
+  const clearBroadcast = async () => {
+    try {
+      setBroadcastSending(true);
+      await axios.post('/api/admin/broadcast', { message: '' });
+      setBroadcastMessage('');
+      alert('Broadcast message cleared.');
+    } catch (e: any) {
+      alert(`Failed to clear broadcast: ${e.response?.data?.error || 'Unknown error'}`);
+    } finally {
+      setBroadcastSending(false);
+    }
+  };
+
   if (loading) return <div>Loading settings...</div>;
 
   return (
@@ -159,6 +188,30 @@ export default function AdminSettings() {
           </div>
           <button className="btn btn-primary" disabled={webhookTesting} onClick={testWebhook}>
             {webhookTesting ? 'Sending...' : 'Trigger Test Webhook'}
+          </button>
+        </div>
+      </div>
+
+      <div className="card" style={{ marginBottom: '24px' }}>
+        <h4>Global Broadcast</h4>
+        <p style={{ fontSize: '13px', color: 'var(--text-muted)', marginBottom: '16px' }}>
+          Push a real-time banner alert to all active developer sessions.
+        </p>
+        <div className="form-group">
+          <input
+            type="text"
+            className="form-control"
+            placeholder="Enter broadcast message..."
+            value={broadcastMessage}
+            onChange={(e) => setBroadcastMessage(e.target.value)}
+          />
+        </div>
+        <div style={{ display: 'flex', gap: '8px', marginTop: '16px' }}>
+          <button className="btn btn-primary" disabled={broadcastSending || !broadcastMessage.trim()} onClick={sendBroadcast}>
+            {broadcastSending ? 'Sending...' : 'Send Broadcast'}
+          </button>
+          <button className="btn btn-secondary" disabled={broadcastSending} onClick={clearBroadcast}>
+            Clear Broadcast
           </button>
         </div>
       </div>

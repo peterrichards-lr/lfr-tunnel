@@ -11,6 +11,7 @@ import AdminAuditLog from './pages/AdminAuditLog';
 import AdminBlacklist from './pages/AdminBlacklist';
 import AdminExtensions from './pages/AdminExtensions';
 import AdminEdgeHealth from './pages/AdminEdgeHealth';
+import AdminMagicLinks from './pages/AdminMagicLinks';
 import AccountSettings from './pages/AccountSettings';
 import { SettingsProvider } from './contexts/SettingsContext';
 import { I18nProvider } from './contexts/I18nContext';
@@ -36,6 +37,7 @@ function App() {
                 <Route path="/admin/audit" element={<AdminAuditLog />} />
                 <Route path="/admin/blacklist" element={<AdminBlacklist />} />
                 <Route path="/admin/edge-health" element={<AdminEdgeHealth />} />
+                <Route path="/admin/magic-links" element={<AdminMagicLinks />} />
                 <Route path="/admin/settings" element={<AdminSettings />} />
               </Route>
             </Route>

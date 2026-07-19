@@ -602,7 +602,7 @@ html[dir="rtl"] td, html[dir="rtl"] th {
         height: auto !important;
     }
     
-    #tab-analytics {
+    .analytics-page {
         display: block !important;
         width: 100% !important;
         padding: 0 !important;
@@ -612,16 +612,16 @@ html[dir="rtl"] td, html[dir="rtl"] th {
     }
 
     /* Convert 2-column grid layout to single-column layout for portrait printing */
-    #tab-analytics div[style*="display: grid"] {
+    .analytics-page div[style*="display: grid"] {
         grid-template-columns: 1fr !important;
     }
     
-    #tab-analytics .glass {
+    .analytics-page .card, .analytics-page .glass {
         grid-column: span 1 !important;
     }
     
     /* Disable table scrolling/clipping in print to allow natural page-break pagination */
-    #tab-analytics .table-container {
+    .analytics-page .table-container {
         max-height: none !important;
         overflow: visible !important;
     }

@@ -49,6 +49,9 @@ export default function Sidebar({ user, isOpen, onClose }: SidebarProps) {
                 <NavLink to="/admin/users" onClick={onClose} className={({ isActive }) => `nav-item ${isActive ? 'active' : ''}`}>
                   {t('users', 'Users')}
                 </NavLink>
+                <NavLink to="/admin/analytics" onClick={onClose} className={({ isActive }) => `nav-item ${isActive ? 'active' : ''}`}>
+                  {t('analytics', 'Analytics')}
+                </NavLink>
                 <NavLink to="/admin/audit" onClick={onClose} className={({ isActive }) => `nav-item ${isActive ? 'active' : ''}`}>
                   {t('audit_log', 'Audit Log')}
                 </NavLink>

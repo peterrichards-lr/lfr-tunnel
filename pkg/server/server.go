@@ -2523,8 +2523,19 @@ func (s *Server) handleAdminEndpoints(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if r.Method == http.MethodGet && r.URL.Path == "/api/admin/backups" {
-		s.handleAdminListBackups(w, r, actor)
+	if r.URL.Path == "/api/admin/backups" {
+		if r.Method == http.MethodGet {
+			s.handleAdminListBackups(w, r, actor)
+			return
+		}
+		if r.Method == http.MethodPost {
+			s.handleAdminTriggerBackup(w, r, actor)
+			return
+		}
+	}
+
+	if strings.HasPrefix(r.URL.Path, "/api/admin/backups/download/") && r.Method == http.MethodGet {
+		s.handleAdminDownloadBackup(w, r, actor)
 		return
 	}
 
@@ -4077,6 +4088,48 @@ func (s *Server) handleAdminListBackups(w http.ResponseWriter, r *http.Request, 
 		backups = []BackupInfo{}
 	}
 	respondJSON(w, http.StatusOK, backups)
+}
+
+// handleAdminTriggerBackup triggers a manual database backup immediately.
+func (s *Server) handleAdminTriggerBackup(w http.ResponseWriter, r *http.Request, actor string) {
+	if s.db == nil {
+		http.Error(w, `{"error":"Database not configured"}`, http.StatusNotImplemented)
+		return
+	}
+	if err := s.BackupDatabase(); err != nil {
+		slog.Info(fmt.Sprintf("[Error] Administrator %s failed to trigger manual database backup: %v", actor, err))
+		http.Error(w, `{"error":"Failed to create database backup"}`, http.StatusInternalServerError)
+		return
+	}
+	slog.Info(fmt.Sprintf("[Audit] Administrator %s manually triggered a database backup", actor))
+	respondJSON(w, http.StatusOK, map[string]string{"message": "Backup triggered successfully"})
+}
+
+// handleAdminDownloadBackup serves the requested database backup file for download.
+func (s *Server) handleAdminDownloadBackup(w http.ResponseWriter, r *http.Request, actor string) {
+	if s.db == nil {
+		http.Error(w, "Database not configured", http.StatusNotImplemented)
+		return
+	}
+	filename := strings.TrimPrefix(r.URL.Path, "/api/admin/backups/download/")
+	if filename == "" || strings.Contains(filename, "..") || strings.Contains(filename, "/") {
+		http.Error(w, "Invalid backup filename", http.StatusBadRequest)
+		return
+	}
+	
+	backupsDir := filepath.Join(filepath.Dir(s.cfg.DBPath), "backups")
+	filePath := filepath.Join(backupsDir, filename)
+	
+	// Check if file exists
+	if _, err := os.Stat(filePath); os.IsNotExist(err) {
+		http.Error(w, "Backup file not found", http.StatusNotFound)
+		return
+	}
+	
+	slog.Info(fmt.Sprintf("[Audit] Administrator %s downloaded database backup: %s", actor, filename))
+	w.Header().Set("Content-Disposition", fmt.Sprintf("attachment; filename=%s", filename))
+	w.Header().Set("Content-Type", "application/octet-stream")
+	http.ServeFile(w, r, filePath)
 }
 
 func (s *Server) handleAdminBlacklist(w http.ResponseWriter, r *http.Request, actor string) {

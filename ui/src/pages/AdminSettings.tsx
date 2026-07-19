@@ -26,6 +26,10 @@ export default function AdminSettings() {
   const [broadcastMessage, setBroadcastMessage] = useState('');
   const [broadcastSending, setBroadcastSending] = useState(false);
 
+  // Backups state
+  const [backups, setBackups] = useState<any[]>([]);
+  const [loadingBackups, setLoadingBackups] = useState(false);
+
   const fetchAllData = async () => {
     try {
       const vRes = await axios.get('/api/version');
@@ -44,6 +48,14 @@ export default function AdminSettings() {
           setServerConfig(cRes.data.config || '');
         } catch (e: any) {
           setConfigError(e.response?.status === 403 ? 'Not authorized to view config' : 'Failed to load configuration');
+        }
+        
+        // Fetch backups
+        try {
+          const bRes = await axios.get('/api/admin/backups');
+          setBackups(bRes.data || []);
+        } catch (e) {
+          console.error("Failed to load backups", e);
         }
       }
     } catch (e) {
@@ -126,6 +138,23 @@ export default function AdminSettings() {
     } finally {
       setBroadcastSending(false);
     }
+  };
+
+  const triggerBackup = async () => {
+    try {
+      setLoadingBackups(true);
+      await axios.post('/api/admin/backups');
+      alert('Backup triggered successfully.');
+      fetchAllData();
+    } catch (e: any) {
+      alert(`Failed to trigger backup: ${e.response?.data?.error || 'Unknown error'}`);
+    } finally {
+      setLoadingBackups(false);
+    }
+  };
+
+  const formatSizeKB = (bytes: number) => {
+    return (bytes / 1024).toFixed(1) + ' KB';
   };
 
   if (loading) return <div>Loading settings...</div>;
@@ -215,6 +244,60 @@ export default function AdminSettings() {
           </button>
         </div>
       </div>
+
+      {(user.role === 'owner' || user.role === 'admin') && (
+        <div className="card" style={{ marginBottom: '24px' }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px' }}>
+            <div>
+              <h4 style={{ margin: 0 }}>Database Backups</h4>
+              <div style={{ fontSize: '13px', color: 'var(--text-muted)', marginTop: '4px' }}>Manage and download automated database snapshots.</div>
+            </div>
+            <button className="btn btn-primary" disabled={loadingBackups} onClick={triggerBackup}>
+              {loadingBackups ? 'Running...' : 'Trigger Backup'}
+            </button>
+          </div>
+          
+          <div className="table-responsive" style={{ marginTop: '16px' }}>
+            <table className="table">
+              <thead>
+                <tr>
+                  <th>Filename</th>
+                  <th>Size</th>
+                  <th>Created At</th>
+                  <th>Actions</th>
+                </tr>
+              </thead>
+              <tbody>
+                {backups.length === 0 ? (
+                  <tr>
+                    <td colSpan={4} style={{ textAlign: 'center', opacity: 0.6, padding: '16px' }}>
+                      No backups found yet. The first backup runs on server startup.
+                    </td>
+                  </tr>
+                ) : (
+                  backups.map(b => (
+                    <tr key={b.filename}>
+                      <td style={{ fontFamily: 'monospace', fontSize: '0.85em' }}>{b.filename}</td>
+                      <td>{formatSizeKB(b.size_bytes)}</td>
+                      <td>{formatDate(b.created_at)}</td>
+                      <td>
+                        <a 
+                          href={`/api/admin/backups/download/${encodeURIComponent(b.filename)}`} 
+                          download
+                          className="btn btn-secondary" 
+                          style={{ padding: '4px 8px', fontSize: '12px', display: 'inline-block', textDecoration: 'none' }}
+                        >
+                          Download
+                        </a>
+                      </td>
+                    </tr>
+                  ))
+                )}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      )}
 
       {(user.role === 'owner' || user.role === 'admin') && (
         <div className="card" id="card-server-config">

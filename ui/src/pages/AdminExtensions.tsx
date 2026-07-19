@@ -1,25 +1,27 @@
 import { useEffect, useState } from 'react';
 import axios from 'axios';
+import { useSettings } from '../contexts/SettingsContext';
 
-interface ExtensionRequest {
+interface ExtRequest {
   id: string;
-  user_email: string;
-  user_id: string;
+  email: string;
   subdomain: string;
-  domain: string;
-  expires_at?: string;
+  port: number;
+  status: string;
+  expires_at: string;
 }
 
 export default function AdminExtensions() {
-  const [requests, setRequests] = useState<ExtensionRequest[]>([]);
+  const [requests, setRequests] = useState<ExtRequest[]>([]);
   const [loading, setLoading] = useState(true);
+  const { formatDate } = useSettings();
 
   const fetchRequests = async () => {
     try {
-      const res = await axios.get('/api/admin/reservations/extensions');
+      const res = await axios.get('/api/admin/extensions');
       setRequests(res.data || []);
-    } catch (e) {
-      console.error(e);
+    } catch (err) {
+      console.error(err);
     } finally {
       setLoading(false);
     }
@@ -29,90 +31,63 @@ export default function AdminExtensions() {
     fetchRequests();
   }, []);
 
-  const approveExtension = async (id: string) => {
-    const daysStr = prompt('Enter duration in days to extend (e.g. 30, 90). Leave blank for permanent:');
-    if (daysStr === null) return; // cancelled
-    
-    let days = 0;
-    if (daysStr.trim() !== '') {
-      days = parseInt(daysStr, 10);
-      if (isNaN(days) || days <= 0) {
-        alert('Invalid number of days.');
-        return;
-      }
-    }
-
+  const handleAction = async (id: string, action: 'approve' | 'reject') => {
     try {
-      await axios.post(`/api/admin/reservations/${encodeURIComponent(id)}/approve-extension`, {
-        duration_days: days
-      });
+      await axios.post(`/api/admin/extensions/${id}`, { action });
       fetchRequests();
-    } catch (err: any) {
-      alert(`Error: ${err.response?.data?.error || 'Failed to approve'}`);
+    } catch (err) {
+      console.error(err);
+      alert('Action failed');
     }
   };
 
-  const demoteExtension = async (id: string) => {
-    if (!confirm('Are you sure you want to reject this request and demote it back to a standard ephemeral lease?')) return;
-    try {
-      await axios.post(`/api/admin/reservations/${encodeURIComponent(id)}/demote`);
-      fetchRequests();
-    } catch (err: any) {
-      alert(`Error: ${err.response?.data?.error || 'Failed to reject'}`);
-    }
-  };
-
-  if (loading) return <div>Loading extension requests...</div>;
+  if (loading) return <div>Loading...</div>;
 
   return (
-    <div>
-      <div style={{ marginBottom: '24px' }}>
-        <h3>Subdomain Extension Requests</h3>
-        <p style={{ color: 'var(--text-muted)' }}>Review user requests for long-lived or permanent subdomains.</p>
-      </div>
-
-      <div className="card" style={{ padding: 0 }}>
-        <div className="table-responsive">
-          <table>
-            <thead>
-              <tr>
-                <th>User</th>
-                <th>Subdomain</th>
-                <th>Domain</th>
-                <th>Current Expiry</th>
-                <th>Actions</th>
+    <div className="card" style={{ animation: 'fadeInUp 0.6s ease-out' }}>
+      <h3 style={{ marginTop: 0, marginBottom: '24px', fontSize: '20px', fontWeight: 700 }}>Extension Requests</h3>
+      
+      <div className="table-responsive">
+        <table style={{ width: '100%', borderCollapse: 'collapse' }}>
+          <thead>
+            <tr style={{ borderBottom: '1px solid var(--border)', textAlign: 'left' }}>
+              <th style={{ padding: '12px 16px', color: 'var(--text-muted)' }}>Email</th>
+              <th style={{ padding: '12px 16px', color: 'var(--text-muted)' }}>Subdomain</th>
+              <th style={{ padding: '12px 16px', color: 'var(--text-muted)' }}>Port</th>
+              <th style={{ padding: '12px 16px', color: 'var(--text-muted)' }}>Expires</th>
+              <th style={{ padding: '12px 16px', color: 'var(--text-muted)' }}>Status</th>
+              <th style={{ padding: '12px 16px', color: 'var(--text-muted)', textAlign: 'right' }}>Actions</th>
+            </tr>
+          </thead>
+          <tbody>
+            {requests.map((req) => (
+              <tr key={req.id} style={{ borderBottom: '1px solid rgba(255,255,255,0.05)' }}>
+                <td style={{ padding: '16px' }}>{req.email}</td>
+                <td style={{ padding: '16px' }}>{req.subdomain}</td>
+                <td style={{ padding: '16px' }}>{req.port}</td>
+                <td style={{ padding: '16px' }}>{req.expires_at ? formatDate(req.expires_at) : 'Never'}</td>
+                <td style={{ padding: '16px' }}>
+                  <span className="badge">{req.status}</span>
+                </td>
+                <td style={{ padding: '16px', textAlign: 'right' }}>
+                  {req.status === 'pending' && (
+                    <div style={{ display: 'flex', gap: '8px', justifyContent: 'flex-end' }}>
+                      <button className="btn btn-primary" style={{ padding: '4px 12px', fontSize: '12px' }} onClick={() => handleAction(req.id, 'approve')}>Approve</button>
+                      <button className="btn btn-secondary" style={{ padding: '4px 12px', fontSize: '12px' }} onClick={() => handleAction(req.id, 'reject')}>Reject</button>
+                    </div>
+                  )}
+                </td>
               </tr>
-            </thead>
-            <tbody>
-              {requests.length === 0 ? (
-                <tr>
-                  <td colSpan={5} style={{ textAlign: 'center', padding: '24px', color: 'var(--text-muted)' }}>
-                    No pending extension requests.
-                  </td>
-                </tr>
-              ) : (
-                requests.map(req => (
-                  <tr key={req.id}>
-                    <td style={{ fontWeight: 500 }}>{req.user_email || req.user_id}</td>
-                    <td style={{ fontFamily: 'monospace' }}>{req.subdomain}</td>
-                    <td style={{ fontFamily: 'monospace' }}>{req.domain}</td>
-                    <td>{req.expires_at ? new Date(req.expires_at).toLocaleString() : 'Never'}</td>
-                    <td>
-                      <div style={{ display: 'flex', gap: '8px' }}>
-                        <button className="btn btn-primary" style={{ padding: '4px 8px', fontSize: '12px' }} onClick={() => approveExtension(req.id)}>
-                          Approve
-                        </button>
-                        <button className="btn btn-danger" style={{ padding: '4px 8px', fontSize: '12px' }} onClick={() => demoteExtension(req.id)}>
-                          Reject
-                        </button>
-                      </div>
-                    </td>
-                  </tr>
-                ))
-              )}
-            </tbody>
-          </table>
-        </div>
+            ))}
+            {requests.length === 0 && (
+              <tr>
+                <td colSpan={6} style={{ textAlign: 'center', padding: '40px 20px', color: 'var(--text-muted)' }}>
+                  No extension requests found.
+                </td>
+              </tr>
+            )}
+          </tbody>
+        </table>
       </div>
     </div>
   );

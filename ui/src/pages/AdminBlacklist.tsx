@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
 import axios from 'axios';
+import { useSettings } from '../contexts/SettingsContext';
 
 interface BlacklistEntry {
   ip: string;
@@ -12,6 +13,7 @@ export default function AdminBlacklist() {
   const [loading, setLoading] = useState(true);
   const [ipInput, setIpInput] = useState('');
   const [reasonInput, setReasonInput] = useState('');
+  const { formatDate } = useSettings();
 
   const fetchEntries = async () => {
     try {
@@ -108,9 +110,9 @@ export default function AdminBlacklist() {
                   <tr key={entry.ip}>
                     <td style={{ fontFamily: 'monospace', fontWeight: 500 }}>{entry.ip}</td>
                     <td>{entry.reason}</td>
-                    <td>{new Date(entry.created_at).toLocaleString()}</td>
+                    <td>{formatDate(entry.created_at)}</td>
                     <td>
-                      <button className="btn" style={{ padding: '4px 8px', fontSize: '12px' }} onClick={() => removeEntry(entry.ip)}>
+                      <button className="btn btn-secondary" style={{ padding: '4px 8px', fontSize: '12px' }} onClick={() => removeEntry(entry.ip)}>
                         Unblock
                       </button>
                     </td>

@@ -1,5 +1,13 @@
 [
   {
+    "version": "v1.43.2",
+    "release_date": "2026-07-20",
+    "features": [
+      "Fix: Migrate language and theme preferences to account settings",
+      "Fix: Resolve sidebar navigation wrapping bug on V2 portal"
+    ]
+  },
+  {
     "version": "v1.43.1",
     "release_date": "2026-07-20",
     "features": [

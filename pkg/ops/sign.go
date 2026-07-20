@@ -116,7 +116,7 @@ func SignCommand(args []string) {
 				gpgSecret = tmpSec.Name()
 				defer os.Remove(gpgSecret)
 			}
-			
+
 			// Import the secret key into GPG
 			importArgs := []string{"--batch", "--yes"}
 			if gpgPass != "" {

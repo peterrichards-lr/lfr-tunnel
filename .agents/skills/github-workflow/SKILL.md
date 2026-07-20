@@ -24,6 +24,11 @@ Before writing code for any feature or logic change:
    ```
    *Note: The script automatically links all sub-issues to the parent Epic.*
 
+### Tech Debt Tracking
+If you encounter code smells, duplicated logic, or overly complex implementations during your work, you MUST record it by raising a GitHub issue via the `gh` CLI (`gh issue create`). 
+- **Required Label**: You must attach the `tech debt` label to these issues.
+- **Actionability**: You do not need to tackle the technical debt immediately unless it can be resolved without diverting significant effort from your primary task. The ultimate requirement is to ensure it is recorded in the backlog.
+
 ## 3. Resolving and Closing Tasks
 - **Pull Request Flow (Preferred)**: When your tasks are tied to code changes, do **NOT** set `"completed": true` in the JSON. Leave it as `false`. Instead, include `Closes #<issue-number>` in your Pull Request body or commit message so GitHub automatically closes the issue when the PR merges.
 - **Manual/Standalone Tasks**: ONLY for operational tasks that do NOT involve a PR (e.g. running scripts, config changes), you may set `"completed": true` and run the sync utility again:

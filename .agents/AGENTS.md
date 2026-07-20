@@ -23,6 +23,7 @@ The monolithic rules have been broken down into modular skills so that they can 
 ## Active Runtime Constraints (CRITICAL)
 
 - **EDR Whitelist Restrictions**: Do NOT run the `lfr-tunnel` or `lfr-tunneld` binaries outside the whitelisted directory (`/private/tmp/lfr-tunnel`). Doing so will trigger SentinelOne (S1), which will forcefully kill the process, Homebrew, and the Antigravity agent itself. Rely on automated GitHub workflows or explicit whitelist paths for testing.
+- **Tech Debt Tracking**: If you encounter code smells, duplicated logic, or overly complex implementations during your work, you MUST record it by raising a GitHub issue with the `tech debt` label via the `gh` CLI. You do not need to tackle the technical debt immediately unless it can be resolved without diverting significant effort from your primary task. The ultimate requirement is to ensure it is recorded in the backlog.
 
 ## Internal Tools & Customization
 

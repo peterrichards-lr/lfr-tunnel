@@ -46,12 +46,15 @@ export default function AdminAnalytics() {
   const [data, setData] = useState<any>(null);
   const [clientStats, setClientStats] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
+  const [timeRange, setTimeRange] = useState('30'); // Default to 30 days
 
   useEffect(() => {
     const fetchData = async () => {
+      setLoading(true);
       try {
+        const query = timeRange !== '0' ? `?days=${timeRange}` : '';
         const [analyticsRes, clientsRes] = await Promise.all([
-          axios.get('/api/analytics'),
+          axios.get(`/api/analytics${query}`),
           axios.get('/api/admin/analytics/clients').catch(() => ({ data: [] }))
         ]);
         setData(analyticsRes.data);
@@ -63,7 +66,7 @@ export default function AdminAnalytics() {
       }
     };
     fetchData();
-  }, []);
+  }, [timeRange]);
 
   const isLight = theme === 'light';
   const textColor = isLight ? '#475569' : '#94a3b8';
@@ -139,9 +142,22 @@ export default function AdminAnalytics() {
     <div className="analytics-page">
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '24px' }} className="no-print">
         <h2 style={{ fontSize: '24px', fontWeight: 'bold' }}>{t('system_analytics', 'System Analytics')}</h2>
-        <button className="btn btn-secondary" onClick={handlePrint}>
-          📄 {t('export_pdf', 'Export PDF')}
-        </button>
+        <div style={{ display: 'flex', gap: '12px' }}>
+          <select 
+            className="form-control" 
+            style={{ width: 'auto' }}
+            value={timeRange} 
+            onChange={(e) => setTimeRange(e.target.value)}
+          >
+            <option value="7">Last 7 Days</option>
+            <option value="14">Last 14 Days</option>
+            <option value="30">Last 30 Days</option>
+            <option value="0">All Time</option>
+          </select>
+          <button className="btn btn-secondary" onClick={handlePrint} style={{ width: 'auto', whiteSpace: 'nowrap' }}>
+            📄 {t('export_pdf', 'Export PDF')}
+          </button>
+        </div>
       </div>
 
       {data.personal && (

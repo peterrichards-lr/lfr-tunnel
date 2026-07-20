@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
 import { useI18n } from '../contexts/I18nContext';
 
-export default function ClientInstallationModal({ isOpen, onClose }: { isOpen: boolean, onClose: () => void }) {
+export default function ClientInstallationModal({ isOpen, onClose, serverConfig }: { isOpen: boolean, onClose: () => void, serverConfig?: any }) {
   const { t } = useI18n();
   const [activeTab, setActiveTab] = useState<'macos' | 'windows' | 'linux'>('macos');
   const [copied, setCopied] = useState<string | null>(null);
@@ -67,15 +67,19 @@ export default function ClientInstallationModal({ isOpen, onClose }: { isOpen: b
             <div className="animation-fade-in">
               <h4 style={{ fontSize: '14px', marginBottom: '8px' }}>🚀 {t('guide_macos_title', 'Apple Silicon (M1/M2/M3) & Intel Macs')}</h4>
               
-              <div style={{ fontSize: '0.8rem', fontWeight: 'bold', marginTop: '10px', color: 'var(--text)' }}>
-                {t('guide_macos_brew', 'Recommended via Homebrew:')}
-              </div>
-              <div className="code-box">
-                <span>brew tap peterrichards-lr/tap && brew install lfr-tunnel</span>
-                <button className="copy-btn" onClick={() => handleCopy('brew tap peterrichards-lr/tap && brew install lfr-tunnel', 'macos-brew')}>
-                  {copied === 'macos-brew' ? '✓' : '📋'}
-                </button>
-              </div>
+              {!serverConfig?.disable_brew && (
+                <>
+                  <div style={{ fontSize: '0.8rem', fontWeight: 'bold', marginTop: '10px', color: 'var(--text)' }}>
+                    {t('guide_macos_brew', 'Recommended via Homebrew:')}
+                  </div>
+                  <div className="code-box">
+                    <span>brew tap peterrichards-lr/tap && brew install lfr-tunnel</span>
+                    <button className="copy-btn" onClick={() => handleCopy('brew tap peterrichards-lr/tap && brew install lfr-tunnel', 'macos-brew')}>
+                      {copied === 'macos-brew' ? '✓' : '📋'}
+                    </button>
+                  </div>
+                </>
+              )}
 
               <div style={{ fontSize: '0.8rem', fontWeight: 'bold', marginTop: '10px', color: 'var(--text-muted)' }}>
                 {t('guide_macos_direct', 'Direct Installation Script (Alternative):')}
@@ -103,15 +107,19 @@ export default function ClientInstallationModal({ isOpen, onClose }: { isOpen: b
             <div className="animation-fade-in">
               <h4 style={{ fontSize: '14px', marginBottom: '8px' }}>🚀 {t('guide_windows_title', 'Windows 10 / 11 (64-bit)')}</h4>
               
-              <div style={{ fontSize: '0.8rem', fontWeight: 'bold', marginTop: '10px', color: 'var(--text)' }}>
-                {t('guide_windows_scoop', 'Recommended via Scoop:')}
-              </div>
-              <div className="code-box">
-                <span>scoop bucket add peterrichards-lr https://github.com/peterrichards-lr/scoop-bucket.git && scoop install lfr-tunnel</span>
-                <button className="copy-btn" onClick={() => handleCopy('scoop bucket add peterrichards-lr https://github.com/peterrichards-lr/scoop-bucket.git && scoop install lfr-tunnel', 'win-scoop')}>
-                  {copied === 'win-scoop' ? '✓' : '📋'}
-                </button>
-              </div>
+              {!serverConfig?.disable_scoop && (
+                <>
+                  <div style={{ fontSize: '0.8rem', fontWeight: 'bold', marginTop: '10px', color: 'var(--text)' }}>
+                    {t('guide_windows_scoop', 'Recommended via Scoop:')}
+                  </div>
+                  <div className="code-box">
+                    <span>scoop bucket add peterrichards-lr https://github.com/peterrichards-lr/scoop-bucket.git && scoop install lfr-tunnel</span>
+                    <button className="copy-btn" onClick={() => handleCopy('scoop bucket add peterrichards-lr https://github.com/peterrichards-lr/scoop-bucket.git && scoop install lfr-tunnel', 'win-scoop')}>
+                      {copied === 'win-scoop' ? '✓' : '📋'}
+                    </button>
+                  </div>
+                </>
+              )}
 
               <div style={{ fontSize: '0.8rem', fontWeight: 'bold', marginTop: '10px', color: 'var(--text-muted)' }}>
                 {t('guide_windows_direct', 'Direct Installation (PowerShell Script):')}

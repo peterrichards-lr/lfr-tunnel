@@ -139,7 +139,7 @@ body {
             font-size: 14px;
         }
 
-        .btn {
+        .login-card .btn {
             display: flex;
             align-items: center;
             justify-content: center;
@@ -364,7 +364,7 @@ body {
         .header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 40px; }
         .header h2 { font-size: 24px; font-weight: 600; }
         
-        .table-container { margin-top: 24px; overflow-x: auto; }
+        .table-responsive { margin-top: 24px; overflow-x: auto; width: 100%; }
         table { width: 100%; border-collapse: collapse; font-size: 14px; }
         th { text-align: left; padding: 16px; color: var(--text-muted); font-weight: 500; border-bottom: 1px solid var(--border); }
         td { padding: 16px; border-bottom: 1px solid var(--border); }
@@ -623,7 +623,7 @@ html[dir="rtl"] td, html[dir="rtl"] th {
     }
     
     /* Disable table scrolling/clipping in print to allow natural page-break pagination */
-    .analytics-page .table-container {
+    .analytics-page .table-responsive {
         max-height: none !important;
         overflow: visible !important;
     }
@@ -790,7 +790,7 @@ html[dir="rtl"] td, html[dir="rtl"] th {
 }
 
 /* Touch & Mobile Optimizations */
-.table-container {
+.table-responsive {
     -webkit-overflow-scrolling: touch;
 }
 
@@ -965,6 +965,7 @@ html[dir="rtl"] td, html[dir="rtl"] th {
     padding: 24px;
     box-shadow: var(--shadow-glass);
     transition: transform 0.3s ease, box-shadow 0.3s ease;
+    min-width: 0;
     animation: fadeInUp 0.6s cubic-bezier(0.16, 1, 0.3, 1) both;
 }
 .card:hover {
@@ -1020,7 +1021,8 @@ html[dir="rtl"] td, html[dir="rtl"] th {
     box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.1), inset 0 1px 1px rgba(255, 255, 255, 0.8);
 }
 
-.input-field {
+.input-field,
+.form-control {
     background: var(--input-bg);
     border: 1px solid var(--border);
     border-radius: 10px;
@@ -1029,13 +1031,15 @@ html[dir="rtl"] td, html[dir="rtl"] th {
     transition: all 0.3s ease;
     font-size: 15px;
 }
-.input-field:focus {
+.input-field:focus,
+.form-control:focus {
     outline: none;
     border-color: var(--primary);
     box-shadow: 0 0 0 4px var(--primary-glow);
     background: rgba(0, 0, 0, 0.1);
 }
-:root[data-theme="light"] .input-field:focus {
+:root[data-theme="light"] .input-field:focus,
+:root[data-theme="light"] .form-control:focus {
     background: #fff;
 }
 

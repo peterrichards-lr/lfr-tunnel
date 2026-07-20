@@ -165,9 +165,15 @@ type TunnelBandwidth struct {
 	BytesOut int64  `json:"bytes_out"`
 }
 
+type PortalUsageStats struct {
+	Version string `json:"version"`
+	Count   int    `json:"count"`
+}
+
 type GlobalAnalytics struct {
-	Daily    []DailyBandwidth `json:"daily"`
-	TopUsers []UserBandwidth  `json:"top_users"`
+	Daily       []DailyBandwidth   `json:"daily"`
+	TopUsers    []UserBandwidth    `json:"top_users"`
+	PortalStats []PortalUsageStats `json:"portal_stats"`
 }
 
 type UserAnalytics struct {

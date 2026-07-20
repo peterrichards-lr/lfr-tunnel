@@ -345,6 +345,19 @@ func (s *Server) handleDeleteToken(w http.ResponseWriter, r *http.Request) {
 	respondJSON(w, http.StatusOK, map[string]string{"status": "ok"})
 }
 
+func (s *Server) handleAnalyticsPing(w http.ResponseWriter, r *http.Request) {
+	user, err := s.getCurrentUser(r)
+	if err != nil {
+		http.Error(w, `{"error":"Unauthorized"}`, http.StatusUnauthorized)
+		return
+	}
+	portalVer := r.URL.Query().Get("portal")
+	if portalVer == "v1" || portalVer == "v2" {
+		s.writeAudit(user.Email, "portal.visit", "portal", portalVer, "User visited the portal dashboard", r)
+	}
+	respondJSON(w, http.StatusOK, map[string]string{"status": "ok"})
+}
+
 // handleGetAnalytics returns analytics data for the authenticated user and globally if admin.
 func (s *Server) handleGetAnalytics(w http.ResponseWriter, r *http.Request) {
 	if s.db == nil {

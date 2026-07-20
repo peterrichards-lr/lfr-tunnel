@@ -593,6 +593,7 @@ function toggleTheme() {
 
         async function showDashboard() {
             try {
+                fetch('/api/analytics/ping?portal=v1').catch(e => console.error(e));
                 const vRes = await fetch('/api/version');
                 if (vRes.ok) {
                     const vData = await vRes.json();
@@ -1469,6 +1470,30 @@ applyTheme(currentUser.theme_preference);
                                 }]
                             },
                             options: getOptions(true)
+                        });
+                    }
+
+                    if (data.global.portal_stats) {
+                        const ctx = document.getElementById('portalStatsChart').getContext('2d');
+                        if (charts['portalStats']) charts['portalStats'].destroy();
+                        charts['portalStats'] = new Chart(ctx, {
+                            type: 'doughnut',
+                            data: {
+                                labels: data.global.portal_stats.map(s => s.version.toUpperCase()),
+                                datasets: [{
+                                    data: data.global.portal_stats.map(s => s.count),
+                                    backgroundColor: ['#0b5fff', '#10b981', '#f59e0b', '#8b5cf6'],
+                                    borderWidth: 0
+                                }]
+                            },
+                            options: {
+                                responsive: true,
+                                maintainAspectRatio: false,
+                                plugins: {
+                                    legend: { position: 'bottom', labels: { color: textColor } }
+                                },
+                                cutout: '70%'
+                            }
                         });
                     }
 

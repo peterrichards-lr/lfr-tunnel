@@ -863,6 +863,11 @@ func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 
+		if r.Method == http.MethodGet && r.URL.Path == "/api/analytics/ping" {
+			s.handleAnalyticsPing(w, r)
+			return
+		}
+
 		if r.Method == http.MethodGet && r.URL.Path == "/api/tokens" {
 			s.handleListTokens(w, r)
 			return

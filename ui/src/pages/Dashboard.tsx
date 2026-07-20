@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react';
+import axios from 'axios';
 import { useOutletContext } from 'react-router-dom';
 import TunnelsPanel from '../components/TunnelsPanel';
 import ReservationsPanel from '../components/ReservationsPanel';
@@ -14,13 +15,51 @@ export default function Dashboard() {
   const [isInstallModalOpen, setIsInstallModalOpen] = useState(false);
   const { formatDate } = useSettings();
   const { t } = useI18n();
+  const [showV1Promo, setShowV1Promo] = useState(false);
 
   useEffect(() => {
     setTokens(user.tokens || []);
+    if (!localStorage.getItem('v1_promo_dismissed')) {
+      setShowV1Promo(true);
+    }
+    axios.get('/api/analytics/ping?portal=v2').catch(() => {});
   }, [user]);
+
+  const dismissV1Promo = () => {
+    localStorage.setItem('v1_promo_dismissed', 'true');
+    setShowV1Promo(false);
+  };
 
   return (
     <div style={{ animation: 'fadeInUp 0.6s ease-out' }}>
+      {showV1Promo && (
+        <div style={{
+          backgroundColor: '#0b5fff',
+          color: 'white',
+          padding: '12px 24px',
+          borderRadius: '8px',
+          marginBottom: '24px',
+          textAlign: 'center',
+          position: 'relative'
+        }}>
+          <p style={{ margin: 0, fontSize: '14px', fontWeight: 500 }}>
+            Prefer the classic look? <a href="/" style={{ color: 'white', textDecoration: 'underline', fontWeight: 700, marginLeft: '8px' }}>Return to V1 &rarr;</a>
+          </p>
+          <button onClick={dismissV1Promo} style={{
+            position: 'absolute',
+            right: '12px',
+            top: '50%',
+            transform: 'translateY(-50%)',
+            background: 'none',
+            border: 'none',
+            color: 'white',
+            cursor: 'pointer',
+            fontSize: '18px',
+            padding: '4px'
+          }}>&times;</button>
+        </div>
+      )}
+
       <div style={{ marginBottom: '32px' }}>
         <h1 style={{ fontSize: '32px', fontWeight: 800, letterSpacing: '-1px', marginBottom: '8px' }}>{t('dashboard_overview', 'Dashboard Overview')}</h1>
         <p style={{ color: 'var(--text-muted)', fontSize: '16px' }}>{t('dashboard_desc', 'Manage your active tunnels, domains, and tokens.')}</p>

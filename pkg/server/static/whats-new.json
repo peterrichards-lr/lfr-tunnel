@@ -1,5 +1,14 @@
 [
   {
+    "version": "v1.43.0",
+    "release_date": "2026-07-20",
+    "features": [
+      "Feature: Implement cross-promotional banners for V1 and V2 portals",
+      "Feature: Implement Portal Usage Analytics tracking (V1 vs V2 distribution)",
+      "Fix: Resolve i18n dynamic field translation parity on V2 Login"
+    ]
+  },
+  {
     "version": "v1.42.0",
     "release_date": "2026-07-17",
     "features": [

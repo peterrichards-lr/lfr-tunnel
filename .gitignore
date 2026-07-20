@@ -42,3 +42,4 @@ scripts/release-client-local.sh
 # Liferay Commerce Accelerator
 liferay-ai-commerce-accelerator/*
 !liferay-ai-commerce-accelerator/docker-compose.yml
+.pnpm-store/

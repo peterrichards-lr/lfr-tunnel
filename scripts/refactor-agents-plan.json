@@ -1,0 +1,37 @@
+{
+  "title": "[Epic] Refactor AGENTS.md Routing & Modularize Agent Instructions",
+  "body": "The current `AGENTS.md` file contains monolithic rules that are easily lost in the agent's context due to the cognitive load of execution. We need to refactor `AGENTS.md` into a routing index and modularize distinct policies (e.g., GitHub PR rules, EDR constraints, Documentation rules) into dedicated, contextual files or skills within `.agents/` to improve salience.",
+  "labels": [
+    "enhancement"
+  ],
+  "issues": [
+    {
+      "title": "Refactor AGENTS.md into a central routing index",
+      "body": "Remove monolithic rule blocks from `AGENTS.md` and rewrite it to serve purely as a 'table of contents' or routing pattern that signposts to other `.md` files in the `.agents/` folder.",
+      "completed": false,
+      "labels": [
+        "enhancement"
+      ],
+      "issueNumber": "645"
+    },
+    {
+      "title": "Extract GitHub Issue Sync and PR workflow rules into a dedicated skill",
+      "body": "Move the GitHub issue workflow and PR state management rules (including the mandatory `Closes #<issue>` rule) into a dedicated `.agents/skills/github-workflow/SKILL.md`. This ensures the rules are explicitly loaded when the agent is performing GitHub operations.",
+      "completed": false,
+      "labels": [
+        "enhancement"
+      ],
+      "issueNumber": "646"
+    },
+    {
+      "title": "Extract SentinelOne EDR and Timestamp rules into dedicated modules",
+      "body": "Extract the SentinelOne EDR execution constraints and the Global Documentation Timestamps rules into their own modular `.md` files inside the `.agents/` folder, referenced by the new `AGENTS.md` index.",
+      "completed": false,
+      "labels": [
+        "enhancement"
+      ],
+      "issueNumber": "647"
+    }
+  ],
+  "epicNumber": "644"
+}

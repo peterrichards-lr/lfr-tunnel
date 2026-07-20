@@ -18,9 +18,15 @@ func SignCommand(args []string) {
 
 	macosIdentity := GetEnvOrDefault("LFT_MACOS_IDENTITY", "")
 	signP12 := GetEnvOrDefault("LFT_SIGN_P12", "")
+	signKey := GetEnvOrDefault("LFT_SIGN_KEY", "")
+	signCrt := GetEnvOrDefault("LFT_SIGN_CRT", "")
 	signPass := GetEnvOrDefault("LFT_SIGN_PASS", "")
 	gpgKey := GetEnvOrDefault("LFT_GPG_KEY", "")
 	gpgPass := GetEnvOrDefault("LFT_GPG_PASS", "")
+	if gpgPass == "" {
+		gpgPass = signPass
+	}
+	gpgSecret := GetEnvOrDefault("LFT_GPG_SECRET", "")
 	skipGPG := GetEnvOrDefault("LFT_SKIP_GPG", "")
 
 	// 1. macOS Signing
@@ -37,14 +43,55 @@ func SignCommand(args []string) {
 	}
 
 	// 2. Windows Signing
-	if signP12 != "" && signP12 != "skip" && fileExists(signP12) {
+	if (signP12 != "" && signP12 != "skip") || (signKey != "" && signCrt != "") {
 		fmt.Println("Signing Windows binary...")
 		in := filepath.Join(binDir, "lfr-tunnel-windows-amd64.exe")
 		out := filepath.Join(binDir, "lfr-tunnel-windows-amd64-signed.exe")
 
-		err := RunCommand("osslsigncode", "sign", "-pkcs12", signP12, "-pass", signPass,
-			"-n", "Liferay Tunnel", "-i", "https://github.com/peterrichards-lr/lfr-tunnel",
-			"-in", in, "-out", out)
+		var args []string
+		args = append(args, "sign")
+
+		var tempFiles []string
+		defer func() {
+			for _, f := range tempFiles {
+				os.Remove(f)
+			}
+		}()
+
+		if signP12 != "" && signP12 != "skip" {
+			if !fileExists(signP12) && strings.Contains(signP12, "-----BEGIN") {
+				tmpP12, _ := os.CreateTemp("", "sign-*.p12")
+				tmpP12.WriteString(signP12)
+				tmpP12.Close()
+				signP12 = tmpP12.Name()
+				tempFiles = append(tempFiles, signP12)
+			}
+			args = append(args, "-pkcs12", signP12)
+		} else {
+			if !fileExists(signKey) && strings.Contains(signKey, "-----BEGIN") {
+				tmpKey, _ := os.CreateTemp("", "key-*.pem")
+				tmpKey.WriteString(signKey)
+				tmpKey.Close()
+				signKey = tmpKey.Name()
+				tempFiles = append(tempFiles, signKey)
+			}
+			if !fileExists(signCrt) && strings.Contains(signCrt, "-----BEGIN") {
+				tmpCrt, _ := os.CreateTemp("", "crt-*.pem")
+				tmpCrt.WriteString(signCrt)
+				tmpCrt.Close()
+				signCrt = tmpCrt.Name()
+				tempFiles = append(tempFiles, signCrt)
+			}
+			args = append(args, "-key", signKey, "-certs", signCrt)
+		}
+
+		if signPass != "" {
+			args = append(args, "-pass", signPass)
+		}
+
+		args = append(args, "-n", "Liferay Tunnel", "-i", "https://github.com/peterrichards-lr/lfr-tunnel", "-in", in, "-out", out)
+
+		err := RunCommand("osslsigncode", args...)
 		CheckFatal(err, "Windows binary signing failed")
 
 		err = os.Rename(out, in)
@@ -60,6 +107,29 @@ func SignCommand(args []string) {
 		target := filepath.Join(binDir, "lfr-tunnel-linux-amd64")
 		sigPath := target + ".asc"
 		os.Remove(sigPath)
+
+		if gpgSecret != "" {
+			if !fileExists(gpgSecret) && strings.Contains(gpgSecret, "-----BEGIN") {
+				tmpSec, _ := os.CreateTemp("", "gpg-*.asc")
+				tmpSec.WriteString(gpgSecret)
+				tmpSec.Close()
+				gpgSecret = tmpSec.Name()
+				defer os.Remove(gpgSecret)
+			}
+			
+			// Import the secret key into GPG
+			importArgs := []string{"--batch", "--yes"}
+			if gpgPass != "" {
+				importArgs = append(importArgs, "--pinentry-mode", "loopback", "--passphrase", gpgPass)
+			}
+			importArgs = append(importArgs, "--import", gpgSecret)
+			err := RunCommand("gpg", importArgs...)
+			if err != nil {
+				fmt.Printf("WARNING: Failed to import GPG secret key: %v\n", err)
+			} else {
+				fmt.Println("GPG secret key imported successfully.")
+			}
+		}
 
 		var gpgArgs []string
 		gpgArgs = append(gpgArgs, "--batch", "--yes")
@@ -90,8 +160,11 @@ func SignCommand(args []string) {
 }
 
 func fileExists(filename string) bool {
+	if len(filename) > 255 {
+		return false
+	}
 	info, err := os.Stat(filename)
-	if os.IsNotExist(err) {
+	if err != nil {
 		return false
 	}
 	return !info.IsDir()

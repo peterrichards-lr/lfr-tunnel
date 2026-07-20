@@ -14,8 +14,8 @@ The monolithic rules have been broken down into modular skills so that they can 
 - **SentinelOne & EDR Constraints**: [`.agents/skills/edr-constraints/SKILL.md`](skills/edr-constraints/SKILL.md)
   *Must be loaded when running Go tests or local binaries to prevent SentinelOne from crashing your environment.*
 
-- **Documentation Timestamps**: [`.agents/skills/global-docs/SKILL.md`](skills/global-docs/SKILL.md)
-  *Must be loaded when reviewing, creating, or modifying markdown documentation.*
+- **Documentation Standards & Timestamps**: [`.agents/skills/global-docs/SKILL.md`](skills/global-docs/SKILL.md)
+  *Must be loaded when reviewing, creating, or modifying markdown documentation, and after implementing any feature or code change.*
 
 - **Edge Node Synchronization**: [`.agents/skills/edge-sync/SKILL.md`](skills/edge-sync/SKILL.md)
   *Must be loaded when modifying the control plane's tunnel state to ensure it propagates to edge nodes.*

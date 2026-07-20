@@ -16,6 +16,13 @@ description: Global requirements for Markdown documentation timestamps and revie
 3. You must also establish a `scripts/check_docs_review.py` script that parses this footer using the regex `r"\*Last Updated: ([\d\-]+)\* \| \*Last Reviewed: ([\d\-]+)\*"` and accepts arguments for `--max-review-days`, `--max-update-days`, and `--max-gap-days`. 
 4. The script should alert the user via `sys.exit(1)` if any documents have exceeded these threshold values.
 
+## Documentation Review Requirements (Active Rule)
+5. **Post-Implementation Review**: After implementing any code or feature change, you MUST review the project documentation to see if updates are needed. Note that a single code change may require updates to multiple documents (e.g., `README.md`, `architecture.md`, `spec.md`).
+6. **Timestamp Updates**:
+   - If no changes are needed but you reviewed a document to verify this, you MUST update its `Last Reviewed` date.
+   - If an update is required, you MUST update both the `Last Reviewed` and `Last Updated` dates to reflect the fact the documentation was reviewed and updated.
+7. **New Documentation**: If no documentation exists around the implemented change and it makes sense to document it, you MUST create a new document for it unless it can be logically added as a new section to an existing document.
+
 If you ever ask the AI to "review the project documentation for outdated files", it will automatically know to look for or construct these scripts.
 
 <!-- markdownlint-disable MD049 -->

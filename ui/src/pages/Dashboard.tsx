@@ -16,6 +16,7 @@ export default function Dashboard() {
   const { formatDate } = useSettings();
   const { t } = useI18n();
   const [showV1Promo, setShowV1Promo] = useState(false);
+  const [serverConfig, setServerConfig] = useState<any>(null);
 
   useEffect(() => {
     setTokens(user.tokens || []);
@@ -23,6 +24,7 @@ export default function Dashboard() {
       setShowV1Promo(true);
     }
     axios.get('/api/analytics/ping?portal=v2').catch(() => {});
+    axios.get('/api/version').then(res => setServerConfig(res.data)).catch(() => {});
   }, [user]);
 
   const dismissV1Promo = () => {
@@ -61,11 +63,11 @@ export default function Dashboard() {
       )}
 
       <div style={{ marginBottom: '32px' }}>
-        <h1 style={{ fontSize: '32px', fontWeight: 800, letterSpacing: '-1px', marginBottom: '8px' }}>{t('dashboard_overview', 'Dashboard Overview')}</h1>
+        <h1 id="dashboard-overview" style={{ fontSize: '32px', fontWeight: 800, letterSpacing: '-1px', marginBottom: '8px' }}>{t('dashboard_overview', 'Dashboard Overview')}</h1>
         <p style={{ color: 'var(--text-muted)', fontSize: '16px' }}>{t('dashboard_desc', 'Manage your active tunnels, domains, and tokens.')}</p>
       </div>
 
-      <TunnelsPanel tunnels={user.tunnels || []} />
+      <TunnelsPanel tunnels={user.tunnels || []} serverConfig={serverConfig} user={user} />
       
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(400px, 1fr))', gap: '24px', alignItems: 'start', marginBottom: '24px' }}>
         <ReservationsPanel />
@@ -140,7 +142,7 @@ export default function Dashboard() {
         )}
       </div>
 
-      <ClientInstallationModal isOpen={isInstallModalOpen} onClose={() => setIsInstallModalOpen(false)} />
+      <ClientInstallationModal isOpen={isInstallModalOpen} onClose={() => setIsInstallModalOpen(false)} serverConfig={serverConfig} />
       <OnboardingTour user={user} />
     </div>
   );

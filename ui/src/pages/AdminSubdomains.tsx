@@ -18,6 +18,8 @@ interface TunnelLease {
 export default function AdminSubdomains() {
   const [leases, setLeases] = useState<TunnelLease[]>([]);
   const [loading, setLoading] = useState(true);
+  const [page, setPage] = useState(0);
+  const ROWS_PER_PAGE = 15;
 
   const fetchLeases = async () => {
     try {
@@ -59,7 +61,7 @@ export default function AdminSubdomains() {
   return (
     <div>
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '24px' }}>
-        <h3>Active Global Tunnels</h3>
+        <h3>Active Subdomains</h3>
       </div>
       <div className="card" style={{ padding: '0' }}>
         <div className="table-responsive">
@@ -81,7 +83,7 @@ export default function AdminSubdomains() {
                   <td colSpan={7} style={{ textAlign: 'center', padding: '24px' }}>No active tunnels</td>
                 </tr>
               ) : (
-                leases.map((lease) => (
+                leases.slice(page * ROWS_PER_PAGE, (page + 1) * ROWS_PER_PAGE).map((lease) => (
                   <tr key={lease.subdomain_prefix}>
                     <td style={{ fontWeight: 500 }}>{lease.subdomain_prefix}</td>
                     <td>
@@ -113,6 +115,32 @@ export default function AdminSubdomains() {
               )}
             </tbody>
           </table>
+          
+          {leases.length > ROWS_PER_PAGE && (
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '16px', borderTop: '1px solid var(--border-color)' }}>
+              <div style={{ fontSize: '13px', color: 'var(--text-muted)' }}>
+                Showing {page * ROWS_PER_PAGE + 1} to {Math.min((page + 1) * ROWS_PER_PAGE, leases.length)} of {leases.length}
+              </div>
+              <div style={{ display: 'flex', gap: '8px' }}>
+                <button 
+                  className="btn btn-secondary" 
+                  disabled={page === 0} 
+                  onClick={() => setPage(page - 1)}
+                  style={{ padding: '4px 12px', fontSize: '13px' }}
+                >
+                  Previous
+                </button>
+                <button 
+                  className="btn btn-secondary" 
+                  disabled={(page + 1) * ROWS_PER_PAGE >= leases.length} 
+                  onClick={() => setPage(page + 1)}
+                  style={{ padding: '4px 12px', fontSize: '13px' }}
+                >
+                  Next
+                </button>
+              </div>
+            </div>
+          )}
         </div>
       </div>
     </div>

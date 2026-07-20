@@ -6,7 +6,7 @@ import { useI18n } from '../contexts/I18nContext';
 
 export default function AccountSettings() {
   const { user } = useOutletContext<{ user: any }>();
-  const { theme, toggleTheme } = useSettings();
+  const { theme, toggleTheme, useUTC, toggleUTC } = useSettings();
   const { language, setLanguage, t, availableLanguages } = useI18n();
 
   const [preferredName, setPreferredName] = useState(user?.preferred_name || '');
@@ -137,6 +137,16 @@ export default function AccountSettings() {
                 <option value="light">{t('theme_light', 'Light')}</option>
                 <option value="dark">{t('theme_dark', 'Dark')}</option>
               </select>
+            </div>
+
+            <div style={{ marginBottom: '24px', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+              <label style={{ fontSize: '14px', color: 'var(--text-muted)' }}>
+                {t('utc_time', 'UTC Time')}
+              </label>
+              <label className="switch">
+                <input type="checkbox" checked={useUTC} onChange={toggleUTC} />
+                <span className="slider round"></span>
+              </label>
             </div>
 
             {message && <div className={message.includes('success') ? 'alert alert-success' : 'alert alert-error'}>{message}</div>}

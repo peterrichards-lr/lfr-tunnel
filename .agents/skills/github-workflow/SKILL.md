@@ -25,7 +25,19 @@ Before writing code for any feature or logic change:
    *Note: The script automatically links all sub-issues to the parent Epic.*
 
 ### Tech Debt Tracking
-If you encounter code smells, duplicated logic, or overly complex implementations during your work, you MUST record it by raising a GitHub issue via the `gh` CLI (`gh issue create`). 
+If you encounter any of the 10 catalogued tech debt categories during your work, you MUST record it by raising a GitHub issue via the `gh` CLI (`gh issue create`). 
+The 10 categories are:
+1. Code smells
+2. Duplication
+3. Over-complexity
+4. Fragile coupling
+5. Missing safety guards
+6. Missing tests
+7. Security hygiene
+8. Deprecated patterns
+9. Config drift
+10. Documentation debt
+
 - **Required Label**: You must attach the `tech debt` label to these issues.
 - **Actionability**: You do not need to tackle the technical debt immediately unless it can be resolved without diverting significant effort from your primary task. The ultimate requirement is to ensure it is recorded in the backlog.
 

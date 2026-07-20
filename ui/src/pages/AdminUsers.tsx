@@ -234,13 +234,17 @@ export default function AdminUsers() {
                                 <button className="btn" style={{ padding: '4px 8px', fontSize: '12px' }} onClick={() => changeStatus(u.email, 'approved')}>Unsuspend</button>
                               )}
                               
-                              {u.role === 'admin' ? (
-                                <button className="btn" style={{ padding: '4px 8px', fontSize: '12px' }} onClick={() => changeRole(u.email, 'user')}>Demote</button>
-                              ) : (
-                                <button className="btn" style={{ padding: '4px 8px', fontSize: '12px' }} onClick={() => changeRole(u.email, 'admin')}>Promote</button>
+                              {(currentUser.role === 'owner' || u.role !== 'owner') && (
+                                <>
+                                  {u.role === 'admin' || u.role === 'owner' ? (
+                                    <button className="btn" style={{ padding: '4px 8px', fontSize: '12px' }} onClick={() => changeRole(u.email, 'user')}>Demote</button>
+                                  ) : (
+                                    <button className="btn" style={{ padding: '4px 8px', fontSize: '12px' }} onClick={() => changeRole(u.email, 'admin')}>Promote</button>
+                                  )}
+                                  
+                                  <button className="btn btn-danger" style={{ padding: '4px 8px', fontSize: '12px' }} onClick={() => deleteUser(u.email)}>Delete</button>
+                                </>
                               )}
-                              
-                              <button className="btn btn-danger" style={{ padding: '4px 8px', fontSize: '12px' }} onClick={() => deleteUser(u.email)}>Delete</button>
                             </>
                           )}
                         </div>

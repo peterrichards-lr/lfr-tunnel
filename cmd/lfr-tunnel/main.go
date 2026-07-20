@@ -876,8 +876,10 @@ func probeFastestRegion(regions map[string]string) string {
 			resp, err := client.Get(targetURL + "/api/healthz")
 			if err == nil {
 				_ = resp.Body.Close() //nolint:errcheck
-				rtt := time.Since(start)
-				ch <- probeResult{region: r, url: targetURL, rtt: rtt}
+				if resp.StatusCode == http.StatusOK {
+					rtt := time.Since(start)
+					ch <- probeResult{region: r, url: targetURL, rtt: rtt}
+				}
 			}
 		}(reg, u)
 	}

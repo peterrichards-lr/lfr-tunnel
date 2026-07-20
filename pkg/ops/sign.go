@@ -62,7 +62,7 @@ func SignCommand(args []string) {
 			if !fileExists(signP12) && strings.Contains(signP12, "-----BEGIN") {
 				tmpP12, _ := os.CreateTemp("", "sign-*.p12")
 				if _, err := tmpP12.WriteString(signP12); err != nil {
-					return fmt.Errorf("failed to write tmp p12: %v", err)
+					CheckFatal(err, "failed to write tmp p12")
 				}
 				tmpP12.Close()
 				signP12 = tmpP12.Name()
@@ -73,7 +73,7 @@ func SignCommand(args []string) {
 			if !fileExists(signKey) && strings.Contains(signKey, "-----BEGIN") {
 				tmpKey, _ := os.CreateTemp("", "key-*.pem")
 				if _, err := tmpKey.WriteString(signKey); err != nil {
-					return fmt.Errorf("failed to write tmp key: %v", err)
+					CheckFatal(err, "failed to write tmp key")
 				}
 				tmpKey.Close()
 				signKey = tmpKey.Name()
@@ -82,7 +82,7 @@ func SignCommand(args []string) {
 			if !fileExists(signCrt) && strings.Contains(signCrt, "-----BEGIN") {
 				tmpCrt, _ := os.CreateTemp("", "crt-*.pem")
 				if _, err := tmpCrt.WriteString(signCrt); err != nil {
-					return fmt.Errorf("failed to write tmp crt: %v", err)
+					CheckFatal(err, "failed to write tmp crt")
 				}
 				tmpCrt.Close()
 				signCrt = tmpCrt.Name()
@@ -118,7 +118,7 @@ func SignCommand(args []string) {
 			if !fileExists(gpgSecret) && strings.Contains(gpgSecret, "-----BEGIN") {
 				tmpSec, _ := os.CreateTemp("", "gpg-*.asc")
 				if _, err := tmpSec.WriteString(gpgSecret); err != nil {
-					return fmt.Errorf("failed to write tmp gpg secret: %v", err)
+					CheckFatal(err, "failed to write tmp gpg secret")
 				}
 				tmpSec.Close()
 				gpgSecret = tmpSec.Name()

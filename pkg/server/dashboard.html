@@ -196,6 +196,21 @@
         </div>
         
         <div class="main-content" style="position: relative; padding-top: 60px;">
+            <div id="v2-promo-banner" style="display: none; background-color: #0b5fff; color: white; padding: 12px 24px; border-radius: 8px; margin-bottom: 24px; text-align: center; font-family: 'Inter', sans-serif; position: relative;">
+                <p style="margin: 0; font-size: 14px; font-weight: 500;">
+                    Try out the new V2 Portal experience! <a href="/portalv2/" style="color: white; text-decoration: underline; font-weight: 700; margin-left: 8px;">Switch to V2 &rarr;</a>
+                </p>
+                <button onclick="dismissV2Promo()" style="position: absolute; right: 12px; top: 50%; transform: translateY(-50%); background: none; border: none; color: white; cursor: pointer; font-size: 18px; padding: 4px;">&times;</button>
+            </div>
+            <script>
+                if (!localStorage.getItem('v2_promo_dismissed')) {
+                    document.getElementById('v2-promo-banner').style.display = 'block';
+                }
+                function dismissV2Promo() {
+                    localStorage.setItem('v2_promo_dismissed', 'true');
+                    document.getElementById('v2-promo-banner').style.display = 'none';
+                }
+            </script>
             <button id="sidebar-toggle-btn" class="sidebar-toggle-btn" onclick="toggleSidebar()" aria-label="Toggle Sidebar">
                 <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
                     <rect x="3" y="3" width="18" height="18" rx="2" ry="2"></rect>
@@ -391,7 +406,7 @@
                 <!-- Admin Only Section -->
                 <div id="admin-analytics-section" style="display: none; margin-bottom: 32px;">
                     <h3 style="margin-bottom: 16px;">Global Overview</h3>
-                    <div class="responsive-grid" style="display: grid; grid-template-columns: 2fr 1fr; gap: 24px;">
+                    <div class="responsive-grid" style="display: grid; grid-template-columns: 2fr 1fr 1fr; gap: 24px;">
                         <div class="glass" style="padding: 16px;" title="Shows the total bytes received (Data In) and sent (Data Out) across all tunnels over the last 30 days.">
                             <h4 style="margin-bottom: 12px; color: var(--text-muted); font-size: 14px; font-weight: 500;">Global Bandwidth Over Time</h4>
                             <div style="position: relative; height: 250px; width: 100%;">
@@ -404,7 +419,13 @@
                                 <canvas id="topUsersChart"></canvas>
                             </div>
                         </div>
-                        <div class="glass" style="padding: 16px; grid-column: span 2;">
+                        <div class="glass" style="padding: 16px;" title="Shows the distribution of portal visits between the V1 and V2 portals.">
+                            <h4 style="margin-bottom: 12px; color: var(--text-muted); font-size: 14px; font-weight: 500;">Portal Usage</h4>
+                            <div style="position: relative; height: 250px; width: 100%;">
+                                <canvas id="portalStatsChart"></canvas>
+                            </div>
+                        </div>
+                        <div class="glass" style="padding: 16px; grid-column: span 3;">
                             <h4 style="margin-bottom: 12px; color: var(--text-muted); font-size: 14px; font-weight: 500;">Client Version Distribution</h4>
                             <div class="table-container" style="max-height: 250px; overflow-y: auto;">
                                 <table>

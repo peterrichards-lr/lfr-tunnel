@@ -1,0 +1,19 @@
+{
+  "title": "[Epic] Restore Missing v1 Parity in Portal v2 (Mobile Navigation)",
+  "body": "The new React-based Portal v2 is missing the mobile navigation toggle (hamburger menu) that was present in the v1 dashboard.",
+  "labels": [
+    "enhancement"
+  ],
+  "issues": [
+    {
+      "title": "Restore Mobile Navigation Toggle (Hamburger Menu)",
+      "body": "The v2 `index.css` includes the `@media (max-width: 1024px)` breakpoints to hide the sidebar, but the `Layout.tsx` header is missing the `.sidebar-toggle-btn` to slide the menu open. \n- Add the hamburger menu button to `Layout.tsx`.\n- Implement a state variable `[isSidebarOpen, setIsSidebarOpen]` to toggle the `.open` class on the sidebar.\n- Add a backdrop overlay to close the sidebar when tapping outside.",
+      "completed": false,
+      "labels": [
+        "enhancement"
+      ],
+      "issueNumber": "640"
+    }
+  ],
+  "epicNumber": "639"
+}

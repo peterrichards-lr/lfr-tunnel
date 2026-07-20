@@ -232,6 +232,32 @@ export default function AdminAnalytics() {
                 </div>
               </div>
             )}
+
+            {data.global.portal_stats && data.global.portal_stats.length > 0 && (
+              <div className="card" style={{ padding: '24px' }}>
+                <h4 style={{ marginBottom: '16px', color: 'var(--text-muted)', fontSize: '14px' }}>Portal Usage</h4>
+                <div style={{ height: '300px' }}>
+                  <Doughnut 
+                    data={{
+                      labels: data.global.portal_stats.map((s: any) => s.version.toUpperCase()),
+                      datasets: [{
+                        data: data.global.portal_stats.map((s: any) => s.count),
+                        backgroundColor: ['#0b5fff', '#10b981', '#f59e0b', '#8b5cf6'],
+                        borderWidth: 0
+                      }]
+                    }} 
+                    options={{
+                      responsive: true,
+                      maintainAspectRatio: false,
+                      plugins: {
+                        legend: { position: 'bottom', labels: { color: 'var(--text-color)' } }
+                      },
+                      cutout: '70%'
+                    }} 
+                  />
+                </div>
+              </div>
+            )}
           </div>
 
           <div className="card" style={{ overflow: 'hidden' }}>

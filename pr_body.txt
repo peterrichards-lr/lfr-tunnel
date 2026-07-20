@@ -1,0 +1,9 @@
+Closes #634
+
+### Description
+This PR integrates automated Playwright UI E2E tests to prevent regressions in the client inspector and cloud dashboard portals.
+
+### Key Changes
+* **Playwright Infrastructure**: Integrated `scripts/run-e2e-ui.sh` unifying docker-compose environment setup with UI test execution. Added `make e2e-ui`.
+* **JS Bug Fixes**: Patched multiple latent JavaScript runtime errors (`matchMedia` unsupported headless exceptions, `addEventListener` null-dereferences) uncovered by the UI test assertions on merged templates.
+* **CI/CD Integration**: Linked `make e2e-ui` into `.github/workflows/ci.yml` and configured automatic `actions/upload-artifact` for `playwright-report/` and `test-results/` extraction upon job failure.

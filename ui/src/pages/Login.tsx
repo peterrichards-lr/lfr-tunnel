@@ -140,6 +140,24 @@ export default function Login() {
         pointerEvents: 'none'
       }} />
 
+      {/* V1 Promo Banner */}
+      <div style={{
+        zIndex: 10,
+        backgroundColor: '#0b5fff',
+        color: 'white',
+        padding: '12px 24px',
+        borderRadius: '8px',
+        marginBottom: '24px',
+        maxWidth: '400px',
+        width: '100%',
+        textAlign: 'center',
+        boxSizing: 'border-box'
+      }}>
+        <p style={{ margin: 0, fontSize: '14px', fontWeight: 500 }}>
+          Prefer the classic look? <a href="/" style={{ color: 'white', textDecoration: 'underline', fontWeight: 700, marginLeft: '8px' }}>Return to V1 &rarr;</a>
+        </p>
+      </div>
+
       <div className="login-card" style={{ zIndex: 10 }}>
         <div style={{ display: 'flex', justifyContent: 'center', marginBottom: '24px' }}>
           <img src="/static/logo.svg" alt="Liferay Tunnel" width="56" height="56" style={{ filter: 'drop-shadow(0 4px 12px rgba(0,0,0,0.5))' }} />

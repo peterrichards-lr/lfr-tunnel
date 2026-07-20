@@ -96,7 +96,34 @@ func (repo *SQLiteMetricRepo) GetGlobalAnalytics(days int) (*GlobalAnalytics, er
 		top = append(top, ub)
 	}
 
-	return &GlobalAnalytics{Daily: daily, TopUsers: top}, nil
+	portalQuery := `
+		SELECT details, COUNT(*)
+		FROM audit_logs
+		WHERE action = 'portal.visit' AND timestamp >= ?
+		GROUP BY details
+	`
+	portalRows, err := repo.conn.Query(portalQuery, timeLimit)
+	if err != nil {
+		return nil, err
+	}
+	defer func() { _ = portalRows.Close() }()
+
+	portalStats := make([]PortalUsageStats, 0)
+	for portalRows.Next() {
+		var ps PortalUsageStats
+		var detailsNull sql.NullString
+		if err := portalRows.Scan(&detailsNull, &ps.Count); err != nil {
+			return nil, err
+		}
+		if detailsNull.Valid {
+			ps.Version = detailsNull.String
+		} else {
+			ps.Version = "Unknown"
+		}
+		portalStats = append(portalStats, ps)
+	}
+
+	return &GlobalAnalytics{Daily: daily, TopUsers: top, PortalStats: portalStats}, nil
 }
 
 // GetUserAnalytics retrieves bandwidth stats for a specific user for the last N days.

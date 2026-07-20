@@ -1,0 +1,28 @@
+{
+  "title": "[Epic] Restore Missing v1 Parity in Portal v2 (Account & i18n)",
+  "body": "The new React-based Portal v2 is missing a few key features that were present in the v1 dashboard, specifically the Account Settings tab, and the Internationalization (i18n) engine.",
+  "labels": [
+    "enhancement"
+  ],
+  "issues": [
+    {
+      "title": "Implement Account Settings Component & GDPR Self-Deletion",
+      "body": "Recreate the v1 Account Settings panel in `AccountSettings.tsx`. Add it to the sidebar navigation. Features required:\n- Form to update First Name, Last Name, Preferred Name, and Notification Preferences via `PUT /api/me`.\n- Danger Zone: GDPR Self-Deletion (hidden if the user is a `owner`). Requires an email confirmation modal before calling `DELETE /api/me`.\n- Include settings for Theme and Language.",
+      "completed": false,
+      "labels": [
+        "enhancement"
+      ],
+      "issueNumber": "637"
+    },
+    {
+      "title": "Implement Portal i18n Engine & Language Selector",
+      "body": "Recreate the v1 multi-language support in the React UI.\n- Create a generic i18n context/provider that fetches dictionary strings from `/api/i18n?lang=...`.\n- Provide a `useTranslation` hook or `formatMessage()` utility to replace hardcoded strings.\n- Implement a language dropdown selector (flag + language name) on the `Login.tsx` screen and in the `AccountSettings.tsx` form.\n- Save language preference to LocalStorage and update via `PUT /api/me` if authenticated.",
+      "completed": false,
+      "labels": [
+        "enhancement"
+      ],
+      "issueNumber": "638"
+    }
+  ],
+  "epicNumber": "636"
+}

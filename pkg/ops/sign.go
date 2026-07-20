@@ -61,7 +61,9 @@ func SignCommand(args []string) {
 		if signP12 != "" && signP12 != "skip" {
 			if !fileExists(signP12) && strings.Contains(signP12, "-----BEGIN") {
 				tmpP12, _ := os.CreateTemp("", "sign-*.p12")
-				tmpP12.WriteString(signP12)
+				if _, err := tmpP12.WriteString(signP12); err != nil {
+					return fmt.Errorf("failed to write tmp p12: %v", err)
+				}
 				tmpP12.Close()
 				signP12 = tmpP12.Name()
 				tempFiles = append(tempFiles, signP12)
@@ -70,14 +72,18 @@ func SignCommand(args []string) {
 		} else {
 			if !fileExists(signKey) && strings.Contains(signKey, "-----BEGIN") {
 				tmpKey, _ := os.CreateTemp("", "key-*.pem")
-				tmpKey.WriteString(signKey)
+				if _, err := tmpKey.WriteString(signKey); err != nil {
+					return fmt.Errorf("failed to write tmp key: %v", err)
+				}
 				tmpKey.Close()
 				signKey = tmpKey.Name()
 				tempFiles = append(tempFiles, signKey)
 			}
 			if !fileExists(signCrt) && strings.Contains(signCrt, "-----BEGIN") {
 				tmpCrt, _ := os.CreateTemp("", "crt-*.pem")
-				tmpCrt.WriteString(signCrt)
+				if _, err := tmpCrt.WriteString(signCrt); err != nil {
+					return fmt.Errorf("failed to write tmp crt: %v", err)
+				}
 				tmpCrt.Close()
 				signCrt = tmpCrt.Name()
 				tempFiles = append(tempFiles, signCrt)
@@ -111,7 +117,9 @@ func SignCommand(args []string) {
 		if gpgSecret != "" {
 			if !fileExists(gpgSecret) && strings.Contains(gpgSecret, "-----BEGIN") {
 				tmpSec, _ := os.CreateTemp("", "gpg-*.asc")
-				tmpSec.WriteString(gpgSecret)
+				if _, err := tmpSec.WriteString(gpgSecret); err != nil {
+					return fmt.Errorf("failed to write tmp gpg secret: %v", err)
+				}
 				tmpSec.Close()
 				gpgSecret = tmpSec.Name()
 				defer os.Remove(gpgSecret)

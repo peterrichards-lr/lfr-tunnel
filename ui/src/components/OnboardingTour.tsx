@@ -34,19 +34,19 @@ export default function OnboardingTour({ user }: { user: any }) {
             }
           },
           {
-            element: '.content-header',
+            element: '#dashboard-overview',
             popover: {
-              title: t('tour_header_title', 'Global Status'),
-              description: t('tour_header_desc', 'Check the global system uptime and overall network health status at a glance.'),
+              title: t('tour_header_title', 'Dashboard Overview'),
+              description: t('tour_header_desc', 'This is your central control panel where you can manage your tunnels and domains.'),
               side: 'bottom',
-              align: 'end'
+              align: 'start'
             }
           },
           {
-            element: '#dashboard-screen',
+            element: '#tour-tunnels-panel',
             popover: {
-              title: t('tour_end_title', 'Onboarding Complete!'),
-              description: t('tour_end_desc', 'You are all set. Go ahead and start using Liferay Tunnel!'),
+              title: t('tour_end_title', 'Active Tunnels'),
+              description: t('tour_end_desc', 'See a real-time list of all your active CLI connections here. You are all set!'),
               side: 'top',
               align: 'center'
             }

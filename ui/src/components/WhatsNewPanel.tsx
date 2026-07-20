@@ -74,7 +74,7 @@ export default function WhatsNewPanel() {
                   </li>
                 ))
               ) : (
-                <li>No changes documented.</li>
+                <li>{t('no_changes_documented', 'No changes documented.')}</li>
               )}
             </ul>
           </div>

@@ -373,7 +373,13 @@ func (s *Server) handleGetAnalytics(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	daysStr := r.URL.Query().Get("days")
 	days := 30
+	if daysStr != "" {
+		if parsed, err := strconv.Atoi(daysStr); err == nil && parsed >= 0 {
+			days = parsed
+		}
+	}
 	isAdmin := user.Role == "admin" || user.Role == "owner"
 
 	slog.Info(fmt.Sprintf("handleGetAnalytics: user=%s, role=%s, isAdmin=%v", user.Email, user.Role, isAdmin))

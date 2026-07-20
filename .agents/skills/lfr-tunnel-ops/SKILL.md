@@ -60,8 +60,9 @@ To automate the release lifecycle (bumping the version in `whats-new.json`, crea
 Before deploying client binaries or making releases, they must be signed.
 - **Run Signing Script**:
   ```bash
-  go run ./cmd/lfr-tunnel-ops sign
+  op run -- go run ./cmd/lfr-tunnel-ops sign
   ```
+  *(**CRITICAL**: You MUST use `op run --` so that 1Password prompts the user to extract the keys needed for Windows and Linux signing)*
   - **Environment Variables** (used to bypass interactive prompts):
     - `LFT_MACOS_IDENTITY`: macOS codesigning identity (e.g. from `security find-identity`).
     - `LFT_SIGN_P12` / `LFT_SIGN_KEY` / `LFT_SIGN_CRT`: Credentials for Windows code signing (can refer to 1Password reference `op://...` or local path).

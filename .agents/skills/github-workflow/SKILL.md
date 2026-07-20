@@ -32,6 +32,16 @@ Before writing code for any feature or logic change:
    ```
    *The utility will automatically detect the completed state, post a reference comment with the current git commit hash, and forcefully close the issue on GitHub.*
 
+## 4. Pre-Commit / Pre-PR Checks
+Before pushing commits and opening a PR, you MUST ensure that your changes will not fail the automated CI pipeline:
+- **Go Formatting**: You MUST run `gofmt -w .` to format all modified Go files. Failure to format will result in a CI Lint & Format check failure.
+- **UI Builds**: If you modify any React UI source files (under `ui/`), you MUST build the UI and commit the resulting `pkg/server/ui-dist` folder to keep it in sync. 
+  - To safely build the UI without interactive prompts, ensure you are running Node v22 or higher, set `CI=true`, and run: 
+    ```bash
+    cd ui && CI=true pnpm install && pnpm run build && cd .. && rm -rf pkg/server/ui-dist && cp -r ui/dist pkg/server/ui-dist
+    ```
+  - The CI workflow includes a synchronization check that explicitly verifies `pkg/server/ui-dist` matches the `ui/` source code. If they do not match, the CI will intentionally fail.
+
 <!-- markdownlint-disable MD049 -->
 ---
-*Last Updated: 2026-07-19* | *Last Reviewed: 2026-07-19*
+*Last Updated: 2026-07-20* | *Last Reviewed: 2026-07-20*

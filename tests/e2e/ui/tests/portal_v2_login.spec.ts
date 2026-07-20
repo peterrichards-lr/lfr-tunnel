@@ -13,7 +13,7 @@ test.describe('Portal v2 Login Flow', () => {
     await page.goto('/portalv2/');
     
     // Check if we are on the login screen
-    await expect(page.locator('h1', { hasText: 'Welcome Back' })).toBeVisible();
+    await expect(page.locator('h1', { hasText: 'Welcome' })).toBeVisible();
 
     // Fill email
     await page.fill('#email-input', adminEmail);

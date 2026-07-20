@@ -22,6 +22,7 @@ The monolithic rules have been broken down into modular skills so that they can 
 
 ## Active Runtime Constraints (CRITICAL)
 
+- **No Assumptions (Anti-Hallucination Rule)**: Any technical statement, explanation, or conclusion you make MUST be strictly based on actual, referenceable code or documentation in this repository. You are expressly forbidden from making blind assumptions about how systems (like edge nodes or routing logic) behave without verifying them via search, reading the code, or consulting `AGENTS.md`/`GEMINI.md`. When the resources are available to you, use them before you speak.
 - **EDR Whitelist Restrictions**: Do NOT run the `lfr-tunnel` or `lfr-tunneld` binaries outside the whitelisted directory (`/private/tmp/lfr-tunnel`). Doing so will trigger SentinelOne (S1), which will forcefully kill the process, Homebrew, and the Antigravity agent itself. Rely on automated GitHub workflows or explicit whitelist paths for testing.
 - **Tech Debt Tracking**: If you encounter any of the 10 catalogued tech debt categories during your work, you MUST record it by raising a GitHub issue with the `tech debt` label via the `gh` CLI. The 10 categories are:
   1. Code smells

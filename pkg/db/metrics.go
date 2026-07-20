@@ -98,8 +98,8 @@ func (repo *SQLiteMetricRepo) GetGlobalAnalytics(days int) (*GlobalAnalytics, er
 
 	portalQuery := `
 		SELECT details, COUNT(*)
-		FROM audit_logs
-		WHERE action = 'portal.visit' AND timestamp >= ?
+		FROM admin_audit_log
+		WHERE action = 'portal.visit' AND created_at >= ?
 		GROUP BY details
 	`
 	portalRows, err := repo.conn.Query(portalQuery, timeLimit)

@@ -22,7 +22,7 @@ jobs:
             echo "❌ Error: pkg/server/static/whats-new.json not found!"
             exit 1
           fi
-          JSON_VER=$(jq -r '.version' pkg/server/static/whats-new.json)
+          JSON_VER=$(jq -r '.[0].version' pkg/server/static/whats-new.json)
           TAG_VER="${{ github.ref_name }}"
           JSON_VER_CLEAN="${JSON_VER#v}"
           TAG_VER_CLEAN="${TAG_VER#v}"

@@ -884,16 +884,28 @@ func probeFastestRegion(regions map[string]string) string {
 		}(reg, u)
 	}
 
-	go func() {
-		wg.Wait()
-		close(ch)
-	}()
+	wg.Wait()
+	close(ch)
 
-	first, ok := <-ch
-	if ok {
-		return first.region
+	var results []probeResult
+	for res := range ch {
+		results = append(results, res)
 	}
-	return ""
+
+	if len(results) == 0 {
+		return ""
+	}
+
+	best := results[0]
+	fmt.Println("[Client] Region latency probe results:")
+	for _, r := range results {
+		fmt.Printf("  - %s: %v\n", r.region, r.rtt)
+		if r.rtt < best.rtt {
+			best = r
+		}
+	}
+
+	return best.region
 }
 
 func rewriteRemotes(regResp *client.RegisterResponse, portMap map[int]int) {

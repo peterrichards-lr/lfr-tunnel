@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import axios from 'axios';
 import { useSettings } from '../contexts/SettingsContext';
+import { useTableSort } from '../hooks/useTableSort';
 
 interface ExtRequest {
   id: string;
@@ -41,26 +42,40 @@ export default function AdminExtensions() {
     }
   };
 
+  const { items: sortedRequests, requestSort, getSortIndicator, searchQuery, setSearchQuery } = useTableSort(requests, ['email', 'subdomain', 'status']);
   if (loading) return <div>Loading...</div>;
+
+
 
   return (
     <div className="card" style={{ animation: 'fadeInUp 0.6s ease-out' }}>
       <h3 style={{ marginTop: 0, marginBottom: '24px', fontSize: '20px', fontWeight: 700 }}>Extension Requests</h3>
+      {requests.length > 0 && (
+        <div style={{ marginBottom: '16px' }}>
+          <input 
+            type="text" 
+            placeholder="Search extensions..." 
+            value={searchQuery} 
+            onChange={e => setSearchQuery(e.target.value)}
+            style={{ padding: '8px 12px', width: '100%', maxWidth: '300px', background: 'var(--input-bg)', color: 'var(--text-main)', border: '1px solid var(--border)', borderRadius: '6px' }}
+          />
+        </div>
+      )}
       
       <div className="table-responsive">
         <table style={{ width: '100%', borderCollapse: 'collapse' }}>
           <thead>
             <tr style={{ borderBottom: '1px solid var(--border)', textAlign: 'left' }}>
-              <th style={{ padding: '12px 16px', color: 'var(--text-muted)' }}>Email</th>
-              <th style={{ padding: '12px 16px', color: 'var(--text-muted)' }}>Subdomain</th>
+              <th style={{ padding: '12px 16px', color: 'var(--text-muted)', cursor: 'pointer' }} onClick={() => requestSort('email')}>Email{getSortIndicator('email')}</th>
+              <th style={{ padding: '12px 16px', color: 'var(--text-muted)', cursor: 'pointer' }} onClick={() => requestSort('subdomain')}>Subdomain{getSortIndicator('subdomain')}</th>
               <th style={{ padding: '12px 16px', color: 'var(--text-muted)' }}>Port</th>
               <th style={{ padding: '12px 16px', color: 'var(--text-muted)' }}>Expires</th>
-              <th style={{ padding: '12px 16px', color: 'var(--text-muted)' }}>Status</th>
+              <th style={{ padding: '12px 16px', color: 'var(--text-muted)', cursor: 'pointer' }} onClick={() => requestSort('status')}>Status{getSortIndicator('status')}</th>
               <th style={{ padding: '12px 16px', color: 'var(--text-muted)', textAlign: 'right' }}>Actions</th>
             </tr>
           </thead>
           <tbody>
-            {requests.map((req) => (
+            {sortedRequests.map((req) => (
               <tr key={req.id} style={{ borderBottom: '1px solid rgba(255,255,255,0.05)' }}>
                 <td style={{ padding: '16px' }}>{req.email}</td>
                 <td style={{ padding: '16px' }}>{req.subdomain}</td>

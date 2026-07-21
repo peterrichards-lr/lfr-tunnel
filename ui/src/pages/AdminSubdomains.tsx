@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
 import axios from 'axios';
+import { useTableSort } from '../hooks/useTableSort';
 
 interface TunnelLease {
   user_id: string;
@@ -56,24 +57,35 @@ export default function AdminSubdomains() {
     }
   };
 
+  const { items: sortedLeases, requestSort, getSortIndicator, searchQuery, setSearchQuery } = useTableSort(leases, ['subdomain_prefix', 'full_host', 'node_id', 'client_ip']);
   if (loading) return <div>Loading subdomains...</div>;
+
 
   return (
     <div>
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '24px' }}>
         <h3>Active Subdomains</h3>
       </div>
+      <div style={{ marginBottom: '16px' }}>
+        <input 
+          type="text" 
+          placeholder="Search subdomains..." 
+          value={searchQuery} 
+          onChange={e => { setSearchQuery(e.target.value); setPage(0); }}
+          style={{ padding: '8px 12px', width: '100%', maxWidth: '300px', background: 'var(--input-bg)', color: 'var(--text-main)', border: '1px solid var(--border)', borderRadius: '6px' }}
+        />
+      </div>
       <div className="card" style={{ padding: '0' }}>
         <div className="table-responsive">
           <table>
             <thead>
               <tr>
-                <th>Subdomain</th>
-                <th>Target Host</th>
-                <th>Node</th>
-                <th>Client IP</th>
-                <th>Bytes In</th>
-                <th>Bytes Out</th>
+                <th style={{ cursor: 'pointer' }} onClick={() => requestSort('subdomain_prefix')}>Subdomain{getSortIndicator('subdomain_prefix')}</th>
+                <th style={{ cursor: 'pointer' }} onClick={() => requestSort('full_host')}>Target Host{getSortIndicator('full_host')}</th>
+                <th style={{ cursor: 'pointer' }} onClick={() => requestSort('node_id')}>Node{getSortIndicator('node_id')}</th>
+                <th style={{ cursor: 'pointer' }} onClick={() => requestSort('client_ip')}>Client IP{getSortIndicator('client_ip')}</th>
+                <th style={{ cursor: 'pointer' }} onClick={() => requestSort('bytes_in')}>Bytes In{getSortIndicator('bytes_in')}</th>
+                <th style={{ cursor: 'pointer' }} onClick={() => requestSort('bytes_out')}>Bytes Out{getSortIndicator('bytes_out')}</th>
                 <th>Actions</th>
               </tr>
             </thead>
@@ -83,7 +95,7 @@ export default function AdminSubdomains() {
                   <td colSpan={7} style={{ textAlign: 'center', padding: '24px' }}>No active tunnels</td>
                 </tr>
               ) : (
-                leases.slice(page * ROWS_PER_PAGE, (page + 1) * ROWS_PER_PAGE).map((lease) => (
+                sortedLeases.slice(page * ROWS_PER_PAGE, (page + 1) * ROWS_PER_PAGE).map((lease) => (
                   <tr key={lease.subdomain_prefix}>
                     <td style={{ fontWeight: 500 }}>{lease.subdomain_prefix}</td>
                     <td>
@@ -116,12 +128,20 @@ export default function AdminSubdomains() {
             </tbody>
           </table>
           
-          {leases.length > ROWS_PER_PAGE && (
+          {sortedLeases.length > 0 && (
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '16px', borderTop: '1px solid var(--border-color)' }}>
               <div style={{ fontSize: '13px', color: 'var(--text-muted)' }}>
-                Showing {page * ROWS_PER_PAGE + 1} to {Math.min((page + 1) * ROWS_PER_PAGE, leases.length)} of {leases.length}
+                Showing {page * ROWS_PER_PAGE + 1} to {Math.min((page + 1) * ROWS_PER_PAGE, sortedLeases.length)} of {sortedLeases.length}
               </div>
               <div style={{ display: 'flex', gap: '8px' }}>
+                <button 
+                  className="btn btn-secondary" 
+                  onClick={() => setPage(0)}
+                  disabled={page === 0}
+                  style={{ padding: '4px 12px', fontSize: '13px' }}
+                >
+                  First
+                </button>
                 <button 
                   className="btn btn-secondary" 
                   disabled={page === 0} 
@@ -130,13 +150,22 @@ export default function AdminSubdomains() {
                 >
                   Previous
                 </button>
+                <span style={{ padding: '4px 8px', fontSize: '14px' }}>Page {page + 1} of {Math.ceil(sortedLeases.length / ROWS_PER_PAGE)}</span>
                 <button 
                   className="btn btn-secondary" 
-                  disabled={(page + 1) * ROWS_PER_PAGE >= leases.length} 
+                  disabled={(page + 1) * ROWS_PER_PAGE >= sortedLeases.length} 
                   onClick={() => setPage(page + 1)}
                   style={{ padding: '4px 12px', fontSize: '13px' }}
                 >
                   Next
+                </button>
+                <button 
+                  className="btn btn-secondary" 
+                  onClick={() => setPage(Math.max(0, Math.ceil(sortedLeases.length / ROWS_PER_PAGE) - 1))}
+                  disabled={(page + 1) * ROWS_PER_PAGE >= sortedLeases.length}
+                  style={{ padding: '4px 12px', fontSize: '13px' }}
+                >
+                  Last
                 </button>
               </div>
             </div>

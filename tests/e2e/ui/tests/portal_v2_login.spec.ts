@@ -33,6 +33,6 @@ test.describe('Portal v2 Login Flow', () => {
     
     // It should verify the token and redirect to /portalv2/dashboard
     await page.waitForURL('**/portalv2/dashboard');
-    await expect(page.locator('h2', { hasText: 'Dashboard' })).toBeVisible();
+    await expect(page.locator('h1', { hasText: 'Dashboard Overview' })).toBeVisible();
   });
 });

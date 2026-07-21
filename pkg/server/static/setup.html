@@ -22,12 +22,25 @@
     </style>
 </head>
 <body>
-    <div class="container" style="flex-direction: column;">
-        <div style="background-color: #0b5fff; color: white; padding: 12px 24px; border-radius: 8px; margin-bottom: 24px; max-width: 400px; width: 100%; text-align: center; box-sizing: border-box; font-family: 'Inter', sans-serif;">
-            <p style="margin: 0; font-size: 14px; font-weight: 500;">
-                Try out the new V2 Portal experience! <a href="/portalv2/" style="color: white; text-decoration: underline; font-weight: 700; margin-left: 8px;">Switch to V2 &rarr;</a>
-            </p>
-        </div>
+    <div id="v2-promo-banner" style="background-color: #0b5fff; color: white; padding: 12px 24px; text-align: center; position: fixed; top: 0; left: 0; width: 100%; z-index: 9999; box-sizing: border-box; box-shadow: 0 4px 12px rgba(0,0,0,0.15); font-family: 'Inter', sans-serif;">
+        <p style="margin: 0; font-size: 14px; font-weight: 500;">
+            Try out the new V2 Portal experience! <a href="/portalv2/" style="color: white; text-decoration: underline; font-weight: 700; margin-left: 8px;">Switch to V2 &rarr;</a>
+        </p>
+        <button onclick="dismissV2Promo()" style="position: absolute; right: 24px; top: 50%; transform: translateY(-50%); background: none; border: none; color: white; cursor: pointer; font-size: 18px; padding: 4px; line-height: 1;">&times;</button>
+    </div>
+    
+    <script>
+        function dismissV2Promo() {
+            localStorage.setItem('v2_promo_dismissed', 'true');
+            document.getElementById('v2-promo-banner').style.display = 'none';
+        }
+        if (localStorage.getItem('v2_promo_dismissed') === 'true') {
+            document.getElementById('v2-promo-banner').style.display = 'none';
+        }
+    </script>
+
+    <div class="container" style="flex-direction: column; margin-top: 60px;">
+
         <div class="glass" style="max-width: 400px; width: 100%; padding: 40px; border-radius: 16px; box-shadow: 0 10px 25px rgba(0,0,0,0.2);">
             <h2 style="text-align: center; margin-bottom: 24px;" data-i18n="setup_title">Complete Your Profile</h2>
             <form id="setup-form">

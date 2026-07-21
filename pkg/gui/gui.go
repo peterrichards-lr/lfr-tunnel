@@ -401,12 +401,13 @@ func updateMenu(tray *systray.SystemTray, cfg *config.ClientConfig, isRunning bo
 	menu.AddSeparator()
 
 	menu.Add("Quit", func() {
-		tray.Remove()
-		tempServer.Stop()
-		if lockPath != "" {
-			_ = os.Remove(lockPath) //nolint:errcheck
-		}
-		os.Exit(0)
+		go func() {
+			tempServer.Stop()
+			if lockPath != "" {
+				_ = os.Remove(lockPath) //nolint:errcheck
+			}
+			os.Exit(0)
+		}()
 	})
 
 	tray.SetMenu(menu)

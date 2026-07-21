@@ -171,9 +171,10 @@ type PortalUsageStats struct {
 }
 
 type GlobalAnalytics struct {
-	Daily       []DailyBandwidth   `json:"daily"`
-	TopUsers    []UserBandwidth    `json:"top_users"`
-	PortalStats []PortalUsageStats `json:"portal_stats"`
+	Daily            []DailyBandwidth   `json:"daily"`
+	TopUsers         []UserBandwidth    `json:"top_users"`
+	PortalStats      []PortalUsageStats `json:"portal_stats"`
+	NodeDistribution map[string]int     `json:"node_distribution"`
 }
 
 type UserAnalytics struct {

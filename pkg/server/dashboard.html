@@ -196,11 +196,11 @@
         </div>
         
         <div class="main-content" style="position: relative; padding-top: 60px;">
-            <div id="v2-promo-banner" style="display: none; background-color: #0b5fff; color: white; padding: 12px 24px; border-radius: 8px; margin-bottom: 24px; text-align: center; font-family: 'Inter', sans-serif; position: relative;">
+            <div id="v2-promo-banner" style="display: none; background-color: #0b5fff; color: white; padding: 12px 24px; text-align: center; font-family: 'Inter', sans-serif; position: fixed; top: 0; left: 0; width: 100%; z-index: 9999; box-sizing: border-box; box-shadow: 0 4px 12px rgba(0,0,0,0.15);">
                 <p style="margin: 0; font-size: 14px; font-weight: 500;">
                     Try out the new V2 Portal experience! <a href="/portalv2/" style="color: white; text-decoration: underline; font-weight: 700; margin-left: 8px;">Switch to V2 &rarr;</a>
                 </p>
-                <button onclick="dismissV2Promo()" style="position: absolute; right: 12px; top: 50%; transform: translateY(-50%); background: none; border: none; color: white; cursor: pointer; font-size: 18px; padding: 4px;">&times;</button>
+                <button onclick="dismissV2Promo()" style="position: absolute; right: 24px; top: 50%; transform: translateY(-50%); background: none; border: none; color: white; cursor: pointer; font-size: 18px; padding: 4px; line-height: 1;">&times;</button>
             </div>
             <script>
                 if (!localStorage.getItem('v2_promo_dismissed')) {

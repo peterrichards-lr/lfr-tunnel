@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import axios from 'axios';
 import { useOutletContext } from 'react-router-dom';
+import { useTableSort } from '../hooks/useTableSort';
 import TunnelsPanel from '../components/TunnelsPanel';
 import ReservationsPanel from '../components/ReservationsPanel';
 import WhatsNewPanel from '../components/WhatsNewPanel';
@@ -13,54 +14,19 @@ export default function Dashboard() {
   const { user } = useOutletContext<{ user: any }>();
   const [tokens, setTokens] = useState<any[]>([]);
   const [isInstallModalOpen, setIsInstallModalOpen] = useState(false);
-  const [serverConfig, setServerConfig] = useState<any>(null);
+  const [serverConfig, setServerConfig] = useState<any>(null); // Kept for modal if needed, though not fetched here currently
   const { formatDate } = useSettings();
   const { t } = useI18n();
-  const [showV1Promo, setShowV1Promo] = useState(false);
+  const { items: sortedTokens, requestSort, getSortIndicator, searchQuery, setSearchQuery } = useTableSort(tokens, ['token', 'status']);
 
   useEffect(() => {
     setTokens(user.tokens || []);
-    if (!localStorage.getItem('v1_promo_dismissed')) {
-      setShowV1Promo(true);
-    }
     axios.get('/api/analytics/ping?portal=v2').catch(() => {});
     axios.get('/api/version').then(res => setServerConfig(res.data)).catch(() => {});
   }, [user]);
 
-  const dismissV1Promo = () => {
-    localStorage.setItem('v1_promo_dismissed', 'true');
-    setShowV1Promo(false);
-  };
-
   return (
     <div style={{ animation: 'fadeInUp 0.6s ease-out' }}>
-      {showV1Promo && (
-        <div style={{
-          backgroundColor: '#0b5fff',
-          color: 'white',
-          padding: '12px 24px',
-          borderRadius: '8px',
-          marginBottom: '24px',
-          textAlign: 'center',
-          position: 'relative'
-        }}>
-          <p style={{ margin: 0, fontSize: '14px', fontWeight: 500 }}>
-            Prefer the classic look? <a href="/" style={{ color: 'white', textDecoration: 'underline', fontWeight: 700, marginLeft: '8px' }}>Return to V1 &rarr;</a>
-          </p>
-          <button onClick={dismissV1Promo} style={{
-            position: 'absolute',
-            right: '12px',
-            top: '50%',
-            transform: 'translateY(-50%)',
-            background: 'none',
-            border: 'none',
-            color: 'white',
-            cursor: 'pointer',
-            fontSize: '18px',
-            padding: '4px'
-          }}>&times;</button>
-        </div>
-      )}
 
       <div style={{ marginBottom: '32px' }}>
         <h1 id="dashboard-overview" style={{ fontSize: '32px', fontWeight: 800, letterSpacing: '-1px', marginBottom: '8px' }}>{t('dashboard_overview', 'Dashboard Overview')}</h1>
@@ -82,6 +48,18 @@ export default function Dashboard() {
               <button className="btn btn-outline" style={{ fontSize: '14px', padding: '8px 16px' }}>{t('generate_token', 'Generate Token')}</button>
             </div>
             
+            {tokens.length > 0 && (
+              <div style={{ marginBottom: '16px' }}>
+                <input 
+                  type="text" 
+                  placeholder="Search tokens..." 
+                  value={searchQuery} 
+                  onChange={e => setSearchQuery(e.target.value)}
+                  style={{ padding: '8px 12px', width: '100%', maxWidth: '300px', background: 'var(--input-bg)', color: 'var(--text-main)', border: '1px solid var(--border)', borderRadius: '6px' }}
+                />
+              </div>
+            )}
+            
             {tokens.length === 0 ? (
               <div style={{ textAlign: 'center', padding: '40px 20px', background: 'rgba(0,0,0,0.1)', border: '1px dashed var(--border)', borderRadius: '12px' }}>
                 <div style={{ color: 'var(--text-muted)', fontSize: '15px' }}>{t('no_active_tokens', 'No active tokens found. Create one to authenticate your CLI.')}</div>
@@ -91,14 +69,14 @@ export default function Dashboard() {
                 <table style={{ width: '100%', borderCollapse: 'collapse' }}>
                   <thead>
                     <tr style={{ borderBottom: '1px solid var(--border)', textAlign: 'left' }}>
-                      <th style={{ padding: '12px 16px', color: 'var(--text-muted)', fontWeight: 600, fontSize: '13px', textTransform: 'uppercase', letterSpacing: '0.5px' }}>{t('token', 'Token')}</th>
-                      <th style={{ padding: '12px 16px', color: 'var(--text-muted)', fontWeight: 600, fontSize: '13px', textTransform: 'uppercase', letterSpacing: '0.5px' }}>{t('created', 'Created')}</th>
-                      <th style={{ padding: '12px 16px', color: 'var(--text-muted)', fontWeight: 600, fontSize: '13px', textTransform: 'uppercase', letterSpacing: '0.5px' }}>{t('expires', 'Expires')}</th>
-                      <th style={{ padding: '12px 16px', color: 'var(--text-muted)', fontWeight: 600, fontSize: '13px', textTransform: 'uppercase', letterSpacing: '0.5px' }}>{t('status', 'Status')}</th>
+                      <th style={{ padding: '12px 16px', color: 'var(--text-muted)', fontWeight: 600, fontSize: '13px', textTransform: 'uppercase', letterSpacing: '0.5px', cursor: 'pointer' }} onClick={() => requestSort('token')}>{t('token', 'Token')}{getSortIndicator('token')}</th>
+                      <th style={{ padding: '12px 16px', color: 'var(--text-muted)', fontWeight: 600, fontSize: '13px', textTransform: 'uppercase', letterSpacing: '0.5px', cursor: 'pointer' }} onClick={() => requestSort('created_at')}>{t('created', 'Created')}{getSortIndicator('created_at')}</th>
+                      <th style={{ padding: '12px 16px', color: 'var(--text-muted)', fontWeight: 600, fontSize: '13px', textTransform: 'uppercase', letterSpacing: '0.5px', cursor: 'pointer' }} onClick={() => requestSort('expires_at')}>{t('expires', 'Expires')}{getSortIndicator('expires_at')}</th>
+                      <th style={{ padding: '12px 16px', color: 'var(--text-muted)', fontWeight: 600, fontSize: '13px', textTransform: 'uppercase', letterSpacing: '0.5px', cursor: 'pointer' }} onClick={() => requestSort('status')}>{t('status', 'Status')}{getSortIndicator('status')}</th>
                     </tr>
                   </thead>
                   <tbody>
-                    {tokens.map((tItem, idx) => (
+                    {sortedTokens.map((tItem, idx) => (
                       <tr key={idx} style={{ borderBottom: '1px solid rgba(255,255,255,0.05)', transition: 'background 0.2s', cursor: 'pointer' }} onMouseOver={e => e.currentTarget.style.background = 'rgba(255,255,255,0.03)'} onMouseOut={e => e.currentTarget.style.background = 'transparent'}>
                         <td style={{ padding: '16px', fontFamily: 'monospace', fontWeight: 500, fontSize: '14px' }}>{tItem.token}</td>
                         <td style={{ padding: '16px', fontSize: '14px' }}>{formatDate(tItem.created_at)}</td>

@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import axios from 'axios';
 import { useSettings } from '../contexts/SettingsContext';
+import { useTableSort } from '../hooks/useTableSort';
 
 interface BlacklistEntry {
   ip: string;
@@ -59,10 +60,12 @@ export default function AdminBlacklist() {
     }
   };
 
+  const { items: sortedEntries, requestSort, getSortIndicator, searchQuery, setSearchQuery } = useTableSort(entries, ['ip', 'reason']);
+
   if (loading) return <div>Loading blacklist...</div>;
 
-  const totalPages = Math.ceil(entries.length / ROWS_PER_PAGE);
-  const paginatedEntries = entries.slice(page * ROWS_PER_PAGE, (page + 1) * ROWS_PER_PAGE);
+  const totalPages = Math.ceil(sortedEntries.length / ROWS_PER_PAGE);
+  const paginatedEntries = sortedEntries.slice(page * ROWS_PER_PAGE, (page + 1) * ROWS_PER_PAGE);
 
   return (
     <div>
@@ -98,14 +101,24 @@ export default function AdminBlacklist() {
         </form>
       </div>
 
+      <div style={{ marginBottom: '16px' }}>
+        <input 
+          type="text" 
+          placeholder="Search blacklist..." 
+          value={searchQuery} 
+          onChange={e => { setSearchQuery(e.target.value); setPage(0); }}
+          style={{ padding: '8px 12px', width: '100%', maxWidth: '300px', background: 'var(--input-bg)', color: 'var(--text-main)', border: '1px solid var(--border)', borderRadius: '6px' }}
+        />
+      </div>
+
       <div className="card" style={{ padding: 0 }}>
         <div className="table-responsive">
           <table style={{ width: '100%', borderCollapse: 'collapse' }}>
             <thead>
               <tr style={{ borderBottom: '1px solid var(--border)', textAlign: 'left' }}>
-                <th style={{ padding: '12px 16px', color: 'var(--text-muted)', fontWeight: 600, fontSize: '13px' }}>IP Address</th>
-                <th style={{ padding: '12px 16px', color: 'var(--text-muted)', fontWeight: 600, fontSize: '13px' }}>Reason</th>
-                <th style={{ padding: '12px 16px', color: 'var(--text-muted)', fontWeight: 600, fontSize: '13px' }}>Blocked At</th>
+                <th style={{ padding: '12px 16px', color: 'var(--text-muted)', fontWeight: 600, fontSize: '13px', cursor: 'pointer' }} onClick={() => requestSort('ip')}>IP Address{getSortIndicator('ip')}</th>
+                <th style={{ padding: '12px 16px', color: 'var(--text-muted)', fontWeight: 600, fontSize: '13px', cursor: 'pointer' }} onClick={() => requestSort('reason')}>Reason{getSortIndicator('reason')}</th>
+                <th style={{ padding: '12px 16px', color: 'var(--text-muted)', fontWeight: 600, fontSize: '13px', cursor: 'pointer' }} onClick={() => requestSort('created_at')}>Blocked At{getSortIndicator('created_at')}</th>
                 <th style={{ padding: '12px 16px', color: 'var(--text-muted)', fontWeight: 600, fontSize: '13px', textAlign: 'right' }}>Actions</th>
               </tr>
             </thead>
@@ -136,7 +149,7 @@ export default function AdminBlacklist() {
         {totalPages > 1 && (
           <div style={{ padding: '16px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderTop: '1px solid var(--border)' }}>
             <div style={{ color: 'var(--text-muted)', fontSize: '14px' }}>
-              Showing {page * ROWS_PER_PAGE + 1} to {Math.min((page + 1) * ROWS_PER_PAGE, entries.length)} of {entries.length} IPs
+              Showing {page * ROWS_PER_PAGE + 1} to {Math.min((page + 1) * ROWS_PER_PAGE, sortedEntries.length)} of {sortedEntries.length} IPs
             </div>
             <div style={{ display: 'flex', gap: '8px' }}>
               <button 

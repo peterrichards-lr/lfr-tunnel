@@ -57,9 +57,9 @@ export default function AdminSubdomains() {
     }
   };
 
+  const { items: sortedLeases, requestSort, getSortIndicator, searchQuery, setSearchQuery } = useTableSort(leases, ['subdomain_prefix', 'full_host', 'node_id', 'client_ip']);
   if (loading) return <div>Loading subdomains...</div>;
 
-  const { items: sortedLeases, requestSort, getSortIndicator, searchQuery, setSearchQuery } = useTableSort(leases, ['subdomain_prefix', 'full_host', 'node_id', 'client_ip']);
 
   return (
     <div>

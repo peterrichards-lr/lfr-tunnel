@@ -163,9 +163,9 @@ export default function AdminUsers() {
       setIsInviting(false);
     }
   };
+  const { items: sortedUsers, requestSort, getSortIndicator, searchQuery, setSearchQuery } = useTableSort(users, ['email', 'first_name', 'last_name', 'role', 'status', 'auth_method']);
   if (loading) return <div>Loading users...</div>;
 
-  const { items: sortedUsers, requestSort, getSortIndicator, searchQuery, setSearchQuery } = useTableSort(users, ['email', 'first_name', 'last_name', 'role', 'status', 'auth_method']);
 
   return (
     <div>

@@ -99,10 +99,10 @@ export default function AdminEdgeHealth() {
     setOpenMenu(openMenu === id ? null : id);
   };
 
-  if (loading) return <div>Loading edge network health...</div>;
-
   const nodeArray = Object.keys(nodes).map(id => ({ id, ...nodes[id] }));
   const { items: sortedNodes, requestSort, getSortIndicator, searchQuery, setSearchQuery } = useTableSort(nodeArray, ['id', 'status', 'resolved_ip', 'version']);
+
+  if (loading) return <div>Loading edge network health...</div>;
 
 
   return (

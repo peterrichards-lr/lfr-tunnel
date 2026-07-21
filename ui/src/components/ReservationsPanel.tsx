@@ -89,12 +89,12 @@ export default function ReservationsPanel() {
     }
   };
 
+  const { items: sortedReservations, requestSort, getSortIndicator, searchQuery, setSearchQuery } = useTableSort(reservations, ['subdomain', 'domain', 'status']);
   if (loading) return <div>{t('loading_reservations', 'Loading reservations...')}</div>;
 
   const percent = limit > 0 ? (used / limit) * 100 : 0;
   const isAtLimit = limit >= 0 && used >= limit;
 
-  const { items: sortedReservations, requestSort, getSortIndicator, searchQuery, setSearchQuery } = useTableSort(reservations, ['subdomain', 'domain', 'status']);
 
   return (
     <div className="card" style={{ marginBottom: '24px' }}>

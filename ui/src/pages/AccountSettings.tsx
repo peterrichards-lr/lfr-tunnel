@@ -34,7 +34,7 @@ export default function AccountSettings() {
         theme_preference: theme
       });
       setMessage(t('success_profile_saved', 'Profile updated successfully'));
-    } catch (err) {
+    } catch {
       setMessage(t('error_profile_save', 'Failed to update profile'));
     } finally {
       setSaving(false);
@@ -46,7 +46,7 @@ export default function AccountSettings() {
       const res = await axios.post('/api/mfa/setup');
       setSetupData(res.data);
       setMfaError('');
-    } catch (err) {
+    } catch {
       setMfaError(t('error_mfa_setup', 'Failed to initialize MFA setup'));
     }
   };
@@ -57,7 +57,7 @@ export default function AccountSettings() {
       setMfaEnabled(true);
       setSetupData(null);
       setMfaError('');
-    } catch (err) {
+    } catch {
       setMfaError(t('error_mfa_invalid', 'Invalid passcode, please try again.'));
     }
   };

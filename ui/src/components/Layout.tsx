@@ -45,7 +45,7 @@ export default function Layout() {
           const m = Math.floor(seconds % 3600 / 60);
           setUptime(`${d}d ${h}h ${m}m`);
         }
-      } catch (err: any) {
+      } catch {
         navigate('/login');
       } finally {
         setLoading(false);

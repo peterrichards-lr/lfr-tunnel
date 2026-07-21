@@ -42,9 +42,9 @@ export default function AdminExtensions() {
     }
   };
 
+  const { items: sortedRequests, requestSort, getSortIndicator, searchQuery, setSearchQuery } = useTableSort(requests, ['email', 'subdomain', 'status']);
   if (loading) return <div>Loading...</div>;
 
-  const { items: sortedRequests, requestSort, getSortIndicator, searchQuery, setSearchQuery } = useTableSort(requests, ['email', 'subdomain', 'status']);
 
 
   return (

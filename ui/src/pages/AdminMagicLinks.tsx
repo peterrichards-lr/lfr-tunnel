@@ -30,9 +30,9 @@ export default function AdminMagicLinks() {
     fetchLinks();
   }, []);
 
+  const { items: sortedLinks, requestSort, getSortIndicator, searchQuery, setSearchQuery } = useTableSort(links, ['email', 'client_ip']);
   if (loading) return <div>Loading active magic links...</div>;
 
-  const { items: sortedLinks, requestSort, getSortIndicator, searchQuery, setSearchQuery } = useTableSort(links, ['email', 'client_ip']);
 
 
   const renderDate = (val: number | string | null | undefined) => {

@@ -60,9 +60,9 @@ export default function AdminBlacklist() {
     }
   };
 
-  if (loading) return <div>Loading blacklist...</div>;
-
   const { items: sortedEntries, requestSort, getSortIndicator, searchQuery, setSearchQuery } = useTableSort(entries, ['ip', 'reason']);
+
+  if (loading) return <div>Loading blacklist...</div>;
 
   const totalPages = Math.ceil(sortedEntries.length / ROWS_PER_PAGE);
   const paginatedEntries = sortedEntries.slice(page * ROWS_PER_PAGE, (page + 1) * ROWS_PER_PAGE);

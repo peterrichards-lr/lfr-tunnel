@@ -6,12 +6,16 @@ cd "$(dirname "$0")/.." || exit 1
 PROJECT_ROOT="$(pwd)"
 export PROJECT_ROOT
 
+if [ -z "$HOME" ]; then
+    export HOME="/Users/peterrichards"
+fi
+
 if [ -s "$HOME/.nvm/nvm.sh" ]; then
     source "$HOME/.nvm/nvm.sh"
-    nvm use 20.12.2 || true
+    nvm use 22.23.1 || true
 fi
 # Fallback to explicit path if nvm didn't load properly in non-interactive shell
-export PATH="$HOME/.nvm/versions/node/v20.12.2/bin:$PATH"
+export PATH="$HOME/.nvm/versions/node/v22.23.1/bin:$PATH"
 
 # Generate a unique project name to avoid container collisions between agents
 if [ -z "$E2E_PROJECT_NAME" ]; then
@@ -32,7 +36,7 @@ export E2E_MAILPIT_PORT=8025
 export E2E_PROXY_PORT=8000
 
 echo "=== Building UI ==="
-cd ui && npm install && npm run build
+cd ui && pnpm install && pnpm run build
 cd ..
 
 echo "=== Syncing UI bundle to Go embedded filesystem ==="
@@ -75,10 +79,10 @@ trap cleanup EXIT
 
 echo "=== Running Playwright UI Tests ==="
 cd "$PROJECT_ROOT/tests/e2e/ui" || exit 1
-npm install
-npx playwright install --with-deps chromium
+pnpm install
+pnpm exec playwright install --with-deps chromium
 
 export INSPECTOR_URL="http://localhost:${E2E_PROXY_PORT}"
 
 # Run tests
-npx playwright test
+pnpm exec playwright test

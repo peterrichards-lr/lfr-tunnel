@@ -4,9 +4,13 @@ import { getMagicLinkToken, clearMailpit } from './utils/mailpit';
 test.describe('Dashboard UI Automation', () => {
   const adminEmail = 'admin@lfr-demo.local'; // From tests/e2e/server-config.yaml
 
-  test.beforeEach(async () => {
+  test.beforeEach(async ({ context }) => {
     // Ensure mailpit is clean before each test
     await clearMailpit();
+    // Pre-dismiss the V2 promo banner by seeding localStorage
+    await context.addInitScript(() => {
+      window.localStorage.setItem('v2_promo_dismissed', 'true');
+    });
   });
 
   test('Magic Link Login, Theme Toggle, and Pagination', async ({ page }) => {
@@ -31,7 +35,7 @@ test.describe('Dashboard UI Automation', () => {
     await page.goto(`/admin?token=${token}`);
 
     // Wait for Dashboard to load (the body or h2 should be visible)
-    await expect(page.locator('h1:has-text("Dashboard Overview")')).toBeVisible();
+    await expect(page.locator('h2:has-text("Dashboard Overview")')).toBeVisible();
 
     // 4. Test Theme Toggling via Account Settings
     await page.click('#nav-account');
@@ -77,7 +81,7 @@ test.describe('Dashboard UI Automation', () => {
     await page.goto(`/admin?token=${token}`);
 
     // Wait for Dashboard to load
-    await expect(page.locator('h1:has-text("Dashboard Overview")')).toBeVisible();
+    await expect(page.locator('h2:has-text("Dashboard Overview")')).toBeVisible();
 
     // 4. Navigate to IP Blacklist
     await page.click('#nav-blacklist');
@@ -106,7 +110,7 @@ test.describe('Dashboard UI Automation', () => {
     await page.goto(`/admin?token=${token}`);
 
     // Wait for Dashboard to load
-    await expect(page.locator('h1:has-text("Dashboard Overview")')).toBeVisible();
+    await expect(page.locator('h2:has-text("Dashboard Overview")')).toBeVisible();
 
     // 4. Verify Docker Panel is visible and displays the configured image
     await expect(page.locator('#docker-container-box')).toBeVisible();
@@ -204,7 +208,7 @@ test.describe('Dashboard UI Automation', () => {
     await page.goto(`/admin?token=${token}`);
 
     // Wait for Dashboard to load
-    await expect(page.locator('h1:has-text("Dashboard Overview")')).toBeVisible();
+    await expect(page.locator('h2:has-text("Dashboard Overview")')).toBeVisible();
 
     // The maintenance countdown box should not be visible initially
     await expect(page.locator('#overview-maintenance-box')).not.toBeVisible();
@@ -252,7 +256,7 @@ test.describe('Dashboard UI Automation', () => {
     await page.goto(`/admin?token=${token}`);
 
     // Wait for Dashboard to load
-    await expect(page.locator('h1:has-text("Dashboard Overview")')).toBeVisible();
+    await expect(page.locator('h2:has-text("Dashboard Overview")')).toBeVisible();
 
     // 2. Verify all sections are expanded initially
     const personalSection = page.locator('#section-personal');
@@ -268,7 +272,7 @@ test.describe('Dashboard UI Automation', () => {
 
     // 4. Reload page and check that personal section remains collapsed
     await page.reload();
-    await expect(page.locator('h1:has-text("Dashboard Overview")')).toBeVisible();
+    await expect(page.locator('h2:has-text("Dashboard Overview")')).toBeVisible();
     await expect(page.locator('#section-personal')).toHaveClass(/collapsed/);
 
     // 5. Expand personal section again
@@ -288,7 +292,7 @@ test.describe('Dashboard UI Automation', () => {
     await page.goto(`/admin?token=${token}`);
 
     // Wait for Dashboard to load
-    await expect(page.locator('h1:has-text("Dashboard Overview")')).toBeVisible();
+    await expect(page.locator('h2:has-text("Dashboard Overview")')).toBeVisible();
 
     // 2. Verify sidebar is expanded initially
     const sidebar = page.locator('.sidebar');
@@ -300,7 +304,7 @@ test.describe('Dashboard UI Automation', () => {
 
     // 4. Reload page and check that sidebar remains collapsed
     await page.reload();
-    await expect(page.locator('h1:has-text("Dashboard Overview")')).toBeVisible();
+    await expect(page.locator('h2:has-text("Dashboard Overview")')).toBeVisible();
     await expect(page.locator('.sidebar')).toHaveClass(/collapsed/);
 
     // 5. Expand sidebar again
@@ -323,7 +327,7 @@ test.describe('Dashboard UI Automation', () => {
     await page.goto(`/admin?token=${token}`);
 
     // Wait for Dashboard to load
-    await expect(page.locator('h1:has-text("Dashboard Overview")')).toBeVisible();
+    await expect(page.locator('h2:has-text("Dashboard Overview")')).toBeVisible();
 
     // 3. Verify that the sidebar is collapsed and backdrop not visible initially
     const sidebar = page.locator('.sidebar');

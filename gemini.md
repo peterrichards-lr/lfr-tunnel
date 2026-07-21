@@ -951,6 +951,15 @@ The solution will consist of:
 
 ## V2 Portal Pending Registrations Sidebar Badge (v1.34.5)
 - [/] Implement pending registrations count badge next to 'Users' link in V2 `Sidebar.tsx` (#709).
+## System Tray and Mobile Menu Fixes (v1.34.3)
+- [x] Fix macOS system tray 'Quit' event Cocoa deadlock by omitting `tray.Remove()` on macOS (#695).
+- [x] Fix mobile hamburger menu button visibility in dark mode on both dashboard and React portal (#694).
+
+
+## V2 Portal Tokens CSV Export & List Fix (v1.34.4)
+- [/] Fetch Personal Access Tokens from `/api/tokens` and implement 'Export CSV' button in V2 `Dashboard.tsx` (#708).
+- [ ] Fix macOS system tray 'Quit' event Cocoa deadlock by omitting `tray.Remove()` on macOS (#695).
+- [ ] Fix mobile hamburger menu button visibility in dark mode on both dashboard and React portal (#694).
 
 <!-- markdownlint-disable MD049 -->
 ---

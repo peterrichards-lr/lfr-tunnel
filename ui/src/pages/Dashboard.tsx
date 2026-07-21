@@ -20,10 +20,39 @@ export default function Dashboard() {
   const { items: sortedTokens, requestSort, getSortIndicator, searchQuery, setSearchQuery } = useTableSort(tokens, ['token', 'status']);
 
   useEffect(() => {
-    setTokens(user.tokens || []);
+    axios.get('/api/tokens')
+      .then(res => setTokens(res.data || []))
+      .catch(err => console.error("Failed to fetch tokens", err));
     axios.get('/api/analytics/ping?portal=v2').catch(() => {});
     axios.get('/api/version').then(res => setServerConfig(res.data)).catch(() => {});
   }, [user]);
+
+  const handleExportCSV = () => {
+    try {
+      let csv = "ID,Name,Prefix,Owner,ExpiresAt,CreatedAt\n";
+      tokens.forEach(item => {
+        const row = [
+          item.id,
+          item.name,
+          item.token_prefix,
+          item.user_id || "",
+          item.expires_at || "Never",
+          item.created_at || ""
+        ].map(val => `"${String(val).replace(/"/g, '""')}"`).join(",");
+        csv += row + "\n";
+      });
+      
+      const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
+      const link = document.createElement("a");
+      link.href = URL.createObjectURL(blob);
+      link.setAttribute("download", "personal_access_tokens.csv");
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+    } catch (e) {
+      console.error("Failed to export CSV", e);
+    }
+  };
 
   return (
     <div style={{ animation: 'fadeInUp 0.6s ease-out' }}>
@@ -45,7 +74,14 @@ export default function Dashboard() {
                   {t('pat_desc', 'Authenticate your CLI client securely without a browser.')}
                 </p>
               </div>
-              <button className="btn btn-outline" style={{ fontSize: '14px', padding: '8px 16px' }}>{t('generate_token', 'Generate Token')}</button>
+              <div style={{ display: 'flex', gap: '12px' }}>
+                {tokens.length > 0 && (
+                  <button className="btn btn-outline" onClick={handleExportCSV} style={{ fontSize: '14px', padding: '8px 16px' }}>
+                    {t('export_csv', 'Export CSV')}
+                  </button>
+                )}
+                <button className="btn btn-outline" style={{ fontSize: '14px', padding: '8px 16px' }}>{t('generate_token', 'Generate Token')}</button>
+              </div>
             </div>
             
             {tokens.length > 0 && (

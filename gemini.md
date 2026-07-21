@@ -948,6 +948,15 @@ The solution will consist of:
 - [x] Verify all unit tests and E2E integration test suites.
 - [x] Push branches and merge PR #495 on GitHub.
 
+
+## System Tray and Mobile Menu Fixes (v1.34.3)
+- [x] Fix macOS system tray 'Quit' event Cocoa deadlock by omitting `tray.Remove()` on macOS (#695).
+- [x] Fix mobile hamburger menu button visibility in dark mode on both dashboard and React portal (#694).
+
+
+## V2 Portal Tokens CSV Export & List Fix (v1.34.4)
+- [/] Fetch Personal Access Tokens from `/api/tokens` and implement 'Export CSV' button in V2 `Dashboard.tsx` (#708).
+
 <!-- markdownlint-disable MD049 -->
 ---
 *Last Updated: 2026-07-15* | *Last Reviewed: 2026-07-15*

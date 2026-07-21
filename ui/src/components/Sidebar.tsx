@@ -1,3 +1,5 @@
+import { useEffect, useState } from 'react';
+import axios from 'axios';
 import { NavLink } from 'react-router-dom';
 import { useI18n } from '../contexts/I18nContext';
 
@@ -9,6 +11,19 @@ interface SidebarProps {
 
 export default function Sidebar({ user, isOpen, onClose }: SidebarProps) {
   const { t } = useI18n();
+  const [pendingCount, setPendingCount] = useState(0);
+
+  useEffect(() => {
+    if (user?.role === 'admin' || user?.role === 'owner') {
+      axios.get('/api/admin/users')
+        .then(res => {
+          const list = res.data || [];
+          const count = list.filter((u: any) => u.status === 'pending').length;
+          setPendingCount(count);
+        })
+        .catch(err => console.error("Failed to load users for sidebar badge", err));
+    }
+  }, [user]);
 
   return (
     <>
@@ -44,8 +59,21 @@ export default function Sidebar({ user, isOpen, onClose }: SidebarProps) {
                 <NavLink to="/admin/extensions" onClick={onClose} className={({ isActive }) => `nav-item ${isActive ? 'active' : ''}`}>
                   {t('extensions', 'Extensions')}
                 </NavLink>
-                <NavLink to="/admin/users" onClick={onClose} className={({ isActive }) => `nav-item ${isActive ? 'active' : ''}`}>
-                  {t('users', 'Users')}
+                <NavLink to="/admin/users" onClick={onClose} className={({ isActive }) => `nav-item ${isActive ? 'active' : ''}`} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                  <span>{t('users', 'Users')}</span>
+                  {pendingCount > 0 && (
+                    <span className="badge" style={{ 
+                      background: 'var(--danger, #ef4444)', 
+                      color: 'white', 
+                      borderRadius: '10px', 
+                      padding: '2px 8px', 
+                      fontSize: '11px', 
+                      fontWeight: 'bold',
+                      lineHeight: '1'
+                    }}>
+                      {pendingCount}
+                    </span>
+                  )}
                 </NavLink>
                 <NavLink to="/admin/analytics" onClick={onClose} className={({ isActive }) => `nav-item ${isActive ? 'active' : ''}`}>
                   {t('analytics', 'Analytics')}

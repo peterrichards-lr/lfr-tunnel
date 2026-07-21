@@ -38,7 +38,7 @@ jobs:
       - name: Set up Node.js
         uses: actions/setup-node@v7
         with:
-          node-version: '20'
+          node-version: '22'
 
       - name: Check Vanilla JavaScript Syntax
         run: |
@@ -51,7 +51,7 @@ jobs:
       - name: Install pnpm
         uses: pnpm/action-setup@v3
         with:
-          version: 8
+          version: 11
 
       - name: Check React UI Syntax & Types
         run: |
@@ -136,12 +136,12 @@ jobs:
       - name: Set up Node.js
         uses: actions/setup-node@v7
         with:
-          node-version: '20'
+          node-version: '22'
 
       - name: Install pnpm
         uses: pnpm/action-setup@v3
         with:
-          version: 8
+          version: 11
 
       - name: Run Playwright E2E Test
         run: make e2e-ui

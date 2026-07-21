@@ -1049,3 +1049,21 @@ html[dir="rtl"] td, html[dir="rtl"] th {
     flex-direction: column;
     min-width: 100%;
 }
+
+/* Skeleton Loaders */
+@keyframes pulse {
+    0%, 100% {
+        opacity: 1;
+    }
+    50% {
+        opacity: 0.35;
+    }
+}
+
+.skeleton {
+    animation: pulse 1.5s cubic-bezier(0.4, 0, 0.6, 1) infinite;
+    background-color: var(--border);
+    border-radius: 4px;
+    display: inline-block;
+}
+

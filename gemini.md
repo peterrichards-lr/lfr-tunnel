@@ -961,6 +961,9 @@ The solution will consist of:
 ## V2 Portal Telemetry Dashboard Port (v1.34.6)
 - [x] Port the real-time WebSocket telemetry dashboard from V1 to V2 UI as a dedicated Telemetry view under Admin Zone (#707).
 
+## V2 Portal Global Skeleton Loaders (v1.34.7)
+- [/] Implement global animated skeleton loaders for data fetching to prevent layout shifts (#706).
+
 <!-- markdownlint-disable MD049 -->
 ---
 *Last Updated: 2026-07-21* | *Last Reviewed: 2026-07-21*

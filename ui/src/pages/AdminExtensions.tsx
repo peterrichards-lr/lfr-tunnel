@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import axios from 'axios';
 import { useSettings } from '../contexts/SettingsContext';
 import { useTableSort } from '../hooks/useTableSort';
+import Skeleton from '../components/Skeleton';
 
 interface ExtRequest {
   id: string;
@@ -43,7 +44,46 @@ export default function AdminExtensions() {
   };
 
   const { items: sortedRequests, requestSort, getSortIndicator, searchQuery, setSearchQuery } = useTableSort(requests, ['email', 'subdomain', 'status']);
-  if (loading) return <div>Loading...</div>;
+  if (loading) {
+    return (
+      <div className="card" style={{ animation: 'fadeInUp 0.6s ease-out' }}>
+        <h3 style={{ marginTop: 0, marginBottom: '24px', fontSize: '20px', fontWeight: 700 }}>
+          <Skeleton width={180} height={24} />
+        </h3>
+        
+        <div style={{ marginBottom: '16px' }}>
+          <Skeleton width="100%" height={40} style={{ maxWidth: '300px' }} />
+        </div>
+
+        <div className="table-responsive">
+          <table style={{ width: '100%', borderCollapse: 'collapse' }}>
+            <thead>
+              <tr style={{ borderBottom: '1px solid var(--border)', textAlign: 'left' }}>
+                <th style={{ padding: '12px 16px' }}><Skeleton width={80} /></th>
+                <th style={{ padding: '12px 16px' }}><Skeleton width={100} /></th>
+                <th style={{ padding: '12px 16px' }}><Skeleton width={60} /></th>
+                <th style={{ padding: '12px 16px' }}><Skeleton width={80} /></th>
+                <th style={{ padding: '12px 16px' }}><Skeleton width={120} /></th>
+                <th style={{ padding: '12px 16px' }}><Skeleton width={80} /></th>
+              </tr>
+            </thead>
+            <tbody>
+              {[...Array(3)].map((_, i) => (
+                <tr key={i} style={{ borderBottom: '1px solid rgba(255,255,255,0.05)' }}>
+                  <td style={{ padding: '16px' }}><Skeleton width="90%" height={16} /></td>
+                  <td style={{ padding: '16px' }}><Skeleton width="85%" height={16} /></td>
+                  <td style={{ padding: '16px' }}><Skeleton width="60%" height={16} /></td>
+                  <td style={{ padding: '16px' }}><Skeleton width="70%" height={16} /></td>
+                  <td style={{ padding: '16px' }}><Skeleton width="80%" height={16} /></td>
+                  <td style={{ padding: '16px' }}><Skeleton width="50%" height={16} /></td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      </div>
+    );
+  }
 
 
 

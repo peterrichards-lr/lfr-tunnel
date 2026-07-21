@@ -4,6 +4,7 @@ import { useSettings } from '../contexts/SettingsContext';
 
 import { useI18n } from '../contexts/I18nContext';
 import { useTableSort } from '../hooks/useTableSort';
+import Skeleton from './Skeleton';
 
 interface Reservation {
   id: string;
@@ -90,7 +91,52 @@ export default function ReservationsPanel() {
   };
 
   const { items: sortedReservations, requestSort, getSortIndicator, searchQuery, setSearchQuery } = useTableSort(reservations, ['subdomain', 'domain', 'status']);
-  if (loading) return <div>{t('loading_reservations', 'Loading reservations...')}</div>;
+  if (loading) {
+    return (
+      <div className="card" style={{ marginBottom: '24px' }}>
+        <div style={{ marginBottom: '16px' }}>
+          <Skeleton width={200} height={24} />
+        </div>
+        <div style={{ marginBottom: '24px' }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '8px' }}>
+            <Skeleton width={120} height={16} />
+            <Skeleton width={80} height={16} />
+          </div>
+          <Skeleton width="100%" height={8} borderRadius={4} />
+        </div>
+        <div style={{ display: 'flex', gap: '8px', marginBottom: '24px' }}>
+          <Skeleton width="100%" height={40} style={{ flex: '1', minWidth: '150px' }} />
+          <Skeleton width="100%" height={40} style={{ flex: '1', minWidth: '150px' }} />
+          <Skeleton width={80} height={40} />
+          <Skeleton width={80} height={40} />
+        </div>
+        <div className="table-responsive">
+          <table style={{ width: '100%', borderCollapse: 'collapse' }}>
+            <thead>
+              <tr style={{ borderBottom: '1px solid var(--border)' }}>
+                <th style={{ padding: '12px 16px' }}><Skeleton width={80} /></th>
+                <th style={{ padding: '12px 16px' }}><Skeleton width={100} /></th>
+                <th style={{ padding: '12px 16px' }}><Skeleton width={60} /></th>
+                <th style={{ padding: '12px 16px' }}><Skeleton width={120} /></th>
+                <th style={{ padding: '12px 16px' }}><Skeleton width={80} /></th>
+              </tr>
+            </thead>
+            <tbody>
+              {[...Array(3)].map((_, i) => (
+                <tr key={i} style={{ borderBottom: '1px solid rgba(255,255,255,0.05)' }}>
+                  <td style={{ padding: '16px' }}><Skeleton width="80%" height={16} /></td>
+                  <td style={{ padding: '16px' }}><Skeleton width="60%" height={16} /></td>
+                  <td style={{ padding: '16px' }}><Skeleton width={50} height={20} borderRadius={10} /></td>
+                  <td style={{ padding: '16px' }}><Skeleton width="70%" height={16} /></td>
+                  <td style={{ padding: '16px' }}><Skeleton width={60} height={28} /></td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      </div>
+    );
+  }
 
   const percent = limit > 0 ? (used / limit) * 100 : 0;
   const isAtLimit = limit >= 0 && used >= limit;

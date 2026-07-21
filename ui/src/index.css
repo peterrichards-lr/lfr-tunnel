@@ -22,6 +22,15 @@
     
     --shadow-glass: 0 8px 32px 0 rgba(0, 0, 0, 0.37);
     --shadow-glow: 0 0 20px rgba(59, 130, 246, 0.3);
+
+    /* Spacing Design Tokens */
+    --spacing-xs: 4px;
+    --spacing-sm: 8px;
+    --spacing-md: 12px;
+    --spacing-lg: 16px;
+    --spacing-xl: 24px;
+    --spacing-2xl: 32px;
+    --spacing-3xl: 48px;
 }
 
 :root[data-theme="light"] {

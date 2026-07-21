@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import axios from 'axios';
 import { useI18n } from '../contexts/I18nContext';
 import { useSettings } from '../contexts/SettingsContext';
+import { useTableSort } from '../hooks/useTableSort';
 import {
   Chart as ChartJS,
   CategoryScale,
@@ -15,7 +16,7 @@ import {
   Legend,
   Filler,
 } from 'chart.js';
-import { Line, Doughnut, Bar } from 'react-chartjs-2';
+import { Line, Doughnut, Bar, Pie } from 'react-chartjs-2';
 
 ChartJS.register(
   CategoryScale,
@@ -47,6 +48,8 @@ export default function AdminAnalytics() {
   const [clientStats, setClientStats] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [timeRange, setTimeRange] = useState('30'); // Default to 30 days
+
+  const { items: sortedClientStats, requestSort, getSortIndicator } = useTableSort(clientStats, ['version', 'os', 'count']);
 
   useEffect(() => {
     const fetchData = async () => {
@@ -274,6 +277,31 @@ export default function AdminAnalytics() {
                 </div>
               </div>
             )}
+
+            {data.global.node_distribution && Object.keys(data.global.node_distribution).length > 0 && (
+              <div className="card" style={{ padding: '24px' }}>
+                <h4 style={{ marginBottom: '16px', color: 'var(--text-muted)', fontSize: '14px' }}>Tunnel Distribution (Active Nodes)</h4>
+                <div style={{ height: '300px' }}>
+                  <Pie 
+                    data={{
+                      labels: Object.keys(data.global.node_distribution).map(k => k.toUpperCase()),
+                      datasets: [{
+                        data: Object.values(data.global.node_distribution),
+                        backgroundColor: ['#3b82f6', '#10b981', '#f59e0b', '#ef4444', '#8b5cf6'],
+                        borderWidth: 0
+                      }]
+                    }} 
+                    options={{
+                      responsive: true,
+                      maintainAspectRatio: false,
+                      plugins: {
+                        legend: { position: 'bottom', labels: { color: 'var(--text-color)' } }
+                      }
+                    }} 
+                  />
+                </div>
+              </div>
+            )}
           </div>
 
           <div className="card" style={{ overflow: 'hidden' }}>
@@ -284,9 +312,9 @@ export default function AdminAnalytics() {
               <table className="table" style={{ width: '100%', borderCollapse: 'collapse' }}>
                 <thead>
                   <tr>
-                    <th style={{ textAlign: 'left', padding: '12px 20px', color: 'var(--text-muted)', fontWeight: '500', fontSize: '13px', borderBottom: '1px solid var(--border)' }}>Version</th>
-                    <th style={{ textAlign: 'left', padding: '12px 20px', color: 'var(--text-muted)', fontWeight: '500', fontSize: '13px', borderBottom: '1px solid var(--border)' }}>OS Platform</th>
-                    <th style={{ textAlign: 'left', padding: '12px 20px', color: 'var(--text-muted)', fontWeight: '500', fontSize: '13px', borderBottom: '1px solid var(--border)' }}>Active Tunnels</th>
+                    <th style={{ textAlign: 'left', padding: '12px 20px', color: 'var(--text-muted)', fontWeight: '500', fontSize: '13px', borderBottom: '1px solid var(--border)', cursor: 'pointer' }} onClick={() => requestSort('version')}>Version{getSortIndicator('version')}</th>
+                    <th style={{ textAlign: 'left', padding: '12px 20px', color: 'var(--text-muted)', fontWeight: '500', fontSize: '13px', borderBottom: '1px solid var(--border)', cursor: 'pointer' }} onClick={() => requestSort('os')}>OS Platform{getSortIndicator('os')}</th>
+                    <th style={{ textAlign: 'left', padding: '12px 20px', color: 'var(--text-muted)', fontWeight: '500', fontSize: '13px', borderBottom: '1px solid var(--border)', cursor: 'pointer' }} onClick={() => requestSort('count')}>Active Tunnels{getSortIndicator('count')}</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -297,7 +325,7 @@ export default function AdminAnalytics() {
                       </td>
                     </tr>
                   ) : (
-                    clientStats.map((stat, idx) => (
+                    sortedClientStats.map((stat, idx) => (
                       <tr key={idx} style={{ borderBottom: '1px solid var(--border)' }}>
                         <td style={{ padding: '12px 20px' }}>
                           <span style={{ background: 'var(--primary)', color: 'white', padding: '2px 8px', borderRadius: '4px', fontSize: '12px', fontWeight: '500' }}>

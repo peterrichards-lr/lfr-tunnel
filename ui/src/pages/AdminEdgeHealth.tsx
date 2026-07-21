@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import axios from 'axios';
-
+import { useTableSort } from '../hooks/useTableSort';
 
 interface EdgeNode {
   status: string;
@@ -101,7 +101,9 @@ export default function AdminEdgeHealth() {
 
   if (loading) return <div>Loading edge network health...</div>;
 
-  const nodeKeys = Object.keys(nodes).sort();
+  const nodeArray = Object.keys(nodes).map(id => ({ id, ...nodes[id] }));
+  const { items: sortedNodes, requestSort, getSortIndicator, searchQuery, setSearchQuery } = useTableSort(nodeArray, ['id', 'status', 'resolved_ip', 'version']);
+
 
   return (
     <div>
@@ -125,30 +127,42 @@ export default function AdminEdgeHealth() {
           {error}
         </div>
       ) : (
-        <div className="card table-responsive">
-          <table className="table" style={{ overflow: 'visible' }}>
-            <thead>
-              <tr>
-                <th>Node ID</th>
-                <th>Resolved IP</th>
-                <th>Status</th>
-                <th>Latency</th>
-                <th>Last Check</th>
-                <th>Version</th>
-                <th>Error</th>
-                <th style={{ textAlign: 'right' }}>Actions</th>
-              </tr>
-            </thead>
-            <tbody>
-              {nodeKeys.length === 0 ? (
+        <>
+          {nodeArray.length > 0 && (
+            <div style={{ marginBottom: '16px' }}>
+              <input 
+                type="text" 
+                placeholder="Search nodes..." 
+                value={searchQuery} 
+                onChange={e => setSearchQuery(e.target.value)}
+                style={{ padding: '8px 12px', width: '100%', maxWidth: '300px', background: 'var(--input-bg)', color: 'var(--text-main)', border: '1px solid var(--border)', borderRadius: '6px' }}
+              />
+            </div>
+          )}
+          <div className="card table-responsive">
+            <table className="table" style={{ overflow: 'visible' }}>
+              <thead>
+                <tr>
+                  <th style={{ cursor: 'pointer' }} onClick={() => requestSort('id')}>Node ID{getSortIndicator('id')}</th>
+                  <th style={{ cursor: 'pointer' }} onClick={() => requestSort('resolved_ip')}>Resolved IP{getSortIndicator('resolved_ip')}</th>
+                  <th style={{ cursor: 'pointer' }} onClick={() => requestSort('status')}>Status{getSortIndicator('status')}</th>
+                  <th style={{ cursor: 'pointer' }} onClick={() => requestSort('latency_ms')}>Latency{getSortIndicator('latency_ms')}</th>
+                  <th style={{ cursor: 'pointer' }} onClick={() => requestSort('last_check_at')}>Last Check{getSortIndicator('last_check_at')}</th>
+                  <th style={{ cursor: 'pointer' }} onClick={() => requestSort('version')}>Version{getSortIndicator('version')}</th>
+                  <th>Error</th>
+                  <th style={{ textAlign: 'right' }}>Actions</th>
+                </tr>
+              </thead>
+              <tbody>
+                {sortedNodes.length === 0 ? (
                 <tr>
                   <td colSpan={8} style={{ textAlign: 'center', opacity: 0.6, padding: '16px' }}>
                     No edge nodes configured
                   </td>
                 </tr>
               ) : (
-                nodeKeys.map(id => {
-                  const h = nodes[id];
+                sortedNodes.map(h => {
+                  const id = h.id;
                   const isOnline = h.status === 'Online';
                   const dotColor = isOnline ? '#10b981' : 'var(--danger)';
                   
@@ -210,6 +224,7 @@ export default function AdminEdgeHealth() {
             </tbody>
           </table>
         </div>
+        </>
       )}
     </div>
   );

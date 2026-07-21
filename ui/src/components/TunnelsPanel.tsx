@@ -1,4 +1,5 @@
 import { useI18n } from '../contexts/I18nContext';
+import { useTableSort } from '../hooks/useTableSort';
 
 interface Tunnel {
   subdomain_prefix: string;
@@ -21,8 +22,10 @@ export default function TunnelsPanel({ tunnels, serverConfig, user }: Props) {
   // Clean version strings (e.g. "v1.7.5" -> "1.7.5")
   const serverVer = serverConfig?.version?.replace('v', '') || '';
   const clientVer = user?.last_client_version?.replace('v', '') || '';
-  
   const isClientOutdated = serverVer && clientVer && clientVer !== serverVer;
+
+  const { items: sortedTunnels, requestSort, getSortIndicator, searchQuery, setSearchQuery } = useTableSort(tunnels, ['subdomain_prefix', 'full_host', 'status', 'node_id']);
+
 
   return (
     <div id="tour-tunnels-panel" className="card" style={{ marginBottom: '24px', animationDelay: '0.1s' }}>
@@ -43,6 +46,17 @@ export default function TunnelsPanel({ tunnels, serverConfig, user }: Props) {
           </span>
         </div>
       )}
+      {tunnels.length > 0 && (
+        <div style={{ marginBottom: '16px' }}>
+          <input 
+            type="text" 
+            placeholder="Search active tunnels..." 
+            value={searchQuery} 
+            onChange={e => setSearchQuery(e.target.value)}
+            style={{ padding: '8px 12px', width: '100%', maxWidth: '300px', background: 'var(--input-bg)', color: 'var(--text-main)', border: '1px solid var(--border)', borderRadius: '6px' }}
+          />
+        </div>
+      )}
 
       {tunnels.length === 0 ? (
         <div style={{ textAlign: 'center', padding: '40px 20px', background: 'rgba(0,0,0,0.1)', border: '1px dashed var(--border)', borderRadius: '12px' }}>
@@ -53,14 +67,14 @@ export default function TunnelsPanel({ tunnels, serverConfig, user }: Props) {
           <table style={{ width: '100%', borderCollapse: 'collapse' }}>
             <thead>
               <tr style={{ borderBottom: '1px solid var(--border)', textAlign: 'left' }}>
-                <th style={{ padding: '12px 16px', color: 'var(--text-muted)', fontWeight: 600, fontSize: '13px', textTransform: 'uppercase', letterSpacing: '0.5px' }}>{t('subdomain', 'Subdomain')}</th>
-                <th style={{ padding: '12px 16px', color: 'var(--text-muted)', fontWeight: 600, fontSize: '13px', textTransform: 'uppercase', letterSpacing: '0.5px' }}>{t('target_host', 'Target Host')}</th>
-                <th style={{ padding: '12px 16px', color: 'var(--text-muted)', fontWeight: 600, fontSize: '13px', textTransform: 'uppercase', letterSpacing: '0.5px' }}>{t('status', 'Status')}</th>
-                <th style={{ padding: '12px 16px', color: 'var(--text-muted)', fontWeight: 600, fontSize: '13px', textTransform: 'uppercase', letterSpacing: '0.5px' }}>{t('node', 'Node')}</th>
+                <th style={{ padding: '12px 16px', color: 'var(--text-muted)', fontWeight: 600, fontSize: '13px', textTransform: 'uppercase', letterSpacing: '0.5px', cursor: 'pointer' }} onClick={() => requestSort('subdomain_prefix')}>{t('subdomain', 'Subdomain')}{getSortIndicator('subdomain_prefix')}</th>
+                <th style={{ padding: '12px 16px', color: 'var(--text-muted)', fontWeight: 600, fontSize: '13px', textTransform: 'uppercase', letterSpacing: '0.5px', cursor: 'pointer' }} onClick={() => requestSort('full_host')}>{t('target_host', 'Target Host')}{getSortIndicator('full_host')}</th>
+                <th style={{ padding: '12px 16px', color: 'var(--text-muted)', fontWeight: 600, fontSize: '13px', textTransform: 'uppercase', letterSpacing: '0.5px', cursor: 'pointer' }} onClick={() => requestSort('status')}>{t('status', 'Status')}{getSortIndicator('status')}</th>
+                <th style={{ padding: '12px 16px', color: 'var(--text-muted)', fontWeight: 600, fontSize: '13px', textTransform: 'uppercase', letterSpacing: '0.5px', cursor: 'pointer' }} onClick={() => requestSort('node_id')}>{t('node', 'Node')}{getSortIndicator('node_id')}</th>
               </tr>
             </thead>
             <tbody>
-              {tunnels.map((tItem, idx) => (
+              {sortedTunnels.map((tItem, idx) => (
                 <tr key={idx} style={{ borderBottom: '1px solid rgba(255,255,255,0.05)', transition: 'background 0.2s', cursor: 'pointer' }} onMouseOver={e => e.currentTarget.style.background = 'rgba(255,255,255,0.03)'} onMouseOut={e => e.currentTarget.style.background = 'transparent'}>
                   <td style={{ padding: '16px', fontWeight: 600, fontSize: '14px' }}>{tItem.subdomain_prefix}</td>
                   <td style={{ padding: '16px', fontSize: '14px' }}>

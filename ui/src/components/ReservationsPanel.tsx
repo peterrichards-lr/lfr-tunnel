@@ -3,6 +3,7 @@ import axios from 'axios';
 import { useSettings } from '../contexts/SettingsContext';
 
 import { useI18n } from '../contexts/I18nContext';
+import { useTableSort } from '../hooks/useTableSort';
 
 interface Reservation {
   id: string;
@@ -93,6 +94,8 @@ export default function ReservationsPanel() {
   const percent = limit > 0 ? (used / limit) * 100 : 0;
   const isAtLimit = limit >= 0 && used >= limit;
 
+  const { items: sortedReservations, requestSort, getSortIndicator, searchQuery, setSearchQuery } = useTableSort(reservations, ['subdomain', 'domain', 'status']);
+
   return (
     <div className="card" style={{ marginBottom: '24px' }}>
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px' }}>
@@ -137,6 +140,18 @@ export default function ReservationsPanel() {
         </form>
       )}
 
+      {reservations.length > 0 && (
+        <div style={{ marginBottom: '16px' }}>
+          <input 
+            type="text" 
+            placeholder="Search reservations..." 
+            value={searchQuery} 
+            onChange={e => setSearchQuery(e.target.value)}
+            style={{ padding: '8px 12px', width: '100%', maxWidth: '300px', background: 'var(--input-bg)', color: 'var(--text-main)', border: '1px solid var(--border)', borderRadius: '6px' }}
+          />
+        </div>
+      )}
+
       {reservations.length === 0 ? (
         <div style={{ textAlign: 'center', padding: '40px 20px', background: 'rgba(0,0,0,0.1)', border: '1px dashed var(--border)', borderRadius: '12px' }}>
           <div style={{ color: 'var(--text-muted)', fontSize: '15px' }}>{t('no_subdomains_reserved', 'No subdomains reserved yet.')}</div>
@@ -146,15 +161,15 @@ export default function ReservationsPanel() {
           <table style={{ width: '100%', borderCollapse: 'collapse' }}>
             <thead>
               <tr style={{ borderBottom: '1px solid var(--border)', textAlign: 'left' }}>
-                <th style={{ padding: '12px 16px', color: 'var(--text-muted)', fontWeight: 600, fontSize: '13px', textTransform: 'uppercase', letterSpacing: '0.5px' }}>{t('subdomain', 'Subdomain')}</th>
-                <th style={{ padding: '12px 16px', color: 'var(--text-muted)', fontWeight: 600, fontSize: '13px', textTransform: 'uppercase', letterSpacing: '0.5px' }}>{t('domain', 'Domain')}</th>
-                <th style={{ padding: '12px 16px', color: 'var(--text-muted)', fontWeight: 600, fontSize: '13px', textTransform: 'uppercase', letterSpacing: '0.5px' }}>{t('status', 'Status')}</th>
-                <th style={{ padding: '12px 16px', color: 'var(--text-muted)', fontWeight: 600, fontSize: '13px', textTransform: 'uppercase', letterSpacing: '0.5px' }}>{t('expires', 'Expires')}</th>
+                <th style={{ padding: '12px 16px', color: 'var(--text-muted)', fontWeight: 600, fontSize: '13px', textTransform: 'uppercase', letterSpacing: '0.5px', cursor: 'pointer' }} onClick={() => requestSort('subdomain')}>{t('subdomain', 'Subdomain')}{getSortIndicator('subdomain')}</th>
+                <th style={{ padding: '12px 16px', color: 'var(--text-muted)', fontWeight: 600, fontSize: '13px', textTransform: 'uppercase', letterSpacing: '0.5px', cursor: 'pointer' }} onClick={() => requestSort('domain')}>{t('domain', 'Domain')}{getSortIndicator('domain')}</th>
+                <th style={{ padding: '12px 16px', color: 'var(--text-muted)', fontWeight: 600, fontSize: '13px', textTransform: 'uppercase', letterSpacing: '0.5px', cursor: 'pointer' }} onClick={() => requestSort('status')}>{t('status', 'Status')}{getSortIndicator('status')}</th>
+                <th style={{ padding: '12px 16px', color: 'var(--text-muted)', fontWeight: 600, fontSize: '13px', textTransform: 'uppercase', letterSpacing: '0.5px', cursor: 'pointer' }} onClick={() => requestSort('expires_at')}>{t('expires', 'Expires')}{getSortIndicator('expires_at')}</th>
                 <th style={{ padding: '12px 16px', color: 'var(--text-muted)', fontWeight: 600, fontSize: '13px', textTransform: 'uppercase', letterSpacing: '0.5px' }}>{t('actions', 'Actions')}</th>
               </tr>
             </thead>
             <tbody>
-              {reservations.map(r => (
+              {sortedReservations.map(r => (
                 <tr key={r.id} style={{ borderBottom: '1px solid rgba(255,255,255,0.05)', transition: 'background 0.2s' }}>
                   <td style={{ padding: '16px', fontWeight: 600, fontSize: '14px' }}>{r.subdomain}</td>
                   <td style={{ padding: '16px', fontSize: '14px', color: 'var(--text-muted)' }}>{r.domain}</td>

@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import axios from 'axios';
 import { useOutletContext } from 'react-router-dom';
 import { useSettings } from '../contexts/SettingsContext';
+import { useTableSort } from '../hooks/useTableSort';
 
 export default function AdminSettings() {
   const { user } = useOutletContext<{ user: any }>();
@@ -66,6 +67,9 @@ export default function AdminSettings() {
       setLoading(false);
     }
   };
+
+  const { items: sortedBackups, requestSort, getSortIndicator, searchQuery, setSearchQuery } = useTableSort(backups, ['filename']);
+
 
   useEffect(() => {
     fetchAllData();
@@ -259,13 +263,24 @@ export default function AdminSettings() {
             </button>
           </div>
           
+          {backups.length > 0 && (
+            <div style={{ marginBottom: '16px' }}>
+              <input 
+                type="text" 
+                placeholder="Search backups..." 
+                value={searchQuery} 
+                onChange={e => { setSearchQuery(e.target.value); setPage(0); }}
+                style={{ padding: '8px 12px', width: '100%', maxWidth: '300px', background: 'var(--input-bg)', color: 'var(--text-main)', border: '1px solid var(--border)', borderRadius: '6px' }}
+              />
+            </div>
+          )}
           <div className="table-responsive" style={{ marginTop: '16px' }}>
             <table className="table">
               <thead>
                 <tr style={{ borderBottom: '1px solid var(--border)', textAlign: 'left' }}>
-                  <th style={{ padding: '12px 16px', color: 'var(--text-muted)', fontWeight: 600, fontSize: '13px', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Filename</th>
-                  <th style={{ padding: '12px 16px', color: 'var(--text-muted)', fontWeight: 600, fontSize: '13px', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Size</th>
-                  <th style={{ padding: '12px 16px', color: 'var(--text-muted)', fontWeight: 600, fontSize: '13px', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Created At</th>
+                  <th style={{ padding: '12px 16px', color: 'var(--text-muted)', fontWeight: 600, fontSize: '13px', textTransform: 'uppercase', letterSpacing: '0.5px', cursor: 'pointer' }} onClick={() => requestSort('filename')}>Filename{getSortIndicator('filename')}</th>
+                  <th style={{ padding: '12px 16px', color: 'var(--text-muted)', fontWeight: 600, fontSize: '13px', textTransform: 'uppercase', letterSpacing: '0.5px', cursor: 'pointer' }} onClick={() => requestSort('size_bytes')}>Size{getSortIndicator('size_bytes')}</th>
+                  <th style={{ padding: '12px 16px', color: 'var(--text-muted)', fontWeight: 600, fontSize: '13px', textTransform: 'uppercase', letterSpacing: '0.5px', cursor: 'pointer' }} onClick={() => requestSort('created_at')}>Created At{getSortIndicator('created_at')}</th>
                   <th style={{ padding: '12px 16px', color: 'var(--text-muted)', fontWeight: 600, fontSize: '13px', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Actions</th>
                 </tr>
               </thead>
@@ -277,7 +292,7 @@ export default function AdminSettings() {
                     </td>
                   </tr>
                 ) : (
-                  backups.slice(page * ROWS_PER_PAGE, (page + 1) * ROWS_PER_PAGE).map(b => (
+                  sortedBackups.slice(page * ROWS_PER_PAGE, (page + 1) * ROWS_PER_PAGE).map(b => (
                     <tr key={b.filename} style={{ borderBottom: '1px solid rgba(255,255,255,0.05)', transition: 'background 0.2s' }} onMouseOver={e => e.currentTarget.style.background = 'rgba(255,255,255,0.03)'} onMouseOut={e => e.currentTarget.style.background = 'transparent'}>
                       <td style={{ padding: '16px', fontFamily: 'monospace', fontWeight: 500, fontSize: '14px' }}>{b.filename}</td>
                       <td style={{ padding: '16px', fontSize: '14px' }}>{formatSizeKB(b.size_bytes)}</td>
@@ -298,12 +313,20 @@ export default function AdminSettings() {
               </tbody>
             </table>
             
-            {backups.length > ROWS_PER_PAGE && (
+            {sortedBackups.length > 0 && (
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '16px', borderTop: '1px solid var(--border-color)' }}>
                 <div style={{ fontSize: '13px', color: 'var(--text-muted)' }}>
-                  Showing {page * ROWS_PER_PAGE + 1} to {Math.min((page + 1) * ROWS_PER_PAGE, backups.length)} of {backups.length}
+                  Showing {page * ROWS_PER_PAGE + 1} to {Math.min((page + 1) * ROWS_PER_PAGE, sortedBackups.length)} of {sortedBackups.length}
                 </div>
                 <div style={{ display: 'flex', gap: '8px' }}>
+                  <button 
+                    className="btn btn-secondary" 
+                    onClick={() => setPage(0)}
+                    disabled={page === 0}
+                    style={{ padding: '4px 12px', fontSize: '13px' }}
+                  >
+                    First
+                  </button>
                   <button 
                     className="btn btn-secondary" 
                     disabled={page === 0} 
@@ -312,17 +335,27 @@ export default function AdminSettings() {
                   >
                     Previous
                   </button>
+                  <span style={{ padding: '4px 8px', fontSize: '14px' }}>Page {page + 1} of {Math.ceil(sortedBackups.length / ROWS_PER_PAGE)}</span>
                   <button 
                     className="btn btn-secondary" 
-                    disabled={(page + 1) * ROWS_PER_PAGE >= backups.length} 
+                    disabled={(page + 1) * ROWS_PER_PAGE >= sortedBackups.length} 
                     onClick={() => setPage(page + 1)}
                     style={{ padding: '4px 12px', fontSize: '13px' }}
                   >
                     Next
                   </button>
+                  <button 
+                    className="btn btn-secondary" 
+                    onClick={() => setPage(Math.max(0, Math.ceil(sortedBackups.length / ROWS_PER_PAGE) - 1))}
+                    disabled={(page + 1) * ROWS_PER_PAGE >= sortedBackups.length}
+                    style={{ padding: '4px 12px', fontSize: '13px' }}
+                  >
+                    Last
+                  </button>
                 </div>
               </div>
             )}
+
           </div>
         </div>
       )}

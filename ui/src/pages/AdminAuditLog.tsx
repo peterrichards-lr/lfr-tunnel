@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import axios from 'axios';
 import { useSettings } from '../contexts/SettingsContext';
+import { useTableSort } from '../hooks/useTableSort';
 
 interface AuditEvent {
   event_id: string;
@@ -34,8 +35,10 @@ export default function AdminAuditLog() {
     fetchEvents();
   }, []);
 
-  const totalPages = Math.ceil(events.length / ROWS_PER_PAGE);
-  const paginatedEvents = events.slice(page * ROWS_PER_PAGE, (page + 1) * ROWS_PER_PAGE);
+  const { items: sortedEvents, requestSort, getSortIndicator, searchQuery, setSearchQuery } = useTableSort(events, ['actor', 'action', 'resource', 'ip_address', 'details']);
+
+  const totalPages = Math.ceil(sortedEvents.length / ROWS_PER_PAGE);
+  const paginatedEvents = sortedEvents.slice(page * ROWS_PER_PAGE, (page + 1) * ROWS_PER_PAGE);
 
   if (loading) return <div>Loading audit logs...</div>;
 
@@ -48,18 +51,27 @@ export default function AdminAuditLog() {
         </div>
         <a href="/api/admin/audit/export" className="btn btn-secondary">Export CSV</a>
       </div>
-      
+      <div style={{ marginBottom: '16px' }}>
+        <input 
+          type="text" 
+          placeholder="Search audit logs..." 
+          value={searchQuery} 
+          onChange={e => { setSearchQuery(e.target.value); setPage(0); }}
+          style={{ padding: '8px 12px', width: '100%', maxWidth: '300px', background: 'var(--input-bg)', color: 'var(--text-main)', border: '1px solid var(--border)', borderRadius: '6px' }}
+        />
+      </div>
+
       <div className="card" style={{ padding: 0 }}>
         <div className="table-responsive">
           <table style={{ width: '100%', borderCollapse: 'collapse' }}>
             <thead>
               <tr style={{ borderBottom: '1px solid var(--border)', textAlign: 'left' }}>
-                <th style={{ padding: '12px 16px', color: 'var(--text-muted)', fontWeight: 600, fontSize: '13px' }}>Time</th>
-                <th style={{ padding: '12px 16px', color: 'var(--text-muted)', fontWeight: 600, fontSize: '13px' }}>Actor</th>
-                <th style={{ padding: '12px 16px', color: 'var(--text-muted)', fontWeight: 600, fontSize: '13px' }}>Action</th>
-                <th style={{ padding: '12px 16px', color: 'var(--text-muted)', fontWeight: 600, fontSize: '13px' }}>Resource</th>
-                <th style={{ padding: '12px 16px', color: 'var(--text-muted)', fontWeight: 600, fontSize: '13px' }}>IP Address</th>
-                <th style={{ padding: '12px 16px', color: 'var(--text-muted)', fontWeight: 600, fontSize: '13px' }}>Details</th>
+                <th style={{ padding: '12px 16px', color: 'var(--text-muted)', fontWeight: 600, fontSize: '13px', cursor: 'pointer' }} onClick={() => requestSort('created_at')}>Time{getSortIndicator('created_at')}</th>
+                <th style={{ padding: '12px 16px', color: 'var(--text-muted)', fontWeight: 600, fontSize: '13px', cursor: 'pointer' }} onClick={() => requestSort('actor')}>Actor{getSortIndicator('actor')}</th>
+                <th style={{ padding: '12px 16px', color: 'var(--text-muted)', fontWeight: 600, fontSize: '13px', cursor: 'pointer' }} onClick={() => requestSort('action')}>Action{getSortIndicator('action')}</th>
+                <th style={{ padding: '12px 16px', color: 'var(--text-muted)', fontWeight: 600, fontSize: '13px', cursor: 'pointer' }} onClick={() => requestSort('resource')}>Resource{getSortIndicator('resource')}</th>
+                <th style={{ padding: '12px 16px', color: 'var(--text-muted)', fontWeight: 600, fontSize: '13px', cursor: 'pointer' }} onClick={() => requestSort('ip_address')}>IP Address{getSortIndicator('ip_address')}</th>
+                <th style={{ padding: '12px 16px', color: 'var(--text-muted)', fontWeight: 600, fontSize: '13px', cursor: 'pointer' }} onClick={() => requestSort('details')}>Details{getSortIndicator('details')}</th>
               </tr>
             </thead>
             <tbody>
@@ -89,7 +101,7 @@ export default function AdminAuditLog() {
         {totalPages > 1 && (
           <div style={{ padding: '16px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderTop: '1px solid var(--border)' }}>
             <div style={{ color: 'var(--text-muted)', fontSize: '14px' }}>
-              Showing {page * ROWS_PER_PAGE + 1} to {Math.min((page + 1) * ROWS_PER_PAGE, events.length)} of {events.length} logs
+              Showing {page * ROWS_PER_PAGE + 1} to {Math.min((page + 1) * ROWS_PER_PAGE, sortedEvents.length)} of {sortedEvents.length} logs
             </div>
             <div style={{ display: 'flex', gap: '8px' }}>
               <button 

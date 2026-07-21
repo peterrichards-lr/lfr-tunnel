@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import axios from 'axios';
 import { useOutletContext } from 'react-router-dom';
 import { useI18n } from '../contexts/I18nContext';
+import { useTableSort } from '../hooks/useTableSort';
 
 interface User {
   id: string;
@@ -162,8 +163,9 @@ export default function AdminUsers() {
       setIsInviting(false);
     }
   };
-
   if (loading) return <div>Loading users...</div>;
+
+  const { items: sortedUsers, requestSort, getSortIndicator, searchQuery, setSearchQuery } = useTableSort(users, ['email', 'first_name', 'last_name', 'role', 'status', 'auth_method']);
 
   return (
     <div>
@@ -184,22 +186,31 @@ export default function AdminUsers() {
           {pageMessage.text}
         </div>
       )}
+      <div style={{ marginBottom: '16px' }}>
+        <input 
+          type="text" 
+          placeholder="Search users..." 
+          value={searchQuery} 
+          onChange={e => setSearchQuery(e.target.value)}
+          style={{ padding: '8px 12px', width: '100%', maxWidth: '300px', background: 'var(--input-bg)', color: 'var(--text-main)', border: '1px solid var(--border)', borderRadius: '6px' }}
+        />
+      </div>
 
       <div className="card" style={{ padding: '0' }}>
         <div className="table-responsive">
           <table>
             <thead>
               <tr>
-                <th>User</th>
-                <th>Role</th>
-                <th>Status</th>
-                <th>Auth Method</th>
-                <th>Portal Active</th>
+                <th style={{ cursor: 'pointer' }} onClick={() => requestSort('first_name')}>User{getSortIndicator('first_name')}</th>
+                <th style={{ cursor: 'pointer' }} onClick={() => requestSort('role')}>Role{getSortIndicator('role')}</th>
+                <th style={{ cursor: 'pointer' }} onClick={() => requestSort('status')}>Status{getSortIndicator('status')}</th>
+                <th style={{ cursor: 'pointer' }} onClick={() => requestSort('auth_method')}>Auth Method{getSortIndicator('auth_method')}</th>
+                <th style={{ cursor: 'pointer' }} onClick={() => requestSort('portal_active')}>Portal Active{getSortIndicator('portal_active')}</th>
                 <th>Actions</th>
               </tr>
             </thead>
             <tbody>
-              {users.map((u) => {
+              {sortedUsers.map((u) => {
                 const isSelf = currentUser && u.email === currentUser.email;
                 return (
                   <tr key={u.email} style={isSelf ? { opacity: 0.6 } : {}}>

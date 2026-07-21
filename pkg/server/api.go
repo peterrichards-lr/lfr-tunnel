@@ -402,6 +402,26 @@ func (s *Server) handleGetAnalytics(w http.ResponseWriter, r *http.Request) {
 			http.Error(w, `{"error":"Failed to fetch global analytics"}`, http.StatusInternalServerError)
 			return
 		}
+
+		nodeDistribution := make(map[string]int)
+		if s.registry != nil {
+			for range s.registry.ListLeases() {
+				nodeDistribution["control"]++
+			}
+		}
+		s.edgeLeasesMu.Lock()
+		for _, userLeases := range s.edgeLeases {
+			for _, el := range userLeases {
+				node := el.NodeID
+				if node == "" {
+					node = "control"
+				}
+				nodeDistribution[node]++
+			}
+		}
+		s.edgeLeasesMu.Unlock()
+		globalStats.NodeDistribution = nodeDistribution
+
 		slog.Info(fmt.Sprintf("handleGetAnalytics: globalStats loaded successfully (TopUsers: %d, Daily: %d)", len(globalStats.TopUsers), len(globalStats.Daily)))
 		resp["global"] = globalStats
 	}

@@ -12,6 +12,13 @@ export default function Layout() {
   const navigate = useNavigate();
   const { t } = useI18n();
 
+  const [showV1Promo, setShowV1Promo] = useState(!localStorage.getItem('v1_promo_dismissed'));
+
+  const dismissV1Promo = () => {
+    localStorage.setItem('v1_promo_dismissed', 'true');
+    setShowV1Promo(false);
+  };
+
   const dismissTargetedMessage = async () => {
     try {
       await axios.post('/api/me/dismiss-message');
@@ -67,9 +74,18 @@ export default function Layout() {
   if (!user) return null;
 
   return (
-    <div id="dashboard-screen" style={{ display: 'flex' }}>
+    <div id="dashboard-screen" style={{ display: 'flex', paddingTop: showV1Promo ? '44px' : '0', transition: 'padding-top 0.2s ease' }}>
       <Sidebar user={user} isOpen={isSidebarOpen} onClose={() => setIsSidebarOpen(false)} />
       
+      {showV1Promo && (
+        <div style={{ backgroundColor: '#0b5fff', color: 'white', padding: '12px 24px', textAlign: 'center', position: 'fixed', top: 0, left: 0, width: '100%', zIndex: 9999, boxSizing: 'border-box', boxShadow: '0 4px 12px rgba(0,0,0,0.15)' }}>
+          <p style={{ margin: 0, fontSize: '14px', fontWeight: 500 }}>
+            Need the legacy interface? <a href="/portal/" style={{ color: 'white', textDecoration: 'underline', fontWeight: 700, marginLeft: '8px' }}>Switch back to V1 &rarr;</a>
+          </p>
+          <button onClick={dismissV1Promo} style={{ position: 'absolute', right: '24px', top: '50%', transform: 'translateY(-50%)', background: 'none', border: 'none', color: 'white', cursor: 'pointer', fontSize: '18px', padding: '4px', lineHeight: 1 }}>&times;</button>
+        </div>
+      )}
+
       {/* Mobile Top Header */}
       <div className="mobile-header" style={{ display: 'none', padding: '16px', background: 'var(--bg-card)', borderBottom: '1px solid var(--border)', alignItems: 'center', gap: '16px' }}>
         <button className="btn" onClick={() => setIsSidebarOpen(true)} style={{ padding: '8px', background: 'transparent', border: '1px solid var(--border)', color: 'var(--text-main)' }}>
@@ -106,14 +122,13 @@ export default function Layout() {
 
         <header className="content-header" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '32px' }}>
           <div>
-            <h2 style={{ margin: 0 }}>{t('dashboard', 'Dashboard')}</h2>
             <p style={{ margin: 0, color: 'var(--text-muted)' }}>{t('welcome_back', 'Welcome back')}, {user.first_name}</p>
           </div>
           <div style={{ textAlign: 'right' }}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: '8px', justifyContent: 'flex-end', marginBottom: '4px' }}>
+            <a href="https://status.lfr-demo.se/" target="_blank" rel="noopener noreferrer" style={{ display: 'flex', alignItems: 'center', gap: '8px', justifyContent: 'flex-end', marginBottom: '4px', textDecoration: 'none' }}>
               <div style={{ width: '8px', height: '8px', borderRadius: '50%', background: 'var(--success)' }}></div>
               <span style={{ fontSize: '13px', fontWeight: 600, color: 'var(--text-main)' }}>{t('system_online', 'System Online')}</span>
-            </div>
+            </a>
             {uptime && <div style={{ fontSize: '12px', color: 'var(--text-muted)' }}>{t('uptime', 'Uptime')}: {uptime}</div>}
           </div>
         </header>

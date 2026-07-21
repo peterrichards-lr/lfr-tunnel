@@ -48,8 +48,9 @@ The 10 categories are:
 
 ## 4. Pre-Commit / Pre-PR Checks
 *Active Constraint*: Before pushing commits and opening a PR, you MUST actively execute the following verification steps:
-1. **Go Formatting**: Execute `gofmt -w .` to format all modified Go files.
-2. **UI Builds**: If you modify any React UI source files (under `ui/`), you MUST execute the UI build to sync `pkg/server/ui-dist`. Execute exactly:
+1. **Branch Sync**: You MUST execute `git fetch origin && git merge origin/master` to ensure your feature branch is strictly up-to-date with `master`. If there are any merge conflicts, you MUST resolve them and re-build any affected components (e.g. `ui-dist`) before proceeding.
+2. **Go Formatting**: Execute `gofmt -w .` to format all modified Go files.
+3. **UI Builds**: If you modify any React UI source files (under `ui/`), you MUST execute the UI build to sync `pkg/server/ui-dist`. Execute exactly:
    ```bash
    cd ui && CI=true pnpm install && pnpm run build && cd .. && rm -rf pkg/server/ui-dist && cp -r ui/dist pkg/server/ui-dist
    ```

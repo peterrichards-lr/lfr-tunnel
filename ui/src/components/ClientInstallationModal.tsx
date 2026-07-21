@@ -64,7 +64,12 @@ export default function ClientInstallationModal({ isOpen, onClose, serverConfig 
                 background: 'none', border: 'none', padding: '8px 16px', cursor: 'pointer', fontWeight: 500,
                 color: activeTab === os ? 'var(--text)' : 'var(--text-muted)',
                 borderBottom: `2px solid ${activeTab === os ? 'var(--primary)' : 'transparent'}`,
-                transition: 'all 0.2s'
+                transition: 'all 0.2s',
+                display: 'flex',
+                justifyContent: 'center',
+                alignItems: 'center',
+                boxSizing: 'border-box',
+                marginBottom: '-1px'
               }}
             >
               {t(`guide_tab_${os}`, os === 'macos' ? 'macOS' : os === 'windows' ? 'Windows' : 'Linux')}

@@ -638,6 +638,7 @@ func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 				"maintenance_mode":         maintStr,
 				"enforce_policy_consent":   consentStr,
 				"docker_image":             dockerImg,
+				"supported_domains":        s.cfg.Domains,
 				"docker_bypass_url":        s.cfg.DockerBypassURL,
 				"client_platforms":         effectivePlatforms,
 				"regions":                  regions,

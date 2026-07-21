@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { Outlet, useNavigate } from 'react-router-dom';
+import { Outlet, useNavigate, useLocation } from 'react-router-dom';
 import axios from 'axios';
 import Sidebar from './Sidebar';
 import { useI18n } from '../contexts/I18nContext';
@@ -10,7 +10,29 @@ export default function Layout() {
   const [uptime, setUptime] = useState<string>('');
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
   const navigate = useNavigate();
+  const location = useLocation();
   const { t } = useI18n();
+
+  const getPageTitle = () => {
+    switch (location.pathname) {
+      case '/dashboard': return t('dashboard_overview', 'Dashboard Overview');
+      case '/dashboard/tokens': return t('tab_tokens_title', 'Personal Access Tokens');
+      case '/dashboard/tunnels': return t('tab_tunnels_title', 'Active Tunnel Connections');
+      case '/dashboard/account': return t('account_title', 'Account Settings');
+      case '/dashboard/admin/registrations': return t('tab_registrations_title', 'User Registrations');
+      case '/dashboard/admin/users': return t('tab_users_title', 'User Management');
+      case '/dashboard/admin/blacklist': return t('tab_blacklist_title', 'IP Blacklist');
+      case '/dashboard/admin/analytics': return t('tab_analytics_title', 'System Analytics');
+      case '/dashboard/admin/audit': return t('tab_audit_title', 'Audit Log');
+      case '/dashboard/admin/magic': return t('tab_magic_title', 'Magic Links');
+      case '/dashboard/admin/network-health': return t('tab_network_title', 'Edge Gateways');
+      case '/dashboard/admin/backups': return t('tab_backups_title', 'Database Backups');
+      case '/dashboard/admin/maintenance': return t('sidebar_maintenance_mode', 'Gateway Maintenance');
+      case '/dashboard/admin/system': return t('sidebar_system', 'System Settings');
+      case '/dashboard/reservations': return t('tab_reservations_title', 'Subdomain Reservations');
+      default: return t('dashboard', 'Dashboard');
+    }
+  };
 
   const dismissTargetedMessage = async () => {
     try {
@@ -106,7 +128,7 @@ export default function Layout() {
 
         <header className="content-header" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '32px' }}>
           <div>
-            <h2 style={{ margin: 0 }}>{t('dashboard', 'Dashboard')}</h2>
+            <h2 style={{ margin: 0 }}>{getPageTitle()}</h2>
             <p style={{ margin: 0, color: 'var(--text-muted)' }}>{t('welcome_back', 'Welcome back')}, {user.first_name}</p>
           </div>
           <div style={{ textAlign: 'right' }}>

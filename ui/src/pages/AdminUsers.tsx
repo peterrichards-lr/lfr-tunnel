@@ -403,7 +403,7 @@ export default function AdminUsers() {
             </p>
             <div className="form-group" style={{ marginBottom: '16px' }}>
               <textarea
-                className="form-control"
+                className="input-field"
                 placeholder="Enter your message..."
                 rows={3}
                 value={targetedMessage}
@@ -435,19 +435,19 @@ export default function AdminUsers() {
             <form onSubmit={submitInvite}>
               <div className="form-group" style={{ marginBottom: '16px' }}>
                 <label>{t('email_address', 'Email Address')}</label>
-                <input type="email" required className="form-control" value={inviteForm.email} onChange={(e) => setInviteForm({...inviteForm, email: e.target.value})} placeholder="user@company.com" />
+                <input type="email" required className="input-field" value={inviteForm.email} onChange={(e) => setInviteForm({...inviteForm, email: e.target.value})} placeholder="user@company.com" />
               </div>
               <div className="form-group" style={{ marginBottom: '16px' }}>
                 <label>{t('first_name', 'First Name')}</label>
-                <input type="text" required className="form-control" value={inviteForm.first_name} onChange={(e) => setInviteForm({...inviteForm, first_name: e.target.value})} placeholder={t('first_name_placeholder', 'John')} />
+                <input type="text" required className="input-field" value={inviteForm.first_name} onChange={(e) => setInviteForm({...inviteForm, first_name: e.target.value})} placeholder={t('first_name_placeholder', 'John')} />
               </div>
               <div className="form-group" style={{ marginBottom: '16px' }}>
                 <label>{t('last_name', 'Last Name')}</label>
-                <input type="text" required className="form-control" value={inviteForm.last_name} onChange={(e) => setInviteForm({...inviteForm, last_name: e.target.value})} placeholder={t('last_name_placeholder', 'Doe')} />
+                <input type="text" required className="input-field" value={inviteForm.last_name} onChange={(e) => setInviteForm({...inviteForm, last_name: e.target.value})} placeholder={t('last_name_placeholder', 'Doe')} />
               </div>
               <div className="form-group" style={{ marginBottom: '24px' }}>
                 <label>{t('language_preference', 'Language Preference')}</label>
-                <select className="form-control" value={inviteForm.language_preference} onChange={(e) => setInviteForm({...inviteForm, language_preference: e.target.value})}>
+                <select className="input-field" value={inviteForm.language_preference} onChange={(e) => setInviteForm({...inviteForm, language_preference: e.target.value})}>
                   <option value="en">English (UK)</option>
                   <option value="en-us">English (US)</option>
                   <option value="de">Deutsch (DE)</option>

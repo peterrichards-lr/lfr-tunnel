@@ -172,7 +172,7 @@ export default function AdminSettings() {
         <h4>Domain Allocation</h4>
         <div className="form-group" style={{ marginTop: '16px' }}>
           <label>Allocation Rule</label>
-          <select className="form-control" value={allocationRule} onChange={(e) => setAllocationRule(e.target.value)}>
+          <select className="input-field" value={allocationRule} onChange={(e) => setAllocationRule(e.target.value)}>
             <option value="round_robin">Round Robin</option>
             <option value="least_connections">Least Connections</option>
             <option value="consistent_hashing">Consistent Hashing</option>
@@ -181,7 +181,7 @@ export default function AdminSettings() {
         </div>
         <div className="form-group">
           <label>Default Domain</label>
-          <select className="form-control" value={defaultDomain} onChange={(e) => setDefaultDomain(e.target.value)}>
+          <select className="input-field" value={defaultDomain} onChange={(e) => setDefaultDomain(e.target.value)}>
             <option value="">None (Force Error if Contextual Fails)</option>
             {supportedDomains.map((d) => (
               <option key={d} value={d}>{d}</option>
@@ -231,7 +231,7 @@ export default function AdminSettings() {
         <div className="form-group">
           <input
             type="text"
-            className="form-control"
+            className="input-field"
             placeholder="Enter broadcast message..."
             value={broadcastMessage}
             onChange={(e) => setBroadcastMessage(e.target.value)}

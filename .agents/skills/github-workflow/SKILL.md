@@ -46,7 +46,17 @@ The 10 categories are:
    ```
    *The utility will automatically detect the completed state, post a reference comment with the current git commit hash, and forcefully close the issue on GitHub.*
 
-## 4. Pre-Commit / Pre-PR Checks
+## 4. Pull Request Requirements
+*Active Constraint*: Before creating a Pull Request (`gh pr create`), you MUST ensure the following criteria are met:
+1. **Existing Issue Verification**: A GitHub issue MUST exist for the work being PR'd.
+2. **Issue Linking**: The PR description or commit message MUST contain `Closes #<issue-number>` or `Resolves #<issue-number>` for all associated issues. A single PR may close multiple issues (e.g., closing the final sub-issue and the parent Epic simultaneously).
+3. **Issue Content Constraints**: The GitHub issue(s) being resolved MUST contain:
+    - A clear description of the problem or feature.
+    - An analysis section detailing how to resolve or implement the fix/change.
+    - A documented implementation plan.
+If the issue lacks these elements, you MUST update the issue (`gh issue edit`) with this information BEFORE opening the PR.
+
+## 5. Pre-Commit / Pre-PR Checks
 *Active Constraint*: Before pushing commits and opening a PR, you MUST actively execute the following verification steps:
 1. **Branch Sync**: You MUST execute `git fetch origin && git merge origin/master` to ensure your feature branch is strictly up-to-date with `master`. If there are any merge conflicts, you MUST resolve them and re-build any affected components (e.g. `ui-dist`) before proceeding.
 2. **Go Formatting**: Execute `gofmt -w .` to format all modified Go files.
@@ -57,4 +67,4 @@ The 10 categories are:
 
 <!-- markdownlint-disable MD049 -->
 ---
-*Last Updated: 2026-07-20* | *Last Reviewed: 2026-07-20*
+*Last Updated: 2026-07-21* | *Last Reviewed: 2026-07-21*

@@ -77,7 +77,7 @@ export default function AdminBlacklist() {
           <div style={{ flex: '1 1 200px' }}>
             <input 
               type="text" 
-              className="form-control" 
+              className="input-field" 
               placeholder="IP Address (e.g. 192.168.1.1)" 
               value={ipInput} 
               onChange={(e) => setIpInput(e.target.value)} 
@@ -87,7 +87,7 @@ export default function AdminBlacklist() {
           <div style={{ flex: '2 1 250px' }}>
             <input 
               type="text" 
-              className="form-control" 
+              className="input-field" 
               placeholder="Reason (optional)" 
               value={reasonInput} 
               onChange={(e) => setReasonInput(e.target.value)} 

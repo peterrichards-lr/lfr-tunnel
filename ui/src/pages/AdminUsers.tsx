@@ -168,39 +168,39 @@ export default function AdminUsers() {
   if (loading) {
     return (
       <div style={{ animation: 'fadeInUp 0.6s ease-out' }}>
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '24px' }}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 'var(--spacing-xl)' }}>
           <Skeleton width={180} height={28} />
           <Skeleton width={120} height={40} />
         </div>
         
-        <div className="card" style={{ padding: '24px', marginBottom: '24px' }}>
-          <div style={{ display: 'flex', gap: '12px', alignItems: 'center' }}>
+        <div className="card" style={{ padding: 'var(--spacing-xl)', marginBottom: 'var(--spacing-xl)' }}>
+          <div style={{ display: 'flex', gap: 'var(--spacing-md)', alignItems: 'center' }}>
             <Skeleton width="100%" height={40} style={{ maxWidth: '300px' }} />
           </div>
         </div>
 
-        <div className="card" style={{ padding: '24px' }}>
+        <div className="card" style={{ padding: 'var(--spacing-xl)' }}>
           <div className="table-responsive">
             <table style={{ width: '100%', borderCollapse: 'collapse' }}>
               <thead>
                 <tr style={{ borderBottom: '1px solid var(--border)', textAlign: 'left' }}>
-                  <th style={{ padding: '12px 16px' }}><Skeleton width={80} /></th>
-                  <th style={{ padding: '12px 16px' }}><Skeleton width={100} /></th>
-                  <th style={{ padding: '12px 16px' }}><Skeleton width={60} /></th>
-                  <th style={{ padding: '12px 16px' }}><Skeleton width={80} /></th>
-                  <th style={{ padding: '12px 16px' }}><Skeleton width={120} /></th>
-                  <th style={{ padding: '12px 16px' }}><Skeleton width={80} /></th>
+                  <th style={{ padding: 'var(--spacing-md) var(--spacing-lg)' }}><Skeleton width={80} /></th>
+                  <th style={{ padding: 'var(--spacing-md) var(--spacing-lg)' }}><Skeleton width={100} /></th>
+                  <th style={{ padding: 'var(--spacing-md) var(--spacing-lg)' }}><Skeleton width={60} /></th>
+                  <th style={{ padding: 'var(--spacing-md) var(--spacing-lg)' }}><Skeleton width={80} /></th>
+                  <th style={{ padding: 'var(--spacing-md) var(--spacing-lg)' }}><Skeleton width={120} /></th>
+                  <th style={{ padding: 'var(--spacing-md) var(--spacing-lg)' }}><Skeleton width={80} /></th>
                 </tr>
               </thead>
               <tbody>
                 {[...Array(5)].map((_, i) => (
                   <tr key={i} style={{ borderBottom: '1px solid rgba(255,255,255,0.05)' }}>
-                    <td style={{ padding: '16px' }}><Skeleton width="90%" height={16} /></td>
-                    <td style={{ padding: '16px' }}><Skeleton width="85%" height={16} /></td>
-                    <td style={{ padding: '16px' }}><Skeleton width="60%" height={16} /></td>
-                    <td style={{ padding: '16px' }}><Skeleton width="70%" height={16} /></td>
-                    <td style={{ padding: '16px' }}><Skeleton width="80%" height={16} /></td>
-                    <td style={{ padding: '16px' }}><Skeleton width="50%" height={16} /></td>
+                    <td style={{ padding: 'var(--spacing-lg)' }}><Skeleton width="90%" height={16} /></td>
+                    <td style={{ padding: 'var(--spacing-lg)' }}><Skeleton width="85%" height={16} /></td>
+                    <td style={{ padding: 'var(--spacing-lg)' }}><Skeleton width="60%" height={16} /></td>
+                    <td style={{ padding: 'var(--spacing-lg)' }}><Skeleton width="70%" height={16} /></td>
+                    <td style={{ padding: 'var(--spacing-lg)' }}><Skeleton width="80%" height={16} /></td>
+                    <td style={{ padding: 'var(--spacing-lg)' }}><Skeleton width="50%" height={16} /></td>
                   </tr>
                 ))}
               </tbody>
@@ -214,16 +214,16 @@ export default function AdminUsers() {
 
   return (
     <div>
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '24px' }}>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 'var(--spacing-xl)' }}>
         <h3>{t('user_management', 'User Management')}</h3>
         <button className="btn btn-primary" onClick={() => setShowInviteModal(true)}>+ {t('invite_user', 'Invite User')}</button>
       </div>
       
       {pageMessage && (
         <div style={{
-          padding: '12px 16px',
-          marginBottom: '20px',
-          borderRadius: '8px',
+          padding: 'var(--spacing-md) var(--spacing-lg)',
+          marginBottom: 'var(--spacing-lg)',
+          borderRadius: 'var(--spacing-sm)',
           background: pageMessage.type === 'error' ? 'rgba(239, 68, 68, 0.15)' : 'rgba(16, 185, 129, 0.15)',
           color: pageMessage.type === 'error' ? '#f87171' : '#34d399',
           border: `1px solid ${pageMessage.type === 'error' ? 'rgba(239, 68, 68, 0.3)' : 'rgba(16, 185, 129, 0.3)'}`
@@ -231,13 +231,13 @@ export default function AdminUsers() {
           {pageMessage.text}
         </div>
       )}
-      <div style={{ marginBottom: '16px' }}>
+      <div style={{ marginBottom: 'var(--spacing-lg)' }}>
         <input 
           type="text" 
           placeholder="Search users..." 
           value={searchQuery} 
           onChange={e => setSearchQuery(e.target.value)}
-          style={{ padding: '8px 12px', width: '100%', maxWidth: '300px', background: 'var(--input-bg)', color: 'var(--text-main)', border: '1px solid var(--border)', borderRadius: '6px' }}
+          style={{ padding: 'var(--spacing-sm) var(--spacing-md)', width: '100%', maxWidth: '300px', background: 'var(--input-bg)', color: 'var(--text-main)', border: '1px solid var(--border)', borderRadius: '6px' }}
         />
       </div>
 
@@ -277,7 +277,7 @@ export default function AdminUsers() {
                           <span 
                             className="badge" 
                             onClick={() => setSelectedUser(u)}
-                            style={{ cursor: 'pointer', background: 'rgba(99,102,241,0.15)', color: '#818cf8', border: '1px solid rgba(99,102,241,0.3)', padding: '2px 6px', fontSize: '11px', marginLeft: '8px' }}
+                            style={{ cursor: 'pointer', background: 'rgba(99,102,241,0.15)', color: '#818cf8', border: '1px solid rgba(99,102,241,0.3)', padding: '2px var(--spacing-sm)', fontSize: '11px', marginLeft: 'var(--spacing-sm)' }}
                             title="Click to view tunnels"
                           >
                             🔌 {u.active_tunnels!.length} Tunnel{(u.active_tunnels!.length) > 1 ? 's' : ''}
@@ -301,32 +301,32 @@ export default function AdminUsers() {
                     </td>
                     <td>
                       {!isSelf && (
-                        <div style={{ display: 'flex', gap: '8px' }}>
+                        <div style={{ display: 'flex', gap: 'var(--spacing-sm)' }}>
                           {u.status === 'pending' || u.status === 'unverified' ? (
                             <>
-                              <button className="btn btn-primary" style={{ padding: '4px 8px', fontSize: '12px' }} onClick={() => changeStatus(u.email, 'approved')}>Approve</button>
-                              <button className="btn btn-danger" style={{ padding: '4px 8px', fontSize: '12px' }} onClick={() => changeStatus(u.email, 'revoked')}>Reject</button>
+                              <button className="btn btn-primary" style={{ padding: 'var(--spacing-xs) var(--spacing-sm)', fontSize: '12px' }} onClick={() => changeStatus(u.email, 'approved')}>Approve</button>
+                              <button className="btn btn-danger" style={{ padding: 'var(--spacing-xs) var(--spacing-sm)', fontSize: '12px' }} onClick={() => changeStatus(u.email, 'revoked')}>Reject</button>
                             </>
                           ) : (
                             <>
                               {u.status === 'approved' ? (
-                                <button className="btn" style={{ padding: '4px 8px', fontSize: '12px' }} onClick={() => changeStatus(u.email, 'revoked')}>Suspend</button>
+                                <button className="btn" style={{ padding: 'var(--spacing-xs) var(--spacing-sm)', fontSize: '12px' }} onClick={() => changeStatus(u.email, 'revoked')}>Suspend</button>
                               ) : (
-                                <button className="btn" style={{ padding: '4px 8px', fontSize: '12px' }} onClick={() => changeStatus(u.email, 'approved')}>Unsuspend</button>
+                                <button className="btn" style={{ padding: 'var(--spacing-xs) var(--spacing-sm)', fontSize: '12px' }} onClick={() => changeStatus(u.email, 'approved')}>Unsuspend</button>
                               )}
                               
                               {(currentUser.role === 'owner' || u.role !== 'owner') && (
-                                <>
-                                  {u.role === 'admin' || u.role === 'owner' ? (
-                                    <button className="btn" style={{ padding: '4px 8px', fontSize: '12px' }} onClick={() => changeRole(u.email, 'user')}>Demote</button>
-                                  ) : (
-                                    <button className="btn" style={{ padding: '4px 8px', fontSize: '12px' }} onClick={() => changeRole(u.email, 'admin')}>Promote</button>
-                                  )}
-                                  
-                                  {u.email.toLowerCase() !== serverConfig?.owner_email?.toLowerCase() && (
-                                    <button className="btn btn-danger" style={{ padding: '4px 8px', fontSize: '12px' }} onClick={() => deleteUser(u.email)}>Delete</button>
-                                  )}
-                                </>
+                                  <>
+                                    {u.role === 'admin' || u.role === 'owner' ? (
+                                      <button className="btn" style={{ padding: 'var(--spacing-xs) var(--spacing-sm)', fontSize: '12px' }} onClick={() => changeRole(u.email, 'user')}>Demote</button>
+                                    ) : (
+                                      <button className="btn" style={{ padding: 'var(--spacing-xs) var(--spacing-sm)', fontSize: '12px' }} onClick={() => changeRole(u.email, 'admin')}>Promote</button>
+                                    )}
+                                    
+                                    {u.email.toLowerCase() !== serverConfig?.owner_email?.toLowerCase() && (
+                                      <button className="btn btn-danger" style={{ padding: 'var(--spacing-xs) var(--spacing-sm)', fontSize: '12px' }} onClick={() => deleteUser(u.email)}>Delete</button>
+                                    )}
+                                  </>
                               )}
                             </>
                           )}
@@ -344,27 +344,27 @@ export default function AdminUsers() {
         <div style={{
           position: 'fixed', top: 0, left: 0, width: '100%', height: '100%', 
           backgroundColor: 'rgba(0,0,0,0.5)', zIndex: 1000, 
-          display: 'flex', justifyContent: 'center', alignItems: 'center', padding: '20px'
+          display: 'flex', justifyContent: 'center', alignItems: 'center', padding: 'var(--spacing-lg)'
         }}>
           <div className="card" style={{ width: '100%', maxWidth: '800px', maxHeight: '90vh', overflowY: 'auto' }}>
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px' }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 'var(--spacing-lg)' }}>
               <h3 style={{ margin: 0 }}>User Details & Tunnels</h3>
               <button onClick={() => setSelectedUser(null)} style={{ background: 'none', border: 'none', color: 'var(--text-muted)', cursor: 'pointer', fontSize: '20px' }}>✕</button>
             </div>
             
-            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '20px', marginBottom: '24px' }}>
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: 'var(--spacing-lg)', marginBottom: 'var(--spacing-xl)' }}>
               <div>
-                <div style={{ fontSize: '12px', color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '1px', marginBottom: '4px' }}>Name</div>
+                <div style={{ fontSize: '12px', color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '1px', marginBottom: 'var(--spacing-xs)' }}>Name</div>
                 <div style={{ fontWeight: 500 }}>{selectedUser.first_name} {selectedUser.last_name}</div>
               </div>
               <div>
-                <div style={{ fontSize: '12px', color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '1px', marginBottom: '4px' }}>Email</div>
+                <div style={{ fontSize: '12px', color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '1px', marginBottom: 'var(--spacing-xs)' }}>Email</div>
                 <div style={{ fontWeight: 500, fontFamily: 'monospace' }}>{selectedUser.email}</div>
               </div>
               <div>
-                <div style={{ fontSize: '12px', color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '1px', marginBottom: '4px' }}>Status & Role</div>
+                <div style={{ fontSize: '12px', color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '1px', marginBottom: 'var(--spacing-xs)' }}>Status & Role</div>
                 <div>
-                  <span className={`badge ${selectedUser.status === 'approved' ? 'success' : (selectedUser.status === 'revoked' ? 'danger' : 'warning')}`} style={{ marginRight: '8px' }}>
+                  <span className={`badge ${selectedUser.status === 'approved' ? 'success' : (selectedUser.status === 'revoked' ? 'danger' : 'warning')}`} style={{ marginRight: 'var(--spacing-sm)' }}>
                     {selectedUser.status}
                   </span>
                   <span className={`badge ${selectedUser.role === 'admin' ? 'success' : ''}`}>
@@ -373,25 +373,25 @@ export default function AdminUsers() {
                 </div>
               </div>
               <div>
-                <div style={{ fontSize: '12px', color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '1px', marginBottom: '4px' }}>Origin</div>
+                <div style={{ fontSize: '12px', color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '1px', marginBottom: 'var(--spacing-xs)' }}>Origin</div>
                 <div style={{ fontWeight: 500, textTransform: 'capitalize' }}>{selectedUser.auth_method || 'Magic Link'}</div>
               </div>
               <div>
-                <div style={{ fontSize: '12px', color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '1px', marginBottom: '4px' }}>Joined Date</div>
+                <div style={{ fontSize: '12px', color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '1px', marginBottom: 'var(--spacing-xs)' }}>Joined Date</div>
                 <div style={{ fontWeight: 500 }}>{selectedUser.created_at ? new Date(selectedUser.created_at).toLocaleString() : 'N/A'}</div>
               </div>
               <div>
-                <div style={{ fontSize: '12px', color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '1px', marginBottom: '4px' }}>API Quota</div>
+                <div style={{ fontSize: '12px', color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '1px', marginBottom: 'var(--spacing-xs)' }}>API Quota</div>
                 <div style={{ fontWeight: 500 }}>{selectedUser.rate_limit ? `${selectedUser.rate_limit} RPS` : 'Unlimited'}</div>
               </div>
             </div>
 
-            <div style={{ display: 'flex', justifyContent: 'flex-start', marginBottom: '24px' }}>
+            <div style={{ display: 'flex', justifyContent: 'flex-start', marginBottom: 'var(--spacing-xl)' }}>
               <button className="btn btn-primary" onClick={() => setTargetedUserId(selectedUser.id)}>💬 Direct Message</button>
             </div>
 
-            <h4 style={{ marginTop: '24px', marginBottom: '16px', borderBottom: '1px solid var(--border-color)', paddingBottom: '8px' }}>
-              Connected Tunnels <span className="badge" style={{ marginLeft: '8px' }}>{(selectedUser.active_tunnels || []).length}</span>
+            <h4 style={{ marginTop: 'var(--spacing-xl)', marginBottom: 'var(--spacing-lg)', borderBottom: '1px solid var(--border-color)', paddingBottom: 'var(--spacing-sm)' }}>
+              Connected Tunnels <span className="badge" style={{ marginLeft: 'var(--spacing-sm)' }}>{(selectedUser.active_tunnels || []).length}</span>
             </h4>
             
             <div className="table-responsive" style={{ border: '1px solid var(--border-color)', borderRadius: '6px' }}>
@@ -399,25 +399,25 @@ export default function AdminUsers() {
                 <tbody>
                   {!(selectedUser.active_tunnels || []).length && (
                     <tr>
-                      <td colSpan={4} style={{ textAlign: 'center', padding: '24px', color: 'var(--text-muted)' }}>No active tunnels connected.</td>
+                      <td colSpan={4} style={{ textAlign: 'center', padding: 'var(--spacing-xl)', color: 'var(--text-muted)' }}>No active tunnels connected.</td>
                     </tr>
                   )}
                   {(selectedUser.active_tunnels || []).map((t) => {
                     const publicUrl = `https://${t.full_host}`;
                     return (
                       <tr key={t.subdomain_prefix} style={{ borderBottom: '1px solid rgba(255,255,255,0.03)' }}>
-                        <td style={{ padding: '12px', verticalAlign: 'middle' }}>
+                        <td style={{ padding: 'var(--spacing-md)', verticalAlign: 'middle' }}>
                           <div style={{ fontWeight: 600, fontFamily: 'monospace', fontSize: '13px', color: 'var(--text)' }}>{t.subdomain_prefix}</div>
                           <div style={{ fontSize: '11px', color: 'var(--text-muted)', marginTop: '2px' }}>Local Port: {t.local_port}</div>
                         </td>
-                        <td style={{ padding: '12px', verticalAlign: 'middle' }}>
+                        <td style={{ padding: 'var(--spacing-md)', verticalAlign: 'middle' }}>
                           <a href={publicUrl} target="_blank" rel="noreferrer" style={{ color: 'var(--primary)', textDecoration: 'none', fontSize: '13px', fontFamily: 'monospace', wordBreak: 'break-all' }}>{publicUrl}</a>
                           {t.node_id && t.node_id !== 'control' ? (
-                            <span className="badge" style={{ background: 'rgba(139, 92, 246, 0.15)', color: '#c084fc', border: '1px solid rgba(139, 92, 246, 0.3)', fontSize: '10px', marginLeft: '6px' }}>
+                            <span className="badge" style={{ background: 'rgba(139, 92, 246, 0.15)', color: '#c084fc', border: '1px solid rgba(139, 92, 246, 0.3)', fontSize: '10px', marginLeft: 'var(--spacing-xs)' }}>
                               🌍 {t.node_id}
                             </span>
                           ) : (
-                            <span className="badge" style={{ background: 'rgba(59, 130, 246, 0.15)', color: '#60a5fa', border: '1px solid rgba(59, 130, 246, 0.3)', fontSize: '10px', marginLeft: '6px' }}>
+                            <span className="badge" style={{ background: 'rgba(59, 130, 246, 0.15)', color: '#60a5fa', border: '1px solid rgba(59, 130, 246, 0.3)', fontSize: '10px', marginLeft: 'var(--spacing-xs)' }}>
                               🇬🇧 Control
                             </span>
                           )}
@@ -425,12 +425,12 @@ export default function AdminUsers() {
                             IP: {t.client_ip} | Connected: {new Date(t.created_at).toLocaleString()}
                           </div>
                         </td>
-                        <td style={{ padding: '12px', verticalAlign: 'middle', fontSize: '12px', color: 'var(--text-muted)' }}>
+                        <td style={{ padding: 'var(--spacing-md)', verticalAlign: 'middle', fontSize: '12px', color: 'var(--text-muted)' }}>
                           <div>📥 In: <strong style={{ color: 'var(--text)' }}>{formatBytes(t.bytes_in)}</strong></div>
                           <div style={{ marginTop: '2px' }}>📤 Out: <strong style={{ color: 'var(--text)' }}>{formatBytes(t.bytes_out)}</strong></div>
                         </td>
-                        <td style={{ padding: '12px', verticalAlign: 'middle', textAlign: 'right' }}>
-                          <button className="btn btn-danger" style={{ padding: '4px 10px', fontSize: '12px' }} onClick={() => kickTunnel(t.subdomain_prefix)}>Kick</button>
+                        <td style={{ padding: 'var(--spacing-md)', verticalAlign: 'middle', textAlign: 'right' }}>
+                          <button className="btn btn-danger" style={{ padding: 'var(--spacing-xs) var(--spacing-md)', fontSize: '12px' }} onClick={() => kickTunnel(t.subdomain_prefix)}>Kick</button>
                         </td>
                       </tr>
                     );
@@ -447,17 +447,17 @@ export default function AdminUsers() {
         <div style={{
           position: 'fixed', top: 0, left: 0, width: '100%', height: '100%',
           backgroundColor: 'rgba(0,0,0,0.5)', zIndex: 1010,
-          display: 'flex', justifyContent: 'center', alignItems: 'center', padding: '20px'
+          display: 'flex', justifyContent: 'center', alignItems: 'center', padding: 'var(--spacing-lg)'
         }}>
           <div className="card" style={{ width: '100%', maxWidth: '500px' }}>
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px' }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 'var(--spacing-lg)' }}>
               <h3 style={{ margin: 0 }}>Send Direct Message</h3>
               <button onClick={() => setTargetedUserId('')} style={{ background: 'none', border: 'none', color: 'var(--text-muted)', cursor: 'pointer', fontSize: '20px' }}>✕</button>
             </div>
-            <p style={{ fontSize: '14px', color: 'var(--text-muted)', marginBottom: '16px' }}>
+            <p style={{ fontSize: '14px', color: 'var(--text-muted)', marginBottom: 'var(--spacing-lg)' }}>
               Push a real-time banner alert to this specific active developer session.
             </p>
-            <div className="form-group" style={{ marginBottom: '16px' }}>
+            <div className="form-group" style={{ marginBottom: 'var(--spacing-lg)' }}>
               <textarea
                 className="input-field"
                 placeholder="Enter your message..."
@@ -466,7 +466,7 @@ export default function AdminUsers() {
                 onChange={(e) => setTargetedMessage(e.target.value)}
               />
             </div>
-            <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '8px' }}>
+            <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 'var(--spacing-sm)' }}>
               <button className="btn btn-secondary" onClick={() => setTargetedUserId('')}>Cancel</button>
               <button className="btn btn-primary" disabled={isSendingTargeted || !targetedMessage.trim()} onClick={sendTargetedMessage}>
                 {isSendingTargeted ? 'Sending...' : 'Send Message'}
@@ -480,28 +480,28 @@ export default function AdminUsers() {
         <div style={{
           position: 'fixed', top: 0, left: 0, width: '100%', height: '100%', 
           backgroundColor: 'rgba(0,0,0,0.5)', zIndex: 1000, 
-          display: 'flex', justifyContent: 'center', alignItems: 'center', padding: '20px'
+          display: 'flex', justifyContent: 'center', alignItems: 'center', padding: 'var(--spacing-lg)'
         }}>
           <div className="card" style={{ width: '100%', maxWidth: '400px' }}>
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px' }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 'var(--spacing-lg)' }}>
               <h3 style={{ margin: 0 }}>{t('invite_user', 'Invite User')}</h3>
               <button onClick={() => setShowInviteModal(false)} style={{ background: 'none', border: 'none', color: 'var(--text-muted)', cursor: 'pointer', fontSize: '20px' }}>✕</button>
             </div>
-            {inviteError && <div className="alert alert-danger" style={{ marginBottom: '16px' }}>{inviteError}</div>}
+            {inviteError && <div className="alert alert-danger" style={{ marginBottom: 'var(--spacing-lg)' }}>{inviteError}</div>}
             <form onSubmit={submitInvite}>
-              <div className="form-group" style={{ marginBottom: '16px' }}>
+              <div className="form-group" style={{ marginBottom: 'var(--spacing-lg)' }}>
                 <label>{t('email_address', 'Email Address')}</label>
                 <input type="email" required className="input-field" value={inviteForm.email} onChange={(e) => setInviteForm({...inviteForm, email: e.target.value})} placeholder="user@company.com" />
               </div>
-              <div className="form-group" style={{ marginBottom: '16px' }}>
+              <div className="form-group" style={{ marginBottom: 'var(--spacing-lg)' }}>
                 <label>{t('first_name', 'First Name')}</label>
                 <input type="text" required className="input-field" value={inviteForm.first_name} onChange={(e) => setInviteForm({...inviteForm, first_name: e.target.value})} placeholder={t('first_name_placeholder', 'John')} />
               </div>
-              <div className="form-group" style={{ marginBottom: '16px' }}>
+              <div className="form-group" style={{ marginBottom: 'var(--spacing-lg)' }}>
                 <label>{t('last_name', 'Last Name')}</label>
                 <input type="text" required className="input-field" value={inviteForm.last_name} onChange={(e) => setInviteForm({...inviteForm, last_name: e.target.value})} placeholder={t('last_name_placeholder', 'Doe')} />
               </div>
-              <div className="form-group" style={{ marginBottom: '24px' }}>
+              <div className="form-group" style={{ marginBottom: 'var(--spacing-xl)' }}>
                 <label>{t('language_preference', 'Language Preference')}</label>
                 <select className="input-field" value={inviteForm.language_preference} onChange={(e) => setInviteForm({...inviteForm, language_preference: e.target.value})}>
                   <option value="en">English (UK)</option>
@@ -511,7 +511,7 @@ export default function AdminUsers() {
                   <option value="fr">Français (FR)</option>
                 </select>
               </div>
-              <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '8px' }}>
+              <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 'var(--spacing-sm)' }}>
                 <button type="button" className="btn" onClick={() => setShowInviteModal(false)}>{t('cancel', 'Cancel')}</button>
                 <button type="submit" className="btn btn-primary" disabled={isInviting}>
                   {isInviting ? t('sending', 'Sending...') : t('send_invitation', 'Send Invitation')}

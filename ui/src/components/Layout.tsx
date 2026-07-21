@@ -78,17 +78,17 @@ export default function Layout() {
       <Sidebar user={user} isOpen={isSidebarOpen} onClose={() => setIsSidebarOpen(false)} />
       
       {showV1Promo && (
-        <div style={{ backgroundColor: '#0b5fff', color: 'white', padding: '12px 24px', textAlign: 'center', position: 'fixed', top: 0, left: 0, width: '100%', zIndex: 9999, boxSizing: 'border-box', boxShadow: '0 4px 12px rgba(0,0,0,0.15)' }}>
+        <div style={{ backgroundColor: '#0b5fff', color: 'white', padding: 'var(--spacing-md) var(--spacing-xl)', textAlign: 'center', position: 'fixed', top: 0, left: 0, width: '100%', zIndex: 9999, boxSizing: 'border-box', boxShadow: '0 4px 12px rgba(0,0,0,0.15)' }}>
           <p style={{ margin: 0, fontSize: '14px', fontWeight: 500 }}>
-            Need the legacy interface? <a href="/portal/" style={{ color: 'white', textDecoration: 'underline', fontWeight: 700, marginLeft: '8px' }}>Switch back to V1 &rarr;</a>
+            Need the legacy interface? <a href="/portal/" style={{ color: 'white', textDecoration: 'underline', fontWeight: 700, marginLeft: 'var(--spacing-sm)' }}>Switch back to V1 &rarr;</a>
           </p>
-          <button onClick={dismissV1Promo} style={{ position: 'absolute', right: '24px', top: '50%', transform: 'translateY(-50%)', background: 'none', border: 'none', color: 'white', cursor: 'pointer', fontSize: '18px', padding: '4px', lineHeight: 1 }}>&times;</button>
+          <button onClick={dismissV1Promo} style={{ position: 'absolute', right: 'var(--spacing-xl)', top: '50%', transform: 'translateY(-50%)', background: 'none', border: 'none', color: 'white', cursor: 'pointer', fontSize: '18px', padding: 'var(--spacing-xs)', lineHeight: 1 }}>&times;</button>
         </div>
       )}
 
       {/* Mobile Top Header */}
-      <div className="mobile-header" style={{ display: 'none', padding: '16px', background: 'var(--bg-card)', borderBottom: '1px solid var(--border)', alignItems: 'center', gap: '16px' }}>
-        <button className="btn" onClick={() => setIsSidebarOpen(true)} style={{ padding: '8px', background: 'transparent', border: '1px solid var(--border)', color: 'var(--text-main)' }}>
+      <div className="mobile-header" style={{ display: 'none', padding: 'var(--spacing-lg)', background: 'var(--bg-card)', borderBottom: '1px solid var(--border)', alignItems: 'center', gap: 'var(--spacing-lg)' }}>
+        <button className="btn" onClick={() => setIsSidebarOpen(true)} style={{ padding: 'var(--spacing-sm)', background: 'transparent', border: '1px solid var(--border)', color: 'var(--text-main)' }}>
           <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="var(--text-main)" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
             <line x1="3" y1="12" x2="21" y2="12"></line>
             <line x1="3" y1="6" x2="21" y2="6"></line>
@@ -100,7 +100,7 @@ export default function Layout() {
 
       <div className="main-content">
         {user.broadcast_message && (
-          <div style={{ background: 'var(--accent)', color: '#fff', padding: '12px 16px', borderRadius: '8px', marginBottom: '24px', display: 'flex', alignItems: 'center', gap: '12px', boxShadow: '0 4px 12px rgba(0,0,0,0.1)' }}>
+          <div style={{ background: 'var(--accent)', color: '#fff', padding: 'var(--spacing-md) var(--spacing-lg)', borderRadius: 'var(--spacing-sm)', marginBottom: 'var(--spacing-xl)', display: 'flex', alignItems: 'center', gap: 'var(--spacing-md)', boxShadow: '0 4px 12px rgba(0,0,0,0.1)' }}>
             <span style={{ fontSize: '18px' }}>📢</span>
             <div style={{ flex: 1, fontSize: '14px' }}>
               <strong>{t('broadcast_alert', 'System Broadcast')}:</strong> {user.broadcast_message}
@@ -109,28 +109,28 @@ export default function Layout() {
         )}
 
         {user.targeted_message && (
-          <div style={{ background: 'var(--primary)', color: '#fff', padding: '12px 16px', borderRadius: '8px', marginBottom: '24px', display: 'flex', alignItems: 'center', gap: '12px', boxShadow: '0 4px 12px rgba(0,0,0,0.1)' }}>
+          <div style={{ background: 'var(--primary)', color: '#fff', padding: 'var(--spacing-md) var(--spacing-lg)', borderRadius: 'var(--spacing-sm)', marginBottom: 'var(--spacing-xl)', display: 'flex', alignItems: 'center', gap: 'var(--spacing-md)', boxShadow: '0 4px 12px rgba(0,0,0,0.1)' }}>
             <span style={{ fontSize: '18px' }}>💬</span>
             <div style={{ flex: 1, fontSize: '14px' }}>
               <strong>{t('admin_message', 'Admin Message')}:</strong> {user.targeted_message}
             </div>
-            <button onClick={dismissTargetedMessage} className="btn" style={{ background: 'rgba(0,0,0,0.2)', color: 'white', border: 'none', padding: '4px 12px', fontSize: '12px' }}>
+            <button onClick={dismissTargetedMessage} className="btn" style={{ background: 'rgba(0,0,0,0.2)', color: 'white', border: 'none', padding: 'var(--spacing-xs) var(--spacing-md)', fontSize: '12px' }}>
               {t('dismiss', 'Dismiss')}
             </button>
           </div>
         )}
 
-        <header className="content-header" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '32px' }}>
+        <header className="content-header" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 'var(--spacing-2xl)' }}>
           <div>
             <p style={{ margin: 0, color: 'var(--text-muted)' }}>{t('welcome_back', 'Welcome back')}, {user.first_name}</p>
             {user.last_login_at && !user.last_login_at.startsWith('0001') && (
-              <p style={{ margin: '4px 0 0 0', color: 'var(--text-muted)', fontSize: '13px' }}>
+              <p style={{ margin: 'var(--spacing-xs) 0 0 0', color: 'var(--text-muted)', fontSize: '13px' }}>
                 Last login: {new Date(user.last_login_at).toLocaleString()} from <code style={{background: 'rgba(0,0,0,0.1)', padding: '2px 4px', borderRadius: '4px'}}>{user.last_login_ip || 'Unknown'}</code>
               </p>
             )}
           </div>
           <div style={{ textAlign: 'right' }}>
-            <a href="https://status.lfr-demo.se/" target="_blank" rel="noopener noreferrer" style={{ display: 'flex', alignItems: 'center', gap: '8px', justifyContent: 'flex-end', marginBottom: '4px', textDecoration: 'none' }}>
+            <a href="https://status.lfr-demo.se/" target="_blank" rel="noopener noreferrer" style={{ display: 'flex', alignItems: 'center', gap: 'var(--spacing-sm)', justifyContent: 'flex-end', marginBottom: 'var(--spacing-xs)', textDecoration: 'none' }}>
               <div style={{ width: '8px', height: '8px', borderRadius: '50%', background: 'var(--success)' }}></div>
               <span style={{ fontSize: '13px', fontWeight: 600, color: 'var(--text-main)' }}>{t('system_online', 'System Online')}</span>
             </a>

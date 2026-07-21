@@ -6,17 +6,16 @@ Persistent state and planning document.
 Build an open-source, MIT-licensed tunneling solution tailored for Liferay's Sales Engineering (SE) team. It will allow team members to route traffic from wildcard subdomains on two public domains to their locally running LDM (Liferay Development Manager) / Liferay instances, offload HTTPS/SSL, and handle offline developer machines gracefully.
 
 ## Security & Secrets Management Constraints
-- **Plain Text Secrets & Passphrases**: The AI assistant must never ask the user to provide any private keys, certificates, or passphrases in plain text. Since the conversation context is shared with remote servers, pasting sensitive credentials in plain text presents a security risk.
-- **Secure Secret Handling**: Instead of pasting secrets:
-  - Generate temporary keys/certificates locally using scripts or commands.
-  - Load passphrases from secure environment variables or files that are not committed.
-  - Instruct the user to run secure decryption or configuration commands locally on their system rather than sharing passwords in the chat.
-  - Ensure all temporary certificate and private key files are completely deleted before making any git commits to prevent accidental exposure in the repository history.
-- **Local Binary Execution Constraints**: The local system EDR (SentinelOne) blocks unsigned `lfr-tunnel`/`lfr-tunneld` binaries and dynamic Go test run executables (`*.test`). InfoSec has granted a specific "Agent Interoperability rule" exclusively for the **exact file path** `/private/tmp/lfr-tunnel`. 
-  - Do NOT simply use `TMPDIR=/private/tmp` as `go test` creates nested directories which SentinelOne will quarantine, bringing down local toolchains. 
-  - To run Go tests safely, you must iterate over packages and explicitly compile the test binary to the exact whitelisted file before executing it: `go test -c -o /private/tmp/lfr-tunnel <pkg> && /private/tmp/lfr-tunnel`. (This logic is codified in the `Makefile` and `pre-commit-hook.sh`).
-- **Git Conflict Prevention & PR Management**: Because remote GitHub cannot evaluate custom merge drivers defined in `.gitattributes`, the AI assistant must always run `git fetch origin` followed by `git merge origin/master` locally to resolve any potential `gemini.md` conflict before pushing commits or creating/updating a PR.
-- **Strict Branch Protection Compliance**: The AI assistant must never use administrative privileges (e.g., `gh pr merge --admin`) to bypass branch protection rules or CI/CD status checks. The rules must be followed to the letter. All changes must be pushed to a branch, a PR raised, and the assistant must wait for the required CI checks to pass and for the user to explicitly approve or merge the PR.
+- **Plain Text Secrets & Passphrases**: 
+  *Active Constraint*: You are FORBIDDEN from asking the user to provide any private keys, certificates, or passphrases in plain text. Before requesting sensitive configuration, you MUST execute a plan to generate temporary keys locally or load them from non-committed files.
+- **Secure Secret Handling**: 
+  *Active Constraint*: Before committing code that involved generating temporary keys, you MUST execute `rm -rf` on all temporary certificate and private key files. You are FORBIDDEN from running `git commit` until this deletion is confirmed via tool output.
+- **Local Binary Execution Constraints**: 
+  *Active Constraint*: The moment you decide to run any Go tests, you MUST formulate the test command exactly as: `make test` or `go test -c -o /private/tmp/lfr-tunnel <pkg> && /private/tmp/lfr-tunnel`. Any deviation will trigger SentinelOne (S1), which will forcefully kill the process, Homebrew, and the Antigravity agent itself.
+- **Git Conflict Prevention & PR Management**: 
+  *Active Constraint*: Before executing `git push` or `gh pr create`, you MUST first execute `git fetch origin && git merge origin/master`. You are FORBIDDEN from pushing without first synchronizing the `gemini.md` state with the remote master.
+- **Strict Branch Protection Compliance**: 
+  *Active Constraint*: When merging PRs, you are FORBIDDEN from using `--admin`. You MUST execute `gh pr merge --auto` or wait for the user to approve and merge. You MUST halt your turn and wait for CI checks to pass before assuming a merge is complete.
 
 
 

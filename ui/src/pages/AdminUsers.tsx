@@ -56,6 +56,12 @@ export default function AdminUsers() {
   const [inviteForm, setInviteForm] = useState({ email: '', first_name: '', last_name: '', language_preference: 'en' });
   const [inviteError, setInviteError] = useState('');
   const [isInviting, setIsInviting] = useState(false);
+  const [pageMessage, setPageMessage] = useState<{type: 'error' | 'success', text: string} | null>(null);
+
+  const showMessage = (type: 'error' | 'success', text: string) => {
+    setPageMessage({ type, text });
+    setTimeout(() => setPageMessage(null), 5000);
+  };
 
   const fetchUsers = async () => {
     try {
@@ -84,7 +90,7 @@ export default function AdminUsers() {
       await axios.patch(`/api/admin/users/${encodeURIComponent(email)}`, { status: newStatus });
       fetchUsers();
     } catch {
-      alert(`Failed to mark user as ${newStatus}`);
+      showMessage('error', `Failed to mark user as ${newStatus}`);
     }
   };
 
@@ -94,7 +100,7 @@ export default function AdminUsers() {
       await axios.patch(`/api/admin/users/${encodeURIComponent(email)}`, { role: newRole });
       fetchUsers();
     } catch {
-      alert(`Failed to change role to ${newRole}`);
+      showMessage('error', `Failed to change role to ${newRole}`);
     }
   };
 
@@ -105,7 +111,7 @@ export default function AdminUsers() {
       await axios.delete(`/api/admin/users/${encodeURIComponent(email)}`);
       fetchUsers();
     } catch {
-      alert('Failed to delete user');
+      showMessage('error', 'Failed to delete user');
     }
   };
 
@@ -117,10 +123,10 @@ export default function AdminUsers() {
         user_id: targetedUserId,
         message: targetedMessage
       });
-      alert('Message sent successfully.');
+      showMessage('success', 'Message sent successfully.');
       setTargetedUserId('');
     } catch (e: any) {
-      alert(`Failed to send message: ${e.response?.data?.error || 'Unknown error'}`);
+      showMessage('error', `Failed to send message: ${e.response?.data?.error || 'Unknown error'}`);
     } finally {
       setIsSendingTargeted(false);
     }
@@ -137,7 +143,7 @@ export default function AdminUsers() {
       } : null);
       fetchUsers();
     } catch {
-      alert(`Failed to kick tunnel ${subdomain}`);
+      showMessage('error', `Failed to kick tunnel ${subdomain}`);
     }
   };
 
@@ -165,6 +171,20 @@ export default function AdminUsers() {
         <h3>{t('user_management', 'User Management')}</h3>
         <button className="btn btn-primary" onClick={() => setShowInviteModal(true)}>+ {t('invite_user', 'Invite User')}</button>
       </div>
+      
+      {pageMessage && (
+        <div style={{
+          padding: '12px 16px',
+          marginBottom: '20px',
+          borderRadius: '8px',
+          background: pageMessage.type === 'error' ? 'rgba(239, 68, 68, 0.15)' : 'rgba(16, 185, 129, 0.15)',
+          color: pageMessage.type === 'error' ? '#f87171' : '#34d399',
+          border: `1px solid ${pageMessage.type === 'error' ? 'rgba(239, 68, 68, 0.3)' : 'rgba(16, 185, 129, 0.3)'}`
+        }}>
+          {pageMessage.text}
+        </div>
+      )}
+
       <div className="card" style={{ padding: '0' }}>
         <div className="table-responsive">
           <table>

@@ -66,10 +66,10 @@ export default function WhatsNewPanel() {
                 </span>
               )}
             </h4>
-            <ul style={{ margin: 0, paddingLeft: '20px', color: 'var(--text-secondary)', fontSize: '14px', lineHeight: '1.6' }}>
+            <ul style={{ margin: 0, paddingLeft: '20px', color: 'var(--text-secondary)', fontSize: '14px', lineHeight: '1.6', wordBreak: 'break-word', overflowWrap: 'break-word' }}>
               {release.features && release.features.length > 0 ? (
                 release.features.map((feature, j) => (
-                  <li key={j} style={{ marginBottom: '4px' }}>
+                  <li key={j} style={{ marginBottom: '4px', minWidth: 0 }}>
                     {renderFeatureItem(feature)}
                   </li>
                 ))

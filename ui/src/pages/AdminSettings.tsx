@@ -262,11 +262,11 @@ export default function AdminSettings() {
           <div className="table-responsive" style={{ marginTop: '16px' }}>
             <table className="table">
               <thead>
-                <tr>
-                  <th>Filename</th>
-                  <th>Size</th>
-                  <th>Created At</th>
-                  <th>Actions</th>
+                <tr style={{ borderBottom: '1px solid var(--border)', textAlign: 'left' }}>
+                  <th style={{ padding: '12px 16px', color: 'var(--text-muted)', fontWeight: 600, fontSize: '13px', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Filename</th>
+                  <th style={{ padding: '12px 16px', color: 'var(--text-muted)', fontWeight: 600, fontSize: '13px', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Size</th>
+                  <th style={{ padding: '12px 16px', color: 'var(--text-muted)', fontWeight: 600, fontSize: '13px', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Created At</th>
+                  <th style={{ padding: '12px 16px', color: 'var(--text-muted)', fontWeight: 600, fontSize: '13px', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Actions</th>
                 </tr>
               </thead>
               <tbody>
@@ -278,15 +278,15 @@ export default function AdminSettings() {
                   </tr>
                 ) : (
                   backups.slice(page * ROWS_PER_PAGE, (page + 1) * ROWS_PER_PAGE).map(b => (
-                    <tr key={b.filename}>
-                      <td style={{ fontFamily: 'monospace', fontSize: '0.85em' }}>{b.filename}</td>
-                      <td>{formatSizeKB(b.size_bytes)}</td>
-                      <td>{formatDate(b.created_at)}</td>
-                      <td>
+                    <tr key={b.filename} style={{ borderBottom: '1px solid rgba(255,255,255,0.05)', transition: 'background 0.2s' }} onMouseOver={e => e.currentTarget.style.background = 'rgba(255,255,255,0.03)'} onMouseOut={e => e.currentTarget.style.background = 'transparent'}>
+                      <td style={{ padding: '16px', fontFamily: 'monospace', fontWeight: 500, fontSize: '14px' }}>{b.filename}</td>
+                      <td style={{ padding: '16px', fontSize: '14px' }}>{formatSizeKB(b.size_bytes)}</td>
+                      <td style={{ padding: '16px', fontSize: '14px', color: 'var(--text-muted)' }}>{formatDate(b.created_at)}</td>
+                      <td style={{ padding: '16px' }}>
                         <a 
                           href={`/api/admin/backups/download/${encodeURIComponent(b.filename)}`} 
                           download
-                          className="btn btn-secondary" 
+                          className="btn btn-outline" 
                           style={{ padding: '4px 8px', fontSize: '12px', display: 'inline-block', textDecoration: 'none' }}
                         >
                           Download

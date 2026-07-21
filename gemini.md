@@ -948,7 +948,11 @@ The solution will consist of:
 - [x] Verify all unit tests and E2E integration test suites.
 - [x] Push branches and merge PR #495 on GitHub.
 
+
+## V2 Portal Pending Registrations Sidebar Badge (v1.34.5)
+- [/] Implement pending registrations count badge next to 'Users' link in V2 `Sidebar.tsx` (#709).
+
 <!-- markdownlint-disable MD049 -->
 ---
-*Last Updated: 2026-07-15* | *Last Reviewed: 2026-07-15*
+*Last Updated: 2026-07-21* | *Last Reviewed: 2026-07-21*
 

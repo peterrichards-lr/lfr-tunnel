@@ -12,7 +12,7 @@ When planning or implementing new features, you must use the automated JSON-driv
 - Sample Config: `scripts/issues.sample.json`
 
 ## 2. Issue Tracking Workflow
-Before writing code for any feature or logic change:
+*Active Constraint*: Before writing ANY code for any feature or logic change, you MUST explicitly execute the following steps to track the task:
 1. **Plan & Draft**: Create a temporary JSON file (e.g., `scripts/feature-xyz-plan.json`) containing the Epic description and target sub-issues. Follow the schema defined in `scripts/issues.sample.json`.
 2. **Dry Run**: Preview the CLI commands that will run:
    ```bash
@@ -24,8 +24,8 @@ Before writing code for any feature or logic change:
    ```
    *Note: The script automatically links all sub-issues to the parent Epic.*
 
-### Tech Debt Tracking
-If you encounter any of the 10 catalogued tech debt categories during your work, you MUST record it by raising a GitHub issue via the `gh` CLI (`gh issue create`). 
+### Tech Debt Tracking (Immediate Logging)
+*Active Constraint*: The moment you identify any of the 10 catalogued tech debt categories during your work, you MUST pause your current workflow and immediately execute `gh issue create --title "Tech Debt: [Topic]" --body "[Details]" --label "tech debt"` before taking any other action.
 The 10 categories are:
 1. Code smells
 2. Duplication
@@ -38,9 +38,6 @@ The 10 categories are:
 9. Config drift
 10. Documentation debt
 
-- **Required Label**: You must attach the `tech debt` label to these issues.
-- **Actionability**: You do not need to tackle the technical debt immediately unless it can be resolved without diverting significant effort from your primary task. The ultimate requirement is to ensure it is recorded in the backlog.
-
 ## 3. Resolving and Closing Tasks
 - **Pull Request Flow (Preferred)**: When your tasks are tied to code changes, do **NOT** set `"completed": true` in the JSON. Leave it as `false`. Instead, include `Closes #<issue-number>` in your Pull Request body or commit message so GitHub automatically closes the issue when the PR merges.
 - **Manual/Standalone Tasks**: ONLY for operational tasks that do NOT involve a PR (e.g. running scripts, config changes), you may set `"completed": true` and run the sync utility again:
@@ -50,14 +47,12 @@ The 10 categories are:
    *The utility will automatically detect the completed state, post a reference comment with the current git commit hash, and forcefully close the issue on GitHub.*
 
 ## 4. Pre-Commit / Pre-PR Checks
-Before pushing commits and opening a PR, you MUST ensure that your changes will not fail the automated CI pipeline:
-- **Go Formatting**: You MUST run `gofmt -w .` to format all modified Go files. Failure to format will result in a CI Lint & Format check failure.
-- **UI Builds**: If you modify any React UI source files (under `ui/`), you MUST build the UI and commit the resulting `pkg/server/ui-dist` folder to keep it in sync. 
-  - To safely build the UI without interactive prompts, ensure you are running Node v22 or higher, set `CI=true`, and run: 
-    ```bash
-    cd ui && CI=true pnpm install && pnpm run build && cd .. && rm -rf pkg/server/ui-dist && cp -r ui/dist pkg/server/ui-dist
-    ```
-  - The CI workflow includes a synchronization check that explicitly verifies `pkg/server/ui-dist` matches the `ui/` source code. If they do not match, the CI will intentionally fail.
+*Active Constraint*: Before pushing commits and opening a PR, you MUST actively execute the following verification steps:
+1. **Go Formatting**: Execute `gofmt -w .` to format all modified Go files.
+2. **UI Builds**: If you modify any React UI source files (under `ui/`), you MUST execute the UI build to sync `pkg/server/ui-dist`. Execute exactly:
+   ```bash
+   cd ui && CI=true pnpm install && pnpm run build && cd .. && rm -rf pkg/server/ui-dist && cp -r ui/dist pkg/server/ui-dist
+   ```
 
 <!-- markdownlint-disable MD049 -->
 ---

@@ -10,10 +10,8 @@ description: Critical SentinelOne End Point Detection and Response (EDR) constra
 > **SENTINELONE WILL DETECT THE DYNAMIC TEST EXECUTABLE (`*.test`), QUARANTINE IT, AND KILL ADJACENT SYSTEM PROCESSES (BREW, JENV, LDM). THIS CAN CRASH THE AGENT AND DESTROY THE USER'S LOCAL WORK ENVIRONMENT.**
 > **ALWAYS, STRICTLY, WITHOUT EXCEPTION, USE `make test` FOR ANY GO TESTING.**
 
-- **Local Binary Execution Constraints**: The local system EDR (SentinelOne) blocks unsigned `lfr-tunnel` binaries and dynamic Go test run executables (`*.test`). **This will crash the AI Agent.** 
-- Do NOT run `go test ./...` or `go test` directly. 
-- To run Go tests safely, you must iterate over packages and explicitly compile the test binary to the exact whitelisted file before executing it: `go test -c -o /private/tmp/lfr-tunnel <pkg> && /private/tmp/lfr-tunnel`. (This logic is codified in the `Makefile` and `pre-commit-hook.sh`).
-- Use `make test` instead of `go test`.
+- **Active Test Execution Constraint**: The moment you decide to run any Go tests, you MUST formulate the test command exactly as: `make test` or `go test -c -o /private/tmp/lfr-tunnel <pkg> && /private/tmp/lfr-tunnel`.
+- **Pre-execution Verification**: Before executing a binary execution command, verify that the path strictly starts with `/private/tmp/lfr-tunnel`. Any deviation will trigger SentinelOne (S1), which will forcefully kill the process, Homebrew, and the Antigravity agent itself.
 
 <!-- markdownlint-disable MD049 -->
 ---

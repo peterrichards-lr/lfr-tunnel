@@ -238,6 +238,7 @@ export default function AdminUsers() {
                               ) : (
                                 <button className="btn" style={{ padding: '4px 8px', fontSize: '12px' }} onClick={() => changeStatus(u.email, 'approved')}>Unsuspend</button>
                               )}
+                              
                               {(currentUser.role === 'owner' || u.role !== 'owner') && (
                                 <>
                                   {u.role === 'admin' || u.role === 'owner' ? (

@@ -29,6 +29,8 @@ export default function AdminSettings() {
   // Backups state
   const [backups, setBackups] = useState<any[]>([]);
   const [loadingBackups, setLoadingBackups] = useState(false);
+  const [page, setPage] = useState(0);
+  const ROWS_PER_PAGE = 5;
 
   const fetchAllData = async () => {
     try {
@@ -275,7 +277,7 @@ export default function AdminSettings() {
                     </td>
                   </tr>
                 ) : (
-                  backups.map(b => (
+                  backups.slice(page * ROWS_PER_PAGE, (page + 1) * ROWS_PER_PAGE).map(b => (
                     <tr key={b.filename}>
                       <td style={{ fontFamily: 'monospace', fontSize: '0.85em' }}>{b.filename}</td>
                       <td>{formatSizeKB(b.size_bytes)}</td>
@@ -295,6 +297,32 @@ export default function AdminSettings() {
                 )}
               </tbody>
             </table>
+            
+            {backups.length > ROWS_PER_PAGE && (
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '16px', borderTop: '1px solid var(--border-color)' }}>
+                <div style={{ fontSize: '13px', color: 'var(--text-muted)' }}>
+                  Showing {page * ROWS_PER_PAGE + 1} to {Math.min((page + 1) * ROWS_PER_PAGE, backups.length)} of {backups.length}
+                </div>
+                <div style={{ display: 'flex', gap: '8px' }}>
+                  <button 
+                    className="btn btn-secondary" 
+                    disabled={page === 0} 
+                    onClick={() => setPage(page - 1)}
+                    style={{ padding: '4px 12px', fontSize: '13px' }}
+                  >
+                    Previous
+                  </button>
+                  <button 
+                    className="btn btn-secondary" 
+                    disabled={(page + 1) * ROWS_PER_PAGE >= backups.length} 
+                    onClick={() => setPage(page + 1)}
+                    style={{ padding: '4px 12px', fontSize: '13px' }}
+                  >
+                    Next
+                  </button>
+                </div>
+              </div>
+            )}
           </div>
         </div>
       )}

@@ -2,6 +2,8 @@ import { useEffect, useState } from 'react';
 import axios from 'axios';
 import { useSettings } from '../contexts/SettingsContext';
 
+import { useI18n } from '../contexts/I18nContext';
+
 interface Reservation {
   id: string;
   subdomain: string;
@@ -11,6 +13,7 @@ interface Reservation {
 }
 
 export default function ReservationsPanel() {
+  const { t } = useI18n();
   const [reservations, setReservations] = useState<Reservation[]>([]);
   const { formatDate } = useSettings();
   const [limit, setLimit] = useState(0);
@@ -53,14 +56,14 @@ export default function ReservationsPanel() {
       const res = await axios.get('/api/portal/generate-subdomain');
       setSubdomainInput(res.data.subdomain);
     } catch {
-      alert('Failed to generate subdomain');
+      alert(t('error_generate_subdomain', 'Failed to generate subdomain'));
     }
   };
 
   const createReservation = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!subdomainInput) {
-      alert('Please enter or generate a subdomain');
+      alert(t('error_enter_subdomain', 'Please enter or generate a subdomain'));
       return;
     }
     try {
@@ -71,21 +74,21 @@ export default function ReservationsPanel() {
       setSubdomainInput('');
       fetchData();
     } catch (err: any) {
-      alert(`Error: ${err.response?.data?.error || 'Failed to create reservation'}`);
+      alert(`${t('error', 'Error')}: ${err.response?.data?.error || t('failed_create_reservation', 'Failed to create reservation')}`);
     }
   };
 
   const deleteReservation = async (id: string) => {
-    if (!confirm('Are you sure you want to release this subdomain?')) return;
+    if (!confirm(t('confirm_release_subdomain', 'Are you sure you want to release this subdomain?'))) return;
     try {
       await axios.delete(`/api/portal/reservations/${encodeURIComponent(id)}`);
       fetchData();
     } catch (err: any) {
-      alert(`Error: ${err.response?.data?.error || 'Failed to delete'}`);
+      alert(`${t('error', 'Error')}: ${err.response?.data?.error || t('failed_delete', 'Failed to delete')}`);
     }
   };
 
-  if (loading) return <div>Loading reservations...</div>;
+  if (loading) return <div>{t('loading_reservations', 'Loading reservations...')}</div>;
 
   const percent = limit > 0 ? (used / limit) * 100 : 0;
   const isAtLimit = limit >= 0 && used >= limit;
@@ -93,20 +96,20 @@ export default function ReservationsPanel() {
   return (
     <div className="card" style={{ marginBottom: '24px' }}>
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px' }}>
-        <h3 style={{ margin: 0 }}>Subdomain Reservations</h3>
+        <h3 style={{ margin: 0 }}>{t('subdomain_reservations', 'Subdomain Reservations')}</h3>
       </div>
       
       <div style={{ marginBottom: '24px' }}>
         <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '13px', marginBottom: '8px' }}>
-          <span>My Personal Quota</span>
-          <span>{limit < 0 ? `${used} / ∞` : `${used} / ${limit}`} reserved</span>
+          <span>{t('reservation_quota', 'My Personal Quota')}</span>
+          <span>{limit < 0 ? `${used} / ∞` : `${used} / ${limit}`} {t('reserved', 'reserved')}</span>
         </div>
         <div style={{ height: '8px', background: 'rgba(255,255,255,0.1)', borderRadius: '4px', overflow: 'hidden' }}>
           <div style={{ height: '100%', width: `${Math.min(percent, 100)}%`, background: isAtLimit ? 'var(--danger)' : 'var(--primary)', transition: 'width 0.3s' }}></div>
         </div>
         {isAtLimit && limit >= 0 && (
           <div style={{ marginTop: '8px', fontSize: '12px', color: 'var(--warning)' }}>
-            ⚠️ You have reached your reservation limit. Release a subdomain to register a new one.
+            ⚠️ {t('reservation_limit_reached', 'You have reached your reservation limit. Release a subdomain to register a new one.')}
           </div>
         )}
       </div>
@@ -117,7 +120,7 @@ export default function ReservationsPanel() {
             <input 
               type="text" 
               className="form-control" 
-              placeholder="subdomain" 
+              placeholder={t('subdomain', 'subdomain')} 
               value={subdomainInput} 
               onChange={(e) => setSubdomainInput(e.target.value)} 
             />
@@ -129,25 +132,25 @@ export default function ReservationsPanel() {
               ))}
             </select>
           </div>
-          <button type="button" className="btn btn-secondary" onClick={generateSubdomain}>Generate</button>
-          <button type="submit" className="btn btn-primary">Reserve</button>
+          <button type="button" className="btn btn-secondary" onClick={generateSubdomain}>{t('generate', 'Generate')}</button>
+          <button type="submit" className="btn btn-primary">{t('reserve', 'Reserve')}</button>
         </form>
       )}
 
       {reservations.length === 0 ? (
         <div style={{ textAlign: 'center', padding: '40px 20px', background: 'rgba(0,0,0,0.1)', border: '1px dashed var(--border)', borderRadius: '12px' }}>
-          <div style={{ color: 'var(--text-muted)', fontSize: '15px' }}>No subdomains reserved yet.</div>
+          <div style={{ color: 'var(--text-muted)', fontSize: '15px' }}>{t('no_subdomains_reserved', 'No subdomains reserved yet.')}</div>
         </div>
       ) : (
         <div className="table-responsive">
           <table style={{ width: '100%', borderCollapse: 'collapse' }}>
             <thead>
               <tr style={{ borderBottom: '1px solid var(--border)', textAlign: 'left' }}>
-                <th style={{ padding: '12px 16px', color: 'var(--text-muted)', fontWeight: 600, fontSize: '13px', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Subdomain</th>
-                <th style={{ padding: '12px 16px', color: 'var(--text-muted)', fontWeight: 600, fontSize: '13px', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Domain</th>
-                <th style={{ padding: '12px 16px', color: 'var(--text-muted)', fontWeight: 600, fontSize: '13px', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Status</th>
-                <th style={{ padding: '12px 16px', color: 'var(--text-muted)', fontWeight: 600, fontSize: '13px', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Expires</th>
-                <th style={{ padding: '12px 16px', color: 'var(--text-muted)', fontWeight: 600, fontSize: '13px', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Actions</th>
+                <th style={{ padding: '12px 16px', color: 'var(--text-muted)', fontWeight: 600, fontSize: '13px', textTransform: 'uppercase', letterSpacing: '0.5px' }}>{t('subdomain', 'Subdomain')}</th>
+                <th style={{ padding: '12px 16px', color: 'var(--text-muted)', fontWeight: 600, fontSize: '13px', textTransform: 'uppercase', letterSpacing: '0.5px' }}>{t('domain', 'Domain')}</th>
+                <th style={{ padding: '12px 16px', color: 'var(--text-muted)', fontWeight: 600, fontSize: '13px', textTransform: 'uppercase', letterSpacing: '0.5px' }}>{t('status', 'Status')}</th>
+                <th style={{ padding: '12px 16px', color: 'var(--text-muted)', fontWeight: 600, fontSize: '13px', textTransform: 'uppercase', letterSpacing: '0.5px' }}>{t('expires', 'Expires')}</th>
+                <th style={{ padding: '12px 16px', color: 'var(--text-muted)', fontWeight: 600, fontSize: '13px', textTransform: 'uppercase', letterSpacing: '0.5px' }}>{t('actions', 'Actions')}</th>
               </tr>
             </thead>
             <tbody>
@@ -160,10 +163,10 @@ export default function ReservationsPanel() {
                       {r.status}
                     </span>
                   </td>
-                  <td style={{ padding: '16px', fontSize: '14px' }}>{r.expires_at ? formatDate(r.expires_at) : 'Never'}</td>
+                  <td style={{ padding: '16px', fontSize: '14px' }}>{r.expires_at ? formatDate(r.expires_at) : t('never', 'Never')}</td>
                   <td style={{ padding: '16px' }}>
                     <button className="btn btn-danger" style={{ padding: '4px 8px', fontSize: '12px' }} onClick={() => deleteReservation(r.id)}>
-                      Release
+                      {t('release', 'Release')}
                     </button>
                   </td>
                 </tr>

@@ -617,7 +617,7 @@ func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 				if _, isUp := s.edgeClients[edge.ID]; isUp {
 					parts := strings.Split(edge.ID, "-")
 					regionName := parts[0]
-					if regionName != "" {
+					if regionName != "" && edge.URL != "" {
 						regions[regionName] = edge.URL
 					}
 				}

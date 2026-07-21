@@ -1,0 +1,422 @@
+﻿2026-07-21T09:08:44.4812855Z Current runner version: '2.335.1'
+2026-07-21T09:08:44.4839259Z ##[group]Runner Image Provisioner
+2026-07-21T09:08:44.4840191Z Hosted Compute Agent
+2026-07-21T09:08:44.4840889Z Version: 20260707.563
+2026-07-21T09:08:44.4841528Z Commit: 02667638d2b423fbc733a8e32a88b44996a3ba6e
+2026-07-21T09:08:44.4842351Z Build Date: 2026-07-07T19:33:50Z
+2026-07-21T09:08:44.4843058Z Worker ID: {043fab10-f6db-4e4a-a9ef-56f5a2baedaa}
+2026-07-21T09:08:44.4843772Z Azure Region: westus
+2026-07-21T09:08:44.4844438Z ##[endgroup]
+2026-07-21T09:08:44.4846347Z ##[group]Operating System
+2026-07-21T09:08:44.4847069Z Ubuntu
+2026-07-21T09:08:44.4847615Z 24.04.4
+2026-07-21T09:08:44.4848140Z LTS
+2026-07-21T09:08:44.4848707Z ##[endgroup]
+2026-07-21T09:08:44.4849298Z ##[group]Runner Image
+2026-07-21T09:08:44.4849895Z Image: ubuntu-24.04
+2026-07-21T09:08:44.4850529Z Version: 20260714.240.1
+2026-07-21T09:08:44.4851786Z Included Software: https://github.com/actions/runner-images/blob/ubuntu24/20260714.240/images/ubuntu/Ubuntu2404-Readme.md
+2026-07-21T09:08:44.4853454Z Image Release: https://github.com/actions/runner-images/releases/tag/ubuntu24%2F20260714.240
+2026-07-21T09:08:44.4854408Z ##[endgroup]
+2026-07-21T09:08:44.4855794Z ##[group]GITHUB_TOKEN Permissions
+2026-07-21T09:08:44.4857646Z Contents: read
+2026-07-21T09:08:44.4858391Z Metadata: read
+2026-07-21T09:08:44.4858947Z ##[endgroup]
+2026-07-21T09:08:44.4861087Z Secret source: Actions
+2026-07-21T09:08:44.4861868Z Prepare workflow directory
+2026-07-21T09:08:44.5195923Z Prepare all required actions
+2026-07-21T09:08:44.5233240Z Getting action download info
+2026-07-21T09:08:44.9133686Z Download action repository 'actions/checkout@v7' (SHA:3d3c42e5aac5ba805825da76410c181273ba90b1)
+2026-07-21T09:08:45.3851913Z Download action repository 'actions/setup-go@v6' (SHA:924ae3a1cded613372ab5595356fb5720e22ba16)
+2026-07-21T09:08:45.9280639Z Download action repository 'actions/setup-node@v7' (SHA:820762786026740c76f36085b0efc47a31fe5020)
+2026-07-21T09:08:46.4179733Z Download action repository 'pnpm/action-setup@v3' (SHA:a3252b78c470c02df07e9d59298aecedc3ccdd6d)
+2026-07-21T09:08:46.9218519Z Download action repository 'golangci/golangci-lint-action@v9' (SHA:ba0d7d2ec06a0ea1cb5fa41b2e4a3ab91d21278a)
+2026-07-21T09:08:47.5035856Z Complete job name: Lint & Format Check
+2026-07-21T09:08:47.5740836Z ##[group]Run actions/checkout@v7
+2026-07-21T09:08:47.5741671Z with:
+2026-07-21T09:08:47.5742039Z   repository: peterrichards-lr/lfr-tunnel
+2026-07-21T09:08:47.5744524Z   token: ***
+2026-07-21T09:08:47.5744886Z   ssh-strict: true
+2026-07-21T09:08:47.5745434Z   ssh-user: git
+2026-07-21T09:08:47.5745765Z   persist-credentials: true
+2026-07-21T09:08:47.5746181Z   clean: true
+2026-07-21T09:08:47.5746492Z   sparse-checkout-cone-mode: true
+2026-07-21T09:08:47.5746880Z   fetch-depth: 1
+2026-07-21T09:08:47.5747192Z   fetch-tags: false
+2026-07-21T09:08:47.5747544Z   show-progress: true
+2026-07-21T09:08:47.5747899Z   lfs: false
+2026-07-21T09:08:47.5748267Z   submodules: false
+2026-07-21T09:08:47.5748727Z   set-safe-directory: true
+2026-07-21T09:08:47.5749348Z   allow-unsafe-pr-checkout: false
+2026-07-21T09:08:47.5750070Z ##[endgroup]
+2026-07-21T09:08:47.6753445Z Syncing repository: peterrichards-lr/lfr-tunnel
+2026-07-21T09:08:47.6755402Z ##[group]Getting Git version info
+2026-07-21T09:08:47.6756567Z Working directory is '/home/runner/work/lfr-tunnel/lfr-tunnel'
+2026-07-21T09:08:47.6757957Z [command]/usr/bin/git version
+2026-07-21T09:08:47.6848328Z git version 2.54.0
+2026-07-21T09:08:47.6872170Z ##[endgroup]
+2026-07-21T09:08:47.6966717Z Temporarily overriding HOME='/home/runner/work/_temp/c9f6796d-9bdd-4921-a964-84a60990d9d7' before making global git config changes
+2026-07-21T09:08:47.6968079Z Adding repository directory to the temporary git global config as a safe directory
+2026-07-21T09:08:47.6969196Z [command]/usr/bin/git config --global --add safe.directory /home/runner/work/lfr-tunnel/lfr-tunnel
+2026-07-21T09:08:47.6970761Z Deleting the contents of '/home/runner/work/lfr-tunnel/lfr-tunnel'
+2026-07-21T09:08:47.6971792Z ##[group]Determining repository object format
+2026-07-21T09:08:47.6973086Z ##[endgroup]
+2026-07-21T09:08:47.6973738Z ##[group]Initializing the repository
+2026-07-21T09:08:47.6974393Z [command]/usr/bin/git init /home/runner/work/lfr-tunnel/lfr-tunnel
+2026-07-21T09:08:47.7066335Z hint: Using 'master' as the name for the initial branch. This default branch name
+2026-07-21T09:08:47.7067235Z hint: will change to "main" in Git 3.0. To configure the initial branch name
+2026-07-21T09:08:47.7067952Z hint: to use in all of your new repositories, which will suppress this warning,
+2026-07-21T09:08:47.7068363Z hint: call:
+2026-07-21T09:08:47.7068555Z hint:
+2026-07-21T09:08:47.7068849Z hint: 	git config --global init.defaultBranch <name>
+2026-07-21T09:08:47.7069173Z hint:
+2026-07-21T09:08:47.7069483Z hint: Names commonly chosen instead of 'master' are 'main', 'trunk' and
+2026-07-21T09:08:47.7070063Z hint: 'development'. The just-created branch can be renamed via this command:
+2026-07-21T09:08:47.7070456Z hint:
+2026-07-21T09:08:47.7070660Z hint: 	git branch -m <name>
+2026-07-21T09:08:47.7070906Z hint:
+2026-07-21T09:08:47.7071228Z hint: Disable this message with "git config set advice.defaultBranchName false"
+2026-07-21T09:08:47.7078176Z Initialized empty Git repository in /home/runner/work/lfr-tunnel/lfr-tunnel/.git/
+2026-07-21T09:08:47.7090731Z [command]/usr/bin/git remote add origin https://github.com/peterrichards-lr/lfr-tunnel
+2026-07-21T09:08:47.7147022Z ##[endgroup]
+2026-07-21T09:08:47.7147680Z ##[group]Disabling automatic garbage collection
+2026-07-21T09:08:47.7148446Z [command]/usr/bin/git config --local gc.auto 0
+2026-07-21T09:08:47.7180628Z ##[endgroup]
+2026-07-21T09:08:47.7181200Z ##[group]Setting up auth
+2026-07-21T09:08:47.7181718Z Removing SSH command configuration
+2026-07-21T09:08:47.7187291Z [command]/usr/bin/git config --local --name-only --get-regexp core\.sshCommand
+2026-07-21T09:08:47.7225981Z [command]/usr/bin/git submodule foreach --recursive sh -c "git config --local --name-only --get-regexp 'core\.sshCommand' && git config --local --unset-all 'core.sshCommand' || :"
+2026-07-21T09:08:47.7610262Z Removing HTTP extra header
+2026-07-21T09:08:47.7611242Z [command]/usr/bin/git config --local --name-only --get-regexp http\.https\:\/\/github\.com\/\.extraheader
+2026-07-21T09:08:47.7640227Z [command]/usr/bin/git submodule foreach --recursive sh -c "git config --local --name-only --get-regexp 'http\.https\:\/\/github\.com\/\.extraheader' && git config --local --unset-all 'http.https://github.com/.extraheader' || :"
+2026-07-21T09:08:47.7863458Z Removing includeIf entries pointing to credentials config files
+2026-07-21T09:08:47.7868544Z [command]/usr/bin/git config --local --name-only --get-regexp ^includeIf\.gitdir:
+2026-07-21T09:08:47.7904120Z [command]/usr/bin/git submodule foreach --recursive git config --local --show-origin --name-only --get-regexp remote.origin.url
+2026-07-21T09:08:47.8136196Z [command]/usr/bin/git config --file /home/runner/work/_temp/git-credentials-d77fb297-8000-4808-8c74-9571eab66f29.config http.https://github.com/.extraheader AUTHORIZATION: basic ***
+2026-07-21T09:08:47.8176511Z [command]/usr/bin/git config --local includeIf.gitdir:/home/runner/work/lfr-tunnel/lfr-tunnel/.git.path /home/runner/work/_temp/git-credentials-d77fb297-8000-4808-8c74-9571eab66f29.config
+2026-07-21T09:08:47.8208885Z [command]/usr/bin/git config --local includeIf.gitdir:/home/runner/work/lfr-tunnel/lfr-tunnel/.git/worktrees/*.path /home/runner/work/_temp/git-credentials-d77fb297-8000-4808-8c74-9571eab66f29.config
+2026-07-21T09:08:47.8245792Z [command]/usr/bin/git config --local includeIf.gitdir:/github/workspace/.git.path /github/runner_temp/git-credentials-d77fb297-8000-4808-8c74-9571eab66f29.config
+2026-07-21T09:08:47.8281707Z [command]/usr/bin/git config --local includeIf.gitdir:/github/workspace/.git/worktrees/*.path /github/runner_temp/git-credentials-d77fb297-8000-4808-8c74-9571eab66f29.config
+2026-07-21T09:08:47.8312150Z ##[endgroup]
+2026-07-21T09:08:47.8312621Z ##[group]Fetching the repository
+2026-07-21T09:08:47.8319149Z [command]/usr/bin/git -c protocol.version=2 fetch --no-tags --prune --no-recurse-submodules --depth=1 origin +3477998832a07d4b9155a2fd01557d82f90a1599:refs/remotes/pull/682/merge
+2026-07-21T09:08:48.5560228Z From https://github.com/peterrichards-lr/lfr-tunnel
+2026-07-21T09:08:48.5560885Z  * [new ref]         3477998832a07d4b9155a2fd01557d82f90a1599 -> pull/682/merge
+2026-07-21T09:08:48.5633476Z ##[endgroup]
+2026-07-21T09:08:48.5634276Z ##[group]Determining the checkout info
+2026-07-21T09:08:48.5635037Z ##[endgroup]
+2026-07-21T09:08:48.5642675Z [command]/usr/bin/git sparse-checkout disable
+2026-07-21T09:08:48.5702273Z [command]/usr/bin/git config --local --unset-all extensions.worktreeConfig
+2026-07-21T09:08:48.5739609Z ##[group]Checking out the ref
+2026-07-21T09:08:48.5744326Z [command]/usr/bin/git checkout --progress --force refs/remotes/pull/682/merge
+2026-07-21T09:08:48.6238505Z Note: switching to 'refs/remotes/pull/682/merge'.
+2026-07-21T09:08:48.6239648Z 
+2026-07-21T09:08:48.6240415Z You are in 'detached HEAD' state. You can look around, make experimental
+2026-07-21T09:08:48.6241616Z changes and commit them, and you can discard any commits you make in this
+2026-07-21T09:08:48.6242742Z state without impacting any branches by switching back to a branch.
+2026-07-21T09:08:48.6243450Z 
+2026-07-21T09:08:48.6243986Z If you want to create a new branch to retain commits you create, you may
+2026-07-21T09:08:48.6245330Z do so (now or later) by using -c with the switch command. Example:
+2026-07-21T09:08:48.6245960Z 
+2026-07-21T09:08:48.6246247Z   git switch -c <new-branch-name>
+2026-07-21T09:08:48.6246650Z 
+2026-07-21T09:08:48.6246879Z Or undo this operation with:
+2026-07-21T09:08:48.6247217Z 
+2026-07-21T09:08:48.6247340Z   git switch -
+2026-07-21T09:08:48.6247535Z 
+2026-07-21T09:08:48.6247854Z Turn off this advice by setting config variable advice.detachedHead to false
+2026-07-21T09:08:48.6248305Z 
+2026-07-21T09:08:48.6248977Z HEAD is now at 3477998 Merge 9dd8cf8e4920a18914d23069591d6426e55a2964 into e8006211aaa1f38d19a3e7d46bb4f7b3aae36ffa
+2026-07-21T09:08:48.6250887Z ##[endgroup]
+2026-07-21T09:08:48.6297955Z [command]/usr/bin/git log -1 --format=%H
+2026-07-21T09:08:48.6327936Z 3477998832a07d4b9155a2fd01557d82f90a1599
+2026-07-21T09:08:48.6581314Z ##[group]Run actions/setup-go@v6
+2026-07-21T09:08:48.6581618Z with:
+2026-07-21T09:08:48.6581830Z   go-version: 1.25
+2026-07-21T09:08:48.6582049Z   cache: true
+2026-07-21T09:08:48.6582253Z   check-latest: false
+2026-07-21T09:08:48.6584529Z   token: ***
+2026-07-21T09:08:48.6584744Z ##[endgroup]
+2026-07-21T09:08:48.7854051Z Setup go version spec 1.25
+2026-07-21T09:08:48.7914892Z Found in cache @ /opt/hostedtoolcache/go/1.25.12/x64
+2026-07-21T09:08:48.7917713Z Added go to the path
+2026-07-21T09:08:48.7921879Z Successfully set up Go version 1.25
+2026-07-21T09:08:49.7312169Z [command]/opt/hostedtoolcache/go/1.25.12/x64/bin/go env GOMODCACHE
+2026-07-21T09:08:49.7348701Z [command]/opt/hostedtoolcache/go/1.25.12/x64/bin/go env GOCACHE
+2026-07-21T09:08:49.7378615Z /home/runner/go/pkg/mod
+2026-07-21T09:08:49.7402814Z /home/runner/.cache/go-build
+2026-07-21T09:08:50.0097791Z Cache hit for: setup-go-Linux-x64-ubuntu24-go-1.25.12-3d52f86a975b83e2b9720d1090c5694658d62d5362e28bf12c19ad6eb591a409
+2026-07-21T09:08:51.3181705Z Received 0 of 145196647 (0.0%), 0.0 MBs/sec
+2026-07-21T09:08:52.3193682Z Received 117440512 of 145196647 (80.9%), 56.0 MBs/sec
+2026-07-21T09:08:53.2037211Z Received 145196647 of 145196647 (100.0%), 48.0 MBs/sec
+2026-07-21T09:08:53.2038790Z Cache Size: ~138 MB (145196647 B)
+2026-07-21T09:08:53.2145446Z [command]/usr/bin/tar -xf /home/runner/work/_temp/5d6e32dc-bebb-40ee-859d-dd5aa7e83996/cache.tzst -P -C /home/runner/work/lfr-tunnel/lfr-tunnel --use-compress-program unzstd
+2026-07-21T09:08:54.2891183Z Cache restored successfully
+2026-07-21T09:08:54.2960144Z Cache restored from key: setup-go-Linux-x64-ubuntu24-go-1.25.12-3d52f86a975b83e2b9720d1090c5694658d62d5362e28bf12c19ad6eb591a409
+2026-07-21T09:08:54.2982166Z go version go1.25.12 linux/amd64
+2026-07-21T09:08:54.2982490Z 
+2026-07-21T09:08:54.2983166Z ##[group]go env
+2026-07-21T09:08:54.3171421Z AR='ar'
+2026-07-21T09:08:54.3171986Z CC='gcc'
+2026-07-21T09:08:54.3172548Z CGO_CFLAGS='-O2 -g'
+2026-07-21T09:08:54.3173235Z CGO_CPPFLAGS=''
+2026-07-21T09:08:54.3173928Z CGO_CXXFLAGS='-O2 -g'
+2026-07-21T09:08:54.3174540Z CGO_ENABLED='1'
+2026-07-21T09:08:54.3175386Z CGO_FFLAGS='-O2 -g'
+2026-07-21T09:08:54.3175946Z CGO_LDFLAGS='-O2 -g'
+2026-07-21T09:08:54.3176596Z CXX='g++'
+2026-07-21T09:08:54.3177021Z GCCGO='gccgo'
+2026-07-21T09:08:54.3177404Z GO111MODULE=''
+2026-07-21T09:08:54.3177759Z GOAMD64='v1'
+2026-07-21T09:08:54.3178095Z GOARCH='amd64'
+2026-07-21T09:08:54.3178518Z GOAUTH='netrc'
+2026-07-21T09:08:54.3178896Z GOBIN=''
+2026-07-21T09:08:54.3179287Z GOCACHE='/home/runner/.cache/go-build'
+2026-07-21T09:08:54.3179746Z GOCACHEPROG=''
+2026-07-21T09:08:54.3180122Z GODEBUG=''
+2026-07-21T09:08:54.3180408Z GOENV='/home/runner/.config/go/env'
+2026-07-21T09:08:54.3180734Z GOEXE=''
+2026-07-21T09:08:54.3180957Z GOEXPERIMENT=''
+2026-07-21T09:08:54.3181197Z GOFIPS140='off'
+2026-07-21T09:08:54.3181439Z GOFLAGS=''
+2026-07-21T09:08:54.3182250Z GOGCCFLAGS='-fPIC -m64 -pthread -Wl,--no-gc-sections -fmessage-length=0 -ffile-prefix-map=/tmp/go-build2270232885=/tmp/go-build -gno-record-gcc-switches'
+2026-07-21T09:08:54.3183114Z GOHOSTARCH='amd64'
+2026-07-21T09:08:54.3183367Z GOHOSTOS='linux'
+2026-07-21T09:08:54.3183609Z GOINSECURE=''
+2026-07-21T09:08:54.3183944Z GOMOD='/home/runner/work/lfr-tunnel/lfr-tunnel/go.mod'
+2026-07-21T09:08:54.3184353Z GOMODCACHE='/home/runner/go/pkg/mod'
+2026-07-21T09:08:54.3184666Z GONOPROXY=''
+2026-07-21T09:08:54.3184903Z GONOSUMDB=''
+2026-07-21T09:08:54.3185327Z GOOS='linux'
+2026-07-21T09:08:54.3185583Z GOPATH='/home/runner/go'
+2026-07-21T09:08:54.3185889Z GOPRIVATE=''
+2026-07-21T09:08:54.3186226Z GOPROXY='https://proxy.golang.org,direct'
+2026-07-21T09:08:54.3186627Z GOROOT='/opt/hostedtoolcache/go/1.25.12/x64'
+2026-07-21T09:08:54.3187014Z GOSUMDB='sum.golang.org'
+2026-07-21T09:08:54.3187298Z GOTELEMETRY='local'
+2026-07-21T09:08:54.3187619Z GOTELEMETRYDIR='/home/runner/.config/go/telemetry'
+2026-07-21T09:08:54.3187994Z GOTMPDIR=''
+2026-07-21T09:08:54.3188245Z GOTOOLCHAIN='local'
+2026-07-21T09:08:54.3188934Z GOTOOLDIR='/opt/hostedtoolcache/go/1.25.12/x64/pkg/tool/linux_amd64'
+2026-07-21T09:08:54.3189429Z GOVCS=''
+2026-07-21T09:08:54.3189683Z GOVERSION='go1.25.12'
+2026-07-21T09:08:54.3189962Z GOWORK=''
+2026-07-21T09:08:54.3190242Z PKG_CONFIG='pkg-config'
+2026-07-21T09:08:54.3190441Z 
+2026-07-21T09:08:54.3190797Z ##[endgroup]
+2026-07-21T09:08:54.3334362Z ##[group]Run unformatted=$(gofmt -l .)
+2026-07-21T09:08:54.3334752Z [36;1munformatted=$(gofmt -l .)[0m
+2026-07-21T09:08:54.3335088Z [36;1mif [ -n "$unformatted" ]; then[0m
+2026-07-21T09:08:54.3335786Z [36;1m  echo "The following files are not formatted properly:"[0m
+2026-07-21T09:08:54.3336169Z [36;1m  echo "$unformatted"[0m
+2026-07-21T09:08:54.3336541Z [36;1m  echo "Please run 'gofmt -w .' locally and commit the changes."[0m
+2026-07-21T09:08:54.3336926Z [36;1m  exit 1[0m
+2026-07-21T09:08:54.3337147Z [36;1mfi[0m
+2026-07-21T09:08:54.3416626Z shell: /usr/bin/bash -e {0}
+2026-07-21T09:08:54.3416938Z env:
+2026-07-21T09:08:54.3417158Z   GOTOOLCHAIN: local
+2026-07-21T09:08:54.3417406Z ##[endgroup]
+2026-07-21T09:08:54.6810298Z ##[group]Run actions/setup-node@v7
+2026-07-21T09:08:54.6810596Z with:
+2026-07-21T09:08:54.6810799Z   node-version: 20
+2026-07-21T09:08:54.6811019Z   check-latest: false
+2026-07-21T09:08:54.6813278Z   token: ***
+2026-07-21T09:08:54.6813503Z   package-manager-cache: true
+2026-07-21T09:08:54.6813753Z env:
+2026-07-21T09:08:54.6813947Z   GOTOOLCHAIN: local
+2026-07-21T09:08:54.6814163Z ##[endgroup]
+2026-07-21T09:08:54.8280630Z Attempting to download 20...
+2026-07-21T09:08:55.7928370Z Acquiring 20.20.2 - x64 from https://github.com/actions/node-versions/releases/download/20.20.2-23521894959/node-20.20.2-linux-x64.tar.gz
+2026-07-21T09:08:56.2754865Z Extracting ...
+2026-07-21T09:08:56.2882094Z [command]/usr/bin/tar xz --strip 1 --warning=no-unknown-keyword --overwrite -C /home/runner/work/_temp/c9c086c3-c685-43f9-bee6-a0e4a2f04189 -f /home/runner/work/_temp/7013c48e-92f0-4199-9929-4837d3588000
+2026-07-21T09:08:57.3733250Z Adding to the cache ...
+2026-07-21T09:08:59.3135896Z ##[group]Environment details
+2026-07-21T09:08:59.5457550Z node: v20.20.2
+2026-07-21T09:08:59.5457976Z npm: 10.8.2
+2026-07-21T09:08:59.5458314Z yarn: 1.22.22
+2026-07-21T09:08:59.5459011Z ##[endgroup]
+2026-07-21T09:08:59.5613526Z ##[group]Run for file in pkg/server/static/*.js; do
+2026-07-21T09:08:59.5613969Z [36;1mfor file in pkg/server/static/*.js; do[0m
+2026-07-21T09:08:59.5614303Z [36;1m  if [ -f "$file" ]; then[0m
+2026-07-21T09:08:59.5614585Z [36;1m    node -c "$file"[0m
+2026-07-21T09:08:59.5614837Z [36;1m  fi[0m
+2026-07-21T09:08:59.5615037Z [36;1mdone[0m
+2026-07-21T09:08:59.5673438Z shell: /usr/bin/bash -e {0}
+2026-07-21T09:08:59.5673737Z env:
+2026-07-21T09:08:59.5673966Z   GOTOOLCHAIN: local
+2026-07-21T09:08:59.5674228Z ##[endgroup]
+2026-07-21T09:08:59.6305347Z Node 20 is being deprecated. This workflow is running with Node 24 by default. If you need to temporarily use Node 20, you can set the ACTIONS_ALLOW_USE_UNSECURE_NODE_VERSION=true environment variable. For more information see: https://github.blog/changelog/2025-09-19-deprecation-of-node-20-on-github-actions-runners/
+2026-07-21T09:08:59.6306888Z ##[group]Run pnpm/action-setup@v3
+2026-07-21T09:08:59.6307162Z with:
+2026-07-21T09:08:59.6307358Z   version: 8
+2026-07-21T09:08:59.6307568Z   dest: ~/setup-pnpm
+2026-07-21T09:08:59.6307789Z   run_install: null
+2026-07-21T09:08:59.6308019Z   package_json_file: package.json
+2026-07-21T09:08:59.6308280Z   standalone: false
+2026-07-21T09:08:59.6308479Z env:
+2026-07-21T09:08:59.6308661Z   GOTOOLCHAIN: local
+2026-07-21T09:08:59.6308868Z ##[endgroup]
+2026-07-21T09:08:59.7221665Z ##[group]Running self-installer...
+2026-07-21T09:09:00.2008201Z (node:2444) [DEP0169] DeprecationWarning: `url.parse()` behavior is not standardized and prone to errors that have security implications. Use the WHATWG URL API instead. CVEs are not issued for `url.parse()` vulnerabilities.
+2026-07-21T09:09:00.2010314Z (Use `node --trace-deprecation ...` to show where the warning was created)
+2026-07-21T09:09:00.3452627Z Progress: resolved 1, reused 0, downloaded 0, added 0
+2026-07-21T09:09:00.3568977Z Packages: +1
+2026-07-21T09:09:00.3569793Z +
+2026-07-21T09:09:00.7264719Z Progress: resolved 1, reused 0, downloaded 1, added 1, done
+2026-07-21T09:09:00.8990081Z 
+2026-07-21T09:09:00.8990691Z dependencies:
+2026-07-21T09:09:00.8991264Z + pnpm 8.15.9 (11.15.1 is available)
+2026-07-21T09:09:00.8991583Z 
+2026-07-21T09:09:00.9055608Z Done in 958ms
+2026-07-21T09:09:00.9242422Z ##[endgroup]
+2026-07-21T09:09:00.9243150Z Installation Completed!
+2026-07-21T09:09:00.9345037Z ##[group]Run cd ui
+2026-07-21T09:09:00.9345600Z [36;1mcd ui[0m
+2026-07-21T09:09:00.9345817Z [36;1mpnpm install[0m
+2026-07-21T09:09:00.9346050Z [36;1mpnpm run lint[0m
+2026-07-21T09:09:00.9346293Z [36;1mpnpm run build[0m
+2026-07-21T09:09:00.9404178Z shell: /usr/bin/bash -e {0}
+2026-07-21T09:09:00.9404463Z env:
+2026-07-21T09:09:00.9404672Z   GOTOOLCHAIN: local
+2026-07-21T09:09:00.9404976Z   PNPM_HOME: /home/runner/setup-pnpm/node_modules/.bin
+2026-07-21T09:09:00.9405562Z ##[endgroup]
+2026-07-21T09:09:01.3612323Z  WARN  Ignoring not compatible lockfile at /home/runner/work/lfr-tunnel/lfr-tunnel/ui/pnpm-lock.yaml
+2026-07-21T09:09:01.5315683Z Progress: resolved 1, reused 0, downloaded 0, added 0
+2026-07-21T09:09:02.5396826Z Progress: resolved 80, reused 0, downloaded 56, added 0
+2026-07-21T09:09:03.0397030Z Packages: +76
+2026-07-21T09:09:03.0397997Z ++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+2026-07-21T09:09:03.1672172Z Progress: resolved 122, reused 0, downloaded 81, added 76, done
+2026-07-21T09:09:03.4513012Z 
+2026-07-21T09:09:03.4513606Z dependencies:
+2026-07-21T09:09:03.4513914Z + axios 1.18.1
+2026-07-21T09:09:03.4514166Z + chart.js 4.5.1
+2026-07-21T09:09:03.4514417Z + driver.js 1.8.0
+2026-07-21T09:09:03.4514653Z + react 19.2.7
+2026-07-21T09:09:03.4514904Z + react-chartjs-2 5.3.1
+2026-07-21T09:09:03.4515898Z + react-dom 19.2.7
+2026-07-21T09:09:03.4516320Z + react-router-dom 7.18.1
+2026-07-21T09:09:03.4516493Z 
+2026-07-21T09:09:03.4516606Z devDependencies:
+2026-07-21T09:09:03.4516931Z + @types/node 24.13.3 (26.1.1 is available)
+2026-07-21T09:09:03.4517262Z + @types/react 19.2.17
+2026-07-21T09:09:03.4517540Z + @types/react-dom 19.2.3
+2026-07-21T09:09:03.4517822Z + @vitejs/plugin-react 6.0.3
+2026-07-21T09:09:03.4518102Z + autoprefixer 10.5.4
+2026-07-21T09:09:03.4518335Z + oxlint 1.74.0
+2026-07-21T09:09:03.4518571Z + postcss 8.5.21
+2026-07-21T09:09:03.4518816Z + tailwindcss 4.3.3
+2026-07-21T09:09:03.4519119Z + typescript 6.0.3 (7.0.2 is available)
+2026-07-21T09:09:03.4519452Z + vite 8.1.5
+2026-07-21T09:09:03.4519575Z 
+2026-07-21T09:09:03.4521842Z Done in 2.4s
+2026-07-21T09:09:03.8678698Z 
+2026-07-21T09:09:03.8679596Z > ui@0.0.0 lint /home/runner/work/lfr-tunnel/lfr-tunnel/ui
+2026-07-21T09:09:03.8680296Z > oxlint
+2026-07-21T09:09:03.8680482Z 
+2026-07-21T09:09:03.9247300Z ##[warning]Fast refresh only works when a file only exports components. Use a new file to share constants or functions between components.
+2026-07-21T09:09:03.9258404Z ##[warning]Fast refresh only works when a file only exports components. Use a new file to share constants or functions between components.
+2026-07-21T09:09:03.9260982Z ##[warning]Catch parameter 'err' is caught but never used.
+2026-07-21T09:09:03.9263212Z ##[warning]Catch parameter 'err' is caught but never used.
+2026-07-21T09:09:03.9265531Z ##[warning]Catch parameter 'err' is caught but never used.
+2026-07-21T09:09:03.9266744Z 
+2026-07-21T09:09:03.9267097Z Found 5 warnings and 0 errors.
+2026-07-21T09:09:03.9267846Z Finished in 11ms on 25 files with 103 rules using 4 threads.
+2026-07-21T09:09:04.3190325Z 
+2026-07-21T09:09:04.3191236Z > ui@0.0.0 build /home/runner/work/lfr-tunnel/lfr-tunnel/ui
+2026-07-21T09:09:04.3191833Z > tsc -b && vite build
+2026-07-21T09:09:04.3192048Z 
+2026-07-21T09:09:08.0581818Z [36mvite v8.1.5 [32mbuilding client environment for production...[36m[39m
+2026-07-21T09:09:08.0713878Z [2K
+2026-07-21T09:09:08.1773759Z transforming...✓ 104 modules transformed.
+2026-07-21T09:09:08.2193189Z rendering chunks...
+2026-07-21T09:09:08.3405024Z computing gzip size...
+2026-07-21T09:09:08.3500663Z dist/index.html                   0.52 kB │ gzip:   0.32 kB
+2026-07-21T09:09:08.3502069Z dist/assets/index-BTZcHQgX.css   22.33 kB │ gzip:   5.11 kB
+2026-07-21T09:09:08.3503413Z dist/assets/index-Ce_SjP80.js   606.70 kB │ gzip: 189.03 kB
+2026-07-21T09:09:08.3504285Z 
+2026-07-21T09:09:08.3504947Z [32m✓ built in 291ms[39m
+2026-07-21T09:09:08.3512547Z [33m[plugin builtin:vite-reporter] 
+2026-07-21T09:09:08.3513906Z (!) Some chunks are larger than 500 kB after minification. Consider:
+2026-07-21T09:09:08.3514930Z - Using dynamic import() to code-split the application
+2026-07-21T09:09:08.3516625Z - Use build.rolldownOptions.output.codeSplitting to improve chunking: https://rolldown.rs/reference/OutputOptions.codeSplitting
+2026-07-21T09:09:08.3518544Z - Adjust chunk size limit for this warning via build.chunkSizeWarningLimit.[39m
+2026-07-21T09:09:08.3728715Z ##[group]Run cd ui
+2026-07-21T09:09:08.3729003Z [36;1mcd ui[0m
+2026-07-21T09:09:08.3729221Z [36;1mpnpm install[0m
+2026-07-21T09:09:08.3729461Z [36;1mpnpm run build[0m
+2026-07-21T09:09:08.3729689Z [36;1mcd ..[0m
+2026-07-21T09:09:08.3729915Z [36;1mrm -rf pkg/server/ui-dist[0m
+2026-07-21T09:09:08.3730211Z [36;1mcp -r ui/dist pkg/server/ui-dist[0m
+2026-07-21T09:09:08.3730604Z [36;1mif [ -n "$(git status --porcelain pkg/server/ui-dist)" ]; then[0m
+2026-07-21T09:09:08.3731224Z [36;1m  echo "❌ UI build out of sync! Please run 'make build' locally and commit the ui-dist changes."[0m
+2026-07-21T09:09:08.3731805Z [36;1m  git status --porcelain pkg/server/ui-dist[0m
+2026-07-21T09:09:08.3732127Z [36;1m  exit 1[0m
+2026-07-21T09:09:08.3732333Z [36;1mfi[0m
+2026-07-21T09:09:08.3792356Z shell: /usr/bin/bash --noprofile --norc -e -o pipefail {0}
+2026-07-21T09:09:08.3792774Z env:
+2026-07-21T09:09:08.3793191Z   GOTOOLCHAIN: local
+2026-07-21T09:09:08.3793599Z   PNPM_HOME: /home/runner/setup-pnpm/node_modules/.bin
+2026-07-21T09:09:08.3793984Z ##[endgroup]
+2026-07-21T09:09:08.8186700Z Lockfile is up to date, resolution step is skipped
+2026-07-21T09:09:08.8552799Z Already up to date
+2026-07-21T09:09:08.9961939Z 
+2026-07-21T09:09:09.0060736Z Done in 592ms
+2026-07-21T09:09:09.4035689Z 
+2026-07-21T09:09:09.4036613Z > ui@0.0.0 build /home/runner/work/lfr-tunnel/lfr-tunnel/ui
+2026-07-21T09:09:09.4037371Z > tsc -b && vite build
+2026-07-21T09:09:09.4037651Z 
+2026-07-21T09:09:13.1316949Z [36mvite v8.1.5 [32mbuilding client environment for production...[36m[39m
+2026-07-21T09:09:13.1443575Z [2K
+2026-07-21T09:09:13.2551795Z transforming...✓ 104 modules transformed.
+2026-07-21T09:09:13.2968875Z rendering chunks...
+2026-07-21T09:09:13.4191859Z computing gzip size...
+2026-07-21T09:09:13.4288045Z dist/index.html                   0.52 kB │ gzip:   0.32 kB
+2026-07-21T09:09:13.4288725Z dist/assets/index-BTZcHQgX.css   22.33 kB │ gzip:   5.11 kB
+2026-07-21T09:09:13.4289374Z dist/assets/index-Ce_SjP80.js   606.70 kB │ gzip: 189.03 kB
+2026-07-21T09:09:13.4289655Z 
+2026-07-21T09:09:13.4291485Z [32m✓ built in 295ms[39m
+2026-07-21T09:09:13.4299385Z [33m[plugin builtin:vite-reporter] 
+2026-07-21T09:09:13.4299927Z (!) Some chunks are larger than 500 kB after minification. Consider:
+2026-07-21T09:09:13.4300475Z - Using dynamic import() to code-split the application
+2026-07-21T09:09:13.4301409Z - Use build.rolldownOptions.output.codeSplitting to improve chunking: https://rolldown.rs/reference/OutputOptions.codeSplitting
+2026-07-21T09:09:13.4302454Z - Adjust chunk size limit for this warning via build.chunkSizeWarningLimit.[39m
+2026-07-21T09:09:13.4739126Z ❌ UI build out of sync! Please run 'make build' locally and commit the ui-dist changes.
+2026-07-21T09:09:13.4783673Z  M pkg/server/ui-dist/assets/index-Ce_SjP80.js
+2026-07-21T09:09:13.4792065Z ##[error]Process completed with exit code 1.
+2026-07-21T09:09:13.4866270Z Node 20 is being deprecated. This workflow is running with Node 24 by default. If you need to temporarily use Node 20, you can set the ACTIONS_ALLOW_USE_UNSECURE_NODE_VERSION=true environment variable. For more information see: https://github.blog/changelog/2025-09-19-deprecation-of-node-20-on-github-actions-runners/
+2026-07-21T09:09:13.4867564Z Post job cleanup.
+2026-07-21T09:09:13.5792474Z Pruning is unnecessary.
+2026-07-21T09:09:13.5946494Z Post job cleanup.
+2026-07-21T09:09:13.6857345Z [command]/usr/bin/git version
+2026-07-21T09:09:13.6914208Z git version 2.54.0
+2026-07-21T09:09:13.6965846Z Temporarily overriding HOME='/home/runner/work/_temp/67bc4645-dada-45e1-8523-8a1626521833' before making global git config changes
+2026-07-21T09:09:13.6969215Z Adding repository directory to the temporary git global config as a safe directory
+2026-07-21T09:09:13.6984432Z [command]/usr/bin/git config --global --add safe.directory /home/runner/work/lfr-tunnel/lfr-tunnel
+2026-07-21T09:09:13.7028363Z Removing SSH command configuration
+2026-07-21T09:09:13.7037769Z [command]/usr/bin/git config --local --name-only --get-regexp core\.sshCommand
+2026-07-21T09:09:13.7100266Z [command]/usr/bin/git submodule foreach --recursive sh -c "git config --local --name-only --get-regexp 'core\.sshCommand' && git config --local --unset-all 'core.sshCommand' || :"
+2026-07-21T09:09:13.7423827Z Removing HTTP extra header
+2026-07-21T09:09:13.7429638Z [command]/usr/bin/git config --local --name-only --get-regexp http\.https\:\/\/github\.com\/\.extraheader
+2026-07-21T09:09:13.7485082Z [command]/usr/bin/git submodule foreach --recursive sh -c "git config --local --name-only --get-regexp 'http\.https\:\/\/github\.com\/\.extraheader' && git config --local --unset-all 'http.https://github.com/.extraheader' || :"
+2026-07-21T09:09:13.7798075Z Removing includeIf entries pointing to credentials config files
+2026-07-21T09:09:13.7805964Z [command]/usr/bin/git config --local --name-only --get-regexp ^includeIf\.gitdir:
+2026-07-21T09:09:13.7849089Z includeif.gitdir:/home/runner/work/lfr-tunnel/lfr-tunnel/.git.path
+2026-07-21T09:09:13.7851003Z includeif.gitdir:/home/runner/work/lfr-tunnel/lfr-tunnel/.git/worktrees/*.path
+2026-07-21T09:09:13.7852454Z includeif.gitdir:/github/workspace/.git.path
+2026-07-21T09:09:13.7853574Z includeif.gitdir:/github/workspace/.git/worktrees/*.path
+2026-07-21T09:09:13.7877196Z [command]/usr/bin/git config --local --get-all includeif.gitdir:/home/runner/work/lfr-tunnel/lfr-tunnel/.git.path
+2026-07-21T09:09:13.7910418Z /home/runner/work/_temp/git-credentials-d77fb297-8000-4808-8c74-9571eab66f29.config
+2026-07-21T09:09:13.7932876Z [command]/usr/bin/git config --local --unset includeif.gitdir:/home/runner/work/lfr-tunnel/lfr-tunnel/.git.path \/home\/runner\/work\/_temp\/git\-credentials\-d77fb297\-8000\-4808\-8c74\-9571eab66f29\.config
+2026-07-21T09:09:13.7986567Z [command]/usr/bin/git config --local --get-all includeif.gitdir:/home/runner/work/lfr-tunnel/lfr-tunnel/.git/worktrees/*.path
+2026-07-21T09:09:13.8014702Z /home/runner/work/_temp/git-credentials-d77fb297-8000-4808-8c74-9571eab66f29.config
+2026-07-21T09:09:13.8025059Z [command]/usr/bin/git config --local --unset includeif.gitdir:/home/runner/work/lfr-tunnel/lfr-tunnel/.git/worktrees/*.path \/home\/runner\/work\/_temp\/git\-credentials\-d77fb297\-8000\-4808\-8c74\-9571eab66f29\.config
+2026-07-21T09:09:13.8067199Z [command]/usr/bin/git config --local --get-all includeif.gitdir:/github/workspace/.git.path
+2026-07-21T09:09:13.8093380Z /github/runner_temp/git-credentials-d77fb297-8000-4808-8c74-9571eab66f29.config
+2026-07-21T09:09:13.8102182Z [command]/usr/bin/git config --local --unset includeif.gitdir:/github/workspace/.git.path \/github\/runner_temp\/git\-credentials\-d77fb297\-8000\-4808\-8c74\-9571eab66f29\.config
+2026-07-21T09:09:13.8137368Z [command]/usr/bin/git config --local --get-all includeif.gitdir:/github/workspace/.git/worktrees/*.path
+2026-07-21T09:09:13.8162695Z /github/runner_temp/git-credentials-d77fb297-8000-4808-8c74-9571eab66f29.config
+2026-07-21T09:09:13.8171663Z [command]/usr/bin/git config --local --unset includeif.gitdir:/github/workspace/.git/worktrees/*.path \/github\/runner_temp\/git\-credentials\-d77fb297\-8000\-4808\-8c74\-9571eab66f29\.config
+2026-07-21T09:09:13.8209410Z [command]/usr/bin/git submodule foreach --recursive git config --local --show-origin --name-only --get-regexp remote.origin.url
+2026-07-21T09:09:13.8429366Z Removing credentials config '/home/runner/work/_temp/git-credentials-d77fb297-8000-4808-8c74-9571eab66f29.config'
+2026-07-21T09:09:13.8572644Z Cleaning up orphan processes
+2026-07-21T09:09:13.8962718Z ##[warning]Node.js 20 is deprecated. The following actions target Node.js 20 but are being forced to run on Node.js 24: pnpm/action-setup@v3. For more information see: https://github.blog/changelog/2025-09-19-deprecation-of-node-20-on-github-actions-runners/

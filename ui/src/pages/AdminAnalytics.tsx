@@ -144,7 +144,7 @@ export default function AdminAnalytics() {
         <h2 style={{ fontSize: '24px', fontWeight: 'bold' }}>{t('system_analytics', 'System Analytics')}</h2>
         <div style={{ display: 'flex', gap: '12px' }}>
           <select 
-            className="form-control" 
+            className="input-field" 
             style={{ width: 'auto' }}
             value={timeRange} 
             onChange={(e) => setTimeRange(e.target.value)}

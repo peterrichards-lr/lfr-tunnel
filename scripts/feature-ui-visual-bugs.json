@@ -1,0 +1,13 @@
+{
+  "epic": {
+    "title": "UI Visual Bugs and UX Polish",
+    "description": "This epic addresses several UI visual bugs and UX layout adjustments across the V1 and V2 portals.\n\n### Analysis\n- The V2 Dashboard layout does not reflect the user flow. It should be re-ordered to display Subdomain Reservations, Personal Access Tokens, and Active Tunnels in a 2/3 width column.\n- The V1 Account and System Settings inputs have jarring white backgrounds in dark mode because they use the deprecated `form-control` class or hardcoded inline styles instead of `input-field`.\n- The V2 mobile hamburger menu is invisible in dark mode due to missing text color inheritance.\n- The V2 SPA renders a blank white screen when `/api/me` fails with a non-401 error.\n\n### Implementation Plan\n1. Modify `ui/src/pages/Dashboard.tsx` to restructure the layout grid into a 2/3 and 1/3 layout containing the respective panels.\n2. Replace `form-control` with `input-field` in V1 `dashboard.html` and V2 pages.\n3. Add `color: var(--text-main)` to the mobile menu button in `Layout.tsx`.\n4. Update the catch block in `Layout.tsx` to route all errors to `/login`.",
+    "labels": [
+      "enhancement",
+      "ui"
+    ],
+    "completed": false,
+    "sub_issues": []
+  },
+  "epicNumber": "686"
+}

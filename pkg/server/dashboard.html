@@ -780,7 +780,7 @@
                         <div class="form-group" style="margin-bottom: 20px;">
                             <label data-i18n="domain_allocation_rule" style="display: block; margin-bottom: 4px; font-weight: 500;">Domain Allocation Rule</label>
                             <p style="font-size: 13px; color: var(--text-muted); margin-bottom: 12px;" data-i18n="domain_allocation_rule_desc">Determine how domains are selected when a user requests a new tunnel.</p>
-                            <select id="system-domain-allocation-rule" class="form-control" style="width: 100%; padding: 10px; border-radius: 6px; border: 1px solid var(--border-color, rgba(255,255,255,0.1)); background: var(--bg-dark, rgba(0,0,0,0.2)); color: var(--text-color, inherit);">
+                            <select id="system-domain-allocation-rule" class="input-field" style="width: 100%;">
                                 <option value="contextual">Contextual (Match requesting domain)</option>
                                 <option value="preference">Preference (Use configured domain list order)</option>
                                 <option value="user-preference">User Preference (Use user's preferred domain)</option>
@@ -794,7 +794,7 @@
                         <div class="form-group" style="margin-bottom: auto;">
                             <label data-i18n="default_domain" style="display: block; margin-bottom: 4px; font-weight: 500;">Default Domain Fallback</label>
                             <p style="font-size: 13px; color: var(--text-muted); margin-bottom: 12px;" data-i18n="default_domain_desc">The fallback domain to use if the allocation rule fails to make a decision.</p>
-                            <select id="system-default-domain" class="form-control" style="width: 100%; padding: 10px; border-radius: 6px; border: 1px solid var(--border-color, rgba(255,255,255,0.1)); background: var(--bg-dark, rgba(0,0,0,0.2)); color: var(--text-color, inherit);">
+                            <select id="system-default-domain" class="input-field" style="width: 100%;">
                                 <!-- Options populated via JS -->
                             </select>
                         </div>
@@ -1106,8 +1106,8 @@
                         <!-- Headers list here -->
                     </div>
                     <div style="display: flex; gap: 8px;">
-                        <input type="text" id="detail-tunnel-header-key" data-i18n-placeholder="detail_header_key_placeholder" placeholder="Header Name (e.g. X-Frame-Options)" class="form-control" style="flex: 1; padding: 6px 8px; font-size: 12px; height: 30px;">
-                        <input type="text" id="detail-tunnel-header-value" data-i18n-placeholder="detail_header_value_placeholder" placeholder="Value" class="form-control" style="flex: 1; padding: 6px 8px; font-size: 12px; height: 30px;">
+                        <input type="text" id="detail-tunnel-header-key" data-i18n-placeholder="detail_header_key_placeholder" placeholder="Header Name (e.g. X-Frame-Options)" class="input-field" style="flex: 1; padding: 6px 8px; font-size: 12px; height: 30px;">
+                        <input type="text" id="detail-tunnel-header-value" data-i18n-placeholder="detail_header_value_placeholder" placeholder="Value" class="input-field" style="flex: 1; padding: 6px 8px; font-size: 12px; height: 30px;">
                         <button class="btn btn-primary" style="margin: 0; padding: 0 12px; height: 30px; font-size: 12px; width: auto;" onclick="addTunnelHeader()" data-i18n="btn_add">Add</button>
                     </div>
                 </div>

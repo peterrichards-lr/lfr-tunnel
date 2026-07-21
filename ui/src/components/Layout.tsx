@@ -123,6 +123,11 @@ export default function Layout() {
         <header className="content-header" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '32px' }}>
           <div>
             <p style={{ margin: 0, color: 'var(--text-muted)' }}>{t('welcome_back', 'Welcome back')}, {user.first_name}</p>
+            {user.last_login_at && !user.last_login_at.startsWith('0001') && (
+              <p style={{ margin: '4px 0 0 0', color: 'var(--text-muted)', fontSize: '13px' }}>
+                Last login: {new Date(user.last_login_at).toLocaleString()} from <code style={{background: 'rgba(0,0,0,0.1)', padding: '2px 4px', borderRadius: '4px'}}>{user.last_login_ip || 'Unknown'}</code>
+              </p>
+            )}
           </div>
           <div style={{ textAlign: 'right' }}>
             <a href="https://status.lfr-demo.se/" target="_blank" rel="noopener noreferrer" style={{ display: 'flex', alignItems: 'center', gap: '8px', justifyContent: 'flex-end', marginBottom: '4px', textDecoration: 'none' }}>

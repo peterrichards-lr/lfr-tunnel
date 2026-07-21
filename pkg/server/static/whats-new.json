@@ -1,5 +1,14 @@
 [
   {
+    "version": "v1.43.3",
+    "release_date": "2026-07-21",
+    "features": [
+      "Fix: Resolve IP Blacklist input form visual styles",
+      "Fix: Correct Admin Settings table column headers and export button",
+      "Feature: Add active rule to sync branch before PR"
+    ]
+  },
+  {
     "version": "v1.43.2",
     "release_date": "2026-07-20",
     "features": [
@@ -15,48 +24,6 @@
       "Feature: Implement cross-promotional banners for V1 and V2 portals",
       "Feature: Implement Portal Usage Analytics tracking (V1 vs V2 distribution)",
       "Fix: Resolve i18n dynamic field translation parity on V2 Login"
-    ]
-  },
-  {
-    "version": "v1.42.0",
-    "release_date": "2026-07-17",
-    "features": [
-      "Feature: Complete refactor of Client Dashboard UI to React SPA",
-      "Feature: Componentized monolithic vanilla JS architecture",
-      "Feature: Strict Error Handling audit and I/O resilience improvements",
-      "Feature: Decouple server package and implement standard Go architecture",
-      "Feature: Consolidate Operations to unified CLI task runner"
-    ]
-  },
-  {
-    "version": "v1.40.0",
-    "release_date": "2026-07-17",
-    "features": [
-      "Feature: Client Dashboard UX Unification & Responsive Design",
-      "Feature: LDM Integration API Bridge for seamless project synchronization"
-    ]
-  },
-  {
-    "version": "v1.39.3",
-    "release_date": "2026-07-16",
-    "features": [
-      "Fix: Resolve 'Preserve Host Header' UI checkbox state persistence bug",
-      "Feature: Add visual status pill for Host header preservation in Client Inspector UI",
-      "Feature: Custom Admin-defined Maintenance Pages for gateway",
-      "Feature: Implement responsive 2-column UI settings layout",
-      "Feature: Add light theme icon variant for client applications"
-    ]
-  },
-  {
-    "version": "v1.39.2",
-    "release_date": "2026-07-15",
-    "features": [
-      "Fix: Resolve 'Connect' failure in Windows 11 GUI caused by log file locks and console window flashing",
-      "Fix: Resolve SentinelOne quarantine interference during self-upgrade by downloading to whitelisted path",
-      "Feature: Implement Live Logs UI in Client Inspector",
-      "Fix: Resolve ignored background flag when gui flag is present",
-      "Fix: Resolve client UI localization bugs in English and other languages",
-      "Fix: Align and fix E2E automated test suite for Playwright container compatibility"
     ]
   }
 ]

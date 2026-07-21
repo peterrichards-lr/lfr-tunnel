@@ -4,9 +4,13 @@ import { getMagicLinkToken, clearMailpit } from './utils/mailpit';
 test.describe('Dashboard UI Automation', () => {
   const adminEmail = 'admin@lfr-demo.local'; // From tests/e2e/server-config.yaml
 
-  test.beforeEach(async () => {
+  test.beforeEach(async ({ context }) => {
     // Ensure mailpit is clean before each test
     await clearMailpit();
+    // Pre-dismiss the V2 promo banner by seeding localStorage
+    await context.addInitScript(() => {
+      window.localStorage.setItem('v2_promo_dismissed', 'true');
+    });
   });
 
   test('Magic Link Login, Theme Toggle, and Pagination', async ({ page }) => {

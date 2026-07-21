@@ -45,6 +45,7 @@ export default function AdminUsers() {
   const [users, setUsers] = useState<User[]>([]);
   const [loading, setLoading] = useState(true);
   const [selectedUser, setSelectedUser] = useState<User | null>(null);
+  const [serverConfig, setServerConfig] = useState<any>(null);
   
   // Targeted Message State
   const [targetedUserId, setTargetedUserId] = useState('');
@@ -58,8 +59,12 @@ export default function AdminUsers() {
 
   const fetchUsers = async () => {
     try {
-      const res = await axios.get('/api/admin/users');
-      setUsers(res.data || []);
+      const [res, confRes] = await Promise.all([
+        axios.get('/api/admin/users'),
+        axios.get('/api/version').catch(() => ({ data: null }))
+      ]);
+      setUsers(res.data);
+      if (confRes.data) setServerConfig(confRes.data);
     } catch (e) {
       console.error(e);
     } finally {
@@ -233,14 +238,19 @@ export default function AdminUsers() {
                               ) : (
                                 <button className="btn" style={{ padding: '4px 8px', fontSize: '12px' }} onClick={() => changeStatus(u.email, 'approved')}>Unsuspend</button>
                               )}
-                              
-                              {u.role === 'admin' ? (
-                                <button className="btn" style={{ padding: '4px 8px', fontSize: '12px' }} onClick={() => changeRole(u.email, 'user')}>Demote</button>
-                              ) : (
-                                <button className="btn" style={{ padding: '4px 8px', fontSize: '12px' }} onClick={() => changeRole(u.email, 'admin')}>Promote</button>
+                              {(currentUser.role === 'owner' || u.role !== 'owner') && (
+                                <>
+                                  {u.role === 'admin' || u.role === 'owner' ? (
+                                    <button className="btn" style={{ padding: '4px 8px', fontSize: '12px' }} onClick={() => changeRole(u.email, 'user')}>Demote</button>
+                                  ) : (
+                                    <button className="btn" style={{ padding: '4px 8px', fontSize: '12px' }} onClick={() => changeRole(u.email, 'admin')}>Promote</button>
+                                  )}
+                                  
+                                  {u.email.toLowerCase() !== serverConfig?.owner_email?.toLowerCase() && (
+                                    <button className="btn btn-danger" style={{ padding: '4px 8px', fontSize: '12px' }} onClick={() => deleteUser(u.email)}>Delete</button>
+                                  )}
+                                </>
                               )}
-                              
-                              <button className="btn btn-danger" style={{ padding: '4px 8px', fontSize: '12px' }} onClick={() => deleteUser(u.email)}>Delete</button>
                             </>
                           )}
                         </div>

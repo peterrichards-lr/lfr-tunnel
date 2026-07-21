@@ -1,13 +1,14 @@
 import { useState, useEffect } from 'react';
 import { useI18n } from '../contexts/I18nContext';
 
-export default function ClientInstallationModal({ isOpen, onClose }: { isOpen: boolean, onClose: () => void }) {
-  const { t } = useI18n();
+export default function ClientInstallationModal({ isOpen, onClose, serverConfig }: { isOpen: boolean, onClose: () => void, serverConfig?: any }) {
   const [activeTab, setActiveTab] = useState<'macos' | 'windows' | 'linux'>('macos');
   const [copied, setCopied] = useState<string | null>(null);
+  const { t } = useI18n();
 
   useEffect(() => {
     if (isOpen) {
+      document.body.style.overflow = 'hidden';
       const ua = navigator.userAgent;
       if (ua.includes('Windows')) {
         setActiveTab('windows');
@@ -16,7 +17,10 @@ export default function ClientInstallationModal({ isOpen, onClose }: { isOpen: b
       } else {
         setActiveTab('macos');
       }
+    } else {
+      document.body.style.overflow = 'unset';
     }
+    return () => { document.body.style.overflow = 'unset'; };
   }, [isOpen]);
 
   const handleCopy = (text: string, id: string) => {
@@ -28,14 +32,22 @@ export default function ClientInstallationModal({ isOpen, onClose }: { isOpen: b
   if (!isOpen) return null;
 
   return (
-    <div className="modal-overlay" style={{ display: 'flex', position: 'fixed', top: 0, left: 0, width: '100%', height: '100%', background: 'rgba(0,0,0,0.6)', alignItems: 'center', justifyContent: 'center', zIndex: 1000 }}>
-      <div className="glass" style={{ maxWidth: '650px', width: '100%', padding: '32px', borderRadius: '16px', border: '1px solid var(--border)', textAlign: 'left', display: 'flex', flexDirection: 'column', maxHeight: '90vh' }}>
+    <div style={{
+      position: 'fixed', top: 0, left: 0, right: 0, bottom: 0,
+      backgroundColor: 'rgba(0,0,0,0.5)', zIndex: 9999,
+      display: 'flex', alignItems: 'center', justifyContent: 'center',
+      backdropFilter: 'blur(4px)', padding: '20px'
+    }} onClick={onClose}>
+      <div style={{
+        background: 'var(--bg-secondary)', borderRadius: '12px', width: '100%', maxWidth: '600px',
+        maxHeight: '90vh', display: 'flex', flexDirection: 'column',
+        boxShadow: '0 10px 25px rgba(0,0,0,0.5)', overflow: 'hidden', padding: '24px'
+      }} onClick={e => e.stopPropagation()}>
         
+        {/* Header */}
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px' }}>
-          <h3 style={{ margin: 0, fontSize: '20px', display: 'flex', alignItems: 'center', gap: '8px' }}>
-            💻 {t('guide_title', 'Client Installation Guide')}
-          </h3>
-          <button onClick={onClose} style={{ background: 'transparent', border: 'none', color: 'var(--text-muted)', cursor: 'pointer', fontSize: '24px', lineHeight: '1' }}>&times;</button>
+          <h2 style={{ fontSize: '1.2rem', margin: 0 }}>{t('guide_title', 'Client Installation Guide')}</h2>
+          <button onClick={onClose} style={{ background: 'transparent', border: 'none', color: 'var(--text-muted)', cursor: 'pointer', fontSize: '1.2rem' }}>×</button>
         </div>
         
         <div style={{ fontSize: '0.9rem', color: 'var(--text-muted)', marginBottom: '20px' }}>
@@ -67,17 +79,21 @@ export default function ClientInstallationModal({ isOpen, onClose }: { isOpen: b
             <div className="animation-fade-in">
               <h4 style={{ fontSize: '14px', marginBottom: '8px' }}>🚀 {t('guide_macos_title', 'Apple Silicon (M1/M2/M3) & Intel Macs')}</h4>
               
-              <div style={{ fontSize: '0.8rem', fontWeight: 'bold', marginTop: '10px', color: 'var(--text)' }}>
-                {t('guide_macos_brew', 'Recommended via Homebrew:')}
-              </div>
-              <div className="code-box">
-                <span>brew tap peterrichards-lr/tap && brew install lfr-tunnel</span>
-                <button className="copy-btn" onClick={() => handleCopy('brew tap peterrichards-lr/tap && brew install lfr-tunnel', 'macos-brew')}>
-                  {copied === 'macos-brew' ? '✓' : '📋'}
-                </button>
-              </div>
+              {!serverConfig?.disable_brew && (
+                <>
+                  <div style={{ fontSize: '0.8rem', fontWeight: 'bold', marginTop: '10px', color: 'var(--text)' }}>
+                    {t('guide_macos_brew', 'Recommended via Homebrew:')}
+                  </div>
+                  <div className="code-box">
+                    <span>brew tap peterrichards-lr/homebrew-tap && brew install lfr-tunnel</span>
+                    <button className="copy-btn" onClick={() => handleCopy('brew tap peterrichards-lr/homebrew-tap && brew install lfr-tunnel', 'macos-brew')}>
+                      {copied === 'macos-brew' ? '✓' : '📋'}
+                    </button>
+                  </div>
+                </>
+              )}
 
-              <div style={{ fontSize: '0.8rem', fontWeight: 'bold', marginTop: '10px', color: 'var(--text-muted)' }}>
+              <div style={{ fontSize: '0.8rem', fontWeight: 'bold', marginTop: '10px', color: !serverConfig?.disable_brew ? 'var(--text-muted)' : 'var(--text)' }}>
                 {t('guide_macos_direct', 'Direct Installation Script (Alternative):')}
               </div>
               <div className="code-box">
@@ -103,17 +119,21 @@ export default function ClientInstallationModal({ isOpen, onClose }: { isOpen: b
             <div className="animation-fade-in">
               <h4 style={{ fontSize: '14px', marginBottom: '8px' }}>🚀 {t('guide_windows_title', 'Windows 10 / 11 (64-bit)')}</h4>
               
-              <div style={{ fontSize: '0.8rem', fontWeight: 'bold', marginTop: '10px', color: 'var(--text)' }}>
-                {t('guide_windows_scoop', 'Recommended via Scoop:')}
-              </div>
-              <div className="code-box">
-                <span>scoop bucket add peterrichards-lr https://github.com/peterrichards-lr/scoop-bucket.git && scoop install lfr-tunnel</span>
-                <button className="copy-btn" onClick={() => handleCopy('scoop bucket add peterrichards-lr https://github.com/peterrichards-lr/scoop-bucket.git && scoop install lfr-tunnel', 'win-scoop')}>
-                  {copied === 'win-scoop' ? '✓' : '📋'}
-                </button>
-              </div>
+              {!serverConfig?.disable_scoop && (
+                <>
+                  <div style={{ fontSize: '0.8rem', fontWeight: 'bold', marginTop: '10px', color: 'var(--text)' }}>
+                    {t('guide_windows_scoop', 'Recommended via Scoop:')}
+                  </div>
+                  <div className="code-box">
+                    <span>scoop bucket add peterrichards-lr https://github.com/peterrichards-lr/scoop-bucket.git && scoop install lfr-tunnel</span>
+                    <button className="copy-btn" onClick={() => handleCopy('scoop bucket add peterrichards-lr https://github.com/peterrichards-lr/scoop-bucket.git && scoop install lfr-tunnel', 'win-scoop')}>
+                      {copied === 'win-scoop' ? '✓' : '📋'}
+                    </button>
+                  </div>
+                </>
+              )}
 
-              <div style={{ fontSize: '0.8rem', fontWeight: 'bold', marginTop: '10px', color: 'var(--text-muted)' }}>
+              <div style={{ fontSize: '0.8rem', fontWeight: 'bold', marginTop: '10px', color: !serverConfig?.disable_scoop ? 'var(--text-muted)' : 'var(--text)' }}>
                 {t('guide_windows_direct', 'Direct Installation (PowerShell Script):')}
               </div>
               <div className="code-box">

@@ -98,7 +98,7 @@ export default function ReservationsPanel() {
       
       <div style={{ marginBottom: '24px' }}>
         <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '13px', marginBottom: '8px' }}>
-          <span>Reservation Quota</span>
+          <span>My Personal Quota</span>
           <span>{limit < 0 ? `${used} / ∞` : `${used} / ${limit}`} reserved</span>
         </div>
         <div style={{ height: '8px', background: 'rgba(255,255,255,0.1)', borderRadius: '4px', overflow: 'hidden' }}>

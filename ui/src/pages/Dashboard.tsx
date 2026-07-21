@@ -13,6 +13,7 @@ export default function Dashboard() {
   const { user } = useOutletContext<{ user: any }>();
   const [tokens, setTokens] = useState<any[]>([]);
   const [isInstallModalOpen, setIsInstallModalOpen] = useState(false);
+  const [serverConfig, setServerConfig] = useState<any>(null);
   const { formatDate } = useSettings();
   const { t } = useI18n();
   const [showV1Promo, setShowV1Promo] = useState(false);
@@ -23,6 +24,7 @@ export default function Dashboard() {
       setShowV1Promo(true);
     }
     axios.get('/api/analytics/ping?portal=v2').catch(() => {});
+    axios.get('/api/version').then(res => setServerConfig(res.data)).catch(() => {});
   }, [user]);
 
   const dismissV1Promo = () => {
@@ -140,7 +142,7 @@ export default function Dashboard() {
         )}
       </div>
 
-      <ClientInstallationModal isOpen={isInstallModalOpen} onClose={() => setIsInstallModalOpen(false)} />
+      <ClientInstallationModal isOpen={isInstallModalOpen} onClose={() => setIsInstallModalOpen(false)} serverConfig={serverConfig} />
       <OnboardingTour user={user} />
     </div>
   );

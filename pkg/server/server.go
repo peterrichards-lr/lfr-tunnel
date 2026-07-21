@@ -648,6 +648,7 @@ func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 				"uptime_seconds":           int(time.Since(s.startTime).Seconds()),
 				"force_mfa":                s.cfg.ForceMFA,
 				"enable_onboarding":        s.cfg.EnableOnboarding,
+				"owner_email":              s.cfg.Owner.UserID,
 			})
 			return
 		}

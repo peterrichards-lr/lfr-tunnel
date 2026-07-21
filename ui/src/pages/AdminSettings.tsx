@@ -3,6 +3,7 @@ import axios from 'axios';
 import { useOutletContext } from 'react-router-dom';
 import { useSettings } from '../contexts/SettingsContext';
 import { useTableSort } from '../hooks/useTableSort';
+import Skeleton from '../components/Skeleton';
 
 export default function AdminSettings() {
   const { user } = useOutletContext<{ user: any }>();
@@ -163,7 +164,40 @@ export default function AdminSettings() {
     return (bytes / 1024).toFixed(1) + ' KB';
   };
 
-  if (loading) return <div>Loading settings...</div>;
+  if (loading) {
+    return (
+      <div style={{ animation: 'fadeInUp 0.6s ease-out' }}>
+        <div style={{ marginBottom: '24px' }}>
+          <Skeleton width={180} height={28} />
+          <Skeleton width={280} height={16} style={{ marginTop: '8px' }} />
+        </div>
+
+        <div className="card" style={{ padding: '24px', marginBottom: '24px' }}>
+          <Skeleton width={150} height={20} style={{ marginBottom: '16px' }} />
+          <div className="form-group" style={{ marginTop: '16px' }}>
+            <Skeleton width={100} height={16} style={{ marginBottom: '8px' }} />
+            <Skeleton width="100%" height={40} style={{ maxWidth: '300px' }} />
+          </div>
+          <div className="form-group" style={{ marginTop: '16px' }}>
+            <Skeleton width={100} height={16} style={{ marginBottom: '8px' }} />
+            <Skeleton width="100%" height={40} style={{ maxWidth: '300px' }} />
+          </div>
+          <div style={{ marginTop: '24px' }}>
+            <Skeleton width={120} height={40} />
+          </div>
+        </div>
+
+        <div className="card" style={{ padding: '24px' }}>
+          <Skeleton width={150} height={20} style={{ marginBottom: '16px' }} />
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
+            <Skeleton width="100%" height={24} />
+            <Skeleton width="100%" height={24} />
+            <Skeleton width="100%" height={24} />
+          </div>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div>

@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import axios from 'axios';
 import { useSettings } from '../contexts/SettingsContext';
 import { useTableSort } from '../hooks/useTableSort';
+import Skeleton from '../components/Skeleton';
 
 interface BlacklistEntry {
   ip: string;
@@ -62,7 +63,54 @@ export default function AdminBlacklist() {
 
   const { items: sortedEntries, requestSort, getSortIndicator, searchQuery, setSearchQuery } = useTableSort(entries, ['ip', 'reason']);
 
-  if (loading) return <div>Loading blacklist...</div>;
+  if (loading) {
+    return (
+      <div style={{ animation: 'fadeInUp 0.6s ease-out' }}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '24px' }}>
+          <div>
+            <Skeleton width={180} height={28} />
+          </div>
+        </div>
+
+        <div className="card" style={{ padding: '24px', marginBottom: '24px' }}>
+          <div style={{ display: 'flex', gap: '12px', flexWrap: 'wrap' }}>
+            <Skeleton width="100%" height={40} style={{ flex: '1', minWidth: '150px' }} />
+            <Skeleton width="100%" height={40} style={{ flex: '2', minWidth: '200px' }} />
+            <Skeleton width={120} height={40} />
+          </div>
+        </div>
+
+        <div className="card" style={{ padding: '24px' }}>
+          <div style={{ marginBottom: '16px' }}>
+            <Skeleton width="100%" height={40} style={{ maxWidth: '300px' }} />
+          </div>
+          
+          <div className="table-responsive">
+            <table style={{ width: '100%', borderCollapse: 'collapse' }}>
+              <thead>
+                <tr style={{ borderBottom: '1px solid var(--border)', textAlign: 'left' }}>
+                  <th style={{ padding: '12px 16px' }}><Skeleton width={100} /></th>
+                  <th style={{ padding: '12px 16px' }}><Skeleton width={200} /></th>
+                  <th style={{ padding: '12px 16px' }}><Skeleton width={120} /></th>
+                  <th style={{ padding: '12px 16px' }}><Skeleton width={80} /></th>
+                </tr>
+              </thead>
+              <tbody>
+                {[...Array(3)].map((_, i) => (
+                  <tr key={i} style={{ borderBottom: '1px solid rgba(255,255,255,0.05)' }}>
+                    <td style={{ padding: '16px' }}><Skeleton width="90%" height={16} /></td>
+                    <td style={{ padding: '16px' }}><Skeleton width="85%" height={16} /></td>
+                    <td style={{ padding: '16px' }}><Skeleton width="60%" height={16} /></td>
+                    <td style={{ padding: '16px' }}><Skeleton width="50%" height={28} /></td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+    );
+  }
 
   const totalPages = Math.ceil(sortedEntries.length / ROWS_PER_PAGE);
   const paginatedEntries = sortedEntries.slice(page * ROWS_PER_PAGE, (page + 1) * ROWS_PER_PAGE);

@@ -406,6 +406,9 @@ func updateMenu(tray *systray.SystemTray, cfg *config.ClientConfig, isRunning bo
 			if lockPath != "" {
 				_ = os.Remove(lockPath) //nolint:errcheck
 			}
+			if runtime.GOOS != "darwin" {
+				tray.Remove()
+			}
 			os.Exit(0)
 		}()
 	})

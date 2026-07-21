@@ -13,10 +13,10 @@ export default function Dashboard() {
   const { user } = useOutletContext<{ user: any }>();
   const [tokens, setTokens] = useState<any[]>([]);
   const [isInstallModalOpen, setIsInstallModalOpen] = useState(false);
+  const [serverConfig, setServerConfig] = useState<any>(null);
   const { formatDate } = useSettings();
   const { t } = useI18n();
   const [showV1Promo, setShowV1Promo] = useState(false);
-  const [serverConfig, setServerConfig] = useState<any>(null);
 
   useEffect(() => {
     setTokens(user.tokens || []);

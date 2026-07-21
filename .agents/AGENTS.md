@@ -22,9 +22,16 @@ The monolithic rules have been broken down into modular skills so that they can 
 
 ## Active Runtime Constraints (CRITICAL)
 
-- **No Assumptions (Anti-Hallucination Rule)**: Any technical statement, explanation, or conclusion you make MUST be strictly based on actual, referenceable code or documentation in this repository. You are expressly forbidden from making blind assumptions about how systems (like edge nodes or routing logic) behave without verifying them via search, reading the code, or consulting `AGENTS.md`/`GEMINI.md`. When the resources are available to you, use them before you speak.
-- **EDR Whitelist Restrictions**: Do NOT run the `lfr-tunnel` or `lfr-tunneld` binaries outside the whitelisted directory (`/private/tmp/lfr-tunnel`). Doing so will trigger SentinelOne (S1), which will forcefully kill the process, Homebrew, and the Antigravity agent itself. Rely on automated GitHub workflows or explicit whitelist paths for testing.
-- **Tech Debt Tracking**: If you encounter any of the 10 catalogued tech debt categories during your work, you MUST record it by raising a GitHub issue with the `tech debt` label via the `gh` CLI. The 10 categories are:
+- **No Assumptions (Anti-Hallucination Protocol)**: 
+  *Active Constraint*: You are FORBIDDEN from answering any question regarding system architecture, logic, or behavior in a single turn. 
+  - **Step 1**: You MUST first explicitly state your intent to verify the codebase, execute `grep_search` or `run_command` to find the relevant code, and then **end your turn** without answering the user's question.
+  - **Step 2**: Only in the *subsequent* turn, after you have read the actual source code into your context window, are you permitted to formulate your answer. You MUST cite the exact file and line number in your response.
+- **EDR Whitelist Restrictions**: 
+  *Active Constraint*: You are FORBIDDEN from executing `go run` or `go test` directly on this machine. If you need to test Go code, you MUST formulate your command exactly as: `go test -c -o /private/tmp/lfr-tunnel <pkg> && /private/tmp/lfr-tunnel`. Any deviation will trigger a SentinelOne EDR kill-switch.
+
+- **Tech Debt Tracking (Immediate Logging)**: 
+  *Active Constraint*: The moment you identify any of the 10 catalogued tech debt categories during your work, you MUST pause your current workflow and immediately execute `gh issue create --title "Tech Debt: [Topic]" --body "[Details]" --label "tech debt"` before taking any other action.
+  The 10 categories are:
   1. Code smells
   2. Duplication
   3. Over-complexity
@@ -35,7 +42,6 @@ The monolithic rules have been broken down into modular skills so that they can 
   8. Deprecated patterns
   9. Config drift
   10. Documentation debt
-  You do not need to tackle the technical debt immediately unless it can be resolved without diverting significant effort from your primary task. The ultimate requirement is to ensure it is recorded in the backlog.
 
 ## Internal Tools & Customization
 

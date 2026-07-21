@@ -65,6 +65,9 @@ If the issue lacks these elements, you MUST update the issue (`gh issue edit`) w
    cd ui && CI=true pnpm install && pnpm run build && cd .. && rm -rf pkg/server/ui-dist && cp -r ui/dist pkg/server/ui-dist
    ```
 
+## 6. CI Failure Remediation
+*Active Constraint*: If a Pull Request fails its CI checks (e.g., a GitHub Action fails), you MUST NOT leave the failed jobs in the repository history. After addressing the underlying issue and pushing the fix to get the build passing again, you MUST actively clean up and delete the failed job runs using the GitHub CLI (e.g., `gh run delete <run-id>`). This ensures the repository maintains a clean history of only successful ("green") jobs and prevents failed runs from triggering false-positive corrective actions.
+
 <!-- markdownlint-disable MD049 -->
 ---
 *Last Updated: 2026-07-21* | *Last Reviewed: 2026-07-21*

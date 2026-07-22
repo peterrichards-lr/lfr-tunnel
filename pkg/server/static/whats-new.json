@@ -1,5 +1,12 @@
 [
   {
+    "version": "v1.43.13",
+    "release_date": "2026-07-22",
+    "features": [
+      "Refactor: Extract hardcoded server, status, and portal URLs into centralized metadata configuration constants (#760)"
+    ]
+  },
+  {
     "version": "v1.43.12",
     "release_date": "2026-07-22",
     "features": [

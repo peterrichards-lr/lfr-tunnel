@@ -57,6 +57,48 @@ export default function AdminUsers() {
   const [selectedUser, setSelectedUser] = useState<User | null>(null);
   const [serverConfig, setServerConfig] = useState<any>(null);
   const [activeTab, setActiveTab] = useState<'users' | 'registrations'>('users');
+  const [selectedUserPATs, setSelectedUserPATs] = useState<any[]>([]);
+
+  useEffect(() => {
+    if (!selectedUser?.email) {
+      setSelectedUserPATs([]);
+      return;
+    }
+    const fetchUserDetails = async () => {
+      try {
+        const res = await axios.get(`/api/admin/users/${encodeURIComponent(selectedUser.email)}`);
+        setSelectedUserPATs(res.data.pats || []);
+      } catch (err) {
+        console.error("Failed to fetch user details", err);
+      }
+    };
+    fetchUserDetails();
+  }, [selectedUser?.email]);
+
+  const extendUserToken = async (tokenId: number, days: number) => {
+    if (!selectedUser) return;
+    try {
+      await axios.post(`/api/admin/tokens/${tokenId}/extend`, { days });
+      showToast("Token updated successfully", "success");
+      const res = await axios.get(`/api/admin/users/${encodeURIComponent(selectedUser.email)}`);
+      setSelectedUserPATs(res.data.pats || []);
+    } catch {
+      showToast("Failed to extend token", "error");
+    }
+  };
+
+  const revokeUserToken = async (tokenId: number) => {
+    if (!selectedUser) return;
+    if (!(await showConfirm('Revoke Token', 'Are you sure you want to revoke this Personal Access Token? This will permanently disable it.'))) return;
+    try {
+      await axios.delete(`/api/admin/tokens/${tokenId}`);
+      showToast("Token revoked successfully", "success");
+      const res = await axios.get(`/api/admin/users/${encodeURIComponent(selectedUser.email)}`);
+      setSelectedUserPATs(res.data.pats || []);
+    } catch {
+      showToast("Failed to revoke token", "error");
+    }
+  };
   
   // Targeted Message State
   const [targetedUserId, setTargetedUserId] = useState('');
@@ -668,6 +710,89 @@ export default function AdminUsers() {
                         </td>
                         <td style={{ padding: 'var(--spacing-md)', verticalAlign: 'middle', textAlign: 'right' }}>
                           <button className="btn btn-danger" style={{ padding: 'var(--spacing-xs) var(--spacing-md)', fontSize: '12px' }} onClick={() => kickTunnel(t.subdomain_prefix)}>Kick</button>
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+
+            <h4 style={{ marginTop: 'var(--spacing-xl)', marginBottom: 'var(--spacing-lg)', borderBottom: '1px solid var(--border-color)', paddingBottom: 'var(--spacing-sm)' }}>
+              Personal Access Tokens <span className="badge" style={{ marginLeft: 'var(--spacing-sm)' }}>{selectedUserPATs.length}</span>
+            </h4>
+
+            <div className="table-responsive" style={{ border: '1px solid var(--border-color)', borderRadius: '6px', marginBottom: 'var(--spacing-xl)' }}>
+              <table style={{ margin: 0 }}>
+                <thead>
+                  <tr style={{ borderBottom: '1px solid var(--border)', textAlign: 'left' }}>
+                    <th style={{ padding: 'var(--spacing-md)', fontSize: '12px' }}>Name</th>
+                    <th style={{ padding: 'var(--spacing-md)', fontSize: '12px' }}>Prefix</th>
+                    <th style={{ padding: 'var(--spacing-md)', fontSize: '12px' }}>Expires</th>
+                    <th style={{ padding: 'var(--spacing-md)', fontSize: '12px' }}>Status</th>
+                    <th style={{ padding: 'var(--spacing-md)', fontSize: '12px', textAlign: 'right' }}>Actions</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {!selectedUserPATs.length && (
+                    <tr>
+                      <td colSpan={5} style={{ textAlign: 'center', padding: 'var(--spacing-xl)', color: 'var(--text-muted)' }}>No tokens found for this user.</td>
+                    </tr>
+                  )}
+                  {selectedUserPATs.map((pat) => {
+                    const isRevoked = pat.revoked_at != null && !pat.revoked_at.startsWith('0001-01-01');
+                    const isExpired = pat.expires_at && !pat.expires_at.startsWith('0001-01-01') && new Date(pat.expires_at) < new Date();
+                    
+                    let statusBadge = (
+                      <span className="badge success">Active</span>
+                    );
+                    if (isRevoked) {
+                      statusBadge = <span className="badge danger">Revoked</span>;
+                    } else if (isExpired) {
+                      statusBadge = <span className="badge danger">Expired</span>;
+                    }
+
+                    return (
+                      <tr key={pat.id} style={{ borderBottom: '1px solid rgba(255,255,255,0.03)' }}>
+                        <td style={{ padding: 'var(--spacing-md)', verticalAlign: 'middle', fontSize: '13px' }}>{pat.name}</td>
+                        <td style={{ padding: 'var(--spacing-md)', verticalAlign: 'middle', fontSize: '13px', fontFamily: 'monospace' }}>{pat.token_prefix}...</td>
+                        <td style={{ padding: 'var(--spacing-md)', verticalAlign: 'middle', fontSize: '13px' }}>
+                          {pat.expires_at && !pat.expires_at.startsWith('0001-01-01') ? new Date(pat.expires_at).toLocaleDateString() : 'Never'}
+                        </td>
+                        <td style={{ padding: 'var(--spacing-md)', verticalAlign: 'middle' }}>{statusBadge}</td>
+                        <td style={{ padding: 'var(--spacing-md)', verticalAlign: 'middle', textAlign: 'right' }}>
+                          {!isRevoked && (
+                            <div style={{ display: 'flex', gap: 'var(--spacing-xs)', justifyContent: 'flex-end' }}>
+                              <button 
+                                className="btn btn-outline" 
+                                style={{ padding: '2px 8px', fontSize: '11px' }}
+                                onClick={() => extendUserToken(pat.id, 30)}
+                              >
+                                +30d
+                              </button>
+                              <button 
+                                className="btn btn-outline" 
+                                style={{ padding: '2px 8px', fontSize: '11px' }}
+                                onClick={() => extendUserToken(pat.id, 90)}
+                              >
+                                +90d
+                              </button>
+                              <button 
+                                className="btn btn-outline" 
+                                style={{ padding: '2px 8px', fontSize: '11px' }}
+                                onClick={() => extendUserToken(pat.id, 0)}
+                              >
+                                Perm
+                              </button>
+                              <button 
+                                className="btn btn-danger" 
+                                style={{ padding: '2px 8px', fontSize: '11px' }}
+                                onClick={() => revokeUserToken(pat.id)}
+                              >
+                                Revoke
+                              </button>
+                            </div>
+                          )}
                         </td>
                       </tr>
                     );

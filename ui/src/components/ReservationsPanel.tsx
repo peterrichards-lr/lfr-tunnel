@@ -5,6 +5,7 @@ import { useSettings } from '../contexts/SettingsContext';
 import { useI18n } from '../contexts/I18nContext';
 import { useTableSort } from '../hooks/useTableSort';
 import Skeleton from './Skeleton';
+import { useUI } from '../contexts/UIContext';
 
 interface Reservation {
   id: string;
@@ -16,6 +17,7 @@ interface Reservation {
 
 export default function ReservationsPanel() {
   const { t } = useI18n();
+  const { showToast, showConfirm } = useUI();
   const [reservations, setReservations] = useState<Reservation[]>([]);
   const { formatDate } = useSettings();
   const [limit, setLimit] = useState(0);
@@ -28,21 +30,18 @@ export default function ReservationsPanel() {
 
   const fetchData = async () => {
     try {
-      const [domRes, resRes] = await Promise.all([
-        axios.get('/api/domains'),
-        axios.get('/api/portal/reservations')
-      ]);
-
-      setDomains(domRes.data || []);
-      if (domRes.data && domRes.data.length > 0 && !selectedDomain) {
-        setSelectedDomain(domRes.data[0]);
+      const vRes = await axios.get('/api/version');
+      setDomains(vRes.data.supported_domains || []);
+      if (vRes.data.supported_domains?.length > 0 && !selectedDomain) {
+        setSelectedDomain(vRes.data.supported_domains[0]);
       }
 
-      setReservations(resRes.data.reservations || []);
-      setLimit(resRes.data.limit || 0);
-      setUsed(resRes.data.used || 0);
-    } catch (e) {
-      console.error(e);
+      const res = await axios.get('/api/portal/reservations');
+      setReservations(res.data.reservations || []);
+      setLimit(res.data.limit || 0);
+      setUsed(res.data.used || 0);
+    } catch {
+      showToast(t('error_fetch_reservations', 'Failed to load reservations'), 'error');
     } finally {
       setLoading(false);
     }
@@ -58,14 +57,14 @@ export default function ReservationsPanel() {
       const res = await axios.get('/api/portal/generate-subdomain');
       setSubdomainInput(res.data.subdomain);
     } catch {
-      alert(t('error_generate_subdomain', 'Failed to generate subdomain'));
+      showToast(t('error_generate_subdomain', 'Failed to generate subdomain'), 'error');
     }
   };
 
   const createReservation = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!subdomainInput) {
-      alert(t('error_enter_subdomain', 'Please enter or generate a subdomain'));
+      showToast(t('error_enter_subdomain', 'Please enter or generate a subdomain'), 'error');
       return;
     }
     try {
@@ -75,18 +74,20 @@ export default function ReservationsPanel() {
       });
       setSubdomainInput('');
       fetchData();
+      showToast(t('success_create_reservation', 'Subdomain reserved successfully'), 'success');
     } catch (err: any) {
-      alert(`${t('error', 'Error')}: ${err.response?.data?.error || t('failed_create_reservation', 'Failed to create reservation')}`);
+      showToast(`${t('error', 'Error')}: ${err.response?.data?.error || t('failed_create_reservation', 'Failed to create reservation')}`, 'error');
     }
   };
 
   const deleteReservation = async (id: string) => {
-    if (!confirm(t('confirm_release_subdomain', 'Are you sure you want to release this subdomain?'))) return;
+    if (!(await showConfirm(t('release_subdomain_title', 'Release Subdomain'), t('confirm_release_subdomain', 'Are you sure you want to release this subdomain?')))) return;
     try {
       await axios.delete(`/api/portal/reservations/${encodeURIComponent(id)}`);
       fetchData();
+      showToast(t('success_delete_reservation', 'Subdomain released successfully'), 'success');
     } catch (err: any) {
-      alert(`${t('error', 'Error')}: ${err.response?.data?.error || t('failed_delete', 'Failed to delete')}`);
+      showToast(`${t('error', 'Error')}: ${err.response?.data?.error || t('failed_delete', 'Failed to delete')}`, 'error');
     }
   };
 

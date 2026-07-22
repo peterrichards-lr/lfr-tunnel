@@ -2,6 +2,7 @@ import { useEffect, useState, useRef } from 'react';
 import axios from 'axios';
 import { useI18n } from '../contexts/I18nContext';
 import { useTableSort } from '../hooks/useTableSort';
+import { useUI } from '../contexts/UIContext';
 
 interface Tunnel {
   subdomain_prefix: string;
@@ -25,6 +26,7 @@ const formatBytes = (bytes: number, decimals = 2) => {
 
 export default function AdminTelemetry() {
   const { t } = useI18n();
+  const { showToast, showConfirm } = useUI();
   const [telemetryData, setTelemetryData] = useState<any>(null);
   const [status, setStatus] = useState<'connecting' | 'connected' | 'disconnected'>('connecting');
   const wsRef = useRef<WebSocket | null>(null);
@@ -91,12 +93,12 @@ export default function AdminTelemetry() {
   const { items: sortedTunnels, requestSort, getSortIndicator, searchQuery, setSearchQuery, getAriaSort } = useTableSort(tunnels, ['subdomain_prefix', 'full_host', 'status', 'node_id', 'client_ip']);
 
   const handleKick = async (subdomain: string) => {
-    if (window.confirm(`Are you sure you want to kick the tunnel lease for subdomain "${subdomain}"?`)) {
+    if (await showConfirm('Kick Lease', `Are you sure you want to kick the tunnel lease for subdomain "${subdomain}"?`)) {
       try {
         await axios.delete(`/api/admin/leases/${encodeURIComponent(subdomain)}`);
-        alert(`Kicked tunnel subdomain "${subdomain}" successfully.`);
+        showToast(`Kicked tunnel subdomain "${subdomain}" successfully.`, 'success');
       } catch (err: any) {
-        alert('Failed to kick tunnel: ' + (err.response?.data?.error || err.message || 'Unknown error'));
+        showToast('Failed to kick tunnel: ' + (err.response?.data?.error || err.message || 'Unknown error'), 'error');
       }
     }
   };

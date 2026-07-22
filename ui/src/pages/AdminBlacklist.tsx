@@ -4,6 +4,7 @@ import { useSettings } from '../contexts/SettingsContext';
 import { useTableSort } from '../hooks/useTableSort';
 import Skeleton from '../components/Skeleton';
 import { useI18n } from '../contexts/I18nContext';
+import { useUI } from '../contexts/UIContext';
 
 interface BlacklistEntry {
   ip: string;
@@ -18,6 +19,7 @@ export default function AdminBlacklist() {
   const [reasonInput, setReasonInput] = useState('');
   const { formatDate } = useSettings();
   const { t } = useI18n();
+  const { showToast, showConfirm } = useUI();
 
   const [page, setPage] = useState(0);
   const ROWS_PER_PAGE = 15;
@@ -48,18 +50,20 @@ export default function AdminBlacklist() {
       setIpInput('');
       setReasonInput('');
       fetchEntries();
+      showToast('IP blocked successfully', 'success');
     } catch (err: any) {
-      alert(`Error: ${err.response?.data?.error || 'Failed to block IP'}`);
+      showToast(err.response?.data?.error || 'Failed to block IP', 'error');
     }
   };
 
   const removeEntry = async (ip: string) => {
-    if (!confirm(`Are you sure you want to unblock ${ip}?`)) return;
+    if (!(await showConfirm('Unblock IP', `Are you sure you want to unblock ${ip}?`))) return;
     try {
       await axios.delete(`/api/admin/blacklist/${encodeURIComponent(ip)}`);
       fetchEntries();
+      showToast('IP unblocked successfully', 'success');
     } catch (err: any) {
-      alert(`Error: ${err.response?.data?.error || 'Failed to unblock IP'}`);
+      showToast(err.response?.data?.error || 'Failed to unblock IP', 'error');
     }
   };
 

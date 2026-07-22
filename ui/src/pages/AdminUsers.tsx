@@ -4,6 +4,7 @@ import { useOutletContext } from 'react-router-dom';
 import { useI18n } from '../contexts/I18nContext';
 import { useTableSort } from '../hooks/useTableSort';
 import Skeleton from '../components/Skeleton';
+import { useUI } from '../contexts/UIContext';
 
 interface User {
   id: string;
@@ -44,6 +45,7 @@ const formatBytes = (bytes: number, decimals = 2) => {
 export default function AdminUsers() {
   const { t } = useI18n();
   const { user: currentUser } = useOutletContext<{ user: any }>();
+  const { showToast, showConfirm, showPrompt } = useUI();
   const [users, setUsers] = useState<User[]>([]);
   const [loading, setLoading] = useState(true);
   const [selectedUser, setSelectedUser] = useState<User | null>(null);
@@ -59,11 +61,9 @@ export default function AdminUsers() {
   const [inviteForm, setInviteForm] = useState({ email: '', first_name: '', last_name: '', language_preference: 'en' });
   const [inviteError, setInviteError] = useState('');
   const [isInviting, setIsInviting] = useState(false);
-  const [pageMessage, setPageMessage] = useState<{type: 'error' | 'success', text: string} | null>(null);
 
   const showMessage = (type: 'error' | 'success', text: string) => {
-    setPageMessage({ type, text });
-    setTimeout(() => setPageMessage(null), 5000);
+    showToast(text, type === 'error' ? 'error' : 'success');
   };
 
   const fetchUsers = async () => {
@@ -85,34 +85,41 @@ export default function AdminUsers() {
     fetchUsers();
     const interval = setInterval(fetchUsers, 5000);
     return () => clearInterval(interval);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   const changeStatus = async (email: string, newStatus: string) => {
-    if (!confirm(`Are you sure you want to mark ${email} as ${newStatus}?`)) return;
+    if (!(await showConfirm('Change Status', `Are you sure you want to mark ${email} as ${newStatus}?`))) return;
     try {
       await axios.patch(`/api/admin/users/${encodeURIComponent(email)}`, { status: newStatus });
       fetchUsers();
+      showToast(`User status marked as ${newStatus}`, 'success');
     } catch {
       showMessage('error', `Failed to mark user as ${newStatus}`);
     }
   };
 
   const changeRole = async (email: string, newRole: string) => {
-    if (!confirm(`Are you sure you want to change ${email} to ${newRole}?`)) return;
+    if (!(await showConfirm('Change Role', `Are you sure you want to change ${email} to ${newRole}?`))) return;
     try {
       await axios.patch(`/api/admin/users/${encodeURIComponent(email)}`, { role: newRole });
       fetchUsers();
+      showToast(`User role updated to ${newRole}`, 'success');
     } catch {
       showMessage('error', `Failed to change role to ${newRole}`);
     }
   };
 
   const deleteUser = async (email: string) => {
-    const confirmation = prompt(`Type "DELETE" to permanently remove ${email}`);
-    if (confirmation !== "DELETE") return;
+    const confirmation = await showPrompt('Delete User', `Type "DELETE" to permanently remove ${email}`);
+    if (confirmation !== "DELETE") {
+      if (confirmation !== null) showToast('Deletion cancelled: confirmation word did not match.', 'info');
+      return;
+    }
     try {
       await axios.delete(`/api/admin/users/${encodeURIComponent(email)}`);
       fetchUsers();
+      showToast('User deleted successfully', 'success');
     } catch {
       showMessage('error', 'Failed to delete user');
     }
@@ -136,7 +143,7 @@ export default function AdminUsers() {
   };
 
   const kickTunnel = async (subdomain: string) => {
-    if (!confirm(`Are you sure you want to kick the tunnel lease for subdomain "${subdomain}"?`)) return;
+    if (!(await showConfirm('Kick Lease', `Are you sure you want to kick the tunnel lease for subdomain "${subdomain}"?`))) return;
     try {
       await axios.delete(`/api/admin/leases/${encodeURIComponent(subdomain)}`);
       // Update selectedUser if open
@@ -145,6 +152,7 @@ export default function AdminUsers() {
         active_tunnels: prev.active_tunnels?.filter(t => t.subdomain_prefix !== subdomain)
       } : null);
       fetchUsers();
+      showToast('Tunnel kicked successfully', 'success');
     } catch {
       showMessage('error', `Failed to kick tunnel ${subdomain}`);
     }
@@ -282,19 +290,6 @@ export default function AdminUsers() {
           )}
         </button>
       </div>
-      
-      {pageMessage && (
-        <div style={{
-          padding: 'var(--spacing-md) var(--spacing-lg)',
-          marginBottom: 'var(--spacing-lg)',
-          borderRadius: 'var(--spacing-sm)',
-          background: pageMessage.type === 'error' ? 'var(--status-danger-bg)' : 'var(--status-success-bg)',
-          color: pageMessage.type === 'error' ? 'var(--status-danger-text)' : 'var(--status-success-text)',
-          border: `1px solid ${pageMessage.type === 'error' ? 'var(--status-danger-border)' : 'var(--status-success-border)'}`
-        }}>
-          {pageMessage.text}
-        </div>
-      )}
       <div style={{ marginBottom: 'var(--spacing-lg)' }}>
         <input 
           type="text" 

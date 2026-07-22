@@ -994,6 +994,9 @@ The solution will consist of:
 ## E2E Exception Guardian & V2 Bug Fix (v1.34.17)
 - [x] Create Playwright pageerror listener and fix token status crash in V2 Dashboard (#732)
 
+## V2 Portal UX Parity, Toasts & Custom Dialogs (v1.34.18)
+- [x] Implement global React Toast & Dialog context, replace native alerts/confirms/prompts, and restore Maintenance panel controls (#739).
+
 <!-- markdownlint-disable MD049 -->
 ---
 *Last Updated: 2026-07-22* | *Last Reviewed: 2026-07-22*

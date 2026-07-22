@@ -5,11 +5,13 @@ import { useSettings } from '../contexts/SettingsContext';
 import { useTableSort } from '../hooks/useTableSort';
 import Skeleton from '../components/Skeleton';
 import { useI18n } from '../contexts/I18nContext';
+import { useUI } from '../contexts/UIContext';
 
 export default function AdminSettings() {
   const { user } = useOutletContext<{ user: any }>();
   const { formatDate } = useSettings();
   const { t } = useI18n();
+  const { showToast, showConfirm, showPrompt } = useUI();
   const [loading, setLoading] = useState(true);
 
   // System Settings state
@@ -18,7 +20,18 @@ export default function AdminSettings() {
   const [supportedDomains, setSupportedDomains] = useState<string[]>([]);
 
   // Maintenance state
-  const [maintenance, setMaintenance] = useState({ enabled: false, start_time: '', action: '', reason: '' });
+  const [maintenance, setMaintenance] = useState<any>({ enabled: false, start_time: '', action: '', reason: '', status: 'false', iron_curtain: false });
+
+  // Form states for soft maintenance
+  const [softAction, setSoftAction] = useState('System Upgrade');
+  const [softReason, setSoftReason] = useState('Deploying updates');
+  const [softDuration, setSoftDuration] = useState(30);
+  const [softCountdown, setSoftCountdown] = useState(0);
+
+  // Form states for hard maintenance (Iron Curtain)
+  const [hardAction, setHardAction] = useState('System Upgrade');
+  const [hardReason, setHardReason] = useState('Deploying updates');
+  const [hardDuration, setHardDuration] = useState(60);
 
   // Config view state
   const [serverConfig, setServerConfig] = useState('');
@@ -85,30 +98,112 @@ export default function AdminSettings() {
         domain_allocation_rule: allocationRule,
         default_domain: defaultDomain
       });
-      alert('System settings saved successfully.');
+      showToast('System settings saved successfully.', 'success');
     } catch (e: any) {
-      alert(`Failed to save settings: ${e.response?.data?.error || 'Unknown error'}`);
+      showToast(e.response?.data?.error || 'Failed to save settings.', 'error');
     }
   };
 
-  const toggleMaintenance = async () => {
+  const toggleSoftMaintenanceMode = async () => {
+    let nextState = true;
+    if (maintenance.status === "true" || maintenance.status === "pending") {
+      nextState = false;
+    }
+
+    const promptMsg = nextState 
+      ? (softCountdown > 0 
+          ? `Are you sure you want to schedule Gateway Soft Maintenance Mode to start in ${softCountdown} minutes?\n\nThis will show a warning banner to users and activate when the timer hits 0.`
+          : `Are you sure you want to enable Gateway Soft Maintenance Mode IMMEDIATELY?\n\nThis will instantly close all standard tunnels, reject new connections, and block standard logins!`)
+      : "Are you sure you want to disable/cancel Gateway Maintenance Mode?\n\nThis will restore standard gateway routing, logins, and tunnel connections.";
+
+    if (!(await showConfirm(nextState ? "Enable Soft Maintenance" : "Disable Soft Maintenance", promptMsg))) return;
+
     try {
-      if (maintenance.enabled) {
-        if (!confirm('Are you sure you want to disable Maintenance Mode?')) return;
-        await axios.delete('/api/admin/maintenance');
-        alert('Maintenance Mode disabled.');
-      } else {
-        const action = prompt('Maintenance Action (e.g., System Upgrade):', 'System Upgrade');
-        if (!action) return;
-        const reason = prompt('Maintenance Reason (e.g., Deploying new version):', 'Deploying updates');
-        if (!reason) return;
-        
-        await axios.put('/api/admin/maintenance', { action, reason });
-        alert('Maintenance Mode enabled.');
+      const payload: any = { 
+        enabled: nextState,
+        iron_curtain: false,
+        action: softAction,
+        reason: softReason,
+        duration: softDuration
+      };
+      if (nextState && softCountdown > 0) {
+        payload.countdown_minutes = softCountdown;
       }
+
+      const res = await axios.post('/api/admin/maintenance', payload);
+      setMaintenance(res.data);
+      showToast(`Soft Maintenance Mode successfully updated!`, "success");
       fetchAllData();
     } catch (e: any) {
-      alert(`Failed to toggle maintenance: ${e.response?.data?.error || 'Unknown error'}`);
+      showToast(e.response?.data?.error || "Failed to update maintenance mode", "error");
+    }
+  };
+
+  const toggleHardMaintenanceMode = async () => {
+    let nextState = true;
+    if (maintenance.iron_curtain) {
+      nextState = false;
+    }
+
+    if (nextState) {
+      const firstConfirm = await showConfirm(
+        "⚠️ Iron Curtain Lockdown WARNING",
+        "WARNING: Activating Nginx Iron Curtain Mode will completely lock down the server.\n\n" +
+        "This blocks ALL traffic including the Admin Dashboard itself. You will be immediately disconnected " +
+        "and will not be able to turn this off from this website.\n\n" +
+        "To restore service, you MUST log into the VPS via SSH and run the disable-maintenance scripts.\n\n" +
+        "Are you sure you want to proceed?"
+      );
+      if (!firstConfirm) return;
+
+      const confirmWord = await showPrompt(
+        "Confirm Lockdown",
+        "To confirm immediate lockdown, please type 'LOCKOUT' in all caps:"
+      );
+      if (confirmWord !== "LOCKOUT") {
+        showToast("Lockdown cancelled: confirmation word did not match.", "info");
+        return;
+      }
+
+      try {
+        const payload = {
+          enabled: true,
+          iron_curtain: true,
+          action: hardAction,
+          reason: hardReason,
+          duration: hardDuration
+        };
+
+        const res = await axios.post('/api/admin/maintenance', payload);
+        setMaintenance(res.data);
+        showToast("Nginx Iron Curtain activated. You will be disconnected shortly.", "error");
+        setTimeout(() => {
+          window.location.reload();
+        }, 1500);
+      } catch (e: any) {
+        showToast(e.response?.data?.error || "Failed to activate Iron Curtain", "error");
+      }
+    } else {
+      const confirmDisable = await showConfirm(
+        "Disable Iron Curtain",
+        "Are you sure you want to disable Nginx Iron Curtain Mode?\n\n" +
+        "Note: If you are seeing this, either the server is not actually behind the Nginx block or you are accessing it via a bypassed endpoint. Disabling will remove the trigger files."
+      );
+      if (!confirmDisable) return;
+
+      try {
+        const payload = {
+          enabled: false,
+          iron_curtain: true
+        };
+
+        const res = await axios.post('/api/admin/maintenance', payload);
+        setMaintenance(res.data);
+        showToast("Nginx Iron Curtain disabled successfully.", "success");
+        fetchAllData();
+      } catch (e: any) {
+        showToast(e.response?.data?.error || "Failed to disable Iron Curtain", "error");
+      }
     }
   };
 
@@ -116,9 +211,9 @@ export default function AdminSettings() {
     try {
       setWebhookTesting(true);
       const res = await axios.post('/api/admin/test-webhook');
-      alert(`Webhook Triggered: ${res.data.message}`);
+      showToast(`Webhook Triggered: ${res.data.message}`, 'success');
     } catch (e: any) {
-      alert(`Webhook Test Failed: ${e.response?.data?.error || 'Unknown error'}`);
+      showToast(e.response?.data?.error || 'Webhook Test Failed.', 'error');
     } finally {
       setWebhookTesting(false);
     }
@@ -128,9 +223,9 @@ export default function AdminSettings() {
     try {
       setBroadcastSending(true);
       await axios.post('/api/admin/broadcast', { message: broadcastMessage });
-      alert('Broadcast message sent successfully.');
+      showToast('Broadcast message sent successfully.', 'success');
     } catch (e: any) {
-      alert(`Failed to send broadcast: ${e.response?.data?.error || 'Unknown error'}`);
+      showToast(e.response?.data?.error || 'Failed to send broadcast.', 'error');
     } finally {
       setBroadcastSending(false);
     }
@@ -141,9 +236,9 @@ export default function AdminSettings() {
       setBroadcastSending(true);
       await axios.post('/api/admin/broadcast', { message: '' });
       setBroadcastMessage('');
-      alert('Broadcast message cleared.');
+      showToast('Broadcast message cleared.', 'success');
     } catch (e: any) {
-      alert(`Failed to clear broadcast: ${e.response?.data?.error || 'Unknown error'}`);
+      showToast(e.response?.data?.error || 'Failed to clear broadcast.', 'error');
     } finally {
       setBroadcastSending(false);
     }
@@ -153,10 +248,10 @@ export default function AdminSettings() {
     try {
       setLoadingBackups(true);
       await axios.post('/api/admin/backups');
-      alert('Backup triggered successfully.');
+      showToast('Backup triggered successfully.', 'success');
       fetchAllData();
     } catch (e: any) {
-      alert(`Failed to trigger backup: ${e.response?.data?.error || 'Unknown error'}`);
+      showToast(e.response?.data?.error || 'Failed to trigger backup.', 'error');
     } finally {
       setLoadingBackups(false);
     }
@@ -233,22 +328,124 @@ export default function AdminSettings() {
 
       <div className="card" style={{ marginBottom: '24px' }}>
         <h4>Maintenance Mode</h4>
-        <p style={{ fontSize: '13px', color: 'var(--text-muted)', marginBottom: '16px' }}>
-          When enabled, the gateway will gracefully reject new tunnel connections and display an offline page to external visitors. Existing active connections will be preserved until they naturally disconnect.
+        <p style={{ fontSize: '13px', color: 'var(--text-muted)', marginBottom: '24px' }}>
+          Configure maintenance gates to manage system upgrades and deployments. Soft maintenance gracefully alerts and migrates standard sessions, while the Iron Curtain locks down the VPS web proxy completely.
         </p>
-        
-        {maintenance.enabled && (
-          <div style={{ background: 'rgba(239, 68, 68, 0.1)', borderLeft: '4px solid var(--danger)', padding: '12px', marginBottom: '16px', borderRadius: '4px' }}>
-            <div style={{ fontWeight: 'bold', color: 'var(--danger)', marginBottom: '4px' }}>MAINTENANCE MODE IS ACTIVE</div>
-            <div style={{ fontSize: '12px', color: 'var(--text-main)' }}>Action: {maintenance.action}</div>
-            <div style={{ fontSize: '12px', color: 'var(--text-main)' }}>Reason: {maintenance.reason}</div>
-            <div style={{ fontSize: '12px', color: 'var(--text-main)' }}>Started: {formatDate(maintenance.start_time)}</div>
-          </div>
-        )}
 
-        <button className={`btn ${maintenance.enabled ? 'btn-secondary' : 'btn-danger'}`} onClick={toggleMaintenance}>
-          {maintenance.enabled ? 'Disable Maintenance Mode' : 'Enable Maintenance Mode'}
-        </button>
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(300px, 1fr))', gap: 'var(--spacing-xl)' }}>
+          {/* Soft Maintenance Section */}
+          <div style={{ padding: 'var(--spacing-lg)', border: '1px solid var(--border)', borderRadius: '8px', display: 'flex', flexDirection: 'column', gap: 'var(--spacing-md)' }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+              <h5 style={{ margin: 0, fontSize: '15px', fontWeight: 600 }}>Soft Maintenance</h5>
+              <span style={{ 
+                padding: '2px 8px', 
+                borderRadius: '4px', 
+                fontSize: '11px', 
+                fontWeight: 700,
+                textTransform: 'uppercase',
+                background: maintenance.status === 'true' ? 'var(--status-danger-bg)' : maintenance.status === 'pending' ? 'var(--status-warning-bg)' : 'var(--status-success-bg)',
+                color: maintenance.status === 'true' ? 'var(--status-danger-text)' : maintenance.status === 'pending' ? 'var(--status-warning-text)' : 'var(--status-success-text)'
+              }}>
+                {maintenance.status === 'true' ? 'Active' : maintenance.status === 'pending' ? 'Scheduled' : 'Inactive'}
+              </span>
+            </div>
+
+            {maintenance.status !== 'false' ? (
+              <div style={{ background: 'rgba(255,255,255,0.02)', padding: 'var(--spacing-md)', borderRadius: '6px', fontSize: '13px', display: 'flex', flexDirection: 'column', gap: '4px' }}>
+                <div><strong>Action:</strong> {maintenance.action}</div>
+                <div><strong>Reason:</strong> {maintenance.reason}</div>
+                <div><strong>Scheduled/Started:</strong> {formatDate(maintenance.start_time)}</div>
+                {maintenance.duration > 0 && <div><strong>Duration:</strong> {maintenance.duration} minutes</div>}
+              </div>
+            ) : (
+              <>
+                <div className="form-group" style={{ margin: 0 }}>
+                  <label style={{ fontSize: '12px' }}>Action Name</label>
+                  <input type="text" className="input-field" value={softAction} onChange={e => setSoftAction(e.target.value)} />
+                </div>
+                <div className="form-group" style={{ margin: 0 }}>
+                  <label style={{ fontSize: '12px' }}>Reason</label>
+                  <input type="text" className="input-field" value={softReason} onChange={e => setSoftReason(e.target.value)} />
+                </div>
+                <div style={{ display: 'flex', gap: 'var(--spacing-md)' }}>
+                  <div className="form-group" style={{ margin: 0, flex: 1 }}>
+                    <label style={{ fontSize: '12px' }}>Duration (min)</label>
+                    <input type="number" className="input-field" value={softDuration} onChange={e => setSoftDuration(parseInt(e.target.value) || 0)} />
+                  </div>
+                  <div className="form-group" style={{ margin: 0, flex: 1 }}>
+                    <label style={{ fontSize: '12px' }}>Countdown (min)</label>
+                    <select className="input-field" value={softCountdown} onChange={e => setSoftCountdown(parseInt(e.target.value) || 0)}>
+                      <option value={0}>Immediate (0m)</option>
+                      <option value={5}>5 minutes</option>
+                      <option value={10}>10 minutes</option>
+                      <option value={15}>15 minutes</option>
+                      <option value={30}>30 minutes</option>
+                      <option value={60}>60 minutes</option>
+                    </select>
+                  </div>
+                </div>
+              </>
+            )}
+
+            <button 
+              className={`btn ${maintenance.status !== 'false' ? 'btn-secondary' : 'btn-primary'}`} 
+              onClick={toggleSoftMaintenanceMode}
+              style={{ marginTop: 'auto' }}
+            >
+              {maintenance.status !== 'false' ? 'Disable Soft Maintenance' : softCountdown > 0 ? 'Schedule Soft Maintenance' : 'Enable Soft Maintenance'}
+            </button>
+          </div>
+
+          {/* Hard Maintenance Section */}
+          <div style={{ padding: 'var(--spacing-lg)', border: '1px solid var(--border)', borderRadius: '8px', display: 'flex', flexDirection: 'column', gap: 'var(--spacing-md)' }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+              <h5 style={{ margin: 0, fontSize: '15px', fontWeight: 600 }}>Iron Curtain (Hard Lockdown)</h5>
+              <span style={{ 
+                padding: '2px 8px', 
+                borderRadius: '4px', 
+                fontSize: '11px', 
+                fontWeight: 700,
+                textTransform: 'uppercase',
+                background: maintenance.iron_curtain ? 'var(--status-danger-bg)' : 'var(--status-success-bg)',
+                color: maintenance.iron_curtain ? 'var(--status-danger-text)' : 'var(--status-success-text)'
+              }}>
+                {maintenance.iron_curtain ? 'Locked' : 'Unlocked'}
+              </span>
+            </div>
+
+            {!maintenance.iron_curtain ? (
+              <>
+                <div className="form-group" style={{ margin: 0 }}>
+                  <label style={{ fontSize: '12px' }}>Lockout Action</label>
+                  <input type="text" className="input-field" value={hardAction} onChange={e => setHardAction(e.target.value)} />
+                </div>
+                <div className="form-group" style={{ margin: 0 }}>
+                  <label style={{ fontSize: '12px' }}>Lockout Reason</label>
+                  <input type="text" className="input-field" value={hardReason} onChange={e => setHardReason(e.target.value)} />
+                </div>
+                <div className="form-group" style={{ margin: 0 }}>
+                  <label style={{ fontSize: '12px' }}>Duration (min)</label>
+                  <input type="number" className="input-field" value={hardDuration} onChange={e => setHardDuration(parseInt(e.target.value) || 0)} />
+                </div>
+              </>
+            ) : (
+              <div style={{ background: 'rgba(239, 68, 68, 0.05)', border: '1px dashed var(--danger)', padding: 'var(--spacing-md)', borderRadius: '6px', fontSize: '13px', display: 'flex', flexDirection: 'column', gap: '4px' }}>
+                <div style={{ fontWeight: 'bold', color: 'var(--danger)' }}>SERVER IS UNDER HARD LOCKOUT</div>
+                <div><strong>Action:</strong> {maintenance.action}</div>
+                <div><strong>Reason:</strong> {maintenance.reason}</div>
+                <div><strong>Expires in:</strong> {maintenance.duration} minutes</div>
+              </div>
+            )}
+
+            <button 
+              className={`btn ${maintenance.iron_curtain ? 'btn-secondary' : 'btn-danger'}`} 
+              onClick={toggleHardMaintenanceMode}
+              style={{ marginTop: 'auto' }}
+            >
+              {maintenance.iron_curtain ? 'Disable Iron Curtain' : 'Enable Iron Curtain'}
+            </button>
+          </div>
+        </div>
       </div>
 
       <div className="card" style={{ marginBottom: '24px' }}>

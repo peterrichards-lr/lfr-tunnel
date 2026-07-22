@@ -3,6 +3,7 @@ import axios from 'axios';
 import { useTableSort } from '../hooks/useTableSort';
 import Skeleton from '../components/Skeleton';
 import { useI18n } from '../contexts/I18nContext';
+import { useUI } from '../contexts/UIContext';
 
 interface EdgeNode {
   status: string;
@@ -19,6 +20,7 @@ export default function AdminEdgeHealth() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const { t } = useI18n();
+  const { showToast, showConfirm, showPrompt } = useUI();
   
   // Track open menus
   const [openMenu, setOpenMenu] = useState<string | null>(null);
@@ -48,6 +50,7 @@ export default function AdminEdgeHealth() {
       clearInterval(interval);
       document.removeEventListener('click', handleGlobalClick);
     };
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   const triggerEdgeAction = async (nodeId: string, action: string, reason = '', duration = 0) => {
@@ -58,41 +61,41 @@ export default function AdminEdgeHealth() {
         reason,
         duration: parseInt(duration.toString(), 10) || 0
       });
-      alert('Action executed successfully.');
+      showToast('Action executed successfully.', 'success');
       fetchHealth();
     } catch (e: any) {
-      alert(`Error: ${e.response?.data?.error || 'Action failed.'}`);
+      showToast(e.response?.data?.error || 'Action failed.', 'error');
     }
     setOpenMenu(null);
   };
 
-  const restartEdgeDaemon = (nodeId: string) => {
-    if (confirm(`Are you sure you want to restart the edge daemon for ${nodeId}?`)) {
+  const restartEdgeDaemon = async (nodeId: string) => {
+    if (await showConfirm('Restart Edge Daemon', `Are you sure you want to restart the edge daemon for ${nodeId}?`)) {
       triggerEdgeAction(nodeId, "restart");
     }
   };
 
-  const enableEdgeMaintenance = (nodeId: string) => {
-    const reason = prompt(`Enter a reason for enabling soft maintenance on ${nodeId}:`, "Edge Server Maintenance");
+  const enableEdgeMaintenance = async (nodeId: string) => {
+    const reason = await showPrompt('Soft Maintenance Reason', `Enter a reason for enabling soft maintenance on ${nodeId}:`, "Edge Server Maintenance");
     if (reason === null) return;
-    const durationStr = prompt(`Enter duration in minutes for maintenance on ${nodeId}:`, "30");
+    const durationStr = await showPrompt('Soft Maintenance Duration', `Enter duration in minutes for maintenance on ${nodeId}:`, "30");
     if (durationStr === null) return;
     const duration = parseInt(durationStr, 10);
     if (isNaN(duration) || duration <= 0) {
-      alert("Invalid duration.");
+      showToast("Invalid duration.", 'error');
       return;
     }
     triggerEdgeAction(nodeId, "maintenance_enable", reason, duration);
   };
 
-  const disableEdgeMaintenance = (nodeId: string) => {
-    if (confirm(`Are you sure you want to disable maintenance on ${nodeId}?`)) {
+  const disableEdgeMaintenance = async (nodeId: string) => {
+    if (await showConfirm('Disable Maintenance', `Are you sure you want to disable maintenance on ${nodeId}?`)) {
       triggerEdgeAction(nodeId, "maintenance_disable");
     }
   };
 
-  const kickEdgeTunnels = (nodeId: string) => {
-    if (confirm(`Are you sure you want to kick ALL active tunnels on edge node ${nodeId}?`)) {
+  const kickEdgeTunnels = async (nodeId: string) => {
+    if (await showConfirm('Kick All Tunnels', `Are you sure you want to kick ALL active tunnels on edge node ${nodeId}?`)) {
       triggerEdgeAction(nodeId, "kick_tunnels");
     }
   };

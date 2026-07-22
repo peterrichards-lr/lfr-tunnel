@@ -4,6 +4,7 @@ import { useSettings } from '../contexts/SettingsContext';
 import { useTableSort } from '../hooks/useTableSort';
 import Skeleton from '../components/Skeleton';
 import { useI18n } from '../contexts/I18nContext';
+import { useUI } from '../contexts/UIContext';
 
 interface ExtRequest {
   id: string;
@@ -19,6 +20,7 @@ export default function AdminExtensions() {
   const [loading, setLoading] = useState(true);
   const { formatDate } = useSettings();
   const { t } = useI18n();
+  const { showToast } = useUI();
 
   const fetchRequests = async () => {
     try {
@@ -39,9 +41,10 @@ export default function AdminExtensions() {
     try {
       await axios.post(`/api/admin/extensions/${id}`, { action });
       fetchRequests();
+      showToast(`Request successfully ${action === 'approve' ? 'approved' : 'rejected'}.`, 'success');
     } catch (err) {
       console.error(err);
-      alert('Action failed');
+      showToast('Action failed', 'error');
     }
   };
 

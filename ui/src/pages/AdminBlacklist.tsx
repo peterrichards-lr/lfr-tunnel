@@ -3,6 +3,7 @@ import axios from 'axios';
 import { useSettings } from '../contexts/SettingsContext';
 import { useTableSort } from '../hooks/useTableSort';
 import Skeleton from '../components/Skeleton';
+import { useI18n } from '../contexts/I18nContext';
 
 interface BlacklistEntry {
   ip: string;
@@ -16,6 +17,7 @@ export default function AdminBlacklist() {
   const [ipInput, setIpInput] = useState('');
   const [reasonInput, setReasonInput] = useState('');
   const { formatDate } = useSettings();
+  const { t } = useI18n();
 
   const [page, setPage] = useState(0);
   const ROWS_PER_PAGE = 15;
@@ -129,7 +131,7 @@ export default function AdminBlacklist() {
             <input 
               type="text" 
               className="input-field" 
-              placeholder="IP Address (e.g. 192.168.1.1)" 
+              placeholder={t('ip_address_eg_placeholder', 'IP Address (e.g. 192.168.1.1)')} 
               value={ipInput} 
               onChange={(e) => setIpInput(e.target.value)} 
               style={{ width: '100%' }}
@@ -139,7 +141,7 @@ export default function AdminBlacklist() {
             <input 
               type="text" 
               className="input-field" 
-              placeholder="Reason (optional)" 
+              placeholder={t('reason_optional_placeholder', 'Reason (optional)')} 
               value={reasonInput} 
               onChange={(e) => setReasonInput(e.target.value)} 
               style={{ width: '100%' }}
@@ -152,7 +154,7 @@ export default function AdminBlacklist() {
       <div style={{ marginBottom: '16px' }}>
         <input 
           type="text" 
-          placeholder="Search blacklist..." 
+          placeholder={t('search_blacklist_placeholder', 'Search blacklist...')} 
           value={searchQuery} 
           onChange={e => { setSearchQuery(e.target.value); setPage(0); }}
           style={{ padding: '8px 12px', width: '100%', maxWidth: '300px', background: 'var(--input-bg)', color: 'var(--text-main)', border: '1px solid var(--border)', borderRadius: '6px' }}

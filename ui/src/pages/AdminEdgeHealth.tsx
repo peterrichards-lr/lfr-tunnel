@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import axios from 'axios';
 import { useTableSort } from '../hooks/useTableSort';
 import Skeleton from '../components/Skeleton';
+import { useI18n } from '../contexts/I18nContext';
 
 interface EdgeNode {
   status: string;
@@ -17,6 +18,7 @@ export default function AdminEdgeHealth() {
   const [outboundOk, setOutboundOk] = useState<boolean>(true);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
+  const { t } = useI18n();
   
   // Track open menus
   const [openMenu, setOpenMenu] = useState<string | null>(null);
@@ -179,7 +181,7 @@ export default function AdminEdgeHealth() {
             <div style={{ marginBottom: '16px' }}>
               <input 
                 type="text" 
-                placeholder="Search nodes..." 
+                placeholder={t('search_nodes_placeholder', 'Search nodes...')} 
                 value={searchQuery} 
                 onChange={e => setSearchQuery(e.target.value)}
                 style={{ padding: '8px 12px', width: '100%', maxWidth: '300px', background: 'var(--input-bg)', color: 'var(--text-main)', border: '1px solid var(--border)', borderRadius: '6px' }}

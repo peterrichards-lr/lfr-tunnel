@@ -234,7 +234,7 @@ export default function AdminUsers() {
       <div style={{ marginBottom: 'var(--spacing-lg)' }}>
         <input 
           type="text" 
-          placeholder="Search users..." 
+          placeholder={t('search_users_placeholder', 'Search users...')} 
           value={searchQuery} 
           onChange={e => setSearchQuery(e.target.value)}
           style={{ padding: 'var(--spacing-sm) var(--spacing-md)', width: '100%', maxWidth: '300px', background: 'var(--input-bg)', color: 'var(--text-main)', border: '1px solid var(--border)', borderRadius: '6px' }}
@@ -458,7 +458,7 @@ export default function AdminUsers() {
             <div className="form-group" style={{ marginBottom: 'var(--spacing-lg)' }}>
               <textarea
                 className="input-field"
-                placeholder="Enter your message..."
+                placeholder={t('enter_your_message_placeholder', 'Enter your message...')}
                 rows={3}
                 value={targetedMessage}
                 onChange={(e) => setTargetedMessage(e.target.value)}
@@ -489,7 +489,7 @@ export default function AdminUsers() {
             <form onSubmit={submitInvite}>
               <div className="form-group" style={{ marginBottom: 'var(--spacing-lg)' }}>
                 <label>{t('email_address', 'Email Address')}</label>
-                <input type="email" required className="input-field" value={inviteForm.email} onChange={(e) => setInviteForm({...inviteForm, email: e.target.value})} placeholder="user@company.com" />
+                <input type="email" required className="input-field" value={inviteForm.email} onChange={(e) => setInviteForm({...inviteForm, email: e.target.value})} placeholder={t('invite_email_placeholder', 'user@company.com')} />
               </div>
               <div className="form-group" style={{ marginBottom: 'var(--spacing-lg)' }}>
                 <label>{t('first_name', 'First Name')}</label>

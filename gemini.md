@@ -994,8 +994,10 @@ The solution will consist of:
 ## E2E Exception Guardian & V2 Bug Fix (v1.34.17)
 - [x] Create Playwright pageerror listener and fix token status crash in V2 Dashboard (#732)
 
-## V2 Portal UX Parity, Toasts & Custom Dialogs (v1.34.18)
-- [x] Implement global React Toast & Dialog context, replace native alerts/confirms/prompts, and restore Maintenance panel controls (#739).
+## V2 Portal Users Quotas, Subdomains Expiration & Aligned Exports (v1.34.19)
+- [x] Restore Users list Last Seen / Quota details columns, and add quota settings and reset MFA inside User Details Modal (#737).
+- [x] Restore Subdomains quarantined/extension requested statuses, Extend reservation trigger, and connection CLI copy utilities (#738).
+- [x] Shift Personal Access Tokens CSV export to server-side endpoint, add active subdomains CSV export, and align PDF print styling (#735).
 
 <!-- markdownlint-disable MD049 -->
 ---

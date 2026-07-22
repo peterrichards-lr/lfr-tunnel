@@ -1,5 +1,12 @@
 [
   {
+    "version": "v1.43.7",
+    "release_date": "2026-07-22",
+    "features": [
+      "Fix: Redirect trailing slashes on control plane static pages to prevent proxy 502 Bad Gateway (#734)"
+    ]
+  },
+  {
     "version": "v1.43.6",
     "release_date": "2026-07-22",
     "features": [

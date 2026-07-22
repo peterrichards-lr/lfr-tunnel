@@ -85,14 +85,14 @@ export default function TunnelsPanel({ tunnels, serverConfig, user }: Props) {
                   <td style={{ padding: '16px' }}>
                     <span style={{ 
                       padding: '4px 12px', borderRadius: '20px', fontSize: '12px', fontWeight: 600, 
-                      background: 'rgba(16, 185, 129, 0.15)', color: '#34d399', border: '1px solid rgba(16, 185, 129, 0.3)' 
+                      background: 'var(--status-success-bg)', color: 'var(--status-success-text)', border: '1px solid var(--status-success-border)' 
                     }}>
                       {tItem.status ? tItem.status.toUpperCase() : 'UP'}
                     </span>
                   </td>
                   <td style={{ padding: '16px' }}>
                     {tItem.node_id && tItem.node_id !== 'control' ? (
-                      <span style={{ padding: '4px 12px', borderRadius: '20px', fontSize: '12px', fontWeight: 600, background: 'rgba(139, 92, 246, 0.15)', color: '#c084fc', border: '1px solid rgba(139, 92, 246, 0.3)' }}>
+                      <span style={{ padding: '4px 12px', borderRadius: '20px', fontSize: '12px', fontWeight: 600, background: 'var(--status-node-bg)', color: 'var(--status-node-text)', border: '1px solid var(--status-node-border)' }}>
                         🌍 {tItem.node_id}
                       </span>
                     ) : (

@@ -984,7 +984,7 @@ The solution will consist of:
 - [x] Refactor hardcoded placeholders to translate hooks (#701)
 
 ## V1 UI FOUC and Layout Shift Fixes (v1.34.15)
-- [/] Prevent FOUC and Cumulative Layout Shifts in V1 setup.html and dashboard.html (#698)
+- [x] Prevent FOUC and Cumulative Layout Shifts in V1 setup.html and dashboard.html (#698)
 
 <!-- markdownlint-disable MD049 -->
 ---

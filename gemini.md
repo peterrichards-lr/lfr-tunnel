@@ -983,6 +983,8 @@ The solution will consist of:
 ## V2 Portal i18n Search Placeholders (v1.34.12)
 - [x] Refactor hardcoded placeholders to translate hooks (#701)
 
+## V2 Portal Feature Gaps (v1.34.16)
+- [x] Restore missing feature gaps (Telemetry, CSV Export, Registrations Tab & Notification Badge) in V2 Portal (#697)
 ## V1 UI FOUC and Layout Shift Fixes (v1.34.15)
 - [x] Prevent FOUC and Cumulative Layout Shifts in V1 setup.html and dashboard.html (#698)
 

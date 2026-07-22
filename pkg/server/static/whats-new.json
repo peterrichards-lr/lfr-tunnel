@@ -1,5 +1,12 @@
 [
   {
+    "version": "v1.43.12",
+    "release_date": "2026-07-22",
+    "features": [
+      "Fix: Enable native Go cross-compilation in Dockerfile to prevent QEMU emulated build hangs (#758)"
+    ]
+  },
+  {
     "version": "v1.43.11",
     "release_date": "2026-07-22",
     "features": [

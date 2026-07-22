@@ -33,7 +33,7 @@ export default function AdminSubdomains() {
   const [subdomains, setSubdomains] = useState<SubdomainInfo[]>([]);
   const [loading, setLoading] = useState(true);
   const { t } = useI18n();
-  const { showToast, showConfirm } = useUI();
+  const { showToast, showConfirm, showPrompt } = useUI();
   const [page, setPage] = useState(0);
   const ROWS_PER_PAGE = 15;
 
@@ -98,6 +98,22 @@ export default function AdminSubdomains() {
       showToast('Tunnel kicked successfully', 'success');
     } catch {
       showToast('Failed to kick lease', 'error');
+    }
+  };
+
+  const throttleLease = async (host: string) => {
+    const limitStr = await showPrompt('Throttle Tunnel', `Enter the max Requests Per Second (RPS) for ${host}. Enter 0 to remove limits.`, '0');
+    if (limitStr === null) return;
+    const limit = parseInt(limitStr, 10);
+    if (isNaN(limit) || limit < 0) {
+      showToast('Invalid rate limit', 'error');
+      return;
+    }
+    try {
+      await axios.post('/api/admin/leases/rate-limit', { host, rate_limit: limit });
+      showToast('Rate limit updated successfully', 'success');
+    } catch {
+      showToast('Failed to update rate limit', 'error');
     }
   };
 
@@ -220,14 +236,24 @@ export default function AdminSubdomains() {
                     <td>{formatBytes(sub.bytes_in || 0)}</td>
                     <td>{formatBytes(sub.bytes_out || 0)}</td>
                     <td>
-                      <button 
-                        className="btn btn-danger" 
-                        disabled={!sub.is_online}
-                        style={{ padding: 'var(--spacing-xs) var(--spacing-sm)', fontSize: '12px' }} 
-                        onClick={() => kickLease(sub.subdomain)}
-                      >
-                        Kick
-                      </button>
+                      <div style={{ display: 'flex', gap: '8px' }}>
+                        <button 
+                          className="btn btn-secondary" 
+                          disabled={!sub.is_online}
+                          style={{ padding: 'var(--spacing-xs) var(--spacing-sm)', fontSize: '12px' }} 
+                          onClick={() => throttleLease(sub.full_host)}
+                        >
+                          Throttle
+                        </button>
+                        <button 
+                          className="btn btn-danger" 
+                          disabled={!sub.is_online}
+                          style={{ padding: 'var(--spacing-xs) var(--spacing-sm)', fontSize: '12px' }} 
+                          onClick={() => kickLease(sub.subdomain)}
+                        >
+                          Kick
+                        </button>
+                      </div>
                     </td>
                   </tr>
                 ))

@@ -29,6 +29,9 @@ The monolithic rules have been broken down into modular skills so that they can 
 - **EDR Whitelist Restrictions**: 
   *Active Constraint*: You are FORBIDDEN from executing `go run` or `go test` directly on this machine. If you need to test Go code, you MUST formulate your command exactly as: `go test -c -o /private/tmp/lfr-tunnel <pkg> && /private/tmp/lfr-tunnel`. Any deviation will trigger a SentinelOne EDR kill-switch.
 
+- **Mandatory Client Binary Signing**:
+  *Active Constraint*: You are FORBIDDEN from deploying client binaries to the VPS or creating a final release unless you have successfully executed codesigning signatures on the binaries. You MUST run the signing command using 1Password credentials integration (`op run -- ./bin/lfr-tunnel-ops sign` or equivalent CLI options) to ensure Darwin, Windows, and Linux targets are properly signed.
+
 - **Tech Debt Tracking (Immediate Logging)**: 
   *Active Constraint*: The moment you identify any of the 10 catalogued tech debt categories during your work, you MUST pause your current workflow and immediately execute `gh issue create --title "Tech Debt: [Topic]" --body "[Details]" --label "tech debt"` before taking any other action.
   The 10 categories are:
@@ -51,4 +54,4 @@ The `.agents/skills` directory also contains operational scripts and infrastruct
 
 <!-- markdownlint-disable MD049 -->
 ---
-*Last Updated: 2026-07-19* | *Last Reviewed: 2026-07-19*
+*Last Updated: 2026-07-22* | *Last Reviewed: 2026-07-22*

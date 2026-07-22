@@ -1,19 +1,11 @@
-import { test, expect } from '@playwright/test';
+import { test, expect } from './utils/fixtures';
 
 test.describe('Client Inspector UI', () => {
   test('should load without JavaScript errors', async ({ page }) => {
-    const errors: string[] = [];
-    page.on('pageerror', (err) => {
-      errors.push(err.message);
-    });
-
     await page.goto('http://localhost:4040/');
 
     // Wait for the Inspector title to be visible
     await expect(page.locator('h1')).toContainText('Inspector');
-
-    // Verify there are no uncaught JavaScript errors (e.g. from missing applyTranslations)
-    expect(errors).toHaveLength(0);
   });
 
   test('should display client configuration correctly', async ({ page }) => {

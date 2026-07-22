@@ -711,19 +711,11 @@ html[dir="rtl"] td, html[dir="rtl"] th {
     
     /* Hide layout wrappers & elements not needed for analytics printout */
     .sidebar, 
-    #header-language-container, 
-    .print-hide, 
+    .no-print,
+    .content-header,
+    .mobile-header,
     .btn,
-    #tab-overview, 
-    #tab-tokens, 
-    #tab-account,
-    #tab-registrations, 
-    #tab-users, 
-    #tab-blacklist, 
-    #tab-audit, 
-    #tab-magic, 
-    #tab-backups,
-    #tab-tunnels {
+    .print-hide {
         display: none !important;
     }
     

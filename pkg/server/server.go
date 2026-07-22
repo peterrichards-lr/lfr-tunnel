@@ -882,6 +882,11 @@ func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 
+		if r.Method == http.MethodGet && r.URL.Path == "/api/tokens/export" {
+			s.handleExportTokensCSV(w, r)
+			return
+		}
+
 		if r.Method == http.MethodGet && r.URL.Path == "/api/tokens" {
 			s.handleListTokens(w, r)
 			return
@@ -2517,6 +2522,11 @@ func (s *Server) handleAdminEndpoints(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	if r.Method == http.MethodGet && r.URL.Path == "/api/admin/leases/export" {
+		s.handleAdminExportLeases(w, r, actor)
+		return
+	}
+
 	if r.Method == http.MethodGet && r.URL.Path == "/api/admin/leases" {
 		s.handleAdminListLeases(w, r, actor)
 		return
@@ -3859,6 +3869,49 @@ func (s *Server) handleAdminListLeases(w http.ResponseWriter, r *http.Request, a
 	s.edgeLeasesMu.Unlock()
 
 	_ = json.NewEncoder(w).Encode(leases) //nolint:errcheck
+}
+
+// handleAdminExportLeases streams active leases as CSV.
+func (s *Server) handleAdminExportLeases(w http.ResponseWriter, r *http.Request, actor string) {
+	leases := s.registry.ListLeases()
+
+	s.edgeLeasesMu.Lock()
+	for _, userLeasesList := range s.edgeLeases {
+		for _, el := range userLeasesList {
+			leases = append(leases, &TunnelLease{
+				UserID:          el.UserID,
+				SubdomainPrefix: el.Subdomain,
+				FullHost:        el.FullHost,
+				LocalPort:       el.LocalPort,
+				ClientIP:        el.ClientIP,
+				Status:          "up",
+				BytesIn:         el.BytesIn,
+				BytesOut:        el.BytesOut,
+				CreatedAt:       el.CreatedAt,
+				NodeID:          el.NodeID,
+			})
+		}
+	}
+	s.edgeLeasesMu.Unlock()
+
+	w.Header().Set("Content-Type", "text/csv")
+	w.Header().Set("Content-Disposition", "attachment;filename=active_subdomains.csv")
+
+	writer := csv.NewWriter(w)
+	_ = writer.Write([]string{"Subdomain", "Target Host", "Node", "Client IP", "Bytes In", "Bytes Out", "Connected At"}) //nolint:errcheck
+
+	for _, l := range leases {
+		_ = writer.Write([]string{ //nolint:errcheck
+			l.SubdomainPrefix,
+			l.FullHost,
+			l.NodeID,
+			l.ClientIP,
+			strconv.FormatUint(l.BytesIn, 10),
+			strconv.FormatUint(l.BytesOut, 10),
+			l.CreatedAt.Format(time.RFC3339),
+		})
+	}
+	writer.Flush()
 }
 
 func (s *Server) handleAdminKickLease(w http.ResponseWriter, r *http.Request, actor string) {

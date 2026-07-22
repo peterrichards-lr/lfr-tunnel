@@ -223,10 +223,8 @@ export default function AccountSettings() {
                 {t('danger_zone_desc', 'Deleting your account will instantly and permanently revoke all of your personal access tokens, kick any active tunnel connections, and permanently purge your profile records from our systems. Any historical bandwidth metrics and logs will be permanently anonymised to protect your privacy.')}
               </p>
               <button 
-                className="btn btn-outline" 
-                style={{ width: 'auto', color: '#f43f5e', borderColor: '#f43f5e', background: 'transparent' }}
-                onMouseOver={e => e.currentTarget.style.background = 'rgba(244,63,94,0.1)'}
-                onMouseOut={e => e.currentTarget.style.background = 'transparent'}
+                className="btn btn-outline-danger" 
+                style={{ width: 'auto' }}
                 onClick={() => setIsDeleteModalOpen(true)}
               >
                 {t('delete_account', 'Delete Account...')}

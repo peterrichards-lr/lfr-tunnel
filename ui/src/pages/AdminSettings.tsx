@@ -327,7 +327,7 @@ export default function AdminSettings() {
                   </tr>
                 ) : (
                   sortedBackups.slice(page * ROWS_PER_PAGE, (page + 1) * ROWS_PER_PAGE).map(b => (
-                    <tr key={b.filename} style={{ borderBottom: '1px solid rgba(255,255,255,0.05)', transition: 'background 0.2s' }} onMouseOver={e => e.currentTarget.style.background = 'rgba(255,255,255,0.03)'} onMouseOut={e => e.currentTarget.style.background = 'transparent'}>
+                    <tr key={b.filename}>
                       <td style={{ padding: '16px', fontFamily: 'monospace', fontWeight: 500, fontSize: '14px' }}>{b.filename}</td>
                       <td style={{ padding: '16px', fontSize: '14px' }}>{formatSizeKB(b.size_bytes)}</td>
                       <td style={{ padding: '16px', fontSize: '14px', color: 'var(--text-muted)' }}>{formatDate(b.created_at)}</td>

@@ -100,7 +100,13 @@ export default function AdminAuditLog() {
           <h3 style={{ margin: 0 }}>System Audit Log</h3>
           <p style={{ color: 'var(--text-muted)', marginTop: '4px' }}>Immutable record of administrative and security events.</p>
         </div>
-        <a href="/api/admin/audit/export" className="btn btn-secondary">Export CSV</a>
+        <a 
+          href="/api/admin/audit/export" 
+          className="btn btn-secondary" 
+          style={{ width: 'auto', whiteSpace: 'nowrap', display: 'inline-flex', alignItems: 'center', gap: '8px' }}
+        >
+          📥 {t('export_csv', 'Export CSV')}
+        </a>
       </div>
       <div style={{ marginBottom: '16px' }}>
         <input 

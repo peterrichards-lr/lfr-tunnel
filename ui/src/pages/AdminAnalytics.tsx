@@ -157,7 +157,7 @@ export default function AdminAnalytics() {
             <option value="30">Last 30 Days</option>
             <option value="0">All Time</option>
           </select>
-          <button className="btn btn-secondary" onClick={handlePrint} style={{ width: 'auto', whiteSpace: 'nowrap' }}>
+          <button className="btn btn-secondary" onClick={handlePrint} style={{ width: 'auto', whiteSpace: 'nowrap', display: 'inline-flex', alignItems: 'center', gap: '8px' }}>
             📄 {t('export_pdf', 'Export PDF')}
           </button>
         </div>

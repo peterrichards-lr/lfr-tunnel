@@ -600,10 +600,10 @@ func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 				effectivePlatforms[k] = v
 			}
 			fallbacks := map[string]string{
-				"macos_arm64":   "/usr/local/bin",
-				"macos_amd64":   "/usr/local/bin",
-				"linux_amd64":   "/usr/local/bin",
-				"windows_amd64": "$env:LOCALAPPDATA\\Programs\\lfr-tunnel",
+				"macos_arm64":   "~/runningpoc/bin",
+				"macos_amd64":   "~/runningpoc/bin",
+				"linux_amd64":   "~/runningpoc/bin",
+				"windows_amd64": "~/runningpoc/bin",
 			}
 			for key, fallback := range fallbacks {
 				if p, ok := effectivePlatforms[key]; ok {
@@ -662,6 +662,7 @@ func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 				"force_mfa":                s.cfg.ForceMFA,
 				"enable_onboarding":        s.cfg.EnableOnboarding,
 				"owner_email":              s.cfg.Owner.UserID,
+				"supported_domains":        s.cfg.Domains,
 			})
 			return
 		}
@@ -949,9 +950,9 @@ func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 				return fallback
 			}
 
-			scriptStr = strings.ReplaceAll(scriptStr, "{{MACOS_AMD64_INSTALL_DIR}}", getInstallDir("macos_amd64", "/usr/local/bin"))
-			scriptStr = strings.ReplaceAll(scriptStr, "{{MACOS_ARM64_INSTALL_DIR}}", getInstallDir("macos_arm64", "/usr/local/bin"))
-			scriptStr = strings.ReplaceAll(scriptStr, "{{LINUX_AMD64_INSTALL_DIR}}", getInstallDir("linux_amd64", "/usr/local/bin"))
+			scriptStr = strings.ReplaceAll(scriptStr, "{{MACOS_AMD64_INSTALL_DIR}}", getInstallDir("macos_amd64", "~/runningpoc/bin"))
+			scriptStr = strings.ReplaceAll(scriptStr, "{{MACOS_ARM64_INSTALL_DIR}}", getInstallDir("macos_arm64", "~/runningpoc/bin"))
+			scriptStr = strings.ReplaceAll(scriptStr, "{{LINUX_AMD64_INSTALL_DIR}}", getInstallDir("linux_amd64", "~/runningpoc/bin"))
 
 			if _, err := w.Write([]byte(scriptStr)); err != nil {
 				log.Printf("[Warning] Failed to write response: %v", err)
@@ -978,7 +979,7 @@ func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 				return fallback
 			}
 
-			scriptStr = strings.ReplaceAll(scriptStr, "{{WINDOWS_AMD64_INSTALL_DIR}}", getInstallDir("windows_amd64", "$env:LOCALAPPDATA\\Programs\\lfr-tunnel"))
+			scriptStr = strings.ReplaceAll(scriptStr, "{{WINDOWS_AMD64_INSTALL_DIR}}", getInstallDir("windows_amd64", "~/runningpoc/bin"))
 
 			if _, err := w.Write([]byte(scriptStr)); err != nil {
 				log.Printf("[Warning] Failed to write response: %v", err)
@@ -2407,7 +2408,18 @@ func (s *Server) handleAdminEndpoints(w http.ResponseWriter, r *http.Request) {
 		s.maintMutex.RLock()
 		isMaint := s.maintenanceMode
 		maintScheduled := s.maintScheduledAt
+		maintAction := s.maintAction
+		maintReason := s.maintReason
+		maintDuration := s.maintDuration
+		maintEndTime := s.maintEndTime
 		s.maintMutex.RUnlock()
+
+		var maintStartTime time.Time
+		if isMaint {
+			maintStartTime = maintEndTime.Add(-time.Duration(maintDuration) * time.Minute)
+		} else if !maintScheduled.IsZero() {
+			maintStartTime = maintScheduled
+		}
 
 		maintStr := "false"
 		if isMaint {
@@ -2435,8 +2447,13 @@ func (s *Server) handleAdminEndpoints(w http.ResponseWriter, r *http.Request) {
 		}
 
 		respondJSON(w, http.StatusOK, map[string]interface{}{
+			"status":           maintStr,
 			"maintenance_mode": maintStr,
 			"iron_curtain":     ironCurtain,
+			"action":           maintAction,
+			"reason":           maintReason,
+			"start_time":       maintStartTime,
+			"duration":         maintDuration,
 			"test_target":      testTarget,
 		})
 		return

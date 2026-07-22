@@ -1002,6 +1002,15 @@ The solution will consist of:
 - [x] Restore Subdomains quarantined/extension requested statuses, Extend reservation trigger, and connection CLI copy utilities (#738).
 - [x] Shift Personal Access Tokens CSV export to server-side endpoint, add active subdomains CSV export, and align PDF print styling (#735).
 
+## V2 Portal V1 Feature Parity, Alignment & Safe Upgrades (v1.43.15)
+- [x] Restore V1 Theme Preferences (System Default, Time of Day) in V2 settings context.
+- [x] Restore First Name, Last Name, and Email Notifications form details under Profile Settings.
+- [x] Fix EDR/permissions self-upgrade failures by standardising the default target directory to user-space `~/runningpoc/bin`.
+- [x] Align layouts, flex dimensions, and download icons for Export PDF and Export CSV buttons across all Admin Zone pages.
+- [x] Restore complete V1 Domain Allocation Rules list and hyphenated Go server keys.
+- [x] Fix soft maintenance active status parsing and GET details endpoint variables mapping.
+- [x] Add dynamic client update alert banner warning users on older CLI binaries.
+
 <!-- markdownlint-disable MD049 -->
 ---
 *Last Updated: 2026-07-22* | *Last Reviewed: 2026-07-22*

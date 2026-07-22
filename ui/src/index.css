@@ -1113,11 +1113,16 @@ html[dir="rtl"] td, html[dir="rtl"] th {
 .btn {
     font-weight: 600;
     border-radius: 8px;
-    padding: 10px 20px;
+    padding: 8px 16px;
     transition: all 0.2s cubic-bezier(0.16, 1, 0.3, 1);
     letter-spacing: 0.3px;
     position: relative;
     overflow: hidden;
+    cursor: pointer;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
 }
 .btn:active {
     transform: scale(0.97);
@@ -1133,6 +1138,26 @@ html[dir="rtl"] td, html[dir="rtl"] th {
     box-shadow: 0 6px 20px 0 var(--primary-glow);
     transform: translateY(-2px);
     filter: brightness(1.1);
+}
+
+.btn-secondary {
+    background: var(--input-bg);
+    border: 1px solid var(--border);
+    color: var(--text-main);
+}
+.btn-secondary:hover {
+    background: var(--bg-card-hover);
+    border-color: var(--text-muted);
+}
+
+.btn-outline {
+    background: transparent;
+    border: 1px solid var(--border);
+    color: var(--text-main);
+}
+.btn-outline:hover {
+    background: var(--bg-card-hover);
+    border-color: var(--text-muted);
 }
 
 .login-card {

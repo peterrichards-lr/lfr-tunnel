@@ -1,8 +1,11 @@
 import React, { createContext, useContext, useState, useEffect } from 'react';
 
+export type ThemePreference = 'light' | 'dark' | 'system' | 'time';
+
 interface SettingsContextType {
+  themePreference: ThemePreference;
+  setThemePreference: (pref: ThemePreference) => void;
   theme: 'light' | 'dark';
-  toggleTheme: () => void;
   useUTC: boolean;
   toggleUTC: () => void;
   formatDate: (dateString: string | Date | undefined | null) => string;
@@ -11,24 +14,71 @@ interface SettingsContextType {
 const SettingsContext = createContext<SettingsContextType | undefined>(undefined);
 
 export function SettingsProvider({ children }: { children: React.ReactNode }) {
-  const [theme, setTheme] = useState<'light' | 'dark'>(() => {
-    return (localStorage.getItem('theme') as 'light' | 'dark') || 'dark';
+  const [themePreference, setThemePreference] = useState<ThemePreference>(() => {
+    return (localStorage.getItem('theme_preference') as ThemePreference) || 'dark';
   });
+
+  const [theme, setTheme] = useState<'light' | 'dark'>('dark');
 
   const [useUTC, setUseUTC] = useState<boolean>(() => {
     return localStorage.getItem('useUTC') === 'true';
   });
 
   useEffect(() => {
-    document.documentElement.setAttribute('data-theme', theme);
-    localStorage.setItem('theme', theme);
-  }, [theme]);
+    localStorage.setItem('theme_preference', themePreference);
+
+    const resolveTheme = (): 'light' | 'dark' => {
+      if (themePreference === 'light') return 'light';
+      if (themePreference === 'dark') return 'dark';
+      if (themePreference === 'time') {
+        const hour = new Date().getHours();
+        return (hour >= 6 && hour < 18) ? 'light' : 'dark';
+      }
+      // 'system'
+      if (window.matchMedia && window.matchMedia('(prefers-color-scheme: light)').matches) {
+        return 'light';
+      }
+      return 'dark';
+    };
+
+    const active = resolveTheme();
+    setTheme(active);
+    document.documentElement.setAttribute('data-theme', active);
+
+    let intervalId: any;
+    let mediaQuery: MediaQueryList | null = null;
+    let themeChangeHandler: ((e: MediaQueryListEvent) => void) | null = null;
+
+    if (themePreference === 'system') {
+      mediaQuery = window.matchMedia('(prefers-color-scheme: light)');
+      themeChangeHandler = (e: MediaQueryListEvent) => {
+        const nextTheme = e.matches ? 'light' : 'dark';
+        setTheme(nextTheme);
+        document.documentElement.setAttribute('data-theme', nextTheme);
+      };
+      mediaQuery.addEventListener('change', themeChangeHandler);
+    } else if (themePreference === 'time') {
+      intervalId = setInterval(() => {
+        const nextTheme = resolveTheme();
+        setTheme(nextTheme);
+        document.documentElement.setAttribute('data-theme', nextTheme);
+      }, 60000);
+    }
+
+    return () => {
+      if (mediaQuery && themeChangeHandler) {
+        mediaQuery.removeEventListener('change', themeChangeHandler);
+      }
+      if (intervalId) {
+        clearInterval(intervalId);
+      }
+    };
+  }, [themePreference]);
 
   useEffect(() => {
     localStorage.setItem('useUTC', String(useUTC));
   }, [useUTC]);
 
-  const toggleTheme = () => setTheme(prev => prev === 'dark' ? 'light' : 'dark');
   const toggleUTC = () => setUseUTC(prev => !prev);
 
   const formatDate = (dateString: string | Date | undefined | null): string => {
@@ -52,7 +102,7 @@ export function SettingsProvider({ children }: { children: React.ReactNode }) {
   };
 
   return (
-    <SettingsContext.Provider value={{ theme, toggleTheme, useUTC, toggleUTC, formatDate }}>
+    <SettingsContext.Provider value={{ themePreference, setThemePreference, theme, useUTC, toggleUTC, formatDate }}>
       {children}
     </SettingsContext.Provider>
   );

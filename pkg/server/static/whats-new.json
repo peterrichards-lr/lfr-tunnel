@@ -1,5 +1,13 @@
 [
   {
+    "version": "v1.43.6",
+    "release_date": "2026-07-22",
+    "features": [
+      "Feature: Add global Playwright exception guardian to detect browser-side exceptions (#732)",
+      "Fix: Handle optional token status in V2 Dashboard mapping (#732)"
+    ]
+  },
+  {
     "version": "v1.43.5",
     "release_date": "2026-07-22",
     "features": [

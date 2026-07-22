@@ -7,6 +7,34 @@ import Skeleton from '../components/Skeleton';
 import { useI18n } from '../contexts/I18nContext';
 import { useUI } from '../contexts/UIContext';
 
+function objectToYAML(obj: any, indent = 0): string {
+  if (!obj || typeof obj !== 'object') {
+    return String(obj);
+  }
+  let yaml = '';
+  const spaces = ' '.repeat(indent);
+  for (const key of Object.keys(obj)) {
+    const val = obj[key];
+    if (val === null || val === undefined) {
+      yaml += `${spaces}${key}: null\n`;
+    } else if (Array.isArray(val)) {
+      yaml += `${spaces}${key}:\n`;
+      for (const item of val) {
+        if (typeof item === 'object') {
+          yaml += `${spaces}  -\n${objectToYAML(item, indent + 4)}`;
+        } else {
+          yaml += `${spaces}  - ${item}\n`;
+        }
+      }
+    } else if (typeof val === 'object') {
+      yaml += `${spaces}${key}:\n${objectToYAML(val, indent + 2)}`;
+    } else {
+      yaml += `${spaces}${key}: ${val}\n`;
+    }
+  }
+  return yaml;
+}
+
 export default function AdminSettings() {
   const { user } = useOutletContext<{ user: any }>();
   const { formatDate } = useSettings();
@@ -64,7 +92,7 @@ export default function AdminSettings() {
       if (user.role === 'owner' || user.role === 'admin') {
         try {
           const cRes = await axios.get('/api/admin/config-view');
-          setServerConfig(cRes.data.config || '');
+          setServerConfig(objectToYAML(cRes.data));
         } catch (e: any) {
           setConfigError(e.response?.status === 403 ? 'Not authorized to view config' : 'Failed to load configuration');
         }

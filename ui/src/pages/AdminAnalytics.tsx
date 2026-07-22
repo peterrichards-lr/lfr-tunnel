@@ -252,6 +252,26 @@ export default function AdminAnalytics() {
               </div>
             )}
 
+            {data.global.top_tunnels && data.global.top_tunnels.length > 0 && (
+              <div className="card" style={{ padding: '24px' }}>
+                <h4 style={{ marginBottom: '16px', color: 'var(--text-muted)', fontSize: '14px' }}>{t('top_tunnels_bandwidth', 'Top Tunnels by Bandwidth')}</h4>
+                <div style={{ height: '300px' }}>
+                  <Doughnut 
+                    data={{
+                      labels: data.global.top_tunnels.map((tItem: any) => tItem.full_host),
+                      datasets: [{
+                        label: 'Total Bandwidth',
+                        data: data.global.top_tunnels.map((tItem: any) => tItem.bytes_in + tItem.bytes_out),
+                        backgroundColor: ['#3b82f6', '#10b981', '#f59e0b', '#ef4444', '#8b5cf6', '#ec4899', '#f43f5e', '#14b8a6', '#6366f1', '#a855f7'],
+                        borderWidth: 0
+                      }]
+                    }} 
+                    options={doughnutOptions} 
+                  />
+                </div>
+              </div>
+            )}
+
             {data.global.portal_stats && data.global.portal_stats.length > 0 && (
               <div className="card" style={{ padding: '24px' }}>
                 <h4 style={{ marginBottom: '16px', color: 'var(--text-muted)', fontSize: '14px' }}>Portal Usage</h4>

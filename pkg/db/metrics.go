@@ -96,6 +96,29 @@ func (repo *SQLiteMetricRepo) GetGlobalAnalytics(days int) (*GlobalAnalytics, er
 		top = append(top, ub)
 	}
 
+	tunnelsQuery := `
+		SELECT full_host, SUM(bytes_in), SUM(bytes_out)
+		FROM tunnel_metrics
+		WHERE recorded_at >= ?
+		GROUP BY full_host
+		ORDER BY (SUM(bytes_in) + SUM(bytes_out)) DESC
+		LIMIT 10
+	`
+	tunnelsRows, err := repo.conn.Query(tunnelsQuery, timeLimit)
+	if err != nil {
+		return nil, err
+	}
+	defer func() { _ = tunnelsRows.Close() }()
+
+	tunnels := make([]TunnelBandwidth, 0)
+	for tunnelsRows.Next() {
+		var tb TunnelBandwidth
+		if err := tunnelsRows.Scan(&tb.FullHost, &tb.BytesIn, &tb.BytesOut); err != nil {
+			return nil, err
+		}
+		tunnels = append(tunnels, tb)
+	}
+
 	portalQuery := `
 		SELECT target_id, COUNT(*)
 		FROM admin_audit_log
@@ -123,7 +146,7 @@ func (repo *SQLiteMetricRepo) GetGlobalAnalytics(days int) (*GlobalAnalytics, er
 		portalStats = append(portalStats, ps)
 	}
 
-	return &GlobalAnalytics{Daily: daily, TopUsers: top, PortalStats: portalStats}, nil
+	return &GlobalAnalytics{Daily: daily, TopUsers: top, TopTunnels: tunnels, PortalStats: portalStats}, nil
 }
 
 // GetUserAnalytics retrieves bandwidth stats for a specific user for the last N days.

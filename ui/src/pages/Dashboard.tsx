@@ -17,7 +17,7 @@ export default function Dashboard() {
   const [serverConfig, setServerConfig] = useState<any>(null); // Kept for modal if needed, though not fetched here currently
   const { formatDate } = useSettings();
   const { t } = useI18n();
-  const { items: sortedTokens, requestSort, getSortIndicator, searchQuery, setSearchQuery, getAriaSort } = useTableSort(tokens, ['token', 'status']);
+  const { items: sortedTokens, requestSort, getSortIndicator, searchQuery, setSearchQuery, getAriaSort } = useTableSort(tokens, ['name', 'token_prefix', 'status']);
 
   useEffect(() => {
     axios.get('/api/tokens')
@@ -82,7 +82,8 @@ export default function Dashboard() {
                 <table style={{ width: '100%', borderCollapse: 'collapse' }}>
                   <thead>
                     <tr style={{ borderBottom: '1px solid var(--border)', textAlign: 'left' }}>
-                      <th style={{ padding: 'var(--spacing-md) var(--spacing-lg)', color: 'var(--text-muted)', fontWeight: 600, fontSize: '13px', textTransform: 'uppercase', letterSpacing: '0.5px', cursor: 'pointer' }} onClick={() => requestSort('token')} aria-sort={getAriaSort('token')}>{t('token', 'Token')}{getSortIndicator('token')}</th>
+                      <th style={{ padding: 'var(--spacing-md) var(--spacing-lg)', color: 'var(--text-muted)', fontWeight: 600, fontSize: '13px', textTransform: 'uppercase', letterSpacing: '0.5px', cursor: 'pointer' }} onClick={() => requestSort('name')} aria-sort={getAriaSort('name')}>{t('name', 'Name')}{getSortIndicator('name')}</th>
+                      <th style={{ padding: 'var(--spacing-md) var(--spacing-lg)', color: 'var(--text-muted)', fontWeight: 600, fontSize: '13px', textTransform: 'uppercase', letterSpacing: '0.5px', cursor: 'pointer' }} onClick={() => requestSort('token_prefix')} aria-sort={getAriaSort('token_prefix')}>{t('prefix', 'Prefix')}{getSortIndicator('token_prefix')}</th>
                       <th style={{ padding: 'var(--spacing-md) var(--spacing-lg)', color: 'var(--text-muted)', fontWeight: 600, fontSize: '13px', textTransform: 'uppercase', letterSpacing: '0.5px', cursor: 'pointer' }} onClick={() => requestSort('created_at')} aria-sort={getAriaSort('created_at')}>{t('created', 'Created')}{getSortIndicator('created_at')}</th>
                       <th style={{ padding: 'var(--spacing-md) var(--spacing-lg)', color: 'var(--text-muted)', fontWeight: 600, fontSize: '13px', textTransform: 'uppercase', letterSpacing: '0.5px', cursor: 'pointer' }} onClick={() => requestSort('expires_at')} aria-sort={getAriaSort('expires_at')}>{t('expires', 'Expires')}{getSortIndicator('expires_at')}</th>
                       <th style={{ padding: 'var(--spacing-md) var(--spacing-lg)', color: 'var(--text-muted)', fontWeight: 600, fontSize: '13px', textTransform: 'uppercase', letterSpacing: '0.5px', cursor: 'pointer' }} onClick={() => requestSort('status')} aria-sort={getAriaSort('status')}>{t('status', 'Status')}{getSortIndicator('status')}</th>
@@ -91,7 +92,8 @@ export default function Dashboard() {
                   <tbody>
                     {sortedTokens.map((tItem, idx) => (
                       <tr key={idx} style={{ cursor: 'pointer' }}>
-                        <td style={{ padding: 'var(--spacing-lg)', fontFamily: 'monospace', fontWeight: 500, fontSize: '14px' }}>{tItem.token}</td>
+                        <td style={{ padding: 'var(--spacing-lg)', fontSize: '14px', fontWeight: 500 }}>{tItem.name}</td>
+                        <td style={{ padding: 'var(--spacing-lg)', fontFamily: 'monospace', fontSize: '14px' }}>{tItem.token_prefix}...</td>
                         <td style={{ padding: 'var(--spacing-lg)', fontSize: '14px' }}>{formatDate(tItem.created_at)}</td>
                         <td style={{ padding: 'var(--spacing-lg)', fontSize: '14px', color: 'var(--text-muted)' }}>{formatDate(tItem.expires_at)}</td>
                         <td style={{ padding: 'var(--spacing-lg)' }}>

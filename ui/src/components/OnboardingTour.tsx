@@ -20,38 +20,73 @@ export default function OnboardingTour({ user }: { user: any }) {
         console.error("Failed to report onboarding start telemetry", e);
       }
 
-      const driverObj = driver({
-        showProgress: true,
-        allowClose: true,
-        steps: [
+      const steps: any[] = [
+        {
+          element: '#dashboard-overview',
+          popover: {
+            title: t('tour_welcome_title', 'Welcome to the V2 Dashboard!'),
+            description: t('tour_welcome_desc', "The portal has been completely rebuilt from the ground up. V2 is faster, highly secure, and features a truly premium, asynchronous user experience. Let's see what changed!"),
+            side: 'bottom',
+            align: 'start'
+          }
+        },
+        {
+          element: '.sidebar',
+          popover: {
+            title: t('tour_sidebar_title', 'Consolidated Sidebar Navigation'),
+            description: t('tour_sidebar_desc', 'All features are now cleanly grouped in the sidebar. We have removed the clutter of the old V1 tabs to give you focused, dedicated views.'),
+            side: 'right',
+            align: 'start'
+          }
+        }
+      ];
+
+      if (user?.role === 'admin' || user?.role === 'owner') {
+        steps.push(
           {
-            element: '.sidebar',
+            element: 'a[href="/admin/users"]',
             popover: {
-              title: t('tour_sidebar_title', 'Sidebar Navigation'),
-              description: t('tour_sidebar_desc', 'Use the sidebar to navigate between your Dashboard Overview, Administration features, and System Settings.'),
+              title: t('tour_users_title', 'Powerful User Management'),
+              description: t('tour_users_desc', 'In V2, clicking on a user opens a powerful modal. All heavy actions (Reset MFA, Set Limits, Preferred Domain) are safely packed there instead of cluttering a wide table.'),
               side: 'right',
-              align: 'start'
+              align: 'center'
             }
           },
           {
-            element: '#dashboard-overview',
+            element: 'a[href="/admin/subdomains"]',
             popover: {
-              title: t('tour_header_title', 'Dashboard Overview'),
-              description: t('tour_header_desc', 'This is your central control panel where you can manage your tunnels and domains.'),
-              side: 'bottom',
-              align: 'start'
+              title: t('tour_subdomains_title', 'Advanced Lifecycle & Throttling'),
+              description: t('tour_subdomains_desc', 'The Subdomains view clearly separates static reservations from active connections. You can even Throttle active connections directly from the UI without clunky browser prompts.'),
+              side: 'right',
+              align: 'center'
             }
           },
           {
-            element: '#tour-tunnels-panel',
+            element: 'a[href="/admin/settings"]',
             popover: {
-              title: t('tour_end_title', 'Active Tunnels'),
-              description: t('tour_end_desc', 'See a real-time list of all your active CLI connections here. You are all set!'),
-              side: 'top',
+              title: t('tour_settings_title', 'Server-Side Safety'),
+              description: t('tour_settings_desc', 'Actions like CSV/PDF exports and "Iron Curtain" lockouts now use secure Go backend streaming and custom themed modals, preventing the browser crashes we saw in V1.'),
+              side: 'right',
               align: 'center'
             }
           }
-        ],
+        );
+      }
+
+      steps.push({
+        element: '#tour-tunnels-panel',
+        popover: {
+          title: t('tour_end_title', 'Active Tunnels'),
+          description: t('tour_end_desc', 'Your real-time tunnel connections are still right here on your Dashboard. Enjoy the new V2 experience!'),
+          side: 'top',
+          align: 'center'
+        }
+      });
+
+      const driverObj = driver({
+        showProgress: true,
+        allowClose: true,
+        steps: steps,
         onDestroyed: () => {
           const status = 'completed';
           axios.post('/api/me/onboarding', {

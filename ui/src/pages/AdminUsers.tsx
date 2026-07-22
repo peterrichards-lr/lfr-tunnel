@@ -58,6 +58,7 @@ export default function AdminUsers() {
   const [serverConfig, setServerConfig] = useState<any>(null);
   const [activeTab, setActiveTab] = useState<'users' | 'registrations'>('users');
   const [selectedUserPATs, setSelectedUserPATs] = useState<any[]>([]);
+  const [domains, setDomains] = useState<string[]>([]);
 
   useEffect(() => {
     if (!selectedUser?.email) {
@@ -109,6 +110,7 @@ export default function AdminUsers() {
   const [modalRateLimit, setModalRateLimit] = useState(0);
   const [modalMaxReservations, setModalMaxReservations] = useState(3);
   const [modalMaxTunnels, setModalMaxTunnels] = useState(3);
+  const [modalPreferredDomain, setModalPreferredDomain] = useState('');
   const [updatingLimits, setUpdatingLimits] = useState(false);
 
   useEffect(() => {
@@ -116,6 +118,7 @@ export default function AdminUsers() {
       setModalRateLimit(selectedUser.rate_limit || 0);
       setModalMaxReservations(selectedUser.max_reservations !== undefined && selectedUser.max_reservations !== null ? selectedUser.max_reservations : 3);
       setModalMaxTunnels(selectedUser.max_tunnels !== undefined && selectedUser.max_tunnels !== null ? selectedUser.max_tunnels : 3);
+      setModalPreferredDomain(selectedUser.preferred_domain || '');
     }
   }, [selectedUser]);
 
@@ -173,6 +176,24 @@ export default function AdminUsers() {
     }
   };
 
+  const updatePreferredDomain = async () => {
+    if (!selectedUser) return;
+    try {
+      setUpdatingLimits(true);
+      await axios.put(`/api/admin/users/${encodeURIComponent(selectedUser.email)}/preferred-domain`, {
+        preferred_domain: modalPreferredDomain
+      });
+      showToast('Preferred domain updated successfully', 'success');
+      setUsers(prev => prev.map(u => u.email === selectedUser.email ? { ...u, preferred_domain: modalPreferredDomain } : u));
+      setSelectedUser(prev => prev ? { ...prev, preferred_domain: modalPreferredDomain } : null);
+      fetchUsers();
+    } catch (e: any) {
+      showToast(e.response?.data?.error || 'Failed to update preferred domain', 'error');
+    } finally {
+      setUpdatingLimits(false);
+    }
+  };
+
   const resetUserMFA = async () => {
     if (!selectedUser) return;
     if (!(await showConfirm('Reset MFA', `Are you sure you want to reset Multi-Factor Authentication (MFA) for ${selectedUser.email}? This will force the user to re-register their TOTP auth device on next login.`))) return;
@@ -198,12 +219,14 @@ export default function AdminUsers() {
 
   const fetchUsers = async () => {
     try {
-      const [res, confRes] = await Promise.all([
+      const [res, confRes, domRes] = await Promise.all([
         axios.get('/api/admin/users'),
-        axios.get('/api/version').catch(() => ({ data: null }))
+        axios.get('/api/version').catch(() => ({ data: null })),
+        axios.get('/api/domains').catch(() => ({ data: [] }))
       ]);
       setUsers(res.data);
       if (confRes.data) setServerConfig(confRes.data);
+      if (domRes.data) setDomains(domRes.data);
     } catch (e) {
       console.error(e);
     } finally {
@@ -651,6 +674,24 @@ export default function AdminUsers() {
                     placeholder="3"
                   />
                   <button className="btn btn-primary" style={{ padding: 'var(--spacing-xs) var(--spacing-sm)', fontSize: '12px' }} onClick={updateTunnelsLimit} disabled={updatingLimits}>Save</button>
+                </div>
+              </div>
+
+              <div>
+                <label style={{ display: 'block', fontSize: '12px', color: 'var(--text-muted)', marginBottom: 'var(--spacing-xs)', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Preferred Domain</label>
+                <div style={{ display: 'flex', gap: 'var(--spacing-sm)' }}>
+                  <select 
+                    className="input-field" 
+                    style={{ flex: 1, padding: 'var(--spacing-xs) var(--spacing-sm)', fontSize: '14px' }} 
+                    value={modalPreferredDomain} 
+                    onChange={(e) => setModalPreferredDomain(e.target.value)} 
+                  >
+                    <option value="">None (Auto)</option>
+                    {domains.map(d => (
+                      <option key={d} value={d}>{d}</option>
+                    ))}
+                  </select>
+                  <button className="btn btn-primary" style={{ padding: 'var(--spacing-xs) var(--spacing-sm)', fontSize: '12px' }} onClick={updatePreferredDomain} disabled={updatingLimits}>Save</button>
                 </div>
               </div>
 

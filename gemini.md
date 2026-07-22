@@ -195,6 +195,9 @@ The solution will consist of:
 - [x] Close Issue #519, #520, and Epic #518 on GitHub
 - [x] Implement Webhook Rate Limiting, Persistent Queue, and Message Batching (Epic #511)
 - [x] Release, tag, and deploy v1.43.5 of lfr-tunnel to GitHub and VPS.
+- [x] Restructure active leases, domains, and tokens responses to restrict dashboard overview to personal user data only.
+- [x] Implement Admin Tokens page in the Admin Zone for global user token management.
+- [x] Commit, test, E2E verify, and merge refactor/personal-dashboard-admin-tokens branch to master.
 
 
 | Feature | Description | Risk | LOE | Business Value | Priority |

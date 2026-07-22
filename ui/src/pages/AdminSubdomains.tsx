@@ -3,6 +3,7 @@ import axios from 'axios';
 import { useTableSort } from '../hooks/useTableSort';
 import Skeleton from '../components/Skeleton';
 import { useI18n } from '../contexts/I18nContext';
+import { useUI } from '../contexts/UIContext';
 
 interface TunnelLease {
   user_id: string;
@@ -22,6 +23,7 @@ export default function AdminSubdomains() {
   const [leases, setLeases] = useState<TunnelLease[]>([]);
   const [loading, setLoading] = useState(true);
   const { t } = useI18n();
+  const { showToast, showConfirm } = useUI();
   const [page, setPage] = useState(0);
   const ROWS_PER_PAGE = 15;
 
@@ -40,6 +42,7 @@ export default function AdminSubdomains() {
     fetchLeases();
     const interval = setInterval(fetchLeases, 5000);
     return () => clearInterval(interval);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   const formatBytes = (bytes: number) => {
@@ -51,12 +54,13 @@ export default function AdminSubdomains() {
   };
 
   const kickLease = async (subdomain: string) => {
-    if (!confirm(`Are you sure you want to kick the tunnel for ${subdomain}?`)) return;
+    if (!(await showConfirm('Kick Tunnel', `Are you sure you want to kick the tunnel for ${subdomain}?`))) return;
     try {
       await axios.delete(`/api/admin/leases/${encodeURIComponent(subdomain)}`);
       fetchLeases();
+      showToast('Tunnel kicked successfully', 'success');
     } catch {
-      alert('Failed to kick lease');
+      showToast('Failed to kick lease', 'error');
     }
   };
 

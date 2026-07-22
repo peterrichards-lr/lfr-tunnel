@@ -22,6 +22,7 @@
     </style>
 </head>
 <body>
+    <div id="loader"><div class="spinner"></div></div>
     <div id="v2-promo-banner" style="background-color: #0b5fff; color: white; padding: 12px 24px; text-align: center; position: fixed; top: 0; left: 0; width: 100%; z-index: 9999; box-sizing: border-box; box-shadow: 0 4px 12px rgba(0,0,0,0.15); font-family: 'Inter', sans-serif;">
         <p style="margin: 0; font-size: 14px; font-weight: 500;">
             Try out the new V2 Portal experience! <a href="/portalv2/" style="color: white; text-decoration: underline; font-weight: 700; margin-left: 8px;">Switch to V2 &rarr;</a>
@@ -103,80 +104,85 @@
             }
         });
 
-        // Load custom privacy/cookie links if configured
-        fetch('/api/version')
-            .then(res => res.json())
-            .then(vData => {
-                if (vData.enforce_policy_consent === "true") {
-                    const cc = document.getElementById('consent-container');
-                    if (cc) {
-                        cc.style.display = 'flex';
-                        cc.classList.remove('hidden');
-                    }
-                    const cb = document.getElementById('setup-consent');
-                    if (cb) cb.required = true;
+        // Load configuration and translations concurrently and apply them dynamically on load
+        Promise.all([
+            fetch('/api/version').then(res => res.json()),
+            fetch('/api/i18n').then(res => res.json())
+        ])
+        .then(([vData, bundle]) => {
+            // Apply version configuration
+            if (vData.enforce_policy_consent === "true") {
+                const cc = document.getElementById('consent-container');
+                if (cc) {
+                    cc.style.display = 'flex';
+                    cc.classList.remove('hidden');
                 }
+                const cb = document.getElementById('setup-consent');
+                if (cb) cb.required = true;
+            }
 
-                if (vData.privacy_policy_url) {
-                    const pl = document.getElementById('footer-privacy-link');
-                    if (pl) pl.href = vData.privacy_policy_url;
-                }
-                if (vData.cookie_policy_url) {
-                    const cl = document.getElementById('footer-cookie-link');
-                    if (cl) cl.href = vData.cookie_policy_url;
-                }
-            })
-            .catch(err => console.error("Failed to load policy links", err));
-
-        // Load translations and apply them dynamically on load
-        fetch('/api/i18n')
-            .then(res => res.json())
-            .then(bundle => {
-                // Deduce resolved language by scanning typical strings
-                let resolvedLang = "en";
-                if (bundle.portal_welcome === "Bienvenido") resolvedLang = "es";
-                else if (bundle.portal_welcome === "Bienvenue") resolvedLang = "fr";
-                else if (bundle.portal_welcome === "Willkommen") resolvedLang = "de";
-                else if (bundle.portal_welcome === "Bem-vindo") resolvedLang = "pt";
-                else if (bundle.portal_welcome === "환영합니다") resolvedLang = "ko";
-                else if (bundle.portal_welcome === "ようこそ") resolvedLang = "ja";
-                else if (bundle.portal_welcome === "欢迎") resolvedLang = "zh";
-                else if (bundle.portal_welcome === "Bine ai venit") resolvedLang = "ro";
-
-                // Apply translations to data-i18n tagged elements
-                document.querySelectorAll('[data-i18n]').forEach(el => {
-                    const key = el.getAttribute('data-i18n');
-                    if (bundle[key]) {
-                        // Keep anchor tags intact for privacy link with active language parameter
-                        if (key === "policy_consent_label") {
-                            el.innerHTML = bundle[key]
-                                .replace("Privacy Policy", `<a href="/privacy?lang=${resolvedLang}" target="_blank" style="color: var(--primary); text-decoration: none;">Privacy Policy</a>`)
-                                .replace("Cookie Disclosure", `<a href="/cookies?lang=${resolvedLang}" target="_blank" style="color: var(--primary); text-decoration: none;">Cookie Disclosure</a>`)
-                                .replace("Politica de Cookie-uri", `<a href="/cookies?lang=${resolvedLang}" target="_blank" style="color: var(--primary); text-decoration: none;">Politica de Cookie-uri</a>`)
-                                .replace("Politică de Confidențialitate", `<a href="/privacy?lang=${resolvedLang}" target="_blank" style="color: var(--primary); text-decoration: none;">Politică de Confidențialitate</a>`);
-                        } else {
-                            el.innerText = bundle[key];
-                        }
-                    }
-                });
-
-                // Apply placeholders
-                const fnInput = document.getElementById('setup-first-name');
-                if (fnInput && bundle.label_first_name) fnInput.placeholder = bundle.label_first_name;
-                const lnInput = document.getElementById('setup-last-name');
-                if (lnInput && bundle.label_last_name) lnInput.placeholder = bundle.label_last_name;
-
-                // Update the bottom footer links with active language parameter
+            if (vData.privacy_policy_url) {
                 const pl = document.getElementById('footer-privacy-link');
-                if (pl && pl.getAttribute('href').startsWith('/privacy')) {
-                    pl.href = '/privacy?lang=' + encodeURIComponent(resolvedLang);
-                }
+                if (pl) pl.href = vData.privacy_policy_url;
+            }
+            if (vData.cookie_policy_url) {
                 const cl = document.getElementById('footer-cookie-link');
-                if (cl && cl.getAttribute('href').startsWith('/cookies')) {
-                    cl.href = '/cookies?lang=' + encodeURIComponent(resolvedLang);
+                if (cl) cl.href = vData.cookie_policy_url;
+            }
+
+            // Deduce resolved language by scanning typical strings
+            let resolvedLang = "en";
+            if (bundle.portal_welcome === "Bienvenido") resolvedLang = "es";
+            else if (bundle.portal_welcome === "Bienvenue") resolvedLang = "fr";
+            else if (bundle.portal_welcome === "Willkommen") resolvedLang = "de";
+            else if (bundle.portal_welcome === "Bem-vindo") resolvedLang = "pt";
+            else if (bundle.portal_welcome === "환영합니다") resolvedLang = "ko";
+            else if (bundle.portal_welcome === "ようこそ") resolvedLang = "ja";
+            else if (bundle.portal_welcome === "欢迎") resolvedLang = "zh";
+            else if (bundle.portal_welcome === "Bine ai venit") resolvedLang = "ro";
+
+            // Apply translations to data-i18n tagged elements
+            document.querySelectorAll('[data-i18n]').forEach(el => {
+                const key = el.getAttribute('data-i18n');
+                if (bundle[key]) {
+                    // Keep anchor tags intact for privacy link with active language parameter
+                    if (key === "policy_consent_label") {
+                        el.innerHTML = bundle[key]
+                            .replace("Privacy Policy", `<a href="/privacy?lang=${resolvedLang}" target="_blank" style="color: var(--primary); text-decoration: none;">Privacy Policy</a>`)
+                            .replace("Cookie Disclosure", `<a href="/cookies?lang=${resolvedLang}" target="_blank" style="color: var(--primary); text-decoration: none;">Cookie Disclosure</a>`)
+                            .replace("Politica de Cookie-uri", `<a href="/cookies?lang=${resolvedLang}" target="_blank" style="color: var(--primary); text-decoration: none;">Politica de Cookie-uri</a>`)
+                            .replace("Politică de Confidențialitate", `<a href="/privacy?lang=${resolvedLang}" target="_blank" style="color: var(--primary); text-decoration: none;">Politică de Confidențialitate</a>`);
+                    } else {
+                        el.innerText = bundle[key];
+                    }
                 }
-            })
-            .catch(err => console.error("Failed to load i18n translations", err));
+            });
+
+            // Apply placeholders
+            const fnInput = document.getElementById('setup-first-name');
+            if (fnInput && bundle.label_first_name) fnInput.placeholder = bundle.label_first_name;
+            const lnInput = document.getElementById('setup-last-name');
+            if (lnInput && bundle.label_last_name) lnInput.placeholder = bundle.label_last_name;
+
+            // Update the bottom footer links with active language parameter
+            const pl = document.getElementById('footer-privacy-link');
+            if (pl && pl.getAttribute('href').startsWith('/privacy')) {
+                pl.href = '/privacy?lang=' + encodeURIComponent(resolvedLang);
+            }
+            const cl = document.getElementById('footer-cookie-link');
+            if (cl && cl.getAttribute('href').startsWith('/cookies')) {
+                cl.href = '/cookies?lang=' + encodeURIComponent(resolvedLang);
+            }
+
+            // Hide loader overlay
+            const loader = document.getElementById('loader');
+            if (loader) loader.style.display = 'none';
+        })
+        .catch(err => {
+            console.error("Failed to load setup configurations or translations", err);
+            const loader = document.getElementById('loader');
+            if (loader) loader.style.display = 'none';
+        });
     </script>
 
     <div style="margin-top: 24px; padding-top: 12px; border-top: 1px solid rgba(255,255,255,0.06); text-align: center; font-size: 11px; display: flex; justify-content: center; gap: 12px; align-items: center; width: 100%; max-width: 400px; margin-left: auto; margin-right: auto;">

@@ -983,6 +983,9 @@ The solution will consist of:
 ## V2 Portal i18n Search Placeholders (v1.34.12)
 - [x] Refactor hardcoded placeholders to translate hooks (#701)
 
+## V1 UI FOUC and Layout Shift Fixes (v1.34.15)
+- [x] Prevent FOUC and Cumulative Layout Shifts in V1 setup.html and dashboard.html (#698)
+
 <!-- markdownlint-disable MD049 -->
 ---
 *Last Updated: 2026-07-22* | *Last Reviewed: 2026-07-22*

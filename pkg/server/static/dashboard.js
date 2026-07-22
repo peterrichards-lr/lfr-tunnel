@@ -6,6 +6,34 @@
             return defaultVal || key;
         }
 
+        function applyTranslations(bundle, lang) {
+            window.translations = bundle;
+            document.querySelectorAll('[data-i18n]').forEach(el => {
+                const key = el.getAttribute('data-i18n');
+                if (bundle[key]) {
+                    el.innerText = bundle[key];
+                }
+            });
+            document.querySelectorAll('[data-i18n-placeholder]').forEach(el => {
+                const key = el.getAttribute('data-i18n-placeholder');
+                if (bundle[key]) {
+                    el.placeholder = bundle[key];
+                }
+            });
+
+            const dir = (lang === 'ar' || lang === 'he') ? 'rtl' : 'ltr';
+            document.documentElement.dir = dir;
+
+            const pl = document.getElementById('footer-privacy-link');
+            if (pl && pl.getAttribute('href').startsWith('/privacy')) {
+                pl.href = '/privacy?lang=' + encodeURIComponent(lang);
+            }
+            const cl = document.getElementById('footer-cookie-link');
+            if (cl && cl.getAttribute('href').startsWith('/cookies')) {
+                cl.href = '/cookies?lang=' + encodeURIComponent(lang);
+            }
+        }
+
         const savedTheme = localStorage.getItem('theme');
         if (savedTheme) {
             document.documentElement.setAttribute('data-theme', savedTheme);
@@ -539,6 +567,32 @@ function toggleTheme() {
             const urlParams = new URLSearchParams(window.location.search);
             const magicToken = urlParams.get('token');
             const langParam = urlParams.get('lang') || '';
+
+            // Load translations before showing login/dashboard to prevent FOUC
+            try {
+                const res = await fetch('/api/i18n?lang=' + encodeURIComponent(langParam));
+                if (res.ok) {
+                    const bundle = await res.json();
+                    let resolvedLang = "en";
+                    if (bundle.portal_welcome === "Bienvenido") resolvedLang = "es";
+                    else if (bundle.portal_welcome === "Bienvenue") resolvedLang = "fr";
+                    else if (bundle.portal_welcome === "Willkommen") resolvedLang = "de";
+                    else if (bundle.portal_welcome === "Bem-vindo") resolvedLang = "pt";
+                    else if (bundle.portal_welcome === "환영합니다") resolvedLang = "ko";
+                    else if (bundle.portal_welcome === "ようこそ") resolvedLang = "ja";
+                    else if (bundle.portal_welcome === "欢迎") resolvedLang = "zh";
+                    else if (bundle.portal_welcome === "Bine ai venit") resolvedLang = "ro";
+
+                    currentLanguage = resolvedLang;
+                    const selector = document.getElementById('portal-language-selector');
+                    if (selector) selector.value = resolvedLang;
+
+                    applyTranslations(bundle, resolvedLang);
+                }
+            } catch (e) {
+                console.error("Failed to auto-detect and translate portal language", e);
+            }
+
             if (magicToken) {
                 window.history.replaceState({}, document.title, window.location.pathname);
                 const vRes = await fetch('/api/auth/verify', {
@@ -581,56 +635,6 @@ function toggleTheme() {
             }
 
             await loadVersionDetails();
-
-            // Auto-detect browser language on first load and translate unauthenticated portal UI
-            try {
-                const res = await fetch('/api/i18n');
-                if (res.ok) {
-                    const bundle = await res.json();
-                    window.translations = bundle;
-                    
-                    // Deduce resolved language by scanning typical strings
-                    let resolvedLang = "en";
-                    if (bundle.portal_welcome === "Bienvenido") resolvedLang = "es";
-                    else if (bundle.portal_welcome === "Bienvenue") resolvedLang = "fr";
-                    else if (bundle.portal_welcome === "Willkommen") resolvedLang = "de";
-                    else if (bundle.portal_welcome === "Bem-vindo") resolvedLang = "pt";
-                    else if (bundle.portal_welcome === "환영합니다") resolvedLang = "ko";
-                    else if (bundle.portal_welcome === "ようこそ") resolvedLang = "ja";
-                    else if (bundle.portal_welcome === "欢迎") resolvedLang = "zh";
-                    else if (bundle.portal_welcome === "Bine ai venit") resolvedLang = "ro";
-
-                    currentLanguage = resolvedLang;
-                    const selector = document.getElementById('portal-language-selector');
-                    if (selector) selector.value = resolvedLang;
-
-                    // Set HTML direction (RTL support for Arabic/Hebrew)
-                    const dir = (resolvedLang === 'ar' || resolvedLang === 'he') ? 'rtl' : 'ltr';
-                    document.documentElement.dir = dir;
-
-                    // Apply translations to data-i18n tagged elements
-                    document.querySelectorAll('[data-i18n]').forEach(el => {
-                        const key = el.getAttribute('data-i18n');
-                        if (bundle[key]) el.innerText = bundle[key];
-                    });
-                    document.querySelectorAll('[data-i18n-placeholder]').forEach(el => {
-                        const key = el.getAttribute('data-i18n-placeholder');
-                        if (bundle[key]) el.placeholder = bundle[key];
-                    });
-
-                    // Dynamically update the footer privacy/cookie links with ?lang=...
-                    const pl = document.getElementById('footer-privacy-link');
-                    if (pl && pl.getAttribute('href').startsWith('/privacy')) {
-                        pl.href = '/privacy?lang=' + encodeURIComponent(resolvedLang);
-                    }
-                    const cl = document.getElementById('footer-cookie-link');
-                    if (cl && cl.getAttribute('href').startsWith('/cookies')) {
-                        cl.href = '/cookies?lang=' + encodeURIComponent(resolvedLang);
-                    }
-                }
-            } catch (e) {
-                console.error("Failed to auto-detect and translate portal language", e);
-            }
             initSidebarSections();
         }
 
@@ -2872,33 +2876,7 @@ applyTheme(currentUser.theme_preference);
                 const res = await fetch('/api/i18n?lang=' + encodeURIComponent(lang));
                 if (res.ok) {
                     const bundle = await res.json();
-                    window.translations = bundle;
-                    document.querySelectorAll('[data-i18n]').forEach(el => {
-                        const key = el.getAttribute('data-i18n');
-                        if (bundle[key]) {
-                            el.innerText = bundle[key];
-                        }
-                    });
-                    document.querySelectorAll('[data-i18n-placeholder]').forEach(el => {
-                        const key = el.getAttribute('data-i18n-placeholder');
-                        if (bundle[key]) {
-                            el.placeholder = bundle[key];
-                        }
-                    });
-
-                    // Set HTML direction (RTL support for Arabic/Hebrew)
-                    const dir = (lang === 'ar' || lang === 'he') ? 'rtl' : 'ltr';
-                    document.documentElement.dir = dir;
-
-                    // Dynamically update the footer privacy/cookie links with ?lang=...
-                    const pl = document.getElementById('footer-privacy-link');
-                    if (pl && pl.getAttribute('href').startsWith('/privacy')) {
-                        pl.href = '/privacy?lang=' + encodeURIComponent(lang);
-                    }
-                    const cl = document.getElementById('footer-cookie-link');
-                    if (cl && cl.getAttribute('href').startsWith('/cookies')) {
-                        cl.href = '/cookies?lang=' + encodeURIComponent(lang);
-                    }
+                    applyTranslations(bundle, lang);
                 }
             } catch (e) {
                 console.error("Failed to load language", e);

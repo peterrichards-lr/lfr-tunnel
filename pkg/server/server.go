@@ -2467,7 +2467,7 @@ func (s *Server) handleAdminEndpoints(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if r.Method == http.MethodPost && strings.HasPrefix(r.URL.Path, "/api/admin/users/") && strings.HasSuffix(r.URL.Path, "/tunnels-limit") {
+	if r.Method == http.MethodPost && strings.HasPrefix(r.URL.Path, "/api/admin/users/") && (strings.HasSuffix(r.URL.Path, "/tunnels-limit") || strings.HasSuffix(r.URL.Path, "/tunnels_limit")) {
 		s.handleAdminOverrideTunnelsLimit(w, r, actor)
 		return
 	}

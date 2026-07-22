@@ -188,7 +188,7 @@ func TestServer_HandleAdminOverrideTunnelsLimit(t *testing.T) {
 	}
 	bodyBytes, _ := json.Marshal(reqBody)
 
-	req, _ := http.NewRequest(http.MethodPost, "http://example.com/api/admin/users/dev@example.com/tunnels-limit", bytes.NewBuffer(bodyBytes))
+	req, _ := http.NewRequest(http.MethodPost, "http://example.com/api/admin/users/dev@example.com/tunnels-invalid", bytes.NewBuffer(bodyBytes))
 	req.AddCookie(&http.Cookie{Name: "lfr_session", Value: sessionToken})
 
 	w := httptest.NewRecorder()

@@ -1153,7 +1153,7 @@ func (s *Server) handleAdminOverrideLimit(w http.ResponseWriter, r *http.Request
 func (s *Server) handleAdminOverrideTunnelsLimit(w http.ResponseWriter, r *http.Request, actor string) {
 	suffix := strings.TrimPrefix(r.URL.Path, "/api/admin/users/")
 	parts := strings.Split(suffix, "/")
-	if len(parts) < 2 || parts[1] != "tunnels_limit" {
+	if len(parts) < 2 || (parts[1] != "tunnels_limit" && parts[1] != "tunnels-limit") {
 		http.Error(w, `{"error":"Invalid URL path"}`, http.StatusBadRequest)
 		return
 	}

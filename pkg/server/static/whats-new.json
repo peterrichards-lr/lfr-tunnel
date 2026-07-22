@@ -1,6 +1,6 @@
 [
   {
-    "version": "v1.43.8",
+    "version": "v1.43.9",
     "release_date": "2026-07-22",
     "features": [
       "Feature: Shift Personal Access Tokens CSV generation to a server-side route (#735)",

@@ -194,6 +194,7 @@ The solution will consist of:
 - [x] Implement Secure Obfuscated Server Configuration Viewer (Epic #518 / Issue #519, #520)
 - [x] Close Issue #519, #520, and Epic #518 on GitHub
 - [x] Implement Webhook Rate Limiting, Persistent Queue, and Message Batching (Epic #511)
+- [x] Release, tag, and deploy v1.43.5 of lfr-tunnel to GitHub and VPS.
 
 
 | Feature | Description | Risk | LOE | Business Value | Priority |

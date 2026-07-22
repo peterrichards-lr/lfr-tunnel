@@ -971,7 +971,7 @@ The solution will consist of:
 - [x] Improve V2 UI tables accessibility by adding aria-sort attributes (#704).
 
 ## V2 Portal Token Badge Contrast (v1.34.10)
-- [/] Improve V2 UI token status badge contrast ratios in light/dark themes (#703).
+- [x] Improve V2 UI token status badge contrast ratios in light/dark themes (#703).
 
 <!-- markdownlint-disable MD049 -->
 ---

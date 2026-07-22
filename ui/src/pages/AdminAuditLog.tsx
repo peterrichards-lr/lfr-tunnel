@@ -134,7 +134,7 @@ export default function AdminAuditLog() {
                   <tr key={e.event_id || idx} style={{ borderBottom: '1px solid var(--border)' }}>
                     <td style={{ padding: '16px', whiteSpace: 'nowrap' }}>{formatDate(e.created_at)}</td>
                     <td style={{ padding: '16px' }}>{e.actor}</td>
-                    <td style={{ padding: '16px' }}><span className="badge" style={{ background: 'var(--primary-dark)', color: 'white' }}>{e.action}</span></td>
+                    <td style={{ padding: '16px' }}><span className="badge" style={{ background: 'var(--status-info-bg)', color: 'var(--status-info-text)', border: '1px solid var(--status-info-border)' }}>{e.action}</span></td>
                     <td style={{ padding: '16px' }}>{e.resource}</td>
                     <td style={{ padding: '16px', fontFamily: 'monospace' }}>{e.ip_address}</td>
                     <td style={{ padding: '16px', fontSize: '11px', fontFamily: 'monospace', color: 'var(--text-muted)', maxWidth: '200px', overflowX: 'auto' }}>

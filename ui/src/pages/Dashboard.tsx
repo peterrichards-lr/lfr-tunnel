@@ -123,9 +123,9 @@ export default function Dashboard() {
                             borderRadius: '20px', 
                             fontSize: '12px', 
                             fontWeight: 600, 
-                            background: tItem.status === 'active' ? 'rgba(16, 185, 129, 0.15)' : 'rgba(239, 68, 68, 0.15)',
-                            color: tItem.status === 'active' ? '#34d399' : '#f87171',
-                            border: `1px solid ${tItem.status === 'active' ? 'rgba(16, 185, 129, 0.3)' : 'rgba(239, 68, 68, 0.3)'}`
+                            background: tItem.status === 'active' ? 'var(--status-success-bg)' : 'var(--status-danger-bg)',
+                            color: tItem.status === 'active' ? 'var(--status-success-text)' : 'var(--status-danger-text)',
+                            border: `1px solid ${tItem.status === 'active' ? 'var(--status-success-border)' : 'var(--status-danger-border)'}`
                           }}>
                             {tItem.status.toUpperCase()}
                           </span>

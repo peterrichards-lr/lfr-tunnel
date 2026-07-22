@@ -224,9 +224,9 @@ export default function AdminUsers() {
           padding: 'var(--spacing-md) var(--spacing-lg)',
           marginBottom: 'var(--spacing-lg)',
           borderRadius: 'var(--spacing-sm)',
-          background: pageMessage.type === 'error' ? 'rgba(239, 68, 68, 0.15)' : 'rgba(16, 185, 129, 0.15)',
-          color: pageMessage.type === 'error' ? '#f87171' : '#34d399',
-          border: `1px solid ${pageMessage.type === 'error' ? 'rgba(239, 68, 68, 0.3)' : 'rgba(16, 185, 129, 0.3)'}`
+          background: pageMessage.type === 'error' ? 'var(--status-danger-bg)' : 'var(--status-success-bg)',
+          color: pageMessage.type === 'error' ? 'var(--status-danger-text)' : 'var(--status-success-text)',
+          border: `1px solid ${pageMessage.type === 'error' ? 'var(--status-danger-border)' : 'var(--status-success-border)'}`
         }}>
           {pageMessage.text}
         </div>
@@ -294,9 +294,9 @@ export default function AdminUsers() {
                     <td>{u.auth_method || 'password'}</td>
                     <td>
                       {u.portal_active ? (
-                        <div style={{ width: '8px', height: '8px', borderRadius: '50%', background: '#10b981', boxShadow: '0 0 8px #10b981' }} />
+                        <div style={{ width: '8px', height: '8px', borderRadius: '50%', background: 'var(--success)', boxShadow: '0 0 8px var(--success)' }} />
                       ) : (
-                        <div style={{ width: '8px', height: '8px', borderRadius: '50%', background: 'rgba(255,255,255,0.2)' }} />
+                        <div style={{ width: '8px', height: '8px', borderRadius: '50%', background: 'var(--status-inactive)' }} />
                       )}
                     </td>
                     <td>

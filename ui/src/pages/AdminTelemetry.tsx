@@ -122,9 +122,9 @@ export default function AdminTelemetry() {
               width: '8px', 
               height: '8px', 
               borderRadius: '50%', 
-              backgroundColor: status === 'connected' ? '#10b981' : status === 'connecting' ? '#f59e0b' : '#ef4444',
+              backgroundColor: status === 'connected' ? 'var(--success)' : status === 'connecting' ? 'var(--warning)' : 'var(--danger)',
               display: 'inline-block',
-              boxShadow: status === 'connected' ? '0 0 8px #10b981' : 'none'
+              boxShadow: status === 'connected' ? '0 0 8px var(--success)' : 'none'
             }}></span>
             <span>
               {status === 'connected' && t('telemetry_connected', 'Live Feed Connected')}
@@ -230,7 +230,7 @@ export default function AdminTelemetry() {
                     <td style={{ padding: 'var(--spacing-lg)' }}>
                       <span style={{ 
                         padding: 'var(--spacing-xs) var(--spacing-md)', borderRadius: '20px', fontSize: '12px', fontWeight: 600, 
-                        background: 'rgba(16, 185, 129, 0.15)', color: '#34d399', border: '1px solid rgba(16, 185, 129, 0.3)' 
+                        background: 'var(--status-success-bg)', color: 'var(--status-success-text)', border: '1px solid var(--status-success-border)' 
                       }}>
                         {tItem.status ? tItem.status.toUpperCase() : 'UP'}
                       </span>
@@ -238,9 +238,9 @@ export default function AdminTelemetry() {
                     <td style={{ padding: 'var(--spacing-lg)', textAlign: 'right' }}>
                       <button 
                         className="btn btn-secondary" 
-                        style={{ padding: 'var(--spacing-xs) var(--spacing-md)', fontSize: '13px', color: 'var(--danger)', borderColor: 'rgba(239, 68, 68, 0.2)', background: 'transparent' }}
+                        style={{ padding: 'var(--spacing-xs) var(--spacing-md)', fontSize: '13px', color: 'var(--danger)', borderColor: 'var(--status-danger-border)', background: 'transparent' }}
                         onClick={() => handleKick(tItem.subdomain_prefix)}
-                        onMouseOver={e => { e.currentTarget.style.background = 'rgba(239, 68, 68, 0.1)'; e.currentTarget.style.color = '#ef4444'; }}
+                        onMouseOver={e => { e.currentTarget.style.background = 'var(--status-danger-bg)'; e.currentTarget.style.color = 'var(--status-danger-text)'; }}
                         onMouseOut={e => { e.currentTarget.style.background = 'transparent'; e.currentTarget.style.color = 'var(--danger)'; }}
                       >
                         {t('kick', 'Kick')}

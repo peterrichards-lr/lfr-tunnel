@@ -4,10 +4,12 @@ import { useOutletContext } from 'react-router-dom';
 import { useSettings } from '../contexts/SettingsContext';
 import { useTableSort } from '../hooks/useTableSort';
 import Skeleton from '../components/Skeleton';
+import { useI18n } from '../contexts/I18nContext';
 
 export default function AdminSettings() {
   const { user } = useOutletContext<{ user: any }>();
   const { formatDate } = useSettings();
+  const { t } = useI18n();
   const [loading, setLoading] = useState(true);
 
   // System Settings state
@@ -270,7 +272,7 @@ export default function AdminSettings() {
           <input
             type="text"
             className="input-field"
-            placeholder="Enter broadcast message..."
+            placeholder={t('enter_broadcast_message_placeholder', 'Enter broadcast message...')}
             value={broadcastMessage}
             onChange={(e) => setBroadcastMessage(e.target.value)}
           />
@@ -301,7 +303,7 @@ export default function AdminSettings() {
             <div style={{ marginBottom: '16px' }}>
               <input 
                 type="text" 
-                placeholder="Search backups..." 
+                placeholder={t('search_backups_placeholder', 'Search backups...')} 
                 value={searchQuery} 
                 onChange={e => { setSearchQuery(e.target.value); setPage(0); }}
                 style={{ padding: '8px 12px', width: '100%', maxWidth: '300px', background: 'var(--input-bg)', color: 'var(--text-main)', border: '1px solid var(--border)', borderRadius: '6px' }}

@@ -3,6 +3,7 @@ import axios from 'axios';
 import { useSettings } from '../contexts/SettingsContext';
 import { useTableSort } from '../hooks/useTableSort';
 import Skeleton from '../components/Skeleton';
+import { useI18n } from '../contexts/I18nContext';
 
 interface MagicLink {
   email: string;
@@ -16,6 +17,7 @@ export default function AdminMagicLinks() {
   const [links, setLinks] = useState<MagicLink[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
+  const { t } = useI18n();
 
   useEffect(() => {
     const fetchLinks = async () => {
@@ -98,7 +100,7 @@ export default function AdminMagicLinks() {
             <div style={{ marginBottom: '16px' }}>
               <input 
                 type="text" 
-                placeholder="Search magic links..." 
+                placeholder={t('search_magic_links_placeholder', 'Search magic links...')} 
                 value={searchQuery} 
                 onChange={e => setSearchQuery(e.target.value)}
                 style={{ padding: '8px 12px', width: '100%', maxWidth: '300px', background: 'var(--input-bg)', color: 'var(--text-main)', border: '1px solid var(--border)', borderRadius: '6px' }}

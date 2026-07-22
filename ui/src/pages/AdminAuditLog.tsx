@@ -3,6 +3,7 @@ import axios from 'axios';
 import { useSettings } from '../contexts/SettingsContext';
 import { useTableSort } from '../hooks/useTableSort';
 import Skeleton from '../components/Skeleton';
+import { useI18n } from '../contexts/I18nContext';
 
 interface AuditEvent {
   event_id: string;
@@ -20,6 +21,7 @@ export default function AdminAuditLog() {
   const [page, setPage] = useState(0);
   const ROWS_PER_PAGE = 15;
   const { formatDate } = useSettings();
+  const { t } = useI18n();
 
   const fetchEvents = async () => {
     try {
@@ -102,7 +104,7 @@ export default function AdminAuditLog() {
       <div style={{ marginBottom: '16px' }}>
         <input 
           type="text" 
-          placeholder="Search audit logs..." 
+          placeholder={t('search_audit_logs_placeholder', 'Search audit logs...')} 
           value={searchQuery} 
           onChange={e => { setSearchQuery(e.target.value); setPage(0); }}
           style={{ padding: '8px 12px', width: '100%', maxWidth: '300px', background: 'var(--input-bg)', color: 'var(--text-main)', border: '1px solid var(--border)', borderRadius: '6px' }}

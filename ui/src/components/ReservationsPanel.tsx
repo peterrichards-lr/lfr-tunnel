@@ -190,7 +190,7 @@ export default function ReservationsPanel() {
         <div style={{ marginBottom: '16px' }}>
           <input 
             type="text" 
-            placeholder="Search reservations..." 
+            placeholder={t('search_reservations_placeholder', 'Search reservations...')} 
             value={searchQuery} 
             onChange={e => setSearchQuery(e.target.value)}
             style={{ padding: '8px 12px', width: '100%', maxWidth: '300px', background: 'var(--input-bg)', color: 'var(--text-main)', border: '1px solid var(--border)', borderRadius: '6px' }}

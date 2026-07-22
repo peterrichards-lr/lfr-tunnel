@@ -3,6 +3,7 @@ import axios from 'axios';
 import { useSettings } from '../contexts/SettingsContext';
 import { useTableSort } from '../hooks/useTableSort';
 import Skeleton from '../components/Skeleton';
+import { useI18n } from '../contexts/I18nContext';
 
 interface ExtRequest {
   id: string;
@@ -17,6 +18,7 @@ export default function AdminExtensions() {
   const [requests, setRequests] = useState<ExtRequest[]>([]);
   const [loading, setLoading] = useState(true);
   const { formatDate } = useSettings();
+  const { t } = useI18n();
 
   const fetchRequests = async () => {
     try {
@@ -94,7 +96,7 @@ export default function AdminExtensions() {
         <div style={{ marginBottom: '16px' }}>
           <input 
             type="text" 
-            placeholder="Search extensions..." 
+            placeholder={t('search_extensions_placeholder', 'Search extensions...')} 
             value={searchQuery} 
             onChange={e => setSearchQuery(e.target.value)}
             style={{ padding: '8px 12px', width: '100%', maxWidth: '300px', background: 'var(--input-bg)', color: 'var(--text-main)', border: '1px solid var(--border)', borderRadius: '6px' }}

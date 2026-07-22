@@ -974,7 +974,9 @@ The solution will consist of:
 - [x] Refactor inline styles and JS hover states to CSS classes (#702).
 ## V2 Portal Token Badge Contrast (v1.34.10)
 - [x] Improve V2 UI token status badge contrast ratios in light/dark themes (#703).
-- [/] Implement a unified Design Token system using CSS variables for spacing consistency (#705).
+
+## V2 Portal i18n Search Placeholders (v1.34.12)
+- [x] Refactor hardcoded placeholders to translate hooks (#701)
 
 <!-- markdownlint-disable MD049 -->
 ---

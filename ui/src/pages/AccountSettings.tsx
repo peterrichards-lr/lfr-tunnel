@@ -112,7 +112,7 @@ export default function AccountSettings() {
                 className="input-field" 
                 value={preferredName} 
                 onChange={(e) => setPreferredName(e.target.value)}
-                placeholder="e.g. John"
+                placeholder={t('first_name_eg_placeholder', 'e.g. John')}
               />
             </div>
 
@@ -200,7 +200,7 @@ export default function AccountSettings() {
                   <input 
                     type="text" 
                     className="input-field" 
-                    placeholder="000000" 
+                    placeholder={t('mfa_otp_placeholder', '000000')} 
                     value={mfaCode}
                     onChange={(e) => setMfaCode(e.target.value)}
                     style={{ marginBottom: 0 }}

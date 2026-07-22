@@ -48,6 +48,7 @@ export default function AdminUsers() {
   const [loading, setLoading] = useState(true);
   const [selectedUser, setSelectedUser] = useState<User | null>(null);
   const [serverConfig, setServerConfig] = useState<any>(null);
+  const [activeTab, setActiveTab] = useState<'users' | 'registrations'>('users');
   
   // Targeted Message State
   const [targetedUserId, setTargetedUserId] = useState('');
@@ -164,7 +165,16 @@ export default function AdminUsers() {
       setIsInviting(false);
     }
   };
-  const { items: sortedUsers, requestSort, getSortIndicator, searchQuery, setSearchQuery, getAriaSort } = useTableSort(users, ['email', 'first_name', 'last_name', 'role', 'status', 'auth_method']);
+  const pendingCount = users.filter(u => u.status === 'pending').length;
+  const filteredUsers = users.filter(u => {
+    if (activeTab === 'users') {
+      return u.status !== 'pending';
+    } else {
+      return u.status === 'pending';
+    }
+  });
+
+  const { items: sortedUsers, requestSort, getSortIndicator, searchQuery, setSearchQuery, getAriaSort } = useTableSort(filteredUsers, ['email', 'first_name', 'last_name', 'role', 'status', 'auth_method']);
   if (loading) {
     return (
       <div style={{ animation: 'fadeInUp 0.6s ease-out' }}>
@@ -218,6 +228,60 @@ export default function AdminUsers() {
         <h3>{t('user_management', 'User Management')}</h3>
         <button className="btn btn-primary" onClick={() => setShowInviteModal(true)}>+ {t('invite_user', 'Invite User')}</button>
       </div>
+
+      {/* Sub-tabs for All Users vs Pending Registrations */}
+      <div style={{ display: 'flex', gap: 'var(--spacing-md)', borderBottom: '1px solid var(--border)', marginBottom: 'var(--spacing-lg)', paddingBottom: 'var(--spacing-sm)' }}>
+        <button 
+          onClick={() => setActiveTab('users')} 
+          style={{
+            background: 'none',
+            border: 'none',
+            color: activeTab === 'users' ? 'var(--primary)' : 'var(--text-muted)',
+            fontWeight: activeTab === 'users' ? '600' : '400',
+            fontSize: '15px',
+            cursor: 'pointer',
+            padding: 'var(--spacing-xs) var(--spacing-md)',
+            borderBottom: activeTab === 'users' ? '2px solid var(--primary)' : '2px solid transparent',
+            marginBottom: '-10px',
+            transition: '0.2s'
+          }}
+        >
+          {t('users_tab_all', 'All Users')}
+        </button>
+        <button 
+          onClick={() => setActiveTab('registrations')} 
+          style={{
+            background: 'none',
+            border: 'none',
+            color: activeTab === 'registrations' ? 'var(--primary)' : 'var(--text-muted)',
+            fontWeight: activeTab === 'registrations' ? '600' : '400',
+            fontSize: '15px',
+            cursor: 'pointer',
+            padding: 'var(--spacing-xs) var(--spacing-md)',
+            borderBottom: activeTab === 'registrations' ? '2px solid var(--primary)' : '2px solid transparent',
+            marginBottom: '-10px',
+            display: 'flex',
+            alignItems: 'center',
+            gap: '8px',
+            transition: '0.2s'
+          }}
+        >
+          <span>{t('users_tab_registrations', 'Pending Registrations')}</span>
+          {pendingCount > 0 && (
+            <span className="badge" style={{ 
+              background: 'var(--danger, #ef4444)', 
+              color: 'white', 
+              borderRadius: 'var(--spacing-xs)', 
+              padding: '2px var(--spacing-sm)', 
+              fontSize: '11px', 
+              fontWeight: 'bold',
+              lineHeight: '1'
+            }}>
+              {pendingCount}
+            </span>
+          )}
+        </button>
+      </div>
       
       {pageMessage && (
         <div style={{
@@ -255,85 +319,93 @@ export default function AdminUsers() {
               </tr>
             </thead>
             <tbody>
-              {sortedUsers.map((u) => {
-                const isSelf = currentUser && u.email === currentUser.email;
-                return (
-                  <tr key={u.email} style={isSelf ? { opacity: 0.6 } : {}}>
-                    <td>
-                      <div style={{ fontWeight: 500 }}>
-                        {u.first_name} {u.last_name}
-                      </div>
-                      <div style={{ fontSize: '12px', color: 'var(--text-muted)' }}>
-                        <a 
-                          href="#" 
-                          onClick={(e) => { e.preventDefault(); setSelectedUser(u); }}
-                          className="email-link"
-                        >
-                          {u.email}
-                        </a>
-                        {(u.active_tunnels?.length || 0) > 0 && (
-                          <span 
-                            className="badge tunnels" 
-                            onClick={() => setSelectedUser(u)}
-                            style={{ cursor: 'pointer', padding: '2px var(--spacing-sm)', fontSize: '11px', marginLeft: 'var(--spacing-sm)' }}
-                            title="Click to view tunnels"
+              {sortedUsers.length === 0 ? (
+                <tr>
+                  <td colSpan={6} style={{ textAlign: 'center', padding: 'var(--spacing-xl)', color: 'var(--text-muted)' }}>
+                    {activeTab === 'users' ? t('no_users_found', 'No users found.') : t('no_pending_registrations', 'No pending registrations.')}
+                  </td>
+                </tr>
+              ) : (
+                sortedUsers.map((u) => {
+                  const isSelf = currentUser && u.email === currentUser.email;
+                  return (
+                    <tr key={u.email} style={isSelf ? { opacity: 0.6 } : {}}>
+                      <td>
+                        <div style={{ fontWeight: 500 }}>
+                          {u.first_name} {u.last_name}
+                        </div>
+                        <div style={{ fontSize: '12px', color: 'var(--text-muted)' }}>
+                          <a 
+                            href="#" 
+                            onClick={(e) => { e.preventDefault(); setSelectedUser(u); }}
+                            className="email-link"
                           >
-                            🔌 {u.active_tunnels!.length} Tunnel{(u.active_tunnels!.length) > 1 ? 's' : ''}
-                          </span>
-                        )}
-                      </div>
-                    </td>
-                    <td><span className="badge">{u.role}</span></td>
-                    <td>
-                      <span className={`badge ${u.status === 'approved' ? 'success' : u.status === 'pending' ? 'warning' : 'danger'}`}>
-                        {u.status}
-                      </span>
-                    </td>
-                    <td>{u.auth_method || 'password'}</td>
-                    <td>
-                      {u.portal_active ? (
-                        <div style={{ width: '8px', height: '8px', borderRadius: '50%', background: 'var(--success)', boxShadow: '0 0 8px var(--success)' }} />
-                      ) : (
-                        <div style={{ width: '8px', height: '8px', borderRadius: '50%', background: 'var(--status-inactive)' }} />
-                      )}
-                    </td>
-                    <td>
-                      {!isSelf && (
-                        <div style={{ display: 'flex', gap: 'var(--spacing-sm)' }}>
-                          {u.status === 'pending' || u.status === 'unverified' ? (
-                            <>
-                              <button className="btn btn-primary" style={{ padding: 'var(--spacing-xs) var(--spacing-sm)', fontSize: '12px' }} onClick={() => changeStatus(u.email, 'approved')}>Approve</button>
-                              <button className="btn btn-danger" style={{ padding: 'var(--spacing-xs) var(--spacing-sm)', fontSize: '12px' }} onClick={() => changeStatus(u.email, 'revoked')}>Reject</button>
-                            </>
-                          ) : (
-                            <>
-                              {u.status === 'approved' ? (
-                                <button className="btn" style={{ padding: 'var(--spacing-xs) var(--spacing-sm)', fontSize: '12px' }} onClick={() => changeStatus(u.email, 'revoked')}>Suspend</button>
-                              ) : (
-                                <button className="btn" style={{ padding: 'var(--spacing-xs) var(--spacing-sm)', fontSize: '12px' }} onClick={() => changeStatus(u.email, 'approved')}>Unsuspend</button>
-                              )}
-                              
-                              {(currentUser.role === 'owner' || u.role !== 'owner') && (
-                                  <>
-                                    {u.role === 'admin' || u.role === 'owner' ? (
-                                      <button className="btn" style={{ padding: 'var(--spacing-xs) var(--spacing-sm)', fontSize: '12px' }} onClick={() => changeRole(u.email, 'user')}>Demote</button>
-                                    ) : (
-                                      <button className="btn" style={{ padding: 'var(--spacing-xs) var(--spacing-sm)', fontSize: '12px' }} onClick={() => changeRole(u.email, 'admin')}>Promote</button>
-                                    )}
-                                    
-                                    {u.email.toLowerCase() !== serverConfig?.owner_email?.toLowerCase() && (
-                                      <button className="btn btn-danger" style={{ padding: 'var(--spacing-xs) var(--spacing-sm)', fontSize: '12px' }} onClick={() => deleteUser(u.email)}>Delete</button>
-                                    )}
-                                  </>
-                              )}
-                            </>
+                            {u.email}
+                          </a>
+                          {(u.active_tunnels?.length || 0) > 0 && (
+                            <span 
+                              className="badge tunnels" 
+                              onClick={() => setSelectedUser(u)}
+                              style={{ cursor: 'pointer', padding: '2px var(--spacing-sm)', fontSize: '11px', marginLeft: 'var(--spacing-sm)' }}
+                              title="Click to view tunnels"
+                            >
+                              🔌 {u.active_tunnels!.length} Tunnel{(u.active_tunnels!.length) > 1 ? 's' : ''}
+                            </span>
                           )}
                         </div>
-                      )}
-                    </td>
-                  </tr>
-                );
-              })}
+                      </td>
+                      <td><span className="badge">{u.role}</span></td>
+                      <td>
+                        <span className={`badge ${u.status === 'approved' ? 'success' : u.status === 'pending' ? 'warning' : 'danger'}`}>
+                          {u.status}
+                        </span>
+                      </td>
+                      <td>{u.auth_method || 'password'}</td>
+                      <td>
+                        {u.portal_active ? (
+                          <div style={{ width: '8px', height: '8px', borderRadius: '50%', background: 'var(--success)', boxShadow: '0 0 8px var(--success)' }} />
+                        ) : (
+                          <div style={{ width: '8px', height: '8px', borderRadius: '50%', background: 'var(--status-inactive)' }} />
+                        )}
+                      </td>
+                      <td>
+                        {!isSelf && (
+                          <div style={{ display: 'flex', gap: 'var(--spacing-sm)' }}>
+                            {u.status === 'pending' || u.status === 'unverified' ? (
+                              <>
+                                <button className="btn btn-primary" style={{ padding: 'var(--spacing-xs) var(--spacing-sm)', fontSize: '12px' }} onClick={() => changeStatus(u.email, 'approved')}>Approve</button>
+                                <button className="btn btn-danger" style={{ padding: 'var(--spacing-xs) var(--spacing-sm)', fontSize: '12px' }} onClick={() => changeStatus(u.email, 'revoked')}>Reject</button>
+                              </>
+                            ) : (
+                              <>
+                                {u.status === 'approved' ? (
+                                  <button className="btn" style={{ padding: 'var(--spacing-xs) var(--spacing-sm)', fontSize: '12px' }} onClick={() => changeStatus(u.email, 'revoked')}>Suspend</button>
+                                ) : (
+                                  <button className="btn" style={{ padding: 'var(--spacing-xs) var(--spacing-sm)', fontSize: '12px' }} onClick={() => changeStatus(u.email, 'approved')}>Unsuspend</button>
+                                )}
+                                
+                                {(currentUser.role === 'owner' || u.role !== 'owner') && (
+                                    <>
+                                      {u.role === 'admin' || u.role === 'owner' ? (
+                                        <button className="btn" style={{ padding: 'var(--spacing-xs) var(--spacing-sm)', fontSize: '12px' }} onClick={() => changeRole(u.email, 'user')}>Demote</button>
+                                      ) : (
+                                        <button className="btn" style={{ padding: 'var(--spacing-xs) var(--spacing-sm)', fontSize: '12px' }} onClick={() => changeRole(u.email, 'admin')}>Promote</button>
+                                      )}
+                                      
+                                      {u.email.toLowerCase() !== serverConfig?.owner_email?.toLowerCase() && (
+                                        <button className="btn btn-danger" style={{ padding: 'var(--spacing-xs) var(--spacing-sm)', fontSize: '12px' }} onClick={() => deleteUser(u.email)}>Delete</button>
+                                      )}
+                                    </>
+                                )}
+                              </>
+                            )}
+                          </div>
+                        )}
+                      </td>
+                    </tr>
+                  );
+                })
+              )}
             </tbody>
           </table>
         </div>

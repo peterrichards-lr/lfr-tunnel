@@ -10,6 +10,19 @@ import OnboardingTour from '../components/OnboardingTour';
 import { useSettings } from '../contexts/SettingsContext';
 import { useI18n } from '../contexts/I18nContext';
 
+function isOlderVersion(current: string, target: string): boolean {
+  if (!current || !target) return false;
+  const cParts = current.replace(/^v/, '').split('-')[0].split('.').map(n => parseInt(n) || 0);
+  const tParts = target.replace(/^v/, '').split('-')[0].split('.').map(n => parseInt(n) || 0);
+  for (let i = 0; i < Math.max(cParts.length, tParts.length); i++) {
+    const cVal = cParts[i] || 0;
+    const tVal = tParts[i] || 0;
+    if (cVal < tVal) return true;
+    if (cVal > tVal) return false;
+  }
+  return false;
+}
+
 export default function Dashboard() {
   const { user } = useOutletContext<{ user: any }>();
   const [tokens, setTokens] = useState<any[]>([]);
@@ -38,6 +51,55 @@ export default function Dashboard() {
         <h1 id="dashboard-overview" style={{ fontSize: '32px', fontWeight: 800, letterSpacing: '-1px', marginBottom: 'var(--spacing-sm)' }}>{t('dashboard_overview', 'Dashboard Overview')}</h1>
         <p style={{ color: 'var(--text-muted)', fontSize: '16px' }}>{t('dashboard_desc', 'Manage your active tunnels, domains, and tokens.')}</p>
       </div>
+
+      {user?.last_client_version && serverConfig?.latest_version && isOlderVersion(user.last_client_version, serverConfig.latest_version) && (
+        <div style={{
+          background: 'rgba(245, 158, 11, 0.12)',
+          border: '1px solid rgba(245, 158, 11, 0.25)',
+          color: '#fbbf24',
+          padding: '16px 20px',
+          borderRadius: '12px',
+          marginBottom: '24px',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'space-between',
+          flexWrap: 'wrap',
+          gap: '12px',
+          animation: 'fadeInUp 0.4s ease-out'
+        }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+            <span style={{ fontSize: '20px' }}>🚀</span>
+            <div>
+              <strong style={{ display: 'block', fontSize: '15px', color: '#fbbf24' }}>
+                {t('update_available', 'Update Available')} ({serverConfig.latest_version})
+              </strong>
+              <span style={{ fontSize: '13px', color: 'rgba(251, 191, 36, 0.8)' }}>
+                {t('older_client_warn', 'You are currently running version')} {user.last_client_version}. {t('please_update_client', 'Please update to get the latest features and security improvements.')}
+              </span>
+            </div>
+          </div>
+          <div style={{ display: 'flex', gap: '12px', alignItems: 'center' }}>
+            <code style={{
+              background: 'rgba(0, 0, 0, 0.3)',
+              padding: '6px 12px',
+              borderRadius: '6px',
+              fontSize: '12px',
+              fontFamily: 'monospace',
+              border: '1px solid var(--border)',
+              color: 'var(--text-main)'
+            }}>
+              lfr-tunnel -upgrade
+            </code>
+            <button 
+              className="btn btn-secondary" 
+              style={{ padding: '6px 12px', fontSize: '12px', width: 'auto' }}
+              onClick={() => setIsInstallModalOpen(true)}
+            >
+              {t('view_guide', 'View Guide')}
+            </button>
+          </div>
+        </div>
+      )}
 
       <div className="responsive-grid" style={{ display: 'grid', gridTemplateColumns: '2fr 1fr', gap: 'var(--spacing-xl)', alignItems: 'start', marginBottom: 'var(--spacing-xl)' }}>
         <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--spacing-xl)' }}>

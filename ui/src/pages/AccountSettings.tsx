@@ -6,13 +6,16 @@ import { useI18n } from '../contexts/I18nContext';
 
 export default function AccountSettings() {
   const { user } = useOutletContext<{ user: any }>();
-  const { theme, toggleTheme, useUTC, toggleUTC } = useSettings();
+  const { themePreference, setThemePreference, useUTC, toggleUTC } = useSettings();
   const { language, setLanguage, t, availableLanguages } = useI18n();
 
+  const [firstName, setFirstName] = useState(user?.first_name || '');
+  const [lastName, setLastName] = useState(user?.last_name || '');
   const [preferredName, setPreferredName] = useState(user?.preferred_name || '');
   const [saving, setSaving] = useState(false);
   const [message, setMessage] = useState('');
   
+  const [emailNotifications, setEmailNotifications] = useState(user?.notification_prefs === 'enabled' || !user?.notification_prefs);
   const [mfaEnabled, setMfaEnabled] = useState(user?.totp_enabled || false);
   const [setupData, setSetupData] = useState<{ secret: string, qr: string } | null>(null);
   const [mfaCode, setMfaCode] = useState('');
@@ -29,9 +32,12 @@ export default function AccountSettings() {
     setMessage('');
     try {
       await axios.put('/api/me', {
+        first_name: firstName,
+        last_name: lastName,
         preferred_name: preferredName,
         language_preference: language,
-        theme_preference: theme
+        theme_preference: themePreference,
+        notification_prefs: emailNotifications ? 'enabled' : 'disabled'
       });
       setMessage(t('success_profile_saved', 'Profile updated successfully'));
     } catch {
@@ -102,6 +108,33 @@ export default function AccountSettings() {
               </label>
               <input type="email" className="input-field" value={user?.email || ''} disabled style={{ opacity: 0.7 }} />
             </div>
+
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px', marginBottom: '16px' }}>
+              <div>
+                <label style={{ display: 'block', marginBottom: '8px', fontSize: '14px', color: 'var(--text-muted)' }}>
+                  {t('first_name', 'First Name')}
+                </label>
+                <input 
+                  type="text" 
+                  className="input-field" 
+                  value={firstName} 
+                  onChange={(e) => setFirstName(e.target.value)}
+                  placeholder={t('first_name_placeholder', 'First Name')}
+                />
+              </div>
+              <div>
+                <label style={{ display: 'block', marginBottom: '8px', fontSize: '14px', color: 'var(--text-muted)' }}>
+                  {t('last_name', 'Last Name')}
+                </label>
+                <input 
+                  type="text" 
+                  className="input-field" 
+                  value={lastName} 
+                  onChange={(e) => setLastName(e.target.value)}
+                  placeholder={t('last_name_placeholder', 'Last Name')}
+                />
+              </div>
+            </div>
             
             <div style={{ marginBottom: '16px' }}>
               <label style={{ display: 'block', marginBottom: '8px', fontSize: '14px', color: 'var(--text-muted)' }}>
@@ -131,12 +164,24 @@ export default function AccountSettings() {
               <label style={{ display: 'block', marginBottom: '8px', fontSize: '14px', color: 'var(--text-muted)' }}>
                 {t('theme', 'Theme Preference')}
               </label>
-              <select className="input-field" value={theme} onChange={(e) => {
-                if(e.target.value !== theme) toggleTheme();
+              <select className="input-field" value={themePreference} onChange={(e) => {
+                setThemePreference(e.target.value as any);
               }}>
                 <option value="light">{t('theme_light', 'Light')}</option>
                 <option value="dark">{t('theme_dark', 'Dark')}</option>
+                <option value="system">{t('theme_system', 'System Default')}</option>
+                <option value="time">{t('theme_time', 'Time of Day')}</option>
               </select>
+            </div>
+
+            <div style={{ marginBottom: '16px', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+              <label style={{ fontSize: '14px', color: 'var(--text-muted)' }}>
+                {t('email_notifications', 'Email Notifications')}
+              </label>
+              <label className="switch">
+                <input type="checkbox" checked={emailNotifications} onChange={(e) => setEmailNotifications(e.target.checked)} />
+                <span className="slider round"></span>
+              </label>
             </div>
 
             <div style={{ marginBottom: '24px', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>

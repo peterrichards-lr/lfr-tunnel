@@ -168,7 +168,13 @@ export default function AdminSubdomains() {
     <div>
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 'var(--spacing-xl)' }}>
         <h3>Registered Subdomains</h3>
-        <a href="/api/admin/leases/export" className="btn btn-secondary">Export CSV</a>
+        <a 
+          href="/api/admin/leases/export" 
+          className="btn btn-secondary" 
+          style={{ width: 'auto', whiteSpace: 'nowrap', display: 'inline-flex', alignItems: 'center', gap: '8px' }}
+        >
+          📥 {t('export_csv', 'Export CSV')}
+        </a>
       </div>
       <div style={{ marginBottom: 'var(--spacing-lg)' }}>
         <input 

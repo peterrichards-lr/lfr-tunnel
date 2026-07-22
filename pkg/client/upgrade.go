@@ -349,6 +349,13 @@ func SelfUpgrade(currentVersion string, serverURL string) error {
 
 	migrated := false
 	if configuredInstallDir != "" {
+		configuredInstallDir = os.ExpandEnv(configuredInstallDir)
+		if strings.HasPrefix(configuredInstallDir, "~/") || strings.HasPrefix(configuredInstallDir, "~\\") {
+			home, err := os.UserHomeDir()
+			if err == nil {
+				configuredInstallDir = filepath.Join(home, configuredInstallDir[2:])
+			}
+		}
 		expectedTarget := filepath.Join(configuredInstallDir, "lfr-tunnel")
 		if runtime.GOOS == "windows" {
 			expectedTarget += ".exe"

@@ -336,10 +336,13 @@ export default function AdminSettings() {
         <div className="form-group" style={{ marginTop: '16px' }}>
           <label>Allocation Rule</label>
           <select className="input-field" value={allocationRule} onChange={(e) => setAllocationRule(e.target.value)}>
-            <option value="round_robin">Round Robin</option>
-            <option value="least_connections">Least Connections</option>
-            <option value="consistent_hashing">Consistent Hashing</option>
-            <option value="random">Random</option>
+            <option value="contextual">Contextual (Match requesting domain)</option>
+            <option value="preference">Preference (Use configured domain list order)</option>
+            <option value="user-preference">User Preference (Use user's preferred domain)</option>
+            <option value="round-robin">Round Robin (Sequential load balancing)</option>
+            <option value="hashing">Deterministic Hashing (Consistent for user/IP)</option>
+            <option value="least-connections">Least Connections (Load-based allocation)</option>
+            <option value="random">Random Allocation</option>
           </select>
         </div>
         <div className="form-group">

@@ -130,7 +130,7 @@ func main() {
 		if info.MaintenanceMode == "true" {
 			slog.Info("[Client] The Gateway server is currently undergoing maintenance.")
 			slog.Info("[Client] Check the service status page for active outages:")
-			slog.Info("         👉 https://status.lfr-demo.se (Cmd/Ctrl+Click to open)")
+			slog.Info(fmt.Sprintf("         👉 %s (Cmd/Ctrl+Click to open)", config.DefaultStatusPageURL))
 			os.Exit(1)
 		}
 		if config.Version != "dev" {
@@ -519,7 +519,7 @@ func performRegistrationHandshake(cfg *config.ClientConfig, portMappings []clien
 			slog.Info(fmt.Sprintf("[Error] Failed to register: %v\n", err))
 			slog.Info("[Client] Gateway appears to be offline or undergoing maintenance.")
 			slog.Info("[Client] Check the service status page for active outages:")
-			slog.Info("         👉 https://status.lfr-demo.se (Cmd/Ctrl+Click to open)")
+			slog.Info(fmt.Sprintf("         👉 %s (Cmd/Ctrl+Click to open)", config.DefaultStatusPageURL))
 			os.Exit(1)
 		} else {
 			log.Fatalf("[Error] Failed to register: %v\n", err)

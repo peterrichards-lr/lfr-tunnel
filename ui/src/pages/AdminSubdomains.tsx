@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import axios from 'axios';
 import { useTableSort } from '../hooks/useTableSort';
 import Skeleton from '../components/Skeleton';
+import { useI18n } from '../contexts/I18nContext';
 
 interface TunnelLease {
   user_id: string;
@@ -20,6 +21,7 @@ interface TunnelLease {
 export default function AdminSubdomains() {
   const [leases, setLeases] = useState<TunnelLease[]>([]);
   const [loading, setLoading] = useState(true);
+  const { t } = useI18n();
   const [page, setPage] = useState(0);
   const ROWS_PER_PAGE = 15;
 
@@ -113,7 +115,7 @@ export default function AdminSubdomains() {
       <div style={{ marginBottom: 'var(--spacing-lg)' }}>
         <input 
           type="text" 
-          placeholder="Search subdomains..." 
+          placeholder={t('search_subdomains_placeholder', 'Search subdomains...')} 
           value={searchQuery} 
           onChange={e => { setSearchQuery(e.target.value); setPage(0); }}
           style={{ padding: 'var(--spacing-sm) var(--spacing-md)', width: '100%', maxWidth: '300px', background: 'var(--input-bg)', color: 'var(--text-main)', border: '1px solid var(--border)', borderRadius: '6px' }}

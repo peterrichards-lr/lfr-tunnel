@@ -974,7 +974,7 @@ The solution will consist of:
 - [x] Improve V2 UI token status badge contrast ratios in light/dark themes (#703).
 
 ## V2 Portal i18n Search Placeholders (v1.34.12)
-- [/] Refactor hardcoded placeholders to translate hooks (#701)
+- [x] Refactor hardcoded placeholders to translate hooks (#701)
 
 <!-- markdownlint-disable MD049 -->
 ---

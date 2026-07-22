@@ -88,7 +88,7 @@ export default function Dashboard() {
               <div style={{ marginBottom: 'var(--spacing-lg)' }}>
                 <input 
                   type="text" 
-                  placeholder="Search tokens..." 
+                  placeholder={t('search_tokens_placeholder', 'Search tokens...')} 
                   value={searchQuery} 
                   onChange={e => setSearchQuery(e.target.value)}
                   style={{ padding: 'var(--spacing-sm) var(--spacing-md)', width: '100%', maxWidth: '300px', background: 'var(--input-bg)', color: 'var(--text-main)', border: '1px solid var(--border)', borderRadius: '6px' }}

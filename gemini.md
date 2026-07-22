@@ -16,6 +16,8 @@ Build an open-source, MIT-licensed tunneling solution tailored for Liferay's Sal
   *Active Constraint*: Before executing `git push` or `gh pr create`, you MUST first execute `git fetch origin && git merge origin/master`. You are FORBIDDEN from pushing without first synchronizing the `gemini.md` state with the remote master.
 - **Strict Branch Protection Compliance**: 
   *Active Constraint*: When merging PRs, you are FORBIDDEN from using `--admin`. You MUST execute `gh pr merge --auto` or wait for the user to approve and merge. You MUST halt your turn and wait for CI checks to pass before assuming a merge is complete.
+- **Mandatory Client Binary Signing**:
+  *Active Constraint*: You are FORBIDDEN from deploying client binaries to the VPS or creating a final release unless you have successfully executed codesigning signatures on the binaries. You MUST run the signing command using 1Password credentials integration (`op run -- ./bin/lfr-tunnel-ops sign` or equivalent CLI options) to ensure Darwin, Windows, and Linux targets are properly signed.
 
 
 

@@ -75,7 +75,7 @@ export default function TunnelsPanel({ tunnels, serverConfig, user }: Props) {
             </thead>
             <tbody>
               {sortedTunnels.map((tItem, idx) => (
-                <tr key={idx} style={{ borderBottom: '1px solid rgba(255,255,255,0.05)', transition: 'background 0.2s', cursor: 'pointer' }} onMouseOver={e => e.currentTarget.style.background = 'rgba(255,255,255,0.03)'} onMouseOut={e => e.currentTarget.style.background = 'transparent'}>
+                <tr key={idx} style={{ cursor: 'pointer' }}>
                   <td style={{ padding: '16px', fontWeight: 600, fontSize: '14px' }}>{tItem.subdomain_prefix}</td>
                   <td style={{ padding: '16px', fontSize: '14px' }}>
                     <a href={`https://${tItem.full_host}`} target="_blank" rel="noreferrer" style={{ color: 'var(--primary)', textDecoration: 'none', fontWeight: 500 }}>

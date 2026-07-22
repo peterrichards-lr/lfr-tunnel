@@ -1,5 +1,17 @@
 [
   {
+    "version": "v1.43.8",
+    "release_date": "2026-07-22",
+    "features": [
+      "Feature: Shift Personal Access Tokens CSV generation to a server-side route (#735)",
+      "Feature: Add active subdomains CSV download capability in active subdomains dashboard (#735)",
+      "Fix: Aligned PDF print layout elements and styling for cleaner multi-page reports (#735)",
+      "Fix: Restore Users list Last Seen and Quota details columns, and add quota settings and reset MFA inside User Details Modal (#737)",
+      "Fix: Restore Subdomains quarantined/extension requested statuses, Extend reservation trigger, and CLI copy utilities (#738)",
+      "Fix: Align router segment checks to support both tunnels-limit and tunnels_limit validation formats (#737)"
+    ]
+  },
+  {
     "version": "v1.43.7",
     "release_date": "2026-07-22",
     "features": [

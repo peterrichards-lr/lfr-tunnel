@@ -13,6 +13,7 @@ import (
 	"path/filepath"
 	"runtime"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 
@@ -311,6 +312,7 @@ func TestServer_CheckSubdomain(t *testing.T) {
 }
 
 type mockMailSender struct {
+	mu           sync.Mutex
 	sentTo       string
 	sentSubject  string
 	sentTextBody string
@@ -318,11 +320,19 @@ type mockMailSender struct {
 }
 
 func (m *mockMailSender) Send(to string, subject string, textBody string, htmlBody string) error {
+	m.mu.Lock()
+	defer m.mu.Unlock()
 	m.sentTo = to
 	m.sentSubject = subject
 	m.sentTextBody = textBody
 	m.sentHtmlBody = htmlBody
 	return nil
+}
+
+func (m *mockMailSender) getSent() (string, string) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	return m.sentTo, m.sentTextBody
 }
 
 func TestServer_RegistrationFlow(t *testing.T) {
@@ -353,6 +363,19 @@ func TestServer_RegistrationFlow(t *testing.T) {
 	mockMail := &mockMailSender{}
 	srv.notifications = NewNotificationService(mockMail, srv.db, srv.cfg)
 
+	waitForMail := func(expectedTo string, timeout time.Duration) (string, string) {
+		start := time.Now()
+		for time.Since(start) < timeout {
+			to, body := mockMail.getSent()
+			if to == expectedTo {
+				return to, body
+			}
+			time.Sleep(10 * time.Millisecond)
+		}
+		to, body := mockMail.getSent()
+		return to, body
+	}
+
 	// 1. Submit registration request
 	reqBody, _ := json.Marshal(RegisterRequestPayload{
 		Email:     "developer@liferay.com",
@@ -378,9 +401,9 @@ func TestServer_RegistrationFlow(t *testing.T) {
 	}
 
 	// Verify developer verification email was sent
-	time.Sleep(50 * time.Millisecond)
-	if mockMail.sentTo != "developer@liferay.com" || !strings.Contains(mockMail.sentTextBody, "/setup?token=") {
-		t.Errorf("developer verification email not sent correctly, got to=%s, body=%s", mockMail.sentTo, mockMail.sentTextBody)
+	sentTo, sentBody := waitForMail("developer@liferay.com", 2*time.Second)
+	if sentTo != "developer@liferay.com" || !strings.Contains(sentBody, "/setup?token=") {
+		t.Errorf("developer verification email not sent correctly, got to=%s, body=%s", sentTo, sentBody)
 	}
 
 	// 1.5. Developer completes setup
@@ -405,9 +428,9 @@ func TestServer_RegistrationFlow(t *testing.T) {
 	}
 
 	// Verify admin notification email was sent
-	time.Sleep(50 * time.Millisecond)
-	if mockMail.sentTo != "admin@example.com" || (!strings.Contains(mockMail.sentTextBody, "/api/admin/approve") && !strings.Contains(mockMail.sentTextBody, "has verified their email")) {
-		t.Errorf("admin notification email not sent correctly, got to=%s, body=%s", mockMail.sentTo, mockMail.sentTextBody)
+	adminTo, adminBody := waitForMail("admin@example.com", 2*time.Second)
+	if adminTo != "admin@example.com" || (!strings.Contains(adminBody, "/api/admin/approve") && !strings.Contains(adminBody, "has verified their email")) {
+		t.Errorf("admin notification email not sent correctly, got to=%s, body=%s", adminTo, adminBody)
 	}
 
 	// 2. Admin approves user

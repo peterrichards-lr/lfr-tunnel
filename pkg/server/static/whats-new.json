@@ -1,5 +1,16 @@
 [
   {
+    "version": "v1.43.10",
+    "release_date": "2026-07-22",
+    "features": [
+      "Fix: Resolve Personal Access Tokens table column mapping to display Name and Prefix (#749)",
+      "Feature: Show all registered Subdomain Reservations in Admin Subdomains list with Online/Offline status badges (#750)",
+      "Feature: Add global Top Tunnels by Bandwidth doughnut chart in Admin Analytics statistics (#751)",
+      "Fix: Map system Audit Log Actor and Resource table columns to backend fields (#752)",
+      "Fix: Implement client-side YAML formatter for Server Configuration display in Settings (#753)"
+    ]
+  },
+  {
     "version": "v1.43.9",
     "release_date": "2026-07-22",
     "features": [

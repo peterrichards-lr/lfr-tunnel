@@ -191,18 +191,18 @@ func DefaultServerConfig() *ServerConfig {
 		PortalSessionDuration:   24 * time.Hour,
 		MinClientVersion:        "v1.0.0",
 		LatestClientVersion:     "",
-		DocumentationURL:        "https://github.com/peterrichards-lr/lfr-tunnel/tree/master/docs",
-		RepositoryURL:           "https://github.com/peterrichards-lr/lfr-tunnel",
-		SecureTokenGuideURL:     "https://github.com/peterrichards-lr/lfr-tunnel/blob/master/docs/getting_started.md#option-c-restricted-secrets-file-advanced--secure",
-		DockerHubURL:            "https://hub.docker.com/r/peterjrichards/lfr-tunnel",
-		StatusPageURL:           "https://status.lfr-demo.se",
+		DocumentationURL:        DefaultDocumentationURL,
+		RepositoryURL:           DefaultRepositoryURL,
+		SecureTokenGuideURL:     DefaultSecureTokenGuideURL,
+		DockerHubURL:            DefaultDockerHubURL,
+		StatusPageURL:           DefaultStatusPageURL,
 		PruneInterval:           1 * time.Hour,
 		MagicLinkExpiry:         15 * time.Minute,
 		PATRetentionDays:        30,
 		InviteLinkExpiry:        7 * 24 * time.Hour,
 		VerificationLinkExpiry:  24 * time.Hour,
 		DockerImage:             "peterjrichards/lfr-tunnel:latest",
-		DockerBypassURL:         "https://github.com/peterrichards-lr/lfr-tunnel/blob/master/docs/liferay-se-guide.md#using-the-docker-wrapper-edr-bypass",
+		DockerBypassURL:         DefaultDockerBypassURL,
 		VisitorTimeout:          5 * time.Minute,
 		EnableWAF:               true,
 		RoleSettings: map[string]RoleSetting{
@@ -263,7 +263,7 @@ func DefaultServerConfig() *ServerConfig {
 // DefaultClientConfig returns a ClientConfig with sensible default values.
 func DefaultClientConfig() *ClientConfig {
 	return &ClientConfig{
-		ServerURL: "https://tunnel.lfr-demo.se",
+		ServerURL: DefaultServerURL,
 		Ports:     []int{8080},
 		Regions:   map[string]string{}, // Regions are now fetched dynamically from the Control Plane at runtime
 	}

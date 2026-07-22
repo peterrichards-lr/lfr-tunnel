@@ -11,6 +11,8 @@ import (
 	"runtime"
 	"strings"
 	"time"
+
+	"lfr-tunnel/pkg/config"
 )
 
 // RunLogin initiates the hybrid CLI login flow.
@@ -47,7 +49,7 @@ func RunLogin(serverURL string) error {
 
 	portalURL := strings.Replace(serverURL, "tunnel.", "portal.", 1)
 	if !strings.Contains(portalURL, "portal.") {
-		portalURL = "https://portal.lfr-demo.se" // Fallback to our canonical portal URL
+		portalURL = config.DefaultPortalURL // Fallback to our canonical portal URL
 	}
 
 	fmt.Println("Opening your browser to authenticate...")

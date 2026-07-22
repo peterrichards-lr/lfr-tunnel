@@ -31,7 +31,7 @@ export default function AdminMagicLinks() {
     fetchLinks();
   }, []);
 
-  const { items: sortedLinks, requestSort, getSortIndicator, searchQuery, setSearchQuery } = useTableSort(links, ['email', 'client_ip']);
+  const { items: sortedLinks, requestSort, getSortIndicator, searchQuery, setSearchQuery, getAriaSort } = useTableSort(links, ['email', 'client_ip']);
   if (loading) {
     return (
       <div style={{ animation: 'fadeInUp 0.6s ease-out' }}>
@@ -109,10 +109,10 @@ export default function AdminMagicLinks() {
             <table className="table">
               <thead>
                 <tr>
-                  <th style={{ cursor: 'pointer' }} onClick={() => requestSort('email')}>Email{getSortIndicator('email')}</th>
-                  <th style={{ cursor: 'pointer' }} onClick={() => requestSort('client_ip')}>IP Address{getSortIndicator('client_ip')}</th>
-                  <th style={{ cursor: 'pointer' }} onClick={() => requestSort('expires_at')}>Expires{getSortIndicator('expires_at')}</th>
-                  <th style={{ cursor: 'pointer' }} onClick={() => requestSort('used_at')}>Used At{getSortIndicator('used_at')}</th>
+                  <th style={{ cursor: 'pointer' }} onClick={() => requestSort('email')} aria-sort={getAriaSort('email')}>Email{getSortIndicator('email')}</th>
+                  <th style={{ cursor: 'pointer' }} onClick={() => requestSort('client_ip')} aria-sort={getAriaSort('client_ip')}>IP Address{getSortIndicator('client_ip')}</th>
+                  <th style={{ cursor: 'pointer' }} onClick={() => requestSort('expires_at')} aria-sort={getAriaSort('expires_at')}>Expires{getSortIndicator('expires_at')}</th>
+                  <th style={{ cursor: 'pointer' }} onClick={() => requestSort('used_at')} aria-sort={getAriaSort('used_at')}>Used At{getSortIndicator('used_at')}</th>
                 </tr>
               </thead>
               <tbody>

@@ -58,7 +58,7 @@ export default function AdminSubdomains() {
     }
   };
 
-  const { items: sortedLeases, requestSort, getSortIndicator, searchQuery, setSearchQuery } = useTableSort(leases, ['subdomain_prefix', 'full_host', 'node_id', 'client_ip']);
+  const { items: sortedLeases, requestSort, getSortIndicator, searchQuery, setSearchQuery, getAriaSort } = useTableSort(leases, ['subdomain_prefix', 'full_host', 'node_id', 'client_ip']);
   if (loading) {
     return (
       <div style={{ animation: 'fadeInUp 0.6s ease-out' }}>
@@ -124,12 +124,12 @@ export default function AdminSubdomains() {
           <table>
             <thead>
               <tr>
-                <th style={{ cursor: 'pointer' }} onClick={() => requestSort('subdomain_prefix')}>Subdomain{getSortIndicator('subdomain_prefix')}</th>
-                <th style={{ cursor: 'pointer' }} onClick={() => requestSort('full_host')}>Target Host{getSortIndicator('full_host')}</th>
-                <th style={{ cursor: 'pointer' }} onClick={() => requestSort('node_id')}>Node{getSortIndicator('node_id')}</th>
-                <th style={{ cursor: 'pointer' }} onClick={() => requestSort('client_ip')}>Client IP{getSortIndicator('client_ip')}</th>
-                <th style={{ cursor: 'pointer' }} onClick={() => requestSort('bytes_in')}>Bytes In{getSortIndicator('bytes_in')}</th>
-                <th style={{ cursor: 'pointer' }} onClick={() => requestSort('bytes_out')}>Bytes Out{getSortIndicator('bytes_out')}</th>
+                <th style={{ cursor: 'pointer' }} onClick={() => requestSort('subdomain_prefix')} aria-sort={getAriaSort('subdomain_prefix')}>Subdomain{getSortIndicator('subdomain_prefix')}</th>
+                <th style={{ cursor: 'pointer' }} onClick={() => requestSort('full_host')} aria-sort={getAriaSort('full_host')}>Target Host{getSortIndicator('full_host')}</th>
+                <th style={{ cursor: 'pointer' }} onClick={() => requestSort('node_id')} aria-sort={getAriaSort('node_id')}>Node{getSortIndicator('node_id')}</th>
+                <th style={{ cursor: 'pointer' }} onClick={() => requestSort('client_ip')} aria-sort={getAriaSort('client_ip')}>Client IP{getSortIndicator('client_ip')}</th>
+                <th style={{ cursor: 'pointer' }} onClick={() => requestSort('bytes_in')} aria-sort={getAriaSort('bytes_in')}>Bytes In{getSortIndicator('bytes_in')}</th>
+                <th style={{ cursor: 'pointer' }} onClick={() => requestSort('bytes_out')} aria-sort={getAriaSort('bytes_out')}>Bytes Out{getSortIndicator('bytes_out')}</th>
                 <th>Actions</th>
               </tr>
             </thead>

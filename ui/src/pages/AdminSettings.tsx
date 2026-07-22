@@ -69,7 +69,7 @@ export default function AdminSettings() {
     }
   };
 
-  const { items: sortedBackups, requestSort, getSortIndicator, searchQuery, setSearchQuery } = useTableSort(backups, ['filename']);
+  const { items: sortedBackups, requestSort, getSortIndicator, searchQuery, setSearchQuery, getAriaSort } = useTableSort(backups, ['filename']);
 
 
   useEffect(() => {
@@ -312,9 +312,9 @@ export default function AdminSettings() {
             <table className="table">
               <thead>
                 <tr style={{ borderBottom: '1px solid var(--border)', textAlign: 'left' }}>
-                  <th style={{ padding: '12px 16px', color: 'var(--text-muted)', fontWeight: 600, fontSize: '13px', textTransform: 'uppercase', letterSpacing: '0.5px', cursor: 'pointer' }} onClick={() => requestSort('filename')}>Filename{getSortIndicator('filename')}</th>
-                  <th style={{ padding: '12px 16px', color: 'var(--text-muted)', fontWeight: 600, fontSize: '13px', textTransform: 'uppercase', letterSpacing: '0.5px', cursor: 'pointer' }} onClick={() => requestSort('size_bytes')}>Size{getSortIndicator('size_bytes')}</th>
-                  <th style={{ padding: '12px 16px', color: 'var(--text-muted)', fontWeight: 600, fontSize: '13px', textTransform: 'uppercase', letterSpacing: '0.5px', cursor: 'pointer' }} onClick={() => requestSort('created_at')}>Created At{getSortIndicator('created_at')}</th>
+                  <th style={{ padding: '12px 16px', color: 'var(--text-muted)', fontWeight: 600, fontSize: '13px', textTransform: 'uppercase', letterSpacing: '0.5px', cursor: 'pointer' }} onClick={() => requestSort('filename')} aria-sort={getAriaSort('filename')}>Filename{getSortIndicator('filename')}</th>
+                  <th style={{ padding: '12px 16px', color: 'var(--text-muted)', fontWeight: 600, fontSize: '13px', textTransform: 'uppercase', letterSpacing: '0.5px', cursor: 'pointer' }} onClick={() => requestSort('size_bytes')} aria-sort={getAriaSort('size_bytes')}>Size{getSortIndicator('size_bytes')}</th>
+                  <th style={{ padding: '12px 16px', color: 'var(--text-muted)', fontWeight: 600, fontSize: '13px', textTransform: 'uppercase', letterSpacing: '0.5px', cursor: 'pointer' }} onClick={() => requestSort('created_at')} aria-sort={getAriaSort('created_at')}>Created At{getSortIndicator('created_at')}</th>
                   <th style={{ padding: '12px 16px', color: 'var(--text-muted)', fontWeight: 600, fontSize: '13px', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Actions</th>
                 </tr>
               </thead>

@@ -61,7 +61,7 @@ export default function AdminBlacklist() {
     }
   };
 
-  const { items: sortedEntries, requestSort, getSortIndicator, searchQuery, setSearchQuery } = useTableSort(entries, ['ip', 'reason']);
+  const { items: sortedEntries, requestSort, getSortIndicator, searchQuery, setSearchQuery, getAriaSort } = useTableSort(entries, ['ip', 'reason']);
 
   if (loading) {
     return (
@@ -164,9 +164,9 @@ export default function AdminBlacklist() {
           <table style={{ width: '100%', borderCollapse: 'collapse' }}>
             <thead>
               <tr style={{ borderBottom: '1px solid var(--border)', textAlign: 'left' }}>
-                <th style={{ padding: '12px 16px', color: 'var(--text-muted)', fontWeight: 600, fontSize: '13px', cursor: 'pointer' }} onClick={() => requestSort('ip')}>IP Address{getSortIndicator('ip')}</th>
-                <th style={{ padding: '12px 16px', color: 'var(--text-muted)', fontWeight: 600, fontSize: '13px', cursor: 'pointer' }} onClick={() => requestSort('reason')}>Reason{getSortIndicator('reason')}</th>
-                <th style={{ padding: '12px 16px', color: 'var(--text-muted)', fontWeight: 600, fontSize: '13px', cursor: 'pointer' }} onClick={() => requestSort('created_at')}>Blocked At{getSortIndicator('created_at')}</th>
+                <th style={{ padding: '12px 16px', color: 'var(--text-muted)', fontWeight: 600, fontSize: '13px', cursor: 'pointer' }} onClick={() => requestSort('ip')} aria-sort={getAriaSort('ip')}>IP Address{getSortIndicator('ip')}</th>
+                <th style={{ padding: '12px 16px', color: 'var(--text-muted)', fontWeight: 600, fontSize: '13px', cursor: 'pointer' }} onClick={() => requestSort('reason')} aria-sort={getAriaSort('reason')}>Reason{getSortIndicator('reason')}</th>
+                <th style={{ padding: '12px 16px', color: 'var(--text-muted)', fontWeight: 600, fontSize: '13px', cursor: 'pointer' }} onClick={() => requestSort('created_at')} aria-sort={getAriaSort('created_at')}>Blocked At{getSortIndicator('created_at')}</th>
                 <th style={{ padding: '12px 16px', color: 'var(--text-muted)', fontWeight: 600, fontSize: '13px', textAlign: 'right' }}>Actions</th>
               </tr>
             </thead>

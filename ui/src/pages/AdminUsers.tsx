@@ -5,6 +5,7 @@ import { useI18n } from '../contexts/I18nContext';
 import { useTableSort } from '../hooks/useTableSort';
 import Skeleton from '../components/Skeleton';
 import { useUI } from '../contexts/UIContext';
+import { useSettings } from '../contexts/SettingsContext';
 
 interface User {
   id: string;
@@ -16,6 +17,10 @@ interface User {
   auth_method: string;
   portal_active: boolean;
   rate_limit?: number;
+  max_reservations?: number;
+  max_tunnels?: number;
+  last_login_at?: string;
+  totp_enabled?: boolean;
   preferred_domain?: string;
   created_at?: string;
   onboarding_status?: string;
@@ -46,6 +51,7 @@ export default function AdminUsers() {
   const { t } = useI18n();
   const { user: currentUser } = useOutletContext<{ user: any }>();
   const { showToast, showConfirm, showPrompt } = useUI();
+  const { formatDate } = useSettings();
   const [users, setUsers] = useState<User[]>([]);
   const [loading, setLoading] = useState(true);
   const [selectedUser, setSelectedUser] = useState<User | null>(null);
@@ -58,6 +64,88 @@ export default function AdminUsers() {
   const [isSendingTargeted, setIsSendingTargeted] = useState(false);
 
   const [showInviteModal, setShowInviteModal] = useState(false);
+  const [modalRateLimit, setModalRateLimit] = useState(0);
+  const [modalMaxReservations, setModalMaxReservations] = useState(3);
+  const [modalMaxTunnels, setModalMaxTunnels] = useState(3);
+  const [updatingLimits, setUpdatingLimits] = useState(false);
+
+  useEffect(() => {
+    if (selectedUser) {
+      setModalRateLimit(selectedUser.rate_limit || 0);
+      setModalMaxReservations(selectedUser.max_reservations !== undefined && selectedUser.max_reservations !== null ? selectedUser.max_reservations : 3);
+      setModalMaxTunnels(selectedUser.max_tunnels !== undefined && selectedUser.max_tunnels !== null ? selectedUser.max_tunnels : 3);
+    }
+  }, [selectedUser]);
+
+  const updateRateLimit = async () => {
+    if (!selectedUser) return;
+    try {
+      setUpdatingLimits(true);
+      await axios.patch(`/api/admin/users/${encodeURIComponent(selectedUser.email)}`, {
+        rate_limit: Number(modalRateLimit)
+      });
+      showToast('Rate limit updated successfully', 'success');
+      setUsers(prev => prev.map(u => u.email === selectedUser.email ? { ...u, rate_limit: Number(modalRateLimit) } : u));
+      setSelectedUser(prev => prev ? { ...prev, rate_limit: Number(modalRateLimit) } : null);
+      fetchUsers();
+    } catch (e: any) {
+      showToast(e.response?.data?.error || 'Failed to update rate limit', 'error');
+    } finally {
+      setUpdatingLimits(false);
+    }
+  };
+
+  const updateSubdomainLimit = async () => {
+    if (!selectedUser) return;
+    try {
+      setUpdatingLimits(true);
+      await axios.post(`/api/admin/users/${encodeURIComponent(selectedUser.email)}/limit`, {
+        max_reservations: Number(modalMaxReservations)
+      });
+      showToast('Subdomain reservation limit updated successfully', 'success');
+      setUsers(prev => prev.map(u => u.email === selectedUser.email ? { ...u, max_reservations: Number(modalMaxReservations) } : u));
+      setSelectedUser(prev => prev ? { ...prev, max_reservations: Number(modalMaxReservations) } : null);
+      fetchUsers();
+    } catch (e: any) {
+      showToast(e.response?.data?.error || 'Failed to update subdomain limit', 'error');
+    } finally {
+      setUpdatingLimits(false);
+    }
+  };
+
+  const updateTunnelsLimit = async () => {
+    if (!selectedUser) return;
+    try {
+      setUpdatingLimits(true);
+      await axios.post(`/api/admin/users/${encodeURIComponent(selectedUser.email)}/tunnels-limit`, {
+        max_tunnels: Number(modalMaxTunnels)
+      });
+      showToast('Tunnels concurrency limit updated successfully', 'success');
+      setUsers(prev => prev.map(u => u.email === selectedUser.email ? { ...u, max_tunnels: Number(modalMaxTunnels) } : u));
+      setSelectedUser(prev => prev ? { ...prev, max_tunnels: Number(modalMaxTunnels) } : null);
+      fetchUsers();
+    } catch (e: any) {
+      showToast(e.response?.data?.error || 'Failed to update tunnels limit', 'error');
+    } finally {
+      setUpdatingLimits(false);
+    }
+  };
+
+  const resetUserMFA = async () => {
+    if (!selectedUser) return;
+    if (!(await showConfirm('Reset MFA', `Are you sure you want to reset Multi-Factor Authentication (MFA) for ${selectedUser.email}? This will force the user to re-register their TOTP auth device on next login.`))) return;
+    try {
+      await axios.patch(`/api/admin/users/${encodeURIComponent(selectedUser.email)}`, {
+        reset_mfa: true
+      });
+      showToast('Multi-Factor Authentication reset successfully', 'success');
+      setUsers(prev => prev.map(u => u.email === selectedUser.email ? { ...u, totp_enabled: false } : u));
+      setSelectedUser(prev => prev ? { ...prev, totp_enabled: false } : null);
+      fetchUsers();
+    } catch (e: any) {
+      showToast(e.response?.data?.error || 'Failed to reset MFA', 'error');
+    }
+  };
   const [inviteForm, setInviteForm] = useState({ email: '', first_name: '', last_name: '', language_preference: 'en' });
   const [inviteError, setInviteError] = useState('');
   const [isInviting, setIsInviting] = useState(false);
@@ -182,7 +270,7 @@ export default function AdminUsers() {
     }
   });
 
-  const { items: sortedUsers, requestSort, getSortIndicator, searchQuery, setSearchQuery, getAriaSort } = useTableSort(filteredUsers, ['email', 'first_name', 'last_name', 'role', 'status', 'auth_method']);
+  const { items: sortedUsers, requestSort, getSortIndicator, searchQuery, setSearchQuery, getAriaSort } = useTableSort(filteredUsers, ['email', 'first_name', 'last_name', 'role', 'status', 'auth_method', 'last_login_at']);
   if (loading) {
     return (
       <div style={{ animation: 'fadeInUp 0.6s ease-out' }}>
@@ -309,14 +397,15 @@ export default function AdminUsers() {
                 <th style={{ cursor: 'pointer' }} onClick={() => requestSort('role')} aria-sort={getAriaSort('role')}>Role{getSortIndicator('role')}</th>
                 <th style={{ cursor: 'pointer' }} onClick={() => requestSort('status')} aria-sort={getAriaSort('status')}>Status{getSortIndicator('status')}</th>
                 <th style={{ cursor: 'pointer' }} onClick={() => requestSort('auth_method')} aria-sort={getAriaSort('auth_method')}>Auth Method{getSortIndicator('auth_method')}</th>
-                <th style={{ cursor: 'pointer' }} onClick={() => requestSort('portal_active')} aria-sort={getAriaSort('portal_active')}>Portal Active{getSortIndicator('portal_active')}</th>
+                <th>Quotas</th>
+                <th style={{ cursor: 'pointer' }} onClick={() => requestSort('last_login_at')} aria-sort={getAriaSort('last_login_at')}>Last Seen{getSortIndicator('last_login_at')}</th>
                 <th>Actions</th>
               </tr>
             </thead>
             <tbody>
               {sortedUsers.length === 0 ? (
                 <tr>
-                  <td colSpan={6} style={{ textAlign: 'center', padding: 'var(--spacing-xl)', color: 'var(--text-muted)' }}>
+                  <td colSpan={7} style={{ textAlign: 'center', padding: 'var(--spacing-xl)', color: 'var(--text-muted)' }}>
                     {activeTab === 'users' ? t('no_users_found', 'No users found.') : t('no_pending_registrations', 'No pending registrations.')}
                   </td>
                 </tr>
@@ -326,27 +415,36 @@ export default function AdminUsers() {
                   return (
                     <tr key={u.email} style={isSelf ? { opacity: 0.6 } : {}}>
                       <td>
-                        <div style={{ fontWeight: 500 }}>
-                          {u.first_name} {u.last_name}
-                        </div>
-                        <div style={{ fontSize: '12px', color: 'var(--text-muted)' }}>
-                          <a 
-                            href="#" 
-                            onClick={(e) => { e.preventDefault(); setSelectedUser(u); }}
-                            className="email-link"
-                          >
-                            {u.email}
-                          </a>
-                          {(u.active_tunnels?.length || 0) > 0 && (
-                            <span 
-                              className="badge tunnels" 
-                              onClick={() => setSelectedUser(u)}
-                              style={{ cursor: 'pointer', padding: '2px var(--spacing-sm)', fontSize: '11px', marginLeft: 'var(--spacing-sm)' }}
-                              title="Click to view tunnels"
-                            >
-                              🔌 {u.active_tunnels!.length} Tunnel{(u.active_tunnels!.length) > 1 ? 's' : ''}
-                            </span>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                          {u.portal_active ? (
+                            <div style={{ width: '8px', height: '8px', borderRadius: '50%', background: 'var(--success)', boxShadow: '0 0 8px var(--success)', flexShrink: 0 }} title="Online" />
+                          ) : (
+                            <div style={{ width: '8px', height: '8px', borderRadius: '50%', background: 'var(--status-inactive)', flexShrink: 0 }} title="Offline" />
                           )}
+                          <div>
+                            <div style={{ fontWeight: 500 }}>
+                              {u.first_name} {u.last_name}
+                            </div>
+                            <div style={{ fontSize: '12px', color: 'var(--text-muted)' }}>
+                              <a 
+                                href="#" 
+                                onClick={(e) => { e.preventDefault(); setSelectedUser(u); }}
+                                className="email-link"
+                              >
+                                {u.email}
+                              </a>
+                              {(u.active_tunnels?.length || 0) > 0 && (
+                                <span 
+                                  className="badge tunnels" 
+                                  onClick={() => setSelectedUser(u)}
+                                  style={{ cursor: 'pointer', padding: '2px var(--spacing-sm)', fontSize: '11px', marginLeft: 'var(--spacing-sm)' }}
+                                  title="Click to view tunnels"
+                                >
+                                  🔌 {u.active_tunnels!.length} Tunnel{(u.active_tunnels!.length) > 1 ? 's' : ''}
+                                </span>
+                              )}
+                            </div>
+                          </div>
                         </div>
                       </td>
                       <td><span className="badge">{u.role}</span></td>
@@ -357,10 +455,17 @@ export default function AdminUsers() {
                       </td>
                       <td>{u.auth_method || 'password'}</td>
                       <td>
+                        <div style={{ fontSize: '12px', display: 'flex', flexDirection: 'column', gap: '2px' }}>
+                          <div><span style={{ color: 'var(--text-muted)', fontSize: '11px' }}>RPS:</span> <strong>{u.rate_limit ? u.rate_limit : '∞'}</strong></div>
+                          <div><span style={{ color: 'var(--text-muted)', fontSize: '11px' }}>Subs:</span> <strong>{u.max_reservations !== undefined && u.max_reservations !== null ? (u.max_reservations < 0 ? '∞' : u.max_reservations) : '3'}</strong></div>
+                          <div><span style={{ color: 'var(--text-muted)', fontSize: '11px' }}>Tunnels:</span> <strong>{u.max_tunnels !== undefined && u.max_tunnels !== null ? (u.max_tunnels < 0 ? '∞' : u.max_tunnels) : '3'}</strong></div>
+                        </div>
+                      </td>
+                      <td>
                         {u.portal_active ? (
-                          <div style={{ width: '8px', height: '8px', borderRadius: '50%', background: 'var(--success)', boxShadow: '0 0 8px var(--success)' }} />
+                          <span style={{ color: 'var(--success)', fontWeight: 600 }}>Active Now</span>
                         ) : (
-                          <div style={{ width: '8px', height: '8px', borderRadius: '50%', background: 'var(--status-inactive)' }} />
+                          u.last_login_at ? formatDate(u.last_login_at) : <span style={{ color: 'var(--text-muted)' }}>Never</span>
                         )}
                       </td>
                       <td>
@@ -453,6 +558,73 @@ export default function AdminUsers() {
 
             <div style={{ display: 'flex', justifyContent: 'flex-start', marginBottom: 'var(--spacing-xl)' }}>
               <button className="btn btn-primary" onClick={() => setTargetedUserId(selectedUser.id)}>💬 Direct Message</button>
+            </div>
+
+            <h4 style={{ marginTop: 'var(--spacing-xl)', marginBottom: 'var(--spacing-lg)', borderBottom: '1px solid var(--border-color)', paddingBottom: 'var(--spacing-sm)' }}>
+              Quotas & Security
+            </h4>
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: 'var(--spacing-lg)', marginBottom: 'var(--spacing-xl)', background: 'rgba(255,255,255,0.02)', padding: 'var(--spacing-md)', borderRadius: '6px', border: '1px solid var(--border-color)' }}>
+              <div>
+                <label style={{ display: 'block', fontSize: '12px', color: 'var(--text-muted)', marginBottom: 'var(--spacing-xs)', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Rate Limit (RPS)</label>
+                <div style={{ display: 'flex', gap: 'var(--spacing-sm)' }}>
+                  <input 
+                    type="number" 
+                    className="input-field" 
+                    style={{ flex: 1, padding: 'var(--spacing-xs) var(--spacing-sm)', fontSize: '14px' }} 
+                    min={0}
+                    value={modalRateLimit} 
+                    onChange={(e) => setModalRateLimit(Number(e.target.value))} 
+                    placeholder="Unlimited"
+                  />
+                  <button className="btn btn-primary" style={{ padding: 'var(--spacing-xs) var(--spacing-sm)', fontSize: '12px' }} onClick={updateRateLimit} disabled={updatingLimits}>Save</button>
+                </div>
+              </div>
+
+              <div>
+                <label style={{ display: 'block', fontSize: '12px', color: 'var(--text-muted)', marginBottom: 'var(--spacing-xs)', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Max Subdomains</label>
+                <div style={{ display: 'flex', gap: 'var(--spacing-sm)' }}>
+                  <input 
+                    type="number" 
+                    className="input-field" 
+                    style={{ flex: 1, padding: 'var(--spacing-xs) var(--spacing-sm)', fontSize: '14px' }} 
+                    min={-1}
+                    value={modalMaxReservations} 
+                    onChange={(e) => setModalMaxReservations(Number(e.target.value))} 
+                    placeholder="3"
+                  />
+                  <button className="btn btn-primary" style={{ padding: 'var(--spacing-xs) var(--spacing-sm)', fontSize: '12px' }} onClick={updateSubdomainLimit} disabled={updatingLimits}>Save</button>
+                </div>
+              </div>
+
+              <div>
+                <label style={{ display: 'block', fontSize: '12px', color: 'var(--text-muted)', marginBottom: 'var(--spacing-xs)', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Max Tunnels</label>
+                <div style={{ display: 'flex', gap: 'var(--spacing-sm)' }}>
+                  <input 
+                    type="number" 
+                    className="input-field" 
+                    style={{ flex: 1, padding: 'var(--spacing-xs) var(--spacing-sm)', fontSize: '14px' }} 
+                    min={-1}
+                    value={modalMaxTunnels} 
+                    onChange={(e) => setModalMaxTunnels(Number(e.target.value))} 
+                    placeholder="3"
+                  />
+                  <button className="btn btn-primary" style={{ padding: 'var(--spacing-xs) var(--spacing-sm)', fontSize: '12px' }} onClick={updateTunnelsLimit} disabled={updatingLimits}>Save</button>
+                </div>
+              </div>
+
+              <div style={{ display: 'flex', flexDirection: 'column', justifyContent: 'center' }}>
+                <label style={{ display: 'block', fontSize: '12px', color: 'var(--text-muted)', marginBottom: 'var(--spacing-xs)', textTransform: 'uppercase', letterSpacing: '0.5px' }}>MFA Security Status</label>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 'var(--spacing-md)' }}>
+                  {selectedUser.totp_enabled ? (
+                    <>
+                      <span className="badge success">Enabled</span>
+                      <button className="btn btn-danger" style={{ padding: 'var(--spacing-xs) var(--spacing-sm)', fontSize: '12px' }} onClick={resetUserMFA}>Reset MFA</button>
+                    </>
+                  ) : (
+                    <span className="badge" style={{ background: 'rgba(255,255,255,0.05)', color: 'var(--text-muted)' }}>Inactive</span>
+                  )}
+                </div>
+              </div>
             </div>
 
             <h4 style={{ marginTop: 'var(--spacing-xl)', marginBottom: 'var(--spacing-lg)', borderBottom: '1px solid var(--border-color)', paddingBottom: 'var(--spacing-sm)' }}>

@@ -311,12 +311,20 @@ func TestServer_CheckSubdomain(t *testing.T) {
 	}
 }
 
+type mockEmail struct {
+	To       string
+	Subject  string
+	TextBody string
+	HtmlBody string
+}
+
 type mockMailSender struct {
 	mu           sync.Mutex
 	sentTo       string
 	sentSubject  string
 	sentTextBody string
 	sentHtmlBody string
+	emails       []mockEmail
 }
 
 func (m *mockMailSender) Send(to string, subject string, textBody string, htmlBody string) error {
@@ -326,7 +334,21 @@ func (m *mockMailSender) Send(to string, subject string, textBody string, htmlBo
 	m.sentSubject = subject
 	m.sentTextBody = textBody
 	m.sentHtmlBody = htmlBody
+	m.emails = append(m.emails, mockEmail{
+		To:       to,
+		Subject:  subject,
+		TextBody: textBody,
+		HtmlBody: htmlBody,
+	})
 	return nil
+}
+
+func (m *mockMailSender) getSentEmails() []mockEmail {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	copied := make([]mockEmail, len(m.emails))
+	copy(copied, m.emails)
+	return copied
 }
 
 func (m *mockMailSender) getSent() (string, string) {
@@ -363,17 +385,23 @@ func TestServer_RegistrationFlow(t *testing.T) {
 	mockMail := &mockMailSender{}
 	srv.notifications = NewNotificationService(mockMail, srv.db, srv.cfg)
 
-	waitForMail := func(expectedTo string, timeout time.Duration) (string, string) {
+	waitForMail := func(expectedTo string, expectedBodyPart string, timeout time.Duration) (string, string) {
 		start := time.Now()
 		for time.Since(start) < timeout {
-			to, body := mockMail.getSent()
-			if to == expectedTo {
-				return to, body
+			emails := mockMail.getSentEmails()
+			for _, e := range emails {
+				if e.To == expectedTo && (expectedBodyPart == "" || strings.Contains(e.TextBody, expectedBodyPart) || strings.Contains(e.HtmlBody, expectedBodyPart)) {
+					return e.To, e.TextBody
+				}
 			}
 			time.Sleep(10 * time.Millisecond)
 		}
-		to, body := mockMail.getSent()
-		return to, body
+		emails := mockMail.getSentEmails()
+		if len(emails) > 0 {
+			last := emails[len(emails)-1]
+			return last.To, last.TextBody
+		}
+		return "", ""
 	}
 
 	// 1. Submit registration request
@@ -401,7 +429,7 @@ func TestServer_RegistrationFlow(t *testing.T) {
 	}
 
 	// Verify developer verification email was sent
-	sentTo, sentBody := waitForMail("developer@liferay.com", 2*time.Second)
+	sentTo, sentBody := waitForMail("developer@liferay.com", "/setup?token=", 2*time.Second)
 	if sentTo != "developer@liferay.com" || !strings.Contains(sentBody, "/setup?token=") {
 		t.Errorf("developer verification email not sent correctly, got to=%s, body=%s", sentTo, sentBody)
 	}
@@ -428,7 +456,7 @@ func TestServer_RegistrationFlow(t *testing.T) {
 	}
 
 	// Verify admin notification email was sent
-	adminTo, adminBody := waitForMail("admin@example.com", 2*time.Second)
+	adminTo, adminBody := waitForMail("admin@example.com", "/api/admin/approve", 2*time.Second)
 	if adminTo != "admin@example.com" || (!strings.Contains(adminBody, "/api/admin/approve") && !strings.Contains(adminBody, "has verified their email")) {
 		t.Errorf("admin notification email not sent correctly, got to=%s, body=%s", adminTo, adminBody)
 	}

@@ -1,5 +1,13 @@
 [
   {
+    "version": "v1.43.5",
+    "release_date": "2026-07-22",
+    "features": [
+      "Feature: Eliminate Flash of Untranslated Content (FOUC) and CLS on setup/dashboard pages (#698)",
+      "Feature: Add All Users vs Pending Registrations sub-tabs and count badges inside V2 Portal (#697)"
+    ]
+  },
+  {
     "version": "v1.43.4",
     "release_date": "2026-07-21",
     "features": [

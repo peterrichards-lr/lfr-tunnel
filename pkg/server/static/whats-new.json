@@ -1,5 +1,12 @@
 [
   {
+    "version": "v1.43.11",
+    "release_date": "2026-07-22",
+    "features": [
+      "Feature: Add Personal Access Tokens management (extend and revoke) inside Admin Users details modal to restore V1 functional parity (#756)"
+    ]
+  },
+  {
     "version": "v1.43.10",
     "release_date": "2026-07-22",
     "features": [

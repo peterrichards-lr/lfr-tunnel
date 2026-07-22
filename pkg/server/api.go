@@ -105,7 +105,7 @@ func (s *Server) handleGetMe(w http.ResponseWriter, r *http.Request) {
 		sessionToken = cookie.Value
 	}
 
-	resp := s.getUserTelemetryData(user, sessionToken)
+	resp := s.getUserTelemetryData(user, sessionToken, false)
 	respondJSON(w, http.StatusOK, resp)
 }
 
@@ -195,7 +195,7 @@ func (s *Server) handleUpdateOnboarding(w http.ResponseWriter, r *http.Request) 
 	respondJSON(w, http.StatusOK, map[string]string{"status": "ok"})
 }
 
-// handleListTokens returns the current user's PATs (or all PATs for admin/owner).
+// handleListTokens returns the current user's PATs.
 func (s *Server) handleListTokens(w http.ResponseWriter, r *http.Request) {
 	user, err := s.getCurrentUser(r)
 	if err != nil {
@@ -203,12 +203,7 @@ func (s *Server) handleListTokens(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	var pats []*db.PersonalAccessToken
-	if user.Role == "admin" || user.Role == "owner" {
-		pats, err = s.db.ListAllPATs()
-	} else {
-		pats, err = s.db.ListPATs(user.ID)
-	}
+	pats, err := s.db.ListPATs(user.ID)
 	if err != nil {
 		http.Error(w, `{"error":"Failed to list tokens"}`, http.StatusInternalServerError)
 		return
@@ -217,7 +212,7 @@ func (s *Server) handleListTokens(w http.ResponseWriter, r *http.Request) {
 	respondJSON(w, http.StatusOK, pats)
 }
 
-// handleExportTokensCSV exports the current user's PATs (or all PATs for admin/owner) as CSV.
+// handleExportTokensCSV exports the current user's PATs as CSV.
 func (s *Server) handleExportTokensCSV(w http.ResponseWriter, r *http.Request) {
 	user, err := s.getCurrentUser(r)
 	if err != nil {
@@ -225,12 +220,7 @@ func (s *Server) handleExportTokensCSV(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	var pats []*db.PersonalAccessToken
-	if user.Role == "admin" || user.Role == "owner" {
-		pats, err = s.db.ListAllPATs()
-	} else {
-		pats, err = s.db.ListPATs(user.ID)
-	}
+	pats, err := s.db.ListPATs(user.ID)
 	if err != nil {
 		http.Error(w, `{"error":"Failed to list tokens"}`, http.StatusInternalServerError)
 		return

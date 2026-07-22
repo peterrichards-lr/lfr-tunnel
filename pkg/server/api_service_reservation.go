@@ -12,29 +12,12 @@ import (
 
 // ListReservations returns the reservations, quota limit, and used count.
 func (s *portalService) ListReservations(user *db.User) ([]*db.SubdomainReservation, int, int, error) {
-	var list []*db.SubdomainReservation
-	var err error
-
-	if user.Role == "admin" || user.Role == "owner" {
-		list, err = s.db.ListAllSubdomainReservations()
-	} else {
-		list, err = s.db.ListSubdomainReservationsByUserID(user.ID)
-	}
-
+	list, err := s.db.ListSubdomainReservationsByUserID(user.ID)
 	if err != nil {
 		return nil, 0, 0, ErrInternalError
 	}
 
-	var usedCount int
-	if user.Role == "admin" || user.Role == "owner" {
-		ownList, err := s.db.ListSubdomainReservationsByUserID(user.ID)
-		if err == nil {
-			usedCount = len(ownList)
-		}
-	} else {
-		usedCount = len(list)
-	}
-
+	usedCount := len(list)
 	limit := s.getUserMaxReservations(user)
 	return list, limit, usedCount, nil
 }

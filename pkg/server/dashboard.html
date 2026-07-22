@@ -219,12 +219,12 @@
             </button>
             <div id="header-language-container" style="position: absolute; top: 16px; right: 24px; z-index: 100; display: flex; align-items: center; gap: 8px;">
                 <div class="custom-dropdown" id="portal-custom-dropdown" style="position: relative; user-select: none;">
-                    <div class="custom-dropdown-trigger" onclick="toggleCustomDropdown()" style="display: flex; align-items: center; gap: 8px; background: rgba(255,255,255,0.05); border: 1px solid rgba(255,255,255,0.1); padding: 6px 12px; border-radius: 6px; cursor: pointer; font-size: 13px; font-weight: 500; color: var(--text-color); transition: 0.2s; height: 32px; box-sizing: border-box;">
+                    <div class="custom-dropdown-trigger" id="portal-custom-dropdown-trigger" onclick="toggleCustomDropdown()" role="combobox" aria-haspopup="listbox" aria-expanded="false" tabindex="0" style="display: flex; align-items: center; gap: 8px; background: rgba(255,255,255,0.05); border: 1px solid rgba(255,255,255,0.1); padding: 6px 12px; border-radius: 6px; cursor: pointer; font-size: 13px; font-weight: 500; color: var(--text-color); transition: 0.2s; height: 32px; box-sizing: border-box;">
                         <span id="custom-dropdown-flag"></span>
                         <span id="custom-dropdown-label">English</span>
                         <svg viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="currentColor" stroke-width="2" style="margin-left: 4px; transition: 0.2s;"><path d="M6 9l6 6 6-6"/></svg>
                     </div>
-                    <div class="custom-dropdown-menu" id="custom-dropdown-menu" style="display: none; position: absolute; top: calc(100% + 6px); right: 0; background: #161b22; border: 1px solid rgba(255,255,255,0.15); border-radius: 6px; box-shadow: 0 8px 24px rgba(0,0,0,0.3); min-width: 160px; padding: 4px 0; z-index: 101;">
+                    <div class="custom-dropdown-menu" id="custom-dropdown-menu" role="listbox" style="display: none; position: absolute; top: calc(100% + 6px); right: 0; background: #161b22; border: 1px solid rgba(255,255,255,0.15); border-radius: 6px; box-shadow: 0 8px 24px rgba(0,0,0,0.3); min-width: 160px; padding: 4px 0; z-index: 101;">
                         <!-- Custom list items rendered dynamically in JS -->
                     </div>
                 </div>
@@ -341,12 +341,12 @@
                             <label style="display:block; margin-bottom: 8px; color: var(--text-muted); font-size: 14px;" data-i18n="label_language">Language Preference</label>
                             <input type="hidden" id="acc-language" value="en" />
                             <div class="custom-dropdown" id="acc-language-custom-dropdown" style="position: relative; user-select: none;">
-                                <div class="custom-dropdown-trigger" onclick="toggleAccDropdown()" style="display: flex; align-items: center; gap: 8px; background: rgba(255,255,255,0.05); border: 1px solid rgba(255,255,255,0.1); padding: 8px 12px; border-radius: 6px; cursor: pointer; font-size: 14px; font-weight: 500; color: var(--text-color); transition: 0.2s; height: 38px; box-sizing: border-box;">
+                                <div class="custom-dropdown-trigger" id="acc-custom-dropdown-trigger" onclick="toggleAccDropdown()" role="combobox" aria-haspopup="listbox" aria-expanded="false" tabindex="0" style="display: flex; align-items: center; gap: 8px; background: rgba(255,255,255,0.05); border: 1px solid rgba(255,255,255,0.1); padding: 8px 12px; border-radius: 6px; cursor: pointer; font-size: 14px; font-weight: 500; color: var(--text-color); transition: 0.2s; height: 38px; box-sizing: border-box;">
                                     <span id="acc-custom-flag"></span>
                                     <span id="acc-custom-label">English</span>
                                     <svg viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="currentColor" stroke-width="2" style="margin-left: auto; transition: 0.2s;"><path d="M6 9l6 6 6-6"/></svg>
                                 </div>
-                                <div class="custom-dropdown-menu" id="acc-custom-menu" style="display: none; position: absolute; top: calc(100% + 6px); left: 0; background: #161b22; border: 1px solid rgba(255,255,255,0.15); border-radius: 6px; box-shadow: 0 8px 24px rgba(0,0,0,0.3); width: 100%; padding: 4px 0; z-index: 101; max-height: 175px; overflow-y: auto;">
+                                <div class="custom-dropdown-menu" id="acc-custom-menu" role="listbox" style="display: none; position: absolute; top: calc(100% + 6px); left: 0; background: #161b22; border: 1px solid rgba(255,255,255,0.15); border-radius: 6px; box-shadow: 0 8px 24px rgba(0,0,0,0.3); width: 100%; padding: 4px 0; z-index: 101; max-height: 175px; overflow-y: auto;">
                                     <!-- Custom list items rendered dynamically in JS -->
                                 </div>
                             </div>

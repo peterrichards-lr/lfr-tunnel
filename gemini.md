@@ -973,10 +973,10 @@ The solution will consist of:
 ## V2 Portal Hover State Refactoring (v1.34.11)
 - [x] Refactor inline styles and JS hover states to CSS classes (#702).
 ## V1 Setup Consent Contrast (v1.34.13)
-- [/] Increase typography contrast for legal consents in setup.html (#700)
+- [x] Increase typography contrast for legal consents in setup.html (#700)
 
 ## V1 Portal Accessibility (v1.34.14)
-- [/] Improve V1 accessibility with aria-live and dropdown keyboard controls (#699)
+- [x] Improve V1 accessibility with aria-live and dropdown keyboard controls (#699)
 
 <!-- markdownlint-disable MD049 -->
 ---

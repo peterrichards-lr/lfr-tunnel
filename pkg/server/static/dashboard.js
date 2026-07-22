@@ -44,6 +44,66 @@
             return flags[lang] || flags['en'];
         }
 
+        function setupDropdownA11y(triggerId, menuId, selectFn, getSelectedCodeFn) {
+            const trigger = document.getElementById(triggerId);
+            const menu = document.getElementById(menuId);
+            if (!trigger || !menu) return;
+
+            trigger.addEventListener('keydown', (e) => {
+                if (e.key === ' ' || e.key === 'Enter' || e.key === 'ArrowDown') {
+                    e.preventDefault();
+                    const isOpen = menu.style.display === 'block';
+                    if (!isOpen) {
+                        menu.style.display = 'block';
+                        trigger.setAttribute('aria-expanded', 'true');
+                        const currentVal = getSelectedCodeFn();
+                        const items = menu.querySelectorAll('[role="option"]');
+                        items.forEach(item => {
+                            const isSelected = item.getAttribute('data-code') === currentVal;
+                            item.setAttribute('aria-selected', isSelected ? 'true' : 'false');
+                        });
+                    }
+                    const firstOption = menu.querySelector('[role="option"]');
+                    if (firstOption) firstOption.focus();
+                } else if (e.key === 'Escape') {
+                    menu.style.display = 'none';
+                    trigger.setAttribute('aria-expanded', 'false');
+                }
+            });
+
+            menu.addEventListener('keydown', (e) => {
+                const items = Array.from(menu.querySelectorAll('[role="option"]'));
+                const activeEl = document.activeElement;
+                const idx = items.indexOf(activeEl);
+
+                if (e.key === 'ArrowDown') {
+                    e.preventDefault();
+                    if (items.length > 0) {
+                        const nextIdx = (idx + 1) % items.length;
+                        items[nextIdx].focus();
+                    }
+                } else if (e.key === 'ArrowUp') {
+                    e.preventDefault();
+                    if (items.length > 0) {
+                        const prevIdx = (idx - 1 + items.length) % items.length;
+                        items[prevIdx].focus();
+                    }
+                } else if (e.key === ' ' || e.key === 'Enter') {
+                    e.preventDefault();
+                    if (idx !== -1) {
+                        const code = items[idx].getAttribute('data-code');
+                        selectFn(code);
+                        trigger.focus();
+                    }
+                } else if (e.key === 'Escape') {
+                    e.preventDefault();
+                    menu.style.display = 'none';
+                    trigger.setAttribute('aria-expanded', 'false');
+                    trigger.focus();
+                }
+            });
+        }
+
         function renderCustomDropdown() {
             const menu = document.getElementById('custom-dropdown-menu');
             if (!menu) return;
@@ -51,6 +111,9 @@
             menu.innerHTML = '';
             supportedLocales.forEach(loc => {
                 const item = document.createElement('div');
+                item.setAttribute('role', 'option');
+                item.setAttribute('tabindex', '-1');
+                item.setAttribute('data-code', loc.code);
                 item.style.display = 'flex';
                 item.style.alignItems = 'center';
                 item.style.gap = '8px';
@@ -90,6 +153,8 @@
             
             const menu = document.getElementById('custom-dropdown-menu');
             if (menu) menu.style.display = 'none';
+            const trigger = document.getElementById('portal-custom-dropdown-trigger');
+            if (trigger) trigger.setAttribute('aria-expanded', 'false');
             
             if (!skipSync) {
                 selectAccLanguage(lang, true);
@@ -101,7 +166,10 @@
         function toggleCustomDropdown() {
             const menu = document.getElementById('custom-dropdown-menu');
             if (!menu) return;
-            menu.style.display = menu.style.display === 'none' ? 'block' : 'none';
+            const isOpen = menu.style.display === 'none';
+            menu.style.display = isOpen ? 'block' : 'none';
+            const trigger = document.getElementById('portal-custom-dropdown-trigger');
+            if (trigger) trigger.setAttribute('aria-expanded', isOpen ? 'true' : 'false');
         }
 
         function renderAccCustomDropdown() {
@@ -111,6 +179,9 @@
             menu.innerHTML = '';
             supportedLocales.forEach(loc => {
                 const item = document.createElement('div');
+                item.setAttribute('role', 'option');
+                item.setAttribute('tabindex', '-1');
+                item.setAttribute('data-code', loc.code);
                 item.style.display = 'flex';
                 item.style.alignItems = 'center';
                 item.style.gap = '8px';
@@ -152,6 +223,8 @@
             
             const menu = document.getElementById('acc-custom-menu');
             if (menu) menu.style.display = 'none';
+            const trigger = document.getElementById('acc-custom-dropdown-trigger');
+            if (trigger) trigger.setAttribute('aria-expanded', 'false');
             
             if (!skipSync) {
                 selectCustomLanguage(lang, true);
@@ -161,7 +234,10 @@
         function toggleAccDropdown() {
             const menu = document.getElementById('acc-custom-menu');
             if (!menu) return;
-            menu.style.display = menu.style.display === 'none' ? 'block' : 'none';
+            const isOpen = menu.style.display === 'none';
+            menu.style.display = isOpen ? 'block' : 'none';
+            const trigger = document.getElementById('acc-custom-dropdown-trigger');
+            if (trigger) trigger.setAttribute('aria-expanded', isOpen ? 'true' : 'false');
         }
 
         const handleOutsideDropdownClick = (e) => {
@@ -169,11 +245,15 @@
             if (customTrigger && !customTrigger.contains(e.target)) {
                 const menu = document.getElementById('custom-dropdown-menu');
                 if (menu) menu.style.display = 'none';
+                const trigger = document.getElementById('portal-custom-dropdown-trigger');
+                if (trigger) trigger.setAttribute('aria-expanded', 'false');
             }
             const accTrigger = document.getElementById('acc-language-custom-dropdown');
             if (accTrigger && !accTrigger.contains(e.target)) {
                 const menu = document.getElementById('acc-custom-menu');
                 if (menu) menu.style.display = 'none';
+                const trigger = document.getElementById('acc-custom-dropdown-trigger');
+                if (trigger) trigger.setAttribute('aria-expanded', 'false');
             }
         };
         document.addEventListener('click', handleOutsideDropdownClick);
@@ -910,6 +990,8 @@ function toggleTheme() {
             renderAccCustomDropdown();
             selectCustomLanguage(currentUser.language_preference || 'en');
             selectAccLanguage(currentUser.language_preference || 'en');
+            setupDropdownA11y('portal-custom-dropdown-trigger', 'custom-dropdown-menu', selectCustomLanguage, () => currentLanguage);
+            setupDropdownA11y('acc-custom-dropdown-trigger', 'acc-custom-menu', selectAccLanguage, () => document.getElementById('acc-language').value);
             document.getElementById('acc-notifications').checked = (currentUser.notification_prefs === 'enabled' || !currentUser.notification_prefs);
 
             // Apply theme from preference if not system

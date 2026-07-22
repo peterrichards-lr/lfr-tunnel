@@ -965,8 +965,14 @@ The solution will consist of:
 - [x] Implement global animated skeleton loaders for data fetching to prevent layout shifts (#706).
 
 ## V2 Portal Design Token System (v1.34.8)
-- [/] Implement a unified Design Token system using CSS variables for spacing consistency (#705).
+- [x] Implement a unified Design Token system using CSS variables for spacing consistency (#705).
+
+## V2 Portal Table Accessibility (v1.34.9)
+- [x] Improve V2 UI tables accessibility by adding aria-sort attributes (#704).
+
+## V2 Portal Token Badge Contrast (v1.34.10)
+- [/] Improve V2 UI token status badge contrast ratios in light/dark themes (#703).
 
 <!-- markdownlint-disable MD049 -->
 ---
-*Last Updated: 2026-07-21* | *Last Reviewed: 2026-07-21*
+*Last Updated: 2026-07-22* | *Last Reviewed: 2026-07-22*

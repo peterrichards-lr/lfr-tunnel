@@ -139,12 +139,12 @@ func (s *Server) handleTelemetryWS(w http.ResponseWriter, r *http.Request) {
 	s.pushUserTelemetry(client)
 }
 
-func (s *Server) getUserTelemetryData(user *db.User, sessionToken string) map[string]interface{} {
+func (s *Server) getUserTelemetryData(user *db.User, sessionToken string, systemWide bool) map[string]interface{} {
 	var activeLeases []map[string]interface{}
 	if s.registry != nil {
 		leases := s.registry.ListLeases()
 		for _, l := range leases {
-			if l.UserID == user.ID || user.Role == "admin" || user.Role == "owner" {
+			if l.UserID == user.ID || (systemWide && (user.Role == "admin" || user.Role == "owner")) {
 				var passcode, whitelistIPs, accessMode string
 				if s.db != nil {
 					parts := strings.SplitN(l.FullHost, ".", 2)
@@ -182,7 +182,7 @@ func (s *Server) getUserTelemetryData(user *db.User, sessionToken string) map[st
 	s.edgeLeasesMu.Lock()
 	for userID, userLeasesList := range s.edgeLeases {
 		for _, el := range userLeasesList {
-			if userID == user.ID || user.Role == "admin" || user.Role == "owner" {
+			if userID == user.ID || (systemWide && (user.Role == "admin" || user.Role == "owner")) {
 				var passcode, whitelistIPs, accessMode string
 				if s.db != nil {
 					parts := strings.SplitN(el.FullHost, ".", 2)
@@ -325,7 +325,7 @@ func (s *Server) pushUserTelemetry(c *wsClient) {
 		}
 	}
 
-	data := s.getUserTelemetryData(u, "")
+	data := s.getUserTelemetryData(u, "", true)
 	payload := map[string]interface{}{
 		"type": "telemetry",
 		"data": data,

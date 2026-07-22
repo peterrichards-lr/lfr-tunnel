@@ -6,6 +6,7 @@ import AdminRoute from './components/AdminRoute';
 import AdminSubdomains from './pages/AdminSubdomains';
 import AdminUsers from './pages/AdminUsers';
 import AdminSettings from './pages/AdminSettings';
+import AdminTokens from './pages/AdminTokens';
 import AdminAnalytics from './pages/AdminAnalytics';
 import AdminAuditLog from './pages/AdminAuditLog';
 import AdminBlacklist from './pages/AdminBlacklist';
@@ -42,6 +43,7 @@ function App() {
                   <Route path="/admin/edge-health" element={<AdminEdgeHealth />} />
                   <Route path="/admin/magic-links" element={<AdminMagicLinks />} />
                   <Route path="/admin/telemetry" element={<AdminTelemetry />} />
+                  <Route path="/admin/tokens" element={<AdminTokens />} />
                   <Route path="/admin/settings" element={<AdminSettings />} />
                 </Route>
               </Route>

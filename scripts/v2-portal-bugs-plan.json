@@ -1,0 +1,56 @@
+{
+  "title": "[Epic] V2 Portal UI Mappings and Admin Zone Parity Polish",
+  "body": "Address remaining mapping mismatches between frontend React pages and backend endpoints, and bridge functional parity for subdomain listings and analytics widgets in the V2 Portal.",
+  "labels": [
+    "bug",
+    "enhancement"
+  ],
+  "issues": [
+    {
+      "title": "Fix Personal Access Tokens Table Column Mapping in V2 Portal",
+      "body": "Fix the Token column in the Personal Access Tokens table in the V2 Dashboard. Currently, the column renders tItem.token which is undefined in the listed tokens payload. Update the columns to display the Token Name and Prefix (e.g. tItem.name and tItem.token_prefix), mirroring the V1 legacy dashboard layout.",
+      "completed": false,
+      "labels": [
+        "bug"
+      ],
+      "issueNumber": "749"
+    },
+    {
+      "title": "Show all Subdomain Reservations in Admin Zone Subdomains Screen",
+      "body": "The Admin Subdomains screen currently only lists active connected tunnel leases from /api/admin/leases. Update it to display all Subdomain Reservations from the database (ListAllSubdomainReservations) along with status badges ('Online/Active' vs 'Offline') indicating if a tunnel is currently connected to that subdomain.",
+      "completed": false,
+      "labels": [
+        "enhancement"
+      ],
+      "issueNumber": "750"
+    },
+    {
+      "title": "Add Global Top Tunnels Bandwidth Chart in Admin Analytics",
+      "body": "The 'Bandwidth by Tunnel' doughnut chart is scoped to the current user's personal context and displayed in the 'Personal Usage' section. To avoid confusion for administrators, add a global 'Top Tunnels by Bandwidth' doughnut chart under the 'Global Statistics' section showing the top active/historical tunnel bandwidth metrics across all users.",
+      "completed": false,
+      "labels": [
+        "enhancement"
+      ],
+      "issueNumber": "751"
+    },
+    {
+      "title": "Fix Actor and Resource Column Mappings in System Audit Log",
+      "body": "The frontend AuditEvent interface and table mapping uses properties actor and resource, but the server API /api/admin/audit returns actor_id, target_type, and target_id. Update the React table columns to render actor_id for Actor, and target_type: target_id for Resource.",
+      "completed": false,
+      "labels": [
+        "bug"
+      ],
+      "issueNumber": "752"
+    },
+    {
+      "title": "Display Obfuscated Server Configuration YAML in Admin Settings",
+      "body": "The Settings page fetches /api/admin/config-view and expects a .config string property, but the server returns the config JSON map directly. Implement a zero-dependency object-to-YAML formatting helper in AdminSettings.tsx to print the configuration map correctly as formatted YAML.",
+      "completed": false,
+      "labels": [
+        "bug"
+      ],
+      "issueNumber": "753"
+    }
+  ],
+  "epicNumber": "748"
+}

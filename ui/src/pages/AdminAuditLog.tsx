@@ -6,10 +6,11 @@ import Skeleton from '../components/Skeleton';
 import { useI18n } from '../contexts/I18nContext';
 
 interface AuditEvent {
-  event_id: string;
-  actor: string;
+  id: number;
+  actor_id: string;
   action: string;
-  resource: string;
+  target_type: string;
+  target_id: string;
   ip_address: string;
   created_at: string;
   details: string;
@@ -38,7 +39,7 @@ export default function AdminAuditLog() {
     fetchEvents();
   }, []);
 
-  const { items: sortedEvents, requestSort, getSortIndicator, searchQuery, setSearchQuery, getAriaSort } = useTableSort(events, ['actor', 'action', 'resource', 'ip_address', 'details']);
+  const { items: sortedEvents, requestSort, getSortIndicator, searchQuery, setSearchQuery, getAriaSort } = useTableSort(events, ['actor_id', 'action', 'target_type', 'target_id', 'ip_address', 'details']);
 
   const totalPages = Math.ceil(sortedEvents.length / ROWS_PER_PAGE);
   const paginatedEvents = sortedEvents.slice(page * ROWS_PER_PAGE, (page + 1) * ROWS_PER_PAGE);
@@ -117,9 +118,9 @@ export default function AdminAuditLog() {
             <thead>
               <tr style={{ borderBottom: '1px solid var(--border)', textAlign: 'left' }}>
                 <th style={{ padding: '12px 16px', color: 'var(--text-muted)', fontWeight: 600, fontSize: '13px', cursor: 'pointer' }} onClick={() => requestSort('created_at')} aria-sort={getAriaSort('created_at')}>Time{getSortIndicator('created_at')}</th>
-                <th style={{ padding: '12px 16px', color: 'var(--text-muted)', fontWeight: 600, fontSize: '13px', cursor: 'pointer' }} onClick={() => requestSort('actor')} aria-sort={getAriaSort('actor')}>Actor{getSortIndicator('actor')}</th>
+                <th style={{ padding: '12px 16px', color: 'var(--text-muted)', fontWeight: 600, fontSize: '13px', cursor: 'pointer' }} onClick={() => requestSort('actor_id')} aria-sort={getAriaSort('actor_id')}>Actor{getSortIndicator('actor_id')}</th>
                 <th style={{ padding: '12px 16px', color: 'var(--text-muted)', fontWeight: 600, fontSize: '13px', cursor: 'pointer' }} onClick={() => requestSort('action')} aria-sort={getAriaSort('action')}>Action{getSortIndicator('action')}</th>
-                <th style={{ padding: '12px 16px', color: 'var(--text-muted)', fontWeight: 600, fontSize: '13px', cursor: 'pointer' }} onClick={() => requestSort('resource')} aria-sort={getAriaSort('resource')}>Resource{getSortIndicator('resource')}</th>
+                <th style={{ padding: '12px 16px', color: 'var(--text-muted)', fontWeight: 600, fontSize: '13px', cursor: 'pointer' }} onClick={() => requestSort('target_id')} aria-sort={getAriaSort('target_id')}>Resource{getSortIndicator('target_id')}</th>
                 <th style={{ padding: '12px 16px', color: 'var(--text-muted)', fontWeight: 600, fontSize: '13px', cursor: 'pointer' }} onClick={() => requestSort('ip_address')} aria-sort={getAriaSort('ip_address')}>IP Address{getSortIndicator('ip_address')}</th>
                 <th style={{ padding: '12px 16px', color: 'var(--text-muted)', fontWeight: 600, fontSize: '13px', cursor: 'pointer' }} onClick={() => requestSort('details')} aria-sort={getAriaSort('details')}>Details{getSortIndicator('details')}</th>
               </tr>
@@ -133,11 +134,17 @@ export default function AdminAuditLog() {
                 </tr>
               ) : (
                 paginatedEvents.map((e, idx) => (
-                  <tr key={e.event_id || idx} style={{ borderBottom: '1px solid var(--border)' }}>
+                  <tr key={e.id || idx} style={{ borderBottom: '1px solid var(--border)' }}>
                     <td style={{ padding: '16px', whiteSpace: 'nowrap' }}>{formatDate(e.created_at)}</td>
-                    <td style={{ padding: '16px' }}>{e.actor}</td>
+                    <td style={{ padding: '16px' }}>{e.actor_id}</td>
                     <td style={{ padding: '16px' }}><span className="badge" style={{ background: 'var(--status-info-bg)', color: 'var(--status-info-text)', border: '1px solid var(--status-info-border)' }}>{e.action}</span></td>
-                    <td style={{ padding: '16px' }}>{e.resource}</td>
+                    <td style={{ padding: '16px' }}>
+                      {e.target_type && e.target_id ? (
+                        <span style={{ fontSize: '13px' }}>
+                          <strong style={{ opacity: 0.8 }}>{e.target_type}:</strong> {e.target_id}
+                        </span>
+                      ) : e.target_id || '-'}
+                    </td>
                     <td style={{ padding: '16px', fontFamily: 'monospace' }}>{e.ip_address}</td>
                     <td style={{ padding: '16px', fontSize: '11px', fontFamily: 'monospace', color: 'var(--text-muted)', maxWidth: '200px', overflowX: 'auto' }}>
                       {e.details}

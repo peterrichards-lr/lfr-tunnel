@@ -2532,6 +2532,11 @@ func (s *Server) handleAdminEndpoints(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	if r.Method == http.MethodGet && r.URL.Path == "/api/admin/subdomains" {
+		s.handleAdminListSubdomains(w, r, actor)
+		return
+	}
+
 	if (r.Method == http.MethodPost || r.Method == http.MethodPut) && r.URL.Path == "/api/admin/leases/rate-limit" {
 		s.handleAdminOverrideRateLimit(w, r, actor)
 		return

@@ -1098,6 +1098,70 @@ func (s *Server) handleAdminListExtensions(w http.ResponseWriter, r *http.Reques
 	respondJSON(w, http.StatusOK, list)
 }
 
+// handleAdminListSubdomains lists all registered subdomain reservations in the database with user emails.
+func (s *Server) handleAdminListSubdomains(w http.ResponseWriter, r *http.Request, actor string) {
+	if s.db == nil {
+		http.Error(w, `{"error":"Database not configured"}`, http.StatusNotImplemented)
+		return
+	}
+
+	reservations, err := s.db.ListAllSubdomainReservations()
+	if err != nil {
+		http.Error(w, `{"error":"Failed to retrieve subdomain reservations"}`, http.StatusInternalServerError)
+		return
+	}
+
+	users, err := s.db.ListUsers()
+	if err != nil {
+		http.Error(w, `{"error":"Failed to retrieve users"}`, http.StatusInternalServerError)
+		return
+	}
+
+	userMap := make(map[string]string)
+	for _, u := range users {
+		userMap[u.ID] = u.Email
+	}
+
+	type SubdomainResponse struct {
+		ID                 int64      `json:"id"`
+		UserID             string     `json:"user_id"`
+		UserEmail          string     `json:"user_email"`
+		Subdomain          string     `json:"subdomain"`
+		Domain             string     `json:"domain"`
+		ExpiresAt          *time.Time `json:"expires_at,omitempty"`
+		ExtensionRequested bool       `json:"extension_requested"`
+		Passcode           string     `json:"passcode"`
+		WhitelistIPs       string     `json:"whitelist_ips"`
+		AccessMode         string     `json:"access_mode"`
+		CreatedAt          time.Time  `json:"created_at"`
+		UpdatedAt          time.Time  `json:"updated_at"`
+	}
+
+	resp := make([]SubdomainResponse, 0, len(reservations))
+	for _, res := range reservations {
+		email := userMap[res.UserID]
+		if email == "" {
+			email = "Unknown"
+		}
+		resp = append(resp, SubdomainResponse{
+			ID:                 res.ID,
+			UserID:             res.UserID,
+			UserEmail:          email,
+			Subdomain:          res.Subdomain,
+			Domain:             res.Domain,
+			ExpiresAt:          res.ExpiresAt,
+			ExtensionRequested: res.ExtensionRequested,
+			Passcode:           res.Passcode,
+			WhitelistIPs:       res.WhitelistIPs,
+			AccessMode:         res.AccessMode,
+			CreatedAt:          res.CreatedAt,
+			UpdatedAt:          res.UpdatedAt,
+		})
+	}
+
+	respondJSON(w, http.StatusOK, resp)
+}
+
 // handleAdminApproveExtension approves an extension request.
 func (s *Server) handleAdminApproveExtension(w http.ResponseWriter, r *http.Request, actor string) {
 	suffix := strings.TrimPrefix(r.URL.Path, "/api/admin/reservations/")

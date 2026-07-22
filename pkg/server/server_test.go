@@ -2912,3 +2912,48 @@ func TestServer_OnboardingTelemetry(t *testing.T) {
 		t.Errorf("expected onboarding_reruns to be 1, got %d", updatedUser.OnboardingReruns)
 	}
 }
+
+func TestServer_TrailingSlashRedirect(t *testing.T) {
+	cfg := &config.ServerConfig{
+		Domains:                []string{"example.com"},
+		DisableBackupScheduler: true,
+	}
+	cfg.DBPath = filepath.Join(t.TempDir(), "test.db")
+
+	srv, err := NewServer(cfg)
+	if err != nil {
+		t.Fatalf("failed to create server: %v", err)
+	}
+	defer func() {
+		time.Sleep(50 * time.Millisecond)
+		srv.Stop()
+	}()
+
+	tests := []struct {
+		url      string
+		expected string
+	}{
+		{"http://example.com/portal/", "/portal"},
+		{"http://example.com/admin/", "/admin"},
+		{"http://example.com/setup/", "/setup"},
+		{"http://example.com/privacy/", "/privacy"},
+		{"http://example.com/cookies/", "/cookies"},
+		{"http://example.com/portal/?token=123", "/portal?token=123"},
+	}
+
+	for _, tc := range tests {
+		req := httptest.NewRequest("GET", tc.url, nil)
+		req.Host = "example.com"
+		rec := httptest.NewRecorder()
+
+		srv.ServeHTTP(rec, req)
+
+		if rec.Code != http.StatusMovedPermanently {
+			t.Errorf("for %s, expected status 301, got %d", tc.url, rec.Code)
+		}
+		loc := rec.Header().Get("Location")
+		if loc != tc.expected {
+			t.Errorf("for %s, expected location %q, got %q", tc.url, tc.expected, loc)
+		}
+	}
+}

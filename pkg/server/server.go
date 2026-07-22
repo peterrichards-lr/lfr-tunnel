@@ -482,6 +482,19 @@ func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if isControl {
+		// Normalize trailing slashes on public control plane pages
+		if r.Method == http.MethodGet {
+			p := r.URL.Path
+			if p == "/portal/" || p == "/admin/" || p == "/setup/" || p == "/privacy/" || p == "/cookies/" {
+				target := strings.TrimSuffix(p, "/")
+				if r.URL.RawQuery != "" {
+					target += "?" + r.URL.RawQuery
+				}
+				http.Redirect(w, r, target, http.StatusMovedPermanently)
+				return
+			}
+		}
+
 		// Route control plane requests
 		if s.cfg.ForceMFA && strings.HasPrefix(r.URL.Path, "/api/") {
 			bypass := false

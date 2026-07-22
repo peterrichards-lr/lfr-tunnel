@@ -55,5 +55,10 @@ export function useTableSort<T>(items: T[], searchKeys: (keyof T)[]) {
     return sortConfig.direction === 'asc' ? ' ↑' : ' ↓';
   };
 
-  return { items: sortedItems, requestSort, getSortIndicator, searchQuery, setSearchQuery, sortConfig };
+  const getAriaSort = (key: keyof T): 'ascending' | 'descending' | 'none' => {
+    if (!sortConfig || sortConfig.key !== key) return 'none';
+    return sortConfig.direction === 'asc' ? 'ascending' : 'descending';
+  };
+
+  return { items: sortedItems, requestSort, getSortIndicator, searchQuery, setSearchQuery, sortConfig, getAriaSort };
 }

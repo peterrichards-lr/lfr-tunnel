@@ -49,7 +49,7 @@ export default function AdminAnalytics() {
   const [loading, setLoading] = useState(true);
   const [timeRange, setTimeRange] = useState('30'); // Default to 30 days
 
-  const { items: sortedClientStats, requestSort, getSortIndicator } = useTableSort(clientStats, ['version', 'os', 'count']);
+  const { items: sortedClientStats, requestSort, getSortIndicator, getAriaSort } = useTableSort(clientStats, ['version', 'os', 'count']);
 
   useEffect(() => {
     const fetchData = async () => {
@@ -312,9 +312,9 @@ export default function AdminAnalytics() {
               <table className="table" style={{ width: '100%', borderCollapse: 'collapse' }}>
                 <thead>
                   <tr>
-                    <th style={{ textAlign: 'left', padding: '12px 20px', color: 'var(--text-muted)', fontWeight: '500', fontSize: '13px', borderBottom: '1px solid var(--border)', cursor: 'pointer' }} onClick={() => requestSort('version')}>Version{getSortIndicator('version')}</th>
-                    <th style={{ textAlign: 'left', padding: '12px 20px', color: 'var(--text-muted)', fontWeight: '500', fontSize: '13px', borderBottom: '1px solid var(--border)', cursor: 'pointer' }} onClick={() => requestSort('os')}>OS Platform{getSortIndicator('os')}</th>
-                    <th style={{ textAlign: 'left', padding: '12px 20px', color: 'var(--text-muted)', fontWeight: '500', fontSize: '13px', borderBottom: '1px solid var(--border)', cursor: 'pointer' }} onClick={() => requestSort('count')}>Active Tunnels{getSortIndicator('count')}</th>
+                    <th style={{ textAlign: 'left', padding: '12px 20px', color: 'var(--text-muted)', fontWeight: '500', fontSize: '13px', borderBottom: '1px solid var(--border)', cursor: 'pointer' }} onClick={() => requestSort('version')} aria-sort={getAriaSort('version')}>Version{getSortIndicator('version')}</th>
+                    <th style={{ textAlign: 'left', padding: '12px 20px', color: 'var(--text-muted)', fontWeight: '500', fontSize: '13px', borderBottom: '1px solid var(--border)', cursor: 'pointer' }} onClick={() => requestSort('os')} aria-sort={getAriaSort('os')}>OS Platform{getSortIndicator('os')}</th>
+                    <th style={{ textAlign: 'left', padding: '12px 20px', color: 'var(--text-muted)', fontWeight: '500', fontSize: '13px', borderBottom: '1px solid var(--border)', cursor: 'pointer' }} onClick={() => requestSort('count')} aria-sort={getAriaSort('count')}>Active Tunnels{getSortIndicator('count')}</th>
                   </tr>
                 </thead>
                 <tbody>

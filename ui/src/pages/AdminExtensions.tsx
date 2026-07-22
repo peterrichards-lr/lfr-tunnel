@@ -43,7 +43,7 @@ export default function AdminExtensions() {
     }
   };
 
-  const { items: sortedRequests, requestSort, getSortIndicator, searchQuery, setSearchQuery } = useTableSort(requests, ['email', 'subdomain', 'status']);
+  const { items: sortedRequests, requestSort, getSortIndicator, searchQuery, setSearchQuery, getAriaSort } = useTableSort(requests, ['email', 'subdomain', 'status']);
   if (loading) {
     return (
       <div className="card" style={{ animation: 'fadeInUp 0.6s ease-out' }}>
@@ -106,11 +106,11 @@ export default function AdminExtensions() {
         <table style={{ width: '100%', borderCollapse: 'collapse' }}>
           <thead>
             <tr style={{ borderBottom: '1px solid var(--border)', textAlign: 'left' }}>
-              <th style={{ padding: '12px 16px', color: 'var(--text-muted)', cursor: 'pointer' }} onClick={() => requestSort('email')}>Email{getSortIndicator('email')}</th>
-              <th style={{ padding: '12px 16px', color: 'var(--text-muted)', cursor: 'pointer' }} onClick={() => requestSort('subdomain')}>Subdomain{getSortIndicator('subdomain')}</th>
+              <th style={{ padding: '12px 16px', color: 'var(--text-muted)', cursor: 'pointer' }} onClick={() => requestSort('email')} aria-sort={getAriaSort('email')}>Email{getSortIndicator('email')}</th>
+              <th style={{ padding: '12px 16px', color: 'var(--text-muted)', cursor: 'pointer' }} onClick={() => requestSort('subdomain')} aria-sort={getAriaSort('subdomain')}>Subdomain{getSortIndicator('subdomain')}</th>
               <th style={{ padding: '12px 16px', color: 'var(--text-muted)' }}>Port</th>
               <th style={{ padding: '12px 16px', color: 'var(--text-muted)' }}>Expires</th>
-              <th style={{ padding: '12px 16px', color: 'var(--text-muted)', cursor: 'pointer' }} onClick={() => requestSort('status')}>Status{getSortIndicator('status')}</th>
+              <th style={{ padding: '12px 16px', color: 'var(--text-muted)', cursor: 'pointer' }} onClick={() => requestSort('status')} aria-sort={getAriaSort('status')}>Status{getSortIndicator('status')}</th>
               <th style={{ padding: '12px 16px', color: 'var(--text-muted)', textAlign: 'right' }}>Actions</th>
             </tr>
           </thead>

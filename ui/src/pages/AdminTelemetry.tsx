@@ -88,7 +88,7 @@ export default function AdminTelemetry() {
   }, []);
 
   const tunnels: Tunnel[] = telemetryData?.tunnels || [];
-  const { items: sortedTunnels, requestSort, getSortIndicator, searchQuery, setSearchQuery } = useTableSort(tunnels, ['subdomain_prefix', 'full_host', 'status', 'node_id', 'client_ip']);
+  const { items: sortedTunnels, requestSort, getSortIndicator, searchQuery, setSearchQuery, getAriaSort } = useTableSort(tunnels, ['subdomain_prefix', 'full_host', 'status', 'node_id', 'client_ip']);
 
   const handleKick = async (subdomain: string) => {
     if (window.confirm(`Are you sure you want to kick the tunnel lease for subdomain "${subdomain}"?`)) {
@@ -188,12 +188,12 @@ export default function AdminTelemetry() {
             <table style={{ width: '100%', borderCollapse: 'collapse' }}>
               <thead>
                 <tr style={{ borderBottom: '1px solid var(--border)', textAlign: 'left' }}>
-                  <th style={{ padding: 'var(--spacing-md) var(--spacing-lg)', color: 'var(--text-muted)', fontWeight: 600, fontSize: '13px', textTransform: 'uppercase', letterSpacing: '0.5px', cursor: 'pointer' }} onClick={() => requestSort('subdomain_prefix')}>{t('subdomain', 'Subdomain')}{getSortIndicator('subdomain_prefix')}</th>
-                  <th style={{ padding: 'var(--spacing-md) var(--spacing-lg)', color: 'var(--text-muted)', fontWeight: 600, fontSize: '13px', textTransform: 'uppercase', letterSpacing: '0.5px', cursor: 'pointer' }} onClick={() => requestSort('full_host')}>{t('target_host', 'Target Host')}{getSortIndicator('full_host')}</th>
-                  <th style={{ padding: 'var(--spacing-md) var(--spacing-lg)', color: 'var(--text-muted)', fontWeight: 600, fontSize: '13px', textTransform: 'uppercase', letterSpacing: '0.5px', cursor: 'pointer' }} onClick={() => requestSort('node_id')}>{t('node', 'Node')}{getSortIndicator('node_id')}</th>
+                  <th style={{ padding: 'var(--spacing-md) var(--spacing-lg)', color: 'var(--text-muted)', fontWeight: 600, fontSize: '13px', textTransform: 'uppercase', letterSpacing: '0.5px', cursor: 'pointer' }} onClick={() => requestSort('subdomain_prefix')} aria-sort={getAriaSort('subdomain_prefix')}>{t('subdomain', 'Subdomain')}{getSortIndicator('subdomain_prefix')}</th>
+                  <th style={{ padding: 'var(--spacing-md) var(--spacing-lg)', color: 'var(--text-muted)', fontWeight: 600, fontSize: '13px', textTransform: 'uppercase', letterSpacing: '0.5px', cursor: 'pointer' }} onClick={() => requestSort('full_host')} aria-sort={getAriaSort('full_host')}>{t('target_host', 'Target Host')}{getSortIndicator('full_host')}</th>
+                  <th style={{ padding: 'var(--spacing-md) var(--spacing-lg)', color: 'var(--text-muted)', fontWeight: 600, fontSize: '13px', textTransform: 'uppercase', letterSpacing: '0.5px', cursor: 'pointer' }} onClick={() => requestSort('node_id')} aria-sort={getAriaSort('node_id')}>{t('node', 'Node')}{getSortIndicator('node_id')}</th>
                   <th style={{ padding: 'var(--spacing-md) var(--spacing-lg)', color: 'var(--text-muted)', fontWeight: 600, fontSize: '13px', textTransform: 'uppercase', letterSpacing: '0.5px' }}>{t('client_ip', 'Client IP')}</th>
-                  <th style={{ padding: 'var(--spacing-md) var(--spacing-lg)', color: 'var(--text-muted)', fontWeight: 600, fontSize: '13px', textTransform: 'uppercase', letterSpacing: '0.5px', cursor: 'pointer' }} onClick={() => requestSort('bytes_in')}>{t('data_in', 'Data In')}{getSortIndicator('bytes_in')}</th>
-                  <th style={{ padding: 'var(--spacing-md) var(--spacing-lg)', color: 'var(--text-muted)', fontWeight: 600, fontSize: '13px', textTransform: 'uppercase', letterSpacing: '0.5px', cursor: 'pointer' }} onClick={() => requestSort('bytes_out')}>{t('data_out', 'Data Out')}{getSortIndicator('bytes_out')}</th>
+                  <th style={{ padding: 'var(--spacing-md) var(--spacing-lg)', color: 'var(--text-muted)', fontWeight: 600, fontSize: '13px', textTransform: 'uppercase', letterSpacing: '0.5px', cursor: 'pointer' }} onClick={() => requestSort('bytes_in')} aria-sort={getAriaSort('bytes_in')}>{t('data_in', 'Data In')}{getSortIndicator('bytes_in')}</th>
+                  <th style={{ padding: 'var(--spacing-md) var(--spacing-lg)', color: 'var(--text-muted)', fontWeight: 600, fontSize: '13px', textTransform: 'uppercase', letterSpacing: '0.5px', cursor: 'pointer' }} onClick={() => requestSort('bytes_out')} aria-sort={getAriaSort('bytes_out')}>{t('data_out', 'Data Out')}{getSortIndicator('bytes_out')}</th>
                   <th style={{ padding: 'var(--spacing-md) var(--spacing-lg)', color: 'var(--text-muted)', fontWeight: 600, fontSize: '13px', textTransform: 'uppercase', letterSpacing: '0.5px' }}>{t('visitors', 'Visitors')}</th>
                   <th style={{ padding: 'var(--spacing-md) var(--spacing-lg)', color: 'var(--text-muted)', fontWeight: 600, fontSize: '13px', textTransform: 'uppercase', letterSpacing: '0.5px' }}>{t('status', 'Status')}</th>
                   <th style={{ padding: 'var(--spacing-md) var(--spacing-lg)', color: 'var(--text-muted)', fontWeight: 600, fontSize: '13px', textTransform: 'uppercase', letterSpacing: '0.5px', textAlign: 'right' }}>{t('actions', 'Actions')}</th>

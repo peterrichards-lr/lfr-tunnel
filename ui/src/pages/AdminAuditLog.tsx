@@ -36,7 +36,7 @@ export default function AdminAuditLog() {
     fetchEvents();
   }, []);
 
-  const { items: sortedEvents, requestSort, getSortIndicator, searchQuery, setSearchQuery } = useTableSort(events, ['actor', 'action', 'resource', 'ip_address', 'details']);
+  const { items: sortedEvents, requestSort, getSortIndicator, searchQuery, setSearchQuery, getAriaSort } = useTableSort(events, ['actor', 'action', 'resource', 'ip_address', 'details']);
 
   const totalPages = Math.ceil(sortedEvents.length / ROWS_PER_PAGE);
   const paginatedEvents = sortedEvents.slice(page * ROWS_PER_PAGE, (page + 1) * ROWS_PER_PAGE);
@@ -114,12 +114,12 @@ export default function AdminAuditLog() {
           <table style={{ width: '100%', borderCollapse: 'collapse' }}>
             <thead>
               <tr style={{ borderBottom: '1px solid var(--border)', textAlign: 'left' }}>
-                <th style={{ padding: '12px 16px', color: 'var(--text-muted)', fontWeight: 600, fontSize: '13px', cursor: 'pointer' }} onClick={() => requestSort('created_at')}>Time{getSortIndicator('created_at')}</th>
-                <th style={{ padding: '12px 16px', color: 'var(--text-muted)', fontWeight: 600, fontSize: '13px', cursor: 'pointer' }} onClick={() => requestSort('actor')}>Actor{getSortIndicator('actor')}</th>
-                <th style={{ padding: '12px 16px', color: 'var(--text-muted)', fontWeight: 600, fontSize: '13px', cursor: 'pointer' }} onClick={() => requestSort('action')}>Action{getSortIndicator('action')}</th>
-                <th style={{ padding: '12px 16px', color: 'var(--text-muted)', fontWeight: 600, fontSize: '13px', cursor: 'pointer' }} onClick={() => requestSort('resource')}>Resource{getSortIndicator('resource')}</th>
-                <th style={{ padding: '12px 16px', color: 'var(--text-muted)', fontWeight: 600, fontSize: '13px', cursor: 'pointer' }} onClick={() => requestSort('ip_address')}>IP Address{getSortIndicator('ip_address')}</th>
-                <th style={{ padding: '12px 16px', color: 'var(--text-muted)', fontWeight: 600, fontSize: '13px', cursor: 'pointer' }} onClick={() => requestSort('details')}>Details{getSortIndicator('details')}</th>
+                <th style={{ padding: '12px 16px', color: 'var(--text-muted)', fontWeight: 600, fontSize: '13px', cursor: 'pointer' }} onClick={() => requestSort('created_at')} aria-sort={getAriaSort('created_at')}>Time{getSortIndicator('created_at')}</th>
+                <th style={{ padding: '12px 16px', color: 'var(--text-muted)', fontWeight: 600, fontSize: '13px', cursor: 'pointer' }} onClick={() => requestSort('actor')} aria-sort={getAriaSort('actor')}>Actor{getSortIndicator('actor')}</th>
+                <th style={{ padding: '12px 16px', color: 'var(--text-muted)', fontWeight: 600, fontSize: '13px', cursor: 'pointer' }} onClick={() => requestSort('action')} aria-sort={getAriaSort('action')}>Action{getSortIndicator('action')}</th>
+                <th style={{ padding: '12px 16px', color: 'var(--text-muted)', fontWeight: 600, fontSize: '13px', cursor: 'pointer' }} onClick={() => requestSort('resource')} aria-sort={getAriaSort('resource')}>Resource{getSortIndicator('resource')}</th>
+                <th style={{ padding: '12px 16px', color: 'var(--text-muted)', fontWeight: 600, fontSize: '13px', cursor: 'pointer' }} onClick={() => requestSort('ip_address')} aria-sort={getAriaSort('ip_address')}>IP Address{getSortIndicator('ip_address')}</th>
+                <th style={{ padding: '12px 16px', color: 'var(--text-muted)', fontWeight: 600, fontSize: '13px', cursor: 'pointer' }} onClick={() => requestSort('details')} aria-sort={getAriaSort('details')}>Details{getSortIndicator('details')}</th>
               </tr>
             </thead>
             <tbody>

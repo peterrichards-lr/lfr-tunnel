@@ -164,7 +164,7 @@ export default function AdminUsers() {
       setIsInviting(false);
     }
   };
-  const { items: sortedUsers, requestSort, getSortIndicator, searchQuery, setSearchQuery } = useTableSort(users, ['email', 'first_name', 'last_name', 'role', 'status', 'auth_method']);
+  const { items: sortedUsers, requestSort, getSortIndicator, searchQuery, setSearchQuery, getAriaSort } = useTableSort(users, ['email', 'first_name', 'last_name', 'role', 'status', 'auth_method']);
   if (loading) {
     return (
       <div style={{ animation: 'fadeInUp 0.6s ease-out' }}>
@@ -246,11 +246,11 @@ export default function AdminUsers() {
           <table>
             <thead>
               <tr>
-                <th style={{ cursor: 'pointer' }} onClick={() => requestSort('first_name')}>User{getSortIndicator('first_name')}</th>
-                <th style={{ cursor: 'pointer' }} onClick={() => requestSort('role')}>Role{getSortIndicator('role')}</th>
-                <th style={{ cursor: 'pointer' }} onClick={() => requestSort('status')}>Status{getSortIndicator('status')}</th>
-                <th style={{ cursor: 'pointer' }} onClick={() => requestSort('auth_method')}>Auth Method{getSortIndicator('auth_method')}</th>
-                <th style={{ cursor: 'pointer' }} onClick={() => requestSort('portal_active')}>Portal Active{getSortIndicator('portal_active')}</th>
+                <th style={{ cursor: 'pointer' }} onClick={() => requestSort('first_name')} aria-sort={getAriaSort('first_name')}>User{getSortIndicator('first_name')}</th>
+                <th style={{ cursor: 'pointer' }} onClick={() => requestSort('role')} aria-sort={getAriaSort('role')}>Role{getSortIndicator('role')}</th>
+                <th style={{ cursor: 'pointer' }} onClick={() => requestSort('status')} aria-sort={getAriaSort('status')}>Status{getSortIndicator('status')}</th>
+                <th style={{ cursor: 'pointer' }} onClick={() => requestSort('auth_method')} aria-sort={getAriaSort('auth_method')}>Auth Method{getSortIndicator('auth_method')}</th>
+                <th style={{ cursor: 'pointer' }} onClick={() => requestSort('portal_active')} aria-sort={getAriaSort('portal_active')}>Portal Active{getSortIndicator('portal_active')}</th>
                 <th>Actions</th>
               </tr>
             </thead>

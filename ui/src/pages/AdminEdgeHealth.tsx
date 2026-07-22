@@ -101,7 +101,7 @@ export default function AdminEdgeHealth() {
   };
 
   const nodeArray = Object.keys(nodes).map(id => ({ id, ...nodes[id] }));
-  const { items: sortedNodes, requestSort, getSortIndicator, searchQuery, setSearchQuery } = useTableSort(nodeArray, ['id', 'status', 'resolved_ip', 'version']);
+  const { items: sortedNodes, requestSort, getSortIndicator, searchQuery, setSearchQuery, getAriaSort } = useTableSort(nodeArray, ['id', 'status', 'resolved_ip', 'version']);
 
   if (loading) {
     return (
@@ -190,12 +190,12 @@ export default function AdminEdgeHealth() {
             <table className="table" style={{ overflow: 'visible' }}>
               <thead>
                 <tr>
-                  <th style={{ cursor: 'pointer' }} onClick={() => requestSort('id')}>Node ID{getSortIndicator('id')}</th>
-                  <th style={{ cursor: 'pointer' }} onClick={() => requestSort('resolved_ip')}>Resolved IP{getSortIndicator('resolved_ip')}</th>
-                  <th style={{ cursor: 'pointer' }} onClick={() => requestSort('status')}>Status{getSortIndicator('status')}</th>
-                  <th style={{ cursor: 'pointer' }} onClick={() => requestSort('latency_ms')}>Latency{getSortIndicator('latency_ms')}</th>
-                  <th style={{ cursor: 'pointer' }} onClick={() => requestSort('last_check_at')}>Last Check{getSortIndicator('last_check_at')}</th>
-                  <th style={{ cursor: 'pointer' }} onClick={() => requestSort('version')}>Version{getSortIndicator('version')}</th>
+                  <th style={{ cursor: 'pointer' }} onClick={() => requestSort('id')} aria-sort={getAriaSort('id')}>Node ID{getSortIndicator('id')}</th>
+                  <th style={{ cursor: 'pointer' }} onClick={() => requestSort('resolved_ip')} aria-sort={getAriaSort('resolved_ip')}>Resolved IP{getSortIndicator('resolved_ip')}</th>
+                  <th style={{ cursor: 'pointer' }} onClick={() => requestSort('status')} aria-sort={getAriaSort('status')}>Status{getSortIndicator('status')}</th>
+                  <th style={{ cursor: 'pointer' }} onClick={() => requestSort('latency_ms')} aria-sort={getAriaSort('latency_ms')}>Latency{getSortIndicator('latency_ms')}</th>
+                  <th style={{ cursor: 'pointer' }} onClick={() => requestSort('last_check_at')} aria-sort={getAriaSort('last_check_at')}>Last Check{getSortIndicator('last_check_at')}</th>
+                  <th style={{ cursor: 'pointer' }} onClick={() => requestSort('version')} aria-sort={getAriaSort('version')}>Version{getSortIndicator('version')}</th>
                   <th>Error</th>
                   <th style={{ textAlign: 'right' }}>Actions</th>
                 </tr>

@@ -351,11 +351,6 @@ func (m *mockMailSender) getSentEmails() []mockEmail {
 	return copied
 }
 
-func (m *mockMailSender) getSent() (string, string) {
-	m.mu.Lock()
-	defer m.mu.Unlock()
-	return m.sentTo, m.sentTextBody
-}
 
 func TestServer_RegistrationFlow(t *testing.T) {
 	tmpDir, err := os.MkdirTemp("", "lfr-tunnel-server-test-*")

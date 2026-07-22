@@ -991,6 +991,9 @@ The solution will consist of:
 ## V1 UI FOUC and Layout Shift Fixes (v1.34.15)
 - [x] Prevent FOUC and Cumulative Layout Shifts in V1 setup.html and dashboard.html (#698)
 
+## E2E Exception Guardian & V2 Bug Fix (v1.34.17)
+- [x] Create Playwright pageerror listener and fix token status crash in V2 Dashboard (#732)
+
 <!-- markdownlint-disable MD049 -->
 ---
 *Last Updated: 2026-07-22* | *Last Reviewed: 2026-07-22*

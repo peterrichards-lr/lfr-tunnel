@@ -123,11 +123,11 @@ export default function Dashboard() {
                             borderRadius: '20px', 
                             fontSize: '12px', 
                             fontWeight: 600, 
-                            background: tItem.status === 'active' ? 'var(--status-success-bg)' : 'var(--status-danger-bg)',
-                            color: tItem.status === 'active' ? 'var(--status-success-text)' : 'var(--status-danger-text)',
-                            border: `1px solid ${tItem.status === 'active' ? 'var(--status-success-border)' : 'var(--status-danger-border)'}`
+                            background: (tItem.status || 'active') === 'active' ? 'var(--status-success-bg)' : 'var(--status-danger-bg)',
+                            color: (tItem.status || 'active') === 'active' ? 'var(--status-success-text)' : 'var(--status-danger-text)',
+                            border: `1px solid ${(tItem.status || 'active') === 'active' ? 'var(--status-success-border)' : 'var(--status-danger-border)'}`
                           }}>
-                            {tItem.status.toUpperCase()}
+                            {(tItem.status || 'active').toUpperCase()}
                           </span>
                         </td>
                       </tr>

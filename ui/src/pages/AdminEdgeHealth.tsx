@@ -211,7 +211,7 @@ export default function AdminEdgeHealth() {
                 sortedNodes.map(h => {
                   const id = h.id;
                   const isOnline = h.status === 'Online';
-                  const dotColor = isOnline ? '#10b981' : 'var(--danger)';
+                  const dotColor = isOnline ? 'var(--success)' : 'var(--danger)';
                   
                   const resolvedIP = h.resolved_ip || '-';
                   const latText = isOnline ? `${h.latency_ms} ms` : '-';

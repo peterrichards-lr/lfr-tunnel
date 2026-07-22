@@ -29,7 +29,7 @@ export default function Sidebar({ user, isOpen, onClose }: SidebarProps) {
     <>
       <div className={`sidebar-backdrop ${isOpen ? 'visible' : ''}`} onClick={onClose}></div>
       <div className={`sidebar ${isOpen ? 'active' : ''}`}>
-        <div className="sidebar-brand" style={{ display: 'flex', alignItems: 'center', gap: '10px', padding: '12px 16px' }}>
+        <div className="sidebar-brand" style={{ display: 'flex', alignItems: 'center', gap: 'var(--spacing-sm)', padding: 'var(--spacing-md) var(--spacing-lg)' }}>
           <img src="/static/logo.svg" alt="Liferay Tunnel" width="28" height="28" style={{ flexShrink: 0 }} />
           <span style={{ fontWeight: 'bold', fontSize: '16px', color: 'var(--text-color)', letterSpacing: '0.5px' }}>Liferay Tunnel</span>
         </div>
@@ -49,7 +49,7 @@ export default function Sidebar({ user, isOpen, onClose }: SidebarProps) {
 
           {(user?.role === 'admin' || user?.role === 'owner') && (
             <>
-              <div className="sidebar-section-header" style={{ marginTop: '24px' }}>
+              <div className="sidebar-section-header" style={{ marginTop: 'var(--spacing-xl)' }}>
                 <span className="sidebar-label">{t('admin_zone', 'Admin Zone')}</span>
               </div>
               <div className="sidebar-section-content" style={{ display: 'block' }}>
@@ -65,8 +65,8 @@ export default function Sidebar({ user, isOpen, onClose }: SidebarProps) {
                     <span className="badge" style={{ 
                       background: 'var(--danger, #ef4444)', 
                       color: 'white', 
-                      borderRadius: '10px', 
-                      padding: '2px 8px', 
+                      borderRadius: 'var(--spacing-xs)', 
+                      padding: '2px var(--spacing-sm)', 
                       fontSize: '11px', 
                       fontWeight: 'bold',
                       lineHeight: '1'
@@ -101,22 +101,22 @@ export default function Sidebar({ user, isOpen, onClose }: SidebarProps) {
           )}
         </div>
         
-        <div className="sidebar-footer" style={{ padding: '16px' }}>
-          <div style={{ paddingBottom: '16px', marginBottom: '16px', borderBottom: '1px solid var(--border)' }}>
+        <div className="sidebar-footer" style={{ padding: 'var(--spacing-lg)' }}>
+          <div style={{ paddingBottom: 'var(--spacing-lg)', marginBottom: 'var(--spacing-lg)', borderBottom: '1px solid var(--border)' }}>
             
 
-            <div style={{ display: 'flex', gap: '12px', fontSize: '12px' }}>
+            <div style={{ display: 'flex', gap: 'var(--spacing-md)', fontSize: '12px' }}>
               <a href="/privacy" target="_blank" style={{ color: 'var(--text-muted)', textDecoration: 'none' }} onMouseOver={e => e.currentTarget.style.color='var(--primary)'} onMouseOut={e => e.currentTarget.style.color='var(--text-muted)'}>{t('privacy_policy', 'Privacy Policy')}</a>
               <a href="/cookies" target="_blank" style={{ color: 'var(--text-muted)', textDecoration: 'none' }} onMouseOver={e => e.currentTarget.style.color='var(--primary)'} onMouseOut={e => e.currentTarget.style.color='var(--text-muted)'}>{t('cookie_policy', 'Cookies')}</a>
             </div>
           </div>
 
-          <div style={{ fontSize: '12px', color: 'var(--text-muted)', marginBottom: '8px' }}>
+          <div style={{ fontSize: '12px', color: 'var(--text-muted)', marginBottom: 'var(--spacing-sm)' }}>
             {t('logged_in_as', 'Logged in as')} <strong>{user?.email}</strong>
           </div>
           <button 
             className="btn btn-secondary" 
-            style={{ width: '100%', padding: '8px' }}
+            style={{ width: '100%', padding: 'var(--spacing-sm)' }}
             onClick={async () => {
               await fetch('/api/auth/logout', { method: 'POST' });
               window.location.href = '/portal-v2/login';

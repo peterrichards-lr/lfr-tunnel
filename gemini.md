@@ -969,6 +969,7 @@ The solution will consist of:
 
 ## V2 Portal Table Accessibility (v1.34.9)
 - [x] Improve V2 UI tables accessibility by adding aria-sort attributes (#704).
+- [/] Implement a unified Design Token system using CSS variables for spacing consistency (#705).
 
 <!-- markdownlint-disable MD049 -->
 ---

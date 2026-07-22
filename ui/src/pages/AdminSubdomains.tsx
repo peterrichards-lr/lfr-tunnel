@@ -62,38 +62,38 @@ export default function AdminSubdomains() {
   if (loading) {
     return (
       <div style={{ animation: 'fadeInUp 0.6s ease-out' }}>
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '24px' }}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 'var(--spacing-xl)' }}>
           <Skeleton width={180} height={28} />
         </div>
         
-        <div className="card" style={{ padding: '24px', marginBottom: '24px' }}>
-          <div style={{ display: 'flex', gap: '12px', alignItems: 'center' }}>
+        <div className="card" style={{ padding: 'var(--spacing-xl)', marginBottom: 'var(--spacing-xl)' }}>
+          <div style={{ display: 'flex', gap: 'var(--spacing-md)', alignItems: 'center' }}>
             <Skeleton width="100%" height={40} style={{ maxWidth: '300px' }} />
           </div>
         </div>
 
-        <div className="card" style={{ padding: '24px' }}>
+        <div className="card" style={{ padding: 'var(--spacing-xl)' }}>
           <div className="table-responsive">
             <table style={{ width: '100%', borderCollapse: 'collapse' }}>
               <thead>
                 <tr style={{ borderBottom: '1px solid var(--border)', textAlign: 'left' }}>
-                  <th style={{ padding: '12px 16px' }}><Skeleton width={80} /></th>
-                  <th style={{ padding: '12px 16px' }}><Skeleton width={100} /></th>
-                  <th style={{ padding: '12px 16px' }}><Skeleton width={60} /></th>
-                  <th style={{ padding: '12px 16px' }}><Skeleton width={80} /></th>
-                  <th style={{ padding: '12px 16px' }}><Skeleton width={120} /></th>
-                  <th style={{ padding: '12px 16px' }}><Skeleton width={80} /></th>
+                  <th style={{ padding: 'var(--spacing-md) var(--spacing-lg)' }}><Skeleton width={80} /></th>
+                  <th style={{ padding: 'var(--spacing-md) var(--spacing-lg)' }}><Skeleton width={100} /></th>
+                  <th style={{ padding: 'var(--spacing-md) var(--spacing-lg)' }}><Skeleton width={60} /></th>
+                  <th style={{ padding: 'var(--spacing-md) var(--spacing-lg)' }}><Skeleton width={80} /></th>
+                  <th style={{ padding: 'var(--spacing-md) var(--spacing-lg)' }}><Skeleton width={120} /></th>
+                  <th style={{ padding: 'var(--spacing-md) var(--spacing-lg)' }}><Skeleton width={80} /></th>
                 </tr>
               </thead>
               <tbody>
                 {[...Array(5)].map((_, i) => (
                   <tr key={i} style={{ borderBottom: '1px solid rgba(255,255,255,0.05)' }}>
-                    <td style={{ padding: '16px' }}><Skeleton width="90%" height={16} /></td>
-                    <td style={{ padding: '16px' }}><Skeleton width="85%" height={16} /></td>
-                    <td style={{ padding: '16px' }}><Skeleton width="60%" height={16} /></td>
-                    <td style={{ padding: '16px' }}><Skeleton width="70%" height={16} /></td>
-                    <td style={{ padding: '16px' }}><Skeleton width="80%" height={16} /></td>
-                    <td style={{ padding: '16px' }}><Skeleton width="50%" height={16} /></td>
+                    <td style={{ padding: 'var(--spacing-lg)' }}><Skeleton width="90%" height={16} /></td>
+                    <td style={{ padding: 'var(--spacing-lg)' }}><Skeleton width="85%" height={16} /></td>
+                    <td style={{ padding: 'var(--spacing-lg)' }}><Skeleton width="60%" height={16} /></td>
+                    <td style={{ padding: 'var(--spacing-lg)' }}><Skeleton width="70%" height={16} /></td>
+                    <td style={{ padding: 'var(--spacing-lg)' }}><Skeleton width="80%" height={16} /></td>
+                    <td style={{ padding: 'var(--spacing-lg)' }}><Skeleton width="50%" height={16} /></td>
                   </tr>
                 ))}
               </tbody>
@@ -107,16 +107,16 @@ export default function AdminSubdomains() {
 
   return (
     <div>
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '24px' }}>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 'var(--spacing-xl)' }}>
         <h3>Active Subdomains</h3>
       </div>
-      <div style={{ marginBottom: '16px' }}>
+      <div style={{ marginBottom: 'var(--spacing-lg)' }}>
         <input 
           type="text" 
           placeholder="Search subdomains..." 
           value={searchQuery} 
           onChange={e => { setSearchQuery(e.target.value); setPage(0); }}
-          style={{ padding: '8px 12px', width: '100%', maxWidth: '300px', background: 'var(--input-bg)', color: 'var(--text-main)', border: '1px solid var(--border)', borderRadius: '6px' }}
+          style={{ padding: 'var(--spacing-sm) var(--spacing-md)', width: '100%', maxWidth: '300px', background: 'var(--input-bg)', color: 'var(--text-main)', border: '1px solid var(--border)', borderRadius: '6px' }}
         />
       </div>
       <div className="card" style={{ padding: '0' }}>
@@ -136,7 +136,7 @@ export default function AdminSubdomains() {
             <tbody>
               {leases.length === 0 ? (
                 <tr>
-                  <td colSpan={7} style={{ textAlign: 'center', padding: '24px' }}>No active tunnels</td>
+                  <td colSpan={7} style={{ textAlign: 'center', padding: 'var(--spacing-xl)' }}>No active tunnels</td>
                 </tr>
               ) : (
                 sortedLeases.slice(page * ROWS_PER_PAGE, (page + 1) * ROWS_PER_PAGE).map((lease) => (
@@ -162,7 +162,7 @@ export default function AdminSubdomains() {
                     <td>{formatBytes(lease.bytes_in || 0)}</td>
                     <td>{formatBytes(lease.bytes_out || 0)}</td>
                     <td>
-                      <button className="btn btn-danger" style={{ padding: '4px 8px', fontSize: '12px' }} onClick={() => kickLease(lease.subdomain_prefix)}>
+                      <button className="btn btn-danger" style={{ padding: 'var(--spacing-xs) var(--spacing-sm)', fontSize: '12px' }} onClick={() => kickLease(lease.subdomain_prefix)}>
                         Kick
                       </button>
                     </td>
@@ -173,16 +173,16 @@ export default function AdminSubdomains() {
           </table>
           
           {sortedLeases.length > 0 && (
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '16px', borderTop: '1px solid var(--border-color)' }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: 'var(--spacing-lg)', borderTop: '1px solid var(--border-color)' }}>
               <div style={{ fontSize: '13px', color: 'var(--text-muted)' }}>
                 Showing {page * ROWS_PER_PAGE + 1} to {Math.min((page + 1) * ROWS_PER_PAGE, sortedLeases.length)} of {sortedLeases.length}
               </div>
-              <div style={{ display: 'flex', gap: '8px' }}>
+              <div style={{ display: 'flex', gap: 'var(--spacing-sm)' }}>
                 <button 
                   className="btn btn-secondary" 
                   onClick={() => setPage(0)}
                   disabled={page === 0}
-                  style={{ padding: '4px 12px', fontSize: '13px' }}
+                  style={{ padding: 'var(--spacing-xs) var(--spacing-md)', fontSize: '13px' }}
                 >
                   First
                 </button>
@@ -190,16 +190,16 @@ export default function AdminSubdomains() {
                   className="btn btn-secondary" 
                   disabled={page === 0} 
                   onClick={() => setPage(page - 1)}
-                  style={{ padding: '4px 12px', fontSize: '13px' }}
+                  style={{ padding: 'var(--spacing-xs) var(--spacing-md)', fontSize: '13px' }}
                 >
                   Previous
                 </button>
-                <span style={{ padding: '4px 8px', fontSize: '14px' }}>Page {page + 1} of {Math.ceil(sortedLeases.length / ROWS_PER_PAGE)}</span>
+                <span style={{ padding: 'var(--spacing-xs) var(--spacing-sm)', fontSize: '14px' }}>Page {page + 1} of {Math.ceil(sortedLeases.length / ROWS_PER_PAGE)}</span>
                 <button 
                   className="btn btn-secondary" 
                   disabled={(page + 1) * ROWS_PER_PAGE >= sortedLeases.length} 
                   onClick={() => setPage(page + 1)}
-                  style={{ padding: '4px 12px', fontSize: '13px' }}
+                  style={{ padding: 'var(--spacing-xs) var(--spacing-md)', fontSize: '13px' }}
                 >
                   Next
                 </button>
@@ -207,7 +207,7 @@ export default function AdminSubdomains() {
                   className="btn btn-secondary" 
                   onClick={() => setPage(Math.max(0, Math.ceil(sortedLeases.length / ROWS_PER_PAGE) - 1))}
                   disabled={(page + 1) * ROWS_PER_PAGE >= sortedLeases.length}
-                  style={{ padding: '4px 12px', fontSize: '13px' }}
+                  style={{ padding: 'var(--spacing-xs) var(--spacing-md)', fontSize: '13px' }}
                 >
                   Last
                 </button>

@@ -294,8 +294,8 @@ export default function Login() {
           ))}
         </select>
         <div style={{ display: 'flex', gap: '24px', fontSize: '13px' }}>
-          <a href={`/privacy?lang=${language}`} target="_blank" style={{ color: 'rgba(255, 255, 255, 0.6)', textDecoration: 'none', transition: 'color 0.2s' }} onMouseOver={e => e.currentTarget.style.color='rgba(255,255,255,0.9)'} onMouseOut={e => e.currentTarget.style.color='rgba(255,255,255,0.6)'}>{t('privacy_title', 'Privacy Policy')}</a>
-          <a href={`/cookies?lang=${language}`} target="_blank" style={{ color: 'rgba(255, 255, 255, 0.6)', textDecoration: 'none', transition: 'color 0.2s' }} onMouseOver={e => e.currentTarget.style.color='rgba(255,255,255,0.9)'} onMouseOut={e => e.currentTarget.style.color='rgba(255,255,255,0.6)'}>{t('cookie_title', 'Cookie Disclosure')}</a>
+          <a href={`/privacy?lang=${language}`} target="_blank" className="login-footer-link">{t('privacy_title', 'Privacy Policy')}</a>
+          <a href={`/cookies?lang=${language}`} target="_blank" className="login-footer-link">{t('cookie_title', 'Cookie Disclosure')}</a>
         </div>
       </div>
     </div>

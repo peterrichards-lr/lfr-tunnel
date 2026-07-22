@@ -267,17 +267,15 @@ export default function AdminUsers() {
                         <a 
                           href="#" 
                           onClick={(e) => { e.preventDefault(); setSelectedUser(u); }}
-                          style={{ fontWeight: 500, textDecoration: 'none', color: 'inherit', cursor: 'pointer', transition: 'opacity 0.2s' }}
-                          onMouseOver={(e) => (e.currentTarget.style.opacity = '0.8')}
-                          onMouseOut={(e) => (e.currentTarget.style.opacity = '1')}
+                          className="email-link"
                         >
                           {u.email}
                         </a>
                         {(u.active_tunnels?.length || 0) > 0 && (
                           <span 
-                            className="badge" 
+                            className="badge tunnels" 
                             onClick={() => setSelectedUser(u)}
-                            style={{ cursor: 'pointer', background: 'rgba(99,102,241,0.15)', color: '#818cf8', border: '1px solid rgba(99,102,241,0.3)', padding: '2px var(--spacing-sm)', fontSize: '11px', marginLeft: 'var(--spacing-sm)' }}
+                            style={{ cursor: 'pointer', padding: '2px var(--spacing-sm)', fontSize: '11px', marginLeft: 'var(--spacing-sm)' }}
                             title="Click to view tunnels"
                           >
                             🔌 {u.active_tunnels!.length} Tunnel{(u.active_tunnels!.length) > 1 ? 's' : ''}

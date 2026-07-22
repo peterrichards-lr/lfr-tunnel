@@ -106,8 +106,8 @@ export default function Sidebar({ user, isOpen, onClose }: SidebarProps) {
             
 
             <div style={{ display: 'flex', gap: 'var(--spacing-md)', fontSize: '12px' }}>
-              <a href="/privacy" target="_blank" style={{ color: 'var(--text-muted)', textDecoration: 'none' }} onMouseOver={e => e.currentTarget.style.color='var(--primary)'} onMouseOut={e => e.currentTarget.style.color='var(--text-muted)'}>{t('privacy_policy', 'Privacy Policy')}</a>
-              <a href="/cookies" target="_blank" style={{ color: 'var(--text-muted)', textDecoration: 'none' }} onMouseOver={e => e.currentTarget.style.color='var(--primary)'} onMouseOut={e => e.currentTarget.style.color='var(--text-muted)'}>{t('cookie_policy', 'Cookies')}</a>
+              <a href="/privacy" target="_blank" className="sidebar-footer-link">{t('privacy_policy', 'Privacy Policy')}</a>
+              <a href="/cookies" target="_blank" className="sidebar-footer-link">{t('cookie_policy', 'Cookies')}</a>
             </div>
           </div>
 

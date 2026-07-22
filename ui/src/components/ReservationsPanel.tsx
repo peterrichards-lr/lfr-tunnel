@@ -13,6 +13,7 @@ interface Reservation {
   domain: string;
   status: string;
   expires_at?: string;
+  extension_requested?: boolean;
 }
 
 export default function ReservationsPanel() {
@@ -91,6 +92,25 @@ export default function ReservationsPanel() {
     }
   };
 
+  const requestExtension = async (id: string) => {
+    try {
+      await axios.post(`/api/portal/reservations/${encodeURIComponent(id)}/request-extension`);
+      fetchData();
+      showToast(t('success_request_extension', 'Lease extension requested successfully'), 'success');
+    } catch (err: any) {
+      showToast(err.response?.data?.error || t('failed_request_extension', 'Failed to request extension'), 'error');
+    }
+  };
+
+  const copyText = async (text: string, message: string) => {
+    try {
+      await navigator.clipboard.writeText(text);
+      showToast(message, 'success');
+    } catch {
+      showToast('Failed to copy to clipboard', 'error');
+    }
+  };
+
   const { items: sortedReservations, requestSort, getSortIndicator, searchQuery, setSearchQuery, getAriaSort } = useTableSort(reservations, ['subdomain', 'domain', 'status']);
   if (loading) {
     return (
@@ -115,9 +135,8 @@ export default function ReservationsPanel() {
           <table style={{ width: '100%', borderCollapse: 'collapse' }}>
             <thead>
               <tr style={{ borderBottom: '1px solid var(--border)' }}>
+                <th style={{ padding: '12px 16px' }}><Skeleton width={120} /></th>
                 <th style={{ padding: '12px 16px' }}><Skeleton width={80} /></th>
-                <th style={{ padding: '12px 16px' }}><Skeleton width={100} /></th>
-                <th style={{ padding: '12px 16px' }}><Skeleton width={60} /></th>
                 <th style={{ padding: '12px 16px' }}><Skeleton width={120} /></th>
                 <th style={{ padding: '12px 16px' }}><Skeleton width={80} /></th>
               </tr>
@@ -126,7 +145,6 @@ export default function ReservationsPanel() {
               {[...Array(3)].map((_, i) => (
                 <tr key={i} style={{ borderBottom: '1px solid rgba(255,255,255,0.05)' }}>
                   <td style={{ padding: '16px' }}><Skeleton width="80%" height={16} /></td>
-                  <td style={{ padding: '16px' }}><Skeleton width="60%" height={16} /></td>
                   <td style={{ padding: '16px' }}><Skeleton width={50} height={20} borderRadius={10} /></td>
                   <td style={{ padding: '16px' }}><Skeleton width="70%" height={16} /></td>
                   <td style={{ padding: '16px' }}><Skeleton width={60} height={28} /></td>
@@ -209,30 +227,70 @@ export default function ReservationsPanel() {
             <thead>
               <tr style={{ borderBottom: '1px solid var(--border)', textAlign: 'left' }}>
                 <th style={{ padding: '12px 16px', color: 'var(--text-muted)', fontWeight: 600, fontSize: '13px', textTransform: 'uppercase', letterSpacing: '0.5px', cursor: 'pointer' }} onClick={() => requestSort('subdomain')} aria-sort={getAriaSort('subdomain')}>{t('subdomain', 'Subdomain')}{getSortIndicator('subdomain')}</th>
-                <th style={{ padding: '12px 16px', color: 'var(--text-muted)', fontWeight: 600, fontSize: '13px', textTransform: 'uppercase', letterSpacing: '0.5px', cursor: 'pointer' }} onClick={() => requestSort('domain')} aria-sort={getAriaSort('domain')}>{t('domain', 'Domain')}{getSortIndicator('domain')}</th>
                 <th style={{ padding: '12px 16px', color: 'var(--text-muted)', fontWeight: 600, fontSize: '13px', textTransform: 'uppercase', letterSpacing: '0.5px', cursor: 'pointer' }} onClick={() => requestSort('status')} aria-sort={getAriaSort('status')}>{t('status', 'Status')}{getSortIndicator('status')}</th>
                 <th style={{ padding: '12px 16px', color: 'var(--text-muted)', fontWeight: 600, fontSize: '13px', textTransform: 'uppercase', letterSpacing: '0.5px', cursor: 'pointer' }} onClick={() => requestSort('expires_at')} aria-sort={getAriaSort('expires_at')}>{t('expires', 'Expires')}{getSortIndicator('expires_at')}</th>
                 <th style={{ padding: '12px 16px', color: 'var(--text-muted)', fontWeight: 600, fontSize: '13px', textTransform: 'uppercase', letterSpacing: '0.5px' }}>{t('actions', 'Actions')}</th>
               </tr>
             </thead>
             <tbody>
-              {sortedReservations.map(r => (
-                <tr key={r.id} style={{ borderBottom: '1px solid rgba(255,255,255,0.05)', transition: 'background 0.2s' }}>
-                  <td style={{ padding: '16px', fontWeight: 600, fontSize: '14px' }}>{r.subdomain}</td>
-                  <td style={{ padding: '16px', fontSize: '14px', color: 'var(--text-muted)' }}>{r.domain}</td>
-                  <td style={{ padding: '16px' }}>
-                    <span className={`badge ${r.status === 'active' ? 'success' : 'warning'}`}>
-                      {r.status}
-                    </span>
-                  </td>
-                  <td style={{ padding: '16px', fontSize: '14px' }}>{r.expires_at ? formatDate(r.expires_at) : t('never', 'Never')}</td>
-                  <td style={{ padding: '16px' }}>
-                    <button className="btn btn-danger" style={{ padding: '4px 8px', fontSize: '12px' }} onClick={() => deleteReservation(r.id)}>
-                      {t('release', 'Release')}
-                    </button>
-                  </td>
-                </tr>
-              ))}
+              {sortedReservations.map(r => {
+                const host = `${r.subdomain}.${r.domain}`;
+                const isExpired = r.expires_at && new Date(r.expires_at) < new Date();
+                const canExtend = !!(r.expires_at && !r.extension_requested && !isExpired);
+                return (
+                  <tr key={r.id} style={{ borderBottom: '1px solid rgba(255,255,255,0.05)', transition: 'background 0.2s' }}>
+                    <td style={{ padding: '16px' }}>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                        <a href={`https://${host}`} target="_blank" rel="noreferrer" style={{ color: 'var(--primary)', fontWeight: 600, textDecoration: 'none', fontFamily: 'monospace', fontSize: '14px' }}>
+                          {host}
+                        </a>
+                        <button 
+                          onClick={() => copyText(host, 'Host copied to clipboard')}
+                          style={{ background: 'none', border: 'none', color: 'var(--text-muted)', cursor: 'pointer', padding: '2px', fontSize: '14px' }}
+                          title="Copy Host"
+                        >
+                          📋
+                        </button>
+                        <button 
+                          onClick={() => copyText(`lfr-tunnel -subdomain ${r.subdomain} -server ${window.location.origin}`, 'CLI command copied')}
+                          style={{ background: 'none', border: 'none', color: 'var(--text-muted)', cursor: 'pointer', padding: '2px', fontSize: '14px' }}
+                          title="Copy CLI Connection Command"
+                        >
+                          🔌
+                        </button>
+                      </div>
+                    </td>
+                    <td style={{ padding: '16px' }}>
+                      {isExpired ? (
+                        <span className="badge danger">Quarantined</span>
+                      ) : r.extension_requested ? (
+                        <span className="badge warning">Extension Requested</span>
+                      ) : (
+                        <span className="badge success">Active</span>
+                      )}
+                    </td>
+                    <td style={{ padding: '16px', fontSize: '14px' }}>
+                      {r.expires_at ? formatDate(r.expires_at) : 'Never (Permanent)'}
+                    </td>
+                    <td style={{ padding: '16px' }}>
+                      <div style={{ display: 'flex', gap: '8px' }}>
+                        {canExtend && (
+                          <button 
+                            className="btn btn-secondary" 
+                            style={{ padding: '4px 8px', fontSize: '12px' }} 
+                            onClick={() => requestExtension(r.id)}
+                          >
+                            Extend
+                          </button>
+                        )}
+                        <button className="btn btn-danger" style={{ padding: '4px 8px', fontSize: '12px' }} onClick={() => deleteReservation(r.id)}>
+                          {t('release', 'Release')}
+                        </button>
+                      </div>
+                    </td>
+                  </tr>
+                );
+              })}
             </tbody>
           </table>
         </div>

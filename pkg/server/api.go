@@ -2,6 +2,7 @@ package server
 
 import (
 	"crypto/sha256"
+	"encoding/csv"
 	"encoding/hex"
 	"encoding/json"
 	"errors"
@@ -214,6 +215,48 @@ func (s *Server) handleListTokens(w http.ResponseWriter, r *http.Request) {
 	}
 
 	respondJSON(w, http.StatusOK, pats)
+}
+
+// handleExportTokensCSV exports the current user's PATs (or all PATs for admin/owner) as CSV.
+func (s *Server) handleExportTokensCSV(w http.ResponseWriter, r *http.Request) {
+	user, err := s.getCurrentUser(r)
+	if err != nil {
+		http.Error(w, `{"error":"Unauthorized"}`, http.StatusUnauthorized)
+		return
+	}
+
+	var pats []*db.PersonalAccessToken
+	if user.Role == "admin" || user.Role == "owner" {
+		pats, err = s.db.ListAllPATs()
+	} else {
+		pats, err = s.db.ListPATs(user.ID)
+	}
+	if err != nil {
+		http.Error(w, `{"error":"Failed to list tokens"}`, http.StatusInternalServerError)
+		return
+	}
+
+	w.Header().Set("Content-Type", "text/csv")
+	w.Header().Set("Content-Disposition", "attachment;filename=personal_access_tokens.csv")
+
+	writer := csv.NewWriter(w)
+	_ = writer.Write([]string{"ID", "Name", "Prefix", "Owner", "ExpiresAt", "CreatedAt"}) //nolint:errcheck
+
+	for _, p := range pats {
+		expiresAtStr := "Never"
+		if p.ExpiresAt != nil {
+			expiresAtStr = p.ExpiresAt.Format(time.RFC3339)
+		}
+		_ = writer.Write([]string{ //nolint:errcheck
+			strconv.FormatInt(p.ID, 10),
+			p.Name,
+			p.TokenPrefix,
+			p.UserID,
+			expiresAtStr,
+			p.CreatedAt.Format(time.RFC3339),
+		})
+	}
+	writer.Flush()
 }
 
 // handleCreateToken creates a new PAT and returns the raw token exactly once.

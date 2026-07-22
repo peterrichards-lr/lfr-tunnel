@@ -28,30 +28,7 @@ export default function Dashboard() {
   }, [user]);
 
   const handleExportCSV = () => {
-    try {
-      let csv = "ID,Name,Prefix,Owner,ExpiresAt,CreatedAt\n";
-      tokens.forEach(item => {
-        const row = [
-          item.id,
-          item.name,
-          item.token_prefix,
-          item.user_id || "",
-          item.expires_at || "Never",
-          item.created_at || ""
-        ].map(val => `"${String(val).replace(/"/g, '""')}"`).join(",");
-        csv += row + "\n";
-      });
-      
-      const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
-      const link = document.createElement("a");
-      link.href = URL.createObjectURL(blob);
-      link.setAttribute("download", "personal_access_tokens.csv");
-      document.body.appendChild(link);
-      link.click();
-      document.body.removeChild(link);
-    } catch (e) {
-      console.error("Failed to export CSV", e);
-    }
+    window.location.href = '/api/tokens/export';
   };
 
   return (

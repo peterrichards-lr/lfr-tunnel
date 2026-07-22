@@ -50,13 +50,13 @@
 
                 <div id="consent-container" class="hidden" style="display: none; margin-top: 16px; gap: 8px; align-items: flex-start; text-align: left;">
                     <input type="checkbox" id="setup-consent" style="margin-top: 3px; cursor: pointer;">
-                    <label for="setup-consent" style="font-size: 12px; color: var(--text-muted); line-height: 1.4; cursor: pointer; user-select: none;" data-i18n="policy_consent_label">
+                    <label for="setup-consent" style="font-size: 14px; color: var(--text-main); line-height: 1.4; cursor: pointer; user-select: none;" data-i18n="policy_consent_label">
                         I acknowledge that I have read the <a href="/privacy" target="_blank" id="footer-privacy-link" style="color: var(--primary); text-decoration: none;">Privacy Policy</a> and <a href="/cookies" target="_blank" id="footer-cookie-link" style="color: var(--primary); text-decoration: none;">Cookie Disclosure</a> and agree to their terms.
                     </label>
                 </div>
 
                 <button type="submit" class="btn btn-primary" style="margin-top: 16px; width: 100%;" data-i18n="btn_complete_setup">Complete Setup</button>
-                <div id="setup-msg" style="margin-top: 12px; font-size: 13px; text-align: center;"></div>
+                <div id="setup-msg" aria-live="polite" style="margin-top: 12px; font-size: 13px; text-align: center;"></div>
             </form>
         </div>
     </div>

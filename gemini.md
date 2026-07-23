@@ -207,6 +207,8 @@ The solution will consist of:
 - [x] Connect useDataTable with per-table localStorage persistence and column customization across Admin tables (#803/#804).
 - [x] Extend ServiceInstaller unit test suite for pretty symlinks and LaunchAgent plists (#805/#806).
 - [x] Release, tag, and deploy v1.44.3 of lfr-tunnel to GitHub and VPS (#807).
+- [x] Standardise V2 Modals ARIA Accessibility, Button aria-labels, and type='button' defaults across all UI pages (#822, #823, #824 / PR #825).
+- [x] Fix Admin Blacklist ip_address payload JSON key and form button vertical baseline alignment (#826).
 
 
 

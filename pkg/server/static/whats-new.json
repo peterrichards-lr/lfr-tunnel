@@ -1,5 +1,15 @@
 [
   {
+    "version": "v1.44.1",
+    "release_date": "2026-07-23",
+    "features": [
+      "Fix: Resolve unreplaced {{LFR_TUNNEL_MACOS_ARM64_INSTALL_DIR}} template placeholders during direct raw install script execution",
+      "Feature: Namespace all install script placeholders and operational environment variables with explicit LFR_TUNNEL_ prefix",
+      "Fix: Gracefully skip Windows binary codesigning when certificate parameters are set to skip",
+      "Docs: Document InfoSec and EDR environment variable namespacing standards"
+    ]
+  },
+  {
     "version": "v1.44.0",
     "release_date": "2026-07-23",
     "features": [

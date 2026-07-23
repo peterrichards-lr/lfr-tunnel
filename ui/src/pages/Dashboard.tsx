@@ -46,11 +46,21 @@ export default function Dashboard() {
     { key: 'created_at', label: t('created', 'Created'), sortable: true }
   ], [t]);
 
+  const isTokenRevoked = (tItem: any) => {
+    if (!tItem.revoked_at) return false;
+    const d = new Date(tItem.revoked_at).getTime();
+    return !isNaN(d) && d > 946684800000;
+  };
+
+  const isTokenExpired = (tItem: any) => {
+    if (!tItem.expires_at) return false;
+    const d = new Date(tItem.expires_at).getTime();
+    return !isNaN(d) && d > 946684800000 && d <= Date.now();
+  };
+
   const mappedTokens = useMemo(() => {
-    const now = new Date();
     return tokens.map(tItem => {
-      const isExpired = tItem.expires_at && new Date(tItem.expires_at) <= now;
-      const statusLabel = tItem.revoked_at ? 'revoked' : (isExpired ? 'expired' : 'active');
+      const statusLabel = isTokenRevoked(tItem) ? 'revoked' : (isTokenExpired(tItem) ? 'expired' : 'active');
       return {
         ...tItem,
         computed_status: statusLabel
@@ -59,9 +69,9 @@ export default function Dashboard() {
   }, [tokens]);
 
   const statusOptions = useMemo(() => [
-    { value: 'active', label: t('status_active', 'Active') },
-    { value: 'expired', label: t('status_expired', 'Expired') },
-    { value: 'revoked', label: t('status_revoked', 'Revoked') }
+    { value: 'active', label: t('status_active', 'active') },
+    { value: 'expired', label: t('status_expired', 'expired') },
+    { value: 'revoked', label: t('status_revoked', 'revoked') }
   ], [t]);
 
   const {

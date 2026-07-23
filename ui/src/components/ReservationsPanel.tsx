@@ -104,10 +104,30 @@ export default function ReservationsPanel() {
     { key: 'created_at', label: t('created_at', 'Created Date'), sortable: true },
   ], [t]);
 
+  const mappedReservations = useMemo(() => {
+    const now = new Date();
+    return reservations.map(r => {
+      const isExpired = r.expires_at && new Date(r.expires_at) <= now;
+      const statusLabel = isExpired ? 'quarantined' : (r.extension_requested ? 'extension requested' : 'active');
+      return {
+        ...r,
+        computed_status: statusLabel
+      };
+    });
+  }, [reservations]);
+
+  const statusOptions = useMemo(() => [
+    { value: 'active', label: t('status_active', 'active') },
+    { value: 'quarantined', label: t('status_quarantined', 'quarantined') },
+    { value: 'extension requested', label: t('status_extension_requested', 'extension requested') }
+  ], [t]);
+
   const {
     paginatedItems,
     searchQuery,
     setSearchQuery,
+    statusFilter,
+    setStatusFilter,
     pageSize,
     setPageSize,
     currentPage,
@@ -119,13 +139,16 @@ export default function ReservationsPanel() {
     requestSort,
     getSortIndicator,
     getAriaSort
-  } = useDataTable<Reservation>(
+  } = useDataTable<Reservation & { computed_status: string }>(
     'dashboard_reservations',
-    reservations,
+    mappedReservations,
     ['subdomain', 'domain', 'status'],
-    columns,
+    columns as any,
     10,
-    ['created_at'] // Unselected by default
+    ['created_at'],
+    'computed_status',
+    statusOptions,
+    'all'
   );
 
   const deleteReservation = async (id: string) => {
@@ -307,6 +330,9 @@ export default function ReservationsPanel() {
             columns={columns}
             isColumnVisible={isColumnVisible}
             onToggleColumn={toggleColumn}
+            statusFilter={statusFilter}
+            onStatusFilterChange={setStatusFilter}
+            statusOptions={statusOptions}
           />
         </div>
       )}
@@ -384,11 +410,11 @@ export default function ReservationsPanel() {
                       {isColumnVisible('status') && (
                         <td className="td-cell">
                           {isExpired ? (
-                            <span className="badge badge-danger">Quarantined</span>
+                            <span className="badge badge-danger">quarantined</span>
                           ) : r.extension_requested ? (
-                            <span className="badge badge-warning">Extension Requested</span>
+                            <span className="badge badge-warning">extension requested</span>
                           ) : (
-                            <span className="badge badge-success">Active</span>
+                            <span className="badge badge-success">active</span>
                           )}
                         </td>
                       )}

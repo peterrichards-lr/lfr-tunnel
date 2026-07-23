@@ -13,13 +13,13 @@ def main():
         data = json.load(f)
 
     if isinstance(data, list):
-        if len(data) > 3:
-            data = data[:3]
+        if len(data) > 5:
+            data = data[:5]
             with open(WHATS_NEW_PATH, 'w') as f:
                 json.dump(data, f, indent=2)
-            print(f"Trimmed whats-new.json to latest 3 releases.")
+            print(f"Trimmed whats-new.json to latest 5 releases.")
         else:
-            print(f"whats-new.json contains {len(data)} releases (<= 3). No trimming needed.")
+            print(f"whats-new.json contains {len(data)} releases (<= 5). No trimming needed.")
     else:
         print("whats-new.json is not an array format.")
 

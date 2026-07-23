@@ -107,8 +107,8 @@ func uninstallLinux() error {
 		return nil
 	}
 
-	_ = exec.Command("systemctl", "--user", "stop", "lfr-tunnel.service").Run()     //nolint:errcheck
-	_ = exec.Command("systemctl", "--user", "disable", "lfr-tunnel.service").Run()  //nolint:errcheck
+	_ = exec.Command("systemctl", "--user", "stop", "lfr-tunnel.service").Run()    //nolint:errcheck
+	_ = exec.Command("systemctl", "--user", "disable", "lfr-tunnel.service").Run() //nolint:errcheck
 
 	if err := os.Remove(servicePath); err != nil {
 		return err

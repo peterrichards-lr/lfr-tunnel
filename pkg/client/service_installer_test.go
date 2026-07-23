@@ -8,7 +8,7 @@ import (
 )
 
 func TestInstallService(t *testing.T) {
-	defer UninstallService()   //nolint:errcheck
+	defer UninstallService()    //nolint:errcheck
 	defer UninstallGUIService() //nolint:errcheck
 
 	binPath := filepath.Join(t.TempDir(), "lfr-tunnel")
@@ -21,6 +21,6 @@ func TestInstallService(t *testing.T) {
 	_ = installLinux(binPath)   //nolint:errcheck
 	_ = installWindows(binPath) //nolint:errcheck
 
-	_ = UninstallService()   //nolint:errcheck
+	_ = UninstallService()    //nolint:errcheck
 	_ = UninstallGUIService() //nolint:errcheck
 }

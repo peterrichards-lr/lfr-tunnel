@@ -1,11 +1,13 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useMemo } from 'react';
 import axios from 'axios';
 import { useOutletContext } from 'react-router-dom';
 import { useI18n } from '../contexts/I18nContext';
-import { useTableSort } from '../hooks/useTableSort';
 import Skeleton from '../components/Skeleton';
 import { useUI } from '../contexts/UIContext';
 import { useSettings } from '../contexts/SettingsContext';
+import { useDataTable, type ColumnDef } from '../hooks/useDataTable';
+import DataTableToolbar from '../components/DataTableToolbar';
+import DataTablePagination from '../components/DataTablePagination';
 
 interface User {
   id: string;
@@ -283,20 +285,45 @@ export default function AdminUsers() {
     }
   };
   const pendingCount = users.filter(u => u.status === 'pending').length;
-  const filteredUsers = users.filter(u => {
+  const filteredUsers = useMemo(() => users.filter(u => {
     if (activeTab === 'users') {
       return u.status !== 'pending';
     } else {
       return u.status === 'pending';
     }
-  });
+  }), [users, activeTab]);
 
-  const { items: sortedUsers, requestSort, getSortIndicator, searchQuery, setSearchQuery, getAriaSort } = useTableSort(filteredUsers, ['email', 'first_name', 'last_name', 'role', 'status', 'auth_method', 'last_login_at']);
+  const columns: ColumnDef<User>[] = useMemo(() => [
+    { key: 'email', label: 'User', sortable: true },
+    { key: 'role', label: 'Role', sortable: true },
+    { key: 'status', label: 'Status', sortable: true },
+    { key: 'auth_method', label: 'Auth Method', sortable: true },
+    { key: 'last_login_at', label: 'Last Seen', sortable: true },
+  ], []);
 
-  const USERS_PER_PAGE = 20;
-  const [usersPage, setUsersPage] = useState(0);
-  const totalUserPages = Math.ceil(sortedUsers.length / USERS_PER_PAGE);
-  const paginatedUsers = sortedUsers.slice(usersPage * USERS_PER_PAGE, (usersPage + 1) * USERS_PER_PAGE);
+  const {
+    paginatedItems: paginatedUsers,
+    currentPage,
+    totalPages,
+    totalItems,
+    pageSize,
+    setCurrentPage,
+    setPageSize,
+    searchQuery,
+    setSearchQuery,
+    requestSort,
+    getSortIndicator,
+    getAriaSort,
+    isColumnVisible,
+    toggleColumn,
+    allColumns
+  } = useDataTable<User>(
+    'admin_users',
+    filteredUsers,
+    ['email', 'first_name', 'last_name', 'role', 'status', 'auth_method'],
+    columns,
+    10
+  );
 
   if (loading) {
     return (
@@ -353,15 +380,15 @@ export default function AdminUsers() {
       </div>
 
       {/* Sub-tabs for All Users vs Pending Registrations */}
-      <div className="sub-tabs">
+      <div className="sub-tabs mb-lg">
         <button 
-          onClick={() => { setActiveTab('users'); setUsersPage(0); }} 
+          onClick={() => setActiveTab('users')} 
           className={`sub-tab ${activeTab === 'users' ? 'sub-tab--active' : ''}`}
         >
           {t('users_tab_all', 'All Users')}
         </button>
         <button 
-          onClick={() => { setActiveTab('registrations'); setUsersPage(0); }} 
+          onClick={() => setActiveTab('registrations')} 
           className={`sub-tab ${activeTab === 'registrations' ? 'sub-tab--active' : ''} flex items-center gap-xs`}
         >
           <span>{t('users_tab_registrations', 'Pending Registrations')}</span>
@@ -372,34 +399,36 @@ export default function AdminUsers() {
           )}
         </button>
       </div>
-      <div className="search-row">
-        <input 
-          type="text" 
-          placeholder={t('search_users_placeholder', 'Search users...')} 
-          value={searchQuery} 
-          onChange={e => { setSearchQuery(e.target.value); setUsersPage(0); }}
-          className="search-input"
-        />
-      </div>
 
-      <div className="card p-0">
+      <div className="card p-xl">
+        <DataTableToolbar
+          searchQuery={searchQuery}
+          onSearchChange={setSearchQuery}
+          searchPlaceholder={t('search_users_placeholder', 'Search users...')}
+          pageSize={pageSize}
+          onPageSizeChange={setPageSize}
+          columns={allColumns}
+          isColumnVisible={isColumnVisible}
+          onToggleColumn={toggleColumn}
+        />
+
         <div className="table-responsive">
           <table className="w-full">
             <thead>
               <tr className="border-b text-left">
-                <th className="th-col th-col--sortable" onClick={() => requestSort('first_name')} aria-sort={getAriaSort('first_name')}>User{getSortIndicator('first_name')}</th>
-                <th className="th-col th-col--sortable" onClick={() => requestSort('role')} aria-sort={getAriaSort('role')}>Role{getSortIndicator('role')}</th>
-                <th className="th-col th-col--sortable" onClick={() => requestSort('status')} aria-sort={getAriaSort('status')}>Status{getSortIndicator('status')}</th>
-                <th className="th-col th-col--sortable" onClick={() => requestSort('auth_method')} aria-sort={getAriaSort('auth_method')}>Auth Method{getSortIndicator('auth_method')}</th>
+                {isColumnVisible('email') && <th className="th-col th-col--sortable" onClick={() => requestSort('email')} aria-sort={getAriaSort('email')}>User{getSortIndicator('email')}</th>}
+                {isColumnVisible('role') && <th className="th-col th-col--sortable" onClick={() => requestSort('role')} aria-sort={getAriaSort('role')}>Role{getSortIndicator('role')}</th>}
+                {isColumnVisible('status') && <th className="th-col th-col--sortable" onClick={() => requestSort('status')} aria-sort={getAriaSort('status')}>Status{getSortIndicator('status')}</th>}
+                {isColumnVisible('auth_method') && <th className="th-col th-col--sortable" onClick={() => requestSort('auth_method')} aria-sort={getAriaSort('auth_method')}>Auth Method{getSortIndicator('auth_method')}</th>}
                 <th className="th-col">Quotas</th>
-                <th className="th-col th-col--sortable" onClick={() => requestSort('last_login_at')} aria-sort={getAriaSort('last_login_at')}>Last Seen{getSortIndicator('last_login_at')}</th>
-                <th className="th-col">Actions</th>
+                {isColumnVisible('last_login_at') && <th className="th-col th-col--sortable" onClick={() => requestSort('last_login_at')} aria-sort={getAriaSort('last_login_at')}>Last Seen{getSortIndicator('last_login_at')}</th>}
+                <th className="th-col text-right">Actions</th>
               </tr>
             </thead>
             <tbody>
-              {sortedUsers.length === 0 ? (
+              {paginatedUsers.length === 0 ? (
                 <tr>
-                  <td colSpan={7} className="td-empty">
+                  <td colSpan={7} className="td-cell text-center text-muted py-xl">
                     {activeTab === 'users' ? t('no_users_found', 'No users found.') : t('no_pending_registrations', 'No pending registrations.')}
                   </td>
                 </tr>
@@ -407,49 +436,53 @@ export default function AdminUsers() {
                 paginatedUsers.map((u) => {
                   const isSelf = currentUser && u.email === currentUser.email;
                   return (
-                    <tr key={u.email} className={`border-b ${isSelf ? 'opacity-60' : ''}`}>
-                      <td className="td-cell">
-                        <div className="flex items-center gap-xs">
-                          {u.portal_active ? (
-                            <div className="status-dot status-dot--online" title="Online" />
-                          ) : (
-                            <div className="status-dot status-dot--offline" title="Offline" />
-                          )}
-                          <div>
-                            <div 
-                              onClick={() => setSelectedUser(u)}
-                              className="user-name-link fw-medium cursor-pointer"
-                            >
-                              {u.first_name || u.last_name ? `${u.first_name} ${u.last_name}` : 'Unnamed User'}
-                            </div>
-                            <div className="text-xs text-muted">
-                              <a 
-                                href="#" 
-                                onClick={(e) => { e.preventDefault(); setSelectedUser(u); }}
-                                className="email-link"
+                    <tr key={u.email} className={`border-b hover:bg-white/5 transition-colors ${isSelf ? 'opacity-60' : ''}`}>
+                      {isColumnVisible('email') && (
+                        <td className="td-cell">
+                          <div className="flex items-center gap-xs">
+                            {u.portal_active ? (
+                              <div className="status-dot status-dot--online" title="Online" />
+                            ) : (
+                              <div className="status-dot status-dot--offline" title="Offline" />
+                            )}
+                            <div>
+                              <div 
+                                onClick={() => setSelectedUser(u)}
+                                className="user-name-link fw-medium cursor-pointer"
                               >
-                                {u.email}
-                              </a>
-                              {(u.active_tunnels?.length || 0) > 0 && (
-                                <span 
-                                  className="badge tunnels badge-node cursor-pointer ml-xs px-xs py-0 text-2xs" 
-                                  onClick={() => setSelectedUser(u)}
-                                  title="Click to view tunnels"
+                                {u.first_name || u.last_name ? `${u.first_name} ${u.last_name}` : 'Unnamed User'}
+                              </div>
+                              <div className="text-xs text-muted">
+                                <a 
+                                  href="#" 
+                                  onClick={(e) => { e.preventDefault(); setSelectedUser(u); }}
+                                  className="email-link"
                                 >
-                                  🔌 {u.active_tunnels!.length} Tunnel{(u.active_tunnels!.length) > 1 ? 's' : ''}
-                                </span>
-                              )}
+                                  {u.email}
+                                </a>
+                                {(u.active_tunnels?.length || 0) > 0 && (
+                                  <span 
+                                    className="badge tunnels badge-node cursor-pointer ml-xs px-xs py-0 text-2xs" 
+                                    onClick={() => setSelectedUser(u)}
+                                    title="Click to view tunnels"
+                                  >
+                                    🔌 {u.active_tunnels!.length} Tunnel{(u.active_tunnels!.length) > 1 ? 's' : ''}
+                                  </span>
+                                )}
+                              </div>
                             </div>
                           </div>
-                        </div>
-                      </td>
-                      <td className="td-cell"><span className="badge">{u.role}</span></td>
-                      <td className="td-cell">
-                        <span className={`badge ${u.status === 'approved' ? 'badge-success' : u.status === 'pending' ? 'badge-warning' : 'badge-danger'}`}>
-                          {u.status}
-                        </span>
-                      </td>
-                      <td className="td-cell">{u.auth_method || 'password'}</td>
+                        </td>
+                      )}
+                      {isColumnVisible('role') && <td className="td-cell"><span className="badge">{u.role}</span></td>}
+                      {isColumnVisible('status') && (
+                        <td className="td-cell">
+                          <span className={`badge ${u.status === 'approved' ? 'badge-success' : u.status === 'pending' ? 'badge-warning' : 'badge-danger'}`}>
+                            {u.status}
+                          </span>
+                        </td>
+                      )}
+                      {isColumnVisible('auth_method') && <td className="td-cell">{u.auth_method || 'password'}</td>}
                       <td className="td-cell text-xs">
                         <div className="flex flex-col gap-2xs">
                           <div><span className="text-2xs text-muted">RPS:</span> <strong>{u.rate_limit ? u.rate_limit : '∞'}</strong></div>
@@ -457,16 +490,18 @@ export default function AdminUsers() {
                           <div><span className="text-2xs text-muted">Tunnels:</span> <strong>{u.max_tunnels !== undefined && u.max_tunnels !== null ? (u.max_tunnels < 0 ? '∞' : u.max_tunnels) : '3'}</strong></div>
                         </div>
                       </td>
-                      <td className="td-cell">
-                        {u.portal_active ? (
-                          <span className="text-success fw-semibold">Active Now</span>
-                        ) : (
-                          u.last_login_at ? formatDate(u.last_login_at) : <span className="text-muted">Never</span>
-                        )}
-                      </td>
-                      <td className="td-cell whitespace-nowrap">
+                      {isColumnVisible('last_login_at') && (
+                        <td className="td-cell">
+                          {u.portal_active ? (
+                            <span className="text-success fw-semibold">Active Now</span>
+                          ) : (
+                            u.last_login_at ? formatDate(u.last_login_at) : <span className="text-muted">Never</span>
+                          )}
+                        </td>
+                      )}
+                      <td className="td-cell text-right whitespace-nowrap">
                         {!isSelf && (
-                          <div className="actions-cell">
+                          <div className="flex gap-xs justify-end">
                             <button 
                               className="btn btn-secondary py-xs px-sm text-xs" 
                               onClick={() => setSelectedUser(u)}
@@ -511,20 +546,14 @@ export default function AdminUsers() {
             </tbody>
           </table>
         </div>
-        {totalUserPages > 1 && (
-          <div className="pagination-row p-lg border-t flex-wrap">
-            <div className="pagination-count">
-              {t('showing_x_to_y_of_z', `Showing ${usersPage * USERS_PER_PAGE + 1} to ${Math.min((usersPage + 1) * USERS_PER_PAGE, sortedUsers.length)} of ${sortedUsers.length} users`)}
-            </div>
-            <div className="pagination-controls">
-              <button className="btn btn-secondary py-xs px-sm text-xs w-auto" onClick={() => setUsersPage(0)} disabled={usersPage === 0}>«</button>
-              <button className="btn btn-secondary py-xs px-sm text-xs w-auto" onClick={() => setUsersPage(p => Math.max(0, p - 1))} disabled={usersPage === 0}>{t('previous', 'Prev')}</button>
-              <span className="pagination-page-label">{usersPage + 1} / {totalUserPages}</span>
-              <button className="btn btn-secondary py-xs px-sm text-xs w-auto" onClick={() => setUsersPage(p => Math.min(totalUserPages - 1, p + 1))} disabled={usersPage >= totalUserPages - 1}>{t('next', 'Next')}</button>
-              <button className="btn btn-secondary py-xs px-sm text-xs w-auto" onClick={() => setUsersPage(totalUserPages - 1)} disabled={usersPage >= totalUserPages - 1}>»</button>
-            </div>
-          </div>
-        )}
+
+        <DataTablePagination
+          currentPage={currentPage}
+          totalPages={totalPages}
+          totalItems={totalItems}
+          pageSize={pageSize}
+          onPageChange={setCurrentPage}
+        />
       </div>
       {selectedUser && (
         <div className="modal-backdrop">

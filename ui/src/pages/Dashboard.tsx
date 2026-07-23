@@ -28,6 +28,7 @@ export default function Dashboard() {
   const [tokens, setTokens] = useState<any[]>([]);
   const [isInstallModalOpen, setIsInstallModalOpen] = useState(false);
   const [serverConfig, setServerConfig] = useState<any>(null); // Kept for modal if needed, though not fetched here currently
+  const [copiedUpgrade, setCopiedUpgrade] = useState(false);
   const { formatDate } = useSettings();
   const { t } = useI18n();
   const { items: sortedTokens, requestSort, getSortIndicator, searchQuery, setSearchQuery, getAriaSort } = useTableSort(tokens, ['name', 'token_prefix', 'status']);
@@ -42,6 +43,12 @@ export default function Dashboard() {
 
   const handleExportCSV = () => {
     window.location.href = '/api/tokens/export';
+  };
+
+  const handleCopyUpgradeCmd = () => {
+    navigator.clipboard.writeText('lfr-tunnel -upgrade');
+    setCopiedUpgrade(true);
+    setTimeout(() => setCopiedUpgrade(false), 2000);
   };
 
   return (
@@ -79,17 +86,44 @@ export default function Dashboard() {
             </div>
           </div>
           <div style={{ display: 'flex', gap: '12px', alignItems: 'center' }}>
-            <code style={{
+            <div style={{
+              display: 'flex',
+              alignItems: 'center',
               background: 'rgba(0, 0, 0, 0.3)',
-              padding: '6px 12px',
               borderRadius: '6px',
-              fontSize: '12px',
-              fontFamily: 'monospace',
               border: '1px solid var(--border)',
-              color: 'var(--text-main)'
+              padding: '2px 8px 2px 12px'
             }}>
-              lfr-tunnel -upgrade
-            </code>
+              <code style={{
+                fontSize: '12px',
+                fontFamily: 'monospace',
+                color: 'var(--text-main)',
+                marginRight: '8px',
+                border: 'none',
+                background: 'none',
+                padding: 0
+              }}>
+                lfr-tunnel -upgrade
+              </code>
+              <button 
+                onClick={handleCopyUpgradeCmd}
+                style={{
+                  background: 'none',
+                  border: 'none',
+                  color: copiedUpgrade ? 'var(--success)' : 'var(--text-muted)',
+                  cursor: 'pointer',
+                  padding: '4px',
+                  fontSize: '12px',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  transition: 'color 0.2s'
+                }}
+                title={copiedUpgrade ? 'Copied!' : 'Copy to clipboard'}
+              >
+                {copiedUpgrade ? '✓' : '📋'}
+              </button>
+            </div>
             <button 
               className="btn btn-secondary" 
               style={{ padding: '6px 12px', fontSize: '12px', width: 'auto' }}

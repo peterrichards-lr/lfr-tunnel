@@ -34,12 +34,12 @@ export default function ClientInstallationModal({ isOpen, onClose, serverConfig 
   return (
     <div style={{
       position: 'fixed', top: 0, left: 0, right: 0, bottom: 0,
-      backgroundColor: 'rgba(0,0,0,0.5)', zIndex: 9999,
+      backgroundColor: 'var(--modal-overlay)', zIndex: 9999,
       display: 'flex', alignItems: 'center', justifyContent: 'center',
       backdropFilter: 'blur(4px)', padding: '20px'
     }} onClick={onClose}>
       <div style={{
-        background: 'var(--bg-secondary)', borderRadius: '12px', width: '100%', maxWidth: '600px',
+        background: 'var(--bg-base)', borderRadius: '12px', width: '100%', maxWidth: '600px',
         maxHeight: '90vh', display: 'flex', flexDirection: 'column',
         boxShadow: '0 10px 25px rgba(0,0,0,0.5)', overflow: 'hidden', padding: '24px'
       }} onClick={e => e.stopPropagation()}>
@@ -62,7 +62,7 @@ export default function ClientInstallationModal({ isOpen, onClose, serverConfig 
               onClick={() => setActiveTab(os)}
               style={{
                 background: 'none', border: 'none', padding: '8px 16px', cursor: 'pointer', fontWeight: 500,
-                color: activeTab === os ? 'var(--text)' : 'var(--text-muted)',
+                color: activeTab === os ? 'var(--text-main)' : 'var(--text-muted)',
                 borderBottom: `2px solid ${activeTab === os ? 'var(--primary)' : 'transparent'}`,
                 transition: 'all 0.2s',
                 display: 'flex',
@@ -86,7 +86,7 @@ export default function ClientInstallationModal({ isOpen, onClose, serverConfig 
               
               {!serverConfig?.disable_brew && (
                 <>
-                  <div style={{ fontSize: '0.8rem', fontWeight: 'bold', marginTop: '10px', color: 'var(--text)' }}>
+                  <div style={{ fontSize: '0.8rem', fontWeight: 'bold', marginTop: '10px', color: 'var(--text-main)' }}>
                     {t('guide_macos_brew', 'Recommended via Homebrew:')}
                   </div>
                   <div className="code-box">
@@ -98,7 +98,7 @@ export default function ClientInstallationModal({ isOpen, onClose, serverConfig 
                 </>
               )}
 
-              <div style={{ fontSize: '0.8rem', fontWeight: 'bold', marginTop: '10px', color: !serverConfig?.disable_brew ? 'var(--text-muted)' : 'var(--text)' }}>
+              <div style={{ fontSize: '0.8rem', fontWeight: 'bold', marginTop: '10px', color: !serverConfig?.disable_brew ? 'var(--text-muted)' : 'var(--text-main)' }}>
                 {t('guide_macos_direct', 'Direct Installation Script (Alternative):')}
               </div>
               <div className="code-box">
@@ -126,7 +126,7 @@ export default function ClientInstallationModal({ isOpen, onClose, serverConfig 
               
               {!serverConfig?.disable_scoop && (
                 <>
-                  <div style={{ fontSize: '0.8rem', fontWeight: 'bold', marginTop: '10px', color: 'var(--text)' }}>
+                  <div style={{ fontSize: '0.8rem', fontWeight: 'bold', marginTop: '10px', color: 'var(--text-main)' }}>
                     {t('guide_windows_scoop', 'Recommended via Scoop:')}
                   </div>
                   <div className="code-box">
@@ -138,7 +138,7 @@ export default function ClientInstallationModal({ isOpen, onClose, serverConfig 
                 </>
               )}
 
-              <div style={{ fontSize: '0.8rem', fontWeight: 'bold', marginTop: '10px', color: !serverConfig?.disable_scoop ? 'var(--text-muted)' : 'var(--text)' }}>
+              <div style={{ fontSize: '0.8rem', fontWeight: 'bold', marginTop: '10px', color: !serverConfig?.disable_scoop ? 'var(--text-muted)' : 'var(--text-main)' }}>
                 {t('guide_windows_direct', 'Direct Installation (PowerShell Script):')}
               </div>
               <div className="code-box">
@@ -161,7 +161,7 @@ export default function ClientInstallationModal({ isOpen, onClose, serverConfig 
             <div className="animation-fade-in">
               <h4 style={{ fontSize: '14px', marginBottom: '8px' }}>🚀 {t('guide_linux_title', 'Linux (amd64 / arm64)')}</h4>
               
-              <div style={{ fontSize: '0.8rem', fontWeight: 'bold', marginTop: '10px', color: 'var(--text)' }}>
+              <div style={{ fontSize: '0.8rem', fontWeight: 'bold', marginTop: '10px', color: 'var(--text-main)' }}>
                 {t('guide_linux_direct', 'Direct Installation Script:')}
               </div>
               <div className="code-box">

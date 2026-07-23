@@ -191,7 +191,7 @@ export default function AdminEdgeHealth() {
               />
             </div>
           )}
-          <div className="card table-responsive">
+          <div className="card table-responsive" style={{ minHeight: '220px' }}>
             <table className="table" style={{ overflow: 'visible' }}>
               <thead>
                 <tr>
@@ -257,9 +257,10 @@ export default function AdminEdgeHealth() {
                           {openMenu === id && (
                             <div className="action-menu-dropdown" style={{
                               position: 'absolute', right: 0, top: '100%', zIndex: 100, 
-                              background: 'var(--card-bg)', border: '1px solid var(--border)',
-                              borderRadius: '4px', boxShadow: '0 4px 12px rgba(0,0,0,0.2)',
-                              minWidth: '180px', display: 'flex', flexDirection: 'column'
+                              background: 'var(--bg-base)', border: '1px solid var(--border)',
+                              borderRadius: '6px', boxShadow: '0 10px 15px -3px rgba(0,0,0,0.3)',
+                              minWidth: '180px', display: 'flex', flexDirection: 'column',
+                              padding: '4px 0'
                             }}>
                               <button className="action-menu-item" style={{ padding: '8px 12px', textAlign: 'left', background: 'none', border: 'none', color: 'var(--text-main)', cursor: 'pointer', borderBottom: '1px solid var(--border)' }} onClick={() => restartEdgeDaemon(id)}>Restart Daemon</button>
                               <button className="action-menu-item" style={{ padding: '8px 12px', textAlign: 'left', background: 'none', border: 'none', color: 'var(--text-main)', cursor: 'pointer', borderBottom: '1px solid var(--border)' }} onClick={() => enableEdgeMaintenance(id)}>Enable Maintenance</button>

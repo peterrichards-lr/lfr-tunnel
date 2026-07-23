@@ -1224,3 +1224,7 @@ html[dir="rtl"] td, html[dir="rtl"] th {
     display: inline-block;
 }
 
+.user-name-link:hover {
+    color: var(--primary);
+}
+

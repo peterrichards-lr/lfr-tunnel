@@ -26,6 +26,7 @@ interface SubdomainInfo {
   client_ip?: string;
   bytes_in: number;
   bytes_out: number;
+  rate_limit?: number;
   node_id?: string;
 }
 
@@ -62,6 +63,7 @@ export default function AdminSubdomains() {
           client_ip: matchingLease?.client_ip || '-',
           bytes_in: matchingLease?.bytes_in || 0,
           bytes_out: matchingLease?.bytes_out || 0,
+          rate_limit: matchingLease?.rate_limit || 0,
           node_id: matchingLease?.node_id
         };
       });
@@ -214,6 +216,11 @@ export default function AdminSubdomains() {
                       <a href={`https://${sub.full_host}`} target="_blank" rel="noreferrer" style={{ color: 'var(--primary)', textDecoration: 'none' }}>
                         {sub.full_host}
                       </a>
+                      {sub.rate_limit !== undefined && sub.rate_limit > 0 && (
+                        <span className="badge" style={{ marginLeft: '8px', backgroundColor: 'rgba(239, 68, 68, 0.15)', color: '#f87171', border: '1px solid rgba(239, 68, 68, 0.3)' }}>
+                          ⏱️ {sub.rate_limit} RPS
+                        </span>
+                      )}
                     </td>
                     <td>{sub.user_email}</td>
                     <td>

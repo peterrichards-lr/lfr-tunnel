@@ -122,73 +122,34 @@ export default function AdminUsers() {
     }
   }, [selectedUser]);
 
-  const updateRateLimit = async () => {
+  const updateQuotas = async () => {
     if (!selectedUser) return;
     try {
       setUpdatingLimits(true);
       await axios.patch(`/api/admin/users/${encodeURIComponent(selectedUser.email)}`, {
-        rate_limit: Number(modalRateLimit)
-      });
-      showToast('Rate limit updated successfully', 'success');
-      setUsers(prev => prev.map(u => u.email === selectedUser.email ? { ...u, rate_limit: Number(modalRateLimit) } : u));
-      setSelectedUser(prev => prev ? { ...prev, rate_limit: Number(modalRateLimit) } : null);
-      fetchUsers();
-    } catch (e: any) {
-      showToast(e.response?.data?.error || 'Failed to update rate limit', 'error');
-    } finally {
-      setUpdatingLimits(false);
-    }
-  };
-
-  const updateSubdomainLimit = async () => {
-    if (!selectedUser) return;
-    try {
-      setUpdatingLimits(true);
-      await axios.post(`/api/admin/users/${encodeURIComponent(selectedUser.email)}/limit`, {
-        max_reservations: Number(modalMaxReservations)
-      });
-      showToast('Subdomain reservation limit updated successfully', 'success');
-      setUsers(prev => prev.map(u => u.email === selectedUser.email ? { ...u, max_reservations: Number(modalMaxReservations) } : u));
-      setSelectedUser(prev => prev ? { ...prev, max_reservations: Number(modalMaxReservations) } : null);
-      fetchUsers();
-    } catch (e: any) {
-      showToast(e.response?.data?.error || 'Failed to update subdomain limit', 'error');
-    } finally {
-      setUpdatingLimits(false);
-    }
-  };
-
-  const updateTunnelsLimit = async () => {
-    if (!selectedUser) return;
-    try {
-      setUpdatingLimits(true);
-      await axios.post(`/api/admin/users/${encodeURIComponent(selectedUser.email)}/tunnels-limit`, {
-        max_tunnels: Number(modalMaxTunnels)
-      });
-      showToast('Tunnels concurrency limit updated successfully', 'success');
-      setUsers(prev => prev.map(u => u.email === selectedUser.email ? { ...u, max_tunnels: Number(modalMaxTunnels) } : u));
-      setSelectedUser(prev => prev ? { ...prev, max_tunnels: Number(modalMaxTunnels) } : null);
-      fetchUsers();
-    } catch (e: any) {
-      showToast(e.response?.data?.error || 'Failed to update tunnels limit', 'error');
-    } finally {
-      setUpdatingLimits(false);
-    }
-  };
-
-  const updatePreferredDomain = async () => {
-    if (!selectedUser) return;
-    try {
-      setUpdatingLimits(true);
-      await axios.put(`/api/admin/users/${encodeURIComponent(selectedUser.email)}/preferred-domain`, {
+        rate_limit: Number(modalRateLimit),
+        max_reservations: Number(modalMaxReservations),
+        max_tunnels: Number(modalMaxTunnels),
         preferred_domain: modalPreferredDomain
       });
-      showToast('Preferred domain updated successfully', 'success');
-      setUsers(prev => prev.map(u => u.email === selectedUser.email ? { ...u, preferred_domain: modalPreferredDomain } : u));
-      setSelectedUser(prev => prev ? { ...prev, preferred_domain: modalPreferredDomain } : null);
+      showToast('User settings updated successfully', 'success');
+      setUsers(prev => prev.map(u => u.email === selectedUser.email ? { 
+        ...u, 
+        rate_limit: Number(modalRateLimit),
+        max_reservations: Number(modalMaxReservations),
+        max_tunnels: Number(modalMaxTunnels),
+        preferred_domain: modalPreferredDomain
+      } : u));
+      setSelectedUser(prev => prev ? { 
+        ...prev, 
+        rate_limit: Number(modalRateLimit),
+        max_reservations: Number(modalMaxReservations),
+        max_tunnels: Number(modalMaxTunnels),
+        preferred_domain: modalPreferredDomain
+      } : null);
       fetchUsers();
     } catch (e: any) {
-      showToast(e.response?.data?.error || 'Failed to update preferred domain', 'error');
+      showToast(e.response?.data?.error || 'Failed to update user quotas', 'error');
     } finally {
       setUpdatingLimits(false);
     }
@@ -487,8 +448,12 @@ export default function AdminUsers() {
                             <div style={{ width: '8px', height: '8px', borderRadius: '50%', background: 'var(--status-inactive)', flexShrink: 0 }} title="Offline" />
                           )}
                           <div>
-                            <div style={{ fontWeight: 500 }}>
-                              {u.first_name} {u.last_name}
+                            <div 
+                              onClick={() => setSelectedUser(u)}
+                              style={{ fontWeight: 500, cursor: 'pointer', transition: 'color 0.2s' }}
+                              className="user-name-link"
+                            >
+                              {u.first_name || u.last_name ? `${u.first_name} ${u.last_name}` : 'Unnamed User'}
                             </div>
                             <div style={{ fontSize: '12px', color: 'var(--text-muted)' }}>
                               <a 
@@ -536,6 +501,13 @@ export default function AdminUsers() {
                       <td>
                         {!isSelf && (
                           <div style={{ display: 'flex', gap: 'var(--spacing-sm)' }}>
+                            <button 
+                              className="btn btn-secondary" 
+                              style={{ padding: 'var(--spacing-xs) var(--spacing-sm)', fontSize: '12px' }} 
+                              onClick={() => setSelectedUser(u)}
+                            >
+                              Details
+                            </button>
                             {u.status === 'pending' || u.status === 'unverified' ? (
                               <>
                                 <button className="btn btn-primary" style={{ padding: 'var(--spacing-xs) var(--spacing-sm)', fontSize: '12px' }} onClick={() => changeStatus(u.email, 'approved')}>Approve</button>
@@ -628,61 +600,58 @@ export default function AdminUsers() {
             <h4 style={{ marginTop: 'var(--spacing-xl)', marginBottom: 'var(--spacing-lg)', borderBottom: '1px solid var(--border-color)', paddingBottom: 'var(--spacing-sm)' }}>
               Quotas & Security
             </h4>
-            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: 'var(--spacing-lg)', marginBottom: 'var(--spacing-xl)', background: 'rgba(255,255,255,0.02)', padding: 'var(--spacing-md)', borderRadius: '6px', border: '1px solid var(--border-color)' }}>
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: 'var(--spacing-lg)', background: 'rgba(255,255,255,0.02)', padding: 'var(--spacing-md)', borderRadius: '6px', border: '1px solid var(--border-color)' }}>
               <div>
                 <label style={{ display: 'block', fontSize: '12px', color: 'var(--text-muted)', marginBottom: 'var(--spacing-xs)', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Rate Limit (RPS)</label>
-                <div style={{ display: 'flex', gap: 'var(--spacing-sm)' }}>
+                <div>
                   <input 
                     type="number" 
                     className="input-field" 
-                    style={{ flex: 1, padding: 'var(--spacing-xs) var(--spacing-sm)', fontSize: '14px' }} 
+                    style={{ width: '100%', padding: 'var(--spacing-xs) var(--spacing-sm)', fontSize: '14px' }} 
                     min={0}
                     value={modalRateLimit} 
                     onChange={(e) => setModalRateLimit(Number(e.target.value))} 
                     placeholder="Unlimited"
                   />
-                  <button className="btn btn-primary" style={{ padding: 'var(--spacing-xs) var(--spacing-sm)', fontSize: '12px' }} onClick={updateRateLimit} disabled={updatingLimits}>Save</button>
                 </div>
               </div>
 
               <div>
                 <label style={{ display: 'block', fontSize: '12px', color: 'var(--text-muted)', marginBottom: 'var(--spacing-xs)', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Max Subdomains</label>
-                <div style={{ display: 'flex', gap: 'var(--spacing-sm)' }}>
+                <div>
                   <input 
                     type="number" 
                     className="input-field" 
-                    style={{ flex: 1, padding: 'var(--spacing-xs) var(--spacing-sm)', fontSize: '14px' }} 
+                    style={{ width: '100%', padding: 'var(--spacing-xs) var(--spacing-sm)', fontSize: '14px' }} 
                     min={-1}
                     value={modalMaxReservations} 
                     onChange={(e) => setModalMaxReservations(Number(e.target.value))} 
                     placeholder="3"
                   />
-                  <button className="btn btn-primary" style={{ padding: 'var(--spacing-xs) var(--spacing-sm)', fontSize: '12px' }} onClick={updateSubdomainLimit} disabled={updatingLimits}>Save</button>
                 </div>
               </div>
 
               <div>
                 <label style={{ display: 'block', fontSize: '12px', color: 'var(--text-muted)', marginBottom: 'var(--spacing-xs)', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Max Tunnels</label>
-                <div style={{ display: 'flex', gap: 'var(--spacing-sm)' }}>
+                <div>
                   <input 
                     type="number" 
                     className="input-field" 
-                    style={{ flex: 1, padding: 'var(--spacing-xs) var(--spacing-sm)', fontSize: '14px' }} 
+                    style={{ width: '100%', padding: 'var(--spacing-xs) var(--spacing-sm)', fontSize: '14px' }} 
                     min={-1}
                     value={modalMaxTunnels} 
                     onChange={(e) => setModalMaxTunnels(Number(e.target.value))} 
                     placeholder="3"
                   />
-                  <button className="btn btn-primary" style={{ padding: 'var(--spacing-xs) var(--spacing-sm)', fontSize: '12px' }} onClick={updateTunnelsLimit} disabled={updatingLimits}>Save</button>
                 </div>
               </div>
 
               <div>
                 <label style={{ display: 'block', fontSize: '12px', color: 'var(--text-muted)', marginBottom: 'var(--spacing-xs)', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Preferred Domain</label>
-                <div style={{ display: 'flex', gap: 'var(--spacing-sm)' }}>
+                <div>
                   <select 
                     className="input-field" 
-                    style={{ flex: 1, padding: 'var(--spacing-xs) var(--spacing-sm)', fontSize: '14px' }} 
+                    style={{ width: '100%', padding: 'var(--spacing-xs) var(--spacing-sm)', fontSize: '14px' }} 
                     value={modalPreferredDomain} 
                     onChange={(e) => setModalPreferredDomain(e.target.value)} 
                   >
@@ -691,7 +660,6 @@ export default function AdminUsers() {
                       <option key={d} value={d}>{d}</option>
                     ))}
                   </select>
-                  <button className="btn btn-primary" style={{ padding: 'var(--spacing-xs) var(--spacing-sm)', fontSize: '12px' }} onClick={updatePreferredDomain} disabled={updatingLimits}>Save</button>
                 </div>
               </div>
 
@@ -708,6 +676,17 @@ export default function AdminUsers() {
                   )}
                 </div>
               </div>
+            </div>
+
+            <div style={{ display: 'flex', justifyContent: 'flex-end', marginTop: 'var(--spacing-md)', marginBottom: 'var(--spacing-xl)' }}>
+              <button 
+                className="btn btn-primary" 
+                onClick={updateQuotas} 
+                disabled={updatingLimits} 
+                style={{ padding: '8px 16px', fontSize: '13px', width: 'auto' }}
+              >
+                {updatingLimits ? 'Saving...' : 'Save Quotas & Preferred Domain'}
+              </button>
             </div>
 
             <h4 style={{ marginTop: 'var(--spacing-xl)', marginBottom: 'var(--spacing-lg)', borderBottom: '1px solid var(--border-color)', paddingBottom: 'var(--spacing-sm)' }}>

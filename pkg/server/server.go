@@ -3629,6 +3629,8 @@ func (s *Server) handleAdminPatchUser(w http.ResponseWriter, r *http.Request, ac
 		ResetMFA        *bool   `json:"reset_mfa"`
 		RateLimit       *int    `json:"rate_limit"`
 		MaxReservations *int    `json:"max_reservations"`
+		MaxTunnels      *int    `json:"max_tunnels"`
+		PreferredDomain *string `json:"preferred_domain"`
 	}
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 		http.Error(w, `{"error":"Invalid request body"}`, http.StatusBadRequest)
@@ -3705,6 +3707,18 @@ func (s *Server) handleAdminPatchUser(w http.ResponseWriter, r *http.Request, ac
 		details["max_reservations_before"] = user.MaxReservations
 		details["max_reservations_after"] = *req.MaxReservations
 		user.MaxReservations = req.MaxReservations
+	}
+
+	if req.MaxTunnels != nil {
+		details["max_tunnels_before"] = user.MaxTunnels
+		details["max_tunnels_after"] = *req.MaxTunnels
+		user.MaxTunnels = req.MaxTunnels
+	}
+
+	if req.PreferredDomain != nil {
+		details["preferred_domain_before"] = user.PreferredDomain
+		details["preferred_domain_after"] = *req.PreferredDomain
+		user.PreferredDomain = *req.PreferredDomain
 	}
 
 	if err := s.db.UpdateUser(user); err != nil {
@@ -3880,6 +3894,7 @@ func (s *Server) handleAdminListLeases(w http.ResponseWriter, r *http.Request, a
 				FullHost:        el.FullHost,
 				LocalPort:       el.LocalPort,
 				ClientIP:        el.ClientIP,
+				RateLimit:       el.RateLimit,
 				Status:          "up",
 				BytesIn:         el.BytesIn,
 				BytesOut:        el.BytesOut,
@@ -3906,6 +3921,7 @@ func (s *Server) handleAdminExportLeases(w http.ResponseWriter, r *http.Request,
 				FullHost:        el.FullHost,
 				LocalPort:       el.LocalPort,
 				ClientIP:        el.ClientIP,
+				RateLimit:       el.RateLimit,
 				Status:          "up",
 				BytesIn:         el.BytesIn,
 				BytesOut:        el.BytesOut,
@@ -4738,6 +4754,7 @@ type EdgeLease struct {
 	ClientIP      string    `json:"client_ip"`
 	ClientVersion string    `json:"client_version,omitempty"`
 	ClientOS      string    `json:"client_os,omitempty"`
+	RateLimit     int       `json:"rate_limit"`
 	BytesIn       uint64    `json:"bytes_in"`
 	BytesOut      uint64    `json:"bytes_out"`
 	CreatedAt     time.Time `json:"created_at"`
@@ -5092,6 +5109,7 @@ func (s *Server) handleEdgeRegister(w http.ResponseWriter, r *http.Request) {
 		ClientIP:      edgeReq.ClientIP,
 		ClientVersion: edgeReq.ClientVersion,
 		ClientOS:      edgeReq.ClientOS,
+		RateLimit:     effectiveLimit,
 		BytesIn:       0,
 		BytesOut:      0,
 		CreatedAt:     time.Now(),

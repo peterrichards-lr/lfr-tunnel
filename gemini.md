@@ -1021,6 +1021,12 @@ The solution will consist of:
 - [x] Combine individual Quota settings Save buttons into a single centered Save Quotas & Preferred Domain button sending a batch PATCH request.
 - [x] Normalize Export PDF button heights to match Export CSV links.
 
+## V2 Portal Localization Sync, Subdomain Styles & Personal Tokens (v1.43.17)
+- [x] Align local frontend t() helper keys in AccountSettings and Sidebar with backend Java-style .properties bundles.
+- [x] Restore subdomain generator style selector (Liferay, Words, Heroku, Alphanumeric) next to Generate button in Reservations panel.
+- [x] Implement Generate Token button action displaying a modal form to create and copy new Personal Access Tokens.
+- [x] Fix absolute action menu clipping in Network Edge Health table by adding bottom padding to container.
+
 <!-- markdownlint-disable MD049 -->
 ---
 *Last Updated: 2026-07-23* | *Last Reviewed: 2026-07-23*

@@ -383,18 +383,18 @@ body {
             color: var(--status-tunnels-text);
             border: 1px solid var(--status-tunnels-border);
         }
-        /* Token / PAT status badge variants (badge-active, badge-expired, badge-revoked) */
-        .badge-active {
+        /* Badge color variants */
+        .badge-active, .badge-success, .badge.success {
             background: var(--status-success-bg);
             color: var(--status-success-text);
             border: 1px solid var(--status-success-border);
         }
-        .badge-expired {
+        .badge-expired, .badge-warning, .badge.warning {
             background: var(--status-warning-bg);
             color: var(--status-warning-text);
             border: 1px solid var(--status-warning-border);
         }
-        .badge-revoked {
+        .badge-revoked, .badge-danger, .badge.danger {
             background: var(--status-danger-bg);
             color: var(--status-danger-text);
             border: 1px solid var(--status-danger-border);

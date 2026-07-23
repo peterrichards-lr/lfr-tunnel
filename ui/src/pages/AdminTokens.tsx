@@ -34,18 +34,32 @@ export default function AdminTokens() {
     { key: 'created_at', label: t('created_at', 'Created'), sortable: true },
   ], [t]);
 
+  const isTokenRevoked = (pat: PAT) => {
+    if (!pat.revoked_at) return false;
+    const d = new Date(pat.revoked_at).getTime();
+    return !isNaN(d) && d > 946684800000;
+  };
+
+  const isTokenExpired = (pat: PAT) => {
+    if (!pat.expires_at) return false;
+    const d = new Date(pat.expires_at).getTime();
+    return !isNaN(d) && d > 946684800000 && d <= Date.now();
+  };
+
   const mappedTokens = useMemo(() => {
-    const now = new Date();
-    return tokens.map(t => ({
-      ...t,
-      computed_status: t.revoked_at ? 'revoked' : (t.expires_at && new Date(t.expires_at) <= now ? 'expired' : 'active')
-    }));
+    return tokens.map(t => {
+      const statusLabel = isTokenRevoked(t) ? 'revoked' : (isTokenExpired(t) ? 'expired' : 'active');
+      return {
+        ...t,
+        computed_status: statusLabel
+      };
+    });
   }, [tokens]);
 
   const statusOptions = useMemo(() => [
-    { value: 'active', label: t('status_active', 'Active') },
-    { value: 'expired', label: t('status_expired', 'Expired') },
-    { value: 'revoked', label: t('status_revoked', 'Revoked') }
+    { value: 'active', label: t('status_active', 'active') },
+    { value: 'expired', label: t('status_expired', 'expired') },
+    { value: 'revoked', label: t('status_revoked', 'revoked') }
   ], [t]);
 
   const {
@@ -72,10 +86,10 @@ export default function AdminTokens() {
     ['name', 'user_id', 'token_prefix'],
     columns as any,
     10,
-    [],
+    ['created_at'],
     'computed_status',
     statusOptions,
-    'active' // Default to showing Active tokens
+    'active'
   );
 
   const fetchTokens = async () => {
@@ -115,16 +129,16 @@ export default function AdminTokens() {
   };
 
   const getTokenStatus = (pat: PAT) => {
-    if (pat.revoked_at) return { label: t('status_revoked', 'REVOKED'), badge: 'badge-danger' };
-    if (pat.expires_at && new Date(pat.expires_at) <= new Date()) return { label: t('status_expired', 'EXPIRED'), badge: 'badge-warning' };
-    return { label: t('status_active', 'ACTIVE'), badge: 'badge-success' };
+    if (isTokenRevoked(pat)) return { label: t('status_revoked', 'revoked'), badge: 'badge-danger' };
+    if (isTokenExpired(pat)) return { label: t('status_expired', 'expired'), badge: 'badge-warning' };
+    return { label: t('status_active', 'active'), badge: 'badge-success' };
   };
 
   const getExpiresInText = (pat: PAT) => {
-    if (pat.revoked_at) return t('revoked', 'Revoked');
-    if (!pat.expires_at) return t('never', 'Never');
+    if (isTokenRevoked(pat)) return t('revoked', 'revoked');
+    if (!pat.expires_at || new Date(pat.expires_at).getFullYear() < 2000) return t('never', 'never');
     const diff = new Date(pat.expires_at).getTime() - new Date().getTime();
-    if (diff <= 0) return t('expired', 'Expired');
+    if (diff <= 0) return t('expired', 'expired');
     const days = Math.floor(diff / (1000 * 60 * 60 * 24));
     const hours = Math.floor((diff % (1000 * 60 * 60 * 24)) / (1000 * 60 * 60));
     return `in ${days}d ${hours}h`;

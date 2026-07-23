@@ -40,10 +40,10 @@ case "$OS" in
     ;;
 esac
 
-# Fallback if templating failed or wasn't substituted
-if [ -z "$DEFAULT_INSTALL_DIR" ] || [ "$DEFAULT_INSTALL_DIR" = "{{MACOS_AMD64_INSTALL_DIR}}" ]; then
-  DEFAULT_INSTALL_DIR="${HOME}/runningpoc/bin"
-fi
+# Fallback if templating failed or script was executed directly from raw source
+case "$DEFAULT_INSTALL_DIR" in
+  ""|\{\{*|\{\{MACOS_*) DEFAULT_INSTALL_DIR="${HOME}/runningpoc/bin" ;;
+esac
 
 INSTALL_DIR="${LFT_INSTALL_DIR:-${DEFAULT_INSTALL_DIR}}"
 INSTALL_PATH="${INSTALL_DIR}/lfr-tunnel"

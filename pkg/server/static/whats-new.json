@@ -1,5 +1,15 @@
 [
   {
+    "version": "v1.44.2",
+    "release_date": "2026-07-23",
+    "features": [
+      "Fix: Align SentinelOne EDR paths to ~/runningpoc/bin/lfr-tunnel for 100% execution immunity",
+      "Feature: Add AssociatedBundleIdentifiers to macOS LaunchAgent plists for clean System Settings presentation",
+      "Refactor: Convert Client SPA Inspector header navigation and cards to CSS theme variables for Light/Dark mode",
+      "Docs: Add subcommands listing to lfr-tunnel --help"
+    ]
+  },
+  {
     "version": "v1.44.1",
     "release_date": "2026-07-23",
     "features": [

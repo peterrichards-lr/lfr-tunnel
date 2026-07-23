@@ -202,6 +202,11 @@ The solution will consist of:
 - [x] Commit, test, E2E verify, and merge refactor/personal-dashboard-admin-tokens branch to master.
 - [x] Fix visual alignments, overlays transparencies, quota settings inputs, and export PDF heights across V2 Portal.
 - [x] Systematically refactor all 20 UI components to CSS utilities and design tokens in index.css (Phase 2 UX+++).
+- [x] Enforce whats-new.json maximum size constraint of 5 releases with automated unit test assertions in TestVersionSync (#801/#802).
+- [x] Fix lfr-tunnel -upgrade badge padding and layout spacing in Dashboard Overview (#803/#804).
+- [x] Connect useDataTable with per-table localStorage persistence and column customization across Admin tables (#803/#804).
+- [x] Extend ServiceInstaller unit test suite for pretty symlinks and LaunchAgent plists (#805/#806).
+- [x] Release, tag, and deploy v1.44.3 of lfr-tunnel to GitHub and VPS (#807).
 
 
 

@@ -30,17 +30,16 @@ Your tunnel will be reachable at:
 > 
 > You must use either **Method A (Native Installer)** or **Method B (Docker Container)** to run the client safely.
 
-### ~~Method A: Native Installer Script (Recommended Native)~~
+### Method A: Native Installer Script (Recommended Native)
 
-> [!IMPORTANT]
-> **Status Note:** We are currently talking with the **Liferay Security Teams** to get this native execution option fully approved and whitelisted. In the meantime, this option is temporarily disabled. **Please use Method B (Docker Container) below for all client operations.**
+This script downloads the officially signed client binary with Apple Developer hardened runtime signatures directly into the EDR-whitelisted canonical installation directory (`~/runningpoc/bin/lfr-tunnel` or `C:\Users\<username>\runningpoc\bin\lfr-tunnel.exe`):
 
-~~This script downloads the officially signed client binary directly into the EDR-whitelisted canonical installation directory (`/usr/local/bin/lfr-tunnel` or `%LOCALAPPDATA%\Programs\lfr-tunnel\lfr-tunnel.exe`):~~
+* **macOS / Linux:** `curl -fsSL https://tunnel.lfr-demo.se/install.sh | sh`
+* **Windows (PowerShell):** `irm https://tunnel.lfr-demo.se/install.ps1 | iex`
 
-* ~~**macOS / Linux:** `curl -sSfL https://tunnel.lfr-demo.se/install.sh | sh`~~
-* ~~**Windows (PowerShell):** `iwr https://tunnel.lfr-demo.se/install.ps1 | iex`~~
+If custom installation directories are required by your local InfoSec policy, export `LFT_INSTALL_DIR` or `LFR_TUNNEL_MACOS_ARM64_INSTALL_DIR` in your `~/.zshrc` or `~/.bashrc`.
 
-~~To verify your installation, open a new terminal window and run: `lfr-tunnel -version`~~
+To verify your installation, open a new terminal window and run: `lfr-tunnel -version`
 
 ### Method B: Standalone Docker Container (EDR Immune)
 For environments where local native binary execution is completely restricted, run our pre-built, multi-architecture client container directly from Docker Hub. This requires **zero local installation, zero compilation, and is 100% immune to EDR host-level blocks**:
@@ -343,4 +342,4 @@ Ngrok is a popular commercial tunnel provider. Note that running raw unsigned ng
 
 <!-- markdownlint-disable MD049 -->
 ---
-*Last Updated: 2026-07-02* | *Last Reviewed: 2026-07-02*
+*Last Updated: 2026-07-23* | *Last Reviewed: 2026-07-23*

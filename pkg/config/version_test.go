@@ -17,7 +17,9 @@ func TestVersionSync(t *testing.T) {
 	}
 
 	var whatsNew []struct {
-		Version string `json:"version"`
+		Version     string   `json:"version"`
+		ReleaseDate string   `json:"release_date"`
+		Features    []string `json:"features"`
 	}
 
 	if err := json.Unmarshal(data, &whatsNew); err != nil {
@@ -34,5 +36,17 @@ func TestVersionSync(t *testing.T) {
 
 	if Version != whatsNew[0].Version {
 		t.Errorf("Version mismatch! config.Version = %q, but whats-new.json = %q. These must be kept in sync.", Version, whatsNew[0].Version)
+	}
+
+	for i, entry := range whatsNew {
+		if entry.Version == "" {
+			t.Errorf("Entry %d in whats-new.json is missing 'version'", i)
+		}
+		if entry.ReleaseDate == "" {
+			t.Errorf("Entry %d (%s) in whats-new.json is missing 'release_date'", i, entry.Version)
+		}
+		if len(entry.Features) == 0 {
+			t.Errorf("Entry %d (%s) in whats-new.json has an empty 'features' array", i, entry.Version)
+		}
 	}
 }

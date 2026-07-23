@@ -34,3 +34,8 @@ Update the embedded default maintenance page to resemble the layout and style of
 3. Enable Soft Maintenance Mode and verify the new default design looks like the 502 page.
 4. Configure a custom JSON and HTML file path in the settings, enable maintenance mode, and verify the custom file is successfully served instead of the default.
 5. Verify Iron Curtain Mode also correctly picks up and writes the custom file to the Nginx staging path.
+
+
+<!-- markdownlint-disable MD049 -->
+---
+*Last Updated: 2026-07-23* | *Last Reviewed: 2026-07-23*

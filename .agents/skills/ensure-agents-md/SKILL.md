@@ -15,3 +15,8 @@ Before any other work, the agent MUST:
 1. **Verify Environment**: Confirm this is the Liferay Tunnel repo.
 2. **Generate AGENTS.md**: Create `AGENTS.md` with instructions for AI coding agents to reference the `lfr-tunnel-ops` skill.
 3. **Inform User**: Tell the user that the bootstrap is complete, and proceed with their request.
+
+
+<!-- markdownlint-disable MD049 -->
+---
+*Last Updated: 2026-07-23* | *Last Reviewed: 2026-07-23*

@@ -30,3 +30,8 @@ If you are developing a production application, we recommend enabling type-aware
 ```
 
 See the [Oxlint rules documentation](https://oxc.rs/docs/guide/usage/linter/rules) for the full list of rules and categories.
+
+
+<!-- markdownlint-disable MD049 -->
+---
+*Last Updated: 2026-07-23* | *Last Reviewed: 2026-07-23*

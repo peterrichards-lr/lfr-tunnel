@@ -76,12 +76,6 @@ export default function AdminEdgeHealth() {
     triggerEdgeAction(nodeId, "maintenance_enable", reason, duration);
   };
 
-  const disableEdgeMaintenance = async (nodeId: string) => {
-    if (await showConfirm('Disable Maintenance', `Are you sure you want to disable maintenance on ${nodeId}?`)) {
-      triggerEdgeAction(nodeId, "maintenance_disable");
-    }
-  };
-
   const kickEdgeTunnels = async (nodeId: string) => {
     if (await showConfirm('Kick All Tunnels', `Are you sure you want to kick ALL active tunnels on edge node ${nodeId}?`)) {
       triggerEdgeAction(nodeId, "kick_tunnels");

@@ -2,12 +2,17 @@
 
 VERSION ?= $(shell grep -oE 'Version = "[^"]+"' pkg/config/version.go | cut -d'"' -f2)
 
+# EDR-safe test execution directory (defaults to /private/tmp on macOS to avoid SentinelOne quarantine)
+LFT_TEST_DIR ?= /private/tmp
+export GOTMPDIR ?= $(LFT_TEST_DIR)
+TEST_BINARY := $(LFT_TEST_DIR)/lfr-tunnel
+
 
 help:
 	@echo "Liferay Tunnel Developer Commands:"
 	@echo "  make fmt          - Format Go files using gofmt"
 	@echo "  make vet          - Run go vet static analysis"
-	@echo "  make test         - Run all unit tests"
+	@echo "  make test         - Run all unit tests (EDR safe via LFT_TEST_DIR=$(LFT_TEST_DIR))"
 	@echo "  make e2e          - Run the Docker integration E2E tests"
 	@echo "  make e2e-sso      - Run the SSO / Keycloak E2E integration tests"
 	@echo "  make e2e-ui       - Run the Playwright UI E2E integration tests"
@@ -24,13 +29,15 @@ vet:
 	go vet ./...
 
 test:
+	@mkdir -p $(LFT_TEST_DIR)
 	@for pkg in $$(go list ./... | grep -v /pkg/server); do \
-		rm -f /private/tmp/lfr-tunnel; \
-		go test -c -o /private/tmp/lfr-tunnel $$pkg; \
-		if [ -f /private/tmp/lfr-tunnel ]; then \
-			(cd $$(go list -f '{{.Dir}}' $$pkg) && /private/tmp/lfr-tunnel) || exit 1; \
+		rm -f $(TEST_BINARY); \
+		go test -c -o $(TEST_BINARY) $$pkg || exit 1; \
+		if [ -f $(TEST_BINARY) ]; then \
+			(cd $$(go list -f '{{.Dir}}' $$pkg) && $(TEST_BINARY)) || exit 1; \
 		fi; \
 	done
+	@rm -f $(TEST_BINARY)
 
 clean:
 	rm -rf bin

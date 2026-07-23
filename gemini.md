@@ -11,7 +11,7 @@ Build an open-source, MIT-licensed tunneling solution tailored for Liferay's Sal
 - **Secure Secret Handling**: 
   *Active Constraint*: Before committing code that involved generating temporary keys, you MUST execute `rm -rf` on all temporary certificate and private key files. You are FORBIDDEN from running `git commit` until this deletion is confirmed via tool output.
 - **Local Binary Execution Constraints**: 
-  *Active Constraint*: The moment you decide to run any Go tests, you MUST formulate the test command exactly as: `make test` or `go test -c -o /private/tmp/lfr-tunnel <pkg> && /private/tmp/lfr-tunnel`. Any deviation will trigger SentinelOne (S1), which will forcefully kill the process, Homebrew, and the Antigravity agent itself.
+  *Active Constraint*: The moment you decide to run any Go tests, you MUST formulate the test command using `make test` (or set `export GOTMPDIR=$(LFT_TEST_DIR)` with `LFT_TEST_DIR` defaulting to `/private/tmp`). Any execution out of `/var/folders` will trigger SentinelOne (S1), which forcefully kills the process and daemon environment.
 - **Git Conflict Prevention & PR Management**: 
   *Active Constraint*: Before executing `git push` or `gh pr create`, you MUST first execute `git fetch origin && git merge origin/master`. You are FORBIDDEN from pushing without first synchronizing the `gemini.md` state with the remote master.
 - **Strict Branch Protection Compliance**: 

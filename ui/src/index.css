@@ -1700,3 +1700,42 @@ html[dir="rtl"] td, html[dir="rtl"] th {
     margin-bottom: var(--spacing-sm);
 }
 
+/* Data Table Toolbar & Column Selector Utility Classes */
+.table-toolbar-select {
+    height: 34px;
+    padding-top: 4px;
+    padding-bottom: 4px;
+    line-height: 1.2;
+    margin: 0;
+    cursor: pointer;
+    width: auto;
+}
+
+.table-toolbar-btn {
+    height: 34px;
+}
+
+.table-column-dropdown {
+    position: absolute;
+    right: 0;
+    top: 100%;
+    margin-top: var(--space-xs, 4px);
+    z-index: 50;
+    padding: var(--space-md, 12px);
+    border-radius: 8px;
+    border: 1px solid var(--border);
+    background-color: var(--bg-card);
+    background: var(--bg-card);
+    box-shadow: 0 12px 30px rgba(0, 0, 0, 0.6), 0 4px 12px rgba(0, 0, 0, 0.4);
+    backdrop-filter: blur(16px);
+    -webkit-backdrop-filter: blur(16px);
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-xs, 4px);
+    min-width: 200px;
+}
+
+.table-column-checkbox {
+    accent-color: var(--primary);
+}
+

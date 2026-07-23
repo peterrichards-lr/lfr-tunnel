@@ -1,7 +1,9 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useMemo } from 'react';
 import axios from 'axios';
 import { useSettings } from '../contexts/SettingsContext';
-import { useTableSort } from '../hooks/useTableSort';
+import { useDataTable, type ColumnDef } from '../hooks/useDataTable';
+import DataTableToolbar from '../components/DataTableToolbar';
+import DataTablePagination from '../components/DataTablePagination';
 import Skeleton from '../components/Skeleton';
 import { useI18n } from '../contexts/I18nContext';
 
@@ -33,7 +35,36 @@ export default function AdminMagicLinks() {
     fetchLinks();
   }, []);
 
-  const { items: sortedLinks, requestSort, getSortIndicator, searchQuery, setSearchQuery, getAriaSort } = useTableSort(links, ['email', 'client_ip']);
+  const columns: ColumnDef<MagicLink>[] = useMemo(() => [
+    { key: 'email', label: t('email', 'Email'), sortable: true },
+    { key: 'client_ip', label: t('client_ip', 'Client IP'), sortable: true },
+    { key: 'expires_at', label: t('expires_at', 'Expires At'), sortable: true },
+    { key: 'used_at', label: t('status', 'Status / Used At'), sortable: true },
+  ], [t]);
+
+  const {
+    paginatedItems,
+    searchQuery,
+    setSearchQuery,
+    pageSize,
+    setPageSize,
+    currentPage,
+    setCurrentPage,
+    totalPages,
+    totalItems,
+    isColumnVisible,
+    toggleColumn,
+    requestSort,
+    getSortIndicator,
+    getAriaSort
+  } = useDataTable<MagicLink>(
+    'admin_magic_links',
+    links,
+    ['email', 'client_ip'],
+    columns,
+    10
+  );
+
   if (loading) {
     return (
       <div style={{ animation: 'fadeInUp 0.6s ease-out' }}>
@@ -77,15 +108,15 @@ export default function AdminMagicLinks() {
   }
 
   const renderDate = (val: number | string | null | undefined) => {
-    if (!val) return 'Unused';
+    if (!val) return <span className="badge badge-info">{t('unused', 'Unused')}</span>;
     return formatDate(typeof val === 'number' ? new Date(val * 1000) : val);
   };
 
   return (
     <div>
       <div className="mb-xl">
-        <h3 className="page-header__title">Magic Links</h3>
-        <p className="page-header__desc">Track pending and unredeemed magic links.</p>
+        <h3 className="page-header__title">{t('magic_links', 'Magic Links')}</h3>
+        <p className="page-header__desc">{t('magic_links_desc', 'Track pending and unredeemed magic links.')}</p>
       </div>
 
       {error ? (
@@ -94,48 +125,83 @@ export default function AdminMagicLinks() {
         </div>
       ) : (
         <>
-          {links.length > 0 && (
-            <div className="search-row">
-              <input 
-                type="text" 
-                placeholder={t('search_magic_links_placeholder', 'Search magic links...')} 
-                value={searchQuery} 
-                onChange={e => setSearchQuery(e.target.value)}
-                className="search-input"
-              />
-            </div>
-          )}
+          <DataTableToolbar
+            searchQuery={searchQuery}
+            onSearchChange={setSearchQuery}
+            searchPlaceholder={t('search_magic_links_placeholder', 'Search magic links...')}
+            pageSize={pageSize}
+            onPageSizeChange={setPageSize}
+            columns={columns}
+            isColumnVisible={isColumnVisible}
+            onToggleColumn={toggleColumn}
+          />
+
           <div className="card p-0">
             <div className="table-responsive">
               <table className="w-full">
                 <thead>
                   <tr className="border-b text-left">
-                    <th className="th-col th-col--sortable" onClick={() => requestSort('email')} aria-sort={getAriaSort('email')}>Email{getSortIndicator('email')}</th>
-                    <th className="th-col th-col--sortable" onClick={() => requestSort('client_ip')} aria-sort={getAriaSort('client_ip')}>IP Address{getSortIndicator('client_ip')}</th>
-                    <th className="th-col th-col--sortable" onClick={() => requestSort('expires_at')} aria-sort={getAriaSort('expires_at')}>Expires{getSortIndicator('expires_at')}</th>
-                    <th className="th-col th-col--sortable" onClick={() => requestSort('used_at')} aria-sort={getAriaSort('used_at')}>Used At{getSortIndicator('used_at')}</th>
+                    {isColumnVisible('email') && (
+                      <th className="th-col th-col--sortable" onClick={() => requestSort('email')} aria-sort={getAriaSort('email')}>
+                        {t('email', 'Email')}{getSortIndicator('email')}
+                      </th>
+                    )}
+                    {isColumnVisible('client_ip') && (
+                      <th className="th-col th-col--sortable" onClick={() => requestSort('client_ip')} aria-sort={getAriaSort('client_ip')}>
+                        {t('client_ip', 'Client IP')}{getSortIndicator('client_ip')}
+                      </th>
+                    )}
+                    {isColumnVisible('expires_at') && (
+                      <th className="th-col th-col--sortable" onClick={() => requestSort('expires_at')} aria-sort={getAriaSort('expires_at')}>
+                        {t('expires_at', 'Expires At')}{getSortIndicator('expires_at')}
+                      </th>
+                    )}
+                    {isColumnVisible('used_at') && (
+                      <th className="th-col th-col--sortable" onClick={() => requestSort('used_at')} aria-sort={getAriaSort('used_at')}>
+                        {t('status', 'Status / Used At')}{getSortIndicator('used_at')}
+                      </th>
+                    )}
                   </tr>
                 </thead>
                 <tbody>
-                  {links.length === 0 ? (
+                  {paginatedItems.length === 0 ? (
                     <tr>
-                      <td colSpan={4} className="td-empty opacity-60">
-                        No magic links found
+                      <td colSpan={4} className="td-empty">
+                        {t('no_magic_links', 'No magic links found.')}
                       </td>
                     </tr>
                   ) : (
-                    sortedLinks.map((l, i) => (
-                      <tr key={i} className="border-b">
-                        <td className="td-cell fw-medium">{l.email}</td>
-                        <td className="td-cell--mono">{l.client_ip}</td>
-                        <td className="td-cell">{renderDate(l.expires_at)}</td>
-                        <td className="td-cell">{renderDate(l.used_at)}</td>
+                    paginatedItems.map((item: MagicLink, idx: number) => (
+                      <tr key={idx} className="border-b">
+                        {isColumnVisible('email') && (
+                          <td className="td-cell fw-medium">{item.email}</td>
+                        )}
+                        {isColumnVisible('client_ip') && (
+                          <td className="td-cell--mono">{item.client_ip || '-'}</td>
+                        )}
+                        {isColumnVisible('expires_at') && (
+                          <td className="td-cell" style={{ whiteSpace: 'nowrap' }}>
+                            {formatDate(typeof item.expires_at === 'number' ? new Date(item.expires_at * 1000) : item.expires_at)}
+                          </td>
+                        )}
+                        {isColumnVisible('used_at') && (
+                          <td className="td-cell" style={{ whiteSpace: 'nowrap' }}>
+                            {renderDate(item.used_at)}
+                          </td>
+                        )}
                       </tr>
                     ))
                   )}
                 </tbody>
               </table>
             </div>
+            <DataTablePagination
+              currentPage={currentPage}
+              totalPages={totalPages}
+              pageSize={pageSize}
+              totalItems={totalItems}
+              onPageChange={setCurrentPage}
+            />
           </div>
         </>
       )}

@@ -6,13 +6,21 @@ export interface ColumnDef<T> {
   sortable?: boolean;
 }
 
+export interface StatusOption {
+  value: string;
+  label: string;
+}
+
 export function useDataTable<T>(
   tableId: string,
   items: T[],
   searchKeys: (keyof T)[],
   allColumns: ColumnDef<T>[],
   defaultPageSize: number = 10,
-  defaultHiddenColumns: string[] = []
+  defaultHiddenColumns: string[] = [],
+  statusKey?: keyof T & string,
+  statusOptions?: StatusOption[],
+  defaultStatusFilter: string = 'all'
 ) {
   // LocalStorage storage keys
   const storageKey = `lfr_table_${tableId}`;
@@ -37,6 +45,9 @@ export function useDataTable<T>(
   const [hiddenColumns, setHiddenColumns] = useState<string[]>(
     storedPrefs?.hiddenColumns !== undefined ? storedPrefs.hiddenColumns : defaultHiddenColumns
   );
+  const [statusFilter, setStatusFilter] = useState<string>(
+    storedPrefs?.statusFilter !== undefined ? storedPrefs.statusFilter : defaultStatusFilter
+  );
 
   // Sync preferences to localStorage
   useEffect(() => {
@@ -46,27 +57,39 @@ export function useDataTable<T>(
         JSON.stringify({
           pageSize,
           sortConfig,
-          hiddenColumns
+          hiddenColumns,
+          statusFilter
         })
       );
     } catch (e) {
       console.warn('Failed to save table preferences to localStorage:', e);
     }
-  }, [storageKey, pageSize, sortConfig, hiddenColumns]);
+  }, [storageKey, pageSize, sortConfig, hiddenColumns, statusFilter]);
 
   // Filtering
   const filteredItems = useMemo(() => {
-    if (!searchQuery.trim()) return items;
+    let result = items;
+
+    if (statusKey && statusFilter && statusFilter !== 'all') {
+      const lowerFilter = statusFilter.toLowerCase();
+      result = result.filter(item => {
+        const val = item[statusKey];
+        if (val == null) return false;
+        return String(val).toLowerCase() === lowerFilter;
+      });
+    }
+
+    if (!searchQuery.trim()) return result;
     const lowerQuery = searchQuery.toLowerCase();
 
-    return items.filter(item =>
+    return result.filter(item =>
       searchKeys.some(key => {
         const val = item[key];
         if (val == null) return false;
         return String(val).toLowerCase().includes(lowerQuery);
       })
     );
-  }, [items, searchQuery, searchKeys]);
+  }, [items, searchQuery, searchKeys, statusKey, statusFilter]);
 
   // Sorting
   const sortedItems = useMemo(() => {
@@ -158,6 +181,9 @@ export function useDataTable<T>(
     // Search & Filter
     searchQuery,
     setSearchQuery,
+    statusFilter,
+    setStatusFilter,
+    statusOptions,
 
     // Sorting
     sortConfig,

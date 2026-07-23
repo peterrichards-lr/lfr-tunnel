@@ -34,6 +34,20 @@ export default function AdminTokens() {
     { key: 'created_at', label: t('created_at', 'Created'), sortable: true },
   ], [t]);
 
+  const mappedTokens = useMemo(() => {
+    const now = new Date();
+    return tokens.map(t => ({
+      ...t,
+      computed_status: t.revoked_at ? 'revoked' : (t.expires_at && new Date(t.expires_at) <= now ? 'expired' : 'active')
+    }));
+  }, [tokens]);
+
+  const statusOptions = useMemo(() => [
+    { value: 'active', label: t('status_active', 'Active') },
+    { value: 'expired', label: t('status_expired', 'Expired') },
+    { value: 'revoked', label: t('status_revoked', 'Revoked') }
+  ], [t]);
+
   const {
     paginatedItems: paginatedTokens,
     currentPage,
@@ -44,18 +58,24 @@ export default function AdminTokens() {
     setPageSize,
     searchQuery,
     setSearchQuery,
+    statusFilter,
+    setStatusFilter,
     requestSort,
     getSortIndicator,
     getAriaSort,
     isColumnVisible,
     toggleColumn,
     allColumns
-  } = useDataTable<PAT>(
+  } = useDataTable<PAT & { computed_status: string }>(
     'admin_tokens',
-    tokens,
+    mappedTokens,
     ['name', 'user_id', 'token_prefix'],
-    columns,
-    10
+    columns as any,
+    10,
+    [],
+    'computed_status',
+    statusOptions,
+    'active' // Default to showing Active tokens
   );
 
   const fetchTokens = async () => {
@@ -171,6 +191,9 @@ export default function AdminTokens() {
             columns={allColumns}
             isColumnVisible={isColumnVisible}
             onToggleColumn={toggleColumn}
+            statusFilter={statusFilter}
+            onStatusFilterChange={setStatusFilter}
+            statusOptions={statusOptions}
           />
         </div>
 

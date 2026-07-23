@@ -160,6 +160,21 @@ EDR heuristic warnings are triggered by standard characteristics common to Go ru
 
 ---
 
+### 6. Environment Variable Namespacing & Isolation Standards
+
+To guarantee namespace safety, prevent global shell environment collisions, and maintain total auditing clarity across developer workstations and CI/CD pipelines, all configuration keys and shell installation placeholders are strictly namespaced with the `LFR_TUNNEL_` or `LFT_` prefixes:
+
+| Category | Environment Variable Pattern | Description / Purpose |
+|---|---|---|
+| **Target Install Paths** | `LFT_INSTALL_DIR` / `LFR_TUNNEL_MACOS_ARM64_INSTALL_DIR` | Installation target directory overrides in `.zshrc` / `.bashrc`. |
+| **Authentication & Tokens** | `LFT_TOKEN_FILE` / `LFT_TOKEN` | Developer OIDC / PAT session token storage location. |
+| **Target Host Override** | `LFT_TARGET_HOST` | Local target host address (e.g., `127.0.0.1`, `host.docker.internal`). |
+| **Build & Signing Ops** | `LFT_MACOS_IDENTITY` / `LFT_SIGN_KEY` | Codesigning identities and certificate parameters for release builds. |
+
+This namespacing guarantees that environment variables exported in shell profiles (`~/.zshrc`, `~/.bashrc`) or pipeline scripts never conflict with system-level variables or third-party CLI tools.
+
+---
+
 ## 6. Recommended Action Plan for InfoSec Review
 
 To authorize the tool with minimal impact on local endpoint alerts, we recommend the following steps:
@@ -172,4 +187,4 @@ To authorize the tool with minimal impact on local endpoint alerts, we recommend
 
 <!-- markdownlint-disable MD049 -->
 ---
-*Last Updated: 2026-07-15* | *Last Reviewed: 2026-07-15*
+*Last Updated: 2026-07-23* | *Last Reviewed: 2026-07-23*

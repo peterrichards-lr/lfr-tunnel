@@ -3,6 +3,8 @@ import { Outlet, useNavigate } from 'react-router-dom';
 import axios from 'axios';
 import Sidebar from './Sidebar';
 import { useI18n } from '../contexts/I18nContext';
+import { useSettings } from '../contexts/SettingsContext';
+
 
 export default function Layout() {
   const [user, setUser] = useState<any>(null);
@@ -11,6 +13,8 @@ export default function Layout() {
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
   const navigate = useNavigate();
   const { t } = useI18n();
+  const { formatDate } = useSettings();
+
 
   const [showV1Promo, setShowV1Promo] = useState(!localStorage.getItem('v1_promo_dismissed'));
 
@@ -68,73 +72,73 @@ export default function Layout() {
   }, [navigate]);
 
   if (loading) {
-    return <div id="loader" style={{ display: 'flex' }}><div className="spinner"></div></div>;
+    return <div id="loader" className="flex items-center justify-center min-h-screen"><div className="spinner"></div></div>;
   }
 
   if (!user) return null;
 
   return (
-    <div id="dashboard-screen" style={{ display: 'flex', paddingTop: showV1Promo ? '44px' : '0', transition: 'padding-top 0.2s ease' }}>
+    <div id="dashboard-screen" className="flex transition-all duration-200" style={{ paddingTop: showV1Promo ? '44px' : '0' }}>
       <Sidebar user={user} isOpen={isSidebarOpen} onClose={() => setIsSidebarOpen(false)} />
       
       {showV1Promo && (
-        <div style={{ backgroundColor: '#0b5fff', color: 'white', padding: 'var(--spacing-md) var(--spacing-xl)', textAlign: 'center', position: 'fixed', top: 0, left: 0, width: '100%', zIndex: 9999, boxSizing: 'border-box', boxShadow: '0 4px 12px rgba(0,0,0,0.15)' }}>
-          <p style={{ margin: 0, fontSize: '14px', fontWeight: 500 }}>
-            Need the legacy interface? <a href="/portal/" style={{ color: 'white', textDecoration: 'underline', fontWeight: 700, marginLeft: 'var(--spacing-sm)' }}>Switch back to V1 &rarr;</a>
+        <div className="bg-primary text-white py-md px-xl text-center fixed top-0 left-0 w-full z-50 box-border shadow-lg">
+          <p className="m-0 text-sm fw-medium">
+            Need the legacy interface? <a href="/portal/" className="text-white underline fw-bold ml-sm">Switch back to V1 &rarr;</a>
           </p>
-          <button onClick={dismissV1Promo} style={{ position: 'absolute', right: 'var(--spacing-xl)', top: '50%', transform: 'translateY(-50%)', background: 'none', border: 'none', color: 'white', cursor: 'pointer', fontSize: '18px', padding: 'var(--spacing-xs)', lineHeight: 1 }}>&times;</button>
+          <button onClick={dismissV1Promo} className="btn-text absolute right-xl top-1/2 -translate-y-1/2 text-white text-lg p-xs leading-none">&times;</button>
         </div>
       )}
 
       {/* Mobile Top Header */}
-      <div className="mobile-header" style={{ display: 'none', padding: 'var(--spacing-lg)', background: 'var(--bg-card)', borderBottom: '1px solid var(--border)', alignItems: 'center', gap: 'var(--spacing-lg)' }}>
-        <button className="btn" onClick={() => setIsSidebarOpen(true)} style={{ padding: 'var(--spacing-sm)', background: 'transparent', border: '1px solid var(--border)', color: 'var(--text-main)' }}>
-          <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="var(--text-main)" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+      <div className="mobile-header p-lg bg-card border-b items-center gap-lg">
+        <button className="btn btn-secondary p-sm bg-transparent border text-main" onClick={() => setIsSidebarOpen(true)}>
+          <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
             <line x1="3" y1="12" x2="21" y2="12"></line>
             <line x1="3" y1="6" x2="21" y2="6"></line>
             <line x1="3" y1="18" x2="21" y2="18"></line>
           </svg>
         </button>
-        <span style={{ fontWeight: 'bold', fontSize: '16px', color: 'var(--text-main)' }}>Liferay Tunnel</span>
+        <span className="fw-bold text-base text-main">Liferay Tunnel</span>
       </div>
 
       <div className="main-content">
         {user.broadcast_message && (
-          <div style={{ background: 'var(--accent)', color: '#fff', padding: 'var(--spacing-md) var(--spacing-lg)', borderRadius: 'var(--spacing-sm)', marginBottom: 'var(--spacing-xl)', display: 'flex', alignItems: 'center', gap: 'var(--spacing-md)', boxShadow: '0 4px 12px rgba(0,0,0,0.1)' }}>
-            <span style={{ fontSize: '18px' }}>📢</span>
-            <div style={{ flex: 1, fontSize: '14px' }}>
+          <div className="bg-accent text-white p-md px-lg rounded-sm mb-xl flex items-center gap-md shadow-md">
+            <span className="text-lg">📢</span>
+            <div className="flex-1 text-sm">
               <strong>{t('broadcast_alert', 'System Broadcast')}:</strong> {user.broadcast_message}
             </div>
           </div>
         )}
 
         {user.targeted_message && (
-          <div style={{ background: 'var(--primary)', color: '#fff', padding: 'var(--spacing-md) var(--spacing-lg)', borderRadius: 'var(--spacing-sm)', marginBottom: 'var(--spacing-xl)', display: 'flex', alignItems: 'center', gap: 'var(--spacing-md)', boxShadow: '0 4px 12px rgba(0,0,0,0.1)' }}>
-            <span style={{ fontSize: '18px' }}>💬</span>
-            <div style={{ flex: 1, fontSize: '14px' }}>
+          <div className="bg-primary text-white p-md px-lg rounded-sm mb-xl flex items-center gap-md shadow-md">
+            <span className="text-lg">💬</span>
+            <div className="flex-1 text-sm">
               <strong>{t('admin_message', 'Admin Message')}:</strong> {user.targeted_message}
             </div>
-            <button onClick={dismissTargetedMessage} className="btn" style={{ background: 'rgba(0,0,0,0.2)', color: 'white', border: 'none', padding: 'var(--spacing-xs) var(--spacing-md)', fontSize: '12px' }}>
+            <button onClick={dismissTargetedMessage} className="btn btn-secondary bg-black/20 text-white border-none py-xs px-md text-xs">
               {t('dismiss', 'Dismiss')}
             </button>
           </div>
         )}
 
-        <header className="content-header" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 'var(--spacing-2xl)' }}>
+        <header className="content-header flex justify-between items-center mb-2xl">
           <div>
-            <p style={{ margin: 0, color: 'var(--text-muted)' }}>{t('welcome_back', 'Welcome back')}, {user.first_name}</p>
+            <p className="m-0 text-muted">{t('welcome_back', 'Welcome back')}, {user.first_name}</p>
             {user.last_login_at && !user.last_login_at.startsWith('0001') && (
-              <p style={{ margin: 'var(--spacing-xs) 0 0 0', color: 'var(--text-muted)', fontSize: '13px' }}>
-                Last login: {new Date(user.last_login_at).toLocaleString()} from <code style={{background: 'rgba(0,0,0,0.1)', padding: '2px 4px', borderRadius: '4px'}}>{user.last_login_ip || 'Unknown'}</code>
+              <p className="mt-xs m-0 text-muted text-xs">
+                Last login: {formatDate(user.last_login_at)} from <code className="bg-black/10 px-xs py-2xs rounded">{user.last_login_ip || 'Unknown'}</code>
               </p>
             )}
           </div>
-          <div style={{ textAlign: 'right' }}>
-            <a href="https://status.lfr-demo.se/" target="_blank" rel="noopener noreferrer" style={{ display: 'flex', alignItems: 'center', gap: 'var(--spacing-sm)', justifyContent: 'flex-end', marginBottom: 'var(--spacing-xs)', textDecoration: 'none' }}>
-              <div style={{ width: '8px', height: '8px', borderRadius: '50%', background: 'var(--success)' }}></div>
-              <span style={{ fontSize: '13px', fontWeight: 600, color: 'var(--text-main)' }}>{t('system_online', 'System Online')}</span>
+          <div className="text-right">
+            <a href="https://status.lfr-demo.se/" target="_blank" rel="noopener noreferrer" className="flex items-center gap-sm justify-end mb-xs no-underline">
+              <div className="status-dot status-dot--online"></div>
+              <span className="text-xs fw-semibold text-main">{t('system_online', 'System Online')}</span>
             </a>
-            {uptime && <div style={{ fontSize: '12px', color: 'var(--text-muted)' }}>{t('uptime', 'Uptime')}: {uptime}</div>}
+            {uptime && <div className="text-xs text-muted">{t('uptime', 'Uptime')}: {uptime}</div>}
           </div>
         </header>
         <div>

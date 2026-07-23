@@ -351,6 +351,22 @@
                                 </div>
                             </div>
                         </div>
+                        <div style="margin-bottom: 16px;">
+                            <label style="display:block; margin-bottom: 8px; color: var(--text-muted); font-size: 14px;">Default Subdomain Generator Style</label>
+                            <select id="acc-subdomain-style" class="input-field">
+                                <option value="liferay">Liferay Style</option>
+                                <option value="words">Words Style</option>
+                                <option value="heroku">Heroku Style</option>
+                                <option value="random">Alphanumeric (Random)</option>
+                            </select>
+                        </div>
+                        <div style="margin-bottom: 16px;" id="acc-preferred-domain-container">
+                            <label style="display:block; margin-bottom: 8px; color: var(--text-muted); font-size: 14px;">Preferred Domain</label>
+                            <select id="acc-preferred-domain" class="input-field">
+                                <option value="">None (Auto)</option>
+                            </select>
+                            <p style="font-size: 12px; color: var(--text-muted); margin-top: 6px;" id="acc-preferred-domain-help">Preferred Domain is active when the administrator configures User Preference domain allocation.</p>
+                        </div>
                         <div style="margin-bottom: 24px;">
                             <div style="display: flex; align-items: center; gap: 12px; margin-bottom: 8px;">
                                 <label style="margin: 0; color: var(--text-muted); font-size: 14px;" data-i18n="label_notifications">Email Notifications</label>

@@ -1,0 +1,65 @@
+/*
+ * lfr-tunnel Portal — Liferay Waffle Theme
+ * Applied when data-theme="liferay".
+ *
+ * Primary colour: #0B5FFF — Liferay.com standard blue
+ * Shell: deep navy (#1a1f35) matching DXP 7.4+ dark control panel aesthetic
+ */
+:root[data-theme="liferay"] {
+    --bg-base: #1a1f35;
+    --bg-card: rgba(26, 31, 53, 0.85);
+    --bg-card-hover: rgba(34, 40, 70, 0.95);
+    --primary: #0b5fff;
+    --primary-hover: #0048d4;
+    --primary-glow: rgba(11, 95, 255, 0.4);
+    --text-main: #f0f2ff;
+    --text-muted: #8892b8;
+    --text-secondary: #b0b8d8;
+    --border: rgba(255, 255, 255, 0.10);
+    --danger: #ff4d6a;
+    --success: #17d09e;
+    --warning: #ffb84d;
+    --login-gradient: radial-gradient(circle at 50% -20%, rgba(11, 95, 255, 0.2), transparent 60%), #1a1f35;
+    --sidebar-bg: rgba(18, 22, 42, 0.92);
+    --input-bg: rgba(0, 0, 0, 0.3);
+    --modal-overlay: rgba(0, 0, 0, 0.85);
+    --copy-box-bg: rgba(10, 15, 35, 0.6);
+    --toast-bg: #1e2442;
+    --toast-color: #f0f2ff;
+    --toast-border: rgba(11, 95, 255, 0.2);
+    --shadow-glass: 0 8px 32px 0 rgba(0, 0, 0, 0.45);
+    --shadow-glow: 0 0 24px rgba(11, 95, 255, 0.35);
+    --table-row-hover: rgba(11, 95, 255, 0.05);
+
+    /* Status — Tunnels */
+    --status-tunnels-bg: rgba(99, 102, 241, 0.15);
+    --status-tunnels-text: #818cf8;
+    --status-tunnels-border: rgba(99, 102, 241, 0.3);
+
+    /* Status — Success */
+    --status-success-bg: rgba(23, 208, 158, 0.12);
+    --status-success-text: #17d09e;
+    --status-success-border: rgba(23, 208, 158, 0.3);
+
+    /* Status — Warning */
+    --status-warning-bg: rgba(255, 184, 77, 0.12);
+    --status-warning-text: #ffb84d;
+    --status-warning-border: rgba(255, 184, 77, 0.3);
+
+    /* Status — Danger */
+    --status-danger-bg: rgba(255, 77, 106, 0.12);
+    --status-danger-text: #ff6b84;
+    --status-danger-border: rgba(255, 77, 106, 0.3);
+
+    /* Status — Info (Liferay blue) */
+    --status-info-bg: rgba(11, 95, 255, 0.15);
+    --status-info-text: #5d9bff;
+    --status-info-border: rgba(11, 95, 255, 0.3);
+
+    /* Status — Edge Node */
+    --status-node-bg: rgba(139, 92, 246, 0.15);
+    --status-node-text: #c084fc;
+    --status-node-border: rgba(139, 92, 246, 0.3);
+
+    --status-inactive: rgba(255, 255, 255, 0.2);
+}

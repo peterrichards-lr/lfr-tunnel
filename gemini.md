@@ -199,6 +199,8 @@ The solution will consist of:
 - [x] Implement Admin Tokens page in the Admin Zone for global user token management.
 - [x] Commit, test, E2E verify, and merge refactor/personal-dashboard-admin-tokens branch to master.
 - [x] Fix visual alignments, overlays transparencies, quota settings inputs, and export PDF heights across V2 Portal.
+- [x] Systematically refactor all 20 UI components to CSS utilities and design tokens in index.css (Phase 2 UX+++).
+
 
 
 | Feature | Description | Risk | LOE | Business Value | Priority |

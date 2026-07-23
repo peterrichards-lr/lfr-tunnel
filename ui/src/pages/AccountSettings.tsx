@@ -21,6 +21,23 @@ export default function AccountSettings() {
   const [mfaCode, setMfaCode] = useState('');
   const [mfaError, setMfaError] = useState('');
 
+  const [domains, setDomains] = useState<string[]>([]);
+  const [allocationRule, setAllocationRule] = useState('contextual');
+  const [subdomainStyle, setSubdomainStyle] = useState(user?.subdomain_style || 'liferay');
+  const [preferredDomain, setPreferredDomain] = useState(user?.preferred_domain || '');
+  const [disablingMfa, setDisablingMfa] = useState(false);
+  const [disableCode, setDisableCode] = useState('');
+  const [disableError, setDisableError] = useState('');
+
+  React.useEffect(() => {
+    axios.get('/api/domains')
+      .then(res => setDomains(res.data || []))
+      .catch(err => console.error('Failed to fetch domains', err));
+    axios.get('/api/version')
+      .then(res => setAllocationRule(res.data?.domain_allocation_rule || 'contextual'))
+      .catch(err => console.error('Failed to fetch version/rule', err));
+  }, []);
+
   const [isDeleteModalOpen, setIsDeleteModalOpen] = useState(false);
   const [deleteConfirmEmail, setDeleteConfirmEmail] = useState('');
   const [isDeleting, setIsDeleting] = useState(false);
@@ -37,8 +54,20 @@ export default function AccountSettings() {
         preferred_name: preferredName,
         language_preference: language,
         theme_preference: themePreference,
-        notification_prefs: emailNotifications ? 'enabled' : 'disabled'
+        notification_prefs: emailNotifications ? 'enabled' : 'disabled',
+        preferred_domain: preferredDomain,
+        subdomain_style: subdomainStyle
       });
+      if (user) {
+        user.first_name = firstName;
+        user.last_name = lastName;
+        user.preferred_name = preferredName;
+        user.language_preference = language;
+        user.theme_preference = themePreference;
+        user.notification_prefs = emailNotifications ? 'enabled' : 'disabled';
+        user.preferred_domain = preferredDomain;
+        user.subdomain_style = subdomainStyle;
+      }
       setMessage(t('success_profile_saved', 'Profile updated successfully'));
     } catch {
       setMessage(t('error_profile_save', 'Failed to update profile'));
@@ -87,31 +116,31 @@ export default function AccountSettings() {
 
   return (
     <div style={{ animation: 'fadeInUp 0.6s ease-out' }}>
-      <div style={{ marginBottom: '32px' }}>
-        <h1 style={{ fontSize: '32px', fontWeight: 800, letterSpacing: '-1px', marginBottom: '8px' }}>
+      <div className="mb-2xl">
+        <h1 className="text-2xl fw-extrabold tracking-tight mb-xs">
           {t('account_title', 'Account Settings')}
         </h1>
-        <p style={{ color: 'var(--text-muted)', fontSize: '16px' }}>
+        <p className="text-muted text-base">
           {t('account_desc', 'Update your personal information and security preferences.')}
         </p>
       </div>
 
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(300px, 1fr))', gap: '24px' }}>
+      <div className="col-2">
         
         {/* Profile Card */}
         <div className="card">
-          <h3 style={{ margin: '0 0 16px 0', fontSize: '20px' }}>{t('profile_details', 'Profile Details')}</h3>
+          <h3 className="section-title mb-lg">{t('profile_details', 'Profile Details')}</h3>
           <form onSubmit={handleSaveProfile}>
-            <div style={{ marginBottom: '16px' }}>
-              <label style={{ display: 'block', marginBottom: '8px', fontSize: '14px', color: 'var(--text-muted)' }}>
+            <div className="form-group mb-lg">
+              <label className="form-label">
                 {t('label_email', 'Email Address')}
               </label>
-              <input type="email" className="input-field" value={user?.email || ''} disabled style={{ opacity: 0.7 }} />
+              <input type="email" className="input-field opacity-70" value={user?.email || ''} disabled />
             </div>
 
-            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px', marginBottom: '16px' }}>
-              <div>
-                <label style={{ display: 'block', marginBottom: '8px', fontSize: '14px', color: 'var(--text-muted)' }}>
+            <div className="grid grid-cols-2 gap-md mb-lg">
+              <div className="form-group m-0">
+                <label className="form-label">
                   {t('label_first_name', 'First Name')}
                 </label>
                 <input 
@@ -122,8 +151,8 @@ export default function AccountSettings() {
                   placeholder={t('label_first_name', 'First Name')}
                 />
               </div>
-              <div>
-                <label style={{ display: 'block', marginBottom: '8px', fontSize: '14px', color: 'var(--text-muted)' }}>
+              <div className="form-group m-0">
+                <label className="form-label">
                   {t('label_last_name', 'Last Name')}
                 </label>
                 <input 
@@ -136,8 +165,8 @@ export default function AccountSettings() {
               </div>
             </div>
             
-            <div style={{ marginBottom: '16px' }}>
-              <label style={{ display: 'block', marginBottom: '8px', fontSize: '14px', color: 'var(--text-muted)' }}>
+            <div className="form-group mb-lg">
+              <label className="form-label">
                 {t('label_preferred_name', 'Preferred Name')}
               </label>
               <input 
@@ -149,8 +178,8 @@ export default function AccountSettings() {
               />
             </div>
 
-            <div style={{ marginBottom: '16px' }}>
-              <label style={{ display: 'block', marginBottom: '8px', fontSize: '14px', color: 'var(--text-muted)' }}>
+            <div className="form-group mb-lg">
+              <label className="form-label">
                 {t('label_language', 'Language')}
               </label>
               <select className="input-field" value={language} onChange={(e) => setLanguage(e.target.value)}>
@@ -160,8 +189,8 @@ export default function AccountSettings() {
               </select>
             </div>
 
-            <div style={{ marginBottom: '24px' }}>
-              <label style={{ display: 'block', marginBottom: '8px', fontSize: '14px', color: 'var(--text-muted)' }}>
+            <div className="form-group mb-xl">
+              <label className="form-label">
                 {t('label_theme', 'Theme Preference')}
               </label>
               <select className="input-field" value={themePreference} onChange={(e) => {
@@ -169,13 +198,15 @@ export default function AccountSettings() {
               }}>
                 <option value="light">{t('theme_light', 'Light')}</option>
                 <option value="dark">{t('theme_dark', 'Dark')}</option>
+                <option value="liferay">{t('theme_liferay', 'Liferay Waffle 🧇')}</option>
                 <option value="system">{t('theme_system', 'System Default')}</option>
                 <option value="time">{t('theme_time', 'Time of Day')}</option>
               </select>
+
             </div>
 
-            <div style={{ marginBottom: '16px', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-              <label style={{ fontSize: '14px', color: 'var(--text-muted)' }}>
+            <div className="flex items-center justify-between mb-lg">
+              <label className="form-label m-0">
                 {t('label_notifications', 'Email Notifications')}
               </label>
               <label className="switch">
@@ -184,8 +215,8 @@ export default function AccountSettings() {
               </label>
             </div>
 
-            <div style={{ marginBottom: '24px', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-              <label style={{ fontSize: '14px', color: 'var(--text-muted)' }}>
+            <div className="flex items-center justify-between mb-xl">
+              <label className="form-label m-0">
                 {t('utc_time', 'UTC Time')}
               </label>
               <label className="switch">
@@ -194,7 +225,49 @@ export default function AccountSettings() {
               </label>
             </div>
 
-            {message && <div className={message.includes('success') ? 'alert alert-success' : 'alert alert-error'}>{message}</div>}
+            <div className="form-group mb-lg">
+              <label className="form-label">
+                {t('default_subdomain_style', 'Default Subdomain Style')}
+              </label>
+              <select className="input-field" value={subdomainStyle} onChange={(e) => setSubdomainStyle(e.target.value)}>
+                <option value="liferay">{t('style_liferay', 'Liferay Style')} — e.g. peterrichards-liferay</option>
+                <option value="words">{t('style_words', 'Words Style')} — e.g. happy-panda-42</option>
+                <option value="heroku">{t('style_heroku', 'Heroku Style')} — e.g. warm-sunrise-1234</option>
+                <option value="random">{t('style_random', 'Alphanumeric')} — e.g. a3f9k2</option>
+              </select>
+              <p className="form-hint">
+                {t('subdomain_style_hint', 'The style used to generate a default subdomain when you connect your CLI without specifying one.')}
+              </p>
+            </div>
+
+            <div className="form-group mb-lg">
+              <div className="flex items-center gap-xs mb-xs">
+                <label className="form-label m-0">
+                  {t('preferred_domain', 'Preferred Domain')}
+                </label>
+                <span className={`badge ${allocationRule === 'user-preference' ? 'badge-success' : 'badge-warning'} text-2xs`}>
+                  {allocationRule === 'user-preference' ? t('active', 'Active') : t('admin_controlled', 'Admin Controlled')}
+                </span>
+              </div>
+              <select
+                className="input-field"
+                value={preferredDomain}
+                onChange={(e) => setPreferredDomain(e.target.value)}
+                disabled={allocationRule !== 'user-preference'}
+              >
+                <option value="">{t('none_auto', 'None (Auto)')}</option>
+                {domains.map(d => (
+                  <option key={d} value={d}>{d}</option>
+                ))}
+              </select>
+              <p className="form-hint">
+                {allocationRule === 'user-preference'
+                  ? t('pref_domain_enabled', 'Your preferred domain will be used when you connect your CLI.')
+                  : t('pref_domain_disabled_generic', 'The administrator has configured automatic domain allocation. Your preference cannot be applied.')}
+              </p>
+            </div>
+
+            {message && <div className={message.includes('success') ? 'alert-banner alert-banner--success mb-lg' : 'alert-banner alert-banner--danger mb-lg'}>{message}</div>}
 
             <button type="submit" className="btn btn-primary" disabled={saving}>
               {saving ? t('saving', 'Saving...') : t('btn_save_changes', 'Save Changes')}
@@ -204,72 +277,115 @@ export default function AccountSettings() {
 
         {/* Security / MFA Card */}
         <div className="card">
-          <h3 style={{ margin: '0 0 16px 0', fontSize: '20px' }}>{t('security', 'Security')}</h3>
+          <h3 className="section-title mb-lg">{t('security', 'Security')}</h3>
           
-          <div style={{ marginBottom: '24px', padding: '16px', background: 'rgba(0,0,0,0.1)', border: '1px solid var(--border)', borderRadius: '8px' }}>
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+          <div className="card p-lg mb-xl border" style={{ background: 'rgba(0,0,0,0.1)' }}>
+            <div className="flex justify-between items-center">
               <div>
-                <h4 style={{ margin: '0 0 4px 0' }}>{t('mfa_title', 'Multi-Factor Authentication')}</h4>
-                <p style={{ margin: 0, fontSize: '13px', color: 'var(--text-muted)' }}>
+                <h4 className="m-0 mb-2xs">{t('mfa_title', 'Multi-Factor Authentication')}</h4>
+                <p className="m-0 text-xs text-muted">
                   {mfaEnabled 
                     ? t('mfa_enabled_desc', 'Your account is secured with 2FA.') 
                     : t('mfa_disabled_desc', 'Add an extra layer of security to your account.')}
                 </p>
               </div>
               <div>
-                <span className={`badge ${mfaEnabled ? 'success' : 'warning'}`}>
+                <span className={`badge ${mfaEnabled ? 'badge-success' : 'badge-warning'}`}>
                   {mfaEnabled ? t('enabled', 'Enabled') : t('disabled', 'Disabled')}
                 </span>
               </div>
             </div>
 
+            {mfaEnabled && (
+              <div className="mt-lg">
+                {!disablingMfa ? (
+                  <button className="btn btn-outline-danger" onClick={() => setDisablingMfa(true)}>
+                    {t('btn_disable_mfa', 'Disable MFA')}
+                  </button>
+                ) : (
+                  <div className="mt-md" style={{ animation: 'fadeInUp 0.3s ease-out' }}>
+                    <p className="text-xs text-muted mb-xs">
+                      {t('mfa_deactivate_desc', 'To deactivate MFA, please enter your 6-digit authenticator code below:')}
+                    </p>
+                    <div className="flex gap-sm items-center">
+                      <input 
+                        type="text" 
+                        className="input-field text-center font-bold mb-0" 
+                        placeholder="123456" 
+                        maxLength={6} 
+                        value={disableCode}
+                        onChange={(e) => setDisableCode(e.target.value)}
+                        style={{ width: '120px' }}
+                      />
+                      <button className="btn btn-primary" onClick={async () => {
+                        setDisableError('');
+                        try {
+                          await axios.post('/api/mfa/disable', { code: disableCode });
+                          setMfaEnabled(false);
+                          setDisablingMfa(false);
+                          setDisableCode('');
+                          if (user) user.totp_enabled = false;
+                        } catch {
+                          setDisableError(t('error_mfa_invalid', 'Invalid passcode, please try again.'));
+                        }
+                      }}>
+                        {t('confirm', 'Confirm')}
+                      </button>
+                      <button className="btn btn-secondary" onClick={() => { setDisablingMfa(false); setDisableCode(''); setDisableError(''); }}>
+                        {t('cancel', 'Cancel')}
+                      </button>
+                    </div>
+                    {disableError && <div className="alert-banner alert-banner--danger mt-md">{disableError}</div>}
+                  </div>
+                )}
+              </div>
+            )}
+
             {!mfaEnabled && !setupData && (
-              <button className="btn btn-primary" style={{ marginTop: '16px' }} onClick={startMfaSetup}>
+              <button className="btn btn-primary mt-lg" onClick={startMfaSetup}>
                 {t('setup_mfa', 'Setup MFA')}
               </button>
             )}
 
             {setupData && !mfaEnabled && (
-              <div style={{ marginTop: '24px', animation: 'fadeInUp 0.3s ease-out' }}>
-                <div style={{ background: '#fff', padding: '16px', borderRadius: '8px', display: 'inline-block', marginBottom: '16px' }}>
+              <div className="mt-xl" style={{ animation: 'fadeInUp 0.3s ease-out' }}>
+                <div className="bg-white p-lg rounded-md inline-block mb-lg">
                   <img src={setupData.qr} alt="QR Code" width="150" height="150" />
                 </div>
-                <div className="copy-box" style={{ fontSize: '12px' }}>
+                <div className="copy-box text-xs mb-lg">
                   {setupData.secret}
                 </div>
                 
-                <label style={{ display: 'block', marginBottom: '8px', fontSize: '14px' }}>
+                <label className="form-label">
                   {t('verify_passcode', 'Enter 6-digit code from authenticator app')}
                 </label>
-                <div style={{ display: 'flex', gap: '8px' }}>
+                <div className="flex gap-sm">
                   <input 
                     type="text" 
-                    className="input-field" 
+                    className="input-field mb-0" 
                     placeholder={t('mfa_otp_placeholder', '000000')} 
                     value={mfaCode}
                     onChange={(e) => setMfaCode(e.target.value)}
-                    style={{ marginBottom: 0 }}
                   />
                   <button className="btn btn-primary" onClick={enableMfa}>
                     {t('verify', 'Verify')}
                   </button>
                 </div>
-                {mfaError && <div className="alert alert-error" style={{ marginTop: '12px' }}>{mfaError}</div>}
+                {mfaError && <div className="alert-banner alert-banner--danger mt-md">{mfaError}</div>}
               </div>
             )}
           </div>
 
           {user?.role !== 'owner' && (
-            <div style={{ padding: '24px', borderRadius: '8px', marginTop: '24px', border: '1px solid rgba(239, 68, 68, 0.2)', background: 'var(--bg-card)' }}>
-              <h3 style={{ margin: '0 0 8px 0', fontSize: '18px', color: '#f43f5e' }}>
+            <div className="card p-xl mt-xl border" style={{ borderColor: 'rgba(239, 68, 68, 0.2)' }}>
+              <h3 className="m-0 mb-xs text-md text-danger">
                 ⚠️ {t('danger_zone_title', 'Danger Zone (GDPR / Right to Be Forgotten)')}
               </h3>
-              <p style={{ color: 'var(--text-muted)', marginBottom: '16px', fontSize: '14px' }}>
+              <p className="text-muted text-sm mb-lg">
                 {t('danger_zone_desc', 'Deleting your account will instantly and permanently revoke all of your personal access tokens, kick any active tunnel connections, and permanently purge your profile records from our systems. Any historical bandwidth metrics and logs will be permanently anonymised to protect your privacy.')}
               </p>
               <button 
-                className="btn btn-outline-danger" 
-                style={{ width: 'auto' }}
+                className="btn btn-outline-danger w-auto" 
                 onClick={() => setIsDeleteModalOpen(true)}
               >
                 {t('delete_account', 'Delete Account...')}
@@ -282,33 +398,36 @@ export default function AccountSettings() {
       </div>
 
       {isDeleteModalOpen && (
-        <div className="modal-overlay" style={{ display: 'flex', position: 'fixed', top: 0, left: 0, width: '100%', height: '100%', background: 'rgba(0,0,0,0.6)', alignItems: 'center', justifyContent: 'center', zIndex: 1000 }}>
-          <div className="glass" style={{ maxWidth: '500px', width: '100%', padding: '32px', borderRadius: '16px', border: '1px solid var(--border)' }}>
-            <h3 style={{ margin: '0 0 16px 0', fontSize: '20px', color: '#f43f5e' }}>{t('confirm_delete_title', 'Delete Account?')}</h3>
-            <p style={{ color: 'var(--text-muted)', marginBottom: '24px', fontSize: '15px' }}>
-              {t('confirm_delete_desc', 'This action is absolutely irreversible. Please type your email address to confirm.')}
-              <br /><br />
-              <strong>{user?.email}</strong>
-            </p>
-            
-            <input 
-              type="email" 
-              className="input-field" 
-              placeholder={user?.email} 
-              value={deleteConfirmEmail}
-              onChange={(e) => setDeleteConfirmEmail(e.target.value)}
-              style={{ marginBottom: '16px', width: '100%' }}
-            />
-            
-            {deleteError && <div className="alert alert-error" style={{ marginBottom: '16px' }}>{deleteError}</div>}
+        <div className="modal-backdrop">
+          <div className="modal-card modal-card--sm">
+            <div className="modal-header">
+              <h3 className="modal-title text-danger">{t('confirm_delete_title', 'Delete Account?')}</h3>
+              <button onClick={() => { setIsDeleteModalOpen(false); setDeleteConfirmEmail(''); setDeleteError(''); }} className="modal-close">✕</button>
+            </div>
+            <div className="modal-body">
+              <p className="text-muted text-sm mb-lg">
+                {t('confirm_delete_desc', 'This action is absolutely irreversible. Please type your email address to confirm.')}
+                <br /><br />
+                <strong className="text-main">{user?.email}</strong>
+              </p>
+              
+              <input 
+                type="email" 
+                className="input-field w-full mb-lg" 
+                placeholder={user?.email} 
+                value={deleteConfirmEmail}
+                onChange={(e) => setDeleteConfirmEmail(e.target.value)}
+              />
+              
+              {deleteError && <div className="alert-banner alert-banner--danger mb-lg">{deleteError}</div>}
+            </div>
 
-            <div style={{ display: 'flex', gap: '12px', justifyContent: 'flex-end' }}>
-              <button className="btn btn-secondary" style={{ width: 'auto' }} onClick={() => { setIsDeleteModalOpen(false); setDeleteConfirmEmail(''); setDeleteError(''); }}>
+            <div className="modal-footer">
+              <button className="btn btn-secondary w-auto" onClick={() => { setIsDeleteModalOpen(false); setDeleteConfirmEmail(''); setDeleteError(''); }}>
                 {t('cancel', 'Cancel')}
               </button>
               <button 
-                className="btn btn-primary" 
-                style={{ width: 'auto', background: '#f43f5e', color: 'white', borderColor: '#f43f5e' }}
+                className="btn btn-danger w-auto" 
                 onClick={handleDeleteAccount}
                 disabled={isDeleting || deleteConfirmEmail !== user?.email}
               >

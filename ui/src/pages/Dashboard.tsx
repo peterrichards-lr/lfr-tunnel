@@ -36,7 +36,18 @@ export default function Dashboard() {
   const [generating, setGenerating] = useState(false);
   const { formatDate } = useSettings();
   const { t } = useI18n();
-  const { items: sortedTokens, requestSort, getSortIndicator, searchQuery, setSearchQuery, getAriaSort } = useTableSort(tokens, ['name', 'token_prefix', 'status']);
+  const { items: sortedTokens, requestSort, getSortIndicator, searchQuery, setSearchQuery, getAriaSort } = useTableSort(tokens, ['name', 'token_prefix', 'status', 'expires_at']);
+
+  const formatRelativeExpiry = (expiresAt: string | null | undefined): { label: string; color: string } => {
+    if (!expiresAt) return { label: t('never', 'Never'), color: 'var(--text-muted)' };
+    const diff = new Date(expiresAt).getTime() - Date.now();
+    if (diff <= 0) return { label: t('expired', 'Expired'), color: 'var(--status-danger-text)' };
+    const days = Math.floor(diff / 86400000);
+    const hours = Math.floor((diff % 86400000) / 3600000);
+    if (days > 30) return { label: `${t('in', 'in')} ${days}d`, color: 'var(--text-muted)' };
+    if (days > 0)  return { label: `${t('in', 'in')} ${days}d ${hours}h`, color: 'var(--status-warning-text)' };
+    return { label: `${t('in', 'in')} ${hours}h`, color: 'var(--status-danger-text)' };
+  };
 
   const fetchTokens = () => {
     axios.get('/api/tokens')
@@ -69,6 +80,16 @@ export default function Dashboard() {
     }
   };
 
+  const handleRevokeToken = async (tokenId: string, tokenName: string) => {
+    if (!confirm(`Revoke token "${tokenName}"? This action cannot be undone.`)) return;
+    try {
+      await axios.delete(`/api/tokens/${tokenId}`);
+      fetchTokens();
+    } catch (err: any) {
+      alert(err.response?.data?.error || 'Failed to revoke token');
+    }
+  };
+
   const handleExportCSV = () => {
     window.location.href = '/api/tokens/export';
   };
@@ -82,79 +103,40 @@ export default function Dashboard() {
   return (
     <div style={{ animation: 'fadeInUp 0.6s ease-out' }}>
 
-      <div style={{ marginBottom: 'var(--spacing-2xl)' }}>
-        <h1 id="dashboard-overview" style={{ fontSize: '32px', fontWeight: 800, letterSpacing: '-1px', marginBottom: 'var(--spacing-sm)' }}>{t('dashboard_overview', 'Dashboard Overview')}</h1>
-        <p style={{ color: 'var(--text-muted)', fontSize: '16px' }}>{t('dashboard_desc', 'Manage your active tunnels, domains, and tokens.')}</p>
+      <div className="mb-2xl">
+        <h1 id="dashboard-overview" className="text-2xl fw-extrabold tracking-tight mb-xs">{t('dashboard_overview', 'Dashboard Overview')}</h1>
+        <p className="text-muted text-base">{t('dashboard_desc', 'Manage your active tunnels, domains, and tokens.')}</p>
       </div>
 
       {user?.last_client_version && serverConfig?.latest_version && isOlderVersion(user.last_client_version, serverConfig.latest_version) && (
-        <div style={{
-          background: 'rgba(245, 158, 11, 0.12)',
-          border: '1px solid rgba(245, 158, 11, 0.25)',
-          color: '#fbbf24',
-          padding: '16px 20px',
-          borderRadius: '12px',
-          marginBottom: '24px',
-          display: 'flex',
-          alignItems: 'center',
-          justifyContent: 'space-between',
-          flexWrap: 'wrap',
-          gap: '12px',
-          animation: 'fadeInUp 0.4s ease-out'
-        }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
-            <span style={{ fontSize: '20px' }}>🚀</span>
+        <div className="alert-banner alert-banner--warning flex-wrap gap-md items-center justify-between mb-xl">
+          <div className="flex items-center gap-md">
+            <span className="text-lg">🚀</span>
             <div>
-              <strong style={{ display: 'block', fontSize: '15px', color: '#fbbf24' }}>
+              <strong className="block text-sm fw-bold">
                 {t('update_available', 'Update Available')} ({serverConfig.latest_version})
               </strong>
-              <span style={{ fontSize: '13px', color: 'rgba(251, 191, 36, 0.8)' }}>
+              <span className="text-xs opacity-80">
                 {t('older_client_warn', 'You are currently running version')} {user.last_client_version}. {t('please_update_client', 'Please update to get the latest features and security improvements.')}
               </span>
             </div>
           </div>
-          <div style={{ display: 'flex', gap: '12px', alignItems: 'center' }}>
-            <div style={{
-              display: 'flex',
-              alignItems: 'center',
-              background: 'rgba(0, 0, 0, 0.3)',
-              borderRadius: '6px',
-              border: '1px solid var(--border)',
-              padding: '2px 8px 2px 12px'
-            }}>
-              <code style={{
-                fontSize: '12px',
-                fontFamily: 'monospace',
-                color: 'var(--text-main)',
-                marginRight: '8px',
-                border: 'none',
-                background: 'none',
-                padding: 0
-              }}>
+          <div className="flex gap-md items-center">
+            <div className="flex items-center bg-black/30 rounded border px-sm py-2xs">
+              <code className="text-xs font-mono text-main mr-xs">
                 lfr-tunnel -upgrade
               </code>
               <button 
                 onClick={handleCopyUpgradeCmd}
-                style={{
-                  background: 'none',
-                  border: 'none',
-                  color: copiedUpgrade ? 'var(--success)' : 'var(--text-muted)',
-                  cursor: 'pointer',
-                  padding: '4px',
-                  fontSize: '12px',
-                  display: 'flex',
-                  alignItems: 'center',
-                  justifyContent: 'center',
-                  transition: 'color 0.2s'
-                }}
+                className="btn-text p-2xs text-xs"
+                style={{ color: copiedUpgrade ? 'var(--success)' : 'var(--text-muted)' }}
                 title={copiedUpgrade ? 'Copied!' : 'Copy to clipboard'}
               >
                 {copiedUpgrade ? '✓' : '📋'}
               </button>
             </div>
             <button 
-              className="btn btn-secondary" 
-              style={{ padding: '6px 12px', fontSize: '12px', width: 'auto' }}
+              className="btn btn-secondary py-xs px-md text-xs w-auto" 
               onClick={() => setIsInstallModalOpen(true)}
             >
               {t('view_guide', 'View Guide')}
@@ -163,33 +145,32 @@ export default function Dashboard() {
         </div>
       )}
 
-      <div className="responsive-grid" style={{ display: 'grid', gridTemplateColumns: '2fr 1fr', gap: 'var(--spacing-xl)', alignItems: 'start', marginBottom: 'var(--spacing-xl)' }}>
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--spacing-xl)' }}>
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-xl items-start mb-2xl">
+        <div className="lg:col-span-2 flex flex-col gap-xl">
           <ReservationsPanel />
           
           <div className="card" style={{ animationDelay: '0.2s' }}>
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 'var(--spacing-xl)' }}>
+            <div className="page-header flex-wrap gap-md mb-xl">
               <div>
-                <h3 style={{ margin: 0, fontSize: '20px', fontWeight: 700 }}>{t('pat_title', 'Personal Access Tokens')}</h3>
-                <p style={{ color: 'var(--text-muted)', margin: 'var(--spacing-xs) 0 0 0', fontSize: '14px' }}>
+                <h3 className="m-0 text-md fw-bold">{t('pat_title', 'Personal Access Tokens')}</h3>
+                <p className="text-muted text-sm mt-xs m-0">
                   {t('pat_desc', 'Authenticate your CLI client securely without a browser.')}
                 </p>
               </div>
-              <div style={{ display: 'flex', gap: 'var(--spacing-md)' }}>
+              <div className="flex gap-md">
                 {tokens.length > 0 && (
-                  <button className="btn btn-outline" onClick={handleExportCSV} style={{ fontSize: '14px', padding: 'var(--spacing-sm) var(--spacing-lg)' }}>
+                  <button className="btn btn-outline py-sm px-lg text-sm" onClick={handleExportCSV}>
                     {t('export_csv', 'Export CSV')}
                   </button>
                 )}
                 <button 
-                  className="btn btn-outline" 
+                  className="btn btn-outline py-sm px-lg text-sm" 
                   onClick={() => {
                     setNewTokenName('');
                     setNewTokenExpiresDays(30);
                     setGeneratedToken(null);
                     setIsCreateTokenModalOpen(true);
                   }}
-                  style={{ fontSize: '14px', padding: 'var(--spacing-sm) var(--spacing-lg)' }}
                 >
                   {t('generate_token', 'Generate Token')}
                 </button>
@@ -197,55 +178,65 @@ export default function Dashboard() {
             </div>
             
             {tokens.length > 0 && (
-              <div style={{ marginBottom: 'var(--spacing-lg)' }}>
+              <div className="search-row">
                 <input 
                   type="text" 
                   placeholder={t('search_tokens_placeholder', 'Search tokens...')} 
                   value={searchQuery} 
                   onChange={e => setSearchQuery(e.target.value)}
-                  style={{ padding: 'var(--spacing-sm) var(--spacing-md)', width: '100%', maxWidth: '300px', background: 'var(--input-bg)', color: 'var(--text-main)', border: '1px solid var(--border)', borderRadius: '6px' }}
+                  className="search-input"
                 />
               </div>
             )}
             
             {tokens.length === 0 ? (
-              <div style={{ textAlign: 'center', padding: 'var(--spacing-3xl) var(--spacing-lg)', background: 'rgba(0,0,0,0.1)', border: '1px dashed var(--border)', borderRadius: 'var(--spacing-md)' }}>
-                <div style={{ color: 'var(--text-muted)', fontSize: '15px' }}>{t('no_active_tokens', 'No active tokens found. Create one to authenticate your CLI.')}</div>
+              <div className="card text-center p-2xl border-dashed">
+                <div className="text-muted text-base">{t('no_active_tokens', 'No active tokens found. Create one to authenticate your CLI.')}</div>
               </div>
             ) : (
               <div className="table-responsive">
-                <table style={{ width: '100%', borderCollapse: 'collapse' }}>
+                <table className="w-full">
                   <thead>
-                    <tr style={{ borderBottom: '1px solid var(--border)', textAlign: 'left' }}>
-                      <th style={{ padding: 'var(--spacing-md) var(--spacing-lg)', color: 'var(--text-muted)', fontWeight: 600, fontSize: '13px', textTransform: 'uppercase', letterSpacing: '0.5px', cursor: 'pointer' }} onClick={() => requestSort('name')} aria-sort={getAriaSort('name')}>{t('name', 'Name')}{getSortIndicator('name')}</th>
-                      <th style={{ padding: 'var(--spacing-md) var(--spacing-lg)', color: 'var(--text-muted)', fontWeight: 600, fontSize: '13px', textTransform: 'uppercase', letterSpacing: '0.5px', cursor: 'pointer' }} onClick={() => requestSort('token_prefix')} aria-sort={getAriaSort('token_prefix')}>{t('prefix', 'Prefix')}{getSortIndicator('token_prefix')}</th>
-                      <th style={{ padding: 'var(--spacing-md) var(--spacing-lg)', color: 'var(--text-muted)', fontWeight: 600, fontSize: '13px', textTransform: 'uppercase', letterSpacing: '0.5px', cursor: 'pointer' }} onClick={() => requestSort('created_at')} aria-sort={getAriaSort('created_at')}>{t('created', 'Created')}{getSortIndicator('created_at')}</th>
-                      <th style={{ padding: 'var(--spacing-md) var(--spacing-lg)', color: 'var(--text-muted)', fontWeight: 600, fontSize: '13px', textTransform: 'uppercase', letterSpacing: '0.5px', cursor: 'pointer' }} onClick={() => requestSort('expires_at')} aria-sort={getAriaSort('expires_at')}>{t('expires', 'Expires')}{getSortIndicator('expires_at')}</th>
-                      <th style={{ padding: 'var(--spacing-md) var(--spacing-lg)', color: 'var(--text-muted)', fontWeight: 600, fontSize: '13px', textTransform: 'uppercase', letterSpacing: '0.5px', cursor: 'pointer' }} onClick={() => requestSort('status')} aria-sort={getAriaSort('status')}>{t('status', 'Status')}{getSortIndicator('status')}</th>
+                    <tr className="border-b text-left">
+                      <th className="th-col th-col--sortable" onClick={() => requestSort('name')} aria-sort={getAriaSort('name')}>{t('name', 'Name')}{getSortIndicator('name')}</th>
+                      <th className="th-col th-col--sortable" onClick={() => requestSort('token_prefix')} aria-sort={getAriaSort('token_prefix')}>{t('prefix', 'Prefix')}{getSortIndicator('token_prefix')}</th>
+                      <th className="th-col th-col--sortable" onClick={() => requestSort('created_at')} aria-sort={getAriaSort('created_at')}>{t('created', 'Created')}{getSortIndicator('created_at')}</th>
+                      <th className="th-col th-col--sortable" onClick={() => requestSort('expires_at')} aria-sort={getAriaSort('expires_at')}>{t('expires', 'Expires')}{getSortIndicator('expires_at')}</th>
+                      <th className="th-col th-col--sortable" onClick={() => requestSort('status')} aria-sort={getAriaSort('status')}>{t('status', 'Status')}{getSortIndicator('status')}</th>
+                      <th className="th-col">{t('expires_in', 'Expires In')}</th>
+                      <th className="th-col">{t('actions', 'Actions')}</th>
                     </tr>
                   </thead>
                   <tbody>
-                    {sortedTokens.map((tItem, idx) => (
-                      <tr key={idx} style={{ cursor: 'pointer' }}>
-                        <td style={{ padding: 'var(--spacing-lg)', fontSize: '14px', fontWeight: 500 }}>{tItem.name}</td>
-                        <td style={{ padding: 'var(--spacing-lg)', fontFamily: 'monospace', fontSize: '14px' }}>{tItem.token_prefix}...</td>
-                        <td style={{ padding: 'var(--spacing-lg)', fontSize: '14px' }}>{formatDate(tItem.created_at)}</td>
-                        <td style={{ padding: 'var(--spacing-lg)', fontSize: '14px', color: 'var(--text-muted)' }}>{formatDate(tItem.expires_at)}</td>
-                        <td style={{ padding: 'var(--spacing-lg)' }}>
-                          <span style={{ 
-                            padding: 'var(--spacing-xs) var(--spacing-md)', 
-                            borderRadius: '20px', 
-                            fontSize: '12px', 
-                            fontWeight: 600, 
-                            background: (tItem.status || 'active') === 'active' ? 'var(--status-success-bg)' : 'var(--status-danger-bg)',
-                            color: (tItem.status || 'active') === 'active' ? 'var(--status-success-text)' : 'var(--status-danger-text)',
-                            border: `1px solid ${(tItem.status || 'active') === 'active' ? 'var(--status-success-border)' : 'var(--status-danger-border)'}`
-                          }}>
+                    {sortedTokens.map((tItem, idx) => {
+                      const expiryInfo = formatRelativeExpiry(tItem.expires_at);
+                      return (
+                      <tr key={idx} className="border-b">
+                        <td className="td-cell fw-medium">{tItem.name}</td>
+                        <td className="td-cell--mono">{tItem.token_prefix}...</td>
+                        <td className="td-cell">{formatDate(tItem.created_at)}</td>
+                        <td className="td-cell text-muted">{formatDate(tItem.expires_at)}</td>
+                        <td className="td-cell">
+                          <span className={`badge ${(tItem.status || 'active') === 'active' ? 'badge-success' : 'badge-danger'}`}>
                             {(tItem.status || 'active').toUpperCase()}
                           </span>
                         </td>
+                        <td className="td-cell">
+                          <span className="text-sm fw-medium" style={{ color: expiryInfo.color }}>{expiryInfo.label}</span>
+                        </td>
+                        <td className="td-cell">
+                          {(tItem.status || 'active') === 'active' && (
+                            <button
+                              className="btn btn-outline-danger py-xs px-sm text-xs w-auto"
+                              onClick={() => handleRevokeToken(tItem.id, tItem.name)}
+                            >
+                              {t('revoke', 'Revoke')}
+                            </button>
+                          )}
+                        </td>
                       </tr>
-                    ))}
+                     );
+                    })}
                   </tbody>
                 </table>
               </div>
@@ -255,16 +246,16 @@ export default function Dashboard() {
           <TunnelsPanel tunnels={user.tunnels || []} serverConfig={serverConfig} user={user} />
         </div>
         
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--spacing-xl)' }}>
+        <div className="flex flex-col gap-xl">
           <WhatsNewPanel />
           
           <div className="card">
-            <h3 style={{ margin: '0 0 var(--spacing-lg) 0', fontSize: '20px', fontWeight: 700 }}>{t('help_resources', 'Help & Resources')}</h3>
-            <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--spacing-md)' }}>
-              <button className="btn btn-outline" style={{ justifyContent: 'flex-start', textAlign: 'left' }} onClick={() => setIsInstallModalOpen(true)}>
+            <h3 className="section-title mb-lg">{t('help_resources', 'Help & Resources')}</h3>
+            <div className="flex flex-col gap-md">
+              <button className="btn btn-outline justify-start text-left" onClick={() => setIsInstallModalOpen(true)}>
                 💻 {t('guide_title', 'Client Installation Guide')}
               </button>
-              <button className="btn btn-outline" style={{ justifyContent: 'flex-start', textAlign: 'left' }} onClick={() => {
+              <button className="btn btn-outline justify-start text-left" onClick={() => {
                 // Trigger a global event to start the tour
                 window.dispatchEvent(new CustomEvent('start-onboarding-tour'));
               }}>
@@ -278,21 +269,17 @@ export default function Dashboard() {
       <ClientInstallationModal isOpen={isInstallModalOpen} onClose={() => setIsInstallModalOpen(false)} serverConfig={serverConfig} />
       
       {isCreateTokenModalOpen && (
-        <div style={{
-          position: 'fixed', top: 0, left: 0, width: '100%', height: '100%',
-          backgroundColor: 'rgba(0,0,0,0.5)', zIndex: 1000,
-          display: 'flex', justifyContent: 'center', alignItems: 'center', padding: 'var(--spacing-lg)'
-        }}>
-          <div className="card" style={{ width: '100%', maxWidth: '500px', background: 'var(--bg-base)', border: '1px solid var(--border)', borderRadius: '12px', padding: '24px' }}>
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 'var(--spacing-lg)' }}>
-              <h3 style={{ margin: 0 }}>{t('generate_new_token', 'Generate Personal Access Token')}</h3>
-              <button onClick={() => setIsCreateTokenModalOpen(false)} style={{ background: 'none', border: 'none', color: 'var(--text-muted)', cursor: 'pointer', fontSize: '20px' }}>✕</button>
+        <div className="modal-backdrop">
+          <div className="modal-card modal-card--sm">
+            <div className="modal-header">
+              <h3 className="modal-title">{t('generate_new_token', 'Generate Personal Access Token')}</h3>
+              <button onClick={() => setIsCreateTokenModalOpen(false)} className="modal-close">✕</button>
             </div>
 
             {!generatedToken ? (
               <form onSubmit={handleCreateToken}>
-                <div style={{ marginBottom: '16px' }}>
-                  <label style={{ display: 'block', fontSize: '13px', color: 'var(--text-muted)', marginBottom: '8px' }}>
+                <div className="form-group mb-lg">
+                  <label className="form-label">
                     {t('token_name_label', 'Token Name / Description')}
                   </label>
                   <input 
@@ -305,8 +292,8 @@ export default function Dashboard() {
                   />
                 </div>
 
-                <div style={{ marginBottom: '24px' }}>
-                  <label style={{ display: 'block', fontSize: '13px', color: 'var(--text-muted)', marginBottom: '8px' }}>
+                <div className="form-group mb-xl">
+                  <label className="form-label">
                     {t('expiration', 'Expiration')}
                   </label>
                   <select 
@@ -323,33 +310,31 @@ export default function Dashboard() {
                   </select>
                 </div>
 
-                <div style={{ display: 'flex', gap: '12px', justifyContent: 'flex-end' }}>
-                  <button type="button" className="btn btn-secondary" onClick={() => setIsCreateTokenModalOpen(false)} style={{ width: 'auto' }}>
+                <div className="modal-footer">
+                  <button type="button" className="btn btn-secondary w-auto" onClick={() => setIsCreateTokenModalOpen(false)}>
                     {t('cancel', 'Cancel')}
                   </button>
-                  <button type="submit" className="btn btn-primary" disabled={generating} style={{ width: 'auto' }}>
+                  <button type="submit" className="btn btn-primary w-auto" disabled={generating}>
                     {generating ? t('generating', 'Generating...') : t('generate', 'Generate')}
                   </button>
                 </div>
               </form>
             ) : (
               <div style={{ animation: 'fadeInUp 0.3s ease-out' }}>
-                <div className="alert alert-warning" style={{ marginBottom: '20px', fontSize: '13px' }}>
+                <div className="alert-banner alert-banner--warning text-xs mb-xl">
                   ⚠️ {t('token_warning', 'Copy this token now! It will not be shown again for security reasons.')}
                 </div>
                 
-                <div style={{ display: 'flex', gap: '8px', marginBottom: '20px' }}>
+                <div className="flex gap-sm mb-xl">
                   <input 
                     type="text" 
-                    className="input-field" 
+                    className="input-field font-mono text-xs mb-0 w-full" 
                     readOnly 
                     value={generatedToken} 
-                    style={{ marginBottom: 0, fontFamily: 'monospace', fontSize: '13px', width: '100%' }} 
                   />
                   <button 
                     type="button" 
-                    className="btn btn-primary" 
-                    style={{ width: 'auto', padding: '0 16px' }}
+                    className="btn btn-primary px-lg w-auto" 
                     onClick={() => {
                       navigator.clipboard.writeText(generatedToken);
                       alert('Token copied to clipboard!');
@@ -359,8 +344,8 @@ export default function Dashboard() {
                   </button>
                 </div>
 
-                <div style={{ display: 'flex', justifyContent: 'flex-end' }}>
-                  <button type="button" className="btn btn-secondary" onClick={() => setIsCreateTokenModalOpen(false)} style={{ width: 'auto' }}>
+                <div className="modal-footer">
+                  <button type="button" className="btn btn-secondary w-auto" onClick={() => setIsCreateTokenModalOpen(false)}>
                     {t('close', 'Close')}
                   </button>
                 </div>

@@ -641,6 +641,7 @@ func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 				"latest_version":           latestClientVer,
 				"min_version":              s.cfg.MinClientVersion,
 				"server_version":           config.Version,
+				"domain_allocation_rule":   s.getDomainAllocationRule(),
 				"documentation_url":        s.cfg.DocumentationURL,
 				"repository_url":           s.cfg.RepositoryURL,
 				"secure_token_guide_url":   s.cfg.SecureTokenGuideURL,
@@ -5454,4 +5455,17 @@ func maskConfigMap(m map[string]interface{}) {
 			}
 		}
 	}
+}
+
+func (s *Server) getDomainAllocationRule() string {
+	rule := s.cfg.DomainAllocationRule
+	if s.db != nil {
+		if dbRule, err := s.db.GetAdminSetting("domain_allocation_rule"); err == nil && dbRule != "" {
+			rule = dbRule
+		}
+	}
+	if rule == "" {
+		rule = "contextual"
+	}
+	return rule
 }

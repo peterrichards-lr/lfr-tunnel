@@ -1,0 +1,72 @@
+/*
+ * lfr-tunnel Portal — Dark Theme
+ * Default theme. Applied when no data-theme attribute is set, or data-theme="dark".
+ */
+:root,
+:root[data-theme="dark"] {
+    --bg-base: #09090b;
+    --bg-card: rgba(24, 24, 27, 0.6);
+    --bg-card-hover: rgba(39, 39, 42, 0.8);
+    --primary: #3b82f6;
+    --primary-hover: #2563eb;
+    --primary-glow: rgba(59, 130, 246, 0.5);
+    --text-main: #f8fafc;
+    --text-muted: #94a3b8;
+    --text-secondary: #cbd5e1;
+    --border: rgba(255, 255, 255, 0.08);
+    --danger: #ef4444;
+    --success: #10b981;
+    --warning: #f59e0b;
+    --login-gradient: radial-gradient(circle at 50% -20%, rgba(59, 130, 246, 0.15), transparent 60%), #09090b;
+    --sidebar-bg: rgba(9, 9, 11, 0.8);
+    --input-bg: rgba(0, 0, 0, 0.3);
+    --modal-overlay: rgba(0, 0, 0, 0.8);
+    --copy-box-bg: rgba(0, 0, 0, 0.4);
+    --toast-bg: #1e293b;
+    --toast-color: #f8fafc;
+    --toast-border: rgba(255, 255, 255, 0.1);
+    --shadow-glass: 0 8px 32px 0 rgba(0, 0, 0, 0.37);
+    --shadow-glow: 0 0 20px rgba(59, 130, 246, 0.3);
+    --table-row-hover: rgba(255, 255, 255, 0.03);
+
+    /* Spacing Design Tokens (theme-independent but defined here as the canonical source) */
+    --spacing-xs: 4px;
+    --spacing-sm: 8px;
+    --spacing-md: 12px;
+    --spacing-lg: 16px;
+    --spacing-xl: 24px;
+    --spacing-2xl: 32px;
+    --spacing-3xl: 48px;
+
+    /* Status — Tunnels */
+    --status-tunnels-bg: rgba(99, 102, 241, 0.15);
+    --status-tunnels-text: #818cf8;
+    --status-tunnels-border: rgba(99, 102, 241, 0.3);
+
+    /* Status — Success */
+    --status-success-bg: rgba(16, 185, 129, 0.15);
+    --status-success-text: #34d399;
+    --status-success-border: rgba(16, 185, 129, 0.3);
+
+    /* Status — Warning */
+    --status-warning-bg: rgba(245, 158, 11, 0.15);
+    --status-warning-text: #fbbf24;
+    --status-warning-border: rgba(245, 158, 11, 0.3);
+
+    /* Status — Danger */
+    --status-danger-bg: rgba(239, 68, 68, 0.15);
+    --status-danger-text: #f87171;
+    --status-danger-border: rgba(239, 68, 68, 0.3);
+
+    /* Status — Info (primary-tinted) */
+    --status-info-bg: rgba(59, 130, 246, 0.15);
+    --status-info-text: #60a5fa;
+    --status-info-border: rgba(59, 130, 246, 0.3);
+
+    /* Status — Edge Node */
+    --status-node-bg: rgba(139, 92, 246, 0.15);
+    --status-node-text: #c084fc;
+    --status-node-border: rgba(139, 92, 246, 0.3);
+
+    --status-inactive: rgba(255, 255, 255, 0.25);
+}

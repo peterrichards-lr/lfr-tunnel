@@ -52,36 +52,37 @@ export default function AdminExtensions() {
   };
 
   const { items: sortedRequests, requestSort, getSortIndicator, searchQuery, setSearchQuery, getAriaSort } = useTableSort(requests, ['user_email', 'subdomain', 'domain']);
+
   if (loading) {
     return (
       <div className="card" style={{ animation: 'fadeInUp 0.6s ease-out' }}>
-        <h3 style={{ marginTop: 0, marginBottom: '24px', fontSize: '20px', fontWeight: 700 }}>
+        <h3 className="section-title mb-lg">
           <Skeleton width={180} height={24} />
         </h3>
         
-        <div style={{ marginBottom: '16px' }}>
+        <div className="search-row">
           <Skeleton width="100%" height={40} style={{ maxWidth: '300px' }} />
         </div>
 
         <div className="table-responsive">
-          <table style={{ width: '100%', borderCollapse: 'collapse' }}>
+          <table className="w-full">
             <thead>
-              <tr style={{ borderBottom: '1px solid var(--border)', textAlign: 'left' }}>
-                <th style={{ padding: '12px 16px' }}><Skeleton width={120} /></th>
-                <th style={{ padding: '12px 16px' }}><Skeleton width={80} /></th>
-                <th style={{ padding: '12px 16px' }}><Skeleton width={80} /></th>
-                <th style={{ padding: '12px 16px' }}><Skeleton width={80} /></th>
-                <th style={{ padding: '12px 16px' }}><Skeleton width={100} /></th>
+              <tr className="border-b text-left">
+                <th className="th-col"><Skeleton width={120} /></th>
+                <th className="th-col"><Skeleton width={80} /></th>
+                <th className="th-col"><Skeleton width={80} /></th>
+                <th className="th-col"><Skeleton width={80} /></th>
+                <th className="th-col"><Skeleton width={100} /></th>
               </tr>
             </thead>
             <tbody>
               {[...Array(3)].map((_, i) => (
-                <tr key={i} style={{ borderBottom: '1px solid rgba(255,255,255,0.05)' }}>
-                  <td style={{ padding: '16px' }}><Skeleton width="90%" height={16} /></td>
-                  <td style={{ padding: '16px' }}><Skeleton width="60%" height={16} /></td>
-                  <td style={{ padding: '16px' }}><Skeleton width="60%" height={16} /></td>
-                  <td style={{ padding: '16px' }}><Skeleton width="70%" height={16} /></td>
-                  <td style={{ padding: '16px' }}><Skeleton width="80%" height={16} /></td>
+                <tr key={i} className="border-b">
+                  <td className="td-cell"><Skeleton width="90%" height={16} /></td>
+                  <td className="td-cell"><Skeleton width="60%" height={16} /></td>
+                  <td className="td-cell"><Skeleton width="60%" height={16} /></td>
+                  <td className="td-cell"><Skeleton width="70%" height={16} /></td>
+                  <td className="td-cell"><Skeleton width="80%" height={16} /></td>
                 </tr>
               ))}
             </tbody>
@@ -91,53 +92,57 @@ export default function AdminExtensions() {
     );
   }
 
-
-
   return (
     <div className="card" style={{ animation: 'fadeInUp 0.6s ease-out' }}>
-      <h3 style={{ marginTop: 0, marginBottom: '24px', fontSize: '20px', fontWeight: 700 }}>Extension Requests</h3>
-      {requests.length > 0 && (
-        <div style={{ marginBottom: '16px' }}>
-          <input 
-            type="text" 
-            placeholder={t('search_extensions_placeholder', 'Search extensions...')} 
-            value={searchQuery} 
-            onChange={e => setSearchQuery(e.target.value)}
-            style={{ padding: '8px 12px', width: '100%', maxWidth: '300px', background: 'var(--input-bg)', color: 'var(--text-main)', border: '1px solid var(--border)', borderRadius: '6px' }}
-          />
-        </div>
-      )}
-      
+      <h3 className="section-title mb-lg">Extension Requests</h3>
+      <div className="search-row">
+        <input 
+          type="text" 
+          placeholder={t('search_extensions_placeholder', 'Search extensions...')} 
+          value={searchQuery} 
+          onChange={e => setSearchQuery(e.target.value)}
+          className="search-input"
+        />
+      </div>
+
       <div className="table-responsive">
-        <table style={{ width: '100%', borderCollapse: 'collapse' }}>
+        <table className="w-full">
           <thead>
-            <tr style={{ borderBottom: '1px solid var(--border)', textAlign: 'left' }}>
-              <th style={{ padding: '12px 16px', color: 'var(--text-muted)', cursor: 'pointer' }} onClick={() => requestSort('user_email')} aria-sort={getAriaSort('user_email')}>Email{getSortIndicator('user_email')}</th>
-              <th style={{ padding: '12px 16px', color: 'var(--text-muted)', cursor: 'pointer' }} onClick={() => requestSort('subdomain')} aria-sort={getAriaSort('subdomain')}>Subdomain{getSortIndicator('subdomain')}</th>
-              <th style={{ padding: '12px 16px', color: 'var(--text-muted)', cursor: 'pointer' }} onClick={() => requestSort('domain')} aria-sort={getAriaSort('domain')}>Domain{getSortIndicator('domain')}</th>
-              <th style={{ padding: '12px 16px', color: 'var(--text-muted)' }}>Expires</th>
-              <th style={{ padding: '12px 16px', color: 'var(--text-muted)', textAlign: 'right' }}>Actions</th>
+            <tr className="border-b text-left">
+              <th className="th-col th-col--sortable" onClick={() => requestSort('user_email')} aria-sort={getAriaSort('user_email')}>
+                Email{getSortIndicator('user_email')}
+              </th>
+              <th className="th-col th-col--sortable" onClick={() => requestSort('subdomain')} aria-sort={getAriaSort('subdomain')}>
+                Subdomain{getSortIndicator('subdomain')}
+              </th>
+              <th className="th-col th-col--sortable" onClick={() => requestSort('domain')} aria-sort={getAriaSort('domain')}>
+                Domain{getSortIndicator('domain')}
+              </th>
+              <th className="th-col">Expires</th>
+              <th className="th-col text-right">Actions</th>
             </tr>
           </thead>
           <tbody>
             {sortedRequests.map((req) => (
-              <tr key={req.id} style={{ borderBottom: '1px solid rgba(255,255,255,0.05)' }}>
-                <td style={{ padding: '16px' }}>{req.user_email}</td>
-                <td style={{ padding: '16px', fontFamily: 'monospace' }}>{req.subdomain}</td>
-                <td style={{ padding: '16px', fontFamily: 'monospace' }}>{req.domain}</td>
-                <td style={{ padding: '16px' }}>{req.expires_at ? formatDate(req.expires_at) : 'Never'}</td>
-                <td style={{ padding: '16px', textAlign: 'right' }}>
-                  <div style={{ display: 'flex', gap: '8px', justifyContent: 'flex-end' }}>
-                    <button className="btn btn-primary" style={{ padding: '4px 12px', fontSize: '12px' }} onClick={() => handleAction(req.id, 'approve')}>Approve</button>
-                    <button className="btn btn-secondary" style={{ padding: '4px 12px', fontSize: '12px' }} onClick={() => handleAction(req.id, 'reject')}>Reject</button>
+              <tr key={req.id} className="border-b">
+                <td className="td-cell">{req.user_email}</td>
+                <td className="td-cell--mono">{req.subdomain}</td>
+                <td className="td-cell--mono">{req.domain}</td>
+                <td className="td-cell">{req.expires_at ? formatDate(req.expires_at) : 'Never'}</td>
+                <td className="td-cell text-right">
+                  <div className="flex gap-sm justify-end">
+                    <button className="btn btn-primary px-md py-xs text-xs" onClick={() => handleAction(req.id, 'approve')}>Approve</button>
+                    <button className="btn btn-secondary px-md py-xs text-xs" onClick={() => handleAction(req.id, 'reject')}>Reject</button>
                   </div>
                 </td>
               </tr>
             ))}
-            {requests.length === 0 && (
+            {sortedRequests.length === 0 && (
               <tr>
-                <td colSpan={5} style={{ textAlign: 'center', padding: '40px 20px', color: 'var(--text-muted)' }}>
-                  No extension requests found.
+                <td colSpan={5} className="td-empty">
+                  {searchQuery
+                    ? t('no_extensions_match', 'No extension requests match your search.')
+                    : t('no_extensions_found', 'No extension requests found.')}
                 </td>
               </tr>
             )}

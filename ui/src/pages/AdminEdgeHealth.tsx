@@ -22,8 +22,9 @@ export default function AdminEdgeHealth() {
   const { t } = useI18n();
   const { showToast, showConfirm, showPrompt } = useUI();
   
-  // Track open menus
+  // Track open menus and their viewport position
   const [openMenu, setOpenMenu] = useState<string | null>(null);
+  const [menuPos, setMenuPos] = useState<{ top: number; right: number } | null>(null);
 
   const fetchHealth = async () => {
     try {
@@ -102,7 +103,14 @@ export default function AdminEdgeHealth() {
 
   const toggleMenu = (e: React.MouseEvent, id: string) => {
     e.stopPropagation();
-    setOpenMenu(openMenu === id ? null : id);
+    if (openMenu === id) {
+      setOpenMenu(null);
+      setMenuPos(null);
+    } else {
+      const rect = (e.currentTarget as HTMLElement).getBoundingClientRect();
+      setMenuPos({ top: rect.bottom + window.scrollY + 4, right: window.innerWidth - rect.right });
+      setOpenMenu(id);
+    }
   };
 
   const nodeArray = Object.keys(nodes).map(id => ({ id, ...nodes[id] }));
@@ -111,41 +119,41 @@ export default function AdminEdgeHealth() {
   if (loading) {
     return (
       <div style={{ animation: 'fadeInUp 0.6s ease-out' }}>
-        <div style={{ marginBottom: '24px' }}>
+        <div className="mb-xl">
           <Skeleton width={180} height={28} />
-          <Skeleton width={320} height={16} style={{ marginTop: '8px' }} />
+          <Skeleton width={320} height={16} className="mt-sm" />
         </div>
 
-        <div className="card" style={{ padding: '24px', marginBottom: '24px' }}>
-          <div style={{ display: 'flex', gap: '12px', alignItems: 'center' }}>
+        <div className="card p-xl mb-xl">
+          <div className="flex gap-md items-center">
             <Skeleton width="100%" height={40} style={{ maxWidth: '300px' }} />
           </div>
         </div>
 
-        <div className="card" style={{ padding: '24px' }}>
+        <div className="card p-xl">
           <div className="table-responsive">
-            <table style={{ width: '100%', borderCollapse: 'collapse' }}>
+            <table className="w-full">
               <thead>
-                <tr style={{ borderBottom: '1px solid var(--border)', textAlign: 'left' }}>
-                  <th style={{ padding: '12px 16px' }}><Skeleton width={80} /></th>
-                  <th style={{ padding: '12px 16px' }}><Skeleton width={80} /></th>
-                  <th style={{ padding: '12px 16px' }}><Skeleton width={100} /></th>
-                  <th style={{ padding: '12px 16px' }}><Skeleton width={80} /></th>
-                  <th style={{ padding: '12px 16px' }}><Skeleton width={120} /></th>
-                  <th style={{ padding: '12px 16px' }}><Skeleton width={100} /></th>
-                  <th style={{ padding: '12px 16px' }}><Skeleton width={80} /></th>
+                <tr className="border-b text-left">
+                  <th className="th-col"><Skeleton width={80} /></th>
+                  <th className="th-col"><Skeleton width={80} /></th>
+                  <th className="th-col"><Skeleton width={100} /></th>
+                  <th className="th-col"><Skeleton width={80} /></th>
+                  <th className="th-col"><Skeleton width={120} /></th>
+                  <th className="th-col"><Skeleton width={100} /></th>
+                  <th className="th-col"><Skeleton width={80} /></th>
                 </tr>
               </thead>
               <tbody>
                 {[...Array(3)].map((_, i) => (
-                  <tr key={i} style={{ borderBottom: '1px solid rgba(255,255,255,0.05)' }}>
-                    <td style={{ padding: '16px' }}><Skeleton width="70%" height={16} /></td>
-                    <td style={{ padding: '16px' }}><Skeleton width={50} height={20} borderRadius={10} /></td>
-                    <td style={{ padding: '16px' }}><Skeleton width="80%" height={16} /></td>
-                    <td style={{ padding: '16px' }}><Skeleton width="50%" height={16} /></td>
-                    <td style={{ padding: '16px' }}><Skeleton width="60%" height={16} /></td>
-                    <td style={{ padding: '16px' }}><Skeleton width="60%" height={16} /></td>
-                    <td style={{ padding: '16px' }}><Skeleton width={40} height={24} /></td>
+                  <tr key={i} className="border-b">
+                    <td className="td-cell"><Skeleton width="70%" height={16} /></td>
+                    <td className="td-cell"><Skeleton width={50} height={20} borderRadius={10} /></td>
+                    <td className="td-cell"><Skeleton width="80%" height={16} /></td>
+                    <td className="td-cell"><Skeleton width="50%" height={16} /></td>
+                    <td className="td-cell"><Skeleton width="60%" height={16} /></td>
+                    <td className="td-cell"><Skeleton width="60%" height={16} /></td>
+                    <td className="td-cell"><Skeleton width={40} height={24} /></td>
                   </tr>
                 ))}
               </tbody>
@@ -156,59 +164,54 @@ export default function AdminEdgeHealth() {
     );
   }
 
-
   return (
     <div>
-      <div style={{ marginBottom: '24px' }}>
-        <h3>Network Health</h3>
-        <p style={{ color: 'var(--text-muted)' }}>Monitor the real-time status, latency, and uptime of regional stateless edge nodes.</p>
+      <div className="mb-xl">
+        <h3 className="page-header__title">Network Health</h3>
+        <p className="page-header__desc">Monitor the real-time status, latency, and uptime of regional stateless edge nodes.</p>
       </div>
 
       {!outboundOk && (
-        <div className="glass" style={{
-          padding: '16px', background: 'rgba(239, 68, 68, 0.1)', borderLeft: '4px solid var(--danger)',
-          color: 'var(--danger)', borderRadius: '8px', marginBottom: '24px', fontSize: '13px',
-          fontWeight: 500, display: 'flex', alignItems: 'center', gap: '8px'
-        }}>
+        <div className="alert-banner alert-banner--danger mb-xl">
           ⚠️ <strong>Gateway Network Error:</strong> The central gateway has lost outbound internet connectivity. Regional health checks are suspended.
         </div>
       )}
 
       {error ? (
-        <div style={{ color: 'var(--danger)', marginBottom: '20px' }}>
+        <div className="text-danger mb-lg">
           {error}
         </div>
       ) : (
         <>
           {nodeArray.length > 0 && (
-            <div style={{ marginBottom: '16px' }}>
+            <div className="search-row">
               <input 
                 type="text" 
                 placeholder={t('search_nodes_placeholder', 'Search nodes...')} 
                 value={searchQuery} 
                 onChange={e => setSearchQuery(e.target.value)}
-                style={{ padding: '8px 12px', width: '100%', maxWidth: '300px', background: 'var(--input-bg)', color: 'var(--text-main)', border: '1px solid var(--border)', borderRadius: '6px' }}
+                className="search-input"
               />
             </div>
           )}
-          <div className="card table-responsive" style={{ minHeight: '320px', paddingBottom: '120px' }}>
-            <table className="table" style={{ overflow: 'visible' }}>
+          <div className="card table-responsive min-h-card">
+            <table className="w-full" style={{ overflow: 'visible' }}>
               <thead>
-                <tr>
-                  <th style={{ cursor: 'pointer' }} onClick={() => requestSort('id')} aria-sort={getAriaSort('id')}>Node ID{getSortIndicator('id')}</th>
-                  <th style={{ cursor: 'pointer' }} onClick={() => requestSort('resolved_ip')} aria-sort={getAriaSort('resolved_ip')}>Resolved IP{getSortIndicator('resolved_ip')}</th>
-                  <th style={{ cursor: 'pointer' }} onClick={() => requestSort('status')} aria-sort={getAriaSort('status')}>Status{getSortIndicator('status')}</th>
-                  <th style={{ cursor: 'pointer' }} onClick={() => requestSort('latency_ms')} aria-sort={getAriaSort('latency_ms')}>Latency{getSortIndicator('latency_ms')}</th>
-                  <th style={{ cursor: 'pointer' }} onClick={() => requestSort('last_check_at')} aria-sort={getAriaSort('last_check_at')}>Last Check{getSortIndicator('last_check_at')}</th>
-                  <th style={{ cursor: 'pointer' }} onClick={() => requestSort('version')} aria-sort={getAriaSort('version')}>Version{getSortIndicator('version')}</th>
-                  <th>Error</th>
-                  <th style={{ textAlign: 'right' }}>Actions</th>
+                <tr className="border-b text-left">
+                  <th className="th-col th-col--sortable" onClick={() => requestSort('id')} aria-sort={getAriaSort('id')}>Node ID{getSortIndicator('id')}</th>
+                  <th className="th-col th-col--sortable" onClick={() => requestSort('resolved_ip')} aria-sort={getAriaSort('resolved_ip')}>Resolved IP{getSortIndicator('resolved_ip')}</th>
+                  <th className="th-col th-col--sortable" onClick={() => requestSort('status')} aria-sort={getAriaSort('status')}>Status{getSortIndicator('status')}</th>
+                  <th className="th-col th-col--sortable" onClick={() => requestSort('latency_ms')} aria-sort={getAriaSort('latency_ms')}>Latency{getSortIndicator('latency_ms')}</th>
+                  <th className="th-col th-col--sortable" onClick={() => requestSort('last_check_at')} aria-sort={getAriaSort('last_check_at')}>Last Check{getSortIndicator('last_check_at')}</th>
+                  <th className="th-col th-col--sortable" onClick={() => requestSort('version')} aria-sort={getAriaSort('version')}>Version{getSortIndicator('version')}</th>
+                  <th className="th-col">Error</th>
+                  <th className="th-col text-right">Actions</th>
                 </tr>
               </thead>
               <tbody>
                 {sortedNodes.length === 0 ? (
                 <tr>
-                  <td colSpan={8} style={{ textAlign: 'center', opacity: 0.6, padding: '16px' }}>
+                  <td colSpan={8} className="td-empty opacity-60">
                     No edge nodes configured
                   </td>
                 </tr>
@@ -216,7 +219,6 @@ export default function AdminEdgeHealth() {
                 sortedNodes.map(h => {
                   const id = h.id;
                   const isOnline = h.status === 'Online';
-                  const dotColor = isOnline ? 'var(--success)' : 'var(--danger)';
                   
                   const resolvedIP = h.resolved_ip || '-';
                   const latText = isOnline ? `${h.latency_ms} ms` : '-';
@@ -224,51 +226,55 @@ export default function AdminEdgeHealth() {
                   const verText = h.version || '-';
 
                   return (
-                    <tr key={id}>
-                      <td><strong>{id}</strong></td>
-                      <td>
-                        <code style={{ fontFamily: 'monospace', fontSize: '12px', background: 'rgba(255, 255, 255, 0.05)', padding: '2px 6px', borderRadius: '4px' }}>
+                    <tr key={id} className="border-b">
+                      <td className="td-cell fw-bold">{id}</td>
+                      <td className="td-cell">
+                        <code className="font-mono text-xs px-sm py-xs rounded-xs" style={{ background: 'rgba(255, 255, 255, 0.05)' }}>
                           {resolvedIP}
                         </code>
                       </td>
-                      <td>
-                        <span style={{ display: 'inline-flex', alignItems: 'center', gap: '6px' }}>
-                          <span style={{ width: '8px', height: '8px', borderRadius: '50%', backgroundColor: dotColor }}></span>
+                      <td className="td-cell">
+                        <span className="inline-flex items-center gap-xs">
+                          <span className={`status-dot ${isOnline ? 'status-dot--online' : 'status-dot--offline'}`}></span>
                           {h.status}
                         </span>
                       </td>
-                      <td>{latText}</td>
-                      <td>{timeSince}</td>
-                      <td><code style={{ fontFamily: 'monospace', fontSize: '11px' }}>{verText}</code></td>
-                      <td>
+                      <td className="td-cell">{latText}</td>
+                      <td className="td-cell">{timeSince}</td>
+                      <td className="td-cell"><code className="font-mono text-2xs">{verText}</code></td>
+                      <td className="td-cell">
                         {h.error_message && (
-                          <span style={{ color: 'var(--danger)', fontSize: '12px' }}>{h.error_message}</span>
+                          <span className="text-danger text-xs">{h.error_message}</span>
                         )}
                       </td>
-                      <td style={{ textAlign: 'right', position: 'relative' }}>
-                        <div className="action-menu" style={{ display: 'inline-block' }}>
+                      <td className="td-cell text-right">
+                        <div className="action-menu inline-block relative">
                           <button 
-                            className="btn btn-secondary" 
-                            style={{ padding: '2px 8px' }}
+                            className="btn btn-secondary py-xs px-sm" 
                             onClick={(e) => toggleMenu(e, id)}
                           >
                             ⋮
                           </button>
-                          {openMenu === id && (
-                            <div className="action-menu-dropdown" style={{
-                              position: 'absolute', right: 0, top: '100%', zIndex: 100, 
-                              background: 'var(--bg-base)', border: '1px solid var(--border)',
-                              borderRadius: '6px', boxShadow: '0 10px 15px -3px rgba(0,0,0,0.3)',
-                              minWidth: '180px', display: 'flex', flexDirection: 'column',
-                              padding: '4px 0'
-                            }}>
-                              <button className="action-menu-item" style={{ padding: '8px 12px', textAlign: 'left', background: 'none', border: 'none', color: 'var(--text-main)', cursor: 'pointer', borderBottom: '1px solid var(--border)' }} onClick={() => restartEdgeDaemon(id)}>Restart Daemon</button>
-                              <button className="action-menu-item" style={{ padding: '8px 12px', textAlign: 'left', background: 'none', border: 'none', color: 'var(--text-main)', cursor: 'pointer', borderBottom: '1px solid var(--border)' }} onClick={() => enableEdgeMaintenance(id)}>Enable Maintenance</button>
-                              <button className="action-menu-item" style={{ padding: '8px 12px', textAlign: 'left', background: 'none', border: 'none', color: 'var(--text-main)', cursor: 'pointer', borderBottom: '1px solid var(--border)' }} onClick={() => disableEdgeMaintenance(id)}>Disable Maintenance</button>
-                              <button className="action-menu-item" style={{ padding: '8px 12px', textAlign: 'left', background: 'none', border: 'none', color: 'var(--danger)', cursor: 'pointer' }} onClick={() => kickEdgeTunnels(id)}>Kick All Tunnels</button>
-                            </div>
-                          )}
                         </div>
+                        {openMenu === id && menuPos && (
+                          <div
+                            className="action-menu-dropdown fixed flex flex-col py-xs rounded-sm border"
+                            style={{
+                              top: `${menuPos.top}px`,
+                              right: `${menuPos.right}px`,
+                              zIndex: 9999,
+                              background: 'var(--bg-base)',
+                              boxShadow: '0 10px 15px -3px rgba(0,0,0,0.3)',
+                              minWidth: '180px'
+                            }}
+                            onClick={(e) => e.stopPropagation()}
+                          >
+                            <button className="action-menu-item text-left border-b cursor-pointer p-md text-main no-underline" style={{ background: 'none', borderLeft: 'none', borderRight: 'none', borderTop: 'none' }} onClick={() => restartEdgeDaemon(id)}>Restart Daemon</button>
+                            <button className="action-menu-item text-left border-b cursor-pointer p-md text-main no-underline" style={{ background: 'none', borderLeft: 'none', borderRight: 'none', borderTop: 'none' }} onClick={() => enableEdgeMaintenance(id)}>Enable Maintenance</button>
+                            <button className="action-menu-item text-left border-b cursor-pointer p-md text-main no-underline" style={{ background: 'none', borderLeft: 'none', borderRight: 'none', borderTop: 'none' }} onClick={() => disableEdgeMaintenance(id)}>Disable Maintenance</button>
+                            <button className="action-menu-item text-left cursor-pointer p-md text-danger no-underline" style={{ background: 'none', border: 'none' }} onClick={() => kickEdgeTunnels(id)}>Kick All Tunnels</button>
+                          </div>
+                        )}
                       </td>
                     </tr>
                   );

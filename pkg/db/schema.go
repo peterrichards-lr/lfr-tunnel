@@ -28,6 +28,7 @@ func (db *DB) initSchema() error {
 		totp_enabled INTEGER DEFAULT 0,
 		policy_consent_at DATETIME,
 		language_preference TEXT NOT NULL DEFAULT 'en',
+		subdomain_style TEXT DEFAULT 'liferay',
 		rate_limit INTEGER DEFAULT 0,
 		max_reservations INTEGER DEFAULT NULL,
 		max_active_tunnels INTEGER DEFAULT NULL,
@@ -238,4 +239,5 @@ var migrations = []migration{
 	{15, "ALTER TABLE users ADD COLUMN onboarding_reruns INTEGER NOT NULL DEFAULT 0"},
 	{16, "CREATE TABLE IF NOT EXISTS webhook_queue (id INTEGER PRIMARY KEY AUTOINCREMENT, title TEXT NOT NULL, description TEXT NOT NULL, color TEXT NOT NULL, facts TEXT NOT NULL, created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP)"},
 	{17, "ALTER TABLE users ADD COLUMN preferred_domain TEXT DEFAULT ''"},
+	{18, "ALTER TABLE users ADD COLUMN subdomain_style TEXT DEFAULT 'liferay'"},
 }

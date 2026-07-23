@@ -110,24 +110,17 @@ export default function AdminTelemetry() {
   const totalBandwidth = totalBytesIn + totalBytesOut;
 
   return (
-    <div style={{ animation: 'fadeInUp 0.6s ease-out' }}>
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 'var(--spacing-xl)', flexWrap: 'wrap', gap: 'var(--spacing-lg)' }}>
+    <div id="telemetry-page" style={{ animation: 'fadeInUp 0.6s ease-out' }}>
+      <div className="page-header flex-wrap gap-lg">
         <div>
-          <h2 style={{ fontSize: '24px', fontWeight: 'bold', margin: 0 }}>{t('telemetry_title', 'Real-time Telemetry')}</h2>
-          <p style={{ color: 'var(--text-muted)', fontSize: '14px', marginTop: 'var(--spacing-xs)' }}>
+          <h2 className="page-header__title">{t('telemetry_title', 'Real-time Telemetry')}</h2>
+          <p className="page-header__desc">
             {t('telemetry_desc', 'Monitor active tunnels, bandwidth consumption, and visitor traffic in real-time.')}
           </p>
         </div>
         <div>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 'var(--spacing-sm)', padding: 'var(--spacing-xs) var(--spacing-lg)', borderRadius: '20px', fontSize: '13px', fontWeight: 600, background: 'rgba(255,255,255,0.05)', border: '1px solid var(--border)' }}>
-            <span style={{ 
-              width: '8px', 
-              height: '8px', 
-              borderRadius: '50%', 
-              backgroundColor: status === 'connected' ? 'var(--success)' : status === 'connecting' ? 'var(--warning)' : 'var(--danger)',
-              display: 'inline-block',
-              boxShadow: status === 'connected' ? '0 0 8px var(--success)' : 'none'
-            }}></span>
+          <div className="flex items-center gap-sm px-lg py-xs rounded-full text-xs fw-semibold border" style={{ background: 'rgba(255,255,255,0.05)' }}>
+            <span className={`status-dot ${status === 'connected' ? 'status-dot--online' : status === 'connecting' ? 'status-dot--warning' : 'status-dot--offline'}`}></span>
             <span>
               {status === 'connected' && t('telemetry_connected', 'Live Feed Connected')}
               {status === 'connecting' && t('telemetry_connecting', 'Connecting to Gateway...')}
@@ -137,113 +130,107 @@ export default function AdminTelemetry() {
         </div>
       </div>
 
-      <div className="responsive-grid" style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(240px, 1fr))', gap: 'var(--spacing-xl)', marginBottom: 'var(--spacing-xl)' }}>
-        <div className="card" style={{ padding: 'var(--spacing-lg)' }}>
-          <div style={{ color: 'var(--text-muted)', fontSize: '13px', fontWeight: 600, textTransform: 'uppercase', marginBottom: 'var(--spacing-sm)' }}>
+      <div className="auto-grid-md mb-2xl">
+        <div id="stat-active-tunnels" className="card p-lg">
+          <div className="stat-label">
             {t('telemetry_active_tunnels', 'Active Tunnels')}
           </div>
-          <div style={{ fontSize: '28px', fontWeight: '800', color: 'var(--text-color)' }}>
+          <div className="stat-value text-main">
             {activeTunnelsCount}
           </div>
         </div>
-        <div className="card" style={{ padding: 'var(--spacing-lg)' }}>
-          <div style={{ color: 'var(--text-muted)', fontSize: '13px', fontWeight: 600, textTransform: 'uppercase', marginBottom: 'var(--spacing-sm)' }}>
+        <div id="stat-total-bandwidth" className="card p-lg">
+          <div className="stat-label">
             {t('telemetry_total_bandwidth', 'Total Live Traffic')}
           </div>
-          <div style={{ fontSize: '28px', fontWeight: '800', color: 'var(--text-color)' }}>
+          <div className="stat-value text-main">
             {formatBytes(totalBandwidth)}
           </div>
-          <div style={{ color: 'var(--text-muted)', fontSize: '11px', marginTop: 'var(--spacing-xs)' }}>
+          <div className="stat-subtext text-muted mt-xs">
             📥 {formatBytes(totalBytesIn)} In | 📤 {formatBytes(totalBytesOut)} Out
           </div>
         </div>
-        <div className="card" style={{ padding: 'var(--spacing-lg)' }}>
-          <div style={{ color: 'var(--text-muted)', fontSize: '13px', fontWeight: 600, textTransform: 'uppercase', marginBottom: 'var(--spacing-sm)' }}>
+        <div id="stat-active-gateways" className="card p-lg">
+          <div className="stat-label">
             {t('telemetry_active_nodes', 'Active Gateways')}
           </div>
-          <div style={{ fontSize: '28px', fontWeight: '800', color: 'var(--text-color)' }}>
+          <div className="stat-value text-main">
             {activeNodesCount}
           </div>
         </div>
       </div>
 
-      <div className="card" style={{ padding: 'var(--spacing-xl)' }}>
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 'var(--spacing-lg)', flexWrap: 'wrap', gap: 'var(--spacing-md)' }}>
-          <h3 style={{ margin: 0, fontSize: '18px', fontWeight: 700 }}>{t('telemetry_tunnels_list', 'Real-Time Tunnel Connections')}</h3>
+      <div id="telemetry-tunnels-table" className="card p-xl">
+        <div className="page-header flex-wrap gap-md mb-lg">
+          <h3 className="m-0 text-base fw-bold">{t('telemetry_tunnels_list', 'Real-Time Tunnel Connections')}</h3>
           <input 
             type="text" 
             placeholder={t('search_active_tunnels_placeholder', 'Search active tunnels...')}
             value={searchQuery} 
             onChange={e => setSearchQuery(e.target.value)}
-            style={{ padding: 'var(--spacing-sm) var(--spacing-md)', width: '100%', maxWidth: '300px', background: 'var(--input-bg)', color: 'var(--text-main)', border: '1px solid var(--border)', borderRadius: '6px' }}
+            className="search-input"
           />
         </div>
 
         {tunnels.length === 0 ? (
-          <div style={{ textAlign: 'center', padding: 'var(--spacing-3xl) var(--spacing-lg)', background: 'rgba(0,0,0,0.1)', border: '1px dashed var(--border)', borderRadius: 'var(--spacing-md)' }}>
-            <div style={{ color: 'var(--text-muted)', fontSize: '15px' }}>
+          <div className="card text-center p-2xl border-dashed">
+            <div className="text-muted text-base">
               {t('telemetry_no_tunnels', 'No active tunnels monitored on the gateway.')}
             </div>
           </div>
         ) : (
           <div className="table-responsive">
-            <table style={{ width: '100%', borderCollapse: 'collapse' }}>
+            <table className="w-full">
               <thead>
-                <tr style={{ borderBottom: '1px solid var(--border)', textAlign: 'left' }}>
-                  <th style={{ padding: 'var(--spacing-md) var(--spacing-lg)', color: 'var(--text-muted)', fontWeight: 600, fontSize: '13px', textTransform: 'uppercase', letterSpacing: '0.5px', cursor: 'pointer' }} onClick={() => requestSort('subdomain_prefix')} aria-sort={getAriaSort('subdomain_prefix')}>{t('subdomain', 'Subdomain')}{getSortIndicator('subdomain_prefix')}</th>
-                  <th style={{ padding: 'var(--spacing-md) var(--spacing-lg)', color: 'var(--text-muted)', fontWeight: 600, fontSize: '13px', textTransform: 'uppercase', letterSpacing: '0.5px', cursor: 'pointer' }} onClick={() => requestSort('full_host')} aria-sort={getAriaSort('full_host')}>{t('target_host', 'Target Host')}{getSortIndicator('full_host')}</th>
-                  <th style={{ padding: 'var(--spacing-md) var(--spacing-lg)', color: 'var(--text-muted)', fontWeight: 600, fontSize: '13px', textTransform: 'uppercase', letterSpacing: '0.5px', cursor: 'pointer' }} onClick={() => requestSort('node_id')} aria-sort={getAriaSort('node_id')}>{t('node', 'Node')}{getSortIndicator('node_id')}</th>
-                  <th style={{ padding: 'var(--spacing-md) var(--spacing-lg)', color: 'var(--text-muted)', fontWeight: 600, fontSize: '13px', textTransform: 'uppercase', letterSpacing: '0.5px' }}>{t('client_ip', 'Client IP')}</th>
-                  <th style={{ padding: 'var(--spacing-md) var(--spacing-lg)', color: 'var(--text-muted)', fontWeight: 600, fontSize: '13px', textTransform: 'uppercase', letterSpacing: '0.5px', cursor: 'pointer' }} onClick={() => requestSort('bytes_in')} aria-sort={getAriaSort('bytes_in')}>{t('data_in', 'Data In')}{getSortIndicator('bytes_in')}</th>
-                  <th style={{ padding: 'var(--spacing-md) var(--spacing-lg)', color: 'var(--text-muted)', fontWeight: 600, fontSize: '13px', textTransform: 'uppercase', letterSpacing: '0.5px', cursor: 'pointer' }} onClick={() => requestSort('bytes_out')} aria-sort={getAriaSort('bytes_out')}>{t('data_out', 'Data Out')}{getSortIndicator('bytes_out')}</th>
-                  <th style={{ padding: 'var(--spacing-md) var(--spacing-lg)', color: 'var(--text-muted)', fontWeight: 600, fontSize: '13px', textTransform: 'uppercase', letterSpacing: '0.5px' }}>{t('visitors', 'Visitors')}</th>
-                  <th style={{ padding: 'var(--spacing-md) var(--spacing-lg)', color: 'var(--text-muted)', fontWeight: 600, fontSize: '13px', textTransform: 'uppercase', letterSpacing: '0.5px' }}>{t('status', 'Status')}</th>
-                  <th style={{ padding: 'var(--spacing-md) var(--spacing-lg)', color: 'var(--text-muted)', fontWeight: 600, fontSize: '13px', textTransform: 'uppercase', letterSpacing: '0.5px', textAlign: 'right' }}>{t('actions', 'Actions')}</th>
+                <tr className="border-b text-left">
+                  <th className="th-col th-col--sortable" onClick={() => requestSort('subdomain_prefix')} aria-sort={getAriaSort('subdomain_prefix')}>{t('subdomain', 'Subdomain')}{getSortIndicator('subdomain_prefix')}</th>
+                  <th className="th-col th-col--sortable" onClick={() => requestSort('full_host')} aria-sort={getAriaSort('full_host')}>{t('target_host', 'Target Host')}{getSortIndicator('full_host')}</th>
+                  <th className="th-col th-col--sortable" onClick={() => requestSort('node_id')} aria-sort={getAriaSort('node_id')}>{t('node', 'Node')}{getSortIndicator('node_id')}</th>
+                  <th className="th-col">{t('client_ip', 'Client IP')}</th>
+                  <th className="th-col th-col--sortable" onClick={() => requestSort('bytes_in')} aria-sort={getAriaSort('bytes_in')}>{t('data_in', 'Data In')}{getSortIndicator('bytes_in')}</th>
+                  <th className="th-col th-col--sortable" onClick={() => requestSort('bytes_out')} aria-sort={getAriaSort('bytes_out')}>{t('data_out', 'Data Out')}{getSortIndicator('bytes_out')}</th>
+                  <th className="th-col">{t('visitors', 'Visitors')}</th>
+                  <th className="th-col">{t('status', 'Status')}</th>
+                  <th className="th-col text-right">{t('actions', 'Actions')}</th>
                 </tr>
               </thead>
               <tbody>
                 {sortedTunnels.map((tItem, idx) => (
-                  <tr key={idx}>
-                    <td style={{ padding: 'var(--spacing-lg)', fontWeight: 600, fontSize: '14px' }}>{tItem.subdomain_prefix}</td>
-                    <td style={{ padding: 'var(--spacing-lg)', fontSize: '14px' }}>
-                      <a href={`https://${tItem.full_host}`} target="_blank" rel="noreferrer" style={{ color: 'var(--primary)', textDecoration: 'none', fontWeight: 500 }}>
+                  <tr key={idx} className="border-b">
+                    <td className="td-cell fw-semibold text-sm">{tItem.subdomain_prefix}</td>
+                    <td className="td-cell text-sm">
+                      <a href={`https://${tItem.full_host}`} target="_blank" rel="noreferrer" className="text-primary no-underline fw-medium">
                         {tItem.full_host}
                       </a>
                     </td>
-                    <td style={{ padding: 'var(--spacing-lg)', fontSize: '14px' }}>
+                    <td className="td-cell">
                       {tItem.node_id && tItem.node_id !== 'control' ? (
-                        <span style={{ padding: 'var(--spacing-xs) var(--spacing-md)', borderRadius: '20px', fontSize: '12px', fontWeight: 600, background: 'rgba(139, 92, 246, 0.15)', color: '#c084fc', border: '1px solid rgba(139, 92, 246, 0.3)' }}>
+                        <span className="badge badge-node">
                           🌍 {tItem.node_id}
                         </span>
                       ) : (
-                        <span style={{ padding: 'var(--spacing-xs) var(--spacing-md)', borderRadius: '20px', fontSize: '12px', fontWeight: 600, background: 'rgba(59, 130, 246, 0.15)', color: '#60a5fa', border: '1px solid rgba(59, 130, 246, 0.3)' }}>
+                        <span className="badge badge-control">
                           🇬🇧 {t('control_node', 'Control')}
                         </span>
                       )}
                     </td>
-                    <td style={{ padding: 'var(--spacing-lg)', fontSize: '14px', fontFamily: 'monospace' }}>{tItem.client_ip || '-'}</td>
-                    <td style={{ padding: 'var(--spacing-lg)', fontSize: '14px' }}>{formatBytes(tItem.bytes_in || 0)}</td>
-                    <td style={{ padding: 'var(--spacing-lg)', fontSize: '14px' }}>{formatBytes(tItem.bytes_out || 0)}</td>
-                    <td style={{ padding: 'var(--spacing-lg)', fontSize: '14px' }}>
-                      <span style={{ fontWeight: 'bold', color: tItem.visitor_ips?.length > 0 ? 'var(--primary)' : 'var(--text-muted)' }}>
+                    <td className="td-cell--mono text-sm">{tItem.client_ip || '-'}</td>
+                    <td className="td-cell text-sm">{formatBytes(tItem.bytes_in || 0)}</td>
+                    <td className="td-cell text-sm">{formatBytes(tItem.bytes_out || 0)}</td>
+                    <td className="td-cell text-sm">
+                      <span className={tItem.visitor_ips?.length > 0 ? 'text-primary fw-bold' : 'text-muted fw-bold'}>
                         {tItem.visitor_ips?.length || 0}
                       </span>
                     </td>
-                    <td style={{ padding: 'var(--spacing-lg)' }}>
-                      <span style={{ 
-                        padding: 'var(--spacing-xs) var(--spacing-md)', borderRadius: '20px', fontSize: '12px', fontWeight: 600, 
-                        background: 'var(--status-success-bg)', color: 'var(--status-success-text)', border: '1px solid var(--status-success-border)' 
-                      }}>
+                    <td className="td-cell">
+                      <span className="badge badge-success">
                         {tItem.status ? tItem.status.toUpperCase() : 'UP'}
                       </span>
                     </td>
-                    <td style={{ padding: 'var(--spacing-lg)', textAlign: 'right' }}>
+                    <td className="td-cell text-right">
                       <button 
-                        className="btn btn-secondary" 
-                        style={{ padding: 'var(--spacing-xs) var(--spacing-md)', fontSize: '13px', color: 'var(--danger)', borderColor: 'var(--status-danger-border)', background: 'transparent' }}
+                        className="btn btn-danger py-xs px-md text-xs w-auto" 
                         onClick={() => handleKick(tItem.subdomain_prefix)}
-                        onMouseOver={e => { e.currentTarget.style.background = 'var(--status-danger-bg)'; e.currentTarget.style.color = 'var(--status-danger-text)'; }}
-                        onMouseOut={e => { e.currentTarget.style.background = 'transparent'; e.currentTarget.style.color = 'var(--danger)'; }}
                       >
                         {t('kick', 'Kick')}
                       </button>

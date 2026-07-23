@@ -115,16 +115,7 @@ export default function Login() {
   };
 
   return (
-    <div id="login-screen" style={{ 
-      display: 'flex', 
-      flexDirection: 'column',
-      minHeight: '100vh', 
-      alignItems: 'center', 
-      justifyContent: 'center', 
-      background: 'var(--login-gradient)',
-      position: 'relative',
-      overflow: 'hidden'
-    }}>
+    <div id="login-screen" className="flex flex-col min-h-screen items-center justify-center relative overflow-hidden" style={{ background: 'var(--login-gradient)' }}>
       {/* Premium ambient animated orb */}
       <div style={{
         position: 'absolute',
@@ -141,119 +132,102 @@ export default function Login() {
       }} />
 
       {/* V1 Promo Banner */}
-      <div style={{
-        zIndex: 10,
-        backgroundColor: '#0b5fff',
-        color: 'white',
-        padding: '12px 24px',
-        borderRadius: '8px',
-        marginBottom: '24px',
-        maxWidth: '400px',
-        width: '100%',
-        textAlign: 'center',
-        boxSizing: 'border-box'
-      }}>
-        <p style={{ margin: 0, fontSize: '14px', fontWeight: 500 }}>
-          Prefer the classic look? <a href="/" style={{ color: 'white', textDecoration: 'underline', fontWeight: 700, marginLeft: '8px' }}>Return to V1 &rarr;</a>
+      <div className="z-10 bg-primary text-white py-md px-xl rounded-md mb-xl max-w-sm w-full text-center box-border shadow-md">
+        <p className="m-0 text-sm fw-medium">
+          Prefer the classic look? <a href="/" className="text-white underline fw-bold ml-xs">Return to V1 &rarr;</a>
         </p>
       </div>
 
-      <div className="login-card" style={{ zIndex: 10 }}>
-        <div style={{ display: 'flex', justifyContent: 'center', marginBottom: '24px' }}>
-          <img src="/static/logo.svg" alt="Liferay Tunnel" width="56" height="56" style={{ filter: 'drop-shadow(0 4px 12px rgba(0,0,0,0.5))' }} />
+      <div className="login-card z-10">
+        <div className="flex justify-center mb-xl">
+          <img src="/static/logo.svg" alt="Liferay Tunnel" width="56" height="56" className="drop-shadow-md" />
         </div>
 
         {mfaRequired ? (
           <form id="mfa-form" onSubmit={handleMfaSubmit}>
-            <h1 style={{ marginTop: 0, textAlign: 'center', fontSize: '28px', fontWeight: 700, letterSpacing: '-0.5px' }}>{t('mfa_verify_title', 'Multi-Factor Verification')}</h1>
-            <p style={{ color: 'var(--text-muted)', marginBottom: '24px', fontSize: '15px', textAlign: 'center' }}>
+            <h1 className="mt-0 text-center text-xl fw-bold tracking-tight">{t('mfa_verify_title', 'Multi-Factor Verification')}</h1>
+            <p className="text-muted mb-xl text-base text-center">
               {t('mfa_verify_desc', 'Please enter the 6-digit code from your authenticator app:')}
             </p>
             <input 
               type="text" 
-              className="input-field" 
+              className="input-field text-center text-2xl font-bold tracking-widest mb-xl w-full" 
               placeholder={t('mfa_otp_placeholder', '123456')} 
               pattern="[0-9]{6}" 
               maxLength={6} 
               inputMode="numeric"
-              style={{ textAlign: 'center', fontSize: '24px', fontWeight: 'bold', letterSpacing: '8px', marginBottom: '24px', width: '100%' }}
               value={mfaCode}
               onChange={(e) => setMfaCode(e.target.value)}
             />
             <button 
               type="submit" 
-              className="btn btn-primary" 
+              className="btn btn-primary w-full p-md text-base" 
               disabled={isSending || mfaCode.length !== 6}
-              style={{ width: '100%', padding: '14px', fontSize: '16px' }}
             >
               {isSending ? t('verifying', 'Verifying...') : t('btn_verify_login', 'Verify & Login')}
             </button>
             {statusMsg.text && (
-              <div style={{ marginTop: '16px', textAlign: 'center', fontSize: '14px', fontWeight: 500, color: statusMsg.isError ? 'var(--danger)' : 'var(--success)' }}>
+              <div className={`mt-lg text-center text-sm fw-medium ${statusMsg.isError ? 'text-danger' : 'text-success'}`}>
                 {statusMsg.text}
               </div>
             )}
           </form>
         ) : (
           <>
-            <h1 style={{ marginTop: 0, textAlign: 'center', fontSize: '28px', fontWeight: 700, letterSpacing: '-0.5px' }}>
+            <h1 className="mt-0 text-center text-xl fw-bold tracking-tight">
               {mode === 'login' ? t('portal_welcome', 'Welcome Back') : t('btn_register_account', 'Register Account')}
             </h1>
-            <p style={{ textAlign: 'center', color: 'var(--text-muted)', marginBottom: '24px', fontSize: '15px' }}>
+            <p className="text-center text-muted mb-xl text-base">
               {mode === 'login' ? t('portal_login_desc', 'Enter your email to request a secure passwordless login link.') : t('portal_register_desc', 'Don\'t have an account yet? Register here:')}
             </p>
             
-            <form id="email-form" style={{ marginTop: '24px' }} onSubmit={handleSubmit}>
+            <form id="email-form" className="mt-xl" onSubmit={handleSubmit}>
               
               {mode === 'register' && (
-                <div style={{ display: 'flex', gap: '12px', marginBottom: '16px' }}>
+                <div className="flex gap-md mb-lg">
                   <input 
                     type="text" 
                     name="first_name" 
-                    className="input-field" 
+                    className="input-field w-full" 
                     placeholder={t('label_first_name', 'First Name')} 
                     required 
                     value={firstName}
                     onChange={(e) => setFirstName(e.target.value)}
-                    style={{ width: '100%' }}
                   />
                   <input 
                     type="text" 
                     name="last_name" 
-                    className="input-field" 
+                    className="input-field w-full" 
                     placeholder={t('label_last_name', 'Last Name')} 
                     required 
                     value={lastName}
                     onChange={(e) => setLastName(e.target.value)}
-                    style={{ width: '100%' }}
                   />
                 </div>
               )}
 
-              <div style={{ marginBottom: '16px' }}>
+              <div className="mb-lg">
                 <input 
                   type="email" 
                   id="email-input" 
                   name="email" 
                   autoComplete="email" 
-                  className="input-field" 
+                  className="input-field w-full" 
                   placeholder={t('label_email', 'Email Address')} 
                   required 
                   value={email}
                   onChange={(e) => setEmail(e.target.value)}
-                  style={{ width: '100%' }}
                 />
               </div>
               <button 
                 type="submit" 
-                className="btn btn-primary" 
+                className="btn btn-primary w-full p-md text-base flex justify-center items-center gap-sm" 
                 id="btn-magic-link"
                 disabled={isSending || (mode === 'login' && countdown > 0)}
-                style={{ width: '100%', padding: '14px', fontSize: '16px', display: 'flex', justifyContent: 'center', alignItems: 'center', gap: '8px' }}
               >
                 {isSending ? (
                   <>
-                    <span className="spinner" style={{ width: '18px', height: '18px', borderWidth: '2px' }} />
+                    <span className="spinner w-4 h-4 border-2" />
                     {t('sending', 'Sending...')}
                   </>
                 ) : mode === 'login' ? (
@@ -262,16 +236,16 @@ export default function Login() {
               </button>
               
               {statusMsg.text && (
-                <div id="email-msg" style={{ marginTop: '16px', textAlign: 'center', fontSize: '14px', fontWeight: 500, color: statusMsg.isError ? 'var(--danger)' : 'var(--success)' }}>
+                <div id="email-msg" className={`mt-lg text-center text-sm fw-medium ${statusMsg.isError ? 'text-danger' : 'text-success'}`}>
                   {statusMsg.text}
                 </div>
               )}
 
-              <div style={{ marginTop: '24px', textAlign: 'center' }}>
+              <div className="mt-xl text-center">
                 <button 
                   type="button" 
                   onClick={() => { setMode(mode === 'login' ? 'register' : 'login'); setStatusMsg({ text: '', isError: false }); }}
-                  style={{ background: 'none', border: 'none', color: 'var(--text-muted)', fontSize: '14px', cursor: 'pointer', textDecoration: 'underline' }}
+                  className="btn-text text-muted text-sm underline cursor-pointer"
                 >
                   {mode === 'login' ? t('portal_register_desc', "Don't have an account yet? Register here:") : t('btn_login_with_email', "Login with Email")}
                 </button>
@@ -282,18 +256,17 @@ export default function Login() {
       </div>
 
       {/* Footer Links & Language */}
-      <div style={{ marginTop: '32px', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '16px', zIndex: 10 }}>
+      <div className="mt-2xl flex flex-col items-center gap-lg z-10">
         <select 
-          className="input-field" 
-          style={{ padding: '6px 12px', background: 'rgba(255,255,255,0.1)', color: 'rgba(255,255,255,0.9)', border: '1px solid rgba(255,255,255,0.2)', cursor: 'pointer', width: 'auto' }}
+          className="input-field py-xs px-md bg-white/10 text-white/90 border border-white/20 cursor-pointer w-auto"
           value={language}
           onChange={(e) => setLanguage(e.target.value)}
         >
           {availableLanguages.map(l => (
-            <option key={l.code} value={l.code} style={{ color: '#000' }}>{l.label}</option>
+            <option key={l.code} value={l.code} className="text-black">{l.label}</option>
           ))}
         </select>
-        <div style={{ display: 'flex', gap: '24px', fontSize: '13px' }}>
+        <div className="flex gap-xl text-xs">
           <a href={`/privacy?lang=${language}`} target="_blank" className="login-footer-link">{t('privacy_title', 'Privacy Policy')}</a>
           <a href={`/cookies?lang=${language}`} target="_blank" className="login-footer-link">{t('cookie_title', 'Cookie Disclosure')}</a>
         </div>

@@ -1,11 +1,12 @@
 import React, { createContext, useContext, useState, useEffect } from 'react';
 
-export type ThemePreference = 'light' | 'dark' | 'system' | 'time';
+export type ThemePreference = 'light' | 'dark' | 'liferay' | 'system' | 'time';
+export type ActiveTheme = 'light' | 'dark' | 'liferay';
 
 interface SettingsContextType {
   themePreference: ThemePreference;
   setThemePreference: (pref: ThemePreference) => void;
-  theme: 'light' | 'dark';
+  theme: ActiveTheme;
   useUTC: boolean;
   toggleUTC: () => void;
   formatDate: (dateString: string | Date | undefined | null) => string;
@@ -18,7 +19,7 @@ export function SettingsProvider({ children }: { children: React.ReactNode }) {
     return (localStorage.getItem('theme_preference') as ThemePreference) || 'dark';
   });
 
-  const [theme, setTheme] = useState<'light' | 'dark'>('dark');
+  const [theme, setTheme] = useState<ActiveTheme>('dark');
 
   const [useUTC, setUseUTC] = useState<boolean>(() => {
     return localStorage.getItem('useUTC') === 'true';
@@ -27,9 +28,10 @@ export function SettingsProvider({ children }: { children: React.ReactNode }) {
   useEffect(() => {
     localStorage.setItem('theme_preference', themePreference);
 
-    const resolveTheme = (): 'light' | 'dark' => {
+    const resolveTheme = (): ActiveTheme => {
       if (themePreference === 'light') return 'light';
       if (themePreference === 'dark') return 'dark';
+      if (themePreference === 'liferay') return 'liferay';
       if (themePreference === 'time') {
         const hour = new Date().getHours();
         return (hour >= 6 && hour < 18) ? 'light' : 'dark';
@@ -85,9 +87,9 @@ export function SettingsProvider({ children }: { children: React.ReactNode }) {
     if (!dateString) return '';
     const date = new Date(dateString);
     if (isNaN(date.getTime())) return 'Never';
-    
-    const options: Intl.DateTimeFormatOptions = { 
-      year: 'numeric', month: 'short', day: 'numeric', 
+
+    const options: Intl.DateTimeFormatOptions = {
+      year: 'numeric', month: 'short', day: 'numeric',
       hour: '2-digit', minute: '2-digit', second: '2-digit',
       timeZoneName: 'short'
     };

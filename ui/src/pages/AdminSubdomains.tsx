@@ -1,9 +1,11 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useMemo } from 'react';
 import axios from 'axios';
-import { useTableSort } from '../hooks/useTableSort';
 import Skeleton from '../components/Skeleton';
 import { useI18n } from '../contexts/I18nContext';
 import { useUI } from '../contexts/UIContext';
+import { useDataTable, type ColumnDef } from '../hooks/useDataTable';
+import DataTableToolbar from '../components/DataTableToolbar';
+import DataTablePagination from '../components/DataTablePagination';
 
 interface SubdomainInfo {
   id: number;
@@ -35,8 +37,41 @@ export default function AdminSubdomains() {
   const [loading, setLoading] = useState(true);
   const { t } = useI18n();
   const { showToast, showConfirm, showPrompt } = useUI();
-  const [page, setPage] = useState(0);
-  const ROWS_PER_PAGE = 15;
+
+  const columns: ColumnDef<SubdomainInfo>[] = useMemo(() => [
+    { key: 'subdomain', label: 'Subdomain', sortable: true },
+    { key: 'full_host', label: 'Target Host', sortable: true },
+    { key: 'user_email', label: 'Owner', sortable: true },
+    { key: 'is_online', label: 'Status', sortable: true },
+    { key: 'node_id', label: 'Node', sortable: true },
+    { key: 'client_ip', label: 'Client IP', sortable: true },
+    { key: 'bytes_in', label: 'Bytes In', sortable: true },
+    { key: 'bytes_out', label: 'Bytes Out', sortable: true },
+  ], []);
+
+  const {
+    paginatedItems: paginatedSubdomains,
+    currentPage,
+    totalPages,
+    totalItems,
+    pageSize,
+    setCurrentPage,
+    setPageSize,
+    searchQuery,
+    setSearchQuery,
+    requestSort,
+    getSortIndicator,
+    getAriaSort,
+    isColumnVisible,
+    toggleColumn,
+    allColumns
+  } = useDataTable<SubdomainInfo>(
+    'admin_subdomains',
+    subdomains,
+    ['subdomain', 'full_host', 'user_email', 'client_ip', 'node_id'],
+    columns,
+    10
+  );
 
   const fetchSubdomains = async () => {
     try {
@@ -103,23 +138,18 @@ export default function AdminSubdomains() {
     }
   };
 
-  const throttleLease = async (host: string) => {
-    const limitStr = await showPrompt('Throttle Tunnel', `Enter the max Requests Per Second (RPS) for ${host}. Enter 0 to remove limits.`, '0');
-    if (limitStr === null) return;
-    const limit = parseInt(limitStr, 10);
-    if (isNaN(limit) || limit < 0) {
-      showToast('Invalid rate limit', 'error');
-      return;
-    }
+  const throttleLease = async (fullHost: string) => {
+    const rate = await showPrompt('Rate Limit Lease', 'Set max requests per second (0 to remove limit):', '10');
+    if (rate === null) return;
     try {
-      await axios.post('/api/admin/leases/rate-limit', { host, rate_limit: limit });
-      showToast('Rate limit updated successfully', 'success');
-    } catch {
+      await axios.post('/api/admin/leases/throttle', { full_host: fullHost, rate_limit: parseInt(rate, 10) });
+      showToast(`Updated rate limit for ${fullHost}`, 'success');
+      fetchSubdomains();
+    } catch (e) {
+      console.error(e);
       showToast('Failed to update rate limit', 'error');
     }
   };
-
-  const { items: sortedSubdomains, requestSort, getSortIndicator, searchQuery, setSearchQuery, getAriaSort } = useTableSort(subdomains, ['subdomain', 'full_host', 'user_email', 'client_ip']);
 
   if (loading) {
     return (
@@ -178,74 +208,83 @@ export default function AdminSubdomains() {
           📥 {t('export_csv', 'Export CSV')}
         </a>
       </div>
-      <div className="search-row">
-        <input 
-          type="text" 
-          placeholder={t('search_subdomains_placeholder', 'Search subdomains...')} 
-          value={searchQuery} 
-          onChange={e => { setSearchQuery(e.target.value); setPage(0); }}
-          className="search-input"
+
+      <div className="card p-xl">
+        <DataTableToolbar
+          searchQuery={searchQuery}
+          onSearchChange={setSearchQuery}
+          searchPlaceholder={t('search_subdomains_placeholder', 'Search subdomains...')}
+          pageSize={pageSize}
+          onPageSizeChange={setPageSize}
+          columns={allColumns}
+          isColumnVisible={isColumnVisible}
+          onToggleColumn={toggleColumn}
         />
-      </div>
-      <div className="card p-0">
+
         <div className="table-responsive">
           <table className="w-full">
             <thead>
               <tr className="border-b text-left">
-                <th className="th-col th-col--sortable" onClick={() => requestSort('subdomain')} aria-sort={getAriaSort('subdomain')}>Subdomain{getSortIndicator('subdomain')}</th>
-                <th className="th-col th-col--sortable" onClick={() => requestSort('full_host')} aria-sort={getAriaSort('full_host')}>Target Host{getSortIndicator('full_host')}</th>
-                <th className="th-col th-col--sortable" onClick={() => requestSort('user_email')} aria-sort={getAriaSort('user_email')}>Owner{getSortIndicator('user_email')}</th>
-                <th className="th-col th-col--sortable" onClick={() => requestSort('is_online')} aria-sort={getAriaSort('is_online')}>Status{getSortIndicator('is_online')}</th>
-                <th className="th-col th-col--sortable" onClick={() => requestSort('node_id')} aria-sort={getAriaSort('node_id')}>Node{getSortIndicator('node_id')}</th>
-                <th className="th-col th-col--sortable" onClick={() => requestSort('client_ip')} aria-sort={getAriaSort('client_ip')}>Client IP{getSortIndicator('client_ip')}</th>
-                <th className="th-col th-col--sortable" onClick={() => requestSort('bytes_in')} aria-sort={getAriaSort('bytes_in')}>Bytes In{getSortIndicator('bytes_in')}</th>
-                <th className="th-col th-col--sortable" onClick={() => requestSort('bytes_out')} aria-sort={getAriaSort('bytes_out')}>Bytes Out{getSortIndicator('bytes_out')}</th>
-                <th className="th-col">Actions</th>
+                {isColumnVisible('subdomain') && <th className="th-col th-col--sortable" onClick={() => requestSort('subdomain')} aria-sort={getAriaSort('subdomain')}>Subdomain{getSortIndicator('subdomain')}</th>}
+                {isColumnVisible('full_host') && <th className="th-col th-col--sortable" onClick={() => requestSort('full_host')} aria-sort={getAriaSort('full_host')}>Target Host{getSortIndicator('full_host')}</th>}
+                {isColumnVisible('user_email') && <th className="th-col th-col--sortable" onClick={() => requestSort('user_email')} aria-sort={getAriaSort('user_email')}>Owner{getSortIndicator('user_email')}</th>}
+                {isColumnVisible('is_online') && <th className="th-col th-col--sortable" onClick={() => requestSort('is_online')} aria-sort={getAriaSort('is_online')}>Status{getSortIndicator('is_online')}</th>}
+                {isColumnVisible('node_id') && <th className="th-col th-col--sortable" onClick={() => requestSort('node_id')} aria-sort={getAriaSort('node_id')}>Node{getSortIndicator('node_id')}</th>}
+                {isColumnVisible('client_ip') && <th className="th-col th-col--sortable" onClick={() => requestSort('client_ip')} aria-sort={getAriaSort('client_ip')}>Client IP{getSortIndicator('client_ip')}</th>}
+                {isColumnVisible('bytes_in') && <th className="th-col th-col--sortable" onClick={() => requestSort('bytes_in')} aria-sort={getAriaSort('bytes_in')}>Bytes In{getSortIndicator('bytes_in')}</th>}
+                {isColumnVisible('bytes_out') && <th className="th-col th-col--sortable" onClick={() => requestSort('bytes_out')} aria-sort={getAriaSort('bytes_out')}>Bytes Out{getSortIndicator('bytes_out')}</th>}
+                <th className="th-col text-right">Actions</th>
               </tr>
             </thead>
             <tbody>
-              {sortedSubdomains.length === 0 ? (
+              {paginatedSubdomains.length === 0 ? (
                 <tr>
-                  <td colSpan={9} className="td-empty">No registered subdomains found</td>
+                  <td colSpan={9} className="td-cell text-center text-muted py-xl">No registered subdomains found</td>
                 </tr>
               ) : (
-                sortedSubdomains.slice(page * ROWS_PER_PAGE, (page + 1) * ROWS_PER_PAGE).map((sub) => (
-                  <tr key={sub.id} className="border-b">
-                    <td className="td-cell fw-medium">{sub.subdomain || '(wildcard)'}</td>
-                    <td className="td-cell">
-                      <a href={`https://${sub.full_host}`} target="_blank" rel="noreferrer" className="text-primary no-underline fw-medium">
-                        {sub.full_host}
-                      </a>
-                      {sub.rate_limit !== undefined && sub.rate_limit > 0 && (
-                        <span className="badge ml-sm" style={{ backgroundColor: 'rgba(239, 68, 68, 0.15)', color: '#f87171', border: '1px solid rgba(239, 68, 68, 0.3)' }}>
-                          ⏱️ {sub.rate_limit} RPS
+                paginatedSubdomains.map((sub) => (
+                  <tr key={sub.id} className="border-b hover:bg-white/5 transition-colors">
+                    {isColumnVisible('subdomain') && <td className="td-cell font-medium">{sub.subdomain || '(wildcard)'}</td>}
+                    {isColumnVisible('full_host') && (
+                      <td className="td-cell">
+                        <a href={`https://${sub.full_host}`} target="_blank" rel="noreferrer" className="text-primary no-underline font-medium">
+                          {sub.full_host}
+                        </a>
+                        {sub.rate_limit !== undefined && sub.rate_limit > 0 && (
+                          <span className="badge ml-sm" style={{ backgroundColor: 'rgba(239, 68, 68, 0.15)', color: '#f87171', border: '1px solid rgba(239, 68, 68, 0.3)' }}>
+                            ⏱️ {sub.rate_limit} RPS
+                          </span>
+                        )}
+                      </td>
+                    )}
+                    {isColumnVisible('user_email') && <td className="td-cell">{sub.user_email}</td>}
+                    {isColumnVisible('is_online') && (
+                      <td className="td-cell">
+                        <span className={`badge ${sub.is_online ? 'badge-success' : ''}`} style={!sub.is_online ? { background: 'rgba(255, 255, 255, 0.05)', color: 'var(--text-muted)', border: '1px solid var(--border)' } : {}}>
+                          {sub.is_online ? '🟢 Online' : '⚪ Offline'}
                         </span>
-                      )}
-                    </td>
-                    <td className="td-cell">{sub.user_email}</td>
-                    <td className="td-cell">
-                      <span className={`badge ${sub.is_online ? 'badge-success' : ''}`} style={!sub.is_online ? { background: 'rgba(255, 255, 255, 0.05)', color: 'var(--text-muted)', border: '1px solid var(--border)' } : {}}>
-                        {sub.is_online ? '🟢 Online' : '⚪ Offline'}
-                      </span>
-                    </td>
-                    <td className="td-cell">
-                      {sub.is_online ? (
-                        sub.node_id && sub.node_id !== 'control' ? (
-                          <span className="badge badge-node">
-                            🌍 {sub.node_id}
-                          </span>
-                        ) : (
-                          <span className="badge badge-control">
-                            🇬🇧 Control
-                          </span>
-                        )
-                      ) : '-'}
-                    </td>
-                    <td className="td-cell--mono text-sm">{sub.client_ip}</td>
-                    <td className="td-cell text-sm">{formatBytes(sub.bytes_in || 0)}</td>
-                    <td className="td-cell text-sm">{formatBytes(sub.bytes_out || 0)}</td>
-                    <td className="td-cell">
-                      <div className="flex gap-sm">
+                      </td>
+                    )}
+                    {isColumnVisible('node_id') && (
+                      <td className="td-cell">
+                        {sub.is_online ? (
+                          sub.node_id && sub.node_id !== 'control' ? (
+                            <span className="badge badge-node">
+                              🌍 {sub.node_id}
+                            </span>
+                          ) : (
+                            <span className="badge badge-control">
+                              🇬🇧 Control
+                            </span>
+                          )
+                        ) : '-'}
+                      </td>
+                    )}
+                    {isColumnVisible('client_ip') && <td className="td-cell font-mono text-xs">{sub.client_ip}</td>}
+                    {isColumnVisible('bytes_in') && <td className="td-cell text-xs text-muted">{formatBytes(sub.bytes_in || 0)}</td>}
+                    {isColumnVisible('bytes_out') && <td className="td-cell text-xs text-muted">{formatBytes(sub.bytes_out || 0)}</td>}
+                    <td className="td-cell text-right">
+                      <div className="flex gap-xs justify-end">
                         <button 
                           className="btn btn-secondary py-xs px-sm text-xs" 
                           disabled={!sub.is_online}
@@ -267,48 +306,16 @@ export default function AdminSubdomains() {
               )}
             </tbody>
           </table>
-          
-          {sortedSubdomains.length > 0 && (
-            <div className="pagination-row p-lg border-t">
-              <div className="pagination-count">
-                Showing {page * ROWS_PER_PAGE + 1} to {Math.min((page + 1) * ROWS_PER_PAGE, sortedSubdomains.length)} of {sortedSubdomains.length}
-              </div>
-              <div className="pagination-controls">
-                <button 
-                  className="btn btn-secondary py-xs px-md text-xs w-auto" 
-                  onClick={() => setPage(0)}
-                  disabled={page === 0}
-                >
-                  First
-                </button>
-                <button 
-                  className="btn btn-secondary py-xs px-md text-xs w-auto" 
-                  disabled={page === 0} 
-                  onClick={() => setPage(page - 1)}
-                >
-                  Previous
-                </button>
-                <span className="pagination-page-label">Page {page + 1} of {Math.ceil(sortedSubdomains.length / ROWS_PER_PAGE)}</span>
-                <button 
-                  className="btn btn-secondary py-xs px-md text-xs w-auto" 
-                  disabled={(page + 1) * ROWS_PER_PAGE >= sortedSubdomains.length} 
-                  onClick={() => setPage(page + 1)}
-                >
-                  Next
-                </button>
-                <button 
-                  className="btn btn-secondary py-xs px-md text-xs w-auto" 
-                  onClick={() => setPage(Math.max(0, Math.ceil(sortedSubdomains.length / ROWS_PER_PAGE) - 1))}
-                  disabled={(page + 1) * ROWS_PER_PAGE >= sortedSubdomains.length}
-                >
-                  Last
-                </button>
-              </div>
-            </div>
-          )}
+
+          <DataTablePagination
+            currentPage={currentPage}
+            totalPages={totalPages}
+            totalItems={totalItems}
+            pageSize={pageSize}
+            onPageChange={setCurrentPage}
+          />
         </div>
       </div>
     </div>
   );
 }
-

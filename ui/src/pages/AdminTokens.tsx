@@ -1,10 +1,12 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useMemo } from 'react';
 import axios from 'axios';
 import { useSettings } from '../contexts/SettingsContext';
-import { useTableSort } from '../hooks/useTableSort';
 import Skeleton from '../components/Skeleton';
 import { useI18n } from '../contexts/I18nContext';
 import { useUI } from '../contexts/UIContext';
+import { useDataTable, type ColumnDef } from '../hooks/useDataTable';
+import DataTableToolbar from '../components/DataTableToolbar';
+import DataTablePagination from '../components/DataTablePagination';
 
 interface PAT {
   id: number;
@@ -24,8 +26,37 @@ export default function AdminTokens() {
   const { t } = useI18n();
   const { showToast, showConfirm } = useUI();
 
-  const [page, setPage] = useState(0);
-  const ROWS_PER_PAGE = 15;
+  const columns: ColumnDef<PAT>[] = useMemo(() => [
+    { key: 'user_id', label: t('owner', 'Owner'), sortable: true },
+    { key: 'name', label: t('name', 'Name'), sortable: true },
+    { key: 'token_prefix', label: t('prefix', 'Prefix'), sortable: true },
+    { key: 'expires_at', label: t('expires', 'Expires'), sortable: true },
+    { key: 'created_at', label: t('created_at', 'Created'), sortable: true },
+  ], [t]);
+
+  const {
+    paginatedItems: paginatedTokens,
+    currentPage,
+    totalPages,
+    totalItems,
+    pageSize,
+    setCurrentPage,
+    setPageSize,
+    searchQuery,
+    setSearchQuery,
+    requestSort,
+    getSortIndicator,
+    getAriaSort,
+    isColumnVisible,
+    toggleColumn,
+    allColumns
+  } = useDataTable<PAT>(
+    'admin_tokens',
+    tokens,
+    ['name', 'user_id', 'token_prefix'],
+    columns,
+    10
+  );
 
   const fetchTokens = async () => {
     try {
@@ -48,33 +79,26 @@ export default function AdminTokens() {
       await axios.delete(`/api/admin/tokens/${id}`);
       fetchTokens();
       showToast(t('token_revoked_success', 'Token revoked successfully'), 'success');
-    } catch {
-      showToast(t('failed_revoke_token', 'Failed to revoke token'), 'error');
+    } catch (e: any) {
+      showToast(e.response?.data?.error || t('token_revoke_failed', 'Failed to revoke token'), 'error');
     }
   };
 
-  const handleExtend = async (id: number, name: string, days: number) => {
-    const desc = days > 0 ? `${days} days` : 'Permanently';
-    if (!(await showConfirm(t('extend_token_title', 'Extend Token'), `Extend token "${name}" by ${desc}?`))) return;
+  const handleExtend = async (id: number, days: number) => {
     try {
       await axios.post(`/api/admin/tokens/${id}/extend`, { days });
       fetchTokens();
       showToast(t('token_extended_success', 'Token extended successfully'), 'success');
-    } catch {
-      showToast(t('failed_extend_token', 'Failed to extend token'), 'error');
+    } catch (e: any) {
+      showToast(e.response?.data?.error || t('token_extend_failed', 'Failed to extend token'), 'error');
     }
   };
 
   const getTokenStatus = (pat: PAT) => {
-    if (pat.revoked_at) return 'revoked';
-    if (pat.expires_at && new Date(pat.expires_at) < new Date()) return 'expired';
-    return 'active';
+    if (pat.revoked_at) return { label: t('revoked', 'Revoked'), color: 'var(--danger)', badge: 'badge-danger' };
+    if (pat.expires_at && new Date(pat.expires_at) < new Date()) return { label: t('expired', 'Expired'), color: 'var(--warning)', badge: 'badge-warning' };
+    return { label: t('active', 'Active'), color: 'var(--success)', badge: 'badge-success' };
   };
-
-  const { items: sortedTokens, requestSort, getSortIndicator, searchQuery, setSearchQuery, getAriaSort } = useTableSort(tokens, ['user_id', 'name', 'token_prefix']);
-
-  const totalPages = Math.ceil(sortedTokens.length / ROWS_PER_PAGE);
-  const paginatedTokens = sortedTokens.slice(page * ROWS_PER_PAGE, (page + 1) * ROWS_PER_PAGE);
 
   if (loading) {
     return (
@@ -129,27 +153,25 @@ export default function AdminTokens() {
       </div>
 
       <div className="card p-xl">
-        <div className="search-row">
-          <input
-            type="text"
-            placeholder={t('search_tokens_placeholder', 'Search tokens...')}
-            value={searchQuery}
-            onChange={e => {
-              setSearchQuery(e.target.value);
-              setPage(0);
-            }}
-            className="search-input"
-          />
-        </div>
+        <DataTableToolbar
+          searchQuery={searchQuery}
+          onSearchChange={setSearchQuery}
+          searchPlaceholder={t('search_tokens_placeholder', 'Search tokens...')}
+          pageSize={pageSize}
+          onPageSizeChange={setPageSize}
+          columns={allColumns}
+          isColumnVisible={isColumnVisible}
+          onToggleColumn={toggleColumn}
+        />
 
         <div className="table-responsive">
           <table className="w-full">
             <thead>
               <tr className="border-b text-left">
-                <th className="th-col th-col--sortable" onClick={() => requestSort('user_id')} aria-sort={getAriaSort('user_id')}>{t('owner', 'Owner')}{getSortIndicator('user_id')}</th>
-                <th className="th-col th-col--sortable" onClick={() => requestSort('name')} aria-sort={getAriaSort('name')}>{t('name', 'Name')}{getSortIndicator('name')}</th>
-                <th className="th-col th-col--sortable" onClick={() => requestSort('token_prefix')} aria-sort={getAriaSort('token_prefix')}>{t('prefix', 'Prefix')}{getSortIndicator('token_prefix')}</th>
-                <th className="th-col">{t('expires', 'Expires')}</th>
+                {isColumnVisible('user_id') && <th className="th-col th-col--sortable" onClick={() => requestSort('user_id')} aria-sort={getAriaSort('user_id')}>{t('owner', 'Owner')}{getSortIndicator('user_id')}</th>}
+                {isColumnVisible('name') && <th className="th-col th-col--sortable" onClick={() => requestSort('name')} aria-sort={getAriaSort('name')}>{t('name', 'Name')}{getSortIndicator('name')}</th>}
+                {isColumnVisible('token_prefix') && <th className="th-col th-col--sortable" onClick={() => requestSort('token_prefix')} aria-sort={getAriaSort('token_prefix')}>{t('prefix', 'Prefix')}{getSortIndicator('token_prefix')}</th>}
+                {isColumnVisible('expires_at') && <th className="th-col th-col--sortable" onClick={() => requestSort('expires_at')} aria-sort={getAriaSort('expires_at')}>{t('expires', 'Expires')}{getSortIndicator('expires_at')}</th>}
                 <th className="th-col">{t('status', 'Status')}</th>
                 <th className="th-col text-right">{t('actions', 'Actions')}</th>
               </tr>
@@ -158,63 +180,44 @@ export default function AdminTokens() {
               {paginatedTokens.map((pat) => {
                 const status = getTokenStatus(pat);
                 return (
-                  <tr key={pat.id} className="border-b">
-                    <td className="td-cell">{pat.user_id}</td>
-                    <td className="td-cell fw-semibold">{pat.name}</td>
-                    <td className="td-cell--mono">{pat.token_prefix}...</td>
-                    <td className="td-cell">{pat.expires_at ? formatDate(pat.expires_at) : t('never', 'Never')}</td>
+                  <tr key={pat.id} className="border-b hover:bg-white/5 transition-colors">
+                    {isColumnVisible('user_id') && <td className="td-cell font-medium">{pat.user_id}</td>}
+                    {isColumnVisible('name') && <td className="td-cell">{pat.name || <span className="text-muted text-xs italic">Unnamed</span>}</td>}
+                    {isColumnVisible('token_prefix') && <td className="td-cell font-mono text-xs">{pat.token_prefix}...</td>}
+                    {isColumnVisible('expires_at') && <td className="td-cell text-xs text-muted">{pat.expires_at ? formatDate(pat.expires_at) : 'Never'}</td>}
                     <td className="td-cell">
-                      <span className={`badge badge-${status}`}>
-                        {status.toUpperCase()}
+                      <span className={`badge ${status.badge} text-xs font-semibold`}>
+                        {status.label}
                       </span>
                     </td>
                     <td className="td-cell text-right">
-                      <div className="flex gap-sm justify-end">
-                        {status === 'active' && (
+                      <div className="flex gap-xs justify-end">
+                        {!pat.revoked_at && (
                           <>
                             <button
-                              className="btn btn-outline py-xs px-sm text-xs"
-                              onClick={() => handleExtend(pat.id, pat.name, 30)}
+                              onClick={() => handleExtend(pat.id, 30)}
+                              className="btn btn-secondary py-xs px-sm text-xs"
+                              title={t('extend_30_days', 'Extend 30 Days')}
                             >
                               +30d
                             </button>
                             <button
-                              className="btn btn-outline py-xs px-sm text-xs"
-                              onClick={() => handleExtend(pat.id, pat.name, 90)}
-                            >
-                              +90d
-                            </button>
-                            <button
-                              className="btn btn-outline py-xs px-sm text-xs"
-                              onClick={() => handleExtend(pat.id, pat.name, 0)}
-                            >
-                              {t('perm', 'Perm')}
-                            </button>
-                            <button
+                              onClick={() => handleRevoke(pat.id, pat.name || pat.token_prefix)}
                               className="btn btn-danger py-xs px-sm text-xs"
-                              onClick={() => handleRevoke(pat.id, pat.name)}
                             >
                               {t('revoke', 'Revoke')}
                             </button>
                           </>
-                        )}
-                        {status !== 'active' && (
-                          <button
-                            className="btn btn-danger py-xs px-sm text-xs opacity-60"
-                            disabled
-                          >
-                            {status === 'revoked' ? t('revoked', 'Revoked') : t('expired', 'Expired')}
-                          </button>
                         )}
                       </div>
                     </td>
                   </tr>
                 );
               })}
-              {sortedTokens.length === 0 && (
+              {paginatedTokens.length === 0 && (
                 <tr>
-                  <td colSpan={6} className="td-empty">
-                    {t('no_tokens_found', 'No personal access tokens found.')}
+                  <td colSpan={6} className="td-cell text-center text-muted py-xl">
+                    {t('no_tokens_found', 'No authentication tokens found.')}
                   </td>
                 </tr>
               )}
@@ -222,21 +225,13 @@ export default function AdminTokens() {
           </table>
         </div>
 
-        {totalPages > 1 && (
-          <div className="pagination-row">
-            <span className="pagination-count">
-              {t('showing_x_to_y_of_z', `Showing ${page * ROWS_PER_PAGE + 1} to ${Math.min((page + 1) * ROWS_PER_PAGE, sortedTokens.length)} of ${sortedTokens.length} tokens`)}
-            </span>
-            <div className="pagination-controls">
-              <button className="btn btn-secondary py-xs px-sm text-xs" onClick={() => setPage(0)} disabled={page === 0}>«</button>
-              <button className="btn btn-secondary py-xs px-sm text-xs" onClick={() => setPage(p => Math.max(0, p - 1))} disabled={page === 0}>{t('prev', 'Prev')}</button>
-              <span className="pagination-page-label">{page + 1} / {totalPages}</span>
-              <button className="btn btn-secondary py-xs px-sm text-xs" onClick={() => setPage(p => Math.min(totalPages - 1, p + 1))} disabled={page >= totalPages - 1}>{t('next', 'Next')}</button>
-              <button className="btn btn-secondary py-xs px-sm text-xs" onClick={() => setPage(totalPages - 1)} disabled={page >= totalPages - 1}>»</button>
-            </div>
-          </div>
-        )}
-
+        <DataTablePagination
+          currentPage={currentPage}
+          totalPages={totalPages}
+          totalItems={totalItems}
+          pageSize={pageSize}
+          onPageChange={setCurrentPage}
+        />
       </div>
     </div>
   );

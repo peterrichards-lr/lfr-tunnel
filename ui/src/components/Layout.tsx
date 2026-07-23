@@ -78,17 +78,25 @@ export default function Layout() {
   if (!user) return null;
 
   return (
-    <div id="dashboard-screen" className="flex transition-all duration-200" style={{ paddingTop: showV1Promo ? '44px' : '0' }}>
-      <Sidebar user={user} isOpen={isSidebarOpen} onClose={() => setIsSidebarOpen(false)} />
-      
+    <div className="flex flex-col min-h-screen w-full">
       {showV1Promo && (
-        <div className="bg-primary text-white py-md px-xl text-center fixed top-0 left-0 w-full z-50 box-border shadow-lg">
+        <div className="bg-primary text-white py-xs px-xl text-center z-40 box-border shadow-sm flex items-center justify-center relative shrink-0">
           <p className="m-0 text-sm fw-medium">
-            Need the legacy interface? <a href="/portal/" className="text-white underline fw-bold ml-sm">Switch back to V1 &rarr;</a>
+            Need the legacy interface? <a href="/portal/" className="text-white underline fw-bold ml-xs">Switch back to V1 &rarr;</a>
           </p>
-          <button onClick={dismissV1Promo} className="btn-text absolute right-xl top-1/2 -translate-y-1/2 text-white text-lg p-xs leading-none">&times;</button>
+          <button 
+            onClick={dismissV1Promo} 
+            className="btn-text absolute right-xl top-1/2 -translate-y-1/2 text-white text-lg p-xs leading-none hover:opacity-80 transition-opacity"
+            style={{ background: 'none', border: 'none', cursor: 'pointer' }}
+            title="Dismiss promo banner"
+          >
+            &times;
+          </button>
         </div>
       )}
+
+      <div id="dashboard-screen" className="flex flex-1 transition-all duration-200">
+        <Sidebar user={user} isOpen={isSidebarOpen} onClose={() => setIsSidebarOpen(false)} />
 
       {/* Mobile Top Header */}
       <div className="mobile-header p-lg bg-card border-b items-center gap-lg">
@@ -146,5 +154,6 @@ export default function Layout() {
         </div>
       </div>
     </div>
-  );
+  </div>
+);
 }

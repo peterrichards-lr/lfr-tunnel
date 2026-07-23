@@ -128,8 +128,8 @@ export default function AccountSettings() {
       <div className="col-2">
         
         {/* Profile Card */}
-        <div className="card">
-          <h3 className="section-title mb-lg">{t('profile_details', 'Profile Details')}</h3>
+        <div className="card mb-xl">
+          <h3 className="section-title mb-lg">{t('profile_details', 'Personal Details')}</h3>
           <form onSubmit={handleSaveProfile}>
             <div className="form-group mb-lg">
               <label className="form-label">
@@ -165,7 +165,7 @@ export default function AccountSettings() {
               </div>
             </div>
             
-            <div className="form-group mb-lg">
+            <div className="form-group mb-xl">
               <label className="form-label">
                 {t('label_preferred_name', 'Preferred Name')}
               </label>
@@ -178,6 +178,18 @@ export default function AccountSettings() {
               />
             </div>
 
+            {message && <div className={message.includes('success') ? 'alert-banner alert-banner--success mb-lg' : 'alert-banner alert-banner--danger mb-lg'}>{message}</div>}
+
+            <button type="submit" className="btn btn-primary" disabled={saving}>
+              {saving ? t('saving', 'Saving...') : t('btn_save_changes', 'Save Profile')}
+            </button>
+          </form>
+        </div>
+
+        {/* Preferences & Defaults Card */}
+        <div className="card mb-xl">
+          <h3 className="section-title mb-lg">{t('preferences_defaults', 'Preferences & Defaults')}</h3>
+          <form onSubmit={handleSaveProfile}>
             <div className="form-group mb-lg">
               <label className="form-label">
                 {t('label_language', 'Language')}
@@ -202,7 +214,6 @@ export default function AccountSettings() {
                 <option value="system">{t('theme_system', 'System Default')}</option>
                 <option value="time">{t('theme_time', 'Time of Day')}</option>
               </select>
-
             </div>
 
             <div className="flex items-center justify-between mb-lg">
@@ -230,7 +241,7 @@ export default function AccountSettings() {
                 {t('default_subdomain_style', 'Default Subdomain Style')}
               </label>
               <select className="input-field" value={subdomainStyle} onChange={(e) => setSubdomainStyle(e.target.value)}>
-                <option value="liferay">{t('style_liferay', 'Liferay Style')} — e.g. peterrichards-liferay</option>
+                <option value="liferay">{t('style_liferay', 'Liferay SE Style')} — e.g. peterrichards-se</option>
                 <option value="words">{t('style_words', 'Words Style')} — e.g. happy-panda-42</option>
                 <option value="heroku">{t('style_heroku', 'Heroku Style')} — e.g. warm-sunrise-1234</option>
                 <option value="random">{t('style_random', 'Alphanumeric')} — e.g. a3f9k2</option>
@@ -241,7 +252,7 @@ export default function AccountSettings() {
             </div>
 
             <div className="form-group mb-lg">
-              <div className="flex items-center gap-xs mb-xs">
+              <div className="flex items-center justify-between gap-xs mb-xs">
                 <label className="form-label m-0">
                   {t('preferred_domain', 'Preferred Domain')}
                 </label>
@@ -267,10 +278,8 @@ export default function AccountSettings() {
               </p>
             </div>
 
-            {message && <div className={message.includes('success') ? 'alert-banner alert-banner--success mb-lg' : 'alert-banner alert-banner--danger mb-lg'}>{message}</div>}
-
             <button type="submit" className="btn btn-primary" disabled={saving}>
-              {saving ? t('saving', 'Saving...') : t('btn_save_changes', 'Save Changes')}
+              {saving ? t('saving', 'Saving...') : t('btn_save_preferences', 'Save Preferences')}
             </button>
           </form>
         </div>

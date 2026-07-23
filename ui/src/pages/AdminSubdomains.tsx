@@ -47,6 +47,7 @@ export default function AdminSubdomains() {
     { key: 'client_ip', label: 'Client IP', sortable: true },
     { key: 'bytes_in', label: 'Bytes In', sortable: true },
     { key: 'bytes_out', label: 'Bytes Out', sortable: true },
+    { key: 'created_at', label: 'Created Date', sortable: true }
   ], []);
 
   const {
@@ -70,7 +71,8 @@ export default function AdminSubdomains() {
     subdomains,
     ['subdomain', 'full_host', 'user_email', 'client_ip', 'node_id'],
     columns,
-    10
+    10,
+    ['created_at']
   );
 
   const fetchSubdomains = async () => {
@@ -209,17 +211,19 @@ export default function AdminSubdomains() {
         </a>
       </div>
 
-      <div className="card p-xl">
-        <DataTableToolbar
-          searchQuery={searchQuery}
-          onSearchChange={setSearchQuery}
-          searchPlaceholder={t('search_subdomains_placeholder', 'Search subdomains...')}
-          pageSize={pageSize}
-          onPageSizeChange={setPageSize}
-          columns={allColumns}
-          isColumnVisible={isColumnVisible}
-          onToggleColumn={toggleColumn}
-        />
+      <div className="card p-0">
+        <div className="p-md border-b">
+          <DataTableToolbar
+            searchQuery={searchQuery}
+            onSearchChange={setSearchQuery}
+            searchPlaceholder={t('search_subdomains_placeholder', 'Search subdomains...')}
+            pageSize={pageSize}
+            onPageSizeChange={setPageSize}
+            columns={allColumns}
+            isColumnVisible={isColumnVisible}
+            onToggleColumn={toggleColumn}
+          />
+        </div>
 
         <div className="table-responsive">
           <table className="w-full">
@@ -233,6 +237,7 @@ export default function AdminSubdomains() {
                 {isColumnVisible('client_ip') && <th className="th-col th-col--sortable" onClick={() => requestSort('client_ip')} aria-sort={getAriaSort('client_ip')}>Client IP{getSortIndicator('client_ip')}</th>}
                 {isColumnVisible('bytes_in') && <th className="th-col th-col--sortable" onClick={() => requestSort('bytes_in')} aria-sort={getAriaSort('bytes_in')}>Bytes In{getSortIndicator('bytes_in')}</th>}
                 {isColumnVisible('bytes_out') && <th className="th-col th-col--sortable" onClick={() => requestSort('bytes_out')} aria-sort={getAriaSort('bytes_out')}>Bytes Out{getSortIndicator('bytes_out')}</th>}
+                {isColumnVisible('created_at') && <th className="th-col th-col--sortable" onClick={() => requestSort('created_at')} aria-sort={getAriaSort('created_at')}>Created Date{getSortIndicator('created_at')}</th>}
                 <th className="th-col text-right">Actions</th>
               </tr>
             </thead>
@@ -283,6 +288,11 @@ export default function AdminSubdomains() {
                     {isColumnVisible('client_ip') && <td className="td-cell font-mono text-xs">{sub.client_ip}</td>}
                     {isColumnVisible('bytes_in') && <td className="td-cell text-xs text-muted">{formatBytes(sub.bytes_in || 0)}</td>}
                     {isColumnVisible('bytes_out') && <td className="td-cell text-xs text-muted">{formatBytes(sub.bytes_out || 0)}</td>}
+                    {isColumnVisible('created_at') && (
+                      <td className="td-cell" style={{ whiteSpace: 'nowrap' }}>
+                        {sub.created_at ? sub.created_at : '—'}
+                      </td>
+                    )}
                     <td className="td-cell text-right">
                       <div className="flex gap-xs justify-end">
                         <button 

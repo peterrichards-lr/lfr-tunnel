@@ -179,18 +179,19 @@ export default function AdminBlacklist() {
         </form>
       </div>
 
-      <DataTableToolbar
-        searchQuery={searchQuery}
-        onSearchChange={setSearchQuery}
-        searchPlaceholder={t('search_blacklist_placeholder', 'Search blacklisted IPs...')}
-        pageSize={pageSize}
-        onPageSizeChange={setPageSize}
-        columns={columns}
-        isColumnVisible={isColumnVisible}
-        onToggleColumn={toggleColumn}
-      />
-
       <div className="card p-0">
+        <div className="p-md border-b">
+          <DataTableToolbar
+            searchQuery={searchQuery}
+            onSearchChange={setSearchQuery}
+            searchPlaceholder={t('search_blacklist_placeholder', 'Search blacklisted IPs...')}
+            pageSize={pageSize}
+            onPageSizeChange={setPageSize}
+            columns={columns}
+            isColumnVisible={isColumnVisible}
+            onToggleColumn={toggleColumn}
+          />
+        </div>
         <div className="table-responsive">
           <table className="w-full">
             <thead>

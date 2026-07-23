@@ -136,18 +136,19 @@ export default function AdminAuditLog() {
         </a>
       </div>
 
-      <DataTableToolbar
-        searchQuery={searchQuery}
-        onSearchChange={setSearchQuery}
-        searchPlaceholder={t('search_audit_logs_placeholder', 'Search audit logs...')}
-        pageSize={pageSize}
-        onPageSizeChange={setPageSize}
-        columns={columns}
-        isColumnVisible={isColumnVisible}
-        onToggleColumn={toggleColumn}
-      />
-
       <div className="card p-0">
+        <div className="p-md border-b">
+          <DataTableToolbar
+            searchQuery={searchQuery}
+            onSearchChange={setSearchQuery}
+            searchPlaceholder={t('search_audit_logs_placeholder', 'Search audit logs...')}
+            pageSize={pageSize}
+            onPageSizeChange={setPageSize}
+            columns={columns}
+            isColumnVisible={isColumnVisible}
+            onToggleColumn={toggleColumn}
+          />
+        </div>
         <div className="table-responsive">
           <table className="w-full">
             <thead>

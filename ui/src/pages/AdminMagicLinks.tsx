@@ -12,6 +12,7 @@ interface MagicLink {
   client_ip: string;
   expires_at: number | string;
   used_at: number | string | null;
+  created_at?: number | string | null;
 }
 
 export default function AdminMagicLinks() {
@@ -40,6 +41,7 @@ export default function AdminMagicLinks() {
     { key: 'client_ip', label: t('client_ip', 'Client IP'), sortable: true },
     { key: 'expires_at', label: t('expires_at', 'Expires At'), sortable: true },
     { key: 'used_at', label: t('status', 'Status / Used At'), sortable: true },
+    { key: 'created_at', label: t('created_at', 'Created Date'), sortable: true }
   ], [t]);
 
   const {
@@ -62,7 +64,8 @@ export default function AdminMagicLinks() {
     links,
     ['email', 'client_ip'],
     columns,
-    10
+    10,
+    ['created_at']
   );
 
   if (loading) {
@@ -70,13 +73,7 @@ export default function AdminMagicLinks() {
       <div style={{ animation: 'fadeInUp 0.6s ease-out' }}>
         <div className="mb-xl">
           <Skeleton width={180} height={28} />
-          <Skeleton width={280} height={16} className="mt-sm" />
-        </div>
-
-        <div className="card p-xl mb-xl">
-          <div className="flex gap-md items-center">
-            <Skeleton width="100%" height={40} style={{ maxWidth: '300px' }} />
-          </div>
+          <Skeleton width={320} height={16} className="mt-sm" />
         </div>
 
         <div className="card p-xl">
@@ -84,10 +81,10 @@ export default function AdminMagicLinks() {
             <table className="w-full">
               <thead>
                 <tr className="border-b text-left">
+                  <th className="th-col"><Skeleton width={150} /></th>
+                  <th className="th-col"><Skeleton width={100} /></th>
                   <th className="th-col"><Skeleton width={120} /></th>
                   <th className="th-col"><Skeleton width={80} /></th>
-                  <th className="th-col"><Skeleton width={100} /></th>
-                  <th className="th-col"><Skeleton width={100} /></th>
                 </tr>
               </thead>
               <tbody>
@@ -96,7 +93,7 @@ export default function AdminMagicLinks() {
                     <td className="td-cell"><Skeleton width="90%" height={16} /></td>
                     <td className="td-cell"><Skeleton width="85%" height={16} /></td>
                     <td className="td-cell"><Skeleton width="60%" height={16} /></td>
-                    <td className="td-cell"><Skeleton width="70%" height={16} /></td>
+                    <td className="td-cell"><Skeleton width="50%" height={16} /></td>
                   </tr>
                 ))}
               </tbody>
@@ -114,9 +111,11 @@ export default function AdminMagicLinks() {
 
   return (
     <div>
-      <div className="mb-xl">
-        <h3 className="page-header__title">{t('magic_links', 'Magic Links')}</h3>
-        <p className="page-header__desc">{t('magic_links_desc', 'Track pending and unredeemed magic links.')}</p>
+      <div className="page-header">
+        <div>
+          <h3 className="page-header__title">{t('magic_links', 'Active Magic Links')}</h3>
+          <p className="page-header__desc">{t('magic_links_desc', 'Track pending passwordless sign-in and invitation tokens.')}</p>
+        </div>
       </div>
 
       {error ? (
@@ -124,86 +123,96 @@ export default function AdminMagicLinks() {
           {error}
         </div>
       ) : (
-        <>
-          <DataTableToolbar
-            searchQuery={searchQuery}
-            onSearchChange={setSearchQuery}
-            searchPlaceholder={t('search_magic_links_placeholder', 'Search magic links...')}
-            pageSize={pageSize}
-            onPageSizeChange={setPageSize}
-            columns={columns}
-            isColumnVisible={isColumnVisible}
-            onToggleColumn={toggleColumn}
-          />
-
-          <div className="card p-0">
-            <div className="table-responsive">
-              <table className="w-full">
-                <thead>
-                  <tr className="border-b text-left">
-                    {isColumnVisible('email') && (
-                      <th className="th-col th-col--sortable" onClick={() => requestSort('email')} aria-sort={getAriaSort('email')}>
-                        {t('email', 'Email')}{getSortIndicator('email')}
-                      </th>
-                    )}
-                    {isColumnVisible('client_ip') && (
-                      <th className="th-col th-col--sortable" onClick={() => requestSort('client_ip')} aria-sort={getAriaSort('client_ip')}>
-                        {t('client_ip', 'Client IP')}{getSortIndicator('client_ip')}
-                      </th>
-                    )}
-                    {isColumnVisible('expires_at') && (
-                      <th className="th-col th-col--sortable" onClick={() => requestSort('expires_at')} aria-sort={getAriaSort('expires_at')}>
-                        {t('expires_at', 'Expires At')}{getSortIndicator('expires_at')}
-                      </th>
-                    )}
-                    {isColumnVisible('used_at') && (
-                      <th className="th-col th-col--sortable" onClick={() => requestSort('used_at')} aria-sort={getAriaSort('used_at')}>
-                        {t('status', 'Status / Used At')}{getSortIndicator('used_at')}
-                      </th>
-                    )}
-                  </tr>
-                </thead>
-                <tbody>
-                  {paginatedItems.length === 0 ? (
-                    <tr>
-                      <td colSpan={4} className="td-empty">
-                        {t('no_magic_links', 'No magic links found.')}
-                      </td>
-                    </tr>
-                  ) : (
-                    paginatedItems.map((item: MagicLink, idx: number) => (
-                      <tr key={idx} className="border-b">
-                        {isColumnVisible('email') && (
-                          <td className="td-cell fw-medium">{item.email}</td>
-                        )}
-                        {isColumnVisible('client_ip') && (
-                          <td className="td-cell--mono">{item.client_ip || '-'}</td>
-                        )}
-                        {isColumnVisible('expires_at') && (
-                          <td className="td-cell" style={{ whiteSpace: 'nowrap' }}>
-                            {formatDate(typeof item.expires_at === 'number' ? new Date(item.expires_at * 1000) : item.expires_at)}
-                          </td>
-                        )}
-                        {isColumnVisible('used_at') && (
-                          <td className="td-cell" style={{ whiteSpace: 'nowrap' }}>
-                            {renderDate(item.used_at)}
-                          </td>
-                        )}
-                      </tr>
-                    ))
-                  )}
-                </tbody>
-              </table>
-            </div>
-            <DataTablePagination
-              currentPage={currentPage}
-              totalPages={totalPages}
+        <div className="card p-0">
+          <div className="p-md border-b">
+            <DataTableToolbar
+              searchQuery={searchQuery}
+              onSearchChange={setSearchQuery}
+              searchPlaceholder={t('search_magic_links_placeholder', 'Search magic links...')}
               pageSize={pageSize}
-              totalItems={totalItems}
-              onPageChange={setCurrentPage}
+              onPageSizeChange={setPageSize}
+              columns={columns}
+              isColumnVisible={isColumnVisible}
+              onToggleColumn={toggleColumn}
             />
           </div>
-        </>
+
+          <div className="table-responsive">
+            <table className="w-full">
+              <thead>
+                <tr className="border-b text-left">
+                  {isColumnVisible('email') && (
+                    <th className="th-col th-col--sortable" onClick={() => requestSort('email')} aria-sort={getAriaSort('email')}>
+                      {t('email', 'Email')}{getSortIndicator('email')}
+                    </th>
+                  )}
+                  {isColumnVisible('client_ip') && (
+                    <th className="th-col th-col--sortable" onClick={() => requestSort('client_ip')} aria-sort={getAriaSort('client_ip')}>
+                      {t('client_ip', 'Client IP')}{getSortIndicator('client_ip')}
+                    </th>
+                  )}
+                  {isColumnVisible('expires_at') && (
+                    <th className="th-col th-col--sortable" onClick={() => requestSort('expires_at')} aria-sort={getAriaSort('expires_at')}>
+                      {t('expires_at', 'Expires At')}{getSortIndicator('expires_at')}
+                    </th>
+                  )}
+                  {isColumnVisible('used_at') && (
+                    <th className="th-col th-col--sortable" onClick={() => requestSort('used_at')} aria-sort={getAriaSort('used_at')}>
+                      {t('status', 'Status / Used At')}{getSortIndicator('used_at')}
+                    </th>
+                  )}
+                  {isColumnVisible('created_at') && (
+                    <th className="th-col th-col--sortable" onClick={() => requestSort('created_at')} aria-sort={getAriaSort('created_at')}>
+                      {t('created_at', 'Created Date')}{getSortIndicator('created_at')}
+                    </th>
+                  )}
+                </tr>
+              </thead>
+              <tbody>
+                {paginatedItems.length === 0 ? (
+                  <tr>
+                    <td colSpan={5} className="td-empty">
+                      {t('no_magic_links', 'No magic links found.')}
+                    </td>
+                  </tr>
+                ) : (
+                  paginatedItems.map((item: MagicLink, idx: number) => (
+                    <tr key={idx} className="border-b">
+                      {isColumnVisible('email') && (
+                        <td className="td-cell fw-medium">{item.email}</td>
+                      )}
+                      {isColumnVisible('client_ip') && (
+                        <td className="td-cell font-mono text-xs">{item.client_ip || '-'}</td>
+                      )}
+                      {isColumnVisible('expires_at') && (
+                        <td className="td-cell text-xs text-muted" style={{ whiteSpace: 'nowrap' }}>
+                          {formatDate(typeof item.expires_at === 'number' ? new Date(item.expires_at * 1000) : item.expires_at)}
+                        </td>
+                      )}
+                      {isColumnVisible('used_at') && (
+                        <td className="td-cell text-xs text-muted" style={{ whiteSpace: 'nowrap' }}>
+                          {renderDate(item.used_at)}
+                        </td>
+                      )}
+                      {isColumnVisible('created_at') && (
+                        <td className="td-cell text-xs text-muted" style={{ whiteSpace: 'nowrap' }}>
+                          {item.created_at ? renderDate(item.created_at) : '—'}
+                        </td>
+                      )}
+                    </tr>
+                  ))
+                )}
+              </tbody>
+            </table>
+          </div>
+          <DataTablePagination
+            currentPage={currentPage}
+            totalPages={totalPages}
+            pageSize={pageSize}
+            totalItems={totalItems}
+            onPageChange={setCurrentPage}
+          />
+        </div>
       )}
     </div>
   );

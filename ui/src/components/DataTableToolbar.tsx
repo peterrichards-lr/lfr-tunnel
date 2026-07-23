@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { useI18n } from '../contexts/I18nContext';
-import type { ColumnDef } from '../hooks/useDataTable';
+import type { ColumnDef, StatusOption } from '../hooks/useDataTable';
 
 interface DataTableToolbarProps<T> {
   searchQuery: string;
@@ -11,6 +11,9 @@ interface DataTableToolbarProps<T> {
   columns: ColumnDef<T>[];
   isColumnVisible: (key: string) => boolean;
   onToggleColumn: (key: string) => void;
+  statusFilter?: string;
+  onStatusFilterChange?: (status: string) => void;
+  statusOptions?: StatusOption[];
   extraControls?: React.ReactNode;
 }
 
@@ -23,14 +26,17 @@ export default function DataTableToolbar<T>({
   columns,
   isColumnVisible,
   onToggleColumn,
+  statusFilter,
+  onStatusFilterChange,
+  statusOptions,
   extraControls
 }: DataTableToolbarProps<T>) {
   const { t } = useI18n();
   const [isColMenuOpen, setIsColMenuOpen] = useState(false);
 
   return (
-    <div className="flex justify-between items-center gap-md mb-lg flex-wrap">
-      {/* Left side: Search & Extra Filters */}
+    <div className="flex justify-between items-center gap-md flex-wrap">
+      {/* Left side: Search, Status Filter & Extra Controls */}
       <div className="flex items-center gap-md flex-1 min-w-[240px]">
         <input
           type="text"
@@ -39,6 +45,21 @@ export default function DataTableToolbar<T>({
           onChange={e => onSearchChange(e.target.value)}
           className="search-input w-full"
         />
+        {statusOptions && onStatusFilterChange && (
+          <div className="flex items-center gap-xs text-xs text-muted">
+            <span className="whitespace-nowrap">{t('status', 'Status')}:</span>
+            <select
+              className="input-field text-xs table-toolbar-select"
+              value={statusFilter || 'all'}
+              onChange={e => onStatusFilterChange(e.target.value)}
+            >
+              <option value="all">{t('status_all', 'All')}</option>
+              {statusOptions.map(opt => (
+                <option key={opt.value} value={opt.value}>{opt.label}</option>
+              ))}
+            </select>
+          </div>
+        )}
         {extraControls}
       </div>
 

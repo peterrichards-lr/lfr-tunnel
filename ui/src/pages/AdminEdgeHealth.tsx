@@ -1,17 +1,22 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useMemo } from 'react';
 import axios from 'axios';
-import { useTableSort } from '../hooks/useTableSort';
+import { useDataTable, type ColumnDef } from '../hooks/useDataTable';
+import DataTableToolbar from '../components/DataTableToolbar';
+import DataTablePagination from '../components/DataTablePagination';
 import Skeleton from '../components/Skeleton';
 import { useI18n } from '../contexts/I18nContext';
 import { useUI } from '../contexts/UIContext';
+import { useSettings } from '../contexts/SettingsContext';
 
 interface EdgeNode {
+  id?: string;
   status: string;
   resolved_ip: string;
   latency_ms: number;
   last_check_at: number;
   error_message: string;
   version: string;
+  created_at?: string;
 }
 
 export default function AdminEdgeHealth() {
@@ -20,6 +25,7 @@ export default function AdminEdgeHealth() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const { t } = useI18n();
+  const { formatDate } = useSettings();
   const { showToast, showConfirm, showPrompt } = useUI();
   
   const fetchHealth = async () => {
@@ -82,8 +88,42 @@ export default function AdminEdgeHealth() {
     }
   };
 
-  const nodeArray = Object.keys(nodes).map(id => ({ id, ...nodes[id] }));
-  const { items: sortedNodes, requestSort, getSortIndicator, searchQuery, setSearchQuery, getAriaSort } = useTableSort(nodeArray, ['id', 'status', 'resolved_ip', 'version']);
+  const nodeArray = useMemo(() => {
+    return Object.keys(nodes).map(id => ({ id, ...nodes[id] }));
+  }, [nodes]);
+
+  const columns: ColumnDef<EdgeNode>[] = useMemo(() => [
+    { key: 'id', label: t('node', 'Node ID'), sortable: true },
+    { key: 'status', label: t('status', 'Status'), sortable: true },
+    { key: 'resolved_ip', label: t('resolved_ip', 'IP Address'), sortable: true },
+    { key: 'latency_ms', label: t('latency', 'Latency'), sortable: true },
+    { key: 'version', label: t('version', 'Version'), sortable: true },
+    { key: 'created_at', label: t('created_at', 'Created Date'), sortable: true }
+  ], [t]);
+
+  const {
+    paginatedItems,
+    searchQuery,
+    setSearchQuery,
+    pageSize,
+    setPageSize,
+    currentPage,
+    setCurrentPage,
+    totalPages,
+    totalItems,
+    isColumnVisible,
+    toggleColumn,
+    requestSort,
+    getSortIndicator,
+    getAriaSort
+  } = useDataTable<EdgeNode>(
+    'admin_edge_health',
+    nodeArray,
+    ['id', 'status', 'resolved_ip', 'version'],
+    columns,
+    10,
+    ['created_at'] // Default unselected
+  );
 
   if (loading) {
     return (
@@ -93,36 +133,26 @@ export default function AdminEdgeHealth() {
           <Skeleton width={320} height={16} className="mt-sm" />
         </div>
 
-        <div className="card p-xl mb-xl">
-          <div className="flex gap-md items-center">
-            <Skeleton width="100%" height={40} style={{ maxWidth: '300px' }} />
-          </div>
-        </div>
-
         <div className="card p-xl">
           <div className="table-responsive">
             <table className="w-full">
               <thead>
                 <tr className="border-b text-left">
-                  <th className="th-col"><Skeleton width={80} /></th>
-                  <th className="th-col"><Skeleton width={80} /></th>
                   <th className="th-col"><Skeleton width={100} /></th>
                   <th className="th-col"><Skeleton width={80} /></th>
                   <th className="th-col"><Skeleton width={120} /></th>
-                  <th className="th-col"><Skeleton width={100} /></th>
+                  <th className="th-col"><Skeleton width={80} /></th>
                   <th className="th-col"><Skeleton width={80} /></th>
                 </tr>
               </thead>
               <tbody>
                 {[...Array(3)].map((_, i) => (
                   <tr key={i} className="border-b">
-                    <td className="td-cell"><Skeleton width="70%" height={16} /></td>
-                    <td className="td-cell"><Skeleton width={50} height={20} borderRadius={10} /></td>
-                    <td className="td-cell"><Skeleton width="80%" height={16} /></td>
+                    <td className="td-cell"><Skeleton width="90%" height={16} /></td>
+                    <td className="td-cell"><Skeleton width="85%" height={16} /></td>
+                    <td className="td-cell"><Skeleton width="60%" height={16} /></td>
                     <td className="td-cell"><Skeleton width="50%" height={16} /></td>
-                    <td className="td-cell"><Skeleton width="60%" height={16} /></td>
-                    <td className="td-cell"><Skeleton width="60%" height={16} /></td>
-                    <td className="td-cell"><Skeleton width={40} height={24} /></td>
+                    <td className="td-cell"><Skeleton width="70%" height={16} /></td>
                   </tr>
                 ))}
               </tbody>
@@ -135,102 +165,149 @@ export default function AdminEdgeHealth() {
 
   return (
     <div>
-      <div className="mb-xl">
-        <h3 className="page-header__title">Network Health</h3>
-        <p className="page-header__desc">Monitor the real-time status, latency, and uptime of regional stateless edge nodes.</p>
+      <div className="page-header">
+        <div>
+          <h3 className="page-header__title">{t('network_edge_health', 'Network & Edge Health')}</h3>
+          <p className="page-header__desc">{t('network_edge_health_desc', 'Global routing nodes, latency, and edge node actions.')}</p>
+        </div>
       </div>
 
       {!outboundOk && (
-        <div className="alert-banner alert-banner--danger mb-xl">
-          ⚠️ <strong>Gateway Network Error:</strong> The central gateway has lost outbound internet connectivity. Regional health checks are suspended.
+        <div className="alert-banner alert-banner--warning mb-xl">
+          ⚠️ {t('outbound_network_degraded', 'Outbound network connectivity is degraded.')}
         </div>
       )}
 
       {error ? (
-        <div className="text-danger mb-lg">
+        <div className="alert-banner alert-banner--danger mb-xl">
           {error}
         </div>
       ) : (
-        <>
-          {nodeArray.length > 0 && (
-            <div className="search-row">
-              <input 
-                type="text" 
-                placeholder={t('search_nodes_placeholder', 'Search nodes...')} 
-                value={searchQuery} 
-                onChange={e => setSearchQuery(e.target.value)}
-                className="search-input"
-              />
-            </div>
-          )}
-          <div className="card table-responsive">
+        <div className="card p-0">
+          <div className="p-md border-b">
+            <DataTableToolbar
+              searchQuery={searchQuery}
+              onSearchChange={setSearchQuery}
+              searchPlaceholder={t('search_nodes_placeholder', 'Search edge nodes...')}
+              pageSize={pageSize}
+              onPageSizeChange={setPageSize}
+              columns={columns}
+              isColumnVisible={isColumnVisible}
+              onToggleColumn={toggleColumn}
+            />
+          </div>
+
+          <div className="table-responsive">
             <table className="w-full">
               <thead>
                 <tr className="border-b text-left">
-                  <th className="th-col th-col--sortable" onClick={() => requestSort('id')} aria-sort={getAriaSort('id')}>Node ID{getSortIndicator('id')}</th>
-                  <th className="th-col th-col--sortable" onClick={() => requestSort('resolved_ip')} aria-sort={getAriaSort('resolved_ip')}>Resolved IP{getSortIndicator('resolved_ip')}</th>
-                  <th className="th-col th-col--sortable" onClick={() => requestSort('status')} aria-sort={getAriaSort('status')}>Status{getSortIndicator('status')}</th>
-                  <th className="th-col th-col--sortable" onClick={() => requestSort('latency_ms')} aria-sort={getAriaSort('latency_ms')}>Latency{getSortIndicator('latency_ms')}</th>
-                  <th className="th-col th-col--sortable" onClick={() => requestSort('last_check_at')} aria-sort={getAriaSort('last_check_at')}>Last Check{getSortIndicator('last_check_at')}</th>
-                  <th className="th-col th-col--sortable" onClick={() => requestSort('version')} aria-sort={getAriaSort('version')}>Version{getSortIndicator('version')}</th>
-                  <th className="th-col">Error</th>
-                  <th className="th-col text-right">Actions</th>
+                  {isColumnVisible('id') && (
+                    <th className="th-col th-col--sortable" onClick={() => requestSort('id')} aria-sort={getAriaSort('id')}>
+                      {t('node', 'Node ID')}{getSortIndicator('id')}
+                    </th>
+                  )}
+                  {isColumnVisible('status') && (
+                    <th className="th-col th-col--sortable" onClick={() => requestSort('status')} aria-sort={getAriaSort('status')}>
+                      {t('status', 'Status')}{getSortIndicator('status')}
+                    </th>
+                  )}
+                  {isColumnVisible('resolved_ip') && (
+                    <th className="th-col th-col--sortable" onClick={() => requestSort('resolved_ip')} aria-sort={getAriaSort('resolved_ip')}>
+                      {t('resolved_ip', 'IP Address')}{getSortIndicator('resolved_ip')}
+                    </th>
+                  )}
+                  {isColumnVisible('latency_ms') && (
+                    <th className="th-col th-col--sortable" onClick={() => requestSort('latency_ms')} aria-sort={getAriaSort('latency_ms')}>
+                      {t('latency', 'Latency')}{getSortIndicator('latency_ms')}
+                    </th>
+                  )}
+                  {isColumnVisible('version') && (
+                    <th className="th-col th-col--sortable" onClick={() => requestSort('version')} aria-sort={getAriaSort('version')}>
+                      {t('version', 'Version')}{getSortIndicator('version')}
+                    </th>
+                  )}
+                  {isColumnVisible('created_at') && (
+                    <th className="th-col th-col--sortable" onClick={() => requestSort('created_at')} aria-sort={getAriaSort('created_at')}>
+                      {t('created_at', 'Created Date')}{getSortIndicator('created_at')}
+                    </th>
+                  )}
+                  <th className="th-col text-right">{t('actions', 'Actions')}</th>
                 </tr>
               </thead>
               <tbody>
-                {sortedNodes.length === 0 ? (
-                <tr>
-                  <td colSpan={8} className="td-empty opacity-60">
-                    No edge nodes configured
-                  </td>
-                </tr>
-              ) : (
-                sortedNodes.map(h => {
-                  const id = h.id;
-                  const isOnline = h.status === 'Online';
-                  
-                  const resolvedIP = h.resolved_ip || '-';
-                  const latText = isOnline ? `${h.latency_ms} ms` : '-';
-                  const timeSince = h.last_check_at ? `${Math.max(0, Math.floor((Date.now() / 1000) - h.last_check_at))}s ago` : 'Never';
-                  const verText = h.version || '-';
-
-                  return (
-                    <tr key={id} className="border-b">
-                      <td className="td-cell fw-bold">{id}</td>
-                      <td className="td-cell">
-                        <code className="font-mono text-xs px-sm py-xs rounded-xs" style={{ background: 'rgba(255, 255, 255, 0.05)' }}>
-                          {resolvedIP}
-                        </code>
-                      </td>
-                      <td className="td-cell">
-                        <span className="inline-flex items-center gap-xs">
-                          <span className={`status-dot ${isOnline ? 'status-dot--online' : 'status-dot--offline'}`}></span>
-                          {h.status}
-                        </span>
-                      </td>
-                      <td className="td-cell">{latText}</td>
-                      <td className="td-cell">{timeSince}</td>
-                      <td className="td-cell"><code className="font-mono text-2xs">{verText}</code></td>
-                      <td className="td-cell">
-                        {h.error_message && (
-                          <span className="text-danger text-xs">{h.error_message}</span>
-                        )}
-                      </td>
-                      <td className="td-cell text-right whitespace-nowrap">
-                        <div className="flex gap-xs justify-end items-center">
-                          <button className="btn btn-secondary py-xs px-sm text-xs" title="Restart Daemon" onClick={() => restartEdgeDaemon(id)}>Restart</button>
-                          <button className="btn btn-secondary py-xs px-sm text-xs" title="Enable Soft Maintenance" onClick={() => enableEdgeMaintenance(id)}>Maintenance</button>
-                          <button className="btn btn-danger py-xs px-sm text-xs" title="Kick All Active Tunnels" onClick={() => kickEdgeTunnels(id)}>Kick</button>
+                {paginatedItems.length === 0 ? (
+                  <tr>
+                    <td colSpan={7} className="td-empty">
+                      {t('no_nodes_found', 'No edge nodes detected.')}
+                    </td>
+                  </tr>
+                ) : (
+                  paginatedItems.map((n: EdgeNode) => (
+                    <tr key={n.id} className="border-b">
+                      {isColumnVisible('id') && (
+                        <td className="td-cell fw-bold">{n.id}</td>
+                      )}
+                      {isColumnVisible('status') && (
+                        <td className="td-cell">
+                          <span className={`badge ${n.status === 'online' ? 'badge-success' : 'badge-danger'}`}>
+                            {n.status ? n.status.toUpperCase() : 'UNKNOWN'}
+                          </span>
+                        </td>
+                      )}
+                      {isColumnVisible('resolved_ip') && (
+                        <td className="td-cell--mono">{n.resolved_ip || '—'}</td>
+                      )}
+                      {isColumnVisible('latency_ms') && (
+                        <td className="td-cell">{n.latency_ms ? `${n.latency_ms}ms` : '—'}</td>
+                      )}
+                      {isColumnVisible('version') && (
+                        <td className="td-cell--mono">{n.version || '—'}</td>
+                      )}
+                      {isColumnVisible('created_at') && (
+                        <td className="td-cell" style={{ whiteSpace: 'nowrap' }}>
+                          {n.created_at ? formatDate(n.created_at) : '—'}
+                        </td>
+                      )}
+                      <td className="td-cell text-right">
+                        <div className="flex gap-xs justify-end">
+                          <button
+                            className="btn btn-secondary text-xs py-xs px-sm"
+                            title="Restart Daemon"
+                            onClick={() => n.id && restartEdgeDaemon(n.id)}
+                          >
+                            🔄
+                          </button>
+                          <button
+                            className="btn btn-secondary text-xs py-xs px-sm"
+                            title="Soft Maintenance"
+                            onClick={() => n.id && enableEdgeMaintenance(n.id)}
+                          >
+                            🚧
+                          </button>
+                          <button
+                            className="btn btn-secondary text-xs text-danger py-xs px-sm"
+                            title="Kick All Tunnels"
+                            onClick={() => n.id && kickEdgeTunnels(n.id)}
+                          >
+                            ⚡
+                          </button>
                         </div>
                       </td>
                     </tr>
-                  );
-                })
-              )}
-            </tbody>
-          </table>
+                  ))
+                )}
+              </tbody>
+            </table>
+          </div>
+
+          <DataTablePagination
+            currentPage={currentPage}
+            totalPages={totalPages}
+            pageSize={pageSize}
+            totalItems={totalItems}
+            onPageChange={setCurrentPage}
+          />
         </div>
-        </>
       )}
     </div>
   );

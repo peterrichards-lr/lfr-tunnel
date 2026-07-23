@@ -198,6 +198,7 @@ The solution will consist of:
 - [x] Restructure active leases, domains, and tokens responses to restrict dashboard overview to personal user data only.
 - [x] Implement Admin Tokens page in the Admin Zone for global user token management.
 - [x] Commit, test, E2E verify, and merge refactor/personal-dashboard-admin-tokens branch to master.
+- [x] Fix visual alignments, overlays transparencies, quota settings inputs, and export PDF heights across V2 Portal.
 
 
 | Feature | Description | Risk | LOE | Business Value | Priority |
@@ -1011,6 +1012,15 @@ The solution will consist of:
 - [x] Fix soft maintenance active status parsing and GET details endpoint variables mapping.
 - [x] Add dynamic client update alert banner warning users on older CLI binaries.
 
+## V2 Portal Visual Alignments & Unified Quotas Saves (v1.43.16)
+- [x] Fix transparent action overlay dropdown and table responsive container clipping in Network Edge Health page.
+- [x] Fix transparent backdrop overlays and incorrect undefined var(--text) variables in Client Installation Modal.
+- [x] Implement copy-to-clipboard actions and feedback checkmarks next to lfr-tunnel -upgrade in dashboard alert.
+- [x] Map rate limits to Subdomains table and display dynamic ⏱️ X RPS warn indicators on throttled subdomains.
+- [x] Make user name column clickable and introduce explicit Details button in admin Users table.
+- [x] Combine individual Quota settings Save buttons into a single centered Save Quotas & Preferred Domain button sending a batch PATCH request.
+- [x] Normalize Export PDF button heights to match Export CSV links.
+
 <!-- markdownlint-disable MD049 -->
 ---
-*Last Updated: 2026-07-22* | *Last Reviewed: 2026-07-22*
+*Last Updated: 2026-07-23* | *Last Reviewed: 2026-07-23*

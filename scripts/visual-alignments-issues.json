@@ -1,0 +1,70 @@
+{
+  "title": "[Epic] V2 Portal Visual Alignments & Unified Quotas Saves",
+  "body": "This epic tracks visual alignment fixes, transparency corrections, clipboard copy functions, and unified quota save behaviors across the Liferay Tunnel V2 portal.",
+  "labels": [
+    "enhancement"
+  ],
+  "issues": [
+    {
+      "title": "Sub-Issue #1: Edge Health Action Menu Dropdown Clipping & Transparency",
+      "body": "Fix the transparent background and clipping of the context action menu on the Network Health screen.",
+      "completed": false,
+      "labels": [
+        "bug",
+        "ui"
+      ],
+      "issueNumber": "769"
+    },
+    {
+      "title": "Sub-Issue #2: Client Installation Modal Backdrop Transparency and Color Contrast",
+      "body": "Increase background contrast in the client installation modal, swapping transparent backgrounds to solid `var(--bg-base)` and fixing undefined `var(--text)` labels to `var(--text-main)`.",
+      "completed": false,
+      "labels": [
+        "bug",
+        "ui"
+      ],
+      "issueNumber": "770"
+    },
+    {
+      "title": "Sub-Issue #3: Console Upgrade Copy Clipboard Tool",
+      "body": "Implement a copy-to-clipboard button and state indicator next to the CLI update warning banner command.",
+      "completed": false,
+      "labels": [
+        "enhancement",
+        "ui"
+      ],
+      "issueNumber": "771"
+    },
+    {
+      "title": "Sub-Issue #4: Rate Limit Badges in Subdomains Dashboard",
+      "body": "Map and render active rate limits to the Subdomains table rows, showing dynamic limit indicator warning badges on throttled subdomains.",
+      "completed": false,
+      "labels": [
+        "enhancement",
+        "ui"
+      ],
+      "issueNumber": "772"
+    },
+    {
+      "title": "Sub-Issue #5: Unified Quota Saves & Clickable Columns in Users Table",
+      "body": "Make user names column clickable to display details, add an explicit Details action button to row action cells, and combine Quota settings save buttons to a single Save button sending a batch PATCH request.",
+      "completed": false,
+      "labels": [
+        "enhancement",
+        "ui"
+      ],
+      "issueNumber": "773"
+    },
+    {
+      "title": "Sub-Issue #6: Export PDF Height Normalization",
+      "body": "Set explicit heights on the Export PDF button to match the visual height of standard link buttons (Export CSV).",
+      "completed": false,
+      "labels": [
+        "bug",
+        "ui"
+      ],
+      "issueNumber": "774"
+    }
+  ],
+  "epicNumber": "768"
+}

@@ -45,7 +45,7 @@ clean:
 build: clean
 	mkdir -p bin
 	@echo "Building UI..."
-	cd ui && pnpm install && pnpm run build
+	cd ui && (which pnpm >/dev/null 2>&1 && pnpm install && pnpm run build || node node_modules/.pnpm/vite@8.1.5_@types+node@24.13.3/node_modules/vite/bin/vite.js build)
 	rm -rf pkg/server/ui-dist
 	cp -r ui/dist pkg/server/ui-dist
 	go build -ldflags="-s -w -X lfr-tunnel/pkg/config.Version=$(VERSION)" -trimpath -o bin/lfr-tunnel ./cmd/lfr-tunnel

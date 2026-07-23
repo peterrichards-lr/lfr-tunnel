@@ -1,5 +1,15 @@
 [
   {
+    "version": "v1.44.3",
+    "release_date": "2026-07-23",
+    "features": [
+      "Feature: Connect useDataTable with per-table localStorage persistence and column customization across Admin tables",
+      "Style: Fix lfr-tunnel -upgrade badge padding and layout spacing in Dashboard Overview",
+      "Fix: Enforce maximum size constraint of 5 releases on whats-new.json with automated unit test assertions",
+      "Test: Extend ServiceInstaller unit tests for pretty symlinks and LaunchAgent plists"
+    ]
+  },
+  {
     "version": "v1.44.2",
     "release_date": "2026-07-23",
     "features": [
@@ -39,14 +49,6 @@
       "Feature: Restore complete V1 Domain Allocation Rules options list and hyphenated server keys",
       "Fix: Resolve soft maintenance active status parsing and GET details endpoint variables mapping",
       "Feature: Add dynamic client update warning alert banner in Dashboard Overview"
-    ]
-  },
-  {
-    "version": "v1.43.14",
-    "release_date": "2026-07-22",
-    "features": [
-      "Feature: Restrict main Dashboard Overview to the logged-in user's personal tunnels, subdomains, and access tokens (#762)",
-      "Feature: Introduce Admin Tokens management page under Admin Zone to view, search, extend, and revoke user PATs globally (#762)"
     ]
   }
 ]

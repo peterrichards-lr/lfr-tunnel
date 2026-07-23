@@ -95,9 +95,19 @@ export default function AdminTokens() {
   };
 
   const getTokenStatus = (pat: PAT) => {
-    if (pat.revoked_at) return { label: t('revoked', 'Revoked'), color: 'var(--danger)', badge: 'badge-danger' };
-    if (pat.expires_at && new Date(pat.expires_at) < new Date()) return { label: t('expired', 'Expired'), color: 'var(--warning)', badge: 'badge-warning' };
-    return { label: t('active', 'Active'), color: 'var(--success)', badge: 'badge-success' };
+    if (pat.revoked_at) return { label: t('status_revoked', 'REVOKED'), badge: 'badge-danger' };
+    if (pat.expires_at && new Date(pat.expires_at) <= new Date()) return { label: t('status_expired', 'EXPIRED'), badge: 'badge-warning' };
+    return { label: t('status_active', 'ACTIVE'), badge: 'badge-success' };
+  };
+
+  const getExpiresInText = (pat: PAT) => {
+    if (pat.revoked_at) return t('revoked', 'Revoked');
+    if (!pat.expires_at) return t('never', 'Never');
+    const diff = new Date(pat.expires_at).getTime() - new Date().getTime();
+    if (diff <= 0) return t('expired', 'Expired');
+    const days = Math.floor(diff / (1000 * 60 * 60 * 24));
+    const hours = Math.floor((diff % (1000 * 60 * 60 * 24)) / (1000 * 60 * 60));
+    return `in ${days}d ${hours}h`;
   };
 
   if (loading) {
@@ -142,27 +152,27 @@ export default function AdminTokens() {
   }
 
   return (
-    <div style={{ animation: 'fadeInUp 0.6s ease-out' }}>
-      <div className="mb-xl">
-        <h1 className="page-header__title text-4xl">
-          {t('admin_tokens_title', 'All Personal Access Tokens')}
-        </h1>
-        <p className="page-header__desc text-md">
-          {t('admin_tokens_desc', 'Monitor, extend, and revoke authentication tokens for all users across the system.')}
-        </p>
+    <div>
+      <div className="page-header mb-xl">
+        <div>
+          <h3 className="page-header__title">{t('admin_tokens_title', 'All Personal Access Tokens')}</h3>
+          <p className="page-header__desc">{t('admin_tokens_desc', 'Monitor, extend, and revoke authentication tokens for all users across the system.')}</p>
+        </div>
       </div>
 
-      <div className="card p-xl">
-        <DataTableToolbar
-          searchQuery={searchQuery}
-          onSearchChange={setSearchQuery}
-          searchPlaceholder={t('search_tokens_placeholder', 'Search tokens...')}
-          pageSize={pageSize}
-          onPageSizeChange={setPageSize}
-          columns={allColumns}
-          isColumnVisible={isColumnVisible}
-          onToggleColumn={toggleColumn}
-        />
+      <div className="card p-0">
+        <div className="p-md border-b">
+          <DataTableToolbar
+            searchQuery={searchQuery}
+            onSearchChange={setSearchQuery}
+            searchPlaceholder={t('search_tokens_placeholder', 'Search tokens...')}
+            pageSize={pageSize}
+            onPageSizeChange={setPageSize}
+            columns={allColumns}
+            isColumnVisible={isColumnVisible}
+            onToggleColumn={toggleColumn}
+          />
+        </div>
 
         <div className="table-responsive">
           <table className="w-full">
@@ -171,24 +181,31 @@ export default function AdminTokens() {
                 {isColumnVisible('user_id') && <th className="th-col th-col--sortable" onClick={() => requestSort('user_id')} aria-sort={getAriaSort('user_id')}>{t('owner', 'Owner')}{getSortIndicator('user_id')}</th>}
                 {isColumnVisible('name') && <th className="th-col th-col--sortable" onClick={() => requestSort('name')} aria-sort={getAriaSort('name')}>{t('name', 'Name')}{getSortIndicator('name')}</th>}
                 {isColumnVisible('token_prefix') && <th className="th-col th-col--sortable" onClick={() => requestSort('token_prefix')} aria-sort={getAriaSort('token_prefix')}>{t('prefix', 'Prefix')}{getSortIndicator('token_prefix')}</th>}
+                {isColumnVisible('created_at') && <th className="th-col th-col--sortable" onClick={() => requestSort('created_at')} aria-sort={getAriaSort('created_at')}>{t('created', 'Created')}{getSortIndicator('created_at')}</th>}
                 {isColumnVisible('expires_at') && <th className="th-col th-col--sortable" onClick={() => requestSort('expires_at')} aria-sort={getAriaSort('expires_at')}>{t('expires', 'Expires')}{getSortIndicator('expires_at')}</th>}
                 <th className="th-col">{t('status', 'Status')}</th>
+                <th className="th-col">{t('expires_in', 'Expires In')}</th>
                 <th className="th-col text-right">{t('actions', 'Actions')}</th>
               </tr>
             </thead>
             <tbody>
               {paginatedTokens.map((pat) => {
                 const status = getTokenStatus(pat);
+                const expiresIn = getExpiresInText(pat);
                 return (
                   <tr key={pat.id} className="border-b hover:bg-white/5 transition-colors">
                     {isColumnVisible('user_id') && <td className="td-cell font-medium">{pat.user_id}</td>}
                     {isColumnVisible('name') && <td className="td-cell">{pat.name || <span className="text-muted text-xs italic">Unnamed</span>}</td>}
                     {isColumnVisible('token_prefix') && <td className="td-cell font-mono text-xs">{pat.token_prefix}...</td>}
-                    {isColumnVisible('expires_at') && <td className="td-cell text-xs text-muted">{pat.expires_at ? formatDate(pat.expires_at) : 'Never'}</td>}
+                    {isColumnVisible('created_at') && <td className="td-cell text-xs text-muted" style={{ whiteSpace: 'nowrap' }}>{formatDate(pat.created_at)}</td>}
+                    {isColumnVisible('expires_at') && <td className="td-cell text-xs text-muted" style={{ whiteSpace: 'nowrap' }}>{pat.expires_at ? formatDate(pat.expires_at) : 'Never'}</td>}
                     <td className="td-cell">
                       <span className={`badge ${status.badge} text-xs font-semibold`}>
                         {status.label}
                       </span>
+                    </td>
+                    <td className="td-cell text-xs text-muted" style={{ whiteSpace: 'nowrap' }}>
+                      {expiresIn}
                     </td>
                     <td className="td-cell text-right">
                       <div className="flex gap-xs justify-end">
@@ -216,7 +233,7 @@ export default function AdminTokens() {
               })}
               {paginatedTokens.length === 0 && (
                 <tr>
-                  <td colSpan={6} className="td-cell text-center text-muted py-xl">
+                  <td colSpan={8} className="td-cell text-center text-muted py-xl">
                     {t('no_tokens_found', 'No authentication tokens found.')}
                   </td>
                 </tr>

@@ -328,15 +328,9 @@ export default function AdminUsers() {
   if (loading) {
     return (
       <div style={{ animation: 'fadeInUp 0.6s ease-out' }}>
-        <div className="page-header">
+        <div className="page-header mb-xl">
           <Skeleton width={180} height={28} />
-          <Skeleton width={120} height={40} />
-        </div>
-        
-        <div className="card p-xl mb-xl">
-          <div className="flex gap-md items-center">
-            <Skeleton width="100%" height={40} style={{ maxWidth: '300px' }} />
-          </div>
+          <Skeleton width={320} height={16} className="mt-sm" />
         </div>
 
         <div className="card p-xl">
@@ -371,21 +365,25 @@ export default function AdminUsers() {
     );
   }
 
-
   return (
     <div>
-      <div className="page-header">
-        <h3 className="page-header__title">{t('user_management', 'User Management')}</h3>
-        <button className="btn btn-primary" onClick={() => setShowInviteModal(true)}>+ {t('invite_user', 'Invite User')}</button>
+      <div className="flex items-center justify-between mb-xl">
+        <div>
+          <h3 className="page-header__title">{t('user_management', 'User Management')}</h3>
+          <p className="page-header__desc">{t('user_management_desc', 'Manage users, promotion, roles, and pending registration approvals.')}</p>
+        </div>
+        <button onClick={() => setShowInviteModal(true)} className="btn btn-primary flex items-center gap-xs">
+          <span>➕</span>
+          <span>{t('invite_user', 'Invite User')}</span>
+        </button>
       </div>
 
-      {/* Sub-tabs for All Users vs Pending Registrations */}
-      <div className="sub-tabs mb-lg">
+      <div className="sub-tab-bar mb-xl">
         <button 
           onClick={() => setActiveTab('users')} 
           className={`sub-tab ${activeTab === 'users' ? 'sub-tab--active' : ''}`}
         >
-          {t('users_tab_all', 'All Users')}
+          {t('users_tab_active', 'Active Users')} ({users.filter(u => u.status !== 'pending').length})
         </button>
         <button 
           onClick={() => setActiveTab('registrations')} 
@@ -400,17 +398,19 @@ export default function AdminUsers() {
         </button>
       </div>
 
-      <div className="card p-xl">
-        <DataTableToolbar
-          searchQuery={searchQuery}
-          onSearchChange={setSearchQuery}
-          searchPlaceholder={t('search_users_placeholder', 'Search users...')}
-          pageSize={pageSize}
-          onPageSizeChange={setPageSize}
-          columns={allColumns}
-          isColumnVisible={isColumnVisible}
-          onToggleColumn={toggleColumn}
-        />
+      <div className="card p-0">
+        <div className="p-md border-b">
+          <DataTableToolbar
+            searchQuery={searchQuery}
+            onSearchChange={setSearchQuery}
+            searchPlaceholder={t('search_users_placeholder', 'Search users...')}
+            pageSize={pageSize}
+            onPageSizeChange={setPageSize}
+            columns={allColumns}
+            isColumnVisible={isColumnVisible}
+            onToggleColumn={toggleColumn}
+          />
+        </div>
 
         <div className="table-responsive">
           <table className="w-full">
@@ -422,13 +422,14 @@ export default function AdminUsers() {
                 {isColumnVisible('auth_method') && <th className="th-col th-col--sortable" onClick={() => requestSort('auth_method')} aria-sort={getAriaSort('auth_method')}>Auth Method{getSortIndicator('auth_method')}</th>}
                 <th className="th-col">Quotas</th>
                 {isColumnVisible('last_login_at') && <th className="th-col th-col--sortable" onClick={() => requestSort('last_login_at')} aria-sort={getAriaSort('last_login_at')}>Last Seen{getSortIndicator('last_login_at')}</th>}
+                {isColumnVisible('created_at') && <th className="th-col th-col--sortable" onClick={() => requestSort('created_at')} aria-sort={getAriaSort('created_at')}>Created Date{getSortIndicator('created_at')}</th>}
                 <th className="th-col text-right">Actions</th>
               </tr>
             </thead>
             <tbody>
               {paginatedUsers.length === 0 ? (
                 <tr>
-                  <td colSpan={7} className="td-cell text-center text-muted py-xl">
+                  <td colSpan={8} className="td-cell text-center text-muted py-xl">
                     {activeTab === 'users' ? t('no_users_found', 'No users found.') : t('no_pending_registrations', 'No pending registrations.')}
                   </td>
                 </tr>
@@ -497,6 +498,11 @@ export default function AdminUsers() {
                           ) : (
                             u.last_login_at ? formatDate(u.last_login_at) : <span className="text-muted">Never</span>
                           )}
+                        </td>
+                      )}
+                      {isColumnVisible('created_at') && (
+                        <td className="td-cell" style={{ whiteSpace: 'nowrap' }}>
+                          {u.created_at ? formatDate(u.created_at) : '—'}
                         </td>
                       )}
                       <td className="td-cell text-right whitespace-nowrap">

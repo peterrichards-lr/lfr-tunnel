@@ -11,7 +11,8 @@ export function useDataTable<T>(
   items: T[],
   searchKeys: (keyof T)[],
   allColumns: ColumnDef<T>[],
-  defaultPageSize: number = 10
+  defaultPageSize: number = 10,
+  defaultHiddenColumns: string[] = []
 ) {
   // LocalStorage storage keys
   const storageKey = `lfr_table_${tableId}`;
@@ -33,7 +34,9 @@ export function useDataTable<T>(
   );
   const [pageSize, setPageSizeState] = useState<number>(storedPrefs?.pageSize || defaultPageSize);
   const [currentPage, setCurrentPage] = useState<number>(1);
-  const [hiddenColumns, setHiddenColumns] = useState<string[]>(storedPrefs?.hiddenColumns || []);
+  const [hiddenColumns, setHiddenColumns] = useState<string[]>(
+    storedPrefs?.hiddenColumns !== undefined ? storedPrefs.hiddenColumns : defaultHiddenColumns
+  );
 
   // Sync preferences to localStorage
   useEffect(() => {

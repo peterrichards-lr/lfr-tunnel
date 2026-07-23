@@ -1,9 +1,10 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useMemo } from 'react';
 import axios from 'axios';
 import { useSettings } from '../contexts/SettingsContext';
-
+import { useDataTable, type ColumnDef } from '../hooks/useDataTable';
+import DataTableToolbar from '../components/DataTableToolbar';
+import DataTablePagination from '../components/DataTablePagination';
 import { useI18n } from '../contexts/I18nContext';
-import { useTableSort } from '../hooks/useTableSort';
 import Skeleton from './Skeleton';
 import { useUI } from '../contexts/UIContext';
 
@@ -12,6 +13,7 @@ interface Reservation {
   subdomain: string;
   domain: string;
   status: string;
+  created_at?: string;
   expires_at?: string;
   extension_requested?: boolean;
   access_mode?: string;
@@ -55,7 +57,6 @@ export default function ReservationsPanel() {
 
   useEffect(() => {
     fetchData();
-    // Load user's default subdomain style from their profile
     axios.get('/api/me')
       .then(res => {
         const style = res.data?.subdomain_style;
@@ -96,6 +97,37 @@ export default function ReservationsPanel() {
     }
   };
 
+  const columns: ColumnDef<Reservation>[] = useMemo(() => [
+    { key: 'subdomain', label: t('subdomain', 'Subdomain'), sortable: true },
+    { key: 'status', label: t('status', 'Status'), sortable: true },
+    { key: 'expires_at', label: t('expires', 'Expires'), sortable: true },
+    { key: 'created_at', label: t('created_at', 'Created Date'), sortable: true },
+  ], [t]);
+
+  const {
+    paginatedItems,
+    searchQuery,
+    setSearchQuery,
+    pageSize,
+    setPageSize,
+    currentPage,
+    setCurrentPage,
+    totalPages,
+    totalItems,
+    isColumnVisible,
+    toggleColumn,
+    requestSort,
+    getSortIndicator,
+    getAriaSort
+  } = useDataTable<Reservation>(
+    'dashboard_reservations',
+    reservations,
+    ['subdomain', 'domain', 'status'],
+    columns,
+    10,
+    ['created_at'] // Unselected by default
+  );
+
   const deleteReservation = async (id: string) => {
     if (!(await showConfirm(t('release_subdomain_title', 'Release Subdomain'), t('confirm_release_subdomain', 'Are you sure you want to release this subdomain?')))) return;
     try {
@@ -117,7 +149,6 @@ export default function ReservationsPanel() {
     }
   };
 
-  // --- Access Control Modal state ---
   const [acModalReservation, setAcModalReservation] = useState<Reservation | null>(null);
   const [acMode, setAcMode] = useState('public');
   const [acPasscode, setAcPasscode] = useState('');
@@ -163,7 +194,6 @@ export default function ReservationsPanel() {
     }
   };
 
-  const { items: sortedReservations, requestSort, getSortIndicator, searchQuery, setSearchQuery, getAriaSort } = useTableSort(reservations, ['subdomain', 'domain', 'status']);
   if (loading) {
     return (
       <div className="card mb-xl">
@@ -266,80 +296,112 @@ export default function ReservationsPanel() {
           </form>
         )}
 
-        {reservations.length > 0 && (
-          <div className="search-row">
-            <input 
-              type="text" 
-              placeholder={t('search_reservations_placeholder', 'Search reservations...')} 
-              value={searchQuery} 
-              onChange={e => setSearchQuery(e.target.value)}
-              className="search-input"
-            />
-          </div>
-        )}
+      {reservations.length > 0 && (
+        <div className="p-md border-b">
+          <DataTableToolbar
+            searchQuery={searchQuery}
+            onSearchChange={setSearchQuery}
+            searchPlaceholder={t('search_reservations_placeholder', 'Search reservations...')}
+            pageSize={pageSize}
+            onPageSizeChange={setPageSize}
+            columns={columns}
+            isColumnVisible={isColumnVisible}
+            onToggleColumn={toggleColumn}
+          />
+        </div>
+      )}
 
-        {reservations.length === 0 ? (
-          <div className="empty-state">
-            <div className="empty-state__text">{t('no_subdomains_reserved', 'No subdomains reserved yet.')}</div>
-          </div>
-        ) : (
+      {reservations.length === 0 ? (
+        <div className="empty-state p-xl">
+          <div className="empty-state__text">{t('no_subdomains_reserved', 'No subdomains reserved yet.')}</div>
+        </div>
+      ) : (
+        <>
           <div className="table-responsive">
             <table className="w-full">
               <thead>
                 <tr className="border-b text-left">
-                  <th className="th-col th-col--sortable" onClick={() => requestSort('subdomain')} aria-sort={getAriaSort('subdomain')}>{t('subdomain', 'Subdomain')}{getSortIndicator('subdomain')}</th>
-                  <th className="th-col th-col--sortable" onClick={() => requestSort('status')} aria-sort={getAriaSort('status')}>{t('status', 'Status')}{getSortIndicator('status')}</th>
-                  <th className="th-col th-col--sortable" onClick={() => requestSort('expires_at')} aria-sort={getAriaSort('expires_at')}>{t('expires', 'Expires')}{getSortIndicator('expires_at')}</th>
+                  {isColumnVisible('subdomain') && (
+                    <th className="th-col th-col--sortable" onClick={() => requestSort('subdomain')} aria-sort={getAriaSort('subdomain')}>
+                      {t('subdomain', 'Subdomain')}{getSortIndicator('subdomain')}
+                    </th>
+                  )}
+                  {isColumnVisible('status') && (
+                    <th className="th-col th-col--sortable" onClick={() => requestSort('status')} aria-sort={getAriaSort('status')}>
+                      {t('status', 'Status')}{getSortIndicator('status')}
+                    </th>
+                  )}
+                  {isColumnVisible('expires_at') && (
+                    <th className="th-col th-col--sortable" onClick={() => requestSort('expires_at')} aria-sort={getAriaSort('expires_at')}>
+                      {t('expires', 'Expires')}{getSortIndicator('expires_at')}
+                    </th>
+                  )}
+                  {isColumnVisible('created_at') && (
+                    <th className="th-col th-col--sortable" onClick={() => requestSort('created_at')} aria-sort={getAriaSort('created_at')}>
+                      {t('created_at', 'Created Date')}{getSortIndicator('created_at')}
+                    </th>
+                  )}
                   <th className="th-col">{t('actions', 'Actions')}</th>
                 </tr>
               </thead>
               <tbody>
-                {sortedReservations.map(r => {
+                {paginatedItems.map(r => {
                   const host = `${r.subdomain}.${r.domain}`;
                   const isExpired = r.expires_at && new Date(r.expires_at) < new Date();
                   const canExtend = !!(r.expires_at && !r.extension_requested && !isExpired);
                   return (
                     <tr key={r.id} className="border-b">
-                      <td className="td-cell">
-                        <div className="flex items-center gap-sm">
-                          <a href={`https://${host}`} target="_blank" rel="noreferrer" className="text-primary fw-semibold no-underline font-mono text-base">
-                            {host}
-                          </a>
-                          <button 
-                            onClick={() => copyText(host, 'Host copied to clipboard')}
-                            className="btn-icon text-muted cursor-pointer text-base"
-                            style={{ background: 'none', border: 'none', padding: '2px' }}
-                            title="Copy Host"
-                          >
-                            📋
-                          </button>
-                          <button 
-                            onClick={() => copyText(`lfr-tunnel -subdomain ${r.subdomain} -server ${window.location.origin}`, 'CLI command copied')}
-                            className="btn-icon text-muted cursor-pointer text-base"
-                            style={{ background: 'none', border: 'none', padding: '2px' }}
-                            title="Copy CLI Connection Command"
-                          >
-                            🔌
-                          </button>
-                        </div>
-                        {r.access_mode && r.access_mode !== 'public' && (
-                          <span className="badge badge-warning text-2xs mt-xs inline-block">
-                            {r.access_mode === 'passcode' ? '🔑 Passcode' : '🛡 IP Whitelist'}
-                          </span>
-                        )}
-                      </td>
-                      <td className="td-cell">
-                        {isExpired ? (
-                          <span className="badge badge-danger">Quarantined</span>
-                        ) : r.extension_requested ? (
-                          <span className="badge badge-warning">Extension Requested</span>
-                        ) : (
-                          <span className="badge badge-success">Active</span>
-                        )}
-                      </td>
-                      <td className="td-cell">
-                        {r.expires_at ? formatDate(r.expires_at) : 'Never (Permanent)'}
-                      </td>
+                      {isColumnVisible('subdomain') && (
+                        <td className="td-cell">
+                          <div className="flex items-center gap-sm">
+                            <a href={`https://${host}`} target="_blank" rel="noreferrer" className="text-primary fw-semibold no-underline font-mono text-base">
+                              {host}
+                            </a>
+                            <button 
+                              onClick={() => copyText(host, 'Host copied to clipboard')}
+                              className="btn-icon text-muted cursor-pointer text-base"
+                              style={{ background: 'none', border: 'none', padding: '2px' }}
+                              title="Copy Host"
+                            >
+                              📋
+                            </button>
+                            <button 
+                              onClick={() => copyText(`lfr-tunnel -subdomain ${r.subdomain} -server ${window.location.origin}`, 'CLI command copied')}
+                              className="btn-icon text-muted cursor-pointer text-base"
+                              style={{ background: 'none', border: 'none', padding: '2px' }}
+                              title="Copy CLI Connection Command"
+                            >
+                              🔌
+                            </button>
+                          </div>
+                          {r.access_mode && r.access_mode !== 'public' && (
+                            <span className="badge badge-warning text-2xs mt-xs inline-block">
+                              {r.access_mode === 'passcode' ? '🔑 Passcode' : '🛡 IP Whitelist'}
+                            </span>
+                          )}
+                        </td>
+                      )}
+                      {isColumnVisible('status') && (
+                        <td className="td-cell">
+                          {isExpired ? (
+                            <span className="badge badge-danger">Quarantined</span>
+                          ) : r.extension_requested ? (
+                            <span className="badge badge-warning">Extension Requested</span>
+                          ) : (
+                            <span className="badge badge-success">Active</span>
+                          )}
+                        </td>
+                      )}
+                      {isColumnVisible('expires_at') && (
+                        <td className="td-cell">
+                          {r.expires_at ? formatDate(r.expires_at) : 'Never (Permanent)'}
+                        </td>
+                      )}
+                      {isColumnVisible('created_at') && (
+                        <td className="td-cell" style={{ whiteSpace: 'nowrap' }}>
+                          {r.created_at ? formatDate(r.created_at) : '—'}
+                        </td>
+                      )}
                       <td className="td-cell">
                         <div className="flex gap-sm">
                           {canExtend && (
@@ -368,7 +430,15 @@ export default function ReservationsPanel() {
               </tbody>
             </table>
           </div>
-        )}
+          <DataTablePagination
+            currentPage={currentPage}
+            totalPages={totalPages}
+            pageSize={pageSize}
+            totalItems={totalItems}
+            onPageChange={setCurrentPage}
+          />
+        </>
+      )}
       </div>
 
       {/* Access Control Modal */}

@@ -2,8 +2,8 @@
 
 VERSION ?= $(shell grep -oE 'Version = "[^"]+"' pkg/config/version.go | cut -d'"' -f2)
 
-# EDR-safe test execution directory (defaults to $(HOME)/runningpoc/bin to match SentinelOne EDR whitelist)
-LFT_TEST_DIR ?= $(HOME)/runningpoc/bin
+# EDR-safe test execution directory (defaults to /private/tmp to match SentinelOne EDR whitelist)
+LFT_TEST_DIR ?= /private/tmp
 export GOTMPDIR ?= $(LFT_TEST_DIR)
 TEST_BINARY := $(LFT_TEST_DIR)/lfr-tunnel
 

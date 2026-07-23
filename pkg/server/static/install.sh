@@ -29,20 +29,20 @@ URL="${SERVER_URL}/static/downloads/${BINARY}"
 case "$OS" in
   darwin)
     case "$ARCH" in
-      amd64) DEFAULT_INSTALL_DIR="{{MACOS_AMD64_INSTALL_DIR}}" ;;
-      arm64) DEFAULT_INSTALL_DIR="{{MACOS_ARM64_INSTALL_DIR}}" ;;
+      amd64) DEFAULT_INSTALL_DIR="{{LFR_TUNNEL_MACOS_AMD64_INSTALL_DIR}}" ;;
+      arm64) DEFAULT_INSTALL_DIR="{{LFR_TUNNEL_MACOS_ARM64_INSTALL_DIR}}" ;;
     esac
     ;;
   linux)
     case "$ARCH" in
-      amd64) DEFAULT_INSTALL_DIR="{{LINUX_AMD64_INSTALL_DIR}}" ;;
+      amd64) DEFAULT_INSTALL_DIR="{{LFR_TUNNEL_LINUX_AMD64_INSTALL_DIR}}" ;;
     esac
     ;;
 esac
 
 # Fallback if templating failed or script was executed directly from raw source
 case "$DEFAULT_INSTALL_DIR" in
-  ""|\{\{*|\{\{MACOS_*) DEFAULT_INSTALL_DIR="${HOME}/runningpoc/bin" ;;
+  ""|\{\{*) DEFAULT_INSTALL_DIR="${HOME}/runningpoc/bin" ;;
 esac
 
 INSTALL_DIR="${LFT_INSTALL_DIR:-${DEFAULT_INSTALL_DIR}}"

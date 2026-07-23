@@ -1,7 +1,9 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useMemo } from 'react';
 import axios from 'axios';
 import { useSettings } from '../contexts/SettingsContext';
-import { useTableSort } from '../hooks/useTableSort';
+import { useDataTable, type ColumnDef } from '../hooks/useDataTable';
+import DataTableToolbar from '../components/DataTableToolbar';
+import DataTablePagination from '../components/DataTablePagination';
 import Skeleton from '../components/Skeleton';
 import { useI18n } from '../contexts/I18nContext';
 import { useUI } from '../contexts/UIContext';
@@ -20,9 +22,6 @@ export default function AdminBlacklist() {
   const { formatDate } = useSettings();
   const { t } = useI18n();
   const { showToast, showConfirm } = useUI();
-
-  const [page, setPage] = useState(0);
-  const ROWS_PER_PAGE = 15;
 
   const fetchEntries = async () => {
     try {
@@ -67,7 +66,34 @@ export default function AdminBlacklist() {
     }
   };
 
-  const { items: sortedEntries, requestSort, getSortIndicator, searchQuery, setSearchQuery, getAriaSort } = useTableSort(entries, ['ip', 'reason']);
+  const columns: ColumnDef<BlacklistEntry>[] = useMemo(() => [
+    { key: 'ip', label: t('tbl_ip_address', 'IP Address'), sortable: true },
+    { key: 'reason', label: t('tbl_reason', 'Reason'), sortable: true },
+    { key: 'created_at', label: t('tbl_time', 'Time'), sortable: true },
+  ], [t]);
+
+  const {
+    paginatedItems,
+    searchQuery,
+    setSearchQuery,
+    pageSize,
+    setPageSize,
+    currentPage,
+    setCurrentPage,
+    totalPages,
+    totalItems,
+    isColumnVisible,
+    toggleColumn,
+    requestSort,
+    getSortIndicator,
+    getAriaSort
+  } = useDataTable<BlacklistEntry>(
+    'admin_blacklist',
+    entries,
+    ['ip', 'reason'],
+    columns,
+    10
+  );
 
   if (loading) {
     return (
@@ -87,10 +113,6 @@ export default function AdminBlacklist() {
         </div>
 
         <div className="card p-xl">
-          <div className="search-row">
-            <Skeleton width="100%" height={40} style={{ maxWidth: '300px' }} />
-          </div>
-          
           <div className="table-responsive">
             <table className="w-full">
               <thead>
@@ -98,7 +120,7 @@ export default function AdminBlacklist() {
                   <th className="th-col"><Skeleton width={100} /></th>
                   <th className="th-col"><Skeleton width={200} /></th>
                   <th className="th-col"><Skeleton width={120} /></th>
-                  <th className="th-col"><Skeleton width={80} /></th>
+                  <th className="th-col"><Skeleton width={60} /></th>
                 </tr>
               </thead>
               <tbody>
@@ -107,7 +129,7 @@ export default function AdminBlacklist() {
                     <td className="td-cell"><Skeleton width="90%" height={16} /></td>
                     <td className="td-cell"><Skeleton width="85%" height={16} /></td>
                     <td className="td-cell"><Skeleton width="60%" height={16} /></td>
-                    <td className="td-cell"><Skeleton width="50%" height={28} /></td>
+                    <td className="td-cell"><Skeleton width="50%" height={16} /></td>
                   </tr>
                 ))}
               </tbody>
@@ -118,77 +140,103 @@ export default function AdminBlacklist() {
     );
   }
 
-  const totalPages = Math.ceil(sortedEntries.length / ROWS_PER_PAGE);
-  const paginatedEntries = sortedEntries.slice(page * ROWS_PER_PAGE, (page + 1) * ROWS_PER_PAGE);
-
   return (
     <div>
-      <div className="mb-xl">
-        <h3 className="page-header__title">IP Blacklist</h3>
-        <p className="page-header__desc">Manage explicitly blocked IP addresses.</p>
+      <div className="page-header">
+        <div>
+          <h3 className="page-header__title">{t('ip_blacklist', 'IP Blacklist & WAF Bans')}</h3>
+          <p className="page-header__desc">{t('ip_blacklist_desc', 'Manage blocked IP addresses and security enforcement.')}</p>
+        </div>
       </div>
-      
-      <div className="card mb-xl max-w-lg">
-        <h4 className="text-md fw-semibold m-0 mb-lg">Add IP to Blacklist</h4>
-        <form onSubmit={addEntry} className="flex gap-md flex-wrap items-start">
-          <div style={{ flex: '1 1 200px' }}>
-            <input 
-              type="text" 
-              className="input-field w-full" 
-              placeholder={t('ip_address_eg_placeholder', 'IP Address (e.g. 192.168.1.1)')} 
-              value={ipInput} 
-              onChange={(e) => setIpInput(e.target.value)} 
+
+      <div className="card p-xl mb-xl">
+        <h4 className="text-md fw-bold mb-md">{t('block_new_ip', 'Block IP Address')}</h4>
+        <form onSubmit={addEntry} className="flex gap-md items-end flex-wrap">
+          <div className="flex-1 min-w-[200px]">
+            <label className="input-label text-xs mb-xs">{t('ip_address', 'IP Address')}</label>
+            <input
+              type="text"
+              placeholder="e.g. 192.0.2.1"
+              value={ipInput}
+              onChange={e => setIpInput(e.target.value)}
+              className="input-field w-full"
+              required
             />
           </div>
-          <div style={{ flex: '2 1 250px' }}>
-            <input 
-              type="text" 
-              className="input-field w-full" 
-              placeholder={t('reason_optional_placeholder', 'Reason (optional)')} 
-              value={reasonInput} 
-              onChange={(e) => setReasonInput(e.target.value)} 
+          <div className="flex-2 min-w-[250px]">
+            <label className="input-label text-xs mb-xs">{t('reason', 'Reason')}</label>
+            <input
+              type="text"
+              placeholder="e.g. Malicious payload scan"
+              value={reasonInput}
+              onChange={e => setReasonInput(e.target.value)}
+              className="input-field w-full"
             />
           </div>
-          <button type="submit" className="btn btn-danger w-auto" style={{ whiteSpace: 'nowrap' }}>Block IP</button>
+          <button type="submit" className="btn btn-primary h-[38px] w-auto">
+            🚫 {t('block_ip', 'Block IP')}
+          </button>
         </form>
       </div>
 
-      <div className="search-row">
-        <input 
-          type="text" 
-          placeholder={t('search_blacklist_placeholder', 'Search blacklist...')} 
-          value={searchQuery} 
-          onChange={e => { setSearchQuery(e.target.value); setPage(0); }}
-          className="search-input"
-        />
-      </div>
+      <DataTableToolbar
+        searchQuery={searchQuery}
+        onSearchChange={setSearchQuery}
+        searchPlaceholder={t('search_blacklist_placeholder', 'Search blacklisted IPs...')}
+        pageSize={pageSize}
+        onPageSizeChange={setPageSize}
+        columns={columns}
+        isColumnVisible={isColumnVisible}
+        onToggleColumn={toggleColumn}
+      />
 
       <div className="card p-0">
         <div className="table-responsive">
           <table className="w-full">
             <thead>
               <tr className="border-b text-left">
-                <th className="th-col th-col--sortable" onClick={() => requestSort('ip')} aria-sort={getAriaSort('ip')}>IP Address{getSortIndicator('ip')}</th>
-                <th className="th-col th-col--sortable" onClick={() => requestSort('reason')} aria-sort={getAriaSort('reason')}>Reason{getSortIndicator('reason')}</th>
-                <th className="th-col th-col--sortable" onClick={() => requestSort('created_at')} aria-sort={getAriaSort('created_at')}>Blocked At{getSortIndicator('created_at')}</th>
-                <th className="th-col text-right">Actions</th>
+                {isColumnVisible('ip') && (
+                  <th className="th-col th-col--sortable" onClick={() => requestSort('ip')} aria-sort={getAriaSort('ip')}>
+                    {t('tbl_ip_address', 'IP Address')}{getSortIndicator('ip')}
+                  </th>
+                )}
+                {isColumnVisible('reason') && (
+                  <th className="th-col th-col--sortable" onClick={() => requestSort('reason')} aria-sort={getAriaSort('reason')}>
+                    {t('tbl_reason', 'Reason')}{getSortIndicator('reason')}
+                  </th>
+                )}
+                {isColumnVisible('created_at') && (
+                  <th className="th-col th-col--sortable" onClick={() => requestSort('created_at')} aria-sort={getAriaSort('created_at')}>
+                    {t('tbl_time', 'Time')}{getSortIndicator('created_at')}
+                  </th>
+                )}
+                <th className="th-col text-right">{t('actions', 'Actions')}</th>
               </tr>
             </thead>
             <tbody>
-              {paginatedEntries.length === 0 ? (
+              {paginatedItems.length === 0 ? (
                 <tr>
                   <td colSpan={4} className="td-empty">
-                    No IP addresses are currently blocked.
+                    {t('no_blacklist_entries', 'No blacklisted IP addresses.')}
                   </td>
                 </tr>
               ) : (
-                paginatedEntries.map(entry => (
+                paginatedItems.map((entry: BlacklistEntry) => (
                   <tr key={entry.ip} className="border-b">
-                    <td className="td-cell--mono fw-medium">{entry.ip}</td>
-                    <td className="td-cell">{entry.reason}</td>
-                    <td className="td-cell" style={{ whiteSpace: 'nowrap' }}>{formatDate(entry.created_at)}</td>
+                    {isColumnVisible('ip') && (
+                      <td className="td-cell--mono fw-bold">{entry.ip}</td>
+                    )}
+                    {isColumnVisible('reason') && (
+                      <td className="td-cell">{entry.reason}</td>
+                    )}
+                    {isColumnVisible('created_at') && (
+                      <td className="td-cell" style={{ whiteSpace: 'nowrap' }}>{formatDate(entry.created_at)}</td>
+                    )}
                     <td className="td-cell text-right">
-                      <button className="btn btn-secondary py-xs px-md text-xs w-auto" onClick={() => removeEntry(entry.ip)}>
+                      <button
+                        className="btn btn-secondary text-xs text-danger py-xs px-md"
+                        onClick={() => removeEntry(entry.ip)}
+                      >
                         Unblock
                       </button>
                     </td>
@@ -198,44 +246,13 @@ export default function AdminBlacklist() {
             </tbody>
           </table>
         </div>
-        {totalPages > 1 && (
-          <div className="pagination-row p-lg border-t">
-            <div className="pagination-count">
-              Showing {page * ROWS_PER_PAGE + 1} to {Math.min((page + 1) * ROWS_PER_PAGE, sortedEntries.length)} of {sortedEntries.length} IPs
-            </div>
-            <div className="pagination-controls">
-              <button 
-                className="btn btn-secondary py-xs px-md text-xs w-auto" 
-                onClick={() => setPage(0)}
-                disabled={page === 0}
-              >
-                First
-              </button>
-              <button 
-                className="btn btn-secondary py-xs px-md text-xs w-auto" 
-                onClick={() => setPage(p => Math.max(0, p - 1))}
-                disabled={page === 0}
-              >
-                Previous
-              </button>
-              <span className="pagination-page-label">Page {page + 1} of {totalPages}</span>
-              <button 
-                className="btn btn-secondary py-xs px-md text-xs w-auto" 
-                onClick={() => setPage(p => Math.min(totalPages - 1, p + 1))}
-                disabled={page >= totalPages - 1}
-              >
-                Next
-              </button>
-              <button 
-                className="btn btn-secondary py-xs px-md text-xs w-auto" 
-                onClick={() => setPage(totalPages - 1)}
-                disabled={page >= totalPages - 1}
-              >
-                Last
-              </button>
-            </div>
-          </div>
-        )}
+        <DataTablePagination
+          currentPage={currentPage}
+          totalPages={totalPages}
+          pageSize={pageSize}
+          totalItems={totalItems}
+          onPageChange={setCurrentPage}
+        />
       </div>
     </div>
   );

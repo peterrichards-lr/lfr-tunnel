@@ -1,7 +1,9 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useMemo } from 'react';
 import axios from 'axios';
 import { useSettings } from '../contexts/SettingsContext';
-import { useTableSort } from '../hooks/useTableSort';
+import { useDataTable, type ColumnDef } from '../hooks/useDataTable';
+import DataTableToolbar from '../components/DataTableToolbar';
+import DataTablePagination from '../components/DataTablePagination';
 import Skeleton from '../components/Skeleton';
 import { useI18n } from '../contexts/I18nContext';
 
@@ -19,8 +21,6 @@ interface AuditEvent {
 export default function AdminAuditLog() {
   const [events, setEvents] = useState<AuditEvent[]>([]);
   const [loading, setLoading] = useState(true);
-  const [page, setPage] = useState(0);
-  const ROWS_PER_PAGE = 15;
   const { formatDate } = useSettings();
   const { t } = useI18n();
 
@@ -39,10 +39,37 @@ export default function AdminAuditLog() {
     fetchEvents();
   }, []);
 
-  const { items: sortedEvents, requestSort, getSortIndicator, searchQuery, setSearchQuery, getAriaSort } = useTableSort(events, ['actor_id', 'action', 'target_type', 'target_id', 'ip_address', 'details']);
+  const columns: ColumnDef<AuditEvent>[] = useMemo(() => [
+    { key: 'created_at', label: t('tbl_time', 'Time'), sortable: true },
+    { key: 'actor_id', label: t('tbl_actor', 'Actor'), sortable: true },
+    { key: 'action', label: t('tbl_action', 'Action'), sortable: true },
+    { key: 'target_id', label: t('tbl_resource', 'Resource'), sortable: true },
+    { key: 'ip_address', label: t('tbl_ip_address', 'IP Address'), sortable: true },
+    { key: 'details', label: t('tbl_details', 'Details'), sortable: true }
+  ], [t]);
 
-  const totalPages = Math.ceil(sortedEvents.length / ROWS_PER_PAGE);
-  const paginatedEvents = sortedEvents.slice(page * ROWS_PER_PAGE, (page + 1) * ROWS_PER_PAGE);
+  const {
+    paginatedItems,
+    searchQuery,
+    setSearchQuery,
+    pageSize,
+    setPageSize,
+    currentPage,
+    setCurrentPage,
+    totalPages,
+    totalItems,
+    isColumnVisible,
+    toggleColumn,
+    requestSort,
+    getSortIndicator,
+    getAriaSort
+  } = useDataTable<AuditEvent>(
+    'admin_audit',
+    events,
+    ['actor_id', 'action', 'target_type', 'target_id', 'ip_address', 'details'],
+    columns,
+    10
+  );
 
   if (loading) {
     return (
@@ -97,8 +124,8 @@ export default function AdminAuditLog() {
     <div>
       <div className="page-header">
         <div>
-          <h3 className="page-header__title">System Audit Log</h3>
-          <p className="page-header__desc">Immutable record of administrative and security events.</p>
+          <h3 className="page-header__title">{t('system_audit_log', 'System Audit Log')}</h3>
+          <p className="page-header__desc">{t('audit_log_desc', 'Immutable record of administrative and security events.')}</p>
         </div>
         <a 
           href="/api/admin/audit/export" 
@@ -108,97 +135,104 @@ export default function AdminAuditLog() {
           📥 {t('export_csv', 'Export CSV')}
         </a>
       </div>
-      <div className="search-row">
-        <input 
-          type="text" 
-          placeholder={t('search_audit_logs_placeholder', 'Search audit logs...')} 
-          value={searchQuery} 
-          onChange={e => { setSearchQuery(e.target.value); setPage(0); }}
-          className="search-input"
-        />
-      </div>
+
+      <DataTableToolbar
+        searchQuery={searchQuery}
+        onSearchChange={setSearchQuery}
+        searchPlaceholder={t('search_audit_logs_placeholder', 'Search audit logs...')}
+        pageSize={pageSize}
+        onPageSizeChange={setPageSize}
+        columns={columns}
+        isColumnVisible={isColumnVisible}
+        onToggleColumn={toggleColumn}
+      />
 
       <div className="card p-0">
         <div className="table-responsive">
           <table className="w-full">
             <thead>
               <tr className="border-b text-left">
-                <th className="th-col th-col--sortable" onClick={() => requestSort('created_at')} aria-sort={getAriaSort('created_at')}>Time{getSortIndicator('created_at')}</th>
-                <th className="th-col th-col--sortable" onClick={() => requestSort('actor_id')} aria-sort={getAriaSort('actor_id')}>Actor{getSortIndicator('actor_id')}</th>
-                <th className="th-col th-col--sortable" onClick={() => requestSort('action')} aria-sort={getAriaSort('action')}>Action{getSortIndicator('action')}</th>
-                <th className="th-col th-col--sortable" onClick={() => requestSort('target_id')} aria-sort={getAriaSort('target_id')}>Resource{getSortIndicator('target_id')}</th>
-                <th className="th-col th-col--sortable" onClick={() => requestSort('ip_address')} aria-sort={getAriaSort('ip_address')}>IP Address{getSortIndicator('ip_address')}</th>
-                <th className="th-col th-col--sortable" onClick={() => requestSort('details')} aria-sort={getAriaSort('details')}>Details{getSortIndicator('details')}</th>
+                {isColumnVisible('created_at') && (
+                  <th className="th-col th-col--sortable" onClick={() => requestSort('created_at')} aria-sort={getAriaSort('created_at')}>
+                    {t('tbl_time', 'Time')}{getSortIndicator('created_at')}
+                  </th>
+                )}
+                {isColumnVisible('actor_id') && (
+                  <th className="th-col th-col--sortable" onClick={() => requestSort('actor_id')} aria-sort={getAriaSort('actor_id')}>
+                    {t('tbl_actor', 'Actor')}{getSortIndicator('actor_id')}
+                  </th>
+                )}
+                {isColumnVisible('action') && (
+                  <th className="th-col th-col--sortable" onClick={() => requestSort('action')} aria-sort={getAriaSort('action')}>
+                    {t('tbl_action', 'Action')}{getSortIndicator('action')}
+                  </th>
+                )}
+                {isColumnVisible('target_id') && (
+                  <th className="th-col th-col--sortable" onClick={() => requestSort('target_id')} aria-sort={getAriaSort('target_id')}>
+                    {t('tbl_resource', 'Resource')}{getSortIndicator('target_id')}
+                  </th>
+                )}
+                {isColumnVisible('ip_address') && (
+                  <th className="th-col th-col--sortable" onClick={() => requestSort('ip_address')} aria-sort={getAriaSort('ip_address')}>
+                    {t('tbl_ip_address', 'IP Address')}{getSortIndicator('ip_address')}
+                  </th>
+                )}
+                {isColumnVisible('details') && (
+                  <th className="th-col th-col--sortable" onClick={() => requestSort('details')} aria-sort={getAriaSort('details')}>
+                    {t('tbl_details', 'Details')}{getSortIndicator('details')}
+                  </th>
+                )}
               </tr>
             </thead>
             <tbody>
-              {paginatedEvents.length === 0 ? (
+              {paginatedItems.length === 0 ? (
                 <tr>
                   <td colSpan={6} className="td-empty">
-                    No audit logs available.
+                    {t('no_audit_logs', 'No audit logs available.')}
                   </td>
                 </tr>
               ) : (
-                paginatedEvents.map((e, idx) => (
+                paginatedItems.map((e: AuditEvent, idx: number) => (
                   <tr key={e.id || idx} className="border-b">
-                    <td className="td-cell" style={{ whiteSpace: 'nowrap' }}>{formatDate(e.created_at)}</td>
-                    <td className="td-cell">{e.actor_id}</td>
-                    <td className="td-cell"><span className="badge badge-info">{e.action}</span></td>
-                    <td className="td-cell">
-                      {e.target_type && e.target_id ? (
-                        <span className="text-sm">
-                          <strong className="opacity-60">{e.target_type}:</strong> {e.target_id}
-                        </span>
-                      ) : e.target_id || '-'}
-                    </td>
-                    <td className="td-cell--mono">{e.ip_address}</td>
-                    <td className="td-cell--mono text-2xs text-muted overflow-auto" style={{ maxWidth: '200px' }}>
-                      {e.details}
-                    </td>
+                    {isColumnVisible('created_at') && (
+                      <td className="td-cell" style={{ whiteSpace: 'nowrap' }}>{formatDate(e.created_at)}</td>
+                    )}
+                    {isColumnVisible('actor_id') && (
+                      <td className="td-cell">{e.actor_id}</td>
+                    )}
+                    {isColumnVisible('action') && (
+                      <td className="td-cell"><span className="badge badge-info">{e.action}</span></td>
+                    )}
+                    {isColumnVisible('target_id') && (
+                      <td className="td-cell">
+                        {e.target_type && e.target_id ? (
+                          <span className="text-sm">
+                            <strong className="opacity-60">{e.target_type}:</strong> {e.target_id}
+                          </span>
+                        ) : e.target_id || '-'}
+                      </td>
+                    )}
+                    {isColumnVisible('ip_address') && (
+                      <td className="td-cell--mono">{e.ip_address}</td>
+                    )}
+                    {isColumnVisible('details') && (
+                      <td className="td-cell--mono text-2xs text-muted overflow-auto" style={{ maxWidth: '200px' }}>
+                        {e.details}
+                      </td>
+                    )}
                   </tr>
                 ))
               )}
             </tbody>
           </table>
         </div>
-        {totalPages > 1 && (
-          <div className="pagination-row p-lg border-t">
-            <div className="pagination-count">
-              Showing {page * ROWS_PER_PAGE + 1} to {Math.min((page + 1) * ROWS_PER_PAGE, sortedEvents.length)} of {sortedEvents.length} logs
-            </div>
-            <div className="pagination-controls">
-              <button 
-                className="btn btn-secondary py-xs px-md text-xs w-auto" 
-                onClick={() => setPage(0)}
-                disabled={page === 0}
-              >
-                First
-              </button>
-              <button 
-                className="btn btn-secondary py-xs px-md text-xs w-auto" 
-                onClick={() => setPage(p => Math.max(0, p - 1))}
-                disabled={page === 0}
-              >
-                Previous
-              </button>
-              <span className="pagination-page-label">Page {page + 1} of {totalPages}</span>
-              <button 
-                className="btn btn-secondary py-xs px-md text-xs w-auto" 
-                onClick={() => setPage(p => Math.min(totalPages - 1, p + 1))}
-                disabled={page >= totalPages - 1}
-              >
-                Next
-              </button>
-              <button 
-                className="btn btn-secondary py-xs px-md text-xs w-auto" 
-                onClick={() => setPage(totalPages - 1)}
-                disabled={page >= totalPages - 1}
-              >
-                Last
-              </button>
-            </div>
-          </div>
-        )}
+        <DataTablePagination
+          currentPage={currentPage}
+          totalPages={totalPages}
+          pageSize={pageSize}
+          totalItems={totalItems}
+          onPageChange={setCurrentPage}
+        />
       </div>
     </div>
   );

@@ -208,11 +208,11 @@ The solution will consist of:
 | Feature | Description | Risk | LOE | Business Value | Priority |
 | :--- | :--- | :--- | :--- | :--- | :--- |
 | **1. LDM & Liferay Auto-Discovery** | Detect running LDM/Docker Tomcat instances to eliminate configuration flags. | Low | Small | High | **Done** |
-| **2. Traffic Web Inspector & Replayer** | Local embedded dashboard (`:4040`) for HTTP headers, payloads, and request replay. | Medium | Medium | High | **High** |
-| **3. Client-Initiated Access Control** | Gateway-level IP whitelisting or passcode screen on the public URL. | Low | Medium | High | **High** |
-| **4. Vanity Domain Routing (SNI)** | Route custom domains directly with on-the-fly gateway SSL provisioning. | High | Large | High | **Medium** |
-| **5. Latency & Bandwidth Simulation** | Throttle traffic and inject network latency from client CLI settings. | Medium | Small | Medium | **Medium** |
-| **6. Edge Node Health & Heartbeat** | Stateless edge nodes ping central server for global uptime visibility in Admin Portal UI. | Low | Medium | High | **Medium** |
+| **2. Traffic Web Inspector & Replayer** | Local embedded dashboard (`:4040`) for HTTP headers, payloads, and request replay. | Medium | Medium | High | **Done** |
+| **3. Client-Initiated Access Control** | Gateway-level IP whitelisting or passcode screen on the public URL. | Low | Medium | High | **Done** |
+| **4. Vanity Domain Routing (SNI)** | Route custom domains directly with on-the-fly gateway SSL provisioning. | High | Large | High | **Done** |
+| **5. Latency & Bandwidth Simulation** | Throttle traffic and inject network latency from client CLI settings. | Medium | Small | Medium | **Done** |
+| **6. Edge Node Health & Heartbeat** | Stateless edge nodes ping central server for global uptime visibility in Admin Portal UI. | Low | Medium | High | **Done** |
 
 
 ## SentinelOne False Positive Mitigation

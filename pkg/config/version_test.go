@@ -28,6 +28,10 @@ func TestVersionSync(t *testing.T) {
 		t.Fatalf("whats-new.json is empty")
 	}
 
+	if len(whatsNew) > 5 {
+		t.Errorf("whats-new.json contains %d releases; maximum allowed is 5 to prevent unbounded growth. Run 'python3 scripts/trim-whatsnew.py' to fix.", len(whatsNew))
+	}
+
 	if Version != whatsNew[0].Version {
 		t.Errorf("Version mismatch! config.Version = %q, but whats-new.json = %q. These must be kept in sync.", Version, whatsNew[0].Version)
 	}

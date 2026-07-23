@@ -173,12 +173,9 @@ export default function AdminBlacklist() {
               className="input-field w-full"
             />
           </div>
-          <div className="form-group m-0">
-            <label className="form-label mb-xs invisible" aria-hidden="true">&nbsp;</label>
-            <button type="submit" className="btn btn-primary py-sm px-xl text-sm w-auto flex items-center justify-center gap-xs">
-              🚫 {t('block_ip', 'Block IP')}
-            </button>
-          </div>
+          <button type="submit" className="btn btn-primary h-[45px] px-xl text-sm w-auto flex items-center justify-center gap-xs">
+            🚫 {t('block_ip', 'Block IP')}
+          </button>
         </form>
       </div>
 

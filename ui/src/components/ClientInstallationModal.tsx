@@ -32,45 +32,26 @@ export default function ClientInstallationModal({ isOpen, onClose, serverConfig 
   if (!isOpen) return null;
 
   return (
-    <div style={{
-      position: 'fixed', top: 0, left: 0, right: 0, bottom: 0,
-      backgroundColor: 'var(--modal-overlay)', zIndex: 9999,
-      display: 'flex', alignItems: 'center', justifyContent: 'center',
-      backdropFilter: 'blur(4px)', padding: '20px'
-    }} onClick={onClose}>
-      <div style={{
-        background: 'var(--bg-base)', borderRadius: '12px', width: '100%', maxWidth: '600px',
-        maxHeight: '90vh', display: 'flex', flexDirection: 'column',
-        boxShadow: '0 10px 25px rgba(0,0,0,0.5)', overflow: 'hidden', padding: '24px'
-      }} onClick={e => e.stopPropagation()}>
+    <div className="modal-backdrop" onClick={onClose}>
+      <div className="modal-card modal-card--md max-h-[90vh] flex flex-col p-xl" onClick={e => e.stopPropagation()}>
         
         {/* Header */}
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px' }}>
-          <h2 style={{ fontSize: '1.2rem', margin: 0 }}>{t('guide_title', 'Client Installation Guide')}</h2>
-          <button onClick={onClose} style={{ background: 'transparent', border: 'none', color: 'var(--text-muted)', cursor: 'pointer', fontSize: '1.2rem' }}>×</button>
+        <div className="modal-header mb-md">
+          <h2 className="modal-title text-md">{t('guide_title', 'Client Installation Guide')}</h2>
+          <button onClick={onClose} className="modal-close">×</button>
         </div>
         
-        <div style={{ fontSize: '0.9rem', color: 'var(--text-muted)', marginBottom: '20px' }}>
+        <div className="text-xs text-muted mb-xl">
           {t('guide_desc', 'Choose your Operating System below to see the recommended command-line installation or direct downloads.')}
         </div>
 
         {/* Tab Headers */}
-        <div style={{ display: 'flex', borderBottom: '1px solid var(--border)', marginBottom: '20px', gap: '16px' }}>
+        <div className="sub-tabs mb-xl">
           {(['macos', 'windows', 'linux'] as const).map(os => (
             <button 
               key={os}
               onClick={() => setActiveTab(os)}
-              style={{
-                background: 'none', border: 'none', padding: '8px 16px', cursor: 'pointer', fontWeight: 500,
-                color: activeTab === os ? 'var(--text-main)' : 'var(--text-muted)',
-                borderBottom: `2px solid ${activeTab === os ? 'var(--primary)' : 'transparent'}`,
-                transition: 'all 0.2s',
-                display: 'flex',
-                justifyContent: 'center',
-                alignItems: 'center',
-                boxSizing: 'border-box',
-                marginBottom: '-1px'
-              }}
+              className={`sub-tab ${activeTab === os ? 'sub-tab--active' : ''}`}
             >
               {t(`guide_tab_${os}`, os === 'macos' ? 'macOS' : os === 'windows' ? 'Windows' : 'Linux')}
             </button>
@@ -78,15 +59,15 @@ export default function ClientInstallationModal({ isOpen, onClose, serverConfig 
         </div>
 
         {/* Tab Contents */}
-        <div style={{ flexGrow: 1, overflowY: 'auto', paddingRight: '4px', marginBottom: '24px' }}>
+        <div className="flex-1 overflow-y-auto pr-xs mb-xl">
           {/* macOS */}
           {activeTab === 'macos' && (
             <div className="animation-fade-in">
-              <h4 style={{ fontSize: '14px', marginBottom: '8px' }}>🚀 {t('guide_macos_title', 'Apple Silicon (M1/M2/M3) & Intel Macs')}</h4>
+              <h4 className="text-xs fw-bold mb-xs">🚀 {t('guide_macos_title', 'Apple Silicon (M1/M2/M3) & Intel Macs')}</h4>
               
               {!serverConfig?.disable_brew && (
                 <>
-                  <div style={{ fontSize: '0.8rem', fontWeight: 'bold', marginTop: '10px', color: 'var(--text-main)' }}>
+                  <div className="text-2xs fw-bold mt-sm text-main">
                     {t('guide_macos_brew', 'Recommended via Homebrew:')}
                   </div>
                   <div className="code-box">
@@ -98,7 +79,7 @@ export default function ClientInstallationModal({ isOpen, onClose, serverConfig 
                 </>
               )}
 
-              <div style={{ fontSize: '0.8rem', fontWeight: 'bold', marginTop: '10px', color: !serverConfig?.disable_brew ? 'var(--text-muted)' : 'var(--text-main)' }}>
+              <div className={`text-2xs fw-bold mt-sm ${!serverConfig?.disable_brew ? 'text-muted' : 'text-main'}`}>
                 {t('guide_macos_direct', 'Direct Installation Script (Alternative):')}
               </div>
               <div className="code-box">
@@ -108,11 +89,11 @@ export default function ClientInstallationModal({ isOpen, onClose, serverConfig 
                 </button>
               </div>
               
-              <div style={{ marginTop: '16px', display: 'flex', gap: '12px' }}>
-                <a href="/static/downloads/lfr-tunnel-darwin-arm64" className="btn btn-outline" style={{ fontSize: '12px', padding: '6px 12px', width: 'auto', margin: 0 }}>
+              <div className="mt-lg flex gap-md flex-wrap">
+                <a href="/static/downloads/lfr-tunnel-darwin-arm64" className="btn btn-outline py-xs px-md text-xs w-auto m-0">
                   {t('guide_macos_dl_arm', 'Download arm64 (M1/M2/M3)')}
                 </a>
-                <a href="/static/downloads/lfr-tunnel-darwin-amd64" className="btn btn-outline" style={{ fontSize: '12px', padding: '6px 12px', width: 'auto', margin: 0 }}>
+                <a href="/static/downloads/lfr-tunnel-darwin-amd64" className="btn btn-outline py-xs px-md text-xs w-auto m-0">
                   {t('guide_macos_dl_intel', 'Download amd64 (Intel)')}
                 </a>
               </div>
@@ -122,11 +103,11 @@ export default function ClientInstallationModal({ isOpen, onClose, serverConfig 
           {/* Windows */}
           {activeTab === 'windows' && (
             <div className="animation-fade-in">
-              <h4 style={{ fontSize: '14px', marginBottom: '8px' }}>🚀 {t('guide_windows_title', 'Windows 10 / 11 (64-bit)')}</h4>
+              <h4 className="text-xs fw-bold mb-xs">🚀 {t('guide_windows_title', 'Windows 10 / 11 (64-bit)')}</h4>
               
               {!serverConfig?.disable_scoop && (
                 <>
-                  <div style={{ fontSize: '0.8rem', fontWeight: 'bold', marginTop: '10px', color: 'var(--text-main)' }}>
+                  <div className="text-2xs fw-bold mt-sm text-main">
                     {t('guide_windows_scoop', 'Recommended via Scoop:')}
                   </div>
                   <div className="code-box">
@@ -138,7 +119,7 @@ export default function ClientInstallationModal({ isOpen, onClose, serverConfig 
                 </>
               )}
 
-              <div style={{ fontSize: '0.8rem', fontWeight: 'bold', marginTop: '10px', color: !serverConfig?.disable_scoop ? 'var(--text-muted)' : 'var(--text-main)' }}>
+              <div className={`text-2xs fw-bold mt-sm ${!serverConfig?.disable_scoop ? 'text-muted' : 'text-main'}`}>
                 {t('guide_windows_direct', 'Direct Installation (PowerShell Script):')}
               </div>
               <div className="code-box">
@@ -148,8 +129,8 @@ export default function ClientInstallationModal({ isOpen, onClose, serverConfig 
                 </button>
               </div>
               
-              <div style={{ marginTop: '16px', display: 'flex', gap: '12px' }}>
-                <a href="/static/downloads/lfr-tunnel-windows-amd64.exe" className="btn btn-outline" style={{ fontSize: '12px', padding: '6px 12px', width: 'auto', margin: 0 }}>
+              <div className="mt-lg flex gap-md">
+                <a href="/static/downloads/lfr-tunnel-windows-amd64.exe" className="btn btn-outline py-xs px-md text-xs w-auto m-0">
                   {t('guide_windows_dl', 'Download amd64 (.exe)')}
                 </a>
               </div>
@@ -159,9 +140,9 @@ export default function ClientInstallationModal({ isOpen, onClose, serverConfig 
           {/* Linux */}
           {activeTab === 'linux' && (
             <div className="animation-fade-in">
-              <h4 style={{ fontSize: '14px', marginBottom: '8px' }}>🚀 {t('guide_linux_title', 'Linux (amd64 / arm64)')}</h4>
+              <h4 className="text-xs fw-bold mb-xs">🚀 {t('guide_linux_title', 'Linux (amd64 / arm64)')}</h4>
               
-              <div style={{ fontSize: '0.8rem', fontWeight: 'bold', marginTop: '10px', color: 'var(--text-main)' }}>
+              <div className="text-2xs fw-bold mt-sm text-main">
                 {t('guide_linux_direct', 'Direct Installation Script:')}
               </div>
               <div className="code-box">
@@ -171,11 +152,11 @@ export default function ClientInstallationModal({ isOpen, onClose, serverConfig 
                 </button>
               </div>
               
-              <div style={{ marginTop: '16px', display: 'flex', gap: '12px' }}>
-                <a href="/static/downloads/lfr-tunnel-linux-amd64" className="btn btn-outline" style={{ fontSize: '12px', padding: '6px 12px', width: 'auto', margin: 0 }}>
+              <div className="mt-lg flex gap-md flex-wrap">
+                <a href="/static/downloads/lfr-tunnel-linux-amd64" className="btn btn-outline py-xs px-md text-xs w-auto m-0">
                   {t('guide_linux_dl_amd', 'Download amd64')}
                 </a>
-                <a href="/static/downloads/lfr-tunnel-linux-arm64" className="btn btn-outline" style={{ fontSize: '12px', padding: '6px 12px', width: 'auto', margin: 0 }}>
+                <a href="/static/downloads/lfr-tunnel-linux-arm64" className="btn btn-outline py-xs px-md text-xs w-auto m-0">
                   {t('guide_linux_dl_arm', 'Download arm64')}
                 </a>
               </div>

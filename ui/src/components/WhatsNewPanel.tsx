@@ -48,28 +48,28 @@ export default function WhatsNewPanel() {
   };
 
   return (
-    <div className="card" style={{ marginBottom: '24px', animationDelay: '0.3s' }}>
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px' }}>
+    <div className="card mb-xl" style={{ animationDelay: '0.3s' }}>
+      <div className="flex justify-between items-center mb-lg">
         <div>
-          <h3 style={{ margin: 0, fontSize: '20px', fontWeight: 700 }}>{t('whats_new', "What's New")}</h3>
+          <h3 className="section-title m-0">{t('whats_new', "What's New")}</h3>
         </div>
       </div>
       
-      <div style={{ maxHeight: '400px', overflowY: 'auto', paddingRight: '8px' }}>
+      <div className="max-h-96 overflow-y-auto pr-sm">
         {releases.map((release, i) => (
-          <div key={i} style={{ marginBottom: i === releases.length - 1 ? '0' : '20px' }}>
-            <h4 style={{ margin: '0 0 8px 0', fontSize: '15px', color: 'var(--text-main)' }}>
+          <div key={i} className={i === releases.length - 1 ? '' : 'mb-lg'}>
+            <h4 className="m-0 mb-xs text-sm text-main">
               {release.version}{' '}
               {release.release_date && (
-                <span style={{ fontSize: '13px', color: 'var(--text-muted)', fontWeight: 'normal' }}>
+                <span className="text-xs text-muted fw-normal">
                   ({release.release_date})
                 </span>
               )}
             </h4>
-            <ul style={{ margin: 0, paddingLeft: '20px', color: 'var(--text-secondary)', fontSize: '14px', lineHeight: '1.6', wordBreak: 'break-word', overflowWrap: 'break-word' }}>
+            <ul className="m-0 pl-lg text-secondary text-sm leading-relaxed break-words">
               {release.features && release.features.length > 0 ? (
                 release.features.map((feature, j) => (
-                  <li key={j} style={{ marginBottom: '4px', minWidth: 0 }}>
+                  <li key={j} className="mb-2xs min-w-0">
                     {renderFeatureItem(feature)}
                   </li>
                 ))

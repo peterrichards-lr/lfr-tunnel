@@ -127,7 +127,7 @@ export default function AdminAnalytics() {
 
   if (loading) {
     return (
-      <div className="card" style={{ padding: '40px', textAlign: 'center' }}>
+      <div className="card text-center p-2xl">
         <p>{t('loading_analytics', 'Loading analytics...')}</p>
       </div>
     );
@@ -135,7 +135,7 @@ export default function AdminAnalytics() {
 
   if (!data) {
     return (
-      <div className="card" style={{ padding: '40px', textAlign: 'center' }}>
+      <div className="card text-center p-2xl">
         <p>{t('error_loading_analytics', 'Failed to load analytics data.')}</p>
       </div>
     );
@@ -143,12 +143,12 @@ export default function AdminAnalytics() {
 
   return (
     <div className="analytics-page">
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '24px' }} className="no-print">
-        <h2 style={{ fontSize: '24px', fontWeight: 'bold' }}>{t('system_analytics', 'System Analytics')}</h2>
-        <div style={{ display: 'flex', gap: '12px' }}>
+      <div className="page-header no-print">
+        <h2 className="page-header__title">{t('system_analytics', 'System Analytics')}</h2>
+        <div className="flex gap-md">
           <select 
-            className="input-field" 
-            style={{ width: 'auto' }}
+            className="input-field w-auto" 
+            style={{ height: '38px', boxSizing: 'border-box', padding: '0 12px' }}
             value={timeRange} 
             onChange={(e) => setTimeRange(e.target.value)}
           >
@@ -157,7 +157,7 @@ export default function AdminAnalytics() {
             <option value="30">Last 30 Days</option>
             <option value="0">All Time</option>
           </select>
-          <button className="btn btn-secondary" onClick={handlePrint} style={{ width: 'auto', whiteSpace: 'nowrap', display: 'inline-flex', alignItems: 'center', gap: '8px', height: '38px', boxSizing: 'border-box', padding: '0 16px' }}>
+          <button className="btn btn-secondary w-auto inline-flex items-center gap-sm" onClick={handlePrint} style={{ whiteSpace: 'nowrap', height: '38px', boxSizing: 'border-box', padding: '0 16px' }}>
             📄 {t('export_pdf', 'Export PDF')}
           </button>
         </div>
@@ -165,12 +165,12 @@ export default function AdminAnalytics() {
 
       {data.personal && (
         <div className="print-section">
-          <h3 style={{ fontSize: '18px', fontWeight: 'bold', marginBottom: '16px' }}>{t('personal_usage', 'Personal Usage')}</h3>
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(300px, 1fr))', gap: '24px', marginBottom: '32px' }}>
+          <h3 className="text-lg fw-bold mb-lg">{t('personal_usage', 'Personal Usage')}</h3>
+          <div className="auto-grid-lg mb-2xl">
             
             {data.personal.daily && data.personal.daily.length > 0 && (
-              <div className="card" style={{ padding: '24px' }}>
-                <h4 style={{ marginBottom: '16px', color: 'var(--text-muted)', fontSize: '14px' }}>{t('bandwidth_over_time', 'Bandwidth Over Time')}</h4>
+              <div className="card p-xl">
+                <h4 className="text-muted text-base mb-lg">{t('bandwidth_over_time', 'Bandwidth Over Time')}</h4>
                 <div style={{ height: '300px' }}>
                   <Line 
                     data={{
@@ -187,8 +187,8 @@ export default function AdminAnalytics() {
             )}
 
             {data.personal.tunnels && data.personal.tunnels.length > 0 && (
-              <div className="card" style={{ padding: '24px' }}>
-                <h4 style={{ marginBottom: '16px', color: 'var(--text-muted)', fontSize: '14px' }}>{t('bandwidth_by_tunnel', 'Bandwidth by Tunnel')}</h4>
+              <div className="card p-xl">
+                <h4 className="text-muted text-base mb-lg">{t('bandwidth_by_tunnel', 'Bandwidth by Tunnel')}</h4>
                 <div style={{ height: '300px' }}>
                   <Doughnut 
                     data={{
@@ -211,12 +211,12 @@ export default function AdminAnalytics() {
 
       {data.global && (
         <div className="print-section">
-          <h3 style={{ fontSize: '18px', fontWeight: 'bold', marginBottom: '16px' }}>{t('global_statistics', 'Global Statistics')}</h3>
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(300px, 1fr))', gap: '24px', marginBottom: '32px' }}>
+          <h3 className="text-lg fw-bold mb-lg">{t('global_statistics', 'Global Statistics')}</h3>
+          <div className="auto-grid-lg mb-2xl">
             
             {data.global.daily && data.global.daily.length > 0 && (
-              <div className="card" style={{ padding: '24px' }}>
-                <h4 style={{ marginBottom: '16px', color: 'var(--text-muted)', fontSize: '14px' }}>{t('global_bandwidth', 'Global Bandwidth')}</h4>
+              <div className="card p-xl">
+                <h4 className="text-muted text-base mb-lg">{t('global_bandwidth', 'Global Bandwidth')}</h4>
                 <div style={{ height: '300px' }}>
                   <Line 
                     data={{
@@ -233,8 +233,8 @@ export default function AdminAnalytics() {
             )}
 
             {data.global.top_users && data.global.top_users.length > 0 && (
-              <div className="card" style={{ padding: '24px' }}>
-                <h4 style={{ marginBottom: '16px', color: 'var(--text-muted)', fontSize: '14px' }}>{t('top_users_bandwidth', 'Top Users by Bandwidth')}</h4>
+              <div className="card p-xl">
+                <h4 className="text-muted text-base mb-lg">{t('top_users_bandwidth', 'Top Users by Bandwidth')}</h4>
                 <div style={{ height: '300px' }}>
                   <Bar 
                     data={{
@@ -253,8 +253,8 @@ export default function AdminAnalytics() {
             )}
 
             {data.global.top_tunnels && data.global.top_tunnels.length > 0 && (
-              <div className="card" style={{ padding: '24px' }}>
-                <h4 style={{ marginBottom: '16px', color: 'var(--text-muted)', fontSize: '14px' }}>{t('top_tunnels_bandwidth', 'Top Tunnels by Bandwidth')}</h4>
+              <div className="card p-xl">
+                <h4 className="text-muted text-base mb-lg">{t('top_tunnels_bandwidth', 'Top Tunnels by Bandwidth')}</h4>
                 <div style={{ height: '300px' }}>
                   <Doughnut 
                     data={{
@@ -273,8 +273,8 @@ export default function AdminAnalytics() {
             )}
 
             {data.global.portal_stats && data.global.portal_stats.length > 0 && (
-              <div className="card" style={{ padding: '24px' }}>
-                <h4 style={{ marginBottom: '16px', color: 'var(--text-muted)', fontSize: '14px' }}>Portal Usage</h4>
+              <div className="card p-xl">
+                <h4 className="text-muted text-base mb-lg">Portal Usage</h4>
                 <div style={{ height: '300px' }}>
                   <Doughnut 
                     data={{
@@ -299,8 +299,8 @@ export default function AdminAnalytics() {
             )}
 
             {data.global.node_distribution && Object.keys(data.global.node_distribution).length > 0 && (
-              <div className="card" style={{ padding: '24px' }}>
-                <h4 style={{ marginBottom: '16px', color: 'var(--text-muted)', fontSize: '14px' }}>Tunnel Distribution (Active Nodes)</h4>
+              <div className="card p-xl">
+                <h4 className="text-muted text-base mb-lg">Tunnel Distribution (Active Nodes)</h4>
                 <div style={{ height: '300px' }}>
                   <Pie 
                     data={{
@@ -324,36 +324,36 @@ export default function AdminAnalytics() {
             )}
           </div>
 
-          <div className="card" style={{ overflow: 'hidden' }}>
-            <div style={{ padding: '16px 20px', borderBottom: '1px solid var(--border)' }}>
-              <h4 style={{ margin: 0, fontSize: '15px', fontWeight: '600' }}>{t('client_versions', 'Client Versions')}</h4>
+          <div className="card overflow-hidden">
+            <div className="p-md px-lg border-b">
+              <h4 className="m-0 text-base fw-semibold">{t('client_versions', 'Client Versions')}</h4>
             </div>
-            <div style={{ overflowX: 'auto' }}>
-              <table className="table" style={{ width: '100%', borderCollapse: 'collapse' }}>
+            <div className="table-responsive">
+              <table className="w-full">
                 <thead>
-                  <tr>
-                    <th style={{ textAlign: 'left', padding: '12px 20px', color: 'var(--text-muted)', fontWeight: '500', fontSize: '13px', borderBottom: '1px solid var(--border)', cursor: 'pointer' }} onClick={() => requestSort('version')} aria-sort={getAriaSort('version')}>Version{getSortIndicator('version')}</th>
-                    <th style={{ textAlign: 'left', padding: '12px 20px', color: 'var(--text-muted)', fontWeight: '500', fontSize: '13px', borderBottom: '1px solid var(--border)', cursor: 'pointer' }} onClick={() => requestSort('os')} aria-sort={getAriaSort('os')}>OS Platform{getSortIndicator('os')}</th>
-                    <th style={{ textAlign: 'left', padding: '12px 20px', color: 'var(--text-muted)', fontWeight: '500', fontSize: '13px', borderBottom: '1px solid var(--border)', cursor: 'pointer' }} onClick={() => requestSort('count')} aria-sort={getAriaSort('count')}>Active Tunnels{getSortIndicator('count')}</th>
+                  <tr className="border-b text-left">
+                    <th className="th-col th-col--sortable" onClick={() => requestSort('version')} aria-sort={getAriaSort('version')}>Version{getSortIndicator('version')}</th>
+                    <th className="th-col th-col--sortable" onClick={() => requestSort('os')} aria-sort={getAriaSort('os')}>OS Platform{getSortIndicator('os')}</th>
+                    <th className="th-col th-col--sortable" onClick={() => requestSort('count')} aria-sort={getAriaSort('count')}>Active Tunnels{getSortIndicator('count')}</th>
                   </tr>
                 </thead>
                 <tbody>
                   {clientStats.length === 0 ? (
                     <tr>
-                      <td colSpan={3} style={{ textAlign: 'center', padding: '30px', color: 'var(--text-muted)' }}>
+                      <td colSpan={3} className="td-empty">
                         {t('no_client_stats', 'No client statistics available')}
                       </td>
                     </tr>
                   ) : (
                     sortedClientStats.map((stat, idx) => (
-                      <tr key={idx} style={{ borderBottom: '1px solid var(--border)' }}>
-                        <td style={{ padding: '12px 20px' }}>
+                      <tr key={idx} className="border-b">
+                        <td className="td-cell">
                           <span style={{ background: 'var(--primary)', color: 'white', padding: '2px 8px', borderRadius: '4px', fontSize: '12px', fontWeight: '500' }}>
                             {stat.version || "Unknown"}
                           </span>
                         </td>
-                        <td style={{ padding: '12px 20px' }}>{stat.os || "Unknown"}</td>
-                        <td style={{ padding: '12px 20px', fontWeight: 'bold' }}>{stat.count || 0}</td>
+                        <td className="td-cell">{stat.os || "Unknown"}</td>
+                        <td className="td-cell fw-bold">{stat.count || 0}</td>
                       </tr>
                     ))
                   )}

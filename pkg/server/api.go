@@ -125,6 +125,8 @@ func (s *Server) handleUpdateMe(w http.ResponseWriter, r *http.Request) {
 		ThemePreference    *string `json:"theme_preference"`
 		NotificationPrefs  *string `json:"notification_prefs"`
 		LanguagePreference *string `json:"language_preference"`
+		PreferredDomain    *string `json:"preferred_domain"`
+		SubdomainStyle     *string `json:"subdomain_style"`
 	}
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 		http.Error(w, `{"error":"Invalid request payload"}`, http.StatusBadRequest)
@@ -151,6 +153,29 @@ func (s *Server) handleUpdateMe(w http.ResponseWriter, r *http.Request) {
 	}
 	if req.LanguagePreference != nil {
 		user.LanguagePreference = strings.TrimSpace(*req.LanguagePreference)
+	}
+	if req.PreferredDomain != nil {
+		prefDom := strings.TrimSpace(*req.PreferredDomain)
+		if prefDom == "" {
+			user.PreferredDomain = ""
+		} else {
+			valid := false
+			for _, d := range s.cfg.Domains {
+				if d == prefDom {
+					valid = true
+					break
+				}
+			}
+			if valid {
+				user.PreferredDomain = prefDom
+			}
+		}
+	}
+	if req.SubdomainStyle != nil {
+		style := strings.TrimSpace(*req.SubdomainStyle)
+		if style == "liferay" || style == "words" || style == "heroku" || style == "random" {
+			user.SubdomainStyle = style
+		}
 	}
 
 	if err := s.db.UpdateUser(user); err != nil {

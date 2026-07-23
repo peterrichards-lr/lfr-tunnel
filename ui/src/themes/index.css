@@ -1,0 +1,11 @@
+/*
+ * lfr-tunnel Portal — Theme Loader
+ * Import all themes here. Add new themes below to make them available.
+ * The active theme is controlled via the `data-theme` attribute on <html>
+ * managed by SettingsContext.tsx.
+ *
+ * Available values: "dark" | "light" | "liferay"
+ */
+@import './dark.css';
+@import './light.css';
+@import './liferay.css';

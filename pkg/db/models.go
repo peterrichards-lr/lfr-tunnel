@@ -76,6 +76,7 @@ type User struct {
 	TOTPEnabled        bool       `json:"totp_enabled"`
 	PolicyConsentAt    *time.Time `json:"policy_consent_at,omitempty"`
 	LanguagePreference string     `json:"language_preference"`
+	SubdomainStyle     string     `json:"subdomain_style"`
 	RateLimit          int        `json:"rate_limit"`
 	MaxReservations    *int       `json:"max_reservations,omitempty"`
 	MaxTunnels         *int       `json:"max_tunnels,omitempty"`

@@ -29,16 +29,16 @@ export default function Sidebar({ user, isOpen, onClose }: SidebarProps) {
     <>
       <div className={`sidebar-backdrop ${isOpen ? 'visible' : ''}`} onClick={onClose}></div>
       <div className={`sidebar ${isOpen ? 'active' : ''}`}>
-        <div className="sidebar-brand" style={{ display: 'flex', alignItems: 'center', gap: 'var(--spacing-sm)', padding: 'var(--spacing-md) var(--spacing-lg)' }}>
-          <img src="/static/logo.svg" alt="Liferay Tunnel" width="28" height="28" style={{ flexShrink: 0 }} />
-          <span style={{ fontWeight: 'bold', fontSize: '16px', color: 'var(--text-color)', letterSpacing: '0.5px' }}>Liferay Tunnel</span>
+        <div className="sidebar-brand flex items-center gap-sm px-lg py-md">
+          <img src="/static/logo.svg" alt="Liferay Tunnel" width="28" height="28" className="shrink-0" />
+          <span className="fw-bold text-base text-main tracking-wide">Liferay Tunnel</span>
         </div>
         
         <div className="sidebar-menu">
           <div className="sidebar-section-header">
             <span className="sidebar-label">{t('sidebar_personal', 'Personal')}</span>
           </div>
-          <div className="sidebar-section-content" style={{ display: 'block' }}>
+          <div className="sidebar-section-content block">
             <NavLink to="/dashboard" onClick={onClose} end className={({ isActive }) => `nav-item ${isActive ? 'active' : ''}`}>
               {t('sidebar_overview', 'Overview')}
             </NavLink>
@@ -49,10 +49,10 @@ export default function Sidebar({ user, isOpen, onClose }: SidebarProps) {
 
           {(user?.role === 'admin' || user?.role === 'owner') && (
             <>
-              <div className="sidebar-section-header" style={{ marginTop: 'var(--spacing-xl)' }}>
+              <div className="sidebar-section-header mt-xl">
                 <span className="sidebar-label">{t('admin_zone', 'Admin Zone')}</span>
               </div>
-              <div className="sidebar-section-content" style={{ display: 'block' }}>
+              <div className="sidebar-section-content block">
                 <NavLink to="/admin/subdomains" onClick={onClose} className={({ isActive }) => `nav-item ${isActive ? 'active' : ''}`}>
                   {t('sidebar_reservations', 'Subdomains')}
                 </NavLink>
@@ -62,15 +62,7 @@ export default function Sidebar({ user, isOpen, onClose }: SidebarProps) {
                 <NavLink to="/admin/users" onClick={onClose} className={({ isActive }) => `nav-item ${isActive ? 'active' : ''}`} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                   <span>{t('sidebar_users', 'Users')}</span>
                   {pendingCount > 0 && (
-                    <span className="badge" style={{ 
-                      background: 'var(--danger, #ef4444)', 
-                      color: 'white', 
-                      borderRadius: 'var(--spacing-xs)', 
-                      padding: '2px var(--spacing-sm)', 
-                      fontSize: '11px', 
-                      fontWeight: 'bold',
-                      lineHeight: '1'
-                    }}>
+                    <span className="badge badge-danger text-2xs py-2xs px-xs">
                       {pendingCount}
                     </span>
                   )}
@@ -104,29 +96,32 @@ export default function Sidebar({ user, isOpen, onClose }: SidebarProps) {
           )}
         </div>
         
-        <div className="sidebar-footer" style={{ padding: 'var(--spacing-lg)' }}>
-          <div style={{ paddingBottom: 'var(--spacing-lg)', marginBottom: 'var(--spacing-lg)', borderBottom: '1px solid var(--border)' }}>
-            
-
-            <div style={{ display: 'flex', gap: 'var(--spacing-md)', fontSize: '12px' }}>
+        <div className="sidebar-footer p-lg">
+          <div className="pb-lg mb-lg border-b">
+            <div className="flex gap-md text-xs">
               <a href="/privacy" target="_blank" className="sidebar-footer-link">{t('privacy_policy', 'Privacy Policy')}</a>
               <a href="/cookies" target="_blank" className="sidebar-footer-link">{t('cookie_policy', 'Cookies')}</a>
             </div>
           </div>
 
-          <div style={{ fontSize: '12px', color: 'var(--text-muted)', marginBottom: 'var(--spacing-sm)' }}>
+          <div className="text-xs text-muted mb-sm">
             {t('logged_in_as', 'Logged in as')} <strong>{user?.email}</strong>
           </div>
           <button 
-            className="btn btn-secondary" 
-            style={{ width: '100%', padding: 'var(--spacing-sm)' }}
+            className="btn btn-secondary w-full p-sm" 
             onClick={async () => {
               await fetch('/api/auth/logout', { method: 'POST' });
-              window.location.href = '/portal-v2/login';
+              window.location.href = '/portalv2/login';
             }}
           >
             {t('sign_out', 'Sign Out')}
           </button>
+          <a
+            href="/portal"
+            className="sidebar-footer-link block text-center text-xs mt-sm"
+          >
+            ← {t('use_classic_dashboard', 'Use Classic Dashboard')}
+          </a>
         </div>
       </div>
     </>

@@ -58,7 +58,7 @@ export default function AdminUsers() {
   const [serverConfig, setServerConfig] = useState<any>(null);
   const [activeTab, setActiveTab] = useState<'users' | 'registrations'>('users');
   const [selectedUserPATs, setSelectedUserPATs] = useState<any[]>([]);
-  const [domains, setDomains] = useState<string[]>([]);
+  const [_domains, _setDomains] = useState<string[]>([]);
 
   useEffect(() => {
     if (!selectedUser?.email) {
@@ -110,7 +110,6 @@ export default function AdminUsers() {
   const [modalRateLimit, setModalRateLimit] = useState(0);
   const [modalMaxReservations, setModalMaxReservations] = useState(3);
   const [modalMaxTunnels, setModalMaxTunnels] = useState(3);
-  const [modalPreferredDomain, setModalPreferredDomain] = useState('');
   const [updatingLimits, setUpdatingLimits] = useState(false);
 
   useEffect(() => {
@@ -118,7 +117,6 @@ export default function AdminUsers() {
       setModalRateLimit(selectedUser.rate_limit || 0);
       setModalMaxReservations(selectedUser.max_reservations !== undefined && selectedUser.max_reservations !== null ? selectedUser.max_reservations : 3);
       setModalMaxTunnels(selectedUser.max_tunnels !== undefined && selectedUser.max_tunnels !== null ? selectedUser.max_tunnels : 3);
-      setModalPreferredDomain(selectedUser.preferred_domain || '');
     }
   }, [selectedUser]);
 
@@ -129,23 +127,20 @@ export default function AdminUsers() {
       await axios.patch(`/api/admin/users/${encodeURIComponent(selectedUser.email)}`, {
         rate_limit: Number(modalRateLimit),
         max_reservations: Number(modalMaxReservations),
-        max_tunnels: Number(modalMaxTunnels),
-        preferred_domain: modalPreferredDomain
+        max_tunnels: Number(modalMaxTunnels)
       });
       showToast('User settings updated successfully', 'success');
       setUsers(prev => prev.map(u => u.email === selectedUser.email ? { 
         ...u, 
         rate_limit: Number(modalRateLimit),
         max_reservations: Number(modalMaxReservations),
-        max_tunnels: Number(modalMaxTunnels),
-        preferred_domain: modalPreferredDomain
+        max_tunnels: Number(modalMaxTunnels)
       } : u));
       setSelectedUser(prev => prev ? { 
         ...prev, 
         rate_limit: Number(modalRateLimit),
         max_reservations: Number(modalMaxReservations),
-        max_tunnels: Number(modalMaxTunnels),
-        preferred_domain: modalPreferredDomain
+        max_tunnels: Number(modalMaxTunnels)
       } : null);
       fetchUsers();
     } catch (e: any) {
@@ -187,7 +182,7 @@ export default function AdminUsers() {
       ]);
       setUsers(res.data);
       if (confRes.data) setServerConfig(confRes.data);
-      if (domRes.data) setDomains(domRes.data);
+      if (domRes.data) _setDomains(domRes.data);
     } catch (e) {
       console.error(e);
     } finally {
@@ -297,42 +292,48 @@ export default function AdminUsers() {
   });
 
   const { items: sortedUsers, requestSort, getSortIndicator, searchQuery, setSearchQuery, getAriaSort } = useTableSort(filteredUsers, ['email', 'first_name', 'last_name', 'role', 'status', 'auth_method', 'last_login_at']);
+
+  const USERS_PER_PAGE = 20;
+  const [usersPage, setUsersPage] = useState(0);
+  const totalUserPages = Math.ceil(sortedUsers.length / USERS_PER_PAGE);
+  const paginatedUsers = sortedUsers.slice(usersPage * USERS_PER_PAGE, (usersPage + 1) * USERS_PER_PAGE);
+
   if (loading) {
     return (
       <div style={{ animation: 'fadeInUp 0.6s ease-out' }}>
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 'var(--spacing-xl)' }}>
+        <div className="page-header">
           <Skeleton width={180} height={28} />
           <Skeleton width={120} height={40} />
         </div>
         
-        <div className="card" style={{ padding: 'var(--spacing-xl)', marginBottom: 'var(--spacing-xl)' }}>
-          <div style={{ display: 'flex', gap: 'var(--spacing-md)', alignItems: 'center' }}>
+        <div className="card p-xl mb-xl">
+          <div className="flex gap-md items-center">
             <Skeleton width="100%" height={40} style={{ maxWidth: '300px' }} />
           </div>
         </div>
 
-        <div className="card" style={{ padding: 'var(--spacing-xl)' }}>
+        <div className="card p-xl">
           <div className="table-responsive">
-            <table style={{ width: '100%', borderCollapse: 'collapse' }}>
+            <table className="w-full">
               <thead>
-                <tr style={{ borderBottom: '1px solid var(--border)', textAlign: 'left' }}>
-                  <th style={{ padding: 'var(--spacing-md) var(--spacing-lg)' }}><Skeleton width={80} /></th>
-                  <th style={{ padding: 'var(--spacing-md) var(--spacing-lg)' }}><Skeleton width={100} /></th>
-                  <th style={{ padding: 'var(--spacing-md) var(--spacing-lg)' }}><Skeleton width={60} /></th>
-                  <th style={{ padding: 'var(--spacing-md) var(--spacing-lg)' }}><Skeleton width={80} /></th>
-                  <th style={{ padding: 'var(--spacing-md) var(--spacing-lg)' }}><Skeleton width={120} /></th>
-                  <th style={{ padding: 'var(--spacing-md) var(--spacing-lg)' }}><Skeleton width={80} /></th>
+                <tr className="border-b text-left">
+                  <th className="th-col"><Skeleton width={80} /></th>
+                  <th className="th-col"><Skeleton width={100} /></th>
+                  <th className="th-col"><Skeleton width={60} /></th>
+                  <th className="th-col"><Skeleton width={80} /></th>
+                  <th className="th-col"><Skeleton width={120} /></th>
+                  <th className="th-col"><Skeleton width={80} /></th>
                 </tr>
               </thead>
               <tbody>
                 {[...Array(5)].map((_, i) => (
-                  <tr key={i} style={{ borderBottom: '1px solid rgba(255,255,255,0.05)' }}>
-                    <td style={{ padding: 'var(--spacing-lg)' }}><Skeleton width="90%" height={16} /></td>
-                    <td style={{ padding: 'var(--spacing-lg)' }}><Skeleton width="85%" height={16} /></td>
-                    <td style={{ padding: 'var(--spacing-lg)' }}><Skeleton width="60%" height={16} /></td>
-                    <td style={{ padding: 'var(--spacing-lg)' }}><Skeleton width="70%" height={16} /></td>
-                    <td style={{ padding: 'var(--spacing-lg)' }}><Skeleton width="80%" height={16} /></td>
-                    <td style={{ padding: 'var(--spacing-lg)' }}><Skeleton width="50%" height={16} /></td>
+                  <tr key={i} className="border-b">
+                    <td className="td-cell"><Skeleton width="90%" height={16} /></td>
+                    <td className="td-cell"><Skeleton width="85%" height={16} /></td>
+                    <td className="td-cell"><Skeleton width="60%" height={16} /></td>
+                    <td className="td-cell"><Skeleton width="70%" height={16} /></td>
+                    <td className="td-cell"><Skeleton width="80%" height={16} /></td>
+                    <td className="td-cell"><Skeleton width="50%" height={16} /></td>
                   </tr>
                 ))}
               </tbody>
@@ -346,116 +347,82 @@ export default function AdminUsers() {
 
   return (
     <div>
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 'var(--spacing-xl)' }}>
-        <h3>{t('user_management', 'User Management')}</h3>
+      <div className="page-header">
+        <h3 className="page-header__title">{t('user_management', 'User Management')}</h3>
         <button className="btn btn-primary" onClick={() => setShowInviteModal(true)}>+ {t('invite_user', 'Invite User')}</button>
       </div>
 
       {/* Sub-tabs for All Users vs Pending Registrations */}
-      <div style={{ display: 'flex', gap: 'var(--spacing-md)', borderBottom: '1px solid var(--border)', marginBottom: 'var(--spacing-lg)', paddingBottom: 'var(--spacing-sm)' }}>
+      <div className="sub-tabs">
         <button 
-          onClick={() => setActiveTab('users')} 
-          style={{
-            background: 'none',
-            border: 'none',
-            color: activeTab === 'users' ? 'var(--primary)' : 'var(--text-muted)',
-            fontWeight: activeTab === 'users' ? '600' : '400',
-            fontSize: '15px',
-            cursor: 'pointer',
-            padding: 'var(--spacing-xs) var(--spacing-md)',
-            borderBottom: activeTab === 'users' ? '2px solid var(--primary)' : '2px solid transparent',
-            marginBottom: '-10px',
-            transition: '0.2s'
-          }}
+          onClick={() => { setActiveTab('users'); setUsersPage(0); }} 
+          className={`sub-tab ${activeTab === 'users' ? 'sub-tab--active' : ''}`}
         >
           {t('users_tab_all', 'All Users')}
         </button>
         <button 
-          onClick={() => setActiveTab('registrations')} 
-          style={{
-            background: 'none',
-            border: 'none',
-            color: activeTab === 'registrations' ? 'var(--primary)' : 'var(--text-muted)',
-            fontWeight: activeTab === 'registrations' ? '600' : '400',
-            fontSize: '15px',
-            cursor: 'pointer',
-            padding: 'var(--spacing-xs) var(--spacing-md)',
-            borderBottom: activeTab === 'registrations' ? '2px solid var(--primary)' : '2px solid transparent',
-            marginBottom: '-10px',
-            display: 'flex',
-            alignItems: 'center',
-            gap: '8px',
-            transition: '0.2s'
-          }}
+          onClick={() => { setActiveTab('registrations'); setUsersPage(0); }} 
+          className={`sub-tab ${activeTab === 'registrations' ? 'sub-tab--active' : ''} flex items-center gap-xs`}
         >
           <span>{t('users_tab_registrations', 'Pending Registrations')}</span>
           {pendingCount > 0 && (
-            <span className="badge" style={{ 
-              background: 'var(--danger, #ef4444)', 
-              color: 'white', 
-              borderRadius: 'var(--spacing-xs)', 
-              padding: '2px var(--spacing-sm)', 
-              fontSize: '11px', 
-              fontWeight: 'bold',
-              lineHeight: '1'
-            }}>
+            <span className="badge badge-danger text-2xs fw-bold px-xs py-0">
               {pendingCount}
             </span>
           )}
         </button>
       </div>
-      <div style={{ marginBottom: 'var(--spacing-lg)' }}>
+      <div className="search-row">
         <input 
           type="text" 
           placeholder={t('search_users_placeholder', 'Search users...')} 
           value={searchQuery} 
-          onChange={e => setSearchQuery(e.target.value)}
-          style={{ padding: 'var(--spacing-sm) var(--spacing-md)', width: '100%', maxWidth: '300px', background: 'var(--input-bg)', color: 'var(--text-main)', border: '1px solid var(--border)', borderRadius: '6px' }}
+          onChange={e => { setSearchQuery(e.target.value); setUsersPage(0); }}
+          className="search-input"
         />
       </div>
 
-      <div className="card" style={{ padding: '0' }}>
+      <div className="card p-0">
         <div className="table-responsive">
-          <table>
+          <table className="w-full">
             <thead>
-              <tr>
-                <th style={{ cursor: 'pointer' }} onClick={() => requestSort('first_name')} aria-sort={getAriaSort('first_name')}>User{getSortIndicator('first_name')}</th>
-                <th style={{ cursor: 'pointer' }} onClick={() => requestSort('role')} aria-sort={getAriaSort('role')}>Role{getSortIndicator('role')}</th>
-                <th style={{ cursor: 'pointer' }} onClick={() => requestSort('status')} aria-sort={getAriaSort('status')}>Status{getSortIndicator('status')}</th>
-                <th style={{ cursor: 'pointer' }} onClick={() => requestSort('auth_method')} aria-sort={getAriaSort('auth_method')}>Auth Method{getSortIndicator('auth_method')}</th>
-                <th>Quotas</th>
-                <th style={{ cursor: 'pointer' }} onClick={() => requestSort('last_login_at')} aria-sort={getAriaSort('last_login_at')}>Last Seen{getSortIndicator('last_login_at')}</th>
-                <th>Actions</th>
+              <tr className="border-b text-left">
+                <th className="th-col th-col--sortable" onClick={() => requestSort('first_name')} aria-sort={getAriaSort('first_name')}>User{getSortIndicator('first_name')}</th>
+                <th className="th-col th-col--sortable" onClick={() => requestSort('role')} aria-sort={getAriaSort('role')}>Role{getSortIndicator('role')}</th>
+                <th className="th-col th-col--sortable" onClick={() => requestSort('status')} aria-sort={getAriaSort('status')}>Status{getSortIndicator('status')}</th>
+                <th className="th-col th-col--sortable" onClick={() => requestSort('auth_method')} aria-sort={getAriaSort('auth_method')}>Auth Method{getSortIndicator('auth_method')}</th>
+                <th className="th-col">Quotas</th>
+                <th className="th-col th-col--sortable" onClick={() => requestSort('last_login_at')} aria-sort={getAriaSort('last_login_at')}>Last Seen{getSortIndicator('last_login_at')}</th>
+                <th className="th-col">Actions</th>
               </tr>
             </thead>
             <tbody>
               {sortedUsers.length === 0 ? (
                 <tr>
-                  <td colSpan={7} style={{ textAlign: 'center', padding: 'var(--spacing-xl)', color: 'var(--text-muted)' }}>
+                  <td colSpan={7} className="td-empty">
                     {activeTab === 'users' ? t('no_users_found', 'No users found.') : t('no_pending_registrations', 'No pending registrations.')}
                   </td>
                 </tr>
               ) : (
-                sortedUsers.map((u) => {
+                paginatedUsers.map((u) => {
                   const isSelf = currentUser && u.email === currentUser.email;
                   return (
-                    <tr key={u.email} style={isSelf ? { opacity: 0.6 } : {}}>
-                      <td>
-                        <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                    <tr key={u.email} className={`border-b ${isSelf ? 'opacity-60' : ''}`}>
+                      <td className="td-cell">
+                        <div className="flex items-center gap-xs">
                           {u.portal_active ? (
-                            <div style={{ width: '8px', height: '8px', borderRadius: '50%', background: 'var(--success)', boxShadow: '0 0 8px var(--success)', flexShrink: 0 }} title="Online" />
+                            <div className="status-dot status-dot--online" title="Online" />
                           ) : (
-                            <div style={{ width: '8px', height: '8px', borderRadius: '50%', background: 'var(--status-inactive)', flexShrink: 0 }} title="Offline" />
+                            <div className="status-dot status-dot--offline" title="Offline" />
                           )}
                           <div>
                             <div 
                               onClick={() => setSelectedUser(u)}
-                              style={{ fontWeight: 500, cursor: 'pointer', transition: 'color 0.2s' }}
-                              className="user-name-link"
+                              className="user-name-link fw-medium cursor-pointer"
                             >
                               {u.first_name || u.last_name ? `${u.first_name} ${u.last_name}` : 'Unnamed User'}
                             </div>
-                            <div style={{ fontSize: '12px', color: 'var(--text-muted)' }}>
+                            <div className="text-xs text-muted">
                               <a 
                                 href="#" 
                                 onClick={(e) => { e.preventDefault(); setSelectedUser(u); }}
@@ -465,9 +432,8 @@ export default function AdminUsers() {
                               </a>
                               {(u.active_tunnels?.length || 0) > 0 && (
                                 <span 
-                                  className="badge tunnels" 
+                                  className="badge tunnels badge-node cursor-pointer ml-xs px-xs py-0 text-2xs" 
                                   onClick={() => setSelectedUser(u)}
-                                  style={{ cursor: 'pointer', padding: '2px var(--spacing-sm)', fontSize: '11px', marginLeft: 'var(--spacing-sm)' }}
                                   title="Click to view tunnels"
                                 >
                                   🔌 {u.active_tunnels!.length} Tunnel{(u.active_tunnels!.length) > 1 ? 's' : ''}
@@ -477,60 +443,59 @@ export default function AdminUsers() {
                           </div>
                         </div>
                       </td>
-                      <td><span className="badge">{u.role}</span></td>
-                      <td>
-                        <span className={`badge ${u.status === 'approved' ? 'success' : u.status === 'pending' ? 'warning' : 'danger'}`}>
+                      <td className="td-cell"><span className="badge">{u.role}</span></td>
+                      <td className="td-cell">
+                        <span className={`badge ${u.status === 'approved' ? 'badge-success' : u.status === 'pending' ? 'badge-warning' : 'badge-danger'}`}>
                           {u.status}
                         </span>
                       </td>
-                      <td>{u.auth_method || 'password'}</td>
-                      <td>
-                        <div style={{ fontSize: '12px', display: 'flex', flexDirection: 'column', gap: '2px' }}>
-                          <div><span style={{ color: 'var(--text-muted)', fontSize: '11px' }}>RPS:</span> <strong>{u.rate_limit ? u.rate_limit : '∞'}</strong></div>
-                          <div><span style={{ color: 'var(--text-muted)', fontSize: '11px' }}>Subs:</span> <strong>{u.max_reservations !== undefined && u.max_reservations !== null ? (u.max_reservations < 0 ? '∞' : u.max_reservations) : '3'}</strong></div>
-                          <div><span style={{ color: 'var(--text-muted)', fontSize: '11px' }}>Tunnels:</span> <strong>{u.max_tunnels !== undefined && u.max_tunnels !== null ? (u.max_tunnels < 0 ? '∞' : u.max_tunnels) : '3'}</strong></div>
+                      <td className="td-cell">{u.auth_method || 'password'}</td>
+                      <td className="td-cell text-xs">
+                        <div className="flex flex-col gap-2xs">
+                          <div><span className="text-2xs text-muted">RPS:</span> <strong>{u.rate_limit ? u.rate_limit : '∞'}</strong></div>
+                          <div><span className="text-2xs text-muted">Subs:</span> <strong>{u.max_reservations !== undefined && u.max_reservations !== null ? (u.max_reservations < 0 ? '∞' : u.max_reservations) : '3'}</strong></div>
+                          <div><span className="text-2xs text-muted">Tunnels:</span> <strong>{u.max_tunnels !== undefined && u.max_tunnels !== null ? (u.max_tunnels < 0 ? '∞' : u.max_tunnels) : '3'}</strong></div>
                         </div>
                       </td>
-                      <td>
+                      <td className="td-cell">
                         {u.portal_active ? (
-                          <span style={{ color: 'var(--success)', fontWeight: 600 }}>Active Now</span>
+                          <span className="text-success fw-semibold">Active Now</span>
                         ) : (
-                          u.last_login_at ? formatDate(u.last_login_at) : <span style={{ color: 'var(--text-muted)' }}>Never</span>
+                          u.last_login_at ? formatDate(u.last_login_at) : <span className="text-muted">Never</span>
                         )}
                       </td>
-                      <td>
+                      <td className="td-cell">
                         {!isSelf && (
-                          <div style={{ display: 'flex', gap: 'var(--spacing-sm)' }}>
+                          <div className="flex gap-xs">
                             <button 
-                              className="btn btn-secondary" 
-                              style={{ padding: 'var(--spacing-xs) var(--spacing-sm)', fontSize: '12px' }} 
+                              className="btn btn-secondary py-xs px-sm text-xs" 
                               onClick={() => setSelectedUser(u)}
                             >
                               Details
                             </button>
                             {u.status === 'pending' || u.status === 'unverified' ? (
                               <>
-                                <button className="btn btn-primary" style={{ padding: 'var(--spacing-xs) var(--spacing-sm)', fontSize: '12px' }} onClick={() => changeStatus(u.email, 'approved')}>Approve</button>
-                                <button className="btn btn-danger" style={{ padding: 'var(--spacing-xs) var(--spacing-sm)', fontSize: '12px' }} onClick={() => changeStatus(u.email, 'revoked')}>Reject</button>
+                                <button className="btn btn-primary py-xs px-sm text-xs" onClick={() => changeStatus(u.email, 'approved')}>Approve</button>
+                                <button className="btn btn-danger py-xs px-sm text-xs" onClick={() => changeStatus(u.email, 'revoked')}>Reject</button>
                               </>
                             ) : (
                               <>
                                 {u.status === 'approved' ? (
-                                  <button className="btn" style={{ padding: 'var(--spacing-xs) var(--spacing-sm)', fontSize: '12px' }} onClick={() => changeStatus(u.email, 'revoked')}>Suspend</button>
+                                  <button className="btn py-xs px-sm text-xs" onClick={() => changeStatus(u.email, 'revoked')}>Suspend</button>
                                 ) : (
-                                  <button className="btn" style={{ padding: 'var(--spacing-xs) var(--spacing-sm)', fontSize: '12px' }} onClick={() => changeStatus(u.email, 'approved')}>Unsuspend</button>
+                                  <button className="btn py-xs px-sm text-xs" onClick={() => changeStatus(u.email, 'approved')}>Unsuspend</button>
                                 )}
                                 
                                 {(currentUser.role === 'owner' || u.role !== 'owner') && (
                                     <>
                                       {u.role === 'admin' || u.role === 'owner' ? (
-                                        <button className="btn" style={{ padding: 'var(--spacing-xs) var(--spacing-sm)', fontSize: '12px' }} onClick={() => changeRole(u.email, 'user')}>Demote</button>
+                                        <button className="btn py-xs px-sm text-xs" onClick={() => changeRole(u.email, 'user')}>Demote</button>
                                       ) : (
-                                        <button className="btn" style={{ padding: 'var(--spacing-xs) var(--spacing-sm)', fontSize: '12px' }} onClick={() => changeRole(u.email, 'admin')}>Promote</button>
+                                        <button className="btn py-xs px-sm text-xs" onClick={() => changeRole(u.email, 'admin')}>Promote</button>
                                       )}
                                       
                                       {u.email.toLowerCase() !== serverConfig?.owner_email?.toLowerCase() && (
-                                        <button className="btn btn-danger" style={{ padding: 'var(--spacing-xs) var(--spacing-sm)', fontSize: '12px' }} onClick={() => deleteUser(u.email)}>Delete</button>
+                                        <button className="btn btn-danger py-xs px-sm text-xs" onClick={() => deleteUser(u.email)}>Delete</button>
                                       )}
                                     </>
                                 )}
@@ -546,68 +511,77 @@ export default function AdminUsers() {
             </tbody>
           </table>
         </div>
+        {totalUserPages > 1 && (
+          <div className="pagination-row p-lg border-t flex-wrap">
+            <div className="pagination-count">
+              {t('showing_x_to_y_of_z', `Showing ${usersPage * USERS_PER_PAGE + 1} to ${Math.min((usersPage + 1) * USERS_PER_PAGE, sortedUsers.length)} of ${sortedUsers.length} users`)}
+            </div>
+            <div className="pagination-controls">
+              <button className="btn btn-secondary py-xs px-sm text-xs w-auto" onClick={() => setUsersPage(0)} disabled={usersPage === 0}>«</button>
+              <button className="btn btn-secondary py-xs px-sm text-xs w-auto" onClick={() => setUsersPage(p => Math.max(0, p - 1))} disabled={usersPage === 0}>{t('previous', 'Prev')}</button>
+              <span className="pagination-page-label">{usersPage + 1} / {totalUserPages}</span>
+              <button className="btn btn-secondary py-xs px-sm text-xs w-auto" onClick={() => setUsersPage(p => Math.min(totalUserPages - 1, p + 1))} disabled={usersPage >= totalUserPages - 1}>{t('next', 'Next')}</button>
+              <button className="btn btn-secondary py-xs px-sm text-xs w-auto" onClick={() => setUsersPage(totalUserPages - 1)} disabled={usersPage >= totalUserPages - 1}>»</button>
+            </div>
+          </div>
+        )}
       </div>
       {selectedUser && (
-        <div style={{
-          position: 'fixed', top: 0, left: 0, width: '100%', height: '100%', 
-          backgroundColor: 'rgba(0,0,0,0.5)', zIndex: 1000, 
-          display: 'flex', justifyContent: 'center', alignItems: 'center', padding: 'var(--spacing-lg)'
-        }}>
-          <div className="card" style={{ width: '100%', maxWidth: '800px', maxHeight: '90vh', overflowY: 'auto' }}>
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 'var(--spacing-lg)' }}>
-              <h3 style={{ margin: 0 }}>User Details & Tunnels</h3>
-              <button onClick={() => setSelectedUser(null)} style={{ background: 'none', border: 'none', color: 'var(--text-muted)', cursor: 'pointer', fontSize: '20px' }}>✕</button>
+        <div className="modal-backdrop">
+          <div className="modal-card modal-card--lg max-h-90vh overflow-y-auto">
+            <div className="modal-header">
+              <h3 className="modal-title">User Details & Tunnels</h3>
+              <button onClick={() => setSelectedUser(null)} className="modal-close">✕</button>
             </div>
             
-            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: 'var(--spacing-lg)', marginBottom: 'var(--spacing-xl)' }}>
+            <div className="auto-grid-md gap-lg mb-xl">
               <div>
-                <div style={{ fontSize: '12px', color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '1px', marginBottom: 'var(--spacing-xs)' }}>Name</div>
-                <div style={{ fontWeight: 500 }}>{selectedUser.first_name} {selectedUser.last_name}</div>
+                <div className="text-2xs text-muted tracking-wider uppercase mb-2xs">Name</div>
+                <div className="fw-medium">{selectedUser.first_name} {selectedUser.last_name}</div>
               </div>
               <div>
-                <div style={{ fontSize: '12px', color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '1px', marginBottom: 'var(--spacing-xs)' }}>Email</div>
-                <div style={{ fontWeight: 500, fontFamily: 'monospace' }}>{selectedUser.email}</div>
+                <div className="text-2xs text-muted tracking-wider uppercase mb-2xs">Email</div>
+                <div className="fw-medium font-mono">{selectedUser.email}</div>
               </div>
               <div>
-                <div style={{ fontSize: '12px', color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '1px', marginBottom: 'var(--spacing-xs)' }}>Status & Role</div>
+                <div className="text-2xs text-muted tracking-wider uppercase mb-2xs">Status & Role</div>
                 <div>
-                  <span className={`badge ${selectedUser.status === 'approved' ? 'success' : (selectedUser.status === 'revoked' ? 'danger' : 'warning')}`} style={{ marginRight: 'var(--spacing-sm)' }}>
+                  <span className={`badge ${selectedUser.status === 'approved' ? 'badge-success' : (selectedUser.status === 'revoked' ? 'badge-danger' : 'badge-warning')} mr-sm`}>
                     {selectedUser.status}
                   </span>
-                  <span className={`badge ${selectedUser.role === 'admin' ? 'success' : ''}`}>
+                  <span className={`badge ${selectedUser.role === 'admin' ? 'badge-success' : ''}`}>
                     {selectedUser.role}
                   </span>
                 </div>
               </div>
               <div>
-                <div style={{ fontSize: '12px', color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '1px', marginBottom: 'var(--spacing-xs)' }}>Origin</div>
-                <div style={{ fontWeight: 500, textTransform: 'capitalize' }}>{selectedUser.auth_method || 'Magic Link'}</div>
+                <div className="text-2xs text-muted tracking-wider uppercase mb-2xs">Origin</div>
+                <div className="fw-medium capitalize">{selectedUser.auth_method || 'Magic Link'}</div>
               </div>
               <div>
-                <div style={{ fontSize: '12px', color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '1px', marginBottom: 'var(--spacing-xs)' }}>Joined Date</div>
-                <div style={{ fontWeight: 500 }}>{selectedUser.created_at ? new Date(selectedUser.created_at).toLocaleString() : 'N/A'}</div>
+                <div className="text-2xs text-muted tracking-wider uppercase mb-2xs">Joined Date</div>
+                <div className="fw-medium">{selectedUser.created_at ? formatDate(selectedUser.created_at) : 'N/A'}</div>
               </div>
               <div>
-                <div style={{ fontSize: '12px', color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '1px', marginBottom: 'var(--spacing-xs)' }}>API Quota</div>
-                <div style={{ fontWeight: 500 }}>{selectedUser.rate_limit ? `${selectedUser.rate_limit} RPS` : 'Unlimited'}</div>
+                <div className="text-2xs text-muted tracking-wider uppercase mb-2xs">API Quota</div>
+                <div className="fw-medium">{selectedUser.rate_limit ? `${selectedUser.rate_limit} RPS` : 'Unlimited'}</div>
               </div>
             </div>
 
-            <div style={{ display: 'flex', justifyContent: 'flex-start', marginBottom: 'var(--spacing-xl)' }}>
+            <div className="flex justify-start mb-xl">
               <button className="btn btn-primary" onClick={() => setTargetedUserId(selectedUser.id)}>💬 Direct Message</button>
             </div>
 
-            <h4 style={{ marginTop: 'var(--spacing-xl)', marginBottom: 'var(--spacing-lg)', borderBottom: '1px solid var(--border-color)', paddingBottom: 'var(--spacing-sm)' }}>
+            <h4 className="section-title mb-lg border-b pb-xs">
               Quotas & Security
             </h4>
-            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: 'var(--spacing-lg)', background: 'rgba(255,255,255,0.02)', padding: 'var(--spacing-md)', borderRadius: '6px', border: '1px solid var(--border-color)' }}>
+            <div className="auto-grid-md gap-lg p-md rounded border">
               <div>
-                <label style={{ display: 'block', fontSize: '12px', color: 'var(--text-muted)', marginBottom: 'var(--spacing-xs)', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Rate Limit (RPS)</label>
+                <label className="form-label text-2xs text-muted mb-2xs tracking-wider uppercase">Rate Limit (RPS)</label>
                 <div>
                   <input 
                     type="number" 
-                    className="input-field" 
-                    style={{ width: '100%', padding: 'var(--spacing-xs) var(--spacing-sm)', fontSize: '14px' }} 
+                    className="input-field w-full py-xs px-sm text-sm" 
                     min={0}
                     value={modalRateLimit} 
                     onChange={(e) => setModalRateLimit(Number(e.target.value))} 
@@ -617,12 +591,11 @@ export default function AdminUsers() {
               </div>
 
               <div>
-                <label style={{ display: 'block', fontSize: '12px', color: 'var(--text-muted)', marginBottom: 'var(--spacing-xs)', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Max Subdomains</label>
+                <label className="form-label text-2xs text-muted mb-2xs tracking-wider uppercase">Max Subdomains</label>
                 <div>
                   <input 
                     type="number" 
-                    className="input-field" 
-                    style={{ width: '100%', padding: 'var(--spacing-xs) var(--spacing-sm)', fontSize: '14px' }} 
+                    className="input-field w-full py-xs px-sm text-sm" 
                     min={-1}
                     value={modalMaxReservations} 
                     onChange={(e) => setModalMaxReservations(Number(e.target.value))} 
@@ -632,12 +605,11 @@ export default function AdminUsers() {
               </div>
 
               <div>
-                <label style={{ display: 'block', fontSize: '12px', color: 'var(--text-muted)', marginBottom: 'var(--spacing-xs)', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Max Tunnels</label>
+                <label className="form-label text-2xs text-muted mb-2xs tracking-wider uppercase">Max Tunnels</label>
                 <div>
                   <input 
                     type="number" 
-                    className="input-field" 
-                    style={{ width: '100%', padding: 'var(--spacing-xs) var(--spacing-sm)', fontSize: '14px' }} 
+                    className="input-field w-full py-xs px-sm text-sm" 
                     min={-1}
                     value={modalMaxTunnels} 
                     onChange={(e) => setModalMaxTunnels(Number(e.target.value))} 
@@ -646,30 +618,13 @@ export default function AdminUsers() {
                 </div>
               </div>
 
-              <div>
-                <label style={{ display: 'block', fontSize: '12px', color: 'var(--text-muted)', marginBottom: 'var(--spacing-xs)', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Preferred Domain</label>
-                <div>
-                  <select 
-                    className="input-field" 
-                    style={{ width: '100%', padding: 'var(--spacing-xs) var(--spacing-sm)', fontSize: '14px' }} 
-                    value={modalPreferredDomain} 
-                    onChange={(e) => setModalPreferredDomain(e.target.value)} 
-                  >
-                    <option value="">None (Auto)</option>
-                    {domains.map(d => (
-                      <option key={d} value={d}>{d}</option>
-                    ))}
-                  </select>
-                </div>
-              </div>
-
-              <div style={{ display: 'flex', flexDirection: 'column', justifyContent: 'center' }}>
-                <label style={{ display: 'block', fontSize: '12px', color: 'var(--text-muted)', marginBottom: 'var(--spacing-xs)', textTransform: 'uppercase', letterSpacing: '0.5px' }}>MFA Security Status</label>
-                <div style={{ display: 'flex', alignItems: 'center', gap: 'var(--spacing-md)' }}>
+              <div className="flex flex-col justify-center">
+                <label className="form-label text-2xs text-muted mb-2xs tracking-wider uppercase">MFA Security Status</label>
+                <div className="flex items-center gap-md">
                   {selectedUser.totp_enabled ? (
                     <>
-                      <span className="badge success">Enabled</span>
-                      <button className="btn btn-danger" style={{ padding: 'var(--spacing-xs) var(--spacing-sm)', fontSize: '12px' }} onClick={resetUserMFA}>Reset MFA</button>
+                      <span className="badge badge-success">Enabled</span>
+                      <button className="btn btn-danger py-xs px-sm text-xs" onClick={resetUserMFA}>Reset MFA</button>
                     </>
                   ) : (
                     <span className="badge" style={{ background: 'rgba(255,255,255,0.05)', color: 'var(--text-muted)' }}>Inactive</span>
@@ -678,58 +633,57 @@ export default function AdminUsers() {
               </div>
             </div>
 
-            <div style={{ display: 'flex', justifyContent: 'flex-end', marginTop: 'var(--spacing-md)', marginBottom: 'var(--spacing-xl)' }}>
+            <div className="flex justify-end mt-md mb-xl">
               <button 
-                className="btn btn-primary" 
+                className="btn btn-primary py-sm px-lg text-sm w-auto" 
                 onClick={updateQuotas} 
                 disabled={updatingLimits} 
-                style={{ padding: '8px 16px', fontSize: '13px', width: 'auto' }}
               >
-                {updatingLimits ? 'Saving...' : 'Save Quotas & Preferred Domain'}
+                {updatingLimits ? 'Saving...' : 'Save Quotas'}
               </button>
             </div>
 
-            <h4 style={{ marginTop: 'var(--spacing-xl)', marginBottom: 'var(--spacing-lg)', borderBottom: '1px solid var(--border-color)', paddingBottom: 'var(--spacing-sm)' }}>
-              Connected Tunnels <span className="badge" style={{ marginLeft: 'var(--spacing-sm)' }}>{(selectedUser.active_tunnels || []).length}</span>
+            <h4 className="section-title mb-lg border-b pb-xs flex items-center">
+              Connected Tunnels <span className="badge ml-sm">{(selectedUser.active_tunnels || []).length}</span>
             </h4>
             
-            <div className="table-responsive" style={{ border: '1px solid var(--border-color)', borderRadius: '6px' }}>
-              <table style={{ margin: 0 }}>
+            <div className="table-responsive border rounded">
+              <table className="w-full m-0">
                 <tbody>
                   {!(selectedUser.active_tunnels || []).length && (
                     <tr>
-                      <td colSpan={4} style={{ textAlign: 'center', padding: 'var(--spacing-xl)', color: 'var(--text-muted)' }}>No active tunnels connected.</td>
+                      <td colSpan={4} className="td-empty">No active tunnels connected.</td>
                     </tr>
                   )}
                   {(selectedUser.active_tunnels || []).map((t) => {
                     const publicUrl = `https://${t.full_host}`;
                     return (
-                      <tr key={t.subdomain_prefix} style={{ borderBottom: '1px solid rgba(255,255,255,0.03)' }}>
-                        <td style={{ padding: 'var(--spacing-md)', verticalAlign: 'middle' }}>
-                          <div style={{ fontWeight: 600, fontFamily: 'monospace', fontSize: '13px', color: 'var(--text)' }}>{t.subdomain_prefix}</div>
-                          <div style={{ fontSize: '11px', color: 'var(--text-muted)', marginTop: '2px' }}>Local Port: {t.local_port}</div>
+                      <tr key={t.subdomain_prefix} className="border-b">
+                        <td className="td-cell align-middle">
+                          <div className="fw-semibold font-mono text-sm">{t.subdomain_prefix}</div>
+                          <div className="text-2xs text-muted mt-2xs">Local Port: {t.local_port}</div>
                         </td>
-                        <td style={{ padding: 'var(--spacing-md)', verticalAlign: 'middle' }}>
-                          <a href={publicUrl} target="_blank" rel="noreferrer" style={{ color: 'var(--primary)', textDecoration: 'none', fontSize: '13px', fontFamily: 'monospace', wordBreak: 'break-all' }}>{publicUrl}</a>
+                        <td className="td-cell align-middle">
+                          <a href={publicUrl} target="_blank" rel="noreferrer" className="text-primary no-underline text-sm font-mono break-all">{publicUrl}</a>
                           {t.node_id && t.node_id !== 'control' ? (
-                            <span className="badge" style={{ background: 'rgba(139, 92, 246, 0.15)', color: '#c084fc', border: '1px solid rgba(139, 92, 246, 0.3)', fontSize: '10px', marginLeft: 'var(--spacing-xs)' }}>
+                            <span className="badge badge-node text-2xs ml-xs">
                               🌍 {t.node_id}
                             </span>
                           ) : (
-                            <span className="badge" style={{ background: 'rgba(59, 130, 246, 0.15)', color: '#60a5fa', border: '1px solid rgba(59, 130, 246, 0.3)', fontSize: '10px', marginLeft: 'var(--spacing-xs)' }}>
+                            <span className="badge badge-control text-2xs ml-xs">
                               🇬🇧 Control
                             </span>
                           )}
-                          <div style={{ fontSize: '11px', color: 'var(--text-muted)', marginTop: '2px' }}>
-                            IP: {t.client_ip} | Connected: {new Date(t.created_at).toLocaleString()}
+                          <div className="text-2xs text-muted mt-2xs">
+                            IP: {t.client_ip} | Connected: {formatDate(t.created_at)}
                           </div>
                         </td>
-                        <td style={{ padding: 'var(--spacing-md)', verticalAlign: 'middle', fontSize: '12px', color: 'var(--text-muted)' }}>
-                          <div>📥 In: <strong style={{ color: 'var(--text)' }}>{formatBytes(t.bytes_in)}</strong></div>
-                          <div style={{ marginTop: '2px' }}>📤 Out: <strong style={{ color: 'var(--text)' }}>{formatBytes(t.bytes_out)}</strong></div>
+                        <td className="td-cell align-middle text-xs text-muted">
+                          <div>📥 In: <strong>{formatBytes(t.bytes_in)}</strong></div>
+                          <div className="mt-2xs">📤 Out: <strong>{formatBytes(t.bytes_out)}</strong></div>
                         </td>
-                        <td style={{ padding: 'var(--spacing-md)', verticalAlign: 'middle', textAlign: 'right' }}>
-                          <button className="btn btn-danger" style={{ padding: 'var(--spacing-xs) var(--spacing-md)', fontSize: '12px' }} onClick={() => kickTunnel(t.subdomain_prefix)}>Kick</button>
+                        <td className="td-cell align-middle text-right">
+                          <button className="btn btn-danger py-xs px-md text-xs" onClick={() => kickTunnel(t.subdomain_prefix)}>Kick</button>
                         </td>
                       </tr>
                     );
@@ -738,25 +692,25 @@ export default function AdminUsers() {
               </table>
             </div>
 
-            <h4 style={{ marginTop: 'var(--spacing-xl)', marginBottom: 'var(--spacing-lg)', borderBottom: '1px solid var(--border-color)', paddingBottom: 'var(--spacing-sm)' }}>
-              Personal Access Tokens <span className="badge" style={{ marginLeft: 'var(--spacing-sm)' }}>{selectedUserPATs.length}</span>
+            <h4 className="section-title mb-lg border-b pb-xs flex items-center mt-xl">
+              Personal Access Tokens <span className="badge ml-sm">{selectedUserPATs.length}</span>
             </h4>
 
-            <div className="table-responsive" style={{ border: '1px solid var(--border-color)', borderRadius: '6px', marginBottom: 'var(--spacing-xl)' }}>
-              <table style={{ margin: 0 }}>
+            <div className="table-responsive border rounded mb-xl">
+              <table className="w-full m-0">
                 <thead>
-                  <tr style={{ borderBottom: '1px solid var(--border)', textAlign: 'left' }}>
-                    <th style={{ padding: 'var(--spacing-md)', fontSize: '12px' }}>Name</th>
-                    <th style={{ padding: 'var(--spacing-md)', fontSize: '12px' }}>Prefix</th>
-                    <th style={{ padding: 'var(--spacing-md)', fontSize: '12px' }}>Expires</th>
-                    <th style={{ padding: 'var(--spacing-md)', fontSize: '12px' }}>Status</th>
-                    <th style={{ padding: 'var(--spacing-md)', fontSize: '12px', textAlign: 'right' }}>Actions</th>
+                  <tr className="border-b text-left">
+                    <th className="th-col text-xs">Name</th>
+                    <th className="th-col text-xs">Prefix</th>
+                    <th className="th-col text-xs">Expires</th>
+                    <th className="th-col text-xs">Status</th>
+                    <th className="th-col text-xs text-right">Actions</th>
                   </tr>
                 </thead>
                 <tbody>
                   {!selectedUserPATs.length && (
                     <tr>
-                      <td colSpan={5} style={{ textAlign: 'center', padding: 'var(--spacing-xl)', color: 'var(--text-muted)' }}>No tokens found for this user.</td>
+                      <td colSpan={5} className="td-empty">No tokens found for this user.</td>
                     </tr>
                   )}
                   {selectedUserPATs.map((pat) => {
@@ -764,49 +718,45 @@ export default function AdminUsers() {
                     const isExpired = pat.expires_at && !pat.expires_at.startsWith('0001-01-01') && new Date(pat.expires_at) < new Date();
                     
                     let statusBadge = (
-                      <span className="badge success">Active</span>
+                      <span className="badge badge-success">Active</span>
                     );
                     if (isRevoked) {
-                      statusBadge = <span className="badge danger">Revoked</span>;
+                      statusBadge = <span className="badge badge-danger">Revoked</span>;
                     } else if (isExpired) {
-                      statusBadge = <span className="badge danger">Expired</span>;
+                      statusBadge = <span className="badge badge-danger">Expired</span>;
                     }
 
                     return (
-                      <tr key={pat.id} style={{ borderBottom: '1px solid rgba(255,255,255,0.03)' }}>
-                        <td style={{ padding: 'var(--spacing-md)', verticalAlign: 'middle', fontSize: '13px' }}>{pat.name}</td>
-                        <td style={{ padding: 'var(--spacing-md)', verticalAlign: 'middle', fontSize: '13px', fontFamily: 'monospace' }}>{pat.token_prefix}...</td>
-                        <td style={{ padding: 'var(--spacing-md)', verticalAlign: 'middle', fontSize: '13px' }}>
-                          {pat.expires_at && !pat.expires_at.startsWith('0001-01-01') ? new Date(pat.expires_at).toLocaleDateString() : 'Never'}
+                      <tr key={pat.id} className="border-b">
+                        <td className="td-cell align-middle text-sm">{pat.name}</td>
+                        <td className="td-cell align-middle text-sm font-mono">{pat.token_prefix}...</td>
+                        <td className="td-cell align-middle text-sm">
+                          {pat.expires_at && !pat.expires_at.startsWith('0001-01-01') ? formatDate(pat.expires_at) : 'Never'}
                         </td>
-                        <td style={{ padding: 'var(--spacing-md)', verticalAlign: 'middle' }}>{statusBadge}</td>
-                        <td style={{ padding: 'var(--spacing-md)', verticalAlign: 'middle', textAlign: 'right' }}>
+                        <td className="td-cell align-middle">{statusBadge}</td>
+                        <td className="td-cell align-middle text-right">
                           {!isRevoked && (
-                            <div style={{ display: 'flex', gap: 'var(--spacing-xs)', justifyContent: 'flex-end' }}>
+                            <div className="flex gap-xs justify-end">
                               <button 
-                                className="btn btn-outline" 
-                                style={{ padding: '2px 8px', fontSize: '11px' }}
+                                className="btn btn-outline py-2xs px-xs text-2xs"
                                 onClick={() => extendUserToken(pat.id, 30)}
                               >
                                 +30d
                               </button>
                               <button 
-                                className="btn btn-outline" 
-                                style={{ padding: '2px 8px', fontSize: '11px' }}
+                                className="btn btn-outline py-2xs px-xs text-2xs"
                                 onClick={() => extendUserToken(pat.id, 90)}
                               >
                                 +90d
                               </button>
                               <button 
-                                className="btn btn-outline" 
-                                style={{ padding: '2px 8px', fontSize: '11px' }}
+                                className="btn btn-outline py-2xs px-xs text-2xs"
                                 onClick={() => extendUserToken(pat.id, 0)}
                               >
                                 Perm
                               </button>
                               <button 
-                                className="btn btn-danger" 
-                                style={{ padding: '2px 8px', fontSize: '11px' }}
+                                className="btn btn-danger py-2xs px-xs text-2xs"
                                 onClick={() => revokeUserToken(pat.id)}
                               >
                                 Revoke
@@ -826,29 +776,25 @@ export default function AdminUsers() {
       )}
 
       {targetedUserId && (
-        <div style={{
-          position: 'fixed', top: 0, left: 0, width: '100%', height: '100%',
-          backgroundColor: 'rgba(0,0,0,0.5)', zIndex: 1010,
-          display: 'flex', justifyContent: 'center', alignItems: 'center', padding: 'var(--spacing-lg)'
-        }}>
-          <div className="card" style={{ width: '100%', maxWidth: '500px' }}>
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 'var(--spacing-lg)' }}>
-              <h3 style={{ margin: 0 }}>Send Direct Message</h3>
-              <button onClick={() => setTargetedUserId('')} style={{ background: 'none', border: 'none', color: 'var(--text-muted)', cursor: 'pointer', fontSize: '20px' }}>✕</button>
+        <div className="fixed inset-0 z-10 flex items-center justify-center p-md bg-black/50">
+          <div className="w-full max-w-sm p-lg bg-body border rounded shadow-lg">
+            <div className="flex items-center justify-between mb-md">
+              <h3 className="text-lg font-bold">Send Direct Message</h3>
+              <button onClick={() => setTargetedUserId('')} className="text-muted hover:text-white">✕</button>
             </div>
-            <p style={{ fontSize: '14px', color: 'var(--text-muted)', marginBottom: 'var(--spacing-lg)' }}>
+            <p className="text-sm text-muted mb-lg">
               Push a real-time banner alert to this specific active developer session.
             </p>
-            <div className="form-group" style={{ marginBottom: 'var(--spacing-lg)' }}>
+            <div className="mb-lg">
               <textarea
-                className="input-field"
+                className="w-full p-sm bg-surface border rounded text-sm"
                 placeholder={t('enter_your_message_placeholder', 'Enter your message...')}
                 rows={3}
                 value={targetedMessage}
                 onChange={(e) => setTargetedMessage(e.target.value)}
               />
             </div>
-            <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 'var(--spacing-sm)' }}>
+            <div className="flex justify-end gap-sm">
               <button className="btn btn-secondary" onClick={() => setTargetedUserId('')}>Cancel</button>
               <button className="btn btn-primary" disabled={isSendingTargeted || !targetedMessage.trim()} onClick={sendTargetedMessage}>
                 {isSendingTargeted ? 'Sending...' : 'Send Message'}
@@ -859,33 +805,29 @@ export default function AdminUsers() {
       )}
 
       {showInviteModal && (
-        <div style={{
-          position: 'fixed', top: 0, left: 0, width: '100%', height: '100%', 
-          backgroundColor: 'rgba(0,0,0,0.5)', zIndex: 1000, 
-          display: 'flex', justifyContent: 'center', alignItems: 'center', padding: 'var(--spacing-lg)'
-        }}>
-          <div className="card" style={{ width: '100%', maxWidth: '400px' }}>
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 'var(--spacing-lg)' }}>
-              <h3 style={{ margin: 0 }}>{t('invite_user', 'Invite User')}</h3>
-              <button onClick={() => setShowInviteModal(false)} style={{ background: 'none', border: 'none', color: 'var(--text-muted)', cursor: 'pointer', fontSize: '20px' }}>✕</button>
+        <div className="fixed inset-0 z-10 flex items-center justify-center p-md bg-black/50">
+          <div className="w-full max-w-sm p-lg bg-body border rounded shadow-lg">
+            <div className="flex items-center justify-between mb-md">
+              <h3 className="text-lg font-bold">{t('invite_user', 'Invite User')}</h3>
+              <button onClick={() => setShowInviteModal(false)} className="text-muted hover:text-white">✕</button>
             </div>
-            {inviteError && <div className="alert alert-danger" style={{ marginBottom: 'var(--spacing-lg)' }}>{inviteError}</div>}
+            {inviteError && <div className="p-sm mb-lg bg-danger/10 text-danger border border-danger/20 rounded text-sm">{inviteError}</div>}
             <form onSubmit={submitInvite}>
-              <div className="form-group" style={{ marginBottom: 'var(--spacing-lg)' }}>
-                <label>{t('email_address', 'Email Address')}</label>
-                <input type="email" required className="input-field" value={inviteForm.email} onChange={(e) => setInviteForm({...inviteForm, email: e.target.value})} placeholder={t('invite_email_placeholder', 'user@company.com')} />
+              <div className="mb-md">
+                <label className="block text-xs uppercase tracking-wider text-muted mb-xs">{t('email_address', 'Email Address')}</label>
+                <input type="email" required className="w-full p-sm bg-surface border rounded text-sm" value={inviteForm.email} onChange={(e) => setInviteForm({...inviteForm, email: e.target.value})} placeholder={t('invite_email_placeholder', 'user@company.com')} />
               </div>
-              <div className="form-group" style={{ marginBottom: 'var(--spacing-lg)' }}>
-                <label>{t('first_name', 'First Name')}</label>
-                <input type="text" required className="input-field" value={inviteForm.first_name} onChange={(e) => setInviteForm({...inviteForm, first_name: e.target.value})} placeholder={t('first_name_placeholder', 'John')} />
+              <div className="mb-md">
+                <label className="block text-xs uppercase tracking-wider text-muted mb-xs">{t('first_name', 'First Name')}</label>
+                <input type="text" required className="w-full p-sm bg-surface border rounded text-sm" value={inviteForm.first_name} onChange={(e) => setInviteForm({...inviteForm, first_name: e.target.value})} placeholder={t('first_name_placeholder', 'John')} />
               </div>
-              <div className="form-group" style={{ marginBottom: 'var(--spacing-lg)' }}>
-                <label>{t('last_name', 'Last Name')}</label>
-                <input type="text" required className="input-field" value={inviteForm.last_name} onChange={(e) => setInviteForm({...inviteForm, last_name: e.target.value})} placeholder={t('last_name_placeholder', 'Doe')} />
+              <div className="mb-md">
+                <label className="block text-xs uppercase tracking-wider text-muted mb-xs">{t('last_name', 'Last Name')}</label>
+                <input type="text" required className="w-full p-sm bg-surface border rounded text-sm" value={inviteForm.last_name} onChange={(e) => setInviteForm({...inviteForm, last_name: e.target.value})} placeholder={t('last_name_placeholder', 'Doe')} />
               </div>
-              <div className="form-group" style={{ marginBottom: 'var(--spacing-xl)' }}>
-                <label>{t('language_preference', 'Language Preference')}</label>
-                <select className="input-field" value={inviteForm.language_preference} onChange={(e) => setInviteForm({...inviteForm, language_preference: e.target.value})}>
+              <div className="mb-lg">
+                <label className="block text-xs uppercase tracking-wider text-muted mb-xs">{t('language_preference', 'Language Preference')}</label>
+                <select className="w-full p-sm bg-surface border rounded text-sm" value={inviteForm.language_preference} onChange={(e) => setInviteForm({...inviteForm, language_preference: e.target.value})}>
                   <option value="en">English (UK)</option>
                   <option value="en-us">English (US)</option>
                   <option value="de">Deutsch (DE)</option>
@@ -893,8 +835,8 @@ export default function AdminUsers() {
                   <option value="fr">Français (FR)</option>
                 </select>
               </div>
-              <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 'var(--spacing-sm)' }}>
-                <button type="button" className="btn" onClick={() => setShowInviteModal(false)}>{t('cancel', 'Cancel')}</button>
+              <div className="flex justify-end gap-sm">
+                <button type="button" className="btn btn-secondary" onClick={() => setShowInviteModal(false)}>{t('cancel', 'Cancel')}</button>
                 <button type="submit" className="btn btn-primary" disabled={isInviting}>
                   {isInviting ? t('sending', 'Sending...') : t('send_invitation', 'Send Invitation')}
                 </button>

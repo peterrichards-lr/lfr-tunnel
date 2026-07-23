@@ -44,14 +44,18 @@ func (repo *SQLiteUserRepo) CreateUser(u *User) error {
 		u.LanguagePreference = "en"
 	}
 
+	if u.SubdomainStyle == "" {
+		u.SubdomainStyle = "liferay"
+	}
+
 	if u.OnboardingStatus == "" {
 		u.OnboardingStatus = "pending"
 	}
 
 	_, err := repo.conn.Exec(`
-		INSERT INTO users (id, email, first_name, last_name, preferred_name, role, status, verification_token, approval_token, claim_token, timezone, auth_method, theme_preference, notification_prefs, created_at, updated_at, last_client_version, last_client_os, totp_secret, totp_enabled, policy_consent_at, language_preference, rate_limit, max_reservations, max_active_tunnels, onboarding_status, onboarding_last_step, onboarding_reruns)
-		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-	`, u.ID, u.Email, u.FirstName, u.LastName, u.PreferredName, u.Role, u.Status, u.VerificationToken, u.ApprovalToken, u.ClaimToken, u.Timezone, u.AuthMethod, u.ThemePreference, u.NotificationPrefs, u.CreatedAt, u.UpdatedAt, u.LastClientVersion, u.LastClientOS, u.TOTPSecret, totpEnabledVal, u.PolicyConsentAt, u.LanguagePreference, u.RateLimit, u.MaxReservations, u.MaxTunnels, u.OnboardingStatus, u.OnboardingLastStep, u.OnboardingReruns)
+		INSERT INTO users (id, email, first_name, last_name, preferred_name, role, status, verification_token, approval_token, claim_token, timezone, auth_method, theme_preference, notification_prefs, created_at, updated_at, last_client_version, last_client_os, totp_secret, totp_enabled, policy_consent_at, language_preference, rate_limit, max_reservations, max_active_tunnels, onboarding_status, onboarding_last_step, onboarding_reruns, preferred_domain, subdomain_style)
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+	`, u.ID, u.Email, u.FirstName, u.LastName, u.PreferredName, u.Role, u.Status, u.VerificationToken, u.ApprovalToken, u.ClaimToken, u.Timezone, u.AuthMethod, u.ThemePreference, u.NotificationPrefs, u.CreatedAt, u.UpdatedAt, u.LastClientVersion, u.LastClientOS, u.TOTPSecret, totpEnabledVal, u.PolicyConsentAt, u.LanguagePreference, u.RateLimit, u.MaxReservations, u.MaxTunnels, u.OnboardingStatus, u.OnboardingLastStep, u.OnboardingReruns, u.PreferredDomain, u.SubdomainStyle)
 	return err
 }
 
@@ -69,8 +73,10 @@ func (repo *SQLiteUserRepo) fetchUserByQuery(query string, arg interface{}) (*Us
 	var rateLimitVal int
 	var maxReservationsVal sql.NullInt64
 	var maxActiveTunnelsVal sql.NullInt64
+	var prefDomVal sql.NullString
+	var subStyleVal sql.NullString
 	err := repo.conn.QueryRow(query, arg).Scan(
-		&u.ID, &u.Email, &u.FirstName, &u.LastName, &u.PreferredName, &u.Role, &u.Status, &vt, &at, &ct, &u.Timezone, &u.AuthMethod, &u.ThemePreference, &u.NotificationPrefs, &u.CreatedAt, &u.UpdatedAt, &lastLogin, &u.LastLoginIP, &lastClientVersion, &lastClientOS, &totpSecret, &totpEnabled, &policyConsentAt, &langPref, &rateLimitVal, &maxReservationsVal, &maxActiveTunnelsVal, &u.OnboardingStatus, &u.OnboardingLastStep, &u.OnboardingReruns,
+		&u.ID, &u.Email, &u.FirstName, &u.LastName, &u.PreferredName, &u.Role, &u.Status, &vt, &at, &ct, &u.Timezone, &u.AuthMethod, &u.ThemePreference, &u.NotificationPrefs, &u.CreatedAt, &u.UpdatedAt, &lastLogin, &u.LastLoginIP, &lastClientVersion, &lastClientOS, &totpSecret, &totpEnabled, &policyConsentAt, &langPref, &rateLimitVal, &maxReservationsVal, &maxActiveTunnelsVal, &u.OnboardingStatus, &u.OnboardingLastStep, &u.OnboardingReruns, &prefDomVal, &subStyleVal,
 	)
 	if err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
@@ -109,32 +115,38 @@ func (repo *SQLiteUserRepo) fetchUserByQuery(query string, arg interface{}) (*Us
 	} else {
 		u.LanguagePreference = "en"
 	}
+	u.PreferredDomain = prefDomVal.String
+	if subStyleVal.Valid && subStyleVal.String != "" {
+		u.SubdomainStyle = subStyleVal.String
+	} else {
+		u.SubdomainStyle = "liferay"
+	}
 	return &u, nil
 }
 
 // GetUser fetches a user by their ID.
 func (repo *SQLiteUserRepo) GetUser(id string) (*User, error) {
-	return repo.fetchUserByQuery(`SELECT id, email, first_name, last_name, preferred_name, role, status, verification_token, approval_token, claim_token, timezone, auth_method, theme_preference, notification_prefs, created_at, updated_at, last_login_at, last_login_ip, last_client_version, last_client_os, totp_secret, totp_enabled, policy_consent_at, language_preference, rate_limit, max_reservations, max_active_tunnels, onboarding_status, onboarding_last_step, onboarding_reruns FROM users WHERE id = ?`, id)
+	return repo.fetchUserByQuery(`SELECT id, email, first_name, last_name, preferred_name, role, status, verification_token, approval_token, claim_token, timezone, auth_method, theme_preference, notification_prefs, created_at, updated_at, last_login_at, last_login_ip, last_client_version, last_client_os, totp_secret, totp_enabled, policy_consent_at, language_preference, rate_limit, max_reservations, max_active_tunnels, onboarding_status, onboarding_last_step, onboarding_reruns, preferred_domain, subdomain_style FROM users WHERE id = ?`, id)
 }
 
 // GetUserByEmail fetches a user by their email address.
 func (repo *SQLiteUserRepo) GetUserByEmail(email string) (*User, error) {
-	return repo.fetchUserByQuery(`SELECT id, email, first_name, last_name, preferred_name, role, status, verification_token, approval_token, claim_token, timezone, auth_method, theme_preference, notification_prefs, created_at, updated_at, last_login_at, last_login_ip, last_client_version, last_client_os, totp_secret, totp_enabled, policy_consent_at, language_preference, rate_limit, max_reservations, max_active_tunnels, onboarding_status, onboarding_last_step, onboarding_reruns FROM users WHERE email = ?`, email)
+	return repo.fetchUserByQuery(`SELECT id, email, first_name, last_name, preferred_name, role, status, verification_token, approval_token, claim_token, timezone, auth_method, theme_preference, notification_prefs, created_at, updated_at, last_login_at, last_login_ip, last_client_version, last_client_os, totp_secret, totp_enabled, policy_consent_at, language_preference, rate_limit, max_reservations, max_active_tunnels, onboarding_status, onboarding_last_step, onboarding_reruns, preferred_domain, subdomain_style FROM users WHERE email = ?`, email)
 }
 
 // GetUserByVerificationToken finds a user by their verification token.
 func (repo *SQLiteUserRepo) GetUserByVerificationToken(token string) (*User, error) {
-	return repo.fetchUserByQuery(`SELECT id, email, first_name, last_name, preferred_name, role, status, verification_token, approval_token, claim_token, timezone, auth_method, theme_preference, notification_prefs, created_at, updated_at, last_login_at, last_login_ip, last_client_version, last_client_os, totp_secret, totp_enabled, policy_consent_at, language_preference, rate_limit, max_reservations, max_active_tunnels, onboarding_status, onboarding_last_step, onboarding_reruns FROM users WHERE verification_token = ?`, token)
+	return repo.fetchUserByQuery(`SELECT id, email, first_name, last_name, preferred_name, role, status, verification_token, approval_token, claim_token, timezone, auth_method, theme_preference, notification_prefs, created_at, updated_at, last_login_at, last_login_ip, last_client_version, last_client_os, totp_secret, totp_enabled, policy_consent_at, language_preference, rate_limit, max_reservations, max_active_tunnels, onboarding_status, onboarding_last_step, onboarding_reruns, preferred_domain, subdomain_style FROM users WHERE verification_token = ?`, token)
 }
 
 // GetUserByApprovalToken fetches a user by their approval token.
 func (repo *SQLiteUserRepo) GetUserByApprovalToken(token string) (*User, error) {
-	return repo.fetchUserByQuery(`SELECT id, email, first_name, last_name, preferred_name, role, status, verification_token, approval_token, claim_token, timezone, auth_method, theme_preference, notification_prefs, created_at, updated_at, last_login_at, last_login_ip, last_client_version, last_client_os, totp_secret, totp_enabled, policy_consent_at, language_preference, rate_limit, max_reservations, max_active_tunnels, onboarding_status, onboarding_last_step, onboarding_reruns FROM users WHERE approval_token = ?`, token)
+	return repo.fetchUserByQuery(`SELECT id, email, first_name, last_name, preferred_name, role, status, verification_token, approval_token, claim_token, timezone, auth_method, theme_preference, notification_prefs, created_at, updated_at, last_login_at, last_login_ip, last_client_version, last_client_os, totp_secret, totp_enabled, policy_consent_at, language_preference, rate_limit, max_reservations, max_active_tunnels, onboarding_status, onboarding_last_step, onboarding_reruns, preferred_domain, subdomain_style FROM users WHERE approval_token = ?`, token)
 }
 
 // GetUserByClaimToken fetches a user by their claim token.
 func (repo *SQLiteUserRepo) GetUserByClaimToken(token string) (*User, error) {
-	return repo.fetchUserByQuery(`SELECT id, email, first_name, last_name, preferred_name, role, status, verification_token, approval_token, claim_token, timezone, auth_method, theme_preference, notification_prefs, created_at, updated_at, last_login_at, last_login_ip, last_client_version, last_client_os, totp_secret, totp_enabled, policy_consent_at, language_preference, rate_limit, max_reservations, max_active_tunnels, onboarding_status, onboarding_last_step, onboarding_reruns FROM users WHERE claim_token = ?`, token)
+	return repo.fetchUserByQuery(`SELECT id, email, first_name, last_name, preferred_name, role, status, verification_token, approval_token, claim_token, timezone, auth_method, theme_preference, notification_prefs, created_at, updated_at, last_login_at, last_login_ip, last_client_version, last_client_os, totp_secret, totp_enabled, policy_consent_at, language_preference, rate_limit, max_reservations, max_active_tunnels, onboarding_status, onboarding_last_step, onboarding_reruns, preferred_domain, subdomain_style FROM users WHERE claim_token = ?`, token)
 }
 
 // DeleteUser removes a user from the database.
@@ -182,9 +194,11 @@ func (repo *SQLiteUserRepo) UpdateUser(u *User) error {
 			max_active_tunnels = ?,
 			onboarding_status = ?,
 			onboarding_last_step = ?,
-			onboarding_reruns = ?
+			onboarding_reruns = ?,
+			preferred_domain = ?,
+			subdomain_style = ?
 	          WHERE id = ?`
-	res, err := repo.conn.Exec(query, u.Email, u.FirstName, u.LastName, u.PreferredName, u.Role, u.Status, vtVal, approvalTokenVal, claimTokenVal, u.Timezone, u.AuthMethod, u.ThemePreference, u.NotificationPrefs, u.UpdatedAt, lastLoginVal, u.LastLoginIP, u.LastClientVersion, u.LastClientOS, u.TOTPSecret, totpEnabledVal, u.PolicyConsentAt, u.LanguagePreference, u.RateLimit, u.MaxReservations, u.MaxTunnels, u.OnboardingStatus, u.OnboardingLastStep, u.OnboardingReruns, u.ID)
+	res, err := repo.conn.Exec(query, u.Email, u.FirstName, u.LastName, u.PreferredName, u.Role, u.Status, vtVal, approvalTokenVal, claimTokenVal, u.Timezone, u.AuthMethod, u.ThemePreference, u.NotificationPrefs, u.UpdatedAt, lastLoginVal, u.LastLoginIP, u.LastClientVersion, u.LastClientOS, u.TOTPSecret, totpEnabledVal, u.PolicyConsentAt, u.LanguagePreference, u.RateLimit, u.MaxReservations, u.MaxTunnels, u.OnboardingStatus, u.OnboardingLastStep, u.OnboardingReruns, u.PreferredDomain, u.SubdomainStyle, u.ID)
 	if err != nil {
 		return err
 	}
@@ -222,7 +236,7 @@ func (repo *SQLiteUserRepo) UpdateUserOnboarding(userID string, status string, l
 
 // ListUsers lists all registered users.
 func (repo *SQLiteUserRepo) ListUsers() ([]*User, error) {
-	query := `SELECT id, email, first_name, last_name, preferred_name, role, status, verification_token, approval_token, claim_token, timezone, auth_method, theme_preference, notification_prefs, created_at, updated_at, last_login_at, last_login_ip, last_client_version, last_client_os, totp_secret, totp_enabled, policy_consent_at, language_preference, rate_limit, max_reservations, max_active_tunnels, onboarding_status, onboarding_last_step, onboarding_reruns FROM users`
+	query := `SELECT id, email, first_name, last_name, preferred_name, role, status, verification_token, approval_token, claim_token, timezone, auth_method, theme_preference, notification_prefs, created_at, updated_at, last_login_at, last_login_ip, last_client_version, last_client_os, totp_secret, totp_enabled, policy_consent_at, language_preference, rate_limit, max_reservations, max_active_tunnels, onboarding_status, onboarding_last_step, onboarding_reruns, preferred_domain, subdomain_style FROM users`
 	rows, err := repo.conn.Query(query)
 	if err != nil {
 		return nil, err
@@ -243,7 +257,9 @@ func (repo *SQLiteUserRepo) ListUsers() ([]*User, error) {
 		var rateLimitVal int
 		var maxReservationsVal sql.NullInt64
 		var maxActiveTunnelsVal sql.NullInt64
-		if err := rows.Scan(&u.ID, &u.Email, &u.FirstName, &u.LastName, &u.PreferredName, &u.Role, &u.Status, &vt, &at, &ct, &u.Timezone, &u.AuthMethod, &u.ThemePreference, &u.NotificationPrefs, &u.CreatedAt, &u.UpdatedAt, &lastLogin, &u.LastLoginIP, &lastClientVersion, &lastClientOS, &totpSecret, &totpEnabled, &policyConsentAt, &langPref, &rateLimitVal, &maxReservationsVal, &maxActiveTunnelsVal, &u.OnboardingStatus, &u.OnboardingLastStep, &u.OnboardingReruns); err != nil {
+		var prefDomVal sql.NullString
+		var subStyleVal sql.NullString
+		if err := rows.Scan(&u.ID, &u.Email, &u.FirstName, &u.LastName, &u.PreferredName, &u.Role, &u.Status, &vt, &at, &ct, &u.Timezone, &u.AuthMethod, &u.ThemePreference, &u.NotificationPrefs, &u.CreatedAt, &u.UpdatedAt, &lastLogin, &u.LastLoginIP, &lastClientVersion, &lastClientOS, &totpSecret, &totpEnabled, &policyConsentAt, &langPref, &rateLimitVal, &maxReservationsVal, &maxActiveTunnelsVal, &u.OnboardingStatus, &u.OnboardingLastStep, &u.OnboardingReruns, &prefDomVal, &subStyleVal); err != nil {
 			return nil, err
 		}
 		u.VerificationToken = vt.String
@@ -254,6 +270,12 @@ func (repo *SQLiteUserRepo) ListUsers() ([]*User, error) {
 		u.TOTPSecret = totpSecret.String
 		u.TOTPEnabled = totpEnabled == 1
 		u.RateLimit = rateLimitVal
+		u.PreferredDomain = prefDomVal.String
+		if subStyleVal.Valid && subStyleVal.String != "" {
+			u.SubdomainStyle = subStyleVal.String
+		} else {
+			u.SubdomainStyle = "liferay"
+		}
 		if maxReservationsVal.Valid {
 			val := int(maxReservationsVal.Int64)
 			u.MaxReservations = &val

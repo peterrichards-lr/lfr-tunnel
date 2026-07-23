@@ -511,6 +511,18 @@ function toggleTheme() {
                         const cl = document.getElementById('footer-cookie-link');
                         if (cl) cl.href = vData.cookie_policy_url;
                     }
+                    const rule = vData.domain_allocation_rule || 'contextual';
+                    const accPrefSelect = document.getElementById('acc-preferred-domain');
+                    const accPrefHelp = document.getElementById('acc-preferred-domain-help');
+                    if (accPrefSelect) {
+                        if (rule === 'user-preference') {
+                            accPrefSelect.removeAttribute('disabled');
+                            if (accPrefHelp) accPrefHelp.textContent = 'Preferred Domain is active because the administrator has configured User Preference domain allocation.';
+                        } else {
+                            accPrefSelect.setAttribute('disabled', 'true');
+                            if (accPrefHelp) accPrefHelp.textContent = 'Preferred Domain selection is disabled because the administrator has configured ' + rule + ' domain allocation.';
+                        }
+                    }
                     const statusLink = document.getElementById('status-page-link');
                     if (statusLink && vData.status_page_url) {
                         statusLink.href = vData.status_page_url;
@@ -968,6 +980,15 @@ function toggleTheme() {
             document.getElementById('acc-last-name').value = currentUser.last_name || '';
             document.getElementById('acc-preferred-name').value = currentUser.preferred_name || '';
             document.getElementById('acc-theme').value = currentUser.theme_preference || 'system';
+            document.getElementById('acc-subdomain-style').value = currentUser.subdomain_style || 'liferay';
+            const accPrefVal = document.getElementById('acc-preferred-domain');
+            if (accPrefVal) {
+                accPrefVal.value = currentUser.preferred_domain || '';
+            }
+            const resStyleSel = document.getElementById('res-style-select');
+            if (resStyleSel) {
+                resStyleSel.value = currentUser.subdomain_style || 'liferay';
+            }
 
             // Hide Danger Zone GDPR Self-Deletion for the Platform Owner
             const dz = document.getElementById('danger-zone-container');
@@ -1307,6 +1328,8 @@ applyTheme(currentUser.theme_preference);
                 theme_preference: document.getElementById('acc-theme').value,
                 language_preference: document.getElementById('acc-language').value,
                 notification_prefs: document.getElementById('acc-notifications').checked ? 'enabled' : 'disabled',
+                preferred_domain: document.getElementById('acc-preferred-domain').value,
+                subdomain_style: document.getElementById('acc-subdomain-style').value
             };
 
             const res = await fetch('/api/me', {
@@ -1323,6 +1346,13 @@ applyTheme(currentUser.theme_preference);
                 currentUser.theme_preference = payload.theme_preference;
                 currentUser.language_preference = payload.language_preference;
                 currentUser.notification_prefs = payload.notification_prefs;
+                currentUser.preferred_domain = payload.preferred_domain;
+                currentUser.subdomain_style = payload.subdomain_style;
+
+                const resStyleSel = document.getElementById('res-style-select');
+                if (resStyleSel) {
+                    resStyleSel.value = payload.subdomain_style;
+                }
 
                 // Update the greeting text immediately
                 let greetingName = currentUser.preferred_name;
@@ -3547,8 +3577,18 @@ applyTheme(currentUser.theme_preference);
                             opt.textContent = d;
                             select.appendChild(opt);
                         });
-                        domainsLoaded = true;
                     }
+                    const accPrefSelect = document.getElementById('acc-preferred-domain');
+                    if (accPrefSelect) {
+                        accPrefSelect.innerHTML = '<option value="">None (Auto)</option>';
+                        domains.forEach(d => {
+                            const opt = document.createElement('option');
+                            opt.value = d;
+                            opt.textContent = d;
+                            accPrefSelect.appendChild(opt);
+                        });
+                    }
+                    domainsLoaded = true;
                 }
             } catch (e) {
                 console.error("Failed to load domains", e);

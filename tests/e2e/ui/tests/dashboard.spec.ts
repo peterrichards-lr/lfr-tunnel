@@ -341,7 +341,7 @@ test.describe('Dashboard UI Automation', () => {
     await expect(backdrop).toHaveClass(/visible/);
 
     // 5. Click the backdrop to close the sidebar
-    await backdrop.click();
+    await backdrop.click({ position: { x: 300, y: 100 } });
     await expect(sidebar).not.toHaveClass(/active/);
     await expect(backdrop).not.toHaveClass(/visible/);
   });

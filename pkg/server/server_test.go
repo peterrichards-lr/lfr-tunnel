@@ -1022,7 +1022,18 @@ label_email:Adresă de E-mail
 func setupTestServer(t *testing.T) (*Server, *mockMailSender, func()) {
 	cfg := config.DefaultServerConfig()
 	cfg.Domains = []string{"example.com"}
-	cfg.DBPath = filepath.Join(t.TempDir(), "test.db")
+	testDir := os.Getenv("LFT_TEST_DIR")
+	if testDir == "" {
+		testDir = t.TempDir()
+	} else {
+		subDir, err := os.MkdirTemp(testDir, "srv_test_*")
+		if err == nil {
+			testDir = subDir
+		} else {
+			testDir = t.TempDir()
+		}
+	}
+	cfg.DBPath = filepath.Join(testDir, "test.db")
 	cfg.DisableBackupScheduler = true
 
 	srv, err := NewServer(cfg)
@@ -1036,6 +1047,7 @@ func setupTestServer(t *testing.T) (*Server, *mockMailSender, func()) {
 	cleanup := func() {
 		srv.Stop()
 		time.Sleep(50 * time.Millisecond) // prevent SQLite cleanup races
+		_ = os.RemoveAll(testDir)
 	}
 
 	return srv, mockMail, cleanup

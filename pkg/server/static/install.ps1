@@ -16,7 +16,13 @@ If ([string]::IsNullOrEmpty($DefaultInstallDir) -or $DefaultInstallDir -like "*{
     $DefaultInstallDir = "$Home\runningpoc\bin"
 }
 
-$InstallDir = $env:LFT_INSTALL_DIR
+$InstallDir = $env:LFR_TUNNEL_WINDOWS_AMD64_INSTALL_DIR
+If (-not $InstallDir) {
+    $InstallDir = $env:LFR_TUNNEL_INSTALL_DIR
+}
+If (-not $InstallDir) {
+    $InstallDir = $env:LFT_INSTALL_DIR
+}
 If (-not $InstallDir) {
     $InstallDir = $DefaultInstallDir
 }

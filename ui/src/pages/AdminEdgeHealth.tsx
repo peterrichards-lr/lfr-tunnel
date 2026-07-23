@@ -194,8 +194,8 @@ export default function AdminEdgeHealth() {
               />
             </div>
           )}
-          <div className="card table-responsive min-h-card">
-            <table className="w-full" style={{ overflow: 'visible' }}>
+          <div className="card table-responsive">
+            <table className="w-full">
               <thead>
                 <tr className="border-b text-left">
                   <th className="th-col th-col--sortable" onClick={() => requestSort('id')} aria-sort={getAriaSort('id')}>Node ID{getSortIndicator('id')}</th>
@@ -247,34 +247,12 @@ export default function AdminEdgeHealth() {
                           <span className="text-danger text-xs">{h.error_message}</span>
                         )}
                       </td>
-                      <td className="td-cell text-right">
-                        <div className="action-menu inline-block relative">
-                          <button 
-                            className="btn btn-secondary py-xs px-sm" 
-                            onClick={(e) => toggleMenu(e, id)}
-                          >
-                            ⋮
-                          </button>
+                      <td className="td-cell text-right whitespace-nowrap">
+                        <div className="flex gap-xs justify-end items-center">
+                          <button className="btn btn-secondary py-xs px-sm text-xs" title="Restart Daemon" onClick={() => restartEdgeDaemon(id)}>Restart</button>
+                          <button className="btn btn-secondary py-xs px-sm text-xs" title="Enable Soft Maintenance" onClick={() => enableEdgeMaintenance(id)}>Maintenance</button>
+                          <button className="btn btn-danger py-xs px-sm text-xs" title="Kick All Active Tunnels" onClick={() => kickEdgeTunnels(id)}>Kick</button>
                         </div>
-                        {openMenu === id && menuPos && (
-                          <div
-                            className="action-menu-dropdown fixed flex flex-col py-xs rounded-sm border"
-                            style={{
-                              top: `${menuPos.top}px`,
-                              right: `${menuPos.right}px`,
-                              zIndex: 9999,
-                              background: 'var(--bg-base)',
-                              boxShadow: '0 10px 15px -3px rgba(0,0,0,0.3)',
-                              minWidth: '180px'
-                            }}
-                            onClick={(e) => e.stopPropagation()}
-                          >
-                            <button className="action-menu-item text-left border-b cursor-pointer p-md text-main no-underline" style={{ background: 'none', borderLeft: 'none', borderRight: 'none', borderTop: 'none' }} onClick={() => restartEdgeDaemon(id)}>Restart Daemon</button>
-                            <button className="action-menu-item text-left border-b cursor-pointer p-md text-main no-underline" style={{ background: 'none', borderLeft: 'none', borderRight: 'none', borderTop: 'none' }} onClick={() => enableEdgeMaintenance(id)}>Enable Maintenance</button>
-                            <button className="action-menu-item text-left border-b cursor-pointer p-md text-main no-underline" style={{ background: 'none', borderLeft: 'none', borderRight: 'none', borderTop: 'none' }} onClick={() => disableEdgeMaintenance(id)}>Disable Maintenance</button>
-                            <button className="action-menu-item text-left cursor-pointer p-md text-danger no-underline" style={{ background: 'none', border: 'none' }} onClick={() => kickEdgeTunnels(id)}>Kick All Tunnels</button>
-                          </div>
-                        )}
                       </td>
                     </tr>
                   );

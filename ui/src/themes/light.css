@@ -5,6 +5,7 @@
 :root[data-theme="light"] {
     --bg-base: #f8fafc;
     --bg-card: rgba(255, 255, 255, 0.7);
+    --bg-card-solid: #ffffff;
     --bg-card-hover: rgba(255, 255, 255, 0.95);
     --primary: #2563eb;
     --primary-hover: #1d4ed8;

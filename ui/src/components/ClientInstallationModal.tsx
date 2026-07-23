@@ -166,17 +166,18 @@ export default function ClientInstallationModal({ isOpen, onClose, serverConfig 
 
         <style>{`
           .code-box {
-            margin-top: 4px;
-            margin-bottom: 12px;
+            margin-top: 6px;
+            margin-bottom: 14px;
             position: relative;
             background: #0d1117;
             color: #e6edf3;
             border-radius: 6px;
-            border: 1px solid rgba(255,255,255,0.1);
-            padding: 10px 40px 10px 12px;
+            border: 1px solid rgba(255,255,255,0.15);
+            padding: 14px 48px 14px 24px;
             font-family: monospace;
-            font-size: 0.8rem;
+            font-size: 0.82rem;
             word-break: break-all;
+            line-height: 1.5;
           }
           .copy-btn {
             position: absolute;

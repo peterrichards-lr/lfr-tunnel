@@ -134,7 +134,7 @@ export default function Login() {
       {/* V1 Promo Banner */}
       <div className="z-10 bg-primary text-white py-md px-xl rounded-md mb-xl max-w-sm w-full text-center box-border shadow-md">
         <p className="m-0 text-sm fw-medium">
-          Prefer the classic look? <a href="/" className="text-white underline fw-bold ml-xs">Return to V1 &rarr;</a>
+          {t('banner_classic_look', 'Prefer the classic look?')} <a href="/" className="text-white underline fw-bold ml-xs">{t('btn_return_v1', 'Return to V1 →')}</a>
         </p>
       </div>
 

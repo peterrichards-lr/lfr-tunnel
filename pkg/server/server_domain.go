@@ -28,6 +28,14 @@ func (s *Server) generateRandomSubdomainPrefix(style string) string {
 		return fmt.Sprintf("%s-%s-%d", generatorAdjectives[randInt(len(generatorAdjectives))], generatorNouns[randInt(len(generatorNouns))], randInt(9000)+1000)
 	case "liferay":
 		return fmt.Sprintf("%s-%s-%d", generatorTechAdjectives[randInt(len(generatorTechAdjectives))], generatorLiferayNouns[randInt(len(generatorLiferayNouns))], randInt(900)+100)
+	case "ngrok":
+		const hexChars = "0123456789abcdef"
+		b := make([]byte, 4)
+		_, _ = rand.Read(b) //nolint:errcheck
+		for i := range b {
+			b[i] = hexChars[int(b[i])%len(hexChars)]
+		}
+		return fmt.Sprintf("%s-tunnel", string(b))
 	default: // Completely Random (Alphanumeric) [a-z0-9]{8}
 		const chars = "abcdefghijklmnopqrstuvwxyz0123456789"
 		b := make([]byte, 8)

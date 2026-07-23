@@ -8,6 +8,7 @@
 :root[data-theme="liferay"] {
     --bg-base: #1a1f35;
     --bg-card: rgba(26, 31, 53, 0.85);
+    --bg-card-solid: #1a1f35;
     --bg-card-hover: rgba(34, 40, 70, 0.95);
     --primary: #0b5fff;
     --primary-hover: #0048d4;

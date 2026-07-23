@@ -9,7 +9,7 @@ import { useI18n } from '../contexts/I18nContext';
 import { useUI } from '../contexts/UIContext';
 
 interface BlacklistEntry {
-  ip: string;
+  ip_address: string;
   reason: string;
   created_at: string;
 }
@@ -40,11 +40,11 @@ export default function AdminBlacklist() {
 
   const addEntry = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!ipInput) return;
+    if (!ipInput.trim()) return;
     try {
       await axios.post('/api/admin/blacklist', {
-        ip: ipInput,
-        reason: reasonInput || 'Manual ban'
+        ip_address: ipInput.trim(),
+        reason: reasonInput.trim() || 'Manual ban'
       });
       setIpInput('');
       setReasonInput('');
@@ -55,10 +55,10 @@ export default function AdminBlacklist() {
     }
   };
 
-  const removeEntry = async (ip: string) => {
-    if (!(await showConfirm('Unblock IP', `Are you sure you want to unblock ${ip}?`))) return;
+  const removeEntry = async (ipAddress: string) => {
+    if (!(await showConfirm('Unblock IP', `Are you sure you want to unblock ${ipAddress}?`))) return;
     try {
-      await axios.delete(`/api/admin/blacklist/${encodeURIComponent(ip)}`);
+      await axios.delete(`/api/admin/blacklist/${encodeURIComponent(ipAddress)}`);
       fetchEntries();
       showToast('IP unblocked successfully', 'success');
     } catch (err: any) {
@@ -67,7 +67,7 @@ export default function AdminBlacklist() {
   };
 
   const columns: ColumnDef<BlacklistEntry>[] = useMemo(() => [
-    { key: 'ip', label: t('tbl_ip_address', 'IP Address'), sortable: true },
+    { key: 'ip_address', label: t('tbl_ip_address', 'IP Address'), sortable: true },
     { key: 'reason', label: t('tbl_reason', 'Reason'), sortable: true },
     { key: 'created_at', label: t('tbl_time', 'Time'), sortable: true },
   ], [t]);
@@ -90,7 +90,7 @@ export default function AdminBlacklist() {
   } = useDataTable<BlacklistEntry>(
     'admin_blacklist',
     entries,
-    ['ip', 'reason'],
+    ['ip_address', 'reason'],
     columns,
     10
   );
@@ -152,8 +152,8 @@ export default function AdminBlacklist() {
       <div className="card p-xl mb-xl">
         <h4 className="text-md fw-bold mb-md">{t('block_new_ip', 'Block IP Address')}</h4>
         <form onSubmit={addEntry} className="flex gap-md items-end flex-wrap">
-          <div className="flex-1 min-w-[200px]">
-            <label className="input-label text-xs mb-xs">{t('ip_address', 'IP Address')}</label>
+          <div className="form-group flex-1 min-w-[200px] m-0">
+            <label className="form-label mb-xs">{t('ip_address', 'IP Address')}</label>
             <input
               type="text"
               placeholder="e.g. 192.0.2.1"
@@ -163,8 +163,8 @@ export default function AdminBlacklist() {
               required
             />
           </div>
-          <div className="flex-2 min-w-[250px]">
-            <label className="input-label text-xs mb-xs">{t('reason', 'Reason')}</label>
+          <div className="form-group flex-2 min-w-[250px] m-0">
+            <label className="form-label mb-xs">{t('reason', 'Reason')}</label>
             <input
               type="text"
               placeholder="e.g. Malicious payload scan"
@@ -173,9 +173,12 @@ export default function AdminBlacklist() {
               className="input-field w-full"
             />
           </div>
-          <button type="submit" className="btn btn-primary h-[38px] w-auto">
-            🚫 {t('block_ip', 'Block IP')}
-          </button>
+          <div className="form-group m-0">
+            <label className="form-label mb-xs invisible" aria-hidden="true">&nbsp;</label>
+            <button type="submit" className="btn btn-primary py-sm px-xl text-sm w-auto flex items-center justify-center gap-xs">
+              🚫 {t('block_ip', 'Block IP')}
+            </button>
+          </div>
         </form>
       </div>
 
@@ -196,9 +199,9 @@ export default function AdminBlacklist() {
           <table className="w-full">
             <thead>
               <tr className="border-b text-left">
-                {isColumnVisible('ip') && (
-                  <th className="th-col th-col--sortable" onClick={() => requestSort('ip')} aria-sort={getAriaSort('ip')}>
-                    {t('tbl_ip_address', 'IP Address')}{getSortIndicator('ip')}
+                {isColumnVisible('ip_address') && (
+                  <th className="th-col th-col--sortable" onClick={() => requestSort('ip_address')} aria-sort={getAriaSort('ip_address')}>
+                    {t('tbl_ip_address', 'IP Address')}{getSortIndicator('ip_address')}
                   </th>
                 )}
                 {isColumnVisible('reason') && (
@@ -223,9 +226,9 @@ export default function AdminBlacklist() {
                 </tr>
               ) : (
                 paginatedItems.map((entry: BlacklistEntry) => (
-                  <tr key={entry.ip} className="border-b">
-                    {isColumnVisible('ip') && (
-                      <td className="td-cell--mono fw-bold">{entry.ip}</td>
+                  <tr key={entry.ip_address} className="border-b">
+                    {isColumnVisible('ip_address') && (
+                      <td className="td-cell--mono fw-bold">{entry.ip_address}</td>
                     )}
                     {isColumnVisible('reason') && (
                       <td className="td-cell">{entry.reason}</td>
@@ -235,8 +238,9 @@ export default function AdminBlacklist() {
                     )}
                     <td className="td-cell text-right">
                       <button
+                        type="button"
                         className="btn btn-secondary text-xs text-danger py-xs px-md"
-                        onClick={() => removeEntry(entry.ip)}
+                        onClick={() => removeEntry(entry.ip_address)}
                       >
                         Unblock
                       </button>

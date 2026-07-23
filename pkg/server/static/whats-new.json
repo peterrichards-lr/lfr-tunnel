@@ -1,5 +1,14 @@
 [
   {
+    "version": "v1.44.0",
+    "release_date": "2026-07-23",
+    "features": [
+      "Refactor: Systematically refactor all 20 V2 portal UI components to CSS utility classes and design tokens",
+      "Feature: Restore complete V1 feature parity across Account Settings, Admin Users, and Personal Access Tokens",
+      "UX: Premium dark, light, and Liferay Waffle theme styling without inline style overhead"
+    ]
+  },
+  {
     "version": "v1.43.15",
     "release_date": "2026-07-22",
     "features": [

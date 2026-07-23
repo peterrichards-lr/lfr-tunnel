@@ -45,11 +45,10 @@ export default function DataTableToolbar<T>({
       {/* Right side: Page Size & Column Selector */}
       <div className="flex items-center gap-md">
         {/* Page Size Selector */}
-        <div className="flex items-center gap-xs text-xs text-muted h-9">
+        <div className="flex items-center gap-xs text-xs text-muted">
           <span className="whitespace-nowrap">{t('tbl_page_size', 'Page Size')}:</span>
           <select
-            className="input-field text-xs cursor-pointer w-auto m-0"
-            style={{ height: '34px', paddingTop: '4px', paddingBottom: '4px', lineHeight: '1.2' }}
+            className="input-field text-xs table-toolbar-select"
             value={pageSize}
             onChange={e => onPageSizeChange(Number(e.target.value))}
           >
@@ -63,8 +62,7 @@ export default function DataTableToolbar<T>({
         {/* Column Visibility Selector */}
         <div className="relative inline-block">
           <button
-            className="btn btn-secondary text-xs flex items-center gap-xs"
-            style={{ height: '34px' }}
+            className="btn btn-secondary text-xs table-toolbar-btn flex items-center gap-xs"
             onClick={() => setIsColMenuOpen(!isColMenuOpen)}
           >
             <span>👁</span>
@@ -77,16 +75,7 @@ export default function DataTableToolbar<T>({
                 className="fixed inset-0 z-40"
                 onClick={() => setIsColMenuOpen(false)}
               ></div>
-              <div
-                className="absolute right-0 top-full mt-xs z-50 p-md rounded-md border flex flex-col gap-xs min-w-[200px]"
-                style={{
-                  background: 'var(--card-bg, var(--bg-card, #1e2430))',
-                  backgroundColor: 'var(--card-bg, #1e2430)',
-                  borderColor: 'var(--border, rgba(255, 255, 255, 0.15))',
-                  boxShadow: '0 12px 30px rgba(0, 0, 0, 0.6), 0 4px 12px rgba(0, 0, 0, 0.4)',
-                  backdropFilter: 'blur(16px)'
-                }}
-              >
+              <div className="table-column-dropdown">
                 <div className="text-2xs fw-bold text-muted uppercase tracking-wider mb-xs">
                   {t('tbl_visible_columns', 'Visible Columns')}
                 </div>
@@ -97,9 +86,9 @@ export default function DataTableToolbar<T>({
                   >
                     <input
                       type="checkbox"
+                      className="table-column-checkbox"
                       checked={isColumnVisible(col.key)}
                       onChange={() => onToggleColumn(col.key)}
-                      style={{ accentColor: 'var(--primary)' }}
                     />
                     <span>{col.label}</span>
                   </label>

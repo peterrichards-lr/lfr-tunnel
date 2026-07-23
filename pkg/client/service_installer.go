@@ -145,6 +145,16 @@ func installDarwin(exePath string) error {
 		return err
 	}
 
+	prettyExe := filepath.Join(filepath.Dir(exePath), "Liferay Tunnel")
+	if prettyExe != exePath {
+		_ = os.Remove(prettyExe)
+		if err := os.Symlink(exePath, prettyExe); err != nil {
+			if input, err := os.ReadFile(exePath); err == nil {
+				_ = os.WriteFile(prettyExe, input, 0755)
+			}
+		}
+	}
+
 	plistPath := filepath.Join(homeDir, "Library", "LaunchAgents", "com.liferay.tunnel.plist")
 	plistContent := fmt.Sprintf(`<?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
@@ -170,7 +180,7 @@ func installDarwin(exePath string) error {
     <key>StandardErrorPath</key>
     <string>%s/.lfr-tunnel/service.err</string>
 </dict>
-</plist>`, exePath, homeDir, homeDir)
+</plist>`, prettyExe, homeDir, homeDir)
 
 	if err := os.MkdirAll(filepath.Dir(plistPath), 0755); err != nil {
 		return err
@@ -317,6 +327,16 @@ func installDarwinGUI(exePath string) error {
 		return err
 	}
 
+	prettyExe := filepath.Join(filepath.Dir(exePath), "Liferay Tunnel")
+	if prettyExe != exePath {
+		_ = os.Remove(prettyExe)
+		if err := os.Symlink(exePath, prettyExe); err != nil {
+			if input, err := os.ReadFile(exePath); err == nil {
+				_ = os.WriteFile(prettyExe, input, 0755)
+			}
+		}
+	}
+
 	plistPath := filepath.Join(homeDir, "Library", "LaunchAgents", "com.liferay.tunnel.gui.plist")
 	plistContent := fmt.Sprintf(`<?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
@@ -340,7 +360,7 @@ func installDarwinGUI(exePath string) error {
     <key>StandardErrorPath</key>
     <string>%s/.lfr-tunnel/gui_service.err</string>
 </dict>
-</plist>`, exePath, homeDir, homeDir)
+</plist>`, prettyExe, homeDir, homeDir)
 
 	if err := os.MkdirAll(filepath.Dir(plistPath), 0755); err != nil {
 		return err

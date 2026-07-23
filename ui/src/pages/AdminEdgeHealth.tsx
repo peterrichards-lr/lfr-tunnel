@@ -191,7 +191,7 @@ export default function AdminEdgeHealth() {
               />
             </div>
           )}
-          <div className="card table-responsive" style={{ minHeight: '220px' }}>
+          <div className="card table-responsive" style={{ minHeight: '320px', paddingBottom: '120px' }}>
             <table className="table" style={{ overflow: 'visible' }}>
               <thead>
                 <tr>

@@ -89,7 +89,7 @@ export default function AccountSettings() {
     <div style={{ animation: 'fadeInUp 0.6s ease-out' }}>
       <div style={{ marginBottom: '32px' }}>
         <h1 style={{ fontSize: '32px', fontWeight: 800, letterSpacing: '-1px', marginBottom: '8px' }}>
-          {t('account_settings', 'Account Settings')}
+          {t('account_title', 'Account Settings')}
         </h1>
         <p style={{ color: 'var(--text-muted)', fontSize: '16px' }}>
           {t('account_desc', 'Update your personal information and security preferences.')}
@@ -104,7 +104,7 @@ export default function AccountSettings() {
           <form onSubmit={handleSaveProfile}>
             <div style={{ marginBottom: '16px' }}>
               <label style={{ display: 'block', marginBottom: '8px', fontSize: '14px', color: 'var(--text-muted)' }}>
-                {t('email_address', 'Email Address')}
+                {t('label_email', 'Email Address')}
               </label>
               <input type="email" className="input-field" value={user?.email || ''} disabled style={{ opacity: 0.7 }} />
             </div>
@@ -112,33 +112,33 @@ export default function AccountSettings() {
             <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px', marginBottom: '16px' }}>
               <div>
                 <label style={{ display: 'block', marginBottom: '8px', fontSize: '14px', color: 'var(--text-muted)' }}>
-                  {t('first_name', 'First Name')}
+                  {t('label_first_name', 'First Name')}
                 </label>
                 <input 
                   type="text" 
                   className="input-field" 
                   value={firstName} 
                   onChange={(e) => setFirstName(e.target.value)}
-                  placeholder={t('first_name_placeholder', 'First Name')}
+                  placeholder={t('label_first_name', 'First Name')}
                 />
               </div>
               <div>
                 <label style={{ display: 'block', marginBottom: '8px', fontSize: '14px', color: 'var(--text-muted)' }}>
-                  {t('last_name', 'Last Name')}
+                  {t('label_last_name', 'Last Name')}
                 </label>
                 <input 
                   type="text" 
                   className="input-field" 
                   value={lastName} 
                   onChange={(e) => setLastName(e.target.value)}
-                  placeholder={t('last_name_placeholder', 'Last Name')}
+                  placeholder={t('label_last_name', 'Last Name')}
                 />
               </div>
             </div>
             
             <div style={{ marginBottom: '16px' }}>
               <label style={{ display: 'block', marginBottom: '8px', fontSize: '14px', color: 'var(--text-muted)' }}>
-                {t('preferred_name', 'Preferred Name')}
+                {t('label_preferred_name', 'Preferred Name')}
               </label>
               <input 
                 type="text" 
@@ -151,7 +151,7 @@ export default function AccountSettings() {
 
             <div style={{ marginBottom: '16px' }}>
               <label style={{ display: 'block', marginBottom: '8px', fontSize: '14px', color: 'var(--text-muted)' }}>
-                {t('language', 'Language')}
+                {t('label_language', 'Language')}
               </label>
               <select className="input-field" value={language} onChange={(e) => setLanguage(e.target.value)}>
                 {availableLanguages.map(l => (
@@ -162,7 +162,7 @@ export default function AccountSettings() {
 
             <div style={{ marginBottom: '24px' }}>
               <label style={{ display: 'block', marginBottom: '8px', fontSize: '14px', color: 'var(--text-muted)' }}>
-                {t('theme', 'Theme Preference')}
+                {t('label_theme', 'Theme Preference')}
               </label>
               <select className="input-field" value={themePreference} onChange={(e) => {
                 setThemePreference(e.target.value as any);
@@ -176,7 +176,7 @@ export default function AccountSettings() {
 
             <div style={{ marginBottom: '16px', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
               <label style={{ fontSize: '14px', color: 'var(--text-muted)' }}>
-                {t('email_notifications', 'Email Notifications')}
+                {t('label_notifications', 'Email Notifications')}
               </label>
               <label className="switch">
                 <input type="checkbox" checked={emailNotifications} onChange={(e) => setEmailNotifications(e.target.checked)} />
@@ -197,7 +197,7 @@ export default function AccountSettings() {
             {message && <div className={message.includes('success') ? 'alert alert-success' : 'alert alert-error'}>{message}</div>}
 
             <button type="submit" className="btn btn-primary" disabled={saving}>
-              {saving ? t('saving', 'Saving...') : t('save_changes', 'Save Changes')}
+              {saving ? t('saving', 'Saving...') : t('btn_save_changes', 'Save Changes')}
             </button>
           </form>
         </div>

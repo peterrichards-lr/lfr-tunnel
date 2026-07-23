@@ -28,6 +28,7 @@ export default function ReservationsPanel() {
   const [domains, setDomains] = useState<string[]>([]);
   const [selectedDomain, setSelectedDomain] = useState('');
   const [subdomainInput, setSubdomainInput] = useState('');
+  const [subdomainStyle, setSubdomainStyle] = useState('liferay');
 
   const fetchData = async () => {
     try {
@@ -55,7 +56,7 @@ export default function ReservationsPanel() {
 
   const generateSubdomain = async () => {
     try {
-      const res = await axios.get('/api/portal/generate-subdomain');
+      const res = await axios.get(`/api/portal/generate-subdomain?style=${subdomainStyle}`);
       setSubdomainInput(res.data.subdomain);
     } catch {
       showToast(t('error_generate_subdomain', 'Failed to generate subdomain'), 'error');
@@ -198,6 +199,14 @@ export default function ReservationsPanel() {
               {domains.map(d => (
                 <option key={d} value={d}>{d}</option>
               ))}
+            </select>
+          </div>
+          <div style={{ minWidth: '130px' }}>
+            <select className="form-control" value={subdomainStyle} onChange={(e) => setSubdomainStyle(e.target.value)}>
+              <option value="liferay">{t('style_liferay', 'Liferay Style')}</option>
+              <option value="words">{t('style_words', 'Words Style')}</option>
+              <option value="heroku">{t('style_heroku', 'Heroku Style')}</option>
+              <option value="random">{t('style_random', 'Alphanumeric')}</option>
             </select>
           </div>
           <button type="button" className="btn btn-secondary" onClick={generateSubdomain}>{t('generate', 'Generate')}</button>

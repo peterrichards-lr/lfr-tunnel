@@ -29,17 +29,45 @@ export default function Dashboard() {
   const [isInstallModalOpen, setIsInstallModalOpen] = useState(false);
   const [serverConfig, setServerConfig] = useState<any>(null); // Kept for modal if needed, though not fetched here currently
   const [copiedUpgrade, setCopiedUpgrade] = useState(false);
+  const [isCreateTokenModalOpen, setIsCreateTokenModalOpen] = useState(false);
+  const [newTokenName, setNewTokenName] = useState('');
+  const [newTokenExpiresDays, setNewTokenExpiresDays] = useState(30);
+  const [generatedToken, setGeneratedToken] = useState<string | null>(null);
+  const [generating, setGenerating] = useState(false);
   const { formatDate } = useSettings();
   const { t } = useI18n();
   const { items: sortedTokens, requestSort, getSortIndicator, searchQuery, setSearchQuery, getAriaSort } = useTableSort(tokens, ['name', 'token_prefix', 'status']);
 
-  useEffect(() => {
+  const fetchTokens = () => {
     axios.get('/api/tokens')
       .then(res => setTokens(res.data || []))
       .catch(err => console.error("Failed to fetch tokens", err));
+  };
+
+  useEffect(() => {
+    fetchTokens();
     axios.get('/api/analytics/ping?portal=v2').catch(() => {});
     axios.get('/api/version').then(res => setServerConfig(res.data)).catch(() => {});
   }, [user]);
+
+  const handleCreateToken = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!newTokenName.trim()) return;
+    setGenerating(true);
+    try {
+      const res = await axios.post('/api/tokens', {
+        name: newTokenName,
+        expires_in_days: Number(newTokenExpiresDays)
+      });
+      setGeneratedToken(res.data.raw_token);
+      fetchTokens();
+    } catch (err: any) {
+      console.error(err);
+      alert(err.response?.data?.error || 'Failed to generate token');
+    } finally {
+      setGenerating(false);
+    }
+  };
 
   const handleExportCSV = () => {
     window.location.href = '/api/tokens/export';
@@ -153,7 +181,18 @@ export default function Dashboard() {
                     {t('export_csv', 'Export CSV')}
                   </button>
                 )}
-                <button className="btn btn-outline" style={{ fontSize: '14px', padding: 'var(--spacing-sm) var(--spacing-lg)' }}>{t('generate_token', 'Generate Token')}</button>
+                <button 
+                  className="btn btn-outline" 
+                  onClick={() => {
+                    setNewTokenName('');
+                    setNewTokenExpiresDays(30);
+                    setGeneratedToken(null);
+                    setIsCreateTokenModalOpen(true);
+                  }}
+                  style={{ fontSize: '14px', padding: 'var(--spacing-sm) var(--spacing-lg)' }}
+                >
+                  {t('generate_token', 'Generate Token')}
+                </button>
               </div>
             </div>
             
@@ -237,6 +276,100 @@ export default function Dashboard() {
       </div>
 
       <ClientInstallationModal isOpen={isInstallModalOpen} onClose={() => setIsInstallModalOpen(false)} serverConfig={serverConfig} />
+      
+      {isCreateTokenModalOpen && (
+        <div style={{
+          position: 'fixed', top: 0, left: 0, width: '100%', height: '100%',
+          backgroundColor: 'rgba(0,0,0,0.5)', zIndex: 1000,
+          display: 'flex', justifyContent: 'center', alignItems: 'center', padding: 'var(--spacing-lg)'
+        }}>
+          <div className="card" style={{ width: '100%', maxWidth: '500px', background: 'var(--bg-base)', border: '1px solid var(--border)', borderRadius: '12px', padding: '24px' }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 'var(--spacing-lg)' }}>
+              <h3 style={{ margin: 0 }}>{t('generate_new_token', 'Generate Personal Access Token')}</h3>
+              <button onClick={() => setIsCreateTokenModalOpen(false)} style={{ background: 'none', border: 'none', color: 'var(--text-muted)', cursor: 'pointer', fontSize: '20px' }}>✕</button>
+            </div>
+
+            {!generatedToken ? (
+              <form onSubmit={handleCreateToken}>
+                <div style={{ marginBottom: '16px' }}>
+                  <label style={{ display: 'block', fontSize: '13px', color: 'var(--text-muted)', marginBottom: '8px' }}>
+                    {t('token_name_label', 'Token Name / Description')}
+                  </label>
+                  <input 
+                    type="text" 
+                    className="input-field" 
+                    required 
+                    placeholder={t('token_name_placeholder', 'e.g. Work Laptop')} 
+                    value={newTokenName}
+                    onChange={(e) => setNewTokenName(e.target.value)}
+                  />
+                </div>
+
+                <div style={{ marginBottom: '24px' }}>
+                  <label style={{ display: 'block', fontSize: '13px', color: 'var(--text-muted)', marginBottom: '8px' }}>
+                    {t('expiration', 'Expiration')}
+                  </label>
+                  <select 
+                    className="input-field" 
+                    value={newTokenExpiresDays} 
+                    onChange={(e) => setNewTokenExpiresDays(Number(e.target.value))}
+                  >
+                    <option value={30}>30 Days</option>
+                    <option value={90}>90 Days</option>
+                    <option value={365}>365 Days</option>
+                    {(user?.role === 'admin' || user?.role === 'owner') && (
+                      <option value={0}>Never Expire</option>
+                    )}
+                  </select>
+                </div>
+
+                <div style={{ display: 'flex', gap: '12px', justifyContent: 'flex-end' }}>
+                  <button type="button" className="btn btn-secondary" onClick={() => setIsCreateTokenModalOpen(false)} style={{ width: 'auto' }}>
+                    {t('cancel', 'Cancel')}
+                  </button>
+                  <button type="submit" className="btn btn-primary" disabled={generating} style={{ width: 'auto' }}>
+                    {generating ? t('generating', 'Generating...') : t('generate', 'Generate')}
+                  </button>
+                </div>
+              </form>
+            ) : (
+              <div style={{ animation: 'fadeInUp 0.3s ease-out' }}>
+                <div className="alert alert-warning" style={{ marginBottom: '20px', fontSize: '13px' }}>
+                  ⚠️ {t('token_warning', 'Copy this token now! It will not be shown again for security reasons.')}
+                </div>
+                
+                <div style={{ display: 'flex', gap: '8px', marginBottom: '20px' }}>
+                  <input 
+                    type="text" 
+                    className="input-field" 
+                    readOnly 
+                    value={generatedToken} 
+                    style={{ marginBottom: 0, fontFamily: 'monospace', fontSize: '13px', width: '100%' }} 
+                  />
+                  <button 
+                    type="button" 
+                    className="btn btn-primary" 
+                    style={{ width: 'auto', padding: '0 16px' }}
+                    onClick={() => {
+                      navigator.clipboard.writeText(generatedToken);
+                      alert('Token copied to clipboard!');
+                    }}
+                  >
+                    {t('copy', 'Copy')}
+                  </button>
+                </div>
+
+                <div style={{ display: 'flex', justifyContent: 'flex-end' }}>
+                  <button type="button" className="btn btn-secondary" onClick={() => setIsCreateTokenModalOpen(false)} style={{ width: 'auto' }}>
+                    {t('close', 'Close')}
+                  </button>
+                </div>
+              </div>
+            )}
+          </div>
+        </div>
+      )}
+
       <OnboardingTour user={user} />
     </div>
   );

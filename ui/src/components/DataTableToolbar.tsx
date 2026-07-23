@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { useI18n } from '../contexts/I18nContext';
-import { ColumnDef } from '../hooks/useDataTable';
+import type { ColumnDef } from '../hooks/useDataTable';
 
 interface DataTableToolbarProps<T> {
   searchQuery: string;

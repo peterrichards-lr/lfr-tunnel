@@ -22,10 +22,6 @@ export default function AdminEdgeHealth() {
   const { t } = useI18n();
   const { showToast, showConfirm, showPrompt } = useUI();
   
-  // Track open menus and their viewport position
-  const [openMenu, setOpenMenu] = useState<string | null>(null);
-  const [menuPos, setMenuPos] = useState<{ top: number; right: number } | null>(null);
-
   const fetchHealth = async () => {
     try {
       const res = await axios.get('/api/portal/edge-health');
@@ -42,15 +38,7 @@ export default function AdminEdgeHealth() {
   useEffect(() => {
     fetchHealth();
     const interval = setInterval(fetchHealth, 30000);
-    
-    // Close menus when clicking outside
-    const handleGlobalClick = () => setOpenMenu(null);
-    document.addEventListener('click', handleGlobalClick);
-    
-    return () => {
-      clearInterval(interval);
-      document.removeEventListener('click', handleGlobalClick);
-    };
+    return () => clearInterval(interval);
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
@@ -67,7 +55,6 @@ export default function AdminEdgeHealth() {
     } catch (e: any) {
       showToast(e.response?.data?.error || 'Action failed.', 'error');
     }
-    setOpenMenu(null);
   };
 
   const restartEdgeDaemon = async (nodeId: string) => {
@@ -98,18 +85,6 @@ export default function AdminEdgeHealth() {
   const kickEdgeTunnels = async (nodeId: string) => {
     if (await showConfirm('Kick All Tunnels', `Are you sure you want to kick ALL active tunnels on edge node ${nodeId}?`)) {
       triggerEdgeAction(nodeId, "kick_tunnels");
-    }
-  };
-
-  const toggleMenu = (e: React.MouseEvent, id: string) => {
-    e.stopPropagation();
-    if (openMenu === id) {
-      setOpenMenu(null);
-      setMenuPos(null);
-    } else {
-      const rect = (e.currentTarget as HTMLElement).getBoundingClientRect();
-      setMenuPos({ top: rect.bottom + window.scrollY + 4, right: window.innerWidth - rect.right });
-      setOpenMenu(id);
     }
   };
 

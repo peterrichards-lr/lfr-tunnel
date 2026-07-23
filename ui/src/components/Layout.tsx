@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import { Outlet, useNavigate } from 'react-router-dom';
 import axios from 'axios';
 import Sidebar from './Sidebar';
+import ScrollToTopButton from './ScrollToTopButton';
 import { useI18n } from '../contexts/I18nContext';
 import { useSettings } from '../contexts/SettingsContext';
 
@@ -152,6 +153,7 @@ export default function Layout() {
         <div>
           <Outlet context={{ user }} />
         </div>
+        <ScrollToTopButton />
       </div>
     </div>
   </div>

@@ -68,7 +68,8 @@ export default function AdminAuditLog() {
     events,
     ['actor_id', 'action', 'target_type', 'target_id', 'ip_address', 'details'],
     columns,
-    10
+    10,
+    ['ip_address']
   );
 
   if (loading) {

@@ -1739,3 +1739,23 @@ html[dir="rtl"] td, html[dir="rtl"] th {
     accent-color: var(--primary);
 }
 
+/* Floating Return to Top Button */
+.scroll-to-top-btn {
+    position: fixed;
+    bottom: 2rem;
+    right: 2rem;
+    z-index: 99;
+    box-shadow: var(--shadow-lg, 0 10px 25px rgba(0,0,0,0.5));
+    padding: 0.5rem 1rem;
+    border-radius: 9999px;
+    font-weight: 600;
+    font-size: 0.85rem;
+    border: 1px solid var(--border);
+    backdrop-filter: blur(12px);
+    -webkit-backdrop-filter: blur(12px);
+    transition: all 0.2s ease-in-out;
+}
+.scroll-to-top-btn:hover {
+    transform: translateY(-2px);
+}
+

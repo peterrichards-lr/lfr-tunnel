@@ -122,7 +122,7 @@ export default function AdminEdgeHealth() {
     ['id', 'status', 'resolved_ip', 'version'],
     columns,
     10,
-    ['created_at'] // Default unselected
+    ['resolved_ip', 'created_at'] // Default unselected
   );
 
   if (loading) {

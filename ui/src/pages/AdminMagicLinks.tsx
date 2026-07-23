@@ -65,7 +65,7 @@ export default function AdminMagicLinks() {
     ['email', 'client_ip'],
     columns,
     10,
-    ['created_at']
+    ['client_ip', 'created_at']
   );
 
   if (loading) {

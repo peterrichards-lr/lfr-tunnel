@@ -1,7 +1,9 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useMemo } from 'react';
 import axios from 'axios';
 import { useOutletContext } from 'react-router-dom';
-import { useTableSort } from '../hooks/useTableSort';
+import { useDataTable, type ColumnDef } from '../hooks/useDataTable';
+import DataTableToolbar from '../components/DataTableToolbar';
+import DataTablePagination from '../components/DataTablePagination';
 import TunnelsPanel from '../components/TunnelsPanel';
 import ReservationsPanel from '../components/ReservationsPanel';
 import WhatsNewPanel from '../components/WhatsNewPanel';
@@ -27,7 +29,7 @@ export default function Dashboard() {
   const { user } = useOutletContext<{ user: any }>();
   const [tokens, setTokens] = useState<any[]>([]);
   const [isInstallModalOpen, setIsInstallModalOpen] = useState(false);
-  const [serverConfig, setServerConfig] = useState<any>(null); // Kept for modal if needed, though not fetched here currently
+  const [serverConfig, setServerConfig] = useState<any>(null);
   const [copiedUpgrade, setCopiedUpgrade] = useState(false);
   const [isCreateTokenModalOpen, setIsCreateTokenModalOpen] = useState(false);
   const [newTokenName, setNewTokenName] = useState('');
@@ -36,7 +38,61 @@ export default function Dashboard() {
   const [generating, setGenerating] = useState(false);
   const { formatDate } = useSettings();
   const { t } = useI18n();
-  const { items: sortedTokens, requestSort, getSortIndicator, searchQuery, setSearchQuery, getAriaSort } = useTableSort(tokens, ['name', 'token_prefix', 'status', 'expires_at']);
+
+  const columns: ColumnDef<any>[] = useMemo(() => [
+    { key: 'name', label: t('name', 'Name'), sortable: true },
+    { key: 'token_prefix', label: t('prefix', 'Prefix'), sortable: true },
+    { key: 'expires_at', label: t('expires', 'Expires'), sortable: true },
+    { key: 'created_at', label: t('created', 'Created'), sortable: true }
+  ], [t]);
+
+  const mappedTokens = useMemo(() => {
+    const now = new Date();
+    return tokens.map(tItem => {
+      const isExpired = tItem.expires_at && new Date(tItem.expires_at) <= now;
+      const statusLabel = tItem.revoked_at ? 'revoked' : (isExpired ? 'expired' : 'active');
+      return {
+        ...tItem,
+        computed_status: statusLabel
+      };
+    });
+  }, [tokens]);
+
+  const statusOptions = useMemo(() => [
+    { value: 'active', label: t('status_active', 'Active') },
+    { value: 'expired', label: t('status_expired', 'Expired') },
+    { value: 'revoked', label: t('status_revoked', 'Revoked') }
+  ], [t]);
+
+  const {
+    paginatedItems: paginatedTokens,
+    currentPage,
+    totalPages,
+    totalItems,
+    pageSize,
+    setCurrentPage,
+    setPageSize,
+    searchQuery,
+    setSearchQuery,
+    statusFilter,
+    setStatusFilter,
+    requestSort,
+    getSortIndicator,
+    getAriaSort,
+    isColumnVisible,
+    toggleColumn,
+    allColumns
+  } = useDataTable<any>(
+    'dashboard_pat_tokens',
+    mappedTokens,
+    ['name', 'token_prefix'],
+    columns,
+    10,
+    ['created_at'],
+    'computed_status',
+    statusOptions,
+    'active'
+  );
 
   const formatRelativeExpiry = (expiresAt: string | null | undefined): { label: string; color: string } => {
     if (!expiresAt) return { label: t('never', 'Never'), color: 'var(--text-muted)' };
@@ -149,8 +205,8 @@ export default function Dashboard() {
         <div className="lg:col-span-2 flex flex-col gap-xl">
           <ReservationsPanel />
           
-          <div className="card" style={{ animationDelay: '0.2s' }}>
-            <div className="page-header flex-wrap gap-md mb-xl">
+          <div className="card p-0" style={{ animationDelay: '0.2s' }}>
+            <div className="p-xl border-b flex justify-between items-center flex-wrap gap-md">
               <div>
                 <h3 className="m-0 text-md fw-bold">{t('pat_title', 'Personal Access Tokens')}</h3>
                 <p className="text-muted text-sm mt-xs m-0">
@@ -178,13 +234,19 @@ export default function Dashboard() {
             </div>
             
             {tokens.length > 0 && (
-              <div className="search-row">
-                <input 
-                  type="text" 
-                  placeholder={t('search_tokens_placeholder', 'Search tokens...')} 
-                  value={searchQuery} 
-                  onChange={e => setSearchQuery(e.target.value)}
-                  className="search-input"
+              <div className="p-md border-b">
+                <DataTableToolbar
+                  searchQuery={searchQuery}
+                  onSearchChange={setSearchQuery}
+                  searchPlaceholder={t('search_tokens_placeholder', 'Search tokens...')}
+                  pageSize={pageSize}
+                  onPageSizeChange={setPageSize}
+                  columns={allColumns}
+                  isColumnVisible={isColumnVisible}
+                  onToggleColumn={toggleColumn}
+                  statusFilter={statusFilter}
+                  onStatusFilterChange={setStatusFilter}
+                  statusOptions={statusOptions}
                 />
               </div>
             )}
@@ -194,52 +256,63 @@ export default function Dashboard() {
                 <div className="text-muted text-base">{t('no_active_tokens', 'No active tokens found. Create one to authenticate your CLI.')}</div>
               </div>
             ) : (
-              <div className="table-responsive">
-                <table className="w-full">
-                  <thead>
-                    <tr className="border-b text-left">
-                      <th className="th-col th-col--sortable" onClick={() => requestSort('name')} aria-sort={getAriaSort('name')}>{t('name', 'Name')}{getSortIndicator('name')}</th>
-                      <th className="th-col th-col--sortable" onClick={() => requestSort('token_prefix')} aria-sort={getAriaSort('token_prefix')}>{t('prefix', 'Prefix')}{getSortIndicator('token_prefix')}</th>
-                      <th className="th-col th-col--sortable" onClick={() => requestSort('created_at')} aria-sort={getAriaSort('created_at')}>{t('created', 'Created')}{getSortIndicator('created_at')}</th>
-                      <th className="th-col th-col--sortable" onClick={() => requestSort('expires_at')} aria-sort={getAriaSort('expires_at')}>{t('expires', 'Expires')}{getSortIndicator('expires_at')}</th>
-                      <th className="th-col th-col--sortable" onClick={() => requestSort('status')} aria-sort={getAriaSort('status')}>{t('status', 'Status')}{getSortIndicator('status')}</th>
-                      <th className="th-col">{t('expires_in', 'Expires In')}</th>
-                      <th className="th-col">{t('actions', 'Actions')}</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {sortedTokens.map((tItem, idx) => {
-                      const expiryInfo = formatRelativeExpiry(tItem.expires_at);
-                      return (
-                      <tr key={idx} className="border-b">
-                        <td className="td-cell fw-medium">{tItem.name}</td>
-                        <td className="td-cell--mono">{tItem.token_prefix}...</td>
-                        <td className="td-cell">{formatDate(tItem.created_at)}</td>
-                        <td className="td-cell text-muted">{formatDate(tItem.expires_at)}</td>
-                        <td className="td-cell">
-                          <span className={`badge ${(tItem.status || 'active') === 'active' ? 'badge-success' : 'badge-danger'}`}>
-                            {(tItem.status || 'active').toUpperCase()}
-                          </span>
-                        </td>
-                        <td className="td-cell">
-                          <span className="text-sm fw-medium" style={{ color: expiryInfo.color }}>{expiryInfo.label}</span>
-                        </td>
-                        <td className="td-cell">
-                          {(tItem.status || 'active') === 'active' && (
-                            <button
-                              className="btn btn-outline-danger py-xs px-sm text-xs w-auto"
-                              onClick={() => handleRevokeToken(tItem.id, tItem.name)}
-                            >
-                              {t('revoke', 'Revoke')}
-                            </button>
-                          )}
-                        </td>
+              <>
+                <div className="table-responsive">
+                  <table className="w-full">
+                    <thead>
+                      <tr className="border-b text-left">
+                        {isColumnVisible('name') && <th className="th-col th-col--sortable" onClick={() => requestSort('name')} aria-sort={getAriaSort('name')}>{t('name', 'Name')}{getSortIndicator('name')}</th>}
+                        {isColumnVisible('token_prefix') && <th className="th-col th-col--sortable" onClick={() => requestSort('token_prefix')} aria-sort={getAriaSort('token_prefix')}>{t('prefix', 'Prefix')}{getSortIndicator('token_prefix')}</th>}
+                        {isColumnVisible('created_at') && <th className="th-col th-col--sortable" onClick={() => requestSort('created_at')} aria-sort={getAriaSort('created_at')}>{t('created', 'Created')}{getSortIndicator('created_at')}</th>}
+                        {isColumnVisible('expires_at') && <th className="th-col th-col--sortable" onClick={() => requestSort('expires_at')} aria-sort={getAriaSort('expires_at')}>{t('expires', 'Expires')}{getSortIndicator('expires_at')}</th>}
+                        <th className="th-col">{t('status', 'Status')}</th>
+                        <th className="th-col">{t('expires_in', 'Expires In')}</th>
+                        <th className="th-col">{t('actions', 'Actions')}</th>
                       </tr>
-                     );
-                    })}
-                  </tbody>
-                </table>
-              </div>
+                    </thead>
+                    <tbody>
+                      {paginatedTokens.map((tItem: any, idx: number) => {
+                        const expiryInfo = formatRelativeExpiry(tItem.expires_at);
+                        const statusVal = tItem.computed_status || 'active';
+                        const badgeClass = statusVal === 'active' ? 'badge-success' : statusVal === 'expired' ? 'badge-warning' : 'badge-danger';
+                        return (
+                        <tr key={idx} className="border-b">
+                          {isColumnVisible('name') && <td className="td-cell fw-medium">{tItem.name}</td>}
+                          {isColumnVisible('token_prefix') && <td className="td-cell--mono">{tItem.token_prefix}...</td>}
+                          {isColumnVisible('created_at') && <td className="td-cell">{formatDate(tItem.created_at)}</td>}
+                          {isColumnVisible('expires_at') && <td className="td-cell text-muted">{formatDate(tItem.expires_at)}</td>}
+                          <td className="td-cell">
+                            <span className={`badge ${badgeClass}`}>
+                              {statusVal}
+                            </span>
+                          </td>
+                          <td className="td-cell">
+                            <span className="text-sm fw-medium" style={{ color: expiryInfo.color }}>{expiryInfo.label}</span>
+                          </td>
+                          <td className="td-cell">
+                            {statusVal === 'active' && (
+                              <button
+                                className="btn btn-outline-danger py-xs px-sm text-xs w-auto"
+                                onClick={() => handleRevokeToken(tItem.id, tItem.name)}
+                              >
+                                {t('revoke', 'Revoke')}
+                              </button>
+                            )}
+                          </td>
+                        </tr>
+                       );
+                      })}
+                    </tbody>
+                  </table>
+                </div>
+                <DataTablePagination
+                  currentPage={currentPage}
+                  totalPages={totalPages}
+                  pageSize={pageSize}
+                  totalItems={totalItems}
+                  onPageChange={setCurrentPage}
+                />
+              </>
             )}
           </div>
 

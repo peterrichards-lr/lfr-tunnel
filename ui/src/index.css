@@ -170,6 +170,20 @@ body {
         .input-field:focus { border-color: var(--primary); }
         .hidden { display: none !important; }
 
+        /* Mobile Header Default (Hidden on Desktop) */
+        .mobile-header {
+            display: none;
+        }
+
+        /* Actions Cell Helper */
+        .actions-cell {
+            white-space: nowrap;
+            display: flex;
+            flex-wrap: nowrap;
+            gap: 6px;
+            align-items: center;
+        }
+
         /* Dashboard */
         #dashboard-screen {
             display: flex;

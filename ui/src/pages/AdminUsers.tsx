@@ -464,9 +464,9 @@ export default function AdminUsers() {
                           u.last_login_at ? formatDate(u.last_login_at) : <span className="text-muted">Never</span>
                         )}
                       </td>
-                      <td className="td-cell">
+                      <td className="td-cell whitespace-nowrap">
                         {!isSelf && (
-                          <div className="flex gap-xs">
+                          <div className="actions-cell">
                             <button 
                               className="btn btn-secondary py-xs px-sm text-xs" 
                               onClick={() => setSelectedUser(u)}

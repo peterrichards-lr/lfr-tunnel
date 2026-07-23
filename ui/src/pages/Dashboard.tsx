@@ -225,11 +225,12 @@ export default function Dashboard() {
               </div>
               <div className="flex gap-md">
                 {tokens.length > 0 && (
-                  <button className="btn btn-outline py-sm px-lg text-sm" onClick={handleExportCSV}>
+                  <button type="button" className="btn btn-outline py-sm px-lg text-sm" onClick={handleExportCSV}>
                     {t('export_csv', 'Export CSV')}
                   </button>
                 )}
                 <button 
+                  type="button"
                   className="btn btn-outline py-sm px-lg text-sm" 
                   onClick={() => {
                     setNewTokenName('');
@@ -302,6 +303,7 @@ export default function Dashboard() {
                           <td className="td-cell">
                             {statusVal === 'active' && (
                               <button
+                                type="button"
                                 className="btn btn-outline-danger py-xs px-sm text-xs w-auto"
                                 onClick={() => handleRevokeToken(tItem.id, tItem.name)}
                               >
@@ -335,10 +337,10 @@ export default function Dashboard() {
           <div className="card">
             <h3 className="section-title mb-lg">{t('help_resources', 'Help & Resources')}</h3>
             <div className="flex flex-col gap-md">
-              <button className="btn btn-outline justify-start text-left" onClick={() => setIsInstallModalOpen(true)}>
+              <button type="button" className="btn btn-outline justify-start text-left" onClick={() => setIsInstallModalOpen(true)}>
                 💻 {t('guide_title', 'Client Installation Guide')}
               </button>
-              <button className="btn btn-outline justify-start text-left" onClick={() => {
+              <button type="button" className="btn btn-outline justify-start text-left" onClick={() => {
                 // Trigger a global event to start the tour
                 window.dispatchEvent(new CustomEvent('start-onboarding-tour'));
               }}>
@@ -353,10 +355,15 @@ export default function Dashboard() {
       
       {isCreateTokenModalOpen && (
         <div className="modal-backdrop">
-          <div className="modal-card modal-card--sm">
+          <div 
+            className="modal-card modal-card--sm"
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="generate-token-title"
+          >
             <div className="modal-header">
-              <h3 className="modal-title">{t('generate_new_token', 'Generate Personal Access Token')}</h3>
-              <button onClick={() => setIsCreateTokenModalOpen(false)} className="modal-close">✕</button>
+              <h3 id="generate-token-title" className="modal-title">{t('generate_new_token', 'Generate Personal Access Token')}</h3>
+              <button type="button" onClick={() => setIsCreateTokenModalOpen(false)} className="modal-close" aria-label={t('close', 'Close')}>✕</button>
             </div>
 
             {!generatedToken ? (

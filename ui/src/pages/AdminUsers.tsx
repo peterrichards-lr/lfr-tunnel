@@ -569,10 +569,15 @@ export default function AdminUsers() {
       </div>
       {selectedUser && (
         <div className="modal-backdrop">
-          <div className="modal-card modal-card--lg max-h-90vh overflow-y-auto">
+          <div 
+            className="modal-card modal-card--lg max-h-90vh overflow-y-auto"
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="user-details-modal-title"
+          >
             <div className="modal-header">
-              <h3 className="modal-title">User Details & Tunnels</h3>
-              <button onClick={() => setSelectedUser(null)} className="modal-close">✕</button>
+              <h3 id="user-details-modal-title" className="modal-title">User Details & Tunnels</h3>
+              <button type="button" onClick={() => setSelectedUser(null)} className="modal-close" aria-label={t('close', 'Close')}>✕</button>
             </div>
             
             <div className="auto-grid-md gap-lg mb-xl">
@@ -610,7 +615,7 @@ export default function AdminUsers() {
             </div>
 
             <div className="flex justify-start mb-xl">
-              <button className="btn btn-primary" onClick={() => setTargetedUserId(selectedUser.id)}>💬 Direct Message</button>
+              <button type="button" className="btn btn-primary" onClick={() => setTargetedUserId(selectedUser.id)}>💬 Direct Message</button>
             </div>
 
             <h4 className="section-title mb-lg border-b pb-xs">
@@ -665,7 +670,7 @@ export default function AdminUsers() {
                   {selectedUser.totp_enabled ? (
                     <>
                       <span className="badge badge-success">Enabled</span>
-                      <button className="btn btn-danger py-xs px-sm text-xs" onClick={resetUserMFA}>Reset MFA</button>
+                      <button type="button" className="btn btn-danger py-xs px-sm text-xs" onClick={resetUserMFA}>Reset MFA</button>
                     </>
                   ) : (
                     <span className="badge" style={{ background: 'rgba(255,255,255,0.05)', color: 'var(--text-muted)' }}>Inactive</span>
@@ -676,6 +681,7 @@ export default function AdminUsers() {
 
             <div className="flex justify-end mt-md mb-xl">
               <button 
+                type="button"
                 className="btn btn-primary py-sm px-lg text-sm w-auto" 
                 onClick={updateQuotas} 
                 disabled={updatingLimits} 
@@ -724,7 +730,7 @@ export default function AdminUsers() {
                           <div className="mt-2xs">📤 Out: <strong>{formatBytes(t.bytes_out)}</strong></div>
                         </td>
                         <td className="td-cell align-middle text-right">
-                          <button className="btn btn-danger py-xs px-md text-xs" onClick={() => kickTunnel(t.subdomain_prefix)}>Kick</button>
+                          <button type="button" className="btn btn-danger py-xs px-md text-xs" onClick={() => kickTunnel(t.subdomain_prefix)}>Kick</button>
                         </td>
                       </tr>
                     );
@@ -779,24 +785,28 @@ export default function AdminUsers() {
                           {!isRevoked && (
                             <div className="flex gap-xs justify-end">
                               <button 
+                                type="button"
                                 className="btn btn-outline py-2xs px-xs text-2xs"
                                 onClick={() => extendUserToken(pat.id, 30)}
                               >
                                 +30d
                               </button>
                               <button 
+                                type="button"
                                 className="btn btn-outline py-2xs px-xs text-2xs"
                                 onClick={() => extendUserToken(pat.id, 90)}
                               >
                                 +90d
                               </button>
                               <button 
+                                type="button"
                                 className="btn btn-outline py-2xs px-xs text-2xs"
                                 onClick={() => extendUserToken(pat.id, 0)}
                               >
                                 Perm
                               </button>
                               <button 
+                                type="button"
                                 className="btn btn-danger py-2xs px-xs text-2xs"
                                 onClick={() => revokeUserToken(pat.id)}
                               >
@@ -818,10 +828,15 @@ export default function AdminUsers() {
 
       {targetedUserId && (
         <div className="fixed inset-0 z-10 flex items-center justify-center p-md bg-black/50">
-          <div className="w-full max-w-sm p-lg bg-body border rounded shadow-lg">
+          <div 
+            className="w-full max-w-sm p-lg bg-body border rounded shadow-lg"
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="direct-message-modal-title"
+          >
             <div className="flex items-center justify-between mb-md">
-              <h3 className="text-lg font-bold">Send Direct Message</h3>
-              <button onClick={() => setTargetedUserId('')} className="text-muted hover:text-white">✕</button>
+              <h3 id="direct-message-modal-title" className="text-lg font-bold">Send Direct Message</h3>
+              <button type="button" onClick={() => setTargetedUserId('')} className="text-muted hover:text-white" aria-label={t('close', 'Close')}>✕</button>
             </div>
             <p className="text-sm text-muted mb-lg">
               Push a real-time banner alert to this specific active developer session.
@@ -836,8 +851,8 @@ export default function AdminUsers() {
               />
             </div>
             <div className="flex justify-end gap-sm">
-              <button className="btn btn-secondary" onClick={() => setTargetedUserId('')}>Cancel</button>
-              <button className="btn btn-primary" disabled={isSendingTargeted || !targetedMessage.trim()} onClick={sendTargetedMessage}>
+              <button type="button" className="btn btn-secondary" onClick={() => setTargetedUserId('')}>Cancel</button>
+              <button type="button" className="btn btn-primary" disabled={isSendingTargeted || !targetedMessage.trim()} onClick={sendTargetedMessage}>
                 {isSendingTargeted ? 'Sending...' : 'Send Message'}
               </button>
             </div>
@@ -847,10 +862,15 @@ export default function AdminUsers() {
 
       {showInviteModal && (
         <div className="fixed inset-0 z-10 flex items-center justify-center p-md bg-black/50">
-          <div className="w-full max-w-sm p-lg bg-body border rounded shadow-lg">
+          <div 
+            className="w-full max-w-sm p-lg bg-body border rounded shadow-lg"
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="invite-user-modal-title"
+          >
             <div className="flex items-center justify-between mb-md">
-              <h3 className="text-lg font-bold">{t('invite_user', 'Invite User')}</h3>
-              <button onClick={() => setShowInviteModal(false)} className="text-muted hover:text-white">✕</button>
+              <h3 id="invite-user-modal-title" className="text-lg font-bold">{t('invite_user', 'Invite User')}</h3>
+              <button type="button" onClick={() => setShowInviteModal(false)} className="text-muted hover:text-white" aria-label={t('close', 'Close')}>✕</button>
             </div>
             {inviteError && <div className="p-sm mb-lg bg-danger/10 text-danger border border-danger/20 rounded text-sm">{inviteError}</div>}
             <form onSubmit={submitInvite}>

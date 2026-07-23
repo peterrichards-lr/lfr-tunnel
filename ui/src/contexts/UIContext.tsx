@@ -161,6 +161,8 @@ export const UIProvider: React.FC<{ children: React.ReactNode }> = ({ children }
           >
             <span style={{ fontSize: '14px', fontWeight: 500 }}>{toast.message}</span>
             <button
+              type="button"
+              aria-label={t('dismiss_notification', 'Dismiss notification')}
               onClick={() => setToasts((prev) => prev.filter((t) => t.id !== toast.id))}
               style={{
                 background: 'transparent',
@@ -191,21 +193,26 @@ export const UIProvider: React.FC<{ children: React.ReactNode }> = ({ children }
           justifyContent: 'center',
           padding: 'var(--spacing-xl)'
         }}>
-          <div style={{
-            background: 'var(--bg-card)',
-            border: '1px solid var(--border)',
-            borderRadius: '12px',
-            padding: 'var(--spacing-xl)',
-            maxWidth: '420px',
-            width: '100%',
-            boxShadow: 'var(--shadow-glass)',
-            backdropFilter: 'blur(16px)',
-            display: 'flex',
-            flexDirection: 'column',
-            gap: 'var(--spacing-lg)'
-          }}>
+          <div 
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="global-dialog-title"
+            style={{
+              background: 'var(--bg-card)',
+              border: '1px solid var(--border)',
+              borderRadius: '12px',
+              padding: 'var(--spacing-xl)',
+              maxWidth: '420px',
+              width: '100%',
+              boxShadow: 'var(--shadow-glass)',
+              backdropFilter: 'blur(16px)',
+              display: 'flex',
+              flexDirection: 'column',
+              gap: 'var(--spacing-lg)'
+            }}
+          >
             <div>
-              <h3 style={{ margin: 0, fontSize: '18px', fontWeight: 700, color: 'var(--text-main)' }}>
+              <h3 id="global-dialog-title" style={{ margin: 0, fontSize: '18px', fontWeight: 700, color: 'var(--text-main)' }}>
                 {activeDialog.title}
               </h3>
               <p style={{ margin: 'var(--spacing-sm) 0 0 0', fontSize: '14px', color: 'var(--text-muted)', lineHeight: '1.5' }}>
@@ -239,6 +246,7 @@ export const UIProvider: React.FC<{ children: React.ReactNode }> = ({ children }
             <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 'var(--spacing-md)', marginTop: 'var(--spacing-sm)' }}>
               {activeDialog.type !== 'alert' && (
                 <button
+                  type="button"
                   onClick={handleCancel}
                   style={{
                     padding: 'var(--spacing-md) var(--spacing-lg)',
@@ -256,6 +264,7 @@ export const UIProvider: React.FC<{ children: React.ReactNode }> = ({ children }
                 </button>
               )}
               <button
+                type="button"
                 onClick={handleConfirm}
                 style={{
                   padding: 'var(--spacing-md) var(--spacing-lg)',

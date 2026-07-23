@@ -309,7 +309,7 @@ export default function AccountSettings() {
             {mfaEnabled && (
               <div className="mt-lg">
                 {!disablingMfa ? (
-                  <button className="btn btn-outline-danger" onClick={() => setDisablingMfa(true)}>
+                  <button type="button" className="btn btn-outline-danger" onClick={() => setDisablingMfa(true)}>
                     {t('btn_disable_mfa', 'Disable MFA')}
                   </button>
                 ) : (
@@ -327,7 +327,7 @@ export default function AccountSettings() {
                         onChange={(e) => setDisableCode(e.target.value)}
                         style={{ width: '120px' }}
                       />
-                      <button className="btn btn-primary" onClick={async () => {
+                      <button type="button" className="btn btn-primary" onClick={async () => {
                         setDisableError('');
                         try {
                           await axios.post('/api/mfa/disable', { code: disableCode });
@@ -341,7 +341,7 @@ export default function AccountSettings() {
                       }}>
                         {t('confirm', 'Confirm')}
                       </button>
-                      <button className="btn btn-secondary" onClick={() => { setDisablingMfa(false); setDisableCode(''); setDisableError(''); }}>
+                      <button type="button" className="btn btn-secondary" onClick={() => { setDisablingMfa(false); setDisableCode(''); setDisableError(''); }}>
                         {t('cancel', 'Cancel')}
                       </button>
                     </div>
@@ -352,7 +352,7 @@ export default function AccountSettings() {
             )}
 
             {!mfaEnabled && !setupData && (
-              <button className="btn btn-primary mt-lg" onClick={startMfaSetup}>
+              <button type="button" className="btn btn-primary mt-lg" onClick={startMfaSetup}>
                 {t('setup_mfa', 'Setup MFA')}
               </button>
             )}
@@ -377,7 +377,7 @@ export default function AccountSettings() {
                     value={mfaCode}
                     onChange={(e) => setMfaCode(e.target.value)}
                   />
-                  <button className="btn btn-primary" onClick={enableMfa}>
+                  <button type="button" className="btn btn-primary" onClick={enableMfa}>
                     {t('verify', 'Verify')}
                   </button>
                 </div>
@@ -395,6 +395,7 @@ export default function AccountSettings() {
                 {t('danger_zone_desc', 'Deleting your account will instantly and permanently revoke all of your personal access tokens, kick any active tunnel connections, and permanently purge your profile records from our systems. Any historical bandwidth metrics and logs will be permanently anonymised to protect your privacy.')}
               </p>
               <button 
+                type="button"
                 className="btn btn-outline-danger w-auto" 
                 onClick={() => setIsDeleteModalOpen(true)}
               >
@@ -409,10 +410,15 @@ export default function AccountSettings() {
 
       {isDeleteModalOpen && (
         <div className="modal-backdrop">
-          <div className="modal-card modal-card--sm">
+          <div 
+            className="modal-card modal-card--sm"
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="delete-account-title"
+          >
             <div className="modal-header">
-              <h3 className="modal-title text-danger">{t('confirm_delete_title', 'Delete Account?')}</h3>
-              <button onClick={() => { setIsDeleteModalOpen(false); setDeleteConfirmEmail(''); setDeleteError(''); }} className="modal-close">✕</button>
+              <h3 id="delete-account-title" className="modal-title text-danger">{t('confirm_delete_title', 'Delete Account?')}</h3>
+              <button type="button" onClick={() => { setIsDeleteModalOpen(false); setDeleteConfirmEmail(''); setDeleteError(''); }} className="modal-close" aria-label={t('close', 'Close')}>✕</button>
             </div>
             <div className="modal-body">
               <p className="text-muted text-sm mb-lg">
@@ -433,10 +439,11 @@ export default function AccountSettings() {
             </div>
 
             <div className="modal-footer">
-              <button className="btn btn-secondary w-auto" onClick={() => { setIsDeleteModalOpen(false); setDeleteConfirmEmail(''); setDeleteError(''); }}>
+              <button type="button" className="btn btn-secondary w-auto" onClick={() => { setIsDeleteModalOpen(false); setDeleteConfirmEmail(''); setDeleteError(''); }}>
                 {t('cancel', 'Cancel')}
               </button>
               <button 
+                type="button"
                 className="btn btn-danger w-auto" 
                 onClick={handleDeleteAccount}
                 disabled={isDeleting || deleteConfirmEmail !== user?.email}

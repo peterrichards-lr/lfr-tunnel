@@ -33,12 +33,18 @@ export default function ClientInstallationModal({ isOpen, onClose, serverConfig 
 
   return (
     <div className="modal-backdrop" onClick={onClose}>
-      <div className="modal-card modal-card--md max-h-[90vh] flex flex-col p-xl" onClick={e => e.stopPropagation()}>
+      <div 
+        className="modal-card modal-card--md max-h-[90vh] flex flex-col p-xl" 
+        onClick={e => e.stopPropagation()}
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="client-install-modal-title"
+      >
         
         {/* Header */}
         <div className="modal-header mb-md">
-          <h2 className="modal-title text-md">{t('guide_title', 'Client Installation Guide')}</h2>
-          <button onClick={onClose} className="modal-close">×</button>
+          <h2 id="client-install-modal-title" className="modal-title text-md">{t('guide_title', 'Client Installation Guide')}</h2>
+          <button type="button" onClick={onClose} className="modal-close" aria-label={t('close', 'Close')}>×</button>
         </div>
         
         <div className="text-xs text-muted mb-xl">
@@ -49,6 +55,7 @@ export default function ClientInstallationModal({ isOpen, onClose, serverConfig 
         <div className="sub-tabs mb-xl">
           {(['macos', 'windows', 'linux'] as const).map(os => (
             <button 
+              type="button"
               key={os}
               onClick={() => setActiveTab(os)}
               className={`sub-tab ${activeTab === os ? 'sub-tab--active' : ''}`}
@@ -72,7 +79,7 @@ export default function ClientInstallationModal({ isOpen, onClose, serverConfig 
                   </div>
                   <div className="code-box">
                     <span>brew tap peterrichards-lr/homebrew-tap && brew install lfr-tunnel</span>
-                    <button className="copy-btn" onClick={() => handleCopy('brew tap peterrichards-lr/homebrew-tap && brew install lfr-tunnel', 'macos-brew')}>
+                    <button type="button" aria-label={t('copy', 'Copy')} className="copy-btn" onClick={() => handleCopy('brew tap peterrichards-lr/homebrew-tap && brew install lfr-tunnel', 'macos-brew')}>
                       {copied === 'macos-brew' ? '✓' : '📋'}
                     </button>
                   </div>
@@ -84,7 +91,7 @@ export default function ClientInstallationModal({ isOpen, onClose, serverConfig 
               </div>
               <div className="code-box">
                 <span>curl -fsSL https://tunnel.lfr-demo.se/install | sh</span>
-                <button className="copy-btn" onClick={() => handleCopy('curl -fsSL https://tunnel.lfr-demo.se/install | sh', 'macos-direct')}>
+                <button type="button" aria-label={t('copy', 'Copy')} className="copy-btn" onClick={() => handleCopy('curl -fsSL https://tunnel.lfr-demo.se/install | sh', 'macos-direct')}>
                   {copied === 'macos-direct' ? '✓' : '📋'}
                 </button>
               </div>
@@ -112,7 +119,7 @@ export default function ClientInstallationModal({ isOpen, onClose, serverConfig 
                   </div>
                   <div className="code-box">
                     <span>scoop bucket add peterrichards-lr https://github.com/peterrichards-lr/scoop-bucket.git && scoop install lfr-tunnel</span>
-                    <button className="copy-btn" onClick={() => handleCopy('scoop bucket add peterrichards-lr https://github.com/peterrichards-lr/scoop-bucket.git && scoop install lfr-tunnel', 'win-scoop')}>
+                    <button type="button" aria-label={t('copy', 'Copy')} className="copy-btn" onClick={() => handleCopy('scoop bucket add peterrichards-lr https://github.com/peterrichards-lr/scoop-bucket.git && scoop install lfr-tunnel', 'win-scoop')}>
                       {copied === 'win-scoop' ? '✓' : '📋'}
                     </button>
                   </div>
@@ -124,7 +131,7 @@ export default function ClientInstallationModal({ isOpen, onClose, serverConfig 
               </div>
               <div className="code-box">
                 <span>irm https://tunnel.lfr-demo.se/install.ps1 | iex</span>
-                <button className="copy-btn" onClick={() => handleCopy('irm https://tunnel.lfr-demo.se/install.ps1 | iex', 'win-direct')}>
+                <button type="button" aria-label={t('copy', 'Copy')} className="copy-btn" onClick={() => handleCopy('irm https://tunnel.lfr-demo.se/install.ps1 | iex', 'win-direct')}>
                   {copied === 'win-direct' ? '✓' : '📋'}
                 </button>
               </div>
@@ -147,7 +154,7 @@ export default function ClientInstallationModal({ isOpen, onClose, serverConfig 
               </div>
               <div className="code-box">
                 <span>curl -fsSL https://tunnel.lfr-demo.se/install | sh</span>
-                <button className="copy-btn" onClick={() => handleCopy('curl -fsSL https://tunnel.lfr-demo.se/install | sh', 'linux-direct')}>
+                <button type="button" aria-label={t('copy', 'Copy')} className="copy-btn" onClick={() => handleCopy('curl -fsSL https://tunnel.lfr-demo.se/install | sh', 'linux-direct')}>
                   {copied === 'linux-direct' ? '✓' : '📋'}
                 </button>
               </div>

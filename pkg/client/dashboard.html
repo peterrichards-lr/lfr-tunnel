@@ -100,136 +100,6 @@
         :root[data-theme="light"] .icon-sun { display: none; }
         :root:not([data-theme="light"]) .icon-moon { display: none; }
         :root:not([data-theme="light"]) .icon-sun { display: block; }
-    
-/* LOGS STYLE */
-
-        :root {
-            --bg-base: #0f172a;
-            --bg-card: rgba(30, 41, 59, 0.7);
-            --bg-solid: #1e293b;
-            --primary: #0B5FFF;
-            --text-main: #f8fafc;
-            --text-muted: #94a3b8;
-            --border: rgba(255, 255, 255, 0.1);
-            --success: #10b981;
-            --warning: #f59e0b;
-            --danger: #ef4444;
-            --info: #3b82f6;
-        }
-
-        :root[data-theme="light"] {
-            --bg-base: #f8fafc;
-            --bg-card: #ffffff;
-            --bg-solid: #ffffff;
-            --primary: #0B5FFF;
-            --text-main: #0f172a;
-            --text-muted: #64748b;
-            --border: rgba(0, 0, 0, 0.1);
-            --success: #059669;
-            --warning: #d97706;
-            --danger: #dc2626;
-            --info: #2563eb;
-        }
-
-        * { box-sizing: border-box; margin: 0; padding: 0; font-family: 'Inter', sans-serif; }
-        body { background: var(--bg-base); color: var(--text-main); display: flex; flex-direction: column; height: 100vh; overflow: hidden; }
-
-        .header-panel { padding: 20px; border-bottom: 1px solid var(--border); background: rgba(15, 23, 42, 0.8); display: flex; flex-direction: column; gap: 15px; }
-        :root[data-theme="light"] .header-panel { background: #f8fafc; }
-        
-        .header-top { display: flex; align-items: center; justify-content: space-between; }
-        .header-top h1 { font-size: 20px; font-weight: 700; color: var(--text-main); display: flex; align-items: center; gap: 10px;}
-        
-        .sys-info { display: flex; gap: 20px; font-size: 13px; color: var(--text-muted); flex-wrap: wrap; }
-        .sys-info-item { background: var(--bg-card); padding: 8px 12px; border-radius: 6px; border: 1px solid var(--border); display: flex; flex-direction: column; gap: 4px; }
-        .sys-info-label { font-size: 11px; text-transform: uppercase; font-weight: 600; opacity: 0.8; }
-        .sys-info-value { font-weight: 500; color: var(--text-main); font-family: monospace; font-size: 13px;}
-
-        .controls-panel { padding: 15px 20px; border-bottom: 1px solid var(--border); background: var(--bg-card); display: flex; gap: 15px; align-items: center; flex-wrap: wrap; }
-        
-        .filter-group { display: flex; align-items: center; gap: 8px; }
-        .filter-group label { font-size: 13px; font-weight: 500; color: var(--text-muted); }
-        .filter-input { background: var(--bg-solid); border: 1px solid var(--border); color: var(--text-main); padding: 6px 12px; border-radius: 4px; font-size: 13px; outline: none; }
-        .filter-input:focus { border-color: var(--primary); }
-        select.filter-input { cursor: pointer; }
-        select option { background: var(--bg-solid); color: var(--text-main); }
-        
-        .btn { background: var(--primary); color: #fff; border: none; padding: 6px 12px; border-radius: 4px; font-size: 13px; font-weight: 500; cursor: pointer; transition: background 0.2s; }
-        .btn:hover { background: #004ecc; }
-        .btn.outline { background: transparent; border: 1px solid var(--border); color: var(--text-main); }
-        .btn.outline:hover { background: rgba(255,255,255,0.05); }
-        :root[data-theme="light"] .btn.outline:hover { background: rgba(0,0,0,0.05); }
-
-        .logs-container { flex: 1; overflow-y: auto; padding: 10px 0; background: #000; font-family: 'Consolas', 'Courier New', monospace; font-size: 13px; line-height: 1.5; }
-        :root[data-theme="light"] .logs-container { background: #f1f5f9; }
-
-        .log-line { padding: 2px 20px; display: flex; gap: 15px; word-break: break-all; border-bottom: 1px solid rgba(255,255,255,0.03); }
-        :root[data-theme="light"] .log-line { border-bottom: 1px solid rgba(0,0,0,0.03); }
-        .log-line:hover { background: rgba(255,255,255,0.05); }
-        :root[data-theme="light"] .log-line:hover { background: rgba(0,0,0,0.05); }
-        
-        .log-time { color: #8b949e; flex-shrink: 0; width: 140px; }
-        :root[data-theme="light"] .log-time { color: #64748b; }
-        .log-level { font-weight: 700; width: 60px; flex-shrink: 0; }
-        .log-level.INFO { color: var(--info); }
-        .log-level.WARN, .log-level.WARNING { color: var(--warning); }
-        .log-level.ERROR { color: var(--danger); }
-        .log-msg { color: #e6edf3; flex: 1; }
-        :root[data-theme="light"] .log-msg { color: #0f172a; }
-
-        .theme-toggle-btn { background: none; border: none; color: var(--text-muted); cursor: pointer; padding: 4px; transition: color 0.2s; }
-        .theme-toggle-btn:hover { color: var(--text-main); }
-        :root[data-theme="light"] .icon-moon { display: block; }
-        :root[data-theme="light"] .icon-sun { display: none; }
-        :root[data-theme="dark"] .icon-moon { display: none; }
-        :root[data-theme="dark"] .icon-sun { display: block; }
-
-        .hidden { display: none !important; }
-    
-
-        /* RESPONSIVE & LAYOUT STYLES */
-        body { flex-direction: row; }
-        .sidebar { width: 260px; height: 100vh; border-right: 1px solid var(--border); background: var(--bg-card); display: flex; flex-direction: column; flex-shrink: 0; z-index: 100; transition: transform 0.3s ease; }
-        .main-view { flex-grow: 1; height: 100vh; overflow: hidden; position: relative; background: var(--bg-base); }
-        
-        /* Nav Placement: Top */
-        body.nav-top { flex-direction: column; }
-        body.nav-top .sidebar { width: 100%; height: auto; flex-direction: row; border-right: none; border-bottom: 1px solid var(--border); align-items: center; justify-content: space-between; padding: 0 20px; }
-        body.nav-top .sidebar .header-panel { border-bottom: none; flex-direction: row; align-items: center; gap: 20px; padding: 15px 0; background: transparent; }
-        body.nav-top .sidebar ul { padding: 0; display: flex; flex-direction: row; gap: 10px; margin: 0; }
-        body.nav-top .sidebar ul li { margin-bottom: 0; padding: 8px 16px; }
-        body.nav-top .sidebar-footer { padding: 15px 0; border-top: none; }
-        
-        /* Mobile Slide-Over for Inspector Details */
-        @media (max-width: 768px) {
-            body { flex-direction: column; }
-            .sidebar { width: 100%; height: auto; flex-direction: column; border-right: none; border-bottom: 1px solid var(--border); padding: 10px; }
-            body.nav-top .sidebar { flex-direction: column; align-items: stretch; padding: 10px; }
-            body.nav-top .sidebar .header-panel { flex-direction: column; align-items: flex-start; gap: 10px; }
-            body.nav-top .sidebar ul { flex-direction: column; }
-            
-            .traffic-split { flex-direction: column; }
-            .traffic-list { width: 100% !important; border-right: none; }
-            
-            /* Slide over */
-            .traffic-details {
-                position: fixed;
-                top: 0; left: 100%; width: 100%; height: 100vh;
-                z-index: 200;
-                background: var(--bg-base);
-                transition: left 0.3s ease;
-                border-left: none;
-            }
-            .traffic-details.slide-in { left: 0; }
-            
-            /* Back button for mobile details */
-            .details-back-btn { display: block !important; margin-right: 10px; cursor: pointer; color: var(--primary); }
-            
-            /* Settings grid */
-            #view-settings .panel-body > div > div { grid-template-columns: 1fr !important; }
-        }
-        .details-back-btn { display: none; }
-
     </style>
     <script>
         document.addEventListener('DOMContentLoaded', () => {
@@ -243,7 +113,7 @@
     </script>
 </head>
 <body>
-    <div class="sidebar" id="app-nav">
+    <sidebar>
         <div class="header-panel">
             <h1 style="margin-bottom: 15px;">
                 <span data-i18n="client_inspector">Inspector</span>
@@ -265,9 +135,13 @@
                     </label>
                 </div>
             </div>
+            </div>
             <div style="display: flex; justify-content: space-between; align-items: center; margin-top: 5px;">
                 <div style="font-size: 12px; color: var(--text-muted);"><span data-i18n="client_listening">Listening on localhost:4040</span></div>
                 <div id="preserve-host-pill" style="display: none; padding: 2px 6px; border-radius: 4px; font-size: 10px; font-weight: 600;"></div>
+                <div id="latency-sim-pill" style="display: none; padding: 2px 6px; border-radius: 4px; font-size: 10px; font-weight: 600; background: rgba(59, 130, 246, 0.2); color: #3b82f6; border: 1px solid rgba(59, 130, 246, 0.4);"></div>
+                <div id="ratelimit-sim-pill" style="display: none; padding: 2px 6px; border-radius: 4px; font-size: 10px; font-weight: 600; background: rgba(168, 85, 247, 0.2); color: #a855f7; border: 1px solid rgba(168, 85, 247, 0.4);"></div>
+                <div id="domain-type-pill" style="display: none; padding: 2px 6px; border-radius: 4px; font-size: 10px; font-weight: 600; background: rgba(236, 72, 153, 0.2); color: #ec4899; border: 1px solid rgba(236, 72, 153, 0.4);"></div>
             </div>
         </div>
         <div style="display: flex; border-bottom: 1px solid var(--border); background: rgba(0,0,0,0.1);">
@@ -285,10 +159,13 @@
                 <input type="text" id="ac-whitelist" placeholder="e.g. 192.168.1.1, 10.0.0.0/24" data-i18n="client_ip_placeholder" style="background: rgba(0,0,0,0.3); border: 1px solid var(--border); color: white; padding: 6px 10px; border-radius: 4px; font-size: 12px; outline: none; width: 100%;">
             </div>
             <div style="display: flex; flex-direction: column; gap: 6px;">
-                <label style="font-size: 11px; color: var(--text-muted);" data-i18n="client_combinator">Combinator Mode</label>
+                <label style="font-size: 11px; color: var(--text-muted);" data-i18n="client_combinator">Access Mode</label>
                 <select id="ac-mode" style="background: #1e293b; border: 1px solid var(--border); color: white; padding: 6px 10px; border-radius: 4px; font-size: 12px; outline: none; cursor: pointer; width: 100%;">
-                    <option value="or" data-i18n="client_mode_or">Bypass passcode if IP matched (OR)</option>
-                    <option value="and" data-i18n="client_mode_and">Require both passcode & IP match (AND)</option>
+                    <option value="public">🌐 Public (Anyone can access)</option>
+                    <option value="passcode">🔑 Passcode (Requires secret code)</option>
+                    <option value="whitelist">🛡️ Whitelist (Restrict by IP)</option>
+                    <option value="or">🔑/🛡️ Passcode OR Whitelist</option>
+                    <option value="and">🔒 Passcode AND Whitelist</option>
                 </select>
             </div>
             <button id="ac-save-btn" onclick="saveAccessControl()" style="background: var(--primary); color: white; border: none; padding: 8px 12px; border-radius: 4px; font-size: 12px; font-weight: 600; cursor: pointer; margin-top: 4px; transition: background 0.2s;" data-i18n="client_save_access">Save Access Control</button>
@@ -306,7 +183,7 @@
         <div class="req-list" id="req-list">
             <!-- Items injected by JS -->
         </div>
-    </div>
+    </sidebar>
 
     <main id="main-view">
         <div class="empty-state" data-i18n="client_select_req">Select a request to view details</div>
@@ -643,13 +520,14 @@ function setLanguage(lang) {
 
         if (window.matchMedia) {
             const mq = window.matchMedia('(prefers-color-scheme: dark)');
-            if (mq) {
-                const handler = e => {
-                    const currentTheme = localStorage.getItem('inspector_theme') || serverThemePref || 'system';
-                    if (currentTheme === 'system') applyTheme('system');
-                };
-                if (mq.addEventListener) mq.addEventListener('change', handler);
-                else if (mq.addListener) mq.addListener(handler);
+            const themeChangeHandler = e => {
+                const currentTheme = localStorage.getItem('inspector_theme') || serverThemePref || 'system';
+                if (currentTheme === 'system') applyTheme('system');
+            };
+            if (mq && mq.addEventListener) {
+                mq.addEventListener('change', themeChangeHandler);
+            } else if (mq && mq.addListener) {
+                mq.addListener(themeChangeHandler);
             }
         }
 
@@ -695,19 +573,62 @@ function setLanguage(lang) {
                         pill.innerText = clientTranslations[currentLang] ? (clientTranslations[currentLang]['client_host_rewritten'] || 'Host Rewritten') : 'Host Rewritten';
                     }
                 }
-                
+
+                if (state.simulation) {
+                    const latPill = document.getElementById('latency-sim-pill');
+                    if (latPill) {
+                        if (state.simulation.latency_ms > 0) {
+                            latPill.style.display = 'inline-block';
+                            latPill.innerText = `⚡ ${state.simulation.latency_ms}ms Simulated`;
+                        } else {
+                            latPill.style.display = 'none';
+                        }
+                    }
+                    const rlPill = document.getElementById('ratelimit-sim-pill');
+                    if (rlPill) {
+                        if (state.simulation.rate_limit_kbps > 0) {
+                            rlPill.style.display = 'inline-block';
+                            rlPill.innerText = `🚦 ${state.simulation.rate_limit_kbps} KB/s Throttled`;
+                        } else {
+                            rlPill.style.display = 'none';
+                        }
+                    }
+                }
+
                 const passcodeEl = document.getElementById('ac-passcode');
                 const whitelistEl = document.getElementById('ac-whitelist');
                 const modeEl = document.getElementById('ac-mode');
 
-                if (document.activeElement !== passcodeEl) {
-                    passcodeEl.value = state.passcode || '';
-                }
-                if (document.activeElement !== whitelistEl) {
-                    whitelistEl.value = state.whitelist_ips || '';
-                }
-                if (document.activeElement !== modeEl) {
-                    modeEl.value = state.access_mode || 'or';
+                if (state.access_control) {
+                    const domPill = document.getElementById('domain-type-pill');
+                    if (domPill) {
+                        if (state.access_control.is_custom_domain) {
+                            domPill.style.display = 'inline-block';
+                            domPill.innerText = `🌐 Vanity SNI Domain`;
+                        } else {
+                            domPill.style.display = 'none';
+                        }
+                    }
+
+                    if (document.activeElement !== passcodeEl) {
+                        passcodeEl.value = state.access_control.passcode || state.passcode || '';
+                    }
+                    if (document.activeElement !== whitelistEl) {
+                        whitelistEl.value = state.access_control.whitelist_ips || state.whitelist_ips || '';
+                    }
+                    if (document.activeElement !== modeEl) {
+                        modeEl.value = state.access_control.mode || state.access_mode || 'public';
+                    }
+                } else {
+                    if (document.activeElement !== passcodeEl) {
+                        passcodeEl.value = state.passcode || '';
+                    }
+                    if (document.activeElement !== whitelistEl) {
+                        whitelistEl.value = state.whitelist_ips || '';
+                    }
+                    if (document.activeElement !== modeEl) {
+                        modeEl.value = state.access_mode || 'public';
+                    }
                 }
 
                 // Update requests if changed
@@ -916,50 +837,45 @@ function setLanguage(lang) {
                  .replace(/'/g, "&#039;");
         }
 
-        
-        
-        function applyNavPlacement() {
-            fetch('/api/config').then(r => r.json()).then(data => {
-                if (data.nav_placement === 'sidebar') {
-                    document.body.classList.remove('nav-top');
-                } else {
-                    document.body.classList.add('nav-top');
-                }
-            }).catch(e => console.error(e));
-        }
-
         function switchView(view) {
             activeView = view;
             
             const trafficTab = document.getElementById('tab-traffic');
             const settingsTab = document.getElementById('tab-settings');
-            const logsTab = document.getElementById('tab-logs');
             
-            const viewInspector = document.getElementById('view-inspector');
-            const viewSettings = document.getElementById('view-settings');
-            const viewLogs = document.getElementById('view-logs');
-            
-            if (trafficTab) trafficTab.classList.remove('active');
-            if (settingsTab) settingsTab.classList.remove('active');
-            if (logsTab) logsTab.classList.remove('active');
-            
-            if (viewInspector) viewInspector.style.display = 'none';
-            if (viewSettings) viewSettings.style.display = 'none';
-            if (viewLogs) viewLogs.style.display = 'none';
+            const acPanel = document.querySelector('.access-control-panel');
+            const publicPanel = document.querySelector('.public-urls-panel');
+            const reqList = document.getElementById('req-list');
             
             if (view === 'settings') {
-                if (history.pushState) history.pushState(null, null, '/settings');
-                if (settingsTab) settingsTab.classList.add('active');
-                if (viewSettings) viewSettings.style.display = 'block';
+                if (history.pushState) {
+                    history.pushState(null, null, '/settings');
+                }
+                trafficTab.classList.remove('active');
+                settingsTab.classList.add('active');
+                
+                acPanel.style.display = 'none';
+                publicPanel.style.display = 'none';
+                reqList.style.display = 'none';
+                
                 renderSettingsView();
-            } else if (view === 'logs') {
-                if (history.pushState) history.pushState(null, null, '/logs');
-                if (logsTab) logsTab.classList.add('active');
-                if (viewLogs) viewLogs.style.display = 'flex';
             } else {
-                if (history.pushState) history.pushState(null, null, '/');
-                if (trafficTab) trafficTab.classList.add('active');
-                if (viewInspector) viewInspector.style.display = 'flex';
+                if (history.pushState) {
+                    history.pushState(null, null, '/');
+                }
+                trafficTab.classList.add('active');
+                settingsTab.classList.remove('active');
+                
+                acPanel.style.display = 'flex';
+                publicPanel.style.display = 'flex';
+                reqList.style.display = 'block';
+                
+                const main = document.getElementById('main-view');
+                if (selectedId) {
+                    renderDetails(requests.find(r => r.id === selectedId));
+                } else {
+                    main.innerHTML = '<div class="empty-state" data-i18n="client_select_req">Select a request to view details</div>';
+                }
             }
         }
 
@@ -978,20 +894,6 @@ function setLanguage(lang) {
                             <div id="settings-success" style="color: var(--success); font-weight: 600; display: none; margin-bottom: 20px; font-size: 13px; padding: 12px; background: rgba(46, 204, 113, 0.1); border-radius: 6px; border: 1px solid rgba(46, 204, 113, 0.3);" data-i18n="client_config_saved">Configuration saved successfully! Note: Changes to Target Host, Port, and SSL settings require you to restart the lfr-tunnel client process to take effect.</div>
                             
                             <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 24px; margin-bottom: 24px;">
-                                
-                                <!-- Column: Layout -->
-                                <div style="display: flex; flex-direction: column; gap: 15px;">
-                                    <h3 style="margin-top: 0; margin-bottom: 5px; font-size: 14px; color: var(--text-color); border-bottom: 1px solid var(--border); padding-bottom: 8px;">Appearance</h3>
-                                    
-                                    <div style="display: flex; flex-direction: column; gap: 6px;">
-                                        <label style="font-weight: 500; color: var(--text-muted); font-size: 11px;" data-i18n="client_nav_placement">Navigation Layout</label>
-                                        <select id="config-nav-placement" class="form-control" style="width: 100%; padding: 10px; border-radius: 6px; border: 1px solid var(--border); background: var(--bg-card); color: var(--text-main);">
-                                            <option value="top">Top Navigation (Default)</option>
-                                            <option value="sidebar">Left Sidebar</option>
-                                        </select>
-                                    </div>
-                                </div>
-
                                 <!-- Column 1: Connection & Authentication -->
                                 <div style="display: flex; flex-direction: column; gap: 15px;">
                                     <h3 style="margin-top: 0; margin-bottom: 5px; font-size: 14px; color: var(--text-color); border-bottom: 1px solid var(--border); padding-bottom: 8px;">Connection</h3>
@@ -1160,13 +1062,9 @@ function setLanguage(lang) {
             }
         }
 
-        
         function initRouter() {
-            const path = window.location.pathname;
-            if (path === '/settings') {
+            if (window.location.pathname === '/settings') {
                 switchView('settings');
-            } else if (path === '/logs') {
-                switchView('logs');
             } else {
                 switchView('traffic');
             }
@@ -1174,153 +1072,10 @@ function setLanguage(lang) {
 
         // Initialize Router
         initRouter();
-        applyNavPlacement();
 
         // Poll every 1.5 seconds
         setInterval(fetchState, 1500);
         fetchState();
     </script>
-<script>
-/* LOGS SCRIPT */
-
-        let allLogs = [];
-        let autoScroll = true;
-        let lastLogLineCount = 0;
-        
-        const logsContainer = document.getElementById('logs-container');
-        const filterSearch = document.getElementById('filter-search');
-        const filterLevel = document.getElementById('filter-level');
-        const autoScrollCheckbox = document.getElementById('auto-scroll');
-
-        // Theme Handling
-        const themeBtn = document.getElementById('theme-toggle');
-        const root = document.documentElement;
-        
-        let currentTheme = localStorage.getItem('inspector_theme') || 'dark';
-        root.setAttribute('data-theme', currentTheme);
-
-        if (themeBtn) themeBtn.addEventListener('click', () => {
-            currentTheme = currentTheme === 'dark' ? 'light' : 'dark';
-            root.setAttribute('data-theme', currentTheme);
-            localStorage.setItem('inspector_theme', currentTheme);
-        });
-
-        if (autoScrollCheckbox) autoScrollCheckbox.addEventListener('change', (e) => {
-            autoScroll = e.target.checked;
-        });
-
-        if (logsContainer) logsContainer.addEventListener('scroll', () => {
-            const isAtBottom = logsContainer.scrollHeight - logsContainer.scrollTop <= logsContainer.clientHeight + 10;
-            if (!isAtBottom && autoScroll) {
-                autoScrollCheckbox.checked = false;
-                autoScroll = false;
-            }
-        });
-
-        function renderLogs() {
-            const search = filterSearch.value.toLowerCase();
-            const level = filterLevel.value;
-
-            logsContainer.innerHTML = '';
-            
-            let html = '';
-            for (const log of allLogs) {
-                if (level !== 'ALL' && log.level !== level) continue;
-                if (search && !log.raw.toLowerCase().includes(search)) continue;
-
-                html += `<div class="log-line">
-                    <div class="log-time">${log.time}</div>
-                    <div class="log-level ${log.level}">${log.level}</div>
-                    <div class="log-msg">${log.msg}</div>
-                </div>`;
-            }
-            logsContainer.innerHTML = html;
-
-            if (autoScroll) {
-                logsContainer.scrollTop = logsContainer.scrollHeight;
-            }
-        }
-
-        function parseLogLine(line) {
-            // Expected format: "2026/07/16 11:51:09 INFO [Client] ..."
-            // Or panic / generic log line
-            const regex = /^(\d{4}\/\d{2}\/\d{2} \d{2}:\d{2}:\d{2})\s+([A-Z]+)\s+(.*)/;
-            const match = line.match(regex);
-            
-            if (match) {
-                return {
-                    raw: line,
-                    time: match[1],
-                    level: match[2],
-                    msg: match[3]
-                };
-            }
-            // Fallback for lines without standard prefix
-            return {
-                raw: line,
-                time: '',
-                level: 'INFO',
-                msg: line
-            };
-        }
-
-        async function fetchInfo() {
-            try {
-                const res = await fetch('/api/info');
-                if (res.ok) {
-                    const data = await res.json();
-                    document.getElementById('info-client-version').textContent = data.client_version || '-';
-                    document.getElementById('info-server-version').textContent = data.server_version || '-';
-                    document.getElementById('info-gateway-url').textContent = data.server_url || '-';
-                    document.getElementById('info-subdomain').textContent = data.client_subdomain || '-';
-                    document.getElementById('info-log-file').textContent = data.log_file || '-';
-                }
-            } catch(e) {
-                console.error("Failed to fetch info", e);
-            }
-        }
-
-        async function fetchLogs() {
-            try {
-                const res = await fetch('/api/logs');
-                if (res.ok) {
-                    const text = await res.text();
-                    const lines = text.split('\n');
-                    if (lines.length > 0 && lines[lines.length - 1] === '') {
-                        lines.pop(); // Remove trailing empty line
-                    }
-                    
-                    if (lines.length !== lastLogLineCount) {
-                        allLogs = lines.map(parseLogLine);
-                        lastLogLineCount = lines.length;
-                        renderLogs();
-                    }
-                }
-            } catch(e) {
-                console.error("Failed to fetch logs", e);
-            }
-        }
-
-        if (filterSearch) filterSearch.addEventListener('input', renderLogs);
-        if (filterLevel) filterLevel.addEventListener('change', renderLogs);
-        
-        const btnRefresh = document.getElementById('btn-refresh');
-        if (btnRefresh) btnRefresh.addEventListener('click', fetchLogs);
-        const btnClear = document.getElementById('btn-clear');
-        if (btnClear) btnClear.addEventListener('click', () => {
-            allLogs = [];
-            lastLogLineCount = 0;
-            renderLogs();
-        });
-
-        // Initialization
-        fetchInfo();
-        fetchLogs();
-        
-        // Auto-refresh logs every 2 seconds
-        setInterval(fetchLogs, 2000);
-
-    
-</script>
 </body>
 </html>

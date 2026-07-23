@@ -196,6 +196,16 @@ func StartInspector(port int, engine *InterceptorEngine) (int, error) {
 				"bytes_in":       engine.BytesIn,
 				"bytes_out":      engine.BytesOut,
 			},
+			"simulation": map[string]interface{}{
+				"latency_ms":      engine.Latency.Milliseconds(),
+				"rate_limit_kbps": engine.RateLimitKBPS,
+			},
+			"access_control": map[string]interface{}{
+				"mode":             engine.AccessMode,
+				"passcode":         engine.Passcode,
+				"whitelist_ips":    engine.WhitelistIPs,
+				"is_custom_domain": engine.IsCustomDomain,
+			},
 		}
 
 		w.Header().Set("Content-Type", "application/json")

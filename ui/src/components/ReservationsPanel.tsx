@@ -432,6 +432,7 @@ export default function ReservationsPanel() {
                         <div className="flex gap-sm">
                           {canExtend && (
                             <button 
+                              type="button"
                               className="btn btn-secondary py-xs px-sm text-xs" 
                               onClick={() => requestExtension(r.id)}
                             >
@@ -439,13 +440,15 @@ export default function ReservationsPanel() {
                             </button>
                           )}
                           <button
+                            type="button"
                             className="btn btn-secondary py-xs px-sm text-xs"
                             title={t('access_control', 'Access Control')}
+                            aria-label={t('access_control', 'Access Control')}
                             onClick={() => openAcModal(r)}
                           >
                             🔒
                           </button>
-                          <button className="btn btn-danger py-xs px-sm text-xs" onClick={() => deleteReservation(r.id)}>
+                          <button type="button" className="btn btn-danger py-xs px-sm text-xs" onClick={() => deleteReservation(r.id)}>
                             {t('release', 'Release')}
                           </button>
                         </div>
@@ -470,12 +473,17 @@ export default function ReservationsPanel() {
       {/* Access Control Modal */}
       {acModalReservation && (
         <div className="modal-backdrop">
-          <div className="card modal-card max-w-md p-xl">
+          <div 
+            className="card modal-card max-w-md p-xl"
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="access-control-modal-title"
+          >
             <div className="modal-header">
-              <h3 className="modal-title">
+              <h3 id="access-control-modal-title" className="modal-title">
                 🔒 {t('access_control', 'Access Control')}
               </h3>
-              <button onClick={() => setAcModalReservation(null)} className="modal-close">✕</button>
+              <button type="button" onClick={() => setAcModalReservation(null)} className="modal-close" aria-label={t('close', 'Close')}>✕</button>
             </div>
             <p className="text-muted text-sm mb-lg">
               <strong className="text-primary font-mono">{acModalReservation.subdomain}.{acModalReservation.domain}</strong>
@@ -528,8 +536,8 @@ export default function ReservationsPanel() {
             )}
 
             <div className="flex gap-sm justify-end">
-              <button className="btn btn-secondary" onClick={() => setAcModalReservation(null)} disabled={acSaving}>{t('cancel', 'Cancel')}</button>
-              <button className="btn btn-primary" onClick={handleUpdateAccessControl} disabled={acSaving}>
+              <button type="button" className="btn btn-secondary" onClick={() => setAcModalReservation(null)} disabled={acSaving}>{t('cancel', 'Cancel')}</button>
+              <button type="button" className="btn btn-primary" onClick={handleUpdateAccessControl} disabled={acSaving}>
                 {acSaving ? t('saving', 'Saving...') : t('save', 'Save')}
               </button>
             </div>

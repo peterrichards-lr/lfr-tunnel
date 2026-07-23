@@ -759,12 +759,12 @@ export default function AdminUsers() {
                     const isExpired = pat.expires_at && !pat.expires_at.startsWith('0001-01-01') && new Date(pat.expires_at) < new Date();
                     
                     let statusBadge = (
-                      <span className="badge badge-success">Active</span>
+                      <span className="badge badge-success">active</span>
                     );
                     if (isRevoked) {
-                      statusBadge = <span className="badge badge-danger">Revoked</span>;
+                      statusBadge = <span className="badge badge-danger">revoked</span>;
                     } else if (isExpired) {
-                      statusBadge = <span className="badge badge-danger">Expired</span>;
+                      statusBadge = <span className="badge badge-warning">expired</span>;
                     }
 
                     return (

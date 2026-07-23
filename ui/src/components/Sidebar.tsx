@@ -36,14 +36,14 @@ export default function Sidebar({ user, isOpen, onClose }: SidebarProps) {
         
         <div className="sidebar-menu">
           <div className="sidebar-section-header">
-            <span className="sidebar-label">{t('personal', 'Personal')}</span>
+            <span className="sidebar-label">{t('sidebar_personal', 'Personal')}</span>
           </div>
           <div className="sidebar-section-content" style={{ display: 'block' }}>
             <NavLink to="/dashboard" onClick={onClose} end className={({ isActive }) => `nav-item ${isActive ? 'active' : ''}`}>
-              {t('overview', 'Overview')}
+              {t('sidebar_overview', 'Overview')}
             </NavLink>
             <NavLink to="/account" onClick={onClose} className={({ isActive }) => `nav-item ${isActive ? 'active' : ''}`}>
-              {t('account_settings', 'Account Settings')}
+              {t('sidebar_account', 'Account Settings')}
             </NavLink>
           </div>
 
@@ -54,13 +54,13 @@ export default function Sidebar({ user, isOpen, onClose }: SidebarProps) {
               </div>
               <div className="sidebar-section-content" style={{ display: 'block' }}>
                 <NavLink to="/admin/subdomains" onClick={onClose} className={({ isActive }) => `nav-item ${isActive ? 'active' : ''}`}>
-                  {t('subdomains', 'Subdomains')}
+                  {t('sidebar_reservations', 'Subdomains')}
                 </NavLink>
                 <NavLink to="/admin/extensions" onClick={onClose} className={({ isActive }) => `nav-item ${isActive ? 'active' : ''}`}>
                   {t('extensions', 'Extensions')}
                 </NavLink>
                 <NavLink to="/admin/users" onClick={onClose} className={({ isActive }) => `nav-item ${isActive ? 'active' : ''}`} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                  <span>{t('users', 'Users')}</span>
+                  <span>{t('sidebar_users', 'Users')}</span>
                   {pendingCount > 0 && (
                     <span className="badge" style={{ 
                       background: 'var(--danger, #ef4444)', 
@@ -76,10 +76,10 @@ export default function Sidebar({ user, isOpen, onClose }: SidebarProps) {
                   )}
                 </NavLink>
                 <NavLink to="/admin/tokens" onClick={onClose} className={({ isActive }) => `nav-item ${isActive ? 'active' : ''}`}>
-                  {t('tokens', 'Tokens')}
+                  {t('sidebar_tokens', 'Tokens')}
                 </NavLink>
                 <NavLink to="/admin/analytics" onClick={onClose} className={({ isActive }) => `nav-item ${isActive ? 'active' : ''}`}>
-                  {t('analytics', 'Analytics')}
+                  {t('sidebar_analytics', 'Analytics')}
                 </NavLink>
                 <NavLink to="/admin/telemetry" onClick={onClose} className={({ isActive }) => `nav-item ${isActive ? 'active' : ''}`}>
                   {t('telemetry', 'Telemetry')}
@@ -88,13 +88,13 @@ export default function Sidebar({ user, isOpen, onClose }: SidebarProps) {
                   {t('network_health', 'Network Health')}
                 </NavLink>
                 <NavLink to="/admin/audit" onClick={onClose} className={({ isActive }) => `nav-item ${isActive ? 'active' : ''}`}>
-                  {t('audit_log', 'Audit Log')}
+                  {t('sidebar_audit', 'Audit Log')}
                 </NavLink>
                 <NavLink to="/admin/blacklist" onClick={onClose} className={({ isActive }) => `nav-item ${isActive ? 'active' : ''}`}>
-                  {t('ip_blacklist', 'IP Blacklist')}
+                  {t('sidebar_blacklist', 'IP Blacklist')}
                 </NavLink>
                 <NavLink to="/admin/magic-links" onClick={onClose} className={({ isActive }) => `nav-item ${isActive ? 'active' : ''}`}>
-                  {t('magic_links', 'Magic Links')}
+                  {t('sidebar_magic', 'Magic Links')}
                 </NavLink>
                 <NavLink to="/admin/settings" onClick={onClose} className={({ isActive }) => `nav-item ${isActive ? 'active' : ''}`}>
                   {t('settings', 'Settings')}

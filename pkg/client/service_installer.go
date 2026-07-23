@@ -7,14 +7,125 @@ import (
 	"os/exec"
 	"path/filepath"
 	"runtime"
+	"strings"
 )
+
+func getCanonicalExePath() string {
+	envDir := os.Getenv("LFR_TUNNEL_MACOS_ARM64_INSTALL_DIR")
+	if envDir == "" {
+		envDir = os.Getenv("LFR_TUNNEL_MACOS_AMD64_INSTALL_DIR")
+	}
+	if envDir == "" {
+		envDir = os.Getenv("LFR_TUNNEL_LINUX_AMD64_INSTALL_DIR")
+	}
+	if envDir == "" {
+		envDir = os.Getenv("LFR_TUNNEL_WINDOWS_AMD64_INSTALL_DIR")
+	}
+	if envDir == "" {
+		envDir = os.Getenv("LFR_TUNNEL_INSTALL_DIR")
+	}
+	if envDir == "" {
+		envDir = os.Getenv("LFT_INSTALL_DIR")
+	}
+
+	home, _ := os.UserHomeDir()
+
+	if envDir != "" {
+		envDir = os.ExpandEnv(envDir)
+		if len(envDir) >= 2 && (envDir[:2] == "~/" || envDir[:2] == "~\\") {
+			envDir = filepath.Join(home, envDir[2:])
+		}
+		exe := filepath.Join(envDir, "lfr-tunnel")
+		if runtime.GOOS == "windows" {
+			exe += ".exe"
+		}
+		if _, err := os.Stat(exe); err == nil {
+			return exe
+		}
+	}
+
+	defaultExe := filepath.Join(home, "runningpoc", "bin", "lfr-tunnel")
+	if runtime.GOOS == "windows" {
+		defaultExe += ".exe"
+	}
+	if _, err := os.Stat(defaultExe); err == nil {
+		return defaultExe
+	}
+
+	exePath, err := os.Executable()
+	if err == nil && !strings.HasPrefix(exePath, "/private/tmp") && !strings.HasPrefix(exePath, "/tmp") {
+		return exePath
+	}
+
+	return defaultExe
+}
+
+// UninstallService removes the CLI daemon service configuration.
+func UninstallService() error {
+	switch runtime.GOOS {
+	case "darwin":
+		return uninstallDarwin()
+	case "linux":
+		return uninstallLinux()
+	case "windows":
+		return uninstallWindows()
+	default:
+		return fmt.Errorf("unsupported operating system: %s", runtime.GOOS)
+	}
+}
+
+func uninstallDarwin() error {
+	homeDir, err := os.UserHomeDir()
+	if err != nil {
+		return err
+	}
+
+	plistPath := filepath.Join(homeDir, "Library", "LaunchAgents", "com.liferay.tunnel.plist")
+	if _, err := os.Stat(plistPath); os.IsNotExist(err) {
+		return nil
+	}
+
+	cmd := exec.Command("launchctl", "unload", plistPath)
+	_ = cmd.Run() //nolint:errcheck
+
+	if err := os.Remove(plistPath); err != nil {
+		return err
+	}
+
+	fmt.Printf("[Success] Uninstalled macOS LaunchAgent: %s\n", plistPath)
+	return nil
+}
+
+func uninstallLinux() error {
+	homeDir, err := os.UserHomeDir()
+	if err != nil {
+		return err
+	}
+
+	servicePath := filepath.Join(homeDir, ".config", "systemd", "user", "lfr-tunnel.service")
+	if _, err := os.Stat(servicePath); os.IsNotExist(err) {
+		return nil
+	}
+
+	_ = exec.Command("systemctl", "--user", "stop", "lfr-tunnel.service").Run()    //nolint:errcheck
+	_ = exec.Command("systemctl", "--user", "disable", "lfr-tunnel.service").Run() //nolint:errcheck
+
+	if err := os.Remove(servicePath); err != nil {
+		return err
+	}
+
+	_ = exec.Command("systemctl", "--user", "daemon-reload").Run() //nolint:errcheck
+	fmt.Printf("[Success] Uninstalled Linux systemd user service: %s\n", servicePath)
+	return nil
+}
+
+func uninstallWindows() error {
+	return nil
+}
 
 // InstallService configures lfr-tunnel to start on login automatically.
 func InstallService() error {
-	exePath, err := os.Executable()
-	if err != nil {
-		return fmt.Errorf("failed to get executable path: %v", err)
-	}
+	exePath := getCanonicalExePath()
 
 	switch runtime.GOOS {
 	case "darwin":
@@ -41,6 +152,10 @@ func installDarwin(exePath string) error {
 <dict>
     <key>Label</key>
     <string>com.liferay.tunnel</string>
+    <key>AssociatedBundleIdentifiers</key>
+    <array>
+        <string>com.liferay.tunnel</string>
+    </array>
     <key>ProgramArguments</key>
     <array>
         <string>%s</string>
@@ -142,12 +257,9 @@ func installWindows(exePath string) error {
 	return nil
 }
 
-// InstallGUIService configures lfr-tunnel -gui to start on login automatically.
+// InstallGUIService configures the system tray GUI wrapper to start on login.
 func InstallGUIService() error {
-	exePath, err := os.Executable()
-	if err != nil {
-		return fmt.Errorf("failed to get executable path: %v", err)
-	}
+	exePath := getCanonicalExePath()
 
 	switch runtime.GOOS {
 	case "darwin":
@@ -212,6 +324,10 @@ func installDarwinGUI(exePath string) error {
 <dict>
     <key>Label</key>
     <string>com.liferay.tunnel.gui</string>
+    <key>AssociatedBundleIdentifiers</key>
+    <array>
+        <string>com.liferay.tunnel</string>
+    </array>
     <key>ProgramArguments</key>
     <array>
         <string>%s</string>

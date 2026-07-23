@@ -227,12 +227,15 @@ The solution will consist of:
 - [x] Add TAP_BUCKET_PAT secret to lfr-tunnel repo (GitHub PAT, contents:write on homebrew-tap and scoop-bucket).
 - [ ] ~~Apply to SignPath Foundation for free Windows Authenticode signing (https://signpath.org).~~ (Ruled out, sticking to file/folder exclusions)
 - [ ] Submit official release binary hashes to SentinelOne false-positive review portal.
-- [ ] Ask SentinelOne admin to configure path exclusions per SECURITY.md (Homebrew + direct-install paths).
+- [x] Ask SentinelOne admin to configure path exclusions per SECURITY.md (Homebrew + direct-install paths).
 - [x] Add ~/.ldm/bin/lfr-tunnel to SentinelOne exclusions in README.md and SECURITY.md.
 - [x] Create docs/infosec.md documenting client-side security architecture, trust verification details (Publisher CN, Team ID, GPG public keys), path exclusions, and gateway administrative risk-reduction controls for corporate InfoSec review.
 - [x] Implement no-backdoor SSO-only lockdown capability (disable_email_login config flag).
 - [x] Support custom target installation directory override via LFT_INSTALL_DIR environment variable in install.sh and install.ps1.
 - [x] Change default canonical install path to ~/runningpoc/bin/lfr-tunnel (C:\Users\<username>\runningpoc\bin\lfr-tunnel.exe) across install.sh, install.ps1, README.md, and docs.
+- [x] Configure wildcard SentinelOne EDR exclusions (/Users/*/runningpoc/bin/*, /private/tmp/lfr-tunnel) with Admin approval.
+- [x] Refactor Client SPA Inspector header navigation and form controls to CSS variables for Light and Dark theme compatibility.
+- [x] Standardise macOS LaunchAgent plist display metadata (com.liferay.tunnel) and canonical path resolution (~/runningpoc/bin/lfr-tunnel).
 
 
 ## Bug Fixes

@@ -65,6 +65,7 @@ var (
 	passcode           = flag.String("passcode", "", "Passcode to protect the public tunnel URLs")
 	whitelistIP        = flag.String("whitelist-ip", "", "Comma-separated IP addresses allowed to access the tunnel")
 	region             = flag.String("region", "", "Gateway region to target (e.g. eu, us-east, us-west, latam, apac)")
+	refreshRegion      = flag.Bool("refresh-region", false, "Force re-probing region latencies and refresh the 24h region cache")
 	domain             = flag.String("domain", "", "Custom domain name (e.g. custom-client-site.com)")
 	latency            = flag.Duration("latency", 0, "Simulated network roundtrip latency (e.g. 200ms, 1s)")
 	bandwidth          = flag.String("bandwidth", "", "Simulated bandwidth throttling limit (e.g. 512kbps, 2mbps)")
@@ -72,6 +73,19 @@ var (
 
 func init() {
 	flag.Var(&addHeaders, "add-header", "Inject HTTP header (e.g. 'X-Bypass-CORS: true')")
+
+	oldUsage := flag.Usage
+	flag.Usage = func() {
+		fmt.Fprintf(os.Stderr, "Usage: lfr-tunnel [options] [command]\n\n")
+		fmt.Fprintf(os.Stderr, "Subcommands:\n")
+		fmt.Fprintf(os.Stderr, "  install-service        Install background CLI autostart service (LaunchAgent/systemd/Windows startup)\n")
+		fmt.Fprintf(os.Stderr, "  uninstall-service      Uninstall background CLI autostart service\n")
+		fmt.Fprintf(os.Stderr, "  install-gui-service    Install background GUI tray autostart service\n")
+		fmt.Fprintf(os.Stderr, "  uninstall-gui-service  Uninstall background GUI tray autostart service\n")
+		fmt.Fprintf(os.Stderr, "  login                  Authenticate via browser handoff / OIDC\n\n")
+		fmt.Fprintf(os.Stderr, "Flags:\n")
+		oldUsage()
+	}
 }
 
 func main() {
@@ -111,13 +125,13 @@ func main() {
 	}
 	sub = strings.ToLower(strings.TrimSpace(sub))
 
-	isExplicitServer := *serverURL != "" || os.Getenv("LFT_CLIENT_SERVER") != "" || os.Getenv("LFT_SERVER_URL") != "" || os.Getenv("LFT_SERVER") != ""
-	resolveServerURL(cfg, isExplicitServer)
-
-	// Execute subcommands if any matching arguments or flags are passed (e.g., -background)
+	// Execute utility subcommands early (e.g., -version, install-gui-service) before network region resolution
 	if executeSubcommands(cfg, sub, subdomainFlagPassed) {
 		return
 	}
+
+	isExplicitServer := *serverURL != "" || os.Getenv("LFT_CLIENT_SERVER") != "" || os.Getenv("LFT_SERVER_URL") != "" || os.Getenv("LFT_SERVER") != ""
+	resolveServerURL(cfg, isExplicitServer)
 
 	if *guiFlag {
 		gui.StartGUI(cfg)
@@ -805,23 +819,95 @@ func handleStatusJSON(sub string, targetSpecific bool) {
 	fmt.Println(string(outputBytes))
 }
 
+type RegionCacheData struct {
+	BestRegion string    `json:"best_region"`
+	ServerURL  string    `json:"server_url"`
+	Timestamp  time.Time `json:"timestamp"`
+}
+
+func getRegionCachePath() (string, error) {
+	home, err := os.UserHomeDir()
+	if err != nil {
+		return "", err
+	}
+	dir := filepath.Join(home, ".lfr-tunnel")
+	if err := os.MkdirAll(dir, 0700); err != nil {
+		return "", err
+	}
+	return filepath.Join(dir, "region_cache.json"), nil
+}
+
+func loadRegionCache() *RegionCacheData {
+	path, err := getRegionCachePath()
+	if err != nil {
+		return nil
+	}
+	data, err := os.ReadFile(path)
+	if err != nil {
+		return nil
+	}
+	var cache RegionCacheData
+	if err := json.Unmarshal(data, &cache); err != nil {
+		return nil
+	}
+	// Expire cache after 24 hours
+	if time.Since(cache.Timestamp) > 24*time.Hour {
+		return nil
+	}
+	return &cache
+}
+
+func saveRegionCache(bestRegion, serverURL string) {
+	path, err := getRegionCachePath()
+	if err != nil {
+		return
+	}
+	cache := RegionCacheData{
+		BestRegion: bestRegion,
+		ServerURL:  serverURL,
+		Timestamp:  time.Now(),
+	}
+	bytes, err := json.Marshal(cache)
+	if err == nil {
+		_ = os.WriteFile(path, bytes, 0600) //nolint:errcheck
+	}
+}
+
 func resolveServerURL(cfg *config.ClientConfig, isExplicitServer bool) {
+	if *refreshRegion {
+		if path, err := getRegionCachePath(); err == nil {
+			_ = os.Remove(path) //nolint:errcheck
+		}
+	}
+
 	fetchRemoteRegions(cfg)
 
 	if cfg.Region == "" {
 		if !isExplicitServer && len(cfg.Regions) > 0 {
+			if !*refreshRegion {
+				if cached := loadRegionCache(); cached != nil && cached.BestRegion != "" {
+					if url, ok := cfg.Regions[cached.BestRegion]; ok {
+						cfg.Region = cached.BestRegion
+						cfg.ServerURL = url
+						slog.Info(fmt.Sprintf("[Client] Using cached best region: '%s' -> %s (cached for 24h, use -refresh-region to re-probe)", cfg.Region, cfg.ServerURL))
+						return
+					}
+				}
+			}
+
 			slog.Info(fmt.Sprintf("[Client] No region specified. Performing latency auto-probing across %d regions...", len(cfg.Regions)))
 			bestRegion := probeFastestRegion(cfg.Regions)
 			if bestRegion != "" {
 				cfg.Region = bestRegion
 				cfg.ServerURL = cfg.Regions[bestRegion]
-				slog.Info(fmt.Sprintf("[Client] Auto-detected best region: '%s' -> %s", bestRegion, cfg.ServerURL))
+				saveRegionCache(bestRegion, cfg.ServerURL)
+				slog.Info(fmt.Sprintf("[Client] Auto-detected best region: '%s' -> %s (cached for 24h)", bestRegion, cfg.ServerURL))
 			}
 		}
 		return
 	}
 
-	regionLower := strings.ToLower(strings.TrimSpace(cfg.Region))
+	regionLower := strings.TrimSpace(strings.ToLower(cfg.Region))
 	if url, ok := cfg.Regions[regionLower]; ok {
 		cfg.ServerURL = url
 		slog.Info(fmt.Sprintf("[Client] Selected region '%s' -> %s", regionLower, url))

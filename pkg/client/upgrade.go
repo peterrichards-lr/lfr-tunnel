@@ -348,6 +348,29 @@ func SelfUpgrade(currentVersion string, serverURL string) error {
 	plistToReload, restartSystemd := stopActiveProcessesAndServices()
 
 	migrated := false
+	// Check for environment variable install directory overrides if targetExecPath was not explicitly specified by caller/test
+	if targetExecPath == "" {
+		envInstallDir := os.Getenv("LFR_TUNNEL_MACOS_ARM64_INSTALL_DIR")
+		if envInstallDir == "" {
+			envInstallDir = os.Getenv("LFR_TUNNEL_MACOS_AMD64_INSTALL_DIR")
+		}
+		if envInstallDir == "" {
+			envInstallDir = os.Getenv("LFR_TUNNEL_LINUX_AMD64_INSTALL_DIR")
+		}
+		if envInstallDir == "" {
+			envInstallDir = os.Getenv("LFR_TUNNEL_WINDOWS_AMD64_INSTALL_DIR")
+		}
+		if envInstallDir == "" {
+			envInstallDir = os.Getenv("LFR_TUNNEL_INSTALL_DIR")
+		}
+		if envInstallDir == "" {
+			envInstallDir = os.Getenv("LFT_INSTALL_DIR")
+		}
+		if envInstallDir != "" {
+			configuredInstallDir = envInstallDir
+		}
+	}
+
 	if configuredInstallDir != "" {
 		configuredInstallDir = os.ExpandEnv(configuredInstallDir)
 		if strings.HasPrefix(configuredInstallDir, "~/") || strings.HasPrefix(configuredInstallDir, "~\\") {

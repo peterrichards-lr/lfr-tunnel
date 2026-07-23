@@ -89,8 +89,21 @@ export default function AdminEdgeHealth() {
   };
 
   const nodeArray = useMemo(() => {
-    return Object.keys(nodes).map(id => ({ id, ...nodes[id] }));
+    return Object.keys(nodes).map(id => {
+      const rawStatus = nodes[id].status || 'offline';
+      const normStatus = rawStatus.toLowerCase();
+      return {
+        id,
+        ...nodes[id],
+        computed_status: normStatus
+      };
+    });
   }, [nodes]);
+
+  const statusOptions = useMemo(() => [
+    { value: 'online', label: t('status_online', 'online') },
+    { value: 'offline', label: t('status_offline', 'offline') }
+  ], [t]);
 
   const columns: ColumnDef<EdgeNode>[] = useMemo(() => [
     { key: 'id', label: t('node', 'Node ID'), sortable: true },
@@ -105,6 +118,8 @@ export default function AdminEdgeHealth() {
     paginatedItems,
     searchQuery,
     setSearchQuery,
+    statusFilter,
+    setStatusFilter,
     pageSize,
     setPageSize,
     currentPage,
@@ -116,13 +131,16 @@ export default function AdminEdgeHealth() {
     requestSort,
     getSortIndicator,
     getAriaSort
-  } = useDataTable<EdgeNode>(
+  } = useDataTable<EdgeNode & { computed_status: string }>(
     'admin_edge_health',
     nodeArray,
     ['id', 'status', 'resolved_ip', 'version'],
-    columns,
+    columns as any,
     10,
-    ['resolved_ip', 'created_at'] // Default unselected
+    ['resolved_ip', 'created_at'],
+    'computed_status',
+    statusOptions,
+    'all'
   );
 
   if (loading) {
@@ -194,6 +212,9 @@ export default function AdminEdgeHealth() {
               columns={columns}
               isColumnVisible={isColumnVisible}
               onToggleColumn={toggleColumn}
+              statusFilter={statusFilter}
+              onStatusFilterChange={setStatusFilter}
+              statusOptions={statusOptions}
             />
           </div>
 
@@ -249,8 +270,8 @@ export default function AdminEdgeHealth() {
                       )}
                       {isColumnVisible('status') && (
                         <td className="td-cell">
-                          <span className={`badge ${n.status === 'online' ? 'badge-success' : 'badge-danger'}`}>
-                            {n.status ? n.status.toUpperCase() : 'UNKNOWN'}
+                          <span className={`badge ${n.status?.toLowerCase() === 'online' ? 'badge-success' : 'badge-danger'}`}>
+                            {n.status ? n.status.toLowerCase() : 'offline'}
                           </span>
                         </td>
                       )}

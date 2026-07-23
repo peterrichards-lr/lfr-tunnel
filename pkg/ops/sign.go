@@ -43,7 +43,7 @@ func SignCommand(args []string) {
 	}
 
 	// 2. Windows Signing
-	if (signP12 != "" && signP12 != "skip") || (signKey != "" && signCrt != "") {
+	if (signP12 != "" && signP12 != "skip") || (signKey != "" && signKey != "skip" && signCrt != "" && signCrt != "skip") {
 		fmt.Println("Signing Windows binary...")
 		in := filepath.Join(binDir, "lfr-tunnel-windows-amd64.exe")
 		out := filepath.Join(binDir, "lfr-tunnel-windows-amd64-signed.exe")

@@ -11,8 +11,8 @@ If ([string]::IsNullOrEmpty($ServerUrl) -or $ServerUrl -eq "{{SERVER_URL}}") {
 }
 $Url = "$ServerUrl/static/downloads/$Binary"
 
-$DefaultInstallDir = "{{WINDOWS_AMD64_INSTALL_DIR}}"
-If ([string]::IsNullOrEmpty($DefaultInstallDir) -or $DefaultInstallDir -eq "{{WINDOWS_AMD64_INSTALL_DIR}}") {
+$DefaultInstallDir = "{{LFR_TUNNEL_WINDOWS_AMD64_INSTALL_DIR}}"
+If ([string]::IsNullOrEmpty($DefaultInstallDir) -or $DefaultInstallDir -like "*{{*") {
     $DefaultInstallDir = "$Home\runningpoc\bin"
 }
 

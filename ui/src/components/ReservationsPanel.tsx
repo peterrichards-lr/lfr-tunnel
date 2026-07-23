@@ -254,9 +254,10 @@ export default function ReservationsPanel() {
             </div>
             <div style={{ minWidth: '130px' }}>
               <select className="form-control" value={subdomainStyle} onChange={(e) => setSubdomainStyle(e.target.value)}>
-                <option value="liferay">{t('style_liferay', 'Liferay Style')}</option>
+                <option value="liferay">{t('style_liferay', 'Liferay SE Style')}</option>
                 <option value="words">{t('style_words', 'Words Style')}</option>
                 <option value="heroku">{t('style_heroku', 'Heroku Style')}</option>
+                <option value="ngrok">{t('style_ngrok', 'Ngrok Style')}</option>
                 <option value="random">{t('style_random', 'Alphanumeric')}</option>
               </select>
             </div>

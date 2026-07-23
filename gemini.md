@@ -149,6 +149,8 @@ The solution will consist of:
 
 ## Roadmap (Post Public Visibility PR Flow)
 - [x] Refactor Client GUI layer to use unified dashboard port and persist log theme preference.
+- [x] Fix V2 Portal layout bugs: hide mobile header on desktop, refactor top V1 promo banner to flex layout, split Account Settings cards, align domain badges, and fix table action button wrapping.
+- [x] Implement V2 Portal Opaque Modals, full i18n sweep, ngrok subdomain generator (8f4b-tunnel), Edge Health actions & universal persistent data tables with localStorage.
 - [x] Implement Advanced Domain Allocation Rules (Round Robin, Consistent Hashing, Least Connections, Random).
 - [x] Create Global System Settings API and Admin Dashboard UI for configuring global allocation defaults.
 - [x] Support Admin-defined Preferred Domain assignment per user.

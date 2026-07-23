@@ -86,6 +86,8 @@ type InterceptorEngine struct {
 	// Latency & Bandwidth Simulation Settings
 	Latency         time.Duration
 	BandwidthLimit  int64
+	RateLimitKBPS   int64
+	IsCustomDomain  bool
 	MaintenancePath string
 }
 

@@ -139,6 +139,9 @@
             <div style="display: flex; justify-content: space-between; align-items: center; margin-top: 5px;">
                 <div style="font-size: 12px; color: var(--text-muted);"><span data-i18n="client_listening">Listening on localhost:4040</span></div>
                 <div id="preserve-host-pill" style="display: none; padding: 2px 6px; border-radius: 4px; font-size: 10px; font-weight: 600;"></div>
+                <div id="latency-sim-pill" style="display: none; padding: 2px 6px; border-radius: 4px; font-size: 10px; font-weight: 600; background: rgba(59, 130, 246, 0.2); color: #3b82f6; border: 1px solid rgba(59, 130, 246, 0.4);"></div>
+                <div id="ratelimit-sim-pill" style="display: none; padding: 2px 6px; border-radius: 4px; font-size: 10px; font-weight: 600; background: rgba(168, 85, 247, 0.2); color: #a855f7; border: 1px solid rgba(168, 85, 247, 0.4);"></div>
+                <div id="domain-type-pill" style="display: none; padding: 2px 6px; border-radius: 4px; font-size: 10px; font-weight: 600; background: rgba(236, 72, 153, 0.2); color: #ec4899; border: 1px solid rgba(236, 72, 153, 0.4);"></div>
             </div>
         </div>
         <div style="display: flex; border-bottom: 1px solid var(--border); background: rgba(0,0,0,0.1);">
@@ -156,10 +159,13 @@
                 <input type="text" id="ac-whitelist" placeholder="e.g. 192.168.1.1, 10.0.0.0/24" data-i18n="client_ip_placeholder" style="background: rgba(0,0,0,0.3); border: 1px solid var(--border); color: white; padding: 6px 10px; border-radius: 4px; font-size: 12px; outline: none; width: 100%;">
             </div>
             <div style="display: flex; flex-direction: column; gap: 6px;">
-                <label style="font-size: 11px; color: var(--text-muted);" data-i18n="client_combinator">Combinator Mode</label>
+                <label style="font-size: 11px; color: var(--text-muted);" data-i18n="client_combinator">Access Mode</label>
                 <select id="ac-mode" style="background: #1e293b; border: 1px solid var(--border); color: white; padding: 6px 10px; border-radius: 4px; font-size: 12px; outline: none; cursor: pointer; width: 100%;">
-                    <option value="or" data-i18n="client_mode_or">Bypass passcode if IP matched (OR)</option>
-                    <option value="and" data-i18n="client_mode_and">Require both passcode & IP match (AND)</option>
+                    <option value="public">🌐 Public (Anyone can access)</option>
+                    <option value="passcode">🔑 Passcode (Requires secret code)</option>
+                    <option value="whitelist">🛡️ Whitelist (Restrict by IP)</option>
+                    <option value="or">🔑/🛡️ Passcode OR Whitelist</option>
+                    <option value="and">🔒 Passcode AND Whitelist</option>
                 </select>
             </div>
             <button id="ac-save-btn" onclick="saveAccessControl()" style="background: var(--primary); color: white; border: none; padding: 8px 12px; border-radius: 4px; font-size: 12px; font-weight: 600; cursor: pointer; margin-top: 4px; transition: background 0.2s;" data-i18n="client_save_access">Save Access Control</button>
@@ -567,19 +573,62 @@ function setLanguage(lang) {
                         pill.innerText = clientTranslations[currentLang] ? (clientTranslations[currentLang]['client_host_rewritten'] || 'Host Rewritten') : 'Host Rewritten';
                     }
                 }
-                
+
+                if (state.simulation) {
+                    const latPill = document.getElementById('latency-sim-pill');
+                    if (latPill) {
+                        if (state.simulation.latency_ms > 0) {
+                            latPill.style.display = 'inline-block';
+                            latPill.innerText = `⚡ ${state.simulation.latency_ms}ms Simulated`;
+                        } else {
+                            latPill.style.display = 'none';
+                        }
+                    }
+                    const rlPill = document.getElementById('ratelimit-sim-pill');
+                    if (rlPill) {
+                        if (state.simulation.rate_limit_kbps > 0) {
+                            rlPill.style.display = 'inline-block';
+                            rlPill.innerText = `🚦 ${state.simulation.rate_limit_kbps} KB/s Throttled`;
+                        } else {
+                            rlPill.style.display = 'none';
+                        }
+                    }
+                }
+
                 const passcodeEl = document.getElementById('ac-passcode');
                 const whitelistEl = document.getElementById('ac-whitelist');
                 const modeEl = document.getElementById('ac-mode');
 
-                if (document.activeElement !== passcodeEl) {
-                    passcodeEl.value = state.passcode || '';
-                }
-                if (document.activeElement !== whitelistEl) {
-                    whitelistEl.value = state.whitelist_ips || '';
-                }
-                if (document.activeElement !== modeEl) {
-                    modeEl.value = state.access_mode || 'or';
+                if (state.access_control) {
+                    const domPill = document.getElementById('domain-type-pill');
+                    if (domPill) {
+                        if (state.access_control.is_custom_domain) {
+                            domPill.style.display = 'inline-block';
+                            domPill.innerText = `🌐 Vanity SNI Domain`;
+                        } else {
+                            domPill.style.display = 'none';
+                        }
+                    }
+
+                    if (document.activeElement !== passcodeEl) {
+                        passcodeEl.value = state.access_control.passcode || state.passcode || '';
+                    }
+                    if (document.activeElement !== whitelistEl) {
+                        whitelistEl.value = state.access_control.whitelist_ips || state.whitelist_ips || '';
+                    }
+                    if (document.activeElement !== modeEl) {
+                        modeEl.value = state.access_control.mode || state.access_mode || 'public';
+                    }
+                } else {
+                    if (document.activeElement !== passcodeEl) {
+                        passcodeEl.value = state.passcode || '';
+                    }
+                    if (document.activeElement !== whitelistEl) {
+                        whitelistEl.value = state.whitelist_ips || '';
+                    }
+                    if (document.activeElement !== modeEl) {
+                        modeEl.value = state.access_mode || 'public';
+                    }
                 }
 
                 // Update requests if changed

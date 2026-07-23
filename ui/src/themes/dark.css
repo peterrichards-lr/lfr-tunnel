@@ -6,6 +6,7 @@
 :root[data-theme="dark"] {
     --bg-base: #09090b;
     --bg-card: rgba(24, 24, 27, 0.6);
+    --bg-card-solid: #18181b;
     --bg-card-hover: rgba(39, 39, 42, 0.8);
     --primary: #3b82f6;
     --primary-hover: #2563eb;

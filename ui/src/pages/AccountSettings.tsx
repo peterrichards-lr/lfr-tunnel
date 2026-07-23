@@ -241,10 +241,11 @@ export default function AccountSettings() {
                 {t('default_subdomain_style', 'Default Subdomain Style')}
               </label>
               <select className="input-field" value={subdomainStyle} onChange={(e) => setSubdomainStyle(e.target.value)}>
-                <option value="liferay">{t('style_liferay', 'Liferay SE Style')} — e.g. peterrichards-se</option>
-                <option value="words">{t('style_words', 'Words Style')} — e.g. happy-panda-42</option>
-                <option value="heroku">{t('style_heroku', 'Heroku Style')} — e.g. warm-sunrise-1234</option>
-                <option value="random">{t('style_random', 'Alphanumeric')} — e.g. a3f9k2</option>
+                <option value="liferay">{t('style_liferay', 'Liferay SE Style')} — e.g. micro-tomcat-387</option>
+                <option value="words">{t('style_words', 'Words Style')} — e.g. falcon-orange-apple</option>
+                <option value="heroku">{t('style_heroku', 'Heroku Style')} — e.g. silent-owl-4319</option>
+                <option value="ngrok">{t('style_ngrok', 'Ngrok Style')} — e.g. 8f4b-tunnel</option>
+                <option value="random">{t('style_random', 'Alphanumeric')} — e.g. 4wq0kgyl</option>
               </select>
               <p className="form-hint">
                 {t('subdomain_style_hint', 'The style used to generate a default subdomain when you connect your CLI without specifying one.')}

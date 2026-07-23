@@ -22,10 +22,6 @@ export default function AdminEdgeHealth() {
   const { t } = useI18n();
   const { showToast, showConfirm, showPrompt } = useUI();
   
-  // Track open menus and their viewport position
-  const [openMenu, setOpenMenu] = useState<string | null>(null);
-  const [menuPos, setMenuPos] = useState<{ top: number; right: number } | null>(null);
-
   const fetchHealth = async () => {
     try {
       const res = await axios.get('/api/portal/edge-health');
@@ -42,15 +38,7 @@ export default function AdminEdgeHealth() {
   useEffect(() => {
     fetchHealth();
     const interval = setInterval(fetchHealth, 30000);
-    
-    // Close menus when clicking outside
-    const handleGlobalClick = () => setOpenMenu(null);
-    document.addEventListener('click', handleGlobalClick);
-    
-    return () => {
-      clearInterval(interval);
-      document.removeEventListener('click', handleGlobalClick);
-    };
+    return () => clearInterval(interval);
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
@@ -67,7 +55,6 @@ export default function AdminEdgeHealth() {
     } catch (e: any) {
       showToast(e.response?.data?.error || 'Action failed.', 'error');
     }
-    setOpenMenu(null);
   };
 
   const restartEdgeDaemon = async (nodeId: string) => {
@@ -89,27 +76,9 @@ export default function AdminEdgeHealth() {
     triggerEdgeAction(nodeId, "maintenance_enable", reason, duration);
   };
 
-  const disableEdgeMaintenance = async (nodeId: string) => {
-    if (await showConfirm('Disable Maintenance', `Are you sure you want to disable maintenance on ${nodeId}?`)) {
-      triggerEdgeAction(nodeId, "maintenance_disable");
-    }
-  };
-
   const kickEdgeTunnels = async (nodeId: string) => {
     if (await showConfirm('Kick All Tunnels', `Are you sure you want to kick ALL active tunnels on edge node ${nodeId}?`)) {
       triggerEdgeAction(nodeId, "kick_tunnels");
-    }
-  };
-
-  const toggleMenu = (e: React.MouseEvent, id: string) => {
-    e.stopPropagation();
-    if (openMenu === id) {
-      setOpenMenu(null);
-      setMenuPos(null);
-    } else {
-      const rect = (e.currentTarget as HTMLElement).getBoundingClientRect();
-      setMenuPos({ top: rect.bottom + window.scrollY + 4, right: window.innerWidth - rect.right });
-      setOpenMenu(id);
     }
   };
 
@@ -194,8 +163,8 @@ export default function AdminEdgeHealth() {
               />
             </div>
           )}
-          <div className="card table-responsive min-h-card">
-            <table className="w-full" style={{ overflow: 'visible' }}>
+          <div className="card table-responsive">
+            <table className="w-full">
               <thead>
                 <tr className="border-b text-left">
                   <th className="th-col th-col--sortable" onClick={() => requestSort('id')} aria-sort={getAriaSort('id')}>Node ID{getSortIndicator('id')}</th>
@@ -247,34 +216,12 @@ export default function AdminEdgeHealth() {
                           <span className="text-danger text-xs">{h.error_message}</span>
                         )}
                       </td>
-                      <td className="td-cell text-right">
-                        <div className="action-menu inline-block relative">
-                          <button 
-                            className="btn btn-secondary py-xs px-sm" 
-                            onClick={(e) => toggleMenu(e, id)}
-                          >
-                            ⋮
-                          </button>
+                      <td className="td-cell text-right whitespace-nowrap">
+                        <div className="flex gap-xs justify-end items-center">
+                          <button className="btn btn-secondary py-xs px-sm text-xs" title="Restart Daemon" onClick={() => restartEdgeDaemon(id)}>Restart</button>
+                          <button className="btn btn-secondary py-xs px-sm text-xs" title="Enable Soft Maintenance" onClick={() => enableEdgeMaintenance(id)}>Maintenance</button>
+                          <button className="btn btn-danger py-xs px-sm text-xs" title="Kick All Active Tunnels" onClick={() => kickEdgeTunnels(id)}>Kick</button>
                         </div>
-                        {openMenu === id && menuPos && (
-                          <div
-                            className="action-menu-dropdown fixed flex flex-col py-xs rounded-sm border"
-                            style={{
-                              top: `${menuPos.top}px`,
-                              right: `${menuPos.right}px`,
-                              zIndex: 9999,
-                              background: 'var(--bg-base)',
-                              boxShadow: '0 10px 15px -3px rgba(0,0,0,0.3)',
-                              minWidth: '180px'
-                            }}
-                            onClick={(e) => e.stopPropagation()}
-                          >
-                            <button className="action-menu-item text-left border-b cursor-pointer p-md text-main no-underline" style={{ background: 'none', borderLeft: 'none', borderRight: 'none', borderTop: 'none' }} onClick={() => restartEdgeDaemon(id)}>Restart Daemon</button>
-                            <button className="action-menu-item text-left border-b cursor-pointer p-md text-main no-underline" style={{ background: 'none', borderLeft: 'none', borderRight: 'none', borderTop: 'none' }} onClick={() => enableEdgeMaintenance(id)}>Enable Maintenance</button>
-                            <button className="action-menu-item text-left border-b cursor-pointer p-md text-main no-underline" style={{ background: 'none', borderLeft: 'none', borderRight: 'none', borderTop: 'none' }} onClick={() => disableEdgeMaintenance(id)}>Disable Maintenance</button>
-                            <button className="action-menu-item text-left cursor-pointer p-md text-danger no-underline" style={{ background: 'none', border: 'none' }} onClick={() => kickEdgeTunnels(id)}>Kick All Tunnels</button>
-                          </div>
-                        )}
                       </td>
                     </tr>
                   );

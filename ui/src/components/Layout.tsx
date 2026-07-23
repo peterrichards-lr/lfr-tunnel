@@ -82,7 +82,7 @@ export default function Layout() {
       {showV1Promo && (
         <div className="bg-primary text-white py-xs px-xl text-center z-40 box-border shadow-sm flex items-center justify-center relative shrink-0">
           <p className="m-0 text-sm fw-medium">
-            Need the legacy interface? <a href="/portal/" className="text-white underline fw-bold ml-xs">Switch back to V1 &rarr;</a>
+            {t('banner_legacy_interface', 'Need the legacy interface?')} <a href="/portal/" className="text-white underline fw-bold ml-xs">{t('btn_switch_v1', 'Switch back to V1 →')}</a>
           </p>
           <button 
             onClick={dismissV1Promo} 

@@ -15,6 +15,19 @@ type AutoDiscoverResult struct {
 	Type  string // e.g. "Docker (LDM)", "Native Tomcat"
 }
 
+// CommandExecutor abstracts the execution of shell commands for easier testing
+type CommandExecutor interface {
+	Output(command string, args ...string) ([]byte, error)
+}
+
+type defaultExecutor struct{}
+
+func (d defaultExecutor) Output(command string, args ...string) ([]byte, error) {
+	return exec.Command(command, args...).Output()
+}
+
+var cmdExecutor CommandExecutor = defaultExecutor{}
+
 // AutoDiscoverTarget attempts to dynamically find running LDM or Liferay instances.
 // It checks Docker containers first, then falls back to probing localhost ports.
 func AutoDiscoverTarget() (*AutoDiscoverResult, error) {
@@ -40,8 +53,7 @@ func AutoDiscoverTarget() (*AutoDiscoverResult, error) {
 
 // discoverDocker executes `docker ps` to find containers that look like Liferay/LDM.
 func discoverDocker() (*AutoDiscoverResult, error) {
-	cmd := exec.Command("docker", "ps", "--format", "{{.Names}}||{{.Image}}||{{.Ports}}")
-	out, err := cmd.Output()
+	out, err := cmdExecutor.Output("docker", "ps", "--format", "{{.Names}}||{{.Image}}||{{.Ports}}")
 	if err != nil {
 		return nil, err // Docker not installed or daemon not running
 	}

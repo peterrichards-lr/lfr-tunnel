@@ -267,6 +267,7 @@ The solution will consist of:
 - [x] Review and align markdown files with the current repository state and document the branching/PR conventions in `CONTRIBUTING.md`.
 
 ## Bug Fixes
+- [x] Fix Tech Debt #830 (Decouple Docker exec execution)
 - [x] Fix MFA Setup button and modal display logic in the dashboard UI.
 - [x] Fix Export CSV button layout width.
 - [x] Implement System Analytics PDF export feature.

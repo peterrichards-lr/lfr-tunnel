@@ -1,5 +1,12 @@
 [
   {
+    "version": "v1.44.4",
+    "release_date": "2026-07-26",
+    "features": [
+      "Release v1.44.4"
+    ]
+  },
+  {
     "version": "v1.44.3",
     "release_date": "2026-07-23",
     "features": [
@@ -36,19 +43,6 @@
       "Refactor: Systematically refactor all 20 V2 portal UI components to CSS utility classes and design tokens",
       "Feature: Restore complete V1 feature parity across Account Settings, Admin Users, and Personal Access Tokens",
       "UX: Premium dark, light, and Liferay Waffle theme styling without inline style overhead"
-    ]
-  },
-  {
-    "version": "v1.43.15",
-    "release_date": "2026-07-22",
-    "features": [
-      "Feature: Restore V1 theme preferences (System Default, Time of Day) in V2 settings context",
-      "Feature: Restore First Name, Last Name, and Email Notifications form details under Profile Settings",
-      "Fix: Resolve permissions and EDR restrictions on self-upgrades by migrating client installation fallbacks to user-space ~/runningpoc/bin",
-      "Fix: Align layouts, flex dimensions, and download icons for Export PDF and Export CSV buttons across all Admin Zone pages",
-      "Feature: Restore complete V1 Domain Allocation Rules options list and hyphenated server keys",
-      "Fix: Resolve soft maintenance active status parsing and GET details endpoint variables mapping",
-      "Feature: Add dynamic client update warning alert banner in Dashboard Overview"
     ]
   }
 ]

@@ -225,8 +225,15 @@ rm -f /tmp/gateway-watchdog-edge.sh
 scp $SSH_KEY_ARG scripts/nginx-override.conf $SSH_USER@$VPS_IP:/home/$SSH_USER/nginx-override.conf
 scp $SSH_KEY_ARG scripts/gateway-watchdog.service scripts/gateway-watchdog.timer $SSH_USER@$VPS_IP:/home/$SSH_USER/
 
-# Upload Edge DDNS Script
+# Upload Edge DDNS Script, plus this instance's own domains file — the DDNS script is
+# shared verbatim across every edge, so it reads which domain(s) are actually *its own*
+# from this file rather than having them hardcoded (see cloudflare-ddns-edge.sh).
 scp $SSH_KEY_ARG scripts/cloudflare-ddns-edge.sh $SSH_USER@$VPS_IP:/home/$SSH_USER/cloudflare-ddns-edge.sh
+
+DDNS_DOMAINS_TMP="/tmp/ddns-domains.txt"
+printf '%s\n' "${DOMAIN_ARRAY[@]}" > "$DDNS_DOMAINS_TMP"
+scp $SSH_KEY_ARG "$DDNS_DOMAINS_TMP" $SSH_USER@$VPS_IP:/home/$SSH_USER/ddns-domains.txt
+rm -f "$DDNS_DOMAINS_TMP"
 
 # 8. Remotely execute setup and service configurations
 echo "=> Registering services and securing files on VPS..."
@@ -310,6 +317,11 @@ EOF
   sudo mv /home/$SSH_USER/cloudflare-ddns-edge.sh /usr/local/bin/cloudflare-ddns-edge.sh
   sudo chmod 700 /usr/local/bin/cloudflare-ddns-edge.sh
   sudo chown root:root /usr/local/bin/cloudflare-ddns-edge.sh
+
+  sudo mkdir -p /etc/lfr-tunneld
+  sudo mv /home/$SSH_USER/ddns-domains.txt /etc/lfr-tunneld/ddns-domains.txt
+  sudo chmod 644 /etc/lfr-tunneld/ddns-domains.txt
+  sudo chown root:root /etc/lfr-tunneld/ddns-domains.txt
 
   # Create a placeholder cloudflare.ini if it does not exist
   sudo mkdir -p /etc/letsencrypt

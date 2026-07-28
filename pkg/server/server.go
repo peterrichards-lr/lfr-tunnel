@@ -942,7 +942,7 @@ func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 			}
 
 			scriptStr := string(scriptBytes)
-			scriptStr = strings.ReplaceAll(scriptStr, "{{SERVER_URL}}", strings.TrimRight(s.cfg.ControlPlaneURL, "/"))
+			scriptStr = strings.ReplaceAll(scriptStr, "{{SERVER_URL}}", s.getPublicServerURL(r))
 
 			getInstallDir := func(platform string, fallback string) string {
 				if p, ok := s.cfg.ClientPlatforms[platform]; ok && p.InstallDir != "" {
@@ -975,7 +975,7 @@ func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 			}
 
 			scriptStr := string(scriptBytes)
-			scriptStr = strings.ReplaceAll(scriptStr, "{{SERVER_URL}}", strings.TrimRight(s.cfg.ControlPlaneURL, "/"))
+			scriptStr = strings.ReplaceAll(scriptStr, "{{SERVER_URL}}", s.getPublicServerURL(r))
 
 			getInstallDir := func(platform string, fallback string) string {
 				if p, ok := s.cfg.ClientPlatforms[platform]; ok && p.InstallDir != "" {
@@ -5473,4 +5473,25 @@ func (s *Server) getDomainAllocationRule() string {
 		rule = "contextual"
 	}
 	return rule
+}
+
+func (s *Server) getPublicServerURL(r *http.Request) string {
+	if s.cfg.ControlPlaneURL != "" {
+		return strings.TrimRight(s.cfg.ControlPlaneURL, "/")
+	}
+	proto := "https"
+	if r.TLS == nil && r.Header.Get("X-Forwarded-Proto") != "https" {
+		proto = "http"
+	}
+	if fwdProto := r.Header.Get("X-Forwarded-Proto"); fwdProto != "" {
+		proto = fwdProto
+	}
+	host := r.Header.Get("X-Forwarded-Host")
+	if host == "" {
+		host = r.Host
+	}
+	if host == "" {
+		return ""
+	}
+	return fmt.Sprintf("%s://%s", proto, host)
 }

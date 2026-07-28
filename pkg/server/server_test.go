@@ -3017,7 +3017,7 @@ func TestServer_TrailingSlashRedirect(t *testing.T) {
 
 func TestInstallScriptServerURLResolution(t *testing.T) {
 	cfg := &config.ServerConfig{
-		Domains:                []string{"custom-gateway.org"},
+		Domains:                []string{"custom-gateway.org", "ps-gateway.org"},
 		DisableBackupScheduler: true,
 	}
 	cfg.DBPath = filepath.Join(t.TempDir(), "test.db")

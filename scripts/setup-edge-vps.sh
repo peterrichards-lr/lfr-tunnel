@@ -53,6 +53,20 @@ fi
 
 echo "=== Starting Edge VPS Automation for IP: $VPS_IP ==="
 
+# 0. Refuse to proceed unless the Cloudflare token is already in place — this script never
+#    handles that secret itself, so this is a hard prerequisite, not something to work around.
+#    (Automated --dns-cloudflare below replaces the old interactive --manual DNS-01 flow,
+#    which required a human to add a TXT record mid-run and can't be driven unattended.)
+echo "=> Checking for /etc/letsencrypt/cloudflare.ini on $VPS_IP..."
+if ! ssh $SSH_KEY_ARG $SSH_USER@$VPS_IP "sudo test -s /etc/letsencrypt/cloudflare.ini"; then
+  echo "❌ Error: /etc/letsencrypt/cloudflare.ini is missing or empty on $VPS_IP."
+  echo "   Place your real Cloudflare API token there yourself first (see setup_guide.md §3.2):"
+  echo "     sudo mkdir -p /etc/letsencrypt"
+  echo "     sudo nano /etc/letsencrypt/cloudflare.ini   # dns_cloudflare_api_token = <token>"
+  echo "     sudo chmod 600 /etc/letsencrypt/cloudflare.ini"
+  exit 1
+fi
+
 # 1. Build Linux amd64 binary locally (compatible with standard GCP e2-micro / AWS t3.nano x86_64)
 VERSION="$(grep -oE 'Version = "[^"]+"' pkg/config/version.go | cut -d'"' -f2)"
 echo "=> Compiling lfr-tunneld for Linux (amd64) with Version=$VERSION..."
@@ -65,22 +79,22 @@ ssh $SSH_KEY_ARG $SSH_USER@$VPS_IP << 'REMOTE_SSH'
   sudo apt-get install -y nginx certbot python3-certbot-dns-cloudflare curl jq ufw fail2ban unattended-upgrades
 REMOTE_SSH
 
-# 3. Request wildcard Let's Encrypt certificates using Certbot Manual DNS-01 challenge
+# 3. Request wildcard Let's Encrypt certificates using Certbot's automated Cloudflare DNS-01
+#    plugin — fully non-interactive, since /etc/letsencrypt/cloudflare.ini was verified above.
 IFS=',' read -r -a DOMAIN_ARRAY <<< "$DOMAINS"
 for DOMAIN in "${DOMAIN_ARRAY[@]}"; do
   echo "=========================================================="
   echo "=> Provisioning Wildcard SSL Certificate for $DOMAIN & *.$DOMAIN"
-  echo "   (This uses Certbot manual DNS-01 verification)."
-  echo "   Please add the DNS TXT record when prompted below!"
   echo "=========================================================="
-  
-  ssh -t $SSH_KEY_ARG $SSH_USER@$VPS_IP "sudo certbot certonly \
-    --manual \
-    --preferred-challenges dns \
-    -d '$DOMAIN' \
-    -d '*.$DOMAIN' \
+
+  ssh $SSH_KEY_ARG $SSH_USER@$VPS_IP "sudo certbot certonly \
+    --dns-cloudflare \
+    --dns-cloudflare-credentials /etc/letsencrypt/cloudflare.ini \
+    --agree-tos \
+    --non-interactive \
     --register-unsafely-without-email \
-    --agree-tos"
+    -d '$DOMAIN' \
+    -d '*.$DOMAIN'"
 done
 
 # 4. Generate stateless server-config.yaml locally and upload
@@ -211,8 +225,15 @@ rm -f /tmp/gateway-watchdog-edge.sh
 scp $SSH_KEY_ARG scripts/nginx-override.conf $SSH_USER@$VPS_IP:/home/$SSH_USER/nginx-override.conf
 scp $SSH_KEY_ARG scripts/gateway-watchdog.service scripts/gateway-watchdog.timer $SSH_USER@$VPS_IP:/home/$SSH_USER/
 
-# Upload Edge DDNS Script
+# Upload Edge DDNS Script, plus this instance's own domains file — the DDNS script is
+# shared verbatim across every edge, so it reads which domain(s) are actually *its own*
+# from this file rather than having them hardcoded (see cloudflare-ddns-edge.sh).
 scp $SSH_KEY_ARG scripts/cloudflare-ddns-edge.sh $SSH_USER@$VPS_IP:/home/$SSH_USER/cloudflare-ddns-edge.sh
+
+DDNS_DOMAINS_TMP="/tmp/ddns-domains.txt"
+printf '%s\n' "${DOMAIN_ARRAY[@]}" > "$DDNS_DOMAINS_TMP"
+scp $SSH_KEY_ARG "$DDNS_DOMAINS_TMP" $SSH_USER@$VPS_IP:/home/$SSH_USER/ddns-domains.txt
+rm -f "$DDNS_DOMAINS_TMP"
 
 # 8. Remotely execute setup and service configurations
 echo "=> Registering services and securing files on VPS..."
@@ -296,6 +317,11 @@ EOF
   sudo mv /home/$SSH_USER/cloudflare-ddns-edge.sh /usr/local/bin/cloudflare-ddns-edge.sh
   sudo chmod 700 /usr/local/bin/cloudflare-ddns-edge.sh
   sudo chown root:root /usr/local/bin/cloudflare-ddns-edge.sh
+
+  sudo mkdir -p /etc/lfr-tunneld
+  sudo mv /home/$SSH_USER/ddns-domains.txt /etc/lfr-tunneld/ddns-domains.txt
+  sudo chmod 644 /etc/lfr-tunneld/ddns-domains.txt
+  sudo chown root:root /etc/lfr-tunneld/ddns-domains.txt
 
   # Create a placeholder cloudflare.ini if it does not exist
   sudo mkdir -p /etc/letsencrypt

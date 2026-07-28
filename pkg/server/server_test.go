@@ -3014,3 +3014,50 @@ func TestServer_TrailingSlashRedirect(t *testing.T) {
 		}
 	}
 }
+
+func TestInstallScriptServerURLResolution(t *testing.T) {
+	cfg := &config.ServerConfig{
+		Domains:                []string{"custom-gateway.org"},
+		DisableBackupScheduler: true,
+	}
+	cfg.DBPath = filepath.Join(t.TempDir(), "test.db")
+	srv, err := NewServer(cfg)
+	if err != nil {
+		t.Fatalf("failed to create server: %v", err)
+	}
+	defer func() {
+		time.Sleep(50 * time.Millisecond)
+		srv.Stop()
+	}()
+
+	// 1. Test /install with X-Forwarded-Host and X-Forwarded-Proto headers
+	reqInstall := httptest.NewRequest("GET", "/install", nil)
+	reqInstall.Header.Set("X-Forwarded-Host", "custom-gateway.org")
+	reqInstall.Header.Set("X-Forwarded-Proto", "https")
+	recInstall := httptest.NewRecorder()
+
+	srv.ServeHTTP(recInstall, reqInstall)
+
+	if recInstall.Code != http.StatusOK {
+		t.Fatalf("expected status 200, got %d", recInstall.Code)
+	}
+	bodyStr := recInstall.Body.String()
+	if !strings.Contains(bodyStr, `SERVER_URL="https://custom-gateway.org"`) {
+		t.Errorf("expected script to contain SERVER_URL=\"https://custom-gateway.org\", got body snippet:\n%s", bodyStr[:min(len(bodyStr), 300)])
+	}
+
+	// 2. Test /install.ps1 with Host header
+	reqInstallPS := httptest.NewRequest("GET", "/install.ps1", nil)
+	reqInstallPS.Host = "ps-gateway.org"
+	recInstallPS := httptest.NewRecorder()
+
+	srv.ServeHTTP(recInstallPS, reqInstallPS)
+
+	if recInstallPS.Code != http.StatusOK {
+		t.Fatalf("expected status 200, got %d", recInstallPS.Code)
+	}
+	psBodyStr := recInstallPS.Body.String()
+	if !strings.Contains(psBodyStr, `$SERVER_URL = "http://ps-gateway.org"`) && !strings.Contains(psBodyStr, `"http://ps-gateway.org"`) {
+		t.Errorf("expected PowerShell script to contain http://ps-gateway.org, got body snippet:\n%s", psBodyStr[:min(len(psBodyStr), 300)])
+	}
+}

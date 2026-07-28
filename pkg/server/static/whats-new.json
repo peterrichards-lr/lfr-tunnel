@@ -1,5 +1,12 @@
 [
   {
+    "version": "v1.44.5",
+    "release_date": "2026-07-28",
+    "features": [
+      "Release v1.44.5"
+    ]
+  },
+  {
     "version": "v1.44.4",
     "release_date": "2026-07-26",
     "features": [
@@ -34,15 +41,6 @@
       "Feature: Namespace all install script placeholders and operational environment variables with explicit LFR_TUNNEL_ prefix",
       "Fix: Gracefully skip Windows binary codesigning when certificate parameters are set to skip",
       "Docs: Document InfoSec and EDR environment variable namespacing standards"
-    ]
-  },
-  {
-    "version": "v1.44.0",
-    "release_date": "2026-07-23",
-    "features": [
-      "Refactor: Systematically refactor all 20 V2 portal UI components to CSS utility classes and design tokens",
-      "Feature: Restore complete V1 feature parity across Account Settings, Admin Users, and Personal Access Tokens",
-      "UX: Premium dark, light, and Liferay Waffle theme styling without inline style overhead"
     ]
   }
 ]

@@ -50,15 +50,12 @@ else:
         'release_date': '$DATE',
         'features': ['Release $NEW_VERSION']
     })
+    data = data[:5]
     with open(path, 'w') as f:
         json.dump(data, f, indent=2)
-    print('Added $NEW_VERSION to whats-new.json')
+        f.write('\n')
+    print('Added $NEW_VERSION to whats-new.json (trimmed to max 5 releases)')
 "
-
-echo "Trimming whats-new.json..."
-if [ -f scripts/trim-whatsnew.py ]; then
-    python3 scripts/trim-whatsnew.py
-fi
 
 echo "Committing changes..."
 git add pkg/config/version.go pkg/server/static/whats-new.json

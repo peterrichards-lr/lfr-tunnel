@@ -13,6 +13,7 @@ Welcome to the Liferay Tunnel documentation! This is the central hub for learnin
 All operator deployment and configuration resources are organized under the `docs/server/` directory:
 - **[Control Plane Setup](server/setup_guide.md)**: Central VPS installation guide, including systemd service configurations, Nginx reverse proxy setups, Let's Encrypt certificates, postfix SMTP relaying, and security access lists.
 - **[Edge Node Scaling](server/edge_setup_guide.md)**: Setting up regional Edge Nodes and configuring real-time edge lease kicks and state updates via WebSockets.
+- **[AWS EC2 Provisioning Guide](server/aws_setup_guide.md)**: AWS-specific supplement covering EC2 instance/AMI choice, security groups, key pairs, and Elastic IPs for either the control plane or edge nodes.
 - **[SSO/OIDC Cloud Guide](server/sso_cloud_guide.md)**: Integrating gateways with Single Sign-On (SSO) providers (Keycloak, Azure AD/Entra, AWS, Google Cloud).
 
 ## 🛡️ Architecture & Security Compliance
@@ -28,4 +29,4 @@ All operator deployment and configuration resources are organized under the `doc
 
 <!-- markdownlint-disable MD049 -->
 ---
-*Last Updated: 2026-07-02* | *Last Reviewed: 2026-07-02*
+*Last Updated: 2026-07-28* | *Last Reviewed: 2026-07-28*

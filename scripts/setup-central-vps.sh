@@ -1,34 +1,41 @@
 #!/usr/bin/env bash
-# scripts/setup-edge-vps.sh
-# Automates setting up a stateless regional edge VPS node for lfr-tunnel.
+# scripts/setup-central-vps.sh
+# Automates setting up the central control-plane VPS node for lfr-tunnel.
+# Target IP/key/domain/config are all parameters (not hardcoded), so this works against
+# any provider — the existing production VPS or a new AWS/other-cloud instance alike.
 set -e
 
-# Default variables
 SSH_USER="ubuntu"
-DOMAINS="us.lfr-demo.se,us.lfr-demo.online"
-CONTROL_PLANE_URL="https://tunnel.lfr-demo.se"
-EDGE_PORT="8090"
-EDGE_TOKEN=""
+DOMAIN=""
+ADMIN_EMAIL=""
 SSH_KEY_ARG=""
 VPS_IP=""
+CONFIG_FILE=""
 
 usage() {
-  echo "Usage: $0 -s <vps_ip> -t <edge_token> [-i <identity_file>] [-u <ssh_user>] [-d <domains>] [-c <control_plane_url>] [-p <port>]"
-  echo "  -s: VPS Public IP address (required)"
-  echo "  -t: Plaintext Edge Token for Control Plane validation (required)"
+  echo "Usage: $0 -s <vps_ip> -d <domain> -f <server-config.yaml path> [-i <identity_file>] [-u <ssh_user>] [-e <admin_email>]"
+  echo "  -s: VPS/EC2 public IP address (required)"
+  echo "  -d: Base domain for the control plane, e.g. aws-central.lfr-demo.se (required)."
+  echo "      A wildcard cert for *.<domain> is requested alongside it."
+  echo "  -f: Local path to a pre-built server-config.yaml to upload (required)"
   echo "  -i: Path to SSH private key file (optional)"
   echo "  -u: SSH username (default: ubuntu)"
-  echo "  -d: Comma-separated list of edge domains (default: us.lfr-demo.se,us.lfr-demo.online)"
-  echo "  -c: Control Plane URL (default: https://tunnel.lfr-demo.se)"
-  echo "  -p: Port for lfr-tunneld to bind to on Edge node (default: 8090)"
+  echo "  -e: Admin/contact email for Let's Encrypt registration (optional)"
+  echo ""
+  echo "PREREQUISITE: place your real Cloudflare API token in /etc/letsencrypt/cloudflare.ini"
+  echo "on the target server YOURSELF before running this script (see setup_guide.md §3.2):"
+  echo "  sudo mkdir -p /etc/letsencrypt"
+  echo "  sudo nano /etc/letsencrypt/cloudflare.ini   # dns_cloudflare_api_token = <token>"
+  echo "  sudo chmod 600 /etc/letsencrypt/cloudflare.ini"
+  echo "This script only checks that file exists — it never reads, uploads, or handles the token."
   exit 1
 }
 
-# Parse parameters
-while getopts "s:t:i:u:d:c:p:" opt; do
+while getopts "s:d:f:i:u:e:" opt; do
   case $opt in
     s) VPS_IP="$OPTARG" ;;
-    t) EDGE_TOKEN="$OPTARG" ;;
+    d) DOMAIN="$OPTARG" ;;
+    f) CONFIG_FILE="$OPTARG" ;;
     i)
       KEY_PATH="$OPTARG"
       if [[ "$KEY_PATH" == "~/"* ]]; then
@@ -39,100 +46,77 @@ while getopts "s:t:i:u:d:c:p:" opt; do
       SSH_KEY_ARG="-i $KEY_PATH"
       ;;
     u) SSH_USER="$OPTARG" ;;
-    d) DOMAINS="$OPTARG" ;;
-    c) CONTROL_PLANE_URL="$OPTARG" ;;
-    p) EDGE_PORT="$OPTARG" ;;
+    e) ADMIN_EMAIL="$OPTARG" ;;
     *) usage ;;
   esac
 done
 
-if [ -z "$VPS_IP" ] || [ -z "$EDGE_TOKEN" ]; then
-  echo "❌ Error: Both VPS IP (-s) and Edge Token (-t) are required parameters."
+if [ -z "$VPS_IP" ] || [ -z "$DOMAIN" ] || [ -z "$CONFIG_FILE" ]; then
+  echo "❌ Error: -s (IP), -d (domain), and -f (server-config.yaml path) are all required."
   usage
 fi
-
-echo "=== Starting Edge VPS Automation for IP: $VPS_IP ==="
-
-# 0. Refuse to proceed unless the Cloudflare token is already in place — this script never
-#    handles that secret itself, so this is a hard prerequisite, not something to work around.
-#    (Automated --dns-cloudflare below replaces the old interactive --manual DNS-01 flow,
-#    which required a human to add a TXT record mid-run and can't be driven unattended.)
-echo "=> Checking for /etc/letsencrypt/cloudflare.ini on $VPS_IP..."
-if ! ssh $SSH_KEY_ARG $SSH_USER@$VPS_IP "sudo test -s /etc/letsencrypt/cloudflare.ini"; then
-  echo "❌ Error: /etc/letsencrypt/cloudflare.ini is missing or empty on $VPS_IP."
-  echo "   Place your real Cloudflare API token there yourself first (see setup_guide.md §3.2):"
-  echo "     sudo mkdir -p /etc/letsencrypt"
-  echo "     sudo nano /etc/letsencrypt/cloudflare.ini   # dns_cloudflare_api_token = <token>"
-  echo "     sudo chmod 600 /etc/letsencrypt/cloudflare.ini"
+if [ ! -f "$CONFIG_FILE" ]; then
+  echo "❌ Error: config file not found locally: $CONFIG_FILE"
   exit 1
 fi
 
-# 1. Build Linux amd64 binary locally (compatible with standard GCP e2-micro / AWS t3.nano x86_64)
+echo "=== Starting Central VPS Automation for IP: $VPS_IP, domain: $DOMAIN ==="
+
+# 0. Refuse to proceed unless the Cloudflare token is already in place — this script never
+#    handles that secret itself, so this is a hard prerequisite, not something to work around.
+echo "=> Checking for /etc/letsencrypt/cloudflare.ini on $VPS_IP..."
+if ! ssh $SSH_KEY_ARG $SSH_USER@$VPS_IP "sudo test -s /etc/letsencrypt/cloudflare.ini"; then
+  echo "❌ Error: /etc/letsencrypt/cloudflare.ini is missing or empty on $VPS_IP."
+  echo "   Place your real Cloudflare API token there yourself first (see usage below), then re-run."
+  usage
+fi
+
+# 1. Build linux/amd64 lfr-tunneld binary locally
 VERSION="$(grep -oE 'Version = "[^"]+"' pkg/config/version.go | cut -d'"' -f2)"
 echo "=> Compiling lfr-tunneld for Linux (amd64) with Version=$VERSION..."
-GOOS=linux GOARCH=amd64 go build -ldflags="-s -w -X lfr-tunnel/pkg/config.Version=$VERSION" -trimpath -o bin/lfr-tunneld-edge-linux ./cmd/lfr-tunneld
+GOOS=linux GOARCH=amd64 go build -ldflags="-s -w -X lfr-tunnel/pkg/config.Version=$VERSION" -trimpath -o bin/lfr-tunneld-central-linux ./cmd/lfr-tunneld
 
-# 2. Update and install packages on the remote VPS (including security hardening packages)
+# 2. Install packages on the remote VPS (including security hardening packages).
+#    Note: no Postfix here — SMTP relaying is expected to be handled externally
+#    (e.g. Amazon SES) via server-config.yaml's smtp_server block.
 echo "=> Connecting to $VPS_IP to install dependencies (Nginx, Certbot, UFW, Fail2ban)..."
 ssh $SSH_KEY_ARG $SSH_USER@$VPS_IP << 'REMOTE_SSH'
   sudo apt-get update
   sudo apt-get install -y nginx certbot python3-certbot-dns-cloudflare curl jq ufw fail2ban unattended-upgrades
 REMOTE_SSH
 
-# 3. Request wildcard Let's Encrypt certificates using Certbot's automated Cloudflare DNS-01
-#    plugin — fully non-interactive, since /etc/letsencrypt/cloudflare.ini was verified above.
-IFS=',' read -r -a DOMAIN_ARRAY <<< "$DOMAINS"
-for DOMAIN in "${DOMAIN_ARRAY[@]}"; do
-  echo "=========================================================="
-  echo "=> Provisioning Wildcard SSL Certificate for $DOMAIN & *.$DOMAIN"
-  echo "=========================================================="
+# 3. Request the wildcard cert via Certbot's automated Cloudflare DNS-01 plugin — fully
+#    non-interactive, since /etc/letsencrypt/cloudflare.ini was already verified above.
+echo "=========================================================="
+echo "=> Provisioning Wildcard SSL Certificate for $DOMAIN & *.$DOMAIN"
+echo "=========================================================="
+CERTBOT_EMAIL_ARG="--register-unsafely-without-email"
+if [ -n "$ADMIN_EMAIL" ]; then
+  CERTBOT_EMAIL_ARG="-m $ADMIN_EMAIL"
+fi
+ssh $SSH_KEY_ARG $SSH_USER@$VPS_IP "sudo certbot certonly \
+  --dns-cloudflare \
+  --dns-cloudflare-credentials /etc/letsencrypt/cloudflare.ini \
+  --agree-tos \
+  --non-interactive \
+  $CERTBOT_EMAIL_ARG \
+  -d '$DOMAIN' \
+  -d '*.$DOMAIN'"
 
-  ssh $SSH_KEY_ARG $SSH_USER@$VPS_IP "sudo certbot certonly \
-    --dns-cloudflare \
-    --dns-cloudflare-credentials /etc/letsencrypt/cloudflare.ini \
-    --agree-tos \
-    --non-interactive \
-    --register-unsafely-without-email \
-    -d '$DOMAIN' \
-    -d '*.$DOMAIN'"
-done
-
-# 4. Generate stateless server-config.yaml locally and upload
-echo "=> Generating server-config.yaml locally..."
-CONFIG_TMP="/tmp/edge-server-config.yaml"
-cat > "$CONFIG_TMP" << EOF
-domains:
-EOF
-
-for DOMAIN in "${DOMAIN_ARRAY[@]}"; do
-  echo "  - \"$DOMAIN\"" >> "$CONFIG_TMP"
-done
-
-cat >> "$CONFIG_TMP" << EOF
-http_bind_addr: "127.0.0.1:$EDGE_PORT"
-db_path: "" # Stateless Edge mode
-control_plane_url: "$CONTROL_PLANE_URL"
-edge_token: "$EDGE_TOKEN"
-EOF
-
+# 4. Upload the pre-built server-config.yaml
 echo "=> Uploading server-config.yaml..."
-scp $SSH_KEY_ARG "$CONFIG_TMP" $SSH_USER@$VPS_IP:/home/$SSH_USER/server-config.yaml
-rm -f "$CONFIG_TMP"
+scp $SSH_KEY_ARG "$CONFIG_FILE" $SSH_USER@$VPS_IP:/home/$SSH_USER/server-config.yaml
 
-# 5. Generate Nginx virtual hosts configuration locally and upload
+# 5. Generate Nginx virtual host configuration locally and upload
 echo "=> Generating Nginx configuration locally..."
-NGINX_TMP="/tmp/nginx-edge.conf"
-cat > "$NGINX_TMP" << 'EOF'
-map $http_upgrade $connection_upgrade {
+NGINX_TMP="/tmp/nginx-central.conf"
+cat > "$NGINX_TMP" << EOF
+map \$http_upgrade \$connection_upgrade {
     default upgrade;
     ''      close;
 }
-EOF
 
-for DOMAIN in "${DOMAIN_ARRAY[@]}"; do
-  cat >> "$NGINX_TMP" << EOF
-
-# HTTP redirect to HTTPS
+# HTTP -> HTTPS redirect
 server {
     listen 80;
     listen [::]:80;
@@ -140,7 +124,7 @@ server {
     return 301 https://\$host\$request_uri;
 }
 
-# Base domain HTTPS
+# Control plane / portal
 server {
     listen 443 ssl http2;
     listen [::]:443 ssl http2;
@@ -151,32 +135,31 @@ server {
     include /etc/letsencrypt/options-ssl-nginx.conf;
     ssl_dhparam /etc/letsencrypt/ssl-dhparams.pem;
 
-    # Redirect root browser traffic to control plane landing page
     location / {
-        return 301 https://lfr-demo.se\$request_uri;
-    }
-
-    location /api/ {
-        proxy_pass http://127.0.0.1:$EDGE_PORT;
-        proxy_set_header Host \$http_host;
-        proxy_set_header X-Real-IP \$remote_addr;
-        proxy_set_header X-Forwarded-For \$proxy_add_x_forwarded_for;
-        proxy_set_header X-Forwarded-Proto https;
-    }
-
-    location /tunnel {
-        proxy_pass http://127.0.0.1:$EDGE_PORT;
+        proxy_pass http://127.0.0.1:8080;
         proxy_http_version 1.1;
         proxy_set_header Upgrade \$http_upgrade;
         proxy_set_header Connection \$connection_upgrade;
-        proxy_set_header Host \$http_host;
+        proxy_set_header Host \$host;
         proxy_set_header X-Real-IP \$remote_addr;
         proxy_set_header X-Forwarded-For \$proxy_add_x_forwarded_for;
-        proxy_set_header X-Forwarded-Proto https;
+        proxy_set_header X-Forwarded-Host \$host;
+        proxy_set_header X-Forwarded-Proto \$scheme;
+    }
+
+    location /tunnel {
+        proxy_pass http://127.0.0.1:8080;
+        proxy_http_version 1.1;
+        proxy_set_header Upgrade \$http_upgrade;
+        proxy_set_header Connection \$connection_upgrade;
+        proxy_set_header Host \$host;
+        proxy_set_header X-Real-IP \$remote_addr;
+        proxy_set_header X-Forwarded-For \$proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto \$scheme;
     }
 }
 
-# Wildcard subdomains HTTPS
+# Wildcard data plane
 server {
     listen 443 ssl http2;
     listen [::]:443 ssl http2;
@@ -188,19 +171,23 @@ server {
     ssl_dhparam /etc/letsencrypt/ssl-dhparams.pem;
 
     location / {
-        proxy_pass http://127.0.0.1:$EDGE_PORT;
+        proxy_pass http://127.0.0.1:8080;
         proxy_http_version 1.1;
         proxy_set_header Upgrade \$http_upgrade;
         proxy_set_header Connection \$connection_upgrade;
-        proxy_set_header Host \$http_host;
+        proxy_set_header Host \$host;
         proxy_set_header X-Real-IP \$remote_addr;
         proxy_set_header X-Forwarded-For \$proxy_add_x_forwarded_for;
-        proxy_set_header X-Forwarded-Host \$http_host;
+        proxy_set_header X-Forwarded-Host \$host;
         proxy_set_header X-Forwarded-Proto https;
+
+        client_max_body_size 500M;
+        proxy_connect_timeout 120s;
+        proxy_send_timeout 120s;
+        proxy_read_timeout 120s;
     }
 }
 EOF
-done
 
 echo "=> Uploading Nginx configuration..."
 scp $SSH_KEY_ARG "$NGINX_TMP" $SSH_USER@$VPS_IP:/home/$SSH_USER/lfr-tunneld-nginx.conf
@@ -208,7 +195,7 @@ rm -f "$NGINX_TMP"
 
 # 6. Upload compiled binary and assets
 echo "=> Uploading binary to VPS..."
-scp $SSH_KEY_ARG bin/lfr-tunneld-edge-linux $SSH_USER@$VPS_IP:/home/$SSH_USER/lfr-tunneld
+scp $SSH_KEY_ARG bin/lfr-tunneld-central-linux $SSH_USER@$VPS_IP:/home/$SSH_USER/lfr-tunneld
 
 echo "=> Uploading error pages..."
 scp $SSH_KEY_ARG -r resources/server/error_pages $SSH_USER@$VPS_IP:/home/$SSH_USER/
@@ -216,19 +203,13 @@ scp $SSH_KEY_ARG -r resources/server/error_pages $SSH_USER@$VPS_IP:/home/$SSH_US
 echo "=> Uploading static assets..."
 scp $SSH_KEY_ARG -r pkg/server/static $SSH_USER@$VPS_IP:/home/$SSH_USER/
 
-# 7. Upload self-healing watchdog and DDNS scripts
-echo "=> Uploading watchdog, DDNS, and systemd overrides..."
-sed "s/8080/$EDGE_PORT/g" scripts/gateway-watchdog.sh > /tmp/gateway-watchdog-edge.sh
-scp $SSH_KEY_ARG /tmp/gateway-watchdog-edge.sh $SSH_USER@$VPS_IP:/home/$SSH_USER/gateway-watchdog.sh
-rm -f /tmp/gateway-watchdog-edge.sh
-
+# 7. Upload self-healing watchdog and Nginx auto-restart override
+echo "=> Uploading watchdog and systemd overrides..."
 scp $SSH_KEY_ARG scripts/nginx-override.conf $SSH_USER@$VPS_IP:/home/$SSH_USER/nginx-override.conf
+scp $SSH_KEY_ARG scripts/gateway-watchdog.sh $SSH_USER@$VPS_IP:/home/$SSH_USER/gateway-watchdog.sh
 scp $SSH_KEY_ARG scripts/gateway-watchdog.service scripts/gateway-watchdog.timer $SSH_USER@$VPS_IP:/home/$SSH_USER/
 
-# Upload Edge DDNS Script
-scp $SSH_KEY_ARG scripts/cloudflare-ddns-edge.sh $SSH_USER@$VPS_IP:/home/$SSH_USER/cloudflare-ddns-edge.sh
-
-# 8. Remotely execute setup and service configurations
+# 8. Remotely execute setup and service configuration
 echo "=> Registering services and securing files on VPS..."
 ssh $SSH_KEY_ARG $SSH_USER@$VPS_IP << REMOTE_SSH
   # Create system user lfr-tunnel
@@ -239,7 +220,8 @@ ssh $SSH_KEY_ARG $SSH_USER@$VPS_IP << REMOTE_SSH
 
   # Binary installation
   sudo mv /home/$SSH_USER/lfr-tunneld /usr/local/bin/lfr-tunneld
-  sudo chmod +x /usr/local/bin/lfr-tunneld
+  sudo chmod 755 /usr/local/bin/lfr-tunneld
+  sudo chown root:root /usr/local/bin/lfr-tunneld
 
   # Static assets
   sudo mkdir -p /var/www/lfr-tunnel/error_pages
@@ -259,15 +241,15 @@ ssh $SSH_KEY_ARG $SSH_USER@$VPS_IP << REMOTE_SSH
   sudo chmod 600 /etc/lfr-tunneld/server-config.yaml
 
   # Nginx config setup
-  sudo mv /home/$SSH_USER/lfr-tunneld-nginx.conf /etc/nginx/sites-available/lfr-tunneld
-  sudo ln -sf /etc/nginx/sites-available/lfr-tunneld /etc/nginx/sites-enabled/default
-  sudo rm -f /etc/nginx/sites-enabled/default-backup
+  sudo mv /home/$SSH_USER/lfr-tunneld-nginx.conf /etc/nginx/sites-available/lfr-tunnel
+  sudo ln -sf /etc/nginx/sites-available/lfr-tunnel /etc/nginx/sites-enabled/lfr-tunnel
+  sudo rm -f /etc/nginx/sites-enabled/default
 
   # systemd configuration
   echo "Creating systemd configuration for lfr-tunneld..."
   sudo tee /etc/systemd/system/lfr-tunneld.service > /dev/null << EOF
 [Unit]
-Description=Liferay Tunnel Gateway Daemon (Edge Mode)
+Description=Liferay Tunnel Gateway Daemon
 After=network.target
 
 [Service]
@@ -306,66 +288,20 @@ EOF
   sudo mv /home/$SSH_USER/gateway-watchdog.timer /etc/systemd/system/gateway-watchdog.timer
   sudo chown root:root /etc/systemd/system/gateway-watchdog.service /etc/systemd/system/gateway-watchdog.timer
 
-  # Cloudflare DDNS configuration
-  sudo mv /home/$SSH_USER/cloudflare-ddns-edge.sh /usr/local/bin/cloudflare-ddns-edge.sh
-  sudo chmod 700 /usr/local/bin/cloudflare-ddns-edge.sh
-  sudo chown root:root /usr/local/bin/cloudflare-ddns-edge.sh
-
-  # Create a placeholder cloudflare.ini if it does not exist
-  sudo mkdir -p /etc/letsencrypt
-  if [ ! -f /etc/letsencrypt/cloudflare.ini ]; then
-    echo "Creating placeholder /etc/letsencrypt/cloudflare.ini..."
-    sudo tee /etc/letsencrypt/cloudflare.ini > /dev/null << EOF
-dns_cloudflare_api_token = PLACEHOLDER_API_TOKEN
-EOF
-    sudo chmod 600 /etc/letsencrypt/cloudflare.ini
-  fi
-
-  # Create DDNS systemd service
-  sudo tee /etc/systemd/system/cloudflare-ddns-edge.service > /dev/null << EOF
-[Unit]
-Description=Cloudflare Dynamic DNS (Edge Subdomains) Updater
-After=network-online.target
-Wants=network-online.target
-
-[Service]
-Type=oneshot
-ExecStart=/usr/local/bin/cloudflare-ddns-edge.sh
-User=root
-Group=root
-EOF
-
-  # Create DDNS systemd timer
-  sudo tee /etc/systemd/system/cloudflare-ddns-edge.timer > /dev/null << EOF
-[Unit]
-Description=Trigger Cloudflare Dynamic DNS (Edge Subdomains) update every 5 minutes
-
-[Timer]
-OnBootSec=1min
-OnUnitActiveSec=5min
-
-[Install]
-WantedBy=timers.target
-EOF
-
-  sudo chown root:root /etc/systemd/system/cloudflare-ddns-edge.service /etc/systemd/system/cloudflare-ddns-edge.timer
-
   # Reload services
   sudo systemctl daemon-reload
-  
+
   # Start services
   sudo systemctl enable lfr-tunneld
   sudo systemctl restart lfr-tunneld
-  
+
+  sudo nginx -t
   sudo systemctl restart nginx
-  
+
   sudo systemctl enable --now gateway-watchdog.timer
   sudo systemctl start gateway-watchdog.service
 
-  # Enable DDNS timer (it will trigger but log a credential error until API token is updated)
-  sudo systemctl enable --now cloudflare-ddns-edge.timer
-
-  # 9. Configure Local Security Hardening (UFW, Fail2ban, Auto Upgrades)
+  # Local security hardening (UFW, Fail2ban, Auto Upgrades)
   echo "=> Configuring UFW local firewall rules..."
   sudo ufw default deny incoming
   sudo ufw default allow outgoing
@@ -381,17 +317,15 @@ EOF
   echo 'APT::Periodic::Update-Package-Lists "1";' | sudo tee /etc/apt/apt.conf.d/20auto-upgrades
   echo 'APT::Periodic::Unattended-Upgrade "1";' | sudo tee -a /etc/apt/apt.conf.d/20auto-upgrades
 
-  echo "=== Edge VPS Remote Setup Complete! ==="
+  echo "=== Central VPS Remote Setup Complete! ==="
   echo "=> Checking status of lfr-tunneld:"
   sudo systemctl status lfr-tunneld --no-pager
-  
   echo "=> Checking status of Nginx:"
   sudo systemctl status nginx --no-pager
 REMOTE_SSH
 
 echo "=========================================================="
-echo "🎉 Edge Node Setup Complete!"
-echo "Edge server is running and proxying requests to port $EDGE_PORT."
+echo "🎉 Central Control Plane Setup Complete!"
+echo "Reachable at: https://$DOMAIN"
 echo "Watchdog, self-healing, and UFW/Fail2ban security guards are active."
-echo "Cloudflare DDNS service is active (placeholder created at /etc/letsencrypt/cloudflare.ini)."
 echo "=========================================================="

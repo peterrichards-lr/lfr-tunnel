@@ -52,6 +52,11 @@ For a multi-region deployment, configure DNS records as follows:
 | `us.lfr-demo.online` | `A` / `AAAA` | `US_EDGE_IP` | Regional US Edge node gateway. |
 | `*.us.lfr-demo.online` | `CNAME` | `us.lfr-demo.online` | Regional US client tunnels domain. |
 
+> [!NOTE]
+> If provisioning an edge node (or the control plane) on AWS, see the
+> [AWS EC2 Provisioning Guide](aws_setup_guide.md) first — it covers getting a stable
+> `UK_CONTROL_IP`/`US_EDGE_IP` (an Elastic IP) before these DNS records are created.
+
 ---
 
 ## 4. Wildcard SSL Certificate Provisioning (ACME DNS-01)
@@ -250,4 +255,4 @@ If your Edge VPS or Control Plane gateway has multiple public IP addresses confi
 
 <!-- markdownlint-disable MD049 -->
 ---
-*Last Updated: 2026-07-02* | *Last Reviewed: 2026-07-02*
+*Last Updated: 2026-07-28* | *Last Reviewed: 2026-07-28*

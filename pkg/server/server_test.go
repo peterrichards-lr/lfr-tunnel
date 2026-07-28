@@ -3032,6 +3032,7 @@ func TestInstallScriptServerURLResolution(t *testing.T) {
 
 	// 1. Test /install with X-Forwarded-Host and X-Forwarded-Proto headers
 	reqInstall := httptest.NewRequest("GET", "/install", nil)
+	reqInstall.Host = "custom-gateway.org"
 	reqInstall.Header.Set("X-Forwarded-Host", "custom-gateway.org")
 	reqInstall.Header.Set("X-Forwarded-Proto", "https")
 	recInstall := httptest.NewRecorder()

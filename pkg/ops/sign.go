@@ -43,7 +43,12 @@ func SignCommand(args []string) {
 	}
 
 	// 2. Windows Signing
-	if (signP12 != "" && signP12 != "skip") || (signKey != "" && signKey != "skip" && signCrt != "" && signCrt != "skip") {
+	validP12 := signP12 != "" && signP12 != "skip" && (fileExists(signP12) || strings.Contains(signP12, "-----BEGIN"))
+	validKeyCrt := signKey != "" && signKey != "skip" && signCrt != "" && signCrt != "skip" &&
+		(fileExists(signKey) || strings.Contains(signKey, "-----BEGIN")) &&
+		(fileExists(signCrt) || strings.Contains(signCrt, "-----BEGIN"))
+
+	if validP12 || validKeyCrt {
 		fmt.Println("Signing Windows binary...")
 		in := filepath.Join(binDir, "lfr-tunnel-windows-amd64.exe")
 		out := filepath.Join(binDir, "lfr-tunnel-windows-amd64-signed.exe")
@@ -58,7 +63,7 @@ func SignCommand(args []string) {
 			}
 		}()
 
-		if signP12 != "" && signP12 != "skip" {
+		if validP12 {
 			if !fileExists(signP12) && strings.Contains(signP12, "-----BEGIN") {
 				tmpP12, _ := os.CreateTemp("", "sign-*.p12")
 				if _, err := tmpP12.WriteString(signP12); err != nil {
@@ -104,7 +109,7 @@ func SignCommand(args []string) {
 		CheckFatal(err, "Failed to replace windows binary")
 		fmt.Println("Windows binary successfully signed!")
 	} else {
-		fmt.Println("Skipping Windows signing (no certificate provided/found or skipped).")
+		fmt.Println("Skipping Windows signing (no valid certificate file or PEM content provided/found).")
 	}
 
 	// 3. Linux GPG Signing

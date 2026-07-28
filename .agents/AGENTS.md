@@ -32,6 +32,9 @@ The monolithic rules have been broken down into modular skills so that they can 
 - **Mandatory Client Binary Signing**:
   *Active Constraint*: You are FORBIDDEN from deploying client binaries to the VPS or creating a final release unless you have successfully executed codesigning signatures on the binaries. You MUST run the signing command using 1Password credentials integration (`op run -- ./bin/lfr-tunnel-ops sign` or equivalent CLI options) to ensure Darwin, Windows, and Linux targets are properly signed.
 
+- **Ops Binary Must Be Built Before Signing**:
+  *Active Constraint*: `bin/lfr-tunnel-ops` is NOT a pre-built or committed binary — it does not exist until compiled. Before running `op run -- ./bin/lfr-tunnel-ops sign` (or any other `lfr-tunnel-ops` subcommand), you MUST first verify it exists (`ls bin/lfr-tunnel-ops`) and, if missing, build it with `go build -o bin/lfr-tunnel-ops ./cmd/lfr-tunnel-ops`. Never substitute `go run ./cmd/lfr-tunnel-ops` for this — that violates the EDR Whitelist Restriction above (compiles and executes from a temp directory, risking a SentinelOne kill).
+
 - **AI Scratch Script Cleanup Policy**:
   *Active Constraint*: You are FORBIDDEN from committing temporary scratch scripts, one-off plan files (`*.json`, `*.txt`, `plan-draft.md`), or debug helper scripts (`fix_*.py`, `patch-*.py`) to the repository. Any temporary scratch files created during execution MUST be stored in `<appDataDir>/brain/<conversation-id>/scratch/` or deleted immediately using shell tools before concluding a turn.
 
@@ -57,4 +60,4 @@ The `.agents/skills` directory also contains operational scripts and infrastruct
 
 <!-- markdownlint-disable MD049 -->
 ---
-*Last Updated: 2026-07-22* | *Last Reviewed: 2026-07-22*
+*Last Updated: 2026-07-28* | *Last Reviewed: 2026-07-28*

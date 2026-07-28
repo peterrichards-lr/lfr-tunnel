@@ -5,9 +5,28 @@ set -euo pipefail
 
 # Configuration
 TOKEN_FILE="/etc/letsencrypt/cloudflare.ini"
-DOMAINS=("lfr-demo.se" "lfr-demo.online")
-# Edge subdomains to update: "us" and "*.us"
-RECORD_NAMES=("us" "*.us")
+# This edge's own full domain(s), one per line, e.g. "aws-edge-us.lfr-demo.se" —
+# written by scripts/setup-edge-vps.sh at install time from its own -d argument.
+# This script is shared verbatim across every edge node, so it must never hardcode
+# a specific edge's domain here (doing so previously caused every edge to fight over
+# the same production "us.*" records regardless of its actual assigned domain).
+DOMAINS_FILE="/etc/lfr-tunneld/ddns-domains.txt"
+
+if [ ! -f "${DOMAINS_FILE}" ]; then
+    echo "[Error] ${DOMAINS_FILE} not found — this edge's own domain(s) were never configured." >&2
+    exit 1
+fi
+
+FULL_DOMAINS=()
+while IFS= read -r line || [ -n "$line" ]; do
+    [ -z "$line" ] && continue
+    FULL_DOMAINS+=("$line")
+done < "${DOMAINS_FILE}"
+
+if [ ${#FULL_DOMAINS[@]} -eq 0 ]; then
+    echo "[Error] ${DOMAINS_FILE} exists but contains no domains." >&2
+    exit 1
+fi
 
 # Extract API Token from cloudflare.ini
 if [ ! -f "${TOKEN_FILE}" ]; then
@@ -51,20 +70,24 @@ cf_api() {
     fi
 }
 
-for domain in "${DOMAINS[@]}"; do
-    echo "[Edge DDNS] Processing domain: ${domain}"
-    
+for full_domain in "${FULL_DOMAINS[@]}"; do
+    # Split "aws-edge-us.lfr-demo.se" into record prefix "aws-edge-us" and zone
+    # "lfr-demo.se" — this edge's own domain, never a shared/hardcoded one.
+    record_prefix="${full_domain%%.*}"
+    zone="${full_domain#*.}"
+    echo "[Edge DDNS] Processing domain: ${zone} (record: ${record_prefix})"
+
     # Fetch Zone ID
-    zone_resp=$(cf_api "GET" "zones?name=${domain}")
+    zone_resp=$(cf_api "GET" "zones?name=${zone}")
     zone_id=$(echo "${zone_resp}" | jq -r '.result[0].id // empty')
-    
+
     if [ -z "${zone_id}" ]; then
-        echo "[Error] Could not find Zone ID for ${domain}" >&2
+        echo "[Error] Could not find Zone ID for ${zone}" >&2
         continue
     fi
 
-    for rname in "${RECORD_NAMES[@]}"; do
-        full_rname="${rname}.${domain}"
+    for rname in "${record_prefix}" "*.${record_prefix}"; do
+        full_rname="${rname}.${zone}"
 
         # 1. Update IPv4 (A Record)
         if [ -n "${IPV4}" ]; then

@@ -43,7 +43,7 @@ func SignCommand(args []string) {
 	}
 
 	// 2. Windows Signing
-	validP12 := signP12 != "" && signP12 != "skip" && (fileExists(signP12) || strings.Contains(signP12, "-----BEGIN"))
+	validP12 := signP12 != "" && signP12 != "skip"
 	validKeyCrt := signKey != "" && signKey != "skip" && signCrt != "" && signCrt != "skip" &&
 		(fileExists(signKey) || strings.Contains(signKey, "-----BEGIN")) &&
 		(fileExists(signCrt) || strings.Contains(signCrt, "-----BEGIN"))
@@ -64,10 +64,13 @@ func SignCommand(args []string) {
 		}()
 
 		if validP12 {
-			if !fileExists(signP12) && strings.Contains(signP12, "-----BEGIN") {
-				tmpP12, _ := os.CreateTemp("", "sign-*.p12")
-				if _, err := tmpP12.WriteString(signP12); err != nil {
-					CheckFatal(err, "failed to write tmp p12")
+			if !fileExists(signP12) {
+				tmpP12, err := os.CreateTemp("", "sign-*.p12")
+				if err != nil {
+					CheckFatal(err, "failed to create tmp p12 file")
+				}
+				if _, err := tmpP12.Write([]byte(signP12)); err != nil {
+					CheckFatal(err, "failed to write tmp p12 file")
 				}
 				tmpP12.Close()
 				signP12 = tmpP12.Name()

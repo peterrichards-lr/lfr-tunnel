@@ -4,7 +4,7 @@ go 1.25.0
 
 require (
 	github.com/coreos/go-oidc/v3 v3.20.0
-	github.com/gogpu/systray v0.1.2
+	github.com/gogpu/systray v0.2.0
 	github.com/gorilla/websocket v1.5.3
 	github.com/jedisct1/go-minisign v0.0.0-20260527172527-a09352b57a22
 	github.com/jpillora/chisel v1.11.8
@@ -22,7 +22,7 @@ require (
 	github.com/dustin/go-humanize v1.0.1 // indirect
 	github.com/fsnotify/fsnotify v1.9.0 // indirect
 	github.com/go-jose/go-jose/v4 v4.1.4 // indirect
-	github.com/go-webgpu/goffi v0.6.0 // indirect
+	github.com/go-webgpu/goffi v0.6.2 // indirect
 	github.com/godbus/dbus/v5 v5.2.2 // indirect
 	github.com/google/uuid v1.6.0 // indirect
 	github.com/jpillora/ansi v1.0.3 // indirect

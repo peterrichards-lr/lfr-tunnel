@@ -13,7 +13,7 @@ Build an open-source, MIT-licensed tunneling solution tailored for Liferay's Sal
 - **Local Binary Execution Constraints**: 
   *Active Constraint*: The moment you decide to run any Go tests, you MUST formulate the test command using `make test` (or set `export GOTMPDIR=$(LFT_TEST_DIR)` with `LFT_TEST_DIR` defaulting to `/private/tmp`). Any execution out of `/var/folders` will trigger SentinelOne (S1), which forcefully kills the process and daemon environment.
 - **Git Conflict Prevention & PR Management**: 
-  *Active Constraint*: Before executing `git push` or `gh pr create`, you MUST first execute `git fetch origin && git merge origin/master`. You are FORBIDDEN from pushing without first synchronizing the `gemini.md` state with the remote master.
+  *Active Constraint*: Before executing `git push` or `gh pr create`, you MUST first execute `git fetch origin && git merge origin/master`. You are FORBIDDEN from pushing without first synchronizing the `.agents/gemini.md` state with the remote master.
 - **Strict Branch Protection Compliance**: 
   *Active Constraint*: When merging PRs, you are FORBIDDEN from using `--admin`. You MUST execute `gh pr merge --auto` or wait for the user to approve and merge. You MUST halt your turn and wait for CI checks to pass before assuming a merge is complete.
 - **Mandatory Client Binary Signing**:

@@ -113,7 +113,8 @@ lfr-tunnel/
 ├── client-extension.yaml
 ├── go.mod
 ├── go.sum
-├── gemini.md
+├── .agents/
+│   └── gemini.md
 └── spec.md
 ```
 

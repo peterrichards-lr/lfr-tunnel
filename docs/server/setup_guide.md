@@ -41,7 +41,7 @@ Because `lfr-tunneld` can send emails for user registration and administrative a
 
 ## 2. VPS Server Setup & Security Hardening
 
-Provision a clean VPS running **Ubuntu 22.04 LTS** or **Ubuntu 24.04 LTS** (e.g., on DigitalOcean, Hetzner, AWS, or Linode) with at least 1 vCPU and 1GB RAM.
+Provision a clean VPS running **Ubuntu 22.04 LTS** or **Ubuntu 24.04 LTS** (e.g., on DigitalOcean, Hetzner, [AWS](aws_setup_guide.md), or Linode) with at least 1 vCPU and 1GB RAM. If provisioning on AWS specifically, see the [AWS EC2 Provisioning Guide](aws_setup_guide.md) first — it covers the AWS-specific steps (Elastic IP, security groups) before continuing with §2.1 below.
 
 ### 2.1. Basic OS & Package Updates
 Once logged in via SSH as `root`, update all system packages:
@@ -844,15 +844,24 @@ The `scripts/sign-release.sh` script compiles the project and signs the binaries
   ```
   The script will guide you through picking available Keychain identities, selecting a `.p12` file (defaulting to `./temp_signing_key.p12` if present), entering passwords securely, and signing.
 
-* **Environment Variable Mode (CI/CD or Non-Interactive)**:
-  Provide variables directly to bypass CLI prompts:
+* **Environment Variable Mode (CI/CD, 1Password, or Non-Interactive)**:
+  Provide variables directly via shell or 1Password `op run`:
   ```bash
-  export LFT_MACOS_IDENTITY="Developer ID Application: Company Name (TEAMID)"
-  export LFT_SIGN_P12="/path/to/certificate.p12"
-  export LFT_SIGN_PASS="your-password"
-  export LFT_GPG_KEY="your.email@company.com"
+  # macOS Codesigning
+  export LFT_MACOS_IDENTITY="71FC1F1B1AAF4504A6B098BA0BDC785979DF14F9"
 
-  ./scripts/sign-release.sh
+  # Windows Authenticode (Separate Key & Cert PEM files via 1Password)
+  export LFT_SIGN_KEY="op://Private/self-signed-key/private key"
+  export LFT_SIGN_CRT="op://Private/self-signed-key/public key"
+  export LFT_SIGN_PASS="op://Private/self signed cert password/password"
+
+  # Alternatively: PKCS#12 bundle (.p12 / .pfx)
+  # export LFT_SIGN_P12="op://Private/self-signed-key/document"
+
+  # Linux GPG Checksums
+  export LFT_GPG_KEY="self-signed-gpg-key"
+
+  op run -- ./bin/lfr-tunnel-ops sign
   ```
 
 * **Output**:
@@ -1091,4 +1100,4 @@ To guarantee that outbound connections originating from the VPS are consistently
 
 <!-- markdownlint-disable MD049 -->
 ---
-*Last Updated: 2026-07-15* | *Last Reviewed: 2026-07-15*
+*Last Updated: 2026-07-28* | *Last Reviewed: 2026-07-28*

@@ -26,6 +26,9 @@ func SignCommand(args []string) {
 	if gpgPass == "" {
 		gpgPass = signPass
 	}
+	if gpgPass == "none" || gpgPass == "skip" {
+		gpgPass = ""
+	}
 	gpgSecret := GetEnvOrDefault("LFT_GPG_SECRET", "")
 	skipGPG := GetEnvOrDefault("LFT_SKIP_GPG", "")
 

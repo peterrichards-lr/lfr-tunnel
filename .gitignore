@@ -9,6 +9,7 @@ dist/
 .env
 client-config.yaml
 edge_nodes.txt
+scripts/aws/liferay-tags.env
 
 # Logs & Coverage
 *.log

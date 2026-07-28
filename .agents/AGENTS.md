@@ -32,6 +32,9 @@ The monolithic rules have been broken down into modular skills so that they can 
 - **Mandatory Client Binary Signing**:
   *Active Constraint*: You are FORBIDDEN from deploying client binaries to the VPS or creating a final release unless you have successfully executed codesigning signatures on the binaries. You MUST run the signing command using 1Password credentials integration (`op run -- ./bin/lfr-tunnel-ops sign` or equivalent CLI options) to ensure Darwin, Windows, and Linux targets are properly signed.
 
+- **AI Scratch Script Cleanup Policy**:
+  *Active Constraint*: You are FORBIDDEN from committing temporary scratch scripts, one-off plan files (`*.json`, `*.txt`, `plan-draft.md`), or debug helper scripts (`fix_*.py`, `patch-*.py`) to the repository. Any temporary scratch files created during execution MUST be stored in `<appDataDir>/brain/<conversation-id>/scratch/` or deleted immediately using shell tools before concluding a turn.
+
 - **Tech Debt Tracking (Immediate Logging)**: 
   *Active Constraint*: The moment you identify any of the 10 catalogued tech debt categories during your work, you MUST pause your current workflow and immediately execute `gh issue create --title "Tech Debt: [Topic]" --body "[Details]" --label "tech debt"` before taking any other action.
   The 10 categories are:

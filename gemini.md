@@ -209,6 +209,7 @@ The solution will consist of:
 - [x] Release, tag, and deploy v1.44.3 of lfr-tunnel to GitHub and VPS (#807).
 - [x] Standardise V2 Modals ARIA Accessibility, Button aria-labels, and type='button' defaults across all UI pages (#822, #823, #824 / PR #825).
 - [x] Fix Admin Blacklist ip_address payload JSON key and form button vertical baseline alignment (#826).
+- [x] Purge uncommitted AI scratch scripts/plan JSONs and establish AI Scratch Script Cleanup Policy active constraint in .agents/AGENTS.md (#830).
 
 
 

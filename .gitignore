@@ -13,12 +13,26 @@ edge_nodes.txt
 # Logs & Coverage
 *.log
 coverage.out
+cov.out
 
 # Database
 *.db
 *.db-journal
 
 lfr-tunneld
+
+# AI Agent Scratch Files & Temporary Artifacts
+scratch/
+*.tmp
+plan-draft.md
+job_log.txt
+test_fail_log.txt
+pr_body.txt
+scripts/*-plan.json
+scripts/bug-*.json
+scripts/comment-*.txt
+scripts/feature-*.json
+scripts/issue-*.json
 
 # Playwright UI Tests
 tests/e2e/ui/node_modules/

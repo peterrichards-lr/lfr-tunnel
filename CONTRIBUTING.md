@@ -57,7 +57,7 @@ To ensure we build the capabilities that provide the highest impact for the Sale
 We encourage the use of AI to help improve Liferay Tunnel.
 
 - **Preferred Tool**: [Gemini](https://gemini.google.com/) is the preferred AI assistant for this project.
-- **Guidance**: You are free to use other AI tools (like Copilot or ChatGPT), but you **MUST** ensure that your tool adheres to the architectural and engineering standards defined in [`.gemini/gemini.md`](.gemini/gemini.md).
+- **Guidance**: You are free to use other AI tools (like Copilot or ChatGPT), but you **MUST** ensure that your tool adheres to the architectural and engineering standards defined in [`.agents/gemini.md`](.agents/gemini.md).
 - **Verification**: AI-generated code must still pass all local linting and unit tests (`make test`) before being submitted.
 - **Documentation**: AI-assisted changes MUST include corresponding documentation updates where applicable (e.g., README updates for new flags or behavior changes).
 

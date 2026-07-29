@@ -55,6 +55,31 @@ func TestReconcile_UpdateWhenPriorityDiffers(t *testing.T) {
 	}
 }
 
+func TestReconcile_NoopWhenDesiredPriorityNilMatchesProviderZero(t *testing.T) {
+	// A spec MX record that omits priority renders as "0 <target>" on write
+	// (toRoute53Value), so the provider always echoes back an explicit 0 on
+	// read. This must match, not perpetually differ.
+	desired := []Record{{Name: "@", Type: RecordTypeMX, Value: "tunnel.example.com", TTL: 120}}
+	current := []ProviderRecord{{Record: Record{Name: "@", Type: RecordTypeMX, Value: "tunnel.example.com", TTL: 120, Priority: intPtr(0)}}}
+
+	changes := Reconcile(desired, current, "route53")
+
+	if len(changes) != 1 || changes[0].Action != ActionNoop {
+		t.Fatalf("expected nil desired priority to match an explicit provider-returned 0, got %+v", changes)
+	}
+}
+
+func TestReconcile_UpdateWhenDesiredPriorityNilDiffersFromNonZero(t *testing.T) {
+	desired := []Record{{Name: "@", Type: RecordTypeMX, Value: "tunnel.example.com", TTL: 120}}
+	current := []ProviderRecord{{Record: Record{Name: "@", Type: RecordTypeMX, Value: "tunnel.example.com", TTL: 120, Priority: intPtr(10)}}}
+
+	changes := Reconcile(desired, current, "route53")
+
+	if len(changes) != 1 || changes[0].Action != ActionUpdate {
+		t.Fatalf("expected nil desired priority (resolves to 0) to differ from an existing non-zero priority, got %+v", changes)
+	}
+}
+
 func TestReconcile_NoopWhenIdentical(t *testing.T) {
 	desired := []Record{{Name: "@", Type: RecordTypeA, Value: "1.2.3.4", TTL: 120}}
 	current := []ProviderRecord{{Record: Record{Name: "@", Type: RecordTypeA, Value: "1.2.3.4", TTL: 120}}}

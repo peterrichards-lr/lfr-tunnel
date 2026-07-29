@@ -154,16 +154,24 @@ func resolveProxied(p *bool) bool {
 	return p != nil && *p
 }
 
+// priorityEqual mirrors toRoute53Value's own nil-handling: an unset Priority
+// is treated as 0 on write (Route53 has no separate priority field, so a nil
+// MX priority is always rendered as "0 <target>"), and a provider always
+// echoes back an explicit priority on read. Comparing pointer-nilness
+// directly (as opposed to resolved values) meant a spec MX record that omits
+// priority could never match the provider's always-non-nil response, even
+// when both effectively mean 0 -- producing a perpetual spurious UPDATE.
 func priorityEqual(a, b *int) bool {
-	if a == nil || b == nil {
-		return a == b
+	return resolvePriority(a) == resolvePriority(b)
+}
+
+func resolvePriority(p *int) int {
+	if p == nil {
+		return 0
 	}
-	return *a == *b
+	return *p
 }
 
 func priorityString(p *int) string {
-	if p == nil {
-		return "<nil>"
-	}
-	return fmt.Sprintf("%d", *p)
+	return fmt.Sprintf("%d", resolvePriority(p))
 }

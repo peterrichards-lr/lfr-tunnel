@@ -402,6 +402,9 @@ allowed_email_domains:
   - "liferay.com"
 
 # SMTP Relay Configuration (Required for registration & magic links)
+# smtp_server is relay-agnostic: point it at a local Postfix daemon, a
+# managed provider like Amazon SES, or any other SMTP relay -- see §4.4
+# below for a walkthrough of both a self-hosted and a managed option.
 # Note: Use your domain here instead of 127.0.0.1 to securely pass TLS verification
 # with your Let's Encrypt certificates.
 smtp_server:
@@ -425,7 +428,10 @@ sudo chmod 700 /etc/lfr-tunneld
 sudo chmod 600 /etc/lfr-tunneld/server-config.yaml
 ```
 
-### 4.4. Local Postfix Email Relay (TLS Verification & rDNS Alignment)
+### 4.4. Choosing an SMTP Relay
+`smtp_server` in `server-config.yaml` is a plain host/port/username/password relay config — `lfr-tunneld` doesn't care what's on the other end, so pick whichever option fits your deployment. Two common choices are covered below: a self-hosted Postfix relay, or a managed provider like Amazon SES. Neither is required over the other — self-hosting keeps everything under your own control with no third-party account, while a managed relay avoids the ongoing IP-reputation and TLS/rDNS maintenance a self-hosted relay needs.
+
+#### 4.4.1. Option A: Local Postfix Email Relay (TLS Verification & rDNS Alignment)
 If you are running a local Postfix daemon to send emails, you must securely configure Postfix to present your Let's Encrypt certificates and align its HELO SMTP banner (`myhostname`) with your public IP's PTR (reverse DNS) record to prevent major mail hosts (like Google or Microsoft) from flagging outbound notifications as spam/forgery.
 
 To align the banner, bind the certificates to Postfix, and allow relaying from the domain's resolved IP, run the following:
@@ -446,6 +452,31 @@ sudo systemctl restart postfix
 ```
 
 Make sure that your `smtp_server.host` in the `server-config.yaml` points to your public domain (e.g., `yourdomain.com`) rather than `127.0.0.1` so that the hostname securely matches the Common Name (CN) of the certificate! Also ensure your VPS's external IP addresses are added to Postfix's `mynetworks` as shown above.
+
+#### 4.4.2. Option B: Amazon SES (Managed Relay)
+Amazon SES is a managed alternative to a self-hosted Postfix relay — AWS handles IP reputation and delivery infrastructure, at the cost of requiring an AWS account.
+
+1. Create a domain identity and get its DKIM tokens:
+```bash
+aws sesv2 create-email-identity --email-identity yourdomain.com --region us-east-1
+```
+2. Publish the 3 returned DKIM tokens as CNAME records: `<token>._domainkey.yourdomain.com` → `<token>.dkim.amazonses.com`. SES verifies domain ownership automatically once these propagate — no separate verification TXT record is needed:
+```bash
+aws sesv2 get-email-identity --email-identity yourdomain.com --region us-east-1 \
+  --query '{Verification:VerificationStatus, Dkim:DkimAttributes.Status}'
+```
+3. SES accounts start in a **sandbox** (200 messages/day, verified recipients only) — request production access from the SES console's "Account dashboard" before relying on it for real user registrations/magic links.
+4. Create an IAM user/role scoped to send-only (`ses:SendEmail`, `ses:SendRawEmail`), then generate SES SMTP credentials for it from the SES console's "SMTP Settings" page (it performs the IAM secret key → SMTP password conversion for you).
+5. Point `smtp_server` at SES's regional SMTP endpoint:
+```yaml
+smtp_server:
+  host: "email-smtp.us-east-1.amazonaws.com"
+  port: 587
+  username: "<SES SMTP username>"
+  password: "<SES SMTP password>"
+  from_address: "Your App <noreply@yourdomain.com>"
+```
+6. Add `include:amazonses.com` to your domain's SPF TXT record so receiving mail servers see SES's sending IPs as authorized alongside DKIM.
 
 ### 4.5. systemd Service Setup
 Create a systemd unit file at `/etc/systemd/system/lfr-tunneld.service`:

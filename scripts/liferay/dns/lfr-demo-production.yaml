@@ -14,8 +14,8 @@
 # never invent a value here, and never resolve it via -detect-ip from an
 # operator laptop (see the -detect-ip flag's own warning).
 #
-# Mirrors the live Cloudflare zone as of 2026-07-29, with two deliberate
-# deviations from a byte-for-byte copy:
+# Mirrors the live Cloudflare zone as of 2026-07-29 (post #857 SES DKIM/SPF
+# additions), with deliberate deviations from a byte-for-byte copy:
 #   - The lfr-demo.online DMARC record's Cloudflare-specific
 #     `rua=mailto:...@dmarc-reports.cloudflare.net;` reporting address is
 #     dropped for both domains: it becomes a dead, non-deliverable address
@@ -25,6 +25,9 @@
 #     documents one as a generic requirement, but it isn't present in live
 #     production DNS today, so this spec reflects reality rather than
 #     inventing a value to look "complete."
+#   - lfr-demo.online's `@`/`*` are CNAME aliases (lfr-demo.se is the single
+#     master domain for the apex IP), not independent A/AAAA -- see the
+#     inline comment on those records.
 
 domains:
   - zone: lfr-demo.se
@@ -38,7 +41,11 @@ domains:
       - {name: portal, type: A, value: "${IPV4}", ttl: 120, cloudflare: {proxied: false}}
       - {name: portal, type: AAAA, value: "${IPV6}", ttl: 120, cloudflare: {proxied: false}}
 
-      - {name: "@", type: TXT, value: "v=spf1 ip4:${IPV4} ip6:${IPV6} include:spf.smtp2go.com -all", ttl: 120}
+      # #857 transitional SPF: keeps the original Postfix IPs (still the MX/
+      # receiving host) and smtp2go (today's live sender) while amazonses.com
+      # is added ahead of the SES cutover. Remove ip4/ip6 and smtp2go once
+      # LFT_SMTP_* is pointed at SES in production and delivery is confirmed.
+      - {name: "@", type: TXT, value: "v=spf1 ip4:${IPV4} ip6:${IPV6} include:spf.smtp2go.com include:amazonses.com -all", ttl: 120}
       - {name: _dmarc, type: TXT, value: "v=DMARC1; p=reject; sp=reject; adkim=s; aspf=s;", ttl: 120}
 
       # MX intentionally points at tunnel.lfr-demo.se for BOTH zones -- a
@@ -55,18 +62,38 @@ domains:
       - {name: yyvdzgjdeuoi2wqfxpdrc3wkwhlerdfr._domainkey.aws-central, type: CNAME, value: yyvdzgjdeuoi2wqfxpdrc3wkwhlerdfr.dkim.amazonses.com, ttl: 120}
       - {name: i6elpixq3st26kl7hw5cgasy2sdofzpj._domainkey.aws-central, type: CNAME, value: i6elpixq3st26kl7hw5cgasy2sdofzpj.dkim.amazonses.com, ttl: 120}
 
+      # #857: Easy DKIM CNAMEs for the lfr-demo.se production SES domain
+      # identity (created 2026-07-29, sesv2 create-email-identity). SESv2
+      # verifies domain ownership via these same 3 CNAMEs -- no separate
+      # verification TXT record is needed.
+      - {name: 34vrrbjvqdgzvlnjaf4l4rjn3dqbh5wp._domainkey, type: CNAME, value: 34vrrbjvqdgzvlnjaf4l4rjn3dqbh5wp.dkim.amazonses.com, ttl: 120}
+      - {name: dnxd5fz5rfzxrxxkuas6yaquqrccp6zf._domainkey, type: CNAME, value: dnxd5fz5rfzxrxxkuas6yaquqrccp6zf.dkim.amazonses.com, ttl: 120}
+      - {name: jo225gpltemtx4dvhevm542z26r5qpog._domainkey, type: CNAME, value: jo225gpltemtx4dvhevm542z26r5qpog.dkim.amazonses.com, ttl: 120}
+
   - zone: lfr-demo.online
     records:
-      - {name: "@", type: A, value: "${IPV4}", ttl: 120, cloudflare: {proxied: false}}
-      - {name: "@", type: AAAA, value: "${IPV6}", ttl: 120, cloudflare: {proxied: false}}
-      - {name: "*", type: A, value: "${IPV4}", ttl: 120, cloudflare: {proxied: false}}
-      - {name: "*", type: AAAA, value: "${IPV6}", ttl: 120, cloudflare: {proxied: false}}
+      # lfr-demo.se is the single master domain for the apex IP: @ and *
+      # here are intentional CNAME aliases, confirmed live and by design
+      # (2026-07-29) -- NOT independent A/AAAA records. @ follows the
+      # master's own apex; * follows its tunnel host specifically (that's
+      # where wildcard subdomain traffic terminates). Only tunnel/portal
+      # keep their own real A/AAAA below.
+      - {name: "@", type: CNAME, value: lfr-demo.se, ttl: 120}
+      - {name: "*", type: CNAME, value: tunnel.lfr-demo.se, ttl: 120}
       - {name: tunnel, type: A, value: "${IPV4}", ttl: 120, cloudflare: {proxied: false}}
       - {name: tunnel, type: AAAA, value: "${IPV6}", ttl: 120, cloudflare: {proxied: false}}
       - {name: portal, type: A, value: "${IPV4}", ttl: 120, cloudflare: {proxied: false}}
       - {name: portal, type: AAAA, value: "${IPV6}", ttl: 120, cloudflare: {proxied: false}}
 
-      - {name: "@", type: TXT, value: "v=spf1 ip4:${IPV4} ip6:${IPV6} include:spf.smtp2go.com -all", ttl: 120}
+      # #857 transitional SPF -- see the lfr-demo.se record above for the
+      # removal plan once SES cutover is confirmed.
+      - {name: "@", type: TXT, value: "v=spf1 ip4:${IPV4} ip6:${IPV6} include:spf.smtp2go.com include:amazonses.com -all", ttl: 120}
       - {name: _dmarc, type: TXT, value: "v=DMARC1; p=reject; sp=reject; adkim=s; aspf=s;", ttl: 120}
 
       - {name: "@", type: MX, value: tunnel.lfr-demo.se, priority: 10, ttl: 120}
+
+      # #857: Easy DKIM CNAMEs for the lfr-demo.online production SES domain
+      # identity (created 2026-07-29). See the lfr-demo.se comment above.
+      - {name: jjgbbrouskxkd7okoki5jydxchl4by5p._domainkey, type: CNAME, value: jjgbbrouskxkd7okoki5jydxchl4by5p.dkim.amazonses.com, ttl: 120}
+      - {name: mjyspdip6wr2vyfh7x3a2ohasq2j6tqh._domainkey, type: CNAME, value: mjyspdip6wr2vyfh7x3a2ohasq2j6tqh.dkim.amazonses.com, ttl: 120}
+      - {name: b2l2csdq2ydi3crkn6zw2nmynw375vtv._domainkey, type: CNAME, value: b2l2csdq2ydi3crkn6zw2nmynw375vtv.dkim.amazonses.com, ttl: 120}

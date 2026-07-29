@@ -2,7 +2,7 @@
 # restore-with-maintenance.sh — Safely coordinate lfr-tunneld restore with Nginx maintenance mode
 #
 # Usage:
-#   sudo ./scripts/restore-with-maintenance.sh [backup_file]
+#   sudo ./scripts/common/restore-with-maintenance.sh [backup_file]
 #
 
 set -euo pipefail

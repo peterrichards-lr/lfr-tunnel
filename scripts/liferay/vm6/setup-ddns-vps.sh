@@ -5,9 +5,9 @@ VPS_USER=${VPS_USER:-"peterrichards"}
 VPS_IP=${VPS_IP:-"lfr-demo.se"}
 
 echo "Uploading files to VPS..."
-scp scripts/cloudflare-ddns.sh $VPS_USER@$VPS_IP:/home/$VPS_USER/cloudflare-ddns.sh
-scp scripts/cloudflare-ddns.service $VPS_USER@$VPS_IP:/home/$VPS_USER/cloudflare-ddns.service
-scp scripts/cloudflare-ddns.timer $VPS_USER@$VPS_IP:/home/$VPS_USER/cloudflare-ddns.timer
+scp scripts/liferay/vm6/cloudflare-ddns.sh $VPS_USER@$VPS_IP:/home/$VPS_USER/cloudflare-ddns.sh
+scp scripts/liferay/vm6/cloudflare-ddns.service $VPS_USER@$VPS_IP:/home/$VPS_USER/cloudflare-ddns.service
+scp scripts/liferay/vm6/cloudflare-ddns.timer $VPS_USER@$VPS_IP:/home/$VPS_USER/cloudflare-ddns.timer
 
 echo "Orchestrating systemd registration and permissions on VPS..."
 ssh $VPS_USER@$VPS_IP << REMOTE_SSH

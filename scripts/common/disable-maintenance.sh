@@ -2,7 +2,7 @@
 # disable-maintenance.sh — Disable Nginx maintenance mode for lfr-tunnel
 #
 # Usage:
-#   sudo ./scripts/disable-maintenance.sh
+#   sudo ./scripts/common/disable-maintenance.sh
 #
 
 set -euo pipefail

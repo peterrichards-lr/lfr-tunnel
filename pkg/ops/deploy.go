@@ -44,10 +44,10 @@ func DeployCommand(args []string) {
 
 	fmt.Println("Uploading maintenance and backup scripts...")
 	scripts := []string{
-		"scripts/enable-maintenance.sh", "scripts/disable-maintenance.sh",
-		"scripts/restore-with-maintenance.sh", "scripts/restore-backup.sh",
-		"scripts/sync-offsite-backups.sh", "scripts/sync-offsite-backups.service",
-		"scripts/sync-offsite-backups.timer",
+		"scripts/common/enable-maintenance.sh", "scripts/common/disable-maintenance.sh",
+		"scripts/common/restore-with-maintenance.sh", "scripts/common/restore-backup.sh",
+		"scripts/liferay/vm6/sync-offsite-backups.sh", "scripts/liferay/vm6/sync-offsite-backups.service",
+		"scripts/liferay/vm6/sync-offsite-backups.timer",
 	}
 	for _, script := range scripts {
 		if fileExists(script) {

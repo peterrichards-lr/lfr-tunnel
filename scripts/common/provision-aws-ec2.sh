@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
-# scripts/provision-aws-ec2.sh
+# scripts/common/provision-aws-ec2.sh
 # Provisions an AWS EC2 instance (key pair, security group, instance, Elastic IP) ready
-# for scripts/setup-edge-vps.sh or lfr-tunnel-ops's -i flag.
+# for scripts/common/setup-edge-vps.sh or lfr-tunnel-ops's -i flag.
 # See docs/server/aws_setup_guide.md for the manual step-by-step equivalent.
 set -e
 
@@ -34,7 +34,7 @@ usage() {
   echo "                   block with the VPC/subnet if not already present, assigns the instance an IPv6"
   echo "                   address, adds a ::/0 route, and opens 80/443 (not 22) to ::/0 on the security"
   echo "                   group. Matches the existing VPS's IPv6 support used for AAAA/SPF records by"
-  echo "                   scripts/cloudflare-ddns.sh. See §9 of docs/server/aws_setup_guide.md."
+  echo "                   scripts/liferay/vm6/cloudflare-ddns.sh. See §9 of docs/server/aws_setup_guide.md."
   echo "See docs/server/aws_setup_guide.md for the manual step-by-step equivalent."
   exit 1
 }
@@ -64,11 +64,11 @@ echo "=> Using AWS CLI profile: $AWS_PROFILE"
 
 echo "=== Provisioning AWS EC2 gateway '$NAME_TAG' in $REGION ==="
 
-# 1. Optional Liferay-internal tag overlay (git-ignored; see scripts/aws/liferay-tags.env.example).
+# 1. Optional Liferay-internal tag overlay (git-ignored; see scripts/liferay/aws/liferay-tags.env.example).
 #    Community users can ignore this entirely — the script works fine without it.
 TAG_ENTRIES=("Key=Name,Value=$NAME_TAG")
 [ -n "$ROLE" ] && TAG_ENTRIES+=("Key=Role,Value=$ROLE")
-LIFERAY_TAGS_ENV="$(dirname "$0")/aws/liferay-tags.env"
+LIFERAY_TAGS_ENV="$(dirname "$0")/../liferay/aws/liferay-tags.env"
 if [ -f "$LIFERAY_TAGS_ENV" ]; then
   echo "=> Sourcing optional tag overlay: $LIFERAY_TAGS_ENV"
   # shellcheck disable=SC1090
@@ -164,7 +164,7 @@ PUBLIC_IP="$(aws ec2 describe-addresses --region "$REGION" --allocation-ids "$AL
   --query 'Addresses[0].PublicIp' --output text)"
 
 # 7. Optional IPv6 dual-stack setup (opt-in via --ipv6). Matches the existing production
-#    VPS's IPv6 support (AAAA/SPF records via scripts/cloudflare-ddns.sh). Off by default
+#    VPS's IPv6 support (AAAA/SPF records via scripts/liferay/vm6/cloudflare-ddns.sh). Off by default
 #    since it modifies the VPC/subnet's networking, not just this instance — see §9 of
 #    docs/server/aws_setup_guide.md for the full rationale and manual equivalent.
 IPV6_ADDR=""
@@ -264,5 +264,5 @@ echo "Public IP:   $PUBLIC_IP (Elastic — stable across restarts)"
 echo "SSH key:     $KEY_PATH"
 echo ""
 echo "Next steps (see docs/server/aws_setup_guide.md §6):"
-echo "  Edge node:    ./scripts/setup-edge-vps.sh -s $PUBLIC_IP -i $KEY_PATH -t <edge_token> ..."
+echo "  Edge node:    ./scripts/common/setup-edge-vps.sh -s $PUBLIC_IP -i $KEY_PATH -t <edge_token> ..."
 echo "  Central node: continue manually from docs/server/setup_guide.md §2.1, using $PUBLIC_IP as YOUR_VPS_PUBLIC_IP"

@@ -1,12 +1,12 @@
 #!/usr/bin/env bash
-# scripts/cloudflare-ddns-edge.sh
+# scripts/common/cloudflare-ddns-edge.sh
 # Automates updating Cloudflare DNS records for stateless regional edge gateways.
 set -euo pipefail
 
 # Configuration
 TOKEN_FILE="/etc/letsencrypt/cloudflare.ini"
 # This edge's own full domain(s), one per line, e.g. "aws-edge-us.lfr-demo.se" —
-# written by scripts/setup-edge-vps.sh at install time from its own -d argument.
+# written by scripts/common/setup-edge-vps.sh at install time from its own -d argument.
 # This script is shared verbatim across every edge node, so it must never hardcode
 # a specific edge's domain here (doing so previously caused every edge to fight over
 # the same production "us.*" records regardless of its actual assigned domain).

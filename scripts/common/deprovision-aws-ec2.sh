@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
-# scripts/deprovision-aws-ec2.sh
-# Tears down what scripts/provision-aws-ec2.sh created: releases the Elastic IP,
+# scripts/common/deprovision-aws-ec2.sh
+# Tears down what scripts/common/provision-aws-ec2.sh created: releases the Elastic IP,
 # terminates the instance, and removes the security group.
 # See docs/server/aws_setup_guide.md §8.
 set -e

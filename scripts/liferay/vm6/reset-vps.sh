@@ -2,7 +2,7 @@
 set -e
 
 if [ "$1" == "-h" ] || [ "$1" == "--help" ]; then
-    echo "Usage: ./scripts/reset-vps.sh [VPS_USER] [VPS_IP] [SSH_KEY_PATH]"
+    echo "Usage: ./scripts/liferay/vm6/reset-vps.sh [VPS_USER] [VPS_IP] [SSH_KEY_PATH]"
     echo ""
     echo "WARNING: This completely wipes the VPS database!"
     echo "This script stops the Go server, deletes the database and caches, and restarts it."

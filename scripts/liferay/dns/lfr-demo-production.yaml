@@ -41,6 +41,13 @@ domains:
       - {name: portal, type: A, value: "${IPV4}", ttl: 120, cloudflare: {proxied: false}}
       - {name: portal, type: AAAA, value: "${IPV6}", ttl: 120, cloudflare: {proxied: false}}
 
+      # Public Better Stack status page (personal account, not yet worth
+      # migrating off -- see conversation). A plain CNAME, no MX/TXT
+      # coexistence concern at this name. Was live in Cloudflare but missing
+      # from this spec until now -- found while auditing DNS parity ahead of
+      # #858's cutover.
+      - {name: status, type: CNAME, value: statuspage.betteruptime.com, ttl: 120}
+
       # #857 transitional SPF: keeps the original Postfix IPs (still the MX/
       # receiving host) and smtp2go (today's live sender) while amazonses.com
       # is added ahead of the SES cutover. Remove ip4/ip6 and smtp2go once

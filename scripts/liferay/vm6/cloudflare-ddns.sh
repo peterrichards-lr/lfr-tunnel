@@ -24,8 +24,21 @@ LFT_DDNS_CNAME_ALIASED_NAMES="${LFT_DDNS_CNAME_ALIASED_NAMES:-lfr-demo.online:@,
 declare -A CNAME_ALIASED_NAMES=()
 IFS=';' read -ra _alias_entries <<< "${LFT_DDNS_CNAME_ALIASED_NAMES}"
 for _entry in "${_alias_entries[@]}"; do
+    # Skip empty entries (e.g. a stray/doubled ";" from a hand-edited env
+    # var) and entries with no ":" -- assigning an empty-string key to an
+    # associative array is a fatal bash error ("bad array subscript"),
+    # which would otherwise crash the whole script, halting DNS management
+    # for every domain rather than just the misconfigured one.
+    if [[ -z "${_entry}" || "${_entry}" != *:* ]]; then
+        [[ -n "${_entry}" ]] && echo "[Error] Ignoring malformed LFT_DDNS_CNAME_ALIASED_NAMES entry (missing ':'): ${_entry}" >&2
+        continue
+    fi
     _entry_domain="${_entry%%:*}"
     _entry_names="${_entry#*:}"
+    if [[ -z "${_entry_domain}" || -z "${_entry_names}" ]]; then
+        echo "[Error] Ignoring malformed LFT_DDNS_CNAME_ALIASED_NAMES entry (empty domain or names): ${_entry}" >&2
+        continue
+    fi
     CNAME_ALIASED_NAMES["${_entry_domain}"]=" ${_entry_names//,/ } "
 done
 unset _alias_entries _entry _entry_domain _entry_names
@@ -188,7 +201,8 @@ for domain in "${DOMAINS[@]}"; do
             if [ -n "${IPV6}" ]; then
                 spf_content="${spf_content} ip6:${IPV6}"
             fi
-            for _spf_include in ${LFT_DDNS_SPF_INCLUDES}; do
+            read -ra _spf_includes <<< "${LFT_DDNS_SPF_INCLUDES}"
+            for _spf_include in "${_spf_includes[@]}"; do
                 spf_content="${spf_content} include:${_spf_include}"
             done
             spf_content="${spf_content} -all"

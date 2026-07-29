@@ -87,7 +87,7 @@ func TestApplyPlan_CreatesZoneOnlyWhenMissing(t *testing.T) {
 		applyChangeFunc: func(ctx context.Context, zone ZoneRef, change Change) error { return nil },
 	}
 	spec := DomainSpec{Zone: "example.com", Records: []Record{{Name: "@", Type: RecordTypeA, Value: "1.2.3.4", TTL: 120}}}
-	plan := &DomainPlan{Domain: "example.com", ZoneExists: false, Changes: Reconcile(spec.Records, nil)}
+	plan := &DomainPlan{Domain: "example.com", ZoneExists: false, Changes: Reconcile(spec.Records, nil, "fake")}
 
 	result, err := ApplyPlan(context.Background(), p, spec, plan)
 	if err != nil {

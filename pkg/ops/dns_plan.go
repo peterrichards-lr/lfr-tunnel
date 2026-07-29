@@ -38,7 +38,7 @@ func BuildPlan(ctx context.Context, provider Provider, spec DomainSpec) (*Domain
 	if !exists {
 		// Nothing to list yet; every desired record will show as a CREATE,
 		// which is exactly what `dns apply` would do once it creates the zone.
-		plan.Changes = Reconcile(spec.Records, nil)
+		plan.Changes = Reconcile(spec.Records, nil, provider.Name())
 		return plan, nil
 	}
 
@@ -50,7 +50,7 @@ func BuildPlan(ctx context.Context, provider Provider, spec DomainSpec) (*Domain
 		return nil, fmt.Errorf("listing records for zone %s: %w", spec.Zone, err)
 	}
 
-	plan.Changes = Reconcile(spec.Records, current)
+	plan.Changes = Reconcile(spec.Records, current, provider.Name())
 	return plan, nil
 }
 

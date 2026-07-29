@@ -71,8 +71,10 @@ type Provider interface {
 // Reconcile is the single, provider-agnostic diff engine shared by every
 // adapter: providers only need to expose ListRecords/ApplyChange, and this
 // comparison logic (name+type match, then value/ttl/priority equality)
-// lives here once rather than being duplicated per provider.
-func Reconcile(desired []Record, current []ProviderRecord) []Change {
+// lives here once rather than being duplicated per provider. providerName
+// (e.g. "cloudflare", "route53") gates provider-specific comparisons such as
+// Cloudflare's Proxied flag, which has no equivalent on other providers.
+func Reconcile(desired []Record, current []ProviderRecord, providerName string) []Change {
 	changes := make([]Change, 0, len(desired))
 
 	for _, want := range desired {
@@ -88,7 +90,7 @@ func Reconcile(desired []Record, current []ProviderRecord) []Change {
 			continue
 		}
 
-		if reason, differs := diff(want, existing.Record); differs {
+		if reason, differs := diff(want, existing.Record, providerName); differs {
 			changes = append(changes, Change{
 				Desired: want,
 				Current: existing,
@@ -118,7 +120,7 @@ func findMatching(current []ProviderRecord, want Record) *ProviderRecord {
 	return nil
 }
 
-func diff(want, have Record) (string, bool) {
+func diff(want, have Record, providerName string) (string, bool) {
 	if want.Value != have.Value {
 		return fmt.Sprintf("value differs: %s -> %s", have.Value, want.Value), true
 	}
@@ -128,7 +130,28 @@ func diff(want, have Record) (string, bool) {
 	if !priorityEqual(want.Priority, have.Priority) {
 		return fmt.Sprintf("priority differs: %s -> %s", priorityString(have.Priority), priorityString(want.Priority)), true
 	}
+	// Proxied is a Cloudflare-only concept (orange/grey cloud) and only
+	// applies to A/AAAA/CNAME records -- other providers never populate it,
+	// so comparing it unconditionally would falsely flag every record on a
+	// non-Cloudflare provider as differing whenever the spec sets
+	// `cloudflare: {proxied: ...}` for a spec shared across providers.
+	if providerName == "cloudflare" && proxiedSupported(want.Type) {
+		wantProxied, haveProxied := resolveProxied(want.Cloudflare.Proxied), resolveProxied(have.Cloudflare.Proxied)
+		if wantProxied != haveProxied {
+			return fmt.Sprintf("proxied differs: %t -> %t", haveProxied, wantProxied), true
+		}
+	}
 	return "", false
+}
+
+func proxiedSupported(t RecordType) bool {
+	return t == RecordTypeA || t == RecordTypeAAAA || t == RecordTypeCNAME
+}
+
+// resolveProxied mirrors recordToCFPayload's own nil-handling: an unset
+// Proxied is treated as false (grey-cloud/DNS-only).
+func resolveProxied(p *bool) bool {
+	return p != nil && *p
 }
 
 func priorityEqual(a, b *int) bool {

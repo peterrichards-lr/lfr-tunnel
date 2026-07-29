@@ -78,6 +78,15 @@ domains:
       # master's own apex; * follows its tunnel host specifically (that's
       # where wildcard subdomain traffic terminates). Only tunnel/portal
       # keep their own real A/AAAA below.
+      #
+      # Route53 caveat: unlike Cloudflare, Route53 has no apex-CNAME
+      # flattening -- a CNAME there cannot coexist with the MX/TXT records
+      # this zone also needs at "@". Applying this spec's "@" as-is with
+      # -provider route53 will fail with InvalidChangeBatch. The Route53
+      # population for "@" instead used a local, uncommitted copy of this
+      # file with "@" swapped to real A/AAAA (same values as tunnel/portal
+      # below) -- functionally identical resolution, just not a literal
+      # CNAME. "*" has no such conflict and was applied as CNAME normally.
       - {name: "@", type: CNAME, value: lfr-demo.se, ttl: 120}
       - {name: "*", type: CNAME, value: tunnel.lfr-demo.se, ttl: 120}
       - {name: tunnel, type: A, value: "${IPV4}", ttl: 120, cloudflare: {proxied: false}}

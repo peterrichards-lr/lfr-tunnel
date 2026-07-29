@@ -1,0 +1,72 @@
+# Liferay's own production DNS spec for lfr-demo.se / lfr-demo.online.
+#
+# This is Liferay's *usage* of the generic lfr-tunnel-ops dns tool -- pure
+# data, nothing secret (it's all public DNS content already, so committing
+# it is fine and gives DNS-as-code auditability). See
+# scripts/common/dns/example.yaml for a provider/deployment-neutral starting
+# point if you're setting this up for your own domain instead. This file
+# lives under scripts/liferay/ rather than scripts/liferay/aws/ or
+# scripts/liferay/vm6/ because it isn't tied to one provider -- the same
+# spec is read for both the Cloudflare read-only verification and the
+# Route53 population.
+#
+# ${IPV4} / ${IPV6} must be supplied via -ipv4/-ipv6 at plan/apply time --
+# never invent a value here, and never resolve it via -detect-ip from an
+# operator laptop (see the -detect-ip flag's own warning).
+#
+# Mirrors the live Cloudflare zone as of 2026-07-29, with two deliberate
+# deviations from a byte-for-byte copy:
+#   - The lfr-demo.online DMARC record's Cloudflare-specific
+#     `rua=mailto:...@dmarc-reports.cloudflare.net;` reporting address is
+#     dropped for both domains: it becomes a dead, non-deliverable address
+#     once off Cloudflare, so silently carrying it forward would look like
+#     parity when it's actually already-dead config.
+#   - No `*._domainkey` SMTP2GO DKIM TXT record is included: setup_guide.md
+#     documents one as a generic requirement, but it isn't present in live
+#     production DNS today, so this spec reflects reality rather than
+#     inventing a value to look "complete."
+
+domains:
+  - zone: lfr-demo.se
+    records:
+      - {name: "@", type: A, value: "${IPV4}", ttl: 120, cloudflare: {proxied: false}}
+      - {name: "@", type: AAAA, value: "${IPV6}", ttl: 120, cloudflare: {proxied: false}}
+      - {name: "*", type: A, value: "${IPV4}", ttl: 120, cloudflare: {proxied: false}}
+      - {name: "*", type: AAAA, value: "${IPV6}", ttl: 120, cloudflare: {proxied: false}}
+      - {name: tunnel, type: A, value: "${IPV4}", ttl: 120, cloudflare: {proxied: false}}
+      - {name: tunnel, type: AAAA, value: "${IPV6}", ttl: 120, cloudflare: {proxied: false}}
+      - {name: portal, type: A, value: "${IPV4}", ttl: 120, cloudflare: {proxied: false}}
+      - {name: portal, type: AAAA, value: "${IPV6}", ttl: 120, cloudflare: {proxied: false}}
+
+      - {name: "@", type: TXT, value: "v=spf1 ip4:${IPV4} ip6:${IPV6} include:spf.smtp2go.com -all", ttl: 120}
+      - {name: _dmarc, type: TXT, value: "v=DMARC1; p=reject; sp=reject; adkim=s; aspf=s;", ttl: 120}
+
+      # MX intentionally points at tunnel.lfr-demo.se for BOTH zones -- a
+      # single shared mail-receiving host, confirmed intentional from live
+      # production data, not a copy-paste artifact.
+      - {name: "@", type: MX, value: tunnel.lfr-demo.se, priority: 10, ttl: 120}
+
+      # aws-central: the AWS-hosted central node pilot (#847/#854 context),
+      # which sends mail via Amazon SES under this subdomain. Only present
+      # under lfr-demo.se, matching live DNS -- a genuine one-off, not part
+      # of the standard per-domain template above.
+      - {name: aws-central, type: A, value: "63.33.115.5", ttl: 120, cloudflare: {proxied: false}}
+      - {name: be6dkhh5dvjx6kvibzjxecvgwn4iohpe._domainkey.aws-central, type: CNAME, value: be6dkhh5dvjx6kvibzjxecvgwn4iohpe.dkim.amazonses.com, ttl: 120}
+      - {name: yyvdzgjdeuoi2wqfxpdrc3wkwhlerdfr._domainkey.aws-central, type: CNAME, value: yyvdzgjdeuoi2wqfxpdrc3wkwhlerdfr.dkim.amazonses.com, ttl: 120}
+      - {name: i6elpixq3st26kl7hw5cgasy2sdofzpj._domainkey.aws-central, type: CNAME, value: i6elpixq3st26kl7hw5cgasy2sdofzpj.dkim.amazonses.com, ttl: 120}
+
+  - zone: lfr-demo.online
+    records:
+      - {name: "@", type: A, value: "${IPV4}", ttl: 120, cloudflare: {proxied: false}}
+      - {name: "@", type: AAAA, value: "${IPV6}", ttl: 120, cloudflare: {proxied: false}}
+      - {name: "*", type: A, value: "${IPV4}", ttl: 120, cloudflare: {proxied: false}}
+      - {name: "*", type: AAAA, value: "${IPV6}", ttl: 120, cloudflare: {proxied: false}}
+      - {name: tunnel, type: A, value: "${IPV4}", ttl: 120, cloudflare: {proxied: false}}
+      - {name: tunnel, type: AAAA, value: "${IPV6}", ttl: 120, cloudflare: {proxied: false}}
+      - {name: portal, type: A, value: "${IPV4}", ttl: 120, cloudflare: {proxied: false}}
+      - {name: portal, type: AAAA, value: "${IPV6}", ttl: 120, cloudflare: {proxied: false}}
+
+      - {name: "@", type: TXT, value: "v=spf1 ip4:${IPV4} ip6:${IPV6} include:spf.smtp2go.com -all", ttl: 120}
+      - {name: _dmarc, type: TXT, value: "v=DMARC1; p=reject; sp=reject; adkim=s; aspf=s;", ttl: 120}
+
+      - {name: "@", type: MX, value: tunnel.lfr-demo.se, priority: 10, ttl: 120}

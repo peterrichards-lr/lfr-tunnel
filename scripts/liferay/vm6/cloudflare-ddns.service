@@ -5,6 +5,8 @@ Wants=network-online.target
 
 [Service]
 Type=oneshot
+Environment=LFT_DDNS_CNAME_ALIASED_NAMES=lfr-demo.online:@,*
+Environment="LFT_DDNS_SPF_INCLUDES=spf.smtp2go.com amazonses.com"
 ExecStart=/usr/local/bin/cloudflare-ddns.sh
 User=root
 Group=root

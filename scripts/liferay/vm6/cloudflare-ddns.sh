@@ -6,6 +6,43 @@ TOKEN_FILE="/etc/letsencrypt/cloudflare.ini"
 CONFIG_FILE="/etc/lfr-tunneld/server-config.yaml"
 RECORD_NAMES=("@" "*" "tunnel" "portal")
 
+# lfr-demo.se is the single master domain for the public IP: lfr-demo.online's
+# "@" and "*" are intentional CNAME aliases (to lfr-demo.se and
+# tunnel.lfr-demo.se respectively), not independent A/AAAA records. Cloudflare
+# rejects creating/updating an A/AAAA record at a name that already holds a
+# CNAME, so these must be skipped here rather than uniformly applying
+# RECORD_NAMES to every domain (#864). SPF/TXT management at "@" is
+# unaffected -- Cloudflare's apex-CNAME flattening allows TXT/MX to coexist
+# with a CNAME there.
+#
+# Configurable via LFT_DDNS_CNAME_ALIASED_NAMES (set in cloudflare-ddns.service)
+# rather than hardcoded here, so the systemd unit can be updated if the DNS
+# design changes without editing this script. Format: semicolon-separated
+# "domain:name1,name2" pairs. Defaults to today's known live setup.
+LFT_DDNS_CNAME_ALIASED_NAMES="${LFT_DDNS_CNAME_ALIASED_NAMES:-lfr-demo.online:@,*}"
+
+declare -A CNAME_ALIASED_NAMES=()
+IFS=';' read -ra _alias_entries <<< "${LFT_DDNS_CNAME_ALIASED_NAMES}"
+for _entry in "${_alias_entries[@]}"; do
+    _entry_domain="${_entry%%:*}"
+    _entry_names="${_entry#*:}"
+    CNAME_ALIASED_NAMES["${_entry_domain}"]=" ${_entry_names//,/ } "
+done
+unset _alias_entries _entry _entry_domain _entry_names
+
+is_cname_aliased() {
+    local domain=$1
+    local rname=$2
+    [[ "${CNAME_ALIASED_NAMES[$domain]:-}" == *" ${rname} "* ]]
+}
+
+# SPF includes to append after "v=spf1 ip4:... ip6:..." and before "-all".
+# Configurable via LFT_DDNS_SPF_INCLUDES (space-separated hostnames, without
+# the "include:" prefix) so the mail-relay list can be updated in
+# cloudflare-ddns.service as relays are added/removed (e.g. #857's SES
+# migration) without editing this script.
+LFT_DDNS_SPF_INCLUDES="${LFT_DDNS_SPF_INCLUDES:-spf.smtp2go.com amazonses.com}"
+
 # Extract dynamic domains list from server-config.yaml if it exists
 DOMAINS=()
 if [ -f "${CONFIG_FILE}" ]; then
@@ -102,6 +139,10 @@ for domain in "${DOMAINS[@]}"; do
             full_rname="${rname}.${domain}"
         fi
 
+        if is_cname_aliased "${domain}" "${rname}"; then
+            echo "[DDNS] Skipping A/AAAA management for ${full_rname}: CNAME-aliased, not an independent record."
+        else
+
         # 1. Update IPv4 (A Record)
         if [ -n "${IPV4}" ]; then
             rec_resp=$(cf_api "GET" "zones/${zone_id}/dns_records?name=${full_rname}&type=A")
@@ -136,6 +177,8 @@ for domain in "${DOMAINS[@]}"; do
             fi
         fi
 
+        fi # end is_cname_aliased skip for A/AAAA management
+
         # 3. Update SPF (TXT Record for root @)
         if [ "${rname}" = "@" ]; then
             spf_content="v=spf1"
@@ -145,7 +188,10 @@ for domain in "${DOMAINS[@]}"; do
             if [ -n "${IPV6}" ]; then
                 spf_content="${spf_content} ip6:${IPV6}"
             fi
-            spf_content="${spf_content} include:spf.smtp2go.com -all"
+            for _spf_include in ${LFT_DDNS_SPF_INCLUDES}; do
+                spf_content="${spf_content} include:${_spf_include}"
+            done
+            spf_content="${spf_content} -all"
 
             rec_resp=$(cf_api "GET" "zones/${zone_id}/dns_records?name=${domain}&type=TXT")
             

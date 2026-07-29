@@ -5,22 +5,24 @@
 # See docs/server/aws_setup_guide.md §8.
 set -e
 
-# Defaults
-REGION="us-east-1"
+# This is a generic, reusable script -- it carries no default values of its
+# own (beyond --delete-key-pair, a genuine off-by-default opt-in toggle).
+# Every other parameter must be supplied explicitly by the caller.
+REGION=""
 NAME_TAG=""
 PROFILE=""
 DELETE_KEY_PAIR="false"
 KEY_NAME=""
 
 usage() {
-  echo "Usage: $0 --profile <aws-cli-profile> --name-tag <name> [--region <aws-region>] [--delete-key-pair] [--key-name <name>]"
+  echo "Usage: $0 --profile <aws-cli-profile> --name-tag <name> --region <aws-region> [--delete-key-pair --key-name <name>]"
   echo "  --profile:         AWS CLI named profile to use (required — never falls back to [default])."
   echo "  --name-tag:        Name tag of the instance/security group to tear down (required — must match"
   echo "                     the --name-tag originally passed to provision-aws-ec2.sh)."
-  echo "  --region:          AWS region (default: us-east-1)"
+  echo "  --region:          AWS region (required)"
   echo "  --delete-key-pair: Also delete the EC2 key pair (off by default — it may be shared by another"
   echo "                     instance, e.g. the central gateway and an edge node reusing the same key)."
-  echo "  --key-name:        Key pair name to delete if --delete-key-pair is set (default: lfr-tunnel-gateway)"
+  echo "  --key-name:        Key pair name to delete (required if --delete-key-pair is set)"
   echo ""
   echo "!! WARNING: This terminates the EC2 instance and releases its Elastic IP. If DNS records"
   echo "!! (Cloudflare A records) point at that IP, they WILL break until you re-provision and update"
@@ -47,6 +49,14 @@ if [ -z "$PROFILE" ]; then
 fi
 if [ -z "$NAME_TAG" ]; then
   echo "❌ Error: --name-tag is required, so the right instance gets torn down."
+  usage
+fi
+if [ -z "$REGION" ]; then
+  echo "❌ Error: --region is required."
+  usage
+fi
+if [ "$DELETE_KEY_PAIR" = "true" ] && [ -z "$KEY_NAME" ]; then
+  echo "❌ Error: --key-name is required when --delete-key-pair is set."
   usage
 fi
 export AWS_PROFILE="$PROFILE"
@@ -97,7 +107,6 @@ fi
 # 3. Optionally remove the key pair (off by default — it may be shared across multiple instances).
 #    The local .pem file on disk is never touched by this script.
 if [ "$DELETE_KEY_PAIR" = "true" ]; then
-  KEY_NAME="${KEY_NAME:-lfr-tunnel-gateway}"
   echo "=> Deleting key pair '$KEY_NAME' from AWS (local .pem file left untouched)..."
   aws ec2 delete-key-pair --region "$REGION" --key-name "$KEY_NAME" || echo "   (already gone or not found)"
 fi

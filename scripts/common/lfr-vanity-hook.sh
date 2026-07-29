@@ -1,17 +1,26 @@
 #!/bin/bash
 set -euo pipefail
 
-# Configuration parameters with sane defaults
-NGINX_CONF_DIR="${NGINX_CONF_DIR:-/etc/nginx/sites-enabled}"
-WEBROOT_PATH="${WEBROOT_PATH:-/var/www/letsencrypt}"
-UPSTREAM_URL="${UPSTREAM_URL:-http://127.0.0.1:8080}"
-ACME_EMAIL="${ACME_EMAIL:-admin@lfr-demo.se}"
+# This is a generic, reusable script -- it carries no default values of its
+# own. Every config value must be supplied explicitly via environment
+# variables by the caller (the operator-configured vanity_domain_hook
+# invocation, or a Liferay-specific wrapper), which is the only place that
+# actually knows the right values for a given deployment.
+NGINX_CONF_DIR="${NGINX_CONF_DIR:-}"
+WEBROOT_PATH="${WEBROOT_PATH:-}"
+UPSTREAM_URL="${UPSTREAM_URL:-}"
+ACME_EMAIL="${ACME_EMAIL:-}"
 
 ACTION="$1"
 DOMAIN="$2"
 
 if [[ -z "$ACTION" || -z "$DOMAIN" ]]; then
     echo "Usage: $0 [add|remove] [domain]"
+    exit 1
+fi
+
+if [[ -z "$NGINX_CONF_DIR" ]]; then
+    echo "Error: NGINX_CONF_DIR must be set (e.g. /etc/nginx/sites-enabled)."
     exit 1
 fi
 
@@ -23,6 +32,19 @@ fi
 
 case "$ACTION" in
     add)
+        if [[ -z "$WEBROOT_PATH" ]]; then
+            echo "Error: WEBROOT_PATH must be set (e.g. /var/www/letsencrypt)."
+            exit 1
+        fi
+        if [[ -z "$UPSTREAM_URL" ]]; then
+            echo "Error: UPSTREAM_URL must be set (e.g. http://127.0.0.1:8080)."
+            exit 1
+        fi
+        if [[ -z "$ACME_EMAIL" ]]; then
+            echo "Error: ACME_EMAIL must be set to a real contact address for Let's Encrypt registration."
+            exit 1
+        fi
+
         echo "Adding vanity domain: $DOMAIN"
         # 1. Create webroot directory if it doesn't exist
         mkdir -p "$WEBROOT_PATH/.well-known/acme-challenge"

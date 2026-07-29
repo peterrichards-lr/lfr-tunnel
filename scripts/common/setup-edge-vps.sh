@@ -3,29 +3,35 @@
 # Automates setting up a stateless regional edge VPS node for lfr-tunnel.
 set -e
 
-# Default variables
-SSH_USER="ubuntu"
-DOMAINS="us.lfr-demo.se,us.lfr-demo.online"
-CONTROL_PLANE_URL="https://tunnel.lfr-demo.se"
-EDGE_PORT="8090"
+# This is a generic, reusable script -- it carries no default values of its
+# own. Every parameter must be supplied explicitly by the caller (a
+# Liferay-specific wrapper, or you, the operator), which is the only place
+# that actually knows the right values for a given deployment.
+SSH_USER=""
+DOMAINS=""
+CONTROL_PLANE_URL=""
+EDGE_PORT=""
 EDGE_TOKEN=""
 SSH_KEY_ARG=""
+KEY_PATH=""
 VPS_IP=""
+REDIRECT_DOMAIN=""
 
 usage() {
-  echo "Usage: $0 -s <vps_ip> -t <edge_token> [-i <identity_file>] [-u <ssh_user>] [-d <domains>] [-c <control_plane_url>] [-p <port>]"
+  echo "Usage: $0 -s <vps_ip> -t <edge_token> -r <redirect_domain> -i <identity_file> -u <ssh_user> -d <domains> -c <control_plane_url> -p <port>"
   echo "  -s: VPS Public IP address (required)"
   echo "  -t: Plaintext Edge Token for Control Plane validation (required)"
-  echo "  -i: Path to SSH private key file (optional)"
-  echo "  -u: SSH username (default: ubuntu)"
-  echo "  -d: Comma-separated list of edge domains (default: us.lfr-demo.se,us.lfr-demo.online)"
-  echo "  -c: Control Plane URL (default: https://tunnel.lfr-demo.se)"
-  echo "  -p: Port for lfr-tunneld to bind to on Edge node (default: 8090)"
+  echo "  -r: Domain to redirect root browser traffic to (required), e.g. your control plane's landing page"
+  echo "  -i: Path to SSH private key file (required)"
+  echo "  -u: SSH username (required)"
+  echo "  -d: Comma-separated list of edge domains (required)"
+  echo "  -c: Control Plane URL (required)"
+  echo "  -p: Port for lfr-tunneld to bind to on Edge node (required)"
   exit 1
 }
 
 # Parse parameters
-while getopts "s:t:i:u:d:c:p:" opt; do
+while getopts "s:t:i:u:d:c:p:r:" opt; do
   case $opt in
     s) VPS_IP="$OPTARG" ;;
     t) EDGE_TOKEN="$OPTARG" ;;
@@ -42,12 +48,14 @@ while getopts "s:t:i:u:d:c:p:" opt; do
     d) DOMAINS="$OPTARG" ;;
     c) CONTROL_PLANE_URL="$OPTARG" ;;
     p) EDGE_PORT="$OPTARG" ;;
+    r) REDIRECT_DOMAIN="$OPTARG" ;;
     *) usage ;;
   esac
 done
 
-if [ -z "$VPS_IP" ] || [ -z "$EDGE_TOKEN" ]; then
-  echo "❌ Error: Both VPS IP (-s) and Edge Token (-t) are required parameters."
+if [ -z "$VPS_IP" ] || [ -z "$EDGE_TOKEN" ] || [ -z "$REDIRECT_DOMAIN" ] || [ -z "$KEY_PATH" ] || \
+   [ -z "$SSH_USER" ] || [ -z "$DOMAINS" ] || [ -z "$CONTROL_PLANE_URL" ] || [ -z "$EDGE_PORT" ]; then
+  echo "❌ Error: -s, -t, -r, -i, -u, -d, -c, and -p are all required parameters."
   usage
 fi
 
@@ -153,7 +161,7 @@ server {
 
     # Redirect root browser traffic to control plane landing page
     location / {
-        return 301 https://lfr-demo.se\$request_uri;
+        return 301 https://$REDIRECT_DOMAIN\$request_uri;
     }
 
     location /api/ {
@@ -216,14 +224,18 @@ scp $SSH_KEY_ARG -r resources/server/error_pages $SSH_USER@$VPS_IP:/home/$SSH_US
 echo "=> Uploading static assets..."
 scp $SSH_KEY_ARG -r pkg/server/static $SSH_USER@$VPS_IP:/home/$SSH_USER/
 
-# 7. Upload self-healing watchdog and DDNS scripts
+# 7. Upload self-healing watchdog and DDNS scripts. gateway-watchdog.sh itself has no
+#    default port -- it requires LFT_BACKEND_PORT to be set, so it's uploaded unmodified;
+#    the systemd unit's placeholder env var is what actually supplies this edge's $EDGE_PORT.
 echo "=> Uploading watchdog, DDNS, and systemd overrides..."
-sed "s/8080/$EDGE_PORT/g" scripts/common/gateway-watchdog.sh > /tmp/gateway-watchdog-edge.sh
-scp $SSH_KEY_ARG /tmp/gateway-watchdog-edge.sh $SSH_USER@$VPS_IP:/home/$SSH_USER/gateway-watchdog.sh
-rm -f /tmp/gateway-watchdog-edge.sh
+scp $SSH_KEY_ARG scripts/common/gateway-watchdog.sh $SSH_USER@$VPS_IP:/home/$SSH_USER/gateway-watchdog.sh
+
+sed "s/__BACKEND_PORT__/$EDGE_PORT/" scripts/common/gateway-watchdog.service > /tmp/gateway-watchdog-edge.service
+scp $SSH_KEY_ARG /tmp/gateway-watchdog-edge.service $SSH_USER@$VPS_IP:/home/$SSH_USER/gateway-watchdog.service
+rm -f /tmp/gateway-watchdog-edge.service
 
 scp $SSH_KEY_ARG scripts/common/nginx-override.conf $SSH_USER@$VPS_IP:/home/$SSH_USER/nginx-override.conf
-scp $SSH_KEY_ARG scripts/common/gateway-watchdog.service scripts/common/gateway-watchdog.timer $SSH_USER@$VPS_IP:/home/$SSH_USER/
+scp $SSH_KEY_ARG scripts/common/gateway-watchdog.timer $SSH_USER@$VPS_IP:/home/$SSH_USER/
 
 # Upload Edge DDNS Script, plus this instance's own domains file — the DDNS script is
 # shared verbatim across every edge, so it reads which domain(s) are actually *its own*

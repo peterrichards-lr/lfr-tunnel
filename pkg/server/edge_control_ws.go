@@ -22,6 +22,11 @@ import (
 	"github.com/gorilla/websocket"
 )
 
+// edgeControlReadDeadline is how long the control plane waits for any frame
+// (data or Ping) from an edge before considering the connection dead. Overridable
+// in tests so the reconnect-loop fix can be verified without a real 60s wait.
+var edgeControlReadDeadline = 60 * time.Second
+
 // ControlMessage represents the JSON schema for websocket communication.
 type ControlMessage struct {
 	Type      string            `json:"type"`
@@ -167,10 +172,33 @@ func (s *Server) handleEdgeControlWS(w http.ResponseWriter, r *http.Request) {
 
 		// Set read limit and pong handler
 		conn.SetReadLimit(512)
-		_ = conn.SetReadDeadline(time.Now().Add(60 * time.Second)) //nolint:errcheck
+		_ = conn.SetReadDeadline(time.Now().Add(edgeControlReadDeadline)) //nolint:errcheck
 		conn.SetPongHandler(func(string) error {
-			_ = conn.SetReadDeadline(time.Now().Add(60 * time.Second)) //nolint:errcheck
+			_ = conn.SetReadDeadline(time.Now().Add(edgeControlReadDeadline)) //nolint:errcheck
 			return nil
+		})
+
+		// The edge sends its own Ping every 30s (runEdgeControlChannel), not a Pong,
+		// so the PongHandler above never actually fires — nothing ever prompts the
+		// edge to send a Pong back to us, and this server never sends a Ping of its
+		// own either. Left with only the PongHandler as a reset mechanism, the
+		// initial deadline set above is a one-shot timer that always expires,
+		// forcing a disconnect/reconnect every ~60s regardless of how alive the
+		// connection actually is. gorilla/websocket handles incoming Ping/Pong
+		// frames internally inside ReadMessage/NextReader and never surfaces them
+		// to the caller, so resetting the deadline only *after* ReadMessage returns
+		// would not fire on those pings either — a custom PingHandler is what
+		// actually observes them. Replicate the default handler's pong reply here
+		// too, since registering a custom handler replaces it entirely.
+		conn.SetPingHandler(func(appData string) error {
+			_ = conn.SetReadDeadline(time.Now().Add(edgeControlReadDeadline)) //nolint:errcheck
+			err := conn.WriteControl(websocket.PongMessage, []byte(appData), time.Now().Add(5*time.Second))
+			if err == websocket.ErrCloseSent {
+				return nil
+			} else if e, ok := err.(net.Error); ok && e.Temporary() { //nolint:staticcheck
+				return nil
+			}
+			return err
 		})
 
 		for {
@@ -178,6 +206,7 @@ func (s *Server) handleEdgeControlWS(w http.ResponseWriter, r *http.Request) {
 			if err != nil {
 				break
 			}
+			_ = conn.SetReadDeadline(time.Now().Add(edgeControlReadDeadline)) //nolint:errcheck
 		}
 	}()
 }

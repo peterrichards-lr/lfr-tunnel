@@ -300,6 +300,102 @@ func TestServer_EdgeActions(t *testing.T) {
 	}
 }
 
+// TestServer_EdgeControlWS_SurvivesBeyondOldOneShotDeadline verifies the fix for the
+// bug where the control plane's read deadline was set once and never refreshed by
+// incoming Pings, forcing a disconnect/reconnect every ~60s regardless of how alive
+// the connection actually was (Closes #848). edgeControlReadDeadline is overridden to
+// a short duration so this can be verified without a real 60s wait: the test keeps
+// the connection alive purely via Ping frames for longer than that shortened deadline
+// would have survived under the old (pre-fix) behavior.
+func TestServer_EdgeControlWS_SurvivesBeyondOldOneShotDeadline(t *testing.T) {
+	original := edgeControlReadDeadline
+	edgeControlReadDeadline = 150 * time.Millisecond
+	defer func() { edgeControlReadDeadline = original }()
+
+	cfgControl := config.DefaultServerConfig()
+	cfgControl.DBPath = filepath.Join(t.TempDir(), "control.db")
+	cfgControl.Domains = []string{"example.se"}
+	cfgControl.DisableBackupScheduler = true
+
+	edgeToken := "usedge-keepalive-token"
+	tokenHashBytes := sha256.Sum256([]byte(edgeToken))
+	cfgControl.EdgeNodes = []config.EdgeNodeConfig{
+		{ID: "usedge", TokenHash: hex.EncodeToString(tokenHashBytes[:])},
+	}
+
+	controlSrv, err := NewServer(cfgControl)
+	if err != nil {
+		t.Fatalf("failed to create control server: %v", err)
+	}
+	defer controlSrv.Stop()
+
+	ts := httptest.NewServer(controlSrv)
+	defer ts.Close()
+
+	u, _ := url.Parse(ts.URL)
+	wsURL := fmt.Sprintf("ws://%s/api/internal/edge-control-ws?node_id=usedge", u.Host)
+
+	conn, _, err := websocket.DefaultDialer.Dial(wsURL, nil)
+	if err != nil {
+		t.Fatalf("failed to dial: %v", err)
+	}
+	defer func() { _ = conn.Close() }() //nolint:errcheck
+
+	var challengeMsg struct {
+		Type  string `json:"type"`
+		Nonce string `json:"nonce"`
+	}
+	if err := conn.ReadJSON(&challengeMsg); err != nil {
+		t.Fatalf("failed to read challenge: %v", err)
+	}
+
+	mac := hmac.New(sha256.New, tokenHashBytes[:])
+	mac.Write([]byte(challengeMsg.Nonce))
+	respHex := hex.EncodeToString(mac.Sum(nil))
+	if err := conn.WriteJSON(map[string]string{"type": "auth", "response": respHex}); err != nil {
+		t.Fatalf("failed to write auth: %v", err)
+	}
+
+	var result struct {
+		Type string `json:"type"`
+	}
+	if err := conn.ReadJSON(&result); err != nil {
+		t.Fatalf("failed to read auth result: %v", err)
+	}
+	if result.Type != "auth_success" {
+		t.Fatalf("expected auth_success, got %s", result.Type)
+	}
+
+	// Mimic the edge's real keepalive: send nothing but raw Ping frames, at an
+	// interval comfortably shorter than the (shortened) deadline, for well longer
+	// than that deadline's total duration. Under the pre-fix behavior this alone
+	// would never prevent the one-shot deadline from expiring.
+	stop := make(chan struct{})
+	go func() {
+		ticker := time.NewTicker(50 * time.Millisecond)
+		defer ticker.Stop()
+		for {
+			select {
+			case <-ticker.C:
+				_ = conn.WriteControl(websocket.PingMessage, nil, time.Now().Add(time.Second)) //nolint:errcheck
+			case <-stop:
+				return
+			}
+		}
+	}()
+	defer close(stop)
+
+	time.Sleep(500 * time.Millisecond) // ~3.3x the shortened deadline
+
+	controlSrv.edgeClientsMu.RLock()
+	_, stillConnected := controlSrv.edgeClients["usedge"]
+	controlSrv.edgeClientsMu.RUnlock()
+
+	if !stillConnected {
+		t.Error("expected edge connection to survive well past the read deadline via Ping keepalive alone, but it was dropped — the reconnect-loop bug (#848) has regressed")
+	}
+}
+
 func TestServer_EdgeControlWS_ProxyIP(t *testing.T) {
 	cfgControl := config.DefaultServerConfig()
 	cfgControl.DBPath = filepath.Join(t.TempDir(), "control.db")

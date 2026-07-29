@@ -2,7 +2,7 @@
 # enable-maintenance.sh — Enable Nginx maintenance mode for lfr-tunnel
 #
 # Usage:
-#   sudo ./scripts/enable-maintenance.sh
+#   sudo ./scripts/common/enable-maintenance.sh
 #
 
 set -euo pipefail

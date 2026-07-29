@@ -20,7 +20,7 @@ differently or don't require at all, most importantly the Elastic IP step below.
 > ```bash
 > aws configure --profile lfr-tunnel
 > ```
-> `scripts/provision-aws-ec2.sh` requires `--profile <name>` explicitly and refuses to
+> `scripts/common/provision-aws-ec2.sh` requires `--profile <name>` explicitly and refuses to
 > run without it — it will never silently fall back to `[default]`, so it can't
 > accidentally provision resources against the wrong AWS account.
 >
@@ -44,8 +44,8 @@ Launch an instance using the standard **Canonical Ubuntu Server 22.04 LTS** or
 **24.04 LTS** AMI — the same OS versions required by
 [`setup_guide.md` §2](setup_guide.md#2-vps-server-setup--security-hardening). Using the
 official Canonical AMI keeps the default SSH user as `ubuntu`, which matches the default
-already hardcoded in `scripts/setup-edge-vps.sh` (`SSH_USER="ubuntu"`) — no extra flags
-needed if you use `scripts/provision-aws-ec2.sh` (§6) or that script directly.
+already hardcoded in `scripts/common/setup-edge-vps.sh` (`SSH_USER="ubuntu"`) — no extra flags
+needed if you use `scripts/common/provision-aws-ec2.sh` (§6) or that script directly.
 
 For instance sizing, `t3.micro` (2 vCPU burstable, 1GB RAM) is a safe default for either
 role. `t3.nano` can run a lightweight edge node (stateless, no SQLite DB, no Postfix) but
@@ -69,7 +69,7 @@ chmod 400 ~/.ssh/lfr-tunnel-gateway.pem
 This file is used directly as the identity file for the existing SSH-based tooling — no
 code changes are needed on the `lfr-tunnel` side:
 - `lfr-tunnel-ops deploy -i ~/.ssh/lfr-tunnel-gateway.pem`
-- `scripts/setup-edge-vps.sh -i ~/.ssh/lfr-tunnel-gateway.pem ...`
+- `scripts/common/setup-edge-vps.sh -i ~/.ssh/lfr-tunnel-gateway.pem ...`
 
 > [!WARNING]
 > **Key pairs are region-scoped.** The same `--key-name` in two different regions is two
@@ -77,7 +77,7 @@ code changes are needed on the `lfr-tunnel` side:
 > gateway and multiple edge nodes in other regions means each region's key would
 > overwrite the same local `~/.ssh/lfr-tunnel-gateway.pem` file. Use a distinct
 > `--key-name` (and therefore a distinct local file) per region, e.g.
-> `--key-name lfr-tunnel-gateway-us-east-2`. `scripts/provision-aws-ec2.sh` refuses to
+> `--key-name lfr-tunnel-gateway-us-east-2`. `scripts/common/provision-aws-ec2.sh` refuses to
 > overwrite an existing local key file for this reason — pass a distinct `--key-name`
 > per region/instance.
 
@@ -87,7 +87,7 @@ code changes are needed on the `lfr-tunnel` side:
 
 Mirror the UFW rules already documented in
 [`setup_guide.md` §2.4](setup_guide.md#24-configure-the-firewall-ufw) and configured
-automatically by `scripts/setup-edge-vps.sh`:
+automatically by `scripts/common/setup-edge-vps.sh`:
 
 | Port | Protocol | Source    | Purpose                          |
 |------|----------|-----------|-----------------------------------|
@@ -162,15 +162,15 @@ Once the instance is running, has an associated Elastic IP, and you can SSH into
   [`setup_guide.md` §2.1](setup_guide.md#21-basic-os--package-updates) onward — nothing
   else in that guide is AWS-specific.
 - **Regional edge node**: continue with [`edge_setup_guide.md`](edge_setup_guide.md), or
-  run `scripts/setup-edge-vps.sh -s <elastic-ip> -i ~/.ssh/lfr-tunnel-gateway.pem ...`
+  run `scripts/common/setup-edge-vps.sh -s <elastic-ip> -i ~/.ssh/lfr-tunnel-gateway.pem ...`
   directly — it already defaults to the `ubuntu` SSH user.
 
-`scripts/provision-aws-ec2.sh` automates steps 2–5 above (key pair, security group,
+`scripts/common/provision-aws-ec2.sh` automates steps 2–5 above (key pair, security group,
 instance launch, Elastic IP) and prints the resulting IP and key path in a form ready to
-pass straight to `scripts/setup-edge-vps.sh` or `lfr-tunnel-ops`'s `-i` flag:
+pass straight to `scripts/common/setup-edge-vps.sh` or `lfr-tunnel-ops`'s `-i` flag:
 
 ```bash
-./scripts/provision-aws-ec2.sh --profile lfr-tunnel --region us-east-1 --name-tag my-gateway --role central
+./scripts/common/provision-aws-ec2.sh --profile lfr-tunnel --region us-east-1 --name-tag my-gateway --role central
 ```
 
 ---
@@ -190,13 +190,13 @@ entirely.
   [`edge_setup_guide.md` §1](edge_setup_guide.md#1-architectural-overview). Regional edge
   nodes hold no persistent data and can be provisioned wherever latency dictates (e.g.
   `us-east-1` for a US edge node) — always pass `--region` explicitly to
-  `scripts/provision-aws-ec2.sh` rather than relying on its generic `us-east-1` default.
+  `scripts/common/provision-aws-ec2.sh` rather than relying on its generic `us-east-1` default.
 - Prefer `t3.micro` for the central control plane; `t3.nano` is acceptable for
   low-traffic edge regions where cost matters more than headroom.
 - Tag every resource (instance, security group, Elastic IP) with `Project=lfr-tunnel`,
   `Owner`, and a cost-center tag for AWS Cost Explorer/Cost Allocation Reports.
-  `scripts/provision-aws-ec2.sh` will source `scripts/aws/liferay-tags.env` if present
-  (see `scripts/aws/liferay-tags.env.example`) and apply those tags automatically — this
+  `scripts/common/provision-aws-ec2.sh` will source `scripts/liferay/aws/liferay-tags.env` if present
+  (see `scripts/liferay/aws/liferay-tags.env.example`) and apply those tags automatically — this
   file is git-ignored, so Liferay's actual account-specific values never need to be
   committed to this OSS repo.
 - **Viewing the whole fleet across regions.** Every instance (central control plane and
@@ -219,7 +219,7 @@ entirely.
     same-named groups in different regions are otherwise indistinguishable when
     switching `--region` context, which surfaces as a confusing "Region in ARN not
     valid" error the moment a group's ARN from one region is used against another.
-    `scripts/provision-aws-ec2.sh` does not create these automatically, so run
+    `scripts/common/provision-aws-ec2.sh` does not create these automatically, so run
     `aws resource-groups create-group --region <region> --name lfr-tunnel-<region> ...`
     once per region if you want it.
   Pass `--role central` or `--role edge` to `provision-aws-ec2.sh` to additionally tag
@@ -231,13 +231,13 @@ entirely.
 
 ## 8. Tearing Down / Retesting
 
-`scripts/deprovision-aws-ec2.sh` is the companion to `provision-aws-ec2.sh`: it releases
+`scripts/common/deprovision-aws-ec2.sh` is the companion to `provision-aws-ec2.sh`: it releases
 the Elastic IP, terminates the instance, and removes the security group for a given
 `--name-tag`, so you can cleanly retry a provisioning run without hunting through the AWS
 Console for leftover (billable) resources.
 
 ```bash
-./scripts/deprovision-aws-ec2.sh --profile lfr-tunnel --region us-east-1 --name-tag my-gateway
+./scripts/common/deprovision-aws-ec2.sh --profile lfr-tunnel --region us-east-1 --name-tag my-gateway
 ```
 
 > [!IMPORTANT]
@@ -257,12 +257,12 @@ both the central gateway and edge nodes (see `--key-name` in §2). Pass
 
 ## 9. IPv6 Dual-Stack Support (Optional)
 
-The existing production VPS is dual-stack — `scripts/cloudflare-ddns.sh` actively
+The existing production VPS is dual-stack — `scripts/liferay/vm6/cloudflare-ddns.sh` actively
 maintains AAAA records and folds the IPv6 address into the SPF record whenever one is
 present. To preserve that on AWS, pass `--ipv6` to `provision-aws-ec2.sh`:
 
 ```bash
-./scripts/provision-aws-ec2.sh --profile lfr-tunnel --region eu-west-1 --name-tag my-gateway --role central --ipv6
+./scripts/common/provision-aws-ec2.sh --profile lfr-tunnel --region eu-west-1 --name-tag my-gateway --role central --ipv6
 ```
 
 This is **opt-in, not the default** — unlike the rest of what the script does, it
@@ -286,7 +286,7 @@ All five steps are idempotent (safe to run again, e.g. when provisioning a secon
 instance into a VPC/subnet that already has IPv6 set up from a previous run) and covered
 by companion checks in the script rather than a single irreversible action.
 
-`scripts/deprovision-aws-ec2.sh` does not need any IPv6-specific cleanup: the VPC/subnet
+`scripts/common/deprovision-aws-ec2.sh` does not need any IPv6-specific cleanup: the VPC/subnet
 CIDR association and route are free and harmless to leave in place for future instances,
 and the instance's own IPv6 address is released automatically when the instance
 terminates (no billable "floating" IPv6 concept the way Elastic IPs work for IPv4).

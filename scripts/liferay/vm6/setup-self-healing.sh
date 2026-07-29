@@ -5,10 +5,10 @@ VPS_USER=${VPS_USER:-"peterrichards"}
 VPS_IP=${VPS_IP:-"lfr-demo.se"}
 
 echo "Uploading self-healing files to VPS..."
-scp scripts/nginx-override.conf $VPS_USER@$VPS_IP:/home/$VPS_USER/nginx-override.conf
-scp scripts/gateway-watchdog.sh $VPS_USER@$VPS_IP:/home/$VPS_USER/gateway-watchdog.sh
-scp scripts/gateway-watchdog.service $VPS_USER@$VPS_IP:/home/$VPS_USER/gateway-watchdog.service
-scp scripts/gateway-watchdog.timer $VPS_USER@$VPS_IP:/home/$VPS_USER/gateway-watchdog.timer
+scp scripts/common/nginx-override.conf $VPS_USER@$VPS_IP:/home/$VPS_USER/nginx-override.conf
+scp scripts/common/gateway-watchdog.sh $VPS_USER@$VPS_IP:/home/$VPS_USER/gateway-watchdog.sh
+scp scripts/common/gateway-watchdog.service $VPS_USER@$VPS_IP:/home/$VPS_USER/gateway-watchdog.service
+scp scripts/common/gateway-watchdog.timer $VPS_USER@$VPS_IP:/home/$VPS_USER/gateway-watchdog.timer
 
 echo "Registering self-healing layers on VPS..."
 ssh $VPS_USER@$VPS_IP << REMOTE_SSH

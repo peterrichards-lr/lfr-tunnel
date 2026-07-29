@@ -2,8 +2,8 @@
 # restore-backup.sh — Restore an lfr-tunneld SQLite backup on the VPS
 #
 # Usage:
-#   ./scripts/restore-backup.sh                          # Interactive: lists and prompts
-#   ./scripts/restore-backup.sh /path/to/backup.db       # Non-interactive: restore specific file
+#   ./scripts/common/restore-backup.sh                          # Interactive: lists and prompts
+#   ./scripts/common/restore-backup.sh /path/to/backup.db       # Non-interactive: restore specific file
 #
 # The script will:
 #   1. Validate the chosen backup is a healthy SQLite3 database

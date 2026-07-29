@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# scripts/sync-offsite-backups.sh
+# scripts/liferay/vm6/sync-offsite-backups.sh
 # Syncs local backups from the central VPS to the Edge server for offsite redundancy.
 
 set -e

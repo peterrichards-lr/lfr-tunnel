@@ -208,8 +208,8 @@ func loadSpecAndProvider(ctx context.Context, f *dnsFlags) (Spec, Provider) {
 }
 
 // tagRoute53ZoneIfApplicable applies Liferay's optional LFR_TAG_* resource
-// tagging convention (see scripts/aws/liferay-tags.env.example, already used
-// by scripts/provision-aws-ec2.sh for EC2) to a hosted zone. This is
+// tagging convention (see scripts/liferay/aws/liferay-tags.env.example, already used
+// by scripts/common/provision-aws-ec2.sh for EC2) to a hosted zone. This is
 // deliberately NOT part of the generic Provider interface -- tagging is an
 // AWS-account-management concern with no Cloudflare equivalent, so it's
 // applied here via a type assertion, only for Route53, and only when at
@@ -231,7 +231,7 @@ func tagRoute53ZoneIfApplicable(ctx context.Context, provider Provider, domain, 
 	}
 }
 
-// liferayTagsFromEnv mirrors scripts/provision-aws-ec2.sh's tag-key mapping
+// liferayTagsFromEnv mirrors scripts/common/provision-aws-ec2.sh's tag-key mapping
 // exactly (Project/Owner/Team/CostCenter), so the same liferay-tags.env file
 // already used for EC2 provisioning drives Route53 zone tagging too, with no
 // new configuration mechanism introduced.
@@ -292,7 +292,7 @@ func newProvider(ctx context.Context, name string) (Provider, error) {
 	}
 }
 
-// detectPublicIPs mirrors scripts/cloudflare-ddns.sh's external-echo-service
+// detectPublicIPs mirrors scripts/liferay/vm6/cloudflare-ddns.sh's external-echo-service
 // fallback. Both lookups are best-effort: either may come back empty if that
 // address family isn't available, and that's left to the caller to handle.
 func detectPublicIPs(ctx context.Context) (ipv4, ipv6 string, err error) {

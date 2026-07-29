@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# scripts/setup-edge-ddns.sh
+# scripts/common/setup-edge-ddns.sh
 # Automates deploying the Cloudflare DDNS service on the stateless Edge VPS.
 set -e
 
@@ -43,7 +43,7 @@ echo "=== Deploying Cloudflare DDNS on Edge VPS: $VPS_IP ==="
 
 # 1. Upload the edge-specific DDNS script
 echo "=> Uploading cloudflare-ddns-edge.sh to VPS..."
-scp $SSH_KEY_ARG scripts/cloudflare-ddns-edge.sh $SSH_USER@$VPS_IP:/home/$SSH_USER/cloudflare-ddns-edge.sh
+scp $SSH_KEY_ARG scripts/common/cloudflare-ddns-edge.sh $SSH_USER@$VPS_IP:/home/$SSH_USER/cloudflare-ddns-edge.sh
 
 # 2. Configure systemd service and timer remotely
 echo "=> Registering DDNS systemd service and timer on VPS..."

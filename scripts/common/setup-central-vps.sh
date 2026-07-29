@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# scripts/setup-central-vps.sh
+# scripts/common/setup-central-vps.sh
 # Automates setting up the central control-plane VPS node for lfr-tunnel.
 # Target IP/key/domain/config are all parameters (not hardcoded), so this works against
 # any provider — the existing production VPS or a new AWS/other-cloud instance alike.
@@ -205,9 +205,9 @@ scp $SSH_KEY_ARG -r pkg/server/static $SSH_USER@$VPS_IP:/home/$SSH_USER/
 
 # 7. Upload self-healing watchdog and Nginx auto-restart override
 echo "=> Uploading watchdog and systemd overrides..."
-scp $SSH_KEY_ARG scripts/nginx-override.conf $SSH_USER@$VPS_IP:/home/$SSH_USER/nginx-override.conf
-scp $SSH_KEY_ARG scripts/gateway-watchdog.sh $SSH_USER@$VPS_IP:/home/$SSH_USER/gateway-watchdog.sh
-scp $SSH_KEY_ARG scripts/gateway-watchdog.service scripts/gateway-watchdog.timer $SSH_USER@$VPS_IP:/home/$SSH_USER/
+scp $SSH_KEY_ARG scripts/common/nginx-override.conf $SSH_USER@$VPS_IP:/home/$SSH_USER/nginx-override.conf
+scp $SSH_KEY_ARG scripts/common/gateway-watchdog.sh $SSH_USER@$VPS_IP:/home/$SSH_USER/gateway-watchdog.sh
+scp $SSH_KEY_ARG scripts/common/gateway-watchdog.service scripts/common/gateway-watchdog.timer $SSH_USER@$VPS_IP:/home/$SSH_USER/
 
 # 8. Remotely execute setup and service configuration
 echo "=> Registering services and securing files on VPS..."

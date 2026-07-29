@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# scripts/setup-edge-vps.sh
+# scripts/common/setup-edge-vps.sh
 # Automates setting up a stateless regional edge VPS node for lfr-tunnel.
 set -e
 
@@ -218,17 +218,17 @@ scp $SSH_KEY_ARG -r pkg/server/static $SSH_USER@$VPS_IP:/home/$SSH_USER/
 
 # 7. Upload self-healing watchdog and DDNS scripts
 echo "=> Uploading watchdog, DDNS, and systemd overrides..."
-sed "s/8080/$EDGE_PORT/g" scripts/gateway-watchdog.sh > /tmp/gateway-watchdog-edge.sh
+sed "s/8080/$EDGE_PORT/g" scripts/common/gateway-watchdog.sh > /tmp/gateway-watchdog-edge.sh
 scp $SSH_KEY_ARG /tmp/gateway-watchdog-edge.sh $SSH_USER@$VPS_IP:/home/$SSH_USER/gateway-watchdog.sh
 rm -f /tmp/gateway-watchdog-edge.sh
 
-scp $SSH_KEY_ARG scripts/nginx-override.conf $SSH_USER@$VPS_IP:/home/$SSH_USER/nginx-override.conf
-scp $SSH_KEY_ARG scripts/gateway-watchdog.service scripts/gateway-watchdog.timer $SSH_USER@$VPS_IP:/home/$SSH_USER/
+scp $SSH_KEY_ARG scripts/common/nginx-override.conf $SSH_USER@$VPS_IP:/home/$SSH_USER/nginx-override.conf
+scp $SSH_KEY_ARG scripts/common/gateway-watchdog.service scripts/common/gateway-watchdog.timer $SSH_USER@$VPS_IP:/home/$SSH_USER/
 
 # Upload Edge DDNS Script, plus this instance's own domains file — the DDNS script is
 # shared verbatim across every edge, so it reads which domain(s) are actually *its own*
 # from this file rather than having them hardcoded (see cloudflare-ddns-edge.sh).
-scp $SSH_KEY_ARG scripts/cloudflare-ddns-edge.sh $SSH_USER@$VPS_IP:/home/$SSH_USER/cloudflare-ddns-edge.sh
+scp $SSH_KEY_ARG scripts/common/cloudflare-ddns-edge.sh $SSH_USER@$VPS_IP:/home/$SSH_USER/cloudflare-ddns-edge.sh
 
 DDNS_DOMAINS_TMP="/tmp/ddns-domains.txt"
 printf '%s\n' "${DOMAIN_ARRAY[@]}" > "$DDNS_DOMAINS_TMP"

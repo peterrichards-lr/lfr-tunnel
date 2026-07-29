@@ -109,7 +109,7 @@ Manage Nginx maintenance mode or perform safe database backups/restores on the V
   ```
 - **Safe Restore Backup** (automatically enables maintenance mode, restores DB, and disables maintenance):
   ```bash
-  ./scripts/restore-with-maintenance.sh -i ~/.ssh/id_vm6_networks_vps -f /home/peterrichards/backups/lfr-tunnel-backup.sql
+  ./scripts/common/restore-with-maintenance.sh -i ~/.ssh/id_vm6_networks_vps -f /home/peterrichards/backups/lfr-tunnel-backup.sql
   ```
 
 ---

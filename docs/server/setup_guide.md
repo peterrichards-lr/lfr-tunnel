@@ -915,7 +915,7 @@ sudo chmod 600 /etc/letsencrypt/cloudflare.ini
 #### Step 2: Install the DDNS Script
 Move the script to your server's binary folder and make it executable:
 ```bash
-sudo cp scripts/cloudflare-ddns.sh /usr/local/bin/cloudflare-ddns.sh
+sudo cp scripts/liferay/vm6/cloudflare-ddns.sh /usr/local/bin/cloudflare-ddns.sh
 sudo chmod +x /usr/local/bin/cloudflare-ddns.sh
 ```
 
@@ -924,11 +924,11 @@ To automate running the script every 5 minutes natively using systemd:
 
 1. Copy the systemd service file to `/etc/systemd/system/cloudflare-ddns.service`:
    ```bash
-   sudo cp scripts/cloudflare-ddns.service /etc/systemd/system/cloudflare-ddns.service
+   sudo cp scripts/liferay/vm6/cloudflare-ddns.service /etc/systemd/system/cloudflare-ddns.service
    ```
 2. Copy the systemd timer file to `/etc/systemd/system/cloudflare-ddns.timer`:
    ```bash
-   sudo cp scripts/cloudflare-ddns.timer /etc/systemd/system/cloudflare-ddns.timer
+   sudo cp scripts/liferay/vm6/cloudflare-ddns.timer /etc/systemd/system/cloudflare-ddns.timer
    ```
 3. Enable and start the timer service:
    ```bash

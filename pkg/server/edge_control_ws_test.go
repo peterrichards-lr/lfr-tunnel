@@ -332,7 +332,8 @@ func TestServer_EdgeControlWS_SurvivesBeyondOldOneShotDeadline(t *testing.T) {
 	ts := httptest.NewServer(controlSrv)
 	defer ts.Close()
 
-	u, _ := url.Parse(ts.URL)
+	u, _err := url.Parse(ts.URL)
+	_ = _err //nolint:errcheck
 	wsURL := fmt.Sprintf("ws://%s/api/internal/edge-control-ws?node_id=usedge", u.Host)
 
 	conn, _, err := websocket.DefaultDialer.Dial(wsURL, nil)

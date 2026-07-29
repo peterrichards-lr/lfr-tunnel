@@ -175,6 +175,32 @@ func TestRoute53Provider_ListRecords_FiltersNSAndSOAAndDecodesWireFormat(t *test
 	}
 }
 
+func TestRoute53Provider_ListRecords_NameDerivationIsCaseInsensitive(t *testing.T) {
+	// DNS names are case-insensitive. The suffix-trim in fromRoute53Name must
+	// still correctly derive the zone-relative name even if the zone domain
+	// or the record name differ in case.
+	client := &fakeRoute53Client{
+		listResourceRecordSetsFunc: func(ctx context.Context, in *route53.ListResourceRecordSetsInput, optFns ...func(*route53.Options)) (*route53.ListResourceRecordSetsOutput, error) {
+			ttl120 := int64(120)
+			return &route53.ListResourceRecordSetsOutput{
+				ResourceRecordSets: []types.ResourceRecordSet{
+					{Name: aws.String("Tunnel.Example.COM."), Type: types.RRTypeA, TTL: &ttl120, ResourceRecords: []types.ResourceRecord{{Value: aws.String("1.2.3.4")}}},
+				},
+				IsTruncated: false,
+			}, nil
+		},
+	}
+	provider := &Route53Provider{Client: client}
+
+	records, err := provider.ListRecords(context.Background(), ZoneRef{Domain: "example.com", ID: "Z123"})
+	if err != nil {
+		t.Fatalf("ListRecords failed: %v", err)
+	}
+	if len(records) != 1 || records[0].Name != "Tunnel" {
+		t.Fatalf("expected the zone suffix to be stripped case-insensitively, leaving 'Tunnel', got %+v", records)
+	}
+}
+
 func TestRoute53Provider_ApplyChange_AlwaysUpserts(t *testing.T) {
 	for _, action := range []ChangeAction{ActionCreate, ActionUpdate} {
 		var gotAction types.ChangeAction

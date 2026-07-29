@@ -54,10 +54,13 @@ type Spec struct {
 }
 
 // LoadSpecFile reads a YAML spec file, substitutes "${KEY}"-style
-// placeholders in every Name/Value string using vars, and unmarshals the
-// result. This is the only spec-construction logic in this package — no
-// domain, deployment, or provider is hardcoded here; callers supply their
-// own YAML file plus whatever variables it references (typically IPV4/IPV6).
+// placeholders in every record's Value string using vars, and unmarshals the
+// result. Record Name is never substituted -- no spec uses a placeholder
+// there, and record names are structural (used to match against provider
+// state), not the sort of value that should vary by deployment. This is the
+// only spec-construction logic in this package — no domain, deployment, or
+// provider is hardcoded here; callers supply their own YAML file plus
+// whatever variables it references (typically IPV4/IPV6).
 func LoadSpecFile(path string, vars map[string]string) (Spec, error) {
 	raw, err := os.ReadFile(path)
 	if err != nil {

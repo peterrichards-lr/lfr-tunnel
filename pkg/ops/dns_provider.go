@@ -3,6 +3,7 @@ package ops
 import (
 	"context"
 	"fmt"
+	"strings"
 )
 
 // ZoneRef identifies a zone at a specific provider.
@@ -113,11 +114,23 @@ func Reconcile(desired []Record, current []ProviderRecord, providerName string) 
 
 func findMatching(current []ProviderRecord, want Record) *ProviderRecord {
 	for i := range current {
-		if current[i].Name == want.Name && current[i].Type == want.Type {
+		// DNS names are case-insensitive; fold case so a provider/spec
+		// casing difference doesn't produce a spurious CREATE.
+		if strings.EqualFold(current[i].Name, want.Name) && current[i].Type == want.Type {
 			return &current[i]
 		}
 	}
 	return nil
+}
+
+// TrimSuffixFold removes suffix from s if s case-insensitively ends with it
+// (DNS names are case-insensitive), preserving the original casing of
+// whatever remains. Shared by both provider adapters' name-derivation logic.
+func TrimSuffixFold(s, suffix string) string {
+	if len(s) >= len(suffix) && strings.EqualFold(s[len(s)-len(suffix):], suffix) {
+		return s[:len(s)-len(suffix)]
+	}
+	return s
 }
 
 func diff(want, have Record, providerName string) (string, bool) {

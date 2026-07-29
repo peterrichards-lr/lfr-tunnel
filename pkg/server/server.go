@@ -483,7 +483,7 @@ func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 
 	if isControl {
 		// Normalize trailing slashes on public control plane pages
-		if r.Method == http.MethodGet {
+		if r.Method == http.MethodGet || r.Method == http.MethodHead {
 			p := r.URL.Path
 			if p == "/portal/" || p == "/admin/" || p == "/setup/" || p == "/privacy/" || p == "/cookies/" {
 				target := strings.TrimSuffix(p, "/")
@@ -1007,13 +1007,13 @@ func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 
-		if r.Method == http.MethodGet && r.URL.Path == "/favicon.ico" {
+		if (r.Method == http.MethodGet || r.Method == http.MethodHead) && r.URL.Path == "/favicon.ico" {
 			r.URL.Path = "/static/favicon.ico"
 			http.FileServer(http.FS(staticFS)).ServeHTTP(w, r)
 			return
 		}
 
-		if r.Method == http.MethodGet && r.URL.Path == "/robots.txt" {
+		if (r.Method == http.MethodGet || r.Method == http.MethodHead) && r.URL.Path == "/robots.txt" {
 			w.Header().Set("Content-Type", "text/plain; charset=utf-8")
 			w.WriteHeader(http.StatusOK)
 			if _, err := w.Write([]byte("User-agent: *\nDisallow: /\n")); err != nil {
@@ -1022,7 +1022,7 @@ func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 
-		if r.Method == http.MethodGet && (r.URL.Path == "/" || r.URL.Path == "/admin" || r.URL.Path == "/portal") {
+		if (r.Method == http.MethodGet || r.Method == http.MethodHead) && (r.URL.Path == "/" || r.URL.Path == "/admin" || r.URL.Path == "/portal") {
 			w.Header().Set("Content-Type", "text/html; charset=utf-8")
 			w.WriteHeader(http.StatusOK)
 			htmlContent := strings.ReplaceAll(dashboardHTML, "static/dashboard.js", "static/dashboard.js?v="+config.Version)
@@ -1034,7 +1034,7 @@ func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		}
 
 		// Catch-all SPA routing for Control Plane GET requests under /portalv2
-		if r.Method == http.MethodGet && strings.HasPrefix(r.URL.Path, "/portalv2") {
+		if (r.Method == http.MethodGet || r.Method == http.MethodHead) && strings.HasPrefix(r.URL.Path, "/portalv2") {
 			subFS, err := fs.Sub(uiDistFS, "ui-dist")
 			if err == nil {
 				cleanPath := strings.TrimPrefix(r.URL.Path, "/portalv2")

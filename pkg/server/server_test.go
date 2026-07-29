@@ -3015,6 +3015,44 @@ func TestServer_TrailingSlashRedirect(t *testing.T) {
 	}
 }
 
+// TestServer_HeadRequestsToRootChain verifies the fix for HEAD requests to the
+// control plane's root-path routing chain incorrectly falling through to the
+// data-plane ProxyHandler and returning 502, instead of being served the same
+// as the equivalent GET (Closes #847). Before the fix, every route below was
+// gated on `r.Method == http.MethodGet` alone, so a HEAD request never matched
+// and fell all the way through to s.proxyHandler, which has no lease for a
+// control domain host and returns 502 Bad Gateway.
+func TestServer_HeadRequestsToRootChain(t *testing.T) {
+	cfg := &config.ServerConfig{
+		Domains:                []string{"example.com"},
+		DisableBackupScheduler: true,
+	}
+	cfg.DBPath = filepath.Join(t.TempDir(), "test.db")
+
+	srv, err := NewServer(cfg)
+	if err != nil {
+		t.Fatalf("failed to create server: %v", err)
+	}
+	defer func() {
+		time.Sleep(50 * time.Millisecond)
+		srv.Stop()
+	}()
+
+	paths := []string{"/", "/admin", "/portal", "/favicon.ico", "/robots.txt", "/portalv2"}
+
+	for _, p := range paths {
+		req := httptest.NewRequest(http.MethodHead, "http://example.com"+p, nil)
+		req.Host = "example.com"
+		rec := httptest.NewRecorder()
+
+		srv.ServeHTTP(rec, req)
+
+		if rec.Code == http.StatusBadGateway {
+			t.Errorf("HEAD %s: got 502 Bad Gateway — request fell through to the proxy handler instead of the root routing chain", p)
+		}
+	}
+}
+
 func TestInstallScriptServerURLResolution(t *testing.T) {
 	cfg := &config.ServerConfig{
 		Domains:                []string{"custom-gateway.org", "ps-gateway.org"},

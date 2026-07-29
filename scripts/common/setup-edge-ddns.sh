@@ -3,16 +3,18 @@
 # Automates deploying the Cloudflare DDNS service on the stateless Edge VPS.
 set -e
 
-# Default variables
-SSH_USER="ubuntu"
+# This is a generic, reusable script -- it carries no default values of its
+# own. Every parameter must be supplied explicitly by the caller.
+SSH_USER=""
 SSH_KEY_ARG=""
+KEY_PATH=""
 VPS_IP=""
 
 usage() {
-  echo "Usage: $0 -s <vps_ip> [-i <identity_file>] [-u <ssh_user>]"
+  echo "Usage: $0 -s <vps_ip> -i <identity_file> -u <ssh_user>"
   echo "  -s: VPS Public IP address (required)"
-  echo "  -i: Path to SSH private key file (optional)"
-  echo "  -u: SSH username (default: ubuntu)"
+  echo "  -i: Path to SSH private key file (required)"
+  echo "  -u: SSH username (required)"
   exit 1
 }
 
@@ -34,8 +36,8 @@ while getopts "s:i:u:" opt; do
   esac
 done
 
-if [ -z "$VPS_IP" ]; then
-  echo "❌ Error: VPS IP (-s) is a required parameter."
+if [ -z "$VPS_IP" ] || [ -z "$KEY_PATH" ] || [ -z "$SSH_USER" ]; then
+  echo "❌ Error: -s, -i, and -u are all required parameters."
   usage
 fi
 

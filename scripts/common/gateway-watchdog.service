@@ -5,6 +5,7 @@ Wants=network-online.target
 
 [Service]
 Type=oneshot
+Environment=LFT_BACKEND_PORT=__BACKEND_PORT__
 ExecStart=/usr/local/bin/gateway-watchdog.sh
 User=root
 Group=root

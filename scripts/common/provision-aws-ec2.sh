@@ -5,26 +5,30 @@
 # See docs/server/aws_setup_guide.md for the manual step-by-step equivalent.
 set -e
 
-# Defaults
-REGION="us-east-1"
-INSTANCE_TYPE="t3.micro"
-NAME_TAG="lfr-tunnel-gateway"
-KEY_NAME="lfr-tunnel-gateway"
-KEY_PATH="$HOME/.ssh/${KEY_NAME}.pem"
+# This is a generic, reusable script -- it carries no default values of its
+# own (beyond --ami-id/--role/--ipv6, which have real, defined skip behavior
+# when omitted, unlike the values below which previously stood in for a real
+# deployment choice). Every other parameter must be supplied explicitly by
+# the caller.
+REGION=""
+INSTANCE_TYPE=""
+NAME_TAG=""
+KEY_NAME=""
+KEY_PATH=""
 AMI_ID=""
 ROLE=""
 PROFILE=""
 IPV6="false"
 
 usage() {
-  echo "Usage: $0 --profile <aws-cli-profile> [--region <aws-region>] [--instance-type <type>] [--name-tag <name>] [--key-name <name>] [--ami-id <ami-id>] [--role central|edge] [--ipv6]"
+  echo "Usage: $0 --profile <aws-cli-profile> --region <aws-region> --instance-type <type> --name-tag <name> --key-name <name> [--ami-id <ami-id>] [--role central|edge] [--ipv6]"
   echo "  --profile:       AWS CLI named profile to use (required — see 'aws configure --profile <name>')."
   echo "                   This script never falls back to the ambient [default] profile, so it can't"
   echo "                   accidentally run against the wrong AWS account."
-  echo "  --region:        AWS region (default: us-east-1)"
-  echo "  --instance-type: EC2 instance type (default: t3.micro)"
-  echo "  --name-tag:      Name tag applied to the instance/security group (default: lfr-tunnel-gateway)"
-  echo "  --key-name:      EC2 key pair name to create/reuse (default: lfr-tunnel-gateway)"
+  echo "  --region:        AWS region (required)"
+  echo "  --instance-type: EC2 instance type (required)"
+  echo "  --name-tag:      Name tag applied to the instance/security group (required)"
+  echo "  --key-name:      EC2 key pair name to create/reuse (required)"
   echo "  --ami-id:        Ubuntu AMI ID to launch (default: auto-lookup latest 22.04 LTS in the region)"
   echo "  --role:          Optional 'central' or 'edge' tag, so a single Project-wide Resource Group"
   echo "                   (tag:Project=lfr-tunnel) can still be filtered by role. See §7 of"
@@ -57,6 +61,10 @@ done
 command -v aws >/dev/null 2>&1 || { echo "❌ Error: AWS CLI not found. Install it and run 'aws configure --profile <name>' first."; exit 1; }
 if [ -z "$PROFILE" ]; then
   echo "❌ Error: --profile is required. This script intentionally never uses the ambient [default] AWS profile."
+  usage
+fi
+if [ -z "$REGION" ] || [ -z "$INSTANCE_TYPE" ] || [ -z "$NAME_TAG" ] || [ -z "$KEY_NAME" ]; then
+  echo "❌ Error: --region, --instance-type, --name-tag, and --key-name are all required."
   usage
 fi
 export AWS_PROFILE="$PROFILE"

@@ -2,6 +2,15 @@
 set -euo pipefail
 
 LOG_TAG="GatewayWatchdog"
+# The local port lfr-tunneld binds to. This has no default -- it must be set
+# via the LFT_BACKEND_PORT environment variable (declared in the systemd
+# unit's Environment= line, filled in by whichever setup script installs
+# this watchdog with the actual deployment's port).
+if [ -z "${LFT_BACKEND_PORT:-}" ]; then
+    echo "[$(date -u +'%Y-%m-%dT%H:%M:%SZ')] [${LOG_TAG}] [ERROR] LFT_BACKEND_PORT is not set -- check the gateway-watchdog.service Environment= line." >&2
+    exit 1
+fi
+BACKEND_PORT="${LFT_BACKEND_PORT}"
 
 log_info() {
     echo "[$(date -u +'%Y-%m-%dT%H:%M:%SZ')] [${LOG_TAG}] [INFO] $1"
@@ -51,9 +60,9 @@ if [ "${HEALED}" -eq 1 ]; then
 fi
 
 # 2. Check HTTP status of local lfr-tunneld daemon
-TUNNEL_HEALTH_URL="http://127.0.0.1:8080/api/version"
+TUNNEL_HEALTH_URL="http://127.0.0.1:${BACKEND_PORT}/api/version"
 if ! curl -sf --connect-timeout 5 "${TUNNEL_HEALTH_URL}" > /dev/null; then
-    log_error "Liferay Tunnel Daemon on port 8080 is not responding! Attempting restart..."
+    log_error "Liferay Tunnel Daemon on port ${BACKEND_PORT} is not responding! Attempting restart..."
     sudo systemctl restart lfr-tunneld
     sleep 2
     if curl -sf "${TUNNEL_HEALTH_URL}" > /dev/null; then

@@ -5,22 +5,29 @@
 # any provider — the existing production VPS or a new AWS/other-cloud instance alike.
 set -e
 
-SSH_USER="ubuntu"
+# This is a generic, reusable script -- it carries no default values of its
+# own. Every parameter must be supplied explicitly by the caller (a
+# Liferay-specific wrapper, or you, the operator), which is the only place
+# that actually knows the right values for a given deployment.
+SSH_USER=""
 DOMAIN=""
 ADMIN_EMAIL=""
 SSH_KEY_ARG=""
+KEY_PATH=""
 VPS_IP=""
 CONFIG_FILE=""
+PORT=""
 
 usage() {
-  echo "Usage: $0 -s <vps_ip> -d <domain> -f <server-config.yaml path> [-i <identity_file>] [-u <ssh_user>] [-e <admin_email>]"
+  echo "Usage: $0 -s <vps_ip> -d <domain> -f <server-config.yaml path> -i <identity_file> -u <ssh_user> -e <admin_email> -p <port>"
   echo "  -s: VPS/EC2 public IP address (required)"
   echo "  -d: Base domain for the control plane, e.g. aws-central.lfr-demo.se (required)."
   echo "      A wildcard cert for *.<domain> is requested alongside it."
   echo "  -f: Local path to a pre-built server-config.yaml to upload (required)"
-  echo "  -i: Path to SSH private key file (optional)"
-  echo "  -u: SSH username (default: ubuntu)"
-  echo "  -e: Admin/contact email for Let's Encrypt registration (optional)"
+  echo "  -i: Path to SSH private key file (required)"
+  echo "  -u: SSH username (required)"
+  echo "  -e: Admin/contact email for Let's Encrypt registration (required)"
+  echo "  -p: Local port lfr-tunneld binds to -- must match the uploaded server-config.yaml (required)"
   echo ""
   echo "PREREQUISITE: place your real Cloudflare API token in /etc/letsencrypt/cloudflare.ini"
   echo "on the target server YOURSELF before running this script (see setup_guide.md §3.2):"
@@ -31,7 +38,7 @@ usage() {
   exit 1
 }
 
-while getopts "s:d:f:i:u:e:" opt; do
+while getopts "s:d:f:i:u:e:p:" opt; do
   case $opt in
     s) VPS_IP="$OPTARG" ;;
     d) DOMAIN="$OPTARG" ;;
@@ -47,12 +54,14 @@ while getopts "s:d:f:i:u:e:" opt; do
       ;;
     u) SSH_USER="$OPTARG" ;;
     e) ADMIN_EMAIL="$OPTARG" ;;
+    p) PORT="$OPTARG" ;;
     *) usage ;;
   esac
 done
 
-if [ -z "$VPS_IP" ] || [ -z "$DOMAIN" ] || [ -z "$CONFIG_FILE" ]; then
-  echo "❌ Error: -s (IP), -d (domain), and -f (server-config.yaml path) are all required."
+if [ -z "$VPS_IP" ] || [ -z "$DOMAIN" ] || [ -z "$CONFIG_FILE" ] || [ -z "$KEY_PATH" ] || \
+   [ -z "$SSH_USER" ] || [ -z "$ADMIN_EMAIL" ] || [ -z "$PORT" ]; then
+  echo "❌ Error: -s, -d, -f, -i, -u, -e, and -p are all required."
   usage
 fi
 if [ ! -f "$CONFIG_FILE" ]; then
@@ -90,16 +99,12 @@ REMOTE_SSH
 echo "=========================================================="
 echo "=> Provisioning Wildcard SSL Certificate for $DOMAIN & *.$DOMAIN"
 echo "=========================================================="
-CERTBOT_EMAIL_ARG="--register-unsafely-without-email"
-if [ -n "$ADMIN_EMAIL" ]; then
-  CERTBOT_EMAIL_ARG="-m $ADMIN_EMAIL"
-fi
 ssh $SSH_KEY_ARG $SSH_USER@$VPS_IP "sudo certbot certonly \
   --dns-cloudflare \
   --dns-cloudflare-credentials /etc/letsencrypt/cloudflare.ini \
   --agree-tos \
   --non-interactive \
-  $CERTBOT_EMAIL_ARG \
+  -m $ADMIN_EMAIL \
   -d '$DOMAIN' \
   -d '*.$DOMAIN'"
 
@@ -136,7 +141,7 @@ server {
     ssl_dhparam /etc/letsencrypt/ssl-dhparams.pem;
 
     location / {
-        proxy_pass http://127.0.0.1:8080;
+        proxy_pass http://127.0.0.1:$PORT;
         proxy_http_version 1.1;
         proxy_set_header Upgrade \$http_upgrade;
         proxy_set_header Connection \$connection_upgrade;
@@ -148,7 +153,7 @@ server {
     }
 
     location /tunnel {
-        proxy_pass http://127.0.0.1:8080;
+        proxy_pass http://127.0.0.1:$PORT;
         proxy_http_version 1.1;
         proxy_set_header Upgrade \$http_upgrade;
         proxy_set_header Connection \$connection_upgrade;
@@ -171,7 +176,7 @@ server {
     ssl_dhparam /etc/letsencrypt/ssl-dhparams.pem;
 
     location / {
-        proxy_pass http://127.0.0.1:8080;
+        proxy_pass http://127.0.0.1:$PORT;
         proxy_http_version 1.1;
         proxy_set_header Upgrade \$http_upgrade;
         proxy_set_header Connection \$connection_upgrade;
@@ -203,11 +208,19 @@ scp $SSH_KEY_ARG -r resources/server/error_pages $SSH_USER@$VPS_IP:/home/$SSH_US
 echo "=> Uploading static assets..."
 scp $SSH_KEY_ARG -r pkg/server/static $SSH_USER@$VPS_IP:/home/$SSH_USER/
 
-# 7. Upload self-healing watchdog and Nginx auto-restart override
+# 7. Upload self-healing watchdog and Nginx auto-restart override. gateway-watchdog.sh
+#    itself has no default port -- it requires LFT_BACKEND_PORT to be set, so it's
+#    uploaded unmodified; the systemd unit's placeholder env var is what actually
+#    supplies this deployment's -p value.
 echo "=> Uploading watchdog and systemd overrides..."
 scp $SSH_KEY_ARG scripts/common/nginx-override.conf $SSH_USER@$VPS_IP:/home/$SSH_USER/nginx-override.conf
 scp $SSH_KEY_ARG scripts/common/gateway-watchdog.sh $SSH_USER@$VPS_IP:/home/$SSH_USER/gateway-watchdog.sh
-scp $SSH_KEY_ARG scripts/common/gateway-watchdog.service scripts/common/gateway-watchdog.timer $SSH_USER@$VPS_IP:/home/$SSH_USER/
+
+sed "s/__BACKEND_PORT__/$PORT/" scripts/common/gateway-watchdog.service > /tmp/gateway-watchdog-central.service
+scp $SSH_KEY_ARG /tmp/gateway-watchdog-central.service $SSH_USER@$VPS_IP:/home/$SSH_USER/gateway-watchdog.service
+rm -f /tmp/gateway-watchdog-central.service
+
+scp $SSH_KEY_ARG scripts/common/gateway-watchdog.timer $SSH_USER@$VPS_IP:/home/$SSH_USER/
 
 # 8. Remotely execute setup and service configuration
 echo "=> Registering services and securing files on VPS..."

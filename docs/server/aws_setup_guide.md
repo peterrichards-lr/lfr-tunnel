@@ -43,9 +43,9 @@ differently or don't require at all, most importantly the Elastic IP step below.
 Launch an instance using the standard **Canonical Ubuntu Server 22.04 LTS** or
 **24.04 LTS** AMI — the same OS versions required by
 [`setup_guide.md` §2](setup_guide.md#2-vps-server-setup--security-hardening). Using the
-official Canonical AMI keeps the default SSH user as `ubuntu`, which matches the default
-already hardcoded in `scripts/common/setup-edge-vps.sh` (`SSH_USER="ubuntu"`) — no extra flags
-needed if you use `scripts/common/provision-aws-ec2.sh` (§6) or that script directly.
+official Canonical AMI keeps the default SSH user as `ubuntu` — pass `-u ubuntu` to
+`scripts/common/setup-edge-vps.sh` (it has no default of its own; every flag is required)
+if you use `scripts/common/provision-aws-ec2.sh` (§6) or that script directly.
 
 For instance sizing, `t3.micro` (2 vCPU burstable, 1GB RAM) is a safe default for either
 role. `t3.nano` can run a lightweight edge node (stateless, no SQLite DB, no Postfix) but
@@ -162,15 +162,15 @@ Once the instance is running, has an associated Elastic IP, and you can SSH into
   [`setup_guide.md` §2.1](setup_guide.md#21-basic-os--package-updates) onward — nothing
   else in that guide is AWS-specific.
 - **Regional edge node**: continue with [`edge_setup_guide.md`](edge_setup_guide.md), or
-  run `scripts/common/setup-edge-vps.sh -s <elastic-ip> -i ~/.ssh/lfr-tunnel-gateway.pem ...`
-  directly — it already defaults to the `ubuntu` SSH user.
+  run `scripts/common/setup-edge-vps.sh -s <elastic-ip> -i ~/.ssh/lfr-tunnel-gateway.pem -u ubuntu ...`
+  directly (the Canonical AMI's default SSH user).
 
 `scripts/common/provision-aws-ec2.sh` automates steps 2–5 above (key pair, security group,
 instance launch, Elastic IP) and prints the resulting IP and key path in a form ready to
 pass straight to `scripts/common/setup-edge-vps.sh` or `lfr-tunnel-ops`'s `-i` flag:
 
 ```bash
-./scripts/common/provision-aws-ec2.sh --profile lfr-tunnel --region us-east-1 --name-tag my-gateway --role central
+./scripts/common/provision-aws-ec2.sh --profile lfr-tunnel --region us-east-1 --instance-type t3.micro --name-tag my-gateway --key-name my-gateway --role central
 ```
 
 ---
@@ -189,8 +189,9 @@ entirely.
   used as the example throughout
   [`edge_setup_guide.md` §1](edge_setup_guide.md#1-architectural-overview). Regional edge
   nodes hold no persistent data and can be provisioned wherever latency dictates (e.g.
-  `us-east-1` for a US edge node) — always pass `--region` explicitly to
-  `scripts/common/provision-aws-ec2.sh` rather than relying on its generic `us-east-1` default.
+  `us-east-1` for a US edge node) — `--region` is always required by
+  `scripts/common/provision-aws-ec2.sh` (it has no default), so pass the right region explicitly
+  for each node you provision.
 - Prefer `t3.micro` for the central control plane; `t3.nano` is acceptable for
   low-traffic edge regions where cost matters more than headroom.
 - Tag every resource (instance, security group, Elastic IP) with `Project=lfr-tunnel`,
@@ -262,7 +263,7 @@ maintains AAAA records and folds the IPv6 address into the SPF record whenever o
 present. To preserve that on AWS, pass `--ipv6` to `provision-aws-ec2.sh`:
 
 ```bash
-./scripts/common/provision-aws-ec2.sh --profile lfr-tunnel --region eu-west-1 --name-tag my-gateway --role central --ipv6
+./scripts/common/provision-aws-ec2.sh --profile lfr-tunnel --region eu-west-1 --instance-type t3.micro --name-tag my-gateway --key-name my-gateway --role central --ipv6
 ```
 
 This is **opt-in, not the default** — unlike the rest of what the script does, it

@@ -212,9 +212,16 @@ entirely.
     console-side aggregation across every region's endpoint, not a single API-level
     group.
   - **For a named Resource Group per region** (useful if you're already working within
-    one region's console), create a same-named `lfr-tunnel` group in each region you
-    provision into — `scripts/provision-aws-ec2.sh` does not do this automatically, so
-    run `aws resource-groups create-group` once per region if you want it.
+    one region's console), create a **region-suffixed** group name (e.g.
+    `lfr-tunnel-eu-west-1`, `lfr-tunnel-us-east-2`) in each region you provision into —
+    do **not** reuse the identical name `lfr-tunnel` across regions: a Resource Group's
+    ARN embeds its region (`arn:aws:resource-groups:<region>:...:group/<name>`), and
+    same-named groups in different regions are otherwise indistinguishable when
+    switching `--region` context, which surfaces as a confusing "Region in ARN not
+    valid" error the moment a group's ARN from one region is used against another.
+    `scripts/provision-aws-ec2.sh` does not create these automatically, so run
+    `aws resource-groups create-group --region <region> --name lfr-tunnel-<region> ...`
+    once per region if you want it.
   Pass `--role central` or `--role edge` to `provision-aws-ec2.sh` to additionally tag
   each instance's role, so either view can still be filtered (e.g. "edge nodes only").
 - Set up an [AWS Budget](https://console.aws.amazon.com/billing/home#/budgets) alert per

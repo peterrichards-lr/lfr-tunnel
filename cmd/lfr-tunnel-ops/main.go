@@ -17,6 +17,7 @@ func printUsage() {
 	fmt.Println("  deploy      Deploy server changes to the VPS")
 	fmt.Println("  maintenance Enable or disable maintenance mode on the VPS")
 	fmt.Println("  diagnose    Run diagnostic checks on the gateway VPS")
+	fmt.Println("  dns         Reconcile DNS records (Cloudflare or Route53) against a YAML spec")
 	fmt.Println("  help        Print this help message")
 	fmt.Println("\nUse 'lfr-tunnel-ops <command> -help' for more information about a command.")
 }
@@ -43,6 +44,8 @@ func main() {
 		ops.MaintenanceCommand(args)
 	case "diagnose":
 		ops.DiagnoseCommand(args)
+	case "dns":
+		ops.DnsCommand(args)
 	case "help", "-h", "--help":
 		printUsage()
 	default:

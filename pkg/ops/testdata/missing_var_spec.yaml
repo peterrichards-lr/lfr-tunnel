@@ -1,0 +1,7 @@
+domains:
+  - zone: example.com
+    records:
+      - name: "@"
+        type: A
+        value: "${UNDEFINED_VAR}"
+        ttl: 120

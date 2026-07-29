@@ -1,0 +1,38 @@
+# Example DNS spec for `lfr-tunnel-ops dns plan|apply -spec <this file>`.
+#
+# This is a generic reference for ANY self-hoster of this project -- it is
+# not tied to any particular provider (Cloudflare, Route53, or anything
+# else the tool grows adapters for later) and is loaded the same way
+# regardless of which -provider you point it at.
+#
+# ${IPV4} / ${IPV6} are placeholders substituted at load time from the
+# -ipv4/-ipv6 flags (or -detect-ip, run from your server, never your laptop).
+#
+# Replace "example.com" and the IPs below with your own domain and server
+# address(es) to get started.
+
+domains:
+  - zone: example.com
+    records:
+      # Root domain pointing at the gateway VPS.
+      - {name: "@", type: A, value: "${IPV4}", ttl: 120}
+      - {name: "@", type: AAAA, value: "${IPV6}", ttl: 120}
+
+      # Wildcard for developer tunnel subdomains (e.g. alice.example.com).
+      - {name: "*", type: A, value: "${IPV4}", ttl: 120}
+      - {name: "*", type: AAAA, value: "${IPV6}", ttl: 120}
+
+      # `tunnel` and `portal` need their OWN explicit A/AAAA records, not
+      # just the wildcard above: RFC 4592 means any explicit record on a
+      # subdomain (even an unrelated one) deactivates the wildcard for that
+      # exact prefix, so these must be defined alongside it, not instead of it.
+      - {name: tunnel, type: A, value: "${IPV4}", ttl: 120}
+      - {name: tunnel, type: AAAA, value: "${IPV6}", ttl: 120}
+      - {name: portal, type: A, value: "${IPV4}", ttl: 120}
+      - {name: portal, type: AAAA, value: "${IPV6}", ttl: 120}
+
+      # SPF authorizing this server to send mail as this domain.
+      - {name: "@", type: TXT, value: "v=spf1 ip4:${IPV4} ip6:${IPV6} -all", ttl: 120}
+
+      # DMARC: reject anything that fails alignment.
+      - {name: _dmarc, type: TXT, value: "v=DMARC1; p=reject; sp=reject; adkim=s; aspf=s;", ttl: 120}

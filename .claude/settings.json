@@ -1,0 +1,16 @@
+{
+  "permissions": {
+    "deny": [
+      "Bash(go run ./cmd/lfr-tunnel *)",
+      "Bash(./bin/lfr-tunnel *)",
+      "Bash(bin/lfr-tunnel *)",
+      "Bash(lfr-tunnel *)",
+      "Bash(./lfr-tunnel *)",
+      "Bash(./lfr-tunnel.sh *)",
+      "Bash(lfr-tunnel.sh *)",
+      "Bash(./lfr-tunnel.bat *)",
+      "Bash(lfr-tunnel.bat *)",
+      "Bash(go test*)"
+    ]
+  }
+}

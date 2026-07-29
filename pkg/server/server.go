@@ -482,6 +482,25 @@ func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if isControl {
+		// Respond to capability-discovery OPTIONS requests on the root routing
+		// chain directly, rather than letting them fall through to the data-plane
+		// ProxyHandler (which has no lease for a control-domain host and would
+		// return 502). Unlike HEAD, OPTIONS does not share GET's response body
+		// contract, so it gets its own empty-body reply instead of reusing the
+		// GET/HEAD branches below.
+		if r.Method == http.MethodOptions {
+			p := r.URL.Path
+			isRootChainPath := p == "/" || p == "/admin" || p == "/portal" ||
+				p == "/favicon.ico" || p == "/robots.txt" ||
+				p == "/portal/" || p == "/admin/" || p == "/setup/" || p == "/privacy/" || p == "/cookies/" ||
+				strings.HasPrefix(p, "/portalv2")
+			if isRootChainPath {
+				w.Header().Set("Allow", "GET, HEAD, OPTIONS")
+				w.WriteHeader(http.StatusNoContent)
+				return
+			}
+		}
+
 		// Normalize trailing slashes on public control plane pages
 		if r.Method == http.MethodGet || r.Method == http.MethodHead {
 			p := r.URL.Path

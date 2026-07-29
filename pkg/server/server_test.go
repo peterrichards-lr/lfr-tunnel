@@ -3053,6 +3053,51 @@ func TestServer_HeadRequestsToRootChain(t *testing.T) {
 	}
 }
 
+// TestServer_OptionsRequestsToRootChain verifies the fix for OPTIONS requests to
+// the control plane's root-path routing chain falling through to the data-plane
+// ProxyHandler and returning 502 (Closes #854, a follow-up to #847's HEAD fix).
+// Unlike HEAD, OPTIONS does not share GET's body contract, so it should get a
+// 204 No Content with an Allow header rather than the page content GET/HEAD get.
+func TestServer_OptionsRequestsToRootChain(t *testing.T) {
+	cfg := &config.ServerConfig{
+		Domains:                []string{"example.com"},
+		DisableBackupScheduler: true,
+	}
+	cfg.DBPath = filepath.Join(t.TempDir(), "test.db")
+
+	srv, err := NewServer(cfg)
+	if err != nil {
+		t.Fatalf("failed to create server: %v", err)
+	}
+	defer func() {
+		time.Sleep(50 * time.Millisecond)
+		srv.Stop()
+	}()
+
+	paths := []string{
+		"/", "/admin", "/portal", "/favicon.ico", "/robots.txt", "/portalv2",
+		"/portal/", "/admin/", "/setup/", "/privacy/", "/cookies/",
+	}
+
+	for _, p := range paths {
+		req := httptest.NewRequest(http.MethodOptions, "http://example.com"+p, nil)
+		req.Host = "example.com"
+		rec := httptest.NewRecorder()
+
+		srv.ServeHTTP(rec, req)
+
+		if rec.Code != http.StatusNoContent {
+			t.Errorf("OPTIONS %s: expected 204 No Content, got %d", p, rec.Code)
+		}
+		if allow := rec.Header().Get("Allow"); allow != "GET, HEAD, OPTIONS" {
+			t.Errorf("OPTIONS %s: expected Allow header %q, got %q", p, "GET, HEAD, OPTIONS", allow)
+		}
+		if rec.Body.Len() != 0 {
+			t.Errorf("OPTIONS %s: expected empty body, got %q", p, rec.Body.String())
+		}
+	}
+}
+
 func TestInstallScriptServerURLResolution(t *testing.T) {
 	cfg := &config.ServerConfig{
 		Domains:                []string{"custom-gateway.org", "ps-gateway.org"},

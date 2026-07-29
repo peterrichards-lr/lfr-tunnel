@@ -214,7 +214,7 @@ func fromRoute53Name(zoneDomain, r53Name string) string {
 	if strings.EqualFold(trimmed, zoneTrimmed) {
 		return "@"
 	}
-	return strings.TrimSuffix(trimmed, "."+zoneTrimmed)
+	return TrimSuffixFold(trimmed, "."+zoneTrimmed)
 }
 
 func ensureTrailingDot(host string) string {

@@ -204,7 +204,7 @@ func fromCloudflareName(zoneDomain, cfName string) string {
 	if strings.EqualFold(cfName, zoneDomain) {
 		return "@"
 	}
-	return strings.TrimSuffix(cfName, "."+zoneDomain)
+	return TrimSuffixFold(cfName, "."+zoneDomain)
 }
 
 // toCloudflareContent and fromCloudflareContent handle the one wire-format

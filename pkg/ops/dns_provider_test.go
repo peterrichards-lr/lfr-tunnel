@@ -111,6 +111,17 @@ func TestReconcile_IgnoresUnknownExistingRecords(t *testing.T) {
 	}
 }
 
+func TestReconcile_MatchesRecordNameCaseInsensitively(t *testing.T) {
+	desired := []Record{{Name: "Tunnel", Type: RecordTypeA, Value: "1.2.3.4", TTL: 120}}
+	current := []ProviderRecord{{Record: Record{Name: "tunnel", Type: RecordTypeA, Value: "1.2.3.4", TTL: 120}}}
+
+	changes := Reconcile(desired, current, "cloudflare")
+
+	if len(changes) != 1 || changes[0].Action != ActionNoop {
+		t.Fatalf("expected a case-differing name to still match existing state, got %+v", changes)
+	}
+}
+
 func TestReconcile_DifferentTypeSameNameNotMatched(t *testing.T) {
 	desired := []Record{{Name: "@", Type: RecordTypeAAAA, Value: "::1", TTL: 120}}
 	current := []ProviderRecord{{Record: Record{Name: "@", Type: RecordTypeA, Value: "1.2.3.4", TTL: 120}}}

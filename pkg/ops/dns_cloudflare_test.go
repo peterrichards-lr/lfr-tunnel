@@ -95,6 +95,28 @@ func TestCloudflareProvider_ListRecords_PaginatesAndFiltersNSAndSOA(t *testing.T
 	}
 }
 
+func TestCloudflareProvider_ListRecords_NameDerivationIsCaseInsensitive(t *testing.T) {
+	// DNS names are case-insensitive. If Cloudflare (or the caller's zone
+	// domain) ever differs in case from what's expected, the suffix-trim in
+	// fromCloudflareName must still correctly derive the zone-relative name
+	// rather than leaving it un-trimmed.
+	client := newTestCloudflareClient(t, func(w http.ResponseWriter, r *http.Request) {
+		body := `{"success":true,"errors":[],"result":[
+			{"id":"r1","type":"A","name":"Tunnel.Example.COM","content":"1.2.3.4","ttl":120,"proxied":false}
+		],"result_info":{"page":1,"total_pages":1}}`
+		_, _ = fmt.Fprint(w, body) //nolint:errcheck
+	})
+	provider := &CloudflareProvider{Client: client}
+
+	records, err := provider.ListRecords(context.Background(), ZoneRef{Domain: "example.com", ID: "zone-123"})
+	if err != nil {
+		t.Fatalf("ListRecords failed: %v", err)
+	}
+	if len(records) != 1 || records[0].Name != "Tunnel" {
+		t.Fatalf("expected the zone suffix to be stripped case-insensitively, leaving 'Tunnel', got %+v", records)
+	}
+}
+
 func TestCloudflareProvider_TXTContentIsQuotedOnWriteAndUnquotedOnRead(t *testing.T) {
 	// Cloudflare stores/returns TXT content WITH literal double quotes
 	// embedded in the string itself (confirmed against the live production

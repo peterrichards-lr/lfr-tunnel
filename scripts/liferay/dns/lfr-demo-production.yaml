@@ -14,8 +14,12 @@
 # never invent a value here, and never resolve it via -detect-ip from an
 # operator laptop (see the -detect-ip flag's own warning).
 #
-# Mirrors the live Cloudflare zone as of 2026-07-29 (post #857 SES DKIM/SPF
-# additions), with deliberate deviations from a byte-for-byte copy:
+# Mirrored the live Cloudflare zone as of 2026-07-29 (post #857 SES DKIM/SPF
+# additions); the SPF records were then edited ahead of live Cloudflare on
+# 2026-07-30 to drop smtp2go/ip4/ip6 now that the #857 SES cutover is confirmed
+# working in production -- this file is the intended target, not yet re-mirrored
+# from Cloudflare. Run `dns apply` (see below) to push it. Deviations from a
+# byte-for-byte copy of Cloudflare, otherwise:
 #   - The lfr-demo.online DMARC record's Cloudflare-specific
 #     `rua=mailto:...@dmarc-reports.cloudflare.net;` reporting address is
 #     dropped for both domains: it becomes a dead, non-deliverable address
@@ -48,11 +52,10 @@ domains:
       # #858's cutover.
       - {name: status, type: CNAME, value: statuspage.betteruptime.com, ttl: 120}
 
-      # #857 transitional SPF: keeps the original Postfix IPs (still the MX/
-      # receiving host) and smtp2go (today's live sender) while amazonses.com
-      # is added ahead of the SES cutover. Remove ip4/ip6 and smtp2go once
-      # LFT_SMTP_* is pointed at SES in production and delivery is confirmed.
-      - {name: "@", type: TXT, value: "v=spf1 ip4:${IPV4} ip6:${IPV6} include:spf.smtp2go.com include:amazonses.com -all", ttl: 120}
+      # #857 SES cutover complete (2026-07-30): LFT_SMTP_* now points at SES in
+      # production and delivery is confirmed, so ip4/ip6 (the old Postfix-as-sender
+      # authorization) and smtp2go are dropped -- amazonses.com is the only sender now.
+      - {name: "@", type: TXT, value: "v=spf1 include:amazonses.com -all", ttl: 120}
       - {name: _dmarc, type: TXT, value: "v=DMARC1; p=reject; sp=reject; adkim=s; aspf=s;", ttl: 120}
 
       # MX intentionally points at tunnel.lfr-demo.se for BOTH zones -- a
@@ -101,9 +104,8 @@ domains:
       - {name: portal, type: A, value: "${IPV4}", ttl: 120, cloudflare: {proxied: false}}
       - {name: portal, type: AAAA, value: "${IPV6}", ttl: 120, cloudflare: {proxied: false}}
 
-      # #857 transitional SPF -- see the lfr-demo.se record above for the
-      # removal plan once SES cutover is confirmed.
-      - {name: "@", type: TXT, value: "v=spf1 ip4:${IPV4} ip6:${IPV6} include:spf.smtp2go.com include:amazonses.com -all", ttl: 120}
+      # #857 SES cutover complete (2026-07-30) -- see the lfr-demo.se record above.
+      - {name: "@", type: TXT, value: "v=spf1 include:amazonses.com -all", ttl: 120}
       - {name: _dmarc, type: TXT, value: "v=DMARC1; p=reject; sp=reject; adkim=s; aspf=s;", ttl: 120}
 
       - {name: "@", type: MX, value: tunnel.lfr-demo.se, priority: 10, ttl: 120}

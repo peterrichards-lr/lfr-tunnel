@@ -407,6 +407,9 @@ allowed_email_domains:
 # below for a walkthrough of both a self-hosted and a managed option.
 # Note: Use your domain here instead of 127.0.0.1 to securely pass TLS verification
 # with your Let's Encrypt certificates.
+# If your relay needs a username/password (e.g. SES -- see §4.4.2), leave those two
+# fields blank here and set LFT_SMTP_USERNAME/LFT_SMTP_PASSWORD instead, so the
+# credentials never sit in this file at all. See §4.5's secrets.env for how.
 smtp_server:
   host: "yourdomain.com"
   port: 25
@@ -426,6 +429,9 @@ Apply restricted file permissions:
 sudo chown -R lfr-tunnel:lfr-tunnel /etc/lfr-tunneld
 sudo chmod 700 /etc/lfr-tunneld
 sudo chmod 600 /etc/lfr-tunneld/server-config.yaml
+# Note: if you later add /etc/lfr-tunneld/secrets.env (§4.5), don't re-run the
+# recursive chown above afterward -- it would flip that file from root:root back to
+# lfr-tunnel:lfr-tunnel, which still works but drops the "root-only" property.
 ```
 
 ### 4.4. Choosing an SMTP Relay
@@ -467,18 +473,45 @@ aws sesv2 get-email-identity --email-identity yourdomain.com --region us-east-1 
 ```
 3. SES accounts start in a **sandbox** (200 messages/day, verified recipients only) — request production access from the SES console's "Account dashboard" before relying on it for real user registrations/magic links.
 4. Create an IAM user/role scoped to send-only (`ses:SendEmail`, `ses:SendRawEmail`), then generate SES SMTP credentials for it from the SES console's "SMTP Settings" page (it performs the IAM secret key → SMTP password conversion for you).
-5. Point `smtp_server` at SES's regional SMTP endpoint:
+5. Point `smtp_server` at SES's regional SMTP endpoint, but **don't put the SMTP username/password in `server-config.yaml`** — set them via the `secrets.env` mechanism in §4.5 instead, so they never sit in the main config file (which gets read, backed up, and copied around far more than a dedicated secrets file):
 ```yaml
 smtp_server:
   host: "email-smtp.us-east-1.amazonaws.com"
   port: 587
-  username: "<SES SMTP username>"
-  password: "<SES SMTP password>"
+  username: ""
+  password: ""
   from_address: "Your App <noreply@yourdomain.com>"
+```
+```bash
+# /etc/lfr-tunneld/secrets.env -- see §4.5 for permissions/systemd wiring
+LFT_SMTP_USERNAME=<SES SMTP username>
+LFT_SMTP_PASSWORD=<SES SMTP password>
 ```
 6. Add `include:amazonses.com` to your domain's SPF TXT record so receiving mail servers see SES's sending IPs as authorized alongside DKIM.
 
 ### 4.5. systemd Service Setup
+
+If your SMTP relay needs a username/password (e.g. SES — see §4.4.2's step 5), create a
+root-only secrets file instead of putting them in `server-config.yaml`:
+```bash
+sudo touch /etc/lfr-tunneld/secrets.env
+sudo chown root:root /etc/lfr-tunneld/secrets.env
+sudo chmod 600 /etc/lfr-tunneld/secrets.env
+sudo nano /etc/lfr-tunneld/secrets.env
+```
+```bash
+# /etc/lfr-tunneld/secrets.env
+LFT_SMTP_USERNAME=<SES SMTP username>
+LFT_SMTP_PASSWORD=<SES SMTP password>
+```
+`systemd`'s `EnvironmentFile=` directive below is read by the systemd manager itself
+(running as root) before it execs and drops to `User=lfr-tunnel`, so `600 root:root` is
+sufficient — the service process never needs its own read access to the file, and
+nothing in `/etc/lfr-tunneld` besides this one file needs to hold the credentials.
+This is the same "restricted secrets file" pattern used for client-side tokens in
+[`getting_started.md`'s Option C](getting_started.md#option-c-restricted-secrets-file-advanced--secure),
+applied at the systemd layer instead of a shell profile.
+
 Create a systemd unit file at `/etc/systemd/system/lfr-tunneld.service`:
 ```bash
 sudo nano /etc/systemd/system/lfr-tunneld.service
@@ -495,6 +528,7 @@ Type=simple
 User=lfr-tunnel
 Group=lfr-tunnel
 WorkingDirectory=/etc/lfr-tunneld
+EnvironmentFile=-/etc/lfr-tunneld/secrets.env
 ExecStart=/usr/local/bin/lfr-tunneld --config /etc/lfr-tunneld/server-config.yaml
 Restart=on-failure
 RestartSec=5s
@@ -511,6 +545,10 @@ ReadWritePaths=/etc/lfr-tunneld
 [Install]
 WantedBy=multi-user.target
 ```
+The leading `-` on `EnvironmentFile=-/etc/lfr-tunneld/secrets.env` makes it optional —
+deployments that don't need any `LFT_*` secret overrides (e.g. a local Postfix relay
+with no auth) can skip creating the file entirely rather than the service failing to
+start over a missing file.
 
 Enable and start the service:
 ```bash
@@ -1131,4 +1169,4 @@ To guarantee that outbound connections originating from the VPS are consistently
 
 <!-- markdownlint-disable MD049 -->
 ---
-*Last Updated: 2026-07-28* | *Last Reviewed: 2026-07-28*
+*Last Updated: 2026-07-30* | *Last Reviewed: 2026-07-30*

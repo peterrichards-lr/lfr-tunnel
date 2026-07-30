@@ -2,7 +2,7 @@
 # scripts/common/deprovision-aws-ec2.sh
 # Tears down what scripts/common/provision-aws-ec2.sh created: releases the Elastic IP,
 # terminates the instance, and removes the security group.
-# See docs/server/aws_setup_guide.md §8.
+# See docs/server/aws_setup_guide.md §9.
 set -e
 
 # This is a generic, reusable script -- it carries no default values of its
@@ -26,7 +26,7 @@ usage() {
   echo ""
   echo "!! WARNING: This terminates the EC2 instance and releases its Elastic IP. If DNS records"
   echo "!! (Cloudflare A records) point at that IP, they WILL break until you re-provision and update"
-  echo "!! DNS to the new IP. See docs/server/aws_setup_guide.md §8."
+  echo "!! DNS to the new IP. See docs/server/aws_setup_guide.md §9."
   exit 1
 }
 

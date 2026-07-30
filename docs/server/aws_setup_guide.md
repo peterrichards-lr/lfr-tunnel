@@ -230,7 +230,53 @@ entirely.
 
 ---
 
-## 8. Tearing Down / Retesting
+## 8. Cost Dashboard
+
+`scripts/common/setup-aws-cost-dashboard.sh` automates the two API-reachable pieces of
+the cost-visibility setup mentioned in §7: activating the `Project`/`Role`/`Owner`/
+`CostCenter` tags as **Cost Allocation Tags**, and creating an **AWS Budget** scoped to
+`tag:Project=<project-tag>` with email alerts at a configurable percentage of actual
+spend and 100% of forecasted spend.
+
+```bash
+./scripts/common/setup-aws-cost-dashboard.sh --profile lfr-tunnel \
+  --monthly-budget-usd 50 --alert-emails you@example.com,other@example.com
+```
+
+> [!NOTE]
+> **Cost Explorer must already be enabled for the account** — a one-time manual toggle
+> under [Billing Preferences](https://console.aws.amazon.com/costmanagement/home#/cost-explorer)
+> with no API equivalent — before any of the above will work. Newly-applied tags also
+> take up to 24h to become discoverable/activatable after their first billed use.
+
+**Including SES sending costs.** Amazon SES's billing line item isn't resource-tagged
+the way EC2 instances/Elastic IPs are, so it can't share the `tag:Project` budget above.
+Pass `--include-ses --ses-monthly-budget-usd <amount>` to also create a second budget
+scoped to `Service=Amazon Simple Email Service`:
+
+```bash
+./scripts/common/setup-aws-cost-dashboard.sh --profile lfr-tunnel \
+  --monthly-budget-usd 50 --alert-emails you@example.com \
+  --include-ses --ses-monthly-budget-usd 10
+```
+
+The one part this script can't automate: Cost Explorer's grouped/filtered **reports**
+have no public creation API, so saving one as a reusable "dashboard" is a manual,
+one-time console step:
+
+1. Open [Cost Explorer](https://console.aws.amazon.com/costmanagement/home#/cost-explorer).
+2. Group by **Tag → Project**; filter **Tag → Project → `<project-tag>`**.
+3. Click **Save as** to bookmark it — this is the persistent dashboard view going
+   forward, reusable across regions since billing data itself isn't region-scoped (unlike
+   the Resource Groups caveat in §7).
+4. If `--include-ses` was used, save a **second** report filtered on
+   **Service → Amazon Simple Email Service** — Cost Explorer ANDs filters across
+   different dimensions, so a single report can't show "tag:Project OR Service:SES"
+   together; two saved reports is the practical equivalent of one combined dashboard.
+
+---
+
+## 9. Tearing Down / Retesting
 
 `scripts/common/deprovision-aws-ec2.sh` is the companion to `provision-aws-ec2.sh`: it releases
 the Elastic IP, terminates the instance, and removes the security group for a given
@@ -256,7 +302,7 @@ both the central gateway and edge nodes (see `--key-name` in §2). Pass
 
 ---
 
-## 9. IPv6 Dual-Stack Support (Optional)
+## 10. IPv6 Dual-Stack Support (Optional)
 
 The existing production VPS is dual-stack — `scripts/liferay/vm6/cloudflare-ddns.sh` actively
 maintains AAAA records and folds the IPv6 address into the SPF record whenever one is
@@ -299,4 +345,4 @@ dual-stack behavior the current production VPS already has.
 
 <!-- markdownlint-disable MD049 -->
 ---
-*Last Updated: 2026-07-28* | *Last Reviewed: 2026-07-28*
+*Last Updated: 2026-07-30* | *Last Reviewed: 2026-07-30*

@@ -52,6 +52,12 @@ role. `t3.nano` can run a lightweight edge node (stateless, no SQLite DB, no Pos
 is undersized for a central control plane running Nginx, `lfr-tunneld`, and a mail relay
 together.
 
+> [!NOTE]
+> **Currently deployed:** both live edge nodes (`edge-us` / `aws-edge-us.lfr-demo.se` and
+> `edge-apac` / `aws-edge-apac.lfr-demo.se`, see `edge_nodes.txt`) run on `t3.micro`.
+> Confirmed via `aws ec2 describe-instances` on 2026-07-30 — instance type isn't recorded
+> anywhere `provision-aws-ec2.sh` writes to, so this note is the only record of it.
+
 ---
 
 ## 2. Key Pair
@@ -230,7 +236,83 @@ entirely.
 
 ---
 
-## 8. Tearing Down / Retesting
+## 8. Cost Dashboard
+
+`scripts/common/setup-aws-cost-dashboard.sh` automates the two API-reachable pieces of
+the cost-visibility setup mentioned in §7: activating the `Project`/`Role`/`Owner`/
+`CostCenter` tags as **Cost Allocation Tags**, and creating an **AWS Budget** scoped to
+`tag:Project=<project-tag>` with email alerts at a configurable percentage of actual
+spend and 100% of forecasted spend.
+
+```bash
+./scripts/common/setup-aws-cost-dashboard.sh --profile lfr-tunnel \
+  --monthly-budget-usd 50 --alert-emails you@example.com,other@example.com
+```
+
+> [!NOTE]
+> **Cost Explorer must already be enabled for the account** — a one-time manual toggle
+> under [Billing Preferences](https://console.aws.amazon.com/costmanagement/home#/cost-explorer)
+> with no API equivalent — before any of the above will work. Newly-applied tags also
+> take up to 24h to become discoverable/activatable after their first billed use.
+
+**Including SES sending costs in the same budget.** Amazon SES's billing line item isn't
+resource-tagged the way EC2 instances/Elastic IPs are, so it can't share the plain
+`tag:Project` filter above. Pass `--include-ses` to fold it into the *same* budget via an
+OR filter expression (`tag:Project=<project-tag> OR Service=Amazon Simple Email Service`),
+so `--monthly-budget-usd` covers everything this project costs as one number, rather than
+tracking infra and SES spend as two separate partial budgets:
+
+```bash
+./scripts/common/setup-aws-cost-dashboard.sh --profile lfr-tunnel \
+  --monthly-budget-usd 50 --alert-emails you@example.com --include-ses
+```
+
+**Non-USD billing.** If the account's billing currency isn't USD, pass `--currency EUR`
+(or whatever ISO code applies) — the `Unit` on the budget must match the account's actual
+billing currency, or the amount/percentage math won't line up with real spend. The
+`--monthly-budget-usd` flag name is historical; the amount you pass is interpreted in
+whatever `--currency` is set to. Some accounts only support USD for Budgets regardless of
+what currency they're actually invoiced in — `CreateBudget` rejects an unsupported
+currency with an explicit `InvalidParameterException` error if so, so this is easy to
+detect and fall back from.
+
+**AWS Organizations member accounts: tag activation may be blocked entirely.** Cost
+Allocation Tags can only be viewed/activated from an organization's payer/management
+account — a member account (even with full Administrator permissions) gets an outright
+Access Denied trying to view them, and this script's tag-activation step will just find
+nothing to activate rather than error. If you don't have payer-account access and the
+account in question is (for now) genuinely dedicated to this project, pass
+`--linked-account <account-id>` instead of relying on `--project-tag`: it scopes the
+budget to that AWS account ID via the `LINKED_ACCOUNT` dimension, which needs no Cost
+Allocation Tag at all and captures everything in the account (EC2 infra and SES together,
+so `--include-ses` isn't needed and is rejected alongside it as redundant):
+
+```bash
+./scripts/common/setup-aws-cost-dashboard.sh --profile lfr-tunnel \
+  --monthly-budget-usd 50 --alert-emails you@example.com --linked-account 123456789012
+```
+
+This is only accurate while the account stays dedicated to the project — once anything
+unrelated starts sharing it, switch back to tag-based filtering (which by then means
+chasing down payer-account access to actually activate the tags).
+
+The one part this script can't automate: Cost Explorer's grouped/filtered **reports**
+have no public creation API, so saving one as a reusable "dashboard" is a manual,
+one-time console step:
+
+1. Open [Cost Explorer](https://console.aws.amazon.com/costmanagement/home#/cost-explorer).
+2. Group by **Tag → Project**; filter **Tag → Project → `<project-tag>`**.
+3. Click **Save as** to bookmark it — this is the persistent dashboard view going
+   forward, reusable across regions since billing data itself isn't region-scoped (unlike
+   the Resource Groups caveat in §7).
+4. If `--include-ses` was used, save a **second** report filtered on
+   **Service → Amazon Simple Email Service** — Cost Explorer ANDs filters across
+   different dimensions, so a single report can't show "tag:Project OR Service:SES"
+   together; two saved reports is the practical equivalent of one combined dashboard.
+
+---
+
+## 9. Tearing Down / Retesting
 
 `scripts/common/deprovision-aws-ec2.sh` is the companion to `provision-aws-ec2.sh`: it releases
 the Elastic IP, terminates the instance, and removes the security group for a given
@@ -256,7 +338,7 @@ both the central gateway and edge nodes (see `--key-name` in §2). Pass
 
 ---
 
-## 9. IPv6 Dual-Stack Support (Optional)
+## 10. IPv6 Dual-Stack Support (Optional)
 
 The existing production VPS is dual-stack — `scripts/liferay/vm6/cloudflare-ddns.sh` actively
 maintains AAAA records and folds the IPv6 address into the SPF record whenever one is
@@ -299,4 +381,4 @@ dual-stack behavior the current production VPS already has.
 
 <!-- markdownlint-disable MD049 -->
 ---
-*Last Updated: 2026-07-28* | *Last Reviewed: 2026-07-28*
+*Last Updated: 2026-07-30* | *Last Reviewed: 2026-07-30*

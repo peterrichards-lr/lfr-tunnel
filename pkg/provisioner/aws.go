@@ -191,8 +191,15 @@ func (b *AWSBackend) GetSchedule(ctx context.Context, nodeID string) (Schedule, 
 		return Schedule{}, fmt.Errorf("parsing %s-start schedule expression: %w", nodeID, err)
 	}
 
+	// A node's schedule is only reported "enabled" if BOTH the stop and start
+	// schedules are actually ENABLED in EventBridge -- not merely that they
+	// exist. This is what lets a specific node be taken off the nightly
+	// schedule (left running or stopped indefinitely under manual control,
+	// per #883/#884) while every other node's schedule keeps firing.
+	enabled := stopSched.State == schedulertypes.ScheduleStateEnabled && startSched.State == schedulertypes.ScheduleStateEnabled
+
 	return Schedule{
-		Enabled:   true,
+		Enabled:   enabled,
 		StopTime:  stopTime,
 		StartTime: startTime,
 		Timezone:  aws.ToString(stopSched.ScheduleExpressionTimezone),
@@ -204,7 +211,10 @@ func (b *AWSBackend) GetSchedule(ctx context.Context, nodeID string) (Schedule, 
 // issue #885's explicit requirement). UpdateSchedule requires the full
 // schedule definition, so each schedule is first fetched via GetSchedule to
 // preserve its existing Target/FlexibleTimeWindow exactly, with only the
-// cron expression and timezone changed.
+// cron expression, timezone, and State (see s.Enabled) changed. Setting
+// Enabled=false disables both the stop and start schedules for this node
+// via EventBridge's own State field -- the schedules keep their configured
+// times, just don't fire, so re-enabling later needs no reconfiguration.
 func (b *AWSBackend) SetSchedule(ctx context.Context, nodeID string, s Schedule) error {
 	target, err := b.target(nodeID)
 	if err != nil {
@@ -212,16 +222,16 @@ func (b *AWSBackend) SetSchedule(ctx context.Context, nodeID string, s Schedule)
 	}
 	client := b.schedulerClients[target.Region]
 
-	if err := b.updateOne(ctx, client, nodeID+"-stop", s.StopTime, s.Timezone); err != nil {
+	if err := b.updateOne(ctx, client, nodeID+"-stop", s.StopTime, s.Timezone, s.Enabled); err != nil {
 		return err
 	}
-	if err := b.updateOne(ctx, client, nodeID+"-start", s.StartTime, s.Timezone); err != nil {
+	if err := b.updateOne(ctx, client, nodeID+"-start", s.StartTime, s.Timezone, s.Enabled); err != nil {
 		return err
 	}
 	return nil
 }
 
-func (b *AWSBackend) updateOne(ctx context.Context, client SchedulerAPI, name, hhmm, timezone string) error {
+func (b *AWSBackend) updateOne(ctx context.Context, client SchedulerAPI, name, hhmm, timezone string, enabled bool) error {
 	current, err := client.GetSchedule(ctx, &scheduler.GetScheduleInput{
 		Name:      aws.String(name),
 		GroupName: aws.String(b.scheduleGroup),
@@ -235,6 +245,11 @@ func (b *AWSBackend) updateOne(ctx context.Context, client SchedulerAPI, name, h
 		return fmt.Errorf("schedule %s: %w", name, err)
 	}
 
+	state := schedulertypes.ScheduleStateDisabled
+	if enabled {
+		state = schedulertypes.ScheduleStateEnabled
+	}
+
 	_, err = client.UpdateSchedule(ctx, &scheduler.UpdateScheduleInput{
 		Name:                       aws.String(name),
 		GroupName:                  aws.String(b.scheduleGroup),
@@ -242,7 +257,7 @@ func (b *AWSBackend) updateOne(ctx context.Context, client SchedulerAPI, name, h
 		ScheduleExpressionTimezone: aws.String(timezone),
 		FlexibleTimeWindow:         current.FlexibleTimeWindow,
 		Target:                     current.Target,
-		State:                      current.State,
+		State:                      state,
 		Description:                current.Description,
 	})
 	if err != nil {

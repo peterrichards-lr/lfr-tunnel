@@ -23,7 +23,6 @@ TIMEZONE=""
 STOP_TIME="00:00"
 START_TIME="08:00"
 SCHEDULE_GROUP="lfr-tunnel-edge-nodes"
-ROLE_NAME="lfr-tunnel-edge-scheduler-role"
 
 usage() {
   echo "Usage: $0 --profile <aws-cli-profile> --region <aws-region> --instance-id <i-xxxx> --name-tag <name> --timezone <IANA-tz> [options]"
@@ -76,7 +75,12 @@ INSTANCE_ARN="arn:aws:ec2:${REGION}:${ACCOUNT_ID}:instance/${INSTANCE_ID}"
 echo "=== Scheduling stop/start for '$NAME_TAG' ($INSTANCE_ID, $TIMEZONE) ==="
 
 # 1. IAM role EventBridge Scheduler assumes to call EC2 Start/StopInstances on our
-#    behalf. Shared across every edge node's schedules -- created once, reused after.
+#    behalf. One dedicated role PER NODE, scoped to only that node's instance ARN --
+#    not a role shared across every edge node -- so a compromised or misconfigured
+#    schedule's execution context can't affect any node but this one. This also
+#    means no merge-with-existing-resources dance: the policy always has exactly
+#    one Resource entry.
+ROLE_NAME="lfr-tunnel-edge-scheduler-${NAME_TAG}-role"
 TRUST_POLICY=$(cat <<EOF
 {
   "Version": "2012-10-17",
@@ -102,35 +106,16 @@ else
 fi
 ROLE_ARN="$(aws iam get-role --role-name "$ROLE_NAME" --query 'Role.Arn' --output text)"
 
-# 2. Inline policy granting Start/StopInstances, scoped to exactly the instance ARNs
-#    we've been asked to schedule so far -- append this instance's ARN if it isn't
-#    already covered, rather than granting account-wide EC2 start/stop rights.
+# 2. Inline policy granting Start/StopInstances on exactly this node's instance ARN.
 POLICY_NAME="lfr-tunnel-edge-scheduler-policy"
-EXISTING_RESOURCES="[]"
-if aws iam get-role-policy --role-name "$ROLE_NAME" --policy-name "$POLICY_NAME" >/dev/null 2>&1; then
-  EXISTING_RESOURCES="$(aws iam get-role-policy --role-name "$ROLE_NAME" --policy-name "$POLICY_NAME" \
-    --query 'PolicyDocument.Statement[0].Resource' --output json)"
-fi
-
-NEW_RESOURCES="$(python3 -c "
-import json
-existing = json.loads('''$EXISTING_RESOURCES''')
-if isinstance(existing, str):
-    existing = [existing]
-arn = '$INSTANCE_ARN'
-if arn not in existing:
-    existing.append(arn)
-print(json.dumps(existing))
-")"
-
-echo "=> Updating IAM policy '$POLICY_NAME' to cover $INSTANCE_ARN..."
+echo "=> Setting IAM policy '$POLICY_NAME' on '$ROLE_NAME' to cover $INSTANCE_ARN..."
 POLICY_DOC=$(cat <<EOF
 {
   "Version": "2012-10-17",
   "Statement": [{
     "Effect": "Allow",
     "Action": ["ec2:StartInstances", "ec2:StopInstances"],
-    "Resource": $NEW_RESOURCES
+    "Resource": ["$INSTANCE_ARN"]
   }]
 }
 EOF
@@ -162,11 +147,17 @@ create_or_update_schedule() {
   local target="{\"Arn\":\"$target_arn\",\"RoleArn\":\"$ROLE_ARN\",\"Input\":\"$escaped_input\"}"
 
   if aws scheduler get-schedule --name "$name" --group-name "$SCHEDULE_GROUP" --region "$REGION" >/dev/null 2>&1; then
-    echo "=> Updating existing schedule '$name' ($hhmm $TIMEZONE)..."
+    # UpdateSchedule is full-replacement, not a partial patch -- omitting --state
+    # here would reset a previously-DISABLED schedule (e.g. one paused via the
+    # portal's #885 toggle) back to ENABLED. Preserve whatever it already is.
+    local existing_state
+    existing_state="$(aws scheduler get-schedule --name "$name" --group-name "$SCHEDULE_GROUP" --region "$REGION" --query 'State' --output text)"
+    echo "=> Updating existing schedule '$name' ($hhmm $TIMEZONE, state: $existing_state)..."
     aws scheduler update-schedule --name "$name" --group-name "$SCHEDULE_GROUP" --region "$REGION" \
       --schedule-expression "$cron" \
       --schedule-expression-timezone "$TIMEZONE" \
       --flexible-time-window '{"Mode": "OFF"}' \
+      --state "$existing_state" \
       --target "$target" >/dev/null
   else
     echo "=> Creating schedule '$name' ($hhmm $TIMEZONE)..."
@@ -186,10 +177,10 @@ echo "=== Done ==="
 echo "Node:       $NAME_TAG ($INSTANCE_ID)"
 echo "Stop:       $STOP_TIME $TIMEZONE daily -> ${NAME_TAG}-stop"
 echo "Start:      $START_TIME $TIMEZONE daily -> ${NAME_TAG}-start"
-echo "IAM role:   $ROLE_ARN (shared across all edge node schedules)"
+echo "IAM role:   $ROLE_ARN (dedicated to this node only)"
 echo ""
 echo "To remove this node's schedule later:"
 echo "  aws scheduler delete-schedule --name ${NAME_TAG}-stop --group-name $SCHEDULE_GROUP --region $REGION --profile $PROFILE"
 echo "  aws scheduler delete-schedule --name ${NAME_TAG}-start --group-name $SCHEDULE_GROUP --region $REGION --profile $PROFILE"
-echo "(the IAM policy's Resource entry for this instance ARN is left in place -- harmless if the"
-echo " instance is later terminated, but remove it manually from '$POLICY_NAME' if you want to tidy up)"
+echo "  aws iam delete-role-policy --role-name $ROLE_NAME --policy-name $POLICY_NAME --profile $PROFILE"
+echo "  aws iam delete-role --role-name $ROLE_NAME --profile $PROFILE"

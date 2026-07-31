@@ -729,6 +729,11 @@
                     <input type="time" id="edge-schedule-start-time" class="input-field">
                     <label style="font-size: 13px; opacity: 0.8;" data-i18n="edge_schedule_timezone">Timezone (IANA)</label>
                     <input type="text" id="edge-schedule-timezone" class="input-field" placeholder="e.g. America/Sao_Paulo">
+                    <label style="display: flex; align-items: center; gap: 8px; margin-top: 12px; font-size: 13px; opacity: 0.8;">
+                        <input type="checkbox" id="edge-schedule-enabled" checked>
+                        <span data-i18n="edge_schedule_enabled">Schedule enabled for this node</span>
+                    </label>
+                    <p style="font-size: 12px; opacity: 0.6; margin-top: 4px;" data-i18n="edge_schedule_disabled_hint">Unchecking this pauses the stop/start schedule for this node only, without affecting other nodes -- it stays under manual control (see the Start/Stop/Restart actions) until re-enabled.</p>
                     <button class="btn btn-primary" onclick="submitEdgeSchedule()" data-i18n="save">Save</button>
                     <button class="btn" onclick="closeEdgeScheduleModal()" data-i18n="cancel">Cancel</button>
                 </div>

@@ -22,6 +22,7 @@ export default function EdgeScheduleModal({ nodeId, onClose, onSaved }: EdgeSche
   const [stopTime, setStopTime] = useState('');
   const [startTime, setStartTime] = useState('');
   const [timezone, setTimezone] = useState('');
+  const [enabled, setEnabled] = useState(true);
 
   useEffect(() => {
     let cancelled = false;
@@ -32,6 +33,7 @@ export default function EdgeScheduleModal({ nodeId, onClose, onSaved }: EdgeSche
         setStopTime(res.data.stop_time || '');
         setStartTime(res.data.start_time || '');
         setTimezone(res.data.timezone || '');
+        setEnabled(res.data.enabled !== false);
       } catch (e: any) {
         if (e.response?.status !== 404) {
           showToast(e.response?.data?.error || 'Failed to load schedule.', 'error');
@@ -52,7 +54,7 @@ export default function EdgeScheduleModal({ nodeId, onClose, onSaved }: EdgeSche
     setSaving(true);
     try {
       await axios.put(`/api/admin/edge/${encodeURIComponent(nodeId)}/schedule`, {
-        enabled: true,
+        enabled,
         stop_time: stopTime,
         start_time: startTime,
         timezone: timezone.trim(),
@@ -107,6 +109,14 @@ export default function EdgeScheduleModal({ nodeId, onClose, onSaved }: EdgeSche
                 onChange={e => setTimezone(e.target.value)}
               />
             </div>
+
+            <label className="flex items-center gap-sm mt-md" style={{ fontSize: 13, opacity: 0.8 }}>
+              <input type="checkbox" checked={enabled} onChange={e => setEnabled(e.target.checked)} />
+              {t('edge_schedule_enabled', 'Schedule enabled for this node')}
+            </label>
+            <p className="text-2xs text-muted mt-xs">
+              {t('edge_schedule_disabled_hint', "Unchecking this pauses the stop/start schedule for this node only, without affecting other nodes -- it stays under manual control (see the Start/Stop/Restart actions) until re-enabled.")}
+            </p>
 
             <div className="flex justify-end gap-sm mt-lg">
               <button type="button" className="btn btn-secondary" onClick={onClose} disabled={saving}>

@@ -116,11 +116,13 @@ func TestAWSBackend_GetSchedule_ParsesBothSchedules(t *testing.T) {
 				return &scheduler.GetScheduleOutput{
 					ScheduleExpression:         aws.String("cron(0 0 * * ? *)"),
 					ScheduleExpressionTimezone: aws.String("America/Sao_Paulo"),
+					State:                      schedulertypes.ScheduleStateEnabled,
 				}, nil
 			case "edge-sa-start":
 				return &scheduler.GetScheduleOutput{
 					ScheduleExpression:         aws.String("cron(0 8 * * ? *)"),
 					ScheduleExpressionTimezone: aws.String("America/Sao_Paulo"),
+					State:                      schedulertypes.ScheduleStateEnabled,
 				}, nil
 			}
 			return nil, errors.New("unexpected schedule name: " + aws.ToString(in.Name))
@@ -160,7 +162,7 @@ func TestAWSBackend_SetSchedule_PreservesExistingTargetAndWindow(t *testing.T) {
 	}
 	b := newTestBackend(&fakeEC2Client{}, client)
 
-	err := b.SetSchedule(context.Background(), "edge-sa", Schedule{StopTime: "23:00", StartTime: "07:00", Timezone: "America/Sao_Paulo"})
+	err := b.SetSchedule(context.Background(), "edge-sa", Schedule{StopTime: "23:00", StartTime: "07:00", Timezone: "America/Sao_Paulo", Enabled: true})
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -175,6 +177,84 @@ func TestAWSBackend_SetSchedule_PreservesExistingTargetAndWindow(t *testing.T) {
 	}
 	if gotWindow != existingWindow {
 		t.Error("expected UpdateSchedule to reuse the existing FlexibleTimeWindow fetched via GetSchedule")
+	}
+}
+
+// TestAWSBackend_SetSchedule_TogglesEnabledState is the actual regression
+// test for the per-node disable/enable requirement: setting Enabled=false
+// must apply State=DISABLED to BOTH the stop and start schedules (so
+// neither fires while the node is under manual control), and Enabled=true
+// must apply State=ENABLED to both -- independent of every other node's
+// schedule, which the shared-vs-per-node IAM role split doesn't affect
+// (this is purely an EventBridge Scheduler State toggle).
+func TestAWSBackend_SetSchedule_TogglesEnabledState(t *testing.T) {
+	existingTarget := &schedulertypes.Target{Arn: aws.String("x"), RoleArn: aws.String("y")}
+	existingWindow := &schedulertypes.FlexibleTimeWindow{Mode: schedulertypes.FlexibleTimeWindowModeOff}
+	var gotStates []schedulertypes.ScheduleState
+
+	client := &fakeSchedulerClient{
+		getScheduleFunc: func(_ context.Context, _ *scheduler.GetScheduleInput, _ ...func(*scheduler.Options)) (*scheduler.GetScheduleOutput, error) {
+			return &scheduler.GetScheduleOutput{Target: existingTarget, FlexibleTimeWindow: existingWindow}, nil
+		},
+		updateScheduleFunc: func(_ context.Context, in *scheduler.UpdateScheduleInput, _ ...func(*scheduler.Options)) (*scheduler.UpdateScheduleOutput, error) {
+			gotStates = append(gotStates, in.State)
+			return &scheduler.UpdateScheduleOutput{}, nil
+		},
+	}
+	b := newTestBackend(&fakeEC2Client{}, client)
+
+	if err := b.SetSchedule(context.Background(), "edge-sa", Schedule{StopTime: "00:00", StartTime: "08:00", Timezone: "UTC", Enabled: false}); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	for _, s := range gotStates {
+		if s != schedulertypes.ScheduleStateDisabled {
+			t.Errorf("Enabled=false: expected both schedules set to DISABLED, got %v", gotStates)
+			break
+		}
+	}
+	if len(gotStates) != 2 {
+		t.Fatalf("expected 2 UpdateSchedule calls (stop + start), got %d", len(gotStates))
+	}
+
+	gotStates = nil
+	if err := b.SetSchedule(context.Background(), "edge-sa", Schedule{StopTime: "00:00", StartTime: "08:00", Timezone: "UTC", Enabled: true}); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	for _, s := range gotStates {
+		if s != schedulertypes.ScheduleStateEnabled {
+			t.Errorf("Enabled=true: expected both schedules set to ENABLED, got %v", gotStates)
+			break
+		}
+	}
+}
+
+// TestAWSBackend_GetSchedule_ReportsDisabledWhenEitherHalfIsDisabled ensures
+// a node's schedule only reads back as "enabled" when BOTH its stop and
+// start schedules are actually enabled in EventBridge -- not merely that
+// they exist (the previous behavior, which couldn't distinguish a disabled
+// node from a normal one).
+func TestAWSBackend_GetSchedule_ReportsDisabledWhenEitherHalfIsDisabled(t *testing.T) {
+	client := &fakeSchedulerClient{
+		getScheduleFunc: func(_ context.Context, in *scheduler.GetScheduleInput, _ ...func(*scheduler.Options)) (*scheduler.GetScheduleOutput, error) {
+			state := schedulertypes.ScheduleStateEnabled
+			if aws.ToString(in.Name) == "edge-sa-stop" {
+				state = schedulertypes.ScheduleStateDisabled
+			}
+			return &scheduler.GetScheduleOutput{
+				ScheduleExpression:         aws.String("cron(0 0 * * ? *)"),
+				ScheduleExpressionTimezone: aws.String("UTC"),
+				State:                      state,
+			}, nil
+		},
+	}
+	b := newTestBackend(&fakeEC2Client{}, client)
+
+	sched, err := b.GetSchedule(context.Background(), "edge-sa")
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if sched.Enabled {
+		t.Error("expected Enabled=false when the stop schedule is disabled, even though the start schedule is enabled")
 	}
 }
 

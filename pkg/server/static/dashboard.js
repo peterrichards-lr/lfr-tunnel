@@ -4527,6 +4527,7 @@ applyTheme(currentUser.theme_preference);
             document.getElementById('edge-schedule-stop-time').value = '';
             document.getElementById('edge-schedule-start-time').value = '';
             document.getElementById('edge-schedule-timezone').value = '';
+            document.getElementById('edge-schedule-enabled').checked = true;
 
             try {
                 const res = await fetch(`/api/admin/edge/${encodeURIComponent(nodeId)}/schedule`);
@@ -4536,6 +4537,7 @@ applyTheme(currentUser.theme_preference);
                     document.getElementById('edge-schedule-stop-time').value = sched.stop_time || '';
                     document.getElementById('edge-schedule-start-time').value = sched.start_time || '';
                     document.getElementById('edge-schedule-timezone').value = sched.timezone || '';
+                    document.getElementById('edge-schedule-enabled').checked = sched.enabled !== false;
                 } else if (res.status !== 404) {
                     const data = await res.json().catch(() => ({}));
                     showToast("Error loading schedule: " + (data.error || res.status));
@@ -4558,6 +4560,7 @@ applyTheme(currentUser.theme_preference);
             const stopTime = document.getElementById('edge-schedule-stop-time').value;
             const startTime = document.getElementById('edge-schedule-start-time').value;
             const timezone = document.getElementById('edge-schedule-timezone').value.trim();
+            const enabled = document.getElementById('edge-schedule-enabled').checked;
             if (!stopTime || !startTime || !timezone) {
                 showToast("Stop time, start time, and timezone are all required.");
                 return;
@@ -4567,7 +4570,7 @@ applyTheme(currentUser.theme_preference);
                 const res = await fetch(`/api/admin/edge/${encodeURIComponent(edgeScheduleNodeId)}/schedule`, {
                     method: 'PUT',
                     headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ stop_time: stopTime, start_time: startTime, timezone: timezone, enabled: true })
+                    body: JSON.stringify({ stop_time: stopTime, start_time: startTime, timezone: timezone, enabled: enabled })
                 });
                 if (res.status === 401) { logout(); return; }
                 if (res.ok) {

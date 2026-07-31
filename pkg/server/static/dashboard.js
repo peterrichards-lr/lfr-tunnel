@@ -4538,12 +4538,64 @@ applyTheme(currentUser.theme_preference);
         // ----------------------------------------------------
         let edgeScheduleNodeId = null;
 
+        // Full list of valid IANA timezone identifiers, grouped by geographic
+        // region (the part before the "/") so a ~400-entry list is actually
+        // browsable, with each option labelled with its current UTC offset --
+        // that offset is what would have caught the edge-sa/edge-in
+        // misconfiguration at a glance (both were left on "Europe/London",
+        // a real but wrong timezone; free text let that typo-shaped mistake
+        // through silently). Populated once and cached on the <select>
+        // itself since the list is static for the lifetime of the page.
+        function populateTimezoneSelect(selectEl, selectedValue) {
+            if (!selectEl.dataset.populated) {
+                let zones;
+                try {
+                    zones = Intl.supportedValuesOf('timeZone');
+                } catch {
+                    // Intl.supportedValuesOf isn't available in every browser --
+                    // fall back to just the regions this project actually uses
+                    // rather than leaving the dropdown empty.
+                    zones = ['UTC', 'America/New_York', 'America/Sao_Paulo', 'Europe/London', 'Europe/Dublin', 'Asia/Tokyo', 'Asia/Kolkata'];
+                }
+                const groups = {};
+                zones.forEach(zone => {
+                    const region = zone.includes('/') ? zone.split('/')[0] : 'Other';
+                    (groups[region] = groups[region] || []).push(zone);
+                });
+
+                selectEl.innerHTML = '<option value="">-- Select timezone --</option>';
+                Object.keys(groups).sort().forEach(region => {
+                    const optgroup = document.createElement('optgroup');
+                    optgroup.label = region;
+                    groups[region].sort().forEach(zone => {
+                        const opt = document.createElement('option');
+                        opt.value = zone;
+                        opt.textContent = `${zone} (${formatTimezoneOffset(zone)})`;
+                        optgroup.appendChild(opt);
+                    });
+                    selectEl.appendChild(optgroup);
+                });
+                selectEl.dataset.populated = 'true';
+            }
+            selectEl.value = selectedValue || '';
+        }
+
+        function formatTimezoneOffset(zone) {
+            try {
+                const parts = new Intl.DateTimeFormat('en-US', { timeZone: zone, timeZoneName: 'shortOffset' }).formatToParts(new Date());
+                const offset = parts.find(p => p.type === 'timeZoneName');
+                return offset ? offset.value : 'UTC';
+            } catch {
+                return '';
+            }
+        }
+
         window.openEdgeScheduleModal = async function(nodeId) {
             edgeScheduleNodeId = nodeId;
             document.getElementById('edge-schedule-modal-node').textContent = nodeId;
             document.getElementById('edge-schedule-stop-time').value = '';
             document.getElementById('edge-schedule-start-time').value = '';
-            document.getElementById('edge-schedule-timezone').value = '';
+            populateTimezoneSelect(document.getElementById('edge-schedule-timezone'), '');
             document.getElementById('edge-schedule-enabled').checked = true;
 
             try {
@@ -4553,7 +4605,7 @@ applyTheme(currentUser.theme_preference);
                     const sched = await res.json();
                     document.getElementById('edge-schedule-stop-time').value = sched.stop_time || '';
                     document.getElementById('edge-schedule-start-time').value = sched.start_time || '';
-                    document.getElementById('edge-schedule-timezone').value = sched.timezone || '';
+                    populateTimezoneSelect(document.getElementById('edge-schedule-timezone'), sched.timezone || '');
                     document.getElementById('edge-schedule-enabled').checked = sched.enabled !== false;
                 } else if (res.status !== 404) {
                     const data = await res.json().catch(() => ({}));

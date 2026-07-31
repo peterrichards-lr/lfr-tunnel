@@ -9,6 +9,41 @@ interface EdgeScheduleModalProps {
   onSaved: () => void;
 }
 
+function formatTimezoneOffset(zone: string): string {
+  try {
+    const parts = new Intl.DateTimeFormat('en-US', { timeZone: zone, timeZoneName: 'shortOffset' }).formatToParts(new Date());
+    const offset = parts.find(p => p.type === 'timeZoneName');
+    return offset ? offset.value : 'UTC';
+  } catch {
+    return '';
+  }
+}
+
+// Full list of valid IANA timezone identifiers, grouped by geographic region
+// (the part before the "/") so a ~400-entry list is actually browsable, each
+// labelled with its current UTC offset -- that offset is what would have
+// caught the edge-sa/edge-in misconfiguration at a glance (both were left on
+// "Europe/London", a real but wrong timezone; free text let that
+// typo-shaped mistake through silently). Computed once at module load since
+// the list is static for the process lifetime.
+const TIMEZONE_GROUPS: [string, string[]][] = (() => {
+  let zones: string[];
+  try {
+    zones = Intl.supportedValuesOf('timeZone');
+  } catch {
+    // Intl.supportedValuesOf isn't available in every browser -- fall back
+    // to just the regions this project actually uses rather than an empty
+    // dropdown.
+    zones = ['UTC', 'America/New_York', 'America/Sao_Paulo', 'Europe/London', 'Europe/Dublin', 'Asia/Tokyo', 'Asia/Kolkata'];
+  }
+  const groups: Record<string, string[]> = {};
+  zones.forEach(zone => {
+    const region = zone.includes('/') ? zone.split('/')[0] : 'Other';
+    (groups[region] = groups[region] || []).push(zone);
+  });
+  return Object.keys(groups).sort().map(region => [region, groups[region].sort()]);
+})();
+
 // Edits an edge node's EventBridge Scheduler stop/start window via
 // GET/PUT /api/admin/edge/{id}/schedule (see issues #885, #888). This
 // updates the existing schedule in place -- the backend/sidecar never
@@ -100,14 +135,21 @@ export default function EdgeScheduleModal({ nodeId, onClose, onSaved }: EdgeSche
               <input type="time" className="input-field" value={startTime} onChange={e => setStartTime(e.target.value)} />
             </div>
             <div className="form-group m-0">
-              <label className="form-label text-xs">{t('edge_schedule_timezone', 'Timezone (IANA)')}</label>
-              <input
-                type="text"
+              <label className="form-label text-xs">{t('edge_schedule_timezone', 'Timezone')}</label>
+              <select
                 className="input-field"
-                placeholder="e.g. America/Sao_Paulo"
                 value={timezone}
                 onChange={e => setTimezone(e.target.value)}
-              />
+              >
+                <option value="">-- Select timezone --</option>
+                {TIMEZONE_GROUPS.map(([region, zones]) => (
+                  <optgroup key={region} label={region}>
+                    {zones.map(zone => (
+                      <option key={zone} value={zone}>{zone} ({formatTimezoneOffset(zone)})</option>
+                    ))}
+                  </optgroup>
+                ))}
+              </select>
             </div>
 
             <label className="flex items-center gap-sm mt-md" style={{ fontSize: 13, opacity: 0.8 }}>

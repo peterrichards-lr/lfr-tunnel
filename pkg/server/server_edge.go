@@ -2,6 +2,7 @@ package server
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
 	"fmt"
 	"html"
@@ -78,14 +79,11 @@ func (s *Server) updateEdgeHealth(id, status string, latency int64, errMsg strin
 	s.edgeHealthMu.Lock()
 	defer s.edgeHealthMu.Unlock()
 
-	var resolvedIP string
+	var ipv4, ipv6 string
 	for _, edge := range s.cfg.EdgeNodes {
 		if edge.ID == id && edge.URL != "" {
 			if u, err := url.Parse(edge.URL); err == nil {
-				host := u.Hostname()
-				if ips, err := net.LookupHost(host); err == nil && len(ips) > 0 {
-					resolvedIP = ips[0]
-				}
+				ipv4, ipv6 = resolveIPv4AndIPv6(u.Hostname())
 			}
 			break
 		}
@@ -96,9 +94,35 @@ func (s *Server) updateEdgeHealth(id, status string, latency int64, errMsg strin
 		LatencyMs:    latency,
 		LastCheckAt:  time.Now().Unix(),
 		ErrorMessage: errMsg,
-		ResolvedIP:   resolvedIP,
+		ResolvedIP:   preferredIP(ipv4, ipv6),
+		ResolvedIPv4: ipv4,
+		ResolvedIPv6: ipv6,
 		Version:      version,
 	}
+}
+
+// resolveIPv4AndIPv6 resolves host's A and AAAA records independently, so a
+// dual-stack node's health status can report both addresses rather than
+// whichever family net.LookupHost happened to return first (see #886).
+// Either return value is empty if that record type doesn't exist for host.
+func resolveIPv4AndIPv6(host string) (ipv4, ipv6 string) {
+	if ips, err := net.DefaultResolver.LookupIP(context.Background(), "ip4", host); err == nil && len(ips) > 0 {
+		ipv4 = ips[0].String()
+	}
+	if ips, err := net.DefaultResolver.LookupIP(context.Background(), "ip6", host); err == nil && len(ips) > 0 {
+		ipv6 = ips[0].String()
+	}
+	return ipv4, ipv6
+}
+
+// preferredIP picks a single address for EdgeHealthStatus.ResolvedIP, the
+// legacy field the V1 dashboard's single IP-address column still reads --
+// prefers IPv4, falling back to IPv6 for an IPv6-only node.
+func preferredIP(ipv4, ipv6 string) string {
+	if ipv4 != "" {
+		return ipv4
+	}
+	return ipv6
 }
 
 // checkOutboundConnectivity checks outbound internet access by hitting highly available public endpoints.

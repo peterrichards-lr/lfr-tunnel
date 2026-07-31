@@ -107,7 +107,14 @@ type EdgeHealthStatus struct {
 	LatencyMs    int64  `json:"latency_ms"`
 	LastCheckAt  int64  `json:"last_check_at"`
 	ErrorMessage string `json:"error_message,omitempty"`
+	// ResolvedIP is kept for backward compatibility with the V1 dashboard's
+	// single IP-address column -- prefers IPv4, falls back to IPv6 if a node
+	// is IPv6-only. New code should use ResolvedIPv4/ResolvedIPv6 instead,
+	// which are resolved independently (see #886) rather than picking
+	// whichever address family net.LookupHost happened to return first.
 	ResolvedIP   string `json:"resolved_ip,omitempty"`
+	ResolvedIPv4 string `json:"resolved_ipv4,omitempty"`
+	ResolvedIPv6 string `json:"resolved_ipv6,omitempty"`
 	Version      string `json:"version,omitempty"`
 }
 
@@ -5433,6 +5440,17 @@ func (s *Server) handleEdgeHealth(w http.ResponseWriter, r *http.Request) {
 			if remoteAddr := conn.RemoteAddr(); remoteAddr != nil {
 				host, _, _ := net.SplitHostPort(remoteAddr.String())
 				h.ResolvedIP = host
+			}
+		}
+		// Backfill the split v4/v6 fields from whichever single address the
+		// fallbacks above found, so a node health-checked via DNS (which
+		// already populates both) and one only known via its live WS
+		// connection (which only knows one address) both report consistently.
+		if h.ResolvedIPv4 == "" && h.ResolvedIPv6 == "" && h.ResolvedIP != "" {
+			if ip := net.ParseIP(h.ResolvedIP); ip != nil && ip.To4() != nil {
+				h.ResolvedIPv4 = h.ResolvedIP
+			} else {
+				h.ResolvedIPv6 = h.ResolvedIP
 			}
 		}
 		nodes[nodeID] = h

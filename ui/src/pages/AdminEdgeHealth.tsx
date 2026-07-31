@@ -4,6 +4,7 @@ import { useDataTable, type ColumnDef } from '../hooks/useDataTable';
 import DataTableToolbar from '../components/DataTableToolbar';
 import DataTablePagination from '../components/DataTablePagination';
 import EdgeScheduleModal from '../components/EdgeScheduleModal';
+import EdgeDetailsModal from '../components/EdgeDetailsModal';
 import Skeleton from '../components/Skeleton';
 import { useI18n } from '../contexts/I18nContext';
 import { useUI } from '../contexts/UIContext';
@@ -13,6 +14,8 @@ interface EdgeNode {
   id?: string;
   status: string;
   resolved_ip: string;
+  resolved_ipv4?: string;
+  resolved_ipv6?: string;
   latency_ms: number;
   last_check_at: number;
   error_message: string;
@@ -29,6 +32,7 @@ export default function AdminEdgeHealth() {
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const [openMenuId, setOpenMenuId] = useState<string | null>(null);
   const [scheduleModalNodeId, setScheduleModalNodeId] = useState<string | null>(null);
+  const [detailsNodeId, setDetailsNodeId] = useState<string | null>(null);
   const { t } = useI18n();
   const { formatDate } = useSettings();
   const { showToast, showConfirm, showPrompt } = useUI();
@@ -268,6 +272,20 @@ export default function AdminEdgeHealth() {
         />
       )}
 
+      {detailsNodeId && nodes[detailsNodeId] && (
+        <EdgeDetailsModal
+          nodeId={detailsNodeId}
+          status={nodes[detailsNodeId].status}
+          resolvedIPv4={nodes[detailsNodeId].resolved_ipv4}
+          resolvedIPv6={nodes[detailsNodeId].resolved_ipv6}
+          latencyMs={nodes[detailsNodeId].latency_ms}
+          lastCheckAt={nodes[detailsNodeId].last_check_at}
+          version={nodes[detailsNodeId].version}
+          errorMessage={nodes[detailsNodeId].error_message}
+          onClose={() => setDetailsNodeId(null)}
+        />
+      )}
+
       {powerActionsEnabled && selectedIds.size > 0 && (
         <div className="alert-banner mb-xl flex items-center gap-md">
           <span className="text-xs">{selectedIds.size} selected</span>
@@ -390,6 +408,13 @@ export default function AdminEdgeHealth() {
                       )}
                       <td className="td-cell text-right">
                         <div className="flex gap-xs justify-end">
+                          <button
+                            className="btn btn-secondary text-xs py-xs px-sm"
+                            title="View Details"
+                            onClick={() => n.id && setDetailsNodeId(n.id)}
+                          >
+                            ℹ️
+                          </button>
                           <button
                             className="btn btn-secondary text-xs py-xs px-sm"
                             title="Restart Daemon"

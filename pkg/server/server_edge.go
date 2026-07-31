@@ -44,7 +44,7 @@ func (s *Server) checkEdgeNodeHealth(edge config.EdgeNodeConfig, outboundOk bool
 	}
 
 	if !outboundOk {
-		s.updateEdgeHealth(edge.ID, "Unknown", 0, "Gateway outbound connectivity check failed", "")
+		s.updateEdgeHealth(edge.ID, "Unknown", 0, "Gateway outbound connectivity check failed", "", false)
 		return
 	}
 
@@ -52,7 +52,7 @@ func (s *Server) checkEdgeNodeHealth(edge config.EdgeNodeConfig, outboundOk bool
 	start := time.Now()
 	req, err := http.NewRequest(http.MethodGet, edge.URL+"/api/version", nil)
 	if err != nil {
-		s.updateEdgeHealth(edge.ID, "Offline", 0, err.Error(), "")
+		s.updateEdgeHealth(edge.ID, "Offline", 0, err.Error(), "", false)
 		return
 	}
 
@@ -62,26 +62,33 @@ func (s *Server) checkEdgeNodeHealth(edge config.EdgeNodeConfig, outboundOk bool
 	latency := time.Since(start).Milliseconds()
 
 	if err != nil {
-		s.updateEdgeHealth(edge.ID, "Offline", latency, err.Error(), "")
+		s.updateEdgeHealth(edge.ID, "Offline", latency, err.Error(), "", false)
 		return
 	}
 
 	var version string
+	var maintenanceActive bool
 	if resp.StatusCode == http.StatusOK {
 		var versionResp struct {
-			ServerVersion string `json:"server_version"`
+			ServerVersion   string `json:"server_version"`
+			MaintenanceMode string `json:"maintenance_mode"`
 		}
 		if bodyBytes, readErr := io.ReadAll(resp.Body); readErr == nil {
 			_ = json.Unmarshal(bodyBytes, &versionResp) //nolint:errcheck
 			version = versionResp.ServerVersion
+			// "pending" (a scheduled-but-not-yet-active countdown) only
+			// applies to the local/deploy-triggered maintenance path, not
+			// the edge_control_ws maintenance_trigger message this reads --
+			// that one flips straight to "true", so only it counts as active.
+			maintenanceActive = versionResp.MaintenanceMode == "true"
 		}
 	}
 	_ = resp.Body.Close() //nolint:errcheck
 
 	if resp.StatusCode == http.StatusOK {
-		s.updateEdgeHealth(edge.ID, "Online", latency, "", version)
+		s.updateEdgeHealth(edge.ID, "Online", latency, "", version, maintenanceActive)
 	} else {
-		s.updateEdgeHealth(edge.ID, "Offline", latency, fmt.Sprintf("HTTP %d", resp.StatusCode), "")
+		s.updateEdgeHealth(edge.ID, "Offline", latency, fmt.Sprintf("HTTP %d", resp.StatusCode), "", false)
 	}
 }
 
@@ -125,7 +132,14 @@ func (s *Server) triggerEdgeHealthRecheck(nodeID string) {
 	}()
 }
 
-func (s *Server) updateEdgeHealth(id, status string, latency int64, errMsg string, version string) {
+// scheduledStartGraceSeconds is how long past a schedule's start_time a node
+// is still shown as "Disabled" rather than "Offline" -- covers real EC2 boot
+// + systemd startup time. Once exceeded, a still-unreachable node is treated
+// as a genuine incident: the schedule said it should be up by now and it
+// isn't, which is exactly the kind of thing worth alerting on (#887).
+const scheduledStartGraceSeconds = 300
+
+func (s *Server) updateEdgeHealth(id, status string, latency int64, errMsg string, version string, maintenanceActive bool) {
 	s.edgeHealthMu.Lock()
 	prev := s.edgeHealth[id]
 	s.edgeHealthMu.Unlock()
@@ -140,6 +154,11 @@ func (s *Server) updateEdgeHealth(id, status string, latency int64, errMsg strin
 		}
 	}
 
+	// Uptime tracks true reachability, independent of the display status
+	// below -- a node in soft maintenance hasn't actually restarted, so its
+	// process uptime keeps counting even though it displays as "Disabled".
+	// The portal only ever shows uptime for status == "Online" anyway, so
+	// this has no visible effect while maintenance is active.
 	onlineSince := prev.OnlineSince
 	if status == "Online" {
 		if prev.Status != "Online" || prev.OnlineSince == 0 {
@@ -149,48 +168,148 @@ func (s *Server) updateEdgeHealth(id, status string, latency int64, errMsg strin
 		onlineSince = 0
 	}
 
-	// Timezone practically never changes once a node's schedule is set, so
-	// fetch it once and cache it here rather than hitting the provisioner
-	// sidecar (and the AWS API behind it) on every 60s health check.
-	// handleAdminEdgeSetSchedule clears the cached value on save so an
-	// edited timezone is picked up on the next check.
+	// The schedule (timezone + stop/start times + enabled flag) practically
+	// never changes once set, so fetch it once and cache it here rather than
+	// hitting the provisioner sidecar (and the AWS API behind it) on every
+	// 60s health check. Fetched regardless of online/offline status -- a
+	// currently-unreachable node is exactly the case that needs this data,
+	// to tell a real outage apart from a scheduled stop window, and the
+	// portal shows a node's local time regardless of its status too.
+	// handleAdminEdgeSetSchedule clears the cache on save so an edit is
+	// picked up on the next check.
 	timezone := prev.Timezone
-	if timezone == "" && status == "Online" && s.provisionerClient != nil {
+	schedStop := prev.ScheduleStopTime
+	schedStart := prev.ScheduleStartTime
+	schedEnabled := prev.ScheduleEnabled
+	if timezone == "" && s.provisionerClient != nil {
 		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 		sched, err := s.provisionerClient.GetSchedule(ctx, id)
 		cancel()
 		if err == nil {
 			timezone = sched.Timezone
+			schedStop = sched.StopTime
+			schedStart = sched.StartTime
+			schedEnabled = sched.Enabled
 		}
+	}
+
+	// Product decision (#887): only these two signals count as an
+	// intentional, non-incident state -- a node stopped some other way (e.g.
+	// directly via the AWS console/CLI, bypassing the portal) is a real
+	// outage and must show "Offline", not "Disabled". Order matters: a
+	// health check that actually succeeded takes precedence over a stale
+	// AdminDisabled flag (e.g. someone started it back up outside the
+	// portal), and the schedule-window check has its own grace period so a
+	// scheduled start that didn't actually come back up still alerts.
+	switch {
+	case status == "Online" && maintenanceActive:
+		status = "Disabled"
+		errMsg = ""
+	case status == "Offline" && prev.AdminDisabled:
+		status = "Disabled"
+		errMsg = ""
+	case status == "Offline" && schedEnabled && isWithinScheduledDowntime(time.Now(), schedStop, schedStart, timezone):
+		status = "Disabled"
+		errMsg = ""
 	}
 
 	s.edgeHealthMu.Lock()
 	defer s.edgeHealthMu.Unlock()
 	s.edgeHealth[id] = EdgeHealthStatus{
-		Status:       status,
-		LatencyMs:    latency,
-		LastCheckAt:  time.Now().Unix(),
-		ErrorMessage: errMsg,
-		ResolvedIP:   preferredIP(ipv4, ipv6),
-		ResolvedIPv4: ipv4,
-		ResolvedIPv6: ipv6,
-		Version:      version,
-		OnlineSince:  onlineSince,
-		Timezone:     timezone,
+		Status:            status,
+		LatencyMs:         latency,
+		LastCheckAt:       time.Now().Unix(),
+		ErrorMessage:      errMsg,
+		ResolvedIP:        preferredIP(ipv4, ipv6),
+		ResolvedIPv4:      ipv4,
+		ResolvedIPv6:      ipv6,
+		Version:           version,
+		OnlineSince:       onlineSince,
+		Timezone:          timezone,
+		ScheduleStopTime:  schedStop,
+		ScheduleStartTime: schedStart,
+		ScheduleEnabled:   schedEnabled,
+		AdminDisabled:     prev.AdminDisabled,
 	}
 }
 
-// invalidateEdgeTimezoneCache clears a node's cached schedule timezone so
-// the next health check re-fetches it from the provisioner sidecar. Called
-// after a successful schedule save so an edited timezone shows up promptly
-// instead of waiting on the (never, once cached) natural cache expiry.
-func (s *Server) invalidateEdgeTimezoneCache(id string) {
+// isWithinScheduledDowntime reports whether now (evaluated in tz) falls
+// inside a node's scheduled stop window, extended by
+// scheduledStartGraceSeconds past its start_time. Handles the overnight-wrap
+// case (e.g. stop=22:00, start=06:00) via modular arithmetic on
+// seconds-of-day: the window's length plus grace is compared against how far
+// past stop_time "now" is, both taken mod 24h, so it doesn't matter whether
+// the window crosses midnight. Returns false on any malformed input rather
+// than erroring -- a node with no valid schedule just isn't in a stop window.
+func isWithinScheduledDowntime(now time.Time, stopHHMM, startHHMM, tz string) bool {
+	if stopHHMM == "" || startHHMM == "" || tz == "" {
+		return false
+	}
+	loc, err := time.LoadLocation(tz)
+	if err != nil {
+		return false
+	}
+	stopSec, err := hhmmToSeconds(stopHHMM)
+	if err != nil {
+		return false
+	}
+	startSec, err := hhmmToSeconds(startHHMM)
+	if err != nil {
+		return false
+	}
+	if stopSec == startSec {
+		return false
+	}
+
+	const daySeconds = 24 * 60 * 60
+	windowLen := ((startSec - stopSec) + daySeconds) % daySeconds
+
+	nowLocal := now.In(loc)
+	nowSec := nowLocal.Hour()*3600 + nowLocal.Minute()*60 + nowLocal.Second()
+	deltaFromStop := ((nowSec - stopSec) + daySeconds) % daySeconds
+
+	return deltaFromStop < windowLen+scheduledStartGraceSeconds
+}
+
+func hhmmToSeconds(hhmm string) (int, error) {
+	var hour, minute int
+	if _, err := fmt.Sscanf(hhmm, "%d:%d", &hour, &minute); err != nil {
+		return 0, err
+	}
+	if hour < 0 || hour > 23 || minute < 0 || minute > 59 {
+		return 0, fmt.Errorf("invalid time %q", hhmm)
+	}
+	return hour*3600 + minute*60, nil
+}
+
+// invalidateEdgeScheduleCache clears a node's cached schedule (timezone,
+// stop/start times, enabled flag) so the next health check re-fetches it
+// from the provisioner sidecar. Called after a successful schedule save so
+// an edit shows up promptly instead of waiting on the (never, once cached)
+// natural cache expiry.
+func (s *Server) invalidateEdgeScheduleCache(id string) {
 	s.edgeHealthMu.Lock()
 	defer s.edgeHealthMu.Unlock()
 	if h, ok := s.edgeHealth[id]; ok {
 		h.Timezone = ""
+		h.ScheduleStopTime = ""
+		h.ScheduleStartTime = ""
+		h.ScheduleEnabled = false
 		s.edgeHealth[id] = h
 	}
+}
+
+// setEdgeAdminDisabled records whether a node was last stopped intentionally
+// via a portal power action, so a subsequent failed health check reports
+// "Disabled" instead of "Offline" (#887). Cleared by a successful start or
+// restart; a health check finding the node Online again overrides this
+// naturally regardless (Status wins over the cached flag either way).
+func (s *Server) setEdgeAdminDisabled(id string, disabled bool) {
+	s.edgeHealthMu.Lock()
+	defer s.edgeHealthMu.Unlock()
+	h := s.edgeHealth[id]
+	h.AdminDisabled = disabled
+	s.edgeHealth[id] = h
 }
 
 // resolveIPv4AndIPv6 resolves host's A and AAAA records independently, so a

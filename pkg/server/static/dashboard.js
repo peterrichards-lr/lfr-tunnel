@@ -4253,7 +4253,8 @@ applyTheme(currentUser.theme_preference);
                     keys.sort().forEach(id => {
                         const h = data[id];
                         const isOnline = h.status === 'Online';
-                        const dotColor = isOnline ? '#10b981' : 'var(--danger)';
+                        const isDisabled = h.status === 'Disabled';
+                        const dotColor = isOnline ? '#10b981' : (isDisabled ? 'var(--text-muted)' : 'var(--danger)');
                         
                         let resolvedIP = h.resolved_ip || '-';
                         let latText = isOnline ? `${h.latency_ms} ms` : '-';

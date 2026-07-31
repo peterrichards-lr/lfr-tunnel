@@ -125,6 +125,20 @@ type EdgeHealthStatus struct {
 	// time. Empty when edge power actions aren't configured for this node or
 	// it has no schedule set.
 	Timezone string `json:"timezone,omitempty"`
+	// ScheduleStopTime/ScheduleStartTime/ScheduleEnabled cache the node's
+	// EventBridge schedule (fetched alongside Timezone) so a failed health
+	// check can be classified as "Disabled" instead of "Offline" when it
+	// falls inside the node's own scheduled stop window (#887) -- internal
+	// bookkeeping, not exposed to the portal (which fetches the schedule
+	// itself, see EdgeDetailsModal/EditSchedule).
+	ScheduleStopTime  string `json:"-"`
+	ScheduleStartTime string `json:"-"`
+	ScheduleEnabled   bool   `json:"-"`
+	// AdminDisabled is set when an operator stops a node via the portal
+	// (start/stop/restart/bulk actions) and cleared by a subsequent
+	// start/restart, so an intentional stop shows as "Disabled" rather than
+	// the alarming "Offline" (#887). Internal bookkeeping, not exposed.
+	AdminDisabled bool `json:"-"`
 }
 
 type safeConn struct {

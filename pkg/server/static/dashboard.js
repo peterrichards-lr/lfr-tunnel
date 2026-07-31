@@ -2227,6 +2227,18 @@ applyTheme(currentUser.theme_preference);
             return parts.join(' ');
         }
 
+        // The node's own local time (its configured schedule timezone), not
+        // the viewer's account timezone -- distinct from formatLocalTime
+        // below, which converts a given UTC timestamp into the viewer's tz.
+        function formatNodeLocalTime(tz) {
+            if (!tz) return '-';
+            try {
+                return new Intl.DateTimeFormat(undefined, { timeZone: tz, hour: '2-digit', minute: '2-digit', hour12: false }).format(new Date());
+            } catch {
+                return '-';
+            }
+        }
+
         function formatLocalTime(utcDateStr) {
             if (!utcDateStr) return 'Never';
             const date = new Date(utcDateStr);
@@ -4236,7 +4248,7 @@ applyTheme(currentUser.theme_preference);
                 tbody.innerHTML = '';
                 const keys = Object.keys(data || {});
                 if (keys.length === 0) {
-                    tbody.innerHTML = '<tr><td colspan="9" style="text-align:center; opacity:0.6;">No edge nodes configured</td></tr>';
+                    tbody.innerHTML = '<tr><td colspan="11" style="text-align:center; opacity:0.6;">No edge nodes configured</td></tr>';
                 } else {
                     keys.sort().forEach(id => {
                         const h = data[id];
@@ -4247,6 +4259,8 @@ applyTheme(currentUser.theme_preference);
                         let latText = isOnline ? `${h.latency_ms} ms` : '-';
                         let timeSince = h.last_check_at ? Math.max(0, Math.floor((Date.now() / 1000) - h.last_check_at)) + 's ago' : 'Never';
                         let errMsg = h.error_message ? `<span style="color:var(--danger); font-size:12px;">${escapeHTML(h.error_message)}</span>` : '';
+                        let localTimeText = formatNodeLocalTime(h.timezone);
+                        let uptimeText = (isOnline && h.online_since) ? formatUptime(Math.max(0, Math.floor(Date.now() / 1000) - h.online_since)) : '-';
 
                         const verText = h.version || '-';
                         const isAdmin = currentUser && (currentUser.role === 'admin' || currentUser.role === 'owner');
@@ -4296,6 +4310,8 @@ applyTheme(currentUser.theme_preference);
                                 </td>
                                 <td>${latText}</td>
                                 <td>${timeSince}</td>
+                                <td style="white-space: nowrap;">${escapeHTML(localTimeText)}</td>
+                                <td style="white-space: nowrap;">${escapeHTML(uptimeText)}</td>
                                 <td><code style="font-family: monospace; font-size: 11px;">${escapeHTML(verText)}</code></td>
                                 <td>${errMsg}</td>
                                 <td style="text-align: right;">${actionsMenuHtml}</td>
@@ -4306,7 +4322,7 @@ applyTheme(currentUser.theme_preference);
                 }
             } catch (err) {
                 console.error(err);
-                tbody.innerHTML = `<tr><td colspan="9" style="color:var(--danger);text-align:center;">Failed to load network health: ${escapeHTML(err.toString())}</td></tr>`;
+                tbody.innerHTML = `<tr><td colspan="11" style="color:var(--danger);text-align:center;">Failed to load network health: ${escapeHTML(err.toString())}</td></tr>`;
             }
             
             // Auto refresh every 30 seconds if tab is still active

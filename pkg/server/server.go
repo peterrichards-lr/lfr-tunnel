@@ -116,6 +116,15 @@ type EdgeHealthStatus struct {
 	ResolvedIPv4 string `json:"resolved_ipv4,omitempty"`
 	ResolvedIPv6 string `json:"resolved_ipv6,omitempty"`
 	Version      string `json:"version,omitempty"`
+	// OnlineSince is the unix timestamp of when this node's status last
+	// transitioned to "Online" (0 when not currently online), so the portal
+	// can show uptime without the client needing its own persisted history.
+	OnlineSince int64 `json:"online_since,omitempty"`
+	// Timezone is the node's configured schedule timezone (IANA name, e.g.
+	// "Europe/Dublin"), used by the portal to show each node's current local
+	// time. Empty when edge power actions aren't configured for this node or
+	// it has no schedule set.
+	Timezone string `json:"timezone,omitempty"`
 }
 
 type safeConn struct {

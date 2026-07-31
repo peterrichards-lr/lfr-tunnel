@@ -127,7 +127,8 @@ func (s *Server) triggerEdgeHealthRecheck(nodeID string) {
 
 func (s *Server) updateEdgeHealth(id, status string, latency int64, errMsg string, version string) {
 	s.edgeHealthMu.Lock()
-	defer s.edgeHealthMu.Unlock()
+	prev := s.edgeHealth[id]
+	s.edgeHealthMu.Unlock()
 
 	var ipv4, ipv6 string
 	for _, edge := range s.cfg.EdgeNodes {
@@ -139,6 +140,32 @@ func (s *Server) updateEdgeHealth(id, status string, latency int64, errMsg strin
 		}
 	}
 
+	onlineSince := prev.OnlineSince
+	if status == "Online" {
+		if prev.Status != "Online" || prev.OnlineSince == 0 {
+			onlineSince = time.Now().Unix()
+		}
+	} else {
+		onlineSince = 0
+	}
+
+	// Timezone practically never changes once a node's schedule is set, so
+	// fetch it once and cache it here rather than hitting the provisioner
+	// sidecar (and the AWS API behind it) on every 60s health check.
+	// handleAdminEdgeSetSchedule clears the cached value on save so an
+	// edited timezone is picked up on the next check.
+	timezone := prev.Timezone
+	if timezone == "" && status == "Online" && s.provisionerClient != nil {
+		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+		sched, err := s.provisionerClient.GetSchedule(ctx, id)
+		cancel()
+		if err == nil {
+			timezone = sched.Timezone
+		}
+	}
+
+	s.edgeHealthMu.Lock()
+	defer s.edgeHealthMu.Unlock()
 	s.edgeHealth[id] = EdgeHealthStatus{
 		Status:       status,
 		LatencyMs:    latency,
@@ -148,6 +175,21 @@ func (s *Server) updateEdgeHealth(id, status string, latency int64, errMsg strin
 		ResolvedIPv4: ipv4,
 		ResolvedIPv6: ipv6,
 		Version:      version,
+		OnlineSince:  onlineSince,
+		Timezone:     timezone,
+	}
+}
+
+// invalidateEdgeTimezoneCache clears a node's cached schedule timezone so
+// the next health check re-fetches it from the provisioner sidecar. Called
+// after a successful schedule save so an edited timezone shows up promptly
+// instead of waiting on the (never, once cached) natural cache expiry.
+func (s *Server) invalidateEdgeTimezoneCache(id string) {
+	s.edgeHealthMu.Lock()
+	defer s.edgeHealthMu.Unlock()
+	if h, ok := s.edgeHealth[id]; ok {
+		h.Timezone = ""
+		s.edgeHealth[id] = h
 	}
 }
 

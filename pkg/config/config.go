@@ -101,9 +101,16 @@ type ServerConfig struct {
 	ControlPlaneURL            string                    `yaml:"control_plane_url"`
 	EdgeToken                  string                    `yaml:"edge_token"`
 	EdgeNodes                  []EdgeNodeConfig          `yaml:"edge_nodes"`
-	VanityDomainHook           string                    `yaml:"vanity_domain_hook"`
-	ProxyHeaders               map[string]string         `yaml:"proxy_headers"`
-	RoleSettings               map[string]RoleSetting    `yaml:"role_settings"`
+	// EdgeProvisionerURL points at the optional, AWS-specific edge-provisioner
+	// sidecar (see cmd/lfr-tunnel-edge-provisioner, issue #888) that this server
+	// calls to start/stop/restart edge node instances and manage their stop/start
+	// schedules. Empty by default -- when unset, those portal actions are simply
+	// absent, not erroring. Never set this to anything but a loopback address.
+	EdgeProvisionerURL       string                 `yaml:"edge_provisioner_url"`
+	EdgeProvisionerTokenFile string                 `yaml:"edge_provisioner_token_file"`
+	VanityDomainHook         string                 `yaml:"vanity_domain_hook"`
+	ProxyHeaders             map[string]string      `yaml:"proxy_headers"`
+	RoleSettings             map[string]RoleSetting `yaml:"role_settings"`
 
 	// Dynamic SSO/OIDC Providers
 	SSOProviders []SSOProviderConfig `yaml:"sso_providers"`

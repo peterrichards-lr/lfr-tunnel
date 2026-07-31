@@ -109,25 +109,42 @@ db_path: "/var/lib/lfr-tunneld/lfr-tunnel.db"
 
 # Authorized Edge Nodes list
 edge_nodes:
-  - id: "us-east-1"
+  - id: "edge-us" # a node ID, not an AWS region name -- keep these distinct even if
+                   # the node happens to live in a region with a similar-looking name
     token_hash: "4a2371ab6fbd2742e0fce40b2f3c1f94ecc8c02ad15f5455cd68bdf4e04f947a" # SHA-256 hash of plaintext token
 ```
 
-#### Automated Edge Node Configuration Deployment
+#### Registering a New Edge Node with the Control Plane
 
-To automate updating the Control Plane configuration with your regional edge nodes list:
-1. Create a local `edge_nodes.txt` file in the root of the repository matching the format in [edge_nodes.txt.example](file:///Volumes/SanDisk/repos/lfr-tunnel/edge_nodes.txt.example):
-   ```text
-   # Format: node_id,plaintext_token[,optional_public_url]
-   us-east-1,my-plaintext-edge-token-us,https://us.lfr-demo.se
-   apac-singapore:my-plaintext-edge-token-apac
-   ```
-2. Run the deployment script with the `-f` parameter:
+There is currently **no automated tool** for this step — track your nodes' plaintext
+tokens locally in a gitignored `edge_nodes.txt` (format in
+[edge_nodes.txt.example](file:///Volumes/SanDisk/repos/lfr-tunnel/edge_nodes.txt.example):
+`node_id,plaintext_token[,optional_public_url]`), then register each one with the
+control plane by hand:
+
+1. Generate a random plaintext token and its SHA-256 hash (never uploaded in plaintext):
    ```bash
-   ./scripts/deploy.sh -i ~/.ssh/vps_key -f edge_nodes.txt
+   TOKEN="edge-<name>-$(openssl rand -hex 32)"
+   echo -n "$TOKEN" | shasum -a 256 | awk '{print $1}'
    ```
+2. SSH to the control plane and add an entry to its `server-config.yaml`'s `edge_nodes`
+   list (`id`, `token_hash`, `url`) using the hash from step 1 — keep the plaintext
+   `$TOKEN` for the edge node's own config in §B below, and record it in your local
+   `edge_nodes.txt`.
+3. Restore the file's ownership/permissions after editing —
+   `chown lfr-tunnel:lfr-tunnel /etc/lfr-tunneld/server-config.yaml && chmod 600 ...`
+   (substitute whatever user `lfr-tunneld` actually runs as on your system). **This step
+   is easy to get wrong and will silently break the service**: setting it to
+   `root:root` instead locks out the service user entirely, causing an immediate
+   `permission denied` crash loop on the *next* restart — verify with
+   `systemctl status lfr-tunneld` before moving on.
+4. `sudo systemctl restart lfr-tunneld`. This briefly interrupts **every** currently
+   active tunnel across **every** edge node, not just the new one — plan this for a
+   quiet moment, or batch it with other pending edge-node registrations to only
+   restart once.
 
-The script will automatically download the current configuration from the Control Plane VPS, calculate the SHA-256 hashes of the pre-shared tokens locally, append/update the `edge_nodes` section securely, upload it back to the VPS, apply restricted owner permissions, and restart `lfr-tunneld`.
+Consider this section a candidate for automation (a script wrapping steps 1-4) if
+you're registering nodes often enough for the manual process to become tedious.
 
 
 ### B. Regional Edge Gateway Configuration (`server-config.yaml`)
@@ -141,7 +158,7 @@ bind_addr: ":8090" # Port for local proxy / direct tunnels
 db_path: "" # Explicitly empty db_path triggers stateless Edge Mode
 
 control_plane_url: "https://tunnel.lfr-demo.se"
-edge_token: "us-east-1-pre-shared-key-plaintext"
+edge_token: "edge-us-pre-shared-key-plaintext" # matches the "edge-us" id registered above
 ```
 
 ---

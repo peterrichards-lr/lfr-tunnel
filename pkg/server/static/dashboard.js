@@ -4196,6 +4196,9 @@ applyTheme(currentUser.theme_preference);
         // ----------------------------------------------------
         // NETWORK HEALTH
         // ----------------------------------------------------
+        let edgePowerActionsEnabled = false;
+        let edgeSelectedIds = new Set();
+
         async function loadNetworkHealth() {
             if (!document.getElementById('nav-network-health').classList.contains('active')) return;
             const tbody = document.getElementById('network-health-body');
@@ -4203,9 +4206,17 @@ applyTheme(currentUser.theme_preference);
                 const res = await fetch('/api/portal/edge-health');
                 if (res.status === 401) { logout(); return; }
                 const payload = await res.json();
-                
+
                 const data = payload.nodes || payload;
                 const outboundOk = payload.outbound_ok !== false;
+                edgePowerActionsEnabled = !!payload.edge_power_actions_enabled;
+
+                const selectAllTh = document.getElementById('edge-select-all-th');
+                if (selectAllTh) selectAllTh.classList.toggle('hidden', !edgePowerActionsEnabled);
+                if (!edgePowerActionsEnabled) {
+                    edgeSelectedIds.clear();
+                    updateEdgeBulkToolbar();
+                }
 
                 // Render or remove the gateway network error warning banner
                 let banner = document.getElementById('gateway-network-error-banner');
@@ -4225,7 +4236,7 @@ applyTheme(currentUser.theme_preference);
                 tbody.innerHTML = '';
                 const keys = Object.keys(data || {});
                 if (keys.length === 0) {
-                    tbody.innerHTML = '<tr><td colspan="8" style="text-align:center; opacity:0.6;">No edge nodes configured</td></tr>';
+                    tbody.innerHTML = '<tr><td colspan="9" style="text-align:center; opacity:0.6;">No edge nodes configured</td></tr>';
                 } else {
                     keys.sort().forEach(id => {
                         const h = data[id];
@@ -4239,9 +4250,19 @@ applyTheme(currentUser.theme_preference);
 
                         const verText = h.version || '-';
                         const isAdmin = currentUser && (currentUser.role === 'admin' || currentUser.role === 'owner');
-                        
+
                         let actionsMenuHtml = '';
                         if (isAdmin) {
+                            let powerItemsHtml = '';
+                            if (edgePowerActionsEnabled) {
+                                powerItemsHtml = `
+                                    <div class="action-menu-divider"></div>
+                                    <button class="action-menu-item" onclick="startEdgeNode('${escapeHTML(id)}')">Start</button>
+                                    <button class="action-menu-item" onclick="stopEdgeNode('${escapeHTML(id)}')">Stop</button>
+                                    <button class="action-menu-item" onclick="restartEdgeInstance('${escapeHTML(id)}')">Restart Instance</button>
+                                    <button class="action-menu-item" onclick="openEdgeScheduleModal('${escapeHTML(id)}')">Edit Schedule</button>
+                                `;
+                            }
                             actionsMenuHtml = `
                                 <div class="action-menu">
                                     <button class="action-menu-btn" onclick="toggleActionMenu('menu-edge-${escapeHTML(id)}', event)">⋮</button>
@@ -4250,6 +4271,7 @@ applyTheme(currentUser.theme_preference);
                                         <button class="action-menu-item" onclick="enableEdgeMaintenance('${escapeHTML(id)}')">Enable Maintenance</button>
                                         <button class="action-menu-item" onclick="disableEdgeMaintenance('${escapeHTML(id)}')">Disable Maintenance</button>
                                         <button class="action-menu-item danger" onclick="kickEdgeTunnels('${escapeHTML(id)}')">Kick All Tunnels</button>
+                                        ${powerItemsHtml}
                                     </div>
                                 </div>
                             `;
@@ -4257,8 +4279,13 @@ applyTheme(currentUser.theme_preference);
                             actionsMenuHtml = '-';
                         }
 
+                        const checkboxCellHtml = edgePowerActionsEnabled
+                            ? `<td><input type="checkbox" class="edge-select-checkbox" data-node-id="${escapeHTML(id)}" ${edgeSelectedIds.has(id) ? 'checked' : ''} onchange="toggleEdgeSelection('${escapeHTML(id)}', this.checked)"></td>`
+                            : '';
+
                         const trHtml = `
                             <tr>
+                                ${checkboxCellHtml}
                                 <td><strong>${escapeHTML(id)}</strong></td>
                                 <td><code style="font-family: monospace; font-size: 12px; background: rgba(255, 255, 255, 0.05); padding: 2px 6px; border-radius: 4px;">${escapeHTML(resolvedIP)}</code></td>
                                 <td>
@@ -4279,7 +4306,7 @@ applyTheme(currentUser.theme_preference);
                 }
             } catch (err) {
                 console.error(err);
-                tbody.innerHTML = `<tr><td colspan="8" style="color:var(--danger);text-align:center;">Failed to load network health: ${escapeHTML(err.toString())}</td></tr>`;
+                tbody.innerHTML = `<tr><td colspan="9" style="color:var(--danger);text-align:center;">Failed to load network health: ${escapeHTML(err.toString())}</td></tr>`;
             }
             
             // Auto refresh every 30 seconds if tab is still active
@@ -4398,6 +4425,165 @@ applyTheme(currentUser.theme_preference);
         window.disableEdgeMaintenance = function(nodeId) {
             if (confirm("Are you sure you want to disable maintenance on " + nodeId + "?")) {
                 triggerEdgeAction(nodeId, "maintenance_disable");
+            }
+        };
+
+        // ----------------------------------------------------
+        // EDGE POWER ACTIONS (start/stop/restart the underlying instance via
+        // the optional edge-provisioner sidecar -- distinct from
+        // restartEdgeDaemon above, which restarts the already-running
+        // lfr-tunneld process over its WebSocket control channel and can't
+        // do anything for a stopped/unreachable instance).
+        // ----------------------------------------------------
+        async function triggerEdgePowerAction(nodeId, action) {
+            try {
+                const res = await fetch(`/api/admin/edge/${encodeURIComponent(nodeId)}/${action}`, { method: 'POST' });
+                if (res.status === 401) { logout(); return; }
+                if (res.status === 202) {
+                    showToast(`${action} requested for ${nodeId}.`);
+                    setTimeout(loadNetworkHealth, 1500);
+                    return;
+                }
+                const data = await res.json().catch(() => ({}));
+                showToast("Error: " + (data.error || `${action} failed.`));
+            } catch (err) {
+                console.error(err);
+                showToast("Network error: " + err.toString());
+            }
+        }
+
+        window.startEdgeNode = function(nodeId) {
+            if (confirm(`Start the ${nodeId} instance?`)) triggerEdgePowerAction(nodeId, 'start');
+        };
+        window.stopEdgeNode = function(nodeId) {
+            if (confirm(`Stop the ${nodeId} instance? Any active tunnels through it will drop.`)) triggerEdgePowerAction(nodeId, 'stop');
+        };
+        window.restartEdgeInstance = function(nodeId) {
+            if (confirm(`Restart the ${nodeId} instance (stop, wait, start)? This can take a minute or more.`)) triggerEdgePowerAction(nodeId, 'restart');
+        };
+
+        window.toggleEdgeSelection = function(nodeId, checked) {
+            if (checked) edgeSelectedIds.add(nodeId); else edgeSelectedIds.delete(nodeId);
+            updateEdgeBulkToolbar();
+        };
+
+        window.toggleAllEdgeSelection = function(checked) {
+            document.querySelectorAll('.edge-select-checkbox').forEach(cb => {
+                cb.checked = checked;
+                if (checked) edgeSelectedIds.add(cb.dataset.nodeId); else edgeSelectedIds.delete(cb.dataset.nodeId);
+            });
+            updateEdgeBulkToolbar();
+        };
+
+        function updateEdgeBulkToolbar() {
+            const toolbar = document.getElementById('edge-bulk-toolbar');
+            const count = document.getElementById('edge-bulk-count');
+            if (!toolbar || !count) return;
+            if (edgeSelectedIds.size > 0) {
+                toolbar.classList.remove('hidden');
+                count.textContent = `${edgeSelectedIds.size} selected`;
+            } else {
+                toolbar.classList.add('hidden');
+            }
+        }
+
+        window.bulkEdgeAction = async function(action) {
+            const nodeIds = Array.from(edgeSelectedIds);
+            if (nodeIds.length === 0) return;
+            if (!confirm(`${action.charAt(0).toUpperCase() + action.slice(1)} ${nodeIds.length} selected node(s)?`)) return;
+
+            try {
+                const res = await fetch('/api/admin/edge/bulk', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ node_ids: nodeIds, action: action })
+                });
+                if (res.status === 401) { logout(); return; }
+                const data = await res.json();
+                const results = data.results || {};
+                const failed = Object.keys(results).filter(id => !results[id].ok);
+                if (failed.length === 0) {
+                    showToast(`${action} requested for ${nodeIds.length} node(s).`);
+                } else {
+                    showToast(`${action} failed for: ${failed.join(', ')}`);
+                }
+                edgeSelectedIds.clear();
+                updateEdgeBulkToolbar();
+                setTimeout(loadNetworkHealth, 1500);
+            } catch (err) {
+                console.error(err);
+                showToast("Network error: " + err.toString());
+            }
+        };
+
+        // ----------------------------------------------------
+        // EDGE SCHEDULE EDITING
+        // ----------------------------------------------------
+        let edgeScheduleNodeId = null;
+
+        window.openEdgeScheduleModal = async function(nodeId) {
+            edgeScheduleNodeId = nodeId;
+            document.getElementById('edge-schedule-modal-node').textContent = nodeId;
+            document.getElementById('edge-schedule-stop-time').value = '';
+            document.getElementById('edge-schedule-start-time').value = '';
+            document.getElementById('edge-schedule-timezone').value = '';
+            document.getElementById('edge-schedule-enabled').checked = true;
+
+            try {
+                const res = await fetch(`/api/admin/edge/${encodeURIComponent(nodeId)}/schedule`);
+                if (res.status === 401) { logout(); return; }
+                if (res.ok) {
+                    const sched = await res.json();
+                    document.getElementById('edge-schedule-stop-time').value = sched.stop_time || '';
+                    document.getElementById('edge-schedule-start-time').value = sched.start_time || '';
+                    document.getElementById('edge-schedule-timezone').value = sched.timezone || '';
+                    document.getElementById('edge-schedule-enabled').checked = sched.enabled !== false;
+                } else if (res.status !== 404) {
+                    const data = await res.json().catch(() => ({}));
+                    showToast("Error loading schedule: " + (data.error || res.status));
+                }
+            } catch (err) {
+                console.error(err);
+                showToast("Network error: " + err.toString());
+            }
+
+            document.getElementById('edge-schedule-modal').style.display = 'flex';
+        };
+
+        window.closeEdgeScheduleModal = function() {
+            document.getElementById('edge-schedule-modal').style.display = 'none';
+            edgeScheduleNodeId = null;
+        };
+
+        window.submitEdgeSchedule = async function() {
+            if (!edgeScheduleNodeId) return;
+            const stopTime = document.getElementById('edge-schedule-stop-time').value;
+            const startTime = document.getElementById('edge-schedule-start-time').value;
+            const timezone = document.getElementById('edge-schedule-timezone').value.trim();
+            const enabled = document.getElementById('edge-schedule-enabled').checked;
+            if (!stopTime || !startTime || !timezone) {
+                showToast("Stop time, start time, and timezone are all required.");
+                return;
+            }
+
+            try {
+                const res = await fetch(`/api/admin/edge/${encodeURIComponent(edgeScheduleNodeId)}/schedule`, {
+                    method: 'PUT',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ stop_time: stopTime, start_time: startTime, timezone: timezone, enabled: enabled })
+                });
+                if (res.status === 401) { logout(); return; }
+                if (res.ok) {
+                    showToast("Schedule updated.");
+                    closeEdgeScheduleModal();
+                    loadNetworkHealth();
+                } else {
+                    const data = await res.json().catch(() => ({}));
+                    showToast("Error: " + (data.error || "Failed to update schedule."));
+                }
+            } catch (err) {
+                console.error(err);
+                showToast("Network error: " + err.toString());
             }
         };
 

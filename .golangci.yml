@@ -79,6 +79,12 @@ linters:
           - gocognit
           - dupl
           - goconst
+      # Hand-declared minimal API interfaces (EC2API, SchedulerAPI) paired with
+      # fake test implementations inherently duplicate method signatures --
+      # same pattern/rationale as pkg/ops's Route53API above.
+      - path: pkg/provisioner/.*
+        linters:
+          - dupl
 
   settings:
     errcheck:

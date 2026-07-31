@@ -47,3 +47,21 @@ func GenerateOrLoadToken(path string) (string, error) {
 func ValidToken(expected, presented string) bool {
 	return subtle.ConstantTimeCompare([]byte(expected), []byte(presented)) == 1
 }
+
+// LoadToken reads the shared secret from path without ever generating one.
+// This is the client-side counterpart to GenerateOrLoadToken: lfr-tunneld is
+// not the owner of this token (the sidecar is), so it must never silently
+// create a mismatched one -- a missing file here means the sidecar hasn't
+// started yet, or edge_provisioner_token_file is misconfigured, and either
+// way that's a real error to surface, not something to paper over.
+func LoadToken(path string) (string, error) {
+	data, err := os.ReadFile(path)
+	if err != nil {
+		return "", fmt.Errorf("reading edge-provisioner token file %s: %w", path, err)
+	}
+	token := strings.TrimSpace(string(data))
+	if token == "" {
+		return "", fmt.Errorf("edge-provisioner token file %s is empty", path)
+	}
+	return token, nil
+}

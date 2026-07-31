@@ -9,6 +9,10 @@ import (
 	"gopkg.in/yaml.v3"
 )
 
+// DefaultScheduleGroup matches scripts/common/schedule-edge-node-hours.sh's
+// own --schedule-group default -- keep the two in sync if either changes.
+const DefaultScheduleGroup = "lfr-tunnel-edge-nodes"
+
 // NodeTarget maps a central control plane's edge node ID (the same "id" used
 // in server-config.yaml's edge_nodes list) to the cloud resource that backs
 // it. This mapping lives here, not in server-config.yaml, so the core
@@ -59,7 +63,7 @@ func LoadConfig(path string) (*Config, error) {
 		return nil, fmt.Errorf("token_file is required")
 	}
 	if cfg.ScheduleGroup == "" {
-		cfg.ScheduleGroup = "lfr-tunnel-edge-nodes"
+		cfg.ScheduleGroup = DefaultScheduleGroup
 	}
 	for id, target := range cfg.Nodes {
 		if target.InstanceID == "" || target.Region == "" {

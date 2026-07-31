@@ -29,7 +29,7 @@ nodes:
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
-	if cfg.ScheduleGroup != "lfr-tunnel-edge-nodes" {
+	if cfg.ScheduleGroup != DefaultScheduleGroup {
 		t.Errorf("expected default schedule group, got %q", cfg.ScheduleGroup)
 	}
 	if cfg.Nodes["edge-sa"].InstanceID != "i-abc123" {

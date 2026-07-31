@@ -45,7 +45,7 @@ func (f *fakeSchedulerClient) UpdateSchedule(ctx context.Context, in *scheduler.
 func newTestBackend(ec2Client EC2API, schedClient SchedulerAPI) *AWSBackend {
 	return &AWSBackend{
 		nodes:            map[string]NodeTarget{"edge-sa": {InstanceID: "i-abc123", Region: "sa-east-1"}},
-		scheduleGroup:    "lfr-tunnel-edge-nodes",
+		scheduleGroup:    DefaultScheduleGroup,
 		ec2Clients:       map[string]EC2API{"sa-east-1": ec2Client},
 		schedulerClients: map[string]SchedulerAPI{"sa-east-1": schedClient},
 	}

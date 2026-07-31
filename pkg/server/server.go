@@ -39,6 +39,7 @@ import (
 	"lfr-tunnel/pkg/db"
 	"lfr-tunnel/pkg/mail"
 	"lfr-tunnel/pkg/nginx"
+	"lfr-tunnel/pkg/provisioner"
 	"lfr-tunnel/pkg/webhook"
 
 	"github.com/gorilla/websocket"
@@ -197,6 +198,11 @@ type Server struct {
 	lastTestTimes      map[string]time.Time
 	testLimiterMu      sync.Mutex
 	roundRobinCounter  uint64
+	// provisionerClient talks to the optional, AWS-specific edge-provisioner
+	// sidecar (see cmd/lfr-tunnel-edge-provisioner, issue #888). Nil unless
+	// cfg.EdgeProvisionerURL is set -- every handler that uses it must treat
+	// nil as "feature not configured," not an error.
+	provisionerClient *provisioner.Client
 }
 
 // NewServer initializes and returns a new Server instance.
@@ -298,6 +304,19 @@ func NewServer(cfg *config.ServerConfig) (*Server, error) {
 	srv.proxyHandler.caCert = caCert
 	srv.webhooks = webhook.NewWebhookService(cfg.Webhooks, database)
 	srv.portalService = NewPortalService(srv.db, srv.cfg, srv.notifications, &srv.portalMap, caCert, caKey)
+
+	// Edge power actions (start/stop/restart, schedule editing) are entirely
+	// optional and AWS-specific -- absent unless both the sidecar URL and its
+	// token file are configured. A missing/unreadable token file is treated
+	// as "feature not configured" here, not a fatal startup error, since the
+	// sidecar (which owns the token) may simply not have started yet.
+	if cfg.EdgeProvisionerURL != "" {
+		if token, err := provisioner.LoadToken(cfg.EdgeProvisionerTokenFile); err != nil {
+			slog.Info(fmt.Sprintf("[Server] edge_provisioner_url is set but its token could not be loaded, edge power actions disabled: %v", err))
+		} else {
+			srv.provisionerClient = provisioner.NewClient(cfg.EdgeProvisionerURL, token)
+		}
+	}
 
 	// Initialize i18n dynamic engine
 	if err := srv.initI18n(); err != nil {
@@ -2536,6 +2555,34 @@ func (s *Server) handleAdminEndpoints(w http.ResponseWriter, r *http.Request) {
 
 	if r.Method == http.MethodDelete && strings.HasPrefix(r.URL.Path, "/api/admin/users/") {
 		s.handleAdminDeleteUser(w, r, actor)
+		return
+	}
+
+	// Edge power actions (#883/#884/#885) -- proxy to the optional, AWS-specific
+	// edge-provisioner sidecar (see requireProvisioner, issue #888). All of
+	// these no-op with 501 if edge_provisioner_url isn't configured.
+	if r.Method == http.MethodPost && r.URL.Path == "/api/admin/edge/bulk" {
+		s.handleAdminEdgeBulkAction(w, r, actor)
+		return
+	}
+	if r.Method == http.MethodPost && strings.HasPrefix(r.URL.Path, "/api/admin/edge/") && strings.HasSuffix(r.URL.Path, "/start") {
+		s.handleAdminEdgeStart(w, r, actor)
+		return
+	}
+	if r.Method == http.MethodPost && strings.HasPrefix(r.URL.Path, "/api/admin/edge/") && strings.HasSuffix(r.URL.Path, "/stop") {
+		s.handleAdminEdgeStop(w, r, actor)
+		return
+	}
+	if r.Method == http.MethodPost && strings.HasPrefix(r.URL.Path, "/api/admin/edge/") && strings.HasSuffix(r.URL.Path, "/restart") {
+		s.handleAdminEdgeRestart(w, r, actor)
+		return
+	}
+	if r.Method == http.MethodGet && strings.HasPrefix(r.URL.Path, "/api/admin/edge/") && strings.HasSuffix(r.URL.Path, "/schedule") {
+		s.handleAdminEdgeGetSchedule(w, r, actor)
+		return
+	}
+	if r.Method == http.MethodPut && strings.HasPrefix(r.URL.Path, "/api/admin/edge/") && strings.HasSuffix(r.URL.Path, "/schedule") {
+		s.handleAdminEdgeSetSchedule(w, r, actor)
 		return
 	}
 
@@ -5397,8 +5444,9 @@ func (s *Server) handleEdgeHealth(w http.ResponseWriter, r *http.Request) {
 	s.outboundMutex.RUnlock()
 
 	response := map[string]interface{}{
-		"outbound_ok": outboundOk,
-		"nodes":       nodes,
+		"outbound_ok":                outboundOk,
+		"nodes":                      nodes,
+		"edge_power_actions_enabled": s.provisionerClient != nil,
 	}
 	respondJSON(w, http.StatusOK, response)
 }

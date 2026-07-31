@@ -3,6 +3,7 @@ package provisioner
 import (
 	"os"
 	"path/filepath"
+	"runtime"
 	"testing"
 )
 
@@ -21,7 +22,10 @@ func TestGenerateOrLoadToken_GeneratesOnFirstRun(t *testing.T) {
 	if err != nil {
 		t.Fatalf("token file was not created: %v", err)
 	}
-	if info.Mode().Perm() != 0o600 {
+	// Windows has no POSIX permission bits -- os.WriteFile's mode argument is
+	// only meaningfully honored on Unix-like systems there (see the same
+	// pattern in pkg/config/config_test.go).
+	if runtime.GOOS != "windows" && info.Mode().Perm() != 0o600 {
 		t.Errorf("expected token file permissions 0600, got %o", info.Mode().Perm())
 	}
 }

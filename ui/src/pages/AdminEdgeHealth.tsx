@@ -282,6 +282,7 @@ export default function AdminEdgeHealth() {
           lastCheckAt={nodes[detailsNodeId].last_check_at}
           version={nodes[detailsNodeId].version}
           errorMessage={nodes[detailsNodeId].error_message}
+          powerActionsEnabled={powerActionsEnabled}
           onClose={() => setDetailsNodeId(null)}
         />
       )}
@@ -450,28 +451,29 @@ export default function AdminEdgeHealth() {
                                   <div className="fixed inset-0 z-40" onClick={() => setOpenMenuId(null)} />
                                   <div className="table-column-dropdown" style={{ right: 0, left: 'auto' }}>
                                     <button
-                                      className="flex items-center gap-sm text-xs cursor-pointer py-xs w-full text-left"
+                                      className="dropdown-menu-item flex items-center gap-sm text-xs cursor-pointer w-full text-left"
                                       style={{ background: 'none', border: 'none' }}
                                       onClick={() => { setOpenMenuId(null); startNode(n.id!); }}
                                     >
                                       Start
                                     </button>
                                     <button
-                                      className="flex items-center gap-sm text-xs cursor-pointer py-xs w-full text-left"
+                                      className="dropdown-menu-item flex items-center gap-sm text-xs cursor-pointer w-full text-left"
                                       style={{ background: 'none', border: 'none' }}
                                       onClick={() => { setOpenMenuId(null); stopNode(n.id!); }}
                                     >
                                       Stop
                                     </button>
                                     <button
-                                      className="flex items-center gap-sm text-xs cursor-pointer py-xs w-full text-left"
+                                      className="dropdown-menu-item flex items-center gap-sm text-xs cursor-pointer w-full text-left"
                                       style={{ background: 'none', border: 'none' }}
                                       onClick={() => { setOpenMenuId(null); restartNodeInstance(n.id!); }}
                                     >
                                       Restart Instance
                                     </button>
+                                    <div className="dropdown-menu-divider" />
                                     <button
-                                      className="flex items-center gap-sm text-xs cursor-pointer py-xs w-full text-left"
+                                      className="dropdown-menu-item flex items-center gap-sm text-xs cursor-pointer w-full text-left"
                                       style={{ background: 'none', border: 'none' }}
                                       onClick={() => { setOpenMenuId(null); setScheduleModalNodeId(n.id!); }}
                                     >

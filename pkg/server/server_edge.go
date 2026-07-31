@@ -12,6 +12,8 @@ import (
 	"net/http"
 	"net/url"
 	"time"
+
+	"lfr-tunnel/pkg/config"
 )
 
 func (s *Server) monitorEdgeHealth() {
@@ -22,50 +24,7 @@ func (s *Server) monitorEdgeHealth() {
 		s.outboundMutex.Unlock()
 
 		for _, edge := range s.cfg.EdgeNodes {
-			if edge.URL == "" {
-				continue
-			}
-
-			if !outboundOk {
-				s.updateEdgeHealth(edge.ID, "Unknown", 0, "Gateway outbound connectivity check failed", "")
-				continue
-			}
-
-			client := &http.Client{Timeout: 5 * time.Second}
-			start := time.Now()
-			req, err := http.NewRequest(http.MethodGet, edge.URL+"/api/version", nil)
-			if err != nil {
-				s.updateEdgeHealth(edge.ID, "Offline", 0, err.Error(), "")
-				continue
-			}
-
-			req.Header.Set("User-Agent", "lfr-tunnel-health-monitor")
-
-			resp, err := client.Do(req)
-			latency := time.Since(start).Milliseconds()
-
-			if err != nil {
-				s.updateEdgeHealth(edge.ID, "Offline", latency, err.Error(), "")
-				continue
-			}
-
-			var version string
-			if resp.StatusCode == http.StatusOK {
-				var versionResp struct {
-					ServerVersion string `json:"server_version"`
-				}
-				if bodyBytes, readErr := io.ReadAll(resp.Body); readErr == nil {
-					_ = json.Unmarshal(bodyBytes, &versionResp) //nolint:errcheck
-					version = versionResp.ServerVersion
-				}
-			}
-			_ = resp.Body.Close() //nolint:errcheck
-
-			if resp.StatusCode == http.StatusOK {
-				s.updateEdgeHealth(edge.ID, "Online", latency, "", version)
-			} else {
-				s.updateEdgeHealth(edge.ID, "Offline", latency, fmt.Sprintf("HTTP %d", resp.StatusCode), "")
-			}
+			s.checkEdgeNodeHealth(edge, outboundOk)
 		}
 		select {
 		case <-s.ctx.Done():
@@ -73,6 +32,97 @@ func (s *Server) monitorEdgeHealth() {
 		case <-time.After(60 * time.Second):
 		}
 	}
+}
+
+// checkEdgeNodeHealth performs a single health check for one edge node and
+// records the result. Shared by the periodic monitorEdgeHealth loop and
+// triggerEdgeHealthRecheck (an on-demand burst run after a portal power
+// action, so status reflects sooner than the periodic loop's up-to-60s lag).
+func (s *Server) checkEdgeNodeHealth(edge config.EdgeNodeConfig, outboundOk bool) {
+	if edge.URL == "" {
+		return
+	}
+
+	if !outboundOk {
+		s.updateEdgeHealth(edge.ID, "Unknown", 0, "Gateway outbound connectivity check failed", "")
+		return
+	}
+
+	client := &http.Client{Timeout: 5 * time.Second}
+	start := time.Now()
+	req, err := http.NewRequest(http.MethodGet, edge.URL+"/api/version", nil)
+	if err != nil {
+		s.updateEdgeHealth(edge.ID, "Offline", 0, err.Error(), "")
+		return
+	}
+
+	req.Header.Set("User-Agent", "lfr-tunnel-health-monitor")
+
+	resp, err := client.Do(req)
+	latency := time.Since(start).Milliseconds()
+
+	if err != nil {
+		s.updateEdgeHealth(edge.ID, "Offline", latency, err.Error(), "")
+		return
+	}
+
+	var version string
+	if resp.StatusCode == http.StatusOK {
+		var versionResp struct {
+			ServerVersion string `json:"server_version"`
+		}
+		if bodyBytes, readErr := io.ReadAll(resp.Body); readErr == nil {
+			_ = json.Unmarshal(bodyBytes, &versionResp) //nolint:errcheck
+			version = versionResp.ServerVersion
+		}
+	}
+	_ = resp.Body.Close() //nolint:errcheck
+
+	if resp.StatusCode == http.StatusOK {
+		s.updateEdgeHealth(edge.ID, "Online", latency, "", version)
+	} else {
+		s.updateEdgeHealth(edge.ID, "Offline", latency, fmt.Sprintf("HTTP %d", resp.StatusCode), "")
+	}
+}
+
+// triggerEdgeHealthRecheck re-checks a single node's health every 5s for up
+// to 2 minutes in the background. Called after a portal power action
+// (start/stop/restart) so the Network Health table reflects the outcome
+// within seconds rather than waiting for monitorEdgeHealth's next scheduled
+// pass, which could be up to 60s away regardless of client-side polling.
+func (s *Server) triggerEdgeHealthRecheck(nodeID string) {
+	var target config.EdgeNodeConfig
+	found := false
+	for _, edge := range s.cfg.EdgeNodes {
+		if edge.ID == nodeID {
+			target = edge
+			found = true
+			break
+		}
+	}
+	if !found {
+		return
+	}
+
+	go func() {
+		ticker := time.NewTicker(5 * time.Second)
+		defer ticker.Stop()
+		deadline := time.After(2 * time.Minute)
+		for {
+			s.outboundMutex.RLock()
+			outboundOk := s.outboundConnected
+			s.outboundMutex.RUnlock()
+			s.checkEdgeNodeHealth(target, outboundOk)
+
+			select {
+			case <-s.ctx.Done():
+				return
+			case <-deadline:
+				return
+			case <-ticker.C:
+			}
+		}
+	}()
 }
 
 func (s *Server) updateEdgeHealth(id, status string, latency int64, errMsg string, version string) {

@@ -1739,6 +1739,30 @@ html[dir="rtl"] td, html[dir="rtl"] th {
     accent-color: var(--primary);
 }
 
+/* Generic dropdown menu item -- e.g. the edge power-action menu in
+   AdminEdgeHealth.tsx. Unstyled <button> elements don't inherit the
+   surrounding container's text color, so without this they fall back to
+   the browser's default button text color, which has poor contrast (or
+   looks like an unstyled system button) against .table-column-dropdown's
+   themed background in dark mode. */
+.dropdown-menu-item {
+    color: var(--text-main);
+    border-radius: 6px;
+    padding: 6px 8px;
+    transition: background 0.15s ease;
+}
+.dropdown-menu-item:hover {
+    background: rgba(255, 255, 255, 0.08);
+}
+:root[data-theme="light"] .dropdown-menu-item:hover {
+    background: rgba(0, 0, 0, 0.05);
+}
+.dropdown-menu-divider {
+    height: 1px;
+    background: var(--border);
+    margin: 4px 0;
+}
+
 /* Floating Return to Top Button */
 .scroll-to-top-btn {
     position: fixed;

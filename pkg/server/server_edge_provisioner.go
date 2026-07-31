@@ -43,6 +43,7 @@ func (s *Server) handleAdminEdgeStart(w http.ResponseWriter, r *http.Request, ac
 		return
 	}
 	s.writeAudit(actor, "edge.power.start", "node", nodeID, "Edge node start requested via portal", r)
+	s.triggerEdgeHealthRecheck(nodeID)
 	w.WriteHeader(http.StatusAccepted)
 }
 
@@ -58,6 +59,7 @@ func (s *Server) handleAdminEdgeStop(w http.ResponseWriter, r *http.Request, act
 		return
 	}
 	s.writeAudit(actor, "edge.power.stop", "node", nodeID, "Edge node stop requested via portal", r)
+	s.triggerEdgeHealthRecheck(nodeID)
 	w.WriteHeader(http.StatusAccepted)
 }
 
@@ -73,6 +75,7 @@ func (s *Server) handleAdminEdgeRestart(w http.ResponseWriter, r *http.Request, 
 		return
 	}
 	s.writeAudit(actor, "edge.power.restart", "node", nodeID, "Edge node restart requested via portal", r)
+	s.triggerEdgeHealthRecheck(nodeID)
 	w.WriteHeader(http.StatusAccepted)
 }
 
@@ -158,6 +161,7 @@ func (s *Server) handleAdminEdgeBulkAction(w http.ResponseWriter, r *http.Reques
 		}
 		results[nodeID] = edgeBulkActionResult{OK: true}
 		s.writeAudit(actor, "edge.power."+req.Action, "node", nodeID, "Bulk "+req.Action+" requested via portal", r)
+		s.triggerEdgeHealthRecheck(nodeID)
 	}
 
 	respondJSON(w, http.StatusOK, map[string]any{"results": results})

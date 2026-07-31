@@ -5,6 +5,7 @@ import DataTableToolbar from '../components/DataTableToolbar';
 import DataTablePagination from '../components/DataTablePagination';
 import EdgeScheduleModal from '../components/EdgeScheduleModal';
 import EdgeDetailsModal from '../components/EdgeDetailsModal';
+import ActionMenu from '../components/ActionMenu';
 import Skeleton from '../components/Skeleton';
 import { useI18n } from '../contexts/I18nContext';
 import { useUI } from '../contexts/UIContext';
@@ -21,6 +22,34 @@ interface EdgeNode {
   error_message: string;
   version: string;
   created_at?: string;
+  online_since?: number;
+  timezone?: string;
+}
+
+// Uptime since a node's status last transitioned to Online (0/absent means
+// not currently online) -- server-tracked in EdgeHealthStatus.OnlineSince,
+// see server_edge.go's updateEdgeHealth.
+function formatUptime(seconds: number): string {
+  const days = Math.floor(seconds / 86400);
+  const hours = Math.floor((seconds % 86400) / 3600);
+  const minutes = Math.floor((seconds % 3600) / 60);
+  const parts: string[] = [];
+  if (days > 0) parts.push(`${days}d`);
+  if (hours > 0) parts.push(`${hours}h`);
+  if (minutes > 0 || parts.length === 0) parts.push(`${minutes}m`);
+  return parts.join(' ');
+}
+
+// The node's own local time (its configured schedule timezone), not the
+// viewer's -- distinct from useSettings().formatDate, which always renders
+// in the viewer's timezone/UTC preference.
+function formatNodeLocalTime(tz?: string): string {
+  if (!tz) return '—';
+  try {
+    return new Intl.DateTimeFormat(undefined, { timeZone: tz, hour: '2-digit', minute: '2-digit', hour12: false }).format(new Date());
+  } catch {
+    return '—';
+  }
 }
 
 export default function AdminEdgeHealth() {
@@ -30,7 +59,6 @@ export default function AdminEdgeHealth() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
-  const [openMenuId, setOpenMenuId] = useState<string | null>(null);
   const [scheduleModalNodeId, setScheduleModalNodeId] = useState<string | null>(null);
   const [detailsNodeId, setDetailsNodeId] = useState<string | null>(null);
   const { t } = useI18n();
@@ -178,6 +206,8 @@ export default function AdminEdgeHealth() {
     { key: 'status', label: t('status', 'Status'), sortable: true },
     { key: 'resolved_ip', label: t('resolved_ip', 'IP Address'), sortable: true },
     { key: 'latency_ms', label: t('latency', 'Latency'), sortable: true },
+    { key: 'timezone', label: t('local_time', 'Local Time'), sortable: false },
+    { key: 'online_since', label: t('uptime', 'Uptime'), sortable: true },
     { key: 'version', label: t('version', 'Version'), sortable: true },
     { key: 'created_at', label: t('created_at', 'Created Date'), sortable: true }
   ], [t]);
@@ -351,6 +381,16 @@ export default function AdminEdgeHealth() {
                       {t('latency', 'Latency')}{getSortIndicator('latency_ms')}
                     </th>
                   )}
+                  {isColumnVisible('timezone') && (
+                    <th className="th-col">
+                      {t('local_time', 'Local Time')}
+                    </th>
+                  )}
+                  {isColumnVisible('online_since') && (
+                    <th className="th-col th-col--sortable" onClick={() => requestSort('online_since')} aria-sort={getAriaSort('online_since')}>
+                      {t('uptime', 'Uptime')}{getSortIndicator('online_since')}
+                    </th>
+                  )}
                   {isColumnVisible('version') && (
                     <th className="th-col th-col--sortable" onClick={() => requestSort('version')} aria-sort={getAriaSort('version')}>
                       {t('version', 'Version')}{getSortIndicator('version')}
@@ -367,7 +407,7 @@ export default function AdminEdgeHealth() {
               <tbody>
                 {paginatedItems.length === 0 ? (
                   <tr>
-                    <td colSpan={8} className="td-empty">
+                    <td colSpan={10} className="td-empty">
                       {t('no_nodes_found', 'No edge nodes detected.')}
                     </td>
                   </tr>
@@ -398,6 +438,16 @@ export default function AdminEdgeHealth() {
                       )}
                       {isColumnVisible('latency_ms') && (
                         <td className="td-cell">{n.latency_ms ? `${n.latency_ms}ms` : '—'}</td>
+                      )}
+                      {isColumnVisible('timezone') && (
+                        <td className="td-cell" style={{ whiteSpace: 'nowrap' }}>{formatNodeLocalTime(n.timezone)}</td>
+                      )}
+                      {isColumnVisible('online_since') && (
+                        <td className="td-cell" style={{ whiteSpace: 'nowrap' }}>
+                          {n.status?.toLowerCase() === 'online' && n.online_since
+                            ? formatUptime(Math.max(0, Math.floor(Date.now() / 1000) - n.online_since))
+                            : '—'}
+                        </td>
                       )}
                       {isColumnVisible('version') && (
                         <td className="td-cell--mono">{n.version || '—'}</td>
@@ -438,51 +488,41 @@ export default function AdminEdgeHealth() {
                             ⚡
                           </button>
                           {powerActionsEnabled && n.id && (
-                            <div className="relative inline-block">
-                              <button
-                                className="btn btn-secondary text-xs py-xs px-sm"
-                                title="Power actions"
-                                onClick={() => setOpenMenuId(openMenuId === n.id ? null : n.id!)}
-                              >
-                                ⋮
-                              </button>
-                              {openMenuId === n.id && (
+                            <ActionMenu buttonTitle="Power actions">
+                              {(close) => (
                                 <>
-                                  <div className="fixed inset-0 z-40" onClick={() => setOpenMenuId(null)} />
-                                  <div className="table-column-dropdown" style={{ right: 0, left: 'auto' }}>
-                                    <button
-                                      className="dropdown-menu-item flex items-center gap-sm text-xs cursor-pointer w-full text-left"
-                                      style={{ background: 'none', border: 'none' }}
-                                      onClick={() => { setOpenMenuId(null); startNode(n.id!); }}
-                                    >
-                                      Start
-                                    </button>
-                                    <button
-                                      className="dropdown-menu-item flex items-center gap-sm text-xs cursor-pointer w-full text-left"
-                                      style={{ background: 'none', border: 'none' }}
-                                      onClick={() => { setOpenMenuId(null); stopNode(n.id!); }}
-                                    >
-                                      Stop
-                                    </button>
-                                    <button
-                                      className="dropdown-menu-item flex items-center gap-sm text-xs cursor-pointer w-full text-left"
-                                      style={{ background: 'none', border: 'none' }}
-                                      onClick={() => { setOpenMenuId(null); restartNodeInstance(n.id!); }}
-                                    >
-                                      Restart Instance
-                                    </button>
-                                    <div className="dropdown-menu-divider" />
-                                    <button
-                                      className="dropdown-menu-item flex items-center gap-sm text-xs cursor-pointer w-full text-left"
-                                      style={{ background: 'none', border: 'none' }}
-                                      onClick={() => { setOpenMenuId(null); setScheduleModalNodeId(n.id!); }}
-                                    >
-                                      Edit Schedule
-                                    </button>
-                                  </div>
+                                  <button
+                                    className="dropdown-menu-item flex items-center gap-sm text-xs cursor-pointer w-full text-left"
+                                    style={{ background: 'none', border: 'none' }}
+                                    onClick={() => { close(); startNode(n.id!); }}
+                                  >
+                                    Start
+                                  </button>
+                                  <button
+                                    className="dropdown-menu-item flex items-center gap-sm text-xs cursor-pointer w-full text-left"
+                                    style={{ background: 'none', border: 'none' }}
+                                    onClick={() => { close(); stopNode(n.id!); }}
+                                  >
+                                    Stop
+                                  </button>
+                                  <button
+                                    className="dropdown-menu-item flex items-center gap-sm text-xs cursor-pointer w-full text-left"
+                                    style={{ background: 'none', border: 'none' }}
+                                    onClick={() => { close(); restartNodeInstance(n.id!); }}
+                                  >
+                                    Restart Instance
+                                  </button>
+                                  <div className="dropdown-menu-divider" />
+                                  <button
+                                    className="dropdown-menu-item flex items-center gap-sm text-xs cursor-pointer w-full text-left"
+                                    style={{ background: 'none', border: 'none' }}
+                                    onClick={() => { close(); setScheduleModalNodeId(n.id!); }}
+                                  >
+                                    Edit Schedule
+                                  </button>
                                 </>
                               )}
-                            </div>
+                            </ActionMenu>
                           )}
                         </div>
                       </td>

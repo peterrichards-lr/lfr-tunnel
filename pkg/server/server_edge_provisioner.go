@@ -111,6 +111,7 @@ func (s *Server) handleAdminEdgeSetSchedule(w http.ResponseWriter, r *http.Reque
 		writeProvisionerError(w, err)
 		return
 	}
+	s.invalidateEdgeTimezoneCache(nodeID)
 	s.writeAudit(actor, "edge.power.schedule_update", "node", nodeID,
 		"Edge node schedule updated via portal: stop="+sched.StopTime+" start="+sched.StartTime+" tz="+sched.Timezone, r)
 	respondJSON(w, http.StatusOK, sched)

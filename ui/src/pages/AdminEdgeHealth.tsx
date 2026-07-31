@@ -198,7 +198,8 @@ export default function AdminEdgeHealth() {
 
   const statusOptions = useMemo(() => [
     { value: 'online', label: t('status_online', 'online') },
-    { value: 'offline', label: t('status_offline', 'offline') }
+    { value: 'offline', label: t('status_offline', 'offline') },
+    { value: 'disabled', label: t('status_disabled', 'disabled') }
   ], [t]);
 
   const columns: ColumnDef<EdgeNode>[] = useMemo(() => [
@@ -428,7 +429,7 @@ export default function AdminEdgeHealth() {
                       )}
                       {isColumnVisible('status') && (
                         <td className="td-cell">
-                          <span className={`badge ${n.status?.toLowerCase() === 'online' ? 'badge-success' : 'badge-danger'}`}>
+                          <span className={`badge ${n.status?.toLowerCase() === 'online' ? 'badge-success' : n.status?.toLowerCase() === 'disabled' ? 'badge-neutral' : 'badge-danger'}`}>
                             {n.status ? n.status.toLowerCase() : 'offline'}
                           </span>
                         </td>

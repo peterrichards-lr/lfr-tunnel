@@ -399,6 +399,15 @@ body {
             color: var(--status-danger-text);
             border: 1px solid var(--status-danger-border);
         }
+        /* Neutral/gray badge -- e.g. an edge node intentionally stopped
+           (via the portal or its own schedule window), distinct from both
+           the green "online" and red "offline" states so it doesn't read
+           as an incident (#887). */
+        .badge-neutral {
+            background: rgba(148, 163, 184, 0.14);
+            color: var(--text-muted);
+            border: 1px solid rgba(148, 163, 184, 0.3);
+        }
         .badge.info, .badge-info {
             background: var(--status-info-bg);
             color: var(--status-info-text);

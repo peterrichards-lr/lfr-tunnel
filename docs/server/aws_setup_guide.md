@@ -365,6 +365,18 @@ availability. `scripts/common/schedule-edge-node-hours.sh` automates this via
 > `edge-in`) run this schedule, `00:00`–`08:00` local time, each with its own dedicated
 > IAM role. The central control plane is intentionally unscheduled.
 
+**A scheduled stop isn't reported as an outage — but a late start still is.** While a
+node is inside its scheduled stop window, the Network & Edge Health screen shows it as
+a neutral "Disabled" state rather than red "Offline" — a health check failing exactly
+when it's expected to be off isn't an incident. This also covers a node stopped
+manually via the portal, or one with soft maintenance enabled. It does **not** cover a
+node stopped some other way (e.g. directly via the AWS console/CLI, bypassing the
+portal) — that always reports as a genuine "Offline" outage, since there's no signal to
+tell that apart from a real crash. The "Disabled" grace period after `start_time` is
+5 minutes (`scheduledStartGraceSeconds` in `pkg/server/server_edge.go`) — if the node
+is still unreachable past that, the schedule's own expected start didn't actually bring
+it back up, and it flips to "Offline" so that's not silently missed.
+
 ### Managing this from the portal (optional, AWS-specific)
 
 The admin portal's Network Health screen can start/stop/restart an edge node's

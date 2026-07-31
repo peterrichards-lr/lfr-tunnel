@@ -1,5 +1,12 @@
 [
   {
+    "version": "v1.44.6",
+    "release_date": "2026-07-31",
+    "features": [
+      "Release v1.44.6"
+    ]
+  },
+  {
     "version": "v1.44.5",
     "release_date": "2026-07-28",
     "features": [
@@ -31,16 +38,6 @@
       "Feature: Add AssociatedBundleIdentifiers to macOS LaunchAgent plists for clean System Settings presentation",
       "Refactor: Convert Client SPA Inspector header navigation and cards to CSS theme variables for Light/Dark mode",
       "Docs: Add subcommands listing to lfr-tunnel --help"
-    ]
-  },
-  {
-    "version": "v1.44.1",
-    "release_date": "2026-07-23",
-    "features": [
-      "Fix: Resolve unreplaced {{LFR_TUNNEL_MACOS_ARM64_INSTALL_DIR}} template placeholders during direct raw install script execution",
-      "Feature: Namespace all install script placeholders and operational environment variables with explicit LFR_TUNNEL_ prefix",
-      "Fix: Gracefully skip Windows binary codesigning when certificate parameters are set to skip",
-      "Docs: Document InfoSec and EDR environment variable namespacing standards"
     ]
   }
 ]

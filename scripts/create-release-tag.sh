@@ -65,7 +65,7 @@ echo "Pushing branch..."
 git push -u origin release-$NEW_VERSION
 
 echo "Creating auto-merging PR..."
-gh pr create --title "chore: bump version to $NEW_VERSION" --body "Automated release bump to $NEW_VERSION."
+gh pr create --title "chore: bump version to $NEW_VERSION" --body "Automated release bump to $NEW_VERSION." --label no-issue-needed
 gh pr merge --auto -s
 
 echo "------------------------------------------------------"

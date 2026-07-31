@@ -62,6 +62,16 @@ Apply this without derailing the task you're actually doing:
     - A documented implementation plan.
 If the issue lacks these elements, you MUST update the issue (`gh issue edit`) with this information BEFORE opening the PR.
 
+**This is CI-enforced, not just documented here.** The "Issue Link Check" workflow
+(`.github/workflows/issue-link-check.yml`) fails any PR that doesn't reference a
+`Closes|Fixes|Resolves #N` issue, unless the PR carries the `no-issue-needed`
+label (an intentional escape hatch for genuinely trivial changes — don't reach
+for it just to skip filing an issue for real work). This exists because prose
+rules alone have repeatedly not been followed in this repo, even by the agent
+that wrote the prose rule in the same session — see the retrospective cleanup
+in issues #894-#897. File the issue *before* running `gh pr create`; a CI
+failure after the fact just means going back to create one anyway.
+
 ## 5. Pre-Commit / Pre-PR Checks
 *Active Constraint*: Before pushing commits and opening a PR, you MUST actively execute the following verification steps:
 1. **Branch Sync**: You MUST execute `git fetch origin && git merge origin/master` to ensure your feature branch is strictly up-to-date with `master`. If there are any merge conflicts, you MUST resolve them and re-build any affected components (e.g. `ui-dist`) before proceeding.

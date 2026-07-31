@@ -13,7 +13,7 @@ description: Global requirements for Markdown documentation timestamps and revie
    `---`
    `*Last Updated: YYYY-MM-DD* | *Last Reviewed: YYYY-MM-DD*`
 2. If working in a new repository without these footers, implement a Python script named `scripts/append_timestamps.py` using `Path.rglob` to recursively scan all `.md` files (ignoring `.venv`, `node_modules`, `.smoke_venv` etc.) and append this block if it does not exist.
-3. You must also establish a `scripts/check_docs_review.py` script that parses this footer using the regex `r"\*Last Updated: ([\d\-]+)\* \| \*Last Reviewed: ([\d\-]+)\*"` and accepts arguments for `--max-review-days`, `--max-update-days`, and `--max-gap-days`. 
+3. You must also establish a `scripts/check_docs_review.py` script that parses this footer using the regex `r"\*Last Updated: ([\d\-]+)\* \| \*Last Reviewed: ([\d\-]+)\*"` and accepts arguments for `--max-review-days` and `--max-update-days`.
 4. The script should alert the user via `sys.exit(1)` if any documents have exceeded these threshold values.
 
 ## Documentation Review Requirements (Active Rule)
@@ -27,4 +27,4 @@ If you ever ask the AI to "review the project documentation for outdated files",
 
 <!-- markdownlint-disable MD049 -->
 ---
-*Last Updated: 2026-07-19* | *Last Reviewed: 2026-07-19*
+*Last Updated: 2026-07-31* | *Last Reviewed: 2026-07-31*

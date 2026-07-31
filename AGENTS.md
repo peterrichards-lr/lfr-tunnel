@@ -1,0 +1,81 @@
+# Liferay Tunnel — Agent Rules Router
+
+This is the entry point for any AI coding agent working in this repository, at the
+location most agent tooling looks for automatically. It is deliberately short: it
+routes to one canonical file per topic under `.agents/skills/`, rather than
+restating their content here. If you're an agent and this is the first file you've
+read in this repo, read the relevant skill file(s) below **before** taking any
+action that matches their trigger condition.
+
+**Single source of truth per topic.** Each rule below lives in exactly one file.
+If you ever see the same rule stated differently in two places, that's a bug —
+fix the drift (make one link to the other) rather than trusting either
+in isolation.
+
+## Rules, by topic
+
+- **Local test/build safety (SentinelOne EDR)** — [`.agents/skills/edr-constraints/SKILL.md`](.agents/skills/edr-constraints/SKILL.md)
+  Read before running any Go test or local binary. Non-negotiable: `make test` only,
+  never bare `go test`, never run the `lfr-tunnel` client binary directly.
+- **GitHub issue tracking & PR workflow** — [`.agents/skills/github-workflow/SKILL.md`](.agents/skills/github-workflow/SKILL.md)
+  Read before planning a feature, filing an issue, or opening a PR. Covers the
+  issue → branch → PR → close lifecycle and tech-debt tracking.
+- **Documentation timestamps & review** — [`.agents/skills/global-docs/SKILL.md`](.agents/skills/global-docs/SKILL.md)
+  Read before creating or editing any `.md` file.
+- **Edge node state synchronization** — [`.agents/skills/edge-sync/SKILL.md`](.agents/skills/edge-sync/SKILL.md)
+  Read before modifying any in-memory tunnel/lease state on the control plane.
+- **Operations, deployment, builds, signing** — [`.agents/skills/lfr-tunnel-ops/SKILL.md`](.agents/skills/lfr-tunnel-ops/SKILL.md)
+  Read before building, signing, deploying, or running maintenance operations.
+- **Upstream/JIRA bug tracking** — [`.agents/skills/jira_tracker/SKILL.md`](.agents/skills/jira_tracker/SKILL.md)
+  Read when you discover an upstream platform bug or limitation, not a bug in this repo.
+
+## Groundedness — verify before asserting
+
+Don't answer questions about this codebase's architecture, logic, or behavior from
+assumption, memory of similar codebases, or a filename's implication. Before making
+a factual claim, actually read the relevant source and cite what you found (file
+path and line number). This applies within your normal turn — there is no
+requirement to split verification and answering across separate turns; the
+requirement is that the answer be grounded, not that it take a particular number
+of turns to produce.
+
+If you cannot verify a claim with reasonable effort, say so explicitly (e.g. "I
+could not confirm this in the codebase — treating it as unverified") rather than
+presenting a guess as fact. A wrong grounded-sounding answer is worse than an
+honest "I don't know."
+
+## Scratch files
+
+Don't commit temporary scratch scripts, one-off plan files, or debug helper
+scripts to the repository. Use whatever scratch/temp mechanism your own tooling
+provides (most agent harnesses expose one); if yours doesn't, use a local
+`.scratch/`-style directory that's already `.gitignore`d, or delete the file
+before finishing your task. This rule is intentionally tool-agnostic — don't hardcode
+a specific tool's temp-directory convention here, since different agents use
+different ones.
+
+## Signing and release
+
+- **Never bypass branch protection** (`gh pr merge --admin` or equivalent) to force
+  a merge. Let CI checks pass naturally. If a check is wrong, fix the check, don't
+  route around it.
+- `bin/lfr-tunnel-ops` is not a committed binary — build it first
+  (`go build -o bin/lfr-tunnel-ops ./cmd/lfr-tunnel-ops`) before using it. Never
+  substitute `go run ./cmd/lfr-tunnel-ops` for this (see the EDR constraints skill
+  above — that pattern risks the same local-execution problem).
+- Client binaries must be signed before release/deployment — see the
+  `lfr-tunnel-ops` skill for the exact signing command and required environment.
+
+## Rules-integrity check
+
+Every path, script, and directory named in this file and the skill files under
+`.agents/skills/` is expected to actually exist in this repo. A rule that points
+at something nonexistent is worse than no rule — it teaches distrust of the whole
+rules corpus. If you find a reference here that doesn't resolve, either fix the
+target (build the missing thing, if it's genuinely still wanted) or fix the
+reference (update or remove it) — don't leave it dangling for the next agent to
+trip over.
+
+<!-- markdownlint-disable MD049 -->
+---
+*Last Updated: 2026-07-31* | *Last Reviewed: 2026-07-31*

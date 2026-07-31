@@ -1,0 +1,24 @@
+{
+  "epicNumber": null,
+  "title": "Epic: Example feature rollout",
+  "body": "Short description of the overall feature or initiative this epic tracks. One paragraph is enough -- link to any design doc or discussion instead of duplicating it here.",
+  "labels": ["epic"],
+  "issues": [
+    {
+      "title": "Add config validation for new field",
+      "body": "Problem: <what's missing/broken>.\n\nAnalysis: <root cause / where in the code this lives>.\n\nPlan: <steps to implement>.",
+      "labels": ["enhancement"],
+      "completed": false,
+      "issueNumber": null,
+      "closed": false
+    },
+    {
+      "title": "Document new config field in setup guide",
+      "body": "Problem: <what's missing/broken>.\n\nAnalysis: <root cause / where in the code this lives>.\n\nPlan: <steps to implement>.",
+      "labels": ["documentation"],
+      "completed": false,
+      "issueNumber": null,
+      "closed": false
+    }
+  ]
+}

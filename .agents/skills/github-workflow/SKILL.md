@@ -24,9 +24,8 @@ When planning or implementing new features, you must use the automated JSON-driv
    ```
    *Note: The script automatically links all sub-issues to the parent Epic.*
 
-### Tech Debt Tracking (Immediate Logging)
-*Active Constraint*: The moment you identify any of the 10 catalogued tech debt categories during your work, you MUST pause your current workflow and immediately execute `gh issue create --title "Tech Debt: [Topic]" --body "[Details]" --label "tech debt"` before taking any other action.
-The 10 categories are:
+### Tech Debt Tracking
+*Active Constraint*: Tech debt you notice but don't fix as part of the current task must still be tracked — untracked debt is debt that never gets paid down. File it as a GitHub issue; do not substitute a PR-description mention or a code comment, since those aren't discoverable or prioritizable later. The 10 catalogued categories are:
 1. Code smells
 2. Duplication
 3. Over-complexity
@@ -37,6 +36,13 @@ The 10 categories are:
 8. Deprecated patterns
 9. Config drift
 10. Documentation debt
+
+Apply this without derailing the task you're actually doing:
+- **Don't halt mid-task.** Keep working; log tech debt at a natural checkpoint (before opening your PR is fine) rather than interrupting the current edit the moment you spot something.
+- **Dedup first.** Before filing, check for an existing open issue covering the same thing: `gh issue list --label "tech debt" --search "<keyword>"`. If one exists, leave a comment or `+1` on it instead of creating a duplicate.
+- **Batch related findings into one issue.** If a single pass surfaces several instances of the same category (e.g. three duplicated helper functions), file one issue describing the pattern with all instances listed, not one issue per instance. One issue per genuinely distinct problem, not per line.
+- **Bar for filing.** File it if it's a real, specific problem you can point at (a named function, a missing test for a named case) — not a vague "this area could be cleaner." If you can't say what a future agent should do with it, it's not ready to file yet.
+- Command: `gh issue create --title "Tech Debt: [Topic]" --body "[Details]" --label "tech debt"`.
 
 ## 3. Resolving and Closing Tasks
 - **Pull Request Flow (Preferred)**: When your tasks are tied to code changes, do **NOT** set `"completed": true` in the JSON. Leave it as `false`. Instead, include `Closes #<issue-number>` in your Pull Request body or commit message so GitHub automatically closes the issue when the PR merges.
@@ -70,4 +76,4 @@ If the issue lacks these elements, you MUST update the issue (`gh issue edit`) w
 
 <!-- markdownlint-disable MD049 -->
 ---
-*Last Updated: 2026-07-21* | *Last Reviewed: 2026-07-21*
+*Last Updated: 2026-07-31* | *Last Reviewed: 2026-07-31*

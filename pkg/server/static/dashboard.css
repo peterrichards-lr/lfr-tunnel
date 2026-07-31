@@ -717,6 +717,12 @@ html[dir="rtl"] td, html[dir="rtl"] th {
 .action-menu-item.primary {
     color: var(--primary);
 }
+
+.action-menu-divider {
+    height: 1px;
+    background: var(--border);
+    margin: 6px 0;
+}
 .action-menu-item.primary:hover {
     background: rgba(11, 95, 255, 0.1);
 }

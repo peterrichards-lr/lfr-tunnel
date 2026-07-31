@@ -690,10 +690,17 @@
                     <h2 data-i18n="edge_gateways_title">Edge Gateways</h2>
                     <button class="btn btn-secondary" style="width: auto; margin: 0;" onclick="loadNetworkHealth()">Refresh</button>
                 </div>
+                <div id="edge-bulk-toolbar" class="glass hidden" style="padding: 10px 16px; margin-bottom: 12px; display: flex; align-items: center; gap: 12px;">
+                    <span id="edge-bulk-count" style="opacity: 0.8;"></span>
+                    <button class="btn btn-secondary" style="width: auto; margin: 0;" onclick="bulkEdgeAction('start')">Start Selected</button>
+                    <button class="btn btn-secondary" style="width: auto; margin: 0;" onclick="bulkEdgeAction('stop')">Stop Selected</button>
+                    <button class="btn btn-secondary" style="width: auto; margin: 0;" onclick="bulkEdgeAction('restart')">Restart Selected</button>
+                </div>
                 <div class="glass table-container">
                     <table>
                         <thead>
                             <tr>
+                                <th id="edge-select-all-th" class="hidden" style="width: 32px;"><input type="checkbox" id="edge-select-all" onchange="toggleAllEdgeSelection(this.checked)"></th>
                                 <th data-i18n="th_region_id">Region ID</th>
                                 <th data-i18n="th_ip_address">IP Address</th>
                                 <th data-i18n="th_status">Status</th>
@@ -705,9 +712,25 @@
                             </tr>
                         </thead>
                         <tbody id="network-health-body">
-                            <tr><td colspan="8" style="text-align:center;opacity:0.6;">Loading...</td></tr>
+                            <tr><td colspan="9" style="text-align:center;opacity:0.6;">Loading...</td></tr>
                         </tbody>
                     </table>
+                </div>
+            </div>
+
+            <!-- Edit Edge Schedule Modal -->
+            <div id="edge-schedule-modal" class="modal-overlay">
+                <div class="glass modal">
+                    <h3 data-i18n="edge_schedule_modal_title">Edit Stop/Start Schedule</h3>
+                    <p id="edge-schedule-modal-node" style="opacity: 0.8; margin-top: -12px; margin-bottom: 16px;"></p>
+                    <label style="font-size: 13px; opacity: 0.8;" data-i18n="edge_schedule_stop_time">Stop time (local)</label>
+                    <input type="time" id="edge-schedule-stop-time" class="input-field">
+                    <label style="font-size: 13px; opacity: 0.8;" data-i18n="edge_schedule_start_time">Start time (local)</label>
+                    <input type="time" id="edge-schedule-start-time" class="input-field">
+                    <label style="font-size: 13px; opacity: 0.8;" data-i18n="edge_schedule_timezone">Timezone (IANA)</label>
+                    <input type="text" id="edge-schedule-timezone" class="input-field" placeholder="e.g. America/Sao_Paulo">
+                    <button class="btn btn-primary" onclick="submitEdgeSchedule()" data-i18n="save">Save</button>
+                    <button class="btn" onclick="closeEdgeScheduleModal()" data-i18n="cancel">Cancel</button>
                 </div>
             </div>
 

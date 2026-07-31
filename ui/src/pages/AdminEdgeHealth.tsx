@@ -3,6 +3,7 @@ import axios from 'axios';
 import { useDataTable, type ColumnDef } from '../hooks/useDataTable';
 import DataTableToolbar from '../components/DataTableToolbar';
 import DataTablePagination from '../components/DataTablePagination';
+import EdgeScheduleModal from '../components/EdgeScheduleModal';
 import Skeleton from '../components/Skeleton';
 import { useI18n } from '../contexts/I18nContext';
 import { useUI } from '../contexts/UIContext';
@@ -22,17 +23,22 @@ interface EdgeNode {
 export default function AdminEdgeHealth() {
   const [nodes, setNodes] = useState<Record<string, EdgeNode>>({});
   const [outboundOk, setOutboundOk] = useState<boolean>(true);
+  const [powerActionsEnabled, setPowerActionsEnabled] = useState(false);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
+  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
+  const [openMenuId, setOpenMenuId] = useState<string | null>(null);
+  const [scheduleModalNodeId, setScheduleModalNodeId] = useState<string | null>(null);
   const { t } = useI18n();
   const { formatDate } = useSettings();
   const { showToast, showConfirm, showPrompt } = useUI();
-  
+
   const fetchHealth = async () => {
     try {
       const res = await axios.get('/api/portal/edge-health');
       setNodes(res.data.nodes || res.data || {});
       setOutboundOk(res.data.outbound_ok !== false);
+      setPowerActionsEnabled(!!res.data.edge_power_actions_enabled);
       setError('');
     } catch (e: any) {
       setError(e.response?.data?.error || e.message || 'Failed to load network health');
@@ -85,6 +91,64 @@ export default function AdminEdgeHealth() {
   const kickEdgeTunnels = async (nodeId: string) => {
     if (await showConfirm('Kick All Tunnels', `Are you sure you want to kick ALL active tunnels on edge node ${nodeId}?`)) {
       triggerEdgeAction(nodeId, "kick_tunnels");
+    }
+  };
+
+  // Power actions (start/stop/restart the underlying instance via the
+  // optional edge-provisioner sidecar, #883/#888) -- distinct from
+  // restartEdgeDaemon above, which restarts the already-running lfr-tunneld
+  // process over its WebSocket control channel and can't do anything for a
+  // stopped/unreachable instance.
+  const triggerPowerAction = async (nodeId: string, action: 'start' | 'stop' | 'restart') => {
+    try {
+      await axios.post(`/api/admin/edge/${encodeURIComponent(nodeId)}/${action}`);
+      showToast(`${action} requested for ${nodeId}.`, 'success');
+      setTimeout(fetchHealth, 1500);
+    } catch (e: any) {
+      showToast(e.response?.data?.error || `${action} failed.`, 'error');
+    }
+  };
+
+  const startNode = async (nodeId: string) => {
+    if (await showConfirm('Start Node', `Start the ${nodeId} instance?`)) triggerPowerAction(nodeId, 'start');
+  };
+  const stopNode = async (nodeId: string) => {
+    if (await showConfirm('Stop Node', `Stop the ${nodeId} instance? Any active tunnels through it will drop.`)) triggerPowerAction(nodeId, 'stop');
+  };
+  const restartNodeInstance = async (nodeId: string) => {
+    if (await showConfirm('Restart Node', `Restart the ${nodeId} instance (stop, wait, start)? This can take a minute or more.`)) triggerPowerAction(nodeId, 'restart');
+  };
+
+  const toggleSelected = (nodeId: string, checked: boolean) => {
+    setSelectedIds(prev => {
+      const next = new Set(prev);
+      if (checked) next.add(nodeId); else next.delete(nodeId);
+      return next;
+    });
+  };
+
+  const toggleSelectAll = (checked: boolean, ids: string[]) => {
+    setSelectedIds(checked ? new Set(ids) : new Set());
+  };
+
+  const bulkAction = async (action: 'start' | 'stop' | 'restart') => {
+    const nodeIds = Array.from(selectedIds);
+    if (nodeIds.length === 0) return;
+    if (!(await showConfirm(`${action[0].toUpperCase()}${action.slice(1)} selected`, `${action[0].toUpperCase()}${action.slice(1)} ${nodeIds.length} selected node(s)?`))) return;
+
+    try {
+      const res = await axios.post('/api/admin/edge/bulk', { node_ids: nodeIds, action });
+      const results = res.data.results || {};
+      const failed = Object.keys(results).filter(id => !results[id].ok);
+      if (failed.length === 0) {
+        showToast(`${action} requested for ${nodeIds.length} node(s).`, 'success');
+      } else {
+        showToast(`${action} failed for: ${failed.join(', ')}`, 'error');
+      }
+      setSelectedIds(new Set());
+      setTimeout(fetchHealth, 1500);
+    } catch (e: any) {
+      showToast(e.response?.data?.error || `Bulk ${action} failed.`, 'error');
     }
   };
 
@@ -196,6 +260,23 @@ export default function AdminEdgeHealth() {
         </div>
       )}
 
+      {scheduleModalNodeId && (
+        <EdgeScheduleModal
+          nodeId={scheduleModalNodeId}
+          onClose={() => setScheduleModalNodeId(null)}
+          onSaved={fetchHealth}
+        />
+      )}
+
+      {powerActionsEnabled && selectedIds.size > 0 && (
+        <div className="alert-banner mb-xl flex items-center gap-md">
+          <span className="text-xs">{selectedIds.size} selected</span>
+          <button className="btn btn-secondary text-xs py-xs px-sm" onClick={() => bulkAction('start')}>Start Selected</button>
+          <button className="btn btn-secondary text-xs py-xs px-sm" onClick={() => bulkAction('stop')}>Stop Selected</button>
+          <button className="btn btn-secondary text-xs py-xs px-sm" onClick={() => bulkAction('restart')}>Restart Selected</button>
+        </div>
+      )}
+
       {error ? (
         <div className="alert-banner alert-banner--danger mb-xl">
           {error}
@@ -222,6 +303,15 @@ export default function AdminEdgeHealth() {
             <table className="w-full">
               <thead>
                 <tr className="border-b text-left">
+                  {powerActionsEnabled && (
+                    <th className="th-col" style={{ width: 32 }}>
+                      <input
+                        type="checkbox"
+                        checked={paginatedItems.length > 0 && paginatedItems.every((n: EdgeNode) => n.id && selectedIds.has(n.id))}
+                        onChange={e => toggleSelectAll(e.target.checked, paginatedItems.map((n: EdgeNode) => n.id).filter(Boolean) as string[])}
+                      />
+                    </th>
+                  )}
                   {isColumnVisible('id') && (
                     <th className="th-col th-col--sortable" onClick={() => requestSort('id')} aria-sort={getAriaSort('id')}>
                       {t('node', 'Node ID')}{getSortIndicator('id')}
@@ -258,13 +348,22 @@ export default function AdminEdgeHealth() {
               <tbody>
                 {paginatedItems.length === 0 ? (
                   <tr>
-                    <td colSpan={7} className="td-empty">
+                    <td colSpan={8} className="td-empty">
                       {t('no_nodes_found', 'No edge nodes detected.')}
                     </td>
                   </tr>
                 ) : (
                   paginatedItems.map((n: EdgeNode) => (
                     <tr key={n.id} className="border-b">
+                      {powerActionsEnabled && (
+                        <td className="td-cell">
+                          <input
+                            type="checkbox"
+                            checked={!!(n.id && selectedIds.has(n.id))}
+                            onChange={e => n.id && toggleSelected(n.id, e.target.checked)}
+                          />
+                        </td>
+                      )}
                       {isColumnVisible('id') && (
                         <td className="td-cell fw-bold">{n.id}</td>
                       )}
@@ -312,6 +411,52 @@ export default function AdminEdgeHealth() {
                           >
                             ⚡
                           </button>
+                          {powerActionsEnabled && n.id && (
+                            <div className="relative inline-block">
+                              <button
+                                className="btn btn-secondary text-xs py-xs px-sm"
+                                title="Power actions"
+                                onClick={() => setOpenMenuId(openMenuId === n.id ? null : n.id!)}
+                              >
+                                ⋮
+                              </button>
+                              {openMenuId === n.id && (
+                                <>
+                                  <div className="fixed inset-0 z-40" onClick={() => setOpenMenuId(null)} />
+                                  <div className="table-column-dropdown" style={{ right: 0, left: 'auto' }}>
+                                    <button
+                                      className="flex items-center gap-sm text-xs cursor-pointer py-xs w-full text-left"
+                                      style={{ background: 'none', border: 'none' }}
+                                      onClick={() => { setOpenMenuId(null); startNode(n.id!); }}
+                                    >
+                                      Start
+                                    </button>
+                                    <button
+                                      className="flex items-center gap-sm text-xs cursor-pointer py-xs w-full text-left"
+                                      style={{ background: 'none', border: 'none' }}
+                                      onClick={() => { setOpenMenuId(null); stopNode(n.id!); }}
+                                    >
+                                      Stop
+                                    </button>
+                                    <button
+                                      className="flex items-center gap-sm text-xs cursor-pointer py-xs w-full text-left"
+                                      style={{ background: 'none', border: 'none' }}
+                                      onClick={() => { setOpenMenuId(null); restartNodeInstance(n.id!); }}
+                                    >
+                                      Restart Instance
+                                    </button>
+                                    <button
+                                      className="flex items-center gap-sm text-xs cursor-pointer py-xs w-full text-left"
+                                      style={{ background: 'none', border: 'none' }}
+                                      onClick={() => { setOpenMenuId(null); setScheduleModalNodeId(n.id!); }}
+                                    >
+                                      Edit Schedule
+                                    </button>
+                                  </div>
+                                </>
+                              )}
+                            </div>
+                          )}
                         </div>
                       </td>
                     </tr>

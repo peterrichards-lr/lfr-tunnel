@@ -1,0 +1,25 @@
+[Unit]
+Description=Liferay Tunnel Edge Provisioner Sidecar (AWS-specific, optional)
+After=network.target
+Before=lfr-tunneld.service
+
+[Service]
+Type=simple
+User=lfr-tunnel
+Group=lfr-tunnel
+WorkingDirectory=/etc/lfr-tunneld
+ExecStart=/usr/local/bin/lfr-tunnel-edge-provisioner --config /etc/lfr-tunneld/edge-provisioner.yaml
+Restart=on-failure
+RestartSec=5s
+
+# Security Hardening (systemd Sandboxing)
+ProtectSystem=strict
+ProtectHome=true
+PrivateTmp=true
+NoNewPrivileges=true
+CapabilityBoundingSet=
+ReadOnlyPaths=/usr/local/bin/lfr-tunnel-edge-provisioner
+ReadWritePaths=/etc/lfr-tunneld
+
+[Install]
+WantedBy=multi-user.target

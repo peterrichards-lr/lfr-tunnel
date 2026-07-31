@@ -53,10 +53,15 @@ is undersized for a central control plane running Nginx, `lfr-tunneld`, and a ma
 together.
 
 > [!NOTE]
-> **Currently deployed:** both live edge nodes (`edge-us` / `aws-edge-us.lfr-demo.se` and
-> `edge-apac` / `aws-edge-apac.lfr-demo.se`, see `edge_nodes.txt`) run on `t3.micro`.
-> Confirmed via `aws ec2 describe-instances` on 2026-07-30 — instance type isn't recorded
-> anywhere `provision-aws-ec2.sh` writes to, so this note is the only record of it.
+> **Currently deployed:** all four live edge nodes run on `t3.micro` — `edge-us`
+> (`aws-edge-us.lfr-demo.se`, `us-east-2`), `edge-apac` (`aws-edge-apac.lfr-demo.se`,
+> `ap-northeast-1`), `edge-sa` (`aws-edge-sa.lfr-demo.se`, `sa-east-1`), and `edge-in`
+> (`aws-edge-in.lfr-demo.se`, `ap-south-1`) — see `edge_nodes.txt`. Confirmed via
+> `aws ec2 describe-instances`; instance type isn't recorded anywhere
+> `provision-aws-ec2.sh` writes to, so this note is the only record of it.
+> `edge-sa`/`edge-in` are the newest two, provisioned as part of a planned future
+> cutover from the current production setup — see §9 below for the stop/start
+> schedule now applied to all four.
 
 ---
 
@@ -312,7 +317,70 @@ one-time console step:
 
 ---
 
-## 9. Tearing Down / Retesting
+## 9. Automated Stop/Start Scheduling for Edge Nodes
+
+Since a regional edge node typically serves a geographically-concentrated audience (e.g.
+`edge-us` mostly sees US daytime traffic), it doesn't need to run 24/7 — stopping it
+overnight in its own local time reduces compute cost with no meaningful impact on
+availability. `scripts/common/schedule-edge-node-hours.sh` automates this via
+[AWS EventBridge Scheduler](https://docs.aws.amazon.com/scheduler/latest/UserGuide/what-is-scheduler.html):
+
+```bash
+./scripts/common/schedule-edge-node-hours.sh \
+  --profile lfr-tunnel --region sa-east-1 --instance-id i-0123456789abcdef0 \
+  --name-tag edge-sa --timezone America/Sao_Paulo
+```
+
+- **Per-node local time, DST-safe.** EventBridge Scheduler's native
+  `--schedule-expression-timezone` support means `--stop-time`/`--start-time` (default
+  `00:00`/`08:00`, both overridable) are evaluated in the node's own IANA timezone, not
+  UTC — no manual DST offset math, ever.
+- **Deliberately excludes the central control plane.** It needs to stay reachable
+  whenever *any* edge node in *any* region might have traffic, which in a multi-region
+  deployment is effectively all the time — don't point this script at the central
+  instance.
+- **One dedicated IAM role per node** (`lfr-tunnel-edge-scheduler-<name-tag>-role`),
+  scoped to `ec2:StartInstances`/`StopInstances` on only that node's instance ARN — not
+  a role shared across every edge node's schedules. A compromised or misconfigured
+  schedule's execution context therefore can't affect any node but its own.
+- **Idempotent.** Re-running the script for the same `--instance-id` updates the
+  existing schedules/role/policy in place (via EventBridge's `UpdateSchedule`, never
+  delete-then-recreate) rather than erroring or duplicating them.
+- **Per-node enable/disable, independent of every other node.** Each node's schedule
+  can be paused (`State: DISABLED` in EventBridge, without losing its configured
+  times) while every other node's keeps firing normally — this is exposed as a toggle
+  in the portal's Edit Schedule action (see below), not a script flag; the node stays
+  under manual start/stop/restart control while its schedule is disabled.
+
+> [!NOTE]
+> **Currently applied:** all four live edge nodes (`edge-us`, `edge-apac`, `edge-sa`,
+> `edge-in`) run this schedule, `00:00`–`08:00` local time, each with its own dedicated
+> IAM role. The central control plane is intentionally unscheduled.
+
+### Managing this from the portal (optional, AWS-specific)
+
+The admin portal's Network Health screen can start/stop/restart an edge node's
+instance and edit its schedule directly — but only if the optional
+`lfr-tunnel-edge-provisioner` sidecar is deployed and configured. This keeps the
+open-source core (`lfr-tunneld`) entirely free of any AWS SDK dependency: it only ever
+calls a small local, versioned HTTP API (see `cmd/lfr-tunnel-edge-provisioner`,
+`pkg/provisioner`) over `127.0.0.1`, never AWS directly. If you don't run this sidecar,
+those portal actions are simply absent — not an error state — and the CLI script above
+remains fully sufficient on its own.
+
+To enable it:
+1. Deploy and run `lfr-tunnel-edge-provisioner` on the **central** control plane host,
+   configured with each edge node's `instance_id`/`region` (mapping is separate from
+   `server-config.yaml`'s `edge_nodes` list, by design — the core config never needs to
+   know about AWS instance IDs).
+2. Set `edge_provisioner_url` (and `edge_provisioner_token_file`) in the central
+   control plane's `server-config.yaml`, pointing at the sidecar's loopback address.
+3. Restart `lfr-tunneld` on the central control plane. The portal's start/stop/
+   restart/bulk actions and Edit Schedule modal become available automatically.
+
+---
+
+## 10. Tearing Down / Retesting
 
 `scripts/common/deprovision-aws-ec2.sh` is the companion to `provision-aws-ec2.sh`: it releases
 the Elastic IP, terminates the instance, and removes the security group for a given
@@ -338,7 +406,7 @@ both the central gateway and edge nodes (see `--key-name` in §2). Pass
 
 ---
 
-## 10. IPv6 Dual-Stack Support (Optional)
+## 11. IPv6 Dual-Stack Support (Optional)
 
 The existing production VPS is dual-stack — `scripts/liferay/vm6/cloudflare-ddns.sh` actively
 maintains AAAA records and folds the IPv6 address into the SPF record whenever one is

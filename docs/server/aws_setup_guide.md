@@ -352,6 +352,14 @@ availability. `scripts/common/schedule-edge-node-hours.sh` automates this via
   in the portal's Edit Schedule action (see below), not a script flag; the node stays
   under manual start/stop/restart control while its schedule is disabled.
 
+> [!WARNING]
+> **This only saves compute cost, not the full instance cost.** As of February 2024,
+> AWS bills *all* public IPv4 addresses hourly, including Elastic IPs attached to a
+> running instance — and an EIP stays allocated (and billed) while its instance is
+> stopped, precisely so re-starting it keeps the same address (see step 5 above). So
+> stopping an edge node overnight saves its EC2 instance-hour cost, but not its EIP
+> cost, which continues regardless of instance state.
+
 > [!NOTE]
 > **Currently applied:** all four live edge nodes (`edge-us`, `edge-apac`, `edge-sa`,
 > `edge-in`) run this schedule, `00:00`–`08:00` local time, each with its own dedicated

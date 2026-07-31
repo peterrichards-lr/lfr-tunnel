@@ -91,6 +91,11 @@ failure after the fact just means going back to create one anyway.
 
 Once it's green, clean up the failed job runs from the PR's history using the GitHub CLI (e.g. `gh run delete <run-id>`), so the repository keeps a clean history of only successful runs and failed attempts don't trigger false-positive corrective actions later.
 
+## 7. Don't Push Into a PR That's Already Merged Out From Under You
+*Active Constraint*: A PR you say is "ready to merge" can be merged by someone else at any moment — check its live state (`gh pr view <number> --json state,mergedAt`) before pushing another commit to the same branch, not just before opening the PR. A merged PR is terminal: further pushes to its branch land nowhere (GitHub Actions may still run on them, which looks identical to a normal in-flight check from the CLI, but the code never reaches the target branch). This actually happened in this repo: a second commit was pushed to an already-merged PR, its checks appeared to pass normally, and the change silently never shipped until a later `git log` diff caught it.
+
+After any merge you expect to close an issue (whether via a `Closes #N` reference or a manual close), verify the issue actually closed (`gh issue view <number> --json state`) instead of assuming the mechanism worked — squash-merge commit messages don't reliably carry every commit's closing reference from a multi-commit PR (this repo's squash setting concatenates commit messages, but a squash performed through the GitHub UI can still end up using only one of them). If it didn't close, close it manually with a comment pointing at the merge that actually resolved it.
+
 <!-- markdownlint-disable MD049 -->
 ---
 *Last Updated: 2026-07-31* | *Last Reviewed: 2026-07-31*

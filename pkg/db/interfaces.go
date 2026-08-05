@@ -95,6 +95,7 @@ type GuestInviteRepository interface {
 type SettingsRepository interface {
 	GetAdminSetting(key string) (string, error)
 	SetAdminSetting(key, value string) error
+	GetAdminSettingOptional(key string) (string, bool, error)
 }
 
 type SystemRepository interface {

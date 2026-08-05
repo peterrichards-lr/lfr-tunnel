@@ -842,6 +842,31 @@
                             </select>
                         </div>
                     </div>
+
+                    <!-- Column 2: Vanity Domain Hook -->
+                    <div class="glass" style="padding: 24px; border-top: 4px solid var(--primary); display: flex; flex-direction: column;">
+                        <h3 style="margin-bottom: 16px; font-size: 16px;">Vanity Domain Hook</h3>
+                        
+                        <!-- Warning badge for non-owners -->
+                        <div id="system-vanity-hook-owner-warning" class="alert-banner alert-banner--warning" style="font-size: 12px; display: none; margin-bottom: 16px; padding: 8px 12px; border-radius: 4px;">
+                            ⚠️ Only the System Owner is authorized to modify vanity domain hook configurations.
+                        </div>
+
+                        <div class="form-group" style="margin-bottom: 20px;">
+                            <label style="display: flex; align-items: center; gap: 8px; font-weight: 500; cursor: pointer;">
+                                <input type="checkbox" id="system-enable-vanity-hook" style="width: auto; margin: 0;" onchange="toggleVanityHookPathInput()" />
+                                <span>Enable Automated DNS/TLS Provisioning</span>
+                            </label>
+                            <p style="font-size: 12px; color: var(--text-muted); margin-top: 6px; line-height: 1.4; margin-bottom: 0;">
+                                When active, registering a custom domain (via the client <code>-domain</code> flag) runs the specified hook script to automate local Nginx reverse proxy configuration and Certbot SSL/TLS certificate registration.
+                            </p>
+                        </div>
+
+                        <div class="form-group" style="margin-bottom: auto;">
+                            <label style="display: block; margin-bottom: 4px; font-weight: 500;">Vanity Domain Hook Script Path</label>
+                            <input type="text" id="system-vanity-hook-path" class="input-field" placeholder="/usr/local/bin/lfr-vanity-hook.sh" style="width: 100%; box-sizing: border-box;" disabled />
+                        </div>
+                    </div>
                 </div>
 
                 <!-- Test Integrations Card -->

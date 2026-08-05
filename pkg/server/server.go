@@ -2622,7 +2622,7 @@ func (s *Server) handleAdminEndpoints(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if r.Method == http.MethodPut && r.URL.Path == "/api/admin/system-settings" {
-		s.handleAdminUpdateSystemSettings(w, r, actor)
+		s.handleAdminUpdateSystemSettings(w, r, actor, role)
 		return
 	}
 

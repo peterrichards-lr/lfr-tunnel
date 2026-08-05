@@ -13,7 +13,10 @@ import (
 	"log/slog"
 	"net/http"
 	"net/url"
+	"os"
 	"path"
+	"path/filepath"
+	"runtime"
 	"strconv"
 	"strings"
 	"time"
@@ -1760,23 +1763,74 @@ func (s *Server) handleAdminGetSystemSettings(w http.ResponseWriter, r *http.Req
 		}
 	}
 
+	vanityPath, vanityEnabled := s.getVanityDomainHookConfig()
+
 	respondJSON(w, http.StatusOK, map[string]interface{}{
-		"domain_allocation_rule": rule,
-		"default_domain":         defaultDomain,
-		"maintenance_page_path":  maintPagePath,
+		"domain_allocation_rule":    rule,
+		"default_domain":            defaultDomain,
+		"maintenance_page_path":     maintPagePath,
+		"vanity_domain_hook_path":   vanityPath,
+		"enable_vanity_domain_hook": vanityEnabled,
 	})
 }
 
 // handleAdminUpdateSystemSettings updates the system settings.
-func (s *Server) handleAdminUpdateSystemSettings(w http.ResponseWriter, r *http.Request, actor string) {
+func (s *Server) handleAdminUpdateSystemSettings(w http.ResponseWriter, r *http.Request, actor string, role string) {
 	var req struct {
-		DomainAllocationRule string `json:"domain_allocation_rule"`
-		DefaultDomain        string `json:"default_domain"`
-		MaintenancePagePath  string `json:"maintenance_page_path"`
+		DomainAllocationRule   string `json:"domain_allocation_rule"`
+		DefaultDomain          string `json:"default_domain"`
+		MaintenancePagePath    string `json:"maintenance_page_path"`
+		VanityDomainHookPath   string `json:"vanity_domain_hook_path"`
+		EnableVanityDomainHook bool   `json:"enable_vanity_domain_hook"`
 	}
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 		http.Error(w, `{"error":"Invalid request"}`, http.StatusBadRequest)
 		return
+	}
+
+	// 1. Gating to System Owner
+	oldPath, oldEnabled := s.getVanityDomainHookConfig()
+	isPathModified := req.VanityDomainHookPath != oldPath
+	isEnabledModified := req.EnableVanityDomainHook != oldEnabled
+
+	if role != "owner" && (isPathModified || isEnabledModified) {
+		http.Error(w, `{"error":"Only the System Owner is authorized to modify vanity domain hook configurations"}`, http.StatusForbidden)
+		return
+	}
+
+	// 2. Validate path if modified and not empty
+	if isPathModified && req.VanityDomainHookPath != "" {
+		if !filepath.IsAbs(req.VanityDomainHookPath) {
+			http.Error(w, `{"error":"Vanity domain hook script path must be an absolute path"}`, http.StatusBadRequest)
+			return
+		}
+
+		cleanPath := filepath.Clean(req.VanityDomainHookPath)
+
+		// Restrict to trusted folders (only on non-Windows platforms to avoid test blocks)
+		if runtime.GOOS != "windows" {
+			if !strings.HasPrefix(cleanPath, "/usr/local/bin/") && !strings.HasPrefix(cleanPath, "/etc/lfr-tunneld/") {
+				http.Error(w, `{"error":"Vanity domain hook script must reside under /usr/local/bin/ or /etc/lfr-tunneld/"}`, http.StatusBadRequest)
+				return
+			}
+		}
+
+		// Check script file status and execution bits
+		info, err := os.Stat(cleanPath)
+		if err != nil {
+			http.Error(w, `{"error":"Vanity domain hook script path does not exist on disk"}`, http.StatusBadRequest)
+			return
+		}
+		if info.IsDir() {
+			http.Error(w, `{"error":"Vanity domain hook path must point to a file, not a directory"}`, http.StatusBadRequest)
+			return
+		}
+		if runtime.GOOS != "windows" {
+			if info.Mode().Perm()&0111 == 0 {
+				http.Error(w, `{"error":"Vanity domain hook script must have execute permissions"}`, http.StatusBadRequest)
+				return
+			}
+		}
 	}
 
 	if s.db != nil {
@@ -1792,7 +1846,17 @@ func (s *Server) handleAdminUpdateSystemSettings(w http.ResponseWriter, r *http.
 			http.Error(w, `{"error":"Failed to save maintenance page path"}`, http.StatusInternalServerError)
 			return
 		}
-		s.writeAudit(actor, "system.settings.updated", "system", "all", "Updated Domain Allocation Rule to "+req.DomainAllocationRule+", Default Domain to "+req.DefaultDomain+", Maintenance Page Path to "+req.MaintenancePagePath, r)
+		if err := s.db.SetAdminSetting("vanity_domain_hook_path", req.VanityDomainHookPath); err != nil {
+			http.Error(w, `{"error":"Failed to save vanity domain hook path"}`, http.StatusInternalServerError)
+			return
+		}
+		if err := s.db.SetAdminSetting("enable_vanity_domain_hook", strconv.FormatBool(req.EnableVanityDomainHook)); err != nil {
+			http.Error(w, `{"error":"Failed to save enable vanity domain hook state"}`, http.StatusInternalServerError)
+			return
+		}
+		auditMsg := fmt.Sprintf("Updated Domain Allocation Rule to %s, Default Domain to %s, Maintenance Page Path to %s, Vanity Domain Hook Path to %s, Enable Vanity Domain Hook to %v",
+			req.DomainAllocationRule, req.DefaultDomain, req.MaintenancePagePath, req.VanityDomainHookPath, req.EnableVanityDomainHook)
+		s.writeAudit(actor, "system.settings.updated", "system", "all", auditMsg, r)
 	}
 
 	respondJSON(w, http.StatusOK, req)

@@ -46,6 +46,8 @@ export default function AdminSettings() {
   const [allocationRule, setAllocationRule] = useState('round_robin');
   const [defaultDomain, setDefaultDomain] = useState('');
   const [supportedDomains, setSupportedDomains] = useState<string[]>([]);
+  const [vanityHookPath, setVanityHookPath] = useState('');
+  const [enableVanityHook, setEnableVanityHook] = useState(false);
 
   // Maintenance state
   const [maintenance, setMaintenance] = useState<any>({ enabled: false, start_time: '', action: '', reason: '', status: 'false', iron_curtain: false });
@@ -85,6 +87,8 @@ export default function AdminSettings() {
       const sRes = await axios.get('/api/admin/system-settings');
       setAllocationRule(sRes.data.domain_allocation_rule || 'round_robin');
       setDefaultDomain(sRes.data.default_domain || '');
+      setVanityHookPath(sRes.data.vanity_domain_hook_path || '');
+      setEnableVanityHook(!!sRes.data.enable_vanity_domain_hook);
 
       const mRes = await axios.get('/api/admin/maintenance');
       setMaintenance(mRes.data);
@@ -124,7 +128,9 @@ export default function AdminSettings() {
     try {
       await axios.put('/api/admin/system-settings', {
         domain_allocation_rule: allocationRule,
-        default_domain: defaultDomain
+        default_domain: defaultDomain,
+        vanity_domain_hook_path: vanityHookPath,
+        enable_vanity_domain_hook: enableVanityHook
       });
       showToast('System settings saved successfully.', 'success');
     } catch (e: any) {
@@ -355,6 +361,42 @@ export default function AdminSettings() {
           </select>
         </div>
         <button className="btn btn-primary" onClick={saveSystemSettings}>Save Settings</button>
+      </div>
+
+      <div className="card mb-xl">
+        <h4 className="section-title mb-lg">Vanity Domain Hook</h4>
+        {user.role !== 'owner' && (
+          <div className="alert-banner alert-banner--warning mb-lg" style={{ fontSize: '13px', margin: 0 }}>
+            ⚠️ Only the System Owner is authorized to modify vanity domain hook configurations.
+          </div>
+        )}
+        <div className="form-group mt-lg">
+          <label className="flex items-center gap-sm cursor-pointer">
+            <input 
+              type="checkbox" 
+              checked={enableVanityHook} 
+              onChange={(e) => setEnableVanityHook(e.target.checked)} 
+              disabled={user.role !== 'owner'}
+              style={{ width: 'auto', margin: 0 }}
+            />
+            <span className="form-label" style={{ margin: 0 }}>Enable Automated DNS/TLS Provisioning</span>
+          </label>
+          <p className="text-muted text-xs mt-xs" style={{ margin: 0 }}>
+            When active, registering a custom domain (via the client <code>-domain</code> flag) runs the specified hook script to automate local Nginx reverse proxy configuration and Certbot SSL/TLS certificate registration.
+          </p>
+        </div>
+        <div className="form-group">
+          <label className="form-label">Vanity Domain Hook Script Path</label>
+          <input 
+            type="text" 
+            className="input-field" 
+            value={vanityHookPath} 
+            onChange={(e) => setVanityHookPath(e.target.value)} 
+            placeholder="/usr/local/bin/lfr-vanity-hook.sh"
+            disabled={user.role !== 'owner' || !enableVanityHook}
+          />
+        </div>
+        <button className="btn btn-primary" onClick={saveSystemSettings} disabled={user.role !== 'owner'}>Save Settings</button>
       </div>
 
       <div className="card mb-xl">

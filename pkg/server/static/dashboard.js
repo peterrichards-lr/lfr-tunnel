@@ -5049,15 +5049,32 @@ async function loadSystemSettings() {
             if (data.default_domain) {
                 domSelect.value = data.default_domain;
             }
+
+            // Populate and configure Vanity Domain Hook controls
+            const isOwner = currentUser && currentUser.role === 'owner';
+            document.getElementById('system-enable-vanity-hook').checked = !!data.enable_vanity_domain_hook;
+            document.getElementById('system-enable-vanity-hook').disabled = !isOwner;
+            document.getElementById('system-vanity-hook-path').value = data.vanity_domain_hook_path || '';
+            document.getElementById('system-vanity-hook-owner-warning').style.display = isOwner ? 'none' : 'block';
+            toggleVanityHookPathInput();
         }
     } catch (e) {
         console.error("Failed to load system settings", e);
     }
 }
 
+function toggleVanityHookPathInput() {
+    const enableCheckbox = document.getElementById('system-enable-vanity-hook');
+    const pathInput = document.getElementById('system-vanity-hook-path');
+    const isOwner = currentUser && currentUser.role === 'owner';
+    pathInput.disabled = !isOwner || !enableCheckbox.checked;
+}
+
 async function saveSystemSettings() {
     const rule = document.getElementById('system-domain-allocation-rule').value;
     const defaultDom = document.getElementById('system-default-domain').value;
+    const enableVanityHook = document.getElementById('system-enable-vanity-hook').checked;
+    const vanityHookPath = document.getElementById('system-vanity-hook-path').value;
 
     try {
         const res = await fetch('/api/admin/system-settings', {
@@ -5065,7 +5082,9 @@ async function saveSystemSettings() {
             headers: {'Content-Type': 'application/json'},
             body: JSON.stringify({
                 domain_allocation_rule: rule,
-                default_domain: defaultDom
+                default_domain: defaultDom,
+                vanity_domain_hook_path: vanityHookPath,
+                enable_vanity_domain_hook: enableVanityHook
             })
         });
 

@@ -57,16 +57,34 @@ func (s *Server) isCustomDomain(host string) bool {
 	return true
 }
 
+// getVanityDomainHookConfig resolves the path and enabled state of the vanity domain hook.
+// It prioritizes dynamic settings in the database, falling back to static config settings.
+func (s *Server) getVanityDomainHookConfig() (string, bool) {
+	path := s.cfg.VanityDomainHook
+	enabled := s.cfg.VanityDomainHook != ""
+
+	if s.db != nil {
+		if dbPath, exists, err := s.db.GetAdminSettingOptional("vanity_domain_hook_path"); err == nil && exists {
+			path = dbPath
+		}
+		if dbEnabled, exists, err := s.db.GetAdminSettingOptional("enable_vanity_domain_hook"); err == nil && exists && dbEnabled != "" {
+			enabled = dbEnabled == "true"
+		}
+	}
+	return path, enabled
+}
+
 // runVanityDomainHook runs the external script with action ("add"/"remove") and domain.
 func (s *Server) runVanityDomainHook(action, domain string) {
-	if s.cfg.VanityDomainHook == "" {
+	path, enabled := s.getVanityDomainHookConfig()
+	if !enabled || path == "" {
 		return
 	}
 	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Minute)
 	defer cancel()
 
-	slog.Info(fmt.Sprintf("[Server] Executing vanity domain hook: %s %s %s", s.cfg.VanityDomainHook, action, domain))
-	cmd := exec.CommandContext(ctx, s.cfg.VanityDomainHook, action, domain)
+	slog.Info(fmt.Sprintf("[Server] Executing vanity domain hook: %s %s %s", path, action, domain))
+	cmd := exec.CommandContext(ctx, path, action, domain)
 	output, err := cmd.CombinedOutput()
 	if err != nil {
 		slog.Info(fmt.Sprintf("[Server] Vanity domain hook error running %s for %s: %v. Output: %s", action, domain, err, string(output)))

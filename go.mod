@@ -9,7 +9,7 @@ require (
 	github.com/aws/aws-sdk-go-v2/service/route53 v1.65.5
 	github.com/aws/aws-sdk-go-v2/service/scheduler v1.20.2
 	github.com/coreos/go-oidc/v3 v3.20.0
-	github.com/gogpu/systray v0.2.0
+	github.com/gogpu/systray v0.2.1
 	github.com/gorilla/websocket v1.5.3
 	github.com/jedisct1/go-minisign v0.0.0-20260527172527-a09352b57a22
 	github.com/jpillora/chisel v1.11.8

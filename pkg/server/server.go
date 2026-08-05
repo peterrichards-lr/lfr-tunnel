@@ -1782,6 +1782,12 @@ func (s *Server) handleRegisterRequest(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	if s.cfg.DisableNewRegistrations {
+		w.WriteHeader(http.StatusForbidden)
+		_ = json.NewEncoder(w).Encode(map[string]string{"error": "New registrations are currently closed."}) //nolint:errcheck
+		return
+	}
+
 	if s.db == nil {
 		w.WriteHeader(http.StatusNotImplemented)
 		_ = json.NewEncoder(w).Encode(map[string]string{"error": "database storage not enabled"}) //nolint:errcheck

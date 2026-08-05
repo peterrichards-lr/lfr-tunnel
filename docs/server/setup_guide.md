@@ -366,7 +366,7 @@ owner:
   name: "Gateway Admin"
 
 admin_notification_email: "admin@yourdomain.com"
-enable_registration: true
+disable_new_registrations: false   # Set to true to block NEW accounts (email or SSO) -- existing users unaffected
 enable_user_portal: true
 
 # Collaboration & Webhook Alerts

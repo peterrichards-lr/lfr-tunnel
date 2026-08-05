@@ -14,7 +14,6 @@ owner:
   name: "Admin User"
 
 admin_notification_email: "admin@lfr-demo.local"
-enable_registration: true
 owner_max_reservations: -1
 allow_client_auto_reservation: true
 

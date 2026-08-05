@@ -1,5 +1,12 @@
 [
   {
+    "version": "v1.44.7",
+    "release_date": "2026-08-05",
+    "features": [
+      "Release v1.44.7"
+    ]
+  },
+  {
     "version": "v1.44.6",
     "release_date": "2026-07-31",
     "features": [
@@ -28,16 +35,6 @@
       "Style: Fix lfr-tunnel -upgrade badge padding and layout spacing in Dashboard Overview",
       "Fix: Enforce maximum size constraint of 5 releases on whats-new.json with automated unit test assertions",
       "Test: Extend ServiceInstaller unit tests for pretty symlinks and LaunchAgent plists"
-    ]
-  },
-  {
-    "version": "v1.44.2",
-    "release_date": "2026-07-23",
-    "features": [
-      "Fix: Align SentinelOne EDR paths to ~/runningpoc/bin/lfr-tunnel for 100% execution immunity",
-      "Feature: Add AssociatedBundleIdentifiers to macOS LaunchAgent plists for clean System Settings presentation",
-      "Refactor: Convert Client SPA Inspector header navigation and cards to CSS theme variables for Light/Dark mode",
-      "Docs: Add subcommands listing to lfr-tunnel --help"
     ]
   }
 ]

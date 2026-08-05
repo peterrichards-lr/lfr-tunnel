@@ -169,6 +169,16 @@ func (s *Server) handleSSOCallback(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if err == db.ErrNotFound {
+		// #910: umbrella flag gating NEW account creation regardless of method. Without
+		// this, SSO first-login always auto-provisioned a new account with only the
+		// AllowedEmailDomains whitelist as a gate -- no way to close off new signups
+		// independent of disabling SSO/email login entirely. The owner is exempt: they're
+		// a pre-configured account, not a new registration, and locking them out would
+		// leave nobody able to administer the server.
+		if s.cfg.DisableNewRegistrations && !strings.EqualFold(email, s.cfg.Owner.UserID) {
+			http.Error(w, "New registrations are currently closed.", http.StatusForbidden)
+			return
+		}
 		user = &db.User{
 			ID:         email,
 			Email:      email,

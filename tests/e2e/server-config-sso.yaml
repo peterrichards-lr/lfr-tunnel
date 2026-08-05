@@ -12,7 +12,10 @@ owner:
   name: "Admin User"
 
 admin_notification_email: "admin@lfr-demo.local"
-enable_registration: false
+# SSO-only deployment -- email registration/login closed, but new users can still
+# auto-register via SSO (this test's actual scenario: sso-user@lfr-demo.local is a
+# brand-new user that must successfully auto-provision through Keycloak).
+disable_email_login: true
 owner_max_reservations: -1
 allow_client_auto_reservation: true
 

@@ -93,14 +93,20 @@ type ServerConfig struct {
 	PATRetentionDays           int                       `yaml:"pat_retention_days"`
 	EnableWAF                  bool                      `yaml:"enable_waf"`
 	DisableEmailLogin          bool                      `yaml:"disable_email_login"`
-	DisableClientDownloads     bool                      `yaml:"disable_client_downloads"`
-	DisableBrew                bool                      `yaml:"disable_brew"`
-	DisableScoop               bool                      `yaml:"disable_scoop"`
-	DisableAPIRateLimit        bool                      `yaml:"disable_api_rate_limit"`
-	PortalURL                  string                    `yaml:"portal_url"`
-	ControlPlaneURL            string                    `yaml:"control_plane_url"`
-	EdgeToken                  string                    `yaml:"edge_token"`
-	EdgeNodes                  []EdgeNodeConfig          `yaml:"edge_nodes"`
+	// DisableNewRegistrations is the umbrella flag gating NEW account creation regardless
+	// of method (email registration or first-time SSO login) -- see issue #910. This is
+	// distinct from DisableEmailLogin, which only affects the email-specific login/register
+	// UI and backend path; without this flag, first-time SSO login always auto-provisioned
+	// a new account with no way to close that off independent of disabling SSO entirely.
+	DisableNewRegistrations bool             `yaml:"disable_new_registrations"`
+	DisableClientDownloads  bool             `yaml:"disable_client_downloads"`
+	DisableBrew             bool             `yaml:"disable_brew"`
+	DisableScoop            bool             `yaml:"disable_scoop"`
+	DisableAPIRateLimit     bool             `yaml:"disable_api_rate_limit"`
+	PortalURL               string           `yaml:"portal_url"`
+	ControlPlaneURL         string           `yaml:"control_plane_url"`
+	EdgeToken               string           `yaml:"edge_token"`
+	EdgeNodes               []EdgeNodeConfig `yaml:"edge_nodes"`
 	// EdgeProvisionerURL points at the optional, AWS-specific edge-provisioner
 	// sidecar (see cmd/lfr-tunnel-edge-provisioner, issue #888) that this server
 	// calls to start/stop/restart edge node instances and manage their stop/start
@@ -433,6 +439,9 @@ func LoadServerConfig(path string) (*ServerConfig, error) {
 	}
 	if val := os.Getenv("LFT_DISABLE_EMAIL_LOGIN"); val != "" {
 		cfg.DisableEmailLogin = strings.ToLower(val) == "true" || val == "1"
+	}
+	if val := os.Getenv("LFT_DISABLE_NEW_REGISTRATIONS"); val != "" {
+		cfg.DisableNewRegistrations = strings.ToLower(val) == "true" || val == "1"
 	}
 	if val := os.Getenv("LFT_DISABLE_CLIENT_DOWNLOADS"); val != "" {
 		cfg.DisableClientDownloads = strings.ToLower(val) == "true" || val == "1"

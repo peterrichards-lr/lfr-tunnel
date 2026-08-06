@@ -31,7 +31,7 @@ To ensure we build the capabilities that provide the highest impact for the Sale
    - **`master`**: Strictly for production-ready, stable releases. Direct pushes to `master` are blocked; all changes must go through a Pull Request (PR).
    - **Feature Branches**: Develop new features, visual dashboard updates, or configuration additions on branches prefixed with `feature/` (e.g., `feature/dashboard-version-indicator`).
    - **Bug Fix Branches**: Develop bug fixes, logic corrections, or error patches on branches prefixed with `fix/` (e.g., `fix/api-me-missing-language-field`).
-   - **Roadmap / Pre-releases**: Complex roadmap components or experimental builds must use dedicated `roadmap/` or `release/` branches (e.g., `release/v1.7.7`).
+   - **Roadmap / Pre-releases**: Complex roadmap components or experimental builds must use dedicated `roadmap/` or `release/` branches (e.g., `release/v1.7.7`). `scripts/create-release-tag.sh` cuts these automatically and refuses to start a new one while a release PR is already open and unmerged -- batch small version bumps behind one release cycle rather than firing off a new release PR for every tiny change.
    - **Conflict Resolution**: Before submitting a PR or merging it, pull the latest `master` into your branch to verify there are no merge conflicts. Resolve all conflicts locally prior to PR completion.
    - **Pass CI Gates**: PRs must pass all automated Github Actions checks, including unit tests, formatting, and lint rules, before they can be merged.
    - **Cleanup**: Delete both local and remote feature/fix branches immediately after they are merged into `master`. **Do NOT delete the persistent `checksums` branch**, as it is an orphaned branch used by the release CI/CD workflow to host client binary signatures.
@@ -120,4 +120,4 @@ Verify these administrative control flows on the Portal Dashboard:
 
 <!-- markdownlint-disable MD049 -->
 ---
-*Last Updated: 2026-07-10* | *Last Reviewed: 2026-07-10*
+*Last Updated: 2026-08-05* | *Last Reviewed: 2026-08-05*

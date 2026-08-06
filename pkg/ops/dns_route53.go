@@ -246,11 +246,22 @@ func toRoute53Value(r Record) string {
 	}
 }
 
+// trimTrailingDot strips a single trailing "." the way toRoute53Value added
+// one via ensureTrailingDot -- except when the whole value IS "." (the RFC
+// 7505 null-MX/CNAME target), where blindly trimming would collapse it to an
+// empty string and lose its meaning entirely. "." trims to "." unchanged.
+func trimTrailingDot(value string) string {
+	if value == "." {
+		return value
+	}
+	return strings.TrimSuffix(value, ".")
+}
+
 // fromRoute53Value is the inverse of toRoute53Value.
 func fromRoute53Value(recordType RecordType, value string) (val string, priority *int) {
 	switch recordType {
 	case RecordTypeCNAME:
-		return strings.TrimSuffix(value, "."), nil
+		return trimTrailingDot(value), nil
 	case RecordTypeMX:
 		parts := strings.SplitN(value, " ", 2)
 		if len(parts) != 2 {
@@ -260,7 +271,7 @@ func fromRoute53Value(recordType RecordType, value string) (val string, priority
 		if err != nil {
 			return value, nil
 		}
-		target := strings.TrimSuffix(parts[1], ".")
+		target := trimTrailingDot(parts[1])
 		return target, &p
 	case RecordTypeTXT:
 		unquoted := strings.TrimSuffix(strings.TrimPrefix(value, `"`), `"`)

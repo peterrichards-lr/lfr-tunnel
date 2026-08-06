@@ -17,6 +17,51 @@ permissions:
   contents: read
 
 jobs:
+  docs-review-check:
+    name: Documentation Review Check
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+
+      - name: Check changed markdown files' review footers
+        run: |
+          set -euo pipefail
+          case "${{ github.event_name }}" in
+            pull_request)
+              BASE="${{ github.event.pull_request.base.sha }}"
+              HEAD="${{ github.event.pull_request.head.sha }}"
+              ;;
+            push)
+              BASE="${{ github.event.before }}"
+              HEAD="${{ github.sha }}"
+              ;;
+            *)
+              echo "Not a push/pull_request event -- skipping."
+              exit 0
+              ;;
+          esac
+
+          # A force-push or first-push-to-branch can make "before" a null SHA;
+          # fall back to just the tip commit's own changes in that case.
+          if [ "$BASE" = "0000000000000000000000000000000000000000" ] || [ -z "$BASE" ]; then
+            CHANGED=$(git diff --name-only "${HEAD}~1" "$HEAD" -- '*.md' || true)
+          else
+            CHANGED=$(git diff --name-only "$BASE" "$HEAD" -- '*.md' || true)
+          fi
+
+          if [ -z "$CHANGED" ]; then
+            echo "No markdown files changed -- skipping."
+            exit 0
+          fi
+
+          echo "Changed markdown files:"
+          echo "$CHANGED"
+          echo
+          python3 scripts/check_docs_review.py --changed-files $CHANGED
+
   lint-and-format:
     name: Lint & Format Check
     runs-on: ubuntu-latest

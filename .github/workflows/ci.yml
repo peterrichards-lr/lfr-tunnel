@@ -153,6 +153,12 @@ jobs:
 
       - name: Run Tests
         run: go test -v ./...
+        env:
+          # Disposable minisign fixture used only by pkg/client/upgrade_test.go -- never
+          # the real signing key (that one lives in 1Password and is never referenced by
+          # anything in CI). Tests skip gracefully if this isn't set (e.g. local `make
+          # test` runs without it exported).
+          TEST_MINISIGN_SECRET_KEY: ${{ secrets.TEST_MINISIGN_SECRET_KEY }}
 
   e2e-test:
     name: E2E Docker Integration Test

@@ -19,9 +19,14 @@ import (
 )
 
 var (
-	githubAPIBase     = "https://api.github.com"
-	targetExecPath    = ""
-	MinisignPublicKey = "RWQ4i1aka4ZBsR0gESesJ6Ay57fGFJ9T1ajVmanT7MFMCCDbPZ8uqDcS"
+	githubAPIBase  = "https://api.github.com"
+	targetExecPath = ""
+	// Rotated 2026-08-06: the previous key was found hardcoded, unencrypted, in
+	// scripts/minisign_helper.go and this package's own test fixtures -- effectively
+	// public since 2026-07-15. The new private half lives only in 1Password
+	// (self-signed-minisign-key), password-protected, used only for local signing before
+	// deploying release artifacts -- it is never committed anywhere.
+	MinisignPublicKey = "RWQYNqPJry2eQ1/p1nmASik7Pka0gr7a+b2oMJ5dl/Ods9CyF/jIs+Pv"
 )
 
 // Release represents GitHub release metadata

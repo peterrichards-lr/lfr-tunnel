@@ -281,10 +281,49 @@ PrivateTmp=true
 NoNewPrivileges=true
 CapabilityBoundingSet=
 ReadOnlyPaths=/usr/local/bin/lfr-tunneld
-ReadWritePaths=/etc/lfr-tunneld
+# /etc/nginx/conf.d and the vanity webroot are here (in addition to
+# /etc/lfr-tunneld) purely so the Vanity Domain Hook (see
+# docs/server/setup_guide.md §4.7) has somewhere to write, without loosening
+# ProtectSystem=strict/NoNewPrivileges for anything else. lfr-tunneld itself
+# never writes to either path directly -- only the hook subprocess it execs
+# does, on the operator's explicit opt-in via Admin Settings.
+ReadWritePaths=/etc/lfr-tunneld /etc/nginx/conf.d /var/www/lfr-tunnel-vanity
 
 [Install]
 WantedBy=multi-user.target
+EOF
+
+  # Vanity Domain Hook support directories (see docs/server/setup_guide.md
+  # §4.7). /etc/nginx/conf.d is already glob-included by the distro's default
+  # nginx.conf (`include /etc/nginx/conf.d/*.conf;`), so handing it to
+  # lfr-tunnel needs no nginx.conf edit. The webroot is a dedicated directory
+  # so it's never confused with any other static assets served from
+  # /var/www/lfr-tunnel.
+  sudo chown lfr-tunnel:lfr-tunnel /etc/nginx/conf.d
+  sudo mkdir -p /var/www/lfr-tunnel-vanity
+  sudo chown -R lfr-tunnel:lfr-tunnel /var/www/lfr-tunnel-vanity
+
+  # lfr-tunneld is deliberately unprivileged and cannot reload nginx itself --
+  # this root-owned path unit watches for the hook's config changes and
+  # reloads nginx on its behalf.
+  sudo tee /etc/systemd/system/nginx-vanity-reload.path > /dev/null << EOF
+[Unit]
+Description=Watch for Vanity Domain Hook nginx config changes
+
+[Path]
+PathChanged=/etc/nginx/conf.d
+
+[Install]
+WantedBy=multi-user.target
+EOF
+
+  sudo tee /etc/systemd/system/nginx-vanity-reload.service > /dev/null << EOF
+[Unit]
+Description=Reload nginx after a Vanity Domain Hook config change
+
+[Service]
+Type=oneshot
+ExecStart=/usr/sbin/nginx -s reload
 EOF
 
   # Deploy systemd override for Nginx auto-restart
@@ -310,6 +349,8 @@ EOF
 
   sudo nginx -t
   sudo systemctl restart nginx
+
+  sudo systemctl enable --now nginx-vanity-reload.path
 
   sudo systemctl enable --now gateway-watchdog.timer
   sudo systemctl start gateway-watchdog.service

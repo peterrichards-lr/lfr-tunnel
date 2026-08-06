@@ -669,6 +669,93 @@ An active watchdog runs every minute to verify Nginx and `lfr-tunneld` ports, an
    sudo systemctl enable --now gateway-watchdog.timer
    ```
 
+### 4.7. Vanity Domain Hook (Custom Domains)
+
+The Vanity Domain Hook lets users bring their own domain (e.g. `demo.customer.com`) and
+have `lfr-tunneld` automatically provision Nginx + a Let's Encrypt certificate for it on
+registration, and tear both down on release. It's an external script, configured and
+toggled from the Admin Dashboard's System Settings (owner-only), not this setup guide --
+but the *directories and services it needs* have to exist on the box first, which this
+section covers. `scripts/common/lfr-vanity-hook.sh` in this repo is a ready-to-use
+reference implementation.
+
+**Why this needs its own directories.** `lfr-tunneld` runs as the unprivileged
+`lfr-tunnel` user under `ProtectSystem=strict` + `NoNewPrivileges=true` (§4.5) -- by
+design, it and anything it execs (including this hook) cannot write to
+`/etc/nginx/sites-enabled`, the default `/etc/letsencrypt`, or reload Nginx. Rather than
+loosen that hardening, the hook gets two narrowly-scoped directories of its own, added to
+the service's `ReadWritePaths=`, plus a small root-owned watcher that reloads Nginx on its
+behalf:
+
+1. Hand `/etc/nginx/conf.d` to the `lfr-tunnel` user. It's already glob-included by the
+   distro's default `nginx.conf` (`include /etc/nginx/conf.d/*.conf;`), so this needs no
+   `nginx.conf` edit -- just an ownership change:
+   ```bash
+   sudo chown lfr-tunnel:lfr-tunnel /etc/nginx/conf.d
+   ```
+2. Create a dedicated ACME webroot, kept separate from `/var/www/lfr-tunnel`'s static
+   assets so file ownership stays simple:
+   ```bash
+   sudo mkdir -p /var/www/lfr-tunnel-vanity
+   sudo chown -R lfr-tunnel:lfr-tunnel /var/www/lfr-tunnel-vanity
+   ```
+3. Add both paths to the `lfr-tunneld.service` unit's `ReadWritePaths=` from §4.5 (do not
+   remove `/etc/lfr-tunneld` -- append to it):
+   ```ini
+   ReadWritePaths=/etc/lfr-tunneld /etc/nginx/conf.d /var/www/lfr-tunnel-vanity
+   ```
+   Certbot's own state (`--config-dir`/`--work-dir`/`--logs-dir`) points at
+   `/etc/lfr-tunneld/letsencrypt`, which is already writable -- no third path needed there.
+4. `lfr-tunneld` still can't reload Nginx itself, so a root-owned `systemd` path unit
+   watches `/etc/nginx/conf.d` and reloads Nginx whenever the hook adds or removes a
+   config file:
+   ```bash
+   sudo tee /etc/systemd/system/nginx-vanity-reload.path > /dev/null << 'EOF'
+   [Unit]
+   Description=Watch for Vanity Domain Hook nginx config changes
+
+   [Path]
+   PathChanged=/etc/nginx/conf.d
+
+   [Install]
+   WantedBy=multi-user.target
+   EOF
+   sudo tee /etc/systemd/system/nginx-vanity-reload.service > /dev/null << 'EOF'
+   [Unit]
+   Description=Reload nginx after a Vanity Domain Hook config change
+
+   [Service]
+   Type=oneshot
+   ExecStart=/usr/sbin/nginx -s reload
+   EOF
+   sudo systemctl daemon-reload
+   sudo systemctl enable --now nginx-vanity-reload.path
+   ```
+
+**Configuring the hook itself**, once the directories above exist:
+1. Copy `scripts/common/lfr-vanity-hook.sh` to the box (e.g. `/usr/local/bin/lfr-vanity-hook.sh`,
+   owned `root:root`, mode `755` -- it must live under a trusted, root-owned folder and be
+   executable, which the Admin Dashboard's own path validation enforces when you set it).
+2. Add its environment to `/etc/lfr-tunneld/secrets.env` (§4.5) -- these aren't secrets,
+   but this is the file `lfr-tunneld`'s systemd unit already loads via `EnvironmentFile=`:
+   ```bash
+   # /etc/lfr-tunneld/secrets.env
+   NGINX_CONF_DIR=/etc/nginx/conf.d
+   WEBROOT_PATH=/var/www/lfr-tunnel-vanity
+   UPSTREAM_URL=http://127.0.0.1:8080   # match your -p / http_bind_addr port
+   CERTBOT_DIR=/etc/lfr-tunneld/letsencrypt
+   ```
+   `ACME_EMAIL` is deliberately *not* set here -- `lfr-tunneld` always injects it itself
+   from `owner.user_id` (§4.3), overriding anything set in this file, since the Owner is
+   the operator actually responsible for the shared Certbot install.
+3. `sudo systemctl restart lfr-tunneld` to pick up the new environment.
+4. In the Admin Dashboard's System Settings, set **Vanity Domain Hook Path** to
+   `/usr/local/bin/lfr-vanity-hook.sh` and enable it.
+
+On failure, the hook alerts both the configured admin (webhook + email) and the
+requesting user directly (bypassing their notification preference, since it means their
+domain may currently have no valid certificate) -- see #945 for the design rationale.
+
 ---
 
 ## 5. Client CLI Setup & Connection
@@ -1169,4 +1256,4 @@ To guarantee that outbound connections originating from the VPS are consistently
 
 <!-- markdownlint-disable MD049 -->
 ---
-*Last Updated: 2026-08-05* | *Last Reviewed: 2026-08-05*
+*Last Updated: 2026-08-06* | *Last Reviewed: 2026-08-06*

@@ -1,6 +1,7 @@
 package server
 
 import (
+	"context"
 	"crypto/hmac"
 	"crypto/rand"
 	"crypto/sha256"
@@ -26,6 +27,17 @@ import (
 // (data or Ping) from an edge before considering the connection dead. Overridable
 // in tests so the reconnect-loop fix can be verified without a real 60s wait.
 var edgeControlReadDeadline = 60 * time.Second
+
+// edgeClientReadDeadline is the mirror-image of edgeControlReadDeadline for the
+// edge's own outbound connection: how long an edge waits for any frame (data or
+// Pong) from the control plane before considering the connection dead. Overridable
+// in tests for the same reason. See #911.
+var edgeClientReadDeadline = 75 * time.Second
+
+// edgeClientPingInterval is how often an edge sends a keepalive Ping to the control
+// plane on its outbound connection. Overridable in tests so edgeClientReadDeadline's
+// fix can be verified without a real 30s+ wait.
+var edgeClientPingInterval = 30 * time.Second
 
 // ControlMessage represents the JSON schema for websocket communication.
 type ControlMessage struct {
@@ -398,6 +410,15 @@ func (s *Server) runEdgeControlChannel() {
 
 		dialer := websocket.DefaultDialer
 		dialer.HandshakeTimeout = 5 * time.Second
+		// Force IPv4 for this outbound connection (see #911): on dual-stack edges, the
+		// default dialer prefers IPv6 when both are available, but at least one edge
+		// region's IPv6 path to the control plane has exhibited a ~75s idle-connection
+		// timeout at an intermediate network hop, causing needless reconnect churn. Every
+		// edge always has a guaranteed IPv4 Elastic IP (IPv6 is opt-in), so this is safe
+		// across all regions, not just the affected one.
+		dialer.NetDialContext = func(ctx context.Context, _, addr string) (net.Conn, error) {
+			return (&net.Dialer{}).DialContext(ctx, "tcp4", addr)
+		}
 
 		if s.cfg.InsecureSkipVerify {
 			dialer.TLSClientConfig = &tls.Config{InsecureSkipVerify: true}
@@ -470,8 +491,28 @@ func (s *Server) runEdgeControlChannel() {
 
 		slog.Info("[Edge Control] Successfully connected and authenticated with Control Plane.")
 
+		// The read loop below resets its 75s read deadline before each blocking read,
+		// but that only actually gets hit once a real ControlMessage arrives -- and the
+		// control plane only sends one on real events (blacklist updates, maintenance
+		// triggers, lease kicks, etc.), not on a fixed schedule. During an idle period
+		// with no such events, nothing refreshes the deadline except this edge's own
+		// outgoing Ping (sent every 30s below) getting a Pong back -- but gorilla/
+		// websocket handles incoming Pong frames internally and never surfaces them to
+		// the caller unless a PongHandler is registered (see #911; same class of bug the
+		// server side already had to work around for the equivalent Ping case). Without
+		// this, any edge idle for >75s hits the deadline and reconnects regardless of
+		// network conditions -- confirmed as the actual root cause of edge-apac's ~75s
+		// reconnect cycling, not a network-path timeout as originally suspected. Other
+		// edges apparently receive enough incidental real ControlMessage traffic
+		// (broadcasts) to keep resetting the deadline before it fires; edge-apac's idle
+		// periods are long enough to expose the missing handler.
+		conn.SetPongHandler(func(string) error {
+			_ = conn.SetReadDeadline(time.Now().Add(edgeClientReadDeadline)) //nolint:errcheck
+			return nil
+		})
+
 		// Start ticker to send ping messages
-		ticker := time.NewTicker(30 * time.Second)
+		ticker := time.NewTicker(edgeClientPingInterval)
 		pingErrChan := make(chan error, 1)
 
 		go func() {
@@ -494,7 +535,7 @@ func (s *Server) runEdgeControlChannel() {
 		for {
 			var msg ControlMessage
 			// Reset read deadline on receiving messages
-			_ = conn.SetReadDeadline(time.Now().Add(75 * time.Second)) //nolint:errcheck
+			_ = conn.SetReadDeadline(time.Now().Add(edgeClientReadDeadline)) //nolint:errcheck
 
 			readErrChan := make(chan error, 1)
 			go func() {

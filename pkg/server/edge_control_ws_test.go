@@ -397,6 +397,91 @@ func TestServer_EdgeControlWS_SurvivesBeyondOldOneShotDeadline(t *testing.T) {
 	}
 }
 
+// TestServer_EdgeControlChannel_SurvivesIdlePeriodViaPongHandler verifies the fix
+// for #911: the edge's own outbound connection reset its read deadline right before
+// each blocking read, but nothing ever refreshed that deadline during an idle period
+// with no real ControlMessage traffic -- gorilla/websocket handles incoming Pong
+// frames (replies to the edge's own Pings) internally and never surfaces them to the
+// caller unless a PongHandler is registered, which the edge side never did (mirror-
+// image of the already-fixed #848 bug on the server side). This forced a disconnect/
+// reconnect every ~75s regardless of how alive the connection actually was --
+// reported as "edge-apac cycles every ~75s over IPv6" but actually reproducible on
+// any edge given a long enough idle gap, independent of network path or IP version.
+//
+// edgeClientReadDeadline/edgeClientPingInterval are overridden to short durations so
+// this can be verified without a real 75s wait. No BroadcastBlacklistUpdate/
+// BroadcastMaintenance/etc is ever sent, so the only thing keeping the connection
+// alive is the edge's own Ping/Pong keepalive -- exactly the idle scenario that
+// exposed the bug.
+func TestServer_EdgeControlChannel_SurvivesIdlePeriodViaPongHandler(t *testing.T) {
+	originalDeadline := edgeClientReadDeadline
+	originalPingInterval := edgeClientPingInterval
+	edgeClientReadDeadline = 300 * time.Millisecond
+	edgeClientPingInterval = 50 * time.Millisecond
+	defer func() {
+		edgeClientReadDeadline = originalDeadline
+		edgeClientPingInterval = originalPingInterval
+	}()
+
+	cfgControl := config.DefaultServerConfig()
+	cfgControl.DBPath = filepath.Join(t.TempDir(), "control.db")
+	cfgControl.Domains = []string{"example.se"}
+	cfgControl.DisableBackupScheduler = true
+
+	edgeToken := "apacedge-mysecrettokenvalue"
+	tokenHashBytes := sha256.Sum256([]byte(edgeToken))
+	cfgControl.EdgeNodes = []config.EdgeNodeConfig{
+		{ID: "apacedge", TokenHash: hex.EncodeToString(tokenHashBytes[:])},
+	}
+
+	controlSrv, err := NewServer(cfgControl)
+	if err != nil {
+		t.Fatalf("failed to create control server: %v", err)
+	}
+	defer controlSrv.Stop()
+
+	ts := httptest.NewServer(controlSrv)
+	defer ts.Close()
+
+	cfgEdge := config.DefaultServerConfig()
+	cfgEdge.DBPath = "" // Edge mode
+	cfgEdge.Domains = []string{"apacedge.example.se"}
+	cfgEdge.ControlPlaneURL = ts.URL
+	cfgEdge.EdgeToken = edgeToken
+	cfgEdge.DisableBackupScheduler = true
+
+	edgeSrv, err := NewServer(cfgEdge)
+	if err != nil {
+		t.Fatalf("failed to create edge server: %v", err)
+	}
+	defer edgeSrv.Stop()
+
+	time.Sleep(150 * time.Millisecond) // let the initial connection establish
+
+	controlSrv.edgeClientsMu.RLock()
+	initialConn, exists := controlSrv.edgeClients["apacedge"]
+	controlSrv.edgeClientsMu.RUnlock()
+	if !exists || initialConn == nil {
+		t.Fatal("expected edge client 'apacedge' to be authenticated and registered on the control plane")
+	}
+
+	// Idle well past several read-deadline cycles, sending no real ControlMessage at
+	// all -- the only thing that can keep this alive is the edge's own Ping/Pong.
+	time.Sleep(1500 * time.Millisecond) // 5x the shortened deadline
+
+	controlSrv.edgeClientsMu.RLock()
+	finalConn, stillExists := controlSrv.edgeClients["apacedge"]
+	controlSrv.edgeClientsMu.RUnlock()
+
+	if !stillExists {
+		t.Fatal("expected edge to still be connected after idling past the read deadline via Ping/Pong keepalive alone, but it disconnected and never reconnected")
+	}
+	if finalConn != initialConn {
+		t.Error("expected the edge's connection to survive the entire idle period without reconnecting, but the registered connection object changed -- " +
+			"the edge disconnected and reconnected at least once, meaning the #911 fix has regressed")
+	}
+}
+
 func TestServer_EdgeControlWS_ProxyIP(t *testing.T) {
 	cfgControl := config.DefaultServerConfig()
 	cfgControl.DBPath = filepath.Join(t.TempDir(), "control.db")

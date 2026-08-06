@@ -15,10 +15,14 @@
 # operator laptop (see the -detect-ip flag's own warning).
 #
 # Mirrored the live Cloudflare zone as of 2026-07-29 (post #857 SES DKIM/SPF
-# additions); the SPF records were then edited ahead of live Cloudflare on
-# 2026-07-30 to drop smtp2go/ip4/ip6 now that the #857 SES cutover is confirmed
-# working in production -- this file is the intended target, not yet re-mirrored
-# from Cloudflare. Run `dns apply` (see below) to push it. Deviations from a
+# additions), then re-audited on 2026-08-06 against real production (#940,
+# #941): this file had silently drifted out of sync with the actual AWS edge
+# cutover -- it had no entries at all for the four renamed edge subdomains
+# (us/apac/sa/in), and still listed the retired aws-central pilot. That drift
+# is how a real live bug (us.lfr-demo.se pointing at a legacy GCP edge's IP)
+# went uncaught: there was nothing here to diff it against. Run `dns apply`
+# (see below) against both providers after any change here so this file stays
+# the actual source of truth rather than just aspirational. Deviations from a
 # byte-for-byte copy of Cloudflare, otherwise:
 #   - The lfr-demo.online DMARC record's Cloudflare-specific
 #     `rua=mailto:...@dmarc-reports.cloudflare.net;` reporting address is
@@ -52,25 +56,43 @@ domains:
       # #858's cutover.
       - {name: status, type: CNAME, value: statuspage.betteruptime.com, ttl: 120}
 
+      # The four AWS edge nodes, renamed off their interim aws-edge-* prefix
+      # (see the edge domain rename plan). Literal per-region Elastic IPs, not
+      # ${IPV4}/${IPV6} placeholders -- each edge has its own distinct address,
+      # unlike the central records above which share one. Public DNS content,
+      # same as everything else in this file -- not a secret.
+      #
+      # us was found live-misdirected to a legacy GCP edge's IP (#940) while
+      # auditing this file's drift from reality ahead of #858 -- this spec
+      # never had an entry for it at all, alongside apac/sa/in also being
+      # entirely absent (#941), which is how the live bug went uncaught: there
+      # was nothing here to diff it against.
+      - {name: us, type: A, value: "3.139.247.146", ttl: 120, cloudflare: {proxied: false}}
+      - {name: us, type: AAAA, value: "2600:1f16:1db9:1a00:bf72:6bab:2929:71d3", ttl: 120, cloudflare: {proxied: false}}
+      - {name: apac, type: A, value: "52.195.125.249", ttl: 120, cloudflare: {proxied: false}}
+      - {name: apac, type: AAAA, value: "2406:da14:1741:2300:53de:dcd2:347b:e857", ttl: 120, cloudflare: {proxied: false}}
+      - {name: sa, type: A, value: "18.229.93.210", ttl: 120, cloudflare: {proxied: false}}
+      - {name: in, type: A, value: "13.233.187.64", ttl: 120, cloudflare: {proxied: false}}
+
       # #857 SES cutover complete (2026-07-30): LFT_SMTP_* now points at SES in
       # production and delivery is confirmed, so ip4/ip6 (the old Postfix-as-sender
       # authorization) and smtp2go are dropped -- amazonses.com is the only sender now.
       - {name: "@", type: TXT, value: "v=spf1 include:amazonses.com -all", ttl: 120}
       - {name: _dmarc, type: TXT, value: "v=DMARC1; p=reject; sp=reject; adkim=s; aspf=s;", ttl: 120}
 
-      # MX intentionally points at tunnel.lfr-demo.se for BOTH zones -- a
-      # single shared mail-receiving host, confirmed intentional from live
-      # production data, not a copy-paste artifact.
-      - {name: "@", type: MX, value: tunnel.lfr-demo.se, priority: 10, ttl: 120}
+      # RFC 7505 Null MX: this domain accepts no inbound mail (outbound-only via SES).
+      # Replaces the old tunnel.lfr-demo.se MX now that Postfix inbound receiving is
+      # being retired along with the legacy VPS -- a null MX gives senders a clean
+      # "does not accept mail" signal instead of a timeout/connection-refused.
+      - {name: "@", type: MX, value: ".", priority: 0, ttl: 120}
 
-      # aws-central: the AWS-hosted central node pilot (#847/#854 context),
-      # which sends mail via Amazon SES under this subdomain. Only present
-      # under lfr-demo.se, matching live DNS -- a genuine one-off, not part
-      # of the standard per-domain template above.
-      - {name: aws-central, type: A, value: "63.33.115.5", ttl: 120, cloudflare: {proxied: false}}
-      - {name: be6dkhh5dvjx6kvibzjxecvgwn4iohpe._domainkey.aws-central, type: CNAME, value: be6dkhh5dvjx6kvibzjxecvgwn4iohpe.dkim.amazonses.com, ttl: 120}
-      - {name: yyvdzgjdeuoi2wqfxpdrc3wkwhlerdfr._domainkey.aws-central, type: CNAME, value: yyvdzgjdeuoi2wqfxpdrc3wkwhlerdfr.dkim.amazonses.com, ttl: 120}
-      - {name: i6elpixq3st26kl7hw5cgasy2sdofzpj._domainkey.aws-central, type: CNAME, value: i6elpixq3st26kl7hw5cgasy2sdofzpj.dkim.amazonses.com, ttl: 120}
+      # aws-central (the AWS-hosted central node PILOT, #847/#854 context) has
+      # been retired now that the real production central is live -- its A
+      # record and 3 SES DKIM CNAMEs are intentionally no longer listed here
+      # (#941). Note: removing entries from this spec does NOT delete the
+      # live records themselves -- `dns apply`'s Reconcile is deliberately
+      # additive-only (create/update, never delete), so the stale aws-central
+      # records had to be removed directly via each provider's API instead.
 
       # #857: Easy DKIM CNAMEs for the lfr-demo.se production SES domain
       # identity (created 2026-07-29, sesv2 create-email-identity). SESv2
@@ -108,7 +130,8 @@ domains:
       - {name: "@", type: TXT, value: "v=spf1 include:amazonses.com -all", ttl: 120}
       - {name: _dmarc, type: TXT, value: "v=DMARC1; p=reject; sp=reject; adkim=s; aspf=s;", ttl: 120}
 
-      - {name: "@", type: MX, value: tunnel.lfr-demo.se, priority: 10, ttl: 120}
+      # RFC 7505 Null MX -- see the lfr-demo.se comment above.
+      - {name: "@", type: MX, value: ".", priority: 0, ttl: 120}
 
       # #857: Easy DKIM CNAMEs for the lfr-demo.online production SES domain
       # identity (created 2026-07-29). See the lfr-demo.se comment above.

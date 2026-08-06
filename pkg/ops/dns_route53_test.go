@@ -175,6 +175,45 @@ func TestRoute53Provider_ListRecords_FiltersNSAndSOAAndDecodesWireFormat(t *test
 	}
 }
 
+// TestRoute53Provider_ListRecords_NullMXDecodesToDotNotEmptyString verifies
+// the fix for #942: fromRoute53Value trimmed a trailing "." off MX/CNAME
+// targets to undo toRoute53Value's own appended dot, but for an RFC 7505
+// null MX ("0 .") the *entire* target is just ".", so blindly trimming
+// collapsed it to an empty string. That made `dns plan` show a perpetual
+// false diff against a live, already-correct null MX record -- confirmed
+// against real production DNS while investigating #941, since the same
+// pattern (`{name: "@", type: MX, value: ".", priority: 0}`) is used there.
+func TestRoute53Provider_ListRecords_NullMXDecodesToDotNotEmptyString(t *testing.T) {
+	client := &fakeRoute53Client{
+		listResourceRecordSetsFunc: func(ctx context.Context, in *route53.ListResourceRecordSetsInput, optFns ...func(*route53.Options)) (*route53.ListResourceRecordSetsOutput, error) {
+			ttl120 := int64(120)
+			return &route53.ListResourceRecordSetsOutput{
+				ResourceRecordSets: []types.ResourceRecordSet{
+					{Name: aws.String("example.com."), Type: types.RRTypeMx, TTL: &ttl120, ResourceRecords: []types.ResourceRecord{{Value: aws.String("0 .")}}},
+				},
+				IsTruncated: false,
+			}, nil
+		},
+	}
+	provider := &Route53Provider{Client: client}
+
+	records, err := provider.ListRecords(context.Background(), ZoneRef{Domain: "example.com", ID: "Z123"})
+	if err != nil {
+		t.Fatalf("ListRecords failed: %v", err)
+	}
+	if len(records) != 1 {
+		t.Fatalf("expected 1 record, got %d: %+v", len(records), records)
+	}
+
+	mx := records[0]
+	if mx.Value != "." {
+		t.Errorf(`expected the null MX target to decode to ".", got %q (record: %+v)`, mx.Value, mx)
+	}
+	if mx.Priority == nil || *mx.Priority != 0 {
+		t.Errorf("expected priority 0, got %+v", mx.Priority)
+	}
+}
+
 func TestRoute53Provider_ListRecords_NameDerivationIsCaseInsensitive(t *testing.T) {
 	// DNS names are case-insensitive. The suffix-trim in fromRoute53Name must
 	// still correctly derive the zone-relative name even if the zone domain

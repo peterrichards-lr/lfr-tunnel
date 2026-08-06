@@ -6,16 +6,16 @@ description: Critical SentinelOne End Point Detection and Response (EDR) constra
 # SentinelOne Execution Constraints (CRITICAL)
 
 > [!CAUTION]
-> **DO NOT EVER RUN `go test ./...` OR `go test` DIRECTLY.**
-> **SENTINELONE WILL DETECT THE DYNAMIC TEST EXECUTABLE (`*.test`), QUARANTINE IT, AND KILL ADJACENT SYSTEM PROCESSES (BREW, JENV, LDM). THIS CAN CRASH THE AGENT AND DESTROY THE USER'S LOCAL WORK ENVIRONMENT.**
-> **ALWAYS, STRICTLY, WITHOUT EXCEPTION, USE `make test` FOR ANY GO TESTING.**
+> **NEVER run a bare `go test` (or `go test ./...`) in this repo. ALWAYS use `make test` instead.** This is a hard, non-negotiable rule, not a preference.
 
-- **Active Test Execution Constraint**: Always run unit tests via `make test` or explicitly export `GOTMPDIR=/private/tmp` (or `LFT_TEST_DIR=/private/tmp`) when compiling Go test binaries.
-- **Pre-execution Verification**: Verify test binaries target `$(LFT_TEST_DIR)/lfr-tunnel` (defaulting to `/private/tmp/lfr-tunnel`). Any execution out of `/var/folders/...` or with arbitrary binary filenames will trigger SentinelOne (S1), which forcefully terminates adjacent system processes and daemon tasks.
-- **Environment Variable Overrides**:
-  - `LFT_TEST_DIR`: Directory where test binaries are pre-compiled and run (defaults to `/private/tmp`).
-  - `GOTMPDIR`: Automatically set to `LFT_TEST_DIR` during `make test` to prevent Go from creating temporary build caches in `/var/folders`.
+- **Why**: plain `go test [pkg]` (no `-o`) compiles an unsigned test binary into the default Go temp dir (`/private/var/folders/...` on macOS), NOT `/private/tmp`. Many packages' tests open real network listeners/sockets (e.g. `pkg/server`'s tests use `httptest.NewServer` and real WebSocket connections; `cmd/lfr-tunnel/main_test.go`'s `TestMain_ValidationFailure` even re-execs itself into the real client `main()`). An unsigned freshly-built binary, sitting in an arbitrary temp path, that then opens network connections is exactly the pattern SentinelOne (S1) flags as a dropped malicious binary — it does NOT matter whether the package under test is the client, the server, or anything else.
+- **This already happened once**: `server.test`, flagged "Malicious file executed", 2026-07-28 — cost a full local environment reinstall. S1 terminated the session and deleted unrelated tooling (Claude, jenv, python, LDM, Homebrew) as collateral damage.
+- **The only safe way to run tests is `make test`** — it compiles every package's test binary into `LFT_TEST_DIR` (default `/private/tmp`, S1-whitelisted) via `-o`, and executes it from there. This is enforced by a deny rule in `.claude/settings.json` blocking any `Bash(go test*)` invocation outright — do not try to work around it, including by manually exporting `GOTMPDIR`/`LFT_TEST_DIR` and invoking `go test` directly. `make test` sets those variables internally as part of its own build step; they are not a substitute for running it.
+- **Pre-execution verification**: if you need to confirm where a test binary landed, verify it targets `$(LFT_TEST_DIR)/lfr-tunnel` (defaulting to `/private/tmp/lfr-tunnel`). Anything running out of `/var/folders/...` or with an arbitrary binary filename means `make test` wasn't actually used.
+- **Also never run the `lfr-tunnel` client binary/process directly on the host**: `go run ./cmd/lfr-tunnel`, the built `bin/lfr-tunnel` binary, or the `lfr-tunnel.sh`/`lfr-tunnel.bat` wrappers. Also denied in `.claude/settings.json`.
+- **Fine to run directly**: `go build` (compiles but doesn't execute), `go vet`, `gofmt`, `go list`, and the compiled `lfr-tunneld` (server) / `lfr-tunnel-ops` (deploy tooling) binaries. The client running inside a Docker container (e.g. `make e2e` / `tests/e2e/run.sh`) is a different risk profile and is not blocked.
+- If ever unsure whether a command would build-and-run code outside `LFT_TEST_DIR`, stop and ask the user first rather than guessing.
 
 <!-- markdownlint-disable MD049 -->
 ---
-*Last Updated: 2026-07-23* | *Last Reviewed: 2026-07-23*
+*Last Updated: 2026-08-05* | *Last Reviewed: 2026-08-05*

@@ -237,7 +237,17 @@ entirely.
   Pass `--role central` or `--role edge` to `provision-aws-ec2.sh` to additionally tag
   each instance's role, so either view can still be filtered (e.g. "edge nodes only").
 - Set up an [AWS Budget](https://console.aws.amazon.com/billing/home#/budgets) alert per
-  environment so unexpected usage (e.g. a forgotten test instance) surfaces quickly.
+  environment so unexpected usage (e.g. a forgotten test instance) surfaces quickly. See
+  §8 below for the script that automates this.
+- **Quick links** for day-to-day cost monitoring once §8 is set up:
+  - [AWS Budgets console](https://console.aws.amazon.com/billing/home#/budgets) — view/edit
+    the budget amount, filter, and alert thresholds.
+  - [Cost Explorer console](https://console.aws.amazon.com/costmanagement/home#/cost-explorer) —
+    where the saved `tag:Project` report lives (§8 step 4 below covers creating it; Cost
+    Explorer has no bookmarkable-report API, so there's no separate direct link to the
+    saved report itself).
+  - Cost Allocation Tags (`Project`/`Role`/`Owner`/`CostCenter`) are active on Liferay's SE
+    sandbox account as of 2026-08-03.
 
 ---
 
@@ -262,15 +272,49 @@ spend and 100% of forecasted spend.
 
 **Including SES sending costs in the same budget.** Amazon SES's billing line item isn't
 resource-tagged the way EC2 instances/Elastic IPs are, so it can't share the plain
-`tag:Project` filter above. Pass `--include-ses` to fold it into the *same* budget via an
-OR filter expression (`tag:Project=<project-tag> OR Service=Amazon Simple Email Service`),
-so `--monthly-budget-usd` covers everything this project costs as one number, rather than
-tracking infra and SES spend as two separate partial budgets:
+`tag:Project` filter above. Pass `--include-ses` to fold it into the *same* budget:
 
 ```bash
 ./scripts/common/setup-aws-cost-dashboard.sh --profile lfr-tunnel \
   --monthly-budget-usd 50 --alert-emails you@example.com --include-ses
 ```
+
+This defines an **AWS Cost Category** (named `<budget-name>-category`) whose own rule is
+`tag:Project=<project-tag> OR Service=Amazon Simple Email Service`, then scopes the budget
+to that *one* category value — so `--monthly-budget-usd` covers everything this project
+costs as one number, rather than tracking infra and SES spend as two separate partial
+budgets. This is deliberately different from a raw `Or` `FilterExpression` directly on the
+budget: `CostCategoryRule.Rule` accepts the same `Expression` type (so `Or`/`And`/`Not` work
+fine *inside* the category's own rule), but once defined, the category is just a single
+named dimension — so the budget's own filter is a plain `CostCategories` key/value, never a
+logical expression the console can't render.
+
+> [!WARNING]
+> **An older version of this script scoped the budget directly via a raw `Or`
+> `FilterExpression`** (`tag:Project=<project-tag> OR Service=Amazon Simple Email Service`),
+> without a Cost Category in between. That form is accepted by the `CreateBudget`/
+> `UpdateBudget` API, but the Budgets console can't display or edit it ("This budget
+> contains a filter with an 'OR' expression. The Budgets console does not support 'OR'
+> expressions.") and its actual-spend chart fails to load (`ce:GetCostAndUsage`
+> `ValidationException: Selected metrics cannot be null`), since the console can't translate
+> either form into a chart query. The budget and its email/SNS alerts still work correctly —
+> this was a console-UI limitation, not a broken budget. If you have a budget created by
+> that older version, migrate it once its Cost Category exists — the script prints the exact
+> `aws budgets update-budget` command to do so when it detects an existing budget of the
+> same name.
+
+> [!NOTE]
+> **Verified working end-to-end** (2026-08-06, issue #908): once Cost Allocation Tags
+> were active, the pre-existing raw-`Or`-`FilterExpression` budget (created before Cost
+> Categories existed in this script) picked up real non-zero `ActualSpend` matching an
+> independent `ce:GetCostAndUsage` group-by-tag breakdown for the same project tag, and
+> both budget notifications (80% actual / 100% forecasted) showed a live `OK`
+> `NotificationState` with the correct email subscribers still attached — confirming the
+> console-UI-only limitation described above never affected the budget's real
+> functionality. `ce:ListCostAllocationTags` itself still returns `AccessDeniedException`
+> for a member account even with tags active and full Administrator permissions — that
+> specific status-check API is its own separate payer-account restriction, same pattern
+> as the Cost Category one below; it doesn't indicate the tags aren't working.
 
 **Non-USD billing.** If the account's billing currency isn't USD, pass `--currency EUR`
 (or whatever ISO code applies) — the `Unit` on the budget must match the account's actual
@@ -301,19 +345,31 @@ This is only accurate while the account stays dedicated to the project — once 
 unrelated starts sharing it, switch back to tag-based filtering (which by then means
 chasing down payer-account access to actually activate the tags).
 
+**Cost Categories are a SEPARATE payer-account restriction from Cost Allocation Tags.**
+`--include-ses` needs `CreateCostCategoryDefinition`/`ListCostCategoryDefinitions`, which
+fail with `AccessDeniedException: Linked account doesn't have access to cost category` in
+an AWS Organizations member account — even with full Administrator permissions there, and
+even once Cost Allocation Tags are already active. Clearing the tag-activation restriction
+does **not** clear this one; they're independent payer-account gates. If you hit this,
+either ask whoever has payer-account access to create the Cost Category for you (mirroring
+the tag-activation ask in §7), or fall back to `--linked-account` above, or to two separate
+simple-filter budgets (one `--project-tag`-scoped, one you create by hand filtered on
+`Service=Amazon Simple Email Service`).
+
 The one part this script can't automate: Cost Explorer's grouped/filtered **reports**
 have no public creation API, so saving one as a reusable "dashboard" is a manual,
 one-time console step:
 
 1. Open [Cost Explorer](https://console.aws.amazon.com/costmanagement/home#/cost-explorer).
-2. Group by **Tag → Project**; filter **Tag → Project → `<project-tag>`**.
+2. If `--include-ses` was **not** used: group by **Tag → Project**; filter
+   **Tag → Project → `<project-tag>`**. If `--include-ses` **was** used: group by
+   **Cost Category → `<budget-name>-category`**; filter
+   **Cost Category → `<budget-name>-category` → `<project-tag>`** — this single report
+   already shows `tag:Project OR Service:SES` combined, since the OR logic lives in the
+   Cost Category rather than the report's own filter.
 3. Click **Save as** to bookmark it — this is the persistent dashboard view going
    forward, reusable across regions since billing data itself isn't region-scoped (unlike
    the Resource Groups caveat in §7).
-4. If `--include-ses` was used, save a **second** report filtered on
-   **Service → Amazon Simple Email Service** — Cost Explorer ANDs filters across
-   different dimensions, so a single report can't show "tag:Project OR Service:SES"
-   together; two saved reports is the practical equivalent of one combined dashboard.
 
 ---
 
@@ -469,4 +525,4 @@ dual-stack behavior the current production VPS already has.
 
 <!-- markdownlint-disable MD049 -->
 ---
-*Last Updated: 2026-07-31* | *Last Reviewed: 2026-07-31*
+*Last Updated: 2026-08-06* | *Last Reviewed: 2026-08-06*

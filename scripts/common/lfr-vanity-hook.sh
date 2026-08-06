@@ -6,9 +6,24 @@ set -euo pipefail
 # variables by the caller (the operator-configured vanity_domain_hook
 # invocation, or a Liferay-specific wrapper), which is the only place that
 # actually knows the right values for a given deployment.
+#
+# IMPORTANT: this script runs as a child of lfr-tunneld, which is
+# deliberately unprivileged (systemd's ProtectSystem=strict, NoNewPrivileges,
+# empty CapabilityBoundingSet -- see docs/server/setup_guide.md's "Vanity
+# Domain Hook" section). It cannot write to /etc/nginx/sites-enabled or the
+# default /etc/letsencrypt, and it cannot reload nginx itself. NGINX_CONF_DIR
+# and WEBROOT_PATH must therefore point at directories the service account
+# actually owns (typically a dedicated /etc/nginx/vanity-domains.d and a
+# dedicated webroot), and CERTBOT_DIR must point certbot's own
+# config/work/logs dirs somewhere writable too (typically under
+# /etc/lfr-tunneld, which is already in the service's ReadWritePaths).
+# Reloading nginx after a config change is handled out-of-band by a
+# root-owned systemd path unit watching NGINX_CONF_DIR -- this script only
+# needs to wait for that reload to land before asking Certbot to validate.
 NGINX_CONF_DIR="${NGINX_CONF_DIR:-}"
 WEBROOT_PATH="${WEBROOT_PATH:-}"
 UPSTREAM_URL="${UPSTREAM_URL:-}"
+CERTBOT_DIR="${CERTBOT_DIR:-}"
 ACME_EMAIL="${ACME_EMAIL:-}"
 
 ACTION="$1"
@@ -20,7 +35,7 @@ if [[ -z "$ACTION" || -z "$DOMAIN" ]]; then
 fi
 
 if [[ -z "$NGINX_CONF_DIR" ]]; then
-    echo "Error: NGINX_CONF_DIR must be set (e.g. /etc/nginx/sites-enabled)."
+    echo "Error: NGINX_CONF_DIR must be set (e.g. /etc/nginx/vanity-domains.d)."
     exit 1
 fi
 
@@ -30,14 +45,48 @@ if [[ ! "$DOMAIN" =~ ^[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$ ]]; then
     exit 1
 fi
 
+# wait_for_nginx_pickup polls a sentinel file through nginx's own HTTP
+# listener (bypassing DNS via --resolve, since the vanity domain's public
+# DNS may not be the thing under test) until the just-written config is
+# actually being served, or times out. Without this, Certbot's HTTP-01
+# challenge could race the reload-watcher's systemd path unit and fail
+# transiently on an otherwise-correct setup.
+wait_for_nginx_pickup() {
+    local sentinel_name="reload-check-$$"
+    local sentinel_path="$WEBROOT_PATH/.well-known/acme-challenge/$sentinel_name"
+    echo "ok" > "$sentinel_path"
+
+    local code="000"
+    for _ in $(seq 1 20); do
+        code=$(curl --resolve "$DOMAIN:80:127.0.0.1" -s -o /dev/null -w '%{http_code}' \
+            "http://$DOMAIN/.well-known/acme-challenge/$sentinel_name" || echo "000")
+        if [[ "$code" == "200" ]]; then
+            break
+        fi
+        sleep 0.5
+    done
+    rm -f "$sentinel_path"
+
+    if [[ "$code" != "200" ]]; then
+        echo "Error: nginx did not pick up the config for $DOMAIN within 10s (last status: $code)."
+        echo "Check that NGINX_CONF_DIR is included from nginx.conf and that the reload-watcher path unit is running."
+        return 1
+    fi
+    return 0
+}
+
 case "$ACTION" in
     add)
         if [[ -z "$WEBROOT_PATH" ]]; then
-            echo "Error: WEBROOT_PATH must be set (e.g. /var/www/letsencrypt)."
+            echo "Error: WEBROOT_PATH must be set (e.g. /var/www/lfr-tunnel-vanity)."
             exit 1
         fi
         if [[ -z "$UPSTREAM_URL" ]]; then
             echo "Error: UPSTREAM_URL must be set (e.g. http://127.0.0.1:8080)."
+            exit 1
+        fi
+        if [[ -z "$CERTBOT_DIR" ]]; then
+            echo "Error: CERTBOT_DIR must be set (e.g. /etc/lfr-tunneld/letsencrypt) -- this script's own Certbot state dir, since it cannot use the system default /etc/letsencrypt."
             exit 1
         fi
         if [[ -z "$ACME_EMAIL" ]]; then
@@ -66,16 +115,21 @@ server {
 }
 EOF
 
-        # Reload nginx for HTTP-01 challenge
-        nginx -s reload || systemctl reload nginx || true
+        # The reload-watcher path unit picks up the config change and reloads
+        # nginx as root; wait for evidence it actually has before continuing.
+        wait_for_nginx_pickup
 
         # 3. Request Certbot certificate
         echo "Requesting Let's Encrypt certificate for $DOMAIN..."
-        if certbot certonly --webroot -w "$WEBROOT_PATH" -d "$DOMAIN" --non-interactive --agree-tos --email "$ACME_EMAIL" --keep-until-expiring; then
+        if certbot certonly --webroot -w "$WEBROOT_PATH" -d "$DOMAIN" \
+            --config-dir "$CERTBOT_DIR" --work-dir "$CERTBOT_DIR/work" --logs-dir "$CERTBOT_DIR/logs" \
+            --non-interactive --agree-tos --email "$ACME_EMAIL" --keep-until-expiring; then
             echo "Certificate obtained successfully."
         else
             echo "Certbot failed, trying with fallback..."
-            certbot certonly --webroot -w "$WEBROOT_PATH" -d "$DOMAIN" --non-interactive --agree-tos --register-unsafely-without-email --keep-until-expiring
+            certbot certonly --webroot -w "$WEBROOT_PATH" -d "$DOMAIN" \
+                --config-dir "$CERTBOT_DIR" --work-dir "$CERTBOT_DIR/work" --logs-dir "$CERTBOT_DIR/logs" \
+                --non-interactive --agree-tos --register-unsafely-without-email --keep-until-expiring
         fi
 
         # 4. Write full SSL configuration
@@ -97,8 +151,8 @@ server {
     listen 443 ssl;
     server_name $DOMAIN *.$DOMAIN;
 
-    ssl_certificate /etc/letsencrypt/live/$DOMAIN/fullchain.pem;
-    ssl_certificate_key /etc/letsencrypt/live/$DOMAIN/privkey.pem;
+    ssl_certificate $CERTBOT_DIR/live/$DOMAIN/fullchain.pem;
+    ssl_certificate_key $CERTBOT_DIR/live/$DOMAIN/privkey.pem;
 
     # Safe SSL config defaults
     ssl_protocols TLSv1.2 TLSv1.3;
@@ -120,26 +174,25 @@ server {
 }
 EOF
 
-        # Reload nginx to activate SSL config
-        nginx -s reload || systemctl reload nginx
+        # Reload-watcher picks this up too -- nothing more to do here.
         echo "Vanity domain setup completed: $DOMAIN"
         ;;
 
     remove)
         echo "Removing vanity domain: $DOMAIN"
-        # Remove nginx configuration
+        # Remove nginx configuration -- the reload-watcher picks up the removal.
         if [ -f "$NGINX_CONF_DIR/$DOMAIN.conf" ]; then
             rm "$NGINX_CONF_DIR/$DOMAIN.conf"
             echo "Removed configuration file: $NGINX_CONF_DIR/$DOMAIN.conf"
         fi
 
-        # Reload Nginx
-        nginx -s reload || systemctl reload nginx || true
-
-        # Clean up certbot certificate
-        if certbot certificates --cert-name "$DOMAIN" >/dev/null 2>&1; then
+        # Clean up certbot certificate (if CERTBOT_DIR is configured -- if the
+        # domain was never fully added, e.g. it failed before certbot ran,
+        # there may be nothing to clean up here).
+        if [[ -n "$CERTBOT_DIR" ]] && certbot certificates --config-dir "$CERTBOT_DIR" --cert-name "$DOMAIN" >/dev/null 2>&1; then
             echo "Deleting Let's Encrypt certificate for $DOMAIN..."
-            certbot delete --cert-name "$DOMAIN" --non-interactive || true
+            certbot delete --config-dir "$CERTBOT_DIR" --work-dir "$CERTBOT_DIR/work" --logs-dir "$CERTBOT_DIR/logs" \
+                --cert-name "$DOMAIN" --non-interactive || true
         fi
         echo "Vanity domain removal completed: $DOMAIN"
         ;;

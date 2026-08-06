@@ -375,7 +375,7 @@ func NewServer(cfg *config.ServerConfig) (*Server, error) {
 			srv.proxyHandler.RemoveRateLimiter(lease.FullHost)
 		}
 		if srv.isCustomDomain(lease.FullHost) {
-			go srv.runVanityDomainHook("remove", lease.FullHost)
+			go srv.runVanityDomainHook("remove", lease.FullHost, lease.UserID)
 		}
 		if srv.cfg.ControlPlaneURL != "" {
 			go srv.notifyControlPlaneDeregister(lease.UserID, lease.SubdomainPrefix)
@@ -1520,7 +1520,7 @@ func (s *Server) handleRegister(w http.ResponseWriter, r *http.Request) {
 		leases := s.registry.GetSessionLeases(sessionToken)
 		for _, lease := range leases {
 			if s.isCustomDomain(lease.FullHost) {
-				go s.runVanityDomainHook("add", lease.FullHost)
+				go s.runVanityDomainHook("add", lease.FullHost, lease.UserID)
 			}
 		}
 	}

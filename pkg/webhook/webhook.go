@@ -196,6 +196,18 @@ func (w *WebhookService) SendRateLimitBanAlert(ip string, duration time.Duration
 	w.enqueueOrSend(title, desc, colorWarning, facts)
 }
 
+func (w *WebhookService) SendVanityDomainHookFailureAlert(action, domain, requestingUserID, reason string) {
+	title := "🔒 Vanity Domain Hook Failed"
+	desc := fmt.Sprintf("*Action:* `%s`\n*Domain:* `%s`\n*Requested By:* `%s`\n*Reason:* %s\n\n_%s likely has no valid SSL certificate or isn't reachable right now._", action, domain, requestingUserID, reason, domain)
+	facts := []map[string]string{
+		{keyName: "Action", keyValue: action},
+		{keyName: "Domain", keyValue: domain},
+		{keyName: "Requested By", keyValue: requestingUserID},
+		{keyName: keyReason, keyValue: reason},
+	}
+	w.enqueueOrSend(title, desc, colorDanger, facts)
+}
+
 func (w *WebhookService) SendIPBlacklistAlert(ip string, reason string) {
 	title := "🚫 Admin Action: IP Blacklisted"
 	desc := fmt.Sprintf("*IP Address:* `%s`\n*Reason:* %s", ip, reason)

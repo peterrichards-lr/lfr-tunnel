@@ -1,0 +1,5 @@
+<p>Hi {{.Name}},</p>
+<p>Something went wrong setting up automated DNS/TLS provisioning for your custom domain <strong>{{.Domain}}</strong>.</p>
+<p>The gateway administrator has also been alerted, but since this may mean <strong>{{.Domain}}</strong> currently has no valid SSL certificate or isn't reachable at all, we're notifying you directly too in case the administrator doesn't see it right away.</p>
+<p>No action is needed from you immediately -- the administrator will investigate. If this keeps happening, check with them before relying on this domain for anything time-sensitive.</p>
+<p style="margin: 24px 0;"><a href="{{.PortalLink}}" style="background: #0969da; color: white; padding: 12px 24px; border-radius: 6px; text-decoration: none; font-weight: bold; display: inline-block;">Go to Portal</a></p>

@@ -1,5 +1,12 @@
 [
   {
+    "version": "v1.44.8",
+    "release_date": "2026-08-07",
+    "features": [
+      "Release v1.44.8"
+    ]
+  },
+  {
     "version": "v1.44.7",
     "release_date": "2026-08-05",
     "features": [
@@ -25,16 +32,6 @@
     "release_date": "2026-07-26",
     "features": [
       "Release v1.44.4"
-    ]
-  },
-  {
-    "version": "v1.44.3",
-    "release_date": "2026-07-23",
-    "features": [
-      "Feature: Connect useDataTable with per-table localStorage persistence and column customization across Admin tables",
-      "Style: Fix lfr-tunnel -upgrade badge padding and layout spacing in Dashboard Overview",
-      "Fix: Enforce maximum size constraint of 5 releases on whats-new.json with automated unit test assertions",
-      "Test: Extend ServiceInstaller unit tests for pretty symlinks and LaunchAgent plists"
     ]
   }
 ]

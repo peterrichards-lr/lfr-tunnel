@@ -72,7 +72,10 @@ export default function AdminSubdomains() {
     ['subdomain', 'full_host', 'user_email', 'client_ip', 'node_id'],
     columns,
     10,
-    ['created_at']
+    // Owner and Client IP hidden by default -- with Status/Node/Target Host already
+    // squeezed for room, showing them up front pushed those into wrapping. Still
+    // available via the column toggle for anyone who wants them.
+    ['created_at', 'user_email', 'client_ip']
   );
 
   const fetchSubdomains = async () => {
@@ -251,7 +254,7 @@ export default function AdminSubdomains() {
                   <tr key={sub.id} className="border-b hover:bg-white/5 transition-colors">
                     {isColumnVisible('subdomain') && <td className="td-cell font-medium">{sub.subdomain || '(wildcard)'}</td>}
                     {isColumnVisible('full_host') && (
-                      <td className="td-cell">
+                      <td className="td-cell" style={{ whiteSpace: 'nowrap' }}>
                         <a href={`https://${sub.full_host}`} target="_blank" rel="noreferrer" className="text-primary no-underline font-medium">
                           {sub.full_host}
                         </a>
@@ -262,16 +265,16 @@ export default function AdminSubdomains() {
                         )}
                       </td>
                     )}
-                    {isColumnVisible('user_email') && <td className="td-cell">{sub.user_email}</td>}
+                    {isColumnVisible('user_email') && <td className="td-cell" style={{ whiteSpace: 'nowrap' }}>{sub.user_email}</td>}
                     {isColumnVisible('is_online') && (
-                      <td className="td-cell">
+                      <td className="td-cell" style={{ whiteSpace: 'nowrap' }}>
                         <span className={`badge ${sub.is_online ? 'badge-success' : ''}`} style={!sub.is_online ? { background: 'rgba(255, 255, 255, 0.05)', color: 'var(--text-muted)', border: '1px solid var(--border)' } : {}}>
                           {sub.is_online ? '🟢 Online' : '⚪ Offline'}
                         </span>
                       </td>
                     )}
                     {isColumnVisible('node_id') && (
-                      <td className="td-cell">
+                      <td className="td-cell" style={{ whiteSpace: 'nowrap' }}>
                         {sub.is_online ? (
                           sub.node_id && sub.node_id !== 'control' ? (
                             <span className="badge badge-node">
@@ -285,7 +288,7 @@ export default function AdminSubdomains() {
                         ) : '-'}
                       </td>
                     )}
-                    {isColumnVisible('client_ip') && <td className="td-cell font-mono text-xs">{sub.client_ip}</td>}
+                    {isColumnVisible('client_ip') && <td className="td-cell font-mono text-xs" style={{ whiteSpace: 'nowrap' }}>{sub.client_ip}</td>}
                     {isColumnVisible('bytes_in') && <td className="td-cell text-xs text-muted">{formatBytes(sub.bytes_in || 0)}</td>}
                     {isColumnVisible('bytes_out') && <td className="td-cell text-xs text-muted">{formatBytes(sub.bytes_out || 0)}</td>}
                     {isColumnVisible('created_at') && (

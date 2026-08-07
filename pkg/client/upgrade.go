@@ -262,6 +262,20 @@ func SelfUpgrade(currentVersion string, serverURL string) error {
 
 	valid, err := pubKey.Verify(checksumsContent, sig)
 	if err != nil {
+		if strings.Contains(err.Error(), "Incompatible key identifiers") {
+			// This specific error means the signature was made with a different minisign
+			// key than the one this binary trusts -- i.e. this install predates a signing-key
+			// rotation (see #949/#955). That's not a corrupted download or an attack; it's the
+			// intended, permanent consequence of rotating away from a compromised key: a
+			// pre-rotation binary can never verify a post-rotation signature, by design.
+			// Self-upgrade cannot bridge that gap on its own -- a fresh manual install is
+			// required, exactly once, to pick up the new trusted key.
+			reinstallHint := "the project's GitHub Releases page or your gateway's download page"
+			if serverURL != "" {
+				reinstallHint = strings.TrimRight(serverURL, "/") + "/install"
+			}
+			return fmt.Errorf("this installation predates a signing-key rotation and can no longer verify new releases automatically -- download and reinstall manually, once, from %s (see https://github.com/peterrichards-lr/lfr-tunnel/issues/955 for background)", reinstallHint)
+		}
 		return fmt.Errorf("signature verification failed: %v", err)
 	}
 	if !valid {

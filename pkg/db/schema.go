@@ -240,4 +240,5 @@ var migrations = []migration{
 	{16, "CREATE TABLE IF NOT EXISTS webhook_queue (id INTEGER PRIMARY KEY AUTOINCREMENT, title TEXT NOT NULL, description TEXT NOT NULL, color TEXT NOT NULL, facts TEXT NOT NULL, created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP)"},
 	{17, "ALTER TABLE users ADD COLUMN preferred_domain TEXT DEFAULT ''"},
 	{18, "ALTER TABLE users ADD COLUMN subdomain_style TEXT DEFAULT 'liferay'"},
+	{19, "CREATE TABLE IF NOT EXISTS vanity_domain_status (full_host TEXT PRIMARY KEY, user_id TEXT NOT NULL DEFAULT '', requested_at DATETIME, nginx_config_at DATETIME, cert_issued_at DATETIME, live_at DATETIME, failed_stage TEXT, error_message TEXT, updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP)"},
 }

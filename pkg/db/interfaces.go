@@ -82,6 +82,22 @@ type BlacklistRepository interface {
 	ListBlacklistedIPs() ([]*BlacklistEntry, error)
 }
 
+type VanityDomainStatusRepository interface {
+	// StartVanityDomainAttempt records a fresh "add" attempt: sets requested_at to now and
+	// clears every later stage/failure field, so a retry doesn't show stale state left over
+	// from a previous failed attempt.
+	StartVanityDomainAttempt(fullHost, userID string) error
+	// MarkVanityDomainStage sets the given stage's timestamp to now. stage must be one of
+	// "nginx_config", "cert_issued", or "live".
+	MarkVanityDomainStage(fullHost, stage string) error
+	// MarkVanityDomainFailed records which stage failed and why, without touching whichever
+	// earlier stage timestamps already succeeded.
+	MarkVanityDomainFailed(fullHost, failedStage, errorMessage string) error
+	GetVanityDomainStatus(fullHost string) (*VanityDomainStatus, error)
+	ListVanityDomainStatusForUser(userID string) ([]*VanityDomainStatus, error)
+	ListAllVanityDomainStatus() ([]*VanityDomainStatus, error)
+}
+
 type GuestInviteRepository interface {
 	CreateGuestInvitation(invite *GuestInvitation) error
 	GetGuestInvitation(id int64) (*GuestInvitation, error)

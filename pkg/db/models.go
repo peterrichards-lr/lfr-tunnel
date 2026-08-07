@@ -148,6 +148,25 @@ type BlacklistEntry struct {
 	CreatedAt time.Time `json:"created_at"`
 }
 
+// VanityDomainStatus tracks a custom/vanity domain's provisioning progress through the
+// stages runVanityDomainHook and lfr-vanity-hook.sh actually go through (see issue #964).
+// Each stage field is nil until that stage is reached -- the portal renders that as an
+// open/grey icon, and a set timestamp as a green tick (with the timestamp itself shown in
+// the hover tooltip). One row per domain: a fresh "add" attempt resets every field below
+// RequestedAt rather than appending a new row, so this always reflects the current attempt,
+// not a historical log of every past one.
+type VanityDomainStatus struct {
+	FullHost      string     `json:"full_host"`
+	UserID        string     `json:"user_id"`
+	RequestedAt   *time.Time `json:"requested_at"`
+	NginxConfigAt *time.Time `json:"nginx_config_at"`
+	CertIssuedAt  *time.Time `json:"cert_issued_at"`
+	LiveAt        *time.Time `json:"live_at"`
+	FailedStage   string     `json:"failed_stage,omitempty"`
+	ErrorMessage  string     `json:"error_message,omitempty"`
+	UpdatedAt     time.Time  `json:"updated_at"`
+}
+
 type DailyBandwidth struct {
 	Date     string `json:"date"`
 	BytesIn  int64  `json:"bytes_in"`

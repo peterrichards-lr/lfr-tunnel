@@ -848,6 +848,11 @@ func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 
+		if r.Method == http.MethodGet && r.URL.Path == "/api/integrations/slack/callback" {
+			s.handleSlackOAuthCallback(w, r)
+			return
+		}
+
 		if r.Method == http.MethodGet && r.URL.Path == "/api/me" {
 			s.handleGetMe(w, r)
 			return

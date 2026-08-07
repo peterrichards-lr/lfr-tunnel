@@ -1690,6 +1690,15 @@ html[dir="rtl"] td, html[dir="rtl"] th {
     grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
     gap: var(--spacing-xl);
 }
+/* .auto-grid-md was referenced (AdminTelemetry's top summary cards,
+   AdminUsers' details-modal fields) but never defined -- those divs got no
+   grid styling at all and fell back to stacking as plain blocks, one per
+   row (#975). */
+.auto-grid-md {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+    gap: var(--spacing-xl);
+}
 
 /* Two-column layout */
 .col-2 {

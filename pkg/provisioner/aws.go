@@ -13,6 +13,7 @@ import (
 	"github.com/aws/aws-sdk-go-v2/service/ec2"
 	"github.com/aws/aws-sdk-go-v2/service/scheduler"
 	schedulertypes "github.com/aws/aws-sdk-go-v2/service/scheduler/types"
+	"github.com/aws/aws-sdk-go-v2/service/sts"
 )
 
 // EC2API is the minimal subset of *ec2.Client this backend needs.
@@ -60,13 +61,33 @@ func NewAWSBackend(ctx context.Context, cfg *Config) (*AWSBackend, error) {
 
 	ec2Clients := make(map[string]EC2API, len(regions))
 	schedulerClients := make(map[string]SchedulerAPI, len(regions))
+	var firstCfg aws.Config
+	first := true
 	for region := range regions {
 		awsCfg, err := config.LoadDefaultConfig(ctx, config.WithRegion(region))
 		if err != nil {
 			return nil, fmt.Errorf("loading AWS config for region %s: %w", region, err)
 		}
+		if first {
+			firstCfg = awsCfg
+			first = false
+		}
 		ec2Clients[region] = ec2.NewFromConfig(awsCfg)
 		schedulerClients[region] = scheduler.NewFromConfig(awsCfg)
+	}
+
+	// config.LoadDefaultConfig only resolves *which* credential source to use -- it never
+	// verifies those credentials actually work. Without this, a missing IAM instance
+	// profile (or any other credential misconfiguration) stays completely silent: the
+	// sidecar starts up looking healthy, and every single API call it ever makes fails
+	// one-by-one with an opaque IMDS/credentials error, surfacing to operators only as
+	// missing data in the portal (e.g. a blank Local Time column) with nothing in the logs
+	// pointing at the actual cause. Fail loudly here instead, once, at startup.
+	if !first {
+		stsClient := sts.NewFromConfig(firstCfg)
+		if _, err := stsClient.GetCallerIdentity(ctx, &sts.GetCallerIdentityInput{}); err != nil {
+			return nil, fmt.Errorf("verifying AWS credentials (does this host have an IAM instance profile attached?): %w", err)
+		}
 	}
 
 	return &AWSBackend{

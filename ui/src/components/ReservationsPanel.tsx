@@ -372,7 +372,14 @@ export default function ReservationsPanel() {
               </thead>
               <tbody>
                 {paginatedItems.map(r => {
-                  const host = `${r.subdomain}.${r.domain}`;
+                  // Custom-domain reservations have an empty subdomain (server.go sets
+                  // SubdomainPrefix = "" for these) -- plain `${subdomain}.${domain}` then
+                  // leaves a leading dot ("`.dev.solaramoto.com`"), which browsers don't treat
+                  // as the bare domain. Omit the separator when there's no prefix to join.
+                  const host = r.subdomain ? `${r.subdomain}.${r.domain}` : r.domain;
+                  const cliCommand = r.subdomain
+                    ? `lfr-tunnel -subdomain ${r.subdomain} -server ${window.location.origin}`
+                    : `lfr-tunnel -domain ${r.domain} -server ${window.location.origin}`;
                   const isExpired = r.expires_at && new Date(r.expires_at) < new Date();
                   const canExtend = !!(r.expires_at && !r.extension_requested && !isExpired);
                   return (
@@ -391,8 +398,8 @@ export default function ReservationsPanel() {
                             >
                               📋
                             </button>
-                            <button 
-                              onClick={() => copyText(`lfr-tunnel -subdomain ${r.subdomain} -server ${window.location.origin}`, 'CLI command copied')}
+                            <button
+                              onClick={() => copyText(cliCommand, 'CLI command copied')}
                               className="btn-icon text-muted cursor-pointer text-base"
                               style={{ background: 'none', border: 'none', padding: '2px' }}
                               title="Copy CLI Connection Command"
@@ -486,7 +493,9 @@ export default function ReservationsPanel() {
               <button type="button" onClick={() => setAcModalReservation(null)} className="modal-close" aria-label={t('close', 'Close')}>✕</button>
             </div>
             <p className="text-muted text-sm mb-lg">
-              <strong className="text-primary font-mono">{acModalReservation.subdomain}.{acModalReservation.domain}</strong>
+              <strong className="text-primary font-mono">
+                {acModalReservation.subdomain ? `${acModalReservation.subdomain}.${acModalReservation.domain}` : acModalReservation.domain}
+              </strong>
             </p>
 
             <div className="form-group">

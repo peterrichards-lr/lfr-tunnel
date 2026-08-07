@@ -1,6 +1,7 @@
 package main
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"flag"
@@ -281,7 +282,41 @@ func main() {
 	signal.Notify(sigs, syscall.SIGINT, syscall.SIGTERM)
 	go func() {
 		<-sigs
-		slog.Info("[Client] Shutdown signal received, closing tunnel...")
+		slog.Info("[Client] Shutdown signal received, notifying gateway before closing tunnel... (press Ctrl+C again to force quit immediately)")
+
+		// Proactively tell the gateway we're disconnecting so it cleans up our lease (and
+		// runs any vanity domain hook removal) right away, instead of waiting for its
+		// periodic orphan-lease sweep (up to 10s, see StartCleanupRoutine server-side).
+		// Without this, immediately restarting with the same custom domain can hit a
+		// spurious "already taken" 409 for our own not-yet-cleaned-up previous session.
+		// Best-effort with a short timeout -- if the gateway is unreachable, fall through
+		// to closing the tunnel anyway rather than hang indefinitely.
+		done := make(chan struct{})
+		go func() {
+			defer close(done)
+			deregisterCtx, deregisterCancel := context.WithTimeout(context.Background(), 3*time.Second)
+			defer deregisterCancel()
+			body, err := json.Marshal(map[string]string{"session_token": regResp.SessionToken})
+			if err != nil {
+				return
+			}
+			req, err := http.NewRequestWithContext(deregisterCtx, http.MethodPost, strings.TrimRight(cfg.ServerURL, "/")+"/api/deregister", bytes.NewReader(body))
+			if err != nil {
+				return
+			}
+			req.Header.Set("Content-Type", "application/json")
+			resp, err := http.DefaultClient.Do(req)
+			if err != nil {
+				return
+			}
+			resp.Body.Close() //nolint:errcheck
+		}()
+
+		select {
+		case <-done:
+		case <-sigs:
+			slog.Info("[Client] Second shutdown signal received, force quitting...")
+		}
 		cancel()
 	}()
 

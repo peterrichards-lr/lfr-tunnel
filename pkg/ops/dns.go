@@ -24,6 +24,10 @@ func DnsCommand(args []string) {
 		printDnsUsage()
 		os.Exit(1)
 	}
+	if IsHelpRequest(args) {
+		printDnsUsage()
+		return
+	}
 
 	action := args[0]
 	rest := args[1:]

@@ -961,9 +961,9 @@ docker_bypass_url: "https://github.com/peterrichards-lr/lfr-tunnel/blob/master/d
 
 #### Step 4: Automating Multi-Platform Code Signing & Verification
 
-To establish user trust and ensure EDR compatibility (SentinelOne/false-positive prevention) across Windows, macOS, and Linux, you can utilize the automated signing script located at `scripts/sign-release.sh`. 
+To establish user trust and ensure EDR compatibility (SentinelOne/false-positive prevention) across Windows, macOS, and Linux, you can utilize `lfr-tunnel-ops`'s `build` and `sign` subcommands (`pkg/ops/build.go`/`pkg/ops/sign.go` -- there is no separate shell script; `scripts/sign-release.sh` was replaced by this Go-based CLI a while back and no longer exists).
 
-This script allows you to build, sign, and update release checksums natively on your macOS MacBook.
+These subcommands let you build, sign, and update release checksums natively on your macOS MacBook.
 
 ##### A. Obtaining Signing Certificates
 
@@ -1007,48 +1007,56 @@ For isolated testing or when corporate certificates are not yet available, you c
    * **Certificate Type**: Code Signing
    * Click **Create**. Right-click the newly generated certificate to export it as a `.cer` file and send it to your SentinelOne administrator for macOS whitelisting.
 
-##### C. Running the Automated Signing Script
+##### C. Running `lfr-tunnel-ops build` and `sign`
 
-The `scripts/sign-release.sh` script compiles the project and signs the binaries. It checks for environment variables and prompts you interactively if they are missing:
+`build` cross-compiles the client into `dist/` first; `sign` then signs whatever it finds there.
+There is no interactive prompt mode -- both are entirely env-var-driven. Per platform, `sign`
+silently prints `Skipping ... signing (no valid ... provided/found)` and moves on if that
+platform's env vars aren't set, rather than asking you for anything.
 
-* **Interactive Mode**:
-  Ensure you have `osslsigncode` and `gnupg` installed:
-  ```bash
-  brew install osslsigncode gnupg
-  ./scripts/sign-release.sh
-  ```
-  The script will guide you through picking available Keychain identities, selecting a `.p12` file (defaulting to `./temp_signing_key.p12` if present), entering passwords securely, and signing.
+Provide the variables below directly via shell or 1Password `op run`. `<vault>` is a placeholder
+-- substitute whichever 1Password vault actually holds these items for you (e.g. your personal
+`Private` vault, or an org-specific vault name like `Employee`):
+```bash
+lfr-tunnel-ops build
 
-* **Environment Variable Mode (CI/CD, 1Password, or Non-Interactive)**:
-  Provide variables directly via shell or 1Password `op run`. `<vault>` below is a placeholder --
-  substitute whichever 1Password vault actually holds these items for you (e.g. your personal
-  `Private` vault, or an org-specific vault name like `Employee`):
-  ```bash
-  # macOS Codesigning
-  export LFT_MACOS_IDENTITY="71FC1F1B1AAF4504A6B098BA0BDC785979DF14F9"
+# macOS Codesigning
+export LFT_MACOS_IDENTITY="71FC1F1B1AAF4504A6B098BA0BDC785979DF14F9"
 
-  # Windows Authenticode (Separate Key & Cert PEM files via 1Password)
-  export LFT_SIGN_KEY="op://<vault>/self-signed-windows-signing-key/<key-filename>.key"
-  export LFT_SIGN_CRT="op://<vault>/self-signed-windows-signing-key/<cert-filename>.crt"
-  export LFT_SIGN_PASS="op://<vault>/self-signed-windows-signing-key/password"
+# Windows Authenticode (private key + certificate attached as files on the same item)
+export LFT_SIGN_KEY="op://<vault>/self-signed-windows-signing-key/<key-filename>.key"
+export LFT_SIGN_CRT="op://<vault>/self-signed-windows-signing-key/<cert-filename>.crt"
+export LFT_SIGN_PASS="op://<vault>/self-signed-windows-signing-key/password"
 
-  # self-signed-windows-signing-key must be a generic item type (e.g. Secure Note/Password)
-  # with the private key and certificate attached as separate file fields -- NOT an "SSH Key"
-  # category item. That category only accepts an SSH-format key and derives an SSH public
-  # key from it, which can't hold an arbitrary X.509 certificate (see #951). The `password`
-  # field is a plain custom field, not the SSH Key type's built-in passphrase handling.
+# self-signed-windows-signing-key must be a generic item type (e.g. Secure Note/Password)
+# with the private key and certificate attached as separate file fields -- NOT an "SSH Key"
+# category item. That category only accepts an SSH-format key and derives an SSH public
+# key from it, which can't hold an arbitrary X.509 certificate (see #951). The `password`
+# field is a plain custom field, not the SSH Key type's built-in passphrase handling.
 
-  # Alternatively: PKCS#12 bundle (.p12 / .pfx)
-  # export LFT_SIGN_P12="op://<vault>/self-signed-windows-signing-key/<bundle-filename>.p12"
+# Alternatively: PKCS#12 bundle (.p12 / .pfx)
+# export LFT_SIGN_P12="op://<vault>/self-signed-windows-signing-key/<bundle-filename>.p12"
 
-  # Linux GPG Checksums
-  export LFT_GPG_KEY="self-signed-linux-gpg-key"
+# Linux GPG signing -- LFT_GPG_KEY is a real key ID/fingerprint (from `gpg --list-secret-keys`),
+# not a 1Password item name. LFT_GPG_SECRET is that key's exported secret key (`gpg --armor
+# --export-secret-keys <key-id>`), attached as a file on its own item. LFT_GPG_PASS is that
+# key's passphrase, or the literal string "skip" if the key is unencrypted -- don't fall back
+# to reusing LFT_SIGN_PASS here, they're unrelated keys.
+export LFT_GPG_KEY="<gpg-key-id-or-fingerprint>"
+export LFT_GPG_SECRET="op://<vault>/self-signed-linux-gpg-key/<key-filename>.asc"
+export LFT_GPG_PASS="skip"
 
-  op run -- ./bin/lfr-tunnel-ops sign
-  ```
+# minisign signature over the checksums manifest (self-upgrade integrity, see #949) --
+# independent of the three platform signing steps above, always attempted.
+export MINISIGN_SECRET_KEY="op://<vault>/self-signed-minisign-key/<key-filename>.key"
+export MINISIGN_KEY_PASSWORD="op://<vault>/self-signed-minisign-key/password"
+
+op run -- lfr-tunnel-ops sign
+```
 
 * **Output**:
-  The script updates signed binaries and generates a verified SHA256 list in `bin/checksums.txt`.
+  Signed binaries land back in `dist/`, alongside `dist/checksums.txt`, `dist/checksums.txt.minisig`,
+  and a per-binary `.asc` for whichever platform's GPG step ran. Nothing lands in `bin/`.
 
 
 ### 8.4. Dual-Mode Gateway Maintenance (Bouncer Mode vs. Fire Curtain)

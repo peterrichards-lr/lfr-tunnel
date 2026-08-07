@@ -158,6 +158,12 @@ func (s *safeConn) WriteMessage(messageType int, data []byte) error {
 	return s.conn.WriteMessage(messageType, data)
 }
 
+func (s *safeConn) WriteControl(messageType int, data []byte, deadline time.Time) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return s.conn.WriteControl(messageType, data, deadline)
+}
+
 func (s *safeConn) Close() error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
@@ -214,20 +220,29 @@ type Server struct {
 	edgeVersions       map[string]string // node_id -> version
 	edgeIPs            map[string]string // node_id -> public IP
 	edgeClientsMu      sync.RWMutex
-	startTime          time.Time
-	edgeLeases         map[string][]EdgeLease
-	edgeLeasesMu       sync.Mutex
-	edgeHealth         map[string]EdgeHealthStatus
-	edgeHealthMu       sync.RWMutex
-	outboundConnected  bool
-	outboundMutex      sync.RWMutex
-	userCache          sync.Map // email -> *db.User cache to prevent SQLite read contention
-	httpServer         *http.Server
-	redirectSrv        *http.Server
-	webhooks           *webhook.WebhookService
-	lastTestTimes      map[string]time.Time
-	testLimiterMu      sync.Mutex
-	roundRobinCounter  uint64
+	// edgePingSentAt tracks when the control plane's own keepalive Ping was last sent to
+	// each WS-connected edge, so the matching Pong's arrival can be timed for RTT (see
+	// #976 -- edges are configured with no `url` in the current architecture, so the
+	// separate HTTP-polling health check in server_edge.go never runs for them at all,
+	// leaving LatencyMs permanently unset). Keyed by node_id, guarded by edgePingMu since
+	// it's written from each connection's own ping-ticker goroutine and read from that
+	// same connection's PongHandler (called from the read pump goroutine).
+	edgePingSentAt    map[string]time.Time
+	edgePingMu        sync.Mutex
+	startTime         time.Time
+	edgeLeases        map[string][]EdgeLease
+	edgeLeasesMu      sync.Mutex
+	edgeHealth        map[string]EdgeHealthStatus
+	edgeHealthMu      sync.RWMutex
+	outboundConnected bool
+	outboundMutex     sync.RWMutex
+	userCache         sync.Map // email -> *db.User cache to prevent SQLite read contention
+	httpServer        *http.Server
+	redirectSrv       *http.Server
+	webhooks          *webhook.WebhookService
+	lastTestTimes     map[string]time.Time
+	testLimiterMu     sync.Mutex
+	roundRobinCounter uint64
 	// provisionerClient talks to the optional, AWS-specific edge-provisioner
 	// sidecar (see cmd/lfr-tunnel-edge-provisioner, issue #888). Nil unless
 	// cfg.EdgeProvisionerURL is set -- every handler that uses it must treat
@@ -320,6 +335,7 @@ func NewServer(cfg *config.ServerConfig) (*Server, error) {
 		wsClients:          make(map[*wsClient]bool),
 		edgeClients:        make(map[string]*safeConn),
 		edgeVersions:       make(map[string]string),
+		edgePingSentAt:     make(map[string]time.Time),
 		edgeIPs:            make(map[string]string),
 		startTime:          time.Now(),
 		caCert:             caCert,

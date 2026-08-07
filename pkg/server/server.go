@@ -1515,13 +1515,17 @@ func (s *Server) handleRegister(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Trigger vanity domain hook for custom domains if configured
-	if s.cfg.VanityDomainHook != "" {
-		leases := s.registry.GetSessionLeases(sessionToken)
-		for _, lease := range leases {
-			if s.isCustomDomain(lease.FullHost) {
-				go s.runVanityDomainHook("add", lease.FullHost, lease.UserID)
-			}
+	// Trigger vanity domain hook for custom domains. Deliberately no enabled/path gate here --
+	// runVanityDomainHook resolves that itself via getVanityDomainHookConfig() (DB setting
+	// takes priority over the static config, see its docstring) and no-ops cleanly if
+	// disabled. Gating here on s.cfg.VanityDomainHook directly (the pre-DB-override static
+	// value only) meant this never fired when the hook was enabled via the dashboard rather
+	// than server-config.yaml -- the "remove" trigger elsewhere in this file never had this
+	// gate and was always correct; this "add" trigger is now consistent with it.
+	leases := s.registry.GetSessionLeases(sessionToken)
+	for _, lease := range leases {
+		if s.isCustomDomain(lease.FullHost) {
+			go s.runVanityDomainHook("add", lease.FullHost, lease.UserID)
 		}
 	}
 

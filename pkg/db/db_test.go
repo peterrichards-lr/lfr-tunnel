@@ -1032,48 +1032,49 @@ func TestSchemaMigrationVersioning(t *testing.T) {
 	database, tmpDir := setupTestDB(t)
 	defer cleanupTestDB(database, tmpDir)
 
-	// 1. Verify that schema_version table is created and populated with version 18
+	// 1. Verify that schema_version table is created and populated with version 19
 	var maxVersion int
 	err := database.conn.QueryRow("SELECT COALESCE(MAX(version), 0) FROM schema_version").Scan(&maxVersion)
 	if err != nil {
 		t.Fatalf("failed to query schema_version: %v", err)
 	}
-	if maxVersion != 18 {
-		t.Errorf("expected max schema version to be 18, got %d", maxVersion)
+	if maxVersion != 19 {
+		t.Errorf("expected max schema version to be 19, got %d", maxVersion)
 	}
 
-	// Count number of rows in schema_version. It should be 18.
+	// Count number of rows in schema_version. It should be 19.
 	var count int
 	err = database.conn.QueryRow("SELECT COUNT(*) FROM schema_version").Scan(&count)
 	if err != nil {
 		t.Fatalf("failed to count schema_version rows: %v", err)
 	}
-	if count != 18 {
-		t.Errorf("expected 18 applied migrations in table, got %d", count)
+	if count != 19 {
+		t.Errorf("expected 19 applied migrations in table, got %d", count)
 	}
 
-	// 2. Manually delete version 18 from schema_version
-	_, err = database.conn.Exec("DELETE FROM schema_version WHERE version = 18")
+	// 2. Manually delete version 19 (the current latest) from schema_version
+	_, err = database.conn.Exec("DELETE FROM schema_version WHERE version = 19")
 	if err != nil {
 		t.Fatalf("failed to delete migration version: %v", err)
 	}
 
-	// 3. Re-run initSchema. It should detect version 17 as current max,
-	// and try to re-run migration 18.
-	// Since the column 'subdomain_style' already exists, it will return "duplicate column name" error,
-	// which our migration system catches and handles by successfully marking it as applied again.
+	// 3. Re-run initSchema. It should detect version 18 as current max,
+	// and try to re-run migration 19.
+	// Since it's a CREATE TABLE IF NOT EXISTS, it's naturally idempotent and won't error at
+	// all on re-run (unlike an ALTER TABLE ADD COLUMN, which would hit the "duplicate column
+	// name" catch-and-continue path our migration system also handles).
 	err = database.initSchema()
 	if err != nil {
 		t.Fatalf("re-running initSchema failed: %v", err)
 	}
 
-	// 4. Verify version 18 has been recorded as applied again
-	err = database.conn.QueryRow("SELECT COUNT(*) FROM schema_version WHERE version = 18").Scan(&count)
+	// 4. Verify version 19 has been recorded as applied again
+	err = database.conn.QueryRow("SELECT COUNT(*) FROM schema_version WHERE version = 19").Scan(&count)
 	if err != nil {
-		t.Fatalf("failed to query schema_version for version 18: %v", err)
+		t.Fatalf("failed to query schema_version for version 19: %v", err)
 	}
 	if count != 1 {
-		t.Errorf("expected migration 18 to be recorded as applied again, got %d", count)
+		t.Errorf("expected migration 19 to be recorded as applied again, got %d", count)
 	}
 }
 

@@ -175,6 +175,17 @@ server {
     include /etc/letsencrypt/options-ssl-nginx.conf;
     ssl_dhparam /etc/letsencrypt/ssl-dhparams.pem;
 
+    # Signed client binaries/checksums (populated by lfr-tunnel-ops deploy-clients) are served
+    # directly from disk here, bypassing the Go app entirely -- it only ever serves /static/*
+    # from its own compiled-in embed.FS, which never contains these. Without this block,
+    # /install's own download links 404 even though the files exist on disk (see #949's
+    # follow-up, #955).
+    location /static/downloads/ {
+        alias /var/www/lfr-tunnel/static/downloads/;
+        autoindex off;
+        add_header Content-Disposition 'attachment';
+    }
+
     location / {
         proxy_pass http://127.0.0.1:$PORT;
         proxy_http_version 1.1;

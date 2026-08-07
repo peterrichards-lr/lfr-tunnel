@@ -216,14 +216,19 @@ export default function AccountSettings() {
               </select>
             </div>
 
-            <div className="flex items-center justify-between mb-lg">
-              <label className="form-label m-0">
-                {t('label_notifications', 'Email Notifications')}
-              </label>
-              <label className="switch">
-                <input type="checkbox" checked={emailNotifications} onChange={(e) => setEmailNotifications(e.target.checked)} />
-                <span className="slider round"></span>
-              </label>
+            <div className="mb-lg">
+              <div className="flex items-center justify-between">
+                <label className="form-label m-0">
+                  {t('label_notifications', 'Email Notifications')}
+                </label>
+                <label className="switch">
+                  <input type="checkbox" checked={emailNotifications} onChange={(e) => setEmailNotifications(e.target.checked)} />
+                  <span className="slider round"></span>
+                </label>
+              </div>
+              <p className="text-xs text-muted mt-xs mb-0">
+                {t('label_notifications_desc', 'Covers subdomain and extension updates (reserved, approved, demoted). Login links, registration, and account security notices are always sent regardless of this setting.')}
+              </p>
             </div>
 
             <div className="flex items-center justify-between mb-xl">

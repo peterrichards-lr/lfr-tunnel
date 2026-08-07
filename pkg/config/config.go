@@ -36,6 +36,22 @@ type WebhookConfig struct {
 	BatchIntervalSeconds int    `yaml:"batch_interval_seconds"`
 }
 
+// SlackAppConfig holds the OAuth credentials for an installable Slack app (the
+// "Add to Slack" / distributable-app flow, issue #909) -- distinct from
+// WebhookConfig.SlackURL above, which is a much simpler incoming-webhook URL
+// for posting admin alerts and needs no OAuth at all. All fields here are
+// normally supplied via LFT_SLACK_* env vars (see secrets.env,
+// docs/server/setup_guide.md §4.5) rather than this YAML block directly, same
+// as SMTPServerConfig's credentials, since ClientSecret/SigningSecret/
+// VerificationToken are real secrets even though AppID/ClientID aren't.
+type SlackAppConfig struct {
+	AppID             string `yaml:"app_id"`
+	ClientID          string `yaml:"client_id"`
+	ClientSecret      string `yaml:"client_secret"`
+	SigningSecret     string `yaml:"signing_secret"`
+	VerificationToken string `yaml:"verification_token"`
+}
+
 // ServerConfig holds configuration settings for the lfr-tunneld server.
 type ServerConfig struct {
 	Domains                    []string                  `yaml:"domains"`
@@ -61,6 +77,7 @@ type ServerConfig struct {
 	DBPath                     string                    `yaml:"db_path"`
 	SMTPServer                 SMTPServerConfig          `yaml:"smtp_server"`
 	Webhooks                   WebhookConfig             `yaml:"webhooks"`
+	SlackApp                   SlackAppConfig            `yaml:"slack_app"`
 	AdminNotificationEmail     string                    `yaml:"admin_notification_email"`
 	InsecureSkipVerify         bool                      `yaml:"insecure_skip_verify"`
 	Owner                      OwnerConfig               `yaml:"owner"`
@@ -359,6 +376,21 @@ func LoadServerConfig(path string) (*ServerConfig, error) {
 	}
 	if val := os.Getenv("LFT_SMTP_FROM"); val != "" {
 		cfg.SMTPServer.FromAddress = val
+	}
+	if val := os.Getenv("LFT_SLACK_APP_ID"); val != "" {
+		cfg.SlackApp.AppID = val
+	}
+	if val := os.Getenv("LFT_SLACK_CLIENT_ID"); val != "" {
+		cfg.SlackApp.ClientID = val
+	}
+	if val := os.Getenv("LFT_SLACK_CLIENT_SECRET"); val != "" {
+		cfg.SlackApp.ClientSecret = val
+	}
+	if val := os.Getenv("LFT_SLACK_SIGNING_SECRET"); val != "" {
+		cfg.SlackApp.SigningSecret = val
+	}
+	if val := os.Getenv("LFT_SLACK_VERIFICATION_TOKEN"); val != "" {
+		cfg.SlackApp.VerificationToken = val
 	}
 	if val := os.Getenv("LFT_ADMIN_EMAIL"); val != "" {
 		cfg.AdminNotificationEmail = val

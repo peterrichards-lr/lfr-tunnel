@@ -66,6 +66,14 @@ func (repo *SQLiteVanityDomainStatusRepo) MarkVanityDomainFailed(fullHost, faile
 	return err
 }
 
+// DeleteVanityDomainStatus removes tracking for a domain entirely -- called when a lease is
+// removed, so a domain no longer in use doesn't keep showing stale "live" status from before
+// it was torn down.
+func (repo *SQLiteVanityDomainStatusRepo) DeleteVanityDomainStatus(fullHost string) error {
+	_, err := repo.conn.Exec("DELETE FROM vanity_domain_status WHERE full_host = ?", fullHost)
+	return err
+}
+
 func (repo *SQLiteVanityDomainStatusRepo) GetVanityDomainStatus(fullHost string) (*VanityDomainStatus, error) {
 	query := "SELECT " + vanityDomainStatusColumns + " FROM vanity_domain_status WHERE full_host = ?"
 	s, err := scanVanityDomainStatus(repo.conn.QueryRow(query, fullHost))

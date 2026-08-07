@@ -1,9 +1,12 @@
 package server
 
 import (
+	"bufio"
+	"bytes"
 	"context"
 	"crypto/rand"
 	"fmt"
+	"io"
 	"log/slog"
 	"os"
 	"os/exec"
@@ -75,6 +78,21 @@ func (s *Server) getVanityDomainHookConfig() (string, bool) {
 	return path, enabled
 }
 
+// vanityHookStages lists the "add" hook's post-request stages in the order
+// lfr-vanity-hook.sh actually reaches them, each paired with a substring of the exact
+// output line that proves that stage was reached. Checked against the hook's output as it
+// runs (not just after it finishes), so the portal's per-domain status (see #964) reflects
+// real-time progress rather than only the final outcome. Order matters: on failure, whichever
+// stage comes after the last one actually matched is recorded as the one that failed.
+var vanityHookStages = []struct {
+	substr string
+	stage  string
+}{
+	{"Requesting Let's Encrypt certificate for", "nginx_config"},
+	{"Certificate obtained successfully.", "cert_issued"},
+	{"Vanity domain setup completed:", "live"},
+}
+
 // runVanityDomainHook runs the external script with action ("add"/"remove") and domain,
 // on behalf of the given requestingUserID (the lease owner) -- used only to route a
 // failure notice to them directly, never passed to the script itself. On failure, alerts
@@ -83,20 +101,95 @@ func (s *Server) getVanityDomainHookConfig() (string, bool) {
 // currently have no valid SSL certificate or be unreachable, which is closer to
 // "Account Suspended"-style critical news than a routine lifecycle event they might have
 // muted (see #913's precedent for that distinction).
+//
+// For "add", also records provisioning progress in vanity_domain_status (see #964/#966) as
+// the hook runs: a fresh attempt at the start, each stage as its marker line appears in the
+// hook's output, and the failed stage + a short error summary if it exits non-zero. For
+// "remove", the domain's status row is deleted outright rather than tracked -- a torn-down
+// lease has no meaningful "add" progress left to show, and leaving stale "live" status
+// around would be misleading.
 func (s *Server) runVanityDomainHook(action, domain, requestingUserID string) {
 	path, enabled := s.getVanityDomainHookConfig()
 	if !enabled || path == "" {
 		return
 	}
+
+	trackStatus := action == "add" && s.db != nil
+	if action == "remove" && s.db != nil {
+		if err := s.db.DeleteVanityDomainStatus(domain); err != nil {
+			slog.Info(fmt.Sprintf("[Server] Failed to delete vanity domain status for %s: %v", domain, err))
+		}
+	} else if trackStatus {
+		if err := s.db.StartVanityDomainAttempt(domain, requestingUserID); err != nil {
+			slog.Info(fmt.Sprintf("[Server] Failed to record vanity domain attempt for %s: %v", domain, err))
+		}
+	}
+
 	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Minute)
 	defer cancel()
 
 	slog.Info(fmt.Sprintf("[Server] Executing vanity domain hook: %s %s %s", path, action, domain))
 	cmd := exec.CommandContext(ctx, path, action, domain)
 	cmd.Env = s.vanityHookEnv()
-	output, err := cmd.CombinedOutput()
+
+	pr, pw := io.Pipe()
+	cmd.Stdout = pw
+	cmd.Stderr = pw
+
+	var output bytes.Buffer
+	var recentLines []string
+	lastReachedIdx := -1
+
+	scanDone := make(chan struct{})
+	go func() {
+		defer close(scanDone)
+		scanner := bufio.NewScanner(pr)
+		for scanner.Scan() {
+			line := scanner.Text()
+			output.WriteString(line)
+			output.WriteByte('\n')
+
+			recentLines = append(recentLines, line)
+			if len(recentLines) > 5 {
+				recentLines = recentLines[1:]
+			}
+
+			if trackStatus {
+				for i, st := range vanityHookStages {
+					if strings.Contains(line, st.substr) {
+						if err := s.db.MarkVanityDomainStage(domain, st.stage); err != nil {
+							slog.Info(fmt.Sprintf("[Server] Failed to mark vanity domain stage %s for %s: %v", st.stage, domain, err))
+						}
+						if i > lastReachedIdx {
+							lastReachedIdx = i
+						}
+					}
+				}
+			}
+		}
+	}()
+
+	err := cmd.Start()
+	if err == nil {
+		err = cmd.Wait()
+	}
+	_ = pw.Close() //nolint:errcheck
+	<-scanDone
+
 	if err != nil {
-		slog.Info(fmt.Sprintf("[Server] Vanity domain hook error running %s for %s: %v. Output: %s", action, domain, err, string(output)))
+		slog.Info(fmt.Sprintf("[Server] Vanity domain hook error running %s for %s: %v. Output: %s", action, domain, err, output.String()))
+		if trackStatus {
+			failedStage := vanityHookStages[0].stage
+			switch {
+			case lastReachedIdx+1 < len(vanityHookStages):
+				failedStage = vanityHookStages[lastReachedIdx+1].stage
+			case lastReachedIdx >= 0:
+				failedStage = vanityHookStages[lastReachedIdx].stage
+			}
+			if merr := s.db.MarkVanityDomainFailed(domain, failedStage, strings.Join(recentLines, "\n")); merr != nil {
+				slog.Info(fmt.Sprintf("[Server] Failed to record vanity domain failure for %s: %v", domain, merr))
+			}
+		}
 		s.alertVanityDomainHookFailure(action, domain, requestingUserID, err)
 		return
 	}

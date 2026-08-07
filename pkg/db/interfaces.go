@@ -93,6 +93,10 @@ type VanityDomainStatusRepository interface {
 	// MarkVanityDomainFailed records which stage failed and why, without touching whichever
 	// earlier stage timestamps already succeeded.
 	MarkVanityDomainFailed(fullHost, failedStage, errorMessage string) error
+	// DeleteVanityDomainStatus removes tracking for a domain entirely -- called when a
+	// lease is removed, so a domain no longer in use doesn't keep showing stale "live"
+	// status from before it was torn down.
+	DeleteVanityDomainStatus(fullHost string) error
 	GetVanityDomainStatus(fullHost string) (*VanityDomainStatus, error)
 	ListVanityDomainStatusForUser(userID string) ([]*VanityDomainStatus, error)
 	ListAllVanityDomainStatus() ([]*VanityDomainStatus, error)

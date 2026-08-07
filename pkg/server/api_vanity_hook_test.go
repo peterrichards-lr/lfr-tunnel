@@ -189,6 +189,138 @@ func TestRunVanityDomainHook_FailureNotifiesAdminAndRequestingUser(t *testing.T)
 	}
 }
 
+// writeFakeVanityHook creates a temporary, executable shell script standing in for
+// lfr-vanity-hook.sh, for tests that need to control exactly what output/exit code the hook
+// produces without depending on the real script or real Certbot/nginx. Unix-only, matching
+// how the real hook mechanism (and its existing /bin/false-based test above) already assumes
+// a shell environment.
+func writeFakeVanityHook(t *testing.T, body string) string {
+	t.Helper()
+	tmpFile, err := os.CreateTemp("", "fake-vanity-hook-*.sh")
+	if err != nil {
+		t.Fatalf("failed to create fake hook script: %v", err)
+	}
+	t.Cleanup(func() { os.Remove(tmpFile.Name()) }) //nolint:errcheck
+	if _, err := tmpFile.WriteString("#!/bin/sh\n" + body); err != nil {
+		t.Fatalf("failed to write fake hook script: %v", err)
+	}
+	if err := tmpFile.Close(); err != nil {
+		t.Fatalf("failed to close fake hook script: %v", err)
+	}
+	if err := os.Chmod(tmpFile.Name(), 0755); err != nil {
+		t.Fatalf("failed to chmod fake hook script: %v", err)
+	}
+	return tmpFile.Name()
+}
+
+func TestRunVanityDomainHook_TracksStagesInRealTime(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("fake hook script is a unix shell script")
+	}
+	srv := setupTestServerForAPI(t)
+	defer srv.Stop()
+	if srv.db == nil {
+		t.Skip("Database not initialized")
+	}
+
+	srv.cfg.VanityDomainHook = writeFakeVanityHook(t, `
+echo "Adding vanity domain: dev.solaramoto.com"
+echo "Requesting Let's Encrypt certificate for dev.solaramoto.com..."
+echo "Certificate obtained successfully."
+echo "Vanity domain setup completed: dev.solaramoto.com"
+exit 0
+`)
+
+	srv.runVanityDomainHook("add", "dev.solaramoto.com", "dev@example.com")
+
+	status, err := srv.db.GetVanityDomainStatus("dev.solaramoto.com")
+	if err != nil {
+		t.Fatalf("GetVanityDomainStatus failed: %v", err)
+	}
+	if status == nil {
+		t.Fatal("expected a status row after a successful run")
+	}
+	if status.RequestedAt == nil || status.NginxConfigAt == nil || status.CertIssuedAt == nil || status.LiveAt == nil {
+		t.Errorf("expected all four stages set, got: requested=%v nginx=%v cert=%v live=%v",
+			status.RequestedAt, status.NginxConfigAt, status.CertIssuedAt, status.LiveAt)
+	}
+	if status.FailedStage != "" || status.ErrorMessage != "" {
+		t.Errorf("expected no failure state on success, got stage=%q message=%q", status.FailedStage, status.ErrorMessage)
+	}
+}
+
+func TestRunVanityDomainHook_RecordsFailedStage(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("fake hook script is a unix shell script")
+	}
+	srv := setupTestServerForAPI(t)
+	defer srv.Stop()
+	if srv.db == nil {
+		t.Skip("Database not initialized")
+	}
+
+	// Reaches the "nginx config written" marker, then fails before ever reaching
+	// "certificate obtained" -- so the failure should be attributed to cert_issued, the
+	// stage that comes right after the last one actually reached.
+	srv.cfg.VanityDomainHook = writeFakeVanityHook(t, `
+echo "Adding vanity domain: dev.solaramoto.com"
+echo "Requesting Let's Encrypt certificate for dev.solaramoto.com..."
+echo "Certbot failed to authenticate some domains (authenticator: webroot)."
+exit 1
+`)
+
+	srv.runVanityDomainHook("add", "dev.solaramoto.com", "dev@example.com")
+
+	status, err := srv.db.GetVanityDomainStatus("dev.solaramoto.com")
+	if err != nil {
+		t.Fatalf("GetVanityDomainStatus failed: %v", err)
+	}
+	if status == nil {
+		t.Fatal("expected a status row after a failed run")
+	}
+	if status.NginxConfigAt == nil {
+		t.Error("expected NginxConfigAt to be set -- that marker line did appear before the failure")
+	}
+	if status.CertIssuedAt != nil || status.LiveAt != nil {
+		t.Error("expected later stages to remain unset")
+	}
+	if status.FailedStage != "cert_issued" {
+		t.Errorf("expected failed_stage=cert_issued, got %q", status.FailedStage)
+	}
+	if !strings.Contains(status.ErrorMessage, "Certbot failed to authenticate") {
+		t.Errorf("expected error message to include the hook's own output, got: %q", status.ErrorMessage)
+	}
+}
+
+func TestRunVanityDomainHook_RemoveDeletesStatus(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("fake hook script is a unix shell script")
+	}
+	srv := setupTestServerForAPI(t)
+	defer srv.Stop()
+	if srv.db == nil {
+		t.Skip("Database not initialized")
+	}
+
+	if err := srv.db.StartVanityDomainAttempt("dev.solaramoto.com", "dev@example.com"); err != nil {
+		t.Fatalf("StartVanityDomainAttempt failed: %v", err)
+	}
+	if err := srv.db.MarkVanityDomainStage("dev.solaramoto.com", "live"); err != nil {
+		t.Fatalf("MarkVanityDomainStage failed: %v", err)
+	}
+
+	srv.cfg.VanityDomainHook = writeFakeVanityHook(t, `echo "Removing vanity domain: dev.solaramoto.com"; exit 0`)
+	srv.runVanityDomainHook("remove", "dev.solaramoto.com", "dev@example.com")
+
+	status, err := srv.db.GetVanityDomainStatus("dev.solaramoto.com")
+	if err != nil {
+		t.Fatalf("GetVanityDomainStatus failed: %v", err)
+	}
+	if status != nil {
+		t.Errorf("expected status to be deleted after removal, got: %+v", status)
+	}
+}
+
 // TestAlertVanityDomainHookFailure_SkipsDuplicateForAdminOrOwner verifies that when the
 // requesting user IS the admin/owner contact, they don't also get the direct "your domain"
 // email on top of the admin alert email that already went to the same inbox (case-insensitive

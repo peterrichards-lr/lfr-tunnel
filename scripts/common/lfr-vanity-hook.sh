@@ -150,9 +150,14 @@ EOF
             echo "Certificate obtained successfully."
         else
             echo "Certbot failed, trying with fallback..."
-            certbot certonly --webroot -w "$WEBROOT_PATH" -d "$DOMAIN" \
+            if certbot certonly --webroot -w "$WEBROOT_PATH" -d "$DOMAIN" \
                 --config-dir "$CERTBOT_DIR" --work-dir "$CERTBOT_DIR/work" --logs-dir "$CERTBOT_DIR/logs" \
-                --non-interactive --agree-tos --register-unsafely-without-email --keep-until-expiring
+                --non-interactive --agree-tos --register-unsafely-without-email --keep-until-expiring; then
+                # Same success line as the primary path above -- callers (see #966) key off
+                # this exact text to know a certificate was actually issued, regardless of
+                # which of the two certbot invocations got there.
+                echo "Certificate obtained successfully."
+            fi
         fi
 
         # 4. Write full SSL configuration

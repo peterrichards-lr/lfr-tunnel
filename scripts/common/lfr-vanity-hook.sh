@@ -51,27 +51,50 @@ fi
 # actually being served, or times out. Without this, Certbot's HTTP-01
 # challenge could race the reload-watcher's systemd path unit and fail
 # transiently on an otherwise-correct setup.
+#
+# A single successful check isn't enough: nginx reloads across multiple worker
+# processes, and during the handover window old workers can still accept brand-new
+# connections for a bit even after a new worker (and this local check) already sees
+# the new config -- so one lucky 200 here doesn't mean every subsequent real request
+# will land on a reloaded worker too. This raced Certbot's actual validation request
+# repeatedly in practice (confirmed live while testing dev.solaramoto.com -- the local
+# check here would pass, then Certbot's real request moments later still hit an old
+# worker and got a 301/502 instead of the new config). Require several CONSECUTIVE
+# successful checks before considering the reload fully propagated, resetting the
+# streak on any miss.
 wait_for_nginx_pickup() {
     local sentinel_name="reload-check-$$"
     local sentinel_path="$WEBROOT_PATH/.well-known/acme-challenge/$sentinel_name"
     echo "ok" > "$sentinel_path"
 
     local code="000"
-    for _ in $(seq 1 20); do
+    local consecutive=0
+    local required_consecutive=3
+    for _ in $(seq 1 40); do
         code=$(curl --resolve "$DOMAIN:80:127.0.0.1" -s -o /dev/null -w '%{http_code}' \
             "http://$DOMAIN/.well-known/acme-challenge/$sentinel_name" || echo "000")
         if [[ "$code" == "200" ]]; then
-            break
+            consecutive=$((consecutive + 1))
+            if [[ "$consecutive" -ge "$required_consecutive" ]]; then
+                break
+            fi
+        else
+            consecutive=0
         fi
-        sleep 0.5
+        sleep 0.3
     done
     rm -f "$sentinel_path"
 
-    if [[ "$code" != "200" ]]; then
-        echo "Error: nginx did not pick up the config for $DOMAIN within 10s (last status: $code)."
+    if [[ "$consecutive" -lt "$required_consecutive" ]]; then
+        echo "Error: nginx did not consistently pick up the config for $DOMAIN (last status: $code)."
         echo "Check that NGINX_CONF_DIR is included from nginx.conf and that the reload-watcher path unit is running."
         return 1
     fi
+
+    # Small extra safety margin beyond the consecutive-success streak above, since the
+    # streak proves recent requests are landing on a reloaded worker but not that every
+    # old worker has fully drained yet.
+    sleep 0.5
     return 0
 }
 

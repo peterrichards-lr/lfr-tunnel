@@ -785,7 +785,7 @@ func (s *Server) getPortalBaseURL(r *http.Request) string {
 }
 
 func (s *Server) sendSubdomainReservedEmail(user *db.User, subdomain, domain string, expiresAt *time.Time, r *http.Request) {
-	if s.notifications == nil || s.notifications.Sender() == nil {
+	if s.notifications == nil || s.notifications.Sender() == nil || user.NotificationPrefs == "disabled" {
 		return
 	}
 	lang := user.LanguagePreference
@@ -815,7 +815,7 @@ func (s *Server) sendSubdomainReservedEmail(user *db.User, subdomain, domain str
 }
 
 func (s *Server) sendExtensionApprovedEmail(user *db.User, subdomain, domain string, expiresAt *time.Time, r *http.Request) {
-	if s.notifications == nil || s.notifications.Sender() == nil {
+	if s.notifications == nil || s.notifications.Sender() == nil || user.NotificationPrefs == "disabled" {
 		return
 	}
 	lang := user.LanguagePreference
@@ -848,7 +848,7 @@ func (s *Server) sendExtensionApprovedEmail(user *db.User, subdomain, domain str
 }
 
 func (s *Server) sendSubdomainDemotedEmail(user *db.User, subdomain, domain string, expiresAt *time.Time, r *http.Request) {
-	if s.notifications == nil || s.notifications.Sender() == nil {
+	if s.notifications == nil || s.notifications.Sender() == nil || user.NotificationPrefs == "disabled" {
 		return
 	}
 	lang := user.LanguagePreference

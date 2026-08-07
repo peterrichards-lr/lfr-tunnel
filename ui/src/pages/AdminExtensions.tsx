@@ -5,6 +5,7 @@ import { useDataTable, type ColumnDef } from '../hooks/useDataTable';
 import DataTableToolbar from '../components/DataTableToolbar';
 import DataTablePagination from '../components/DataTablePagination';
 import Skeleton from '../components/Skeleton';
+import ActionMenu from '../components/ActionMenu';
 import { useI18n } from '../contexts/I18nContext';
 import { useUI } from '../contexts/UIContext';
 
@@ -72,15 +73,22 @@ export default function AdminExtensions() {
     fetchRequests();
   }, []);
 
-  const handleAction = async (id: string, action: 'approve' | 'reject') => {
+  const handleApprove = async (id: string, days: number, permanent: boolean) => {
     try {
-      if (action === 'approve') {
-        await axios.post(`/api/admin/reservations/${id}/approve-extension`);
-      } else {
-        await axios.post(`/api/admin/reservations/${id}/demote`);
-      }
+      await axios.post(`/api/admin/reservations/${id}/approve-extension`, { days, permanent });
       fetchRequests();
-      showToast(`Request successfully ${action === 'approve' ? 'approved' : 'rejected'}.`, 'success');
+      showToast('Request successfully approved.', 'success');
+    } catch (err) {
+      console.error(err);
+      showToast('Action failed', 'error');
+    }
+  };
+
+  const handleReject = async (id: string) => {
+    try {
+      await axios.post(`/api/admin/reservations/${id}/demote`);
+      fetchRequests();
+      showToast('Request successfully rejected.', 'success');
     } catch (err) {
       console.error(err);
       showToast('Action failed', 'error');
@@ -198,8 +206,27 @@ export default function AdminExtensions() {
                     {isColumnVisible('created_at') && <td className="td-cell text-xs text-muted" style={{ whiteSpace: 'nowrap' }}>{req.created_at ? formatDate(req.created_at) : '—'}</td>}
                     <td className="td-cell text-right">
                       <div className="flex gap-sm justify-end">
-                        <button className="btn btn-primary px-md py-xs text-xs" onClick={() => handleAction(req.id, 'approve')}>Approve</button>
-                        <button className="btn btn-secondary px-md py-xs text-xs" onClick={() => handleAction(req.id, 'reject')}>Reject</button>
+                        <ActionMenu buttonLabel="Approve" buttonClassName="btn btn-primary px-md py-xs text-xs" buttonTitle="Approve extension">
+                          {(close) => (
+                            <>
+                              <button
+                                className="dropdown-menu-item flex items-center gap-sm text-xs cursor-pointer w-full text-left"
+                                style={{ background: 'none', border: 'none' }}
+                                onClick={() => { close(); handleApprove(req.id, 30, false); }}
+                              >
+                                Approve +30 Days
+                              </button>
+                              <button
+                                className="dropdown-menu-item flex items-center gap-sm text-xs cursor-pointer w-full text-left"
+                                style={{ background: 'none', border: 'none' }}
+                                onClick={() => { close(); handleApprove(req.id, 0, true); }}
+                              >
+                                Approve Permanent
+                              </button>
+                            </>
+                          )}
+                        </ActionMenu>
+                        <button className="btn btn-secondary px-md py-xs text-xs" onClick={() => handleReject(req.id)}>Reject</button>
                       </div>
                     </td>
                   </tr>

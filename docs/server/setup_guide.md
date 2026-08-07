@@ -393,6 +393,25 @@ latest_client_version: "v1.9.3"    # Latest recommended client version (decouple
 >    - Configure `admin_notification_email` to point directly to that address in `server-config.yaml` (e.g. `admin_notification_email: '"lfr-tunnel-admin (Slack)" <lfr-tunnel-admin-xxx@liferay.slack.com>'`).
 >    - Our mail client fully parses name-formatted email recipients natively, ensuring standard SMTP notifications are safely delivered and displayed directly inside the channel without requiring Slack App authorization.
 
+> [!NOTE]
+> **Slack App "Add to Slack" Redirect URL (Distribution, Not Notifications)**
+> The two options above cover *receiving* alerts and don't require a Slack App at all. If you've instead created a real Slack App (e.g. to get an "Add to Slack" button so others can install it into their own workspace), Slack's app dashboard requires at least one **Redirect URL** before it will activate that button — this is a standard OAuth v2 installation flow, not a notification channel.
+>
+> `lfr-tunneld` implements this redirect target at `https://<your-domain>/api/integrations/slack/callback`. To wire it up:
+> 1. In your Slack app's dashboard, under **OAuth & Permissions**, add `https://<your-domain>/api/integrations/slack/callback` as a Redirect URL and pick the bot scopes your app needs.
+> 2. Under **Basic Information**, note the App ID, Client ID, Client Secret, Signing Secret, and Verification Token.
+> 3. Set the Client ID and Client Secret via `secrets.env` (§4.5) rather than `server-config.yaml`, since those two are the actual secrets:
+>    ```bash
+>    # /etc/lfr-tunneld/secrets.env
+>    LFT_SLACK_APP_ID=<App ID>
+>    LFT_SLACK_CLIENT_ID=<Client ID>
+>    LFT_SLACK_CLIENT_SECRET=<Client Secret>
+>    LFT_SLACK_SIGNING_SECRET=<Signing Secret>
+>    LFT_SLACK_VERIFICATION_TOKEN=<Verification Token>
+>    ```
+>    (App ID and Client ID aren't secret on their own, but Slack's dashboard only hides the other three — placing all five together in `secrets.env` keeps the whole credential set in one root-only file instead of splitting it across two locations.)
+> 4. Restart `lfr-tunneld` (`sudo systemctl restart lfr-tunneld`) so the new environment variables load, then click "Add to Slack" — the callback exchanges the one-time code for a workspace access token server-side and stores it in the gateway's database; the token is never displayed in a browser or committed to any file.
+
 > [!TIP]
 > **Native Multi-Factor Authentication (MFA / TOTP)**  
 > If `enable_user_portal` is set to `true`, users can activate 6-digit Time-Based One-Time Password (TOTP) MFA from their **Account Settings** tab. This secures passwordless portal sessions using two independent factors: possession of email (magic link) + possession of device (authenticator app). Gateway administrators can reset or disable a user's MFA status directly from the Admin Dashboard in case of lost devices.
@@ -1001,21 +1020,23 @@ The `scripts/sign-release.sh` script compiles the project and signs the binaries
   The script will guide you through picking available Keychain identities, selecting a `.p12` file (defaulting to `./temp_signing_key.p12` if present), entering passwords securely, and signing.
 
 * **Environment Variable Mode (CI/CD, 1Password, or Non-Interactive)**:
-  Provide variables directly via shell or 1Password `op run`:
+  Provide variables directly via shell or 1Password `op run`. `<vault>` below is a placeholder --
+  substitute whichever 1Password vault actually holds these items for you (e.g. your personal
+  `Private` vault, or an org-specific vault name like `Employee`):
   ```bash
   # macOS Codesigning
   export LFT_MACOS_IDENTITY="71FC1F1B1AAF4504A6B098BA0BDC785979DF14F9"
 
   # Windows Authenticode (Separate Key & Cert PEM files via 1Password)
-  export LFT_SIGN_KEY="op://Private/self-signed-key/private key"
-  export LFT_SIGN_CRT="op://Private/self-signed-key/public key"
-  export LFT_SIGN_PASS="op://Private/self signed cert password/password"
+  export LFT_SIGN_KEY="op://<vault>/self-signed-windows-signing-key/private key"
+  export LFT_SIGN_CRT="op://<vault>/self-signed-windows-signing-key/public key"
+  export LFT_SIGN_PASS="op://<vault>/self-signed-windows-signing-key/password"
 
   # Alternatively: PKCS#12 bundle (.p12 / .pfx)
-  # export LFT_SIGN_P12="op://Private/self-signed-key/document"
+  # export LFT_SIGN_P12="op://<vault>/self-signed-windows-signing-key/document"
 
   # Linux GPG Checksums
-  export LFT_GPG_KEY="self-signed-gpg-key"
+  export LFT_GPG_KEY="self-signed-linux-gpg-key"
 
   op run -- ./bin/lfr-tunnel-ops sign
   ```

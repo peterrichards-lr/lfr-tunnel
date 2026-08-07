@@ -17,8 +17,31 @@ import (
 	"github.com/jedisct1/go-minisign"
 )
 
-const testSK = `untrusted comment: minisign encrypted secret key
-RWQAAEIyAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAOItWpGuGQbG4C9WXaxEYLgZ2xxuqfbuZmDgAhQ8Unot8t7SyxZ0nVh0gESesJ6Ay57fGFJ9T1ajVmanT7MFMCCDbPZ8uqDcSAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=`
+// testMinisignSecretKey returns a disposable, unencrypted, throwaway keypair generated
+// solely for tests (2026-08-06) -- it has no relationship to the real production signing
+// key (that one lives only in 1Password, never referenced by anything in this repo or
+// CI). It's supplied via TEST_MINISIGN_SECRET_KEY (a GitHub Actions secret in CI) rather
+// than hardcoded, so no key material of any kind -- sensitive or not -- sits in the tree.
+// Do NOT reuse a real signing key as a test fixture; that's exactly how the previous key
+// ended up leaked (see upgrade.go's MinisignPublicKey comment). Skips the test if unset,
+// e.g. a local `make test` run without it exported.
+// testMinisignPublicKey is the public half of the disposable keypair above.
+const testMinisignPublicKey = "RWQ0Ib4N4eIa5NNmN/UHoNrzAWCb+xdbbLeETVL8gQ+QQA07ZSuEhwow"
+
+func testMinisignSecretKey(t *testing.T) string {
+	sk := os.Getenv("TEST_MINISIGN_SECRET_KEY")
+	if sk == "" {
+		t.Skip("TEST_MINISIGN_SECRET_KEY not set -- skipping minisign-dependent test")
+	}
+	// SelfUpgrade verifies against the package-level MinisignPublicKey var. Swap it to
+	// this disposable test key's public half for the duration of the test, and restore
+	// the real one afterward, so these tests exercise the real verification code path
+	// without ever signing against (or needing) the real production key.
+	orig := MinisignPublicKey
+	MinisignPublicKey = testMinisignPublicKey
+	t.Cleanup(func() { MinisignPublicKey = orig })
+	return sk
+}
 
 func TestCheckForUpdate_NewerVersion(t *testing.T) {
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -69,6 +92,7 @@ func TestCheckForUpdate_SameVersion(t *testing.T) {
 }
 
 func TestSelfUpgrade(t *testing.T) {
+	testSK := testMinisignSecretKey(t)
 	tmpDir, err := os.MkdirTemp("", "lfr-tunnel-test-*")
 	if err != nil {
 		t.Fatalf("failed to create temp dir: %v", err)
@@ -187,6 +211,7 @@ func TestSelfUpgrade(t *testing.T) {
 }
 
 func TestSelfUpgrade_ChecksumMismatch(t *testing.T) {
+	testSK := testMinisignSecretKey(t)
 	tmpDir, err := os.MkdirTemp("", "lfr-tunnel-test-*")
 	if err != nil {
 		t.Fatalf("failed to create temp dir: %v", err)
@@ -333,6 +358,7 @@ func TestCompareVersions(t *testing.T) {
 }
 
 func TestSelfUpgrade_GatewayFirst(t *testing.T) {
+	testSK := testMinisignSecretKey(t)
 	tmpDir, err := os.MkdirTemp("", "lfr-tunnel-test-*")
 	if err != nil {
 		t.Fatalf("failed to create temp dir: %v", err)

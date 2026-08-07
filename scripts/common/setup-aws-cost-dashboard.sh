@@ -40,16 +40,33 @@ usage() {
   echo "                           reject an unsupported currency with an explicit error if so."
   echo "  --alert-threshold-pct:   Percent of the budget that triggers the ACTUAL-spend alert (default: 80)."
   echo "                           A FORECASTED-spend alert at 100% is always also created."
-  echo "  --include-ses:           Fold Service=$SES_SERVICE_NAME into the SAME budget above via an OR filter"
-  echo "                           expression (tag:Project=<project-tag> OR Service=$SES_SERVICE_NAME), so"
-  echo "                           --monthly-budget-usd covers everything this project costs as one number —"
-  echo "                           off by default since SES costs aren't resource-tagged the way EC2 is, so"
-  echo "                           combining them requires the newer FilterExpression API instead of the"
-  echo "                           simpler tag-only CostFilters used when this flag is omitted. Requires tag:Project"
-  echo "                           to already be an ACTIVE Cost Allocation Tag — in an AWS Organizations member"
-  echo "                           account, only the payer/management account can activate cost allocation tags,"
-  echo "                           so this may be blocked entirely until someone with payer-account access does that."
-  echo "                           Mutually exclusive with --linked-account (see below)."
+  echo "  --include-ses:           Fold Service=$SES_SERVICE_NAME into the SAME budget above by defining an AWS"
+  echo "                           Cost Category (named <budget-name>-category) whose rule is tag:Project="
+  echo "                           <project-tag> OR Service=$SES_SERVICE_NAME, then scoping the budget to that ONE"
+  echo "                           category value — so --monthly-budget-usd covers everything this project costs"
+  echo "                           as one number, with a fully console-native Budget chart and a single Cost"
+  echo "                           Explorer report (the OR logic lives inside the Cost Category definition, not in"
+  echo "                           the budget's own filter, so the console has no trouble rendering either one)."
+  echo "                           Off by default since SES costs aren't resource-tagged the way EC2 is, so"
+  echo "                           combining them needs this extra Cost Category step rather than the plain"
+  echo "                           tag-only filter used when this flag is omitted. Requires tag:Project to already"
+  echo "                           be an ACTIVE Cost Allocation Tag — in an AWS Organizations member account, only"
+  echo "                           the payer/management account can activate cost allocation tags, so this may be"
+  echo "                           blocked entirely until someone with payer-account access does that. Mutually"
+  echo "                           exclusive with --linked-account (see below)."
+  echo "                           ALSO REQUIRES Cost Category access, which is SEPARATELY payer-account-restricted"
+  echo "                           in an AWS Organizations member account — CreateCostCategoryDefinition/"
+  echo "                           ListCostCategoryDefinitions fail with 'AccessDeniedException: Linked account"
+  echo "                           doesn't have access to cost category' there, even with full Administrator"
+  echo "                           permissions on the member account itself. This is a distinct restriction from the"
+  echo "                           Cost Allocation Tag one above — clearing one doesn't clear the other."
+  echo "                           NOTE: an older version of this script scoped the budget directly via a raw OR"
+  echo "                           FilterExpression instead of a Cost Category. That form is accepted by the API"
+  echo "                           but the Budgets CONSOLE can't display/edit it or render its chart (\"does not"
+  echo "                           support 'OR' expressions\"; ce:GetCostAndUsage ValidationException: Selected"
+  echo "                           metrics cannot be null). If you have a budget created by that older version,"
+  echo "                           this script prints the exact 'aws budgets update-budget' command to migrate it"
+  echo "                           once its Cost Category exists."
   echo "  --linked-account:        Scope the budget to this AWS account ID via the LINKED_ACCOUNT dimension"
   echo "                           instead of a tag — captures EVERYTHING in that account (EC2 infra AND SES"
   echo "                           together) with no Cost Allocation Tag dependency at all, so it works even"
@@ -166,31 +183,57 @@ EOF
 }
 
 # 3. Build the budget's filter: LINKED_ACCOUNT if that mode is on (captures everything
-#    in the account, no tag dependency); tag:Project OR Service=SES via FilterExpression
-#    if --include-ses was passed (CostFilters can't OR across two different filter
-#    dimensions, so combining them needs the newer, mutually-exclusive-with-CostFilters
-#    FilterExpression instead); plain tag-only CostFilters otherwise.
+#    in the account, no tag dependency); a Cost-Category-backed filter if --include-ses was
+#    passed (the category's OWN rule combines tag:Project OR Service=SES via an Expression
+#    that itself supports Or/And/Not -- CostCategoryRule.Rule accepts the same Expression
+#    type used elsewhere in the Budgets/CE APIs -- so the budget itself only ever filters on
+#    ONE simple CostCategories value, never a raw Or/And FilterExpression the console can't
+#    render); plain tag-only CostFilters otherwise.
+COST_CATEGORY_NAME="${BUDGET_NAME}-category"
+
 if [ -n "$LINKED_ACCOUNT" ]; then
   FILTER_FIELD="\"CostFilters\": {\"LinkedAccount\": [\"$LINKED_ACCOUNT\"]}"
   FILTER_DESCRIPTION="LinkedAccount=$LINKED_ACCOUNT (accurate only while this account is dedicated to the project)"
 elif [ "$INCLUDE_SES" = "true" ]; then
   echo "=> Verifying '$SES_SERVICE_NAME' is a billing Service name AWS recognizes for this account..."
+  echo "   (Cost Category rules require the short SERVICE_CODE form -- e.g. 'AmazonSES' -- but"
+  echo "   GetDimensionValues doesn't accept SERVICE_CODE as a queryable dimension at all, so this can only"
+  echo "   sanity-check the friendlier SERVICE display name; SERVICE_CODE itself is a well-known constant.)"
   TODAY_START="$(date -u +%Y-%m-01 2>/dev/null || true)"
   TODAY_END="$(date -u +%Y-%m-%d 2>/dev/null || true)"
+  SES_SERVICE_CODE="AmazonSES"
   if [ -n "$TODAY_START" ] && [ -n "$TODAY_END" ] && [ "$TODAY_START" != "$TODAY_END" ]; then
     SES_DIMENSION_MATCH="$(aws ce get-dimension-values --dimension SERVICE \
       --time-period "Start=$TODAY_START,End=$TODAY_END" --search-string "Email" \
       --query "DimensionValues[?Value=='$SES_SERVICE_NAME'].Value" --output text 2>/dev/null || true)"
     if [ -z "$SES_DIMENSION_MATCH" ]; then
       echo "⚠️  Cost Explorer hasn't recorded any billed usage matching '$SES_SERVICE_NAME' yet this month"
-      echo "   (expected if SES is brand new here) — proceeding anyway. If SES spend never shows up in this"
-      echo "   budget, double check the exact Service name via:"
-      echo "   aws ce get-dimension-values --dimension SERVICE --time-period Start=$TODAY_START,End=$TODAY_END --search-string Email"
+      echo "   (expected if SES is brand new here) — proceeding anyway with SERVICE_CODE='$SES_SERVICE_CODE'."
     fi
   fi
 
-  FILTER_FIELD="\"FilterExpression\": {\"Or\": [{\"Tags\": {\"Key\": \"Project\", \"Values\": [\"$PROJECT_TAG\"]}}, {\"Dimensions\": {\"Key\": \"SERVICE\", \"Values\": [\"$SES_SERVICE_NAME\"]}}]}"
-  FILTER_DESCRIPTION="tag Project=$PROJECT_TAG OR Service=$SES_SERVICE_NAME"
+  RULES_JSON="[{\"Value\": \"$PROJECT_TAG\", \"Type\": \"REGULAR\", \"Rule\": {\"Or\": [{\"Tags\": {\"Key\": \"Project\", \"Values\": [\"$PROJECT_TAG\"]}}, {\"Dimensions\": {\"Key\": \"SERVICE_CODE\", \"Values\": [\"$SES_SERVICE_CODE\"]}}]}}]"
+
+  echo "=> Checking for existing Cost Category '$COST_CATEGORY_NAME'..."
+  EXISTING_CATEGORY_ARN="$(aws ce list-cost-category-definitions \
+    --query "CostCategoryReferences[?Name=='$COST_CATEGORY_NAME'].CostCategoryArn | [0]" \
+    --output text 2>/dev/null || true)"
+  if [ -n "$EXISTING_CATEGORY_ARN" ] && [ "$EXISTING_CATEGORY_ARN" != "None" ]; then
+    echo "=> Updating existing Cost Category '$COST_CATEGORY_NAME'..."
+    aws ce update-cost-category-definition \
+      --cost-category-arn "$EXISTING_CATEGORY_ARN" \
+      --rule-version CostCategoryExpression.v1 \
+      --rules "$RULES_JSON" >/dev/null
+  else
+    echo "=> Creating Cost Category '$COST_CATEGORY_NAME'..."
+    aws ce create-cost-category-definition \
+      --name "$COST_CATEGORY_NAME" \
+      --rule-version CostCategoryExpression.v1 \
+      --rules "$RULES_JSON" >/dev/null
+  fi
+
+  FILTER_FIELD="\"FilterExpression\": {\"CostCategories\": {\"Key\": \"$COST_CATEGORY_NAME\", \"Values\": [\"$PROJECT_TAG\"]}}"
+  FILTER_DESCRIPTION="Cost Category '$COST_CATEGORY_NAME'=$PROJECT_TAG (combines tag:Project=$PROJECT_TAG OR Service=$SES_SERVICE_NAME)"
 else
   FILTER_FIELD="\"CostFilters\": {\"TagKeyValue\": [\"user:Project\$$PROJECT_TAG\"]}"
   FILTER_DESCRIPTION="tag Project=$PROJECT_TAG"
@@ -199,8 +242,15 @@ fi
 # 4. Create (or skip, if one already exists) the AWS Budget.
 echo "=> Checking for existing budget '$BUDGET_NAME'..."
 if aws budgets describe-budget --account-id "$ACCOUNT_ID" --budget-name "$BUDGET_NAME" >/dev/null 2>&1; then
-  echo "=> Budget '$BUDGET_NAME' already exists; leaving it as-is. Edit it in the Budgets console if you need"
-  echo "   to change the amount, threshold, filter, or subscriber list."
+  echo "=> Budget '$BUDGET_NAME' already exists; leaving it as-is (this script never overwrites an existing"
+  echo "   budget's filter automatically)."
+  if [ "$INCLUDE_SES" = "true" ]; then
+    echo "   The '$COST_CATEGORY_NAME' Cost Category above is ready. If this budget still uses the OLDER raw OR"
+    echo "   FilterExpression (console can't display/edit/chart it), migrate it to the Cost Category with:"
+    echo "     aws budgets update-budget --account-id $ACCOUNT_ID --new-budget '{\"BudgetName\": \"$BUDGET_NAME\", \"BudgetType\": \"COST\", \"TimeUnit\": \"MONTHLY\", \"BudgetLimit\": {\"Amount\": \"$MONTHLY_BUDGET_USD\", \"Unit\": \"$CURRENCY\"}, $FILTER_FIELD}'"
+  else
+    echo "   Edit it in the Budgets console if you need to change the amount, threshold, filter, or subscriber list."
+  fi
 else
   echo "=> Creating budget '$BUDGET_NAME': $MONTHLY_BUDGET_USD $CURRENCY/month, scoped to $FILTER_DESCRIPTION..."
 
@@ -235,13 +285,12 @@ if [ -n "$LINKED_ACCOUNT" ]; then
   echo "  2. Filter: Linked Account -> $LINKED_ACCOUNT."
   echo "     Revisit this filter once anything unrelated starts sharing this account -- it stops being an"
   echo "     accurate view of just this project's spend at that point."
+elif [ "$INCLUDE_SES" = "true" ]; then
+  echo "  2. Group by: Cost Category -> $COST_CATEGORY_NAME. Filter: Cost Category -> $COST_CATEGORY_NAME -> $PROJECT_TAG."
+  echo "     One report now shows tag:Project=$PROJECT_TAG OR Service=$SES_SERVICE_NAME combined -- no second"
+  echo "     report needed, since the OR logic lives in the Cost Category, not in the report's own filter."
 else
   echo "  2. Group by: Tag -> Project. Filter: Tag -> Project -> $PROJECT_TAG."
-  if [ "$INCLUDE_SES" = "true" ]; then
-    echo "     Cost Explorer's own console filters are AND'd across dimensions (unlike the Budget above, which"
-    echo "     uses an OR), so a single saved report can't show both at once -- save a SECOND report filtered on"
-    echo "     Service -> $SES_SERVICE_NAME to see SES spend, as the practical equivalent of one combined view."
-  fi
 fi
 echo "  3. Click 'Save as' to bookmark it as a dashboard-style saved report."
 echo "See docs/server/aws_setup_guide.md §8 for the full walkthrough."

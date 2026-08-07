@@ -233,6 +233,24 @@ func (s *Server) updateEdgeHealth(id, status string, latency int64, errMsg strin
 	}
 }
 
+// updateEdgeLatencyFromPing records a fresh RTT measurement for a WS-connected edge,
+// independent of the HTTP-polling path above -- edges configured with no `url` (the
+// current norm; see docs/server/edge_setup_guide.md's example config) never get a
+// health-check entry via checkEdgeNodeHealth at all, which left LatencyMs permanently
+// unset and rendered as "--" in the portal (#976). Measured over the existing WS
+// keepalive Ping/Pong instead (see edge_control_ws.go's per-connection ping ticker).
+// Preserves every other field already recorded for this node -- handleEdgeHealth
+// overlays Status "Online" for any node with a live WS connection regardless of what's
+// stored here, so this never needs to touch Status itself.
+func (s *Server) updateEdgeLatencyFromPing(nodeID string, latencyMs int64) {
+	s.edgeHealthMu.Lock()
+	defer s.edgeHealthMu.Unlock()
+	h := s.edgeHealth[nodeID]
+	h.LatencyMs = latencyMs
+	h.LastCheckAt = time.Now().Unix()
+	s.edgeHealth[nodeID] = h
+}
+
 // isWithinScheduledDowntime reports whether now (evaluated in tz) falls
 // inside a node's scheduled stop window, extended by
 // scheduledStartGraceSeconds past its start_time. Handles the overnight-wrap

@@ -39,6 +39,12 @@ var edgeClientReadDeadline = 75 * time.Second
 // fix can be verified without a real 30s+ wait.
 var edgeClientPingInterval = 30 * time.Second
 
+// edgeHealthPingInterval is how often the control plane sends its OWN Ping to each
+// connected edge, purely to time the Pong for RTT (see handleEdgeControlWS's PongHandler
+// and #976) -- independent of edgeClientPingInterval above, which is the edge's existing
+// keepalive in the other direction and was never used for timing. Overridable in tests.
+var edgeHealthPingInterval = 20 * time.Second
+
 // ControlMessage represents the JSON schema for websocket communication.
 type ControlMessage struct {
 	Type      string            `json:"type"`
@@ -168,9 +174,15 @@ func (s *Server) handleEdgeControlWS(w http.ResponseWriter, r *http.Request) {
 	slog.Info(fmt.Sprintf("[Edge WS] Edge node %s successfully authenticated.", nodeID))
 	_ = conn.WriteJSON(ControlMessage{Type: "auth_success"}) //nolint:errcheck
 
+	// pingStop signals the RTT-ping goroutine below to exit once the read pump's defer
+	// runs -- it has no other way to notice the connection is gone, since it only ever
+	// writes and never reads.
+	pingStop := make(chan struct{})
+
 	// Start read pump to keep alive and detect disconnects
 	go func() {
 		defer func() {
+			close(pingStop)
 			s.edgeClientsMu.Lock()
 			if activeConn, exists := s.edgeClients[nodeID]; exists && activeConn.conn == conn {
 				delete(s.edgeClients, nodeID)
@@ -178,6 +190,9 @@ func (s *Server) handleEdgeControlWS(w http.ResponseWriter, r *http.Request) {
 				delete(s.edgeIPs, nodeID)
 			}
 			s.edgeClientsMu.Unlock()
+			s.edgePingMu.Lock()
+			delete(s.edgePingSentAt, nodeID)
+			s.edgePingMu.Unlock()
 			_ = conn.Close() //nolint:errcheck
 			slog.Info(fmt.Sprintf("[Edge WS] Edge node %s disconnected.", nodeID))
 		}()
@@ -187,6 +202,17 @@ func (s *Server) handleEdgeControlWS(w http.ResponseWriter, r *http.Request) {
 		_ = conn.SetReadDeadline(time.Now().Add(edgeControlReadDeadline)) //nolint:errcheck
 		conn.SetPongHandler(func(string) error {
 			_ = conn.SetReadDeadline(time.Now().Add(edgeControlReadDeadline)) //nolint:errcheck
+			// Answers our own RTT-ping below, not the edge's keepalive Ping (that one
+			// gets a Pong reply from the PingHandler further down, never from us
+			// sending a Ping ourselves) -- see #976. A miss (no recorded send time,
+			// e.g. a stray Pong right after reconnect) just leaves latency unchanged
+			// rather than recording a bogus value.
+			s.edgePingMu.Lock()
+			sentAt, ok := s.edgePingSentAt[nodeID]
+			s.edgePingMu.Unlock()
+			if ok {
+				s.updateEdgeLatencyFromPing(nodeID, time.Since(sentAt).Milliseconds())
+			}
 			return nil
 		})
 
@@ -219,6 +245,32 @@ func (s *Server) handleEdgeControlWS(w http.ResponseWriter, r *http.Request) {
 				break
 			}
 			_ = conn.SetReadDeadline(time.Now().Add(edgeControlReadDeadline)) //nolint:errcheck
+		}
+	}()
+
+	// Send our own periodic Ping so the PongHandler above has something to time (#976) --
+	// the edge's existing keepalive Ping (runEdgeControlChannel, other direction) was never
+	// usable for this since we only reply to it, we don't time it. WriteControl is safe to
+	// call concurrently with the read pump's WriteControl (PongHandler, above) and with any
+	// WriteJSON/WriteMessage via safeConn elsewhere -- gorilla/websocket exempts
+	// WriteControl from its single-writer restriction.
+	go func() {
+		ticker := time.NewTicker(edgeHealthPingInterval)
+		defer ticker.Stop()
+		for {
+			select {
+			case <-pingStop:
+				return
+			case <-s.ctx.Done():
+				return
+			case <-ticker.C:
+				s.edgePingMu.Lock()
+				s.edgePingSentAt[nodeID] = time.Now()
+				s.edgePingMu.Unlock()
+				if err := conn.WriteControl(websocket.PingMessage, nil, time.Now().Add(5*time.Second)); err != nil {
+					return
+				}
+			}
 		}
 	}()
 }

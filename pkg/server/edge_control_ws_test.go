@@ -397,6 +397,81 @@ func TestServer_EdgeControlWS_SurvivesBeyondOldOneShotDeadline(t *testing.T) {
 	}
 }
 
+// TestServer_EdgeControlWS_LatencyMeasuredViaPing verifies the fix for #976: edges are
+// configured with no `url` in the current architecture (see docs/server/edge_setup_guide.md's
+// example config), so they never got an entry via the HTTP-polling checkEdgeNodeHealth path
+// at all -- EdgeHealthStatus.LatencyMs stayed permanently unset, rendered as "--" on the
+// portal's Network Health screen regardless of how healthy the connection actually was. The
+// control plane now sends its own periodic Ping over the WS control channel and times the
+// Pong (edgeHealthPingInterval, overridden here to a short duration); the real edge client
+// (runEdgeControlChannel) never overrides gorilla/websocket's default PingHandler, so it
+// answers automatically without any edge-side change.
+func TestServer_EdgeControlWS_LatencyMeasuredViaPing(t *testing.T) {
+	original := edgeHealthPingInterval
+	edgeHealthPingInterval = 50 * time.Millisecond
+	defer func() { edgeHealthPingInterval = original }()
+
+	cfgControl := config.DefaultServerConfig()
+	cfgControl.DBPath = filepath.Join(t.TempDir(), "control.db")
+	cfgControl.Domains = []string{"example.se"}
+	cfgControl.DisableBackupScheduler = true
+
+	edgeToken := "usedge-latencytoken"
+	tokenHashBytes := sha256.Sum256([]byte(edgeToken))
+	cfgControl.EdgeNodes = []config.EdgeNodeConfig{
+		{ID: "usedge", TokenHash: hex.EncodeToString(tokenHashBytes[:])},
+	}
+
+	controlSrv, err := NewServer(cfgControl)
+	if err != nil {
+		t.Fatalf("failed to create control server: %v", err)
+	}
+	defer func() {
+		time.Sleep(50 * time.Millisecond)
+		controlSrv.Stop()
+	}()
+
+	ts := httptest.NewServer(controlSrv)
+	defer ts.Close()
+
+	cfgEdge := config.DefaultServerConfig()
+	cfgEdge.DBPath = "" // Edge mode
+	cfgEdge.Domains = []string{"usedge.example.se"}
+	cfgEdge.ControlPlaneURL = ts.URL
+	cfgEdge.EdgeToken = edgeToken
+	cfgEdge.DisableBackupScheduler = true
+
+	edgeSrv, err := NewServer(cfgEdge)
+	if err != nil {
+		t.Fatalf("failed to create edge server: %v", err)
+	}
+	defer func() {
+		time.Sleep(50 * time.Millisecond)
+		edgeSrv.Stop()
+	}()
+
+	// Give the edge time to connect, authenticate, and answer at least one RTT ping.
+	time.Sleep(300 * time.Millisecond)
+
+	controlSrv.edgeHealthMu.RLock()
+	status, exists := controlSrv.edgeHealth["usedge"]
+	controlSrv.edgeHealthMu.RUnlock()
+
+	if !exists {
+		t.Fatal("expected an EdgeHealthStatus entry for 'usedge' after at least one RTT ping cycle, but there was none")
+	}
+	// Not asserting LatencyMs > 0: a real loopback round-trip can legitimately measure
+	// under a millisecond and truncate to 0, which is a correct measurement, not a
+	// missing one -- LastCheckAt is the reliable signal that updateEdgeLatencyFromPing
+	// actually ran (it's set unconditionally on every RTT measurement, success or not).
+	if status.LatencyMs < 0 {
+		t.Errorf("expected a non-negative LatencyMs, got %d", status.LatencyMs)
+	}
+	if status.LastCheckAt == 0 {
+		t.Error("expected LastCheckAt to be set after the control plane's own Ping/Pong RTT cycle, but it was never recorded -- the ping mechanism never fired")
+	}
+}
+
 // TestServer_EdgeControlChannel_SurvivesIdlePeriodViaPongHandler verifies the fix
 // for #911: the edge's own outbound connection reset its read deadline right before
 // each blocking read, but nothing ever refreshed that deadline during an idle period

@@ -7,6 +7,16 @@ import (
 
 // DeployCommand handles deploying server changes to the VPS.
 func DeployCommand(args []string) {
+	if IsHelpRequest(args) {
+		fmt.Println("Usage: lfr-tunnel-ops deploy [-i identity_file]")
+		fmt.Println("\nBuilds lfr-tunneld for linux/amd64, uploads it plus static assets/i18n/")
+		fmt.Println("templates/maintenance scripts to VPS_USER@VPS_IP (defaults: peterrichards@")
+		fmt.Println("82.39.133.178), then over SSH installs the binary, enables maintenance mode,")
+		fmt.Println("restarts lfr-tunneld, and disables maintenance mode. This is a real, live")
+		fmt.Println("deployment with no dry-run mode -- there is no way to preview its effect.")
+		return
+	}
+
 	fmt.Println("=== Starting VPS Deployment ===")
 
 	identityFile := "~/.ssh/id_vm6_networks_vps"
@@ -98,6 +108,15 @@ func DeployCommand(args []string) {
 
 // DeployClientsCommand handles deploying signed client binaries to the VPS.
 func DeployClientsCommand(args []string) {
+	if IsHelpRequest(args) {
+		fmt.Println("Usage: lfr-tunnel-ops deploy-clients [-i identity_file]")
+		fmt.Println("\nUploads dist/ (built + signed client binaries and checksums.txt*) to")
+		fmt.Println("VPS_USER@VPS_IP (defaults: peterrichards@lfr-demo.se) and moves them into")
+		fmt.Println("the web server's static downloads directory. Requires dist/checksums.txt")
+		fmt.Println("to already exist -- run build then sign first. Real, live upload, no dry run.")
+		return
+	}
+
 	fmt.Println("=== Deploying Client Binaries and Checksums to VPS ===")
 
 	identityFile := "~/.ssh/id_vm6_networks_vps"

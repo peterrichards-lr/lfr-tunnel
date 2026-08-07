@@ -7,8 +7,10 @@ import (
 
 // MaintenanceCommand toggles Nginx maintenance mode on the VPS.
 func MaintenanceCommand(args []string) {
-	if len(args) < 1 {
+	if len(args) < 1 || IsHelpRequest(args) {
 		fmt.Println("Usage: lfr-tunnel-ops maintenance <enable|disable> [-i identity_file]")
+		fmt.Println("\nEnables or disables Nginx maintenance mode on VPS_USER@VPS_IP (defaults:")
+		fmt.Println("peterrichards@82.39.133.178) over SSH. Real, live effect on production traffic.")
 		return
 	}
 
@@ -39,6 +41,14 @@ func MaintenanceCommand(args []string) {
 
 // DiagnoseCommand runs diagnostics on the VPS.
 func DiagnoseCommand(args []string) {
+	if IsHelpRequest(args) {
+		fmt.Println("Usage: lfr-tunnel-ops diagnose [-i identity_file]")
+		fmt.Println("\nSSHes into VPS_USER@VPS_IP (defaults: peterrichards@82.39.133.178) and runs")
+		fmt.Println("read-only checks: uptime, lfr-tunneld/nginx status, UFW rules, cert listing,")
+		fmt.Println("recent error logs. Does not modify anything on the VPS.")
+		return
+	}
+
 	fmt.Println("=== Running Gateway Diagnostics ===")
 
 	identityFile := "~/.ssh/id_vm6_networks_vps"

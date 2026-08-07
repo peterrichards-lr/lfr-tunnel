@@ -41,3 +41,17 @@ func GetEnvOrDefault(key, fallback string) string {
 	}
 	return fallback
 }
+
+// IsHelpRequest reports whether args contains -h, -help, or --help anywhere. Every
+// Command function with side effects (builds, signs, or touches the network/VPS) must
+// check this FIRST and print usage instead of running -- main.go's top-level usage text
+// promises `lfr-tunnel-ops <command> -help` works, but that's only true if each command
+// actually honors it; args isn't parsed for a help flag automatically.
+func IsHelpRequest(args []string) bool {
+	for _, a := range args {
+		if a == "-h" || a == "-help" || a == "--help" {
+			return true
+		}
+	}
+	return false
+}

@@ -12,6 +12,16 @@ import (
 
 // SignCommand handles the signing of macOS, Windows, and Linux binaries.
 func SignCommand(args []string) {
+	if IsHelpRequest(args) {
+		fmt.Println("Usage: lfr-tunnel-ops sign")
+		fmt.Println("\nSigns dist/'s built binaries: macOS via codesign (LFT_MACOS_IDENTITY),")
+		fmt.Println("Windows via osslsigncode (LFT_SIGN_KEY/LFT_SIGN_CRT or LFT_SIGN_P12, plus")
+		fmt.Println("LFT_SIGN_PASS), and Linux via a detached GPG signature (LFT_GPG_KEY,")
+		fmt.Println("LFT_GPG_SECRET, LFT_GPG_PASS). Any step is skipped if its env vars are")
+		fmt.Println("unset. Regenerates dist/checksums.txt and minisign-signs it.")
+		return
+	}
+
 	fmt.Println("=== Beginning Signing Process ===")
 
 	binDir := "dist"

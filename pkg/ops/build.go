@@ -8,6 +8,14 @@ import (
 
 // BuildCommand handles the cross-compilation of client binaries.
 func BuildCommand(args []string) {
+	if IsHelpRequest(args) {
+		fmt.Println("Usage: lfr-tunnel-ops build")
+		fmt.Println("\nCross-compiles client binaries for linux/amd64, linux/arm64, darwin/amd64,")
+		fmt.Println("darwin/arm64, and windows/amd64 into dist/. Set VERSION to override the")
+		fmt.Println("version embedded via ldflags (defaults to pkg/config/version.go's Version).")
+		return
+	}
+
 	fmt.Println("Starting cross-platform build...")
 
 	version := os.Getenv("VERSION")

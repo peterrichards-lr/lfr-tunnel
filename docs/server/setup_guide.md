@@ -1028,12 +1028,18 @@ The `scripts/sign-release.sh` script compiles the project and signs the binaries
   export LFT_MACOS_IDENTITY="71FC1F1B1AAF4504A6B098BA0BDC785979DF14F9"
 
   # Windows Authenticode (Separate Key & Cert PEM files via 1Password)
-  export LFT_SIGN_KEY="op://<vault>/self-signed-windows-signing-key/private key"
-  export LFT_SIGN_CRT="op://<vault>/self-signed-windows-signing-key/public key"
+  export LFT_SIGN_KEY="op://<vault>/self-signed-windows-signing-key/<key-filename>.key"
+  export LFT_SIGN_CRT="op://<vault>/self-signed-windows-signing-key/<cert-filename>.crt"
   export LFT_SIGN_PASS="op://<vault>/self-signed-windows-signing-key/password"
 
+  # self-signed-windows-signing-key must be a generic item type (e.g. Secure Note/Password)
+  # with the private key and certificate attached as separate file fields -- NOT an "SSH Key"
+  # category item. That category only accepts an SSH-format key and derives an SSH public
+  # key from it, which can't hold an arbitrary X.509 certificate (see #951). The `password`
+  # field is a plain custom field, not the SSH Key type's built-in passphrase handling.
+
   # Alternatively: PKCS#12 bundle (.p12 / .pfx)
-  # export LFT_SIGN_P12="op://<vault>/self-signed-windows-signing-key/document"
+  # export LFT_SIGN_P12="op://<vault>/self-signed-windows-signing-key/<bundle-filename>.p12"
 
   # Linux GPG Checksums
   export LFT_GPG_KEY="self-signed-linux-gpg-key"

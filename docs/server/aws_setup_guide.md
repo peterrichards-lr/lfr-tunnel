@@ -54,14 +54,18 @@ together.
 
 > [!NOTE]
 > **Currently deployed:** all four live edge nodes run on `t3.micro` — `edge-us`
-> (`aws-edge-us.lfr-demo.se`, `us-east-2`), `edge-apac` (`aws-edge-apac.lfr-demo.se`,
-> `ap-northeast-1`), `edge-sa` (`aws-edge-sa.lfr-demo.se`, `sa-east-1`), and `edge-in`
-> (`aws-edge-in.lfr-demo.se`, `ap-south-1`) — see `edge_nodes.txt`. Confirmed via
+> (`us.lfr-demo.se`, `us-east-2`), `edge-apac` (`apac.lfr-demo.se`,
+> `ap-northeast-1`), `edge-sa` (`sa.lfr-demo.se`, `sa-east-1`), and `edge-in`
+> (`in.lfr-demo.se`, `ap-south-1`) — see `edge_nodes.txt`. Confirmed via
 > `aws ec2 describe-instances`; instance type isn't recorded anywhere
 > `provision-aws-ec2.sh` writes to, so this note is the only record of it.
 > `edge-sa`/`edge-in` are the newest two, provisioned as part of a planned future
 > cutover from the current production setup — see §9 below for the stop/start
 > schedule now applied to all four.
+>
+> The bare `<region>.lfr-demo.se` names above are current as of the 2026-08-06 domain
+> rename; the older `aws-edge-<region>.lfr-demo.se` names have since been repointed at
+> the central and no longer resolve to their respective edges -- don't use them.
 
 ---
 
@@ -444,15 +448,36 @@ calls a small local, versioned HTTP API (see `cmd/lfr-tunnel-edge-provisioner`,
 those portal actions are simply absent — not an error state — and the CLI script above
 remains fully sufficient on its own.
 
-To enable it:
-1. Deploy and run `lfr-tunnel-edge-provisioner` on the **central** control plane host,
-   configured with each edge node's `instance_id`/`region` (mapping is separate from
-   `server-config.yaml`'s `edge_nodes` list, by design — the core config never needs to
-   know about AWS instance IDs).
-2. Set `edge_provisioner_url` (and `edge_provisioner_token_file`) in the central
-   control plane's `server-config.yaml`, pointing at the sidecar's loopback address.
-3. Restart `lfr-tunneld` on the central control plane. The portal's start/stop/
-   restart/bulk actions and Edit Schedule modal become available automatically.
+To enable it, run `scripts/common/setup-edge-provisioner.sh` against the central host
+(after `setup-central-vps.sh`), with each edge node's `instance_id`/`region` (this mapping
+is separate from `server-config.yaml`'s `edge_nodes` list, by design — the core config
+never needs to know about AWS instance IDs):
+
+```bash
+./scripts/common/setup-edge-provisioner.sh -s <central_ip> -i <identity_file> -u ubuntu \
+  --profile lfr-tunnel --region eu-west-1 \
+  -n "edge-us:i-0123456789abcdef0:us-east-2,edge-apac:i-0fedcba9876543210:ap-northeast-1"
+```
+
+This handles everything end to end:
+1. **Creates (or reuses) the IAM role/instance-profile** the sidecar needs and attaches it
+   to the central instance — a least-privilege policy scoped to exactly the given edge
+   instances/schedules, derived straight from the `-n` mapping. Skipping this step used to
+   be a real footgun: the sidecar starts up looking healthy either way, but every AWS call
+   it makes fails silently with an opaque IMDS/credentials error, surfacing only as missing
+   data in the portal (e.g. a blank Local Time column) with nothing pointing at the actual
+   cause. `pkg/provisioner.NewAWSBackend` now also fails loudly at the sidecar's own startup
+   if credentials don't actually work, as a second line of defense.
+2. Builds and deploys the `lfr-tunnel-edge-provisioner` binary + config + systemd unit.
+3. Restarts `lfr-tunneld` so it picks up the now-generated token. `edge_provisioner_url`/
+   `edge_provisioner_token_file` are expected to already be set in the central's
+   `server-config.yaml` (pointing at the sidecar's loopback address) — this script doesn't
+   touch that file. The portal's start/stop/restart/bulk actions and Edit Schedule modal
+   become available automatically.
+
+If you'd rather manage the IAM role yourself, create it with equivalent permissions and
+attach it to the central instance before running the script — it detects and reuses an
+already-associated instance profile instead of overwriting it.
 
 ---
 

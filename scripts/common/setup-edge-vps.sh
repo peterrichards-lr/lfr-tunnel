@@ -98,6 +98,7 @@ for DOMAIN in "${DOMAIN_ARRAY[@]}"; do
   ssh $SSH_KEY_ARG $SSH_USER@$VPS_IP "sudo certbot certonly \
     --dns-cloudflare \
     --dns-cloudflare-credentials /etc/letsencrypt/cloudflare.ini \
+    --dns-cloudflare-propagation-seconds 45 \
     --agree-tos \
     --non-interactive \
     --register-unsafely-without-email \

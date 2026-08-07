@@ -625,6 +625,11 @@ func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 
+		if r.Method == http.MethodPost && r.URL.Path == "/api/deregister" {
+			s.handleDeregister(w, r)
+			return
+		}
+
 		if r.Method == http.MethodGet && r.URL.Path == "/api/domains" {
 			s.handleDomains(w, r)
 			return
@@ -1567,6 +1572,26 @@ func (s *Server) respondRegisterResponse(w http.ResponseWriter, status int, r *h
 	}
 	resp.ServerVersion = config.Version
 	respondJSON(w, status, resp)
+}
+
+// handleDeregister lets a client proactively tell the gateway it's disconnecting, so its
+// lease (and any vanity domain hook "remove" cleanup, via Registry.OnLeaseCleanup) happens
+// immediately rather than waiting for the next periodic orphan-lease sweep (up to 10s, see
+// StartCleanupRoutine) -- that gap otherwise means a client that stops and immediately
+// restarts (e.g. Ctrl+C then re-running the same command) can hit a spurious "domain
+// already taken" 409 for its own not-yet-cleaned-up previous session. Idempotent: CleanLease
+// itself no-ops if the session is already gone, so it's safe to call even if the periodic
+// sweep beat this request to it, or if called twice.
+func (s *Server) handleDeregister(w http.ResponseWriter, r *http.Request) {
+	var req struct {
+		SessionToken string `json:"session_token"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil || req.SessionToken == "" {
+		http.Error(w, "invalid request", http.StatusBadRequest)
+		return
+	}
+	s.registry.CleanLease(req.SessionToken)
+	w.WriteHeader(http.StatusOK)
 }
 
 // handleTunnelStatus updates the maintenance/health status of a client's tunnel.

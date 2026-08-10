@@ -247,6 +247,20 @@ func (e *InterceptorEngine) InterceptPort(targetPort int) (int, error) {
 		}
 	}
 
+	// Without this, a dial failure (nothing listening on the local target port) falls
+	// through to httputil.ReverseProxy's stock error handling: a bare 502 with no body,
+	// inconsistent with the polished "Environment Offline" page the central serves when
+	// no client is connected at all (#980). interceptorTransport.RoundTrip above already
+	// records the failed request (rec.Status = 502) before returning the error, so this
+	// only replaces how the response itself gets written -- it also takes over the
+	// default handler's log.Printf("http: proxy error: ...") call, which is why that's
+	// replicated here rather than dropped (the TUI's SYSTEM LOGS panel captures it via
+	// log.SetOutput, same as before).
+	proxy.ErrorHandler = func(w http.ResponseWriter, r *http.Request, err error) {
+		log.Printf("http: proxy error: %v", err)
+		serveDialFailurePage(w, e.TargetHost, targetPort)
+	}
+
 	// HTTP Handler
 	handler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		e.mu.RLock()
@@ -499,6 +513,47 @@ func serveMaintenancePage(w http.ResponseWriter, path string) {
 	</div>
 </body>
 </html>`)); err != nil {
+		log.Printf("[Warning] Failed to write response: %v", err)
+	}
+}
+
+// serveDialFailurePage renders a styled 502 page for the case where the tunnel itself is
+// up but the local target (targetHost:targetPort) can't be dialed -- distinct from
+// serveMaintenancePage's "developer paused this on purpose" case above, and from the
+// central's "no client connected at all" page, but deliberately similar in visual style
+// to both (dark gradient card, Outfit font) so a visitor sees one coherent "offline" look
+// across all three (#980). Unlike the central's visitor-facing page, this one names the
+// target host/port -- the audience here is the developer running the client, for whom
+// that's exactly the actionable detail ("is anything even listening on :8080?").
+func serveDialFailurePage(w http.ResponseWriter, targetHost string, targetPort int) {
+	w.Header().Set("Content-Type", "text/html; charset=utf-8")
+	w.WriteHeader(http.StatusBadGateway)
+	target := fmt.Sprintf("%s:%d", targetHost, targetPort)
+	page := fmt.Sprintf(`<!DOCTYPE html>
+<html>
+<head>
+	<title>Local Application Unreachable</title>
+	<link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;600;800&display=swap" rel="stylesheet">
+	<style>
+		body { font-family: 'Outfit', sans-serif; background: linear-gradient(135deg, #0f172a 0%%, #1e1b4b 50%%, #311042 100%%); color: white; display: flex; align-items: center; justify-content: center; height: 100vh; margin: 0; }
+		.card { background: rgba(30, 41, 59, 0.7); padding: 48px 32px; border-radius: 24px; border: 1px solid rgba(255,255,255,0.08); text-align: center; max-width: 520px; box-shadow: 0 20px 40px rgba(0, 0, 0, 0.3); }
+		h1 { margin-top: 0; color: #f87171; font-size: 28px; font-weight: 800; }
+		p { color: #94a3b8; font-size: 16px; line-height: 1.6; }
+		.logo-container { margin-bottom: 24px; display: inline-flex; align-items: center; justify-content: center; width: 80px; height: 80px; border-radius: 20px; background: rgba(255, 255, 255, 0.03); border: 1px solid rgba(255, 255, 255, 0.05); }
+		.target { font-family: monospace; color: #38bdf8; font-weight: 600; }
+	</style>
+</head>
+<body>
+	<div class="card">
+		<div class="logo-container">
+			<svg width="44" height="44" viewBox="0 0 24 24" fill="white"><path d="M12 2L2 22h20L12 2zm0 3.8l7.5 14.2H4.5L12 5.8z"/></svg>
+		</div>
+		<h1>Local Application Unreachable</h1>
+		<p>The tunnel is connected, but nothing responded at <span class="target">%s</span> on this machine. Make sure your local application is running, then reload.</p>
+	</div>
+</body>
+</html>`, target)
+	if _, err := w.Write([]byte(page)); err != nil {
 		log.Printf("[Warning] Failed to write response: %v", err)
 	}
 }

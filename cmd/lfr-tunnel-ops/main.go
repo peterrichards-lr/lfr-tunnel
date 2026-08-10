@@ -15,6 +15,8 @@ func printUsage() {
 	fmt.Println("  build       Build cross-platform client binaries")
 	fmt.Println("  sign        Sign client binaries for macOS, Windows, and Linux")
 	fmt.Println("  deploy      Deploy server changes to the VPS")
+	fmt.Println("  deploy-clients Deploy signed client binaries to the VPS")
+	fmt.Println("  reconcile-nginx Regenerate and push the core nginx config to an already-provisioned VPS")
 	fmt.Println("  maintenance Enable or disable maintenance mode on the VPS")
 	fmt.Println("  diagnose    Run diagnostic checks on the gateway VPS")
 	fmt.Println("  dns         Reconcile DNS records (Cloudflare or Route53) against a YAML spec")
@@ -40,6 +42,8 @@ func main() {
 		ops.DeployCommand(args)
 	case "deploy-clients":
 		ops.DeployClientsCommand(args)
+	case "reconcile-nginx":
+		ops.ReconcileNginxCommand(args)
 	case "maintenance":
 		ops.MaintenanceCommand(args)
 	case "diagnose":

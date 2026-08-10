@@ -93,6 +93,16 @@ Cross-compiles the Linux `lfr-tunneld` binary and deploys it along with static a
 ```bash
 ./bin/lfr-tunnel-ops deploy -i ~/.ssh/id_vm6_networks_vps
 ```
+*Note: `deploy` never touches nginx config -- see "Reconciling Nginx Config" below for that.*
+
+### Reconciling Nginx Config
+`deploy` only ever uploads the `lfr-tunneld` binary and static assets -- a fix to the nginx config template in `scripts/common/setup-central-vps.sh` (e.g. the #979 ACME-fallback location block) only ever reaches a box on its *initial* provision, never on a normal `deploy` (#997). Use `reconcile-nginx` to regenerate the current central's nginx config from that same template and push it to an already-provisioned box. Safe to re-run repeatedly: it backs up the existing config, swaps in the new one, runs `nginx -t`, and only reloads if that passes -- otherwise it restores the backup and reloads that instead, so a bad reconcile can't leave the box without a working config.
+```bash
+./bin/lfr-tunnel-ops reconcile-nginx -domains lfr-demo.se,lfr-demo.online -port 8080 -i ~/.ssh/lfr-tunnel-gateway.pem
+```
+- `-domains`: comma-separated list of every domain group the target central actually serves (check `/etc/nginx/sites-available/lfr-tunnel`'s existing `server_name` lines if unsure which ones are live).
+- `-port`: must match the live `server-config.yaml`'s `http_bind_addr` port.
+- Defaults to `VPS_USER=ubuntu` / `VPS_IP=lfr-demo.se` (the current AWS central) if those env vars aren't set -- unlike `deploy`/`maintenance`/`diagnose` above, which still default to the pre-migration VPS.
 
 ---
 

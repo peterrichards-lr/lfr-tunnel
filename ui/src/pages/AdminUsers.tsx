@@ -20,6 +20,7 @@ interface User {
   portal_active: boolean;
   rate_limit?: number;
   max_reservations?: number;
+  max_custom_domains?: number;
   max_tunnels?: number;
   last_login_at?: string;
   totp_enabled?: boolean;
@@ -112,6 +113,7 @@ export default function AdminUsers() {
   const [showInviteModal, setShowInviteModal] = useState(false);
   const [modalRateLimit, setModalRateLimit] = useState(0);
   const [modalMaxReservations, setModalMaxReservations] = useState(3);
+  const [modalMaxCustomDomains, setModalMaxCustomDomains] = useState(1);
   const [modalMaxTunnels, setModalMaxTunnels] = useState(3);
   const [updatingLimits, setUpdatingLimits] = useState(false);
 
@@ -119,6 +121,7 @@ export default function AdminUsers() {
     if (selectedUser) {
       setModalRateLimit(selectedUser.rate_limit || 0);
       setModalMaxReservations(selectedUser.max_reservations !== undefined && selectedUser.max_reservations !== null ? selectedUser.max_reservations : 3);
+      setModalMaxCustomDomains(selectedUser.max_custom_domains !== undefined && selectedUser.max_custom_domains !== null ? selectedUser.max_custom_domains : 1);
       setModalMaxTunnels(selectedUser.max_tunnels !== undefined && selectedUser.max_tunnels !== null ? selectedUser.max_tunnels : 3);
     }
   }, [selectedUser]);
@@ -130,19 +133,22 @@ export default function AdminUsers() {
       await axios.patch(`/api/admin/users/${encodeURIComponent(selectedUser.email)}`, {
         rate_limit: Number(modalRateLimit),
         max_reservations: Number(modalMaxReservations),
+        max_custom_domains: Number(modalMaxCustomDomains),
         max_tunnels: Number(modalMaxTunnels)
       });
       showToast('User settings updated successfully', 'success');
-      setUsers(prev => prev.map(u => u.email === selectedUser.email ? { 
-        ...u, 
+      setUsers(prev => prev.map(u => u.email === selectedUser.email ? {
+        ...u,
         rate_limit: Number(modalRateLimit),
         max_reservations: Number(modalMaxReservations),
+        max_custom_domains: Number(modalMaxCustomDomains),
         max_tunnels: Number(modalMaxTunnels)
       } : u));
-      setSelectedUser(prev => prev ? { 
-        ...prev, 
+      setSelectedUser(prev => prev ? {
+        ...prev,
         rate_limit: Number(modalRateLimit),
         max_reservations: Number(modalMaxReservations),
+        max_custom_domains: Number(modalMaxCustomDomains),
         max_tunnels: Number(modalMaxTunnels)
       } : null);
       fetchUsers();
@@ -493,6 +499,7 @@ export default function AdminUsers() {
                           <div className="flex flex-col gap-2xs">
                             <div><span className="text-2xs text-muted">RPS:</span> <strong>{u.rate_limit ? u.rate_limit : '∞'}</strong></div>
                             <div><span className="text-2xs text-muted">Subs:</span> <strong>{u.max_reservations !== undefined && u.max_reservations !== null ? (u.max_reservations < 0 ? '∞' : u.max_reservations) : '3'}</strong></div>
+                            <div><span className="text-2xs text-muted">Domains:</span> <strong>{u.max_custom_domains !== undefined && u.max_custom_domains !== null ? (u.max_custom_domains < 0 ? '∞' : u.max_custom_domains) : '1'}</strong></div>
                             <div><span className="text-2xs text-muted">Tunnels:</span> <strong>{u.max_tunnels !== undefined && u.max_tunnels !== null ? (u.max_tunnels < 0 ? '∞' : u.max_tunnels) : '3'}</strong></div>
                           </div>
                         </td>
@@ -643,9 +650,23 @@ export default function AdminUsers() {
                     type="number" 
                     className="input-field w-full py-xs px-sm text-sm" 
                     min={-1}
-                    value={modalMaxReservations} 
-                    onChange={(e) => setModalMaxReservations(Number(e.target.value))} 
+                    value={modalMaxReservations}
+                    onChange={(e) => setModalMaxReservations(Number(e.target.value))}
                     placeholder="3"
+                  />
+                </div>
+              </div>
+
+              <div>
+                <label className="form-label text-2xs text-muted mb-2xs tracking-wider uppercase">Max Custom Domains</label>
+                <div>
+                  <input
+                    type="number"
+                    className="input-field w-full py-xs px-sm text-sm"
+                    min={-1}
+                    value={modalMaxCustomDomains}
+                    onChange={(e) => setModalMaxCustomDomains(Number(e.target.value))}
+                    placeholder="1"
                   />
                 </div>
               </div>

@@ -6,6 +6,7 @@ import DataTableToolbar from '../components/DataTableToolbar';
 import DataTablePagination from '../components/DataTablePagination';
 import TunnelsPanel from '../components/TunnelsPanel';
 import ReservationsPanel from '../components/ReservationsPanel';
+import VanityDomainStatusPanel from '../components/VanityDomainStatusPanel';
 import WhatsNewPanel from '../components/WhatsNewPanel';
 import ClientInstallationModal from '../components/ClientInstallationModal';
 import OnboardingTour from '../components/OnboardingTour';
@@ -214,7 +215,8 @@ export default function Dashboard() {
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-xl items-start mb-2xl">
         <div className="lg:col-span-2 flex flex-col gap-xl">
           <ReservationsPanel />
-          
+          <VanityDomainStatusPanel />
+
           <div className="card p-0" style={{ animationDelay: '0.2s' }}>
             <div className="p-xl border-b flex justify-between items-center flex-wrap gap-md">
               <div>

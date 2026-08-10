@@ -390,9 +390,19 @@ func NewServer(cfg *config.ServerConfig) (*Server, error) {
 		if srv.proxyHandler != nil {
 			srv.proxyHandler.RemoveRateLimiter(lease.FullHost)
 		}
-		if srv.isCustomDomain(lease.FullHost) {
-			go srv.runVanityDomainHook("remove", lease.FullHost, lease.UserID)
-		}
+		// Deliberately NOT firing the vanity domain hook's "remove" action here (#1010):
+		// this callback also fires on an ordinary/transient disconnect -- including the
+		// background dead-tunnel sweep's periodic TCP dial check -- not just an explicit
+		// unreserve. "remove" deletes the domain's nginx vhost AND calls `certbot delete`,
+		// actually revoking the certificate; reconnecting then re-issues a brand-new one from
+		// scratch. Tying that to mere lease cleanup meant any network blip (laptop sleep,
+		// wifi hiccup) fully tore down and reissued a custom domain's certificate, risking
+		// exhausting Let's Encrypt's 5-duplicate-certs-per-7-days limit from ordinary
+		// reconnect churn alone. "remove" now only fires on an explicit action: the admin
+		// "Remove" button (handleAdminRemoveVanityDomain) or the user releasing their own
+		// custom domain reservation (handleDeleteReservation) -- the tunnel disconnecting
+		// doesn't mean the domain is being given up; the external DNS/CNAME still points here
+		// regardless, and reconnecting should just resume using what's already provisioned.
 		if srv.cfg.ControlPlaneURL != "" {
 			go srv.notifyControlPlaneDeregister(lease.UserID, lease.SubdomainPrefix)
 		}
@@ -1316,7 +1326,13 @@ func (s *Server) handleRegister(w http.ResponseWriter, r *http.Request) {
 						UserID:    user.ID,
 						Subdomain: "",
 						Domain:    d,
-						ExpiresAt: s.getUserSubdomainExpiry(user),
+						// Custom domains are always permanent (#1009), unlike plain
+						// subdomain reservations' role-based getUserSubdomainExpiry: the
+						// expiry+quarantine+extension model exists to reclaim a shared,
+						// contested namespace, but nobody else can ever claim this exact
+						// domain -- it belongs to the requesting user externally (DNS/
+						// CNAME) regardless of what this reservation says.
+						ExpiresAt: nil,
 					}
 					if err := s.db.CreateSubdomainReservation(res); err != nil {
 						slog.Info(fmt.Sprintf("[Server] Failed to auto-create reservation for custom domain %s: %v", d, err))

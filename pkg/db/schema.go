@@ -31,6 +31,7 @@ func (db *DB) initSchema() error {
 		subdomain_style TEXT DEFAULT 'liferay',
 		rate_limit INTEGER DEFAULT 0,
 		max_reservations INTEGER DEFAULT NULL,
+		max_custom_domains INTEGER DEFAULT NULL,
 		max_active_tunnels INTEGER DEFAULT NULL,
 		onboarding_status TEXT NOT NULL DEFAULT 'pending',
 		onboarding_last_step TEXT DEFAULT '',
@@ -241,4 +242,15 @@ var migrations = []migration{
 	{17, "ALTER TABLE users ADD COLUMN preferred_domain TEXT DEFAULT ''"},
 	{18, "ALTER TABLE users ADD COLUMN subdomain_style TEXT DEFAULT 'liferay'"},
 	{19, "CREATE TABLE IF NOT EXISTS vanity_domain_status (full_host TEXT PRIMARY KEY, user_id TEXT NOT NULL DEFAULT '', requested_at DATETIME, nginx_config_at DATETIME, cert_issued_at DATETIME, live_at DATETIME, failed_stage TEXT, error_message TEXT, updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP)"},
+	// #1004 added db.User.MaxCustomDomains (the per-user override for the new, separate
+	// custom-domain quota) but this migration was missed initially -- without it, the column
+	// never existed on an already-provisioned DB, so every read/write of that field silently
+	// no-op'd: the admin "Max Custom Domains" field appeared to save (200 OK) but the value
+	// was never actually persisted or read back.
+	{20, "ALTER TABLE users ADD COLUMN max_custom_domains INTEGER DEFAULT NULL"},
+	// Custom domain reservations (subdomain = '') are now always permanent (#1009) -- the
+	// expiry+quarantine+extension model exists to reclaim a shared, contested namespace, which
+	// doesn't apply to a domain nobody but its owner can ever claim. Backfills any row created
+	// before this fix that got a real expiry date from the previous role-based logic.
+	{21, "UPDATE subdomain_reservations SET expires_at = NULL WHERE subdomain = ''"},
 }

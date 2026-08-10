@@ -1162,9 +1162,18 @@ func (s *Server) handleDeleteReservation(w http.ResponseWriter, r *http.Request)
 	}
 
 	idStr := strings.TrimPrefix(r.URL.Path, "/api/portal/reservations/")
-	if err := s.portalService.DeleteReservation(user, idStr, getClientIP(r)); err != nil {
+	res, err := s.portalService.DeleteReservation(user, idStr, getClientIP(r))
+	if err != nil {
 		respondWithError(w, err)
 		return
+	}
+
+	// Custom domain reservations (Subdomain == "") no longer get their nginx vhost/certificate
+	// torn down on ordinary tunnel disconnect (#1010) -- releasing the reservation here IS the
+	// explicit action that should trigger that cleanup now, mirroring
+	// handleAdminRemoveVanityDomain's admin-facing equivalent.
+	if res != nil && res.Subdomain == "" {
+		go s.runVanityDomainHook("remove", res.Domain, res.UserID)
 	}
 
 	respondJSON(w, http.StatusOK, map[string]string{"status": "success"})

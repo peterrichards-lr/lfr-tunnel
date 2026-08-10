@@ -26,7 +26,7 @@ type PortalService interface {
 
 	ListReservations(user *db.User) ([]*db.SubdomainReservation, int, int, int, int, error)
 	CreateReservation(user *db.User, subdomain, domain, ip string) (*db.SubdomainReservation, error)
-	DeleteReservation(user *db.User, idStr, ip string) error
+	DeleteReservation(user *db.User, idStr, ip string) (*db.SubdomainReservation, error)
 	RequestExtension(user *db.User, idStr, ip string) (*db.SubdomainReservation, error)
 	PromoteReservation(user *db.User, subdomain, domain, ip string) (*db.SubdomainReservation, error)
 	UpdateReservationAccessControl(user *db.User, subdomain, domain, accessMode, passcode, whitelistIPs, ip string) error

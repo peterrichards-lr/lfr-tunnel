@@ -2619,13 +2619,18 @@ echo "$1 $2" >> "%s"
 		t.Errorf("expected status success, got %s", registerResp.Status)
 	}
 
-	// Verify the reservation was created in DB
+	// Verify the reservation was created in DB, and is permanent (#1009) -- custom domains
+	// are never subject to the expiry/quarantine/extension model plain subdomains use, since
+	// nobody but the requesting user can ever claim this exact domain.
 	res, err := srv.db.GetSubdomainReservationByName("", "custom-site.org")
 	if err != nil {
 		t.Errorf("failed to retrieve reservation: %v", err)
 	}
 	if res == nil || res.Domain != "custom-site.org" {
 		t.Errorf("expected reservation for custom-site.org, got %v", res)
+	}
+	if res != nil && res.ExpiresAt != nil {
+		t.Errorf("expected custom domain reservation to be permanent (ExpiresAt nil), got %v", res.ExpiresAt)
 	}
 
 	// Wait up to 3 seconds for the async hook to execute
@@ -2650,8 +2655,40 @@ echo "$1 $2" >> "%s"
 		t.Errorf("expected hook log to be %q, got %q", expectedLog, logContent)
 	}
 
-	// Clean up lease and verify hook is called with "remove"
+	// Clean up the lease (simulating an ordinary disconnect, e.g. the dead-tunnel sweep) and
+	// verify the hook is NOT called with "remove" (#1010) -- tearing down the nginx vhost and
+	// revoking the certificate on a mere disconnect risked exhausting Let's Encrypt's
+	// duplicate-certificate rate limit on nothing more than a flaky connection reconnecting.
 	srv.registry.CleanLease(registerResp.SessionToken)
+
+	time.Sleep(300 * time.Millisecond)
+	logBytesAfterCleanup, err := os.ReadFile(logPath)
+	if err != nil {
+		t.Fatalf("failed to read hook log after lease cleanup: %v", err)
+	}
+	if strings.Contains(string(logBytesAfterCleanup), "remove custom-site.org") {
+		t.Errorf("expected ordinary lease cleanup NOT to trigger the remove hook, got log: %q", string(logBytesAfterCleanup))
+	}
+
+	// Explicitly releasing the reservation, on the other hand, IS the action that should now
+	// trigger "remove" -- it's the only way (short of an admin action) the nginx vhost and
+	// certificate ever get torn down going forward.
+	user, err := srv.db.GetUser("test@example.com")
+	if err != nil {
+		t.Fatalf("failed to fetch user: %v", err)
+	}
+	deleteReq := httptest.NewRequest("DELETE", fmt.Sprintf("http://example.com/api/portal/reservations/%d", res.ID), nil)
+	sessionToken := generateToken(16)
+	srv.portalMap.Store("admin_session_"+sessionToken, PortalSessionData{
+		Email:     user.Email,
+		ExpiresAt: time.Now().Add(1 * time.Hour),
+	})
+	deleteReq.AddCookie(&http.Cookie{Name: "lfr_session", Value: sessionToken})
+	deleteRec := httptest.NewRecorder()
+	srv.ServeHTTP(deleteRec, deleteReq)
+	if deleteRec.Code != http.StatusOK {
+		t.Fatalf("expected 200 OK releasing the custom domain reservation, got %d. Body: %s", deleteRec.Code, deleteRec.Body.String())
+	}
 
 	var logContent2 string
 	var readErr2 error
@@ -2670,7 +2707,7 @@ echo "$1 $2" >> "%s"
 		t.Fatalf("failed to read hook log for remove: %v", readErr2)
 	}
 	if !strings.Contains(logContent2, "remove custom-site.org") {
-		t.Errorf("expected hook log to contain remove action, got %q", logContent2)
+		t.Errorf("expected releasing the reservation to trigger the remove action, got %q", logContent2)
 	}
 }
 

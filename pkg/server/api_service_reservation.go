@@ -124,27 +124,30 @@ func (s *portalService) CreateReservation(user *db.User, subdomain, domain, ip s
 	return res, nil
 }
 
-// DeleteReservation removes a reservation securely.
-func (s *portalService) DeleteReservation(user *db.User, idStr, ip string) error {
+// DeleteReservation removes a reservation securely. Returns the now-deleted reservation so
+// callers can act on what kind of reservation it was -- in particular, the HTTP handler uses
+// this to trigger the vanity domain hook's "remove" action for a custom domain (Subdomain ==
+// ""), since that's now the only place explicit removal happens for one (#1010).
+func (s *portalService) DeleteReservation(user *db.User, idStr, ip string) (*db.SubdomainReservation, error) {
 	id, err := strconv.ParseInt(idStr, 10, 64)
 	if err != nil {
-		return ErrInvalidRequest
+		return nil, ErrInvalidRequest
 	}
 
 	res, err := s.db.GetSubdomainReservation(id)
 	if err != nil {
 		if errors.Is(err, db.ErrNotFound) {
-			return ErrNotFound
+			return nil, ErrNotFound
 		}
-		return ErrInternalError
+		return nil, ErrInternalError
 	}
 
 	if res.UserID != user.ID && user.Role != "admin" && user.Role != "owner" {
-		return ErrForbidden
+		return nil, ErrForbidden
 	}
 
 	if err := s.db.DeleteSubdomainReservation(id); err != nil {
-		return ErrInternalError
+		return nil, ErrInternalError
 	}
 
 	_ = s.db.WriteAuditEntry(&db.AuditEntry{ //nolint:errcheck
@@ -157,7 +160,7 @@ func (s *portalService) DeleteReservation(user *db.User, idStr, ip string) error
 		CreatedAt:  time.Now(),
 	})
 
-	return nil
+	return res, nil
 }
 
 // RequestExtension marks a reservation for extension.

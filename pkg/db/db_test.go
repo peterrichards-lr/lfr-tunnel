@@ -606,6 +606,90 @@ func TestUserRateLimitCRUD(t *testing.T) {
 	}
 }
 
+// TestUserMaxCustomDomainsCRUD verifies MaxCustomDomains actually round-trips through
+// CreateUser/GetUser/UpdateUser -- #1011 caught this field being added to the Go struct
+// without the corresponding schema migration or SQL wiring, so every read/write of it
+// silently no-op'd despite the admin UI reporting success.
+func TestUserMaxCustomDomainsCRUD(t *testing.T) {
+	database, tmpDir := setupTestDB(t)
+	defer cleanupTestDB(database, tmpDir)
+
+	userID := "custom-domain-quota-user"
+	maxDomains := 2
+	user := &User{
+		ID:                 userID,
+		Email:              "custom-domain-quota-user@example.com",
+		FirstName:          "Custom",
+		LastName:           "Domainer",
+		Role:               "user",
+		Status:             "approved",
+		MaxCustomDomains:   &maxDomains,
+		LanguagePreference: "en",
+	}
+
+	if err := database.CreateUser(user); err != nil {
+		t.Fatalf("CreateUser failed: %v", err)
+	}
+
+	u, err := database.GetUser(userID)
+	if err != nil {
+		t.Fatalf("GetUser failed: %v", err)
+	}
+	if u.MaxCustomDomains == nil || *u.MaxCustomDomains != 2 {
+		t.Errorf("expected MaxCustomDomains to be 2, got %v", u.MaxCustomDomains)
+	}
+
+	// Update to a different value and back to nil (default fallback), verifying both
+	// directions actually persist.
+	newLimit := 7
+	u.MaxCustomDomains = &newLimit
+	if err := database.UpdateUser(u); err != nil {
+		t.Fatalf("UpdateUser failed: %v", err)
+	}
+	u2, err := database.GetUser(userID)
+	if err != nil {
+		t.Fatalf("GetUser failed: %v", err)
+	}
+	if u2.MaxCustomDomains == nil || *u2.MaxCustomDomains != 7 {
+		t.Errorf("expected MaxCustomDomains to be 7 after update, got %v", u2.MaxCustomDomains)
+	}
+
+	u2.MaxCustomDomains = nil
+	if err := database.UpdateUser(u2); err != nil {
+		t.Fatalf("UpdateUser failed: %v", err)
+	}
+	u3, err := database.GetUser(userID)
+	if err != nil {
+		t.Fatalf("GetUser failed: %v", err)
+	}
+	if u3.MaxCustomDomains != nil {
+		t.Errorf("expected MaxCustomDomains to be nil, got %v", *u3.MaxCustomDomains)
+	}
+
+	// Also verify ListUsers (a separate scan path from GetUser) picks it up correctly.
+	limitForList := 4
+	u3.MaxCustomDomains = &limitForList
+	if err := database.UpdateUser(u3); err != nil {
+		t.Fatalf("UpdateUser failed: %v", err)
+	}
+	all, err := database.ListUsers()
+	if err != nil {
+		t.Fatalf("ListUsers failed: %v", err)
+	}
+	found := false
+	for _, u := range all {
+		if u.ID == userID {
+			found = true
+			if u.MaxCustomDomains == nil || *u.MaxCustomDomains != 4 {
+				t.Errorf("expected ListUsers to report MaxCustomDomains=4, got %v", u.MaxCustomDomains)
+			}
+		}
+	}
+	if !found {
+		t.Error("expected to find the test user in ListUsers results")
+	}
+}
+
 func TestSubdomainReservationCRUD(t *testing.T) {
 	database, tmpDir := setupTestDB(t)
 	defer cleanupTestDB(database, tmpDir)
@@ -1032,49 +1116,50 @@ func TestSchemaMigrationVersioning(t *testing.T) {
 	database, tmpDir := setupTestDB(t)
 	defer cleanupTestDB(database, tmpDir)
 
-	// 1. Verify that schema_version table is created and populated with version 19
+	// 1. Verify that schema_version table is created and populated with version 21
 	var maxVersion int
 	err := database.conn.QueryRow("SELECT COALESCE(MAX(version), 0) FROM schema_version").Scan(&maxVersion)
 	if err != nil {
 		t.Fatalf("failed to query schema_version: %v", err)
 	}
-	if maxVersion != 19 {
-		t.Errorf("expected max schema version to be 19, got %d", maxVersion)
+	if maxVersion != 21 {
+		t.Errorf("expected max schema version to be 21, got %d", maxVersion)
 	}
 
-	// Count number of rows in schema_version. It should be 19.
+	// Count number of rows in schema_version. It should be 21.
 	var count int
 	err = database.conn.QueryRow("SELECT COUNT(*) FROM schema_version").Scan(&count)
 	if err != nil {
 		t.Fatalf("failed to count schema_version rows: %v", err)
 	}
-	if count != 19 {
-		t.Errorf("expected 19 applied migrations in table, got %d", count)
+	if count != 21 {
+		t.Errorf("expected 21 applied migrations in table, got %d", count)
 	}
 
-	// 2. Manually delete version 19 (the current latest) from schema_version
-	_, err = database.conn.Exec("DELETE FROM schema_version WHERE version = 19")
+	// 2. Manually delete version 21 (the current latest) from schema_version
+	_, err = database.conn.Exec("DELETE FROM schema_version WHERE version = 21")
 	if err != nil {
 		t.Fatalf("failed to delete migration version: %v", err)
 	}
 
-	// 3. Re-run initSchema. It should detect version 18 as current max,
-	// and try to re-run migration 19.
-	// Since it's a CREATE TABLE IF NOT EXISTS, it's naturally idempotent and won't error at
-	// all on re-run (unlike an ALTER TABLE ADD COLUMN, which would hit the "duplicate column
-	// name" catch-and-continue path our migration system also handles).
+	// 3. Re-run initSchema. It should detect version 20 as current max,
+	// and try to re-run migration 21.
+	// Migration 21 is an UPDATE statement (backfilling custom domain reservations' expires_at
+	// to NULL), which is naturally idempotent and won't error at all on re-run -- same category
+	// as a CREATE TABLE IF NOT EXISTS (unlike an ALTER TABLE ADD COLUMN, which would hit the
+	// "duplicate column name" catch-and-continue path our migration system also handles).
 	err = database.initSchema()
 	if err != nil {
 		t.Fatalf("re-running initSchema failed: %v", err)
 	}
 
-	// 4. Verify version 19 has been recorded as applied again
-	err = database.conn.QueryRow("SELECT COUNT(*) FROM schema_version WHERE version = 19").Scan(&count)
+	// 4. Verify version 21 has been recorded as applied again
+	err = database.conn.QueryRow("SELECT COUNT(*) FROM schema_version WHERE version = 21").Scan(&count)
 	if err != nil {
-		t.Fatalf("failed to query schema_version for version 19: %v", err)
+		t.Fatalf("failed to query schema_version for version 21: %v", err)
 	}
 	if count != 1 {
-		t.Errorf("expected migration 19 to be recorded as applied again, got %d", count)
+		t.Errorf("expected migration 21 to be recorded as applied again, got %d", count)
 	}
 }
 

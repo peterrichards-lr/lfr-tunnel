@@ -24,7 +24,7 @@ type PortalService interface {
 	MFADisable(user *db.User, code, ip string) error
 	MFAVerify(tempToken, code, ip string) (*db.User, string, error)
 
-	ListReservations(user *db.User) ([]*db.SubdomainReservation, int, int, error)
+	ListReservations(user *db.User) ([]*db.SubdomainReservation, int, int, int, int, error)
 	CreateReservation(user *db.User, subdomain, domain, ip string) (*db.SubdomainReservation, error)
 	DeleteReservation(user *db.User, idStr, ip string) error
 	RequestExtension(user *db.User, idStr, ip string) (*db.SubdomainReservation, error)

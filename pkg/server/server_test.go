@@ -2674,6 +2674,148 @@ echo "$1 $2" >> "%s"
 	}
 }
 
+// TestServer_CustomDomainQuota_SeparateFromSubdomainQuota verifies #1004: a custom domain
+// reservation (Subdomain == "") is tracked against its own, separate getUserMaxCustomDomains
+// quota and does not consume -- or get consumed by -- the plain subdomain reservation quota.
+func TestServer_CustomDomainQuota_SeparateFromSubdomainQuota(t *testing.T) {
+	cfg := &config.ServerConfig{
+		Domains:                    []string{"example.com"},
+		DisableBackupScheduler:     true,
+		AllowClientAutoReservation: true,
+		DefaultMaxReservations:     2,
+		DefaultMaxCustomDomains:    1,
+		DBPath:                     filepath.Join(t.TempDir(), "test.db"),
+	}
+
+	srv, err := NewServer(cfg)
+	if err != nil {
+		t.Fatalf("failed to create server: %v", err)
+	}
+	defer func() {
+		time.Sleep(50 * time.Millisecond)
+		srv.Stop()
+	}()
+
+	userEmail := "quota-test@example.com"
+	_ = srv.db.CreateUser(&db.User{ID: userEmail, Email: userEmail, Role: "developer", Status: "approved"}) //nolint:errcheck
+	patHash := sha256.Sum256([]byte("pat_quota_test"))
+	_ = srv.db.CreatePAT(&db.PersonalAccessToken{UserID: userEmail, TokenHash: hex.EncodeToString(patHash[:]), TokenPrefix: "pat_quota_"}) //nolint:errcheck
+
+	register := func(payload RegisterRequest) int {
+		body, _ := json.Marshal(payload)
+		req := httptest.NewRequest("POST", "http://example.com/api/register", bytes.NewReader(body))
+		rec := httptest.NewRecorder()
+		srv.ServeHTTP(rec, req)
+		return rec.Code
+	}
+
+	// 1. First custom domain reservation succeeds (uses the 1-domain custom quota).
+	if code := register(RegisterRequest{CustomDomain: "quota-a.org", Ports: []PortMapping{{LocalPort: 8080}}, AuthToken: "pat_quota_test"}); code != http.StatusOK {
+		t.Fatalf("expected first custom domain registration to succeed, got %d", code)
+	}
+
+	// 2. A second custom domain is rejected -- the custom-domain quota (1) is exhausted, even
+	// though the plain subdomain quota (2) hasn't been touched yet.
+	if code := register(RegisterRequest{CustomDomain: "quota-b.org", Ports: []PortMapping{{LocalPort: 8080}}, AuthToken: "pat_quota_test"}); code != http.StatusForbidden {
+		t.Errorf("expected second custom domain registration to be forbidden (custom domain quota reached), got %d", code)
+	}
+
+	// 3. Plain subdomain reservations still succeed up to their own quota of 2 -- the
+	// already-reserved custom domain must not have eaten into this pool.
+	if code := register(RegisterRequest{SubdomainPrefix: "quota-sub-1", Ports: []PortMapping{{LocalPort: 8080}}, AuthToken: "pat_quota_test"}); code != http.StatusOK {
+		t.Fatalf("expected first subdomain registration to succeed, got %d", code)
+	}
+	if code := register(RegisterRequest{SubdomainPrefix: "quota-sub-2", Ports: []PortMapping{{LocalPort: 8080}}, AuthToken: "pat_quota_test"}); code != http.StatusOK {
+		t.Fatalf("expected second subdomain registration to succeed, got %d", code)
+	}
+
+	// 4. A third subdomain reservation is rejected -- the subdomain quota (2) is now exhausted.
+	if code := register(RegisterRequest{SubdomainPrefix: "quota-sub-3", Ports: []PortMapping{{LocalPort: 8080}}, AuthToken: "pat_quota_test"}); code != http.StatusForbidden {
+		t.Errorf("expected third subdomain registration to be forbidden (subdomain quota reached), got %d", code)
+	}
+
+	// Sanity check the DB directly: exactly 1 custom-domain row (Subdomain == "") and 2
+	// plain-subdomain rows exist for this user.
+	list, err := srv.db.ListSubdomainReservationsByUserID(userEmail)
+	if err != nil {
+		t.Fatalf("failed to list reservations: %v", err)
+	}
+	customDomainCount, subdomainCount := 0, 0
+	for _, res := range list {
+		if res.Subdomain == "" {
+			customDomainCount++
+		} else {
+			subdomainCount++
+		}
+	}
+	if customDomainCount != 1 {
+		t.Errorf("expected exactly 1 custom domain reservation, got %d", customDomainCount)
+	}
+	if subdomainCount != 2 {
+		t.Errorf("expected exactly 2 subdomain reservations, got %d", subdomainCount)
+	}
+}
+
+// TestServer_PortalReservations_CustomDomainSplitFromSubdomainQuota verifies the portal-facing
+// side of #1004: GET /api/portal/reservations reports the custom-domain and subdomain quotas
+// separately, and POST /api/portal/reservations (which only ever creates plain subdomain
+// reservations, see portalService.CreateReservation's s.cfg.Domains validation) is unaffected
+// by a pre-existing custom-domain reservation eating into its quota.
+func TestServer_PortalReservations_CustomDomainSplitFromSubdomainQuota(t *testing.T) {
+	srv, _, cleanup := setupTestServer(t)
+	defer cleanup()
+
+	emailUser := "custom-domain-quota@example.com"
+	_ = srv.db.CreateUser(&db.User{ID: emailUser, Email: emailUser, Role: "user", Status: "approved"}) //nolint:errcheck
+
+	// Simulate a custom domain already reserved via the client's -domain auto-reserve flow
+	// (handleRegister) -- these are never created through the portal's CreateReservation, which
+	// only accepts s.cfg.Domains-supported subdomains.
+	_ = srv.db.CreateSubdomainReservation(&db.SubdomainReservation{ //nolint:errcheck
+		UserID:    emailUser,
+		Subdomain: "",
+		Domain:    "my-custom-domain.org",
+	})
+
+	sessionUser := "custom-domain-quota-session"
+	srv.portalMap.Store("admin_session_"+sessionUser, PortalSessionData{
+		Email:     emailUser,
+		ExpiresAt: time.Now().Add(1 * time.Hour),
+	})
+
+	// GET /api/portal/reservations should report the custom domain against its own counter,
+	// with the subdomain counter still at 0.
+	reqList := httptest.NewRequest("GET", "/api/portal/reservations", nil)
+	reqList.AddCookie(&http.Cookie{Name: "lfr_session", Value: sessionUser})
+	recList := httptest.NewRecorder()
+	srv.ServeHTTP(recList, reqList)
+
+	if recList.Code != http.StatusOK {
+		t.Fatalf("expected 200 OK listing reservations, got %d", recList.Code)
+	}
+	var listResp map[string]interface{}
+	_ = json.NewDecoder(recList.Body).Decode(&listResp) //nolint:errcheck
+	if listResp["used"].(float64) != 0 {
+		t.Errorf("expected subdomain used count 0 (custom domain shouldn't count), got %v", listResp["used"])
+	}
+	if listResp["custom_domain_used"].(float64) != 1 {
+		t.Errorf("expected custom_domain_used count 1, got %v", listResp["custom_domain_used"])
+	}
+
+	// POST /api/portal/reservations for a plain subdomain must still succeed -- the existing
+	// custom domain reservation must not have consumed the subdomain quota.
+	payload := map[string]string{"subdomain": "my-subdomain", "domain": "example.com"}
+	body, _ := json.Marshal(payload)
+	req := httptest.NewRequest("POST", "/api/portal/reservations", bytes.NewReader(body))
+	req.AddCookie(&http.Cookie{Name: "lfr_session", Value: sessionUser})
+	rec := httptest.NewRecorder()
+	srv.ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusOK {
+		t.Fatalf("expected 200 OK for subdomain reservation, got %d, body: %s", rec.Code, rec.Body.String())
+	}
+}
+
 func TestServer_SubdomainExpirationNotifications(t *testing.T) {
 	srv, mockMail, cleanup := setupTestServer(t)
 	defer cleanup()

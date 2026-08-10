@@ -54,13 +54,24 @@ type SlackAppConfig struct {
 
 // ServerConfig holds configuration settings for the lfr-tunneld server.
 type ServerConfig struct {
-	Domains                    []string                  `yaml:"domains"`
-	BindAddr                   string                    `yaml:"bind_addr"`
-	HTTPBindAddr               string                    `yaml:"http_bind_addr"`
-	ChiselBindAddr             string                    `yaml:"chisel_bind_addr"`
-	DefaultMaxReservations     int                       `yaml:"default_max_reservations"`
-	AdminMaxReservations       *int                      `yaml:"admin_max_reservations"`
-	OwnerMaxReservations       *int                      `yaml:"owner_max_reservations"`
+	Domains                []string `yaml:"domains"`
+	BindAddr               string   `yaml:"bind_addr"`
+	HTTPBindAddr           string   `yaml:"http_bind_addr"`
+	ChiselBindAddr         string   `yaml:"chisel_bind_addr"`
+	DefaultMaxReservations int      `yaml:"default_max_reservations"`
+	AdminMaxReservations   *int     `yaml:"admin_max_reservations"`
+	OwnerMaxReservations   *int     `yaml:"owner_max_reservations"`
+	// DefaultMaxCustomDomains and its admin/owner overrides are a separate quota from the
+	// plain reservation one above -- a custom domain costs meaningfully more than a
+	// subdomain on the shared wildcard domain (its own Let's Encrypt certificate, its own
+	// nginx vhost, ongoing Certbot renewal) and shouldn't share a counter with the cheaper
+	// resource, or a user reserving both hits their limit faster than one who only ever
+	// uses subdomains (#1004). Same three-tier resolution as MaxReservations otherwise:
+	// per-role RoleSettings entry, then these admin/owner-specific overrides, then this
+	// default.
+	DefaultMaxCustomDomains    int                       `yaml:"default_max_custom_domains"`
+	AdminMaxCustomDomains      *int                      `yaml:"admin_max_custom_domains"`
+	OwnerMaxCustomDomains      *int                      `yaml:"owner_max_custom_domains"`
 	DefaultMaxActiveTunnels    int                       `yaml:"default_max_active_tunnels"`
 	AdminMaxActiveTunnels      *int                      `yaml:"admin_max_active_tunnels"`
 	OwnerMaxActiveTunnels      *int                      `yaml:"owner_max_active_tunnels"`
@@ -146,6 +157,7 @@ type ServerConfig struct {
 
 type RoleSetting struct {
 	MaxReservations      *int  `yaml:"max_reservations" json:"max_reservations"`
+	MaxCustomDomains     *int  `yaml:"max_custom_domains" json:"max_custom_domains"`
 	SubdomainExpiryDays  *int  `yaml:"subdomain_expiry_days" json:"subdomain_expiry_days"`
 	AllowAutoReservation *bool `yaml:"allow_auto_reservation" json:"allow_auto_reservation"`
 }
@@ -213,6 +225,7 @@ func DefaultServerConfig() *ServerConfig {
 		HTTPBindAddr:            ":80",
 		ChiselBindAddr:          ":8081",
 		DefaultMaxReservations:  3,
+		DefaultMaxCustomDomains: 1,
 		DefaultMaxActiveTunnels: 3,
 		SubdomainQuarantineDays: 3,
 		MaxTunnelRateLimit:      100,
@@ -444,6 +457,11 @@ func LoadServerConfig(path string) (*ServerConfig, error) {
 	if val := os.Getenv("LFT_DEFAULT_MAX_RESERVATIONS"); val != "" {
 		if limit, err := strconv.Atoi(val); err == nil {
 			cfg.DefaultMaxReservations = limit
+		}
+	}
+	if val := os.Getenv("LFT_DEFAULT_MAX_CUSTOM_DOMAINS"); val != "" {
+		if limit, err := strconv.Atoi(val); err == nil {
+			cfg.DefaultMaxCustomDomains = limit
 		}
 	}
 	if val := os.Getenv("LFT_DEFAULT_MAX_ACTIVE_TUNNELS"); val != "" {

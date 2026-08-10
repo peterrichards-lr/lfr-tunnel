@@ -10,16 +10,28 @@ import (
 	"lfr-tunnel/pkg/db"
 )
 
-// ListReservations returns the reservations, quota limit, and used count.
-func (s *portalService) ListReservations(user *db.User) ([]*db.SubdomainReservation, int, int, error) {
+// ListReservations returns the reservations, the subdomain quota limit/used count, and the
+// custom-domain quota limit/used count. Custom domains are SubdomainReservation rows with an
+// empty Subdomain field (see CreateReservation/getUserMaxCustomDomains below) -- they're tracked
+// against a separate, smaller quota, so the two counts must never be mixed.
+func (s *portalService) ListReservations(user *db.User) ([]*db.SubdomainReservation, int, int, int, int, error) {
 	list, err := s.db.ListSubdomainReservationsByUserID(user.ID)
 	if err != nil {
-		return nil, 0, 0, ErrInternalError
+		return nil, 0, 0, 0, 0, ErrInternalError
 	}
 
-	usedCount := len(list)
+	usedCount := 0
+	customDomainUsedCount := 0
+	for _, res := range list {
+		if res.Subdomain == "" {
+			customDomainUsedCount++
+		} else {
+			usedCount++
+		}
+	}
 	limit := s.getUserMaxReservations(user)
-	return list, limit, usedCount, nil
+	customDomainLimit := s.getUserMaxCustomDomains(user)
+	return list, limit, usedCount, customDomainLimit, customDomainUsedCount, nil
 }
 
 // CreateReservation validates and persists a new subdomain reservation.
@@ -54,6 +66,11 @@ func (s *portalService) CreateReservation(user *db.User, subdomain, domain, ip s
 
 	activeCount := 0
 	for _, res := range list {
+		// Custom domains (Subdomain == "") are tracked against their own, separate quota --
+		// see getUserMaxCustomDomains -- and must not count against the plain subdomain limit.
+		if res.Subdomain == "" {
+			continue
+		}
 		if res.ExpiresAt == nil || res.ExpiresAt.After(time.Now()) {
 			activeCount++
 		}
@@ -200,6 +217,11 @@ func (s *portalService) PromoteReservation(user *db.User, subdomain, domain, ip 
 
 	activeCount := 0
 	for _, res := range list {
+		// Custom domains are tracked against their own, separate quota (see
+		// getUserMaxCustomDomains) and must not count against the plain subdomain limit.
+		if res.Subdomain == "" {
+			continue
+		}
 		if res.ExpiresAt == nil || res.ExpiresAt.After(time.Now()) {
 			activeCount++
 		}
@@ -407,6 +429,24 @@ func (s *portalService) getUserMaxReservations(u *db.User) int {
 		return *s.cfg.OwnerMaxReservations
 	}
 	return s.cfg.DefaultMaxReservations
+}
+
+// getUserMaxCustomDomains helper method matching the existing one in api.go. Custom domains are
+// a separate, smaller quota from plain subdomain reservations -- see the comment on
+// config.ServerConfig.DefaultMaxCustomDomains for why.
+func (s *portalService) getUserMaxCustomDomains(u *db.User) int {
+	if s.cfg.RoleSettings != nil {
+		if rs, ok := s.cfg.RoleSettings[u.Role]; ok && rs.MaxCustomDomains != nil {
+			return *rs.MaxCustomDomains
+		}
+	}
+	if u.Role == "admin" && s.cfg.AdminMaxCustomDomains != nil {
+		return *s.cfg.AdminMaxCustomDomains
+	}
+	if u.Role == "owner" && s.cfg.OwnerMaxCustomDomains != nil {
+		return *s.cfg.OwnerMaxCustomDomains
+	}
+	return s.cfg.DefaultMaxCustomDomains
 }
 
 // getUserSubdomainExpiry helper method

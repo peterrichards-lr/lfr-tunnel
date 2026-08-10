@@ -936,6 +936,41 @@ func (s *Server) getUserMaxReservations(user *db.User) int {
 	return s.cfg.DefaultMaxReservations
 }
 
+// getUserMaxCustomDomains resolves the maximum custom-domain limit for a given user, mirroring
+// getUserMaxReservations' resolution order above. This is a distinct, smaller quota from
+// getUserMaxReservations -- a custom domain (its own Let's Encrypt cert, its own nginx vhost,
+// ongoing Certbot renewal) costs meaningfully more to provision than a subdomain on the shared
+// wildcard domain, so the two are tracked as separate counters (#1004): a user reserving one
+// custom domain and several plain subdomains shouldn't have the custom domain eat into the same
+// pool as the cheaper resource.
+func (s *Server) getUserMaxCustomDomains(user *db.User) int {
+	if user.MaxCustomDomains != nil {
+		return *user.MaxCustomDomains
+	}
+
+	if s.cfg.RoleSettings != nil {
+		if setting, ok := s.cfg.RoleSettings[user.Role]; ok {
+			if setting.MaxCustomDomains != nil {
+				return *setting.MaxCustomDomains
+			}
+		}
+	}
+
+	if user.Role == "admin" {
+		if s.cfg.AdminMaxCustomDomains != nil {
+			return *s.cfg.AdminMaxCustomDomains
+		}
+		return 1
+	}
+	if user.Role == "owner" {
+		if s.cfg.OwnerMaxCustomDomains != nil {
+			return *s.cfg.OwnerMaxCustomDomains
+		}
+		return -1 // Default infinite for owner!
+	}
+	return s.cfg.DefaultMaxCustomDomains
+}
+
 // getUserSubdomainExpiry computes the default expiry date for a subdomain reservation.
 // Returns nil if the reservation should be permanent (no expiration).
 func (s *Server) getUserSubdomainExpiry(user *db.User) *time.Time {
@@ -969,16 +1004,18 @@ func (s *Server) handleListReservations(w http.ResponseWriter, r *http.Request) 
 		return
 	}
 
-	list, limit, usedCount, err := s.portalService.ListReservations(user)
+	list, limit, usedCount, customDomainLimit, customDomainUsedCount, err := s.portalService.ListReservations(user)
 	if err != nil {
 		respondWithError(w, err)
 		return
 	}
 
 	respondJSON(w, http.StatusOK, map[string]interface{}{
-		"reservations": list,
-		"limit":        limit,
-		"used":         usedCount,
+		"reservations":        list,
+		"limit":               limit,
+		"used":                usedCount,
+		"custom_domain_limit": customDomainLimit,
+		"custom_domain_used":  customDomainUsedCount,
 	})
 }
 

@@ -79,6 +79,7 @@ type User struct {
 	SubdomainStyle     string     `json:"subdomain_style"`
 	RateLimit          int        `json:"rate_limit"`
 	MaxReservations    *int       `json:"max_reservations,omitempty"`
+	MaxCustomDomains   *int       `json:"max_custom_domains,omitempty"`
 	MaxTunnels         *int       `json:"max_tunnels,omitempty"`
 	OnboardingStatus   string     `json:"onboarding_status"`
 	OnboardingLastStep string     `json:"onboarding_last_step"`

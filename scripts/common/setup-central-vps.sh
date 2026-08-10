@@ -126,7 +126,29 @@ server {
     listen 80;
     listen [::]:80;
     server_name $DOMAIN *.$DOMAIN;
-    return 301 https://\$host\$request_uri;
+
+    # Neither of these server blocks has an explicit server_name for a vanity/custom
+    # domain (e.g. dev.solaramoto.com) added later via lfr-vanity-hook.sh -- until that
+    # domain's own conf.d/*.conf vhost exists and nginx has reloaded, requests for it fall
+    # through to whichever server block nginx treats as the implicit default for this
+    # listen socket, which is this one. Without this location, that meant ACME's own
+    # HTTP-01 validation request (and any real visitor hitting the domain during that same
+    # window) got redirected to HTTPS and then proxied straight through to the Go backend
+    # and on into the WS tunnel to whichever client holds that lease -- surfacing as a 502
+    # in the CLIENT's own request log, since nothing local is listening on that path
+    # (#979). Serving ACME challenges here directly, from the same shared webroot
+    # lfr-vanity-hook.sh's own per-domain vhosts use, closes that window regardless of
+    # whether a domain-specific vhost has been created yet. Harmless 404s if the vanity
+    # hook is never configured -- /var/www/lfr-tunnel-vanity not existing isn't an nginx
+    # config error, just an empty webroot.
+    location /.well-known/acme-challenge/ {
+        root /var/www/lfr-tunnel-vanity;
+        try_files \$uri =404;
+    }
+
+    location / {
+        return 301 https://\$host\$request_uri;
+    }
 }
 
 # Control plane / portal
@@ -139,6 +161,16 @@ server {
     ssl_certificate_key /etc/letsencrypt/live/$DOMAIN/privkey.pem;
     include /etc/letsencrypt/options-ssl-nginx.conf;
     ssl_dhparam /etc/letsencrypt/ssl-dhparams.pem;
+
+    # Same rationale as the port-80 block above -- a vanity domain's own HTTPS vhost
+    # doesn't exist until lfr-vanity-hook.sh has actually issued its certificate, and
+    # until then this is the implicit default for a Host header nothing else matches. If
+    # the HTTP-01 validator (or a real visitor) reaches this over HTTPS having already
+    # been redirected from port 80, this stops the same fall-through into the tunnel (#979).
+    location /.well-known/acme-challenge/ {
+        root /var/www/lfr-tunnel-vanity;
+        try_files \$uri =404;
+    }
 
     location / {
         proxy_pass http://127.0.0.1:$PORT;

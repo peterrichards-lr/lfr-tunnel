@@ -14,6 +14,7 @@ import AdminExtensions from './pages/AdminExtensions';
 import AdminEdgeHealth from './pages/AdminEdgeHealth';
 import AdminMagicLinks from './pages/AdminMagicLinks';
 import AdminTelemetry from './pages/AdminTelemetry';
+import AdminVanityDomainStatus from './pages/AdminVanityDomainStatus';
 import AccountSettings from './pages/AccountSettings';
 import { SettingsProvider } from './contexts/SettingsContext';
 import { I18nProvider } from './contexts/I18nContext';
@@ -35,6 +36,7 @@ function App() {
                 
                 <Route element={<AdminRoute />}>
                   <Route path="/admin/subdomains" element={<AdminSubdomains />} />
+                  <Route path="/admin/vanity-domain-status" element={<AdminVanityDomainStatus />} />
                   <Route path="/admin/extensions" element={<AdminExtensions />} />
                   <Route path="/admin/users" element={<AdminUsers />} />
                   <Route path="/admin/analytics" element={<AdminAnalytics />} />

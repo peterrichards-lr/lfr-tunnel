@@ -1026,6 +1026,68 @@ func (s *Server) handleAdminListVanityDomainStatus(w http.ResponseWriter, r *htt
 	respondJSON(w, http.StatusOK, statuses)
 }
 
+// handleAdminRetryVanityDomain re-runs the "add" hook for a domain, most useful after a
+// failed stage: runVanityDomainHook's own StartVanityDomainAttempt call resets every stage
+// timestamp for a fresh attempt, so this is safe to call on a domain in any state, not just
+// a failed one. Runs in the background like every other call site -- the hook can take up
+// to 2 minutes (nginx reload propagation + Certbot), so the response here only confirms the
+// retry was queued, not that it succeeded; watch the status update via polling as usual.
+func (s *Server) handleAdminRetryVanityDomain(w http.ResponseWriter, r *http.Request, actor string) {
+	if s.db == nil {
+		http.Error(w, `{"error":"Database not configured"}`, http.StatusNotImplemented)
+		return
+	}
+	fullHost := strings.TrimSuffix(strings.TrimPrefix(r.URL.Path, "/api/admin/vanity-domain-status/"), "/retry")
+	if fullHost == "" {
+		http.Error(w, `{"error":"Missing domain"}`, http.StatusBadRequest)
+		return
+	}
+
+	status, err := s.db.GetVanityDomainStatus(fullHost)
+	if err != nil {
+		http.Error(w, `{"error":"Failed to look up vanity domain status"}`, http.StatusInternalServerError)
+		return
+	}
+	if status == nil {
+		http.Error(w, `{"error":"No tracked status for this domain -- it will be created on the next real add attempt"}`, http.StatusNotFound)
+		return
+	}
+
+	go s.runVanityDomainHook("add", fullHost, status.UserID)
+	s.writeAudit(actor, "vanity_domain.retry", "vanity_domain", fullHost, "", r)
+	respondJSON(w, http.StatusOK, map[string]string{"status": "retry queued"})
+}
+
+// handleAdminRemoveVanityDomain tears down a domain's nginx config and certificate (the same
+// "remove" path a normal lease cleanup triggers) and clears its tracked status -- for a
+// stuck or orphaned entry an admin wants to clear without waiting for the owning lease to
+// naturally expire. Runs in the background like handleAdminRetryVanityDomain above.
+func (s *Server) handleAdminRemoveVanityDomain(w http.ResponseWriter, r *http.Request, actor string) {
+	if s.db == nil {
+		http.Error(w, `{"error":"Database not configured"}`, http.StatusNotImplemented)
+		return
+	}
+	fullHost := strings.TrimSuffix(strings.TrimPrefix(r.URL.Path, "/api/admin/vanity-domain-status/"), "/remove")
+	if fullHost == "" {
+		http.Error(w, `{"error":"Missing domain"}`, http.StatusBadRequest)
+		return
+	}
+
+	status, err := s.db.GetVanityDomainStatus(fullHost)
+	if err != nil {
+		http.Error(w, `{"error":"Failed to look up vanity domain status"}`, http.StatusInternalServerError)
+		return
+	}
+	if status == nil {
+		http.Error(w, `{"error":"No tracked status for this domain"}`, http.StatusNotFound)
+		return
+	}
+
+	go s.runVanityDomainHook("remove", fullHost, status.UserID)
+	s.writeAudit(actor, "vanity_domain.removed", "vanity_domain", fullHost, "", r)
+	respondJSON(w, http.StatusOK, map[string]string{"status": "removal queued"})
+}
+
 // handleCreateReservation reserves a subdomain for 7 days.
 func (s *Server) handleCreateReservation(w http.ResponseWriter, r *http.Request) {
 	user, err := s.getCurrentUser(r)

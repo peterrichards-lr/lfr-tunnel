@@ -56,6 +56,9 @@ export default function Sidebar({ user, isOpen, onClose }: SidebarProps) {
                 <NavLink to="/admin/subdomains" onClick={onClose} className={({ isActive }) => `nav-item ${isActive ? 'active' : ''}`}>
                   {t('sidebar_reservations', 'Subdomains')}
                 </NavLink>
+                <NavLink to="/admin/vanity-domain-status" onClick={onClose} className={({ isActive }) => `nav-item ${isActive ? 'active' : ''}`}>
+                  {t('sidebar_vanity_status', 'Custom Domains')}
+                </NavLink>
                 <NavLink to="/admin/extensions" onClick={onClose} className={({ isActive }) => `nav-item ${isActive ? 'active' : ''}`}>
                   {t('extensions', 'Extensions')}
                 </NavLink>

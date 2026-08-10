@@ -3,6 +3,7 @@ import axios from 'axios';
 import { useSettings } from '../contexts/SettingsContext';
 import { useI18n } from '../contexts/I18nContext';
 import Skeleton from './Skeleton';
+import StageIcon from './VanityStageIcon';
 
 interface VanityDomainStatus {
   full_host: string;
@@ -14,41 +15,6 @@ interface VanityDomainStatus {
   failed_stage?: string;
   error_message?: string;
   updated_at: string;
-}
-
-type StageState = 'done' | 'open' | 'failed';
-
-// StageIcon renders the circular, white-glyph status icon spec from #964/#968:
-// green + tick = timestamp set (passed), grey + dash = timestamp null (not yet reached),
-// red + cross = failed at this stage. Hovering a passed stage shows its exact date/time;
-// hovering a failed one shows the recorded error.
-function StageIcon({ state, title }: { state: StageState; title: string }) {
-  const style: Record<StageState, { background: string; glyph: string }> = {
-    done: { background: 'var(--success)', glyph: '✓' },
-    open: { background: 'var(--text-muted)', glyph: '–' },
-    failed: { background: 'var(--danger)', glyph: '✕' },
-  };
-  const { background, glyph } = style[state];
-  return (
-    <span
-      title={title}
-      style={{
-        display: 'inline-flex',
-        alignItems: 'center',
-        justifyContent: 'center',
-        width: 22,
-        height: 22,
-        borderRadius: '50%',
-        background,
-        color: '#fff',
-        fontSize: 12,
-        fontWeight: 700,
-        lineHeight: 1,
-      }}
-    >
-      {glyph}
-    </span>
-  );
 }
 
 export default function VanityDomainStatusPanel() {

@@ -116,6 +116,59 @@ func TestInterceptorEngine_MaintenanceMode(t *testing.T) {
 	}
 }
 
+// TestInterceptorEngine_DialFailurePage verifies the fix for #980: a dial failure (nothing
+// listening on the local target port) used to fall through to httputil.ReverseProxy's stock
+// error handling -- a bare 502 with no body. Now serves a styled page instead, naming the
+// unreachable target so the developer running the client has something actionable.
+func TestInterceptorEngine_DialFailurePage(t *testing.T) {
+	// Grab a port and immediately release it, so it's a real "nothing listening" refusal
+	// rather than a made-up number that might collide with something else.
+	l, err := net.Listen("tcp", "127.0.0.1:0")
+	if err != nil {
+		t.Fatalf("failed to reserve a port: %v", err)
+	}
+	targetPort := l.Addr().(*net.TCPAddr).Port
+	if err := l.Close(); err != nil {
+		t.Fatalf("failed to release the reserved port: %v", err)
+	}
+
+	engine := NewInterceptorEngine("", nil)
+	interceptPort, err := engine.InterceptPort(targetPort)
+	if err != nil {
+		t.Fatalf("Failed to intercept port: %v", err)
+	}
+
+	proxyURL := fmt.Sprintf("http://127.0.0.1:%d", interceptPort)
+	resp, err := http.Get(proxyURL)
+	if err != nil {
+		t.Fatalf("Failed to request proxy: %v", err)
+	}
+	defer resp.Body.Close() //nolint:errcheck
+
+	if resp.StatusCode != http.StatusBadGateway {
+		t.Errorf("Expected 502 on dial failure, got %d", resp.StatusCode)
+	}
+
+	body, _ := io.ReadAll(resp.Body)
+	if !bytes.Contains(body, []byte("Local Application Unreachable")) {
+		t.Errorf("Expected the styled dial-failure page, got: %s", body)
+	}
+	wantTarget := fmt.Sprintf("127.0.0.1:%d", targetPort)
+	if !bytes.Contains(body, []byte(wantTarget)) {
+		t.Errorf("Expected the page to name the unreachable target %q, got: %s", wantTarget, body)
+	}
+
+	// interceptorTransport.RoundTrip should still have recorded the failed request.
+	engine.mu.RLock()
+	defer engine.mu.RUnlock()
+	if len(engine.History) != 1 {
+		t.Fatalf("Expected 1 history record, got %d", len(engine.History))
+	}
+	if engine.History[0].Status != http.StatusBadGateway {
+		t.Errorf("Expected status 502 in history, got %d", engine.History[0].Status)
+	}
+}
+
 func TestInterceptorEngine_CustomTargetHost(t *testing.T) {
 	// 1. Setup Dummy Target Server
 	var receivedHost string

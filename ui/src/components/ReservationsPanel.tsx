@@ -28,6 +28,8 @@ export default function ReservationsPanel() {
   const { formatDate } = useSettings();
   const [limit, setLimit] = useState(0);
   const [used, setUsed] = useState(0);
+  const [customDomainLimit, setCustomDomainLimit] = useState(0);
+  const [customDomainUsed, setCustomDomainUsed] = useState(0);
   const [loading, setLoading] = useState(true);
 
   const [domains, setDomains] = useState<string[]>([]);
@@ -48,6 +50,8 @@ export default function ReservationsPanel() {
       setReservations(res.data.reservations || []);
       setLimit(res.data.limit || 0);
       setUsed(res.data.used || 0);
+      setCustomDomainLimit(res.data.custom_domain_limit || 0);
+      setCustomDomainUsed(res.data.custom_domain_used || 0);
     } catch {
       showToast(t('error_fetch_reservations', 'Failed to load reservations'), 'error');
     } finally {
@@ -264,6 +268,8 @@ export default function ReservationsPanel() {
 
   const percent = limit > 0 ? (used / limit) * 100 : 0;
   const isAtLimit = limit >= 0 && used >= limit;
+  const customDomainPercent = customDomainLimit > 0 ? (customDomainUsed / customDomainLimit) * 100 : 0;
+  const isAtCustomDomainLimit = customDomainLimit >= 0 && customDomainUsed >= customDomainLimit;
 
   return (
     <>
@@ -283,6 +289,24 @@ export default function ReservationsPanel() {
           {isAtLimit && limit >= 0 && (
             <div className="mt-sm text-xs text-warning">
               ⚠️ {t('reservation_limit_reached', 'You have reached your reservation limit. Release a subdomain to register a new one.')}
+            </div>
+          )}
+        </div>
+
+        <div className="mb-xl">
+          <div className="flex justify-between text-sm mb-xs">
+            <span>{t('custom_domain_quota', 'Custom Domain Quota')}</span>
+            <span>{customDomainLimit < 0 ? `${customDomainUsed} / ∞` : `${customDomainUsed} / ${customDomainLimit}`} {t('reserved', 'reserved')}</span>
+          </div>
+          <div style={{ height: '8px', background: 'rgba(255,255,255,0.1)', borderRadius: '4px', overflow: 'hidden' }}>
+            <div style={{ height: '100%', width: `${Math.min(customDomainPercent, 100)}%`, background: isAtCustomDomainLimit ? 'var(--danger)' : 'var(--primary)', transition: 'width 0.3s' }}></div>
+          </div>
+          <p className="text-muted text-xs mt-xs mb-0">
+            {t('custom_domain_quota_hint', 'Custom domains (via CNAME) are tracked separately from subdomain reservations above -- connect your client with -domain to reserve one, up to this limit.')}
+          </p>
+          {isAtCustomDomainLimit && customDomainLimit >= 0 && (
+            <div className="mt-sm text-xs text-warning">
+              ⚠️ {t('custom_domain_limit_reached', 'You have reached your custom domain limit. Release one to register a new one.')}
             </div>
           )}
         </div>

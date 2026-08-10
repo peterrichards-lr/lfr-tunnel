@@ -1277,17 +1277,23 @@ func (s *Server) handleRegister(w http.ResponseWriter, r *http.Request) {
 				}
 			}
 
-			// If we have domains to auto-reserve, verify quota limit first
+			// If we have domains to auto-reserve, verify quota limit first. Custom domains
+			// are tracked against their own, smaller getUserMaxCustomDomains quota, not the
+			// plain subdomain one -- see the config.ServerConfig.DefaultMaxCustomDomains
+			// comment (#1004).
 			if len(domainsToReserve) > 0 {
-				limit := s.cfg.DefaultMaxReservations
+				limit := s.cfg.DefaultMaxCustomDomains
 				if userRec != nil {
-					limit = s.getUserMaxReservations(userRec)
+					limit = s.getUserMaxCustomDomains(userRec)
 				}
 
 				list, err := s.db.ListSubdomainReservationsByUserID(user.ID)
 				activeCount := 0
 				if err == nil {
 					for _, res := range list {
+						if res.Subdomain != "" {
+							continue
+						}
 						if res.ExpiresAt == nil || res.ExpiresAt.After(time.Now()) {
 							activeCount++
 						}
@@ -1296,7 +1302,7 @@ func (s *Server) handleRegister(w http.ResponseWriter, r *http.Request) {
 
 				needed := len(domainsToReserve)
 				if limit >= 0 && activeCount+needed > limit {
-					s.respondRegisterResponse(w, http.StatusForbidden, r, RegisterResponse{Status: "error", Error: "Domain reservation quota limit reached"})
+					s.respondRegisterResponse(w, http.StatusForbidden, r, RegisterResponse{Status: "error", Error: "Custom domain reservation quota limit reached"})
 					return
 				}
 
@@ -1407,7 +1413,9 @@ func (s *Server) handleRegister(w http.ResponseWriter, r *http.Request) {
 					}
 				}
 
-				// If we have domains to auto-reserve, verify quota limit first
+				// If we have domains to auto-reserve, verify quota limit first. Custom domain
+				// reservations (Subdomain == "") are tracked against their own, separate
+				// quota (see the custom-domain branch above) and must not count here.
 				if len(domainsToReserve) > 0 {
 					limit := s.cfg.DefaultMaxReservations
 					if userRec != nil {
@@ -1418,6 +1426,9 @@ func (s *Server) handleRegister(w http.ResponseWriter, r *http.Request) {
 					activeCount := 0
 					if err == nil {
 						for _, res := range list {
+							if res.Subdomain == "" {
+								continue
+							}
 							if res.ExpiresAt == nil || res.ExpiresAt.After(time.Now()) {
 								activeCount++
 							}
@@ -3792,13 +3803,14 @@ func (s *Server) handleAdminPatchUser(w http.ResponseWriter, r *http.Request, ac
 	}
 
 	var req struct {
-		Role            *string `json:"role"`
-		Status          *string `json:"status"`
-		ResetMFA        *bool   `json:"reset_mfa"`
-		RateLimit       *int    `json:"rate_limit"`
-		MaxReservations *int    `json:"max_reservations"`
-		MaxTunnels      *int    `json:"max_tunnels"`
-		PreferredDomain *string `json:"preferred_domain"`
+		Role             *string `json:"role"`
+		Status           *string `json:"status"`
+		ResetMFA         *bool   `json:"reset_mfa"`
+		RateLimit        *int    `json:"rate_limit"`
+		MaxReservations  *int    `json:"max_reservations"`
+		MaxCustomDomains *int    `json:"max_custom_domains"`
+		MaxTunnels       *int    `json:"max_tunnels"`
+		PreferredDomain  *string `json:"preferred_domain"`
 	}
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 		http.Error(w, `{"error":"Invalid request body"}`, http.StatusBadRequest)
@@ -3875,6 +3887,12 @@ func (s *Server) handleAdminPatchUser(w http.ResponseWriter, r *http.Request, ac
 		details["max_reservations_before"] = user.MaxReservations
 		details["max_reservations_after"] = *req.MaxReservations
 		user.MaxReservations = req.MaxReservations
+	}
+
+	if req.MaxCustomDomains != nil {
+		details["max_custom_domains_before"] = user.MaxCustomDomains
+		details["max_custom_domains_after"] = *req.MaxCustomDomains
+		user.MaxCustomDomains = req.MaxCustomDomains
 	}
 
 	if req.MaxTunnels != nil {
@@ -5125,6 +5143,11 @@ func (s *Server) handleEdgeRegister(w http.ResponseWriter, r *http.Request) {
 				activeCount := 0
 				if err == nil {
 					for _, res := range list {
+						// Custom domain reservations (Subdomain == "") are tracked against
+						// their own, separate quota and must not count here.
+						if res.Subdomain == "" {
+							continue
+						}
 						if res.ExpiresAt == nil || res.ExpiresAt.After(time.Now()) {
 							activeCount++
 						}

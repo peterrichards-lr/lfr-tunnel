@@ -144,10 +144,12 @@ EOF
 
         # 3. Request Certbot certificate
         echo "Requesting Let's Encrypt certificate for $DOMAIN..."
+        cert_obtained=false
         if certbot certonly --webroot -w "$WEBROOT_PATH" -d "$DOMAIN" \
             --config-dir "$CERTBOT_DIR" --work-dir "$CERTBOT_DIR/work" --logs-dir "$CERTBOT_DIR/logs" \
             --non-interactive --agree-tos --email "$ACME_EMAIL" --keep-until-expiring; then
             echo "Certificate obtained successfully."
+            cert_obtained=true
         else
             echo "Certbot failed, trying with fallback..."
             if certbot certonly --webroot -w "$WEBROOT_PATH" -d "$DOMAIN" \
@@ -157,7 +159,25 @@ EOF
                 # this exact text to know a certificate was actually issued, regardless of
                 # which of the two certbot invocations got there.
                 echo "Certificate obtained successfully."
+                cert_obtained=true
             fi
+        fi
+
+        # If BOTH attempts failed, stop here (#1006) rather than falling through to step 4: writing
+        # the SSL server block below unconditionally references $CERTBOT_DIR/live/$DOMAIN's
+        # cert files, which don't exist in this case. That produces an nginx config that fails
+        # `nginx -t` (confirmed live while debugging dev.solaramoto.com -- a broken conf.d file
+        # from exactly this situation blocked ALL subsequent nginx reloads, not just this
+        # domain's, until it was manually removed) and, without an exit here, this script would
+        # still print "Vanity domain setup completed" and exit 0 -- runVanityDomainHook
+        # (server_domain.go) takes that as unqualified success and marks the domain "live" with
+        # no certificate. Exiting non-zero here instead leaves the HTTP-only bootstrap config
+        # from step 2 in place (valid on its own, no cert reference) and lets
+        # runVanityDomainHook's existing failure handling correctly attribute this to the
+        # cert_issued stage and notify the user, exactly as if certbot itself had errored.
+        if [[ "$cert_obtained" != true ]]; then
+            echo "Error: Certbot failed to obtain a certificate for $DOMAIN after both attempts."
+            exit 1
         fi
 
         # 4. Write full SSL configuration

@@ -112,6 +112,18 @@ func render(engine *InterceptorEngine, publicURLs []string, systemLogs []string)
 	}
 	engine.mu.RUnlock()
 
+	// eol clears from the cursor to the end of the current line before the newline that
+	// follows it. Every line below whose content can vary in length between renders needs
+	// this -- moving the cursor to home (\033[H) and overwriting line-by-line, as this
+	// whole function does on every redraw, only overwrites however many characters the new
+	// content actually has; anything past that from a *longer* previous frame (a longer
+	// status text, a longer log line, a bigger byte-count string, etc.) is left on screen
+	// untouched, since a bare newline only moves the cursor and never erases anything.
+	// Reported as garbled/duplicated-looking text mid-line (e.g. "200 OK (17ms)ied (3ms)"
+	// -- the tail end of a longer previous line bleeding through a shorter new one) and as
+	// "4.4 MBKB" on the byte counters.
+	const eol = "\033[K"
+
 	// Title Banner
 	fmt.Print("\033[H")   // Cursor to home
 	fmt.Print("\033[36m") // Cyan
@@ -126,7 +138,7 @@ func render(engine *InterceptorEngine, publicURLs []string, systemLogs []string)
 	case "connecting":
 		statusLabel = "\033[33mCONNECTING\033[36m"
 	}
-	fmt.Printf("[%s]  \n", statusLabel)
+	fmt.Printf("[%s]  %s\n", statusLabel, eol)
 	fmt.Println("================================================================================")
 	fmt.Print("\033[0m") // Reset
 
@@ -135,26 +147,26 @@ func render(engine *InterceptorEngine, publicURLs []string, systemLogs []string)
 	if subdomainAss != "" {
 		sub = subdomainAss
 	}
-	fmt.Printf("  Subdomain:  \033[1;37m%s\033[0m\n", sub)
-	fmt.Printf("  Server:     \033[90m%s\033[0m\n", strings.Join(publicURLs, ", "))
-	fmt.Printf("  Local:      \033[90m127.0.0.1:%d (Primary)\033[0m\n", destPort)
-	fmt.Printf("  Inspector:  \033[34mhttp://127.0.0.1:%d\033[0m\n", 4040)
+	fmt.Printf("  Subdomain:  \033[1;37m%s\033[0m%s\n", sub, eol)
+	fmt.Printf("  Server:     \033[90m%s\033[0m%s\n", strings.Join(publicURLs, ", "), eol)
+	fmt.Printf("  Local:      \033[90m127.0.0.1:%d (Primary)\033[0m%s\n", destPort, eol)
+	fmt.Printf("  Inspector:  \033[34mhttp://127.0.0.1:%d\033[0m%s\n", 4040, eol)
 	fmt.Println("--------------------------------------------------------------------------------")
 
 	// Metrics Grid
-	fmt.Printf("  Uptime:       %-12s | Active Conns:  %-12d\n", uptime, activeConns)
-	fmt.Printf("  Total Reqs:   %-12d | RTT Latency:   %d ms (Avg: %s)\n", reqTotal, latency, rttAvg)
-	fmt.Printf("  Bytes In:     %-12s | Bytes Out:     %s\n", formatBytes(bytesIn), formatBytes(bytesOut))
+	fmt.Printf("  Uptime:       %-12s | Active Conns:  %-12d%s\n", uptime, activeConns, eol)
+	fmt.Printf("  Total Reqs:   %-12d | RTT Latency:   %d ms (Avg: %s)%s\n", reqTotal, latency, rttAvg, eol)
+	fmt.Printf("  Bytes In:     %-12s | Bytes Out:     %s%s\n", formatBytes(bytesIn), formatBytes(bytesOut), eol)
 	fmt.Println("================================================================================")
 
 	// Scrolling Request History
 	fmt.Println("  RECENT HTTP REQUESTS (SCROLLING):")
 	fmt.Print("\033[90m") // Dark Gray
 	if len(history) == 0 {
-		fmt.Println("  (No traffic captured yet. Make requests to your public domain to view.)")
+		fmt.Printf("  (No traffic captured yet. Make requests to your public domain to view.)%s\n", eol)
 		// Fill space to prevent jumpy screen sizes
 		for i := 0; i < 7; i++ {
-			fmt.Println()
+			fmt.Println(eol)
 		}
 	} else {
 		// Limit to last 8 requests
@@ -177,12 +189,12 @@ func render(engine *InterceptorEngine, publicURLs []string, systemLogs []string)
 				pathStr = pathStr[:pathLimit-3] + "..."
 			}
 
-			fmt.Printf("  [%s] %s %-45s -> %s (%dms)\n", timeStr, methodStr, pathStr, statusStr, rec.DurationMs)
+			fmt.Printf("  [%s] %s %-45s -> %s (%dms)%s\n", timeStr, methodStr, pathStr, statusStr, rec.DurationMs, eol)
 			printed++
 		}
 		// Pad remaining space
 		for i := printed; i < limit; i++ {
-			fmt.Println()
+			fmt.Println(eol)
 		}
 	}
 	fmt.Print("\033[0m") // Reset
@@ -200,14 +212,15 @@ func render(engine *InterceptorEngine, publicURLs []string, systemLogs []string)
 			if len(line) > 78 {
 				line = line[:75] + "..."
 			}
-			fmt.Printf("  * %s\n", line)
+			fmt.Printf("  * %s%s\n", line, eol)
 			printedLogs++
 		}
 	}
 	for i := printedLogs; i < logLimit; i++ {
-		fmt.Println()
+		fmt.Println(eol)
 	}
 	fmt.Print("\033[0m") // Reset
+	fmt.Print(eol)       // Clear any leftover tail on whatever was the terminal's last-drawn line
 }
 
 func formatBytes(b int64) string {

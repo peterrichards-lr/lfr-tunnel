@@ -2,7 +2,9 @@ package client
 
 import (
 	"context"
+	"io"
 	"net/http"
+	"os"
 	"strings"
 	"testing"
 	"time"
@@ -122,4 +124,59 @@ func TestTUI_DashboardLifecycle(t *testing.T) {
 
 	cleanup := StartTUIDashboard(ctx, engine, []string{"https://peter-dev.lfr-demo.se"})
 	cleanup() // Exits screen and restores standard logger output
+}
+
+// TestTUI_RenderClearsEndOfLine verifies the fix for a reported bug: render() redraws by
+// moving the cursor to home and overwriting line-by-line on every tick, but a bare newline
+// never erases anything -- if a line's content is shorter than what a *previous* frame drew
+// at that same row (a shorter status label, a shorter byte-count string, a shorter request
+// path/status, etc.), the old frame's trailing characters stayed on screen, visible as
+// garbled text mid-line (e.g. "200 OK (17ms)ied (3ms)"). Every dynamic line must now emit
+// "\033[K" (erase to end of line) before its newline; this counts occurrences rather than
+// asserting on exact formatting, since the latter would make this test brittle to routine
+// copy changes.
+func TestTUI_RenderClearsEndOfLine(t *testing.T) {
+	engine := NewInterceptorEngine("127.0.0.1", nil)
+	engine.ConnState = "connected"
+	engine.UptimeStart = time.Now()
+	engine.RequestsTotal = 42
+	engine.BytesIn = 1000
+	engine.BytesOut = 2000
+	engine.ActiveConnections = 2
+	engine.AddRecord(&RequestRecord{
+		ID: "test-id", Time: time.Now(), Method: "GET", Path: "/api/users",
+		Status: http.StatusOK, DurationMs: 15,
+	})
+
+	origStdout := os.Stdout
+	r, w, err := os.Pipe()
+	if err != nil {
+		t.Fatalf("failed to create pipe: %v", err)
+	}
+	os.Stdout = w
+
+	done := make(chan struct{})
+	var output string
+	go func() {
+		defer close(done)
+		buf, _ := io.ReadAll(r)
+		output = string(buf)
+	}()
+
+	render(engine, []string{"https://peter-dev.lfr-demo.se"}, []string{"a log line"})
+
+	_ = w.Close() //nolint:errcheck
+	os.Stdout = origStdout
+	<-done
+
+	const eol = "\033[K"
+	count := strings.Count(output, eol)
+	// One per dynamic line printed above (title status, subdomain, server, local, inspector,
+	// uptime/conns, reqs/rtt, bytes, the one request row, plus the padding lines filling the
+	// rest of the 8-row history slot and the 5-row log slot, plus the final trailing clear) --
+	// asserting a lower bound rather than an exact count so this doesn't need updating every
+	// time a cosmetic line is added or removed.
+	if count < 15 {
+		t.Errorf("expected render() output to contain at least 15 end-of-line clears (%q), got %d", eol, count)
+	}
 }

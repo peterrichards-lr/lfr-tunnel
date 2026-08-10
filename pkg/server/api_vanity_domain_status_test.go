@@ -121,3 +121,64 @@ func TestServer_HandleListVanityDomainStatus_Unauthorized(t *testing.T) {
 		t.Errorf("expected 401 Unauthorized, got %d", w.Code)
 	}
 }
+
+// TestServer_HandleAdminRetryVanityDomain verifies the admin retry action queues cleanly
+// for a tracked domain -- the actual hook re-run happens in a background goroutine (covered
+// by runVanityDomainHook's own tests) and writeAudit's own DB write is *also* asynchronous
+// ("run in a goroutine so it doesn't block the HTTP response"), so this only asserts on the
+// synchronous part of the HTTP contract, matching every other admin-action test in this
+// package -- none of them assert on the audit trail for the same reason.
+func TestServer_HandleAdminRetryVanityDomain(t *testing.T) {
+	srv := setupTestServerForAPI(t)
+	defer srv.Stop()
+
+	_ = srv.db.StartVanityDomainAttempt("retry-me.com", "user@example.com")                  //nolint:errcheck
+	_ = srv.db.MarkVanityDomainFailed("retry-me.com", "cert_issued", "Certbot rate limited") //nolint:errcheck
+
+	sessionToken := newAdminSession(t, srv, "admin@example.com")
+	req := adminRequest(http.MethodPost, "http://example.com/api/admin/vanity-domain-status/retry-me.com/retry", nil, sessionToken)
+
+	w := httptest.NewRecorder()
+	srv.handleAdminRetryVanityDomain(w, req, "admin@example.com")
+
+	if w.Code != http.StatusOK {
+		t.Fatalf("expected 200 OK, got %d. Body: %s", w.Code, w.Body.String())
+	}
+}
+
+// TestServer_HandleAdminRetryVanityDomain_NotFound verifies retrying an untracked domain
+// 404s instead of silently queuing a no-op.
+func TestServer_HandleAdminRetryVanityDomain_NotFound(t *testing.T) {
+	srv := setupTestServerForAPI(t)
+	defer srv.Stop()
+
+	sessionToken := newAdminSession(t, srv, "admin@example.com")
+	req := adminRequest(http.MethodPost, "http://example.com/api/admin/vanity-domain-status/never-existed.com/retry", nil, sessionToken)
+
+	w := httptest.NewRecorder()
+	srv.handleAdminRetryVanityDomain(w, req, "admin@example.com")
+
+	if w.Code != http.StatusNotFound {
+		t.Errorf("expected 404 Not Found, got %d", w.Code)
+	}
+}
+
+// TestServer_HandleAdminRemoveVanityDomain verifies the admin remove action queues cleanly,
+// mirroring the retry test above (see its comment for why this doesn't assert on the audit
+// trail, which writeAudit writes asynchronously).
+func TestServer_HandleAdminRemoveVanityDomain(t *testing.T) {
+	srv := setupTestServerForAPI(t)
+	defer srv.Stop()
+
+	_ = srv.db.StartVanityDomainAttempt("remove-me.com", "user@example.com") //nolint:errcheck
+
+	sessionToken := newAdminSession(t, srv, "admin@example.com")
+	req := adminRequest(http.MethodPost, "http://example.com/api/admin/vanity-domain-status/remove-me.com/remove", nil, sessionToken)
+
+	w := httptest.NewRecorder()
+	srv.handleAdminRemoveVanityDomain(w, req, "admin@example.com")
+
+	if w.Code != http.StatusOK {
+		t.Fatalf("expected 200 OK, got %d. Body: %s", w.Code, w.Body.String())
+	}
+}

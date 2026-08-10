@@ -2733,6 +2733,16 @@ func (s *Server) handleAdminEndpoints(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	if r.Method == http.MethodPost && strings.HasPrefix(r.URL.Path, "/api/admin/vanity-domain-status/") && strings.HasSuffix(r.URL.Path, "/retry") {
+		s.handleAdminRetryVanityDomain(w, r, actor)
+		return
+	}
+
+	if r.Method == http.MethodPost && strings.HasPrefix(r.URL.Path, "/api/admin/vanity-domain-status/") && strings.HasSuffix(r.URL.Path, "/remove") {
+		s.handleAdminRemoveVanityDomain(w, r, actor)
+		return
+	}
+
 	if (r.Method == http.MethodPost || r.Method == http.MethodPut) && r.URL.Path == "/api/admin/leases/rate-limit" {
 		s.handleAdminOverrideRateLimit(w, r, actor)
 		return

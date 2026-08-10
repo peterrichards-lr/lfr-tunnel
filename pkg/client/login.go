@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"io"
+	"net"
 	"net/http"
 	"os"
 	"os/exec"
@@ -42,9 +43,22 @@ func RunLogin(serverURL string) error {
 		w.WriteHeader(http.StatusBadRequest)
 	})
 
-	srv := &http.Server{Addr: "127.0.0.1:4444", Handler: mux}
+	// net.Listen synchronously, rather than letting srv.ListenAndServe() bind the socket
+	// inside its own goroutine -- otherwise nothing guarantees the port is actually
+	// listening before this function returns control to the caller and the browser
+	// starts its handoff POST. Normally that bind takes microseconds, well within any
+	// real browser's round-trip time, but it's a genuine (if rare) race either way -- and
+	// it's exactly what made TestRunLogin flaky under CI scheduling pressure: its handoff
+	// POST fired on a fixed timer, occasionally racing ListenAndServe's own goroutine and
+	// hanging the whole test until Go's 10-minute timeout killed it, since the browser
+	// mock and the stdin fallback would both then have nothing to deliver.
+	listener, err := net.Listen("tcp", "127.0.0.1:4444")
+	if err != nil {
+		return fmt.Errorf("failed to start local handoff listener: %w", err)
+	}
+	srv := &http.Server{Handler: mux}
 	go func() {
-		_ = srv.ListenAndServe() //nolint:errcheck
+		_ = srv.Serve(listener) //nolint:errcheck
 	}()
 
 	portalURL := strings.Replace(serverURL, "tunnel.", "portal.", 1)

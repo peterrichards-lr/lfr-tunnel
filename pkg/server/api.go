@@ -982,6 +982,50 @@ func (s *Server) handleListReservations(w http.ResponseWriter, r *http.Request) 
 	})
 }
 
+// handleListVanityDomainStatus returns the current user's own vanity/custom domain
+// provisioning status (see #964/#967) -- one entry per domain they've attempted to add,
+// showing which stages (nginx config written, certificate issued, live) have been reached
+// and, if it failed, which stage and why. Read-only; the write side is entirely handled by
+// runVanityDomainHook as the hook actually runs (server_domain.go).
+func (s *Server) handleListVanityDomainStatus(w http.ResponseWriter, r *http.Request) {
+	user, err := s.getCurrentUser(r)
+	if err != nil {
+		http.Error(w, `{"error":"Unauthorized"}`, http.StatusUnauthorized)
+		return
+	}
+	if s.db == nil {
+		http.Error(w, `{"error":"Database not configured"}`, http.StatusNotImplemented)
+		return
+	}
+
+	statuses, err := s.db.ListVanityDomainStatusForUser(user.ID)
+	if err != nil {
+		http.Error(w, `{"error":"Failed to retrieve vanity domain status"}`, http.StatusInternalServerError)
+		return
+	}
+
+	respondJSON(w, http.StatusOK, statuses)
+}
+
+// handleAdminListVanityDomainStatus is the admin-facing variant of
+// handleListVanityDomainStatus, returning every domain's provisioning status regardless of
+// which user requested it -- useful for troubleshooting on behalf of a user without needing
+// them to share their own screen.
+func (s *Server) handleAdminListVanityDomainStatus(w http.ResponseWriter, r *http.Request, actor string) {
+	if s.db == nil {
+		http.Error(w, `{"error":"Database not configured"}`, http.StatusNotImplemented)
+		return
+	}
+
+	statuses, err := s.db.ListAllVanityDomainStatus()
+	if err != nil {
+		http.Error(w, `{"error":"Failed to retrieve vanity domain status"}`, http.StatusInternalServerError)
+		return
+	}
+
+	respondJSON(w, http.StatusOK, statuses)
+}
+
 // handleCreateReservation reserves a subdomain for 7 days.
 func (s *Server) handleCreateReservation(w http.ResponseWriter, r *http.Request) {
 	user, err := s.getCurrentUser(r)

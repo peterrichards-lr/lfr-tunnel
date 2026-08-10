@@ -888,6 +888,11 @@ func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 
+		if r.Method == http.MethodGet && r.URL.Path == "/api/portal/vanity-domain-status" {
+			s.handleListVanityDomainStatus(w, r)
+			return
+		}
+
 		if r.Method == http.MethodPost && r.URL.Path == "/api/portal/reservations" {
 			s.handleCreateReservation(w, r)
 			return
@@ -2709,6 +2714,11 @@ func (s *Server) handleAdminEndpoints(w http.ResponseWriter, r *http.Request) {
 
 	if r.Method == http.MethodGet && r.URL.Path == "/api/admin/subdomains" {
 		s.handleAdminListSubdomains(w, r, actor)
+		return
+	}
+
+	if r.Method == http.MethodGet && r.URL.Path == "/api/admin/vanity-domain-status" {
+		s.handleAdminListVanityDomainStatus(w, r, actor)
 		return
 	}
 

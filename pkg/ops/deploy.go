@@ -10,23 +10,26 @@ func DeployCommand(args []string) {
 	if IsHelpRequest(args) {
 		fmt.Println("Usage: lfr-tunnel-ops deploy [-i identity_file]")
 		fmt.Println("\nBuilds lfr-tunneld for linux/amd64, uploads it plus static assets/i18n/")
-		fmt.Println("templates/maintenance scripts to VPS_USER@VPS_IP (defaults: peterrichards@")
-		fmt.Println("82.39.133.178), then over SSH installs the binary, enables maintenance mode,")
-		fmt.Println("restarts lfr-tunneld, and disables maintenance mode. This is a real, live")
-		fmt.Println("deployment with no dry-run mode -- there is no way to preview its effect.")
+		fmt.Println("templates/maintenance scripts to the central VPS, then over SSH installs the")
+		fmt.Println("binary, enables maintenance mode, restarts lfr-tunneld, and disables")
+		fmt.Println("maintenance mode. The target is resolved from (highest precedence first) the")
+		fmt.Println("-i flag / VPS_USER,VPS_IP,LFT_IDENTITY_FILE env vars / lfr-tunnel-ops.yaml --")
+		fmt.Println("see lfr-tunnel-ops.yaml.example. Real, live deployment, no dry-run mode.")
 		return
 	}
 
 	fmt.Println("=== Starting VPS Deployment ===")
 
-	identityFile := "~/.ssh/id_vm6_networks_vps"
+	flagIdentity := ""
 	if len(args) > 0 && args[0] == "-i" && len(args) > 1 {
-		identityFile = args[1]
+		flagIdentity = args[1]
 	}
 
-	vpsUser := GetEnvOrDefault("VPS_USER", "peterrichards")
-	vpsIP := GetEnvOrDefault("VPS_IP", "82.39.133.178")
-	sshTarget := fmt.Sprintf("%s@%s", vpsUser, vpsIP)
+	target, err := ResolveDeployTarget("", "", flagIdentity)
+	CheckFatal(err, "Failed to resolve deployment target")
+	identityFile := target.IdentityFile
+	vpsUser := target.User
+	sshTarget := fmt.Sprintf("%s@%s", target.User, target.Host)
 
 	version := os.Getenv("VERSION")
 	if version == "" {
@@ -35,7 +38,7 @@ func DeployCommand(args []string) {
 
 	fmt.Printf("Building Linux binary (version: %s)...\n", version)
 	ldflags := fmt.Sprintf("-s -w -X lfr-tunnel/pkg/config.Version=%s", version)
-	err := RunCommandWithEnv([]string{"GOOS=linux", "GOARCH=amd64"}, "go", "build", "-ldflags", ldflags, "-trimpath", "-o", "bin/lfr-tunneld-linux", "./cmd/lfr-tunneld")
+	err = RunCommandWithEnv([]string{"GOOS=linux", "GOARCH=amd64"}, "go", "build", "-ldflags", ldflags, "-trimpath", "-o", "bin/lfr-tunneld-linux", "./cmd/lfr-tunneld")
 	CheckFatal(err, "Failed to build lfr-tunneld for Linux")
 
 	fmt.Println("Uploading binary to VPS...")
@@ -110,23 +113,27 @@ func DeployCommand(args []string) {
 func DeployClientsCommand(args []string) {
 	if IsHelpRequest(args) {
 		fmt.Println("Usage: lfr-tunnel-ops deploy-clients [-i identity_file]")
-		fmt.Println("\nUploads dist/ (built + signed client binaries and checksums.txt*) to")
-		fmt.Println("VPS_USER@VPS_IP (defaults: peterrichards@lfr-demo.se) and moves them into")
-		fmt.Println("the web server's static downloads directory. Requires dist/checksums.txt")
-		fmt.Println("to already exist -- run build then sign first. Real, live upload, no dry run.")
+		fmt.Println("\nUploads dist/ (built + signed client binaries and checksums.txt*) to the")
+		fmt.Println("central VPS and moves them into the web server's static downloads")
+		fmt.Println("directory. Requires dist/checksums.txt to already exist -- run build then")
+		fmt.Println("sign first. The target is resolved from (highest precedence first) the -i")
+		fmt.Println("flag / VPS_USER,VPS_IP,LFT_IDENTITY_FILE env vars / lfr-tunnel-ops.yaml --")
+		fmt.Println("see lfr-tunnel-ops.yaml.example. Real, live upload, no dry run.")
 		return
 	}
 
 	fmt.Println("=== Deploying Client Binaries and Checksums to VPS ===")
 
-	identityFile := "~/.ssh/id_vm6_networks_vps"
+	flagIdentity := ""
 	if len(args) > 0 && args[0] == "-i" && len(args) > 1 {
-		identityFile = args[1]
+		flagIdentity = args[1]
 	}
 
-	vpsUser := GetEnvOrDefault("VPS_USER", "peterrichards")
-	vpsIP := GetEnvOrDefault("VPS_IP", "lfr-demo.se") // deploy-client-binaries.sh uses lfr-demo.se
-	sshTarget := fmt.Sprintf("%s@%s", vpsUser, vpsIP)
+	target, err := ResolveDeployTarget("", "", flagIdentity)
+	CheckFatal(err, "Failed to resolve deployment target")
+	identityFile := target.IdentityFile
+	vpsUser := target.User
+	sshTarget := fmt.Sprintf("%s@%s", target.User, target.Host)
 
 	if !fileExists("dist/checksums.txt") {
 		fmt.Println("ERROR: Client binaries or checksums.txt not found in dist/. Build and sign them first.")
@@ -134,7 +141,7 @@ func DeployClientsCommand(args []string) {
 	}
 
 	fmt.Println("Uploading files from dist/ to", sshTarget)
-	err := RunCommand("scp", "-i", identityFile, "-r", "dist", sshTarget+":/home/"+vpsUser+"/dist_tmp")
+	err = RunCommand("scp", "-i", identityFile, "-r", "dist", sshTarget+":/home/"+vpsUser+"/dist_tmp")
 	CheckFatal(err, "Failed to SCP client binaries")
 
 	fmt.Println("Moving files to secure web server downloads directory on VPS...")

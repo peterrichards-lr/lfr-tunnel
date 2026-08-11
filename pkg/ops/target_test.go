@@ -190,3 +190,72 @@ func TestResolveNginxTarget_NothingConfiguredErrorsClearly(t *testing.T) {
 		}
 	}
 }
+
+// TestParseTargetFlags covers exactly the bug class the original hand-rolled
+// `args[0] == "-i"` positional checks were exposed to: silently misparsing the moment more
+// than one flag exists, or the caller passes them in a different order than the code
+// happened to expect. flag.FlagSet (stdlib, well-tested) fixes this, but the wiring
+// (mapping -i/-u/-s onto identityFile/user/host) is still worth covering directly.
+func TestParseTargetFlags(t *testing.T) {
+	tests := []struct {
+		name         string
+		args         []string
+		wantIdentity string
+		wantUser     string
+		wantHost     string
+		wantErr      bool
+	}{
+		{
+			name:         "all three flags in the documented order",
+			args:         []string{"-i", "/tmp/key.pem", "-u", "ubuntu", "-s", "central.example.com"},
+			wantIdentity: "/tmp/key.pem",
+			wantUser:     "ubuntu",
+			wantHost:     "central.example.com",
+		},
+		{
+			name:         "flags in a different order still parse correctly",
+			args:         []string{"-s", "central.example.com", "-i", "/tmp/key.pem", "-u", "ubuntu"},
+			wantIdentity: "/tmp/key.pem",
+			wantUser:     "ubuntu",
+			wantHost:     "central.example.com",
+		},
+		{
+			name:         "only -i, no -u/-s",
+			args:         []string{"-i", "/tmp/key.pem"},
+			wantIdentity: "/tmp/key.pem",
+		},
+		{
+			name: "no flags at all",
+			args: []string{},
+		},
+		{
+			name:    "unrecognized flag errors instead of being silently ignored",
+			args:    []string{"-bogus", "value"},
+			wantErr: true,
+		},
+		{
+			name:    "flag with no value errors instead of silently leaving it empty",
+			args:    []string{"-i"},
+			wantErr: true,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			identity, user, host, err := parseTargetFlags("test", tt.args)
+			if tt.wantErr {
+				if err == nil {
+					t.Fatal("expected an error, got nil")
+				}
+				return
+			}
+			if err != nil {
+				t.Fatalf("expected no error, got: %v", err)
+			}
+			if identity != tt.wantIdentity || user != tt.wantUser || host != tt.wantHost {
+				t.Errorf("got (identity=%q, user=%q, host=%q), want (identity=%q, user=%q, host=%q)",
+					identity, user, host, tt.wantIdentity, tt.wantUser, tt.wantHost)
+			}
+		})
+	}
+}

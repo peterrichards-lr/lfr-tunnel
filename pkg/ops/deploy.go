@@ -8,24 +8,23 @@ import (
 // DeployCommand handles deploying server changes to the VPS.
 func DeployCommand(args []string) {
 	if IsHelpRequest(args) {
-		fmt.Println("Usage: lfr-tunnel-ops deploy [-i identity_file]")
+		fmt.Println("Usage: lfr-tunnel-ops deploy [-i identity_file] [-u user] [-s host]")
 		fmt.Println("\nBuilds lfr-tunneld for linux/amd64, uploads it plus static assets/i18n/")
 		fmt.Println("templates/maintenance scripts to the central VPS, then over SSH installs the")
 		fmt.Println("binary, enables maintenance mode, restarts lfr-tunneld, and disables")
 		fmt.Println("maintenance mode. The target is resolved from (highest precedence first) the")
-		fmt.Println("-i flag / VPS_USER,VPS_IP,LFT_IDENTITY_FILE env vars / lfr-tunnel-ops.yaml --")
-		fmt.Println("see lfr-tunnel-ops.yaml.example. Real, live deployment, no dry-run mode.")
+		fmt.Println("-i/-u/-s flags / VPS_USER,VPS_IP,LFT_IDENTITY_FILE env vars /")
+		fmt.Println("lfr-tunnel-ops.yaml -- see lfr-tunnel-ops.yaml.example. Real, live")
+		fmt.Println("deployment, no dry-run mode.")
 		return
 	}
 
 	fmt.Println("=== Starting VPS Deployment ===")
 
-	flagIdentity := ""
-	if len(args) > 0 && args[0] == "-i" && len(args) > 1 {
-		flagIdentity = args[1]
-	}
+	flagIdentity, flagUser, flagHost, err := parseTargetFlags("deploy", args)
+	CheckFatal(err, "Failed to parse arguments")
 
-	target, err := ResolveDeployTarget("", "", flagIdentity)
+	target, err := ResolveDeployTarget(flagUser, flagHost, flagIdentity)
 	CheckFatal(err, "Failed to resolve deployment target")
 	identityFile := target.IdentityFile
 	vpsUser := target.User
@@ -112,24 +111,23 @@ func DeployCommand(args []string) {
 // DeployClientsCommand handles deploying signed client binaries to the VPS.
 func DeployClientsCommand(args []string) {
 	if IsHelpRequest(args) {
-		fmt.Println("Usage: lfr-tunnel-ops deploy-clients [-i identity_file]")
+		fmt.Println("Usage: lfr-tunnel-ops deploy-clients [-i identity_file] [-u user] [-s host]")
 		fmt.Println("\nUploads dist/ (built + signed client binaries and checksums.txt*) to the")
 		fmt.Println("central VPS and moves them into the web server's static downloads")
 		fmt.Println("directory. Requires dist/checksums.txt to already exist -- run build then")
-		fmt.Println("sign first. The target is resolved from (highest precedence first) the -i")
-		fmt.Println("flag / VPS_USER,VPS_IP,LFT_IDENTITY_FILE env vars / lfr-tunnel-ops.yaml --")
-		fmt.Println("see lfr-tunnel-ops.yaml.example. Real, live upload, no dry run.")
+		fmt.Println("sign first. The target is resolved from (highest precedence first) the")
+		fmt.Println("-i/-u/-s flags / VPS_USER,VPS_IP,LFT_IDENTITY_FILE env vars /")
+		fmt.Println("lfr-tunnel-ops.yaml -- see lfr-tunnel-ops.yaml.example. Real, live upload,")
+		fmt.Println("no dry run.")
 		return
 	}
 
 	fmt.Println("=== Deploying Client Binaries and Checksums to VPS ===")
 
-	flagIdentity := ""
-	if len(args) > 0 && args[0] == "-i" && len(args) > 1 {
-		flagIdentity = args[1]
-	}
+	flagIdentity, flagUser, flagHost, err := parseTargetFlags("deploy-clients", args)
+	CheckFatal(err, "Failed to parse arguments")
 
-	target, err := ResolveDeployTarget("", "", flagIdentity)
+	target, err := ResolveDeployTarget(flagUser, flagHost, flagIdentity)
 	CheckFatal(err, "Failed to resolve deployment target")
 	identityFile := target.IdentityFile
 	vpsUser := target.User

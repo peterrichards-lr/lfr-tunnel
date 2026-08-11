@@ -169,8 +169,10 @@ func ReconcileNginxCommand(args []string) {
 	domainsFlag := fs.String("domains", "", "comma-separated domain groups this central serves, e.g. lfr-demo.se,lfr-demo.online (falls back to nginx.domains in lfr-tunnel-ops.yaml)")
 	port := fs.String("port", "", "local port lfr-tunneld binds to -- must match the live server-config.yaml's http_bind_addr (falls back to nginx.port in lfr-tunnel-ops.yaml)")
 	identityFile := fs.String("i", "", "path to SSH private key file (falls back to VPS_USER,VPS_IP,LFT_IDENTITY_FILE env vars / lfr-tunnel-ops.yaml)")
+	flagUser := fs.String("u", "", "SSH username on the central VPS (falls back to VPS_USER env var / lfr-tunnel-ops.yaml)")
+	flagHost := fs.String("s", "", "SSH host of the central VPS (falls back to VPS_IP env var / lfr-tunnel-ops.yaml)")
 	fs.Usage = func() {
-		fmt.Println("Usage: lfr-tunnel-ops reconcile-nginx [-domains <d1,d2,...>] [-port <port>] [-i identity_file]")
+		fmt.Println("Usage: lfr-tunnel-ops reconcile-nginx [-domains <d1,d2,...>] [-port <port>] [-i identity_file] [-u user] [-s host]")
 		fmt.Println("\nRegenerates /etc/nginx/sites-available/lfr-tunnel from the same template")
 		fmt.Println("setup-central-vps.sh uses for initial provisioning, and pushes it to the")
 		fmt.Println("central VPS over SSH. Backs up the existing config, swaps in the new one,")
@@ -200,7 +202,7 @@ func ReconcileNginxCommand(args []string) {
 	CheckFatal(err, "Failed to resolve nginx target")
 	domains := nginxTarget.Domains
 
-	target, err := ResolveDeployTarget("", "", *identityFile)
+	target, err := ResolveDeployTarget(*flagUser, *flagHost, *identityFile)
 	CheckFatal(err, "Failed to resolve deployment target")
 	sshTarget := fmt.Sprintf("%s@%s", target.User, target.Host)
 

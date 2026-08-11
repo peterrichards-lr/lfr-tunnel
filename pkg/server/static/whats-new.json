@@ -1,5 +1,19 @@
 [
   {
+    "version": "v1.44.10",
+    "release_date": "2026-08-11",
+    "features": [
+      "Security Fix: Patched a vulnerability in the admin portal's dependencies (react-router-dom, GHSA-qwww-vcr4-c8h2).",
+      "Permanent Vanity Domains: Custom vanity domains no longer get torn down when you disconnect -- they stick around until you remove them.",
+      "Separate Custom Domain Quota: Custom domains now draw from their own quota, independent of subdomain reservations.",
+      "Vanity Domain Admin Page: New admin console page showing per-stage vanity domain provisioning status, with retry/remove actions.",
+      "Portal v1 -> v2 Link: The classic portal login page now links directly to the new v2 portal.",
+      "CLI Redraw Fix: Fixed leftover characters lingering in the terminal UI during live redraws.",
+      "Published Documentation Site: lfr-tunnel's docs are now published as a browsable site (MkDocs + GitHub Pages), in addition to the raw markdown in the repo.",
+      "Favicon Fix: Replaced the browser tab icon across the portal with the correct logo (was a mismatched placeholder image)."
+    ]
+  },
+  {
     "version": "v1.44.9",
     "release_date": "2026-08-10",
     "features": [
@@ -25,13 +39,6 @@
     "release_date": "2026-07-31",
     "features": [
       "Release v1.44.6"
-    ]
-  },
-  {
-    "version": "v1.44.5",
-    "release_date": "2026-07-28",
-    "features": [
-      "Release v1.44.5"
     ]
   }
 ]

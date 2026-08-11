@@ -9,20 +9,23 @@ import (
 func MaintenanceCommand(args []string) {
 	if len(args) < 1 || IsHelpRequest(args) {
 		fmt.Println("Usage: lfr-tunnel-ops maintenance <enable|disable> [-i identity_file]")
-		fmt.Println("\nEnables or disables Nginx maintenance mode on VPS_USER@VPS_IP (defaults:")
-		fmt.Println("peterrichards@82.39.133.178) over SSH. Real, live effect on production traffic.")
+		fmt.Println("\nEnables or disables Nginx maintenance mode on the central VPS over SSH.")
+		fmt.Println("The target is resolved from (highest precedence first) the -i flag /")
+		fmt.Println("VPS_USER,VPS_IP,LFT_IDENTITY_FILE env vars / lfr-tunnel-ops.yaml -- see")
+		fmt.Println("lfr-tunnel-ops.yaml.example. Real, live effect on production traffic.")
 		return
 	}
 
 	action := args[0]
-	identityFile := "~/.ssh/id_vm6_networks_vps"
+	flagIdentity := ""
 	if len(args) > 1 && args[1] == "-i" && len(args) > 2 {
-		identityFile = args[2]
+		flagIdentity = args[2]
 	}
 
-	vpsUser := GetEnvOrDefault("VPS_USER", "peterrichards")
-	vpsIP := GetEnvOrDefault("VPS_IP", "82.39.133.178")
-	sshTarget := fmt.Sprintf("%s@%s", vpsUser, vpsIP)
+	target, err := ResolveDeployTarget("", "", flagIdentity)
+	CheckFatal(err, "Failed to resolve deployment target")
+	identityFile := target.IdentityFile
+	sshTarget := fmt.Sprintf("%s@%s", target.User, target.Host)
 
 	switch action {
 	case "enable":
@@ -43,22 +46,25 @@ func MaintenanceCommand(args []string) {
 func DiagnoseCommand(args []string) {
 	if IsHelpRequest(args) {
 		fmt.Println("Usage: lfr-tunnel-ops diagnose [-i identity_file]")
-		fmt.Println("\nSSHes into VPS_USER@VPS_IP (defaults: peterrichards@82.39.133.178) and runs")
-		fmt.Println("read-only checks: uptime, lfr-tunneld/nginx status, UFW rules, cert listing,")
-		fmt.Println("recent error logs. Does not modify anything on the VPS.")
+		fmt.Println("\nSSHes into the central VPS and runs read-only checks: uptime,")
+		fmt.Println("lfr-tunneld/nginx status, UFW rules, cert listing, recent error logs. Does")
+		fmt.Println("not modify anything on the VPS. The target is resolved from (highest")
+		fmt.Println("precedence first) the -i flag / VPS_USER,VPS_IP,LFT_IDENTITY_FILE env vars /")
+		fmt.Println("lfr-tunnel-ops.yaml -- see lfr-tunnel-ops.yaml.example.")
 		return
 	}
 
 	fmt.Println("=== Running Gateway Diagnostics ===")
 
-	identityFile := "~/.ssh/id_vm6_networks_vps"
+	flagIdentity := ""
 	if len(args) > 0 && args[0] == "-i" && len(args) > 1 {
-		identityFile = args[1]
+		flagIdentity = args[1]
 	}
 
-	vpsUser := GetEnvOrDefault("VPS_USER", "peterrichards")
-	vpsIP := GetEnvOrDefault("VPS_IP", "82.39.133.178")
-	sshTarget := fmt.Sprintf("%s@%s", vpsUser, vpsIP)
+	target, err := ResolveDeployTarget("", "", flagIdentity)
+	CheckFatal(err, "Failed to resolve deployment target")
+	identityFile := target.IdentityFile
+	sshTarget := fmt.Sprintf("%s@%s", target.User, target.Host)
 
 	// A lightweight translation of diagnose-gateway.sh
 	script := `
@@ -88,7 +94,7 @@ echo "6. Recent Gateway Errors:"
 sudo journalctl -u lfr-tunneld -p err -n 10 --no-pager
 `
 
-	err := RunCommand("ssh", "-i", identityFile, sshTarget, script)
+	err = RunCommand("ssh", "-i", identityFile, sshTarget, script)
 	CheckFatal(err, "Failed to run diagnostics")
 	fmt.Println("=== Diagnostics Complete ===")
 }

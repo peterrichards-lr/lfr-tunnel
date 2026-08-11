@@ -8,6 +8,7 @@ dist/
 # Configuration & Secrets
 .env
 client-config.yaml
+lfr-tunnel-ops.yaml
 edge_nodes.txt
 scripts/liferay/aws/liferay-tags.env
 

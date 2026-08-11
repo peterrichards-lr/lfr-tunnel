@@ -166,17 +166,19 @@ func buildNginxConfig(domains []string, localPort string) string {
 // until it was manually SSH-patched).
 func ReconcileNginxCommand(args []string) {
 	fs := flag.NewFlagSet("reconcile-nginx", flag.ExitOnError)
-	domainsFlag := fs.String("domains", "", "comma-separated domain groups this central serves, e.g. lfr-demo.se,lfr-demo.online (required)")
-	port := fs.String("port", "", "local port lfr-tunneld binds to -- must match the live server-config.yaml's http_bind_addr (required)")
-	identityFile := fs.String("i", "~/.ssh/lfr-tunnel-gateway.pem", "path to SSH private key file")
+	domainsFlag := fs.String("domains", "", "comma-separated domain groups this central serves, e.g. lfr-demo.se,lfr-demo.online (falls back to nginx.domains in lfr-tunnel-ops.yaml)")
+	port := fs.String("port", "", "local port lfr-tunneld binds to -- must match the live server-config.yaml's http_bind_addr (falls back to nginx.port in lfr-tunnel-ops.yaml)")
+	identityFile := fs.String("i", "", "path to SSH private key file (falls back to VPS_USER,VPS_IP,LFT_IDENTITY_FILE env vars / lfr-tunnel-ops.yaml)")
 	fs.Usage = func() {
-		fmt.Println("Usage: lfr-tunnel-ops reconcile-nginx -domains <d1,d2,...> -port <port> [-i identity_file]")
+		fmt.Println("Usage: lfr-tunnel-ops reconcile-nginx [-domains <d1,d2,...>] [-port <port>] [-i identity_file]")
 		fmt.Println("\nRegenerates /etc/nginx/sites-available/lfr-tunnel from the same template")
-		fmt.Println("setup-central-vps.sh uses for initial provisioning, and pushes it to")
-		fmt.Println("VPS_USER@VPS_IP (defaults: ubuntu@lfr-demo.se) over SSH. Backs up the existing")
-		fmt.Println("config, swaps in the new one, runs `nginx -t`, and only reloads nginx if that")
-		fmt.Println("passes -- otherwise restores the backup and reloads that instead. Real, live")
-		fmt.Println("effect on production traffic; safe to re-run repeatedly.")
+		fmt.Println("setup-central-vps.sh uses for initial provisioning, and pushes it to the")
+		fmt.Println("central VPS over SSH. Backs up the existing config, swaps in the new one,")
+		fmt.Println("runs `nginx -t`, and only reloads nginx if that passes -- otherwise restores")
+		fmt.Println("the backup and reloads that instead. Real, live effect on production")
+		fmt.Println("traffic; safe to re-run repeatedly. The target (and domains/port, if not")
+		fmt.Println("passed as flags) is resolved from env vars / lfr-tunnel-ops.yaml -- see")
+		fmt.Println("lfr-tunnel-ops.yaml.example.")
 	}
 	if IsHelpRequest(args) {
 		fs.Usage()
@@ -186,31 +188,25 @@ func ReconcileNginxCommand(args []string) {
 		CheckFatal(err, "Failed to parse arguments")
 	}
 
-	if *domainsFlag == "" || *port == "" {
-		fmt.Println("ERROR: -domains and -port are both required.")
-		fs.Usage()
-		os.Exit(1)
-	}
-
-	var domains []string
+	var flagDomains []string
 	for _, d := range strings.Split(*domainsFlag, ",") {
 		d = strings.TrimSpace(d)
 		if d != "" {
-			domains = append(domains, d)
+			flagDomains = append(flagDomains, d)
 		}
 	}
-	if len(domains) == 0 {
-		fmt.Println("ERROR: -domains resolved to an empty list.")
-		os.Exit(1)
-	}
 
-	vpsUser := GetEnvOrDefault("VPS_USER", "ubuntu")
-	vpsIP := GetEnvOrDefault("VPS_IP", "lfr-demo.se")
-	sshTarget := fmt.Sprintf("%s@%s", vpsUser, vpsIP)
+	nginxTarget, err := ResolveNginxTarget(flagDomains, *port)
+	CheckFatal(err, "Failed to resolve nginx target")
+	domains := nginxTarget.Domains
+
+	target, err := ResolveDeployTarget("", "", *identityFile)
+	CheckFatal(err, "Failed to resolve deployment target")
+	sshTarget := fmt.Sprintf("%s@%s", target.User, target.Host)
 
 	fmt.Printf("=== Reconciling nginx config on %s for domains: %s ===\n", sshTarget, strings.Join(domains, ", "))
 
-	config := buildNginxConfig(domains, *port)
+	config := buildNginxConfig(domains, nginxTarget.Port)
 
 	tmpPath := fmt.Sprintf("/tmp/lfr-tunneld-nginx-reconcile-%d.conf", time.Now().UnixNano())
 	if err := os.WriteFile(tmpPath, []byte(config), 0644); err != nil {
@@ -218,9 +214,9 @@ func ReconcileNginxCommand(args []string) {
 	}
 	defer os.Remove(tmpPath) //nolint:errcheck
 
-	remoteTmp := "/home/" + vpsUser + "/lfr-tunneld-nginx-reconcile.conf"
+	remoteTmp := "/home/" + target.User + "/lfr-tunneld-nginx-reconcile.conf"
 	fmt.Println("Uploading generated nginx config...")
-	err := RunCommand("scp", "-i", identityFileArg(*identityFile), tmpPath, sshTarget+":"+remoteTmp)
+	err = RunCommand("scp", "-i", target.IdentityFile, tmpPath, sshTarget+":"+remoteTmp)
 	CheckFatal(err, "Failed to SCP generated nginx config")
 
 	remoteScript := `
@@ -260,27 +256,8 @@ else
 fi
 `
 	fmt.Println("Applying config on the remote host (backup, swap, nginx -t, reload -- with automatic rollback on failure)...")
-	err = RunCommand("ssh", "-i", identityFileArg(*identityFile), sshTarget, remoteScript)
+	err = RunCommand("ssh", "-i", target.IdentityFile, sshTarget, remoteScript)
 	CheckFatal(err, "Reconcile failed -- see output above; the remote side should already have rolled back to its previous working config")
 
 	fmt.Println("=== Nginx Reconcile Complete! ===")
-}
-
-// identityFileArg expands a leading ~/ the same way setup-central-vps.sh's -i flag does,
-// since ssh/scp themselves don't expand it when passed as a literal -i argument.
-func identityFileArg(path string) string {
-	if path == "~" {
-		home, err := os.UserHomeDir()
-		if err == nil {
-			return home
-		}
-		return path
-	}
-	if strings.HasPrefix(path, "~/") {
-		home, err := os.UserHomeDir()
-		if err == nil {
-			return home + "/" + strings.TrimPrefix(path, "~/")
-		}
-	}
-	return path
 }

@@ -1,7 +1,6 @@
 package ops
 
 import (
-	"os"
 	"strings"
 	"testing"
 )
@@ -65,16 +64,6 @@ func TestBuildNginxConfig_MultipleDomains(t *testing.T) {
 	}
 }
 
-func TestIdentityFileArg_ExpandsHomeDir(t *testing.T) {
-	home, err := os.UserHomeDir()
-	if err != nil {
-		t.Skip("cannot resolve home directory in this environment")
-	}
-
-	if got := identityFileArg("~/.ssh/lfr-tunnel-gateway.pem"); got != home+"/.ssh/lfr-tunnel-gateway.pem" {
-		t.Errorf("expected ~/ to expand to home dir, got %q", got)
-	}
-	if got := identityFileArg("/absolute/path.pem"); got != "/absolute/path.pem" {
-		t.Errorf("expected an absolute path to pass through unchanged, got %q", got)
-	}
-}
+// ~/ expansion for identity files is now covered by TestResolveDeployTarget_ExpandsHomeDir
+// in target_test.go -- reconcile-nginx resolves its identity file through
+// ResolveDeployTarget like every other command now (#1019), rather than its own helper.

@@ -144,7 +144,7 @@ func waitForTCP(addr string, timeout, interval time.Duration) error {
 	for time.Now().Before(deadline) {
 		conn, err := net.DialTimeout("tcp", addr, dialTimeout)
 		if err == nil {
-			conn.Close()
+			_ = conn.Close() //nolint:errcheck
 			return nil
 		}
 		time.Sleep(interval)

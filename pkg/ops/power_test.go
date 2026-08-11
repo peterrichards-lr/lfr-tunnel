@@ -87,7 +87,7 @@ func TestWaitForTCP_SucceedsOnOpenPort(t *testing.T) {
 	if err != nil {
 		t.Fatalf("failed to start a test listener: %v", err)
 	}
-	defer ln.Close()
+	defer func() { _ = ln.Close() }() //nolint:errcheck
 
 	if err := waitForTCP(ln.Addr().String(), 2*time.Second, 50*time.Millisecond); err != nil {
 		t.Fatalf("expected success against a real open port, got: %v", err)

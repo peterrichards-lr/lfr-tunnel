@@ -10,6 +10,10 @@
 #
 # This file is entirely optional: if you'd rather set VPS_USER/VPS_IP/LFT_IDENTITY_FILE
 # in your shell profile (or pass -i/-u/-s flags every time), you don't need it at all.
+#
+# ---------------------------------------------------------------------------------------
+# Option A: single target (most setups -- one operator, one central VPS)
+# ---------------------------------------------------------------------------------------
 
 central:
   # SSH username on the central VPS.
@@ -29,3 +33,35 @@ nginx:
   # Local port lfr-tunneld binds to -- must match the live server-config.yaml's
   # http_bind_addr port.
   port: "8080"
+
+# ---------------------------------------------------------------------------------------
+# Option B: multiple named targets (managing more than one environment, e.g.
+# staging/production, from the same checkout). Uncomment this block and delete the
+# central:/nginx: block above -- a file should use one shape or the other, not both.
+#
+# Select which target a command uses with -target <name> or the LFT_OPS_TARGET env var
+# (same precedence order as everything else: flag wins over env var). If the file
+# defines exactly one target, it's used automatically without needing to select it. If
+# it defines more than one and neither -target nor LFT_OPS_TARGET is set, every command
+# errors out listing the available names rather than guessing which one you meant.
+# ---------------------------------------------------------------------------------------
+
+# targets:
+#   production:
+#     central:
+#       user: ubuntu
+#       host: prod-central.example.com
+#       identity_file: ~/.ssh/prod-central-key.pem
+#     nginx:
+#       domains:
+#         - prod-central.example.com
+#       port: "8080"
+#   staging:
+#     central:
+#       user: ubuntu
+#       host: staging-central.example.com
+#       identity_file: ~/.ssh/staging-central-key.pem
+#     nginx:
+#       domains:
+#         - staging-central.example.com
+#       port: "8080"

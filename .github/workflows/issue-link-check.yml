@@ -6,9 +6,17 @@ on:
     branches:
       - master
 
+# cancel-in-progress deliberately false (#1033): this check runs on both `opened` and
+# `labeled` (e.g. adding `no-issue-needed` right after opening a PR that didn't reference
+# an issue), and cancelling the in-flight `opened` run left a `cancelled` check-run
+# alongside the `labeled` run's `success` for the same required context -- branch
+# protection latched onto the cancelled one and blocked merge even though the latest run
+# for this context had actually succeeded. Runs still queue sequentially within the same
+# PR (never in parallel) via the shared concurrency group; they just complete naturally
+# instead of being cancelled.
 concurrency:
   group: ${{ github.workflow }}-${{ github.event.pull_request.number }}
-  cancel-in-progress: true
+  cancel-in-progress: false
 
 permissions:
   contents: read

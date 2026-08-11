@@ -29,4 +29,4 @@ All operator deployment and configuration resources are organized under the `doc
 
 <!-- markdownlint-disable MD049 -->
 ---
-*Last Updated: 2026-07-28* | *Last Reviewed: 2026-07-28*
+*Last Updated: 2026-08-11* | *Last Reviewed: 2026-08-11*

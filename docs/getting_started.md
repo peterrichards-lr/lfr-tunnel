@@ -305,4 +305,4 @@ To configure the System Tray / Menu Bar utility to launch on login:
 
 <!-- markdownlint-disable MD049 -->
 ---
-*Last Updated: 2026-07-15* | *Last Reviewed: 2026-07-15*
+*Last Updated: 2026-08-11* | *Last Reviewed: 2026-08-11*

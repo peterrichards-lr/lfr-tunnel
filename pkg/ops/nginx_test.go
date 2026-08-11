@@ -67,3 +67,30 @@ func TestBuildNginxConfig_MultipleDomains(t *testing.T) {
 // ~/ expansion for identity files is now covered by TestResolveDeployTarget_ExpandsHomeDir
 // in target_test.go -- reconcile-nginx resolves its identity file through
 // ResolveDeployTarget like every other command now (#1019), rather than its own helper.
+
+func TestParseDomainsFlag(t *testing.T) {
+	tests := []struct {
+		name string
+		csv  string
+		want []string
+	}{
+		{"single domain", "lfr-demo.se", []string{"lfr-demo.se"}},
+		{"multiple domains", "lfr-demo.se,lfr-demo.online", []string{"lfr-demo.se", "lfr-demo.online"}},
+		{"whitespace around entries is trimmed", " lfr-demo.se , lfr-demo.online ", []string{"lfr-demo.se", "lfr-demo.online"}},
+		{"empty entries from stray commas are dropped", "lfr-demo.se,,lfr-demo.online,", []string{"lfr-demo.se", "lfr-demo.online"}},
+		{"empty string yields no domains", "", nil},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := parseDomainsFlag(tt.csv)
+			if len(got) != len(tt.want) {
+				t.Fatalf("got %v, want %v", got, tt.want)
+			}
+			for i := range got {
+				if got[i] != tt.want[i] {
+					t.Errorf("got %v, want %v", got, tt.want)
+				}
+			}
+		})
+	}
+}

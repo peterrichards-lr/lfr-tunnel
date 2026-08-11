@@ -1,0 +1,18 @@
+# Requires the EC2 instance to have an IAM instance profile attached with
+# route53:ChangeResourceRecordSets/ListResourceRecordSets/ListHostedZonesByName permission
+# on the lfr-demo.se/lfr-demo.online hosted zones -- unlike cloudflare-ddns.service's
+# token-in-a-file approach, the AWS CLI picks up instance-profile credentials automatically
+# via the instance metadata service, no credentials file needed on the box at all.
+[Unit]
+Description=Route53 Dynamic DNS IPv4/IPv6 Updater
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+Environment=LFT_DDNS_RECORD_NAMES=lfr-demo.se:@,*,tunnel,portal;lfr-demo.online:@,tunnel,portal
+Environment="LFT_DDNS_SPF_INCLUDES=amazonses.com"
+Environment=LFT_DDNS_SPF_INCLUDE_BOX_IP=false
+ExecStart=/usr/local/bin/route53-ddns.sh
+User=root
+Group=root

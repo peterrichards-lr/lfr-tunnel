@@ -4,7 +4,7 @@
 
 This guide is for **Liferay Sales Engineering team members** connecting to the shared, Liferay-operated `lfr-tunnel` gateway. It covers installation, authentication, and usage examples with the real team domains.
 
-For general architecture, self-hosting instructions, and configuration reference, see the main [README](../README.md) and [Architecture Guide](architecture.md).
+For general architecture, self-hosting instructions, and configuration reference, see the main [README](https://github.com/peterrichards-lr/lfr-tunnel#readme) and [Architecture Guide](architecture.md).
 
 ---
 

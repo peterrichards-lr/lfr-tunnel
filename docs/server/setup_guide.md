@@ -528,7 +528,7 @@ LFT_SMTP_PASSWORD=<SES SMTP password>
 sufficient — the service process never needs its own read access to the file, and
 nothing in `/etc/lfr-tunneld` besides this one file needs to hold the credentials.
 This is the same "restricted secrets file" pattern used for client-side tokens in
-[`getting_started.md`'s Option C](getting_started.md#option-c-restricted-secrets-file-advanced--secure),
+[`getting_started.md`'s Option C](../getting_started.md#option-c-restricted-secrets-file-advanced--secure),
 applied at the systemd layer instead of a shell profile.
 
 Create a systemd unit file at `/etc/systemd/system/lfr-tunneld.service`:

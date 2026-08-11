@@ -26,6 +26,7 @@ func clearTargetEnv(t *testing.T) {
 	t.Setenv("VPS_USER", "")
 	t.Setenv("VPS_IP", "")
 	t.Setenv("LFT_IDENTITY_FILE", "")
+	t.Setenv("AWS_REGION", "")
 	t.Setenv("LFT_OPS_TARGET", "")
 	t.Setenv("LFT_OPS_CONFIG", filepath.Join(t.TempDir(), "nonexistent.yaml"))
 }
@@ -432,5 +433,84 @@ targets:
 	}
 	if len(target.Domains) != 1 || target.Domains[0] != "staging.example.com" || target.Port != "9090" {
 		t.Errorf("expected the staging target's nginx config, got: %+v", target)
+	}
+}
+
+// --- AWSRegion resolution (#1050) -- deliberately optional, unlike user/host/identity_file:
+// missing it is never an error, it just means ensureInstanceRunning becomes a no-op.
+
+func TestResolveDeployTargetWithRegion_Unset_IsNotAnError(t *testing.T) {
+	clearTargetEnv(t)
+
+	target, err := ResolveDeployTargetWithRegion("ubuntu", "host.example.com", "/tmp/key.pem", "", "")
+	if err != nil {
+		t.Fatalf("expected resolution to succeed without an AWS region, got: %v", err)
+	}
+	if target.AWSRegion != "" {
+		t.Errorf("expected empty AWSRegion, got %q", target.AWSRegion)
+	}
+}
+
+func TestResolveDeployTargetWithRegion_FromFlag(t *testing.T) {
+	clearTargetEnv(t)
+
+	target, err := ResolveDeployTargetWithRegion("ubuntu", "host.example.com", "/tmp/key.pem", "ap-northeast-1", "")
+	if err != nil {
+		t.Fatalf("expected resolution to succeed, got: %v", err)
+	}
+	if target.AWSRegion != "ap-northeast-1" {
+		t.Errorf("expected flag value to win, got %q", target.AWSRegion)
+	}
+}
+
+func TestResolveDeployTargetWithRegion_FromEnv(t *testing.T) {
+	clearTargetEnv(t)
+	t.Setenv("AWS_REGION", "sa-east-1")
+
+	target, err := ResolveDeployTargetWithRegion("ubuntu", "host.example.com", "/tmp/key.pem", "", "")
+	if err != nil {
+		t.Fatalf("expected resolution to succeed, got: %v", err)
+	}
+	if target.AWSRegion != "sa-east-1" {
+		t.Errorf("expected env var value, got %q", target.AWSRegion)
+	}
+}
+
+func TestResolveDeployTargetWithRegion_FromConfigFile(t *testing.T) {
+	clearTargetEnv(t)
+	writeOpsConfig(t, `
+central:
+  user: ubuntu
+  host: central.example.com
+  identity_file: /tmp/my-key.pem
+  aws_region: eu-west-1
+`)
+
+	target, err := ResolveDeployTargetWithRegion("", "", "", "", "")
+	if err != nil {
+		t.Fatalf("expected resolution to succeed, got: %v", err)
+	}
+	if target.AWSRegion != "eu-west-1" {
+		t.Errorf("expected config file value, got %q", target.AWSRegion)
+	}
+}
+
+func TestResolveDeployTargetWithRegion_FlagWinsOverEnvAndConfig(t *testing.T) {
+	clearTargetEnv(t)
+	t.Setenv("AWS_REGION", "env-region")
+	writeOpsConfig(t, `
+central:
+  user: ubuntu
+  host: central.example.com
+  identity_file: /tmp/my-key.pem
+  aws_region: config-region
+`)
+
+	target, err := ResolveDeployTargetWithRegion("", "", "", "flag-region", "")
+	if err != nil {
+		t.Fatalf("expected resolution to succeed, got: %v", err)
+	}
+	if target.AWSRegion != "flag-region" {
+		t.Errorf("expected flag to win over env and config, got %q", target.AWSRegion)
 	}
 }

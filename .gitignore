@@ -2,6 +2,10 @@
 bin/
 dist/
 
+# MkDocs build output
+_site/
+site/
+
 # System Files
 .DS_Store
 

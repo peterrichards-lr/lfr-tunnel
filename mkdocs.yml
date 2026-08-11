@@ -1,0 +1,33 @@
+site_name: Liferay Tunnel
+site_url: https://peterrichards-lr.github.io/lfr-tunnel/
+site_description: "An open-source tunneling utility tailored for Liferay Development and Sales Engineering teams -- securely expose local Liferay runtime environments through dynamic wildcard subdomains."
+site_author: Liferay Tunnel Contributors
+repo_url: https://github.com/peterrichards-lr/lfr-tunnel
+repo_name: peterrichards-lr/lfr-tunnel
+
+theme:
+  name: material
+  favicon: assets/favicon.png
+  logo: assets/logo.svg
+
+plugins:
+  - search
+
+nav:
+  - Home: README.md
+  - Client Guides:
+    - Getting Started: getting_started.md
+    - Liferay SE Guide: liferay-se-guide.md
+    - MCP Guide: mcp.md
+  - Server & Operator Guides:
+    - Control Plane Setup: server/setup_guide.md
+    - Edge Node Scaling: server/edge_setup_guide.md
+    - AWS Provisioning: server/aws_setup_guide.md
+    - SSO / OIDC Cloud Guide: server/sso_cloud_guide.md
+  - Architecture & Security:
+    - System Architecture: architecture.md
+    - InfoSec & Trust Guide: infosec.md
+  - Project Info:
+    - Contributing: https://github.com/peterrichards-lr/lfr-tunnel/blob/master/CONTRIBUTING.md
+    - Security Policy: https://github.com/peterrichards-lr/lfr-tunnel/blob/master/SECURITY.md
+    - Code of Conduct: https://github.com/peterrichards-lr/lfr-tunnel/blob/master/CODE_OF_CONDUCT.md

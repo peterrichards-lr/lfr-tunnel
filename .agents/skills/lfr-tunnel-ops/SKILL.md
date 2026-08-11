@@ -7,6 +7,14 @@ description: Operations, deployment, build, and diagnostic helper skill for the 
 
 This skill guides you through the common operational tasks for the Liferay Tunnel (`lfr-tunnel`) project, including compilation, binary signing, deployment to the VPS, maintenance mode controls, and diagnostics.
 
+## 0. One-Time Setup: Deployment Target
+
+Every `lfr-tunnel-ops` command below that talks to the central VPS (`deploy`, `deploy-clients`, `maintenance`, `diagnose`, `reconcile-nginx`) resolves *which* VPS, as which user, with which SSH key -- none of them hardcode a specific server. Resolution order per field, highest precedence first: a command's own `-i` flag, then `VPS_USER`/`VPS_IP`/`LFT_IDENTITY_FILE` environment variables, then `lfr-tunnel-ops.yaml` (gitignored, at the repo root).
+
+Copy `lfr-tunnel-ops.yaml.example` to `lfr-tunnel-ops.yaml` and fill in your actual central VPS's user/host/SSH key once, and every command below just works without repeating `-i` on each invocation. If nothing is configured through any of the three sources, the command exits with a clear error naming exactly which field is missing, rather than silently deploying to the wrong place.
+
+---
+
 ## 1. Running Tests and Checks
 
 Always run unit and E2E integration tests before proposing deployment.
@@ -80,29 +88,27 @@ Before deploying client binaries or making releases, they must be signed.
 
 ## 5. Deploying to the VPS
 
-Deployments require SSH access to the VPS. The private key is typically `~/.ssh/id_vm6_networks_vps`. Build `bin/lfr-tunnel-ops` first (see §2) — never `go run ./cmd/lfr-tunnel-ops ...`.
+Deployments require SSH access to the VPS -- see §0 for how the target (user/host/key) is resolved. Build `bin/lfr-tunnel-ops` first (see §2) — never `go run ./cmd/lfr-tunnel-ops ...`.
 
 ### Deploying Client Binaries
 Copies the multi-platform binaries from `dist/` and `checksums.txt` to the VPS static downloads directory (`/var/www/lfr-tunnel/static/downloads`).
 ```bash
-./bin/lfr-tunnel-ops deploy-clients -i ~/.ssh/id_vm6_networks_vps
+./bin/lfr-tunnel-ops deploy-clients
 ```
 
 ### Deploying Gateway Changes
 Cross-compiles the Linux `lfr-tunneld` binary and deploys it along with static assets to the VPS, restarting the systemd service.
 ```bash
-./bin/lfr-tunnel-ops deploy -i ~/.ssh/id_vm6_networks_vps
+./bin/lfr-tunnel-ops deploy
 ```
 *Note: `deploy` never touches nginx config -- see "Reconciling Nginx Config" below for that.*
 
 ### Reconciling Nginx Config
 `deploy` only ever uploads the `lfr-tunneld` binary and static assets -- a fix to the nginx config template in `scripts/common/setup-central-vps.sh` (e.g. the #979 ACME-fallback location block) only ever reaches a box on its *initial* provision, never on a normal `deploy` (#997). Use `reconcile-nginx` to regenerate the current central's nginx config from that same template and push it to an already-provisioned box. Safe to re-run repeatedly: it backs up the existing config, swaps in the new one, runs `nginx -t`, and only reloads if that passes -- otherwise it restores the backup and reloads that instead, so a bad reconcile can't leave the box without a working config.
 ```bash
-./bin/lfr-tunnel-ops reconcile-nginx -domains lfr-demo.se,lfr-demo.online -port 8080 -i ~/.ssh/lfr-tunnel-gateway.pem
+./bin/lfr-tunnel-ops reconcile-nginx
 ```
-- `-domains`: comma-separated list of every domain group the target central actually serves (check `/etc/nginx/sites-available/lfr-tunnel`'s existing `server_name` lines if unsure which ones are live).
-- `-port`: must match the live `server-config.yaml`'s `http_bind_addr` port.
-- Defaults to `VPS_USER=ubuntu` / `VPS_IP=lfr-demo.se` (the current AWS central) if those env vars aren't set -- unlike `deploy`/`maintenance`/`diagnose` above, which still default to the pre-migration VPS.
+`-domains`/`-port` can be passed as flags to override `lfr-tunnel-ops.yaml`'s `nginx:` section for a one-off run; otherwise they're required there. `-domains` should list every domain group the target central actually serves (check `/etc/nginx/sites-available/lfr-tunnel`'s existing `server_name` lines if unsure which ones are live); `-port` must match the live `server-config.yaml`'s `http_bind_addr` port.
 
 ---
 
@@ -112,11 +118,11 @@ Manage Nginx maintenance mode or perform safe database backups/restores on the V
 
 - **Enable Maintenance Mode** (serves static Liferay-themed maintenance page):
   ```bash
-  ./bin/lfr-tunnel-ops maintenance enable -i ~/.ssh/id_vm6_networks_vps
+  ./bin/lfr-tunnel-ops maintenance enable
   ```
 - **Disable Maintenance Mode**:
   ```bash
-  ./bin/lfr-tunnel-ops maintenance disable -i ~/.ssh/id_vm6_networks_vps
+  ./bin/lfr-tunnel-ops maintenance disable
   ```
 - **Safe Restore Backup** (run directly on the VPS as root — this is not part of `lfr-tunnel-ops` and takes no SSH identity flag; it automatically enables maintenance mode, restores the DB, and disables maintenance):
   ```bash
@@ -129,10 +135,10 @@ Manage Nginx maintenance mode or perform safe database backups/restores on the V
 
 Run remote diagnostic checks on the VPS (system uptime/load, systemd service status, Nginx config test, UFW firewall rules, Let's Encrypt certificate status, and recent `lfr-tunneld` error logs):
 ```bash
-./bin/lfr-tunnel-ops diagnose -i ~/.ssh/id_vm6_networks_vps
+./bin/lfr-tunnel-ops diagnose
 ```
 
 
 <!-- markdownlint-disable MD049 -->
 ---
-*Last Updated: 2026-08-10* | *Last Reviewed: 2026-08-10*
+*Last Updated: 2026-08-11* | *Last Reviewed: 2026-08-11*

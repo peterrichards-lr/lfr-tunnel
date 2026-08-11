@@ -130,11 +130,6 @@ func SignCommand(args []string) {
 
 	// 3. Linux GPG Signing
 	if skipGPG != "true" && gpgKey != "skip" {
-		fmt.Println("Generating Linux detached GPG signature...")
-		target := filepath.Join(binDir, "lfr-tunnel-linux-amd64")
-		sigPath := target + ".asc"
-		os.Remove(sigPath)
-
 		if gpgSecret != "" {
 			if !fileExists(gpgSecret) && strings.Contains(gpgSecret, "-----BEGIN") {
 				tmpSec, _ := os.CreateTemp("", "gpg-*.asc")
@@ -160,21 +155,28 @@ func SignCommand(args []string) {
 			}
 		}
 
-		var gpgArgs []string
-		gpgArgs = append(gpgArgs, "--batch", "--yes")
-		if gpgPass != "" {
-			gpgArgs = append(gpgArgs, "--pinentry-mode", "loopback", "--passphrase", gpgPass)
-		}
-		if gpgKey != "" {
-			gpgArgs = append(gpgArgs, "--local-user", gpgKey)
-		}
-		gpgArgs = append(gpgArgs, "--armor", "--detach-sign", target)
+		for _, arch := range []string{"amd64", "arm64"} {
+			fmt.Printf("Generating Linux detached GPG signature for %s...\n", arch)
+			target := filepath.Join(binDir, fmt.Sprintf("lfr-tunnel-linux-%s", arch))
+			sigPath := target + ".asc"
+			os.Remove(sigPath)
 
-		err := RunCommand("gpg", gpgArgs...)
-		if err != nil {
-			fmt.Printf("WARNING: GPG signing failed: %v\n", err)
-		} else {
-			fmt.Println("Linux detached GPG signature successfully created!")
+			var gpgArgs []string
+			gpgArgs = append(gpgArgs, "--batch", "--yes")
+			if gpgPass != "" {
+				gpgArgs = append(gpgArgs, "--pinentry-mode", "loopback", "--passphrase", gpgPass)
+			}
+			if gpgKey != "" {
+				gpgArgs = append(gpgArgs, "--local-user", gpgKey)
+			}
+			gpgArgs = append(gpgArgs, "--armor", "--detach-sign", target)
+
+			err := RunCommand("gpg", gpgArgs...)
+			if err != nil {
+				fmt.Printf("WARNING: GPG signing failed for %s: %v\n", arch, err)
+			} else {
+				fmt.Printf("Linux detached GPG signature for %s successfully created!\n", arch)
+			}
 		}
 	} else {
 		fmt.Println("Skipping Linux GPG signing.")

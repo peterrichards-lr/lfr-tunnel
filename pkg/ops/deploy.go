@@ -8,7 +8,7 @@ import (
 // DeployCommand handles deploying server changes to the VPS.
 func DeployCommand(args []string) {
 	if IsHelpRequest(args) {
-		fmt.Println("Usage: lfr-tunnel-ops deploy [-i identity_file] [-u user] [-s host] [-target name]")
+		fmt.Println("Usage: lfr-tunnel-ops deploy [-i identity_file] [-u user] [-s host] [-aws-region region] [-target name]")
 		fmt.Println("\nBuilds lfr-tunneld for linux/amd64, uploads it plus static assets/i18n/")
 		fmt.Println("templates/maintenance scripts to the central VPS, then over SSH installs the")
 		fmt.Println("binary, enables maintenance mode, restarts lfr-tunneld, and disables")
@@ -17,19 +17,28 @@ func DeployCommand(args []string) {
 		fmt.Println("lfr-tunnel-ops.yaml -- see lfr-tunnel-ops.yaml.example. -target/LFT_OPS_TARGET")
 		fmt.Println("selects which named target to use from a multi-target config file. Real,")
 		fmt.Println("live deployment, no dry-run mode.")
+		fmt.Println("\n-aws-region (or AWS_REGION env var / central.aws_region in the yaml) is")
+		fmt.Println("optional (#1050): if set and the target's EC2 instance is stopped (e.g. an")
+		fmt.Println("edge caught inside its scheduled power-off window), it's started, waited on")
+		fmt.Println("until SSH is reachable, deployed to, then stopped back afterward -- whether")
+		fmt.Println("the deploy succeeds or fails. Left unset, EC2 power state is never touched.")
 		return
 	}
 
 	fmt.Println("=== Starting VPS Deployment ===")
 
-	flagIdentity, flagUser, flagHost, flagTarget, err := parseTargetFlags("deploy", args)
+	flagIdentity, flagUser, flagHost, flagAWSRegion, flagTarget, err := parseTargetFlagsWithRegion("deploy", args)
 	CheckFatal(err, "Failed to parse arguments")
 
-	target, err := ResolveDeployTarget(flagUser, flagHost, flagIdentity, flagTarget)
+	target, err := ResolveDeployTargetWithRegion(flagUser, flagHost, flagIdentity, flagAWSRegion, flagTarget)
 	CheckFatal(err, "Failed to resolve deployment target")
 	identityFile := target.IdentityFile
 	vpsUser := target.User
 	sshTarget := fmt.Sprintf("%s@%s", target.User, target.Host)
+
+	restorePower, err := ensureInstanceRunning(target.Host, target.AWSRegion)
+	CheckFatal(err, "Failed to ensure target instance is running")
+	defer restorePower()
 
 	version := os.Getenv("VERSION")
 	if version == "" {

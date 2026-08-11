@@ -4,7 +4,7 @@
 
 This guide is for **Liferay Sales Engineering team members** connecting to the shared, Liferay-operated `lfr-tunnel` gateway. It covers installation, authentication, and usage examples with the real team domains.
 
-For general architecture, self-hosting instructions, and configuration reference, see the main [README](../README.md) and [Architecture Guide](architecture.md).
+For general architecture, self-hosting instructions, and configuration reference, see the main [README](https://github.com/peterrichards-lr/lfr-tunnel#readme) and [Architecture Guide](architecture.md).
 
 ---
 
@@ -342,4 +342,4 @@ Ngrok is a popular commercial tunnel provider. Note that running raw unsigned ng
 
 <!-- markdownlint-disable MD049 -->
 ---
-*Last Updated: 2026-07-23* | *Last Reviewed: 2026-07-23*
+*Last Updated: 2026-08-11* | *Last Reviewed: 2026-08-11*

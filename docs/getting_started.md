@@ -300,9 +300,9 @@ To configure the System Tray / Menu Bar utility to launch on login:
   * `[Error] Subdomain already registered`: Another active user is currently using the requested subdomain prefix. Try a different `-subdomain` flag.
 * **Detailed Guides:**
   * For advanced setup and Liferay virtual host configurations, see the [Liferay SE Guide](liferay-se-guide.md).
-  * For details on self-hosting your own gateway, see the [Server Setup Guide](setup_guide.md).
+  * For details on self-hosting your own gateway, see the [Server Setup Guide](server/setup_guide.md).
 
 
 <!-- markdownlint-disable MD049 -->
 ---
-*Last Updated: 2026-07-15* | *Last Reviewed: 2026-07-15*
+*Last Updated: 2026-08-11* | *Last Reviewed: 2026-08-11*

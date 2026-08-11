@@ -26,6 +26,18 @@ func RunCommandWithEnv(env []string, name string, args ...string) error {
 	return cmd.Run()
 }
 
+// RunCommandCaptureOutput executes a local command and returns its stdout as a string,
+// for callers that need to parse the result (e.g. `aws ec2 describe-instances --output
+// json`) rather than just check pass/fail. Stderr still streams to the terminal so
+// failures remain visible.
+func RunCommandCaptureOutput(name string, args ...string) (string, error) {
+	fmt.Printf("==> Executing: %s %s\n", name, strings.Join(args, " "))
+	cmd := exec.Command(name, args...)
+	cmd.Stderr = os.Stderr
+	out, err := cmd.Output()
+	return string(out), err
+}
+
 // CheckFatal exits the program if err is not nil.
 func CheckFatal(err error, msg string) {
 	if err != nil {

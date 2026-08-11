@@ -105,6 +105,14 @@ Cross-compiles the Linux `lfr-tunneld` binary and deploys it along with static a
 ```
 *Note: `deploy` never touches nginx config -- see "Reconciling Nginx Config" below for that.*
 
+*Note (#1050): pass `-aws-region <region>` (or set `AWS_REGION`/`central.aws_region`) if the
+target might be a stopped EC2 instance -- e.g. edge-us/edge-apac's deliberately-wrong
+midnight-8am shutdown schedule kept as a live test case for #885. When set, `deploy` starts
+the instance first if it's stopped, waits for SSH, deploys, then stops it back afterward
+(whether the deploy succeeds or fails). Requires the `aws` CLI to be authenticated already --
+`deploy` doesn't handle AWS credentials itself. Leave unset for central (never scheduled off)
+or any target you know is already running.*
+
 ### Reconciling Nginx Config
 `deploy` only ever uploads the `lfr-tunneld` binary and static assets -- a fix to the nginx config template (e.g. the #979 ACME-fallback location block) only ever reached a box on its *initial* provision, never on a normal `deploy` (#997). Use `reconcile-nginx` to regenerate the current central's nginx config and push it to an already-provisioned box. Safe to re-run repeatedly: it backs up the existing config, swaps in the new one, runs `nginx -t`, and only reloads if that passes -- otherwise it restores the backup and reloads that instead, so a bad reconcile can't leave the box without a working config. `scripts/common/setup-central-vps.sh` (initial provisioning) generates its nginx config the same way, via `lfr-tunnel-ops render-nginx-config` -- the two paths share exactly one template now and can't drift apart from each other again (#1026).
 ```bash

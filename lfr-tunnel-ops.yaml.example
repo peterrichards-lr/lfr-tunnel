@@ -22,6 +22,12 @@ central:
   host: central.example.com
   # Path to your SSH private key for that host. ~ is expanded to your home directory.
   identity_file: ~/.ssh/my-central-key.pem
+  # Optional (#1050). Only `deploy` uses this, and only if set: if the target's EC2
+  # instance is stopped (e.g. an edge caught inside a scheduled power-off window), deploy
+  # starts it, waits for SSH, deploys, then stops it back afterward -- whether the deploy
+  # succeeds or fails. Leave unset (or omit the line) to never touch EC2 power state, same
+  # as before this field existed. Can also be set via -aws-region or the AWS_REGION env var.
+  # aws_region: eu-west-1
 
 # Only needed for `lfr-tunnel-ops reconcile-nginx`.
 nginx:

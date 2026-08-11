@@ -17,6 +17,14 @@ type DeployTarget struct {
 	User         string
 	Host         string
 	IdentityFile string
+	// AWSRegion is optional and, unlike the three fields above, has no hardcoded
+	// requirement -- most commands never need it. When set, `deploy` uses it to check
+	// whether the target's EC2 instance is stopped (e.g. edge-us/edge-apac's
+	// deliberately-wrong midnight-8am shutdown schedule kept as a live test case for
+	// #885) and, if so, starts it for the duration of the deploy and restores its
+	// previous power state afterward (#1050). Empty means "don't touch EC2 power state
+	// at all", which is the same as before this field existed.
+	AWSRegion string
 }
 
 // NginxTarget is the fully-resolved input for reconcile-nginx beyond the DeployTarget
@@ -34,6 +42,7 @@ type opsConfigTarget struct {
 		User         string `yaml:"user"`
 		Host         string `yaml:"host"`
 		IdentityFile string `yaml:"identity_file"`
+		AWSRegion    string `yaml:"aws_region"`
 	} `yaml:"central"`
 	Nginx struct {
 		Domains []string `yaml:"domains"`
@@ -128,6 +137,14 @@ func sortedTargetNames(targets map[string]opsConfigTarget) []string {
 // just one, then errors listing the available names if it defines more than one and neither
 // selected. Single-target files (no targets: map at all) ignore this entirely.
 func ResolveDeployTarget(flagUser, flagHost, flagIdentity, flagTarget string) (DeployTarget, error) {
+	return ResolveDeployTargetWithRegion(flagUser, flagHost, flagIdentity, "", flagTarget)
+}
+
+// ResolveDeployTargetWithRegion is ResolveDeployTarget plus the optional AWSRegion field
+// (#1050). A separate function rather than adding the parameter to ResolveDeployTarget
+// itself, so every existing call site (most commands don't need EC2 power management)
+// doesn't have to pass an empty string through for a field it doesn't care about.
+func ResolveDeployTargetWithRegion(flagUser, flagHost, flagIdentity, flagAWSRegion, flagTarget string) (DeployTarget, error) {
 	if flagTarget == "" {
 		flagTarget = os.Getenv("LFT_OPS_TARGET")
 	}
@@ -140,6 +157,7 @@ func ResolveDeployTarget(flagUser, flagHost, flagIdentity, flagTarget string) (D
 		User:         flagUser,
 		Host:         flagHost,
 		IdentityFile: flagIdentity,
+		AWSRegion:    flagAWSRegion,
 	}
 
 	if target.User == "" {
@@ -151,6 +169,9 @@ func ResolveDeployTarget(flagUser, flagHost, flagIdentity, flagTarget string) (D
 	if target.IdentityFile == "" {
 		target.IdentityFile = os.Getenv("LFT_IDENTITY_FILE")
 	}
+	if target.AWSRegion == "" {
+		target.AWSRegion = os.Getenv("AWS_REGION")
+	}
 
 	if cfg != nil {
 		if target.User == "" {
@@ -161,6 +182,9 @@ func ResolveDeployTarget(flagUser, flagHost, flagIdentity, flagTarget string) (D
 		}
 		if target.IdentityFile == "" {
 			target.IdentityFile = cfg.Central.IdentityFile
+		}
+		if target.AWSRegion == "" {
+			target.AWSRegion = cfg.Central.AWSRegion
 		}
 	}
 
@@ -237,16 +261,25 @@ func ResolveNginxTarget(flagDomains []string, flagPort, flagTarget string) (Ngin
 // enable/disable action) must slice that off args before calling this -- flag.Parse stops
 // at the first non-flag argument, so a positional arg has to come first either way.
 func parseTargetFlags(name string, args []string) (identityFile, user, host, target string, err error) {
+	identityFile, user, host, _, target, err = parseTargetFlagsWithRegion(name, args)
+	return identityFile, user, host, target, err
+}
+
+// parseTargetFlagsWithRegion is parseTargetFlags plus the optional -aws-region flag
+// (#1050) -- only DeployCommand needs it, so it's a separate function rather than
+// changing parseTargetFlags's signature for every caller.
+func parseTargetFlagsWithRegion(name string, args []string) (identityFile, user, host, awsRegion, target string, err error) {
 	fs := flag.NewFlagSet(name, flag.ContinueOnError)
 	fs.SetOutput(io.Discard)
 	i := fs.String("i", "", "path to SSH private key file")
 	u := fs.String("u", "", "SSH username on the central VPS")
 	s := fs.String("s", "", "SSH host (IP or hostname) of the central VPS")
+	r := fs.String("aws-region", "", "AWS region the target's EC2 instance lives in -- if set, deploy will start it first if stopped and restore its previous power state afterward (#1050)")
 	t := fs.String("target", "", "named target to use from a multi-target lfr-tunnel-ops.yaml (#1028)")
 	if err := fs.Parse(args); err != nil {
-		return "", "", "", "", err
+		return "", "", "", "", "", err
 	}
-	return *i, *u, *s, *t, nil
+	return *i, *u, *s, *r, *t, nil
 }
 
 // expandHomeDir expands a leading ~ or ~/ the same way a shell would, since ssh/scp don't

@@ -8,21 +8,19 @@ import (
 // MaintenanceCommand toggles Nginx maintenance mode on the VPS.
 func MaintenanceCommand(args []string) {
 	if len(args) < 1 || IsHelpRequest(args) {
-		fmt.Println("Usage: lfr-tunnel-ops maintenance <enable|disable> [-i identity_file]")
+		fmt.Println("Usage: lfr-tunnel-ops maintenance <enable|disable> [-i identity_file] [-u user] [-s host]")
 		fmt.Println("\nEnables or disables Nginx maintenance mode on the central VPS over SSH.")
-		fmt.Println("The target is resolved from (highest precedence first) the -i flag /")
+		fmt.Println("The target is resolved from (highest precedence first) the -i/-u/-s flags /")
 		fmt.Println("VPS_USER,VPS_IP,LFT_IDENTITY_FILE env vars / lfr-tunnel-ops.yaml -- see")
 		fmt.Println("lfr-tunnel-ops.yaml.example. Real, live effect on production traffic.")
 		return
 	}
 
 	action := args[0]
-	flagIdentity := ""
-	if len(args) > 1 && args[1] == "-i" && len(args) > 2 {
-		flagIdentity = args[2]
-	}
+	flagIdentity, flagUser, flagHost, err := parseTargetFlags("maintenance", args[1:])
+	CheckFatal(err, "Failed to parse arguments")
 
-	target, err := ResolveDeployTarget("", "", flagIdentity)
+	target, err := ResolveDeployTarget(flagUser, flagHost, flagIdentity)
 	CheckFatal(err, "Failed to resolve deployment target")
 	identityFile := target.IdentityFile
 	sshTarget := fmt.Sprintf("%s@%s", target.User, target.Host)
@@ -45,23 +43,21 @@ func MaintenanceCommand(args []string) {
 // DiagnoseCommand runs diagnostics on the VPS.
 func DiagnoseCommand(args []string) {
 	if IsHelpRequest(args) {
-		fmt.Println("Usage: lfr-tunnel-ops diagnose [-i identity_file]")
+		fmt.Println("Usage: lfr-tunnel-ops diagnose [-i identity_file] [-u user] [-s host]")
 		fmt.Println("\nSSHes into the central VPS and runs read-only checks: uptime,")
 		fmt.Println("lfr-tunneld/nginx status, UFW rules, cert listing, recent error logs. Does")
 		fmt.Println("not modify anything on the VPS. The target is resolved from (highest")
-		fmt.Println("precedence first) the -i flag / VPS_USER,VPS_IP,LFT_IDENTITY_FILE env vars /")
-		fmt.Println("lfr-tunnel-ops.yaml -- see lfr-tunnel-ops.yaml.example.")
+		fmt.Println("precedence first) the -i/-u/-s flags / VPS_USER,VPS_IP,LFT_IDENTITY_FILE env")
+		fmt.Println("vars / lfr-tunnel-ops.yaml -- see lfr-tunnel-ops.yaml.example.")
 		return
 	}
 
 	fmt.Println("=== Running Gateway Diagnostics ===")
 
-	flagIdentity := ""
-	if len(args) > 0 && args[0] == "-i" && len(args) > 1 {
-		flagIdentity = args[1]
-	}
+	flagIdentity, flagUser, flagHost, err := parseTargetFlags("diagnose", args)
+	CheckFatal(err, "Failed to parse arguments")
 
-	target, err := ResolveDeployTarget("", "", flagIdentity)
+	target, err := ResolveDeployTarget(flagUser, flagHost, flagIdentity)
 	CheckFatal(err, "Failed to resolve deployment target")
 	identityFile := target.IdentityFile
 	sshTarget := fmt.Sprintf("%s@%s", target.User, target.Host)

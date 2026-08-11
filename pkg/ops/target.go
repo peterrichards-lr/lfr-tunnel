@@ -1,7 +1,9 @@
 package ops
 
 import (
+	"flag"
 	"fmt"
+	"io"
 	"os"
 	"strings"
 
@@ -155,6 +157,28 @@ func ResolveNginxTarget(flagDomains []string, flagPort string) (NginxTarget, err
 	}
 
 	return target, nil
+}
+
+// parseTargetFlags parses the -i/-u/-s flags common to every lfr-tunnel-ops command that
+// resolves a DeployTarget, using the standard library's flag.FlagSet rather than hand-rolled
+// positional checks (the original `args[0] == "-i"` style required -i to be the very first
+// argument and would have silently misparsed the moment a second flag like -u/-s was added
+// in any order). name is used only for flag.FlagSet's own internal error-prefixing; callers
+// print their own usage text on error, so the FlagSet's built-in usage output is discarded.
+//
+// Callers with a leading positional argument of their own (e.g. maintenance's
+// enable/disable action) must slice that off args before calling this -- flag.Parse stops
+// at the first non-flag argument, so a positional arg has to come first either way.
+func parseTargetFlags(name string, args []string) (identityFile, user, host string, err error) {
+	fs := flag.NewFlagSet(name, flag.ContinueOnError)
+	fs.SetOutput(io.Discard)
+	i := fs.String("i", "", "path to SSH private key file")
+	u := fs.String("u", "", "SSH username on the central VPS")
+	s := fs.String("s", "", "SSH host (IP or hostname) of the central VPS")
+	if err := fs.Parse(args); err != nil {
+		return "", "", "", err
+	}
+	return *i, *u, *s, nil
 }
 
 // expandHomeDir expands a leading ~ or ~/ the same way a shell would, since ssh/scp don't

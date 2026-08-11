@@ -9,9 +9,11 @@ This skill guides you through the common operational tasks for the Liferay Tunne
 
 ## 0. One-Time Setup: Deployment Target
 
-Every `lfr-tunnel-ops` command below that talks to the central VPS (`deploy`, `deploy-clients`, `maintenance`, `diagnose`, `reconcile-nginx`) resolves *which* VPS, as which user, with which SSH key -- none of them hardcode a specific server. Resolution order per field, highest precedence first: a command's own `-i` flag, then `VPS_USER`/`VPS_IP`/`LFT_IDENTITY_FILE` environment variables, then `lfr-tunnel-ops.yaml` (gitignored, at the repo root).
+Every `lfr-tunnel-ops` command below that talks to the central VPS (`deploy`, `deploy-clients`, `maintenance`, `diagnose`, `reconcile-nginx`) resolves *which* VPS, as which user, with which SSH key -- none of them hardcode a specific server. Resolution order per field, highest precedence first: a command's own `-i`/`-u`/`-s` flags, then `VPS_USER`/`VPS_IP`/`LFT_IDENTITY_FILE` environment variables, then `lfr-tunnel-ops.yaml` (gitignored, at the repo root).
 
 Copy `lfr-tunnel-ops.yaml.example` to `lfr-tunnel-ops.yaml` and fill in your actual central VPS's user/host/SSH key once, and every command below just works without repeating `-i` on each invocation. If nothing is configured through any of the three sources, the command exits with a clear error naming exactly which field is missing, rather than silently deploying to the wrong place.
+
+**Managing more than one environment** (e.g. staging/production) from the same checkout: use `lfr-tunnel-ops.yaml`'s multi-target shape (a `targets:` map of named entries, see the commented-out block in `lfr-tunnel-ops.yaml.example`) instead of the flat `central:`/`nginx:` shape. Select which one a command uses with `-target <name>` or the `LFT_OPS_TARGET` env var (same flag-wins-over-env precedence as everything else). If the file defines exactly one target, it's used automatically; if it defines more than one and neither is set, every command errors out listing the available names.
 
 ---
 

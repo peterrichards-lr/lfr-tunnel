@@ -171,8 +171,9 @@ func ReconcileNginxCommand(args []string) {
 	identityFile := fs.String("i", "", "path to SSH private key file (falls back to VPS_USER,VPS_IP,LFT_IDENTITY_FILE env vars / lfr-tunnel-ops.yaml)")
 	flagUser := fs.String("u", "", "SSH username on the central VPS (falls back to VPS_USER env var / lfr-tunnel-ops.yaml)")
 	flagHost := fs.String("s", "", "SSH host of the central VPS (falls back to VPS_IP env var / lfr-tunnel-ops.yaml)")
+	flagTarget := fs.String("target", "", "named target to use from a multi-target lfr-tunnel-ops.yaml (#1028)")
 	fs.Usage = func() {
-		fmt.Println("Usage: lfr-tunnel-ops reconcile-nginx [-domains <d1,d2,...>] [-port <port>] [-i identity_file] [-u user] [-s host]")
+		fmt.Println("Usage: lfr-tunnel-ops reconcile-nginx [-domains <d1,d2,...>] [-port <port>] [-i identity_file] [-u user] [-s host] [-target name]")
 		fmt.Println("\nRegenerates /etc/nginx/sites-available/lfr-tunnel from the same template")
 		fmt.Println("setup-central-vps.sh uses for initial provisioning, and pushes it to the")
 		fmt.Println("central VPS over SSH. Backs up the existing config, swaps in the new one,")
@@ -180,7 +181,8 @@ func ReconcileNginxCommand(args []string) {
 		fmt.Println("the backup and reloads that instead. Real, live effect on production")
 		fmt.Println("traffic; safe to re-run repeatedly. The target (and domains/port, if not")
 		fmt.Println("passed as flags) is resolved from env vars / lfr-tunnel-ops.yaml -- see")
-		fmt.Println("lfr-tunnel-ops.yaml.example.")
+		fmt.Println("lfr-tunnel-ops.yaml.example. -target/LFT_OPS_TARGET selects which named")
+		fmt.Println("target to use from a multi-target config file.")
 	}
 	if IsHelpRequest(args) {
 		fs.Usage()
@@ -190,11 +192,11 @@ func ReconcileNginxCommand(args []string) {
 		CheckFatal(err, "Failed to parse arguments")
 	}
 
-	nginxTarget, err := ResolveNginxTarget(parseDomainsFlag(*domainsFlag), *port)
+	nginxTarget, err := ResolveNginxTarget(parseDomainsFlag(*domainsFlag), *port, *flagTarget)
 	CheckFatal(err, "Failed to resolve nginx target")
 	domains := nginxTarget.Domains
 
-	target, err := ResolveDeployTarget(*flagUser, *flagHost, *identityFile)
+	target, err := ResolveDeployTarget(*flagUser, *flagHost, *identityFile, *flagTarget)
 	CheckFatal(err, "Failed to resolve deployment target")
 	sshTarget := fmt.Sprintf("%s@%s", target.User, target.Host)
 

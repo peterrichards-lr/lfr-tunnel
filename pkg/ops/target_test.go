@@ -26,6 +26,7 @@ func clearTargetEnv(t *testing.T) {
 	t.Setenv("VPS_USER", "")
 	t.Setenv("VPS_IP", "")
 	t.Setenv("LFT_IDENTITY_FILE", "")
+	t.Setenv("LFT_OPS_TARGET", "")
 	t.Setenv("LFT_OPS_CONFIG", filepath.Join(t.TempDir(), "nonexistent.yaml"))
 }
 
@@ -38,7 +39,7 @@ central:
   identity_file: /tmp/my-key.pem
 `)
 
-	target, err := ResolveDeployTarget("", "", "")
+	target, err := ResolveDeployTarget("", "", "", "")
 	if err != nil {
 		t.Fatalf("expected resolution to succeed from config file alone, got: %v", err)
 	}
@@ -57,7 +58,7 @@ central:
 `)
 	t.Setenv("VPS_IP", "env-host.example.com")
 
-	target, err := ResolveDeployTarget("", "", "")
+	target, err := ResolveDeployTarget("", "", "", "")
 	if err != nil {
 		t.Fatalf("expected resolution to succeed, got: %v", err)
 	}
@@ -80,7 +81,7 @@ central:
 `)
 	t.Setenv("VPS_IP", "env-host.example.com")
 
-	target, err := ResolveDeployTarget("", "flag-host.example.com", "")
+	target, err := ResolveDeployTarget("", "flag-host.example.com", "", "")
 	if err != nil {
 		t.Fatalf("expected resolution to succeed, got: %v", err)
 	}
@@ -92,7 +93,7 @@ central:
 func TestResolveDeployTarget_NothingConfiguredErrorsClearly(t *testing.T) {
 	clearTargetEnv(t)
 
-	_, err := ResolveDeployTarget("", "", "")
+	_, err := ResolveDeployTarget("", "", "", "")
 	if err == nil {
 		t.Fatal("expected an error when no target is configured at all")
 	}
@@ -109,7 +110,7 @@ func TestResolveDeployTarget_MissingConfigFileStillWorksViaEnv(t *testing.T) {
 	t.Setenv("VPS_IP", "env-only.example.com")
 	t.Setenv("LFT_IDENTITY_FILE", "/tmp/env-key.pem")
 
-	target, err := ResolveDeployTarget("", "", "")
+	target, err := ResolveDeployTarget("", "", "", "")
 	if err != nil {
 		t.Fatalf("expected resolution to succeed from env vars alone with no config file present, got: %v", err)
 	}
@@ -125,7 +126,7 @@ func TestResolveDeployTarget_ExpandsHomeDir(t *testing.T) {
 		t.Skip("cannot resolve home directory in this environment")
 	}
 
-	target, err := ResolveDeployTarget("ubuntu", "example.com", "~/.ssh/my-key.pem")
+	target, err := ResolveDeployTarget("ubuntu", "example.com", "~/.ssh/my-key.pem", "")
 	if err != nil {
 		t.Fatalf("expected resolution to succeed, got: %v", err)
 	}
@@ -144,7 +145,7 @@ nginx:
   port: "8080"
 `)
 
-	target, err := ResolveNginxTarget(nil, "")
+	target, err := ResolveNginxTarget(nil, "", "")
 	if err != nil {
 		t.Fatalf("expected resolution to succeed from config file alone, got: %v", err)
 	}
@@ -165,7 +166,7 @@ nginx:
   port: "8080"
 `)
 
-	target, err := ResolveNginxTarget([]string{"flag.example.com"}, "9090")
+	target, err := ResolveNginxTarget([]string{"flag.example.com"}, "9090", "")
 	if err != nil {
 		t.Fatalf("expected resolution to succeed, got: %v", err)
 	}
@@ -180,7 +181,7 @@ nginx:
 func TestResolveNginxTarget_NothingConfiguredErrorsClearly(t *testing.T) {
 	clearTargetEnv(t)
 
-	_, err := ResolveNginxTarget(nil, "")
+	_, err := ResolveNginxTarget(nil, "", "")
 	if err == nil {
 		t.Fatal("expected an error when no nginx target is configured at all")
 	}
@@ -195,7 +196,8 @@ func TestResolveNginxTarget_NothingConfiguredErrorsClearly(t *testing.T) {
 // `args[0] == "-i"` positional checks were exposed to: silently misparsing the moment more
 // than one flag exists, or the caller passes them in a different order than the code
 // happened to expect. flag.FlagSet (stdlib, well-tested) fixes this, but the wiring
-// (mapping -i/-u/-s onto identityFile/user/host) is still worth covering directly.
+// (mapping -i/-u/-s/-target onto identityFile/user/host/target) is still worth covering
+// directly.
 func TestParseTargetFlags(t *testing.T) {
 	tests := []struct {
 		name         string
@@ -203,14 +205,16 @@ func TestParseTargetFlags(t *testing.T) {
 		wantIdentity string
 		wantUser     string
 		wantHost     string
+		wantTarget   string
 		wantErr      bool
 	}{
 		{
-			name:         "all three flags in the documented order",
-			args:         []string{"-i", "/tmp/key.pem", "-u", "ubuntu", "-s", "central.example.com"},
+			name:         "all four flags in the documented order",
+			args:         []string{"-i", "/tmp/key.pem", "-u", "ubuntu", "-s", "central.example.com", "-target", "production"},
 			wantIdentity: "/tmp/key.pem",
 			wantUser:     "ubuntu",
 			wantHost:     "central.example.com",
+			wantTarget:   "production",
 		},
 		{
 			name:         "flags in a different order still parse correctly",
@@ -220,7 +224,7 @@ func TestParseTargetFlags(t *testing.T) {
 			wantHost:     "central.example.com",
 		},
 		{
-			name:         "only -i, no -u/-s",
+			name:         "only -i, no -u/-s/-target",
 			args:         []string{"-i", "/tmp/key.pem"},
 			wantIdentity: "/tmp/key.pem",
 		},
@@ -242,7 +246,7 @@ func TestParseTargetFlags(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			identity, user, host, err := parseTargetFlags("test", tt.args)
+			identity, user, host, target, err := parseTargetFlags("test", tt.args)
 			if tt.wantErr {
 				if err == nil {
 					t.Fatal("expected an error, got nil")
@@ -252,10 +256,181 @@ func TestParseTargetFlags(t *testing.T) {
 			if err != nil {
 				t.Fatalf("expected no error, got: %v", err)
 			}
-			if identity != tt.wantIdentity || user != tt.wantUser || host != tt.wantHost {
-				t.Errorf("got (identity=%q, user=%q, host=%q), want (identity=%q, user=%q, host=%q)",
-					identity, user, host, tt.wantIdentity, tt.wantUser, tt.wantHost)
+			if identity != tt.wantIdentity || user != tt.wantUser || host != tt.wantHost || target != tt.wantTarget {
+				t.Errorf("got (identity=%q, user=%q, host=%q, target=%q), want (identity=%q, user=%q, host=%q, target=%q)",
+					identity, user, host, target, tt.wantIdentity, tt.wantUser, tt.wantHost, tt.wantTarget)
 			}
 		})
+	}
+}
+
+// -- Multi-target config file tests (#1028) --
+
+func TestResolveDeployTarget_MultiTarget_SingleEntryUsedImplicitly(t *testing.T) {
+	clearTargetEnv(t)
+	writeOpsConfig(t, `
+targets:
+  production:
+    central:
+      user: ubuntu
+      host: central.example.com
+      identity_file: /tmp/prod-key.pem
+`)
+
+	target, err := ResolveDeployTarget("", "", "", "")
+	if err != nil {
+		t.Fatalf("expected the file's only target to be used implicitly, got error: %v", err)
+	}
+	if target.Host != "central.example.com" {
+		t.Errorf("unexpected target: %+v", target)
+	}
+}
+
+func TestResolveDeployTarget_MultiTarget_SelectedByFlag(t *testing.T) {
+	clearTargetEnv(t)
+	writeOpsConfig(t, `
+targets:
+  production:
+    central:
+      user: ubuntu
+      host: prod.example.com
+      identity_file: /tmp/prod-key.pem
+  staging:
+    central:
+      user: ubuntu
+      host: staging.example.com
+      identity_file: /tmp/staging-key.pem
+`)
+
+	target, err := ResolveDeployTarget("", "", "", "staging")
+	if err != nil {
+		t.Fatalf("expected resolution to succeed with an explicit -target, got: %v", err)
+	}
+	if target.Host != "staging.example.com" {
+		t.Errorf("expected the staging target to be selected, got: %+v", target)
+	}
+}
+
+func TestResolveDeployTarget_MultiTarget_SelectedByEnvVar(t *testing.T) {
+	clearTargetEnv(t)
+	writeOpsConfig(t, `
+targets:
+  production:
+    central:
+      user: ubuntu
+      host: prod.example.com
+      identity_file: /tmp/prod-key.pem
+  staging:
+    central:
+      user: ubuntu
+      host: staging.example.com
+      identity_file: /tmp/staging-key.pem
+`)
+	t.Setenv("LFT_OPS_TARGET", "production")
+
+	target, err := ResolveDeployTarget("", "", "", "")
+	if err != nil {
+		t.Fatalf("expected resolution to succeed via LFT_OPS_TARGET, got: %v", err)
+	}
+	if target.Host != "prod.example.com" {
+		t.Errorf("expected the production target to be selected via env var, got: %+v", target)
+	}
+}
+
+func TestResolveDeployTarget_MultiTarget_FlagOverridesEnvVar(t *testing.T) {
+	clearTargetEnv(t)
+	writeOpsConfig(t, `
+targets:
+  production:
+    central:
+      user: ubuntu
+      host: prod.example.com
+      identity_file: /tmp/prod-key.pem
+  staging:
+    central:
+      user: ubuntu
+      host: staging.example.com
+      identity_file: /tmp/staging-key.pem
+`)
+	t.Setenv("LFT_OPS_TARGET", "production")
+
+	target, err := ResolveDeployTarget("", "", "", "staging")
+	if err != nil {
+		t.Fatalf("expected resolution to succeed, got: %v", err)
+	}
+	if target.Host != "staging.example.com" {
+		t.Errorf("expected the -target flag to win over LFT_OPS_TARGET, got: %+v", target)
+	}
+}
+
+func TestResolveDeployTarget_MultiTarget_AmbiguousWithoutSelectionErrorsWithNames(t *testing.T) {
+	clearTargetEnv(t)
+	writeOpsConfig(t, `
+targets:
+  production:
+    central:
+      user: ubuntu
+      host: prod.example.com
+      identity_file: /tmp/prod-key.pem
+  staging:
+    central:
+      user: ubuntu
+      host: staging.example.com
+      identity_file: /tmp/staging-key.pem
+`)
+
+	_, err := ResolveDeployTarget("", "", "", "")
+	if err == nil {
+		t.Fatal("expected an error when the file defines multiple targets and none is selected")
+	}
+	for _, want := range []string{"production", "staging", "-target", "LFT_OPS_TARGET"} {
+		if !strings.Contains(err.Error(), want) {
+			t.Errorf("expected error to mention %q, got: %v", want, err)
+		}
+	}
+}
+
+func TestResolveDeployTarget_MultiTarget_UnknownNameErrorsWithAvailableNames(t *testing.T) {
+	clearTargetEnv(t)
+	writeOpsConfig(t, `
+targets:
+  production:
+    central:
+      user: ubuntu
+      host: prod.example.com
+      identity_file: /tmp/prod-key.pem
+`)
+
+	_, err := ResolveDeployTarget("", "", "", "nonexistent")
+	if err == nil {
+		t.Fatal("expected an error when the requested target doesn't exist")
+	}
+	if !strings.Contains(err.Error(), "nonexistent") || !strings.Contains(err.Error(), "production") {
+		t.Errorf("expected error to name both the requested and available targets, got: %v", err)
+	}
+}
+
+func TestResolveNginxTarget_MultiTarget_SelectedByFlag(t *testing.T) {
+	clearTargetEnv(t)
+	writeOpsConfig(t, `
+targets:
+  production:
+    nginx:
+      domains:
+        - prod.example.com
+      port: "8080"
+  staging:
+    nginx:
+      domains:
+        - staging.example.com
+      port: "9090"
+`)
+
+	target, err := ResolveNginxTarget(nil, "", "staging")
+	if err != nil {
+		t.Fatalf("expected resolution to succeed, got: %v", err)
+	}
+	if len(target.Domains) != 1 || target.Domains[0] != "staging.example.com" || target.Port != "9090" {
+		t.Errorf("expected the staging target's nginx config, got: %+v", target)
 	}
 }

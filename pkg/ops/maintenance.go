@@ -8,19 +8,21 @@ import (
 // MaintenanceCommand toggles Nginx maintenance mode on the VPS.
 func MaintenanceCommand(args []string) {
 	if len(args) < 1 || IsHelpRequest(args) {
-		fmt.Println("Usage: lfr-tunnel-ops maintenance <enable|disable> [-i identity_file] [-u user] [-s host]")
+		fmt.Println("Usage: lfr-tunnel-ops maintenance <enable|disable> [-i identity_file] [-u user] [-s host] [-target name]")
 		fmt.Println("\nEnables or disables Nginx maintenance mode on the central VPS over SSH.")
 		fmt.Println("The target is resolved from (highest precedence first) the -i/-u/-s flags /")
 		fmt.Println("VPS_USER,VPS_IP,LFT_IDENTITY_FILE env vars / lfr-tunnel-ops.yaml -- see")
-		fmt.Println("lfr-tunnel-ops.yaml.example. Real, live effect on production traffic.")
+		fmt.Println("lfr-tunnel-ops.yaml.example. -target/LFT_OPS_TARGET selects which named")
+		fmt.Println("target to use from a multi-target config file. Real, live effect on")
+		fmt.Println("production traffic.")
 		return
 	}
 
 	action := args[0]
-	flagIdentity, flagUser, flagHost, err := parseTargetFlags("maintenance", args[1:])
+	flagIdentity, flagUser, flagHost, flagTarget, err := parseTargetFlags("maintenance", args[1:])
 	CheckFatal(err, "Failed to parse arguments")
 
-	target, err := ResolveDeployTarget(flagUser, flagHost, flagIdentity)
+	target, err := ResolveDeployTarget(flagUser, flagHost, flagIdentity, flagTarget)
 	CheckFatal(err, "Failed to resolve deployment target")
 	identityFile := target.IdentityFile
 	sshTarget := fmt.Sprintf("%s@%s", target.User, target.Host)
@@ -43,21 +45,23 @@ func MaintenanceCommand(args []string) {
 // DiagnoseCommand runs diagnostics on the VPS.
 func DiagnoseCommand(args []string) {
 	if IsHelpRequest(args) {
-		fmt.Println("Usage: lfr-tunnel-ops diagnose [-i identity_file] [-u user] [-s host]")
+		fmt.Println("Usage: lfr-tunnel-ops diagnose [-i identity_file] [-u user] [-s host] [-target name]")
 		fmt.Println("\nSSHes into the central VPS and runs read-only checks: uptime,")
 		fmt.Println("lfr-tunneld/nginx status, UFW rules, cert listing, recent error logs. Does")
 		fmt.Println("not modify anything on the VPS. The target is resolved from (highest")
 		fmt.Println("precedence first) the -i/-u/-s flags / VPS_USER,VPS_IP,LFT_IDENTITY_FILE env")
 		fmt.Println("vars / lfr-tunnel-ops.yaml -- see lfr-tunnel-ops.yaml.example.")
+		fmt.Println("-target/LFT_OPS_TARGET selects which named target to use from a")
+		fmt.Println("multi-target config file.")
 		return
 	}
 
 	fmt.Println("=== Running Gateway Diagnostics ===")
 
-	flagIdentity, flagUser, flagHost, err := parseTargetFlags("diagnose", args)
+	flagIdentity, flagUser, flagHost, flagTarget, err := parseTargetFlags("diagnose", args)
 	CheckFatal(err, "Failed to parse arguments")
 
-	target, err := ResolveDeployTarget(flagUser, flagHost, flagIdentity)
+	target, err := ResolveDeployTarget(flagUser, flagHost, flagIdentity, flagTarget)
 	CheckFatal(err, "Failed to resolve deployment target")
 	identityFile := target.IdentityFile
 	sshTarget := fmt.Sprintf("%s@%s", target.User, target.Host)

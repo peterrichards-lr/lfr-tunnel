@@ -190,15 +190,7 @@ func ReconcileNginxCommand(args []string) {
 		CheckFatal(err, "Failed to parse arguments")
 	}
 
-	var flagDomains []string
-	for _, d := range strings.Split(*domainsFlag, ",") {
-		d = strings.TrimSpace(d)
-		if d != "" {
-			flagDomains = append(flagDomains, d)
-		}
-	}
-
-	nginxTarget, err := ResolveNginxTarget(flagDomains, *port)
+	nginxTarget, err := ResolveNginxTarget(parseDomainsFlag(*domainsFlag), *port)
 	CheckFatal(err, "Failed to resolve nginx target")
 	domains := nginxTarget.Domains
 
@@ -262,4 +254,55 @@ fi
 	CheckFatal(err, "Reconcile failed -- see output above; the remote side should already have rolled back to its previous working config")
 
 	fmt.Println("=== Nginx Reconcile Complete! ===")
+}
+
+// RenderNginxConfigCommand prints the nginx config for one or more domain groups to
+// stdout, using the exact same buildNginxConfig template ReconcileNginxCommand uses.
+// Purely local -- no SSH, no deployment target needed. This exists so
+// scripts/common/setup-central-vps.sh (bash, initial provisioning) and reconcile-nginx (Go,
+// re-syncing an already-provisioned box) generate nginx config from exactly one source of
+// truth instead of two independently hand-maintained copies drifting apart, which is
+// precisely why #997 existed in the first place (#1026).
+func RenderNginxConfigCommand(args []string) {
+	fs := flag.NewFlagSet("render-nginx-config", flag.ExitOnError)
+	domainsFlag := fs.String("domains", "", "comma-separated domain groups, e.g. lfr-demo.se,lfr-demo.online (required)")
+	port := fs.String("port", "", "local port lfr-tunneld binds to (required)")
+	fs.Usage = func() {
+		fmt.Println("Usage: lfr-tunnel-ops render-nginx-config -domains <d1,d2,...> -port <port>")
+		fmt.Println("\nPrints the core nginx config for the given domain groups to stdout -- the")
+		fmt.Println("exact same template reconcile-nginx uses to re-sync an already-provisioned")
+		fmt.Println("box. Purely local, no SSH, no deployment target involved. Used by")
+		fmt.Println("setup-central-vps.sh during initial provisioning so it and reconcile-nginx")
+		fmt.Println("can never drift apart from each other again.")
+	}
+	if IsHelpRequest(args) {
+		fs.Usage()
+		return
+	}
+	if err := fs.Parse(args); err != nil {
+		CheckFatal(err, "Failed to parse arguments")
+	}
+
+	domains := parseDomainsFlag(*domainsFlag)
+	if len(domains) == 0 || *port == "" {
+		fmt.Println("ERROR: -domains and -port are both required.")
+		fs.Usage()
+		os.Exit(1)
+	}
+
+	fmt.Print(buildNginxConfig(domains, *port))
+}
+
+// parseDomainsFlag splits a comma-separated -domains flag value into a trimmed,
+// empty-entry-free list, shared by reconcile-nginx and render-nginx-config so their
+// (identical) handling of the same flag can't drift apart from each other.
+func parseDomainsFlag(csv string) []string {
+	var domains []string
+	for _, d := range strings.Split(csv, ",") {
+		d = strings.TrimSpace(d)
+		if d != "" {
+			domains = append(domains, d)
+		}
+	}
+	return domains
 }

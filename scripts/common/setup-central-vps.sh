@@ -80,10 +80,13 @@ if ! ssh $SSH_KEY_ARG $SSH_USER@$VPS_IP "sudo test -s /etc/letsencrypt/cloudflar
   usage
 fi
 
-# 1. Build linux/amd64 lfr-tunneld binary locally
+# 1. Build linux/amd64 lfr-tunneld binary locally, and the lfr-tunnel-ops CLI (needed below
+#    to render the nginx config from the same template reconcile-nginx uses -- never `go run`
+#    it, see the edr-constraints skill).
 VERSION="$(grep -oE 'Version = "[^"]+"' pkg/config/version.go | cut -d'"' -f2)"
 echo "=> Compiling lfr-tunneld for Linux (amd64) with Version=$VERSION..."
 GOOS=linux GOARCH=amd64 go build -ldflags="-s -w -X lfr-tunnel/pkg/config.Version=$VERSION" -trimpath -o bin/lfr-tunneld-central-linux ./cmd/lfr-tunneld
+go build -o bin/lfr-tunnel-ops ./cmd/lfr-tunnel-ops
 
 # 2. Install packages on the remote VPS (including security hardening packages).
 #    Note: no Postfix here — SMTP relaying is expected to be handled externally
@@ -112,130 +115,13 @@ ssh $SSH_KEY_ARG $SSH_USER@$VPS_IP "sudo certbot certonly \
 echo "=> Uploading server-config.yaml..."
 scp $SSH_KEY_ARG "$CONFIG_FILE" $SSH_USER@$VPS_IP:/home/$SSH_USER/server-config.yaml
 
-# 5. Generate Nginx virtual host configuration locally and upload
+# 5. Generate Nginx virtual host configuration locally and upload -- rendered by
+#    lfr-tunnel-ops from the exact same template `reconcile-nginx` uses to re-sync an
+#    already-provisioned box, so the two can never drift apart from each other again (#997,
+#    #1026).
 echo "=> Generating Nginx configuration locally..."
 NGINX_TMP="/tmp/nginx-central.conf"
-cat > "$NGINX_TMP" << EOF
-map \$http_upgrade \$connection_upgrade {
-    default upgrade;
-    ''      close;
-}
-
-# HTTP -> HTTPS redirect
-server {
-    listen 80;
-    listen [::]:80;
-    server_name $DOMAIN *.$DOMAIN;
-
-    # Neither of these server blocks has an explicit server_name for a vanity/custom
-    # domain (e.g. dev.solaramoto.com) added later via lfr-vanity-hook.sh -- until that
-    # domain's own conf.d/*.conf vhost exists and nginx has reloaded, requests for it fall
-    # through to whichever server block nginx treats as the implicit default for this
-    # listen socket, which is this one. Without this location, that meant ACME's own
-    # HTTP-01 validation request (and any real visitor hitting the domain during that same
-    # window) got redirected to HTTPS and then proxied straight through to the Go backend
-    # and on into the WS tunnel to whichever client holds that lease -- surfacing as a 502
-    # in the CLIENT's own request log, since nothing local is listening on that path
-    # (#979). Serving ACME challenges here directly, from the same shared webroot
-    # lfr-vanity-hook.sh's own per-domain vhosts use, closes that window regardless of
-    # whether a domain-specific vhost has been created yet. Harmless 404s if the vanity
-    # hook is never configured -- /var/www/lfr-tunnel-vanity not existing isn't an nginx
-    # config error, just an empty webroot.
-    location /.well-known/acme-challenge/ {
-        root /var/www/lfr-tunnel-vanity;
-        try_files \$uri =404;
-    }
-
-    location / {
-        return 301 https://\$host\$request_uri;
-    }
-}
-
-# Control plane / portal
-server {
-    listen 443 ssl http2;
-    listen [::]:443 ssl http2;
-    server_name $DOMAIN;
-
-    ssl_certificate /etc/letsencrypt/live/$DOMAIN/fullchain.pem;
-    ssl_certificate_key /etc/letsencrypt/live/$DOMAIN/privkey.pem;
-    include /etc/letsencrypt/options-ssl-nginx.conf;
-    ssl_dhparam /etc/letsencrypt/ssl-dhparams.pem;
-
-    # Same rationale as the port-80 block above -- a vanity domain's own HTTPS vhost
-    # doesn't exist until lfr-vanity-hook.sh has actually issued its certificate, and
-    # until then this is the implicit default for a Host header nothing else matches. If
-    # the HTTP-01 validator (or a real visitor) reaches this over HTTPS having already
-    # been redirected from port 80, this stops the same fall-through into the tunnel (#979).
-    location /.well-known/acme-challenge/ {
-        root /var/www/lfr-tunnel-vanity;
-        try_files \$uri =404;
-    }
-
-    location / {
-        proxy_pass http://127.0.0.1:$PORT;
-        proxy_http_version 1.1;
-        proxy_set_header Upgrade \$http_upgrade;
-        proxy_set_header Connection \$connection_upgrade;
-        proxy_set_header Host \$host;
-        proxy_set_header X-Real-IP \$remote_addr;
-        proxy_set_header X-Forwarded-For \$proxy_add_x_forwarded_for;
-        proxy_set_header X-Forwarded-Host \$host;
-        proxy_set_header X-Forwarded-Proto \$scheme;
-    }
-
-    location /tunnel {
-        proxy_pass http://127.0.0.1:$PORT;
-        proxy_http_version 1.1;
-        proxy_set_header Upgrade \$http_upgrade;
-        proxy_set_header Connection \$connection_upgrade;
-        proxy_set_header Host \$host;
-        proxy_set_header X-Real-IP \$remote_addr;
-        proxy_set_header X-Forwarded-For \$proxy_add_x_forwarded_for;
-        proxy_set_header X-Forwarded-Proto \$scheme;
-    }
-}
-
-# Wildcard data plane
-server {
-    listen 443 ssl http2;
-    listen [::]:443 ssl http2;
-    server_name *.$DOMAIN;
-
-    ssl_certificate /etc/letsencrypt/live/$DOMAIN/fullchain.pem;
-    ssl_certificate_key /etc/letsencrypt/live/$DOMAIN/privkey.pem;
-    include /etc/letsencrypt/options-ssl-nginx.conf;
-    ssl_dhparam /etc/letsencrypt/ssl-dhparams.pem;
-
-    # Signed client binaries/checksums (populated by lfr-tunnel-ops deploy-clients) are served
-    # directly from disk here, bypassing the Go app entirely -- it only ever serves /static/*
-    # from its own compiled-in embed.FS, which never contains these. Without this block,
-    # /install's own download links 404 even though the files exist on disk (see #949's
-    # follow-up, #955).
-    location /static/downloads/ {
-        alias /var/www/lfr-tunnel/static/downloads/;
-        autoindex off;
-        add_header Content-Disposition 'attachment';
-    }
-
-    location / {
-        proxy_pass http://127.0.0.1:$PORT;
-        proxy_http_version 1.1;
-        proxy_set_header Upgrade \$http_upgrade;
-        proxy_set_header Connection \$connection_upgrade;
-        proxy_set_header Host \$host;
-        proxy_set_header X-Real-IP \$remote_addr;
-        proxy_set_header X-Forwarded-For \$proxy_add_x_forwarded_for;
-        proxy_set_header X-Forwarded-Host \$host;
-        proxy_set_header X-Forwarded-Proto https;
-
-        client_max_body_size 500M;
-        proxy_connect_timeout 120s;
-        proxy_send_timeout 120s;
-        proxy_read_timeout 120s;
-    }
-}
-EOF
+./bin/lfr-tunnel-ops render-nginx-config -domains "$DOMAIN" -port "$PORT" > "$NGINX_TMP"
 
 echo "=> Uploading Nginx configuration..."
 scp $SSH_KEY_ARG "$NGINX_TMP" $SSH_USER@$VPS_IP:/home/$SSH_USER/lfr-tunneld-nginx.conf

@@ -17,6 +17,7 @@ func printUsage() {
 	fmt.Println("  deploy      Deploy server changes to the VPS")
 	fmt.Println("  deploy-clients Deploy signed client binaries to the VPS")
 	fmt.Println("  reconcile-nginx Regenerate and push the core nginx config to an already-provisioned VPS")
+	fmt.Println("  render-nginx-config Print the core nginx config to stdout (no SSH; used by setup-central-vps.sh)")
 	fmt.Println("  maintenance Enable or disable maintenance mode on the VPS")
 	fmt.Println("  diagnose    Run diagnostic checks on the gateway VPS")
 	fmt.Println("  dns         Reconcile DNS records (Cloudflare or Route53) against a YAML spec")
@@ -44,6 +45,8 @@ func main() {
 		ops.DeployClientsCommand(args)
 	case "reconcile-nginx":
 		ops.ReconcileNginxCommand(args)
+	case "render-nginx-config":
+		ops.RenderNginxConfigCommand(args)
 	case "maintenance":
 		ops.MaintenanceCommand(args)
 	case "diagnose":

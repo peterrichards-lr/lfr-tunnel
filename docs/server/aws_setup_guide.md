@@ -547,7 +547,79 @@ If you add the equivalent AAAA DNS records afterward (same pattern as
 [`setup_guide.md` §1.1](setup_guide.md#11-required-dns-records)), you get the same
 dual-stack behavior the current production VPS already has.
 
+---
+
+## 12. Route53 DDNS Setup (Corporate AWS Account DNS)
+
+DNS was migrated off a personal Cloudflare account onto this AWS account's Route53
+(#858) -- domains tied to a personal account have no corporate access continuity, audit
+trail, or offboarding safety net. `scripts/liferay/vm6/route53-ddns.sh` is Route53's
+equivalent of `cloudflare-ddns.sh`: it keeps each domain's A/AAAA/SPF records pointed at
+this box's current public IP, run on the same 5-minute timer cadence.
+
+### One-time IAM setup
+
+The central EC2 instance's IAM instance profile needs Route53 permissions to run this --
+by default it doesn't have any (it's scoped tightly to just edge power management, see
+`scripts/common/setup-edge-provisioner.sh`). Add an inline policy statement to that role,
+scoped to just the two hosted zones actually in use:
+
+```json
+{
+  "Sid": "DdnsRoute53Management",
+  "Effect": "Allow",
+  "Action": [
+    "route53:ChangeResourceRecordSets",
+    "route53:ListResourceRecordSets"
+  ],
+  "Resource": [
+    "arn:aws:route53:::hostedzone/<lfr-demo.se zone ID>",
+    "arn:aws:route53:::hostedzone/<lfr-demo.online zone ID>"
+  ]
+},
+{
+  "Sid": "DdnsRoute53ZoneLookup",
+  "Effect": "Allow",
+  "Action": "route53:ListHostedZonesByName",
+  "Resource": "*"
+}
+```
+
+`route53:ListHostedZonesByName` doesn't support resource-level scoping (hence
+`Resource: "*"` on that statement only) -- the actual read/write actions above are scoped
+to just the two zones. No credentials file is needed on the box at all: the AWS CLI picks
+up instance-profile credentials automatically via the instance metadata service.
+
+### Deploying the DDNS timer
+
+```bash
+scp route53-ddns.sh central:/tmp/ && ssh central 'sudo mv /tmp/route53-ddns.sh /usr/local/bin/ && sudo chmod +x /usr/local/bin/route53-ddns.sh'
+scp route53-ddns.service route53-ddns.timer central:/tmp/ && ssh central 'sudo mv /tmp/route53-ddns.{service,timer} /etc/systemd/system/ && sudo systemctl daemon-reload && sudo systemctl enable --now route53-ddns.timer'
+```
+
+### Known, permanent differences from Cloudflare's setup
+
+Confirmed live against both hosted zones while writing this:
+
+- **No apex CNAME/ALIAS flattening.** Cloudflare's proxy could flatten a CNAME at a zone
+  apex (`@`) to an external domain in a different zone; Route53's ALIAS record type can't
+  -- it only targets AWS resources (CloudFront/ELB/S3) or another record in the *same*
+  zone. `lfr-demo.online`'s apex is a literal A/AAAA record here, not a CNAME to
+  `lfr-demo.se` the way it briefly was on Cloudflare.
+- **`lfr-demo.online` has no wildcard subdomain space.** There's no `*.lfr-demo.online`
+  record, and `route53-ddns.sh` is deliberately configured not to create one (only
+  `lfr-demo.se` hands out auto-generated/reserved tunnel subdomains).
+- **SPF has no `ip4:`/`ip6:` literals.** Since #857 moved outbound mail entirely through
+  Amazon SES, the box's own IP no longer sends mail and doesn't need SPF coverage. The
+  live record is exactly `v=spf1 include:amazonses.com -all`. `route53-ddns.sh` defaults
+  `LFT_DDNS_SPF_INCLUDE_BOX_IP=false` to match -- re-enable only if a direct-send mail
+  path is ever reintroduced.
+- **Wildcard names read back escaped.** Route53's API accepts a literal `*` on write but
+  always returns wildcard record names as the escaped octal form (`\052.lfr-demo.se.`)
+  on read. `route53-ddns.sh` accounts for this; if you're querying the zone by hand with
+  the AWS CLI, remember to do the same or your `--query` filter will silently never match.
+
 
 <!-- markdownlint-disable MD049 -->
 ---
-*Last Updated: 2026-08-06* | *Last Reviewed: 2026-08-06*
+*Last Updated: 2026-08-11* | *Last Reviewed: 2026-08-11*

@@ -1,0 +1,31 @@
+# Copy this file to lfr-tunnel-ops.yaml (gitignored -- it's specific to your own
+# deployment) and fill in your actual central VPS details.
+#
+# Every lfr-tunnel-ops command that talks to the central VPS (deploy, deploy-clients,
+# maintenance, diagnose, reconcile-nginx) resolves its target through the same three
+# sources, in this order of precedence: a CLI flag, then an environment variable
+# (VPS_USER / VPS_IP / LFT_IDENTITY_FILE), then this file. None of them carry a
+# hardcoded default of their own -- see .agents/skills/lfr-tunnel-ops/SKILL.md for the
+# full command reference.
+#
+# This file is entirely optional: if you'd rather set VPS_USER/VPS_IP/LFT_IDENTITY_FILE
+# in your shell profile (or pass -i/-u/-s flags every time), you don't need it at all.
+
+central:
+  # SSH username on the central VPS.
+  user: ubuntu
+  # SSH host -- an IP address or a hostname.
+  host: central.example.com
+  # Path to your SSH private key for that host. ~ is expanded to your home directory.
+  identity_file: ~/.ssh/my-central-key.pem
+
+# Only needed for `lfr-tunnel-ops reconcile-nginx`.
+nginx:
+  # Every domain group this central actually serves. Check the existing
+  # server_name lines in /etc/nginx/sites-available/lfr-tunnel on the box itself if
+  # you're not sure which ones are live.
+  domains:
+    - central.example.com
+  # Local port lfr-tunneld binds to -- must match the live server-config.yaml's
+  # http_bind_addr port.
+  port: "8080"

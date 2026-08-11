@@ -3,11 +3,12 @@ module lfr-tunnel
 go 1.25.0
 
 require (
-	github.com/aws/aws-sdk-go-v2 v1.43.3
+	github.com/aws/aws-sdk-go-v2 v1.43.4
 	github.com/aws/aws-sdk-go-v2/config v1.32.34
 	github.com/aws/aws-sdk-go-v2/service/ec2 v1.318.0
 	github.com/aws/aws-sdk-go-v2/service/route53 v1.65.5
 	github.com/aws/aws-sdk-go-v2/service/scheduler v1.20.3
+	github.com/aws/aws-sdk-go-v2/service/sts v1.45.3
 	github.com/coreos/go-oidc/v3 v3.20.0
 	github.com/gogpu/systray v0.2.1
 	github.com/gorilla/websocket v1.5.3
@@ -34,7 +35,6 @@ require (
 	github.com/aws/aws-sdk-go-v2/service/signin v1.5.3 // indirect
 	github.com/aws/aws-sdk-go-v2/service/sso v1.33.3 // indirect
 	github.com/aws/aws-sdk-go-v2/service/ssooidc v1.38.3 // indirect
-	github.com/aws/aws-sdk-go-v2/service/sts v1.45.3 // indirect
 	github.com/aws/smithy-go v1.27.6 // indirect
 	github.com/dustin/go-humanize v1.0.1 // indirect
 	github.com/fsnotify/fsnotify v1.9.0 // indirect

@@ -13,9 +13,32 @@ description: Critical SentinelOne End Point Detection and Response (EDR) constra
 - **The only safe way to run tests is `make test`** — it compiles every package's test binary into `LFT_TEST_DIR` (default `/private/tmp`, S1-whitelisted) via `-o`, and executes it from there. This is enforced by a deny rule in `.claude/settings.json` blocking any `Bash(go test*)` invocation outright — do not try to work around it, including by manually exporting `GOTMPDIR`/`LFT_TEST_DIR` and invoking `go test` directly. `make test` sets those variables internally as part of its own build step; they are not a substitute for running it.
 - **Pre-execution verification**: if you need to confirm where a test binary landed, verify it targets `$(LFT_TEST_DIR)/lfr-tunnel` (defaulting to `/private/tmp/lfr-tunnel`). Anything running out of `/var/folders/...` or with an arbitrary binary filename means `make test` wasn't actually used.
 - **Also never run the `lfr-tunnel` client binary/process directly on the host**: `go run ./cmd/lfr-tunnel`, the built `bin/lfr-tunnel` binary, or the `lfr-tunnel.sh`/`lfr-tunnel.bat` wrappers. Also denied in `.claude/settings.json`.
-- **Fine to run directly**: `go build` (compiles but doesn't execute), `go vet`, `gofmt`, `go list`, and the compiled `lfr-tunneld` (server) / `lfr-tunnel-ops` (deploy tooling) binaries. The client running inside a Docker container (e.g. `make e2e` / `tests/e2e/run.sh`) is a different risk profile and is not blocked.
+- **Fine to run directly**: `go build` (compiles but doesn't execute), `go vet`, `gofmt`, `go list`, and the `lfr-tunnel-ops` (deploy tooling) binary. **Not** `lfr-tunneld` -- see "Running the server locally" below, that claim was wrong. The client running inside a Docker container (e.g. `make e2e` / `tests/e2e/run.sh`) is a different risk profile and is not blocked.
 - If ever unsure whether a command would build-and-run code outside `LFT_TEST_DIR`, stop and ask the user first rather than guessing.
+
+## Running the server locally -- DON'T (as of 2026-08-13, no verified-safe way exists)
+
+Three incidents in a row now, each one a full local environment reinstall (Homebrew, jenv,
+Python, Claude Code itself all deleted as collateral damage):
+1. `server.test` (2026-07-28) -- a bare `go test` binary.
+2. `lfr-tunneld` built to a manually-chosen path under `/private/tmp` (2026-08-13) -- wrong
+   assumption that the whole tree under `/private/tmp` is whitelisted; it's actually the
+   *exact literal path* `make test` uses (`$LFT_TEST_DIR/lfr-tunnel`), not the directory tree.
+3. `lfr-tunneld` built via `make build` to `bin/lfr-tunneld` inside the repo and run from there
+   (2026-08-13, same day) -- this is the pattern this document *previously* called "fine to run
+   directly" above. It got killed too. That claim was wrong.
+
+**Conclusion: there is no currently-verified-safe way to execute `lfr-tunneld` or `lfr-tunnel`
+locally on this machine, regardless of build location.** Only `make test`'s own mechanism has
+ever actually completed without being killed. Do not invent another script or path meant to
+make this safe -- that reasoning has now failed three times.
+
+**If a task seems to need running the server locally** (screenshot a UI change, smoke-test an
+endpoint): don't. Verify via `go build`/`tsc -b`/`make test`/code review instead, or use the
+Playwright E2E suite (`make e2e-ui`), which runs inside Docker -- a different risk profile,
+not blocked by this rule. Surface it to the user as a real limitation rather than trying another
+local-execution workaround.
 
 <!-- markdownlint-disable MD049 -->
 ---
-*Last Updated: 2026-08-05* | *Last Reviewed: 2026-08-05*
+*Last Updated: 2026-08-13* | *Last Reviewed: 2026-08-13*

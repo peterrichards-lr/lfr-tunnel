@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import axios from 'axios';
 import { useOutletContext } from 'react-router-dom';
+import { QRCodeSVG } from 'qrcode.react';
 import { useSettings } from '../contexts/SettingsContext';
 import { useI18n } from '../contexts/I18nContext';
 
@@ -17,7 +18,7 @@ export default function AccountSettings() {
   
   const [emailNotifications, setEmailNotifications] = useState(user?.notification_prefs === 'enabled' || !user?.notification_prefs);
   const [mfaEnabled, setMfaEnabled] = useState(user?.totp_enabled || false);
-  const [setupData, setSetupData] = useState<{ secret: string, qr: string } | null>(null);
+  const [setupData, setSetupData] = useState<{ secret: string, otpauth_url: string } | null>(null);
   const [mfaCode, setMfaCode] = useState('');
   const [mfaError, setMfaError] = useState('');
 
@@ -78,7 +79,7 @@ export default function AccountSettings() {
 
   const startMfaSetup = async () => {
     try {
-      const res = await axios.post('/api/mfa/setup');
+      const res = await axios.get('/api/mfa/setup');
       setSetupData(res.data);
       setMfaError('');
     } catch {
@@ -87,8 +88,9 @@ export default function AccountSettings() {
   };
 
   const enableMfa = async () => {
+    if (!setupData) return;
     try {
-      await axios.post('/api/mfa/enable', { passcode: mfaCode });
+      await axios.post('/api/mfa/enable', { secret: setupData.secret, code: mfaCode });
       setMfaEnabled(true);
       setSetupData(null);
       setMfaError('');
@@ -365,7 +367,7 @@ export default function AccountSettings() {
             {setupData && !mfaEnabled && (
               <div className="mt-xl" style={{ animation: 'fadeInUp 0.3s ease-out' }}>
                 <div className="bg-white p-lg rounded-md inline-block mb-lg">
-                  <img src={setupData.qr} alt="QR Code" width="150" height="150" />
+                  <QRCodeSVG value={setupData.otpauth_url} size={150} />
                 </div>
                 <div className="copy-box text-xs mb-lg">
                   {setupData.secret}

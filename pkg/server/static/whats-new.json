@@ -1,5 +1,12 @@
 [
   {
+    "version": "v1.44.11",
+    "release_date": "2026-08-13",
+    "features": [
+      "Release v1.44.11"
+    ]
+  },
+  {
     "version": "v1.44.10",
     "release_date": "2026-08-11",
     "features": [
@@ -32,13 +39,6 @@
     "release_date": "2026-08-05",
     "features": [
       "Release v1.44.7"
-    ]
-  },
-  {
-    "version": "v1.44.6",
-    "release_date": "2026-07-31",
-    "features": [
-      "Release v1.44.6"
     ]
   }
 ]

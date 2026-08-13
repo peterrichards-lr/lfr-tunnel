@@ -7,7 +7,7 @@ import DataTablePagination from '../components/DataTablePagination';
 import TunnelsPanel from '../components/TunnelsPanel';
 import ReservationsPanel from '../components/ReservationsPanel';
 import VanityDomainStatusPanel from '../components/VanityDomainStatusPanel';
-import WhatsNewPanel from '../components/WhatsNewPanel';
+import WhatsNewHelpBar from '../components/WhatsNewHelpBar';
 import ClientInstallationModal from '../components/ClientInstallationModal';
 import OnboardingTour from '../components/OnboardingTour';
 import { useSettings } from '../contexts/SettingsContext';
@@ -212,8 +212,9 @@ export default function Dashboard() {
         </div>
       )}
 
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-xl items-start mb-2xl">
-        <div className="lg:col-span-2 flex flex-col gap-xl">
+      <WhatsNewHelpBar onInstallClick={() => setIsInstallModalOpen(true)} />
+
+      <div className="flex flex-col gap-xl mb-2xl">
           <ReservationsPanel />
           <VanityDomainStatusPanel />
 
@@ -331,26 +332,6 @@ export default function Dashboard() {
           </div>
 
           <TunnelsPanel tunnels={user.tunnels || []} serverConfig={serverConfig} user={user} />
-        </div>
-        
-        <div className="flex flex-col gap-xl">
-          <WhatsNewPanel />
-          
-          <div className="card">
-            <h3 className="section-title mb-lg">{t('help_resources', 'Help & Resources')}</h3>
-            <div className="flex flex-col gap-md">
-              <button type="button" className="btn btn-outline justify-start text-left" onClick={() => setIsInstallModalOpen(true)}>
-                💻 {t('guide_title', 'Client Installation Guide')}
-              </button>
-              <button type="button" className="btn btn-outline justify-start text-left" onClick={() => {
-                // Trigger a global event to start the tour
-                window.dispatchEvent(new CustomEvent('start-onboarding-tour'));
-              }}>
-                🧭 {t('onboarding_guide_title', 'Run Dashboard Onboarding Tour')}
-              </button>
-            </div>
-          </div>
-        </div>
       </div>
 
       <ClientInstallationModal isOpen={isInstallModalOpen} onClose={() => setIsInstallModalOpen(false)} serverConfig={serverConfig} />

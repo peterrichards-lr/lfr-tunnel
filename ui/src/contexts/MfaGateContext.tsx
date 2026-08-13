@@ -48,7 +48,7 @@ interface MfaSetupData {
   secret: string;
 }
 
-function MfaSetupGate({ onComplete }: { onComplete: () => void }) {
+function MfaSetupGate() {
   const { t } = useI18n();
   const { showToast } = useUI();
   const [setupData, setSetupData] = useState<MfaSetupData | null>(null);
@@ -71,7 +71,11 @@ function MfaSetupGate({ onComplete }: { onComplete: () => void }) {
     try {
       await axios.post('/api/mfa/enable', { secret: setupData.secret, code });
       showToast(t('mfa_setup_complete', 'MFA enabled -- welcome back!'), 'success');
-      onComplete();
+      // Whatever page was mounted when force_mfa first blocked it already ran its
+      // data-fetching effects and failed with 403 -- those never auto-retry. A full
+      // reload is the simplest way to guarantee everything re-fetches fresh, rather
+      // than tracking/retrying every possible failed request across the app (#1071).
+      setTimeout(() => window.location.reload(), 600);
     } catch {
       setVerifyError(t('error_mfa_invalid', 'Invalid passcode, please try again.'));
     } finally {
@@ -169,10 +173,12 @@ export const MfaGateProvider: React.FC<{ children: React.ReactNode }> = ({ child
     return () => { notify = null; };
   }, []);
 
+  // No setRequired(false) path -- MfaSetupGate reloads the page itself once setup
+  // succeeds (see #1071), which re-mounts everything including this provider.
   return (
     <>
       {children}
-      {required && <MfaSetupGate onComplete={() => setRequired(false)} />}
+      {required && <MfaSetupGate />}
     </>
   );
 };

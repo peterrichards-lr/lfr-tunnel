@@ -15,3 +15,7 @@
   docker run --rm -v "$(pwd)":/app -w /app golangci/golangci-lint:latest golangci-lint run
   ```
   Always use that Docker invocation to lint locally (matches the CI job and the Docker carve-out above). Do NOT `brew install golangci-lint` or `go install github.com/golangci/golangci-lint/...` to "fix" its absence — that would add an unnecessary local binary and deviate from how this project actually runs it.
+
+<!-- markdownlint-disable MD049 -->
+---
+*Last Updated: 2026-08-13* | *Last Reviewed: 2026-08-13*

@@ -1,5 +1,15 @@
 [
   {
+    "version": "v1.44.11",
+    "release_date": "2026-08-13",
+    "features": [
+      "Split Reservations View: The dashboard now shows Registered Subdomains and Custom Domains as two separate tables instead of one interleaved list.",
+      "MFA Setup Prompt: If your administrator requires multi-factor authentication, you'll now see a dedicated setup screen the moment it's needed, instead of the dashboard just failing to load.",
+      "Reliability: lfr-tunnel-ops deploy can now recover a scheduled-off edge automatically instead of failing outright.",
+      "Fixed a gap where Linux ARM64 release binaries weren't individually signature-verified."
+    ]
+  },
+  {
     "version": "v1.44.10",
     "release_date": "2026-08-11",
     "features": [
@@ -32,13 +42,6 @@
     "release_date": "2026-08-05",
     "features": [
       "Release v1.44.7"
-    ]
-  },
-  {
-    "version": "v1.44.6",
-    "release_date": "2026-07-31",
-    "features": [
-      "Release v1.44.6"
     ]
   }
 ]

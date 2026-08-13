@@ -2,11 +2,10 @@ import { useEffect, useState, useMemo } from 'react';
 import axios from 'axios';
 import { useSettings } from '../contexts/SettingsContext';
 import { useDataTable, type ColumnDef } from '../hooks/useDataTable';
-import DataTableToolbar from '../components/DataTableToolbar';
-import DataTablePagination from '../components/DataTablePagination';
 import { useI18n } from '../contexts/I18nContext';
 import Skeleton from './Skeleton';
 import { useUI } from '../contexts/UIContext';
+import ReservationsTable from './ReservationsTable';
 
 interface Reservation {
   id: string;
@@ -101,8 +100,20 @@ export default function ReservationsPanel() {
     }
   };
 
-  const columns: ColumnDef<Reservation>[] = useMemo(() => [
+  // Subdomain reservations and custom domains are tracked as one list server-side, but
+  // shown as two separate tables (#1053) -- server.go sets SubdomainPrefix = "" for
+  // custom-domain rows, so a truthy r.subdomain is the reliable signal for "which table
+  // does this row belong in" (same signal the host-string/CLI-command logic below already
+  // relied on before the split).
+  const subdomainColumns: ColumnDef<Reservation>[] = useMemo(() => [
     { key: 'subdomain', label: t('subdomain', 'Subdomain'), sortable: true },
+    { key: 'status', label: t('status', 'Status'), sortable: true },
+    { key: 'expires_at', label: t('expires', 'Expires'), sortable: true },
+    { key: 'created_at', label: t('created_at', 'Created Date'), sortable: true },
+  ], [t]);
+
+  const customDomainColumns: ColumnDef<Reservation>[] = useMemo(() => [
+    { key: 'domain', label: t('custom_domain', 'Domain'), sortable: true },
     { key: 'status', label: t('status', 'Status'), sortable: true },
     { key: 'expires_at', label: t('expires', 'Expires'), sortable: true },
     { key: 'created_at', label: t('created_at', 'Created Date'), sortable: true },
@@ -120,34 +131,38 @@ export default function ReservationsPanel() {
     });
   }, [reservations]);
 
+  const subdomainReservations = useMemo(
+    () => mappedReservations.filter(r => !!r.subdomain),
+    [mappedReservations]
+  );
+  const customDomainReservations = useMemo(
+    () => mappedReservations.filter(r => !r.subdomain),
+    [mappedReservations]
+  );
+
   const statusOptions = useMemo(() => [
     { value: 'active', label: t('status_active', 'active') },
     { value: 'quarantined', label: t('status_quarantined', 'quarantined') },
     { value: 'extension requested', label: t('status_extension_requested', 'extension requested') }
   ], [t]);
 
-  const {
-    paginatedItems,
-    searchQuery,
-    setSearchQuery,
-    statusFilter,
-    setStatusFilter,
-    pageSize,
-    setPageSize,
-    currentPage,
-    setCurrentPage,
-    totalPages,
-    totalItems,
-    isColumnVisible,
-    toggleColumn,
-    requestSort,
-    getSortIndicator,
-    getAriaSort
-  } = useDataTable<Reservation & { computed_status: string }>(
-    'dashboard_reservations',
-    mappedReservations,
+  const subdomainTable = useDataTable<Reservation & { computed_status: string }>(
+    'dashboard_reservations_subdomains',
+    subdomainReservations,
     ['subdomain', 'domain', 'status'],
-    columns as any,
+    subdomainColumns as any,
+    10,
+    ['created_at'],
+    'computed_status',
+    statusOptions,
+    'all'
+  );
+
+  const customDomainTable = useDataTable<Reservation & { computed_status: string }>(
+    'dashboard_reservations_custom_domains',
+    customDomainReservations,
+    ['domain', 'status'],
+    customDomainColumns as any,
     10,
     ['created_at'],
     'computed_status',
@@ -275,7 +290,7 @@ export default function ReservationsPanel() {
     <>
       <div className="card mb-xl">
         <div className="section-header mb-md">
-          <h3 className="section-title">{t('subdomain_reservations', 'Subdomain Reservations')}</h3>
+          <h3 className="section-title">{t('reservations_overview', 'Reservations Overview')}</h3>
         </div>
         
         <div className="mb-xl">
@@ -342,164 +357,69 @@ export default function ReservationsPanel() {
             <button type="submit" className="btn btn-primary">{t('reserve', 'Reserve')}</button>
           </form>
         )}
-
-      {reservations.length > 0 && (
-        <div className="p-md border-b">
-          <DataTableToolbar
-            searchQuery={searchQuery}
-            onSearchChange={setSearchQuery}
-            searchPlaceholder={t('search_reservations_placeholder', 'Search reservations...')}
-            pageSize={pageSize}
-            onPageSizeChange={setPageSize}
-            columns={columns}
-            isColumnVisible={isColumnVisible}
-            onToggleColumn={toggleColumn}
-            statusFilter={statusFilter}
-            onStatusFilterChange={setStatusFilter}
-            statusOptions={statusOptions}
-          />
-        </div>
-      )}
-
-      {reservations.length === 0 ? (
-        <div className="empty-state p-xl">
-          <div className="empty-state__text">{t('no_subdomains_reserved', 'No subdomains reserved yet.')}</div>
-        </div>
-      ) : (
-        <>
-          <div className="table-responsive">
-            <table className="w-full">
-              <thead>
-                <tr className="border-b text-left">
-                  {isColumnVisible('subdomain') && (
-                    <th className="th-col th-col--sortable" onClick={() => requestSort('subdomain')} aria-sort={getAriaSort('subdomain')}>
-                      {t('subdomain', 'Subdomain')}{getSortIndicator('subdomain')}
-                    </th>
-                  )}
-                  {isColumnVisible('status') && (
-                    <th className="th-col th-col--sortable" onClick={() => requestSort('status')} aria-sort={getAriaSort('status')}>
-                      {t('status', 'Status')}{getSortIndicator('status')}
-                    </th>
-                  )}
-                  {isColumnVisible('expires_at') && (
-                    <th className="th-col th-col--sortable" onClick={() => requestSort('expires_at')} aria-sort={getAriaSort('expires_at')}>
-                      {t('expires', 'Expires')}{getSortIndicator('expires_at')}
-                    </th>
-                  )}
-                  {isColumnVisible('created_at') && (
-                    <th className="th-col th-col--sortable" onClick={() => requestSort('created_at')} aria-sort={getAriaSort('created_at')}>
-                      {t('created_at', 'Created Date')}{getSortIndicator('created_at')}
-                    </th>
-                  )}
-                  <th className="th-col">{t('actions', 'Actions')}</th>
-                </tr>
-              </thead>
-              <tbody>
-                {paginatedItems.map(r => {
-                  // Custom-domain reservations have an empty subdomain (server.go sets
-                  // SubdomainPrefix = "" for these) -- plain `${subdomain}.${domain}` then
-                  // leaves a leading dot ("`.dev.solaramoto.com`"), which browsers don't treat
-                  // as the bare domain. Omit the separator when there's no prefix to join.
-                  const host = r.subdomain ? `${r.subdomain}.${r.domain}` : r.domain;
-                  const cliCommand = r.subdomain
-                    ? `lfr-tunnel -subdomain ${r.subdomain} -server ${window.location.origin}`
-                    : `lfr-tunnel -domain ${r.domain} -server ${window.location.origin}`;
-                  const isExpired = r.expires_at && new Date(r.expires_at) < new Date();
-                  const canExtend = !!(r.expires_at && !r.extension_requested && !isExpired);
-                  return (
-                    <tr key={r.id} className="border-b">
-                      {isColumnVisible('subdomain') && (
-                        <td className="td-cell">
-                          <div className="flex items-center gap-sm">
-                            <a href={`https://${host}`} target="_blank" rel="noreferrer" className="text-primary fw-semibold no-underline font-mono text-base">
-                              {host}
-                            </a>
-                            <button 
-                              onClick={() => copyText(host, 'Host copied to clipboard')}
-                              className="btn-icon text-muted cursor-pointer text-base"
-                              style={{ background: 'none', border: 'none', padding: '2px' }}
-                              title="Copy Host"
-                            >
-                              📋
-                            </button>
-                            <button
-                              onClick={() => copyText(cliCommand, 'CLI command copied')}
-                              className="btn-icon text-muted cursor-pointer text-base"
-                              style={{ background: 'none', border: 'none', padding: '2px' }}
-                              title="Copy CLI Connection Command"
-                            >
-                              🔌
-                            </button>
-                          </div>
-                          {r.access_mode && r.access_mode !== 'public' && (
-                            <span className="badge badge-warning text-2xs mt-xs inline-block">
-                              {r.access_mode === 'passcode' ? '🔑 Passcode' : '🛡 IP Whitelist'}
-                            </span>
-                          )}
-                        </td>
-                      )}
-                      {isColumnVisible('status') && (
-                        <td className="td-cell">
-                          {isExpired ? (
-                            <span className="badge badge-danger">quarantined</span>
-                          ) : r.extension_requested ? (
-                            <span className="badge badge-warning">extension requested</span>
-                          ) : (
-                            <span className="badge badge-success">active</span>
-                          )}
-                        </td>
-                      )}
-                      {isColumnVisible('expires_at') && (
-                        <td className="td-cell">
-                          {r.expires_at ? formatDate(r.expires_at) : 'Never (Permanent)'}
-                        </td>
-                      )}
-                      {isColumnVisible('created_at') && (
-                        <td className="td-cell" style={{ whiteSpace: 'nowrap' }}>
-                          {r.created_at ? formatDate(r.created_at) : '—'}
-                        </td>
-                      )}
-                      <td className="td-cell">
-                        <div className="flex gap-sm">
-                          {canExtend && (
-                            <button 
-                              type="button"
-                              className="btn btn-secondary py-xs px-sm text-xs" 
-                              onClick={() => requestExtension(r.id)}
-                            >
-                              Extend
-                            </button>
-                          )}
-                          <button
-                            type="button"
-                            className="btn btn-secondary py-xs px-sm text-xs"
-                            title={t('access_control', 'Access Control')}
-                            aria-label={t('access_control', 'Access Control')}
-                            onClick={() => openAcModal(r)}
-                          >
-                            🔒
-                          </button>
-                          <button type="button" className="btn btn-danger py-xs px-sm text-xs" onClick={() => deleteReservation(r.id)}>
-                            {t('release', 'Release')}
-                          </button>
-                        </div>
-                      </td>
-                    </tr>
-                  );
-                })}
-              </tbody>
-            </table>
-          </div>
-          <DataTablePagination
-            currentPage={currentPage}
-            totalPages={totalPages}
-            pageSize={pageSize}
-            totalItems={totalItems}
-            onPageChange={setCurrentPage}
-          />
-        </>
-      )}
       </div>
+
+      <ReservationsTable
+        title={t('subdomain_reservations', 'Registered Subdomains')}
+        emptyMessage={t('no_subdomains_reserved', 'No subdomains reserved yet.')}
+        searchPlaceholder={t('search_reservations_placeholder', 'Search reservations...')}
+        primaryColumnKey="subdomain"
+        columns={subdomainColumns}
+        statusOptions={statusOptions}
+        formatDate={formatDate}
+        copyText={copyText}
+        requestExtension={requestExtension}
+        openAcModal={openAcModal}
+        deleteReservation={deleteReservation}
+        totalUnfilteredCount={subdomainReservations.length}
+        paginatedItems={subdomainTable.paginatedItems}
+        searchQuery={subdomainTable.searchQuery}
+        setSearchQuery={subdomainTable.setSearchQuery}
+        statusFilter={subdomainTable.statusFilter}
+        setStatusFilter={subdomainTable.setStatusFilter}
+        pageSize={subdomainTable.pageSize}
+        setPageSize={subdomainTable.setPageSize}
+        currentPage={subdomainTable.currentPage}
+        setCurrentPage={subdomainTable.setCurrentPage}
+        totalPages={subdomainTable.totalPages}
+        totalItems={subdomainTable.totalItems}
+        isColumnVisible={subdomainTable.isColumnVisible}
+        toggleColumn={subdomainTable.toggleColumn}
+        requestSort={subdomainTable.requestSort}
+        getSortIndicator={subdomainTable.getSortIndicator}
+        getAriaSort={subdomainTable.getAriaSort}
+      />
+
+      <ReservationsTable
+        title={t('custom_domains', 'Custom Domains')}
+        emptyMessage={t('no_custom_domains_registered', 'No custom domains registered yet.')}
+        searchPlaceholder={t('search_custom_domains_placeholder', 'Search custom domains...')}
+        primaryColumnKey="domain"
+        columns={customDomainColumns}
+        statusOptions={statusOptions}
+        formatDate={formatDate}
+        copyText={copyText}
+        requestExtension={requestExtension}
+        openAcModal={openAcModal}
+        deleteReservation={deleteReservation}
+        totalUnfilteredCount={customDomainReservations.length}
+        paginatedItems={customDomainTable.paginatedItems}
+        searchQuery={customDomainTable.searchQuery}
+        setSearchQuery={customDomainTable.setSearchQuery}
+        statusFilter={customDomainTable.statusFilter}
+        setStatusFilter={customDomainTable.setStatusFilter}
+        pageSize={customDomainTable.pageSize}
+        setPageSize={customDomainTable.setPageSize}
+        currentPage={customDomainTable.currentPage}
+        setCurrentPage={customDomainTable.setCurrentPage}
+        totalPages={customDomainTable.totalPages}
+        totalItems={customDomainTable.totalItems}
+        isColumnVisible={customDomainTable.isColumnVisible}
+        toggleColumn={customDomainTable.toggleColumn}
+        requestSort={customDomainTable.requestSort}
+        getSortIndicator={customDomainTable.getSortIndicator}
+        getAriaSort={customDomainTable.getAriaSort}
+      />
 
       {/* Access Control Modal */}
       {acModalReservation && (

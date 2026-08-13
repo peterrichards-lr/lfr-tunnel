@@ -1,5 +1,6 @@
 import axios from 'axios';
 import React, { useEffect, useState } from 'react';
+import { QRCodeSVG } from 'qrcode.react';
 import { useI18n } from './I18nContext';
 import { useUI } from './UIContext';
 
@@ -43,7 +44,7 @@ axios.interceptors.response.use(
 );
 
 interface MfaSetupData {
-  qr: string;
+  otpauth_url: string;
   secret: string;
 }
 
@@ -57,17 +58,18 @@ function MfaSetupGate({ onComplete }: { onComplete: () => void }) {
   const [verifying, setVerifying] = useState(false);
 
   useEffect(() => {
-    axios.post('/api/mfa/setup')
+    axios.get('/api/mfa/setup')
       .then((res) => setSetupData(res.data))
       .catch(() => setLoadError(t('error_mfa_setup', 'Failed to initialize MFA setup')));
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   const verify = async () => {
+    if (!setupData) return;
     setVerifying(true);
     setVerifyError('');
     try {
-      await axios.post('/api/mfa/enable', { passcode: code });
+      await axios.post('/api/mfa/enable', { secret: setupData.secret, code });
       showToast(t('mfa_setup_complete', 'MFA enabled -- welcome back!'), 'success');
       onComplete();
     } catch {
@@ -119,7 +121,7 @@ function MfaSetupGate({ onComplete }: { onComplete: () => void }) {
         {setupData ? (
           <div style={{ animation: 'fadeInUp 0.3s ease-out' }}>
             <div className="bg-white p-lg rounded-md inline-block mb-lg">
-              <img src={setupData.qr} alt="QR Code" width="150" height="150" />
+              <QRCodeSVG value={setupData.otpauth_url} size={150} />
             </div>
             <div className="copy-box text-xs mb-lg">{setupData.secret}</div>
 

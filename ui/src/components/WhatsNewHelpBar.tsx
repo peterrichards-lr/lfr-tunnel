@@ -73,20 +73,29 @@ export default function WhatsNewHelpBar({ onInstallClick }: { onInstallClick: ()
       <button
         type="button"
         onClick={toggle}
-        className="flex justify-between items-center w-full"
-        style={{ background: 'none', border: 'none', cursor: 'pointer', padding: 0, textAlign: 'left' }}
+        className="btn btn-outline flex justify-between items-center w-full"
         aria-expanded={expanded}
       >
-        <span className="section-title m-0 flex items-center gap-sm">
+        <span className="flex items-center gap-sm">
           {t('whats_new_help', "What's New & Help")}
           {hasUnseen && <span className="badge badge-primary">{t('new', 'New')}</span>}
         </span>
-        <span className="text-muted">{expanded ? '▾' : '▸'}</span>
+        <span className="flex items-center gap-xs text-sm">
+          {expanded ? t('hide', 'Hide') : t('show', 'Show')}
+          <span aria-hidden="true">{expanded ? '▾' : '▸'}</span>
+        </span>
       </button>
 
       {expanded && (
-        <div className="mt-lg flex flex-col md:flex-row gap-xl">
-          <div className="flex-1 min-w-0">
+        // Real flex-wrap, not a responsive-prefix utility class -- this project's
+        // custom CSS system (Tailwind-style class *names* but hand-written, no
+        // actual Tailwind build step) never implemented sm:/md:/lg: variants, so
+        // e.g. "md:flex-row" silently did nothing (same reason the *old* sidebar's
+        // "lg:grid-cols-3" never actually put it next to Reservations on desktop
+        // either). flex-wrap with a min-width per child reflows naturally with no
+        // breakpoint to get wrong.
+        <div className="mt-lg flex flex-wrap gap-xl">
+          <div className="flex-1 min-w-0" style={{ minWidth: '260px' }}>
             <h4 className="section-title text-sm mb-md">{t('whats_new', "What's New")}</h4>
             <div className="max-h-96 overflow-y-auto pr-sm">
               {releases.map((release, i) => (
@@ -115,7 +124,7 @@ export default function WhatsNewHelpBar({ onInstallClick }: { onInstallClick: ()
             </div>
           </div>
 
-          <div className="flex-1 min-w-0">
+          <div className="flex-1 min-w-0" style={{ minWidth: '260px' }}>
             <h4 className="section-title text-sm mb-md">{t('help_resources', 'Help & Resources')}</h4>
             <div className="flex flex-col gap-md">
               <button type="button" className="btn btn-outline justify-start text-left" onClick={onInstallClick}>

@@ -3,7 +3,9 @@
     "version": "v1.44.12",
     "release_date": "2026-08-14",
     "features": [
-      "Release v1.44.12"
+      "What's New & Help bar: The old always-visible sidebar (What's New panel + Help & Resources card) is now a single collapsible bar at the top of the dashboard, minimized by default and auto-expanding once when there's something new to see.",
+      "Fixed the What's New & Help toggle being unclear -- it's now a proper outlined button with explicit Show/Hide text instead of a bare chevron.",
+      "Fixed What's New and Help & Resources not actually sitting side by side on wider screens once expanded."
     ]
   },
   {

@@ -1,5 +1,13 @@
 [
   {
+    "version": "v1.44.23",
+    "release_date": "2026-08-20",
+    "features": [
+      "Automated Primary Region Failback (#1103): Added background health prober in client CLI that pings developer's primary regional edge node when running in failover mode.",
+      "Seamless Primary Migration: Automatically re-registers on primary edge node when it recovers, updating TUI headers, state files, and tunnels live without CLI restarts."
+    ]
+  },
+  {
     "version": "v1.44.22",
     "release_date": "2026-08-20",
     "features": [
@@ -29,14 +37,6 @@
     "features": [
       "Scoped Session Context Isolation: Client session context is isolated per connection attempt, ensuring heartbeat eviction triggers live failover without exiting the main process.",
       "Central Region Heartbeat Alignment: Central Gateway validates region online status during status heartbeats, returning HTTP 503 for stopped nodes while preserving 200 OK for online edge leases."
-    ]
-  },
-  {
-    "version": "v1.44.18",
-    "release_date": "2026-08-20",
-    "features": [
-      "Central Control Plane Edge Status Enforcement: Central Gateway responds HTTP 503 Service Unavailable when a region node is disabled or stopped in Portal V2.",
-      "Live On-Screen Dynamic Failover: Client CLI dual-pings Central Gateway heartbeat, detecting node stops within 5s and switching regions live without CLI restarts."
     ]
   }
 ]

@@ -495,3 +495,68 @@ func TestThrottledReader_And_Latency(t *testing.T) {
 		t.Errorf("Expected request duration to be at least 100ms due to latency injection, got %v", duration)
 	}
 }
+
+func TestStartFailbackProber_PrimaryRecovered(t *testing.T) {
+	primaryServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path == "/api/healthz" {
+			w.WriteHeader(http.StatusOK)
+			_, _ = w.Write([]byte(`{"status":"healthy"}`))
+			return
+		}
+		w.WriteHeader(http.StatusNotFound)
+	}))
+	defer primaryServer.Close()
+
+	engine := NewInterceptorEngine("", nil)
+	engine.SelectedRegion = "central"
+	engine.FailbackProbeInterval = 50 * time.Millisecond
+
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	clientCanceled := make(chan struct{})
+	cancelClient := func() {
+		close(clientCanceled)
+	}
+
+	engine.StartFailbackProber(ctx, cancelClient, primaryServer.URL, "in")
+
+	select {
+	case <-clientCanceled:
+		if !engine.IsFailback {
+			t.Error("expected IsFailback to be true when primary region recovers")
+		}
+	case <-time.After(2 * time.Second):
+		t.Fatal("timed out waiting for failback prober to cancel client")
+	}
+}
+
+func TestStartFailbackProber_PrimaryStillOffline(t *testing.T) {
+	primaryServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusServiceUnavailable)
+	}))
+	defer primaryServer.Close()
+
+	engine := NewInterceptorEngine("", nil)
+	engine.SelectedRegion = "central"
+	engine.FailbackProbeInterval = 50 * time.Millisecond
+
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	clientCanceled := make(chan struct{})
+	cancelClient := func() {
+		close(clientCanceled)
+	}
+
+	engine.StartFailbackProber(ctx, cancelClient, primaryServer.URL, "in")
+
+	select {
+	case <-clientCanceled:
+		t.Fatal("expected client NOT to be canceled when primary region is still offline")
+	case <-time.After(2 * time.Second):
+		if engine.IsFailback {
+			t.Error("expected IsFailback to remain false when primary region is offline")
+		}
+	}
+}

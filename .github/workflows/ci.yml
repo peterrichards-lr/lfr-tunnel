@@ -152,7 +152,7 @@ jobs:
         shell: bash
 
       - name: Run Tests
-        run: go test -v ./...
+        run: make test
         env:
           # Disposable minisign fixture used only by pkg/client/upgrade_test.go -- never
           # the real signing key (that one lives in 1Password and is never referenced by

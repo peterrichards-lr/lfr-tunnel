@@ -1601,6 +1601,9 @@ func (s *Server) handleRegister(w http.ResponseWriter, r *http.Request) {
 		themePref = userRec.ThemePreference
 	}
 
+	auditDetails := fmt.Sprintf("Started tunnel for subdomain %s (domains: %v, remotes: %v)", req.SubdomainPrefix, activeDomains, remotes)
+	s.writeAudit(user.Email, "tunnel.start", "subdomain", req.SubdomainPrefix, auditDetails, r)
+
 	s.respondRegisterResponse(w, http.StatusOK, r, RegisterResponse{
 		Status:             "success",
 		SessionToken:       sessionToken,
@@ -1642,6 +1645,17 @@ func (s *Server) handleDeregister(w http.ResponseWriter, r *http.Request) {
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil || req.SessionToken == "" {
 		http.Error(w, "invalid request", http.StatusBadRequest)
 		return
+	}
+	leases := s.registry.GetSessionLeases(req.SessionToken)
+	if len(leases) > 0 {
+		subdomain := leases[0].SubdomainPrefix
+		actor := leases[0].UserID
+		if s.db != nil {
+			if u, err := s.db.GetUser(actor); err == nil && u != nil {
+				actor = u.Email
+			}
+		}
+		s.writeAudit(actor, "tunnel.stop", "subdomain", subdomain, "Deregistered tunnel session", r)
 	}
 	s.registry.CleanLease(req.SessionToken)
 	w.WriteHeader(http.StatusOK)
@@ -5333,6 +5347,13 @@ func (s *Server) handleEdgeRegister(w http.ResponseWriter, r *http.Request) {
 	})
 	s.edgeLeasesMu.Unlock()
 
+	actorEmail := user.Email
+	if userRec != nil && userRec.Email != "" {
+		actorEmail = userRec.Email
+	}
+	auditDetails := fmt.Sprintf("Started edge tunnel on node %s for subdomain %s (client IP: %s)", edgeNodeID, finalSubdomain, edgeReq.ClientIP)
+	s.writeAudit(actorEmail, "tunnel.start", "subdomain", finalSubdomain, auditDetails, r)
+
 	respondJSON(w, http.StatusOK, map[string]interface{}{
 		"user_id":          user.ID,
 		"subdomain_prefix": finalSubdomain,
@@ -5390,6 +5411,14 @@ func (s *Server) handleEdgeDeregister(w http.ResponseWriter, r *http.Request) {
 			s.edgeLeases[edgeReq.UserID] = newLeases
 		}
 	}
+
+	actorEmail := edgeReq.UserID
+	if s.db != nil {
+		if u, err := s.db.GetUser(edgeReq.UserID); err == nil && u != nil {
+			actorEmail = u.Email
+		}
+	}
+	s.writeAudit(actorEmail, "tunnel.stop", "subdomain", edgeReq.Subdomain, "Deregistered edge tunnel session", r)
 
 	w.WriteHeader(http.StatusOK)
 }

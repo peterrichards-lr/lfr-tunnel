@@ -382,6 +382,32 @@ sequenceDiagram
     end
 ```
 
+---
+
+## 13. Transparent Multi-Region Failover & Zero-Session-Loss Resilience
+
+`lfr-tunnel` provides enterprise-grade multi-region availability across regional edge nodes (`us`, `apac`, `sa`, `in`) and the central control plane without sacrificing local developer session state or forcing browser re-logins.
+
+```
+[ Developer Machine ]                [ Edge Node (US) ]                 [ Central Gateway ]
+   (Local Tomcat / LDM)                 (Going Offline)                       (Online)
+         │                                    │                                  │
+         │ 1. 5m Shutdown Warning Broadcast ◄─┤                                  │
+         │    (Fires LDM warning_received)    │                                  │
+         │                                    │                                  │
+         │ 2. Edge Offline / Tunnel Drop ────X                                   │
+         │    (Purges region_cache.json)                                         │
+         │                                                                       │
+         │ 3. Probe & Reconnect (1-3s) ─────────────────────────────────────────►│
+         │    (Claims same subdomain)                                            │
+```
+
+### Key Credibility & Reliability Guarantees
+1. **Zero Domain Modification**: All public domain wildcards (`*.lfr-demo.se`, `*.lfr-demo.online`) are registered without regional distinction. The public URL (`https://my-sub.lfr-demo.se`) remains identical before and after failover.
+2. **Zero Session Loss**: Because Liferay Tomcat runs locally on the developer's machine and the public domain origin does not change, browser `JSESSIONID` cookies, OAuth redirect tokens, and `localStorage` states are **100% preserved**. Developers experience zero forced re-logins or session purges.
+3. **Local State Protection**: LDM and third-party tools receive `warning_received`, `stopping`, and `started` lifecycle hooks, allowing local syncs to pause gracefully before transit drops and resume automatically once failover completes.
+
+
 <!-- markdownlint-disable MD049 -->
 ---
-*Last Updated: 2026-07-09* | *Last Reviewed: 2026-07-09*
+*Last Updated: 2026-08-20* | *Last Reviewed: 2026-08-20*

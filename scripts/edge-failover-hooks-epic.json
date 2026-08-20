@@ -1,0 +1,40 @@
+{
+  "epicNumber": 1083,
+  "title": "Epic: Graceful Edge Node Shutdown Warnings & Client Failover Hooks",
+  "body": "Implement a graceful shutdown warning signal and client-side lifecycle hook engine. When an Edge Node is scheduled for shutdown or enters soft maintenance, connected clients receive an advance warning signal (default: 5 minutes prior to shutdown). The client executes user-configured lifecycle hooks (`warning_received`, `stopping`, `stopped`, `starting`, `started`) for graceful control of local third-party tools, invalidates its local region cache, and automatically fails over to the next nearest online edge node or central control plane.",
+  "labels": ["epic"],
+  "issues": [
+    {
+      "title": "Server-side Edge Shutdown Warning Scheduler & Config",
+      "body": "Problem: Edge nodes shutting down overnight or entering soft maintenance terminate client tunnels without advance warning, leading to abrupt connection drops for active developer sessions.\n\nAnalysis: `pkg/config/config.go` needs a new setting `edge_shutdown_warning_minutes` (default: 5). `pkg/server/server_edge.go` and `edge_control_ws.go` need warning timer logic that broadcasts a `node_shutdown_warning` WebSocket frame to connected clients `N` minutes prior to `stop_time` or soft maintenance activation.\n\nPlan:\n1. Add `EdgeShutdownWarningMinutes` to `config.ServerConfig` with default `5`.\n2. Add pre-shutdown broadcast logic in `pkg/server/edge_control_ws.go` and `pkg/server/server_edge.go`.\n3. Include `node_id`, `shutdown_at`, `seconds_remaining`, and `reason` in the WS broadcast payload.",
+      "labels": ["enhancement"],
+      "completed": false,
+      "issueNumber": 1084,
+      "closed": false
+    },
+    {
+      "title": "Client WebSocket Shutdown Notification Handling & Auto-Failover",
+      "body": "Problem: When an edge node shuts down, the client CLI attempts to reconnect to the exact same offline server URL using Chisel's internal retry loop rather than failing over to an online regional gateway.\n\nAnalysis: `pkg/client/client.go` and `cmd/lfr-tunnel/main.go` need a WebSocket message listener for `node_shutdown_warning` frames. Upon receiving the warning countdown expiry or node disconnect, the client must clear `region_cache.json`, exclude the shutting-down node ID, and invoke `probeFastestRegion()` to fail over to the next nearest online gateway.\n\nPlan:\n1. Add WS message handler for `node_shutdown_warning` in `pkg/client/client.go`.\n2. Invalidate local region cache and trigger re-probing upon node shutdown.\n3. Re-establish tunnel on the selected failover region seamlessly.",
+      "labels": ["enhancement"],
+      "completed": false,
+      "issueNumber": 1085,
+      "closed": false
+    },
+    {
+      "title": "Client Lifecycle Hook Execution Engine",
+      "body": "Problem: Developers running local third-party tools, background syncs, or webhooks have no programmatic mechanism to pause or prepare local scripts when a tunnel gateway changes.\n\nAnalysis: Create a new hook engine in `pkg/client/hooks.go` supporting 5 lifecycle hooks (`warning_received`, `stopping`, `stopped`, `starting`, `started`) configured via `~/.lfr-tunnel/config.yaml` or CLI flags. Hooks execute user-specified shell scripts/commands with contextual environment variables (`LFT_EVENT`, `LFT_NODE_ID`, `LFT_SECONDS_REMAINING`, `LFT_FAILOVER_REGION`).\n\nPlan:\n1. Create `pkg/client/hooks.go` to parse and execute hook scripts with environment context.\n2. Wire hook execution triggers into client connection lifecycle states.\n3. Support timeout and error logging for hook script execution.",
+      "labels": ["enhancement"],
+      "completed": false,
+      "issueNumber": 1086,
+      "closed": false
+    },
+    {
+      "title": "Integration Tests & Documentation for Client Failover Hooks",
+      "body": "Problem: The new edge shutdown warning signal, auto-failover, and client hook lifecycle need test coverage and user documentation.\n\nAnalysis: Add unit tests in `pkg/server/` and `pkg/client/` to verify warning payload delivery, failover region selection, and hook execution. Document hook configuration and environment variable schema in `README.md` and `docs/server/edge_setup_guide.md`.\n\nPlan:\n1. Add unit tests for shutdown warning broadcast and hook execution.\n2. Add E2E failover verification script.\n3. Update `README.md` and `docs/server/edge_setup_guide.md` with hook setup examples.",
+      "labels": ["documentation", "testing"],
+      "completed": false,
+      "issueNumber": 1087,
+      "closed": false
+    }
+  ]
+}

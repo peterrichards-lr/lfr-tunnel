@@ -135,7 +135,7 @@ func TestOverrideConfigWithFlags(t *testing.T) {
 
 func TestMain_ValidationFailure(t *testing.T) {
 	if os.Getenv("BE_CRASHER_VALIDATION") == "1" {
-		os.Args = []string{"cmd", "-bandwidth", "invalid"}
+		*bandwidth = "invalid"
 		main()
 		return
 	}

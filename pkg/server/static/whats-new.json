@@ -1,5 +1,13 @@
 [
   {
+    "version": "v1.44.19",
+    "release_date": "2026-08-20",
+    "features": [
+      "Scoped Session Context Isolation: Client session context is isolated per connection attempt, ensuring heartbeat eviction triggers live failover without exiting the main process.",
+      "Central Region Heartbeat Alignment: Central Gateway validates region online status during status heartbeats, returning HTTP 503 for stopped nodes while preserving 200 OK for online edge leases."
+    ]
+  },
+  {
     "version": "v1.44.18",
     "release_date": "2026-08-20",
     "features": [
@@ -31,14 +39,6 @@
       "Edge Health Monitoring Fix: Edge node health determination now reads directly from active WebSocket control channels and real-time remote IPs, eliminating false-positive 5ms loopback latency.",
       "Windows CI Test Suite Fix: Fixed path backslash translation in Makefile test targets for cross-platform Git Bash compatibility across CI matrix runners.",
       "Target Node Power Control: Added graceful AWS credential checks to Target Node Cost & Power Control scheduled workflow."
-    ]
-  },
-  {
-    "version": "v1.44.14",
-    "release_date": "2026-08-20",
-    "features": [
-      "Dynamic Region Failover: When a requested or cached region is offline (e.g. apac), the client CLI automatically probes active regions and connects to the fastest online node.",
-      "Instant Edge Stop Sync: Stopping an edge node in Portal V2 immediately tears down active developer tunnels, closes the control channel, and marks node health as Offline."
     ]
   }
 ]

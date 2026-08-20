@@ -23,6 +23,8 @@ type ClientState struct {
 	PublicURLs    []string `json:"public_urls"`
 	Ports         []int    `json:"ports"`
 	StartTime     string   `json:"start_time"`
+	Region        string   `json:"region,omitempty"`
+	ServerURL     string   `json:"server_url,omitempty"`
 }
 
 // StatusOutput represents the combined output returned by the status-json flag.
@@ -35,6 +37,8 @@ type StatusOutput struct {
 	PublicURLs      []string `json:"public_urls,omitempty"`
 	Ports           []int    `json:"ports,omitempty"`
 	StartTime       string   `json:"start_time,omitempty"`
+	Region          string   `json:"region,omitempty"`
+	ServerURL       string   `json:"server_url,omitempty"`
 	ConnectionState string   `json:"connection_state,omitempty"`
 	Status          string   `json:"status,omitempty"`
 	BytesIn         int64    `json:"bytes_in,omitempty"`

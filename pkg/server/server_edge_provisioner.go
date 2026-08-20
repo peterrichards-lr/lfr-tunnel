@@ -59,7 +59,16 @@ func (s *Server) handleAdminEdgeStop(w http.ResponseWriter, r *http.Request, act
 		writeProvisionerError(w, err)
 		return
 	}
+	_ = s.SendEdgeKickAll(nodeID)
+	s.CloseEdgeControlConn(nodeID)
 	s.setEdgeAdminDisabled(nodeID, true)
+	s.edgeHealthMu.Lock()
+	if h, exists := s.edgeHealth[nodeID]; exists {
+		h.Status = "Offline"
+		h.ErrorMessage = "Administrative stop requested"
+		s.edgeHealth[nodeID] = h
+	}
+	s.edgeHealthMu.Unlock()
 	s.writeAudit(actor, "edge.power.stop", "node", nodeID, "Edge node stop requested via portal", r)
 	s.triggerEdgeHealthRecheck(nodeID)
 	w.WriteHeader(http.StatusAccepted)

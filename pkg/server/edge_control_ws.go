@@ -193,6 +193,13 @@ func (s *Server) handleEdgeControlWS(w http.ResponseWriter, r *http.Request) {
 				delete(s.edgeIPs, nodeID)
 			}
 			s.edgeClientsMu.Unlock()
+			s.edgeHealthMu.Lock()
+			if h, exists := s.edgeHealth[nodeID]; exists {
+				h.Status = "Offline"
+				h.ErrorMessage = "Control connection disconnected"
+				s.edgeHealth[nodeID] = h
+			}
+			s.edgeHealthMu.Unlock()
 			s.edgePingMu.Lock()
 			delete(s.edgePingSentAt, nodeID)
 			s.edgePingMu.Unlock()
@@ -443,6 +450,16 @@ func (s *Server) SendEdgeKickAll(nodeID string) error {
 		Subdomain: "*",
 	}
 	return conn.WriteJSON(msg)
+}
+
+// CloseEdgeControlConn forcibly closes the control WebSocket connection for a specific edge node.
+func (s *Server) CloseEdgeControlConn(nodeID string) {
+	s.edgeClientsMu.Lock()
+	conn, exists := s.edgeClients[nodeID]
+	if exists && conn != nil && conn.conn != nil {
+		_ = conn.conn.Close() //nolint:errcheck
+	}
+	s.edgeClientsMu.Unlock()
 }
 
 // kickAllLocalLeases terminates all tunnels hosted locally on this server instance.

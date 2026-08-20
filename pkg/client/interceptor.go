@@ -74,6 +74,7 @@ type InterceptorEngine struct {
 	// Access Control & Server Settings
 	Token              string
 	ServerURL          string
+	SelectedRegion     string
 	Passcode           string
 	WhitelistIPs       string
 	AccessMode         string

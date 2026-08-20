@@ -556,6 +556,23 @@ func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
+	if !isControl {
+		for _, edge := range s.cfg.EdgeNodes {
+			if edge.URL != "" {
+				if u, err := url.Parse(edge.URL); err == nil && u.Host != "" {
+					h := u.Host
+					if hostOnly, _, err := net.SplitHostPort(h); err == nil {
+						h = hostOnly
+					}
+					if strings.EqualFold(host, h) {
+						isControl = true
+						break
+					}
+				}
+			}
+		}
+	}
+
 	if isControl {
 		// Respond to capability-discovery OPTIONS requests on the root routing
 		// chain directly, rather than letting them fall through to the data-plane
@@ -722,15 +739,25 @@ func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 
 			regions := make(map[string]string)
 			if len(s.cfg.Domains) > 0 {
-				regions["eu"] = "https://tunnel." + s.cfg.Domains[0]
+				centralURL := "https://tunnel." + s.cfg.Domains[0]
+				regions["eu"] = centralURL
+				regions["central"] = centralURL
 			}
 			s.edgeClientsMu.RLock()
 			for _, edge := range s.cfg.EdgeNodes {
 				if _, isUp := s.edgeClients[edge.ID]; isUp {
-					parts := strings.Split(edge.ID, "-")
-					regionName := parts[0]
-					if regionName != "" && edge.URL != "" {
-						regions[regionName] = edge.URL
+					if edge.URL != "" {
+						regions[edge.ID] = edge.URL
+						cleanID := edge.ID
+						cleanID = strings.TrimPrefix(cleanID, "aws-")
+						cleanID = strings.TrimPrefix(cleanID, "edge-")
+						parts := strings.Split(cleanID, "-")
+						for _, p := range parts {
+							p = strings.TrimSpace(p)
+							if p != "" && p != "aws" && p != "edge" && p != "node" {
+								regions[p] = edge.URL
+							}
+						}
 					}
 				}
 			}

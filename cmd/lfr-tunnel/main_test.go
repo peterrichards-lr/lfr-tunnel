@@ -75,6 +75,27 @@ func TestProbeFastestRegion(t *testing.T) {
 	_ = probeFastestRegion(regions) //nolint:errcheck
 }
 
+func TestResolveServerURL_OfflineRegionFallback(t *testing.T) {
+	cfg := &config.ClientConfig{
+		Region:    "apac",
+		ServerURL: "https://tunnel.lfr-demo.se",
+		Regions: map[string]string{
+			"us": "https://aws-edge-us.lfr-demo.se",
+			"eu": "https://tunnel.lfr-demo.se",
+		},
+	}
+
+	resolveServerURL(cfg, false)
+
+	// Since apac is not in Regions, it should failover to an available region (us or eu)
+	if cfg.Region == "apac" {
+		t.Errorf("Expected region failover from offline 'apac', but cfg.Region was still 'apac'")
+	}
+	if cfg.ServerURL == "" {
+		t.Errorf("Expected non-empty ServerURL after failover")
+	}
+}
+
 func TestRewriteRemotes(t *testing.T) {
 	regResp := &client.RegisterResponse{
 		Remotes: []string{"60000:0.0.0.0:8080:8080"},

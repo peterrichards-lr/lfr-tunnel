@@ -356,6 +356,12 @@ func main() {
 			publicURLs = printAndCollectPublicURLs(cfg, regResp, portMappings, subHost)
 			engine.PublicURLs = publicURLs
 			engine.SetSubdomainDetails(sub, regResp.SubdomainPrefix, true, false)
+			state.Region = cfg.Region
+			state.ServerURL = cfg.ServerURL
+			state.PublicURLs = publicURLs
+			if err := client.WriteState(subHost, state); err != nil {
+				slog.Info(fmt.Sprintf("[Warning] Failed to update state file on failover: %v\n", err))
+			}
 			slog.Info(fmt.Sprintf("[Client] Successfully failed over to region '%s' (%s)", cfg.Region, cfg.ServerURL))
 			continue
 		}

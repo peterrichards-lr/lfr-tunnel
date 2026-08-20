@@ -1,5 +1,14 @@
 [
   {
+    "version": "v1.44.16",
+    "release_date": "2026-08-20",
+    "features": [
+      "Client TUI Render Cleanup: Updated all section headers and divider lines to erase to end-of-line (\\033[K), eliminating trailing character artifacts.",
+      "Inspector Replay Sanitization: Sanitized HTTP method strings during request replay, fixing net/http invalid method errors when replaying previously replayed requests.",
+      "Dynamic Region Auto-Failover on Node Shutdown: Set Chisel retry limits and added an outer failover loop so the client CLI automatically auto-detects edge node shutdowns and fails over to the next fastest online region."
+    ]
+  },
+  {
     "version": "v1.44.15",
     "release_date": "2026-08-20",
     "features": [
@@ -31,16 +40,6 @@
       "What's New & Help bar: The old always-visible sidebar (What's New panel + Help & Resources card) is now a single collapsible bar at the top of the dashboard, minimized by default and auto-expanding once when there's something new to see.",
       "Fixed the What's New & Help toggle being unclear -- it's now a proper outlined button with explicit Show/Hide text instead of a bare chevron.",
       "Fixed What's New and Help & Resources not actually sitting side by side on wider screens once expanded."
-    ]
-  },
-  {
-    "version": "v1.44.11",
-    "release_date": "2026-08-13",
-    "features": [
-      "Split Reservations View: The dashboard now shows Registered Subdomains and Custom Domains as two separate tables instead of one interleaved list.",
-      "MFA Setup Prompt: If your administrator requires multi-factor authentication, you'll now see a dedicated setup screen the moment it's needed, instead of the dashboard just failing to load.",
-      "Reliability: lfr-tunnel-ops deploy can now recover a scheduled-off edge automatically instead of failing outright.",
-      "Fixed a gap where Linux ARM64 release binaries weren't individually signature-verified."
     ]
   }
 ]

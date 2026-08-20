@@ -329,6 +329,16 @@ func main() {
 	// Set lease status and subdomains info on engine
 	engine.SetSubdomainDetails(sub, regResp.SubdomainPrefix, true, false)
 
+	// Save primary region and server URL for automated failback (#1103)
+	primaryRegion := cfg.Region
+	primaryServerURL := cfg.ServerURL
+	primaryRegionsMap := make(map[string]string)
+	for k, v := range cfg.Regions {
+		primaryRegionsMap[k] = v
+	}
+	engine.PrimaryRegion = primaryRegion
+	engine.PrimaryServerURL = primaryServerURL
+
 	// Check if TUI is enabled and if stdout/stderr are terminals (not redirected, not backgrounded)
 	tuiEnabled := !*noTUI && !*background && isatty.IsTerminal(os.Stdout.Fd()) && isatty.IsTerminal(os.Stderr.Fd())
 	var cleanupTUI func()
@@ -341,6 +351,9 @@ func main() {
 		for _, pm := range portMappings {
 			engine.StartHealthChecks(clientCtx, cancelClient, cfg.ServerURL, cfg.Region, regResp.SessionToken, pm.LocalPort)
 		}
+		if primaryRegion != "" && primaryServerURL != "" {
+			engine.StartFailbackProber(clientCtx, cancelClient, primaryServerURL, primaryRegion)
+		}
 
 		err = client.RunClient(clientCtx, cfg.ServerURL, regResp.SessionToken, regResp.Remotes, publicURLs, engine)
 		cancelClient()
@@ -349,32 +362,61 @@ func main() {
 			break
 		}
 
-		if (err != nil || clientCtx.Err() != nil) && !isExplicitServer && len(cfg.Regions) > 0 {
-			failedRegion := cfg.Region
-			slog.Info(fmt.Sprintf("[Client] Connection to region '%s' (%s) lost. Performing dynamic region failover...", failedRegion, cfg.ServerURL))
-			_ = client.ClearRegionCacheFile() //nolint:errcheck
+		if (err != nil || clientCtx.Err() != nil) && !isExplicitServer {
+			if engine.IsFailback {
+				slog.Info(fmt.Sprintf("[Client] Primary region '%s' (%s) recovered. Performing automated failback...", primaryRegion, primaryServerURL))
+				engine.IsFailback = false
+				cfg.Region = primaryRegion
+				cfg.ServerURL = primaryServerURL
+				cfg.Regions = make(map[string]string)
+				for k, v := range primaryRegionsMap {
+					cfg.Regions[k] = v
+				}
 
-			if failedRegion != "" {
-				delete(cfg.Regions, strings.ToLower(failedRegion))
+				regResp = performRegistrationHandshake(cfg, regPortMappings, sub, engine.AddedHeaders)
+				rewriteRemotes(regResp, portMap)
+				engine.ServerURL = cfg.ServerURL
+				engine.SelectedRegion = cfg.Region
+				publicURLs = printAndCollectPublicURLs(cfg, regResp, portMappings, subHost)
+				engine.PublicURLs = publicURLs
+				engine.SetSubdomainDetails(sub, regResp.SubdomainPrefix, true, false)
+				state.Region = cfg.Region
+				state.ServerURL = cfg.ServerURL
+				state.PublicURLs = publicURLs
+				if err := client.WriteState(subHost, state); err != nil {
+					slog.Info(fmt.Sprintf("[Warning] Failed to update state file on failback: %v\n", err))
+				}
+				slog.Info(fmt.Sprintf("[Client] Successfully failed back to primary region '%s' (%s)", cfg.Region, cfg.ServerURL))
+				continue
 			}
-			cfg.Region = ""
 
-			resolveServerURL(cfg, false)
-			regResp = performRegistrationHandshake(cfg, regPortMappings, sub, engine.AddedHeaders)
-			rewriteRemotes(regResp, portMap)
-			engine.ServerURL = cfg.ServerURL
-			engine.SelectedRegion = cfg.Region
-			publicURLs = printAndCollectPublicURLs(cfg, regResp, portMappings, subHost)
-			engine.PublicURLs = publicURLs
-			engine.SetSubdomainDetails(sub, regResp.SubdomainPrefix, true, false)
-			state.Region = cfg.Region
-			state.ServerURL = cfg.ServerURL
-			state.PublicURLs = publicURLs
-			if err := client.WriteState(subHost, state); err != nil {
-				slog.Info(fmt.Sprintf("[Warning] Failed to update state file on failover: %v\n", err))
+			if len(cfg.Regions) > 0 {
+				failedRegion := cfg.Region
+				slog.Info(fmt.Sprintf("[Client] Connection to region '%s' (%s) lost. Performing dynamic region failover...", failedRegion, cfg.ServerURL))
+				_ = client.ClearRegionCacheFile() //nolint:errcheck
+
+				if failedRegion != "" {
+					delete(cfg.Regions, strings.ToLower(failedRegion))
+				}
+				cfg.Region = ""
+
+				resolveServerURL(cfg, false)
+				regResp = performRegistrationHandshake(cfg, regPortMappings, sub, engine.AddedHeaders)
+				rewriteRemotes(regResp, portMap)
+				engine.ServerURL = cfg.ServerURL
+				engine.SelectedRegion = cfg.Region
+				publicURLs = printAndCollectPublicURLs(cfg, regResp, portMappings, subHost)
+				engine.PublicURLs = publicURLs
+				engine.SetSubdomainDetails(sub, regResp.SubdomainPrefix, true, false)
+				state.Region = cfg.Region
+				state.ServerURL = cfg.ServerURL
+				state.PublicURLs = publicURLs
+				if err := client.WriteState(subHost, state); err != nil {
+					slog.Info(fmt.Sprintf("[Warning] Failed to update state file on failover: %v\n", err))
+				}
+				slog.Info(fmt.Sprintf("[Client] Successfully failed over to region '%s' (%s)", cfg.Region, cfg.ServerURL))
+				continue
 			}
-			slog.Info(fmt.Sprintf("[Client] Successfully failed over to region '%s' (%s)", cfg.Region, cfg.ServerURL))
-			continue
 		}
 
 		if err != nil {

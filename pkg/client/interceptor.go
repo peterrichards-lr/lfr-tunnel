@@ -84,6 +84,11 @@ type InterceptorEngine struct {
 	NavPlacement       string
 	ServerVersion      string
 
+	PrimaryRegion         string
+	PrimaryServerURL      string
+	IsFailback            bool
+	FailbackProbeInterval time.Duration
+
 	// Latency & Bandwidth Simulation Settings
 	Latency         time.Duration
 	BandwidthLimit  int64
@@ -186,6 +191,59 @@ func (e *InterceptorEngine) StartHealthChecks(ctx context.Context, cancel contex
 							}
 							_ = resp.Body.Close() //nolint:errcheck
 						}
+					}
+				}
+			}
+		}
+	}()
+}
+
+// StartFailbackProber periodically checks if the primary region is back online when running in failover mode.
+func (e *InterceptorEngine) StartFailbackProber(ctx context.Context, cancel context.CancelFunc, primaryServerURL, primaryRegion string) {
+	if primaryServerURL == "" || primaryRegion == "" {
+		return
+	}
+	go func() {
+		interval := e.FailbackProbeInterval
+		if interval <= 0 {
+			interval = 15 * time.Second
+		}
+		ticker := time.NewTicker(interval)
+		defer ticker.Stop()
+
+		for {
+			select {
+			case <-ctx.Done():
+				return
+			case <-ticker.C:
+				e.mu.RLock()
+				currentRegion := e.SelectedRegion
+				e.mu.RUnlock()
+
+				if strings.EqualFold(currentRegion, primaryRegion) {
+					continue
+				}
+
+				// Probe primary region healthz endpoint
+				probeURL := strings.TrimRight(primaryServerURL, "/") + "/api/healthz"
+				req, err := http.NewRequestWithContext(ctx, http.MethodGet, probeURL, nil)
+				if err != nil {
+					continue
+				}
+
+				client := &http.Client{Timeout: 5 * time.Second}
+				resp, err := client.Do(req)
+				if err == nil {
+					_ = resp.Body.Close() //nolint:errcheck
+					if resp.StatusCode == http.StatusOK {
+						slog.Info(fmt.Sprintf("[Client] Primary region '%s' (%s) is back online! Initiating automated failback...", primaryRegion, primaryServerURL))
+						e.mu.Lock()
+						e.IsFailback = true
+						e.mu.Unlock()
+						if cancel != nil {
+							cancel()
+						}
+						return
 					}
 				}
 			}

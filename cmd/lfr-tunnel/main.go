@@ -247,7 +247,7 @@ func main() {
 		if err != nil {
 			log.Fatalf("[Error] Failed to start interceptor for port %d: %v", targetPort, err)
 		}
-		engine.StartHealthChecks(ctx, cfg.ServerURL, regResp.SessionToken, targetPort)
+		engine.StartHealthChecks(ctx, cancel, cfg.ServerURL, regResp.SessionToken, targetPort)
 		portMappings[i].LocalPort = interceptPort
 		portMap[targetPort] = interceptPort
 	}

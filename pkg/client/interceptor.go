@@ -125,7 +125,7 @@ func NewInterceptorEngine(targetHost string, headers []string) *InterceptorEngin
 }
 
 // StartHealthChecks begins a background loop to verify Tomcat is responding and reports status to the Gateway.
-func (e *InterceptorEngine) StartHealthChecks(ctx context.Context, serverURL, sessionToken string, targetPort int) {
+func (e *InterceptorEngine) StartHealthChecks(ctx context.Context, cancel context.CancelFunc, serverURL, sessionToken string, targetPort int) {
 	go func() {
 		ticker := time.NewTicker(5 * time.Second)
 		defer ticker.Stop()
@@ -152,25 +152,30 @@ func (e *InterceptorEngine) StartHealthChecks(ctx context.Context, serverURL, se
 					}
 				}
 
-				// Update internal state and notify server if changed
+				// Update internal state and notify server if changed or heartbeat tick
 				e.mu.Lock()
-				changed := e.Status != newStatus
 				e.Status = newStatus
 				e.mu.Unlock()
 
-				if changed || newStatus == "maintenance" {
-					// Send status update to Gateway
-					payload, _ := json.Marshal(map[string]string{
-						"session_token": sessionToken,
-						"status":        newStatus,
-					})
-					req, err := http.NewRequestWithContext(ctx, "POST", fmt.Sprintf("%s/api/tunnel-status", serverURL), bytes.NewBuffer(payload))
+				// Send status update/heartbeat to Gateway
+				payload, _ := json.Marshal(map[string]string{
+					"session_token": sessionToken,
+					"status":        newStatus,
+				})
+				req, err := http.NewRequestWithContext(ctx, "POST", fmt.Sprintf("%s/api/tunnel-status", serverURL), bytes.NewBuffer(payload))
+				if err == nil {
+					req.Header.Set("Content-Type", "application/json")
+					resp, err := http.DefaultClient.Do(req)
 					if err == nil {
-						req.Header.Set("Content-Type", "application/json")
-						resp, err := http.DefaultClient.Do(req)
-						if err == nil {
+						if resp.StatusCode == http.StatusNotFound || resp.StatusCode == http.StatusUnauthorized || resp.StatusCode == http.StatusGone || resp.StatusCode == http.StatusServiceUnavailable {
+							slog.Info(fmt.Sprintf("[Client] Lease evicted or region offline (HTTP %d). Triggering dynamic region failover...", resp.StatusCode))
 							_ = resp.Body.Close() //nolint:errcheck
+							if cancel != nil {
+								cancel()
+							}
+							return
 						}
+						_ = resp.Body.Close() //nolint:errcheck
 					}
 				}
 			}

@@ -125,7 +125,7 @@ func NewInterceptorEngine(targetHost string, headers []string) *InterceptorEngin
 }
 
 // StartHealthChecks begins a background loop to verify Tomcat is responding and reports status to the Gateway.
-func (e *InterceptorEngine) StartHealthChecks(ctx context.Context, cancel context.CancelFunc, serverURL, sessionToken string, targetPort int) {
+func (e *InterceptorEngine) StartHealthChecks(ctx context.Context, cancel context.CancelFunc, serverURL, region, sessionToken string, targetPort int) {
 	go func() {
 		ticker := time.NewTicker(5 * time.Second)
 		defer ticker.Stop()
@@ -160,6 +160,7 @@ func (e *InterceptorEngine) StartHealthChecks(ctx context.Context, cancel contex
 				// Send status update/heartbeat to Gateway and Central Control Plane
 				payload, _ := json.Marshal(map[string]string{
 					"session_token": sessionToken,
+					"region":        region,
 					"status":        newStatus,
 				})
 

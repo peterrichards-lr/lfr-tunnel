@@ -1,5 +1,13 @@
 [
   {
+    "version": "v1.44.17",
+    "release_date": "2026-08-20",
+    "features": [
+      "Instant Heartbeat Lease Eviction Detection: Updated client background status heartbeat loop to inspect HTTP status codes, detecting lease evictions and node shutdowns within 5 seconds.",
+      "Seamless Region Failover: Automatically triggers region re-probing and reconnects to the next fastest online edge node, updating TUI headers, system logs, and local state files in real time."
+    ]
+  },
+  {
     "version": "v1.44.16",
     "release_date": "2026-08-20",
     "features": [
@@ -31,15 +39,6 @@
     "features": [
       "Client TUI Active Region Display: The terminal header now displays the active region code and edge node hostname (e.g. apac (aws-edge-apac.lfr-demo.se)).",
       "Gateway Edge Domain Routing: Central server gateway now correctly recognizes edge node domains as control plane endpoints."
-    ]
-  },
-  {
-    "version": "v1.44.12",
-    "release_date": "2026-08-14",
-    "features": [
-      "What's New & Help bar: The old always-visible sidebar (What's New panel + Help & Resources card) is now a single collapsible bar at the top of the dashboard, minimized by default and auto-expanding once when there's something new to see.",
-      "Fixed the What's New & Help toggle being unclear -- it's now a proper outlined button with explicit Show/Hide text instead of a bare chevron.",
-      "Fixed What's New and Help & Resources not actually sitting side by side on wider screens once expanded."
     ]
   }
 ]

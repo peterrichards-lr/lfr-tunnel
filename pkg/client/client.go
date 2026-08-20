@@ -261,8 +261,8 @@ func RunClient(ctx context.Context, serverURL string, token string, remotes []st
 		Server:           serverURL + "/tunnel",
 		Auth:             fmt.Sprintf("%s:%s", token, token),
 		Remotes:          remotes,
-		MaxRetryInterval: 10 * time.Second,
-		MaxRetryCount:    -1, // Retry infinitely
+		MaxRetryInterval: 3 * time.Second,
+		MaxRetryCount:    3, // Allow client to return control on edge shutdown for dynamic region failover
 	}
 
 	// 3. Initialize Chisel client

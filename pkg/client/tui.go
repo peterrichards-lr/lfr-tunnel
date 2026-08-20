@@ -128,7 +128,7 @@ func render(engine *InterceptorEngine, publicURLs []string, systemLogs []string)
 	// Title Banner
 	fmt.Print("\033[H")   // Cursor to home
 	fmt.Print("\033[36m") // Cyan
-	fmt.Println("================================================================================")
+	fmt.Printf("================================================================================%s\n", eol)
 	fmt.Print("  LIFERAY TUNNEL CLIENT                                            ")
 
 	// Colored Status Label
@@ -140,7 +140,7 @@ func render(engine *InterceptorEngine, publicURLs []string, systemLogs []string)
 		statusLabel = "\033[33mCONNECTING\033[36m"
 	}
 	fmt.Printf("[%s]  %s\n", statusLabel, eol)
-	fmt.Println("================================================================================")
+	fmt.Printf("================================================================================%s\n", eol)
 	fmt.Print("\033[0m") // Reset
 
 	// Configuration Info
@@ -170,22 +170,22 @@ func render(engine *InterceptorEngine, publicURLs []string, systemLogs []string)
 	fmt.Printf("  Server:     \033[90m%s\033[0m%s\n", strings.Join(publicURLs, ", "), eol)
 	fmt.Printf("  Local:      \033[90m127.0.0.1:%d (Primary)\033[0m%s\n", destPort, eol)
 	fmt.Printf("  Inspector:  \033[34mhttp://127.0.0.1:%d\033[0m%s\n", 4040, eol)
-	fmt.Println("--------------------------------------------------------------------------------")
+	fmt.Printf("--------------------------------------------------------------------------------%s\n", eol)
 
 	// Metrics Grid
 	fmt.Printf("  Uptime:       %-12s | Active Conns:  %-12d%s\n", uptime, activeConns, eol)
 	fmt.Printf("  Total Reqs:   %-12d | RTT Latency:   %d ms (Avg: %s)%s\n", reqTotal, latency, rttAvg, eol)
 	fmt.Printf("  Bytes In:     %-12s | Bytes Out:     %s%s\n", formatBytes(bytesIn), formatBytes(bytesOut), eol)
-	fmt.Println("================================================================================")
+	fmt.Printf("================================================================================%s\n", eol)
 
 	// Scrolling Request History
-	fmt.Println("  RECENT HTTP REQUESTS (SCROLLING):")
+	fmt.Printf("  RECENT HTTP REQUESTS (SCROLLING):%s\n", eol)
 	fmt.Print("\033[90m") // Dark Gray
 	if len(history) == 0 {
 		fmt.Printf("  (No traffic captured yet. Make requests to your public domain to view.)%s\n", eol)
 		// Fill space to prevent jumpy screen sizes
 		for i := 0; i < 7; i++ {
-			fmt.Println(eol)
+			fmt.Printf("%s\n", eol)
 		}
 	} else {
 		// Limit to last 8 requests

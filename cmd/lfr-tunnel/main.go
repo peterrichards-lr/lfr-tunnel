@@ -333,7 +333,38 @@ func main() {
 		cleanupTUI = client.StartTUIDashboard(ctx, engine, publicURLs)
 	}
 
-	err = client.RunClient(ctx, cfg.ServerURL, regResp.SessionToken, regResp.Remotes, publicURLs, engine)
+	for ctx.Err() == nil {
+		err = client.RunClient(ctx, cfg.ServerURL, regResp.SessionToken, regResp.Remotes, publicURLs, engine)
+		if ctx.Err() != nil {
+			break
+		}
+
+		if err != nil && !isExplicitServer && len(cfg.Regions) > 0 {
+			failedRegion := cfg.Region
+			slog.Info(fmt.Sprintf("[Client] Connection to region '%s' (%s) lost. Performing dynamic region failover...", failedRegion, cfg.ServerURL))
+			_ = client.ClearRegionCacheFile() //nolint:errcheck
+
+			if failedRegion != "" {
+				delete(cfg.Regions, strings.ToLower(failedRegion))
+			}
+			cfg.Region = ""
+
+			resolveServerURL(cfg, false)
+			regResp = performRegistrationHandshake(cfg, portMappings, sub, engine.AddedHeaders)
+			engine.ServerURL = cfg.ServerURL
+			engine.SelectedRegion = cfg.Region
+			publicURLs = printAndCollectPublicURLs(cfg, regResp, portMappings, subHost)
+			engine.PublicURLs = publicURLs
+			engine.SetSubdomainDetails(sub, regResp.SubdomainPrefix, true, false)
+			slog.Info(fmt.Sprintf("[Client] Successfully failed over to region '%s' (%s)", cfg.Region, cfg.ServerURL))
+			continue
+		}
+
+		if err != nil {
+			break
+		}
+	}
+
 	if cleanupTUI != nil {
 		cleanupTUI()
 	}

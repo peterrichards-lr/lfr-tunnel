@@ -4,7 +4,7 @@ VERSION ?= $(shell grep -oE 'Version = "[^"]+"' pkg/config/version.go | cut -d'"
 
 # EDR-safe test execution directory (defaults to /private/tmp on macOS to match SentinelOne EDR whitelist, or /tmp / %TEMP% on Linux/Windows)
 ifeq ($(OS),Windows_NT)
-LFT_TEST_DIR ?= $(TEMP)
+LFT_TEST_DIR ?= $(subst \,/,$(TEMP))
 else
 LFT_TEST_DIR ?= $(shell [ -d /private/tmp ] && echo /private/tmp || echo /tmp)
 endif

@@ -216,6 +216,8 @@ The solution will consist of:
   - [x] Sub-Issue #1086: Client Lifecycle Hook Execution Engine
   - [x] Sub-Issue #1087: Integration Tests & Documentation for Client Failover Hooks
 - [x] Implement Multi-Layer SentinelOne EDR Safety Guards (scripts/check-edr-safety.sh, Makefile PKG/TEST_FLAGS overrides, pre-commit hook enforcer)
+- [ ] Fix Windows `LFT_TEST_DIR` backslash escaping in Makefile via `$(subst \,/,$(TEMP))`
+
 
 
 

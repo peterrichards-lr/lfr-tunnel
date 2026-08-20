@@ -215,8 +215,9 @@ The solution will consist of:
   - [x] Sub-Issue #1085: Client WebSocket Shutdown Notification Handling & Auto-Failover
   - [x] Sub-Issue #1086: Client Lifecycle Hook Execution Engine
   - [x] Sub-Issue #1087: Integration Tests & Documentation for Client Failover Hooks
-- [x] Implement Multi-Layer SentinelOne EDR Safety Guards (scripts/check-edr-safety.sh, Makefile PKG/TEST_FLAGS overrides, pre-commit hook enforcer)
 - [ ] Fix Windows `LFT_TEST_DIR` backslash escaping in Makefile via `$(subst \,/,$(TEMP))`
+- [ ] Implement Standardized Target Node Power & Cost Management Integration (manage_target_nodes.py, node_power.sh, node-power-manager.yml)
+
 
 
 

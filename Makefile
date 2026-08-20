@@ -5,7 +5,7 @@ VERSION ?= $(shell grep -oE 'Version = "[^"]+"' pkg/config/version.go | cut -d'"
 # EDR-safe test execution directory (defaults to /private/tmp on macOS to match SentinelOne EDR whitelist, or /tmp on Linux/CI)
 LFT_TEST_DIR ?= $(shell [ -d /private/tmp ] && echo /private/tmp || echo /tmp)
 export GOTMPDIR ?= $(LFT_TEST_DIR)
-TEST_BINARY := $(LFT_TEST_DIR)/lfr-tunnel
+TEST_BINARY := $(LFT_TEST_DIR)/lfr-tunnel$(shell go env GOEXE)
 
 PKG ?= ./...
 TEST_FLAGS ?=

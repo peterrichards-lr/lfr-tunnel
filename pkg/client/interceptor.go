@@ -157,25 +157,34 @@ func (e *InterceptorEngine) StartHealthChecks(ctx context.Context, cancel contex
 				e.Status = newStatus
 				e.mu.Unlock()
 
-				// Send status update/heartbeat to Gateway
+				// Send status update/heartbeat to Gateway and Central Control Plane
 				payload, _ := json.Marshal(map[string]string{
 					"session_token": sessionToken,
 					"status":        newStatus,
 				})
-				req, err := http.NewRequestWithContext(ctx, "POST", fmt.Sprintf("%s/api/tunnel-status", serverURL), bytes.NewBuffer(payload))
-				if err == nil {
-					req.Header.Set("Content-Type", "application/json")
-					resp, err := http.DefaultClient.Do(req)
+
+				centralURL := "https://tunnel.lfr-demo.se"
+				urlsToPing := []string{serverURL}
+				if serverURL != centralURL && !strings.Contains(serverURL, "tunnel.lfr-demo.se") {
+					urlsToPing = append(urlsToPing, centralURL)
+				}
+
+				for _, pingURL := range urlsToPing {
+					req, err := http.NewRequestWithContext(ctx, "POST", fmt.Sprintf("%s/api/tunnel-status", pingURL), bytes.NewBuffer(payload))
 					if err == nil {
-						if resp.StatusCode == http.StatusNotFound || resp.StatusCode == http.StatusUnauthorized || resp.StatusCode == http.StatusGone || resp.StatusCode == http.StatusServiceUnavailable {
-							slog.Info(fmt.Sprintf("[Client] Lease evicted or region offline (HTTP %d). Triggering dynamic region failover...", resp.StatusCode))
-							_ = resp.Body.Close() //nolint:errcheck
-							if cancel != nil {
-								cancel()
+						req.Header.Set("Content-Type", "application/json")
+						resp, err := http.DefaultClient.Do(req)
+						if err == nil {
+							if resp.StatusCode == http.StatusNotFound || resp.StatusCode == http.StatusUnauthorized || resp.StatusCode == http.StatusGone || resp.StatusCode == http.StatusServiceUnavailable {
+								slog.Info(fmt.Sprintf("[Client] Control plane reported region offline or lease evicted (HTTP %d). Triggering dynamic region failover...", resp.StatusCode))
+								_ = resp.Body.Close() //nolint:errcheck
+								if cancel != nil {
+									cancel()
+								}
+								return
 							}
-							return
+							_ = resp.Body.Close() //nolint:errcheck
 						}
-						_ = resp.Body.Close() //nolint:errcheck
 					}
 				}
 			}

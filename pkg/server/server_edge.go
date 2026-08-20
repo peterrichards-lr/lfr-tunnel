@@ -10,6 +10,7 @@ import (
 	"net"
 	"net/http"
 	"net/url"
+	"strings"
 	"time"
 
 	"lfr-tunnel/pkg/config"
@@ -537,4 +538,22 @@ func (s *Server) checkEdgeShutdownWarnings(now time.Time) {
 			go s.BroadcastNodeShutdownWarning(id, secUntilStop, reason)
 		}
 	}
+}
+
+// isRegionOffline returns true if the specified region node is marked Offline or Disabled on the central control plane.
+func (s *Server) isRegionOffline(region string) bool {
+	if region == "" {
+		return false
+	}
+	regionLower := strings.ToLower(region)
+	s.edgeHealthMu.RLock()
+	defer s.edgeHealthMu.RUnlock()
+	for id, health := range s.edgeHealth {
+		if strings.EqualFold(id, regionLower) || strings.HasSuffix(strings.ToLower(id), "-"+regionLower) || strings.HasPrefix(strings.ToLower(id), regionLower+"-") {
+			if health.Status == "Offline" || health.Status == "Disabled" || health.AdminDisabled {
+				return true
+			}
+		}
+	}
+	return false
 }

@@ -1699,6 +1699,14 @@ func (s *Server) handleTunnelStatus(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	leases := s.registry.GetSessionLeases(req.SessionToken)
+	for _, l := range leases {
+		if l.NodeID != "" && s.isRegionOffline(l.NodeID) {
+			http.Error(w, "region offline", http.StatusServiceUnavailable)
+			return
+		}
+	}
+
 	if s.registry.UpdateLeaseStatus(req.SessionToken, req.Status) {
 		if req.Status == "down" {
 			body, _err := s.renderNotificationTemplate("en", "admin_tunnel_offline.txt", nil)

@@ -1403,7 +1403,7 @@ func (s *Server) handleRegister(w http.ResponseWriter, r *http.Request) {
 			var pickedDomain string
 
 			for _, d := range activeDomains {
-				avail, rsn := s.registry.CheckSubdomain(req.SubdomainPrefix, []string{d})
+				avail, rsn := s.registry.CheckSubdomainForUser(req.SubdomainPrefix, []string{d}, user.ID)
 				if avail {
 					available = true
 					pickedDomain = d

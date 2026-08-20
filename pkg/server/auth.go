@@ -164,8 +164,13 @@ func (r *Registry) Register(userID string, subdomainPrefix string, ports []PortM
 			} else {
 				fullHost = fmt.Sprintf("%s.%s", subdomain, domain)
 			}
-			if _, exists := r.leases[fullHost]; exists {
-				return "", nil, fmt.Errorf("host %s is already registered", fullHost)
+			if existing, exists := r.leases[fullHost]; exists {
+				if existing.UserID == userID {
+					delete(r.leases, fullHost)
+					delete(r.usedPorts, existing.LocalPort)
+				} else {
+					return "", nil, fmt.Errorf("host %s is already registered", fullHost)
+				}
 			}
 		}
 	}
@@ -303,6 +308,12 @@ func (r *Registry) UpdateLeaseRateLimit(fullHost string, newLimit int) error {
 
 // CheckSubdomain checks a subdomain prefix availability and returns availability, reason if unavailable.
 func (r *Registry) CheckSubdomain(subdomainPrefix string, domains []string) (bool, string) {
+	return r.CheckSubdomainForUser(subdomainPrefix, domains, "")
+}
+
+// CheckSubdomainForUser checks a subdomain prefix availability for a specific user ID.
+// If an existing lease belongs to the same user, it is considered available for re-registration / failover.
+func (r *Registry) CheckSubdomainForUser(subdomainPrefix string, domains []string, userID string) (bool, string) {
 	r.RLock()
 	defer r.RUnlock()
 
@@ -326,7 +337,10 @@ func (r *Registry) CheckSubdomain(subdomainPrefix string, domains []string) (boo
 
 	for _, domain := range domains {
 		fullHost := fmt.Sprintf("%s.%s", subdomainPrefix, domain)
-		if _, exists := r.leases[fullHost]; exists {
+		if lease, exists := r.leases[fullHost]; exists {
+			if userID != "" && lease.UserID == userID {
+				continue
+			}
 			return false, "subdomain is already taken"
 		}
 	}

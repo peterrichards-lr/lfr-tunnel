@@ -73,7 +73,7 @@ func TestRegistryDuplicateSubdomain(t *testing.T) {
 		t.Fatalf("first registration failed: %v", err)
 	}
 
-	_, _, err = reg.Register("test-user", "beta-se", []PortMapping{{LocalPort: 8080}}, domains, 0, "127.0.0.1", "", nil)
+	_, _, err = reg.Register("test-user-2", "beta-se", []PortMapping{{LocalPort: 8080}}, domains, 0, "127.0.0.1", "", nil)
 	if err == nil {
 		t.Error("expected second registration with same subdomain to fail")
 	}

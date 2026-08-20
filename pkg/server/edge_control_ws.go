@@ -47,16 +47,19 @@ var edgeHealthPingInterval = 20 * time.Second
 
 // ControlMessage represents the JSON schema for websocket communication.
 type ControlMessage struct {
-	Type      string            `json:"type"`
-	Nonce     string            `json:"nonce,omitempty"`
-	Response  string            `json:"response,omitempty"`
-	IP        string            `json:"ip,omitempty"`
-	Action    string            `json:"action,omitempty"`
-	Reason    string            `json:"reason,omitempty"`
-	Duration  int               `json:"duration,omitempty"`
-	UserID    string            `json:"user_id,omitempty"`
-	Subdomain string            `json:"subdomain,omitempty"`
-	Headers   map[string]string `json:"headers,omitempty"`
+	Type             string            `json:"type"`
+	Nonce            string            `json:"nonce,omitempty"`
+	Response         string            `json:"response,omitempty"`
+	IP               string            `json:"ip,omitempty"`
+	NodeID           string            `json:"node_id,omitempty"`
+	Action           string            `json:"action,omitempty"`
+	Reason           string            `json:"reason,omitempty"`
+	Duration         int               `json:"duration,omitempty"`
+	UserID           string            `json:"user_id,omitempty"`
+	Subdomain        string            `json:"subdomain,omitempty"`
+	SecondsRemaining int               `json:"seconds_remaining,omitempty"`
+	ShutdownAt       int64             `json:"shutdown_at,omitempty"`
+	Headers          map[string]string `json:"headers,omitempty"`
 }
 
 // handleEdgeControlWS handles control plane WebSocket connections from Edge nodes.
@@ -315,6 +318,37 @@ func (s *Server) BroadcastMaintenance(action string, duration int, reason string
 
 	for _, conn := range s.edgeClients {
 		_ = conn.WriteMessage(websocket.TextMessage, payload) //nolint:errcheck
+	}
+}
+
+// BroadcastNodeShutdownWarning sends a shutdown warning notification to a specific edge node or all edge nodes.
+func (s *Server) BroadcastNodeShutdownWarning(nodeID string, secondsRemaining int, reason string) {
+	shutdownAt := time.Now().Unix() + int64(secondsRemaining)
+	msg := ControlMessage{
+		Type:             "node_shutdown_warning",
+		NodeID:           nodeID,
+		Action:           "shutdown_warning",
+		SecondsRemaining: secondsRemaining,
+		ShutdownAt:       shutdownAt,
+		Reason:           reason,
+	}
+
+	payload, err := json.Marshal(msg)
+	if err != nil {
+		return
+	}
+
+	s.edgeClientsMu.RLock()
+	defer s.edgeClientsMu.RUnlock()
+
+	if nodeID != "" {
+		if conn, exists := s.edgeClients[nodeID]; exists {
+			_ = conn.WriteMessage(websocket.TextMessage, payload) //nolint:errcheck
+		}
+	} else {
+		for _, conn := range s.edgeClients {
+			_ = conn.WriteMessage(websocket.TextMessage, payload) //nolint:errcheck
+		}
 	}
 }
 

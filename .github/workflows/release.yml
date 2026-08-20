@@ -39,7 +39,7 @@ jobs:
           cache: true
 
       - name: Run Tests
-        run: go test -v ./...
+        run: make test
 
       - name: Prepare Dist Directory
         run: mkdir -p dist

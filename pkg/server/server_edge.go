@@ -26,6 +26,7 @@ func (s *Server) monitorEdgeHealth() {
 		for _, edge := range s.cfg.EdgeNodes {
 			s.checkEdgeNodeHealth(edge, outboundOk)
 		}
+		s.checkEdgeShutdownWarnings(time.Now())
 		select {
 		case <-s.ctx.Done():
 			return
@@ -509,6 +510,49 @@ func (s *Server) checkExpiringReservations() {
 			if err := s.db.UpdateSubdomainReservation(res); err != nil {
 				slog.Info(fmt.Sprintf("[Server] Failed to update expiry warning state for reservation %d: %v", res.ID, err))
 			}
+		}
+	}
+}
+
+// secondsUntilScheduledStop reports how many seconds remain until stopHHMM in tz.
+func secondsUntilScheduledStop(now time.Time, stopHHMM, tz string) (int, bool) {
+	if stopHHMM == "" || tz == "" {
+		return 0, false
+	}
+	loc, err := time.LoadLocation(tz)
+	if err != nil {
+		return 0, false
+	}
+	stopSec, err := hhmmToSeconds(stopHHMM)
+	if err != nil {
+		return 0, false
+	}
+	const daySeconds = 24 * 60 * 60
+	nowLocal := now.In(loc)
+	nowSec := nowLocal.Hour()*3600 + nowLocal.Minute()*60 + nowLocal.Second()
+	secUntilStop := ((stopSec - nowSec) + daySeconds) % daySeconds
+	return secUntilStop, true
+}
+
+// checkEdgeShutdownWarnings evaluates whether connected edge nodes are approaching
+// their scheduled stop window and broadcasts a node_shutdown_warning frame.
+func (s *Server) checkEdgeShutdownWarnings(now time.Time) {
+	warningMinutes := s.cfg.EdgeShutdownWarningMinutes
+	if warningMinutes <= 0 {
+		warningMinutes = 5
+	}
+	warningSec := warningMinutes * 60
+
+	s.edgeHealthMu.RLock()
+	defer s.edgeHealthMu.RUnlock()
+
+	for id, health := range s.edgeHealth {
+		if !health.ScheduleEnabled || health.ScheduleStopTime == "" || health.Timezone == "" {
+			continue
+		}
+		if secUntilStop, ok := secondsUntilScheduledStop(now, health.ScheduleStopTime, health.Timezone); ok && secUntilStop > 0 && secUntilStop <= warningSec {
+			reason := fmt.Sprintf("Scheduled edge node shutdown in %d minutes (%s local time)", warningMinutes, health.ScheduleStopTime)
+			go s.BroadcastNodeShutdownWarning(id, secUntilStop, reason)
 		}
 	}
 }

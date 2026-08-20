@@ -537,6 +537,7 @@ func (s *Server) handleMFAEnable(w http.ResponseWriter, r *http.Request) {
 	}
 	s.invalidateUserCache(u.Email)
 
+	s.writeAudit(u.Email, "mfa.enabled", "user", u.Email, "Enabled TOTP multi-factor authentication", r)
 	respondJSON(w, http.StatusOK, map[string]string{"status": "success"})
 }
 
@@ -566,6 +567,7 @@ func (s *Server) handleMFADisable(w http.ResponseWriter, r *http.Request) {
 	}
 	s.invalidateUserCache(u.Email)
 
+	s.writeAudit(u.Email, "mfa.disabled", "user", u.Email, "Disabled TOTP multi-factor authentication", r)
 	respondJSON(w, http.StatusOK, map[string]string{"status": "success"})
 }
 
@@ -1150,6 +1152,7 @@ func (s *Server) handleCreateReservation(w http.ResponseWriter, r *http.Request)
 
 	s.sendSubdomainReservedEmail(user, req.Subdomain, req.Domain, res.ExpiresAt, r)
 
+	s.writeAudit(user.Email, "reservation.created", "subdomain", fmt.Sprintf("%s.%s", req.Subdomain, req.Domain), "", r)
 	respondJSON(w, http.StatusOK, res)
 }
 
@@ -1176,6 +1179,16 @@ func (s *Server) handleDeleteReservation(w http.ResponseWriter, r *http.Request)
 		go s.runVanityDomainHook("remove", res.Domain, res.UserID)
 	}
 
+	if res != nil {
+		subName := res.Subdomain
+		if subName != "" {
+			subName = fmt.Sprintf("%s.%s", res.Subdomain, res.Domain)
+		} else {
+			subName = res.Domain
+		}
+		s.writeAudit(user.Email, "reservation.deleted", "subdomain", subName, "", r)
+	}
+
 	respondJSON(w, http.StatusOK, map[string]string{"status": "success"})
 }
 
@@ -1200,6 +1213,7 @@ func (s *Server) handleRequestExtension(w http.ResponseWriter, r *http.Request) 
 		return
 	}
 
+	s.writeAudit(user.Email, "reservation.extension_requested", "subdomain", fmt.Sprintf("%s.%s", res.Subdomain, res.Domain), "", r)
 	respondJSON(w, http.StatusOK, res)
 }
 
@@ -1255,6 +1269,7 @@ func (s *Server) handlePromoteReservation(w http.ResponseWriter, r *http.Request
 
 	s.sendSubdomainReservedEmail(user, req.Subdomain, domain, res.ExpiresAt, r)
 
+	s.writeAudit(user.Email, "reservation.promoted", "subdomain", fmt.Sprintf("%s.%s", req.Subdomain, domain), "", r)
 	respondJSON(w, http.StatusOK, res)
 }
 
@@ -1361,6 +1376,7 @@ func (s *Server) handleAdminApproveExtension(w http.ResponseWriter, r *http.Requ
 		s.sendExtensionApprovedEmail(user, res.Subdomain, res.Domain, res.ExpiresAt, r)
 	}
 
+	s.writeAudit(actor, "reservation.extension_approved", "subdomain", fmt.Sprintf("%s.%s", res.Subdomain, res.Domain), fmt.Sprintf("Days: %d, Permanent: %v", req.Days, req.Permanent), r)
 	respondJSON(w, http.StatusOK, res)
 }
 
@@ -1384,6 +1400,7 @@ func (s *Server) handleAdminDemoteReservation(w http.ResponseWriter, r *http.Req
 		s.sendSubdomainDemotedEmail(resOwner, res.Subdomain, res.Domain, res.ExpiresAt, r)
 	}
 
+	s.writeAudit(actor, "reservation.demoted", "subdomain", fmt.Sprintf("%s.%s", res.Subdomain, res.Domain), "", r)
 	respondJSON(w, http.StatusOK, res)
 }
 
@@ -1724,6 +1741,7 @@ func (s *Server) handleUpdateReservationAccessControl(w http.ResponseWriter, r *
 		return
 	}
 
+	s.writeAudit(user.Email, "reservation.access_control_updated", "subdomain", fmt.Sprintf("%s.%s", req.Subdomain, req.Domain), fmt.Sprintf("AccessMode: %s", req.AccessMode), r)
 	respondJSON(w, http.StatusOK, map[string]string{"status": "success"})
 }
 

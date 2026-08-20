@@ -7,6 +7,7 @@ import (
 	"lfr-tunnel/pkg/db"
 	"log/slog"
 	"net/http"
+	"strings"
 	"time"
 )
 
@@ -21,19 +22,25 @@ func (s *Server) writeAudit(actorID, action, targetType, targetID string, detail
 		}
 		return
 	}
+	ip := ""
+	if r != nil {
+		ip = r.RemoteAddr
+	}
 	entry := &db.AuditEntry{
 		ActorID:    actorID,
 		Action:     action,
 		TargetType: targetType,
 		TargetID:   targetID,
 		Details:    details,
-		IPAddress:  r.RemoteAddr,
+		IPAddress:  ip,
 	}
 	dbConn := s.db
 	// Run in a goroutine so it doesn't block the HTTP response
 	go func() {
 		if err := dbConn.WriteAuditEntry(entry); err != nil {
-			slog.Info(fmt.Sprintf("[Server] Failed to write audit log: %v", err))
+			if !strings.Contains(err.Error(), "database is closed") {
+				slog.Info(fmt.Sprintf("[Server] Failed to write audit log: %v", err))
+			}
 		}
 	}()
 }

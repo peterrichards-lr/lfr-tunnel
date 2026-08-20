@@ -1,5 +1,12 @@
 [
   {
+    "version": "v1.44.14",
+    "release_date": "2026-08-20",
+    "features": [
+      "Release v1.44.14"
+    ]
+  },
+  {
     "version": "v1.44.13",
     "release_date": "2026-08-20",
     "features": [
@@ -37,13 +44,6 @@
       "CLI Redraw Fix: Fixed leftover characters lingering in the terminal UI during live redraws.",
       "Published Documentation Site: lfr-tunnel's docs are now published as a browsable site (MkDocs + GitHub Pages), in addition to the raw markdown in the repo.",
       "Favicon Fix: Replaced the browser tab icon across the portal with the correct logo (was a mismatched placeholder image)."
-    ]
-  },
-  {
-    "version": "v1.44.9",
-    "release_date": "2026-08-10",
-    "features": [
-      "Release v1.44.9"
     ]
   }
 ]

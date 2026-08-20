@@ -5620,7 +5620,7 @@ func (s *Server) handleEdgeHealth(w http.ResponseWriter, r *http.Request) {
 				Status:      "Online",
 				LastCheckAt: time.Now().Unix(),
 			}
-		} else {
+		} else if h.Status != "Offline" && h.Status != "Disabled" {
 			h.Status = "Online"
 			h.ErrorMessage = ""
 		}

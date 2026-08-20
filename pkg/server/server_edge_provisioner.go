@@ -59,7 +59,7 @@ func (s *Server) handleAdminEdgeStop(w http.ResponseWriter, r *http.Request, act
 		writeProvisionerError(w, err)
 		return
 	}
-	_ = s.SendEdgeKickAll(nodeID)
+	_ = s.SendEdgeKickAll(nodeID) //nolint:errcheck
 	s.CloseEdgeControlConn(nodeID)
 	s.setEdgeAdminDisabled(nodeID, true)
 	s.edgeHealthMu.Lock()

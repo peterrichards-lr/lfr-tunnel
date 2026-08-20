@@ -4,7 +4,7 @@ VERSION ?= $(shell grep -oE 'Version = "[^"]+"' pkg/config/version.go | cut -d'"
 
 # EDR-safe test execution directory (defaults to /private/tmp on macOS to match SentinelOne EDR whitelist, or /tmp / %TEMP% on Linux/Windows)
 ifeq ($(OS),Windows_NT)
-LFT_TEST_DIR ?= $(subst \,/,$(TEMP))
+LFT_TEST_DIR ?= $(subst \,/,$(or $(TMPDIR),$(TEMP),$(TMP),/tmp))
 else
 LFT_TEST_DIR ?= $(shell [ -d /private/tmp ] && echo /private/tmp || echo /tmp)
 endif
@@ -41,7 +41,7 @@ test:
 		rm -f $(TEST_BINARY); \
 		go test -c -o $(TEST_BINARY) $$pkg || exit 1; \
 		if [ -f $(TEST_BINARY) ]; then \
-			(cd $$(go list -f '{{.Dir}}' $$pkg) && $(TEST_BINARY) $(TEST_FLAGS)) || exit 1; \
+			(cd "$$(go list -f '{{.Dir}}' $$pkg | tr '\\' '/')" && $(TEST_BINARY) $(TEST_FLAGS)) || exit 1; \
 		fi; \
 	done
 	@rm -f $(TEST_BINARY)

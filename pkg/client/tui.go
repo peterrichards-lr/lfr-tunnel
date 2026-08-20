@@ -188,14 +188,13 @@ func render(engine *InterceptorEngine, publicURLs []string, systemLogs []string)
 			fmt.Printf("%s\n", eol)
 		}
 	} else {
-		// Limit to last 8 requests
+		// Display 8 most recent requests (newest at top)
 		limit := 8
-		startIdx := len(history) - limit
-		if startIdx < 0 {
-			startIdx = 0
+		if limit > len(history) {
+			limit = len(history)
 		}
 		printed := 0
-		for i := startIdx; i < len(history); i++ {
+		for i := 0; i < limit; i++ {
 			rec := history[i]
 			timeStr := rec.Time.Format("15:04:05")
 			statusStr := colorStatus(rec.Status)
@@ -212,8 +211,8 @@ func render(engine *InterceptorEngine, publicURLs []string, systemLogs []string)
 			printed++
 		}
 		// Pad remaining space
-		for i := printed; i < limit; i++ {
-			fmt.Println(eol)
+		for i := printed; i < 8; i++ {
+			fmt.Printf("%s\n", eol)
 		}
 	}
 	fmt.Print("\033[0m") // Reset

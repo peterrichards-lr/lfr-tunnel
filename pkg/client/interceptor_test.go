@@ -500,7 +500,9 @@ func TestStartFailbackProber_PrimaryRecovered(t *testing.T) {
 	primaryServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.URL.Path == "/api/healthz" {
 			w.WriteHeader(http.StatusOK)
-			_, _ = w.Write([]byte(`{"status":"healthy"}`))
+			if _, err := w.Write([]byte(`{"status":"healthy"}`)); err != nil {
+				log.Printf("[Warning] Failed to write response: %v", err)
+			}
 			return
 		}
 		w.WriteHeader(http.StatusNotFound)

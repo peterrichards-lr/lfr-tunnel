@@ -1,5 +1,13 @@
 [
   {
+    "version": "v1.44.22",
+    "release_date": "2026-08-20",
+    "features": [
+      "Same-User Lease Eviction & Primary Domain Assignment: Updated Central Gateway CheckSubdomainForUser and Register to evict stale regional leases for the same user, ensuring primary .se domain is assigned to the new live tunnel connection during failover.",
+      "Seamless Primary Subdomain Traffic Forwarding: Eliminates stale lease lockouts and 502 Bad Gateway responses when accessing primary subdomain URLs post-failover."
+    ]
+  },
+  {
     "version": "v1.44.21",
     "release_date": "2026-08-20",
     "features": [
@@ -29,14 +37,6 @@
     "features": [
       "Central Control Plane Edge Status Enforcement: Central Gateway responds HTTP 503 Service Unavailable when a region node is disabled or stopped in Portal V2.",
       "Live On-Screen Dynamic Failover: Client CLI dual-pings Central Gateway heartbeat, detecting node stops within 5s and switching regions live without CLI restarts."
-    ]
-  },
-  {
-    "version": "v1.44.17",
-    "release_date": "2026-08-20",
-    "features": [
-      "Instant Heartbeat Lease Eviction Detection: Updated client background status heartbeat loop to inspect HTTP status codes, detecting lease evictions and node shutdowns within 5 seconds.",
-      "Seamless Region Failover: Automatically triggers region re-probing and reconnects to the next fastest online edge node, updating TUI headers, system logs, and local state files in real time."
     ]
   }
 ]

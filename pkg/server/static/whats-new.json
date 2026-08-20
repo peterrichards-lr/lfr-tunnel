@@ -1,5 +1,13 @@
 [
   {
+    "version": "v1.44.20",
+    "release_date": "2026-08-20",
+    "features": [
+      "Failover Reverse Tunnel Remote Port Rewriting: Rewrites reverse tunnel port mappings during live region failover, ensuring Chisel client requests correct allocated server ports and visitor traffic flows to local machines.",
+      "End-to-End Traffic Proxying Verification: Verified traffic forwarding over fallback edge connections to prevent server 502 Bad Gateway responses."
+    ]
+  },
+  {
     "version": "v1.44.19",
     "release_date": "2026-08-20",
     "features": [
@@ -30,15 +38,6 @@
       "Client TUI Render Cleanup: Updated all section headers and divider lines to erase to end-of-line (\\033[K), eliminating trailing character artifacts.",
       "Inspector Replay Sanitization: Sanitized HTTP method strings during request replay, fixing net/http invalid method errors when replaying previously replayed requests.",
       "Dynamic Region Auto-Failover on Node Shutdown: Set Chisel retry limits and added an outer failover loop so the client CLI automatically auto-detects edge node shutdowns and fails over to the next fastest online region."
-    ]
-  },
-  {
-    "version": "v1.44.15",
-    "release_date": "2026-08-20",
-    "features": [
-      "Edge Health Monitoring Fix: Edge node health determination now reads directly from active WebSocket control channels and real-time remote IPs, eliminating false-positive 5ms loopback latency.",
-      "Windows CI Test Suite Fix: Fixed path backslash translation in Makefile test targets for cross-platform Git Bash compatibility across CI matrix runners.",
-      "Target Node Power Control: Added graceful AWS credential checks to Target Node Cost & Power Control scheduled workflow."
     ]
   }
 ]

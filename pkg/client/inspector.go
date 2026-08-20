@@ -547,7 +547,13 @@ func ReplayRequest(targetHost string, record *RequestRecord) (*RequestRecord, er
 		reqBodyReader = strings.NewReader(record.ReqBody)
 	}
 
-	req, err := http.NewRequest(record.Method, targetURL, reqBodyReader)
+	cleanMethod := record.Method
+	if idx := strings.Index(cleanMethod, " "); idx != -1 {
+		cleanMethod = cleanMethod[:idx]
+	}
+	cleanMethod = strings.ToUpper(strings.TrimSpace(cleanMethod))
+
+	req, err := http.NewRequest(cleanMethod, targetURL, reqBodyReader)
 	if err != nil {
 		return nil, err
 	}
@@ -570,7 +576,7 @@ func ReplayRequest(targetHost string, record *RequestRecord) (*RequestRecord, er
 	rec := &RequestRecord{
 		ID:         fmt.Sprintf("%d", time.Now().UnixNano()),
 		Time:       startTime,
-		Method:     record.Method + " (Replay)",
+		Method:     cleanMethod + " (Replay)",
 		Path:       record.Path,
 		ReqHeaders: record.ReqHeaders,
 		ReqBody:    record.ReqBody,

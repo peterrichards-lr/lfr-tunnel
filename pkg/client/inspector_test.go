@@ -375,6 +375,15 @@ func TestReplayRequestEndpoint(t *testing.T) {
 		t.Errorf("Expected RespBody 'Mock Replay Response', got '%s'", newRecord.RespBody)
 	}
 
+	// Test case A2: Replaying a previously replayed request (Method already has ' (Replay)')
+	replayedAgain, err := ReplayRequest(engine.TargetHost, newRecord)
+	if err != nil {
+		t.Fatalf("Replaying a previously replayed request failed: %v", err)
+	}
+	if replayedAgain.Method != "POST (Replay)" {
+		t.Errorf("Expected Method 'POST (Replay)', got %s", replayedAgain.Method)
+	}
+
 	// Test case B: Request Not Found
 	bodyBytes2, _ := json.Marshal(map[string]string{"id": "non-existent-id"})
 	rec2 := httptest.NewRecorder()

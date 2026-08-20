@@ -357,6 +357,7 @@ func main() {
 
 			resolveServerURL(cfg, false)
 			regResp = performRegistrationHandshake(cfg, portMappings, sub, engine.AddedHeaders)
+			rewriteRemotes(regResp, portMap)
 			engine.ServerURL = cfg.ServerURL
 			engine.SelectedRegion = cfg.Region
 			publicURLs = printAndCollectPublicURLs(cfg, regResp, portMappings, subHost)

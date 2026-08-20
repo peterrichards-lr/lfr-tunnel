@@ -1,5 +1,13 @@
 [
   {
+    "version": "v1.44.24",
+    "release_date": "2026-08-20",
+    "features": [
+      "Dynamic TUI Scrolling Requests Table: Fixed TUI request history loop to display 8 newest requests at top, ensuring incoming HTTP requests update live.",
+      "Live Request Stream Rendering: Restores continuous real-time scrolling of captured HTTP requests in the CLI dashboard interface."
+    ]
+  },
+  {
     "version": "v1.44.23",
     "release_date": "2026-08-20",
     "features": [
@@ -29,14 +37,6 @@
     "features": [
       "Failover Reverse Tunnel Remote Port Rewriting: Rewrites reverse tunnel port mappings during live region failover, ensuring Chisel client requests correct allocated server ports and visitor traffic flows to local machines.",
       "End-to-End Traffic Proxying Verification: Verified traffic forwarding over fallback edge connections to prevent server 502 Bad Gateway responses."
-    ]
-  },
-  {
-    "version": "v1.44.19",
-    "release_date": "2026-08-20",
-    "features": [
-      "Scoped Session Context Isolation: Client session context is isolated per connection attempt, ensuring heartbeat eviction triggers live failover without exiting the main process.",
-      "Central Region Heartbeat Alignment: Central Gateway validates region online status during status heartbeats, returning HTTP 503 for stopped nodes while preserving 200 OK for online edge leases."
     ]
   }
 ]

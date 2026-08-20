@@ -247,7 +247,6 @@ func main() {
 		if err != nil {
 			log.Fatalf("[Error] Failed to start interceptor for port %d: %v", targetPort, err)
 		}
-		engine.StartHealthChecks(ctx, cancel, cfg.ServerURL, regResp.SessionToken, targetPort)
 		portMappings[i].LocalPort = interceptPort
 		portMap[targetPort] = interceptPort
 	}
@@ -334,12 +333,19 @@ func main() {
 	}
 
 	for ctx.Err() == nil {
-		err = client.RunClient(ctx, cfg.ServerURL, regResp.SessionToken, regResp.Remotes, publicURLs, engine)
+		clientCtx, cancelClient := context.WithCancel(ctx)
+		for _, pm := range portMappings {
+			engine.StartHealthChecks(clientCtx, cancelClient, cfg.ServerURL, cfg.Region, regResp.SessionToken, pm.LocalPort)
+		}
+
+		err = client.RunClient(clientCtx, cfg.ServerURL, regResp.SessionToken, regResp.Remotes, publicURLs, engine)
+		cancelClient()
+
 		if ctx.Err() != nil {
 			break
 		}
 
-		if err != nil && !isExplicitServer && len(cfg.Regions) > 0 {
+		if (err != nil || clientCtx.Err() != nil) && !isExplicitServer && len(cfg.Regions) > 0 {
 			failedRegion := cfg.Region
 			slog.Info(fmt.Sprintf("[Client] Connection to region '%s' (%s) lost. Performing dynamic region failover...", failedRegion, cfg.ServerURL))
 			_ = client.ClearRegionCacheFile() //nolint:errcheck

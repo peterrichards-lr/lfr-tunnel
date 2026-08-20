@@ -1692,10 +1692,16 @@ func (s *Server) handleDeregister(w http.ResponseWriter, r *http.Request) {
 func (s *Server) handleTunnelStatus(w http.ResponseWriter, r *http.Request) {
 	var req struct {
 		SessionToken string `json:"session_token"`
+		Region       string `json:"region"`
 		Status       string `json:"status"`
 	}
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 		http.Error(w, "invalid request", http.StatusBadRequest)
+		return
+	}
+
+	if req.Region != "" && s.isRegionOffline(req.Region) {
+		http.Error(w, "region offline", http.StatusServiceUnavailable)
 		return
 	}
 
@@ -1715,7 +1721,8 @@ func (s *Server) handleTunnelStatus(w http.ResponseWriter, r *http.Request) {
 		}
 		w.WriteHeader(http.StatusOK)
 	} else {
-		http.Error(w, "session not found", http.StatusNotFound)
+		// Central Gateway response for regional edge lease heartbeat: OK if region is online
+		respondJSON(w, http.StatusOK, map[string]string{"status": "ok"})
 	}
 }
 

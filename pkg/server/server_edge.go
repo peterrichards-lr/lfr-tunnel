@@ -49,26 +49,45 @@ func (s *Server) checkEdgeNodeHealth(edge config.EdgeNodeConfig, outboundOk bool
 		return
 	}
 
-	client := &http.Client{Timeout: 5 * time.Second}
+	s.edgeClientsMu.RLock()
+	conn, connected := s.edgeClients[edge.ID]
+	liveIP := s.edgeIPs[edge.ID]
+	version := s.edgeVersions[edge.ID]
+	s.edgeClientsMu.RUnlock()
+
+	if connected && conn != nil {
+		s.updateEdgeHealth(edge.ID, "Online", 0, "", version, false)
+		return
+	}
+
+	client := &http.Client{Timeout: 3 * time.Second}
 	start := time.Now()
-	req, err := http.NewRequest(http.MethodGet, edge.URL+"/api/version", nil)
+	probeURL := edge.URL + "/api/version"
+	if liveIP != "" {
+		if u, err := url.Parse(edge.URL); err == nil && u.Scheme != "" {
+			probeURL = fmt.Sprintf("%s://%s/api/version", u.Scheme, liveIP)
+		}
+	}
+
+	req, err := http.NewRequest(http.MethodGet, probeURL, nil)
 	if err != nil {
 		s.updateEdgeHealth(edge.ID, "Offline", 0, err.Error(), "", false)
 		return
 	}
-
+	if u, err := url.Parse(edge.URL); err == nil && u.Hostname() != "" {
+		req.Host = u.Hostname()
+	}
 	req.Header.Set("User-Agent", "lfr-tunnel-health-monitor")
 
 	resp, err := client.Do(req)
 	latency := time.Since(start).Milliseconds()
 
 	if err != nil {
-		s.updateEdgeHealth(edge.ID, "Offline", latency, err.Error(), "", false)
+		s.updateEdgeHealth(edge.ID, "Offline", 0, "Edge control channel disconnected", "", false)
 		return
 	}
+	defer resp.Body.Close() //nolint:errcheck
 
-	var version string
-	var maintenanceActive bool
 	if resp.StatusCode == http.StatusOK {
 		var versionResp struct {
 			ServerVersion   string `json:"server_version"`
@@ -76,20 +95,13 @@ func (s *Server) checkEdgeNodeHealth(edge config.EdgeNodeConfig, outboundOk bool
 		}
 		if bodyBytes, readErr := io.ReadAll(resp.Body); readErr == nil {
 			_ = json.Unmarshal(bodyBytes, &versionResp) //nolint:errcheck
-			version = versionResp.ServerVersion
-			// "pending" (a scheduled-but-not-yet-active countdown) only
-			// applies to the local/deploy-triggered maintenance path, not
-			// the edge_control_ws maintenance_trigger message this reads --
-			// that one flips straight to "true", so only it counts as active.
-			maintenanceActive = versionResp.MaintenanceMode == "true"
+			if versionResp.ServerVersion != "" {
+				version = versionResp.ServerVersion
+			}
 		}
-	}
-	_ = resp.Body.Close() //nolint:errcheck
-
-	if resp.StatusCode == http.StatusOK {
-		s.updateEdgeHealth(edge.ID, "Online", latency, "", version, maintenanceActive)
+		s.updateEdgeHealth(edge.ID, "Online", latency, "", version, false)
 	} else {
-		s.updateEdgeHealth(edge.ID, "Offline", latency, fmt.Sprintf("HTTP %d", resp.StatusCode), "", false)
+		s.updateEdgeHealth(edge.ID, "Offline", 0, fmt.Sprintf("HTTP %d", resp.StatusCode), "", false)
 	}
 }
 
@@ -146,12 +158,26 @@ func (s *Server) updateEdgeHealth(id, status string, latency int64, errMsg strin
 	s.edgeHealthMu.Unlock()
 
 	var ipv4, ipv6 string
-	for _, edge := range s.cfg.EdgeNodes {
-		if edge.ID == id && edge.URL != "" {
-			if u, err := url.Parse(edge.URL); err == nil {
-				ipv4, ipv6 = resolveIPv4AndIPv6(u.Hostname())
+	s.edgeClientsMu.RLock()
+	if liveIP := s.edgeIPs[id]; liveIP != "" {
+		if ip := net.ParseIP(liveIP); ip != nil {
+			if ip.To4() != nil {
+				ipv4 = liveIP
+			} else {
+				ipv6 = liveIP
 			}
-			break
+		}
+	}
+	s.edgeClientsMu.RUnlock()
+
+	if ipv4 == "" && ipv6 == "" {
+		for _, edge := range s.cfg.EdgeNodes {
+			if edge.ID == id && edge.URL != "" {
+				if u, err := url.Parse(edge.URL); err == nil {
+					ipv4, ipv6 = resolveIPv4AndIPv6(u.Hostname())
+				}
+				break
+			}
 		}
 	}
 

@@ -51,7 +51,10 @@ func TestServer_CheckEdgeShutdownWarnings_ScheduledWindow(t *testing.T) {
 	if err != nil {
 		t.Fatalf("failed to create server: %v", err)
 	}
-	defer srv.Stop()
+	defer func() {
+		time.Sleep(50 * time.Millisecond)
+		srv.Stop()
+	}()
 
 	srv.edgeHealthMu.Lock()
 	srv.edgeHealth["edge-us"] = EdgeHealthStatus{

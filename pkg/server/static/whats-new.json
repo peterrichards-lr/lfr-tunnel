@@ -1,9 +1,18 @@
 [
   {
+    "version": "v1.44.14",
+    "release_date": "2026-08-20",
+    "features": [
+      "Dynamic Region Failover: When a requested or cached region is offline (e.g. apac), the client CLI automatically probes active regions and connects to the fastest online node.",
+      "Instant Edge Stop Sync: Stopping an edge node in Portal V2 immediately tears down active developer tunnels, closes the control channel, and marks node health as Offline."
+    ]
+  },
+  {
     "version": "v1.44.13",
     "release_date": "2026-08-20",
     "features": [
-      "Release v1.44.13"
+      "Client TUI Active Region Display: The terminal header now displays the active region code and edge node hostname (e.g. apac (aws-edge-apac.lfr-demo.se)).",
+      "Gateway Edge Domain Routing: Central server gateway now correctly recognizes edge node domains as control plane endpoints."
     ]
   },
   {
@@ -37,13 +46,6 @@
       "CLI Redraw Fix: Fixed leftover characters lingering in the terminal UI during live redraws.",
       "Published Documentation Site: lfr-tunnel's docs are now published as a browsable site (MkDocs + GitHub Pages), in addition to the raw markdown in the repo.",
       "Favicon Fix: Replaced the browser tab icon across the portal with the correct logo (was a mismatched placeholder image)."
-    ]
-  },
-  {
-    "version": "v1.44.9",
-    "release_date": "2026-08-10",
-    "features": [
-      "Release v1.44.9"
     ]
   }
 ]

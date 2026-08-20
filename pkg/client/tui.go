@@ -6,6 +6,7 @@ import (
 	"io"
 	"log"
 	"net/http"
+	"net/url"
 	"os"
 	"strings"
 	"sync"
@@ -148,6 +149,24 @@ func render(engine *InterceptorEngine, publicURLs []string, systemLogs []string)
 		sub = subdomainAss
 	}
 	fmt.Printf("  Subdomain:  \033[1;37m%s\033[0m%s\n", sub, eol)
+
+	// Region / Edge Node
+	if engine.SelectedRegion != "" {
+		edgeHost := ""
+		if u, err := url.Parse(engine.ServerURL); err == nil && u.Host != "" {
+			edgeHost = u.Host
+		}
+		if edgeHost != "" {
+			fmt.Printf("  Region:     \033[1;37m%s (%s)\033[0m%s\n", engine.SelectedRegion, edgeHost, eol)
+		} else {
+			fmt.Printf("  Region:     \033[1;37m%s\033[0m%s\n", engine.SelectedRegion, eol)
+		}
+	} else if engine.ServerURL != "" {
+		if u, err := url.Parse(engine.ServerURL); err == nil && u.Host != "" {
+			fmt.Printf("  Edge Node:  \033[1;37m%s\033[0m%s\n", u.Host, eol)
+		}
+	}
+
 	fmt.Printf("  Server:     \033[90m%s\033[0m%s\n", strings.Join(publicURLs, ", "), eol)
 	fmt.Printf("  Local:      \033[90m127.0.0.1:%d (Primary)\033[0m%s\n", destPort, eol)
 	fmt.Printf("  Inspector:  \033[34mhttp://127.0.0.1:%d\033[0m%s\n", 4040, eol)

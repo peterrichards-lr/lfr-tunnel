@@ -36,12 +36,24 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: '3.12'
+      - name: Check AWS Credentials
+        id: check-aws
+        run: |
+          if [ -n "${{ secrets.AWS_ACCESS_KEY_ID }}" ]; then
+            echo "configured=true" >> $GITHUB_OUTPUT
+          else
+            echo "configured=false" >> $GITHUB_OUTPUT
+            echo "::warning::AWS_ACCESS_KEY_ID secret is not set in repository secrets. Skipping Target Node Power Control."
+          fi
       - uses: aws-actions/configure-aws-credentials@v4
+        if: steps.check-aws.outputs.configured == 'true'
         with:
           aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
           aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
           aws-region: ${{ secrets.AWS_REGION || 'us-east-1' }}
-      - run: |
+      - name: Run Target Node Power Control
+        if: steps.check-aws.outputs.configured == 'true'
+        run: |
           TARGET_NODE="${{ inputs.node || vars.LDM_NODE_TARGET || env.LDM_NODE_TARGET || 'aws-1' }}"
 
           if [ "${{ github.event_name }}" = "schedule" ]; then

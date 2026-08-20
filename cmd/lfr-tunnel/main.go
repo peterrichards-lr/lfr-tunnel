@@ -172,6 +172,7 @@ func main() {
 	engine.MaintenancePath = cfg.MaintenancePath
 	engine.Token = cfg.AuthToken
 	engine.ServerURL = cfg.ServerURL
+	engine.SelectedRegion = cfg.Region
 	engine.Passcode = cfg.Passcode
 	engine.WhitelistIPs = cfg.WhitelistIPs
 	engine.PreserveHost = cfg.PreserveHost
@@ -272,6 +273,8 @@ func main() {
 		PublicURLs:    publicURLs,
 		Ports:         originalPorts,
 		StartTime:     time.Now().Format(time.RFC3339),
+		Region:        cfg.Region,
+		ServerURL:     cfg.ServerURL,
 	}
 	if err := client.WriteState(subHost, state); err != nil {
 		slog.Info(fmt.Sprintf("[Warning] Failed to write state file: %v\n", err))
@@ -947,7 +950,18 @@ func resolveServerURL(cfg *config.ClientConfig, isExplicitServer bool) {
 		cfg.ServerURL = url
 		slog.Info(fmt.Sprintf("[Client] Selected region '%s' -> %s", regionLower, url))
 	} else {
-		slog.Info(fmt.Sprintf("[Client] Warning: Unknown region '%s'. Using default server URL: %s", regionLower, cfg.ServerURL))
+		if len(cfg.Regions) > 0 {
+			slog.Info(fmt.Sprintf("[Client] Specified region '%s' is currently unavailable or offline. Performing latency auto-probing across %d active regions...", regionLower, len(cfg.Regions)))
+			bestRegion := probeFastestRegion(cfg.Regions)
+			if bestRegion != "" {
+				cfg.Region = bestRegion
+				cfg.ServerURL = cfg.Regions[bestRegion]
+				saveRegionCache(bestRegion, cfg.ServerURL)
+				slog.Info(fmt.Sprintf("[Client] Auto-selected next best online region: '%s' -> %s", bestRegion, cfg.ServerURL))
+				return
+			}
+		}
+		slog.Info(fmt.Sprintf("[Client] Warning: Region '%s' unavailable and no active edge nodes found. Using default server URL: %s", regionLower, cfg.ServerURL))
 	}
 }
 

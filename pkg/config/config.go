@@ -140,11 +140,12 @@ type ServerConfig struct {
 	// calls to start/stop/restart edge node instances and manage their stop/start
 	// schedules. Empty by default -- when unset, those portal actions are simply
 	// absent, not erroring. Never set this to anything but a loopback address.
-	EdgeProvisionerURL       string                 `yaml:"edge_provisioner_url"`
-	EdgeProvisionerTokenFile string                 `yaml:"edge_provisioner_token_file"`
-	VanityDomainHook         string                 `yaml:"vanity_domain_hook"`
-	ProxyHeaders             map[string]string      `yaml:"proxy_headers"`
-	RoleSettings             map[string]RoleSetting `yaml:"role_settings"`
+	EdgeProvisionerURL         string                 `yaml:"edge_provisioner_url"`
+	EdgeProvisionerTokenFile   string                 `yaml:"edge_provisioner_token_file"`
+	EdgeShutdownWarningMinutes int                    `yaml:"edge_shutdown_warning_minutes" json:"edge_shutdown_warning_minutes"`
+	VanityDomainHook           string                 `yaml:"vanity_domain_hook"`
+	ProxyHeaders               map[string]string      `yaml:"proxy_headers"`
+	RoleSettings               map[string]RoleSetting `yaml:"role_settings"`
 
 	// Dynamic SSO/OIDC Providers
 	SSOProviders []SSOProviderConfig `yaml:"sso_providers"`
@@ -192,6 +193,15 @@ type EdgeNodeConfig struct {
 	URL       string `yaml:"url"`
 }
 
+// ClientHooksConfig defines script paths/commands for client lifecycle hook triggers.
+type ClientHooksConfig struct {
+	WarningReceived string `yaml:"warning_received" json:"warning_received,omitempty"`
+	Stopping        string `yaml:"stopping" json:"stopping,omitempty"`
+	Stopped         string `yaml:"stopped" json:"stopped,omitempty"`
+	Starting        string `yaml:"starting" json:"starting,omitempty"`
+	Started         string `yaml:"started" json:"started,omitempty"`
+}
+
 // ClientConfig holds configuration settings for the lfr-tunnel client.
 type ClientConfig struct {
 	ServerURL          string            `yaml:"server_url"`
@@ -215,39 +225,41 @@ type ClientConfig struct {
 	InsecureSkipVerify bool              `yaml:"insecure_skip_verify,omitempty"`
 	Theme              string            `yaml:"theme,omitempty"`
 	NavPlacement       string            `yaml:"nav_placement,omitempty"`
+	Hooks              ClientHooksConfig `yaml:"hooks" json:"hooks,omitempty"`
 }
 
 // DefaultServerConfig returns a ServerConfig with sensible default values.
 func DefaultServerConfig() *ServerConfig {
 	trueVal := true
 	return &ServerConfig{
-		BindAddr:                ":443",
-		HTTPBindAddr:            ":80",
-		ChiselBindAddr:          ":8081",
-		DefaultMaxReservations:  3,
-		DefaultMaxCustomDomains: 1,
-		DefaultMaxActiveTunnels: 3,
-		SubdomainQuarantineDays: 3,
-		MaxTunnelRateLimit:      100,
-		EnableUserPortal:        true,
-		EnableOnboarding:        true,
-		PortalSessionDuration:   24 * time.Hour,
-		MinClientVersion:        "v1.0.0",
-		LatestClientVersion:     "",
-		DocumentationURL:        DefaultDocumentationURL,
-		RepositoryURL:           DefaultRepositoryURL,
-		SecureTokenGuideURL:     DefaultSecureTokenGuideURL,
-		DockerHubURL:            DefaultDockerHubURL,
-		StatusPageURL:           DefaultStatusPageURL,
-		PruneInterval:           1 * time.Hour,
-		MagicLinkExpiry:         15 * time.Minute,
-		PATRetentionDays:        30,
-		InviteLinkExpiry:        7 * 24 * time.Hour,
-		VerificationLinkExpiry:  24 * time.Hour,
-		DockerImage:             "peterjrichards/lfr-tunnel:latest",
-		DockerBypassURL:         DefaultDockerBypassURL,
-		VisitorTimeout:          5 * time.Minute,
-		EnableWAF:               true,
+		BindAddr:                   ":443",
+		HTTPBindAddr:               ":80",
+		ChiselBindAddr:             ":8081",
+		DefaultMaxReservations:     3,
+		DefaultMaxCustomDomains:    1,
+		DefaultMaxActiveTunnels:    3,
+		SubdomainQuarantineDays:    3,
+		MaxTunnelRateLimit:         100,
+		EdgeShutdownWarningMinutes: 5,
+		EnableUserPortal:           true,
+		EnableOnboarding:           true,
+		PortalSessionDuration:      24 * time.Hour,
+		MinClientVersion:           "v1.0.0",
+		LatestClientVersion:        "",
+		DocumentationURL:           DefaultDocumentationURL,
+		RepositoryURL:              DefaultRepositoryURL,
+		SecureTokenGuideURL:        DefaultSecureTokenGuideURL,
+		DockerHubURL:               DefaultDockerHubURL,
+		StatusPageURL:              DefaultStatusPageURL,
+		PruneInterval:              1 * time.Hour,
+		MagicLinkExpiry:            15 * time.Minute,
+		PATRetentionDays:           30,
+		InviteLinkExpiry:           7 * 24 * time.Hour,
+		VerificationLinkExpiry:     24 * time.Hour,
+		DockerImage:                "peterjrichards/lfr-tunnel:latest",
+		DockerBypassURL:            DefaultDockerBypassURL,
+		VisitorTimeout:             5 * time.Minute,
+		EnableWAF:                  true,
 		RoleSettings: map[string]RoleSetting{
 			"admin": {
 				AllowAutoReservation: &trueVal,
@@ -439,6 +451,11 @@ func LoadServerConfig(path string) (*ServerConfig, error) {
 	}
 	if val := os.Getenv("LFT_EDGE_TOKEN"); val != "" {
 		cfg.EdgeToken = val
+	}
+	if val := os.Getenv("LFT_EDGE_SHUTDOWN_WARNING_MINUTES"); val != "" {
+		if m, err := strconv.Atoi(val); err == nil {
+			cfg.EdgeShutdownWarningMinutes = m
+		}
 	}
 	if val := os.Getenv("LFT_PORTAL_SESSION_DURATION"); val != "" {
 		if d, err := time.ParseDuration(val); err == nil {

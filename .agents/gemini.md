@@ -210,6 +210,11 @@ The solution will consist of:
 - [x] Standardise V2 Modals ARIA Accessibility, Button aria-labels, and type='button' defaults across all UI pages (#822, #823, #824 / PR #825).
 - [x] Fix Admin Blacklist ip_address payload JSON key and form button vertical baseline alignment (#826).
 - [x] Purge uncommitted AI scratch scripts/plan JSONs and establish AI Scratch Script Cleanup Policy active constraint in .agents/AGENTS.md (#830).
+- [ ] Implement Graceful Edge Node Shutdown Warnings & Client Failover Hooks (Epic #1083)
+  - [ ] Sub-Issue #1084: Server-side Edge Shutdown Warning Scheduler & Config
+  - [ ] Sub-Issue #1085: Client WebSocket Shutdown Notification Handling & Auto-Failover
+  - [ ] Sub-Issue #1086: Client Lifecycle Hook Execution Engine
+  - [ ] Sub-Issue #1087: Integration Tests & Documentation for Client Failover Hooks
 
 
 
@@ -1043,6 +1048,13 @@ The solution will consist of:
 - [x] Implement Generate Token button action displaying a modal form to create and copy new Personal Access Tokens.
 - [x] Fix absolute action menu clipping in Network Edge Health table by adding bottom padding to container.
 
+## Graceful Edge Node Shutdown Warnings & Client Failover Hooks (Epic #1083)
+- [x] Sub-Issue #1084: Server-side Edge Shutdown Warning Scheduler & Config
+- [x] Sub-Issue #1085: Client WebSocket Shutdown Notification Handling & Auto-Failover
+- [x] Sub-Issue #1086: Client Lifecycle Hook Execution Engine
+- [x] Sub-Issue #1087: Integration Tests & Documentation for Client Failover Hooks
+
 <!-- markdownlint-disable MD049 -->
 ---
-*Last Updated: 2026-08-05* | *Last Reviewed: 2026-08-05*
+*Last Updated: 2026-08-20* | *Last Reviewed: 2026-08-20*
+

@@ -147,6 +147,16 @@ Consider this section a candidate for automation (a script wrapping steps 1-4) i
 you're registering nodes often enough for the manual process to become tedious.
 
 
+### Control Plane Shutdown Warning Setting (`server-config.yaml`)
+
+To configure advance WebSocket shutdown warning notifications sent to connected clients before a regional node enters scheduled downtime or soft maintenance:
+
+```yaml
+# Advance warning window (in minutes) sent to connected clients prior to node stop
+edge_shutdown_warning_minutes: 5
+```
+
+
 ### B. Regional Edge Gateway Configuration (`server-config.yaml`)
 
 On the stateless edge node VPS, configure connection settings pointing to the Control Plane:
@@ -272,4 +282,4 @@ If your Edge VPS or Control Plane gateway has multiple public IP addresses confi
 
 <!-- markdownlint-disable MD049 -->
 ---
-*Last Updated: 2026-07-28* | *Last Reviewed: 2026-07-28*
+*Last Updated: 2026-08-20* | *Last Reviewed: 2026-08-20*

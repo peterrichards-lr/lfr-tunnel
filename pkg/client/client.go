@@ -59,6 +59,38 @@ type RegisterResponse struct {
 	ServerVersion      string   `json:"server_version,omitempty"`
 }
 
+// NodeShutdownWarning represents a shutdown notification message from a tunnel gateway.
+type NodeShutdownWarning struct {
+	Type             string `json:"type"`
+	NodeID           string `json:"node_id,omitempty"`
+	Action           string `json:"action,omitempty"`
+	SecondsRemaining int    `json:"seconds_remaining,omitempty"`
+	ShutdownAt       int64  `json:"shutdown_at,omitempty"`
+	Reason           string `json:"reason,omitempty"`
+}
+
+// ParseNodeShutdownWarning attempts to parse a raw JSON frame into a NodeShutdownWarning.
+func ParseNodeShutdownWarning(data []byte) (*NodeShutdownWarning, bool) {
+	var msg NodeShutdownWarning
+	if err := json.Unmarshal(data, &msg); err == nil && msg.Type == "node_shutdown_warning" {
+		return &msg, true
+	}
+	return nil, false
+}
+
+// ClearRegionCacheFile purges the local 24h region cache file to force re-probing on failover.
+func ClearRegionCacheFile() error {
+	home, err := os.UserHomeDir()
+	if err != nil {
+		return err
+	}
+	path := filepath.Join(home, ".lfr-tunnel", "region_cache.json")
+	if _, err := os.Stat(path); err == nil {
+		return os.Remove(path)
+	}
+	return nil
+}
+
 type RegistrationError struct {
 	StatusCode int
 	Message    string

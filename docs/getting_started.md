@@ -293,6 +293,32 @@ To configure the System Tray / Menu Bar utility to launch on login:
 
 ---
 
+## Client Lifecycle Hooks & Failover Automation
+
+`lfr-tunnel` supports user-configured shell hooks that execute automatically during gateway state transitions (e.g. advance node shutdown warnings or regional failover).
+
+### Configuration (`~/.lfr-tunnel/config.yaml`)
+Add script paths or commands under the `hooks` section:
+
+```yaml
+hooks:
+  warning_received: "/usr/local/bin/on-gateway-warning.sh" # Fired immediately upon server shutdown warning
+  stopping: "/usr/local/bin/on-gateway-stopping.sh"       # Fired right before tearing down the old tunnel
+  stopped: "/usr/local/bin/on-gateway-stopped.sh"         # Fired after old tunnel connection closes
+  starting: "/usr/local/bin/on-gateway-starting.sh"       # Fired before connecting to failover gateway
+  started: "/usr/local/bin/on-gateway-started.sh"         # Fired after successful handshake on new gateway
+```
+
+### Contextual Environment Variables
+Every hook receives the following environment variables during execution:
+* `LFT_EVENT` — The active lifecycle event name (`warning_received`, `stopping`, `stopped`, `starting`, `started`).
+* `LFT_NODE_ID` — ID of the regional edge node or central gateway.
+* `LFT_SECONDS_REMAINING` — Time remaining in seconds before scheduled gateway shutdown.
+* `LFT_FAILOVER_REGION` — Target failover region selected during re-probing.
+* `LFT_SUBDOMAIN` — Leased subdomain prefix.
+
+---
+
 ## Need Help?
 
 * **Common Errors:**
@@ -305,4 +331,4 @@ To configure the System Tray / Menu Bar utility to launch on login:
 
 <!-- markdownlint-disable MD049 -->
 ---
-*Last Updated: 2026-08-11* | *Last Reviewed: 2026-08-11*
+*Last Updated: 2026-08-20* | *Last Reviewed: 2026-08-20*

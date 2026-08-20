@@ -7,6 +7,9 @@ LFT_TEST_DIR ?= /private/tmp
 export GOTMPDIR ?= $(LFT_TEST_DIR)
 TEST_BINARY := $(LFT_TEST_DIR)/lfr-tunnel
 
+PKG ?= ./...
+TEST_FLAGS ?=
+
 
 help:
 	@echo "Liferay Tunnel Developer Commands:"
@@ -30,11 +33,11 @@ vet:
 
 test:
 	@mkdir -p $(LFT_TEST_DIR)
-	@for pkg in $$(go list -f '{{if .TestGoFiles}}{{.ImportPath}}{{end}}' ./...); do \
+	@for pkg in $$(go list -f '{{if .TestGoFiles}}{{.ImportPath}}{{end}}' $(PKG)); do \
 		rm -f $(TEST_BINARY); \
 		go test -c -o $(TEST_BINARY) $$pkg || exit 1; \
 		if [ -f $(TEST_BINARY) ]; then \
-			(cd $$(go list -f '{{.Dir}}' $$pkg) && $(TEST_BINARY)) || exit 1; \
+			(cd $$(go list -f '{{.Dir}}' $$pkg) && $(TEST_BINARY) $(TEST_FLAGS)) || exit 1; \
 		fi; \
 	done
 	@rm -f $(TEST_BINARY)

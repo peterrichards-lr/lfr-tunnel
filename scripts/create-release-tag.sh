@@ -56,16 +56,34 @@ except Exception as e:
 if data and data[0]['version'] == '$NEW_VERSION':
     print('Version $NEW_VERSION already exists in whats-new.json')
 else:
-    data.insert(0, {
-        'version': '$NEW_VERSION',
-        'release_date': '$DATE',
-        'features': ['Release $NEW_VERSION']
-    })
-    data = data[:5]
-    with open(path, 'w') as f:
-        json.dump(data, f, indent=2)
-        f.write('\n')
-    print('Added $NEW_VERSION to whats-new.json (trimmed to max 5 releases)')
+    existing = [e for e in data if e.get('version') == '$NEW_VERSION']
+    if existing:
+        print('Version $NEW_VERSION already present in whats-new.json, retaining release notes.')
+    else:
+        import subprocess
+        features = []
+        try:
+            last_tag = subprocess.check_output(['git', 'describe', '--tags', '--abbrev=0'], text=True).strip()
+            log_out = subprocess.check_output(['git', 'log', f'{last_tag}..HEAD', '--oneline', '--no-merges'], text=True).strip()
+            for line in log_out.splitlines():
+                if line:
+                    parts = line.split(' ', 1)
+                    if len(parts) > 1 and not parts[1].startswith('chore: bump version'):
+                        features.append(parts[1])
+        except Exception:
+            pass
+        if not features:
+            features = ['Release $NEW_VERSION']
+        data.insert(0, {
+            'version': '$NEW_VERSION',
+            'release_date': '$DATE',
+            'features': features
+        })
+        data = data[:5]
+        with open(path, 'w') as f:
+            json.dump(data, f, indent=2)
+            f.write('\n')
+        print('Added $NEW_VERSION to whats-new.json')
 "
 
 echo "Committing changes..."

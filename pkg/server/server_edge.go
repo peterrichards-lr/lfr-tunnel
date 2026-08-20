@@ -6,7 +6,6 @@ import (
 	"encoding/json"
 	"fmt"
 	"html"
-	"io"
 	"log/slog"
 	"net"
 	"net/http"
@@ -51,7 +50,6 @@ func (s *Server) checkEdgeNodeHealth(edge config.EdgeNodeConfig, outboundOk bool
 
 	s.edgeClientsMu.RLock()
 	conn, connected := s.edgeClients[edge.ID]
-	liveIP := s.edgeIPs[edge.ID]
 	version := s.edgeVersions[edge.ID]
 	s.edgeClientsMu.RUnlock()
 
@@ -60,49 +58,7 @@ func (s *Server) checkEdgeNodeHealth(edge config.EdgeNodeConfig, outboundOk bool
 		return
 	}
 
-	client := &http.Client{Timeout: 3 * time.Second}
-	start := time.Now()
-	probeURL := edge.URL + "/api/version"
-	if liveIP != "" {
-		if u, err := url.Parse(edge.URL); err == nil && u.Scheme != "" {
-			probeURL = fmt.Sprintf("%s://%s/api/version", u.Scheme, liveIP)
-		}
-	}
-
-	req, err := http.NewRequest(http.MethodGet, probeURL, nil)
-	if err != nil {
-		s.updateEdgeHealth(edge.ID, "Offline", 0, err.Error(), "", false)
-		return
-	}
-	if u, err := url.Parse(edge.URL); err == nil && u.Hostname() != "" {
-		req.Host = u.Hostname()
-	}
-	req.Header.Set("User-Agent", "lfr-tunnel-health-monitor")
-
-	resp, err := client.Do(req)
-	latency := time.Since(start).Milliseconds()
-
-	if err != nil {
-		s.updateEdgeHealth(edge.ID, "Offline", 0, "Edge control channel disconnected", "", false)
-		return
-	}
-	defer resp.Body.Close() //nolint:errcheck
-
-	if resp.StatusCode == http.StatusOK {
-		var versionResp struct {
-			ServerVersion   string `json:"server_version"`
-			MaintenanceMode string `json:"maintenance_mode"`
-		}
-		if bodyBytes, readErr := io.ReadAll(resp.Body); readErr == nil {
-			_ = json.Unmarshal(bodyBytes, &versionResp) //nolint:errcheck
-			if versionResp.ServerVersion != "" {
-				version = versionResp.ServerVersion
-			}
-		}
-		s.updateEdgeHealth(edge.ID, "Online", latency, "", version, false)
-	} else {
-		s.updateEdgeHealth(edge.ID, "Offline", 0, fmt.Sprintf("HTTP %d", resp.StatusCode), "", false)
-	}
+	s.updateEdgeHealth(edge.ID, "Offline", 0, "Edge control channel disconnected", "", false)
 }
 
 // triggerEdgeHealthRecheck re-checks a single node's health every 5s for up

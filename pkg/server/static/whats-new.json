@@ -3,7 +3,9 @@
     "version": "v1.44.15",
     "release_date": "2026-08-20",
     "features": [
-      "Release v1.44.15"
+      "Edge Health Monitoring Fix: Edge node health determination now reads directly from active WebSocket control channels and real-time remote IPs, eliminating false-positive 5ms loopback latency.",
+      "Windows CI Test Suite Fix: Fixed path backslash translation in Makefile test targets for cross-platform Git Bash compatibility across CI matrix runners.",
+      "Target Node Power Control: Added graceful AWS credential checks to Target Node Cost & Power Control scheduled workflow."
     ]
   },
   {

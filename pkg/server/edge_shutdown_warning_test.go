@@ -21,7 +21,10 @@ func TestSecondsUntilScheduledStop(t *testing.T) {
 	tz := "UTC"
 
 	// Test 1: 21:55 UTC -> 300 seconds until stop
-	loc, _ := time.LoadLocation(tz)
+	loc, err := time.LoadLocation(tz)
+	if err != nil {
+		t.Fatalf("failed to load location %s: %v", tz, err)
+	}
 	now := time.Date(2026, 8, 20, 21, 55, 0, 0, loc)
 	sec, ok := secondsUntilScheduledStop(now, stopHHMM, tz)
 	if !ok {
@@ -60,7 +63,10 @@ func TestServer_CheckEdgeShutdownWarnings_ScheduledWindow(t *testing.T) {
 	srv.edgeHealthMu.Unlock()
 
 	// 21:56 UTC is within 5-minute warning window (240 seconds remaining)
-	loc, _ := time.LoadLocation("UTC")
+	loc, err := time.LoadLocation("UTC")
+	if err != nil {
+		t.Fatalf("failed to load location UTC: %v", err)
+	}
 	nowInWindow := time.Date(2026, 8, 20, 21, 56, 0, 0, loc)
 	srv.checkEdgeShutdownWarnings(nowInWindow)
 }

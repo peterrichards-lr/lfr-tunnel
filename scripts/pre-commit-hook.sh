@@ -23,6 +23,13 @@ fi
 
 echo "✅ No secrets detected."
 
+echo "[Git Hook] Running SentinelOne EDR Safety Guard check..."
+./scripts/check-edr-safety.sh
+if [ $? -ne 0 ]; then
+  echo "❌ Error: EDR safety check failed."
+  exit 1
+fi
+
 echo "[Git Hook] Checking for unformatted files..."
 UNFORMATTED=$(gofmt -l .)
 if [ -n "$UNFORMATTED" ]; then

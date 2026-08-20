@@ -1,5 +1,13 @@
 [
   {
+    "version": "v1.44.21",
+    "release_date": "2026-08-20",
+    "features": [
+      "Multi-Part Chisel Remote Authorization Regex: Updated Gateway allowedRemotes regex to accept multi-part client remote strings, eliminating Access Denied rejections during live region failover.",
+      "Un-mutated Registration Port Mappings: Preserved regPortMappings in main loop so server registration during failover receives original target ports, enabling full HTTP traffic forwarding."
+    ]
+  },
+  {
     "version": "v1.44.20",
     "release_date": "2026-08-20",
     "features": [
@@ -29,15 +37,6 @@
     "features": [
       "Instant Heartbeat Lease Eviction Detection: Updated client background status heartbeat loop to inspect HTTP status codes, detecting lease evictions and node shutdowns within 5 seconds.",
       "Seamless Region Failover: Automatically triggers region re-probing and reconnects to the next fastest online edge node, updating TUI headers, system logs, and local state files in real time."
-    ]
-  },
-  {
-    "version": "v1.44.16",
-    "release_date": "2026-08-20",
-    "features": [
-      "Client TUI Render Cleanup: Updated all section headers and divider lines to erase to end-of-line (\\033[K), eliminating trailing character artifacts.",
-      "Inspector Replay Sanitization: Sanitized HTTP method strings during request replay, fixing net/http invalid method errors when replaying previously replayed requests.",
-      "Dynamic Region Auto-Failover on Node Shutdown: Set Chisel retry limits and added an outer failover loop so the client CLI automatically auto-detects edge node shutdowns and fails over to the next fastest online region."
     ]
   }
 ]

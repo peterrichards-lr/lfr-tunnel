@@ -239,6 +239,10 @@ func main() {
 		engine.NavPlacement = cfg.NavPlacement
 	}
 
+	// Keep an un-mutated copy of portMappings for server registration
+	regPortMappings := make([]client.PortMapping, len(portMappings))
+	copy(regPortMappings, portMappings)
+
 	// Modify portMappings to point to dynamic Interceptor ports
 	portMap := make(map[int]int)
 	for i, pm := range portMappings {
@@ -356,7 +360,7 @@ func main() {
 			cfg.Region = ""
 
 			resolveServerURL(cfg, false)
-			regResp = performRegistrationHandshake(cfg, portMappings, sub, engine.AddedHeaders)
+			regResp = performRegistrationHandshake(cfg, regPortMappings, sub, engine.AddedHeaders)
 			rewriteRemotes(regResp, portMap)
 			engine.ServerURL = cfg.ServerURL
 			engine.SelectedRegion = cfg.Region

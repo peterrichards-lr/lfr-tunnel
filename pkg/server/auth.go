@@ -231,7 +231,7 @@ func (r *Registry) Register(userID string, subdomainPrefix string, ports []PortM
 		}
 
 		r.usedPorts[localPort] = true
-		allowedRemotes = append(allowedRemotes, fmt.Sprintf("^R:.*:%d$", localPort))
+		allowedRemotes = append(allowedRemotes, fmt.Sprintf("^R:.*:%d(:.*)?$", localPort))
 	}
 
 	r.sessionLeases[sessionToken] = allocatedLeases

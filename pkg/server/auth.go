@@ -7,6 +7,7 @@ import (
 	"log/slog"
 	"net"
 	"regexp"
+	"strconv"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -180,8 +181,15 @@ func (r *Registry) Register(userID string, subdomainPrefix string, ports []PortM
 	for idx, pm := range ports {
 		suffix := pm.NameSuffix
 		if suffix == "" && idx > 0 {
-			suffix = fmt.Sprintf("-%d", pm.LocalPort)
+			// No leading dash: the separator is added when this is joined to the
+			// subdomain below. Carrying one here produced hosts like sub--8080 (#1154).
+			suffix = strconv.Itoa(pm.LocalPort)
 		}
+		// Deliberately not normalising a leading dash away here. A client from before
+		// this fix sends "-8080" and prints sub--8080 for itself; rewriting it server-side
+		// would serve sub-8080 while the client advertised sub--8080. Leaving the value
+		// alone keeps every client consistent with the host it tells the user about,
+		// whatever version it is.
 
 		var subdomain string
 		if suffix == "" {
@@ -225,8 +233,15 @@ func (r *Registry) Register(userID string, subdomainPrefix string, ports []PortM
 	for idx, pm := range ports {
 		suffix := pm.NameSuffix
 		if suffix == "" && idx > 0 {
-			suffix = fmt.Sprintf("-%d", pm.LocalPort)
+			// No leading dash: the separator is added when this is joined to the
+			// subdomain below. Carrying one here produced hosts like sub--8080 (#1154).
+			suffix = strconv.Itoa(pm.LocalPort)
 		}
+		// Deliberately not normalising a leading dash away here. A client from before
+		// this fix sends "-8080" and prints sub--8080 for itself; rewriting it server-side
+		// would serve sub-8080 while the client advertised sub--8080. Leaving the value
+		// alone keeps every client consistent with the host it tells the user about,
+		// whatever version it is.
 
 		var subdomain string
 		if suffix == "" {

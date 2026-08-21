@@ -700,7 +700,11 @@ func resolvePortsAndMappings(cfg *config.ClientConfig) []client.PortMapping {
 		for idx, port := range ports {
 			suffix := ""
 			if idx > 0 {
-				suffix = fmt.Sprintf("-%d", port)
+				// No leading dash: the separator is added when the suffix is joined to
+				// the subdomain. Carrying one here produced ngriffin--58081 (#1154), and
+				// left this inconsistent with client-extension suffixes, which never had
+				// one.
+				suffix = strconv.Itoa(port)
 			}
 			portMappings = append(portMappings, client.PortMapping{
 				LocalPort:  port,
@@ -729,7 +733,8 @@ func resolvePortsAndMappings(cfg *config.ClientConfig) []client.PortMapping {
 				for idx, port := range discoveryResult.Ports {
 					suffix := ""
 					if idx > 0 {
-						suffix = fmt.Sprintf("-%d", port)
+						// See above: the separator is added at join time (#1154).
+						suffix = strconv.Itoa(port)
 					}
 					portMappings = append(portMappings, client.PortMapping{
 						LocalPort:  port,

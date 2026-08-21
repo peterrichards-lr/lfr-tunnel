@@ -69,7 +69,10 @@ func ensureInstanceRunning(host, region, instanceTag string) (restore func(), er
 			// an instance and stopping it can outlive the credential -- which is exactly
 			// how a node was left running overnight after a deploy to Tokyo (#1183).
 			// Confirm the state actually reached.
-			_, state, checkErr := describeInstanceForHost(region, ip, instanceTag)
+			state, checkErr := confirmStopped(func() (string, error) {
+				_, s, err := describeInstanceForHost(region, ip, instanceTag)
+				return s, err
+			}, stopConfirmAttempts, stopConfirmDelay)
 			switch {
 			case checkErr == nil && (state == "stopping" || state == "stopped"):
 				fmt.Printf("EC2 instance %s (%s) is %s.\n", instanceID, host, state)
@@ -90,6 +93,42 @@ func ensureInstanceRunning(host, region, instanceTag string) (restore func(), er
 	default:
 		return noop, fmt.Errorf("instance %s (%s) is in state %q, not running or stopped -- refusing to guess, deploy manually once it settles", instanceID, host, state)
 	}
+}
+
+// How long the restore gives a stop to become visible. describe-instances is eventually
+// consistent, so a read taken immediately after stop-instances can still report "running"
+// even though the stop was accepted -- and since #1184 that wrongly fails the whole deploy.
+//
+// Deliberately not `aws ec2 wait instance-stopped`: that blocks until the instance is fully
+// stopped, typically 30-90s, and would add it to the teardown of every deploy that started
+// one. "stopping" already proves the stop took effect, so a few short re-reads are enough.
+const (
+	stopConfirmAttempts = 5
+	stopConfirmDelay    = 2 * time.Second
+)
+
+// confirmStopped re-reads the instance state until it proves the stop took effect, or the
+// attempts run out. Returns the last state and error seen, so the caller can distinguish
+// "still running" from "could not be read at all" -- those mean different things to an
+// operator and get reported differently.
+//
+// Takes readState rather than calling describeInstanceForHost directly so the retry
+// behaviour is testable without an AWS account or a real delay.
+func confirmStopped(readState func() (string, error), attempts int, delay time.Duration) (string, error) {
+	var (
+		state string
+		err   error
+	)
+	for attempt := 1; attempt <= attempts; attempt++ {
+		state, err = readState()
+		if err == nil && (state == "stopping" || state == "stopped") {
+			return state, nil
+		}
+		if attempt < attempts {
+			time.Sleep(delay)
+		}
+	}
+	return state, err
 }
 
 // PowerRestoreFailed reports whether a deploy left an instance running that it had

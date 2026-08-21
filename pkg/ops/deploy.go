@@ -47,6 +47,14 @@ func DeployCommand(args []string) {
 	// entirely and would leave a started instance running outside its schedule.
 	exitCode := 0
 	defer func() {
+		// A stranded instance fails the deploy even if everything else worked. Checked
+		// here rather than in the restore itself because this defer runs after it, and
+		// because an unattended run must not exit 0 having left a node running outside
+		// its schedule (#1183).
+		if failure := PowerRestoreFailure(); failure != "" {
+			fmt.Fprintf(os.Stderr, "FATAL: deploy finished but %s\n", failure)
+			exitCode = 1
+		}
 		if exitCode != 0 {
 			os.Exit(exitCode)
 		}

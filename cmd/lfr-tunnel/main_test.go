@@ -301,6 +301,76 @@ func TestRegionDiscoveryURLAvoidsFailedRegion(t *testing.T) {
 	}
 }
 
+// TestExcludeFailedRegionSkipsAfterFailback is the regression test for #1137. A failback
+// that fails restores the region the client was already serving from and logs that it is
+// staying there -- but execution then fell into the failover path, which cooled that
+// region down as though it were the casualty, abandoning a healthy edge.
+func TestExcludeFailedRegionSkipsAfterFailback(t *testing.T) {
+	resetCooldowns(t)
+
+	newCfg := func() *config.ClientConfig {
+		return &config.ClientConfig{
+			Region:    "eu",
+			ServerURL: "https://eu.example",
+			Regions: map[string]string{
+				"eu":      "https://eu.example",
+				"central": "https://central.example",
+			},
+		}
+	}
+
+	// After a failed failback: no cooldown, and discovery stays where it is.
+	cfg := newCfg()
+	excludeFailedRegion(cfg, nil, "eu", true)
+	if _, present := cooldowns.filter(cfg.Regions)["eu"]; !present {
+		t.Error("the region returned to after a failed failback must stay a candidate; cooling it down abandons a healthy edge")
+	}
+	if cfg.ServerURL != "https://eu.example" {
+		t.Errorf("discovery should not move off a region that did not fail, got %q", cfg.ServerURL)
+	}
+
+	// A genuine connection loss still cools the region down and moves discovery.
+	resetCooldowns(t)
+	cfg = newCfg()
+	excludeFailedRegion(cfg, nil, "eu", false)
+	if _, present := cooldowns.filter(cfg.Regions)["eu"]; present {
+		t.Error("a region whose connection was lost must be excluded from the candidate set")
+	}
+	if cfg.ServerURL != "https://central.example" {
+		t.Errorf("discovery should move to central after a real failure, got %q", cfg.ServerURL)
+	}
+}
+
+// TestExcludeFailedRegionAfterFailbackKeepsTwoRegionCaseSane covers the sharpest edge of
+// #1137. With two regions, cooling down both the primary (by the failed failback) and the
+// fallback (by the failover path) empties the candidate set, and regionCooldowns.filter
+// then returns the unfiltered map -- so the client could re-elect the primary whose
+// failback had just failed, which is the loop #1121 exists to prevent.
+func TestExcludeFailedRegionAfterFailbackKeepsTwoRegionCaseSane(t *testing.T) {
+	resetCooldowns(t)
+
+	cfg := &config.ClientConfig{
+		Region:    "eu",
+		ServerURL: "https://eu.example",
+		Regions:   map[string]string{"eu": "https://eu.example", "apac": "https://apac.example"},
+	}
+
+	// The failed failback cools the primary, as it should.
+	cooldowns.exclude("apac", regionFailoverCooldown)
+	excludeFailedRegion(cfg, nil, "eu", true)
+
+	candidates := cooldowns.filter(cfg.Regions)
+	if _, present := candidates["apac"]; present {
+		t.Fatal("the primary whose failback failed must stay excluded")
+	}
+	if _, present := candidates["eu"]; !present {
+		t.Fatal("expected 'eu' to remain a candidate")
+	}
+	if len(candidates) != 1 {
+		t.Errorf("expected exactly one candidate, got %v -- an empty set would trip filter's unfiltered fallback", candidates)
+	}
+}
+
 // TestAttemptRegistrationClassifiesFailures is the regression test for #1120: the
 // handshake must report failures instead of terminating the process, and must mark a
 // 403 as terminal so failover does not pointlessly retry it against every region.

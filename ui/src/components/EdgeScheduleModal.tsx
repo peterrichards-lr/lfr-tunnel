@@ -107,7 +107,7 @@ export default function EdgeScheduleModal({ nodeId, onClose, onSaved }: EdgeSche
   return (
     <div className="modal-backdrop" onClick={onClose}>
       <div
-        className="modal-card modal-card--md p-xl"
+        className="modal-card modal-card--md"
         onClick={e => e.stopPropagation()}
         role="dialog"
         aria-modal="true"

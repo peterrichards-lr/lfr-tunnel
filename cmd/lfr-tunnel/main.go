@@ -363,9 +363,30 @@ func main() {
 		}
 
 		if (err != nil || clientCtx.Err() != nil) && !isExplicitServer {
-			if engine.IsFailback {
+			// applySession commits a successful re-registration to every place the
+			// current endpoint is recorded.
+			applySession := func(newResp *client.RegisterResponse, what string) {
+				regResp = newResp
+				rewriteRemotes(regResp, portMap)
+				publicURLs = printAndCollectPublicURLs(cfg, regResp, portMappings, subHost)
+				engine.SetRegionEndpoint(cfg.Region, cfg.ServerURL, publicURLs)
+				engine.SetSubdomainDetails(sub, regResp.SubdomainPrefix, true, false)
+				state.Region = cfg.Region
+				state.ServerURL = cfg.ServerURL
+				state.PublicURLs = publicURLs
+				if werr := client.WriteState(subHost, state); werr != nil {
+					slog.Info(fmt.Sprintf("[Warning] Failed to update state file on %s: %v\n", what, werr))
+				}
+				cooldowns.clear(cfg.Region)
+			}
+
+			if engine.ConsumeFailback() {
 				slog.Info(fmt.Sprintf("[Client] Primary region '%s' (%s) recovered. Performing automated failback...", primaryRegion, primaryServerURL))
-				engine.IsFailback = false
+
+				// Remember where we are, so a failed failback can put us back rather
+				// than leaving the tunnel down.
+				fallbackRegion, fallbackServerURL := cfg.Region, cfg.ServerURL
+
 				cfg.Region = primaryRegion
 				cfg.ServerURL = primaryServerURL
 				cfg.Regions = make(map[string]string)
@@ -373,21 +394,24 @@ func main() {
 					cfg.Regions[k] = v
 				}
 
-				regResp = performRegistrationHandshake(cfg, regPortMappings, sub, engine.AddedHeaders)
-				rewriteRemotes(regResp, portMap)
-				engine.ServerURL = cfg.ServerURL
-				engine.SelectedRegion = cfg.Region
-				publicURLs = printAndCollectPublicURLs(cfg, regResp, portMappings, subHost)
-				engine.PublicURLs = publicURLs
-				engine.SetSubdomainDetails(sub, regResp.SubdomainPrefix, true, false)
-				state.Region = cfg.Region
-				state.ServerURL = cfg.ServerURL
-				state.PublicURLs = publicURLs
-				if err := client.WriteState(subHost, state); err != nil {
-					slog.Info(fmt.Sprintf("[Warning] Failed to update state file on failback: %v\n", err))
+				newResp, failure := attemptRegistration(cfg, regPortMappings, sub, engine.AddedHeaders)
+				if failure == nil {
+					applySession(newResp, "failback")
+					slog.Info(fmt.Sprintf("[Client] Successfully failed back to primary region '%s' (%s)", cfg.Region, cfg.ServerURL))
+					continue
 				}
-				slog.Info(fmt.Sprintf("[Client] Successfully failed back to primary region '%s' (%s)", cfg.Region, cfg.ServerURL))
-				continue
+
+				// A failback that fails must never be worse than not attempting one.
+				// Hold the primary off for a cooldown so the prober does not retry it
+				// immediately, restore the region we were working on, and let the
+				// failover path below re-establish the tunnel.
+				slog.Info(fmt.Sprintf("[Warning] Failback to primary region '%s' failed: %v", primaryRegion, failure.err))
+				for _, line := range failure.advice {
+					slog.Info(line)
+				}
+				slog.Info(fmt.Sprintf("[Client] Staying on region '%s'; will retry the primary later.", fallbackRegion))
+				cooldowns.exclude(primaryRegion, regionFailoverCooldown)
+				cfg.Region, cfg.ServerURL = fallbackRegion, fallbackServerURL
 			}
 
 			if len(cfg.Regions) > 0 {
@@ -395,27 +419,26 @@ func main() {
 				slog.Info(fmt.Sprintf("[Client] Connection to region '%s' (%s) lost. Performing dynamic region failover...", failedRegion, cfg.ServerURL))
 				_ = client.ClearRegionCacheFile() //nolint:errcheck
 
-				if failedRegion != "" {
-					delete(cfg.Regions, strings.ToLower(failedRegion))
-				}
-				cfg.Region = ""
+				// Hold the failed region out of the running. This has to be a cooldown
+				// rather than a delete from cfg.Regions: resolveServerURL refreshes that
+				// map from the gateway and would restore the entry (issue #1121).
+				cooldowns.exclude(failedRegion, regionFailoverCooldown)
 
-				resolveServerURL(cfg, false)
-				regResp = performRegistrationHandshake(cfg, regPortMappings, sub, engine.AddedHeaders)
-				rewriteRemotes(regResp, portMap)
-				engine.ServerURL = cfg.ServerURL
-				engine.SelectedRegion = cfg.Region
-				publicURLs = printAndCollectPublicURLs(cfg, regResp, portMappings, subHost)
-				engine.PublicURLs = publicURLs
-				engine.SetSubdomainDetails(sub, regResp.SubdomainPrefix, true, false)
-				state.Region = cfg.Region
-				state.ServerURL = cfg.ServerURL
-				state.PublicURLs = publicURLs
-				if err := client.WriteState(subHost, state); err != nil {
-					slog.Info(fmt.Sprintf("[Warning] Failed to update state file on failover: %v\n", err))
+				// Rediscover from a host that is not the one that just failed --
+				// otherwise the failed edge is the source of truth for the region list
+				// it is supposed to be excluded from.
+				if discoveryURL := regionDiscoveryURL(cfg, primaryRegionsMap, failedRegion); discoveryURL != "" {
+					cfg.ServerURL = discoveryURL
 				}
-				slog.Info(fmt.Sprintf("[Client] Successfully failed over to region '%s' (%s)", cfg.Region, cfg.ServerURL))
-				continue
+
+				if newResp, ok := reregisterAcrossRegions(cfg, regPortMappings, sub, engine.AddedHeaders); ok {
+					applySession(newResp, "failover")
+					slog.Info(fmt.Sprintf("[Client] Successfully failed over to region '%s' (%s)", cfg.Region, cfg.ServerURL))
+					continue
+				}
+
+				slog.Info("[Error] Failover exhausted every candidate region without a successful registration.")
+				break
 			}
 		}
 
@@ -627,7 +650,97 @@ func resolvePortsAndMappings(cfg *config.ClientConfig) []client.PortMapping {
 	return portMappings
 }
 
-func performRegistrationHandshake(cfg *config.ClientConfig, portMappings []client.PortMapping, sub string, addedHeaders map[string]string) *client.RegisterResponse {
+// maxFailoverAttempts bounds how many regions a single failover will try before
+// giving up, so an outage affecting every edge terminates with one clear message
+// instead of spinning.
+const maxFailoverAttempts = 4
+
+// failoverRetryBackoff is the initial pause between failover registration attempts,
+// doubled on each retry. A variable so tests don't have to sit through real backoff.
+var failoverRetryBackoff = time.Second
+
+// regionDiscoveryURL picks a host to fetch the region list from during failover, in
+// preference order: the central control plane, then any region other than the one that
+// just failed. Returns "" when no better host than the current one is known.
+func regionDiscoveryURL(cfg *config.ClientConfig, primaryRegions map[string]string, failedRegion string) string {
+	failed := strings.ToLower(strings.TrimSpace(failedRegion))
+	for _, regions := range []map[string]string{cfg.Regions, primaryRegions} {
+		if url, ok := regions["central"]; ok && url != "" && !strings.EqualFold("central", failed) {
+			return url
+		}
+	}
+	for _, regions := range []map[string]string{cfg.Regions, primaryRegions} {
+		for name, url := range regions {
+			if url != "" && strings.ToLower(name) != failed {
+				return url
+			}
+		}
+	}
+	return ""
+}
+
+// reregisterAcrossRegions re-elects a region and registers on it, moving on to the
+// next-best region when a registration fails for a reason another region could
+// satisfy. Returns false only when every candidate has been tried, or when the failure
+// is one no region can fix.
+func reregisterAcrossRegions(cfg *config.ClientConfig, portMappings []client.PortMapping, sub string, addedHeaders map[string]string) (*client.RegisterResponse, bool) {
+	backoff := failoverRetryBackoff
+	for attempt := 1; attempt <= maxFailoverAttempts; attempt++ {
+		cfg.Region = ""
+		resolveServerURL(cfg, false)
+		if cfg.ServerURL == "" {
+			return nil, false
+		}
+
+		regResp, failure := attemptRegistration(cfg, portMappings, sub, addedHeaders)
+		if failure == nil {
+			return regResp, true
+		}
+
+		slog.Info(fmt.Sprintf("[Warning] Registration on region '%s' failed (attempt %d/%d): %v",
+			cfg.Region, attempt, maxFailoverAttempts, failure.err))
+		for _, line := range failure.advice {
+			slog.Info(line)
+		}
+
+		if failure.terminal {
+			// Another region would reject this identically.
+			return nil, false
+		}
+
+		// Take this region out of the running and let the next pass elect a different
+		// one. Without the cooldown, resolveServerURL would re-elect the same fastest
+		// region every time and the retries would all hit the same broken gateway.
+		cooldowns.exclude(cfg.Region, regionFailoverCooldown)
+
+		if attempt < maxFailoverAttempts {
+			time.Sleep(backoff)
+			backoff *= 2
+		}
+	}
+	return nil, false
+}
+
+// registrationFailure describes why a registration attempt failed and whether trying
+// a different region could possibly help.
+type registrationFailure struct {
+	err error
+	// terminal marks a failure no region can satisfy -- a reservation or account-limit
+	// problem the user has to resolve in the portal. Retrying elsewhere just produces
+	// the same rejection from a different host.
+	terminal bool
+	// advice is the operator-facing guidance to print, if any.
+	advice []string
+}
+
+func (f *registrationFailure) Error() string { return f.err.Error() }
+
+// attemptRegistration performs the registration call and classifies any failure. It
+// never exits the process; callers decide what a failure means in their context. The
+// initial startup registration has nowhere to fall back to and treats everything as
+// fatal, whereas failover and failback are recovery paths that must survive a
+// transient error and keep trying -- see issue #1120.
+func attemptRegistration(cfg *config.ClientConfig, portMappings []client.PortMapping, sub string, addedHeaders map[string]string) (*client.RegisterResponse, *registrationFailure) {
 	clientOS := runtime.GOOS
 	if client.IsDocker() {
 		clientOS += " (Docker)"
@@ -635,7 +748,6 @@ func performRegistrationHandshake(cfg *config.ClientConfig, portMappings []clien
 	regResp, err := client.RegisterTunnel(cfg.ServerURL, cfg.AuthToken, sub, cfg.CustomDomain, portMappings, cfg.RateLimit, cfg.BasicAuth, addedHeaders, clientOS, cfg.Passcode, cfg.WhitelistIPs)
 	if err != nil {
 		if regErr, ok := err.(*client.RegistrationError); ok && regErr.StatusCode == 403 {
-			slog.Info(fmt.Sprintf("[Error] Failed to register: %s\n", regErr.Message))
 			portalURL := regErr.PortalURL
 			if portalURL == "" {
 				portalURL = strings.Replace(cfg.ServerURL, "tunnel.", "portal.", 1)
@@ -643,33 +755,53 @@ func performRegistrationHandshake(cfg *config.ClientConfig, portMappings []clien
 					portalURL = cfg.ServerURL + "/portal"
 				}
 			}
-			slog.Info("[Client] Subdomain reservation or limit issue detected.")
-			slog.Info("[Client] Please visit the User Portal to resolve it:")
-			slog.Info(fmt.Sprintf("         👉 %s (Cmd/Ctrl+Click to open)\n", portalURL))
-			os.Exit(1)
+			return nil, &registrationFailure{
+				err:      err,
+				terminal: true,
+				advice: []string{
+					"[Client] Subdomain reservation or limit issue detected.",
+					"[Client] Please visit the User Portal to resolve it:",
+					fmt.Sprintf("         👉 %s (Cmd/Ctrl+Click to open)\n", portalURL),
+				},
+			}
 		}
 
 		errStr := err.Error()
-		isGatewayIssue := false
 		if strings.Contains(errStr, "registration request failed") ||
 			strings.Contains(errStr, "gateway error (5") ||
 			strings.Contains(errStr, "gateway returned status 5") {
-			isGatewayIssue = true
+			// A 5xx or transport error is the gateway's problem, not the user's, and
+			// another region may well be healthy.
+			return nil, &registrationFailure{
+				err: err,
+				advice: []string{
+					"[Client] Gateway appears to be offline or undergoing maintenance.",
+					"[Client] Check the service status page for active outages:",
+					fmt.Sprintf("         👉 %s (Cmd/Ctrl+Click to open)", config.DefaultStatusPageURL),
+				},
+			}
 		}
 
-		if isGatewayIssue {
-			slog.Info(fmt.Sprintf("[Error] Failed to register: %v\n", err))
-			slog.Info("[Client] Gateway appears to be offline or undergoing maintenance.")
-			slog.Info("[Client] Check the service status page for active outages:")
-			slog.Info(fmt.Sprintf("         👉 %s (Cmd/Ctrl+Click to open)", config.DefaultStatusPageURL))
-			os.Exit(1)
-		} else {
-			log.Fatalf("[Error] Failed to register: %v\n", err)
-		}
+		return nil, &registrationFailure{err: err}
 	}
 
 	if regResp.Warning != "" {
 		slog.Info(fmt.Sprintf("\n[WARNING] %s\n\n", regResp.Warning))
+	}
+	return regResp, nil
+}
+
+// performRegistrationHandshake registers and exits the process on any failure. Only
+// correct for the initial registration at startup, where there is no established
+// tunnel to preserve and nothing to fall back to.
+func performRegistrationHandshake(cfg *config.ClientConfig, portMappings []client.PortMapping, sub string, addedHeaders map[string]string) *client.RegisterResponse {
+	regResp, failure := attemptRegistration(cfg, portMappings, sub, addedHeaders)
+	if failure != nil {
+		slog.Info(fmt.Sprintf("[Error] Failed to register: %v\n", failure.err))
+		for _, line := range failure.advice {
+			slog.Info(line)
+		}
+		os.Exit(1)
 	}
 	return regResp
 }
@@ -1010,6 +1142,70 @@ var (
 	saveRegionCacheFn    = saveRegionCache
 )
 
+// regionFailoverCooldown is how long a region we have just failed away from stays out
+// of the candidate set. It has to outlast the control plane's own lease cleanup sweep
+// (documented at 10s in docs/architecture.md section 5), otherwise the edge can still
+// be advertising a stale lease for this subdomain when we reconsider it.
+const regionFailoverCooldown = 90 * time.Second
+
+// cooldowns records regions that recently failed. Region exclusion cannot be done by
+// deleting from cfg.Regions, because resolveServerURL refreshes that map from the
+// gateway on every call and would restore the entry -- see issue #1121.
+var cooldowns = &regionCooldowns{until: make(map[string]time.Time)}
+
+type regionCooldowns struct {
+	mu    sync.Mutex
+	until map[string]time.Time
+}
+
+// exclude puts a region into cooldown for d.
+func (c *regionCooldowns) exclude(region string, d time.Duration) {
+	if region == "" {
+		return
+	}
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	c.until[strings.ToLower(strings.TrimSpace(region))] = time.Now().Add(d)
+}
+
+// clear drops any cooldown on a region, used once we are successfully connected to it
+// again so a later failure starts from a clean slate.
+func (c *regionCooldowns) clear(region string) {
+	if region == "" {
+		return
+	}
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	delete(c.until, strings.ToLower(strings.TrimSpace(region)))
+}
+
+// filter returns regions with any region still in cooldown removed. If that would
+// leave nothing to connect to, the original map is returned unchanged: retrying a
+// region that recently failed is strictly better than having no gateway at all.
+func (c *regionCooldowns) filter(regions map[string]string) map[string]string {
+	if len(regions) == 0 {
+		return regions
+	}
+	c.mu.Lock()
+	defer c.mu.Unlock()
+
+	now := time.Now()
+	out := make(map[string]string, len(regions))
+	for name, url := range regions {
+		if deadline, ok := c.until[strings.ToLower(name)]; ok {
+			if now.Before(deadline) {
+				continue
+			}
+			delete(c.until, strings.ToLower(name))
+		}
+		out[name] = url
+	}
+	if len(out) == 0 {
+		return regions
+	}
+	return out
+}
+
 func resolveServerURL(cfg *config.ClientConfig, isExplicitServer bool) {
 	if *refreshRegion {
 		if path, err := getRegionCachePath(); err == nil {
@@ -1018,6 +1214,10 @@ func resolveServerURL(cfg *config.ClientConfig, isExplicitServer bool) {
 	}
 
 	fetchRemoteRegionsFn(cfg)
+
+	// Applied after the refresh, not before: fetchRemoteRegions replaces cfg.Regions
+	// wholesale, so anything removed beforehand comes straight back.
+	cfg.Regions = cooldowns.filter(cfg.Regions)
 
 	if cfg.Region == "" {
 		if !isExplicitServer && len(cfg.Regions) > 0 {

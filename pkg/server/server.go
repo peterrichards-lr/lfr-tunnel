@@ -1271,7 +1271,7 @@ func (s *Server) handleRegister(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Determine active domains to register dynamically based on rules and request Host
-	activeDomains := s.getActiveDomainsForRequest(r, userRec)
+	activeDomains := topRankedDomain(s.getActiveDomainsForRequest(r, userRec))
 
 	// Validate custom domain format if provided
 	if req.CustomDomain != "" && !isValidCustomDomain(req.CustomDomain) {
@@ -2500,6 +2500,26 @@ func (s *Server) Stop() {
 		_ = s.db.RecordGatewayCleanShutdown() //nolint:errcheck
 		s.db.Close()                          //nolint:errcheck
 	}
+}
+
+// topRankedDomain narrows the candidate list from getActiveDomainsForRequest to the one
+// domain a registration should actually use.
+//
+// That function returns candidates *in preference order* -- `hashing`, `round-robin`,
+// `random`, `least-connections` and `preference` all return the full list and differ only
+// in how they sort it. Registration consumed the whole slice and created a lease, and for
+// users with auto-reservation a reservation, on every configured domain. The ranking was
+// computed and then thrown away, and a user who never asked for a domain ended up holding
+// all of them (issue #1153).
+//
+// handleCheckSubdomain already treats the list correctly, walking it to pick one; this
+// makes the registration paths agree. Registering on several domains at once, if it is
+// ever wanted, should be an explicit request rather than a side effect of ranking.
+func topRankedDomain(candidates []string) []string {
+	if len(candidates) <= 1 {
+		return candidates
+	}
+	return candidates[:1]
 }
 
 // getActiveDomainsForRequest evaluates the configured DomainAllocationRule to return a sorted slice of candidate domains.
@@ -5088,7 +5108,7 @@ type EdgeLease struct {
 }
 
 func (s *Server) handleEdgeRegisterProxy(w http.ResponseWriter, r *http.Request, req RegisterRequest) {
-	activeDomains := s.getActiveDomainsForRequest(r, nil)
+	activeDomains := topRankedDomain(s.getActiveDomainsForRequest(r, nil))
 	edgeReqPayload := struct {
 		RegisterRequest
 		Domains  []string `json:"domains"`

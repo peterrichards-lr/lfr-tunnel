@@ -201,7 +201,7 @@ func TestRegionCooldownSurvivesRemoteRefresh(t *testing.T) {
 	}
 	saveRegionCacheFn = func(string, string, bool) {}
 
-	cooldowns.exclude("apac", regionFailoverCooldown)
+	cooldowns.exclude(failedSrv.URL, regionFailoverCooldown)
 
 	cfg := &config.ClientConfig{Region: "", ServerURL: failedSrv.URL}
 	resolveServerURL(cfg, false)
@@ -231,7 +231,7 @@ func TestRegionCooldownFallsBackWhenAllExcluded(t *testing.T) {
 	}
 	saveRegionCacheFn = func(string, string, bool) {}
 
-	cooldowns.exclude("eu", regionFailoverCooldown)
+	cooldowns.exclude(onlySrv.URL, regionFailoverCooldown)
 
 	cfg := &config.ClientConfig{Region: "", ServerURL: onlySrv.URL}
 	resolveServerURL(cfg, false)
@@ -246,7 +246,7 @@ func TestRegionCooldownExpires(t *testing.T) {
 	resetCooldowns(t)
 	regions := map[string]string{"apac": "https://apac.invalid", "eu": "https://eu.invalid"}
 
-	cooldowns.exclude("apac", 1*time.Millisecond)
+	cooldowns.exclude("https://apac.invalid", 1*time.Millisecond)
 	if got := cooldowns.filter(regions); len(got) != 1 {
 		t.Fatalf("expected 'apac' filtered out while in cooldown, got %v", got)
 	}
@@ -262,12 +262,12 @@ func TestRegionCooldownClear(t *testing.T) {
 	resetCooldowns(t)
 	regions := map[string]string{"apac": "https://apac.invalid", "eu": "https://eu.invalid"}
 
-	cooldowns.exclude("APAC", regionFailoverCooldown)
+	cooldowns.exclude("https://APAC.invalid", regionFailoverCooldown)
 	if _, present := cooldowns.filter(regions)["apac"]; present {
-		t.Fatalf("exclude should be case-insensitive")
+		t.Fatalf("exclude should be case-insensitive on the host")
 	}
 
-	cooldowns.clear("apac")
+	cooldowns.clear("https://apac.invalid")
 	if _, present := cooldowns.filter(regions)["apac"]; !present {
 		t.Errorf("clear should return the region to the candidate set")
 	}
@@ -283,20 +283,20 @@ func TestRegionDiscoveryURLAvoidsFailedRegion(t *testing.T) {
 		},
 	}
 
-	if got := regionDiscoveryURL(cfg, nil, "apac"); got != "https://central.example" {
+	if got := regionDiscoveryURL(cfg, nil, "https://apac.example"); got != "https://central.example" {
 		t.Errorf("expected the central control plane to be preferred, got %q", got)
 	}
 
 	// With central itself the failed region, any other region will do.
 	cfg2 := &config.ClientConfig{Regions: map[string]string{"central": "https://central.example"}}
-	if got := regionDiscoveryURL(cfg2, nil, "central"); got != "" {
+	if got := regionDiscoveryURL(cfg2, nil, "https://central.example"); got != "" {
 		t.Errorf("expected no discovery URL when only the failed region is known, got %q", got)
 	}
 
 	// Falls back to the primary map when cfg has been emptied.
 	cfg3 := &config.ClientConfig{}
 	primary := map[string]string{"eu": "https://eu.example"}
-	if got := regionDiscoveryURL(cfg3, primary, "apac"); got != "https://eu.example" {
+	if got := regionDiscoveryURL(cfg3, primary, "https://apac.example"); got != "https://eu.example" {
 		t.Errorf("expected fallback to the primary region map, got %q", got)
 	}
 }
@@ -321,7 +321,7 @@ func TestExcludeFailedRegionSkipsAfterFailback(t *testing.T) {
 
 	// After a failed failback: no cooldown, and discovery stays where it is.
 	cfg := newCfg()
-	excludeFailedRegion(cfg, nil, "eu", true)
+	excludeFailedRegion(cfg, nil, "https://eu.example", true)
 	if _, present := cooldowns.filter(cfg.Regions)["eu"]; !present {
 		t.Error("the region returned to after a failed failback must stay a candidate; cooling it down abandons a healthy edge")
 	}
@@ -332,7 +332,7 @@ func TestExcludeFailedRegionSkipsAfterFailback(t *testing.T) {
 	// A genuine connection loss still cools the region down and moves discovery.
 	resetCooldowns(t)
 	cfg = newCfg()
-	excludeFailedRegion(cfg, nil, "eu", false)
+	excludeFailedRegion(cfg, nil, "https://eu.example", false)
 	if _, present := cooldowns.filter(cfg.Regions)["eu"]; present {
 		t.Error("a region whose connection was lost must be excluded from the candidate set")
 	}
@@ -356,8 +356,8 @@ func TestExcludeFailedRegionAfterFailbackKeepsTwoRegionCaseSane(t *testing.T) {
 	}
 
 	// The failed failback cools the primary, as it should.
-	cooldowns.exclude("apac", regionFailoverCooldown)
-	excludeFailedRegion(cfg, nil, "eu", true)
+	cooldowns.exclude("https://apac.example", regionFailoverCooldown)
+	excludeFailedRegion(cfg, nil, "https://eu.example", true)
 
 	candidates := cooldowns.filter(cfg.Regions)
 	if _, present := candidates["apac"]; present {

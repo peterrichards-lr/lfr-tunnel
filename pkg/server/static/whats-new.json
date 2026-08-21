@@ -3,11 +3,11 @@
     "version": "v1.47.0",
     "release_date": "2026-08-21",
     "features": [
-      "fix(server): exit 0 on a clean shutdown (#1172)",
-      "fix(tui): show the client version and surface a new-version notice (#1173)",
-      "fix(server): stamp the serving gateway on a lease, not \"control\" (#1174)",
-      "fix(client): treat one gateway as one place, not several (#1171)",
-      "fix(client): don't elect a gateway that cannot carry a session (#1170)"
+      "Failover Recovers Quickly Again: The client now asks an edge whether it can actually carry a tunnel before moving to it, rather than only noticing afterwards that it could not. A recovered edge is used again within seconds instead of after a fixed five-minute wait, which previously made the client look stuck on a distant region long after the nearer one was healthy.",
+      "No More Phantom Region Switches: Each gateway is advertised under two names, and the client treated them as different places -- so a failover could 'move' between two names for the same server, logging what looked like a second outage while never going anywhere. One gateway is now one place, which also halves the health checks made when choosing a region.",
+      "Client Version In The Dashboard: The TUI header now shows which version you are running, and tells you when a newer one is available. That check also runs periodically rather than only at startup, so a client left running for days will notice a release instead of missing it entirely.",
+      "Accurate Node Reporting: The portal's tunnel list showed every session on the Control node, even when it was being served by a regional edge. Each gateway now records itself, so the Node column reflects reality.",
+      "Cleaner Restarts: Stopping the gateway normally no longer reports a failure, which previously made every routine restart look like a crash in the system logs and made real crashes harder to spot."
     ]
   },
   {

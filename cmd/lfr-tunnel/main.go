@@ -213,6 +213,10 @@ func main() {
 		log.Fatalf("[Error] Failed to start Inspector dashboard: %v", err)
 	}
 	*inspectorPort = actualInspectorPort
+	// The bound port is not necessarily the requested one -- StartInspector walks
+	// upwards when the port is taken -- so record what it actually got, for the TUI
+	// to display.
+	engine.SetInspectorPort(actualInspectorPort)
 
 	if cfg.CustomDomain != "" {
 		slog.Info("[Client] Custom domain: " + cfg.CustomDomain)

@@ -98,6 +98,10 @@ type InterceptorEngine struct {
 	// discards, so no call site needs a nil check.
 	sessionLog *SessionLogger
 
+	// inspectorPort is the port the Inspector actually bound, which is not necessarily
+	// the one requested -- StartInspector walks upwards when the port is in use.
+	inspectorPort int
+
 	// Latency & Bandwidth Simulation Settings
 	Latency         time.Duration
 	BandwidthLimit  int64
@@ -322,6 +326,20 @@ func (e *InterceptorEngine) StartFailbackProber(ctx context.Context, cancel cont
 			}
 		}
 	}()
+}
+
+// SetInspectorPort records the port the Inspector actually bound to.
+func (e *InterceptorEngine) SetInspectorPort(port int) {
+	e.mu.Lock()
+	defer e.mu.Unlock()
+	e.inspectorPort = port
+}
+
+// InspectorPort returns the port the Inspector bound to, or 0 if it is not running.
+func (e *InterceptorEngine) InspectorPort() int {
+	e.mu.RLock()
+	defer e.mu.RUnlock()
+	return e.inspectorPort
 }
 
 // SetSessionLogger attaches the persistent traffic/diagnostic logs to the engine.

@@ -197,6 +197,16 @@ func (s *Server) updateEdgeHealth(id, status string, latency int64, errMsg strin
 		errMsg = ""
 	}
 
+	// Keep the last version this node reported. It arrives on the control-channel
+	// handshake, so the only callers with one to pass are the online paths; the offline
+	// path passes "" and used to erase it. That meant a node showed no version at all
+	// exactly when it was powered down -- which is when you most want to know what it is
+	// running, and what made a deploy to a sleeping edge impossible to confirm
+	// (issue #1176).
+	if version == "" {
+		version = prev.Version
+	}
+
 	s.edgeHealthMu.Lock()
 	defer s.edgeHealthMu.Unlock()
 	s.edgeHealth[id] = EdgeHealthStatus{

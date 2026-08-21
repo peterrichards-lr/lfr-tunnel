@@ -1,8 +1,13 @@
 package ops
 
 import (
+	"encoding/json"
 	"fmt"
+	"io"
+	"net/http"
 	"os"
+	"strings"
+	"time"
 )
 
 // DeployCommand handles deploying server changes to the VPS.
@@ -35,6 +40,17 @@ func DeployCommand(args []string) {
 	identityFile := target.IdentityFile
 	vpsUser := target.User
 	sshTarget := fmt.Sprintf("%s@%s", target.User, target.Host)
+
+	// Registered before the power restore below so it runs *after* it: deferred functions
+	// run last-in-first-out. Anything that fails past this point must exit through here
+	// rather than CheckFatal, because CheckFatal calls os.Exit, which skips defers
+	// entirely and would leave a started instance running outside its schedule.
+	exitCode := 0
+	defer func() {
+		if exitCode != 0 {
+			os.Exit(exitCode)
+		}
+	}()
 
 	restorePower, err := ensureInstanceRunning(target.Host, target.AWSRegion)
 	CheckFatal(err, "Failed to ensure target instance is running")
@@ -113,9 +129,85 @@ func DeployCommand(args []string) {
 
 	fmt.Println("Executing remote deployment configuration...")
 	err = RunCommand("ssh", "-i", identityFile, sshTarget, remoteScript)
-	CheckFatal(err, "Failed to execute remote deployment commands")
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "FATAL: Failed to execute remote deployment commands: %v\n", err)
+		exitCode = 1
+		return
+	}
+
+	// Confirm the node is serving what was just built, before the deferred restore may
+	// power it back down. Without this a failed or partial deploy to a scheduled-off edge
+	// was indistinguishable from a good one until the box next woke -- which happened
+	// twice, once leaving a node on the previous version with nothing reporting a problem
+	// (issue #1176).
+	if err := verifyDeployedVersion(target.Host, version, 90*time.Second); err != nil {
+		fmt.Fprintf(os.Stderr, "FATAL: Deployment could not be verified: %v\n", err)
+		exitCode = 1
+		return
+	}
 
 	fmt.Println("=== Deployment Complete! ===")
+}
+
+// verifyDeployedVersion polls the gateway's own /api/version until it reports want.
+//
+// Asks the node directly rather than going through central: an edge reports its version to
+// central on the control-channel handshake, but that is a second hop with its own timing,
+// and this needs to answer "is the binary I just installed the one now serving" rather than
+// "has central noticed yet".
+func verifyDeployedVersion(host, want string, timeout time.Duration) error {
+	return verifyDeployedVersionAt("https://"+host, want, timeout, 5*time.Second)
+}
+
+// verifyDeployedVersionAt is the testable form: baseURL and the poll interval are explicit
+// so tests do not have to sit through the real cadence.
+func verifyDeployedVersionAt(baseURL, want string, timeout, interval time.Duration) error {
+	url := strings.TrimRight(baseURL, "/") + "/api/version"
+	client := &http.Client{Timeout: 10 * time.Second}
+	deadline := time.Now().Add(timeout)
+
+	fmt.Printf("Verifying %s is serving %s...\n", baseURL, want)
+
+	var lastSeen, lastErr string
+	for time.Now().Before(deadline) {
+		got, err := fetchServerVersion(client, url)
+		switch {
+		case err != nil:
+			// Expected for the first few seconds: the service is restarting and nginx
+			// answers 502, or the maintenance page is still up.
+			lastErr = err.Error()
+		case got == want:
+			fmt.Printf("Verified: %s is serving %s.\n", baseURL, got)
+			return nil
+		default:
+			lastSeen = got
+		}
+		time.Sleep(interval)
+	}
+
+	if lastSeen != "" {
+		return fmt.Errorf("%s is still serving %s, expected %s -- the deploy did not take", baseURL, lastSeen, want)
+	}
+	return fmt.Errorf("%s never reported a version within %s (last error: %s)", baseURL, timeout, lastErr)
+}
+
+func fetchServerVersion(client *http.Client, url string) (string, error) {
+	resp, err := client.Get(url)
+	if err != nil {
+		return "", err
+	}
+	defer resp.Body.Close() //nolint:errcheck
+
+	if resp.StatusCode != http.StatusOK {
+		return "", fmt.Errorf("status %d", resp.StatusCode)
+	}
+	var payload struct {
+		ServerVersion string `json:"server_version"`
+	}
+	if err := json.NewDecoder(io.LimitReader(resp.Body, 64<<10)).Decode(&payload); err != nil {
+		return "", err
+	}
+	return payload.ServerVersion, nil
 }
 
 // DeployClientsCommand handles deploying signed client binaries to the VPS.

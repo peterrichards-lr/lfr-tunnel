@@ -35,7 +35,7 @@ func ensureInstanceRunning(host, region string) (restore func(), err error) {
 		return noop, fmt.Errorf("resolving %s to an IP for AWS lookup: %w", host, err)
 	}
 
-	instanceID, state, err := describeInstanceByIP(region, ip)
+	instanceID, state, err := describeInstanceForHost(region, ip)
 	if err != nil {
 		return noop, fmt.Errorf("looking up EC2 instance for %s (%s) in %s: %w", host, ip, region, err)
 	}
@@ -98,12 +98,27 @@ type ec2DescribeInstancesOutput struct {
 	} `json:"Reservations"`
 }
 
-// describeInstanceByIP returns the first EC2 instance in region whose public IP matches
-// ip, or ("", "", nil) if none is found (not an error -- the caller decides that's fatal).
-func describeInstanceByIP(region, ip string) (instanceID, state string, err error) {
+// projectTag is the tag every lfr-tunnel AWS resource carries. Identifying an instance by
+// it is steadier than by address: an Elastic IP can be reassigned, and matching on one
+// meant the lookup depended on DNS being correct at deploy time and needed a separate IPv4
+// resolution step, since the ip-address filter does not match IPv6 (issue #1176).
+const projectTag = "lfr-tunnel"
+
+// describeInstanceForHost returns the EC2 instance in region belonging to this project
+// whose public address matches ip, or ("", "", nil) if none is found -- not an error, the
+// caller decides whether that is fatal.
+//
+// The project tag narrows the search and the address picks the node out of it, so a
+// mis-set region or a stale DNS record fails as "not found" rather than silently matching
+// somebody else's instance.
+func describeInstanceForHost(region, ip string) (instanceID, state string, err error) {
 	out, err := RunCommandCaptureOutput("aws", "ec2", "describe-instances",
 		"--region", region,
-		"--filters", "Name=ip-address,Values="+ip,
+		// One --filters flag taking several values; repeating the flag would drop all but
+		// the last, which would silently widen the search rather than narrow it.
+		"--filters",
+		"Name=tag:Project,Values="+projectTag,
+		"Name=ip-address,Values="+ip,
 		"--output", "json")
 	if err != nil {
 		return "", "", err
@@ -111,7 +126,7 @@ func describeInstanceByIP(region, ip string) (instanceID, state string, err erro
 	return parseInstanceDescribeOutput(out)
 }
 
-// parseInstanceDescribeOutput is split out from describeInstanceByIP so the JSON-parsing
+// parseInstanceDescribeOutput is split out from describeInstanceForHost so the JSON-parsing
 // logic can be unit tested against canned AWS CLI output without actually shelling out.
 func parseInstanceDescribeOutput(rawJSON string) (instanceID, state string, err error) {
 	var parsed ec2DescribeInstancesOutput

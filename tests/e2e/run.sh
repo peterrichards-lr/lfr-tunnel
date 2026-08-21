@@ -174,7 +174,11 @@ echo "Extracted Approval Token: $APPROVAL_TOKEN"
 
 # 3.5. Call Admin Approval endpoint
 echo "=== Approving developer request ==="
-APPROVE_RESP=$(curl -s "http://localhost:$E2E_PROXY_PORT/api/admin/approve?email=developer@lfr-demo.local&token=${APPROVAL_TOKEN}")
+# POST, not GET: approving on GET meant any fetch of the emailed link approved the
+# user, and that link is delivered to a chat channel where previews follow URLs (#1143).
+APPROVE_RESP=$(curl -s -X POST "http://localhost:$E2E_PROXY_PORT/api/admin/approve" \
+  --data-urlencode "email=developer@lfr-demo.local" \
+  --data-urlencode "token=${APPROVAL_TOKEN}")
 echo "Approval response: $APPROVE_RESP"
 sleep 2
 

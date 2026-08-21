@@ -178,16 +178,21 @@ func (s *safeConn) RemoteAddr() net.Addr {
 
 // Server coordinates the entire gateway operations.
 type Server struct {
-	cfg                *config.ServerConfig
-	chiselServer       *chserver.Server
-	registry           *Registry
-	proxyHandler       *ProxyHandler
-	chiselProxy        *httputil.ReverseProxy
-	db                 *db.DB
-	portalService      PortalService
-	notifications      *NotificationService
-	ctx                context.Context
-	cancel             context.CancelFunc
+	cfg           *config.ServerConfig
+	chiselServer  *chserver.Server
+	registry      *Registry
+	proxyHandler  *ProxyHandler
+	chiselProxy   *httputil.ReverseProxy
+	db            *db.DB
+	portalService PortalService
+	notifications *NotificationService
+	ctx           context.Context
+	cancel        context.CancelFunc
+	// bgWG tracks long-lived goroutines that outlive a single request and read shared
+	// state. Stop waits on it so a cancelled goroutine has actually returned before the
+	// caller tears down what it was reading -- tests restoring package-level tunables
+	// raced the edge control channel still using them (issue #1131).
+	bgWG               sync.WaitGroup
 	rateLimiters       map[string]*ipLimiter
 	rlMutex            sync.Mutex
 	violations         map[string]int
@@ -482,7 +487,11 @@ func NewServer(cfg *config.ServerConfig) (*Server, error) {
 	}
 
 	if srv.cfg.ControlPlaneURL != "" && srv.cfg.EdgeToken != "" {
-		go srv.runEdgeControlChannel()
+		srv.bgWG.Add(1)
+		go func() {
+			defer srv.bgWG.Done()
+			srv.runEdgeControlChannel()
+		}()
 	}
 
 	return srv, nil
@@ -2466,6 +2475,21 @@ func (s *Server) Stop() {
 	}
 
 	s.chiselServer.Close() //nolint:errcheck
+
+	// Wait for the cancelled background goroutines to actually return before closing the
+	// database out from under them. Bounded, because Stop must not hang on a goroutine
+	// stuck in a syscall -- the timeout is the same 5s budget the shutdowns above use.
+	waited := make(chan struct{})
+	go func() {
+		s.bgWG.Wait()
+		close(waited)
+	}()
+	select {
+	case <-waited:
+	case <-ctx.Done():
+		slog.Warn("[Server] Background goroutines did not stop within the shutdown timeout.")
+	}
+
 	if s.db != nil {
 		_ = s.db.RecordGatewayCleanShutdown() //nolint:errcheck
 		s.db.Close()                          //nolint:errcheck

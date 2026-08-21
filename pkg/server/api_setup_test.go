@@ -132,7 +132,7 @@ func TestHandleCompleteSetup(t *testing.T) {
 		{
 			name: "Success_PreferredNameFallback_And_NotifyAdmin",
 			setup: func() (string, func()) {
-				mockMail.sentTo = "" // reset mail
+				mockMail.reset()
 				u := &db.User{
 					ID:                "success@example.com",
 					Email:             "success@example.com",
@@ -171,18 +171,18 @@ func TestHandleCompleteSetup(t *testing.T) {
 
 				// Wait a tiny bit for async email routine
 				time.Sleep(50 * time.Millisecond)
-				if mockMail.sentTo != "admin@example.com" {
-					t.Errorf("expected admin email notification, got to: %s", mockMail.sentTo)
+				if mockMail.lastSentTo() != "admin@example.com" {
+					t.Errorf("expected admin email notification, got to: %s", mockMail.lastSentTo())
 				}
-				if !strings.Contains(mockMail.sentSubject, "New User Registration") && !strings.Contains(mockMail.sentTextBody, "John Doe") {
-					t.Errorf("email subject/body mismatch, got subject: %s", mockMail.sentSubject)
+				if !strings.Contains(mockMail.lastSubject(), "New User Registration") && !strings.Contains(mockMail.lastTextBody(), "John Doe") {
+					t.Errorf("email subject/body mismatch, got subject: %s", mockMail.lastSubject())
 				}
 			},
 		},
 		{
 			name: "Success_AdminNotificationDisabled",
 			setup: func() (string, func()) {
-				mockMail.sentTo = "" // reset mail
+				mockMail.reset()
 				// Register admin who has disabled notification preferences
 				admin := &db.User{
 					ID:                "admin@example.com",
@@ -214,8 +214,8 @@ func TestHandleCompleteSetup(t *testing.T) {
 			expectedStatus: http.StatusOK,
 			verifyBody: func(t *testing.T, body string) {
 				time.Sleep(50 * time.Millisecond)
-				if mockMail.sentTo != "" {
-					t.Errorf("expected no email to be sent since admin disabled it, but sent to: %s", mockMail.sentTo)
+				if mockMail.lastSentTo() != "" {
+					t.Errorf("expected no email to be sent since admin disabled it, but sent to: %s", mockMail.lastSentTo())
 				}
 			},
 		},

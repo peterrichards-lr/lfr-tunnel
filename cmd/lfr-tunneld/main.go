@@ -1,13 +1,16 @@
 package main
 
 import (
+	"errors"
 	"flag"
 	"log"
 	"log/slog"
+	"net/http"
 	"os"
 	"os/signal"
 	"strings"
 	"syscall"
+	"time"
 
 	"lfr-tunnel/pkg/config"
 	"lfr-tunnel/pkg/server"
@@ -64,16 +67,36 @@ func main() {
 	// 5. Setup graceful shutdown handler
 	sigs := make(chan os.Signal, 1)
 	signal.Notify(sigs, syscall.SIGINT, syscall.SIGTERM)
+	stopped := make(chan struct{})
 	go func() {
 		<-sigs
 		slog.Info("[Server] Shutdown signal received, stopping...")
 		srv.Stop()
-		os.Exit(0)
+		close(stopped)
 	}()
 
 	// 6. Start server
 	slog.Info("[Server] Initializing Liferay Tunnel Gateway daemon...")
-	if err := srv.Start(); err != nil {
+	err = srv.Start()
+
+	// http.ErrServerClosed is the documented, expected return once Stop has closed the
+	// listener: it means the shutdown worked, not that anything went wrong. Treating it as
+	// fatal raced the signal handler's os.Exit(0) and usually won, so every clean stop
+	// exited 1 -- systemd recorded FAILURE on each ordinary restart, and a real crash
+	// looked identical to a normal one (issue #1169).
+	if err != nil && !errors.Is(err, http.ErrServerClosed) {
 		log.Fatalf("[Server] Server stopped with error: %v", err)
 	}
+
+	// Start returns the moment the listener closes, which is well before Stop has
+	// recorded the clean shutdown and closed the database. Returning straight away would
+	// race the signal handler and could cut that short.
+	if errors.Is(err, http.ErrServerClosed) {
+		select {
+		case <-stopped:
+		case <-time.After(15 * time.Second):
+			slog.Warn("[Server] Shutdown did not complete within 15s; exiting anyway.")
+		}
+	}
+	slog.Info("[Server] Shutdown complete.")
 }

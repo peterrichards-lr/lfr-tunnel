@@ -343,6 +343,36 @@ func (m *mockMailSender) Send(to string, subject string, textBody string, htmlBo
 	return nil
 }
 
+// Send runs on the server's own goroutines -- several send sites are `go func()` -- so
+// every field below must be read through these accessors. Reading them directly from a
+// test raced the in-flight send and was reported by the race detector (issue #1131).
+func (m *mockMailSender) lastSentTo() string {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	return m.sentTo
+}
+
+func (m *mockMailSender) lastSubject() string {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	return m.sentSubject
+}
+
+func (m *mockMailSender) lastTextBody() string {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	return m.sentTextBody
+}
+
+// reset clears the recorded state so a later assertion cannot pass on an email sent
+// earlier in the same test.
+func (m *mockMailSender) reset() {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	m.sentTo, m.sentSubject, m.sentTextBody, m.sentHtmlBody = "", "", "", ""
+	m.emails = nil
+}
+
 func (m *mockMailSender) getSentEmails() []mockEmail {
 	m.mu.Lock()
 	defer m.mu.Unlock()
@@ -476,8 +506,8 @@ func TestServer_RegistrationFlow(t *testing.T) {
 
 	// Verify developer approval email was sent
 	time.Sleep(50 * time.Millisecond)
-	if mockMail.sentTo != "developer@liferay.com" || !strings.Contains(mockMail.sentTextBody, "/api/claim") {
-		t.Errorf("developer email not sent correctly, got to=%s, body=%s", mockMail.sentTo, mockMail.sentTextBody)
+	if mockMail.lastSentTo() != "developer@liferay.com" || !strings.Contains(mockMail.lastTextBody(), "/api/claim") {
+		t.Errorf("developer email not sent correctly, got to=%s, body=%s", mockMail.lastSentTo(), mockMail.lastTextBody())
 	}
 
 	// Extract claim token prefix (before the colon)
@@ -1165,7 +1195,7 @@ func TestServer_WelcomePageLanguageOverride(t *testing.T) {
 	}
 
 	// 4. Assert that the intercepted email is in Romanian (respecting ?lang=ro instead of DB's "en"!)
-	interceptedBody := mockMail.sentTextBody
+	interceptedBody := mockMail.lastTextBody()
 	if !strings.Contains(interceptedBody, "Salut") {
 		t.Error("expected email body to be translated to Romanian ('Salut'), but it was not")
 	}
@@ -1199,7 +1229,7 @@ func TestServer_MagicLinkInstantRequestInvalidation(t *testing.T) {
 	time.Sleep(30 * time.Millisecond) // wait for goroutine
 
 	// Extract first token from intercepted body
-	firstBody := mockMail.sentTextBody
+	firstBody := mockMail.lastTextBody()
 	firstToken := extractTokenFromBody(firstBody)
 	if firstToken == "" {
 		t.Fatal("failed to extract first magic token from email body")
@@ -1213,7 +1243,7 @@ func TestServer_MagicLinkInstantRequestInvalidation(t *testing.T) {
 	time.Sleep(30 * time.Millisecond) // wait for goroutine
 
 	// Extract second token from intercepted body
-	secondBody := mockMail.sentTextBody
+	secondBody := mockMail.lastTextBody()
 	secondToken := extractTokenFromBody(secondBody)
 	if secondToken == "" {
 		t.Fatal("failed to extract second magic token from email body")
@@ -1282,7 +1312,7 @@ func TestServer_MagicLinkLanguagePersistence(t *testing.T) {
 	time.Sleep(30 * time.Millisecond) // wait for goroutine
 
 	// Extract the magic token containing the &lang=ro URL query parameter!
-	bodyText := mockMail.sentTextBody
+	bodyText := mockMail.lastTextBody()
 	idxToken := strings.Index(bodyText, "token=")
 	if idxToken == -1 {
 		t.Fatal("failed to find token= in email body")
@@ -1381,7 +1411,7 @@ func TestServer_InvitationLanguagePersistence(t *testing.T) {
 	}
 
 	// 4. Assert that the sent invitation email is translated into Romanian
-	interceptedBody := mockMail.sentTextBody
+	interceptedBody := mockMail.lastTextBody()
 	if !strings.Contains(interceptedBody, "Acceptă Invitația") {
 		t.Error("expected invitation email button to be translated to Romanian ('Acceptă Invitația'), but it was not")
 	}
@@ -2890,11 +2920,11 @@ func TestServer_SubdomainExpirationNotifications(t *testing.T) {
 	srv.checkExpiringReservations()
 
 	// Verify email sent
-	if mockMail.sentTo != email {
-		t.Errorf("expected email to be sent to %s, got %s", email, mockMail.sentTo)
+	if mockMail.lastSentTo() != email {
+		t.Errorf("expected email to be sent to %s, got %s", email, mockMail.lastSentTo())
 	}
-	if !strings.Contains(mockMail.sentSubject, "Expiring Soon") {
-		t.Errorf("expected email subject to contain 'Expiring Soon', got %q", mockMail.sentSubject)
+	if !strings.Contains(mockMail.lastSubject(), "Expiring Soon") {
+		t.Errorf("expected email subject to contain 'Expiring Soon', got %q", mockMail.lastSubject())
 	}
 
 	// Verify DB state updated to 1
@@ -2907,13 +2937,12 @@ func TestServer_SubdomainExpirationNotifications(t *testing.T) {
 	}
 
 	// Reset mockMail
-	mockMail.sentTo = ""
-	mockMail.sentSubject = ""
+	mockMail.reset()
 
 	// 2. Run warning checker again: should not send duplicate email
 	srv.checkExpiringReservations()
-	if mockMail.sentTo != "" {
-		t.Errorf("expected no duplicate warning email, but got email to %s", mockMail.sentTo)
+	if mockMail.lastSentTo() != "" {
+		t.Errorf("expected no duplicate warning email, but got email to %s", mockMail.lastSentTo())
 	}
 
 	// 3. Move expiration time to the past (expired and quarantined)
@@ -2926,11 +2955,11 @@ func TestServer_SubdomainExpirationNotifications(t *testing.T) {
 	// Run warning checker: should trigger "expired/quarantined" email alert
 	srv.checkExpiringReservations()
 
-	if mockMail.sentTo != email {
-		t.Errorf("expected expired email to be sent to %s, got %s", email, mockMail.sentTo)
+	if mockMail.lastSentTo() != email {
+		t.Errorf("expected expired email to be sent to %s, got %s", email, mockMail.lastSentTo())
 	}
-	if !strings.Contains(mockMail.sentSubject, "Expired") {
-		t.Errorf("expected email subject to contain 'Expired', got %q", mockMail.sentSubject)
+	if !strings.Contains(mockMail.lastSubject(), "Expired") {
+		t.Errorf("expected email subject to contain 'Expired', got %q", mockMail.lastSubject())
 	}
 
 	// Verify DB state updated to 2
@@ -2948,7 +2977,7 @@ func TestServer_SubdomainExpirationNotifications(t *testing.T) {
 		t.Fatalf("failed to update user notifications: %v", err)
 	}
 
-	mockMail.sentTo = ""
+	mockMail.reset()
 	// Reset ExpiryWarningSent to 0 and set expires back to 36 hours
 	updated.ExpiresAt = &expiresAt
 	updated.ExpiryWarningSent = 0
@@ -2957,8 +2986,8 @@ func TestServer_SubdomainExpirationNotifications(t *testing.T) {
 	}
 
 	srv.checkExpiringReservations()
-	if mockMail.sentTo != "" {
-		t.Errorf("expected no email when NotificationPrefs is disabled, but got email to %s", mockMail.sentTo)
+	if mockMail.lastSentTo() != "" {
+		t.Errorf("expected no email when NotificationPrefs is disabled, but got email to %s", mockMail.lastSentTo())
 	}
 }
 

@@ -479,6 +479,21 @@ func (s *Server) kickAllLocalLeases() {
 	}
 }
 
+// backoffOrStop pauses d before the next reconnect attempt, reporting false when the
+// server is shutting down. A bare time.Sleep on these paths kept runEdgeControlChannel
+// alive for up to ten seconds after Stop had cancelled its context -- still reading the
+// deadline tunables that Stop's caller is entitled to tear down (issue #1131).
+func (s *Server) backoffOrStop(d time.Duration) bool {
+	timer := time.NewTimer(d)
+	defer timer.Stop()
+	select {
+	case <-timer.C:
+		return true
+	case <-s.ctx.Done():
+		return false
+	}
+}
+
 // runEdgeControlChannel manages the Edge Node's client control WebSocket connection.
 func (s *Server) runEdgeControlChannel() {
 	lostAt := time.Time{}
@@ -493,7 +508,9 @@ func (s *Server) runEdgeControlChannel() {
 		u, err := url.Parse(s.cfg.ControlPlaneURL)
 		if err != nil {
 			slog.Info(fmt.Sprintf("[Edge Control] Invalid ControlPlaneURL: %v", err))
-			time.Sleep(10 * time.Second)
+			if !s.backoffOrStop(10 * time.Second) {
+				return
+			}
 			continue
 		}
 
@@ -541,7 +558,9 @@ func (s *Server) runEdgeControlChannel() {
 				slog.Info("[Edge Control] Connection lost for >3 minutes. Terminating all active tunnels...")
 				s.kickAllLocalLeases()
 			}
-			time.Sleep(10 * time.Second)
+			if !s.backoffOrStop(10 * time.Second) {
+				return
+			}
 			continue
 		}
 
@@ -553,14 +572,18 @@ func (s *Server) runEdgeControlChannel() {
 		if err := conn.ReadJSON(&challengeMsg); err != nil {
 			slog.Info(fmt.Sprintf("[Edge Control] Failed to read challenge: %v", err))
 			_ = conn.Close() //nolint:errcheck
-			time.Sleep(5 * time.Second)
+			if !s.backoffOrStop(5 * time.Second) {
+				return
+			}
 			continue
 		}
 
 		if challengeMsg.Type != "challenge" {
 			slog.Info(fmt.Sprintf("[Edge Control] Expected challenge message, got %s", challengeMsg.Type))
 			_ = conn.Close() //nolint:errcheck
-			time.Sleep(5 * time.Second)
+			if !s.backoffOrStop(5 * time.Second) {
+				return
+			}
 			continue
 		}
 
@@ -577,7 +600,9 @@ func (s *Server) runEdgeControlChannel() {
 		if err := conn.WriteJSON(authMsg); err != nil {
 			slog.Info(fmt.Sprintf("[Edge Control] Failed to send auth response: %v", err))
 			_ = conn.Close() //nolint:errcheck
-			time.Sleep(5 * time.Second)
+			if !s.backoffOrStop(5 * time.Second) {
+				return
+			}
 			continue
 		}
 
@@ -586,14 +611,18 @@ func (s *Server) runEdgeControlChannel() {
 		if err := conn.ReadJSON(&authResult); err != nil {
 			slog.Info(fmt.Sprintf("[Edge Control] Failed to read auth result: %v", err))
 			_ = conn.Close() //nolint:errcheck
-			time.Sleep(5 * time.Second)
+			if !s.backoffOrStop(5 * time.Second) {
+				return
+			}
 			continue
 		}
 
 		if authResult.Type != "auth_success" {
 			slog.Info(fmt.Sprintf("[Edge Control] Authentication failed: %s", authResult.Reason))
 			_ = conn.Close() //nolint:errcheck
-			time.Sleep(10 * time.Second)
+			if !s.backoffOrStop(10 * time.Second) {
+				return
+			}
 			continue
 		}
 
@@ -623,6 +652,13 @@ func (s *Server) runEdgeControlChannel() {
 		ticker := time.NewTicker(edgeClientPingInterval)
 		pingErrChan := make(chan error, 1)
 
+		// connDone bounds both per-connection goroutines below to the life of this
+		// connection. The ping goroutine used to exit only on a write error or on
+		// server shutdown, so every read-side failure stranded one: ticker.Stop() halts
+		// deliveries but leaves it parked on a channel that can no longer fire. An edge
+		// reconnecting on the 75s deadline leaked one per cycle (issue #1131).
+		connDone := make(chan struct{})
+
 		go func() {
 			defer ticker.Stop()
 			for {
@@ -633,7 +669,38 @@ func (s *Server) runEdgeControlChannel() {
 						pingErrChan <- err
 						return
 					}
+				case <-connDone:
+					return
 				case <-s.ctx.Done():
+					return
+				}
+			}
+		}()
+
+		// One reader for the connection's lifetime. Spawning one per loop iteration
+		// orphaned a goroutine still blocked in ReadJSON whenever pingErrChan won the
+		// select, leaving it on a connection the loop then closed and replaced, and it
+		// split SetReadDeadline and ReadJSON across two goroutines. gorilla/websocket
+		// permits one reader and one writer; this had neither (issue #1131).
+		type controlRead struct {
+			msg ControlMessage
+			err error
+		}
+		// The send selects on connDone as well: readCh holds one message, so a read that
+		// completes just as pingErrChan wins the select below would otherwise park here
+		// on a full buffer nobody will drain.
+		readCh := make(chan controlRead, 1)
+		go func() {
+			for {
+				var msg ControlMessage
+				_ = conn.SetReadDeadline(time.Now().Add(edgeClientReadDeadline)) //nolint:errcheck
+				err := conn.ReadJSON(&msg)
+				select {
+				case readCh <- controlRead{msg: msg, err: err}:
+				case <-connDone:
+					return
+				}
+				if err != nil {
 					return
 				}
 			}
@@ -642,20 +709,14 @@ func (s *Server) runEdgeControlChannel() {
 		// Read loop
 		for {
 			var msg ControlMessage
-			// Reset read deadline on receiving messages
-			_ = conn.SetReadDeadline(time.Now().Add(edgeClientReadDeadline)) //nolint:errcheck
-
-			readErrChan := make(chan error, 1)
-			go func() {
-				err := conn.ReadJSON(&msg)
-				readErrChan <- err
-			}()
-
 			var readErr error
 			select {
-			case readErr = <-readErrChan:
+			case res := <-readCh:
+				msg, readErr = res.msg, res.err
 			case pingErr := <-pingErrChan:
 				readErr = pingErr
+			case <-s.ctx.Done():
+				readErr = s.ctx.Err()
 			}
 
 			if readErr != nil {
@@ -704,6 +765,9 @@ func (s *Server) runEdgeControlChannel() {
 			}
 		}
 
+		// Release both goroutines, then close: the reader may be parked in ReadJSON,
+		// which only Close unblocks.
+		close(connDone)
 		ticker.Stop()
 		_ = conn.Close() //nolint:errcheck
 		lostAt = time.Now()

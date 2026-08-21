@@ -319,6 +319,43 @@ Every hook receives the following environment variables during execution:
 
 ---
 
+## Client Logs & Diagnostics
+
+The client keeps persistent logs under `~/.lfr-tunnel/logs/`, for both foreground and background runs. They are the first place to look when a tunnel misbehaved and the terminal output is gone.
+
+| File | Contents |
+| --- | --- |
+| `traffic-<subdomain>.log` | One JSON object per proxied HTTP request: timestamp, method, path, status, duration, target port and the region serving it. |
+| `error-<subdomain>.log` | Structured diagnostic events — failover, failback, lease eviction, exhausted regions — with the fields explaining each. |
+| `client-<subdomain>.log` | Console output from a `-background` run. |
+
+All three are JSON Lines and are rotated rather than overwritten: the previous run is kept as `.1`, up to three generations, each capped at 8 MiB. A client that exits unexpectedly leaves its log behind instead of erasing it on the next start.
+
+Because they are JSON Lines, they can be filtered directly:
+
+```bash
+# Every request that failed
+jq 'select(.status >= 400)' ~/.lfr-tunnel/logs/traffic-your-name-se.log
+
+# What happened during the last region switch
+jq 'select(.event | startswith("failover"))' ~/.lfr-tunnel/logs/error-your-name-se.log
+
+# Slowest requests first
+jq -s 'sort_by(-.dur_ms) | .[0:10]' ~/.lfr-tunnel/logs/traffic-your-name-se.log
+```
+
+### Recording request and response bodies
+
+Bodies are **not** written by default. They routinely carry OAuth tokens, session cookies and customer data, and these files persist on disk. When you need them — debugging an incoming webhook payload, for instance — enable them explicitly:
+
+```bash
+lfr-tunnel -subdomain your-name-se -log-bodies
+```
+
+Bodies are capped at 10 KB each. Prefer the Inspector at `http://localhost:4040` for casual payload inspection: it holds the last 100 requests in memory only, so nothing reaches disk.
+
+---
+
 ## Need Help?
 
 * **Common Errors:**
@@ -331,4 +368,4 @@ Every hook receives the following environment variables during execution:
 
 <!-- markdownlint-disable MD049 -->
 ---
-*Last Updated: 2026-08-20* | *Last Reviewed: 2026-08-20*
+*Last Updated: 2026-08-21* | *Last Reviewed: 2026-08-21*

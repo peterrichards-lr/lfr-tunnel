@@ -12,7 +12,6 @@ import (
 	"net"
 	"net/http"
 	"os"
-	"path/filepath"
 	"strings"
 	"time"
 )
@@ -152,10 +151,9 @@ func StartInspector(port int, engine *InterceptorEngine) (int, error) {
 			authErrMsg = engine.AuthErrorMessage
 		}
 
-		home, _ := os.UserHomeDir()
 		logFile := ""
 		if engine.ClientSubdomain != "" {
-			logFile = fmt.Sprintf("%s/.lfr-tunnel/client-%s.log", home, engine.ClientSubdomain)
+			logFile, _ = ResolveClientLogPath(engine.ClientSubdomain) //nolint:errcheck
 		}
 
 		info := map[string]interface{}{
@@ -213,12 +211,15 @@ func StartInspector(port int, engine *InterceptorEngine) (int, error) {
 	})
 
 	mux.HandleFunc("/api/logs", func(w http.ResponseWriter, r *http.Request) {
-		home, err := os.UserHomeDir()
-		if err != nil || engine.ClientSubdomain == "" {
+		if engine.ClientSubdomain == "" {
 			http.Error(w, "Log file not found", http.StatusNotFound)
 			return
 		}
-		logFile := filepath.Join(home, ".lfr-tunnel", fmt.Sprintf("client-%s.log", engine.ClientSubdomain))
+		logFile, err := ResolveClientLogPath(engine.ClientSubdomain)
+		if err != nil {
+			http.Error(w, "Log file not found", http.StatusNotFound)
+			return
+		}
 
 		data, err := os.ReadFile(logFile)
 		if err != nil {

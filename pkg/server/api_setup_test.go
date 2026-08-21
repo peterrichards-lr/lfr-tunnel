@@ -180,6 +180,11 @@ func TestHandleCompleteSetup(t *testing.T) {
 			},
 		},
 		{
+			// An admin who has muted notifications still receives the approve link, which
+			// is transactional -- it is the only route by which this registration can be
+			// approved. Only the routine "new registration" alert is suppressed. Before
+			// #1135 both were suppressed, so an admin who unsubscribed silently broke
+			// registration for every subsequent user.
 			name: "Success_AdminNotificationDisabled",
 			setup: func() (string, func()) {
 				mockMail.reset()
@@ -214,8 +219,26 @@ func TestHandleCompleteSetup(t *testing.T) {
 			expectedStatus: http.StatusOK,
 			verifyBody: func(t *testing.T, body string) {
 				time.Sleep(50 * time.Millisecond)
-				if mockMail.lastSentTo() != "" {
-					t.Errorf("expected no email to be sent since admin disabled it, but sent to: %s", mockMail.lastSentTo())
+
+				sent := mockMail.getSentEmails()
+				var approvals, alerts int
+				for _, e := range sent {
+					if e.To != "admin@example.com" {
+						t.Errorf("unexpected recipient %q", e.To)
+						continue
+					}
+					if strings.Contains(e.TextBody, "/api/admin/approve") {
+						approvals++
+					} else {
+						alerts++
+					}
+				}
+
+				if approvals != 1 {
+					t.Errorf("expected exactly one approve-link email despite the muted preference, got %d (of %d sent)", approvals, len(sent))
+				}
+				if alerts != 0 {
+					t.Errorf("expected the routine registration alert to stay suppressed, got %d", alerts)
 				}
 			},
 		},

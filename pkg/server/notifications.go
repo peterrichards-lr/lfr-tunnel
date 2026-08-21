@@ -50,9 +50,12 @@ func (n *NotificationService) SendAdminAlert(settingKey, subject, htmlBody strin
 		return // default false
 	}
 
-	// Check the admin user's personal notification preferences
+	// Notification: routine operational news -- a registration happened, an IP was
+	// blacklisted, a tunnel went offline. All of it is visible in the admin dashboard,
+	// so an admin who mutes it loses nothing. The approve-link email that accompanies a
+	// registration is classified transactional at its own send site and is unaffected.
 	if adminUser, err := n.db.GetUserByEmail(n.cfg.AdminNotificationEmail); err == nil && adminUser != nil {
-		if adminUser.NotificationPrefs == "disabled" {
+		if !shouldSendTo(adminUser, emailNotification) {
 			return
 		}
 	}

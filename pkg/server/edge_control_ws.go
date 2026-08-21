@@ -479,6 +479,26 @@ func (s *Server) kickAllLocalLeases() {
 	}
 }
 
+// edgeNodeIDFromToken derives an edge's own node ID from its configured edge token, which
+// is shaped "<node-id>-<secret>".
+//
+// Extracted so the control channel and the lease registry cannot disagree about who this
+// gateway is -- the registry previously did not know at all and stamped every lease
+// "control" (issue #1167).
+func edgeNodeIDFromToken(token string) string {
+	parts := strings.Split(token, "-")
+	nodeID := ""
+	if len(parts) > 1 {
+		nodeID = strings.Join(parts[:len(parts)-1], "-")
+	} else if len(parts) == 1 {
+		nodeID = parts[0]
+	}
+	if nodeID == "" {
+		nodeID = "edge"
+	}
+	return nodeID
+}
+
 // backoffOrStop pauses d before the next reconnect attempt, reporting false when the
 // server is shutting down. A bare time.Sleep on these paths kept runEdgeControlChannel
 // alive for up to ten seconds after Stop had cancelled its context -- still reading the
@@ -514,16 +534,7 @@ func (s *Server) runEdgeControlChannel() {
 			continue
 		}
 
-		nodeID := ""
-		parts := strings.Split(s.cfg.EdgeToken, "-")
-		if len(parts) > 1 {
-			nodeID = strings.Join(parts[:len(parts)-1], "-")
-		} else if len(parts) == 1 {
-			nodeID = parts[0]
-		}
-		if nodeID == "" {
-			nodeID = "edge"
-		}
+		nodeID := edgeNodeIDFromToken(s.cfg.EdgeToken)
 
 		scheme := "ws"
 		if u.Scheme == "https" {

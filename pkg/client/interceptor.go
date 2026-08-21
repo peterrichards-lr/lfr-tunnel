@@ -20,6 +20,8 @@ import (
 	"sync/atomic"
 	"time"
 
+	"lfr-tunnel/pkg/config"
+
 	"golang.org/x/time/rate"
 )
 
@@ -113,6 +115,12 @@ type InterceptorEngine struct {
 	// inspectorPort is the port the Inspector actually bound, which is not necessarily
 	// the one requested -- StartInspector walks upwards when the port is in use.
 	inspectorPort int
+
+	// latestVersion is the newest client version the gateway advertises. Refreshed while
+	// running, not just at startup: a client left up for days would otherwise never learn
+	// about a release, and those are exactly the users who do not revisit the portal
+	// after registering (issue #1168).
+	latestVersion string
 
 	// Latency & Bandwidth Simulation Settings
 	Latency         time.Duration
@@ -489,6 +497,56 @@ func (e *InterceptorEngine) InspectorPort() int {
 	e.mu.RLock()
 	defer e.mu.RUnlock()
 	return e.inspectorPort
+}
+
+// SetLatestVersion records the newest client version the gateway advertises.
+func (e *InterceptorEngine) SetLatestVersion(v string) {
+	e.mu.Lock()
+	defer e.mu.Unlock()
+	e.latestVersion = v
+}
+
+// NewerVersion returns the advertised version when it is newer than the running one, and
+// "" otherwise. A development build never reports an update, since its version does not
+// compare meaningfully.
+func (e *InterceptorEngine) NewerVersion() string {
+	e.mu.RLock()
+	latest := e.latestVersion
+	e.mu.RUnlock()
+
+	if latest == "" || config.Version == "dev" {
+		return ""
+	}
+	if CompareVersions(config.Version, latest) < 0 {
+		return latest
+	}
+	return ""
+}
+
+// StartVersionWatcher periodically re-asks the gateway what the newest client version is.
+//
+// The existing check ran once, before the tunnel opened, and wrote a single log line. In
+// the TUI that line is pushed out of the five-line log box within seconds, and in
+// background mode it goes to a file nobody reads -- so a client left running for days
+// never learned about a release (issue #1168). This keeps the header honest instead.
+func (e *InterceptorEngine) StartVersionWatcher(ctx context.Context, serverURL string, interval time.Duration) {
+	if interval <= 0 {
+		interval = 6 * time.Hour
+	}
+	go func() {
+		ticker := time.NewTicker(interval)
+		defer ticker.Stop()
+		for {
+			select {
+			case <-ctx.Done():
+				return
+			case <-ticker.C:
+				if info, err := CheckServerCompatibility(serverURL); err == nil && info != nil {
+					e.SetLatestVersion(info.LatestVersion)
+				}
+			}
+		}
+	}()
 }
 
 // SetSessionLogger attaches the persistent traffic/diagnostic logs to the engine.

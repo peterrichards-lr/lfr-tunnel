@@ -63,3 +63,7 @@ scripts/release-client-local.sh
 liferay-ai-commerce-accelerator/*
 !liferay-ai-commerce-accelerator/docker-compose.yml
 .pnpm-store/
+
+# Python bytecode (scripts/ still has .py helpers; a .pyc had been committed before)
+__pycache__/
+*.py[cod]

@@ -237,22 +237,76 @@ func GatewayCanCarrySession(statusCode int, body []byte) bool {
 }
 
 // probeGatewayHealth fetches /api/healthz and applies GatewayCanCarrySession.
-func probeGatewayHealth(ctx context.Context, serverURL string, timeout time.Duration) bool {
+// gatewayProbe records what a health probe actually saw.
+//
+// The verdict alone is not enough to explain a failback after the fact. A client failed
+// back onto an edge that was mid-reboot and there was no way to tell, from the logs, what
+// the prober had seen to justify it -- no status code, no control_plane value, nothing.
+// Every other decision on this path writes a diagnostic event; this one did not, so the
+// one question worth answering could not be (issue #1180).
+type gatewayProbe struct {
+	Usable       bool
+	StatusCode   int
+	ControlPlane string
+	Body         string
+	Err          string
+}
+
+// Reason renders the probe as a short phrase for a log line.
+func (p gatewayProbe) Reason() string {
+	switch {
+	case p.Err != "":
+		return "unreachable: " + p.Err
+	case p.StatusCode != http.StatusOK:
+		return fmt.Sprintf("http %d", p.StatusCode)
+	case p.ControlPlane == "disconnected":
+		return "control plane disconnected"
+	case p.ControlPlane == "":
+		return "healthy (no control_plane reported)"
+	default:
+		return "healthy (control_plane " + p.ControlPlane + ")"
+	}
+}
+
+// probeGateway asks a gateway whether it can carry a session and reports what it saw.
+func probeGateway(ctx context.Context, serverURL string, timeout time.Duration) gatewayProbe {
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, strings.TrimRight(serverURL, "/")+"/api/healthz", nil)
 	if err != nil {
-		return false
+		return gatewayProbe{Err: err.Error()}
 	}
 	resp, err := (&http.Client{Timeout: timeout}).Do(req)
 	if err != nil {
-		return false
+		return gatewayProbe{Err: err.Error()}
 	}
 	defer resp.Body.Close() //nolint:errcheck
 
 	body, err := io.ReadAll(io.LimitReader(resp.Body, 512))
 	if err != nil {
-		return false
+		return gatewayProbe{StatusCode: resp.StatusCode, Err: err.Error()}
 	}
-	return GatewayCanCarrySession(resp.StatusCode, body)
+
+	probe := gatewayProbe{
+		StatusCode: resp.StatusCode,
+		Body:       strings.TrimSpace(string(body)),
+		Usable:     GatewayCanCarrySession(resp.StatusCode, body),
+	}
+	var payload struct {
+		ControlPlane string `json:"control_plane"`
+	}
+	if json.Unmarshal(bytes.TrimSpace(body), &payload) == nil {
+		probe.ControlPlane = payload.ControlPlane
+	}
+	// Only worth keeping the body when it did not parse -- that is the case the
+	// "unparseable 200 counts as healthy" fallback covers, and the one most likely to be
+	// wrong.
+	if probe.ControlPlane != "" {
+		probe.Body = ""
+	}
+	return probe
+}
+
+func probeGatewayHealth(ctx context.Context, serverURL string, timeout time.Duration) bool {
+	return probeGateway(ctx, serverURL, timeout).Usable
 }
 
 // gatewayHasNoLease reports whether a 200 from /api/tunnel-status came from the branch
@@ -443,6 +497,9 @@ func (e *InterceptorEngine) StartFailbackProber(ctx context.Context, cancel cont
 		if interval <= 0 {
 			interval = 15 * time.Second
 		}
+		// Tracks the last reason a failback was declined, so a long outage logs the
+		// transitions rather than the same line every 15 seconds.
+		lastDeclineReason := ""
 		ticker := time.NewTicker(interval)
 		defer ticker.Stop()
 
@@ -470,16 +527,46 @@ func (e *InterceptorEngine) StartFailbackProber(ctx context.Context, cancel cont
 				// Ask the primary whether it can actually carry a session, not merely
 				// whether its HTTP listener is up. An edge that cannot reach central
 				// answers healthz fine and then evicts us within seconds.
-				if probeGatewayHealth(ctx, primaryServerURL, 5*time.Second) {
-					slog.Info(fmt.Sprintf("[Client] Primary region '%s' (%s) is back online! Initiating automated failback...", primaryRegion, primaryServerURL))
-					e.mu.Lock()
-					e.IsFailback = true
-					e.mu.Unlock()
-					if cancel != nil {
-						cancel()
+				probe := probeGateway(ctx, primaryServerURL, 5*time.Second)
+
+				if !probe.Usable {
+					// Declines are logged only when the reason changes, since this runs
+					// every 15s and an edge can be down for a long time. The transition is
+					// the informative part.
+					if probe.Reason() != lastDeclineReason {
+						lastDeclineReason = probe.Reason()
+						e.LogEvent("info", "failback_declined", map[string]any{
+							"region":        primaryRegion,
+							"url":           primaryServerURL,
+							"reason":        probe.Reason(),
+							"status_code":   probe.StatusCode,
+							"control_plane": probe.ControlPlane,
+							"body":          probe.Body,
+						})
 					}
-					return
+					continue
 				}
+				lastDeclineReason = ""
+
+				// Always recorded: a failback is rare, and this is the decision that
+				// needs explaining when one turns out to have been wrong.
+				e.LogEvent("info", "failback_probe", map[string]any{
+					"region":        primaryRegion,
+					"url":           primaryServerURL,
+					"reason":        probe.Reason(),
+					"status_code":   probe.StatusCode,
+					"control_plane": probe.ControlPlane,
+					"body":          probe.Body,
+				})
+
+				slog.Info(fmt.Sprintf("[Client] Primary region '%s' (%s) reports %s. Initiating automated failback...", primaryRegion, primaryServerURL, probe.Reason()))
+				e.mu.Lock()
+				e.IsFailback = true
+				e.mu.Unlock()
+				if cancel != nil {
+					cancel()
+				}
+				return
 			}
 		}
 	}()

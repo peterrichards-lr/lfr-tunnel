@@ -1,5 +1,17 @@
 [
   {
+    "version": "v1.46.0",
+    "release_date": "2026-08-21",
+    "features": [
+      "Failover That Recovers On Its Own: A brief edge outage now causes one clean switch instead of the client bouncing between regions. The client no longer returns to an edge that cannot actually carry your tunnel, edges report honestly whether they can reach the control plane, and if a session is lost the client re-registers within seconds rather than sitting with a dead tunnel until you restart it.",
+      "Fixed: Tunnels Left Serving Errors After A Region Switch. Cleaning up an abandoned session could remove the routing for the session that replaced it, leaving a connected tunnel whose public URL returned 502 indefinitely. This was the single biggest cause of a tunnel appearing to survive a failover while serving nothing.",
+      "Better Region Selection: If an edge is unavailable when you start the client -- during a scheduled shutdown, for instance -- that choice is no longer locked in for 24 hours. The client re-checks shortly afterwards and moves to the nearer edge once it returns, and the startup log now names any region that did not respond.",
+      "One Domain Per Tunnel: Starting a tunnel without naming a domain no longer registers it on every configured domain at once, which previously consumed several subdomain reservations for a single tunnel.",
+      "Tidier Multi-Port URLs: Additional ports now use a single dash, so a second port on 'alpha' is alpha-8081 rather than alpha--8081. If you expose more than one port, your public URLs change with this release -- update any bookmarks.",
+      "Security: Approving a registration now requires a deliberate confirmation rather than simply opening the link, so a link preview or crawler can no longer approve someone. The local Inspector rejects requests driven from other websites, closing a route by which a page you visited could change your tunnel's settings."
+    ]
+  },
+  {
     "version": "v1.45.0",
     "release_date": "2026-08-21",
     "features": [
@@ -33,14 +45,6 @@
     "features": [
       "Same-User Lease Eviction & Primary Domain Assignment: Updated Central Gateway CheckSubdomainForUser and Register to evict stale regional leases for the same user, ensuring primary .se domain is assigned to the new live tunnel connection during failover.",
       "Seamless Primary Subdomain Traffic Forwarding: Eliminates stale lease lockouts and 502 Bad Gateway responses when accessing primary subdomain URLs post-failover."
-    ]
-  },
-  {
-    "version": "v1.44.21",
-    "release_date": "2026-08-20",
-    "features": [
-      "Multi-Part Chisel Remote Authorization Regex: Updated Gateway allowedRemotes regex to accept multi-part client remote strings, eliminating Access Denied rejections during live region failover.",
-      "Un-mutated Registration Port Mappings: Preserved regPortMappings in main loop so server registration during failover receives original target ports, enabling full HTTP traffic forwarding."
     ]
   }
 ]

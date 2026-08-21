@@ -9,6 +9,7 @@ import (
 	"log"
 	"log/slog"
 	"net/http"
+	"net/url"
 	"os"
 	"os/signal"
 	"path/filepath"
@@ -412,7 +413,7 @@ func main() {
 				if werr := client.WriteState(subHost, state); werr != nil {
 					slog.Info(fmt.Sprintf("[Warning] Failed to update state file on %s: %v\n", what, werr))
 				}
-				cooldowns.clear(cfg.Region)
+				cooldowns.clear(cfg.ServerURL)
 			}
 
 			// Set when a failback attempt failed and put us back on the region we were
@@ -439,7 +440,7 @@ func main() {
 					"suppressed": failbackSuppression.String(),
 				})
 				engine.SuppressFailback(failbackSuppression)
-				cooldowns.exclude(cfg.Region, failbackSuppression)
+				cooldowns.exclude(cfg.ServerURL, failbackSuppression)
 				lastFailbackAt = time.Time{}
 			}
 
@@ -483,13 +484,15 @@ func main() {
 					slog.Info(line)
 				}
 				slog.Info(fmt.Sprintf("[Client] Staying on region '%s'; will retry the primary later.", fallbackRegion))
-				cooldowns.exclude(primaryRegion, regionFailoverCooldown)
+				cooldowns.exclude(primaryServerURL, regionFailoverCooldown)
 				cfg.Region, cfg.ServerURL = fallbackRegion, fallbackServerURL
 				failbackReturned = true
 			}
 
 			if len(cfg.Regions) > 0 {
 				failedRegion := cfg.Region
+				// Captured before rediscovery reassigns cfg.ServerURL.
+				failedURL := cfg.ServerURL
 				keepRegion := failbackReturned || leaseLost
 				if keepRegion {
 					// Nothing here failed, so no cooldown, no cache clear and no
@@ -509,7 +512,10 @@ func main() {
 					})
 					_ = client.ClearRegionCacheFile() //nolint:errcheck
 				}
-				excludeFailedRegion(cfg, primaryRegionsMap, failedRegion, keepRegion)
+				// Keyed on the URL, not the region name: the same gateway is advertised
+				// under several names, so excluding by name leaves it electable as its
+				// alias (issue #1166).
+				excludeFailedRegion(cfg, primaryRegionsMap, failedURL, keepRegion)
 
 				if newResp, ok := reregisterAcrossRegions(cfg, regPortMappings, sub, engine.AddedHeaders); ok {
 					applySession(newResp, "failover")
@@ -796,30 +802,35 @@ func centralControlPlaneURL(cfg *config.ClientConfig) string {
 // edge, and with only two regions configured the "everything excluded" fallback in
 // regionCooldowns.filter could then re-elect the primary whose failback had just
 // failed -- the loop #1121 exists to prevent (issue #1137).
-func excludeFailedRegion(cfg *config.ClientConfig, primaryRegions map[string]string, failedRegion string, afterFailback bool) {
+func excludeFailedRegion(cfg *config.ClientConfig, primaryRegions map[string]string, failedURL string, afterFailback bool) {
 	if afterFailback {
 		return
 	}
-	cooldowns.exclude(failedRegion, regionFailoverCooldown)
-	if discoveryURL := regionDiscoveryURL(cfg, primaryRegions, failedRegion); discoveryURL != "" {
+	cooldowns.exclude(failedURL, regionFailoverCooldown)
+	if discoveryURL := regionDiscoveryURL(cfg, primaryRegions, failedURL); discoveryURL != "" {
 		cfg.ServerURL = discoveryURL
 	}
 }
 
 // regionDiscoveryURL picks a host to fetch the region list from during failover, in
-// preference order: the central control plane, then any region other than the one that
+// preference order: the central control plane, then any gateway other than the one that
 // just failed. Returns "" when no better host than the current one is known.
-func regionDiscoveryURL(cfg *config.ClientConfig, primaryRegions map[string]string, failedRegion string) string {
-	failed := strings.ToLower(strings.TrimSpace(failedRegion))
+//
+// Compared on host rather than region name. Names are not unique per gateway -- 'central'
+// and 'eu' are the same host, as are 'in' and 'edge-in' -- so a name comparison happily
+// returned the failed gateway under its other name, which is the very host being
+// excluded (issue #1166).
+func regionDiscoveryURL(cfg *config.ClientConfig, primaryRegions map[string]string, failedURL string) string {
+	failedHost := gatewayHostKey(failedURL)
 	for _, regions := range []map[string]string{cfg.Regions, primaryRegions} {
-		if url, ok := regions["central"]; ok && url != "" && !strings.EqualFold("central", failed) {
-			return url
+		if u, ok := regions["central"]; ok && u != "" && gatewayHostKey(u) != failedHost {
+			return u
 		}
 	}
 	for _, regions := range []map[string]string{cfg.Regions, primaryRegions} {
-		for name, url := range regions {
-			if url != "" && strings.ToLower(name) != failed {
-				return url
+		for _, u := range regions {
+			if u != "" && gatewayHostKey(u) != failedHost {
+				return u
 			}
 		}
 	}
@@ -858,7 +869,7 @@ func reregisterAcrossRegions(cfg *config.ClientConfig, portMappings []client.Por
 		// Take this region out of the running and let the next pass elect a different
 		// one. Without the cooldown, resolveServerURL would re-elect the same fastest
 		// region every time and the retries would all hit the same broken gateway.
-		cooldowns.exclude(cfg.Region, regionFailoverCooldown)
+		cooldowns.exclude(cfg.ServerURL, regionFailoverCooldown)
 
 		if attempt < maxFailoverAttempts {
 			time.Sleep(backoff)
@@ -1320,8 +1331,37 @@ var (
 // be advertising a stale lease for this subdomain when we reconsider it.
 const regionFailoverCooldown = 90 * time.Second
 
-// cooldowns records regions that recently failed. Region exclusion cannot be done by
-// deleting from cfg.Regions, because resolveServerURL refreshes that map from the
+// gatewayHostKey reduces a gateway URL to the host that identifies it, so aliases collapse
+// onto one entry.
+//
+// The gateway advertises every region under more than one name -- 'central' and 'eu' are
+// both https://tunnel.lfr-demo.se, 'in' and 'edge-in' are both the Mumbai edge. Keying
+// anything on the region *name* therefore treats one gateway as several places: a cooldown
+// on 'in' left 'edge-in' electable, and a failover from 'in' to 'eu' and then to 'central'
+// looked like two moves while never leaving the same host (issue #1166).
+func gatewayHostKey(rawURL string) string {
+	trimmed := strings.TrimSpace(rawURL)
+	if trimmed == "" {
+		return ""
+	}
+	u, err := url.Parse(strings.TrimRight(trimmed, "/"))
+	if err != nil || u.Hostname() == "" {
+		return strings.ToLower(trimmed)
+	}
+
+	host := strings.ToLower(u.Hostname())
+	// The port is part of the identity: two gateways can share a hostname and differ
+	// only by port, which is the normal shape for local and test deployments. A default
+	// port is dropped so https://x and https://x:443 are recognised as one gateway.
+	port := u.Port()
+	if port == "" || (u.Scheme == "https" && port == "443") || (u.Scheme == "http" && port == "80") {
+		return host
+	}
+	return host + ":" + port
+}
+
+// cooldowns records gateways that recently failed, keyed by host. Exclusion cannot be done
+// by deleting from cfg.Regions, because resolveServerURL refreshes that map from the
 // gateway on every call and would restore the entry -- see issue #1121.
 var cooldowns = &regionCooldowns{until: make(map[string]time.Time)}
 
@@ -1330,30 +1370,33 @@ type regionCooldowns struct {
 	until map[string]time.Time
 }
 
-// exclude puts a region into cooldown for d.
-func (c *regionCooldowns) exclude(region string, d time.Duration) {
-	if region == "" {
+// exclude puts the gateway at serverURL into cooldown for d, covering every region name
+// that resolves to it.
+func (c *regionCooldowns) exclude(serverURL string, d time.Duration) {
+	host := gatewayHostKey(serverURL)
+	if host == "" {
 		return
 	}
 	c.mu.Lock()
 	defer c.mu.Unlock()
-	c.until[strings.ToLower(strings.TrimSpace(region))] = time.Now().Add(d)
+	c.until[host] = time.Now().Add(d)
 }
 
-// clear drops any cooldown on a region, used once we are successfully connected to it
+// clear drops any cooldown on a gateway, used once we are successfully connected to it
 // again so a later failure starts from a clean slate.
-func (c *regionCooldowns) clear(region string) {
-	if region == "" {
+func (c *regionCooldowns) clear(serverURL string) {
+	host := gatewayHostKey(serverURL)
+	if host == "" {
 		return
 	}
 	c.mu.Lock()
 	defer c.mu.Unlock()
-	delete(c.until, strings.ToLower(strings.TrimSpace(region)))
+	delete(c.until, host)
 }
 
-// filter returns regions with any region still in cooldown removed. If that would
-// leave nothing to connect to, the original map is returned unchanged: retrying a
-// region that recently failed is strictly better than having no gateway at all.
+// filter returns regions whose gateway is still in cooldown removed. If that would leave
+// nothing to connect to, the original map is returned unchanged: retrying a gateway that
+// recently failed is strictly better than having none at all.
 func (c *regionCooldowns) filter(regions map[string]string) map[string]string {
 	if len(regions) == 0 {
 		return regions
@@ -1363,14 +1406,15 @@ func (c *regionCooldowns) filter(regions map[string]string) map[string]string {
 
 	now := time.Now()
 	out := make(map[string]string, len(regions))
-	for name, url := range regions {
-		if deadline, ok := c.until[strings.ToLower(name)]; ok {
+	for name, regionURL := range regions {
+		host := gatewayHostKey(regionURL)
+		if deadline, ok := c.until[host]; ok {
 			if now.Before(deadline) {
 				continue
 			}
-			delete(c.until, strings.ToLower(name))
+			delete(c.until, host)
 		}
-		out[name] = url
+		out[name] = regionURL
 	}
 	if len(out) == 0 {
 		return regions
@@ -1464,11 +1508,46 @@ func fetchRemoteRegions(cfg *config.ClientConfig) {
 	}
 }
 
+// dedupeRegionsByHost collapses region names that resolve to the same gateway, keeping one
+// name per host.
+//
+// Which name survives is user-visible -- it becomes the region shown in the TUI and written
+// to the state file -- so the choice is deliberate rather than map-order luck: prefer the
+// shorter name, and the alphabetically earlier one to break ties. That keeps the familiar
+// 'in' and 'central' rather than 'edge-in' and 'eu'.
+func dedupeRegionsByHost(regions map[string]string) map[string]string {
+	if len(regions) < 2 {
+		return regions
+	}
+	best := make(map[string]string, len(regions)) // host -> chosen name
+	for name, regionURL := range regions {
+		host := gatewayHostKey(regionURL)
+		if host == "" {
+			continue
+		}
+		current, seen := best[host]
+		if !seen || len(name) < len(current) || (len(name) == len(current) && name < current) {
+			best[host] = name
+		}
+	}
+
+	out := make(map[string]string, len(best))
+	for _, name := range best {
+		out[name] = regions[name]
+	}
+	return out
+}
+
 // probeFastestRegion elects the lowest-RTT region and reports which regions did not
 // answer at all. The unreachable list matters: an election made while some regions were
 // down is provisional, and caching it for the full 24h strands the client on a worse
 // region long after the better one returns (issue #1148).
 func probeFastestRegion(regions map[string]string) (string, []string) {
+	// One probe per gateway, not per name. The gateway advertises each region twice
+	// ('in' and 'edge-in' are the same host), so probing by name doubled the health
+	// requests and ranked a host against itself on RTT noise (issue #1166).
+	regions = dedupeRegionsByHost(regions)
+
 	type probeResult struct {
 		region string
 		url    string

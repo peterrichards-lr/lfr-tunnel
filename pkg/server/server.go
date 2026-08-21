@@ -241,7 +241,13 @@ type Server struct {
 	edgeHealthMu      sync.RWMutex
 	outboundConnected bool
 	outboundMutex     sync.RWMutex
-	userCache         sync.Map // email -> *db.User cache to prevent SQLite read contention
+	// edgeControlConnected is an edge's own view of its control channel to central.
+	// /api/healthz reports it so a client can tell "this edge's HTTP is up" apart from
+	// "this edge can actually carry a session" -- during an outage on 2026-08-21 an edge
+	// answered healthz throughout while central considered it offline, and clients
+	// failed back onto it repeatedly (issue #1145).
+	edgeControlConnected atomic.Bool
+	userCache            sync.Map // email -> *db.User cache to prevent SQLite read contention
 	// httpServer and redirectSrv are assigned late in Start, from the goroutine that
 	// then blocks serving, and read by Stop from another goroutine. Guarded by
 	// httpServerMu: without it, publishing the *http.Server races Shutdown's writes to
@@ -1147,7 +1153,7 @@ func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		if r.Method == http.MethodGet && r.URL.Path == "/api/healthz" {
 			w.Header().Set("Content-Type", "application/json")
 			w.WriteHeader(http.StatusOK)
-			if _, err := w.Write([]byte(`{"status":"healthy"}`)); err != nil {
+			if _, err := w.Write(s.healthzPayload()); err != nil {
 				log.Printf("[Warning] Failed to write response: %v", err)
 			}
 			return
@@ -1726,6 +1732,16 @@ func (s *Server) handleTunnelStatus(w http.ResponseWriter, r *http.Request) {
 			http.Error(w, "region offline", http.StatusServiceUnavailable)
 			return
 		}
+	}
+
+	// A session this gateway itself reaped is definitively gone, and saying so lets the
+	// client re-register within a tick instead of heartbeating against nothing forever.
+	// Scoped to sessions *we* cleaned: the client reports to both its connected gateway
+	// and central, and central holds no lease for any edge-hosted session, so answering
+	// on "no lease" alone would fail over every edge client on every tick (issue #1146).
+	if s.registry.SessionWasCleaned(req.SessionToken) {
+		http.Error(w, "session no longer registered", http.StatusGone)
+		return
 	}
 
 	if s.registry.UpdateLeaseStatus(req.SessionToken, req.Status) {
@@ -5755,6 +5771,30 @@ func (s *Server) handleEdgeHealth(w http.ResponseWriter, r *http.Request) {
 		"edge_power_actions_enabled": s.provisionerClient != nil,
 	}
 	respondJSON(w, http.StatusOK, response)
+}
+
+// healthzPayload renders the /api/healthz body.
+//
+// The status code stays 200 unconditionally so existing consumers -- load balancers,
+// uptime monitoring -- are unaffected. What changes is that an edge now also reports
+// whether its control channel to central is up.
+//
+// Answering only "healthy" made this endpoint useless for the decision the client was
+// using it for. An edge whose control channel is down still serves HTTP perfectly well
+// but cannot carry a session: central reports its region offline and evicts anything that
+// lands there. The client failback prober, and probeFastestRegion at startup, both took a
+// 200 here as "usable" and elected it anyway (issue #1145).
+//
+// Central emits no control_plane field at all -- it has no upstream to be connected to --
+// and a client treats its absence as healthy, so older gateways keep working.
+func (s *Server) healthzPayload() []byte {
+	if s.cfg.ControlPlaneURL == "" {
+		return []byte(`{"status":"healthy"}`)
+	}
+	if s.edgeControlConnected.Load() {
+		return []byte(`{"status":"healthy","control_plane":"connected"}`)
+	}
+	return []byte(`{"status":"degraded","control_plane":"disconnected"}`)
 }
 
 // isValidCustomDomain validates a custom domain FQDN.

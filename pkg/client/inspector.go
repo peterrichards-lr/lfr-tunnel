@@ -11,7 +11,9 @@ import (
 	"log/slog"
 	"net"
 	"net/http"
+	"net/url"
 	"os"
+	"strconv"
 	"strings"
 	"time"
 )
@@ -504,14 +506,81 @@ func StartInspector(port int, engine *InterceptorEngine) (int, error) {
 		return 0, fmt.Errorf("failed to find free inspector port starting from %d: %w", port, err)
 	}
 
+	// The Host check only makes sense on a loopback bind; beyond that the legitimate
+	// Host is whatever the container or operator mapped.
+	loopbackOnly := isLoopbackHostname(bindIP)
+	if !loopbackOnly {
+		slog.Info(fmt.Sprintf("[Inspector] Warning: bound to %s, which is reachable beyond this machine. Cross-origin requests are still rejected, but anything that can reach this port can read captured traffic.", bindIP))
+	}
+	handler := guardLocalOnly(mux, actualPort, loopbackOnly)
+
 	go func() {
 		slog.Info(fmt.Sprintf("[Inspector] Local Dashboard running at http://%s:%d\n", bindIP, actualPort))
-		if err := http.Serve(listener, mux); err != nil && !strings.Contains(err.Error(), "use of closed network connection") {
+		if err := http.Serve(listener, handler); err != nil && !strings.Contains(err.Error(), "use of closed network connection") {
 			slog.Info(fmt.Sprintf("[Inspector] Failed to serve: %v", err))
 		}
 	}()
 
 	return actualPort, nil
+}
+
+// isLoopbackHostname reports whether a hostname refers to this machine.
+func isLoopbackHostname(host string) bool {
+	switch strings.ToLower(host) {
+	case "localhost", "127.0.0.1", "::1", "[::1]":
+		return true
+	}
+	if ip := net.ParseIP(strings.Trim(host, "[]")); ip != nil {
+		return ip.IsLoopback()
+	}
+	return false
+}
+
+// isOwnOrigin reports whether an Origin header names this Inspector.
+func isOwnOrigin(origin string, port int) bool {
+	u, err := url.Parse(origin)
+	if err != nil || u.Host == "" {
+		return false
+	}
+	hostname := u.Hostname()
+	if !isLoopbackHostname(hostname) {
+		return false
+	}
+	return u.Port() == strconv.Itoa(port)
+}
+
+// guardLocalOnly rejects requests a browser on another site could have driven.
+//
+// The Inspector binds loopback, which protects it from the network but not from the
+// browser: localhost is not a trust boundary a browser enforces, so any page a developer
+// visits can issue cross-origin requests at a known fixed port. Five of these endpoints
+// mutate live tunnel state, and CORS blocks reading the response but not the side effect.
+// Reading the disclosing ones needs DNS rebinding on top, which the Host check defeats
+// (issue #1138).
+//
+// Requests with no Origin at all -- curl, scripts, the client's own tooling -- are
+// untouched, because they are not browser-driven.
+//
+// hostCheck is disabled when the Inspector is bound beyond loopback, since the legitimate
+// Host is then whatever the container or operator mapped and cannot be predicted.
+func guardLocalOnly(next http.Handler, port int, hostCheck bool) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if origin := r.Header.Get("Origin"); origin != "" && !isOwnOrigin(origin, port) {
+			http.Error(w, "cross-origin requests are not accepted", http.StatusForbidden)
+			return
+		}
+		if hostCheck {
+			hostname := r.Host
+			if h, _, err := net.SplitHostPort(r.Host); err == nil {
+				hostname = h
+			}
+			if !isLoopbackHostname(hostname) {
+				http.Error(w, "unexpected Host header", http.StatusForbidden)
+				return
+			}
+		}
+		next.ServeHTTP(w, r)
+	})
 }
 
 // IsDocker checks if the application is running inside a Docker container.

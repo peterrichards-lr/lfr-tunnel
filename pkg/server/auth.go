@@ -86,16 +86,53 @@ type Registry struct {
 	usedPorts      map[int]bool
 	chiselServer   *chserver.Server
 	OnLeaseCleanup func(*TunnelLease)
+
+	// cleanedSessions records tokens this gateway has reaped, so a client still
+	// heartbeating against a session we destroyed can be told so explicitly rather
+	// than left to infer it. Bounded by pruning on insert (issue #1146).
+	cleanedSessions map[string]time.Time
 }
+
+// cleanedSessionTTL is how long a reaped session token is remembered. It only has to
+// outlast the client's 5s heartbeat by a wide margin; past that the client has either
+// re-registered or gone away.
+const cleanedSessionTTL = 10 * time.Minute
 
 // NewRegistry initializes and returns a new Registry instance.
 func NewRegistry(chiselServer *chserver.Server) *Registry {
 	return &Registry{
-		leases:        make(map[string]*TunnelLease),
-		sessionLeases: make(map[string][]*TunnelLease),
-		usedPorts:     make(map[int]bool),
-		chiselServer:  chiselServer,
+		leases:          make(map[string]*TunnelLease),
+		sessionLeases:   make(map[string][]*TunnelLease),
+		usedPorts:       make(map[int]bool),
+		chiselServer:    chiselServer,
+		cleanedSessions: make(map[string]time.Time),
 	}
+}
+
+// SessionWasCleaned reports whether this gateway reaped the given session token. It is
+// deliberately specific to *this* gateway: a token it has never held is not evidence of
+// anything, because a client reports its status to both its connected gateway and
+// central, and central legitimately holds no lease for an edge-hosted session.
+func (r *Registry) SessionWasCleaned(sessionToken string) bool {
+	r.RLock()
+	defer r.RUnlock()
+	cleanedAt, ok := r.cleanedSessions[sessionToken]
+	return ok && time.Since(cleanedAt) < cleanedSessionTTL
+}
+
+// rememberCleanedSession records a reaped token and prunes expired entries. Caller holds
+// the write lock.
+func (r *Registry) rememberCleanedSession(sessionToken string) {
+	if r.cleanedSessions == nil {
+		r.cleanedSessions = make(map[string]time.Time)
+	}
+	now := time.Now()
+	for token, cleanedAt := range r.cleanedSessions {
+		if now.Sub(cleanedAt) >= cleanedSessionTTL {
+			delete(r.cleanedSessions, token)
+		}
+	}
+	r.cleanedSessions[sessionToken] = now
 }
 
 // generateSessionToken generates a secure random token.
@@ -432,6 +469,7 @@ func (r *Registry) CleanLease(sessionToken string) {
 	}
 
 	delete(r.sessionLeases, sessionToken)
+	r.rememberCleanedSession(sessionToken)
 	r.chiselServer.DeleteUser(sessionToken)
 }
 

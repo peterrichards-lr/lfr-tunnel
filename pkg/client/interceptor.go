@@ -546,7 +546,8 @@ func (e *InterceptorEngine) StartFailbackProber(ctx context.Context, cancel cont
 					}
 					continue
 				}
-				lastDeclineReason = ""
+				// No need to reset lastDeclineReason here -- a usable probe always ends
+				// this goroutine a few lines below, so nothing would ever read it again.
 
 				// Always recorded: a failback is rare, and this is the decision that
 				// needs explaining when one turns out to have been wrong.

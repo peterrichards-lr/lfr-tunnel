@@ -165,7 +165,8 @@ func (s *Server) handleEdgeControlWS(w http.ResponseWriter, r *http.Request) {
 		_ = oldConn.WriteJSON(ControlMessage{Type: "replaced", Reason: "new connection established"}) //nolint:errcheck
 		_ = oldConn.Close()                                                                           //nolint:errcheck
 	}
-	s.edgeClients[nodeID] = &safeConn{conn: conn}
+	registered := &safeConn{conn: conn}
+	s.edgeClients[nodeID] = registered
 	if version != "" {
 		s.edgeVersions[nodeID] = version
 	} else {
@@ -175,7 +176,11 @@ func (s *Server) handleEdgeControlWS(w http.ResponseWriter, r *http.Request) {
 	s.edgeClientsMu.Unlock()
 
 	slog.Info(fmt.Sprintf("[Edge WS] Edge node %s successfully authenticated.", nodeID))
-	_ = conn.WriteJSON(ControlMessage{Type: "auth_success"}) //nolint:errcheck
+	// Written through the registered safeConn, not the raw conn. The moment the lock
+	// above is released, broadcasts such as SendEdgeKickAll can take this node from
+	// s.edgeClients and write to it; going direct to conn here would bypass
+	// safeConn.mu and interleave two frames on the same socket (issue #1125).
+	_ = registered.WriteJSON(ControlMessage{Type: "auth_success"}) //nolint:errcheck
 
 	// pingStop signals the RTT-ping goroutine below to exit once the read pump's defer
 	// runs -- it has no other way to notice the connection is gone, since it only ever

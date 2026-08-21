@@ -89,6 +89,18 @@ type InterceptorEngine struct {
 	IsFailback            bool
 	FailbackProbeInterval time.Duration
 
+	// LeaseLost records that the connected gateway stopped holding a lease for this
+	// session while the tunnel itself was healthy. Distinct from an eviction: nothing
+	// is wrong with the region, so the recovery is to re-register, preferentially
+	// where we already were (issue #1146).
+	LeaseLost bool
+
+	// failbackSuppressedUntil holds the failback prober off. A failback that is
+	// immediately evicted means the primary answers /api/healthz but cannot actually
+	// carry the session, and retrying it every 15s produces the flapping loop that
+	// took a tunnel down on 2026-08-21 (issue #1145).
+	failbackSuppressedUntil time.Time
+
 	// centralURL is the control plane an edge session also reports status to. Set from
 	// configuration via SetCentralURL; empty means "report only to the connected
 	// gateway". Unexported so it cannot be read without the lock.
@@ -190,6 +202,62 @@ func (e *InterceptorEngine) SetCentralURL(u string) {
 	e.centralURL = u
 }
 
+// gatewayHasNoLease reports whether a 200 from /api/tunnel-status came from the branch
+// where the gateway holds no lease for this session, rather than the one where it updated
+// ours. handleTunnelStatus answers 200 either way and the two differ only by body: the
+// update path writes nothing, the no-lease path writes a JSON object.
+//
+// Anything unreadable, unparseable or empty is treated as "lease present". A false
+// negative merely delays recovery by one tick; a false positive would re-register a
+// perfectly healthy tunnel, so the doubt goes that way deliberately.
+func gatewayHasNoLease(resp *http.Response) bool {
+	if resp == nil || resp.Body == nil {
+		return false
+	}
+	body, err := io.ReadAll(io.LimitReader(resp.Body, 512))
+	if err != nil {
+		return false
+	}
+	body = bytes.TrimSpace(body)
+	if len(body) == 0 {
+		return false
+	}
+	var payload struct {
+		Status string `json:"status"`
+	}
+	if err := json.Unmarshal(body, &payload); err != nil {
+		return false
+	}
+	return payload.Status == "ok"
+}
+
+// ConsumeLeaseLost reports whether the connected gateway has stopped holding our lease,
+// clearing the flag as it does. Read-and-clear under one lock, for the same reason as
+// ConsumeFailback: the health-check goroutine sets it while the main loop reads it.
+func (e *InterceptorEngine) ConsumeLeaseLost() bool {
+	e.mu.Lock()
+	defer e.mu.Unlock()
+	lost := e.LeaseLost
+	e.LeaseLost = false
+	return lost
+}
+
+// SuppressFailback holds the failback prober off for d. Cooling the region down is not
+// enough on its own -- the prober targets the primary region directly and never consults
+// the cooldown set.
+func (e *InterceptorEngine) SuppressFailback(d time.Duration) {
+	e.mu.Lock()
+	defer e.mu.Unlock()
+	e.failbackSuppressedUntil = time.Now().Add(d)
+}
+
+// failbackSuppressed reports whether the prober is currently held off.
+func (e *InterceptorEngine) failbackSuppressed() bool {
+	e.mu.RLock()
+	defer e.mu.RUnlock()
+	return time.Now().Before(e.failbackSuppressedUntil)
+}
+
 // healthReportClient bounds the tunnel-status POST. http.DefaultClient has no timeout,
 // so the only thing that could release a hung request is this loop's own context -- and
 // that context is cancelled by this loop, on lease eviction. An edge that completes the
@@ -275,6 +343,34 @@ func (e *InterceptorEngine) StartHealthChecks(ctx context.Context, cancel contex
 								}
 								return
 							}
+
+							// A 200 does not by itself mean the session is still served.
+							// handleTunnelStatus answers 200 both when it updated our lease
+							// and when it holds no lease for us at all; the two differ only
+							// by body, the update path writing nothing and the no-lease path
+							// writing {"status":"ok"}. Central legitimately takes the
+							// no-lease path for every edge-hosted session, so only the
+							// gateway we are actually connected to can tell us anything.
+							//
+							// Without this the client is told "ok" indefinitely after its
+							// lease is swept, serves no traffic and never re-registers --
+							// a dead tunnel that only a restart recovers.
+							if pingURL == serverURL && resp.StatusCode == http.StatusOK && gatewayHasNoLease(resp) {
+								slog.Info("[Client] Gateway no longer holds a lease for this session. Re-registering...")
+								e.LogEvent("warn", "lease_missing", map[string]any{
+									"region":       region,
+									"reported_by":  pingURL,
+									"local_status": newStatus,
+								})
+								_ = resp.Body.Close() //nolint:errcheck
+								e.mu.Lock()
+								e.LeaseLost = true
+								e.mu.Unlock()
+								if cancel != nil {
+									cancel()
+								}
+								return
+							}
 							_ = resp.Body.Close() //nolint:errcheck
 						}
 					}
@@ -307,6 +403,14 @@ func (e *InterceptorEngine) StartFailbackProber(ctx context.Context, cancel cont
 				e.mu.RUnlock()
 
 				if strings.EqualFold(currentRegion, primaryRegion) {
+					continue
+				}
+
+				// A failback that was immediately evicted means the primary answers
+				// /api/healthz while being unable to carry the session -- its HTTP
+				// listener is up but its control channel to central is not. Retrying
+				// on the next tick just reproduces that, so back off (issue #1145).
+				if e.failbackSuppressed() {
 					continue
 				}
 

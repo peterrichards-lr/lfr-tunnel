@@ -13,6 +13,7 @@ import (
 	"os/signal"
 	"path/filepath"
 	"runtime"
+	"sort"
 	"strconv"
 	"strings"
 	"sync"
@@ -1233,7 +1234,19 @@ type RegionCacheData struct {
 	BestRegion string    `json:"best_region"`
 	ServerURL  string    `json:"server_url"`
 	Timestamp  time.Time `json:"timestamp"`
+	// Provisional marks an election made while one or more advertised regions did not
+	// answer. That choice is the best of what was reachable, not the best available, so
+	// it expires quickly rather than pinning the client for a day (issue #1148).
+	Provisional bool `json:"provisional,omitempty"`
 }
+
+// regionCacheTTL is how long a complete election is trusted.
+const regionCacheTTL = 24 * time.Hour
+
+// provisionalRegionCacheTTL is how long an election made with regions missing is trusted.
+// Short enough that a client started while an edge sat in its power-off window re-probes
+// within the working day instead of staying on a distant region until tomorrow.
+const provisionalRegionCacheTTL = 30 * time.Minute
 
 func getRegionCachePath() (string, error) {
 	home, err := os.UserHomeDir()
@@ -1260,22 +1273,26 @@ func loadRegionCache() *RegionCacheData {
 	if err := json.Unmarshal(data, &cache); err != nil {
 		return nil
 	}
-	// Expire cache after 24 hours
-	if time.Since(cache.Timestamp) > 24*time.Hour {
+	ttl := regionCacheTTL
+	if cache.Provisional {
+		ttl = provisionalRegionCacheTTL
+	}
+	if time.Since(cache.Timestamp) > ttl {
 		return nil
 	}
 	return &cache
 }
 
-func saveRegionCache(bestRegion, serverURL string) {
+func saveRegionCache(bestRegion, serverURL string, provisional bool) {
 	path, err := getRegionCachePath()
 	if err != nil {
 		return
 	}
 	cache := RegionCacheData{
-		BestRegion: bestRegion,
-		ServerURL:  serverURL,
-		Timestamp:  time.Now(),
+		BestRegion:  bestRegion,
+		ServerURL:   serverURL,
+		Timestamp:   time.Now(),
+		Provisional: provisional,
 	}
 	bytes, err := json.Marshal(cache)
 	if err == nil {
@@ -1383,12 +1400,17 @@ func resolveServerURL(cfg *config.ClientConfig, isExplicitServer bool) {
 			}
 
 			slog.Info(fmt.Sprintf("[Client] No region specified. Performing latency auto-probing across %d regions...", len(cfg.Regions)))
-			bestRegion := probeFastestRegion(cfg.Regions)
+			bestRegion, unreachable := probeFastestRegion(cfg.Regions)
 			if bestRegion != "" {
 				cfg.Region = bestRegion
 				cfg.ServerURL = cfg.Regions[bestRegion]
-				saveRegionCacheFn(bestRegion, cfg.ServerURL)
-				slog.Info(fmt.Sprintf("[Client] Auto-detected best region: '%s' -> %s (cached for 24h)", bestRegion, cfg.ServerURL))
+				saveRegionCacheFn(bestRegion, cfg.ServerURL, len(unreachable) > 0)
+				if len(unreachable) > 0 {
+					slog.Info(fmt.Sprintf("[Client] Auto-detected best reachable region: '%s' -> %s. %d region(s) did not answer (%s), so this choice is provisional and is re-probed within %s.",
+						bestRegion, cfg.ServerURL, len(unreachable), strings.Join(unreachable, ", "), provisionalRegionCacheTTL))
+				} else {
+					slog.Info(fmt.Sprintf("[Client] Auto-detected best region: '%s' -> %s (cached for %s)", bestRegion, cfg.ServerURL, regionCacheTTL))
+				}
 			}
 		}
 		return
@@ -1401,11 +1423,11 @@ func resolveServerURL(cfg *config.ClientConfig, isExplicitServer bool) {
 	} else {
 		if len(cfg.Regions) > 0 {
 			slog.Info(fmt.Sprintf("[Client] Specified region '%s' is currently unavailable or offline. Performing latency auto-probing across %d active regions...", regionLower, len(cfg.Regions)))
-			bestRegion := probeFastestRegion(cfg.Regions)
+			bestRegion, unreachable := probeFastestRegion(cfg.Regions)
 			if bestRegion != "" {
 				cfg.Region = bestRegion
 				cfg.ServerURL = cfg.Regions[bestRegion]
-				saveRegionCacheFn(bestRegion, cfg.ServerURL)
+				saveRegionCacheFn(bestRegion, cfg.ServerURL, len(unreachable) > 0)
 				slog.Info(fmt.Sprintf("[Client] Auto-selected next best online region: '%s' -> %s", bestRegion, cfg.ServerURL))
 				return
 			}
@@ -1437,7 +1459,11 @@ func fetchRemoteRegions(cfg *config.ClientConfig) {
 	}
 }
 
-func probeFastestRegion(regions map[string]string) string {
+// probeFastestRegion elects the lowest-RTT region and reports which regions did not
+// answer at all. The unreachable list matters: an election made while some regions were
+// down is provisional, and caching it for the full 24h strands the client on a worse
+// region long after the better one returns (issue #1148).
+func probeFastestRegion(regions map[string]string) (string, []string) {
 	type probeResult struct {
 		region string
 		url    string
@@ -1476,8 +1502,20 @@ func probeFastestRegion(regions map[string]string) string {
 		results = append(results, res)
 	}
 
+	answered := make(map[string]bool, len(results))
+	for _, r := range results {
+		answered[r.region] = true
+	}
+	var unreachable []string
+	for reg := range regions {
+		if !answered[reg] {
+			unreachable = append(unreachable, reg)
+		}
+	}
+	sort.Strings(unreachable)
+
 	if len(results) == 0 {
-		return ""
+		return "", unreachable
 	}
 
 	best := results[0]
@@ -1488,8 +1526,11 @@ func probeFastestRegion(regions map[string]string) string {
 			best = r
 		}
 	}
+	for _, reg := range unreachable {
+		fmt.Printf("  - %s: no response\n", reg)
+	}
 
-	return best.region
+	return best.region, unreachable
 }
 
 func rewriteRemotes(regResp *client.RegisterResponse, portMap map[int]int) {

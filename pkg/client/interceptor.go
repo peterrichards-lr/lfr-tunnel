@@ -94,6 +94,10 @@ type InterceptorEngine struct {
 	// gateway". Unexported so it cannot be read without the lock.
 	centralURL string
 
+	// sessionLog persists proxied requests and diagnostic events. Nil is valid and
+	// discards, so no call site needs a nil check.
+	sessionLog *SessionLogger
+
 	// Latency & Bandwidth Simulation Settings
 	Latency         time.Duration
 	BandwidthLimit  int64
@@ -246,6 +250,12 @@ func (e *InterceptorEngine) StartHealthChecks(ctx context.Context, cancel contex
 						if err == nil {
 							if resp.StatusCode == http.StatusNotFound || resp.StatusCode == http.StatusUnauthorized || resp.StatusCode == http.StatusGone || resp.StatusCode == http.StatusServiceUnavailable {
 								slog.Info(fmt.Sprintf("[Client] Control plane reported region offline or lease evicted (HTTP %d). Triggering dynamic region failover...", resp.StatusCode))
+								e.LogEvent("warn", "lease_evicted", map[string]any{
+									"region":       region,
+									"reported_by":  pingURL,
+									"status_code":  resp.StatusCode,
+									"local_status": newStatus,
+								})
 								_ = resp.Body.Close() //nolint:errcheck
 								if cancel != nil {
 									cancel()
@@ -314,14 +324,34 @@ func (e *InterceptorEngine) StartFailbackProber(ctx context.Context, cancel cont
 	}()
 }
 
-// AddRecord safely appends a record to the history buffer.
-func (e *InterceptorEngine) AddRecord(rec *RequestRecord) {
+// SetSessionLogger attaches the persistent traffic/diagnostic logs to the engine.
+func (e *InterceptorEngine) SetSessionLogger(l *SessionLogger) {
 	e.mu.Lock()
 	defer e.mu.Unlock()
+	e.sessionLog = l
+}
+
+// LogEvent records a diagnostic event to the persistent error log, if one is attached.
+func (e *InterceptorEngine) LogEvent(level, event string, fields map[string]any) {
+	e.mu.RLock()
+	logger := e.sessionLog
+	e.mu.RUnlock()
+	logger.Event(level, event, fields)
+}
+
+// AddRecord safely appends a record to the history buffer and persists it.
+func (e *InterceptorEngine) AddRecord(rec *RequestRecord) {
+	e.mu.Lock()
 	e.History = append([]*RequestRecord{rec}, e.History...) // Prepend
 	if len(e.History) > e.MaxHistory {
 		e.History = e.History[:e.MaxHistory]
 	}
+	logger, region := e.sessionLog, e.SelectedRegion
+	e.mu.Unlock()
+
+	// Written outside the lock: the in-memory ring is on the hot path of every proxied
+	// request and must not wait on disk I/O.
+	logger.Traffic(rec, region)
 }
 
 // ConsumeFailback reports whether the failback prober has asked for a switch to the

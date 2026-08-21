@@ -63,6 +63,7 @@ var (
 	checkVersionFlag   = flag.Bool("check-version", false, "Check server API for version requirements and print as JSON")
 	upgradeFlag        = flag.Bool("upgrade", false, "Self-upgrade client to the latest release")
 	noTUI              = flag.Bool("no-tui", false, "Disable interactive terminal dashboard UI")
+	logBodies          = flag.Bool("log-bodies", false, "Also record request/response bodies in the traffic log (may contain tokens and customer data)")
 	passcode           = flag.String("passcode", "", "Passcode to protect the public tunnel URLs")
 	whitelistIP        = flag.String("whitelist-ip", "", "Comma-separated IP addresses allowed to access the tunnel")
 	region             = flag.String("region", "", "Gateway region to target (e.g. eu, us-east, us-west, latam, apac)")
@@ -174,6 +175,25 @@ func main() {
 	engine.ServerURL = cfg.ServerURL
 	engine.SelectedRegion = cfg.Region
 	engine.SetCentralURL(centralControlPlaneURL(cfg))
+
+	// Persistent traffic and diagnostic logs, for both foreground and background runs.
+	// A failure to open them must not stop the tunnel starting, so it is reported and
+	// the engine simply carries a nil logger, which discards.
+	if logDir, lerr := client.LogDir(); lerr != nil {
+		slog.Info(fmt.Sprintf("[Warning] Could not resolve the log directory, continuing without persistent logs: %v", lerr))
+	} else if sessionLog, lerr := client.NewSessionLogger(logDir, sub, *logBodies); lerr != nil {
+		slog.Info(fmt.Sprintf("[Warning] Could not open the client logs, continuing without them: %v", lerr))
+	} else {
+		engine.SetSessionLogger(sessionLog)
+		defer sessionLog.Close() //nolint:errcheck
+		sessionLog.Event("info", "session_start", map[string]any{
+			"version":    config.Version,
+			"subdomain":  sub,
+			"region":     cfg.Region,
+			"server_url": cfg.ServerURL,
+			"log_bodies": *logBodies,
+		})
+	}
 	engine.Passcode = cfg.Passcode
 	engine.WhitelistIPs = cfg.WhitelistIPs
 	engine.PreserveHost = cfg.PreserveHost
@@ -404,6 +424,10 @@ func main() {
 				if failure == nil {
 					applySession(newResp, "failback")
 					slog.Info(fmt.Sprintf("[Client] Successfully failed back to primary region '%s' (%s)", cfg.Region, cfg.ServerURL))
+					engine.LogEvent("info", "failback", map[string]any{
+						"from": fallbackRegion,
+						"to":   cfg.Region,
+					})
 					continue
 				}
 
@@ -412,6 +436,11 @@ func main() {
 				// immediately, restore the region we were working on, and let the
 				// failover path below re-establish the tunnel.
 				slog.Info(fmt.Sprintf("[Warning] Failback to primary region '%s' failed: %v", primaryRegion, failure.err))
+				engine.LogEvent("warn", "failback_failed", map[string]any{
+					"primary_region": primaryRegion,
+					"staying_on":     fallbackRegion,
+					"error":          failure.err.Error(),
+				})
 				for _, line := range failure.advice {
 					slog.Info(line)
 				}
@@ -423,6 +452,15 @@ func main() {
 			if len(cfg.Regions) > 0 {
 				failedRegion := cfg.Region
 				slog.Info(fmt.Sprintf("[Client] Connection to region '%s' (%s) lost. Performing dynamic region failover...", failedRegion, cfg.ServerURL))
+				failoverCause := "connection closed"
+				if err != nil {
+					failoverCause = err.Error()
+				}
+				engine.LogEvent("warn", "failover_started", map[string]any{
+					"failed_region": failedRegion,
+					"failed_url":    cfg.ServerURL,
+					"cause":         failoverCause,
+				})
 				_ = client.ClearRegionCacheFile() //nolint:errcheck
 
 				// Hold the failed region out of the running. This has to be a cooldown
@@ -440,10 +478,19 @@ func main() {
 				if newResp, ok := reregisterAcrossRegions(cfg, regPortMappings, sub, engine.AddedHeaders); ok {
 					applySession(newResp, "failover")
 					slog.Info(fmt.Sprintf("[Client] Successfully failed over to region '%s' (%s)", cfg.Region, cfg.ServerURL))
+					engine.LogEvent("info", "failover", map[string]any{
+						"from": failedRegion,
+						"to":   cfg.Region,
+						"url":  cfg.ServerURL,
+					})
 					continue
 				}
 
 				slog.Info("[Error] Failover exhausted every candidate region without a successful registration.")
+				engine.LogEvent("error", "failover_exhausted", map[string]any{
+					"failed_region": failedRegion,
+					"attempts":      maxFailoverAttempts,
+				})
 				break
 			}
 		}
@@ -920,15 +967,15 @@ func handleBackground(sub string) {
 		log.Fatalf("[Client] A background tunnel for subdomain '%s' is already running (PID: %d). Stop it first using: lfr-tunnel -stop -subdomain %s\n", sub, pid, sub)
 	}
 
-	home, err := os.UserHomeDir()
+	logPath, err := client.ClientLogPath(sub)
 	if err != nil {
-		log.Fatalf("[Client] Failed to resolve home directory: %v\n", err)
+		log.Fatalf("[Client] Failed to resolve the log directory: %v\n", err)
 	}
-	logDir := filepath.Join(home, ".lfr-tunnel")
-	_ = os.MkdirAll(logDir, 0700) //nolint:errcheck
-	logPath := filepath.Join(logDir, fmt.Sprintf("client-%s.log", sub))
 
-	logFile, err := os.OpenFile(logPath, os.O_CREATE|os.O_WRONLY|os.O_TRUNC, 0600)
+	// Rotated rather than truncated: this previously opened O_TRUNC, so every restart
+	// destroyed the log of the run that had just ended -- the one worth reading after
+	// an unexplained exit.
+	logFile, err := client.OpenRotatingFile(logPath, client.DefaultLogMaxBytes, client.DefaultLogGenerations)
 	if err != nil {
 		log.Fatalf("[Client] Failed to create log file: %v\n", err)
 	}

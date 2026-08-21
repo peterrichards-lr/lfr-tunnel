@@ -1255,10 +1255,19 @@ func (s *Server) handlePromoteReservation(w http.ResponseWriter, r *http.Request
 		return
 	}
 
+	// Fall back to this gateway's own first configured domain rather than a hardcoded
+	// one, so a self-hosted deployment never promotes a reservation onto someone
+	// else's domain if FullHost is malformed.
 	parts := strings.SplitN(activeLease.FullHost, ".", 2)
-	domain := "lfr-demo.se"
+	domain := ""
 	if len(parts) == 2 {
 		domain = parts[1]
+	} else if len(s.cfg.Domains) > 0 {
+		domain = s.cfg.Domains[0]
+	}
+	if domain == "" {
+		http.Error(w, `{"error":"Unable to determine the domain for this subdomain prefix"}`, http.StatusBadRequest)
+		return
 	}
 
 	res, err := s.portalService.PromoteReservation(user, req.Subdomain, domain, getClientIP(r))

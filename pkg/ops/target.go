@@ -25,6 +25,15 @@ type DeployTarget struct {
 	// previous power state afterward (#1050). Empty means "don't touch EC2 power state
 	// at all", which is the same as before this field existed.
 	AWSRegion string
+	// InstanceTag optionally narrows the instance lookup to resources carrying a given
+	// tag, written "Key=Value" (e.g. "Project=my-tunnel"). Empty means match on address
+	// alone.
+	//
+	// Operator-supplied on purpose. A tag value is deployment-specific by definition, and
+	// this file carries no defaults of its own (#1015/#1016) -- briefly hardcoding one
+	// project's tag here put a single deployment's identity into MIT, provider-neutral
+	// code that other people are meant to run.
+	InstanceTag string
 }
 
 // NginxTarget is the fully-resolved input for reconcile-nginx beyond the DeployTarget
@@ -43,6 +52,7 @@ type opsConfigTarget struct {
 		Host         string `yaml:"host"`
 		IdentityFile string `yaml:"identity_file"`
 		AWSRegion    string `yaml:"aws_region"`
+		InstanceTag  string `yaml:"instance_tag"`
 	} `yaml:"central"`
 	Nginx struct {
 		Domains []string `yaml:"domains"`
@@ -186,6 +196,12 @@ func ResolveDeployTargetWithRegion(flagUser, flagHost, flagIdentity, flagAWSRegi
 		if target.AWSRegion == "" {
 			target.AWSRegion = cfg.Central.AWSRegion
 		}
+		if target.InstanceTag == "" {
+			target.InstanceTag = cfg.Central.InstanceTag
+		}
+	}
+	if target.InstanceTag == "" {
+		target.InstanceTag = os.Getenv("LFT_INSTANCE_TAG")
 	}
 
 	var missing []string

@@ -1001,6 +1001,15 @@ func saveRegionCache(bestRegion, serverURL string) {
 	}
 }
 
+// Indirection seams for resolveServerURL's two side-effecting dependencies: a live
+// HTTP call to the gateway, and a write to the user's real home directory. Tests
+// swap these so region resolution can be exercised without production being reachable
+// (or being mutated). Production always runs the real implementations.
+var (
+	fetchRemoteRegionsFn = fetchRemoteRegions
+	saveRegionCacheFn    = saveRegionCache
+)
+
 func resolveServerURL(cfg *config.ClientConfig, isExplicitServer bool) {
 	if *refreshRegion {
 		if path, err := getRegionCachePath(); err == nil {
@@ -1008,7 +1017,7 @@ func resolveServerURL(cfg *config.ClientConfig, isExplicitServer bool) {
 		}
 	}
 
-	fetchRemoteRegions(cfg)
+	fetchRemoteRegionsFn(cfg)
 
 	if cfg.Region == "" {
 		if !isExplicitServer && len(cfg.Regions) > 0 {
@@ -1028,7 +1037,7 @@ func resolveServerURL(cfg *config.ClientConfig, isExplicitServer bool) {
 			if bestRegion != "" {
 				cfg.Region = bestRegion
 				cfg.ServerURL = cfg.Regions[bestRegion]
-				saveRegionCache(bestRegion, cfg.ServerURL)
+				saveRegionCacheFn(bestRegion, cfg.ServerURL)
 				slog.Info(fmt.Sprintf("[Client] Auto-detected best region: '%s' -> %s (cached for 24h)", bestRegion, cfg.ServerURL))
 			}
 		}
@@ -1046,7 +1055,7 @@ func resolveServerURL(cfg *config.ClientConfig, isExplicitServer bool) {
 			if bestRegion != "" {
 				cfg.Region = bestRegion
 				cfg.ServerURL = cfg.Regions[bestRegion]
-				saveRegionCache(bestRegion, cfg.ServerURL)
+				saveRegionCacheFn(bestRegion, cfg.ServerURL)
 				slog.Info(fmt.Sprintf("[Client] Auto-selected next best online region: '%s' -> %s", bestRegion, cfg.ServerURL))
 				return
 			}

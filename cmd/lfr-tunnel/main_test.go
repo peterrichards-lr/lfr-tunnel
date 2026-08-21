@@ -3,6 +3,8 @@ package main
 import (
 	"lfr-tunnel/pkg/client"
 	"lfr-tunnel/pkg/config"
+	"net/http"
+	"net/http/httptest"
 	"os"
 	"os/exec"
 	"testing"
@@ -75,24 +77,64 @@ func TestProbeFastestRegion(t *testing.T) {
 	_ = probeFastestRegion(regions) //nolint:errcheck
 }
 
+// newHealthyEdge returns a stand-in edge node that answers probeFastestRegion's
+// health check, so region election is decided locally rather than by whichever
+// real edges happen to be powered up.
+func newHealthyEdge(t *testing.T) *httptest.Server {
+	t.Helper()
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path == "/api/healthz" {
+			w.WriteHeader(http.StatusOK)
+			return
+		}
+		w.WriteHeader(http.StatusNotFound)
+	}))
+	t.Cleanup(srv.Close)
+	return srv
+}
+
 func TestResolveServerURL_OfflineRegionFallback(t *testing.T) {
+	usSrv := newHealthyEdge(t)
+	euSrv := newHealthyEdge(t)
+
+	// resolveServerURL otherwise reaches production: fetchRemoteRegions replaces
+	// cfg.Regions with the live region list (which would put 'apac' back and defeat
+	// the fixture), and saveRegionCache writes to the real ~/.lfr-tunnel. Stub both.
+	origFetch, origSave := fetchRemoteRegionsFn, saveRegionCacheFn
+	defer func() { fetchRemoteRegionsFn, saveRegionCacheFn = origFetch, origSave }()
+	fetchRemoteRegionsFn = func(*config.ClientConfig) {}
+	var cachedRegion, cachedURL string
+	saveRegionCacheFn = func(bestRegion, serverURL string) {
+		cachedRegion, cachedURL = bestRegion, serverURL
+	}
+
 	cfg := &config.ClientConfig{
 		Region:    "apac",
-		ServerURL: "https://tunnel.lfr-demo.se",
+		ServerURL: "https://tunnel.invalid",
 		Regions: map[string]string{
-			"us": "https://aws-edge-us.lfr-demo.se",
-			"eu": "https://tunnel.lfr-demo.se",
+			"us": usSrv.URL,
+			"eu": euSrv.URL,
 		},
 	}
 
 	resolveServerURL(cfg, false)
 
-	// Since apac is not in Regions, it should failover to an available region (us or eu)
+	// 'apac' is absent from Regions, standing in for an offline edge, so resolution
+	// must fall back to one of the two reachable regions.
 	if cfg.Region == "apac" {
-		t.Errorf("Expected region failover from offline 'apac', but cfg.Region was still 'apac'")
+		t.Fatalf("Expected region failover from offline 'apac', but cfg.Region was still 'apac'")
 	}
-	if cfg.ServerURL == "" {
-		t.Errorf("Expected non-empty ServerURL after failover")
+	if cfg.Region != "us" && cfg.Region != "eu" {
+		t.Fatalf("Expected failover to 'us' or 'eu', got %q", cfg.Region)
+	}
+	if want := cfg.Regions[cfg.Region]; cfg.ServerURL != want {
+		t.Errorf("Expected ServerURL %q for elected region %q, got %q", want, cfg.Region, cfg.ServerURL)
+	}
+	// The elected region must also be the one persisted, or the next client start
+	// reads back a region that disagrees with the one actually in use.
+	if cachedRegion != cfg.Region || cachedURL != cfg.ServerURL {
+		t.Errorf("Expected region cache to record %q/%q, got %q/%q",
+			cfg.Region, cfg.ServerURL, cachedRegion, cachedURL)
 	}
 }
 

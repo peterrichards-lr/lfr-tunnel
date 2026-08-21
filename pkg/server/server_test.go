@@ -2971,7 +2971,10 @@ func TestServer_SubdomainExpirationNotifications(t *testing.T) {
 		t.Errorf("expected ExpiryWarningSent to be 2, got %d", updated.ExpiryWarningSent)
 	}
 
-	// 4. Test notification prefs disabling email alerts
+	// 4. The expiry warning is transactional: it is the only notice before the
+	// reservation lapses and the subdomain is released, so muting notifications must not
+	// suppress it. Muting it would not spare the user noise, it would lose them the
+	// subdomain (#1135).
 	u.NotificationPrefs = "disabled"
 	if err := srv.db.UpdateUser(u); err != nil {
 		t.Fatalf("failed to update user notifications: %v", err)
@@ -2986,8 +2989,8 @@ func TestServer_SubdomainExpirationNotifications(t *testing.T) {
 	}
 
 	srv.checkExpiringReservations()
-	if mockMail.lastSentTo() != "" {
-		t.Errorf("expected no email when NotificationPrefs is disabled, but got email to %s", mockMail.lastSentTo())
+	if mockMail.lastSentTo() != u.Email {
+		t.Errorf("expected the expiry warning to be delivered despite disabled notifications, got %q", mockMail.lastSentTo())
 	}
 }
 

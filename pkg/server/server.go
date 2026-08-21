@@ -2184,20 +2184,26 @@ func (s *Server) handleCompleteSetup(w http.ResponseWriter, r *http.Request) {
 	s.notifications.SendAdminAlert("alert_notify_registration", "LFR Tunnel Alert: New User Registration", body)
 	s.webhooks.SendRegistrationAlert(user.Email, "Pending admin approval")
 
-	// Send approval email to admin
+	// Send approval email to admin.
+	//
+	// Transactional: this mail carries the only approve link there is, so suppressing it
+	// does not spare the admin noise -- it strands the applicant with no route to
+	// approval and no indication anything is wrong. An admin who unsubscribed (including
+	// via the one-click footer, which sets NotificationPrefs to "disabled") silently
+	// broke registration for every subsequent user. The sibling path in handleVerifyEmail
+	// always sent it; this one did not (issue #1135). The routine "new registration"
+	// alert above stays a notification and still honours the preference.
 	if s.notifications != nil && s.notifications.Sender() != nil && s.cfg.AdminNotificationEmail != "" {
-		sendAdminEmail := true
 		adminLang := "en"
+		var adminUser *db.User
 		if s.db != nil {
-			if adminUser, err := s.db.GetUserByEmail(s.cfg.AdminNotificationEmail); err == nil && adminUser != nil {
-				adminLang = adminUser.LanguagePreference
-				if adminUser.NotificationPrefs == "disabled" {
-					sendAdminEmail = false
-				}
+			if u, err := s.db.GetUserByEmail(s.cfg.AdminNotificationEmail); err == nil && u != nil {
+				adminUser = u
+				adminLang = u.LanguagePreference
 			}
 		}
 
-		if sendAdminEmail {
+		if shouldSendTo(adminUser, emailTransactional) {
 			subject := s.GetTranslation(adminLang, "registration_pending_subject")
 			scheme := "http"
 			if s.cfg.SSLCertFile != "" {

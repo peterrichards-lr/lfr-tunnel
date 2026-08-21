@@ -786,8 +786,9 @@ func (s *Server) getPortalBaseURL(r *http.Request) string {
 	return fmt.Sprintf("%s://%s", scheme, host)
 }
 
+// Notification: confirms an outcome the user asked for and can see in the portal.
 func (s *Server) sendSubdomainReservedEmail(user *db.User, subdomain, domain string, expiresAt *time.Time, r *http.Request) {
-	if s.notifications == nil || s.notifications.Sender() == nil || user.NotificationPrefs == "disabled" {
+	if s.notifications == nil || s.notifications.Sender() == nil || !shouldSendTo(user, emailNotification) {
 		return
 	}
 	lang := user.LanguagePreference
@@ -816,8 +817,9 @@ func (s *Server) sendSubdomainReservedEmail(user *db.User, subdomain, domain str
 	go func() { _ = s.notifications.Sender().Send(user.Email, subject, body, plain) }() //nolint:errcheck
 }
 
+// Notification: confirms an outcome the user asked for and can see in the portal.
 func (s *Server) sendExtensionApprovedEmail(user *db.User, subdomain, domain string, expiresAt *time.Time, r *http.Request) {
-	if s.notifications == nil || s.notifications.Sender() == nil || user.NotificationPrefs == "disabled" {
+	if s.notifications == nil || s.notifications.Sender() == nil || !shouldSendTo(user, emailNotification) {
 		return
 	}
 	lang := user.LanguagePreference
@@ -849,8 +851,10 @@ func (s *Server) sendExtensionApprovedEmail(user *db.User, subdomain, domain str
 	go func() { _ = s.notifications.Sender().Send(user.Email, subject, body, plain) }() //nolint:errcheck
 }
 
+// Transactional: the user's subdomain changed status without them asking. Silence here
+// means they discover it when a tunnel they rely on stops resolving as they expect.
 func (s *Server) sendSubdomainDemotedEmail(user *db.User, subdomain, domain string, expiresAt *time.Time, r *http.Request) {
-	if s.notifications == nil || s.notifications.Sender() == nil || user.NotificationPrefs == "disabled" {
+	if s.notifications == nil || s.notifications.Sender() == nil || !shouldSendTo(user, emailTransactional) {
 		return
 	}
 	lang := user.LanguagePreference

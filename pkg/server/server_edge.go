@@ -408,7 +408,10 @@ func (s *Server) checkExpiringReservations() {
 			continue
 		}
 
-		if user.NotificationPrefs == "disabled" {
+		// Transactional: this is the only warning before the reservation lapses and the
+		// subdomain is released. Muting it does not spare the user noise, it loses them
+		// the subdomain.
+		if !shouldSendTo(user, emailTransactional) {
 			continue
 		}
 

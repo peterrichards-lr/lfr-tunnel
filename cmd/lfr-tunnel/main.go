@@ -144,6 +144,7 @@ func main() {
 	}
 
 	// 3. Synchronous Server Compatibility and Maintenance Check
+	var latestVersion string
 	info, err := client.CheckServerCompatibility(cfg.ServerURL)
 	if err == nil && info != nil {
 		if info.MaintenanceMode == "true" {
@@ -157,8 +158,9 @@ func main() {
 				log.Fatalf("[Error] Your Liferay Tunnel client is too old to connect to the server. Minimum required version is %s.", info.MinVersion)
 			}
 			if client.CompareVersions(config.Version, info.LatestVersion) < 0 {
-				slog.Info(fmt.Sprintf("[Warning] A new version of Liferay Tunnel (%s) is available. You are running %s.", info.LatestVersion, config.Version))
+				slog.Info(fmt.Sprintf("[Warning] A new version of Liferay Tunnel (%s) is available. You are running %s. Run 'lfr-tunnel -upgrade' to update.", info.LatestVersion, config.Version))
 			}
+			latestVersion = info.LatestVersion
 		}
 	}
 
@@ -178,6 +180,7 @@ func main() {
 	engine.ServerURL = cfg.ServerURL
 	engine.SelectedRegion = cfg.Region
 	engine.SetCentralURL(centralControlPlaneURL(cfg))
+	engine.SetLatestVersion(latestVersion)
 
 	// Persistent traffic and diagnostic logs, for both foreground and background runs.
 	// A failure to open them must not stop the tunnel starting, so it is reported and
@@ -377,6 +380,10 @@ func main() {
 	if tuiEnabled {
 		cleanupTUI = client.StartTUIDashboard(ctx, engine, publicURLs)
 	}
+
+	// Bound to the outer ctx rather than a per-session one: this outlives failovers, and
+	// a client left running for days is exactly the case a startup-only check misses.
+	engine.StartVersionWatcher(ctx, cfg.ServerURL, 6*time.Hour)
 
 	for ctx.Err() == nil {
 		clientCtx, cancelClient := context.WithCancel(ctx)

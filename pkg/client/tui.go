@@ -9,6 +9,8 @@ import (
 	"net/url"
 	"os"
 	"strings"
+
+	"lfr-tunnel/pkg/config"
 	"sync"
 	"time"
 )
@@ -136,17 +138,31 @@ func render(engine *InterceptorEngine, publicURLs []string, systemLogs []string)
 	fmt.Print("\033[H")   // Cursor to home
 	fmt.Print("\033[36m") // Cyan
 	fmt.Printf("================================================================================%s\n", eol)
-	fmt.Print("  LIFERAY TUNNEL CLIENT                                            ")
+	// Title carries the running version. It lives in the header rather than the log box
+	// because a log line scrolls out of a five-line window within seconds, which is why
+	// the existing new-version notice was never seen (issue #1168).
+	title := "  LIFERAY TUNNEL CLIENT  " + config.Version
+	if newer := engine.NewerVersion(); newer != "" {
+		title += "  (update available: " + newer + ")"
+	}
 
-	// Colored Status Label
+	// Colored Status Label. The plain text is tracked separately because the coloured
+	// form carries ANSI escapes, which would corrupt any width calculation.
+	statusText := "OFFLINE"
 	statusLabel := "\033[31mOFFLINE\033[36m"
 	switch state {
 	case "connected":
-		statusLabel = "\033[32mCONNECTED\033[36m"
+		statusText, statusLabel = "CONNECTED", "\033[32mCONNECTED\033[36m"
 	case "connecting":
-		statusLabel = "\033[33mCONNECTING\033[36m"
+		statusText, statusLabel = "CONNECTING", "\033[33mCONNECTING\033[36m"
 	}
-	fmt.Printf("[%s]  %s\n", statusLabel, eol)
+
+	// Right-align the status marker on the same 80-column rule as the borders.
+	gap := 80 - runeLen(title) - runeLen(statusText) - 4
+	if gap < 1 {
+		gap = 1
+	}
+	fmt.Printf("%s%s[%s]  %s\n", title, strings.Repeat(" ", gap), statusLabel, eol)
 	fmt.Printf("================================================================================%s\n", eol)
 	fmt.Print("\033[0m") // Reset
 
@@ -245,6 +261,12 @@ func render(engine *InterceptorEngine, publicURLs []string, systemLogs []string)
 	}
 	fmt.Print("\033[0m") // Reset
 	fmt.Print(eol)       // Clear any leftover tail on whatever was the terminal's last-drawn line
+}
+
+// runeLen counts characters rather than bytes, so a multi-byte title still lines the
+// header up with the 80-column borders.
+func runeLen(s string) int {
+	return len([]rune(s))
 }
 
 // truncateRunes shortens s to at most maxLen characters, appending an ellipsis when it

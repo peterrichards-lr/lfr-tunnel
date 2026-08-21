@@ -627,6 +627,10 @@ func (s *Server) runEdgeControlChannel() {
 		}
 
 		slog.Info("[Edge Control] Successfully connected and authenticated with Control Plane.")
+		// From here until the read loop exits this edge can carry sessions. /api/healthz
+		// reports this so clients stop electing an edge whose HTTP is up but whose
+		// control channel is not (issue #1145).
+		s.edgeControlConnected.Store(true)
 
 		// The read loop below resets its 75s read deadline before each blocking read,
 		// but that only actually gets hit once a real ControlMessage arrives -- and the
@@ -765,6 +769,7 @@ func (s *Server) runEdgeControlChannel() {
 			}
 		}
 
+		s.edgeControlConnected.Store(false)
 		// Release both goroutines, then close: the reader may be parked in ReadJSON,
 		// which only Close unblocks.
 		close(connDone)

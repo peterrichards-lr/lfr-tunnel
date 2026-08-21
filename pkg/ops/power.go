@@ -69,7 +69,7 @@ func ensureInstanceRunning(host, region, instanceTag string) (restore func(), er
 			// an instance and stopping it can outlive the credential -- which is exactly
 			// how a node was left running overnight after a deploy to Tokyo (#1183).
 			// Confirm the state actually reached.
-			_, state, checkErr := describeInstanceForHost(region, ip)
+			_, state, checkErr := describeInstanceForHost(region, ip, instanceTag)
 			switch {
 			case checkErr == nil && (state == "stopping" || state == "stopped"):
 				fmt.Printf("EC2 instance %s (%s) is %s.\n", instanceID, host, state)

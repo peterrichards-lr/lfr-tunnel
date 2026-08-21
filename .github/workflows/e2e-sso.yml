@@ -31,14 +31,3 @@ jobs:
 
       - name: Run SSO E2E Integration Test
         run: ./tests/e2e/run-sso.sh
-
-      - name: Sleep remote target node (mandatory cleanup)
-        if: always()
-        run: |
-          TARGET_NODE="${{ inputs.node || vars.LDM_NODE_TARGET || env.LDM_NODE_TARGET || 'aws-1' }}"
-          if [ "$TARGET_NODE" != "local" ] && [ -n "$TARGET_NODE" ]; then
-            ./scripts/node_power.sh sleep "$TARGET_NODE" || true
-          fi
-        env:
-          AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
-          AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}

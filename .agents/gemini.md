@@ -215,8 +215,8 @@ The solution will consist of:
   - [x] Sub-Issue #1085: Client WebSocket Shutdown Notification Handling & Auto-Failover
   - [x] Sub-Issue #1086: Client Lifecycle Hook Execution Engine
   - [x] Sub-Issue #1087: Integration Tests & Documentation for Client Failover Hooks
-- [ ] Fix Windows `LFT_TEST_DIR` backslash escaping in Makefile via `$(subst \,/,$(TEMP))`
-- [ ] Implement Standardized Target Node Power & Cost Management Integration (manage_target_nodes.py, node_power.sh, node-power-manager.yml)
+- [x] Fix Windows `LFT_TEST_DIR` backslash escaping in Makefile via `$(subst \,/,$(TEMP))` — landed in `Makefile:7`
+- [x] Remove LDM dev-box power tooling from this repo (#1117) — it targeted `aws-1`/`aws-2`, which nothing in lfr-tunnel uses; belongs in `liferay-docker-manager`
 
 
 
@@ -1060,5 +1060,5 @@ The solution will consist of:
 
 <!-- markdownlint-disable MD049 -->
 ---
-*Last Updated: 2026-08-20* | *Last Reviewed: 2026-08-20*
+*Last Updated: 2026-08-21* | *Last Reviewed: 2026-08-21*
 

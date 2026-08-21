@@ -364,6 +364,10 @@ func main() {
 	engine.PrimaryRegion = primaryRegion
 	engine.PrimaryServerURL = primaryServerURL
 
+	// When the last failback completed, so an eviction shortly afterwards can be
+	// recognised as the primary refusing the session rather than a fresh fault.
+	var lastFailbackAt time.Time
+
 	// Check if TUI is enabled and if stdout/stderr are terminals (not redirected, not backgrounded)
 	tuiEnabled := !*noTUI && !*background && isatty.IsTerminal(os.Stdout.Fd()) && isatty.IsTerminal(os.Stderr.Fd())
 	var cleanupTUI func()
@@ -416,6 +420,28 @@ func main() {
 			// below must not treat it as the casualty (issue #1137).
 			failbackReturned := false
 
+			// The gateway stopped holding our lease while the tunnel itself was fine.
+			// Nothing is wrong with the region, so re-register rather than failing away
+			// from it (issue #1146).
+			leaseLost := engine.ConsumeLeaseLost()
+
+			// A failback that is evicted almost immediately means the primary answers
+			// /api/healthz but cannot carry the session. Hold the prober off, or it
+			// retries every 15s and the client flaps between regions until something
+			// reaps its lease (issue #1145).
+			if !lastFailbackAt.IsZero() && time.Since(lastFailbackAt) < failbackEvictionWindow {
+				slog.Info(fmt.Sprintf("[Client] Region '%s' dropped the session %s after failback; holding off further failback attempts.",
+					cfg.Region, time.Since(lastFailbackAt).Round(time.Second)))
+				engine.LogEvent("warn", "failback_unstable", map[string]any{
+					"region":     cfg.Region,
+					"held_for":   time.Since(lastFailbackAt).Round(time.Second).String(),
+					"suppressed": failbackSuppression.String(),
+				})
+				engine.SuppressFailback(failbackSuppression)
+				cooldowns.exclude(cfg.Region, failbackSuppression)
+				lastFailbackAt = time.Time{}
+			}
+
 			if engine.ConsumeFailback() {
 				slog.Info(fmt.Sprintf("[Client] Primary region '%s' (%s) recovered. Performing automated failback...", primaryRegion, primaryServerURL))
 
@@ -433,6 +459,7 @@ func main() {
 				newResp, failure := attemptRegistration(cfg, regPortMappings, sub, engine.AddedHeaders)
 				if failure == nil {
 					applySession(newResp, "failback")
+					lastFailbackAt = time.Now()
 					slog.Info(fmt.Sprintf("[Client] Successfully failed back to primary region '%s' (%s)", cfg.Region, cfg.ServerURL))
 					engine.LogEvent("info", "failback", map[string]any{
 						"from": fallbackRegion,
@@ -462,7 +489,8 @@ func main() {
 
 			if len(cfg.Regions) > 0 {
 				failedRegion := cfg.Region
-				if failbackReturned {
+				keepRegion := failbackReturned || leaseLost
+				if keepRegion {
 					// Nothing here failed, so no cooldown, no cache clear and no
 					// rediscovery away from this region: leaving it a candidate is what
 					// makes the "staying on '%s'" message above true.
@@ -480,11 +508,11 @@ func main() {
 					})
 					_ = client.ClearRegionCacheFile() //nolint:errcheck
 				}
-				excludeFailedRegion(cfg, primaryRegionsMap, failedRegion, failbackReturned)
+				excludeFailedRegion(cfg, primaryRegionsMap, failedRegion, keepRegion)
 
 				if newResp, ok := reregisterAcrossRegions(cfg, regPortMappings, sub, engine.AddedHeaders); ok {
 					applySession(newResp, "failover")
-					if failbackReturned {
+					if keepRegion {
 						slog.Info(fmt.Sprintf("[Client] Session re-established on region '%s' (%s)", cfg.Region, cfg.ServerURL))
 					} else {
 						slog.Info(fmt.Sprintf("[Client] Successfully failed over to region '%s' (%s)", cfg.Region, cfg.ServerURL))
@@ -494,6 +522,7 @@ func main() {
 						"to":             cfg.Region,
 						"url":            cfg.ServerURL,
 						"after_failback": failbackReturned,
+						"lease_lost":     leaseLost,
 					})
 					continue
 				}
@@ -719,6 +748,17 @@ func resolvePortsAndMappings(cfg *config.ClientConfig) []client.PortMapping {
 // giving up, so an outage affecting every edge terminates with one clear message
 // instead of spinning.
 const maxFailoverAttempts = 4
+
+// failbackEvictionWindow is how soon after a failback an eviction is taken as evidence
+// that the primary cannot actually carry the session, rather than as an unrelated fault.
+// The health check runs every 5s, so anything inside a couple of cycles is the primary
+// rejecting us rather than a coincidence.
+const failbackEvictionWindow = 20 * time.Second
+
+// failbackSuppression is how long the failback prober is held off after that happens. It
+// has to outlast a control-plane reconnect (observed at ~49s) so the client is not still
+// bouncing while the edge is coming back.
+const failbackSuppression = 5 * time.Minute
 
 // failoverRetryBackoff is the initial pause between failover registration attempts,
 // doubled on each retry. A variable so tests don't have to sit through real backoff.

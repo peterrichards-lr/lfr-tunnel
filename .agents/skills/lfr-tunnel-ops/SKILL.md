@@ -13,6 +13,29 @@ Every `lfr-tunnel-ops` command below that talks to the central VPS (`deploy`, `d
 
 Copy `lfr-tunnel-ops.yaml.example` to `lfr-tunnel-ops.yaml` and fill in your actual central VPS's user/host/SSH key once, and every command below just works without repeating `-i` on each invocation. If nothing is configured through any of the three sources, the command exits with a clear error naming exactly which field is missing, rather than silently deploying to the wrong place.
 
+### Finding the targets — look these up, don't ask
+
+`lfr-tunnel-ops.yaml` typically defines only `central`. **Its lack of edge entries does not mean the edge details are unknown** — they are all on the machine already. Read them rather than asking the operator:
+
+| What | Where to read it |
+| --- | --- |
+| Which edge nodes exist, and their Elastic IPs | `scripts/liferay/dns/lfr-demo-production.yaml` — the authoritative record, kept in sync with live DNS after #941. **Read it; do not copy the list into other docs, which is how it drifted in the first place.** |
+| Public hostnames | `<region>.lfr-demo.se`, one per edge named in that file; central is `tunnel.lfr-demo.se` |
+| SSH keys | `ls ~/.ssh/lfr-tunnel-*.pem` — one per box, named by AWS region rather than by edge name, so match on region |
+| SSH user | `ubuntu` on central and every edge |
+| Which edges the gateway believes in | `edge_nodes` in `/etc/lfr-tunneld/server-config.yaml` on central |
+| Live admin settings | `/etc/lfr-tunneld/lfr-tunnel.db` on central, table `admin_settings` — note `domain_allocation_rule` and `default_domain` live here and override the YAML |
+
+So an edge deploy needs no new information — take the region list from the DNS spec, match it to a key, and:
+
+```bash
+./bin/lfr-tunnel-ops deploy -u ubuntu -s <region>.lfr-demo.se -i ~/.ssh/<matching-key>.pem
+```
+
+Add each edge to `lfr-tunnel-ops.yaml` as a named target to avoid repeating the flags, and set `aws_region` on any edge with a power schedule so `deploy` starts it, deploys, and stops it back.
+
+Remember that deploying an edge restarts it, which drops its control channel to central and will trigger a client failover. Deploy before a failover test, not during one.
+
 **Managing more than one environment** (e.g. staging/production) from the same checkout: use `lfr-tunnel-ops.yaml`'s multi-target shape (a `targets:` map of named entries, see the commented-out block in `lfr-tunnel-ops.yaml.example`) instead of the flat `central:`/`nginx:` shape. Select which one a command uses with `-target <name>` or the `LFT_OPS_TARGET` env var (same flag-wins-over-env precedence as everything else). If the file defines exactly one target, it's used automatically; if it defines more than one and neither is set, every command errors out listing the available names.
 
 ---

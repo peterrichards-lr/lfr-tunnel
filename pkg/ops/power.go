@@ -4,6 +4,8 @@ import (
 	"encoding/json"
 	"fmt"
 	"net"
+	"os"
+	"strings"
 	"time"
 )
 
@@ -60,14 +62,56 @@ func ensureInstanceRunning(host, region string) (restore func(), err error) {
 		}
 		restore = func() {
 			fmt.Printf("Restoring EC2 instance %s (%s) to its previous (stopped) state...\n", instanceID, host)
-			if err := RunCommand("aws", "ec2", "stop-instances", "--region", region, "--instance-ids", instanceID); err != nil {
-				fmt.Printf("WARNING: failed to stop instance %s back -- it's left running, stop it manually: %v\n", instanceID, err)
+			stopErr := RunCommand("aws", "ec2", "stop-instances", "--region", region, "--instance-ids", instanceID)
+
+			// Don't take the stop command's word for it. Credentials on this account are
+			// short-lived and their refresh is unreliable, so the window between starting
+			// an instance and stopping it can outlive the credential -- which is exactly
+			// how a node was left running overnight after a deploy to Tokyo (#1183).
+			// Confirm the state actually reached.
+			_, state, checkErr := describeInstanceForHost(region, ip)
+			switch {
+			case checkErr == nil && (state == "stopping" || state == "stopped"):
+				fmt.Printf("EC2 instance %s (%s) is %s.\n", instanceID, host, state)
+				return
+			case stopErr == nil && checkErr != nil:
+				// The stop was accepted but we cannot confirm it. Say so rather than
+				// implying either outcome.
+				powerRestoreFailed(instanceID, host, region,
+					fmt.Sprintf("stop was accepted but its result could not be confirmed: %v", checkErr))
+			case stopErr != nil:
+				powerRestoreFailed(instanceID, host, region, stopErr.Error())
+			default:
+				powerRestoreFailed(instanceID, host, region,
+					fmt.Sprintf("instance is still %q after the stop", state))
 			}
 		}
 		return restore, nil
 	default:
 		return noop, fmt.Errorf("instance %s (%s) is in state %q, not running or stopped -- refusing to guess, deploy manually once it settles", instanceID, host, state)
 	}
+}
+
+// PowerRestoreFailed reports whether a deploy left an instance running that it had
+// started. Deploy checks this so an unattended run cannot exit 0 having stranded a node
+// outside its schedule, quietly costing money (#1183).
+var powerRestoreFailure string
+
+// PowerRestoreFailure returns the description of a failed power restore, or "" if none.
+func PowerRestoreFailure() string { return powerRestoreFailure }
+
+// powerRestoreFailed records the failure and makes it loud. The previous behaviour was a
+// single Printf at the tail of a long, noisy deploy, which affected nothing and was easy
+// to miss entirely.
+func powerRestoreFailed(instanceID, host, region, reason string) {
+	powerRestoreFailure = fmt.Sprintf("instance %s (%s) may still be RUNNING: %s", instanceID, host, reason)
+	rule := strings.Repeat("!", 78)
+	fmt.Fprintf(os.Stderr, "\n%s\n", rule)
+	fmt.Fprintf(os.Stderr, "WARNING: %s\n", powerRestoreFailure)
+	fmt.Fprint(os.Stderr, "It was started for this deploy and must be stopped, or it runs outside its\n")
+	fmt.Fprint(os.Stderr, "schedule and keeps costing money. Stop it with:\n\n")
+	fmt.Fprintf(os.Stderr, "  aws ec2 stop-instances --region %s --instance-ids %s\n", region, instanceID)
+	fmt.Fprintf(os.Stderr, "%s\n\n", rule)
 }
 
 // resolveHostIPv4 looks up host's first IPv4 address, since AWS's ip-address filter

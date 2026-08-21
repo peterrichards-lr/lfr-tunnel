@@ -4,6 +4,7 @@ import (
 	"bufio"
 	"encoding/json"
 	"fmt"
+	"log/slog"
 	"net/url"
 	"os"
 	"path/filepath"
@@ -542,6 +543,19 @@ func LoadServerConfig(path string) (*ServerConfig, error) {
 				cfg.ProxyHeaders = m
 			}
 		}
+	}
+
+	// Every admin alert -- new registrations, approval requests, IP bans, tunnel
+	// offline -- is addressed to AdminNotificationEmail, and each send site returns
+	// silently when it is empty. An operator who has configured owner.user_id has
+	// already said who runs this gateway, so treat that as the destination rather than
+	// notifying nobody and saying nothing about it.
+	if cfg.AdminNotificationEmail == "" && cfg.Owner.UserID != "" {
+		cfg.AdminNotificationEmail = cfg.Owner.UserID
+		slog.Info(fmt.Sprintf("[Config] admin_notification_email is not set; defaulting admin alerts to owner.user_id (%s).", cfg.Owner.UserID))
+	}
+	if cfg.AdminNotificationEmail == "" {
+		slog.Warn("[Config] Neither admin_notification_email nor owner.user_id is set -- admin alerts (new registrations, approval requests, IP bans) will not be sent to anyone.")
 	}
 
 	return cfg, nil

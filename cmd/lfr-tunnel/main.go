@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"flag"
 	"fmt"
+	"io"
 	"log"
 	"log/slog"
 	"net/http"
@@ -767,10 +768,18 @@ const maxFailoverAttempts = 4
 // rejecting us rather than a coincidence.
 const failbackEvictionWindow = 20 * time.Second
 
-// failbackSuppression is how long the failback prober is held off after that happens. It
-// has to outlast a control-plane reconnect (observed at ~49s) so the client is not still
-// bouncing while the edge is coming back.
-const failbackSuppression = 5 * time.Minute
+// failbackSuppression is how long the failback prober is held off after that happens.
+//
+// This is now a backstop, not the main defence. The prober asks the primary whether it can
+// actually carry a session before moving (issue #1165), so the common case never reaches
+// here. It still matters for a gateway too old to report control_plane, or an edge that is
+// wrong about itself.
+//
+// It was five minutes, chosen to outlast a control-plane reconnect. That proved far too
+// blunt in practice: an edge that recovered in seconds still cost a full five minutes
+// parked on a worse region, which reads as the client being stuck. With prevention doing
+// the real work, this only has to outlast a flapping reconnect.
+const failbackSuppression = 45 * time.Second
 
 // failoverRetryBackoff is the initial pause between failover registration attempts,
 // doubled on each retry. A variable so tests don't have to sit through real backoff.
@@ -1554,7 +1563,8 @@ func probeFastestRegion(regions map[string]string) (string, []string) {
 		rtt    time.Duration
 	}
 	ch := make(chan probeResult, len(regions))
-	client := &http.Client{
+	// Named to leave the imported client package reachable inside the probe goroutine.
+	probeClient := &http.Client{
 		Timeout: 1500 * time.Millisecond,
 		CheckRedirect: func(req *http.Request, via []*http.Request) error {
 			return http.ErrUseLastResponse
@@ -1567,10 +1577,15 @@ func probeFastestRegion(regions map[string]string) (string, []string) {
 		go func(r, targetURL string) {
 			defer wg.Done()
 			start := time.Now()
-			resp, err := client.Get(targetURL + "/api/healthz")
+			resp, err := probeClient.Get(targetURL + "/api/healthz")
 			if err == nil {
-				_ = resp.Body.Close() //nolint:errcheck
-				if resp.StatusCode == http.StatusOK {
+				body, _ := io.ReadAll(io.LimitReader(resp.Body, 512)) //nolint:errcheck
+				_ = resp.Body.Close()                                 //nolint:errcheck
+				// A 200 alone is not enough: an edge that cannot reach central still
+				// answers healthz but will evict any session that lands there. Electing
+				// on the status code is how a client ends up on an edge that throws it
+				// off five seconds later (issue #1165).
+				if client.GatewayCanCarrySession(resp.StatusCode, body) {
 					rtt := time.Since(start)
 					ch <- probeResult{region: r, url: targetURL, rtt: rtt}
 				}

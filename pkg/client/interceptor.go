@@ -202,6 +202,51 @@ func (e *InterceptorEngine) SetCentralURL(u string) {
 	e.centralURL = u
 }
 
+// GatewayCanCarrySession reports whether a gateway is fit to serve a tunnel, given its
+// /api/healthz response.
+//
+// A 200 alone is not enough. An edge whose control channel to central is down answers
+// healthz perfectly well -- its HTTP listener is fine -- but central reports its region
+// offline and evicts anything that lands there. Electing on the status code alone is what
+// let a client fail back onto such an edge and be thrown off five seconds later, over and
+// over (issue #1165).
+//
+// Gateways from before this field existed, and central itself, send no control_plane key.
+// Their absence means healthy: an older gateway must keep working exactly as it does now.
+func GatewayCanCarrySession(statusCode int, body []byte) bool {
+	if statusCode != http.StatusOK {
+		return false
+	}
+	var payload struct {
+		ControlPlane string `json:"control_plane"`
+	}
+	if err := json.Unmarshal(bytes.TrimSpace(body), &payload); err != nil {
+		// Unparseable but 200: treat as healthy rather than stranding a client on a
+		// gateway that is probably fine and merely returning something unexpected.
+		return true
+	}
+	return payload.ControlPlane != "disconnected"
+}
+
+// probeGatewayHealth fetches /api/healthz and applies GatewayCanCarrySession.
+func probeGatewayHealth(ctx context.Context, serverURL string, timeout time.Duration) bool {
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, strings.TrimRight(serverURL, "/")+"/api/healthz", nil)
+	if err != nil {
+		return false
+	}
+	resp, err := (&http.Client{Timeout: timeout}).Do(req)
+	if err != nil {
+		return false
+	}
+	defer resp.Body.Close() //nolint:errcheck
+
+	body, err := io.ReadAll(io.LimitReader(resp.Body, 512))
+	if err != nil {
+		return false
+	}
+	return GatewayCanCarrySession(resp.StatusCode, body)
+}
+
 // gatewayHasNoLease reports whether a 200 from /api/tunnel-status came from the branch
 // where the gateway holds no lease for this session, rather than the one where it updated
 // ours. handleTunnelStatus answers 200 either way and the two differ only by body: the
@@ -414,27 +459,18 @@ func (e *InterceptorEngine) StartFailbackProber(ctx context.Context, cancel cont
 					continue
 				}
 
-				// Probe primary region healthz endpoint
-				probeURL := strings.TrimRight(primaryServerURL, "/") + "/api/healthz"
-				req, err := http.NewRequestWithContext(ctx, http.MethodGet, probeURL, nil)
-				if err != nil {
-					continue
-				}
-
-				client := &http.Client{Timeout: 5 * time.Second}
-				resp, err := client.Do(req)
-				if err == nil {
-					_ = resp.Body.Close() //nolint:errcheck
-					if resp.StatusCode == http.StatusOK {
-						slog.Info(fmt.Sprintf("[Client] Primary region '%s' (%s) is back online! Initiating automated failback...", primaryRegion, primaryServerURL))
-						e.mu.Lock()
-						e.IsFailback = true
-						e.mu.Unlock()
-						if cancel != nil {
-							cancel()
-						}
-						return
+				// Ask the primary whether it can actually carry a session, not merely
+				// whether its HTTP listener is up. An edge that cannot reach central
+				// answers healthz fine and then evicts us within seconds.
+				if probeGatewayHealth(ctx, primaryServerURL, 5*time.Second) {
+					slog.Info(fmt.Sprintf("[Client] Primary region '%s' (%s) is back online! Initiating automated failback...", primaryRegion, primaryServerURL))
+					e.mu.Lock()
+					e.IsFailback = true
+					e.mu.Unlock()
+					if cancel != nil {
+						cancel()
 					}
+					return
 				}
 			}
 		}

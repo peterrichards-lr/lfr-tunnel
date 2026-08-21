@@ -88,6 +88,12 @@ type Registry struct {
 	chiselServer   *chserver.Server
 	OnLeaseCleanup func(*TunnelLease)
 
+	// nodeID identifies the gateway this registry belongs to, and is stamped on every
+	// lease it creates. It used to be the constant "control" regardless of which gateway
+	// was serving, so the portal reported every tunnel on the control plane even when the
+	// client's own TUI correctly showed a regional edge (issue #1167).
+	nodeID string
+
 	// cleanedSessions records tokens this gateway has reaped, so a client still
 	// heartbeating against a session we destroyed can be told so explicitly rather
 	// than left to infer it. Bounded by pruning on insert (issue #1146).
@@ -108,6 +114,23 @@ func NewRegistry(chiselServer *chserver.Server) *Registry {
 		chiselServer:    chiselServer,
 		cleanedSessions: make(map[string]time.Time),
 	}
+}
+
+// SetNodeID records which gateway this registry belongs to. Called once at startup;
+// unset means the control plane.
+func (r *Registry) SetNodeID(id string) {
+	r.Lock()
+	defer r.Unlock()
+	r.nodeID = strings.TrimSpace(id)
+}
+
+// localNodeID returns the identity stamped on leases this registry creates, defaulting to
+// the control plane so an unconfigured gateway behaves as it always has.
+func (r *Registry) localNodeID() string {
+	if r.nodeID == "" {
+		return "control"
+	}
+	return r.nodeID
 }
 
 // SessionWasCleaned reports whether this gateway reaped the given session token. It is
@@ -280,7 +303,7 @@ func (r *Registry) Register(userID string, subdomainPrefix string, ports []PortM
 				AddedHeaders:    addedHeaders,
 				Status:          "up",
 				CreatedAt:       time.Now(),
-				NodeID:          "control",
+				NodeID:          r.localNodeID(),
 				VisitorIPs:      make(map[string]time.Time),
 			}
 			r.leases[fullHost] = lease

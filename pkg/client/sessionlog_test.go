@@ -95,6 +95,64 @@ func TestRotatingFileDoesNotRollWhenEmpty(t *testing.T) {
 	}
 }
 
+// TestRotateFileKeepsPlainOsFileUsable covers the background-mode console log. That
+// handle is assigned to exec.Cmd.Stdout, and os/exec only passes a file descriptor
+// straight through to the child when it is an *os.File -- any other io.Writer is wrapped
+// in a pipe serviced by a goroutine in the parent, which for a detached background run
+// exits immediately and takes the child's stdout with it. So rotation must be available
+// without forcing the caller to hold a RotatingFile.
+func TestRotateFileKeepsPlainOsFileUsable(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "client.log")
+
+	if err := os.WriteFile(path, []byte("previous run\n"), 0600); err != nil {
+		t.Fatalf("seed failed: %v", err)
+	}
+	if err := RotateFile(path, 3); err != nil {
+		t.Fatalf("RotateFile failed: %v", err)
+	}
+
+	f, err := os.OpenFile(path, os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0600)
+	if err != nil {
+		t.Fatalf("open failed: %v", err)
+	}
+	if _, err := f.WriteString("current run\n"); err != nil {
+		t.Fatalf("write failed: %v", err)
+	}
+	_ = f.Close() //nolint:errcheck
+
+	if got := readLines(t, path); len(got) != 1 || got[0] != "current run" {
+		t.Errorf("expected a fresh file for the new run, got %v", got)
+	}
+	if got := readLines(t, path+".1"); len(got) != 1 || got[0] != "previous run" {
+		t.Errorf("expected the previous run preserved, got %v", got)
+	}
+}
+
+// TestRotateFileNoopsOnMissingOrEmpty makes sure a first-ever run, or one that produced
+// no output, does not create empty generations.
+func TestRotateFileNoopsOnMissingOrEmpty(t *testing.T) {
+	dir := t.TempDir()
+
+	missing := filepath.Join(dir, "never-written.log")
+	if err := RotateFile(missing, 3); err != nil {
+		t.Errorf("rotating a missing file should be a no-op, got %v", err)
+	}
+	if _, err := os.Stat(missing + ".1"); !os.IsNotExist(err) {
+		t.Errorf("rotating a missing file must not create a generation")
+	}
+
+	empty := filepath.Join(dir, "empty.log")
+	if err := os.WriteFile(empty, nil, 0600); err != nil {
+		t.Fatalf("seed failed: %v", err)
+	}
+	if err := RotateFile(empty, 3); err != nil {
+		t.Errorf("rotating an empty file should be a no-op, got %v", err)
+	}
+	if _, err := os.Stat(empty + ".1"); !os.IsNotExist(err) {
+		t.Errorf("rotating an empty file must not create a generation")
+	}
+}
+
 // TestRotatingFileRotatesAtSizeCap covers the in-flight rotation path and pruning of the
 // oldest generation.
 func TestRotatingFileRotatesAtSizeCap(t *testing.T) {

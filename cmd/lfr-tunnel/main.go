@@ -975,7 +975,16 @@ func handleBackground(sub string) {
 	// Rotated rather than truncated: this previously opened O_TRUNC, so every restart
 	// destroyed the log of the run that had just ended -- the one worth reading after
 	// an unexplained exit.
-	logFile, err := client.OpenRotatingFile(logPath, client.DefaultLogMaxBytes, client.DefaultLogGenerations)
+	//
+	// Rotation is done separately from opening so that logFile stays a real *os.File.
+	// os/exec passes an *os.File to the child as a file descriptor, but wraps any other
+	// io.Writer in a pipe serviced by a goroutine in *this* process -- and this process
+	// exits immediately after Start() for a detached background run, which would tear
+	// the child's stdout down with it.
+	if rerr := client.RotateFile(logPath, client.DefaultLogGenerations); rerr != nil {
+		slog.Info(fmt.Sprintf("[Warning] Could not rotate the previous log: %v", rerr))
+	}
+	logFile, err := os.OpenFile(logPath, os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0600)
 	if err != nil {
 		log.Fatalf("[Client] Failed to create log file: %v\n", err)
 	}

@@ -103,17 +103,53 @@ func OpenRotatingFile(path string, maxBytes int64, generations int) (*RotatingFi
 
 	r := &RotatingFile{path: path, maxBytes: maxBytes, generations: generations}
 
-	// Only roll if there is something worth keeping; otherwise a client that starts and
-	// stops repeatedly would push real content out through empty generations.
-	if info, err := os.Stat(path); err == nil && info.Size() > 0 {
-		if err := r.roll(); err != nil {
-			return nil, err
-		}
+	if err := RotateFile(path, generations); err != nil {
+		return nil, err
 	}
 	if err := r.open(); err != nil {
 		return nil, err
 	}
 	return r, nil
+}
+
+// RotateFile shifts an existing log into the next generation, so the caller can start a
+// fresh file while keeping the previous run. Exported for callers that need a real
+// *os.File rather than a RotatingFile -- notably the background-mode console log, whose
+// handle is passed to a child process as a file descriptor.
+//
+// Rolls only when there is content worth keeping: a client that starts and stops
+// repeatedly must not push real content out through empty generations.
+func RotateFile(path string, generations int) error {
+	info, err := os.Stat(path)
+	if err != nil || info.Size() == 0 {
+		return nil //nolint:nilerr // nothing to rotate is not a failure
+	}
+	if err := os.MkdirAll(filepath.Dir(path), 0700); err != nil {
+		return err
+	}
+	return rotateGenerations(path, generations)
+}
+
+// rotateGenerations shifts path -> path.1 -> path.2 ... discarding the oldest.
+func rotateGenerations(path string, generations int) error {
+	if generations <= 0 {
+		return os.Remove(path)
+	}
+	oldest := fmt.Sprintf("%s.%d", path, generations)
+	if err := os.Remove(oldest); err != nil && !os.IsNotExist(err) {
+		return err
+	}
+	for i := generations - 1; i >= 1; i-- {
+		from := fmt.Sprintf("%s.%d", path, i)
+		to := fmt.Sprintf("%s.%d", path, i+1)
+		if err := os.Rename(from, to); err != nil && !os.IsNotExist(err) {
+			return err
+		}
+	}
+	if err := os.Rename(path, path+".1"); err != nil && !os.IsNotExist(err) {
+		return err
+	}
+	return nil
 }
 
 func (r *RotatingFile) open() error {
@@ -130,29 +166,6 @@ func (r *RotatingFile) open() error {
 	return nil
 }
 
-// roll shifts path -> path.1 -> path.2 ... discarding the oldest generation. The caller
-// must hold the lock, or hold no references yet.
-func (r *RotatingFile) roll() error {
-	if r.generations == 0 {
-		return os.Remove(r.path)
-	}
-	oldest := fmt.Sprintf("%s.%d", r.path, r.generations)
-	if err := os.Remove(oldest); err != nil && !os.IsNotExist(err) {
-		return err
-	}
-	for i := r.generations - 1; i >= 1; i-- {
-		from := fmt.Sprintf("%s.%d", r.path, i)
-		to := fmt.Sprintf("%s.%d", r.path, i+1)
-		if err := os.Rename(from, to); err != nil && !os.IsNotExist(err) {
-			return err
-		}
-	}
-	if err := os.Rename(r.path, r.path+".1"); err != nil && !os.IsNotExist(err) {
-		return err
-	}
-	return nil
-}
-
 // Write appends p, rotating first if it would take the file past its size cap.
 func (r *RotatingFile) Write(p []byte) (int, error) {
 	r.mu.Lock()
@@ -165,7 +178,7 @@ func (r *RotatingFile) Write(p []byte) (int, error) {
 		if err := r.file.Close(); err != nil {
 			return 0, err
 		}
-		if err := r.roll(); err != nil {
+		if err := rotateGenerations(r.path, r.generations); err != nil {
 			return 0, err
 		}
 		if err := r.open(); err != nil {

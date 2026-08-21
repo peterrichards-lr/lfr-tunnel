@@ -7,7 +7,9 @@ import (
 	"net/http/httptest"
 	"os"
 	"os/exec"
+	"sync/atomic"
 	"testing"
+	"time"
 )
 
 func TestPIDManagement(t *testing.T) {
@@ -135,6 +137,318 @@ func TestResolveServerURL_OfflineRegionFallback(t *testing.T) {
 	if cachedRegion != cfg.Region || cachedURL != cfg.ServerURL {
 		t.Errorf("Expected region cache to record %q/%q, got %q/%q",
 			cfg.Region, cfg.ServerURL, cachedRegion, cachedURL)
+	}
+}
+
+// registrationServer stands in for a gateway. It answers /api/healthz with 200 so
+// probeFastestRegion will elect it, and returns the given status and body for
+// /api/register, counting the registration attempts it receives.
+func registrationServer(t *testing.T, status int, body string, hits *int32) *httptest.Server {
+	t.Helper()
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path == "/api/healthz" {
+			w.WriteHeader(http.StatusOK)
+			return
+		}
+		if hits != nil {
+			atomic.AddInt32(hits, 1)
+		}
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(status)
+		_, _ = w.Write([]byte(body)) //nolint:errcheck
+	}))
+	t.Cleanup(srv.Close)
+	return srv
+}
+
+// shortenBackoff removes the real retry pauses so failover tests stay fast.
+func shortenBackoff(t *testing.T) {
+	t.Helper()
+	orig := failoverRetryBackoff
+	failoverRetryBackoff = time.Millisecond
+	t.Cleanup(func() { failoverRetryBackoff = orig })
+}
+
+// resetCooldowns clears failover cooldown state so tests don't leak into each other
+// through the package-level tracker.
+func resetCooldowns(t *testing.T) {
+	t.Helper()
+	cooldowns.mu.Lock()
+	cooldowns.until = make(map[string]time.Time)
+	cooldowns.mu.Unlock()
+	t.Cleanup(func() {
+		cooldowns.mu.Lock()
+		cooldowns.until = make(map[string]time.Time)
+		cooldowns.mu.Unlock()
+	})
+}
+
+// TestRegionCooldownSurvivesRemoteRefresh is the regression test for #1121: a region
+// put into cooldown must stay excluded even though resolveServerURL refreshes
+// cfg.Regions from the gateway, which previously restored the entry and let the client
+// re-elect the region it had just failed away from.
+func TestRegionCooldownSurvivesRemoteRefresh(t *testing.T) {
+	resetCooldowns(t)
+	failedSrv := newHealthyEdge(t)
+	goodSrv := newHealthyEdge(t)
+
+	origFetch, origSave := fetchRemoteRegionsFn, saveRegionCacheFn
+	defer func() { fetchRemoteRegionsFn, saveRegionCacheFn = origFetch, origSave }()
+	// Stand in for the live gateway: always re-advertises both regions, including the
+	// failed one. This is exactly the behaviour that defeated the old delete().
+	fetchRemoteRegionsFn = func(c *config.ClientConfig) {
+		c.Regions = map[string]string{"apac": failedSrv.URL, "eu": goodSrv.URL}
+	}
+	saveRegionCacheFn = func(string, string) {}
+
+	cooldowns.exclude("apac", regionFailoverCooldown)
+
+	cfg := &config.ClientConfig{Region: "", ServerURL: failedSrv.URL}
+	resolveServerURL(cfg, false)
+
+	if cfg.Region == "apac" {
+		t.Fatalf("region in cooldown was re-elected; cooldown did not survive the region refresh")
+	}
+	if cfg.Region != "eu" {
+		t.Fatalf("expected election of 'eu', got %q", cfg.Region)
+	}
+	if cfg.ServerURL != goodSrv.URL {
+		t.Errorf("expected ServerURL %q, got %q", goodSrv.URL, cfg.ServerURL)
+	}
+}
+
+// TestRegionCooldownFallsBackWhenAllExcluded checks that excluding every region does
+// not leave the client with nowhere to go -- retrying a recently-failed region beats
+// having no gateway at all.
+func TestRegionCooldownFallsBackWhenAllExcluded(t *testing.T) {
+	resetCooldowns(t)
+	onlySrv := newHealthyEdge(t)
+
+	origFetch, origSave := fetchRemoteRegionsFn, saveRegionCacheFn
+	defer func() { fetchRemoteRegionsFn, saveRegionCacheFn = origFetch, origSave }()
+	fetchRemoteRegionsFn = func(c *config.ClientConfig) {
+		c.Regions = map[string]string{"eu": onlySrv.URL}
+	}
+	saveRegionCacheFn = func(string, string) {}
+
+	cooldowns.exclude("eu", regionFailoverCooldown)
+
+	cfg := &config.ClientConfig{Region: "", ServerURL: onlySrv.URL}
+	resolveServerURL(cfg, false)
+
+	if cfg.Region != "eu" {
+		t.Fatalf("expected fallback to the only region even though it is in cooldown, got %q", cfg.Region)
+	}
+}
+
+// TestRegionCooldownExpires confirms a cooldown is not permanent.
+func TestRegionCooldownExpires(t *testing.T) {
+	resetCooldowns(t)
+	regions := map[string]string{"apac": "https://apac.invalid", "eu": "https://eu.invalid"}
+
+	cooldowns.exclude("apac", 1*time.Millisecond)
+	if got := cooldowns.filter(regions); len(got) != 1 {
+		t.Fatalf("expected 'apac' filtered out while in cooldown, got %v", got)
+	}
+
+	time.Sleep(5 * time.Millisecond)
+	if got := cooldowns.filter(regions); len(got) != 2 {
+		t.Errorf("expected cooldown to expire and both regions to return, got %v", got)
+	}
+}
+
+// TestRegionCooldownClear covers the successful-reconnect path clearing prior state.
+func TestRegionCooldownClear(t *testing.T) {
+	resetCooldowns(t)
+	regions := map[string]string{"apac": "https://apac.invalid", "eu": "https://eu.invalid"}
+
+	cooldowns.exclude("APAC", regionFailoverCooldown)
+	if _, present := cooldowns.filter(regions)["apac"]; present {
+		t.Fatalf("exclude should be case-insensitive")
+	}
+
+	cooldowns.clear("apac")
+	if _, present := cooldowns.filter(regions)["apac"]; !present {
+		t.Errorf("clear should return the region to the candidate set")
+	}
+}
+
+// TestRegionDiscoveryURLAvoidsFailedRegion covers #1121's second half: the region list
+// must not be refetched from the edge we are trying to exclude.
+func TestRegionDiscoveryURLAvoidsFailedRegion(t *testing.T) {
+	cfg := &config.ClientConfig{
+		Regions: map[string]string{
+			"apac":    "https://apac.example",
+			"central": "https://central.example",
+		},
+	}
+
+	if got := regionDiscoveryURL(cfg, nil, "apac"); got != "https://central.example" {
+		t.Errorf("expected the central control plane to be preferred, got %q", got)
+	}
+
+	// With central itself the failed region, any other region will do.
+	cfg2 := &config.ClientConfig{Regions: map[string]string{"central": "https://central.example"}}
+	if got := regionDiscoveryURL(cfg2, nil, "central"); got != "" {
+		t.Errorf("expected no discovery URL when only the failed region is known, got %q", got)
+	}
+
+	// Falls back to the primary map when cfg has been emptied.
+	cfg3 := &config.ClientConfig{}
+	primary := map[string]string{"eu": "https://eu.example"}
+	if got := regionDiscoveryURL(cfg3, primary, "apac"); got != "https://eu.example" {
+		t.Errorf("expected fallback to the primary region map, got %q", got)
+	}
+}
+
+// TestAttemptRegistrationClassifiesFailures is the regression test for #1120: the
+// handshake must report failures instead of terminating the process, and must mark a
+// 403 as terminal so failover does not pointlessly retry it against every region.
+func TestAttemptRegistrationClassifiesFailures(t *testing.T) {
+	t.Run("gateway 5xx is retryable", func(t *testing.T) {
+		srv := registrationServer(t, http.StatusBadGateway, `{}`, nil)
+
+		cfg := &config.ClientConfig{ServerURL: srv.URL, AuthToken: "t"}
+		resp, failure := attemptRegistration(cfg, nil, "sub", nil)
+		if failure == nil {
+			t.Fatalf("expected a failure for HTTP 502, got response %+v", resp)
+		}
+		if failure.terminal {
+			t.Errorf("a gateway 5xx must be retryable on another region, got terminal=true")
+		}
+	})
+
+	t.Run("undecodable gateway error is retryable", func(t *testing.T) {
+		// A 502 from a reverse proxy in front of the gateway returns an HTML error
+		// page, not JSON. RegisterTunnel fails at the decode step before it ever looks
+		// at the status code, producing an error that matches none of the gateway
+		// patterns -- which is precisely the case that used to reach log.Fatalf.
+		srv := registrationServer(t, http.StatusBadGateway, `<html>502 Bad Gateway</html>`, nil)
+
+		cfg := &config.ClientConfig{ServerURL: srv.URL, AuthToken: "t"}
+		_, failure := attemptRegistration(cfg, nil, "sub", nil)
+		if failure == nil {
+			t.Fatalf("expected a failure for an undecodable 502 body")
+		}
+		if failure.terminal {
+			t.Errorf("an undecodable gateway response must stay retryable, got terminal=true")
+		}
+	})
+
+	t.Run("403 is terminal", func(t *testing.T) {
+		srv := registrationServer(t, http.StatusForbidden, `{"error":"subdomain reserved by another user"}`, nil)
+
+		cfg := &config.ClientConfig{ServerURL: srv.URL, AuthToken: "t"}
+		_, failure := attemptRegistration(cfg, nil, "sub", nil)
+		if failure == nil {
+			t.Fatalf("expected a failure for HTTP 403")
+		}
+		if !failure.terminal {
+			t.Errorf("a 403 reservation/limit rejection must be terminal, got terminal=false")
+		}
+		if len(failure.advice) == 0 {
+			t.Errorf("expected portal guidance to be attached to a 403 failure")
+		}
+	})
+
+	t.Run("success", func(t *testing.T) {
+		srv := registrationServer(t, http.StatusOK, `{"status":"success","session_token":"tok","subdomain_prefix":"sub"}`, nil)
+
+		cfg := &config.ClientConfig{ServerURL: srv.URL, AuthToken: "t"}
+		resp, failure := attemptRegistration(cfg, nil, "sub", nil)
+		if failure != nil {
+			t.Fatalf("expected success, got failure %v", failure.err)
+		}
+		if resp.SessionToken != "tok" {
+			t.Errorf("expected session token 'tok', got %q", resp.SessionToken)
+		}
+	})
+}
+
+// TestReregisterAcrossRegionsMovesOn checks that a region whose registration fails is
+// abandoned for a different one, rather than the same broken gateway being retried
+// until the attempt budget runs out.
+func TestReregisterAcrossRegionsMovesOn(t *testing.T) {
+	resetCooldowns(t)
+	shortenBackoff(t)
+
+	var badHits, goodHits int32
+	badSrv := registrationServer(t, http.StatusBadGateway, `{}`, &badHits)
+	goodSrv := registrationServer(t, http.StatusOK,
+		`{"status":"success","session_token":"tok","subdomain_prefix":"sub"}`, &goodHits)
+
+	origFetch, origSave := fetchRemoteRegionsFn, saveRegionCacheFn
+	defer func() { fetchRemoteRegionsFn, saveRegionCacheFn = origFetch, origSave }()
+	fetchRemoteRegionsFn = func(c *config.ClientConfig) {
+		c.Regions = map[string]string{"bad": badSrv.URL, "good": goodSrv.URL}
+	}
+	saveRegionCacheFn = func(string, string) {}
+
+	cfg := &config.ClientConfig{ServerURL: badSrv.URL, AuthToken: "t"}
+	resp, ok := reregisterAcrossRegions(cfg, nil, "sub", nil)
+	if !ok {
+		t.Fatalf("expected registration to succeed on the healthy region")
+	}
+	if resp.SessionToken != "tok" {
+		t.Errorf("expected the healthy region's response, got %+v", resp)
+	}
+	if cfg.Region != "good" {
+		t.Errorf("expected to end up on 'good', got %q", cfg.Region)
+	}
+	// Whichever region was elected first, the broken one must never be retried after
+	// failing -- one attempt at most, then it is cooled down and skipped.
+	if got := atomic.LoadInt32(&badHits); got > 1 {
+		t.Errorf("broken region should be tried at most once then cooled down, got %d attempts", got)
+	}
+}
+
+// TestReregisterAcrossRegionsStopsOnTerminal makes sure a 403 is not retried against
+// every remaining region, since none of them can satisfy it.
+func TestReregisterAcrossRegionsStopsOnTerminal(t *testing.T) {
+	resetCooldowns(t)
+	shortenBackoff(t)
+
+	var hits int32
+	srv := registrationServer(t, http.StatusForbidden, `{"error":"subdomain reserved"}`, &hits)
+
+	origFetch, origSave := fetchRemoteRegionsFn, saveRegionCacheFn
+	defer func() { fetchRemoteRegionsFn, saveRegionCacheFn = origFetch, origSave }()
+	fetchRemoteRegionsFn = func(c *config.ClientConfig) {
+		c.Regions = map[string]string{"a": srv.URL, "b": srv.URL}
+	}
+	saveRegionCacheFn = func(string, string) {}
+
+	cfg := &config.ClientConfig{ServerURL: srv.URL, AuthToken: "t"}
+	if _, ok := reregisterAcrossRegions(cfg, nil, "sub", nil); ok {
+		t.Fatalf("expected a terminal 403 to abort the failover")
+	}
+	if got := atomic.LoadInt32(&hits); got != 1 {
+		t.Errorf("expected a terminal failure to stop after one attempt, got %d", got)
+	}
+}
+
+// TestReregisterAcrossRegionsGivesUpCleanly covers the total-outage case: every region
+// failing must return false rather than exiting the process or looping forever.
+func TestReregisterAcrossRegionsGivesUpCleanly(t *testing.T) {
+	resetCooldowns(t)
+	shortenBackoff(t)
+
+	var hits int32
+	srv := registrationServer(t, http.StatusBadGateway, `{}`, &hits)
+
+	origFetch, origSave := fetchRemoteRegionsFn, saveRegionCacheFn
+	defer func() { fetchRemoteRegionsFn, saveRegionCacheFn = origFetch, origSave }()
+	fetchRemoteRegionsFn = func(c *config.ClientConfig) {
+		c.Regions = map[string]string{"a": srv.URL, "b": srv.URL}
+	}
+	saveRegionCacheFn = func(string, string) {}
+
+	cfg := &config.ClientConfig{ServerURL: srv.URL, AuthToken: "t"}
+	if _, ok := reregisterAcrossRegions(cfg, nil, "sub", nil); ok {
+		t.Fatalf("expected failure when every region is unhealthy")
+	}
+	if got := atomic.LoadInt32(&hits); got != maxFailoverAttempts {
+		t.Errorf("expected exactly %d attempts before giving up, got %d", maxFailoverAttempts, got)
 	}
 }
 

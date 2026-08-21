@@ -261,6 +261,40 @@ func (e *InterceptorEngine) AddRecord(rec *RequestRecord) {
 	}
 }
 
+// ConsumeFailback reports whether the failback prober has asked for a switch to the
+// primary region, clearing the flag as it does so. Read-and-clear is one operation
+// under the lock: the prober goroutine sets the flag while the main loop reads it, and
+// a failback must be acted on exactly once.
+func (e *InterceptorEngine) ConsumeFailback() bool {
+	e.mu.Lock()
+	defer e.mu.Unlock()
+	requested := e.IsFailback
+	e.IsFailback = false
+	return requested
+}
+
+// SetRegionEndpoint atomically updates the region, gateway URL and public URLs the
+// client is currently serving from. These three always change together during a
+// failover or failback, and the TUI renderer, the Inspector HTTP handlers and the
+// failback prober all read them concurrently -- updating them under one lock keeps
+// readers from observing a half-applied switch (e.g. the new region label next to
+// the old edge host).
+func (e *InterceptorEngine) SetRegionEndpoint(region, serverURL string, publicURLs []string) {
+	e.mu.Lock()
+	defer e.mu.Unlock()
+	e.SelectedRegion = region
+	e.ServerURL = serverURL
+	// Copy rather than alias: the caller keeps using its slice after this returns.
+	e.PublicURLs = append([]string(nil), publicURLs...)
+}
+
+// RegionEndpoint returns the current region, gateway URL and public URLs together.
+func (e *InterceptorEngine) RegionEndpoint() (region, serverURL string, publicURLs []string) {
+	e.mu.RLock()
+	defer e.mu.RUnlock()
+	return e.SelectedRegion, e.ServerURL, append([]string(nil), e.PublicURLs...)
+}
+
 // SetSubdomainDetails updates the subdomain registration details safely.
 func (e *InterceptorEngine) SetSubdomainDetails(req, ass string, leased, conflict bool) {
 	e.mu.Lock()

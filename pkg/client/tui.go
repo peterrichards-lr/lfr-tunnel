@@ -99,6 +99,11 @@ func render(engine *InterceptorEngine, publicURLs []string, systemLogs []string)
 	subdomainReq := engine.SubdomainReq
 	subdomainAss := engine.SubdomainAss
 	destPort := engine.DestPort
+	// Snapshot the endpoint here too. Failover rewrites region and server URL together,
+	// and reading them unlocked further down raced with that write and could show the
+	// new region label beside the old edge host.
+	selectedRegion := engine.SelectedRegion
+	engineServerURL := engine.ServerURL
 	engine.mu.RUnlock()
 
 	// Calculate RTT average
@@ -151,18 +156,18 @@ func render(engine *InterceptorEngine, publicURLs []string, systemLogs []string)
 	fmt.Printf("  Subdomain:  \033[1;37m%s\033[0m%s\n", sub, eol)
 
 	// Region / Edge Node
-	if engine.SelectedRegion != "" {
+	if selectedRegion != "" {
 		edgeHost := ""
-		if u, err := url.Parse(engine.ServerURL); err == nil && u.Host != "" {
+		if u, err := url.Parse(engineServerURL); err == nil && u.Host != "" {
 			edgeHost = u.Host
 		}
 		if edgeHost != "" {
-			fmt.Printf("  Region:     \033[1;37m%s (%s)\033[0m%s\n", engine.SelectedRegion, edgeHost, eol)
+			fmt.Printf("  Region:     \033[1;37m%s (%s)\033[0m%s\n", selectedRegion, edgeHost, eol)
 		} else {
-			fmt.Printf("  Region:     \033[1;37m%s\033[0m%s\n", engine.SelectedRegion, eol)
+			fmt.Printf("  Region:     \033[1;37m%s\033[0m%s\n", selectedRegion, eol)
 		}
-	} else if engine.ServerURL != "" {
-		if u, err := url.Parse(engine.ServerURL); err == nil && u.Host != "" {
+	} else if engineServerURL != "" {
+		if u, err := url.Parse(engineServerURL); err == nil && u.Host != "" {
 			fmt.Printf("  Edge Node:  \033[1;37m%s\033[0m%s\n", u.Host, eol)
 		}
 	}

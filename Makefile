@@ -13,6 +13,11 @@ TEST_BINARY := $(LFT_TEST_DIR)/lfr-tunnel$(shell go env GOEXE)
 
 PKG ?= ./...
 TEST_FLAGS ?=
+# Compile-time flags for the test binary. TEST_FLAGS is passed to the binary at run
+# time, so options that must be set when building -- notably -race -- belong here:
+#   make test TEST_BUILD_FLAGS=-race
+# The binary is still built to and executed from LFT_TEST_DIR, so this stays EDR-safe.
+TEST_BUILD_FLAGS ?=
 
 
 help:
@@ -39,7 +44,7 @@ test:
 	@mkdir -p $(LFT_TEST_DIR)
 	@for pkg in $$(go list -f '{{if .TestGoFiles}}{{.ImportPath}}{{end}}' $(PKG)); do \
 		rm -f $(TEST_BINARY); \
-		go test -c -o $(TEST_BINARY) $$pkg || exit 1; \
+		go test -c $(TEST_BUILD_FLAGS) -o $(TEST_BINARY) $$pkg || exit 1; \
 		if [ -f $(TEST_BINARY) ]; then \
 			(cd "$$(go list -f '{{.Dir}}' $$pkg | tr '\\' '/')" && $(TEST_BINARY) $(TEST_FLAGS)) || exit 1; \
 		fi; \

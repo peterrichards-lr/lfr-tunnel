@@ -279,6 +279,12 @@ func NewServer(cfg *config.ServerConfig) (*Server, error) {
 	}
 
 	registry := NewRegistry(chiselSrv)
+	// An edge stamps its own identity on the leases it creates, so the portal can report
+	// which gateway is actually serving a tunnel rather than assuming the control plane
+	// (issue #1167). Central leaves it unset and keeps the "control" default.
+	if cfg.ControlPlaneURL != "" && cfg.EdgeToken != "" {
+		registry.SetNodeID(edgeNodeIDFromToken(cfg.EdgeToken))
+	}
 	proxyHandler := NewProxyHandler(registry, cfg)
 
 	// Setup internal reverse proxy to Chisel server

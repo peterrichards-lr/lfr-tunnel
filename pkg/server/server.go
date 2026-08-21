@@ -237,8 +237,14 @@ type Server struct {
 	outboundConnected bool
 	outboundMutex     sync.RWMutex
 	userCache         sync.Map // email -> *db.User cache to prevent SQLite read contention
+	// httpServer and redirectSrv are assigned late in Start, from the goroutine that
+	// then blocks serving, and read by Stop from another goroutine. Guarded by
+	// httpServerMu: without it, publishing the *http.Server races Shutdown's writes to
+	// the same struct, and Stop can observe a nil pointer and silently skip the
+	// graceful shutdown, leaving the listener bound (issue #1125).
 	httpServer        *http.Server
 	redirectSrv       *http.Server
+	httpServerMu      sync.RWMutex
 	webhooks          *webhook.WebhookService
 	lastTestTimes     map[string]time.Time
 	testLimiterMu     sync.Mutex
@@ -1869,7 +1875,7 @@ func (s *Server) Start() error {
 					http.Redirect(w, r, target, http.StatusMovedPermanently)
 				}),
 			}
-			s.redirectSrv = redirectSrv
+			s.setRedirectServer(redirectSrv)
 			if err := redirectSrv.ListenAndServe(); err != nil && err != http.ErrServerClosed {
 				log.Fatalf("[Server] HTTP redirect server failed: %v", err)
 			}
@@ -1880,7 +1886,7 @@ func (s *Server) Start() error {
 			Addr:    s.cfg.BindAddr,
 			Handler: s,
 		}
-		s.httpServer = srv
+		s.setHTTPServer(srv)
 		return srv.ListenAndServeTLS(s.cfg.SSLCertFile, s.cfg.SSLKeyFile)
 	}
 
@@ -1890,8 +1896,30 @@ func (s *Server) Start() error {
 		Addr:    s.cfg.HTTPBindAddr,
 		Handler: s,
 	}
-	s.httpServer = srv
+	s.setHTTPServer(srv)
 	return srv.ListenAndServe()
+}
+
+// setHTTPServer publishes the gateway listener for Stop to shut down.
+func (s *Server) setHTTPServer(srv *http.Server) {
+	s.httpServerMu.Lock()
+	defer s.httpServerMu.Unlock()
+	s.httpServer = srv
+}
+
+// setRedirectServer publishes the HTTP-to-HTTPS redirect listener for Stop.
+func (s *Server) setRedirectServer(srv *http.Server) {
+	s.httpServerMu.Lock()
+	defer s.httpServerMu.Unlock()
+	s.redirectSrv = srv
+}
+
+// httpServers returns the listeners to shut down. Either may be nil when Stop races a
+// Start that has not reached its assignment yet, or when the server was never started.
+func (s *Server) httpServers() (gateway, redirect *http.Server) {
+	s.httpServerMu.RLock()
+	defer s.httpServerMu.RUnlock()
+	return s.httpServer, s.redirectSrv
 }
 
 // RegisterRequestPayload represents the payload to request developer registration.
@@ -2429,11 +2457,12 @@ func (s *Server) Stop() {
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 
-	if s.httpServer != nil {
-		_ = s.httpServer.Shutdown(ctx) //nolint:errcheck
+	gateway, redirect := s.httpServers()
+	if gateway != nil {
+		_ = gateway.Shutdown(ctx) //nolint:errcheck
 	}
-	if s.redirectSrv != nil {
-		_ = s.redirectSrv.Shutdown(ctx) //nolint:errcheck
+	if redirect != nil {
+		_ = redirect.Shutdown(ctx) //nolint:errcheck
 	}
 
 	s.chiselServer.Close() //nolint:errcheck

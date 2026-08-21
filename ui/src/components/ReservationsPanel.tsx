@@ -306,6 +306,11 @@ export default function ReservationsPanel() {
               ⚠️ {t('reservation_limit_reached', 'You have reached your reservation limit. Release a subdomain to register a new one.')}
             </div>
           )}
+          <div className="flex justify-end mt-sm">
+            <a href="#registered-subdomains" className="btn btn-outline py-xs px-md text-xs w-auto m-0">
+              {t('view_registered_subdomains', 'View Registered Subdomains')} ↓
+            </a>
+          </div>
         </div>
 
         <div className="mb-xl">
@@ -324,6 +329,11 @@ export default function ReservationsPanel() {
               ⚠️ {t('custom_domain_limit_reached', 'You have reached your custom domain limit. Release one to register a new one.')}
             </div>
           )}
+          <div className="flex justify-end mt-sm">
+            <a href="#custom-domains" className="btn btn-outline py-xs px-md text-xs w-auto m-0">
+              {t('view_custom_domains', 'View Custom Domains')} ↓
+            </a>
+          </div>
         </div>
 
         {!isAtLimit && (
@@ -360,6 +370,7 @@ export default function ReservationsPanel() {
       </div>
 
       <ReservationsTable
+        id="registered-subdomains"
         title={t('subdomain_reservations', 'Registered Subdomains')}
         emptyMessage={t('no_subdomains_reserved', 'No subdomains reserved yet.')}
         searchPlaceholder={t('search_reservations_placeholder', 'Search reservations...')}
@@ -391,6 +402,7 @@ export default function ReservationsPanel() {
       />
 
       <ReservationsTable
+        id="custom-domains"
         title={t('custom_domains', 'Custom Domains')}
         emptyMessage={t('no_custom_domains_registered', 'No custom domains registered yet.')}
         searchPlaceholder={t('search_custom_domains_placeholder', 'Search custom domains...')}

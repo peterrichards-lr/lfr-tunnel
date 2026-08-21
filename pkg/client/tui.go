@@ -104,6 +104,8 @@ func render(engine *InterceptorEngine, publicURLs []string, systemLogs []string)
 	// new region label beside the old edge host.
 	selectedRegion := engine.SelectedRegion
 	engineServerURL := engine.ServerURL
+	targetHost := engine.TargetHost
+	inspectorPort := engine.inspectorPort
 	engine.mu.RUnlock()
 
 	// Calculate RTT average
@@ -173,8 +175,15 @@ func render(engine *InterceptorEngine, publicURLs []string, systemLogs []string)
 	}
 
 	fmt.Printf("  Server:     \033[90m%s\033[0m%s\n", strings.Join(publicURLs, ", "), eol)
-	fmt.Printf("  Local:      \033[90m127.0.0.1:%d (Primary)\033[0m%s\n", destPort, eol)
-	fmt.Printf("  Inspector:  \033[34mhttp://127.0.0.1:%d\033[0m%s\n", 4040, eol)
+	if targetHost == "" {
+		targetHost = "127.0.0.1"
+	}
+	fmt.Printf("  Local:      \033[90m%s:%d (Primary)\033[0m%s\n", targetHost, destPort, eol)
+	if inspectorPort > 0 {
+		fmt.Printf("  Inspector:  \033[34mhttp://127.0.0.1:%d\033[0m%s\n", inspectorPort, eol)
+	} else {
+		fmt.Printf("  Inspector:  \033[90m(not running)\033[0m%s\n", eol)
+	}
 	fmt.Printf("--------------------------------------------------------------------------------%s\n", eol)
 
 	// Metrics Grid
@@ -206,11 +215,7 @@ func render(engine *InterceptorEngine, publicURLs []string, systemLogs []string)
 
 			// Format method and path
 			methodStr := fmt.Sprintf("\033[1;36m%-6s\033[0m", rec.Method)
-			pathLimit := 45
-			pathStr := rec.Path
-			if len(pathStr) > pathLimit {
-				pathStr = pathStr[:pathLimit-3] + "..."
-			}
+			pathStr := truncateRunes(rec.Path, 45)
 
 			fmt.Printf("  [%s] %s %-45s -> %s (%dms)%s\n", timeStr, methodStr, pathStr, statusStr, rec.DurationMs, eol)
 			printed++
@@ -230,11 +235,7 @@ func render(engine *InterceptorEngine, publicURLs []string, systemLogs []string)
 	printedLogs := 0
 	for i := len(systemLogs) - logLimit; i < len(systemLogs); i++ {
 		if i >= 0 {
-			line := systemLogs[i]
-			// Trim timestamp if it's already there to save width
-			if len(line) > 78 {
-				line = line[:75] + "..."
-			}
+			line := truncateRunes(systemLogs[i], 78)
 			fmt.Printf("  * %s%s\n", line, eol)
 			printedLogs++
 		}
@@ -244,6 +245,26 @@ func render(engine *InterceptorEngine, publicURLs []string, systemLogs []string)
 	}
 	fmt.Print("\033[0m") // Reset
 	fmt.Print(eol)       // Clear any leftover tail on whatever was the terminal's last-drawn line
+}
+
+// truncateRunes shortens s to at most maxLen characters, appending an ellipsis when it
+// had to cut. It counts runes rather than bytes: slicing a UTF-8 string at a byte offset
+// can land mid-character and emit a replacement glyph, and the client's own log lines
+// carry multi-byte characters (the portal and status-page hints use an arrow, the ops
+// output uses check and clock marks) -- precisely the lines long enough to be truncated.
+// Counting runes also keeps the fmt padding verbs aligned, since they count runes too.
+func truncateRunes(s string, maxLen int) string {
+	if maxLen <= 0 {
+		return ""
+	}
+	runes := []rune(s)
+	if len(runes) <= maxLen {
+		return s
+	}
+	if maxLen <= 3 {
+		return string(runes[:maxLen])
+	}
+	return string(runes[:maxLen-3]) + "..."
 }
 
 func formatBytes(b int64) string {

@@ -1,5 +1,17 @@
 [
   {
+    "version": "v1.45.0",
+    "release_date": "2026-08-21",
+    "features": [
+      "Reliable Edge Failover & Failback: Losing an edge no longer risks killing your tunnel. A transient gateway error during recovery is now retried against another region instead of exiting, a region you have failed away from is genuinely held out of the running until it settles, and a failback that doesn't work leaves you on the region you were already using rather than migrating you somewhere new.",
+      "Persistent Client Logs: The client now keeps a JSON Lines record of every proxied request and every diagnostic event under ~/.lfr-tunnel/logs/, for foreground and background runs alike. Region switches, lease evictions and exhausted failovers are all recorded, so a tunnel that misbehaved can be explained after the fact instead of guessed at. Logs rotate rather than overwrite, and request bodies stay off disk unless you pass -log-bodies.",
+      "Clearer TUI: The dashboard now shows the Inspector port it actually bound to and the target host you actually configured, rather than assuming 4040 and 127.0.0.1. Long paths and log lines are truncated by character, so accented text and emoji no longer render as broken glyphs.",
+      "Dependable Admin Email: Registration approval emails now reach administrators even if they have muted routine notifications, so unsubscribing can no longer silently block new users from being approved. Admin alerts also fall back to the configured owner when no dedicated notification address is set, and the gateway warns at startup if nobody would receive them.",
+      "Gateway Stability: Fixed several concurrency faults in the gateway and edge control channel, including a goroutine leak on every edge reconnect and races during startup and shutdown.",
+      "Self-Hosting Correctness: Self-hosted deployments no longer report tunnel status to this project's production gateway, and no longer fall back to its domain when promoting a reservation."
+    ]
+  },
+  {
     "version": "v1.44.24",
     "release_date": "2026-08-20",
     "features": [
@@ -29,14 +41,6 @@
     "features": [
       "Multi-Part Chisel Remote Authorization Regex: Updated Gateway allowedRemotes regex to accept multi-part client remote strings, eliminating Access Denied rejections during live region failover.",
       "Un-mutated Registration Port Mappings: Preserved regPortMappings in main loop so server registration during failover receives original target ports, enabling full HTTP traffic forwarding."
-    ]
-  },
-  {
-    "version": "v1.44.20",
-    "release_date": "2026-08-20",
-    "features": [
-      "Failover Reverse Tunnel Remote Port Rewriting: Rewrites reverse tunnel port mappings during live region failover, ensuring Chisel client requests correct allocated server ports and visitor traffic flows to local machines.",
-      "End-to-End Traffic Proxying Verification: Verified traffic forwarding over fallback edge connections to prevent server 502 Bad Gateway responses."
     ]
   }
 ]

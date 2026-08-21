@@ -7,3 +7,8 @@ for the naming conventions, template, and lifecycle this directory follows.
 - `todo/` — drafted but not yet raised on the JIRA platform.
 - `open/` — raised and currently open on JIRA.
 - `closed/` — resolved, closed, or discarded.
+
+
+<!-- markdownlint-disable MD049 -->
+---
+*Last Updated: 2026-08-21* | *Last Reviewed: 2026-08-21*

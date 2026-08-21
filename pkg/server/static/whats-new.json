@@ -1,5 +1,16 @@
 [
   {
+    "version": "v1.47.0",
+    "release_date": "2026-08-21",
+    "features": [
+      "Failover Recovers Quickly Again: The client now asks an edge whether it can actually carry a tunnel before moving to it, rather than only noticing afterwards that it could not. A recovered edge is used again within seconds instead of after a fixed five-minute wait, which previously made the client look stuck on a distant region long after the nearer one was healthy.",
+      "No More Phantom Region Switches: Each gateway is advertised under two names, and the client treated them as different places -- so a failover could 'move' between two names for the same server, logging what looked like a second outage while never going anywhere. One gateway is now one place, which also halves the health checks made when choosing a region.",
+      "Client Version In The Dashboard: The TUI header now shows which version you are running, and tells you when a newer one is available. That check also runs periodically rather than only at startup, so a client left running for days will notice a release instead of missing it entirely.",
+      "Accurate Node Reporting: The portal's tunnel list showed every session on the Control node, even when it was being served by a regional edge. Each gateway now records itself, so the Node column reflects reality.",
+      "Cleaner Restarts: Stopping the gateway normally no longer reports a failure, which previously made every routine restart look like a crash in the system logs and made real crashes harder to spot."
+    ]
+  },
+  {
     "version": "v1.46.0",
     "release_date": "2026-08-21",
     "features": [
@@ -37,14 +48,6 @@
     "features": [
       "Automated Primary Region Failback (#1103): Added background health prober in client CLI that pings developer's primary regional edge node when running in failover mode.",
       "Seamless Primary Migration: Automatically re-registers on primary edge node when it recovers, updating TUI headers, state files, and tunnels live without CLI restarts."
-    ]
-  },
-  {
-    "version": "v1.44.22",
-    "release_date": "2026-08-20",
-    "features": [
-      "Same-User Lease Eviction & Primary Domain Assignment: Updated Central Gateway CheckSubdomainForUser and Register to evict stale regional leases for the same user, ensuring primary .se domain is assigned to the new live tunnel connection during failover.",
-      "Seamless Primary Subdomain Traffic Forwarding: Eliminates stale lease lockouts and 502 Bad Gateway responses when accessing primary subdomain URLs post-failover."
     ]
   }
 ]

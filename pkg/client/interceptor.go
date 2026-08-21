@@ -89,6 +89,11 @@ type InterceptorEngine struct {
 	IsFailback            bool
 	FailbackProbeInterval time.Duration
 
+	// centralURL is the control plane an edge session also reports status to. Set from
+	// configuration via SetCentralURL; empty means "report only to the connected
+	// gateway". Unexported so it cannot be read without the lock.
+	centralURL string
+
 	// Latency & Bandwidth Simulation Settings
 	Latency         time.Duration
 	BandwidthLimit  int64
@@ -129,8 +134,86 @@ func NewInterceptorEngine(targetHost string, headers []string) *InterceptorEngin
 	}
 }
 
-// StartHealthChecks begins a background loop to verify Tomcat is responding and reports status to the Gateway.
-func (e *InterceptorEngine) StartHealthChecks(ctx context.Context, cancel context.CancelFunc, serverURL, region, sessionToken string, targetPort int) {
+// sameGatewayHost reports whether two gateway URLs address the same host. Compared on
+// the parsed host rather than by substring: a substring test matches any hostname that
+// merely contains the other, and misses equivalent spellings such as a trailing slash
+// or an explicit default port.
+func sameGatewayHost(a, b string) bool {
+	if a == "" || b == "" {
+		return false
+	}
+	parsedA, errA := url.Parse(strings.TrimRight(a, "/"))
+	parsedB, errB := url.Parse(strings.TrimRight(b, "/"))
+	if errA != nil || errB != nil {
+		return strings.EqualFold(a, b)
+	}
+	return strings.EqualFold(parsedA.Hostname(), parsedB.Hostname())
+}
+
+// statusReportTargets lists the gateways a tunnel-status heartbeat should go to. The
+// connected gateway always gets one. The central control plane additionally gets one
+// when the client is connected to a regional edge, so central keeps an accurate view
+// of the session.
+//
+// centralURL must come from configuration. It was previously hardcoded to this
+// project's own production gateway, which meant any self-hosted deployment shipped its
+// session tokens to a third party every 5 seconds (issue #1124). When it is unknown,
+// report only to the connected gateway.
+func statusReportTargets(serverURL, centralURL string) []string {
+	targets := []string{serverURL}
+	if centralURL != "" && !sameGatewayHost(serverURL, centralURL) {
+		targets = append(targets, centralURL)
+	}
+	return targets
+}
+
+// CentralURL returns the configured central control-plane URL, if any.
+func (e *InterceptorEngine) CentralURL() string {
+	e.mu.RLock()
+	defer e.mu.RUnlock()
+	return e.centralURL
+}
+
+// SetCentralURL records the central control-plane URL that regional edge sessions
+// should also report their status to.
+func (e *InterceptorEngine) SetCentralURL(u string) {
+	e.mu.Lock()
+	defer e.mu.Unlock()
+	e.centralURL = u
+}
+
+// localTargetStatus dials every mapped local port and reports one aggregate status for
+// the session. A tunnel is only "up" when every port it advertises is reachable:
+// reporting "up" while a client extension's port is dead would mean the gateway
+// forwards traffic to a listener that isn't there.
+func (e *InterceptorEngine) localTargetStatus(targetPorts []int) string {
+	e.mu.RLock()
+	isMaint := e.MaintenanceMode
+	e.mu.RUnlock()
+	if isMaint {
+		return "maintenance"
+	}
+
+	for _, port := range targetPorts {
+		conn, err := net.DialTimeout("tcp", fmt.Sprintf("%s:%d", e.TargetHost, port), 2*time.Second)
+		if err != nil {
+			return "down"
+		}
+		conn.Close() //nolint:errcheck
+	}
+	return "up"
+}
+
+// StartHealthChecks begins a background loop to verify the local targets are responding
+// and reports one aggregate status for the session to the Gateway.
+//
+// One goroutine per session, not per port. It previously ran per mapped port, so every
+// tick produced an identical status report per port per endpoint -- a portal plus three
+// client extensions meant eight POSTs every five seconds carrying the same session
+// state -- and each goroutine independently raced to trigger the same failover, while
+// each overwrote the engine's single Status field with its own port's result
+// (issue #1123).
+func (e *InterceptorEngine) StartHealthChecks(ctx context.Context, cancel context.CancelFunc, serverURL, region, sessionToken string, targetPorts []int) {
 	go func() {
 		ticker := time.NewTicker(5 * time.Second)
 		defer ticker.Stop()
@@ -139,23 +222,7 @@ func (e *InterceptorEngine) StartHealthChecks(ctx context.Context, cancel contex
 			case <-ctx.Done():
 				return
 			case <-ticker.C:
-				// Determine actual status
-				e.mu.RLock()
-				isMaint := e.MaintenanceMode
-				e.mu.RUnlock()
-
-				newStatus := "up"
-				if isMaint {
-					newStatus = "maintenance"
-				} else {
-					// Simple dial test to the local target port
-					conn, err := net.DialTimeout("tcp", fmt.Sprintf("%s:%d", e.TargetHost, targetPort), 2*time.Second)
-					if err != nil {
-						newStatus = "down"
-					} else {
-						conn.Close() //nolint:errcheck
-					}
-				}
+				newStatus := e.localTargetStatus(targetPorts)
 
 				// Update internal state and notify server if changed or heartbeat tick
 				e.mu.Lock()
@@ -169,11 +236,7 @@ func (e *InterceptorEngine) StartHealthChecks(ctx context.Context, cancel contex
 					"status":        newStatus,
 				})
 
-				centralURL := "https://tunnel.lfr-demo.se"
-				urlsToPing := []string{serverURL}
-				if serverURL != centralURL && !strings.Contains(serverURL, "tunnel.lfr-demo.se") {
-					urlsToPing = append(urlsToPing, centralURL)
-				}
+				urlsToPing := statusReportTargets(serverURL, e.CentralURL())
 
 				for _, pingURL := range urlsToPing {
 					req, err := http.NewRequestWithContext(ctx, "POST", fmt.Sprintf("%s/api/tunnel-status", pingURL), bytes.NewBuffer(payload))

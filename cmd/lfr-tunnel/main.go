@@ -173,6 +173,7 @@ func main() {
 	engine.Token = cfg.AuthToken
 	engine.ServerURL = cfg.ServerURL
 	engine.SelectedRegion = cfg.Region
+	engine.SetCentralURL(centralControlPlaneURL(cfg))
 	engine.Passcode = cfg.Passcode
 	engine.WhitelistIPs = cfg.WhitelistIPs
 	engine.PreserveHost = cfg.PreserveHost
@@ -348,9 +349,11 @@ func main() {
 
 	for ctx.Err() == nil {
 		clientCtx, cancelClient := context.WithCancel(ctx)
+		healthCheckPorts := make([]int, 0, len(portMappings))
 		for _, pm := range portMappings {
-			engine.StartHealthChecks(clientCtx, cancelClient, cfg.ServerURL, cfg.Region, regResp.SessionToken, pm.LocalPort)
+			healthCheckPorts = append(healthCheckPorts, pm.LocalPort)
 		}
+		engine.StartHealthChecks(clientCtx, cancelClient, cfg.ServerURL, cfg.Region, regResp.SessionToken, healthCheckPorts)
 		if primaryRegion != "" && primaryServerURL != "" {
 			engine.StartFailbackProber(clientCtx, cancelClient, primaryServerURL, primaryRegion)
 		}
@@ -370,6 +373,9 @@ func main() {
 				rewriteRemotes(regResp, portMap)
 				publicURLs = printAndCollectPublicURLs(cfg, regResp, portMappings, subHost)
 				engine.SetRegionEndpoint(cfg.Region, cfg.ServerURL, publicURLs)
+				// The region list can change across a failover, so re-derive rather
+				// than keeping whatever central was advertised at startup.
+				engine.SetCentralURL(centralControlPlaneURL(cfg))
 				engine.SetSubdomainDetails(sub, regResp.SubdomainPrefix, true, false)
 				state.Region = cfg.Region
 				state.ServerURL = cfg.ServerURL
@@ -658,6 +664,18 @@ const maxFailoverAttempts = 4
 // failoverRetryBackoff is the initial pause between failover registration attempts,
 // doubled on each retry. A variable so tests don't have to sit through real backoff.
 var failoverRetryBackoff = time.Second
+
+// centralControlPlaneURL returns the control plane that edge sessions should also
+// report their tunnel status to, taken from the gateway-advertised region list. There
+// is deliberately no hardcoded fallback: a deployment that does not advertise a
+// "central" region gets no second report target, rather than having this project's
+// production gateway assumed on its behalf (issue #1124).
+func centralControlPlaneURL(cfg *config.ClientConfig) string {
+	if url, ok := cfg.Regions["central"]; ok {
+		return url
+	}
+	return ""
+}
 
 // regionDiscoveryURL picks a host to fetch the region list from during failover, in
 // preference order: the central control plane, then any region other than the one that

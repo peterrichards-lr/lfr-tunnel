@@ -410,6 +410,12 @@ func main() {
 				cooldowns.clear(cfg.Region)
 			}
 
+			// Set when a failback attempt failed and put us back on the region we were
+			// already serving from. That region did not fail -- the session was
+			// cancelled deliberately to try the primary -- so the failover bookkeeping
+			// below must not treat it as the casualty (issue #1137).
+			failbackReturned := false
+
 			if engine.ConsumeFailback() {
 				slog.Info(fmt.Sprintf("[Client] Primary region '%s' (%s) recovered. Performing automated failback...", primaryRegion, primaryServerURL))
 
@@ -451,41 +457,43 @@ func main() {
 				slog.Info(fmt.Sprintf("[Client] Staying on region '%s'; will retry the primary later.", fallbackRegion))
 				cooldowns.exclude(primaryRegion, regionFailoverCooldown)
 				cfg.Region, cfg.ServerURL = fallbackRegion, fallbackServerURL
+				failbackReturned = true
 			}
 
 			if len(cfg.Regions) > 0 {
 				failedRegion := cfg.Region
-				slog.Info(fmt.Sprintf("[Client] Connection to region '%s' (%s) lost. Performing dynamic region failover...", failedRegion, cfg.ServerURL))
-				failoverCause := "connection closed"
-				if err != nil {
-					failoverCause = err.Error()
+				if failbackReturned {
+					// Nothing here failed, so no cooldown, no cache clear and no
+					// rediscovery away from this region: leaving it a candidate is what
+					// makes the "staying on '%s'" message above true.
+					slog.Info(fmt.Sprintf("[Client] Re-establishing the session on region '%s' (%s)...", failedRegion, cfg.ServerURL))
+				} else {
+					slog.Info(fmt.Sprintf("[Client] Connection to region '%s' (%s) lost. Performing dynamic region failover...", failedRegion, cfg.ServerURL))
+					failoverCause := "connection closed"
+					if err != nil {
+						failoverCause = err.Error()
+					}
+					engine.LogEvent("warn", "failover_started", map[string]any{
+						"failed_region": failedRegion,
+						"failed_url":    cfg.ServerURL,
+						"cause":         failoverCause,
+					})
+					_ = client.ClearRegionCacheFile() //nolint:errcheck
 				}
-				engine.LogEvent("warn", "failover_started", map[string]any{
-					"failed_region": failedRegion,
-					"failed_url":    cfg.ServerURL,
-					"cause":         failoverCause,
-				})
-				_ = client.ClearRegionCacheFile() //nolint:errcheck
-
-				// Hold the failed region out of the running. This has to be a cooldown
-				// rather than a delete from cfg.Regions: resolveServerURL refreshes that
-				// map from the gateway and would restore the entry (issue #1121).
-				cooldowns.exclude(failedRegion, regionFailoverCooldown)
-
-				// Rediscover from a host that is not the one that just failed --
-				// otherwise the failed edge is the source of truth for the region list
-				// it is supposed to be excluded from.
-				if discoveryURL := regionDiscoveryURL(cfg, primaryRegionsMap, failedRegion); discoveryURL != "" {
-					cfg.ServerURL = discoveryURL
-				}
+				excludeFailedRegion(cfg, primaryRegionsMap, failedRegion, failbackReturned)
 
 				if newResp, ok := reregisterAcrossRegions(cfg, regPortMappings, sub, engine.AddedHeaders); ok {
 					applySession(newResp, "failover")
-					slog.Info(fmt.Sprintf("[Client] Successfully failed over to region '%s' (%s)", cfg.Region, cfg.ServerURL))
+					if failbackReturned {
+						slog.Info(fmt.Sprintf("[Client] Session re-established on region '%s' (%s)", cfg.Region, cfg.ServerURL))
+					} else {
+						slog.Info(fmt.Sprintf("[Client] Successfully failed over to region '%s' (%s)", cfg.Region, cfg.ServerURL))
+					}
 					engine.LogEvent("info", "failover", map[string]any{
-						"from": failedRegion,
-						"to":   cfg.Region,
-						"url":  cfg.ServerURL,
+						"from":           failedRegion,
+						"to":             cfg.Region,
+						"url":            cfg.ServerURL,
+						"after_failback": failbackReturned,
 					})
 					continue
 				}
@@ -726,6 +734,30 @@ func centralControlPlaneURL(cfg *config.ClientConfig) string {
 		return url
 	}
 	return ""
+}
+
+// excludeFailedRegion holds the region that just failed out of the candidate set and
+// points region discovery at a different host.
+//
+// The exclusion has to be a cooldown rather than a delete from cfg.Regions, because
+// resolveServerURL refreshes that map from the gateway and would restore the entry
+// (issue #1121). Discovery has to move off the failed edge too, or that edge is the
+// source of truth for the region list it is supposed to be excluded from.
+//
+// afterFailback makes the whole thing a no-op. A failed failback returns the client to
+// the region it was already serving from, which never failed -- the session was
+// cancelled deliberately to try the primary. Cooling it down there abandoned a healthy
+// edge, and with only two regions configured the "everything excluded" fallback in
+// regionCooldowns.filter could then re-elect the primary whose failback had just
+// failed -- the loop #1121 exists to prevent (issue #1137).
+func excludeFailedRegion(cfg *config.ClientConfig, primaryRegions map[string]string, failedRegion string, afterFailback bool) {
+	if afterFailback {
+		return
+	}
+	cooldowns.exclude(failedRegion, regionFailoverCooldown)
+	if discoveryURL := regionDiscoveryURL(cfg, primaryRegions, failedRegion); discoveryURL != "" {
+		cfg.ServerURL = discoveryURL
+	}
 }
 
 // regionDiscoveryURL picks a host to fetch the region list from during failover, in

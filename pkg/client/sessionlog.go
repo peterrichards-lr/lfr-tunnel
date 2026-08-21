@@ -7,6 +7,7 @@ import (
 	"path/filepath"
 	"sync"
 	"time"
+	"unicode/utf8"
 )
 
 const (
@@ -270,10 +271,17 @@ func writeJSONLine(w *RotatingFile, v any) {
 }
 
 func truncateBody(s string) string {
-	if len(s) > maxLoggedBodyBytes {
-		return s[:maxLoggedBodyBytes]
+	if len(s) <= maxLoggedBodyBytes {
+		return s
 	}
-	return s
+	// Back up to a rune boundary. Bodies are arbitrary UTF-8, and cutting mid-character
+	// leaves invalid bytes that json.Marshal silently rewrites to U+FFFD -- the same
+	// defect class fixed for the TUI in #1130.
+	cut := maxLoggedBodyBytes
+	for cut > 0 && !utf8.RuneStart(s[cut]) {
+		cut--
+	}
+	return s[:cut]
 }
 
 // Traffic records one proxied request.

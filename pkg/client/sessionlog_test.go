@@ -10,6 +10,7 @@ import (
 	"sync"
 	"testing"
 	"time"
+	"unicode/utf8"
 )
 
 func readLines(t *testing.T, path string) []string {
@@ -357,5 +358,33 @@ func TestEngineAddRecordPersists(t *testing.T) {
 	}
 	if entry.Region != "apac" {
 		t.Errorf("expected the engine's current region to be stamped on the entry, got %q", entry.Region)
+	}
+}
+
+// TestTruncateBodyCutsOnRuneBoundary is the regression test for the byte-wise cut noted
+// in #1137. Bodies are arbitrary UTF-8, and slicing at a fixed byte offset can land
+// mid-character; json.Marshal then rewrites the orphaned bytes to U+FFFD, so the logged
+// body ends in a corrupted glyph rather than simply stopping short.
+func TestTruncateBodyCutsOnRuneBoundary(t *testing.T) {
+	// Three-byte runes do not divide into the cap, so a byte-wise cut is guaranteed to
+	// land inside the rune straddling the boundary.
+	body := strings.Repeat("　", maxLoggedBodyBytes)
+
+	got := truncateBody(body)
+
+	if len(got) > maxLoggedBodyBytes {
+		t.Errorf("truncated body is %d bytes, over the %d cap", len(got), maxLoggedBodyBytes)
+	}
+	if !utf8.ValidString(got) {
+		t.Error("truncated body is not valid UTF-8 -- the cut landed inside a character")
+	}
+	if len(got) < maxLoggedBodyBytes-3 {
+		t.Errorf("expected the cut to give up at most one rune, got %d bytes", len(got))
+	}
+
+	// A body already inside the cap is returned untouched, multi-byte or not.
+	short := "héllo ✅"
+	if got := truncateBody(short); got != short {
+		t.Errorf("expected a short body to pass through unchanged, got %q", got)
 	}
 }

@@ -190,6 +190,15 @@ func (e *InterceptorEngine) SetCentralURL(u string) {
 	e.centralURL = u
 }
 
+// healthReportClient bounds the tunnel-status POST. http.DefaultClient has no timeout,
+// so the only thing that could release a hung request is this loop's own context -- and
+// that context is cancelled by this loop, on lease eviction. An edge that completes the
+// TCP handshake and then never responds would therefore park the one goroutine
+// responsible for noticing the eviction, and no failover would ever be triggered
+// (issue #1137). The timeout is generous relative to the 5s tick because a slow reply is
+// not itself a fault; only an indefinite one is.
+var healthReportClient = &http.Client{Timeout: 10 * time.Second}
+
 // localTargetStatus dials every mapped local port and reports one aggregate status for
 // the session. A tunnel is only "up" when every port it advertises is reachable:
 // reporting "up" while a client extension's port is dead would mean the gateway
@@ -250,7 +259,7 @@ func (e *InterceptorEngine) StartHealthChecks(ctx context.Context, cancel contex
 					req, err := http.NewRequestWithContext(ctx, "POST", fmt.Sprintf("%s/api/tunnel-status", pingURL), bytes.NewBuffer(payload))
 					if err == nil {
 						req.Header.Set("Content-Type", "application/json")
-						resp, err := http.DefaultClient.Do(req)
+						resp, err := healthReportClient.Do(req)
 						if err == nil {
 							if resp.StatusCode == http.StatusNotFound || resp.StatusCode == http.StatusUnauthorized || resp.StatusCode == http.StatusGone || resp.StatusCode == http.StatusServiceUnavailable {
 								slog.Info(fmt.Sprintf("[Client] Control plane reported region offline or lease evicted (HTTP %d). Triggering dynamic region failover...", resp.StatusCode))

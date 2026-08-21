@@ -414,7 +414,19 @@ func (r *Registry) CleanLease(sessionToken string) {
 		if r.OnLeaseCleanup != nil {
 			r.OnLeaseCleanup(lease)
 		}
-		delete(r.leases, lease.FullHost)
+
+		// r.leases is keyed by host, so a re-registration for the same subdomain
+		// replaces the entry rather than adding one. Deleting unconditionally therefore
+		// tore down whichever session currently owns the host, which after a failover is
+		// a different, live one -- the routing entry vanished while its chisel tunnel
+		// stayed up, so the public URL returned 502 indefinitely and nothing swept it
+		// afterwards because only this token's sessionLeases entry was removed
+		// (issue #1147). Any client re-registering for the same host inside the sweep's
+		// 30s grace period hits this, which failover makes routine.
+		if current, ok := r.leases[lease.FullHost]; ok && current == lease {
+			delete(r.leases, lease.FullHost)
+		}
+		// usedPorts is keyed by the port, which is unique per lease, so it needs no guard.
 		delete(r.usedPorts, lease.LocalPort)
 		slog.Info(fmt.Sprintf("[Server] Cleaned up lease for host %s (local port %d)", lease.FullHost, lease.LocalPort))
 	}

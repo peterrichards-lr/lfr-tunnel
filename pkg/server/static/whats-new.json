@@ -1,5 +1,16 @@
 [
   {
+    "version": "v1.47.0",
+    "release_date": "2026-08-21",
+    "features": [
+      "fix(server): exit 0 on a clean shutdown (#1172)",
+      "fix(tui): show the client version and surface a new-version notice (#1173)",
+      "fix(server): stamp the serving gateway on a lease, not \"control\" (#1174)",
+      "fix(client): treat one gateway as one place, not several (#1171)",
+      "fix(client): don't elect a gateway that cannot carry a session (#1170)"
+    ]
+  },
+  {
     "version": "v1.46.0",
     "release_date": "2026-08-21",
     "features": [
@@ -37,14 +48,6 @@
     "features": [
       "Automated Primary Region Failback (#1103): Added background health prober in client CLI that pings developer's primary regional edge node when running in failover mode.",
       "Seamless Primary Migration: Automatically re-registers on primary edge node when it recovers, updating TUI headers, state files, and tunnels live without CLI restarts."
-    ]
-  },
-  {
-    "version": "v1.44.22",
-    "release_date": "2026-08-20",
-    "features": [
-      "Same-User Lease Eviction & Primary Domain Assignment: Updated Central Gateway CheckSubdomainForUser and Register to evict stale regional leases for the same user, ensuring primary .se domain is assigned to the new live tunnel connection during failover.",
-      "Seamless Primary Subdomain Traffic Forwarding: Eliminates stale lease lockouts and 502 Bad Gateway responses when accessing primary subdomain URLs post-failover."
     ]
   }
 ]

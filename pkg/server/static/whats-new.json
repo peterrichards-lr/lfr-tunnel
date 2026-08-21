@@ -1,5 +1,19 @@
 [
   {
+    "version": "v1.46.0",
+    "release_date": "2026-08-21",
+    "features": [
+      "fix(client): remove the double dash from multi-port hostnames (#1162)",
+      "fix(server): require a deliberate POST to approve a registration (#1161)",
+      "fix(client): don't pin a region elected while others were unreachable (#1160)",
+      "fix(client): reject cross-origin and rebound requests to the Inspector (#1159)",
+      "fix(server): tell the truth about edge health and reaped sessions (#1158)",
+      "fix(server): register on the top-ranked domain, not every candidate (#1157)",
+      "fix(client): recover from a lost lease and stop failback flapping (#1155)",
+      "fix(server): don't let a stale session's cleanup delete a live route (#1156)"
+    ]
+  },
+  {
     "version": "v1.45.0",
     "release_date": "2026-08-21",
     "features": [
@@ -33,14 +47,6 @@
     "features": [
       "Same-User Lease Eviction & Primary Domain Assignment: Updated Central Gateway CheckSubdomainForUser and Register to evict stale regional leases for the same user, ensuring primary .se domain is assigned to the new live tunnel connection during failover.",
       "Seamless Primary Subdomain Traffic Forwarding: Eliminates stale lease lockouts and 502 Bad Gateway responses when accessing primary subdomain URLs post-failover."
-    ]
-  },
-  {
-    "version": "v1.44.21",
-    "release_date": "2026-08-20",
-    "features": [
-      "Multi-Part Chisel Remote Authorization Regex: Updated Gateway allowedRemotes regex to accept multi-part client remote strings, eliminating Access Denied rejections during live region failover.",
-      "Un-mutated Registration Port Mappings: Preserved regPortMappings in main loop so server registration during failover receives original target ports, enabling full HTTP traffic forwarding."
     ]
   }
 ]

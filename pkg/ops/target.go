@@ -182,6 +182,9 @@ func ResolveDeployTargetWithRegion(flagUser, flagHost, flagIdentity, flagAWSRegi
 	if target.AWSRegion == "" {
 		target.AWSRegion = os.Getenv("AWS_REGION")
 	}
+	if target.InstanceTag == "" {
+		target.InstanceTag = os.Getenv("LFT_INSTANCE_TAG")
+	}
 
 	if cfg != nil {
 		if target.User == "" {
@@ -199,9 +202,6 @@ func ResolveDeployTargetWithRegion(flagUser, flagHost, flagIdentity, flagAWSRegi
 		if target.InstanceTag == "" {
 			target.InstanceTag = cfg.Central.InstanceTag
 		}
-	}
-	if target.InstanceTag == "" {
-		target.InstanceTag = os.Getenv("LFT_INSTANCE_TAG")
 	}
 
 	var missing []string

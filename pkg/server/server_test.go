@@ -485,8 +485,27 @@ func TestServer_RegistrationFlow(t *testing.T) {
 		t.Errorf("admin notification email not sent correctly, got to=%s, body=%s", adminTo, adminBody)
 	}
 
-	// 2. Admin approves user
-	approveReq := httptest.NewRequest("GET", fmt.Sprintf("http://example.com/api/admin/approve?email=developer@liferay.com&token=%s", user.ApprovalToken), nil)
+	// 2. Admin follows the emailed link, which only describes what would happen. A GET
+	// must not approve: that link is delivered to a chat channel, where previews and
+	// crawlers follow URLs (#1143).
+	previewReq := httptest.NewRequest("GET", fmt.Sprintf("http://example.com/api/admin/approve?email=developer@liferay.com&token=%s", user.ApprovalToken), nil)
+	previewReq.Host = "example.com"
+	previewRec := httptest.NewRecorder()
+	srv.ServeHTTP(previewRec, previewReq)
+
+	if previewRec.Code != http.StatusOK {
+		t.Errorf("expected 200 OK for the confirmation page, got %d", previewRec.Code)
+	}
+	if stillPending, err := srv.db.GetUser("developer@liferay.com"); err == nil && stillPending.Status != "pending" {
+		t.Errorf("a GET approved the user; status is now %q", stillPending.Status)
+	}
+
+	// 3. Admin submits the confirmation, which performs the approval.
+	approveForm := url.Values{}
+	approveForm.Set("email", "developer@liferay.com")
+	approveForm.Set("token", user.ApprovalToken)
+	approveReq := httptest.NewRequest("POST", "http://example.com/api/admin/approve", strings.NewReader(approveForm.Encode()))
+	approveReq.Header.Set("Content-Type", "application/x-www-form-urlencoded")
 	approveReq.Host = "example.com"
 	approveRec := httptest.NewRecorder()
 	srv.ServeHTTP(approveRec, approveReq)

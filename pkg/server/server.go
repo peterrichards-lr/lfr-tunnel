@@ -840,7 +840,7 @@ func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 
-		if r.Method == http.MethodGet && r.URL.Path == "/api/admin/approve" {
+		if (r.Method == http.MethodGet || r.Method == http.MethodPost) && r.URL.Path == "/api/admin/approve" {
 			s.handleApproveUser(w, r)
 			return
 		}
@@ -2333,6 +2333,58 @@ func (s *Server) handleVerifyEmail(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
+// renderApprovalConfirmation shows what a click would do and asks for a deliberate
+// submission. The token stays in a hidden field rather than the form action, so it is not
+// re-sent in a URL the browser will keep in history or leak in a Referer.
+//
+// Everything is escaped: the name and email come from an unverified registration.
+func (s *Server) renderApprovalConfirmation(w http.ResponseWriter, user *db.User, email, token string) {
+	name := strings.TrimSpace(user.FirstName + " " + user.LastName)
+	if name == "" {
+		name = email
+	}
+
+	page := fmt.Sprintf(`<!doctype html>
+<html lang="en"><head><meta charset="utf-8">
+<meta name="robots" content="noindex,nofollow">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Approve registration</title>
+<style>
+body{font-family:system-ui,-apple-system,"Segoe UI",sans-serif;background:#f5f6f8;margin:0;padding:2rem;color:#1f2933}
+.card{max-width:32rem;margin:3rem auto;background:#fff;border-radius:8px;padding:2rem;box-shadow:0 1px 3px rgba(0,0,0,.12)}
+h1{font-size:1.25rem;margin:0 0 1rem}
+dl{margin:0 0 1.5rem}dt{font-size:.75rem;text-transform:uppercase;color:#616e7c;margin-top:.75rem}
+dd{margin:.15rem 0 0;font-weight:600}
+button{background:#0b5fff;color:#fff;border:0;border-radius:6px;padding:.65rem 1.25rem;font-size:1rem;cursor:pointer}
+p.note{color:#616e7c;font-size:.8rem;margin-top:1.25rem}
+</style></head>
+<body><div class="card">
+<h1>Approve this registration?</h1>
+<dl>
+<dt>Name</dt><dd>%s</dd>
+<dt>Email</dt><dd>%s</dd>
+</dl>
+<form method="POST" action="/api/admin/approve">
+<input type="hidden" name="email" value="%s">
+<input type="hidden" name="token" value="%s">
+<button type="submit">Approve</button>
+</form>
+<p class="note">Approving grants this person access and issues them a personal access token. Close this page to do nothing.</p>
+</div></body></html>`,
+		html.EscapeString(name),
+		html.EscapeString(email),
+		html.EscapeString(email),
+		html.EscapeString(token),
+	)
+
+	w.Header().Set("Content-Type", "text/html; charset=utf-8")
+	w.Header().Set("Cache-Control", "no-store")
+	w.Header().Set("Referrer-Policy", "no-referrer")
+	if _, err := w.Write([]byte(page)); err != nil {
+		slog.Info(fmt.Sprintf("[Server] Failed to write approval confirmation: %v", err))
+	}
+}
+
 // handleApproveUser handles admin clicks on approval links.
 func (s *Server) handleApproveUser(w http.ResponseWriter, r *http.Request) {
 	if s.db == nil {
@@ -2342,6 +2394,18 @@ func (s *Server) handleApproveUser(w http.ResponseWriter, r *http.Request) {
 
 	email := r.URL.Query().Get("email")
 	token := r.URL.Query().Get("token")
+	if r.Method == http.MethodPost {
+		// The confirmation form submits these as hidden fields, keeping the token out
+		// of a URL that the browser would retain in history.
+		if err := r.ParseForm(); err == nil {
+			if v := r.PostFormValue("email"); v != "" {
+				email = v
+			}
+			if v := r.PostFormValue("token"); v != "" {
+				token = v
+			}
+		}
+	}
 
 	if email == "" || token == "" {
 		http.Error(w, "Missing email or token parameters", http.StatusBadRequest)
@@ -2356,6 +2420,20 @@ func (s *Server) handleApproveUser(w http.ResponseWriter, r *http.Request) {
 
 	if user.Status != "pending" || user.ApprovalToken != token {
 		http.Error(w, "Invalid approval link or request already processed", http.StatusGone)
+		return
+	}
+
+	// Approving on GET meant anything that merely *fetched* the URL approved the user:
+	// no session is required here by design, so the token in the query string is the
+	// entire credential. That link is emailed to admin_notification_email, which on this
+	// deployment is a Slack email-to-channel bridge -- so it lands in a chat channel where
+	// link previews, crawlers and prefetchers all follow URLs, and anyone with channel
+	// history can replay it. A GET must not change state (issue #1143).
+	//
+	// The GET now only describes what would happen; the POST performs it. That is enough
+	// to defeat any automated fetch, since none of them submit forms.
+	if r.Method != http.MethodPost {
+		s.renderApprovalConfirmation(w, user, email, token)
 		return
 	}
 

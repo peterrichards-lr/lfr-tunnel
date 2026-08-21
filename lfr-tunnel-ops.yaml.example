@@ -29,6 +29,16 @@ central:
   # as before this field existed. Can also be set via -aws-region or the AWS_REGION env var.
   # aws_region: eu-west-1
 
+  # Optional, and only used alongside aws_region. Narrows the instance lookup to
+  # resources carrying this tag, written Key=Value. Without it the lookup matches on
+  # public address alone, so a mis-set region or a stale DNS record could in principle
+  # find an unrelated instance that happens to share an address.
+  #
+  # There is deliberately no default. A tag value names one particular deployment, and
+  # this file carries no values of its own -- the operator is the only one who knows
+  # what their own resources are tagged with. Can also be set via LFT_INSTANCE_TAG.
+  # instance_tag: Project=my-tunnel
+
 # Only needed for `lfr-tunnel-ops reconcile-nginx`.
 nginx:
   # Every domain group this central actually serves. Check the existing

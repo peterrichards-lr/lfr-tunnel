@@ -55,7 +55,7 @@ func TestParseInstanceDescribeOutput_InvalidJSON(t *testing.T) {
 }
 
 func TestEnsureInstanceRunning_NoRegion_IsNoOp(t *testing.T) {
-	restore, err := ensureInstanceRunning("host.example.com", "")
+	restore, err := ensureInstanceRunning("host.example.com", "", "")
 	if err != nil {
 		t.Fatalf("expected no error when region is unset, got: %v", err)
 	}

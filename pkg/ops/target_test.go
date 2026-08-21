@@ -27,6 +27,7 @@ func clearTargetEnv(t *testing.T) {
 	t.Setenv("VPS_IP", "")
 	t.Setenv("LFT_IDENTITY_FILE", "")
 	t.Setenv("AWS_REGION", "")
+	t.Setenv("LFT_INSTANCE_TAG", "")
 	t.Setenv("LFT_OPS_TARGET", "")
 	t.Setenv("LFT_OPS_CONFIG", filepath.Join(t.TempDir(), "nonexistent.yaml"))
 }
@@ -512,5 +513,99 @@ central:
 	}
 	if target.AWSRegion != "flag-region" {
 		t.Errorf("expected flag to win over env and config, got %q", target.AWSRegion)
+	}
+}
+
+// The instance tag obeys the same precedence as every other field in
+// ResolveDeployTarget's documented contract -- env var first, then the yaml. It has no
+// flag, so those are the only two sources.
+//
+// Regression tests: the field was first written checking the config file *before* the
+// env var, which silently inverted that order for this one field while every sibling
+// obeyed it.
+
+func TestResolveDeployTarget_InstanceTagFromConfigFile(t *testing.T) {
+	clearTargetEnv(t)
+	writeOpsConfig(t, `
+central:
+  user: ubuntu
+  host: central.example.com
+  identity_file: /tmp/my-key.pem
+  instance_tag: Project=from-yaml
+`)
+
+	target, err := ResolveDeployTarget("", "", "", "")
+	if err != nil {
+		t.Fatalf("expected resolution to succeed, got: %v", err)
+	}
+	if target.InstanceTag != "Project=from-yaml" {
+		t.Errorf("expected the instance tag to come from the config file, got %q", target.InstanceTag)
+	}
+}
+
+func TestResolveDeployTarget_InstanceTagEnvOverridesConfigFile(t *testing.T) {
+	clearTargetEnv(t)
+	writeOpsConfig(t, `
+central:
+  user: ubuntu
+  host: central.example.com
+  identity_file: /tmp/my-key.pem
+  instance_tag: Project=from-yaml
+`)
+	t.Setenv("LFT_INSTANCE_TAG", "Project=from-env")
+
+	target, err := ResolveDeployTarget("", "", "", "")
+	if err != nil {
+		t.Fatalf("expected resolution to succeed, got: %v", err)
+	}
+	if target.InstanceTag != "Project=from-env" {
+		t.Errorf("expected LFT_INSTANCE_TAG to override the config file, got %q", target.InstanceTag)
+	}
+}
+
+// The tag must also reach a named target, since opsConfigTarget backs both the
+// single-target and multi-target file shapes.
+func TestResolveDeployTarget_InstanceTagFromNamedTarget(t *testing.T) {
+	clearTargetEnv(t)
+	writeOpsConfig(t, `
+targets:
+  production:
+    central:
+      user: ubuntu
+      host: prod.example.com
+      identity_file: /tmp/prod-key.pem
+      instance_tag: Project=prod-tag
+`)
+
+	target, err := ResolveDeployTarget("", "", "", "production")
+	if err != nil {
+		t.Fatalf("expected resolution to succeed, got: %v", err)
+	}
+	if target.InstanceTag != "Project=prod-tag" {
+		t.Errorf("expected the named target's instance tag, got %q", target.InstanceTag)
+	}
+}
+
+// Nothing configured must mean no tag filter at all. A default here would name one
+// organisation's resources and make the lookup silently wrong for everyone else --
+// the regression this field exists to fix.
+func TestResolveDeployTarget_InstanceTagHasNoDefault(t *testing.T) {
+	clearTargetEnv(t)
+	writeOpsConfig(t, `
+central:
+  user: ubuntu
+  host: central.example.com
+  identity_file: /tmp/my-key.pem
+`)
+
+	target, err := ResolveDeployTarget("", "", "", "")
+	if err != nil {
+		t.Fatalf("expected resolution to succeed, got: %v", err)
+	}
+	if target.InstanceTag != "" {
+		t.Errorf("expected no instance tag when none is configured, got %q", target.InstanceTag)
+	}
+	if filter := tagFilter(target.InstanceTag); filter != "" {
+		t.Errorf("expected an empty tag to produce no filter, got %q", filter)
 	}
 }

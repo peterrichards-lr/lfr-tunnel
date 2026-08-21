@@ -1,5 +1,22 @@
 [
   {
+    "version": "v1.45.0",
+    "release_date": "2026-08-21",
+    "features": [
+      "fix(server): decide email delivery policy in one place (#1141)",
+      "fix(client): do not cool down the region a failed failback returns to (#1140)",
+      "fix(server): bound the edge control channel's goroutines to the connection (#1139)",
+      "fix(tui): show the real Inspector port and target host, truncate by runes (#1136)",
+      "fix(server): default admin alerts to the owner, and warn when nobody is configured (#1134)",
+      "fix(server): guard the HTTP listeners and the edge auth_success write (#1132)",
+      "feat(client): persistent HTTP traffic log and diagnostic error log (#1129)",
+      "fix(client): configure the central control plane instead of hardcoding it (#1127)",
+      "fix(client): harden edge failover and failback (#1126)",
+      "chore(ci): remove LDM dev-box power tooling from this repo (#1118)",
+      "docs: update .agent-state.md for provider persistence (#1115)"
+    ]
+  },
+  {
     "version": "v1.44.24",
     "release_date": "2026-08-20",
     "features": [
@@ -29,14 +46,6 @@
     "features": [
       "Multi-Part Chisel Remote Authorization Regex: Updated Gateway allowedRemotes regex to accept multi-part client remote strings, eliminating Access Denied rejections during live region failover.",
       "Un-mutated Registration Port Mappings: Preserved regPortMappings in main loop so server registration during failover receives original target ports, enabling full HTTP traffic forwarding."
-    ]
-  },
-  {
-    "version": "v1.44.20",
-    "release_date": "2026-08-20",
-    "features": [
-      "Failover Reverse Tunnel Remote Port Rewriting: Rewrites reverse tunnel port mappings during live region failover, ensuring Chisel client requests correct allocated server ports and visitor traffic flows to local machines.",
-      "End-to-End Traffic Proxying Verification: Verified traffic forwarding over fallback edge connections to prevent server 502 Bad Gateway responses."
     ]
   }
 ]

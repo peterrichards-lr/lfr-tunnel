@@ -3,14 +3,12 @@
     "version": "v1.46.0",
     "release_date": "2026-08-21",
     "features": [
-      "fix(client): remove the double dash from multi-port hostnames (#1162)",
-      "fix(server): require a deliberate POST to approve a registration (#1161)",
-      "fix(client): don't pin a region elected while others were unreachable (#1160)",
-      "fix(client): reject cross-origin and rebound requests to the Inspector (#1159)",
-      "fix(server): tell the truth about edge health and reaped sessions (#1158)",
-      "fix(server): register on the top-ranked domain, not every candidate (#1157)",
-      "fix(client): recover from a lost lease and stop failback flapping (#1155)",
-      "fix(server): don't let a stale session's cleanup delete a live route (#1156)"
+      "Failover That Recovers On Its Own: A brief edge outage now causes one clean switch instead of the client bouncing between regions. The client no longer returns to an edge that cannot actually carry your tunnel, edges report honestly whether they can reach the control plane, and if a session is lost the client re-registers within seconds rather than sitting with a dead tunnel until you restart it.",
+      "Fixed: Tunnels Left Serving Errors After A Region Switch. Cleaning up an abandoned session could remove the routing for the session that replaced it, leaving a connected tunnel whose public URL returned 502 indefinitely. This was the single biggest cause of a tunnel appearing to survive a failover while serving nothing.",
+      "Better Region Selection: If an edge is unavailable when you start the client -- during a scheduled shutdown, for instance -- that choice is no longer locked in for 24 hours. The client re-checks shortly afterwards and moves to the nearer edge once it returns, and the startup log now names any region that did not respond.",
+      "One Domain Per Tunnel: Starting a tunnel without naming a domain no longer registers it on every configured domain at once, which previously consumed several subdomain reservations for a single tunnel.",
+      "Tidier Multi-Port URLs: Additional ports now use a single dash, so a second port on 'alpha' is alpha-8081 rather than alpha--8081. If you expose more than one port, your public URLs change with this release -- update any bookmarks.",
+      "Security: Approving a registration now requires a deliberate confirmation rather than simply opening the link, so a link preview or crawler can no longer approve someone. The local Inspector rejects requests driven from other websites, closing a route by which a page you visited could change your tunnel's settings."
     ]
   },
   {

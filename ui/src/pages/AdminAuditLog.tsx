@@ -125,7 +125,7 @@ export default function AdminAuditLog() {
     <div>
       <div className="page-header">
         <div>
-          <h3 className="page-header__title">{t('system_audit_log', 'System Audit Log')}</h3>
+          <h1 className="page-header__title">{t('system_audit_log', 'System Audit Log')}</h1>
           <p className="page-header__desc">{t('audit_log_desc', 'Immutable record of administrative and security events.')}</p>
         </div>
         <a 

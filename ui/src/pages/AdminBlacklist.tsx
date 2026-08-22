@@ -144,7 +144,7 @@ export default function AdminBlacklist() {
     <div>
       <div className="page-header">
         <div>
-          <h3 className="page-header__title">{t('ip_blacklist', 'IP Blacklist & WAF Bans')}</h3>
+          <h1 className="page-header__title">{t('ip_blacklist', 'IP Blacklist & WAF Bans')}</h1>
           <p className="page-header__desc">{t('ip_blacklist_desc', 'Manage blocked IP addresses and security enforcement.')}</p>
         </div>
       </div>

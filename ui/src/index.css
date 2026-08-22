@@ -1466,6 +1466,30 @@ html[dir="rtl"] td, html[dir="rtl"] th {
    the Liferay brand blue hardcoded into a component, wrong on the other two themes. */
 .surface-selected { background: var(--surface-selected); }
 
+/* --- Skip link (#1219) --- */
+/* Off-screen until focused, rather than display:none -- a hidden element cannot be
+   focused, so it would never be reachable by the keyboard users it exists for. */
+.skip-link {
+    position: absolute;
+    left: -9999px;
+    top: 0;
+    z-index: 10001;
+    padding: var(--spacing-sm) var(--spacing-lg);
+    background: var(--primary);
+    color: #fff;
+    text-decoration: none;
+    border-radius: 0 0 6px 0;
+}
+.skip-link:focus {
+    left: 0;
+}
+
+/* main-content takes focus when the skip link is used, but it is not an interactive
+   control, so it should not show a focus ring. */
+.main-content:focus {
+    outline: none;
+}
+
 /* --- View As (#1225) --- */
 /* Deliberately conspicuous. The session is read-only while this is showing, so it has to
    be impossible to miss -- otherwise the refusals look like bugs. */

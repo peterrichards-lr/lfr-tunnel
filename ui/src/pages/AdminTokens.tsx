@@ -189,7 +189,7 @@ export default function AdminTokens() {
     <div>
       <div className="page-header mb-xl">
         <div>
-          <h3 className="page-header__title">{t('admin_tokens_title', 'All Personal Access Tokens')}</h3>
+          <h1 className="page-header__title">{t('admin_tokens_title', 'All Personal Access Tokens')}</h1>
           <p className="page-header__desc">{t('admin_tokens_desc', 'Monitor, extend, and revoke authentication tokens for all users across the system.')}</p>
         </div>
       </div>

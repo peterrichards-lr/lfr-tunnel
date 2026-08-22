@@ -8,8 +8,8 @@ interface ReleaseNote {
   features: string[];
 }
 
-// Tracks which release the user has already expanded this bar for, so a genuinely
-// new release auto-expands once (and shows a badge) without re-expanding every visit.
+// Tracks which release the user has already expanded this bar for, so the "New" badge
+// clears once they've actually looked. The bar itself never opens on its own.
 const SEEN_VERSION_KEY = 'whats_new_seen_version';
 
 function renderFeatureItem(feature: string) {
@@ -46,10 +46,13 @@ export default function WhatsNewHelpBar({ onInstallClick }: { onInstallClick: ()
           : (res.data?.version && Array.isArray(res.data?.features) ? [res.data] : []);
         setReleases(data);
 
+        // Flag an unseen release with the badge, but leave the bar collapsed. It is
+        // low-frequency content that shouldn't take the top of the dashboard uninvited,
+        // and auto-expanding meant every user got it reopened after each release --
+        // exactly the permanent screen space this bar replaced the old sidebar to avoid.
         const latest = data[0]?.version;
         if (latest && localStorage.getItem(SEEN_VERSION_KEY) !== latest) {
           setHasUnseen(true);
-          setExpanded(true);
         }
       })
       .catch(() => {});

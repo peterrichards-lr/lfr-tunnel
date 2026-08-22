@@ -134,18 +134,18 @@ export default function AccountSettings() {
           <h3 className="section-title mb-lg">{t('profile_details', 'Personal Details')}</h3>
           <form onSubmit={handleSaveProfile}>
             <div className="form-group mb-lg">
-              <label className="form-label">
+              <label className="form-label" htmlFor="email">
                 {t('label_email', 'Email Address')}
               </label>
-              <input type="email" className="input-field opacity-70" value={user?.email || ''} disabled />
+              <input id="email" type="email" className="input-field opacity-70" value={user?.email || ''} disabled />
             </div>
 
             <div className="grid grid-cols-2 gap-md mb-lg">
               <div className="form-group m-0">
-                <label className="form-label">
+                <label className="form-label" htmlFor="first-name">
                   {t('label_first_name', 'First Name')}
                 </label>
-                <input 
+                <input id="first-name" 
                   type="text" 
                   className="input-field" 
                   value={firstName} 
@@ -154,10 +154,10 @@ export default function AccountSettings() {
                 />
               </div>
               <div className="form-group m-0">
-                <label className="form-label">
+                <label className="form-label" htmlFor="last-name">
                   {t('label_last_name', 'Last Name')}
                 </label>
-                <input 
+                <input id="last-name" 
                   type="text" 
                   className="input-field" 
                   value={lastName} 
@@ -168,10 +168,10 @@ export default function AccountSettings() {
             </div>
             
             <div className="form-group mb-xl">
-              <label className="form-label">
+              <label className="form-label" htmlFor="preferred-name">
                 {t('label_preferred_name', 'Preferred Name')}
               </label>
-              <input 
+              <input id="preferred-name" 
                 type="text" 
                 className="input-field" 
                 value={preferredName} 
@@ -193,10 +193,10 @@ export default function AccountSettings() {
           <h3 className="section-title mb-lg">{t('preferences_defaults', 'Preferences & Defaults')}</h3>
           <form onSubmit={handleSaveProfile}>
             <div className="form-group mb-lg">
-              <label className="form-label">
+              <label className="form-label" htmlFor="language">
                 {t('label_language', 'Language')}
               </label>
-              <select className="input-field" value={language} onChange={(e) => setLanguage(e.target.value)}>
+              <select id="language" className="input-field" value={language} onChange={(e) => setLanguage(e.target.value)}>
                 {availableLanguages.map(l => (
                   <option key={l.code} value={l.code}>{l.label}</option>
                 ))}
@@ -204,10 +204,10 @@ export default function AccountSettings() {
             </div>
 
             <div className="form-group mb-xl">
-              <label className="form-label">
+              <label className="form-label" htmlFor="theme">
                 {t('label_theme', 'Theme Preference')}
               </label>
-              <select className="input-field" value={themePreference} onChange={(e) => {
+              <select id="theme" className="input-field" value={themePreference} onChange={(e) => {
                 setThemePreference(e.target.value as any);
               }}>
                 <option value="light">{t('theme_light', 'Light')}</option>
@@ -220,11 +220,11 @@ export default function AccountSettings() {
 
             <div className="mb-lg">
               <div className="flex items-center justify-between">
-                <label className="form-label m-0">
+                <label className="form-label m-0" htmlFor="notifications">
                   {t('label_notifications', 'Email Notifications')}
                 </label>
                 <label className="switch">
-                  <input type="checkbox" checked={emailNotifications} onChange={(e) => setEmailNotifications(e.target.checked)} />
+                  <input id="notifications" type="checkbox" checked={emailNotifications} onChange={(e) => setEmailNotifications(e.target.checked)} />
                   <span className="slider round"></span>
                 </label>
               </div>
@@ -244,10 +244,10 @@ export default function AccountSettings() {
             </div>
 
             <div className="form-group mb-lg">
-              <label className="form-label">
+              <label className="form-label" htmlFor="default-subdomain-style">
                 {t('default_subdomain_style', 'Default Subdomain Style')}
               </label>
-              <select className="input-field" value={subdomainStyle} onChange={(e) => setSubdomainStyle(e.target.value)}>
+              <select id="default-subdomain-style" className="input-field" value={subdomainStyle} onChange={(e) => setSubdomainStyle(e.target.value)}>
                 <option value="liferay">{t('style_liferay', 'Liferay SE Style')} — e.g. micro-tomcat-387</option>
                 <option value="words">{t('style_words', 'Words Style')} — e.g. falcon-orange-apple</option>
                 <option value="heroku">{t('style_heroku', 'Heroku Style')} — e.g. silent-owl-4319</option>
@@ -273,7 +273,7 @@ export default function AccountSettings() {
                 value={preferredDomain}
                 onChange={(e) => setPreferredDomain(e.target.value)}
                 disabled={allocationRule !== 'user-preference'}
-              >
+               aria-label={t('preferred_domain', 'Preferred domain')}>
                 <option value="">{t('none_auto', 'None (Auto)')}</option>
                 {domains.map(d => (
                   <option key={d} value={d}>{d}</option>
@@ -332,7 +332,7 @@ export default function AccountSettings() {
                         maxLength={6} 
                         value={disableCode}
                         onChange={(e) => setDisableCode(e.target.value)}
-                      />
+                       aria-label={t('mfa_code', 'Authentication code')}/>
                       <button type="button" className="btn btn-primary" onClick={async () => {
                         setDisableError('');
                         try {
@@ -372,11 +372,11 @@ export default function AccountSettings() {
                   {setupData.secret}
                 </div>
                 
-                <label className="form-label">
+                <label className="form-label" htmlFor="verify-passcode">
                   {t('verify_passcode', 'Enter 6-digit code from authenticator app')}
                 </label>
                 <div className="flex gap-sm">
-                  <input 
+                  <input id="verify-passcode" 
                     type="text" 
                     className="input-field mb-0" 
                     placeholder={t('mfa_otp_placeholder', '000000')} 
@@ -439,7 +439,7 @@ export default function AccountSettings() {
                 placeholder={user?.email} 
                 value={deleteConfirmEmail}
                 onChange={(e) => setDeleteConfirmEmail(e.target.value)}
-              />
+               aria-label={t('confirm_email', 'Confirm your email address')}/>
               
               {deleteError && <div className="alert-banner alert-banner--danger mb-lg">{deleteError}</div>}
             </div>

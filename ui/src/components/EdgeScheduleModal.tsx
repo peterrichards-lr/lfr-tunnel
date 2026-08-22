@@ -127,16 +127,16 @@ export default function EdgeScheduleModal({ nodeId, onClose, onSaved }: EdgeSche
         ) : (
           <>
             <div className="form-group m-0">
-              <label className="form-label text-xs">{t('edge_schedule_stop_time', 'Stop time (local)')}</label>
-              <input type="time" className="input-field" value={stopTime} onChange={e => setStopTime(e.target.value)} />
+              <label className="form-label text-xs" htmlFor="edge-schedule-stop-time">{t('edge_schedule_stop_time', 'Stop time (local)')}</label>
+              <input id="edge-schedule-stop-time" type="time" className="input-field" value={stopTime} onChange={e => setStopTime(e.target.value)} />
             </div>
             <div className="form-group m-0">
-              <label className="form-label text-xs">{t('edge_schedule_start_time', 'Start time (local)')}</label>
-              <input type="time" className="input-field" value={startTime} onChange={e => setStartTime(e.target.value)} />
+              <label className="form-label text-xs" htmlFor="edge-schedule-start-time">{t('edge_schedule_start_time', 'Start time (local)')}</label>
+              <input id="edge-schedule-start-time" type="time" className="input-field" value={startTime} onChange={e => setStartTime(e.target.value)} />
             </div>
             <div className="form-group m-0">
-              <label className="form-label text-xs">{t('edge_schedule_timezone', 'Timezone')}</label>
-              <select
+              <label className="form-label text-xs" htmlFor="edge-schedule-timezone">{t('edge_schedule_timezone', 'Timezone')}</label>
+              <select id="edge-schedule-timezone"
                 className="input-field"
                 value={timezone}
                 onChange={e => setTimezone(e.target.value)}

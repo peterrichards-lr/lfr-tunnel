@@ -630,9 +630,9 @@ export default function AdminUsers() {
             </h4>
             <div className="auto-grid-md gap-lg p-md rounded border">
               <div>
-                <label className="form-label text-2xs text-muted mb-2xs tracking-wider uppercase">Rate Limit (RPS)</label>
+                <label className="form-label text-2xs text-muted mb-2xs tracking-wider uppercase" htmlFor="field">Rate Limit (RPS)</label>
                 <div>
-                  <input 
+                  <input id="field" 
                     type="number" 
                     className="input-field w-full py-xs px-sm text-sm" 
                     min={0}
@@ -644,9 +644,9 @@ export default function AdminUsers() {
               </div>
 
               <div>
-                <label className="form-label text-2xs text-muted mb-2xs tracking-wider uppercase">Max Subdomains</label>
+                <label className="form-label text-2xs text-muted mb-2xs tracking-wider uppercase" htmlFor="field-2">Max Subdomains</label>
                 <div>
-                  <input 
+                  <input id="field-2" 
                     type="number" 
                     className="input-field w-full py-xs px-sm text-sm" 
                     min={-1}
@@ -658,9 +658,9 @@ export default function AdminUsers() {
               </div>
 
               <div>
-                <label className="form-label text-2xs text-muted mb-2xs tracking-wider uppercase">Max Custom Domains</label>
+                <label className="form-label text-2xs text-muted mb-2xs tracking-wider uppercase" htmlFor="field-3">Max Custom Domains</label>
                 <div>
-                  <input
+                  <input id="field-3"
                     type="number"
                     className="input-field w-full py-xs px-sm text-sm"
                     min={-1}
@@ -672,9 +672,9 @@ export default function AdminUsers() {
               </div>
 
               <div>
-                <label className="form-label text-2xs text-muted mb-2xs tracking-wider uppercase">Max Tunnels</label>
+                <label className="form-label text-2xs text-muted mb-2xs tracking-wider uppercase" htmlFor="field-4">Max Tunnels</label>
                 <div>
-                  <input 
+                  <input id="field-4" 
                     type="number" 
                     className="input-field w-full py-xs px-sm text-sm" 
                     min={-1}
@@ -686,7 +686,7 @@ export default function AdminUsers() {
               </div>
 
               <div className="flex flex-col justify-center">
-                <label className="form-label text-2xs text-muted mb-2xs tracking-wider uppercase">MFA Security Status</label>
+                <label className="form-label text-2xs text-muted mb-2xs tracking-wider uppercase" htmlFor="close">MFA Security Status</label>
                 <div className="flex items-center gap-md">
                   {selectedUser.totp_enabled ? (
                     <>
@@ -869,7 +869,7 @@ export default function AdminUsers() {
                 rows={3}
                 value={targetedMessage}
                 onChange={(e) => setTargetedMessage(e.target.value)}
-              />
+               aria-label={t('message_to_user', 'Message to user')}/>
             </div>
             <div className="flex justify-end gap-sm">
               <button type="button" className="btn btn-secondary" onClick={() => setTargetedUserId('')}>Cancel</button>
@@ -897,19 +897,19 @@ export default function AdminUsers() {
             <form onSubmit={submitInvite}>
               <div className="mb-md">
                 <label className="block text-xs uppercase tracking-wider text-muted mb-xs">{t('email_address', 'Email Address')}</label>
-                <input type="email" required className="w-full p-sm bg-surface border rounded text-sm" value={inviteForm.email} onChange={(e) => setInviteForm({...inviteForm, email: e.target.value})} placeholder={t('invite_email_placeholder', 'user@company.com')} />
+                <input id="close" type="email" required className="w-full p-sm bg-surface border rounded text-sm" value={inviteForm.email} onChange={(e) => setInviteForm({...inviteForm, email: e.target.value})} placeholder={t('invite_email_placeholder', 'user@company.com')} />
               </div>
               <div className="mb-md">
-                <label className="block text-xs uppercase tracking-wider text-muted mb-xs">{t('first_name', 'First Name')}</label>
-                <input type="text" required className="w-full p-sm bg-surface border rounded text-sm" value={inviteForm.first_name} onChange={(e) => setInviteForm({...inviteForm, first_name: e.target.value})} placeholder={t('first_name_placeholder', 'John')} />
+                <label className="block text-xs uppercase tracking-wider text-muted mb-xs" htmlFor="first-name">{t('first_name', 'First Name')}</label>
+                <input id="first-name" type="text" required className="w-full p-sm bg-surface border rounded text-sm" value={inviteForm.first_name} onChange={(e) => setInviteForm({...inviteForm, first_name: e.target.value})} placeholder={t('first_name_placeholder', 'John')} />
               </div>
               <div className="mb-md">
-                <label className="block text-xs uppercase tracking-wider text-muted mb-xs">{t('last_name', 'Last Name')}</label>
-                <input type="text" required className="w-full p-sm bg-surface border rounded text-sm" value={inviteForm.last_name} onChange={(e) => setInviteForm({...inviteForm, last_name: e.target.value})} placeholder={t('last_name_placeholder', 'Doe')} />
+                <label className="block text-xs uppercase tracking-wider text-muted mb-xs" htmlFor="last-name">{t('last_name', 'Last Name')}</label>
+                <input id="last-name" type="text" required className="w-full p-sm bg-surface border rounded text-sm" value={inviteForm.last_name} onChange={(e) => setInviteForm({...inviteForm, last_name: e.target.value})} placeholder={t('last_name_placeholder', 'Doe')} />
               </div>
               <div className="mb-lg">
-                <label className="block text-xs uppercase tracking-wider text-muted mb-xs">{t('language_preference', 'Language Preference')}</label>
-                <select className="w-full p-sm bg-surface border rounded text-sm" value={inviteForm.language_preference} onChange={(e) => setInviteForm({...inviteForm, language_preference: e.target.value})}>
+                <label className="block text-xs uppercase tracking-wider text-muted mb-xs" htmlFor="language-preference">{t('language_preference', 'Language Preference')}</label>
+                <select id="language-preference" className="w-full p-sm bg-surface border rounded text-sm" value={inviteForm.language_preference} onChange={(e) => setInviteForm({...inviteForm, language_preference: e.target.value})}>
                   <option value="en">English (UK)</option>
                   <option value="en-us">English (US)</option>
                   <option value="de">Deutsch (DE)</option>

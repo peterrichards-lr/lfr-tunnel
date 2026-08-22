@@ -352,17 +352,17 @@ export default function ReservationsPanel() {
                 placeholder={t('subdomain', 'subdomain')} 
                 value={subdomainInput} 
                 onChange={(e) => setSubdomainInput(e.target.value)} 
-              />
+               aria-label={t('subdomain', 'Subdomain')}/>
             </div>
             <div className="flex-1 min-w-sm">
-              <select className="form-control" value={selectedDomain} onChange={(e) => setSelectedDomain(e.target.value)}>
+              <select className="form-control" value={selectedDomain} onChange={(e) => setSelectedDomain(e.target.value)} aria-label={t('domain', 'Domain')}>
                 {domains.map(d => (
                   <option key={d} value={d}>{d}</option>
                 ))}
               </select>
             </div>
             <div className="min-w-xs">
-              <select className="form-control" value={subdomainStyle} onChange={(e) => setSubdomainStyle(e.target.value)}>
+              <select className="form-control" value={subdomainStyle} onChange={(e) => setSubdomainStyle(e.target.value)} aria-label={t('style_label', 'Subdomain style')}>
                 <option value="liferay">{t('style_liferay', 'Liferay SE Style')}</option>
                 <option value="words">{t('style_words', 'Words Style')}</option>
                 <option value="heroku">{t('style_heroku', 'Heroku Style')}</option>
@@ -462,10 +462,12 @@ export default function ReservationsPanel() {
             </p>
 
             <div className="form-group">
-              <label className="form-label--bold">
+              <span className="form-label--bold" id="access-mode-label">
                 {t('access_mode', 'Access Mode')}
-              </label>
-              <div className="flex flex-col gap-sm">
+              </span>
+              {/* A caption for a set of radios, not for one control, so it is announced
+                  via a group rather than htmlFor -- which names a single element. */}
+              <div className="flex flex-col gap-sm" role="radiogroup" aria-labelledby="access-mode-label">
                 {([['public', '🌐', t('access_public', 'Public — Anyone can access')],
                   ['passcode', '🔑', t('access_passcode', 'Passcode — Requires a secret code')],
                   ['whitelist', '🛡', t('access_whitelist', 'IP Whitelist — Restrict by IP address')]] as [string, string, string][]).map(([val, icon, label]) => (
@@ -479,8 +481,8 @@ export default function ReservationsPanel() {
 
             {acMode === 'passcode' && (
               <div className="form-group">
-                <label className="form-label--bold">{t('passcode', 'Passcode')}</label>
-                <input
+                <label className="form-label--bold" htmlFor="passcode">{t('passcode', 'Passcode')}</label>
+                <input id="passcode"
                   type="text"
                   className="input-field"
                   value={acPasscode}
@@ -492,8 +494,8 @@ export default function ReservationsPanel() {
 
             {acMode === 'whitelist' && (
               <div className="form-group">
-                <label className="form-label--bold">{t('allowed_ips', 'Allowed IPs')}</label>
-                <textarea
+                <label className="form-label--bold" htmlFor="allowed-ips">{t('allowed_ips', 'Allowed IPs')}</label>
+                <textarea id="allowed-ips"
                   className="input-field font-mono text-sm resize-y"
                   value={acWhitelist}
                   onChange={e => setAcWhitelist(e.target.value)}

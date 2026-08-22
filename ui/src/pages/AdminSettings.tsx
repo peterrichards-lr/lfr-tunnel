@@ -340,8 +340,8 @@ export default function AdminSettings() {
       <div className="card mb-xl">
         <h4 className="section-title mb-lg">Domain Allocation</h4>
         <div className="form-group mt-lg">
-          <label className="form-label">Allocation Rule</label>
-          <select className="input-field" value={allocationRule} onChange={(e) => setAllocationRule(e.target.value)}>
+          <label className="form-label" htmlFor="field">Allocation Rule</label>
+          <select id="field" className="input-field" value={allocationRule} onChange={(e) => setAllocationRule(e.target.value)}>
             <option value="contextual">Contextual (Match requesting domain)</option>
             <option value="preference">Preference (Use configured domain list order)</option>
             <option value="user-preference">User Preference (Use user's preferred domain)</option>
@@ -352,8 +352,8 @@ export default function AdminSettings() {
           </select>
         </div>
         <div className="form-group">
-          <label className="form-label">Default Domain</label>
-          <select className="input-field" value={defaultDomain} onChange={(e) => setDefaultDomain(e.target.value)}>
+          <label className="form-label" htmlFor="field-2">Default Domain</label>
+          <select id="field-2" className="input-field" value={defaultDomain} onChange={(e) => setDefaultDomain(e.target.value)}>
             <option value="">None (Force Error if Contextual Fails)</option>
             {supportedDomains.map((d) => (
               <option key={d} value={d}>{d}</option>
@@ -386,8 +386,8 @@ export default function AdminSettings() {
           </p>
         </div>
         <div className="form-group">
-          <label className="form-label">Vanity Domain Hook Script Path</label>
-          <input 
+          <label className="form-label" htmlFor="field-3">Vanity Domain Hook Script Path</label>
+          <input id="field-3" 
             type="text" 
             className="input-field" 
             value={vanityHookPath} 
@@ -427,21 +427,21 @@ export default function AdminSettings() {
             ) : (
               <>
                 <div className="form-group m-0">
-                  <label className="form-label text-xs">Action Name</label>
-                  <input type="text" className="input-field" value={softAction} onChange={e => setSoftAction(e.target.value)} />
+                  <label className="form-label text-xs" htmlFor="field-4">Action Name</label>
+                  <input id="field-4" type="text" className="input-field" value={softAction} onChange={e => setSoftAction(e.target.value)} />
                 </div>
                 <div className="form-group m-0">
-                  <label className="form-label text-xs">Reason</label>
-                  <input type="text" className="input-field" value={softReason} onChange={e => setSoftReason(e.target.value)} />
+                  <label className="form-label text-xs" htmlFor="field-5">Reason</label>
+                  <input id="field-5" type="text" className="input-field" value={softReason} onChange={e => setSoftReason(e.target.value)} />
                 </div>
                 <div className="flex gap-md">
                   <div className="form-group m-0 flex-1">
-                    <label className="form-label text-xs">Duration (min)</label>
-                    <input type="number" className="input-field" value={softDuration} onChange={e => setSoftDuration(parseInt(e.target.value) || 0)} />
+                    <label className="form-label text-xs" htmlFor="field-6">Duration (min)</label>
+                    <input id="field-6" type="number" className="input-field" value={softDuration} onChange={e => setSoftDuration(parseInt(e.target.value) || 0)} />
                   </div>
                   <div className="form-group m-0 flex-1">
-                    <label className="form-label text-xs">Countdown (min)</label>
-                    <select className="input-field" value={softCountdown} onChange={e => setSoftCountdown(parseInt(e.target.value) || 0)}>
+                    <label className="form-label text-xs" htmlFor="field-7">Countdown (min)</label>
+                    <select id="field-7" className="input-field" value={softCountdown} onChange={e => setSoftCountdown(parseInt(e.target.value) || 0)}>
                       <option value={0}>Immediate (0m)</option>
                       <option value={5}>5 minutes</option>
                       <option value={10}>10 minutes</option>
@@ -474,16 +474,16 @@ export default function AdminSettings() {
             {!maintenance.iron_curtain ? (
               <>
                 <div className="form-group m-0">
-                  <label className="form-label text-xs">Lockout Action</label>
-                  <input type="text" className="input-field" value={hardAction} onChange={e => setHardAction(e.target.value)} />
+                  <label className="form-label text-xs" htmlFor="field-8">Lockout Action</label>
+                  <input id="field-8" type="text" className="input-field" value={hardAction} onChange={e => setHardAction(e.target.value)} />
                 </div>
                 <div className="form-group m-0">
-                  <label className="form-label text-xs">Lockout Reason</label>
-                  <input type="text" className="input-field" value={hardReason} onChange={e => setHardReason(e.target.value)} />
+                  <label className="form-label text-xs" htmlFor="field-9">Lockout Reason</label>
+                  <input id="field-9" type="text" className="input-field" value={hardReason} onChange={e => setHardReason(e.target.value)} />
                 </div>
                 <div className="form-group m-0">
-                  <label className="form-label text-xs">Duration (min)</label>
-                  <input type="number" className="input-field" value={hardDuration} onChange={e => setHardDuration(parseInt(e.target.value) || 0)} />
+                  <label className="form-label text-xs" htmlFor="field-10">Duration (min)</label>
+                  <input id="field-10" type="number" className="input-field" value={hardDuration} onChange={e => setHardDuration(parseInt(e.target.value) || 0)} />
                 </div>
               </>
             ) : (
@@ -529,7 +529,7 @@ export default function AdminSettings() {
             placeholder={t('enter_broadcast_message_placeholder', 'Enter broadcast message...')}
             value={broadcastMessage}
             onChange={(e) => setBroadcastMessage(e.target.value)}
-          />
+           aria-label={t('broadcast_message', 'Broadcast message')}/>
         </div>
         <div className="flex gap-sm mt-lg">
           <button className="btn btn-primary" disabled={broadcastSending || !broadcastMessage.trim()} onClick={sendBroadcast}>
@@ -561,7 +561,7 @@ export default function AdminSettings() {
                 value={searchQuery} 
                 onChange={e => { setSearchQuery(e.target.value); setPage(0); }}
                 className="search-input"
-              />
+               aria-label={t('search_backups', 'Search backups')}/>
             </div>
           )}
           <div className="table-responsive mt-lg">

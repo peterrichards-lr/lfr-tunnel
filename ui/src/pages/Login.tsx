@@ -146,7 +146,7 @@ export default function Login() {
               inputMode="numeric"
               value={mfaCode}
               onChange={(e) => setMfaCode(e.target.value)}
-            />
+             aria-label={t('mfa_code', 'Authentication code')}/>
             <button 
               type="submit" 
               className="btn btn-primary w-full p-md text-base" 
@@ -181,7 +181,7 @@ export default function Login() {
                     required 
                     value={firstName}
                     onChange={(e) => setFirstName(e.target.value)}
-                  />
+                   aria-label={t('first_name', 'First name')}/>
                   <input 
                     type="text" 
                     name="last_name" 
@@ -190,7 +190,7 @@ export default function Login() {
                     required 
                     value={lastName}
                     onChange={(e) => setLastName(e.target.value)}
-                  />
+                   aria-label={t('last_name', 'Last name')}/>
                 </div>
               )}
 
@@ -249,7 +249,7 @@ export default function Login() {
           className="input-field py-xs px-md bg-white/10 text-white/90 border border-white/20 cursor-pointer w-auto"
           value={language}
           onChange={(e) => setLanguage(e.target.value)}
-        >
+         aria-label={t('language', 'Language')}>
           {availableLanguages.map(l => (
             <option key={l.code} value={l.code} className="text-black">{l.label}</option>
           ))}

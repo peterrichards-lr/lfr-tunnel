@@ -44,7 +44,7 @@ export default function DataTableToolbar<T>({
           value={searchQuery}
           onChange={e => onSearchChange(e.target.value)}
           className="search-input w-full"
-        />
+         aria-label={searchPlaceholder || t('search_placeholder', 'Search')}/>
         {statusOptions && onStatusFilterChange && (
           <div className="flex items-center gap-xs text-xs text-muted">
             <span className="whitespace-nowrap">{t('status', 'Status')}:</span>
@@ -52,7 +52,7 @@ export default function DataTableToolbar<T>({
               className="input-field text-xs table-toolbar-select"
               value={statusFilter || 'all'}
               onChange={e => onStatusFilterChange(e.target.value)}
-            >
+             aria-label={t('filter_by_status', 'Filter by status')}>
               <option value="all">{t('status_all', 'All')}</option>
               {statusOptions.map(opt => (
                 <option key={opt.value} value={opt.value}>{opt.label}</option>
@@ -72,7 +72,7 @@ export default function DataTableToolbar<T>({
             className="input-field text-xs table-toolbar-select"
             value={pageSize}
             onChange={e => onPageSizeChange(Number(e.target.value))}
-          >
+           aria-label={t('rows_per_page', 'Rows per page')}>
             <option value={10}>10</option>
             <option value={25}>25</option>
             <option value={50}>50</option>

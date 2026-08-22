@@ -150,7 +150,7 @@ export default function AdminAnalytics() {
             className="input-field w-auto h-control px-md"
             value={timeRange} 
             onChange={(e) => setTimeRange(e.target.value)}
-          >
+           aria-label={t('time_range', 'Time range')}>
             <option value="7">Last 7 Days</option>
             <option value="14">Last 14 Days</option>
             <option value="30">Last 30 Days</option>

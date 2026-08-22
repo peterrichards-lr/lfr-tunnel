@@ -355,10 +355,10 @@ export default function Dashboard() {
             {!generatedToken ? (
               <form onSubmit={handleCreateToken}>
                 <div className="form-group mb-lg">
-                  <label className="form-label">
+                  <label className="form-label" htmlFor="token-name-label">
                     {t('token_name_label', 'Token Name / Description')}
                   </label>
-                  <input 
+                  <input id="token-name-label" 
                     type="text" 
                     className="input-field" 
                     required 
@@ -369,10 +369,10 @@ export default function Dashboard() {
                 </div>
 
                 <div className="form-group mb-xl">
-                  <label className="form-label">
+                  <label className="form-label" htmlFor="expiration">
                     {t('expiration', 'Expiration')}
                   </label>
-                  <select 
+                  <select id="expiration" 
                     className="input-field" 
                     value={newTokenExpiresDays} 
                     onChange={(e) => setNewTokenExpiresDays(Number(e.target.value))}
@@ -407,7 +407,7 @@ export default function Dashboard() {
                     className="input-field font-mono text-xs mb-0 w-full" 
                     readOnly 
                     value={generatedToken} 
-                  />
+                   aria-label={t('upgrade_command', 'Upgrade command')}/>
                   <button 
                     type="button" 
                     className="btn btn-primary px-lg w-auto" 

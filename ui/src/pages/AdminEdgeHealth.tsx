@@ -359,7 +359,7 @@ export default function AdminEdgeHealth() {
                         type="checkbox"
                         checked={paginatedItems.length > 0 && paginatedItems.every((n: EdgeNode) => n.id && selectedIds.has(n.id))}
                         onChange={e => toggleSelectAll(e.target.checked, paginatedItems.map((n: EdgeNode) => n.id).filter(Boolean) as string[])}
-                      />
+                       aria-label={t('select_all_nodes', 'Select all edge nodes')}/>
                     </th>
                   )}
                   {isColumnVisible('id') && (
@@ -421,6 +421,7 @@ export default function AdminEdgeHealth() {
                             type="checkbox"
                             checked={!!(n.id && selectedIds.has(n.id))}
                             onChange={e => n.id && toggleSelected(n.id, e.target.checked)}
+                            aria-label={`${t('select_node', 'Select edge node')} ${n.id}`}
                           />
                         </td>
                       )}

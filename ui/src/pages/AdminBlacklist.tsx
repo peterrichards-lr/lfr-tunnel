@@ -153,8 +153,8 @@ export default function AdminBlacklist() {
         <h4 className="text-md fw-bold mb-md">{t('block_new_ip', 'Block IP Address')}</h4>
         <form onSubmit={addEntry} className="flex gap-md items-end flex-wrap">
           <div className="form-group flex-1 min-w-[200px] m-0">
-            <label className="form-label mb-xs">{t('ip_address', 'IP Address')}</label>
-            <input
+            <label className="form-label mb-xs" htmlFor="ip-address">{t('ip_address', 'IP Address')}</label>
+            <input id="ip-address"
               type="text"
               placeholder="e.g. 192.0.2.1"
               value={ipInput}
@@ -164,8 +164,8 @@ export default function AdminBlacklist() {
             />
           </div>
           <div className="form-group flex-2 min-w-[250px] m-0">
-            <label className="form-label mb-xs">{t('reason', 'Reason')}</label>
-            <input
+            <label className="form-label mb-xs" htmlFor="reason">{t('reason', 'Reason')}</label>
+            <input id="reason"
               type="text"
               placeholder="e.g. Malicious payload scan"
               value={reasonInput}

@@ -169,7 +169,7 @@ export default function AdminTelemetry() {
             value={searchQuery} 
             onChange={e => setSearchQuery(e.target.value)}
             className="search-input"
-          />
+           aria-label={t('search_active_tunnels', 'Search active tunnels')}/>
         </div>
 
         {tunnels.length === 0 ? (

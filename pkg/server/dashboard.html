@@ -138,62 +138,62 @@
 
     <div id="dashboard-screen">
         <div id="sidebar-backdrop" class="sidebar-backdrop" onclick="toggleSidebar()"></div>
-        <div class="sidebar">
+        <nav class="sidebar" aria-label="Primary">
             <div class="sidebar-brand" style="display: flex; align-items: center; gap: 10px; padding: 12px 16px;">
                 <img src="/static/logo.svg" alt="Liferay Tunnel" width="28" height="28" style="flex-shrink: 0;">
                 <span style="font-weight: bold; font-size: 16px; color: var(--text-color); letter-spacing: 0.5px;">Liferay Tunnel</span>
             </div>
             
             <div class="sidebar-menu">
-                <div class="sidebar-section-header" onclick="toggleSidebarSection('personal')">
+                <button type="button" class="sidebar-section-header" onclick="toggleSidebarSection('personal')" aria-expanded="true" aria-controls="section-personal">
                     <span class="sidebar-label" data-i18n="sidebar_personal">Personal</span>
                     <span class="sidebar-section-toggle">▼</span>
-                </div>
+                </button>
                 <div id="section-personal" class="sidebar-section-content">
-                    <div id="nav-overview" class="nav-item active" onclick="showTab('overview')" data-i18n="sidebar_overview">Overview</div>
-                    <div id="nav-tokens" class="nav-item" onclick="showTab('tokens')" data-i18n="sidebar_tokens">API Tokens</div>
-                    <div id="nav-reservations" class="nav-item" onclick="showTab('reservations')" data-i18n="sidebar_reservations">Reservations</div>
-                    <div id="nav-tunnels" class="nav-item" onclick="showTab('tunnels')" data-i18n="sidebar_tunnels">Active Tunnels</div>
+                    <a id="nav-overview" class="nav-item active" data-i18n="sidebar_overview" href="#overview">Overview</a>
+                    <a id="nav-tokens" class="nav-item" data-i18n="sidebar_tokens" href="#tokens">API Tokens</a>
+                    <a id="nav-reservations" class="nav-item" data-i18n="sidebar_reservations" href="#reservations">Reservations</a>
+                    <a id="nav-tunnels" class="nav-item" data-i18n="sidebar_tunnels" href="#tunnels">Active Tunnels</a>
                 </div>
                 
                 <div id="admin-sidebar-group" class="hidden">
-                    <div class="sidebar-section-header" onclick="toggleSidebarSection('administration')">
+                    <button type="button" class="sidebar-section-header" onclick="toggleSidebarSection('administration')" aria-expanded="true" aria-controls="section-administration">
                         <span class="sidebar-label" data-i18n="sidebar_administration">Administration</span>
                         <span class="sidebar-section-toggle">▼</span>
-                    </div>
+                    </button>
                     <div id="section-administration" class="sidebar-section-content">
-                        <div id="nav-registrations" class="nav-item" onclick="showTab('registrations')"><span data-i18n="sidebar_registrations">Registrations</span> <span id="reg-badge" class="badge" style="display:none; background: var(--danger); color: white; margin-left: 8px;">0</span></div>
-                        <div id="nav-users" class="nav-item" onclick="showTab('users')" data-i18n="sidebar_users">Users</div>
-                        <div id="nav-blacklist" class="nav-item" onclick="showTab('blacklist')" data-i18n="sidebar_blacklist">IP Blacklist</div>
+                        <a id="nav-registrations" class="nav-item" href="#registrations"><span data-i18n="sidebar_registrations">Registrations</span> <span id="reg-badge" class="badge" style="display:none; background: var(--danger); color: white; margin-left: 8px;">0</span></a>
+                        <a id="nav-users" class="nav-item" data-i18n="sidebar_users" href="#users">Users</a>
+                        <a id="nav-blacklist" class="nav-item" data-i18n="sidebar_blacklist" href="#blacklist">IP Blacklist</a>
                     </div>
 
-                    <div class="sidebar-section-header" onclick="toggleSidebarSection('reporting')">
+                    <button type="button" class="sidebar-section-header" onclick="toggleSidebarSection('reporting')" aria-expanded="true" aria-controls="section-reporting">
                         <span class="sidebar-label" data-i18n="sidebar_reporting">Reporting</span>
                         <span class="sidebar-section-toggle">▼</span>
-                    </div>
+                    </button>
                     <div id="section-reporting" class="sidebar-section-content">
-                        <div id="nav-analytics" class="nav-item" onclick="showTab('analytics')" data-i18n="sidebar_analytics">Analytics</div>
-                        <div id="nav-audit" class="nav-item" onclick="showTab('audit')" data-i18n="sidebar_audit">Audit Logs</div>
-                        <div id="nav-magic" class="nav-item" onclick="showTab('magic')" data-i18n="sidebar_magic">Magic Links</div>
+                        <a id="nav-analytics" class="nav-item" data-i18n="sidebar_analytics" href="#analytics">Analytics</a>
+                        <a id="nav-audit" class="nav-item" data-i18n="sidebar_audit" href="#audit">Audit Logs</a>
+                        <a id="nav-magic" class="nav-item" data-i18n="sidebar_magic" href="#magic">Magic Links</a>
                     </div>
 
-                    <div class="sidebar-section-header" onclick="toggleSidebarSection('maintenance')">
+                    <button type="button" class="sidebar-section-header" onclick="toggleSidebarSection('maintenance')" aria-expanded="true" aria-controls="section-maintenance">
                         <span class="sidebar-label" data-i18n="sidebar_maintenance">Maintenance</span>
                         <span class="sidebar-section-toggle">▼</span>
-                    </div>
+                    </button>
                     <div id="section-maintenance" class="sidebar-section-content">
-                        <div id="nav-network-health" class="nav-item" onclick="showTab('network-health')" data-i18n="sidebar_edge_gateways">Edge Gateways</div>
-                        <div id="nav-backups" class="nav-item" onclick="showTab('backups')" data-i18n="sidebar_backups">Database Backups</div>
-                        <div id="nav-maintenance" class="nav-item" onclick="showTab('maintenance')" data-i18n="sidebar_maintenance_mode">Gateway Maintenance</div>
+                        <a id="nav-network-health" class="nav-item" data-i18n="sidebar_edge_gateways" href="#network-health">Edge Gateways</a>
+                        <a id="nav-backups" class="nav-item" data-i18n="sidebar_backups" href="#backups">Database Backups</a>
+                        <a id="nav-maintenance" class="nav-item" data-i18n="sidebar_maintenance_mode" href="#maintenance">Gateway Maintenance</a>
                     </div>
                 </div>
             </div>
             
             <div class="sidebar-footer">
-                <div id="nav-system" class="nav-item" onclick="showTab('system')" data-i18n="sidebar_system">System Settings</div>
+                <a id="nav-system" class="nav-item" data-i18n="sidebar_system" href="#system">System Settings</a>
 
-                <div id="nav-account" class="nav-item" onclick="showTab('account')" data-i18n="sidebar_account">Account Settings</div>
-                <div class="nav-item" onclick="logout()">Logout</div>
+                <a id="nav-account" class="nav-item" data-i18n="sidebar_account" href="#account">Account Settings</a>
+                <button type="button" class="nav-item" onclick="logout()">Logout</button>
                 <a href="https://status.lfr-demo.se" target="_blank" rel="noopener noreferrer" style="font-size: 11px; color: var(--text-muted); text-decoration: none; display: flex; align-items: center; gap: 6px; padding-left: 16px; margin-top: 12px; transition: 0.2s;" onmouseover="this.style.color='var(--primary)'" onmouseout="this.style.color='var(--text-muted)'">
                     <span style="width: 8px; height: 8px; border-radius: 50%; background-color: #10b981; display: inline-block;"></span>
                     <span data-i18n="system_status">System Status</span>
@@ -203,7 +203,7 @@
                     <div>Client: <span class="client-version-display"></span></div>
                 </div>
             </div>
-        </div>
+        </nav>
         
         <div class="main-content" style="position: relative; padding-top: 60px;">
             <div id="v2-promo-banner" style="display: none; background-color: #0b5fff; color: white; padding: 12px 24px; text-align: center; font-family: 'Inter', sans-serif; position: fixed; top: 0; left: 0; width: 100%; z-index: 9999; box-sizing: border-box; box-shadow: 0 4px 12px rgba(0,0,0,0.15);">

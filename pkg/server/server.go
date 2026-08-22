@@ -633,6 +633,13 @@ func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 			}
 		}
 
+		// A session previewing another role may not change anything (#1225). Enforced
+		// here, at the boundary, rather than by disabling controls in two separate
+		// portals and hoping none is ever missed.
+		if s.enforceViewAsReadOnly(w, r) {
+			return
+		}
+
 		// Route control plane requests
 		if s.cfg.ForceMFA && strings.HasPrefix(r.URL.Path, "/api/") {
 			bypass := false
@@ -924,6 +931,11 @@ func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 
 		if r.Method == http.MethodPut && r.URL.Path == "/api/me" {
 			s.handleUpdateMe(w, r)
+			return
+		}
+
+		if r.Method == http.MethodPost && r.URL.Path == "/api/me/view-as" {
+			s.handleViewAs(w, r)
 			return
 		}
 
@@ -4916,6 +4928,10 @@ type PortalSessionData struct {
 	ClientIP              string
 	PreviousLoginAt       *time.Time
 	KilledPreviousSession bool
+	// ViewAsRole is the role the owner is previewing the portal as, or "" normally.
+	// Held on the session rather than sent by the client, so the effective role is the
+	// server's decision (#1225). A session carrying this is read-only.
+	ViewAsRole string
 }
 
 func (s *Server) handleAdminListMagicLinks(w http.ResponseWriter, r *http.Request) {

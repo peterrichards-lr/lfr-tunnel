@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import { Outlet, useNavigate } from 'react-router-dom';
 import axios from 'axios';
 import Sidebar from './Sidebar';
+import ViewAsBar from './ViewAsBar';
 import ScrollToTopButton from './ScrollToTopButton';
 import { useI18n } from '../contexts/I18nContext';
 import { useSettings } from '../contexts/SettingsContext';
@@ -80,6 +81,10 @@ export default function Layout() {
 
   return (
     <div className="flex flex-col min-h-screen w-full">
+      {/* Above the fold and above every other banner: while previewing, the session is
+          read-only, so an owner who cannot tell would report the refusals as bugs. */}
+      <ViewAsBar viewAs={user.view_as} canViewAs={user.can_view_as} />
+
       {showV1Promo && (
         <div className="bg-primary text-white py-xs px-xl text-center z-40 box-border shadow-sm flex items-center justify-center relative shrink-0">
           <p className="m-0 text-sm fw-medium">

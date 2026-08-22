@@ -25,7 +25,36 @@ import (
 )
 
 // getCurrentUser is a helper to extract the authenticated user from the session cookie
+// getCurrentUser returns the user this request should be treated as, which is the
+// authenticated user with the View As role applied when the owner is previewing another
+// role (#1225). Handlers want this one: it is what makes the preview faithful, since every
+// role check in the codebase already funnels through here.
+//
+// Use getCurrentUserRaw instead when deciding what someone is *allowed* to do rather than
+// what they should see.
 func (s *Server) getCurrentUser(r *http.Request) (*db.User, error) {
+	user, err := s.getCurrentUserRaw(r)
+	if err != nil {
+		return nil, err
+	}
+	role := s.sessionViewAsRole(r)
+	if role == "" || user == nil {
+		return user, nil
+	}
+	// Only ever downgrade, and only from the owner. Anything else means a session carries a
+	// role it was never entitled to set, so ignore it rather than honouring it.
+	if !strings.EqualFold(user.Role, "owner") || !viewAsRoles[role] {
+		return user, nil
+	}
+	// Copy, so the preview cannot leak into anything holding the real user.
+	preview := *user
+	preview.Role = role
+	return &preview, nil
+}
+
+// getCurrentUserRaw resolves the authenticated user from the session cookie, ignoring any
+// View As override.
+func (s *Server) getCurrentUserRaw(r *http.Request) (*db.User, error) {
 	cookie, err := r.Cookie("lfr_session")
 	if err != nil {
 		return nil, err
@@ -109,6 +138,19 @@ func (s *Server) handleGetMe(w http.ResponseWriter, r *http.Request) {
 	}
 
 	resp := s.getUserTelemetryData(user, sessionToken, false)
+
+	// Tell the portal when it is showing a preview, so it can say so and stop offering
+	// actions the server will refuse anyway (#1225). role above is already the previewed
+	// one; can_view_as reports whether this account may start a preview at all, which has
+	// to come from the real role rather than the substituted one.
+	if viewAs := s.sessionViewAsRole(r); viewAs != "" {
+		resp["view_as"] = viewAs
+		resp["read_only"] = true
+	}
+	if realUser, rerr := s.getCurrentUserRaw(r); rerr == nil && realUser != nil {
+		resp["can_view_as"] = strings.EqualFold(realUser.Role, "owner")
+	}
+
 	respondJSON(w, http.StatusOK, resp)
 }
 

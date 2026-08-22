@@ -74,12 +74,15 @@ failure after the fact just means going back to create one anyway.
 
 ## 5. Pre-Commit / Pre-PR Checks
 *Active Constraint*: Before pushing commits and opening a PR, you MUST actively execute the following verification steps:
-1. **Branch Sync**: You MUST execute `git fetch origin && git merge origin/master` to ensure your feature branch is strictly up-to-date with `master`. If there are any merge conflicts, you MUST resolve them and re-build any affected components (e.g. `ui-dist`) before proceeding.
+1. **Branch Sync**: You MUST execute `git fetch origin && git merge origin/master` to ensure your feature branch is strictly up-to-date with `master`.
 2. **Go Formatting**: Execute `gofmt -w .` to format all modified Go files.
-3. **UI Builds**: If you modify any React UI source files (under `ui/`), you MUST execute the UI build to sync `pkg/server/ui-dist`. Execute exactly:
+3. **UI Builds**: `pkg/server/ui-dist` is generated and **must never be committed** (#1196) — it is gitignored apart from a `.gitkeep` that keeps `//go:embed` compiling. CI, the `Dockerfile` and the release workflow each build it from source, so a UI change needs nothing but the source change.
+
+   Build it locally only when you need to *run* the server (the portal 503s with "UI not built" otherwise):
    ```bash
-   cd ui && CI=true pnpm install && pnpm run build && cd .. && rm -rf pkg/server/ui-dist && cp -r ui/dist pkg/server/ui-dist
+   make build
    ```
+   If you ever see `pkg/server/ui-dist` in `git status`, something has force-added it — do not commit it. Its filenames are content-hashed, so committed bundles made every pair of concurrent UI branches conflict unresolvably.
 
 ## 6. CI Failure Remediation
 *Active Constraint*: If a Pull Request fails its CI checks (e.g., a GitHub Action fails), stay on it until it's green:

@@ -67,3 +67,11 @@ liferay-ai-commerce-accelerator/*
 # Python bytecode (scripts/ still has .py helpers; a .pyc had been committed before)
 __pycache__/
 *.py[cod]
+
+# Generated React bundle, built by `make build` (and by the Dockerfile and the release
+# workflow). Not committed: the bundles are content-hashed, so every build emits new
+# filenames, and any two concurrent UI branches produced a rename/rename conflict that
+# could only ever be resolved by throwing both sides away and rebuilding (#1196).
+# .gitkeep is tracked because //go:embed ui-dist/* fails to compile on an empty directory.
+pkg/server/ui-dist/*
+!pkg/server/ui-dist/.gitkeep

@@ -32,6 +32,30 @@ jobs:
           fi
           echo "✅ Success: Tag ($TAG_VER) matches whats-new.json version ($JSON_VER)."
 
+      # The React bundle is not committed (#1196), so it has to be built here before any
+      # Go build: pkg/server embeds ui-dist, and a release compiled without this step
+      # would ship a server with no portal. Mirrors the Dockerfile's ui-builder stage and
+      # ci.yml. Runs before the tests too, so they exercise the real bundle.
+      - name: Set up Node
+        uses: actions/setup-node@v5
+        with:
+          node-version: '20'
+
+      - name: Install pnpm
+        uses: pnpm/action-setup@v6
+        with:
+          version: 11
+
+      - name: Build UI
+        run: |
+          cd ui
+          CI=true pnpm install
+          pnpm run build
+          cd ..
+          rm -rf pkg/server/ui-dist
+          cp -r ui/dist pkg/server/ui-dist
+          test -f pkg/server/ui-dist/index.html || { echo "::error::UI build produced no index.html"; exit 1; }
+
       - name: Set up Go
         uses: actions/setup-go@v7
         with:

@@ -211,14 +211,12 @@ export default function AdminExtensions() {
                             <>
                               <button
                                 className="dropdown-menu-item flex items-center gap-sm text-xs cursor-pointer w-full text-left"
-                                style={{ background: 'none', border: 'none' }}
                                 onClick={() => { close(); handleApprove(req.id, 30, false); }}
                               >
                                 Approve +30 Days
                               </button>
                               <button
                                 className="dropdown-menu-item flex items-center gap-sm text-xs cursor-pointer w-full text-left"
-                                style={{ background: 'none', border: 'none' }}
                                 onClick={() => { close(); handleApprove(req.id, 0, true); }}
                               >
                                 Approve Permanent

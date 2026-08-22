@@ -152,7 +152,7 @@ export default function AdminTokens() {
         </div>
         <div className="card p-xl">
           <div className="search-row">
-            <Skeleton width="100%" height={40} style={{ maxWidth: '300px' }} />
+            <Skeleton width="100%" height={40} className="max-w-sm" />
           </div>
           <div className="table-responsive">
             <table className="w-full">

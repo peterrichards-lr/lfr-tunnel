@@ -1820,6 +1820,14 @@ html[dir="rtl"] td, html[dir="rtl"] th {
     border-radius: 6px;
     padding: 6px 8px;
     transition: background 0.15s ease;
+    /* Menu items are <button> as often as not, so strip the browser's chrome here rather
+       than leaving each call site to remember. Seven of them carried an identical inline
+       `background: none; border: none` before #1182 -- the same shape as #1178, where
+       padding lived in three components instead of the shared rule and the ones that
+       forgot it looked wrong until a user noticed. */
+    background: none;
+    border: none;
+    font: inherit;
 }
 .dropdown-menu-item:hover {
     background: rgba(255, 255, 255, 0.08);

@@ -307,11 +307,11 @@ export default function AdminSettings() {
           <Skeleton width={150} height={20} className="mb-lg" />
           <div className="form-group mt-lg">
             <Skeleton width={100} height={16} className="mb-sm" />
-            <Skeleton width="100%" height={40} style={{ maxWidth: '300px' }} />
+            <Skeleton width="100%" height={40} className="max-w-sm" />
           </div>
           <div className="form-group mt-lg">
             <Skeleton width={100} height={16} className="mb-sm" />
-            <Skeleton width="100%" height={40} style={{ maxWidth: '300px' }} />
+            <Skeleton width="100%" height={40} className="max-w-sm" />
           </div>
           <div className="mt-xl">
             <Skeleton width={120} height={40} />

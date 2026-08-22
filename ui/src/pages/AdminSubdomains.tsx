@@ -165,7 +165,7 @@ export default function AdminSubdomains() {
         
         <div className="card p-xl mb-xl">
           <div className="flex gap-md items-center">
-            <Skeleton width="100%" height={40} style={{ maxWidth: '300px' }} />
+            <Skeleton width="100%" height={40} className="max-w-sm" />
           </div>
         </div>
 

@@ -494,21 +494,18 @@ export default function AdminEdgeHealth() {
                                 <>
                                   <button
                                     className="dropdown-menu-item flex items-center gap-sm text-xs cursor-pointer w-full text-left"
-                                    style={{ background: 'none', border: 'none' }}
                                     onClick={() => { close(); startNode(n.id!); }}
                                   >
                                     Start
                                   </button>
                                   <button
                                     className="dropdown-menu-item flex items-center gap-sm text-xs cursor-pointer w-full text-left"
-                                    style={{ background: 'none', border: 'none' }}
                                     onClick={() => { close(); stopNode(n.id!); }}
                                   >
                                     Stop
                                   </button>
                                   <button
                                     className="dropdown-menu-item flex items-center gap-sm text-xs cursor-pointer w-full text-left"
-                                    style={{ background: 'none', border: 'none' }}
                                     onClick={() => { close(); restartNodeInstance(n.id!); }}
                                   >
                                     Restart Instance
@@ -516,7 +513,6 @@ export default function AdminEdgeHealth() {
                                   <div className="dropdown-menu-divider" />
                                   <button
                                     className="dropdown-menu-item flex items-center gap-sm text-xs cursor-pointer w-full text-left"
-                                    style={{ background: 'none', border: 'none' }}
                                     onClick={() => { close(); setScheduleModalNodeId(n.id!); }}
                                   >
                                     Edit Schedule

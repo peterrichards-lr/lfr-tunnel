@@ -60,7 +60,7 @@ func DeployCommand(args []string) {
 		}
 	}()
 
-	restorePower, err := ensureInstanceRunning(target.Host, target.AWSRegion)
+	restorePower, err := ensureInstanceRunning(target.Host, target.AWSRegion, target.InstanceTag)
 	CheckFatal(err, "Failed to ensure target instance is running")
 	defer restorePower()
 

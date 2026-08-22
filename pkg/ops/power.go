@@ -26,7 +26,7 @@ import (
 // `Name=ip-address` on a stopped instance) -- true for every box in this fleet as of
 // #1050; a regular auto-assigned public IP is released on stop and this lookup would find
 // nothing.
-func ensureInstanceRunning(host, region string) (restore func(), err error) {
+func ensureInstanceRunning(host, region, instanceTag string) (restore func(), err error) {
 	noop := func() {}
 	if region == "" {
 		return noop, nil
@@ -37,7 +37,7 @@ func ensureInstanceRunning(host, region string) (restore func(), err error) {
 		return noop, fmt.Errorf("resolving %s to an IP for AWS lookup: %w", host, err)
 	}
 
-	instanceID, state, err := describeInstanceForHost(region, ip)
+	instanceID, state, err := describeInstanceForHost(region, ip, instanceTag)
 	if err != nil {
 		return noop, fmt.Errorf("looking up EC2 instance for %s (%s) in %s: %w", host, ip, region, err)
 	}
@@ -69,7 +69,7 @@ func ensureInstanceRunning(host, region string) (restore func(), err error) {
 			// an instance and stopping it can outlive the credential -- which is exactly
 			// how a node was left running overnight after a deploy to Tokyo (#1183).
 			// Confirm the state actually reached.
-			_, state, checkErr := describeInstanceForHost(region, ip)
+			_, state, checkErr := describeInstanceForHost(region, ip, instanceTag)
 			switch {
 			case checkErr == nil && (state == "stopping" || state == "stopped"):
 				fmt.Printf("EC2 instance %s (%s) is %s.\n", instanceID, host, state)
@@ -142,32 +142,44 @@ type ec2DescribeInstancesOutput struct {
 	} `json:"Reservations"`
 }
 
-// projectTag is the tag every lfr-tunnel AWS resource carries. Identifying an instance by
-// it is steadier than by address: an Elastic IP can be reassigned, and matching on one
-// meant the lookup depended on DNS being correct at deploy time and needed a separate IPv4
-// resolution step, since the ip-address filter does not match IPv6 (issue #1176).
-const projectTag = "lfr-tunnel"
-
-// describeInstanceForHost returns the EC2 instance in region belonging to this project
-// whose public address matches ip, or ("", "", nil) if none is found -- not an error, the
-// caller decides whether that is fatal.
+// describeInstanceForHost returns the instance in region whose public address matches ip,
+// or ("", "", nil) if none is found -- not an error, the caller decides whether that is
+// fatal.
 //
-// The project tag narrows the search and the address picks the node out of it, so a
-// mis-set region or a stale DNS record fails as "not found" rather than silently matching
-// somebody else's instance.
-func describeInstanceForHost(region, ip string) (instanceID, state string, err error) {
-	out, err := RunCommandCaptureOutput("aws", "ec2", "describe-instances",
-		"--region", region,
-		// One --filters flag taking several values; repeating the flag would drop all but
-		// the last, which would silently widen the search rather than narrow it.
-		"--filters",
-		"Name=tag:Project,Values="+projectTag,
-		"Name=ip-address,Values="+ip,
-		"--output", "json")
+// instanceTag optionally narrows the search to resources carrying a given tag, written
+// "Key=Value". Supplying one means a mis-set region or a stale DNS record fails as "not
+// found" rather than matching an unrelated instance that happens to share an address.
+//
+// The tag is operator-supplied and empty by default. A tag value identifies one particular
+// deployment, so hardcoding one here would put a single organisation's naming into
+// MIT-licensed code that other people are meant to run against their own infrastructure.
+func describeInstanceForHost(region, ip, instanceTag string) (instanceID, state string, err error) {
+	args := []string{"ec2", "describe-instances", "--region", region, "--filters"}
+	// One --filters flag taking several values; repeating the flag would drop all but the
+	// last, which would silently widen the search rather than narrow it.
+	if filter := tagFilter(instanceTag); filter != "" {
+		args = append(args, filter)
+	}
+	args = append(args, "Name=ip-address,Values="+ip, "--output", "json")
+
+	out, err := RunCommandCaptureOutput("aws", args...)
 	if err != nil {
 		return "", "", err
 	}
 	return parseInstanceDescribeOutput(out)
+}
+
+// tagFilter turns an operator-supplied "Key=Value" into the provider's filter syntax, or
+// "" when nothing usable was given. A malformed value is ignored rather than fatal: it can
+// only ever widen the search back to matching on address alone, which is what happens
+// without a tag anyway.
+func tagFilter(instanceTag string) string {
+	key, value, found := strings.Cut(strings.TrimSpace(instanceTag), "=")
+	key, value = strings.TrimSpace(key), strings.TrimSpace(value)
+	if !found || key == "" || value == "" {
+		return ""
+	}
+	return "Name=tag:" + key + ",Values=" + value
 }
 
 // parseInstanceDescribeOutput is split out from describeInstanceForHost so the JSON-parsing

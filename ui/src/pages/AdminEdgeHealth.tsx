@@ -284,7 +284,7 @@ export default function AdminEdgeHealth() {
     <div>
       <div className="page-header">
         <div>
-          <h3 className="page-header__title">{t('network_edge_health', 'Network & Edge Health')}</h3>
+          <h1 className="page-header__title">{t('network_edge_health', 'Network & Edge Health')}</h1>
           <p className="page-header__desc">{t('network_edge_health_desc', 'Global routing nodes, latency, and edge node actions.')}</p>
         </div>
       </div>

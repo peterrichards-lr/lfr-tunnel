@@ -144,7 +144,7 @@ export default function AdminAnalytics() {
   return (
     <div className="analytics-page">
       <div className="page-header no-print">
-        <h2 className="page-header__title">{t('system_analytics', 'System Analytics')}</h2>
+        <h1 className="page-header__title">{t('system_analytics', 'System Analytics')}</h1>
         <div className="flex gap-md">
           <select 
             className="input-field w-auto h-control px-md"

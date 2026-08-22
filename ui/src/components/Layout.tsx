@@ -83,6 +83,13 @@ export default function Layout() {
     <div className="flex flex-col min-h-screen w-full">
       {/* Above the fold and above every other banner: while previewing, the session is
           read-only, so an owner who cannot tell would report the refusals as bugs. */}
+      {/* First thing in the tab order: a keyboard user should not have to tab through
+          the whole sidebar to reach the page content (#1219). Visually hidden until
+          focused, which is the conventional treatment. */}
+      <a href="#main-content" className="skip-link">
+        {t('skip_to_content', 'Skip to content')}
+      </a>
+
       <ViewAsBar viewAs={user.view_as} canViewAs={user.can_view_as} />
 
       {showV1Promo && (
@@ -115,7 +122,7 @@ export default function Layout() {
         <span className="fw-bold text-base text-main">Liferay Tunnel</span>
       </div>
 
-      <div className="main-content">
+      <main id="main-content" className="main-content" tabIndex={-1}>
         {user.broadcast_message && (
           <div className="bg-accent text-white p-md px-lg rounded-sm mb-xl flex items-center gap-md shadow-md">
             <span className="text-lg">📢</span>
@@ -158,7 +165,7 @@ export default function Layout() {
           <Outlet context={{ user }} />
         </div>
         <ScrollToTopButton />
-      </div>
+      </main>
     </div>
   </div>
 );

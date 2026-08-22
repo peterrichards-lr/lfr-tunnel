@@ -333,7 +333,7 @@ export default function AdminSettings() {
   return (
     <div>
       <div className="mb-xl">
-        <h3 className="page-header__title">System Settings</h3>
+        <h1 className="page-header__title">System Settings</h1>
         <p className="page-header__desc">Configure global routing and domain parameters.</p>
       </div>
 

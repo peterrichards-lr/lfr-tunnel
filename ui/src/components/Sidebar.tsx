@@ -28,7 +28,9 @@ export default function Sidebar({ user, isOpen, onClose }: SidebarProps) {
   return (
     <>
       <div className={`sidebar-backdrop ${isOpen ? 'visible' : ''}`} onClick={onClose}></div>
-      <div className={`sidebar ${isOpen ? 'active' : ''}`}>
+      {/* A navigation landmark, so screen-reader users can jump straight here
+          instead of tabbing through the page to find it (#1219). */}
+      <nav className={`sidebar ${isOpen ? 'active' : ''}`} aria-label="Primary">
         <div className="sidebar-brand flex items-center gap-sm px-lg py-md">
           <img src="/static/logo.svg" alt="Liferay Tunnel" width="28" height="28" className="shrink-0" />
           <span className="fw-bold text-base text-main tracking-wide">Liferay Tunnel</span>
@@ -126,7 +128,7 @@ export default function Sidebar({ user, isOpen, onClose }: SidebarProps) {
             ← {t('use_classic_dashboard', 'Use Classic Dashboard')}
           </a>
         </div>
-      </div>
+      </nav>
     </>
   );
 }

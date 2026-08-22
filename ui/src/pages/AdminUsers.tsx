@@ -391,7 +391,7 @@ export default function AdminUsers() {
     <div>
       <div className="flex items-center justify-between mb-xl">
         <div>
-          <h3 className="page-header__title">{t('user_management', 'User Management')}</h3>
+          <h1 className="page-header__title">{t('user_management', 'User Management')}</h1>
           <p className="page-header__desc">{t('user_management_desc', 'Manage users, promotion, roles, and pending registration approvals.')}</p>
         </div>
         <button onClick={() => setShowInviteModal(true)} className="btn btn-primary flex items-center gap-xs">

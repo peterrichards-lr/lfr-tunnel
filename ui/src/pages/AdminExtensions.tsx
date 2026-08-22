@@ -138,7 +138,7 @@ export default function AdminExtensions() {
     <div>
       <div className="page-header mb-xl">
         <div>
-          <h3 className="page-header__title">{t('extension_requests', 'Extension Requests')}</h3>
+          <h1 className="page-header__title">{t('extension_requests', 'Extension Requests')}</h1>
           <p className="page-header__desc">{t('extension_requests_desc', 'Review and approve subdomain lease extension requests.')}</p>
         </div>
       </div>

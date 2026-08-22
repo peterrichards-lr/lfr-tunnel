@@ -143,7 +143,7 @@ export default function AdminVanityDomainStatus() {
   return (
     <div>
       <div className="page-header">
-        <h3 className="page-header__title">{t('vanity_status_admin_title', 'Vanity Domain Status')}</h3>
+        <h1 className="page-header__title">{t('vanity_status_admin_title', 'Vanity Domain Status')}</h1>
         <p className="page-header__desc">{t('vanity_status_admin_desc', 'Provisioning progress for every custom domain across all users.')}</p>
       </div>
 

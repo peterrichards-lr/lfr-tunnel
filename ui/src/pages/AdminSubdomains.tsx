@@ -204,7 +204,7 @@ export default function AdminSubdomains() {
   return (
     <div>
       <div className="page-header">
-        <h3 className="page-header__title">Registered Subdomains</h3>
+        <h1 className="page-header__title">Registered Subdomains</h1>
         <a 
           href="/api/admin/leases/export" 
           className="btn btn-secondary w-auto inline-flex items-center gap-sm whitespace-nowrap"

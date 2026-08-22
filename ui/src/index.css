@@ -1497,6 +1497,11 @@ html[dir="rtl"] td, html[dir="rtl"] th {
 .modal-card {
     width: 100%;
     max-width: 640px;
+    /* Modals had no padding of their own, so content sat flush against the border.
+       Three of the six compensated with a p-xl utility and three did not, which is why
+       User Details & Tunnels, the Dashboard modal and Account Settings looked cramped
+       while the edge modals looked right. Owned here so every modal matches. */
+    padding: var(--spacing-xl);
     max-height: 90vh;
     overflow-y: auto;
     background: var(--bg-card-solid) !important;

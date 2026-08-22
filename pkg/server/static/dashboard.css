@@ -7,6 +7,8 @@
             --text-main: #f8fafc;
             --text-muted: #94a3b8;
             --border: rgba(255, 255, 255, 0.1);
+            --scrollbar-thumb: rgba(255, 255, 255, 0.28);
+            --scrollbar-thumb-hover: rgba(255, 255, 255, 0.45);
             --danger: #ef4444;
             --success: #10b981;
             --login-gradient: radial-gradient(circle at center, #1e293b 0%, #0f172a 100%);
@@ -28,6 +30,8 @@
             --text-main: #0f172a;
             --text-muted: #475569;
             --border: rgba(0, 0, 0, 0.1);
+            --scrollbar-thumb: rgba(0, 0, 0, 0.28);
+            --scrollbar-thumb-hover: rgba(0, 0, 0, 0.45);
             --login-gradient: radial-gradient(circle at center, #e2e8f0 0%, #f1f5f9 100%);
             --sidebar-bg: rgba(241, 245, 249, 0.6);
             --input-bg: rgba(255, 255, 255, 0.5);
@@ -48,6 +52,8 @@
                 --text-main: #0f172a;
                 --text-muted: #475569;
                 --border: rgba(0, 0, 0, 0.1);
+                --scrollbar-thumb: rgba(0, 0, 0, 0.28);
+                --scrollbar-thumb-hover: rgba(0, 0, 0, 0.45);
                 --login-gradient: radial-gradient(circle at center, #e2e8f0 0%, #f1f5f9 100%);
                 --sidebar-bg: rgba(241, 245, 249, 0.6);
                 --input-bg: rgba(255, 255, 255, 0.5);
@@ -235,17 +241,26 @@
             margin-bottom: 16px;
             padding-right: 4px;
             scrollbar-width: thin;
-            scrollbar-color: var(--border) transparent;
+            scrollbar-color: var(--scrollbar-thumb) transparent;
         }
+        /* The sidebar list scrolls when a role has enough sections to overflow, but the
+           only cue was a 4px thumb tinted var(--border) -- 8% opacity -- which is
+           invisible in practice, so whole admin sections went undiscovered (#1204/#1213).
+           Styling ::-webkit-scrollbar already opts out of macOS's overlay scrollbars, so
+           the bar was being painted all along; it just could not be seen. A dedicated
+           token gives it real contrast without making it loud. */
         .sidebar-menu::-webkit-scrollbar {
-            width: 4px;
+            width: 8px;
         }
         .sidebar-menu::-webkit-scrollbar-track {
             background: transparent;
         }
         .sidebar-menu::-webkit-scrollbar-thumb {
-            background: var(--border);
+            background: var(--scrollbar-thumb);
             border-radius: 4px;
+        }
+        .sidebar-menu::-webkit-scrollbar-thumb:hover {
+            background: var(--scrollbar-thumb-hover);
         }
         .sidebar-footer {
             margin-top: auto;

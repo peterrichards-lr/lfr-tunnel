@@ -463,31 +463,35 @@ export default function AdminEdgeHealth() {
                         <div className="flex gap-xs justify-end">
                           <button
                             className="btn btn-secondary text-xs py-xs px-sm"
-                            title="View Details"
+                            aria-label={t('view_details', 'View details')}
+                            title={t('view_details', 'View details')}
                             onClick={() => n.id && setDetailsNodeId(n.id)}
                           >
-                            ℹ️
+                            <span aria-hidden="true">ℹ️</span>
                           </button>
                           <button
                             className="btn btn-secondary text-xs py-xs px-sm"
-                            title="Restart Daemon"
+                            aria-label={t('restart_daemon', 'Restart daemon')}
+                            title={t('restart_daemon', 'Restart daemon')}
                             onClick={() => n.id && restartEdgeDaemon(n.id)}
                           >
-                            🔄
+                            <span aria-hidden="true">🔄</span>
                           </button>
                           <button
                             className="btn btn-secondary text-xs py-xs px-sm"
-                            title="Soft Maintenance"
+                            aria-label={t('soft_maintenance', 'Enable soft maintenance')}
+                            title={t('soft_maintenance', 'Enable soft maintenance')}
                             onClick={() => n.id && enableEdgeMaintenance(n.id)}
                           >
-                            🚧
+                            <span aria-hidden="true">🚧</span>
                           </button>
                           <button
-                            className="btn btn-secondary text-xs text-danger py-xs px-sm"
-                            title="Kick All Tunnels"
+                            className="btn btn-outline-danger text-xs py-xs px-sm"
+                            aria-label={t('kick_all_tunnels', 'Kick all tunnels')}
+                            title={t('kick_all_tunnels', 'Kick all tunnels')}
                             onClick={() => n.id && kickEdgeTunnels(n.id)}
                           >
-                            ⚡
+                            <span aria-hidden="true">⚡</span>
                           </button>
                           {powerActionsEnabled && n.id && (
                             <ActionMenu buttonTitle="Power actions">

@@ -948,3 +948,42 @@ html[dir="rtl"] td, html[dir="rtl"] th {
 :root[data-theme="light"] .config-tree-bracket {
     color: #475569; /* Slate grey */
 }
+
+/* --- View As (#1225) --- */
+/* Deliberately conspicuous: the session is read-only while previewing, so an owner who
+   cannot tell they are in it would report the refusals as bugs. */
+.view-as-bar {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 16px;
+    flex-wrap: wrap;
+    padding: 8px 24px;
+    background: var(--status-warning-bg);
+    color: var(--status-warning-text);
+    border-bottom: 1px solid var(--status-warning-border);
+    font-size: 13px;
+}
+.view-as-bar .btn {
+    width: auto;
+    margin: 0;
+    padding: 4px 12px;
+    font-size: 12px;
+}
+
+.view-as-switcher {
+    display: flex;
+    align-items: center;
+    justify-content: flex-end;
+    gap: 8px;
+    padding: 8px 24px;
+    border-bottom: 1px solid var(--border);
+    font-size: 12px;
+    color: var(--text-muted);
+}
+.view-as-switcher .input-field {
+    width: auto;
+    margin: 0;
+    padding: 4px 8px;
+    font-size: 12px;
+}

@@ -990,6 +990,8 @@ function toggleTheme() {
                 resStyleSel.value = currentUser.subdomain_style || 'liferay';
             }
 
+            renderViewAs();
+
             // Hide Danger Zone GDPR Self-Deletion for the Platform Owner
             const dz = document.getElementById('danger-zone-container');
             if (dz) {
@@ -5099,3 +5101,76 @@ async function saveSystemSettings() {
         alert("Error saving settings");
     }
 }
+
+        // --- View As (#1225) ---------------------------------------------------------
+        // Lets the owner preview the portal as a lower role. This only asks; the server
+        // decides, enforces read-only, and is the thing that actually refuses changes --
+        // so nothing here is a security control, and a tampered-with page gains nothing.
+        function renderViewAs() {
+            const bar = document.getElementById('view-as-bar');
+            if (!bar || !currentUser) return;
+
+            const viewAs = currentUser.view_as || '';
+            const canViewAs = !!currentUser.can_view_as;
+
+            if (!viewAs && !canViewAs) {
+                bar.classList.add('hidden');
+                return;
+            }
+            bar.classList.remove('hidden');
+
+            if (viewAs) {
+                // Loud on purpose: the session is read-only, and an owner who cannot tell
+                // they are previewing would report the refusals as bugs.
+                bar.className = 'view-as-bar';
+                bar.innerHTML = '';
+                const label = document.createElement('span');
+                label.textContent = 'Previewing as ' + viewAs + ' \u2014 read-only, no changes can be made';
+                const exit = document.createElement('button');
+                exit.type = 'button';
+                exit.className = 'btn btn-outline';
+                exit.textContent = 'Exit preview';
+                exit.onclick = () => setViewAs('');
+                bar.appendChild(label);
+                bar.appendChild(exit);
+                return;
+            }
+
+            bar.className = 'view-as-switcher';
+            bar.innerHTML = '';
+            const label = document.createElement('label');
+            label.setAttribute('for', 'view-as-select');
+            label.textContent = 'View as';
+            const select = document.createElement('select');
+            select.id = 'view-as-select';
+            select.className = 'input-field';
+            [['', 'Owner (you)'], ['admin', 'admin'], ['user', 'user']].forEach(([value, text]) => {
+                const opt = document.createElement('option');
+                opt.value = value;
+                opt.textContent = text;
+                select.appendChild(opt);
+            });
+            select.onchange = () => { if (select.value) setViewAs(select.value); };
+            bar.appendChild(label);
+            bar.appendChild(select);
+        }
+
+        async function setViewAs(role) {
+            try {
+                const res = await fetch('/api/me/view-as', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ role })
+                });
+                if (!res.ok) {
+                    const body = await res.json().catch(() => ({}));
+                    alert(body.error || 'Could not change the preview role.');
+                    return;
+                }
+                // Reload rather than patch the DOM: every panel on the page is role-dependent,
+                // and re-fetching is the only way to be sure the screen matches the server.
+                window.location.reload();
+            } catch (e) {
+                alert('Could not change the preview role: ' + e.message);
+            }
+        }

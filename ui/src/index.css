@@ -1457,6 +1457,35 @@ html[dir="rtl"] td, html[dir="rtl"] th {
    the Liferay brand blue hardcoded into a component, wrong on the other two themes. */
 .surface-selected { background: var(--surface-selected); }
 
+/* --- View As (#1225) --- */
+/* Deliberately conspicuous. The session is read-only while this is showing, so it has to
+   be impossible to miss -- otherwise the refusals look like bugs. */
+.view-as-bar {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: var(--spacing-md);
+    flex-wrap: wrap;
+    padding: var(--spacing-xs) var(--spacing-xl);
+    background: var(--status-warning-bg);
+    color: var(--status-warning-text);
+    border-bottom: 1px solid var(--status-warning-border);
+    font-size: 13px;
+    z-index: 40;
+    flex-shrink: 0;
+}
+.view-as-bar__label { text-align: center; }
+
+.view-as-switcher {
+    display: flex;
+    align-items: center;
+    justify-content: flex-end;
+    gap: var(--spacing-sm);
+    padding: var(--spacing-xs) var(--spacing-xl);
+    border-bottom: 1px solid var(--border);
+    flex-shrink: 0;
+}
+
 /* --- Quota / progress bars --- */
 /* The track was written inline as a literal rgba(255,255,255,0.1) -- a white overlay that
    simply vanishes on the light theme. It is now a token, defined per theme (#1182).

@@ -216,17 +216,26 @@ body {
             margin-bottom: 16px;
             padding-right: 4px;
             scrollbar-width: thin;
-            scrollbar-color: var(--border) transparent;
+            scrollbar-color: var(--scrollbar-thumb) transparent;
         }
+        /* The sidebar list scrolls when a role has enough sections to overflow, but the
+           only cue was a 4px thumb tinted var(--border) -- 8% opacity -- which is
+           invisible in practice, so whole admin sections went undiscovered (#1204/#1213).
+           Styling ::-webkit-scrollbar already opts out of macOS's overlay scrollbars, so
+           the bar was being painted all along; it just could not be seen. A dedicated
+           token gives it real contrast without making it loud. */
         .sidebar-menu::-webkit-scrollbar {
-            width: 4px;
+            width: 8px;
         }
         .sidebar-menu::-webkit-scrollbar-track {
             background: transparent;
         }
         .sidebar-menu::-webkit-scrollbar-thumb {
-            background: var(--border);
+            background: var(--scrollbar-thumb);
             border-radius: 4px;
+        }
+        .sidebar-menu::-webkit-scrollbar-thumb:hover {
+            background: var(--scrollbar-thumb-hover);
         }
         .sidebar-footer {
             margin-top: auto;

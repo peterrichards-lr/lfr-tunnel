@@ -17,6 +17,8 @@
     --text-muted: #8892b8;
     --text-secondary: #b0b8d8;
     --border: rgba(255, 255, 255, 0.10);
+    --scrollbar-thumb: rgba(11, 95, 255, 0.40);
+    --scrollbar-thumb-hover: rgba(11, 95, 255, 0.60);
     --danger: #ff4d6a;
     --success: #17d09e;
     --warning: #ffb84d;

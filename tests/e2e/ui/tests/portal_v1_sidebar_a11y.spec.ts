@@ -78,6 +78,27 @@ test.describe('Portal V1 sidebar accessibility', () => {
     await expect(header).toHaveAttribute('aria-expanded', 'true');
   });
 
+  test('account settings fields have programmatic names', async ({ page }) => {
+    // 52 of 55 fields had none (#1216): captions were visual text only, so a screen
+    // reader announced an unlabelled edit box. getByLabel resolves via <label for>,
+    // a wrapping <label>, aria-label or aria-labelledby -- i.e. exactly the association
+    // that was missing, rather than the visible text next to it.
+    await page.click('#nav-account');
+    await expect(page.locator('h2:has-text("Account Settings")')).toBeVisible();
+
+    for (const name of ['First Name', 'Last Name', 'Preferred Name', 'Theme Preference']) {
+      await expect(page.getByLabel(name, { exact: false }).first()).toBeVisible();
+    }
+  });
+
+  test('fields without a visible label still carry an accessible name', async ({ page }) => {
+    // These are named by aria-label rather than <label for>, because their caption is not
+    // a <label> element. A placeholder is a hint, not a name, so it does not count.
+    await page.click('#nav-tokens');
+    await expect(page.locator('#token-name')).toHaveAttribute('aria-label', /.+/);
+    await expect(page.locator('#token-expiry')).toHaveAttribute('aria-label', /.+/);
+  });
+
   test('a hidden sidebar does not keep its links focusable', async ({ page }) => {
     // The regression this change could have introduced: making 16 items focusable while
     // the sidebar can be visually hidden means a keyboard user tabs into something they

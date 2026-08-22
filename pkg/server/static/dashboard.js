@@ -20,6 +20,15 @@
                     el.placeholder = bundle[key];
                 }
             });
+            // Accessible names need translating too. Fields whose visible caption is not a
+            // <label> carry aria-label, and without this they would stay English in an
+            // otherwise translated portal (#1216).
+            document.querySelectorAll('[data-i18n-aria-label]').forEach(el => {
+                const key = el.getAttribute('data-i18n-aria-label');
+                if (bundle[key]) {
+                    el.setAttribute('aria-label', bundle[key]);
+                }
+            });
 
             const dir = (lang === 'ar' || lang === 'he') ? 'rtl' : 'ltr';
             document.documentElement.dir = dir;

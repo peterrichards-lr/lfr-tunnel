@@ -21,7 +21,7 @@
             <h3 data-i18n="targeted_msg_title">Targeted Message</h3>
             <p id="targeted-message-desc" style="color: var(--text-muted); margin-bottom: 16px; font-size: 14px;"></p>
             <input type="hidden" id="targeted-message-userid">
-            <input type="text" id="targeted-message-input" class="input-field" data-i18n-placeholder="targeted_msg_placeholder" placeholder="Enter message to send..." required>
+            <input type="text" id="targeted-message-input" class="input-field" data-i18n-placeholder="targeted_msg_placeholder" placeholder="Enter message to send..." required aria-label="Message to user" data-i18n-aria-label="aria_targeted_message">
             <button class="btn btn-primary" onclick="sendTargetedMessage()" data-i18n="btn_send_message">Send Message</button>
             <button class="btn" style="color: var(--danger); border-color: var(--danger);" onclick="clearTargetedMessage()" data-i18n="btn_clear_alert">Clear Existing Alert</button>
             <button class="btn" onclick="closeTargetedModal()" data-i18n="btn_cancel">Cancel</button>
@@ -33,7 +33,7 @@
     <div id="login-screen">
         <div class="glass login-card" style="position: relative;">
             <div style="position: absolute; top: 16px; right: 16px; display: flex; align-items: center; gap: 4px;">
-                <select id="portal-language-selector" style="background: transparent; border: none; color: var(--text-muted); font-size: 11px; cursor: pointer; outline: none; padding: 2px; font-weight: 500;" onchange="changePortalLanguage(this.value)">
+                <select id="portal-language-selector" style="background: transparent; border: none; color: var(--text-muted); font-size: 11px; cursor: pointer; outline: none; padding: 2px; font-weight: 500;" onchange="changePortalLanguage(this.value)" aria-label="Language" data-i18n-aria-label="aria_language_selector">
                     <option value="ar">🇸🇦 AR</option>
                     <option value="de">🇩🇪 DE</option>
                     <option value="en">🇺🇸 EN</option>
@@ -69,20 +69,20 @@
             <button class="btn btn-outline" id="btn-show-register" style="margin-top: 8px;" data-i18n="btn_register_account">Create Account</button>
             
             <form id="email-form" class="hidden" style="margin-top: 16px;">
-                <input type="email" id="email-input" name="email" autocomplete="email" class="input-field" placeholder="name@liferay.com" required>
+                <input type="email" id="email-input" name="email" autocomplete="email" class="input-field" placeholder="name@liferay.com" required aria-label="Email address" data-i18n-aria-label="aria_email_address">
                 <button type="submit" class="btn btn-primary" id="btn-magic-link" data-i18n="btn_send_magic_link">Send Magic Link</button>
                 <div id="email-msg" style="margin-top: 12px; font-size: 13px;"></div>
             </form>
 
             <form id="register-form" class="hidden" style="margin-top: 16px;">
-                <input type="email" id="reg-email" name="email" autocomplete="email" class="input-field" placeholder="name@liferay.com" required>
+                <input type="email" id="reg-email" name="email" autocomplete="email" class="input-field" placeholder="name@liferay.com" required aria-label="Email address" data-i18n-aria-label="aria_email_address">
                 <button type="submit" class="btn btn-primary" id="btn-register" data-i18n="btn_register_account">Register Account</button>
                 <div id="reg-msg" style="margin-top: 12px; font-size: 13px;"></div>
             </form>
 
             <form id="mfa-form" class="hidden" style="margin-top: 16px;">
                 <p style="font-size: 13px; color: var(--text-muted); margin-bottom: 12px; line-height: 1.5; text-align: left;" data-i18n="mfa_verify_desc">Your account is protected with Multi-Factor Authentication. Please enter the 6-digit code from your authenticator app to complete your login:</p>
-                <input type="text" id="mfa-code-input" name="code" autocomplete="one-time-code" class="input-field" placeholder="123456" pattern="[0-9]{6}" maxlength="6" inputmode="numeric" required style="letter-spacing: 8px; text-align: center; font-size: 18px; font-weight: bold;">
+                <input type="text" id="mfa-code-input" name="code" autocomplete="one-time-code" class="input-field" placeholder="123456" pattern="[0-9]{6}" maxlength="6" inputmode="numeric" required style="letter-spacing: 8px; text-align: center; font-size: 18px; font-weight: bold;" aria-label="Authentication code" data-i18n-aria-label="aria_mfa_code">
                 <input type="hidden" id="mfa-temp-token">
                 <button type="submit" class="btn btn-primary" id="btn-verify-mfa" style="margin-top: 12px;" data-i18n="btn_verify_login">Verify & Login</button>
                 <div id="mfa-msg" style="margin-top: 12px; font-size: 13px; color: var(--danger);"></div>
@@ -125,7 +125,7 @@
                 <p data-i18n="mfa_setup_step2" style="font-size: 14px; color: var(--text-muted); margin-bottom: 8px; text-align: left; line-height: 1.5;">
                     2. Enter the 6-digit code from your app to verify setup:
                 </p>
-                <input type="text" id="intercept-mfa-verify-code" class="input-field" placeholder="123456" pattern="[0-9]{6}" maxlength="6" inputmode="numeric" style="text-align: center; font-size: 18px; font-weight: bold; letter-spacing: 4px; margin-bottom: 16px; background: rgba(255,255,255,0.05); border: 1px solid rgba(255,255,255,0.1); border-radius: 6px; color: var(--text-color);">
+                <input type="text" id="intercept-mfa-verify-code" class="input-field" placeholder="123456" pattern="[0-9]{6}" maxlength="6" inputmode="numeric" style="text-align: center; font-size: 18px; font-weight: bold; letter-spacing: 4px; margin-bottom: 16px; background: rgba(255,255,255,0.05); border: 1px solid rgba(255,255,255,0.1); border-radius: 6px; color: var(--text-color);" aria-label="Authentication code" data-i18n-aria-label="aria_mfa_code">
                 <button data-i18n="mfa_setup_verify" class="btn btn-primary" onclick="confirmInterceptMFA()" style="width: 100%; margin-bottom: 8px;">Verify & Enable</button>
             </div>
         </div>
@@ -326,20 +326,20 @@
                     <form id="account-form">
                         <div style="display: flex; gap: 16px; margin-bottom: 16px;">
                             <div style="flex: 1;">
-                                <label style="display:block; margin-bottom: 8px; color: var(--text-muted); font-size: 14px;" data-i18n="label_first_name">First Name</label>
+                                <label style="display:block; margin-bottom: 8px; color: var(--text-muted); font-size: 14px;" data-i18n="label_first_name" for="acc-first-name">First Name</label>
                                 <input type="text" id="acc-first-name" class="input-field">
                             </div>
                             <div style="flex: 1;">
-                                <label style="display:block; margin-bottom: 8px; color: var(--text-muted); font-size: 14px;" data-i18n="label_last_name">Last Name</label>
+                                <label style="display:block; margin-bottom: 8px; color: var(--text-muted); font-size: 14px;" data-i18n="label_last_name" for="acc-last-name">Last Name</label>
                                 <input type="text" id="acc-last-name" class="input-field">
                             </div>
                         </div>
                         <div style="margin-bottom: 16px;">
-                            <label style="display:block; margin-bottom: 8px; color: var(--text-muted); font-size: 14px;" data-i18n="label_preferred_name">Preferred Name</label>
+                            <label style="display:block; margin-bottom: 8px; color: var(--text-muted); font-size: 14px;" data-i18n="label_preferred_name" for="acc-preferred-name">Preferred Name</label>
                             <input type="text" id="acc-preferred-name" class="input-field" placeholder="How should we address you?">
                         </div>
                         <div style="margin-bottom: 16px;">
-                            <label style="display:block; margin-bottom: 8px; color: var(--text-muted); font-size: 14px;" data-i18n="label_theme">Theme Preference</label>
+                            <label style="display:block; margin-bottom: 8px; color: var(--text-muted); font-size: 14px;" data-i18n="label_theme" for="acc-theme">Theme Preference</label>
                             <select id="acc-theme" class="input-field">
                                 <option value="system">System Default</option>
                                 <option value="light">Light Mode</option>
@@ -362,7 +362,7 @@
                             </div>
                         </div>
                         <div style="margin-bottom: 16px;">
-                            <label style="display:block; margin-bottom: 8px; color: var(--text-muted); font-size: 14px;">Default Subdomain Generator Style</label>
+                            <label style="display:block; margin-bottom: 8px; color: var(--text-muted); font-size: 14px;" for="acc-subdomain-style">Default Subdomain Generator Style</label>
                             <select id="acc-subdomain-style" class="input-field">
                                 <option value="liferay">Liferay Style</option>
                                 <option value="words">Words Style</option>
@@ -371,7 +371,7 @@
                             </select>
                         </div>
                         <div style="margin-bottom: 16px;" id="acc-preferred-domain-container">
-                            <label style="display:block; margin-bottom: 8px; color: var(--text-muted); font-size: 14px;">Preferred Domain</label>
+                            <label style="display:block; margin-bottom: 8px; color: var(--text-muted); font-size: 14px;" for="acc-preferred-domain">Preferred Domain</label>
                             <select id="acc-preferred-domain" class="input-field">
                                 <option value="">None (Auto)</option>
                             </select>
@@ -379,7 +379,7 @@
                         </div>
                         <div style="margin-bottom: 24px;">
                             <div style="display: flex; align-items: center; gap: 12px; margin-bottom: 8px;">
-                                <label style="margin: 0; color: var(--text-muted); font-size: 14px;" data-i18n="label_notifications">Email Notifications</label>
+                                <label for="acc-notifications" style="margin: 0; color: var(--text-muted); font-size: 14px;" data-i18n="label_notifications">Email Notifications</label>
                                 <label class="toggle-switch">
                                     <input type="checkbox" id="acc-notifications">
                                     <span class="toggle-slider"></span>
@@ -521,11 +521,11 @@
                     <div id="reservation-form-container">
                         <div style="display: flex; gap: 16px; margin-bottom: 16px; align-items: flex-end; flex-wrap: wrap;">
                             <div style="flex: 2; min-width: 200px;">
-                                <label style="display:block; margin-bottom: 8px; color: var(--text-muted); font-size: 13px;">Subdomain Prefix</label>
+                                <label style="display:block; margin-bottom: 8px; color: var(--text-muted); font-size: 13px;" for="res-subdomain">Subdomain Prefix</label>
                                 <input type="text" id="res-subdomain" class="input-field" placeholder="e.g. my-subdomain" style="width: 100%; box-sizing: border-box; margin-bottom: 0;">
                             </div>
                             <div style="flex: 1; min-width: 150px;">
-                                <label style="display:block; margin-bottom: 8px; color: var(--text-muted); font-size: 13px;">Domain</label>
+                                <label style="display:block; margin-bottom: 8px; color: var(--text-muted); font-size: 13px;" for="res-domain">Domain</label>
                                 <select id="res-domain" class="input-field" style="width: 100%; box-sizing: border-box; margin-bottom: 0;"></select>
                             </div>
                             <button id="btn-reserve-subdomain" class="btn btn-primary" style="width: auto; margin: 0;" onclick="reserveSubdomain()">Reserve</button>
@@ -535,7 +535,7 @@
                         
                         <div style="display: flex; gap: 16px; align-items: center; flex-wrap: wrap;">
                             <span style="font-size: 13px; color: var(--text-muted);">Need inspiration?</span>
-                            <select id="res-style-select" class="input-field" style="width: auto; max-width: 200px; margin: 0;">
+                            <select id="res-style-select" class="input-field" style="width: auto; max-width: 200px; margin: 0;" aria-label="Subdomain generator style" data-i18n-aria-label="aria_subdomain_style">
                                 <option value="random">Alphanumeric (8 chars)</option>
                                 <option value="words">What-Three-Words Style</option>
                                 <option value="heroku">Adjective-Noun-Number</option>
@@ -621,7 +621,7 @@
                 <div class="glass" style="padding: 16px; margin-bottom: 24px;">
                     <h4 style="margin-bottom: 8px; color: var(--text-muted); font-size: 14px; font-weight: 500;" data-i18n="lbl_global_broadcast">Global Broadcast Message</h4>
                     <div style="display: flex; gap: 12px;">
-                        <input type="text" id="admin-broadcast-input" data-i18n-placeholder="broadcast_input_placeholder" placeholder="e.g. Server is going down for maintenance in 5 minutes..." style="flex: 1;" />
+                        <input type="text" id="admin-broadcast-input" data-i18n-placeholder="broadcast_input_placeholder" placeholder="e.g. Server is going down for maintenance in 5 minutes..." style="flex: 1;"  aria-label="Broadcast message" data-i18n-aria-label="aria_broadcast_message"/>
                         <button class="btn btn-primary" style="width: auto; margin: 0;" onclick="setBroadcastMessage()" data-i18n="btn_broadcast">Broadcast</button>
                         <button class="btn btn-secondary" style="width: auto; margin: 0;" onclick="clearBroadcastMessage()" data-i18n="btn_clear">Clear</button>
                     </div>
@@ -710,7 +710,7 @@
                     <table>
                         <thead>
                             <tr>
-                                <th id="edge-select-all-th" class="hidden" style="width: 32px;"><input type="checkbox" id="edge-select-all" onchange="toggleAllEdgeSelection(this.checked)"></th>
+                                <th id="edge-select-all-th" class="hidden" style="width: 32px;"><input type="checkbox" id="edge-select-all" onchange="toggleAllEdgeSelection(this.checked)" aria-label="Select all edge nodes" data-i18n-aria-label="aria_select_all_edges"></th>
                                 <th data-i18n="th_region_id">Region ID</th>
                                 <th data-i18n="th_ip_address">IP Address</th>
                                 <th data-i18n="th_status">Status</th>
@@ -735,13 +735,13 @@
                 <div class="glass modal">
                     <h3 data-i18n="edge_schedule_modal_title">Edit Stop/Start Schedule</h3>
                     <p id="edge-schedule-modal-node" style="opacity: 0.8; margin-top: -12px; margin-bottom: 16px;"></p>
-                    <label style="font-size: 13px; opacity: 0.8;" data-i18n="edge_schedule_stop_time">Stop time (local)</label>
+                    <label style="font-size: 13px; opacity: 0.8;" data-i18n="edge_schedule_stop_time" for="edge-schedule-stop-time">Stop time (local)</label>
                     <input type="time" id="edge-schedule-stop-time" class="input-field">
-                    <label style="font-size: 13px; opacity: 0.8;" data-i18n="edge_schedule_start_time">Start time (local)</label>
+                    <label style="font-size: 13px; opacity: 0.8;" data-i18n="edge_schedule_start_time" for="edge-schedule-start-time">Start time (local)</label>
                     <input type="time" id="edge-schedule-start-time" class="input-field">
-                    <label style="font-size: 13px; opacity: 0.8;" data-i18n="edge_schedule_timezone">Timezone</label>
+                    <label style="font-size: 13px; opacity: 0.8;" data-i18n="edge_schedule_timezone" for="edge-schedule-timezone">Timezone</label>
                     <select id="edge-schedule-timezone" class="input-field"></select>
-                    <label style="display: flex; align-items: center; gap: 8px; margin-top: 12px; font-size: 13px; opacity: 0.8;">
+                    <label style="display: flex; align-items: center; gap: 8px; margin-top: 12px; font-size: 13px; opacity: 0.8;" for="edge-schedule-enabled">
                         <input type="checkbox" id="edge-schedule-enabled" checked>
                         <span data-i18n="edge_schedule_enabled">Schedule enabled for this node</span>
                     </label>
@@ -763,23 +763,23 @@
                     <div id="maint-soft-input-fields" style="display: flex; flex-direction: column; gap: 12px; margin-bottom: 16px; max-width: 500px;">
                         <div style="display: flex; gap: 12px;">
                             <div style="flex: 1;">
-                                <label style="display:block; color: var(--text-muted); font-size: 11px; text-transform: uppercase; font-weight: 600; margin-bottom: 4px;" data-i18n="maint_lbl_action">Action Name</label>
+                                <label style="display:block; color: var(--text-muted); font-size: 11px; text-transform: uppercase; font-weight: 600; margin-bottom: 4px;" data-i18n="maint_lbl_action" for="maint-soft-action">Action Name</label>
                                 <input type="text" id="maint-soft-action" class="input-field" value="Server Upgrade" style="width: 100%; box-sizing: border-box;" />
                             </div>
                             <div style="flex: 1;">
-                                <label style="display:block; color: var(--text-muted); font-size: 11px; text-transform: uppercase; font-weight: 600; margin-bottom: 4px;" data-i18n="maint_lbl_duration">Duration (Minutes)</label>
+                                <label style="display:block; color: var(--text-muted); font-size: 11px; text-transform: uppercase; font-weight: 600; margin-bottom: 4px;" data-i18n="maint_lbl_duration" for="maint-soft-duration">Duration (Minutes)</label>
                                 <input type="number" id="maint-soft-duration" class="input-field" value="30" min="1" style="width: 100%; box-sizing: border-box;" />
                             </div>
                         </div>
                         <div>
-                            <label style="display:block; color: var(--text-muted); font-size: 11px; text-transform: uppercase; font-weight: 600; margin-bottom: 4px;" data-i18n="maint_lbl_reason">Reason / Details</label>
+                            <label style="display:block; color: var(--text-muted); font-size: 11px; text-transform: uppercase; font-weight: 600; margin-bottom: 4px;" data-i18n="maint_lbl_reason" for="maint-soft-reason">Reason / Details</label>
                             <input type="text" id="maint-soft-reason" class="input-field" value="System upgrade and maintenance" style="width: 100%; box-sizing: border-box;" />
                         </div>
                     </div>
 
                     <div style="display: flex; gap: 12px; align-items: center; flex-wrap: wrap;">
                         <span id="maint-status-text" data-i18n="maint_status_loading" style="font-weight: bold; font-size: 13px; color: var(--text-muted); margin-right: 12px;">Status: Loading...</span>
-                        <select id="maint-countdown-select" class="input-field" style="width: auto; margin: 0; padding: 6px 12px; font-size: 13px; height: auto; background: rgba(255,255,255,0.05); border-color: rgba(255,255,255,0.1);">
+                        <select id="maint-countdown-select" class="input-field" style="width: auto; margin: 0; padding: 6px 12px; font-size: 13px; height: auto; background: rgba(255,255,255,0.05); border-color: rgba(255,255,255,0.1);" aria-label="Countdown before maintenance starts" data-i18n-aria-label="aria_maint_countdown">
                             <option value="0" data-i18n="maint_opt_0">Immediate Activation ⚡</option>
                             <option value="1" data-i18n="maint_opt_1">Schedule in 1 Minute ⏳</option>
                             <option value="5" selected data-i18n="maint_opt_5">Schedule in 5 Minutes ⏳</option>
@@ -798,16 +798,16 @@
                     <div id="maint-hard-input-fields" style="display: flex; flex-direction: column; gap: 12px; margin-bottom: 16px; max-width: 500px;">
                         <div style="display: flex; gap: 12px;">
                             <div style="flex: 1;">
-                                <label style="display:block; color: var(--text-muted); font-size: 11px; text-transform: uppercase; font-weight: 600; margin-bottom: 4px;" data-i18n="maint_lbl_action">Action Name</label>
+                                <label style="display:block; color: var(--text-muted); font-size: 11px; text-transform: uppercase; font-weight: 600; margin-bottom: 4px;" data-i18n="maint_lbl_action" for="maint-hard-action">Action Name</label>
                                 <input type="text" id="maint-hard-action" class="input-field" value="Database Restoration" style="width: 100%; box-sizing: border-box;" />
                             </div>
                             <div style="flex: 1;">
-                                <label style="display:block; color: var(--text-muted); font-size: 11px; text-transform: uppercase; font-weight: 600; margin-bottom: 4px;" data-i18n="maint_lbl_duration">Duration (Minutes)</label>
+                                <label style="display:block; color: var(--text-muted); font-size: 11px; text-transform: uppercase; font-weight: 600; margin-bottom: 4px;" data-i18n="maint_lbl_duration" for="maint-hard-duration">Duration (Minutes)</label>
                                 <input type="number" id="maint-hard-duration" class="input-field" value="60" min="1" style="width: 100%; box-sizing: border-box;" />
                             </div>
                         </div>
                         <div>
-                            <label style="display:block; color: var(--text-muted); font-size: 11px; text-transform: uppercase; font-weight: 600; margin-bottom: 4px;" data-i18n="maint_lbl_reason">Reason / Details</label>
+                            <label style="display:block; color: var(--text-muted); font-size: 11px; text-transform: uppercase; font-weight: 600; margin-bottom: 4px;" data-i18n="maint_lbl_reason" for="maint-hard-reason">Reason / Details</label>
                             <input type="text" id="maint-hard-reason" class="input-field" value="Performing database restore operations." style="width: 100%; box-sizing: border-box;" />
                         </div>
                     </div>
@@ -831,7 +831,7 @@
                     <div class="glass" style="padding: 24px; border-top: 4px solid var(--primary); display: flex; flex-direction: column;">
                         <h3 style="margin-bottom: 16px; font-size: 16px;">Domain Allocation</h3>
                         <div class="form-group" style="margin-bottom: 20px;">
-                            <label data-i18n="domain_allocation_rule" style="display: block; margin-bottom: 4px; font-weight: 500;">Domain Allocation Rule</label>
+                            <label data-i18n="domain_allocation_rule" style="display: block; margin-bottom: 4px; font-weight: 500;" for="system-domain-allocation-rule">Domain Allocation Rule</label>
                             <p style="font-size: 13px; color: var(--text-muted); margin-bottom: 12px;" data-i18n="domain_allocation_rule_desc">Determine how domains are selected when a user requests a new tunnel.</p>
                             <select id="system-domain-allocation-rule" class="input-field" style="width: 100%;">
                                 <option value="contextual">Contextual (Match requesting domain)</option>
@@ -845,7 +845,7 @@
                         </div>
 
                         <div class="form-group" style="margin-bottom: auto;">
-                            <label data-i18n="default_domain" style="display: block; margin-bottom: 4px; font-weight: 500;">Default Domain Fallback</label>
+                            <label data-i18n="default_domain" style="display: block; margin-bottom: 4px; font-weight: 500;" for="system-default-domain">Default Domain Fallback</label>
                             <p style="font-size: 13px; color: var(--text-muted); margin-bottom: 12px;" data-i18n="default_domain_desc">The fallback domain to use if the allocation rule fails to make a decision.</p>
                             <select id="system-default-domain" class="input-field" style="width: 100%;">
                                 <!-- Options populated via JS -->
@@ -863,7 +863,7 @@
                         </div>
 
                         <div class="form-group" style="margin-bottom: 20px;">
-                            <label style="display: flex; align-items: center; gap: 8px; font-weight: 500; cursor: pointer;">
+                            <label style="display: flex; align-items: center; gap: 8px; font-weight: 500; cursor: pointer;" for="system-enable-vanity-hook">
                                 <input type="checkbox" id="system-enable-vanity-hook" style="width: auto; margin: 0;" onchange="toggleVanityHookPathInput()" />
                                 <span>Enable Automated DNS/TLS Provisioning</span>
                             </label>
@@ -873,7 +873,7 @@
                         </div>
 
                         <div class="form-group" style="margin-bottom: auto;">
-                            <label style="display: block; margin-bottom: 4px; font-weight: 500;">Vanity Domain Hook Script Path</label>
+                            <label style="display: block; margin-bottom: 4px; font-weight: 500;" for="system-vanity-hook-path">Vanity Domain Hook Script Path</label>
                             <input type="text" id="system-vanity-hook-path" class="input-field" placeholder="/usr/local/bin/lfr-vanity-hook.sh" style="width: 100%; box-sizing: border-box;" disabled />
                         </div>
                     </div>
@@ -902,7 +902,7 @@
                     </p>
                     
                     <div style="margin-bottom: 16px;">
-                        <input type="text" id="config-search" class="input-field" placeholder="Search configuration keys or values..." style="width: 100%; max-width: 400px; box-sizing: border-box;" oninput="filterConfigTree()" />
+                        <input type="text" id="config-search" class="input-field" placeholder="Search configuration keys or values..." style="width: 100%; max-width: 400px; box-sizing: border-box;" oninput="filterConfigTree()"  aria-label="Search configuration" data-i18n-aria-label="aria_config_search"/>
                     </div>
 
                     <div id="config-tree-container" style="background: var(--copy-box-bg); border: 1px solid var(--border); border-radius: 6px; padding: 16px; max-height: 400px; overflow-y: auto; font-family: monospace; font-size: 13px; line-height: 1.6; color: var(--text-main);">
@@ -923,8 +923,8 @@
             <h3 id="modal-title">Generate New Token</h3>
             
             <div id="token-form-step">
-                <input type="text" id="token-name" class="input-field" placeholder="What's this token for? (e.g. MacBook)" required>
-                <select id="token-expiry" class="input-field">
+                <input type="text" id="token-name" class="input-field" placeholder="What's this token for? (e.g. MacBook)" required aria-label="Token name" data-i18n-aria-label="aria_token_name">
+                <select id="token-expiry" class="input-field" aria-label="Token expiry" data-i18n-aria-label="aria_token_expiry">
                     <option value="30">30 Days</option>
                     <option value="90">90 Days</option>
                     <option value="365">1 Year</option>
@@ -948,8 +948,8 @@
     <div id="blacklist-modal" class="modal-overlay">
         <div class="glass modal">
             <h3 data-i18n="ban_ip_title">Ban IP Address</h3>
-            <input type="text" id="blacklist-ip" class="input-field" data-i18n-placeholder="ban_ip_placeholder" placeholder="192.168.1.1" required>
-            <input type="text" id="blacklist-reason" class="input-field" data-i18n-placeholder="ban_ip_reason_placeholder" placeholder="Reason (e.g. Malicious Activity)" required>
+            <input type="text" id="blacklist-ip" class="input-field" data-i18n-placeholder="ban_ip_placeholder" placeholder="192.168.1.1" required aria-label="IP address to ban" data-i18n-aria-label="aria_blacklist_ip">
+            <input type="text" id="blacklist-reason" class="input-field" data-i18n-placeholder="ban_ip_reason_placeholder" placeholder="Reason (e.g. Malicious Activity)" required aria-label="Reason for ban" data-i18n-aria-label="aria_blacklist_reason">
             <button class="btn btn-primary" style="background-color: var(--danger);" onclick="submitBlacklist()" data-i18n="btn_ban_ip">Ban IP</button>
             <button class="btn" onclick="closeBlacklistModal()" data-i18n="btn_cancel">Cancel</button>
         </div>
@@ -959,11 +959,11 @@
     <div id="invite-modal" class="modal-overlay">
         <div class="glass modal">
             <h3 data-i18n="invite_user_title">Invite User</h3>
-            <input type="email" id="invite-email" class="input-field" data-i18n-placeholder="invite_email_placeholder" placeholder="Email Address" required>
-            <input type="text" id="invite-first-name" class="input-field" data-i18n-placeholder="invite_first_name_placeholder" placeholder="First Name" required>
-            <input type="text" id="invite-last-name" class="input-field" data-i18n-placeholder="invite_last_name_placeholder" placeholder="Last Name" required>
+            <input type="email" id="invite-email" class="input-field" data-i18n-placeholder="invite_email_placeholder" placeholder="Email Address" required aria-label="Invitee email address" data-i18n-aria-label="aria_invite_email">
+            <input type="text" id="invite-first-name" class="input-field" data-i18n-placeholder="invite_first_name_placeholder" placeholder="First Name" required aria-label="Invitee first name" data-i18n-aria-label="aria_invite_first_name">
+            <input type="text" id="invite-last-name" class="input-field" data-i18n-placeholder="invite_last_name_placeholder" placeholder="Last Name" required aria-label="Invitee last name" data-i18n-aria-label="aria_invite_last_name">
             <div style="margin-bottom: 16px; text-align: left;">
-                <label style="display:block; margin-bottom: 8px; color: var(--text-muted); font-size: 13px;" data-i18n="invite_lbl_onboarding_lang">Onboarding Language</label>
+                <label style="display:block; margin-bottom: 8px; color: var(--text-muted); font-size: 13px;" data-i18n="invite_lbl_onboarding_lang" for="invite-language">Onboarding Language</label>
                 <select id="invite-language" class="input-field" style="background: #161b22; color: var(--text-color); border: 1px solid var(--border); border-radius: 6px; padding: 10px; font-weight: 500; height: 38px; box-sizing: border-box; width: 100%;">
                     <option value="en" selected>English</option>
                     <option value="ar">العربية (Arabic)</option>
@@ -1002,7 +1002,7 @@
                 <p data-i18n="mfa_setup_step2" style="font-size: 14px; color: var(--text-muted); margin-bottom: 8px; text-align: left; line-height: 1.5;">
                     2. Enter the 6-digit code from your app to verify setup:
                 </p>
-                <input type="text" id="mfa-verify-code" class="input-field" placeholder="123456" pattern="[0-9]{6}" maxlength="6" inputmode="numeric" style="text-align: center; font-size: 18px; font-weight: bold; letter-spacing: 4px; margin-bottom: 16px;">
+                <input type="text" id="mfa-verify-code" class="input-field" placeholder="123456" pattern="[0-9]{6}" maxlength="6" inputmode="numeric" style="text-align: center; font-size: 18px; font-weight: bold; letter-spacing: 4px; margin-bottom: 16px;" aria-label="Authentication code" data-i18n-aria-label="aria_mfa_code">
                 <button data-i18n="mfa_setup_verify" class="btn btn-primary" onclick="confirmEnableMFA()" style="margin-bottom: 8px;">Verify & Enable</button>
                 <button data-i18n="btn_cancel" class="btn" id="mfa-cancel-btn" onclick="closeMFAModal()">Cancel</button>
             </div>
@@ -1018,7 +1018,7 @@
                 <br/><br/>
                 Please type your email address <strong><span id="delete-acc-email-hint"></span></strong> to confirm deletion:
             </p>
-            <input type="email" id="delete-acc-confirm-input" class="input-field" placeholder="you@liferay.com" required style="margin-bottom: 20px; width: 100%;">
+            <input type="email" id="delete-acc-confirm-input" class="input-field" placeholder="you@liferay.com" required style="margin-bottom: 20px; width: 100%;" aria-label="Confirm your email address to delete the account" data-i18n-aria-label="aria_delete_confirm">
             <div style="display: flex; gap: 12px; justify-content: flex-end;">
                 <button class="btn btn-secondary" style="width: auto; margin: 0;" onclick="closeDeleteAccountModal()">Cancel</button>
                 <button class="btn" style="width: auto; margin: 0; background: #f43f5e; color: white; border: none;" onclick="submitSelfDeleteAccount()">Delete Permanently</button>
@@ -1034,7 +1034,7 @@
                 Configure the requests-per-second (RPS) quota limit for <strong><span id="user-quota-email-hint"></span></strong>. Any subdomains created by this user will be capped at this maximum rate.
             </p>
             <div style="margin-bottom: 20px;">
-                <label style="display:block; margin-bottom: 8px; color: var(--text-muted); font-size: 13px;">Requests Per Second Limit (RPS)</label>
+                <label style="display:block; margin-bottom: 8px; color: var(--text-muted); font-size: 13px;" for="user-quota-input">Requests Per Second Limit (RPS)</label>
                 <input type="number" id="user-quota-input" class="input-field" min="0" placeholder="0 (Unlimited)" style="width: 100%; box-sizing: border-box; font-size: 16px; font-weight: bold; padding: 10px;">
                 <span style="font-size: 11px; color: var(--text-muted); display: block; margin-top: 4px;">Set to 0 to grant unlimited requests.</span>
             </div>
@@ -1053,7 +1053,7 @@
                 Configure the maximum subdomain reservations quota override for <strong><span id="user-res-limit-email-hint"></span></strong>.
             </p>
             <div style="margin-bottom: 20px;">
-                <label style="display:block; margin-bottom: 8px; color: var(--text-muted); font-size: 13px;">Max Subdomain Reservations Limit</label>
+                <label style="display:block; margin-bottom: 8px; color: var(--text-muted); font-size: 13px;" for="user-res-limit-input">Max Subdomain Reservations Limit</label>
                 <input type="number" id="user-res-limit-input" class="input-field" min="1" placeholder="Use default value" style="width: 100%; box-sizing: border-box; font-size: 16px; font-weight: bold; padding: 10px;">
                 <span style="font-size: 11px; color: var(--text-muted); display: block; margin-top: 4px;">Leave blank/empty to reset and use gateway configuration default.</span>
             </div>
@@ -1072,7 +1072,7 @@
                 Configure the maximum concurrent active tunnels quota override for <strong><span id="user-tunnels-limit-email-hint"></span></strong>.
             </p>
             <div style="margin-bottom: 20px;">
-                <label style="display:block; margin-bottom: 8px; color: var(--text-muted); font-size: 13px;">Max Active Tunnels Limit</label>
+                <label style="display:block; margin-bottom: 8px; color: var(--text-muted); font-size: 13px;" for="user-tunnels-limit-input">Max Active Tunnels Limit</label>
                 <input type="number" id="user-tunnels-limit-input" class="input-field" min="1" placeholder="Use default value" style="width: 100%; box-sizing: border-box; font-size: 16px; font-weight: bold; padding: 10px;">
                 <span style="font-size: 11px; color: var(--text-muted); display: block; margin-top: 4px;">Leave blank/empty to reset and use gateway configuration default.</span>
             </div>
@@ -1094,7 +1094,7 @@
                 <span style="color: #f43f5e; font-weight: bold;">Warning:</span> Throttling an active developer tunnel may result in packet drops, slow response times, or asset delivery failures on Liferay Client Extensions (Portlets).
             </p>
             <div style="margin-bottom: 24px;">
-                <label style="display:block; margin-bottom: 8px; color: var(--text-muted); font-size: 13px;">Live Rate Limit Override (RPS)</label>
+                <label style="display:block; margin-bottom: 8px; color: var(--text-muted); font-size: 13px;" for="tunnel-override-input">Live Rate Limit Override (RPS)</label>
                 <input type="number" id="tunnel-override-input" class="input-field" min="0" placeholder="0 (Unlimited)" style="width: 100%; box-sizing: border-box; font-size: 16px; font-weight: bold; padding: 10px;">
                 <span style="font-size: 11px; color: var(--text-muted); display: block; margin-top: 4px;">Changes are dynamically applied in-memory and will throttle the proxy instantly.</span>
             </div>
@@ -1177,7 +1177,7 @@
                     </div>
                 </div>
                 <div style="grid-column: span 2; border-top: 1px solid rgba(255,255,255,0.05); padding-top: 12px; margin-top: 4px;">
-                    <label data-i18n="detail_lbl_custom_headers" style="display:flex; justify-content: space-between; align-items: center; color: var(--text-muted); font-size: 11px; text-transform: uppercase; font-weight: 600; margin-bottom: 8px;">
+                    <label data-i18n="detail_lbl_custom_headers" style="display:flex; justify-content: space-between; align-items: center; color: var(--text-muted); font-size: 11px; text-transform: uppercase; font-weight: 600; margin-bottom: 8px;" for="detail-tunnel-header-key">
                         Custom Headers Injection
                     </label>
                     <div id="detail-tunnel-headers-container" style="margin-bottom: 8px; font-size: 13px;">
@@ -1185,7 +1185,7 @@
                     </div>
                     <div style="display: flex; gap: 8px;">
                         <input type="text" id="detail-tunnel-header-key" data-i18n-placeholder="detail_header_key_placeholder" placeholder="Header Name (e.g. X-Frame-Options)" class="input-field" style="flex: 1; padding: 6px 8px; font-size: 12px; height: 30px;">
-                        <input type="text" id="detail-tunnel-header-value" data-i18n-placeholder="detail_header_value_placeholder" placeholder="Value" class="input-field" style="flex: 1; padding: 6px 8px; font-size: 12px; height: 30px;">
+                        <input type="text" id="detail-tunnel-header-value" data-i18n-placeholder="detail_header_value_placeholder" placeholder="Value" class="input-field" style="flex: 1; padding: 6px 8px; font-size: 12px; height: 30px;" aria-label="Custom header value" data-i18n-aria-label="aria_header_value">
                         <button class="btn btn-primary" style="margin: 0; padding: 0 12px; height: 30px; font-size: 12px; width: auto;" onclick="addTunnelHeader()" data-i18n="btn_add">Add</button>
                     </div>
                 </div>
@@ -1236,7 +1236,7 @@
                     <span id="detail-user-origin" style="display: inline-block; margin-top: 4px;"></span>
                 </div>
                 <div>
-                    <label data-i18n="user_lbl_preferred_domain" style="display:block; color: var(--text-muted); font-size: 11px; text-transform: uppercase; font-weight: 600;">Preferred Domain</label>
+                    <label data-i18n="user_lbl_preferred_domain" style="display:block; color: var(--text-muted); font-size: 11px; text-transform: uppercase; font-weight: 600;" for="detail-user-preferred-domain">Preferred Domain</label>
                     <select id="detail-user-preferred-domain" style="margin-top: 4px; background: rgba(0,0,0,0.2); border: 1px solid var(--border); color: var(--text); border-radius: 4px; padding: 2px 4px; font-size: 13px;" onchange="updateUserPreferredDomain()">
                         <option value="">Default (Contextual)</option>
                     </select>

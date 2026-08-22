@@ -26,6 +26,9 @@
     --toast-bg: #1e293b;
     --toast-color: #f8fafc;
     --toast-border: rgba(255, 255, 255, 0.1);
+    --progress-track: rgba(255, 255, 255, 0.1);
+    --surface-subtle: rgba(255, 255, 255, 0.02);
+    --surface-selected: rgba(59, 130, 246, 0.08);
     --shadow-glass: 0 8px 32px 0 rgba(0, 0, 0, 0.37);
     --shadow-glow: 0 0 20px rgba(59, 130, 246, 0.3);
     --table-row-hover: rgba(255, 255, 255, 0.03);

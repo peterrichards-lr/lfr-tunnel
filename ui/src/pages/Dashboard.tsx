@@ -168,7 +168,7 @@ export default function Dashboard() {
   };
 
   return (
-    <div style={{ animation: 'fadeInUp 0.6s ease-out' }}>
+    <div className="animate-fade-in">
 
       <div className="mb-2xl">
         <h1 id="dashboard-overview" className="text-2xl fw-extrabold tracking-tight mb-xs">{t('dashboard_overview', 'Dashboard Overview')}</h1>
@@ -195,8 +195,7 @@ export default function Dashboard() {
               </code>
               <button 
                 onClick={handleCopyUpgradeCmd}
-                className="btn-text p-xs text-xs rounded hover:bg-white/10 transition-colors"
-                style={{ color: copiedUpgrade ? 'var(--success)' : 'var(--text-muted)' }}
+                className={`btn-text p-xs text-xs rounded hover:bg-white/10 transition-colors ${copiedUpgrade ? 'text-success' : 'text-muted'}`}
                 title={copiedUpgrade ? 'Copied!' : 'Copy to clipboard'}
               >
                 {copiedUpgrade ? '✓' : '📋'}
@@ -224,7 +223,7 @@ export default function Dashboard() {
           <ReservationsPanel />
           <VanityDomainStatusPanel />
 
-          <div className="card p-0" style={{ animationDelay: '0.2s' }}>
+          <div className="card p-0 animate-delay-sm">
             <div className="p-xl border-b flex justify-between items-center flex-wrap gap-md">
               <div>
                 <h3 className="m-0 text-md fw-bold">{t('pat_title', 'Personal Access Tokens')}</h3>
@@ -397,7 +396,7 @@ export default function Dashboard() {
                 </div>
               </form>
             ) : (
-              <div style={{ animation: 'fadeInUp 0.3s ease-out' }}>
+              <div className="animate-fade-in-fast">
                 <div className="alert-banner alert-banner--warning text-xs mb-xl">
                   ⚠️ {t('token_warning', 'Copy this token now! It will not be shown again for security reasons.')}
                 </div>

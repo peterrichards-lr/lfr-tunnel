@@ -62,7 +62,7 @@ export default function Sidebar({ user, isOpen, onClose }: SidebarProps) {
                 <NavLink to="/admin/extensions" onClick={onClose} className={({ isActive }) => `nav-item ${isActive ? 'active' : ''}`}>
                   {t('extensions', 'Extensions')}
                 </NavLink>
-                <NavLink to="/admin/users" onClick={onClose} className={({ isActive }) => `nav-item ${isActive ? 'active' : ''}`} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                <NavLink to="/admin/users" onClick={onClose} className={({ isActive }) => `nav-item flex justify-between items-center ${isActive ? 'active' : ''}`}>
                   <span>{t('sidebar_users', 'Users')}</span>
                   {pendingCount > 0 && (
                     <span className="badge badge-danger text-2xs py-2xs px-xs">

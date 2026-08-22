@@ -244,7 +244,7 @@ export default function AdminEdgeHealth() {
 
   if (loading) {
     return (
-      <div style={{ animation: 'fadeInUp 0.6s ease-out' }}>
+      <div className="animate-fade-in">
         <div className="mb-xl">
           <Skeleton width={180} height={28} />
           <Skeleton width={320} height={16} className="mt-sm" />
@@ -354,7 +354,7 @@ export default function AdminEdgeHealth() {
               <thead>
                 <tr className="border-b text-left">
                   {powerActionsEnabled && (
-                    <th className="th-col" style={{ width: 32 }}>
+                    <th className="th-col w-icon">
                       <input
                         type="checkbox"
                         checked={paginatedItems.length > 0 && paginatedItems.every((n: EdgeNode) => n.id && selectedIds.has(n.id))}
@@ -441,10 +441,10 @@ export default function AdminEdgeHealth() {
                         <td className="td-cell">{n.latency_ms ? `${n.latency_ms}ms` : '—'}</td>
                       )}
                       {isColumnVisible('timezone') && (
-                        <td className="td-cell" style={{ whiteSpace: 'nowrap' }}>{formatNodeLocalTime(n.timezone)}</td>
+                        <td className="td-cell whitespace-nowrap">{formatNodeLocalTime(n.timezone)}</td>
                       )}
                       {isColumnVisible('online_since') && (
-                        <td className="td-cell" style={{ whiteSpace: 'nowrap' }}>
+                        <td className="td-cell whitespace-nowrap">
                           {n.status?.toLowerCase() === 'online' && n.online_since
                             ? formatUptime(Math.max(0, Math.floor(Date.now() / 1000) - n.online_since))
                             : '—'}
@@ -454,7 +454,7 @@ export default function AdminEdgeHealth() {
                         <td className="td-cell--mono">{n.version || '—'}</td>
                       )}
                       {isColumnVisible('created_at') && (
-                        <td className="td-cell" style={{ whiteSpace: 'nowrap' }}>
+                        <td className="td-cell whitespace-nowrap">
                           {n.created_at ? formatDate(n.created_at) : '—'}
                         </td>
                       )}
@@ -494,21 +494,18 @@ export default function AdminEdgeHealth() {
                                 <>
                                   <button
                                     className="dropdown-menu-item flex items-center gap-sm text-xs cursor-pointer w-full text-left"
-                                    style={{ background: 'none', border: 'none' }}
                                     onClick={() => { close(); startNode(n.id!); }}
                                   >
                                     Start
                                   </button>
                                   <button
                                     className="dropdown-menu-item flex items-center gap-sm text-xs cursor-pointer w-full text-left"
-                                    style={{ background: 'none', border: 'none' }}
                                     onClick={() => { close(); stopNode(n.id!); }}
                                   >
                                     Stop
                                   </button>
                                   <button
                                     className="dropdown-menu-item flex items-center gap-sm text-xs cursor-pointer w-full text-left"
-                                    style={{ background: 'none', border: 'none' }}
                                     onClick={() => { close(); restartNodeInstance(n.id!); }}
                                   >
                                     Restart Instance
@@ -516,7 +513,6 @@ export default function AdminEdgeHealth() {
                                   <div className="dropdown-menu-divider" />
                                   <button
                                     className="dropdown-menu-item flex items-center gap-sm text-xs cursor-pointer w-full text-left"
-                                    style={{ background: 'none', border: 'none' }}
                                     onClick={() => { close(); setScheduleModalNodeId(n.id!); }}
                                   >
                                     Edit Schedule

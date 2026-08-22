@@ -250,8 +250,8 @@ export default function ReservationsPanel() {
           <Skeleton width="100%" height={8} borderRadius={4} />
         </div>
         <div className="flex gap-sm mb-xl flex-wrap">
-          <Skeleton width="100%" height={40} style={{ flex: '1', minWidth: '150px' }} />
-          <Skeleton width="100%" height={40} style={{ flex: '1', minWidth: '150px' }} />
+          <Skeleton width="100%" height={40} className="flex-1 min-w-sm" />
+          <Skeleton width="100%" height={40} className="flex-1 min-w-sm" />
           <Skeleton width={80} height={40} />
           <Skeleton width={80} height={40} />
         </div>
@@ -298,8 +298,12 @@ export default function ReservationsPanel() {
             <span>{t('reservation_quota', 'My Personal Quota')}</span>
             <span>{limit < 0 ? `${used} / ∞` : `${used} / ${limit}`} {t('reserved', 'reserved')}</span>
           </div>
-          <div style={{ height: '8px', background: 'rgba(255,255,255,0.1)', borderRadius: '4px', overflow: 'hidden' }}>
-            <div style={{ height: '100%', width: `${Math.min(percent, 100)}%`, background: isAtLimit ? 'var(--danger)' : 'var(--primary)', transition: 'width 0.3s' }}></div>
+          <div className="progress-track">
+            {/* Only the width is computed; at-limit is a state, so it is a class. */}
+            <div
+              className={`progress-fill${isAtLimit ? ' is-at-limit' : ''}`}
+              style={{ width: `${Math.min(percent, 100)}%` }}
+            ></div>
           </div>
           {isAtLimit && limit >= 0 && (
             <div className="mt-sm text-xs text-warning">
@@ -318,8 +322,11 @@ export default function ReservationsPanel() {
             <span>{t('custom_domain_quota', 'Custom Domain Quota')}</span>
             <span>{customDomainLimit < 0 ? `${customDomainUsed} / ∞` : `${customDomainUsed} / ${customDomainLimit}`} {t('reserved', 'reserved')}</span>
           </div>
-          <div style={{ height: '8px', background: 'rgba(255,255,255,0.1)', borderRadius: '4px', overflow: 'hidden' }}>
-            <div style={{ height: '100%', width: `${Math.min(customDomainPercent, 100)}%`, background: isAtCustomDomainLimit ? 'var(--danger)' : 'var(--primary)', transition: 'width 0.3s' }}></div>
+          <div className="progress-track">
+            <div
+              className={`progress-fill${isAtCustomDomainLimit ? ' is-at-limit' : ''}`}
+              style={{ width: `${Math.min(customDomainPercent, 100)}%` }}
+            ></div>
           </div>
           <p className="text-muted text-xs mt-xs mb-0">
             {t('custom_domain_quota_hint', 'Custom domains (via CNAME) are tracked separately from subdomain reservations above -- connect your client with -domain to reserve one, up to this limit.')}
@@ -338,7 +345,7 @@ export default function ReservationsPanel() {
 
         {!isAtLimit && (
           <form onSubmit={createReservation} className="flex gap-sm mb-xl flex-wrap">
-            <div className="flex-1" style={{ minWidth: '150px' }}>
+            <div className="flex-1 min-w-sm">
               <input 
                 type="text" 
                 className="form-control" 
@@ -347,14 +354,14 @@ export default function ReservationsPanel() {
                 onChange={(e) => setSubdomainInput(e.target.value)} 
               />
             </div>
-            <div className="flex-1" style={{ minWidth: '150px' }}>
+            <div className="flex-1 min-w-sm">
               <select className="form-control" value={selectedDomain} onChange={(e) => setSelectedDomain(e.target.value)}>
                 {domains.map(d => (
                   <option key={d} value={d}>{d}</option>
                 ))}
               </select>
             </div>
-            <div style={{ minWidth: '130px' }}>
+            <div className="min-w-xs">
               <select className="form-control" value={subdomainStyle} onChange={(e) => setSubdomainStyle(e.target.value)}>
                 <option value="liferay">{t('style_liferay', 'Liferay SE Style')}</option>
                 <option value="words">{t('style_words', 'Words Style')}</option>
@@ -462,8 +469,8 @@ export default function ReservationsPanel() {
                 {([['public', '🌐', t('access_public', 'Public — Anyone can access')],
                   ['passcode', '🔑', t('access_passcode', 'Passcode — Requires a secret code')],
                   ['whitelist', '🛡', t('access_whitelist', 'IP Whitelist — Restrict by IP address')]] as [string, string, string][]).map(([val, icon, label]) => (
-                  <label key={val} className={`flex items-center gap-md p-md rounded cursor-pointer border ${acMode === val ? 'border-primary' : 'border'}`} style={{ background: acMode === val ? 'rgba(11,95,255,0.05)' : 'transparent' }}>
-                    <input type="radio" name="acMode" value={val} checked={acMode === val} onChange={() => setAcMode(val)} style={{ accentColor: 'var(--primary)' }} />
+                  <label key={val} className={`flex items-center gap-md p-md rounded cursor-pointer border ${acMode === val ? 'border-primary surface-selected' : 'border'}`}>
+                    <input type="radio" name="acMode" value={val} checked={acMode === val} onChange={() => setAcMode(val)} />
                     <span>{icon} {label}</span>
                   </label>
                 ))}
@@ -487,12 +494,11 @@ export default function ReservationsPanel() {
               <div className="form-group">
                 <label className="form-label--bold">{t('allowed_ips', 'Allowed IPs')}</label>
                 <textarea
-                  className="input-field"
+                  className="input-field font-mono text-sm resize-y"
                   value={acWhitelist}
                   onChange={e => setAcWhitelist(e.target.value)}
                   placeholder={'One IP or CIDR per line, e.g.\n192.168.1.0/24\n10.0.0.1'}
                   rows={4}
-                  style={{ fontFamily: 'monospace', fontSize: '13px', resize: 'vertical' }}
                 />
                 <p className="form-hint">
                   {t('whitelist_hint', 'Enter individual IP addresses or CIDR ranges, one per line.')}

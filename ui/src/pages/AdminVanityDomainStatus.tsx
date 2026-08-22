@@ -129,12 +129,12 @@ export default function AdminVanityDomainStatus() {
 
   if (loading) {
     return (
-      <div style={{ animation: 'fadeInUp 0.6s ease-out' }}>
+      <div className="animate-fade-in">
         <div className="page-header">
           <Skeleton width={260} height={28} />
         </div>
         <div className="card p-xl">
-          <Skeleton width="100%" height={40} style={{ maxWidth: '300px' }} />
+          <Skeleton width="100%" height={40} className="max-w-sm" />
         </div>
       </div>
     );
@@ -211,14 +211,12 @@ export default function AdminVanityDomainStatus() {
                             <>
                               <button
                                 className="dropdown-menu-item flex items-center gap-sm text-xs cursor-pointer w-full text-left"
-                                style={{ background: 'none', border: 'none' }}
                                 onClick={() => { close(); retryDomain(status.full_host); }}
                               >
                                 🔄 {t('vanity_action_retry', 'Retry')}
                               </button>
                               <button
-                                className="dropdown-menu-item flex items-center gap-sm text-xs cursor-pointer w-full text-left"
-                                style={{ background: 'none', border: 'none', color: 'var(--danger)' }}
+                                className="dropdown-menu-item flex items-center gap-sm text-xs cursor-pointer w-full text-left btn-bare text-danger-strong"
                                 onClick={() => { close(); removeDomain(status.full_host); }}
                               >
                                 🗑 {t('vanity_action_remove', 'Remove')}

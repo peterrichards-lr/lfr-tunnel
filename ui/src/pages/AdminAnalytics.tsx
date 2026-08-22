@@ -147,8 +147,7 @@ export default function AdminAnalytics() {
         <h2 className="page-header__title">{t('system_analytics', 'System Analytics')}</h2>
         <div className="flex gap-md">
           <select 
-            className="input-field w-auto" 
-            style={{ height: '38px', boxSizing: 'border-box', padding: '0 12px' }}
+            className="input-field w-auto h-control px-md"
             value={timeRange} 
             onChange={(e) => setTimeRange(e.target.value)}
           >
@@ -157,7 +156,7 @@ export default function AdminAnalytics() {
             <option value="30">Last 30 Days</option>
             <option value="0">All Time</option>
           </select>
-          <button className="btn btn-secondary w-auto inline-flex items-center gap-sm" onClick={handlePrint} style={{ whiteSpace: 'nowrap', height: '38px', boxSizing: 'border-box', padding: '0 16px' }}>
+          <button className="btn btn-secondary w-auto inline-flex items-center gap-sm" onClick={handlePrint}>
             📄 {t('export_pdf', 'Export PDF')}
           </button>
         </div>
@@ -171,7 +170,7 @@ export default function AdminAnalytics() {
             {data.personal.daily && data.personal.daily.length > 0 && (
               <div className="card p-xl">
                 <h4 className="text-muted text-base mb-lg">{t('bandwidth_over_time', 'Bandwidth Over Time')}</h4>
-                <div style={{ height: '300px' }}>
+                <div className="chart-container">
                   <Line 
                     data={{
                       labels: data.personal.daily.map((d: any) => d.date),
@@ -189,7 +188,7 @@ export default function AdminAnalytics() {
             {data.personal.tunnels && data.personal.tunnels.length > 0 && (
               <div className="card p-xl">
                 <h4 className="text-muted text-base mb-lg">{t('bandwidth_by_tunnel', 'Bandwidth by Tunnel')}</h4>
-                <div style={{ height: '300px' }}>
+                <div className="chart-container">
                   <Doughnut 
                     data={{
                       labels: data.personal.tunnels.map((t: any) => t.full_host),
@@ -217,7 +216,7 @@ export default function AdminAnalytics() {
             {data.global.daily && data.global.daily.length > 0 && (
               <div className="card p-xl">
                 <h4 className="text-muted text-base mb-lg">{t('global_bandwidth', 'Global Bandwidth')}</h4>
-                <div style={{ height: '300px' }}>
+                <div className="chart-container">
                   <Line 
                     data={{
                       labels: data.global.daily.map((d: any) => d.date),
@@ -235,7 +234,7 @@ export default function AdminAnalytics() {
             {data.global.top_users && data.global.top_users.length > 0 && (
               <div className="card p-xl">
                 <h4 className="text-muted text-base mb-lg">{t('top_users_bandwidth', 'Top Users by Bandwidth')}</h4>
-                <div style={{ height: '300px' }}>
+                <div className="chart-container">
                   <Bar 
                     data={{
                       labels: data.global.top_users.map((u: any) => (u.email || "Anonymous").split('@')[0]),
@@ -255,7 +254,7 @@ export default function AdminAnalytics() {
             {data.global.top_tunnels && data.global.top_tunnels.length > 0 && (
               <div className="card p-xl">
                 <h4 className="text-muted text-base mb-lg">{t('top_tunnels_bandwidth', 'Top Tunnels by Bandwidth')}</h4>
-                <div style={{ height: '300px' }}>
+                <div className="chart-container">
                   <Doughnut 
                     data={{
                       labels: data.global.top_tunnels.map((tItem: any) => tItem.full_host),
@@ -275,7 +274,7 @@ export default function AdminAnalytics() {
             {data.global.portal_stats && data.global.portal_stats.length > 0 && (
               <div className="card p-xl">
                 <h4 className="text-muted text-base mb-lg">Portal Usage</h4>
-                <div style={{ height: '300px' }}>
+                <div className="chart-container">
                   <Doughnut 
                     data={{
                       labels: data.global.portal_stats.map((s: any) => s.version.toUpperCase()),
@@ -301,7 +300,7 @@ export default function AdminAnalytics() {
             {data.global.node_distribution && Object.keys(data.global.node_distribution).length > 0 && (
               <div className="card p-xl">
                 <h4 className="text-muted text-base mb-lg">Tunnel Distribution (Active Nodes)</h4>
-                <div style={{ height: '300px' }}>
+                <div className="chart-container">
                   <Pie 
                     data={{
                       labels: Object.keys(data.global.node_distribution).map(k => k.toUpperCase()),
@@ -348,7 +347,7 @@ export default function AdminAnalytics() {
                     sortedClientStats.map((stat, idx) => (
                       <tr key={idx} className="border-b">
                         <td className="td-cell">
-                          <span style={{ background: 'var(--primary)', color: 'white', padding: '2px 8px', borderRadius: '4px', fontSize: '12px', fontWeight: '500' }}>
+                          <span className="badge admin">
                             {stat.version || "Unknown"}
                           </span>
                         </td>

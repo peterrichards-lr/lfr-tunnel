@@ -74,7 +74,7 @@ export default function AdminAuditLog() {
 
   if (loading) {
     return (
-      <div style={{ animation: 'fadeInUp 0.6s ease-out' }}>
+      <div className="animate-fade-in">
         <div className="page-header">
           <div>
             <Skeleton width={180} height={28} />
@@ -85,7 +85,7 @@ export default function AdminAuditLog() {
         
         <div className="card p-xl mb-xl">
           <div className="flex gap-md items-center">
-            <Skeleton width="100%" height={40} style={{ maxWidth: '300px' }} />
+            <Skeleton width="100%" height={40} className="max-w-sm" />
           </div>
         </div>
 
@@ -130,8 +130,7 @@ export default function AdminAuditLog() {
         </div>
         <a 
           href="/api/admin/audit/export" 
-          className="btn btn-secondary w-auto inline-flex items-center gap-sm" 
-          style={{ whiteSpace: 'nowrap' }}
+          className="btn btn-secondary w-auto inline-flex items-center gap-sm whitespace-nowrap"
         >
           📥 {t('export_csv', 'Export CSV')}
         </a>
@@ -197,7 +196,7 @@ export default function AdminAuditLog() {
                 paginatedItems.map((e: AuditEvent, idx: number) => (
                   <tr key={e.id || idx} className="border-b">
                     {isColumnVisible('created_at') && (
-                      <td className="td-cell" style={{ whiteSpace: 'nowrap' }}>{formatDate(e.created_at)}</td>
+                      <td className="td-cell whitespace-nowrap">{formatDate(e.created_at)}</td>
                     )}
                     {isColumnVisible('actor_id') && (
                       <td className="td-cell">{e.actor_id}</td>
@@ -218,7 +217,7 @@ export default function AdminAuditLog() {
                       <td className="td-cell--mono">{e.ip_address}</td>
                     )}
                     {isColumnVisible('details') && (
-                      <td className="td-cell--mono text-2xs text-muted overflow-auto" style={{ maxWidth: '200px' }}>
+                      <td className="td-cell--mono text-2xs text-muted overflow-auto max-w-xs">
                         {e.details}
                       </td>
                     )}

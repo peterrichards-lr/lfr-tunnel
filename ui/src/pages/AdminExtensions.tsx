@@ -202,8 +202,8 @@ export default function AdminExtensions() {
                     {isColumnVisible('user_email') && <td className="td-cell">{req.user_email}</td>}
                     {isColumnVisible('subdomain') && <td className="td-cell font-mono text-xs">{req.subdomain}</td>}
                     {isColumnVisible('domain') && <td className="td-cell font-mono text-xs">{req.domain}</td>}
-                    {isColumnVisible('expires_at') && <td className="td-cell text-xs text-muted" style={{ whiteSpace: 'nowrap' }}>{req.expires_at ? formatDate(req.expires_at) : 'Never'}</td>}
-                    {isColumnVisible('created_at') && <td className="td-cell text-xs text-muted" style={{ whiteSpace: 'nowrap' }}>{req.created_at ? formatDate(req.created_at) : '—'}</td>}
+                    {isColumnVisible('expires_at') && <td className="td-cell text-xs text-muted whitespace-nowrap">{req.expires_at ? formatDate(req.expires_at) : 'Never'}</td>}
+                    {isColumnVisible('created_at') && <td className="td-cell text-xs text-muted whitespace-nowrap">{req.created_at ? formatDate(req.created_at) : '—'}</td>}
                     <td className="td-cell text-right">
                       <div className="flex gap-sm justify-end">
                         <ActionMenu buttonLabel="Approve" buttonClassName="btn btn-primary px-md py-xs text-xs" buttonTitle="Approve extension">
@@ -211,14 +211,12 @@ export default function AdminExtensions() {
                             <>
                               <button
                                 className="dropdown-menu-item flex items-center gap-sm text-xs cursor-pointer w-full text-left"
-                                style={{ background: 'none', border: 'none' }}
                                 onClick={() => { close(); handleApprove(req.id, 30, false); }}
                               >
                                 Approve +30 Days
                               </button>
                               <button
                                 className="dropdown-menu-item flex items-center gap-sm text-xs cursor-pointer w-full text-left"
-                                style={{ background: 'none', border: 'none' }}
                                 onClick={() => { close(); handleApprove(req.id, 0, true); }}
                               >
                                 Approve Permanent

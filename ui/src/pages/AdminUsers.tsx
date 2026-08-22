@@ -349,7 +349,7 @@ export default function AdminUsers() {
 
   if (loading) {
     return (
-      <div style={{ animation: 'fadeInUp 0.6s ease-out' }}>
+      <div className="animate-fade-in">
         <div className="page-header mb-xl">
           <Skeleton width={180} height={28} />
           <Skeleton width={320} height={16} className="mt-sm" />
@@ -514,7 +514,7 @@ export default function AdminUsers() {
                         </td>
                       )}
                       {isColumnVisible('created_at') && (
-                        <td className="td-cell" style={{ whiteSpace: 'nowrap' }}>
+                        <td className="td-cell whitespace-nowrap">
                           {u.created_at ? formatDate(u.created_at) : '—'}
                         </td>
                       )}
@@ -694,7 +694,7 @@ export default function AdminUsers() {
                       <button type="button" className="btn btn-danger py-xs px-sm text-xs" onClick={resetUserMFA}>Reset MFA</button>
                     </>
                   ) : (
-                    <span className="badge" style={{ background: 'rgba(255,255,255,0.05)', color: 'var(--text-muted)' }}>Inactive</span>
+                    <span className="badge neutral">Inactive</span>
                   )}
                 </div>
               </div>

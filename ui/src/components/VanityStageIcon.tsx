@@ -14,19 +14,8 @@ export default function VanityStageIcon({ state, title }: { state: VanityStageSt
   return (
     <span
       title={title}
-      style={{
-        display: 'inline-flex',
-        alignItems: 'center',
-        justifyContent: 'center',
-        width: 22,
-        height: 22,
-        borderRadius: '50%',
-        background,
-        color: '#fff',
-        fontSize: 12,
-        fontWeight: 700,
-        lineHeight: 1,
-      }}
+      className="stage-icon"
+      style={{ background }}
     >
       {glyph}
     </span>

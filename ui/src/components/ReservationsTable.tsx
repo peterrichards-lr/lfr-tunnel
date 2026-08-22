@@ -166,16 +166,14 @@ export default function ReservationsTable({
                             </a>
                             <button
                               onClick={() => copyText(host, 'Host copied to clipboard')}
-                              className="btn-icon text-muted cursor-pointer text-base"
-                              style={{ background: 'none', border: 'none', padding: '2px' }}
+                              className="btn-icon text-muted cursor-pointer text-base btn-bare p-2xs"
                               title="Copy Host"
                             >
                               📋
                             </button>
                             <button
                               onClick={() => copyText(cliCommand, 'CLI command copied')}
-                              className="btn-icon text-muted cursor-pointer text-base"
-                              style={{ background: 'none', border: 'none', padding: '2px' }}
+                              className="btn-icon text-muted cursor-pointer text-base btn-bare p-2xs"
                               title="Copy CLI Connection Command"
                             >
                               🔌
@@ -205,7 +203,7 @@ export default function ReservationsTable({
                         </td>
                       )}
                       {isColumnVisible('created_at') && (
-                        <td className="td-cell" style={{ whiteSpace: 'nowrap' }}>
+                        <td className="td-cell whitespace-nowrap">
                           {r.created_at ? formatDate(r.created_at) : '—'}
                         </td>
                       )}

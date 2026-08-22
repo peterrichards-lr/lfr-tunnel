@@ -117,7 +117,7 @@ export default function AccountSettings() {
   };
 
   return (
-    <div style={{ animation: 'fadeInUp 0.6s ease-out' }}>
+    <div className="animate-fade-in">
       <div className="mb-2xl">
         <h1 className="text-2xl fw-extrabold tracking-tight mb-xs">
           {t('account_title', 'Account Settings')}
@@ -296,7 +296,7 @@ export default function AccountSettings() {
         <div className="card">
           <h3 className="section-title mb-lg">{t('security', 'Security')}</h3>
           
-          <div className="card p-lg mb-xl border" style={{ background: 'rgba(0,0,0,0.1)' }}>
+          <div className="card p-lg mb-xl border surface-subtle">
             <div className="flex justify-between items-center">
               <div>
                 <h4 className="m-0 mb-2xs">{t('mfa_title', 'Multi-Factor Authentication')}</h4>
@@ -320,19 +320,18 @@ export default function AccountSettings() {
                     {t('btn_disable_mfa', 'Disable MFA')}
                   </button>
                 ) : (
-                  <div className="mt-md" style={{ animation: 'fadeInUp 0.3s ease-out' }}>
+                  <div className="mt-md animate-fade-in-fast">
                     <p className="text-xs text-muted mb-xs">
                       {t('mfa_deactivate_desc', 'To deactivate MFA, please enter your 6-digit authenticator code below:')}
                     </p>
                     <div className="flex gap-sm items-center">
                       <input 
                         type="text" 
-                        className="input-field text-center font-bold mb-0" 
+                        className="input-field text-center font-bold mb-0 w-narrow"
                         placeholder="123456" 
                         maxLength={6} 
                         value={disableCode}
                         onChange={(e) => setDisableCode(e.target.value)}
-                        style={{ width: '120px' }}
                       />
                       <button type="button" className="btn btn-primary" onClick={async () => {
                         setDisableError('');
@@ -365,7 +364,7 @@ export default function AccountSettings() {
             )}
 
             {setupData && !mfaEnabled && (
-              <div className="mt-xl" style={{ animation: 'fadeInUp 0.3s ease-out' }}>
+              <div className="mt-xl animate-fade-in-fast">
                 <div className="bg-white p-lg rounded-md inline-block mb-lg">
                   <QRCodeSVG value={setupData.otpauth_url} size={150} />
                 </div>
@@ -394,7 +393,7 @@ export default function AccountSettings() {
           </div>
 
           {user?.role !== 'owner' && (
-            <div className="card p-xl mt-xl border" style={{ borderColor: 'rgba(239, 68, 68, 0.2)' }}>
+            <div className="card p-xl mt-xl border border-danger">
               <h3 className="m-0 mb-xs text-md text-danger">
                 ⚠️ {t('danger_zone_title', 'Danger Zone (GDPR / Right to Be Forgotten)')}
               </h3>

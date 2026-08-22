@@ -126,53 +126,18 @@ export const UIProvider: React.FC<{ children: React.ReactNode }> = ({ children }
       {children}
 
       {/* Floating Toasts container */}
-      <div style={{
-        position: 'fixed',
-        top: '24px',
-        right: '24px',
-        zIndex: 9999,
-        display: 'flex',
-        flexDirection: 'column',
-        gap: 'var(--spacing-sm)',
-        maxWidth: '350px',
-        width: '100%'
-      }}>
+      <div className="toast-stack">
         {toasts.map((toast) => (
           <div
             key={toast.id}
-            style={{
-              padding: 'var(--spacing-md) var(--spacing-lg)',
-              borderRadius: '8px',
-              background: 'var(--bg-card)',
-              color: 'var(--text-main)',
-              borderLeft: `4px solid ${
-                toast.type === 'success' ? 'var(--success)' : toast.type === 'error' ? 'var(--danger)' : 'var(--primary)'
-              }`,
-              borderTop: '1px solid var(--border)',
-              borderRight: '1px solid var(--border)',
-              borderBottom: '1px solid var(--border)',
-              boxShadow: 'var(--shadow-glass)',
-              backdropFilter: 'blur(12px)',
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'space-between',
-              animation: 'slideIn 0.3s ease-out'
-            }}
+            className={`toast-card${toast.type === 'success' ? ' is-success' : toast.type === 'error' ? ' is-error' : ''}`}
           >
-            <span style={{ fontSize: '14px', fontWeight: 500 }}>{toast.message}</span>
+            <span className="toast-message">{toast.message}</span>
             <button
               type="button"
+              className="toast-dismiss"
               aria-label={t('dismiss_notification', 'Dismiss notification')}
               onClick={() => setToasts((prev) => prev.filter((t) => t.id !== toast.id))}
-              style={{
-                background: 'transparent',
-                border: 'none',
-                color: 'var(--text-muted)',
-                cursor: 'pointer',
-                fontSize: '16px',
-                padding: '0 var(--spacing-xs)',
-                marginLeft: 'var(--spacing-md)'
-              }}
             >
               ×
             </button>
@@ -182,40 +147,18 @@ export const UIProvider: React.FC<{ children: React.ReactNode }> = ({ children }
 
       {/* Async Custom Dialog Modal overlay */}
       {activeDialog && (
-        <div style={{
-          position: 'fixed',
-          inset: 0,
-          background: 'var(--modal-overlay)',
-          backdropFilter: 'blur(8px)',
-          zIndex: 9998,
-          display: 'flex',
-          alignItems: 'center',
-          justifyContent: 'center',
-          padding: 'var(--spacing-xl)'
-        }}>
-          <div 
+        <div className="dialog-overlay">
+          <div
             role="dialog"
             aria-modal="true"
             aria-labelledby="global-dialog-title"
-            style={{
-              background: 'var(--bg-card)',
-              border: '1px solid var(--border)',
-              borderRadius: '12px',
-              padding: 'var(--spacing-xl)',
-              maxWidth: '420px',
-              width: '100%',
-              boxShadow: 'var(--shadow-glass)',
-              backdropFilter: 'blur(16px)',
-              display: 'flex',
-              flexDirection: 'column',
-              gap: 'var(--spacing-lg)'
-            }}
+            className="dialog-card"
           >
             <div>
-              <h3 id="global-dialog-title" style={{ margin: 0, fontSize: '18px', fontWeight: 700, color: 'var(--text-main)' }}>
+              <h3 id="global-dialog-title" className="dialog-title">
                 {activeDialog.title}
               </h3>
-              <p style={{ margin: 'var(--spacing-sm) 0 0 0', fontSize: '14px', color: 'var(--text-muted)', lineHeight: '1.5' }}>
+              <p className="dialog-message">
                 {activeDialog.message}
               </p>
             </div>
@@ -230,35 +173,16 @@ export const UIProvider: React.FC<{ children: React.ReactNode }> = ({ children }
                   if (e.key === 'Enter') handleConfirm();
                   if (e.key === 'Escape') handleCancel();
                 }}
-                style={{
-                  width: '100%',
-                  padding: 'var(--spacing-md)',
-                  background: 'var(--input-bg)',
-                  border: '1px solid var(--border)',
-                  borderRadius: '6px',
-                  color: 'var(--text-main)',
-                  outline: 'none',
-                  fontSize: '14px'
-                }}
+                className="form-control"
               />
             )}
 
-            <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 'var(--spacing-md)', marginTop: 'var(--spacing-sm)' }}>
+            <div className="dialog-actions">
               {activeDialog.type !== 'alert' && (
                 <button
                   type="button"
                   onClick={handleCancel}
-                  style={{
-                    padding: 'var(--spacing-md) var(--spacing-lg)',
-                    background: 'transparent',
-                    border: '1px solid var(--border)',
-                    borderRadius: '6px',
-                    color: 'var(--text-muted)',
-                    cursor: 'pointer',
-                    fontSize: '14px',
-                    fontWeight: 600,
-                    transition: 'all 0.2s'
-                  }}
+                  className="btn btn-outline w-auto m-0"
                 >
                   {t('cancel', 'Cancel')}
                 </button>
@@ -266,18 +190,7 @@ export const UIProvider: React.FC<{ children: React.ReactNode }> = ({ children }
               <button
                 type="button"
                 onClick={handleConfirm}
-                style={{
-                  padding: 'var(--spacing-md) var(--spacing-lg)',
-                  background: 'var(--primary)',
-                  border: 'none',
-                  borderRadius: '6px',
-                  color: '#ffffff',
-                  cursor: 'pointer',
-                  fontSize: '14px',
-                  fontWeight: 600,
-                  boxShadow: 'var(--shadow-glow)',
-                  transition: 'all 0.2s'
-                }}
+                className="btn btn-primary w-auto m-0"
               >
                 {t('confirm', 'Confirm')}
               </button>

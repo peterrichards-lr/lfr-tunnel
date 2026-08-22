@@ -408,6 +408,13 @@ body {
             color: var(--text-muted);
             border: 1px solid rgba(148, 163, 184, 0.3);
         }
+        /* Neutral/inactive state. Was written inline as rgba(255,255,255,0.05), which is
+           invisible on a light background (#1182). */
+        .badge.neutral {
+            background: var(--surface-subtle);
+            color: var(--text-muted);
+            border: 1px solid var(--border);
+        }
         .badge.info, .badge-info {
             background: var(--status-info-bg);
             color: var(--status-info-text);
@@ -1225,6 +1232,7 @@ html[dir="rtl"] td, html[dir="rtl"] th {
 .gap-2xl { gap: var(--spacing-2xl); }
 
 /* --- Padding --- */
+.p-2xs { padding: 2px; }
 .p-xs  { padding: var(--spacing-xs); }
 .p-sm  { padding: var(--spacing-sm); }
 .p-md  { padding: var(--spacing-md); }
@@ -1241,6 +1249,7 @@ html[dir="rtl"] td, html[dir="rtl"] th {
 
 /* --- Margin --- */
 .m-0   { margin: 0; }
+.mt-auto { margin-top: auto; }
 .mt-0  { margin-top: 0; }
 .mt-xs { margin-top: var(--spacing-xs); }
 .mt-sm { margin-top: var(--spacing-sm); }
@@ -1260,6 +1269,15 @@ html[dir="rtl"] td, html[dir="rtl"] th {
 /* --- Width / Height --- */
 .w-full    { width: 100%; }
 .w-auto    { width: auto; }
+/* Minimum widths, mirroring the max-width scale below. These are almost all form controls
+   in a wrapping flex row: the minimum is what stops flex squeezing a select down to
+   nothing. The steps are the values that were already in use inline, so converting changed
+   no layout (#1182). */
+.min-w-xs  { min-width: 130px; }
+.min-w-sm  { min-width: 150px; }
+.min-w-md  { min-width: 200px; }
+.min-w-lg  { min-width: 260px; }
+
 .max-w-xs  { max-width: 200px; }
 .max-w-sm  { max-width: 300px; }
 .max-w-md  { max-width: 480px; }
@@ -1295,6 +1313,10 @@ html[dir="rtl"] td, html[dir="rtl"] th {
 .text-success { color: var(--status-success-text); }
 .text-warning { color: var(--status-warning-text); }
 .text-danger  { color: var(--status-danger-text); }
+/* The raw danger colour, as opposed to .text-danger's --status-danger-text, which is the
+   tone meant for text sitting inside a danger-tinted badge. Standalone destructive icons
+   want the stronger base token. */
+.text-danger-strong { color: var(--danger); }
 
 /* --- Typography: Transform / Decoration --- */
 .uppercase     { text-transform: uppercase; }
@@ -1304,6 +1326,220 @@ html[dir="rtl"] td, html[dir="rtl"] th {
 .font-mono     { font-family: monospace; }
 .no-underline  { text-decoration: none; }
 .truncate      { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+/* Plain nowrap, without .truncate's overflow/ellipsis -- for cells and controls that
+   must stay on one line but are sized to fit rather than clipped. */
+.whitespace-nowrap { white-space: nowrap; }
+
+/* --- Entrance animation --- */
+/* Page and section wrappers fade in on mount. .card already animates itself, so this is
+   for the plain wrappers around it; putting it on a card would only override the card's
+   own (identical) animation.
+   The easing is the design system's curve rather than a plain ease-out: these were
+   previously written inline as `fadeInUp 0.6s ease-out`, which quietly disagreed with
+   every .card on the same screen. */
+.animate-fade-in      { animation: fadeInUp 0.6s cubic-bezier(0.16, 1, 0.3, 1) both; }
+.animate-fade-in-fast { animation: fadeInUp 0.3s cubic-bezier(0.16, 1, 0.3, 1) both; }
+
+@media (prefers-reduced-motion: reduce) {
+    .animate-fade-in,
+    .animate-fade-in-fast { animation: none; }
+}
+
+/* --- Unstyled button --- */
+/* For buttons that exist only to be clickable -- icon triggers, table sort headers --
+   where the browser's default chrome is unwanted but .btn's styling is too much. */
+.btn-bare {
+    background: none;
+    border: none;
+    padding: 0;
+    color: inherit;
+    font: inherit;
+    cursor: pointer;
+}
+
+/* --- Global toasts and dialog (UIContext) --- */
+/* These were written entirely inline, ~12 declarations in one file (#1182). Note the
+   existing .toast / #toast-container rules further up are not reused: they belong to the
+   legacy dashboard.html markup and start at `opacity: 0; translateX(120%)`, waiting for a
+   .show class that React never adds -- adopting them would render invisible toasts.
+   Likewise .modal-overlay is `display: none` until legacy JS opens it. */
+.toast-stack {
+    position: fixed;
+    top: 24px;
+    right: 24px;
+    z-index: 9999;
+    display: flex;
+    flex-direction: column;
+    gap: var(--spacing-sm);
+    max-width: 350px;
+    width: 100%;
+}
+.toast-card {
+    padding: var(--spacing-md) var(--spacing-lg);
+    border-radius: 8px;
+    background: var(--bg-card);
+    color: var(--text-main);
+    border: 1px solid var(--border);
+    /* Severity is shown by the left edge; the colour is a state, so it is a modifier
+       rather than a ternary picking a var() inline. */
+    border-left: 4px solid var(--primary);
+    box-shadow: var(--shadow-glass);
+    backdrop-filter: blur(12px);
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    animation: slideIn 0.3s ease-out;
+}
+.toast-card.is-success { border-left-color: var(--success); }
+.toast-card.is-error   { border-left-color: var(--danger); }
+.toast-message { font-size: 14px; font-weight: 500; }
+.toast-dismiss {
+    background: transparent;
+    border: none;
+    color: var(--text-muted);
+    cursor: pointer;
+    font-size: 16px;
+    padding: 0 var(--spacing-xs);
+    margin-left: var(--spacing-md);
+}
+
+.dialog-overlay {
+    position: fixed;
+    inset: 0;
+    background: var(--modal-overlay);
+    backdrop-filter: blur(8px);
+    z-index: 9998;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: var(--spacing-xl);
+}
+.dialog-card {
+    background: var(--bg-card);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    padding: var(--spacing-xl);
+    max-width: 420px;
+    width: 100%;
+    box-shadow: var(--shadow-glass);
+    backdrop-filter: blur(16px);
+    display: flex;
+    flex-direction: column;
+    gap: var(--spacing-lg);
+}
+.dialog-title {
+    margin: 0;
+    font-size: 18px;
+    font-weight: 700;
+    color: var(--text-main);
+}
+.dialog-message {
+    margin: var(--spacing-sm) 0 0 0;
+    font-size: 14px;
+    color: var(--text-muted);
+    line-height: 1.5;
+}
+.dialog-actions {
+    display: flex;
+    justify-content: flex-end;
+    gap: var(--spacing-md);
+    margin-top: var(--spacing-sm);
+}
+
+@media (prefers-reduced-motion: reduce) {
+    .toast-card { animation: none; }
+}
+
+/* A barely-raised surface for nested detail blocks. Was written inline as a literal
+   rgba(255,255,255,0.02), which is invisible against a light background (#1182). */
+.surface-subtle { background: var(--surface-subtle); }
+/* A faint primary wash marking a selected option. Was inline as rgba(11,95,255,0.05) --
+   the Liferay brand blue hardcoded into a component, wrong on the other two themes. */
+.surface-selected { background: var(--surface-selected); }
+
+/* --- Quota / progress bars --- */
+/* The track was written inline as a literal rgba(255,255,255,0.1) -- a white overlay that
+   simply vanishes on the light theme. It is now a token, defined per theme (#1182).
+   Only the fill's width is genuinely dynamic and stays inline; whether it reads as normal
+   or at-limit is a state, so it is a class rather than a computed colour. */
+.progress-track {
+    height: 8px;
+    background: var(--progress-track);
+    border-radius: 4px;
+    overflow: hidden;
+}
+.progress-fill {
+    height: 100%;
+    background: var(--primary);
+    transition: width 0.3s;
+}
+.progress-fill.is-at-limit { background: var(--danger); }
+
+/* --- Assorted component pieces converted from inline styles (#1182) --- */
+
+/* The MFA gate is the same overlay as a dialog, but must sit above one. */
+.dialog-overlay--gate { z-index: 10000; }
+.gate-card {
+    max-width: 440px;
+    width: 100%;
+    padding: var(--spacing-xl);
+    text-align: center;
+}
+
+/* The login screen's ambient orb. Purely decorative, hence aria-hidden at the call site. */
+.login-orb {
+    position: absolute;
+    width: 600px;
+    height: 600px;
+    background: radial-gradient(circle, var(--primary-glow) 0%, transparent 60%);
+    border-radius: 50%;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    animation: floatOrb 8s ease-in-out infinite;
+    z-index: 0;
+    pointer-events: none;
+}
+
+/* Small round glyph marking a vanity-domain stage. Only the fill is state-dependent and
+   stays inline; the geometry is fixed. */
+.stage-icon {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 22px;
+    height: 22px;
+    border-radius: 50%;
+    color: #fff;
+    font-size: 12px;
+    font-weight: 700;
+    line-height: 1;
+}
+
+/* Matches the height of a .form-control sitting beside it, so a control and a button in
+   the same row line up. */
+.h-control {
+    height: 38px;
+    box-sizing: border-box;
+}
+
+/* Radios and checkboxes take the brand colour everywhere, rather than each call site
+   remembering an inline accentColor -- one input carried it and the rest did not. */
+input[type="radio"],
+input[type="checkbox"] { accent-color: var(--primary); }
+
+.resize-y  { resize: vertical; }
+.opacity-80 { opacity: 0.8; }
+.w-icon    { width: 32px; }
+.w-narrow  { width: 120px; }
+
+/* Staggers a card's entrance behind the one above it. */
+.animate-delay-sm { animation-delay: 0.2s; }
+
+/* --- Chart sizing --- */
+/* Recharts needs a definite height on the wrapper to lay out at all, so this is a real
+   layout constraint rather than decoration. */
+.chart-container { height: 300px; }
 
 /* --- Border Radius --- */
 .rounded-xs { border-radius: 4px; }
@@ -1318,6 +1554,7 @@ html[dir="rtl"] td, html[dir="rtl"] th {
 .border-b { border-bottom: 1px solid var(--border); }
 .border-t { border-top: 1px solid var(--border); }
 .border   { border: 1px solid var(--border); }
+.border-danger { border-color: var(--status-danger-border); }
 
 /* --- Position --- */
 .relative { position: relative; }
@@ -1785,6 +2022,14 @@ html[dir="rtl"] td, html[dir="rtl"] th {
     border-radius: 6px;
     padding: 6px 8px;
     transition: background 0.15s ease;
+    /* Menu items are <button> as often as not, so strip the browser's chrome here rather
+       than leaving each call site to remember. Seven of them carried an identical inline
+       `background: none; border: none` before #1182 -- the same shape as #1178, where
+       padding lived in three components instead of the shared rule and the ones that
+       forgot it looked wrong until a user noticed. */
+    background: none;
+    border: none;
+    font: inherit;
 }
 .dropdown-menu-item:hover {
     background: rgba(255, 255, 255, 0.08);

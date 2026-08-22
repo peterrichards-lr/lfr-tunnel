@@ -93,25 +93,12 @@ function MfaSetupGate() {
   };
 
   return (
-    <div
-      style={{
-        position: 'fixed',
-        inset: 0,
-        background: 'var(--modal-overlay)',
-        backdropFilter: 'blur(8px)',
-        zIndex: 10000,
-        display: 'flex',
-        alignItems: 'center',
-        justifyContent: 'center',
-        padding: 'var(--spacing-xl)',
-      }}
-    >
+    <div className="dialog-overlay dialog-overlay--gate">
       <div
-        className="card"
+        className="card gate-card"
         role="dialog"
         aria-modal="true"
         aria-labelledby="mfa-gate-title"
-        style={{ maxWidth: '440px', width: '100%', padding: 'var(--spacing-xl)', textAlign: 'center' }}
       >
         <h3 id="mfa-gate-title" className="m-0 mb-sm">
           {t('mfa_required_title', 'Set Up Multi-Factor Authentication to Continue')}
@@ -123,7 +110,7 @@ function MfaSetupGate() {
         {loadError && <div className="alert-banner alert-banner--danger mb-md">{loadError}</div>}
 
         {setupData ? (
-          <div style={{ animation: 'fadeInUp 0.3s ease-out' }}>
+          <div className="animate-fade-in-fast">
             <div className="bg-white p-lg rounded-md inline-block mb-lg">
               <QRCodeSVG value={setupData.otpauth_url} size={150} />
             </div>
@@ -154,9 +141,8 @@ function MfaSetupGate() {
 
         <button
           type="button"
-          className="btn btn-secondary mt-lg"
+          className="btn btn-secondary mt-lg text-sm"
           onClick={logout}
-          style={{ fontSize: '13px' }}
         >
           {t('sign_out', 'Sign Out')}
         </button>

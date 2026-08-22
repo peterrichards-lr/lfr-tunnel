@@ -77,7 +77,7 @@ export default function VanityDomainStatusPanel() {
 
   if (loading) {
     return (
-      <div className="card p-0" style={{ animation: 'fadeInUp 0.6s ease-out' }}>
+      <div className="card p-0">
         <div className="p-xl border-b">
           <Skeleton width={220} height={24} />
         </div>
@@ -93,7 +93,7 @@ export default function VanityDomainStatusPanel() {
   }
 
   return (
-    <div className="card p-0" style={{ animation: 'fadeInUp 0.6s ease-out' }}>
+    <div className="card p-0">
       <div className="p-xl border-b">
         <h3 className="section-title m-0">{t('vanity_status_title', 'Custom Domain Status')}</h3>
         <p className="text-muted text-sm mt-xs mb-0">

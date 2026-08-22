@@ -70,7 +70,7 @@ export default function AdminMagicLinks() {
 
   if (loading) {
     return (
-      <div style={{ animation: 'fadeInUp 0.6s ease-out' }}>
+      <div className="animate-fade-in">
         <div className="mb-xl">
           <Skeleton width={180} height={28} />
           <Skeleton width={320} height={16} className="mt-sm" />
@@ -185,17 +185,17 @@ export default function AdminMagicLinks() {
                         <td className="td-cell font-mono text-xs">{item.client_ip || '-'}</td>
                       )}
                       {isColumnVisible('expires_at') && (
-                        <td className="td-cell text-xs text-muted" style={{ whiteSpace: 'nowrap' }}>
+                        <td className="td-cell text-xs text-muted whitespace-nowrap">
                           {formatDate(typeof item.expires_at === 'number' ? new Date(item.expires_at * 1000) : item.expires_at)}
                         </td>
                       )}
                       {isColumnVisible('used_at') && (
-                        <td className="td-cell text-xs text-muted" style={{ whiteSpace: 'nowrap' }}>
+                        <td className="td-cell text-xs text-muted whitespace-nowrap">
                           {renderDate(item.used_at)}
                         </td>
                       )}
                       {isColumnVisible('created_at') && (
-                        <td className="td-cell text-xs text-muted" style={{ whiteSpace: 'nowrap' }}>
+                        <td className="td-cell text-xs text-muted whitespace-nowrap">
                           {item.created_at ? renderDate(item.created_at) : '—'}
                         </td>
                       )}

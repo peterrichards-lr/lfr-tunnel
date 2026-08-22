@@ -146,13 +146,13 @@ export default function AdminTokens() {
 
   if (loading) {
     return (
-      <div style={{ animation: 'fadeInUp 0.6s ease-out' }}>
+      <div className="animate-fade-in">
         <div className="mb-xl">
           <Skeleton width={180} height={28} />
         </div>
         <div className="card p-xl">
           <div className="search-row">
-            <Skeleton width="100%" height={40} style={{ maxWidth: '300px' }} />
+            <Skeleton width="100%" height={40} className="max-w-sm" />
           </div>
           <div className="table-responsive">
             <table className="w-full">
@@ -234,14 +234,14 @@ export default function AdminTokens() {
                     {isColumnVisible('user_id') && <td className="td-cell font-medium">{pat.user_id}</td>}
                     {isColumnVisible('name') && <td className="td-cell">{pat.name || <span className="text-muted text-xs italic">Unnamed</span>}</td>}
                     {isColumnVisible('token_prefix') && <td className="td-cell font-mono text-xs">{pat.token_prefix}...</td>}
-                    {isColumnVisible('created_at') && <td className="td-cell text-xs text-muted" style={{ whiteSpace: 'nowrap' }}>{formatDate(pat.created_at)}</td>}
-                    {isColumnVisible('expires_at') && <td className="td-cell text-xs text-muted" style={{ whiteSpace: 'nowrap' }}>{pat.expires_at ? formatDate(pat.expires_at) : 'Never'}</td>}
+                    {isColumnVisible('created_at') && <td className="td-cell text-xs text-muted whitespace-nowrap">{formatDate(pat.created_at)}</td>}
+                    {isColumnVisible('expires_at') && <td className="td-cell text-xs text-muted whitespace-nowrap">{pat.expires_at ? formatDate(pat.expires_at) : 'Never'}</td>}
                     <td className="td-cell">
                       <span className={`badge ${status.badge} text-xs font-semibold`}>
                         {status.label}
                       </span>
                     </td>
-                    <td className="td-cell text-xs text-muted" style={{ whiteSpace: 'nowrap' }}>
+                    <td className="td-cell text-xs text-muted whitespace-nowrap">
                       {expiresIn}
                     </td>
                     <td className="td-cell text-right">

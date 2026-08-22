@@ -34,6 +34,16 @@ type DeployTarget struct {
 	// project's tag here put a single deployment's identity into MIT, provider-neutral
 	// code that other people are meant to run.
 	InstanceTag string
+	// PowerHook is the script that reads and changes the target's power state. Empty
+	// means power management is not configured and deploys never touch it.
+	//
+	// This is what makes the feature provider-agnostic (#1187): lfr-tunnel itself knows
+	// only the hook's contract, so running on something other than AWS means writing a
+	// script, not patching Go. scripts/common/lfr-power-hook-aws.sh is the bundled
+	// reference implementation. AWSRegion and InstanceTag above are no longer interpreted
+	// here -- they are passed to the hook as AWS_REGION and LFT_INSTANCE_TAG, for whatever
+	// the operator's chosen script makes of them.
+	PowerHook string
 }
 
 // NginxTarget is the fully-resolved input for reconcile-nginx beyond the DeployTarget
@@ -53,6 +63,7 @@ type opsConfigTarget struct {
 		IdentityFile string `yaml:"identity_file"`
 		AWSRegion    string `yaml:"aws_region"`
 		InstanceTag  string `yaml:"instance_tag"`
+		PowerHook    string `yaml:"power_hook"`
 	} `yaml:"central"`
 	Nginx struct {
 		Domains []string `yaml:"domains"`
@@ -185,6 +196,9 @@ func ResolveDeployTargetWithRegion(flagUser, flagHost, flagIdentity, flagAWSRegi
 	if target.InstanceTag == "" {
 		target.InstanceTag = os.Getenv("LFT_INSTANCE_TAG")
 	}
+	if target.PowerHook == "" {
+		target.PowerHook = os.Getenv("LFT_POWER_HOOK")
+	}
 
 	if cfg != nil {
 		if target.User == "" {
@@ -201,6 +215,9 @@ func ResolveDeployTargetWithRegion(flagUser, flagHost, flagIdentity, flagAWSRegi
 		}
 		if target.InstanceTag == "" {
 			target.InstanceTag = cfg.Central.InstanceTag
+		}
+		if target.PowerHook == "" {
+			target.PowerHook = cfg.Central.PowerHook
 		}
 	}
 

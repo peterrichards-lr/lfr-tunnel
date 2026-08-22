@@ -34,7 +34,7 @@ export default function ClientInstallationModal({ isOpen, onClose, serverConfig 
   return (
     <div className="modal-backdrop" onClick={onClose}>
       <div 
-        className="modal-card modal-card--md max-h-[90vh] flex flex-col p-xl" 
+        className="modal-card modal-card--md max-h-[90vh] flex flex-col" 
         onClick={e => e.stopPropagation()}
         role="dialog"
         aria-modal="true"

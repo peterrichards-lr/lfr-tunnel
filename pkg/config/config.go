@@ -229,8 +229,8 @@ type ClientConfig struct {
 	// LogDir is where the persistent traffic and error logs are written. Empty means
 	// ~/.lfr-tunnel/logs (#1223). A leading ~ is expanded, since this is a value people
 	// type by hand.
-	LogDir string `yaml:"log_dir,omitempty"`
-	Hooks              ClientHooksConfig `yaml:"hooks" json:"hooks,omitempty"`
+	LogDir string            `yaml:"log_dir,omitempty"`
+	Hooks  ClientHooksConfig `yaml:"hooks" json:"hooks,omitempty"`
 }
 
 // DefaultServerConfig returns a ServerConfig with sensible default values.

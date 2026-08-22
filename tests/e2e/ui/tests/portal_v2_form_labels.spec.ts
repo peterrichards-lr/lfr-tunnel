@@ -15,15 +15,17 @@ test.describe('Portal V2 form labels', () => {
   const adminEmail = 'admin@lfr-demo.local'; // From tests/e2e/server-config.yaml
 
   test.beforeEach(async ({ page }) => {
+    // V2's login differs from V1's: the email field is shown directly rather than behind
+    // a #btn-show-email toggle, and the token is redeemed at /portalv2/login.
     await clearMailpit();
     await page.goto('/portalv2/');
-    await page.click('#btn-show-email');
     await page.fill('#email-input', adminEmail);
     await page.click('button[type="submit"]');
+    await expect(page.locator('text=Magic link sent')).toBeVisible();
     const token = await getMagicLinkToken(adminEmail);
     expect(token).toBeTruthy();
-    await page.goto(`/portalv2/?token=${token}`);
-    await expect(page.getByRole('main')).toBeVisible();
+    await page.goto(`/portalv2/login?token=${token}`);
+    await page.waitForURL('**/portalv2/dashboard');
   });
 
   test('account settings fields are labelled', async ({ page }) => {

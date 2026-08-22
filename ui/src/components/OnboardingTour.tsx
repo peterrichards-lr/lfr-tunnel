@@ -1,10 +1,11 @@
-import { useEffect } from 'react';
+import { useEffect, useRef } from 'react';
 import axios from 'axios';
 import { driver } from 'driver.js';
 import 'driver.js/dist/driver.css';
 import { useI18n } from '../contexts/I18nContext';
 
 export default function OnboardingTour({ user }: { user: any }) {
+  const hasAutoStarted = useRef(false);
   const { t } = useI18n();
 
   useEffect(() => {
@@ -100,8 +101,11 @@ export default function OnboardingTour({ user }: { user: any }) {
       driverObj.drive();
     };
 
-    // Auto-start if pending
-    if (user && user.onboarding_status === 'pending') {
+    // Auto-start if pending, and only ever once (#1234). The ref matters as much as the
+    // dependency array below: it makes "this starts once" explicit rather than something
+    // implied by which fields happen to be depended on.
+    if (user && user.onboarding_status === 'pending' && !hasAutoStarted.current) {
+      hasAutoStarted.current = true;
       const timer = setTimeout(() => startTour(false), 1200);
       return () => clearTimeout(timer);
     }
@@ -113,7 +117,11 @@ export default function OnboardingTour({ user }: { user: any }) {
     return () => {
       window.removeEventListener('start-onboarding-tour', handleStartTour as EventListener);
     };
-  }, [user, t]);
+  // Keyed on the status rather than the whole user object. Layout re-fetches /api/me every
+  // 10s and calls setUser with a fresh object, so [user] re-ran this on every poll --
+  // rescheduling the tour and reopening it on top of whatever the user was doing (#1234).
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [user?.onboarding_status, t]);
 
   return null; // This is a headless component
 }

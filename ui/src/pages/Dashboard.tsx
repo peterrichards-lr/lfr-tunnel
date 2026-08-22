@@ -122,11 +122,21 @@ export default function Dashboard() {
       .catch(err => console.error("Failed to fetch tokens", err));
   };
 
+  // Once per mount. Layout re-fetches /api/me every 10s and calls setUser with a fresh
+  // object, so anything keyed on `user` re-runs on every poll -- which is what filled the
+  // audit log with a portal.visit every 10 seconds (#1208). A visit is a visit, not a
+  // heartbeat, and the server config does not change under us either.
   useEffect(() => {
-    fetchTokens();
     axios.get('/api/analytics/ping?portal=v2').catch(() => {});
     axios.get('/api/version').then(res => setServerConfig(res.data)).catch(() => {});
-  }, [user]);
+  }, []);
+
+  // Tokens do belong to the user, but keyed on identity rather than on the polled object,
+  // so this re-runs when the user actually changes instead of every 10 seconds.
+  useEffect(() => {
+    fetchTokens();
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [user?.id]);
 
   const handleCreateToken = async (e: React.FormEvent) => {
     e.preventDefault();

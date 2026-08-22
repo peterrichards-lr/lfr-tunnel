@@ -42,12 +42,20 @@ type MagicLink struct {
 	UsedAt    *time.Time `json:"used_at"`
 }
 
+// ActionPortalVisit records that someone loaded the portal. It is analytics rather than an
+// administrative or security event, which is why the audit log hides it by default (#1208).
+const ActionPortalVisit = "portal.visit"
+
 type AuditFilter struct {
 	ActorID  string
 	Action   string
 	TargetID string
 	Limit    int
 	Offset   int
+	// IncludeRoutine keeps routine page-view entries in the results. Off by default: the
+	// audit log is a record of administrative and security events, and dozens of near
+	// identical visit rows bury the events someone opened it to find.
+	IncludeRoutine bool
 }
 
 type User struct {

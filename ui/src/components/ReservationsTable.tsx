@@ -58,9 +58,12 @@ interface ReservationsTableProps extends DataTableBag {
   openAcModal: (r: ReservationRow) => void;
   deleteReservation: (id: string) => void;
   totalUnfilteredCount: number;
+  // Anchor target, so the Reservations Overview can link straight down to this table.
+  id?: string;
 }
 
 export default function ReservationsTable({
+  id,
   title,
   emptyMessage,
   searchPlaceholder,
@@ -93,7 +96,7 @@ export default function ReservationsTable({
   const { t } = useI18n();
 
   return (
-    <div className="card mb-xl">
+    <div id={id} className="card mb-xl scroll-target">
       <div className="section-header mb-md">
         <h3 className="section-title">{title}</h3>
       </div>

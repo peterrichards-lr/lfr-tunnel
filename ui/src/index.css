@@ -1325,6 +1325,18 @@ html[dir="rtl"] td, html[dir="rtl"] th {
 .fixed    { position: fixed; }
 .inset-0  { top: 0; right: 0; bottom: 0; left: 0; }
 
+/* --- In-page anchor targets --- */
+/* Panels linked to from elsewhere on the page (e.g. Reservations Overview -> Registered
+   Subdomains). scroll-margin-top keeps the card's heading clear of the top edge instead
+   of butting right against it. .main-content is the scroll container, not the window, so
+   the smooth behaviour belongs there rather than on html. */
+.scroll-target { scroll-margin-top: 24px; }
+.main-content  { scroll-behavior: smooth; }
+
+@media (prefers-reduced-motion: reduce) {
+    .main-content { scroll-behavior: auto; }
+}
+
 /* --- Cursor --- */
 .cursor-pointer { cursor: pointer; }
 .cursor-default { cursor: default; }

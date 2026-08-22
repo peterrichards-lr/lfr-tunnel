@@ -214,7 +214,13 @@ export default function Dashboard() {
 
       <WhatsNewHelpBar onInstallClick={() => setIsInstallModalOpen(true)} />
 
+      {/* Order matters here. Active Tunnels is the live, fast-changing panel people open
+          the dashboard to check, so it leads. Reservations Overview then sits directly
+          above the two tables its quota bars summarise (Registered Subdomains, Custom
+          Domains), with Custom Domain Status alongside them, and Personal Access Tokens
+          -- set up once and rarely revisited -- last. */}
       <div className="flex flex-col gap-xl mb-2xl">
+          <TunnelsPanel tunnels={user.tunnels || []} serverConfig={serverConfig} user={user} />
           <ReservationsPanel />
           <VanityDomainStatusPanel />
 
@@ -330,8 +336,6 @@ export default function Dashboard() {
               </>
             )}
           </div>
-
-          <TunnelsPanel tunnels={user.tunnels || []} serverConfig={serverConfig} user={user} />
       </div>
 
       <ClientInstallationModal isOpen={isInstallModalOpen} onClose={() => setIsInstallModalOpen(false)} serverConfig={serverConfig} />

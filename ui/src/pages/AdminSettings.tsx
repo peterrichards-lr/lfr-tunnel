@@ -366,7 +366,7 @@ export default function AdminSettings() {
       <div className="card mb-xl">
         <h4 className="section-title mb-lg">Vanity Domain Hook</h4>
         {user.role !== 'owner' && (
-          <div className="alert-banner alert-banner--warning mb-lg" style={{ fontSize: '13px', margin: 0 }}>
+          <div className="alert-banner alert-banner--warning mb-lg text-sm m-0">
             ⚠️ Only the System Owner is authorized to modify vanity domain hook configurations.
           </div>
         )}
@@ -377,11 +377,11 @@ export default function AdminSettings() {
               checked={enableVanityHook} 
               onChange={(e) => setEnableVanityHook(e.target.checked)} 
               disabled={user.role !== 'owner'}
-              style={{ width: 'auto', margin: 0 }}
+              className="w-auto m-0"
             />
-            <span className="form-label" style={{ margin: 0 }}>Enable Automated DNS/TLS Provisioning</span>
+            <span className="form-label m-0">Enable Automated DNS/TLS Provisioning</span>
           </label>
-          <p className="text-muted text-xs mt-xs" style={{ margin: 0 }}>
+          <p className="text-muted text-xs mt-xs m-0">
             When active, registering a custom domain (via the client <code>-domain</code> flag) runs the specified hook script to automate local Nginx reverse proxy configuration and Certbot SSL/TLS certificate registration.
           </p>
         </div>
@@ -410,21 +410,15 @@ export default function AdminSettings() {
           <div className="p-lg border rounded flex flex-col gap-md">
             <div className="flex justify-between items-center">
               <h5 className="m-0 text-md fw-semibold">Soft Maintenance</h5>
-              <span style={{ 
-                padding: '2px 8px', 
-                borderRadius: '4px', 
-                fontSize: '11px', 
-                fontWeight: 700,
-                textTransform: 'uppercase',
-                background: maintenance.status === 'true' ? 'var(--status-danger-bg)' : maintenance.status === 'pending' ? 'var(--status-warning-bg)' : 'var(--status-success-bg)',
-                color: maintenance.status === 'true' ? 'var(--status-danger-text)' : maintenance.status === 'pending' ? 'var(--status-warning-text)' : 'var(--status-success-text)'
-              }}>
+              {/* .badge already carries these exact --status-* tokens, so the state is a
+                  class rather than two parallel ternaries picking colours inline. */}
+              <span className={`badge ${maintenance.status === 'true' ? 'danger' : maintenance.status === 'pending' ? 'warning' : 'success'}`}>
                 {maintenance.status === 'true' ? 'Active' : maintenance.status === 'pending' ? 'Scheduled' : 'Inactive'}
               </span>
             </div>
 
             {maintenance.status !== 'false' ? (
-              <div className="p-md rounded-sm text-sm flex flex-col gap-xs" style={{ background: 'rgba(255,255,255,0.02)' }}>
+              <div className="p-md rounded-sm text-sm flex flex-col gap-xs surface-subtle">
                 <div><strong>Action:</strong> {maintenance.action}</div>
                 <div><strong>Reason:</strong> {maintenance.reason}</div>
                 <div><strong>Scheduled/Started:</strong> {formatDate(maintenance.start_time)}</div>
@@ -461,9 +455,8 @@ export default function AdminSettings() {
             )}
 
             <button 
-              className={`btn ${maintenance.status !== 'false' ? 'btn-secondary' : 'btn-primary'}`} 
+              className={`btn mt-auto ${maintenance.status !== 'false' ? 'btn-secondary' : 'btn-primary'}`}
               onClick={toggleSoftMaintenanceMode}
-              style={{ marginTop: 'auto' }}
             >
               {maintenance.status !== 'false' ? 'Disable Soft Maintenance' : softCountdown > 0 ? 'Schedule Soft Maintenance' : 'Enable Soft Maintenance'}
             </button>
@@ -473,15 +466,7 @@ export default function AdminSettings() {
           <div className="p-lg border rounded flex flex-col gap-md">
             <div className="flex justify-between items-center">
               <h5 className="m-0 text-md fw-semibold">Iron Curtain (Hard Lockdown)</h5>
-              <span style={{ 
-                padding: '2px 8px', 
-                borderRadius: '4px', 
-                fontSize: '11px', 
-                fontWeight: 700,
-                textTransform: 'uppercase',
-                background: maintenance.iron_curtain ? 'var(--status-danger-bg)' : 'var(--status-success-bg)',
-                color: maintenance.iron_curtain ? 'var(--status-danger-text)' : 'var(--status-success-text)'
-              }}>
+              <span className={`badge ${maintenance.iron_curtain ? 'danger' : 'success'}`}>
                 {maintenance.iron_curtain ? 'Locked' : 'Unlocked'}
               </span>
             </div>
@@ -511,9 +496,8 @@ export default function AdminSettings() {
             )}
 
             <button 
-              className={`btn ${maintenance.iron_curtain ? 'btn-secondary' : 'btn-danger'}`} 
+              className={`btn mt-auto ${maintenance.iron_curtain ? 'btn-secondary' : 'btn-danger'}`}
               onClick={toggleHardMaintenanceMode}
-              style={{ marginTop: 'auto' }}
             >
               {maintenance.iron_curtain ? 'Disable Iron Curtain' : 'Enable Iron Curtain'}
             </button>
@@ -670,7 +654,7 @@ export default function AdminSettings() {
           {configError ? (
             <div className="text-danger">{configError}</div>
           ) : (
-            <pre className="copy-box text-xs text-main overflow-auto" style={{ background: 'rgba(0,0,0,0.2)' }}>
+            <pre className="copy-box text-xs text-main overflow-auto">
               {serverConfig || 'No configuration available.'}
             </pre>
           )}

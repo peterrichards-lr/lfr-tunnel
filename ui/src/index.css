@@ -1241,6 +1241,7 @@ html[dir="rtl"] td, html[dir="rtl"] th {
 
 /* --- Margin --- */
 .m-0   { margin: 0; }
+.mt-auto { margin-top: auto; }
 .mt-0  { margin-top: 0; }
 .mt-xs { margin-top: var(--spacing-xs); }
 .mt-sm { margin-top: var(--spacing-sm); }
@@ -1436,6 +1437,10 @@ html[dir="rtl"] td, html[dir="rtl"] th {
 @media (prefers-reduced-motion: reduce) {
     .toast-card { animation: none; }
 }
+
+/* A barely-raised surface for nested detail blocks. Was written inline as a literal
+   rgba(255,255,255,0.02), which is invisible against a light background (#1182). */
+.surface-subtle { background: var(--surface-subtle); }
 
 /* --- Quota / progress bars --- */
 /* The track was written inline as a literal rgba(255,255,255,0.1) -- a white overlay that

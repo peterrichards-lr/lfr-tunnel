@@ -1344,6 +1344,99 @@ html[dir="rtl"] td, html[dir="rtl"] th {
     cursor: pointer;
 }
 
+/* --- Global toasts and dialog (UIContext) --- */
+/* These were written entirely inline, ~12 declarations in one file (#1182). Note the
+   existing .toast / #toast-container rules further up are not reused: they belong to the
+   legacy dashboard.html markup and start at `opacity: 0; translateX(120%)`, waiting for a
+   .show class that React never adds -- adopting them would render invisible toasts.
+   Likewise .modal-overlay is `display: none` until legacy JS opens it. */
+.toast-stack {
+    position: fixed;
+    top: 24px;
+    right: 24px;
+    z-index: 9999;
+    display: flex;
+    flex-direction: column;
+    gap: var(--spacing-sm);
+    max-width: 350px;
+    width: 100%;
+}
+.toast-card {
+    padding: var(--spacing-md) var(--spacing-lg);
+    border-radius: 8px;
+    background: var(--bg-card);
+    color: var(--text-main);
+    border: 1px solid var(--border);
+    /* Severity is shown by the left edge; the colour is a state, so it is a modifier
+       rather than a ternary picking a var() inline. */
+    border-left: 4px solid var(--primary);
+    box-shadow: var(--shadow-glass);
+    backdrop-filter: blur(12px);
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    animation: slideIn 0.3s ease-out;
+}
+.toast-card.is-success { border-left-color: var(--success); }
+.toast-card.is-error   { border-left-color: var(--danger); }
+.toast-message { font-size: 14px; font-weight: 500; }
+.toast-dismiss {
+    background: transparent;
+    border: none;
+    color: var(--text-muted);
+    cursor: pointer;
+    font-size: 16px;
+    padding: 0 var(--spacing-xs);
+    margin-left: var(--spacing-md);
+}
+
+.dialog-overlay {
+    position: fixed;
+    inset: 0;
+    background: var(--modal-overlay);
+    backdrop-filter: blur(8px);
+    z-index: 9998;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: var(--spacing-xl);
+}
+.dialog-card {
+    background: var(--bg-card);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    padding: var(--spacing-xl);
+    max-width: 420px;
+    width: 100%;
+    box-shadow: var(--shadow-glass);
+    backdrop-filter: blur(16px);
+    display: flex;
+    flex-direction: column;
+    gap: var(--spacing-lg);
+}
+.dialog-title {
+    margin: 0;
+    font-size: 18px;
+    font-weight: 700;
+    color: var(--text-main);
+}
+.dialog-message {
+    margin: var(--spacing-sm) 0 0 0;
+    font-size: 14px;
+    color: var(--text-muted);
+    line-height: 1.5;
+}
+.dialog-actions {
+    display: flex;
+    justify-content: flex-end;
+    gap: var(--spacing-md);
+    margin-top: var(--spacing-sm);
+}
+
+@media (prefers-reduced-motion: reduce) {
+    .toast-card { animation: none; }
+}
+
 /* --- Quota / progress bars --- */
 /* The track was written inline as a literal rgba(255,255,255,0.1) -- a white overlay that
    simply vanishes on the light theme. It is now a token, defined per theme (#1182).

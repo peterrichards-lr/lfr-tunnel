@@ -955,6 +955,12 @@ function setLanguage(lang) {
                                         <label style="font-weight: 500; color: var(--text-muted); font-size: 11px;">Custom Maintenance Page <span class="help-icon" title="Optional path to a custom HTML file to show when maintenance mode is enabled.">?</span></label>
                                         <input type="text" id="cfg-maintenance-path" placeholder="/path/to/custom-maintenance.html" style="background: rgba(0,0,0,0.3); border: 1px solid var(--border); color: white; padding: 10px; border-radius: 6px; font-size: 13px; outline: none; width: 100%;">
                                     </div>
+                                    </div>
+
+                                    <div style="display: flex; flex-direction: column; gap: 6px; margin-top: 5px;">
+                                        <label style="font-weight: 500; color: var(--text-muted); font-size: 11px;">Log Directory <span class="help-icon" title="Where the traffic and error logs are written. Leave blank for the default (~/.lfr-tunnel/logs). Applies the next time the client starts.">?</span></label>
+                                        <input type="text" id="cfg-log-dir" placeholder="~/.lfr-tunnel/logs" style="background: rgba(0,0,0,0.3); border: 1px solid var(--border); color: white; padding: 10px; border-radius: 6px; font-size: 13px; outline: none; width: 100%;">
+                                        <span id="cfg-log-dir-effective" style="color: var(--text-muted); font-size: 11px;"></span>
                                 </div>
                             </div>
 
@@ -977,6 +983,15 @@ function setLanguage(lang) {
                 document.getElementById('cfg-preserve-host').checked = !!cfg.preserve_host;
                 document.getElementById('cfg-insecure-skip-verify').checked = !!cfg.insecure_skip_verify;
                 document.getElementById('cfg-maintenance-path').value = cfg.maintenance_path || '';
+                document.getElementById('cfg-log-dir').value = cfg.log_dir || '';
+                // The saved value may be blank (meaning the default) or may have changed
+                // since this session started, so show where logs are going right now.
+                const logDirNote = document.getElementById('cfg-log-dir-effective');
+                if (cfg.log_dir_effective) {
+                    logDirNote.innerText = 'Currently writing to ' + cfg.log_dir_effective + '. A change applies next time the client starts.';
+                } else {
+                    logDirNote.innerText = 'A change applies next time the client starts.';
+                }
                 document.getElementById('cfg-theme').value = localStorage.getItem('inspector_theme') || '';
                 
                 setLanguage(currentLang);
@@ -1003,6 +1018,7 @@ function setLanguage(lang) {
                 const preserveHost = document.getElementById('cfg-preserve-host').checked;
                 const insecureSkipVerify = document.getElementById('cfg-insecure-skip-verify').checked;
                 const maintenancePath = document.getElementById('cfg-maintenance-path').value;
+                const logDir = document.getElementById('cfg-log-dir').value;
                 
                 if (!serverUrl.startsWith('http://') && !serverUrl.startsWith('https://')) {
                     throw new Error('Server URL must start with http:// or https://');
@@ -1030,7 +1046,8 @@ function setLanguage(lang) {
                         insecure_skip_verify: insecureSkipVerify,
                         passcode: "",
                         rate_limit: 0,
-                        maintenance_path: maintenancePath
+                        maintenance_path: maintenancePath,
+                        log_dir: logDir
                     })
                 });
                 

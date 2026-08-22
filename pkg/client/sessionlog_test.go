@@ -388,3 +388,107 @@ func TestTruncateBodyCutsOnRuneBoundary(t *testing.T) {
 		t.Errorf("expected a short body to pass through unchanged, got %q", got)
 	}
 }
+
+// The log directory is configurable (#1223). These cover the resolution rules without
+// touching the disk; LogDir itself only adds MkdirAll on top.
+
+func TestResolveLogDir_DefaultsToTheHomeDirectory(t *testing.T) {
+	home, err := os.UserHomeDir()
+	if err != nil {
+		t.Skip("cannot resolve home directory in this environment")
+	}
+
+	got, err := resolveLogDir("")
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	want := filepath.Join(home, ".lfr-tunnel", "logs")
+	if got != want {
+		t.Errorf("expected the default %q, got %q", want, got)
+	}
+}
+
+func TestResolveLogDir_UsesAnAbsolutePathAsGiven(t *testing.T) {
+	dir := t.TempDir()
+	got, err := resolveLogDir(dir)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if got != dir {
+		t.Errorf("expected %q, got %q", dir, got)
+	}
+}
+
+// A value people type by hand, so a leading ~ has to work.
+func TestResolveLogDir_ExpandsLeadingTilde(t *testing.T) {
+	home, err := os.UserHomeDir()
+	if err != nil {
+		t.Skip("cannot resolve home directory in this environment")
+	}
+
+	got, err := resolveLogDir("~/tunnel-logs")
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	want := filepath.Join(home, "tunnel-logs")
+	if got != want {
+		t.Errorf("expected %q, got %q", want, got)
+	}
+}
+
+// A tilde anywhere but the front is an ordinary character in a path, not a home reference.
+func TestExpandHome_OnlyTreatsALeadingTildeSpecially(t *testing.T) {
+	home := "/home/someone"
+	cases := map[string]string{
+		"~":              home,
+		"~/logs":         filepath.Join(home, "logs"),
+		"/var/log/~keep": "/var/log/~keep",
+		"/var/log":       "/var/log",
+		"relative/path":  "relative/path",
+	}
+	for in, want := range cases {
+		if got := expandHome(in, home); got != want {
+			t.Errorf("expandHome(%q) = %q, want %q", in, got, want)
+		}
+	}
+}
+
+// SetLogDir is process-wide state, so it must be readable back and clearable -- the
+// Inspector's log reader resolves through the same value as the writer.
+func TestSetLogDir_RoundTripsAndClears(t *testing.T) {
+	t.Cleanup(func() { SetLogDir("") })
+
+	SetLogDir("  /var/log/lfr  ")
+	if got := ConfiguredLogDir(); got != "/var/log/lfr" {
+		t.Errorf("expected the value trimmed and stored, got %q", got)
+	}
+
+	SetLogDir("")
+	if got := ConfiguredLogDir(); got != "" {
+		t.Errorf("expected empty to restore the default, got %q", got)
+	}
+}
+
+// The whole point of holding this process-wide: the reader must follow the writer, or the
+// Inspector shows an empty default directory while logs pile up elsewhere.
+func TestLogDir_ReaderFollowsTheConfiguredWriter(t *testing.T) {
+	dir := t.TempDir()
+	t.Cleanup(func() { SetLogDir("") })
+	SetLogDir(dir)
+
+	effective, err := LogDir()
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if effective != dir {
+		t.Fatalf("expected LogDir to honour the configured directory, got %q", effective)
+	}
+
+	logPath, err := ClientLogPath("demo")
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if filepath.Dir(logPath) != dir {
+		t.Errorf("expected the console log path to sit under %q, got %q", dir, logPath)
+	}
+}

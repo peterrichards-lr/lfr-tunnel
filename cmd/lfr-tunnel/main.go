@@ -67,6 +67,7 @@ var (
 	upgradeFlag        = flag.Bool("upgrade", false, "Self-upgrade client to the latest release")
 	noTUI              = flag.Bool("no-tui", false, "Disable interactive terminal dashboard UI")
 	logBodies          = flag.Bool("log-bodies", false, "Also record request/response bodies in the traffic log (may contain tokens and customer data)")
+	logDirFlag         = flag.String("log-dir", "", "Directory for the persistent traffic and error logs (default ~/.lfr-tunnel/logs)")
 	passcode           = flag.String("passcode", "", "Passcode to protect the public tunnel URLs")
 	whitelistIP        = flag.String("whitelist-ip", "", "Comma-separated IP addresses allowed to access the tunnel")
 	region             = flag.String("region", "", "Gateway region to target (e.g. eu, us-east, us-west, latam, apac)")
@@ -190,6 +191,12 @@ func main() {
 	engine.SelectedRegion = cfg.Region
 	engine.SetCentralURL(centralControlPlaneURL(cfg))
 	engine.SetLatestVersion(latestVersion)
+
+	// Where those logs live, resolved with the same precedence as every other client
+	// setting: flag, then environment, then the config file (#1223). Set before anything
+	// opens a log, and process-wide because the Inspector's log viewer reads through the
+	// same resolution -- otherwise it would keep looking in the default directory.
+	client.SetLogDir(firstNonEmpty(*logDirFlag, os.Getenv("LFT_LOG_DIR"), cfg.LogDir))
 
 	// Persistent traffic and diagnostic logs, for both foreground and background runs.
 	// A failure to open them must not stop the tunnel starting, so it is reported and
@@ -1441,6 +1448,17 @@ func (c *regionCooldowns) filter(regions map[string]string) map[string]string {
 		return regions
 	}
 	return out
+}
+
+// firstNonEmpty returns the first value that isn't blank, which is how every client
+// setting picks between flag, environment variable and config file.
+func firstNonEmpty(values ...string) string {
+	for _, v := range values {
+		if strings.TrimSpace(v) != "" {
+			return v
+		}
+	}
+	return ""
 }
 
 // statusPageAdvice returns the "check the status page" lines, or nothing at all when this

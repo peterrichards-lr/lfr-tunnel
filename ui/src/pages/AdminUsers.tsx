@@ -694,7 +694,7 @@ export default function AdminUsers() {
                       <button type="button" className="btn btn-danger py-xs px-sm text-xs" onClick={resetUserMFA}>Reset MFA</button>
                     </>
                   ) : (
-                    <span className="badge" style={{ background: 'rgba(255,255,255,0.05)', color: 'var(--text-muted)' }}>Inactive</span>
+                    <span className="badge neutral">Inactive</span>
                   )}
                 </div>
               </div>

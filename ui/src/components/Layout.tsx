@@ -87,8 +87,7 @@ export default function Layout() {
           </p>
           <button 
             onClick={dismissV1Promo} 
-            className="btn-text absolute right-xl top-1/2 -translate-y-1/2 text-white text-lg p-xs leading-none hover:opacity-80 transition-opacity"
-            style={{ background: 'none', border: 'none', cursor: 'pointer' }}
+            className="btn-text absolute right-xl top-1/2 -translate-y-1/2 text-white text-lg p-xs leading-none hover:opacity-80 transition-opacity btn-bare"
             title="Dismiss promo banner"
           >
             &times;

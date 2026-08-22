@@ -469,7 +469,7 @@ export default function ReservationsPanel() {
                 {([['public', '🌐', t('access_public', 'Public — Anyone can access')],
                   ['passcode', '🔑', t('access_passcode', 'Passcode — Requires a secret code')],
                   ['whitelist', '🛡', t('access_whitelist', 'IP Whitelist — Restrict by IP address')]] as [string, string, string][]).map(([val, icon, label]) => (
-                  <label key={val} className={`flex items-center gap-md p-md rounded cursor-pointer border ${acMode === val ? 'border-primary' : 'border'}`} style={{ background: acMode === val ? 'rgba(11,95,255,0.05)' : 'transparent' }}>
+                  <label key={val} className={`flex items-center gap-md p-md rounded cursor-pointer border ${acMode === val ? 'border-primary surface-selected' : 'border'}`}>
                     <input type="radio" name="acMode" value={val} checked={acMode === val} onChange={() => setAcMode(val)} style={{ accentColor: 'var(--primary)' }} />
                     <span>{icon} {label}</span>
                   </label>

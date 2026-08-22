@@ -217,7 +217,7 @@ export default function AdminAuditLog() {
                       <td className="td-cell--mono">{e.ip_address}</td>
                     )}
                     {isColumnVisible('details') && (
-                      <td className="td-cell--mono text-2xs text-muted overflow-auto" style={{ maxWidth: '200px' }}>
+                      <td className="td-cell--mono text-2xs text-muted overflow-auto max-w-xs">
                         {e.details}
                       </td>
                     )}

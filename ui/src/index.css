@@ -408,6 +408,13 @@ body {
             color: var(--text-muted);
             border: 1px solid rgba(148, 163, 184, 0.3);
         }
+        /* Neutral/inactive state. Was written inline as rgba(255,255,255,0.05), which is
+           invisible on a light background (#1182). */
+        .badge.neutral {
+            background: var(--surface-subtle);
+            color: var(--text-muted);
+            border: 1px solid var(--border);
+        }
         .badge.info, .badge-info {
             background: var(--status-info-bg);
             color: var(--status-info-text);
@@ -1225,6 +1232,7 @@ html[dir="rtl"] td, html[dir="rtl"] th {
 .gap-2xl { gap: var(--spacing-2xl); }
 
 /* --- Padding --- */
+.p-2xs { padding: 2px; }
 .p-xs  { padding: var(--spacing-xs); }
 .p-sm  { padding: var(--spacing-sm); }
 .p-md  { padding: var(--spacing-md); }
@@ -1305,6 +1313,10 @@ html[dir="rtl"] td, html[dir="rtl"] th {
 .text-success { color: var(--status-success-text); }
 .text-warning { color: var(--status-warning-text); }
 .text-danger  { color: var(--status-danger-text); }
+/* The raw danger colour, as opposed to .text-danger's --status-danger-text, which is the
+   tone meant for text sitting inside a danger-tinted badge. Standalone destructive icons
+   want the stronger base token. */
+.text-danger-strong { color: var(--danger); }
 
 /* --- Typography: Transform / Decoration --- */
 .uppercase     { text-transform: uppercase; }
@@ -1441,6 +1453,9 @@ html[dir="rtl"] td, html[dir="rtl"] th {
 /* A barely-raised surface for nested detail blocks. Was written inline as a literal
    rgba(255,255,255,0.02), which is invisible against a light background (#1182). */
 .surface-subtle { background: var(--surface-subtle); }
+/* A faint primary wash marking a selected option. Was inline as rgba(11,95,255,0.05) --
+   the Liferay brand blue hardcoded into a component, wrong on the other two themes. */
+.surface-selected { background: var(--surface-selected); }
 
 /* --- Quota / progress bars --- */
 /* The track was written inline as a literal rgba(255,255,255,0.1) -- a white overlay that
@@ -1478,6 +1493,7 @@ html[dir="rtl"] td, html[dir="rtl"] th {
 .border-b { border-bottom: 1px solid var(--border); }
 .border-t { border-top: 1px solid var(--border); }
 .border   { border: 1px solid var(--border); }
+.border-danger { border-color: var(--status-danger-border); }
 
 /* --- Position --- */
 .relative { position: relative; }

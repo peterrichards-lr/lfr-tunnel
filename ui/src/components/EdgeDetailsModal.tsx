@@ -56,9 +56,9 @@ export default function EdgeDetailsModal({
   }, [nodeId, powerActionsEnabled]);
 
   const row = (label: string, value: string) => (
-    <div className="flex justify-between gap-lg py-xs border-b" style={{ fontSize: 13 }}>
+    <div className="flex justify-between gap-lg py-xs border-b text-sm">
       <span className="text-muted">{label}</span>
-      <span className="td-cell--mono" style={{ textAlign: 'right' }}>{value}</span>
+      <span className="td-cell--mono text-right">{value}</span>
     </div>
   );
 
@@ -103,7 +103,7 @@ export default function EdgeDetailsModal({
         )}
 
         {errorMessage && (
-          <div className="mt-md p-md rounded-sm text-xs" style={{ background: 'rgba(239, 68, 68, 0.1)', color: 'var(--danger)' }}>
+          <div className="mt-md p-md rounded-sm text-xs alert-banner alert-banner--danger">
             {errorMessage}
           </div>
         )}

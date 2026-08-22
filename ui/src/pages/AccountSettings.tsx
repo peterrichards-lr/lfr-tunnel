@@ -296,7 +296,7 @@ export default function AccountSettings() {
         <div className="card">
           <h3 className="section-title mb-lg">{t('security', 'Security')}</h3>
           
-          <div className="card p-lg mb-xl border" style={{ background: 'rgba(0,0,0,0.1)' }}>
+          <div className="card p-lg mb-xl border surface-subtle">
             <div className="flex justify-between items-center">
               <div>
                 <h4 className="m-0 mb-2xs">{t('mfa_title', 'Multi-Factor Authentication')}</h4>
@@ -394,7 +394,7 @@ export default function AccountSettings() {
           </div>
 
           {user?.role !== 'owner' && (
-            <div className="card p-xl mt-xl border" style={{ borderColor: 'rgba(239, 68, 68, 0.2)' }}>
+            <div className="card p-xl mt-xl border border-danger">
               <h3 className="m-0 mb-xs text-md text-danger">
                 ⚠️ {t('danger_zone_title', 'Danger Zone (GDPR / Right to Be Forgotten)')}
               </h3>

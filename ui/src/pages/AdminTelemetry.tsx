@@ -119,7 +119,7 @@ export default function AdminTelemetry() {
           </p>
         </div>
         <div>
-          <div className="flex items-center gap-sm px-lg py-xs rounded-full text-xs fw-semibold border" style={{ background: 'rgba(255,255,255,0.05)' }}>
+          <div className="flex items-center gap-sm px-lg py-xs rounded-full text-xs fw-semibold border surface-subtle">
             <span className={`status-dot ${status === 'connected' ? 'status-dot--online' : status === 'connecting' ? 'status-dot--warning' : 'status-dot--offline'}`}></span>
             <span>
               {status === 'connected' && t('telemetry_connected', 'Live Feed Connected')}

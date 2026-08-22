@@ -258,7 +258,7 @@ export default function AdminSubdomains() {
                           {sub.full_host}
                         </a>
                         {sub.rate_limit !== undefined && sub.rate_limit > 0 && (
-                          <span className="badge ml-sm" style={{ backgroundColor: 'rgba(239, 68, 68, 0.15)', color: '#f87171', border: '1px solid rgba(239, 68, 68, 0.3)' }}>
+                          <span className="badge danger ml-sm">
                             ⏱️ {sub.rate_limit} RPS
                           </span>
                         )}

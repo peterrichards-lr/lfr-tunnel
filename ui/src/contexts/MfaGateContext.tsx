@@ -154,9 +154,8 @@ function MfaSetupGate() {
 
         <button
           type="button"
-          className="btn btn-secondary mt-lg"
+          className="btn btn-secondary mt-lg text-sm"
           onClick={logout}
-          style={{ fontSize: '13px' }}
         >
           {t('sign_out', 'Sign Out')}
         </button>

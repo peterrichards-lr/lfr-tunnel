@@ -216,8 +216,7 @@ export default function AdminVanityDomainStatus() {
                                 🔄 {t('vanity_action_retry', 'Retry')}
                               </button>
                               <button
-                                className="dropdown-menu-item flex items-center gap-sm text-xs cursor-pointer w-full text-left"
-                                style={{ background: 'none', border: 'none', color: 'var(--danger)' }}
+                                className="dropdown-menu-item flex items-center gap-sm text-xs cursor-pointer w-full text-left btn-bare text-danger-strong"
                                 onClick={() => { close(); removeDomain(status.full_host); }}
                               >
                                 🗑 {t('vanity_action_remove', 'Remove')}

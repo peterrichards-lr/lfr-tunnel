@@ -20,11 +20,16 @@ test.describe('Client Inspector UI', () => {
     // Verify configuration title is present (using data-i18n attribute)
     await expect(page.locator('[data-i18n="client_config_title"]')).toBeVisible();
 
-    // Verify the inputs are populated
-    // run-ui.sh starts the client with subdomain "client-ui-test" and server "http://tunnel.lfr-demo.local"
-    // Wait for the config to be loaded via the API
+    // These fields show the client's *saved configuration*, not the flags it was started
+    // with -- run-ui.sh passes -server and -subdomain, and this container has no config
+    // file, so both are empty.
+    //
+    // The server URL used to read "https://tunnel.lfr-demo.se" here: one deployment's
+    // hostname compiled in as every build's default (#1188). It is now injected at build
+    // time, and this image is built without it, so an empty value is the correct
+    // expectation and asserts nothing has been baked back in.
     await expect(page.locator('#cfg-subdomain')).toHaveValue('');
-    await expect(page.locator('#cfg-server-url')).toHaveValue('https://tunnel.lfr-demo.se');
+    await expect(page.locator('#cfg-server-url')).toHaveValue('');
   });
 
   test('should sync local theme preference', async ({ page }) => {

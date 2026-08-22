@@ -23,7 +23,10 @@ export default function Sidebar({ user, isOpen, onClose }: SidebarProps) {
         })
         .catch(err => console.error("Failed to load users for sidebar badge", err));
     }
-  }, [user]);
+  // Keyed on identity and role rather than the polled user object: this fetches the whole
+  // user list to count pending registrations, and was doing so every 10 seconds (#1208).
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [user?.id, user?.role]);
 
   return (
     <>

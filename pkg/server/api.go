@@ -456,7 +456,7 @@ func (s *Server) handleAnalyticsPing(w http.ResponseWriter, r *http.Request) {
 	}
 	portalVer := r.URL.Query().Get("portal")
 	if portalVer == "v1" || portalVer == "v2" {
-		s.writeAudit(user.Email, "portal.visit", "portal", portalVer, "User visited the portal dashboard", r)
+		s.writeAudit(user.Email, db.ActionPortalVisit, "portal", portalVer, "User visited the portal dashboard", r)
 	}
 	respondJSON(w, http.StatusOK, map[string]string{"status": "ok"})
 }

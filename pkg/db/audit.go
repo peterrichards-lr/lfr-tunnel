@@ -55,6 +55,13 @@ func (repo *SQLiteAuditRepo) ListAuditEntries(f AuditFilter) ([]*AuditEntry, err
 		args = append(args, f.TargetID)
 	}
 
+	// Hidden unless asked for, either by opting in or by filtering for the action
+	// explicitly -- so nothing becomes unreachable, it just stops drowning everything else.
+	if f.Action == "" && !f.IncludeRoutine {
+		query += " AND action <> ?"
+		args = append(args, ActionPortalVisit)
+	}
+
 	query += " ORDER BY created_at DESC LIMIT ? OFFSET ?"
 	args = append(args, f.Limit, f.Offset)
 

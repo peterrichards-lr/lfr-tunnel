@@ -349,7 +349,7 @@ export default function AdminUsers() {
 
   if (loading) {
     return (
-      <div style={{ animation: 'fadeInUp 0.6s ease-out' }}>
+      <div className="animate-fade-in">
         <div className="page-header mb-xl">
           <Skeleton width={180} height={28} />
           <Skeleton width={320} height={16} className="mt-sm" />
@@ -514,7 +514,7 @@ export default function AdminUsers() {
                         </td>
                       )}
                       {isColumnVisible('created_at') && (
-                        <td className="td-cell" style={{ whiteSpace: 'nowrap' }}>
+                        <td className="td-cell whitespace-nowrap">
                           {u.created_at ? formatDate(u.created_at) : '—'}
                         </td>
                       )}

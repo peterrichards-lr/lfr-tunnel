@@ -1304,6 +1304,41 @@ html[dir="rtl"] td, html[dir="rtl"] th {
 .font-mono     { font-family: monospace; }
 .no-underline  { text-decoration: none; }
 .truncate      { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+/* Plain nowrap, without .truncate's overflow/ellipsis -- for cells and controls that
+   must stay on one line but are sized to fit rather than clipped. */
+.whitespace-nowrap { white-space: nowrap; }
+
+/* --- Entrance animation --- */
+/* Page and section wrappers fade in on mount. .card already animates itself, so this is
+   for the plain wrappers around it; putting it on a card would only override the card's
+   own (identical) animation.
+   The easing is the design system's curve rather than a plain ease-out: these were
+   previously written inline as `fadeInUp 0.6s ease-out`, which quietly disagreed with
+   every .card on the same screen. */
+.animate-fade-in      { animation: fadeInUp 0.6s cubic-bezier(0.16, 1, 0.3, 1) both; }
+.animate-fade-in-fast { animation: fadeInUp 0.3s cubic-bezier(0.16, 1, 0.3, 1) both; }
+
+@media (prefers-reduced-motion: reduce) {
+    .animate-fade-in,
+    .animate-fade-in-fast { animation: none; }
+}
+
+/* --- Unstyled button --- */
+/* For buttons that exist only to be clickable -- icon triggers, table sort headers --
+   where the browser's default chrome is unwanted but .btn's styling is too much. */
+.btn-bare {
+    background: none;
+    border: none;
+    padding: 0;
+    color: inherit;
+    font: inherit;
+    cursor: pointer;
+}
+
+/* --- Chart sizing --- */
+/* Recharts needs a definite height on the wrapper to lay out at all, so this is a real
+   layout constraint rather than decoration. */
+.chart-container { height: 300px; }
 
 /* --- Border Radius --- */
 .rounded-xs { border-radius: 4px; }

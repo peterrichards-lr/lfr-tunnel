@@ -202,8 +202,8 @@ export default function AdminExtensions() {
                     {isColumnVisible('user_email') && <td className="td-cell">{req.user_email}</td>}
                     {isColumnVisible('subdomain') && <td className="td-cell font-mono text-xs">{req.subdomain}</td>}
                     {isColumnVisible('domain') && <td className="td-cell font-mono text-xs">{req.domain}</td>}
-                    {isColumnVisible('expires_at') && <td className="td-cell text-xs text-muted" style={{ whiteSpace: 'nowrap' }}>{req.expires_at ? formatDate(req.expires_at) : 'Never'}</td>}
-                    {isColumnVisible('created_at') && <td className="td-cell text-xs text-muted" style={{ whiteSpace: 'nowrap' }}>{req.created_at ? formatDate(req.created_at) : '—'}</td>}
+                    {isColumnVisible('expires_at') && <td className="td-cell text-xs text-muted whitespace-nowrap">{req.expires_at ? formatDate(req.expires_at) : 'Never'}</td>}
+                    {isColumnVisible('created_at') && <td className="td-cell text-xs text-muted whitespace-nowrap">{req.created_at ? formatDate(req.created_at) : '—'}</td>}
                     <td className="td-cell text-right">
                       <div className="flex gap-sm justify-end">
                         <ActionMenu buttonLabel="Approve" buttonClassName="btn btn-primary px-md py-xs text-xs" buttonTitle="Approve extension">

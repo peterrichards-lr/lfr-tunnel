@@ -74,7 +74,7 @@ export default function AdminAuditLog() {
 
   if (loading) {
     return (
-      <div style={{ animation: 'fadeInUp 0.6s ease-out' }}>
+      <div className="animate-fade-in">
         <div className="page-header">
           <div>
             <Skeleton width={180} height={28} />
@@ -130,8 +130,7 @@ export default function AdminAuditLog() {
         </div>
         <a 
           href="/api/admin/audit/export" 
-          className="btn btn-secondary w-auto inline-flex items-center gap-sm" 
-          style={{ whiteSpace: 'nowrap' }}
+          className="btn btn-secondary w-auto inline-flex items-center gap-sm whitespace-nowrap"
         >
           📥 {t('export_csv', 'Export CSV')}
         </a>
@@ -197,7 +196,7 @@ export default function AdminAuditLog() {
                 paginatedItems.map((e: AuditEvent, idx: number) => (
                   <tr key={e.id || idx} className="border-b">
                     {isColumnVisible('created_at') && (
-                      <td className="td-cell" style={{ whiteSpace: 'nowrap' }}>{formatDate(e.created_at)}</td>
+                      <td className="td-cell whitespace-nowrap">{formatDate(e.created_at)}</td>
                     )}
                     {isColumnVisible('actor_id') && (
                       <td className="td-cell">{e.actor_id}</td>

@@ -297,7 +297,7 @@ export default function AdminSettings() {
 
   if (loading) {
     return (
-      <div style={{ animation: 'fadeInUp 0.6s ease-out' }}>
+      <div className="animate-fade-in">
         <div className="mb-xl">
           <Skeleton width={180} height={28} />
           <Skeleton width={280} height={16} className="mt-sm" />

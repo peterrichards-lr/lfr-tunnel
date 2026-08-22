@@ -205,7 +205,7 @@ export default function ReservationsTable({
                         </td>
                       )}
                       {isColumnVisible('created_at') && (
-                        <td className="td-cell" style={{ whiteSpace: 'nowrap' }}>
+                        <td className="td-cell whitespace-nowrap">
                           {r.created_at ? formatDate(r.created_at) : '—'}
                         </td>
                       )}

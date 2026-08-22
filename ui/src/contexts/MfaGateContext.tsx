@@ -123,7 +123,7 @@ function MfaSetupGate() {
         {loadError && <div className="alert-banner alert-banner--danger mb-md">{loadError}</div>}
 
         {setupData ? (
-          <div style={{ animation: 'fadeInUp 0.3s ease-out' }}>
+          <div className="animate-fade-in-fast">
             <div className="bg-white p-lg rounded-md inline-block mb-lg">
               <QRCodeSVG value={setupData.otpauth_url} size={150} />
             </div>

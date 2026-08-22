@@ -129,7 +129,7 @@ export default function AdminVanityDomainStatus() {
 
   if (loading) {
     return (
-      <div style={{ animation: 'fadeInUp 0.6s ease-out' }}>
+      <div className="animate-fade-in">
         <div className="page-header">
           <Skeleton width={260} height={28} />
         </div>

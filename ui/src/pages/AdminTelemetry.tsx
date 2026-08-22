@@ -110,7 +110,7 @@ export default function AdminTelemetry() {
   const totalBandwidth = totalBytesIn + totalBytesOut;
 
   return (
-    <div id="telemetry-page" style={{ animation: 'fadeInUp 0.6s ease-out' }}>
+    <div id="telemetry-page" className="animate-fade-in">
       <div className="page-header flex-wrap gap-lg">
         <div>
           <h2 className="page-header__title">{t('telemetry_title', 'Real-time Telemetry')}</h2>

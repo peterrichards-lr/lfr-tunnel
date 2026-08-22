@@ -97,7 +97,7 @@ export default function AdminBlacklist() {
 
   if (loading) {
     return (
-      <div style={{ animation: 'fadeInUp 0.6s ease-out' }}>
+      <div className="animate-fade-in">
         <div className="page-header">
           <div>
             <Skeleton width={180} height={28} />
@@ -231,7 +231,7 @@ export default function AdminBlacklist() {
                       <td className="td-cell">{entry.reason}</td>
                     )}
                     {isColumnVisible('created_at') && (
-                      <td className="td-cell" style={{ whiteSpace: 'nowrap' }}>{formatDate(entry.created_at)}</td>
+                      <td className="td-cell whitespace-nowrap">{formatDate(entry.created_at)}</td>
                     )}
                     <td className="td-cell text-right">
                       <button

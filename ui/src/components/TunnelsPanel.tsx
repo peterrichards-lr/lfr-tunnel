@@ -190,7 +190,7 @@ export default function TunnelsPanel({ tunnels, serverConfig, user }: Props) {
                       <td className="td-cell text-xs text-muted">{formatBytes(tItem.bytes_out)}</td>
                     )}
                     {isColumnVisible('created_at') && (
-                      <td className="td-cell text-xs text-muted" style={{ whiteSpace: 'nowrap' }}>
+                      <td className="td-cell text-xs text-muted whitespace-nowrap">
                         {tItem.created_at ? formatDate(tItem.created_at) : '—'}
                       </td>
                     )}

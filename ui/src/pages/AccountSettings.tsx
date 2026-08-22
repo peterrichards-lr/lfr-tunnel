@@ -117,7 +117,7 @@ export default function AccountSettings() {
   };
 
   return (
-    <div style={{ animation: 'fadeInUp 0.6s ease-out' }}>
+    <div className="animate-fade-in">
       <div className="mb-2xl">
         <h1 className="text-2xl fw-extrabold tracking-tight mb-xs">
           {t('account_title', 'Account Settings')}
@@ -320,7 +320,7 @@ export default function AccountSettings() {
                     {t('btn_disable_mfa', 'Disable MFA')}
                   </button>
                 ) : (
-                  <div className="mt-md" style={{ animation: 'fadeInUp 0.3s ease-out' }}>
+                  <div className="mt-md animate-fade-in-fast">
                     <p className="text-xs text-muted mb-xs">
                       {t('mfa_deactivate_desc', 'To deactivate MFA, please enter your 6-digit authenticator code below:')}
                     </p>
@@ -365,7 +365,7 @@ export default function AccountSettings() {
             )}
 
             {setupData && !mfaEnabled && (
-              <div className="mt-xl" style={{ animation: 'fadeInUp 0.3s ease-out' }}>
+              <div className="mt-xl animate-fade-in-fast">
                 <div className="bg-white p-lg rounded-md inline-block mb-lg">
                   <QRCodeSVG value={setupData.otpauth_url} size={150} />
                 </div>

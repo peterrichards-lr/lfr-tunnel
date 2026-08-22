@@ -168,7 +168,7 @@ export default function Dashboard() {
   };
 
   return (
-    <div style={{ animation: 'fadeInUp 0.6s ease-out' }}>
+    <div className="animate-fade-in">
 
       <div className="mb-2xl">
         <h1 id="dashboard-overview" className="text-2xl fw-extrabold tracking-tight mb-xs">{t('dashboard_overview', 'Dashboard Overview')}</h1>
@@ -397,7 +397,7 @@ export default function Dashboard() {
                 </div>
               </form>
             ) : (
-              <div style={{ animation: 'fadeInUp 0.3s ease-out' }}>
+              <div className="animate-fade-in-fast">
                 <div className="alert-banner alert-banner--warning text-xs mb-xl">
                   ⚠️ {t('token_warning', 'Copy this token now! It will not be shown again for security reasons.')}
                 </div>

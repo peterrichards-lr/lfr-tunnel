@@ -244,7 +244,7 @@ export default function AdminEdgeHealth() {
 
   if (loading) {
     return (
-      <div style={{ animation: 'fadeInUp 0.6s ease-out' }}>
+      <div className="animate-fade-in">
         <div className="mb-xl">
           <Skeleton width={180} height={28} />
           <Skeleton width={320} height={16} className="mt-sm" />
@@ -441,10 +441,10 @@ export default function AdminEdgeHealth() {
                         <td className="td-cell">{n.latency_ms ? `${n.latency_ms}ms` : '—'}</td>
                       )}
                       {isColumnVisible('timezone') && (
-                        <td className="td-cell" style={{ whiteSpace: 'nowrap' }}>{formatNodeLocalTime(n.timezone)}</td>
+                        <td className="td-cell whitespace-nowrap">{formatNodeLocalTime(n.timezone)}</td>
                       )}
                       {isColumnVisible('online_since') && (
-                        <td className="td-cell" style={{ whiteSpace: 'nowrap' }}>
+                        <td className="td-cell whitespace-nowrap">
                           {n.status?.toLowerCase() === 'online' && n.online_since
                             ? formatUptime(Math.max(0, Math.floor(Date.now() / 1000) - n.online_since))
                             : '—'}
@@ -454,7 +454,7 @@ export default function AdminEdgeHealth() {
                         <td className="td-cell--mono">{n.version || '—'}</td>
                       )}
                       {isColumnVisible('created_at') && (
-                        <td className="td-cell" style={{ whiteSpace: 'nowrap' }}>
+                        <td className="td-cell whitespace-nowrap">
                           {n.created_at ? formatDate(n.created_at) : '—'}
                         </td>
                       )}

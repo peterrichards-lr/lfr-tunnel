@@ -354,7 +354,7 @@ export default function AdminEdgeHealth() {
               <thead>
                 <tr className="border-b text-left">
                   {powerActionsEnabled && (
-                    <th className="th-col" style={{ width: 32 }}>
+                    <th className="th-col w-icon">
                       <input
                         type="checkbox"
                         checked={paginatedItems.length > 0 && paginatedItems.every((n: EdgeNode) => n.id && selectedIds.has(n.id))}

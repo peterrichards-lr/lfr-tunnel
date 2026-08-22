@@ -327,12 +327,11 @@ export default function AccountSettings() {
                     <div className="flex gap-sm items-center">
                       <input 
                         type="text" 
-                        className="input-field text-center font-bold mb-0" 
+                        className="input-field text-center font-bold mb-0 w-narrow"
                         placeholder="123456" 
                         maxLength={6} 
                         value={disableCode}
                         onChange={(e) => setDisableCode(e.target.value)}
-                        style={{ width: '120px' }}
                       />
                       <button type="button" className="btn btn-primary" onClick={async () => {
                         setDisableError('');

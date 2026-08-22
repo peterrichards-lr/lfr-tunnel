@@ -107,7 +107,7 @@ export default function AdminBlacklist() {
         <div className="card p-xl mb-xl">
           <div className="flex gap-md flex-wrap">
             <Skeleton width="100%" height={40} className="flex-1 min-w-sm" />
-            <Skeleton width="100%" height={40} style={{ flex: '2', minWidth: '200px' }} />
+            <Skeleton width="100%" height={40} className="flex-2 min-w-md" />
             <Skeleton width={120} height={40} />
           </div>
         </div>

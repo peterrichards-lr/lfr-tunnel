@@ -152,7 +152,7 @@ export default function EdgeScheduleModal({ nodeId, onClose, onSaved }: EdgeSche
               </select>
             </div>
 
-            <label className="flex items-center gap-sm mt-md" style={{ fontSize: 13, opacity: 0.8 }}>
+            <label className="flex items-center gap-sm mt-md text-sm opacity-80">
               <input type="checkbox" checked={enabled} onChange={e => setEnabled(e.target.checked)} />
               {t('edge_schedule_enabled', 'Schedule enabled for this node')}
             </label>

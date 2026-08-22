@@ -115,21 +115,9 @@ export default function Login() {
   };
 
   return (
-    <div id="login-screen" className="flex flex-col min-h-screen items-center justify-center relative overflow-hidden" style={{ background: 'var(--login-gradient)' }}>
+    <div id="login-screen" className="flex flex-col min-h-screen items-center justify-center relative overflow-hidden">
       {/* Premium ambient animated orb */}
-      <div style={{
-        position: 'absolute',
-        width: '600px',
-        height: '600px',
-        background: 'radial-gradient(circle, var(--primary-glow) 0%, transparent 60%)',
-        borderRadius: '50%',
-        top: '50%',
-        left: '50%',
-        transform: 'translate(-50%, -50%)',
-        animation: 'floatOrb 8s ease-in-out infinite',
-        zIndex: 0,
-        pointerEvents: 'none'
-      }} />
+      <div className="login-orb" aria-hidden="true" />
 
       {/* V1 Promo Banner */}
       <div className="z-10 bg-primary text-white py-md px-xl rounded-md mb-xl max-w-sm w-full text-center box-border shadow-md">

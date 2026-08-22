@@ -1475,6 +1475,67 @@ html[dir="rtl"] td, html[dir="rtl"] th {
 }
 .progress-fill.is-at-limit { background: var(--danger); }
 
+/* --- Assorted component pieces converted from inline styles (#1182) --- */
+
+/* The MFA gate is the same overlay as a dialog, but must sit above one. */
+.dialog-overlay--gate { z-index: 10000; }
+.gate-card {
+    max-width: 440px;
+    width: 100%;
+    padding: var(--spacing-xl);
+    text-align: center;
+}
+
+/* The login screen's ambient orb. Purely decorative, hence aria-hidden at the call site. */
+.login-orb {
+    position: absolute;
+    width: 600px;
+    height: 600px;
+    background: radial-gradient(circle, var(--primary-glow) 0%, transparent 60%);
+    border-radius: 50%;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    animation: floatOrb 8s ease-in-out infinite;
+    z-index: 0;
+    pointer-events: none;
+}
+
+/* Small round glyph marking a vanity-domain stage. Only the fill is state-dependent and
+   stays inline; the geometry is fixed. */
+.stage-icon {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 22px;
+    height: 22px;
+    border-radius: 50%;
+    color: #fff;
+    font-size: 12px;
+    font-weight: 700;
+    line-height: 1;
+}
+
+/* Matches the height of a .form-control sitting beside it, so a control and a button in
+   the same row line up. */
+.h-control {
+    height: 38px;
+    box-sizing: border-box;
+}
+
+/* Radios and checkboxes take the brand colour everywhere, rather than each call site
+   remembering an inline accentColor -- one input carried it and the rest did not. */
+input[type="radio"],
+input[type="checkbox"] { accent-color: var(--primary); }
+
+.resize-y  { resize: vertical; }
+.opacity-80 { opacity: 0.8; }
+.w-icon    { width: 32px; }
+.w-narrow  { width: 120px; }
+
+/* Staggers a card's entrance behind the one above it. */
+.animate-delay-sm { animation-delay: 0.2s; }
+
 /* --- Chart sizing --- */
 /* Recharts needs a definite height on the wrapper to lay out at all, so this is a real
    layout constraint rather than decoration. */

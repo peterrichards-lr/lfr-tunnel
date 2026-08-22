@@ -147,8 +147,7 @@ export default function AdminAnalytics() {
         <h2 className="page-header__title">{t('system_analytics', 'System Analytics')}</h2>
         <div className="flex gap-md">
           <select 
-            className="input-field w-auto" 
-            style={{ height: '38px', boxSizing: 'border-box', padding: '0 12px' }}
+            className="input-field w-auto h-control px-md"
             value={timeRange} 
             onChange={(e) => setTimeRange(e.target.value)}
           >
@@ -157,7 +156,7 @@ export default function AdminAnalytics() {
             <option value="30">Last 30 Days</option>
             <option value="0">All Time</option>
           </select>
-          <button className="btn btn-secondary w-auto inline-flex items-center gap-sm" onClick={handlePrint} style={{ whiteSpace: 'nowrap', height: '38px', boxSizing: 'border-box', padding: '0 16px' }}>
+          <button className="btn btn-secondary w-auto inline-flex items-center gap-sm" onClick={handlePrint}>
             📄 {t('export_pdf', 'Export PDF')}
           </button>
         </div>
@@ -348,7 +347,7 @@ export default function AdminAnalytics() {
                     sortedClientStats.map((stat, idx) => (
                       <tr key={idx} className="border-b">
                         <td className="td-cell">
-                          <span style={{ background: 'var(--primary)', color: 'white', padding: '2px 8px', borderRadius: '4px', fontSize: '12px', fontWeight: '500' }}>
+                          <span className="badge admin">
                             {stat.version || "Unknown"}
                           </span>
                         </td>

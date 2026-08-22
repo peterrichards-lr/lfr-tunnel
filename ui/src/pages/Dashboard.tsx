@@ -195,8 +195,7 @@ export default function Dashboard() {
               </code>
               <button 
                 onClick={handleCopyUpgradeCmd}
-                className="btn-text p-xs text-xs rounded hover:bg-white/10 transition-colors"
-                style={{ color: copiedUpgrade ? 'var(--success)' : 'var(--text-muted)' }}
+                className={`btn-text p-xs text-xs rounded hover:bg-white/10 transition-colors ${copiedUpgrade ? 'text-success' : 'text-muted'}`}
                 title={copiedUpgrade ? 'Copied!' : 'Copy to clipboard'}
               >
                 {copiedUpgrade ? '✓' : '📋'}
@@ -224,7 +223,7 @@ export default function Dashboard() {
           <ReservationsPanel />
           <VanityDomainStatusPanel />
 
-          <div className="card p-0" style={{ animationDelay: '0.2s' }}>
+          <div className="card p-0 animate-delay-sm">
             <div className="p-xl border-b flex justify-between items-center flex-wrap gap-md">
               <div>
                 <h3 className="m-0 text-md fw-bold">{t('pat_title', 'Personal Access Tokens')}</h3>

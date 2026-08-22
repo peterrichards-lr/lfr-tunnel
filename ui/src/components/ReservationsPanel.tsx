@@ -470,7 +470,7 @@ export default function ReservationsPanel() {
                   ['passcode', '🔑', t('access_passcode', 'Passcode — Requires a secret code')],
                   ['whitelist', '🛡', t('access_whitelist', 'IP Whitelist — Restrict by IP address')]] as [string, string, string][]).map(([val, icon, label]) => (
                   <label key={val} className={`flex items-center gap-md p-md rounded cursor-pointer border ${acMode === val ? 'border-primary surface-selected' : 'border'}`}>
-                    <input type="radio" name="acMode" value={val} checked={acMode === val} onChange={() => setAcMode(val)} style={{ accentColor: 'var(--primary)' }} />
+                    <input type="radio" name="acMode" value={val} checked={acMode === val} onChange={() => setAcMode(val)} />
                     <span>{icon} {label}</span>
                   </label>
                 ))}
@@ -494,12 +494,11 @@ export default function ReservationsPanel() {
               <div className="form-group">
                 <label className="form-label--bold">{t('allowed_ips', 'Allowed IPs')}</label>
                 <textarea
-                  className="input-field"
+                  className="input-field font-mono text-sm resize-y"
                   value={acWhitelist}
                   onChange={e => setAcWhitelist(e.target.value)}
                   placeholder={'One IP or CIDR per line, e.g.\n192.168.1.0/24\n10.0.0.1'}
                   rows={4}
-                  style={{ fontFamily: 'monospace', fontSize: '13px', resize: 'vertical' }}
                 />
                 <p className="form-hint">
                   {t('whitelist_hint', 'Enter individual IP addresses or CIDR ranges, one per line.')}

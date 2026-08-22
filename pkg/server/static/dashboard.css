@@ -207,6 +207,25 @@
             margin-bottom: 16px;
         }
         .input-field:focus { border-color: var(--primary); }
+        /* Before #1212 this file had exactly one focus rule -- the line above. Making the
+           sidebar keyboard-reachable is pointless if a keyboard user cannot see where they
+           are, so everything focusable gets a visible ring. :focus-visible rather than
+           :focus, so it does not appear on mouse clicks. */
+        .nav-item:focus-visible,
+        .sidebar-section-header:focus-visible,
+        .btn:focus-visible,
+        .btn-primary:focus-visible,
+        .sidebar-toggle-btn:focus-visible,
+        .action-menu-btn:focus-visible,
+        a:focus-visible,
+        button:focus-visible,
+        select:focus-visible,
+        input:focus-visible,
+        textarea:focus-visible {
+            outline: 2px solid var(--primary);
+            outline-offset: 2px;
+            border-radius: 4px;
+        }
         .hidden { display: none !important; }
 
         /* Dashboard */
@@ -234,6 +253,10 @@
             border-right-color: transparent;
             opacity: 0;
             pointer-events: none;
+            /* Without this the collapsed sidebar keeps its links in the tab order, so a
+               keyboard user tabs into a sidebar they cannot see -- a regression this
+               change would otherwise have introduced by making them focusable (#1212). */
+            visibility: hidden;
         }
         .sidebar-menu {
             flex: 1;
@@ -361,7 +384,27 @@
             font-size: 14px;
             flex-shrink: 0;
         }
+        /* .nav-item is an <a> or <button> since #1212, so it has to shed the user-agent
+           styling that a <div> never had -- underline, inherited font, button chrome --
+           without changing how it looks. */
+        .nav-item {
+            display: block;
+            width: 100%;
+            text-align: inherit;
+            text-decoration: none;
+            font: inherit;
+            background: none;
+            border: none;
+        }
         .nav-item:hover { background: var(--bg-card); color: var(--text-main); }
+        .sidebar-section-header {
+            width: 100%;
+            text-align: inherit;
+            font: inherit;
+            color: inherit;
+            background: none;
+            border: none;
+        }
         .nav-item.active { background: var(--primary); color: #fff; box-shadow: 0 4px 12px var(--primary-glow); }
         
         .main-content {
@@ -862,8 +905,19 @@ html[dir="rtl"] td, html[dir="rtl"] th {
         opacity: 1 !important;
         pointer-events: auto !important;
     }
+    /* Off-canvas at this width, so it must not hold focus either. The desktop rule uses
+       .collapsed, but on mobile the sidebar is hidden by transform regardless of that
+       class -- without this its links stay in the tab order while off-screen (#1212).
+       visibility is in the transition so the slide-out still animates before hiding. */
+    .sidebar,
+    .sidebar.collapsed {
+        visibility: hidden !important;
+        transition: transform 0.3s cubic-bezier(0.4, 0, 0.2, 1), visibility 0s linear 0.3s !important;
+    }
     .sidebar.active,
     .sidebar.collapsed.active {
+        visibility: visible !important;
+        transition: transform 0.3s cubic-bezier(0.4, 0, 0.2, 1), visibility 0s !important;
         transform: translateX(0) !important;
     }
     

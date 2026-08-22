@@ -1446,12 +1446,19 @@ applyTheme(currentUser.theme_preference);
                 }
             }
             document.querySelectorAll('.main-content > div[id^="tab-"]').forEach(el => el.classList.add('hidden'));
-            document.querySelectorAll('.nav-item').forEach(el => el.classList.remove('active'));
+            document.querySelectorAll('.nav-item').forEach(el => {
+                el.classList.remove('active');
+                el.removeAttribute('aria-current');
+            });
             
             const tabEl = document.getElementById(`tab-${tabName}`);
             const navEl = document.getElementById(`nav-${tabName}`);
             if (tabEl) tabEl.classList.remove('hidden');
-            if (navEl) navEl.classList.add('active');
+            if (navEl) {
+                navEl.classList.add('active');
+                // .active only makes it look current; aria-current makes it announced (#1212).
+                navEl.setAttribute('aria-current', 'page');
+            }
 
             if (!skipHistory) {
                 history.pushState({ tab: tabName }, '', '#' + tabName);
@@ -1477,6 +1484,14 @@ applyTheme(currentUser.theme_preference);
                 loadVersionDetails();
             }
         }
+
+        // The sidebar links are real anchors (#1212), so clicking one navigates the
+        // fragment and the browser has already written the history entry. Drive the tab
+        // from that, and pass skipHistory so showTab does not push a duplicate.
+        window.addEventListener('hashchange', () => {
+            const tabName = window.location.hash ? window.location.hash.slice(1) : 'overview';
+            showTab(tabName, true);
+        });
 
         window.addEventListener('popstate', (e) => {
             const tabName = (e.state && e.state.tab) ? e.state.tab : (window.location.hash ? window.location.hash.slice(1) : 'overview');
@@ -4342,6 +4357,7 @@ applyTheme(currentUser.theme_preference);
             const isCollapsed = content.classList.toggle('collapsed');
             if (header) {
                 header.classList.toggle('collapsed', isCollapsed);
+                header.setAttribute('aria-expanded', isCollapsed ? 'false' : 'true');
             }
             localStorage.setItem('sidebar_collapsed_' + sectionId, isCollapsed ? 'true' : 'false');
         };
@@ -4384,6 +4400,8 @@ applyTheme(currentUser.theme_preference);
                 content.classList.toggle('collapsed', shouldCollapse);
                 if (header) {
                     header.classList.toggle('collapsed', shouldCollapse);
+                    // Restored from localStorage, so the markup's default can be wrong here.
+                    header.setAttribute('aria-expanded', shouldCollapse ? 'false' : 'true');
                 }
             });
             initSidebarCollapse();

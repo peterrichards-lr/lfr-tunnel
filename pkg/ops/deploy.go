@@ -60,7 +60,26 @@ func DeployCommand(args []string) {
 		}
 	}()
 
-	restorePower, err := ensureInstanceRunning(target.Host, target.AWSRegion, target.InstanceTag)
+	// aws_region used to be the whole switch for power management. It is now just one of
+	// the values handed to a hook, so a config still carrying it alone would quietly stop
+	// managing power -- and silently leaving a started node running is the exact failure
+	// #1183 exists to catch. Fail here with the line to add (#1187).
+	//
+	// Checked in deploy rather than in ResolveDeployTarget because deploy is the only
+	// command that manages power; the others share that resolver and have no business
+	// failing over a power hook they never use.
+	CheckFatal(checkPowerConfig(target), "Power management is misconfigured")
+
+	// AWSRegion and InstanceTag are not interpreted here -- they are handed to whatever
+	// hook the operator configured, which is the only thing that knows what they mean
+	// (#1187).
+	restorePower, err := ensureInstanceRunning(target.Host, powerHook{
+		Path: target.PowerHook,
+		Env: []string{
+			"AWS_REGION=" + target.AWSRegion,
+			"LFT_INSTANCE_TAG=" + target.InstanceTag,
+		},
+	})
 	CheckFatal(err, "Failed to ensure target instance is running")
 	defer restorePower()
 

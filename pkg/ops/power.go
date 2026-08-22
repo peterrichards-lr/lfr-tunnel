@@ -1,119 +1,211 @@
 package ops
 
 import (
-	"encoding/json"
 	"fmt"
 	"net"
 	"os"
+	"os/exec"
 	"strings"
 	"time"
 )
 
-// ensureInstanceRunning checks (via the AWS CLI) whether the EC2 instance behind host is
-// currently stopped and, if so, starts it and waits until it's reachable over SSH before
-// returning. The returned restore func puts the instance back into whatever power state
-// it was in before this call -- callers should `defer restore()` immediately after a nil
-// error, so a deploy that lands during a scheduled power-off window (e.g. edge-us/
-// edge-apac's deliberately-wrong midnight-8am schedule, kept as a live test case for
-// #885) doesn't leave the box running outside its schedule, whether the deploy itself
-// succeeds or fails.
+// powerHook is an operator-supplied script that knows how to read and change the power
+// state of the machine behind a host.
 //
-// A no-op restore (and nil error) is returned if region is empty -- this whole feature is
-// opt-in via -aws-region/AWS_REGION/central.aws_region (#1050), so a deploy that never
-// configures it behaves exactly as it did before this existed.
+// It exists so this package can start a stopped node for a deploy without knowing anything
+// about the cloud it runs on. The AWS CLI calls that used to live here are now in
+// scripts/common/lfr-power-hook-aws.sh; supporting a different provider means writing a
+// sibling of that script and pointing power_hook at it, not patching lfr-tunnel (#1187).
+// Same shape as the vanity domain hook: `<hook> <action> <target>`, everything else through
+// the environment, and no defaults of its own.
 //
-// Relies on the target's public IP being an Elastic IP (so it's still visible via
-// `Name=ip-address` on a stopped instance) -- true for every box in this fleet as of
-// #1050; a regular auto-assigned public IP is released on stop and this lookup would find
-// nothing.
-func ensureInstanceRunning(host, region, instanceTag string) (restore func(), err error) {
+// Contract:
+//
+//	<hook> status <host>  prints "<state> [id]" on stdout, exit 0
+//	<hook> start  <host>  starts it and does not return until it is running, exit 0
+//	<hook> stop   <host>  requests a stop, exit 0 once accepted
+//
+// state is the provider's own vocabulary; only "running", "stopped" and "stopping" mean
+// anything here. id is optional and used purely to make failure messages actionable.
+type powerHook struct {
+	// Path is the hook script. Empty means power management is not configured, which is
+	// the same as never setting it up -- deploys simply don't touch power state.
+	Path string
+	// Env is passed to the hook on top of the current environment, carrying whatever the
+	// operator's chosen script needs (AWS_REGION and LFT_INSTANCE_TAG for the bundled one).
+	Env []string
+}
+
+func (h powerHook) configured() bool { return h.Path != "" }
+
+// checkPowerConfig rejects a target that asks for power management without saying how.
+//
+// Before #1187 aws_region alone switched the feature on. Now it is only a value passed to
+// a hook, so a config that still carries it by itself would leave power unmanaged without
+// a word -- and a deploy that starts a node and never stops it is precisely the failure
+// #1183 exists to make loud. Better to stop with the missing line than to succeed quietly.
+func checkPowerConfig(target DeployTarget) error {
+	if target.AWSRegion == "" || target.PowerHook != "" {
+		return nil
+	}
+	return fmt.Errorf(
+		"aws_region is set but power_hook is not, so power management would be skipped silently.\n"+
+			"It is no longer built in -- lfr-tunnel calls a script, so it works on any provider.\n"+
+			"Add the bundled AWS implementation to your lfr-tunnel-ops.yaml:\n\n"+
+			"  central:\n"+
+			"    power_hook: %s\n\n"+
+			"or set LFT_POWER_HOOK. To turn power management off instead, remove aws_region",
+		bundledAWSPowerHook)
+}
+
+// bundledAWSPowerHook is the reference implementation shipped in this repo. Named here only
+// so the error above can point at it -- nothing defaults to it, since which provider (and
+// which script) an operator uses is theirs to declare.
+const bundledAWSPowerHook = "scripts/common/lfr-power-hook-aws.sh"
+
+// run invokes the hook and returns its trimmed stdout. The hook's stderr is passed through
+// to ours, so whatever it has to say about a failure reaches the operator unedited.
+func (h powerHook) run(action, host string) (string, error) {
+	cmd := exec.Command(h.Path, action, host)
+	cmd.Env = append(os.Environ(), h.Env...)
+	cmd.Stderr = os.Stderr
+	out, err := cmd.Output()
+	if err != nil {
+		return "", fmt.Errorf("power hook %q %s %s: %w", h.Path, action, host, err)
+	}
+	return strings.TrimSpace(string(out)), nil
+}
+
+// status asks the hook for the current power state, and an optional provider identifier
+// used only to make messages actionable.
+func (h powerHook) status(host string) (state, id string, err error) {
+	out, err := h.run("status", host)
+	if err != nil {
+		return "", "", err
+	}
+	state, id, err = parsePowerStatus(out)
+	if err != nil {
+		return "", "", fmt.Errorf("power hook %q for %s: %w", h.Path, host, err)
+	}
+	return state, id, nil
+}
+
+// parsePowerStatus reads a hook's status line: a state, optionally followed by a provider
+// identifier. Split out from status so the contract is testable without executing anything.
+//
+// Anything beyond the first two fields is ignored rather than rejected, so a hook that adds
+// detail to its output doesn't break against an older lfr-tunnel.
+func parsePowerStatus(out string) (state, id string, err error) {
+	fields := strings.Fields(out)
+	if len(fields) == 0 {
+		return "", "", fmt.Errorf("reported no power state")
+	}
+	if len(fields) > 1 {
+		id = fields[1]
+	}
+	return fields[0], id, nil
+}
+
+// ensureInstanceRunning checks whether the machine behind host is currently stopped and, if
+// so, starts it and waits until it is reachable over SSH before returning. The returned
+// restore func puts it back into whatever power state it was in before this call -- callers
+// should `defer restore()` immediately after a nil error, so a deploy that lands during a
+// scheduled power-off window (e.g. edge-us/edge-apac's deliberately-wrong midnight-8am
+// schedule, kept as a live test case for #885) doesn't leave the box running outside its
+// schedule, whether the deploy itself succeeds or fails.
+//
+// A no-op restore (and nil error) is returned when no hook is configured -- this whole
+// feature is opt-in (#1050), so a deploy that never sets it up behaves exactly as it did
+// before it existed.
+func ensureInstanceRunning(host string, hook powerHook) (restore func(), err error) {
 	noop := func() {}
-	if region == "" {
+	if !hook.configured() {
 		return noop, nil
 	}
 
-	ip, err := resolveHostIPv4(host)
+	state, id, err := hook.status(host)
 	if err != nil {
-		return noop, fmt.Errorf("resolving %s to an IP for AWS lookup: %w", host, err)
+		return noop, fmt.Errorf("reading the power state of %s: %w", host, err)
 	}
-
-	instanceID, state, err := describeInstanceForHost(region, ip, instanceTag)
-	if err != nil {
-		return noop, fmt.Errorf("looking up EC2 instance for %s (%s) in %s: %w", host, ip, region, err)
-	}
-	if instanceID == "" {
-		return noop, fmt.Errorf("no EC2 instance found for %s (%s) in %s -- check the region is right", host, ip, region)
-	}
+	label := describeTarget(host, id)
 
 	switch state {
 	case "running":
-		fmt.Printf("EC2 instance %s (%s) is already running.\n", instanceID, host)
+		fmt.Printf("%s is already running.\n", label)
 		return noop, nil
 	case "stopped":
-		fmt.Printf("EC2 instance %s (%s) is stopped -- starting it for this deploy...\n", instanceID, host)
-		if err := RunCommand("aws", "ec2", "start-instances", "--region", region, "--instance-ids", instanceID); err != nil {
-			return noop, fmt.Errorf("starting instance %s: %w", instanceID, err)
-		}
-		if err := RunCommand("aws", "ec2", "wait", "instance-running", "--region", region, "--instance-ids", instanceID); err != nil {
-			return noop, fmt.Errorf("waiting for instance %s to reach running: %w", instanceID, err)
+		fmt.Printf("%s is stopped -- starting it for this deploy...\n", label)
+		if _, err := hook.run("start", host); err != nil {
+			return noop, fmt.Errorf("starting %s: %w", label, err)
 		}
 		if err := waitForSSH(host, 2*time.Minute); err != nil {
-			return noop, fmt.Errorf("instance %s is running but SSH never came up: %w", instanceID, err)
+			return noop, fmt.Errorf("%s is running but SSH never came up: %w", label, err)
 		}
 		restore = func() {
-			fmt.Printf("Restoring EC2 instance %s (%s) to its previous (stopped) state...\n", instanceID, host)
-			stopErr := RunCommand("aws", "ec2", "stop-instances", "--region", region, "--instance-ids", instanceID)
+			fmt.Printf("Restoring %s to its previous (stopped) state...\n", label)
+			_, stopErr := hook.run("stop", host)
 
-			// Don't take the stop command's word for it. Credentials on this account are
+			// Don't take the stop's word for it. Credentials on this account are
 			// short-lived and their refresh is unreliable, so the window between starting
 			// an instance and stopping it can outlive the credential -- which is exactly
 			// how a node was left running overnight after a deploy to Tokyo (#1183).
 			// Confirm the state actually reached.
 			state, checkErr := confirmStopped(func() (string, error) {
-				_, s, err := describeInstanceForHost(region, ip, instanceTag)
+				s, _, err := hook.status(host)
 				return s, err
 			}, stopConfirmAttempts, stopConfirmDelay)
 			switch {
 			case checkErr == nil && (state == "stopping" || state == "stopped"):
-				fmt.Printf("EC2 instance %s (%s) is %s.\n", instanceID, host, state)
+				fmt.Printf("%s is %s.\n", label, state)
 				return
 			case stopErr == nil && checkErr != nil:
 				// The stop was accepted but we cannot confirm it. Say so rather than
 				// implying either outcome.
-				powerRestoreFailed(instanceID, host, region,
+				powerRestoreFailed(label, host, hook.Path,
 					fmt.Sprintf("stop was accepted but its result could not be confirmed: %v", checkErr))
 			case stopErr != nil:
-				powerRestoreFailed(instanceID, host, region, stopErr.Error())
+				powerRestoreFailed(label, host, hook.Path, stopErr.Error())
 			default:
-				powerRestoreFailed(instanceID, host, region,
-					fmt.Sprintf("instance is still %q after the stop", state))
+				powerRestoreFailed(label, host, hook.Path,
+					fmt.Sprintf("it is still %q after the stop", state))
 			}
 		}
 		return restore, nil
 	default:
-		return noop, fmt.Errorf("instance %s (%s) is in state %q, not running or stopped -- refusing to guess, deploy manually once it settles", instanceID, host, state)
+		return noop, fmt.Errorf("%s is in state %q, not running or stopped -- refusing to guess, deploy manually once it settles", label, state)
 	}
 }
 
-// How long the restore gives a stop to become visible. describe-instances is eventually
-// consistent, so a read taken immediately after stop-instances can still report "running"
-// even though the stop was accepted -- and since #1184 that wrongly fails the whole deploy.
+// describeTarget names the machine in operator-facing messages. The hook may or may not
+// report a provider identifier; when it does, it is far more useful than the hostname for
+// acting on the problem, so both are shown.
+func describeTarget(host, id string) string {
+	if id == "" {
+		return host
+	}
+	return fmt.Sprintf("%s (%s)", id, host)
+}
+
+// How long the restore gives a stop to become visible. A provider's read API may be
+// eventually consistent, so a status taken immediately after a stop can still report
+// "running" even though the stop was accepted -- and since #1184 that wrongly fails the
+// whole deploy (#1191).
 //
-// Deliberately not `aws ec2 wait instance-stopped`: that blocks until the instance is fully
-// stopped, typically 30-90s, and would add it to the teardown of every deploy that started
-// one. "stopping" already proves the stop took effect, so a few short re-reads are enough.
+// Deliberately short: the hook's stop returns as soon as the request is accepted rather
+// than waiting for the machine to finish stopping, because "stopping" already proves the
+// stop took effect and waiting for "stopped" would add 30-90s to every deploy teardown.
 const (
 	stopConfirmAttempts = 5
 	stopConfirmDelay    = 2 * time.Second
 )
 
-// confirmStopped re-reads the instance state until it proves the stop took effect, or the
+// confirmStopped re-reads the power state until it proves the stop took effect, or the
 // attempts run out. Returns the last state and error seen, so the caller can distinguish
 // "still running" from "could not be read at all" -- those mean different things to an
 // operator and get reported differently.
 //
-// Takes readState rather than calling describeInstanceForHost directly so the retry
-// behaviour is testable without an AWS account or a real delay.
+// Takes readState rather than calling the hook directly so the retry behaviour is testable
+// without a provider account or a real delay.
 func confirmStopped(readState func() (string, error), attempts int, delay time.Duration) (string, error) {
 	var (
 		state string
@@ -131,9 +223,9 @@ func confirmStopped(readState func() (string, error), attempts int, delay time.D
 	return state, err
 }
 
-// PowerRestoreFailed reports whether a deploy left an instance running that it had
-// started. Deploy checks this so an unattended run cannot exit 0 having stranded a node
-// outside its schedule, quietly costing money (#1183).
+// PowerRestoreFailed reports whether a deploy left a node running that it had started.
+// Deploy checks this so an unattended run cannot exit 0 having stranded a node outside its
+// schedule, quietly costing money (#1183).
 var powerRestoreFailure string
 
 // PowerRestoreFailure returns the description of a failed power restore, or "" if none.
@@ -142,102 +234,22 @@ func PowerRestoreFailure() string { return powerRestoreFailure }
 // powerRestoreFailed records the failure and makes it loud. The previous behaviour was a
 // single Printf at the tail of a long, noisy deploy, which affected nothing and was easy
 // to miss entirely.
-func powerRestoreFailed(instanceID, host, region, reason string) {
-	powerRestoreFailure = fmt.Sprintf("instance %s (%s) may still be RUNNING: %s", instanceID, host, reason)
+//
+// The remediation it prints is the hook itself rather than any provider's CLI -- that is
+// the one command guaranteed to work for whoever is reading it.
+func powerRestoreFailed(label, host, hookPath, reason string) {
+	powerRestoreFailure = fmt.Sprintf("%s may still be RUNNING: %s", label, reason)
 	rule := strings.Repeat("!", 78)
 	fmt.Fprintf(os.Stderr, "\n%s\n", rule)
 	fmt.Fprintf(os.Stderr, "WARNING: %s\n", powerRestoreFailure)
 	fmt.Fprint(os.Stderr, "It was started for this deploy and must be stopped, or it runs outside its\n")
 	fmt.Fprint(os.Stderr, "schedule and keeps costing money. Stop it with:\n\n")
-	fmt.Fprintf(os.Stderr, "  aws ec2 stop-instances --region %s --instance-ids %s\n", region, instanceID)
+	fmt.Fprintf(os.Stderr, "  %s stop %s\n", hookPath, host)
 	fmt.Fprintf(os.Stderr, "%s\n\n", rule)
 }
 
-// resolveHostIPv4 looks up host's first IPv4 address, since AWS's ip-address filter
-// doesn't match on IPv6.
-func resolveHostIPv4(host string) (string, error) {
-	ips, err := net.LookupIP(host)
-	if err != nil {
-		return "", err
-	}
-	for _, ip := range ips {
-		if v4 := ip.To4(); v4 != nil {
-			return v4.String(), nil
-		}
-	}
-	return "", fmt.Errorf("no IPv4 address found for %s", host)
-}
-
-// ec2DescribeInstancesOutput is the subset of `aws ec2 describe-instances --output json`
-// this package actually needs.
-type ec2DescribeInstancesOutput struct {
-	Reservations []struct {
-		Instances []struct {
-			InstanceID string `json:"InstanceId"`
-			State      struct {
-				Name string `json:"Name"`
-			} `json:"State"`
-		} `json:"Instances"`
-	} `json:"Reservations"`
-}
-
-// describeInstanceForHost returns the instance in region whose public address matches ip,
-// or ("", "", nil) if none is found -- not an error, the caller decides whether that is
-// fatal.
-//
-// instanceTag optionally narrows the search to resources carrying a given tag, written
-// "Key=Value". Supplying one means a mis-set region or a stale DNS record fails as "not
-// found" rather than matching an unrelated instance that happens to share an address.
-//
-// The tag is operator-supplied and empty by default. A tag value identifies one particular
-// deployment, so hardcoding one here would put a single organisation's naming into
-// MIT-licensed code that other people are meant to run against their own infrastructure.
-func describeInstanceForHost(region, ip, instanceTag string) (instanceID, state string, err error) {
-	args := []string{"ec2", "describe-instances", "--region", region, "--filters"}
-	// One --filters flag taking several values; repeating the flag would drop all but the
-	// last, which would silently widen the search rather than narrow it.
-	if filter := tagFilter(instanceTag); filter != "" {
-		args = append(args, filter)
-	}
-	args = append(args, "Name=ip-address,Values="+ip, "--output", "json")
-
-	out, err := RunCommandCaptureOutput("aws", args...)
-	if err != nil {
-		return "", "", err
-	}
-	return parseInstanceDescribeOutput(out)
-}
-
-// tagFilter turns an operator-supplied "Key=Value" into the provider's filter syntax, or
-// "" when nothing usable was given. A malformed value is ignored rather than fatal: it can
-// only ever widen the search back to matching on address alone, which is what happens
-// without a tag anyway.
-func tagFilter(instanceTag string) string {
-	key, value, found := strings.Cut(strings.TrimSpace(instanceTag), "=")
-	key, value = strings.TrimSpace(key), strings.TrimSpace(value)
-	if !found || key == "" || value == "" {
-		return ""
-	}
-	return "Name=tag:" + key + ",Values=" + value
-}
-
-// parseInstanceDescribeOutput is split out from describeInstanceForHost so the JSON-parsing
-// logic can be unit tested against canned AWS CLI output without actually shelling out.
-func parseInstanceDescribeOutput(rawJSON string) (instanceID, state string, err error) {
-	var parsed ec2DescribeInstancesOutput
-	if err := json.Unmarshal([]byte(rawJSON), &parsed); err != nil {
-		return "", "", fmt.Errorf("parsing aws ec2 describe-instances output: %w", err)
-	}
-	for _, r := range parsed.Reservations {
-		for _, i := range r.Instances {
-			return i.InstanceID, i.State.Name, nil
-		}
-	}
-	return "", "", nil
-}
-
 // waitForSSH polls host's SSH port (22) until it accepts a TCP connection or timeout
-// elapses.
+// elapses. Reaching "running" is not the same as being able to log in.
 func waitForSSH(host string, timeout time.Duration) error {
 	return waitForTCP(net.JoinHostPort(host, "22"), timeout, 5*time.Second)
 }

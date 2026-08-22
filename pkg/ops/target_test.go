@@ -28,6 +28,7 @@ func clearTargetEnv(t *testing.T) {
 	t.Setenv("LFT_IDENTITY_FILE", "")
 	t.Setenv("AWS_REGION", "")
 	t.Setenv("LFT_INSTANCE_TAG", "")
+	t.Setenv("LFT_POWER_HOOK", "")
 	t.Setenv("LFT_OPS_TARGET", "")
 	t.Setenv("LFT_OPS_CONFIG", filepath.Join(t.TempDir(), "nonexistent.yaml"))
 }
@@ -605,7 +606,67 @@ central:
 	if target.InstanceTag != "" {
 		t.Errorf("expected no instance tag when none is configured, got %q", target.InstanceTag)
 	}
-	if filter := tagFilter(target.InstanceTag); filter != "" {
-		t.Errorf("expected an empty tag to produce no filter, got %q", filter)
+	// What an empty tag then means for the lookup is the hook's business, not this
+	// package's -- the filter-building moved to scripts/common/lfr-power-hook-aws.sh
+	// with #1187. All that matters here is that nothing is invented on the way through.
+}
+
+// power_hook resolves like every other field: env var first, then the yaml (#1187).
+
+func TestResolveDeployTarget_PowerHookFromConfigFile(t *testing.T) {
+	clearTargetEnv(t)
+	writeOpsConfig(t, `
+central:
+  user: ubuntu
+  host: central.example.com
+  identity_file: /tmp/my-key.pem
+  power_hook: scripts/common/lfr-power-hook-aws.sh
+`)
+
+	target, err := ResolveDeployTarget("", "", "", "")
+	if err != nil {
+		t.Fatalf("expected resolution to succeed, got: %v", err)
+	}
+	if target.PowerHook != "scripts/common/lfr-power-hook-aws.sh" {
+		t.Errorf("expected the hook from the config file, got %q", target.PowerHook)
+	}
+}
+
+func TestResolveDeployTarget_PowerHookEnvOverridesConfigFile(t *testing.T) {
+	clearTargetEnv(t)
+	writeOpsConfig(t, `
+central:
+  user: ubuntu
+  host: central.example.com
+  identity_file: /tmp/my-key.pem
+  power_hook: /from/yaml.sh
+`)
+	t.Setenv("LFT_POWER_HOOK", "/from/env.sh")
+
+	target, err := ResolveDeployTarget("", "", "", "")
+	if err != nil {
+		t.Fatalf("expected resolution to succeed, got: %v", err)
+	}
+	if target.PowerHook != "/from/env.sh" {
+		t.Errorf("expected LFT_POWER_HOOK to override the config file, got %q", target.PowerHook)
+	}
+}
+
+// Power management stays opt-in: no hook, no error, deploys simply don't touch power.
+func TestResolveDeployTarget_NoPowerHookIsFine(t *testing.T) {
+	clearTargetEnv(t)
+	writeOpsConfig(t, `
+central:
+  user: ubuntu
+  host: central.example.com
+  identity_file: /tmp/my-key.pem
+`)
+
+	target, err := ResolveDeployTarget("", "", "", "")
+	if err != nil {
+		t.Fatalf("expected resolution to succeed with no power hook, got: %v", err)
+	}
+	if target.PowerHook != "" {
+		t.Errorf("expected no power hook, got %q", target.PowerHook)
 	}
 }

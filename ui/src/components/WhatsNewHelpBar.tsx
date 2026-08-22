@@ -98,7 +98,7 @@ export default function WhatsNewHelpBar({ onInstallClick }: { onInstallClick: ()
         // either). flex-wrap with a min-width per child reflows naturally with no
         // breakpoint to get wrong.
         <div className="mt-lg flex flex-wrap gap-xl">
-          <div className="flex-1 min-w-0" style={{ minWidth: '260px' }}>
+          <div className="flex-1 min-w-0 min-w-lg">
             <h4 className="section-title text-sm mb-md">{t('whats_new', "What's New")}</h4>
             <div className="max-h-96 overflow-y-auto pr-sm">
               {releases.map((release, i) => (
@@ -127,7 +127,7 @@ export default function WhatsNewHelpBar({ onInstallClick }: { onInstallClick: ()
             </div>
           </div>
 
-          <div className="flex-1 min-w-0" style={{ minWidth: '260px' }}>
+          <div className="flex-1 min-w-0 min-w-lg">
             <h4 className="section-title text-sm mb-md">{t('help_resources', 'Help & Resources')}</h4>
             <div className="flex flex-col gap-md">
               <button type="button" className="btn btn-outline justify-start text-left" onClick={onInstallClick}>

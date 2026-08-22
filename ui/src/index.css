@@ -1260,6 +1260,15 @@ html[dir="rtl"] td, html[dir="rtl"] th {
 /* --- Width / Height --- */
 .w-full    { width: 100%; }
 .w-auto    { width: auto; }
+/* Minimum widths, mirroring the max-width scale below. These are almost all form controls
+   in a wrapping flex row: the minimum is what stops flex squeezing a select down to
+   nothing. The steps are the values that were already in use inline, so converting changed
+   no layout (#1182). */
+.min-w-xs  { min-width: 130px; }
+.min-w-sm  { min-width: 150px; }
+.min-w-md  { min-width: 200px; }
+.min-w-lg  { min-width: 260px; }
+
 .max-w-xs  { max-width: 200px; }
 .max-w-sm  { max-width: 300px; }
 .max-w-md  { max-width: 480px; }
@@ -1334,6 +1343,24 @@ html[dir="rtl"] td, html[dir="rtl"] th {
     font: inherit;
     cursor: pointer;
 }
+
+/* --- Quota / progress bars --- */
+/* The track was written inline as a literal rgba(255,255,255,0.1) -- a white overlay that
+   simply vanishes on the light theme. It is now a token, defined per theme (#1182).
+   Only the fill's width is genuinely dynamic and stays inline; whether it reads as normal
+   or at-limit is a state, so it is a class rather than a computed colour. */
+.progress-track {
+    height: 8px;
+    background: var(--progress-track);
+    border-radius: 4px;
+    overflow: hidden;
+}
+.progress-fill {
+    height: 100%;
+    background: var(--primary);
+    transition: width 0.3s;
+}
+.progress-fill.is-at-limit { background: var(--danger); }
 
 /* --- Chart sizing --- */
 /* Recharts needs a definite height on the wrapper to lay out at all, so this is a real

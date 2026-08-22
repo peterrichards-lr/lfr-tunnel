@@ -2,6 +2,22 @@
 
 VERSION ?= $(shell grep -oE 'Version = "[^"]+"' pkg/config/version.go | cut -d'"' -f2)
 
+# Which gateway, status page and portal a build points at by default. These describe one
+# deployment rather than the software, so they are not in the source tree (#1188) -- set
+# them in your own environment to bake your deployment's values into your binaries:
+#
+#   LFT_DEFAULT_SERVER_URL=https://tunnel.example.com make build
+#
+# Unset is fully supported: the client then asks to be pointed at a gateway instead of
+# guessing one, and the status-page and portal hints are simply omitted.
+LFT_DEFAULT_SERVER_URL ?=
+LFT_DEFAULT_STATUS_PAGE_URL ?=
+LFT_DEFAULT_PORTAL_URL ?=
+DEPLOYMENT_LDFLAGS = \
+	-X lfr-tunnel/pkg/config.DefaultServerURL=$(LFT_DEFAULT_SERVER_URL) \
+	-X lfr-tunnel/pkg/config.DefaultStatusPageURL=$(LFT_DEFAULT_STATUS_PAGE_URL) \
+	-X lfr-tunnel/pkg/config.DefaultPortalURL=$(LFT_DEFAULT_PORTAL_URL)
+
 # EDR-safe test execution directory (defaults to /private/tmp on macOS to match SentinelOne EDR whitelist, or /tmp / %TEMP% on Linux/Windows)
 ifeq ($(OS),Windows_NT)
 LFT_TEST_DIR ?= $(subst \,/,$(or $(TMPDIR),$(TEMP),$(TMP),/tmp))
@@ -60,8 +76,8 @@ build: clean
 	cd ui && (which pnpm >/dev/null 2>&1 && pnpm install && pnpm run build || node node_modules/.pnpm/vite@8.1.5_@types+node@24.13.3/node_modules/vite/bin/vite.js build)
 	rm -rf pkg/server/ui-dist
 	cp -r ui/dist pkg/server/ui-dist
-	go build -ldflags="-s -w -X lfr-tunnel/pkg/config.Version=$(VERSION)" -trimpath -o bin/lfr-tunnel ./cmd/lfr-tunnel
-	go build -ldflags="-s -w -X lfr-tunnel/pkg/config.Version=$(VERSION)" -trimpath -o bin/lfr-tunneld ./cmd/lfr-tunneld
+	go build -ldflags="-s -w $(DEPLOYMENT_LDFLAGS) -X lfr-tunnel/pkg/config.Version=$(VERSION)" -trimpath -o bin/lfr-tunnel ./cmd/lfr-tunnel
+	go build -ldflags="-s -w $(DEPLOYMENT_LDFLAGS) -X lfr-tunnel/pkg/config.Version=$(VERSION)" -trimpath -o bin/lfr-tunneld ./cmd/lfr-tunneld
 
 deploy:
 	@go run ./cmd/lfr-tunnel-ops deploy

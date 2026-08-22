@@ -138,6 +138,14 @@ func main() {
 	isExplicitServer := *serverURL != "" || os.Getenv("LFT_CLIENT_SERVER") != "" || os.Getenv("LFT_SERVER_URL") != "" || os.Getenv("LFT_SERVER") != ""
 	resolveServerURL(cfg, isExplicitServer)
 
+	// A build that bakes in no DefaultServerURL (#1188) reaches here with nothing to
+	// connect to. Say so now, in terms the user can act on -- otherwise the first symptom
+	// is a request to the empty string failing somewhere inside registration.
+	if cfg.ServerURL == "" {
+		log.Fatalf("[Error] No tunnel server configured. Pass -server https://your-gateway.example.com, " +
+			"set LFT_SERVER_URL, or add server_url to your client config file.")
+	}
+
 	if *guiFlag {
 		gui.StartGUI(cfg)
 		return
@@ -149,8 +157,9 @@ func main() {
 	if err == nil && info != nil {
 		if info.MaintenanceMode == "true" {
 			slog.Info("[Client] The Gateway server is currently undergoing maintenance.")
-			slog.Info("[Client] Check the service status page for active outages:")
-			slog.Info(fmt.Sprintf("         👉 %s (Cmd/Ctrl+Click to open)", config.DefaultStatusPageURL))
+			for _, line := range statusPageAdvice() {
+				slog.Info(line)
+			}
 			os.Exit(1)
 		}
 		if config.Version != "dev" {
@@ -947,12 +956,8 @@ func attemptRegistration(cfg *config.ClientConfig, portMappings []client.PortMap
 			// A 5xx or transport error is the gateway's problem, not the user's, and
 			// another region may well be healthy.
 			return nil, &registrationFailure{
-				err: err,
-				advice: []string{
-					"[Client] Gateway appears to be offline or undergoing maintenance.",
-					"[Client] Check the service status page for active outages:",
-					fmt.Sprintf("         👉 %s (Cmd/Ctrl+Click to open)", config.DefaultStatusPageURL),
-				},
+				err:    err,
+				advice: append([]string{"[Client] Gateway appears to be offline or undergoing maintenance."}, statusPageAdvice()...),
 			}
 		}
 
@@ -1436,6 +1441,22 @@ func (c *regionCooldowns) filter(regions map[string]string) map[string]string {
 		return regions
 	}
 	return out
+}
+
+// statusPageAdvice returns the "check the status page" lines, or nothing at all when this
+// build has no status page configured (#1188).
+//
+// Pointing someone at a status page for an unrelated service while they debug their own
+// outage is worse than staying quiet, so a build with no DefaultStatusPageURL simply omits
+// the suggestion rather than printing a bare arrow.
+func statusPageAdvice() []string {
+	if config.DefaultStatusPageURL == "" {
+		return nil
+	}
+	return []string{
+		"[Client] Check the service status page for active outages:",
+		fmt.Sprintf("         👉 %s (Cmd/Ctrl+Click to open)", config.DefaultStatusPageURL),
+	}
 }
 
 func resolveServerURL(cfg *config.ClientConfig, isExplicitServer bool) {

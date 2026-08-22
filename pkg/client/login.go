@@ -61,10 +61,7 @@ func RunLogin(serverURL string) error {
 		_ = srv.Serve(listener) //nolint:errcheck
 	}()
 
-	portalURL := strings.Replace(serverURL, "tunnel.", "portal.", 1)
-	if !strings.Contains(portalURL, "portal.") {
-		portalURL = config.DefaultPortalURL // Fallback to our canonical portal URL
-	}
+	portalURL := resolvePortalURL(serverURL)
 
 	fmt.Println("Opening your browser to authenticate...")
 	_ = openBrowserFunc(portalURL) //nolint:errcheck
@@ -108,6 +105,28 @@ func RunLogin(serverURL string) error {
 }
 
 var openBrowserFunc = openBrowser
+
+// resolvePortalURL works out which portal to open a browser at for a given gateway.
+//
+// Deployments conventionally name the gateway tunnel.<domain> and the portal
+// portal.<domain>, so the substitution covers the normal case for anyone, not just one
+// organisation. When it doesn't apply -- a gateway called something else entirely -- fall
+// back to this build's configured portal if it has one, and otherwise to the gateway
+// itself, which serves the portal too.
+//
+// The last step matters: this used to fall back to one organisation's production portal, so
+// a self-hoster whose gateway wasn't named tunnel.* was sent to a stranger's login page to
+// authenticate (#1188). Sending them to the server they are already talking to is both
+// correct and the safe direction to be wrong in.
+func resolvePortalURL(serverURL string) string {
+	if portal := strings.Replace(serverURL, "tunnel.", "portal.", 1); strings.Contains(portal, "portal.") {
+		return portal
+	}
+	if config.DefaultPortalURL != "" {
+		return config.DefaultPortalURL
+	}
+	return serverURL
+}
 
 func openBrowser(url string) error {
 	var cmd string

@@ -22,6 +22,13 @@
         }
 
         :root[data-theme="light"] {
+            /* Light-theme variants. Without these, --success and --danger kept the values
+               tuned for a dark background and were used as text colour on light surfaces:
+               #10b981 on the copy box measured 2.42:1 and #ef4444 measured 3.60:1, against
+               a WCAG AA requirement of 4.5:1 (#1217). These are the same values Portal V2's
+               light theme already uses, so the two portals agree rather than diverging. */
+            --success: #047857;
+            --danger: #b91c1c;
             --bg-base: #f1f5f9;
             --bg-card: rgba(255, 255, 255, 0.8);
             --bg-card-hover: rgba(255, 255, 255, 1);
@@ -44,6 +51,13 @@
 
         @media (prefers-color-scheme: light) {
             :root:not([data-theme="dark"]) {
+            /* Light-theme variants. Without these, --success and --danger kept the values
+               tuned for a dark background and were used as text colour on light surfaces:
+               #10b981 on the copy box measured 2.42:1 and #ef4444 measured 3.60:1, against
+               a WCAG AA requirement of 4.5:1 (#1217). These are the same values Portal V2's
+               light theme already uses, so the two portals agree rather than diverging. */
+                --success: #047857;
+                --danger: #b91c1c;
                 --bg-base: #f1f5f9;
                 --bg-card: rgba(255, 255, 255, 0.8);
                 --bg-card-hover: rgba(255, 255, 255, 1);

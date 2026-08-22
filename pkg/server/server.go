@@ -1200,6 +1200,16 @@ func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		if (r.Method == http.MethodGet || r.Method == http.MethodHead) && strings.HasPrefix(r.URL.Path, "/portalv2") {
 			subFS, err := fs.Sub(uiDistFS, "ui-dist")
 			if err == nil {
+				// ui-dist is generated and no longer committed (#1196), so a binary built
+				// with a bare `go build` embeds only the .gitkeep placeholder. Without this
+				// the SPA fallback below would ask for an index.html that isn't there and
+				// return a bare 404, which reads as a routing bug rather than a missing
+				// build step.
+				if _, statErr := fs.Stat(subFS, "index.html"); statErr != nil {
+					http.Error(w, "UI not built. Run 'make build' first.", http.StatusInternalServerError)
+					return
+				}
+
 				cleanPath := strings.TrimPrefix(r.URL.Path, "/portalv2")
 				cleanPath = strings.TrimPrefix(cleanPath, "/")
 				if cleanPath == "" {

@@ -110,20 +110,10 @@ jobs:
           pnpm run lint
           pnpm run build
 
-      - name: Build UI and check Sync
-        run: |
-          cd ui
-          pnpm install
-          pnpm run build
-          cd ..
-          rm -rf pkg/server/ui-dist
-          cp -r ui/dist pkg/server/ui-dist
-          if [ -n "$(git status --porcelain pkg/server/ui-dist)" ]; then
-            echo "❌ UI build out of sync! Please run 'make build' locally and commit the ui-dist changes."
-            git status --porcelain pkg/server/ui-dist
-            exit 1
-          fi
-        shell: bash
+      # The "Build UI and check Sync" step that used to sit here is gone with #1196:
+      # ui-dist is no longer committed, so there is nothing for it to be out of sync with.
+      # "Check React UI Syntax & Types" above already runs pnpm run build, so a broken UI
+      # build still fails this job.
 
       - name: Run Linter (golangci-lint)
         uses: golangci/golangci-lint-action@v9

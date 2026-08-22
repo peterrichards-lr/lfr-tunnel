@@ -22,17 +22,36 @@ central:
   host: central.example.com
   # Path to your SSH private key for that host. ~ is expanded to your home directory.
   identity_file: ~/.ssh/my-central-key.pem
-  # Optional (#1050). Only `deploy` uses this, and only if set: if the target's EC2
-  # instance is stopped (e.g. an edge caught inside a scheduled power-off window), deploy
+  # Optional (#1050, #1187). Only `deploy` uses this, and only if set: if the target
+  # machine is stopped (e.g. an edge caught inside a scheduled power-off window), deploy
   # starts it, waits for SSH, deploys, then stops it back afterward -- whether the deploy
-  # succeeds or fails. Leave unset (or omit the line) to never touch EC2 power state, same
-  # as before this field existed. Can also be set via -aws-region or the AWS_REGION env var.
+  # succeeds or fails. Leave unset (or omit the line) to never touch power state at all.
+  #
+  # power_hook is the script that actually reads and changes the power state. lfr-tunnel
+  # itself knows nothing about any cloud provider -- it only knows the hook's contract --
+  # so running somewhere other than AWS means writing a script, not patching Go:
+  #
+  #   <hook> status <host>   print "<state> [id]", exit 0
+  #   <hook> start  <host>   start it, return only once it is running
+  #   <hook> stop   <host>   request a stop, return once accepted
+  #
+  # A reference implementation for AWS EC2 ships in the repo. Can also be set via the
+  # LFT_POWER_HOOK env var.
+  # power_hook: scripts/common/lfr-power-hook-aws.sh
+
+  # Passed to the hook as AWS_REGION. Required by the bundled AWS hook; whether your own
+  # hook needs it is up to your hook. Can also be set via -aws-region or AWS_REGION.
+  #
+  # Setting this without a power_hook is an error rather than a silent no-op: it used to
+  # be the whole switch for power management, and quietly leaving a started node running
+  # is exactly the failure the restore check exists to catch (#1183).
   # aws_region: eu-west-1
 
-  # Optional, and only used alongside aws_region. Narrows the instance lookup to
-  # resources carrying this tag, written Key=Value. Without it the lookup matches on
-  # public address alone, so a mis-set region or a stale DNS record could in principle
-  # find an unrelated instance that happens to share an address.
+  # Optional, and only used alongside a power_hook. Passed through as LFT_INSTANCE_TAG.
+  # The bundled AWS hook uses it to narrow the instance lookup to resources carrying this
+  # tag, written Key=Value. Without it that lookup matches on public address alone, so a
+  # mis-set region or a stale DNS record could in principle find an unrelated instance
+  # that happens to share an address.
   #
   # There is deliberately no default. A tag value names one particular deployment, and
   # this file carries no values of its own -- the operator is the only one who knows

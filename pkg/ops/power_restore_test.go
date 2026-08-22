@@ -18,7 +18,8 @@ func TestPowerRestoreFailureIsRecorded(t *testing.T) {
 		t.Fatal("expected no failure recorded initially")
 	}
 
-	powerRestoreFailed("i-0123456789abcdef0", "apac.lfr-demo.se", "ap-northeast-1", "credentials expired")
+	powerRestoreFailed("i-0123456789abcdef0 (apac.lfr-demo.se)", "apac.lfr-demo.se",
+		"scripts/common/lfr-power-hook-aws.sh", "credentials expired")
 
 	got := PowerRestoreFailure()
 	if got == "" {
@@ -37,7 +38,7 @@ func TestPowerRestoreFailureIsRecorded(t *testing.T) {
 func TestPowerRestoreFailureStartsClear(t *testing.T) {
 	t.Cleanup(func() { powerRestoreFailure = "" })
 
-	powerRestoreFailed("i-aaa", "one.example", "eu-west-1", "boom")
+	powerRestoreFailed("i-aaa", "one.example", "/opt/hooks/power.sh", "boom")
 	if PowerRestoreFailure() == "" {
 		t.Fatal("fixture failed")
 	}

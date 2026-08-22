@@ -113,7 +113,7 @@ export default function AdminTelemetry() {
     <div id="telemetry-page" className="animate-fade-in">
       <div className="page-header flex-wrap gap-lg">
         <div>
-          <h2 className="page-header__title">{t('telemetry_title', 'Real-time Telemetry')}</h2>
+          <h1 className="page-header__title">{t('telemetry_title', 'Real-time Telemetry')}</h1>
           <p className="page-header__desc">
             {t('telemetry_desc', 'Monitor active tunnels, bandwidth consumption, and visitor traffic in real-time.')}
           </p>

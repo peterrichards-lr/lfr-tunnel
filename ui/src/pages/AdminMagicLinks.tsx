@@ -113,7 +113,7 @@ export default function AdminMagicLinks() {
     <div>
       <div className="page-header">
         <div>
-          <h3 className="page-header__title">{t('magic_links', 'Active Magic Links')}</h3>
+          <h1 className="page-header__title">{t('magic_links', 'Active Magic Links')}</h1>
           <p className="page-header__desc">{t('magic_links_desc', 'Track pending passwordless sign-in and invitation tokens.')}</p>
         </div>
       </div>

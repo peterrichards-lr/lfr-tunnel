@@ -33,6 +33,7 @@
     --surface-selected: rgba(59, 130, 246, 0.08);
     --shadow-glass: 0 8px 32px 0 rgba(0, 0, 0, 0.37);
     --shadow-glow: 0 0 20px rgba(59, 130, 246, 0.3);
+    --shadow-lg: 0 10px 25px rgba(0, 0, 0, 0.5);
     --table-row-hover: rgba(255, 255, 255, 0.03);
 
     /* Spacing Design Tokens (theme-independent but defined here as the canonical source) */

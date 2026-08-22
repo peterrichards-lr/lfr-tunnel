@@ -103,6 +103,13 @@ jobs:
         with:
           version: 11
 
+      - name: Check theme tokens resolve
+        # A var(--x) that resolves to nothing makes the whole declaration invalid and the
+        # browser drops it silently, so neither review nor the build notices. #1221 was five
+        # of them, including a print rule that made the dark theme print a near-black page;
+        # #1217 was a colour inherited by a theme it was never designed for.
+        run: node scripts/check-theme-tokens.mjs
+
       - name: Check React UI Syntax & Types
         run: |
           cd ui

@@ -655,8 +655,14 @@ html[dir="rtl"] td, html[dir="rtl"] th {
     }
     
     body {
-        background: var(--bg) !important;
-        color: var(--text-color) !important;
+        /* Deliberately literal, not theme tokens. This previously read var(--bg) and
+           var(--text-main), neither of which is defined anywhere -- so both declarations
+           were invalid and dropped, the body kept its on-screen colours, and
+           print-color-adjust: exact then told the browser to reproduce them faithfully.
+           On the dark theme that prints a near-black page, and Analytics has a Print
+           button (#1221). Paper is not themed: print is black on white. */
+        background: #ffffff !important;
+        color: #000000 !important;
         -webkit-print-color-adjust: exact !important;
         print-color-adjust: exact !important;
     }
@@ -814,7 +820,7 @@ html[dir="rtl"] td, html[dir="rtl"] th {
 /* --- Driver.js Custom Styling Overrides --- */
 .driver-popover.driverjs-theme {
     background: var(--bg-card) !important;
-    color: var(--text-color) !important;
+    color: var(--text-main) !important;
     border: 1px solid var(--border) !important;
     backdrop-filter: blur(12px) !important;
     -webkit-backdrop-filter: blur(12px) !important;
@@ -860,7 +866,7 @@ html[dir="rtl"] td, html[dir="rtl"] th {
 }
 
 .driver-popover.driverjs-theme .driver-popover-close-btn:hover {
-    color: var(--text-color) !important;
+    color: var(--text-main) !important;
 }
 
 .driver-popover.driverjs-theme .driver-popover-arrow {
@@ -2053,9 +2059,9 @@ input[type="checkbox"] { accent-color: var(--primary); }
     position: absolute;
     right: 0;
     top: 100%;
-    margin-top: var(--space-xs, 4px);
+    margin-top: var(--spacing-xs);
     z-index: 50;
-    padding: var(--space-md, 12px);
+    padding: var(--spacing-md);
     border-radius: 8px;
     border: 1px solid var(--border);
     background-color: var(--bg-card);
@@ -2065,7 +2071,7 @@ input[type="checkbox"] { accent-color: var(--primary); }
     -webkit-backdrop-filter: blur(16px);
     display: flex;
     flex-direction: column;
-    gap: var(--space-xs, 4px);
+    gap: var(--spacing-xs);
     min-width: 200px;
 }
 
@@ -2111,7 +2117,7 @@ input[type="checkbox"] { accent-color: var(--primary); }
     bottom: 2rem;
     right: 2rem;
     z-index: 99;
-    box-shadow: var(--shadow-lg, 0 10px 25px rgba(0,0,0,0.5));
+    box-shadow: var(--shadow-lg);
     padding: 0.5rem 1rem;
     border-radius: 9999px;
     font-weight: 600;

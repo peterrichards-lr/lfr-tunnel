@@ -265,6 +265,13 @@ func StartInspector(port int, engine *InterceptorEngine) (int, error) {
 				"rate_limit":           cfg.RateLimit,
 				"maintenance_path":     cfg.MaintenancePath,
 				"nav_placement":        cfg.NavPlacement,
+				"log_dir":              cfg.LogDir,
+			}
+			// Also report where logs are being written right now. The saved value can be
+			// blank (meaning "the default") or changed since this session started, and the
+			// question the Inspector is actually asked is "where are my logs?" (#1223).
+			if effective, derr := LogDir(); derr == nil {
+				resp["log_dir_effective"] = effective
 			}
 			_ = json.NewEncoder(w).Encode(resp) //nolint:errcheck
 			return
@@ -283,6 +290,7 @@ func StartInspector(port int, engine *InterceptorEngine) (int, error) {
 				RateLimit          int    `json:"rate_limit"`
 				MaintenancePath    string `json:"maintenance_path"`
 				NavPlacement       string `json:"nav_placement"`
+				LogDir             string `json:"log_dir"`
 			}
 			if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 				w.WriteHeader(http.StatusBadRequest)
@@ -310,6 +318,10 @@ func StartInspector(port int, engine *InterceptorEngine) (int, error) {
 			cfg.RateLimit = req.RateLimit
 			cfg.MaintenancePath = req.MaintenancePath
 			cfg.NavPlacement = req.NavPlacement
+			// Saved for the next run only. The traffic and error logs are opened once at
+			// startup, so a directory change cannot move an open file handle -- the
+			// Settings tab says as much rather than implying it takes effect now (#1223).
+			cfg.LogDir = strings.TrimSpace(req.LogDir)
 
 			engine.MaintenancePath = req.MaintenancePath
 			engine.NavPlacement = req.NavPlacement

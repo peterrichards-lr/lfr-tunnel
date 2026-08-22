@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strings"
 	"sync"
 	"time"
 	"unicode/utf8"
@@ -22,17 +23,73 @@ const (
 	maxLoggedBodyBytes = 10 * 1024
 )
 
-// LogDir returns the directory holding the client's persistent logs.
+// configuredLogDir is the operator's chosen log directory, or "" for the default.
+//
+// Held at package level, and set once at startup, because LogDir has several readers as
+// well as the writer -- ClientLogPath and ResolveClientLogPath back the Inspector's log
+// viewer. Threading the value only as far as the writer would leave the Inspector reading
+// an empty default directory and reporting no logs at all (#1223). The mutex is because
+// the Inspector serves HTTP concurrently with the tunnel.
+var (
+	logDirMu         sync.RWMutex
+	configuredLogDir string
+)
+
+// SetLogDir records where the persistent logs should live. Empty restores the default.
+// Call it before opening any logger.
+func SetLogDir(dir string) {
+	logDirMu.Lock()
+	defer logDirMu.Unlock()
+	configuredLogDir = strings.TrimSpace(dir)
+}
+
+// ConfiguredLogDir returns the directory that was explicitly configured, or "" when the
+// default is in use. Distinct from LogDir, which resolves and creates the effective path:
+// this is for reporting what the operator actually set.
+func ConfiguredLogDir() string {
+	logDirMu.RLock()
+	defer logDirMu.RUnlock()
+	return configuredLogDir
+}
+
+// LogDir returns the directory holding the client's persistent logs, creating it if
+// necessary. Defaults to ~/.lfr-tunnel/logs when nothing is configured.
 func LogDir() (string, error) {
+	dir, err := resolveLogDir(ConfiguredLogDir())
+	if err != nil {
+		return "", err
+	}
+	if err := os.MkdirAll(dir, 0700); err != nil {
+		// Name the directory. A configured path that cannot be created is usually a typo,
+		// and an error that does not say which path failed is not actionable.
+		return "", fmt.Errorf("creating log directory %s: %w", dir, err)
+	}
+	return dir, nil
+}
+
+// resolveLogDir turns a configured value into an absolute path, without touching the disk
+// so it stays testable. Empty yields the default location.
+func resolveLogDir(configured string) (string, error) {
 	home, err := os.UserHomeDir()
 	if err != nil {
 		return "", err
 	}
-	dir := filepath.Join(home, ".lfr-tunnel", "logs")
-	if err := os.MkdirAll(dir, 0700); err != nil {
-		return "", err
+	if configured == "" {
+		return filepath.Join(home, ".lfr-tunnel", "logs"), nil
 	}
-	return dir, nil
+	return expandHome(configured, home), nil
+}
+
+// expandHome expands a leading ~ against home. Only a leading ~ is meaningful; a tilde
+// elsewhere in a path is an ordinary character.
+func expandHome(path, home string) string {
+	if path == "~" {
+		return home
+	}
+	if strings.HasPrefix(path, "~/") || strings.HasPrefix(path, `~\`) {
+		return filepath.Join(home, path[2:])
+	}
+	return path
 }
 
 // LegacyClientLogPath is where background-mode output was written before logs moved

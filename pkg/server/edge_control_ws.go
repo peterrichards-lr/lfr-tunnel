@@ -788,6 +788,15 @@ func (s *Server) runEdgeControlChannel() {
 				if err := s.registry.UpdateLeaseHeaders(msg.Subdomain, msg.Headers); err != nil {
 					slog.Error(fmt.Sprintf("[Edge Control] Failed to update lease headers for %s: %v", msg.Subdomain, err))
 				}
+			default:
+				// Ignoring a frame this build has no case for is the correct behaviour --
+				// an older node must tolerate a newer control plane rather than die on it.
+				// Doing so *silently* is not: central sent node_shutdown_warning every
+				// scheduled stop for weeks and every edge discarded it here, because the
+				// case handling it shipped after the release the fleet was running. From
+				// the outside that was indistinguishable from central never sending at all
+				// (#1245). A version skew that changes behaviour has to say so.
+				slog.Warn(fmt.Sprintf("[Edge Control] Ignoring unknown message type %q from the control plane -- this node is likely running an older version than central", msg.Type))
 			}
 		}
 

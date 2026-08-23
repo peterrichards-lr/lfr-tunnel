@@ -1,5 +1,36 @@
 [
   {
+    "version": "v1.48.0",
+    "release_date": "2026-08-23",
+    "features": [
+      "fix(server): log control-plane messages an edge does not recognise (#1253)",
+      "feat(client): show a gateway shutdown countdown in the TUI (#1242)",
+      "feat(client): deliver node shutdown warnings to the client (#1240)",
+      "fix(portal-v2): name the edge row actions and mark the destructive one (#1236)",
+      "fix(ui): make every referenced theme token resolve, and check it stays that way (#1235)",
+      "fix(portal-v2): stop the audit log filling with routine visit entries (#1233)",
+      "fix(portal-v2): give every form control a programmatic label (#1232)",
+      "fix(portal-v2): add landmarks, a skip link, and a real h1 per page (#1231)",
+      "fix(portal-v1): give the status colours light-theme variants (#1230)",
+      "fix(portal-v1): give every form field a programmatic label (#1229)",
+      "fix(portal-v1): make the sidebar navigation keyboard and screen-reader accessible (#1228)",
+      "fix(ui): make the sidebar scrollbar visible in both portals (#1227)",
+      "feat(portal): let the owner preview the UI as another role (read-only) (#1226)",
+      "feat(client): make the log directory configurable from the Inspector (#1224)",
+      "refactor(ui): replace static inline styles with utility and component classes (#1222)",
+      "fix(config): stop shipping one deployment's hostnames as everyone's defaults (#1210)",
+      "refactor(ops): put instance power management behind a configurable hook (#1198)",
+      "build: stop committing the generated ui-dist bundle (#1197)",
+      "fix(ops): let a stop become visible before declaring it failed (#1195)",
+      "fix(ui): reorder the dashboard panels and stop What's New auto-expanding (#1193)",
+      "fix(ui): give modals their own padding (#1179)",
+      "fix(ops): make the instance tag operator-supplied, not hardcoded (#1185)",
+      "feat(client): record why the failback prober decided what it did (#1181)",
+      "fix(ops): fail the deploy if it leaves an instance running (#1184)",
+      "fix(ops): verify a deploy before powering the node back down (#1177)"
+    ]
+  },
+  {
     "version": "v1.47.0",
     "release_date": "2026-08-21",
     "features": [
@@ -40,14 +71,6 @@
     "features": [
       "Dynamic TUI Scrolling Requests Table: Fixed TUI request history loop to display 8 newest requests at top, ensuring incoming HTTP requests update live.",
       "Live Request Stream Rendering: Restores continuous real-time scrolling of captured HTTP requests in the CLI dashboard interface."
-    ]
-  },
-  {
-    "version": "v1.44.23",
-    "release_date": "2026-08-20",
-    "features": [
-      "Automated Primary Region Failback (#1103): Added background health prober in client CLI that pings developer's primary regional edge node when running in failover mode.",
-      "Seamless Primary Migration: Automatically re-registers on primary edge node when it recovers, updating TUI headers, state files, and tunnels live without CLI restarts."
     ]
   }
 ]

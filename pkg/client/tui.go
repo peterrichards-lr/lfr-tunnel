@@ -206,6 +206,14 @@ func render(engine *InterceptorEngine, publicURLs []string, systemLogs []string)
 	fmt.Printf("  Uptime:       %-12s | Active Conns:  %-12d%s\n", uptime, activeConns, eol)
 	fmt.Printf("  Total Reqs:   %-12d | RTT Latency:   %d ms (Avg: %s)%s\n", reqTotal, latency, rttAvg, eol)
 	fmt.Printf("  Bytes In:     %-12s | Bytes Out:     %s%s\n", formatBytes(bytesIn), formatBytes(bytesOut), eol)
+	// A pending gateway shutdown, when the gateway has announced one (#1239). Placed
+	// under the metrics rather than in the log box because it is a countdown: it changes
+	// every render and belongs where the eye already goes for current state, not scrolling
+	// away in history.
+	if line := shutdownCountdownLine(engine); line != "" {
+		fmt.Printf("%s%s\n", line, eol)
+	}
+
 	fmt.Printf("================================================================================%s\n", eol)
 
 	// Scrolling Request History
@@ -300,6 +308,42 @@ func formatBytes(b int64) string {
 		exp++
 	}
 	return fmt.Sprintf("%.1f %cB", float64(b)/float64(div), "KMGTPE"[exp])
+}
+
+// shutdownCountdownLine renders the pending gateway shutdown, or "" when none is
+// announced.
+//
+// The countdown is recomputed from the announced time rather than shown as the gateway
+// last reported it: heartbeats arrive every few seconds, so a stored figure would visibly
+// stall and then jump. Once it reaches zero the line stays, saying so -- the shutdown is
+// still the most useful thing on screen at that moment, and the tunnel is about to move.
+func shutdownCountdownLine(engine *InterceptorEngine) string {
+	at, _, reason := engine.ShutdownWarning()
+	if at == 0 {
+		return ""
+	}
+
+	remaining := time.Until(time.Unix(at, 0))
+	when := "now"
+	if remaining > 0 {
+		when = "in " + formatCountdown(remaining)
+	}
+
+	line := fmt.Sprintf("  \033[33m⚠ Gateway shutting down %s\033[0m", when)
+	if reason != "" {
+		line += fmt.Sprintf(" \033[90m(%s)\033[0m", reason)
+	}
+	return line
+}
+
+// formatCountdown renders a duration the way someone reads a countdown: minutes and
+// seconds while that is meaningful, seconds alone once it is nearly up.
+func formatCountdown(d time.Duration) string {
+	total := int(d.Seconds())
+	if total < 60 {
+		return fmt.Sprintf("%ds", total)
+	}
+	return fmt.Sprintf("%dm %02ds", total/60, total%60)
 }
 
 func formatUptime(uptimeStart time.Time) string {

@@ -116,6 +116,12 @@ type InterceptorEngine struct {
 	// the one requested -- StartInspector walks upwards when the port is in use.
 	inspectorPort int
 
+	// shutdownWarnedAt is the Unix time the connected gateway says it is going down, with
+	// the countdown and reason as last reported. Zero means none announced (#1238).
+	shutdownWarnedAt    int64
+	shutdownWarnSeconds int
+	shutdownWarnReason  string
+
 	// latestVersion is the newest client version the gateway advertises. Refreshed while
 	// running, not just at startup: a client left up for days would otherwise never learn
 	// about a release, and those are exactly the users who do not revisit the portal
@@ -317,14 +323,7 @@ func probeGatewayHealth(ctx context.Context, serverURL string, timeout time.Dura
 // Anything unreadable, unparseable or empty is treated as "lease present". A false
 // negative merely delays recovery by one tick; a false positive would re-register a
 // perfectly healthy tunnel, so the doubt goes that way deliberately.
-func gatewayHasNoLease(resp *http.Response) bool {
-	if resp == nil || resp.Body == nil {
-		return false
-	}
-	body, err := io.ReadAll(io.LimitReader(resp.Body, 512))
-	if err != nil {
-		return false
-	}
+func gatewayHasNoLease(body []byte) bool {
 	body = bytes.TrimSpace(body)
 	if len(body) == 0 {
 		return false
@@ -336,6 +335,45 @@ func gatewayHasNoLease(resp *http.Response) bool {
 		return false
 	}
 	return payload.Status == "ok"
+}
+
+// noteShutdownWarning records that the connected gateway has told us it is going down,
+// and says so once per warning rather than on every heartbeat -- these arrive with the
+// status ping, so an unguarded log would repeat every few seconds for the whole countdown.
+//
+// Recording it is all this does today. Acting on it -- bringing up a session on another
+// gateway before this one goes, so the move costs nothing -- is the remaining half of
+// #1238, and now has a signal to hang off.
+func (e *InterceptorEngine) noteShutdownWarning(w *NodeShutdownWarning) {
+	if w == nil || w.ShutdownAt == 0 {
+		return
+	}
+
+	e.mu.Lock()
+	already := e.shutdownWarnedAt == w.ShutdownAt
+	e.shutdownWarnedAt = w.ShutdownAt
+	e.shutdownWarnSeconds = w.SecondsRemaining
+	e.shutdownWarnReason = w.Reason
+	e.mu.Unlock()
+	if already {
+		return
+	}
+
+	slog.Info(fmt.Sprintf("[Client] Gateway reports it is shutting down in %ds: %s", w.SecondsRemaining, w.Reason))
+	e.LogEvent("warn", "gateway_shutdown_warning", map[string]any{
+		"seconds_remaining": w.SecondsRemaining,
+		"shutdown_at":       w.ShutdownAt,
+		"reason":            w.Reason,
+		"node_id":           w.NodeID,
+	})
+}
+
+// ShutdownWarning returns the pending gateway shutdown, if one has been announced: the
+// Unix time it is expected at, the countdown as last reported, and the reason.
+func (e *InterceptorEngine) ShutdownWarning() (at int64, secondsRemaining int, reason string) {
+	e.mu.RLock()
+	defer e.mu.RUnlock()
+	return e.shutdownWarnedAt, e.shutdownWarnSeconds, e.shutdownWarnReason
 }
 
 // ConsumeLeaseLost reports whether the connected gateway has stopped holding our lease,
@@ -462,7 +500,19 @@ func (e *InterceptorEngine) StartHealthChecks(ctx context.Context, cancel contex
 							// Without this the client is told "ok" indefinitely after its
 							// lease is swept, serves no traffic and never re-registers --
 							// a dead tunnel that only a restart recovers.
-							if pingURL == serverURL && resp.StatusCode == http.StatusOK && gatewayHasNoLease(resp) {
+							// One read, two questions: whether the gateway still holds our
+							// lease, and whether it has told us it is going down. The body
+							// can only be consumed once, so it is read here rather than
+							// inside either check.
+							body, _ := io.ReadAll(io.LimitReader(resp.Body, 512)) //nolint:errcheck
+
+							if pingURL == serverURL {
+								if warning, ok := ParseNodeShutdownWarning(body); ok {
+									e.noteShutdownWarning(warning)
+								}
+							}
+
+							if pingURL == serverURL && resp.StatusCode == http.StatusOK && gatewayHasNoLease(body) {
 								slog.Info("[Client] Gateway no longer holds a lease for this session. Re-registering...")
 								e.LogEvent("warn", "lease_missing", map[string]any{
 									"region":       region,

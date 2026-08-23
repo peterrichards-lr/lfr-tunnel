@@ -764,6 +764,17 @@ func (s *Server) runEdgeControlChannel() {
 					s.maintenanceMode = false
 				}
 				s.maintMutex.Unlock()
+			case "node_shutdown_warning":
+				// Central warns a specific node ahead of a scheduled stop. Recorded here
+				// and handed to clients on their next tunnel-status heartbeat, which is
+				// the only channel they already listen on -- their tunnel itself is a
+				// chisel connection owned by the library, with no frame channel of its
+				// own (#1238).
+				s.maintMutex.Lock()
+				s.pendingShutdownAt = msg.ShutdownAt
+				s.pendingShutdownReason = msg.Reason
+				s.maintMutex.Unlock()
+				slog.Info(fmt.Sprintf("[Edge Control] Node shutdown warning: %ds remaining (%s)", msg.SecondsRemaining, msg.Reason))
 			case "lease_kick":
 				if msg.Subdomain == "*" || msg.Subdomain == "" {
 					slog.Info("[Edge Control] Kicking ALL leases on this edge node")

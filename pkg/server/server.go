@@ -192,39 +192,44 @@ type Server struct {
 	// state. Stop waits on it so a cancelled goroutine has actually returned before the
 	// caller tears down what it was reading -- tests restoring package-level tunables
 	// raced the edge control channel still using them (issue #1131).
-	bgWG               sync.WaitGroup
-	rateLimiters       map[string]*ipLimiter
-	rlMutex            sync.Mutex
-	violations         map[string]int
-	vMutex             sync.Mutex
-	blacklist          sync.Map // memory cache for db blacklist
-	portalMap          sync.Map // memory cache for portal magic links and sessions
-	metrics            *MetricsCollector
-	nginxManager       *nginx.MaintenanceManager
-	caCert             *x509.Certificate
-	caKey              *rsa.PrivateKey
-	broadcastMutex     sync.RWMutex
-	broadcastMessage   string
-	targetedMessages   map[string]string
-	targetedMutex      sync.RWMutex
-	maintenanceMode    bool
-	maintTimer         *time.Timer
-	maintScheduledAt   time.Time
-	maintMutex         sync.RWMutex
-	unsubscribeSecret  string
-	translations       map[string]map[string]string
-	lastPortalActivity map[string]time.Time
-	portalActivityMu   sync.RWMutex
-	maintReason        string
-	maintAction        string
-	maintDuration      int
-	maintEndTime       time.Time
-	wsClients          map[*wsClient]bool
-	wsMutex            sync.RWMutex
-	edgeClients        map[string]*safeConn
-	edgeVersions       map[string]string // node_id -> version
-	edgeIPs            map[string]string // node_id -> public IP
-	edgeClientsMu      sync.RWMutex
+	bgWG             sync.WaitGroup
+	rateLimiters     map[string]*ipLimiter
+	rlMutex          sync.Mutex
+	violations       map[string]int
+	vMutex           sync.Mutex
+	blacklist        sync.Map // memory cache for db blacklist
+	portalMap        sync.Map // memory cache for portal magic links and sessions
+	metrics          *MetricsCollector
+	nginxManager     *nginx.MaintenanceManager
+	caCert           *x509.Certificate
+	caKey            *rsa.PrivateKey
+	broadcastMutex   sync.RWMutex
+	broadcastMessage string
+	targetedMessages map[string]string
+	targetedMutex    sync.RWMutex
+	maintenanceMode  bool
+	// pendingShutdownAt is when central last told this node it is going down, as a Unix
+	// time, with the reason. Zero means none pending. Relayed to connected clients on
+	// their tunnel-status heartbeat so they learn about it before it happens (#1238).
+	pendingShutdownAt     int64
+	pendingShutdownReason string
+	maintTimer            *time.Timer
+	maintScheduledAt      time.Time
+	maintMutex            sync.RWMutex
+	unsubscribeSecret     string
+	translations          map[string]map[string]string
+	lastPortalActivity    map[string]time.Time
+	portalActivityMu      sync.RWMutex
+	maintReason           string
+	maintAction           string
+	maintDuration         int
+	maintEndTime          time.Time
+	wsClients             map[*wsClient]bool
+	wsMutex               sync.RWMutex
+	edgeClients           map[string]*safeConn
+	edgeVersions          map[string]string // node_id -> version
+	edgeIPs               map[string]string // node_id -> public IP
+	edgeClientsMu         sync.RWMutex
 	// edgePingSentAt tracks when the control plane's own keepalive Ping was last sent to
 	// each WS-connected edge, so the matching Pong's arrival can be timed for RTT (see
 	// #976 -- edges are configured with no `url` in the current architecture, so the
@@ -1778,11 +1783,58 @@ func (s *Server) handleTunnelStatus(w http.ResponseWriter, r *http.Request) {
 			_ = _err //nolint:errcheck
 			s.notifications.SendAdminAlert("alert_notify_tunnel_offline", "LFR Tunnel Alert: Tunnel Offline", body)
 		}
-		w.WriteHeader(http.StatusOK)
+		// The body distinguishes this path from the no-lease one below: the client's
+		// gatewayHasNoLease treats {"status":"ok"} as "this gateway holds nothing for
+		// me". Answering that here would make a successful heartbeat look like a lost
+		// lease and re-register the tunnel every few seconds, so this path must never
+		// carry a status field -- only a pending shutdown, when there is one.
+		if warning := s.pendingShutdownWarning(); warning != nil {
+			respondJSON(w, http.StatusOK, warning)
+		} else {
+			w.WriteHeader(http.StatusOK)
+		}
 	} else {
 		// Central Gateway response for regional edge lease heartbeat: OK if region is online
 		respondJSON(w, http.StatusOK, map[string]string{"status": "ok"})
 	}
+}
+
+// pendingShutdownWarning is the body of a successful tunnel-status heartbeat when central
+// has warned this node that it is going down, or nil when it has not.
+//
+// Normally just an acknowledgement. When central has warned this node that it is going
+// down, the pending shutdown rides along -- shaped so the client's existing
+// ParseNodeShutdownWarning matches it, since that parser was written for this message and
+// has never had a channel to arrive on (#1238).
+//
+// The heartbeat is the right carrier: it is the one gateway-to-client channel the client
+// already listens to and already acts on, so nothing new has to be opened or polled.
+func (s *Server) pendingShutdownWarning() map[string]interface{} {
+	s.maintMutex.RLock()
+	at, reason := s.pendingShutdownAt, s.pendingShutdownReason
+	s.maintMutex.RUnlock()
+	if at == 0 {
+		return nil
+	}
+
+	remaining := at - time.Now().Unix()
+	if remaining <= 0 {
+		// The moment has passed; there is nothing useful left to warn about, and a
+		// negative countdown would read as nonsense to whoever saw it.
+		return nil
+	}
+
+	// Deliberately no "status" field -- see the caller.
+	warning := map[string]interface{}{
+		"type":              "node_shutdown_warning",
+		"action":            "shutdown_warning",
+		"seconds_remaining": int(remaining),
+		"shutdown_at":       at,
+	}
+	if reason != "" {
+		warning["reason"] = reason
+	}
+	return warning
 }
 
 // handleDomains responds with the supported root domains.

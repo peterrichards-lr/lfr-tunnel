@@ -1,19 +1,9 @@
 package client
 
 import (
-	"io"
-	"net/http"
-	"strings"
 	"testing"
 	"time"
 )
-
-func bodyResponse(body string) *http.Response {
-	return &http.Response{
-		StatusCode: http.StatusOK,
-		Body:       io.NopCloser(strings.NewReader(body)),
-	}
-}
 
 // TestGatewayHasNoLease is the regression test for #1146. handleTunnelStatus answers 200
 // whether it updated our lease or holds none at all, and the only difference is the body:
@@ -22,23 +12,27 @@ func bodyResponse(body string) *http.Response {
 func TestGatewayHasNoLease(t *testing.T) {
 	cases := []struct {
 		name string
-		resp *http.Response
+		body string
 		want bool
 	}{
-		{"empty body means our lease was updated", bodyResponse(""), false},
-		{"whitespace only is still an empty body", bodyResponse("  \n"), false},
-		{"status ok body means no lease is held", bodyResponse(`{"status":"ok"}`), true},
-		{"status ok with trailing newline", bodyResponse("{\"status\":\"ok\"}\n"), true},
+		{"empty body means our lease was updated", "", false},
+		{"whitespace only is still an empty body", "  \n", false},
+		{"status ok body means no lease is held", `{"status":"ok"}`, true},
+		{"status ok with trailing newline", "{\"status\":\"ok\"}\n", true},
 		// Doubt resolves towards "lease present": a false positive re-registers a
 		// working tunnel, a false negative only costs one more tick.
-		{"unparseable body is treated as lease present", bodyResponse("<html>502</html>"), false},
-		{"different status is not the no-lease branch", bodyResponse(`{"status":"maintenance"}`), false},
-		{"nil response", nil, false},
+		{"unparseable body is treated as lease present", "<html>502</html>", false},
+		{"different status is not the no-lease branch", `{"status":"maintenance"}`, false},
+		{"no body at all", "", false},
+		// A shutdown warning rides the lease-held path, so it must never look like the
+		// no-lease branch -- it deliberately carries no status field (#1238).
+		{"a shutdown warning still means our lease is held",
+			`{"type":"node_shutdown_warning","seconds_remaining":120,"shutdown_at":1,"reason":"deploy"}`, false},
 	}
 
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
-			if got := gatewayHasNoLease(tc.resp); got != tc.want {
+			if got := gatewayHasNoLease([]byte(tc.body)); got != tc.want {
 				t.Errorf("gatewayHasNoLease() = %v, want %v", got, tc.want)
 			}
 		})

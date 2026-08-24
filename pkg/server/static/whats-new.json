@@ -1,5 +1,16 @@
 [
   {
+    "version": "v1.48.1",
+    "release_date": "2026-08-24",
+    "features": [
+      "fix(server): answer 503 for a tunnel that moved and 404 for one that never existed (#1263)",
+      "fix(ops): bake deployment defaults into the binaries deploy-clients publishes (#1262)",
+      "ci(release): report which deployment defaults a release is built with (#1261)",
+      "fix(client): bound the registration handshake so an unreachable gateway fails fast (#1260)",
+      "fix(client): only announce the tunnel once it is actually connected (#1259)"
+    ]
+  },
+  {
     "version": "v1.48.0",
     "release_date": "2026-08-23",
     "features": [
@@ -63,14 +74,6 @@
       "Dependable Admin Email: Registration approval emails now reach administrators even if they have muted routine notifications, so unsubscribing can no longer silently block new users from being approved. Admin alerts also fall back to the configured owner when no dedicated notification address is set, and the gateway warns at startup if nobody would receive them.",
       "Gateway Stability: Fixed several concurrency faults in the gateway and edge control channel, including a goroutine leak on every edge reconnect and races during startup and shutdown.",
       "Self-Hosting Correctness: Self-hosted deployments no longer report tunnel status to this project's production gateway, and no longer fall back to its domain when promoting a reservation."
-    ]
-  },
-  {
-    "version": "v1.44.24",
-    "release_date": "2026-08-20",
-    "features": [
-      "Dynamic TUI Scrolling Requests Table: Fixed TUI request history loop to display 8 newest requests at top, ensuring incoming HTTP requests update live.",
-      "Live Request Stream Rendering: Restores continuous real-time scrolling of captured HTTP requests in the CLI dashboard interface."
     ]
   }
 ]

@@ -131,9 +131,21 @@ type EdgeHealthStatus struct {
 	// falls inside the node's own scheduled stop window (#887) -- internal
 	// bookkeeping, not exposed to the portal (which fetches the schedule
 	// itself, see EdgeDetailsModal/EditSchedule).
-	ScheduleStopTime  string `json:"-"`
-	ScheduleStartTime string `json:"-"`
-	ScheduleEnabled   bool   `json:"-"`
+	// Exposed since #1245. These were internal bookkeeping on the grounds that the portal
+	// fetches the schedule from the provisioner itself -- but that is a different question
+	// from what *central* believes, and only central's copy decides whether a node reads as
+	// Disabled and whether a shutdown warning is ever sent. When the two disagreed there
+	// was no way to see it: the provisioner returned one thing, central acted on another,
+	// and the difference was invisible from the outside.
+	ScheduleStopTime  string `json:"schedule_stop_time,omitempty"`
+	ScheduleStartTime string `json:"schedule_start_time,omitempty"`
+	ScheduleEnabled   bool   `json:"schedule_enabled"`
+	// ScheduleFetchedAt records when this node's schedule was last read from the
+	// provisioner, so a stale cache is visible rather than inferred.
+	ScheduleFetchedAt int64 `json:"schedule_fetched_at,omitempty"`
+	// ScheduleError carries the last provisioner failure for this node, if any. Empty
+	// means the most recent fetch succeeded.
+	ScheduleError string `json:"schedule_error,omitempty"`
 	// AdminDisabled is set when an operator stops a node via the portal
 	// (start/stop/restart/bulk actions) and cleared by a subsequent
 	// start/restart, so an intentional stop shows as "Disabled" rather than

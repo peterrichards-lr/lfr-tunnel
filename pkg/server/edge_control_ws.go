@@ -347,21 +347,43 @@ func (s *Server) BroadcastNodeShutdownWarning(nodeID string, secondsRemaining in
 
 	payload, err := json.Marshal(msg)
 	if err != nil {
+		slog.Error(fmt.Sprintf("[Edge WS] Could not encode a shutdown warning for %s: %v", nodeID, err))
 		return
 	}
 
 	s.edgeClientsMu.RLock()
 	defer s.edgeClientsMu.RUnlock()
 
+	// Every outcome is logged, including the misses. This used to send silently, so an
+	// operator could not tell a warning that fired from one that never did -- and the two
+	// were indistinguishable for weeks while the edge-side receiver was unreleased and
+	// discarding every frame. Establishing which had happened took a live test against a
+	// real scheduled stop (#1245).
 	if nodeID != "" {
-		if conn, exists := s.edgeClients[nodeID]; exists {
-			_ = conn.WriteMessage(websocket.TextMessage, payload) //nolint:errcheck
+		conn, exists := s.edgeClients[nodeID]
+		if !exists {
+			slog.Warn(fmt.Sprintf("[Edge WS] Shutdown warning for %s not sent: it has no control connection (stopping in %ds: %s)", nodeID, secondsRemaining, reason))
+			return
 		}
-	} else {
-		for _, conn := range s.edgeClients {
-			_ = conn.WriteMessage(websocket.TextMessage, payload) //nolint:errcheck
+		if err := conn.WriteMessage(websocket.TextMessage, payload); err != nil {
+			slog.Warn(fmt.Sprintf("[Edge WS] Shutdown warning for %s failed to send: %v", nodeID, err))
+			return
 		}
+		slog.Info(fmt.Sprintf("[Edge WS] Sent shutdown warning to %s: %ds remaining (%s)", nodeID, secondsRemaining, reason))
+		return
 	}
+
+	// No nodeID means every connected edge -- used for control-plane-wide events rather
+	// than a single node's schedule.
+	sent := 0
+	for id, conn := range s.edgeClients {
+		if err := conn.WriteMessage(websocket.TextMessage, payload); err != nil {
+			slog.Warn(fmt.Sprintf("[Edge WS] Shutdown warning to %s failed to send: %v", id, err))
+			continue
+		}
+		sent++
+	}
+	slog.Info(fmt.Sprintf("[Edge WS] Sent shutdown warning to %d edge node(s): %ds remaining (%s)", sent, secondsRemaining, reason))
 }
 
 // sendEdgeWSKick sends a lease kick message to a specific Edge node via WebSocket.

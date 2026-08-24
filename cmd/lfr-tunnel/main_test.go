@@ -321,7 +321,7 @@ func TestExcludeFailedRegionSkipsAfterFailback(t *testing.T) {
 
 	// After a failed failback: no cooldown, and discovery stays where it is.
 	cfg := newCfg()
-	excludeFailedRegion(cfg, nil, "https://eu.example", true)
+	excludeFailedRegion(cfg, nil, "https://eu.example", true, false)
 	if _, present := cooldowns.filter(cfg.Regions)["eu"]; !present {
 		t.Error("the region returned to after a failed failback must stay a candidate; cooling it down abandons a healthy edge")
 	}
@@ -332,7 +332,7 @@ func TestExcludeFailedRegionSkipsAfterFailback(t *testing.T) {
 	// A genuine connection loss still cools the region down and moves discovery.
 	resetCooldowns(t)
 	cfg = newCfg()
-	excludeFailedRegion(cfg, nil, "https://eu.example", false)
+	excludeFailedRegion(cfg, nil, "https://eu.example", false, false)
 	if _, present := cooldowns.filter(cfg.Regions)["eu"]; present {
 		t.Error("a region whose connection was lost must be excluded from the candidate set")
 	}
@@ -357,7 +357,7 @@ func TestExcludeFailedRegionAfterFailbackKeepsTwoRegionCaseSane(t *testing.T) {
 
 	// The failed failback cools the primary, as it should.
 	cooldowns.exclude("https://apac.example", regionFailoverCooldown)
-	excludeFailedRegion(cfg, nil, "https://eu.example", true)
+	excludeFailedRegion(cfg, nil, "https://eu.example", true, false)
 
 	candidates := cooldowns.filter(cfg.Regions)
 	if _, present := candidates["apac"]; present {

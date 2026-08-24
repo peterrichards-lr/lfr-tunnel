@@ -121,6 +121,12 @@ type InterceptorEngine struct {
 	shutdownWarnedAt    int64
 	shutdownWarnSeconds int
 	shutdownWarnReason  string
+	// migrateOnShutdownAt is set when a warning arrives and the client should move off this
+	// gateway before it stops, rather than waiting to be dropped (#1246). Separate from
+	// shutdownWarnedAt because that one stays set so the TUI can keep rendering its
+	// countdown, whereas this is read-and-cleared exactly once by the session loop.
+	migrateOnShutdownAt     int64
+	migrateOnShutdownReason string
 
 	// latestVersion is the newest client version the gateway advertises. Refreshed while
 	// running, not just at startup: a client left up for days would otherwise never learn
@@ -354,6 +360,13 @@ func (e *InterceptorEngine) noteShutdownWarning(w *NodeShutdownWarning) {
 	e.shutdownWarnedAt = w.ShutdownAt
 	e.shutdownWarnSeconds = w.SecondsRemaining
 	e.shutdownWarnReason = w.Reason
+	if !already {
+		// Raised once per distinct shutdown, not on every heartbeat that repeats the
+		// warning -- the session loop consumes it to move off this gateway before it
+		// stops (#1246).
+		e.migrateOnShutdownAt = w.ShutdownAt
+		e.migrateOnShutdownReason = w.Reason
+	}
 	e.mu.Unlock()
 	if already {
 		return
@@ -385,6 +398,29 @@ func (e *InterceptorEngine) ConsumeLeaseLost() bool {
 	lost := e.LeaseLost
 	e.LeaseLost = false
 	return lost
+}
+
+// ConsumeShutdownMigration reports whether the connected gateway has announced a shutdown
+// this client should move ahead of, clearing the signal as it does. Read-and-clear under one
+// lock, matching ConsumeLeaseLost: a watcher goroutine sets it while the session loop reads
+// it.
+//
+// Returns the announced shutdown time and reason so the caller can say why it moved, and how
+// long the gateway it is leaving will be away.
+func (e *InterceptorEngine) ConsumeShutdownMigration() (at int64, reason string, ok bool) {
+	e.mu.Lock()
+	defer e.mu.Unlock()
+	at, reason = e.migrateOnShutdownAt, e.migrateOnShutdownReason
+	e.migrateOnShutdownAt, e.migrateOnShutdownReason = 0, ""
+	return at, reason, at != 0
+}
+
+// PendingShutdownMigration reports whether a move is pending without consuming it, so a
+// watcher can poll cheaply and only the session loop takes the signal.
+func (e *InterceptorEngine) PendingShutdownMigration() bool {
+	e.mu.RLock()
+	defer e.mu.RUnlock()
+	return e.migrateOnShutdownAt != 0
 }
 
 // SuppressFailback holds the failback prober off for d. Cooling the region down is not
@@ -538,6 +574,57 @@ func (e *InterceptorEngine) StartHealthChecks(ctx context.Context, cancel contex
 }
 
 // StartFailbackProber periodically checks if the primary region is back online when running in failover mode.
+// shutdownMigrationPollInterval is how often the migrator checks for a pending shutdown. The
+// signal is set from a heartbeat response rather than pushed, so there is nothing to select
+// on; a second is far finer than the minute-granularity warnings it reacts to.
+var shutdownMigrationPollInterval = time.Second
+
+// StartShutdownMigrator ends the current session when the gateway announces it is stopping,
+// so the client moves while that gateway is still up rather than being dropped by it (#1246).
+//
+// It does not perform the move itself. Cancelling the session hands control back to the
+// session loop, which already knows how to exclude a gateway, re-elect and re-register --
+// the same path a connection loss takes. Reusing it means a planned move and an unplanned one
+// cannot drift apart, and the loop consumes ConsumeShutdownMigration to tell them apart.
+//
+// Measured baseline this replaces: a client dropped by a scheduled stop was down 24m36s,
+// nearly all of it waiting for the node to return. Moving on the warning turns that into the
+// cost of one reconnect.
+//
+// Deliberately not started for a client pinned with -server: that client will not fail over
+// (see #1275), so cancelling its session would drop the tunnel with nothing to move to.
+func (e *InterceptorEngine) StartShutdownMigrator(ctx context.Context, cancel context.CancelFunc) {
+	go func() {
+		ticker := time.NewTicker(shutdownMigrationPollInterval)
+		defer ticker.Stop()
+
+		for {
+			select {
+			case <-ctx.Done():
+				return
+			case <-ticker.C:
+				if !e.PendingShutdownMigration() {
+					continue
+				}
+				at, _, _ := e.ConsumeShutdownMigrationPeek()
+				slog.Info(fmt.Sprintf("[Client] Gateway is stopping in %ds; moving to another gateway now rather than waiting to be dropped.",
+					int(time.Until(time.Unix(at, 0)).Seconds())))
+				cancel()
+				return
+			}
+		}
+	}()
+}
+
+// ConsumeShutdownMigrationPeek reads the pending migration without clearing it, so the
+// migrator can log what it is reacting to while leaving the signal for the session loop to
+// consume once.
+func (e *InterceptorEngine) ConsumeShutdownMigrationPeek() (at int64, reason string, ok bool) {
+	e.mu.RLock()
+	defer e.mu.RUnlock()
+	return e.migrateOnShutdownAt, e.migrateOnShutdownReason, e.migrateOnShutdownAt != 0
+}
+
 func (e *InterceptorEngine) StartFailbackProber(ctx context.Context, cancel context.CancelFunc, primaryServerURL, primaryRegion string) {
 	if primaryServerURL == "" || primaryRegion == "" {
 		return

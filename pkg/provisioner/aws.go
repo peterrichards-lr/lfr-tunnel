@@ -243,10 +243,16 @@ func (b *AWSBackend) SetSchedule(ctx context.Context, nodeID string, s Schedule)
 	}
 	client := b.schedulerClients[target.Region]
 
-	if err := b.updateOne(ctx, client, nodeID+"-stop", s.StopTime, s.Timezone, s.Enabled); err != nil {
+	// Start before stop, deliberately. These are two separate EventBridge schedules and
+	// there is no transaction across them, so a failure between the two calls leaves the
+	// node half-configured. Applying stop first means that half is "switches off tonight,
+	// with nothing scheduled to switch it back on" -- an outage lasting until someone
+	// notices. This order makes the surviving half "wakes up as usual, never sleeps",
+	// which costs an instance-hour and nothing else (#1250).
+	if err := b.updateOne(ctx, client, nodeID+"-start", s.StartTime, s.Timezone, s.Enabled); err != nil {
 		return err
 	}
-	if err := b.updateOne(ctx, client, nodeID+"-start", s.StartTime, s.Timezone, s.Enabled); err != nil {
+	if err := b.updateOne(ctx, client, nodeID+"-stop", s.StopTime, s.Timezone, s.Enabled); err != nil {
 		return err
 	}
 	return nil

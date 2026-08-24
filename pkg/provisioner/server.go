@@ -138,6 +138,15 @@ func (s *Server) handleSetSchedule(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// Validated here rather than in the portal handler so it applies to every caller:
+	// the portal proxies through this endpoint, and so does anything driving the sidecar
+	// directly. edge-sa was found stopping at 16:00 and starting at 15:45 -- up for fifteen
+	// minutes a day -- because nothing on any path rejected it (#1250).
+	if err := sched.Validate(); err != nil {
+		writeError(w, http.StatusBadRequest, "invalid_schedule", err.Error())
+		return
+	}
+
 	if err := s.backend.SetSchedule(r.Context(), nodeID, sched); err != nil {
 		writeBackendError(w, err)
 		return

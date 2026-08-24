@@ -129,6 +129,27 @@ jobs:
           cd dist
           sha256sum * > checksums.txt
 
+      # Publishes checksums.txt.minisig alongside checksums.txt, so a client upgrading from
+      # a GitHub release can verify what it downloaded. Without it the release is
+      # unverifiable and --upgrade refuses to install from it (#1265).
+      #
+      # Skipped, not failed, when no signing key is configured: a fork or self-hoster must be
+      # able to cut a release without holding this project's key, and would sign with their
+      # own. Only the minisign signature is done here -- OS codesigning stays local, since it
+      # needs an Apple Developer ID or a Windows certificate that is per-distributor and not
+      # something CI should hold on anyone's behalf.
+      - name: Sign Checksums (minisign)
+        env:
+          MINISIGN_SECRET_KEY: ${{ secrets.MINISIGN_PRIVATE_KEY }}
+          MINISIGN_KEY_PASSWORD: ${{ secrets.MINISIGN_KEY_PASSWORD }}
+        run: |
+          if [ -z "$MINISIGN_SECRET_KEY" ]; then
+            echo "::notice title=Release published unsigned::MINISIGN_PRIVATE_KEY is not configured, so no checksums.txt.minisig will be published. Clients upgrading from this release will be told it cannot be verified and pointed at a gateway instead. Set the secret to sign releases."
+            exit 0
+          fi
+          go run scripts/minisign_helper.go dist/checksums.txt dist/checksums.txt.minisig
+          echo "Signed dist/checksums.txt -> dist/checksums.txt.minisig"
+
       - name: Push Checksums to Checksums Branch
         run: |
           git config --global user.name "github-actions[bot]"

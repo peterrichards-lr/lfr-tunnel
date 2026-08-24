@@ -1,5 +1,13 @@
 [
   {
+    "version": "v1.48.3",
+    "release_date": "2026-08-24",
+    "features": [
+      "fix(server): make the shutdown-warning path observable and refresh schedules (#1273)",
+      "fix(server): stop reporting a connected edge as Offline (#1272)"
+    ]
+  },
+  {
     "version": "v1.48.2",
     "release_date": "2026-08-24",
     "features": [
@@ -59,18 +67,6 @@
       "Client Version In The Dashboard: The TUI header now shows which version you are running, and tells you when a newer one is available. That check also runs periodically rather than only at startup, so a client left running for days will notice a release instead of missing it entirely.",
       "Accurate Node Reporting: The portal's tunnel list showed every session on the Control node, even when it was being served by a regional edge. Each gateway now records itself, so the Node column reflects reality.",
       "Cleaner Restarts: Stopping the gateway normally no longer reports a failure, which previously made every routine restart look like a crash in the system logs and made real crashes harder to spot."
-    ]
-  },
-  {
-    "version": "v1.46.0",
-    "release_date": "2026-08-21",
-    "features": [
-      "Failover That Recovers On Its Own: A brief edge outage now causes one clean switch instead of the client bouncing between regions. The client no longer returns to an edge that cannot actually carry your tunnel, edges report honestly whether they can reach the control plane, and if a session is lost the client re-registers within seconds rather than sitting with a dead tunnel until you restart it.",
-      "Fixed: Tunnels Left Serving Errors After A Region Switch. Cleaning up an abandoned session could remove the routing for the session that replaced it, leaving a connected tunnel whose public URL returned 502 indefinitely. This was the single biggest cause of a tunnel appearing to survive a failover while serving nothing.",
-      "Better Region Selection: If an edge is unavailable when you start the client -- during a scheduled shutdown, for instance -- that choice is no longer locked in for 24 hours. The client re-checks shortly afterwards and moves to the nearer edge once it returns, and the startup log now names any region that did not respond.",
-      "One Domain Per Tunnel: Starting a tunnel without naming a domain no longer registers it on every configured domain at once, which previously consumed several subdomain reservations for a single tunnel.",
-      "Tidier Multi-Port URLs: Additional ports now use a single dash, so a second port on 'alpha' is alpha-8081 rather than alpha--8081. If you expose more than one port, your public URLs change with this release -- update any bookmarks.",
-      "Security: Approving a registration now requires a deliberate confirmation rather than simply opening the link, so a link preview or crawler can no longer approve someone. The local Inspector rejects requests driven from other websites, closing a route by which a page you visited could change your tunnel's settings."
     ]
   }
 ]

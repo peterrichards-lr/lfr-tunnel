@@ -144,7 +144,11 @@ func TestAWSBackend_SetSchedule_PreservesExistingTargetAndWindow(t *testing.T) {
 	existingTarget := &schedulertypes.Target{Arn: aws.String("arn:aws:scheduler:::aws-sdk:ec2:stopInstances"), RoleArn: aws.String("arn:aws:iam::123:role/x")}
 	existingWindow := &schedulertypes.FlexibleTimeWindow{Mode: schedulertypes.FlexibleTimeWindowModeOff}
 
-	var gotExpr, gotTZ string
+	// Keyed by schedule name rather than "whichever call came last": SetSchedule applies
+	// start before stop on purpose (#1250), so asserting on the final call would encode an
+	// ordering this test does not care about and break the next time it changes.
+	gotExprs := map[string]string{}
+	var gotTZ string
 	var gotTarget *schedulertypes.Target
 	var gotWindow *schedulertypes.FlexibleTimeWindow
 
@@ -153,7 +157,7 @@ func TestAWSBackend_SetSchedule_PreservesExistingTargetAndWindow(t *testing.T) {
 			return &scheduler.GetScheduleOutput{Target: existingTarget, FlexibleTimeWindow: existingWindow}, nil
 		},
 		updateScheduleFunc: func(_ context.Context, in *scheduler.UpdateScheduleInput, _ ...func(*scheduler.Options)) (*scheduler.UpdateScheduleOutput, error) {
-			gotExpr = aws.ToString(in.ScheduleExpression)
+			gotExprs[aws.ToString(in.Name)] = aws.ToString(in.ScheduleExpression)
 			gotTZ = aws.ToString(in.ScheduleExpressionTimezone)
 			gotTarget = in.Target
 			gotWindow = in.FlexibleTimeWindow
@@ -166,8 +170,11 @@ func TestAWSBackend_SetSchedule_PreservesExistingTargetAndWindow(t *testing.T) {
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
-	if gotExpr != "cron(0 7 * * ? *)" {
-		t.Errorf("expected the last UpdateSchedule call (start) to use cron(0 7 * * ? *), got %q", gotExpr)
+	if got := gotExprs["edge-sa-start"]; got != "cron(0 7 * * ? *)" {
+		t.Errorf("expected the start schedule to use cron(0 7 * * ? *), got %q", got)
+	}
+	if got := gotExprs["edge-sa-stop"]; got != "cron(0 23 * * ? *)" {
+		t.Errorf("expected the stop schedule to use cron(0 23 * * ? *), got %q", got)
 	}
 	if gotTZ != "America/Sao_Paulo" {
 		t.Errorf("expected timezone America/Sao_Paulo, got %q", gotTZ)

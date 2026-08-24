@@ -109,6 +109,22 @@ func (s *Server) triggerEdgeHealthRecheck(nodeID string) {
 // isn't, which is exactly the kind of thing worth alerting on (#887).
 const scheduledStartGraceSeconds = 300
 
+// staticScheduleFor returns the schedule declared in config for a node, or nil when it has
+// none. Only enabled schedules are returned: a disabled one carries no times worth adopting,
+// and returning it would make an unscheduled node look configured (#1282).
+func staticScheduleFor(nodes []config.EdgeNodeConfig, id string) *config.EdgeScheduleConfig {
+	for _, node := range nodes {
+		if node.ID != id {
+			continue
+		}
+		if node.Schedule == nil || !node.Schedule.Enabled {
+			return nil
+		}
+		return node.Schedule
+	}
+	return nil
+}
+
 // scheduleRefetchInterval is how long a cached schedule is trusted before central re-reads
 // it from the provisioner. Schedules change a handful of times a year, so this is cheap --
 // but it must not be "never", which is what the previous "fetch only when the timezone is
@@ -222,6 +238,27 @@ func (s *Server) updateEdgeHealth(id, status string, latency int64, errMsg strin
 			if schedErr != err.Error() {
 				slog.Warn(fmt.Sprintf("[Server] Could not read %s's schedule from the provisioner, so its stop window is unknown and no shutdown warning will be sent: %v", id, err))
 				schedErr = err.Error()
+			}
+		}
+	}
+
+	// Fall back to a statically declared schedule when the provisioner has not supplied one
+	// -- either because none is configured, or because its fetch has not succeeded (#1282).
+	//
+	// Deliberately a fallback rather than an override: where the provisioner works it
+	// reflects what the scheduler will actually do, and a config file that disagrees with
+	// the live scheduler should lose. Where there is no provisioner, this is the only way a
+	// deployment outside AWS can have scheduled shutdown at all.
+	if timezone == "" {
+		if static := staticScheduleFor(s.cfg.EdgeNodes, id); static != nil {
+			timezone = static.Timezone
+			schedStop = static.StopTime
+			schedStart = static.StartTime
+			schedEnabled = static.Enabled
+			schedFetchedAt = time.Now().Unix()
+			if prev.Timezone == "" {
+				slog.Info(fmt.Sprintf("[Server] Using the schedule declared in config for %s: stops %s, starts %s (%s)",
+					id, static.StopTime, static.StartTime, static.Timezone))
 			}
 		}
 	}

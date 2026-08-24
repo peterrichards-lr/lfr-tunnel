@@ -416,6 +416,30 @@ func NewServer(cfg *config.ServerConfig) (*Server, error) {
 	// token file are configured. A missing/unreadable token file is treated
 	// as "feature not configured" here, not a fatal startup error, since the
 	// sidecar (which owns the token) may simply not have started yet.
+	// Reject an unusable statically-declared schedule once, at startup, rather than acting on
+	// it every health cycle (#1282). Dropped rather than fatal: a bad schedule should stop
+	// the node being treated as scheduled, not stop the gateway serving traffic.
+	//
+	// Same rules as the provisioner API path (#1250), reusing that validation rather than
+	// restating it -- edge-sa was once configured to stop at 16:00 and start at 15:45, up
+	// for fifteen minutes a day, and nothing rejected it.
+	for i := range cfg.EdgeNodes {
+		sched := cfg.EdgeNodes[i].Schedule
+		if sched == nil {
+			continue
+		}
+		candidate := provisioner.Schedule{
+			Enabled:   sched.Enabled,
+			StopTime:  sched.StopTime,
+			StartTime: sched.StartTime,
+			Timezone:  sched.Timezone,
+		}
+		if err := candidate.Validate(); err != nil {
+			slog.Error(fmt.Sprintf("[Server] Ignoring the schedule configured for %s: %v", cfg.EdgeNodes[i].ID, err))
+			cfg.EdgeNodes[i].Schedule = nil
+		}
+	}
+
 	if cfg.EdgeProvisionerURL != "" {
 		if token, err := provisioner.LoadToken(cfg.EdgeProvisionerTokenFile); err != nil {
 			slog.Info(fmt.Sprintf("[Server] edge_provisioner_url is set but its token could not be loaded, edge power actions disabled: %v", err))

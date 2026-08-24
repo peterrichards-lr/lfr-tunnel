@@ -1584,12 +1584,16 @@ html[dir="rtl"] td, html[dir="rtl"] th {
     line-height: 1;
 }
 
-/* Matches the height of a .form-control sitting beside it, so a control and a button in
-   the same row line up. */
-.h-control {
-    height: 38px;
-    box-sizing: border-box;
-}
+/* .h-control used to live here: a hard `height: 38px` applied to one select, said to "match
+ * the height of a .form-control sitting beside it". Measured, it matched nothing. The select
+ * needs 47px for its own text (.input-field's 12px vertical padding, its line, its border),
+ * so 38px clipped the label top and bottom -- the reported symptom (#1293). The button beside
+ * it measures 63px, so the row it claimed to align was never aligned either.
+ *
+ * Removed rather than replaced. With no height of its own the select sizes itself from
+ * .input-field like every other control in the app, and sits top-aligned with its neighbour,
+ * which is what the surrounding layout does everywhere else. A replacement height would just
+ * be another number to go stale the next time the button's padding or font changed. */
 
 /* Radios and checkboxes take the brand colour everywhere, rather than each call site
    remembering an inline accentColor -- one input carried it and the rest did not. */

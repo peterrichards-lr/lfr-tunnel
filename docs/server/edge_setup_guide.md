@@ -226,10 +226,28 @@ provider-neutral code. The contract is two commands:
 `<target>` is a hostname that already resolves to the serving gateway (an edge's configured
 `url`, or the control plane's), so a hook may write a CNAME, an ALIAS, or resolve it and write
 an A record. `scripts/common/lfr-dns-hook-route53.sh` is the reference implementation — it
-writes a short-TTL CNAME and needs `LFT_DNS_ZONE_ID` in its environment plus AWS credentials
-scoped to `route53:ChangeResourceRecordSets` and `route53:ListResourceRecordSets` on that one
-zone. Supporting a different provider means writing a sibling of that script, not patching
-`lfr-tunnel`.
+writes a short-TTL CNAME, with AWS credentials scoped to `route53:ChangeResourceRecordSets`
+and `route53:ListResourceRecordSets` on the zones in play and nothing else. Supporting a
+different provider means writing a sibling of that script, not patching `lfr-tunnel`.
+
+**More than one tunnel domain.** A gateway can issue tunnels on several domains — here both
+`lfr-demo.se` and `lfr-demo.online`, with users choosing per reservation — and each lives in
+its own hosted zone. A single pinned zone id would send half the records to the wrong zone,
+where Route53 rejects them, so the hook resolves the zone from the name it is writing:
+
+```bash
+# Explicit, and avoids an API call:
+LFT_DNS_ZONES="lfr-demo.se=Z123456,lfr-demo.online=Z789012"
+
+# Or set nothing and let it look the zone up, which needs route53:ListHostedZonesByName:
+#   (no configuration at all -- the zone is found from the name)
+
+# Or pin one zone, correct only for a single-domain deployment:
+LFT_DNS_ZONE_ID="Z123456"
+```
+
+The longest matching domain wins, so a more specific entry overrides a broader one regardless
+of the order they are written in.
 
 **Why withdrawal waits.** A lease is cleaned up on *any* disconnect, including a laptop
 sleeping. Deleting immediately would hammer the provider on ordinary reconnect churn and blank

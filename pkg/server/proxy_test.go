@@ -28,8 +28,13 @@ func TestProxyHandler_Offline(t *testing.T) {
 
 	handler.ServeHTTP(rec, req)
 
-	if rec.Code != http.StatusBadGateway {
-		t.Errorf("expected status 502, got %d", rec.Code)
+	// 404, not 502, since #1251. This host has never held a lease and none was released
+	// for it, so it is genuinely not here -- 502 would assert an upstream failed, which
+	// monitoring pages on and some proxies treat as a hard error. A host whose lease was
+	// torn down moments ago answers 503 with Retry-After instead; see
+	// proxy_unavailable_test.go.
+	if rec.Code != http.StatusNotFound {
+		t.Errorf("expected status 404 for a host that never had a lease, got %d", rec.Code)
 	}
 
 	body := rec.Body.String()

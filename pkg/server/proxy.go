@@ -96,7 +96,7 @@ func (p *ProxyHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 
 	lease, exists := p.registry.GetLease(host)
 	if !exists {
-		p.serveOfflinePage(w, r, host, "No active tunnel registered for this subdomain.")
+		p.serveNoTunnel(w, r, host)
 		return
 	}
 
@@ -210,8 +210,11 @@ func (p *ProxyHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 			lease:        lease,
 		},
 		ErrorHandler: func(w http.ResponseWriter, req *http.Request, err error) {
+			// Deliberately still 502. A lease exists and the tunnel is up; the
+			// developer's own local server is what failed, which is exactly what a bad
+			// gateway is. Only the lease-miss path above changed (#1251).
 			slog.Info(fmt.Sprintf("[Proxy] Routing failure to %s (127.0.0.1:%d): %v", host, lease.LocalPort, err))
-			p.serveOfflinePage(w, req, host, err.Error())
+			p.serveOfflinePage(w, req, host, http.StatusBadGateway)
 		},
 	}
 
@@ -219,17 +222,64 @@ func (p *ProxyHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	proxy.ServeHTTP(w, r)
 }
 
-// serveOfflinePage renders the Liferay-themed offline page.
-func (p *ProxyHandler) serveOfflinePage(w http.ResponseWriter, r *http.Request, host string, reason string) {
+// retryAfterSeconds is what a transiently-unavailable tunnel asks callers to wait. Short,
+// because the gap it covers is a reconnect rather than an outage, and a visitor refreshing
+// sooner costs nothing.
+const retryAfterSeconds = 5
+
+// serveNoTunnel answers a request for a host this gateway holds no lease for.
+//
+// A host whose lease was torn down moments ago is transient -- a failover, a client
+// reconnect, a scheduled node stop -- and gets 503 with Retry-After, which tells browsers,
+// caches and monitoring "come back shortly". Anything else is genuinely not here and gets
+// 404.
+//
+// Both used to be 502, which asserts the upstream is broken. Monitoring pages on it, some
+// proxies and CDNs treat it as a hard failure, and neither is true of a tunnel that simply
+// moved. Nothing was logged either, so an operator could not tell whether visitors were
+// hitting dead hostnames at all -- the only way to find out was to reproduce it by hand
+// (#1251).
+func (p *ProxyHandler) serveNoTunnel(w http.ResponseWriter, r *http.Request, host string) {
+	if p.registry != nil && p.registry.RecentlyReleased(host) {
+		slog.Info(fmt.Sprintf("[Proxy] No lease for %s, released within the last %s -- serving 503", host, releasedHostTTL))
+		w.Header().Set("Retry-After", strconv.Itoa(retryAfterSeconds))
+		p.serveOfflinePage(w, r, host, http.StatusServiceUnavailable)
+		return
+	}
+	slog.Info(fmt.Sprintf("[Proxy] No lease for %s and none released recently -- serving 404", host))
+	p.serveOfflinePage(w, r, host, http.StatusNotFound)
+}
+
+// serveOfflinePage renders the Liferay-themed offline page with the given status. The page
+// states the status itself, so it must not be hardcoded there.
+func (p *ProxyHandler) serveOfflinePage(w http.ResponseWriter, r *http.Request, host string, status int) {
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
-	w.WriteHeader(http.StatusBadGateway)
+	w.WriteHeader(status)
 
 	// Replace placeholder host in embedded HTML
 	pageBytes := bytes.ReplaceAll(offlineHTML, []byte("loading..."), []byte(host))
+	pageBytes = bytes.ReplaceAll(pageBytes, []byte("__STATUS__"), []byte(statusText(status)))
+	// Only a transient status invites an automatic retry; re-fetching a 404 forever just
+	// burns the visitor's battery on a tunnel that is not coming back.
+	pageBytes = bytes.ReplaceAll(pageBytes, []byte("__RETRY_SECONDS__"), []byte(retryScript(status)))
 	pageBytes = p.injectBaseTag(pageBytes, r, host)
 	if _, err := w.Write(pageBytes); err != nil {
 		slog.Info(fmt.Sprintf("[Proxy] Failed to write offline page: %v", err))
 	}
+}
+
+// statusText renders the status line shown on the offline page.
+func statusText(status int) string {
+	return fmt.Sprintf("%d %s", status, http.StatusText(status))
+}
+
+// retryScript returns the auto-retry interval in seconds for the page to use, or "0" to
+// disable it. Kept as data rather than markup so the page decides how to present it.
+func retryScript(status int) string {
+	if status == http.StatusServiceUnavailable {
+		return strconv.Itoa(retryAfterSeconds)
+	}
+	return "0"
 }
 
 func (p *ProxyHandler) isOriginAllowed(origin string) bool {

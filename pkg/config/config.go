@@ -192,6 +192,27 @@ type EdgeNodeConfig struct {
 	ID        string `yaml:"id"`
 	TokenHash string `yaml:"token_hash"`
 	URL       string `yaml:"url"`
+	// Schedule optionally declares when this node stops and starts, for deployments with no
+	// edge-provisioner sidecar to ask (#1282). Nil means "ask the provisioner, or treat the
+	// node as unscheduled" -- the previous and still the default behaviour.
+	//
+	// The provisioner keeps precedence where it is configured and working, since it reflects
+	// what the scheduler will actually do. This is a fallback, not an override.
+	Schedule *EdgeScheduleConfig `yaml:"schedule,omitempty"`
+}
+
+// EdgeScheduleConfig is a statically declared stop/start window for an edge node.
+//
+// Only the *discovery* of a schedule was ever AWS-specific. Everything downstream -- the
+// shutdown warning, a client moving ahead of the stop (#1246), the Disabled classification
+// (#887), an edge knowing its own window (#1276) -- is provider-neutral, but none of it
+// happened without EventBridge because there was no other way to tell central the times.
+// Anyone stopping a node with cron can now say so here.
+type EdgeScheduleConfig struct {
+	Enabled   bool   `yaml:"enabled"`
+	StopTime  string `yaml:"stop_time"`  // "HH:MM" in Timezone
+	StartTime string `yaml:"start_time"` // "HH:MM" in Timezone
+	Timezone  string `yaml:"timezone"`   // IANA name, e.g. "Asia/Kolkata"
 }
 
 // ClientHooksConfig defines script paths/commands for client lifecycle hook triggers.

@@ -306,6 +306,8 @@ type Server struct {
 
 // NewServer initializes and returns a new Server instance.
 func NewServer(cfg *config.ServerConfig) (*Server, error) {
+	validateTunnelDomains(cfg)
+
 	// Initialize Chisel server config
 	chiselCfg := &chserver.Config{
 		Reverse: true,
@@ -891,7 +893,7 @@ func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 				"force_mfa":                s.cfg.ForceMFA,
 				"enable_onboarding":        s.cfg.EnableOnboarding,
 				"owner_email":              s.cfg.Owner.UserID,
-				"supported_domains":        s.cfg.Domains,
+				"supported_domains":        s.tunnelDomains(),
 			})
 			return
 		}
@@ -1922,8 +1924,12 @@ func (s *Server) pendingShutdownWarning() map[string]interface{} {
 // handleDomains responds with the supported root domains.
 func (s *Server) handleDomains(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/json")
-	domains := make([]string, len(s.cfg.Domains))
-	copy(domains, s.cfg.Domains)
+	// The issuable domains, not every domain served: this list is what a caller picks a
+	// domain to reserve or register on, and offering one no tunnel can be issued on just
+	// produces a reservation nothing will ever match (#1285).
+	issuable := s.tunnelDomains()
+	domains := make([]string, len(issuable))
+	copy(domains, issuable)
 	if len(domains) == 0 {
 		domains = append(domains, "localhost")
 	}
@@ -2778,9 +2784,55 @@ func topRankedDomain(candidates []string) []string {
 	return candidates[:1]
 }
 
+// validateTunnelDomains drops any tunnel_domains entry this gateway does not serve, since a
+// lease issued on it would produce a host no vhost matches -- a tunnel that reports success
+// and then 404s for every visitor. Dropping rather than failing to start keeps a typo from
+// taking a gateway down; the log says exactly what was ignored, and an empty result falls back
+// to the full domains list, which is the pre-#1285 behaviour.
+func validateTunnelDomains(cfg *config.ServerConfig) {
+	if len(cfg.TunnelDomains) == 0 {
+		return
+	}
+	served := make(map[string]bool, len(cfg.Domains))
+	for _, d := range cfg.Domains {
+		served[strings.ToLower(strings.TrimSpace(d))] = true
+	}
+	kept := make([]string, 0, len(cfg.TunnelDomains))
+	for _, d := range cfg.TunnelDomains {
+		clean := strings.ToLower(strings.TrimSpace(d))
+		if clean == "" {
+			continue
+		}
+		if !served[clean] {
+			slog.Info(fmt.Sprintf("[Server] Ignoring tunnel_domains entry %q: this gateway does not serve it (its domains are %v)", d, cfg.Domains))
+			continue
+		}
+		kept = append(kept, clean)
+	}
+	cfg.TunnelDomains = kept
+	if len(kept) > 0 {
+		slog.Info(fmt.Sprintf("[Server] Tunnels will be issued on %v (of the %d domains served)", kept, len(cfg.Domains)))
+	}
+}
+
+// tunnelDomains returns the domains a lease may be issued on, which is not necessarily every
+// domain this gateway answers on. See config.ServerConfig.TunnelDomains (#1285). Entries that
+// aren't served here are dropped at startup, so this is already filtered.
+func (s *Server) tunnelDomains() []string {
+	if len(s.cfg.TunnelDomains) > 0 {
+		return s.cfg.TunnelDomains
+	}
+	return s.cfg.Domains
+}
+
 // getActiveDomainsForRequest evaluates the configured DomainAllocationRule to return a sorted slice of candidate domains.
 // It falls back to contextual or preference rules as necessary.
+//
+// The candidates are the *issuable* domains, not everything this gateway serves: an edge
+// answers on its regional names but must still issue apex-level hosts, or the serving node
+// ends up in the visitor's URL and a planned move changes it (#1285).
 func (s *Server) getActiveDomainsForRequest(r *http.Request, user *db.User) []string {
+	eligible := s.tunnelDomains()
 	host := r.Host
 	if h, _, err := net.SplitHostPort(host); err == nil {
 		host = h
@@ -2799,7 +2851,7 @@ func (s *Server) getActiveDomainsForRequest(r *http.Request, user *db.User) []st
 
 	if rule == "user-preference" {
 		if user != nil && user.PreferredDomain != "" {
-			for _, d := range s.cfg.Domains {
+			for _, d := range eligible {
 				if d == user.PreferredDomain {
 					return []string{d}
 				}
@@ -2810,7 +2862,7 @@ func (s *Server) getActiveDomainsForRequest(r *http.Request, user *db.User) []st
 	}
 
 	if rule == "contextual" {
-		for _, d := range s.cfg.Domains {
+		for _, d := range eligible {
 			if strings.Contains(host, strings.ToLower(d)) || host == strings.ToLower(d) {
 				return []string{d}
 			}
@@ -2823,7 +2875,7 @@ func (s *Server) getActiveDomainsForRequest(r *http.Request, user *db.User) []st
 			}
 		}
 		if defaultDom != "" {
-			for _, d := range s.cfg.Domains {
+			for _, d := range eligible {
 				if d == defaultDom {
 					return []string{d}
 				}
@@ -2834,7 +2886,7 @@ func (s *Server) getActiveDomainsForRequest(r *http.Request, user *db.User) []st
 	}
 
 	if rule == "hashing" {
-		if len(s.cfg.Domains) > 0 {
+		if len(eligible) > 0 {
 			var hashStr string
 			if user != nil {
 				hashStr = user.ID
@@ -2848,25 +2900,25 @@ func (s *Server) getActiveDomainsForRequest(r *http.Request, user *db.User) []st
 			for i := 0; i < 8; i++ {
 				idx = (idx << 8) | uint64(hashBytes[i])
 			}
-			startIdx := int(idx % uint64(len(s.cfg.Domains)))
+			startIdx := int(idx % uint64(len(eligible)))
 			var ordered []string
-			for i := 0; i < len(s.cfg.Domains); i++ {
-				ordered = append(ordered, s.cfg.Domains[(startIdx+i)%len(s.cfg.Domains)])
+			for i := 0; i < len(eligible); i++ {
+				ordered = append(ordered, eligible[(startIdx+i)%len(eligible)])
 			}
 			return ordered
 		}
 	}
 
 	if rule == "least-connections" {
-		if len(s.cfg.Domains) > 0 {
+		if len(eligible) > 0 {
 			counts := make(map[string]int)
-			for _, d := range s.cfg.Domains {
+			for _, d := range eligible {
 				counts[d] = 0
 			}
 
 			s.registry.RLock()
 			for host := range s.registry.leases {
-				for _, d := range s.cfg.Domains {
+				for _, d := range eligible {
 					if strings.HasSuffix(host, "."+d) {
 						counts[d]++
 						break
@@ -2875,8 +2927,8 @@ func (s *Server) getActiveDomainsForRequest(r *http.Request, user *db.User) []st
 			}
 			s.registry.RUnlock()
 
-			activeDomains := make([]string, len(s.cfg.Domains))
-			copy(activeDomains, s.cfg.Domains)
+			activeDomains := make([]string, len(eligible))
+			copy(activeDomains, eligible)
 			sort.SliceStable(activeDomains, func(i, j int) bool {
 				return counts[activeDomains[i]] < counts[activeDomains[j]]
 			})
@@ -2886,20 +2938,20 @@ func (s *Server) getActiveDomainsForRequest(r *http.Request, user *db.User) []st
 
 	if rule == "round-robin" {
 		idx := atomic.AddUint64(&s.roundRobinCounter, 1)
-		if len(s.cfg.Domains) > 0 {
-			startIdx := int(idx) % len(s.cfg.Domains)
+		if len(eligible) > 0 {
+			startIdx := int(idx) % len(eligible)
 			var ordered []string
-			for i := 0; i < len(s.cfg.Domains); i++ {
-				ordered = append(ordered, s.cfg.Domains[(startIdx+i)%len(s.cfg.Domains)])
+			for i := 0; i < len(eligible); i++ {
+				ordered = append(ordered, eligible[(startIdx+i)%len(eligible)])
 			}
 			return ordered
 		}
 	}
 
 	if rule == "random" {
-		if len(s.cfg.Domains) > 0 {
-			activeDomains := make([]string, len(s.cfg.Domains))
-			copy(activeDomains, s.cfg.Domains)
+		if len(eligible) > 0 {
+			activeDomains := make([]string, len(eligible))
+			copy(activeDomains, eligible)
 			mathrand.Shuffle(len(activeDomains), func(i, j int) {
 				activeDomains[i], activeDomains[j] = activeDomains[j], activeDomains[i]
 			})
@@ -2908,9 +2960,9 @@ func (s *Server) getActiveDomainsForRequest(r *http.Request, user *db.User) []st
 	}
 
 	if rule == "preference" {
-		if len(s.cfg.Domains) > 0 {
-			activeDomains := make([]string, len(s.cfg.Domains))
-			copy(activeDomains, s.cfg.Domains)
+		if len(eligible) > 0 {
+			activeDomains := make([]string, len(eligible))
+			copy(activeDomains, eligible)
 			return activeDomains
 		}
 	}
@@ -4581,9 +4633,11 @@ func (s *Server) handleAdminKickLease(w http.ResponseWriter, r *http.Request, ac
 	if targetEdgeLease != nil {
 		// Found on Edge node! Look up node config to get the token hash
 		var nodeHash string
+		var nodeURL string
 		for _, node := range s.cfg.EdgeNodes {
 			if node.ID == targetEdgeLease.NodeID {
 				nodeHash = node.TokenHash
+				nodeURL = strings.TrimSuffix(node.URL, "/")
 				break
 			}
 		}
@@ -4593,11 +4647,6 @@ func (s *Server) handleAdminKickLease(w http.ResponseWriter, r *http.Request, ac
 			return
 		}
 
-		// Parse the edge base domain from FullHost
-		edgeBaseDomain := targetEdgeLease.FullHost
-		prefix := targetEdgeLease.Subdomain + "."
-		edgeBaseDomain = strings.TrimPrefix(edgeBaseDomain, prefix)
-
 		// Send proxy kick request to Edge server
 		if s.sendEdgeWSKick(targetEdgeLease.NodeID, subdomain) {
 			s.writeAudit(actor, "lease.kicked", "lease", subdomain, "Proxied kick to edge server via WebSocket: "+targetEdgeLease.NodeID, r)
@@ -4605,13 +4654,24 @@ func (s *Server) handleAdminKickLease(w http.ResponseWriter, r *http.Request, ac
 			return
 		}
 
+		// The node's configured URL, not one reconstructed from the lease host. Stripping the
+		// subdomain off FullHost only ever worked because a lease host carried the region
+		// (peters.in.lfr-demo.se -> in.lfr-demo.se); once hosts are issued at the apex (#1285)
+		// the same arithmetic yields lfr-demo.se, which is central, so the kick would go to
+		// the wrong node -- or with a custom domain, to somebody else's server entirely.
+		kickBase := nodeURL
+		if kickBase == "" {
+			edgeBaseDomain := strings.TrimPrefix(targetEdgeLease.FullHost, targetEdgeLease.Subdomain+".")
+			scheme := "https"
+			if strings.HasPrefix(edgeBaseDomain, "127.0.0.1") || strings.HasPrefix(edgeBaseDomain, "localhost") {
+				scheme = "http"
+			}
+			kickBase = scheme + "://" + edgeBaseDomain
+		}
+
 		client := &http.Client{Timeout: 5 * time.Second}
 		payload, _ := json.Marshal(map[string]string{"subdomain": subdomain})
-		scheme := "https"
-		if strings.HasPrefix(edgeBaseDomain, "127.0.0.1") || strings.HasPrefix(edgeBaseDomain, "localhost") {
-			scheme = "http"
-		}
-		proxyReq, err := http.NewRequest("POST", scheme+"://"+edgeBaseDomain+"/api/internal/edge-kick", bytes.NewReader(payload))
+		proxyReq, err := http.NewRequest("POST", kickBase+"/api/internal/edge-kick", bytes.NewReader(payload))
 		if err != nil {
 			respondJSON(w, http.StatusInternalServerError, map[string]string{"error": "failed to create proxy kick request"})
 			return

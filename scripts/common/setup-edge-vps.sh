@@ -16,9 +16,10 @@ SSH_KEY_ARG=""
 KEY_PATH=""
 VPS_IP=""
 REDIRECT_DOMAIN=""
+TUNNEL_DOMAINS=""
 
 usage() {
-  echo "Usage: $0 -s <vps_ip> -t <edge_token> -r <redirect_domain> -i <identity_file> -u <ssh_user> -d <domains> -c <control_plane_url> -p <port>"
+  echo "Usage: $0 -s <vps_ip> -t <edge_token> -r <redirect_domain> -i <identity_file> -u <ssh_user> -d <domains> -c <control_plane_url> -p <port> [-a <tunnel_domains>]"
   echo "  -s: VPS Public IP address (required)"
   echo "  -t: Plaintext Edge Token for Control Plane validation (required)"
   echo "  -r: Domain to redirect root browser traffic to (required), e.g. your control plane's landing page"
@@ -27,11 +28,15 @@ usage() {
   echo "  -d: Comma-separated list of edge domains (required)"
   echo "  -c: Control Plane URL (required)"
   echo "  -p: Port for lfr-tunneld to bind to on Edge node (required)"
+  echo "  -a: Comma-separated subset of -d that tunnels may be issued on (optional)."
+  echo "      Set this to the shared domain so a tunnel's public URL never names the edge"
+  echo "      serving it, and does not change when the client moves (see #1285). The regional"
+  echo "      names stay in -d for direct addressing. Omitted, any domain in -d may be used."
   exit 1
 }
 
 # Parse parameters
-while getopts "s:t:i:u:d:c:p:r:" opt; do
+while getopts "s:t:i:u:d:c:p:r:a:" opt; do
   case $opt in
     s) VPS_IP="$OPTARG" ;;
     t) EDGE_TOKEN="$OPTARG" ;;
@@ -49,6 +54,7 @@ while getopts "s:t:i:u:d:c:p:r:" opt; do
     c) CONTROL_PLANE_URL="$OPTARG" ;;
     p) EDGE_PORT="$OPTARG" ;;
     r) REDIRECT_DOMAIN="$OPTARG" ;;
+    a) TUNNEL_DOMAINS="$OPTARG" ;;
     *) usage ;;
   esac
 done
@@ -116,6 +122,14 @@ EOF
 for DOMAIN in "${DOMAIN_ARRAY[@]}"; do
   echo "  - \"$DOMAIN\"" >> "$CONFIG_TMP"
 done
+
+if [ -n "$TUNNEL_DOMAINS" ]; then
+  echo "tunnel_domains:" >> "$CONFIG_TMP"
+  IFS=',' read -ra TUNNEL_DOMAIN_ARRAY <<< "$TUNNEL_DOMAINS"
+  for TDOMAIN in "${TUNNEL_DOMAIN_ARRAY[@]}"; do
+    echo "  - \"$TDOMAIN\"" >> "$CONFIG_TMP"
+  done
+fi
 
 cat >> "$CONFIG_TMP" << EOF
 http_bind_addr: "127.0.0.1:$EDGE_PORT"

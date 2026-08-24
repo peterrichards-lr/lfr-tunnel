@@ -505,13 +505,34 @@ func (e *InterceptorEngine) StartHealthChecks(ctx context.Context, cancel contex
 				urlsToPing := statusReportTargets(serverURL, e.CentralURL())
 
 				for _, pingURL := range urlsToPing {
+					// Only the gateway actually serving this session can say the lease is
+					// gone. The same reasoning the 200 path below already applies, applied
+					// here: central legitimately knows nothing about an edge-hosted session,
+					// so its answer describes central, not this tunnel (#1306).
+					servingGateway := sameGatewayHost(pingURL, serverURL)
+
 					req, err := http.NewRequestWithContext(ctx, "POST", fmt.Sprintf("%s/api/tunnel-status", pingURL), bytes.NewBuffer(payload))
 					if err == nil {
 						req.Header.Set("Content-Type", "application/json")
 						resp, err := healthReportClient.Do(req)
 						if err == nil {
 							if resp.StatusCode == http.StatusNotFound || resp.StatusCode == http.StatusUnauthorized || resp.StatusCode == http.StatusGone || resp.StatusCode == http.StatusServiceUnavailable {
-								slog.Info(fmt.Sprintf("[Client] Control plane reported region offline or lease evicted (HTTP %d). Triggering dynamic region failover...", resp.StatusCode))
+								if !servingGateway {
+									// Central having a moment -- a restart, a deploy, a blip.
+									// Acting on it used to tear down every edge-served tunnel
+									// in the fleet at once, which is the opposite of what the
+									// regional edges are for: they are meant to keep serving
+									// while central is unavailable.
+									slog.Info(fmt.Sprintf("[Client] Control plane at %s answered HTTP %d; it does not serve this tunnel, so continuing.", pingURL, resp.StatusCode))
+									e.LogEvent("warn", "control_plane_unavailable", map[string]any{
+										"region":      region,
+										"reported_by": pingURL,
+										"status_code": resp.StatusCode,
+									})
+									_ = resp.Body.Close() //nolint:errcheck
+									continue
+								}
+								slog.Info(fmt.Sprintf("[Client] Gateway reported region offline or lease evicted (HTTP %d). Triggering dynamic region failover...", resp.StatusCode))
 								e.LogEvent("warn", "lease_evicted", map[string]any{
 									"region":       region,
 									"reported_by":  pingURL,

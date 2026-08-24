@@ -596,6 +596,15 @@ func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// Drain control, ahead of all host-based routing (#1303). A deploy curls this over
+	// loopback on the box itself, so the request arrives with Host: 127.0.0.1:<port> and
+	// matches none of the configured domains -- gating it behind those would 404 exactly the
+	// caller it exists for. handleLocalDrain enforces that the connection really is local.
+	if r.URL.Path == "/api/local/drain" && (r.Method == http.MethodPost || r.Method == http.MethodGet) {
+		s.handleLocalDrain(w, r)
+		return
+	}
+
 	// 2. Rate Limiting and Auto-Ban for API routes
 	if strings.HasPrefix(r.URL.Path, "/api/") && !s.cfg.DisableAPIRateLimit {
 		limiter := s.getRateLimiter(ip)

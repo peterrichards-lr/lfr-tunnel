@@ -50,7 +50,13 @@ central_url: "http://tunnel.lfr-demo.local"
 dns_hook: "/usr/local/bin/dns-hook.sh"
 dns_withdraw_grace: 5s
 
-edge_shutdown_warning_minutes: 1
+# Two minutes, not one. Central evaluates schedules on a 60s cycle and a stop time has minute
+# granularity, so the lead time a client actually receives is (warning_minutes * 60) minus
+# however far into the cycle the evaluation landed. At 1 minute that is anywhere from 60s down
+# to ~0s: one run saw "Sent shutdown warning to edge-us: 3s remaining", too little for the
+# client to migrate, and the test failed as though the feature were broken. At 2 minutes the
+# floor is 60s, which is always enough.
+edge_shutdown_warning_minutes: 2
 
 edge_nodes:
   - id: "edge-us"

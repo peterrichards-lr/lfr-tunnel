@@ -550,5 +550,141 @@ fi
 echo "✅ DNS followed the tunnel: peter-dev.lfr-demo.local -> tunnel.lfr-demo.local"
 echo "✅ Client moved off the stopping edge and kept serving!"
 
+# 9. Drain before restart (#1303).
+#
+# The payoff for the whole make-before-break chain: restarting a gateway on purpose, for a
+# deploy, without dropping the tunnels it is serving. Maintenance mode alone only stops NEW
+# connections; the ones already attached were killed by the restart.
+#
+# Uses the auto-probed client, not the explicit one. peter-dev moved off the edge under a
+# planned shutdown earlier, so its region is in the hour-long cooldown that stops a client
+# bouncing straight back (#1246) -- it has nowhere to go and could not migrate. peter-auto has
+# never been warned.
+echo "=== Bringing the edge back up so there is somewhere to drain to ==="
+docker-compose -f docker-compose-edge.yml start lfr-tunneld-edge > /dev/null 2>&1
+EDGE_BACK=false
+for i in {1..40}; do
+    if docker-compose -f docker-compose-edge.yml logs --tail=40 lfr-tunneld-edge 2>/dev/null | grep -q "Successfully connected and authenticated"; then
+        EDGE_BACK=true
+        break
+    fi
+    sleep 2
+done
+if [ "$EDGE_BACK" = false ]; then
+    echo "❌ The edge never re-authenticated, so the drain test has nowhere to migrate to."
+    docker-compose -f docker-compose-edge.yml logs --tail=20 lfr-tunneld-edge
+    exit 1
+fi
+
+DRAIN_URL="http://127.0.0.1:8080/api/local/drain"
+DRAIN_REASON="Deploy drain E2E"
+
+echo "=== Announcing a drain on the control plane ==="
+DRAIN_RESP=$(docker-compose -f docker-compose-edge.yml exec -T lfr-tunneld-control \
+    wget -q -O - --post-data="{\"seconds\": 45, \"reason\": \"${DRAIN_REASON}\"}" \
+    --header='Content-Type: application/json' "$DRAIN_URL" 2>/dev/null || true)
+
+if ! echo "$DRAIN_RESP" | grep -q '"draining":true'; then
+    echo "❌ The control plane did not report itself draining."
+    echo "    Response: ${DRAIN_RESP:-<none>}"
+    exit 1
+fi
+echo "Control plane reports: $DRAIN_RESP"
+
+# The announcement has to reach a real client over the real heartbeat. Asserted on the reason
+# text, which is unique to this drain -- the scheduled-stop warning earlier in this run also
+# logs "shutting down", so matching on that alone would pass without the drain doing anything.
+echo "=== Waiting for the client to receive the drain announcement ==="
+DRAIN_SEEN=false
+for i in {1..40}; do
+    if docker logs "$AUTO_CLIENT_ID" 2>&1 | grep -q "$DRAIN_REASON"; then
+        DRAIN_SEEN=true
+        break
+    fi
+    sleep 2
+done
+
+if [ "$DRAIN_SEEN" = false ]; then
+    echo "❌ The client never received the drain announcement."
+    echo "    An operator-initiated drain that no client hears is the same as no drain at all."
+    docker logs "$AUTO_CLIENT_ID" 2>&1 | tail -20
+    exit 1
+fi
+echo "✅ Client received the drain announcement"
+
+echo "=== Waiting for the client to move off the control plane ==="
+DRAIN_MOVED=false
+for i in {1..60}; do
+    CODE=$(curl -s -o /dev/null -w "%{http_code}" -H "Host: peter-auto.lfr-demo.local" http://localhost:8090/ || true)
+    if [ "$CODE" = "200" ]; then
+        DRAIN_MOVED=true
+        break
+    fi
+    sleep 2
+done
+
+if [ "$DRAIN_MOVED" = false ]; then
+    echo "❌ The client heard the drain but never came up on the edge."
+    docker logs "$AUTO_CLIENT_ID" 2>&1 | tail -25
+    exit 1
+fi
+echo "✅ Client migrated to the edge ahead of the restart"
+
+# The actual assertion: restart the control plane and require the tunnel to serve throughout.
+# Sampled continuously rather than checked once afterwards, because a single check after the
+# fact cannot tell "never dropped" from "dropped and recovered before we looked".
+echo "=== Restarting the control plane while sampling the tunnel ==="
+# Sampled at BOTH gateways, requiring one of them to answer at each instant. A tunnel follows
+# its client: it moved to the edge on the drain announcement, and once the control plane is
+# back the failback prober legitimately returns it there. Sampling a single gateway records a
+# 502 for a tunnel that is serving perfectly well on the other one -- which is exactly what an
+# earlier version of this test did, and it read as an outage that never happened.
+SAMPLE_LOG=$(mktemp)
+(
+    for i in {1..60}; do
+        EDGE_CODE=$(curl -s -o /dev/null -w "%{http_code}" --max-time 2 \
+            -H "Host: peter-auto.lfr-demo.local" http://localhost:8090/ 2>/dev/null || echo 000)
+        CENTRAL_CODE=$(curl -s -o /dev/null -w "%{http_code}" --max-time 2 \
+            -H "Host: peter-auto.lfr-demo.local" http://localhost:8000/ 2>/dev/null || echo 000)
+        if [ "$EDGE_CODE" = "200" ] || [ "$CENTRAL_CODE" = "200" ]; then
+            echo "200" >> "$SAMPLE_LOG"
+        else
+            echo "edge=$EDGE_CODE central=$CENTRAL_CODE" >> "$SAMPLE_LOG"
+        fi
+        sleep 0.5
+    done
+) &
+SAMPLER_PID=$!
+
+sleep 3
+docker-compose -f docker-compose-edge.yml restart lfr-tunneld-control > /dev/null 2>&1
+echo "Control plane restarted; letting the sampler finish..."
+wait $SAMPLER_PID 2>/dev/null || true
+
+TOTAL=$(grep -c . "$SAMPLE_LOG" || echo 0)
+FAILED=$(grep -vc '^200$' "$SAMPLE_LOG" || echo 0)
+echo "Sampled ${TOTAL} requests through the tunnel during the restart; ${FAILED} did not return 200."
+
+if [ "$FAILED" -ne 0 ]; then
+    echo "❌ The tunnel was interrupted by a control plane restart it had been warned about."
+    echo "    Non-200 responses:"
+    grep -v '^200$' "$SAMPLE_LOG" | sort | uniq -c
+    echo "    Sample sequence (first 60, in order):"
+    tr '\n' ' ' < "$SAMPLE_LOG"; echo
+    echo "=== Auto client log (tail) ==="
+    docker logs "$AUTO_CLIENT_ID" 2>&1 | tail -40
+    echo "=== Edge log (tail) ==="
+    docker-compose -f docker-compose-edge.yml logs --tail=40 lfr-tunneld-edge 2>&1
+    rm -f "$SAMPLE_LOG"
+    exit 1
+fi
+rm -f "$SAMPLE_LOG"
+echo "✅ Control plane restarted with zero interruption to the drained tunnel!"
+
+# Leaving the announcement set would have every client migrate away from a gateway that is
+# staying up, so the deploy clears it -- and so must this.
+docker-compose -f docker-compose-edge.yml exec -T lfr-tunneld-control \
+    wget -q -O - --post-data='{"seconds": 0}' --header='Content-Type: application/json' "$DRAIN_URL" > /dev/null 2>&1 || true
+
 echo "✅ All Multi-Region Edge E2E Integration Tests PASSED!"
 exit 0

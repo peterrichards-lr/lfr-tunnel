@@ -562,3 +562,60 @@ func TestStartFailbackProber_PrimaryStillOffline(t *testing.T) {
 		}
 	}
 }
+
+// A control-plane blip used to tear down every edge-served tunnel in the fleet at once: the
+// heartbeat pinged both the serving gateway and central, and acted on an eviction response
+// from either. Central answering 503 during a restart says something about central, not about
+// a tunnel it is not in the data path for (#1306).
+func TestStartHealthChecks_CentralOutageDoesNotDropAnEdgeServedTunnel(t *testing.T) {
+	edge := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		// The serving gateway is healthy and still holds the lease.
+		w.WriteHeader(http.StatusOK)
+	}))
+	defer edge.Close()
+
+	central := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		// Central is restarting.
+		w.WriteHeader(http.StatusServiceUnavailable)
+	}))
+	defer central.Close()
+
+	engine := NewInterceptorEngine("", nil)
+	engine.SetCentralURL(central.URL)
+
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	clientCanceled := make(chan struct{})
+	engine.StartHealthChecks(ctx, func() { close(clientCanceled) }, edge.URL, "us", "session-token", []int{})
+
+	select {
+	case <-clientCanceled:
+		t.Fatal("a control plane restart tore down a tunnel the control plane does not serve")
+	case <-time.After(7 * time.Second):
+		// Long enough for at least one 5s heartbeat tick to have hit both endpoints.
+	}
+}
+
+// And the failover that #1147 and #1246 depend on must still fire when the gateway actually
+// serving the session says the lease is gone.
+func TestStartHealthChecks_ServingGatewayEvictionStillFailsOver(t *testing.T) {
+	edge := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusGone)
+	}))
+	defer edge.Close()
+
+	engine := NewInterceptorEngine("", nil)
+
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	clientCanceled := make(chan struct{})
+	engine.StartHealthChecks(ctx, func() { close(clientCanceled) }, edge.URL, "us", "session-token", []int{})
+
+	select {
+	case <-clientCanceled:
+	case <-time.After(10 * time.Second):
+		t.Fatal("expected failover when the serving gateway reports the lease evicted")
+	}
+}

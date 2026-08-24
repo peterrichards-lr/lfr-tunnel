@@ -8,10 +8,21 @@ import (
 )
 
 // This helper signs a file with minisign, using a private key supplied entirely via
-// environment variables -- it never contains or reads a hardcoded key. It is invoked
-// locally (never in CI) as part of the "sign, then deploy" release flow (see
-// pkg/ops/sign.go / pkg/ops/deploy.go and docs/server/setup_guide.md), after pulling the
-// real key out of 1Password ("self-signed-minisign-key").
+// environment variables -- it never contains or reads a hardcoded key.
+//
+// Two callers, both supplying the key the same way:
+//
+//   - Locally, as part of the "sign, then deploy" flow (pkg/ops/sign.go, pkg/ops/deploy.go,
+//     docs/server/setup_guide.md), after pulling the real key out of 1Password
+//     ("self-signed-minisign-key"). This signs the checksums for the binaries published to
+//     a gateway's downloads directory.
+//   - In .github/workflows/release.yml, signing the checksums for the binaries attached to
+//     a GitHub release, so those can be verified too (#1265). That step skips itself when
+//     no key is configured, so a fork can cut a release without one.
+//
+// The two sign different checksum files -- CI's binaries and the locally built, OS-codesigned
+// ones are not the same bytes -- but both verify against the same public key, so a client
+// can check whichever route it downloaded from.
 //
 // MINISIGN_SECRET_KEY must contain the full minisign secret key file content (the
 // "untrusted comment: ..." line plus the base64 payload). MINISIGN_KEY_PASSWORD is its

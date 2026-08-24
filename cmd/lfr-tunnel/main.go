@@ -420,6 +420,12 @@ func main() {
 		if primaryRegion != "" && primaryServerURL != "" {
 			engine.StartFailbackProber(clientCtx, cancelClient, primaryServerURL, primaryRegion)
 		}
+		// Only for a client that can actually move. One pinned with -server does not fail
+		// over (#1275), so ending its session on a shutdown warning would drop the tunnel
+		// with nowhere to go -- strictly worse than letting it run until the gateway stops.
+		if !isExplicitServer {
+			engine.StartShutdownMigrator(clientCtx, cancelClient)
+		}
 
 		err = client.RunClient(clientCtx, cfg.ServerURL, regResp.SessionToken, regResp.Remotes, publicURLs, engine)
 		cancelClient()
@@ -459,6 +465,13 @@ func main() {
 			// Nothing is wrong with the region, so re-register rather than failing away
 			// from it (issue #1146).
 			leaseLost := engine.ConsumeLeaseLost()
+
+			// The session ended because the gateway announced it was stopping and the
+			// migrator moved us off ahead of it, rather than because anything failed
+			// (#1246). The gateway is not broken and will be back, so this is logged as a
+			// planned move -- and held off for far longer than a fault would be, since it
+			// is about to be unreachable for its whole stop window.
+			plannedAt, plannedReason, plannedMove := engine.ConsumeShutdownMigration()
 
 			// A failback that is evicted almost immediately means the primary answers
 			// /api/healthz but cannot carry the session. Hold the prober off, or it
@@ -532,6 +545,19 @@ func main() {
 					// rediscovery away from this region: leaving it a candidate is what
 					// makes the "staying on '%s'" message above true.
 					slog.Info(fmt.Sprintf("[Client] Re-establishing the session on region '%s' (%s)...", failedRegion, cfg.ServerURL))
+				} else if plannedMove {
+					// Nothing failed. The gateway told us it was stopping and we left
+					// ahead of it, so this reads as a planned move rather than an
+					// incident -- which matters when someone is reading these logs to
+					// find out what went wrong (#1246).
+					slog.Info(fmt.Sprintf("[Client] Moving off region '%s' (%s) before its scheduled stop: %s", failedRegion, cfg.ServerURL, plannedReason))
+					engine.LogEvent("info", "planned_move_started", map[string]any{
+						"leaving_region": failedRegion,
+						"leaving_url":    cfg.ServerURL,
+						"shutdown_at":    plannedAt,
+						"reason":         plannedReason,
+					})
+					_ = client.ClearRegionCacheFile() //nolint:errcheck
 				} else {
 					slog.Info(fmt.Sprintf("[Client] Connection to region '%s' (%s) lost. Performing dynamic region failover...", failedRegion, cfg.ServerURL))
 					failoverCause := "connection closed"
@@ -548,7 +574,7 @@ func main() {
 				// Keyed on the URL, not the region name: the same gateway is advertised
 				// under several names, so excluding by name leaves it electable as its
 				// alias (issue #1166).
-				excludeFailedRegion(cfg, primaryRegionsMap, failedURL, keepRegion)
+				excludeFailedRegion(cfg, primaryRegionsMap, failedURL, keepRegion, plannedMove)
 
 				if newResp, ok := reregisterAcrossRegions(cfg, regPortMappings, sub, engine.AddedHeaders); ok {
 					applySession(newResp, "failover")
@@ -843,11 +869,26 @@ func centralControlPlaneURL(cfg *config.ClientConfig) string {
 // edge, and with only two regions configured the "everything excluded" fallback in
 // regionCooldowns.filter could then re-elect the primary whose failback had just
 // failed -- the loop #1121 exists to prevent (issue #1137).
-func excludeFailedRegion(cfg *config.ClientConfig, primaryRegions map[string]string, failedURL string, afterFailback bool) {
+// plannedShutdownCooldown holds a gateway out of the candidate set after moving off it
+// ahead of a scheduled stop (#1246). Far longer than regionFailoverCooldown, because that
+// one is sized for a transient fault whereas this gateway is about to be deliberately
+// unreachable for hours -- a 90s hold-off would re-elect it while it is still powered off,
+// fail to register, and start the cycle again.
+//
+// A fixed value rather than the real downtime: the warning carries shutdown_at but no return
+// time, so the client cannot yet know how long the stop lasts. An hour covers a typical
+// window well enough to stop the churn; carrying the return time would let this be exact.
+const plannedShutdownCooldown = time.Hour
+
+func excludeFailedRegion(cfg *config.ClientConfig, primaryRegions map[string]string, failedURL string, afterFailback bool, planned bool) {
 	if afterFailback {
 		return
 	}
-	cooldowns.exclude(failedURL, regionFailoverCooldown)
+	cooldown := regionFailoverCooldown
+	if planned {
+		cooldown = plannedShutdownCooldown
+	}
+	cooldowns.exclude(failedURL, cooldown)
 	if discoveryURL := regionDiscoveryURL(cfg, primaryRegions, failedURL); discoveryURL != "" {
 		cfg.ServerURL = discoveryURL
 	}

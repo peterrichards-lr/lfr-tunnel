@@ -86,6 +86,17 @@ type RegisterResponse struct {
 	LanguagePreference string   `json:"language_preference,omitempty"`
 	ThemePreference    string   `json:"theme_preference,omitempty"`
 	ServerVersion      string   `json:"server_version,omitempty"`
+	// The serving gateway's own scheduled downtime, when it has one (#1275). Sent so a
+	// client pinned with -server -- which never fails over, by design -- can be told up
+	// front that this gateway will go away, rather than discovering it when the tunnel
+	// drops.
+	//
+	// NodeStopsInSeconds is computed here rather than left to the client: working it out
+	// needs time.LoadLocation, and the tz database is not reliably present on every client
+	// platform. The time and zone are sent alongside purely so the message can name them.
+	NodeStopsInSeconds int    `json:"node_stops_in_seconds,omitempty"`
+	NodeStopTime       string `json:"node_stop_time,omitempty"`
+	NodeTimezone       string `json:"node_timezone,omitempty"`
 }
 
 // CheckSubdomainResponse represents the JSON response payload for subdomain checks.
@@ -1729,6 +1740,25 @@ func (s *Server) respondRegisterResponse(w http.ResponseWriter, status int, r *h
 		resp.PortalURL = portalURL
 	}
 	resp.ServerVersion = config.Version
+
+	// Attach this gateway's own scheduled downtime, so a client learns about it at
+	// registration rather than when the tunnel drops (#1275). Enriched here rather than at
+	// each call site because both success paths -- registering directly against this
+	// gateway, and registering via the edge proxy -- come through here.
+	//
+	// s.OwnSchedule() is what central told this node about itself (#1276). Central's own
+	// copy is always empty, which is correct: it is deliberately never scheduled, so
+	// nothing is disclosed for a client registering against it.
+	if resp.Status == "success" {
+		if sched := s.OwnSchedule(); sched.Enabled {
+			if secs, ok := secondsUntilScheduledStop(time.Now(), sched.StopTime, sched.Timezone); ok && secs > 0 {
+				resp.NodeStopsInSeconds = secs
+				resp.NodeStopTime = sched.StopTime
+				resp.NodeTimezone = sched.Timezone
+			}
+		}
+	}
+
 	respondJSON(w, status, resp)
 }
 

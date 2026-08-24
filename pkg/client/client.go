@@ -57,6 +57,55 @@ type RegisterResponse struct {
 	LanguagePreference string   `json:"language_preference,omitempty"`
 	ThemePreference    string   `json:"theme_preference,omitempty"`
 	ServerVersion      string   `json:"server_version,omitempty"`
+	// The serving gateway's own scheduled downtime, when it has one (#1275). Zero means
+	// this gateway is not scheduled to stop -- which is always true of the control plane.
+	NodeStopsInSeconds int    `json:"node_stops_in_seconds,omitempty"`
+	NodeStopTime       string `json:"node_stop_time,omitempty"`
+	NodeTimezone       string `json:"node_timezone,omitempty"`
+}
+
+// PinnedShutdownNotice returns the warning a client pinned to a specific gateway should be
+// shown at startup, or "" when there is nothing to say (#1275).
+//
+// A client started with -server never fails over. That is deliberate -- the flag means "use
+// this and nothing else", and a user wanting regional preference with resilience has -region
+// -- but it was never disclosed, so a pinned client simply dropped when its gateway hit a
+// scheduled stop and stayed down for the whole window. Measured at 24m36s against edge-in.
+//
+// Silent unless all three conditions hold: the client is pinned, the gateway is scheduled,
+// and the stop is still ahead. An unpinned client needs no warning because it will fail over.
+func PinnedShutdownNotice(resp *RegisterResponse, isExplicitServer bool) string {
+	if resp == nil || !isExplicitServer || resp.NodeStopsInSeconds <= 0 {
+		return ""
+	}
+
+	when := resp.NodeStopTime
+	if resp.NodeTimezone != "" {
+		when = fmt.Sprintf("%s %s", resp.NodeStopTime, resp.NodeTimezone)
+	}
+	return fmt.Sprintf(
+		"This gateway is scheduled to stop at %s, in %s. Because it was named with -server, "+
+			"this client will not move to another gateway -- the tunnel will drop and stay down "+
+			"until the gateway returns. Use -region instead of -server to allow failover.",
+		when, formatTimeUntil(resp.NodeStopsInSeconds))
+}
+
+// formatTimeUntil renders a span as coarse human units, e.g. "6h 12m".
+//
+// Distinct from tui.go's formatCountdown, which renders minutes and seconds because it ticks
+// down a five-minute warning. The same treatment here would print "372m 30s" for a stop
+// six hours away.
+func formatTimeUntil(seconds int) string {
+	d := time.Duration(seconds) * time.Second
+	h := int(d.Hours())
+	m := int(d.Minutes()) % 60
+	if h > 0 {
+		return fmt.Sprintf("%dh %dm", h, m)
+	}
+	if m > 0 {
+		return fmt.Sprintf("%dm", m)
+	}
+	return fmt.Sprintf("%ds", seconds)
 }
 
 // NodeShutdownWarning represents a shutdown notification message from a tunnel gateway.

@@ -147,7 +147,7 @@ export default function AdminAnalytics() {
         <h1 className="page-header__title">{t('system_analytics', 'System Analytics')}</h1>
         <div className="flex gap-md">
           <select 
-            className="input-field w-auto h-control px-md"
+            className="input-field w-auto px-md"
             value={timeRange} 
             onChange={(e) => setTimeRange(e.target.value)}
            aria-label={t('time_range', 'Time range')}>

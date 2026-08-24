@@ -22,9 +22,12 @@ services:
     build:
       context: ../../
       dockerfile: cmd/lfr-tunneld/Dockerfile
+    # The generated copy, not the committed one: run-edge.sh substitutes the schedule
+    # placeholders with times a couple of minutes ahead so the shutdown-migration test has a
+    # stop to react to (#1254). Run run-edge.sh rather than composing directly.
     command: ["--config", "/etc/lfr-tunneld/server-config-control.yaml"]
     volumes:
-      - ./server-config-control.yaml:/etc/lfr-tunneld/server-config-control.yaml:ro
+      - ./server-config-control.generated.yaml:/etc/lfr-tunneld/server-config-control.yaml:ro
     expose:
       - "8080"
       - "8081"

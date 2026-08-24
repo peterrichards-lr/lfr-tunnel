@@ -75,3 +75,4 @@ __pycache__/
 # .gitkeep is tracked because //go:embed ui-dist/* fails to compile on an empty directory.
 pkg/server/ui-dist/*
 !pkg/server/ui-dist/.gitkeep
+tests/e2e/server-config-control.generated.yaml

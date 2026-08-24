@@ -353,22 +353,72 @@ func RunClient(ctx context.Context, serverURL string, token string, remotes []st
 		return fmt.Errorf("chisel client error: %v", err)
 	}
 
-	// Print a clean, auto-clickable URL block after connection log sequence
+	// Print a clean, auto-clickable URL block, but only once the tunnel is genuinely up.
+	// This used to fire on a 500ms timer guarded by ctx.Err() == nil, which asks whether
+	// the context was cancelled -- not whether anything connected. Start() returns as soon
+	// as the chisel client has been started, so every failed attempt announced success:
+	// during a node's scheduled stop the log filled with "fully online" while the client
+	// was attached to nothing and the TUI correctly showed OFFLINE (#1258). The log is the
+	// artefact someone greps during an incident, so it is the one that must not lie.
 	go func() {
-		time.Sleep(500 * time.Millisecond)
-		if ctx.Err() == nil {
-			slog.Info("[Client] ========================================================")
-			slog.Info("[Client] Tunnel is active and fully online!")
-			slog.Info("[Client] You can access your local environment at:")
-			for _, u := range publicURLs {
-				slog.Info(fmt.Sprintf("  %s", u))
-			}
-			slog.Info("[Client] ========================================================")
+		if !waitForConnected(ctx, engine, connectAnnounceTimeout) {
+			return
 		}
+		slog.Info("[Client] ========================================================")
+		slog.Info("[Client] Tunnel is active and fully online!")
+		slog.Info("[Client] You can access your local environment at:")
+		for _, u := range publicURLs {
+			slog.Info(fmt.Sprintf("  %s", u))
+		}
+		slog.Info("[Client] ========================================================")
 	}()
 
 	// 5. Block until context done or wait error
 	return c.Wait()
+}
+
+// connectAnnounceTimeout bounds how long the "fully online" announcement waits for the
+// tunnel before giving up. Chisel reports "Connected" within about a second on a healthy
+// link; this is generous enough to absorb a slow one without parking a goroutine for the
+// life of the process on a connection that is never going to succeed.
+const connectAnnounceTimeout = 30 * time.Second
+
+// connectPollInterval is how often waitForConnected re-reads the engine's state. The state
+// is set from a log line rather than pushed, so there is nothing to select on.
+const connectPollInterval = 100 * time.Millisecond
+
+// waitForConnected reports whether the tunnel actually came up, blocking until it does,
+// until ctx is cancelled, or until timeout elapses.
+//
+// "Connected" means the engine's ConnState, which logParserWriter.parseMessage sets from
+// chisel's own "Connected (Latency ...)" line -- not anything inferred from Start()
+// returning, which happens whether or not a connection follows.
+//
+// Deliberately silent on the failure paths. Announcing a failure is #1257's job; doing it
+// here would print on every reconnect attempt, which is the same mistake as #1258 in the
+// opposite direction.
+func waitForConnected(ctx context.Context, engine *InterceptorEngine, timeout time.Duration) bool {
+	ticker := time.NewTicker(connectPollInterval)
+	defer ticker.Stop()
+	deadline := time.NewTimer(timeout)
+	defer deadline.Stop()
+
+	for {
+		engine.mu.RLock()
+		connected := engine.ConnState == "connected"
+		engine.mu.RUnlock()
+		if connected {
+			return true
+		}
+
+		select {
+		case <-ctx.Done():
+			return false
+		case <-deadline.C:
+			return false
+		case <-ticker.C:
+		}
+	}
 }
 
 var latencyRegex = regexp.MustCompile(`Latency\s+([^)]+)`)

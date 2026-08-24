@@ -5904,7 +5904,15 @@ func (s *Server) handleEdgeHealth(w http.ResponseWriter, r *http.Request) {
 				Status:      "Online",
 				LastCheckAt: time.Now().Unix(),
 			}
-		} else if h.Status != "Offline" && h.Status != "Disabled" {
+		} else if h.Status != "Disabled" {
+			// A node in edgeClients is holding a live control channel, so a cached
+			// "Offline" is a contradiction rather than something to preserve. Excluding
+			// it here meant a stale Offline could never be corrected by the one check
+			// positioned to notice (#1271).
+			//
+			// "Disabled" still wins: it means scheduled downtime or an operator action,
+			// and a node inside its stop window should not flip to Online because a
+			// connection lingers.
 			h.Status = "Online"
 			h.ErrorMessage = ""
 		}

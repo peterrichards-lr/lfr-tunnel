@@ -192,19 +192,34 @@ func (s *Server) handleEdgeControlWS(w http.ResponseWriter, r *http.Request) {
 		defer func() {
 			close(pingStop)
 			s.edgeClientsMu.Lock()
+			// Only tear down if this connection is still the registered one. A node that
+			// reconnected already has a newer, live connection under the same ID, and
+			// removing it here would strand a healthy node (the #1147 shape, control-channel
+			// edition).
+			wasActive := false
 			if activeConn, exists := s.edgeClients[nodeID]; exists && activeConn.conn == conn {
+				wasActive = true
 				delete(s.edgeClients, nodeID)
 				delete(s.edgeVersions, nodeID)
 				delete(s.edgeIPs, nodeID)
 			}
 			s.edgeClientsMu.Unlock()
-			s.edgeHealthMu.Lock()
-			if h, exists := s.edgeHealth[nodeID]; exists {
-				h.Status = "Offline"
-				h.ErrorMessage = "Control connection disconnected"
-				s.edgeHealth[nodeID] = h
+
+			// The same guard has to cover the health write. It used to be unconditional, so
+			// a superseded connection's cleanup marked the node Offline even though a newer
+			// connection was live and registered -- and nothing writes "Online" on
+			// registration, so that stale status stuck. Central logged
+			// "successfully authenticated" and then reported the node Offline for eight and
+			// a half minutes (#1271).
+			if wasActive {
+				s.edgeHealthMu.Lock()
+				if h, exists := s.edgeHealth[nodeID]; exists {
+					h.Status = "Offline"
+					h.ErrorMessage = "Control connection disconnected"
+					s.edgeHealth[nodeID] = h
+				}
+				s.edgeHealthMu.Unlock()
 			}
-			s.edgeHealthMu.Unlock()
 			s.edgePingMu.Lock()
 			delete(s.edgePingSentAt, nodeID)
 			s.edgePingMu.Unlock()

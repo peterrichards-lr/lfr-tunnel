@@ -147,12 +147,28 @@ type ServerConfig struct {
 	// calls to start/stop/restart edge node instances and manage their stop/start
 	// schedules. Empty by default -- when unset, those portal actions are simply
 	// absent, not erroring. Never set this to anything but a loopback address.
-	EdgeProvisionerURL         string                 `yaml:"edge_provisioner_url"`
-	EdgeProvisionerTokenFile   string                 `yaml:"edge_provisioner_token_file"`
-	EdgeShutdownWarningMinutes int                    `yaml:"edge_shutdown_warning_minutes" json:"edge_shutdown_warning_minutes"`
-	VanityDomainHook           string                 `yaml:"vanity_domain_hook"`
-	ProxyHeaders               map[string]string      `yaml:"proxy_headers"`
-	RoleSettings               map[string]RoleSetting `yaml:"role_settings"`
+	EdgeProvisionerURL         string `yaml:"edge_provisioner_url"`
+	EdgeProvisionerTokenFile   string `yaml:"edge_provisioner_token_file"`
+	EdgeShutdownWarningMinutes int    `yaml:"edge_shutdown_warning_minutes" json:"edge_shutdown_warning_minutes"`
+	VanityDomainHook           string `yaml:"vanity_domain_hook"`
+	// DNSHook is an operator-supplied executable that publishes and withdraws the DNS record
+	// for a tunnel, so a visitor reaches the gateway actually serving it rather than whichever
+	// one the wildcard points at (#1247). Empty leaves DNS alone entirely.
+	//
+	// Contract, mirroring the power hook in pkg/ops:
+	//
+	//	<hook> upsert <fqdn> <target>
+	//	<hook> delete <fqdn>
+	//
+	// See scripts/common/lfr-dns-hook-route53.sh for a reference implementation. This belongs
+	// on the control plane, which is the only gateway that knows which node holds which lease.
+	DNSHook string `yaml:"dns_hook"`
+	// DNSWithdrawGrace is how long a withdrawal waits before deleting the record. A lease is
+	// cleaned up on any disconnect, so deleting immediately would blank the record on every
+	// wifi blip. Zero uses the built-in default.
+	DNSWithdrawGrace time.Duration          `yaml:"dns_withdraw_grace"`
+	ProxyHeaders     map[string]string      `yaml:"proxy_headers"`
+	RoleSettings     map[string]RoleSetting `yaml:"role_settings"`
 
 	// Dynamic SSO/OIDC Providers
 	SSOProviders []SSOProviderConfig `yaml:"sso_providers"`

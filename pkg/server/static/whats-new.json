@@ -1,5 +1,14 @@
 [
   {
+    "version": "v1.48.2",
+    "release_date": "2026-08-24",
+    "features": [
+      "feat(ci): sign release checksums with minisign when a key is configured (#1269)",
+      "fix(provisioner): reject swapped schedule times and apply start before stop (#1268)",
+      "fix(client): explain an unsigned release instead of reporting a bare 404 (#1267)"
+    ]
+  },
+  {
     "version": "v1.48.1",
     "release_date": "2026-08-24",
     "features": [
@@ -62,18 +71,6 @@
       "One Domain Per Tunnel: Starting a tunnel without naming a domain no longer registers it on every configured domain at once, which previously consumed several subdomain reservations for a single tunnel.",
       "Tidier Multi-Port URLs: Additional ports now use a single dash, so a second port on 'alpha' is alpha-8081 rather than alpha--8081. If you expose more than one port, your public URLs change with this release -- update any bookmarks.",
       "Security: Approving a registration now requires a deliberate confirmation rather than simply opening the link, so a link preview or crawler can no longer approve someone. The local Inspector rejects requests driven from other websites, closing a route by which a page you visited could change your tunnel's settings."
-    ]
-  },
-  {
-    "version": "v1.45.0",
-    "release_date": "2026-08-21",
-    "features": [
-      "Reliable Edge Failover & Failback: Losing an edge no longer risks killing your tunnel. A transient gateway error during recovery is now retried against another region instead of exiting, a region you have failed away from is genuinely held out of the running until it settles, and a failback that doesn't work leaves you on the region you were already using rather than migrating you somewhere new.",
-      "Persistent Client Logs: The client now keeps a JSON Lines record of every proxied request and every diagnostic event under ~/.lfr-tunnel/logs/, for foreground and background runs alike. Region switches, lease evictions and exhausted failovers are all recorded, so a tunnel that misbehaved can be explained after the fact instead of guessed at. Logs rotate rather than overwrite, and request bodies stay off disk unless you pass -log-bodies.",
-      "Clearer TUI: The dashboard now shows the Inspector port it actually bound to and the target host you actually configured, rather than assuming 4040 and 127.0.0.1. Long paths and log lines are truncated by character, so accented text and emoji no longer render as broken glyphs.",
-      "Dependable Admin Email: Registration approval emails now reach administrators even if they have muted routine notifications, so unsubscribing can no longer silently block new users from being approved. Admin alerts also fall back to the configured owner when no dedicated notification address is set, and the gateway warns at startup if nobody would receive them.",
-      "Gateway Stability: Fixed several concurrency faults in the gateway and edge control channel, including a goroutine leak on every edge reconnect and races during startup and shutdown.",
-      "Self-Hosting Correctness: Self-hosted deployments no longer report tunnel status to this project's production gateway, and no longer fall back to its domain when promoting a reservation."
     ]
   }
 ]

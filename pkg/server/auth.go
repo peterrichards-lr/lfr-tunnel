@@ -98,7 +98,18 @@ type Registry struct {
 	// heartbeating against a session we destroyed can be told so explicitly rather
 	// than left to infer it. Bounded by pruning on insert (issue #1146).
 	cleanedSessions map[string]time.Time
+
+	// releasedHosts records hosts whose lease this gateway tore down, so a visitor
+	// arriving in the gap can be told the tunnel is briefly unavailable rather than that
+	// it never existed. Without it the two are indistinguishable and both answered 502
+	// (issue #1251). Bounded by pruning on insert, same as cleanedSessions.
+	releasedHosts map[string]time.Time
 }
+
+// releasedHostTTL is how long a torn-down host keeps being treated as briefly unavailable
+// rather than gone. Long enough to cover a failover and the client's reconnect; short
+// enough that a subdomain nobody is coming back to stops promising it will return.
+const releasedHostTTL = 5 * time.Minute
 
 // cleanedSessionTTL is how long a reaped session token is remembered. It only has to
 // outlast the client's 5s heartbeat by a wide margin; past that the client has either
@@ -113,6 +124,7 @@ func NewRegistry(chiselServer *chserver.Server) *Registry {
 		usedPorts:       make(map[int]bool),
 		chiselServer:    chiselServer,
 		cleanedSessions: make(map[string]time.Time),
+		releasedHosts:   make(map[string]time.Time),
 	}
 }
 
@@ -157,6 +169,31 @@ func (r *Registry) rememberCleanedSession(sessionToken string) {
 		}
 	}
 	r.cleanedSessions[sessionToken] = now
+}
+
+// rememberReleasedHost records that this gateway has just torn down host's lease. Caller
+// must hold the write lock, matching rememberCleanedSession.
+func (r *Registry) rememberReleasedHost(host string) {
+	if r.releasedHosts == nil {
+		r.releasedHosts = make(map[string]time.Time)
+	}
+	now := time.Now()
+	for h, releasedAt := range r.releasedHosts {
+		if now.Sub(releasedAt) >= releasedHostTTL {
+			delete(r.releasedHosts, h)
+		}
+	}
+	r.releasedHosts[host] = now
+}
+
+// RecentlyReleased reports whether this gateway tore down a lease for host within
+// releasedHostTTL. A true answer means "briefly unavailable" -- a failover, a reconnect, or
+// a scheduled node stop -- rather than "no such tunnel".
+func (r *Registry) RecentlyReleased(host string) bool {
+	r.RLock()
+	defer r.RUnlock()
+	releasedAt, ok := r.releasedHosts[host]
+	return ok && time.Since(releasedAt) < releasedHostTTL
 }
 
 // generateSessionToken generates a secure random token.
@@ -500,6 +537,11 @@ func (r *Registry) CleanLease(sessionToken string) {
 		// 30s grace period hits this, which failover makes routine.
 		if current, ok := r.leases[lease.FullHost]; ok && current == lease {
 			delete(r.leases, lease.FullHost)
+			// Only on the branch that actually removed the routing entry. When the guard
+			// above fails, a different live session owns the host, so nothing was
+			// released and a visitor should be served normally rather than told the
+			// tunnel is briefly away (#1251).
+			r.rememberReleasedHost(lease.FullHost)
 		}
 		// usedPorts is keyed by the port, which is unique per lease, so it needs no guard.
 		delete(r.usedPorts, lease.LocalPort)

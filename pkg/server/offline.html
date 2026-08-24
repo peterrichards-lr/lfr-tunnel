@@ -237,7 +237,7 @@
                 </div>
                 <div class="detail-row">
                     <span class="detail-label">Gateway Status</span>
-                    <span class="detail-value" style="color: var(--alert-red);">502 Bad Gateway</span>
+                    <span class="detail-value" style="color: var(--alert-red);" id="status-placeholder">__STATUS__</span>
                 </div>
                 <div class="detail-row">
                     <span class="detail-label">Service</span>
@@ -248,6 +248,7 @@
             <button class="btn" onclick="window.location.reload()">
                 Check Connection
             </button>
+            <div id="retry-notice" style="margin-top: 12px; font-size: 12px; opacity: 0.7;"></div>
         </div>
         <div class="footer" style="margin-top: 24px; font-size: 11px; opacity: 0.6; display: flex; justify-content: center; gap: 12px; align-items: center; width: 100%;">
             <a href="https://status.lfr-demo.se" target="_blank" rel="noopener noreferrer" style="color: var(--text-secondary); text-decoration: none; transition: 0.2s;" onmouseover="this.style.color='var(--liferay-blue)'" onmouseout="this.style.color='var(--text-secondary)'">System Status</a>
@@ -261,6 +262,28 @@
     <script>
         // Dynamically show the current domain host
         document.getElementById('host-placeholder').textContent = window.location.hostname;
+
+        // The gateway substitutes the retry interval in seconds, or 0 to disable it. Only a
+        // transient status (503) sets one -- a tunnel that has genuinely gone is not worth
+        // re-fetching forever. Without this a visitor caught in a failover or a scheduled
+        // node stop had to keep pressing refresh to discover the tunnel had come back.
+        var retrySeconds = parseInt('__RETRY_SECONDS__', 10);
+        if (retrySeconds > 0) {
+            var remaining = retrySeconds;
+            var notice = document.getElementById('retry-notice');
+            var tick = function () {
+                notice.textContent = remaining > 0
+                    ? 'Retrying automatically in ' + remaining + 's...'
+                    : 'Retrying...';
+                if (remaining <= 0) {
+                    window.location.reload();
+                    return;
+                }
+                remaining -= 1;
+                window.setTimeout(tick, 1000);
+            };
+            tick();
+        }
     </script>
 </body>
 </html>

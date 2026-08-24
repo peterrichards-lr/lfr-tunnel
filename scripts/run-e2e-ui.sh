@@ -11,8 +11,17 @@ if [ -z "$HOME" ]; then
 fi
 
 if [ -s "$HOME/.nvm/nvm.sh" ]; then
-    source "$HOME/.nvm/nvm.sh"
-    nvm use 22.23.1 || true
+    # errexit off around the whole nvm block, not just "|| true" on each call. Sourcing nvm.sh
+    # runs its auto-use, which returns 3 in a non-interactive shell with no .nvmrc -- and nvm
+    # restores whatever errexit setting it found on the way in, so with set -e active it
+    # re-arms errexit and then returns non-zero, killing this script before it ever reaches
+    # the explicit-PATH fallback written for exactly this case. It exited 3 having printed
+    # nothing at all, which is why nobody could see what had gone wrong.
+    set +e
+    # shellcheck disable=SC1091
+    . "$HOME/.nvm/nvm.sh"
+    nvm use 22.23.1
+    set -e
 fi
 # Fallback to explicit path if nvm didn't load properly in non-interactive shell
 export PATH="$HOME/.nvm/versions/node/v22.23.1/bin:$PATH"
@@ -42,6 +51,10 @@ cd ..
 echo "=== Syncing UI bundle to Go embedded filesystem ==="
 rm -rf pkg/server/ui-dist
 cp -r ui/dist pkg/server/ui-dist
+# .gitkeep is tracked -- //go:embed ui-dist/* fails to compile on an empty directory (#1196).
+# The rm above takes it with the bundle, so every run left it deleted in git status, ready to
+# be committed by accident.
+touch pkg/server/ui-dist/.gitkeep
 
 echo "=== Starting Docker Compose for E2E UI Tests ==="
 cd tests/e2e || exit 1

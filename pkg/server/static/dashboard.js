@@ -715,7 +715,7 @@ function toggleTheme() {
             document.getElementById('loader').style.display = 'none';
             document.getElementById('login-screen').style.display = 'none';
             document.getElementById('intercept-screen').style.display = 'none';
-            document.getElementById('dashboard-screen').style.display = 'flex';
+            document.getElementById('dashboard-shell').style.display = 'flex';
 
             if (currentUser.killed_previous_session) {
                 setTimeout(() => showToast("Warning: You were previously logged in elsewhere. That session has been invalidated."), 1000);
@@ -980,6 +980,10 @@ function toggleTheme() {
 
             if (currentUser.role === 'admin' || currentUser.role === 'owner') {
                 document.getElementById('admin-sidebar-group').classList.remove('hidden');
+                // System Settings lives in the sidebar footer, outside that group, so it has
+                // to be revealed separately -- it was previously never hidden at all, and
+                // every role saw it, including an owner previewing as a plain user (#1289).
+                document.getElementById('nav-system').classList.remove('hidden');
                 loadUsers(); // This updates the registration badge count
                 updateMaintenanceModeUI(currentUser.maintenance_mode || 'false', currentUser.iron_curtain || false);
             }
@@ -1442,9 +1446,22 @@ applyTheme(currentUser.theme_preference);
             });
         }
 
+        // Tabs whose panels are administrative. The nav items for these are hidden for other
+        // roles, but the hash is still typeable, and hiding a link is not access control --
+        // without this, #system rendered its panel shell for anyone who asked for it (#1289).
+        // The server refuses the data either way; this stops the portal implying otherwise.
+        const ADMIN_ONLY_TABS = [
+            'system', 'users', 'registrations', 'blacklist', 'audit', 'magic',
+            'backups', 'network-health', 'maintenance', 'analytics'
+        ];
+
         function showTab(tabName, skipHistory = false) {
             if (window.closeAllActionMenus) {
                 window.closeAllActionMenus();
+            }
+            if (ADMIN_ONLY_TABS.includes(tabName) &&
+                !(currentUser && (currentUser.role === 'admin' || currentUser.role === 'owner'))) {
+                tabName = 'overview';
             }
             if (window.innerWidth <= 1024) {
                 const sidebar = document.querySelector('.sidebar');
@@ -4688,7 +4705,7 @@ applyTheme(currentUser.theme_preference);
         window.showIntercept = async function(type) {
             document.getElementById('loader').style.display = 'none';
             document.getElementById('login-screen').style.display = 'none';
-            document.getElementById('dashboard-screen').style.display = 'none';
+            document.getElementById('dashboard-shell').style.display = 'none';
             document.getElementById('intercept-screen').style.display = 'flex';
             
             if (type === 'mfa_setup') {

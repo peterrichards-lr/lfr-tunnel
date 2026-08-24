@@ -132,6 +132,10 @@
     </div>
 
     <!-- DASHBOARD SCREEN -->
+    <!-- A column, because body is a flex ROW. Directly in body, the View As bar became a
+         flex item beside the sidebar rather than a banner above it (#1289). This wrapper is
+         what is shown and hidden; #dashboard-screen inside it stays the sidebar+content row. -->
+    <div id="dashboard-shell">
     <!-- View As (#1225). Hidden until renderViewAs() decides otherwise. The session is
          read-only while previewing, so this has to be impossible to miss. -->
     <div id="view-as-bar" class="hidden"></div>
@@ -190,7 +194,9 @@
             </div>
             
             <div class="sidebar-footer">
-                <a id="nav-system" class="nav-item" data-i18n="sidebar_system" href="#system">System Settings</a>
+                <!-- Hidden until the role is known. It sits in the footer rather than in
+                     #admin-sidebar-group, which is what left it on show for every role (#1289). -->
+                <a id="nav-system" class="nav-item hidden" data-i18n="sidebar_system" href="#system">System Settings</a>
 
                 <a id="nav-account" class="nav-item" data-i18n="sidebar_account" href="#account">Account Settings</a>
                 <button type="button" class="nav-item" onclick="logout()">Logout</button>
@@ -916,6 +922,7 @@
             </div>
         </div>
     </div>
+    </div><!-- /#dashboard-shell -->
 
     <!-- NEW TOKEN MODAL -->
     <div id="token-modal" class="modal-overlay">

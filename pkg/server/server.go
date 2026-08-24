@@ -834,7 +834,14 @@ func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 
 			regions := make(map[string]string)
 			if len(s.cfg.Domains) > 0 {
-				centralURL := "https://tunnel." + s.cfg.Domains[0]
+				// Configured verbatim where set, because the construction below assumes both
+				// the scheme and the hostname prefix. A deployment that is neither https nor
+				// tunnel.<domain> was handed a URL that does not answer, and clients failing
+				// over to it retried every attempt against the same dead address (#1286).
+				centralURL := s.cfg.CentralURL
+				if centralURL == "" {
+					centralURL = "https://tunnel." + s.cfg.Domains[0]
+				}
 				regions["eu"] = centralURL
 				regions["central"] = centralURL
 			}

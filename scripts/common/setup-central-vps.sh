@@ -29,12 +29,12 @@ usage() {
   echo "  -e: Admin/contact email for Let's Encrypt registration (required)"
   echo "  -p: Local port lfr-tunneld binds to -- must match the uploaded server-config.yaml (required)"
   echo ""
-  echo "PREREQUISITE: place your real Cloudflare API token in /etc/letsencrypt/cloudflare.ini"
-  echo "on the target server YOURSELF before running this script (see setup_guide.md §3.2):"
-  echo "  sudo mkdir -p /etc/letsencrypt"
-  echo "  sudo nano /etc/letsencrypt/cloudflare.ini   # dns_cloudflare_api_token = <token>"
-  echo "  sudo chmod 600 /etc/letsencrypt/cloudflare.ini"
-  echo "This script only checks that file exists — it never reads, uploads, or handles the token."
+  echo "PREREQUISITE: the target instance must already be able to write the DNS-01 challenge"
+  echo "record into its hosted zone. On AWS that means an instance profile granting, on the"
+  echo "zones this deployment serves and nothing else:"
+  echo "  route53:ChangeResourceRecordSets, route53:ListResourceRecordSets, route53:GetHostedZone"
+  echo "plus route53:ListHostedZonesByName and route53:GetChange on *."
+  echo "This script never reads, uploads, or handles a credential of any kind."
   exit 1
 }
 
@@ -71,12 +71,20 @@ fi
 
 echo "=== Starting Central VPS Automation for IP: $VPS_IP, domain: $DOMAIN ==="
 
-# 0. Refuse to proceed unless the Cloudflare token is already in place — this script never
-#    handles that secret itself, so this is a hard prerequisite, not something to work around.
-echo "=> Checking for /etc/letsencrypt/cloudflare.ini on $VPS_IP..."
-if ! ssh $SSH_KEY_ARG $SSH_USER@$VPS_IP "sudo test -s /etc/letsencrypt/cloudflare.ini"; then
-  echo "❌ Error: /etc/letsencrypt/cloudflare.ini is missing or empty on $VPS_IP."
-  echo "   Place your real Cloudflare API token there yourself first (see usage below), then re-run."
+# 0. Refuse to proceed unless the instance can actually write a DNS-01 challenge record. This
+#    script never handles a credential itself, so this is a hard prerequisite rather than
+#    something to work around -- and checking it here turns a silent renewal failure 30 days
+#    before expiry into a refusal at provisioning time (#1297).
+echo "=> Checking $VPS_IP can write DNS-01 challenge records into its hosted zone..."
+if ! ssh $SSH_KEY_ARG $SSH_USER@$VPS_IP "command -v aws >/dev/null 2>&1"; then
+  echo "❌ Error: the AWS CLI is not installed on $VPS_IP, so the Route53 DNS-01 plugin has"
+  echo "   nothing to authenticate with. Install it and attach an instance profile first."
+  usage
+fi
+if ! ssh $SSH_KEY_ARG $SSH_USER@$VPS_IP "aws route53 list-hosted-zones-by-name --dns-name '$DOMAIN' --max-items 1 >/dev/null 2>&1"; then
+  echo "❌ Error: $VPS_IP cannot read Route53 hosted zones for $DOMAIN."
+  echo "   Attach an instance profile granting the permissions listed in the usage below,"
+  echo "   then re-run. Nothing here needs a token on disk."
   usage
 fi
 
@@ -94,22 +102,39 @@ go build -o bin/lfr-tunnel-ops ./cmd/lfr-tunnel-ops
 echo "=> Connecting to $VPS_IP to install dependencies (Nginx, Certbot, UFW, Fail2ban)..."
 ssh $SSH_KEY_ARG $SSH_USER@$VPS_IP << 'REMOTE_SSH'
   sudo apt-get update
-  sudo apt-get install -y nginx certbot python3-certbot-dns-cloudflare curl jq ufw fail2ban unattended-upgrades
+  sudo apt-get install -y nginx certbot python3-certbot-dns-route53 curl jq ufw fail2ban unattended-upgrades
 REMOTE_SSH
 
-# 3. Request the wildcard cert via Certbot's automated Cloudflare DNS-01 plugin — fully
-#    non-interactive, since /etc/letsencrypt/cloudflare.ini was already verified above.
+# 3. Request the wildcard cert via Certbot's Route53 DNS-01 plugin. Fully non-interactive and
+#    credential-free from this script's point of view: the plugin uses the instance's own IAM
+#    role, so no token is ever written down, uploaded, or rotated by hand.
+#
+#    This was --dns-cloudflare until #1297. Both zones moved to Route53 on 2026-08-11, so the
+#    Cloudflare plugin was writing the challenge record into a zone that is no longer
+#    authoritative -- the CA queries the AWS nameservers and would never have seen it. Nothing
+#    failed at the time because the certificates had just been issued; the first renewal after
+#    the migration would have been the first failure, silently, 30 days before expiry.
 echo "=========================================================="
 echo "=> Provisioning Wildcard SSL Certificate for $DOMAIN & *.$DOMAIN"
 echo "=========================================================="
 ssh $SSH_KEY_ARG $SSH_USER@$VPS_IP "sudo certbot certonly \
-  --dns-cloudflare \
-  --dns-cloudflare-credentials /etc/letsencrypt/cloudflare.ini \
+  --dns-route53 \
   --agree-tos \
   --non-interactive \
   -m $ADMIN_EMAIL \
   -d '$DOMAIN' \
   -d '*.$DOMAIN'"
+
+# 3b. Prove renewal actually works, rather than assuming it because issuance did. A dry run
+#     performs a real challenge against the live zone, which is the only thing that
+#     distinguishes a working authenticator from one pointed at the wrong provider -- exactly
+#     the failure #1297 was.
+echo "=> Verifying unattended renewal (certbot renew --dry-run)..."
+ssh $SSH_KEY_ARG $SSH_USER@$VPS_IP "sudo certbot renew --dry-run" || {
+  echo "❌ Renewal dry run failed. The certificate is issued but will not renew unattended."
+  echo "   Check the instance's Route53 permissions before going further."
+  exit 1
+}
 
 # 4. Upload the pre-built server-config.yaml
 echo "=> Uploading server-config.yaml..."

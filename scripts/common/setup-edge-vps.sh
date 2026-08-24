@@ -67,17 +67,26 @@ fi
 
 echo "=== Starting Edge VPS Automation for IP: $VPS_IP ==="
 
-# 0. Refuse to proceed unless the Cloudflare token is already in place — this script never
-#    handles that secret itself, so this is a hard prerequisite, not something to work around.
-#    (Automated --dns-cloudflare below replaces the old interactive --manual DNS-01 flow,
-#    which required a human to add a TXT record mid-run and can't be driven unattended.)
-echo "=> Checking for /etc/letsencrypt/cloudflare.ini on $VPS_IP..."
-if ! ssh $SSH_KEY_ARG $SSH_USER@$VPS_IP "sudo test -s /etc/letsencrypt/cloudflare.ini"; then
-  echo "❌ Error: /etc/letsencrypt/cloudflare.ini is missing or empty on $VPS_IP."
-  echo "   Place your real Cloudflare API token there yourself first (see setup_guide.md §3.2):"
-  echo "     sudo mkdir -p /etc/letsencrypt"
-  echo "     sudo nano /etc/letsencrypt/cloudflare.ini   # dns_cloudflare_api_token = <token>"
-  echo "     sudo chmod 600 /etc/letsencrypt/cloudflare.ini"
+# 0. Refuse to proceed unless the instance can write a DNS-01 challenge record. This script
+#    never handles a credential itself, so this is a hard prerequisite rather than something to
+#    work around -- and checking it here turns a silent renewal failure 30 days before expiry
+#    into a refusal at provisioning time (#1297).
+#
+#    This was a check for /etc/letsencrypt/cloudflare.ini. Both zones moved to Route53 on
+#    2026-08-11, so the Cloudflare plugin was writing the challenge into a zone that is no
+#    longer authoritative -- the CA queries the AWS nameservers and would never have seen it.
+echo "=> Checking $VPS_IP can write DNS-01 challenge records into its hosted zone..."
+FIRST_DOMAIN="${DOMAINS%%,*}"
+if ! ssh $SSH_KEY_ARG $SSH_USER@$VPS_IP "command -v aws >/dev/null 2>&1"; then
+  echo "❌ Error: the AWS CLI is not installed on $VPS_IP, so the Route53 DNS-01 plugin has"
+  echo "   nothing to authenticate with. Install it and attach an instance profile first."
+  exit 1
+fi
+if ! ssh $SSH_KEY_ARG $SSH_USER@$VPS_IP "aws route53 list-hosted-zones-by-name --dns-name '$FIRST_DOMAIN' --max-items 1 >/dev/null 2>&1"; then
+  echo "❌ Error: $VPS_IP cannot read Route53 hosted zones for $FIRST_DOMAIN."
+  echo "   Attach an instance profile granting, on the zones this deployment serves:"
+  echo "     route53:ChangeResourceRecordSets, route53:ListResourceRecordSets, route53:GetHostedZone"
+  echo "   plus route53:ListHostedZonesByName and route53:GetChange on *."
   exit 1
 fi
 
@@ -90,11 +99,12 @@ GOOS=linux GOARCH=amd64 go build -ldflags="-s -w -X lfr-tunnel/pkg/config.Versio
 echo "=> Connecting to $VPS_IP to install dependencies (Nginx, Certbot, UFW, Fail2ban)..."
 ssh $SSH_KEY_ARG $SSH_USER@$VPS_IP << 'REMOTE_SSH'
   sudo apt-get update
-  sudo apt-get install -y nginx certbot python3-certbot-dns-cloudflare curl jq ufw fail2ban unattended-upgrades
+  sudo apt-get install -y nginx certbot python3-certbot-dns-route53 curl jq ufw fail2ban unattended-upgrades
 REMOTE_SSH
 
-# 3. Request wildcard Let's Encrypt certificates using Certbot's automated Cloudflare DNS-01
-#    plugin — fully non-interactive, since /etc/letsencrypt/cloudflare.ini was verified above.
+# 3. Request wildcard Let's Encrypt certificates using Certbot's Route53 DNS-01 plugin --
+#    non-interactive, and credential-free from this script's point of view: the plugin uses the
+#    instance's own IAM role, so no token is written down, uploaded, or rotated by hand.
 IFS=',' read -r -a DOMAIN_ARRAY <<< "$DOMAINS"
 for DOMAIN in "${DOMAIN_ARRAY[@]}"; do
   echo "=========================================================="
@@ -102,9 +112,7 @@ for DOMAIN in "${DOMAIN_ARRAY[@]}"; do
   echo "=========================================================="
 
   ssh $SSH_KEY_ARG $SSH_USER@$VPS_IP "sudo certbot certonly \
-    --dns-cloudflare \
-    --dns-cloudflare-credentials /etc/letsencrypt/cloudflare.ini \
-    --dns-cloudflare-propagation-seconds 45 \
+    --dns-route53 \
     --agree-tos \
     --non-interactive \
     --register-unsafely-without-email \

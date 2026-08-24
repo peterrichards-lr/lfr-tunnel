@@ -274,6 +274,15 @@ func main() {
 	defer cancel()
 
 	regResp := performRegistrationHandshake(cfg, portMappings, sub, engine.AddedHeaders)
+
+	// A gateway named with -server is used and nothing else -- the failover path is gated on
+	// !isExplicitServer. That is the right contract, but it was never disclosed: a pinned
+	// client simply dropped when its gateway hit a scheduled stop and stayed down for the
+	// whole window. Say so now, while the user can still choose differently (#1275).
+	if notice := client.PinnedShutdownNotice(regResp, isExplicitServer); notice != "" {
+		slog.Warn(fmt.Sprintf("[Client] %s", notice))
+	}
+
 	if regResp.LanguagePreference != "" {
 		engine.LanguagePreference = regResp.LanguagePreference
 	}

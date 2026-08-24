@@ -77,6 +77,35 @@ jobs:
       - name: Prepare Dist Directory
         run: mkdir -p dist
 
+      # Say which deployment defaults this release is being built with. Unset is a supported
+      # mode -- the client then asks to be pointed at a gateway rather than guessing one --
+      # but it is indistinguishable from the configured mode once the binaries are built, so
+      # v1.48.0 shipped with no default gateway and nobody noticed until someone downloaded
+      # it (#1256). A build that silently changes what the client does has to say so.
+      - name: Report Deployment Defaults
+        env:
+          SERVER_URL: ${{ vars.LFT_DEFAULT_SERVER_URL }}
+          STATUS_PAGE_URL: ${{ vars.LFT_DEFAULT_STATUS_PAGE_URL }}
+          PORTAL_URL: ${{ vars.LFT_DEFAULT_PORTAL_URL }}
+          TAG: ${{ github.ref_name }}
+        run: |
+          # Each default means something different when empty, so the consequence is
+          # spelled out per line rather than shared.
+          report() {
+            if [ -z "$2" ]; then
+              echo "  $1: (unset -- $3)"
+            else
+              echo "  $1: $2"
+            fi
+          }
+          echo "Building $TAG with these deployment defaults:"
+          report DefaultServerURL     "$SERVER_URL"      "clients will ask to be pointed at a gateway"
+          report DefaultStatusPageURL "$STATUS_PAGE_URL" "no status-page hint when a gateway looks unreachable"
+          report DefaultPortalURL     "$PORTAL_URL"      "browser login falls back to the gateway, which serves the portal too"
+          if [ -z "$SERVER_URL" ]; then
+            echo "::warning title=No default gateway::This release ships clients with no built-in gateway. Set the LFT_DEFAULT_SERVER_URL repository variable if that is not intended."
+          fi
+
       - name: Build Server Gateway (lfr-tunneld)
         run: |
           GOOS=linux GOARCH=amd64 go build -ldflags="-s -w $DEPLOYMENT_LDFLAGS -X lfr-tunnel/pkg/config.Version=${{ github.ref_name }}" -trimpath -o dist/lfr-tunneld-linux-amd64 ./cmd/lfr-tunneld

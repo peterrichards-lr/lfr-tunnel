@@ -358,6 +358,29 @@ if ! docker logs "$CLIENT_CONTAINER_ID" 2>&1 | grep -q "peter-dev.lfr-demo.local
 fi
 echo "✅ Explicit regional edge tunnel routing verified successfully, on a region-agnostic host!"
 
+# The record has to point at the node actually holding the tunnel. Without it an apex-issued
+# host resolves to the control plane via the wildcard, and the control plane holds no lease for
+# it -- the tunnel is up and every visitor gets an offline page (#1247).
+echo "=== Verifying DNS was published for the edge that holds the tunnel ==="
+DNS_PUBLISHED=false
+for i in {1..30}; do
+    DNS_LOG=$(docker-compose -f docker-compose-edge.yml exec -T lfr-tunneld-control cat /tmp/dns-hook.log 2>/dev/null || true)
+    if echo "$DNS_LOG" | grep -q "^upsert peter-dev.lfr-demo.local us.lfr-demo.local$"; then
+        DNS_PUBLISHED=true
+        break
+    fi
+    sleep 1
+done
+
+if [ "$DNS_PUBLISHED" = false ]; then
+    echo "❌ The control plane never pointed peter-dev.lfr-demo.local at the edge serving it."
+    echo "    Expected: upsert peter-dev.lfr-demo.local us.lfr-demo.local"
+    echo "=== DNS hook calls so far ==="
+    docker-compose -f docker-compose-edge.yml exec -T lfr-tunneld-control cat /tmp/dns-hook.log 2>&1 || echo "(no hook calls at all)"
+    exit 1
+fi
+echo "✅ DNS published: peter-dev.lfr-demo.local -> us.lfr-demo.local"
+
 # 7. Test Auto-Probing Latency Selection
 echo "=== Starting auto-probing client tunnel ==="
 AUTO_CLIENT_ID=$(docker-compose -f docker-compose-edge.yml run -d --no-deps \
@@ -474,6 +497,57 @@ if docker logs "$CLIENT_CONTAINER_ID" 2>&1 | grep -q "peter-dev.us.lfr-demo.loca
     docker logs "$CLIENT_CONTAINER_ID" 2>&1 | grep "peter-dev"
     exit 1
 fi
+
+# And the record has to have moved with it. The name is unchanged, so the only thing that can
+# get a visitor to the new gateway is the record being repointed (#1247).
+echo "=== Verifying DNS followed the tunnel to the control plane ==="
+DNS_MOVED=false
+for i in {1..30}; do
+    DNS_LOG=$(docker-compose -f docker-compose-edge.yml exec -T lfr-tunneld-control cat /tmp/dns-hook.log 2>/dev/null || true)
+    if echo "$DNS_LOG" | grep -q "^upsert peter-dev.lfr-demo.local tunnel.lfr-demo.local$"; then
+        DNS_MOVED=true
+        break
+    fi
+    sleep 1
+done
+
+if [ "$DNS_MOVED" = false ]; then
+    echo "❌ The tunnel moved to the control plane but its DNS record still points at the edge."
+    echo "    Expected: upsert peter-dev.lfr-demo.local tunnel.lfr-demo.local"
+    echo "=== DNS hook calls ==="
+    docker-compose -f docker-compose-edge.yml exec -T lfr-tunneld-control cat /tmp/dns-hook.log 2>&1 || true
+    exit 1
+fi
+
+# Now let the scheduled stop actually happen. Up to here the edge has only *announced* that it
+# is stopping; the container stayed up, so the client kept failing back to it and being warned
+# off again, and the record oscillated. That is a property of the harness, not of the product:
+# a real edge stops. Stopping it here settles the end state so the assertion below means
+# something.
+echo "=== Stopping the edge, as its schedule said it would ==="
+docker-compose -f docker-compose-edge.yml stop lfr-tunneld-edge > /dev/null 2>&1 || true
+
+# Past the withdrawal grace (5s in this harness's config), the record has to be left pointing
+# at the gateway that actually holds the tunnel. The failure this replaced: the edge's
+# deregistration arrives AFTER central has published, so a withdrawal that only asks "has
+# anything happened since?" deletes the record that just replaced it, leaving the tunnel live
+# and unreachable.
+sleep 12
+FINAL_DNS=$(docker-compose -f docker-compose-edge.yml exec -T lfr-tunneld-control cat /tmp/dns-hook.log 2>/dev/null || true)
+FINAL_TARGET=$(echo "$FINAL_DNS" | awk '
+    $2 == "peter-dev.lfr-demo.local" && $1 == "upsert" { target = $3 }
+    $2 == "peter-dev.lfr-demo.local" && $1 == "delete" { target = "<withdrawn>" }
+    END { print target }
+')
+
+if [ "$FINAL_TARGET" != "tunnel.lfr-demo.local" ]; then
+    echo "❌ peter-dev.lfr-demo.local ends up pointing at '${FINAL_TARGET}', not the gateway holding it."
+    echo "    A tunnel that is up but whose name resolves elsewhere is unreachable to every visitor."
+    echo "=== DNS hook calls ==="
+    echo "$FINAL_DNS"
+    exit 1
+fi
+echo "✅ DNS followed the tunnel: peter-dev.lfr-demo.local -> tunnel.lfr-demo.local"
 echo "✅ Client moved off the stopping edge and kept serving!"
 
 echo "✅ All Multi-Region Edge E2E Integration Tests PASSED!"

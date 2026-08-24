@@ -28,6 +28,9 @@ services:
     command: ["--config", "/etc/lfr-tunneld/server-config-control.yaml"]
     volumes:
       - ./server-config-control.generated.yaml:/etc/lfr-tunneld/server-config-control.yaml:ro
+      # Records what the control plane asked DNS to do instead of touching a provider, so the
+      # harness can assert the record followed the tunnel between gateways (#1247).
+      - ./dns-hook-fake.sh:/usr/local/bin/dns-hook.sh:ro
     expose:
       - "8080"
       - "8081"

@@ -187,6 +187,24 @@ func (s *Server) updateEdgeHealth(id, status string, latency int64, errMsg strin
 		sched, err := s.provisionerClient.GetSchedule(ctx, id)
 		cancel()
 		if err == nil {
+			// Tell the node itself when its schedule changes, so its own view stays in step
+			// with central's without waiting for a reconnect (#1276). Compared before the
+			// assignment below, and pushed from a goroutine because SendEdgeSchedule takes
+			// edgeClientsMu and this runs on the health loop.
+			changed := timezone != sched.Timezone ||
+				schedStop != sched.StopTime ||
+				schedStart != sched.StartTime ||
+				schedEnabled != sched.Enabled
+			if changed {
+				updated := nodeSchedule{
+					Enabled:   sched.Enabled,
+					StopTime:  sched.StopTime,
+					StartTime: sched.StartTime,
+					Timezone:  sched.Timezone,
+				}
+				go s.SendEdgeSchedule(id, updated)
+			}
+
 			timezone = sched.Timezone
 			schedStop = sched.StopTime
 			schedStart = sched.StartTime

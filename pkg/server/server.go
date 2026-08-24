@@ -225,23 +225,32 @@ type Server struct {
 	// their tunnel-status heartbeat so they learn about it before it happens (#1238).
 	pendingShutdownAt     int64
 	pendingShutdownReason string
-	maintTimer            *time.Timer
-	maintScheduledAt      time.Time
-	maintMutex            sync.RWMutex
-	unsubscribeSecret     string
-	translations          map[string]map[string]string
-	lastPortalActivity    map[string]time.Time
-	portalActivityMu      sync.RWMutex
-	maintReason           string
-	maintAction           string
-	maintDuration         int
-	maintEndTime          time.Time
-	wsClients             map[*wsClient]bool
-	wsMutex               sync.RWMutex
-	edgeClients           map[string]*safeConn
-	edgeVersions          map[string]string // node_id -> version
-	edgeIPs               map[string]string // node_id -> public IP
-	edgeClientsMu         sync.RWMutex
+	// ownSchedule is this node's own stop/start window, pushed down by central over the
+	// control channel (#1276). An edge cannot discover this for itself: the provisioner
+	// sidecar that knows it runs only beside central, and giving every edge cloud
+	// credentials to read its own schedule would be a far worse trade.
+	//
+	// Held in memory only. A restarted edge re-learns it on its next handshake, so there is
+	// nothing to persist and nothing to go stale across a deploy. Central stays the sole
+	// writer -- it owns the provisioner, so it is the only party that can change a schedule.
+	ownSchedule        nodeSchedule
+	maintTimer         *time.Timer
+	maintScheduledAt   time.Time
+	maintMutex         sync.RWMutex
+	unsubscribeSecret  string
+	translations       map[string]map[string]string
+	lastPortalActivity map[string]time.Time
+	portalActivityMu   sync.RWMutex
+	maintReason        string
+	maintAction        string
+	maintDuration      int
+	maintEndTime       time.Time
+	wsClients          map[*wsClient]bool
+	wsMutex            sync.RWMutex
+	edgeClients        map[string]*safeConn
+	edgeVersions       map[string]string // node_id -> version
+	edgeIPs            map[string]string // node_id -> public IP
+	edgeClientsMu      sync.RWMutex
 	// edgePingSentAt tracks when the control plane's own keepalive Ping was last sent to
 	// each WS-connected edge, so the matching Pong's arrival can be timed for RTT (see
 	// #976 -- edges are configured with no `url` in the current architecture, so the

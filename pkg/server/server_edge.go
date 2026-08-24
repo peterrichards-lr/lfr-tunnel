@@ -109,6 +109,14 @@ func (s *Server) triggerEdgeHealthRecheck(nodeID string) {
 // isn't, which is exactly the kind of thing worth alerting on (#887).
 const scheduledStartGraceSeconds = 300
 
+// scheduleRefetchInterval is how long a cached schedule is trusted before central re-reads
+// it from the provisioner. Schedules change a handful of times a year, so this is cheap --
+// but it must not be "never", which is what the previous "fetch only when the timezone is
+// empty" condition amounted to in practice: once per process. A schedule edited out of band,
+// including via the documented schedule-edge-node-hours.sh, stayed invisible until central
+// restarted (#1245).
+const scheduleRefetchInterval = time.Hour
+
 func (s *Server) updateEdgeHealth(id, status string, latency int64, errMsg string, version string, maintenanceActive bool) {
 	s.edgeHealthMu.Lock()
 	prev := s.edgeHealth[id]
@@ -165,7 +173,16 @@ func (s *Server) updateEdgeHealth(id, status string, latency int64, errMsg strin
 	schedStop := prev.ScheduleStopTime
 	schedStart := prev.ScheduleStartTime
 	schedEnabled := prev.ScheduleEnabled
-	if timezone == "" && s.provisionerClient != nil {
+	schedFetchedAt := prev.ScheduleFetchedAt
+	schedErr := prev.ScheduleError
+
+	// Re-fetch when the cache is empty or has gone stale. It used to fetch only when the
+	// timezone was empty, which in practice meant once per process: a schedule changed out
+	// of band -- including via the documented schedule-edge-node-hours.sh -- stayed
+	// invisible until central restarted. Verified live twice: central acted on
+	// Asia/Kolkata while the provisioner had been returning UTC for hours (#1245).
+	stale := schedFetchedAt == 0 || time.Since(time.Unix(schedFetchedAt, 0)) >= scheduleRefetchInterval
+	if (timezone == "" || stale) && s.provisionerClient != nil {
 		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 		sched, err := s.provisionerClient.GetSchedule(ctx, id)
 		cancel()
@@ -174,6 +191,20 @@ func (s *Server) updateEdgeHealth(id, status string, latency int64, errMsg strin
 			schedStop = sched.StopTime
 			schedStart = sched.StartTime
 			schedEnabled = sched.Enabled
+			schedFetchedAt = time.Now().Unix()
+			if schedErr != "" {
+				slog.Info(fmt.Sprintf("[Server] Schedule for %s is readable again", id))
+				schedErr = ""
+			}
+		} else {
+			// Logged on change rather than every cycle: a persistent failure would
+			// otherwise emit a line per node per minute. Silence was the original problem
+			// -- this failure was swallowed by an `if err == nil` with no else, so a
+			// permanently failing fetch looked identical to a working one.
+			if schedErr != err.Error() {
+				slog.Warn(fmt.Sprintf("[Server] Could not read %s's schedule from the provisioner, so its stop window is unknown and no shutdown warning will be sent: %v", id, err))
+				schedErr = err.Error()
+			}
 		}
 	}
 
@@ -223,6 +254,8 @@ func (s *Server) updateEdgeHealth(id, status string, latency int64, errMsg strin
 		ScheduleStopTime:  schedStop,
 		ScheduleStartTime: schedStart,
 		ScheduleEnabled:   schedEnabled,
+		ScheduleFetchedAt: schedFetchedAt,
+		ScheduleError:     schedErr,
 		AdminDisabled:     prev.AdminDisabled,
 	}
 }
@@ -297,8 +330,7 @@ func hhmmToSeconds(hhmm string) (int, error) {
 // invalidateEdgeScheduleCache clears a node's cached schedule (timezone,
 // stop/start times, enabled flag) so the next health check re-fetches it
 // from the provisioner sidecar. Called after a successful schedule save so
-// an edit shows up promptly instead of waiting on the (never, once cached)
-// natural cache expiry.
+// an edit shows up promptly rather than waiting for the periodic re-fetch.
 func (s *Server) invalidateEdgeScheduleCache(id string) {
 	s.edgeHealthMu.Lock()
 	defer s.edgeHealthMu.Unlock()
@@ -307,6 +339,9 @@ func (s *Server) invalidateEdgeScheduleCache(id string) {
 		h.ScheduleStopTime = ""
 		h.ScheduleStartTime = ""
 		h.ScheduleEnabled = false
+		// Also clear the fetch timestamp, or the next pass would see a recent fetch and
+		// treat the cache it was just told to discard as fresh.
+		h.ScheduleFetchedAt = 0
 		s.edgeHealth[id] = h
 	}
 }

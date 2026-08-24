@@ -45,6 +45,11 @@ disable_api_rate_limit: true
 # "https://tunnel.<domain>" pointed clients at a port nothing listens on (#1286).
 central_url: "http://tunnel.lfr-demo.local"
 
+# Records calls to /tmp/dns-hook.log rather than talking to a provider (#1247). The grace is
+# deliberately short so the test does not sit through the 90s default waiting for a withdrawal.
+dns_hook: "/usr/local/bin/dns-hook.sh"
+dns_withdraw_grace: 5s
+
 edge_shutdown_warning_minutes: 1
 
 edge_nodes:

@@ -189,8 +189,61 @@ this for you. Entries that aren't also in `domains` are ignored at startup, with
 saying so — a gateway cannot issue a host it doesn't serve.
 
 Two things must follow for an apex-issued host on an edge to be reachable by visitors: DNS
-has to point that host at the node currently holding it (#1247), and that node's certificate
-has to cover `*.lfr-demo.online` rather than only `*.us.lfr-demo.online` (#1248).
+has to point that host at the node currently holding it (see `dns_hook` below), and that
+node's certificate has to cover `*.lfr-demo.online` rather than only `*.us.lfr-demo.online`
+(#1248).
+
+### C. DNS That Follows The Tunnel (`dns_hook`)
+
+Configured on the **control plane**, not on the edges — it is the only gateway that knows
+which node holds which lease.
+
+```yaml
+# On the control plane's server-config.yaml
+dns_hook: "/usr/local/bin/lfr-dns-hook-route53.sh"
+dns_withdraw_grace: 90s   # optional; this is the default
+```
+
+Once `tunnel_domains` is set, a tunnel's name no longer says where it lives —
+`peters.lfr-demo.online` is the same name on every gateway. The `*.lfr-demo.online` wildcard
+sends it to the control plane, which is right only while the control plane is the one serving
+it. For a tunnel held by an edge, a visitor has to reach that edge, so the control plane
+publishes a specific record when the tunnel starts and withdraws it when it stops (#1247). A
+specific record beats the wildcard, so the two coexist, and when the record is withdrawn the
+name falls back to the wildcard — and therefore to the control plane's offline page rather
+than to NXDOMAIN.
+
+**The hook, not a DNS SDK.** `lfr-tunneld` has no cloud credentials and no provider code, for
+the same reasons as the power hook in `pkg/ops`: the most exposed host in the deployment
+should not carry a DNS-write credential, and one deployment's provider does not belong in
+provider-neutral code. The contract is two commands:
+
+```
+<hook> upsert <fqdn> <target>   publish or replace the record, exit 0 on success
+<hook> delete <fqdn>            withdraw it, exit 0 on success
+```
+
+`<target>` is a hostname that already resolves to the serving gateway (an edge's configured
+`url`, or the control plane's), so a hook may write a CNAME, an ALIAS, or resolve it and write
+an A record. `scripts/common/lfr-dns-hook-route53.sh` is the reference implementation — it
+writes a short-TTL CNAME and needs `LFT_DNS_ZONE_ID` in its environment plus AWS credentials
+scoped to `route53:ChangeResourceRecordSets` and `route53:ListResourceRecordSets` on that one
+zone. Supporting a different provider means writing a sibling of that script, not patching
+`lfr-tunnel`.
+
+**Why withdrawal waits.** A lease is cleaned up on *any* disconnect, including a laptop
+sleeping. Deleting immediately would hammer the provider on ordinary reconnect churn and blank
+the record on every blip, so a withdrawal waits out `dns_withdraw_grace` and abandons itself
+if anything claims the name in the meantime. That is also what makes a planned move safe: the
+new gateway publishes as it registers, and the old gateway's pending withdrawal then knows it
+is stale rather than deleting the record that just replaced it.
+
+**Keep the TTL short.** This record follows a client between gateways; a long TTL pins
+visitors to a node that no longer holds the tunnel for as long as it lasts. The reference hook
+defaults to 60 seconds.
+
+Unset `dns_hook` and none of this happens — DNS is left entirely alone, which is correct for a
+single-gateway deployment where the wildcard already points at the only gateway there is.
 
 ---
 

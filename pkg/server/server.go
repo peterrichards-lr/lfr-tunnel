@@ -269,11 +269,14 @@ type Server struct {
 	// leaving LatencyMs permanently unset). Keyed by node_id, guarded by edgePingMu since
 	// it's written from each connection's own ping-ticker goroutine and read from that
 	// same connection's PongHandler (called from the read pump goroutine).
-	edgePingSentAt    map[string]time.Time
-	edgePingMu        sync.Mutex
-	startTime         time.Time
-	edgeLeases        map[string][]EdgeLease
-	edgeLeasesMu      sync.Mutex
+	edgePingSentAt map[string]time.Time
+	edgePingMu     sync.Mutex
+	startTime      time.Time
+	edgeLeases     map[string][]EdgeLease
+	edgeLeasesMu   sync.Mutex
+	// dns keeps each tunnel's public name pointed at the gateway serving it, via an
+	// operator-supplied hook. No-ops unless dns_hook is configured (#1247).
+	dns               *dnsPublisher
 	edgeHealth        map[string]EdgeHealthStatus
 	edgeHealthMu      sync.RWMutex
 	outboundConnected bool
@@ -403,6 +406,7 @@ func NewServer(cfg *config.ServerConfig) (*Server, error) {
 		caCert:             caCert,
 		caKey:              caKey,
 		edgeLeases:         make(map[string][]EdgeLease),
+		dns:                newDNSPublisher(cfg.DNSHook, cfg.DNSWithdrawGrace),
 		edgeHealth:         make(map[string]EdgeHealthStatus),
 		outboundConnected:  true,
 		lastTestTimes:      make(map[string]time.Time),
@@ -492,6 +496,11 @@ func NewServer(cfg *config.ServerConfig) (*Server, error) {
 		if srv.cfg.ControlPlaneURL != "" {
 			go srv.notifyControlPlaneDeregister(lease.UserID, lease.SubdomainPrefix)
 		}
+		// Unlike the vanity hook above, withdrawing DNS on a transient disconnect is safe to
+		// start here: it only schedules a delete, which abandons itself if the name is
+		// claimed again within the grace period. Reconnecting or moving gateways therefore
+		// costs nothing, while a tunnel that really has gone stops advertising a dead node.
+		srv.withdrawTunnelDNS(lease.FullHost, srv.dnsTargetForCentral())
 		srv.BroadcastTelemetry()
 	}
 
@@ -1727,10 +1736,16 @@ func (s *Server) handleRegister(w http.ResponseWriter, r *http.Request) {
 	// than server-config.yaml -- the "remove" trigger elsewhere in this file never had this
 	// gate and was always correct; this "add" trigger is now consistent with it.
 	leases := s.registry.GetSessionLeases(sessionToken)
+	centralTarget := s.dnsTargetForCentral()
 	for _, lease := range leases {
 		if s.isCustomDomain(lease.FullHost) {
 			go s.runVanityDomainHook("add", lease.FullHost, lease.UserID)
+			continue
 		}
+		// Published rather than merely left to the wildcard, because this is also the
+		// landing side of a planned move: writing the record now replaces the edge's
+		// immediately, instead of waiting on that edge's withdrawal to arrive (#1247).
+		s.publishTunnelDNS(lease.FullHost, centralTarget)
 	}
 
 	var warning string
@@ -5788,6 +5803,11 @@ func (s *Server) handleEdgeRegister(w http.ResponseWriter, r *http.Request) {
 	})
 	s.edgeLeasesMu.Unlock()
 
+	// The one place that knows both the name and the node holding it, which is exactly what
+	// the record has to say. Without it an apex-issued host resolves to the control plane via
+	// the wildcard, and the control plane holds no lease for it (#1247).
+	s.publishTunnelDNS(fullHost, s.dnsTargetForEdge(edgeNodeID))
+
 	actorEmail := user.Email
 	if userRec != nil && userRec.Email != "" {
 		actorEmail = userRec.Email
@@ -5841,15 +5861,24 @@ func (s *Server) handleEdgeDeregister(w http.ResponseWriter, r *http.Request) {
 	leases, ok := s.edgeLeases[edgeReq.UserID]
 	if ok {
 		var newLeases []EdgeLease
+		var released []struct{ host, nodeID string }
 		for _, l := range leases {
 			if l.Subdomain != edgeReq.Subdomain {
 				newLeases = append(newLeases, l)
+			} else {
+				released = append(released, struct{ host, nodeID string }{l.FullHost, l.NodeID})
 			}
 		}
 		if len(newLeases) == 0 {
 			delete(s.edgeLeases, edgeReq.UserID)
 		} else {
 			s.edgeLeases[edgeReq.UserID] = newLeases
+		}
+		// After the grace period, and only if nothing has claimed the name since -- a client
+		// that moved to another gateway has already re-published it, and this must not undo
+		// that (#1247).
+		for _, rel := range released {
+			s.withdrawTunnelDNS(rel.host, s.dnsTargetForEdge(rel.nodeID))
 		}
 	}
 

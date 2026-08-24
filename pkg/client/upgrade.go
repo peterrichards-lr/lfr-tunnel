@@ -230,6 +230,16 @@ func SelfUpgrade(currentVersion string, serverURL string) error {
 	}
 
 	if minisigURL == "" {
+		// On the GitHub path the signature has to be a published asset. Appending
+		// ".minisig" to an asset download URL cannot work -- release assets are addressed
+		// by identifier, not by filename -- so the synthesised URL always 404s and the
+		// user is told a status code instead of the problem (#1265).
+		if !useGateway {
+			return fmt.Errorf("this release publishes no checksums.txt.minisig, so the download cannot be verified.\n" +
+				"       Upgrade from a gateway instead, which publishes one:\n" +
+				"         lfr-tunnel --upgrade -server https://your-gateway.example.com\n" +
+				"       (a configured gateway is also how deployments that must control the install location get their binaries)")
+		}
 		minisigURL = checksumsURL + ".minisig"
 	}
 
@@ -241,7 +251,14 @@ func SelfUpgrade(currentVersion string, serverURL string) error {
 	defer sigResp.Body.Close() //nolint:errcheck
 
 	if sigResp.StatusCode != http.StatusOK {
-		return fmt.Errorf("failed downloading signature: server returned status %d", sigResp.StatusCode)
+		// A missing signature is a publishing gap, not a transport failure, and saying so
+		// saves the reader from inferring it from a bare status code.
+		if sigResp.StatusCode == http.StatusNotFound {
+			return fmt.Errorf("the checksum signature is missing from %s (404), so the download cannot be verified.\n"+
+				"       If this is a GitHub release, it was published without a signature; try a gateway instead:\n"+
+				"         lfr-tunnel --upgrade -server https://your-gateway.example.com", minisigURL)
+		}
+		return fmt.Errorf("failed downloading signature from %s: server returned status %d", minisigURL, sigResp.StatusCode)
 	}
 
 	sigContent, err := io.ReadAll(sigResp.Body)

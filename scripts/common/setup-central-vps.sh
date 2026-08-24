@@ -17,9 +17,15 @@ KEY_PATH=""
 VPS_IP=""
 CONFIG_FILE=""
 PORT=""
+# Which Certbot DNS-01 plugin proves domain control. Deliberately no default: baking one
+# provider in is what #1015/#1016/#1187 pushed out of this repo, and this script is the
+# generic layer -- a deployment on Cloudflare, DigitalOcean or Google DNS is as valid as one
+# on Route53. The Liferay-specific wrapper passes -a dns-route53 (#1297).
+DNS_AUTHENTICATOR=""
+DNS_AUTHENTICATOR_ARGS=""
 
 usage() {
-  echo "Usage: $0 -s <vps_ip> -d <domain> -f <server-config.yaml path> -i <identity_file> -u <ssh_user> -e <admin_email> -p <port>"
+  echo "Usage: $0 -s <vps_ip> -d <domain> -f <server-config.yaml path> -i <identity_file> -u <ssh_user> -e <admin_email> -p <port> -a <dns_authenticator> [-A <authenticator_args>]"
   echo "  -s: VPS/EC2 public IP address (required)"
   echo "  -d: Base domain for the control plane, e.g. aws-central.lfr-demo.se (required)."
   echo "      A wildcard cert for *.<domain> is requested alongside it."
@@ -29,18 +35,25 @@ usage() {
   echo "  -e: Admin/contact email for Let's Encrypt registration (required)"
   echo "  -p: Local port lfr-tunneld binds to -- must match the uploaded server-config.yaml (required)"
   echo ""
-  echo "PREREQUISITE: place your real Cloudflare API token in /etc/letsencrypt/cloudflare.ini"
-  echo "on the target server YOURSELF before running this script (see setup_guide.md §3.2):"
-  echo "  sudo mkdir -p /etc/letsencrypt"
-  echo "  sudo nano /etc/letsencrypt/cloudflare.ini   # dns_cloudflare_api_token = <token>"
-  echo "  sudo chmod 600 /etc/letsencrypt/cloudflare.ini"
-  echo "This script only checks that file exists — it never reads, uploads, or handles the token."
+  echo "  -a: Certbot DNS-01 authenticator to prove domain control with (required), e.g."
+  echo "      dns-route53, dns-cloudflare, dns-digitalocean, dns-google. Installs"
+  echo "      python3-certbot-<authenticator> and passes --<authenticator> to certbot."
+  echo "  -A: Extra arguments for that authenticator (optional), e.g."
+  echo "      \"--dns-cloudflare-credentials /etc/letsencrypt/cloudflare.ini\""
+  echo ""
+  echo "PREREQUISITE: the target instance must already be able to write the DNS-01 challenge"
+  echo "record into its zone -- an instance role, a credentials file, whatever the chosen"
+  echo "authenticator needs. This script never reads, uploads, or handles a credential of any"
+  echo "kind, and carries no default provider: which one is right is a property of your"
+  echo "deployment, not of this tool."
   exit 1
 }
 
-while getopts "s:d:f:i:u:e:p:" opt; do
+while getopts "s:d:f:i:u:e:p:a:A:" opt; do
   case $opt in
     s) VPS_IP="$OPTARG" ;;
+    a) DNS_AUTHENTICATOR="$OPTARG" ;;
+    A) DNS_AUTHENTICATOR_ARGS="$OPTARG" ;;
     d) DOMAIN="$OPTARG" ;;
     f) CONFIG_FILE="$OPTARG" ;;
     i)
@@ -60,8 +73,8 @@ while getopts "s:d:f:i:u:e:p:" opt; do
 done
 
 if [ -z "$VPS_IP" ] || [ -z "$DOMAIN" ] || [ -z "$CONFIG_FILE" ] || [ -z "$KEY_PATH" ] || \
-   [ -z "$SSH_USER" ] || [ -z "$ADMIN_EMAIL" ] || [ -z "$PORT" ]; then
-  echo "❌ Error: -s, -d, -f, -i, -u, -e, and -p are all required."
+   [ -z "$SSH_USER" ] || [ -z "$ADMIN_EMAIL" ] || [ -z "$PORT" ] || [ -z "$DNS_AUTHENTICATOR" ]; then
+  echo "❌ Error: -s, -d, -f, -i, -u, -e, -p and -a are all required."
   usage
 fi
 if [ ! -f "$CONFIG_FILE" ]; then
@@ -71,14 +84,6 @@ fi
 
 echo "=== Starting Central VPS Automation for IP: $VPS_IP, domain: $DOMAIN ==="
 
-# 0. Refuse to proceed unless the Cloudflare token is already in place — this script never
-#    handles that secret itself, so this is a hard prerequisite, not something to work around.
-echo "=> Checking for /etc/letsencrypt/cloudflare.ini on $VPS_IP..."
-if ! ssh $SSH_KEY_ARG $SSH_USER@$VPS_IP "sudo test -s /etc/letsencrypt/cloudflare.ini"; then
-  echo "❌ Error: /etc/letsencrypt/cloudflare.ini is missing or empty on $VPS_IP."
-  echo "   Place your real Cloudflare API token there yourself first (see usage below), then re-run."
-  usage
-fi
 
 # 1. Build linux/amd64 lfr-tunneld binary locally, and the lfr-tunnel-ops CLI (needed below
 #    to render the nginx config from the same template reconcile-nginx uses -- never `go run`
@@ -94,22 +99,39 @@ go build -o bin/lfr-tunnel-ops ./cmd/lfr-tunnel-ops
 echo "=> Connecting to $VPS_IP to install dependencies (Nginx, Certbot, UFW, Fail2ban)..."
 ssh $SSH_KEY_ARG $SSH_USER@$VPS_IP << 'REMOTE_SSH'
   sudo apt-get update
-  sudo apt-get install -y nginx certbot python3-certbot-dns-cloudflare curl jq ufw fail2ban unattended-upgrades
+  sudo apt-get install -y nginx certbot curl jq ufw fail2ban unattended-upgrades
 REMOTE_SSH
 
-# 3. Request the wildcard cert via Certbot's automated Cloudflare DNS-01 plugin — fully
-#    non-interactive, since /etc/letsencrypt/cloudflare.ini was already verified above.
+# 3. Request the wildcard cert via whichever Certbot DNS-01 plugin the operator named. The
+#    plugin is a parameter, not a constant: this script is the generic layer, and hardcoding
+#    one provider here is what #1015/#1016/#1187 removed from this repo.
+#
+#    It was hardcoded to --dns-cloudflare until #1297, which is how that bug survived the
+#    Route53 migration: the deployment moved provider, the script could not, and the mismatch
+#    was invisible until a renewal came due. Nothing failed at the time because the
+#    certificates had just been issued.
 echo "=========================================================="
 echo "=> Provisioning Wildcard SSL Certificate for $DOMAIN & *.$DOMAIN"
 echo "=========================================================="
+ssh $SSH_KEY_ARG $SSH_USER@$VPS_IP "sudo apt-get install -y python3-certbot-$DNS_AUTHENTICATOR"
 ssh $SSH_KEY_ARG $SSH_USER@$VPS_IP "sudo certbot certonly \
-  --dns-cloudflare \
-  --dns-cloudflare-credentials /etc/letsencrypt/cloudflare.ini \
+  --$DNS_AUTHENTICATOR $DNS_AUTHENTICATOR_ARGS \
   --agree-tos \
   --non-interactive \
   -m $ADMIN_EMAIL \
   -d '$DOMAIN' \
   -d '*.$DOMAIN'"
+
+# 3b. Prove renewal actually works, rather than assuming it because issuance did. A dry run
+#     performs a real challenge against the live zone, which is the only thing that
+#     distinguishes a working authenticator from one pointed at the wrong provider -- exactly
+#     the failure #1297 was.
+echo "=> Verifying unattended renewal (certbot renew --dry-run)..."
+ssh $SSH_KEY_ARG $SSH_USER@$VPS_IP "sudo certbot renew --dry-run" || {
+  echo "❌ Renewal dry run failed. The certificate is issued but will not renew unattended."
+  echo "   Check the instance's Route53 permissions before going further."
+  exit 1
+}
 
 # 4. Upload the pre-built server-config.yaml
 echo "=> Uploading server-config.yaml..."

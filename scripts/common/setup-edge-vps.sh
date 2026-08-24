@@ -17,6 +17,11 @@ KEY_PATH=""
 VPS_IP=""
 REDIRECT_DOMAIN=""
 TUNNEL_DOMAINS=""
+# Which Certbot DNS-01 plugin proves domain control. No default on purpose: this is the
+# generic layer, and which provider is right is a property of the deployment, not of this
+# tool (#1015/#1016/#1187).
+DNS_AUTHENTICATOR=""
+DNS_AUTHENTICATOR_ARGS=""
 
 usage() {
   echo "Usage: $0 -s <vps_ip> -t <edge_token> -r <redirect_domain> -i <identity_file> -u <ssh_user> -d <domains> -c <control_plane_url> -p <port> [-a <tunnel_domains>]"
@@ -28,6 +33,11 @@ usage() {
   echo "  -d: Comma-separated list of edge domains (required)"
   echo "  -c: Control Plane URL (required)"
   echo "  -p: Port for lfr-tunneld to bind to on Edge node (required)"
+  echo "  -n: Certbot DNS-01 authenticator to prove domain control with (required), e.g."
+  echo "      dns-route53, dns-cloudflare, dns-digitalocean, dns-google. Installs"
+  echo "      python3-certbot-<authenticator> and passes --<authenticator> to certbot."
+  echo "  -N: Extra arguments for that authenticator (optional), e.g."
+  echo "      \"--dns-cloudflare-credentials /etc/letsencrypt/cloudflare.ini\""
   echo "  -a: Comma-separated subset of -d that tunnels may be issued on (optional)."
   echo "      Set this to the shared domain so a tunnel's public URL never names the edge"
   echo "      serving it, and does not change when the client moves (see #1285). The regional"
@@ -36,7 +46,7 @@ usage() {
 }
 
 # Parse parameters
-while getopts "s:t:i:u:d:c:p:r:a:" opt; do
+while getopts "s:t:i:u:d:c:p:r:a:n:N:" opt; do
   case $opt in
     s) VPS_IP="$OPTARG" ;;
     t) EDGE_TOKEN="$OPTARG" ;;
@@ -55,31 +65,21 @@ while getopts "s:t:i:u:d:c:p:r:a:" opt; do
     p) EDGE_PORT="$OPTARG" ;;
     r) REDIRECT_DOMAIN="$OPTARG" ;;
     a) TUNNEL_DOMAINS="$OPTARG" ;;
+    n) DNS_AUTHENTICATOR="$OPTARG" ;;
+    N) DNS_AUTHENTICATOR_ARGS="$OPTARG" ;;
     *) usage ;;
   esac
 done
 
 if [ -z "$VPS_IP" ] || [ -z "$EDGE_TOKEN" ] || [ -z "$REDIRECT_DOMAIN" ] || [ -z "$KEY_PATH" ] || \
-   [ -z "$SSH_USER" ] || [ -z "$DOMAINS" ] || [ -z "$CONTROL_PLANE_URL" ] || [ -z "$EDGE_PORT" ]; then
-  echo "❌ Error: -s, -t, -r, -i, -u, -d, -c, and -p are all required parameters."
+   [ -z "$SSH_USER" ] || [ -z "$DOMAINS" ] || [ -z "$CONTROL_PLANE_URL" ] || [ -z "$EDGE_PORT" ] || \
+   [ -z "$DNS_AUTHENTICATOR" ]; then
+  echo "❌ Error: -s, -t, -r, -i, -u, -d, -c, -p and -n are all required parameters."
   usage
 fi
 
 echo "=== Starting Edge VPS Automation for IP: $VPS_IP ==="
 
-# 0. Refuse to proceed unless the Cloudflare token is already in place — this script never
-#    handles that secret itself, so this is a hard prerequisite, not something to work around.
-#    (Automated --dns-cloudflare below replaces the old interactive --manual DNS-01 flow,
-#    which required a human to add a TXT record mid-run and can't be driven unattended.)
-echo "=> Checking for /etc/letsencrypt/cloudflare.ini on $VPS_IP..."
-if ! ssh $SSH_KEY_ARG $SSH_USER@$VPS_IP "sudo test -s /etc/letsencrypt/cloudflare.ini"; then
-  echo "❌ Error: /etc/letsencrypt/cloudflare.ini is missing or empty on $VPS_IP."
-  echo "   Place your real Cloudflare API token there yourself first (see setup_guide.md §3.2):"
-  echo "     sudo mkdir -p /etc/letsencrypt"
-  echo "     sudo nano /etc/letsencrypt/cloudflare.ini   # dns_cloudflare_api_token = <token>"
-  echo "     sudo chmod 600 /etc/letsencrypt/cloudflare.ini"
-  exit 1
-fi
 
 # 1. Build Linux amd64 binary locally (compatible with standard GCP e2-micro / AWS t3.nano x86_64)
 VERSION="$(grep -oE 'Version = "[^"]+"' pkg/config/version.go | cut -d'"' -f2)"
@@ -90,21 +90,21 @@ GOOS=linux GOARCH=amd64 go build -ldflags="-s -w -X lfr-tunnel/pkg/config.Versio
 echo "=> Connecting to $VPS_IP to install dependencies (Nginx, Certbot, UFW, Fail2ban)..."
 ssh $SSH_KEY_ARG $SSH_USER@$VPS_IP << 'REMOTE_SSH'
   sudo apt-get update
-  sudo apt-get install -y nginx certbot python3-certbot-dns-cloudflare curl jq ufw fail2ban unattended-upgrades
+  sudo apt-get install -y nginx certbot curl jq ufw fail2ban unattended-upgrades
 REMOTE_SSH
 
-# 3. Request wildcard Let's Encrypt certificates using Certbot's automated Cloudflare DNS-01
-#    plugin — fully non-interactive, since /etc/letsencrypt/cloudflare.ini was verified above.
+# 3. Request wildcard Let's Encrypt certificates using whichever Certbot DNS-01 plugin the
+#    operator named. The plugin is a parameter, not a constant -- hardcoding --dns-cloudflare
+#    here is how #1297 survived the move to another DNS provider unnoticed.
 IFS=',' read -r -a DOMAIN_ARRAY <<< "$DOMAINS"
 for DOMAIN in "${DOMAIN_ARRAY[@]}"; do
   echo "=========================================================="
   echo "=> Provisioning Wildcard SSL Certificate for $DOMAIN & *.$DOMAIN"
   echo "=========================================================="
 
+  ssh $SSH_KEY_ARG $SSH_USER@$VPS_IP "sudo apt-get install -y python3-certbot-$DNS_AUTHENTICATOR"
   ssh $SSH_KEY_ARG $SSH_USER@$VPS_IP "sudo certbot certonly \
-    --dns-cloudflare \
-    --dns-cloudflare-credentials /etc/letsencrypt/cloudflare.ini \
-    --dns-cloudflare-propagation-seconds 45 \
+    --$DNS_AUTHENTICATOR $DNS_AUTHENTICATOR_ARGS \
     --agree-tos \
     --non-interactive \
     --register-unsafely-without-email \

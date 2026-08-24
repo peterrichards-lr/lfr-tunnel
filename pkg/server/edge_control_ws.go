@@ -45,6 +45,15 @@ var edgeClientPingInterval = 30 * time.Second
 // keepalive in the other direction and was never used for timing. Overridable in tests.
 var edgeHealthPingInterval = 20 * time.Second
 
+// nodeSchedule is an edge's own stop/start window as told to it by central (#1276).
+// Enabled false means the node is not on a schedule and the times carry no meaning.
+type nodeSchedule struct {
+	Enabled   bool
+	StopTime  string // "HH:MM" in Timezone
+	StartTime string // "HH:MM" in Timezone
+	Timezone  string // IANA name, e.g. "Asia/Kolkata"
+}
+
 // ControlMessage represents the JSON schema for websocket communication.
 type ControlMessage struct {
 	Type             string            `json:"type"`
@@ -60,6 +69,13 @@ type ControlMessage struct {
 	SecondsRemaining int               `json:"seconds_remaining,omitempty"`
 	ShutdownAt       int64             `json:"shutdown_at,omitempty"`
 	Headers          map[string]string `json:"headers,omitempty"`
+	// Schedule fields, carried by the "node_schedule" frame (#1276). ScheduleEnabled has no
+	// omitempty: false is meaningful here -- it is how central tells a node it has come off
+	// the rota, and dropping it would leave the edge believing its last known schedule.
+	ScheduleEnabled   bool   `json:"schedule_enabled"`
+	ScheduleStopTime  string `json:"schedule_stop_time,omitempty"`
+	ScheduleStartTime string `json:"schedule_start_time,omitempty"`
+	Timezone          string `json:"timezone,omitempty"`
 }
 
 // handleEdgeControlWS handles control plane WebSocket connections from Edge nodes.
@@ -181,6 +197,23 @@ func (s *Server) handleEdgeControlWS(w http.ResponseWriter, r *http.Request) {
 	// s.edgeClients and write to it; going direct to conn here would bypass
 	// safeConn.mu and interleave two frames on the same socket (issue #1125).
 	_ = registered.WriteJSON(ControlMessage{Type: "auth_success"}) //nolint:errcheck
+
+	// Tell the node its own schedule as soon as it is registered, so a node that has just
+	// restarted -- or has just been deployed to -- knows about its own downtime without
+	// waiting for the next change (#1276). Sent from a goroutine because SendEdgeSchedule
+	// takes edgeClientsMu, which this path has only just released, and because a slow write
+	// must not hold up the read pump starting below.
+	go func() {
+		s.edgeHealthMu.RLock()
+		h := s.edgeHealth[nodeID]
+		s.edgeHealthMu.RUnlock()
+		s.SendEdgeSchedule(nodeID, nodeSchedule{
+			Enabled:   h.ScheduleEnabled,
+			StopTime:  h.ScheduleStopTime,
+			StartTime: h.ScheduleStartTime,
+			Timezone:  h.Timezone,
+		})
+	}()
 
 	// pingStop signals the RTT-ping goroutine below to exit once the read pump's defer
 	// runs -- it has no other way to notice the connection is gone, since it only ever
@@ -346,6 +379,65 @@ func (s *Server) BroadcastMaintenance(action string, duration int, reason string
 	for _, conn := range s.edgeClients {
 		_ = conn.WriteMessage(websocket.TextMessage, payload) //nolint:errcheck
 	}
+}
+
+// SendEdgeSchedule tells one edge node what its own stop/start window is (#1276).
+//
+// An edge cannot work this out for itself: the provisioner sidecar that knows it runs only
+// beside central. Pushing it means the node can answer questions about its own downtime --
+// including warning its own clients -- without a round trip to central, and without central
+// being reachable at the moment it matters.
+//
+// A miss is logged rather than retried. The next handshake pushes the schedule again, so a
+// node that is briefly disconnected converges on its own.
+func (s *Server) SendEdgeSchedule(nodeID string, sched nodeSchedule) {
+	msg := ControlMessage{
+		Type:              "node_schedule",
+		NodeID:            nodeID,
+		ScheduleEnabled:   sched.Enabled,
+		ScheduleStopTime:  sched.StopTime,
+		ScheduleStartTime: sched.StartTime,
+		Timezone:          sched.Timezone,
+	}
+
+	payload, err := json.Marshal(msg)
+	if err != nil {
+		slog.Error(fmt.Sprintf("[Edge WS] Could not encode the schedule for %s: %v", nodeID, err))
+		return
+	}
+
+	s.edgeClientsMu.RLock()
+	conn, exists := s.edgeClients[nodeID]
+	s.edgeClientsMu.RUnlock()
+	if !exists {
+		slog.Info(fmt.Sprintf("[Edge WS] Schedule for %s not sent: it has no control connection", nodeID))
+		return
+	}
+	if err := conn.WriteMessage(websocket.TextMessage, payload); err != nil {
+		slog.Warn(fmt.Sprintf("[Edge WS] Schedule for %s failed to send: %v", nodeID, err))
+		return
+	}
+	if sched.Enabled {
+		slog.Info(fmt.Sprintf("[Edge WS] Told %s its schedule: stops %s, starts %s (%s)", nodeID, sched.StopTime, sched.StartTime, sched.Timezone))
+		return
+	}
+	slog.Info(fmt.Sprintf("[Edge WS] Told %s it is not on a schedule", nodeID))
+}
+
+// setOwnSchedule records what central has told this node about its own downtime.
+func (s *Server) setOwnSchedule(sched nodeSchedule) {
+	s.maintMutex.Lock()
+	defer s.maintMutex.Unlock()
+	s.ownSchedule = sched
+}
+
+// OwnSchedule returns this node's own stop/start window as last told by central. The zero
+// value -- Enabled false -- means either that this node is not scheduled or that central has
+// not told it yet; both mean "no known downtime", which is the safe reading for a caller.
+func (s *Server) OwnSchedule() nodeSchedule {
+	s.maintMutex.RLock()
+	defer s.maintMutex.RUnlock()
+	return s.ownSchedule
 }
 
 // BroadcastNodeShutdownWarning sends a shutdown warning notification to a specific edge node or all edge nodes.
@@ -812,6 +904,26 @@ func (s *Server) runEdgeControlChannel() {
 				s.pendingShutdownReason = msg.Reason
 				s.maintMutex.Unlock()
 				slog.Info(fmt.Sprintf("[Edge Control] Node shutdown warning: %ds remaining (%s)", msg.SecondsRemaining, msg.Reason))
+			case "node_schedule":
+				// Central telling this node its own stop/start window (#1276). Held in
+				// memory only -- the next handshake re-sends it, so there is nothing to
+				// persist and nothing to go stale across a restart.
+				sched := nodeSchedule{
+					Enabled:   msg.ScheduleEnabled,
+					StopTime:  msg.ScheduleStopTime,
+					StartTime: msg.ScheduleStartTime,
+					Timezone:  msg.Timezone,
+				}
+				s.setOwnSchedule(sched)
+				// Logged so a node's own view of its downtime is visible in its own
+				// journal, rather than only in central's. Establishing what central
+				// believed about a schedule used to require reading central's logs and
+				// inferring the rest (#1245).
+				if sched.Enabled {
+					slog.Info(fmt.Sprintf("[Edge Control] Control plane says this node stops at %s and starts at %s (%s)", sched.StopTime, sched.StartTime, sched.Timezone))
+				} else {
+					slog.Info("[Edge Control] Control plane says this node is not on a shutdown schedule")
+				}
 			case "lease_kick":
 				if msg.Subdomain == "*" || msg.Subdomain == "" {
 					slog.Info("[Edge Control] Kicking ALL leases on this edge node")

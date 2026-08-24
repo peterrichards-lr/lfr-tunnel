@@ -35,19 +35,57 @@ func BuildCommand(args []string) {
 		{"windows", "amd64", "dist/lfr-tunnel-windows-amd64.exe"},
 	}
 
+	// Deployment defaults are baked in at build time, exactly as the Makefile and the
+	// release workflow already do (#1188). This path was missed, and it is the one that
+	// matters most: `build` populates dist/, which `deploy-clients` publishes to the
+	// portal's downloads directory, so a client fetched by `lfr-tunnel --upgrade` had no
+	// default gateway even once the release workflow was building correctly (#1256).
+	//
+	// Unset stays supported and means the same here as everywhere else: the client asks to
+	// be pointed at a gateway rather than guessing one.
+	serverURL := GetEnvOrDefault("LFT_DEFAULT_SERVER_URL", "")
+	statusPageURL := GetEnvOrDefault("LFT_DEFAULT_STATUS_PAGE_URL", "")
+	portalURL := GetEnvOrDefault("LFT_DEFAULT_PORTAL_URL", "")
+
+	// Say which defaults are going in before compiling. An empty value is invisible in the
+	// finished binary, which is how a release shipped with none and nobody noticed.
+	reportDefault("DefaultServerURL", serverURL, "clients will ask to be pointed at a gateway")
+	reportDefault("DefaultStatusPageURL", statusPageURL, "no status-page hint when a gateway looks unreachable")
+	reportDefault("DefaultPortalURL", portalURL, "browser login falls back to the gateway, which serves the portal too")
+
 	for _, target := range targets {
 		env := []string{
 			fmt.Sprintf("GOOS=%s", target.GOOS),
 			fmt.Sprintf("GOARCH=%s", target.GOARCH),
 		}
 
-		ldflags := fmt.Sprintf("-s -w -X lfr-tunnel/pkg/config.Version=%s", version)
+		ldflags := fmt.Sprintf(
+			"-s -w -X lfr-tunnel/pkg/config.Version=%s"+
+				" -X lfr-tunnel/pkg/config.DefaultServerURL=%s"+
+				" -X lfr-tunnel/pkg/config.DefaultStatusPageURL=%s"+
+				" -X lfr-tunnel/pkg/config.DefaultPortalURL=%s",
+			version, serverURL, statusPageURL, portalURL)
 
 		err := RunCommandWithEnv(env, "go", "build", "-ldflags", ldflags, "-trimpath", "-o", target.Output, "./cmd/lfr-tunnel")
 		CheckFatal(err, fmt.Sprintf("Failed to build for %s/%s", target.GOOS, target.GOARCH))
 	}
 
 	fmt.Println("Build complete!")
+}
+
+// formatDefault renders one build-time deployment default, naming the consequence when it
+// is empty. Each of the three means something different when unset, so the explanation
+// belongs with the value rather than being shared -- an unset portal URL does not make
+// clients ask for a gateway, and saying so would be worse than saying nothing.
+func formatDefault(name, value, whenEmpty string) string {
+	if value == "" {
+		return fmt.Sprintf("  %s: (unset -- %s)", name, whenEmpty)
+	}
+	return fmt.Sprintf("  %s: %s", name, value)
+}
+
+func reportDefault(name, value, whenEmpty string) {
+	fmt.Println(formatDefault(name, value, whenEmpty))
 }
 
 func extractVersion() string {

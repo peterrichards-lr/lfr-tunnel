@@ -14,6 +14,9 @@ owner:
   name: "Admin User"
 
 admin_notification_email: "admin@lfr-demo.local"
+# Four: peter-dev and peter-auto, each on both the central and the regional domain. The
+# default of 3 left the fourth failing with a quota 403 mid-test.
+default_max_reservations: 4
 owner_max_reservations: -1
 allow_client_auto_reservation: true
 
@@ -39,9 +42,34 @@ disable_brew: true
 disable_scoop: true
 disable_api_rate_limit: true
 
+# One minute rather than the five-minute default, so the migration test does not sit for
+# five minutes waiting for a warning it already knows is coming (#1254).
+# The harness serves plain HTTP behind nginx, so the default advertisement of
+# "https://tunnel.<domain>" pointed clients at a port nothing listens on (#1286).
+central_url: "http://tunnel.lfr-demo.local"
+
+edge_shutdown_warning_minutes: 1
+
 edge_nodes:
-  - id: "us-east-1"
-    token_hash: "4a2371ab6fbd2742e0fce40b2f3c1f94ecc8c02ad15f5455cd68bdf4e04f947a"
+  - id: "edge-us"
+    token_hash: "e0e4f2a8d0c91b8451be0437c1524cba76073de2b2a51c09add3ac637a210b21"
+    # Without a url central never advertises this node as a region, so a client asking for
+    # -region us was told "no active edge nodes found" and silently fell back to central --
+    # which is not what a multi-region edge test is supposed to exercise (#1254).
+    url: "http://us.lfr-demo.local"
+    # Statically declared (#1282), because this environment has no edge-provisioner sidecar
+    # to ask -- that is AWS-specific, and without a schedule from somewhere central would
+    # never send a shutdown warning and the client would have nothing to react to.
+    #
+    # The times are placeholders. run-edge.sh substitutes them with a stop a couple of
+    # minutes ahead and writes server-config-control.generated.yaml, which is what the
+    # compose file actually mounts. Running docker-compose directly without run-edge.sh
+    # will not find that file.
+    schedule:
+      enabled: true
+      stop_time: "__E2E_STOP_TIME__"
+      start_time: "__E2E_START_TIME__"
+      timezone: "UTC"
 
 client_platforms:
   macos_arm64:

@@ -1,4 +1,4 @@
-.PHONY: fmt vet test build deploy clean install-hook e2e e2e-sso e2e-ui help
+.PHONY: fmt vet test build deploy clean install-hook e2e e2e-sso e2e-edge e2e-ui help
 
 VERSION ?= $(shell grep -oE 'Version = "[^"]+"' pkg/config/version.go | cut -d'"' -f2)
 
@@ -43,6 +43,7 @@ help:
 	@echo "  make test         - Run all unit tests (EDR safe via LFT_TEST_DIR=$(LFT_TEST_DIR))"
 	@echo "  make e2e          - Run the Docker integration E2E tests"
 	@echo "  make e2e-sso      - Run the SSO / Keycloak E2E integration tests"
+	@echo "  make e2e-edge     - Run the multi-region edge E2E integration tests"
 	@echo "  make e2e-ui       - Run the Playwright UI E2E integration tests"
 	@echo "  make build        - Clean and build client and server binaries"
 	@echo "  make deploy       - Cross-compile and deploy server binary to VPS"
@@ -87,6 +88,9 @@ e2e:
 
 e2e-sso:
 	@./scripts/run-e2e.sh sso
+
+e2e-edge:
+	@./scripts/run-e2e.sh edge
 
 e2e-ui:
 	@./scripts/run-e2e-ui.sh

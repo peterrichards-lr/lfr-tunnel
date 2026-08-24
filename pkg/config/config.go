@@ -127,15 +127,21 @@ type ServerConfig struct {
 	// distinct from DisableEmailLogin, which only affects the email-specific login/register
 	// UI and backend path; without this flag, first-time SSO login always auto-provisioned
 	// a new account with no way to close that off independent of disabling SSO entirely.
-	DisableNewRegistrations bool             `yaml:"disable_new_registrations"`
-	DisableClientDownloads  bool             `yaml:"disable_client_downloads"`
-	DisableBrew             bool             `yaml:"disable_brew"`
-	DisableScoop            bool             `yaml:"disable_scoop"`
-	DisableAPIRateLimit     bool             `yaml:"disable_api_rate_limit"`
-	PortalURL               string           `yaml:"portal_url"`
-	ControlPlaneURL         string           `yaml:"control_plane_url"`
-	EdgeToken               string           `yaml:"edge_token"`
-	EdgeNodes               []EdgeNodeConfig `yaml:"edge_nodes"`
+	DisableNewRegistrations bool   `yaml:"disable_new_registrations"`
+	DisableClientDownloads  bool   `yaml:"disable_client_downloads"`
+	DisableBrew             bool   `yaml:"disable_brew"`
+	DisableScoop            bool   `yaml:"disable_scoop"`
+	DisableAPIRateLimit     bool   `yaml:"disable_api_rate_limit"`
+	PortalURL               string `yaml:"portal_url"`
+	// CentralURL is how the control plane advertises itself to clients in the region map.
+	// Empty keeps the historical construction, "https://tunnel." + the first configured
+	// domain, which assumes both the scheme and the hostname prefix (#1286). Set it when
+	// either is untrue -- a control plane at gateway.example.com, or one behind a proxy
+	// terminating TLS elsewhere, otherwise hands clients a URL that does not answer.
+	CentralURL      string           `yaml:"central_url"`
+	ControlPlaneURL string           `yaml:"control_plane_url"`
+	EdgeToken       string           `yaml:"edge_token"`
+	EdgeNodes       []EdgeNodeConfig `yaml:"edge_nodes"`
 	// EdgeProvisionerURL points at the optional, AWS-specific edge-provisioner
 	// sidecar (see cmd/lfr-tunnel-edge-provisioner, issue #888) that this server
 	// calls to start/stop/restart edge node instances and manage their stop/start

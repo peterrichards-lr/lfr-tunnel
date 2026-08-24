@@ -180,6 +180,23 @@ func DetectWorkspacePorts(rootDir string) ([]PortMapping, error) {
 	return mappings, err
 }
 
+// registerTimeout bounds the registration handshake. Generous enough for a slow link to a
+// cold gateway, short enough that a user learns something is wrong long before they
+// conclude the client is hung.
+const registerTimeout = 20 * time.Second
+
+// registerClient bounds the registration POST. http.DefaultClient has no timeout, and a
+// gateway whose host is powered off drops packets rather than refusing the connection, so
+// this call used to sit in the OS TCP retry cycle for over a minute. Nothing is printed in
+// that window and the TUI has not started yet -- it only runs once registration has
+// succeeded (cmd/lfr-tunnel/main.go) -- so the client looked hung with no output at all
+// (#1257). Edge nodes here power off nightly, which makes an unreachable gateway a routine
+// state rather than an exceptional one.
+//
+// Same reasoning as healthReportClient in interceptor.go; registration was the one call in
+// pkg/ and cmd/ that never got it.
+var registerClient = &http.Client{Timeout: registerTimeout}
+
 // RegisterTunnel performs the handshake with the server's registration endpoint.
 func RegisterTunnel(serverURL string, authToken string, subdomain string, customDomain string, ports []PortMapping, rateLimit int, basicAuth string, addedHeaders map[string]string, clientOS string, passcode string, whitelistIPs string) (*RegisterResponse, error) {
 	// Normalize server URL
@@ -210,9 +227,16 @@ func RegisterTunnel(serverURL string, authToken string, subdomain string, custom
 		return nil, err
 	}
 
-	resp, err := http.Post(registerURL, "application/json", bytes.NewBuffer(payload))
+	// Say which gateway is being contacted before blocking on it, so a slow or failing
+	// registration reports what it is trying rather than printing nothing at all.
+	slog.Info(fmt.Sprintf("[Client] Registering with gateway %s...", parsedURL.Host))
+
+	resp, err := registerClient.Post(registerURL, "application/json", bytes.NewBuffer(payload))
 	if err != nil {
-		return nil, fmt.Errorf("registration request failed: %v", err)
+		// The "registration request failed" prefix is load-bearing: attemptRegistration in
+		// cmd/lfr-tunnel classifies this as a retry-elsewhere failure by matching on that
+		// substring, so a different region gets tried. Keep it when adding detail.
+		return nil, fmt.Errorf("registration request failed (%s): %v", parsedURL.Host, err)
 	}
 	defer resp.Body.Close() //nolint:errcheck
 

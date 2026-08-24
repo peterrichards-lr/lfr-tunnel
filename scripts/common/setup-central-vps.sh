@@ -17,9 +17,15 @@ KEY_PATH=""
 VPS_IP=""
 CONFIG_FILE=""
 PORT=""
+# Which Certbot DNS-01 plugin proves domain control. Deliberately no default: baking one
+# provider in is what #1015/#1016/#1187 pushed out of this repo, and this script is the
+# generic layer -- a deployment on Cloudflare, DigitalOcean or Google DNS is as valid as one
+# on Route53. The Liferay-specific wrapper passes -a dns-route53 (#1297).
+DNS_AUTHENTICATOR=""
+DNS_AUTHENTICATOR_ARGS=""
 
 usage() {
-  echo "Usage: $0 -s <vps_ip> -d <domain> -f <server-config.yaml path> -i <identity_file> -u <ssh_user> -e <admin_email> -p <port>"
+  echo "Usage: $0 -s <vps_ip> -d <domain> -f <server-config.yaml path> -i <identity_file> -u <ssh_user> -e <admin_email> -p <port> -a <dns_authenticator> [-A <authenticator_args>]"
   echo "  -s: VPS/EC2 public IP address (required)"
   echo "  -d: Base domain for the control plane, e.g. aws-central.lfr-demo.se (required)."
   echo "      A wildcard cert for *.<domain> is requested alongside it."
@@ -29,18 +35,25 @@ usage() {
   echo "  -e: Admin/contact email for Let's Encrypt registration (required)"
   echo "  -p: Local port lfr-tunneld binds to -- must match the uploaded server-config.yaml (required)"
   echo ""
+  echo "  -a: Certbot DNS-01 authenticator to prove domain control with (required), e.g."
+  echo "      dns-route53, dns-cloudflare, dns-digitalocean, dns-google. Installs"
+  echo "      python3-certbot-<authenticator> and passes --<authenticator> to certbot."
+  echo "  -A: Extra arguments for that authenticator (optional), e.g."
+  echo "      \"--dns-cloudflare-credentials /etc/letsencrypt/cloudflare.ini\""
+  echo ""
   echo "PREREQUISITE: the target instance must already be able to write the DNS-01 challenge"
-  echo "record into its hosted zone. On AWS that means an instance profile granting, on the"
-  echo "zones this deployment serves and nothing else:"
-  echo "  route53:ChangeResourceRecordSets, route53:ListResourceRecordSets, route53:GetHostedZone"
-  echo "plus route53:ListHostedZonesByName and route53:GetChange on *."
-  echo "This script never reads, uploads, or handles a credential of any kind."
+  echo "record into its zone -- an instance role, a credentials file, whatever the chosen"
+  echo "authenticator needs. This script never reads, uploads, or handles a credential of any"
+  echo "kind, and carries no default provider: which one is right is a property of your"
+  echo "deployment, not of this tool."
   exit 1
 }
 
-while getopts "s:d:f:i:u:e:p:" opt; do
+while getopts "s:d:f:i:u:e:p:a:A:" opt; do
   case $opt in
     s) VPS_IP="$OPTARG" ;;
+    a) DNS_AUTHENTICATOR="$OPTARG" ;;
+    A) DNS_AUTHENTICATOR_ARGS="$OPTARG" ;;
     d) DOMAIN="$OPTARG" ;;
     f) CONFIG_FILE="$OPTARG" ;;
     i)
@@ -60,8 +73,8 @@ while getopts "s:d:f:i:u:e:p:" opt; do
 done
 
 if [ -z "$VPS_IP" ] || [ -z "$DOMAIN" ] || [ -z "$CONFIG_FILE" ] || [ -z "$KEY_PATH" ] || \
-   [ -z "$SSH_USER" ] || [ -z "$ADMIN_EMAIL" ] || [ -z "$PORT" ]; then
-  echo "❌ Error: -s, -d, -f, -i, -u, -e, and -p are all required."
+   [ -z "$SSH_USER" ] || [ -z "$ADMIN_EMAIL" ] || [ -z "$PORT" ] || [ -z "$DNS_AUTHENTICATOR" ]; then
+  echo "❌ Error: -s, -d, -f, -i, -u, -e, -p and -a are all required."
   usage
 fi
 if [ ! -f "$CONFIG_FILE" ]; then
@@ -71,22 +84,6 @@ fi
 
 echo "=== Starting Central VPS Automation for IP: $VPS_IP, domain: $DOMAIN ==="
 
-# 0. Refuse to proceed unless the instance can actually write a DNS-01 challenge record. This
-#    script never handles a credential itself, so this is a hard prerequisite rather than
-#    something to work around -- and checking it here turns a silent renewal failure 30 days
-#    before expiry into a refusal at provisioning time (#1297).
-echo "=> Checking $VPS_IP can write DNS-01 challenge records into its hosted zone..."
-if ! ssh $SSH_KEY_ARG $SSH_USER@$VPS_IP "command -v aws >/dev/null 2>&1"; then
-  echo "❌ Error: the AWS CLI is not installed on $VPS_IP, so the Route53 DNS-01 plugin has"
-  echo "   nothing to authenticate with. Install it and attach an instance profile first."
-  usage
-fi
-if ! ssh $SSH_KEY_ARG $SSH_USER@$VPS_IP "aws route53 list-hosted-zones-by-name --dns-name '$DOMAIN' --max-items 1 >/dev/null 2>&1"; then
-  echo "❌ Error: $VPS_IP cannot read Route53 hosted zones for $DOMAIN."
-  echo "   Attach an instance profile granting the permissions listed in the usage below,"
-  echo "   then re-run. Nothing here needs a token on disk."
-  usage
-fi
 
 # 1. Build linux/amd64 lfr-tunneld binary locally, and the lfr-tunnel-ops CLI (needed below
 #    to render the nginx config from the same template reconcile-nginx uses -- never `go run`
@@ -102,23 +99,23 @@ go build -o bin/lfr-tunnel-ops ./cmd/lfr-tunnel-ops
 echo "=> Connecting to $VPS_IP to install dependencies (Nginx, Certbot, UFW, Fail2ban)..."
 ssh $SSH_KEY_ARG $SSH_USER@$VPS_IP << 'REMOTE_SSH'
   sudo apt-get update
-  sudo apt-get install -y nginx certbot python3-certbot-dns-route53 curl jq ufw fail2ban unattended-upgrades
+  sudo apt-get install -y nginx certbot curl jq ufw fail2ban unattended-upgrades
 REMOTE_SSH
 
-# 3. Request the wildcard cert via Certbot's Route53 DNS-01 plugin. Fully non-interactive and
-#    credential-free from this script's point of view: the plugin uses the instance's own IAM
-#    role, so no token is ever written down, uploaded, or rotated by hand.
+# 3. Request the wildcard cert via whichever Certbot DNS-01 plugin the operator named. The
+#    plugin is a parameter, not a constant: this script is the generic layer, and hardcoding
+#    one provider here is what #1015/#1016/#1187 removed from this repo.
 #
-#    This was --dns-cloudflare until #1297. Both zones moved to Route53 on 2026-08-11, so the
-#    Cloudflare plugin was writing the challenge record into a zone that is no longer
-#    authoritative -- the CA queries the AWS nameservers and would never have seen it. Nothing
-#    failed at the time because the certificates had just been issued; the first renewal after
-#    the migration would have been the first failure, silently, 30 days before expiry.
+#    It was hardcoded to --dns-cloudflare until #1297, which is how that bug survived the
+#    Route53 migration: the deployment moved provider, the script could not, and the mismatch
+#    was invisible until a renewal came due. Nothing failed at the time because the
+#    certificates had just been issued.
 echo "=========================================================="
 echo "=> Provisioning Wildcard SSL Certificate for $DOMAIN & *.$DOMAIN"
 echo "=========================================================="
+ssh $SSH_KEY_ARG $SSH_USER@$VPS_IP "sudo apt-get install -y python3-certbot-$DNS_AUTHENTICATOR"
 ssh $SSH_KEY_ARG $SSH_USER@$VPS_IP "sudo certbot certonly \
-  --dns-route53 \
+  --$DNS_AUTHENTICATOR $DNS_AUTHENTICATOR_ARGS \
   --agree-tos \
   --non-interactive \
   -m $ADMIN_EMAIL \

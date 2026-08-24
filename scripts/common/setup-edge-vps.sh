@@ -17,6 +17,11 @@ KEY_PATH=""
 VPS_IP=""
 REDIRECT_DOMAIN=""
 TUNNEL_DOMAINS=""
+# Which Certbot DNS-01 plugin proves domain control. No default on purpose: this is the
+# generic layer, and which provider is right is a property of the deployment, not of this
+# tool (#1015/#1016/#1187).
+DNS_AUTHENTICATOR=""
+DNS_AUTHENTICATOR_ARGS=""
 
 usage() {
   echo "Usage: $0 -s <vps_ip> -t <edge_token> -r <redirect_domain> -i <identity_file> -u <ssh_user> -d <domains> -c <control_plane_url> -p <port> [-a <tunnel_domains>]"
@@ -28,6 +33,11 @@ usage() {
   echo "  -d: Comma-separated list of edge domains (required)"
   echo "  -c: Control Plane URL (required)"
   echo "  -p: Port for lfr-tunneld to bind to on Edge node (required)"
+  echo "  -n: Certbot DNS-01 authenticator to prove domain control with (required), e.g."
+  echo "      dns-route53, dns-cloudflare, dns-digitalocean, dns-google. Installs"
+  echo "      python3-certbot-<authenticator> and passes --<authenticator> to certbot."
+  echo "  -N: Extra arguments for that authenticator (optional), e.g."
+  echo "      \"--dns-cloudflare-credentials /etc/letsencrypt/cloudflare.ini\""
   echo "  -a: Comma-separated subset of -d that tunnels may be issued on (optional)."
   echo "      Set this to the shared domain so a tunnel's public URL never names the edge"
   echo "      serving it, and does not change when the client moves (see #1285). The regional"
@@ -36,7 +46,7 @@ usage() {
 }
 
 # Parse parameters
-while getopts "s:t:i:u:d:c:p:r:a:" opt; do
+while getopts "s:t:i:u:d:c:p:r:a:n:N:" opt; do
   case $opt in
     s) VPS_IP="$OPTARG" ;;
     t) EDGE_TOKEN="$OPTARG" ;;
@@ -55,40 +65,21 @@ while getopts "s:t:i:u:d:c:p:r:a:" opt; do
     p) EDGE_PORT="$OPTARG" ;;
     r) REDIRECT_DOMAIN="$OPTARG" ;;
     a) TUNNEL_DOMAINS="$OPTARG" ;;
+    n) DNS_AUTHENTICATOR="$OPTARG" ;;
+    N) DNS_AUTHENTICATOR_ARGS="$OPTARG" ;;
     *) usage ;;
   esac
 done
 
 if [ -z "$VPS_IP" ] || [ -z "$EDGE_TOKEN" ] || [ -z "$REDIRECT_DOMAIN" ] || [ -z "$KEY_PATH" ] || \
-   [ -z "$SSH_USER" ] || [ -z "$DOMAINS" ] || [ -z "$CONTROL_PLANE_URL" ] || [ -z "$EDGE_PORT" ]; then
-  echo "❌ Error: -s, -t, -r, -i, -u, -d, -c, and -p are all required parameters."
+   [ -z "$SSH_USER" ] || [ -z "$DOMAINS" ] || [ -z "$CONTROL_PLANE_URL" ] || [ -z "$EDGE_PORT" ] || \
+   [ -z "$DNS_AUTHENTICATOR" ]; then
+  echo "❌ Error: -s, -t, -r, -i, -u, -d, -c, -p and -n are all required parameters."
   usage
 fi
 
 echo "=== Starting Edge VPS Automation for IP: $VPS_IP ==="
 
-# 0. Refuse to proceed unless the instance can write a DNS-01 challenge record. This script
-#    never handles a credential itself, so this is a hard prerequisite rather than something to
-#    work around -- and checking it here turns a silent renewal failure 30 days before expiry
-#    into a refusal at provisioning time (#1297).
-#
-#    This was a check for /etc/letsencrypt/cloudflare.ini. Both zones moved to Route53 on
-#    2026-08-11, so the Cloudflare plugin was writing the challenge into a zone that is no
-#    longer authoritative -- the CA queries the AWS nameservers and would never have seen it.
-echo "=> Checking $VPS_IP can write DNS-01 challenge records into its hosted zone..."
-FIRST_DOMAIN="${DOMAINS%%,*}"
-if ! ssh $SSH_KEY_ARG $SSH_USER@$VPS_IP "command -v aws >/dev/null 2>&1"; then
-  echo "❌ Error: the AWS CLI is not installed on $VPS_IP, so the Route53 DNS-01 plugin has"
-  echo "   nothing to authenticate with. Install it and attach an instance profile first."
-  exit 1
-fi
-if ! ssh $SSH_KEY_ARG $SSH_USER@$VPS_IP "aws route53 list-hosted-zones-by-name --dns-name '$FIRST_DOMAIN' --max-items 1 >/dev/null 2>&1"; then
-  echo "❌ Error: $VPS_IP cannot read Route53 hosted zones for $FIRST_DOMAIN."
-  echo "   Attach an instance profile granting, on the zones this deployment serves:"
-  echo "     route53:ChangeResourceRecordSets, route53:ListResourceRecordSets, route53:GetHostedZone"
-  echo "   plus route53:ListHostedZonesByName and route53:GetChange on *."
-  exit 1
-fi
 
 # 1. Build Linux amd64 binary locally (compatible with standard GCP e2-micro / AWS t3.nano x86_64)
 VERSION="$(grep -oE 'Version = "[^"]+"' pkg/config/version.go | cut -d'"' -f2)"
@@ -99,20 +90,21 @@ GOOS=linux GOARCH=amd64 go build -ldflags="-s -w -X lfr-tunnel/pkg/config.Versio
 echo "=> Connecting to $VPS_IP to install dependencies (Nginx, Certbot, UFW, Fail2ban)..."
 ssh $SSH_KEY_ARG $SSH_USER@$VPS_IP << 'REMOTE_SSH'
   sudo apt-get update
-  sudo apt-get install -y nginx certbot python3-certbot-dns-route53 curl jq ufw fail2ban unattended-upgrades
+  sudo apt-get install -y nginx certbot curl jq ufw fail2ban unattended-upgrades
 REMOTE_SSH
 
-# 3. Request wildcard Let's Encrypt certificates using Certbot's Route53 DNS-01 plugin --
-#    non-interactive, and credential-free from this script's point of view: the plugin uses the
-#    instance's own IAM role, so no token is written down, uploaded, or rotated by hand.
+# 3. Request wildcard Let's Encrypt certificates using whichever Certbot DNS-01 plugin the
+#    operator named. The plugin is a parameter, not a constant -- hardcoding --dns-cloudflare
+#    here is how #1297 survived the move to another DNS provider unnoticed.
 IFS=',' read -r -a DOMAIN_ARRAY <<< "$DOMAINS"
 for DOMAIN in "${DOMAIN_ARRAY[@]}"; do
   echo "=========================================================="
   echo "=> Provisioning Wildcard SSL Certificate for $DOMAIN & *.$DOMAIN"
   echo "=========================================================="
 
+  ssh $SSH_KEY_ARG $SSH_USER@$VPS_IP "sudo apt-get install -y python3-certbot-$DNS_AUTHENTICATOR"
   ssh $SSH_KEY_ARG $SSH_USER@$VPS_IP "sudo certbot certonly \
-    --dns-route53 \
+    --$DNS_AUTHENTICATOR $DNS_AUTHENTICATOR_ARGS \
     --agree-tos \
     --non-interactive \
     --register-unsafely-without-email \

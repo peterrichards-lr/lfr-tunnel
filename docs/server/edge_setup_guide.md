@@ -163,13 +163,34 @@ On the stateless edge node VPS, configure connection settings pointing to the Co
 
 ```yaml
 domains:
-  - "us.lfr-demo.online"
+  - "us.lfr-demo.online"   # regional name, for direct and internal addressing
+  - "lfr-demo.online"      # the shared name visitors actually use
+tunnel_domains:
+  - "lfr-demo.online"      # tunnels are only ever issued here
 bind_addr: ":8090" # Port for local proxy / direct tunnels
 db_path: "" # Explicitly empty db_path triggers stateless Edge Mode
 
 control_plane_url: "https://tunnel.lfr-demo.se"
 edge_token: "edge-us-pre-shared-key-plaintext" # matches the "edge-us" id registered above
 ```
+
+#### Why `tunnel_domains`
+
+`domains` is what this gateway *answers* on; `tunnel_domains` is what it may *issue tunnels
+on*. Without the second list, a tunnel registered through this edge could only ever be
+`peters.us.lfr-demo.online` — the serving node baked into the visitor's URL. Move the client
+to another gateway, which it now does deliberately ahead of a scheduled stop, and the URL
+becomes something else entirely, breaking every link anyone was holding (#1285).
+
+Set `tunnel_domains` to the shared domain on every edge, and the same tunnel is
+`peters.lfr-demo.online` wherever it is served from. The region belongs in DNS resolution,
+not in the name a visitor types. `scripts/common/setup-edge-vps.sh -a lfr-demo.online` writes
+this for you. Entries that aren't also in `domains` are ignored at startup, with a log line
+saying so — a gateway cannot issue a host it doesn't serve.
+
+Two things must follow for an apex-issued host on an edge to be reachable by visitors: DNS
+has to point that host at the node currently holding it (#1247), and that node's certificate
+has to cover `*.lfr-demo.online` rather than only `*.us.lfr-demo.online` (#1248).
 
 ---
 
@@ -282,4 +303,4 @@ If your Edge VPS or Control Plane gateway has multiple public IP addresses confi
 
 <!-- markdownlint-disable MD049 -->
 ---
-*Last Updated: 2026-08-20* | *Last Reviewed: 2026-08-20*
+*Last Updated: 2026-08-24* | *Last Reviewed: 2026-08-24*

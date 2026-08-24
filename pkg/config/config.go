@@ -161,6 +161,21 @@ type ServerConfig struct {
 
 	DomainAllocationRule string `yaml:"domain_allocation_rule"`
 	DefaultDomain        string `yaml:"default_domain"`
+	// TunnelDomains restricts which of Domains a tunnel may actually be issued on.
+	//
+	// Domains is the list this gateway *answers* on, and an edge needs regional names in it
+	// -- in.lfr-demo.se, aws-edge-in.lfr-demo.se -- for direct and internal addressing. But a
+	// lease issued on one of those puts the serving node into the visitor's URL, so the URL
+	// changes the moment the client moves to another gateway, which is exactly what a planned
+	// move (#1246) was meant to avoid. The region belongs in DNS resolution, not in the name
+	// a visitor types (#1285).
+	//
+	// Set this to the shared domain(s) on an edge so registration always issues an
+	// apex-level host regardless of which node handled it. Empty means every entry in
+	// Domains is eligible, which is correct for a single-gateway deployment and for central.
+	// Entries not present in Domains are dropped at startup -- a gateway cannot issue a host
+	// it does not serve.
+	TunnelDomains []string `yaml:"tunnel_domains"`
 }
 
 type RoleSetting struct {

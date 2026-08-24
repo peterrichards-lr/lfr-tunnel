@@ -1,5 +1,11 @@
 domains:
   - "us.lfr-demo.local"
+  - "lfr-demo.local"
+# The edge answers on its regional name for direct addressing, but tunnels are issued on the
+# shared domain so the serving node never appears in a visitor's URL and a planned move does
+# not change it (#1285).
+tunnel_domains:
+  - "lfr-demo.local"
 http_bind_addr: "0.0.0.0:8090"
 db_path: ""
 control_plane_url: "http://lfr-tunneld-control:8080"

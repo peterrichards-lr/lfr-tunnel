@@ -14,9 +14,6 @@ owner:
   name: "Admin User"
 
 admin_notification_email: "admin@lfr-demo.local"
-# Four: peter-dev and peter-auto, each on both the central and the regional domain. The
-# default of 3 left the fourth failing with a quota 403 mid-test.
-default_max_reservations: 4
 owner_max_reservations: -1
 allow_client_auto_reservation: true
 

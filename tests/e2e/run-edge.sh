@@ -280,14 +280,10 @@ curl -s -c /tmp/dev-session.txt -X POST -H "Content-Type: application/json" \
      -d "{\"token\": \"$DEV_ML_TOKEN\"}" \
      "http://localhost:8000/api/auth/verify"
 
+# One reservation each, on the shared domain. Both gateways issue tunnels there now (#1285),
+# so a reservation follows the client between them instead of being spent twice -- which is
+# what previously made a move fail with a quota 403 rather than a routing error.
 echo "=== Reserving subdomain peter-dev ==="
-curl -s -b /tmp/dev-session.txt -X POST -H "Content-Type: application/json" \
-     -d '{"subdomain": "peter-dev", "domain": "us.lfr-demo.local"}' \
-     "http://localhost:8000/api/portal/reservations"
-# Reserved on the central domain as well, because a reservation is currently per-domain and the
-# planned move below re-registers on whichever gateway it elects. Without this the move fails
-# with a 403 quota error, which is the region-scoped-hostname defect (#1285) showing up as a
-# reservation problem. Drop this second call once hostnames stop carrying the region.
 curl -s -b /tmp/dev-session.txt -X POST -H "Content-Type: application/json" \
      -d '{"subdomain": "peter-dev", "domain": "lfr-demo.local"}' \
      "http://localhost:8000/api/portal/reservations"
@@ -295,9 +291,6 @@ curl -s -b /tmp/dev-session.txt -X POST -H "Content-Type: application/json" \
 echo "=== Reserving subdomain peter-auto ==="
 curl -s -b /tmp/dev-session.txt -X POST -H "Content-Type: application/json" \
      -d '{"subdomain": "peter-auto", "domain": "lfr-demo.local"}' \
-     "http://localhost:8000/api/portal/reservations"
-curl -s -b /tmp/dev-session.txt -X POST -H "Content-Type: application/json" \
-     -d '{"subdomain": "peter-auto", "domain": "us.lfr-demo.local"}' \
      "http://localhost:8000/api/portal/reservations"
 sleep 2
 
@@ -314,11 +307,16 @@ CLIENT_CONTAINER_ID=$(docker-compose -f docker-compose-edge.yml run -d --no-deps
 
 echo "Explicit Client Container: $CLIENT_CONTAINER_ID"
 
-# Wait for tunnel connection
+# Wait for tunnel connection.
+#
+# Addressed at the edge directly (port 8090) rather than through nginx, because the host is
+# now apex-level -- peter-dev.lfr-demo.local, with no "us" in it (#1285) -- and this nginx
+# sends every *.lfr-demo.local to central. Getting apex traffic to the node actually holding
+# the tunnel is #1247; until that exists, talking to the node directly stands in for it.
 echo "=== Waiting for explicit regional tunnel ==="
 TUNNEL_READY=false
 for i in {1..20}; do
-    RESPONSE_CODE=$(curl -s -o /dev/null -w "%{http_code}" -H "Host: peter-dev.us.lfr-demo.local" http://localhost:8000/ || true)
+    RESPONSE_CODE=$(curl -s -o /dev/null -w "%{http_code}" -H "Host: peter-dev.lfr-demo.local" http://localhost:8090/ || true)
     if [ "$RESPONSE_CODE" = "200" ]; then
         echo "Regional edge tunnel is ready!"
         TUNNEL_READY=true
@@ -340,12 +338,25 @@ if [ "$TUNNEL_READY" = false ]; then
 fi
 
 echo "=== Verifying routing through explicit regional tunnel ==="
-RESPONSE=$(curl -s -H "Host: peter-dev.us.lfr-demo.local" http://localhost:8000/)
+RESPONSE=$(curl -s -H "Host: peter-dev.lfr-demo.local" http://localhost:8090/)
 if ! echo "$RESPONSE" | grep -q "Mock Liferay Instance"; then
     echo "❌ Edge routing content mismatch!"
     exit 1
 fi
-echo "✅ Explicit regional edge tunnel routing verified successfully!"
+
+# The URL the client was given must not name the node serving it. A regional host here is the
+# defect #1285 fixes: it changes the moment the client moves, breaking every existing link.
+if docker logs "$CLIENT_CONTAINER_ID" 2>&1 | grep -q "peter-dev.us.lfr-demo.local"; then
+    echo "❌ The edge issued a region-scoped URL; a tunnel's public URL must not name its gateway."
+    docker logs "$CLIENT_CONTAINER_ID" 2>&1 | grep "peter-dev"
+    exit 1
+fi
+if ! docker logs "$CLIENT_CONTAINER_ID" 2>&1 | grep -q "peter-dev.lfr-demo.local"; then
+    echo "❌ The edge did not issue the shared-domain host the client should have been given."
+    docker logs "$CLIENT_CONTAINER_ID"
+    exit 1
+fi
+echo "✅ Explicit regional edge tunnel routing verified successfully, on a region-agnostic host!"
 
 # 7. Test Auto-Probing Latency Selection
 echo "=== Starting auto-probing client tunnel ==="
@@ -359,14 +370,18 @@ AUTO_CLIENT_ID=$(docker-compose -f docker-compose-edge.yml run -d --no-deps \
 
 echo "Auto-probing Client Container: $AUTO_CLIENT_ID"
 
-# Wait for auto-probed tunnel connection
+# Wait for auto-probed tunnel connection.
+#
+# One host either way now: whichever region the probe picks, the tunnel is issued on the shared
+# domain (#1285). Central is reachable through nginx, the edge through its own port, since
+# apex traffic does not yet follow the tunnel to the node holding it (#1247).
 echo "=== Waiting for auto-probed tunnel ==="
 AUTO_TUNNEL_READY=false
 for i in {1..20}; do
     CODE_EU=$(curl -s -o /dev/null -w "%{http_code}" -H "Host: peter-auto.lfr-demo.local" http://localhost:8000/ || true)
-    CODE_US=$(curl -s -o /dev/null -w "%{http_code}" -H "Host: peter-auto.us.lfr-demo.local" http://localhost:8000/ || true)
+    CODE_US=$(curl -s -o /dev/null -w "%{http_code}" -H "Host: peter-auto.lfr-demo.local" http://localhost:8090/ || true)
     if [ "$CODE_EU" = "200" ] || [ "$CODE_US" = "200" ]; then
-        echo "Auto-probed tunnel connected successfully (EU: $CODE_EU, US: $CODE_US)!"
+        echo "Auto-probed tunnel connected successfully (central: $CODE_EU, edge: $CODE_US)!"
         AUTO_TUNNEL_READY=true
         break
     fi
@@ -425,38 +440,38 @@ if ! docker logs "$CLIENT_CONTAINER_ID" 2>&1 | grep -q "Gateway reports it is sh
     exit 1
 fi
 
-# And it has to land somewhere that serves traffic. Which hostname it lands on is deliberately
-# NOT asserted yet: today the gateway that registers a tunnel builds the hostname from its own
-# domains, so moving between gateways changes the visitor's URL. That is the defect #1285
-# fixes -- hostnames are supposed to be region-agnostic. Until it lands, accept either form and
-# assert only what #1246 actually promises: the warning arrives and the tunnel comes back up
-# somewhere. Tighten this to the region-agnostic host alone once #1285 has merged.
-echo "=== Verifying the tunnel survived the move ==="
+# And it has to come back up on the SAME host it started on. That is the point of the move:
+# a visitor holding peter-dev.lfr-demo.local keeps working, and never learns which node is
+# serving it (#1285). The client has moved to the control plane, so nginx's *.lfr-demo.local
+# vhost now reaches it.
+echo "=== Verifying the tunnel survived the move on the same host ==="
 SURVIVED=false
-SURVIVING_HOST=""
 for i in {1..60}; do
-    for HOST in peter-dev.lfr-demo.local peter-dev.us.lfr-demo.local; do
-        CODE=$(curl -s -o /dev/null -w "%{http_code}" -H "Host: $HOST" http://localhost:8000/ || true)
-        if [ "$CODE" = "200" ]; then
-            SURVIVED=true
-            SURVIVING_HOST="$HOST"
-            break 2
-        fi
-    done
+    CODE=$(curl -s -o /dev/null -w "%{http_code}" -H "Host: peter-dev.lfr-demo.local" http://localhost:8000/ || true)
+    if [ "$CODE" = "200" ]; then
+        SURVIVED=true
+        break
+    fi
     sleep 2
 done
 
 if [ "$SURVIVED" = false ]; then
-    echo "❌ The client moved but its tunnel never came back up on any gateway."
+    echo "❌ The client moved but peter-dev.lfr-demo.local never served again."
+    echo "    A planned move must not change the URL a visitor is holding."
     echo "=== Client logs ==="
     docker logs "$CLIENT_CONTAINER_ID"
     exit 1
 fi
-echo "Tunnel answered again on ${SURVIVING_HOST}"
 
-RESPONSE=$(curl -s -H "Host: $SURVIVING_HOST" http://localhost:8000/)
+RESPONSE=$(curl -s -H "Host: peter-dev.lfr-demo.local" http://localhost:8000/)
 if ! echo "$RESPONSE" | grep -q "Mock Liferay Instance"; then
     echo "❌ The tunnel answered after the move but served the wrong content."
+    exit 1
+fi
+
+if docker logs "$CLIENT_CONTAINER_ID" 2>&1 | grep -q "peter-dev.us.lfr-demo.local"; then
+    echo "❌ The client advertised a region-scoped URL at some point during the move."
+    docker logs "$CLIENT_CONTAINER_ID" 2>&1 | grep "peter-dev"
     exit 1
 fi
 echo "✅ Client moved off the stopping edge and kept serving!"

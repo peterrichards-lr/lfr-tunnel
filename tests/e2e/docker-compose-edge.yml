@@ -42,6 +42,13 @@ services:
     command: ["--config", "/etc/lfr-tunneld/server-config-edge.yaml"]
     volumes:
       - ./server-config-edge.yaml:/etc/lfr-tunneld/server-config-edge.yaml:ro
+    # Published so the harness can address the edge directly with an apex Host header. Tunnels
+    # are now issued at the apex (#1285) and this nginx sends *.lfr-demo.local to central, so
+    # there is otherwise no way to reach an edge-held tunnel by the name its visitor uses.
+    # That routing is #1247's job (a DNS hook pointing the host at the node holding it); until
+    # it exists, hitting the node directly is what stands in for it.
+    ports:
+      - "8090:8090"
     expose:
       - "8090"
       - "8091"

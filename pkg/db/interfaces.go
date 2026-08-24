@@ -66,6 +66,16 @@ type MetricRepository interface {
 	GetGatewayRuns(limit int) ([]*GatewayRun, error)
 }
 
+// PortalSessionRepository persists logged-in portal sessions so a restart -- including a
+// routine deploy -- does not sign every user out (#1304).
+type PortalSessionRepository interface {
+	UpsertPortalSession(sess *PortalSession) error
+	GetPortalSession(tokenHash string) (*PortalSession, error)
+	DeletePortalSession(tokenHash string) error
+	DeletePortalSessionsForEmail(email string) (int64, error)
+	PrunePortalSessions() (int64, error)
+}
+
 type MagicLinkRepository interface {
 	CreateMagicLink(email, tokenHash, clientIP string, expiresAt time.Time) error
 	GetMagicLink(tokenHash string) (*MagicLink, error)

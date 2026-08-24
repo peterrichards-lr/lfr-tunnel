@@ -215,13 +215,17 @@ type Server struct {
 	// state. Stop waits on it so a cancelled goroutine has actually returned before the
 	// caller tears down what it was reading -- tests restoring package-level tunables
 	// raced the edge control channel still using them (issue #1131).
-	bgWG             sync.WaitGroup
-	rateLimiters     map[string]*ipLimiter
-	rlMutex          sync.Mutex
-	violations       map[string]int
-	vMutex           sync.Mutex
-	blacklist        sync.Map // memory cache for db blacklist
-	portalMap        sync.Map // memory cache for portal magic links and sessions
+	bgWG         sync.WaitGroup
+	rateLimiters map[string]*ipLimiter
+	rlMutex      sync.Mutex
+	violations   map[string]int
+	vMutex       sync.Mutex
+	blacklist    sync.Map // memory cache for db blacklist
+	portalMap    sync.Map // memory cache for portal magic links and sessions
+	// sessions persists portal logins so a restart does not sign everyone out (#1304).
+	// Reached through sessionStore(), which builds it on first use.
+	sessions         *portalSessionStore
+	sessionsOnce     sync.Once
 	metrics          *MetricsCollector
 	nginxManager     *nginx.MaintenanceManager
 	caCert           *x509.Certificate
@@ -2050,6 +2054,10 @@ func (s *Server) Start() error {
 				if s.db != nil {
 					_ = s.db.PruneExpiredMagicLinks()                          //nolint:errcheck
 					_ = s.db.PruneExpiredOrRevokedPATs(s.cfg.PATRetentionDays) //nolint:errcheck
+					// Expired sessions are read as absent, so this is housekeeping rather
+					// than a correctness requirement -- on the existing timer instead of a
+					// new one (#1304).
+					_, _ = s.db.PrunePortalSessions() //nolint:errcheck
 					s.checkExpiringReservations()
 				}
 			}
@@ -3571,20 +3579,9 @@ func (s *Server) handleAdminVerify(w http.ResponseWriter, r *http.Request) {
 		_ = s.db.UpdateUser(user) //nolint:errcheck
 	}
 
-	killedPreviousSession := false
-	s.portalMap.Range(func(key, value interface{}) bool {
-		k := key.(string)
-		if strings.HasPrefix(k, "admin_session_") {
-			sessionData := value.(PortalSessionData)
-			if sessionData.Email == email {
-				s.portalMap.Delete(k)
-				killedPreviousSession = true
-			}
-		}
-		return true
-	})
+	killedPreviousSession := s.sessionStore().killPortalSessionsFor(email)
 
-	s.portalMap.Store("admin_session_"+sessionToken, PortalSessionData{
+	s.sessionStore().storePortalSession(sessionToken, PortalSessionData{
 		Email:                 email,
 		ExpiresAt:             time.Now().Add(s.cfg.PortalSessionDuration),
 		ClientIP:              clientIP,
@@ -3611,7 +3608,7 @@ func (s *Server) handleAdminVerify(w http.ResponseWriter, r *http.Request) {
 func (s *Server) handleAdminLogout(w http.ResponseWriter, r *http.Request) {
 	cookie, err := r.Cookie("lfr_session")
 	if err == nil {
-		s.portalMap.Delete("admin_session_" + cookie.Value)
+		s.sessionStore().deletePortalSession(cookie.Value)
 	}
 	http.SetCookie(w, &http.Cookie{
 		Name:     "lfr_session",

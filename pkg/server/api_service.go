@@ -50,6 +50,7 @@ type portalService struct {
 	cfg       *config.ServerConfig
 	mailer    *NotificationService
 	portalMap *sync.Map
+	sessions  *portalSessionStore
 	caCert    *x509.Certificate
 	caKey     *rsa.PrivateKey
 }
@@ -60,6 +61,7 @@ func NewPortalService(database *db.DB, cfg *config.ServerConfig, mailer *Notific
 		cfg:       cfg,
 		mailer:    mailer,
 		portalMap: pMap,
+		sessions:  newPortalSessionStore(pMap, database),
 		caCert:    caCert,
 		caKey:     caKey,
 	}

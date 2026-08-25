@@ -541,9 +541,12 @@ func NewServer(cfg *config.ServerConfig) (*Server, error) {
 
 	// Load DB blacklist and unsubscribe secret into cache
 	if srv.db != nil {
+		// ListBlacklistedIPs returns only bans still in force, so an expired one is not
+		// resurrected by a restart -- its row survives for the sake of escalation, not to
+		// keep blocking (#1353).
 		if list, err := srv.db.ListBlacklistedIPs(); err == nil {
 			for _, entry := range list {
-				srv.blacklist.Store(entry.IPAddress, true)
+				srv.cacheBan(entry.IPAddress, entry.ExpiresAt)
 			}
 		}
 
@@ -626,7 +629,7 @@ func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 	}
-	if _, blocked := s.blacklist.Load(ip); blocked {
+	if s.isBlacklisted(ip) {
 		http.Error(w, "Forbidden", http.StatusForbidden)
 		return
 	}
@@ -647,26 +650,32 @@ func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 			vCount := s.recordViolation(ip)
 
 			if vCount >= 50 {
-				// Auto-ban. The threshold now means 50 violations within violationWindow of
-				// each other, rather than 50 accumulated over the life of the process (#1327).
-				slog.Info(fmt.Sprintf("[Defense] Auto-banning IP %s after %d violations within %v", ip, vCount, violationWindow))
-				s.blacklist.Store(ip, true)
-				s.BroadcastBlacklistUpdate("add", ip)
-				if s.db != nil {
-					_ = s.db.AddBlacklistIP(ip, "Auto-banned by Rate Limiter for DDOS") //nolint:errcheck
-					s.writeAudit("system", "ip.blacklisted", "ip", ip, "Auto-banned by Rate Limiter for DDOS", r)
-					body, _err := s.renderNotificationTemplate("en", "admin_ip_autobanned.txt", map[string]interface{}{"IP": ip})
-					_ = _err //nolint:errcheck
-					s.notifications.SendAdminAlert("alert_notify_blacklist", "LFR Tunnel Alert: IP Auto-Banned", body)
-					// Zero, not 24h: ip_blacklist has no expiry column and nothing lifts these
-					// bans, so the previous value described a behaviour that does not exist.
-					// Whether they *should* expire is a policy question, deliberately not
-					// changed here (#1327).
-					s.webhooks.SendRateLimitBanAlert(ip, 0, "Exceeded API rate limit (50 violations)")
-				}
+				// Auto-ban. The threshold means 50 violations within violationWindow of each
+				// other, rather than 50 accumulated over the life of the process (#1327), and
+				// the ban itself expires and escalates for repeat offenders (#1353).
+				reason := "Auto-banned by Rate Limiter for DDOS"
+				expiresAt, banned := s.applyAutoBan(ip, reason)
+				if banned {
+					slog.Info(fmt.Sprintf("[Defense] Auto-banning IP %s after %d violations within %v, %s",
+						ip, vCount, violationWindow, describeBanDuration(expiresAt)))
+					s.BroadcastBlacklistUpdate("add", ip, expiresAt)
+					if s.db != nil {
+						s.writeAudit("system", "ip.blacklisted", "ip", ip, reason, r)
+						body, _err := s.renderNotificationTemplate("en", "admin_ip_autobanned.txt", map[string]interface{}{"IP": ip})
+						_ = _err //nolint:errcheck
+						s.notifications.SendAdminAlert("alert_notify_blacklist", "LFR Tunnel Alert: IP Auto-Banned", body)
+						// The real remaining time, not a fixed string. Operators were
+						// previously told every ban lasted 24h when none of them expired.
+						var remaining time.Duration
+						if expiresAt != nil {
+							remaining = time.Until(*expiresAt)
+						}
+						s.webhooks.SendRateLimitBanAlert(ip, remaining, "Exceeded API rate limit (50 violations)")
+					}
 
-				http.Error(w, "Forbidden", http.StatusForbidden)
-				return
+					http.Error(w, "Forbidden", http.StatusForbidden)
+					return
+				}
 			}
 
 			http.Error(w, "Too Many Requests", http.StatusTooManyRequests)
@@ -2125,6 +2134,9 @@ func (s *Server) Start() error {
 					// than a correctness requirement -- on the existing timer instead of a
 					// new one (#1304).
 					_, _ = s.db.PrunePortalSessions() //nolint:errcheck
+					// Expired bans stop blocking the moment they lapse; this only clears the
+					// rows once their history is no longer needed for escalation (#1353).
+					_, _ = s.db.PruneBlacklist(s.cfg.AutoBan.HistoryRetention) //nolint:errcheck
 					s.checkExpiringReservations()
 				}
 			}
@@ -5030,8 +5042,10 @@ func (s *Server) handleAdminBlacklist(w http.ResponseWriter, r *http.Request, ac
 			http.Error(w, `{"error":"Failed to add IP to blacklist"}`, http.StatusInternalServerError)
 			return
 		}
-		s.blacklist.Store(payload.IPAddress, true)
-		s.BroadcastBlacklistUpdate("add", payload.IPAddress)
+		// A manual ban does not expire: a person looked at this address and decided. Only the
+		// automatic ones lift on their own (#1353).
+		s.cacheBan(payload.IPAddress, nil)
+		s.BroadcastBlacklistUpdate("add", payload.IPAddress, nil)
 		s.writeAudit(actor, "ip.blacklisted", "ip", payload.IPAddress, payload.Reason, r)
 		body, _err := s.renderNotificationTemplate("en", "admin_ip_banned.txt", map[string]interface{}{"IP": payload.IPAddress, "Actor": actor})
 		_ = _err //nolint:errcheck
@@ -5052,7 +5066,7 @@ func (s *Server) handleAdminBlacklist(w http.ResponseWriter, r *http.Request, ac
 			return
 		}
 		s.blacklist.Delete(ip)
-		s.BroadcastBlacklistUpdate("remove", ip)
+		s.BroadcastBlacklistUpdate("remove", ip, nil)
 		s.writeAudit(actor, "ip.unblacklisted", "ip", ip, "", r)
 		_ = json.NewEncoder(w).Encode(map[string]string{"status": "success"}) //nolint:errcheck
 		return

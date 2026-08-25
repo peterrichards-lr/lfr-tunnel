@@ -87,9 +87,11 @@ type MagicLinkRepository interface {
 
 type BlacklistRepository interface {
 	AddBlacklistIP(ip, reason string) error
+	AddAutoBan(ip, reason string, duration time.Duration, factor float64, maxDuration time.Duration) (*BlacklistEntry, error)
 	RemoveBlacklistIP(ip string) error
 	IsBlacklisted(ip string) (bool, error)
 	ListBlacklistedIPs() ([]*BlacklistEntry, error)
+	PruneBlacklist(retention time.Duration) (int64, error)
 }
 
 type VanityDomainStatusRepository interface {

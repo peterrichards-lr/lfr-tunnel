@@ -4,6 +4,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"strings"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -411,13 +412,13 @@ func TestCrossNodeProxy_WAFEarlyBlock(t *testing.T) {
 // TestCrossNodeProxy_EdgeRejectsUnservedDomainLocally verifies that an Edge node terminates
 // unserved/scanner host requests locally with 404 instead of proxying them to Central (#1319).
 func TestCrossNodeProxy_EdgeRejectsUnservedDomainLocally(t *testing.T) {
-	mockControlReached := false
+	var mockControlReached atomic.Bool
 	mockControlPlane := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if strings.HasPrefix(r.URL.Path, "/api/internal/") {
 			http.Error(w, "internal", http.StatusNotFound)
 			return
 		}
-		mockControlReached = true
+		mockControlReached.Store(true)
 		w.WriteHeader(http.StatusOK)
 		if _, err := w.Write([]byte("control plane")); err != nil {
 			t.Errorf("failed to write response: %v", err)
@@ -448,12 +449,12 @@ func TestCrossNodeProxy_EdgeRejectsUnservedDomainLocally(t *testing.T) {
 	if rec.Code != http.StatusNotFound {
 		t.Errorf("expected 404 Not Found for unserved domain, got %d", rec.Code)
 	}
-	if mockControlReached {
+	if mockControlReached.Load() {
 		t.Errorf("mock control plane should NOT have been reached for an unserved domain request")
 	}
 
 	// 2. Request for served domain (should reach control plane fallback)
-	mockControlReached = false
+	mockControlReached.Store(false)
 	req2 := httptest.NewRequest(http.MethodGet, "http://valid-sub.lfr-demo.se/", nil)
 	req2.Host = "valid-sub.lfr-demo.se"
 	rec2 := httptest.NewRecorder()
@@ -462,7 +463,7 @@ func TestCrossNodeProxy_EdgeRejectsUnservedDomainLocally(t *testing.T) {
 	if rec2.Code != http.StatusOK {
 		t.Errorf("expected 200 OK for served domain routed to control plane, got %d", rec2.Code)
 	}
-	if !mockControlReached {
+	if !mockControlReached.Load() {
 		t.Errorf("expected control plane to be queried for served domain")
 	}
 }

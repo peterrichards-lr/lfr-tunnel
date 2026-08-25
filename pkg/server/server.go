@@ -1372,6 +1372,26 @@ func (s *Server) canUserAutoReserve(userRec *db.User) bool {
 }
 
 func (s *Server) handleRegister(w http.ResponseWriter, r *http.Request) {
+	// Turn new sessions away while this gateway empties. Announcing a drain and then accepting
+	// registrations means a client can land on a node that is seconds from restarting, and be
+	// moved again immediately -- a drain that moves the same client twice (#1238).
+	//
+	// healthz already advertises "draining", and a client that probes will not elect this
+	// gateway at all. This is for the ones that do not: a -server pinned client, an older
+	// build, or a registration already in flight when the drain was announced.
+	//
+	// 503 with Retry-After, because the condition is temporary and the client should come back
+	// rather than treat the gateway as broken. Answering 200 and then dying is worse than a
+	// clear refusal.
+	if s.isDraining() {
+		w.Header().Set("Retry-After", strconv.Itoa(drainRetryAfterSeconds))
+		s.respondRegisterResponse(w, http.StatusServiceUnavailable, r, RegisterResponse{
+			Status: "error",
+			Error:  "this gateway is restarting shortly; retry in a moment or elect another region",
+		})
+		return
+	}
+
 	var req RegisterRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 		s.respondRegisterResponse(w, http.StatusBadRequest, r, RegisterResponse{Status: "error", Error: "invalid JSON payload"})
@@ -6135,6 +6155,24 @@ func (s *Server) handleEdgeHealth(w http.ResponseWriter, r *http.Request) {
 // Central emits no control_plane field at all -- it has no upstream to be connected to --
 // and a client treats its absence as healthy, so older gateways keep working.
 func (s *Server) healthzPayload() []byte {
+	// Draining outranks everything else this reports. A gateway that is about to restart can
+	// be perfectly healthy in every other respect -- control channel up, listeners fine -- and
+	// is still the wrong place to put a new session. Announcing the drain and then continuing
+	// to accept registrations means sessions land on a node while it empties, which is how a
+	// drain ends up moving the same client twice (#1238).
+	//
+	// Deliberately its own state rather than reusing "degraded". An operator has to be able to
+	// tell a deploy from a node that has lost its control channel; conflating those two is
+	// where #1145 came from.
+	if s.isDraining() {
+		if s.cfg.ControlPlaneURL == "" {
+			return []byte(`{"status":"draining"}`)
+		}
+		if s.edgeControlConnected.Load() {
+			return []byte(`{"status":"draining","control_plane":"connected"}`)
+		}
+		return []byte(`{"status":"draining","control_plane":"disconnected"}`)
+	}
 	if s.cfg.ControlPlaneURL == "" {
 		return []byte(`{"status":"healthy"}`)
 	}

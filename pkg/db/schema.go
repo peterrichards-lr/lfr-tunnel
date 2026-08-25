@@ -139,7 +139,13 @@ func (db *DB) initSchema() error {
 		ip_address TEXT PRIMARY KEY,
 		reason TEXT,
 		banned_by TEXT,
-		banned_at DATETIME DEFAULT CURRENT_TIMESTAMP
+		banned_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+		-- NULL means the ban never expires, which is what a manual ban by an admin is.
+		-- Automatic bans carry a real expiry (#1353).
+		expires_at DATETIME,
+		-- How many times this address has been auto-banned. Survives expiry, because
+		-- escalation would otherwise reset every time a ban lapsed.
+		ban_count INTEGER NOT NULL DEFAULT 0
 	);
 
 	CREATE TABLE IF NOT EXISTS tunnel_metrics (
@@ -269,4 +275,10 @@ var migrations = []migration{
 	// doesn't apply to a domain nobody but its owner can ever claim. Backfills any row created
 	// before this fix that got a real expiry date from the previous role-based logic.
 	{21, "UPDATE subdomain_reservations SET expires_at = NULL WHERE subdomain = ''"},
+	// Automatic rate-limit bans used to be permanent, with no in-band way to undo one -- the
+	// blacklist check runs before all routing, so a banned address cannot reach the admin API
+	// to unban itself (#1353). NULL keeps the existing rows permanent, which is right: they
+	// were all placed under the old behaviour, and an operator may have meant them.
+	{22, "ALTER TABLE ip_blacklist ADD COLUMN expires_at DATETIME"},
+	{23, "ALTER TABLE ip_blacklist ADD COLUMN ban_count INTEGER NOT NULL DEFAULT 0"},
 }

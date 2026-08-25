@@ -47,11 +47,7 @@ func (s *Server) sessionViewAsRole(r *http.Request) string {
 	if err != nil {
 		return ""
 	}
-	sessionRaw, ok := s.portalMap.Load("admin_session_" + cookie.Value)
-	if !ok {
-		return ""
-	}
-	sessionData, ok := sessionRaw.(PortalSessionData)
+	sessionData, ok := s.sessionStore().loadPortalSession(cookie.Value)
 	if !ok {
 		return ""
 	}
@@ -131,20 +127,14 @@ func (s *Server) handleViewAs(w http.ResponseWriter, r *http.Request) {
 		respondJSON(w, http.StatusUnauthorized, map[string]interface{}{"error": "Not authenticated"})
 		return
 	}
-	key := "admin_session_" + cookie.Value
-	sessionRaw, ok := s.portalMap.Load(key)
-	if !ok {
-		respondJSON(w, http.StatusUnauthorized, map[string]interface{}{"error": "Session not found"})
-		return
-	}
-	sessionData, ok := sessionRaw.(PortalSessionData)
+	sessionData, ok := s.sessionStore().loadPortalSession(cookie.Value)
 	if !ok {
 		respondJSON(w, http.StatusUnauthorized, map[string]interface{}{"error": "Session not found"})
 		return
 	}
 
 	sessionData.ViewAsRole = role
-	s.portalMap.Store(key, sessionData)
+	s.sessionStore().storePortalSession(cookie.Value, sessionData)
 
 	// An owner adopting another role is worth a record even though it grants nothing.
 	action, details := "view_as_exit", "Left View As"

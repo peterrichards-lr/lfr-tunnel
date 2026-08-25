@@ -1116,50 +1116,55 @@ func TestSchemaMigrationVersioning(t *testing.T) {
 	database, tmpDir := setupTestDB(t)
 	defer cleanupTestDB(database, tmpDir)
 
-	// 1. Verify that schema_version table is created and populated with version 21
+	// Expectations are derived from the migrations slice rather than written as literals.
+	// Hardcoding the number meant every migration added to the repo broke this test for a
+	// reason that had nothing to do with what it is checking, which is that all of them get
+	// applied and recorded.
+	latest := migrations[len(migrations)-1].version
+
+	// 1. Verify that schema_version is created and every migration has been applied
 	var maxVersion int
 	err := database.conn.QueryRow("SELECT COALESCE(MAX(version), 0) FROM schema_version").Scan(&maxVersion)
 	if err != nil {
 		t.Fatalf("failed to query schema_version: %v", err)
 	}
-	if maxVersion != 21 {
-		t.Errorf("expected max schema version to be 21, got %d", maxVersion)
+	if maxVersion != latest {
+		t.Errorf("expected max schema version to be %d, got %d", latest, maxVersion)
 	}
 
-	// Count number of rows in schema_version. It should be 21.
 	var count int
 	err = database.conn.QueryRow("SELECT COUNT(*) FROM schema_version").Scan(&count)
 	if err != nil {
 		t.Fatalf("failed to count schema_version rows: %v", err)
 	}
-	if count != 21 {
-		t.Errorf("expected 21 applied migrations in table, got %d", count)
+	if count != len(migrations) {
+		t.Errorf("expected %d applied migrations in table, got %d", len(migrations), count)
 	}
 
-	// 2. Manually delete version 21 (the current latest) from schema_version
-	_, err = database.conn.Exec("DELETE FROM schema_version WHERE version = 21")
+	// 2. Manually delete the latest migration from schema_version
+	_, err = database.conn.Exec("DELETE FROM schema_version WHERE version = ?", latest)
 	if err != nil {
 		t.Fatalf("failed to delete migration version: %v", err)
 	}
 
-	// 3. Re-run initSchema. It should detect version 20 as current max,
-	// and try to re-run migration 21.
-	// Migration 21 is an UPDATE statement (backfilling custom domain reservations' expires_at
-	// to NULL), which is naturally idempotent and won't error at all on re-run -- same category
-	// as a CREATE TABLE IF NOT EXISTS (unlike an ALTER TABLE ADD COLUMN, which would hit the
-	// "duplicate column name" catch-and-continue path our migration system also handles).
+	// 3. Re-run initSchema. It should detect the previous version as current max and re-run the
+	// latest one. Re-running has to be safe whatever kind of statement that migration is: an
+	// UPDATE is naturally idempotent, a CREATE TABLE IF NOT EXISTS is a no-op, and an ALTER
+	// TABLE ADD COLUMN hits the "duplicate column name" catch-and-continue path, which records
+	// the version anyway. This is the property worth pinning, since which kind is last changes
+	// with every addition.
 	err = database.initSchema()
 	if err != nil {
 		t.Fatalf("re-running initSchema failed: %v", err)
 	}
 
-	// 4. Verify version 21 has been recorded as applied again
-	err = database.conn.QueryRow("SELECT COUNT(*) FROM schema_version WHERE version = 21").Scan(&count)
+	// 4. Verify the latest migration has been recorded as applied again
+	err = database.conn.QueryRow("SELECT COUNT(*) FROM schema_version WHERE version = ?", latest).Scan(&count)
 	if err != nil {
-		t.Fatalf("failed to query schema_version for version 21: %v", err)
+		t.Fatalf("failed to query schema_version for version %d: %v", latest, err)
 	}
 	if count != 1 {
-		t.Errorf("expected migration 21 to be recorded as applied again, got %d", count)
+		t.Errorf("expected migration %d to be recorded as applied again, got %d", latest, count)
 	}
 }
 

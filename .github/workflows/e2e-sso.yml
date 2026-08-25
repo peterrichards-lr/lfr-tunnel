@@ -1,12 +1,40 @@
 name: SSO E2E Test
 
+# Path-gated (#1343): this suite exercises the Go server against Keycloak, so a docs-only or
+# UI-only change cannot affect it. Safe to skip the workflow outright here -- unlike the jobs in
+# ci.yml, "E2E Keycloak SSO Integration Test" is not a required status check, so a run that never
+# reports does not block a merge.
 on:
   push:
     branches:
       - master
+    # Duplicated rather than a YAML anchor: GitHub Actions' workflow parser does not
+    # support anchors or aliases, so &/* would fail at run time despite parsing locally.
+    paths:
+      - '**.go'
+      - 'go.mod'
+      - 'go.sum'
+      - 'Makefile'
+      - 'cmd/**'
+      - 'pkg/**'
+      - 'tests/e2e/**'
+      - 'scripts/**'
+      - 'Dockerfile'
+      - '.github/workflows/e2e-sso.yml'
   pull_request:
     branches:
       - master
+    paths:
+      - '**.go'
+      - 'go.mod'
+      - 'go.sum'
+      - 'Makefile'
+      - 'cmd/**'
+      - 'pkg/**'
+      - 'tests/e2e/**'
+      - 'scripts/**'
+      - 'Dockerfile'
+      - '.github/workflows/e2e-sso.yml'
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}

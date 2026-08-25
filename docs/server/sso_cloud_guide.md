@@ -136,10 +136,17 @@ This uses our existing E2E Keycloak Docker setup to run a local OIDC Identity Pr
        icon: "key"
        skip_issuer_check: true
    ```
-3. Run the gateway server with this config:
+3. Build the gateway server, then run the built binary:
    ```bash
-   go run ./cmd/lfr-tunneld -config server-config-local-sso.yaml
+   go build -o bin/lfr-tunneld ./cmd/lfr-tunneld
+   ./bin/lfr-tunneld -config server-config-local-sso.yaml
    ```
+
+   > **Not `go run`.** `go run` links the executable inside the Go work directory
+   > (`GOTMPDIR`, or the system temp directory when that is unset) and runs it from
+   > there. An unsigned binary appearing in a temp directory and then opening network
+   > listeners is a signature endpoint-protection products quarantine on. Build to a
+   > path you chose, then execute that.
 
 ### Option B: Local Mock OIDC Server (Dex)
 [Dex](https://github.com/dexidp/dex) is a lightweight open-source OIDC provider that acts as a portal to other user databases. You can run Dex locally using Docker.
@@ -182,4 +189,4 @@ This uses our existing E2E Keycloak Docker setup to run a local OIDC Identity Pr
 
 <!-- markdownlint-disable MD049 -->
 ---
-*Last Updated: 2026-07-02* | *Last Reviewed: 2026-07-02*
+*Last Updated: 2026-08-25* | *Last Reviewed: 2026-08-25*

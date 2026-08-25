@@ -24,8 +24,17 @@ LFT_TEST_DIR ?= $(subst \,/,$(or $(TMPDIR),$(TEMP),$(TMP),/tmp))
 else
 LFT_TEST_DIR ?= $(shell [ -d /private/tmp ] && echo /private/tmp || echo /tmp)
 endif
-export GOTMPDIR ?= $(LFT_TEST_DIR)
+# := rather than ?=, because this is the variable the EDR whitelist actually depends on (#1335).
+#
+# The Go toolchain links every executable inside GOTMPDIR and only then moves it to the -o path,
+# so GOTMPDIR -- not -o -- decides where an unsigned binary first appears on disk. With ?=, any
+# inherited GOTMPDIR (a shell profile, direnv, an IDE terminal) silently won and the build left
+# the whitelist while reporting nothing. LFT_TEST_DIR stays overridable on purpose; GOTMPDIR now
+# always follows it.
+export GOTMPDIR := $(LFT_TEST_DIR)
 TEST_BINARY := $(LFT_TEST_DIR)/lfr-tunnel$(shell go env GOEXE)
+# The ops tool is built to bin/ and run from there rather than through `go run` (#1333).
+OPS_BINARY := bin/lfr-tunnel-ops$(shell go env GOEXE)
 
 PKG ?= ./...
 TEST_FLAGS ?=
@@ -57,8 +66,31 @@ fmt:
 vet:
 	go vet ./...
 
-test:
+# Asserts that the toolchain will really link inside the whitelisted directory, rather than
+# assuming it (#1335). The macOS default is resolved by an existence test, so a missing
+# /private/tmp would otherwise fall through to /tmp and compile outside the whitelist while
+# reporting success -- the exact "looks configured, is not working" shape this repo keeps hitting.
+edr-guard:
 	@mkdir -p $(LFT_TEST_DIR)
+	@if [ "$$(go env GOTMPDIR)" != "$(LFT_TEST_DIR)" ]; then \
+		echo "EDR GUARD FAILED: go will link in [$$(go env GOTMPDIR)], not [$(LFT_TEST_DIR)]."; \
+		echo "Every executable is written inside that directory before it is moved to -o,"; \
+		echo "so building now would drop an unsigned binary outside the EDR whitelist."; \
+		exit 1; \
+	fi
+	@if [ ! -d "$(LFT_TEST_DIR)" ]; then \
+		echo "EDR GUARD FAILED: [$(LFT_TEST_DIR)] does not exist."; \
+		exit 1; \
+	fi
+	@if [ "$$(uname)" = "Darwin" ] && [ -d /private/tmp ] && [ "$(LFT_TEST_DIR)" != "/private/tmp" ]; then \
+		echo "EDR GUARD FAILED: on macOS the whitelist is the literal path /private/tmp,"; \
+		echo "but LFT_TEST_DIR resolved to [$(LFT_TEST_DIR)]."; \
+		echo "/tmp is a symlink to the same directory, but the whitelist matches on the path"; \
+		echo "as written, so the two are not interchangeable here."; \
+		exit 1; \
+	fi
+
+test: edr-guard
 	@for pkg in $$(go list -f '{{if .TestGoFiles}}{{.ImportPath}}{{end}}' $(PKG)); do \
 		rm -f $(TEST_BINARY); \
 		go test -c $(TEST_BUILD_FLAGS) -o $(TEST_BINARY) $$pkg || exit 1; \
@@ -80,8 +112,15 @@ build: clean
 	go build -ldflags="-s -w $(DEPLOYMENT_LDFLAGS) -X lfr-tunnel/pkg/config.Version=$(VERSION)" -trimpath -o bin/lfr-tunnel ./cmd/lfr-tunnel
 	go build -ldflags="-s -w $(DEPLOYMENT_LDFLAGS) -X lfr-tunnel/pkg/config.Version=$(VERSION)" -trimpath -o bin/lfr-tunneld ./cmd/lfr-tunneld
 
-deploy:
-	@go run ./cmd/lfr-tunnel-ops deploy
+# Built and then executed, never `go run` (#1333). go run links the binary inside GOTMPDIR and
+# executes it from there, which is precisely the unsigned-binary-in-a-temp-directory shape the
+# local EDR quarantines -- and this one goes on to open SSH, AWS and Route53 connections, which
+# is what makes it look malicious rather than merely unknown.
+#
+# The repo already forbade this pattern in three other places; only the Makefile disagreed.
+deploy: edr-guard
+	@go build -o $(OPS_BINARY) ./cmd/lfr-tunnel-ops
+	@$(OPS_BINARY) deploy
 
 e2e:
 	@./scripts/run-e2e.sh standard

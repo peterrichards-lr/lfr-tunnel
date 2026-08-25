@@ -78,18 +78,24 @@ if [ $? -ne 0 ]; then
 fi
 
 echo "[Git Hook] Running tests..."
-TMPDIR=/private/tmp
-for pkg in $(go list ./... | grep -v /pkg/server); do
-  rm -f /private/tmp/lfr-tunnel
-  go test -c -o /private/tmp/lfr-tunnel "$pkg"
-  if [ -f /private/tmp/lfr-tunnel ]; then
-    (cd "$(go list -f '{{.Dir}}' "$pkg")" && /private/tmp/lfr-tunnel)
-    if [ $? -ne 0 ]; then
-      echo "❌ Error: Tests failed. Please fix before committing."
-      exit 1
-    fi
-  fi
-done
+# Delegated to `make test` rather than repeating its loop here (#1334).
+#
+# What this used to do: set TMPDIR=/private/tmp -- without exporting it, so the go child never
+# saw it -- and then build with -o. With GOTMPDIR unset, the toolchain linked every test binary
+# inside /var/folders and only then moved it to the -o path. That is the unsigned-binary-in-a-
+# temp-directory shape the local EDR quarantines, and it ran on every single commit.
+#
+# make test exports GOTMPDIR and asserts it before building, so there is now one sanctioned
+# path instead of two that could drift apart -- and only one place to get it right.
+#
+# pkg/server stays excluded here, as before: its tests open real listeners and are slow enough
+# to make a commit hook painful. CI runs the full set.
+PKGS=$(go list ./... | grep -v /pkg/server | tr '\n' ' ')
+make test PKG="$PKGS"
+if [ $? -ne 0 ]; then
+  echo "❌ Error: Tests failed. Please fix before committing."
+  exit 1
+fi
 
 echo "[Git Hook] Running golangci-lint via Docker..."
 docker run --rm -v "$(pwd)":/app -w /app golangci/golangci-lint:latest golangci-lint run

@@ -44,7 +44,109 @@ Apply this without derailing the task you're actually doing:
 - **Bar for filing.** File it if it's a real, specific problem you can point at (a named function, a missing test for a named case) — not a vague "this area could be cleaner." If you can't say what a future agent should do with it, it's not ready to file yet.
 - Command: `gh issue create --title "Tech Debt: [Topic]" --body "[Details]" --label "tech debt"`.
 
-## 3. Resolving and Closing Tasks
+## 3. Claiming an Issue
+
+*Active Constraint*: Multiple agents work this backlog concurrently — Claude sessions in parallel,
+and Gemini on a separate machine. Before starting work on any issue you MUST claim it, and you MUST
+NOT start work on an issue another session holds.
+
+### Identity: the label says *which agent*, the session ID says *which instance*
+
+Two identifiers together:
+
+- the `agent: <name>` label — `agent: claude`, `agent: gemini`
+- your **session ID**, recorded in the claim comment
+
+**Never infer ownership from the `agent:` label alone.** Two concurrent Claude sessions both carry
+`agent: claude`, so a listing of claimed issues looks identical whether you hold them or another
+session does. Resolve the session ID before touching anything:
+
+```bash
+gh issue view <N> --json comments \
+  --jq '[.comments[] | select(.body | test("Claimed")) | .body] | last' \
+  | grep -oE 'session_[A-Za-z0-9]+|transcript:[a-f0-9-]+'
+```
+
+If that returns a session ID that is not yours, the issue is taken. Leave it alone — including its
+body, its labels, and any files its claim declares as territory.
+
+Use whichever session identifier your runtime exposes. Prefer `session_01…`; where only a
+transcript UUID is available, prefix it as `transcript:<uuid>` so the two forms are never confused.
+**Never invent an ID in a namespace your runtime does not provide** — a fabricated identifier
+cannot be traced back to a real session, which defeats the point.
+
+### The label is a signal; the branch is the lock
+
+GitHub label writes are last-write-wins with no compare-and-swap. Two agents polling "is there an
+`agent:` label?" at the same moment both see *no* and both start. `git push` of a new branch
+**fails if the ref already exists**, which is the only atomic test-and-set available across
+machines — and every issue needs a branch anyway.
+
+### Step 1 — find unclaimed work
+
+```bash
+gh issue list --state open --limit 100 --json number,title,labels \
+  --jq '.[] | select([.labels[].name] | any(startswith("agent:")) | not) | "#\(.number) \(.title)"'
+```
+
+### Step 2 — check territory, not just the issue
+
+Issue-level locking is not sufficient. Several open issues can target the same file, so two agents
+holding disjoint issues still collide. Read the parent epic's file-overlap table if there is one,
+and read the territory line of any active claim. Do not take an issue whose primary files are held.
+
+### Step 3 — take the lock, before any work
+
+Branch names are keyed on the issue number so `git ls-remote` acts as the lock table. Check by
+number first (slugs vary between agents), then push:
+
+```bash
+git ls-remote --heads origin | grep -E "refs/heads/[^/]+/1323-" && echo "TAKEN -- pick another"
+
+git switch -c fix/1323-escape-proxy-pages master
+git push -u origin fix/1323-escape-proxy-pages   # atomic: fails if the ref exists
+```
+
+If the push is rejected, the issue is taken. Pick another. **Never force.**
+
+### Step 4 — signal, only after the push succeeds
+
+```bash
+gh issue edit 1323 --add-label "agent: claude"
+gh issue comment 1323 --body "🔒 **Claimed**
+
+| | |
+|---|---|
+| **Agent** | \`claude\` |
+| **Session** | \`session_01EXAMPLE\` |
+| **Claimed** | 2026-08-25T16:22Z |
+| **Branch** | \`fix/1323-escape-proxy-pages\` |
+| **Territory** | \`pkg/server/proxy.go\`, \`pkg/server/*.html\` |"
+```
+
+Territory is the field other agents act on — list the files your PR will actually modify.
+
+### Step 5 — release
+
+- **Normal**: PR with `Closes #<N>`. Merging closes the issue and retires the claim.
+- **Abandoned**: delete the remote branch, remove the `agent:` label, and comment why — so the next
+  agent knows it was abandoned rather than finished.
+
+### Races and stale claims
+
+**Tie-break.** If two agents both end up claiming (slug divergence beat the number check), the
+**lexicographically lower session ID yields**: delete the branch, remove the label, comment. String
+comparison is total and deterministic across both ID forms, so this needs no negotiation.
+
+**Staleness.** An `agent:` label whose branch has had no commits for **24h** is reclaimable by any
+agent, after commenting on the issue. Without this, one crashed session removes an issue from the
+pool permanently.
+
+```bash
+git log -1 --format='%cr' origin/fix/1323-escape-proxy-pages
+```
+
+## 4. Resolving and Closing Tasks
 - **Pull Request Flow (Preferred)**: When your tasks are tied to code changes, do **NOT** set `"completed": true` in the JSON. Leave it as `false`. Instead, include `Closes #<issue-number>` in your Pull Request body or commit message so GitHub automatically closes the issue when the PR merges.
 - **Manual/Standalone Tasks**: ONLY for operational tasks that do NOT involve a PR (e.g. running scripts, config changes), you may set `"completed": true` and run the sync utility again:
    ```bash
@@ -52,7 +154,7 @@ Apply this without derailing the task you're actually doing:
    ```
    *The utility will automatically detect the completed state, post a reference comment with the current git commit hash, and forcefully close the issue on GitHub.*
 
-## 4. Pull Request Requirements
+## 5. Pull Request Requirements
 *Active Constraint*: Before creating a Pull Request (`gh pr create`), you MUST ensure the following criteria are met:
 1. **Existing Issue Verification**: A GitHub issue MUST exist for the work being PR'd.
 2. **Issue Linking**: The PR description or commit message MUST contain `Closes #<issue-number>` or `Resolves #<issue-number>` for all associated issues. A single PR may close multiple issues (e.g., closing the final sub-issue and the parent Epic simultaneously).
@@ -72,7 +174,7 @@ that wrote the prose rule in the same session — see the retrospective cleanup
 in issues #894-#897. File the issue *before* running `gh pr create`; a CI
 failure after the fact just means going back to create one anyway.
 
-## 5. Pre-Commit / Pre-PR Checks
+## 6. Pre-Commit / Pre-PR Checks
 *Active Constraint*: Before pushing commits and opening a PR, you MUST actively execute the following verification steps:
 1. **Branch Sync**: You MUST execute `git fetch origin && git merge origin/master` to ensure your feature branch is strictly up-to-date with `master`.
 2. **Go Formatting**: Execute `gofmt -w .` to format all modified Go files.
@@ -84,7 +186,7 @@ failure after the fact just means going back to create one anyway.
    ```
    If you ever see `pkg/server/ui-dist` in `git status`, something has force-added it — do not commit it. Its filenames are content-hashed, so committed bundles made every pair of concurrent UI branches conflict unresolvably.
 
-## 6. CI Failure Remediation
+## 7. CI Failure Remediation
 *Active Constraint*: If a Pull Request fails its CI checks (e.g., a GitHub Action fails), stay on it until it's green:
 1. **Fix on the same branch.** Diagnose the root cause and push a fix commit to the SAME branch/PR. Do not open a fresh PR for the same change, do not abandon the branch, and do not ask the user to route around the failure.
 2. **Re-check, don't assume.** After pushing, re-poll status (`gh pr checks <number>`, or `gh pr checks <number> --watch` to block until it resolves) rather than declaring success from the fix alone. Repeat step 1 if it's still red.
@@ -94,11 +196,11 @@ failure after the fact just means going back to create one anyway.
 
 Once it's green, clean up the failed job runs from the PR's history using the GitHub CLI (e.g. `gh run delete <run-id>`), so the repository keeps a clean history of only successful runs and failed attempts don't trigger false-positive corrective actions later.
 
-## 7. Don't Push Into a PR That's Already Merged Out From Under You
+## 8. Don't Push Into a PR That's Already Merged Out From Under You
 *Active Constraint*: A PR you say is "ready to merge" can be merged by someone else at any moment — check its live state (`gh pr view <number> --json state,mergedAt`) before pushing another commit to the same branch, not just before opening the PR. A merged PR is terminal: further pushes to its branch land nowhere (GitHub Actions may still run on them, which looks identical to a normal in-flight check from the CLI, but the code never reaches the target branch). This actually happened in this repo: a second commit was pushed to an already-merged PR, its checks appeared to pass normally, and the change silently never shipped until a later `git log` diff caught it.
 
 After any merge you expect to close an issue (whether via a `Closes #N` reference or a manual close), verify the issue actually closed (`gh issue view <number> --json state`) instead of assuming the mechanism worked — squash-merge commit messages don't reliably carry every commit's closing reference from a multi-commit PR (this repo's squash setting concatenates commit messages, but a squash performed through the GitHub UI can still end up using only one of them). If it didn't close, close it manually with a comment pointing at the merge that actually resolved it.
 
 <!-- markdownlint-disable MD049 -->
 ---
-*Last Updated: 2026-08-22* | *Last Reviewed: 2026-08-22*
+*Last Updated: 2026-08-25* | *Last Reviewed: 2026-08-25*

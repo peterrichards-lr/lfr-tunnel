@@ -209,11 +209,11 @@ func main() {
 		engine.SetSessionLogger(sessionLog)
 		defer sessionLog.Close() //nolint:errcheck
 		sessionLog.Event("info", "session_start", map[string]any{
-			"version":    config.Version,
-			"subdomain":  sub,
-			"region":     cfg.Region,
-			"server_url": cfg.ServerURL,
-			"log_bodies": *logBodies,
+			"version":      config.Version,
+			"subdomain":    sub,
+			logFieldRegion: cfg.Region,
+			"server_url":   cfg.ServerURL,
+			"log_bodies":   *logBodies,
 		})
 	}
 	engine.Passcode = cfg.Passcode
@@ -410,6 +410,15 @@ func main() {
 	// a client left running for days is exactly the case a startup-only check misses.
 	engine.StartVersionWatcher(ctx, cfg.ServerURL, 6*time.Hour)
 
+	// The prober knows the primary is answering; only this side knows whether we left it
+	// deliberately. Wired here so the cooldown policy stays in one place, and consulted by the
+	// prober BEFORE it ends the session -- checking afterwards is too late, because ending the
+	// session is itself the interruption a drain exists to avoid (#1310).
+	engine.SetFailbackGate(func(regionURL string) bool {
+		cooling, _ := cooldowns.coolingDown(regionURL)
+		return !cooling
+	})
+
 	for ctx.Err() == nil {
 		clientCtx, cancelClient := context.WithCancel(ctx)
 		healthCheckPorts := make([]int, 0, len(portMappings))
@@ -481,16 +490,42 @@ func main() {
 				slog.Info(fmt.Sprintf("[Client] Region '%s' dropped the session %s after failback; holding off further failback attempts.",
 					cfg.Region, time.Since(lastFailbackAt).Round(time.Second)))
 				engine.LogEvent("warn", "failback_unstable", map[string]any{
-					"region":     cfg.Region,
-					"held_for":   time.Since(lastFailbackAt).Round(time.Second).String(),
-					"suppressed": failbackSuppression.String(),
+					logFieldRegion: cfg.Region,
+					"held_for":     time.Since(lastFailbackAt).Round(time.Second).String(),
+					"suppressed":   failbackSuppression.String(),
 				})
 				engine.SuppressFailback(failbackSuppression)
 				cooldowns.exclude(cfg.ServerURL, failbackSuppression)
 				lastFailbackAt = time.Time{}
 			}
 
-			if engine.ConsumeFailback() {
+			// A failback the client asked for is not automatically a failback it should take.
+			// The prober only knows the primary is answering; the cooldown knows whether we
+			// deliberately left it, and why. Without this a client moved off ahead of an
+			// announced stop was pulled straight back the moment that gateway returned --
+			// and the return trip costs a re-registration and a chisel reconnect, which is
+			// the interruption the announcement existed to avoid (#1310).
+			//
+			// Said out loud rather than silently skipped. A signal published and never
+			// consumed is how #1145 happened; a signal consumed and never mentioned is how
+			// the next one will.
+			// The gate above stops the prober ever getting this far while the primary is
+			// cooling down. This is the second line of the same defence, for a cooldown that
+			// began between the gate check and here.
+			failbackReady := engine.ConsumeFailback()
+			if failbackReady {
+				if cooling, remaining := cooldowns.coolingDown(primaryServerURL); cooling {
+					slog.Info(fmt.Sprintf("[Client] Primary region '%s' (%s) is reachable again, but we left it deliberately -- staying put for another %s.",
+						primaryRegion, primaryServerURL, remaining.Round(time.Second)))
+					engine.LogEvent("info", "failback_deferred", map[string]any{
+						logFieldRegion:       primaryRegion,
+						"cooldown_remaining": remaining.Round(time.Second).String(),
+					})
+					failbackReady = false
+				}
+			}
+
+			if failbackReady {
 				slog.Info(fmt.Sprintf("[Client] Primary region '%s' (%s) recovered. Performing automated failback...", primaryRegion, primaryServerURL))
 
 				// Remember where we are, so a failed failback can put us back rather
@@ -879,6 +914,11 @@ func centralControlPlaneURL(cfg *config.ClientConfig) string {
 // time, so the client cannot yet know how long the stop lasts. An hour covers a typical
 // window well enough to stop the churn; carrying the return time would let this be exact.
 const plannedShutdownCooldown = time.Hour
+
+// logFieldRegion is the key every diagnostic event uses for the gateway region. A constant
+// because a typo in one of them is invisible -- the event still writes, just under a key
+// nothing queries.
+const logFieldRegion = "region"
 
 func excludeFailedRegion(cfg *config.ClientConfig, primaryRegions map[string]string, failedURL string, afterFailback bool, planned bool) {
 	if afterFailback {
@@ -1458,6 +1498,37 @@ func (c *regionCooldowns) exclude(serverURL string, d time.Duration) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 	c.until[host] = time.Now().Add(d)
+}
+
+// coolingDown reports whether a gateway is still being held out of the candidate set, and for
+// how much longer.
+//
+// Failover set cooldowns from the start; failback never consulted them, so a client moved off
+// its primary by a shutdown warning was dragged straight back the moment that gateway answered
+// (#1310). For a scheduled stop the node is genuinely powered off, so the probe failed for
+// hours and the hour-long plannedShutdownCooldown looked like it was doing the work -- it was
+// not, the node being down was. A drain (#1303) brings the gateway back in seconds, and the
+// return trip costs a re-registration and a chisel reconnect: exactly the interruption the
+// drain exists to avoid.
+//
+// Expired entries are left for filter() to reap rather than deleted here, so this stays a
+// read and can be called from the probe loop without contending on writes.
+func (c *regionCooldowns) coolingDown(serverURL string) (bool, time.Duration) {
+	host := gatewayHostKey(serverURL)
+	if host == "" {
+		return false, 0
+	}
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	deadline, ok := c.until[host]
+	if !ok {
+		return false, 0
+	}
+	remaining := time.Until(deadline)
+	if remaining <= 0 {
+		return false, 0
+	}
+	return true, remaining
 }
 
 // clear drops any cooldown on a gateway, used once we are successfully connected to it

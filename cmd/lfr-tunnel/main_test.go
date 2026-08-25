@@ -594,3 +594,69 @@ func TestMain_ValidationFailure(t *testing.T) {
 	}
 	t.Fatalf("process ran with err %v, want exit status 1", err)
 }
+
+// The failback prober only knows the primary is answering. The cooldown knows whether we left
+// it deliberately, and that is the difference between returning to a recovered gateway and
+// being dragged back onto one that just told us to go (#1310).
+func TestCoolingDown_ReportsADeliberateDeparture(t *testing.T) {
+	resetCooldowns(t)
+
+	primary := "http://tunnel.lfr-demo.se"
+	if cooling, _ := cooldowns.coolingDown(primary); cooling {
+		t.Fatal("nothing has happened yet; the primary must not be on cooldown")
+	}
+
+	// What a planned move does: excludeFailedRegion with planned=true.
+	cooldowns.exclude(primary, plannedShutdownCooldown)
+
+	cooling, remaining := cooldowns.coolingDown(primary)
+	if !cooling {
+		t.Fatal("a gateway we deliberately left is not reported as cooling down, so failback would return to it immediately")
+	}
+	if remaining <= 0 || remaining > plannedShutdownCooldown {
+		t.Errorf("remaining = %v, want 0 < n <= %v", remaining, plannedShutdownCooldown)
+	}
+}
+
+// Keyed on the gateway host, so the alias a region happens to be advertised under cannot let
+// a client back onto the same box -- the same trap as #1166.
+func TestCoolingDown_IsKeyedOnTheGatewayNotTheName(t *testing.T) {
+	resetCooldowns(t)
+
+	cooldowns.exclude("http://tunnel.lfr-demo.se", plannedShutdownCooldown)
+
+	if cooling, _ := cooldowns.coolingDown("https://tunnel.lfr-demo.se"); !cooling {
+		t.Error("the same gateway on another scheme was not recognised as cooling down")
+	}
+	if cooling, _ := cooldowns.coolingDown("http://in.lfr-demo.se"); cooling {
+		t.Error("an unrelated gateway was reported as cooling down")
+	}
+}
+
+// An expired cooldown must stop holding the client away, or a client that moved off during a
+// nightly stop would never go home.
+func TestCoolingDown_ExpiresAndAllowsFailback(t *testing.T) {
+	resetCooldowns(t)
+
+	primary := "http://tunnel.lfr-demo.se"
+	cooldowns.exclude(primary, time.Millisecond)
+	time.Sleep(10 * time.Millisecond)
+
+	if cooling, remaining := cooldowns.coolingDown(primary); cooling {
+		t.Errorf("an expired cooldown still blocks failback (%v remaining)", remaining)
+	}
+}
+
+// Reconnecting to a gateway clears its cooldown, so a client that returned by any route is not
+// then told it may not be there.
+func TestCoolingDown_ClearedOnReconnect(t *testing.T) {
+	resetCooldowns(t)
+
+	primary := "http://tunnel.lfr-demo.se"
+	cooldowns.exclude(primary, plannedShutdownCooldown)
+	cooldowns.clear(primary)
+
+	if cooling, _ := cooldowns.coolingDown(primary); cooling {
+		t.Error("a cooldown survived a successful reconnection to that gateway")
+	}
+}

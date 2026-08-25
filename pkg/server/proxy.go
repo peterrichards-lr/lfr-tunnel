@@ -744,25 +744,18 @@ func (p *ProxyHandler) checkAccessControls(w http.ResponseWriter, r *http.Reques
 		return false
 	}
 
-	// 3. Evaluate configured rules
-	var passcodeRequired string
-	var ipWhitelist string
-	accessMode := "or"
-
-	if p.db != nil {
-		parts := strings.SplitN(host, ".", 2)
-		if len(parts) == 2 {
-			domain := parts[1]
-			res, err := p.db.GetSubdomainReservationByName(lease.SubdomainPrefix, domain)
-			if err == nil && res != nil {
-				passcodeRequired = res.Passcode
-				ipWhitelist = res.WhitelistIPs
-				if res.AccessMode != "" {
-					accessMode = strings.ToLower(res.AccessMode)
-				}
-			}
-		}
-	}
+	// 3. Evaluate configured rules, read from the lease rather than the database.
+	//
+	// This used to query the reservation row on every request, purely to discover that the
+	// tunnel has no access control -- which is the answer for almost every request, for every
+	// asset on every page (#1329). pkg/db deliberately runs a single connection (#464), so that
+	// query serialised the whole data plane behind one connection alongside metric writes,
+	// portal reads and audit writes.
+	//
+	// Reading the lease also makes the rules available on an edge, which has no database at all
+	// and therefore used to enforce nothing (#1367).
+	passcodeRequired, ipWhitelist, accessMode := lease.AccessControls()
+	accessMode = strings.ToLower(accessMode)
 
 	// Apply enterprise force configs
 	if p.config != nil {

@@ -23,6 +23,7 @@ type DB struct {
 	SystemRepository
 	WebhookQueueRepository
 	VanityDomainStatusRepository
+	PortalSessionRepository
 }
 
 func Open(dsn string) (*DB, error) {
@@ -52,6 +53,7 @@ func Open(dsn string) (*DB, error) {
 		AuditRepository:              NewSQLiteAuditRepo(conn),
 		MetricRepository:             NewSQLiteMetricRepo(conn),
 		MagicLinkRepository:          NewSQLiteMagicLinkRepo(conn),
+		PortalSessionRepository:      NewSQLitePortalSessionRepo(conn),
 		BlacklistRepository:          NewSQLiteBlacklistRepo(conn),
 		GuestInviteRepository:        NewSQLiteInviteRepo(conn),
 		SettingsRepository:           NewSQLiteSettingsRepo(conn),

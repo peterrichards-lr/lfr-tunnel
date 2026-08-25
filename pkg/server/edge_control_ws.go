@@ -56,10 +56,15 @@ type nodeSchedule struct {
 
 // ControlMessage represents the JSON schema for websocket communication.
 type ControlMessage struct {
-	Type             string            `json:"type"`
-	Nonce            string            `json:"nonce,omitempty"`
-	Response         string            `json:"response,omitempty"`
-	IP               string            `json:"ip,omitempty"`
+	Type     string `json:"type"`
+	Nonce    string `json:"nonce,omitempty"`
+	Response string `json:"response,omitempty"`
+	IP       string `json:"ip,omitempty"`
+	// BanExpiresAt carries when a blacklist entry lapses, so an edge expires it in step with
+	// the control plane (#1353). Absent means the ban does not expire, which is what a manual
+	// ban by an admin is -- and what every ban was before this existed, so an older edge that
+	// ignores this field simply keeps the previous behaviour.
+	BanExpiresAt     *time.Time        `json:"ban_expires_at,omitempty"`
 	NodeID           string            `json:"node_id,omitempty"`
 	Action           string            `json:"action,omitempty"`
 	Reason           string            `json:"reason,omitempty"`
@@ -341,11 +346,12 @@ func (s *Server) handleEdgeControlWS(w http.ResponseWriter, r *http.Request) {
 }
 
 // BroadcastBlacklistUpdate pushes an IP blacklist update to all connected Edge nodes.
-func (s *Server) BroadcastBlacklistUpdate(action, ip string) {
+func (s *Server) BroadcastBlacklistUpdate(action, ip string, expiresAt *time.Time) {
 	msg := ControlMessage{
-		Type:   "blacklist_update",
-		Action: action, // "add" or "remove"
-		IP:     ip,
+		Type:         "blacklist_update",
+		Action:       action, // "add" or "remove"
+		IP:           ip,
+		BanExpiresAt: expiresAt,
 	}
 
 	payload, err := json.Marshal(msg)
@@ -914,8 +920,10 @@ func (s *Server) runEdgeControlChannel() {
 			case "blacklist_update":
 				switch msg.Action {
 				case "add":
-					slog.Info(fmt.Sprintf("[Edge Control] Blacklisting IP: %s", msg.IP))
-					s.blacklist.Store(msg.IP, true)
+					slog.Info(fmt.Sprintf("[Edge Control] Blacklisting IP: %s, %s", msg.IP, describeBanDuration(msg.BanExpiresAt)))
+					// Stored with the control plane's expiry, so the ban lifts here at the same
+					// moment it lifts there rather than outliving it (#1353).
+					s.cacheBan(msg.IP, msg.BanExpiresAt)
 				case "remove":
 					slog.Info(fmt.Sprintf("[Edge Control] Unblacklisting IP: %s", msg.IP))
 					s.blacklist.Delete(msg.IP)

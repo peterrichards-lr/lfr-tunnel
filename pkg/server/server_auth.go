@@ -51,9 +51,8 @@ func (s *Server) requireAdmin(w http.ResponseWriter, r *http.Request) (string, s
 	// 1. Check HTTP-only cookie
 	cookie, err := r.Cookie("lfr_session")
 	if err == nil && cookie.Value != "" {
-		if val, ok := s.portalMap.Load("admin_session_" + cookie.Value); ok {
-			sessionData := val.(PortalSessionData)
-			if time.Now().Before(sessionData.ExpiresAt) {
+		if sessionData, ok := s.sessionStore().loadPortalSession(cookie.Value); ok {
+			{
 				actorEmail = sessionData.Email
 				actorRole = "admin"
 				if s.db != nil {
@@ -72,9 +71,7 @@ func (s *Server) requireAdmin(w http.ResponseWriter, r *http.Request) (string, s
 
 				// Optional: sliding expiration
 				sessionData.ExpiresAt = time.Now().Add(s.cfg.PortalSessionDuration)
-				s.portalMap.Store("admin_session_"+cookie.Value, sessionData)
-			} else {
-				s.portalMap.Delete("admin_session_" + cookie.Value)
+				s.sessionStore().storePortalSession(cookie.Value, sessionData)
 			}
 		}
 	}

@@ -103,6 +103,16 @@ type InterceptorEngine struct {
 	// took a tunnel down on 2026-08-21 (issue #1145).
 	failbackSuppressedUntil time.Time
 
+	// failbackGate is asked, just before a failback would end the current session, whether
+	// returning to that gateway is allowed at all. It exists because "the primary answers"
+	// and "we should go back to the primary" are different questions, and only the caller
+	// knows the second -- it holds the cooldowns, and knows whether we left deliberately.
+	//
+	// Consulted here rather than after the prober cancels, because cancelling IS the
+	// interruption: by the time the caller could decline, the tunnel is already down and
+	// re-registering (#1310).
+	failbackGate func(regionURL string) bool
+
 	// centralURL is the control plane an edge session also reports status to. Set from
 	// configuration via SetCentralURL; empty means "report only to the connected
 	// gateway". Unexported so it cannot be read without the lock.
@@ -238,12 +248,19 @@ func GatewayCanCarrySession(statusCode int, body []byte) bool {
 		return false
 	}
 	var payload struct {
+		Status       string `json:"status"`
 		ControlPlane string `json:"control_plane"`
 	}
 	if err := json.Unmarshal(bytes.TrimSpace(body), &payload); err != nil {
 		// Unparseable but 200: treat as healthy rather than stranding a client on a
 		// gateway that is probably fine and merely returning something unexpected.
 		return true
+	}
+	// A draining gateway is about to restart. It can be healthy in every other respect and is
+	// still the wrong place to start a session -- electing it means being moved again within
+	// seconds (#1238). Distinct from "degraded", which means the control channel is down.
+	if payload.Status == "draining" {
+		return false
 	}
 	return payload.ControlPlane != "disconnected"
 }
@@ -430,6 +447,25 @@ func (e *InterceptorEngine) SuppressFailback(d time.Duration) {
 	e.mu.Lock()
 	defer e.mu.Unlock()
 	e.failbackSuppressedUntil = time.Now().Add(d)
+}
+
+// SetFailbackGate installs the predicate consulted before a failback ends the session. Nil, the
+// default, means every recovered primary is returned to -- the behaviour before #1310.
+func (e *InterceptorEngine) SetFailbackGate(gate func(regionURL string) bool) {
+	e.mu.Lock()
+	defer e.mu.Unlock()
+	e.failbackGate = gate
+}
+
+// failbackAllowed asks the gate whether returning to regionURL is permitted.
+func (e *InterceptorEngine) failbackAllowed(regionURL string) bool {
+	e.mu.RLock()
+	gate := e.failbackGate
+	e.mu.RUnlock()
+	if gate == nil {
+		return true
+	}
+	return gate(regionURL)
 }
 
 // failbackSuppressed reports whether the prober is currently held off.
@@ -679,6 +715,22 @@ func (e *InterceptorEngine) StartFailbackProber(ctx context.Context, cancel cont
 				// listener is up but its control channel to central is not. Retrying
 				// on the next tick just reproduces that, so back off (issue #1145).
 				if e.failbackSuppressed() {
+					continue
+				}
+
+				// Before probing, and long before cancelling: a gateway we deliberately
+				// left is not one to go back to just because it answers again (#1310).
+				// Checked here so the session is never torn down for a failback that was
+				// going to be declined.
+				if !e.failbackAllowed(primaryServerURL) {
+					if lastDeclineReason != "cooldown" {
+						lastDeclineReason = "cooldown"
+						e.LogEvent("info", "failback_declined", map[string]any{
+							"region": primaryRegion,
+							"url":    primaryServerURL,
+							"reason": "cooldown",
+						})
+					}
 					continue
 				}
 

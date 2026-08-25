@@ -22,6 +22,11 @@ TUNNEL_DOMAINS=""
 # tool (#1015/#1016/#1187).
 DNS_AUTHENTICATOR=""
 DNS_AUTHENTICATOR_ARGS=""
+# Which dynamic-DNS updater to install, if any. Default none: a node with a static or elastic
+# address does not need one, and installing an updater that cannot reach its provider is worse
+# than installing nothing -- it runs every five minutes, fails, and exits 0, so systemd records
+# success while the records go stale (#1300).
+DDNS_PROVIDER="none"
 
 usage() {
   echo "Usage: $0 -s <vps_ip> -t <edge_token> -r <redirect_domain> -i <identity_file> -u <ssh_user> -d <domains> -c <control_plane_url> -p <port> [-a <tunnel_domains>]"
@@ -33,6 +38,9 @@ usage() {
   echo "  -d: Comma-separated list of edge domains (required)"
   echo "  -c: Control Plane URL (required)"
   echo "  -p: Port for lfr-tunneld to bind to on Edge node (required)"
+  echo "  -D: Dynamic DNS updater to install: none (default), cloudflare, or route53."
+  echo "      Only needed when this node's public address can change. A node with a static"
+  echo "      or elastic address should leave this as none."
   echo "  -n: Certbot DNS-01 authenticator to prove domain control with (required), e.g."
   echo "      dns-route53, dns-cloudflare, dns-digitalocean, dns-google. Installs"
   echo "      python3-certbot-<authenticator> and passes --<authenticator> to certbot."
@@ -46,7 +54,7 @@ usage() {
 }
 
 # Parse parameters
-while getopts "s:t:i:u:d:c:p:r:a:n:N:" opt; do
+while getopts "s:t:i:u:d:c:p:r:a:n:N:D:" opt; do
   case $opt in
     s) VPS_IP="$OPTARG" ;;
     t) EDGE_TOKEN="$OPTARG" ;;
@@ -66,6 +74,7 @@ while getopts "s:t:i:u:d:c:p:r:a:n:N:" opt; do
     r) REDIRECT_DOMAIN="$OPTARG" ;;
     a) TUNNEL_DOMAINS="$OPTARG" ;;
     n) DNS_AUTHENTICATOR="$OPTARG" ;;
+    D) DDNS_PROVIDER="$OPTARG" ;;
     N) DNS_AUTHENTICATOR_ARGS="$OPTARG" ;;
     *) usage ;;
   esac
@@ -77,6 +86,14 @@ if [ -z "$VPS_IP" ] || [ -z "$EDGE_TOKEN" ] || [ -z "$REDIRECT_DOMAIN" ] || [ -z
   echo "❌ Error: -s, -t, -r, -i, -u, -d, -c, -p and -n are all required parameters."
   usage
 fi
+
+case "$DDNS_PROVIDER" in
+  none|cloudflare|route53) ;;
+  *)
+    echo "❌ Error: -D must be none, cloudflare or route53 (got '$DDNS_PROVIDER')."
+    usage
+    ;;
+esac
 
 echo "=== Starting Edge VPS Automation for IP: $VPS_IP ==="
 
@@ -254,8 +271,10 @@ scp $SSH_KEY_ARG scripts/common/gateway-watchdog.timer $SSH_USER@$VPS_IP:/home/$
 
 # Upload Edge DDNS Script, plus this instance's own domains file — the DDNS script is
 # shared verbatim across every edge, so it reads which domain(s) are actually *its own*
-# from this file rather than having them hardcoded (see cloudflare-ddns-edge.sh).
-scp $SSH_KEY_ARG scripts/common/cloudflare-ddns-edge.sh $SSH_USER@$VPS_IP:/home/$SSH_USER/cloudflare-ddns-edge.sh
+# from this file rather than having them hardcoded (see the *-ddns-edge.sh scripts).
+if [ "$DDNS_PROVIDER" != "none" ]; then
+  scp $SSH_KEY_ARG "scripts/common/${DDNS_PROVIDER}-ddns-edge.sh" $SSH_USER@$VPS_IP:/home/$SSH_USER/lfr-ddns-edge.sh
+fi
 
 DDNS_DOMAINS_TMP="/tmp/ddns-domains.txt"
 printf '%s\n' "${DOMAIN_ARRAY[@]}" > "$DDNS_DOMAINS_TMP"
@@ -340,54 +359,59 @@ EOF
   sudo mv /home/$SSH_USER/gateway-watchdog.timer /etc/systemd/system/gateway-watchdog.timer
   sudo chown root:root /etc/systemd/system/gateway-watchdog.service /etc/systemd/system/gateway-watchdog.timer
 
-  # Cloudflare DDNS configuration
-  sudo mv /home/$SSH_USER/cloudflare-ddns-edge.sh /usr/local/bin/cloudflare-ddns-edge.sh
-  sudo chmod 700 /usr/local/bin/cloudflare-ddns-edge.sh
-  sudo chown root:root /usr/local/bin/cloudflare-ddns-edge.sh
-
   sudo mkdir -p /etc/lfr-tunneld
   sudo mv /home/$SSH_USER/ddns-domains.txt /etc/lfr-tunneld/ddns-domains.txt
   sudo chmod 644 /etc/lfr-tunneld/ddns-domains.txt
   sudo chown root:root /etc/lfr-tunneld/ddns-domains.txt
 
-  # Create a placeholder cloudflare.ini if it does not exist
-  sudo mkdir -p /etc/letsencrypt
-  if [ ! -f /etc/letsencrypt/cloudflare.ini ]; then
-    echo "Creating placeholder /etc/letsencrypt/cloudflare.ini..."
-    sudo tee /etc/letsencrypt/cloudflare.ini > /dev/null << EOF
-dns_cloudflare_api_token = PLACEHOLDER_API_TOKEN
-EOF
-    sudo chmod 600 /etc/letsencrypt/cloudflare.ini
-  fi
+  # Dynamic DNS, only when one was asked for (-D). This used to install a Cloudflare updater
+  # unconditionally, which is how every edge ended up running one that could not reach its
+  # provider after the zones moved: it fired every five minutes, failed, and exited 0, so
+  # systemd recorded success for two weeks (#1300).
+  if [ "$DDNS_PROVIDER" != "none" ]; then
+    sudo mv /home/$SSH_USER/lfr-ddns-edge.sh /usr/local/bin/lfr-ddns-edge.sh
+    sudo chmod 700 /usr/local/bin/lfr-ddns-edge.sh
+    sudo chown root:root /usr/local/bin/lfr-ddns-edge.sh
 
-  # Create DDNS systemd service
-  sudo tee /etc/systemd/system/cloudflare-ddns-edge.service > /dev/null << EOF
+    sudo tee /etc/systemd/system/lfr-ddns-edge.service > /dev/null << EOF
 [Unit]
-Description=Cloudflare Dynamic DNS (Edge Subdomains) Updater
+Description=Dynamic DNS (Edge Subdomains) Updater -- $DDNS_PROVIDER
 After=network-online.target
 Wants=network-online.target
 
 [Service]
 Type=oneshot
-ExecStart=/usr/local/bin/cloudflare-ddns-edge.sh
+ExecStart=/usr/local/bin/lfr-ddns-edge.sh
 User=root
 Group=root
 EOF
 
-  # Create DDNS systemd timer
-  sudo tee /etc/systemd/system/cloudflare-ddns-edge.timer > /dev/null << EOF
+    sudo tee /etc/systemd/system/lfr-ddns-edge.timer > /dev/null << EOF
 [Unit]
-Description=Trigger Cloudflare Dynamic DNS (Edge Subdomains) update every 5 minutes
+Description=Trigger Dynamic DNS (Edge Subdomains) update every 5 minutes
 
 [Timer]
 OnBootSec=1min
 OnUnitActiveSec=5min
+# So a node that was asleep when the timer was due still updates on the next boot, rather
+# than waiting a further five minutes with a stale record.
+Persistent=true
 
 [Install]
 WantedBy=timers.target
 EOF
 
-  sudo chown root:root /etc/systemd/system/cloudflare-ddns-edge.service /etc/systemd/system/cloudflare-ddns-edge.timer
+    sudo chown root:root /etc/systemd/system/lfr-ddns-edge.service /etc/systemd/system/lfr-ddns-edge.timer
+  fi
+
+  # Any DDNS units from a previous provisioning run are removed, so re-running with -D none
+  # actually retires the updater rather than leaving it failing in the background.
+  if [ "$DDNS_PROVIDER" = "none" ]; then
+    sudo systemctl disable --now lfr-ddns-edge.timer cloudflare-ddns-edge.timer 2>/dev/null || true
+    sudo rm -f /etc/systemd/system/lfr-ddns-edge.{service,timer} \
+               /etc/systemd/system/cloudflare-ddns-edge.{service,timer} \
+               /usr/local/bin/lfr-ddns-edge.sh /usr/local/bin/cloudflare-ddns-edge.sh
+  fi
 
   # Reload services
   sudo systemctl daemon-reload
@@ -401,8 +425,14 @@ EOF
   sudo systemctl enable --now gateway-watchdog.timer
   sudo systemctl start gateway-watchdog.service
 
-  # Enable DDNS timer (it will trigger but log a credential error until API token is updated)
-  sudo systemctl enable --now cloudflare-ddns-edge.timer
+  # Enable the DDNS timer only when one was installed. The previous version enabled it
+  # unconditionally, with the comment "it will trigger but log a credential error until API
+  # token is updated" -- an updater expected to fail on every run from the moment it was
+  # provisioned. That expectation is why nobody noticed when it started failing for a
+  # different reason entirely and stayed broken for two weeks (#1300).
+  if [ "$DDNS_PROVIDER" != "none" ]; then
+    sudo systemctl enable --now lfr-ddns-edge.timer
+  fi
 
   # 9. Configure Local Security Hardening (UFW, Fail2ban, Auto Upgrades)
   echo "=> Configuring UFW local firewall rules..."
@@ -432,5 +462,12 @@ echo "=========================================================="
 echo "🎉 Edge Node Setup Complete!"
 echo "Edge server is running and proxying requests to port $EDGE_PORT."
 echo "Watchdog, self-healing, and UFW/Fail2ban security guards are active."
-echo "Cloudflare DDNS service is active (placeholder created at /etc/letsencrypt/cloudflare.ini)."
+if [ "$DDNS_PROVIDER" = "none" ]; then
+  echo "Dynamic DNS: not installed (-D none). Correct for a node with a static or elastic address."
+else
+  echo "Dynamic DNS: $DDNS_PROVIDER updater installed and enabled."
+  echo "  Verify it before relying on it:  systemctl start lfr-ddns-edge.service && journalctl -u lfr-ddns-edge -n 20"
+  echo "  An updater that cannot reach its provider is worse than none -- it fails every five"
+  echo "  minutes while systemd records success (#1300)."
+fi
 echo "=========================================================="

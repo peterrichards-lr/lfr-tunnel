@@ -180,9 +180,18 @@ export default function Dashboard() {
   return (
     <div className="animate-fade-in">
 
-      <div className="mb-2xl">
-        <h1 id="dashboard-overview" className="text-2xl fw-extrabold tracking-tight mb-xs">{t('dashboard_overview', 'Dashboard Overview')}</h1>
-        <p className="text-muted text-base">{t('dashboard_desc', 'Manage your active tunnels, domains, and tokens.')}</p>
+      <div className="mb-2xl flex justify-between items-center flex-wrap gap-md">
+        <div>
+          <h1 id="dashboard-overview" className="text-2xl fw-extrabold tracking-tight mb-xs">{t('dashboard_overview', 'Dashboard Overview')}</h1>
+          <p className="text-muted text-base">{t('dashboard_desc', 'Manage your active tunnels, domains, and tokens.')}</p>
+        </div>
+        <button 
+          type="button"
+          className="btn btn-outline py-xs px-md text-xs w-auto flex items-center gap-xs m-0" 
+          onClick={() => setIsInstallModalOpen(true)}
+        >
+          <span>🚀</span> {t('install_client', 'Install Client')}
+        </button>
       </div>
 
       {user?.last_client_version && serverConfig?.latest_version && isOlderVersion(user.last_client_version, serverConfig.latest_version) && (

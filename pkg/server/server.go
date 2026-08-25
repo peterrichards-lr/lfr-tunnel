@@ -241,10 +241,13 @@ type Server struct {
 	bgWG         sync.WaitGroup
 	rateLimiters map[string]*ipLimiter
 	rlMutex      sync.Mutex
-	violations   map[string]*ipViolations
-	vMutex       sync.Mutex
-	blacklist    sync.Map // memory cache for db blacklist
-	portalMap    sync.Map // memory cache for portal magic links and sessions
+	// trustedProxies are the hops whose forwarding headers may be believed when resolving a
+	// client address (#1325). Parsed once, because it is consulted on every request.
+	trustedProxies []*net.IPNet
+	violations     map[string]*ipViolations
+	vMutex         sync.Mutex
+	blacklist      sync.Map // memory cache for db blacklist
+	portalMap      sync.Map // memory cache for portal magic links and sessions
 	// sessions persists portal logins so a restart does not sign everyone out (#1304).
 	// Reached through sessionStore(), which builds it on first use.
 	sessions         *portalSessionStore
@@ -421,6 +424,7 @@ func NewServer(cfg *config.ServerConfig) (*Server, error) {
 		ctx:                ctx,
 		cancel:             cancel,
 		rateLimiters:       make(map[string]*ipLimiter),
+		trustedProxies:     parseTrustedProxies(cfg.TrustedProxies),
 		violations:         make(map[string]*ipViolations),
 		metrics:            NewMetricsCollector(database, cfg, registry),
 		nginxManager:       nginx.NewMaintenanceManager(cfg.MaintenanceTriggerPath),
@@ -615,7 +619,7 @@ func NewServer(cfg *config.ServerConfig) (*Server, error) {
 // ServeHTTP multiplexes control plane (registration & chisel WebSocket) and data plane (tunnel routing).
 func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	// 1. IP Blacklist Defense (Config + DB Cache)
-	ip := getClientIP(r)
+	ip := s.clientIP(r)
 	for _, blockedIP := range s.cfg.IPBlacklist {
 		if ip == blockedIP {
 			http.Error(w, "Forbidden", http.StatusForbidden)
@@ -1734,7 +1738,7 @@ func (s *Server) handleRegister(w http.ResponseWriter, r *http.Request) {
 		effectiveLimit = 0
 	}
 
-	clientIP := getClientIP(r)
+	clientIP := s.clientIP(r)
 	if (req.ClientVersion != "" || req.ClientOS != "") && userRec != nil {
 		changed := false
 		if req.ClientVersion != "" && userRec.LastClientVersion != req.ClientVersion {
@@ -2140,6 +2144,18 @@ func (s *Server) Start() error {
 
 	// 3. Start HTTPS / HTTP Gateway listener
 	if s.cfg.SSLCertFile != "" && s.cfg.SSLKeyFile != "" {
+		// Serving TLS directly means nothing sits in front to overwrite the forwarding headers,
+		// so anything reaching a trusted peer address can name its own client address. That is
+		// only safe while the trusted set stays at loopback, where a request cannot originate
+		// from off-box. Warn rather than refuse: it is a legitimate configuration, and the
+		// operator may have a proxy this code cannot see (#1325).
+		if s.trustsNonLoopbackProxies() {
+			slog.Warn("[Server] TLS is served directly and trusted_proxies includes non-loopback ranges. " +
+				"Forwarding headers from those ranges are believed with nothing in front to sanitise them, " +
+				"which lets a caller inside them choose its own client address -- and that address drives " +
+				"the per-tunnel IP whitelist, the rate limiter and the audit log.")
+		}
+
 		// HTTP redirect server
 		go func() {
 			slog.Info(fmt.Sprintf("[Server] Loaded config: Bind=%s, HTTPBind=%s, Domains=%v, DB=%s",
@@ -2266,7 +2282,7 @@ func (s *Server) handleRegisterRequest(w http.ResponseWriter, r *http.Request) {
 			}
 			if !allowed {
 				if s.db != nil {
-					s.writeAudit(req.Email, "auth.registration_blocked", "ip", getClientIP(r), "Registration blocked by email domain whitelist", r)
+					s.writeAudit(req.Email, "auth.registration_blocked", "ip", s.clientIP(r), "Registration blocked by email domain whitelist", r)
 				}
 				w.WriteHeader(http.StatusForbidden)
 				_ = json.NewEncoder(w).Encode(map[string]string{"error": "email domain not allowed by server configuration"}) //nolint:errcheck
@@ -2335,7 +2351,7 @@ func (s *Server) handleRegisterRequest(w http.ResponseWriter, r *http.Request) {
 
 		greetingName := "there"
 
-		clientIP := getClientIP(r)
+		clientIP := s.clientIP(r)
 		reportLink := fmt.Sprintf("%s://%s/api/auth/report-registration?token=%s", scheme, r.Host, verificationToken)
 
 		body := fmt.Sprintf(`Hi %s,
@@ -2977,7 +2993,7 @@ func (s *Server) getActiveDomainsForRequest(r *http.Request, user *db.User) []st
 			if user != nil {
 				hashStr = user.ID
 			} else {
-				hashStr = getClientIP(r)
+				hashStr = s.clientIP(r)
 			}
 			h := sha256.New()
 			h.Write([]byte(hashStr))
@@ -3440,7 +3456,7 @@ func (s *Server) handleAdminMagicLink(w http.ResponseWriter, r *http.Request) {
 
 	magicToken, _err := generateSecureToken()
 	_ = _err //nolint:errcheck
-	clientIP := getClientIP(r)
+	clientIP := s.clientIP(r)
 
 	expiresAt := time.Now().Add(s.cfg.MagicLinkExpiry)
 	if s.db != nil {
@@ -3559,7 +3575,7 @@ func (s *Server) handleAdminVerify(w http.ResponseWriter, r *http.Request) {
 	}
 	sessionToken, _err := generateSecureToken()
 	_ = _err //nolint:errcheck
-	clientIP := getClientIP(r)
+	clientIP := s.clientIP(r)
 
 	var previousLoginAt *time.Time
 	var user *db.User
@@ -3865,7 +3881,7 @@ func (s *Server) handleAdminInviteUser(w http.ResponseWriter, r *http.Request, a
 		http.Error(w, "Failed to generate token", http.StatusInternalServerError)
 		return
 	}
-	clientIP := getClientIP(r)
+	clientIP := s.clientIP(r)
 	expiresAt := time.Now().Add(s.cfg.InviteLinkExpiry)
 	h := sha256.Sum256([]byte(magicToken))
 	tokenHash := hex.EncodeToString(h[:])
@@ -5176,21 +5192,6 @@ func respondJSON(w http.ResponseWriter, status int, payload interface{}) {
 	}
 }
 
-// getClientIP extracts the real client IP, respecting proxy headers if present
-func getClientIP(r *http.Request) string {
-	ip := r.Header.Get("X-Real-IP")
-	if ip == "" {
-		ip = r.Header.Get("X-Forwarded-For")
-	}
-	if ip == "" {
-		ip, _, _ = net.SplitHostPort(r.RemoteAddr)
-		if ip == "" {
-			ip = r.RemoteAddr
-		}
-	}
-	return strings.Split(ip, ",")[0]
-}
-
 type PortalSessionData struct {
 	Email                 string
 	ExpiresAt             time.Time
@@ -5596,7 +5597,7 @@ func (s *Server) handleEdgeRegisterProxy(w http.ResponseWriter, r *http.Request,
 	}{
 		RegisterRequest: req,
 		Domains:         activeDomains,
-		ClientIP:        getClientIP(r),
+		ClientIP:        s.clientIP(r),
 	}
 
 	payloadBytes, err := json.Marshal(edgeReqPayload)
@@ -5643,7 +5644,7 @@ func (s *Server) handleEdgeRegisterProxy(w http.ResponseWriter, r *http.Request,
 		return
 	}
 
-	clientIP := getClientIP(r)
+	clientIP := s.clientIP(r)
 	sessionToken, remotes, err := s.registry.Register(valResp.UserID, valResp.SubdomainPrefix, req.Ports, activeDomains, valResp.RateLimit, clientIP, req.BasicAuth, req.AddedHeaders)
 	if err != nil {
 		s.respondRegisterResponse(w, http.StatusConflict, r, RegisterResponse{Status: "error", Error: err.Error()})

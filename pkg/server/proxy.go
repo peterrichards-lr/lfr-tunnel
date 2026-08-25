@@ -55,16 +55,26 @@ type ProxyHandler struct {
 	db                  *db.DB
 	cookieSecret        []byte
 	remoteRouteResolver RemoteRouteResolver
+	// trustedProxies mirrors the server's, so the visitor-facing path resolves a client
+	// address by the same rule as everything else (#1325).
+	trustedProxies []*net.IPNet
 }
 
 // NewProxyHandler creates a new ProxyHandler instance.
 func NewProxyHandler(registry *Registry, cfg *config.ServerConfig) *ProxyHandler {
 	secret := make([]byte, 32)
 	_, _ = rand.Read(secret) //nolint:errcheck
+	var trusted []*net.IPNet
+	if cfg != nil {
+		trusted = parseTrustedProxies(cfg.TrustedProxies)
+	} else {
+		trusted = parseTrustedProxies(nil)
+	}
 	return &ProxyHandler{
-		registry:     registry,
-		config:       cfg,
-		cookieSecret: secret,
+		registry:       registry,
+		config:         cfg,
+		cookieSecret:   secret,
+		trustedProxies: trusted,
 	}
 }
 
@@ -111,7 +121,7 @@ func (p *ProxyHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	// 2. Web Application Firewall (WAF) Protection
 	if p.config != nil && p.config.EnableWAF {
 		if blocked, category, reason := IsMaliciousRequest(r); blocked {
-			clientIP := getClientIP(r)
+			clientIP := p.clientIP(r)
 			slog.Info(fmt.Sprintf("[WAF] Blocked malicious request on %s from IP %s. Category: %s, Reason: %s", host, clientIP, category, reason))
 			p.serveBlockedPage(w, r, host, category, reason, clientIP)
 			return
@@ -175,7 +185,7 @@ func (p *ProxyHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 			req.URL.Scheme = "http"
 			req.URL.Host = fmt.Sprintf("127.0.0.1:%d", lease.LocalPort)
 			// Resolve client IP address using centralized helper from original request r
-			clientIP := getClientIP(r)
+			clientIP := p.clientIP(r)
 
 			// Update visitor IP
 			lease.VisitorIPsMu.Lock()
@@ -322,7 +332,7 @@ func (p *ProxyHandler) tryCrossNodeProxy(w http.ResponseWriter, r *http.Request,
 			// Keep req.Host intact so the downstream gateway identifies the tunnel lease
 			req.Host = host
 
-			clientIP := getClientIP(r)
+			clientIP := p.clientIP(r)
 			if priorFor := req.Header.Get("X-Forwarded-For"); priorFor != "" {
 				req.Header.Set("X-Forwarded-For", priorFor+", "+clientIP)
 			} else {
@@ -757,7 +767,7 @@ func (p *ProxyHandler) checkAccessControls(w http.ResponseWriter, r *http.Reques
 	// Apply enterprise force configs
 	if p.config != nil {
 		if p.config.ForceClientCert && p.caCert != nil {
-			p.serveUnauthorizedIPPage(w, r, host, getClientIP(r))
+			p.serveUnauthorizedIPPage(w, r, host, p.clientIP(r))
 			return false
 		}
 	}
@@ -769,7 +779,7 @@ func (p *ProxyHandler) checkAccessControls(w http.ResponseWriter, r *http.Reques
 		return true
 	}
 
-	visitorIP := getClientIP(r)
+	visitorIP := p.clientIP(r)
 	ipAllowed := false
 	if hasIPWhitelist {
 		ipAllowed = checkIPInWhitelist(visitorIP, ipWhitelist)

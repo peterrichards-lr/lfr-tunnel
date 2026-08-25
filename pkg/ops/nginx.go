@@ -82,8 +82,13 @@ server {
         proxy_set_header Upgrade $http_upgrade;
         proxy_set_header Connection $connection_upgrade;
         proxy_set_header Host $host;
+        # $remote_addr, never $proxy_add_x_forwarded_for: the latter APPENDS to whatever the
+        # client sent, so the leftmost entry is caller-supplied and forgeable. Both headers are
+        # overwritten here, so the gateway can trust what it receives from this hop (#1325).
+        # If a CDN or load balancer is ever placed IN FRONT of this nginx, revisit -- you would
+        # then want the real_ip module with set_real_ip_from naming that upstream.
         proxy_set_header X-Real-IP $remote_addr;
-        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-For $remote_addr;
         proxy_set_header X-Forwarded-Host $host;
         proxy_set_header X-Forwarded-Proto $scheme;
     }
@@ -94,8 +99,13 @@ server {
         proxy_set_header Upgrade $http_upgrade;
         proxy_set_header Connection $connection_upgrade;
         proxy_set_header Host $host;
+        # $remote_addr, never $proxy_add_x_forwarded_for: the latter APPENDS to whatever the
+        # client sent, so the leftmost entry is caller-supplied and forgeable. Both headers are
+        # overwritten here, so the gateway can trust what it receives from this hop (#1325).
+        # If a CDN or load balancer is ever placed IN FRONT of this nginx, revisit -- you would
+        # then want the real_ip module with set_real_ip_from naming that upstream.
         proxy_set_header X-Real-IP $remote_addr;
-        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-For $remote_addr;
         proxy_set_header X-Forwarded-Proto $scheme;
     }
 }
@@ -128,8 +138,13 @@ server {
         proxy_set_header Upgrade $http_upgrade;
         proxy_set_header Connection $connection_upgrade;
         proxy_set_header Host $host;
+        # $remote_addr, never $proxy_add_x_forwarded_for: the latter APPENDS to whatever the
+        # client sent, so the leftmost entry is caller-supplied and forgeable. Both headers are
+        # overwritten here, so the gateway can trust what it receives from this hop (#1325).
+        # If a CDN or load balancer is ever placed IN FRONT of this nginx, revisit -- you would
+        # then want the real_ip module with set_real_ip_from naming that upstream.
         proxy_set_header X-Real-IP $remote_addr;
-        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-For $remote_addr;
         proxy_set_header X-Forwarded-Host $host;
         proxy_set_header X-Forwarded-Proto https;
 

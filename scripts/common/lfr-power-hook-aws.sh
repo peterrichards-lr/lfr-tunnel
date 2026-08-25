@@ -34,7 +34,16 @@ set -euo pipefail
 # value must be supplied explicitly by the caller through the environment, which is the
 # only place that actually knows the right values for a given deployment (#1015/#1016).
 #
-#   AWS_REGION        Required. The region the instance lives in.
+#   AWS_REGION        Required. The region the instance lives in, or a comma-separated list
+#                     of regions to search. A list matters when one caller serves nodes in
+#                     several regions -- certificate distribution sends to every edge from a
+#                     single control plane, and those edges are routinely spread across the
+#                     world (#1302). Each is tried in turn until the address is found, so a
+#                     single region behaves exactly as it always did.
+#
+#                     Commas, not spaces: callers pass this through as one word of
+#                     environment (see lfr-distribute-certs.sh), and a space would split it
+#                     into a bogus command rather than a second region.
 #   LFT_INSTANCE_TAG  Optional, written Key=Value. Narrows the lookup to resources
 #                     carrying that tag. Without it the lookup matches on public address
 #                     alone, so a mis-set region or a stale DNS record could in principle
@@ -61,6 +70,13 @@ usage() {
 }
 
 [[ -n "$ACTION" && -n "$HOST" ]] || usage
+
+# Checked before anything is looked up, so a mistyped action fails on the spot rather than
+# after a round of API calls.
+case "$ACTION" in
+    status|start|stop) ;;
+    *) usage ;;
+esac
 
 if [[ -z "$AWS_REGION" ]]; then
     echo "Error: AWS_REGION must be set." >&2
@@ -102,57 +118,62 @@ tag_filter() {
     echo "Name=tag:${key},Values=${value}"
 }
 
-describe() {
-    local ip filter
-    ip="$(resolve_ipv4 "$HOST")"
-    filter="$(tag_filter)"
+describe_in() {
+    local region="$1" ip="$2" filter="$3"
 
     # One --filters flag taking several values. Repeating the flag would drop all but the
     # last, which would silently widen the search rather than narrow it.
     if [[ -n "$filter" ]]; then
-        aws ec2 describe-instances --region "$AWS_REGION" \
-            --filters "$filter" "Name=ip-address,Values=${ip}" --output json
+        aws ec2 describe-instances --region "$region" \
+            --filters "$filter" "Name=ip-address,Values=${ip}" --output json 2>/dev/null || true
     else
-        aws ec2 describe-instances --region "$AWS_REGION" \
-            --filters "Name=ip-address,Values=${ip}" --output json
+        aws ec2 describe-instances --region "$region" \
+            --filters "Name=ip-address,Values=${ip}" --output json 2>/dev/null || true
     fi
 }
 
-instance_id() {
-    local id
-    id="$(describe | jq -r '.Reservations[0].Instances[0].InstanceId // empty')"
-    if [[ -z "$id" ]]; then
-        echo "Error: no EC2 instance found for $HOST in $AWS_REGION -- check the region is right." >&2
-        exit 69
-    fi
-    echo "$id"
+# Echoes "<region> <id> <state>". Every action needs all three -- start and stop have to name
+# the region the instance was actually found in, not the first one searched -- and resolving
+# them together keeps a start from describing the same instance twice.
+find_instance() {
+    local ip filter region json id state
+    ip="$(resolve_ipv4 "$HOST")"
+    filter="$(tag_filter)"
+
+    for region in $(echo "$AWS_REGION" | tr ',' ' '); do
+        json="$(describe_in "$region" "$ip" "$filter")"
+        [[ -n "$json" ]] || continue
+        id="$(echo "$json" | jq -r '.Reservations[0].Instances[0].InstanceId // empty')"
+        state="$(echo "$json" | jq -r '.Reservations[0].Instances[0].State.Name // empty')"
+        if [[ -n "$id" ]]; then
+            echo "$region $id $state"
+            return 0
+        fi
+    done
+
+    echo "Error: no EC2 instance found for $HOST in: $AWS_REGION -- check the region list is right." >&2
+    return 69
 }
+
+# Not inside a command substitution in the case below: an `exit` from find_instance would end
+# only the subshell there, and the caller would carry on with an empty instance id.
+INFO="$(find_instance)" || exit $?
+
+read -r FOUND_REGION FOUND_ID FOUND_STATE <<< "$INFO"
 
 case "$ACTION" in
     status)
-        json="$(describe)"
-        state="$(echo "$json" | jq -r '.Reservations[0].Instances[0].State.Name // empty')"
-        id="$(echo "$json" | jq -r '.Reservations[0].Instances[0].InstanceId // empty')"
-        if [[ -z "$state" ]]; then
-            echo "Error: no EC2 instance found for $HOST in $AWS_REGION -- check the region is right." >&2
-            exit 69
-        fi
-        echo "$state $id"
+        echo "$FOUND_STATE $FOUND_ID"
         ;;
     start)
-        id="$(instance_id)"
-        aws ec2 start-instances --region "$AWS_REGION" --instance-ids "$id" >/dev/null
+        aws ec2 start-instances --region "$FOUND_REGION" --instance-ids "$FOUND_ID" >/dev/null
         # Block until it is actually running, per the contract.
-        aws ec2 wait instance-running --region "$AWS_REGION" --instance-ids "$id"
+        aws ec2 wait instance-running --region "$FOUND_REGION" --instance-ids "$FOUND_ID"
         ;;
     stop)
-        id="$(instance_id)"
         # Return as soon as the request is accepted. The caller polls `status` to confirm,
         # so waiting for instance-stopped here would add 30-90s to every deploy teardown
         # for no extra certainty.
-        aws ec2 stop-instances --region "$AWS_REGION" --instance-ids "$id" >/dev/null
-        ;;
-    *)
-        usage
+        aws ec2 stop-instances --region "$FOUND_REGION" --instance-ids "$FOUND_ID" >/dev/null
         ;;
 esac

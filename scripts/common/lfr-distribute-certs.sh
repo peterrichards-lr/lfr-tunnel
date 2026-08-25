@@ -25,7 +25,14 @@ set -uo pipefail
 #                      back into the state it was found in. Unset, a sleeping node is skipped
 #                      with a warning -- and skipping is not silent, because a node that misses
 #                      a renewal is one that will serve an expired certificate later.
-#   LFT_POWER_HOOK_ENV Optional. Extra environment for the power hook, e.g. "AWS_REGION=eu-west-1".
+#   LFT_POWER_HOOK_ENV Optional. Extra environment for the power hook, e.g. "AWS_REGION=us-east-2".
+#                      Passed through as words of environment, so each entry must be a single
+#                      word: a hook that takes a list wants it comma-separated, never with
+#                      spaces, or the tail of the list is read as the command to run.
+#                      Note this is the region the *edges* are in, which is not usually the
+#                      one the control plane itself runs in.
+#   LFT_SSH_WAIT       Optional, seconds. How long to wait for a node that had to be started
+#                      to accept SSH. Default 180.
 
 LIVE_DIR="${LFT_LIVE_DIR:-/etc/letsencrypt/live}"
 TARGETS="${LFT_EDGE_TARGETS:-}"
@@ -73,6 +80,24 @@ power() {
     env ${LFT_POWER_HOOK_ENV:-} "$POWER_HOOK" "$@"
 }
 
+# A node that has reached "running" is not yet a node you can log in to: sshd comes up some way
+# after the instance does. The node that had to be started is precisely the one whose first
+# connection would otherwise arrive too early, so waiting is not optional here.
+#
+# Bounded, and a timeout is a failure rather than an endless retry -- this runs unattended from
+# a renewal hook, where something that never returns is worse than something that reports.
+wait_for_ssh() {
+    local target="$1" waited=0
+    while [ "$waited" -lt "${LFT_SSH_WAIT:-180}" ]; do
+        if ssh -o BatchMode=yes -o ConnectTimeout=10 -i "$KEY" "$target" true 2>/dev/null; then
+            return 0
+        fi
+        sleep 5
+        waited=$((waited + 5))
+    done
+    return 1
+}
+
 FAILURES=0
 DELIVERED=0
 
@@ -87,6 +112,12 @@ for target in $(echo "$TARGETS" | tr ',' ' '); do
                 log "$host is stopped; starting it to deliver"
                 if power start "$host" >/dev/null 2>&1; then
                     started_it=1
+                    if ! wait_for_ssh "$target"; then
+                        warn "$host: started, but SSH did not come up in time; it will keep serving its current certificate"
+                        power stop "$host" >/dev/null 2>&1 || warn "$host: started for delivery but could not be stopped again"
+                        FAILURES=$((FAILURES + 1))
+                        continue
+                    fi
                 else
                     warn "$host: could not be started; it will serve its current certificate until it is next reachable"
                     FAILURES=$((FAILURES + 1))

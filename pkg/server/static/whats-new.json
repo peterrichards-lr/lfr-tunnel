@@ -1,5 +1,29 @@
 [
   {
+    "version": "v1.48.5",
+    "release_date": "2026-08-25",
+    "features": [
+      "fix(server): terminate unserved domain miss traffic locally at the edge (#1319) (#1320)",
+      "docs: record the state of the cluster resilience work before a restart (#1318)",
+      "feat(server): cross-node routing table and proxying during DNS propagation (#1249) (#1317)",
+      "fix(ops): installer scripts fail LDM auto-discovery and Portal V2 guide modal rendering (#1311) (#1313)",
+      "fix(ops): make edge DDNS a declared choice, not an unconditional install (#1316)",
+      "feat(ops): distribute renewed certificates from central to the edges (#1315)",
+      "feat(server): persist portal sessions so a restart does not sign everyone out (#1307)",
+      "feat(server): refuse new sessions on a gateway that is draining (#1314)",
+      "fix(client): failback prober respects cooldown so planned moves don't bounce back (#1310) (#1312)",
+      "feat(ops): drain a gateway before restarting it (#1305)",
+      "fix(ops): issue and renew certificates through Route53, not Cloudflare (#1301)",
+      "fix(ops): resolve the Route53 zone from the name being written (#1299)",
+      "fix(portal-v2): stop the Analytics time-range select clipping its own text (#1296)",
+      "feat(server): publish DNS that follows a tunnel to the gateway serving it (#1295)",
+      "fix(portal-v1): put the View As bar above the layout, and hide admin-only nav (#1292)",
+      "fix(server): stop putting the serving gateway in a tunnel's public URL (#1288)",
+      "test(e2e): run the multi-region edge harness and prove a planned move; let central say how it is reachable (#1287)",
+      "feat(config): allow an edge node's schedule to be declared statically (#1283)"
+    ]
+  },
+  {
     "version": "v1.48.4",
     "release_date": "2026-08-24",
     "features": [
@@ -32,37 +56,6 @@
       "ci(release): report which deployment defaults a release is built with (#1261)",
       "fix(client): bound the registration handshake so an unreachable gateway fails fast (#1260)",
       "fix(client): only announce the tunnel once it is actually connected (#1259)"
-    ]
-  },
-  {
-    "version": "v1.48.0",
-    "release_date": "2026-08-23",
-    "features": [
-      "fix(server): log control-plane messages an edge does not recognise (#1253)",
-      "feat(client): show a gateway shutdown countdown in the TUI (#1242)",
-      "feat(client): deliver node shutdown warnings to the client (#1240)",
-      "fix(portal-v2): name the edge row actions and mark the destructive one (#1236)",
-      "fix(ui): make every referenced theme token resolve, and check it stays that way (#1235)",
-      "fix(portal-v2): stop the audit log filling with routine visit entries (#1233)",
-      "fix(portal-v2): give every form control a programmatic label (#1232)",
-      "fix(portal-v2): add landmarks, a skip link, and a real h1 per page (#1231)",
-      "fix(portal-v1): give the status colours light-theme variants (#1230)",
-      "fix(portal-v1): give every form field a programmatic label (#1229)",
-      "fix(portal-v1): make the sidebar navigation keyboard and screen-reader accessible (#1228)",
-      "fix(ui): make the sidebar scrollbar visible in both portals (#1227)",
-      "feat(portal): let the owner preview the UI as another role (read-only) (#1226)",
-      "feat(client): make the log directory configurable from the Inspector (#1224)",
-      "refactor(ui): replace static inline styles with utility and component classes (#1222)",
-      "fix(config): stop shipping one deployment's hostnames as everyone's defaults (#1210)",
-      "refactor(ops): put instance power management behind a configurable hook (#1198)",
-      "build: stop committing the generated ui-dist bundle (#1197)",
-      "fix(ops): let a stop become visible before declaring it failed (#1195)",
-      "fix(ui): reorder the dashboard panels and stop What's New auto-expanding (#1193)",
-      "fix(ui): give modals their own padding (#1179)",
-      "fix(ops): make the instance tag operator-supplied, not hardcoded (#1185)",
-      "feat(client): record why the failback prober decided what it did (#1181)",
-      "fix(ops): fail the deploy if it leaves an instance running (#1184)",
-      "fix(ops): verify a deploy before powering the node back down (#1177)"
     ]
   }
 ]

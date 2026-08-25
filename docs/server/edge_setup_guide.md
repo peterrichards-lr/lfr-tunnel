@@ -193,6 +193,37 @@ has to point that host at the node currently holding it (see `dns_hook` below), 
 node's certificate has to cover `*.lfr-demo.online` rather than only `*.us.lfr-demo.online`
 (#1248).
 
+### B2. Dynamic DNS — Only If The Address Can Change
+
+`setup-edge-vps.sh -D <none|cloudflare|route53>`, defaulting to **none**.
+
+A node with a static or elastic address does not need a DDNS updater, and installing one anyway
+is actively harmful: it runs every five minutes, and if it cannot reach its provider it fails
+and exits 0 — so `systemd` records success while the records go stale.
+
+That is not hypothetical. Provisioning used to install a Cloudflare updater unconditionally and
+enable it with the comment *"it will trigger but log a credential error until API token is
+updated"* — an updater expected to fail from the moment it was provisioned. When the zones later
+moved to Route53 it started failing for a completely different reason, and that failure looked
+identical to the one everyone had learned to ignore. It ran broken for two weeks (#1300).
+
+If the address genuinely can change, pick the provider serving your zone. Both reference
+implementations live in `scripts/common/`:
+
+| provider | script |
+|---|---|
+| `cloudflare` | `cloudflare-ddns-edge.sh` |
+| `route53` | `route53-ddns-edge.sh` |
+
+The Route53 one validates what it detects before publishing it, prefers instance metadata over a
+third-party echo service, and **exits non-zero on failure** so a broken updater shows up as a
+failed unit rather than a successful one.
+
+Re-running provisioning with `-D none` removes any updater a previous run installed, so retiring
+one is a re-provision rather than manual cleanup on every node.
+
+---
+
 ### C. DNS That Follows The Tunnel (`dns_hook`)
 
 Configured on the **control plane**, not on the edges — it is the only gateway that knows

@@ -3,6 +3,7 @@ package server
 import (
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
 	"time"
 
@@ -19,6 +20,10 @@ func TestCrossNodeProxy_CentralToEdge(t *testing.T) {
 
 	// 1. Start a mock regional Edge server
 	mockEdgeServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if strings.HasPrefix(r.URL.Path, "/api/internal/") {
+			http.Error(w, "internal", http.StatusNotFound)
+			return
+		}
 		receivedHost = r.Host
 		receivedHop = r.Header.Get("X-LFR-Cross-Node-Hop")
 		receivedVisited = r.Header.Get("X-LFR-Cross-Node-Visited")
@@ -26,7 +31,9 @@ func TestCrossNodeProxy_CentralToEdge(t *testing.T) {
 
 		w.Header().Set("X-Served-By", "mock-edge-in")
 		w.WriteHeader(http.StatusOK)
-		_, _ = w.Write([]byte("hello from edge-in"))
+		if _, err := w.Write([]byte("hello from edge-in")); err != nil {
+			t.Errorf("failed to write response: %v", err)
+		}
 	}))
 	defer mockEdgeServer.Close()
 
@@ -102,13 +109,19 @@ func TestCrossNodeProxy_EdgeToCentral(t *testing.T) {
 
 	// 1. Start a mock Control Plane server
 	mockControlPlane := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if strings.HasPrefix(r.URL.Path, "/api/internal/") {
+			http.Error(w, "internal", http.StatusNotFound)
+			return
+		}
 		receivedHost = r.Host
 		receivedHop = r.Header.Get("X-LFR-Cross-Node-Hop")
 		receivedVisited = r.Header.Get("X-LFR-Cross-Node-Visited")
 
 		w.Header().Set("X-Served-By", "mock-control-plane")
 		w.WriteHeader(http.StatusOK)
-		_, _ = w.Write([]byte("hello from central"))
+		if _, err := w.Write([]byte("hello from central")); err != nil {
+			t.Errorf("failed to write response: %v", err)
+		}
 	}))
 	defer mockControlPlane.Close()
 
@@ -157,9 +170,15 @@ func TestCrossNodeProxy_EdgeToCentral(t *testing.T) {
 func TestCrossNodeProxy_EdgeToEdgeViaCentral(t *testing.T) {
 	// 1. Start mock Edge B
 	mockEdgeB := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if strings.HasPrefix(r.URL.Path, "/api/internal/") {
+			http.Error(w, "internal", http.StatusNotFound)
+			return
+		}
 		w.Header().Set("X-Served-By", "mock-edge-b")
 		w.WriteHeader(http.StatusOK)
-		_, _ = w.Write([]byte("hello from edge-b"))
+		if _, err := w.Write([]byte("hello from edge-b")); err != nil {
+			t.Errorf("failed to write response: %v", err)
+		}
 	}))
 	defer mockEdgeB.Close()
 

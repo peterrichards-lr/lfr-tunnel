@@ -1241,6 +1241,39 @@ To prevent developers from seeing client CLI update warnings when you deploy cos
 
 ---
 
+### 8.9. Automatic IP Bans (Rate Limiter)
+
+The API rate limiter auto-bans an address after 50 refused requests. Since #1353 those bans
+**expire**, and escalate for repeat offenders, following the fail2ban model.
+
+This matters because the blacklist is enforced ahead of all routing: a banned address gets a
+`403` on everything, including the admin portal, so it cannot reach `/api/admin/blacklist/` to
+unban itself. A permanent automatic ban therefore had no in-band recovery -- and automatic bans
+act on a noisy signal, since shared NAT, CGNAT, mobile carriers and corporate egress all look
+like one very busy address.
+
+Manual bans placed by an admin are unaffected: they never expire, because a person decided on
+them.
+
+```yaml
+auto_ban:
+  duration: 24h            # ban time for a first offence. 0 = never expires
+  increment: true          # longer bans for repeat offenders
+  factor: 2                # multiplier per prior ban: 24h, then 48h, 96h, ...
+  max_duration: 168h       # cap, so escalation cannot become permanent by another route
+  history_retention: 720h  # how long an expired ban is remembered, so escalation still sees it
+  ignore:                  # never auto-banned
+    - 127.0.0.1/32
+    - ::1/128
+```
+
+The defaults above apply when the block is absent, so no change is needed to keep sensible
+behaviour. Set `duration: 0` to restore the previous permanent-ban behaviour.
+
+**Keep loopback in `ignore`.** Locking an operator out of their own gateway is a worse outcome
+than a missed ban, and the ban cannot be lifted from the banned address. Add your own office or
+VPN ranges here for the same reason.
+
 ### 8.10. Trusted Proxies and Client IP Resolution
 
 The gateway binds loopback (`http_bind_addr: "127.0.0.1:8080"`) and nginx terminates TLS in front
@@ -1273,6 +1306,7 @@ that combination means headers are honoured with nothing in front to sanitise th
 than `$proxy_add_x_forwarded_for` which *appends* to whatever the client sent — leaving the
 leftmost entry caller-controlled. If you place a CDN or load balancer in front of nginx, revisit
 this: you would then want nginx's `real_ip` module with `set_real_ip_from` naming that upstream.
+
 
 ## 9. Asymmetric Outbound Routing Workaround (Dual-IP VPS)
 

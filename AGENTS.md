@@ -20,6 +20,10 @@ in isolation.
 - **GitHub issue tracking & PR workflow** — [`.agents/skills/github-workflow/SKILL.md`](.agents/skills/github-workflow/SKILL.md)
   Read before planning a feature, filing an issue, or opening a PR. Covers the
   issue → branch → PR → close lifecycle and tech-debt tracking.
+  **Claim an issue before starting work on it** (§3). Multiple agents run this
+  backlog concurrently, so resolve the session ID in an issue's claim comment
+  before touching it — the `agent:` label alone cannot tell two Claude sessions
+  apart, and you must not work on what another session holds.
 - **Documentation timestamps & review** — [`.agents/skills/global-docs/SKILL.md`](.agents/skills/global-docs/SKILL.md)
   Read before creating or editing any `.md` file.
 - **Edge node state synchronization** — [`.agents/skills/edge-sync/SKILL.md`](.agents/skills/edge-sync/SKILL.md)
@@ -78,4 +82,4 @@ trip over.
 
 <!-- markdownlint-disable MD049 -->
 ---
-*Last Updated: 2026-07-31* | *Last Reviewed: 2026-07-31*
+*Last Updated: 2026-08-25* | *Last Reviewed: 2026-08-25*

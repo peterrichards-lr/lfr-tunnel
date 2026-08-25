@@ -209,11 +209,11 @@ func main() {
 		engine.SetSessionLogger(sessionLog)
 		defer sessionLog.Close() //nolint:errcheck
 		sessionLog.Event("info", "session_start", map[string]any{
-			"version":    config.Version,
-			"subdomain":  sub,
-			"region":     cfg.Region,
-			"server_url": cfg.ServerURL,
-			"log_bodies": *logBodies,
+			"version":      config.Version,
+			"subdomain":    sub,
+			logFieldRegion: cfg.Region,
+			"server_url":   cfg.ServerURL,
+			"log_bodies":   *logBodies,
 		})
 	}
 	engine.Passcode = cfg.Passcode
@@ -490,9 +490,9 @@ func main() {
 				slog.Info(fmt.Sprintf("[Client] Region '%s' dropped the session %s after failback; holding off further failback attempts.",
 					cfg.Region, time.Since(lastFailbackAt).Round(time.Second)))
 				engine.LogEvent("warn", "failback_unstable", map[string]any{
-					"region":     cfg.Region,
-					"held_for":   time.Since(lastFailbackAt).Round(time.Second).String(),
-					"suppressed": failbackSuppression.String(),
+					logFieldRegion: cfg.Region,
+					"held_for":     time.Since(lastFailbackAt).Round(time.Second).String(),
+					"suppressed":   failbackSuppression.String(),
 				})
 				engine.SuppressFailback(failbackSuppression)
 				cooldowns.exclude(cfg.ServerURL, failbackSuppression)
@@ -518,7 +518,7 @@ func main() {
 					slog.Info(fmt.Sprintf("[Client] Primary region '%s' (%s) is reachable again, but we left it deliberately -- staying put for another %s.",
 						primaryRegion, primaryServerURL, remaining.Round(time.Second)))
 					engine.LogEvent("info", "failback_deferred", map[string]any{
-						"region":             primaryRegion,
+						logFieldRegion:       primaryRegion,
 						"cooldown_remaining": remaining.Round(time.Second).String(),
 					})
 					failbackReady = false
@@ -914,6 +914,11 @@ func centralControlPlaneURL(cfg *config.ClientConfig) string {
 // time, so the client cannot yet know how long the stop lasts. An hour covers a typical
 // window well enough to stop the churn; carrying the return time would let this be exact.
 const plannedShutdownCooldown = time.Hour
+
+// logFieldRegion is the key every diagnostic event uses for the gateway region. A constant
+// because a typo in one of them is invisible -- the event still writes, just under a key
+// nothing queries.
+const logFieldRegion = "region"
 
 func excludeFailedRegion(cfg *config.ClientConfig, primaryRegions map[string]string, failedURL string, afterFailback bool, planned bool) {
 	if afterFailback {

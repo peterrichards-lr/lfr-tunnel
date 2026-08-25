@@ -24,25 +24,101 @@ type PortMapping struct {
 
 // TunnelLease represents a single active subdomain tunnel allocation.
 type TunnelLease struct {
-	UserID          string               `json:"user_id"`
-	SubdomainPrefix string               `json:"subdomain_prefix"`
-	FullHost        string               `json:"full_host"`
-	SessionToken    string               `json:"session_token"`
-	LocalPort       int                  `json:"local_port"`
-	TargetPort      int                  `json:"target_port"`
-	RateLimit       int                  `json:"rate_limit"`
-	ClientIP        string               `json:"client_ip"`
-	BasicAuth       string               `json:"basic_auth"`
-	AddedHeaders    map[string]string    `json:"added_headers"`
-	Status          string               `json:"status"` // e.g., "up", "maintenance", "down"
-	BytesIn         uint64               `json:"bytes_in"`
-	BytesOut        uint64               `json:"bytes_out"`
-	LastBytesIn     uint64               `json:"-"`
-	LastBytesOut    uint64               `json:"-"`
-	CreatedAt       time.Time            `json:"created_at"`
-	NodeID          string               `json:"node_id,omitempty"`
-	VisitorIPsMu    sync.Mutex           `json:"-"`
-	VisitorIPs      map[string]time.Time `json:"-"`
+	UserID          string `json:"user_id"`
+	SubdomainPrefix string `json:"subdomain_prefix"`
+	FullHost        string `json:"full_host"`
+	SessionToken    string `json:"session_token"`
+	LocalPort       int    `json:"local_port"`
+	TargetPort      int    `json:"target_port"`
+	RateLimit       int    `json:"rate_limit"`
+	ClientIP        string `json:"client_ip"`
+	BasicAuth       string `json:"basic_auth"`
+	// Access control carried on the lease rather than read from the database per request
+	// (#1329), which also makes it available on an edge, where there is no database to read
+	// (#1367).
+	//
+	// Guarded because a portal edit changes these while requests are reading them. BasicAuth
+	// above needs no guard only because it is fixed for the life of the lease.
+	accessMu     sync.RWMutex `json:"-"`
+	passcode     string
+	whitelistIPs string
+	accessMode   string
+	AddedHeaders map[string]string    `json:"added_headers"`
+	Status       string               `json:"status"` // e.g., "up", "maintenance", "down"
+	BytesIn      uint64               `json:"bytes_in"`
+	BytesOut     uint64               `json:"bytes_out"`
+	LastBytesIn  uint64               `json:"-"`
+	LastBytesOut uint64               `json:"-"`
+	CreatedAt    time.Time            `json:"created_at"`
+	NodeID       string               `json:"node_id,omitempty"`
+	VisitorIPsMu sync.Mutex           `json:"-"`
+	VisitorIPs   map[string]time.Time `json:"-"`
+}
+
+// SetAccessControlsForHost applies rules to one lease. Per host rather than per session because
+// a reservation is keyed on (subdomain, domain): the same subdomain registered across two
+// domains can carry different rules, and applying one domain's answer to both would be wrong in
+// whichever direction the loop happened to finish.
+func (r *Registry) SetAccessControlsForHost(fullHost, passcode, whitelistIPs, accessMode string) bool {
+	r.RLock()
+	defer r.RUnlock()
+	lease, ok := r.leases[fullHost]
+	if !ok {
+		return false
+	}
+	lease.SetAccessControls(passcode, whitelistIPs, accessMode)
+	return true
+}
+
+// SetAccessControlsForSubdomain applies access-control rules to every live lease for a
+// subdomain, so a portal edit takes effect immediately rather than on the client's next
+// reconnect (#1329). Returns how many leases were updated, which lets a caller log whether the
+// edit reached anything.
+func (r *Registry) SetAccessControlsForSubdomain(subdomainPrefix, passcode, whitelistIPs, accessMode string) int {
+	r.RLock()
+	defer r.RUnlock()
+	updated := 0
+	for _, lease := range r.leases {
+		if lease.SubdomainPrefix == subdomainPrefix {
+			lease.SetAccessControls(passcode, whitelistIPs, accessMode)
+			updated++
+		}
+	}
+	return updated
+}
+
+// SetAccessControlsForSession applies rules to the leases created by one registration. Used at
+// registration time, where the session token is what the caller has to hand.
+func (r *Registry) SetAccessControlsForSession(sessionToken, passcode, whitelistIPs, accessMode string) {
+	r.RLock()
+	defer r.RUnlock()
+	for _, lease := range r.sessionLeases[sessionToken] {
+		lease.SetAccessControls(passcode, whitelistIPs, accessMode)
+	}
+}
+
+// AccessControls returns the rules this tunnel is currently subject to. accessMode is "and" or
+// "or"; empty passcode and whitelist mean the tunnel is open, which is the common case and the
+// reason this is worth reading from memory.
+func (l *TunnelLease) AccessControls() (passcode, whitelistIPs, accessMode string) {
+	l.accessMu.RLock()
+	defer l.accessMu.RUnlock()
+	mode := l.accessMode
+	if mode == "" {
+		mode = "or"
+	}
+	return l.passcode, l.whitelistIPs, mode
+}
+
+// SetAccessControls records the rules for this tunnel. Called at registration, and again
+// whenever the portal changes them, so an edit takes effect on the next request rather than on
+// the next reconnect.
+func (l *TunnelLease) SetAccessControls(passcode, whitelistIPs, accessMode string) {
+	l.accessMu.Lock()
+	defer l.accessMu.Unlock()
+	l.passcode = passcode
+	l.whitelistIPs = whitelistIPs
+	l.accessMode = accessMode
 }
 
 var (
@@ -703,4 +779,43 @@ func (l *TunnelLease) GetActiveVisitorIPs(timeout time.Duration) []string {
 		}
 	}
 	return active
+}
+
+// applyAccessControlsToLeases stamps per-domain rules onto the leases a registration produced.
+//
+// Shared by the control plane and by an edge, which resolve the values differently -- one reads
+// its own database, the other is told by central -- but apply them identically. Keeping the
+// host construction in one place matters because it has to match Register's own, or the rules
+// land on nothing and the tunnel is served unprotected.
+func applyAccessControlsToLeases(r *Registry, subdomainPrefix string, domains []string, accessByDomain map[string][3]string) {
+	if r == nil || len(accessByDomain) == 0 {
+		return
+	}
+	for _, d := range domains {
+		ac, ok := accessByDomain[d]
+		if !ok {
+			continue
+		}
+		fullHost := d
+		if subdomainPrefix != "" {
+			fullHost = subdomainPrefix + "." + d
+		}
+		if !r.SetAccessControlsForHost(fullHost, ac[0], ac[1], ac[2]) {
+			slog.Info(fmt.Sprintf("[Server] Access controls for %s matched no live lease", fullHost))
+		}
+	}
+}
+
+// reservationAccessControls reads the stored rules for a reservation, so a caller applying them
+// to live leases uses exactly what the database now holds rather than what the request asked
+// for -- the two differ whenever the service normalises or rejects part of the input.
+func (s *Server) reservationAccessControls(subdomain, domain string) ([3]string, bool) {
+	if s.db == nil {
+		return [3]string{}, false
+	}
+	res, err := s.db.GetSubdomainReservationByName(subdomain, domain)
+	if err != nil || res == nil {
+		return [3]string{}, false
+	}
+	return [3]string{res.Passcode, res.WhitelistIPs, res.AccessMode}, true
 }

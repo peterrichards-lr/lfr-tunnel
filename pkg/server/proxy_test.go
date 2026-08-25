@@ -167,6 +167,13 @@ func TestProxyHandler_AccessControls(t *testing.T) {
 	}
 	reg.Unlock()
 
+	// The proxy reads access control from the lease rather than querying per request (#1329),
+	// so the lease carries what registration would have stamped on it. The reservation row is
+	// still seeded above: the passcode-verification POST is a rare, user-initiated request and
+	// deliberately still reads it.
+	reg.SetAccessControlsForHost("protected-se.liferay.com",
+		reservation.Passcode, reservation.WhitelistIPs, reservation.AccessMode)
+
 	handler := NewProxyHandler(reg, config.DefaultServerConfig())
 	handler.db = database
 

@@ -64,9 +64,16 @@ type ControlMessage struct {
 	// the control plane (#1353). Absent means the ban does not expire, which is what a manual
 	// ban by an admin is -- and what every ban was before this existed, so an older edge that
 	// ignores this field simply keeps the previous behaviour.
-	BanExpiresAt     *time.Time        `json:"ban_expires_at,omitempty"`
-	NodeID           string            `json:"node_id,omitempty"`
-	Action           string            `json:"action,omitempty"`
+	BanExpiresAt *time.Time `json:"ban_expires_at,omitempty"`
+	NodeID       string     `json:"node_id,omitempty"`
+	Action       string     `json:"action,omitempty"`
+	// Access control pushed to edges when the portal changes it (#1329). An edge has no
+	// database, so being told is the only way an edit reaches it -- otherwise turning a
+	// passcode on would leave every edge serving the tunnel unprotected until the client
+	// reconnected (#1367).
+	Passcode         string            `json:"passcode,omitempty"`
+	WhitelistIPs     string            `json:"whitelist_ips,omitempty"`
+	AccessMode       string            `json:"access_mode,omitempty"`
 	Reason           string            `json:"reason,omitempty"`
 	Duration         int               `json:"duration,omitempty"`
 	UserID           string            `json:"user_id,omitempty"`
@@ -343,6 +350,36 @@ func (s *Server) handleEdgeControlWS(w http.ResponseWriter, r *http.Request) {
 			}
 		}
 	}()
+}
+
+// BroadcastAccessControlUpdate pushes changed access-control rules for a subdomain to every
+// connected Edge node, so a portal edit takes effect there on the next request rather than on
+// the client's next reconnect.
+//
+// Empty values are meaningful here -- clearing a passcode is an edit like any other -- so the
+// message carries the subdomain in a field that is always sent, and the edge applies whatever
+// it is given rather than merging.
+func (s *Server) BroadcastAccessControlUpdate(subdomain, passcode, whitelistIPs, accessMode string) {
+	msg := ControlMessage{
+		Type:         "access_control_update",
+		Subdomain:    subdomain,
+		Passcode:     passcode,
+		WhitelistIPs: whitelistIPs,
+		AccessMode:   accessMode,
+	}
+
+	payload, err := json.Marshal(msg)
+	if err != nil {
+		return
+	}
+
+	s.edgeClientsMu.RLock()
+	defer s.edgeClientsMu.RUnlock()
+	for nodeID, conn := range s.edgeClients {
+		if err := conn.WriteMessage(websocket.TextMessage, payload); err != nil {
+			slog.Info(fmt.Sprintf("[Edge Control] Failed to push access control for %s to %s: %v", subdomain, nodeID, err))
+		}
+	}
 }
 
 // BroadcastBlacklistUpdate pushes an IP blacklist update to all connected Edge nodes.
@@ -917,6 +954,9 @@ func (s *Server) runEdgeControlChannel() {
 					delete(s.remoteRoutes, msg.FullHost)
 				}
 				s.remoteRoutesMu.Unlock()
+			case "access_control_update":
+				updated := s.registry.SetAccessControlsForSubdomain(msg.Subdomain, msg.Passcode, msg.WhitelistIPs, msg.AccessMode)
+				slog.Info(fmt.Sprintf("[Edge Control] Access control for %s applied to %d lease(s)", msg.Subdomain, updated))
 			case "blacklist_update":
 				switch msg.Action {
 				case "add":

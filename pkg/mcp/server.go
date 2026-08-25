@@ -195,7 +195,7 @@ func handleToolCall(id interface{}, name string, args json.RawMessage) {
 			Ports      string `json:"ports"`
 			TargetHost string `json:"target_host"`
 		}
-		_ = json.Unmarshal(args, &params) // Optional params //nolint:errcheck
+		_ = json.Unmarshal(args, &params) //nolint:errcheck // params are optional; zero values are the documented default
 
 		res, err := startTunnel(params.Subdomain, params.Ports, params.TargetHost)
 		if err != nil {
@@ -208,7 +208,7 @@ func handleToolCall(id interface{}, name string, args json.RawMessage) {
 		var params struct {
 			Subdomain string `json:"subdomain"`
 		}
-		_ = json.Unmarshal(args, &params) // Optional param //nolint:errcheck
+		_ = json.Unmarshal(args, &params) //nolint:errcheck // param is optional; zero value is the documented default
 
 		res, err := stopTunnel(params.Subdomain)
 		if err != nil {

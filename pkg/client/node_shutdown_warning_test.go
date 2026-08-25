@@ -44,7 +44,11 @@ func TestClearRegionCacheFile(t *testing.T) {
 	}
 	cachePath := filepath.Join(home, ".lfr-tunnel", "region_cache.json")
 	_ = os.MkdirAll(filepath.Dir(cachePath), 0700)
-	_ = os.WriteFile(cachePath, []byte(`{"test":true}`), 0600)
+	// Checked, not discarded: if the fixture is not written the assertion below passes for the
+	// wrong reason -- ClearRegionCacheFile would report success having removed nothing.
+	if err := os.WriteFile(cachePath, []byte(`{"test":true}`), 0600); err != nil {
+		t.Fatalf("failed to write the region cache fixture: %v", err)
+	}
 
 	if err := ClearRegionCacheFile(); err != nil {
 		t.Fatalf("ClearRegionCacheFile failed: %v", err)

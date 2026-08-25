@@ -66,6 +66,12 @@ fmt:
 vet:
 	go vet ./...
 
+# Ceiling on suppressed errcheck findings (#1331). Not wired into CI here:
+# .github/workflows/ci.yml is another agent's territory under #1328, so wiring belongs with
+# whoever holds it. Runnable now, and by the pre-commit hook.
+nolint-ratchet:
+	@./scripts/check-nolint-ratchet.sh
+
 # Asserts that the toolchain will really link inside the whitelisted directory, rather than
 # assuming it (#1335). The macOS default is resolved by an existence test, so a missing
 # /private/tmp would otherwise fall through to /tmp and compile outside the whitelist while

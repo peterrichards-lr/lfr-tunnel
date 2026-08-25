@@ -17,6 +17,97 @@ permissions:
   contents: read
 
 jobs:
+  # Which downstream jobs need to run at all (#1343). Before this, a docs-only or
+  # workflow-only PR ran the full 3-OS Go matrix, three E2E suites and Playwright.
+  #
+  # Uses plain `git diff` rather than a third-party filter action, matching what
+  # docs-review-check below already does, and so there is no extra action to pin.
+  #
+  # FAIL OPEN. Every unresolved case sets true and runs everything. A wrong "false"
+  # silently skips the tests that were supposed to gate the merge, which is far worse
+  # than a wasted run.
+  changes:
+    name: Detect Changed Paths
+    runs-on: ubuntu-latest
+    outputs:
+      go: ${{ steps.filter.outputs.go }}
+      ui: ${{ steps.filter.outputs.ui }}
+      shell: ${{ steps.filter.outputs.shell }}
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+
+      - name: Determine which areas changed
+        id: filter
+        run: |
+          set -euo pipefail
+
+          run_everything() {
+            echo "$1"
+            {
+              echo "go=true"
+              echo "ui=true"
+              echo "shell=true"
+            } >> "$GITHUB_OUTPUT"
+            exit 0
+          }
+
+          case "${{ github.event_name }}" in
+            pull_request)
+              BASE="${{ github.event.pull_request.base.sha }}"
+              HEAD="${{ github.event.pull_request.head.sha }}"
+              ;;
+            push)
+              BASE="${{ github.event.before }}"
+              HEAD="${{ github.sha }}"
+              ;;
+            *)
+              run_everything "Not a push/pull_request event -- running everything."
+              ;;
+          esac
+
+          # A force-push or first-push-to-branch makes "before" a null SHA.
+          if [ "$BASE" = "0000000000000000000000000000000000000000" ] || [ -z "$BASE" ]; then
+            CHANGED=$(git diff --name-only "${HEAD}~1" "$HEAD" 2>/dev/null) || \
+              run_everything "Could not resolve the diff base -- running everything."
+          else
+            CHANGED=$(git diff --name-only "$BASE" "$HEAD" 2>/dev/null) || \
+              run_everything "Could not diff $BASE..$HEAD -- running everything."
+          fi
+
+          if [ -z "$CHANGED" ]; then
+            run_everything "Empty diff -- running everything."
+          fi
+
+          echo "Changed files:"
+          echo "$CHANGED" | sed 's/^/  /'
+
+          # Go: sources, module files, the Makefile that builds and tests them, the E2E
+          # harnesses that exercise the binaries, and this workflow itself.
+          if echo "$CHANGED" | grep -qE '\.go$|^go\.(mod|sum)$|^Makefile$|^tests/|^scripts/|^\.github/workflows/|^Dockerfile$|^cmd/'; then
+            GO=true
+          else
+            GO=false
+          fi
+
+          if echo "$CHANGED" | grep -qE '^ui/|^\.github/workflows/'; then
+            UI=true
+          else
+            UI=false
+          fi
+
+          if echo "$CHANGED" | grep -qE '\.sh$|^\.github/workflows/'; then
+            SHELL_CHANGED=true
+          else
+            SHELL_CHANGED=false
+          fi
+
+          echo "go=$GO"    | tee -a "$GITHUB_OUTPUT"
+          echo "ui=$UI"    | tee -a "$GITHUB_OUTPUT"
+          echo "shell=$SHELL_CHANGED" | tee -a "$GITHUB_OUTPUT"
+
   docs-review-check:
     name: Documentation Review Check
     runs-on: ubuntu-latest
@@ -125,10 +216,70 @@ jobs:
       - name: Run Linter (golangci-lint)
         uses: golangci/golangci-lint-action@v9
         with:
-          version: latest
+          # Pinned rather than `latest` (#1343): a golangci-lint release should not be able
+          # to fail an unchanged PR. Bump deliberately, like any other dependency.
+          version: v2.13.1
+
+  # Nothing checked dependencies for known advisories. golang.org/x/text carried a reachable
+  # DoS (GO-2026-5970, #1342) for as long as it took someone to run govulncheck by hand.
+  #
+  # Dependabot does not cover this: its Go support does not propose version updates for
+  # `// indirect` requirements the main module does not import directly, which is exactly what
+  # x/text is. So this job is not redundant with dependabot.yml -- it covers what that cannot.
+  govulncheck:
+    name: Vulnerability Scan
+    needs: changes
+    if: needs.changes.outputs.go == 'true'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v7
+
+      - name: Set up Go
+        uses: actions/setup-go@v7
+        with:
+          go-version: '1.25'
+          cache: true
+
+      - name: Create dummy UI dist for Go embed
+        run: mkdir -p pkg/server/ui-dist && touch pkg/server/ui-dist/index.html
+
+      - name: Run govulncheck
+        run: |
+          go install golang.org/x/vuln/cmd/govulncheck@latest
+          "$(go env GOPATH)/bin/govulncheck" ./...
+
+  # 40+ shell scripts, none linted -- including the EDR-critical ones, where an unchecked exit
+  # code is what let the pre-commit hook run zero tests while reporting success (#1334).
+  #
+  # Containerised to match how golangci-lint and gitleaks already run here, so there is no new
+  # tool to install.
+  #
+  # -S error, not -S warning, and deliberately so. Measured on the tree at the time this landed:
+  # -S error is clean, while -S warning reports 34 findings across 18 files (SC2088, SC2087,
+  # SC2034, SC1007, SC2206, SC2046, SC2207). Enforcing a level the tree does not meet would mean
+  # landing a red job and teaching people to ignore it. This sets a floor that holds today and
+  # catches genuine errors; raising it to -S warning is tracked separately.
+  shellcheck:
+    name: Shell Lint
+    needs: changes
+    if: needs.changes.outputs.shell == 'true'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v7
+
+      - name: Run shellcheck
+        run: |
+          mapfile -t FILES < <(git ls-files '*.sh')
+          echo "Linting ${#FILES[@]} shell scripts..."
+          docker run --rm -v "$(pwd)":/mnt -w /mnt koalaman/shellcheck:v0.11.0 \
+            -S error -x "${FILES[@]}"
 
   test:
     name: Test Suite
+    needs: changes
+    if: needs.changes.outputs.go == 'true'
     runs-on: ${{ matrix.os }}
     strategy:
       fail-fast: false
@@ -160,6 +311,8 @@ jobs:
 
   e2e-test:
     name: E2E Docker Integration Test
+    needs: changes
+    if: needs.changes.outputs.go == 'true'
     runs-on: ubuntu-latest
     steps:
       - name: Checkout Code
@@ -180,6 +333,8 @@ jobs:
   # lease kicks never existed. Wired in so it cannot rot unnoticed again (#1254).
   e2e-edge-test:
     name: E2E Multi-Region Edge Test
+    needs: changes
+    if: needs.changes.outputs.go == 'true'
     runs-on: ubuntu-latest
     steps:
       - name: Checkout Code
@@ -196,6 +351,8 @@ jobs:
 
   e2e-ui-test:
     name: E2E Playwright UI Test
+    needs: changes
+    if: needs.changes.outputs.ui == 'true' || needs.changes.outputs.go == 'true'
     runs-on: ubuntu-latest
     steps:
       - name: Checkout Code

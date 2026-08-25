@@ -57,7 +57,7 @@ help:
 	@echo "  make build        - Clean and build client and server binaries"
 	@echo "  make deploy       - Cross-compile and deploy server binary to VPS"
 	@echo "  make clean        - Delete build binaries"
-	@echo "  make install-hook - Install the native Git secrets pre-commit hook"
+	@echo "  make install-hook - Install the native Git pre-commit and pre-push hooks"
 	@echo "  make help         - Show this help message"
 
 fmt:
@@ -134,9 +134,14 @@ e2e-edge:
 e2e-ui:
 	@./scripts/run-e2e-ui.sh
 
+# Installs both hooks (#1343). pre-commit is the fast, irreversible-only set; pre-push carries
+# vet, tests and the conditional UI build. Installing only one of the two leaves a gap rather
+# than a slow hook, so they go together.
 install-hook:
-	@echo "Installing native git pre-commit hook..."
+	@echo "Installing native git hooks..."
 	@cp scripts/pre-commit-hook.sh .git/hooks/pre-commit
 	@chmod +x .git/hooks/pre-commit
-	@echo "Pre-commit hook installed successfully."
+	@cp scripts/pre-push-hook.sh .git/hooks/pre-push
+	@chmod +x .git/hooks/pre-push
+	@echo "pre-commit and pre-push hooks installed successfully."
 

@@ -651,8 +651,16 @@ var shutdownMigrationPollInterval = time.Second
 // Deliberately not started for a client pinned with -server: that client will not fail over
 // (see #1275), so cancelling its session would drop the tunnel with nothing to move to.
 func (e *InterceptorEngine) StartShutdownMigrator(ctx context.Context, cancel context.CancelFunc) {
+	// Read the tunable on the caller's goroutine, not inside the one being started (#1328).
+	// Read inside, it raced every test that sets the interval and restores it with a defer:
+	// the restore is a write from the test's goroutine, the ticker construction a read from
+	// this one, and nothing orders them -- the goroutine may not be scheduled until after
+	// the test has already returned. Hoisting the read makes the ordering the caller's, which
+	// is deterministic. Same class as #1131, and the same shape as StartFailbackProber below,
+	// which already reads its interval from the engine before starting.
+	pollInterval := shutdownMigrationPollInterval
 	go func() {
-		ticker := time.NewTicker(shutdownMigrationPollInterval)
+		ticker := time.NewTicker(pollInterval)
 		defer ticker.Stop()
 
 		for {

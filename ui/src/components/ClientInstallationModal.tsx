@@ -5,6 +5,7 @@ export default function ClientInstallationModal({ isOpen, onClose, serverConfig 
   const [activeTab, setActiveTab] = useState<'macos' | 'windows' | 'linux'>('macos');
   const [copied, setCopied] = useState<string | null>(null);
   const { t } = useI18n();
+  const baseUrl = serverConfig?.DefaultServerURL || (typeof window !== 'undefined' ? window.location.origin : 'https://lfr-demo.se');
 
   useEffect(() => {
     if (isOpen) {
@@ -38,39 +39,51 @@ export default function ClientInstallationModal({ isOpen, onClose, serverConfig 
         onClick={e => e.stopPropagation()}
         role="dialog"
         aria-modal="true"
-        aria-labelledby="client-install-modal-title"
+        aria-labelledby="install-guide-title"
       >
         
-        {/* Header */}
-        <div className="modal-header mb-md">
-          <h2 id="client-install-modal-title" className="modal-title text-md">{t('guide_title', 'Client Installation Guide')}</h2>
-          <button type="button" onClick={onClose} className="modal-close" aria-label={t('close', 'Close')}>×</button>
-        </div>
-        
-        <div className="text-xs text-muted mb-xl">
-          {t('guide_desc', 'Choose your Operating System below to see the recommended command-line installation or direct downloads.')}
-        </div>
-
-        {/* Tab Headers */}
-        <div className="sub-tabs mb-xl">
-          {(['macos', 'windows', 'linux'] as const).map(os => (
-            <button 
-              type="button"
-              key={os}
-              onClick={() => setActiveTab(os)}
-              className={`sub-tab ${activeTab === os ? 'sub-tab--active' : ''}`}
-            >
-              {t(`guide_tab_${os}`, os === 'macos' ? 'macOS' : os === 'windows' ? 'Windows' : 'Linux')}
-            </button>
-          ))}
+        <div className="modal-header border-b pb-md">
+          <div>
+            <h3 id="install-guide-title" className="m-0 text-md fw-bold flex items-center gap-xs">
+              <span>🚀</span> {t('guide_title', 'Client Installation Guide')}
+            </h3>
+            <p className="text-muted text-2xs mt-xs m-0">
+              {t('guide_subtitle', 'Choose your platform to quickly set up lfr-tunnel on your machine.')}
+            </p>
+          </div>
+          <button type="button" aria-label={t('close', 'Close')} className="modal-close-btn" onClick={onClose}>&times;</button>
         </div>
 
-        {/* Tab Contents */}
-        <div className="flex-1 overflow-y-auto pr-xs mb-xl">
+        {/* Tab Selection */}
+        <div className="flex border-b border-subtle mt-md">
+          <button 
+            type="button"
+            className={`tab-btn flex-1 py-xs text-xs fw-bold transition-all ${activeTab === 'macos' ? 'tab-btn--active text-main border-b-2 border-primary' : 'text-muted hover:text-main'}`}
+            onClick={() => setActiveTab('macos')}
+          >
+            🍎 macOS
+          </button>
+          <button 
+            type="button"
+            className={`tab-btn flex-1 py-xs text-xs fw-bold transition-all ${activeTab === 'windows' ? 'tab-btn--active text-main border-b-2 border-primary' : 'text-muted hover:text-main'}`}
+            onClick={() => setActiveTab('windows')}
+          >
+            🪟 Windows
+          </button>
+          <button 
+            type="button"
+            className={`tab-btn flex-1 py-xs text-xs fw-bold transition-all ${activeTab === 'linux' ? 'tab-btn--active text-main border-b-2 border-primary' : 'text-muted hover:text-main'}`}
+            onClick={() => setActiveTab('linux')}
+          >
+            🐧 Linux
+          </button>
+        </div>
+
+        <div className="modal-body py-lg overflow-y-auto flex-1">
           {/* macOS */}
           {activeTab === 'macos' && (
             <div className="animation-fade-in">
-              <h4 className="text-xs fw-bold mb-xs">🚀 {t('guide_macos_title', 'Apple Silicon (M1/M2/M3) & Intel Macs')}</h4>
+              <h4 className="text-xs fw-bold mb-xs">🚀 {t('guide_macos_title', 'macOS (Apple Silicon & Intel)')}</h4>
               
               {!serverConfig?.disable_brew && (
                 <>
@@ -90,8 +103,8 @@ export default function ClientInstallationModal({ isOpen, onClose, serverConfig 
                 {t('guide_macos_direct', 'Direct Installation Script (Alternative):')}
               </div>
               <div className="code-box">
-                <span>curl -fsSL https://tunnel.lfr-demo.se/install | sh</span>
-                <button type="button" aria-label={t('copy', 'Copy')} className="copy-btn" onClick={() => handleCopy('curl -fsSL https://tunnel.lfr-demo.se/install | sh', 'macos-direct')}>
+                <span>{`curl -fsSL ${baseUrl}/install | sh`}</span>
+                <button type="button" aria-label={t('copy', 'Copy')} className="copy-btn" onClick={() => handleCopy(`curl -fsSL ${baseUrl}/install | sh`, 'macos-direct')}>
                   {copied === 'macos-direct' ? '✓' : '📋'}
                 </button>
               </div>
@@ -130,8 +143,8 @@ export default function ClientInstallationModal({ isOpen, onClose, serverConfig 
                 {t('guide_windows_direct', 'Direct Installation (PowerShell Script):')}
               </div>
               <div className="code-box">
-                <span>irm https://tunnel.lfr-demo.se/install.ps1 | iex</span>
-                <button type="button" aria-label={t('copy', 'Copy')} className="copy-btn" onClick={() => handleCopy('irm https://tunnel.lfr-demo.se/install.ps1 | iex', 'win-direct')}>
+                <span>{`irm ${baseUrl}/install.ps1 | iex`}</span>
+                <button type="button" aria-label={t('copy', 'Copy')} className="copy-btn" onClick={() => handleCopy(`irm ${baseUrl}/install.ps1 | iex`, 'win-direct')}>
                   {copied === 'win-direct' ? '✓' : '📋'}
                 </button>
               </div>
@@ -153,8 +166,8 @@ export default function ClientInstallationModal({ isOpen, onClose, serverConfig 
                 {t('guide_linux_direct', 'Direct Installation Script:')}
               </div>
               <div className="code-box">
-                <span>curl -fsSL https://tunnel.lfr-demo.se/install | sh</span>
-                <button type="button" aria-label={t('copy', 'Copy')} className="copy-btn" onClick={() => handleCopy('curl -fsSL https://tunnel.lfr-demo.se/install | sh', 'linux-direct')}>
+                <span>{`curl -fsSL ${baseUrl}/install | sh`}</span>
+                <button type="button" aria-label={t('copy', 'Copy')} className="copy-btn" onClick={() => handleCopy(`curl -fsSL ${baseUrl}/install | sh`, 'linux-direct')}>
                   {copied === 'linux-direct' ? '✓' : '📋'}
                 </button>
               </div>

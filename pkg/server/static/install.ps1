@@ -7,7 +7,7 @@ $Binary = "lfr-tunnel-windows-amd64.exe"
 
 $ServerUrl = "{{SERVER_URL}}"
 If ([string]::IsNullOrEmpty($ServerUrl) -or $ServerUrl -eq "{{SERVER_URL}}") {
-    $ServerUrl = "https://tunnel.lfr-demo.se"
+    $ServerUrl = "https://lfr-demo.se"
 }
 $Url = "$ServerUrl/static/downloads/$Binary"
 
@@ -52,6 +52,17 @@ if ($UserPath -notlike "*$InstallDir*") {
     Write-Host "Adding $InstallDir to user PATH..."
     [Environment]::SetEnvironmentVariable("Path", "$UserPath;$InstallDir", "User")
     $env:Path += ";$InstallDir"
+}
+
+# Configure LDM (liferay-docker-manager) auto-discovery to prevent un-whitelisted auto-downloads
+[Environment]::SetEnvironmentVariable("LDM_LFR_TUNNEL_BIN", $DestPath, "User")
+$env:LDM_LFR_TUNNEL_BIN = $DestPath
+if (Test-Path "$Home\.ldm") {
+    $LdmBinDir = "$Home\.ldm\bin"
+    if (!(Test-Path $LdmBinDir)) { New-Item -ItemType Directory -Force -Path $LdmBinDir | Out-Null }
+    $LdmTarget = "$LdmBinDir\lfr-tunnel.exe"
+    if (Test-Path $LdmTarget) { Remove-Item -Force $LdmTarget -ErrorAction SilentlyContinue }
+    New-Item -ItemType HardLink -Path $LdmTarget -Target $DestPath -ErrorAction SilentlyContinue | Out-Null
 }
 
 Write-Host "lfr-tunnel installed successfully to $DestPath"

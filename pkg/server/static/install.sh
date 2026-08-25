@@ -20,7 +20,7 @@ esac
 # Server URL injected by Gateway
 SERVER_URL="{{SERVER_URL}}"
 if [ -z "$SERVER_URL" ] || [ "$SERVER_URL" = "{{SERVER_URL}}" ]; then
-  SERVER_URL="https://tunnel.lfr-demo.se"
+  SERVER_URL="https://lfr-demo.se"
 fi
 
 BINARY="lfr-tunnel-${OS}-${ARCH}"
@@ -70,6 +70,12 @@ else
   sudo mv /tmp/lfr-tunnel "$INSTALL_PATH"
 fi
 echo "lfr-tunnel installed to ${INSTALL_PATH}"
+
+# LDM (liferay-docker-manager) auto-discovery integration
+if [ -d "${HOME}/.ldm" ]; then
+  mkdir -p "${HOME}/.ldm/bin" 2>/dev/null || true
+  ln -sf "$INSTALL_PATH" "${HOME}/.ldm/bin/lfr-tunnel" 2>/dev/null || true
+fi
 
 # Advise on PATH if the target directory is not already present
 case ":${PATH}:" in

@@ -155,6 +155,12 @@ type BlacklistEntry struct {
 	IPAddress string    `json:"ip_address"`
 	Reason    string    `json:"reason"`
 	CreatedAt time.Time `json:"created_at"`
+	// ExpiresAt is nil for a ban that never expires -- which is what a manual ban by an admin
+	// is. Automatic bans carry a real expiry (#1353).
+	ExpiresAt *time.Time `json:"expires_at,omitempty"`
+	// BanCount is how many times this address has been auto-banned, and drives the escalating
+	// ban time. It survives expiry, so a repeat offender does not start from zero each time.
+	BanCount int `json:"ban_count"`
 }
 
 // VanityDomainStatus tracks a custom/vanity domain's provisioning progress through the

@@ -74,22 +74,34 @@ func TestServer_EdgeControlWS_AuthenticationAndPubSub(t *testing.T) {
 		t.Error("expected edge client 'usedge' to be authenticated and registered on the control plane, but it wasn't")
 	}
 
-	// 3. Test IP Blacklist Broadcast propagation
+	// 3. Test IP Blacklist Broadcast propagation. nil is a ban with no expiry, which is what a
+	// manual admin ban is.
 	testIP := "198.51.100.42"
-	controlSrv.BroadcastBlacklistUpdate("add", testIP)
+	controlSrv.BroadcastBlacklistUpdate("add", testIP, nil)
 
 	// Wait for WS propagation
 	time.Sleep(100 * time.Millisecond)
 
-	if _, blocked := edgeSrv.blacklist.Load(testIP); !blocked {
+	if !edgeSrv.isBlacklisted(testIP) {
 		t.Error("expected IP to be blacklisted on the Edge node via WS propagation")
 	}
 
-	controlSrv.BroadcastBlacklistUpdate("remove", testIP)
+	controlSrv.BroadcastBlacklistUpdate("remove", testIP, nil)
 	time.Sleep(100 * time.Millisecond)
 
-	if _, blocked := edgeSrv.blacklist.Load(testIP); blocked {
+	if edgeSrv.isBlacklisted(testIP) {
 		t.Error("expected IP to be removed from the blacklist on the Edge node via WS propagation")
+	}
+
+	// 3b. An automatic ban carries its expiry across the control channel, so the edge lifts it
+	// at the same moment the control plane does rather than holding it forever (#1353).
+	expiringIP := "198.51.100.43"
+	expiry := time.Now().Add(80 * time.Millisecond)
+	controlSrv.BroadcastBlacklistUpdate("add", expiringIP, &expiry)
+	time.Sleep(100 * time.Millisecond)
+
+	if edgeSrv.isBlacklisted(expiringIP) {
+		t.Error("an expiring ban was still in force on the Edge node after its expiry -- the edge would outlive the control plane's ban")
 	}
 
 	// 4. Test Lease Kick propagation

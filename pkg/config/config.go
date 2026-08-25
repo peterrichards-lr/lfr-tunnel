@@ -127,11 +127,12 @@ type ServerConfig struct {
 	// distinct from DisableEmailLogin, which only affects the email-specific login/register
 	// UI and backend path; without this flag, first-time SSO login always auto-provisioned
 	// a new account with no way to close that off independent of disabling SSO entirely.
-	DisableNewRegistrations bool `yaml:"disable_new_registrations"`
-	DisableClientDownloads  bool `yaml:"disable_client_downloads"`
-	DisableBrew             bool `yaml:"disable_brew"`
-	DisableScoop            bool `yaml:"disable_scoop"`
-	DisableAPIRateLimit     bool `yaml:"disable_api_rate_limit"`
+	DisableNewRegistrations bool          `yaml:"disable_new_registrations"`
+	DisableClientDownloads  bool          `yaml:"disable_client_downloads"`
+	DisableBrew             bool          `yaml:"disable_brew"`
+	DisableScoop            bool          `yaml:"disable_scoop"`
+	DisableAPIRateLimit     bool          `yaml:"disable_api_rate_limit"`
+	AutoBan                 AutoBanConfig `yaml:"auto_ban"`
 	// TrustedProxies lists the CIDRs whose X-Real-IP / X-Forwarded-For headers may be believed
 	// (#1325). A header is only as trustworthy as the hop that set it, and the resolved address
 	// drives the per-tunnel IP whitelist, the API rate limiter and every audit entry.
@@ -234,6 +235,36 @@ type SSOProviderConfig struct {
 	SkipIssuerCheck bool   `yaml:"skip_issuer_check"`
 }
 
+// AutoBanConfig governs the automatic bans the API rate limiter issues (#1353).
+//
+// Modelled on fail2ban, because the failure mode it guards against is the same: an automatic
+// ban acts on a noisy signal -- shared NAT, CGNAT, mobile carriers and corporate egress all
+// look like one busy address -- so a ban that never lifts eventually punishes someone who did
+// nothing. fail2ban answers that with a finite ban time, a longer one for repeat offenders,
+// and an ignore list; so does this.
+//
+// The blacklist is enforced ahead of all routing, so a banned address cannot reach the admin
+// API to undo its own ban. That is what makes the expiry matter rather than merely being tidy.
+type AutoBanConfig struct {
+	// Duration is the ban time for a first offence. Zero means the ban never expires, which
+	// was the behaviour before this existed -- available deliberately, but not the default.
+	Duration time.Duration `yaml:"duration"`
+	// Increment turns on longer bans for repeat offenders (fail2ban's bantime.increment).
+	Increment bool `yaml:"increment"`
+	// Factor multiplies the ban time per prior ban. 2 doubles it each time.
+	Factor float64 `yaml:"factor"`
+	// MaxDuration caps the escalation, so a repeat offender cannot reach a ban that is
+	// effectively permanent by another route.
+	MaxDuration time.Duration `yaml:"max_duration"`
+	// HistoryRetention is how long an expired ban is kept so that escalation still sees it.
+	// An address only starts from zero once it has stayed clean for this long.
+	HistoryRetention time.Duration `yaml:"history_retention"`
+	// Ignore lists CIDRs that are never auto-banned -- fail2ban's ignoreip. Loopback is the
+	// default: locking an operator out of their own gateway is a worse outcome than a missed
+	// ban, and the ban cannot be lifted from the banned address.
+	Ignore []string `yaml:"ignore"`
+}
+
 type EdgeNodeConfig struct {
 	ID        string `yaml:"id"`
 	TokenHash string `yaml:"token_hash"`
@@ -332,6 +363,18 @@ func DefaultServerConfig() *ServerConfig {
 		DockerBypassURL:            DefaultDockerBypassURL,
 		VisitorTimeout:             5 * time.Minute,
 		EnableWAF:                  true,
+		// 24h matches what the ban alert has always told operators, and sits in the range the
+		// comparable tools use for an automated block. Escalation is on by default: a genuine
+		// repeat offender should be held longer, and it is the presence of escalation that
+		// makes a finite first ban safe rather than lenient.
+		AutoBan: AutoBanConfig{
+			Duration:         24 * time.Hour,
+			Increment:        true,
+			Factor:           2,
+			MaxDuration:      7 * 24 * time.Hour,
+			HistoryRetention: 30 * 24 * time.Hour,
+			Ignore:           []string{"127.0.0.1/32", "::1/128"},
+		},
 		RoleSettings: map[string]RoleSetting{
 			"admin": {
 				AllowAutoReservation: &trueVal,

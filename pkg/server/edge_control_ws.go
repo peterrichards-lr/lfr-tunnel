@@ -66,6 +66,8 @@ type ControlMessage struct {
 	Duration         int               `json:"duration,omitempty"`
 	UserID           string            `json:"user_id,omitempty"`
 	Subdomain        string            `json:"subdomain,omitempty"`
+	FullHost         string            `json:"full_host,omitempty"`
+	TargetURL        string            `json:"target_url,omitempty"`
 	SecondsRemaining int               `json:"seconds_remaining,omitempty"`
 	ShutdownAt       int64             `json:"shutdown_at,omitempty"`
 	Headers          map[string]string `json:"headers,omitempty"`
@@ -366,6 +368,29 @@ func (s *Server) BroadcastMaintenance(action string, duration int, reason string
 		Action:   action, // "enable" or "disable"
 		Duration: duration,
 		Reason:   reason,
+	}
+
+	payload, err := json.Marshal(msg)
+	if err != nil {
+		return
+	}
+
+	s.edgeClientsMu.RLock()
+	defer s.edgeClientsMu.RUnlock()
+
+	for _, conn := range s.edgeClients {
+		_ = conn.WriteMessage(websocket.TextMessage, payload) //nolint:errcheck
+	}
+}
+
+// BroadcastRouteUpdate pushes a routing table update to all connected Edge nodes (issue #1249).
+func (s *Server) BroadcastRouteUpdate(action, fullHost, targetURL, nodeID string) {
+	msg := ControlMessage{
+		Type:      "route_update",
+		Action:    action, // "add" or "remove"
+		FullHost:  fullHost,
+		TargetURL: targetURL,
+		NodeID:    nodeID,
 	}
 
 	payload, err := json.Marshal(msg)
@@ -872,6 +897,20 @@ func (s *Server) runEdgeControlChannel() {
 			case "restart":
 				slog.Info("[Edge Control] Restart request received from Control Plane. Exiting...")
 				os.Exit(1)
+			case "route_update":
+				s.remoteRoutesMu.Lock()
+				if s.remoteRoutes == nil {
+					s.remoteRoutes = make(map[string]string)
+				}
+				switch msg.Action {
+				case "add":
+					slog.Info(fmt.Sprintf("[Edge Control] Route added for %s -> %s (node: %s)", msg.FullHost, msg.TargetURL, msg.NodeID))
+					s.remoteRoutes[msg.FullHost] = msg.TargetURL
+				case "remove":
+					slog.Info(fmt.Sprintf("[Edge Control] Route removed for %s", msg.FullHost))
+					delete(s.remoteRoutes, msg.FullHost)
+				}
+				s.remoteRoutesMu.Unlock()
 			case "blacklist_update":
 				switch msg.Action {
 				case "add":

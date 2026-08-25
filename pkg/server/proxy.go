@@ -6,6 +6,7 @@ import (
 	"crypto/rand"
 	"crypto/sha256"
 	"crypto/subtle"
+	"crypto/tls"
 	"crypto/x509"
 	_ "embed"
 	"encoding/base64"
@@ -18,6 +19,7 @@ import (
 	"net"
 	"net/http"
 	"net/http/httputil"
+	"net/url"
 	"strconv"
 	"strings"
 	"sync"
@@ -39,14 +41,19 @@ var passcodeHTML []byte
 //go:embed unauthorized_ip.html
 var unauthorizedIPHTML []byte
 
+// RemoteRouteResolver resolves the target gateway URL and node ID for a host whose lease
+// is held by another gateway in the cluster (issue #1249).
+type RemoteRouteResolver func(host string) (targetURL string, nodeID string, exists bool)
+
 // ProxyHandler handles incoming HTTP/HTTPS proxy traffic, routing it to the active tunnel.
 type ProxyHandler struct {
-	registry     *Registry
-	config       *config.ServerConfig
-	limiters     sync.Map // Map of host -> *rate.Limiter
-	caCert       *x509.Certificate
-	db           *db.DB
-	cookieSecret []byte
+	registry            *Registry
+	config              *config.ServerConfig
+	limiters            sync.Map // Map of host -> *rate.Limiter
+	caCert              *x509.Certificate
+	db                  *db.DB
+	cookieSecret        []byte
+	remoteRouteResolver RemoteRouteResolver
 }
 
 // NewProxyHandler creates a new ProxyHandler instance.
@@ -58,6 +65,12 @@ func NewProxyHandler(registry *Registry, cfg *config.ServerConfig) *ProxyHandler
 		config:       cfg,
 		cookieSecret: secret,
 	}
+}
+
+// SetRemoteRouteResolver configures the callback used to locate and proxy traffic to
+// remote gateways during DNS propagation (issue #1249).
+func (p *ProxyHandler) SetRemoteRouteResolver(resolver RemoteRouteResolver) {
+	p.remoteRouteResolver = resolver
 }
 
 // RemoveRateLimiter deletes the rate limiter associated with the given host.
@@ -94,8 +107,21 @@ func (p *ProxyHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		host = h
 	}
 
+	// 2. Web Application Firewall (WAF) Protection
+	if p.config != nil && p.config.EnableWAF {
+		if blocked, category, reason := IsMaliciousRequest(r); blocked {
+			clientIP := getClientIP(r)
+			slog.Info(fmt.Sprintf("[WAF] Blocked malicious request on %s from IP %s. Category: %s, Reason: %s", host, clientIP, category, reason))
+			p.serveBlockedPage(w, r, host, category, reason, clientIP)
+			return
+		}
+	}
+
 	lease, exists := p.registry.GetLease(host)
 	if !exists {
+		if p.tryCrossNodeProxy(w, r, host) {
+			return
+		}
 		p.serveNoTunnel(w, r, host)
 		return
 	}
@@ -107,16 +133,6 @@ func (p *ProxyHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 			p.injectCORSHeaders(w.Header(), origin)
 			w.Header().Set("Access-Control-Max-Age", "86400")
 			w.WriteHeader(http.StatusNoContent)
-			return
-		}
-	}
-
-	// 2.3 Web Application Firewall (WAF) Protection
-	if p.config != nil && p.config.EnableWAF {
-		if blocked, category, reason := IsMaliciousRequest(r); blocked {
-			clientIP := getClientIP(r)
-			slog.Info(fmt.Sprintf("[WAF] Blocked malicious request on %s from IP %s. Category: %s, Reason: %s", host, clientIP, category, reason))
-			p.serveBlockedPage(w, r, host, category, reason, clientIP)
 			return
 		}
 	}
@@ -220,6 +236,146 @@ func (p *ProxyHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 
 	// 4. Forward the request
 	proxy.ServeHTTP(w, r)
+}
+
+// tryCrossNodeProxy forwards a request to another gateway holding the lease when
+// this gateway does not hold a local lease (e.g. during DNS propagation or failover, issue #1249).
+// Returns true if the request was handled/proxied, false if it should fall through to serveNoTunnel.
+func (p *ProxyHandler) tryCrossNodeProxy(w http.ResponseWriter, r *http.Request, host string) bool {
+	if p.remoteRouteResolver == nil {
+		return false
+	}
+
+	// 1. Check hop limit (max 2 hops: Edge A -> Central -> Edge B)
+	hopStr := r.Header.Get("X-LFR-Cross-Node-Hop")
+	hops := 0
+	if hopStr != "" {
+		if parsedHops, err := strconv.Atoi(hopStr); err == nil {
+			hops = parsedHops
+		}
+		if hops >= 2 {
+			slog.Info(fmt.Sprintf("[Proxy] Cross-node proxy hop limit reached for %s (hops=%d)", host, hops))
+			return false
+		}
+	}
+
+	// 2. Check loop prevention (visited nodes)
+	visited := r.Header.Get("X-LFR-Cross-Node-Visited")
+	var currentNodeID string
+	if p.registry != nil {
+		currentNodeID = p.registry.localNodeID()
+	}
+	if currentNodeID == "" {
+		currentNodeID = "control"
+	}
+
+	if visited != "" {
+		for _, v := range strings.Split(visited, ",") {
+			if strings.TrimSpace(v) == currentNodeID {
+				slog.Info(fmt.Sprintf("[Proxy] Cross-node loop detected for %s: node %s already visited in [%s]", host, currentNodeID, visited))
+				return false
+			}
+		}
+	}
+
+	// 3. Resolve target route
+	targetURL, targetNodeID, exists := p.remoteRouteResolver(host)
+	if !exists || targetURL == "" {
+		return false
+	}
+
+	if targetNodeID == currentNodeID {
+		// Target is reported as this node, but we already know we have no local lease for it.
+		return false
+	}
+
+	// Check if targetNodeID was already visited
+	if visited != "" {
+		for _, v := range strings.Split(visited, ",") {
+			if strings.TrimSpace(v) == targetNodeID {
+				slog.Info(fmt.Sprintf("[Proxy] Cross-node loop prevented for %s: target node %s already in [%s]", host, targetNodeID, visited))
+				return false
+			}
+		}
+	}
+
+	// 4. Ensure targetURL has a scheme
+	if !strings.HasPrefix(targetURL, "http://") && !strings.HasPrefix(targetURL, "https://") {
+		targetURL = "http://" + targetURL
+	}
+
+	targetParsed, err := url.Parse(targetURL)
+	if err != nil {
+		slog.Info(fmt.Sprintf("[Proxy] Invalid cross-node target URL %q for %s: %v", targetURL, host, err))
+		return false
+	}
+
+	// 5. Build reverse proxy
+	proxy := &httputil.ReverseProxy{
+		Director: func(req *http.Request) {
+			req.URL.Scheme = targetParsed.Scheme
+			req.URL.Host = targetParsed.Host
+			if targetParsed.Path != "" && targetParsed.Path != "/" {
+				req.URL.Path = singleJoiningSlash(targetParsed.Path, req.URL.Path)
+			}
+			// Keep req.Host intact so the downstream gateway identifies the tunnel lease
+			req.Host = host
+
+			clientIP := getClientIP(r)
+			if priorFor := req.Header.Get("X-Forwarded-For"); priorFor != "" {
+				req.Header.Set("X-Forwarded-For", priorFor+", "+clientIP)
+			} else {
+				req.Header.Set("X-Forwarded-For", clientIP)
+			}
+			if req.Header.Get("X-Real-IP") == "" {
+				req.Header.Set("X-Real-IP", clientIP)
+			}
+			if req.Header.Get("X-Forwarded-Host") == "" {
+				req.Header.Set("X-Forwarded-Host", host)
+			}
+			if req.Header.Get("X-Forwarded-Proto") == "" {
+				proto := "http"
+				if r.TLS != nil || strings.ToLower(r.Header.Get("X-Forwarded-Proto")) == "https" {
+					proto = "https"
+				}
+				req.Header.Set("X-Forwarded-Proto", proto)
+			}
+
+			// Add cross-node tracing and loop prevention headers
+			req.Header.Set("X-LFR-Cross-Node-Hop", strconv.Itoa(hops+1))
+			if visited == "" {
+				req.Header.Set("X-LFR-Cross-Node-Visited", currentNodeID)
+			} else {
+				req.Header.Set("X-LFR-Cross-Node-Visited", visited+","+currentNodeID)
+			}
+		},
+		ErrorHandler: func(w http.ResponseWriter, req *http.Request, err error) {
+			slog.Info(fmt.Sprintf("[Proxy] Cross-node routing failure for %s to %s (%s): %v", host, targetNodeID, targetURL, err))
+			p.serveOfflinePage(w, req, host, http.StatusBadGateway)
+		},
+	}
+
+	if p.config != nil && p.config.InsecureSkipVerify {
+		proxy.Transport = &http.Transport{
+			TLSClientConfig: &tls.Config{InsecureSkipVerify: true},
+		}
+	}
+
+	slog.Info(fmt.Sprintf("[Proxy] Cross-node routing %s to %s (%s, hop %d)", host, targetNodeID, targetURL, hops+1))
+	proxy.ServeHTTP(w, r)
+	return true
+}
+
+func singleJoiningSlash(a, b string) string {
+	aslash := strings.HasSuffix(a, "/")
+	bslash := strings.HasPrefix(b, "/")
+	switch {
+	case aslash && bslash:
+		return a + b[1:]
+	case !aslash && !bslash:
+		return a + "/" + b
+	}
+	return a + b
 }
 
 // retryAfterSeconds is what a transiently-unavailable tunnel asks callers to wait. Short,

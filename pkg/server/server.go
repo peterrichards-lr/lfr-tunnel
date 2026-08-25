@@ -278,6 +278,8 @@ type Server struct {
 	startTime      time.Time
 	edgeLeases     map[string][]EdgeLease
 	edgeLeasesMu   sync.Mutex
+	remoteRoutes   map[string]string // fullHost -> targetURL for fast cross-node proxying (issue #1249)
+	remoteRoutesMu sync.RWMutex
 	// dns keeps each tunnel's public name pointed at the gateway serving it, via an
 	// operator-supplied hook. No-ops unless dns_hook is configured (#1247).
 	dns               *dnsPublisher
@@ -410,6 +412,7 @@ func NewServer(cfg *config.ServerConfig) (*Server, error) {
 		caCert:             caCert,
 		caKey:              caKey,
 		edgeLeases:         make(map[string][]EdgeLease),
+		remoteRoutes:       make(map[string]string),
 		dns:                newDNSPublisher(cfg.DNSHook, cfg.DNSWithdrawGrace),
 		edgeHealth:         make(map[string]EdgeHealthStatus),
 		outboundConnected:  true,
@@ -418,6 +421,7 @@ func NewServer(cfg *config.ServerConfig) (*Server, error) {
 
 	srv.proxyHandler.db = database
 	srv.proxyHandler.caCert = caCert
+	srv.proxyHandler.SetRemoteRouteResolver(srv.resolveRemoteRouteForHost)
 	srv.webhooks = webhook.NewWebhookService(cfg.Webhooks, database)
 	srv.portalService = NewPortalService(srv.db, srv.cfg, srv.notifications, &srv.portalMap, caCert, caKey)
 
@@ -1779,6 +1783,11 @@ func (s *Server) handleRegister(w http.ResponseWriter, r *http.Request) {
 		// landing side of a planned move: writing the record now replaces the edge's
 		// immediately, instead of waiting on that edge's withdrawal to arrive (#1247).
 		s.publishTunnelDNS(lease.FullHost, centralTarget)
+		centralURL := s.cfg.CentralURL
+		if centralURL == "" && len(s.cfg.Domains) > 0 {
+			centralURL = "https://tunnel." + s.cfg.Domains[0]
+		}
+		s.BroadcastRouteUpdate("add", lease.FullHost, centralURL, "control")
 	}
 
 	var warning string
@@ -5468,6 +5477,61 @@ type EdgeLease struct {
 	CreatedAt     time.Time `json:"created_at"`
 }
 
+// resolveRemoteRouteForHost finds the target gateway URL and node ID for a host whose lease
+// is held by another gateway in the cluster (issue #1249).
+func (s *Server) resolveRemoteRouteForHost(host string) (string, string, bool) {
+	// If this node is a regional Edge Node:
+	if s.cfg.ControlPlaneURL != "" && s.cfg.EdgeToken != "" {
+		// Check local in-memory routing table for direct routing
+		s.remoteRoutesMu.RLock()
+		if targetURL, ok := s.remoteRoutes[host]; ok && targetURL != "" {
+			s.remoteRoutesMu.RUnlock()
+			return targetURL, "remote-edge", true
+		}
+		s.remoteRoutesMu.RUnlock()
+
+		// Fallback to Control Plane
+		return s.cfg.ControlPlaneURL, "control", true
+	}
+
+	// Otherwise, this is the Control Plane. Query the in-memory edge leases table.
+	s.edgeLeasesMu.Lock()
+	defer s.edgeLeasesMu.Unlock()
+
+	for _, userLeases := range s.edgeLeases {
+		for _, el := range userLeases {
+			if strings.EqualFold(el.FullHost, host) {
+				nodeID := el.NodeID
+				targetURL := s.findEdgeNodeURL(nodeID)
+				if targetURL != "" {
+					return targetURL, nodeID, true
+				}
+				s.edgeClientsMu.RLock()
+				ip := s.edgeIPs[nodeID]
+				s.edgeClientsMu.RUnlock()
+				if ip != "" {
+					return "http://" + ip, nodeID, true
+				}
+				if dnsTarget := s.dnsTargetForEdge(nodeID); dnsTarget != "" {
+					return "http://" + dnsTarget, nodeID, true
+				}
+				return "", nodeID, false
+			}
+		}
+	}
+
+	return "", "", false
+}
+
+func (s *Server) findEdgeNodeURL(nodeID string) string {
+	for _, node := range s.cfg.EdgeNodes {
+		if node.ID == nodeID {
+			return node.URL
+		}
+	}
+	return ""
+}
+
 func (s *Server) handleEdgeRegisterProxy(w http.ResponseWriter, r *http.Request, req RegisterRequest) {
 	activeDomains := topRankedDomain(s.getActiveDomainsForRequest(r, nil))
 	edgeReqPayload := struct {
@@ -5834,6 +5898,12 @@ func (s *Server) handleEdgeRegister(w http.ResponseWriter, r *http.Request) {
 	// the wildcard, and the control plane holds no lease for it (#1247).
 	s.publishTunnelDNS(fullHost, s.dnsTargetForEdge(edgeNodeID))
 
+	edgeTargetURL := s.findEdgeNodeURL(edgeNodeID)
+	if edgeTargetURL == "" {
+		edgeTargetURL = "http://" + s.dnsTargetForEdge(edgeNodeID)
+	}
+	s.BroadcastRouteUpdate("add", fullHost, edgeTargetURL, edgeNodeID)
+
 	actorEmail := user.Email
 	if userRec != nil && userRec.Email != "" {
 		actorEmail = userRec.Email
@@ -5905,6 +5975,7 @@ func (s *Server) handleEdgeDeregister(w http.ResponseWriter, r *http.Request) {
 		// that (#1247).
 		for _, rel := range released {
 			s.withdrawTunnelDNS(rel.host, s.dnsTargetForEdge(rel.nodeID))
+			s.BroadcastRouteUpdate("remove", rel.host, "", rel.nodeID)
 		}
 	}
 

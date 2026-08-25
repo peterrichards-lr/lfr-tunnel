@@ -214,20 +214,9 @@ func (s *Server) handleSSOCallback(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "Failed to generate session ID", http.StatusInternalServerError)
 		return
 	}
-	killedPreviousSession := false
-	s.portalMap.Range(func(key, value interface{}) bool {
-		k := key.(string)
-		if strings.HasPrefix(k, "admin_session_") {
-			sessionData := value.(PortalSessionData)
-			if sessionData.Email == user.Email {
-				s.portalMap.Delete(k)
-				killedPreviousSession = true
-			}
-		}
-		return true
-	})
+	killedPreviousSession := s.sessionStore().killPortalSessionsFor(user.Email)
 
-	s.portalMap.Store("admin_session_"+sessionID, PortalSessionData{
+	s.sessionStore().storePortalSession(sessionID, PortalSessionData{
 		Email:                 user.Email,
 		ExpiresAt:             time.Now().Add(s.cfg.PortalSessionDuration),
 		ClientIP:              r.Header.Get("X-Real-IP"),

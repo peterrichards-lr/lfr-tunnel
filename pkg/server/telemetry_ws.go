@@ -239,17 +239,15 @@ func (s *Server) getUserTelemetryData(user *db.User, sessionToken string, system
 	}
 
 	if sessionToken != "" {
-		if sessionRaw, ok := s.portalMap.Load("admin_session_" + sessionToken); ok {
-			if sessionData, ok := sessionRaw.(PortalSessionData); ok {
-				if sessionData.PreviousLoginAt != nil {
-					resp["last_login_at"] = *sessionData.PreviousLoginAt
-				}
-				if sessionData.KilledPreviousSession {
-					resp["killed_previous_session"] = true
-					// Unset it so the UI only alerts once
-					sessionData.KilledPreviousSession = false
-					s.portalMap.Store("admin_session_"+sessionToken, sessionData)
-				}
+		if sessionData, ok := s.sessionStore().loadPortalSession(sessionToken); ok {
+			if sessionData.PreviousLoginAt != nil {
+				resp["last_login_at"] = *sessionData.PreviousLoginAt
+			}
+			if sessionData.KilledPreviousSession {
+				resp["killed_previous_session"] = true
+				// Unset it so the UI only alerts once
+				sessionData.KilledPreviousSession = false
+				s.sessionStore().storePortalSession(sessionToken, sessionData)
 			}
 		}
 	}

@@ -27,6 +27,11 @@ import (
 // already restart the service outright, so a token would guard nothing while adding a secret
 // to distribute.
 
+// drainRetryAfterSeconds is what a refused registration is told to wait. Sized for a restart:
+// long enough that a client is not hammering a gateway mid-restart, short enough that a client
+// with nowhere else to go is not parked for minutes after it comes back (#1238).
+const drainRetryAfterSeconds = 15
+
 // drainStatus is what a caller polls: whether a shutdown is announced, and how much is still
 // attached. Clients are counted by lease rather than by connection, because a lease is what a
 // visitor's URL resolves to and therefore what actually breaks when the process stops.
@@ -101,6 +106,14 @@ func (s *Server) handleLocalDrain(w http.ResponseWriter, r *http.Request) {
 	}
 
 	respondJSON(w, http.StatusOK, s.currentDrainStatus())
+}
+
+// isDraining reports whether this gateway has announced a pending shutdown. Used to turn new
+// work away while the node empties -- see healthzPayload and the registration paths (#1238).
+func (s *Server) isDraining() bool {
+	s.maintMutex.RLock()
+	defer s.maintMutex.RUnlock()
+	return s.pendingShutdownAt > 0 && s.pendingShutdownAt > time.Now().Unix()
 }
 
 // currentDrainStatus reads the announcement and counts what is still attached.

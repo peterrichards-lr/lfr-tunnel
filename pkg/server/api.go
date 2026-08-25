@@ -59,11 +59,7 @@ func (s *Server) getCurrentUserRaw(r *http.Request) (*db.User, error) {
 	if err != nil {
 		return nil, err
 	}
-	sessionRaw, ok := s.portalMap.Load("admin_session_" + cookie.Value)
-	if !ok {
-		return nil, http.ErrNoCookie
-	}
-	sessionData, ok := sessionRaw.(PortalSessionData)
+	sessionData, ok := s.sessionStore().loadPortalSession(cookie.Value)
 	if !ok {
 		return nil, http.ErrNoCookie
 	}

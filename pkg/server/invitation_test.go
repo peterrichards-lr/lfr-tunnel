@@ -137,8 +137,13 @@ func TestInvitationAPIEndpoints(t *testing.T) {
 
 	// Mock session loader
 	sessionToken := "test-session-token"
+	// ExpiresAt matters now. getCurrentUserRaw used to read the session map directly with no
+	// expiry check, so a fixture with a zero time authenticated fine -- and so, in production,
+	// did a session that had already expired, on every /api path that resolves a user through
+	// it. Both go through one store now, and it enforces expiry (#1304).
 	srv.portalMap.Store("admin_session_"+sessionToken, PortalSessionData{
-		Email: userEmail,
+		Email:     userEmail,
+		ExpiresAt: time.Now().Add(time.Hour),
 	})
 
 	// Helper to add auth cookie

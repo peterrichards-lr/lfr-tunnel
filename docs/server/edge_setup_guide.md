@@ -287,6 +287,63 @@ if anything claims the name in the meantime. That is also what makes a planned m
 new gateway publishes as it registers, and the old gateway's pending withdrawal then knows it
 is stale rather than deleting the record that just replaced it.
 
+### D. Distributing Renewed Certificates To The Edges (`#1302`)
+
+The control plane renews the wildcards; an edge renews nothing. Something has to carry a
+renewal outward, or an edge keeps serving the previous certificate until it expires -- a cliff
+rather than a degradation.
+
+Three scripts, on the principle that the receiving account never writes to the final location:
+
+| script | runs as | does |
+|---|---|---|
+| `lfr-distribute-certs.sh` | root on the control plane | Certbot **deploy hook**; bundles and sends |
+| `lfr-receive-certs.sh` | `certsync` on each edge | reads stdin into a staging directory |
+| `lfr-install-certs.sh` | root on each edge, via one sudoers entry | validates, installs, reloads nginx |
+
+On each edge:
+
+```
+# ~certsync/.ssh/authorized_keys
+restrict,command="/usr/local/bin/lfr-receive-certs" ssh-ed25519 AAAA...control-plane
+
+# /etc/sudoers.d/lfr-certsync
+certsync ALL=(root) NOPASSWD: /usr/local/bin/lfr-install-certs
+```
+
+`restrict` disables pty, port, agent and X11 forwarding; the forced command means whatever the
+caller asks for is ignored. A key that leaks from the control plane buys exactly one thing:
+the ability to *offer* this node a bundle.
+
+**What the installer refuses,** because offering is not the same as being trusted:
+
+- a private key that does not match its certificate
+- a certificate covering any name this node does not serve, read from the node's **own**
+  `domains`/`tunnel_domains` rather than passed in
+- a certificate no newer than the one installed -- a distribution mechanism that can roll back
+  is one that can be used to
+- anything with no `subjectAltName` at all
+
+It then runs `nginx -t` before reloading, because this fires unattended from a renewal hook
+where nobody is watching.
+
+On the control plane:
+
+```
+# /etc/letsencrypt/renewal-hooks/deploy/50-lfr-distribute-certs
+LFT_EDGE_TARGETS="certsync@in.lfr-demo.se certsync@us.lfr-demo.se ..."
+LFT_CERT_KEY=/etc/lfr-tunneld/certsync.key      # root:root 0600
+LFT_POWER_HOOK=/usr/local/bin/lfr-power-hook-aws.sh
+LFT_POWER_HOOK_ENV="AWS_REGION=eu-west-1"
+```
+
+**Sleeping nodes are woken, not skipped.** `us` and `apac` power down for eight hours a day and
+will sometimes be asleep when a renewal lands. With a power hook configured, such a node is
+started, delivered to, and returned to the state it was found in -- the same contract deploys
+use. Without one it is skipped *loudly*, and the hook exits non-zero: a renewal that reports
+success while a node missed the new certificate is the same failure as a DDNS updater exiting
+0 while doing nothing (#1300).
+
 **Keep the TTL short.** This record follows a client between gateways; a long TTL pins
 visitors to a node that no longer holds the tunnel for as long as it lasts. The reference hook
 defaults to 60 seconds.

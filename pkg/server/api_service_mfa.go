@@ -2,7 +2,6 @@ package server
 
 import (
 	"fmt"
-	"strings"
 	"time"
 
 	"lfr-tunnel/pkg/db"
@@ -119,20 +118,9 @@ func (s *portalService) MFAVerify(tempToken, code, ip string) (*db.User, string,
 	user.LastLoginIP = ip
 	_ = s.db.UpdateUser(user) //nolint:errcheck
 
-	killedPreviousSession := false
-	s.portalMap.Range(func(key, value interface{}) bool {
-		k := key.(string)
-		if strings.HasPrefix(k, "admin_session_") {
-			sessionData, ok := value.(PortalSessionData)
-			if ok && sessionData.Email == user.Email {
-				s.portalMap.Delete(k)
-				killedPreviousSession = true
-			}
-		}
-		return true
-	})
+	killedPreviousSession := s.sessions.killPortalSessionsFor(user.Email)
 
-	s.portalMap.Store("admin_session_"+sessionToken, PortalSessionData{
+	s.sessions.storePortalSession(sessionToken, PortalSessionData{
 		Email:                 user.Email,
 		ExpiresAt:             time.Now().Add(s.cfg.PortalSessionDuration),
 		ClientIP:              ip,

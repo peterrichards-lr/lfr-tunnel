@@ -104,6 +104,22 @@ func (db *DB) initSchema() error {
 		used_at DATETIME
 	);
 	CREATE INDEX IF NOT EXISTS idx_magic_email ON admin_magic_links(email);
+	-- Portal sessions were held only in memory, so every restart -- including a routine
+	-- deploy -- signed out every logged-in user (#1304). Stored as a hash of the cookie
+	-- value, never the value itself, on the same reasoning as personal_access_tokens: the
+	-- row is then useless to anyone who reads the database.
+	CREATE TABLE IF NOT EXISTS portal_sessions (
+		token_hash TEXT PRIMARY KEY,
+		email TEXT NOT NULL,
+		client_ip TEXT,
+		view_as_role TEXT,
+		previous_login_at DATETIME,
+		killed_previous_session INTEGER NOT NULL DEFAULT 0,
+		created_at DATETIME NOT NULL DEFAULT (datetime('now')),
+		expires_at DATETIME NOT NULL
+	);
+	CREATE INDEX IF NOT EXISTS idx_portal_sessions_email ON portal_sessions(email);
+	CREATE INDEX IF NOT EXISTS idx_portal_sessions_expiry ON portal_sessions(expires_at);
 	CREATE TABLE IF NOT EXISTS admin_audit_log (
 		id         INTEGER PRIMARY KEY AUTOINCREMENT,
 		actor_id   TEXT    NOT NULL,

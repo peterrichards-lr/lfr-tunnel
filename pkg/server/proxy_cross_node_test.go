@@ -407,3 +407,62 @@ func TestCrossNodeProxy_WAFEarlyBlock(t *testing.T) {
 		t.Errorf("expected 403 Forbidden for malicious request, got %d", rec.Code)
 	}
 }
+
+// TestCrossNodeProxy_EdgeRejectsUnservedDomainLocally verifies that an Edge node terminates
+// unserved/scanner host requests locally with 404 instead of proxying them to Central (#1319).
+func TestCrossNodeProxy_EdgeRejectsUnservedDomainLocally(t *testing.T) {
+	mockControlReached := false
+	mockControlPlane := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if strings.HasPrefix(r.URL.Path, "/api/internal/") {
+			http.Error(w, "internal", http.StatusNotFound)
+			return
+		}
+		mockControlReached = true
+		w.WriteHeader(http.StatusOK)
+		if _, err := w.Write([]byte("control plane")); err != nil {
+			t.Errorf("failed to write response: %v", err)
+		}
+	}))
+	defer mockControlPlane.Close()
+
+	edgeCfg := &config.ServerConfig{
+		Domains:         []string{"lfr-demo.se"},
+		TunnelDomains:   []string{"lfr-demo.online"},
+		BindAddr:        ":0",
+		ChiselBindAddr:  ":0",
+		ControlPlaneURL: mockControlPlane.URL,
+		EdgeToken:       "edge-token-test",
+	}
+
+	edgeSrv, err := NewServer(edgeCfg)
+	if err != nil {
+		t.Fatalf("failed to create edge server: %v", err)
+	}
+
+	// 1. Request for unserved domain (scanner/noise)
+	req := httptest.NewRequest(http.MethodGet, "http://scanner.random-attacker.com/", nil)
+	req.Host = "scanner.random-attacker.com"
+	rec := httptest.NewRecorder()
+	edgeSrv.proxyHandler.ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusNotFound {
+		t.Errorf("expected 404 Not Found for unserved domain, got %d", rec.Code)
+	}
+	if mockControlReached {
+		t.Errorf("mock control plane should NOT have been reached for an unserved domain request")
+	}
+
+	// 2. Request for served domain (should reach control plane fallback)
+	mockControlReached = false
+	req2 := httptest.NewRequest(http.MethodGet, "http://valid-sub.lfr-demo.se/", nil)
+	req2.Host = "valid-sub.lfr-demo.se"
+	rec2 := httptest.NewRecorder()
+	edgeSrv.proxyHandler.ServeHTTP(rec2, req2)
+
+	if rec2.Code != http.StatusOK {
+		t.Errorf("expected 200 OK for served domain routed to control plane, got %d", rec2.Code)
+	}
+	if !mockControlReached {
+		t.Errorf("expected control plane to be queried for served domain")
+	}
+}

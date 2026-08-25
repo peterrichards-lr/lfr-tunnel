@@ -277,7 +277,7 @@ type Server struct {
 	edgePingMu     sync.Mutex
 	startTime      time.Time
 	edgeLeases     map[string][]EdgeLease
-	edgeLeasesMu   sync.Mutex
+	edgeLeasesMu   sync.RWMutex
 	remoteRoutes   map[string]string // fullHost -> targetURL for fast cross-node proxying (issue #1249)
 	remoteRoutesMu sync.RWMutex
 	// dns keeps each tunnel's public name pointed at the gateway serving it, via an
@@ -5482,6 +5482,13 @@ type EdgeLease struct {
 func (s *Server) resolveRemoteRouteForHost(host string) (string, string, bool) {
 	// If this node is a regional Edge Node:
 	if s.cfg.ControlPlaneURL != "" && s.cfg.EdgeToken != "" {
+		// Only consider remote routes if the host is under one of our served domains.
+		// Internet-facing noise and unrelated scanner hosts must terminate at the edge
+		// and not amplify onto the Central control plane (#1319).
+		if !s.isServedDomain(host) {
+			return "", "", false
+		}
+
 		// Check local in-memory routing table for direct routing
 		s.remoteRoutesMu.RLock()
 		if targetURL, ok := s.remoteRoutes[host]; ok && targetURL != "" {
@@ -5490,13 +5497,13 @@ func (s *Server) resolveRemoteRouteForHost(host string) (string, string, bool) {
 		}
 		s.remoteRoutesMu.RUnlock()
 
-		// Fallback to Control Plane
+		// Fallback to Control Plane for recognized served domains
 		return s.cfg.ControlPlaneURL, "control", true
 	}
 
-	// Otherwise, this is the Control Plane. Query the in-memory edge leases table.
-	s.edgeLeasesMu.Lock()
-	defer s.edgeLeasesMu.Unlock()
+	// Otherwise, this is the Control Plane. Query the in-memory edge leases table under read lock (#1319).
+	s.edgeLeasesMu.RLock()
+	defer s.edgeLeasesMu.RUnlock()
 
 	for _, userLeases := range s.edgeLeases {
 		for _, el := range userLeases {
@@ -5521,6 +5528,29 @@ func (s *Server) resolveRemoteRouteForHost(host string) (string, string, bool) {
 	}
 
 	return "", "", false
+}
+
+// isServedDomain reports whether the host belongs to one of the configured domains or tunnel_domains.
+func (s *Server) isServedDomain(host string) bool {
+	host = strings.ToLower(host)
+	if hostOnly, _, err := net.SplitHostPort(host); err == nil {
+		host = hostOnly
+	}
+
+	var allDomains []string
+	allDomains = append(allDomains, s.cfg.Domains...)
+	allDomains = append(allDomains, s.cfg.TunnelDomains...)
+
+	for _, d := range allDomains {
+		d = strings.ToLower(strings.TrimSpace(d))
+		if d == "" {
+			continue
+		}
+		if host == d || strings.HasSuffix(host, "."+d) {
+			return true
+		}
+	}
+	return false
 }
 
 func (s *Server) findEdgeNodeURL(nodeID string) string {

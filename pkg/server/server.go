@@ -113,6 +113,29 @@ type ipLimiter struct {
 	lastSeen time.Time
 }
 
+// ipViolations counts how often one address has been refused by the rate limiter, and when it
+// last was (#1327).
+//
+// It used to be a bare int that only ever went up. The limiter behind it is evicted after an
+// hour idle, but the count outlived it for the life of the process, so the 50-violation
+// auto-ban meant "50 violations ever" rather than "50 violations recently". An address that
+// collected 49 over a period of months was banned by a single refused request today, with no
+// burst and nothing abusive in between -- a shared corporate NAT egress in front of a team is
+// exactly that shape.
+type ipViolations struct {
+	count    int
+	lastSeen time.Time
+}
+
+// violationWindow is how long a violation counts towards the auto-ban threshold. Matching the
+// limiter's own idle eviction keeps the two retention policies in step and makes the threshold
+// read as "50 violations within an hour of each other", which is the behaviour the number was
+// presumably chosen for.
+//
+// A package-level var rather than a constant so tests can compress it, following the other
+// tunables in this package.
+var violationWindow = 1 * time.Hour
+
 type EdgeHealthStatus struct {
 	Status       string `json:"status"`
 	LatencyMs    int64  `json:"latency_ms"`
@@ -218,7 +241,7 @@ type Server struct {
 	bgWG         sync.WaitGroup
 	rateLimiters map[string]*ipLimiter
 	rlMutex      sync.Mutex
-	violations   map[string]int
+	violations   map[string]*ipViolations
 	vMutex       sync.Mutex
 	blacklist    sync.Map // memory cache for db blacklist
 	portalMap    sync.Map // memory cache for portal magic links and sessions
@@ -398,7 +421,7 @@ func NewServer(cfg *config.ServerConfig) (*Server, error) {
 		ctx:                ctx,
 		cancel:             cancel,
 		rateLimiters:       make(map[string]*ipLimiter),
-		violations:         make(map[string]int),
+		violations:         make(map[string]*ipViolations),
 		metrics:            NewMetricsCollector(database, cfg, registry),
 		nginxManager:       nginx.NewMaintenanceManager(cfg.MaintenanceTriggerPath),
 		targetedMessages:   make(map[string]string),
@@ -617,14 +640,12 @@ func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	if strings.HasPrefix(r.URL.Path, "/api/") && !s.cfg.DisableAPIRateLimit {
 		limiter := s.getRateLimiter(ip)
 		if !limiter.Allow() {
-			s.vMutex.Lock()
-			s.violations[ip]++
-			vCount := s.violations[ip]
-			s.vMutex.Unlock()
+			vCount := s.recordViolation(ip)
 
 			if vCount >= 50 {
-				// Auto-ban!
-				slog.Info(fmt.Sprintf("[Defense] Auto-banning IP %s after 50 violations", ip))
+				// Auto-ban. The threshold now means 50 violations within violationWindow of
+				// each other, rather than 50 accumulated over the life of the process (#1327).
+				slog.Info(fmt.Sprintf("[Defense] Auto-banning IP %s after %d violations within %v", ip, vCount, violationWindow))
 				s.blacklist.Store(ip, true)
 				s.BroadcastBlacklistUpdate("add", ip)
 				if s.db != nil {
@@ -633,7 +654,11 @@ func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 					body, _err := s.renderNotificationTemplate("en", "admin_ip_autobanned.txt", map[string]interface{}{"IP": ip})
 					_ = _err //nolint:errcheck
 					s.notifications.SendAdminAlert("alert_notify_blacklist", "LFR Tunnel Alert: IP Auto-Banned", body)
-					s.webhooks.SendRateLimitBanAlert(ip, 24*time.Hour, "Exceeded API rate limit (50 violations)")
+					// Zero, not 24h: ip_blacklist has no expiry column and nothing lifts these
+					// bans, so the previous value described a behaviour that does not exist.
+					// Whether they *should* expire is a policy question, deliberately not
+					// changed here (#1327).
+					s.webhooks.SendRateLimitBanAlert(ip, 0, "Exceeded API rate limit (50 violations)")
 				}
 
 				http.Error(w, "Forbidden", http.StatusForbidden)

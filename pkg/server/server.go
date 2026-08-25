@@ -113,6 +113,29 @@ type ipLimiter struct {
 	lastSeen time.Time
 }
 
+// ipViolations counts how often one address has been refused by the rate limiter, and when it
+// last was (#1327).
+//
+// It used to be a bare int that only ever went up. The limiter behind it is evicted after an
+// hour idle, but the count outlived it for the life of the process, so the 50-violation
+// auto-ban meant "50 violations ever" rather than "50 violations recently". An address that
+// collected 49 over a period of months was banned by a single refused request today, with no
+// burst and nothing abusive in between -- a shared corporate NAT egress in front of a team is
+// exactly that shape.
+type ipViolations struct {
+	count    int
+	lastSeen time.Time
+}
+
+// violationWindow is how long a violation counts towards the auto-ban threshold. Matching the
+// limiter's own idle eviction keeps the two retention policies in step and makes the threshold
+// read as "50 violations within an hour of each other", which is the behaviour the number was
+// presumably chosen for.
+//
+// A package-level var rather than a constant so tests can compress it, following the other
+// tunables in this package.
+var violationWindow = 1 * time.Hour
+
 type EdgeHealthStatus struct {
 	Status       string `json:"status"`
 	LatencyMs    int64  `json:"latency_ms"`
@@ -218,10 +241,13 @@ type Server struct {
 	bgWG         sync.WaitGroup
 	rateLimiters map[string]*ipLimiter
 	rlMutex      sync.Mutex
-	violations   map[string]int
-	vMutex       sync.Mutex
-	blacklist    sync.Map // memory cache for db blacklist
-	portalMap    sync.Map // memory cache for portal magic links and sessions
+	// trustedProxies are the hops whose forwarding headers may be believed when resolving a
+	// client address (#1325). Parsed once, because it is consulted on every request.
+	trustedProxies []*net.IPNet
+	violations     map[string]*ipViolations
+	vMutex         sync.Mutex
+	blacklist      sync.Map // memory cache for db blacklist
+	portalMap      sync.Map // memory cache for portal magic links and sessions
 	// sessions persists portal logins so a restart does not sign everyone out (#1304).
 	// Reached through sessionStore(), which builds it on first use.
 	sessions         *portalSessionStore
@@ -398,7 +424,8 @@ func NewServer(cfg *config.ServerConfig) (*Server, error) {
 		ctx:                ctx,
 		cancel:             cancel,
 		rateLimiters:       make(map[string]*ipLimiter),
-		violations:         make(map[string]int),
+		trustedProxies:     parseTrustedProxies(cfg.TrustedProxies),
+		violations:         make(map[string]*ipViolations),
 		metrics:            NewMetricsCollector(database, cfg, registry),
 		nginxManager:       nginx.NewMaintenanceManager(cfg.MaintenanceTriggerPath),
 		targetedMessages:   make(map[string]string),
@@ -592,7 +619,7 @@ func NewServer(cfg *config.ServerConfig) (*Server, error) {
 // ServeHTTP multiplexes control plane (registration & chisel WebSocket) and data plane (tunnel routing).
 func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	// 1. IP Blacklist Defense (Config + DB Cache)
-	ip := getClientIP(r)
+	ip := s.clientIP(r)
 	for _, blockedIP := range s.cfg.IPBlacklist {
 		if ip == blockedIP {
 			http.Error(w, "Forbidden", http.StatusForbidden)
@@ -617,14 +644,12 @@ func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	if strings.HasPrefix(r.URL.Path, "/api/") && !s.cfg.DisableAPIRateLimit {
 		limiter := s.getRateLimiter(ip)
 		if !limiter.Allow() {
-			s.vMutex.Lock()
-			s.violations[ip]++
-			vCount := s.violations[ip]
-			s.vMutex.Unlock()
+			vCount := s.recordViolation(ip)
 
 			if vCount >= 50 {
-				// Auto-ban!
-				slog.Info(fmt.Sprintf("[Defense] Auto-banning IP %s after 50 violations", ip))
+				// Auto-ban. The threshold now means 50 violations within violationWindow of
+				// each other, rather than 50 accumulated over the life of the process (#1327).
+				slog.Info(fmt.Sprintf("[Defense] Auto-banning IP %s after %d violations within %v", ip, vCount, violationWindow))
 				s.blacklist.Store(ip, true)
 				s.BroadcastBlacklistUpdate("add", ip)
 				if s.db != nil {
@@ -633,7 +658,11 @@ func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 					body, _err := s.renderNotificationTemplate("en", "admin_ip_autobanned.txt", map[string]interface{}{"IP": ip})
 					_ = _err //nolint:errcheck
 					s.notifications.SendAdminAlert("alert_notify_blacklist", "LFR Tunnel Alert: IP Auto-Banned", body)
-					s.webhooks.SendRateLimitBanAlert(ip, 24*time.Hour, "Exceeded API rate limit (50 violations)")
+					// Zero, not 24h: ip_blacklist has no expiry column and nothing lifts these
+					// bans, so the previous value described a behaviour that does not exist.
+					// Whether they *should* expire is a policy question, deliberately not
+					// changed here (#1327).
+					s.webhooks.SendRateLimitBanAlert(ip, 0, "Exceeded API rate limit (50 violations)")
 				}
 
 				http.Error(w, "Forbidden", http.StatusForbidden)
@@ -1709,7 +1738,7 @@ func (s *Server) handleRegister(w http.ResponseWriter, r *http.Request) {
 		effectiveLimit = 0
 	}
 
-	clientIP := getClientIP(r)
+	clientIP := s.clientIP(r)
 	if (req.ClientVersion != "" || req.ClientOS != "") && userRec != nil {
 		changed := false
 		if req.ClientVersion != "" && userRec.LastClientVersion != req.ClientVersion {
@@ -2115,6 +2144,18 @@ func (s *Server) Start() error {
 
 	// 3. Start HTTPS / HTTP Gateway listener
 	if s.cfg.SSLCertFile != "" && s.cfg.SSLKeyFile != "" {
+		// Serving TLS directly means nothing sits in front to overwrite the forwarding headers,
+		// so anything reaching a trusted peer address can name its own client address. That is
+		// only safe while the trusted set stays at loopback, where a request cannot originate
+		// from off-box. Warn rather than refuse: it is a legitimate configuration, and the
+		// operator may have a proxy this code cannot see (#1325).
+		if s.trustsNonLoopbackProxies() {
+			slog.Warn("[Server] TLS is served directly and trusted_proxies includes non-loopback ranges. " +
+				"Forwarding headers from those ranges are believed with nothing in front to sanitise them, " +
+				"which lets a caller inside them choose its own client address -- and that address drives " +
+				"the per-tunnel IP whitelist, the rate limiter and the audit log.")
+		}
+
 		// HTTP redirect server
 		go func() {
 			slog.Info(fmt.Sprintf("[Server] Loaded config: Bind=%s, HTTPBind=%s, Domains=%v, DB=%s",
@@ -2241,7 +2282,7 @@ func (s *Server) handleRegisterRequest(w http.ResponseWriter, r *http.Request) {
 			}
 			if !allowed {
 				if s.db != nil {
-					s.writeAudit(req.Email, "auth.registration_blocked", "ip", getClientIP(r), "Registration blocked by email domain whitelist", r)
+					s.writeAudit(req.Email, "auth.registration_blocked", "ip", s.clientIP(r), "Registration blocked by email domain whitelist", r)
 				}
 				w.WriteHeader(http.StatusForbidden)
 				_ = json.NewEncoder(w).Encode(map[string]string{"error": "email domain not allowed by server configuration"}) //nolint:errcheck
@@ -2310,7 +2351,7 @@ func (s *Server) handleRegisterRequest(w http.ResponseWriter, r *http.Request) {
 
 		greetingName := "there"
 
-		clientIP := getClientIP(r)
+		clientIP := s.clientIP(r)
 		reportLink := fmt.Sprintf("%s://%s/api/auth/report-registration?token=%s", scheme, r.Host, verificationToken)
 
 		body := fmt.Sprintf(`Hi %s,
@@ -2952,7 +2993,7 @@ func (s *Server) getActiveDomainsForRequest(r *http.Request, user *db.User) []st
 			if user != nil {
 				hashStr = user.ID
 			} else {
-				hashStr = getClientIP(r)
+				hashStr = s.clientIP(r)
 			}
 			h := sha256.New()
 			h.Write([]byte(hashStr))
@@ -3415,7 +3456,7 @@ func (s *Server) handleAdminMagicLink(w http.ResponseWriter, r *http.Request) {
 
 	magicToken, _err := generateSecureToken()
 	_ = _err //nolint:errcheck
-	clientIP := getClientIP(r)
+	clientIP := s.clientIP(r)
 
 	expiresAt := time.Now().Add(s.cfg.MagicLinkExpiry)
 	if s.db != nil {
@@ -3534,7 +3575,7 @@ func (s *Server) handleAdminVerify(w http.ResponseWriter, r *http.Request) {
 	}
 	sessionToken, _err := generateSecureToken()
 	_ = _err //nolint:errcheck
-	clientIP := getClientIP(r)
+	clientIP := s.clientIP(r)
 
 	var previousLoginAt *time.Time
 	var user *db.User
@@ -3840,7 +3881,7 @@ func (s *Server) handleAdminInviteUser(w http.ResponseWriter, r *http.Request, a
 		http.Error(w, "Failed to generate token", http.StatusInternalServerError)
 		return
 	}
-	clientIP := getClientIP(r)
+	clientIP := s.clientIP(r)
 	expiresAt := time.Now().Add(s.cfg.InviteLinkExpiry)
 	h := sha256.Sum256([]byte(magicToken))
 	tokenHash := hex.EncodeToString(h[:])
@@ -5151,21 +5192,6 @@ func respondJSON(w http.ResponseWriter, status int, payload interface{}) {
 	}
 }
 
-// getClientIP extracts the real client IP, respecting proxy headers if present
-func getClientIP(r *http.Request) string {
-	ip := r.Header.Get("X-Real-IP")
-	if ip == "" {
-		ip = r.Header.Get("X-Forwarded-For")
-	}
-	if ip == "" {
-		ip, _, _ = net.SplitHostPort(r.RemoteAddr)
-		if ip == "" {
-			ip = r.RemoteAddr
-		}
-	}
-	return strings.Split(ip, ",")[0]
-}
-
 type PortalSessionData struct {
 	Email                 string
 	ExpiresAt             time.Time
@@ -5571,7 +5597,7 @@ func (s *Server) handleEdgeRegisterProxy(w http.ResponseWriter, r *http.Request,
 	}{
 		RegisterRequest: req,
 		Domains:         activeDomains,
-		ClientIP:        getClientIP(r),
+		ClientIP:        s.clientIP(r),
 	}
 
 	payloadBytes, err := json.Marshal(edgeReqPayload)
@@ -5618,7 +5644,7 @@ func (s *Server) handleEdgeRegisterProxy(w http.ResponseWriter, r *http.Request,
 		return
 	}
 
-	clientIP := getClientIP(r)
+	clientIP := s.clientIP(r)
 	sessionToken, remotes, err := s.registry.Register(valResp.UserID, valResp.SubdomainPrefix, req.Ports, activeDomains, valResp.RateLimit, clientIP, req.BasicAuth, req.AddedHeaders)
 	if err != nil {
 		s.respondRegisterResponse(w, http.StatusConflict, r, RegisterResponse{Status: "error", Error: err.Error()})

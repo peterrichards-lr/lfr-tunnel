@@ -1,12 +1,9 @@
 #!/bin/bash
 set -e
 
-# Fallback to "docker compose" if "docker-compose" is not installed
-if ! command -v docker-compose >/dev/null 2>&1; then
-    docker-compose() {
-        docker compose "$@"
-    }
-fi
+# Shared `docker-compose` wrapper -- selects v2 vs v1 by capability, not by existence (#1355).
+# shellcheck source=lib/compose.sh
+. "$(dirname -- "${BASH_SOURCE[0]}")/lib/compose.sh"
 
 # Change directory to script location
 CDPATH= cd -- "$(dirname -- "$0")"

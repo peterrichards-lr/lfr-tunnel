@@ -185,12 +185,20 @@ func (w *WebhookService) SendAbuseReportAlert(subdomain, reason, reporterIP stri
 	w.enqueueOrSend(title, desc, colorDanger, facts)
 }
 
+// SendRateLimitBanAlert reports an automatic ban. A duration of zero or less means the ban does
+// not expire on its own, and is reported that way rather than as "0s" (#1327) -- the caller used
+// to pass 24h for a ban that nothing ever lifted, so the alert told operators the problem would
+// resolve itself when it would not.
 func (w *WebhookService) SendRateLimitBanAlert(ip string, duration time.Duration, reason string) {
+	durationText := duration.String()
+	if duration <= 0 {
+		durationText = "until manually removed"
+	}
 	title := "🛡️ EDR: IP Automatically Rate Limit Banned"
-	desc := fmt.Sprintf("*IP Address:* `%s`\n*Duration:* `%v`\n*Reason:* %s", ip, duration, reason)
+	desc := fmt.Sprintf("*IP Address:* `%s`\n*Duration:* `%s`\n*Reason:* %s", ip, durationText, reason)
 	facts := []map[string]string{
 		{keyName: "IP Address", keyValue: ip},
-		{keyName: "Duration", keyValue: duration.String()},
+		{keyName: "Duration", keyValue: durationText},
 		{keyName: keyReason, keyValue: reason},
 	}
 	w.enqueueOrSend(title, desc, colorWarning, facts)

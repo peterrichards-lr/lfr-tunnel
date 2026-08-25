@@ -127,12 +127,21 @@ type ServerConfig struct {
 	// distinct from DisableEmailLogin, which only affects the email-specific login/register
 	// UI and backend path; without this flag, first-time SSO login always auto-provisioned
 	// a new account with no way to close that off independent of disabling SSO entirely.
-	DisableNewRegistrations bool   `yaml:"disable_new_registrations"`
-	DisableClientDownloads  bool   `yaml:"disable_client_downloads"`
-	DisableBrew             bool   `yaml:"disable_brew"`
-	DisableScoop            bool   `yaml:"disable_scoop"`
-	DisableAPIRateLimit     bool   `yaml:"disable_api_rate_limit"`
-	PortalURL               string `yaml:"portal_url"`
+	DisableNewRegistrations bool `yaml:"disable_new_registrations"`
+	DisableClientDownloads  bool `yaml:"disable_client_downloads"`
+	DisableBrew             bool `yaml:"disable_brew"`
+	DisableScoop            bool `yaml:"disable_scoop"`
+	DisableAPIRateLimit     bool `yaml:"disable_api_rate_limit"`
+	// TrustedProxies lists the CIDRs whose X-Real-IP / X-Forwarded-For headers may be believed
+	// (#1325). A header is only as trustworthy as the hop that set it, and the resolved address
+	// drives the per-tunnel IP whitelist, the API rate limiter and every audit entry.
+	//
+	// Empty means loopback, which matches every documented deployment: nginx terminates TLS on
+	// the same host and proxies to 127.0.0.1. Widen it only for a proxy you actually run --
+	// naming a range you do not control hands anyone inside it the ability to choose their own
+	// client address.
+	TrustedProxies []string `yaml:"trusted_proxies"`
+	PortalURL      string   `yaml:"portal_url"`
 	// CentralURL is how the control plane advertises itself to clients in the region map.
 	// Empty keeps the historical construction, "https://tunnel." + the first configured
 	// domain, which assumes both the scheme and the hostname prefix (#1286). Set it when

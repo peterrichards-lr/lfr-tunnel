@@ -680,9 +680,14 @@ echo "=== Restarting the control plane while sampling the tunnel ==="
 # back the failback prober legitimately returns it there. Sampling a single gateway records a
 # 502 for a tunnel that is serving perfectly well on the other one -- which is exactly what an
 # earlier version of this test did, and it read as an outage that never happened.
+
+# Asserted after the run, not just used to size the loop: a sampler that died early writes a
+# short log, and a short log is indistinguishable from "the tunnel never dropped" unless the
+# count itself is checked (#1358). Driven from one variable so the two cannot drift.
+EXPECTED_SAMPLES=60
 SAMPLE_LOG=$(mktemp)
 (
-    for i in {1..60}; do
+    for i in $(seq 1 "$EXPECTED_SAMPLES"); do
         EDGE_CODE=$(curl -s -o /dev/null -w "%{http_code}" --max-time 2 \
             -H "Host: peter-drain.lfr-demo.local" http://localhost:8090/ 2>/dev/null || echo 000)
         CENTRAL_CODE=$(curl -s -o /dev/null -w "%{http_code}" --max-time 2 \
@@ -702,15 +707,30 @@ docker-compose -f docker-compose-edge.yml restart lfr-tunneld-control > /dev/nul
 echo "Control plane restarted; letting the sampler finish..."
 wait $SAMPLER_PID 2>/dev/null || true
 
-TOTAL=$(grep -c . "$SAMPLE_LOG" || echo 0)
-FAILED=$(grep -vc '^200$' "$SAMPLE_LOG" || echo 0)
+# grep -c and grep -vc print the count AND exit 1 when that count is zero, so `|| echo 0` fired
+# in addition to grep's own "0" and produced the two-line string "0\n0" (#1358). That is not a
+# valid integer, so the comparison below errored, the failure branch was skipped, and the suite
+# reported success. Assign on the failure branch instead of appending a second value to stdout.
+TOTAL=$(grep -c . "$SAMPLE_LOG" 2>/dev/null) || TOTAL=0
+FAILED=$(grep -vc '^200$' "$SAMPLE_LOG" 2>/dev/null) || FAILED=0
 echo "Sampled ${TOTAL} requests through the tunnel during the restart; ${FAILED} did not return 200."
+
+# The sampler having run is part of the assertion, not a precondition to assume. Without this,
+# an empty log reports zero failures and the suite certifies "zero interruption" on no evidence.
+if [ "$TOTAL" -ne "$EXPECTED_SAMPLES" ]; then
+    echo "❌ Sampler collected ${TOTAL} of ${EXPECTED_SAMPLES} expected samples."
+    echo "    The tunnel was never actually observed, so this run proves nothing about the drain."
+    echo "    Sample log contents:"
+    cat "$SAMPLE_LOG"
+    rm -f "$SAMPLE_LOG"
+    exit 1
+fi
 
 if [ "$FAILED" -ne 0 ]; then
     echo "❌ The tunnel was interrupted by a control plane restart it had been warned about."
     echo "    Non-200 responses:"
     grep -v '^200$' "$SAMPLE_LOG" | sort | uniq -c
-    echo "    Sample sequence (first 60, in order):"
+    echo "    Sample sequence (first ${EXPECTED_SAMPLES}, in order):"
     tr '\n' ' ' < "$SAMPLE_LOG"; echo
     echo "=== Drain client log (tail) ==="
     docker logs "$DRAIN_CLIENT_ID" 2>&1 | tail -40

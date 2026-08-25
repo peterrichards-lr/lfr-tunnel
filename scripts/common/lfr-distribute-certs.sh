@@ -25,7 +25,14 @@ set -uo pipefail
 #                      back into the state it was found in. Unset, a sleeping node is skipped
 #                      with a warning -- and skipping is not silent, because a node that misses
 #                      a renewal is one that will serve an expired certificate later.
-#   LFT_POWER_HOOK_ENV Optional. Extra environment for the power hook, e.g. "AWS_REGION=eu-west-1".
+#   LFT_POWER_HOOK_ENV Optional. Extra environment for the power hook, e.g. "AWS_REGION=us-east-2".
+#                      Passed through as words of environment, so each entry must be a single
+#                      word: a hook that takes a list wants it comma-separated, never with
+#                      spaces, or the tail of the list is read as the command to run.
+#                      Note this is the region the *edges* are in, which is not usually the
+#                      one the control plane itself runs in.
+#   LFT_SSH_WAIT       Optional, seconds. How long to wait for a node that had to be started
+#                      to accept SSH. Default 300.
 
 LIVE_DIR="${LFT_LIVE_DIR:-/etc/letsencrypt/live}"
 TARGETS="${LFT_EDGE_TARGETS:-}"
@@ -73,6 +80,38 @@ power() {
     env ${LFT_POWER_HOOK_ENV:-} "$POWER_HOOK" "$@"
 }
 
+# Can this node be logged into? Deliberately NOT "did the command succeed": the receiving
+# account pins a forced command that expects a certificate bundle on stdin, so anything asked
+# of it here is ignored and then fails for want of input. A readiness probe written the obvious
+# way therefore never succeeds, and a node that had to be woken could never be delivered to.
+#
+# ssh reserves 255 for its own failures -- connect, host key, authentication. Any other status
+# was produced by the far side, which means the connection and the login both worked.
+ssh_ready() {
+    local target="$1" rc
+    ssh -o BatchMode=yes -o ConnectTimeout=10 -i "$KEY" "$target" true >/dev/null 2>&1
+    rc=$?
+    [ "$rc" -ne 255 ]
+}
+
+# A node that has reached "running" is not yet a node you can log in to: sshd comes up some way
+# after the instance does. The node that had to be started is precisely the one whose first
+# connection would otherwise arrive too early, so waiting is not optional here.
+#
+# Bounded, and a timeout is a failure rather than an endless retry -- this runs unattended from
+# a renewal hook, where something that never returns is worse than something that reports.
+wait_for_ssh() {
+    local target="$1" waited=0
+    while [ "$waited" -lt "${LFT_SSH_WAIT:-300}" ]; do
+        if ssh_ready "$target"; then
+            return 0
+        fi
+        sleep 5
+        waited=$((waited + 5))
+    done
+    return 1
+}
+
 FAILURES=0
 DELIVERED=0
 
@@ -80,13 +119,19 @@ for target in $(echo "$TARGETS" | tr ',' ' '); do
     host="${target#*@}"
     started_it=0
 
-    if ! ssh -o BatchMode=yes -o ConnectTimeout=10 -i "$KEY" "$target" true 2>/dev/null; then
+    if ! ssh_ready "$target"; then
         if [ -n "$POWER_HOOK" ]; then
             state="$(power status "$host" 2>/dev/null | awk '{print $1}')"
             if [ "$state" = "stopped" ]; then
                 log "$host is stopped; starting it to deliver"
                 if power start "$host" >/dev/null 2>&1; then
                     started_it=1
+                    if ! wait_for_ssh "$target"; then
+                        warn "$host: started, but SSH did not come up in time; it will keep serving its current certificate"
+                        power stop "$host" >/dev/null 2>&1 || warn "$host: started for delivery but could not be stopped again"
+                        FAILURES=$((FAILURES + 1))
+                        continue
+                    fi
                 else
                     warn "$host: could not be started; it will serve its current certificate until it is next reachable"
                     FAILURES=$((FAILURES + 1))

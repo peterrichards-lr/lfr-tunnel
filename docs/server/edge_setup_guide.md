@@ -331,11 +331,63 @@ On the control plane:
 
 ```
 # /etc/letsencrypt/renewal-hooks/deploy/50-lfr-distribute-certs
-LFT_EDGE_TARGETS="certsync@in.lfr-demo.se certsync@us.lfr-demo.se ..."
-LFT_CERT_KEY=/etc/lfr-tunneld/certsync.key      # root:root 0600
+LFT_EDGE_TARGETS="certsync@in.lfr-demo.se,certsync@us.lfr-demo.se,..."
+LFT_CERT_KEY=/etc/lfr-certsync/certsync.key     # root:root 0600
 LFT_POWER_HOOK=/usr/local/bin/lfr-power-hook-aws.sh
-LFT_POWER_HOOK_ENV="AWS_REGION=eu-west-1"
+LFT_POWER_HOOK_ENV="AWS_REGION=us-east-2,ap-northeast-1,sa-east-1,ap-south-1"
 ```
+
+The key lives in its own root-owned directory rather than beside the server's configuration:
+that directory belongs to the service account, which could otherwise replace the key that
+reaches every edge.
+
+`AWS_REGION` names the regions the **edges** are in, not the one the control plane runs in --
+they are rarely the same, and a hook pointed at the control plane's own region finds no
+instances and quietly wakes nothing. It takes a comma-separated list because the nodes one
+control plane serves are routinely spread across regions; commas rather than spaces because
+the value is passed through as a single word of environment.
+
+#### Provisioning it
+
+Two scripts install the whole chain, and they are safe to re-run:
+
+```bash
+# 1. The sending half. Prints the public key the edges need.
+./scripts/common/setup-certsync-central.sh \
+    -s tunnel.example.com -i ~/.ssh/central.pem -u ubuntu \
+    -t "certsync@in.example.com,certsync@us.example.com" \
+    -R "ap-south-1,us-east-2"
+
+# 2. The receiving half, once per edge. -H collects that node's host key.
+./scripts/common/setup-certsync-edge.sh \
+    -s in.example.com -i ~/.ssh/in.pem -u ubuntu \
+    -k "ssh-ed25519 AAAA...  # printed by step 1" \
+    -H /tmp/edge-known-hosts
+
+# 3. Re-run step 1 with -H so the control plane knows every node's host key.
+./scripts/common/setup-certsync-central.sh ... -H /tmp/edge-known-hosts
+
+# 4. Prove it, rather than assume it.
+ssh ubuntu@tunnel.example.com 'sudo /etc/letsencrypt/renewal-hooks/deploy/50-lfr-distribute-certs'
+```
+
+**Host keys are collected, not scanned.** `-H` reads each node's host key over the session
+already used to administer it, and installs it in the control plane's `known_hosts` before
+anything is ever sent. The alternative -- letting the first delivery trust whoever answers on
+port 22 -- puts a private key on the wire during exactly the one connection an impostor would
+want to intercept. A node whose key could not be obtained is reported, and delivery to it
+fails loudly rather than falling back to trust.
+
+**The edge provisioner self-tests.** It finishes by running the privileged installer through
+the sudoers grant, as `certsync`, against an empty staging directory. That exercises the
+grant, the script and the parsing of the node's own domains, and installs nothing. A node that
+cannot do this would otherwise have failed months later, at renewal, with an expired
+certificate.
+
+**The control plane needs to reach each edge on port 22.** This is the step most likely to be
+missed, because nothing else in the deployment needs it: the edges' firewall rules are usually
+written for operator access, and a control plane added later is silently dropped. It presents
+as a delivery timeout, not as a permission error.
 
 **Sleeping nodes are woken, not skipped.** `us` and `apac` power down for eight hours a day and
 will sometimes be asleep when a renewal lands. With a power hook configured, such a node is

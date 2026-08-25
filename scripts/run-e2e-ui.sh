@@ -32,14 +32,9 @@ if [ -z "$E2E_PROJECT_NAME" ]; then
 fi
 export E2E_PROJECT_NAME
 
-# Fallback to "docker compose" if "docker-compose" is not installed, wrapping with project name
-docker-compose() {
-    if docker compose version >/dev/null 2>&1; then
-        docker compose -p "$E2E_PROJECT_NAME" "$@"
-    else
-        command docker-compose -p "$E2E_PROJECT_NAME" "$@"
-    fi
-}
+# Shared `docker-compose` wrapper -- selects v2 vs v1 by capability, not by existence (#1355).
+# shellcheck source=../tests/e2e/lib/compose.sh
+. "$(dirname -- "${BASH_SOURCE[0]}")/../tests/e2e/lib/compose.sh"
 
 export E2E_MAILPIT_PORT=8025
 export E2E_PROXY_PORT=8000

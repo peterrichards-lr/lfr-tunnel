@@ -104,7 +104,7 @@ func (s *Server) handleReportRegistration(w http.ResponseWriter, r *http.Request
 	_ = s.db.DeleteUser(user.ID) //nolint:errcheck
 
 	s.writeAudit(user.Email, "auth.registration_reported", "user", user.Email, "User reported unauthorized registration request", r)
-	s.webhooks.SendAbuseReportAlert(user.Email, "Unauthorized registration request", getClientIP(r))
+	s.webhooks.SendAbuseReportAlert(user.Email, "Unauthorized registration request", s.clientIP(r))
 
 	w.Header().Set("Content-Type", "text/html")
 	if _, err := w.Write([]byte("Thank you. This registration token has been instantly deactivated, preventing anyone from completing the sign-up process.")); err != nil {

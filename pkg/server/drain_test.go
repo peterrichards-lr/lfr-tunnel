@@ -152,3 +152,69 @@ func TestDrain_RejectsForwardedAndRemoteRequests(t *testing.T) {
 		})
 	}
 }
+
+// A gateway that announces a drain and then keeps accepting registrations moves the same
+// client twice: it lands on a node seconds from restarting, and is moved again (#1238).
+func TestDrain_HealthzAdvertisesDrainingDistinctly(t *testing.T) {
+	srv := newDrainTestServer(t)
+
+	if got := string(srv.healthzPayload()); got != `{"status":"healthy"}` {
+		t.Fatalf("before draining, healthz = %s", got)
+	}
+
+	postDrain(t, srv, `{"seconds": 45}`)
+
+	got := string(srv.healthzPayload())
+	if !strings.Contains(got, `"status":"draining"`) {
+		t.Errorf("healthz = %s, want a draining status", got)
+	}
+	// Deliberately NOT "degraded": an operator has to tell a deploy from a node that has lost
+	// its control channel, and conflating those is where #1145 came from.
+	if strings.Contains(got, "degraded") {
+		t.Errorf("healthz = %s, want draining reported separately from degraded", got)
+	}
+
+	postDrain(t, srv, `{"seconds": 0}`)
+	if got := string(srv.healthzPayload()); strings.Contains(got, "draining") {
+		t.Errorf("healthz still reports draining after the drain was cancelled: %s", got)
+	}
+}
+
+// The clients that matter here are the ones that do not probe: a -server pinned client, an
+// older build, or a registration already in flight when the drain was announced.
+func TestDrain_RegistrationIsRefusedWhileDraining(t *testing.T) {
+	srv := newDrainTestServer(t)
+	postDrain(t, srv, `{"seconds": 45}`)
+
+	req := httptest.NewRequest(http.MethodPost, "/api/register",
+		strings.NewReader(`{"auth_token":"whatever","subdomain_prefix":"x","ports":[{"local_port":80}]}`))
+	req.Host = "lfr-demo.se"
+	rec := httptest.NewRecorder()
+	srv.ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusServiceUnavailable {
+		t.Fatalf("got %d, want 503 while the gateway is draining", rec.Code)
+	}
+	// Temporary, not broken: the client should come back rather than write the gateway off.
+	if rec.Header().Get("Retry-After") == "" {
+		t.Error("a refusal with no Retry-After reads as a permanent failure")
+	}
+}
+
+// And once the drain is cancelled -- a deploy that failed partway, say -- the gateway has to
+// accept work again, or a cancelled drain is worse than none.
+func TestDrain_RegistrationResumesAfterCancel(t *testing.T) {
+	srv := newDrainTestServer(t)
+	postDrain(t, srv, `{"seconds": 45}`)
+	postDrain(t, srv, `{"seconds": 0}`)
+
+	req := httptest.NewRequest(http.MethodPost, "/api/register",
+		strings.NewReader(`{"auth_token":"whatever","subdomain_prefix":"x","ports":[{"local_port":80}]}`))
+	req.Host = "lfr-demo.se"
+	rec := httptest.NewRecorder()
+	srv.ServeHTTP(rec, req)
+
+	if rec.Code == http.StatusServiceUnavailable {
+		t.Error("the gateway is still refusing registrations after the drain was cancelled")
+	}
+}

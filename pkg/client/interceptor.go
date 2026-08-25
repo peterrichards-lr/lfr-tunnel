@@ -238,12 +238,19 @@ func GatewayCanCarrySession(statusCode int, body []byte) bool {
 		return false
 	}
 	var payload struct {
+		Status       string `json:"status"`
 		ControlPlane string `json:"control_plane"`
 	}
 	if err := json.Unmarshal(bytes.TrimSpace(body), &payload); err != nil {
 		// Unparseable but 200: treat as healthy rather than stranding a client on a
 		// gateway that is probably fine and merely returning something unexpected.
 		return true
+	}
+	// A draining gateway is about to restart. It can be healthy in every other respect and is
+	// still the wrong place to start a session -- electing it means being moved again within
+	// seconds (#1238). Distinct from "degraded", which means the control channel is down.
+	if payload.Status == "draining" {
+		return false
 	}
 	return payload.ControlPlane != "disconnected"
 }

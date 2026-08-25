@@ -619,3 +619,26 @@ func TestStartHealthChecks_ServingGatewayEvictionStillFailsOver(t *testing.T) {
 		t.Fatal("expected failover when the serving gateway reports the lease evicted")
 	}
 }
+
+// A draining gateway is about to restart. Electing it means being moved again within seconds,
+// so a client must decline it even though it is healthy in every other respect (#1238).
+func TestGatewayCanCarrySession_DeclinesADrainingGateway(t *testing.T) {
+	cases := map[string]struct {
+		body string
+		want bool
+	}{
+		"healthy":              {`{"status":"healthy","control_plane":"connected"}`, true},
+		"draining":             {`{"status":"draining","control_plane":"connected"}`, false},
+		"draining, no control": {`{"status":"draining"}`, false},
+		"degraded":             {`{"status":"degraded","control_plane":"disconnected"}`, false},
+		"healthy standalone":   {`{"status":"healthy"}`, true},
+		"unparseable but 200":  {`not json`, true},
+	}
+	for name, tc := range cases {
+		t.Run(name, func(t *testing.T) {
+			if got := GatewayCanCarrySession(http.StatusOK, []byte(tc.body)); got != tc.want {
+				t.Errorf("GatewayCanCarrySession(%s) = %v, want %v", tc.body, got, tc.want)
+			}
+		})
+	}
+}

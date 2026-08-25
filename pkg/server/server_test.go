@@ -2169,8 +2169,8 @@ func TestServer_InstallerEndpoints(t *testing.T) {
 	req2, _ := http.NewRequest("GET", "http://example.com/install.sh", nil)
 	rec2 := httptest.NewRecorder()
 	srv.ServeHTTP(rec2, req2)
-	if rec2.Code != http.StatusOK {
-		t.Errorf("expected status 200 for /install.sh, got %d", rec2.Code)
+	if !strings.Contains(rec2.Body.String(), "LDM_LFR_TUNNEL_BIN") || !strings.Contains(rec2.Body.String(), ".ldm/bin") {
+		t.Error("expected /install.sh to contain LDM auto-discovery integration (.ldm/bin and LDM_LFR_TUNNEL_BIN)")
 	}
 
 	// 3. Check /install.ps1 endpoint
@@ -2182,6 +2182,9 @@ func TestServer_InstallerEndpoints(t *testing.T) {
 	}
 	if !strings.Contains(rec3.Body.String(), "Invoke-WebRequest") {
 		t.Error("expected /install.ps1 to return PowerShell script containing 'Invoke-WebRequest'")
+	}
+	if !strings.Contains(rec3.Body.String(), "LDM_LFR_TUNNEL_BIN") {
+		t.Error("expected /install.ps1 to contain LDM_LFR_TUNNEL_BIN environment variable export")
 	}
 }
 

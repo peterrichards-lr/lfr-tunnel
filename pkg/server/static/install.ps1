@@ -54,15 +54,17 @@ if ($UserPath -notlike "*$InstallDir*") {
     $env:Path += ";$InstallDir"
 }
 
-# Configure LDM (liferay-docker-manager) auto-discovery to prevent un-whitelisted auto-downloads
+# Configure LDM (liferay-docker-manager) auto-discovery to prevent un-whitelisted auto-downloads (#1311)
 [Environment]::SetEnvironmentVariable("LDM_LFR_TUNNEL_BIN", $DestPath, "User")
 $env:LDM_LFR_TUNNEL_BIN = $DestPath
-if (Test-Path "$Home\.ldm") {
-    $LdmBinDir = "$Home\.ldm\bin"
-    if (!(Test-Path $LdmBinDir)) { New-Item -ItemType Directory -Force -Path $LdmBinDir | Out-Null }
-    $LdmTarget = "$LdmBinDir\lfr-tunnel.exe"
-    if (Test-Path $LdmTarget) { Remove-Item -Force $LdmTarget -ErrorAction SilentlyContinue }
-    New-Item -ItemType HardLink -Path $LdmTarget -Target $DestPath -ErrorAction SilentlyContinue | Out-Null
+$LdmBinDir = "$Home\.ldm\bin"
+if (!(Test-Path $LdmBinDir)) { New-Item -ItemType Directory -Force -Path $LdmBinDir | Out-Null }
+$LdmTarget = "$LdmBinDir\lfr-tunnel.exe"
+if (Test-Path $LdmTarget) { Remove-Item -Force $LdmTarget -ErrorAction SilentlyContinue }
+try {
+    New-Item -ItemType HardLink -Path $LdmTarget -Target $DestPath -ErrorAction Stop | Out-Null
+} catch {
+    Copy-Item -Force -Path $DestPath -Destination $LdmTarget -ErrorAction SilentlyContinue | Out-Null
 }
 
 Write-Host "lfr-tunnel installed successfully to $DestPath"

@@ -1241,6 +1241,39 @@ To prevent developers from seeing client CLI update warnings when you deploy cos
 
 ---
 
+### 8.10. Trusted Proxies and Client IP Resolution
+
+The gateway binds loopback (`http_bind_addr: "127.0.0.1:8080"`) and nginx terminates TLS in front
+of it. Every request therefore arrives from `127.0.0.1`, and the real client address can only come
+from a forwarding header — which is exactly why those headers must not be believed unconditionally.
+
+`trusted_proxies` names the hops whose `X-Real-IP` / `X-Forwarded-For` may be honoured:
+
+```yaml
+trusted_proxies:
+  - 127.0.0.1/32
+  - ::1/128
+```
+
+Those are the defaults, and they match every documented deployment. A request arriving from
+anywhere else has its headers ignored and is attributed to its peer address instead.
+
+**Why it matters.** The resolved address drives the per-tunnel IP whitelist, the API rate limiter
+and its auto-ban, and every audit log entry. Without the boundary, a deployment serving TLS
+directly (`ssl_cert_file`/`ssl_key_file`, no nginx) lets a visitor walk straight through an IP
+whitelist by naming an allowed address in a header.
+
+**Only widen this for a proxy you actually run.** Naming a range you do not control hands everyone
+inside it the ability to choose their own client address.
+
+If you serve TLS directly *and* trust non-loopback ranges, the gateway logs a warning at startup:
+that combination means headers are honoured with nothing in front to sanitise them.
+
+**The nginx side matters too.** The generated config sets both headers to `$remote_addr`, rather
+than `$proxy_add_x_forwarded_for` which *appends* to whatever the client sent — leaving the
+leftmost entry caller-controlled. If you place a CDN or load balancer in front of nginx, revisit
+this: you would then want nginx's `real_ip` module with `set_real_ip_from` naming that upstream.
+
 ## 9. Asymmetric Outbound Routing Workaround (Dual-IP VPS)
 
 If your VPS hosting provider allocates multiple public IPv4/IPv6 addresses to a single virtual instance (for example, a primary IP and a secondary IP), you may encounter outbound routing issues.
@@ -1291,4 +1324,4 @@ To guarantee that outbound connections originating from the VPS are consistently
 
 <!-- markdownlint-disable MD049 -->
 ---
-*Last Updated: 2026-08-11* | *Last Reviewed: 2026-08-11*
+*Last Updated: 2026-08-25* | *Last Reviewed: 2026-08-25*

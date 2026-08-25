@@ -565,7 +565,7 @@ func (s *Server) handleMFAEnable(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if err := s.portalService.MFAEnable(u, req.Secret, req.Code, getClientIP(r)); err != nil {
+	if err := s.portalService.MFAEnable(u, req.Secret, req.Code, s.clientIP(r)); err != nil {
 		if err == ErrInvalidRequest {
 			http.Error(w, `{"error":"Invalid verification code"}`, http.StatusBadRequest)
 			return
@@ -595,7 +595,7 @@ func (s *Server) handleMFADisable(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if err := s.portalService.MFADisable(u, req.Code, getClientIP(r)); err != nil {
+	if err := s.portalService.MFADisable(u, req.Code, s.clientIP(r)); err != nil {
 		if err == ErrInvalidRequest {
 			http.Error(w, `{"error":"Invalid verification code"}`, http.StatusBadRequest)
 			return
@@ -620,7 +620,7 @@ func (s *Server) handleMFAVerify(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	user, sessionToken, err := s.portalService.MFAVerify(req.TempToken, req.Code, getClientIP(r))
+	user, sessionToken, err := s.portalService.MFAVerify(req.TempToken, req.Code, s.clientIP(r))
 	if err != nil {
 		if err == ErrUnauthorized {
 			http.Error(w, `{"error":"Invalid verification code or session"}`, http.StatusUnauthorized)
@@ -1186,7 +1186,7 @@ func (s *Server) handleCreateReservation(w http.ResponseWriter, r *http.Request)
 		return
 	}
 
-	res, err := s.portalService.CreateReservation(user, req.Subdomain, req.Domain, getClientIP(r))
+	res, err := s.portalService.CreateReservation(user, req.Subdomain, req.Domain, s.clientIP(r))
 	if err != nil {
 		respondWithError(w, err)
 		return
@@ -1207,7 +1207,7 @@ func (s *Server) handleDeleteReservation(w http.ResponseWriter, r *http.Request)
 	}
 
 	idStr := strings.TrimPrefix(r.URL.Path, "/api/portal/reservations/")
-	res, err := s.portalService.DeleteReservation(user, idStr, getClientIP(r))
+	res, err := s.portalService.DeleteReservation(user, idStr, s.clientIP(r))
 	if err != nil {
 		respondWithError(w, err)
 		return
@@ -1249,7 +1249,7 @@ func (s *Server) handleRequestExtension(w http.ResponseWriter, r *http.Request) 
 		return
 	}
 
-	res, err := s.portalService.RequestExtension(user, parts[0], getClientIP(r))
+	res, err := s.portalService.RequestExtension(user, parts[0], s.clientIP(r))
 	if err != nil {
 		respondWithError(w, err)
 		return
@@ -1312,7 +1312,7 @@ func (s *Server) handlePromoteReservation(w http.ResponseWriter, r *http.Request
 		return
 	}
 
-	res, err := s.portalService.PromoteReservation(user, req.Subdomain, domain, getClientIP(r))
+	res, err := s.portalService.PromoteReservation(user, req.Subdomain, domain, s.clientIP(r))
 	if err != nil {
 		respondWithError(w, err)
 		return
@@ -1416,7 +1416,7 @@ func (s *Server) handleAdminApproveExtension(w http.ResponseWriter, r *http.Requ
 		return
 	}
 
-	res, err := s.portalService.AdminApproveExtension(actor, parts[0], req.Days, req.Permanent, getClientIP(r))
+	res, err := s.portalService.AdminApproveExtension(actor, parts[0], req.Days, req.Permanent, s.clientIP(r))
 	if err != nil {
 		respondWithError(w, err)
 		return
@@ -1440,7 +1440,7 @@ func (s *Server) handleAdminDemoteReservation(w http.ResponseWriter, r *http.Req
 		return
 	}
 
-	res, err := s.portalService.AdminDemoteReservation(actor, parts[0], getClientIP(r))
+	res, err := s.portalService.AdminDemoteReservation(actor, parts[0], s.clientIP(r))
 	if err != nil {
 		respondWithError(w, err)
 		return
@@ -1477,7 +1477,7 @@ func (s *Server) handleAdminOverrideLimit(w http.ResponseWriter, r *http.Request
 		return
 	}
 
-	user, err := s.portalService.AdminOverrideLimit(actor, email, req.MaxReservations, getClientIP(r))
+	user, err := s.portalService.AdminOverrideLimit(actor, email, req.MaxReservations, s.clientIP(r))
 	if err != nil {
 		if err == ErrNotFound {
 			http.Error(w, `{"error":"User not found"}`, http.StatusNotFound)
@@ -1516,7 +1516,7 @@ func (s *Server) handleAdminOverrideTunnelsLimit(w http.ResponseWriter, r *http.
 		return
 	}
 
-	user, err := s.portalService.AdminOverrideTunnelsLimit(actor, email, req.MaxTunnels, getClientIP(r))
+	user, err := s.portalService.AdminOverrideTunnelsLimit(actor, email, req.MaxTunnels, s.clientIP(r))
 	if err != nil {
 		if err == ErrNotFound {
 			http.Error(w, `{"error":"User not found"}`, http.StatusNotFound)
@@ -1591,7 +1591,7 @@ func (s *Server) handleCreateInvitation(w http.ResponseWriter, r *http.Request) 
 
 	invite, claimURL, err := s.portalService.CreateInvitation(
 		user, req.Subdomain, req.Domain, req.Name, req.Email, req.ValidityDays,
-		getClientIP(r), s.cfg.PortalURL, scheme, r.Host,
+		s.clientIP(r), s.cfg.PortalURL, scheme, r.Host,
 	)
 	if err != nil {
 		if err == ErrNotFound {
@@ -1621,7 +1621,7 @@ func (s *Server) handleDeleteInvitation(w http.ResponseWriter, r *http.Request) 
 	}
 
 	idStr := strings.TrimPrefix(r.URL.Path, "/api/portal/invitations/")
-	if err := s.portalService.DeleteInvitation(user, idStr, getClientIP(r)); err != nil {
+	if err := s.portalService.DeleteInvitation(user, idStr, s.clientIP(r)); err != nil {
 		if err == ErrInvalidRequest {
 			http.Error(w, `{"error":"Invalid invitation ID"}`, http.StatusBadRequest)
 			return
@@ -1654,7 +1654,7 @@ func (s *Server) handleClaimInvitation(w http.ResponseWriter, r *http.Request) {
 		pfxPassword = "tunnel"
 	}
 
-	pfxBytes, invite, err := s.portalService.ClaimInvitation(token, pfxPassword, getClientIP(r))
+	pfxBytes, invite, err := s.portalService.ClaimInvitation(token, pfxPassword, s.clientIP(r))
 	if err != nil {
 		if err == ErrNotFound {
 			http.Error(w, "Invalid or expired claim link", http.StatusNotFound)
@@ -1710,7 +1710,7 @@ func (s *Server) handleCSRSignInvitation(w http.ResponseWriter, r *http.Request)
 		return
 	}
 
-	certBytes, invite, err := s.portalService.CSRSignInvitation(token, bodyBytes, getClientIP(r))
+	certBytes, invite, err := s.portalService.CSRSignInvitation(token, bodyBytes, s.clientIP(r))
 	if err != nil {
 		if err == ErrNotFound {
 			http.Error(w, "Invalid or expired invitation token", http.StatusNotFound)
@@ -1779,7 +1779,7 @@ func (s *Server) handleUpdateReservationAccessControl(w http.ResponseWriter, r *
 		return
 	}
 
-	if err := s.portalService.UpdateReservationAccessControl(user, req.Subdomain, req.Domain, req.AccessMode, req.Passcode, req.WhitelistIPs, getClientIP(r)); err != nil {
+	if err := s.portalService.UpdateReservationAccessControl(user, req.Subdomain, req.Domain, req.AccessMode, req.Passcode, req.WhitelistIPs, s.clientIP(r)); err != nil {
 		if err == ErrNotFound {
 			http.Error(w, `{"error":"Reservation not found"}`, http.StatusNotFound)
 			return
@@ -1852,7 +1852,7 @@ func (s *Server) handleUpdateReservationHeaders(w http.ResponseWriter, r *http.R
 		TargetType: "lease",
 		TargetID:   fullHost,
 		Details:    "Custom headers updated dynamically",
-		IPAddress:  getClientIP(r),
+		IPAddress:  s.clientIP(r),
 		CreatedAt:  time.Now(),
 	})
 
@@ -1951,7 +1951,7 @@ func (s *Server) handleAdminOverridePreferredDomain(w http.ResponseWriter, r *ht
 		return
 	}
 
-	user, err := s.portalService.AdminOverridePreferredDomain(actor, email, req.PreferredDomain, getClientIP(r))
+	user, err := s.portalService.AdminOverridePreferredDomain(actor, email, req.PreferredDomain, s.clientIP(r))
 	if err != nil {
 		if err == ErrNotFound {
 			http.Error(w, `{"error":"User not found"}`, http.StatusNotFound)

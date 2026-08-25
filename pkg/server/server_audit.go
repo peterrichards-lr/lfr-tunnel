@@ -12,19 +12,21 @@ import (
 )
 
 func (s *Server) writeAudit(actorID, action, targetType, targetID string, details string, r *http.Request) {
+	// r.RemoteAddr is the wrong answer here and always has been (#1357). The gateway binds
+	// loopback and nginx proxies to it, so RemoteAddr is 127.0.0.1 with an ephemeral port on
+	// every single request -- which is exactly what the production audit log was full of: 4,896
+	// of 4,951 rows. clientIP resolves the address the visitor actually came from, honouring the
+	// forwarding headers only when the hop that set them is trusted.
+	ip := ""
+	if r != nil {
+		ip = s.clientIP(r)
+	}
+
 	if s.db == nil {
 		if s.cfg.ControlPlaneURL != "" {
-			ip := ""
-			if r != nil {
-				ip = r.RemoteAddr
-			}
 			go s.forwardAuditToControlPlane(actorID, action, targetType, targetID, details, ip)
 		}
 		return
-	}
-	ip := ""
-	if r != nil {
-		ip = r.RemoteAddr
 	}
 	entry := &db.AuditEntry{
 		ActorID:    actorID,

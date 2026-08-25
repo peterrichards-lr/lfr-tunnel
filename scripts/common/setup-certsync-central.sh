@@ -213,12 +213,38 @@ HOOK_TMP="$(mktemp -t lfr-deploy-hook-XXXXXX)"
 scp $SSH_KEY_ARG "$HOOK_TMP" "$SSH_USER@$CENTRAL_HOST:/home/$SSH_USER/50-lfr-distribute-certs"
 rm -f "$HOOK_TMP"
 
+# Numbered to run before distribution: the node that renewed should be serving the new
+# certificate before it starts handing it to anyone else.
+RELOAD_TMP="$(mktemp -t lfr-reload-hook-XXXXXX)"
+cat > "$RELOAD_TMP" << 'RELOAD_HOOK'
+#!/bin/sh
+# Certbot deploy hook -- reload nginx so a renewed certificate is actually served (#1302).
+# Installed by scripts/common/setup-certsync-central.sh. Edit that, not this.
+#
+# nginx reads its certificates once and holds them in memory. A renewal writes new files and
+# changes nothing that is being served until a reload, so without this the control plane keeps
+# presenting the previous certificate right up to its expiry -- the same cliff the edges had,
+# on the node that does the renewing.
+#
+# Tested before reloading, because this fires unattended and a bad config plus a reload takes
+# the node's public traffic down.
+set -e
+command -v nginx >/dev/null 2>&1 || exit 0
+nginx -t
+systemctl reload nginx
+echo "[reload-nginx] reloaded; the renewed certificate is now being served"
+RELOAD_HOOK
+
+scp $SSH_KEY_ARG "$RELOAD_TMP" "$SSH_USER@$CENTRAL_HOST:/home/$SSH_USER/10-lfr-reload-nginx"
+rm -f "$RELOAD_TMP"
+
 ssh $SSH_KEY_ARG "$SSH_USER@$CENTRAL_HOST" << REMOTE_SSH
 set -e
 sudo install -d -m 755 -o root -g root /etc/letsencrypt/renewal-hooks/deploy
 sudo install -m 700 -o root -g root /home/$SSH_USER/50-lfr-distribute-certs /etc/letsencrypt/renewal-hooks/deploy/50-lfr-distribute-certs
-rm -f /home/$SSH_USER/50-lfr-distribute-certs
-echo "Deploy hook installed."
+sudo install -m 700 -o root -g root /home/$SSH_USER/10-lfr-reload-nginx /etc/letsencrypt/renewal-hooks/deploy/10-lfr-reload-nginx
+rm -f /home/$SSH_USER/50-lfr-distribute-certs /home/$SSH_USER/10-lfr-reload-nginx
+echo "Deploy hooks installed."
 
 echo
 echo "=== Give this public key to each edge, via setup-certsync-edge.sh -k ==="

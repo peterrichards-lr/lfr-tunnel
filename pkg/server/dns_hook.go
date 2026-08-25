@@ -55,6 +55,18 @@ type dnsPublisher struct {
 	// planned move safe: the new gateway's upsert lands, and the old gateway's pending
 	// delete then knows it is stale rather than deleting the record that just replaced it.
 	gen map[string]uint64
+	// desired records where each name is *meant* to point, written when the request is made
+	// rather than when the hook succeeds (#1362).
+	//
+	// Debouncing on `published` was wrong: that map is only written after the hook returns,
+	// so two requests arriving inside one hook invocation both saw "not published yet" and
+	// both called the provider. On a slow provider call that window is the whole call.
+	desired map[string]string
+	// nameMu serialises hook invocations per name, so the provider sees them in the order
+	// they were requested. Without it, Publish(A) then Publish(B) ran concurrently and could
+	// land A *after* B while gen recorded B as current -- leaving DNS pointing at the old
+	// gateway while every later Publish(B) debounced, so the name stayed wrong for good.
+	nameMu map[string]*sync.Mutex
 
 	// run executes the hook. A field so tests can exercise the debouncing, the withdrawal
 	// grace and the migration ordering without a script on disk.
@@ -80,6 +92,8 @@ func newDNSPublisher(path string, grace time.Duration) *dnsPublisher {
 		grace:     grace,
 		published: make(map[string]string),
 		gen:       make(map[string]uint64),
+		desired:   make(map[string]string),
+		nameMu:    make(map[string]*sync.Mutex),
 	}
 	p.run = p.exec
 	return p
@@ -115,18 +129,44 @@ func (p *dnsPublisher) Publish(fqdn, target string) {
 	}
 
 	p.mu.Lock()
-	g := p.gen[fqdn] + 1
-	p.gen[fqdn] = g
-	unchanged := p.published[fqdn] == target
-	p.mu.Unlock()
-
-	if unchanged {
+	// Debounced against where the name is *meant* to point, not against where it has been
+	// confirmed to point. The confirmation only lands after the hook returns, so debouncing on
+	// it meant a second request arriving during a provider call saw "nothing published yet"
+	// and called the provider again (#1362).
+	if p.desired[fqdn] == target {
+		p.mu.Unlock()
 		return
 	}
+	g := p.gen[fqdn] + 1
+	p.gen[fqdn] = g
+	p.desired[fqdn] = target
+	p.mu.Unlock()
 
 	go func() {
+		// One name at a time, so the provider sees these in the order they were asked for.
+		lock := p.nameLock(fqdn)
+		lock.Lock()
+		defer lock.Unlock()
+
+		// Superseded while queued behind another invocation for this name. Running now would
+		// land an older target on top of a newer one.
+		p.mu.Lock()
+		stale := p.gen[fqdn] != g
+		p.mu.Unlock()
+		if stale {
+			return
+		}
+
 		if err := p.run("upsert", fqdn, target); err != nil {
 			slog.Info(fmt.Sprintf("[DNS] Failed to publish %s -> %s: %v", fqdn, target, err))
+			// The name is not where the intent says it is, so clear it and let the next
+			// request try again rather than debouncing against a target that was never
+			// written.
+			p.mu.Lock()
+			if p.desired[fqdn] == target {
+				delete(p.desired, fqdn)
+			}
+			p.mu.Unlock()
 			return
 		}
 		p.mu.Lock()
@@ -138,6 +178,24 @@ func (p *dnsPublisher) Publish(fqdn, target string) {
 			slog.Info(fmt.Sprintf("[DNS] Published %s -> %s", fqdn, target))
 		}
 	}()
+}
+
+// nameLock returns the mutex serialising hook invocations for one name, creating it on first
+// use. Per name rather than global: two different tunnels moving at once have no ordering
+// relationship, and making them wait on each other would serialise every provider call in the
+// deployment behind the slowest one.
+func (p *dnsPublisher) nameLock(fqdn string) *sync.Mutex {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	if p.nameMu == nil {
+		p.nameMu = make(map[string]*sync.Mutex)
+	}
+	m, ok := p.nameMu[fqdn]
+	if !ok {
+		m = &sync.Mutex{}
+		p.nameMu[fqdn] = m
+	}
+	return m
 }
 
 // Withdraw removes fqdn after the grace period, on behalf of the gateway that was serving it.
@@ -156,9 +214,14 @@ func (p *dnsPublisher) Withdraw(fqdn, target string) {
 	}
 
 	p.mu.Lock()
-	if _, known := p.published[fqdn]; !known {
+	_, published := p.published[fqdn]
+	_, intended := p.desired[fqdn]
+	if !published && !intended {
 		// Never published by this process, so there is nothing of ours to remove. Deleting
 		// anyway would take out a static record an operator put there by hand.
+		//
+		// An intent with no confirmation still counts as ours: a publish in flight when the
+		// lease is torn down would otherwise leave the record behind with nothing tracking it.
 		p.mu.Unlock()
 		return
 	}
@@ -172,6 +235,15 @@ func (p *dnsPublisher) Withdraw(fqdn, target string) {
 // withdrawNow performs the delete if the name is still this gateway's to give up. Split out
 // from Withdraw so both conditions are testable without waiting out a grace period.
 func (p *dnsPublisher) withdrawNow(fqdn, target string, g uint64) {
+	// The same serialisation Publish uses: a delete and an upsert for one name must not
+	// interleave, or a planned move can end with the delete landing after the new gateway's
+	// upsert (#1362). The nameMu entry is deliberately never removed -- a goroutine may still
+	// hold the old mutex, and handing the next caller a fresh one would drop the guarantee
+	// exactly when it matters. One mutex per name ever published is a bounded cost.
+	lock := p.nameLock(fqdn)
+	lock.Lock()
+	defer lock.Unlock()
+
 	p.mu.Lock()
 	if p.gen[fqdn] != g {
 		// Reconnected, or moved to another gateway, while this was waiting.
@@ -195,6 +267,10 @@ func (p *dnsPublisher) withdrawNow(fqdn, target string, g uint64) {
 	if p.gen[fqdn] == g {
 		delete(p.published, fqdn)
 		delete(p.gen, fqdn)
+		// The intent goes with it. Leaving it behind would debounce the next Publish of the
+		// same target against a record that no longer exists, and the name would never come
+		// back (#1362).
+		delete(p.desired, fqdn)
 		slog.Info(fmt.Sprintf("[DNS] Withdrew %s", fqdn))
 	}
 }

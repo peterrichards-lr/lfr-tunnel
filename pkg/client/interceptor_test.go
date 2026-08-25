@@ -619,3 +619,59 @@ func TestStartHealthChecks_ServingGatewayEvictionStillFailsOver(t *testing.T) {
 		t.Fatal("expected failover when the serving gateway reports the lease evicted")
 	}
 }
+
+// The gate has to stop the prober BEFORE it cancels the session. Checking after the fact is
+// too late: cancelling is itself the interruption, and the client then re-registers anyway
+// via the ordinary failover path (#1310).
+func TestStartFailbackProber_GateStopsItBeforeCancelling(t *testing.T) {
+	primaryServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusOK)
+	}))
+	defer primaryServer.Close()
+
+	engine := NewInterceptorEngine("", nil)
+	engine.SelectedRegion = "us"
+	engine.FailbackProbeInterval = 50 * time.Millisecond
+	engine.SetFailbackGate(func(string) bool { return false })
+
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	clientCanceled := make(chan struct{})
+	engine.StartFailbackProber(ctx, func() { close(clientCanceled) }, primaryServer.URL, "eu")
+
+	select {
+	case <-clientCanceled:
+		t.Fatal("the prober tore down the session for a failback the gate had refused")
+	case <-time.After(1 * time.Second):
+	}
+
+	if engine.ConsumeFailback() {
+		t.Error("a refused failback was still announced to the caller")
+	}
+}
+
+// And with no gate, or an allowing one, failback works exactly as before.
+func TestStartFailbackProber_AllowingGateStillFailsBack(t *testing.T) {
+	primaryServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusOK)
+	}))
+	defer primaryServer.Close()
+
+	engine := NewInterceptorEngine("", nil)
+	engine.SelectedRegion = "us"
+	engine.FailbackProbeInterval = 50 * time.Millisecond
+	engine.SetFailbackGate(func(string) bool { return true })
+
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	clientCanceled := make(chan struct{})
+	engine.StartFailbackProber(ctx, func() { close(clientCanceled) }, primaryServer.URL, "eu")
+
+	select {
+	case <-clientCanceled:
+	case <-time.After(3 * time.Second):
+		t.Fatal("an allowed failback never happened")
+	}
+}

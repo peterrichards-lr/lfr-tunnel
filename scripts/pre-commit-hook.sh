@@ -1,109 +1,80 @@
 #!/bin/bash
+#
+# Pre-commit hook: only the checks that are fast AND catch something painful to undo (#1343).
+#
+# A commit is a local checkpoint; a push is where work becomes shared. Gating commits on the
+# full suite meant a checkpoint cost minutes, which is a good way to teach people --no-verify.
+# Everything slower lives in scripts/pre-push-hook.sh, and golangci-lint moved to CI only,
+# where it already ran.
+#
+# What stays here, and why:
+#   gitleaks   - a secret that reaches a commit is in history; rewriting is the expensive fix
+#   EDR guard  - 15 lines, and the thing it prevents costs a machine reinstall
+#   gofmt      - stops formatting churn entering the tree at all
+#   node -c    - milliseconds, catches a typo before it ships
+#
+# Every check is scoped to STAGED files. `gofmt -l .` used to walk the whole tree on every
+# commit regardless of what changed.
 
-# Gitleaks Docker Pre-Commit Hook
-# Scans staged files for API keys, passwords, and private tokens.
+set -uo pipefail
+
+# Pinned rather than :latest so Docker resolves from cache instead of hitting the registry on
+# every commit, and so a gitleaks release cannot change what this hook accepts (#1343).
+GITLEAKS_IMAGE="zricethezav/gitleaks:v8.30.1"
+
+staged() {
+    git diff --cached --name-only --diff-filter=ACM -- "$@"
+}
 
 echo "[Git Hook] Scanning staged files for secrets/tokens..."
-
-# Run Gitleaks in Docker
-# -v "$(pwd)":/app mounts the repository root
-# -w /app sets the working directory
-# protect --source=/app --verbose --staged tells gitleaks to scan staged changes
-docker run --rm -v "$(pwd)":/app -w /app zricethezav/gitleaks:latest protect --source=/app --verbose --staged
-
-EXIT_CODE=$?
-
-if [ $EXIT_CODE -ne 0 ]; then
-  echo ""
-  echo "❌ Error: Git commit blocked because a secret or private token was detected."
-  echo "If this is a false positive, add the secret value to '.gitleaksignore' to allow it."
-  echo ""
-  exit $EXIT_CODE
+if ! docker run --rm -v "$(pwd)":/app -w /app "$GITLEAKS_IMAGE" \
+        protect --source=/app --verbose --staged; then
+    echo ""
+    echo "❌ Error: Git commit blocked because a secret or private token was detected."
+    echo "If this is a false positive, add the secret value to '.gitleaksignore' to allow it."
+    echo ""
+    exit 1
 fi
-
 echo "✅ No secrets detected."
 
 echo "[Git Hook] Running SentinelOne EDR Safety Guard check..."
-./scripts/check-edr-safety.sh
-if [ $? -ne 0 ]; then
-  echo "❌ Error: EDR safety check failed."
-  exit 1
-fi
-
-echo "[Git Hook] Checking for unformatted files..."
-UNFORMATTED=$(gofmt -l .)
-if [ -n "$UNFORMATTED" ]; then
-  echo "❌ Error: The following files are not formatted properly:"
-  echo "$UNFORMATTED"
-  echo "Formatting them now..."
-  make fmt
-  echo "❌ Error: Git commit blocked because files were modified by formatting."
-  echo "Please restage these files ('git add .') and try committing again."
-  exit 1
-fi
-
-echo "[Git Hook] Checking JavaScript syntax..."
-if command -v node &>/dev/null; then
-  for js_file in pkg/server/static/*.js; do
-    if [ -f "$js_file" ]; then
-      node -c "$js_file"
-      if [ $? -ne 0 ]; then
-        echo "❌ Error: JavaScript syntax check failed for $js_file."
-        exit 1
-      fi
-    fi
-  done
-  echo "✅ Vanilla JavaScript syntax check passed."
-else
-  echo "⚠️ Warning: 'node' not found in PATH. Skipping Vanilla JavaScript syntax check."
-fi
-
-echo "[Git Hook] Checking React UI syntax and types..."
-if command -v pnpm &>/dev/null; then
-  (cd ui && pnpm install && pnpm run lint && pnpm run build)
-  if [ $? -ne 0 ]; then
-    echo "❌ Error: React UI lint or build failed. Please fix before committing."
+if ! ./scripts/check-edr-safety.sh; then
+    echo "❌ Error: EDR safety check failed."
     exit 1
-  fi
-  echo "✅ React UI checks passed."
-else
-  echo "⚠️ Warning: 'pnpm' not found in PATH. Skipping React UI checks."
 fi
 
-echo "[Git Hook] Running go vet..."
-go vet ./...
-if [ $? -ne 0 ]; then
-  echo "❌ Error: 'go vet' failed. Please fix before committing."
-  exit 1
+GO_FILES=$(staged '*.go')
+if [ -n "$GO_FILES" ]; then
+    echo "[Git Hook] Checking staged Go files are formatted..."
+    # shellcheck disable=SC2086
+    UNFORMATTED=$(gofmt -l $GO_FILES)
+    if [ -n "$UNFORMATTED" ]; then
+        echo "❌ Error: The following staged files are not formatted properly:"
+        echo "$UNFORMATTED"
+        echo "Formatting them now..."
+        # shellcheck disable=SC2086
+        gofmt -w $UNFORMATTED
+        echo "❌ Error: Git commit blocked because files were modified by formatting."
+        echo "Please restage these files ('git add .') and try committing again."
+        exit 1
+    fi
 fi
 
-echo "[Git Hook] Running tests..."
-# Delegated to `make test` rather than repeating its loop here (#1334).
-#
-# What this used to do: set TMPDIR=/private/tmp -- without exporting it, so the go child never
-# saw it -- and then build with -o. With GOTMPDIR unset, the toolchain linked every test binary
-# inside /var/folders and only then moved it to the -o path. That is the unsigned-binary-in-a-
-# temp-directory shape the local EDR quarantines, and it ran on every single commit.
-#
-# make test exports GOTMPDIR and asserts it before building, so there is now one sanctioned
-# path instead of two that could drift apart -- and only one place to get it right.
-#
-# pkg/server stays excluded here, as before: its tests open real listeners and are slow enough
-# to make a commit hook painful. CI runs the full set.
-PKGS=$(go list ./... | grep -v /pkg/server | tr '\n' ' ')
-make test PKG="$PKGS"
-if [ $? -ne 0 ]; then
-  echo "❌ Error: Tests failed. Please fix before committing."
-  exit 1
+JS_FILES=$(staged 'pkg/server/static/*.js')
+if [ -n "$JS_FILES" ]; then
+    if command -v node >/dev/null 2>&1; then
+        echo "[Git Hook] Checking staged JavaScript syntax..."
+        while IFS= read -r js_file; do
+            if ! node -c "$js_file"; then
+                echo "❌ Error: JavaScript syntax check failed for $js_file."
+                exit 1
+            fi
+        done <<< "$JS_FILES"
+        echo "✅ Vanilla JavaScript syntax check passed."
+    else
+        echo "⚠️ Warning: 'node' not found in PATH. Skipping JavaScript syntax check."
+    fi
 fi
 
-echo "[Git Hook] Running golangci-lint via Docker..."
-docker run --rm -v "$(pwd)":/app -w /app golangci/golangci-lint:latest golangci-lint run
-if [ $? -ne 0 ]; then
-  echo "❌ Error: golangci-lint found issues. Please fix before committing."
-  exit 1
-fi
-echo "✅ Linting passed."
-
-echo "✅ All pre-commit checks passed! Proceeding with commit."
+echo "✅ Pre-commit checks passed. (vet, tests and the UI build run on push.)"
 exit 0

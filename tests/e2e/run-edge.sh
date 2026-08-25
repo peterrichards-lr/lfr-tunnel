@@ -31,6 +31,11 @@ cleanup() {
         docker stop "$AUTO_CLIENT_ID" >/dev/null 2>&1 || true
         docker rm "$AUTO_CLIENT_ID" >/dev/null 2>&1 || true
     fi
+    if [ -n "$DRAIN_CLIENT_ID" ]; then
+        echo "Stopping and removing drain-test client container: $DRAIN_CLIENT_ID"
+        docker stop "$DRAIN_CLIENT_ID" >/dev/null 2>&1 || true
+        docker rm "$DRAIN_CLIENT_ID" >/dev/null 2>&1 || true
+    fi
     docker-compose -f docker-compose-edge.yml down -v --remove-orphans >/dev/null 2>&1 || true
 
     if [ $EXIT_CODE -eq 0 ]; then
@@ -291,6 +296,15 @@ curl -s -b /tmp/dev-session.txt -X POST -H "Content-Type: application/json" \
 echo "=== Reserving subdomain peter-auto ==="
 curl -s -b /tmp/dev-session.txt -X POST -H "Content-Type: application/json" \
      -d '{"subdomain": "peter-auto", "domain": "lfr-demo.local"}' \
+     "http://localhost:8000/api/portal/reservations"
+
+# A third reservation for the drain test, which needs a client it can guarantee is on the
+# control plane. Reusing the auto-probing client did not work: which gateway that lands on is
+# decided by a latency probe, and CI put it on the edge, so the drain was announced on a
+# gateway it was not attached to and the test failed on its own premise.
+echo "=== Reserving subdomain peter-drain ==="
+curl -s -b /tmp/dev-session.txt -X POST -H "Content-Type: application/json" \
+     -d '{"subdomain": "peter-drain", "domain": "lfr-demo.local"}' \
      "http://localhost:8000/api/portal/reservations"
 sleep 2
 
@@ -576,6 +590,36 @@ if [ "$EDGE_BACK" = false ]; then
     exit 1
 fi
 
+# A client pinned to the control plane with -region eu, rather than whichever gateway the
+# auto-probe happened to choose. The drain has to be announced on the gateway the client is
+# actually attached to, and "actually" must not depend on measured latency inside a CI runner.
+echo "=== Starting a client on the control plane for the drain test ==="
+DRAIN_CLIENT_ID=$(docker-compose -f docker-compose-edge.yml run -d --no-deps \
+  --entrypoint "./lfr-tunnel" \
+  -e LFT_CLIENT_TOKEN="$DEVELOPER_PAT" \
+  lfr-tunnel \
+  -config client-config-edge.yaml \
+  -region eu \
+  -subdomain peter-drain \
+  -ports 80)
+
+DRAIN_READY=false
+for i in {1..30}; do
+    CODE=$(curl -s -o /dev/null -w "%{http_code}" -H "Host: peter-drain.lfr-demo.local" http://localhost:8000/ || true)
+    if [ "$CODE" = "200" ]; then
+        DRAIN_READY=true
+        break
+    fi
+    sleep 2
+done
+
+if [ "$DRAIN_READY" = false ]; then
+    echo "❌ The drain-test client never came up on the control plane."
+    docker logs "$DRAIN_CLIENT_ID" 2>&1 | tail -25
+    exit 1
+fi
+echo "Drain-test client is serving on the control plane"
+
 DRAIN_URL="http://127.0.0.1:8080/api/local/drain"
 DRAIN_REASON="Deploy drain E2E"
 
@@ -597,7 +641,7 @@ echo "Control plane reports: $DRAIN_RESP"
 echo "=== Waiting for the client to receive the drain announcement ==="
 DRAIN_SEEN=false
 for i in {1..40}; do
-    if docker logs "$AUTO_CLIENT_ID" 2>&1 | grep -q "$DRAIN_REASON"; then
+    if docker logs "$DRAIN_CLIENT_ID" 2>&1 | grep -q "$DRAIN_REASON"; then
         DRAIN_SEEN=true
         break
     fi
@@ -607,7 +651,7 @@ done
 if [ "$DRAIN_SEEN" = false ]; then
     echo "❌ The client never received the drain announcement."
     echo "    An operator-initiated drain that no client hears is the same as no drain at all."
-    docker logs "$AUTO_CLIENT_ID" 2>&1 | tail -20
+    docker logs "$DRAIN_CLIENT_ID" 2>&1 | tail -20
     exit 1
 fi
 echo "✅ Client received the drain announcement"
@@ -615,7 +659,7 @@ echo "✅ Client received the drain announcement"
 echo "=== Waiting for the client to move off the control plane ==="
 DRAIN_MOVED=false
 for i in {1..60}; do
-    CODE=$(curl -s -o /dev/null -w "%{http_code}" -H "Host: peter-auto.lfr-demo.local" http://localhost:8090/ || true)
+    CODE=$(curl -s -o /dev/null -w "%{http_code}" -H "Host: peter-drain.lfr-demo.local" http://localhost:8090/ || true)
     if [ "$CODE" = "200" ]; then
         DRAIN_MOVED=true
         break
@@ -625,7 +669,7 @@ done
 
 if [ "$DRAIN_MOVED" = false ]; then
     echo "❌ The client heard the drain but never came up on the edge."
-    docker logs "$AUTO_CLIENT_ID" 2>&1 | tail -25
+    docker logs "$DRAIN_CLIENT_ID" 2>&1 | tail -25
     exit 1
 fi
 echo "✅ Client migrated to the edge ahead of the restart"
@@ -643,9 +687,9 @@ SAMPLE_LOG=$(mktemp)
 (
     for i in {1..60}; do
         EDGE_CODE=$(curl -s -o /dev/null -w "%{http_code}" --max-time 2 \
-            -H "Host: peter-auto.lfr-demo.local" http://localhost:8090/ 2>/dev/null || echo 000)
+            -H "Host: peter-drain.lfr-demo.local" http://localhost:8090/ 2>/dev/null || echo 000)
         CENTRAL_CODE=$(curl -s -o /dev/null -w "%{http_code}" --max-time 2 \
-            -H "Host: peter-auto.lfr-demo.local" http://localhost:8000/ 2>/dev/null || echo 000)
+            -H "Host: peter-drain.lfr-demo.local" http://localhost:8000/ 2>/dev/null || echo 000)
         if [ "$EDGE_CODE" = "200" ] || [ "$CENTRAL_CODE" = "200" ]; then
             echo "200" >> "$SAMPLE_LOG"
         else
@@ -671,8 +715,8 @@ if [ "$FAILED" -ne 0 ]; then
     grep -v '^200$' "$SAMPLE_LOG" | sort | uniq -c
     echo "    Sample sequence (first 60, in order):"
     tr '\n' ' ' < "$SAMPLE_LOG"; echo
-    echo "=== Auto client log (tail) ==="
-    docker logs "$AUTO_CLIENT_ID" 2>&1 | tail -40
+    echo "=== Drain client log (tail) ==="
+    docker logs "$DRAIN_CLIENT_ID" 2>&1 | tail -40
     echo "=== Edge log (tail) ==="
     docker-compose -f docker-compose-edge.yml logs --tail=40 lfr-tunneld-edge 2>&1
     rm -f "$SAMPLE_LOG"

@@ -102,8 +102,44 @@ for name in "${!REQUIRED_JOBS[@]}"; do
     fi
 done
 
+# 4. Every job in ci.yml must be listed in ci-gate's `needs:`.
+#
+#    This is the check that matters once "CI Gate" is the required context. The gate
+#    treats a `skipped` result as acceptable, which is only safe while every job is a
+#    dependency: a job skipped because an upstream job failed reports `skipped`, and the
+#    only thing stopping that hiding the failure is that the upstream job is also in the
+#    list and reports `failure` itself. A job missing from `needs:` is worse than
+#    ungated -- it is ungated while the gate reports green.
+GATE_FILE=".github/workflows/ci.yml"
+if grep -qE '^  ci-gate:' "$GATE_FILE"; then
+    gate_needs=$(awk '
+        /^  ci-gate:/ { in_gate = 1; next }
+        in_gate && /^  [a-zA-Z0-9_-]+:/ { exit }
+        in_gate && /^    needs:/ { in_needs = 1; next }
+        in_needs && /^      - / { sub(/^      - /, ""); print; next }
+        in_needs && /^    [a-zA-Z]/ { in_needs = 0 }
+    ' "$GATE_FILE")
+
+    all_jobs=$(awk '
+        /^jobs:/ { in_jobs = 1; next }
+        in_jobs && /^  [a-zA-Z0-9_-]+:$/ { sub(/:$/, ""); sub(/^  /, ""); print }
+    ' "$GATE_FILE" | grep -v '^ci-gate$')
+
+    for job in $all_jobs; do
+        if ! grep -qxF "$job" <<<"$gate_needs"; then
+            echo "ERROR: job '$job' is not in ci-gate's needs:." >&2
+            echo "       CI Gate accepts a 'skipped' result, which is only safe while every" >&2
+            echo "       job is a dependency. A job missing from needs: is ungated while the" >&2
+            echo "       gate still reports green." >&2
+            fail=1
+        fi
+    done
+else
+    echo "NOTE: no ci-gate job yet; skipping gate-coverage check." >&2
+fi
+
 if [ "$fail" -ne 0 ]; then
     exit 1
 fi
 
-echo "OK: every required status check is emitted by a job that always produces a check run."
+echo "OK: required contexts all report, and CI Gate covers every job."

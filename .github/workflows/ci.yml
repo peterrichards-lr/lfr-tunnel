@@ -461,3 +461,56 @@ jobs:
             tests/e2e/ui/playwright-report/
             tests/e2e/ui/test-results/
           retention-days: 7
+
+  # The single context branch protection requires, instead of naming each job (#1386).
+  #
+  # Why: the required-contexts list is configured in the GitHub UI and the jobs are defined
+  # here, and nothing kept them in step. That drift produced two permanent merge blocks --
+  # #1380 (a skipped matrix job reports one check run under the bare job name, so the
+  # required per-OS contexts never appeared) and #1386 (a workflow-level `paths:` filter
+  # meant no check run at all). With one context, adding or renaming a job here can never
+  # desynchronise that list again.
+  #
+  # Note `needs:` is workflow-scoped, so this cannot cover
+  # "E2E Keycloak SSO Integration Test" (e2e-sso.yml) or "Verify PR references an issue"
+  # (issue-link-check.yml, which triggers on `labeled` and so cannot move here without
+  # breaking the `no-issue-needed` override). Those two stay required in their own right.
+  ci-gate:
+    name: CI Gate
+    # always(), never path-filtered: this is the context that gates the merge, so it has to
+    # report on every PR. `if: success()` would be wrong -- it passes when upstream jobs
+    # were skipped, including skipped *because a dependency failed*.
+    if: always()
+    needs:
+      - changes
+      - docs-review-check
+      - lint-and-format
+      - govulncheck
+      - shellcheck
+      - test
+      - race
+      - e2e-test
+      - e2e-edge-test
+      - e2e-ui-test
+    runs-on: ubuntu-latest
+    steps:
+      - name: Require every job to have succeeded or been skipped
+        env:
+          RESULTS: ${{ toJSON(needs) }}
+        run: |
+          set -euo pipefail
+          echo "$RESULTS"
+          # `skipped` is allowed because path filters legitimately skip jobs. That is only
+          # safe because EVERY job above is listed: a job skipped as a consequence of an
+          # upstream failure cannot hide it, since the upstream job is in this list too and
+          # reports `failure` itself. Drop a job from `needs:` and that guarantee goes with
+          # it -- scripts/check-required-contexts.sh enforces that it never happens.
+          bad=$(jq -r 'to_entries[]
+                       | select(.value.result != "success" and .value.result != "skipped")
+                       | "\(.key)=\(.value.result)"' <<<"$RESULTS")
+          if [ -n "$bad" ]; then
+            echo "::error::CI Gate failing -- these jobs did not pass:"
+            echo "$bad"
+            exit 1
+          fi
+          echo "All jobs succeeded or were skipped."

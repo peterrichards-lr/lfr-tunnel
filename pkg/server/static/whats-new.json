@@ -1,5 +1,64 @@
 [
   {
+    "version": "v1.48.6",
+    "release_date": "2026-08-26",
+    "features": [
+      "ci(shell): clear the shellcheck warnings and raise the floor to -S warning (#1366) (#1427)",
+      "security(server): tighten file and directory modes, and enforce the gosec rules (#1408) (#1424)",
+      "fix(client): restore the Inspector log viewer lost in #783 (#1422)",
+      "fix(server): copy the default websocket dialer instead of mutating it (#1370) (#1417)",
+      "chore(client): delete three tracked files that nothing loads (#1416)",
+      "docs(agents): record how to resolve a conflicting dependabot PR (#1418)",
+      "fix(ci): diff a PR from its merge base, not from the base branch tip (#1411)",
+      "docs(agents): add velocity and pragmatism guardrails (Closes #1414) (#1415)",
+      "docs(agents): make CLAUDE.md a pointer, not a second copy of the rules (#1412) (#1413)",
+      "test(server): fix the 5 data races blocking -race on the whole tree (#1370) (#1410)",
+      "fix(portal-v2): stop the edge schedule timezone picker rendering blank (#1407)",
+      "security(server): set ReadHeaderTimeout on every HTTP listener (#1372) (#1409)",
+      "fix(portal-v2): give the admin subdomains nav its own i18n key (#1406)",
+      "fix(ci): make the required-contexts gate runnable on macOS bash 3.2 (#1395) (#1401)",
+      "chore(format): adopt Prettier and format the JS, TS, CSS and JSON sources (#1405)",
+      "security(build): stop `sign` spawning `go run`, and let the guard see Go source (#1402) (#1404)",
+      "fix(portal-v2): give the \"Switch back to V1\" banner a real dismiss control (#1400)",
+      "fix(ops): refuse to sign or publish artefacts that are not from this source (#1279) (#1396)",
+      "fix(portal-v1): confirm before a global broadcast, and stop it clearing silently (#1399)",
+      "docs(agents): record the CI Gate convention for adding jobs (#1397)",
+      "fix(client): show the Inspector the settings the client is actually using (#1394)",
+      "fix(hooks): make the secret scanner fail closed, and work in a worktree (#1377) (#1392)",
+      "ci: add a CI Gate job and enforce that it covers every job (#1391)",
+      "test(db): stop TestAutoBan_Expires racing the clock (#1390)",
+      "fix(portal-v2): make wide tables visibly scrollable on narrow viewports (#1388)",
+      "fix(portal-v1): stop selects rendering blank when the stored value has no option (#1385)",
+      "docs(agents): bring .agent-state.md up to date for a session handover (#1379)",
+      "fix(ci): report the required Test Suite contexts even when there is nothing to test (#1380) (#1381)",
+      "fix(portal-v1): stop the V2 promo banner overlaying the header controls (#1382)",
+      "test(e2e): cover unplanned failover and failback, not just announced moves (#1374) (#1375)",
+      "chore(deps): bump github.com/aws/aws-sdk-go-v2/service/scheduler (#1351)",
+      "fix(build): remove build config that drifted from how the project is built (#1330) (#1369)",
+      "ci: run the race detector, scoped to the packages that are clean (#1371)",
+      "chore(lint): make the linter config honest, and add gosec (#1331) (#1373)",
+      "chore(deps): bump github.com/aws/aws-sdk-go-v2/service/route53 (#1350)",
+      "perf(server): read access control from the lease, not the database, per request (#1329, #1367) (#1368)",
+      "chore(deps): bump github.com/aws/aws-sdk-go-v2/config (#1349)",
+      "fix(server): debounce DNS publishes on intent, and serialise them per name (#1362) (#1364)",
+      "perf(ci): split the commit hook and skip CI jobs a change cannot affect (#1363)",
+      "feat(server): expiring auto-bans with fail2ban-style escalation (#1353) (#1356)",
+      "fix(e2e): fail the drain test when the sampler collected nothing (#1361)",
+      "chore(deps): bump github.com/aws/aws-sdk-go-v2 from 1.43.6 to 1.43.7 (#1347)",
+      "chore(deps): bump actions/setup-node from 5 to 7 (#1346)",
+      "chore(deps): bump modernc.org/sqlite from 1.56.0 to 1.57.0 (#1345)",
+      "security(server): trust forwarding headers only from trusted proxies, and audit the real IP (#1325, #1357) (#1360)",
+      "fix(e2e): select docker compose by capability, not by existence (#1359)",
+      "fix(deps): bump golang.org/x/text to v0.39.0 for GO-2026-5970 (#1354)",
+      "fix(server): decay rate-limit violations so auto-bans reflect a burst, not a lifetime (#1327) (#1352)",
+      "docs(agents): add an issue-claiming convention for parallel agents (#1348)",
+      "fix(build): GOTMPDIR is the EDR control, not -o (#1332, #1333, #1334, #1335, #1336, #1337) (#1344)",
+      "security(server): escape visitor-facing proxy pages and refuse off-site redirects (#1323, #1324) (#1341)",
+      "fix(ci): treat an issue's existing priority as a baseline, not a target (#1340)",
+      "feat(ops): provision certificate distribution, so a renewal reaches the edges (#1302) (#1322)"
+    ]
+  },
+  {
     "version": "v1.48.5",
     "release_date": "2026-08-25",
     "features": [
@@ -45,17 +104,6 @@
       "feat(ci): sign release checksums with minisign when a key is configured (#1269)",
       "fix(provisioner): reject swapped schedule times and apply start before stop (#1268)",
       "fix(client): explain an unsigned release instead of reporting a bare 404 (#1267)"
-    ]
-  },
-  {
-    "version": "v1.48.1",
-    "release_date": "2026-08-24",
-    "features": [
-      "fix(server): answer 503 for a tunnel that moved and 404 for one that never existed (#1263)",
-      "fix(ops): bake deployment defaults into the binaries deploy-clients publishes (#1262)",
-      "ci(release): report which deployment defaults a release is built with (#1261)",
-      "fix(client): bound the registration handshake so an unreachable gateway fails fast (#1260)",
-      "fix(client): only announce the tunnel once it is actually connected (#1259)"
     ]
   }
 ]

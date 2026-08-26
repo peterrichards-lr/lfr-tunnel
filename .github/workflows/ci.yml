@@ -277,11 +277,14 @@ jobs:
   # Containerised to match how golangci-lint and gitleaks already run here, so there is no new
   # tool to install.
   #
-  # -S error, not -S warning, and deliberately so. Measured on the tree at the time this landed:
-  # -S error is clean, while -S warning reports 34 findings across 18 files (SC2088, SC2087,
-  # SC2034, SC1007, SC2206, SC2046, SC2207). Enforcing a level the tree does not meet would mean
-  # landing a red job and teaching people to ignore it. This sets a floor that holds today and
-  # catches genuine errors; raising it to -S warning is tracked separately.
+  # -S warning as of #1366. It was -S error while the tree did not meet the higher level --
+  # enforcing a level the code fails would land a red job and teach people to ignore it. The
+  # tree meets it now: 30 findings resolved, 10 by fixing and 20 by a suppression that names its
+  # reason at the site.
+  #
+  # Do not reach for `--exclude` to keep this green. That is the pattern #1331 had to undo, where
+  # linters were enabled and then excluded until they no longer said anything. A finding is
+  # either a bug to fix or a false positive worth explaining in one line next to the code.
   shellcheck:
     name: Shell Lint
     needs: changes
@@ -296,7 +299,7 @@ jobs:
           mapfile -t FILES < <(git ls-files '*.sh')
           echo "Linting ${#FILES[@]} shell scripts..."
           docker run --rm -v "$(pwd)":/mnt -w /mnt koalaman/shellcheck:v0.11.0 \
-            -S error -x "${FILES[@]}"
+            -S warning -x "${FILES[@]}"
 
   # The secret scanner's own tests (#1377). gitleaks in the pre-commit hook was reporting
   # "No secrets detected" on a scan of zero bytes whenever the commit came from a git worktree,

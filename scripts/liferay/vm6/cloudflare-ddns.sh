@@ -81,7 +81,10 @@ except Exception:
     pass
 " 2>/dev/null || true)
     if [ -n "${DOMAINS_STR}" ]; then
-        DOMAINS=(${DOMAINS_STR})
+        # read -ra rather than DOMAINS=(${DOMAINS_STR}): the old form also glob-expanded
+        # each field, so a domain containing a shell metacharacter would have been
+        # rewritten against the filesystem (#1366).
+        read -ra DOMAINS <<< "${DOMAINS_STR}"
         echo "[DDNS] Dynamically loaded domains from ${CONFIG_FILE}: ${DOMAINS[*]}"
     fi
 fi
@@ -210,7 +213,9 @@ for domain in "${DOMAINS[@]}"; do
             rec_resp=$(cf_api "GET" "zones/${zone_id}/dns_records?name=${domain}&type=TXT")
             
             # Extract IDs of all TXT records containing 'v=spf1' (handling quotes robustly)
-            rec_ids=($(echo "${rec_resp}" | jq -r '.result[] | select(.content | contains("v=spf1")) | .id // empty'))
+            # mapfile rather than rec_ids=($(...)): same globbing problem, and this reads
+            # ids straight from jq without a word-splitting round trip (#1366).
+            mapfile -t rec_ids < <(echo "${rec_resp}" | jq -r '.result[] | select(.content | contains("v=spf1")) | .id // empty')
 
             if [ ${#rec_ids[@]} -gt 0 ]; then
                 primary_id="${rec_ids[0]}"

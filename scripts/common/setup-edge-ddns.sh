@@ -24,6 +24,10 @@ while getopts "s:i:u:" opt; do
     s) VPS_IP="$OPTARG" ;;
     i)
       KEY_PATH="$OPTARG"
+      # Deliberate literal tilde (#1366): this matches a user-supplied path that BEGINS with
+      # "~/" so the next line can expand it against $HOME. Using $HOME in the pattern would
+      # match the already-expanded form instead, which is not what arrives here.
+      # shellcheck disable=SC2088
       if [[ "$KEY_PATH" == "~/"* ]]; then
         KEY_PATH="${HOME}/${KEY_PATH#~/}"
       elif [[ "$KEY_PATH" == "~" ]]; then

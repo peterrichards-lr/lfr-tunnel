@@ -6,6 +6,10 @@ set -e
 # Load local environment configuration if present
 if [ -f .env ]; then
   # Load env variables (filtering out comments)
+  # Word splitting is required here (#1366): export needs one argument per variable, so
+  # the substitution must split. Note the known limitation -- a value containing spaces
+  # or quotes is still mishandled; that is a property of this .env loader, not the quoting.
+  # shellcheck disable=SC2046
   export $(grep -v '^#' .env | xargs)
 fi
 

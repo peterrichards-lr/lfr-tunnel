@@ -6,24 +6,43 @@
 # scripts/common/dns/example.yaml for a provider/deployment-neutral starting
 # point if you're setting this up for your own domain instead. This file
 # lives under scripts/liferay/ rather than scripts/liferay/aws/ or
-# scripts/liferay/vm6/ because it isn't tied to one provider -- the same
-# spec is read for both the Cloudflare read-only verification and the
-# Route53 population.
+# scripts/liferay/vm6/ because it isn't tied to one provider: the dns tool
+# reads the same spec for either, and the per-record `cloudflare:` keys below
+# exist for exactly that reason.
+#
+# ROUTE53 IS AUTHORITATIVE for both zones, and has been since #858 closed on
+# 2026-08-11. Verified 2026-08-26 -- NS for lfr-demo.se and lfr-demo.online
+# both answer awsdns. Nothing in Liferay's deployment reads or writes
+# Cloudflare any more; the zones there were removed when the migration
+# completed.
+#
+# That is a statement about THIS deployment, not about the tool. Cloudflare
+# remains a fully supported provider in lfr-tunnel-ops (pkg/ops/dns_cloudflare.go,
+# selected by `-provider cloudflare`), because this is an MIT project and other
+# deployments use it. Do not strip Cloudflare support or the `cloudflare:` keys
+# on the strength of Liferay having moved off it -- that conflation is the
+# mistake #1301 had to undo, where a Cloudflare hardcoding in the
+# provider-neutral scripts/common layer was replaced with an AWS one instead of
+# a required argument (#1284).
 #
 # ${IPV4} / ${IPV6} must be supplied via -ipv4/-ipv6 at plan/apply time --
 # never invent a value here, and never resolve it via -detect-ip from an
 # operator laptop (see the -detect-ip flag's own warning).
 #
-# Mirrored the live Cloudflare zone as of 2026-07-29 (post #857 SES DKIM/SPF
+# HISTORY. Originally mirrored from the then-live Cloudflare zone on 2026-07-29 (post #857 SES DKIM/SPF
 # additions), then re-audited on 2026-08-06 against real production (#940,
 # #941): this file had silently drifted out of sync with the actual AWS edge
 # cutover -- it had no entries at all for the four renamed edge subdomains
 # (us/apac/sa/in), and still listed the retired aws-central pilot. That drift
 # is how a real live bug (us.lfr-demo.se pointing at a legacy GCP edge's IP)
 # went uncaught: there was nothing here to diff it against. Run `dns apply`
-# (see below) against both providers after any change here so this file stays
-# the actual source of truth rather than just aspirational. Deviations from a
-# byte-for-byte copy of Cloudflare, otherwise:
+# (see below) after any change here so this file stays the actual source of
+# truth rather than just aspirational -- against Route53 only, now. The old
+# instruction said "against both providers", which stopped being possible when
+# the Cloudflare zones were removed and would now either fail or recreate a
+# zone nobody serves from (#1284).
+#
+# Deviations from what was originally copied out of Cloudflare, otherwise:
 #   - The lfr-demo.online DMARC record's Cloudflare-specific
 #     `rua=mailto:...@dmarc-reports.cloudflare.net;` reporting address is
 #     dropped for both domains: it becomes a dead, non-deliverable address

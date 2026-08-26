@@ -10,6 +10,10 @@ scp scripts/liferay/vm6/cloudflare-ddns.service $VPS_USER@$VPS_IP:/home/$VPS_USE
 scp scripts/liferay/vm6/cloudflare-ddns.timer $VPS_USER@$VPS_IP:/home/$VPS_USER/cloudflare-ddns.timer
 
 echo "Orchestrating systemd registration and permissions on VPS..."
+# Deliberate mixed heredoc (#1366): local values such as $SSH_USER are interpolated
+# here on purpose, and every remote-side variable is escaped as \$var so it expands on
+# the server. Quoting the delimiter would stop the local half the script depends on.
+# shellcheck disable=SC2087
 ssh $VPS_USER@$VPS_IP << REMOTE_SSH
   echo "=> Installing and securing script under /usr/local/bin..."
   sudo mv /home/$VPS_USER/cloudflare-ddns.sh /usr/local/bin/cloudflare-ddns.sh

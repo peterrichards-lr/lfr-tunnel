@@ -61,6 +61,10 @@ while [[ $# -gt 0 ]]; do
     -s) VPS_IP="$2"; shift 2 ;;
     -i)
       KEY_PATH="$2"
+      # Deliberate literal tilde (#1366): this matches a user-supplied path that BEGINS with
+      # "~/" so the next line can expand it against $HOME. Using $HOME in the pattern would
+      # match the already-expanded form instead, which is not what arrives here.
+      # shellcheck disable=SC2088
       if [[ "$KEY_PATH" == "~/"* ]]; then
         KEY_PATH="${HOME}/${KEY_PATH#~/}"
       elif [[ "$KEY_PATH" == "~" ]]; then
@@ -229,6 +233,10 @@ scp $SSH_KEY_ARG bin/lfr-tunnel-edge-provisioner-linux $SSH_USER@$VPS_IP:/home/$
 #    /etc/lfr-tunneld to already exist (i.e. run this AFTER setup-central-vps.sh, not
 #    before) -- this script never creates the central's core config/systemd unit itself.
 echo "=> Installing binary, config, and systemd unit on $VPS_IP..."
+# Deliberate mixed heredoc (#1366): local values such as $SSH_USER are interpolated
+# here on purpose, and every remote-side variable is escaped as \$var so it expands on
+# the server. Quoting the delimiter would stop the local half the script depends on.
+# shellcheck disable=SC2087
 ssh $SSH_KEY_ARG $SSH_USER@$VPS_IP << REMOTE_SSH
   if ! id "lfr-tunnel" &>/dev/null; then
     echo "❌ Error: system user 'lfr-tunnel' doesn't exist -- run setup-central-vps.sh first."

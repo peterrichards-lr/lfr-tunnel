@@ -1253,7 +1253,27 @@ applyTheme(currentUser.theme_preference);
         }
 
         async function setBroadcastMessage() {
-            const msg = document.getElementById('admin-broadcast-input').value.trim();
+            const input = document.getElementById('admin-broadcast-input');
+            const msg = input.value.trim();
+
+            // An empty box used to POST "" -- which is exactly what Clear does. So the
+            // primary button silently performed a clear, which is not something anyone
+            // does on purpose (#1202).
+            if (!msg) {
+                showToast(t('toast_broadcast_empty',
+                    'Enter a message to broadcast, or use Clear to remove the current one.'));
+                input.focus();
+                return;
+            }
+
+            // handleAdminBroadcast calls BroadcastTelemetry(), so this reaches every
+            // connected portal immediately and is audited against target "all". The
+            // button sits beside routine actions and fired with nothing in between.
+            if (!confirm(t('confirm_broadcast',
+                    'Send this message to every user right now?') + '\n\n' + msg)) {
+                return;
+            }
+
             const res = await fetch('/api/admin/broadcast', {
                 method: 'POST',
                 headers: {'Content-Type': 'application/json'},
@@ -1264,14 +1284,27 @@ applyTheme(currentUser.theme_preference);
         }
 
         async function clearBroadcastMessage() {
-            document.getElementById('admin-broadcast-input').value = "";
+            const input = document.getElementById('admin-broadcast-input');
+
+            if (!confirm(t('confirm_broadcast_clear',
+                    "Remove the current broadcast message from every user's portal?"))) {
+                return;
+            }
+
             const res = await fetch('/api/admin/broadcast', {
                 method: 'POST',
                 headers: {'Content-Type': 'application/json'},
                 body: JSON.stringify({ message: "" })
             });
-            if (res.ok) showToast(t('toast_broadcast_cleared', 'Broadcast message cleared!'));
-            else showToast(t('toast_broadcast_clear_failed', 'Failed to clear broadcast'));
+            // Only wipe the box once the gateway has accepted it. It used to be cleared
+            // first, so a failed request lost whatever had been typed while leaving the
+            // banner live -- the worst of both.
+            if (res.ok) {
+                input.value = "";
+                showToast(t('toast_broadcast_cleared', 'Broadcast message cleared!'));
+            } else {
+                showToast(t('toast_broadcast_clear_failed', 'Failed to clear broadcast'));
+            }
         }
 
         // Themes Portal V2 can store that V1 has no stylesheet for. Used only to label

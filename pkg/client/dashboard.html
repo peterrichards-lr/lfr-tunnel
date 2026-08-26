@@ -6,6 +6,29 @@
     <title>Liferay Tunnel Inspector</title>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
     <style>
+        /* Log viewer (#1420). Monospaced and scrollable, with the level colour-coded so
+           an ERROR is findable without reading every line. */
+        .log-viewer {
+            max-height: 60vh;
+            overflow-y: auto;
+            font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+            font-size: 12px;
+            line-height: 1.6;
+            background: rgba(0, 0, 0, 0.25);
+            border: 1px solid var(--border);
+            border-radius: 6px;
+            padding: 8px;
+        }
+        .log-line { display: flex; gap: 10px; padding: 1px 4px; white-space: pre-wrap; word-break: break-word; }
+        .log-line:hover { background: rgba(255, 255, 255, 0.04); }
+        .log-time { color: var(--text-muted); flex-shrink: 0; }
+        .log-level { flex-shrink: 0; font-weight: 700; min-width: 46px; }
+        .log-level--error { color: var(--danger); }
+        .log-level--warn { color: #f59e0b; }
+        .log-level--info { color: var(--success); }
+        .log-level--debug { color: var(--text-muted); }
+        .log-message { flex: 1; }
+
         :root {
             --bg-base: #0f172a;
             --bg-card: rgba(30, 41, 59, 0.7);
@@ -148,6 +171,7 @@
         <div style="display: flex; border-bottom: 1px solid var(--border); background: var(--bg-card);">
             <div id="tab-traffic" class="tab-item active" onclick="switchView('traffic')" data-i18n="client_traffic_log">Traffic Log</div>
             <div id="tab-settings" class="tab-item" onclick="switchView('settings')" data-i18n="client_settings">Settings</div>
+            <div id="tab-logs" class="tab-item" onclick="switchView('logs')" data-i18n="client_logs">Logs</div>
         </div>
         <div class="access-control-panel" style="padding: 16px 20px; border-bottom: 1px solid var(--border); background: var(--bg-card); display: flex; flex-direction: column; gap: 10px;">
             <div style="font-size: 12px; font-weight: 600; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.05em;" data-i18n="client_access_control">Access Control</div>
@@ -207,6 +231,14 @@ const clientTranslations = {
         "client_config_title": "Client Configuration",
         "client_config_subtitle": "Manage your local Liferay Tunnel settings",
         "client_settings": "Settings",
+        "client_logs": "Logs",
+        "client_logs_title": "Client Logs",
+        "client_logs_subtitle": "Live output from this client's log file",
+        "client_logs_filter": "Filter logs...",
+        "client_logs_all_levels": "All levels",
+        "client_logs_refresh": "Refresh",
+        "client_logs_empty": "No log lines to show",
+        "client_logs_none": "No log file yet -- the client has not connected.",
         "client_access_control": "Access Control",
         "client_passcode": "Passcode Protection",
         "client_passcode_placeholder": "No passcode set (Public)",
@@ -248,6 +280,14 @@ const clientTranslations = {
         "client_config_title": "Configuración del Cliente",
         "client_config_subtitle": "Gestione la configuración local de Liferay Tunnel",
         "client_settings": "Ajustes",
+        "client_logs": "Registros",
+        "client_logs_title": "Registros del cliente",
+        "client_logs_subtitle": "Salida en vivo del archivo de registro de este cliente",
+        "client_logs_filter": "Filtrar registros...",
+        "client_logs_all_levels": "Todos los niveles",
+        "client_logs_refresh": "Actualizar",
+        "client_logs_empty": "No hay líneas de registro que mostrar",
+        "client_logs_none": "Aún no hay archivo de registro: el cliente no se ha conectado.",
         "client_access_control": "Control de Acceso",
         "client_passcode": "Protección por Contraseña",
         "client_passcode_placeholder": "Sin contraseña (Público)",
@@ -289,6 +329,14 @@ const clientTranslations = {
         "client_config_title": "Client-Konfiguration",
         "client_config_subtitle": "Verwalten Sie Ihre lokalen Liferay Tunnel-Einstellungen",
         "client_settings": "Einstellungen",
+        "client_logs": "Protokolle",
+        "client_logs_title": "Client-Protokolle",
+        "client_logs_subtitle": "Live-Ausgabe der Protokolldatei dieses Clients",
+        "client_logs_filter": "Protokolle filtern...",
+        "client_logs_all_levels": "Alle Ebenen",
+        "client_logs_refresh": "Aktualisieren",
+        "client_logs_empty": "Keine Protokollzeilen vorhanden",
+        "client_logs_none": "Noch keine Protokolldatei – der Client hat sich nicht verbunden.",
         "client_access_control": "Zugangskontrolle",
         "client_passcode": "Passwortschutz",
         "client_passcode_placeholder": "Kein Passwort gesetzt (Öffentlich)",
@@ -330,6 +378,14 @@ const clientTranslations = {
         "client_config_title": "Configuration du Client",
         "client_config_subtitle": "Gérez vos paramètres locaux Liferay Tunnel",
         "client_settings": "Paramètres",
+        "client_logs": "Journaux",
+        "client_logs_title": "Journaux du client",
+        "client_logs_subtitle": "Sortie en direct du fichier journal de ce client",
+        "client_logs_filter": "Filtrer les journaux...",
+        "client_logs_all_levels": "Tous les niveaux",
+        "client_logs_refresh": "Actualiser",
+        "client_logs_empty": "Aucune ligne de journal à afficher",
+        "client_logs_none": "Pas encore de fichier journal : le client ne s'est pas connecté.",
         "client_access_control": "Contrôle d'Accès",
         "client_passcode": "Code d'accès",
         "client_passcode_placeholder": "Aucun code d'accès (Public)",
@@ -371,6 +427,14 @@ const clientTranslations = {
         "client_config_title": "Configuração do Cliente",
         "client_config_subtitle": "Gerencie suas configurações locais do Liferay Tunnel",
         "client_settings": "Configurações",
+        "client_logs": "Registos",
+        "client_logs_title": "Registos do cliente",
+        "client_logs_subtitle": "Saída em direto do ficheiro de registo deste cliente",
+        "client_logs_filter": "Filtrar registos...",
+        "client_logs_all_levels": "Todos os níveis",
+        "client_logs_refresh": "Atualizar",
+        "client_logs_empty": "Sem linhas de registo para mostrar",
+        "client_logs_none": "Ainda sem ficheiro de registo — o cliente não se ligou.",
         "client_access_control": "Controle de Acesso",
         "client_passcode": "Senha de Proteção",
         "client_passcode_placeholder": "Sem senha (Público)",
@@ -412,6 +476,14 @@ const clientTranslations = {
         "client_config_title": "クライアント設定",
         "client_config_subtitle": "ローカルのLiferay Tunnel設定を管理します",
         "client_settings": "設定",
+        "client_logs": "ログ",
+        "client_logs_title": "クライアントログ",
+        "client_logs_subtitle": "このクライアントのログファイルのライブ出力",
+        "client_logs_filter": "ログを絞り込む...",
+        "client_logs_all_levels": "すべてのレベル",
+        "client_logs_refresh": "更新",
+        "client_logs_empty": "表示するログ行がありません",
+        "client_logs_none": "ログファイルがまだありません。クライアントが接続していません。",
         "client_access_control": "アクセス制御",
         "client_passcode": "パスコード保護",
         "client_passcode_placeholder": "パスコードなし（公開）",
@@ -849,17 +921,36 @@ function setLanguage(lang) {
             
             const trafficTab = document.getElementById('tab-traffic');
             const settingsTab = document.getElementById('tab-settings');
+            const logsTab = document.getElementById('tab-logs');
             
             const acPanel = document.querySelector('.access-control-panel');
             const publicPanel = document.querySelector('.public-urls-panel');
             const reqList = document.getElementById('req-list');
             
-            if (view === 'settings') {
+            if (view === 'logs') {
+                // Restored in #1420. The log viewer was dropped when the dashboard was
+                // rewritten in #783, while /api/logs (inspector.go:215) and the /logs
+                // route (inspector.go:37) both kept working -- so nothing errored and the
+                // tab simply stopped existing.
+                if (history.pushState) {
+                    history.pushState(null, null, '/logs');
+                }
+                trafficTab.classList.remove('active');
+                settingsTab.classList.remove('active');
+                if (logsTab) logsTab.classList.add('active');
+
+                acPanel.style.display = 'none';
+                publicPanel.style.display = 'none';
+                reqList.style.display = 'none';
+
+                renderLogsView();
+            } else if (view === 'settings') {
                 if (history.pushState) {
                     history.pushState(null, null, '/settings');
                 }
                 trafficTab.classList.remove('active');
                 settingsTab.classList.add('active');
+                if (logsTab) logsTab.classList.remove('active');
                 
                 acPanel.style.display = 'none';
                 publicPanel.style.display = 'none';
@@ -872,6 +963,7 @@ function setLanguage(lang) {
                 }
                 trafficTab.classList.add('active');
                 settingsTab.classList.remove('active');
+                if (logsTab) logsTab.classList.remove('active');
                 
                 acPanel.style.display = 'flex';
                 publicPanel.style.display = 'flex';
@@ -884,6 +976,122 @@ function setLanguage(lang) {
                     main.innerHTML = '<div class="empty-state" data-i18n="client_select_req">Select a request to view details</div>';
                 }
             }
+        }
+
+        // --- Log viewer, restored in #1420 -------------------------------------------
+        // Lost when the dashboard was rewritten in #783. /api/logs and the /logs route
+        // both kept working throughout, so nothing failed -- the tab just stopped being
+        // rendered, and no test asserted on it.
+        let logPollTimer = null;
+        let allLogLines = [];
+        let lastLogLineCount = -1;
+
+        // Lines look like: 2026/08/26 09:12:33 INFO [Client] message
+        function parseLogLine(line) {
+            const m = line.match(/^(\d{4}\/\d{2}\/\d{2} \d{2}:\d{2}:\d{2})\s+(\w+)\s+(.*)$/);
+            if (m) return { time: m[1], level: m[2].toUpperCase(), message: m[3] };
+            return { time: '', level: '', message: line };
+        }
+
+        function renderLogLines() {
+            const body = document.getElementById('log-lines');
+            if (!body) return;
+            const search = (document.getElementById('log-filter-search')?.value || '').toLowerCase();
+            const level = document.getElementById('log-filter-level')?.value || '';
+
+            const rows = allLogLines.filter(l => {
+                if (level && l.level !== level) return false;
+                if (search && !l.message.toLowerCase().includes(search) && !l.time.includes(search)) return false;
+                return true;
+            });
+
+            if (rows.length === 0) {
+                body.innerHTML = '<div class="empty-state" data-i18n="client_logs_empty">No log lines to show</div>';
+                return;
+            }
+            body.innerHTML = rows.map(l => `
+                <div class="log-line">
+                    <span class="log-time">${escapeHtml(l.time)}</span>
+                    <span class="log-level log-level--${escapeHtml(l.level.toLowerCase())}">${escapeHtml(l.level)}</span>
+                    <span class="log-message">${escapeHtml(l.message)}</span>
+                </div>`).join('');
+        }
+
+        async function fetchLogs() {
+            const body = document.getElementById('log-lines');
+            try {
+                const res = await fetch('/api/logs');
+                if (res.status === 404) {
+                    // The endpoint 404s until the client has a subdomain, which is a real
+                    // state rather than a failure -- say so instead of showing an empty
+                    // pane that looks like "no logs yet".
+                    allLogLines = [];
+                    lastLogLineCount = -1;
+                    if (body) body.innerHTML = '<div class="empty-state" data-i18n="client_logs_none">No log file yet -- the client has not connected.</div>';
+                    return;
+                }
+                if (!res.ok) return;
+                const text = await res.text();
+                const lines = text.split('\n');
+                if (lines.length && lines[lines.length - 1] === '') lines.pop();
+                // Only re-render when something actually changed, so the pane does not
+                // flicker or lose the user's scroll position on every poll.
+                if (lines.length !== lastLogLineCount) {
+                    allLogLines = lines.map(parseLogLine);
+                    lastLogLineCount = lines.length;
+                    renderLogLines();
+                }
+            } catch (e) {
+                console.error('Failed to fetch logs', e);
+            }
+        }
+
+        function renderLogsView() {
+            const main = document.getElementById('main-view');
+            main.innerHTML = `
+                <div class="details-header">
+                    <h2 data-i18n="client_logs_title">Client Logs</h2>
+                    <div class="details-meta" data-i18n="client_logs_subtitle">Live output from this client's log file</div>
+                </div>
+                <div class="details-content" style="padding: 20px;">
+                    <div class="panel" style="width: 100%;">
+                        <div class="panel-body" style="padding: 12px;">
+                            <div style="display: flex; gap: 8px; margin-bottom: 12px; flex-wrap: wrap;">
+                                <input type="text" id="log-filter-search" class="input-field" style="flex: 1; min-width: 180px;"
+                                       placeholder="Filter logs..." data-i18n-placeholder="client_logs_filter"
+                                       aria-label="Filter logs" />
+                                <select id="log-filter-level" class="input-field" style="width: auto;" aria-label="Log level">
+                                    <option value="" data-i18n="client_logs_all_levels">All levels</option>
+                                    <option value="INFO">INFO</option>
+                                    <option value="WARN">WARN</option>
+                                    <option value="ERROR">ERROR</option>
+                                    <option value="DEBUG">DEBUG</option>
+                                </select>
+                                <button id="btn-log-refresh" class="btn btn-secondary" style="width: auto; margin: 0;" data-i18n="client_logs_refresh">Refresh</button>
+                            </div>
+                            <div id="log-lines" class="log-viewer"></div>
+                        </div>
+                    </div>
+                </div>`;
+
+            document.getElementById('log-filter-search').addEventListener('input', renderLogLines);
+            document.getElementById('log-filter-level').addEventListener('change', renderLogLines);
+            document.getElementById('btn-log-refresh').addEventListener('click', () => {
+                lastLogLineCount = -1;
+                fetchLogs();
+            });
+
+            lastLogLineCount = -1;
+            fetchLogs();
+            if (logPollTimer) clearInterval(logPollTimer);
+            logPollTimer = setInterval(() => {
+                // Stop polling as soon as the user leaves the tab -- this ran every 3s
+                // against a file read on the client host.
+                if (activeView !== 'logs') { clearInterval(logPollTimer); logPollTimer = null; return; }
+                fetchLogs();
+            }, 3000);
+
+            setLanguage(currentLang);
         }
 
         async function renderSettingsView() {
@@ -1137,6 +1345,8 @@ function setLanguage(lang) {
         function initRouter() {
             if (window.location.pathname === '/settings') {
                 switchView('settings');
+            } else if (window.location.pathname === '/logs') {
+                switchView('logs');
             } else {
                 switchView('traffic');
             }

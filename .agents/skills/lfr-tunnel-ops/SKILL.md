@@ -199,7 +199,44 @@ or any target you know is already running.*
 ```bash
 ./bin/lfr-tunnel-ops reconcile-nginx
 ```
-`-domains`/`-port` can be passed as flags to override `lfr-tunnel-ops.yaml`'s `nginx:` section for a one-off run; otherwise they're required there. `-domains` should list every domain group the target central actually serves (check `/etc/nginx/sites-available/lfr-tunnel`'s existing `server_name` lines if unsure which ones are live); `-port` must match the live `server-config.yaml`'s `http_bind_addr` port.
+`-domains`/`-port` can be passed as flags to override `lfr-tunnel-ops.yaml`'s `nginx:` section for a one-off run; otherwise they're required there. `-port` must match the live `server-config.yaml`'s `http_bind_addr` port.
+
+**`-domains` takes APEX domains, not hostnames, and the list must be complete.** Each entry
+generates two server blocks -- `<entry>` and `*.<entry>` -- and reads its certificate from
+`/etc/letsencrypt/live/<entry>/`. Liferay's central is therefore
+`-domains lfr-demo.se,lfr-demo.online`, **not** `tunnel.lfr-demo.se`: the wildcard certificates
+are issued for the apex names, and `tunnel.` is served by the `*.lfr-demo.se` block.
+
+Two ways to get this wrong, and only one of them is caught for you:
+
+- **A hostname instead of an apex** asks for `live/tunnel.lfr-demo.se/`, which does not exist.
+  `nginx -t` fails, reconcile rolls back, nothing is harmed. Loud and safe.
+- **An incomplete list is not caught.** The generated config replaces the whole file, so a
+  domain group left out is a vhost deleted. A single-entry list on this two-domain gateway
+  removes `lfr-demo.online` entirely -- and that config is perfectly valid, so `nginx -t`
+  passes and it applies. On 2026-08-26 exactly this was attempted with
+  `-domains tunnel.lfr-demo.se`; the missing certificate is the only reason it failed instead
+  of taking `lfr-demo.online` offline.
+
+So read the live config before running it, every time:
+
+```bash
+ssh <target> 'sudo grep -E "server_name|ssl_certificate " /etc/nginx/sites-available/lfr-tunnel'
+```
+
+and confirm the rendered output matches those pairings before applying:
+
+```bash
+./bin/lfr-tunnel-ops render-nginx-config -domains <list> -port <port> | grep -E "server_name|ssl_certificate "
+```
+
+`render-nginx-config` writes to stdout and touches nothing, so this is free.
+
+**A release that changes the nginx template needs this step, and `deploy` will not tell you.**
+`deploy` only ships the binary and static assets. After deploying a release, check whether the
+template moved -- `git diff <previous-tag>..<tag> -- pkg/ops/nginx.go` -- and reconcile every box
+if it did. v1.48.6 changed `X-Forwarded-For` from `$proxy_add_x_forwarded_for` to `$remote_addr`
+and that change reached no gateway until reconcile was run separately.
 
 ---
 

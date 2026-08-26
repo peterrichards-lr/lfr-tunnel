@@ -502,14 +502,10 @@ func TestServer_EdgeControlWS_LatencyMeasuredViaPing(t *testing.T) {
 // alive is the edge's own Ping/Pong keepalive -- exactly the idle scenario that
 // exposed the bug.
 func TestServer_EdgeControlChannel_SurvivesIdlePeriodViaPongHandler(t *testing.T) {
-	originalDeadline := edgeClientReadDeadline
-	originalPingInterval := edgeClientPingInterval
-	edgeClientReadDeadline = 300 * time.Millisecond
-	edgeClientPingInterval = 50 * time.Millisecond
-	defer func() {
-		edgeClientReadDeadline = originalDeadline
-		edgeClientPingInterval = originalPingInterval
-	}()
+	// Under edgeTunableMu (#1370). runEdgeControlChannel's PongHandler reads these from the
+	// reader goroutine gorilla/websocket drives, which Server.bgWG does not cover, so a direct
+	// assignment races it however the teardown is ordered.
+	defer setEdgeClientTunables(300*time.Millisecond, 50*time.Millisecond)()
 
 	cfgControl := config.DefaultServerConfig()
 	cfgControl.DBPath = filepath.Join(t.TempDir(), "control.db")

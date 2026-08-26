@@ -913,7 +913,11 @@ func centralControlPlaneURL(cfg *config.ClientConfig) string {
 // A fixed value rather than the real downtime: the warning carries shutdown_at but no return
 // time, so the client cannot yet know how long the stop lasts. An hour covers a typical
 // window well enough to stop the churn; carrying the return time would let this be exact.
-const plannedShutdownCooldown = time.Hour
+// A var rather than a const so the E2E suite can compress it (#1374). Asserting that a client
+// does NOT bounce back after a planned move -- the #1310 regression -- otherwise means waiting
+// out a real hour, which is why that behaviour has only ever been covered by unit tests.
+// Overridden only through the environment, and only by tests; nothing documents it as config.
+var plannedShutdownCooldown = cooldownFromEnv("LFT_PLANNED_SHUTDOWN_COOLDOWN", time.Hour)
 
 // logFieldRegion is the key every diagnostic event uses for the gateway region. A constant
 // because a typo in one of them is invisible -- the event still writes, just under a key
@@ -1447,7 +1451,25 @@ var (
 // of the candidate set. It has to outlast the control plane's own lease cleanup sweep
 // (documented at 10s in docs/architecture.md section 5), otherwise the edge can still
 // be advertising a stale lease for this subdomain when we reconsider it.
-const regionFailoverCooldown = 90 * time.Second
+// Also a var, for the same reason as plannedShutdownCooldown above (#1374): an end-to-end
+// failover-then-failback test would otherwise spend 90 seconds of every CI run waiting for a
+// timer whose behaviour is not what the test is trying to prove.
+var regionFailoverCooldown = cooldownFromEnv("LFT_REGION_FAILOVER_COOLDOWN", 90*time.Second)
+
+// cooldownFromEnv reads a test override, falling back to the production value. An unparseable
+// value is ignored rather than fatal: a typo in a test harness must not change how the client
+// behaves for a real user, and silently keeping the safe default is the conservative failure.
+func cooldownFromEnv(key string, fallback time.Duration) time.Duration {
+	raw := strings.TrimSpace(os.Getenv(key))
+	if raw == "" {
+		return fallback
+	}
+	d, err := time.ParseDuration(raw)
+	if err != nil || d <= 0 {
+		return fallback
+	}
+	return d
+}
 
 // gatewayHostKey reduces a gateway URL to the host that identifies it, so aliases collapse
 // onto one entry.

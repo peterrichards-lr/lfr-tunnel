@@ -75,4 +75,43 @@ test.describe('Client Inspector UI', () => {
       'light',
     );
   });
+
+  /**
+   * The log viewer regressed out of the Inspector in #783 and nobody noticed for months
+   * (#1420). /api/logs kept working and /logs stayed a valid route, so nothing errored --
+   * the tab simply stopped being rendered, and no test asserted on it. This is that test.
+   */
+  test('the Logs tab shows the client log', async ({ page }) => {
+    await page.goto('http://localhost:4040/logs');
+
+    const tab = page.locator('#tab-logs');
+    await expect(tab).toBeVisible();
+    await expect(tab).toHaveClass(/active/);
+
+    // Assert on rendered content, not just the container. An empty pane is a real state
+    // here -- /api/logs 404s until the client has a subdomain -- so a test that only
+    // checked the tab exists would have passed against a viewer that shows nothing.
+    const viewer = page.locator('.log-viewer');
+    await expect(viewer).toBeVisible();
+    await expect(page.locator('.log-line').first()).toBeVisible({
+      timeout: 15000,
+    });
+
+    const parsed = await page
+      .locator('.log-line')
+      .first()
+      .evaluate((el) => ({
+        hasLevel: !!el.querySelector('.log-level')?.textContent?.trim(),
+        hasMessage: !!el.querySelector('.log-message')?.textContent?.trim(),
+      }));
+    expect(parsed.hasLevel).toBe(true);
+    expect(parsed.hasMessage).toBe(true);
+  });
+
+  test('the Logs tab is reachable from the Traffic view', async ({ page }) => {
+    await page.goto('http://localhost:4040/');
+    await page.locator('#tab-logs').click();
+    await expect(page.locator('#tab-logs')).toHaveClass(/active/);
+    await expect(page.locator('.log-viewer')).toBeVisible();
+  });
 });

@@ -23,9 +23,18 @@ staged() {
     git diff --cached --name-only --diff-filter=ACM -- "$@"
 }
 
-echo "[Git Hook] Checking the commit will be attributable..."
-if ! ./scripts/check-commit-attribution.sh; then
-    exit 1
+# Guarded on existence, not assumed present. Hooks are COPIES in .git/hooks (#1425), so an
+# installed hook outlives the branch it came from: installing this one and then checking out
+# a branch that predates the script made every commit there fail on a missing file. Skipping
+# loudly is right here -- the check is absent, not passing, and saying so beats both a hard
+# failure on unrelated branches and a silent pass.
+if [ -x ./scripts/check-commit-attribution.sh ]; then
+    echo "[Git Hook] Checking the commit will be attributable..."
+    if ! ./scripts/check-commit-attribution.sh; then
+        exit 1
+    fi
+else
+    echo "[Git Hook] SKIPPED attribution check -- scripts/check-commit-attribution.sh is not on this branch."
 fi
 
 echo "[Git Hook] Scanning staged files for secrets/tokens..."

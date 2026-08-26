@@ -15,7 +15,9 @@ func (s *Server) BackupDatabase() error {
 	}
 
 	backupsDir := filepath.Join(filepath.Dir(s.cfg.DBPath), "backups")
-	if err := os.MkdirAll(backupsDir, 0755); err != nil {
+	// 0750: these are copies of the database, so there is no reason for them to be
+	// world-readable (#1408).
+	if err := os.MkdirAll(backupsDir, 0o750); err != nil {
 		return fmt.Errorf("failed to create backups directory: %v", err)
 	}
 

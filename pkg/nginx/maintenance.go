@@ -41,11 +41,16 @@ func (m *MaintenanceManager) Enable(action, reason string, duration int, endTime
 	}
 
 	triggerDir := filepath.Dir(triggerPath)
-	if err := os.MkdirAll(triggerDir, 0755); err != nil {
+	// 0755 and 0644 throughout this function, deliberately (#1408). nginx serves
+	// maintenance.html and stats the trigger file as www-data, a different user, so it needs
+	// traversal on the directory and read on the files. Tightening to 0750/0600 turns the
+	// maintenance page into a 403 -- visible only during an outage, which is the worst
+	// moment to be debugging file modes.
+	if err := os.MkdirAll(triggerDir, 0o755); err != nil { //nolint:gosec
 		slog.Info(fmt.Sprintf("[Nginx] Failed to create trigger directory: %v", err))
 		return
 	}
-	if err := os.WriteFile(triggerPath, []byte("enabled"), 0644); err != nil {
+	if err := os.WriteFile(triggerPath, []byte("enabled"), 0o644); err != nil { //nolint:gosec
 		slog.Info(fmt.Sprintf("[Nginx] Failed to write Nginx maintenance trigger file: %v", err))
 		return
 	}
@@ -62,7 +67,7 @@ func (m *MaintenanceManager) Enable(action, reason string, duration int, endTime
 	htmlContent = strings.ReplaceAll(htmlContent, "__END_TIME__", strconv.FormatInt(endTime.Unix(), 10))
 
 	htmlDestPath := filepath.Join(triggerDir, "maintenance.html")
-	if err := os.WriteFile(htmlDestPath, []byte(htmlContent), 0644); err != nil {
+	if err := os.WriteFile(htmlDestPath, []byte(htmlContent), 0o644); err != nil { //nolint:gosec
 		slog.Info(fmt.Sprintf("[Nginx] Failed to write Nginx maintenance HTML file: %v", err))
 	} else {
 		slog.Info(fmt.Sprintf("[Nginx] Maintenance HTML written successfully to %s", htmlDestPath))
@@ -71,7 +76,7 @@ func (m *MaintenanceManager) Enable(action, reason string, duration int, endTime
 	vpsWebRoot := "/var/www/lfr-tunnel"
 	if fi, err := os.Stat(vpsWebRoot); err == nil && fi.IsDir() {
 		destFilePath := filepath.Join(vpsWebRoot, "maintenance.html")
-		if err := os.WriteFile(destFilePath, []byte(htmlContent), 0644); err != nil {
+		if err := os.WriteFile(destFilePath, []byte(htmlContent), 0o644); err != nil { //nolint:gosec
 			slog.Info(fmt.Sprintf("[Nginx] Could not write directly to %s: %v", destFilePath, err))
 		} else {
 			slog.Info(fmt.Sprintf("[Nginx] Custom maintenance page successfully copied to %s", destFilePath))

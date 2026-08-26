@@ -93,14 +93,15 @@ export default function Layout() {
       <ViewAsBar viewAs={user.view_as} canViewAs={user.can_view_as} />
 
       {showV1Promo && (
-        <div className="bg-primary text-white py-xs px-xl text-center z-40 box-border shadow-sm flex items-center justify-center relative shrink-0">
+        <div className="v1-promo-banner">
           <p className="m-0 text-sm fw-medium">
-            {t('banner_legacy_interface', 'Need the legacy interface?')} <a href="/portal/" className="text-white underline fw-bold ml-xs">{t('btn_switch_v1', 'Switch back to V1 →')}</a>
+            {t('banner_legacy_interface', 'Need the legacy interface?')} <a href="/portal/">{t('btn_switch_v1', 'Switch back to V1 →')}</a>
           </p>
-          <button 
-            onClick={dismissV1Promo} 
-            className="btn-text absolute right-xl top-1/2 -translate-y-1/2 text-white text-lg p-xs leading-none hover:opacity-80 transition-opacity btn-bare"
-            title="Dismiss promo banner"
+          <button
+            onClick={dismissV1Promo}
+            className="v1-promo-banner__dismiss"
+            title={t('dismiss_promo_banner', 'Dismiss promo banner')}
+            aria-label={t('dismiss_promo_banner', 'Dismiss promo banner')}
           >
             &times;
           </button>

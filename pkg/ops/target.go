@@ -315,6 +315,25 @@ func parseTargetFlagsWithRegion(name string, args []string) (identityFile, user,
 	return *i, *u, *s, *r, *t, nil
 }
 
+// parseDeployClientsFlags is parseTargetFlags plus the two overrides only deploy-clients has
+// (#1279). A separate function for the same reason parseTargetFlagsWithRegion is one: adding
+// these to the shared parser would make `deploy` accept flags it silently ignores, which is its
+// own small version of a command reporting something it did not do.
+func parseDeployClientsFlags(name string, args []string) (identityFile, user, host, target string, allowStale, skipVerify bool, err error) {
+	fs := flag.NewFlagSet(name, flag.ContinueOnError)
+	fs.SetOutput(io.Discard)
+	i := fs.String("i", "", "path to SSH private key file")
+	u := fs.String("u", "", "SSH username on the central VPS")
+	s := fs.String("s", "", "SSH host (IP or hostname) of the central VPS")
+	t := fs.String("target", "", "named target to use from a multi-target lfr-tunnel-ops.yaml (#1028)")
+	stale := fs.Bool("allow-stale", false, "publish dist/ even if it was not built from the current source")
+	noVerify := fs.Bool("skip-verify", false, "skip the post-upload check that the gateway is serving the uploaded bytes")
+	if err := fs.Parse(args); err != nil {
+		return "", "", "", "", false, false, err
+	}
+	return *i, *u, *s, *t, *stale, *noVerify, nil
+}
+
 // expandHomeDir expands a leading ~ or ~/ the same way a shell would, since ssh/scp don't
 // expand it themselves when passed as a literal -i argument from Go's exec.Command.
 func expandHomeDir(path string) string {

@@ -1,4 +1,4 @@
-.PHONY: fmt vet test test-hooks check-contexts build deploy clean install-hook e2e e2e-sso e2e-edge e2e-ui help
+.PHONY: fmt vet test test-hooks check-contexts check-attribution build deploy clean install-hook e2e e2e-sso e2e-edge e2e-ui help
 
 VERSION ?= $(shell grep -oE 'Version = "[^"]+"' pkg/config/version.go | cut -d'"' -f2)
 
@@ -189,4 +189,9 @@ test-hooks:
 # which is how tests/hooks/test-shell-portability.sh discovers what must stay bash 3.2 clean.
 check-contexts:
 	@./scripts/check-required-contexts.sh
+
+# Same reasoning as check-contexts above: a gate with no convenient invocation is a gate
+# nobody runs, and being make-reachable is what puts it in the bash 3.2 portable set.
+check-attribution:
+	@./scripts/check-commit-attribution.sh
 

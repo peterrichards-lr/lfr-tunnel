@@ -23,6 +23,11 @@ staged() {
     git diff --cached --name-only --diff-filter=ACM -- "$@"
 }
 
+echo "[Git Hook] Checking the commit will be attributable..."
+if ! ./scripts/check-commit-attribution.sh; then
+    exit 1
+fi
+
 echo "[Git Hook] Scanning staged files for secrets/tokens..."
 if ! ./scripts/scan-staged-secrets.sh; then
     exit 1

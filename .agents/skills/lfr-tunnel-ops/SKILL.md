@@ -89,6 +89,47 @@ To automate the release lifecycle (bumping the version in `pkg/config/version.go
   - *Note: the script creates and pushes a `release-<version>` branch and PR only. It does not create or push a git tag — tagging is a manual step the script prints as its final instruction.*
   - **CRITICAL COMPLIANCE NOTE**: Never use `--admin` to bypass branch protection rules to merge the resulting PR, or any other PR. The AI assistant must let CI/CD checks pass naturally and follow the repository rules to the letter.
 
+### Pushing the tag is one-shot — verify the run started
+
+`git push origin <tag>` is the only thing that triggers `.github/workflows/release.yml`. Its
+trigger is `on: push: tags: ['v*']` and it has **no `workflow_dispatch`**, so there is no manual
+way to start it.
+
+**A tag cannot be re-pushed to try again.** The `Protect Version Tags` ruleset forbids `deletion`
+and `update` on `refs/tags/v*`, for everyone — the repository owner included. So if the push does
+not produce a run, that version has no GitHub release and never will. The next version is the
+only remedy.
+
+This is not hypothetical: on 2026-08-26 the `v1.48.6` tag pushed cleanly and GitHub never created
+a run, during an Actions backlog that was also producing `startup_failure` on unrelated
+workflows. The tag is correct and points at the right commit; the release simply does not exist.
+
+**So immediately after pushing a tag, confirm the run exists** rather than assuming it:
+
+```bash
+gh run list --workflow=release.yml --limit 1
+gh release view <tag>
+```
+
+If no run appeared within a minute or so, say so at once. There is nothing to retry, and the
+sooner it is known the sooner the next release can carry the fix.
+
+What a missing run does and does not affect, so the blast radius is not overstated:
+
+- **Missing**: the GitHub Release and its assets, and the push to the orphan `checksums` branch
+  that the portal reads over `raw.githubusercontent.com` (see `docs/architecture.md`). Both stay
+  at the previous version, *consistently* — nothing is mismatched, that tier simply skips a
+  version.
+- **Unaffected**: everything in §4 and §5. The gateway deployment, the locally signed client
+  binaries and the downloads page are a separate path with separate bytes — `scripts/minisign_helper.go`
+  spells out that CI's binaries and the locally OS-codesigned ones are deliberately not the same.
+  A missing GitHub release does not hold up a deployment.
+
+If making the run recoverable is wanted, that is a change to `release.yml`: a `workflow_dispatch`
+with a tag input, dispatched from `master`. Note it cannot be dispatched *at* an existing tag —
+`workflow_dispatch` is only offered where the workflow file at that ref declares it, so any tag
+predating the change stays unrecoverable.
+
 ---
 
 ## 4. Signing Client Binaries
@@ -100,6 +141,23 @@ Before deploying client binaries or making releases, they must be signed.
   op run -- ./bin/lfr-tunnel-ops sign
   ```
   *(**CRITICAL**: You MUST use `op run --` so that 1Password prompts the user to extract the keys needed for Windows and Linux signing. And build first — never `go run ./cmd/lfr-tunnel-ops ...`.)*
+
+  **An agent should run this itself — do not hand it back to the operator.** The 1Password
+  prompt is a biometric dialog raised by the desktop app, not a terminal read on stdin, so it
+  reaches the operator perfectly well from a tool call and they approve it there. Asking them
+  to run the command by hand instead just adds a round trip. Verified 2026-08-26 signing
+  v1.48.6: macOS codesign, Windows osslsigncode, both Linux GPG signatures and the minisign
+  step all completed from an agent-invoked `op run --`.
+
+  Two preconditions worth checking before you run it, rather than after:
+  - `op whoami` failing with *"account is not signed in"* does **not** mean you are blocked.
+    `op run` establishes the session through the same biometric prompt. Do not ask for
+    `op signin` first.
+  - The `LFT_*` / `MINISIGN_*` variables below must already be exported in the environment,
+    holding `op://` references — `op run` substitutes references it finds, it does not invent
+    them. `env | grep -E '^(LFT_|MINISIGN)'` confirms it. If they are absent, `sign` does not
+    fail: it **skips** each platform in turn and still writes `checksums.txt`, which would
+    publish unsigned binaries that look signed. That is the one outcome to avoid here.
   - **Environment Variables** (used to bypass interactive prompts):
     - `LFT_MACOS_IDENTITY`: macOS codesigning identity (e.g. from `security find-identity`).
     - `LFT_SIGN_P12` / `LFT_SIGN_KEY` / `LFT_SIGN_CRT`: Credentials for Windows code signing (can refer to 1Password reference `op://...` or local path).
@@ -141,7 +199,44 @@ or any target you know is already running.*
 ```bash
 ./bin/lfr-tunnel-ops reconcile-nginx
 ```
-`-domains`/`-port` can be passed as flags to override `lfr-tunnel-ops.yaml`'s `nginx:` section for a one-off run; otherwise they're required there. `-domains` should list every domain group the target central actually serves (check `/etc/nginx/sites-available/lfr-tunnel`'s existing `server_name` lines if unsure which ones are live); `-port` must match the live `server-config.yaml`'s `http_bind_addr` port.
+`-domains`/`-port` can be passed as flags to override `lfr-tunnel-ops.yaml`'s `nginx:` section for a one-off run; otherwise they're required there. `-port` must match the live `server-config.yaml`'s `http_bind_addr` port.
+
+**`-domains` takes APEX domains, not hostnames, and the list must be complete.** Each entry
+generates two server blocks -- `<entry>` and `*.<entry>` -- and reads its certificate from
+`/etc/letsencrypt/live/<entry>/`. Liferay's central is therefore
+`-domains lfr-demo.se,lfr-demo.online`, **not** `tunnel.lfr-demo.se`: the wildcard certificates
+are issued for the apex names, and `tunnel.` is served by the `*.lfr-demo.se` block.
+
+Two ways to get this wrong, and only one of them is caught for you:
+
+- **A hostname instead of an apex** asks for `live/tunnel.lfr-demo.se/`, which does not exist.
+  `nginx -t` fails, reconcile rolls back, nothing is harmed. Loud and safe.
+- **An incomplete list is not caught.** The generated config replaces the whole file, so a
+  domain group left out is a vhost deleted. A single-entry list on this two-domain gateway
+  removes `lfr-demo.online` entirely -- and that config is perfectly valid, so `nginx -t`
+  passes and it applies. On 2026-08-26 exactly this was attempted with
+  `-domains tunnel.lfr-demo.se`; the missing certificate is the only reason it failed instead
+  of taking `lfr-demo.online` offline.
+
+So read the live config before running it, every time:
+
+```bash
+ssh <target> 'sudo grep -E "server_name|ssl_certificate " /etc/nginx/sites-available/lfr-tunnel'
+```
+
+and confirm the rendered output matches those pairings before applying:
+
+```bash
+./bin/lfr-tunnel-ops render-nginx-config -domains <list> -port <port> | grep -E "server_name|ssl_certificate "
+```
+
+`render-nginx-config` writes to stdout and touches nothing, so this is free.
+
+**A release that changes the nginx template needs this step, and `deploy` will not tell you.**
+`deploy` only ships the binary and static assets. After deploying a release, check whether the
+template moved -- `git diff <previous-tag>..<tag> -- pkg/ops/nginx.go` -- and reconcile every box
+if it did. v1.48.6 changed `X-Forwarded-For` from `$proxy_add_x_forwarded_for` to `$remote_addr`
+and that change reached no gateway until reconcile was run separately.
 
 ---
 
@@ -174,4 +269,4 @@ Run remote diagnostic checks on the VPS (system uptime/load, systemd service sta
 
 <!-- markdownlint-disable MD049 -->
 ---
-*Last Updated: 2026-08-21* | *Last Reviewed: 2026-08-21*
+*Last Updated: 2026-08-26* | *Last Reviewed: 2026-08-26*

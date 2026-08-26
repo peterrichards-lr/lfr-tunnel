@@ -1007,9 +1007,14 @@ func (e *InterceptorEngine) InterceptPort(targetPort int) (int, error) {
 		proxy.ServeHTTP(w, r)
 	})
 
+	// A configured server rather than http.Serve, which cannot set timeouts (#1372). Header
+	// reading only: this proxy carries the developer's own tunnel traffic, so bounding whole
+	// requests or responses would cut off large uploads and long-lived streams.
+	srv := &http.Server{Handler: handler, ReadHeaderTimeout: readHeaderTimeout}
+
 	// Run in background
 	go func() {
-		if err := http.Serve(listener, handler); err != nil {
+		if err := srv.Serve(listener); err != nil {
 			slog.Info(fmt.Sprintf("[Interceptor] Proxy on port %d crashed: %v", listenPort, err))
 		}
 	}()

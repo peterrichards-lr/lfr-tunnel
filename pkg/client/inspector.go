@@ -555,15 +555,27 @@ func StartInspector(port int, engine *InterceptorEngine) (int, error) {
 	}
 	handler := guardLocalOnly(mux, actualPort, loopbackOnly)
 
+	// A configured server rather than http.Serve, which cannot set timeouts (#1372). Only
+	// ReadHeaderTimeout is set: ReadTimeout and WriteTimeout would apply to whole requests, and
+	// the interceptor below proxies tunnel traffic and WebSocket upgrades that legitimately
+	// outlive any fixed bound. Header reading is not one of those.
+	srv := &http.Server{Handler: handler, ReadHeaderTimeout: readHeaderTimeout}
+
 	go func() {
 		slog.Info(fmt.Sprintf("[Inspector] Local Dashboard running at http://%s:%d\n", bindIP, actualPort))
-		if err := http.Serve(listener, handler); err != nil && !strings.Contains(err.Error(), "use of closed network connection") {
+		if err := srv.Serve(listener); err != nil && !strings.Contains(err.Error(), "use of closed network connection") {
 			slog.Info(fmt.Sprintf("[Inspector] Failed to serve: %v", err))
 		}
 	}()
 
 	return actualPort, nil
 }
+
+// readHeaderTimeout bounds how long a caller may take to send request headers, on every
+// listener this package opens (#1372). Loopback-bound, so the Slowloris exposure is smaller
+// than the gateway's -- but http.Serve cannot set it at all, which is what gosec's G114 is
+// about, and a local process holding goroutines open is still worth bounding.
+const readHeaderTimeout = 10 * time.Second
 
 // isLoopbackHostname reports whether a hostname refers to this machine.
 func isLoopbackHostname(host string) bool {

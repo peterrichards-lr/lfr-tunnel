@@ -56,7 +56,7 @@ func RunLogin(serverURL string) error {
 	if err != nil {
 		return fmt.Errorf("failed to start local handoff listener: %w", err)
 	}
-	srv := &http.Server{Handler: mux}
+	srv := &http.Server{Handler: mux, ReadHeaderTimeout: readHeaderTimeout}
 	go func() {
 		_ = srv.Serve(listener) //nolint:errcheck
 	}()

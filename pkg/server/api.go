@@ -1792,6 +1792,18 @@ func (s *Server) handleUpdateReservationAccessControl(w http.ResponseWriter, r *
 		return
 	}
 
+	// The proxy reads access control from the lease, so an edit has to reach the live leases or
+	// it would not take effect until the client next reconnected -- which for turning a
+	// passcode *on* means the tunnel stays open in the meantime (#1329).
+	//
+	// The stored passcode is what VerifyPasscode compares against, so it is forwarded exactly
+	// as registration already forwards it; this adds no new exposure.
+	stored, _ := s.reservationAccessControls(req.Subdomain, req.Domain)
+	updated := s.registry.SetAccessControlsForSubdomain(req.Subdomain, stored[0], stored[1], stored[2])
+	s.BroadcastAccessControlUpdate(req.Subdomain, stored[0], stored[1], stored[2])
+	slog.Info(fmt.Sprintf("[Portal] Access control for %s.%s applied to %d local lease(s) and broadcast to edges",
+		req.Subdomain, req.Domain, updated))
+
 	s.writeAudit(user.Email, "reservation.access_control_updated", "subdomain", fmt.Sprintf("%s.%s", req.Subdomain, req.Domain), fmt.Sprintf("AccessMode: %s", req.AccessMode), r)
 	respondJSON(w, http.StatusOK, map[string]string{"status": "success"})
 }

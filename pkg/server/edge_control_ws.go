@@ -786,7 +786,17 @@ func (s *Server) runEdgeControlChannel() {
 
 		slog.Info(fmt.Sprintf("[Edge Control] Connecting to Control Plane at %s...", wsURL))
 
-		dialer := websocket.DefaultDialer
+		// A COPY of the default dialer, not the pointer (#1370). websocket.DefaultDialer is a
+		// *Dialer, so assigning it and then setting fields mutates gorilla's package-level
+		// global. Two Servers with overlapping lifetimes race on it -- write/write between two
+		// runEdgeControlChannel goroutines, and write/read against gorilla reading the same
+		// fields inside DialContext. Found by 20 iterations under -race; a single run and a
+		// single CI run both passed.
+		//
+		// It is also wrong independently of the race: mutating the global leaves every other
+		// user of DefaultDialer in this process with NetDialContext forcing tcp4.
+		dialerCopy := *websocket.DefaultDialer
+		dialer := &dialerCopy
 		dialer.HandshakeTimeout = 5 * time.Second
 		// Force IPv4 for this outbound connection (see #911): on dual-stack edges, the
 		// default dialer prefers IPv6 when both are available, but at least one edge

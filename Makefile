@@ -176,8 +176,9 @@ install-hook:
 	@chmod +x "$(HOOKS_DIR)/pre-push"
 	@echo "pre-commit and pre-push hooks installed successfully."
 
-# Tests the secret scanner itself (#1377). Fast: the stubbed cases need no Docker at all, and
-# only the end-to-end worktree case does. Not part of `test`, which is the Go suite.
+# Tests the hook and guard scripts themselves (#1377, #1402). Fast: the stubbed cases need no
+# Docker, and only the end-to-end worktree case does. Not part of `test`, which is the Go suite.
 test-hooks:
 	@./tests/hooks/test-scan-staged-secrets.sh
+	@./tests/hooks/test-edr-guard.sh
 

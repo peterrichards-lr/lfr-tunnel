@@ -3,12 +3,15 @@ package ops
 import (
 	"crypto/sha256"
 	"encoding/hex"
+	"errors"
 	"flag"
 	"fmt"
 	"io"
 	"os"
 	"path/filepath"
 	"strings"
+
+	"lfr-tunnel/pkg/minisign"
 )
 
 // SignCommand handles the signing of macOS, Windows, and Linux binaries.
@@ -248,12 +251,21 @@ func generateChecksums(dir string) error {
 	}
 	fmt.Printf("Checksums updated in %s\n", checksumsPath)
 
-	// Run Minisign helper if exists
-	minisignHelper := filepath.Join("scripts", "minisign_helper.go")
-	if fileExists(minisignHelper) {
-		fmt.Println("Generating Minisign signature for checksums.txt...")
-		err = RunCommand("go", "run", minisignHelper, checksumsPath, checksumsPath+".minisig")
-		if err != nil {
+	// In-process, not `go run scripts/minisign_helper.go` (#1402). That spawned the Go
+	// toolchain, which links every executable it builds inside GOTMPDIR -- or the system temp
+	// dir when unset -- and `go run` then executes it from there. `sign` is documented as being
+	// run directly (`op run -- lfr-tunnel-ops sign`), never through make, so GOTMPDIR was
+	// unset and this linked and ran an unsigned binary out of /var/folders on every signing
+	// run: the exact pattern CLAUDE.md exists to prevent.
+	fmt.Println("Generating Minisign signature for checksums.txt...")
+	if err := minisign.SignFileFromEnv(checksumsPath, checksumsPath+".minisig"); err != nil {
+		// Still a warning rather than fatal, as before. No key configured is a legitimate
+		// state, and the platform signatures above are independent of this one -- but say
+		// which of the two it was, since "no key" and "signing broke" want different actions.
+		if errors.Is(err, minisign.ErrNoSecretKey) {
+			fmt.Printf("Skipping Minisign signature: %v. Clients upgrading will be told the "+
+				"download cannot be verified.\n", err)
+		} else {
 			fmt.Printf("WARNING: Minisign signature generation failed: %v\n", err)
 		}
 	}

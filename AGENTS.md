@@ -12,6 +12,17 @@ If you ever see the same rule stated differently in two places, that's a bug —
 fix the drift (make one link to the other) rather than trusting either
 in isolation.
 
+## Skills are discoverable through `.claude/skills`
+
+`.claude/skills` is a symlink to `.agents/skills`. It has to exist: Claude Code enumerates
+project skills from `.claude/skills/`, so without it none of the skills below appear in an
+agent's skill list and the only route to them is this file — which makes one missed read cost
+everything they contain (#1433).
+
+Keep the files themselves in `.agents/`, which is tool-neutral. Add a new skill as
+`.agents/skills/<name>/SKILL.md` with `name` and `description` frontmatter; the symlink picks it
+up with no further wiring. `/reload-skills` re-scans without restarting a session.
+
 ## Rules, by topic
 
 - **Local test/build safety (SentinelOne EDR)** — [`.agents/skills/edr-constraints/SKILL.md`](.agents/skills/edr-constraints/SKILL.md)
@@ -30,8 +41,12 @@ in isolation.
   Read before modifying any in-memory tunnel/lease state on the control plane.
 - **Operations, deployment, builds, signing** — [`.agents/skills/lfr-tunnel-ops/SKILL.md`](.agents/skills/lfr-tunnel-ops/SKILL.md)
   Read before building, signing, deploying, or running maintenance operations.
-- **Upstream/JIRA bug tracking** — [`.agents/skills/jira_tracker/SKILL.md`](.agents/skills/jira_tracker/SKILL.md)
-  Read when you discover an upstream platform bug or limitation, not a bug in this repo.
+- **Upstream/JIRA bug tracking** — `.agents/skills/jira_tracker/SKILL.md` — **not in this
+  repo.** It is excluded by `.git/info/exclude` on the maintainer's machine because it carries
+  Liferay-internal tracker detail and this repo is public. Deliberately unlinked here: a link
+  that dangles on every clone but one teaches distrust of this whole file, which the
+  rules-integrity section below is about. If you are working somewhere it exists, it covers
+  recording an upstream platform bug or limitation rather than a bug in this repo (#1433).
 
 ## Groundedness — verify before asserting
 

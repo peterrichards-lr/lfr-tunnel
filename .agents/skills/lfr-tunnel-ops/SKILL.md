@@ -100,6 +100,23 @@ Before deploying client binaries or making releases, they must be signed.
   op run -- ./bin/lfr-tunnel-ops sign
   ```
   *(**CRITICAL**: You MUST use `op run --` so that 1Password prompts the user to extract the keys needed for Windows and Linux signing. And build first — never `go run ./cmd/lfr-tunnel-ops ...`.)*
+
+  **An agent should run this itself — do not hand it back to the operator.** The 1Password
+  prompt is a biometric dialog raised by the desktop app, not a terminal read on stdin, so it
+  reaches the operator perfectly well from a tool call and they approve it there. Asking them
+  to run the command by hand instead just adds a round trip. Verified 2026-08-26 signing
+  v1.48.6: macOS codesign, Windows osslsigncode, both Linux GPG signatures and the minisign
+  step all completed from an agent-invoked `op run --`.
+
+  Two preconditions worth checking before you run it, rather than after:
+  - `op whoami` failing with *"account is not signed in"* does **not** mean you are blocked.
+    `op run` establishes the session through the same biometric prompt. Do not ask for
+    `op signin` first.
+  - The `LFT_*` / `MINISIGN_*` variables below must already be exported in the environment,
+    holding `op://` references — `op run` substitutes references it finds, it does not invent
+    them. `env | grep -E '^(LFT_|MINISIGN)'` confirms it. If they are absent, `sign` does not
+    fail: it **skips** each platform in turn and still writes `checksums.txt`, which would
+    publish unsigned binaries that look signed. That is the one outcome to avoid here.
   - **Environment Variables** (used to bypass interactive prompts):
     - `LFT_MACOS_IDENTITY`: macOS codesigning identity (e.g. from `security find-identity`).
     - `LFT_SIGN_P12` / `LFT_SIGN_KEY` / `LFT_SIGN_CRT`: Credentials for Windows code signing (can refer to 1Password reference `op://...` or local path).
@@ -174,4 +191,4 @@ Run remote diagnostic checks on the VPS (system uptime/load, systemd service sta
 
 <!-- markdownlint-disable MD049 -->
 ---
-*Last Updated: 2026-08-21* | *Last Reviewed: 2026-08-21*
+*Last Updated: 2026-08-26* | *Last Reviewed: 2026-08-26*

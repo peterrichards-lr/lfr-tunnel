@@ -513,6 +513,7 @@ jobs:
       - lint-and-format
       - govulncheck
       - shellcheck
+      - hook-tests
       - test
       - race
       - e2e-test

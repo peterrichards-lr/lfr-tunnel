@@ -35,25 +35,67 @@ pass() { printf '  \033[32mPASS\033[0m  %s\n' "$1"; PASS=$((PASS + 1)); }
 fail() { printf '  \033[31mFAIL\033[0m  %s\n' "$1"; FAIL=$((FAIL + 1)); }
 skip() { printf '  \033[33mSKIP\033[0m  %s\n' "$1"; SKIP=$((SKIP + 1)); }
 
-# Scripts that MUST run on bash 3.2: anything a developer is expected to run locally.
-PORTABLE_SCRIPTS='scripts/check-required-contexts.sh
-scripts/check-edr-safety.sh
-scripts/scan-staged-secrets.sh
-scripts/pre-commit-hook.sh
-scripts/pre-push-hook.sh
-scripts/check-nolint-ratchet.sh
-scripts/run-e2e.sh
-scripts/run-e2e-ui.sh
-tests/hooks/test-scan-staged-secrets.sh
-tests/hooks/test-shell-portability.sh'
-
-# Exempt, with the reason. Each of these only ever runs somewhere with bash 4+.
-#   scripts/common/restore-backup.sh      -- runs on the gateway VPS (Linux)
-#   scripts/liferay/vm6/*-ddns.sh         -- run on edge nodes (Linux)
-#   tests/e2e/*                           -- run inside Linux containers
+# Which scripts MUST run on bash 3.2: anything a developer is expected to run locally, which
+# in practice means anything the Makefile or a git hook invokes.
+#
+# DERIVED, not hand-maintained. A hand-written list is one more thing that falls behind the repo
+# while still reporting OK, and it also couples unrelated PRs: a branch adding a script would
+# have to edit a list living in another branch, and whichever merged second would fail. Deriving
+# it means a new script is covered the moment it is wired into `make`.
+#
+# The corollary is that a script must be make-reachable to be covered. check-required-contexts.sh
+# was not, which is why this change also adds a `check-contexts` target -- a pre-push gate with
+# no convenient invocation is a gate nobody runs anyway.
 EXEMPT_PREFIXES='scripts/common/
 scripts/liferay/
 tests/e2e/'
+# Exempt because each only ever runs where bash 4+ is a given:
+#   scripts/common/    -- the gateway VPS (Linux)
+#   scripts/liferay/   -- edge nodes (Linux)
+#   tests/e2e/         -- inside Linux containers
+
+is_exempt() {
+    while IFS= read -r prefix; do
+        [ -n "$prefix" ] || continue
+        case "$1" in "$prefix"*) return 0 ;; esac
+    done <<EXEMPT
+$EXEMPT_PREFIXES
+EXEMPT
+    return 1
+}
+
+referenced=$(grep -ohE '(\./)?(scripts|tests)/[A-Za-z0-9_/.-]+\.sh' \
+    Makefile scripts/pre-commit-hook.sh scripts/pre-push-hook.sh 2>/dev/null \
+    | sed 's|^\./||' | sort -u)
+
+PORTABLE_SCRIPTS=""
+while IFS= read -r ref; do
+    [ -n "$ref" ] || continue
+    [ -f "$ref" ] || continue
+    is_exempt "$ref" && continue
+    PORTABLE_SCRIPTS="${PORTABLE_SCRIPTS}${ref}
+"
+done <<REFS
+$referenced
+REFS
+
+# A derivation that silently finds nothing would report a clean pass over an empty set, which is
+# the exact defect this whole file exists to prevent. So assert the floor: the set must be
+# non-empty and must contain the script the derivation was extended for.
+if [ -z "$PORTABLE_SCRIPTS" ]; then
+    echo "ERROR: derived no portable scripts at all -- the derivation is broken, not the repo." >&2
+    exit 1
+fi
+if ! printf '%s\n' "$PORTABLE_SCRIPTS" | grep -qxF 'scripts/check-required-contexts.sh'; then
+    echo "ERROR: scripts/check-required-contexts.sh is not in the derived set. It must stay" >&2
+    echo "       reachable from the Makefile (target: check-contexts) or this test silently" >&2
+    echo "       stops covering the script it was written for." >&2
+    exit 1
+fi
+
+echo "Derived portable set ($(printf '%s\n' "$PORTABLE_SCRIPTS" | grep -c .) scripts):"
+printf '%s\n' "$PORTABLE_SCRIPTS" | grep . | sed 's/^/  /'
+echo ""
 
 # ------------------------------------------------------------------------------------------
 # SCAN: no bash-4-only constructs in the scripts developers run
@@ -89,40 +131,6 @@ $PORTABLE_SCRIPTS
 PORTABLE
 
 [ "$scan_failures" -eq 0 ] && pass "SCAN: no bash 4+ constructs in the portable set"
-
-# Anti-drift: every .sh the Makefile or the git hooks invoke must be either in the portable set
-# or explicitly exempt. Without this the list above quietly falls behind the repo -- which is the
-# same shape of defect as the gate script that reported OK while checking nothing.
-echo ""
-echo "Checking the portable set has not fallen behind:"
-
-referenced=$(grep -ohE '(\./)?(scripts|tests)/[A-Za-z0-9_/.-]+\.sh' Makefile scripts/pre-commit-hook.sh scripts/pre-push-hook.sh 2>/dev/null \
-    | sed 's|^\./||' | sort -u)
-
-drift=0
-while IFS= read -r ref; do
-    [ -n "$ref" ] || continue
-    [ -f "$ref" ] || continue
-    if printf '%s\n' "$PORTABLE_SCRIPTS" | grep -qxF "$ref"; then
-        continue
-    fi
-    exempt=0
-    while IFS= read -r prefix; do
-        [ -n "$prefix" ] || continue
-        case "$ref" in "$prefix"*) exempt=1 ;; esac
-    done <<EXEMPT
-$EXEMPT_PREFIXES
-EXEMPT
-    if [ "$exempt" -eq 0 ]; then
-        fail "DRIFT: $ref is invoked by the Makefile or a git hook but is neither in
-        PORTABLE_SCRIPTS nor exempt. Add it to one, with a reason."
-        drift=$((drift + 1))
-    fi
-done <<REFS
-$referenced
-REFS
-
-[ "$drift" -eq 0 ] && pass "DRIFT: every locally-invoked script is classified"
 
 # ------------------------------------------------------------------------------------------
 # RUN: execute the gate script under both bash versions and require agreement

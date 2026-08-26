@@ -83,11 +83,19 @@ So in `scripts/` and `tests/hooks/`: **no `declare -A` / `local -A`, no `mapfile
 Scripts that only ever run on Linux — `scripts/common/`, `scripts/liferay/`,
 `tests/e2e/`, and workflow `run:` blocks — may use bash 4+ freely.
 
-`tests/hooks/test-shell-portability.sh` (via `make test-hooks`) enforces this three
-ways: it greps the portable set for those constructs, checks that every `.sh` the
-Makefile or a git hook invokes is classified as either portable or exempt, and
-actually runs `scripts/check-required-contexts.sh` under both bash 3.2 and bash 5
-requiring them to agree — on a passing tree *and* a deliberately broken one.
+`tests/hooks/test-shell-portability.sh` (via `make test-hooks`) enforces this. The
+portable set is **derived**, not listed: it is every `.sh` the Makefile or a git
+hook invokes, minus the exempt prefixes. So wiring a new script into `make` covers
+it automatically, and nothing has to be kept in sync by hand.
+
+The corollary: **a script must be make-reachable to be covered.** That is why
+`scripts/check-required-contexts.sh` has a `make check-contexts` target — a
+pre-push gate with no convenient invocation is a gate nobody runs. The test
+asserts the derived set is non-empty and contains that script, so a broken
+derivation fails loudly instead of reporting a clean pass over nothing.
+
+It then actually runs the gate under both bash 3.2 and bash 5 and requires them to
+agree — on a passing tree *and* a deliberately broken one.
 
 **`bash -n` does not catch this** (verified): `declare -A` parses fine under 3.2 and
 only fails at run time, as `<key>: unbound variable` under `set -u`. That is how

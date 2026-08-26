@@ -1543,6 +1543,73 @@ html[dir="rtl"] td, html[dir="rtl"] th {
 }
 .view-as-bar__label { text-align: center; }
 
+/* The "Switch back to V1" promo banner (#1203).
+ *
+ * Written out longhand for the same reason .view-as-bar above is: this project declares
+ * tailwindcss but never runs it -- no vite plugin, no config, no @import -- so every
+ * Tailwind-shaped class in the TSX does nothing unless a rule of that name happens to
+ * exist here (#1383). The banner previously relied on bg-primary, text-white, py-xs,
+ * px-xl, shadow-sm, z-40 and shrink-0, ALL of which are inert, so it rendered as plain
+ * centred text with no background at all.
+ *
+ * The dismiss control was worse than unstyled. It carried `absolute` (which IS defined)
+ * with right-xl, top-1/2 and -translate-y-1/2 (which are not), so it was positioned
+ * absolutely with every offset left at `auto` -- landing at its static position inside a
+ * justify-center flex row, on top of the banner text, with no colour of its own. Hence
+ * "exists in the accessibility tree but is not visibly rendered anywhere". */
+.v1-promo-banner {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    position: relative;
+    box-sizing: border-box;
+    padding: var(--spacing-xs) var(--spacing-xl);
+    background: var(--primary);
+    color: #fff;
+    text-align: center;
+    font-size: 14px;
+    /* No --shadow-sm token exists; the smallest defined one is --shadow-lg, which is
+       far too heavy for a 32px strip. Kept literal rather than inventing a token. */
+    box-shadow: 0 1px 2px rgba(0, 0, 0, 0.12);
+    z-index: 40;
+    flex-shrink: 0;
+}
+
+.v1-promo-banner a {
+    color: #fff;
+    text-decoration: underline;
+    font-weight: 700;
+    margin-left: var(--spacing-xs);
+}
+
+.v1-promo-banner__dismiss {
+    position: absolute;
+    right: var(--spacing-xl);
+    top: 50%;
+    transform: translateY(-50%);
+    background: none;
+    border: none;
+    padding: var(--spacing-xs);
+    color: #fff;
+    font-size: 18px;
+    line-height: 1;
+    cursor: pointer;
+    transition: opacity 0.2s ease;
+}
+
+.v1-promo-banner__dismiss:hover {
+    opacity: 0.8;
+}
+
+/* The banner is the one place on the page with a saturated background, so the default
+   focus ring has nothing to contrast against. */
+.v1-promo-banner__dismiss:focus-visible {
+    outline: 2px solid #fff;
+    outline-offset: 2px;
+    border-radius: 4px;
+}
+
+
 .view-as-switcher {
     display: flex;
     align-items: center;

@@ -73,8 +73,15 @@ jobs:
             CHANGED=$(git diff --name-only "${HEAD}~1" "$HEAD" 2>/dev/null) || \
               run_everything "Could not resolve the diff base -- running everything."
           else
-            CHANGED=$(git diff --name-only "$BASE" "$HEAD" 2>/dev/null) || \
-              run_everything "Could not diff $BASE..$HEAD -- running everything."
+            # Three dots, not two (#1398). $BASE is the tip of the base branch, so a
+            # two-dot diff also reports everything merged to master since this branch was
+            # cut -- in reverse -- and attributes it to the PR. A one-file docs PR one
+            # commit behind master measured as six changed files including the Makefile
+            # and three shell scripts, so it ran the Go suite, Shell Lint and Hook Tests.
+            # Three-dot diffs from the merge base, which is what "changed in this PR"
+            # means and what the Files-changed tab shows.
+            CHANGED=$(git diff --name-only "$BASE...$HEAD" 2>/dev/null) || \
+              run_everything "Could not diff $BASE...$HEAD -- running everything."
           fi
 
           if [ -z "$CHANGED" ]; then
@@ -140,7 +147,10 @@ jobs:
           if [ "$BASE" = "0000000000000000000000000000000000000000" ] || [ -z "$BASE" ]; then
             CHANGED=$(git diff --name-only "${HEAD}~1" "$HEAD" -- '*.md' || true)
           else
-            CHANGED=$(git diff --name-only "$BASE" "$HEAD" -- '*.md' || true)
+            # Three dots, as above (#1398). Here the consequence is sharper than wasted
+            # minutes: a two-dot diff hands this check .md files the PR never touched, so
+            # a PR can be failed for a stale footer somebody else left behind.
+            CHANGED=$(git diff --name-only "$BASE...$HEAD" -- '*.md' || true)
           fi
 
           if [ -z "$CHANGED" ]; then

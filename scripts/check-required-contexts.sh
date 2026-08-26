@@ -25,26 +25,53 @@
 # This cannot read branch protection (GITHUB_TOKEN has contents:read; protection needs
 # admin), so the required list is mirrored below. If the required contexts change in the
 # GitHub UI, update this list in the same PR.
+#
+# Kept to bash 3.2 on purpose (#1395). This script exists to be run BEFORE pushing, and
+# macOS still ships bash 3.2.57 as /bin/bash, so anything newer makes it CI-only -- which
+# is most of its value gone. The first version used `declare -A`, a bash 4 builtin: under
+# 3.2 the assignment is parsed as an ordinary indexed array with word splitting, `Suite` is
+# read as a variable, and `set -u` turns that into a fatal error before a single check runs.
+# So: no associative arrays, no mapfile, no ${var^^}. tests/hooks/test-shell-portability.sh
+# runs this file under both bash 3.2 and bash 5 and requires them to agree.
 
 set -euo pipefail
 
 # Mirrors branches/master/protection -> required_status_checks.contexts, as job names.
 # Matrix contexts are listed by job name; GitHub appends "(<matrix value>)" itself.
-declare -A REQUIRED_JOBS=(
-    ["Test Suite"]=".github/workflows/ci.yml"
-    ["Lint & Format Check"]=".github/workflows/ci.yml"
-    ["Documentation Review Check"]=".github/workflows/ci.yml"
-    ["E2E Docker Integration Test"]=".github/workflows/ci.yml"
-    ["E2E Playwright UI Test"]=".github/workflows/ci.yml"
-    ["E2E Keycloak SSO Integration Test"]=".github/workflows/e2e-sso.yml"
-    ["Verify PR references an issue"]=".github/workflows/issue-link-check.yml"
-)
+#
+# "<job name>|<workflow file>", one per line. A delimited list rather than an associative
+# array, for the bash 3.2 reason above. "|" rather than a tab because a tab is invisible in
+# a diff and one stray space would silently drop an entry -- and an entry silently dropped
+# from THIS list means a required context stops being checked while the script still says OK.
+REQUIRED_JOBS='Test Suite|.github/workflows/ci.yml
+Lint & Format Check|.github/workflows/ci.yml
+Documentation Review Check|.github/workflows/ci.yml
+E2E Docker Integration Test|.github/workflows/ci.yml
+E2E Playwright UI Test|.github/workflows/ci.yml
+E2E Keycloak SSO Integration Test|.github/workflows/e2e-sso.yml
+Verify PR references an issue|.github/workflows/issue-link-check.yml'
+
+# Guard against the failure mode the delimiter choice is about: if a line loses its "|", the
+# loops below would read an empty file path and quietly check nothing.
+while IFS= read -r line; do
+    case "$line" in
+        *'|'*) ;;
+        *) echo "ERROR: malformed REQUIRED_JOBS entry (no '|'): '$line'" >&2; exit 1 ;;
+    esac
+done <<REQ
+$REQUIRED_JOBS
+REQ
+
+# Unique workflow files backing a required context.
+REQUIRED_FILES=$(printf '%s\n' "$REQUIRED_JOBS" | awk -F'|' 'NF { print $2 }' | sort -u)
 
 fail=0
 
 # 1. Every required context must be emitted by a job that exists.
-for name in "${!REQUIRED_JOBS[@]}"; do
-    file="${REQUIRED_JOBS[$name]}"
+# A here-doc redirect, not a pipe: a piped `while` runs in a subshell, so `fail=1` set
+# inside it would be discarded and the script would exit 0 having found problems.
+while IFS='|' read -r name file; do
+    [ -n "$name" ] || continue
     if [ ! -f "$file" ]; then
         echo "ERROR: '$file' does not exist, but required context '$name' is expected there." >&2
         fail=1
@@ -55,10 +82,13 @@ for name in "${!REQUIRED_JOBS[@]}"; do
         echo "       A required context nobody emits stays pending and blocks every PR." >&2
         fail=1
     fi
-done
+done <<REQ
+$REQUIRED_JOBS
+REQ
 
 # 2. No workflow containing a required job may be path-filtered at the workflow level.
-for file in $(printf '%s\n' "${REQUIRED_JOBS[@]}" | sort -u); do
+while IFS= read -r file; do
+    [ -n "$file" ] || continue
     [ -f "$file" ] || continue
     # Only `pull_request:` matters. A `paths:` under `push:` is fine -- required status
     # checks are evaluated on pull requests, and master's own e2e-sso.yml deliberately
@@ -77,12 +107,14 @@ for file in $(printf '%s\n' "${REQUIRED_JOBS[@]}" | sort -u); do
         echo "       Gate the steps instead, so the job still runs and still reports." >&2
         fail=1
     fi
-done
+done <<FILES
+$REQUIRED_FILES
+FILES
 
 # 3. A matrix job backing a required context must not carry a job-level `if:`.
 #    Non-matrix jobs may: a "skipped" conclusion satisfies a required check.
-for name in "${!REQUIRED_JOBS[@]}"; do
-    file="${REQUIRED_JOBS[$name]}"
+while IFS='|' read -r name file; do
+    [ -n "$name" ] || continue
     [ -f "$file" ] || continue
 
     block=$(awk -v want="    name: $name" '
@@ -100,7 +132,9 @@ for name in "${!REQUIRED_JOBS[@]}"; do
         echo "       Gate the steps instead." >&2
         fail=1
     fi
-done
+done <<REQ
+$REQUIRED_JOBS
+REQ
 
 # 4. Every job in ci.yml must be listed in ci-gate's `needs:`.
 #
@@ -126,7 +160,7 @@ if grep -qE '^  ci-gate:' "$GATE_FILE"; then
     ' "$GATE_FILE" | grep -v '^ci-gate$')
 
     for job in $all_jobs; do
-        if ! grep -qxF "$job" <<<"$gate_needs"; then
+        if ! printf '%s\n' "$gate_needs" | grep -qxF "$job"; then
             echo "ERROR: job '$job' is not in ci-gate's needs:." >&2
             echo "       CI Gate accepts a 'skipped' result, which is only safe while every" >&2
             echo "       job is a dependency. A job missing from needs: is ungated while the" >&2

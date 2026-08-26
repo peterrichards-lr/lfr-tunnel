@@ -85,6 +85,9 @@ services:
       - LFT_TARGET_PORT=80
     entrypoint: ["sleep", "infinity"]
     volumes:
-      - ./client-config-edge.yaml:/root/client-config-edge.yaml:ro
+      # /home/lfr, not /root: the client image runs as an unprivileged user with its WORKDIR
+      # there (#1330). The test passes -config as a relative path, so the file has to land in
+      # the working directory -- and /root would not be readable by that user in any case.
+      - ./client-config-edge.yaml:/home/lfr/client-config-edge.yaml:ro
     depends_on:
       - nginx-proxy

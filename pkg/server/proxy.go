@@ -897,3 +897,6 @@ func VerifyPasscode(rawPasscode, hashedPasscode string) bool {
 	// Legacy fallback to support plain-text comparison
 	return subtle.ConstantTimeCompare([]byte(rawPasscode), []byte(hashedPasscode)) == 1
 }
+
+// Temporary no-op comment to verify the #1365 platform_sensitive filter on a
+// server-only diff. This branch is a throwaway and is never merged.

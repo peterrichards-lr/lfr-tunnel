@@ -226,6 +226,10 @@ jobs:
   # Dependabot does not cover this: its Go support does not propose version updates for
   # `// indirect` requirements the main module does not import directly, which is exactly what
   # x/text is. So this job is not redundant with dependabot.yml -- it covers what that cannot.
+
+      - name: Required status checks must always report
+        run: ./scripts/check-required-contexts.sh
+
   govulncheck:
     name: Vulnerability Scan
     needs: changes
@@ -279,7 +283,13 @@ jobs:
   test:
     name: Test Suite
     needs: changes
-    if: needs.changes.outputs.go == 'true'
+    # NO job-level `if:` here, deliberately. A job skipped that way reports a check run
+    # with conclusion "skipped", and GitHub does not accept "skipped" for a context listed
+    # in required_status_checks -- so gating this job made every docs-only PR permanently
+    # unmergeable (#1386). Worse for a matrix: the required contexts are the per-OS names,
+    # but a skipped matrix job reports one check run called "Test Suite", so the required
+    # contexts never appear at all. The steps carry the guard instead: the job always runs
+    # and always reports, and costs a few seconds when there is nothing to do.
     runs-on: ${{ matrix.os }}
     strategy:
       fail-fast: false
@@ -287,19 +297,28 @@ jobs:
         os: [ubuntu-latest, macos-latest, windows-latest]
     steps:
       - name: Checkout Code
+        if: needs.changes.outputs.go == 'true'
         uses: actions/checkout@v7
 
       - name: Set up Go
+        if: needs.changes.outputs.go == 'true'
         uses: actions/setup-go@v7
         with:
           go-version: '1.25'
           cache: true
 
       - name: Create dummy UI dist for Go embed
+        if: needs.changes.outputs.go == 'true'
         run: mkdir -p pkg/server/ui-dist && touch pkg/server/ui-dist/index.html
         shell: bash
 
+      - name: No Go changes
+        if: ${{ !(needs.changes.outputs.go == 'true') }}
+        run: echo "No Go-affecting paths changed; reporting success without running the suite."
+        shell: bash
+
       - name: Run Tests
+        if: needs.changes.outputs.go == 'true'
         run: make test
         shell: bash
         env:
@@ -353,19 +372,26 @@ jobs:
   e2e-test:
     name: E2E Docker Integration Test
     needs: changes
-    if: needs.changes.outputs.go == 'true'
+    # Required context -- must always report. See the note on `test` above (#1386).
     runs-on: ubuntu-latest
     steps:
       - name: Checkout Code
+        if: needs.changes.outputs.go == 'true'
         uses: actions/checkout@v7
 
       - name: Set up Go
+        if: needs.changes.outputs.go == 'true'
         uses: actions/setup-go@v7
         with:
           go-version: '1.25'
           cache: true
 
+      - name: No Go changes
+        if: ${{ !(needs.changes.outputs.go == 'true') }}
+        run: echo "No Go-affecting paths changed; reporting success without running the suite."
+
       - name: Run E2E Integration Test
+        if: needs.changes.outputs.go == 'true'
         run: ./tests/e2e/run.sh
 
   # The multi-region harness existed but nothing ran it -- not CI, not the Makefile, not the
@@ -390,37 +416,83 @@ jobs:
       - name: Run Multi-Region Edge E2E Test
         run: ./tests/e2e/run-edge.sh
 
-  e2e-ui-test:
-    name: E2E Playwright UI Test
+  # Moved here from .github/workflows/e2e-sso.yml (#1386). That workflow was path-gated at
+  # the *workflow* level and carried this comment:
+  #
+  #   "Safe to skip the workflow outright here -- unlike the jobs in ci.yml, 'E2E Keycloak
+  #    SSO Integration Test' is not a required status check, so a run that never reports
+  #    does not block a merge."
+  #
+  # That was false. It IS a required status check, confirmed against the branch-protection
+  # API, so a docs-only PR produced no check run for it and the missing context blocked the
+  # merge on its own. Living here means it shares the one `changes` job instead of keeping a
+  # second copy of the path list that drifted from reality unnoticed.
+  e2e-sso-test:
+    name: E2E Keycloak SSO Integration Test
     needs: changes
-    if: needs.changes.outputs.ui == 'true' || needs.changes.outputs.go == 'true'
     runs-on: ubuntu-latest
     steps:
       - name: Checkout Code
+        if: needs.changes.outputs.go == 'true'
         uses: actions/checkout@v7
 
       - name: Set up Go
+        if: needs.changes.outputs.go == 'true'
+        uses: actions/setup-go@v7
+        with:
+          go-version: '1.25'
+          cache: true
+
+      - name: No Go changes
+        if: ${{ !(needs.changes.outputs.go == 'true') }}
+        run: echo "No Go-affecting paths changed; reporting success without running the suite."
+
+      - name: Run SSO E2E Integration Test
+        if: needs.changes.outputs.go == 'true'
+        run: ./tests/e2e/run-sso.sh
+
+  e2e-ui-test:
+    name: E2E Playwright UI Test
+    needs: changes
+    # Required context -- must always report. See the note on `test` above (#1386).
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout Code
+        if: needs.changes.outputs.ui == 'true' || needs.changes.outputs.go == 'true'
+        uses: actions/checkout@v7
+
+      - name: Set up Go
+        if: needs.changes.outputs.ui == 'true' || needs.changes.outputs.go == 'true'
         uses: actions/setup-go@v7
         with:
           go-version: '1.25'
           cache: true
 
       - name: Set up Node.js
+        if: needs.changes.outputs.ui == 'true' || needs.changes.outputs.go == 'true'
         uses: actions/setup-node@v7
         with:
           node-version: '22'
 
       - name: Install pnpm
+        if: needs.changes.outputs.ui == 'true' || needs.changes.outputs.go == 'true'
         uses: pnpm/action-setup@v6
         with:
           version: 11
 
+      - name: No UI or Go changes
+        if: ${{ !(needs.changes.outputs.ui == 'true' || needs.changes.outputs.go == 'true') }}
+        run: echo "No UI- or Go-affecting paths changed; reporting success without running the suite."
+
       - name: Run Playwright E2E Test
+        if: needs.changes.outputs.ui == 'true' || needs.changes.outputs.go == 'true'
         run: make e2e-ui
 
       - name: Upload Playwright Report
         uses: actions/upload-artifact@v7
-        if: always()
+        # always(), but only when the suite actually ran -- otherwise every docs-only PR
+        # fails trying to upload a report directory that was never created.
+        if: ${{ always() && (needs.changes.outputs.ui == 'true' || needs.changes.outputs.go == 'true') }}
         with:
           name: playwright-report
           path: |

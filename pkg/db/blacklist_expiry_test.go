@@ -9,19 +9,43 @@ import (
 // because the enforcement point sits ahead of all routing -- a banned address cannot reach the
 // admin API to undo its own ban, so "permanent" really does mean permanent.
 
-func TestAutoBan_Expires(t *testing.T) {
+// Split from TestAutoBan_Expires (#1389). "The ban takes effect" has nothing to do with
+// expiry, but it used to be checked against a row that self-destructed in 40ms -- so on a
+// loaded runner the row was already gone by the time it was read back, and the test
+// reported that the ban never took effect. Under -race, which instruments every memory
+// access, that was often enough to fail unrelated PRs. A lifetime that cannot lapse
+// mid-test removes the race rather than widening it.
+func TestAutoBan_TakesEffect(t *testing.T) {
 	database, tmpDir := setupTestDB(t)
 	defer cleanupTestDB(database, tmpDir)
 
-	if _, err := database.AddAutoBan("203.0.113.9", "flooding", 40*time.Millisecond, 1, 0); err != nil {
+	if _, err := database.AddAutoBan("203.0.113.9", "flooding", time.Hour, 1, 0); err != nil {
 		t.Fatalf("AddAutoBan: %v", err)
 	}
 
 	if !mustBlacklisted(t, database, "203.0.113.9") {
 		t.Fatal("the ban did not take effect")
 	}
+}
 
-	time.Sleep(70 * time.Millisecond)
+func TestAutoBan_Expires(t *testing.T) {
+	database, tmpDir := setupTestDB(t)
+	defer cleanupTestDB(database, tmpDir)
+
+	// Assert on the returned entry rather than reading the row back, so this stays
+	// non-vacuous -- it proves an expiring ban was created -- without depending on
+	// beating the clock to observe it.
+	entry, err := database.AddAutoBan("203.0.113.9", "flooding", 40*time.Millisecond, 1, 0)
+	if err != nil {
+		t.Fatalf("AddAutoBan: %v", err)
+	}
+	if entry.ExpiresAt == nil {
+		t.Fatal("expected an expiring ban, got one with no expiry")
+	}
+
+	// The only timing assertion left, and it fails safe: more delay can only make the ban
+	// more expired, so a slow machine cannot produce a false failure.
+	time.Sleep(200 * time.Millisecond)
 
 	if mustBlacklisted(t, database, "203.0.113.9") {
 		t.Error("the ban was still in force after its expiry -- an automatic ban must lift on its own")

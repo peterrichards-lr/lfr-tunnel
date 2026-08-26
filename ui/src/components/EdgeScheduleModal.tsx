@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import axios from 'axios';
 import { useI18n } from '../contexts/I18nContext';
 import { useUI } from '../contexts/UIContext';
@@ -32,7 +32,9 @@ function formatTimezoneOffset(zone: string): string {
 const TIMEZONE_GROUPS: [string, string[]][] = (() => {
   let zones: string[];
   try {
-    zones = Intl.supportedValuesOf('timeZone');
+    // Canonical IANA names only, which leaves out 'UTC' entirely (#1252) -- the obvious
+    // choice for a test node or one whose local time does not matter.
+    zones = ['UTC', ...Intl.supportedValuesOf('timeZone')];
   } catch {
     // Intl.supportedValuesOf isn't available in every browser -- fall back
     // to just the regions this project actually uses rather than an empty
@@ -74,6 +76,29 @@ export default function EdgeScheduleModal({
   const [stopTime, setStopTime] = useState('');
   const [startTime, setStartTime] = useState('');
   const [timezone, setTimezone] = useState('');
+
+  // Intl.supportedValuesOf returns canonical names, so a node configured with an alias --
+  // edge-in uses Asia/Kolkata, whose canonical form is Asia/Calcutta -- matches no option.
+  // This select is controlled, so that renders blank and the operator cannot see the
+  // node's timezone at all (#1252). Fold the configured value in so the field always shows
+  // it, and stays re-selectable after the dropdown is touched.
+  const timezoneGroups = useMemo<[string, string[]][]>(() => {
+    if (
+      !timezone ||
+      TIMEZONE_GROUPS.some(([, zones]) => zones.includes(timezone))
+    ) {
+      return TIMEZONE_GROUPS;
+    }
+    const region = timezone.includes('/') ? timezone.split('/')[0] : 'Other';
+    const merged = TIMEZONE_GROUPS.map<[string, string[]]>(([r, zones]) =>
+      r === region ? [r, [...zones, timezone].sort()] : [r, zones],
+    );
+    return merged.some(([r]) => r === region)
+      ? merged
+      : [...merged, [region, [timezone]] as [string, string[]]].sort((a, b) =>
+          a[0].localeCompare(b[0]),
+        );
+  }, [timezone]);
   const [enabled, setEnabled] = useState(true);
 
   useEffect(() => {
@@ -210,7 +235,7 @@ export default function EdgeScheduleModal({
                 onChange={(e) => setTimezone(e.target.value)}
               >
                 <option value="">-- Select timezone --</option>
-                {TIMEZONE_GROUPS.map(([region, zones]) => (
+                {timezoneGroups.map(([region, zones]) => (
                   <optgroup key={region} label={region}>
                     {zones.map((zone) => (
                       <option key={zone} value={zone}>

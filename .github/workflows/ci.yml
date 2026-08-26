@@ -226,6 +226,10 @@ jobs:
   # Dependabot does not cover this: its Go support does not propose version updates for
   # `// indirect` requirements the main module does not import directly, which is exactly what
   # x/text is. So this job is not redundant with dependabot.yml -- it covers what that cannot.
+
+      - name: Required status checks must always produce a check run
+        run: ./scripts/check-required-contexts.sh
+
   govulncheck:
     name: Vulnerability Scan
     needs: changes

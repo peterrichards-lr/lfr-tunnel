@@ -48,6 +48,15 @@ could not confirm this in the codebase — treating it as unverified") rather th
 presenting a guess as fact. A wrong grounded-sounding answer is worse than an
 honest "I don't know."
 
+## Pragmatism & Velocity Principles
+
+To maintain high developer velocity while preserving software quality:
+
+- **Surgical Fixes & Minimal Diffs**: Focus strictly on the requested bug or feature. Do not refactor surrounding working code or re-architect functional logic unless explicitly asked.
+- **Preserve CLI, API & Operational Semantics**: Never alter or break existing CLI flags, API behavior, or user habits under the guise of "intent vs mechanism" or "semantic purity."
+- **Verify Claims Historically**: Before asserting that a feature "never worked" or "is broken," inspect past commit history (`git log -S`) to avoid misdiagnosing a recent regression as an initial design flaw.
+- **No Unsolicited Audit Cascades**: Do not create cascades of secondary micro-debt issues during routine bug fixes unless a full audit was explicitly requested.
+
 ## Scratch files
 
 Don't commit temporary scratch scripts, one-off plan files, or debug helper

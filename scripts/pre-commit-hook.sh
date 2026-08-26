@@ -9,6 +9,7 @@
 #
 # What stays here, and why:
 #   gitleaks   - a secret that reaches a commit is in history; rewriting is the expensive fix
+#                (scripts/scan-staged-secrets.sh -- extracted in #1377 so it can be tested)
 #   EDR guard  - 15 lines, and the thing it prevents costs a machine reinstall
 #   gofmt      - stops formatting churn entering the tree at all
 #   node -c    - milliseconds, catches a typo before it ships
@@ -18,24 +19,14 @@
 
 set -uo pipefail
 
-# Pinned rather than :latest so Docker resolves from cache instead of hitting the registry on
-# every commit, and so a gitleaks release cannot change what this hook accepts (#1343).
-GITLEAKS_IMAGE="zricethezav/gitleaks:v8.30.1"
-
 staged() {
     git diff --cached --name-only --diff-filter=ACM -- "$@"
 }
 
 echo "[Git Hook] Scanning staged files for secrets/tokens..."
-if ! docker run --rm -v "$(pwd)":/app -w /app "$GITLEAKS_IMAGE" \
-        protect --source=/app --verbose --staged; then
-    echo ""
-    echo "❌ Error: Git commit blocked because a secret or private token was detected."
-    echo "If this is a false positive, add the secret value to '.gitleaksignore' to allow it."
-    echo ""
+if ! ./scripts/scan-staged-secrets.sh; then
     exit 1
 fi
-echo "✅ No secrets detected."
 
 echo "[Git Hook] Running SentinelOne EDR Safety Guard check..."
 if ! ./scripts/check-edr-safety.sh; then

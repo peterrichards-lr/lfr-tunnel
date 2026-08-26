@@ -276,6 +276,32 @@ jobs:
           docker run --rm -v "$(pwd)":/mnt -w /mnt koalaman/shellcheck:v0.11.0 \
             -S error -x "${FILES[@]}"
 
+  # The secret scanner's own tests (#1377). gitleaks in the pre-commit hook was reporting
+  # "No secrets detected" on a scan of zero bytes whenever the commit came from a git worktree,
+  # so the hook proved it was configured rather than that it worked. This is the check that
+  # proves it works, and it belongs in CI because the hook cannot test itself.
+  #
+  # Job-level `if:` is safe here: this job has no matrix, so a gated-off job still reports its
+  # own context as `skipped`, which satisfies a required check. Only matrix jobs break that way
+  # (#1380). This context is not required in any case.
+  hook-tests:
+    name: Hook Tests
+    needs: changes
+    if: needs.changes.outputs.shell == 'true'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v7
+        with:
+          # The suite creates linked worktrees off HEAD; give it real history to do that with.
+          fetch-depth: 0
+
+      - name: Run hook tests
+        # No LFT_HOOK_TEST_ALLOW_SKIP here, deliberately. Docker is present on this runner, so
+        # if the real end-to-end cases cannot run, that is a failure worth seeing rather than a
+        # skip to wave through.
+        run: make test-hooks
+
   # NOT gated at the job level, deliberately -- see #1380. Required checks on `master` are
   # configured in TWO places: the ruleset (5 contexts) and classic branch protection (9 contexts,
   # `enforce_admins` on). Both require the matrix-expanded contexts

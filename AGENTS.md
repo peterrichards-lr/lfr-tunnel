@@ -70,6 +70,38 @@ different ones.
 - Client binaries must be signed before release/deployment — see the
   `lfr-tunnel-ops` skill for the exact signing command and required environment.
 
+## Shell scripts: bash 3.2 if a developer runs it
+
+macOS ships **bash 3.2.57** as `/bin/bash` — the last GPLv2 release, frozen in 2007.
+Anything a developer is expected to run locally has to work there, or it silently
+becomes CI-only.
+
+So in `scripts/` and `tests/hooks/`: **no `declare -A` / `local -A`, no `mapfile` /
+`readarray`, no `${var^^}` / `${var,,}`.** Use a delimited string plus
+`while IFS='|' read -r`, or two indexed arrays.
+
+Scripts that only ever run on Linux — `scripts/common/`, `scripts/liferay/`,
+`tests/e2e/`, and workflow `run:` blocks — may use bash 4+ freely.
+
+`tests/hooks/test-shell-portability.sh` (via `make test-hooks`) enforces this. The
+portable set is **derived**, not listed: it is every `.sh` the Makefile or a git
+hook invokes, minus the exempt prefixes. So wiring a new script into `make` covers
+it automatically, and nothing has to be kept in sync by hand.
+
+The corollary: **a script must be make-reachable to be covered.** That is why
+`scripts/check-required-contexts.sh` has a `make check-contexts` target — a
+pre-push gate with no convenient invocation is a gate nobody runs. The test
+asserts the derived set is non-empty and contains that script, so a broken
+derivation fails loudly instead of reporting a clean pass over nothing.
+
+It then actually runs the gate under both bash 3.2 and bash 5 and requires them to
+agree — on a passing tree *and* a deliberately broken one.
+
+**`bash -n` does not catch this** (verified): `declare -A` parses fine under 3.2 and
+only fails at run time, as `<key>: unbound variable` under `set -u`. That is how
+`check-required-contexts.sh` shipped in #1391 exiting 1 before checking anything — a
+gate whose entire value was being runnable before pushing (#1395).
+
 ## Rules-integrity check
 
 Every path, script, and directory named in this file and the skill files under
@@ -82,4 +114,4 @@ trip over.
 
 <!-- markdownlint-disable MD049 -->
 ---
-*Last Updated: 2026-08-25* | *Last Reviewed: 2026-08-25*
+*Last Updated: 2026-08-26* | *Last Reviewed: 2026-08-26*

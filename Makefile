@@ -1,4 +1,4 @@
-.PHONY: fmt vet test test-hooks build deploy clean install-hook e2e e2e-sso e2e-edge e2e-ui help
+.PHONY: fmt vet test test-hooks check-contexts build deploy clean install-hook e2e e2e-sso e2e-edge e2e-ui help
 
 VERSION ?= $(shell grep -oE 'Version = "[^"]+"' pkg/config/version.go | cut -d'"' -f2)
 
@@ -176,9 +176,17 @@ install-hook:
 	@chmod +x "$(HOOKS_DIR)/pre-push"
 	@echo "pre-commit and pre-push hooks installed successfully."
 
-# Tests the hook and guard scripts themselves (#1377, #1402). Fast: the stubbed cases need no
-# Docker, and only the end-to-end worktree case does. Not part of `test`, which is the Go suite.
+# Tests the hook and guard scripts themselves (#1377, #1395, #1402). Fast: the stubbed cases
+# need no Docker, and only the end-to-end cases do. Not part of `test`, which is the Go suite.
 test-hooks:
 	@./tests/hooks/test-scan-staged-secrets.sh
 	@./tests/hooks/test-edr-guard.sh
+	@./tests/hooks/test-shell-portability.sh
+
+# The pre-merge CI-configuration gate (#1391). Worth a target rather than only a path to type:
+# the whole point of this check is being run BEFORE pushing, and a check nobody can invoke
+# conveniently is a check nobody invokes. Also makes the script reachable from the Makefile,
+# which is how tests/hooks/test-shell-portability.sh discovers what must stay bash 3.2 clean.
+check-contexts:
+	@./scripts/check-required-contexts.sh
 

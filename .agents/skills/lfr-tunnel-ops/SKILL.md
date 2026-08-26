@@ -89,6 +89,47 @@ To automate the release lifecycle (bumping the version in `pkg/config/version.go
   - *Note: the script creates and pushes a `release-<version>` branch and PR only. It does not create or push a git tag — tagging is a manual step the script prints as its final instruction.*
   - **CRITICAL COMPLIANCE NOTE**: Never use `--admin` to bypass branch protection rules to merge the resulting PR, or any other PR. The AI assistant must let CI/CD checks pass naturally and follow the repository rules to the letter.
 
+### Pushing the tag is one-shot — verify the run started
+
+`git push origin <tag>` is the only thing that triggers `.github/workflows/release.yml`. Its
+trigger is `on: push: tags: ['v*']` and it has **no `workflow_dispatch`**, so there is no manual
+way to start it.
+
+**A tag cannot be re-pushed to try again.** The `Protect Version Tags` ruleset forbids `deletion`
+and `update` on `refs/tags/v*`, for everyone — the repository owner included. So if the push does
+not produce a run, that version has no GitHub release and never will. The next version is the
+only remedy.
+
+This is not hypothetical: on 2026-08-26 the `v1.48.6` tag pushed cleanly and GitHub never created
+a run, during an Actions backlog that was also producing `startup_failure` on unrelated
+workflows. The tag is correct and points at the right commit; the release simply does not exist.
+
+**So immediately after pushing a tag, confirm the run exists** rather than assuming it:
+
+```bash
+gh run list --workflow=release.yml --limit 1
+gh release view <tag>
+```
+
+If no run appeared within a minute or so, say so at once. There is nothing to retry, and the
+sooner it is known the sooner the next release can carry the fix.
+
+What a missing run does and does not affect, so the blast radius is not overstated:
+
+- **Missing**: the GitHub Release and its assets, and the push to the orphan `checksums` branch
+  that the portal reads over `raw.githubusercontent.com` (see `docs/architecture.md`). Both stay
+  at the previous version, *consistently* — nothing is mismatched, that tier simply skips a
+  version.
+- **Unaffected**: everything in §4 and §5. The gateway deployment, the locally signed client
+  binaries and the downloads page are a separate path with separate bytes — `scripts/minisign_helper.go`
+  spells out that CI's binaries and the locally OS-codesigned ones are deliberately not the same.
+  A missing GitHub release does not hold up a deployment.
+
+If making the run recoverable is wanted, that is a change to `release.yml`: a `workflow_dispatch`
+with a tag input, dispatched from `master`. Note it cannot be dispatched *at* an existing tag —
+`workflow_dispatch` is only offered where the workflow file at that ref declares it, so any tag
+predating the change stays unrecoverable.
+
 ---
 
 ## 4. Signing Client Binaries

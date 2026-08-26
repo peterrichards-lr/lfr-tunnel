@@ -1009,10 +1009,22 @@ For isolated testing or when corporate certificates are not yet available, you c
 
 ##### C. Running `lfr-tunnel-ops build` and `sign`
 
-`build` cross-compiles the client into `dist/` first; `sign` then signs whatever it finds there.
+`build` cross-compiles the client into `dist/` first; `sign` then signs what it finds there.
 There is no interactive prompt mode -- both are entirely env-var-driven. Per platform, `sign`
 silently prints `Skipping ... signing (no valid ... provided/found)` and moves on if that
 platform's env vars aren't set, rather than asking you for anything.
+
+`build` records what it produced in `dist/build-manifest.json`, and `sign` and `deploy-clients`
+both refuse to run if that manifest's source version no longer matches `pkg/config/version.go`
+(#1279). This is why: `build`'s output is routinely piped, and a pipe that closes early -- `|
+head -4` is the case that actually happened -- kills it with SIGPIPE before it compiles
+anything. Twice in one day the downloads page was populated with the previous version's binaries
+while the release, the tag, the gateway and `latest_version` all agreed on the new one. A user
+running `--upgrade` was told a new version was available, downloaded it, had the signature and
+integrity verified, installed it, and was still on the old version.
+
+If you genuinely mean to ship artefacts that did not come from the current source, pass
+`-allow-stale` to either command. It has to be a deliberate act rather than the default.
 
 Provide the variables below directly via shell or 1Password `op run`. `<vault>` is a placeholder
 -- substitute whichever 1Password vault actually holds these items for you (e.g. your personal
@@ -1056,7 +1068,10 @@ op run -- lfr-tunnel-ops sign
 
 * **Output**:
   Signed binaries land back in `dist/`, alongside `dist/checksums.txt`, `dist/checksums.txt.minisig`,
-  and a per-binary `.asc` for whichever platform's GPG step ran. Nothing lands in `bin/`.
+  `dist/build-manifest.json`, and a per-binary `.asc` for whichever platform's GPG step ran.
+  Nothing lands in `bin/`. `build-manifest.json` is deliberately excluded from `checksums.txt`:
+  that file is what `--upgrade` and `install.sh` verify a downloaded binary against, so it stays
+  a list of downloadable artefacts.
 
 
 ### 8.4. Dual-Mode Gateway Maintenance (Bouncer Mode vs. Fire Curtain)
@@ -1358,4 +1373,4 @@ To guarantee that outbound connections originating from the VPS are consistently
 
 <!-- markdownlint-disable MD049 -->
 ---
-*Last Updated: 2026-08-25* | *Last Reviewed: 2026-08-25*
+*Last Updated: 2026-08-26* | *Last Reviewed: 2026-08-26*

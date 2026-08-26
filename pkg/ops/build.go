@@ -3,7 +3,9 @@ package ops
 import (
 	"fmt"
 	"os"
+	"path/filepath"
 	"regexp"
+	"time"
 )
 
 // BuildCommand handles the cross-compilation of client binaries.
@@ -53,6 +55,9 @@ func BuildCommand(args []string) {
 	reportDefault("DefaultStatusPageURL", statusPageURL, "no status-page hint when a gateway looks unreachable")
 	reportDefault("DefaultPortalURL", portalURL, "browser login falls back to the gateway, which serves the portal too")
 
+	sourceVersion := extractVersion()
+	var built []string
+
 	for _, target := range targets {
 		env := []string{
 			fmt.Sprintf("GOOS=%s", target.GOOS),
@@ -68,9 +73,27 @@ func BuildCommand(args []string) {
 
 		err := RunCommandWithEnv(env, "go", "build", "-ldflags", ldflags, "-trimpath", "-o", target.Output, "./cmd/lfr-tunnel")
 		CheckFatal(err, fmt.Sprintf("Failed to build for %s/%s", target.GOOS, target.GOARCH))
+		built = append(built, filepath.Base(target.Output))
 	}
 
-	fmt.Println("Build complete!")
+	// Written last, after every target has succeeded, and that ordering is the point (#1279).
+	// This command's output is routinely piped, and a pipe that closes early -- `| head -4` is
+	// the case that actually happened -- kills the process with SIGPIPE before it compiles
+	// anything. Nothing in-process can catch that. But a build that dies part-way then leaves
+	// the PREVIOUS manifest in place, so `sign` and `deploy-clients` see a source version that
+	// no longer matches version.go and refuse. The absent manifest is the signal, rather than
+	// this command having to survive its own death.
+	manifest := BuildManifest{
+		Version:       version,
+		SourceVersion: sourceVersion,
+		Commit:        currentGitCommit(),
+		BuiltAt:       time.Now().UTC(),
+		Artifacts:     built,
+	}
+	CheckFatal(WriteBuildManifest("dist", manifest), "Failed to write build manifest")
+
+	fmt.Printf("Build complete! dist/ now holds %s (source %s, commit %s).\n",
+		manifest.Version, manifest.SourceVersion, manifest.Commit)
 }
 
 // formatDefault renders one build-time deployment default, naming the consequence when it

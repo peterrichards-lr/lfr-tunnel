@@ -33,6 +33,11 @@ cleanup() {
         docker stop "$DRAIN_CLIENT_ID" >/dev/null 2>&1 || true
         docker rm "$DRAIN_CLIENT_ID" >/dev/null 2>&1 || true
     fi
+    if [ -n "$FAIL_CLIENT_ID" ]; then
+        echo "Stopping and removing failover-test client container: $FAIL_CLIENT_ID"
+        docker stop "$FAIL_CLIENT_ID" >/dev/null 2>&1 || true
+        docker rm "$FAIL_CLIENT_ID" >/dev/null 2>&1 || true
+    fi
     docker-compose -f docker-compose-edge.yml down -v --remove-orphans >/dev/null 2>&1 || true
 
     if [ $EXIT_CODE -eq 0 ]; then
@@ -303,6 +308,20 @@ echo "=== Reserving subdomain peter-drain ==="
 curl -s -b /tmp/dev-session.txt -X POST -H "Content-Type: application/json" \
      -d '{"subdomain": "peter-drain", "domain": "lfr-demo.local"}' \
      "http://localhost:8000/api/portal/reservations"
+sleep 2
+
+echo "=== Reserving subdomain peter-fail ==="
+# Checked, unlike the three above. A refused reservation is silent here and only surfaces much
+# later as "Failed to register: quota limit reached" against a client that looks broken -- which
+# is exactly how the quota ceiling was found when this phase was added.
+FAIL_RES=$(curl -s -b /tmp/dev-session.txt -X POST -H "Content-Type: application/json" \
+     -d '{"subdomain": "peter-fail", "domain": "lfr-demo.local"}' \
+     "http://localhost:8000/api/portal/reservations")
+if ! echo "$FAIL_RES" | grep -q '"subdomain":"peter-fail"'; then
+    echo "❌ Could not reserve peter-fail, so the failover test has no tunnel to work with."
+    echo "    Response: $FAIL_RES"
+    exit 1
+fi
 sleep 2
 
 # 6. Test Explicit Edge Gateway Connection (-region us)
@@ -746,6 +765,150 @@ echo "✅ Control plane restarted with zero interruption to the drained tunnel!"
 # staying up, so the deploy clears it -- and so must this.
 docker-compose -f docker-compose-edge.yml exec -T lfr-tunneld-control \
     wget -q -O - --post-data='{"seconds": 0}' --header='Content-Type: application/json' "$DRAIN_URL" > /dev/null 2>&1 || true
+
+# 10. Unplanned failover (#1374).
+#
+# Everything above this point is an ANNOUNCED move: a scheduled shutdown warning, or a drain
+# posted before a restart. Both depend on the gateway being well behaved enough to say goodbye.
+# This is the case that has no announcement -- a crash, an OOM kill, a partition, an instance
+# terminated outside its window -- and it was the one path the suite never covered.
+#
+# kill, not stop: stop sends SIGTERM, the gateway shuts down gracefully and may announce, which
+# turns this back into the planned path already tested above.
+echo "=== Starting a client pinned to the edge for the failover test ==="
+# The failover cooldown is compressed for THIS client only, not in the compose service.
+# Phase 9 depends on peter-dev still being inside the hour-long PLANNED cooldown, and a
+# service-wide override would quietly change that phase's premise while appearing to pass.
+# In production this is 90s; the client ignores an unparseable value and keeps the default,
+# so a typo here cannot weaken a real deployment.
+FAIL_CLIENT_ID=$(docker-compose -f docker-compose-edge.yml run -d --no-deps \
+  --entrypoint "./lfr-tunnel" \
+  -e LFT_CLIENT_TOKEN="$DEVELOPER_PAT" \
+  -e LFT_REGION_FAILOVER_COOLDOWN=5s \
+  lfr-tunnel \
+  -config client-config-edge.yaml \
+  -region us \
+  -subdomain peter-fail \
+  -ports 80)
+
+FAIL_READY=false
+for i in {1..30}; do
+    if curl -s -o /dev/null -w "%{http_code}" --max-time 2 \
+        -H "Host: peter-fail.lfr-demo.local" http://localhost:8090/ 2>/dev/null | grep -q 200; then
+        FAIL_READY=true
+        break
+    fi
+    sleep 2
+done
+if [ "$FAIL_READY" = false ]; then
+    echo "❌ The failover-test client never came up on the edge."
+    docker logs "$FAIL_CLIENT_ID" 2>&1 | tail -30
+    exit 1
+fi
+echo "Failover-test client is serving on the edge"
+
+echo "=== Killing the edge outright, with no warning ==="
+docker-compose -f docker-compose-edge.yml kill lfr-tunneld-edge > /dev/null 2>&1
+
+# Unlike the drain, this IS an interruption: the gateway carrying the tunnel vanished. What is
+# being asserted is recovery, and how long it takes -- not that nothing was dropped.
+RECOVERED=false
+RECOVERY_SECONDS=0
+for i in $(seq 1 60); do
+    if curl -s -o /dev/null -w "%{http_code}" --max-time 2 \
+        -H "Host: peter-fail.lfr-demo.local" http://localhost:8000/ 2>/dev/null | grep -q 200; then
+        RECOVERED=true
+        RECOVERY_SECONDS=$i
+        break
+    fi
+    sleep 1
+done
+
+if [ "$RECOVERED" = false ]; then
+    echo "❌ The client never recovered after its gateway was killed without warning."
+    echo "    This is the failure mode with no announcement to react to, so nothing else covers it."
+    echo "=== Failover client log (tail) ==="
+    docker logs "$FAIL_CLIENT_ID" 2>&1 | tail -40
+    echo "=== Control plane log (tail) ==="
+    docker-compose -f docker-compose-edge.yml logs --tail=30 lfr-tunneld-control 2>&1
+    exit 1
+fi
+echo "✅ Client recovered onto the control plane ${RECOVERY_SECONDS}s after its edge was killed!"
+
+# Recovering by luck is not recovering. The client must have noticed the gateway was gone,
+# rather than the tunnel having been re-established by some unrelated reconnect.
+# The exact line this path emits, not a loose alternation: "reconnect" and friends appear in
+# ordinary operation, so matching those would pass whether or not the failover machinery ran.
+#
+# Note there are TWO failover paths, and an abrupt kill takes the second:
+#   - "Triggering dynamic region failover"  -- the gateway ANSWERED with 503 / lease evicted
+#   - "Successfully failed over to region"  -- the tunnel connection itself dropped
+# A killed gateway answers nothing, so the connection-loss path is the one under test here.
+# Asserting the first was wrong, and the loose version hid that by matching "reconnect".
+if ! docker logs "$FAIL_CLIENT_ID" 2>&1 | grep -q "Successfully failed over to region"; then
+    echo "❌ The client is serving again but never ran the region failover path."
+    echo "    Recovery has to be attributable to the mechanism, or this passes for reasons the"
+    echo "    code does not own -- an ordinary reconnect would look identical from outside."
+    docker logs "$FAIL_CLIENT_ID" 2>&1 | tail -40
+    exit 1
+fi
+echo "✅ Client detected the gateway loss and ran the failover path"
+
+# 11. Failback (#1374).
+#
+# The other half of the journey, and the half #1310 was found in: once the edge is healthy the
+# client should return to its preferred region -- but NOT immediately after a planned move, or
+# it bounces straight back to a gateway that is about to be switched off.
+echo "=== Bringing the killed edge back for the failback test ==="
+docker-compose -f docker-compose-edge.yml start lfr-tunneld-edge > /dev/null 2>&1
+EDGE_BACK=false
+for i in {1..40}; do
+    if docker-compose -f docker-compose-edge.yml logs --tail=40 lfr-tunneld-edge 2>/dev/null | grep -q "Successfully connected and authenticated"; then
+        EDGE_BACK=true
+        break
+    fi
+    sleep 2
+done
+if [ "$EDGE_BACK" = false ]; then
+    echo "❌ The edge never came back, so failback cannot be tested."
+    docker-compose -f docker-compose-edge.yml logs --tail=20 lfr-tunneld-edge
+    exit 1
+fi
+
+# LFT_REGION_FAILOVER_COOLDOWN is compressed on this client only, so this waits seconds rather
+# than the production 90. The failback prober ticks every 15s on top of that.
+# Waits on the MECHANISM, not on the edge answering. An edge cross-proxies to whichever gateway
+# holds the lease (#1249), so it returns 200 for this tunnel the moment it is back up -- while
+# the client is still on the control plane. Polling the HTTP code therefore succeeded on the
+# first iteration and asserted the log before the prober had ticked once, which is what made an
+# earlier version of this phase fail for a reason that had nothing to do with failback.
+FAILED_BACK=false
+for i in $(seq 1 60); do
+    if docker logs "$FAIL_CLIENT_ID" 2>&1 | grep -q "Successfully failed back to primary region"; then
+        FAILED_BACK=true
+        break
+    fi
+    sleep 2
+done
+
+if [ "$FAILED_BACK" = false ]; then
+    echo "❌ The client never returned to its preferred region after the edge recovered."
+    echo "    Without failback a single transient fault pins every client on the control plane"
+    echo "    permanently, which defeats the point of having regional edges."
+    echo "=== Failback-related lines from the whole client log ==="
+    docker logs "$FAIL_CLIENT_ID" 2>&1 | grep -iE 'failback|failed back|primary region|holding off|cooling' || echo "    (none -- the prober never reported on the primary at all)"
+    echo "=== Failover client log (tail) ==="
+    docker logs "$FAIL_CLIENT_ID" 2>&1 | tail -40
+    exit 1
+fi
+# Having returned, it must also still be serving.
+if ! curl -s -o /dev/null -w "%{http_code}" --max-time 3 \
+    -H "Host: peter-fail.lfr-demo.local" http://localhost:8090/ 2>/dev/null | grep -q 200; then
+    echo "❌ The client failed back but the tunnel is not serving on the edge."
+    docker logs "$FAIL_CLIENT_ID" 2>&1 | tail -30
+    exit 1
+fi
+echo "✅ Client failed back to the edge once it was healthy again!"
 
 echo "✅ All Multi-Region Edge E2E Integration Tests PASSED!"
 exit 0

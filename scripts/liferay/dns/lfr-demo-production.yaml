@@ -14,6 +14,21 @@
 # never invent a value here, and never resolve it via -detect-ip from an
 # operator laptop (see the -detect-ip flag's own warning).
 #
+# AUTHORITATIVE PROVIDER: Route53, for both lfr-demo.se and lfr-demo.online,
+# since the migration in #858 (closed 2026-08-11). Cloudflare is no longer
+# authoritative for either zone. The history below predates that migration and
+# is kept because it explains how this file came to exist and why it deviates
+# from the zone it was first copied from -- not because Cloudflare is still the
+# reference. Reading it as current is what sent a design review in the wrong
+# direction on #1247 and again on #1243 (#1284).
+#
+# The `cloudflare:` keys on individual records are deliberate, not leftovers:
+# `lfr-tunnel-ops dns` still takes `-provider <cloudflare|route53>`
+# (pkg/ops/dns.go:65) and the Cloudflare path is still implemented. Whether that
+# read-only verification path is still wanted is an open question on #1284; it
+# has not been removed here because the tooling still supports it.
+#
+# --- history, pre-Route53 -------------------------------------------------
 # Mirrored the live Cloudflare zone as of 2026-07-29 (post #857 SES DKIM/SPF
 # additions), then re-audited on 2026-08-06 against real production (#940,
 # #941): this file had silently drifted out of sync with the actual AWS edge
@@ -22,8 +37,8 @@
 # is how a real live bug (us.lfr-demo.se pointing at a legacy GCP edge's IP)
 # went uncaught: there was nothing here to diff it against. Run `dns apply`
 # (see below) against both providers after any change here so this file stays
-# the actual source of truth rather than just aspirational. Deviations from a
-# byte-for-byte copy of Cloudflare, otherwise:
+# the actual source of truth rather than just aspirational. Deviations from the
+# Cloudflare zone this file was originally copied from, recorded at the time:
 #   - The lfr-demo.online DMARC record's Cloudflare-specific
 #     `rua=mailto:...@dmarc-reports.cloudflare.net;` reporting address is
 #     dropped for both domains: it becomes a dead, non-deliverable address

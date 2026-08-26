@@ -1,4 +1,4 @@
-.PHONY: fmt vet test build deploy clean install-hook e2e e2e-sso e2e-edge e2e-ui help
+.PHONY: fmt vet test test-hooks build deploy clean install-hook e2e e2e-sso e2e-edge e2e-ui help
 
 VERSION ?= $(shell grep -oE 'Version = "[^"]+"' pkg/config/version.go | cut -d'"' -f2)
 
@@ -159,11 +159,25 @@ e2e-ui:
 # Installs both hooks (#1343). pre-commit is the fast, irreversible-only set; pre-push carries
 # vet, tests and the conditional UI build. Installing only one of the two leaves a gap rather
 # than a slow hook, so they go together.
+#
+# The destination is resolved with `git rev-parse --git-path hooks` rather than hardcoded to
+# `.git/hooks` (#1377). In a linked worktree `.git` is a FILE, not a directory, so the old
+# hardcoded path failed outright with "cp: .git/hooks/pre-commit: Not a directory" -- leaving a
+# worktree with NO hooks installed, which is worse than a slow one. Hooks live in the common
+# gitdir and are shared across worktrees, which is what rev-parse resolves to.
+HOOKS_DIR = $(shell git rev-parse --git-path hooks)
+
 install-hook:
-	@echo "Installing native git hooks..."
-	@cp scripts/pre-commit-hook.sh .git/hooks/pre-commit
-	@chmod +x .git/hooks/pre-commit
-	@cp scripts/pre-push-hook.sh .git/hooks/pre-push
-	@chmod +x .git/hooks/pre-push
+	@echo "Installing native git hooks into $(HOOKS_DIR)..."
+	@mkdir -p "$(HOOKS_DIR)"
+	@cp scripts/pre-commit-hook.sh "$(HOOKS_DIR)/pre-commit"
+	@chmod +x "$(HOOKS_DIR)/pre-commit"
+	@cp scripts/pre-push-hook.sh "$(HOOKS_DIR)/pre-push"
+	@chmod +x "$(HOOKS_DIR)/pre-push"
 	@echo "pre-commit and pre-push hooks installed successfully."
+
+# Tests the secret scanner itself (#1377). Fast: the stubbed cases need no Docker at all, and
+# only the end-to-end worktree case does. Not part of `test`, which is the Go suite.
+test-hooks:
+	@./tests/hooks/test-scan-staged-secrets.sh
 

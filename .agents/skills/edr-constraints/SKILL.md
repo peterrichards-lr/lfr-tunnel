@@ -21,6 +21,8 @@ description: Critical SentinelOne End Point Detection and Response (EDR) constra
 - **Also never run the `lfr-tunnel` client binary/process directly on the host**: `go run ./cmd/lfr-tunnel`, the built `bin/lfr-tunnel` binary, or the `lfr-tunnel.sh`/`lfr-tunnel.bat` wrappers. Also denied in `.claude/settings.json`.
 - **Fine to run directly**: `go build` (compiles but doesn't execute), `go vet`, `gofmt`, `go list`, and the `lfr-tunnel-ops` (deploy tooling) binary. **Not** `lfr-tunneld` -- see "Running the server locally" below, that claim was wrong. The client running inside a Docker container (e.g. `make e2e` / `tests/e2e/run.sh`) is a different risk profile and is not blocked.
 - If ever unsure whether a command would build-and-run code outside `LFT_TEST_DIR`, stop and ask the user first rather than guessing.
+- **A tool you were told to build rather than `go run` can still spawn `go run` itself** (#1402). The rule had always been applied to how `lfr-tunnel-ops` is *invoked* — build it, never `go run ./cmd/lfr-tunnel-ops` — and never to what it *does*. `pkg/ops/sign.go` shelled out to `go run scripts/minisign_helper.go` on every `sign`, and `sign` is documented as being run directly (`op run -- lfr-tunnel-ops sign`), never through `make`, so `GOTMPDIR` was unset and it linked and executed out of `/var/folders` each time. Now done in-process via `pkg/minisign`.
+- **`scripts/check-edr-safety.sh` covers Go source as of #1402, and needed two changes to do it.** Adding `--include=*.go` alone caught nothing: the script's patterns are the literal `go run` / `go test`, and Go spells it as separate string literals — `exec.Command("go", "run", ...)`. Measured against the real defect: includes alone → exit 0; includes plus a `"go"[[:space:]]*,[[:space:]]*"(run|test)"` pattern → exit 1. `tests/hooks/test-edr-guard.sh` (via `make test-hooks`) holds both halves in place. When widening this guard again, check that the new coverage actually fires — an include that matches no pattern reads as coverage and is none.
 
 ## Running the server locally -- DON'T (as of 2026-08-13, no verified-safe way exists)
 
@@ -47,4 +49,4 @@ local-execution workaround.
 
 <!-- markdownlint-disable MD049 -->
 ---
-*Last Updated: 2026-08-25* | *Last Reviewed: 2026-08-25*
+*Last Updated: 2026-08-26* | *Last Reviewed: 2026-08-26*

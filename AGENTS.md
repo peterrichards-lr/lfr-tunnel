@@ -79,6 +79,25 @@ different ones.
 - Client binaries must be signed before release/deployment — see the
   `lfr-tunnel-ops` skill for the exact signing command and required environment.
 
+## Linting locally: containerized, not installed
+
+`golangci-lint` is deliberately **not** installed via `brew` or `go install`. Its
+absence is the intended state, not something to fix. This repo's own
+`scripts/pre-commit-hook.sh` runs it in a container, and CI runs the same image:
+
+```
+docker run --rm -v "$(pwd)":/app -w /app golangci/golangci-lint:latest golangci-lint run
+```
+
+Use that. Installing the binary adds a local toolchain the project does not use and
+diverges from what CI actually enforces.
+
+Known local limitation: it can OOM inside the colima VM while compiling the AWS SDK
+(`signal: killed` on `pkg/provisioner/aws.go`), including when scoped to one package,
+because `pkg/server` imports `pkg/provisioner` transitively. That is a memory limit,
+not a code defect — CI's Lint & Format Check is authoritative. Scoping the run to the
+packages you touched (`golangci-lint run ./pkg/ops/...`) usually gets under it.
+
 ## Shell scripts: bash 3.2 if a developer runs it
 
 macOS ships **bash 3.2.57** as `/bin/bash` — the last GPLv2 release, frozen in 2007.

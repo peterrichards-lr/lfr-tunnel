@@ -340,7 +340,8 @@ func SelfUpgrade(currentVersion string, serverURL string) error {
 	}
 
 	// Write to temporary file
-	tempFile, err := os.OpenFile(tempPath, os.O_CREATE|os.O_WRONLY|os.O_TRUNC, 0755)
+	// 0755 required (#1408): this becomes the client binary, so it must be executable.
+	tempFile, err := os.OpenFile(tempPath, os.O_CREATE|os.O_WRONLY|os.O_TRUNC, 0o755) //nolint:gosec
 	if err != nil {
 		return fmt.Errorf("failed to create temporary file (is directory writeable?): %v", err)
 	}
@@ -425,7 +426,9 @@ func SelfUpgrade(currentVersion string, serverURL string) error {
 			fmt.Println("[Update] Migrating binary to the new directory...")
 
 			// Ensure target directory exists
-			if err := os.MkdirAll(configuredInstallDir, 0755); err != nil {
+			// 0750 (#1408): the user's own install directory; they are the only one who
+			// needs to run what lands in it.
+			if err := os.MkdirAll(configuredInstallDir, 0o750); err != nil {
 				return fmt.Errorf("failed to create target directory %s: %v (try running with sudo/Administrator)", configuredInstallDir, err)
 			}
 
@@ -507,7 +510,8 @@ func replaceBinary(tempPath, execPath string) error {
 	}
 	defer in.Close() //nolint:errcheck
 
-	out, err := os.OpenFile(execPath, os.O_CREATE|os.O_WRONLY|os.O_TRUNC, 0755)
+	// 0755 required (#1408): same -- the replacement binary has to be executable.
+	out, err := os.OpenFile(execPath, os.O_CREATE|os.O_WRONLY|os.O_TRUNC, 0o755) //nolint:gosec
 	if err != nil {
 		return err
 	}

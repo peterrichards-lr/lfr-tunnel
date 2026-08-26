@@ -286,7 +286,8 @@ func acquireGUILock() bool {
 	}
 
 	// Write our PID
-	_ = os.WriteFile(lockPath, []byte(strconv.Itoa(os.Getpid())), 0644) //nolint:errcheck
+	// 0600: only this process and its successor read the lock (#1408).
+	_ = os.WriteFile(lockPath, []byte(strconv.Itoa(os.Getpid())), 0o600) //nolint:errcheck
 	return true
 }
 

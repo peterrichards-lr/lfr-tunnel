@@ -245,7 +245,10 @@ func generateChecksums(dir string) error {
 	}
 
 	checksumsPath := filepath.Join(dir, "checksums.txt")
-	err = os.WriteFile(checksumsPath, []byte(strings.Join(lines, "\n")+"\n"), 0644)
+	// 0644 deliberately (#1408): deploy-clients publishes this to the gateway's downloads
+	// directory, where `lfr-tunnel --upgrade` and install.sh fetch it to verify a download.
+	// It is a list of hashes, not a secret.
+	err = os.WriteFile(checksumsPath, []byte(strings.Join(lines, "\n")+"\n"), 0o644) //nolint:gosec
 	if err != nil {
 		return err
 	}

@@ -220,7 +220,9 @@ func ReconcileNginxCommand(args []string) {
 	config := buildNginxConfig(domains, nginxTarget.Port)
 
 	tmpPath := fmt.Sprintf("/tmp/lfr-tunneld-nginx-reconcile-%d.conf", time.Now().UnixNano())
-	if err := os.WriteFile(tmpPath, []byte(config), 0644); err != nil {
+	// 0600: a generated nginx config staged in a world-readable /tmp, read only by the scp
+	// below (#1408). The predictable filename is a separate matter, untouched here.
+	if err := os.WriteFile(tmpPath, []byte(config), 0o600); err != nil {
 		CheckFatal(err, "Failed to write local temp nginx config")
 	}
 	defer os.Remove(tmpPath) //nolint:errcheck

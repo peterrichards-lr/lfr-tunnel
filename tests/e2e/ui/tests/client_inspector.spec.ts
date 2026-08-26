@@ -54,6 +54,39 @@ test.describe('Client Inspector UI', () => {
     );
   });
 
+  // #1419. /api/logs has been served since #584, but #783 deleted the UI that read it and
+  // nothing noticed for eleven weeks -- because nothing asserted it existed. This is that
+  // assertion: it fails if the tab, the container, or the endpoint wiring goes away again.
+  test('should show the log viewer and read /api/logs', async ({ page }) => {
+    await page.goto('http://localhost:4040/');
+
+    const logsRequest = page.waitForRequest(
+      (r) => r.url().endsWith('/api/logs'),
+      { timeout: 10_000 },
+    );
+
+    await page.locator('#tab-logs').click();
+    await expect(page.locator('#tab-logs')).toHaveClass(/active/);
+
+    // The endpoint is actually called -- a tab that renders an empty pane without ever
+    // fetching would be the same defect wearing a different hat.
+    await logsRequest;
+
+    await expect(page.locator('#logs-container')).toBeVisible();
+
+    // The traffic panels are hidden in this view, the same way the Settings tab hides them.
+    await expect(page.locator('#req-list')).toBeHidden();
+
+    // Either real log lines or the explicit empty state -- both mean the view rendered.
+    // Which one depends on whether this client has written to its log file yet, so asserting
+    // one of them specifically would make the test depend on execution order.
+    await expect(
+      page
+        .locator('#logs-container .log-line, #logs-container .logs-empty')
+        .first(),
+    ).toBeVisible();
+  });
+
   test('should sync local theme preference', async ({ page }) => {
     await page.goto('http://localhost:4040/');
 

@@ -992,7 +992,16 @@ function toggleTheme() {
             document.getElementById('acc-first-name').value = currentUser.first_name || '';
             document.getElementById('acc-last-name').value = currentUser.last_name || '';
             document.getElementById('acc-preferred-name').value = currentUser.preferred_name || '';
-            document.getElementById('acc-theme').value = currentUser.theme_preference || 'system';
+            // V2 offers themes V1 does not (currently 'liferay'), and the server stores
+            // theme_preference as free text with no whitelist, so an unknown value lands
+            // here routinely rather than exceptionally (#1201).
+            setSelectValueSafely(
+                document.getElementById('acc-theme'),
+                currentUser.theme_preference || 'system',
+                v => V2_ONLY_THEME_LABELS[v]
+                    ? `${V2_ONLY_THEME_LABELS[v]} ${t('theme_portal_v2_only', '(set in Portal V2)')}`
+                    : `${v} ${t('theme_unsupported_here', '(unsupported in Portal V1)')}`
+            );
             document.getElementById('acc-subdomain-style').value = currentUser.subdomain_style || 'liferay';
             const accPrefVal = document.getElementById('acc-preferred-domain');
             if (accPrefVal) {
@@ -1265,8 +1274,18 @@ applyTheme(currentUser.theme_preference);
             else showToast(t('toast_broadcast_clear_failed', 'Failed to clear broadcast'));
         }
 
+        // Themes Portal V2 can store that V1 has no stylesheet for. Used only to label
+        // the value honestly in Account Settings; V1 still renders a theme it owns.
+        const V2_ONLY_THEME_LABELS = { liferay: 'Liferay Waffle \u{1F9C7}' };
+        const V1_THEMES = ['system', 'light', 'dark', 'time'];
+
         function applyTheme(pref) {
             let themeToApply = pref;
+            // An unknown value set data-theme to something with no rules, so the portal
+            // silently fell back to :root defaults regardless of the user's OS setting.
+            if (themeToApply && !V1_THEMES.includes(themeToApply)) {
+                themeToApply = 'system';
+            }
             if (themeToApply === 'time') {
                 const hour = new Date().getHours();
                 themeToApply = (hour >= 6 && hour < 18) ? 'light' : 'dark';
@@ -4376,6 +4395,41 @@ applyTheme(currentUser.theme_preference);
                 }
             }, 30000);
         }
+        /**
+         * Assign a value to a <select> without the box silently going blank (#1201).
+         *
+         * Setting .value to something no <option> carries leaves selectedIndex at -1,
+         * which renders as an empty control -- no text, just the chevron. Both known
+         * cases came from a value written somewhere else: Portal V2 stores
+         * theme_preference 'liferay', which V1 has no option for, and default_domain can
+         * name a domain that is absent from the gateway's supported_domains. In each case
+         * the user was shown nothing at all rather than what is actually configured.
+         *
+         * Rather than quietly substituting a default -- which would misreport the stored
+         * setting -- surface the real value as a disabled option so it is visible and
+         * obviously not one of the normal choices.
+         */
+        window.setSelectValueSafely = function(select, value, describeUnknown) {
+            if (!select) return;
+            const raw = (value === null || value === undefined) ? '' : String(value);
+            select.value = raw;
+            if (select.selectedIndex !== -1) {
+                const stale = select.querySelector('option[data-unknown-value]');
+                if (stale) stale.remove();
+                return;
+            }
+            let opt = select.querySelector('option[data-unknown-value]');
+            if (!opt) {
+                opt = document.createElement('option');
+                opt.setAttribute('data-unknown-value', '');
+                opt.disabled = true;
+                select.insertBefore(opt, select.firstChild);
+            }
+            opt.value = raw;
+            opt.textContent = describeUnknown ? describeUnknown(raw) : raw;
+            select.value = raw;
+        };
+
         window.toggleSidebarSection = function(sectionId) {
             const content = document.getElementById('section-' + sectionId);
             if (!content) return;
@@ -5093,7 +5147,14 @@ async function loadSystemSettings() {
             }
             const domSelect = document.getElementById('system-default-domain');
             if (data.default_domain) {
-                domSelect.value = data.default_domain;
+                // A configured default_domain that is not in supported_domains used to
+                // render the control empty, hiding the very misconfiguration an admin
+                // needs to see (#1201).
+                setSelectValueSafely(
+                    domSelect,
+                    data.default_domain,
+                    v => `${v} ${t('domain_not_supported', '(not in supported domains)')}`
+                );
             }
 
             // Populate and configure Vanity Domain Hook controls

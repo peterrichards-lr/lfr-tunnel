@@ -65,6 +65,25 @@ test.describe("Portal V1 promo banner does not overlay header controls", () => {
     }) => {
       await page.setViewportSize({ width, height });
 
+      // These tests sign in as an admin, and an admin with view-as capability gets a
+      // 44px #view-as-bar above #dashboard-screen. That bar pushes .main-content down
+      // far enough that the toggle lands ~2px clear of the banner, which masked this
+      // bug entirely: the suite measured the one account shape that happens not to
+      // overlap. Ordinary users have no such bar, .main-content starts at y=0, and the
+      // toggle sits squarely behind the banner. Reproduce the ordinary-user geometry.
+      await page.evaluate(() => {
+        const bar = document.getElementById("view-as-bar");
+        if (bar) bar.style.display = "none";
+      });
+
+      // The sidebar slides off-canvas over 0.3s at <=1024px. Until that transition
+      // lands it still sits over the toggle, so measuring immediately reports the
+      // sidebar as the occluder and the test fails for a reason that is not the bug.
+      // The mobile rules end at visibility:hidden, which is what we wait for.
+      if (width <= 1024) {
+        await expect(page.locator(".sidebar")).toBeHidden();
+      }
+
       // elementFromPoint is the assertion that actually caught this. `toBeVisible()`
       // passed throughout the bug: the button was 32x32, display:flex, opacity:1 -- it
       // was simply painted over, which only hit-testing reveals.

@@ -112,7 +112,23 @@ clean:
 build: clean
 	mkdir -p bin
 	@echo "Building UI..."
-	cd ui && (which pnpm >/dev/null 2>&1 && pnpm install && pnpm run build || node node_modules/.pnpm/vite@8.1.5_@types+node@24.13.3/node_modules/vite/bin/vite.js build)
+	@# The fallback used to name a pnpm store path with exact transitive versions in it --
+	@# node_modules/.pnpm/vite@8.1.5_@types+node@24.13.3/... -- while ui/package.json declares
+	@# "^8.1.1" and "^24.13.2". The next install resolving a new patch of either moved the
+	@# directory and broke the fallback, and it only runs on machines without pnpm on PATH,
+	@# which is exactly where nobody would notice (#1330).
+	@#
+	@# corepack ships with Node 16.9+ and is the supported way to get pnpm without installing
+	@# it globally, so it covers the same case without pinning anything.
+	@cd ui && \
+	if command -v pnpm >/dev/null 2>&1; then \
+		pnpm install && pnpm run build; \
+	elif command -v corepack >/dev/null 2>&1; then \
+		corepack pnpm install && corepack pnpm run build; \
+	else \
+		echo "Neither pnpm nor corepack found. Install pnpm, or Node 16.9+ for corepack."; \
+		exit 1; \
+	fi
 	rm -rf pkg/server/ui-dist
 	cp -r ui/dist pkg/server/ui-dist
 	go build -ldflags="-s -w $(DEPLOYMENT_LDFLAGS) -X lfr-tunnel/pkg/config.Version=$(VERSION)" -trimpath -o bin/lfr-tunnel ./cmd/lfr-tunnel

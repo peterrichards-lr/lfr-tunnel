@@ -221,6 +221,25 @@ Two related rules the same script enforces, both learned from permanent merge bl
   required context.** The workflow simply does not run, no check run is created, and the
   context stays pending forever (#1386). A `paths:` filter under `push:` is fine.
 
+- **Required checks come from TWO independent places on this repo.** `master` carries both a
+  ruleset (`resources/github/branch_ruleset.json`, live id in `gh api .../rulesets`) *and*
+  classic branch protection, each with its own context list, `enforce_admins: true`, and the
+  union is what gates the merge. Removing a context from one leaves the other enforcing it.
+  Read both before concluding why a PR will or will not merge:
+
+  ```bash
+  gh api /repos/{owner}/{repo}/rulesets/<id> \
+    --jq '.rules[] | select(.type=="required_status_checks")
+          | .parameters.required_status_checks[].context'
+  gh api /repos/{owner}/{repo}/branches/master/protection --jq '.required_status_checks.contexts[]'
+  ```
+
+  This is what made #1380 look self-contradictory: the workflow fix was correct, the ruleset
+  agreed, and the merge stayed blocked by the classic list nobody had looked at. Note also that
+  `gh pr view --json statusCheckRollup` summarises only the checks that actually **reported** —
+  a context that was never created does not appear there at all while still blocking the merge,
+  so a green-looking rollup is not proof a PR can merge.
+
 A job-level `if:` on a normal, non-matrix job **is** fine: GitHub accepts a `skipped`
 conclusion for a required status check. Verified — PR #1379 merged while two required
 contexts were skipped. Don't remove existing path filters believing otherwise; that would

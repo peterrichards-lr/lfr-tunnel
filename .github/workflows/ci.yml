@@ -33,6 +33,7 @@ jobs:
       go: ${{ steps.filter.outputs.go }}
       ui: ${{ steps.filter.outputs.ui }}
       shell: ${{ steps.filter.outputs.shell }}
+      platform_sensitive: ${{ steps.filter.outputs.platform_sensitive }}
     steps:
       - name: Checkout Code
         uses: actions/checkout@v7
@@ -50,6 +51,7 @@ jobs:
               echo "go=true"
               echo "ui=true"
               echo "shell=true"
+              echo "platform_sensitive=true"
             } >> "$GITHUB_OUTPUT"
             exit 0
           }
@@ -111,9 +113,28 @@ jobs:
             SHELL_CHANGED=false
           fi
 
+          # Platform-sensitive: can this diff behave differently on macOS or Windows than it
+          # does on ubuntu? Files that are per-OS by construction (_windows.go and friends),
+          # plus the areas that have actually produced per-OS failures in this repo -- the
+          # Makefile's GOTMPDIR handling for the local EDR whitelist, bash 3.2 vs 4 under
+          # scripts/, dns_hook flaking only on Windows (#1362), and the client and GUI, which
+          # are the code that actually ships to all three. Workflow changes count as well:
+          # they change how the suite runs everywhere, so they are proved everywhere. So do
+          # dependency bumps: go.mod/go.sum swap third-party code that may itself be per-OS,
+          # and they are rare enough that proving them on all three costs almost nothing.
+          #
+          # Anything that is not a pull_request -- a master push or a tag -- always gets the
+          # full matrix, so a platform regression cannot reach a release unproven.
+          if [ "${{ github.event_name }}" != "pull_request" ] || echo "$CHANGED" | grep -qE '^Makefile$|^go\.(mod|sum)$|^\.github/workflows/|^scripts/|^pkg/client/|^pkg/gui/|_(windows|darwin|linux)(_test)?\.go$|dns_hook'; then
+            PLATFORM_SENSITIVE=true
+          else
+            PLATFORM_SENSITIVE=false
+          fi
+
           echo "go=$GO"    | tee -a "$GITHUB_OUTPUT"
           echo "ui=$UI"    | tee -a "$GITHUB_OUTPUT"
           echo "shell=$SHELL_CHANGED" | tee -a "$GITHUB_OUTPUT"
+          echo "platform_sensitive=$PLATFORM_SENSITIVE" | tee -a "$GITHUB_OUTPUT"
 
   docs-review-check:
     name: Documentation Review Check
@@ -353,34 +374,56 @@ jobs:
     runs-on: ${{ matrix.os }}
     strategy:
       fail-fast: false
+      # Every leg is always GENERATED, even when it has nothing to do, and that is deliberate
+      # (#1365). A matrix entry that is never generated reports no check run at all, and these
+      # three contexts are required BY NAME in two independent places -- the branch ruleset and
+      # the classic branch protection on master. Making the matrix itself conditional would mean
+      # no PR that failed to expand it could ever merge. The saving is taken on the INSIDE
+      # instead, which needs no repository-settings change and cannot deadlock a merge.
       matrix:
         os: [ubuntu-latest, macos-latest, windows-latest]
+    env:
+      # ubuntu-latest always carries the suite. macOS and Windows re-prove it only when the diff
+      # could actually behave differently there -- see platform_sensitive in the changes job.
+      # Measured: a no-op leg costs 3-10s, a real one 77-235s, so this is most of the cost of
+      # the two extra legs without giving up the contexts or the pre-merge coverage.
+      RUN_SUITE: ${{ needs.changes.outputs.go == 'true'
+                     && (matrix.os == 'ubuntu-latest'
+                         || needs.changes.outputs.platform_sensitive == 'true') }}
     steps:
       # Not a silent green: say which it was, so a skip is distinguishable from a pass in the
       # log rather than only by reading the workflow.
       - name: Report why this leg is a no-op
-        if: needs.changes.outputs.go != 'true'
-        run: echo "No Go, Makefile, script, workflow, Dockerfile or tests/ changes -- nothing to test."
+        if: env.RUN_SUITE != 'true'
+        run: |
+          if [ "${{ needs.changes.outputs.go }}" != "true" ]; then
+            echo "No Go, Makefile, script, workflow, Dockerfile or tests/ changes -- nothing to test."
+          else
+            echo "Go changed, but nothing platform-specific did, so ${{ matrix.os }} would only"
+            echo "re-prove what the ubuntu-latest leg is already proving on this same commit."
+            echo "The full matrix still runs on master pushes, on tags, and whenever a"
+            echo "platform-sensitive path changes -- see platform_sensitive in the changes job."
+          fi
         shell: bash
 
       - name: Checkout Code
-        if: needs.changes.outputs.go == 'true'
+        if: env.RUN_SUITE == 'true'
         uses: actions/checkout@v7
 
       - name: Set up Go
-        if: needs.changes.outputs.go == 'true'
+        if: env.RUN_SUITE == 'true'
         uses: actions/setup-go@v7
         with:
           go-version: '1.25'
           cache: true
 
       - name: Create dummy UI dist for Go embed
-        if: needs.changes.outputs.go == 'true'
+        if: env.RUN_SUITE == 'true'
         run: mkdir -p pkg/server/ui-dist && touch pkg/server/ui-dist/index.html
         shell: bash
 
       - name: Run Tests
-        if: needs.changes.outputs.go == 'true'
+        if: env.RUN_SUITE == 'true'
         run: make test
         shell: bash
         env:

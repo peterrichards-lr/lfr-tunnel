@@ -4,10 +4,11 @@
   "enforcement": "active",
   "conditions": {
     "ref_name": {
-      "include": ["refs/heads/master"],
-      "exclude": []
+      "exclude": [],
+      "include": ["~DEFAULT_BRANCH"]
     }
   },
+  "bypass_actors": [],
   "rules": [
     {
       "type": "deletion"
@@ -20,9 +21,11 @@
       "parameters": {
         "required_approving_review_count": 0,
         "dismiss_stale_reviews_on_push": true,
+        "required_reviewers": [],
         "require_code_owner_review": false,
         "require_last_push_approval": false,
         "required_review_thread_resolution": false,
+        "require_extra_approval_for_unattributed_changes": true,
         "allowed_merge_methods": ["squash"]
       }
     },
@@ -30,6 +33,7 @@
       "type": "required_status_checks",
       "parameters": {
         "strict_required_status_checks_policy": true,
+        "do_not_enforce_on_create": false,
         "required_status_checks": [
           {
             "context": "Lint & Format Check"
@@ -42,9 +46,18 @@
           },
           {
             "context": "Test Suite (windows-latest)"
+          },
+          {
+            "context": "Verify PR references an issue"
+          },
+          {
+            "context": "CI Gate"
           }
         ]
       }
+    },
+    {
+      "type": "required_linear_history"
     }
   ]
 }

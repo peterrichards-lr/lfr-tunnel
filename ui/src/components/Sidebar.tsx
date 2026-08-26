@@ -96,7 +96,7 @@ export default function Sidebar({ user, isOpen, onClose }: SidebarProps) {
                     `nav-item ${isActive ? 'active' : ''}`
                   }
                 >
-                  {t('sidebar_reservations', 'Subdomains')}
+                  {t('sidebar_admin_subdomains', 'Registered Subdomains')}
                 </NavLink>
                 <NavLink
                   to="/admin/vanity-domain-status"

@@ -226,7 +226,46 @@ conclusion for a required status check. Verified — PR #1379 merged while two r
 contexts were skipped. Don't remove existing path filters believing otherwise; that would
 throw away the CI speed-up from #1363 for no benefit.
 
-## 8. Don't Push Into a PR That's Already Merged Out From Under You
+## 8. Resolving a Conflicting Dependabot PR
+
+*Active Constraint*: A stale dependabot branch does not only contain its own bump. It was
+cut from an older master, so accepting its `go.mod` wholesale **reverts every dependency
+that moved since** — which can silently undo a security bump.
+
+Seen for real in #1351: the branch was titled "bump scheduler 1.20.6 to 1.20.7", and also
+took `config` back from 1.32.38 to 1.32.37, `route53` from 1.65.9 to 1.65.8, `sts` from
+1.45.7 to 1.45.6, and five indirect lines with them.
+
+**1. Diagnose before resolving.** Compare the dependency lines against master rather than
+reading the conflict markers. Any line where the PR is *behind* master is a revert, not a
+bump:
+
+```bash
+git show origin/master:go.mod | grep -n 'aws-sdk-go-v2'
+git show origin/<dependabot-branch>:go.mod | grep -n 'aws-sdk-go-v2'
+```
+
+**2. Try `@dependabot recreate` first.** It costs nothing and keeps the branch
+dependabot-owned. Only rebuild by hand when that will not converge.
+
+**3. Rebuilding by hand.** Branch from current master, apply *only* the intended change,
+and confirm the diff is minimal before pushing:
+
+```bash
+go get <module>@<version> && go mod tidy
+git diff --stat                  # expect go.mod and go.sum only
+git push --force-with-lease      # never bare --force
+```
+
+**4. Know what that costs.** Once anyone other than dependabot pushes to the branch,
+**dependabot stops maintaining it** — it will neither rebase nor recreate it. If it goes
+stale again it needs another manual rebuild, or an explicit `@dependabot recreate` comment.
+
+**5. Verify the bump is real.** `go build ./...` and `go vet ./...`, and check the version
+actually moved *forward*. The whole failure mode here is a bump that is quietly a
+downgrade, so "CI is green" does not answer the question.
+
+## 9. Don't Push Into a PR That's Already Merged Out From Under You
 *Active Constraint*: A PR you say is "ready to merge" can be merged by someone else at any moment — check its live state (`gh pr view <number> --json state,mergedAt`) before pushing another commit to the same branch, not just before opening the PR. A merged PR is terminal: further pushes to its branch land nowhere (GitHub Actions may still run on them, which looks identical to a normal in-flight check from the CLI, but the code never reaches the target branch). This actually happened in this repo: a second commit was pushed to an already-merged PR, its checks appeared to pass normally, and the change silently never shipped until a later `git log` diff caught it.
 
 After any merge you expect to close an issue (whether via a `Closes #N` reference or a manual close), verify the issue actually closed (`gh issue view <number> --json state`) instead of assuming the mechanism worked — squash-merge commit messages don't reliably carry every commit's closing reference from a multi-commit PR (this repo's squash setting concatenates commit messages, but a squash performed through the GitHub UI can still end up using only one of them). If it didn't close, close it manually with a comment pointing at the merge that actually resolved it.

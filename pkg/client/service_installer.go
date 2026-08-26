@@ -150,7 +150,12 @@ func installDarwin(exePath string) error {
 		_ = os.Remove(prettyExe)
 		if err := os.Symlink(exePath, prettyExe); err != nil {
 			if input, err := os.ReadFile(exePath); err == nil {
-				_ = os.WriteFile(prettyExe, input, 0755)
+				if werr := os.WriteFile(prettyExe, input, 0755); werr != nil {
+					// Cosmetic only: the friendly name is what the OS shows for the running
+					// process. Without it the service still starts, under the real binary
+					// name, so this is worth reporting rather than failing on.
+					slog.Info(fmt.Sprintf("[Warning] Could not create %q: %v", prettyExe, werr))
+				}
 			}
 		}
 	}
@@ -332,7 +337,12 @@ func installDarwinGUI(exePath string) error {
 		_ = os.Remove(prettyExe)
 		if err := os.Symlink(exePath, prettyExe); err != nil {
 			if input, err := os.ReadFile(exePath); err == nil {
-				_ = os.WriteFile(prettyExe, input, 0755)
+				if werr := os.WriteFile(prettyExe, input, 0755); werr != nil {
+					// Cosmetic only: the friendly name is what the OS shows for the running
+					// process. Without it the service still starts, under the real binary
+					// name, so this is worth reporting rather than failing on.
+					slog.Info(fmt.Sprintf("[Warning] Could not create %q: %v", prettyExe, werr))
+				}
 			}
 		}
 	}

@@ -12,6 +12,11 @@ linters:
     - ineffassign
     - staticcheck
     - unused
+    # gosec is the one linter most worth having on an internet-facing gateway that terminates
+    # TLS, proxies untrusted traffic, issues certificates and stores credentials (#1331). Its
+    # noisier rules are excluded below, individually and with reasons, rather than by leaving
+    # the linter off.
+    - gosec
 
   exclusions:
     rules:
@@ -23,56 +28,372 @@ linters:
           - gocognit
           - dupl
           - goconst
+          # gosec too: a test's hardcoded credential, permissive temp-dir mode or missing
+          # server timeout is fixture setup, not deployed surface (#1331).
+          - gosec
       # Exclude main.go from gocognit, gocyclo, and funlen due to orchestrating CLI setup
       - path: cmd/lfr-tunnel/main\.go
         linters:
           - gocognit
           - gocyclo
           - funlen
-      # Exclude legacy package directories from these strict checks
-      - path: pkg/client/.*
+      # Files that breach the complexity limits today, listed individually rather than by
+      # package (#1331).
+      #
+      # This used to exclude pkg/client, pkg/config, pkg/server, pkg/db, pkg/mail, pkg/mcp and
+      # pkg/ops wholesale -- 7 of the 13 packages under pkg/, and by line count most of the
+      # non-test Go in the repo -- so funlen, gocyclo, gocognit, dupl and goconst were enabled
+      # but did not run. The "legacy" framing had not aged well: those are the active packages,
+      # and the code inside them kept growing under the exemption. server.go was 5,359 lines
+      # when #319 ("Refactor server.go God Object") was closed as completed; it is ~6,400 today.
+      #
+      # Listing files means a NEW file in any of these packages is linted from birth, which is
+      # the property that was missing -- nothing stopped the next 6,000-line file. Each entry
+      # here is a debt to remove, not settled configuration; see #319 for pkg/server.
+      - path: pkg/client/client\.go
         linters:
           - funlen
           - gocyclo
           - gocognit
           - dupl
           - goconst
-      - path: pkg/config/.*
+      - path: pkg/client/discovery\.go
         linters:
           - funlen
           - gocyclo
           - gocognit
           - dupl
           - goconst
-      - path: pkg/server/.*
+      - path: pkg/client/hooks\.go
         linters:
           - funlen
           - gocyclo
           - gocognit
           - dupl
           - goconst
-      - path: pkg/db/.*
+      - path: pkg/client/inspector\.go
         linters:
           - funlen
           - gocyclo
           - gocognit
           - dupl
           - goconst
-      - path: pkg/mail/.*
+      - path: pkg/client/interceptor\.go
         linters:
           - funlen
           - gocyclo
           - gocognit
           - dupl
           - goconst
-      - path: pkg/mcp/.*
+      - path: pkg/client/login\.go
         linters:
           - funlen
           - gocyclo
           - gocognit
           - dupl
           - goconst
-      - path: pkg/ops/.*
+      - path: pkg/client/service_installer\.go
+        linters:
+          - funlen
+          - gocyclo
+          - gocognit
+          - dupl
+          - goconst
+      - path: pkg/client/tui\.go
+        linters:
+          - funlen
+          - gocyclo
+          - gocognit
+          - dupl
+          - goconst
+      - path: pkg/client/upgrade\.go
+        linters:
+          - funlen
+          - gocyclo
+          - gocognit
+          - dupl
+          - goconst
+      - path: pkg/config/config\.go
+        linters:
+          - funlen
+          - gocyclo
+          - gocognit
+          - dupl
+          - goconst
+      - path: pkg/db/invite\.go
+        linters:
+          - funlen
+          - gocyclo
+          - gocognit
+          - dupl
+          - goconst
+      - path: pkg/db/metrics\.go
+        linters:
+          - funlen
+          - gocyclo
+          - gocognit
+          - dupl
+          - goconst
+      - path: pkg/db/schema\.go
+        linters:
+          - funlen
+          - gocyclo
+          - gocognit
+          - dupl
+          - goconst
+      - path: pkg/db/subdomain\.go
+        linters:
+          - funlen
+          - gocyclo
+          - gocognit
+          - dupl
+          - goconst
+      - path: pkg/db/user\.go
+        linters:
+          - funlen
+          - gocyclo
+          - gocognit
+          - dupl
+          - goconst
+      - path: pkg/mail/mail\.go
+        linters:
+          - funlen
+          - gocyclo
+          - gocognit
+          - dupl
+          - goconst
+      - path: pkg/mcp/server\.go
+        linters:
+          - funlen
+          - gocyclo
+          - gocognit
+          - dupl
+          - goconst
+      - path: pkg/ops/deploy\.go
+        linters:
+          - funlen
+          - gocyclo
+          - gocognit
+          - dupl
+          - goconst
+      - path: pkg/ops/dns_route53\.go
+        linters:
+          - funlen
+          - gocyclo
+          - gocognit
+          - dupl
+          - goconst
+      - path: pkg/ops/sign\.go
+        linters:
+          - funlen
+          - gocyclo
+          - gocognit
+          - dupl
+          - goconst
+      - path: pkg/server/api\.go
+        linters:
+          - funlen
+          - gocyclo
+          - gocognit
+          - dupl
+          - goconst
+      - path: pkg/server/api_service_reservation\.go
+        linters:
+          - funlen
+          - gocyclo
+          - gocognit
+          - dupl
+          - goconst
+      - path: pkg/server/api_service_user\.go
+        linters:
+          - funlen
+          - gocyclo
+          - gocognit
+          - dupl
+          - goconst
+      - path: pkg/server/auth\.go
+        linters:
+          - funlen
+          - gocyclo
+          - gocognit
+          - dupl
+          - goconst
+      - path: pkg/server/ca\.go
+        linters:
+          - funlen
+          - gocyclo
+          - gocognit
+          - dupl
+          - goconst
+      - path: pkg/server/edge_control_ws\.go
+        linters:
+          - funlen
+          - gocyclo
+          - gocognit
+          - dupl
+          - goconst
+      - path: pkg/server/metrics_collector\.go
+        linters:
+          - funlen
+          - gocyclo
+          - gocognit
+          - dupl
+          - goconst
+      - path: pkg/server/proxy\.go
+        linters:
+          - funlen
+          - gocyclo
+          - gocognit
+          - dupl
+          - goconst
+      - path: pkg/server/server\.go
+        linters:
+          - funlen
+          - gocyclo
+          - gocognit
+          - dupl
+          - goconst
+      - path: pkg/server/server_auth\.go
+        linters:
+          - funlen
+          - gocyclo
+          - gocognit
+          - dupl
+          - goconst
+      - path: pkg/server/server_domain\.go
+        linters:
+          - funlen
+          - gocyclo
+          - gocognit
+          - dupl
+          - goconst
+      - path: pkg/server/server_edge\.go
+        linters:
+          - funlen
+          - gocyclo
+          - gocognit
+          - dupl
+          - goconst
+      - path: pkg/server/server_edge_provisioner\.go
+        linters:
+          - funlen
+          - gocyclo
+          - gocognit
+          - dupl
+          - goconst
+      - path: pkg/server/sso\.go
+        linters:
+          - funlen
+          - gocyclo
+          - gocognit
+          - dupl
+          - goconst
+      - path: pkg/server/telemetry_ws\.go
+        linters:
+          - funlen
+          - gocyclo
+          - gocognit
+          - dupl
+          - goconst
+      - path: pkg/server/waf\.go
+        linters:
+          - funlen
+          - gocyclo
+          - gocognit
+          - dupl
+          - goconst
+      - path: pkg/client/state\.go
+        linters:
+          - funlen
+          - gocyclo
+          - gocognit
+          - dupl
+          - goconst
+      - path: pkg/ops/build\.go
+        linters:
+          - funlen
+          - gocyclo
+          - gocognit
+          - dupl
+          - goconst
+      - path: pkg/ops/dns\.go
+        linters:
+          - funlen
+          - gocyclo
+          - gocognit
+          - dupl
+          - goconst
+      - path: pkg/ops/dns_cloudflare\.go
+        linters:
+          - funlen
+          - gocyclo
+          - gocognit
+          - dupl
+          - goconst
+      - path: pkg/ops/dns_provider\.go
+        linters:
+          - funlen
+          - gocyclo
+          - gocognit
+          - dupl
+          - goconst
+      - path: pkg/ops/power\.go
+        linters:
+          - funlen
+          - gocyclo
+          - gocognit
+          - dupl
+          - goconst
+      - path: pkg/server/api_service_invite\.go
+        linters:
+          - funlen
+          - gocyclo
+          - gocognit
+          - dupl
+          - goconst
+      - path: pkg/server/api_service_mfa\.go
+        linters:
+          - funlen
+          - gocyclo
+          - gocognit
+          - dupl
+          - goconst
+      - path: pkg/server/drain\.go
+        linters:
+          - funlen
+          - gocyclo
+          - gocognit
+          - dupl
+          - goconst
+      - path: pkg/server/email_policy\.go
+        linters:
+          - funlen
+          - gocyclo
+          - gocognit
+          - dupl
+          - goconst
+      - path: pkg/server/notifications\.go
+        linters:
+          - funlen
+          - gocyclo
+          - gocognit
+          - dupl
+          - goconst
+      - path: pkg/server/server_audit\.go
+        linters:
+          - funlen
+          - gocyclo
+          - gocognit
+          - dupl
+          - goconst
+      - path: pkg/server/unsubscribe\.go
+        linters:
+          - funlen
+          - gocyclo
+          - gocognit
+          - dupl
+          - goconst
+      - path: pkg/server/view_as\.go
         linters:
           - funlen
           - gocyclo
@@ -87,6 +408,48 @@ linters:
           - dupl
 
   settings:
+    gosec:
+      # Rules excluded individually, each with a reason (#1331). A blanket exclusion is what
+      # made this config dishonest in the first place, so none is used here.
+      #
+      # Measured on the tree when gosec was first enabled: 271 findings, of which these
+      # account for ~200. Everything not listed is enforced.
+      excludes:
+        # Taint-analysis rules, added in recent gosec releases. They flag this design rather
+        # than a defect: operator-supplied hook executables (dns_hook, power hook, vanity hook)
+        # are *meant* to take their arguments from configuration and request data, and the
+        # control-plane URL an edge calls is *meant* to come from config. Revisit if gosec gains
+        # a way to mark a trusted source.
+        - G702 # command injection via taint analysis -- operator-supplied hooks
+        - G703 # path traversal via taint analysis -- operator-configured paths
+        - G704 # SSRF via taint analysis -- the configured control-plane URL
+        - G705 # XSS via taint analysis -- superseded by the escaping fixed in #1323
+        - G706 # log injection via taint analysis -- 56 findings, all structured slog calls
+        # File and subprocess rules that describe the deployment rather than a defect: paths
+        # come from server-config.yaml, and the hooks above are executed on purpose.
+        - G304 # file inclusion via variable -- certificate and config paths from config
+        - G204 # subprocess launched with a variable -- the hook contract
+        # Duplicates errcheck, which is enabled and stricter here (check-blank: true).
+        - G104
+        # By design, verified individually rather than assumed:
+        - G402 # InsecureSkipVerify -- all 4 sites are gated on the documented
+               # insecure_skip_verify config key; an operator opt-in, not a hardcoded bypass
+        - G404 # math/rand -- used to shuffle domain order for load balancing, not for secrets
+        - G505 # crypto/sha1 -- TOTP is HMAC-SHA1 by RFC 6238; the algorithm is mandated
+        - G101 # "hardcoded credentials" -- constant *names* in pkg/config/metadata.go
+        - G117 # tokens in marshalled structs -- these are the API's response bodies
+        - G115 # integer conversions, almost all uint64<->int64 on byte counters in metrics
+        - G118 # context.Background in a goroutine outliving its request, which is deliberate
+        - G122 # filepath.Walk callback -- a client-side scan of the user's own directory
+        - G124 # deferred close in a loop, in short-lived command helpers
+        - G710 # unbounded read, on responses from the control plane this gateway configured
+        # Genuine hardening, excluded here only so #1331 stayed config-only. Tracked in #1372;
+        # remove each entry as that issue burns the group down to zero.
+        - G112 # missing ReadHeaderTimeout -- Slowloris exposure on an internet-facing gateway
+        - G114 # http.Serve without timeouts, same class
+        - G301 # directory permissions wider than 0750
+        - G302 # file permissions wider than 0600
+        - G306 # WriteFile permissions wider than 0600
     errcheck:
       check-blank: true
       exclude-functions:
@@ -105,7 +468,6 @@ linters:
         - (*encoding/json.Encoder).Encode
         - encoding/json.Marshal
         - encoding/json.MarshalIndent
-        - encoding/json.Unmarshal
         - (*os.File).Close
         - net.Conn.Close
         - (*net.TCPConn).Close
@@ -121,11 +483,8 @@ linters:
         - os.Create
         - os.MkdirAll
         - os.Pipe
-        - os.Rename
         - os.Setenv
-        - os.WriteFile
         - (*os.Process).Kill
-        - (*os/exec.Cmd).Run
         - (*os/exec.Cmd).Start
         - (*database/sql.Rows).Close
         - lfr-tunnel/pkg/config.LoadClientConfig

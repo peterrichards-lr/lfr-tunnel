@@ -15,6 +15,13 @@ owner:
 
 admin_notification_email: "admin@lfr-demo.local"
 owner_max_reservations: -1
+# The suite runs four concurrent tunnels for one developer account: peter-dev (explicit edge),
+# peter-auto (auto-probed), peter-drain (drain test) and peter-fail (failover/failback, #1374).
+# Both quotas default to 3, so the fourth was refused with "Subdomain reservation quota limit
+# reached" -- and because the reservation curl's response is not checked, that surfaced later as
+# a confusing registration failure rather than at the point the reservation was refused.
+default_max_reservations: 6
+default_max_active_tunnels: 6
 allow_client_auto_reservation: true
 
 sso_providers:

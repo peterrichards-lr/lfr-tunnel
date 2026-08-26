@@ -1,5 +1,32 @@
 [
   {
+    "version": "v1.48.6",
+    "release_date": "2026-08-26",
+    "features": [
+      "security(server): escape visitor-facing proxy pages and refuse off-site redirects (#1323, #1324)",
+      "security(server): trust forwarding headers only from trusted proxies, and audit the real client IP (#1325, #1357)",
+      "security(server): set ReadHeaderTimeout on every HTTP listener, closing a Slowloris exposure (#1372)",
+      "security(server): tighten file and directory modes across the tree (#1408)",
+      "fix(deps): bump golang.org/x/text to v0.39.0 for GO-2026-5970",
+      "feat(server): expiring auto-bans with fail2ban-style escalation, configurable under auto_ban (#1353)",
+      "fix(server): decay rate-limit violations so an auto-ban reflects a burst, not a lifetime (#1327)",
+      "fix(server): edges now enforce passcode and IP allow-lists, which a per-request DB lookup had been hiding (#1329, #1367)",
+      "fix(server): debounce DNS publishes on intent and serialise them per name, so a gateway move cannot leave a stale record (#1362)",
+      "fix(server): copy the default websocket dialer instead of mutating the shared global (#1370)",
+      "fix(client): restore the Inspector's log viewer, removed in error by #783 (#1422)",
+      "fix(client): the Inspector now shows the settings the running client is actually using (#1211)",
+      "fix(portal-v1): stop the V2 promo banner overlaying the header controls (#1200)",
+      "fix(portal-v1): stop selects rendering blank when the stored value has no matching option (#1201)",
+      "fix(portal-v1): confirm before a global broadcast, and stop it clearing silently (#1202)",
+      "fix(portal-v2): make wide tables visibly scrollable on narrow viewports (#1206)",
+      "fix(portal-v2): give the \"Switch back to V1\" banner a real dismiss control (#1203)",
+      "fix(portal-v2): stop the edge schedule timezone picker rendering blank (#1252)",
+      "fix(portal-v2): give the admin subdomains nav its own i18n key (#1209)",
+      "feat(ops): provision certificate distribution, so a renewal reaches the edges (#1302)",
+      "fix(ops): refuse to sign or publish artefacts that did not come from the current source (#1279)"
+    ]
+  },
+  {
     "version": "v1.48.5",
     "release_date": "2026-08-25",
     "features": [
@@ -45,17 +72,6 @@
       "feat(ci): sign release checksums with minisign when a key is configured (#1269)",
       "fix(provisioner): reject swapped schedule times and apply start before stop (#1268)",
       "fix(client): explain an unsigned release instead of reporting a bare 404 (#1267)"
-    ]
-  },
-  {
-    "version": "v1.48.1",
-    "release_date": "2026-08-24",
-    "features": [
-      "fix(server): answer 503 for a tunnel that moved and 404 for one that never existed (#1263)",
-      "fix(ops): bake deployment defaults into the binaries deploy-clients publishes (#1262)",
-      "ci(release): report which deployment defaults a release is built with (#1261)",
-      "fix(client): bound the registration handshake so an unreachable gateway fails fast (#1260)",
-      "fix(client): only announce the tunnel once it is actually connected (#1259)"
     ]
   }
 ]

@@ -196,6 +196,36 @@ failure after the fact just means going back to create one anyway.
 
 Once it's green, clean up the failed job runs from the PR's history using the GitHub CLI (e.g. `gh run delete <run-id>`), so the repository keeps a clean history of only successful runs and failed attempts don't trigger false-positive corrective actions later.
 
+### Adding a job to `ci.yml`? Wire it into `CI Gate`
+
+*Active Constraint*: `master` requires a single aggregate context, **CI Gate**, rather than
+naming each job. `ci-gate` in `.github/workflows/ci.yml` `needs:` every other job in that
+file and fails if any of them ended in anything other than `success` or `skipped`.
+
+**If you add a job to `ci.yml`, you MUST add it to `ci-gate`'s `needs:` list.**
+`scripts/check-required-contexts.sh` runs inside "Lint & Format Check" and will fail your
+build if you don't — the error names the job. This is not bureaucracy: the gate treats
+`skipped` as acceptable so that path filters still work, and that is only safe while every
+job is a dependency. A job skipped because an upstream job *failed* also reports `skipped`,
+and the only thing stopping that from hiding the failure is that the upstream job is in the
+same list and reports `failure` itself. A job missing from `needs:` is worse than ungated —
+it is ungated while the gate reports green.
+
+Two related rules the same script enforces, both learned from permanent merge blocks:
+
+- **Never put a job-level `if:` on a job backing a required context if it has a `matrix:`.**
+  A skipped matrix job reports one check run under the bare job name, so the required
+  per-entry contexts (`Test Suite (ubuntu-latest)` and friends) never appear at all, and the
+  PR can never merge (#1380).
+- **Never add a workflow-level `paths:` filter to `pull_request` in a workflow that emits a
+  required context.** The workflow simply does not run, no check run is created, and the
+  context stays pending forever (#1386). A `paths:` filter under `push:` is fine.
+
+A job-level `if:` on a normal, non-matrix job **is** fine: GitHub accepts a `skipped`
+conclusion for a required status check. Verified — PR #1379 merged while two required
+contexts were skipped. Don't remove existing path filters believing otherwise; that would
+throw away the CI speed-up from #1363 for no benefit.
+
 ## 8. Don't Push Into a PR That's Already Merged Out From Under You
 *Active Constraint*: A PR you say is "ready to merge" can be merged by someone else at any moment — check its live state (`gh pr view <number> --json state,mergedAt`) before pushing another commit to the same branch, not just before opening the PR. A merged PR is terminal: further pushes to its branch land nowhere (GitHub Actions may still run on them, which looks identical to a normal in-flight check from the CLI, but the code never reaches the target branch). This actually happened in this repo: a second commit was pushed to an already-merged PR, its checks appeared to pass normally, and the change silently never shipped until a later `git log` diff caught it.
 
@@ -203,4 +233,4 @@ After any merge you expect to close an issue (whether via a `Closes #N` referenc
 
 <!-- markdownlint-disable MD049 -->
 ---
-*Last Updated: 2026-08-25* | *Last Reviewed: 2026-08-25*
+*Last Updated: 2026-08-26* | *Last Reviewed: 2026-08-26*

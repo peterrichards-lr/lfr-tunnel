@@ -414,63 +414,41 @@ No special Nginx changes are needed on the Control Plane. Standard proxying to p
 
 On the Edge node, configure Nginx to proxy client WebSocket handshakes and terminate SSL for regional visitor subdomains:
 
-```nginx
-map $http_upgrade $connection_upgrade {
-    default upgrade;
-    ''      close;
-}
+Do not hand-write this. It is generated from the same template central uses, so the two cannot
+drift apart (#1442):
 
-server {
-    listen 80;
-    listen [::]:80;
-    server_name us.lfr-demo.online *.us.lfr-demo.online;
-    return 301 https://$host$request_uri;
-}
-
-server {
-    listen 443 ssl http2;
-    listen [::]:443 ssl http2;
-    server_name us.lfr-demo.online;
-
-    ssl_certificate /etc/letsencrypt/live/us.lfr-demo.online/fullchain.pem;
-    ssl_certificate_key /etc/letsencrypt/live/us.lfr-demo.online/privkey.pem;
-
-    location /api/ {
-        proxy_pass http://127.0.0.1:8090;
-        proxy_set_header Host $http_host;
-        proxy_set_header X-Real-IP $remote_addr;
-    }
-
-    location /tunnel {
-        proxy_pass http://127.0.0.1:8090;
-        proxy_http_version 1.1;
-        proxy_set_header Upgrade $http_upgrade;
-        proxy_set_header Connection $connection_upgrade;
-        proxy_set_header Host $http_host;
-        proxy_set_header X-Real-IP $remote_addr;
-    }
-}
-
-server {
-    listen 443 ssl http2;
-    listen [::]:443 ssl http2;
-    server_name *.us.lfr-demo.online;
-
-    ssl_certificate /etc/letsencrypt/live/us.lfr-demo.online/fullchain.pem;
-    ssl_certificate_key /etc/letsencrypt/live/us.lfr-demo.online/privkey.pem;
-
-    location / {
-        proxy_pass http://127.0.0.1:8090;
-        proxy_http_version 1.1;
-        proxy_set_header Upgrade $http_upgrade;
-        proxy_set_header Connection $connection_upgrade;
-        proxy_set_header Host $http_host;
-        proxy_set_header X-Real-IP $remote_addr;
-        proxy_set_header X-Forwarded-Host $http_host;
-        proxy_set_header X-Forwarded-Proto https;
-    }
-}
+```bash
+go build -o bin/lfr-tunnel-ops ./cmd/lfr-tunnel-ops
+./bin/lfr-tunnel-ops render-nginx-config -role edge \
+  -domains us.lfr-demo.online \
+  -apex-domains lfr-demo.online \
+  -redirect-domain lfr-demo.online -port 8090
 ```
+
+`setup-edge-vps.sh` calls exactly this during provisioning, and
+`lfr-tunnel-ops reconcile-nginx -role edge` pushes it to a box that is already running -- which
+is what did not exist before #1442, and why the edges ended up running a hand-written config
+with no source in this repo (#1443).
+
+What the rendered config contains, and why:
+
+| block | purpose |
+| --- | --- |
+| `map $http_upgrade $connection_upgrade` | once per file; nginx errors on a duplicate `map` |
+| `:80` for `<edge>` and `*.<edge>` | redirect to HTTPS. No ACME fallback: an edge issues no vanity certificates, so it has no fall-through window to protect (unlike central, #979) |
+| `:443` for `<edge>` | the edge's own hostname. Browser traffic is redirected to the control plane -- there is no portal here -- while `/api/` and `/tunnel` are served locally |
+| `:443` for `*.<edge>` | the regional data plane, certificate from `/etc/letsencrypt/live/<edge>/` |
+| `:443` for `*.<apex>` | apex wildcards served edge-direct, certificate from `/etc/lfr-tunneld/certs/<apex>/` where certsync installs the bundle pushed from central |
+
+Two things that are easy to get wrong:
+
+- The shared apex goes in **`-apex-domains`**, never `-domains`. `-domains` renders the apex
+  server block too, so every edge would claim the control plane's own hostname -- and nginx
+  reports a duplicate `server_name` as a warning, not an error, so it passes `nginx -t` and
+  silently steals traffic.
+- Forwarded headers are **overwritten**, not appended (`$remote_addr`, never
+  `$proxy_add_x_forwarded_for`), because an appended value's leftmost entry is caller-supplied
+  and forgeable (#1325). Note the known gap for the central-to-edge hop in #1450.
 
 ---
 
@@ -514,4 +492,4 @@ If your Edge VPS or Control Plane gateway has multiple public IP addresses confi
 
 <!-- markdownlint-disable MD049 -->
 ---
-*Last Updated: 2026-08-24* | *Last Reviewed: 2026-08-24*
+*Last Updated: 2026-08-26* | *Last Reviewed: 2026-08-26*

@@ -195,7 +195,7 @@ the instance first if it's stopped, waits for SSH, deploys, then stops it back a
 or any target you know is already running.*
 
 ### Reconciling Nginx Config
-`deploy` only ever uploads the `lfr-tunneld` binary and static assets -- a fix to the nginx config template (e.g. the #979 ACME-fallback location block) only ever reached a box on its *initial* provision, never on a normal `deploy` (#997). Use `reconcile-nginx` to regenerate the current central's nginx config and push it to an already-provisioned box. Safe to re-run repeatedly: it backs up the existing config, swaps in the new one, runs `nginx -t`, and only reloads if that passes -- otherwise it restores the backup and reloads that instead, so a bad reconcile can't leave the box without a working config. `scripts/common/setup-central-vps.sh` (initial provisioning) generates its nginx config the same way, via `lfr-tunnel-ops render-nginx-config` -- the two paths share exactly one template now and can't drift apart from each other again (#1026).
+`deploy` only ever uploads the `lfr-tunneld` binary and static assets -- a fix to the nginx config template (e.g. the #979 ACME-fallback location block) only ever reached a box on its *initial* provision, never on a normal `deploy` (#997). Use `reconcile-nginx` to regenerate a node's nginx config and push it to an already-provisioned box -- central **or** an edge, selected with `-role` (#1442). Safe to re-run repeatedly: it backs up the existing config, swaps in the new one, runs `nginx -t`, and only reloads if that passes -- otherwise it restores the backup and reloads that instead, so a bad reconcile can't leave the box without a working config. `scripts/common/setup-central-vps.sh` **and** `scripts/common/setup-edge-vps.sh` generate their nginx config the same way, via `lfr-tunnel-ops render-nginx-config` -- provisioning and reconciling share exactly one template for both roles and cannot drift apart again (#1026, #1442). The edge script used to carry its own copy, which is how the live edges ended up still emitting the pre-#1360 appending `X-Forwarded-For` (#1441) and running an apex vhost with no source in this repo at all (#1443).
 ```bash
 ./bin/lfr-tunnel-ops reconcile-nginx
 ```
@@ -207,28 +207,67 @@ generates two server blocks -- `<entry>` and `*.<entry>` -- and reads its certif
 `-domains lfr-demo.se,lfr-demo.online`, **not** `tunnel.lfr-demo.se`: the wildcard certificates
 are issued for the apex names, and `tunnel.` is served by the `*.lfr-demo.se` block.
 
-Two ways to get this wrong, and only one of them is caught for you:
+Two ways to get this wrong. **Both are now caught before anything is written** (#1442) --
+previously only the first was, and only by accident:
 
-- **A hostname instead of an apex** asks for `live/tunnel.lfr-demo.se/`, which does not exist.
-  `nginx -t` fails, reconcile rolls back, nothing is harmed. Loud and safe.
-- **An incomplete list is not caught.** The generated config replaces the whole file, so a
-  domain group left out is a vhost deleted. A single-entry list on this two-domain gateway
-  removes `lfr-demo.online` entirely -- and that config is perfectly valid, so `nginx -t`
-  passes and it applies. On 2026-08-26 exactly this was attempted with
-  `-domains tunnel.lfr-demo.se`; the missing certificate is the only reason it failed instead
-  of taking `lfr-demo.online` offline.
+- **A hostname instead of an apex** is rejected outright: a first label that names a service
+  (`tunnel`, `portal`, `www`, `api`, `status`, `mail`) fails validation with the apex it should
+  have been. It never reaches the box.
+- **An incomplete list** is caught by a pre-flight comparison against what the box is serving
+  today. reconcile reads the files it is about to replace, and refuses if the new config would
+  stop serving any `server_name` the old one served, naming each one. nginx cannot warn about
+  this -- a config that no longer mentions a name is perfectly valid, so it applies cleanly and
+  silently -- which is why the check has to live here. Override with `-allow-vhost-removal` only
+  when dropping them is deliberate.
 
-So read the live config before running it, every time:
+  This is not hypothetical twice over. On 2026-08-26 a run with `-domains tunnel.lfr-demo.se`
+  was attempted on central and only a missing certificate stopped it taking `lfr-demo.online`
+  offline. And the first honest render of an **edge** config was refused by this guard because
+  the live edges still carry vhosts for their pre-rename `aws-edge-*` hostnames, which no
+  `-domains` list anybody would think to write includes.
+
+Reading the live config first is still the right habit, and now shows you what the guard will
+compare against:
 
 ```bash
 ssh <target> 'sudo grep -E "server_name|ssl_certificate " /etc/nginx/sites-available/lfr-tunnel'
 ```
 
-and confirm the rendered output matches those pairings before applying:
+### Reconciling an edge
+
+An edge is the same command with `-role edge`, which changes both the shape and the file it
+writes -- an edge's config lives at `sites-available/lfr-tunneld` enabled as
+`sites-enabled/default`, so central's paths would add a second config rather than replace the
+live one. That mismatch is why this could not target an edge at all before #1442.
 
 ```bash
-./bin/lfr-tunnel-ops render-nginx-config -domains <list> -port <port> | grep -E "server_name|ssl_certificate "
+./bin/lfr-tunnel-ops reconcile-nginx -target sa -role edge \
+  -domains sa.lfr-demo.se \
+  -apex-domains lfr-demo.se,lfr-demo.online \
+  -redirect-domain lfr-demo.se -port 8090
 ```
+
+Three things differ from central, and they are the whole reason an edge needs its own role:
+
+- **`-domains` vs `-apex-domains`.** `-domains` is what this node OWNS, and gets the full three
+  blocks. `-apex-domains` is served **wildcard-only** because the control plane owns the apex:
+  the edge answers `*.lfr-demo.se` so a visitor URL can be served edge-direct, without claiming
+  `lfr-demo.se` itself. Putting a shared domain in `-domains` would have every edge claim the
+  control plane's own hostname -- and nginx treats a duplicate `server_name` as a *warning*, so
+  it would pass `nginx -t` and silently steal traffic.
+- **Different certificate roots.** `-domains` reads certbot's `/etc/letsencrypt/live/<d>/`;
+  `-apex-domains` reads `/etc/lfr-tunneld/certs/<d>/`, where `lfr-install-certs.sh` puts the
+  wildcard bundle pushed from central. Central holds the DNS-write credential and renews those,
+  so an edge only ever receives them -- run `setup-certsync-edge.sh` too, or nginx will fail to
+  start on a missing certificate.
+- **`-redirect-domain` is required.** An edge's own apex has no portal to serve, so browser
+  traffic arriving there is redirected to the control plane. Only `/api/` and `/tunnel` are
+  served locally on that hostname.
+
+The rendered config replaces the hand-written `lfr-apex-wildcards.conf` found on the live edges,
+so reconcile stands that file down in the same operation (renamed, and restored by the rollback
+path if the new config does not hold). Leaving it would duplicate the apex server blocks, which
+nginx accepts with only a warning.
 
 `render-nginx-config` writes to stdout and touches nothing, so this is free.
 

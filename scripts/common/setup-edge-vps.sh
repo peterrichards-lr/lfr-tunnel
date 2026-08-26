@@ -17,6 +17,14 @@ KEY_PATH=""
 VPS_IP=""
 REDIRECT_DOMAIN=""
 TUNNEL_DOMAINS=""
+# Apex domains this edge serves WILDCARD-ONLY, because the control plane owns the apex itself
+# (#1443). These are deliberately not in -d: -d issues a certificate per domain and renders the
+# apex server block, so putting a shared domain there would have every edge request a
+# certificate the control plane already holds AND claim the control plane's own hostname. nginx
+# treats a duplicate server_name as a warning, not an error, so that would pass `nginx -t` and
+# silently steal traffic. Certificates for these arrive from the control plane via certsync
+# (scripts/common/setup-certsync-edge.sh), which is why they read from a different cert root.
+APEX_DOMAINS=""
 # Which Certbot DNS-01 plugin proves domain control. No default on purpose: this is the
 # generic layer, and which provider is right is a property of the deployment, not of this
 # tool (#1015/#1016/#1187).
@@ -50,11 +58,17 @@ usage() {
   echo "      Set this to the shared domain so a tunnel's public URL never names the edge"
   echo "      serving it, and does not change when the client moves (see #1285). The regional"
   echo "      names stay in -d for direct addressing. Omitted, any domain in -d may be used."
+  echo "  -A: Comma-separated apex domains served WILDCARD-ONLY here (optional), e.g. the"
+  echo "      shared domain whose apex the control plane owns. This edge answers *.<domain>"
+  echo "      so a visitor URL can be served edge-direct, without claiming <domain> itself."
+  echo "      Certificates for these are NOT issued here -- they are pushed from the control"
+  echo "      plane by certsync, so run setup-certsync-edge.sh as well or nginx will fail to"
+  echo "      start on a missing certificate."
   exit 1
 }
 
 # Parse parameters
-while getopts "s:t:i:u:d:c:p:r:a:n:N:D:" opt; do
+while getopts "s:t:i:u:d:c:p:r:a:A:n:N:D:" opt; do
   case $opt in
     s) VPS_IP="$OPTARG" ;;
     t) EDGE_TOKEN="$OPTARG" ;;
@@ -77,6 +91,7 @@ while getopts "s:t:i:u:d:c:p:r:a:n:N:D:" opt; do
     p) EDGE_PORT="$OPTARG" ;;
     r) REDIRECT_DOMAIN="$OPTARG" ;;
     a) TUNNEL_DOMAINS="$OPTARG" ;;
+    A) APEX_DOMAINS="$OPTARG" ;;
     n) DNS_AUTHENTICATOR="$OPTARG" ;;
     D) DDNS_PROVIDER="$OPTARG" ;;
     N) DNS_AUTHENTICATOR_ARGS="$OPTARG" ;;
@@ -106,6 +121,8 @@ echo "=== Starting Edge VPS Automation for IP: $VPS_IP ==="
 VERSION="$(grep -oE 'Version = "[^"]+"' pkg/config/version.go | cut -d'"' -f2)"
 echo "=> Compiling lfr-tunneld for Linux (amd64) with Version=$VERSION..."
 GOOS=linux GOARCH=amd64 go build -ldflags="-s -w -X lfr-tunnel/pkg/config.Version=$VERSION" -trimpath -o bin/lfr-tunneld-edge-linux ./cmd/lfr-tunneld
+# Needed below to render the nginx config from the one shared template (#1442).
+go build -o bin/lfr-tunnel-ops ./cmd/lfr-tunnel-ops
 
 # 2. Update and install packages on the remote VPS (including security hardening packages)
 echo "=> Connecting to $VPS_IP to install dependencies (Nginx, Certbot, UFW, Fail2ban)..."
@@ -163,88 +180,22 @@ echo "=> Uploading server-config.yaml..."
 scp $SSH_KEY_ARG "$CONFIG_TMP" $SSH_USER@$VPS_IP:/home/$SSH_USER/server-config.yaml
 rm -f "$CONFIG_TMP"
 
-# 5. Generate Nginx virtual hosts configuration locally and upload
+# 5. Generate Nginx virtual hosts configuration locally and upload -- rendered by
+#    lfr-tunnel-ops from the exact same template setup-central-vps.sh and `reconcile-nginx`
+#    use, so an edge's config is finally reproducible from this repo and can be re-synced to a
+#    running box instead of only ever being written on first provision (#1442, #1443).
+#
+#    This script used to carry its own copy of the vhost template. That copy is why the live
+#    edges drifted: it still emitted the appending X-Forwarded-For form (#1441) long after
+#    #1360 replaced it centrally, and it could not express a wildcard-only apex at all, so the
+#    file the edges actually run was hand-written on the box with no source anywhere here.
 echo "=> Generating Nginx configuration locally..."
 NGINX_TMP="/tmp/nginx-edge.conf"
-cat > "$NGINX_TMP" << 'EOF'
-map $http_upgrade $connection_upgrade {
-    default upgrade;
-    ''      close;
-}
-EOF
-
-for DOMAIN in "${DOMAIN_ARRAY[@]}"; do
-  cat >> "$NGINX_TMP" << EOF
-
-# HTTP redirect to HTTPS
-server {
-    listen 80;
-    listen [::]:80;
-    server_name $DOMAIN *.$DOMAIN;
-    return 301 https://\$host\$request_uri;
-}
-
-# Base domain HTTPS
-server {
-    listen 443 ssl http2;
-    listen [::]:443 ssl http2;
-    server_name $DOMAIN;
-
-    ssl_certificate /etc/letsencrypt/live/$DOMAIN/fullchain.pem;
-    ssl_certificate_key /etc/letsencrypt/live/$DOMAIN/privkey.pem;
-    include /etc/letsencrypt/options-ssl-nginx.conf;
-    ssl_dhparam /etc/letsencrypt/ssl-dhparams.pem;
-
-    # Redirect root browser traffic to control plane landing page
-    location / {
-        return 301 https://$REDIRECT_DOMAIN\$request_uri;
-    }
-
-    location /api/ {
-        proxy_pass http://127.0.0.1:$EDGE_PORT;
-        proxy_set_header Host \$http_host;
-        proxy_set_header X-Real-IP \$remote_addr;
-        proxy_set_header X-Forwarded-For \$proxy_add_x_forwarded_for;
-        proxy_set_header X-Forwarded-Proto https;
-    }
-
-    location /tunnel {
-        proxy_pass http://127.0.0.1:$EDGE_PORT;
-        proxy_http_version 1.1;
-        proxy_set_header Upgrade \$http_upgrade;
-        proxy_set_header Connection \$connection_upgrade;
-        proxy_set_header Host \$http_host;
-        proxy_set_header X-Real-IP \$remote_addr;
-        proxy_set_header X-Forwarded-For \$proxy_add_x_forwarded_for;
-        proxy_set_header X-Forwarded-Proto https;
-    }
-}
-
-# Wildcard subdomains HTTPS
-server {
-    listen 443 ssl http2;
-    listen [::]:443 ssl http2;
-    server_name *.$DOMAIN;
-
-    ssl_certificate /etc/letsencrypt/live/$DOMAIN/fullchain.pem;
-    ssl_certificate_key /etc/letsencrypt/live/$DOMAIN/privkey.pem;
-    include /etc/letsencrypt/options-ssl-nginx.conf;
-    ssl_dhparam /etc/letsencrypt/ssl-dhparams.pem;
-
-    location / {
-        proxy_pass http://127.0.0.1:$EDGE_PORT;
-        proxy_http_version 1.1;
-        proxy_set_header Upgrade \$http_upgrade;
-        proxy_set_header Connection \$connection_upgrade;
-        proxy_set_header Host \$http_host;
-        proxy_set_header X-Real-IP \$remote_addr;
-        proxy_set_header X-Forwarded-For \$proxy_add_x_forwarded_for;
-        proxy_set_header X-Forwarded-Host \$http_host;
-        proxy_set_header X-Forwarded-Proto https;
-    }
-}
-EOF
-done
+RENDER_ARGS=(-role edge -domains "$DOMAINS" -port "$EDGE_PORT" -redirect-domain "$REDIRECT_DOMAIN")
+if [ -n "$APEX_DOMAINS" ]; then
+  RENDER_ARGS+=(-apex-domains "$APEX_DOMAINS")
+fi
+./bin/lfr-tunnel-ops render-nginx-config "${RENDER_ARGS[@]}" > "$NGINX_TMP"
 
 echo "=> Uploading Nginx configuration..."
 scp $SSH_KEY_ARG "$NGINX_TMP" $SSH_USER@$VPS_IP:/home/$SSH_USER/lfr-tunneld-nginx.conf

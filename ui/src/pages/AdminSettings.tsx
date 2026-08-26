@@ -713,6 +713,16 @@ export default function AdminSettings() {
             {webhookTesting ? 'Sending...' : 'Trigger Test Webhook'}
           </button>
         </div>
+        {/* Where the test alert actually goes. V1 shows this beside the same button
+            (dashboard.html:907); the value already arrives on /api/admin/maintenance as
+            test_target (server.go:3201) and V2 simply was not displaying it. Without it
+            the button reports success without saying what it reached (#1290). */}
+        {maintenance?.test_target && (
+          <div className="text-sm text-muted mt-md">
+            Active Target:{' '}
+            <strong className="text-main">{maintenance.test_target}</strong>
+          </div>
+        )}
       </div>
 
       <div className="card mb-xl">

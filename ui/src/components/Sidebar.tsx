@@ -200,7 +200,7 @@ export default function Sidebar({ user, isOpen, onClose }: SidebarProps) {
                     `nav-item ${isActive ? 'active' : ''}`
                   }
                 >
-                  {t('settings', 'Settings')}
+                  {t('sidebar_system', 'System Settings')}
                 </NavLink>
               </div>
             </>

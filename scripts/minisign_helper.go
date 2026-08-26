@@ -1,28 +1,27 @@
 package main
 
 import (
+	"errors"
 	"fmt"
 	"os"
 
-	"github.com/jedisct1/go-minisign"
+	"lfr-tunnel/pkg/minisign"
 )
 
-// This helper signs a file with minisign, using a private key supplied entirely via
-// environment variables -- it never contains or reads a hardcoded key.
+// A thin CLI wrapper over pkg/minisign. The signing logic moved into that package in #1402 so
+// the LOCAL path (pkg/ops/sign.go) can call it in-process instead of through `go run`, which
+// links and executes an unsigned binary out of the system temp dir on the EDR-protected
+// workstation.
 //
-// Two callers, both supplying the key the same way:
+// This wrapper is kept because .github/workflows/release.yml still invokes it as
+// `go run scripts/minisign_helper.go`, signing the checksums for the binaries attached to a
+// GitHub release (#1265). That runs on an ephemeral Linux runner, which is unmonitored -- and
+// .github/ is excluded from scripts/check-edr-safety.sh for exactly that reason -- so there is
+// nothing to fix there and no reason to churn the release path.
 //
-//   - Locally, as part of the "sign, then deploy" flow (pkg/ops/sign.go, pkg/ops/deploy.go,
-//     docs/server/setup_guide.md), after pulling the real key out of 1Password
-//     ("self-signed-minisign-key"). This signs the checksums for the binaries published to
-//     a gateway's downloads directory.
-//   - In .github/workflows/release.yml, signing the checksums for the binaries attached to
-//     a GitHub release, so those can be verified too (#1265). That step skips itself when
-//     no key is configured, so a fork can cut a release without one.
-//
-// The two sign different checksum files -- CI's binaries and the locally built, OS-codesigned
-// ones are not the same bytes -- but both verify against the same public key, so a client
-// can check whichever route it downloaded from.
+// The two callers sign different checksum files: CI's binaries and the locally built,
+// OS-codesigned ones are not the same bytes. Both verify against the same public key, so a
+// client can check whichever route it downloaded from.
 //
 // MINISIGN_SECRET_KEY must contain the full minisign secret key file content (the
 // "untrusted comment: ..." line plus the base64 payload). MINISIGN_KEY_PASSWORD is its
@@ -31,50 +30,20 @@ import (
 // throwaway test fixture.
 func main() {
 	if len(os.Args) < 3 {
-		fmt.Println("Usage: MINISIGN_SECRET_KEY=<key file content> [MINISIGN_KEY_PASSWORD=<passphrase>] go run minisign_helper.go <file_to_sign> <output_signature_file>")
+		// Deliberately does not spell out the toolchain invocation. scripts/check-edr-safety.sh
+		// now scans Go source, and a usage string advertising the very command the guard exists
+		// to discourage is both a false positive for it and bad advice for a reader on macOS.
+		fmt.Println("Usage: MINISIGN_SECRET_KEY=<key file content> [MINISIGN_KEY_PASSWORD=<passphrase>] minisign_helper <file_to_sign> <output_signature_file>")
 		os.Exit(1)
 	}
 
-	secretKey := os.Getenv("MINISIGN_SECRET_KEY")
-	if secretKey == "" {
-		fmt.Println("Error: MINISIGN_SECRET_KEY is not set. Pull the real signing key from 1Password (self-signed-minisign-key) and export it before running this helper.")
-		os.Exit(1)
-	}
-
-	content, err := os.ReadFile(os.Args[1])
-	if err != nil {
-		fmt.Printf("Failed to read file: %v\n", err)
-		os.Exit(1)
-	}
-
-	sk, err := minisign.DecodePrivateKey(secretKey)
-	if err != nil {
-		fmt.Printf("Failed to decode private key: %v\n", err)
-		os.Exit(1)
-	}
-	defer sk.Wipe()
-
-	if sk.IsEncrypted() {
-		password := os.Getenv("MINISIGN_KEY_PASSWORD")
-		if password == "" {
-			fmt.Println("Error: this secret key is password-protected but MINISIGN_KEY_PASSWORD is not set.")
-			os.Exit(1)
+	if err := minisign.SignFileFromEnv(os.Args[1], os.Args[2]); err != nil {
+		if errors.Is(err, minisign.ErrNoSecretKey) {
+			fmt.Printf("Error: %v. Pull the real signing key from 1Password "+
+				"(self-signed-minisign-key) and export it before running this helper.\n", err)
+		} else {
+			fmt.Printf("Error: %v\n", err)
 		}
-		if err := sk.Decrypt(password); err != nil {
-			fmt.Printf("Failed to decrypt private key: %v\n", err)
-			os.Exit(1)
-		}
-	}
-
-	sig, err := sk.Sign(content, minisign.SignOptions{Hashed: true})
-	if err != nil {
-		fmt.Printf("Failed to sign: %v\n", err)
-		os.Exit(1)
-	}
-
-	err = os.WriteFile(os.Args[2], sig.Encode(), 0644)
-	if err != nil {
-		fmt.Printf("Failed to write signature: %v\n", err)
 		os.Exit(1)
 	}
 

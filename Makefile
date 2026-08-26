@@ -176,10 +176,11 @@ install-hook:
 	@chmod +x "$(HOOKS_DIR)/pre-push"
 	@echo "pre-commit and pre-push hooks installed successfully."
 
-# Tests the hook and gate scripts themselves (#1377, #1395). Fast: the stubbed cases need no
-# Docker, and only the end-to-end cases do. Not part of `test`, which is the Go suite.
+# Tests the hook and guard scripts themselves (#1377, #1395, #1402). Fast: the stubbed cases
+# need no Docker, and only the end-to-end cases do. Not part of `test`, which is the Go suite.
 test-hooks:
 	@./tests/hooks/test-scan-staged-secrets.sh
+	@./tests/hooks/test-edr-guard.sh
 	@./tests/hooks/test-shell-portability.sh
 
 # The pre-merge CI-configuration gate (#1391). Worth a target rather than only a path to type:

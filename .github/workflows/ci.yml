@@ -380,13 +380,14 @@ jobs:
   # The race detector, which had never run in CI despite `make test` supporting it since #1122.
   # That one manual run immediately produced #1125 and #1131, both pre-existing and both shipped.
   #
-  # SCOPED, deliberately. pkg/server still has 5 data races (#1370), all pre-existing and all
-  # inside territory held elsewhere at the time this landed. Every other package is clean, so
-  # this covers them now rather than waiting -- pkg/client is where #1122 and #1123 were found,
-  # so the coverage is not hypothetical. Delete the exclusion once #1370 closes.
+  # WHOLE TREE as of #1370. This was scoped to exclude pkg/server while it still had 5 races;
+  # those are fixed, so the exclusion is gone and `./...` is covered. If pkg/server regresses,
+  # this job is now the thing that says so.
   #
-  # A red job nobody can fix is worse than a narrow green one: it gets ignored, and then it gets
-  # removed. This is a floor that holds today and ratchets, the same call made for shellcheck.
+  # What it does and does not buy: -race finds unsynchronised memory access, not incorrect
+  # ordering between correctly-synchronised operations. #1362 was a genuine concurrency bug --
+  # two Publish calls landing out of order -- and the detector reported zero races over 200
+  # iterations. A real net, not a complete one.
   #
   # ubuntu only: the detector needs cgo and roughly doubles wall time, and this class of bug is
   # not platform-specific. The plain `test` job keeps the 3-OS matrix.
@@ -412,9 +413,7 @@ jobs:
       - name: Run Tests (race detector)
         # Through make test, which exports GOTMPDIR and asserts it before building (#1335).
         # Never hand-roll `go test -race` here -- that is what the repo's deny rule exists for.
-        run: |
-          PKGS=$(go list ./... | grep -v /pkg/server | tr '\n' ' ')
-          make test PKG="$PKGS" TEST_BUILD_FLAGS=-race
+        run: make test TEST_BUILD_FLAGS=-race
         env:
           TEST_MINISIGN_SECRET_KEY: ${{ secrets.TEST_MINISIGN_SECRET_KEY }}
 

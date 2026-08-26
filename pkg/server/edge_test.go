@@ -10,6 +10,7 @@ import (
 	"net/http/httptest"
 	"os"
 	"path/filepath"
+	"sync"
 	"testing"
 	"time"
 
@@ -18,6 +19,16 @@ import (
 )
 
 func TestEdgeValidationDeregisterAndAuditProxy(t *testing.T) {
+	// Guarded by mu (#1370). These are written by the mock control plane's handler goroutine and
+	// read by the test body. For the deregister and audit notifications the only thing between
+	// the write and the read is a time.Sleep, which establishes no happens-before, so the reads
+	// were unsynchronised -- three of pkg/server's five races.
+	//
+	// receivedEdgeRegister happens to be safe today, because it is written while the edge is
+	// still handling the /api/register call the test is blocked on, so the HTTP round-trip
+	// orders it. It is guarded anyway: which of these four has an ordering edge is not visible
+	// at the point of use, and -race only reports the interleavings it actually observes.
+	var mu sync.Mutex
 	var receivedEdgeRegister bool
 	var receivedEdgeDeregister bool
 	var receivedEdgeAudit bool
@@ -38,7 +49,9 @@ func TestEdgeValidationDeregisterAndAuditProxy(t *testing.T) {
 		}
 
 		if r.Method == http.MethodPost && r.URL.Path == "/api/internal/edge-register" {
+			mu.Lock()
 			receivedEdgeRegister = true
+			mu.Unlock()
 
 			var edgeReq struct {
 				AuthToken       string   `json:"auth_token"`
@@ -67,18 +80,22 @@ func TestEdgeValidationDeregisterAndAuditProxy(t *testing.T) {
 		}
 
 		if r.Method == http.MethodPost && r.URL.Path == "/api/internal/edge-deregister" {
+			mu.Lock()
 			receivedEdgeDeregister = true
+			mu.Unlock()
 			w.WriteHeader(http.StatusOK)
 			return
 		}
 
 		if r.Method == http.MethodPost && r.URL.Path == "/api/internal/edge-audit-log" {
-			receivedEdgeAudit = true
 			var auditReq struct {
 				Details string `json:"details"`
 			}
 			_ = json.NewDecoder(r.Body).Decode(&auditReq) //nolint:errcheck
+			mu.Lock()
+			receivedEdgeAudit = true
 			forwardedAuditDetails = auditReq.Details
+			mu.Unlock()
 			w.WriteHeader(http.StatusOK)
 			return
 		}
@@ -129,7 +146,10 @@ func TestEdgeValidationDeregisterAndAuditProxy(t *testing.T) {
 		t.Fatalf("unexpected register response: %+v", regResp)
 	}
 
-	if !receivedEdgeRegister {
+	mu.Lock()
+	gotRegister := receivedEdgeRegister
+	mu.Unlock()
+	if !gotRegister {
 		t.Fatal("Control Plane did not receive edge-register request")
 	}
 
@@ -139,11 +159,15 @@ func TestEdgeValidationDeregisterAndAuditProxy(t *testing.T) {
 	// Wait a moment for async audit notification
 	time.Sleep(100 * time.Millisecond)
 
-	if !receivedEdgeAudit {
+	mu.Lock()
+	gotAudit := receivedEdgeAudit
+	gotDetails := forwardedAuditDetails
+	mu.Unlock()
+	if !gotAudit {
 		t.Fatal("Control Plane did not receive edge-audit-log request")
 	}
-	if forwardedAuditDetails != "Edge event detailed logs" {
-		t.Fatalf("expected audit details 'Edge event detailed logs', got '%s'", forwardedAuditDetails)
+	if gotDetails != "Edge event detailed logs" {
+		t.Fatalf("expected audit details 'Edge event detailed logs', got '%s'", gotDetails)
 	}
 
 	// 5. Manually trigger lease cleanup to verify edge-deregister notification
@@ -157,7 +181,10 @@ func TestEdgeValidationDeregisterAndAuditProxy(t *testing.T) {
 	// Wait a moment for async cleanup notification
 	time.Sleep(100 * time.Millisecond)
 
-	if !receivedEdgeDeregister {
+	mu.Lock()
+	gotDeregister := receivedEdgeDeregister
+	mu.Unlock()
+	if !gotDeregister {
 		t.Fatal("Control Plane did not receive edge-deregister request on lease cleanup")
 	}
 }

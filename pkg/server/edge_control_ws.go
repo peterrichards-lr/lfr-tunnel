@@ -234,6 +234,22 @@ func (s *Server) handleEdgeControlWS(w http.ResponseWriter, r *http.Request) {
 	// writes and never reads.
 	pingStop := make(chan struct{})
 
+	// Read both package-level tunables HERE, on the request goroutine, and pass the values
+	// into the goroutines below (#1370). They are ordinary vars with no synchronisation, and a
+	// test that overrides one and restores it in a defer writes them while a live connection
+	// goroutine is still reading -- three of pkg/server's five races were exactly this.
+	//
+	// Same fix as #1328 used for shutdownMigrationPollInterval in pkg/client: hoist the read to
+	// the caller so the ordering belongs to whoever spawned the goroutine, rather than threading
+	// the connection goroutine through Server.bgWG.
+	//
+	// Freezing the values per connection is not a behaviour change. Nothing in production writes
+	// either var -- they are set once at package init and overridden only by tests -- so there
+	// is no live update to miss. A connection's own deadline policy staying fixed for its
+	// lifetime is arguably the more defensible semantics anyway.
+	readDeadline := edgeControlReadDeadline
+	healthPingInterval := edgeHealthPingInterval
+
 	// Start read pump to keep alive and detect disconnects
 	go func() {
 		defer func() {
@@ -276,9 +292,9 @@ func (s *Server) handleEdgeControlWS(w http.ResponseWriter, r *http.Request) {
 
 		// Set read limit and pong handler
 		conn.SetReadLimit(512)
-		_ = conn.SetReadDeadline(time.Now().Add(edgeControlReadDeadline)) //nolint:errcheck
+		_ = conn.SetReadDeadline(time.Now().Add(readDeadline)) //nolint:errcheck
 		conn.SetPongHandler(func(string) error {
-			_ = conn.SetReadDeadline(time.Now().Add(edgeControlReadDeadline)) //nolint:errcheck
+			_ = conn.SetReadDeadline(time.Now().Add(readDeadline)) //nolint:errcheck
 			// Answers our own RTT-ping below, not the edge's keepalive Ping (that one
 			// gets a Pong reply from the PingHandler further down, never from us
 			// sending a Ping ourselves) -- see #976. A miss (no recorded send time,
@@ -306,7 +322,7 @@ func (s *Server) handleEdgeControlWS(w http.ResponseWriter, r *http.Request) {
 		// actually observes them. Replicate the default handler's pong reply here
 		// too, since registering a custom handler replaces it entirely.
 		conn.SetPingHandler(func(appData string) error {
-			_ = conn.SetReadDeadline(time.Now().Add(edgeControlReadDeadline)) //nolint:errcheck
+			_ = conn.SetReadDeadline(time.Now().Add(readDeadline)) //nolint:errcheck
 			err := conn.WriteControl(websocket.PongMessage, []byte(appData), time.Now().Add(5*time.Second))
 			if err == websocket.ErrCloseSent {
 				return nil
@@ -321,7 +337,7 @@ func (s *Server) handleEdgeControlWS(w http.ResponseWriter, r *http.Request) {
 			if err != nil {
 				break
 			}
-			_ = conn.SetReadDeadline(time.Now().Add(edgeControlReadDeadline)) //nolint:errcheck
+			_ = conn.SetReadDeadline(time.Now().Add(readDeadline)) //nolint:errcheck
 		}
 	}()
 
@@ -332,7 +348,7 @@ func (s *Server) handleEdgeControlWS(w http.ResponseWriter, r *http.Request) {
 	// WriteJSON/WriteMessage via safeConn elsewhere -- gorilla/websocket exempts
 	// WriteControl from its single-writer restriction.
 	go func() {
-		ticker := time.NewTicker(edgeHealthPingInterval)
+		ticker := time.NewTicker(healthPingInterval)
 		defer ticker.Stop()
 		for {
 			select {

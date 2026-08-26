@@ -5730,6 +5730,12 @@ window.startTutorial = async function (isRerun = false) {
   // Temporarily switch to Overview tab to start the tour
   showTab('overview');
 
+  // Same role test showTab itself uses for ADMIN_ONLY_TABS, so the tour and the guard
+  // cannot disagree about who counts as an admin.
+  const isAdmin =
+    currentUser &&
+    (currentUser.role === 'admin' || currentUser.role === 'owner');
+
   const driverObj = window.driver.js.driver({
     showProgress: true,
     className: 'driverjs-theme',
@@ -5804,6 +5810,11 @@ window.startTutorial = async function (isRerun = false) {
         },
       },
       {
+        // Analytics lives inside #admin-sidebar-group, which is hidden for anyone who is
+        // not admin or owner -- so for a plain user this step highlighted an element that
+        // is not on screen, and its showTab('analytics') is bounced back to overview by
+        // the role guard added in #1289 (#1291).
+        adminOnly: true,
         element: '#nav-analytics',
         popover: {
           title: t('tour_analytics_title', 'Traffic Analytics'),
@@ -5845,7 +5856,7 @@ window.startTutorial = async function (isRerun = false) {
           align: 'center',
         },
       },
-    ],
+    ].filter((step) => !step.adminOnly || isAdmin),
     onDestroyed: (el) => {
       const stepIdx = driverObj.getActiveIndex();
       const totalSteps = driverObj.getConfig().steps.length;

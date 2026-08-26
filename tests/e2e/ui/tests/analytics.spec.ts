@@ -6,13 +6,15 @@ import { promisify } from 'util';
 const execAsync = promisify(exec);
 
 test.describe('Analytics & Tunnel Automation', () => {
-  const adminEmail = 'admin@lfr-demo.local'; 
+  const adminEmail = 'admin@lfr-demo.local';
 
   test.beforeAll(async () => {
     await clearMailpit();
   });
 
-  test('Generate token, connect tunnel, and verify analytics', async ({ page }) => {
+  test('Generate token, connect tunnel, and verify analytics', async ({
+    page,
+  }) => {
     // 1. Trigger Magic Link
     await page.goto('/admin');
     await page.click('#btn-show-email');
@@ -26,7 +28,9 @@ test.describe('Analytics & Tunnel Automation', () => {
 
     // 3. Login using Magic Link
     await page.goto(`/admin?token=${token}`);
-    await expect(page.locator('h2:has-text("Dashboard Overview")')).toBeVisible();
+    await expect(
+      page.locator('h2:has-text("Dashboard Overview")'),
+    ).toBeVisible();
 
     // 4. Navigate to API Tokens and Generate a new token
     await page.click('#nav-tokens');
@@ -41,56 +45,60 @@ test.describe('Analytics & Tunnel Automation', () => {
     await page.click('#token-modal button:has-text("Done")');
 
     // 6. Connect the lfr-tunnel client via Docker execution
-    console.log("Connecting tunnel with token: " + rawToken);
-    
+    console.log('Connecting tunnel with token: ' + rawToken);
+
     // We execute the CLI inside the running e2e-lfr-tunnel-1 container
     // LFT_TARGET_HOST is already set in the container environment
     const projectName = process.env.E2E_PROJECT_NAME || 'e2e';
     const cmd = `docker exec ${projectName}-lfr-tunnel-1 ./lfr-tunnel -token ${rawToken} -server http://tunnel.lfr-demo.local -ports 80 -background`;
     const { stdout, stderr } = await execAsync(cmd);
-    console.log("Tunnel CLI stdout: ", stdout);
-    console.log("Tunnel CLI stderr: ", stderr);
+    console.log('Tunnel CLI stdout: ', stdout);
+    console.log('Tunnel CLI stderr: ', stderr);
 
     // Wait for the tunnel to register and appear in the UI
     await expect(async () => {
-        await page.reload();
-        await page.click('#nav-tunnels');
-        // The table shows 'up' for active tunnels
-        await expect(page.locator('#tunnels-table-body td:has-text("up")').first()).toBeVisible({ timeout: 1000 });
+      await page.reload();
+      await page.click('#nav-tunnels');
+      // The table shows 'up' for active tunnels
+      await expect(
+        page.locator('#tunnels-table-body td:has-text("up")').first(),
+      ).toBeVisible({ timeout: 1000 });
     }).toPass({ timeout: 15000 });
 
     // Scrape the generated subdomain public URL
-    const publicUrlEl = await page.locator('#tunnels-table-body td a[target="_blank"]').first();
+    const publicUrlEl = await page
+      .locator('#tunnels-table-body td a[target="_blank"]')
+      .first();
     const publicUrl = await publicUrlEl.getAttribute('href');
     expect(publicUrl).toBeTruthy();
-    console.log("Public Tunnel URL: ", publicUrl);
+    console.log('Public Tunnel URL: ', publicUrl);
 
     // 8. Generate Traffic through the public URL
-    console.log("Sending traffic through the tunnel...");
+    console.log('Sending traffic through the tunnel...');
     // We must route traffic through our local E2E Nginx (localhost:8000) but mock the Host header
     // so it doesn't escape to the real public internet VPS.
     const urlObj = new URL(publicUrl as string);
     const targetHost = urlObj.host;
 
     try {
-        await expect(async () => {
-            for (let i = 0; i < 5; i++) {
-                const response = await page.request.get('http://localhost:8000', {
-                    headers: { 'Host': targetHost }
-                });
-                expect(response.status()).toBe(200);
-            }
-        }).toPass({ timeout: 15000 });
-    } catch (e) {
-        console.error("Test failed, printing tunnel logs...");
-        const logCmd = `docker exec ${projectName}-lfr-tunnel-1 cat /root/.lfr-tunnel/client-${subdomain}.log`;
-        try {
-            const { stdout } = await execAsync(logCmd);
-            console.log("=== Tunnel Logs ===\n" + stdout);
-        } catch (err) {
-            console.error("Failed to fetch tunnel logs", err);
+      await expect(async () => {
+        for (let i = 0; i < 5; i++) {
+          const response = await page.request.get('http://localhost:8000', {
+            headers: { Host: targetHost },
+          });
+          expect(response.status()).toBe(200);
         }
-        throw e;
+      }).toPass({ timeout: 15000 });
+    } catch (e) {
+      console.error('Test failed, printing tunnel logs...');
+      const logCmd = `docker exec ${projectName}-lfr-tunnel-1 cat /root/.lfr-tunnel/client-${subdomain}.log`;
+      try {
+        const { stdout } = await execAsync(logCmd);
+        console.log('=== Tunnel Logs ===\n' + stdout);
+      } catch (err) {
+        console.error('Failed to fetch tunnel logs', err);
+      }
+      throw e;
     }
 
     // Wait a brief moment for bandwidth stats to flush and aggregate
@@ -98,46 +106,56 @@ test.describe('Analytics & Tunnel Automation', () => {
 
     // 9. Navigate to Analytics Tab and verify data
     await page.click('#nav-analytics');
-    
+
     // Check if the Chart.js canvas elements exist
     await expect(page.locator('#globalBandwidthChart')).toBeVisible();
     await expect(page.locator('#topUsersChart')).toBeVisible();
 
     // Check if the Client Distribution Table rendered our client
-    await expect(page.locator('#client-stats-table-body td:has-text("Linux")')).toBeVisible();
+    await expect(
+      page.locator('#client-stats-table-body td:has-text("Linux")'),
+    ).toBeVisible();
 
     // Verify it doesn't say "No results found"
-    await expect(page.locator('#client-stats-table-body')).not.toContainText('No results found.');
+    await expect(page.locator('#client-stats-table-body')).not.toContainText(
+      'No results found.',
+    );
 
     // 10. Navigate back to Tunnels Tab and test the new Tunnel Details Modal
     await page.click('#nav-tunnels');
-    
+
     // Find the action menu button
-    const menuBtn = page.locator('#tunnels-table-body .action-menu-btn').first();
+    const menuBtn = page
+      .locator('#tunnels-table-body .action-menu-btn')
+      .first();
     await expect(menuBtn).toBeVisible();
-    
+
     // Open the action menu
     await menuBtn.click();
-    
+
     // Assert dropdown is visible and the trigger button has the 'active' class
     const dropdown = page.locator('.action-menu-dropdown.show').first();
     await expect(dropdown).toBeVisible();
     await expect(menuBtn).toHaveClass(/active/);
-    
+
     // Press Escape to dismiss the dropdown
     await page.keyboard.press('Escape');
-    
+
     // Assert dropdown is hidden and the trigger button no longer has the 'active' class
     await expect(dropdown).not.toBeVisible();
     await expect(menuBtn).not.toHaveClass(/active/);
-    
+
     // Open the action menu again
     await menuBtn.click();
     await expect(dropdown).toBeVisible();
     await expect(menuBtn).toHaveClass(/active/);
 
     // Click the details item inside the open menu
-    const detailsItem = page.locator('.action-menu-dropdown.show .action-menu-item:has-text("Details")').first();
+    const detailsItem = page
+      .locator(
+        '.action-menu-dropdown.show .action-menu-item:has-text("Details")',
+      )
+      .first();
     await expect(detailsItem).toBeVisible();
     await detailsItem.click();
 
@@ -159,15 +177,21 @@ test.describe('Analytics & Tunnel Automation', () => {
     expect(connectedText).not.toContain('<span');
 
     // Verify bandwidth statistics are not '0 Bytes' (traffic was generated)
-    await expect(page.locator('#detail-tunnel-bytes-out')).not.toHaveText('0 Bytes');
+    await expect(page.locator('#detail-tunnel-bytes-out')).not.toHaveText(
+      '0 Bytes',
+    );
 
     // Test Copy URL button and Toast
     await page.click('#tunnel-details-modal button:has-text("Copy URL")');
-    await expect(page.locator('.toast:has-text("Copied tunnel URL to clipboard!")')).toBeVisible();
+    await expect(
+      page.locator('.toast:has-text("Copied tunnel URL to clipboard!")'),
+    ).toBeVisible();
 
     // Test Refresh button and Toast
     await page.click('#tunnel-details-modal button:has-text("Refresh")');
-    await expect(page.locator('.toast:has-text("Tunnel metrics refreshed!")')).toBeVisible();
+    await expect(
+      page.locator('.toast:has-text("Tunnel metrics refreshed!")'),
+    ).toBeVisible();
 
     // Close the modal and assert it is hidden
     await page.click('#tunnel-details-modal button:has-text("Close")');

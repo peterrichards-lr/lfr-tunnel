@@ -1,0 +1,28 @@
+# --- Generated output ---------------------------------------------------------------
+# Rebuilt from source by CI and the Dockerfile; reformatting it is pure noise.
+ui/dist
+pkg/server/ui-dist
+**/node_modules
+
+# --- Lock files ---------------------------------------------------------------------
+pnpm-lock.yaml
+package-lock.json
+
+# --- Markdown -----------------------------------------------------------------------
+# Every .md file carries a "Last Updated / Last Reviewed" footer, and CI cross-checks it
+# against git's real last-modified date for that file (scripts/check_docs_review.py
+# --changed-files). Reformatting all 35 docs would mark every one of them modified and
+# demand a footer bump on each, turning a formatting pass into a documentation review.
+*.md
+
+# --- HTML ---------------------------------------------------------------------------
+# Server-rendered pages and the localised email templates. Prettier reflows HTML, and
+# whitespace between inline elements is rendered, so this can change layout and how mail
+# clients display a message. Not worth the risk for formatting alone.
+*.html
+
+# --- Workflows and other YAML -------------------------------------------------------
+# ci.yml carries long explanatory comments whose indentation Prettier reflows, and a
+# mangled workflow is a broken merge gate rather than an ugly file.
+*.yml
+*.yaml

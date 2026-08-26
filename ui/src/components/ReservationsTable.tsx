@@ -36,7 +36,9 @@ interface DataTableBag {
   toggleColumn: (key: string) => void;
   requestSort: (key: keyof ReservationRow & string) => void;
   getSortIndicator: (key: keyof ReservationRow & string) => string | null;
-  getAriaSort: (key: keyof ReservationRow & string) => 'ascending' | 'descending' | 'none' | undefined;
+  getAriaSort: (
+    key: keyof ReservationRow & string,
+  ) => 'ascending' | 'descending' | 'none' | undefined;
 }
 
 interface ReservationsTableProps extends DataTableBag {
@@ -129,50 +131,76 @@ export default function ReservationsTable({
             <table className="w-full">
               <thead>
                 <tr className="border-b text-left">
-                  {columns.map(col => (
-                    isColumnVisible(col.key) && (
-                      <th
-                        key={col.key}
-                        className={col.sortable ? 'th-col th-col--sortable' : 'th-col'}
-                        onClick={col.sortable ? () => requestSort(col.key) : undefined}
-                        aria-sort={col.sortable ? getAriaSort(col.key) : undefined}
-                      >
-                        {col.label}{col.sortable ? getSortIndicator(col.key) : null}
-                      </th>
-                    )
-                  ))}
+                  {columns.map(
+                    (col) =>
+                      isColumnVisible(col.key) && (
+                        <th
+                          key={col.key}
+                          className={
+                            col.sortable ? 'th-col th-col--sortable' : 'th-col'
+                          }
+                          onClick={
+                            col.sortable
+                              ? () => requestSort(col.key)
+                              : undefined
+                          }
+                          aria-sort={
+                            col.sortable ? getAriaSort(col.key) : undefined
+                          }
+                        >
+                          {col.label}
+                          {col.sortable ? getSortIndicator(col.key) : null}
+                        </th>
+                      ),
+                  )}
                   <th className="th-col">{t('actions', 'Actions')}</th>
                 </tr>
               </thead>
               <tbody>
-                {paginatedItems.map(r => {
+                {paginatedItems.map((r) => {
                   // Custom-domain reservations have an empty subdomain (server.go sets
                   // SubdomainPrefix = "" for these) -- plain `${subdomain}.${domain}` then
                   // leaves a leading dot ("`.dev.solaramoto.com`"), which browsers don't treat
                   // as the bare domain. Omit the separator when there's no prefix to join.
-                  const host = r.subdomain ? `${r.subdomain}.${r.domain}` : r.domain;
+                  const host = r.subdomain
+                    ? `${r.subdomain}.${r.domain}`
+                    : r.domain;
                   const cliCommand = r.subdomain
                     ? `lfr-tunnel -subdomain ${r.subdomain} -server ${window.location.origin}`
                     : `lfr-tunnel -domain ${r.domain} -server ${window.location.origin}`;
-                  const isExpired = r.expires_at && new Date(r.expires_at) < new Date();
-                  const canExtend = !!(r.expires_at && !r.extension_requested && !isExpired);
+                  const isExpired =
+                    r.expires_at && new Date(r.expires_at) < new Date();
+                  const canExtend = !!(
+                    r.expires_at &&
+                    !r.extension_requested &&
+                    !isExpired
+                  );
                   return (
                     <tr key={r.id} className="border-b">
                       {isColumnVisible(primaryColumnKey) && (
                         <td className="td-cell">
                           <div className="flex items-center gap-sm">
-                            <a href={`https://${host}`} target="_blank" rel="noreferrer" className="text-primary fw-semibold no-underline font-mono text-base">
+                            <a
+                              href={`https://${host}`}
+                              target="_blank"
+                              rel="noreferrer"
+                              className="text-primary fw-semibold no-underline font-mono text-base"
+                            >
                               {host}
                             </a>
                             <button
-                              onClick={() => copyText(host, 'Host copied to clipboard')}
+                              onClick={() =>
+                                copyText(host, 'Host copied to clipboard')
+                              }
                               className="btn-icon text-muted cursor-pointer text-base btn-bare p-2xs"
                               title="Copy Host"
                             >
                               📋
                             </button>
                             <button
-                              onClick={() => copyText(cliCommand, 'CLI command copied')}
+                              onClick={() =>
+                                copyText(cliCommand, 'CLI command copied')
+                              }
                               className="btn-icon text-muted cursor-pointer text-base btn-bare p-2xs"
                               title="Copy CLI Connection Command"
                             >
@@ -181,7 +209,9 @@ export default function ReservationsTable({
                           </div>
                           {r.access_mode && r.access_mode !== 'public' && (
                             <span className="badge badge-warning text-2xs mt-xs inline-block">
-                              {r.access_mode === 'passcode' ? '🔑 Passcode' : '🛡 IP Whitelist'}
+                              {r.access_mode === 'passcode'
+                                ? '🔑 Passcode'
+                                : '🛡 IP Whitelist'}
                             </span>
                           )}
                         </td>
@@ -189,9 +219,13 @@ export default function ReservationsTable({
                       {isColumnVisible('status') && (
                         <td className="td-cell">
                           {isExpired ? (
-                            <span className="badge badge-danger">quarantined</span>
+                            <span className="badge badge-danger">
+                              quarantined
+                            </span>
                           ) : r.extension_requested ? (
-                            <span className="badge badge-warning">extension requested</span>
+                            <span className="badge badge-warning">
+                              extension requested
+                            </span>
                           ) : (
                             <span className="badge badge-success">active</span>
                           )}
@@ -199,7 +233,9 @@ export default function ReservationsTable({
                       )}
                       {isColumnVisible('expires_at') && (
                         <td className="td-cell">
-                          {r.expires_at ? formatDate(r.expires_at) : 'Never (Permanent)'}
+                          {r.expires_at
+                            ? formatDate(r.expires_at)
+                            : 'Never (Permanent)'}
                         </td>
                       )}
                       {isColumnVisible('created_at') && (
@@ -227,7 +263,11 @@ export default function ReservationsTable({
                           >
                             🔒
                           </button>
-                          <button type="button" className="btn btn-danger py-xs px-sm text-xs" onClick={() => deleteReservation(r.id)}>
+                          <button
+                            type="button"
+                            className="btn btn-danger py-xs px-sm text-xs"
+                            onClick={() => deleteReservation(r.id)}
+                          >
                             {t('release', 'Release')}
                           </button>
                         </div>

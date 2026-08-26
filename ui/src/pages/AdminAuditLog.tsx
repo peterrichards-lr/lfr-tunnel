@@ -27,7 +27,7 @@ export default function AdminAuditLog() {
   const fetchEvents = async () => {
     try {
       const res = await axios.get('/api/admin/audit');
-      setEvents(Array.isArray(res.data) ? res.data : (res.data.events || []));
+      setEvents(Array.isArray(res.data) ? res.data : res.data.events || []);
     } catch (e) {
       console.error(e);
     } finally {
@@ -39,14 +39,25 @@ export default function AdminAuditLog() {
     fetchEvents();
   }, []);
 
-  const columns: ColumnDef<AuditEvent>[] = useMemo(() => [
-    { key: 'created_at', label: t('tbl_time', 'Time'), sortable: true },
-    { key: 'actor_id', label: t('tbl_actor', 'Actor'), sortable: true },
-    { key: 'action', label: t('tbl_action', 'Action'), sortable: true },
-    { key: 'target_id', label: t('tbl_resource', 'Resource'), sortable: true },
-    { key: 'ip_address', label: t('tbl_ip_address', 'IP Address'), sortable: true },
-    { key: 'details', label: t('tbl_details', 'Details'), sortable: true }
-  ], [t]);
+  const columns: ColumnDef<AuditEvent>[] = useMemo(
+    () => [
+      { key: 'created_at', label: t('tbl_time', 'Time'), sortable: true },
+      { key: 'actor_id', label: t('tbl_actor', 'Actor'), sortable: true },
+      { key: 'action', label: t('tbl_action', 'Action'), sortable: true },
+      {
+        key: 'target_id',
+        label: t('tbl_resource', 'Resource'),
+        sortable: true,
+      },
+      {
+        key: 'ip_address',
+        label: t('tbl_ip_address', 'IP Address'),
+        sortable: true,
+      },
+      { key: 'details', label: t('tbl_details', 'Details'), sortable: true },
+    ],
+    [t],
+  );
 
   const {
     paginatedItems,
@@ -62,14 +73,14 @@ export default function AdminAuditLog() {
     toggleColumn,
     requestSort,
     getSortIndicator,
-    getAriaSort
+    getAriaSort,
   } = useDataTable<AuditEvent>(
     'admin_audit',
     events,
     ['actor_id', 'action', 'target_type', 'target_id', 'ip_address', 'details'],
     columns,
     10,
-    ['ip_address']
+    ['ip_address'],
   );
 
   if (loading) {
@@ -82,7 +93,7 @@ export default function AdminAuditLog() {
           </div>
           <Skeleton width={100} height={40} />
         </div>
-        
+
         <div className="card p-xl mb-xl">
           <div className="flex gap-md items-center">
             <Skeleton width="100%" height={40} className="max-w-sm" />
@@ -94,23 +105,47 @@ export default function AdminAuditLog() {
             <table className="w-full">
               <thead>
                 <tr className="border-b text-left">
-                  <th className="th-col"><Skeleton width={100} /></th>
-                  <th className="th-col"><Skeleton width={80} /></th>
-                  <th className="th-col"><Skeleton width={120} /></th>
-                  <th className="th-col"><Skeleton width={90} /></th>
-                  <th className="th-col"><Skeleton width={180} /></th>
-                  <th className="th-col"><Skeleton width={60} /></th>
+                  <th className="th-col">
+                    <Skeleton width={100} />
+                  </th>
+                  <th className="th-col">
+                    <Skeleton width={80} />
+                  </th>
+                  <th className="th-col">
+                    <Skeleton width={120} />
+                  </th>
+                  <th className="th-col">
+                    <Skeleton width={90} />
+                  </th>
+                  <th className="th-col">
+                    <Skeleton width={180} />
+                  </th>
+                  <th className="th-col">
+                    <Skeleton width={60} />
+                  </th>
                 </tr>
               </thead>
               <tbody>
                 {[...Array(5)].map((_, i) => (
                   <tr key={i} className="border-b">
-                    <td className="td-cell"><Skeleton width="90%" height={16} /></td>
-                    <td className="td-cell"><Skeleton width="85%" height={16} /></td>
-                    <td className="td-cell"><Skeleton width="60%" height={16} /></td>
-                    <td className="td-cell"><Skeleton width="70%" height={16} /></td>
-                    <td className="td-cell"><Skeleton width="80%" height={16} /></td>
-                    <td className="td-cell"><Skeleton width="50%" height={16} /></td>
+                    <td className="td-cell">
+                      <Skeleton width="90%" height={16} />
+                    </td>
+                    <td className="td-cell">
+                      <Skeleton width="85%" height={16} />
+                    </td>
+                    <td className="td-cell">
+                      <Skeleton width="60%" height={16} />
+                    </td>
+                    <td className="td-cell">
+                      <Skeleton width="70%" height={16} />
+                    </td>
+                    <td className="td-cell">
+                      <Skeleton width="80%" height={16} />
+                    </td>
+                    <td className="td-cell">
+                      <Skeleton width="50%" height={16} />
+                    </td>
                   </tr>
                 ))}
               </tbody>
@@ -125,11 +160,18 @@ export default function AdminAuditLog() {
     <div>
       <div className="page-header">
         <div>
-          <h1 className="page-header__title">{t('system_audit_log', 'System Audit Log')}</h1>
-          <p className="page-header__desc">{t('audit_log_desc', 'Immutable record of administrative and security events.')}</p>
+          <h1 className="page-header__title">
+            {t('system_audit_log', 'System Audit Log')}
+          </h1>
+          <p className="page-header__desc">
+            {t(
+              'audit_log_desc',
+              'Immutable record of administrative and security events.',
+            )}
+          </p>
         </div>
-        <a 
-          href="/api/admin/audit/export" 
+        <a
+          href="/api/admin/audit/export"
           className="btn btn-secondary w-auto inline-flex items-center gap-sm whitespace-nowrap"
         >
           📥 {t('export_csv', 'Export CSV')}
@@ -141,7 +183,10 @@ export default function AdminAuditLog() {
           <DataTableToolbar
             searchQuery={searchQuery}
             onSearchChange={setSearchQuery}
-            searchPlaceholder={t('search_audit_logs_placeholder', 'Search audit logs...')}
+            searchPlaceholder={t(
+              'search_audit_logs_placeholder',
+              'Search audit logs...',
+            )}
             pageSize={pageSize}
             onPageSizeChange={setPageSize}
             columns={columns}
@@ -154,33 +199,63 @@ export default function AdminAuditLog() {
             <thead>
               <tr className="border-b text-left">
                 {isColumnVisible('created_at') && (
-                  <th className="th-col th-col--sortable" onClick={() => requestSort('created_at')} aria-sort={getAriaSort('created_at')}>
-                    {t('tbl_time', 'Time')}{getSortIndicator('created_at')}
+                  <th
+                    className="th-col th-col--sortable"
+                    onClick={() => requestSort('created_at')}
+                    aria-sort={getAriaSort('created_at')}
+                  >
+                    {t('tbl_time', 'Time')}
+                    {getSortIndicator('created_at')}
                   </th>
                 )}
                 {isColumnVisible('actor_id') && (
-                  <th className="th-col th-col--sortable" onClick={() => requestSort('actor_id')} aria-sort={getAriaSort('actor_id')}>
-                    {t('tbl_actor', 'Actor')}{getSortIndicator('actor_id')}
+                  <th
+                    className="th-col th-col--sortable"
+                    onClick={() => requestSort('actor_id')}
+                    aria-sort={getAriaSort('actor_id')}
+                  >
+                    {t('tbl_actor', 'Actor')}
+                    {getSortIndicator('actor_id')}
                   </th>
                 )}
                 {isColumnVisible('action') && (
-                  <th className="th-col th-col--sortable" onClick={() => requestSort('action')} aria-sort={getAriaSort('action')}>
-                    {t('tbl_action', 'Action')}{getSortIndicator('action')}
+                  <th
+                    className="th-col th-col--sortable"
+                    onClick={() => requestSort('action')}
+                    aria-sort={getAriaSort('action')}
+                  >
+                    {t('tbl_action', 'Action')}
+                    {getSortIndicator('action')}
                   </th>
                 )}
                 {isColumnVisible('target_id') && (
-                  <th className="th-col th-col--sortable" onClick={() => requestSort('target_id')} aria-sort={getAriaSort('target_id')}>
-                    {t('tbl_resource', 'Resource')}{getSortIndicator('target_id')}
+                  <th
+                    className="th-col th-col--sortable"
+                    onClick={() => requestSort('target_id')}
+                    aria-sort={getAriaSort('target_id')}
+                  >
+                    {t('tbl_resource', 'Resource')}
+                    {getSortIndicator('target_id')}
                   </th>
                 )}
                 {isColumnVisible('ip_address') && (
-                  <th className="th-col th-col--sortable" onClick={() => requestSort('ip_address')} aria-sort={getAriaSort('ip_address')}>
-                    {t('tbl_ip_address', 'IP Address')}{getSortIndicator('ip_address')}
+                  <th
+                    className="th-col th-col--sortable"
+                    onClick={() => requestSort('ip_address')}
+                    aria-sort={getAriaSort('ip_address')}
+                  >
+                    {t('tbl_ip_address', 'IP Address')}
+                    {getSortIndicator('ip_address')}
                   </th>
                 )}
                 {isColumnVisible('details') && (
-                  <th className="th-col th-col--sortable" onClick={() => requestSort('details')} aria-sort={getAriaSort('details')}>
-                    {t('tbl_details', 'Details')}{getSortIndicator('details')}
+                  <th
+                    className="th-col th-col--sortable"
+                    onClick={() => requestSort('details')}
+                    aria-sort={getAriaSort('details')}
+                  >
+                    {t('tbl_details', 'Details')}
+                    {getSortIndicator('details')}
                   </th>
                 )}
               </tr>
@@ -196,21 +271,30 @@ export default function AdminAuditLog() {
                 paginatedItems.map((e: AuditEvent, idx: number) => (
                   <tr key={e.id || idx} className="border-b">
                     {isColumnVisible('created_at') && (
-                      <td className="td-cell whitespace-nowrap">{formatDate(e.created_at)}</td>
+                      <td className="td-cell whitespace-nowrap">
+                        {formatDate(e.created_at)}
+                      </td>
                     )}
                     {isColumnVisible('actor_id') && (
                       <td className="td-cell">{e.actor_id}</td>
                     )}
                     {isColumnVisible('action') && (
-                      <td className="td-cell"><span className="badge badge-info">{e.action}</span></td>
+                      <td className="td-cell">
+                        <span className="badge badge-info">{e.action}</span>
+                      </td>
                     )}
                     {isColumnVisible('target_id') && (
                       <td className="td-cell">
                         {e.target_type && e.target_id ? (
                           <span className="text-sm">
-                            <strong className="opacity-60">{e.target_type}:</strong> {e.target_id}
+                            <strong className="opacity-60">
+                              {e.target_type}:
+                            </strong>{' '}
+                            {e.target_id}
                           </span>
-                        ) : e.target_id || '-'}
+                        ) : (
+                          e.target_id || '-'
+                        )}
                       </td>
                     )}
                     {isColumnVisible('ip_address') && (

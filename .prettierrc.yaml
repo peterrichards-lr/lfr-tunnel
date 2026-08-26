@@ -1,0 +1,9 @@
+# Formatting for this repo's JavaScript, TypeScript, CSS and JSON.
+#
+# singleQuote because that is what the hand-written source already used everywhere;
+# Prettier's own default is double, so an unconfigured `prettier --write` silently
+# rewrote whatever file it touched and produced style churn inside small diffs (#1403).
+#
+# Scope is deliberately narrower than "every file Prettier can parse" -- see
+# .prettierignore for what is held back and why.
+singleQuote: true

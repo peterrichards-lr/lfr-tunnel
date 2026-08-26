@@ -28,7 +28,11 @@ export default function AdminMagicLinks() {
         const res = await axios.get('/api/admin/magic-links');
         setLinks(res.data || []);
       } catch (err: any) {
-        setError(err.response?.data?.error || err.message || 'Failed to load magic links');
+        setError(
+          err.response?.data?.error ||
+            err.message ||
+            'Failed to load magic links',
+        );
       } finally {
         setLoading(false);
       }
@@ -36,13 +40,28 @@ export default function AdminMagicLinks() {
     fetchLinks();
   }, []);
 
-  const columns: ColumnDef<MagicLink>[] = useMemo(() => [
-    { key: 'email', label: t('email', 'Email'), sortable: true },
-    { key: 'client_ip', label: t('client_ip', 'Client IP'), sortable: true },
-    { key: 'expires_at', label: t('expires_at', 'Expires At'), sortable: true },
-    { key: 'used_at', label: t('status', 'Status / Used At'), sortable: true },
-    { key: 'created_at', label: t('created_at', 'Created Date'), sortable: true }
-  ], [t]);
+  const columns: ColumnDef<MagicLink>[] = useMemo(
+    () => [
+      { key: 'email', label: t('email', 'Email'), sortable: true },
+      { key: 'client_ip', label: t('client_ip', 'Client IP'), sortable: true },
+      {
+        key: 'expires_at',
+        label: t('expires_at', 'Expires At'),
+        sortable: true,
+      },
+      {
+        key: 'used_at',
+        label: t('status', 'Status / Used At'),
+        sortable: true,
+      },
+      {
+        key: 'created_at',
+        label: t('created_at', 'Created Date'),
+        sortable: true,
+      },
+    ],
+    [t],
+  );
 
   const {
     paginatedItems,
@@ -58,14 +77,14 @@ export default function AdminMagicLinks() {
     toggleColumn,
     requestSort,
     getSortIndicator,
-    getAriaSort
+    getAriaSort,
   } = useDataTable<MagicLink>(
     'admin_magic_links',
     links,
     ['email', 'client_ip'],
     columns,
     10,
-    ['client_ip', 'created_at']
+    ['client_ip', 'created_at'],
   );
 
   if (loading) {
@@ -81,19 +100,35 @@ export default function AdminMagicLinks() {
             <table className="w-full">
               <thead>
                 <tr className="border-b text-left">
-                  <th className="th-col"><Skeleton width={150} /></th>
-                  <th className="th-col"><Skeleton width={100} /></th>
-                  <th className="th-col"><Skeleton width={120} /></th>
-                  <th className="th-col"><Skeleton width={80} /></th>
+                  <th className="th-col">
+                    <Skeleton width={150} />
+                  </th>
+                  <th className="th-col">
+                    <Skeleton width={100} />
+                  </th>
+                  <th className="th-col">
+                    <Skeleton width={120} />
+                  </th>
+                  <th className="th-col">
+                    <Skeleton width={80} />
+                  </th>
                 </tr>
               </thead>
               <tbody>
                 {[...Array(3)].map((_, i) => (
                   <tr key={i} className="border-b">
-                    <td className="td-cell"><Skeleton width="90%" height={16} /></td>
-                    <td className="td-cell"><Skeleton width="85%" height={16} /></td>
-                    <td className="td-cell"><Skeleton width="60%" height={16} /></td>
-                    <td className="td-cell"><Skeleton width="50%" height={16} /></td>
+                    <td className="td-cell">
+                      <Skeleton width="90%" height={16} />
+                    </td>
+                    <td className="td-cell">
+                      <Skeleton width="85%" height={16} />
+                    </td>
+                    <td className="td-cell">
+                      <Skeleton width="60%" height={16} />
+                    </td>
+                    <td className="td-cell">
+                      <Skeleton width="50%" height={16} />
+                    </td>
                   </tr>
                 ))}
               </tbody>
@@ -105,7 +140,8 @@ export default function AdminMagicLinks() {
   }
 
   const renderDate = (val: number | string | null | undefined) => {
-    if (!val) return <span className="badge badge-info">{t('unused', 'Unused')}</span>;
+    if (!val)
+      return <span className="badge badge-info">{t('unused', 'Unused')}</span>;
     return formatDate(typeof val === 'number' ? new Date(val * 1000) : val);
   };
 
@@ -113,22 +149,30 @@ export default function AdminMagicLinks() {
     <div>
       <div className="page-header">
         <div>
-          <h1 className="page-header__title">{t('magic_links', 'Active Magic Links')}</h1>
-          <p className="page-header__desc">{t('magic_links_desc', 'Track pending passwordless sign-in and invitation tokens.')}</p>
+          <h1 className="page-header__title">
+            {t('magic_links', 'Active Magic Links')}
+          </h1>
+          <p className="page-header__desc">
+            {t(
+              'magic_links_desc',
+              'Track pending passwordless sign-in and invitation tokens.',
+            )}
+          </p>
         </div>
       </div>
 
       {error ? (
-        <div className="alert-banner alert-banner--danger mb-xl">
-          {error}
-        </div>
+        <div className="alert-banner alert-banner--danger mb-xl">{error}</div>
       ) : (
         <div className="card p-0">
           <div className="p-md border-b">
             <DataTableToolbar
               searchQuery={searchQuery}
               onSearchChange={setSearchQuery}
-              searchPlaceholder={t('search_magic_links_placeholder', 'Search magic links...')}
+              searchPlaceholder={t(
+                'search_magic_links_placeholder',
+                'Search magic links...',
+              )}
               pageSize={pageSize}
               onPageSizeChange={setPageSize}
               columns={columns}
@@ -142,28 +186,53 @@ export default function AdminMagicLinks() {
               <thead>
                 <tr className="border-b text-left">
                   {isColumnVisible('email') && (
-                    <th className="th-col th-col--sortable" onClick={() => requestSort('email')} aria-sort={getAriaSort('email')}>
-                      {t('email', 'Email')}{getSortIndicator('email')}
+                    <th
+                      className="th-col th-col--sortable"
+                      onClick={() => requestSort('email')}
+                      aria-sort={getAriaSort('email')}
+                    >
+                      {t('email', 'Email')}
+                      {getSortIndicator('email')}
                     </th>
                   )}
                   {isColumnVisible('client_ip') && (
-                    <th className="th-col th-col--sortable" onClick={() => requestSort('client_ip')} aria-sort={getAriaSort('client_ip')}>
-                      {t('client_ip', 'Client IP')}{getSortIndicator('client_ip')}
+                    <th
+                      className="th-col th-col--sortable"
+                      onClick={() => requestSort('client_ip')}
+                      aria-sort={getAriaSort('client_ip')}
+                    >
+                      {t('client_ip', 'Client IP')}
+                      {getSortIndicator('client_ip')}
                     </th>
                   )}
                   {isColumnVisible('expires_at') && (
-                    <th className="th-col th-col--sortable" onClick={() => requestSort('expires_at')} aria-sort={getAriaSort('expires_at')}>
-                      {t('expires_at', 'Expires At')}{getSortIndicator('expires_at')}
+                    <th
+                      className="th-col th-col--sortable"
+                      onClick={() => requestSort('expires_at')}
+                      aria-sort={getAriaSort('expires_at')}
+                    >
+                      {t('expires_at', 'Expires At')}
+                      {getSortIndicator('expires_at')}
                     </th>
                   )}
                   {isColumnVisible('used_at') && (
-                    <th className="th-col th-col--sortable" onClick={() => requestSort('used_at')} aria-sort={getAriaSort('used_at')}>
-                      {t('status', 'Status / Used At')}{getSortIndicator('used_at')}
+                    <th
+                      className="th-col th-col--sortable"
+                      onClick={() => requestSort('used_at')}
+                      aria-sort={getAriaSort('used_at')}
+                    >
+                      {t('status', 'Status / Used At')}
+                      {getSortIndicator('used_at')}
                     </th>
                   )}
                   {isColumnVisible('created_at') && (
-                    <th className="th-col th-col--sortable" onClick={() => requestSort('created_at')} aria-sort={getAriaSort('created_at')}>
-                      {t('created_at', 'Created Date')}{getSortIndicator('created_at')}
+                    <th
+                      className="th-col th-col--sortable"
+                      onClick={() => requestSort('created_at')}
+                      aria-sort={getAriaSort('created_at')}
+                    >
+                      {t('created_at', 'Created Date')}
+                      {getSortIndicator('created_at')}
                     </th>
                   )}
                 </tr>
@@ -182,11 +251,17 @@ export default function AdminMagicLinks() {
                         <td className="td-cell fw-medium">{item.email}</td>
                       )}
                       {isColumnVisible('client_ip') && (
-                        <td className="td-cell font-mono text-xs">{item.client_ip || '-'}</td>
+                        <td className="td-cell font-mono text-xs">
+                          {item.client_ip || '-'}
+                        </td>
                       )}
                       {isColumnVisible('expires_at') && (
                         <td className="td-cell text-xs text-muted whitespace-nowrap">
-                          {formatDate(typeof item.expires_at === 'number' ? new Date(item.expires_at * 1000) : item.expires_at)}
+                          {formatDate(
+                            typeof item.expires_at === 'number'
+                              ? new Date(item.expires_at * 1000)
+                              : item.expires_at,
+                          )}
                         </td>
                       )}
                       {isColumnVisible('used_at') && (

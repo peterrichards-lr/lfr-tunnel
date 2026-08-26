@@ -1,5 +1,5 @@
-import { test, expect } from "./utils/fixtures";
-import { getMagicLinkToken, clearMailpit } from "./utils/mailpit";
+import { test, expect } from './utils/fixtures';
+import { getMagicLinkToken, clearMailpit } from './utils/mailpit';
 
 /**
  * The "Switch back to V1" banner must be dismissible (#1203).
@@ -20,9 +20,9 @@ import { getMagicLinkToken, clearMailpit } from "./utils/mailpit";
  * unchanged by the fix. Targeting the new CSS class would make a red run fail merely
  * because the class did not exist yet, which proves nothing about the defect.
  */
-test.describe("Portal V2 legacy-interface banner can be dismissed", () => {
-  const adminEmail = "admin@lfr-demo.local"; // From tests/e2e/server-config.yaml
-  const BANNER_TEXT = "Need the legacy interface?";
+test.describe('Portal V2 legacy-interface banner can be dismissed', () => {
+  const adminEmail = 'admin@lfr-demo.local'; // From tests/e2e/server-config.yaml
+  const BANNER_TEXT = 'Need the legacy interface?';
   // title="Dismiss promo banner" before the fix, aria-label of the same text after, so
   // this resolves against either markup.
   const DISMISS_SELECTOR =
@@ -33,48 +33,48 @@ test.describe("Portal V2 legacy-interface banner can be dismissed", () => {
   // this one contains &times; -- so getByRole({name: 'Dismiss promo banner'}) did not
   // resolve at all on the old markup, and the test would have failed for the wrong
   // reason. The aria-label added by the fix is itself the correction to that.
-  const dismiss = (page: import("@playwright/test").Page) =>
+  const dismiss = (page: import('@playwright/test').Page) =>
     page.locator(DISMISS_SELECTOR);
 
   test.beforeEach(async ({ page }) => {
     await clearMailpit();
-    await page.goto("/portalv2/");
-    await page.fill("#email-input", adminEmail);
+    await page.goto('/portalv2/');
+    await page.fill('#email-input', adminEmail);
     await page.click('button[type="submit"]');
-    await expect(page.locator("text=Magic link sent")).toBeVisible();
+    await expect(page.locator('text=Magic link sent')).toBeVisible();
 
     const token = await getMagicLinkToken(adminEmail);
     await page.goto(`/portalv2/login?token=${token}`);
-    await page.waitForURL("**/portalv2/dashboard");
+    await page.waitForURL('**/portalv2/dashboard');
     // Deliberately NOT dismissing the banner: it is the subject.
     await expect(page.getByText(BANNER_TEXT)).toBeVisible();
   });
 
-  test("the dismiss control is actually clickable, not just present", async ({
+  test('the dismiss control is actually clickable, not just present', async ({
     page,
   }) => {
     const onTop = await page.evaluate((sel) => {
       const el = document.querySelector(sel) as HTMLElement | null;
-      if (!el) return "missing";
+      if (!el) return 'missing';
       const b = el.getBoundingClientRect();
-      if (b.width === 0 || b.height === 0) return "zero-size";
+      if (b.width === 0 || b.height === 0) return 'zero-size';
       const top = document.elementFromPoint(
         b.x + b.width / 2,
         b.y + b.height / 2,
       );
-      if (!top) return "nothing";
+      if (!top) return 'nothing';
       return el === top || el.contains(top)
-        ? "self"
+        ? 'self'
         : `blocked by ${top.tagName}`;
     }, DISMISS_SELECTOR);
-    expect(onTop).toBe("self");
+    expect(onTop).toBe('self');
   });
 
-  test("it sits at the banner edge, not over the message", async ({ page }) => {
+  test('it sits at the banner edge, not over the message', async ({ page }) => {
     const geom = await page.evaluate((sel) => {
       const btn = document.querySelector(sel) as HTMLElement;
       const banner = btn.parentElement as HTMLElement;
-      const text = banner.querySelector("p") as HTMLElement;
+      const text = banner.querySelector('p') as HTMLElement;
       const b = banner.getBoundingClientRect();
       const d = btn.getBoundingClientRect();
       const t = text.getBoundingClientRect();
@@ -91,25 +91,25 @@ test.describe("Portal V2 legacy-interface banner can be dismissed", () => {
     expect(geom.overlapsText).toBe(false);
   });
 
-  test("the banner is styled, not bare text", async ({ page }) => {
+  test('the banner is styled, not bare text', async ({ page }) => {
     // bg-primary was inert, so the banner had no background at all.
     const bg = await page.evaluate((sel) => {
       const btn = document.querySelector(sel) as HTMLElement;
       return getComputedStyle(btn.parentElement as HTMLElement).backgroundColor;
     }, DISMISS_SELECTOR);
 
-    expect(bg).not.toBe("rgba(0, 0, 0, 0)");
-    expect(bg).not.toBe("transparent");
+    expect(bg).not.toBe('rgba(0, 0, 0, 0)');
+    expect(bg).not.toBe('transparent');
   });
 
-  test("clicking it dismisses the banner, and it stays dismissed", async ({
+  test('clicking it dismisses the banner, and it stays dismissed', async ({
     page,
   }) => {
     await dismiss(page).click();
     await expect(page.getByText(BANNER_TEXT)).toHaveCount(0);
 
     await page.reload();
-    await page.waitForURL("**/portalv2/dashboard");
+    await page.waitForURL('**/portalv2/dashboard');
     await expect(page.getByText(BANNER_TEXT)).toHaveCount(0);
   });
 });

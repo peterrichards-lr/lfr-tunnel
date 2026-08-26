@@ -35,12 +35,13 @@ axios.interceptors.response.use(
     // "mfa_required" status Login.tsx checks for from /api/auth/verify) happens
     // before any session exists -- that flow already handles this response itself
     // and must not be intercepted here.
-    const isLoginFlow = url.includes('/api/auth/verify') || url.includes('/api/auth/mfa-verify');
+    const isLoginFlow =
+      url.includes('/api/auth/verify') || url.includes('/api/auth/mfa-verify');
     if (status === 403 && data?.mfa_required && !isLoginFlow && notify) {
       notify();
     }
     return Promise.reject(error);
-  }
+  },
 );
 
 interface MfaSetupData {
@@ -58,10 +59,13 @@ function MfaSetupGate() {
   const [verifying, setVerifying] = useState(false);
 
   useEffect(() => {
-    axios.get('/api/mfa/setup')
+    axios
+      .get('/api/mfa/setup')
       .then((res) => setSetupData(res.data))
-      .catch(() => setLoadError(t('error_mfa_setup', 'Failed to initialize MFA setup')));
-  // eslint-disable-next-line react-hooks/exhaustive-deps
+      .catch(() =>
+        setLoadError(t('error_mfa_setup', 'Failed to initialize MFA setup')),
+      );
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   const verify = async () => {
@@ -70,14 +74,19 @@ function MfaSetupGate() {
     setVerifyError('');
     try {
       await axios.post('/api/mfa/enable', { secret: setupData.secret, code });
-      showToast(t('mfa_setup_complete', 'MFA enabled -- welcome back!'), 'success');
+      showToast(
+        t('mfa_setup_complete', 'MFA enabled -- welcome back!'),
+        'success',
+      );
       // Whatever page was mounted when force_mfa first blocked it already ran its
       // data-fetching effects and failed with 403 -- those never auto-retry. A full
       // reload is the simplest way to guarantee everything re-fetches fresh, rather
       // than tracking/retrying every possible failed request across the app (#1071).
       setTimeout(() => window.location.reload(), 600);
     } catch {
-      setVerifyError(t('error_mfa_invalid', 'Invalid passcode, please try again.'));
+      setVerifyError(
+        t('error_mfa_invalid', 'Invalid passcode, please try again.'),
+      );
     } finally {
       setVerifying(false);
     }
@@ -101,13 +110,23 @@ function MfaSetupGate() {
         aria-labelledby="mfa-gate-title"
       >
         <h3 id="mfa-gate-title" className="m-0 mb-sm">
-          {t('mfa_required_title', 'Set Up Multi-Factor Authentication to Continue')}
+          {t(
+            'mfa_required_title',
+            'Set Up Multi-Factor Authentication to Continue',
+          )}
         </h3>
         <p className="text-muted text-sm mb-lg">
-          {t('mfa_required_desc', 'Your administrator requires MFA on this account. Scan the code below with your authenticator app, then enter the 6-digit code to continue.')}
+          {t(
+            'mfa_required_desc',
+            'Your administrator requires MFA on this account. Scan the code below with your authenticator app, then enter the 6-digit code to continue.',
+          )}
         </p>
 
-        {loadError && <div className="alert-banner alert-banner--danger mb-md">{loadError}</div>}
+        {loadError && (
+          <div className="alert-banner alert-banner--danger mb-md">
+            {loadError}
+          </div>
+        )}
 
         {setupData ? (
           <div className="animate-fade-in-fast">
@@ -117,7 +136,10 @@ function MfaSetupGate() {
             <div className="copy-box text-xs mb-lg">{setupData.secret}</div>
 
             <label className="form-label">
-              {t('verify_passcode', 'Enter 6-digit code from authenticator app')}
+              {t(
+                'verify_passcode',
+                'Enter 6-digit code from authenticator app',
+              )}
             </label>
             <div className="flex gap-sm">
               <input
@@ -126,14 +148,27 @@ function MfaSetupGate() {
                 placeholder={t('mfa_otp_placeholder', '000000')}
                 value={code}
                 onChange={(e) => setCode(e.target.value)}
-                onKeyDown={(e) => { if (e.key === 'Enter') verify(); }}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter') verify();
+                }}
                 autoFocus
               />
-              <button type="button" className="btn btn-primary" onClick={verify} disabled={verifying}>
-                {verifying ? t('verifying', 'Verifying...') : t('verify', 'Verify')}
+              <button
+                type="button"
+                className="btn btn-primary"
+                onClick={verify}
+                disabled={verifying}
+              >
+                {verifying
+                  ? t('verifying', 'Verifying...')
+                  : t('verify', 'Verify')}
               </button>
             </div>
-            {verifyError && <div className="alert-banner alert-banner--danger mt-md">{verifyError}</div>}
+            {verifyError && (
+              <div className="alert-banner alert-banner--danger mt-md">
+                {verifyError}
+              </div>
+            )}
           </div>
         ) : !loadError ? (
           <div className="mb-lg">{t('loading', 'Loading...')}</div>
@@ -151,12 +186,16 @@ function MfaSetupGate() {
   );
 }
 
-export const MfaGateProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
+export const MfaGateProvider: React.FC<{ children: React.ReactNode }> = ({
+  children,
+}) => {
   const [required, setRequired] = useState(false);
 
   useEffect(() => {
     notify = () => setRequired(true);
-    return () => { notify = null; };
+    return () => {
+      notify = null;
+    };
   }, []);
 
   // No setRequired(false) path -- MfaSetupGate reloads the page itself once setup

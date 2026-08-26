@@ -19,7 +19,11 @@ interface UIContextType {
   showToast: (message: string, type?: 'success' | 'error' | 'info') => void;
   showAlert: (title: string, message: string) => Promise<void>;
   showConfirm: (title: string, message: string) => Promise<boolean>;
-  showPrompt: (title: string, message: string, defaultValue?: string) => Promise<string | null>;
+  showPrompt: (
+    title: string,
+    message: string,
+    defaultValue?: string,
+  ) => Promise<string | null>;
 }
 
 const UIContext = createContext<UIContextType | undefined>(undefined);
@@ -32,7 +36,9 @@ export const useUI = () => {
   return context;
 };
 
-export const UIProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
+export const UIProvider: React.FC<{ children: React.ReactNode }> = ({
+  children,
+}) => {
   const { t } = useI18n();
   const [toasts, setToasts] = useState<Toast[]>([]);
   const [activeDialog, setActiveDialog] = useState<DialogConfig | null>(null);
@@ -55,7 +61,10 @@ export const UIProvider: React.FC<{ children: React.ReactNode }> = ({ children }
     }
   }, [activeDialog]);
 
-  const showToast = (message: string, type: 'success' | 'error' | 'info' = 'info') => {
+  const showToast = (
+    message: string,
+    type: 'success' | 'error' | 'info' = 'info',
+  ) => {
     const id = Math.random().toString(36).substring(2, 9);
     setToasts((prev) => [...prev, { id, message, type }]);
   };
@@ -88,7 +97,11 @@ export const UIProvider: React.FC<{ children: React.ReactNode }> = ({ children }
     });
   };
 
-  const showPrompt = (title: string, message: string, defaultValue: string = ''): Promise<string | null> => {
+  const showPrompt = (
+    title: string,
+    message: string,
+    defaultValue: string = '',
+  ): Promise<string | null> => {
     return new Promise<string | null>((resolve) => {
       setActiveDialog({
         type: 'prompt',
@@ -122,7 +135,9 @@ export const UIProvider: React.FC<{ children: React.ReactNode }> = ({ children }
   };
 
   return (
-    <UIContext.Provider value={{ showToast, showAlert, showConfirm, showPrompt }}>
+    <UIContext.Provider
+      value={{ showToast, showAlert, showConfirm, showPrompt }}
+    >
       {children}
 
       {/* Floating Toasts container */}
@@ -137,7 +152,9 @@ export const UIProvider: React.FC<{ children: React.ReactNode }> = ({ children }
               type="button"
               className="toast-dismiss"
               aria-label={t('dismiss_notification', 'Dismiss notification')}
-              onClick={() => setToasts((prev) => prev.filter((t) => t.id !== toast.id))}
+              onClick={() =>
+                setToasts((prev) => prev.filter((t) => t.id !== toast.id))
+              }
             >
               ×
             </button>
@@ -158,9 +175,7 @@ export const UIProvider: React.FC<{ children: React.ReactNode }> = ({ children }
               <h3 id="global-dialog-title" className="dialog-title">
                 {activeDialog.title}
               </h3>
-              <p className="dialog-message">
-                {activeDialog.message}
-              </p>
+              <p className="dialog-message">{activeDialog.message}</p>
             </div>
 
             {activeDialog.type === 'prompt' && (

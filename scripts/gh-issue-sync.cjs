@@ -20,7 +20,7 @@ try {
 } catch (e) {
   log(
     'Error: GitHub CLI (gh) is not installed. Please install it and log in.',
-    'error'
+    'error',
   );
   process.exit(1);
 }
@@ -30,7 +30,7 @@ try {
 } catch (e) {
   log(
     'Error: GitHub CLI is not authenticated. Please run "gh auth login".',
-    'error'
+    'error',
   );
   process.exit(1);
 }
@@ -73,8 +73,15 @@ if (epicNumber) {
   log(`Reusing existing Epic: #${epicNumber}`, 'info');
 } else {
   log(`\nCreating Epic: "${config.title}"...`, 'info');
-  const args = ['issue', 'create', '--title', config.title, '--body', config.body];
-  (config.labels || []).forEach(l => {
+  const args = [
+    'issue',
+    'create',
+    '--title',
+    config.title,
+    '--body',
+    config.body,
+  ];
+  (config.labels || []).forEach((l) => {
     args.push('--label', l);
   });
 
@@ -88,7 +95,7 @@ if (epicNumber) {
     needsSave = true;
     log(
       `Epic created successfully: Issue #${epicNumber} (${epicUrl})`,
-      'success'
+      'success',
     );
   }
 }
@@ -98,11 +105,18 @@ if (config.issues && config.issues.length > 0) {
   config.issues.forEach((issue, idx) => {
     log(
       `\nProcessing sub-issue [${idx + 1}/${config.issues.length}]: "${issue.title}"...`,
-      'info'
+      'info',
     );
     const bodyText = `${issue.body}\n\n(Belongs to Epic #${epicNumber})`;
-    const args = ['issue', 'create', '--title', issue.title, '--body', bodyText];
-    (issue.labels || []).forEach(l => {
+    const args = [
+      'issue',
+      'create',
+      '--title',
+      issue.title,
+      '--body',
+      bodyText,
+    ];
+    (issue.labels || []).forEach((l) => {
       args.push('--label', l);
     });
 
@@ -116,19 +130,27 @@ if (config.issues && config.issues.length > 0) {
       if (subIssueNumber) {
         log(`Reusing sub-issue: #${subIssueNumber}`, 'info');
       } else {
-        const subIssueUrl = execFileSync('gh', args, { encoding: 'utf8' }).trim();
+        const subIssueUrl = execFileSync('gh', args, {
+          encoding: 'utf8',
+        }).trim();
         subIssueNumber = subIssueUrl.split('/').pop();
         issue.issueNumber = subIssueNumber;
         needsSave = true;
         log(
           `Sub-issue created: Issue #${subIssueNumber} (${subIssueUrl})`,
-          'success'
+          'success',
         );
       }
 
       if (issue.completed && !issue.closed) {
         log(`Closing completed sub-issue #${subIssueNumber}...`, 'info');
-        execFileSync('gh', ['issue', 'comment', subIssueNumber, '--body', `This issue was successfully implemented and verified in commit ${commitHash}. Closing.`]);
+        execFileSync('gh', [
+          'issue',
+          'comment',
+          subIssueNumber,
+          '--body',
+          `This issue was successfully implemented and verified in commit ${commitHash}. Closing.`,
+        ]);
         execFileSync('gh', ['issue', 'close', subIssueNumber]);
         issue.closed = true;
         needsSave = true;

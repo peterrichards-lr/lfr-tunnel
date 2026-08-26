@@ -25,13 +25,16 @@ export default function AdminExtensions() {
   const { t } = useI18n();
   const { showToast } = useUI();
 
-  const columns: ColumnDef<ExtRequest>[] = useMemo(() => [
-    { key: 'user_email', label: 'Email', sortable: true },
-    { key: 'subdomain', label: 'Subdomain', sortable: true },
-    { key: 'domain', label: 'Domain', sortable: true },
-    { key: 'expires_at', label: 'Expires', sortable: true },
-    { key: 'created_at', label: 'Created Date', sortable: true },
-  ], []);
+  const columns: ColumnDef<ExtRequest>[] = useMemo(
+    () => [
+      { key: 'user_email', label: 'Email', sortable: true },
+      { key: 'subdomain', label: 'Subdomain', sortable: true },
+      { key: 'domain', label: 'Domain', sortable: true },
+      { key: 'expires_at', label: 'Expires', sortable: true },
+      { key: 'created_at', label: 'Created Date', sortable: true },
+    ],
+    [],
+  );
 
   const {
     paginatedItems: paginatedRequests,
@@ -48,14 +51,14 @@ export default function AdminExtensions() {
     getAriaSort,
     isColumnVisible,
     toggleColumn,
-    allColumns
+    allColumns,
   } = useDataTable<ExtRequest>(
     'admin_extensions',
     requests,
     ['user_email', 'subdomain', 'domain'],
     columns,
     10,
-    ['created_at']
+    ['created_at'],
   );
 
   const fetchRequests = async () => {
@@ -73,9 +76,16 @@ export default function AdminExtensions() {
     fetchRequests();
   }, []);
 
-  const handleApprove = async (id: string, days: number, permanent: boolean) => {
+  const handleApprove = async (
+    id: string,
+    days: number,
+    permanent: boolean,
+  ) => {
     try {
-      await axios.post(`/api/admin/reservations/${id}/approve-extension`, { days, permanent });
+      await axios.post(`/api/admin/reservations/${id}/approve-extension`, {
+        days,
+        permanent,
+      });
       fetchRequests();
       showToast('Request successfully approved.', 'success');
     } catch (err) {
@@ -109,21 +119,41 @@ export default function AdminExtensions() {
             <table className="w-full">
               <thead>
                 <tr className="border-b text-left">
-                  <th className="th-col"><Skeleton width={120} /></th>
-                  <th className="th-col"><Skeleton width={80} /></th>
-                  <th className="th-col"><Skeleton width={80} /></th>
-                  <th className="th-col"><Skeleton width={80} /></th>
-                  <th className="th-col text-right"><Skeleton width={100} /></th>
+                  <th className="th-col">
+                    <Skeleton width={120} />
+                  </th>
+                  <th className="th-col">
+                    <Skeleton width={80} />
+                  </th>
+                  <th className="th-col">
+                    <Skeleton width={80} />
+                  </th>
+                  <th className="th-col">
+                    <Skeleton width={80} />
+                  </th>
+                  <th className="th-col text-right">
+                    <Skeleton width={100} />
+                  </th>
                 </tr>
               </thead>
               <tbody>
                 {[...Array(3)].map((_, i) => (
                   <tr key={i} className="border-b">
-                    <td className="td-cell"><Skeleton width="90%" height={16} /></td>
-                    <td className="td-cell"><Skeleton width="60%" height={16} /></td>
-                    <td className="td-cell"><Skeleton width="60%" height={16} /></td>
-                    <td className="td-cell"><Skeleton width="70%" height={16} /></td>
-                    <td className="td-cell text-right"><Skeleton width="80%" height={16} /></td>
+                    <td className="td-cell">
+                      <Skeleton width="90%" height={16} />
+                    </td>
+                    <td className="td-cell">
+                      <Skeleton width="60%" height={16} />
+                    </td>
+                    <td className="td-cell">
+                      <Skeleton width="60%" height={16} />
+                    </td>
+                    <td className="td-cell">
+                      <Skeleton width="70%" height={16} />
+                    </td>
+                    <td className="td-cell text-right">
+                      <Skeleton width="80%" height={16} />
+                    </td>
                   </tr>
                 ))}
               </tbody>
@@ -138,8 +168,15 @@ export default function AdminExtensions() {
     <div>
       <div className="page-header mb-xl">
         <div>
-          <h1 className="page-header__title">{t('extension_requests', 'Extension Requests')}</h1>
-          <p className="page-header__desc">{t('extension_requests_desc', 'Review and approve subdomain lease extension requests.')}</p>
+          <h1 className="page-header__title">
+            {t('extension_requests', 'Extension Requests')}
+          </h1>
+          <p className="page-header__desc">
+            {t(
+              'extension_requests_desc',
+              'Review and approve subdomain lease extension requests.',
+            )}
+          </p>
         </div>
       </div>
 
@@ -148,7 +185,10 @@ export default function AdminExtensions() {
           <DataTableToolbar
             searchQuery={searchQuery}
             onSearchChange={setSearchQuery}
-            searchPlaceholder={t('search_extensions_placeholder', 'Search extension requests...')}
+            searchPlaceholder={t(
+              'search_extensions_placeholder',
+              'Search extension requests...',
+            )}
             pageSize={pageSize}
             onPageSizeChange={setPageSize}
             columns={allColumns}
@@ -162,27 +202,47 @@ export default function AdminExtensions() {
             <thead>
               <tr className="border-b text-left">
                 {isColumnVisible('user_email') && (
-                  <th className="th-col th-col--sortable" onClick={() => requestSort('user_email')} aria-sort={getAriaSort('user_email')}>
+                  <th
+                    className="th-col th-col--sortable"
+                    onClick={() => requestSort('user_email')}
+                    aria-sort={getAriaSort('user_email')}
+                  >
                     Email{getSortIndicator('user_email')}
                   </th>
                 )}
                 {isColumnVisible('subdomain') && (
-                  <th className="th-col th-col--sortable" onClick={() => requestSort('subdomain')} aria-sort={getAriaSort('subdomain')}>
+                  <th
+                    className="th-col th-col--sortable"
+                    onClick={() => requestSort('subdomain')}
+                    aria-sort={getAriaSort('subdomain')}
+                  >
                     Subdomain{getSortIndicator('subdomain')}
                   </th>
                 )}
                 {isColumnVisible('domain') && (
-                  <th className="th-col th-col--sortable" onClick={() => requestSort('domain')} aria-sort={getAriaSort('domain')}>
+                  <th
+                    className="th-col th-col--sortable"
+                    onClick={() => requestSort('domain')}
+                    aria-sort={getAriaSort('domain')}
+                  >
                     Domain{getSortIndicator('domain')}
                   </th>
                 )}
                 {isColumnVisible('expires_at') && (
-                  <th className="th-col th-col--sortable" onClick={() => requestSort('expires_at')} aria-sort={getAriaSort('expires_at')}>
+                  <th
+                    className="th-col th-col--sortable"
+                    onClick={() => requestSort('expires_at')}
+                    aria-sort={getAriaSort('expires_at')}
+                  >
                     Expires{getSortIndicator('expires_at')}
                   </th>
                 )}
                 {isColumnVisible('created_at') && (
-                  <th className="th-col th-col--sortable" onClick={() => requestSort('created_at')} aria-sort={getAriaSort('created_at')}>
+                  <th
+                    className="th-col th-col--sortable"
+                    onClick={() => requestSort('created_at')}
+                    aria-sort={getAriaSort('created_at')}
+                  >
                     Created Date{getSortIndicator('created_at')}
                   </th>
                 )}
@@ -199,32 +259,65 @@ export default function AdminExtensions() {
               ) : (
                 paginatedRequests.map((req) => (
                   <tr key={req.id} className="border-b">
-                    {isColumnVisible('user_email') && <td className="td-cell">{req.user_email}</td>}
-                    {isColumnVisible('subdomain') && <td className="td-cell font-mono text-xs">{req.subdomain}</td>}
-                    {isColumnVisible('domain') && <td className="td-cell font-mono text-xs">{req.domain}</td>}
-                    {isColumnVisible('expires_at') && <td className="td-cell text-xs text-muted whitespace-nowrap">{req.expires_at ? formatDate(req.expires_at) : 'Never'}</td>}
-                    {isColumnVisible('created_at') && <td className="td-cell text-xs text-muted whitespace-nowrap">{req.created_at ? formatDate(req.created_at) : '—'}</td>}
+                    {isColumnVisible('user_email') && (
+                      <td className="td-cell">{req.user_email}</td>
+                    )}
+                    {isColumnVisible('subdomain') && (
+                      <td className="td-cell font-mono text-xs">
+                        {req.subdomain}
+                      </td>
+                    )}
+                    {isColumnVisible('domain') && (
+                      <td className="td-cell font-mono text-xs">
+                        {req.domain}
+                      </td>
+                    )}
+                    {isColumnVisible('expires_at') && (
+                      <td className="td-cell text-xs text-muted whitespace-nowrap">
+                        {req.expires_at ? formatDate(req.expires_at) : 'Never'}
+                      </td>
+                    )}
+                    {isColumnVisible('created_at') && (
+                      <td className="td-cell text-xs text-muted whitespace-nowrap">
+                        {req.created_at ? formatDate(req.created_at) : '—'}
+                      </td>
+                    )}
                     <td className="td-cell text-right">
                       <div className="flex gap-sm justify-end">
-                        <ActionMenu buttonLabel="Approve" buttonClassName="btn btn-primary px-md py-xs text-xs" buttonTitle="Approve extension">
+                        <ActionMenu
+                          buttonLabel="Approve"
+                          buttonClassName="btn btn-primary px-md py-xs text-xs"
+                          buttonTitle="Approve extension"
+                        >
                           {(close) => (
                             <>
                               <button
                                 className="dropdown-menu-item flex items-center gap-sm text-xs cursor-pointer w-full text-left"
-                                onClick={() => { close(); handleApprove(req.id, 30, false); }}
+                                onClick={() => {
+                                  close();
+                                  handleApprove(req.id, 30, false);
+                                }}
                               >
                                 Approve +30 Days
                               </button>
                               <button
                                 className="dropdown-menu-item flex items-center gap-sm text-xs cursor-pointer w-full text-left"
-                                onClick={() => { close(); handleApprove(req.id, 0, true); }}
+                                onClick={() => {
+                                  close();
+                                  handleApprove(req.id, 0, true);
+                                }}
                               >
                                 Approve Permanent
                               </button>
                             </>
                           )}
                         </ActionMenu>
-                        <button className="btn btn-secondary px-md py-xs text-xs" onClick={() => handleReject(req.id)}>Reject</button>
+                        <button
+                          className="btn btn-secondary px-md py-xs text-xs"
+                          onClick={() => handleReject(req.id)}
+                        >
+                          Reject
+                        </button>
                       </div>
                     </td>
                   </tr>

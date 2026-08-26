@@ -13,13 +13,14 @@ export default function Skeleton({
   height = '1em',
   borderRadius = '4px',
   className = '',
-  style
+  style,
 }: SkeletonProps) {
   const customStyle: React.CSSProperties = {
     width: typeof width === 'number' ? `${width}px` : width,
     height: typeof height === 'number' ? `${height}px` : height,
-    borderRadius: typeof borderRadius === 'number' ? `${borderRadius}px` : borderRadius,
-    ...style
+    borderRadius:
+      typeof borderRadius === 'number' ? `${borderRadius}px` : borderRadius,
+    ...style,
   };
 
   return <span className={`skeleton ${className}`} style={customStyle} />;

@@ -16,14 +16,14 @@ test.describe('Dashboard UI Automation', () => {
   test('Magic Link Login, Theme Toggle, and Pagination', async ({ page }) => {
     // 1. Trigger Magic Link
     await page.goto('/admin');
-    
+
     // Show email form
     await page.click('#btn-show-email');
-    
+
     // Fill email
     await page.fill('#email-input', adminEmail);
     await page.click('button[type="submit"]');
-    
+
     // Check for success message
     await expect(page.locator('text=Magic Link Sent')).toBeVisible();
 
@@ -35,22 +35,24 @@ test.describe('Dashboard UI Automation', () => {
     await page.goto(`/admin?token=${token}`);
 
     // Wait for Dashboard to load (the body or h2 should be visible)
-    await expect(page.locator('h2:has-text("Dashboard Overview")')).toBeVisible();
+    await expect(
+      page.locator('h2:has-text("Dashboard Overview")'),
+    ).toBeVisible();
 
     // 4. Test Theme Toggling via Account Settings
     await page.click('#nav-account');
     await expect(page.locator('h2:has-text("Account Settings")')).toBeVisible();
 
     const htmlElement = page.locator('html');
-    
+
     // Change theme to dark
     await page.selectOption('#acc-theme', 'dark');
     // Save account settings
     await page.click('button:has-text("Save Changes")');
-    
+
     // Verify success via button text
     await expect(page.locator('button:has-text("Saved!")')).toBeVisible();
-    
+
     // Verify theme changed
     await expect(htmlElement).toHaveAttribute('data-theme', 'dark');
 
@@ -81,7 +83,9 @@ test.describe('Dashboard UI Automation', () => {
     await page.goto(`/admin?token=${token}`);
 
     // Wait for Dashboard to load
-    await expect(page.locator('h2:has-text("Dashboard Overview")')).toBeVisible();
+    await expect(
+      page.locator('h2:has-text("Dashboard Overview")'),
+    ).toBeVisible();
 
     // 4. Navigate to IP Blacklist
     await page.click('#nav-blacklist');
@@ -95,7 +99,9 @@ test.describe('Dashboard UI Automation', () => {
     await expect(page.locator('text=Restore via CLI only.')).toBeVisible();
   });
 
-  test('Verify Docker panel and user details modal HTML escaping', async ({ page }) => {
+  test('Verify Docker panel and user details modal HTML escaping', async ({
+    page,
+  }) => {
     // 1. Trigger Magic Link
     await page.goto('/admin');
     await page.click('#btn-show-email');
@@ -110,11 +116,15 @@ test.describe('Dashboard UI Automation', () => {
     await page.goto(`/admin?token=${token}`);
 
     // Wait for Dashboard to load
-    await expect(page.locator('h2:has-text("Dashboard Overview")')).toBeVisible();
+    await expect(
+      page.locator('h2:has-text("Dashboard Overview")'),
+    ).toBeVisible();
 
     // 4. Verify Docker Panel is visible and displays the configured image
     await expect(page.locator('#docker-container-box')).toBeVisible();
-    await expect(page.locator('#docker-pull-text')).toContainText('docker pull peterjrichards/lfr-tunnel:latest');
+    await expect(page.locator('#docker-pull-text')).toContainText(
+      'docker pull peterjrichards/lfr-tunnel:latest',
+    );
 
     // 5. Navigate to Users tab and open User Details modal
     await page.click('#nav-users');
@@ -122,7 +132,7 @@ test.describe('Dashboard UI Automation', () => {
 
     // Find and click the administrator's email link to open the details modal
     await page.click(`a:has-text("${adminEmail}")`);
-    
+
     // Assert modal is open and has user details
     await expect(page.locator('#user-details-modal')).toBeVisible();
     await expect(page.locator('#detail-user-email')).toHaveText(adminEmail);
@@ -130,7 +140,7 @@ test.describe('Dashboard UI Automation', () => {
     // Verify Joined Date tooltip rendered as HTML (not raw text)
     const joinedEl = page.locator('#detail-user-joined');
     await expect(joinedEl.locator('span.timestamp-tooltip')).toBeAttached();
-    
+
     const joinedText = await joinedEl.innerText();
     expect(joinedText).not.toContain('<span');
 
@@ -142,20 +152,30 @@ test.describe('Dashboard UI Automation', () => {
     const bannerContainer = page.locator('#cli-client-banner-container');
     await expect(bannerContainer).toBeVisible();
     const textContent = await bannerContainer.innerText();
-    expect(textContent).toMatch(/(Recommended Installation|Upgrade Command|Client Up to Date|Client Info)/);
-    await expect(page.locator('text=6d4aef719dee798e611139e422d9231b226ec3538617d025fad08accf8fc63d6')).toBeVisible();
-    
+    expect(textContent).toMatch(
+      /(Recommended Installation|Upgrade Command|Client Up to Date|Client Info)/,
+    );
+    await expect(
+      page.locator(
+        'text=6d4aef719dee798e611139e422d9231b226ec3538617d025fad08accf8fc63d6',
+      ),
+    ).toBeVisible();
+
     // Direct binary download is disabled in server-config.yaml, so the download button should NOT be visible
-    await expect(page.locator('text=⬇️ Download Signed Binary')).not.toBeVisible();
+    await expect(
+      page.locator('text=⬇️ Download Signed Binary'),
+    ).not.toBeVisible();
 
     // Verify package manager sections (Brew, Scoop) are hidden in the guide modal
     await page.click('button:has-text("Other Operating Systems")');
     await expect(page.locator('#installer-guide-modal')).toBeVisible();
     await expect(page.locator('#guide-macos-brew-section')).not.toBeVisible();
-    
+
     await page.click('#tab-btn-windows');
-    await expect(page.locator('#guide-windows-scoop-section')).not.toBeVisible();
-    
+    await expect(
+      page.locator('#guide-windows-scoop-section'),
+    ).not.toBeVisible();
+
     await page.click('#installer-guide-modal button:has-text("Close")');
   });
 
@@ -172,18 +192,22 @@ test.describe('Dashboard UI Automation', () => {
 
     // 2. Navigate to Reservations
     await page.click('#nav-reservations');
-    await expect(page.locator('h2:has-text("Subdomain Reservations")')).toBeVisible();
+    await expect(
+      page.locator('h2:has-text("Subdomain Reservations")'),
+    ).toBeVisible();
 
     // 3. Test Generator and reservation fields
     await expect(page.locator('#res-subdomain')).toBeVisible();
     await expect(page.locator('#res-domain')).toBeVisible();
-    
+
     // Select style and generate
     await page.selectOption('#res-style-select', 'words');
     await page.click('#btn-generate-subdomain');
-    
+
     // Check that subdomain input is now populated (not empty)
-    await expect(page.locator('#res-subdomain')).toHaveValue(/^[a-z]+-[a-z]+-[a-z]+$/); // word-word-word
+    await expect(page.locator('#res-subdomain')).toHaveValue(
+      /^[a-z]+-[a-z]+-[a-z]+$/,
+    ); // word-word-word
     const val = await page.inputValue('#res-subdomain');
 
     // Click Reserve Subdomain
@@ -193,7 +217,9 @@ test.describe('Dashboard UI Automation', () => {
     await expect(page.locator('#reservations-table-body')).toContainText(val);
 
     // Verify visual quota limit progress bar updates
-    await expect(page.locator('#reservation-quota-text')).toContainText('subdomains reserved');
+    await expect(page.locator('#reservation-quota-text')).toContainText(
+      'subdomains reserved',
+    );
   });
 
   test('Verify Telemetry Maintenance Countdown Widget', async ({ page }) => {
@@ -208,18 +234,22 @@ test.describe('Dashboard UI Automation', () => {
     await page.goto(`/admin?token=${token}`);
 
     // Wait for Dashboard to load
-    await expect(page.locator('h2:has-text("Dashboard Overview")')).toBeVisible();
+    await expect(
+      page.locator('h2:has-text("Dashboard Overview")'),
+    ).toBeVisible();
 
     // The maintenance countdown box should not be visible initially
     await expect(page.locator('#overview-maintenance-box')).not.toBeVisible();
     await expect(page.locator('#global-maintenance-banner')).not.toBeVisible();
 
     // Register dialog handler to automatically accept confirmation prompts
-    page.on('dialog', dialog => dialog.accept());
+    page.on('dialog', (dialog) => dialog.accept());
 
     // 2. Navigate to Gateway Maintenance and schedule a mock soft maintenance
     await page.click('#nav-maintenance');
-    await expect(page.locator('h2:has-text("Gateway Maintenance")')).toBeVisible();
+    await expect(
+      page.locator('h2:has-text("Gateway Maintenance")'),
+    ).toBeVisible();
 
     // Select countdown (e.g. 5 minutes)
     await page.selectOption('#maint-countdown-select', '5');
@@ -232,7 +262,9 @@ test.describe('Dashboard UI Automation', () => {
     // 3. Navigate back to Overview and verify countdown banner is visible
     await page.click('#nav-overview');
     await expect(page.locator('#global-maintenance-banner')).toBeVisible();
-    await expect(page.locator('#global-maintenance-banner')).toContainText('Scheduled Maintenance starting in');
+    await expect(page.locator('#global-maintenance-banner')).toContainText(
+      'Scheduled Maintenance starting in',
+    );
 
     // 4. Cancel maintenance from Gateway Maintenance tab
     await page.click('#nav-maintenance');
@@ -244,7 +276,9 @@ test.describe('Dashboard UI Automation', () => {
     await expect(page.locator('#global-maintenance-banner')).not.toBeVisible();
   });
 
-  test('Verify Collapsible Sidebar Sections and Persistence', async ({ page }) => {
+  test('Verify Collapsible Sidebar Sections and Persistence', async ({
+    page,
+  }) => {
     // 1. Login
     await page.goto('/admin');
     await page.click('#btn-show-email');
@@ -256,7 +290,9 @@ test.describe('Dashboard UI Automation', () => {
     await page.goto(`/admin?token=${token}`);
 
     // Wait for Dashboard to load
-    await expect(page.locator('h2:has-text("Dashboard Overview")')).toBeVisible();
+    await expect(
+      page.locator('h2:has-text("Dashboard Overview")'),
+    ).toBeVisible();
 
     // 2. Verify all sections are expanded initially
     const personalSection = page.locator('#section-personal');
@@ -272,15 +308,21 @@ test.describe('Dashboard UI Automation', () => {
 
     // 4. Reload page and check that personal section remains collapsed
     await page.reload();
-    await expect(page.locator('h2:has-text("Dashboard Overview")')).toBeVisible();
+    await expect(
+      page.locator('h2:has-text("Dashboard Overview")'),
+    ).toBeVisible();
     await expect(page.locator('#section-personal')).toHaveClass(/collapsed/);
 
     // 5. Expand personal section again
     await page.click('.sidebar-section-header:has-text("Personal")');
-    await expect(page.locator('#section-personal')).not.toHaveClass(/collapsed/);
+    await expect(page.locator('#section-personal')).not.toHaveClass(
+      /collapsed/,
+    );
   });
 
-  test('Verify Collapsible Sidebar Toggle and Persistence', async ({ page }) => {
+  test('Verify Collapsible Sidebar Toggle and Persistence', async ({
+    page,
+  }) => {
     // 1. Login
     await page.goto('/admin');
     await page.click('#btn-show-email');
@@ -292,7 +334,9 @@ test.describe('Dashboard UI Automation', () => {
     await page.goto(`/admin?token=${token}`);
 
     // Wait for Dashboard to load
-    await expect(page.locator('h2:has-text("Dashboard Overview")')).toBeVisible();
+    await expect(
+      page.locator('h2:has-text("Dashboard Overview")'),
+    ).toBeVisible();
 
     // 2. Verify sidebar is expanded initially
     const sidebar = page.locator('.sidebar');
@@ -304,7 +348,9 @@ test.describe('Dashboard UI Automation', () => {
 
     // 4. Reload page and check that sidebar remains collapsed
     await page.reload();
-    await expect(page.locator('h2:has-text("Dashboard Overview")')).toBeVisible();
+    await expect(
+      page.locator('h2:has-text("Dashboard Overview")'),
+    ).toBeVisible();
     await expect(page.locator('.sidebar')).toHaveClass(/collapsed/);
 
     // 5. Expand sidebar again
@@ -312,7 +358,9 @@ test.describe('Dashboard UI Automation', () => {
     await expect(page.locator('.sidebar')).not.toHaveClass(/collapsed/);
   });
 
-  test('Verify Mobile Responsive Layout and Sidebar Slide-Over Drawer', async ({ page }) => {
+  test('Verify Mobile Responsive Layout and Sidebar Slide-Over Drawer', async ({
+    page,
+  }) => {
     // 1. Set viewport size to a mobile dimension
     await page.setViewportSize({ width: 375, height: 812 });
 
@@ -327,7 +375,9 @@ test.describe('Dashboard UI Automation', () => {
     await page.goto(`/admin?token=${token}`);
 
     // Wait for Dashboard to load
-    await expect(page.locator('h2:has-text("Dashboard Overview")')).toBeVisible();
+    await expect(
+      page.locator('h2:has-text("Dashboard Overview")'),
+    ).toBeVisible();
 
     // 3. Verify that the sidebar is collapsed and backdrop not visible initially
     const sidebar = page.locator('.sidebar');
@@ -346,4 +396,3 @@ test.describe('Dashboard UI Automation', () => {
     await expect(backdrop).not.toHaveClass(/visible/);
   });
 });
-

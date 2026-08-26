@@ -19,7 +19,13 @@ interface ActionMenuProps {
 // dashboard's toggleActionMenu() already uses (dashboard.js), which doesn't
 // have this bug for the same reason -- move to body, position via
 // getBoundingClientRect, close on any scroll.
-export default function ActionMenu({ buttonLabel = '⋮', buttonTitle, buttonClassName = 'btn btn-secondary text-xs py-xs px-sm', align = 'right', children }: ActionMenuProps) {
+export default function ActionMenu({
+  buttonLabel = '⋮',
+  buttonTitle,
+  buttonClassName = 'btn btn-secondary text-xs py-xs px-sm',
+  align = 'right',
+  children,
+}: ActionMenuProps) {
   const [open, setOpen] = useState(false);
   const [pos, setPos] = useState<{ top: number; left: number } | null>(null);
   const btnRef = useRef<HTMLButtonElement>(null);
@@ -66,8 +72,13 @@ export default function ActionMenu({ buttonLabel = '⋮', buttonTitle, buttonCla
 
     const handleScroll = () => close();
     const handleResize = () => close();
-    const handleKey = (e: KeyboardEvent) => { if (e.key === 'Escape') close(); };
-    window.addEventListener('scroll', handleScroll, { capture: true, passive: true });
+    const handleKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') close();
+    };
+    window.addEventListener('scroll', handleScroll, {
+      capture: true,
+      passive: true,
+    });
     window.addEventListener('resize', handleResize, { passive: true });
     window.addEventListener('keydown', handleKey);
     return () => {
@@ -89,19 +100,26 @@ export default function ActionMenu({ buttonLabel = '⋮', buttonTitle, buttonCla
       >
         {buttonLabel}
       </button>
-      {open && pos && createPortal(
-        <>
-          <div className="fixed inset-0 z-40" onClick={close} />
-          <div
-            ref={menuRef}
-            className="table-column-dropdown"
-            style={{ position: 'fixed', top: pos.top, left: pos.left, right: 'auto' }}
-          >
-            {children(close)}
-          </div>
-        </>,
-        document.body
-      )}
+      {open &&
+        pos &&
+        createPortal(
+          <>
+            <div className="fixed inset-0 z-40" onClick={close} />
+            <div
+              ref={menuRef}
+              className="table-column-dropdown"
+              style={{
+                position: 'fixed',
+                top: pos.top,
+                left: pos.left,
+                right: 'auto',
+              }}
+            >
+              {children(close)}
+            </div>
+          </>,
+          document.body,
+        )}
     </>
   );
 }

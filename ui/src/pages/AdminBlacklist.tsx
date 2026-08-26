@@ -44,7 +44,7 @@ export default function AdminBlacklist() {
     try {
       await axios.post('/api/admin/blacklist', {
         ip_address: ipInput.trim(),
-        reason: reasonInput.trim() || 'Manual ban'
+        reason: reasonInput.trim() || 'Manual ban',
       });
       setIpInput('');
       setReasonInput('');
@@ -56,9 +56,17 @@ export default function AdminBlacklist() {
   };
 
   const removeEntry = async (ipAddress: string) => {
-    if (!(await showConfirm('Unblock IP', `Are you sure you want to unblock ${ipAddress}?`))) return;
+    if (
+      !(await showConfirm(
+        'Unblock IP',
+        `Are you sure you want to unblock ${ipAddress}?`,
+      ))
+    )
+      return;
     try {
-      await axios.delete(`/api/admin/blacklist/${encodeURIComponent(ipAddress)}`);
+      await axios.delete(
+        `/api/admin/blacklist/${encodeURIComponent(ipAddress)}`,
+      );
       fetchEntries();
       showToast('IP unblocked successfully', 'success');
     } catch (err: any) {
@@ -66,11 +74,18 @@ export default function AdminBlacklist() {
     }
   };
 
-  const columns: ColumnDef<BlacklistEntry>[] = useMemo(() => [
-    { key: 'ip_address', label: t('tbl_ip_address', 'IP Address'), sortable: true },
-    { key: 'reason', label: t('tbl_reason', 'Reason'), sortable: true },
-    { key: 'created_at', label: t('tbl_time', 'Time'), sortable: true },
-  ], [t]);
+  const columns: ColumnDef<BlacklistEntry>[] = useMemo(
+    () => [
+      {
+        key: 'ip_address',
+        label: t('tbl_ip_address', 'IP Address'),
+        sortable: true,
+      },
+      { key: 'reason', label: t('tbl_reason', 'Reason'), sortable: true },
+      { key: 'created_at', label: t('tbl_time', 'Time'), sortable: true },
+    ],
+    [t],
+  );
 
   const {
     paginatedItems,
@@ -86,13 +101,13 @@ export default function AdminBlacklist() {
     toggleColumn,
     requestSort,
     getSortIndicator,
-    getAriaSort
+    getAriaSort,
   } = useDataTable<BlacklistEntry>(
     'admin_blacklist',
     entries,
     ['ip_address', 'reason'],
     columns,
-    10
+    10,
   );
 
   if (loading) {
@@ -117,19 +132,35 @@ export default function AdminBlacklist() {
             <table className="w-full">
               <thead>
                 <tr className="border-b text-left">
-                  <th className="th-col"><Skeleton width={100} /></th>
-                  <th className="th-col"><Skeleton width={200} /></th>
-                  <th className="th-col"><Skeleton width={120} /></th>
-                  <th className="th-col"><Skeleton width={60} /></th>
+                  <th className="th-col">
+                    <Skeleton width={100} />
+                  </th>
+                  <th className="th-col">
+                    <Skeleton width={200} />
+                  </th>
+                  <th className="th-col">
+                    <Skeleton width={120} />
+                  </th>
+                  <th className="th-col">
+                    <Skeleton width={60} />
+                  </th>
                 </tr>
               </thead>
               <tbody>
                 {[...Array(3)].map((_, i) => (
                   <tr key={i} className="border-b">
-                    <td className="td-cell"><Skeleton width="90%" height={16} /></td>
-                    <td className="td-cell"><Skeleton width="85%" height={16} /></td>
-                    <td className="td-cell"><Skeleton width="60%" height={16} /></td>
-                    <td className="td-cell"><Skeleton width="50%" height={16} /></td>
+                    <td className="td-cell">
+                      <Skeleton width="90%" height={16} />
+                    </td>
+                    <td className="td-cell">
+                      <Skeleton width="85%" height={16} />
+                    </td>
+                    <td className="td-cell">
+                      <Skeleton width="60%" height={16} />
+                    </td>
+                    <td className="td-cell">
+                      <Skeleton width="50%" height={16} />
+                    </td>
                   </tr>
                 ))}
               </tbody>
@@ -144,36 +175,54 @@ export default function AdminBlacklist() {
     <div>
       <div className="page-header">
         <div>
-          <h1 className="page-header__title">{t('ip_blacklist', 'IP Blacklist & WAF Bans')}</h1>
-          <p className="page-header__desc">{t('ip_blacklist_desc', 'Manage blocked IP addresses and security enforcement.')}</p>
+          <h1 className="page-header__title">
+            {t('ip_blacklist', 'IP Blacklist & WAF Bans')}
+          </h1>
+          <p className="page-header__desc">
+            {t(
+              'ip_blacklist_desc',
+              'Manage blocked IP addresses and security enforcement.',
+            )}
+          </p>
         </div>
       </div>
 
       <div className="card p-xl mb-xl">
-        <h4 className="text-md fw-bold mb-md">{t('block_new_ip', 'Block IP Address')}</h4>
+        <h4 className="text-md fw-bold mb-md">
+          {t('block_new_ip', 'Block IP Address')}
+        </h4>
         <form onSubmit={addEntry} className="flex gap-md items-end flex-wrap">
           <div className="form-group flex-1 min-w-[200px] m-0">
-            <label className="form-label mb-xs" htmlFor="ip-address">{t('ip_address', 'IP Address')}</label>
-            <input id="ip-address"
+            <label className="form-label mb-xs" htmlFor="ip-address">
+              {t('ip_address', 'IP Address')}
+            </label>
+            <input
+              id="ip-address"
               type="text"
               placeholder="e.g. 192.0.2.1"
               value={ipInput}
-              onChange={e => setIpInput(e.target.value)}
+              onChange={(e) => setIpInput(e.target.value)}
               className="input-field w-full"
               required
             />
           </div>
           <div className="form-group flex-2 min-w-[250px] m-0">
-            <label className="form-label mb-xs" htmlFor="reason">{t('reason', 'Reason')}</label>
-            <input id="reason"
+            <label className="form-label mb-xs" htmlFor="reason">
+              {t('reason', 'Reason')}
+            </label>
+            <input
+              id="reason"
               type="text"
               placeholder="e.g. Malicious payload scan"
               value={reasonInput}
-              onChange={e => setReasonInput(e.target.value)}
+              onChange={(e) => setReasonInput(e.target.value)}
               className="input-field w-full"
             />
           </div>
-          <button type="submit" className="btn btn-primary h-[45px] px-xl text-sm w-auto flex items-center justify-center gap-xs">
+          <button
+            type="submit"
+            className="btn btn-primary h-[45px] px-xl text-sm w-auto flex items-center justify-center gap-xs"
+          >
             🚫 {t('block_ip', 'Block IP')}
           </button>
         </form>
@@ -184,7 +233,10 @@ export default function AdminBlacklist() {
           <DataTableToolbar
             searchQuery={searchQuery}
             onSearchChange={setSearchQuery}
-            searchPlaceholder={t('search_blacklist_placeholder', 'Search blacklisted IPs...')}
+            searchPlaceholder={t(
+              'search_blacklist_placeholder',
+              'Search blacklisted IPs...',
+            )}
             pageSize={pageSize}
             onPageSizeChange={setPageSize}
             columns={columns}
@@ -197,18 +249,33 @@ export default function AdminBlacklist() {
             <thead>
               <tr className="border-b text-left">
                 {isColumnVisible('ip_address') && (
-                  <th className="th-col th-col--sortable" onClick={() => requestSort('ip_address')} aria-sort={getAriaSort('ip_address')}>
-                    {t('tbl_ip_address', 'IP Address')}{getSortIndicator('ip_address')}
+                  <th
+                    className="th-col th-col--sortable"
+                    onClick={() => requestSort('ip_address')}
+                    aria-sort={getAriaSort('ip_address')}
+                  >
+                    {t('tbl_ip_address', 'IP Address')}
+                    {getSortIndicator('ip_address')}
                   </th>
                 )}
                 {isColumnVisible('reason') && (
-                  <th className="th-col th-col--sortable" onClick={() => requestSort('reason')} aria-sort={getAriaSort('reason')}>
-                    {t('tbl_reason', 'Reason')}{getSortIndicator('reason')}
+                  <th
+                    className="th-col th-col--sortable"
+                    onClick={() => requestSort('reason')}
+                    aria-sort={getAriaSort('reason')}
+                  >
+                    {t('tbl_reason', 'Reason')}
+                    {getSortIndicator('reason')}
                   </th>
                 )}
                 {isColumnVisible('created_at') && (
-                  <th className="th-col th-col--sortable" onClick={() => requestSort('created_at')} aria-sort={getAriaSort('created_at')}>
-                    {t('tbl_time', 'Time')}{getSortIndicator('created_at')}
+                  <th
+                    className="th-col th-col--sortable"
+                    onClick={() => requestSort('created_at')}
+                    aria-sort={getAriaSort('created_at')}
+                  >
+                    {t('tbl_time', 'Time')}
+                    {getSortIndicator('created_at')}
                   </th>
                 )}
                 <th className="th-col text-right">{t('actions', 'Actions')}</th>
@@ -225,13 +292,17 @@ export default function AdminBlacklist() {
                 paginatedItems.map((entry: BlacklistEntry) => (
                   <tr key={entry.ip_address} className="border-b">
                     {isColumnVisible('ip_address') && (
-                      <td className="td-cell--mono fw-bold">{entry.ip_address}</td>
+                      <td className="td-cell--mono fw-bold">
+                        {entry.ip_address}
+                      </td>
                     )}
                     {isColumnVisible('reason') && (
                       <td className="td-cell">{entry.reason}</td>
                     )}
                     {isColumnVisible('created_at') && (
-                      <td className="td-cell whitespace-nowrap">{formatDate(entry.created_at)}</td>
+                      <td className="td-cell whitespace-nowrap">
+                        {formatDate(entry.created_at)}
+                      </td>
                     )}
                     <td className="td-cell text-right">
                       <button

@@ -32,18 +32,25 @@ function renderFeatureItem(feature: string) {
 // collapsed to the *bottom* of a long single-column stack (after Reservations,
 // Vanity Domains, Tunnels), so a fixed top bar is also the more consistent mobile
 // layout, not just a desktop decluttering.
-export default function WhatsNewHelpBar({ onInstallClick }: { onInstallClick: () => void }) {
+export default function WhatsNewHelpBar({
+  onInstallClick,
+}: {
+  onInstallClick: () => void;
+}) {
   const { t } = useI18n();
   const [releases, setReleases] = useState<ReleaseNote[]>([]);
   const [expanded, setExpanded] = useState(false);
   const [hasUnseen, setHasUnseen] = useState(false);
 
   useEffect(() => {
-    axios.get('/static/whats-new.json')
+    axios
+      .get('/static/whats-new.json')
       .then((res) => {
         const data: ReleaseNote[] = Array.isArray(res.data)
           ? res.data
-          : (res.data?.version && Array.isArray(res.data?.features) ? [res.data] : []);
+          : res.data?.version && Array.isArray(res.data?.features)
+            ? [res.data]
+            : [];
         setReleases(data);
 
         // Flag an unseen release with the badge, but leave the bar collapsed. It is
@@ -81,7 +88,9 @@ export default function WhatsNewHelpBar({ onInstallClick }: { onInstallClick: ()
       >
         <span className="flex items-center gap-sm">
           {t('whats_new_help', "What's New & Help")}
-          {hasUnseen && <span className="badge badge-primary">{t('new', 'New')}</span>}
+          {hasUnseen && (
+            <span className="badge badge-primary">{t('new', 'New')}</span>
+          )}
         </span>
         <span className="flex items-center gap-xs text-sm">
           {expanded ? t('hide', 'Hide') : t('show', 'Show')}
@@ -99,10 +108,15 @@ export default function WhatsNewHelpBar({ onInstallClick }: { onInstallClick: ()
         // breakpoint to get wrong.
         <div className="mt-lg flex flex-wrap gap-xl">
           <div className="flex-1 min-w-0 min-w-lg">
-            <h4 className="section-title text-sm mb-md">{t('whats_new', "What's New")}</h4>
+            <h4 className="section-title text-sm mb-md">
+              {t('whats_new', "What's New")}
+            </h4>
             <div className="max-h-96 overflow-y-auto pr-sm">
               {releases.map((release, i) => (
-                <div key={i} className={i === releases.length - 1 ? '' : 'mb-lg'}>
+                <div
+                  key={i}
+                  className={i === releases.length - 1 ? '' : 'mb-lg'}
+                >
                   <h4 className="m-0 mb-xs text-sm text-main">
                     {release.version}{' '}
                     {release.release_date && (
@@ -119,7 +133,9 @@ export default function WhatsNewHelpBar({ onInstallClick }: { onInstallClick: ()
                         </li>
                       ))
                     ) : (
-                      <li>{t('no_changes_documented', 'No changes documented.')}</li>
+                      <li>
+                        {t('no_changes_documented', 'No changes documented.')}
+                      </li>
                     )}
                   </ul>
                 </div>
@@ -128,17 +144,26 @@ export default function WhatsNewHelpBar({ onInstallClick }: { onInstallClick: ()
           </div>
 
           <div className="flex-1 min-w-0 min-w-lg">
-            <h4 className="section-title text-sm mb-md">{t('help_resources', 'Help & Resources')}</h4>
+            <h4 className="section-title text-sm mb-md">
+              {t('help_resources', 'Help & Resources')}
+            </h4>
             <div className="flex flex-col gap-md">
-              <button type="button" className="btn btn-outline justify-start text-left" onClick={onInstallClick}>
+              <button
+                type="button"
+                className="btn btn-outline justify-start text-left"
+                onClick={onInstallClick}
+              >
                 💻 {t('guide_title', 'Client Installation Guide')}
               </button>
               <button
                 type="button"
                 className="btn btn-outline justify-start text-left"
-                onClick={() => window.dispatchEvent(new CustomEvent('start-onboarding-tour'))}
+                onClick={() =>
+                  window.dispatchEvent(new CustomEvent('start-onboarding-tour'))
+                }
               >
-                🧭 {t('onboarding_guide_title', 'Run Dashboard Onboarding Tour')}
+                🧭{' '}
+                {t('onboarding_guide_title', 'Run Dashboard Onboarding Tour')}
               </button>
             </div>
           </div>

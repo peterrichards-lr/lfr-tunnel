@@ -138,15 +138,22 @@ echo "End-to-end cases (real Docker, real worktree):"
 # share a different root.
 WT_BASE="${LFT_HOOK_TEST_DIR:-$(dirname "$REPO_ROOT")}"
 
-# Creates a fresh worktree, verifies Docker can actually see it, and echoes its path.
+# Creates a fresh worktree and verifies Docker can actually see it. Sets NEW_WT rather than
+# echoing the path: a `wt=$(new_worktree ...)` command substitution runs in a SUBSHELL, so the
+# WORKTREES append made inside it is lost to the parent and the cleanup trap then has nothing to
+# remove. That leaked four worktrees per run before it was caught.
+NEW_WT=""
 new_worktree() {
     local wt="$WT_BASE/.lft-hook-test-$$-$1" mounted
+    NEW_WT=""
     git -C "$REPO_ROOT" worktree add --detach -q "$wt" HEAD >/dev/null 2>&1 || return 1
+    # Registered for cleanup before the reachability probe, so a worktree that Docker cannot see
+    # is still removed rather than left behind by the early return.
     WORKTREES+=("$wt")
     mounted=$(docker run --rm -v "$wt":/probe --entrypoint sh "$GITLEAKS_IMAGE" \
         -c 'ls -a /probe | wc -l' 2>/dev/null)
     [ "${mounted:-0}" -gt 2 ] || return 2
-    printf '%s' "$wt"
+    NEW_WT="$wt"
 }
 
 if ! command -v docker >/dev/null 2>&1 || ! docker info >/dev/null 2>&1; then
@@ -159,8 +166,8 @@ if ! command -v docker >/dev/null 2>&1 || ! docker info >/dev/null 2>&1; then
     fi
 else
     # Case: a staged secret in a worktree must be blocked. This is the regression.
-    if WT=$(new_worktree secret); then
-        ( cd "$WT" && printf 'const token = "%s";\n' "$(make_token)" > probe.js \
+    if new_worktree secret; then
+        ( cd "$NEW_WT" && printf 'const token = "%s";\n' "$(make_token)" > probe.js \
             && git add probe.js && "$SCANNER" >/dev/null 2>&1 )
         rc=$?
         if [ "$rc" -ne 0 ]; then
@@ -187,8 +194,8 @@ else
     #
     # So the secret case alone cannot tell "the mount is fixed" from "the mount is broken and
     # the guard compensated". Both cases are load-bearing; do not drop this one as a duplicate.
-    if WT=$(new_worktree clean); then
-        ( cd "$WT" && printf 'const greeting = "hello";\n' > probe.js \
+    if new_worktree clean; then
+        ( cd "$NEW_WT" && printf 'const greeting = "hello";\n' > probe.js \
             && git add probe.js && "$SCANNER" >/dev/null 2>&1 )
         rc=$?
         if [ "$rc" -eq 0 ]; then

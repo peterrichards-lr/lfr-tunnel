@@ -21,11 +21,32 @@ import (
 	"lfr-tunnel/pkg/config"
 
 	"github.com/gorilla/websocket"
+	"sync"
 )
+
+// edgeTunableMu guards the four tunables below (#1370).
+//
+// They are plain vars that only tests ever write -- but the write races a live read, and no
+// amount of teardown ordering in the test fixes it. handleEdgeControlWS reads them AFTER
+// upgrading the connection, and httptest.Server.Close() stops tracking a connection once it
+// is hijacked, so Close() does not wait for that handler and establishes no happens-before
+// with the test's deferred restore.
+//
+// Hoisting the read out of the spawned goroutine (the fix #1328 used in pkg/client) is not
+// sufficient here for that reason: it moved the read from one untracked goroutine to another.
+// Synchronising the access is what actually removes it.
+//
+// All four are guarded, not just the two the issue listed. edgeClientReadDeadline was first
+// left alone on the grounds that runEdgeControlChannel runs under Server.bgWG, so Stop() waits
+// for it -- but the read sits in its PongHandler CLOSURE, which gorilla/websocket invokes from
+// the inner reader goroutine, and that one is not under bgWG. "The enclosing function is
+// tracked" is not the same claim as "this read is tracked".
+var edgeTunableMu sync.RWMutex
 
 // edgeControlReadDeadline is how long the control plane waits for any frame
 // (data or Ping) from an edge before considering the connection dead. Overridable
 // in tests so the reconnect-loop fix can be verified without a real 60s wait.
+// Read via edgeTunables(); written only by tests, via setEdgeControlReadDeadline.
 var edgeControlReadDeadline = 60 * time.Second
 
 // edgeClientReadDeadline is the mirror-image of edgeControlReadDeadline for the
@@ -43,7 +64,24 @@ var edgeClientPingInterval = 30 * time.Second
 // connected edge, purely to time the Pong for RTT (see handleEdgeControlWS's PongHandler
 // and #976) -- independent of edgeClientPingInterval above, which is the edge's existing
 // keepalive in the other direction and was never used for timing. Overridable in tests.
+// Read via edgeTunables(); written only by tests, via setEdgeHealthPingInterval.
 var edgeHealthPingInterval = 20 * time.Second
+
+// edgeTunables reads the control-plane side's guarded values together. One call per connection,
+// at the top of the connection's lifetime, so the values stay fixed for that connection --
+// which is what the code already assumed and is why a single read site is enough.
+func edgeTunables() (readDeadline, healthPingInterval time.Duration) {
+	edgeTunableMu.RLock()
+	defer edgeTunableMu.RUnlock()
+	return edgeControlReadDeadline, edgeHealthPingInterval
+}
+
+// edgeClientTunables is edgeTunables for the edge's own outbound connection.
+func edgeClientTunables() (readDeadline, pingInterval time.Duration) {
+	edgeTunableMu.RLock()
+	defer edgeTunableMu.RUnlock()
+	return edgeClientReadDeadline, edgeClientPingInterval
+}
 
 // nodeSchedule is an edge's own stop/start window as told to it by central (#1276).
 // Enabled false means the node is not on a schedule and the times carry no meaning.
@@ -234,6 +272,13 @@ func (s *Server) handleEdgeControlWS(w http.ResponseWriter, r *http.Request) {
 	// writes and never reads.
 	pingStop := make(chan struct{})
 
+	// One synchronised read for this connection, passed into the goroutines below (#1370).
+	// See edgeTunableMu for why the lock is required and hoisting alone was not.
+	//
+	// Freezing the values per connection is not a behaviour change: nothing in production writes
+	// either var, so there is no live update to miss.
+	readDeadline, healthPingInterval := edgeTunables()
+
 	// Start read pump to keep alive and detect disconnects
 	go func() {
 		defer func() {
@@ -276,9 +321,9 @@ func (s *Server) handleEdgeControlWS(w http.ResponseWriter, r *http.Request) {
 
 		// Set read limit and pong handler
 		conn.SetReadLimit(512)
-		_ = conn.SetReadDeadline(time.Now().Add(edgeControlReadDeadline)) //nolint:errcheck
+		_ = conn.SetReadDeadline(time.Now().Add(readDeadline)) //nolint:errcheck
 		conn.SetPongHandler(func(string) error {
-			_ = conn.SetReadDeadline(time.Now().Add(edgeControlReadDeadline)) //nolint:errcheck
+			_ = conn.SetReadDeadline(time.Now().Add(readDeadline)) //nolint:errcheck
 			// Answers our own RTT-ping below, not the edge's keepalive Ping (that one
 			// gets a Pong reply from the PingHandler further down, never from us
 			// sending a Ping ourselves) -- see #976. A miss (no recorded send time,
@@ -306,7 +351,7 @@ func (s *Server) handleEdgeControlWS(w http.ResponseWriter, r *http.Request) {
 		// actually observes them. Replicate the default handler's pong reply here
 		// too, since registering a custom handler replaces it entirely.
 		conn.SetPingHandler(func(appData string) error {
-			_ = conn.SetReadDeadline(time.Now().Add(edgeControlReadDeadline)) //nolint:errcheck
+			_ = conn.SetReadDeadline(time.Now().Add(readDeadline)) //nolint:errcheck
 			err := conn.WriteControl(websocket.PongMessage, []byte(appData), time.Now().Add(5*time.Second))
 			if err == websocket.ErrCloseSent {
 				return nil
@@ -321,7 +366,7 @@ func (s *Server) handleEdgeControlWS(w http.ResponseWriter, r *http.Request) {
 			if err != nil {
 				break
 			}
-			_ = conn.SetReadDeadline(time.Now().Add(edgeControlReadDeadline)) //nolint:errcheck
+			_ = conn.SetReadDeadline(time.Now().Add(readDeadline)) //nolint:errcheck
 		}
 	}()
 
@@ -332,7 +377,7 @@ func (s *Server) handleEdgeControlWS(w http.ResponseWriter, r *http.Request) {
 	// WriteJSON/WriteMessage via safeConn elsewhere -- gorilla/websocket exempts
 	// WriteControl from its single-writer restriction.
 	go func() {
-		ticker := time.NewTicker(edgeHealthPingInterval)
+		ticker := time.NewTicker(healthPingInterval)
 		defer ticker.Stop()
 		for {
 			select {
@@ -855,13 +900,18 @@ func (s *Server) runEdgeControlChannel() {
 		// edges apparently receive enough incidental real ControlMessage traffic
 		// (broadcasts) to keep resetting the deadline before it fires; edge-apac's idle
 		// periods are long enough to expose the missing handler.
+		// One synchronised read per connection (#1370). The PongHandler below is invoked by
+		// gorilla/websocket from the reader goroutine, so it must close over a value rather
+		// than read the package var itself.
+		clientReadDeadline, clientPingInterval := edgeClientTunables()
+
 		conn.SetPongHandler(func(string) error {
-			_ = conn.SetReadDeadline(time.Now().Add(edgeClientReadDeadline)) //nolint:errcheck
+			_ = conn.SetReadDeadline(time.Now().Add(clientReadDeadline)) //nolint:errcheck
 			return nil
 		})
 
 		// Start ticker to send ping messages
-		ticker := time.NewTicker(edgeClientPingInterval)
+		ticker := time.NewTicker(clientPingInterval)
 		pingErrChan := make(chan error, 1)
 
 		// connDone bounds both per-connection goroutines below to the life of this
@@ -905,7 +955,7 @@ func (s *Server) runEdgeControlChannel() {
 		go func() {
 			for {
 				var msg ControlMessage
-				_ = conn.SetReadDeadline(time.Now().Add(edgeClientReadDeadline)) //nolint:errcheck
+				_ = conn.SetReadDeadline(time.Now().Add(clientReadDeadline)) //nolint:errcheck
 				err := conn.ReadJSON(&msg)
 				select {
 				case readCh <- controlRead{msg: msg, err: err}:
@@ -1043,5 +1093,46 @@ func (s *Server) runEdgeControlChannel() {
 		ticker.Stop()
 		_ = conn.Close() //nolint:errcheck
 		lostAt = time.Now()
+	}
+}
+
+// setEdgeControlReadDeadline sets the guarded tunable and returns the previous value, so a test
+// can restore it with `defer setEdgeControlReadDeadline(setEdgeControlReadDeadline(d))` and have
+// both the write and the restore hold the lock (#1370).
+func setEdgeControlReadDeadline(d time.Duration) time.Duration {
+	edgeTunableMu.Lock()
+	defer edgeTunableMu.Unlock()
+	prev := edgeControlReadDeadline
+	edgeControlReadDeadline = d
+	return prev
+}
+
+// setEdgeHealthPingInterval is setEdgeControlReadDeadline's counterpart for the RTT-ping
+// interval.
+func setEdgeHealthPingInterval(d time.Duration) time.Duration {
+	edgeTunableMu.Lock()
+	defer edgeTunableMu.Unlock()
+	prev := edgeHealthPingInterval
+	edgeHealthPingInterval = d
+	return prev
+}
+
+// setEdgeClientTunables sets the edge-side pair and returns a restore func, so a test can do
+// `defer setEdgeClientTunables(d, i)()` with both the override and the restore under the lock
+// (#1370). A pair rather than two setters because the two tests that touch these always set
+// both, and restoring only one of them is not a state worth making expressible.
+func setEdgeClientTunables(readDeadline, pingInterval time.Duration) func() {
+	edgeTunableMu.Lock()
+	prevDeadline := edgeClientReadDeadline
+	prevInterval := edgeClientPingInterval
+	edgeClientReadDeadline = readDeadline
+	edgeClientPingInterval = pingInterval
+	edgeTunableMu.Unlock()
+
+	return func() {
+		edgeTunableMu.Lock()
+		edgeClientReadDeadline = prevDeadline
+		edgeClientPingInterval = prevInterval
+		edgeTunableMu.Unlock()
 	}
 }

@@ -320,9 +320,11 @@ func TestServer_EdgeActions(t *testing.T) {
 // the connection alive purely via Ping frames for longer than that shortened deadline
 // would have survived under the old (pre-fix) behavior.
 func TestServer_EdgeControlWS_SurvivesBeyondOldOneShotDeadline(t *testing.T) {
-	original := edgeControlReadDeadline
-	edgeControlReadDeadline = 150 * time.Millisecond
-	defer func() { edgeControlReadDeadline = original }()
+	// Through the setter so the write is under edgeTunableMu (#1370). A direct assignment
+	// races handleEdgeControlWS's read: that read happens after the WS upgrade, and
+	// httptest.Server.Close() does not wait for a hijacked connection's handler, so no
+	// amount of teardown ordering here creates the missing happens-before.
+	defer setEdgeControlReadDeadline(setEdgeControlReadDeadline(150 * time.Millisecond))
 
 	cfgControl := config.DefaultServerConfig()
 	cfgControl.DBPath = filepath.Join(t.TempDir(), "control.db")
@@ -419,9 +421,8 @@ func TestServer_EdgeControlWS_SurvivesBeyondOldOneShotDeadline(t *testing.T) {
 // (runEdgeControlChannel) never overrides gorilla/websocket's default PingHandler, so it
 // answers automatically without any edge-side change.
 func TestServer_EdgeControlWS_LatencyMeasuredViaPing(t *testing.T) {
-	original := edgeHealthPingInterval
-	edgeHealthPingInterval = 50 * time.Millisecond
-	defer func() { edgeHealthPingInterval = original }()
+	// See the note in TestServer_EdgeControlWS_SurvivesBeyondOldOneShotDeadline (#1370).
+	defer setEdgeHealthPingInterval(setEdgeHealthPingInterval(50 * time.Millisecond))
 
 	cfgControl := config.DefaultServerConfig()
 	cfgControl.DBPath = filepath.Join(t.TempDir(), "control.db")
@@ -501,14 +502,10 @@ func TestServer_EdgeControlWS_LatencyMeasuredViaPing(t *testing.T) {
 // alive is the edge's own Ping/Pong keepalive -- exactly the idle scenario that
 // exposed the bug.
 func TestServer_EdgeControlChannel_SurvivesIdlePeriodViaPongHandler(t *testing.T) {
-	originalDeadline := edgeClientReadDeadline
-	originalPingInterval := edgeClientPingInterval
-	edgeClientReadDeadline = 300 * time.Millisecond
-	edgeClientPingInterval = 50 * time.Millisecond
-	defer func() {
-		edgeClientReadDeadline = originalDeadline
-		edgeClientPingInterval = originalPingInterval
-	}()
+	// Under edgeTunableMu (#1370). runEdgeControlChannel's PongHandler reads these from the
+	// reader goroutine gorilla/websocket drives, which Server.bgWG does not cover, so a direct
+	// assignment races it however the teardown is ordered.
+	defer setEdgeClientTunables(300*time.Millisecond, 50*time.Millisecond)()
 
 	cfgControl := config.DefaultServerConfig()
 	cfgControl.DBPath = filepath.Join(t.TempDir(), "control.db")

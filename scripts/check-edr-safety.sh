@@ -42,6 +42,7 @@ INCLUDES=(
     --include=*.md
     --include=*.py
     --include=*.cjs
+    --include=*.go
 )
 
 # Prose describing the rule is not a breach of it, and this repo documents the rule in a lot of
@@ -120,6 +121,19 @@ scan '(^|[^[:alnum:]_-])go test' \
 scan '(^|[^[:alnum:]_-])go run ' \
      'go run' \
      'Build with "go build -o <path>" and run the built binary. go run executes it from inside GOTMPDIR.'
+
+# The same two commands, but spawned FROM Go source. This needs its own pattern rather than
+# riding on the two above: Go never contains the literal "go run". It spells it as separate
+# string literals -- exec.Command("go", "run", ...) -- so widening the includes to *.go changes
+# nothing on its own. That was the actual gap in #1402: `pkg/ops/sign.go` shelled out to
+# `go run scripts/minisign_helper.go` on every `sign`, on the documented local path, and this
+# guard could not see it in either dimension.
+#
+# Matches the argument pair with optional whitespace, which covers exec.Command, exec.CommandContext
+# and this repo's RunCommand / RunCommandWithEnv / RunCommandCaptureOutput wrappers alike.
+scan '"go"[[:space:]]*,[[:space:]]*"(run|test)"' \
+     'go toolchain spawned from Go source' \
+     'Do the work in-process, or build to a path and exec that. A subprocess "go run" links and executes inside GOTMPDIR just as a shell one does.'
 
 if [ "$FAILED" -ne 0 ]; then
     echo

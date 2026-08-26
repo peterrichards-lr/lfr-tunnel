@@ -13,7 +13,7 @@ const I18nContext = createContext<I18nContextType>({
   language: 'en',
   setLanguage: () => {},
   t: (_key, fallback) => fallback,
-  availableLanguages: []
+  availableLanguages: [],
 });
 
 export const useI18n = () => useContext(I18nContext);
@@ -28,19 +28,22 @@ const DEFAULT_LANGUAGES = [
   { code: 'pt', label: 'Português' },
   { code: 'ro', label: 'Română' },
   { code: 'zh', label: '中文' },
-  { code: 'ar', label: 'العربية' }
+  { code: 'ar', label: 'العربية' },
 ];
 
 export const I18nProvider = ({ children }: { children: ReactNode }) => {
   const [language, setLanguageState] = useState<string>(() => {
-    return localStorage.getItem('lfr_lang') || (navigator.language || 'en').split('-')[0].toLowerCase();
+    return (
+      localStorage.getItem('lfr_lang') ||
+      (navigator.language || 'en').split('-')[0].toLowerCase()
+    );
   });
   const [dictionary, setDictionary] = useState<Record<string, string>>({});
 
   useEffect(() => {
     // Save to local storage for persistent preference across sessions/unauth views
     localStorage.setItem('lfr_lang', language);
-    
+
     // Set text direction for RTL languages
     if (language === 'ar') {
       document.documentElement.dir = 'rtl';
@@ -49,11 +52,12 @@ export const I18nProvider = ({ children }: { children: ReactNode }) => {
     }
 
     // Fetch translations
-    axios.get(`/api/i18n?lang=${language}`)
-      .then(res => {
+    axios
+      .get(`/api/i18n?lang=${language}`)
+      .then((res) => {
         if (res.data) setDictionary(res.data);
       })
-      .catch(err => {
+      .catch((err) => {
         console.error('Failed to fetch translations:', err);
       });
   }, [language]);
@@ -67,7 +71,14 @@ export const I18nProvider = ({ children }: { children: ReactNode }) => {
   };
 
   return (
-    <I18nContext.Provider value={{ language, setLanguage, t, availableLanguages: DEFAULT_LANGUAGES }}>
+    <I18nContext.Provider
+      value={{
+        language,
+        setLanguage,
+        t,
+        availableLanguages: DEFAULT_LANGUAGES,
+      }}
+    >
       {children}
     </I18nContext.Provider>
   );

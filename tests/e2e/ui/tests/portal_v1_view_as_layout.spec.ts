@@ -31,10 +31,14 @@ test.describe('Portal V1 View As bar placement', () => {
     const token = await getMagicLinkToken(ownerEmail);
     expect(token).toBeTruthy();
     await page.goto(`/admin?token=${token}`);
-    await expect(page.locator('h2:has-text("Dashboard Overview")')).toBeVisible();
+    await expect(
+      page.locator('h2:has-text("Dashboard Overview")'),
+    ).toBeVisible();
   });
 
-  test('the bar spans the layout and sits above the sidebar', async ({ page }) => {
+  test('the bar spans the layout and sits above the sidebar', async ({
+    page,
+  }) => {
     const bar = page.locator('#view-as-bar');
     await expect(bar).toBeVisible();
 
@@ -59,7 +63,9 @@ test.describe('Portal V1 View As bar placement', () => {
     expect(barBox.y).toBeLessThan(80);
   });
 
-  test('previewing as a plain user hides the admin-only System Settings', async ({ page }) => {
+  test('previewing as a plain user hides the admin-only System Settings', async ({
+    page,
+  }) => {
     // System Settings sits in the sidebar footer rather than in #admin-sidebar-group, so it
     // was never hidden for anybody -- an owner previewing as a user still saw it, and so did
     // every real non-admin (#1289).
@@ -69,7 +75,9 @@ test.describe('Portal V1 View As bar placement', () => {
 
     // setViewAs reloads the page rather than patching the DOM, since every panel is
     // role-dependent.
-    await expect(page.locator('#view-as-bar')).toContainText('Previewing as user');
+    await expect(page.locator('#view-as-bar')).toContainText(
+      'Previewing as user',
+    );
     await expect(page.locator('#nav-system')).toBeHidden();
     await expect(page.locator('#admin-sidebar-group')).toBeHidden();
 
@@ -82,7 +90,9 @@ test.describe('Portal V1 View As bar placement', () => {
     await expect(page.locator('#nav-system')).toBeVisible();
   });
 
-  test('the dashboard still fills the viewport below the bar', async ({ page }) => {
+  test('the dashboard still fills the viewport below the bar', async ({
+    page,
+  }) => {
     const viewport = page.viewportSize();
     expect(viewport).not.toBeNull();
     if (!viewport) return;
@@ -92,7 +102,9 @@ test.describe('Portal V1 View As bar placement', () => {
     const sidebarBox = await page.locator('nav.sidebar').boundingBox();
     expect(sidebarBox).not.toBeNull();
     if (!sidebarBox) return;
-    expect(sidebarBox.y + sidebarBox.height).toBeLessThanOrEqual(viewport.height + 1);
+    expect(sidebarBox.y + sidebarBox.height).toBeLessThanOrEqual(
+      viewport.height + 1,
+    );
 
     // The whole point of the column: no page-level vertical scrollbar appears just because a
     // banner is present -- the content column scrolls internally, as it did before.

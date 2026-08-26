@@ -201,6 +201,14 @@ jobs:
         # #1217 was a colour inherited by a theme it was never designed for.
         run: node scripts/check-theme-tokens.mjs
 
+      - name: Check Formatting (Prettier)
+        # Pinned, not `prettier@latest`. Prettier changes its output between releases, so
+        # an unpinned check turns unrelated PRs red the day upstream ships a new version --
+        # the same reasoning as the pinned gitleaks image in the pre-commit hook (#1343).
+        # Scope is controlled by .prettierignore: Markdown, HTML and YAML are held back on
+        # purpose, with the reasons written down there (#1403).
+        run: npx --yes prettier@3.9.6 --check .
+
       - name: Check React UI Syntax & Types
         run: |
           cd ui

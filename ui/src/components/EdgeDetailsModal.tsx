@@ -30,7 +30,16 @@ interface Schedule {
 // rather than picking one arbitrarily (see the backend fix in
 // server_edge.go's resolveIPv4AndIPv6).
 export default function EdgeDetailsModal({
-  nodeId, status, resolvedIPv4, resolvedIPv6, latencyMs, lastCheckAt, version, errorMessage, powerActionsEnabled, onClose,
+  nodeId,
+  status,
+  resolvedIPv4,
+  resolvedIPv6,
+  latencyMs,
+  lastCheckAt,
+  version,
+  errorMessage,
+  powerActionsEnabled,
+  onClose,
 }: EdgeDetailsModalProps) {
   const { t } = useI18n();
   const { formatDate } = useSettings();
@@ -42,7 +51,9 @@ export default function EdgeDetailsModal({
     let cancelled = false;
     (async () => {
       try {
-        const res = await axios.get(`/api/admin/edge/${encodeURIComponent(nodeId)}/schedule`);
+        const res = await axios.get(
+          `/api/admin/edge/${encodeURIComponent(nodeId)}/schedule`,
+        );
         if (!cancelled) setSchedule(res.data);
       } catch {
         // No schedule configured for this node, or the sidecar rejected it --
@@ -51,7 +62,9 @@ export default function EdgeDetailsModal({
         if (!cancelled) setScheduleLoading(false);
       }
     })();
-    return () => { cancelled = true; };
+    return () => {
+      cancelled = true;
+    };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [nodeId, powerActionsEnabled]);
 
@@ -66,14 +79,23 @@ export default function EdgeDetailsModal({
     <div className="modal-backdrop" onClick={onClose}>
       <div
         className="modal-card modal-card--md"
-        onClick={e => e.stopPropagation()}
+        onClick={(e) => e.stopPropagation()}
         role="dialog"
         aria-modal="true"
         aria-labelledby="edge-details-modal-title"
       >
         <div className="modal-header mb-md">
-          <h2 id="edge-details-modal-title" className="modal-title text-md">{nodeId}</h2>
-          <button type="button" onClick={onClose} className="modal-close" aria-label={t('close', 'Close')}>×</button>
+          <h2 id="edge-details-modal-title" className="modal-title text-md">
+            {nodeId}
+          </h2>
+          <button
+            type="button"
+            onClick={onClose}
+            className="modal-close"
+            aria-label={t('close', 'Close')}
+          >
+            ×
+          </button>
         </div>
 
         {row(t('status', 'Status'), status || '—')}
@@ -81,7 +103,12 @@ export default function EdgeDetailsModal({
         {row('IPv6', resolvedIPv6 || '—')}
         {row(t('latency', 'Latency'), latencyMs ? `${latencyMs}ms` : '—')}
         {row(t('version', 'Version'), version || '—')}
-        {row(t('last_check', 'Last Check'), lastCheckAt ? formatDate(new Date(lastCheckAt * 1000).toISOString()) : '—')}
+        {row(
+          t('last_check', 'Last Check'),
+          lastCheckAt
+            ? formatDate(new Date(lastCheckAt * 1000).toISOString())
+            : '—',
+        )}
 
         {powerActionsEnabled && (
           <>
@@ -92,12 +119,24 @@ export default function EdgeDetailsModal({
               row(t('loading', 'Loading...'), '')
             ) : schedule?.enabled ? (
               <>
-                {row(t('edge_schedule_stop_time', 'Stop time (local)'), schedule.stop_time || '—')}
-                {row(t('edge_schedule_start_time', 'Start time (local)'), schedule.start_time || '—')}
-                {row(t('edge_schedule_timezone', 'Timezone'), schedule.timezone || '—')}
+                {row(
+                  t('edge_schedule_stop_time', 'Stop time (local)'),
+                  schedule.stop_time || '—',
+                )}
+                {row(
+                  t('edge_schedule_start_time', 'Start time (local)'),
+                  schedule.start_time || '—',
+                )}
+                {row(
+                  t('edge_schedule_timezone', 'Timezone'),
+                  schedule.timezone || '—',
+                )}
               </>
             ) : (
-              row(t('edge_schedule_status', 'Status'), t('edge_schedule_disabled', 'Disabled / not configured'))
+              row(
+                t('edge_schedule_status', 'Status'),
+                t('edge_schedule_disabled', 'Disabled / not configured'),
+              )
             )}
           </>
         )}
@@ -109,7 +148,9 @@ export default function EdgeDetailsModal({
         )}
 
         <div className="flex justify-end mt-lg">
-          <button type="button" className="btn btn-secondary" onClick={onClose}>{t('close', 'Close')}</button>
+          <button type="button" className="btn btn-secondary" onClick={onClose}>
+            {t('close', 'Close')}
+          </button>
         </div>
       </div>
     </div>

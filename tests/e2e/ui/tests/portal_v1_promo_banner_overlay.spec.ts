@@ -1,5 +1,5 @@
-import { test, expect } from "./utils/fixtures";
-import { getMagicLinkToken, clearMailpit } from "./utils/mailpit";
+import { test, expect } from './utils/fixtures';
+import { getMagicLinkToken, clearMailpit } from './utils/mailpit';
 
 /**
  * Portal V1 promo banner must not overlay the header controls (#1200).
@@ -15,17 +15,17 @@ import { getMagicLinkToken, clearMailpit } from "./utils/mailpit";
  * bug -- that is why the suite stayed green while the portal was broken for every
  * first-time user. Keep the banner shown here, or this file stops testing anything.
  */
-test.describe("Portal V1 promo banner does not overlay header controls", () => {
-  const adminEmail = "admin@lfr-demo.local"; // From tests/e2e/server-config.yaml
+test.describe('Portal V1 promo banner does not overlay header controls', () => {
+  const adminEmail = 'admin@lfr-demo.local'; // From tests/e2e/server-config.yaml
 
   test.beforeEach(async ({ page }) => {
     await clearMailpit();
 
-    await page.goto("/admin");
-    await page.click("#btn-show-email");
-    await page.fill("#email-input", adminEmail);
+    await page.goto('/admin');
+    await page.click('#btn-show-email');
+    await page.fill('#email-input', adminEmail);
     await page.click('button[type="submit"]');
-    await expect(page.locator("text=Magic Link Sent")).toBeVisible();
+    await expect(page.locator('text=Magic Link Sent')).toBeVisible();
 
     const token = await getMagicLinkToken(adminEmail);
     expect(token).toBeTruthy();
@@ -35,30 +35,30 @@ test.describe("Portal V1 promo banner does not overlay header controls", () => {
     ).toBeVisible();
 
     // The whole point of this file: prove the banner is actually on screen.
-    await expect(page.locator("#v2-promo-banner")).toBeVisible();
+    await expect(page.locator('#v2-promo-banner')).toBeVisible();
   });
 
-  test("the banner sits in flow rather than floating over the page", async ({
+  test('the banner sits in flow rather than floating over the page', async ({
     page,
   }) => {
     // A fixed banner is what made this overlap possible at all. Asserting the computed
     // position keeps a future "just bump the z-index" fix from silently reintroducing it.
     const position = await page
-      .locator("#v2-promo-banner")
+      .locator('#v2-promo-banner')
       .evaluate((el) => getComputedStyle(el).position);
-    expect(position).not.toBe("fixed");
+    expect(position).not.toBe('fixed');
 
     // In flow means it occupies vertical space, so the controls start below it.
-    const banner = await page.locator("#v2-promo-banner").boundingBox();
-    const toggle = await page.locator("#sidebar-toggle-btn").boundingBox();
+    const banner = await page.locator('#v2-promo-banner').boundingBox();
+    const toggle = await page.locator('#sidebar-toggle-btn').boundingBox();
     expect(banner).not.toBeNull();
     expect(toggle).not.toBeNull();
     expect(toggle!.y).toBeGreaterThanOrEqual(banner!.y + banner!.height);
   });
 
   for (const [label, width, height] of [
-    ["mobile", 400, 800],
-    ["desktop", 1280, 900],
+    ['mobile', 400, 800],
+    ['desktop', 1280, 900],
   ] as const) {
     test(`header controls are hit-testable at ${label} width`, async ({
       page,
@@ -72,8 +72,8 @@ test.describe("Portal V1 promo banner does not overlay header controls", () => {
       // overlap. Ordinary users have no such bar, .main-content starts at y=0, and the
       // toggle sits squarely behind the banner. Reproduce the ordinary-user geometry.
       await page.evaluate(() => {
-        const bar = document.getElementById("view-as-bar");
-        if (bar) bar.style.display = "none";
+        const bar = document.getElementById('view-as-bar');
+        if (bar) bar.style.display = 'none';
       });
 
       // The sidebar slides off-canvas over 0.3s at <=1024px. Until that transition
@@ -81,60 +81,60 @@ test.describe("Portal V1 promo banner does not overlay header controls", () => {
       // sidebar as the occluder and the test fails for a reason that is not the bug.
       // The mobile rules end at visibility:hidden, which is what we wait for.
       if (width <= 1024) {
-        await expect(page.locator(".sidebar")).toBeHidden();
+        await expect(page.locator('.sidebar')).toBeHidden();
       }
 
       // elementFromPoint is the assertion that actually caught this. `toBeVisible()`
       // passed throughout the bug: the button was 32x32, display:flex, opacity:1 -- it
       // was simply painted over, which only hit-testing reveals.
-      for (const id of ["sidebar-toggle-btn", "header-language-container"]) {
+      for (const id of ['sidebar-toggle-btn', 'header-language-container']) {
         const onTop = await page.evaluate((elementId) => {
           const el = document.getElementById(elementId);
-          if (!el) return "missing";
+          if (!el) return 'missing';
           const b = el.getBoundingClientRect();
           const top = document.elementFromPoint(
             b.x + b.width / 2,
             b.y + b.height / 2,
           );
-          if (!top) return "nothing";
+          if (!top) return 'nothing';
           return el === top || el.contains(top)
-            ? "self"
+            ? 'self'
             : `blocked by ${top.id || top.tagName}`;
         }, id);
-        expect(onTop, `${id} at ${label} width`).toBe("self");
+        expect(onTop, `${id} at ${label} width`).toBe('self');
       }
     });
   }
 
-  test("the sidebar toggle actually opens the nav on a phone viewport", async ({
+  test('the sidebar toggle actually opens the nav on a phone viewport', async ({
     page,
   }) => {
     await page.setViewportSize({ width: 400, height: 800 });
 
-    const sidebar = page.locator(".sidebar");
+    const sidebar = page.locator('.sidebar');
     await expect(sidebar).not.toHaveClass(/active/);
 
     // Playwright's actionability check fails a click that another element intercepts,
     // so this alone would have failed before the fix.
-    await page.click("#sidebar-toggle-btn");
+    await page.click('#sidebar-toggle-btn');
 
     await expect(sidebar).toHaveClass(/active/);
-    await expect(page.locator("#nav-tokens")).toBeVisible();
+    await expect(page.locator('#nav-tokens')).toBeVisible();
   });
 
-  test("dismissing the banner reclaims its space and keeps the toggle usable", async ({
+  test('dismissing the banner reclaims its space and keeps the toggle usable', async ({
     page,
   }) => {
     await page.setViewportSize({ width: 400, height: 800 });
 
-    const before = await page.locator("#sidebar-toggle-btn").boundingBox();
-    await page.click("#v2-promo-banner button");
-    await expect(page.locator("#v2-promo-banner")).toBeHidden();
+    const before = await page.locator('#sidebar-toggle-btn').boundingBox();
+    await page.click('#v2-promo-banner button');
+    await expect(page.locator('#v2-promo-banner')).toBeHidden();
 
-    const after = await page.locator("#sidebar-toggle-btn").boundingBox();
+    const after = await page.locator('#sidebar-toggle-btn').boundingBox();
     expect(after!.y).toBeLessThan(before!.y);
 
-    await page.click("#sidebar-toggle-btn");
-    await expect(page.locator(".sidebar")).toHaveClass(/active/);
+    await page.click('#sidebar-toggle-btn');
+    await expect(page.locator('.sidebar')).toHaveClass(/active/);
   });
 });

@@ -28,7 +28,7 @@ ChartJS.register(
   Title,
   Tooltip,
   Legend,
-  Filler
+  Filler,
 );
 
 const formatBytes = (bytes: number, decimals = 2) => {
@@ -43,13 +43,18 @@ const formatBytes = (bytes: number, decimals = 2) => {
 export default function AdminAnalytics() {
   const { t } = useI18n();
   const { theme } = useSettings();
-  
+
   const [data, setData] = useState<any>(null);
   const [clientStats, setClientStats] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [timeRange, setTimeRange] = useState('30'); // Default to 30 days
 
-  const { items: sortedClientStats, requestSort, getSortIndicator, getAriaSort } = useTableSort(clientStats, ['version', 'os', 'count']);
+  const {
+    items: sortedClientStats,
+    requestSort,
+    getSortIndicator,
+    getAriaSort,
+  } = useTableSort(clientStats, ['version', 'os', 'count']);
 
   useEffect(() => {
     const fetchData = async () => {
@@ -58,7 +63,7 @@ export default function AdminAnalytics() {
         const query = timeRange !== '0' ? `?days=${timeRange}` : '';
         const [analyticsRes, clientsRes] = await Promise.all([
           axios.get(`/api/analytics${query}`),
-          axios.get('/api/admin/analytics/clients').catch(() => ({ data: [] }))
+          axios.get('/api/admin/analytics/clients').catch(() => ({ data: [] })),
         ]);
         setData(analyticsRes.data);
         setClientStats(clientsRes.data || []);
@@ -79,46 +84,56 @@ export default function AdminAnalytics() {
     responsive: true,
     maintainAspectRatio: false,
     plugins: {
-      legend: { 
-        position: 'top' as const, 
-        labels: { color: textColor, font: { family: 'Inter, system-ui, sans-serif' } } 
+      legend: {
+        position: 'top' as const,
+        labels: {
+          color: textColor,
+          font: { family: 'Inter, system-ui, sans-serif' },
+        },
       },
       tooltip: {
         callbacks: {
-          label: (context: any) => `${context.dataset.label}: ${formatBytes(context.raw)}`
-        }
-      }
+          label: (context: any) =>
+            `${context.dataset.label}: ${formatBytes(context.raw)}`,
+        },
+      },
     },
     scales: {
-      x: { 
-        grid: { color: gridColor }, 
-        ticks: { color: textColor, font: { family: 'Inter, system-ui, sans-serif' } } 
-      },
-      y: { 
-        grid: { color: gridColor }, 
-        ticks: { 
-          color: textColor, 
+      x: {
+        grid: { color: gridColor },
+        ticks: {
+          color: textColor,
           font: { family: 'Inter, system-ui, sans-serif' },
-          callback: (value: any) => formatBytes(value) 
-        } 
-      }
-    }
+        },
+      },
+      y: {
+        grid: { color: gridColor },
+        ticks: {
+          color: textColor,
+          font: { family: 'Inter, system-ui, sans-serif' },
+          callback: (value: any) => formatBytes(value),
+        },
+      },
+    },
   });
 
   const doughnutOptions = {
     responsive: true,
     maintainAspectRatio: false,
     plugins: {
-      legend: { 
-        position: 'right' as const, 
-        labels: { color: textColor, font: { family: 'Inter, system-ui, sans-serif' } } 
+      legend: {
+        position: 'right' as const,
+        labels: {
+          color: textColor,
+          font: { family: 'Inter, system-ui, sans-serif' },
+        },
       },
       tooltip: {
         callbacks: {
-          label: (context: any) => formatBytes(context.raw)
-        }
-      }
-    }
+          label: (context: any) => formatBytes(context.raw),
+        },
+      },
+    },
   };
 
   const handlePrint = () => {
@@ -144,19 +159,25 @@ export default function AdminAnalytics() {
   return (
     <div className="analytics-page">
       <div className="page-header no-print">
-        <h1 className="page-header__title">{t('system_analytics', 'System Analytics')}</h1>
+        <h1 className="page-header__title">
+          {t('system_analytics', 'System Analytics')}
+        </h1>
         <div className="flex gap-md">
-          <select 
+          <select
             className="input-field w-auto px-md"
-            value={timeRange} 
+            value={timeRange}
             onChange={(e) => setTimeRange(e.target.value)}
-           aria-label={t('time_range', 'Time range')}>
+            aria-label={t('time_range', 'Time range')}
+          >
             <option value="7">Last 7 Days</option>
             <option value="14">Last 14 Days</option>
             <option value="30">Last 30 Days</option>
             <option value="0">All Time</option>
           </select>
-          <button className="btn btn-secondary w-auto inline-flex items-center gap-sm" onClick={handlePrint}>
+          <button
+            className="btn btn-secondary w-auto inline-flex items-center gap-sm"
+            onClick={handlePrint}
+          >
             📄 {t('export_pdf', 'Export PDF')}
           </button>
         </div>
@@ -164,22 +185,41 @@ export default function AdminAnalytics() {
 
       {data.personal && (
         <div className="print-section">
-          <h3 className="text-lg fw-bold mb-lg">{t('personal_usage', 'Personal Usage')}</h3>
+          <h3 className="text-lg fw-bold mb-lg">
+            {t('personal_usage', 'Personal Usage')}
+          </h3>
           <div className="auto-grid-lg mb-2xl">
-            
             {data.personal.daily && data.personal.daily.length > 0 && (
               <div className="card p-xl">
-                <h4 className="text-muted text-base mb-lg">{t('bandwidth_over_time', 'Bandwidth Over Time')}</h4>
+                <h4 className="text-muted text-base mb-lg">
+                  {t('bandwidth_over_time', 'Bandwidth Over Time')}
+                </h4>
                 <div className="chart-container">
-                  <Line 
+                  <Line
                     data={{
                       labels: data.personal.daily.map((d: any) => d.date),
                       datasets: [
-                        { label: 'Data In', data: data.personal.daily.map((d: any) => d.bytes_in), borderColor: '#3b82f6', backgroundColor: '#3b82f620', fill: true, tension: 0.4 },
-                        { label: 'Data Out', data: data.personal.daily.map((d: any) => d.bytes_out), borderColor: '#10b981', backgroundColor: '#10b98120', fill: true, tension: 0.4 }
-                      ]
-                    }} 
-                    options={chartOptions()} 
+                        {
+                          label: 'Data In',
+                          data: data.personal.daily.map((d: any) => d.bytes_in),
+                          borderColor: '#3b82f6',
+                          backgroundColor: '#3b82f620',
+                          fill: true,
+                          tension: 0.4,
+                        },
+                        {
+                          label: 'Data Out',
+                          data: data.personal.daily.map(
+                            (d: any) => d.bytes_out,
+                          ),
+                          borderColor: '#10b981',
+                          backgroundColor: '#10b98120',
+                          fill: true,
+                          tension: 0.4,
+                        },
+                      ],
+                    }}
+                    options={chartOptions()}
                   />
                 </div>
               </div>
@@ -187,19 +227,34 @@ export default function AdminAnalytics() {
 
             {data.personal.tunnels && data.personal.tunnels.length > 0 && (
               <div className="card p-xl">
-                <h4 className="text-muted text-base mb-lg">{t('bandwidth_by_tunnel', 'Bandwidth by Tunnel')}</h4>
+                <h4 className="text-muted text-base mb-lg">
+                  {t('bandwidth_by_tunnel', 'Bandwidth by Tunnel')}
+                </h4>
                 <div className="chart-container">
-                  <Doughnut 
+                  <Doughnut
                     data={{
-                      labels: data.personal.tunnels.map((t: any) => t.full_host),
-                      datasets: [{
-                        label: 'Total Bandwidth',
-                        data: data.personal.tunnels.map((t: any) => t.bytes_in + t.bytes_out),
-                        backgroundColor: ['#3b82f6', '#10b981', '#f59e0b', '#ef4444', '#8b5cf6', '#ec4899'],
-                        borderWidth: 0
-                      }]
-                    }} 
-                    options={doughnutOptions} 
+                      labels: data.personal.tunnels.map(
+                        (t: any) => t.full_host,
+                      ),
+                      datasets: [
+                        {
+                          label: 'Total Bandwidth',
+                          data: data.personal.tunnels.map(
+                            (t: any) => t.bytes_in + t.bytes_out,
+                          ),
+                          backgroundColor: [
+                            '#3b82f6',
+                            '#10b981',
+                            '#f59e0b',
+                            '#ef4444',
+                            '#8b5cf6',
+                            '#ec4899',
+                          ],
+                          borderWidth: 0,
+                        },
+                      ],
+                    }}
+                    options={doughnutOptions}
                   />
                 </div>
               </div>
@@ -210,22 +265,39 @@ export default function AdminAnalytics() {
 
       {data.global && (
         <div className="print-section">
-          <h3 className="text-lg fw-bold mb-lg">{t('global_statistics', 'Global Statistics')}</h3>
+          <h3 className="text-lg fw-bold mb-lg">
+            {t('global_statistics', 'Global Statistics')}
+          </h3>
           <div className="auto-grid-lg mb-2xl">
-            
             {data.global.daily && data.global.daily.length > 0 && (
               <div className="card p-xl">
-                <h4 className="text-muted text-base mb-lg">{t('global_bandwidth', 'Global Bandwidth')}</h4>
+                <h4 className="text-muted text-base mb-lg">
+                  {t('global_bandwidth', 'Global Bandwidth')}
+                </h4>
                 <div className="chart-container">
-                  <Line 
+                  <Line
                     data={{
                       labels: data.global.daily.map((d: any) => d.date),
                       datasets: [
-                        { label: 'Total Data In', data: data.global.daily.map((d: any) => d.bytes_in), borderColor: '#6366f1', backgroundColor: '#6366f120', fill: true, tension: 0.4 },
-                        { label: 'Total Data Out', data: data.global.daily.map((d: any) => d.bytes_out), borderColor: '#f43f5e', backgroundColor: '#f43f5e20', fill: true, tension: 0.4 }
-                      ]
-                    }} 
-                    options={chartOptions()} 
+                        {
+                          label: 'Total Data In',
+                          data: data.global.daily.map((d: any) => d.bytes_in),
+                          borderColor: '#6366f1',
+                          backgroundColor: '#6366f120',
+                          fill: true,
+                          tension: 0.4,
+                        },
+                        {
+                          label: 'Total Data Out',
+                          data: data.global.daily.map((d: any) => d.bytes_out),
+                          borderColor: '#f43f5e',
+                          backgroundColor: '#f43f5e20',
+                          fill: true,
+                          tension: 0.4,
+                        },
+                      ],
+                    }}
+                    options={chartOptions()}
                   />
                 </div>
               </div>
@@ -233,19 +305,27 @@ export default function AdminAnalytics() {
 
             {data.global.top_users && data.global.top_users.length > 0 && (
               <div className="card p-xl">
-                <h4 className="text-muted text-base mb-lg">{t('top_users_bandwidth', 'Top Users by Bandwidth')}</h4>
+                <h4 className="text-muted text-base mb-lg">
+                  {t('top_users_bandwidth', 'Top Users by Bandwidth')}
+                </h4>
                 <div className="chart-container">
-                  <Bar 
+                  <Bar
                     data={{
-                      labels: data.global.top_users.map((u: any) => (u.email || "Anonymous").split('@')[0]),
-                      datasets: [{
-                        label: 'Total Bandwidth',
-                        data: data.global.top_users.map((u: any) => u.bytes_in + u.bytes_out),
-                        backgroundColor: '#8b5cf6',
-                        borderRadius: 4
-                      }]
-                    }} 
-                    options={chartOptions()} 
+                      labels: data.global.top_users.map(
+                        (u: any) => (u.email || 'Anonymous').split('@')[0],
+                      ),
+                      datasets: [
+                        {
+                          label: 'Total Bandwidth',
+                          data: data.global.top_users.map(
+                            (u: any) => u.bytes_in + u.bytes_out,
+                          ),
+                          backgroundColor: '#8b5cf6',
+                          borderRadius: 4,
+                        },
+                      ],
+                    }}
+                    options={chartOptions()}
                   />
                 </div>
               </div>
@@ -253,87 +333,157 @@ export default function AdminAnalytics() {
 
             {data.global.top_tunnels && data.global.top_tunnels.length > 0 && (
               <div className="card p-xl">
-                <h4 className="text-muted text-base mb-lg">{t('top_tunnels_bandwidth', 'Top Tunnels by Bandwidth')}</h4>
+                <h4 className="text-muted text-base mb-lg">
+                  {t('top_tunnels_bandwidth', 'Top Tunnels by Bandwidth')}
+                </h4>
                 <div className="chart-container">
-                  <Doughnut 
+                  <Doughnut
                     data={{
-                      labels: data.global.top_tunnels.map((tItem: any) => tItem.full_host),
-                      datasets: [{
-                        label: 'Total Bandwidth',
-                        data: data.global.top_tunnels.map((tItem: any) => tItem.bytes_in + tItem.bytes_out),
-                        backgroundColor: ['#3b82f6', '#10b981', '#f59e0b', '#ef4444', '#8b5cf6', '#ec4899', '#f43f5e', '#14b8a6', '#6366f1', '#a855f7'],
-                        borderWidth: 0
-                      }]
-                    }} 
-                    options={doughnutOptions} 
+                      labels: data.global.top_tunnels.map(
+                        (tItem: any) => tItem.full_host,
+                      ),
+                      datasets: [
+                        {
+                          label: 'Total Bandwidth',
+                          data: data.global.top_tunnels.map(
+                            (tItem: any) => tItem.bytes_in + tItem.bytes_out,
+                          ),
+                          backgroundColor: [
+                            '#3b82f6',
+                            '#10b981',
+                            '#f59e0b',
+                            '#ef4444',
+                            '#8b5cf6',
+                            '#ec4899',
+                            '#f43f5e',
+                            '#14b8a6',
+                            '#6366f1',
+                            '#a855f7',
+                          ],
+                          borderWidth: 0,
+                        },
+                      ],
+                    }}
+                    options={doughnutOptions}
                   />
                 </div>
               </div>
             )}
 
-            {data.global.portal_stats && data.global.portal_stats.length > 0 && (
-              <div className="card p-xl">
-                <h4 className="text-muted text-base mb-lg">Portal Usage</h4>
-                <div className="chart-container">
-                  <Doughnut 
-                    data={{
-                      labels: data.global.portal_stats.map((s: any) => s.version.toUpperCase()),
-                      datasets: [{
-                        data: data.global.portal_stats.map((s: any) => s.count),
-                        backgroundColor: ['#0b5fff', '#10b981', '#f59e0b', '#8b5cf6'],
-                        borderWidth: 0
-                      }]
-                    }} 
-                    options={{
-                      responsive: true,
-                      maintainAspectRatio: false,
-                      plugins: {
-                        legend: { position: 'bottom', labels: { color: 'var(--text-color)' } }
-                      },
-                      cutout: '70%'
-                    }} 
-                  />
+            {data.global.portal_stats &&
+              data.global.portal_stats.length > 0 && (
+                <div className="card p-xl">
+                  <h4 className="text-muted text-base mb-lg">Portal Usage</h4>
+                  <div className="chart-container">
+                    <Doughnut
+                      data={{
+                        labels: data.global.portal_stats.map((s: any) =>
+                          s.version.toUpperCase(),
+                        ),
+                        datasets: [
+                          {
+                            data: data.global.portal_stats.map(
+                              (s: any) => s.count,
+                            ),
+                            backgroundColor: [
+                              '#0b5fff',
+                              '#10b981',
+                              '#f59e0b',
+                              '#8b5cf6',
+                            ],
+                            borderWidth: 0,
+                          },
+                        ],
+                      }}
+                      options={{
+                        responsive: true,
+                        maintainAspectRatio: false,
+                        plugins: {
+                          legend: {
+                            position: 'bottom',
+                            labels: { color: 'var(--text-color)' },
+                          },
+                        },
+                        cutout: '70%',
+                      }}
+                    />
+                  </div>
                 </div>
-              </div>
-            )}
+              )}
 
-            {data.global.node_distribution && Object.keys(data.global.node_distribution).length > 0 && (
-              <div className="card p-xl">
-                <h4 className="text-muted text-base mb-lg">Tunnel Distribution (Active Nodes)</h4>
-                <div className="chart-container">
-                  <Pie 
-                    data={{
-                      labels: Object.keys(data.global.node_distribution).map(k => k.toUpperCase()),
-                      datasets: [{
-                        data: Object.values(data.global.node_distribution),
-                        backgroundColor: ['#3b82f6', '#10b981', '#f59e0b', '#ef4444', '#8b5cf6'],
-                        borderWidth: 0
-                      }]
-                    }} 
-                    options={{
-                      responsive: true,
-                      maintainAspectRatio: false,
-                      plugins: {
-                        legend: { position: 'bottom', labels: { color: 'var(--text-color)' } }
-                      }
-                    }} 
-                  />
+            {data.global.node_distribution &&
+              Object.keys(data.global.node_distribution).length > 0 && (
+                <div className="card p-xl">
+                  <h4 className="text-muted text-base mb-lg">
+                    Tunnel Distribution (Active Nodes)
+                  </h4>
+                  <div className="chart-container">
+                    <Pie
+                      data={{
+                        labels: Object.keys(data.global.node_distribution).map(
+                          (k) => k.toUpperCase(),
+                        ),
+                        datasets: [
+                          {
+                            data: Object.values(data.global.node_distribution),
+                            backgroundColor: [
+                              '#3b82f6',
+                              '#10b981',
+                              '#f59e0b',
+                              '#ef4444',
+                              '#8b5cf6',
+                            ],
+                            borderWidth: 0,
+                          },
+                        ],
+                      }}
+                      options={{
+                        responsive: true,
+                        maintainAspectRatio: false,
+                        plugins: {
+                          legend: {
+                            position: 'bottom',
+                            labels: { color: 'var(--text-color)' },
+                          },
+                        },
+                      }}
+                    />
+                  </div>
                 </div>
-              </div>
-            )}
+              )}
           </div>
 
           <div className="card overflow-hidden">
             <div className="p-md px-lg border-b">
-              <h4 className="m-0 text-base fw-semibold">{t('client_versions', 'Client Versions')}</h4>
+              <h4 className="m-0 text-base fw-semibold">
+                {t('client_versions', 'Client Versions')}
+              </h4>
             </div>
             <div className="table-responsive">
               <table className="w-full">
                 <thead>
                   <tr className="border-b text-left">
-                    <th className="th-col th-col--sortable" onClick={() => requestSort('version')} aria-sort={getAriaSort('version')}>Version{getSortIndicator('version')}</th>
-                    <th className="th-col th-col--sortable" onClick={() => requestSort('os')} aria-sort={getAriaSort('os')}>OS Platform{getSortIndicator('os')}</th>
-                    <th className="th-col th-col--sortable" onClick={() => requestSort('count')} aria-sort={getAriaSort('count')}>Active Tunnels{getSortIndicator('count')}</th>
+                    <th
+                      className="th-col th-col--sortable"
+                      onClick={() => requestSort('version')}
+                      aria-sort={getAriaSort('version')}
+                    >
+                      Version{getSortIndicator('version')}
+                    </th>
+                    <th
+                      className="th-col th-col--sortable"
+                      onClick={() => requestSort('os')}
+                      aria-sort={getAriaSort('os')}
+                    >
+                      OS Platform{getSortIndicator('os')}
+                    </th>
+                    <th
+                      className="th-col th-col--sortable"
+                      onClick={() => requestSort('count')}
+                      aria-sort={getAriaSort('count')}
+                    >
+                      Active Tunnels{getSortIndicator('count')}
+                    </th>
                   </tr>
                 </thead>
                 <tbody>
@@ -348,10 +498,10 @@ export default function AdminAnalytics() {
                       <tr key={idx} className="border-b">
                         <td className="td-cell">
                           <span className="badge admin">
-                            {stat.version || "Unknown"}
+                            {stat.version || 'Unknown'}
                           </span>
                         </td>
-                        <td className="td-cell">{stat.os || "Unknown"}</td>
+                        <td className="td-cell">{stat.os || 'Unknown'}</td>
                         <td className="td-cell fw-bold">{stat.count || 0}</td>
                       </tr>
                     ))

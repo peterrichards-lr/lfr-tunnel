@@ -44,7 +44,10 @@ function collectReferences() {
       if (!entry.name.endsWith('.css')) continue;
       const css = read(full);
       for (const m of css.matchAll(/var\(\s*(--[a-z0-9-]+)\s*(,)?/g)) {
-        const existing = refs.get(m[1]) || { hasFallback: false, files: new Set() };
+        const existing = refs.get(m[1]) || {
+          hasFallback: false,
+          files: new Set(),
+        };
         if (m[2]) existing.hasFallback = true;
         existing.files.add(basename(full));
         refs.set(m[1], existing);
@@ -93,7 +96,8 @@ function collectBaseColours() {
     const selectors = block[1].split(',').map((sel) => sel.trim());
     if (!selectors.includes(':root')) continue;
     for (const m of block[2].matchAll(/(--[a-z0-9-]+)\s*:\s*([^;]+);/g)) {
-      if (/^(#|rgba?\(|hsla?\()/.test(m[2].trim())) colours.set(m[1], m[2].trim());
+      if (/^(#|rgba?\(|hsla?\()/.test(m[2].trim()))
+        colours.set(m[1], m[2].trim());
     }
   }
   return colours;
@@ -107,7 +111,9 @@ const fallbackOnly = [];
 
 for (const [name, info] of [...refs].sort()) {
   if (base.has(name)) continue;
-  const missing = [...perTheme].filter(([, defs]) => !defs.has(name)).map(([f]) => f);
+  const missing = [...perTheme]
+    .filter(([, defs]) => !defs.has(name))
+    .map(([f]) => f);
   if (missing.length === perTheme.size) {
     undefinedTokens.push({ name, info, missing });
   } else if (missing.length > 0) {
@@ -118,7 +124,9 @@ for (const [name, info] of [...refs].sort()) {
 }
 
 if (fallbackOnly.length > 0) {
-  console.log('Referenced with a fallback (accepted, but check the name is right):');
+  console.log(
+    'Referenced with a fallback (accepted, but check the name is right):',
+  );
   for (const n of fallbackOnly) console.log(`  ${n}`);
   console.log('');
 }
@@ -126,14 +134,19 @@ if (fallbackOnly.length > 0) {
 if (undefinedTokens.length > 0) {
   console.error('❌ CSS custom properties that will not resolve:\n');
   for (const { name, info, missing } of undefinedTokens) {
-    const where = missing.length === perTheme.size ? 'no theme defines it' : `missing from ${missing.join(', ')}`;
+    const where =
+      missing.length === perTheme.size
+        ? 'no theme defines it'
+        : `missing from ${missing.join(', ')}`;
     const fb = info.hasFallback
       ? ' — it has a fallback, so it renders, but never follows the theme'
       : ' — the declaration is invalid and the browser drops it silently';
     console.error(`  ${name}: ${where}${fb}`);
     console.error(`      referenced in: ${[...info.files].join(', ')}`);
   }
-  console.error('\nDefine it in every theme, or in the base :root if it is theme-independent.');
+  console.error(
+    '\nDefine it in every theme, or in the base :root if it is theme-independent.',
+  );
   process.exit(1);
 }
 
@@ -147,17 +160,23 @@ const inherited = [...baseColours]
 if (inherited.length > 0) {
   console.error('❌ Colours inherited by every theme from the base :root:\n');
   for (const [name, value] of inherited) {
-    console.error(`  ${name}: ${value} — no theme overrides it, so every theme renders this exact colour.`);
+    console.error(
+      `  ${name}: ${value} — no theme overrides it, so every theme renders this exact colour.`,
+    );
   }
   console.error(
     '\nA colour picked for one theme is usually wrong against another background. This is\n' +
       'how #1217 happened: --success and --danger were tuned for dark, inherited by light,\n' +
       'and used as text at 2.4:1 contrast. Give each theme its own value. If the colour is\n' +
       'genuinely theme-independent, set it explicitly in each theme so that is a decision\n' +
-      'someone made rather than something nobody noticed.'
+      'someone made rather than something nobody noticed.',
   );
   process.exit(1);
 }
 
-console.log(`✅ All ${refs.size} referenced CSS custom properties resolve in every theme.`);
-console.log(`✅ No referenced colour is inherited un-overridden from the base :root.`);
+console.log(
+  `✅ All ${refs.size} referenced CSS custom properties resolve in every theme.`,
+);
+console.log(
+  `✅ No referenced colour is inherited un-overridden from the base :root.`,
+);

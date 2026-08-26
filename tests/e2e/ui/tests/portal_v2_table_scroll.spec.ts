@@ -1,5 +1,5 @@
-import { test, expect } from "./utils/fixtures";
-import { getMagicLinkToken, clearMailpit } from "./utils/mailpit";
+import { test, expect } from './utils/fixtures';
+import { getMagicLinkToken, clearMailpit } from './utils/mailpit';
 
 /**
  * Portal V2 wide tables must be reachable on a narrow viewport (#1206).
@@ -18,37 +18,37 @@ import { getMagicLinkToken, clearMailpit } from "./utils/mailpit";
  * the affordance saying so is present. Testing only the first would pass on the build that
  * was reported as broken.
  */
-test.describe("Portal V2 wide tables scroll on narrow viewports", () => {
-  const adminEmail = "admin@lfr-demo.local"; // From tests/e2e/server-config.yaml
+test.describe('Portal V2 wide tables scroll on narrow viewports', () => {
+  const adminEmail = 'admin@lfr-demo.local'; // From tests/e2e/server-config.yaml
 
   test.beforeEach(async ({ page }) => {
     await clearMailpit();
-    await page.goto("/portalv2/");
-    await page.fill("#email-input", adminEmail);
+    await page.goto('/portalv2/');
+    await page.fill('#email-input', adminEmail);
     await page.click('button[type="submit"]');
-    await expect(page.locator("text=Magic link sent")).toBeVisible();
+    await expect(page.locator('text=Magic link sent')).toBeVisible();
 
     const token = await getMagicLinkToken(adminEmail);
     expect(token).toBeTruthy();
     await page.goto(`/portalv2/login?token=${token}`);
-    await page.waitForURL("**/portalv2/dashboard");
+    await page.waitForURL('**/portalv2/dashboard');
 
-    await page.goto("/portalv2/admin/users");
-    await expect(page.locator("table").first()).toBeVisible();
+    await page.goto('/portalv2/admin/users');
+    await expect(page.locator('table').first()).toBeVisible();
   });
 
-  test("the Actions column can be reached by scrolling on a phone viewport", async ({
+  test('the Actions column can be reached by scrolling on a phone viewport', async ({
     page,
   }) => {
     await page.setViewportSize({ width: 400, height: 800 });
-    const wrapper = page.locator(".table-responsive").first();
+    const wrapper = page.locator('.table-responsive').first();
 
     const before = await wrapper.evaluate((el) => ({
       clientWidth: el.clientWidth,
       scrollWidth: el.scrollWidth,
       actionsWithinViewport:
         (
-          el.querySelector("thead th:last-child") as HTMLElement
+          el.querySelector('thead th:last-child') as HTMLElement
         ).getBoundingClientRect().right <= window.innerWidth,
     }));
 
@@ -65,7 +65,7 @@ test.describe("Portal V2 wide tables scroll on narrow viewports", () => {
       scrollLeft: el.scrollLeft,
       actionsWithinViewport:
         (
-          el.querySelector("thead th:last-child") as HTMLElement
+          el.querySelector('thead th:last-child') as HTMLElement
         ).getBoundingClientRect().right <= window.innerWidth,
     }));
 
@@ -73,32 +73,32 @@ test.describe("Portal V2 wide tables scroll on narrow viewports", () => {
     expect(after.actionsWithinViewport).toBe(true);
   });
 
-  test("the table advertises that it scrolls", async ({ page }) => {
+  test('the table advertises that it scrolls', async ({ page }) => {
     await page.setViewportSize({ width: 400, height: 800 });
 
     const style = await page
-      .locator(".table-responsive")
+      .locator('.table-responsive')
       .first()
       .evaluate((el) => {
         const cs = getComputedStyle(el);
         return { overflowX: cs.overflowX, scrollbarWidth: cs.scrollbarWidth };
       });
 
-    expect(style.overflowX).toBe("auto");
+    expect(style.overflowX).toBe('auto');
     // Without this the bar is an overlay that fades out, which is exactly why the columns
     // were reported as unreachable rather than merely off-screen.
-    expect(style.scrollbarWidth).toBe("thin");
+    expect(style.scrollbarWidth).toBe('thin');
   });
 
-  test("a full-width viewport needs no scrolling", async ({ page }) => {
+  test('a full-width viewport needs no scrolling', async ({ page }) => {
     await page.setViewportSize({ width: 1280, height: 900 });
-    const wrapper = page.locator(".table-responsive").first();
+    const wrapper = page.locator('.table-responsive').first();
 
     const state = await wrapper.evaluate((el) => ({
       overflows: el.scrollWidth > el.clientWidth,
       actionsWithinViewport:
         (
-          el.querySelector("thead th:last-child") as HTMLElement
+          el.querySelector('thead th:last-child') as HTMLElement
         ).getBoundingClientRect().right <= window.innerWidth,
     }));
 

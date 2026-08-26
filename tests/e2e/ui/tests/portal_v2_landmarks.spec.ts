@@ -28,11 +28,15 @@ test.describe('Portal V2 landmarks and headings', () => {
   });
 
   test('the page exposes navigation and main landmarks', async ({ page }) => {
-    await expect(page.getByRole('navigation', { name: 'Primary' })).toBeVisible();
+    await expect(
+      page.getByRole('navigation', { name: 'Primary' }),
+    ).toBeVisible();
     await expect(page.getByRole('main')).toBeVisible();
   });
 
-  test('a skip link is the first thing a keyboard user reaches', async ({ page }) => {
+  test('a skip link is the first thing a keyboard user reaches', async ({
+    page,
+  }) => {
     // Hidden off-screen rather than display:none -- a display:none element cannot be
     // focused, so it would never reach the keyboard users it exists for.
     await page.keyboard.press('Tab');
@@ -43,7 +47,11 @@ test.describe('Portal V2 landmarks and headings', () => {
   test('each page has a single top-level h1', async ({ page }) => {
     // Every admin page used to start at h3 with no h1 above it, so heading navigation
     // had nothing to anchor on.
-    for (const path of ['/portalv2/admin/users', '/portalv2/admin/blacklist', '/portalv2/admin/tokens']) {
+    for (const path of [
+      '/portalv2/admin/users',
+      '/portalv2/admin/blacklist',
+      '/portalv2/admin/tokens',
+    ]) {
       await page.goto(path);
       await expect(page.locator('h1')).toHaveCount(1);
       await expect(page.locator('h1')).toBeVisible();

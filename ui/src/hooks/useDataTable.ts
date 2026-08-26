@@ -20,7 +20,7 @@ export function useDataTable<T>(
   defaultHiddenColumns: string[] = [],
   statusKey?: keyof T & string,
   statusOptions?: StatusOption[],
-  defaultStatusFilter: string = 'all'
+  defaultStatusFilter: string = 'all',
 ) {
   // LocalStorage storage keys
   const storageKey = `lfr_table_${tableId}`;
@@ -37,16 +37,23 @@ export function useDataTable<T>(
 
   // State
   const [searchQuery, setSearchQuery] = useState('');
-  const [sortConfig, setSortConfig] = useState<{ key: keyof T; direction: 'asc' | 'desc' } | null>(
-    storedPrefs?.sortConfig || null
+  const [sortConfig, setSortConfig] = useState<{
+    key: keyof T;
+    direction: 'asc' | 'desc';
+  } | null>(storedPrefs?.sortConfig || null);
+  const [pageSize, setPageSizeState] = useState<number>(
+    storedPrefs?.pageSize || defaultPageSize,
   );
-  const [pageSize, setPageSizeState] = useState<number>(storedPrefs?.pageSize || defaultPageSize);
   const [currentPage, setCurrentPage] = useState<number>(1);
   const [hiddenColumns, setHiddenColumns] = useState<string[]>(
-    storedPrefs?.hiddenColumns !== undefined ? storedPrefs.hiddenColumns : defaultHiddenColumns
+    storedPrefs?.hiddenColumns !== undefined
+      ? storedPrefs.hiddenColumns
+      : defaultHiddenColumns,
   );
   const [statusFilter, setStatusFilter] = useState<string>(
-    storedPrefs?.statusFilter !== undefined ? storedPrefs.statusFilter : defaultStatusFilter
+    storedPrefs?.statusFilter !== undefined
+      ? storedPrefs.statusFilter
+      : defaultStatusFilter,
   );
 
   // Sync preferences to localStorage
@@ -58,8 +65,8 @@ export function useDataTable<T>(
           pageSize,
           sortConfig,
           hiddenColumns,
-          statusFilter
-        })
+          statusFilter,
+        }),
       );
     } catch (e) {
       console.warn('Failed to save table preferences to localStorage:', e);
@@ -72,7 +79,7 @@ export function useDataTable<T>(
 
     if (statusKey && statusFilter && statusFilter !== 'all') {
       const lowerFilter = statusFilter.toLowerCase();
-      result = result.filter(item => {
+      result = result.filter((item) => {
         const val = item[statusKey];
         if (val == null) return false;
         return String(val).toLowerCase() === lowerFilter;
@@ -82,12 +89,12 @@ export function useDataTable<T>(
     if (!searchQuery.trim()) return result;
     const lowerQuery = searchQuery.toLowerCase();
 
-    return result.filter(item =>
-      searchKeys.some(key => {
+    return result.filter((item) =>
+      searchKeys.some((key) => {
         const val = item[key];
         if (val == null) return false;
         return String(val).toLowerCase().includes(lowerQuery);
-      })
+      }),
     );
   }, [items, searchQuery, searchKeys, statusKey, statusFilter]);
 
@@ -133,7 +140,7 @@ export function useDataTable<T>(
 
   // Sort Handler
   const requestSort = (key: keyof T) => {
-    setSortConfig(current => {
+    setSortConfig((current) => {
       if (!current || current.key !== key) {
         return { key, direction: 'asc' };
       }
@@ -156,12 +163,15 @@ export function useDataTable<T>(
 
   // Column Visibility Handlers
   const toggleColumn = (columnKey: string) => {
-    setHiddenColumns(current =>
-      current.includes(columnKey) ? current.filter(k => k !== columnKey) : [...current, columnKey]
+    setHiddenColumns((current) =>
+      current.includes(columnKey)
+        ? current.filter((k) => k !== columnKey)
+        : [...current, columnKey],
     );
   };
 
-  const isColumnVisible = (columnKey: string) => !hiddenColumns.includes(columnKey);
+  const isColumnVisible = (columnKey: string) =>
+    !hiddenColumns.includes(columnKey);
 
   const setPageSize = (size: number) => {
     setPageSizeState(size);
@@ -199,6 +209,6 @@ export function useDataTable<T>(
     allColumns,
     hiddenColumns,
     toggleColumn,
-    isColumnVisible
+    isColumnVisible,
   };
 }

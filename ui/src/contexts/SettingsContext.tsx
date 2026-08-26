@@ -12,12 +12,18 @@ interface SettingsContextType {
   formatDate: (dateString: string | Date | undefined | null) => string;
 }
 
-const SettingsContext = createContext<SettingsContextType | undefined>(undefined);
+const SettingsContext = createContext<SettingsContextType | undefined>(
+  undefined,
+);
 
 export function SettingsProvider({ children }: { children: React.ReactNode }) {
-  const [themePreference, setThemePreference] = useState<ThemePreference>(() => {
-    return (localStorage.getItem('theme_preference') as ThemePreference) || 'dark';
-  });
+  const [themePreference, setThemePreference] = useState<ThemePreference>(
+    () => {
+      return (
+        (localStorage.getItem('theme_preference') as ThemePreference) || 'dark'
+      );
+    },
+  );
 
   const [theme, setTheme] = useState<ActiveTheme>('dark');
 
@@ -34,10 +40,13 @@ export function SettingsProvider({ children }: { children: React.ReactNode }) {
       if (themePreference === 'liferay') return 'liferay';
       if (themePreference === 'time') {
         const hour = new Date().getHours();
-        return (hour >= 6 && hour < 18) ? 'light' : 'dark';
+        return hour >= 6 && hour < 18 ? 'light' : 'dark';
       }
       // 'system'
-      if (window.matchMedia && window.matchMedia('(prefers-color-scheme: light)').matches) {
+      if (
+        window.matchMedia &&
+        window.matchMedia('(prefers-color-scheme: light)').matches
+      ) {
         return 'light';
       }
       return 'dark';
@@ -81,7 +90,7 @@ export function SettingsProvider({ children }: { children: React.ReactNode }) {
     localStorage.setItem('useUTC', String(useUTC));
   }, [useUTC]);
 
-  const toggleUTC = () => setUseUTC(prev => !prev);
+  const toggleUTC = () => setUseUTC((prev) => !prev);
 
   const formatDate = (dateString: string | Date | undefined | null): string => {
     if (!dateString) return '';
@@ -89,9 +98,13 @@ export function SettingsProvider({ children }: { children: React.ReactNode }) {
     if (isNaN(date.getTime())) return 'Never';
 
     const options: Intl.DateTimeFormatOptions = {
-      year: 'numeric', month: 'short', day: 'numeric',
-      hour: '2-digit', minute: '2-digit', second: '2-digit',
-      timeZoneName: 'short'
+      year: 'numeric',
+      month: 'short',
+      day: 'numeric',
+      hour: '2-digit',
+      minute: '2-digit',
+      second: '2-digit',
+      timeZoneName: 'short',
     };
 
     if (useUTC) {
@@ -104,7 +117,16 @@ export function SettingsProvider({ children }: { children: React.ReactNode }) {
   };
 
   return (
-    <SettingsContext.Provider value={{ themePreference, setThemePreference, theme, useUTC, toggleUTC, formatDate }}>
+    <SettingsContext.Provider
+      value={{
+        themePreference,
+        setThemePreference,
+        theme,
+        useUTC,
+        toggleUTC,
+        formatDate,
+      }}
+    >
       {children}
     </SettingsContext.Provider>
   );

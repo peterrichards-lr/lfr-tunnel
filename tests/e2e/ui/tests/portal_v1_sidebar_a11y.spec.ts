@@ -30,27 +30,40 @@ test.describe('Portal V1 sidebar accessibility', () => {
     const token = await getMagicLinkToken(adminEmail);
     expect(token).toBeTruthy();
     await page.goto(`/admin?token=${token}`);
-    await expect(page.locator('h2:has-text("Dashboard Overview")')).toBeVisible();
+    await expect(
+      page.locator('h2:has-text("Dashboard Overview")'),
+    ).toBeVisible();
   });
 
   test('nav items are links, not generic elements', async ({ page }) => {
     // The exact failure reported: these showed up as `generic "Reservations"` rather than
     // `link`, so assistive technology had nothing to offer the user.
-    for (const id of ['nav-overview', 'nav-tokens', 'nav-reservations', 'nav-tunnels']) {
+    for (const id of [
+      'nav-overview',
+      'nav-tokens',
+      'nav-reservations',
+      'nav-tunnels',
+    ]) {
       const item = page.locator(`#${id}`);
       await expect(item).toHaveRole('link');
       await expect(item).toHaveAttribute('href', /^#/);
     }
 
     // Logout acts rather than navigates, so it is deliberately a button.
-    await expect(page.locator('.nav-item:has-text("Logout")')).toHaveRole('button');
+    await expect(page.locator('.nav-item:has-text("Logout")')).toHaveRole(
+      'button',
+    );
   });
 
   test('the sidebar is a navigation landmark', async ({ page }) => {
-    await expect(page.getByRole('navigation', { name: 'Primary' })).toBeVisible();
+    await expect(
+      page.getByRole('navigation', { name: 'Primary' }),
+    ).toBeVisible();
   });
 
-  test('a nav item can be focused and activated by keyboard alone', async ({ page }) => {
+  test('a nav item can be focused and activated by keyboard alone', async ({
+    page,
+  }) => {
     const tokens = page.locator('#nav-tokens');
     await tokens.focus();
     await expect(tokens).toBeFocused();
@@ -59,11 +72,19 @@ test.describe('Portal V1 sidebar accessibility', () => {
     await expect(page.locator('#tab-tokens')).toBeVisible();
   });
 
-  test('the current section is announced, not only coloured', async ({ page }) => {
+  test('the current section is announced, not only coloured', async ({
+    page,
+  }) => {
     await page.click('#nav-tunnels');
-    await expect(page.locator('#nav-tunnels')).toHaveAttribute('aria-current', 'page');
+    await expect(page.locator('#nav-tunnels')).toHaveAttribute(
+      'aria-current',
+      'page',
+    );
     // And it moves, rather than accumulating on every visited item.
-    await expect(page.locator('#nav-overview')).not.toHaveAttribute('aria-current', 'page');
+    await expect(page.locator('#nav-overview')).not.toHaveAttribute(
+      'aria-current',
+      'page',
+    );
   });
 
   test('collapsible section headers report their state', async ({ page }) => {
@@ -86,20 +107,37 @@ test.describe('Portal V1 sidebar accessibility', () => {
     await page.click('#nav-account');
     await expect(page.locator('h2:has-text("Account Settings")')).toBeVisible();
 
-    for (const name of ['First Name', 'Last Name', 'Preferred Name', 'Theme Preference']) {
-      await expect(page.getByLabel(name, { exact: false }).first()).toBeVisible();
+    for (const name of [
+      'First Name',
+      'Last Name',
+      'Preferred Name',
+      'Theme Preference',
+    ]) {
+      await expect(
+        page.getByLabel(name, { exact: false }).first(),
+      ).toBeVisible();
     }
   });
 
-  test('fields without a visible label still carry an accessible name', async ({ page }) => {
+  test('fields without a visible label still carry an accessible name', async ({
+    page,
+  }) => {
     // These are named by aria-label rather than <label for>, because their caption is not
     // a <label> element. A placeholder is a hint, not a name, so it does not count.
     await page.click('#nav-tokens');
-    await expect(page.locator('#token-name')).toHaveAttribute('aria-label', /.+/);
-    await expect(page.locator('#token-expiry')).toHaveAttribute('aria-label', /.+/);
+    await expect(page.locator('#token-name')).toHaveAttribute(
+      'aria-label',
+      /.+/,
+    );
+    await expect(page.locator('#token-expiry')).toHaveAttribute(
+      'aria-label',
+      /.+/,
+    );
   });
 
-  test('a hidden sidebar does not keep its links focusable', async ({ page }) => {
+  test('a hidden sidebar does not keep its links focusable', async ({
+    page,
+  }) => {
     // The regression this change could have introduced: making 16 items focusable while
     // the sidebar can be visually hidden means a keyboard user tabs into something they
     // cannot see. Hidden here has to mean hidden from the tab order too.

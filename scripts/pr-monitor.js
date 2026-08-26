@@ -10,11 +10,11 @@ const POLL_INTERVAL_MS = 30000; // 30 seconds
 function log(msg, type = 'info') {
   const timestamp = new Date().toISOString();
   const colors = {
-    info: '\x1b[34m',    // Blue
+    info: '\x1b[34m', // Blue
     success: '\x1b[32m', // Green
-    warn: '\x1b[33m',    // Yellow
-    error: '\x1b[31m',   // Red
-    reset: '\x1b[0m'
+    warn: '\x1b[33m', // Yellow
+    error: '\x1b[31m', // Red
+    reset: '\x1b[0m',
   };
   console.log(`[${timestamp}] ${colors[type] || ''}${msg}${colors.reset}`);
 }
@@ -40,10 +40,13 @@ function saveState(state) {
 
 function getOpenPRs() {
   try {
-    const output = execSync('gh pr list --state open --json number,headRefName,baseRefName,updatedAt', {
-      encoding: 'utf8',
-      stdio: ['pipe', 'pipe', 'ignore'] // ignore stderr to prevent cluttering
-    });
+    const output = execSync(
+      'gh pr list --state open --json number,headRefName,baseRefName,updatedAt',
+      {
+        encoding: 'utf8',
+        stdio: ['pipe', 'pipe', 'ignore'], // ignore stderr to prevent cluttering
+      },
+    );
     return JSON.parse(output);
   } catch (e) {
     log(`GitHub CLI execution failed: ${e.message}`, 'error');
@@ -69,7 +72,10 @@ function poll() {
     const lastUpdated = state[prKey];
 
     if (!lastUpdated || lastUpdated !== pr.updatedAt) {
-      log(`[PR-ALERT] PR #${pr.number} (Branch: ${pr.headRefName}) has been updated/opened. Target base: ${pr.baseRefName}. Last Updated: ${pr.updatedAt}`, 'success');
+      log(
+        `[PR-ALERT] PR #${pr.number} (Branch: ${pr.headRefName}) has been updated/opened. Target base: ${pr.baseRefName}. Last Updated: ${pr.updatedAt}`,
+        'success',
+      );
       state[prKey] = pr.updatedAt;
       stateUpdated = true;
     }

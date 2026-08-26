@@ -276,30 +276,53 @@ jobs:
           docker run --rm -v "$(pwd)":/mnt -w /mnt koalaman/shellcheck:v0.11.0 \
             -S error -x "${FILES[@]}"
 
+  # NOT gated at the job level, deliberately -- see #1380. The `master` ruleset requires the
+  # matrix-expanded contexts `Test Suite (ubuntu-latest|macos-latest|windows-latest)`. A
+  # job-level `if:` that evaluates false does not expand the matrix, so GitHub reports one
+  # check named `Test Suite` (conclusion `skipped`) and those three contexts are never created
+  # at all. A required context that never reports counts as pending, not as satisfied, so the
+  # PR is blocked permanently with every check that ran showing green and nothing to re-run.
+  # #1363 introduced that gate here and made every docs-only PR unmergeable; #1379 was the
+  # first one to hit it.
+  #
+  # So the matrix always expands and every leg reports, and the *steps* carry the condition.
+  # A non-Go PR costs three runner starts that do nothing, which is the price of the required
+  # contexts naming specific OSes. #1365 tracks requiring an aggregator context instead, which
+  # would let this go back to a job-level gate and let the matrix be trimmed on PRs.
   test:
     name: Test Suite
     needs: changes
-    if: needs.changes.outputs.go == 'true'
     runs-on: ${{ matrix.os }}
     strategy:
       fail-fast: false
       matrix:
         os: [ubuntu-latest, macos-latest, windows-latest]
     steps:
+      # Not a silent green: say which it was, so a skip is distinguishable from a pass in the
+      # log rather than only by reading the workflow.
+      - name: Report why this leg is a no-op
+        if: needs.changes.outputs.go != 'true'
+        run: echo "No Go, Makefile, script, workflow, Dockerfile or tests/ changes -- nothing to test."
+        shell: bash
+
       - name: Checkout Code
+        if: needs.changes.outputs.go == 'true'
         uses: actions/checkout@v7
 
       - name: Set up Go
+        if: needs.changes.outputs.go == 'true'
         uses: actions/setup-go@v7
         with:
           go-version: '1.25'
           cache: true
 
       - name: Create dummy UI dist for Go embed
+        if: needs.changes.outputs.go == 'true'
         run: mkdir -p pkg/server/ui-dist && touch pkg/server/ui-dist/index.html
         shell: bash
 
       - name: Run Tests
+        if: needs.changes.outputs.go == 'true'
         run: make test
         shell: bash
         env:

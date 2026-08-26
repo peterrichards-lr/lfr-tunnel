@@ -57,12 +57,10 @@ up with no further wiring. `/reload-skills` re-scans without restarting a sessio
     `scripts/create-release-tag.sh` enforces both.
   - Every PR builds standalone binaries for Linux, macOS and Windows, downloadable from its
     Actions run — useful for reproducing a report without a local build.
-- **Upstream/JIRA bug tracking** — `.agents/skills/jira_tracker/SKILL.md` — **not in this
-  repo.** It is excluded by `.git/info/exclude` on the maintainer's machine because it carries
-  Liferay-internal tracker detail and this repo is public. Deliberately unlinked here: a link
-  that dangles on every clone but one teaches distrust of this whole file, which the
-  rules-integrity section below is about. If you are working somewhere it exists, it covers
-  recording an upstream platform bug or limitation rather than a bug in this repo (#1433).
+- **Upstream/JIRA bug tracking** — [`.agents/skills/jira-tracker/SKILL.md`](.agents/skills/jira-tracker/SKILL.md)
+  Read when you discover an upstream platform bug or limitation, not a bug in this repo. Covers
+  the `jira/todo` → `jira/open` → `jira/closed` lifecycle, the file naming, and the report
+  template.
 
 ## Groundedness — verify before asserting
 

@@ -45,7 +45,17 @@ func NewServer(backend Backend, token string) *Server {
 
 func (s *Server) ListenAndServe(addr string) error {
 	slog.Info("[edge-provisioner] listening", "addr", addr)
-	return http.ListenAndServe(addr, s.mux) //nolint:gosec // addr is validated loopback-only by config.LoadConfig's caller
+	// A configured server rather than http.ListenAndServe, which cannot set timeouts (#1372).
+	//
+	// This replaces a `//nolint:gosec` whose stated reason -- "addr is validated loopback-only"
+	// -- described the bind address rather than the finding, which was about missing timeouts.
+	// A suppression justified by the wrong fact is worse than none: it reads as considered.
+	srv := &http.Server{
+		Addr:              addr,
+		Handler:           s.mux,
+		ReadHeaderTimeout: 10 * time.Second,
+	}
+	return srv.ListenAndServe()
 }
 
 func (s *Server) authenticated(next http.HandlerFunc) http.HandlerFunc {

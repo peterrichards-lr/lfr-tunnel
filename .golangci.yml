@@ -445,8 +445,16 @@ linters:
         - G710 # unbounded read, on responses from the control plane this gateway configured
         # Genuine hardening, excluded here only so #1331 stayed config-only. Tracked in #1372;
         # remove each entry as that issue burns the group down to zero.
-        - G112 # missing ReadHeaderTimeout -- Slowloris exposure on an internet-facing gateway
-        - G114 # http.Serve without timeouts, same class
+        #
+        # G112 and G114 are gone: every http.Server now sets ReadHeaderTimeout, and the three
+        # bare http.Serve/ListenAndServe calls are configured servers. Both rules are ENFORCED
+        # from here on, so a new listener without a header timeout fails the build.
+        #
+        # The file-mode rules stay for now. They need case-by-case judgement rather than a
+        # blanket tightening -- some of these paths are deliberately world-readable (published
+        # client binaries, checksums, the maintenance page nginx serves) and some are certainly
+        # not (certificate directories, database backups). Tightening the wrong one breaks a
+        # deploy silently, so they are being done as their own change.
         - G301 # directory permissions wider than 0750
         - G302 # file permissions wider than 0600
         - G306 # WriteFile permissions wider than 0600

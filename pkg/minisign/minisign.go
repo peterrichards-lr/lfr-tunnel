@@ -75,7 +75,10 @@ func SignFile(secretKey, password, inPath, outPath string) error {
 		return fmt.Errorf("signing %s: %w", inPath, err)
 	}
 
-	if err := os.WriteFile(outPath, sig.Encode(), 0o644); err != nil {
+	// 0644 deliberately (#1408): a detached signature is published alongside what it signs
+	// and is verified with the PUBLIC key. Nothing here is secret -- the secret key arrives
+	// by environment and is wiped, never written.
+	if err := os.WriteFile(outPath, sig.Encode(), 0o644); err != nil { //nolint:gosec
 		return fmt.Errorf("writing %s: %w", outPath, err)
 	}
 	return nil

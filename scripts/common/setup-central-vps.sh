@@ -58,6 +58,10 @@ while getopts "s:d:f:i:u:e:p:a:A:" opt; do
     f) CONFIG_FILE="$OPTARG" ;;
     i)
       KEY_PATH="$OPTARG"
+      # Deliberate literal tilde (#1366): this matches a user-supplied path that BEGINS with
+      # "~/" so the next line can expand it against $HOME. Using $HOME in the pattern would
+      # match the already-expanded form instead, which is not what arrives here.
+      # shellcheck disable=SC2088
       if [[ "$KEY_PATH" == "~/"* ]]; then
         KEY_PATH="${HOME}/${KEY_PATH#~/}"
       elif [[ "$KEY_PATH" == "~" ]]; then
@@ -175,6 +179,10 @@ scp $SSH_KEY_ARG scripts/common/gateway-watchdog.timer $SSH_USER@$VPS_IP:/home/$
 
 # 8. Remotely execute setup and service configuration
 echo "=> Registering services and securing files on VPS..."
+# Deliberate mixed heredoc (#1366): local values such as $SSH_USER are interpolated
+# here on purpose, and every remote-side variable is escaped as \$var so it expands on
+# the server. Quoting the delimiter would stop the local half the script depends on.
+# shellcheck disable=SC2087
 ssh $SSH_KEY_ARG $SSH_USER@$VPS_IP << REMOTE_SSH
   # Create system user lfr-tunnel
   if ! id "lfr-tunnel" &>/dev/null; then

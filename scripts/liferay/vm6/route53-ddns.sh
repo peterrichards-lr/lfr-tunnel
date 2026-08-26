@@ -90,7 +90,10 @@ except Exception:
     pass
 " 2>/dev/null || true)
     if [ -n "${DOMAINS_STR}" ]; then
-        DOMAINS=(${DOMAINS_STR})
+        # read -ra rather than DOMAINS=(${DOMAINS_STR}): the old form also glob-expanded
+        # each field, so a domain containing a shell metacharacter would have been
+        # rewritten against the filesystem (#1366).
+        read -ra DOMAINS <<< "${DOMAINS_STR}"
         echo "[DDNS] Dynamically loaded domains from ${CONFIG_FILE}: ${DOMAINS[*]}"
     fi
 fi

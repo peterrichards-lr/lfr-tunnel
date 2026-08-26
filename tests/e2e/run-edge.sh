@@ -6,6 +6,10 @@ set -e
 . "$(dirname -- "${BASH_SOURCE[0]}")/lib/compose.sh"
 
 # Change directory to script location
+# Not a stray space (#1366): `CDPATH= cd` is a prefix assignment that neutralises
+# CDPATH for this one command, so an entry in the user's CDPATH cannot silently
+# redirect the cd. shellcheck reads it as an empty assignment.
+# shellcheck disable=SC1007
 CDPATH= cd -- "$(dirname -- "$0")"
 
 # Signal file configuration

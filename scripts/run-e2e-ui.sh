@@ -61,7 +61,7 @@ docker-compose up -d mailpit mock-target lfr-tunneld nginx-proxy lfr-tunnel
 # Wait for services to be healthy
 echo "=== Waiting for services to become healthy ==="
 HEALTHY=false
-for i in {1..30}; do
+for _ in {1..30}; do
     RESPONSE_CODE=$(curl -s -o /dev/null -w "%{http_code}" http://localhost:${E2E_PROXY_PORT}/api/version || true)
     if [ "$RESPONSE_CODE" = "200" ]; then
         HEALTHY=true

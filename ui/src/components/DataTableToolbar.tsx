@@ -29,7 +29,7 @@ export default function DataTableToolbar<T>({
   statusFilter,
   onStatusFilterChange,
   statusOptions,
-  extraControls
+  extraControls,
 }: DataTableToolbarProps<T>) {
   const { t } = useI18n();
   const [isColMenuOpen, setIsColMenuOpen] = useState(false);
@@ -40,22 +40,28 @@ export default function DataTableToolbar<T>({
       <div className="flex items-center gap-md flex-1 min-w-[240px]">
         <input
           type="text"
-          placeholder={searchPlaceholder || t('search_placeholder', 'Search...')}
+          placeholder={
+            searchPlaceholder || t('search_placeholder', 'Search...')
+          }
           value={searchQuery}
-          onChange={e => onSearchChange(e.target.value)}
+          onChange={(e) => onSearchChange(e.target.value)}
           className="search-input w-full"
-         aria-label={searchPlaceholder || t('search_placeholder', 'Search')}/>
+          aria-label={searchPlaceholder || t('search_placeholder', 'Search')}
+        />
         {statusOptions && onStatusFilterChange && (
           <div className="flex items-center gap-xs text-xs text-muted">
             <span className="whitespace-nowrap">{t('status', 'Status')}:</span>
             <select
               className="input-field text-xs table-toolbar-select"
               value={statusFilter || 'all'}
-              onChange={e => onStatusFilterChange(e.target.value)}
-             aria-label={t('filter_by_status', 'Filter by status')}>
+              onChange={(e) => onStatusFilterChange(e.target.value)}
+              aria-label={t('filter_by_status', 'Filter by status')}
+            >
               <option value="all">{t('status_all', 'All')}</option>
-              {statusOptions.map(opt => (
-                <option key={opt.value} value={opt.value}>{opt.label}</option>
+              {statusOptions.map((opt) => (
+                <option key={opt.value} value={opt.value}>
+                  {opt.label}
+                </option>
               ))}
             </select>
           </div>
@@ -67,12 +73,15 @@ export default function DataTableToolbar<T>({
       <div className="flex items-center gap-md">
         {/* Page Size Selector */}
         <div className="flex items-center gap-xs text-xs text-muted">
-          <span className="whitespace-nowrap">{t('tbl_page_size', 'Page Size')}:</span>
+          <span className="whitespace-nowrap">
+            {t('tbl_page_size', 'Page Size')}:
+          </span>
           <select
             className="input-field text-xs table-toolbar-select"
             value={pageSize}
-            onChange={e => onPageSizeChange(Number(e.target.value))}
-           aria-label={t('rows_per_page', 'Rows per page')}>
+            onChange={(e) => onPageSizeChange(Number(e.target.value))}
+            aria-label={t('rows_per_page', 'Rows per page')}
+          >
             <option value={10}>10</option>
             <option value={25}>25</option>
             <option value={50}>50</option>
@@ -100,7 +109,7 @@ export default function DataTableToolbar<T>({
                 <div className="text-2xs fw-bold text-muted uppercase tracking-wider mb-xs">
                   {t('tbl_visible_columns', 'Visible Columns')}
                 </div>
-                {columns.map(col => (
+                {columns.map((col) => (
                   <label
                     key={col.key}
                     className="flex items-center gap-sm text-xs cursor-pointer hover:opacity-80 py-xs"

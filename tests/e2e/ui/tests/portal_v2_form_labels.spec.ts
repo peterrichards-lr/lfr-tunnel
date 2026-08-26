@@ -31,7 +31,9 @@ test.describe('Portal V2 form labels', () => {
   test('account settings fields are labelled', async ({ page }) => {
     await page.goto('/portalv2/account');
     for (const name of ['First Name', 'Last Name', 'Preferred Name']) {
-      await expect(page.getByLabel(name, { exact: false }).first()).toBeVisible();
+      await expect(
+        page.getByLabel(name, { exact: false }).first(),
+      ).toBeVisible();
     }
   });
 
@@ -42,12 +44,14 @@ test.describe('Portal V2 form labels', () => {
     await expect(page.getByLabel(/search/i).first()).toBeVisible();
   });
 
-  test('a caption for a group of radios labels the group, not one radio', async ({ page }) => {
+  test('a caption for a group of radios labels the group, not one radio', async ({
+    page,
+  }) => {
     // htmlFor names a single control, so a group needs role=radiogroup with
     // aria-labelledby -- pointing it at one radio would have been wrong.
     await page.goto('/portalv2/dashboard');
     const groups = page.getByRole('radiogroup');
-    if (await groups.count() > 0) {
+    if ((await groups.count()) > 0) {
       await expect(groups.first()).toHaveAttribute('aria-labelledby', /.+/);
     }
   });

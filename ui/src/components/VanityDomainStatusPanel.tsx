@@ -49,14 +49,28 @@ export default function VanityDomainStatusPanel() {
   // stageIcon renders one column's icon for a given status row: failed takes precedence
   // over the stage's own (always-null-on-failure) timestamp, since MarkVanityDomainFailed
   // never sets the failed stage's own timestamp -- it just records which stage and why.
-  const stageIcon = (status: VanityDomainStatus, stage: string, timestamp: string | null) => {
+  const stageIcon = (
+    status: VanityDomainStatus,
+    stage: string,
+    timestamp: string | null,
+  ) => {
     if (status.failed_stage === stage) {
-      return <StageIcon state="failed" title={status.error_message || t('vanity_status_failed', 'Failed')} />;
+      return (
+        <StageIcon
+          state="failed"
+          title={status.error_message || t('vanity_status_failed', 'Failed')}
+        />
+      );
     }
     if (timestamp) {
       return <StageIcon state="done" title={formatDate(timestamp)} />;
     }
-    return <StageIcon state="open" title={t('vanity_status_not_reached', 'Not yet reached')} />;
+    return (
+      <StageIcon
+        state="open"
+        title={t('vanity_status_not_reached', 'Not yet reached')}
+      />
+    );
   };
 
   const summaryFor = (status: VanityDomainStatus) => {
@@ -67,7 +81,10 @@ export default function VanityDomainStatusPanel() {
       return `${t('vanity_status_summary_live', 'Live since')} ${formatDate(status.live_at)}`;
     }
     if (status.cert_issued_at) {
-      return t('vanity_status_summary_cert', 'Certificate issued, finishing setup...');
+      return t(
+        'vanity_status_summary_cert',
+        'Certificate issued, finishing setup...',
+      );
     }
     if (status.nginx_config_at) {
       return t('vanity_status_summary_nginx', 'Requesting certificate...');
@@ -95,21 +112,38 @@ export default function VanityDomainStatusPanel() {
   return (
     <div className="card p-0">
       <div className="p-xl border-b">
-        <h3 className="section-title m-0">{t('vanity_status_title', 'Custom Domain Status')}</h3>
+        <h3 className="section-title m-0">
+          {t('vanity_status_title', 'Custom Domain Status')}
+        </h3>
         <p className="text-muted text-sm mt-xs mb-0">
-          {t('vanity_status_desc', 'Live provisioning progress for your custom domains.')}
+          {t(
+            'vanity_status_desc',
+            'Live provisioning progress for your custom domains.',
+          )}
         </p>
       </div>
       <div className="table-responsive">
         <table className="w-full">
           <thead>
             <tr className="border-b text-left">
-              <th className="th-col">{t('vanity_status_col_domain', 'Domain')}</th>
-              <th className="th-col text-center">{t('vanity_status_col_requested', 'Requested')}</th>
-              <th className="th-col text-center">{t('vanity_status_col_nginx', 'Nginx Config')}</th>
-              <th className="th-col text-center">{t('vanity_status_col_cert', 'Cert Issued')}</th>
-              <th className="th-col text-center">{t('vanity_status_col_live', 'Live')}</th>
-              <th className="th-col">{t('vanity_status_col_summary', 'Summary')}</th>
+              <th className="th-col">
+                {t('vanity_status_col_domain', 'Domain')}
+              </th>
+              <th className="th-col text-center">
+                {t('vanity_status_col_requested', 'Requested')}
+              </th>
+              <th className="th-col text-center">
+                {t('vanity_status_col_nginx', 'Nginx Config')}
+              </th>
+              <th className="th-col text-center">
+                {t('vanity_status_col_cert', 'Cert Issued')}
+              </th>
+              <th className="th-col text-center">
+                {t('vanity_status_col_live', 'Live')}
+              </th>
+              <th className="th-col">
+                {t('vanity_status_col_summary', 'Summary')}
+              </th>
             </tr>
           </thead>
           <tbody>
@@ -118,15 +152,29 @@ export default function VanityDomainStatusPanel() {
                 <td className="td-cell font-mono">{status.full_host}</td>
                 <td className="td-cell text-center">
                   {status.requested_at ? (
-                    <StageIcon state="done" title={formatDate(status.requested_at)} />
+                    <StageIcon
+                      state="done"
+                      title={formatDate(status.requested_at)}
+                    />
                   ) : (
-                    <StageIcon state="open" title={t('vanity_status_not_reached', 'Not yet reached')} />
+                    <StageIcon
+                      state="open"
+                      title={t('vanity_status_not_reached', 'Not yet reached')}
+                    />
                   )}
                 </td>
-                <td className="td-cell text-center">{stageIcon(status, 'nginx_config', status.nginx_config_at)}</td>
-                <td className="td-cell text-center">{stageIcon(status, 'cert_issued', status.cert_issued_at)}</td>
-                <td className="td-cell text-center">{stageIcon(status, 'live', status.live_at)}</td>
-                <td className="td-cell text-sm text-muted">{summaryFor(status)}</td>
+                <td className="td-cell text-center">
+                  {stageIcon(status, 'nginx_config', status.nginx_config_at)}
+                </td>
+                <td className="td-cell text-center">
+                  {stageIcon(status, 'cert_issued', status.cert_issued_at)}
+                </td>
+                <td className="td-cell text-center">
+                  {stageIcon(status, 'live', status.live_at)}
+                </td>
+                <td className="td-cell text-sm text-muted">
+                  {summaryFor(status)}
+                </td>
               </tr>
             ))}
           </tbody>

@@ -5,7 +5,7 @@ export const test = base.extend({
     try {
       await context.grantPermissions(['clipboard-read', 'clipboard-write']);
     } catch (e) {
-      console.warn("Failed to grant clipboard permissions in this context:", e);
+      console.warn('Failed to grant clipboard permissions in this context:', e);
     }
 
     const errors: Error[] = [];
@@ -16,7 +16,9 @@ export const test = base.extend({
     await use(page);
 
     if (errors.length > 0) {
-      throw new Error(`Uncaught exception detected in page: ${errors[0].message}\nStack:\n${errors[0].stack}`);
+      throw new Error(
+        `Uncaught exception detected in page: ${errors[0].message}\nStack:\n${errors[0].stack}`,
+      );
     }
   },
 });

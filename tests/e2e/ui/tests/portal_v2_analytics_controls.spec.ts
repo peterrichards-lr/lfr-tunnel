@@ -26,10 +26,14 @@ test.describe('Portal V2 Analytics controls', () => {
     await page.goto(`/portalv2/login?token=${token}`);
     await page.waitForURL('**/portalv2/dashboard');
     await page.goto('/portalv2/admin/analytics');
-    await expect(page.getByRole('heading', { name: /Analytics/i })).toBeVisible();
+    await expect(
+      page.getByRole('heading', { name: /Analytics/i }),
+    ).toBeVisible();
   });
 
-  test('the time-range select is tall enough for its own text', async ({ page }) => {
+  test('the time-range select is tall enough for its own text', async ({
+    page,
+  }) => {
     const select = page.getByLabel('Time range');
     await expect(select).toBeVisible();
 
@@ -39,7 +43,9 @@ test.describe('Portal V2 Analytics controls', () => {
       // "normal" line-height has no computed pixel value; 1.2x the font size is the usual
       // approximation and is what a select's own text occupies.
       const line =
-        style.lineHeight === 'normal' ? px(style.fontSize) * 1.2 : px(style.lineHeight);
+        style.lineHeight === 'normal'
+          ? px(style.fontSize) * 1.2
+          : px(style.lineHeight);
       const needed = px(style.paddingTop) + px(style.paddingBottom) + line;
       return {
         needed,
@@ -57,7 +63,9 @@ test.describe('Portal V2 Analytics controls', () => {
 
   test('the select sits level with the button beside it', async ({ page }) => {
     const selectBox = await page.getByLabel('Time range').boundingBox();
-    const buttonBox = await page.getByRole('button', { name: /Export PDF/i }).boundingBox();
+    const buttonBox = await page
+      .getByRole('button', { name: /Export PDF/i })
+      .boundingBox();
     expect(selectBox).not.toBeNull();
     expect(buttonBox).not.toBeNull();
     if (!selectBox || !buttonBox) return;

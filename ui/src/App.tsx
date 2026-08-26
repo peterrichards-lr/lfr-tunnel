@@ -37,22 +37,49 @@ function App() {
                   <Route path="/account" element={<AccountSettings />} />
 
                   <Route element={<AdminRoute />}>
-                    <Route path="/admin/subdomains" element={<AdminSubdomains />} />
-                    <Route path="/admin/vanity-domain-status" element={<AdminVanityDomainStatus />} />
-                    <Route path="/admin/extensions" element={<AdminExtensions />} />
+                    <Route
+                      path="/admin/subdomains"
+                      element={<AdminSubdomains />}
+                    />
+                    <Route
+                      path="/admin/vanity-domain-status"
+                      element={<AdminVanityDomainStatus />}
+                    />
+                    <Route
+                      path="/admin/extensions"
+                      element={<AdminExtensions />}
+                    />
                     <Route path="/admin/users" element={<AdminUsers />} />
-                    <Route path="/admin/analytics" element={<AdminAnalytics />} />
+                    <Route
+                      path="/admin/analytics"
+                      element={<AdminAnalytics />}
+                    />
                     <Route path="/admin/audit" element={<AdminAuditLog />} />
-                    <Route path="/admin/blacklist" element={<AdminBlacklist />} />
-                    <Route path="/admin/edge-health" element={<AdminEdgeHealth />} />
-                    <Route path="/admin/magic-links" element={<AdminMagicLinks />} />
-                    <Route path="/admin/telemetry" element={<AdminTelemetry />} />
+                    <Route
+                      path="/admin/blacklist"
+                      element={<AdminBlacklist />}
+                    />
+                    <Route
+                      path="/admin/edge-health"
+                      element={<AdminEdgeHealth />}
+                    />
+                    <Route
+                      path="/admin/magic-links"
+                      element={<AdminMagicLinks />}
+                    />
+                    <Route
+                      path="/admin/telemetry"
+                      element={<AdminTelemetry />}
+                    />
                     <Route path="/admin/tokens" element={<AdminTokens />} />
                     <Route path="/admin/settings" element={<AdminSettings />} />
                   </Route>
                 </Route>
 
-                <Route path="/" element={<Navigate to="/dashboard" replace />} />
+                <Route
+                  path="/"
+                  element={<Navigate to="/dashboard" replace />}
+                />
               </Routes>
             </BrowserRouter>
           </MfaGateProvider>

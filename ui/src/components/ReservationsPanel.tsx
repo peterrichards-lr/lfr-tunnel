@@ -52,7 +52,10 @@ export default function ReservationsPanel() {
       setCustomDomainLimit(res.data.custom_domain_limit || 0);
       setCustomDomainUsed(res.data.custom_domain_used || 0);
     } catch {
-      showToast(t('error_fetch_reservations', 'Failed to load reservations'), 'error');
+      showToast(
+        t('error_fetch_reservations', 'Failed to load reservations'),
+        'error',
+      );
     } finally {
       setLoading(false);
     }
@@ -60,8 +63,9 @@ export default function ReservationsPanel() {
 
   useEffect(() => {
     fetchData();
-    axios.get('/api/me')
-      .then(res => {
+    axios
+      .get('/api/me')
+      .then((res) => {
         const style = res.data?.subdomain_style;
         if (style && !styleInitialized) {
           setSubdomainStyle(style);
@@ -69,34 +73,48 @@ export default function ReservationsPanel() {
         }
       })
       .catch(() => {});
-  // eslint-disable-next-line react-hooks/exhaustive-deps
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   const generateSubdomain = async () => {
     try {
-      const res = await axios.get(`/api/portal/generate-subdomain?style=${subdomainStyle}`);
+      const res = await axios.get(
+        `/api/portal/generate-subdomain?style=${subdomainStyle}`,
+      );
       setSubdomainInput(res.data.subdomain);
     } catch {
-      showToast(t('error_generate_subdomain', 'Failed to generate subdomain'), 'error');
+      showToast(
+        t('error_generate_subdomain', 'Failed to generate subdomain'),
+        'error',
+      );
     }
   };
 
   const createReservation = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!subdomainInput) {
-      showToast(t('error_enter_subdomain', 'Please enter or generate a subdomain'), 'error');
+      showToast(
+        t('error_enter_subdomain', 'Please enter or generate a subdomain'),
+        'error',
+      );
       return;
     }
     try {
       await axios.post('/api/portal/reservations', {
         subdomain: subdomainInput.toLowerCase(),
-        domain: selectedDomain
+        domain: selectedDomain,
       });
       setSubdomainInput('');
       fetchData();
-      showToast(t('success_create_reservation', 'Subdomain reserved successfully'), 'success');
+      showToast(
+        t('success_create_reservation', 'Subdomain reserved successfully'),
+        'success',
+      );
     } catch (err: any) {
-      showToast(`${t('error', 'Error')}: ${err.response?.data?.error || t('failed_create_reservation', 'Failed to create reservation')}`, 'error');
+      showToast(
+        `${t('error', 'Error')}: ${err.response?.data?.error || t('failed_create_reservation', 'Failed to create reservation')}`,
+        'error',
+      );
     }
   };
 
@@ -105,48 +123,74 @@ export default function ReservationsPanel() {
   // custom-domain rows, so a truthy r.subdomain is the reliable signal for "which table
   // does this row belong in" (same signal the host-string/CLI-command logic below already
   // relied on before the split).
-  const subdomainColumns: ColumnDef<Reservation>[] = useMemo(() => [
-    { key: 'subdomain', label: t('subdomain', 'Subdomain'), sortable: true },
-    { key: 'status', label: t('status', 'Status'), sortable: true },
-    { key: 'expires_at', label: t('expires', 'Expires'), sortable: true },
-    { key: 'created_at', label: t('created_at', 'Created Date'), sortable: true },
-  ], [t]);
+  const subdomainColumns: ColumnDef<Reservation>[] = useMemo(
+    () => [
+      { key: 'subdomain', label: t('subdomain', 'Subdomain'), sortable: true },
+      { key: 'status', label: t('status', 'Status'), sortable: true },
+      { key: 'expires_at', label: t('expires', 'Expires'), sortable: true },
+      {
+        key: 'created_at',
+        label: t('created_at', 'Created Date'),
+        sortable: true,
+      },
+    ],
+    [t],
+  );
 
-  const customDomainColumns: ColumnDef<Reservation>[] = useMemo(() => [
-    { key: 'domain', label: t('custom_domain', 'Domain'), sortable: true },
-    { key: 'status', label: t('status', 'Status'), sortable: true },
-    { key: 'expires_at', label: t('expires', 'Expires'), sortable: true },
-    { key: 'created_at', label: t('created_at', 'Created Date'), sortable: true },
-  ], [t]);
+  const customDomainColumns: ColumnDef<Reservation>[] = useMemo(
+    () => [
+      { key: 'domain', label: t('custom_domain', 'Domain'), sortable: true },
+      { key: 'status', label: t('status', 'Status'), sortable: true },
+      { key: 'expires_at', label: t('expires', 'Expires'), sortable: true },
+      {
+        key: 'created_at',
+        label: t('created_at', 'Created Date'),
+        sortable: true,
+      },
+    ],
+    [t],
+  );
 
   const mappedReservations = useMemo(() => {
     const now = new Date();
-    return reservations.map(r => {
+    return reservations.map((r) => {
       const isExpired = r.expires_at && new Date(r.expires_at) <= now;
-      const statusLabel = isExpired ? 'quarantined' : (r.extension_requested ? 'extension requested' : 'active');
+      const statusLabel = isExpired
+        ? 'quarantined'
+        : r.extension_requested
+          ? 'extension requested'
+          : 'active';
       return {
         ...r,
-        computed_status: statusLabel
+        computed_status: statusLabel,
       };
     });
   }, [reservations]);
 
   const subdomainReservations = useMemo(
-    () => mappedReservations.filter(r => !!r.subdomain),
-    [mappedReservations]
+    () => mappedReservations.filter((r) => !!r.subdomain),
+    [mappedReservations],
   );
   const customDomainReservations = useMemo(
-    () => mappedReservations.filter(r => !r.subdomain),
-    [mappedReservations]
+    () => mappedReservations.filter((r) => !r.subdomain),
+    [mappedReservations],
   );
 
-  const statusOptions = useMemo(() => [
-    { value: 'active', label: t('status_active', 'active') },
-    { value: 'quarantined', label: t('status_quarantined', 'quarantined') },
-    { value: 'extension requested', label: t('status_extension_requested', 'extension requested') }
-  ], [t]);
+  const statusOptions = useMemo(
+    () => [
+      { value: 'active', label: t('status_active', 'active') },
+      { value: 'quarantined', label: t('status_quarantined', 'quarantined') },
+      {
+        value: 'extension requested',
+        label: t('status_extension_requested', 'extension requested'),
+      },
+    ],
+    [t],
+  );
 
-  const subdomainTable = useDataTable<Reservation & { computed_status: string }>(
+  const subdomainTable = useDataTable<
+    Reservation & { computed_status: string }
+  >(
     'dashboard_reservations_subdomains',
     subdomainReservations,
     ['subdomain', 'domain', 'status'],
@@ -155,10 +199,12 @@ export default function ReservationsPanel() {
     ['created_at'],
     'computed_status',
     statusOptions,
-    'all'
+    'all',
   );
 
-  const customDomainTable = useDataTable<Reservation & { computed_status: string }>(
+  const customDomainTable = useDataTable<
+    Reservation & { computed_status: string }
+  >(
     'dashboard_reservations_custom_domains',
     customDomainReservations,
     ['domain', 'status'],
@@ -167,31 +213,59 @@ export default function ReservationsPanel() {
     ['created_at'],
     'computed_status',
     statusOptions,
-    'all'
+    'all',
   );
 
   const deleteReservation = async (id: string) => {
-    if (!(await showConfirm(t('release_subdomain_title', 'Release Subdomain'), t('confirm_release_subdomain', 'Are you sure you want to release this subdomain?')))) return;
+    if (
+      !(await showConfirm(
+        t('release_subdomain_title', 'Release Subdomain'),
+        t(
+          'confirm_release_subdomain',
+          'Are you sure you want to release this subdomain?',
+        ),
+      ))
+    )
+      return;
     try {
       await axios.delete(`/api/portal/reservations/${encodeURIComponent(id)}`);
       fetchData();
-      showToast(t('success_delete_reservation', 'Subdomain released successfully'), 'success');
+      showToast(
+        t('success_delete_reservation', 'Subdomain released successfully'),
+        'success',
+      );
     } catch (err: any) {
-      showToast(`${t('error', 'Error')}: ${err.response?.data?.error || t('failed_delete', 'Failed to delete')}`, 'error');
+      showToast(
+        `${t('error', 'Error')}: ${err.response?.data?.error || t('failed_delete', 'Failed to delete')}`,
+        'error',
+      );
     }
   };
 
   const requestExtension = async (id: string) => {
     try {
-      await axios.post(`/api/portal/reservations/${encodeURIComponent(id)}/request-extension`);
+      await axios.post(
+        `/api/portal/reservations/${encodeURIComponent(id)}/request-extension`,
+      );
       fetchData();
-      showToast(t('success_request_extension', 'Lease extension requested successfully'), 'success');
+      showToast(
+        t(
+          'success_request_extension',
+          'Lease extension requested successfully',
+        ),
+        'success',
+      );
     } catch (err: any) {
-      showToast(err.response?.data?.error || t('failed_request_extension', 'Failed to request extension'), 'error');
+      showToast(
+        err.response?.data?.error ||
+          t('failed_request_extension', 'Failed to request extension'),
+        'error',
+      );
     }
   };
 
-  const [acModalReservation, setAcModalReservation] = useState<Reservation | null>(null);
+  const [acModalReservation, setAcModalReservation] =
+    useState<Reservation | null>(null);
   const [acMode, setAcMode] = useState('public');
   const [acPasscode, setAcPasscode] = useState('');
   const [acWhitelist, setAcWhitelist] = useState('');
@@ -210,22 +284,27 @@ export default function ReservationsPanel() {
     try {
       await axios.post('/api/portal/reservations/access-control', {
         subdomain: acModalReservation.subdomain,
-        domain:    acModalReservation.domain,
-        access_mode:   acMode,
-        passcode:      acPasscode,
+        domain: acModalReservation.domain,
+        access_mode: acMode,
+        passcode: acPasscode,
         whitelist_ips: acWhitelist,
       });
       fetchData();
       setAcModalReservation(null);
-      showToast(t('access_control_saved', 'Access control settings saved'), 'success');
+      showToast(
+        t('access_control_saved', 'Access control settings saved'),
+        'success',
+      );
     } catch (err: any) {
-      showToast(err.response?.data?.error || t('error_save_access_control', 'Failed to save access control'), 'error');
+      showToast(
+        err.response?.data?.error ||
+          t('error_save_access_control', 'Failed to save access control'),
+        'error',
+      );
     } finally {
       setAcSaving(false);
     }
   };
-
-
 
   const copyText = async (text: string, message: string) => {
     try {
@@ -259,19 +338,35 @@ export default function ReservationsPanel() {
           <table className="w-full">
             <thead>
               <tr className="border-b text-left">
-                <th className="th-col"><Skeleton width={120} /></th>
-                <th className="th-col"><Skeleton width={80} /></th>
-                <th className="th-col"><Skeleton width={120} /></th>
-                <th className="th-col"><Skeleton width={80} /></th>
+                <th className="th-col">
+                  <Skeleton width={120} />
+                </th>
+                <th className="th-col">
+                  <Skeleton width={80} />
+                </th>
+                <th className="th-col">
+                  <Skeleton width={120} />
+                </th>
+                <th className="th-col">
+                  <Skeleton width={80} />
+                </th>
               </tr>
             </thead>
             <tbody>
               {[...Array(3)].map((_, i) => (
                 <tr key={i} className="border-b">
-                  <td className="td-cell"><Skeleton width="80%" height={16} /></td>
-                  <td className="td-cell"><Skeleton width={50} height={20} borderRadius={10} /></td>
-                  <td className="td-cell"><Skeleton width="70%" height={16} /></td>
-                  <td className="td-cell"><Skeleton width={60} height={28} /></td>
+                  <td className="td-cell">
+                    <Skeleton width="80%" height={16} />
+                  </td>
+                  <td className="td-cell">
+                    <Skeleton width={50} height={20} borderRadius={10} />
+                  </td>
+                  <td className="td-cell">
+                    <Skeleton width="70%" height={16} />
+                  </td>
+                  <td className="td-cell">
+                    <Skeleton width={60} height={28} />
+                  </td>
                 </tr>
               ))}
             </tbody>
@@ -283,20 +378,27 @@ export default function ReservationsPanel() {
 
   const percent = limit > 0 ? (used / limit) * 100 : 0;
   const isAtLimit = limit >= 0 && used >= limit;
-  const customDomainPercent = customDomainLimit > 0 ? (customDomainUsed / customDomainLimit) * 100 : 0;
-  const isAtCustomDomainLimit = customDomainLimit >= 0 && customDomainUsed >= customDomainLimit;
+  const customDomainPercent =
+    customDomainLimit > 0 ? (customDomainUsed / customDomainLimit) * 100 : 0;
+  const isAtCustomDomainLimit =
+    customDomainLimit >= 0 && customDomainUsed >= customDomainLimit;
 
   return (
     <>
       <div className="card mb-xl">
         <div className="section-header mb-md">
-          <h3 className="section-title">{t('reservations_overview', 'Reservations Overview')}</h3>
+          <h3 className="section-title">
+            {t('reservations_overview', 'Reservations Overview')}
+          </h3>
         </div>
-        
+
         <div className="mb-xl">
           <div className="flex justify-between text-sm mb-xs">
             <span>{t('reservation_quota', 'My Personal Quota')}</span>
-            <span>{limit < 0 ? `${used} / ∞` : `${used} / ${limit}`} {t('reserved', 'reserved')}</span>
+            <span>
+              {limit < 0 ? `${used} / ∞` : `${used} / ${limit}`}{' '}
+              {t('reserved', 'reserved')}
+            </span>
           </div>
           <div className="progress-track">
             {/* Only the width is computed; at-limit is a state, so it is a class. */}
@@ -307,11 +409,18 @@ export default function ReservationsPanel() {
           </div>
           {isAtLimit && limit >= 0 && (
             <div className="mt-sm text-xs text-warning">
-              ⚠️ {t('reservation_limit_reached', 'You have reached your reservation limit. Release a subdomain to register a new one.')}
+              ⚠️{' '}
+              {t(
+                'reservation_limit_reached',
+                'You have reached your reservation limit. Release a subdomain to register a new one.',
+              )}
             </div>
           )}
           <div className="flex justify-end mt-sm">
-            <a href="#registered-subdomains" className="btn btn-outline py-xs px-md text-xs w-auto m-0">
+            <a
+              href="#registered-subdomains"
+              className="btn btn-outline py-xs px-md text-xs w-auto m-0"
+            >
               {t('view_registered_subdomains', 'View Registered Subdomains')} ↓
             </a>
           </div>
@@ -320,7 +429,12 @@ export default function ReservationsPanel() {
         <div className="mb-xl">
           <div className="flex justify-between text-sm mb-xs">
             <span>{t('custom_domain_quota', 'Custom Domain Quota')}</span>
-            <span>{customDomainLimit < 0 ? `${customDomainUsed} / ∞` : `${customDomainUsed} / ${customDomainLimit}`} {t('reserved', 'reserved')}</span>
+            <span>
+              {customDomainLimit < 0
+                ? `${customDomainUsed} / ∞`
+                : `${customDomainUsed} / ${customDomainLimit}`}{' '}
+              {t('reserved', 'reserved')}
+            </span>
           </div>
           <div className="progress-track">
             <div
@@ -329,49 +443,89 @@ export default function ReservationsPanel() {
             ></div>
           </div>
           <p className="text-muted text-xs mt-xs mb-0">
-            {t('custom_domain_quota_hint', 'Custom domains (via CNAME) are tracked separately from subdomain reservations above -- connect your client with -domain to reserve one, up to this limit.')}
+            {t(
+              'custom_domain_quota_hint',
+              'Custom domains (via CNAME) are tracked separately from subdomain reservations above -- connect your client with -domain to reserve one, up to this limit.',
+            )}
           </p>
           {isAtCustomDomainLimit && customDomainLimit >= 0 && (
             <div className="mt-sm text-xs text-warning">
-              ⚠️ {t('custom_domain_limit_reached', 'You have reached your custom domain limit. Release one to register a new one.')}
+              ⚠️{' '}
+              {t(
+                'custom_domain_limit_reached',
+                'You have reached your custom domain limit. Release one to register a new one.',
+              )}
             </div>
           )}
           <div className="flex justify-end mt-sm">
-            <a href="#custom-domains" className="btn btn-outline py-xs px-md text-xs w-auto m-0">
+            <a
+              href="#custom-domains"
+              className="btn btn-outline py-xs px-md text-xs w-auto m-0"
+            >
               {t('view_custom_domains', 'View Custom Domains')} ↓
             </a>
           </div>
         </div>
 
         {!isAtLimit && (
-          <form onSubmit={createReservation} className="flex gap-sm mb-xl flex-wrap">
+          <form
+            onSubmit={createReservation}
+            className="flex gap-sm mb-xl flex-wrap"
+          >
             <div className="flex-1 min-w-sm">
-              <input 
-                type="text" 
-                className="form-control" 
-                placeholder={t('subdomain', 'subdomain')} 
-                value={subdomainInput} 
-                onChange={(e) => setSubdomainInput(e.target.value)} 
-               aria-label={t('subdomain', 'Subdomain')}/>
+              <input
+                type="text"
+                className="form-control"
+                placeholder={t('subdomain', 'subdomain')}
+                value={subdomainInput}
+                onChange={(e) => setSubdomainInput(e.target.value)}
+                aria-label={t('subdomain', 'Subdomain')}
+              />
             </div>
             <div className="flex-1 min-w-sm">
-              <select className="form-control" value={selectedDomain} onChange={(e) => setSelectedDomain(e.target.value)} aria-label={t('domain', 'Domain')}>
-                {domains.map(d => (
-                  <option key={d} value={d}>{d}</option>
+              <select
+                className="form-control"
+                value={selectedDomain}
+                onChange={(e) => setSelectedDomain(e.target.value)}
+                aria-label={t('domain', 'Domain')}
+              >
+                {domains.map((d) => (
+                  <option key={d} value={d}>
+                    {d}
+                  </option>
                 ))}
               </select>
             </div>
             <div className="min-w-xs">
-              <select className="form-control" value={subdomainStyle} onChange={(e) => setSubdomainStyle(e.target.value)} aria-label={t('style_label', 'Subdomain style')}>
-                <option value="liferay">{t('style_liferay', 'Liferay SE Style')}</option>
+              <select
+                className="form-control"
+                value={subdomainStyle}
+                onChange={(e) => setSubdomainStyle(e.target.value)}
+                aria-label={t('style_label', 'Subdomain style')}
+              >
+                <option value="liferay">
+                  {t('style_liferay', 'Liferay SE Style')}
+                </option>
                 <option value="words">{t('style_words', 'Words Style')}</option>
-                <option value="heroku">{t('style_heroku', 'Heroku Style')}</option>
+                <option value="heroku">
+                  {t('style_heroku', 'Heroku Style')}
+                </option>
                 <option value="ngrok">{t('style_ngrok', 'Ngrok Style')}</option>
-                <option value="random">{t('style_random', 'Alphanumeric')}</option>
+                <option value="random">
+                  {t('style_random', 'Alphanumeric')}
+                </option>
               </select>
             </div>
-            <button type="button" className="btn btn-secondary" onClick={generateSubdomain}>{t('generate', 'Generate')}</button>
-            <button type="submit" className="btn btn-primary">{t('reserve', 'Reserve')}</button>
+            <button
+              type="button"
+              className="btn btn-secondary"
+              onClick={generateSubdomain}
+            >
+              {t('generate', 'Generate')}
+            </button>
+            <button type="submit" className="btn btn-primary">
+              {t('reserve', 'Reserve')}
+            </button>
           </form>
         )}
       </div>
@@ -379,8 +533,14 @@ export default function ReservationsPanel() {
       <ReservationsTable
         id="registered-subdomains"
         title={t('subdomain_reservations', 'Registered Subdomains')}
-        emptyMessage={t('no_subdomains_reserved', 'No subdomains reserved yet.')}
-        searchPlaceholder={t('search_reservations_placeholder', 'Search reservations...')}
+        emptyMessage={t(
+          'no_subdomains_reserved',
+          'No subdomains reserved yet.',
+        )}
+        searchPlaceholder={t(
+          'search_reservations_placeholder',
+          'Search reservations...',
+        )}
         primaryColumnKey="subdomain"
         columns={subdomainColumns}
         statusOptions={statusOptions}
@@ -411,8 +571,14 @@ export default function ReservationsPanel() {
       <ReservationsTable
         id="custom-domains"
         title={t('custom_domains', 'Custom Domains')}
-        emptyMessage={t('no_custom_domains_registered', 'No custom domains registered yet.')}
-        searchPlaceholder={t('search_custom_domains_placeholder', 'Search custom domains...')}
+        emptyMessage={t(
+          'no_custom_domains_registered',
+          'No custom domains registered yet.',
+        )}
+        searchPlaceholder={t(
+          'search_custom_domains_placeholder',
+          'Search custom domains...',
+        )}
         primaryColumnKey="domain"
         columns={customDomainColumns}
         statusOptions={statusOptions}
@@ -443,7 +609,7 @@ export default function ReservationsPanel() {
       {/* Access Control Modal */}
       {acModalReservation && (
         <div className="modal-backdrop">
-          <div 
+          <div
             className="card modal-card max-w-md p-xl"
             role="dialog"
             aria-modal="true"
@@ -453,11 +619,20 @@ export default function ReservationsPanel() {
               <h3 id="access-control-modal-title" className="modal-title">
                 🔒 {t('access_control', 'Access Control')}
               </h3>
-              <button type="button" onClick={() => setAcModalReservation(null)} className="modal-close" aria-label={t('close', 'Close')}>✕</button>
+              <button
+                type="button"
+                onClick={() => setAcModalReservation(null)}
+                className="modal-close"
+                aria-label={t('close', 'Close')}
+              >
+                ✕
+              </button>
             </div>
             <p className="text-muted text-sm mb-lg">
               <strong className="text-primary font-mono">
-                {acModalReservation.subdomain ? `${acModalReservation.subdomain}.${acModalReservation.domain}` : acModalReservation.domain}
+                {acModalReservation.subdomain
+                  ? `${acModalReservation.subdomain}.${acModalReservation.domain}`
+                  : acModalReservation.domain}
               </strong>
             </p>
 
@@ -467,13 +642,47 @@ export default function ReservationsPanel() {
               </span>
               {/* A caption for a set of radios, not for one control, so it is announced
                   via a group rather than htmlFor -- which names a single element. */}
-              <div className="flex flex-col gap-sm" role="radiogroup" aria-labelledby="access-mode-label">
-                {([['public', '🌐', t('access_public', 'Public — Anyone can access')],
-                  ['passcode', '🔑', t('access_passcode', 'Passcode — Requires a secret code')],
-                  ['whitelist', '🛡', t('access_whitelist', 'IP Whitelist — Restrict by IP address')]] as [string, string, string][]).map(([val, icon, label]) => (
-                  <label key={val} className={`flex items-center gap-md p-md rounded cursor-pointer border ${acMode === val ? 'border-primary surface-selected' : 'border'}`}>
-                    <input type="radio" name="acMode" value={val} checked={acMode === val} onChange={() => setAcMode(val)} />
-                    <span>{icon} {label}</span>
+              <div
+                className="flex flex-col gap-sm"
+                role="radiogroup"
+                aria-labelledby="access-mode-label"
+              >
+                {(
+                  [
+                    [
+                      'public',
+                      '🌐',
+                      t('access_public', 'Public — Anyone can access'),
+                    ],
+                    [
+                      'passcode',
+                      '🔑',
+                      t('access_passcode', 'Passcode — Requires a secret code'),
+                    ],
+                    [
+                      'whitelist',
+                      '🛡',
+                      t(
+                        'access_whitelist',
+                        'IP Whitelist — Restrict by IP address',
+                      ),
+                    ],
+                  ] as [string, string, string][]
+                ).map(([val, icon, label]) => (
+                  <label
+                    key={val}
+                    className={`flex items-center gap-md p-md rounded cursor-pointer border ${acMode === val ? 'border-primary surface-selected' : 'border'}`}
+                  >
+                    <input
+                      type="radio"
+                      name="acMode"
+                      value={val}
+                      checked={acMode === val}
+                      onChange={() => setAcMode(val)}
+                    />
+                    <span>
+                      {icon} {label}
+                    </span>
                   </label>
                 ))}
               </div>
@@ -481,36 +690,62 @@ export default function ReservationsPanel() {
 
             {acMode === 'passcode' && (
               <div className="form-group">
-                <label className="form-label--bold" htmlFor="passcode">{t('passcode', 'Passcode')}</label>
-                <input id="passcode"
+                <label className="form-label--bold" htmlFor="passcode">
+                  {t('passcode', 'Passcode')}
+                </label>
+                <input
+                  id="passcode"
                   type="text"
                   className="input-field"
                   value={acPasscode}
-                  onChange={e => setAcPasscode(e.target.value)}
-                  placeholder={t('passcode_placeholder', 'Enter a secret passcode...')}
+                  onChange={(e) => setAcPasscode(e.target.value)}
+                  placeholder={t(
+                    'passcode_placeholder',
+                    'Enter a secret passcode...',
+                  )}
                 />
               </div>
             )}
 
             {acMode === 'whitelist' && (
               <div className="form-group">
-                <label className="form-label--bold" htmlFor="allowed-ips">{t('allowed_ips', 'Allowed IPs')}</label>
-                <textarea id="allowed-ips"
+                <label className="form-label--bold" htmlFor="allowed-ips">
+                  {t('allowed_ips', 'Allowed IPs')}
+                </label>
+                <textarea
+                  id="allowed-ips"
                   className="input-field font-mono text-sm resize-y"
                   value={acWhitelist}
-                  onChange={e => setAcWhitelist(e.target.value)}
-                  placeholder={'One IP or CIDR per line, e.g.\n192.168.1.0/24\n10.0.0.1'}
+                  onChange={(e) => setAcWhitelist(e.target.value)}
+                  placeholder={
+                    'One IP or CIDR per line, e.g.\n192.168.1.0/24\n10.0.0.1'
+                  }
                   rows={4}
                 />
                 <p className="form-hint">
-                  {t('whitelist_hint', 'Enter individual IP addresses or CIDR ranges, one per line.')}
+                  {t(
+                    'whitelist_hint',
+                    'Enter individual IP addresses or CIDR ranges, one per line.',
+                  )}
                 </p>
               </div>
             )}
 
             <div className="flex gap-sm justify-end">
-              <button type="button" className="btn btn-secondary" onClick={() => setAcModalReservation(null)} disabled={acSaving}>{t('cancel', 'Cancel')}</button>
-              <button type="button" className="btn btn-primary" onClick={handleUpdateAccessControl} disabled={acSaving}>
+              <button
+                type="button"
+                className="btn btn-secondary"
+                onClick={() => setAcModalReservation(null)}
+                disabled={acSaving}
+              >
+                {t('cancel', 'Cancel')}
+              </button>
+              <button
+                type="button"
+                className="btn btn-primary"
+                onClick={handleUpdateAccessControl}
+                disabled={acSaving}
+              >
                 {acSaving ? t('saving', 'Saving...') : t('save', 'Save')}
               </button>
             </div>

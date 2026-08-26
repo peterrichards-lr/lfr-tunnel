@@ -60,11 +60,20 @@ central:
 
 # Only needed for `lfr-tunnel-ops reconcile-nginx`.
 nginx:
-  # Every domain group this central actually serves. Check the existing
-  # server_name lines in /etc/nginx/sites-available/lfr-tunnel on the box itself if
-  # you're not sure which ones are live.
+  # APEX domains, not hostnames. Each entry generates TWO server blocks -- `example.com` and
+  # `*.example.com` -- and reads its certificate from /etc/letsencrypt/live/<entry>/. So the
+  # entry has to be the name the wildcard certificate was issued for, which is the apex. Put
+  # a hostname here and nginx is asked for a certificate directory that does not exist.
+  #
+  # List EVERY domain group the box serves. The generated config replaces the whole file, so an
+  # entry left out is a vhost deleted -- a single-entry list on a two-domain gateway silently
+  # removes the second domain. reconcile-nginx runs `nginx -t` and rolls back on failure, but a
+  # config that is merely INCOMPLETE passes `nginx -t` and applies cleanly.
+  #
+  # Check the live `server_name` lines before editing this:
+  #   sudo grep -E "server_name|ssl_certificate " /etc/nginx/sites-available/lfr-tunnel
   domains:
-    - central.example.com
+    - example.com
   # Local port lfr-tunneld binds to -- must match the live server-config.yaml's
   # http_bind_addr port.
   port: "8080"

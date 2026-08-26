@@ -21,11 +21,26 @@ import (
 	"lfr-tunnel/pkg/config"
 
 	"github.com/gorilla/websocket"
+	"sync"
 )
+
+// edgeTunableMu guards the two tunables below (#1370).
+//
+// They are plain vars that only tests ever write -- but the write races a live read, and no
+// amount of teardown ordering in the test fixes it. handleEdgeControlWS reads them AFTER
+// upgrading the connection, and httptest.Server.Close() stops tracking a connection once it
+// is hijacked, so Close() does not wait for that handler and establishes no happens-before
+// with the test's deferred restore.
+//
+// Hoisting the read out of the spawned goroutine (the fix #1328 used in pkg/client) is not
+// sufficient here for that reason: it moved the read from one untracked goroutine to another.
+// Synchronising the access is what actually removes it.
+var edgeTunableMu sync.RWMutex
 
 // edgeControlReadDeadline is how long the control plane waits for any frame
 // (data or Ping) from an edge before considering the connection dead. Overridable
 // in tests so the reconnect-loop fix can be verified without a real 60s wait.
+// Read via edgeTunables(); written only by tests, via setEdgeControlReadDeadline.
 var edgeControlReadDeadline = 60 * time.Second
 
 // edgeClientReadDeadline is the mirror-image of edgeControlReadDeadline for the
@@ -43,7 +58,17 @@ var edgeClientPingInterval = 30 * time.Second
 // connected edge, purely to time the Pong for RTT (see handleEdgeControlWS's PongHandler
 // and #976) -- independent of edgeClientPingInterval above, which is the edge's existing
 // keepalive in the other direction and was never used for timing. Overridable in tests.
+// Read via edgeTunables(); written only by tests, via setEdgeHealthPingInterval.
 var edgeHealthPingInterval = 20 * time.Second
+
+// edgeTunables reads both guarded values together. One call per connection, at the top of the
+// connection's lifetime, so the values stay fixed for that connection -- which is what the
+// code already assumed and is why a single read site is enough.
+func edgeTunables() (readDeadline, healthPingInterval time.Duration) {
+	edgeTunableMu.RLock()
+	defer edgeTunableMu.RUnlock()
+	return edgeControlReadDeadline, edgeHealthPingInterval
+}
 
 // nodeSchedule is an edge's own stop/start window as told to it by central (#1276).
 // Enabled false means the node is not on a schedule and the times carry no meaning.
@@ -234,21 +259,12 @@ func (s *Server) handleEdgeControlWS(w http.ResponseWriter, r *http.Request) {
 	// writes and never reads.
 	pingStop := make(chan struct{})
 
-	// Read both package-level tunables HERE, on the request goroutine, and pass the values
-	// into the goroutines below (#1370). They are ordinary vars with no synchronisation, and a
-	// test that overrides one and restores it in a defer writes them while a live connection
-	// goroutine is still reading -- three of pkg/server's five races were exactly this.
+	// One synchronised read for this connection, passed into the goroutines below (#1370).
+	// See edgeTunableMu for why the lock is required and hoisting alone was not.
 	//
-	// Same fix as #1328 used for shutdownMigrationPollInterval in pkg/client: hoist the read to
-	// the caller so the ordering belongs to whoever spawned the goroutine, rather than threading
-	// the connection goroutine through Server.bgWG.
-	//
-	// Freezing the values per connection is not a behaviour change. Nothing in production writes
-	// either var -- they are set once at package init and overridden only by tests -- so there
-	// is no live update to miss. A connection's own deadline policy staying fixed for its
-	// lifetime is arguably the more defensible semantics anyway.
-	readDeadline := edgeControlReadDeadline
-	healthPingInterval := edgeHealthPingInterval
+	// Freezing the values per connection is not a behaviour change: nothing in production writes
+	// either var, so there is no live update to miss.
+	readDeadline, healthPingInterval := edgeTunables()
 
 	// Start read pump to keep alive and detect disconnects
 	go func() {
@@ -1060,4 +1076,25 @@ func (s *Server) runEdgeControlChannel() {
 		_ = conn.Close() //nolint:errcheck
 		lostAt = time.Now()
 	}
+}
+
+// setEdgeControlReadDeadline sets the guarded tunable and returns the previous value, so a test
+// can restore it with `defer setEdgeControlReadDeadline(setEdgeControlReadDeadline(d))` and have
+// both the write and the restore hold the lock (#1370).
+func setEdgeControlReadDeadline(d time.Duration) time.Duration {
+	edgeTunableMu.Lock()
+	defer edgeTunableMu.Unlock()
+	prev := edgeControlReadDeadline
+	edgeControlReadDeadline = d
+	return prev
+}
+
+// setEdgeHealthPingInterval is setEdgeControlReadDeadline's counterpart for the RTT-ping
+// interval.
+func setEdgeHealthPingInterval(d time.Duration) time.Duration {
+	edgeTunableMu.Lock()
+	defer edgeTunableMu.Unlock()
+	prev := edgeHealthPingInterval
+	edgeHealthPingInterval = d
+	return prev
 }

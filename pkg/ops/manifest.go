@@ -20,6 +20,11 @@ import (
 // bytes -- and every step reported success.
 const BuildManifestName = "build-manifest.json"
 
+// unknownValue is what build records when it cannot determine a version or commit. Shared with
+// extractVersion so the two cannot drift, and so goconst is not reporting the same literal from
+// four separate places in this package.
+const unknownValue = "unknown"
+
 // BuildManifest records what a build produced. Deliberately small: this exists to answer "are
 // these artefacts from this source tree" and nothing more.
 type BuildManifest struct {
@@ -149,11 +154,11 @@ func RequireCurrentDist(dir, command string, allowStale bool) BuildManifest {
 func currentGitCommit() string {
 	out, err := RunCommandCaptureOutput("git", "rev-parse", "--short", "HEAD")
 	if err != nil {
-		return "unknown"
+		return unknownValue
 	}
 	commit := strings.TrimSpace(out)
 	if commit == "" {
-		return "unknown"
+		return unknownValue
 	}
 	return commit
 }

@@ -115,12 +115,12 @@ func extractVersion() string {
 	content, err := os.ReadFile("pkg/config/version.go")
 	if err != nil {
 		fmt.Println("Warning: Could not read version.go, defaulting to unknown")
-		return "unknown"
+		return unknownValue
 	}
 	re := regexp.MustCompile(`Version\s*=\s*"([^"]+)"`)
 	matches := re.FindStringSubmatch(string(content))
 	if len(matches) > 1 {
 		return matches[1]
 	}
-	return "unknown"
+	return unknownValue
 }

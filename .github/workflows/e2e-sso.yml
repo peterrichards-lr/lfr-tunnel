@@ -1,9 +1,29 @@
 name: SSO E2E Test
 
-# Path-gated (#1343): this suite exercises the Go server against Keycloak, so a docs-only or
-# UI-only change cannot affect it. Safe to skip the workflow outright here -- unlike the jobs in
-# ci.yml, "E2E Keycloak SSO Integration Test" is not a required status check, so a run that never
-# reports does not block a merge.
+# #1343 path-gated this workflow on the premise that "E2E Keycloak SSO Integration Test" is not a
+# required status check. **That premise was wrong.** Required checks are configured in TWO places
+# on this repo, and the classic branch protection on `master` requires nine contexts -- including
+# this one -- with `enforce_admins` on:
+#
+#   Test Suite (ubuntu-latest|macos-latest|windows-latest), Lint & Format Check,
+#   Documentation Review Check, E2E Docker Integration Test, E2E Playwright UI Test,
+#   E2E Keycloak SSO Integration Test, Verify PR references an issue
+#
+# A `paths:` filter at the WORKFLOW level means that on a non-matching PR the workflow never runs,
+# so the context is never created. GitHub treats a `skipped` check as satisfying a required
+# context, but a context that was never reported at all stays pending forever -- the PR is blocked
+# with every check that did run showing green and nothing to re-run. See #1380.
+#
+# So: no `paths:` filter on `pull_request`. The workflow always runs and the STEPS carry the
+# condition, which keeps the context reporting while still skipping the expensive suite.
+#
+# The rule this encodes, for anyone adding a gate later:
+#   - job-level `if:`  -- safe for a required context ONLY if the job has no matrix, since a
+#     skipped job still reports its context. A matrix job that is gated off never expands, so
+#     `Job (os)` contexts are never created (that is the other half of #1380).
+#   - workflow-level `paths:` -- NEVER safe for a required context.
+#
+# `push` keeps its filter: post-merge runs gate nothing.
 on:
   push:
     branches:
@@ -24,17 +44,6 @@ on:
   pull_request:
     branches:
       - master
-    paths:
-      - '**.go'
-      - 'go.mod'
-      - 'go.sum'
-      - 'Makefile'
-      - 'cmd/**'
-      - 'pkg/**'
-      - 'tests/e2e/**'
-      - 'scripts/**'
-      - 'Dockerfile'
-      - '.github/workflows/e2e-sso.yml'
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
@@ -50,12 +59,49 @@ jobs:
     steps:
       - name: Checkout Code
         uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+
+      # Same path set the `pull_request` trigger used to carry, evaluated here instead so the
+      # context always reports. Duplicated rather than shared with ci.yml's `changes` job: that
+      # one lives in another workflow and cannot be depended on across workflow boundaries.
+      - name: Determine whether the SSO suite can be affected
+        id: relevant
+        run: |
+          set -euo pipefail
+
+          if [ "${{ github.event_name }}" != "pull_request" ]; then
+            echo "run=true" >> "$GITHUB_OUTPUT"
+            echo "Not a pull_request event -- running."
+            exit 0
+          fi
+
+          BASE="${{ github.event.pull_request.base.sha }}"
+          HEAD="${{ github.event.pull_request.head.sha }}"
+
+          if ! CHANGED=$(git diff --name-only "$BASE" "$HEAD" 2>/dev/null) || [ -z "$CHANGED" ]; then
+            echo "run=true" >> "$GITHUB_OUTPUT"
+            echo "Could not resolve the diff, or it was empty -- running rather than assuming."
+            exit 0
+          fi
+
+          echo "Changed files:"
+          echo "$CHANGED" | sed 's/^/  /'
+
+          if echo "$CHANGED" | grep -qE '\.go$|^go\.(mod|sum)$|^Makefile$|^cmd/|^pkg/|^tests/e2e/|^scripts/|^Dockerfile$|^\.github/workflows/e2e-sso\.yml$'; then
+            echo "run=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "run=false" >> "$GITHUB_OUTPUT"
+            echo "Nothing the SSO suite exercises changed -- reporting success without running it."
+          fi
 
       - name: Set up Go
+        if: steps.relevant.outputs.run == 'true'
         uses: actions/setup-go@v7
         with:
           go-version: '1.25'
           cache: true
 
       - name: Run SSO E2E Integration Test
+        if: steps.relevant.outputs.run == 'true'
         run: ./tests/e2e/run-sso.sh

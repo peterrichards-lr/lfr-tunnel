@@ -276,8 +276,10 @@ jobs:
           docker run --rm -v "$(pwd)":/mnt -w /mnt koalaman/shellcheck:v0.11.0 \
             -S error -x "${FILES[@]}"
 
-  # NOT gated at the job level, deliberately -- see #1380. The `master` ruleset requires the
-  # matrix-expanded contexts `Test Suite (ubuntu-latest|macos-latest|windows-latest)`. A
+  # NOT gated at the job level, deliberately -- see #1380. Required checks on `master` are
+  # configured in TWO places: the ruleset (5 contexts) and classic branch protection (9 contexts,
+  # `enforce_admins` on). Both require the matrix-expanded contexts
+  # `Test Suite (ubuntu-latest|macos-latest|windows-latest)`. A
   # job-level `if:` that evaluates false does not expand the matrix, so GitHub reports one
   # check named `Test Suite` (conclusion `skipped`) and those three contexts are never created
   # at all. A required context that never reports counts as pending, not as satisfied, so the
@@ -289,6 +291,11 @@ jobs:
   # A non-Go PR costs three runner starts that do nothing, which is the price of the required
   # contexts naming specific OSes. #1365 tracks requiring an aggregator context instead, which
   # would let this go back to a job-level gate and let the matrix be trimmed on PRs.
+  #
+  # A job-level `if:` IS safe for a required context when the job has no matrix -- a skipped job
+  # still reports its own context, and GitHub counts `skipped` as satisfied. That is why the
+  # gates #1363 put on `e2e-test`, `e2e-edge-test` and `e2e-ui-test` are fine and are left alone.
+  # Only the matrix job broke, plus e2e-sso.yml, which was gated at the workflow level instead.
   test:
     name: Test Suite
     needs: changes

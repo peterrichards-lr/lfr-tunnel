@@ -1708,7 +1708,13 @@ func (s *Server) handleRegister(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	// Update reservation with registration passcode & whitelist_ips if specified
+	// Update reservation with registration passcode & whitelist_ips if specified.
+	//
+	// The resolved values are kept so they can be stamped onto the lease below: the proxy reads
+	// access control from the lease rather than querying per request (#1329), and an edge has no
+	// database to query at all (#1367). This loop already holds the row, so recording it here
+	// costs nothing extra.
+	accessByDomain := make(map[string][3]string, len(activeDomains))
 	if s.db != nil {
 		for _, d := range activeDomains {
 			existing, err := s.db.GetSubdomainReservationByName(req.SubdomainPrefix, d)
@@ -1727,6 +1733,7 @@ func (s *Server) handleRegister(w http.ResponseWriter, r *http.Request) {
 						slog.Info(fmt.Sprintf("[Server] Failed to update access controls on registration: %v", err))
 					}
 				}
+				accessByDomain[d] = [3]string{existing.Passcode, existing.WhitelistIPs, existing.AccessMode}
 			}
 		}
 	}
@@ -1802,6 +1809,10 @@ func (s *Server) handleRegister(w http.ResponseWriter, r *http.Request) {
 		s.respondRegisterResponse(w, http.StatusConflict, r, RegisterResponse{Status: "error", Error: err.Error()})
 		return
 	}
+
+	// Stamp the access-control rules onto the leases just created, so the proxy can read them
+	// without a query per request (#1329).
+	applyAccessControlsToLeases(s.registry, req.SubdomainPrefix, activeDomains, accessByDomain)
 
 	// Trigger vanity domain hook for custom domains. Deliberately no enabled/path gate here --
 	// runVanityDomainHook resolves that itself via getVanityDomainHookConfig() (DB setting
@@ -5652,6 +5663,15 @@ func (s *Server) handleEdgeRegisterProxy(w http.ResponseWriter, r *http.Request,
 		UserID          string `json:"user_id"`
 		SubdomainPrefix string `json:"subdomain_prefix"`
 		RateLimit       int    `json:"rate_limit"`
+		// AccessControls is what this edge is to enforce, keyed by domain. It has no database
+		// to read it from, so being told is the only way it can enforce anything at all
+		// (#1367). An older control plane omits the field, which decodes as empty -- the
+		// previous behaviour, rather than a failure to register.
+		AccessControls map[string]struct {
+			Passcode     string `json:"passcode"`
+			WhitelistIPs string `json:"whitelist_ips"`
+			AccessMode   string `json:"access_mode"`
+		} `json:"access_controls"`
 	}
 	if err := json.NewDecoder(resp.Body).Decode(&valResp); err != nil {
 		s.respondRegisterResponse(w, http.StatusInternalServerError, r, RegisterResponse{Status: "error", Error: "invalid response from control plane"})
@@ -5664,6 +5684,13 @@ func (s *Server) handleEdgeRegisterProxy(w http.ResponseWriter, r *http.Request,
 		s.respondRegisterResponse(w, http.StatusConflict, r, RegisterResponse{Status: "error", Error: err.Error()})
 		return
 	}
+
+	// Enforcement on an edge depends entirely on this: it has no database to fall back on.
+	edgeAccess := make(map[string][3]string, len(valResp.AccessControls))
+	for d, ac := range valResp.AccessControls {
+		edgeAccess[d] = [3]string{ac.Passcode, ac.WhitelistIPs, ac.AccessMode}
+	}
+	applyAccessControlsToLeases(s.registry, valResp.SubdomainPrefix, activeDomains, edgeAccess)
 
 	var warning string
 	if req.ClientVersion != "" && req.ClientVersion != config.Version {
@@ -5832,6 +5859,10 @@ func (s *Server) handleEdgeRegister(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
+	// The resolved rules are returned to the edge below. An edge is stateless and has no
+	// database of its own, so without being told it enforced neither passcode nor IP whitelist
+	// on anything it served (#1367).
+	edgeAccessByDomain := make(map[string][3]string, len(edgeReq.Domains))
 	if s.db != nil {
 		for _, d := range edgeReq.Domains {
 			existing, err := s.db.GetSubdomainReservationByName(finalSubdomain, d)
@@ -5848,6 +5879,7 @@ func (s *Server) handleEdgeRegister(w http.ResponseWriter, r *http.Request) {
 				if updated {
 					_ = s.db.UpdateSubdomainReservation(existing) //nolint:errcheck
 				}
+				edgeAccessByDomain[d] = [3]string{existing.Passcode, existing.WhitelistIPs, existing.AccessMode}
 			}
 		}
 	}
@@ -5981,10 +6013,22 @@ func (s *Server) handleEdgeRegister(w http.ResponseWriter, r *http.Request) {
 	auditDetails := fmt.Sprintf("Started edge tunnel on node %s for subdomain %s (client IP: %s)", edgeNodeID, finalSubdomain, edgeReq.ClientIP)
 	s.writeAudit(actorEmail, "tunnel.start", "subdomain", finalSubdomain, auditDetails, r)
 
+	// access_controls is keyed by domain, because a reservation is keyed on (subdomain, domain)
+	// and the same subdomain can carry different rules on each.
+	accessControls := make(map[string]map[string]string, len(edgeAccessByDomain))
+	for d, ac := range edgeAccessByDomain {
+		accessControls[d] = map[string]string{
+			"passcode":      ac[0],
+			"whitelist_ips": ac[1],
+			"access_mode":   ac[2],
+		}
+	}
+
 	respondJSON(w, http.StatusOK, map[string]interface{}{
 		"user_id":          user.ID,
 		"subdomain_prefix": finalSubdomain,
 		"rate_limit":       effectiveLimit,
+		"access_controls":  accessControls,
 	})
 }
 

@@ -816,9 +816,22 @@ docker-compose -f docker-compose-edge.yml kill lfr-tunneld-edge > /dev/null 2>&1
 
 # Unlike the drain, this IS an interruption: the gateway carrying the tunnel vanished. What is
 # being asserted is recovery, and how long it takes -- not that nothing was dropped.
+#
+# The budget has to CLEAR edgeControlReadDeadline (pkg/server/edge_control_ws.go), not match it.
+# A killed gateway sends no close frame, so control cannot learn the edge is gone by any faster
+# path than that deadline expiring; until it does, control still believes the edge holds the
+# lease and the client cannot take it over. Recovery therefore costs the RESIDUAL of the
+# deadline -- how long since the dead edge's last ping -- which lands anywhere in 0..60s.
+# At 60 iterations this asserted a <=60s recovery against a mechanism whose worst case IS 60s,
+# so it passed on margin alone (43s and 53s in two runs) and failed whenever the kill landed
+# early in a ping interval, on PRs that had changed nothing near it (#1444).
+#
+# One second per iteration, so this is a budget in seconds: the 60s deadline, plus 60s of
+# headroom for the client's own failover cooldown, its re-registration, and CI scheduling noise.
+FAILOVER_RECOVERY_BUDGET="${FAILOVER_RECOVERY_BUDGET:-120}"
 RECOVERED=false
 RECOVERY_SECONDS=0
-for i in $(seq 1 60); do
+for i in $(seq 1 "$FAILOVER_RECOVERY_BUDGET"); do
     if curl -s -o /dev/null -w "%{http_code}" --max-time 2 \
         -H "Host: peter-fail.lfr-demo.local" http://localhost:8000/ 2>/dev/null | grep -q 200; then
         RECOVERED=true

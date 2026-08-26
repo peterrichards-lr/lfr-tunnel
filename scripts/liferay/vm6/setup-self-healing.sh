@@ -11,6 +11,10 @@ scp scripts/common/gateway-watchdog.service $VPS_USER@$VPS_IP:/home/$VPS_USER/ga
 scp scripts/common/gateway-watchdog.timer $VPS_USER@$VPS_IP:/home/$VPS_USER/gateway-watchdog.timer
 
 echo "Registering self-healing layers on VPS..."
+# Deliberate mixed heredoc (#1366): local values such as $SSH_USER are interpolated
+# here on purpose, and every remote-side variable is escaped as \$var so it expands on
+# the server. Quoting the delimiter would stop the local half the script depends on.
+# shellcheck disable=SC2087
 ssh $VPS_USER@$VPS_IP << REMOTE_SSH
   echo "=> Deploying systemd override for Nginx..."
   sudo mkdir -p /etc/systemd/system/nginx.service.d/

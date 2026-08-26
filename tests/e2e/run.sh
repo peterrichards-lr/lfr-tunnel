@@ -22,6 +22,10 @@ export E2E_PROXY_PORT
 export E2E_MAILPIT_PORT
 
 # Change directory to script location
+# Not a stray space (#1366): `CDPATH= cd` is a prefix assignment that neutralises
+# CDPATH for this one command, so an entry in the user's CDPATH cannot silently
+# redirect the cd. shellcheck reads it as an empty assignment.
+# shellcheck disable=SC1007
 CDPATH= cd -- "$(dirname -- "$0")"
 
 # Signal file configuration
@@ -62,7 +66,7 @@ echo "WAITING_HEALTHY" > "$SIGNAL_FILE"
 
 # Wait for Mailpit to be fully online
 echo "=== Waiting for Mailpit to be ready ==="
-for i in {1..15}; do
+for _ in {1..15}; do
     if curl -s http://localhost:$E2E_MAILPIT_PORT/api/v1/messages > /dev/null; then
         echo "Mailpit is ready!"
         break
@@ -73,7 +77,7 @@ done
 
 # Wait for Nginx proxy to be fully online
 echo "=== Waiting for Nginx proxy to be ready ==="
-for i in {1..30}; do
+for _ in {1..30}; do
     if curl -s -f http://localhost:$E2E_PROXY_PORT/api/domains > /dev/null; then
         echo "Nginx proxy is ready!"
         break
@@ -288,7 +292,7 @@ echo "Client container ID: $CLIENT_CONTAINER_ID"
 # Wait for client to connect and establish the tunnel
 echo "=== Waiting for tunnel connection ==="
 TUNNEL_READY=false
-for i in {1..20}; do
+for _ in {1..20}; do
     RESPONSE_CODE=$(curl -s -o /dev/null -w "%{http_code}" -H "Host: peter-dev.lfr-demo.local" http://localhost:$E2E_PROXY_PORT/ || true)
     if [ "$RESPONSE_CODE" = "200" ]; then
         echo "Tunnel is ready!"

@@ -40,6 +40,10 @@ export E2E_PROXY_PORT
 export E2E_KEYCLOAK_PORT
 export E2E_MAILPIT_PORT
 
+# Not a stray space (#1366): `CDPATH= cd` is a prefix assignment that neutralises
+# CDPATH for this one command, so an entry in the user's CDPATH cannot silently
+# redirect the cd. shellcheck reads it as an empty assignment.
+# shellcheck disable=SC1007
 CDPATH= cd -- "$(dirname -- "$0")"
 
 # Signal file configuration
@@ -69,14 +73,17 @@ COMPOSE_FILE="docker-compose-sso.yml"
 TUNNEL_BASE="http://localhost:$E2E_PROXY_PORT"
 KEYCLOAK_BASE="http://localhost:$E2E_KEYCLOAK_PORT"
 KEYCLOAK_REALM="liferay"
-KEYCLOAK_CLIENT_ID="lfr-tunnel"
-KEYCLOAK_CLIENT_SECRET="secret"
+# The client id and secret are NOT set here. keycloak-realm.json is the source of truth for
+# both ("clientId": "lfr-tunnel", "secret": "secret") and nothing in this script or in
+# docker-compose-sso.yml read these variables -- they were duplicate documentation that
+# nothing kept in step with the realm (#1366).
 SSO_USER_EMAIL="sso-user@lfr-demo.local"
 SSO_USER_PASSWORD="SsoP@ssw0rd!"
 PROVIDER_ID="keycloak"
 ADMIN_EMAIL="admin@lfr-demo.local"
 
-FAILED=0
+# No FAILED counter: failure runs through fail(), which exits 1, and the EXIT trap above
+# writes the signal file. The old FAILED=0 was never read (#1366).
 
 fail() {
     echo ""

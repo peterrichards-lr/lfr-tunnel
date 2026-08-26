@@ -1,11 +1,15 @@
 package ops
 
 import (
+	"crypto/sha256"
+	"encoding/hex"
 	"encoding/json"
 	"fmt"
 	"io"
 	"net/http"
 	"os"
+	"path/filepath"
+	"sort"
 	"strings"
 	"time"
 )
@@ -309,12 +313,15 @@ func DeployClientsCommand(args []string) {
 		fmt.Println("lfr-tunnel-ops.yaml -- see lfr-tunnel-ops.yaml.example. -target/LFT_OPS_TARGET")
 		fmt.Println("selects which named target to use from a multi-target config file. Real,")
 		fmt.Println("live upload, no dry run.")
+		fmt.Println("\nRefuses to run unless dist/'s build manifest matches pkg/config/version.go,")
+		fmt.Println("and afterwards verifies the gateway is serving the bytes just uploaded")
+		fmt.Println("(#1279). -allow-stale overrides the first check; -skip-verify the second.")
 		return
 	}
 
 	fmt.Println("=== Deploying Client Binaries and Checksums to VPS ===")
 
-	flagIdentity, flagUser, flagHost, flagTarget, err := parseTargetFlags("deploy-clients", args)
+	flagIdentity, flagUser, flagHost, flagTarget, allowStale, skipVerify, err := parseDeployClientsFlags("deploy-clients", args)
 	CheckFatal(err, "Failed to parse arguments")
 
 	target, err := ResolveDeployTarget(flagUser, flagHost, flagIdentity, flagTarget)
@@ -328,6 +335,12 @@ func DeployClientsCommand(args []string) {
 		os.Exit(1)
 	}
 
+	// Say which version is about to be published, before publishing it. This alone would have
+	// made the #1279 incident visible immediately: every step reported success, and none of them
+	// said what they were shipping.
+	manifest := RequireCurrentDist("dist", "deploy-clients", allowStale)
+	fmt.Printf("Publishing client binaries for %s to %s.\n", manifest.Version, target.Host)
+
 	fmt.Println("Uploading files from dist/ to", sshTarget)
 	err = RunCommand("scp", "-i", identityFile, "-r", "dist", sshTarget+":/home/"+vpsUser+"/dist_tmp")
 	CheckFatal(err, "Failed to SCP client binaries")
@@ -335,12 +348,150 @@ func DeployClientsCommand(args []string) {
 	fmt.Println("Moving files to secure web server downloads directory on VPS...")
 	remoteScript := `
 	sudo mkdir -p /var/www/lfr-tunnel/static/downloads
-	sudo cp /home/` + vpsUser + `/dist_tmp/lfr-tunnel-* /home/` + vpsUser + `/dist_tmp/checksums.txt* /var/www/lfr-tunnel/static/downloads/ 2>/dev/null || true
+	sudo cp /home/` + vpsUser + `/dist_tmp/lfr-tunnel-* /home/` + vpsUser + `/dist_tmp/checksums.txt* /home/` + vpsUser + `/dist_tmp/` + BuildManifestName + ` /var/www/lfr-tunnel/static/downloads/ 2>/dev/null || true
 	sudo chmod -R +r /var/www/lfr-tunnel/static/downloads
 	rm -rf /home/` + vpsUser + `/dist_tmp
 	`
 	err = RunCommand("ssh", "-i", identityFile, sshTarget, remoteScript)
 	CheckFatal(err, "Failed to move client binaries on VPS")
 
-	fmt.Println("=== Client Binaries Deployment Complete! ===")
+	if skipVerify {
+		fmt.Println("Skipping post-upload verification (-skip-verify).")
+	} else {
+		err = verifyPublishedClientsAt("https://"+target.Host, "dist", &http.Client{Timeout: 2 * time.Minute})
+		CheckFatal(err, "Client binaries were uploaded but the gateway is not serving them")
+	}
+
+	fmt.Printf("=== Client Binaries Deployment Complete! Published %s ===\n", manifest.Version)
+}
+
+// --- Post-upload verification of the client downloads (#1279) ---
+//
+// `deploy` already proves the gateway is serving the version it just installed ("Verifying ...
+// is serving vX"). The client download path had no equivalent, which is how binaries from an
+// earlier version were served for a full day while every step reported success. "The copy
+// succeeded" and "the right bytes are being served" are different claims, and only the second
+// one matters to a user running --upgrade.
+
+// parseChecksums reads the `<sha256>  <name>` lines that generateChecksums writes.
+//
+// Compared as a parsed map rather than as raw bytes on purpose: it makes the mismatch report
+// name the file that differs, and it is immune to a trailing-newline difference introduced in
+// transit, which would otherwise read as a deploy failure.
+func parseChecksums(data []byte) map[string]string {
+	out := map[string]string{}
+	for _, line := range strings.Split(string(data), "\n") {
+		fields := strings.Fields(line)
+		if len(fields) != 2 {
+			continue
+		}
+		out[fields[1]] = fields[0]
+	}
+	return out
+}
+
+// diffChecksums describes how published differs from local, or returns "" when they agree.
+func diffChecksums(local, published map[string]string) string {
+	var problems []string
+	for name, want := range local {
+		got, ok := published[name]
+		switch {
+		case !ok:
+			problems = append(problems, fmt.Sprintf("%s is not published", name))
+		case got != want:
+			problems = append(problems, fmt.Sprintf("%s published as %s, expected %s", name, short(got), short(want)))
+		}
+	}
+	// Extra published entries are reported but are not a failure on their own: an older
+	// artefact left in the downloads directory is untidy, not a wrong answer to --upgrade.
+	var extra []string
+	for name := range published {
+		if _, ok := local[name]; !ok {
+			extra = append(extra, name)
+		}
+	}
+	sort.Strings(problems)
+	sort.Strings(extra)
+	if len(extra) > 0 {
+		fmt.Printf("Note: the downloads directory also holds %s (left from an earlier deploy).\n",
+			strings.Join(extra, ", "))
+	}
+	if len(problems) == 0 {
+		return ""
+	}
+	return strings.Join(problems, "; ")
+}
+
+func short(hash string) string {
+	if len(hash) > 12 {
+		return hash[:12]
+	}
+	return hash
+}
+
+// verifyPublishedClientsAt is the testable form: the base URL is explicit so tests can point at
+// an httptest server rather than a real gateway.
+func verifyPublishedClientsAt(baseURL, distDir string, client *http.Client) error {
+	localRaw, err := os.ReadFile(filepath.Join(distDir, "checksums.txt"))
+	if err != nil {
+		return fmt.Errorf("could not read local checksums: %w", err)
+	}
+	local := parseChecksums(localRaw)
+	if len(local) == 0 {
+		return fmt.Errorf("local checksums.txt lists no artefacts")
+	}
+
+	downloads := strings.TrimRight(baseURL, "/") + "/static/downloads"
+
+	fmt.Printf("Verifying %s is serving what was just uploaded...\n", downloads)
+
+	publishedRaw, err := httpGetLimited(client, downloads+"/checksums.txt", 1<<20)
+	if err != nil {
+		return fmt.Errorf("could not fetch the published checksums.txt: %w", err)
+	}
+	published := parseChecksums(publishedRaw)
+
+	if problems := diffChecksums(local, published); problems != "" {
+		return fmt.Errorf("the published checksums do not match what was uploaded: %s", problems)
+	}
+	fmt.Printf("Verified: all %d published checksums match.\n", len(local))
+
+	// The checksums agreeing only proves the manifest was replaced. Fetch one real binary and
+	// hash it, so a stale binary sitting behind a fresh checksums.txt cannot pass. Prefer
+	// linux-amd64: it is what install.sh fetches by default, so it is the one most users get.
+	probe := "lfr-tunnel-linux-amd64"
+	if _, ok := local[probe]; !ok {
+		names := make([]string, 0, len(local))
+		for name := range local {
+			names = append(names, name)
+		}
+		sort.Strings(names)
+		probe = names[0]
+	}
+
+	fmt.Printf("Fetching %s to confirm the bytes match...\n", probe)
+	body, err := httpGetLimited(client, downloads+"/"+probe, 256<<20)
+	if err != nil {
+		return fmt.Errorf("could not fetch published %s: %w", probe, err)
+	}
+	sum := sha256.Sum256(body)
+	got := hex.EncodeToString(sum[:])
+	if got != local[probe] {
+		return fmt.Errorf("published %s hashes to %s, expected %s -- the downloads directory is "+
+			"serving different bytes from the ones just uploaded", probe, short(got), short(local[probe]))
+	}
+	fmt.Printf("Verified: published %s matches (%s).\n", probe, short(got))
+	return nil
+}
+
+func httpGetLimited(client *http.Client, url string, limit int64) ([]byte, error) {
+	resp, err := client.Get(url)
+	if err != nil {
+		return nil, err
+	}
+	defer resp.Body.Close() //nolint:errcheck
+	if resp.StatusCode != http.StatusOK {
+		return nil, fmt.Errorf("status %d", resp.StatusCode)
+	}
+	return io.ReadAll(io.LimitReader(resp.Body, limit))
 }

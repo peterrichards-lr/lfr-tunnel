@@ -60,7 +60,9 @@ func WriteBuildManifest(dir string, m BuildManifest) error {
 	if err != nil {
 		return err
 	}
-	return os.WriteFile(BuildManifestPath(dir), append(data, '\n'), 0o644)
+	// 0644 deliberately (#1408): deploy-clients copies this into the downloads directory as
+	// provenance for what was published. Version, commit and build time -- not a secret.
+	return os.WriteFile(BuildManifestPath(dir), append(data, '\n'), 0o644) //nolint:gosec
 }
 
 // ReadBuildManifest loads the manifest, or reports why it could not.

@@ -22,10 +22,12 @@ func LoadOrCreateCA(certPath, keyPath string) (*x509.Certificate, *rsa.PrivateKe
 	}
 
 	// 1. Ensure target directories exist
-	if err := os.MkdirAll(filepath.Dir(certPath), 0755); err != nil {
+	// 0750: this directory holds the CA key as well as the cert, and only this process
+	// reads it. Nothing else on the host needs traversal (#1408).
+	if err := os.MkdirAll(filepath.Dir(certPath), 0o750); err != nil {
 		return nil, nil, fmt.Errorf("failed to create CA cert directory: %w", err)
 	}
-	if err := os.MkdirAll(filepath.Dir(keyPath), 0755); err != nil {
+	if err := os.MkdirAll(filepath.Dir(keyPath), 0o750); err != nil {
 		return nil, nil, fmt.Errorf("failed to create CA key directory: %w", err)
 	}
 
@@ -132,7 +134,9 @@ func LoadOrCreateCA(certPath, keyPath string) (*x509.Certificate, *rsa.PrivateKe
 	}
 
 	// Write cert to disk with 0644 permissions
-	certOut, err := os.OpenFile(certPath, os.O_WRONLY|os.O_CREATE|os.O_TRUNC, 0644)
+	// 0644 deliberately: a certificate is public material. The private key beside it is
+	// written 0600 above, which is the mode that matters here (#1408).
+	certOut, err := os.OpenFile(certPath, os.O_WRONLY|os.O_CREATE|os.O_TRUNC, 0o644) //nolint:gosec
 	if err != nil {
 		return nil, nil, fmt.Errorf("failed to open CA cert file for writing: %w", err)
 	}

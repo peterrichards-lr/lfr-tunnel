@@ -150,7 +150,9 @@ func installDarwin(exePath string) error {
 		_ = os.Remove(prettyExe)
 		if err := os.Symlink(exePath, prettyExe); err != nil {
 			if input, err := os.ReadFile(exePath); err == nil {
-				if werr := os.WriteFile(prettyExe, input, 0755); werr != nil {
+				// 0755 required (#1408): this is a copy of the client binary under a friendly
+				// name, and it has to be executable to be the thing the service launches.
+				if werr := os.WriteFile(prettyExe, input, 0o755); werr != nil { //nolint:gosec
 					// Cosmetic only: the friendly name is what the OS shows for the running
 					// process. Without it the service still starts, under the real binary
 					// name, so this is worth reporting rather than failing on.
@@ -187,10 +189,20 @@ func installDarwin(exePath string) error {
 </dict>
 </plist>`, prettyExe, homeDir, homeDir)
 
-	if err := os.MkdirAll(filepath.Dir(plistPath), 0755); err != nil {
+	// 0750 (#1408): these live under the user's own home and every reader -- launchd,
+	// systemd --user, Explorer -- runs as that same user. MkdirAll leaves an existing
+	// directory's mode alone, so this only applies when creating one.
+	if err := os.MkdirAll(filepath.Dir(plistPath), 0o750); err != nil {
 		return err
 	}
-	if err := os.WriteFile(plistPath, []byte(plistContent), 0644); err != nil {
+	// 0644 left alone (#1408). Read by the platform service manager -- launchd,
+	// systemd --user, Explorer -- which runs as this same user, so 0600 would very
+	// likely work. "Very likely" is the problem: a unit file the manager cannot read
+	// presents as autostart silently not happening, on three platforms that cannot be
+	// tested from one machine. The content is a binary path, not a secret, so the
+	// trade is a world-readable path against a silent breakage -- deliberately taking
+	// the former until someone can verify all three.
+	if err := os.WriteFile(plistPath, []byte(plistContent), 0o644); err != nil { //nolint:gosec
 		return err
 	}
 
@@ -212,7 +224,7 @@ func installLinux(exePath string) error {
 	}
 
 	serviceDir := filepath.Join(homeDir, ".config", "systemd", "user")
-	if err := os.MkdirAll(serviceDir, 0755); err != nil {
+	if err := os.MkdirAll(serviceDir, 0o750); err != nil {
 		return err
 	}
 
@@ -230,7 +242,14 @@ RestartSec=10
 WantedBy=default.target
 `, exePath)
 
-	if err := os.WriteFile(servicePath, []byte(serviceContent), 0644); err != nil {
+	// 0644 left alone (#1408). Read by the platform service manager -- launchd,
+	// systemd --user, Explorer -- which runs as this same user, so 0600 would very
+	// likely work. "Very likely" is the problem: a unit file the manager cannot read
+	// presents as autostart silently not happening, on three platforms that cannot be
+	// tested from one machine. The content is a binary path, not a secret, so the
+	// trade is a world-readable path against a silent breakage -- deliberately taking
+	// the former until someone can verify all three.
+	if err := os.WriteFile(servicePath, []byte(serviceContent), 0o644); err != nil { //nolint:gosec
 		return err
 	}
 
@@ -252,7 +271,7 @@ func installWindows(exePath string) error {
 
 	// AppData\Roaming\Microsoft\Windows\Start Menu\Programs\Startup
 	startupDir := filepath.Join(homeDir, "AppData", "Roaming", "Microsoft", "Windows", "Start Menu", "Programs", "Startup")
-	if err := os.MkdirAll(startupDir, 0755); err != nil {
+	if err := os.MkdirAll(startupDir, 0o750); err != nil {
 		return err
 	}
 
@@ -263,7 +282,14 @@ func installWindows(exePath string) error {
 		"WshShell.Run chr(34) & \"%s\" & chr(34) & \" -background\", 0\r\n"+
 		"Set WshShell = Nothing", exePath)
 
-	if err := os.WriteFile(vbsPath, []byte(vbsContent), 0644); err != nil {
+	// 0644 left alone (#1408). Read by the platform service manager -- launchd,
+	// systemd --user, Explorer -- which runs as this same user, so 0600 would very
+	// likely work. "Very likely" is the problem: a unit file the manager cannot read
+	// presents as autostart silently not happening, on three platforms that cannot be
+	// tested from one machine. The content is a binary path, not a secret, so the
+	// trade is a world-readable path against a silent breakage -- deliberately taking
+	// the former until someone can verify all three.
+	if err := os.WriteFile(vbsPath, []byte(vbsContent), 0o644); err != nil { //nolint:gosec
 		return err
 	}
 
@@ -337,7 +363,9 @@ func installDarwinGUI(exePath string) error {
 		_ = os.Remove(prettyExe)
 		if err := os.Symlink(exePath, prettyExe); err != nil {
 			if input, err := os.ReadFile(exePath); err == nil {
-				if werr := os.WriteFile(prettyExe, input, 0755); werr != nil {
+				// 0755 required (#1408): this is a copy of the client binary under a friendly
+				// name, and it has to be executable to be the thing the service launches.
+				if werr := os.WriteFile(prettyExe, input, 0o755); werr != nil { //nolint:gosec
 					// Cosmetic only: the friendly name is what the OS shows for the running
 					// process. Without it the service still starts, under the real binary
 					// name, so this is worth reporting rather than failing on.
@@ -372,10 +400,20 @@ func installDarwinGUI(exePath string) error {
 </dict>
 </plist>`, prettyExe, homeDir, homeDir)
 
-	if err := os.MkdirAll(filepath.Dir(plistPath), 0755); err != nil {
+	// 0750 (#1408): these live under the user's own home and every reader -- launchd,
+	// systemd --user, Explorer -- runs as that same user. MkdirAll leaves an existing
+	// directory's mode alone, so this only applies when creating one.
+	if err := os.MkdirAll(filepath.Dir(plistPath), 0o750); err != nil {
 		return err
 	}
-	if err := os.WriteFile(plistPath, []byte(plistContent), 0644); err != nil {
+	// 0644 left alone (#1408). Read by the platform service manager -- launchd,
+	// systemd --user, Explorer -- which runs as this same user, so 0600 would very
+	// likely work. "Very likely" is the problem: a unit file the manager cannot read
+	// presents as autostart silently not happening, on three platforms that cannot be
+	// tested from one machine. The content is a binary path, not a secret, so the
+	// trade is a world-readable path against a silent breakage -- deliberately taking
+	// the former until someone can verify all three.
+	if err := os.WriteFile(plistPath, []byte(plistContent), 0o644); err != nil { //nolint:gosec
 		return err
 	}
 
@@ -420,7 +458,7 @@ func installLinuxGUI(exePath string) error {
 	}
 
 	autostartDir := filepath.Join(homeDir, ".config", "autostart")
-	if err := os.MkdirAll(autostartDir, 0755); err != nil {
+	if err := os.MkdirAll(autostartDir, 0o750); err != nil {
 		return err
 	}
 
@@ -434,7 +472,14 @@ Terminal=false
 Categories=Network;
 `, exePath)
 
-	if err := os.WriteFile(desktopPath, []byte(desktopContent), 0644); err != nil {
+	// 0644 left alone (#1408). Read by the platform service manager -- launchd,
+	// systemd --user, Explorer -- which runs as this same user, so 0600 would very
+	// likely work. "Very likely" is the problem: a unit file the manager cannot read
+	// presents as autostart silently not happening, on three platforms that cannot be
+	// tested from one machine. The content is a binary path, not a secret, so the
+	// trade is a world-readable path against a silent breakage -- deliberately taking
+	// the former until someone can verify all three.
+	if err := os.WriteFile(desktopPath, []byte(desktopContent), 0o644); err != nil { //nolint:gosec
 		return err
 	}
 
@@ -469,7 +514,7 @@ func installWindowsGUI(exePath string) error {
 	}
 
 	startupDir := filepath.Join(homeDir, "AppData", "Roaming", "Microsoft", "Windows", "Start Menu", "Programs", "Startup")
-	if err := os.MkdirAll(startupDir, 0755); err != nil {
+	if err := os.MkdirAll(startupDir, 0o750); err != nil {
 		return err
 	}
 
@@ -478,7 +523,14 @@ func installWindowsGUI(exePath string) error {
 		"WshShell.Run chr(34) & \"%s\" & chr(34) & \" -gui\", 0\r\n"+
 		"Set WshShell = Nothing", exePath)
 
-	if err := os.WriteFile(vbsPath, []byte(vbsContent), 0644); err != nil {
+	// 0644 left alone (#1408). Read by the platform service manager -- launchd,
+	// systemd --user, Explorer -- which runs as this same user, so 0600 would very
+	// likely work. "Very likely" is the problem: a unit file the manager cannot read
+	// presents as autostart silently not happening, on three platforms that cannot be
+	// tested from one machine. The content is a binary path, not a secret, so the
+	// trade is a world-readable path against a silent breakage -- deliberately taking
+	// the former until someone can verify all three.
+	if err := os.WriteFile(vbsPath, []byte(vbsContent), 0o644); err != nil { //nolint:gosec
 		return err
 	}
 

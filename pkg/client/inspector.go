@@ -273,6 +273,35 @@ func StartInspector(port int, engine *InterceptorEngine) (int, error) {
 			if effective, derr := LogDir(); derr == nil {
 				resp["log_dir_effective"] = effective
 			}
+
+			// Same reasoning, applied to the rest of the panel (#1211). Everything above is
+			// the *saved* config, but a client started with flags or environment variables
+			// is not using it -- run the client with -server and -subdomain and no config
+			// file, and this panel showed two empty boxes while the process was happily
+			// connected to a gateway. The Inspector is the diagnostic tool; someone asking
+			// "am I on the right gateway?" is exactly who reads this, and it was exactly
+			// what it would not tell them.
+			//
+			// Reported alongside the saved values rather than replacing them, because the
+			// difference is the useful part: editing a field here writes the saved config,
+			// which does not change what the running process is using.
+			engine.mu.RLock()
+			effSubdomain := engine.ClientSubdomain
+			if effSubdomain == "" {
+				effSubdomain = engine.SubdomainAss
+			}
+			if effSubdomain == "" {
+				effSubdomain = engine.SubdomainReq
+			}
+			resp["effective"] = map[string]interface{}{
+				"server_url":    engine.ServerURL,
+				"auth_token":    maskToken(engine.Token),
+				"target_host":   engine.TargetHost,
+				"dest_port":     engine.DestPort,
+				"subdomain":     effSubdomain,
+				"preserve_host": engine.PreserveHost,
+			}
+			engine.mu.RUnlock()
 			_ = json.NewEncoder(w).Encode(resp) //nolint:errcheck
 			return
 		}

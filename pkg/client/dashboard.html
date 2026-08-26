@@ -230,6 +230,7 @@ const clientTranslations = {
         "client_req_subdomain": "Requested Subdomain",
         "client_req_subdomain_help": "The subdomain prefix for your public URL. If auto-reservation is enabled for your account, leaving this blank will assign a random subdomain.",
         "client_preserve_host": "Preserve incoming Host header",
+        "client_runtime_override": "In use now (set at launch). Saving changes the stored config, not this session.",
         "client_preserve_host_help": "If checked, forwards the public URL Host header to your local server instead of rewriting it to the Target Host. Useful for Liferay Virtual Instances.",
         "client_insecure_ssl": "Allow insecure local SSL (Skip TLS Verification)",
         "client_insecure_ssl_help": "If checking against an HTTPS port (e.g. 443), this bypasses strict certificate checks. Required for most self-signed localhost certificates.",
@@ -270,6 +271,7 @@ const clientTranslations = {
         "client_req_subdomain": "Subdominio Solicitado (Opcional)",
         "client_req_subdomain_help": "Un nombre personalizado para su URL pública (sujeto a permisos de la cuenta).",
         "client_preserve_host": "Preservar encabezado Host",
+        "client_runtime_override": "En uso ahora (definido al iniciar). Guardar cambia la configuración almacenada, no esta sesión.",
         "client_preserve_host_help": "Reenvía el encabezado Host de la URL pública a su servidor local.",
         "client_insecure_ssl": "Permitir SSL local inseguro",
         "client_insecure_ssl_help": "Omite las comprobaciones estrictas de certificados. Necesario para localhost.",
@@ -310,6 +312,7 @@ const clientTranslations = {
         "client_req_subdomain": "Gewünschte Subdomain (Optional)",
         "client_req_subdomain_help": "Ein benutzerdefinierter Name für Ihre öffentliche URL (abhängig von Kontoberechtigungen).",
         "client_preserve_host": "Eingehenden Host-Header beibehalten",
+        "client_runtime_override": "Derzeit aktiv (beim Start gesetzt). Speichern ändert die gespeicherte Konfiguration, nicht diese Sitzung.",
         "client_preserve_host_help": "Leitet den Host-Header der öffentlichen URL an Ihren lokalen Server weiter.",
         "client_insecure_ssl": "Unsicheres lokales SSL zulassen",
         "client_insecure_ssl_help": "Überspringt Zertifikatsprüfungen. Erforderlich für localhost-Zertifikate.",
@@ -350,6 +353,7 @@ const clientTranslations = {
         "client_req_subdomain": "Sous-domaine demandé (Optionnel)",
         "client_req_subdomain_help": "Un nom personnalisé pour votre URL publique (sous réserve des autorisations du compte).",
         "client_preserve_host": "Préserver l'en-tête Host",
+        "client_runtime_override": "Actuellement utilisé (défini au démarrage). Enregistrer modifie la configuration enregistrée, pas cette session.",
         "client_preserve_host_help": "Transmet l'en-tête Host de l'URL publique à votre serveur local.",
         "client_insecure_ssl": "Autoriser SSL local non sécurisé",
         "client_insecure_ssl_help": "Contourne les vérifications de certificats. Requis pour localhost.",
@@ -390,6 +394,7 @@ const clientTranslations = {
         "client_req_subdomain": "Subdomínio Solicitado (Opcional)",
         "client_req_subdomain_help": "Um nome personalizado para sua URL pública (sujeito às permissões da conta).",
         "client_preserve_host": "Preservar cabeçalho Host",
+        "client_runtime_override": "Em uso agora (definido ao iniciar). Guardar altera a configuração guardada, não esta sessão.",
         "client_preserve_host_help": "Encaminha o cabeçalho Host da URL pública para o servidor local.",
         "client_insecure_ssl": "Permitir SSL local inseguro",
         "client_insecure_ssl_help": "Ignora verificações rigorosas de certificado. Necessário para localhost.",
@@ -430,6 +435,7 @@ const clientTranslations = {
         "client_req_subdomain": "希望するサブドメイン（オプション）",
         "client_req_subdomain_help": "公開URLのカスタム名です（アカウント権限に依存します）。",
         "client_preserve_host": "着信Hostヘッダーを保持する",
+        "client_runtime_override": "現在使用中（起動時に指定）。保存すると保存済みの設定が変更され、このセッションには影響しません。",
         "client_preserve_host_help": "公開URLのHostヘッダーをローカルサーバーに転送します。",
         "client_insecure_ssl": "安全でないローカルSSLを許可する",
         "client_insecure_ssl_help": "厳密な証明書チェックをバイパスします。localhostに必要です。",
@@ -975,12 +981,29 @@ function setLanguage(lang) {
             try {
                 const res = await fetch('/api/config');
                 const cfg = await res.json();
-                document.getElementById('cfg-server-url').value = cfg.server_url || '';
-                document.getElementById('cfg-auth-token').value = cfg.auth_token || '';
-                document.getElementById('cfg-dest-port').value = cfg.dest_port || 8080;
-                document.getElementById('cfg-target-host').value = cfg.target_host || 'localhost';
-                document.getElementById('cfg-subdomain').value = cfg.subdomain || '';
-                document.getElementById('cfg-preserve-host').checked = !!cfg.preserve_host;
+                // Show what the running client is ACTUALLY using, not only what was saved
+                // (#1211). Started with -server/-subdomain and no config file, this panel
+                // used to render empty boxes while the client sat connected and serving
+                // traffic -- the one screen someone opens to ask "am I on the right
+                // gateway?" was the one that could not say. Same reasoning as the
+                // log_dir_effective note just below. Fall back to the saved value where the
+                // engine has nothing.
+                const eff = cfg.effective || {};
+                const pick = (name, fallback) =>
+                    (eff[name] !== undefined && eff[name] !== null && eff[name] !== '')
+                        ? eff[name] : fallback;
+
+                document.getElementById('cfg-server-url').value = pick('server_url', cfg.server_url || '');
+                document.getElementById('cfg-auth-token').value = pick('auth_token', cfg.auth_token || '');
+                document.getElementById('cfg-dest-port').value = pick('dest_port', cfg.dest_port || 8080);
+                document.getElementById('cfg-target-host').value = pick('target_host', cfg.target_host || 'localhost');
+                document.getElementById('cfg-subdomain').value = pick('subdomain', cfg.subdomain || '');
+                document.getElementById('cfg-preserve-host').checked = !!pick('preserve_host', cfg.preserve_host);
+
+                // Where the running value and the saved one disagree, say so: editing a
+                // field here writes the saved config and does not touch the process that is
+                // already running.
+                markRuntimeOverrides(cfg, eff);
                 document.getElementById('cfg-insecure-skip-verify').checked = !!cfg.insecure_skip_verify;
                 document.getElementById('cfg-maintenance-path').value = cfg.maintenance_path || '';
                 document.getElementById('cfg-log-dir').value = cfg.log_dir || '';
@@ -999,6 +1022,37 @@ function setLanguage(lang) {
                 console.error("Error loading config", e);
                 document.getElementById('settings-error').innerText = 'Failed to load configuration: ' + e.message;
                 document.getElementById('settings-error').style.display = 'block';
+            }
+        }
+
+        // Flags and environment variables win over the saved config for a process that is
+        // already running (#1211). Marking the fields where the two disagree keeps the panel
+        // honest about which value is in force and which one editing would change.
+        function markRuntimeOverrides(saved, eff) {
+            const fields = [
+                ['cfg-server-url', 'server_url'],
+                ['cfg-auth-token', 'auth_token'],
+                ['cfg-dest-port', 'dest_port'],
+                ['cfg-target-host', 'target_host'],
+                ['cfg-subdomain', 'subdomain'],
+                ['cfg-preserve-host', 'preserve_host'],
+            ];
+            for (const [id, key] of fields) {
+                const el = document.getElementById(id);
+                if (!el) continue;
+                const existing = el.parentElement.querySelector('.runtime-override-note');
+                if (existing) existing.remove();
+
+                const effVal = eff[key];
+                if (effVal === undefined || effVal === null || effVal === '') continue;
+                const savedVal = (saved[key] === undefined || saved[key] === null) ? '' : saved[key];
+                if (String(effVal) === String(savedVal)) continue;
+
+                const note = document.createElement('div');
+                note.className = 'runtime-override-note';
+                note.style.cssText = 'font-size: 11px; color: var(--text-muted); margin-top: 4px;';
+                note.textContent = t('client_runtime_override');
+                el.parentElement.appendChild(note);
             }
         }
 

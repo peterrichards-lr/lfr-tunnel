@@ -882,6 +882,34 @@ html[dir="rtl"] td, html[dir="rtl"] th {
 /* Touch & Mobile Optimizations */
 .table-responsive {
     -webkit-overflow-scrolling: touch;
+    /* The wrapper has always scrolled -- measured on a 400px viewport, a Users table is
+       722px wide inside a 318px container, so overflow-x: auto is doing its job. The
+       problem reported in #1206 was that nothing said so: with overlay scrollbars there is
+       no visible cue, so Role, Status, Auth Method, Quotas, Last Seen and the whole
+       Actions column read as clipped and unreachable rather than scrolled-past.
+
+       Same fix and same reasoning as .sidebar-menu (#1204/#1213), where an invisible
+       thumb left whole admin sections undiscovered. Styling ::-webkit-scrollbar opts out
+       of macOS overlay scrollbars, so the bar is painted rather than fading away. */
+    scrollbar-width: thin;
+    scrollbar-color: var(--scrollbar-thumb) transparent;
+}
+
+.table-responsive::-webkit-scrollbar {
+    height: 8px;
+}
+
+.table-responsive::-webkit-scrollbar-track {
+    background: transparent;
+}
+
+.table-responsive::-webkit-scrollbar-thumb {
+    background: var(--scrollbar-thumb);
+    border-radius: 4px;
+}
+
+.table-responsive::-webkit-scrollbar-thumb:hover {
+    background: var(--scrollbar-thumb-hover);
 }
 
 @media (hover: none) {

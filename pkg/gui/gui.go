@@ -58,6 +58,10 @@ func (s *TempSettingsServer) Start() {
 	s.server = &http.Server{
 		Addr:    fmt.Sprintf("127.0.0.1:%d", s.port),
 		Handler: mux,
+		// Header reading only (#1372). This is a loopback settings UI, so nothing it serves
+		// needs an unbounded header read, and the other three timeouts are left unset for the
+		// same reason as elsewhere: they would bound whole requests, not just the exposure.
+		ReadHeaderTimeout: 10 * time.Second,
 	}
 
 	go func() {

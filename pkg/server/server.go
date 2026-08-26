@@ -2184,7 +2184,8 @@ func (s *Server) Start() error {
 			slog.Info(fmt.Sprintf("[Server] Loaded config: Bind=%s, HTTPBind=%s, Domains=%v, DB=%s",
 				s.cfg.BindAddr, s.cfg.HTTPBindAddr, s.cfg.Domains, s.cfg.DBPath))
 			redirectSrv := &http.Server{
-				Addr: s.cfg.HTTPBindAddr,
+				Addr:              s.cfg.HTTPBindAddr,
+				ReadHeaderTimeout: readHeaderTimeout,
 				Handler: http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 					target := "https://" + r.Host + r.URL.Path
 					if r.URL.RawQuery != "" {
@@ -2201,8 +2202,9 @@ func (s *Server) Start() error {
 
 		slog.Info(fmt.Sprintf("[Server] Starting HTTPS gateway on %s (TLS offloaded)...", s.cfg.BindAddr))
 		srv := &http.Server{
-			Addr:    s.cfg.BindAddr,
-			Handler: s,
+			Addr:              s.cfg.BindAddr,
+			Handler:           s,
+			ReadHeaderTimeout: readHeaderTimeout,
 		}
 		s.setHTTPServer(srv)
 		return srv.ListenAndServeTLS(s.cfg.SSLCertFile, s.cfg.SSLKeyFile)
@@ -2211,12 +2213,24 @@ func (s *Server) Start() error {
 	// HTTP-only mode
 	slog.Info(fmt.Sprintf("[Server] Starting HTTP gateway on %s (TLS disabled)...", s.cfg.HTTPBindAddr))
 	srv := &http.Server{
-		Addr:    s.cfg.HTTPBindAddr,
-		Handler: s,
+		Addr:              s.cfg.HTTPBindAddr,
+		Handler:           s,
+		ReadHeaderTimeout: readHeaderTimeout,
 	}
 	s.setHTTPServer(srv)
 	return srv.ListenAndServe()
 }
+
+// readHeaderTimeout bounds how long a client may take to send its request headers (#1372).
+//
+// Only this timeout is set, deliberately. ReadTimeout and WriteTimeout would apply to the whole
+// request and response, and this process proxies tunnel traffic and upgrades connections to
+// WebSockets -- a blanket write timeout would sever a working tunnel mid-transfer. Header
+// reading, by contrast, is bounded work no legitimate client needs long for, and leaving it
+// unbounded is the Slowloris exposure: each half-sent header set holds a goroutine open
+// indefinitely. nginx fronts 443 but does not protect these listeners when they are bound
+// directly, which is the case in TLS-offloaded and HTTP-only modes.
+const readHeaderTimeout = 10 * time.Second
 
 // setHTTPServer publishes the gateway listener for Stop to shut down.
 func (s *Server) setHTTPServer(srv *http.Server) {

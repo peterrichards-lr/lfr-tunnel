@@ -275,3 +275,55 @@ func TestExpectedConfigOwner_MatchesTheCommittedUnit(t *testing.T) {
 		t.Errorf("expected user:group, got %q", got)
 	}
 }
+
+// Verifying an edge still trusts the control plane's address (#1450).
+//
+// The address is baked into each edge's nginx, which is precisely the shape that goes stale
+// unnoticed -- the same shape as the edge_nodes urls that named retired hosts for weeks (#1449).
+
+func TestCheckEdgeRealIP_CentralIsSkipped(t *testing.T) {
+	// Nothing forwards to central, so there is no upstream to trust and nothing to report.
+	if f := checkEdgeRealIP("", "server { listen 443; }"); len(f) != 0 {
+		t.Errorf("central must produce no finding, got %+v", f)
+	}
+}
+
+func TestCheckEdgeRealIP_MissingDirectiveIsReported(t *testing.T) {
+	f := checkEdgeRealIP("https://tunnel.example.com", "server { listen 443; }")
+	if len(f) != 1 {
+		t.Fatalf("expected one finding, got %+v", f)
+	}
+	if f[0].Severity != severityWarning {
+		t.Errorf("expected a warning, got %q", f[0].Severity)
+	}
+	// The message has to say what goes wrong, not just that something is absent -- an operator
+	// reading this needs to know traffic is being attributed to the wrong address.
+	if !strings.Contains(f[0].Message, "attributed to CENTRAL") {
+		t.Errorf("expected the consequence spelled out, got %q", f[0].Message)
+	}
+	if !strings.Contains(f[0].Message, "-trusted-proxy") {
+		t.Errorf("expected the remedy named, got %q", f[0].Message)
+	}
+}
+
+// A host that cannot be resolved must be reported rather than silently treated as agreeing --
+// that would turn the check into a rubber stamp on exactly the machines where DNS is broken.
+func TestCheckEdgeRealIP_UnresolvableHostIsReported(t *testing.T) {
+	conf := "set_real_ip_from 203.0.113.7;\nreal_ip_header X-Forwarded-For;\n"
+	f := checkEdgeRealIP("https://nonexistent.invalid", conf)
+	if len(f) != 1 || f[0].Severity != severityWarning {
+		t.Fatalf("expected one warning, got %+v", f)
+	}
+	if !strings.Contains(f[0].Message, "could not be resolved") {
+		t.Errorf("expected the resolution failure to be named, got %q", f[0].Message)
+	}
+}
+
+// A commented-out directive is not in effect, and must not read as configured.
+func TestCheckEdgeRealIP_CommentedDirectiveDoesNotCount(t *testing.T) {
+	conf := "# set_real_ip_from 203.0.113.7;\nserver { listen 443; }\n"
+	f := checkEdgeRealIP("https://tunnel.example.com", conf)
+	if len(f) != 1 || !strings.Contains(f[0].Message, "does not trust") {
+		t.Errorf("a commented directive must count as absent, got %+v", f)
+	}
+}

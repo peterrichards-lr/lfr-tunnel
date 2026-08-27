@@ -1727,9 +1727,31 @@ function showTab(tabName, skipHistory = false) {
       if (backdrop) backdrop.classList.remove('visible');
     }
   }
-  document
-    .querySelectorAll('.main-content > div[id^="tab-"]')
-    .forEach((el) => el.classList.add('hidden'));
+  // An unknown section name -- a stale bookmark to a renamed tab, or a typo -- used to
+  // hide every section and show none, leaving a blank content area with nothing
+  // highlighted in the sidebar either. Nothing said anything had gone wrong; the portal
+  // simply looked broken. Confirmed against a running build: '#nonsense' rendered
+  // visible-tabs=[] nav-active=[] (#1215).
+  //
+  // The valid set is read from the DOM rather than kept as a list here, so renaming or
+  // adding a section cannot drift out of sync with it. It has to be the sections
+  // themselves -- direct children of .main-content -- and not every id starting with
+  // "tab-", because the install instructions use tab-btn-linux, tab-content-macos and
+  // friends, which are not sections and must not be reachable by fragment.
+  const sections = document.querySelectorAll('.main-content > div[id^="tab-"]');
+  const sectionNames = Array.from(sections).map((el) => el.id.slice(4));
+  if (!sectionNames.includes(tabName)) {
+    tabName = 'overview';
+    // Correct the URL so it matches what is actually shown; leaving '#nonsense' in the
+    // bar means a reload lands somewhere the address does not describe. replaceState
+    // rather than pushState, so a bad link does not add a history entry to go Back to,
+    // and it does not fire hashchange, so this cannot recurse.
+    if (window.location.hash && window.location.hash !== '#overview') {
+      history.replaceState({ tab: tabName }, '', '#' + tabName);
+    }
+  }
+
+  sections.forEach((el) => el.classList.add('hidden'));
   document.querySelectorAll('.nav-item').forEach((el) => {
     el.classList.remove('active');
     el.removeAttribute('aria-current');
@@ -1993,6 +2015,79 @@ async function loadAnalytics() {
             cutout: '70%',
           },
         });
+      }
+
+      // Sessions per gateway over time (#1150).
+      //
+      // Portal V2 already rendered a live distribution pie and V1 rendered nothing, so
+      // this was a difference between the two arms of the V1/V2 comparison rather than a
+      // missing nicety. Both now carry it.
+      //
+      // A gateway that carried nothing on a day has no row for it, so a missing entry is
+      // filled with 0 rather than skipped -- that gap is the whole signal, and left as a
+      // hole Chart.js joins the surrounding points and draws a line straight over the
+      // outage.
+      {
+        const nodeCanvas = document.getElementById('nodeSessionsChart');
+        const nodeEmpty = document.getElementById('node-sessions-empty');
+        const hasNodeData =
+          data.global.node_daily && data.global.node_daily.length;
+        // Shown even with nothing to plot. An admin opening this to ask which gateways
+        // are carrying sessions learns nothing from an absent panel -- "no sessions
+        // recorded yet" is an answer, and hiding it recreates the gap this closes.
+        if (nodeCanvas)
+          nodeCanvas.parentElement.style.display = hasNodeData ? '' : 'none';
+        if (nodeEmpty) nodeEmpty.style.display = hasNodeData ? 'none' : '';
+        if (nodeCanvas && hasNodeData) {
+          const nd = data.global.node_daily;
+          const dates = [...new Set(nd.map((d) => d.date))].sort();
+          const nodes = [...new Set(nd.map((d) => d.node_id))].sort();
+          const lookup = new Map(
+            nd.map((d) => [`${d.date}|${d.node_id}`, d.sessions]),
+          );
+          // Same order as Portal V2's palette, so a gateway keeps its colour across both.
+          const palette = [
+            '#3b82f6',
+            '#10b981',
+            '#f59e0b',
+            '#ef4444',
+            '#8b5cf6',
+            '#ec4899',
+            '#14b8a6',
+          ];
+          if (charts['nodeSessions']) charts['nodeSessions'].destroy();
+          charts['nodeSessions'] = new Chart(nodeCanvas.getContext('2d'), {
+            type: 'line',
+            data: {
+              labels: dates,
+              datasets: nodes.map((node, i) => ({
+                label: node.toUpperCase(),
+                data: dates.map((d) => lookup.get(`${d}|${node}`) ?? 0),
+                borderColor: palette[i % palette.length],
+                backgroundColor: palette[i % palette.length] + '20',
+                tension: 0.3,
+                fill: false,
+              })),
+            },
+            options: {
+              responsive: true,
+              maintainAspectRatio: false,
+              plugins: {
+                legend: { position: 'bottom', labels: { color: textColor } },
+              },
+              scales: {
+                x: { grid: { color: gridColor }, ticks: { color: textColor } },
+                y: {
+                  beginAtZero: true,
+                  grid: { color: gridColor },
+                  // Sessions are whole tunnels; getOptions() formats the axis as bytes,
+                  // which is why this chart does not reuse it.
+                  ticks: { color: textColor, precision: 0 },
+                },
+              },
+            },
+          });
+        }
       }
 
       // Load Client Stats

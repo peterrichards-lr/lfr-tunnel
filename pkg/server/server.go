@@ -758,6 +758,46 @@ func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 				http.Redirect(w, r, target, http.StatusMovedPermanently)
 				return
 			}
+
+			// A deeper path under /portal/ or /admin/ is not a route. Portal V1 is served
+			// as a single document at /portal, so anything below it matched no control
+			// plane handler and fell through to the data-plane ProxyHandler, which has no
+			// lease for a control-domain host -- answering /portal/users with the
+			// "Developer Environment Offline" page. Someone who typed the shape Portal V2
+			// taught them was told their environment was down (#1215). Verified against a
+			// running stack: 404 carrying offline.html, not the 502 the report described.
+			//
+			// This is the GET form of the problem the OPTIONS branch above already exists
+			// to solve, and it is fixed the same way: answer on the control plane rather
+			// than letting it reach the proxy.
+			//
+			// V1 routes on the fragment, so the path maps straight onto it and no rewrite
+			// of its tab switching is needed. showTab falls back to the overview for a
+			// section that does not exist, so a typo lands somewhere real -- which is why
+			// that fallback has to be in place for this redirect to be safe.
+			//
+			// Found rather than MovedPermanently: browsers cache a 301 aggressively, and
+			// if V1 ever gains real path routing a cached one would keep bouncing users to
+			// the fragment form. The trailing-slash redirect above is a genuine
+			// canonicalisation and stays permanent.
+			//
+			// "/portalv2/..." does not match "/portal/" -- the character after "portal" is
+			// "v", not "/" -- so the V2 SPA is untouched.
+			for _, base := range []string{"/portal", "/admin"} {
+				if !strings.HasPrefix(p, base+"/") {
+					continue
+				}
+				section := strings.Trim(strings.TrimPrefix(p, base+"/"), "/")
+				target := base
+				if r.URL.RawQuery != "" {
+					target += "?" + r.URL.RawQuery
+				}
+				if section != "" {
+					target += "#" + section
+				}
+				http.Redirect(w, r, target, http.StatusFound)
+				return
+			}
 		}
 
 		// A session previewing another role may not change anything (#1225). Enforced

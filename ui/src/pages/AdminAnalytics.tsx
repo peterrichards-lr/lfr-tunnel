@@ -40,6 +40,46 @@ const formatBytes = (bytes: number, decimals = 2) => {
   return `${parseFloat((bytes / Math.pow(k, i)).toFixed(dm))} ${sizes[i]}`;
 };
 
+// Palette for per-gateway series. Fixed order rather than random, so a given gateway keeps
+// the same colour between renders and between the two portals.
+const NODE_COLOURS = [
+  '#3b82f6',
+  '#10b981',
+  '#f59e0b',
+  '#ef4444',
+  '#8b5cf6',
+  '#ec4899',
+  '#14b8a6',
+];
+
+// Turns the flat [{date, node_id, sessions}] list into one dataset per gateway.
+//
+// A gateway that carried nothing on a day has no row for it, so a missing entry is
+// filled with 0 rather than skipped. That gap IS the signal this chart exists for -- an
+// edge dropping to zero is what a power window or a dead control channel looks like from
+// outside (#1150). Left as a hole, Chart.js would join the surrounding points and draw a
+// line straight over the outage.
+function nodeSeries(
+  nodeDaily: { date: string; node_id: string; sessions: number }[],
+) {
+  const dates = Array.from(new Set(nodeDaily.map((d) => d.date))).sort();
+  const nodes = Array.from(new Set(nodeDaily.map((d) => d.node_id))).sort();
+  const lookup = new Map(
+    nodeDaily.map((d) => [`${d.date}|${d.node_id}`, d.sessions]),
+  );
+  return {
+    labels: dates,
+    datasets: nodes.map((node, i) => ({
+      label: node.toUpperCase(),
+      data: dates.map((date) => lookup.get(`${date}|${node}`) ?? 0),
+      borderColor: NODE_COLOURS[i % NODE_COLOURS.length],
+      backgroundColor: NODE_COLOURS[i % NODE_COLOURS.length] + '20',
+      tension: 0.3,
+      fill: false,
+    })),
+  };
+}
+
 export default function AdminAnalytics() {
   const { t } = useI18n();
   const { theme } = useSettings();
@@ -452,6 +492,61 @@ export default function AdminAnalytics() {
                 </div>
               )}
           </div>
+
+          {/* Sessions per gateway over time (#1150). The pie above is the live snapshot;
+              this is the history beside it, because a snapshot cannot distinguish a
+              scheduled power window from a dead control channel -- both just show an edge
+              with no sessions right now. */}
+          {data.global && (
+            <div className="card p-xl mb-xl">
+              <h4 className="text-muted text-base mb-lg">
+                {t('sessions_per_edge', 'Sessions per Gateway')}
+              </h4>
+              <p className="text-muted text-sm mt-0 mb-lg">
+                {t(
+                  'sessions_per_edge_desc',
+                  'Distinct tunnel sessions each gateway carried per day. A line falling to zero means that gateway stopped receiving sessions.',
+                )}
+              </p>
+              {/* Rendered even with nothing to plot. An admin opening this to ask which
+                  gateways are carrying sessions learns nothing from an absent panel --
+                  "no sessions recorded yet" is an answer, and hiding it recreates exactly
+                  the gap this closes. */}
+              {!data.global.node_daily ||
+              data.global.node_daily.length === 0 ? (
+                <p className="text-muted text-sm m-0">
+                  {t(
+                    'sessions_per_edge_empty',
+                    'No session data recorded yet for this period.',
+                  )}
+                </p>
+              ) : (
+                <div className="chart-container">
+                  <Line
+                    data={nodeSeries(data.global.node_daily)}
+                    options={{
+                      responsive: true,
+                      maintainAspectRatio: false,
+                      plugins: {
+                        legend: {
+                          position: 'bottom',
+                          labels: { color: 'var(--text-color)' },
+                        },
+                      },
+                      scales: {
+                        y: {
+                          beginAtZero: true,
+                          // Sessions are whole tunnels; a "2.5 sessions" gridline is
+                          // meaningless and Chart.js will produce one on small ranges.
+                          ticks: { precision: 0 },
+                        },
+                      },
+                    }}
+                  />
+                </div>
+              )}
+            </div>
+          )}
 
           <div className="card overflow-hidden">
             <div className="p-md px-lg border-b">

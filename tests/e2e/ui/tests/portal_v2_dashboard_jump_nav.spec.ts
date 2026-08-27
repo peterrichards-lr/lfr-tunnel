@@ -79,16 +79,38 @@ test.describe('Portal V2 Overview jump navigation', () => {
     }
   });
 
-  test('clicking an entry moves the page to that section', async ({ page }) => {
+  test('clicking an entry scrolls the page to that section', async ({
+    page,
+  }) => {
     const nav = page.getByRole('navigation', { name: 'Dashboard sections' });
-    await nav.getByRole('link', { name: 'Personal Access Tokens' }).click();
+    const target = page.locator('#access-tokens');
 
+    // Measured on the target rather than on a scroll container's scrollTop. Which element
+    // actually scrolls is not obvious here: .main-content carries overflow-y: auto and
+    // index.css says it is the scroll container, but its scrollTop stays 0 while the
+    // section plainly moves -- so at this viewport the document is scrolling instead.
+    // Asserting on the target works either way, and is what the user actually cares about.
+    const before = await target.boundingBox();
+    expect(before).not.toBeNull();
+    expect(
+      before!.y,
+      'Personal Access Tokens should start below the fold, or this test proves nothing',
+    ).toBeGreaterThan(page.viewportSize()!.height);
+
+    await nav.getByRole('link', { name: 'Personal Access Tokens' }).click();
     await expect(page).toHaveURL(/#access-tokens$/);
 
-    // scroll-margin-top: 24px keeps the heading clear of the top edge, so assert the
-    // section reached the upper part of the viewport rather than an exact offset.
-    const box = await page.locator('#access-tokens').boundingBox();
-    expect(box).not.toBeNull();
-    expect(box!.y).toBeLessThan(page.viewportSize()!.height / 2);
+    // scroll-behavior: smooth means the position is animated, so poll until it settles
+    // rather than sampling once mid-flight.
+    await expect
+      .poll(async () => Math.round((await target.boundingBox())!.y))
+      .toBeLessThan(page.viewportSize()!.height);
+
+    // Not asserting it reaches the top: Personal Access Tokens is the LAST section, so the
+    // scroll bottoms out and the section stops partway up. An earlier version of this test
+    // asserted y < viewport/2 and failed at y=426 of 720 for exactly that reason -- the
+    // browser refusing to scroll past the end, not a broken anchor.
+    const after = await target.boundingBox();
+    expect(after!.y).toBeLessThan(before!.y);
   });
 });

@@ -295,16 +295,60 @@ export default function Dashboard() {
           above the two tables its quota bars summarise (Registered Subdomains, Custom
           Domains), with Custom Domain Status alongside them, and Personal Access Tokens
           -- set up once and rarely revisited -- last. */}
-      <div className="flex flex-col gap-xl mb-2xl">
-        <TunnelsPanel
-          tunnels={user.tunnels || []}
-          serverConfig={serverConfig}
-          user={user}
-        />
-        <ReservationsPanel />
-        <VanityDomainStatusPanel />
+      {/* Jump nav (#1218). The Overview runs to roughly five screens and ScrollToTopButton
+          only appears once you are already down it, so there was no way to see how much
+          page remained or to reach a section directly.
 
-        <div className="card p-0 animate-delay-sm">
+          Additive on purpose: the alternative direction on that issue was trimming the
+          Overview back to summaries and links, which would remove the personal
+          reservations table with Extend/Release -- it has no other home in V2. Anchors
+          answer the navigation complaint without deciding what the Overview is for.
+
+          Labels reuse each panel's own translation key rather than restating the text.
+          Two names for one panel is what #1209 had to fix. */}
+      <nav
+        className="dashboard-jump-nav"
+        aria-label={t('dashboard_sections', 'Dashboard sections')}
+      >
+        <a href="#active-tunnels">{t('active_tunnels', 'Active Tunnels')}</a>
+        <a href="#reservations-overview">
+          {t('reservations_overview', 'Reservations Overview')}
+        </a>
+        <a href="#registered-subdomains">
+          {t('subdomain_reservations', 'Registered Subdomains')}
+        </a>
+        <a href="#custom-domains">{t('custom_domains', 'Custom Domains')}</a>
+        <a href="#custom-domain-status">
+          {t('vanity_status_title', 'Custom Domain Status')}
+        </a>
+        <a href="#access-tokens">{t('pat_title', 'Personal Access Tokens')}</a>
+      </nav>
+
+      <div className="flex flex-col gap-xl mb-2xl">
+        {/* Anchor ids live on wrappers here rather than inside each panel: TunnelsPanel's
+            root already carries #tour-tunnels-panel, which OnboardingTour targets, and an
+            element takes one id. Wrapping keeps every anchor in one file and leaves the
+            tour alone. ReservationsPanel renders Reservations Overview first, so the
+            wrapper lands on it; its own #registered-subdomains and #custom-domains
+            targets from #1193 are unchanged. */}
+        <section id="active-tunnels" className="scroll-target">
+          <TunnelsPanel
+            tunnels={user.tunnels || []}
+            serverConfig={serverConfig}
+            user={user}
+          />
+        </section>
+        <section id="reservations-overview" className="scroll-target">
+          <ReservationsPanel />
+        </section>
+        <section id="custom-domain-status" className="scroll-target">
+          <VanityDomainStatusPanel />
+        </section>
+
+        <div
+          id="access-tokens"
+          className="card p-0 animate-delay-sm scroll-target"
+        >
           <div className="p-xl border-b flex justify-between items-center flex-wrap gap-md">
             <div>
               <h3 className="m-0 text-md fw-bold">

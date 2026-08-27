@@ -140,6 +140,8 @@ The central gateway service (`lfr-tunneld`) manages traffic and mitigates securi
     The gateway includes an active Web Application Firewall (WAF) to block SQLi, XSS, and path traversal payloads on forwarded traffic. If an IP exceeds 50 rate-limiting violations, it is **automatically blacklisted** and an administrative notification alert is sent.
 * **GDPR-Compliant Auditing:**
     All administrative events are logged in an immutable audit trail. Deleted user data is cryptographically hashed using SHA-256 (Pill/GDPR compliant) to retain system analytics without storing personally identifiable information.
+* **Region Latency Reporting:**
+    The client measures round-trip time to each advertised gateway at startup in order to choose one, and reports those measurements so edge placement can be judged on latency people actually experience rather than on geography. What is sent is a region name and a round trip in milliseconds — no IP address, no location, and nothing derived from either — and it is aggregated per user per day, so the figures describe people rather than reconnections. Suppress it entirely with `disable_latency_report: true` in the client config, or `LFT_DISABLE_LATENCY_REPORT=1`.
 
 ---
 
@@ -187,4 +189,4 @@ To authorize the tool with minimal impact on local endpoint alerts, we recommend
 
 <!-- markdownlint-disable MD049 -->
 ---
-*Last Updated: 2026-07-23* | *Last Reviewed: 2026-07-23*
+*Last Updated: 2026-08-27* | *Last Reviewed: 2026-08-27*

@@ -72,6 +72,16 @@ type RegisterRequest struct {
 	ClientOS        string            `json:"client_os,omitempty"`
 	Passcode        string            `json:"passcode,omitempty"`
 	WhitelistIPs    string            `json:"whitelist_ips,omitempty"`
+	// RegionProbes are the latency measurements the client took to choose a gateway (#1151).
+	// Optional: an older client sends none, and a client with reporting turned off sends none.
+	RegionProbes []RegionProbe `json:"region_probes,omitempty"`
+}
+
+// RegionProbe is one client's measurement of one advertised region (#1151).
+type RegionProbe struct {
+	Region      string `json:"region"`
+	RTTMs       int    `json:"rtt_ms,omitempty"`
+	Unreachable bool   `json:"unreachable,omitempty"`
 }
 
 // RegisterResponse represents the JSON response payload.
@@ -1809,6 +1819,8 @@ func (s *Server) handleRegister(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
+	s.recordRegionProbes(userRec, req.RegionProbes)
+
 	// Enforce active tunnels limit
 	if s.registry != nil {
 		leases := s.registry.ListLeases()
@@ -3160,6 +3172,13 @@ func (s *Server) handleAdminEndpoints(w http.ResponseWriter, r *http.Request) {
 	}
 
 	w.Header().Set("Content-Type", "application/json")
+
+	// Where should the next edge go (#1151). Served alongside the other admin analytics rather
+	// than on its own route, so it inherits the same admin check.
+	if r.URL.Path == "/api/admin/analytics/region-latency" {
+		s.handleRegionLatency(w, r)
+		return
+	}
 
 	if r.Method == http.MethodGet && r.URL.Path == "/api/admin/analytics/clients" {
 		stats, err := s.db.GetClientVersionStats()

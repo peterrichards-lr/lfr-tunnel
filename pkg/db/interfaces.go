@@ -66,6 +66,14 @@ type MetricRepository interface {
 	GetGatewayRuns(limit int) ([]*GatewayRun, error)
 }
 
+// RegionProbeRepository stores the latency measurements clients already take and used to throw
+// away, so edge placement can be judged on what users experience rather than on geography
+// (#1151).
+type RegionProbeRepository interface {
+	RecordRegionProbes(userID string, samples []RegionProbeSample, at time.Time) error
+	GetRegionLatency(days int) (*RegionLatencyReport, error)
+}
+
 // PortalSessionRepository persists logged-in portal sessions so a restart -- including a
 // routine deploy -- does not sign every user out (#1304).
 type PortalSessionRepository interface {

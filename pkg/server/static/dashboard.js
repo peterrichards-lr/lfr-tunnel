@@ -2017,6 +2017,70 @@ async function loadAnalytics() {
         });
       }
 
+      // Sessions per gateway over time (#1150).
+      //
+      // Portal V2 already rendered a live distribution pie and V1 rendered nothing, so
+      // this was a difference between the two arms of the V1/V2 comparison rather than a
+      // missing nicety. Both now carry it.
+      //
+      // A gateway that carried nothing on a day has no row for it, so a missing entry is
+      // filled with 0 rather than skipped -- that gap is the whole signal, and left as a
+      // hole Chart.js joins the surrounding points and draws a line straight over the
+      // outage.
+      if (data.global.node_daily && data.global.node_daily.length) {
+        const nodeCanvas = document.getElementById('nodeSessionsChart');
+        if (nodeCanvas) {
+          const nd = data.global.node_daily;
+          const dates = [...new Set(nd.map((d) => d.date))].sort();
+          const nodes = [...new Set(nd.map((d) => d.node_id))].sort();
+          const lookup = new Map(
+            nd.map((d) => [`${d.date}|${d.node_id}`, d.sessions]),
+          );
+          // Same order as Portal V2's palette, so a gateway keeps its colour across both.
+          const palette = [
+            '#3b82f6',
+            '#10b981',
+            '#f59e0b',
+            '#ef4444',
+            '#8b5cf6',
+            '#ec4899',
+            '#14b8a6',
+          ];
+          if (charts['nodeSessions']) charts['nodeSessions'].destroy();
+          charts['nodeSessions'] = new Chart(nodeCanvas.getContext('2d'), {
+            type: 'line',
+            data: {
+              labels: dates,
+              datasets: nodes.map((node, i) => ({
+                label: node.toUpperCase(),
+                data: dates.map((d) => lookup.get(`${d}|${node}`) ?? 0),
+                borderColor: palette[i % palette.length],
+                backgroundColor: palette[i % palette.length] + '20',
+                tension: 0.3,
+                fill: false,
+              })),
+            },
+            options: {
+              responsive: true,
+              maintainAspectRatio: false,
+              plugins: {
+                legend: { position: 'bottom', labels: { color: textColor } },
+              },
+              scales: {
+                x: { grid: { color: gridColor }, ticks: { color: textColor } },
+                y: {
+                  beginAtZero: true,
+                  grid: { color: gridColor },
+                  // Sessions are whole tunnels; getOptions() formats the axis as bytes,
+                  // which is why this chart does not reuse it.
+                  ticks: { color: textColor, precision: 0 },
+                },
+              },
+            },
+          });
+        }
+      }
+
       // Load Client Stats
       try {
         const cRes = await fetch('/api/admin/analytics/clients');

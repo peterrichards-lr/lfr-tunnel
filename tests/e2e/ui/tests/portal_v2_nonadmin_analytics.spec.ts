@@ -1,6 +1,6 @@
 import { test, expect } from './utils/fixtures';
 import { getMagicLinkToken, clearMailpit } from './utils/mailpit';
-import { createApprovedUser } from './utils/nonadmin';
+import { createApprovedUser, deleteUser } from './utils/nonadmin';
 
 /**
  * A non-admin can see their own analytics in Portal V2 (#1512).
@@ -31,6 +31,12 @@ test.describe('Portal V2 analytics for a non-admin', () => {
   test.beforeAll(async () => {
     await clearMailpit();
     await createApprovedUser(email);
+  });
+
+  // Leave the database as we found it. Specs share one, and they run in file order, so a row
+  // left here is a row every alphabetically-later spec inherits (#1512).
+  test.afterAll(async () => {
+    await deleteUser(email);
   });
 
   test.beforeEach(async ({ page }) => {

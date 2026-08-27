@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 /**
- * Fails when a Portal V2 theme's danger colours cannot carry the text placed on them.
+ * Fails when a Portal V2 theme's button fills cannot carry the text placed on them.
  *
  * Written to be theme-agnostic: it discovers every file in ui/src/themes and checks
  * whatever it finds, so a theme added later is covered without anyone remembering this
@@ -19,6 +19,14 @@
  *
  *   --danger              also the button's border, so >= 3:1 against the page for the
  *                         non-text contrast of a component boundary (WCAG 1.4.11).
+ *
+ *   --primary-strong      the same fill role for .btn-primary (#1514). Its second gradient
+ *   --primary-strong-alt  stop used to be the literal #60a5fa, which put white text at
+ *                         2.54:1 -- so the button failed AA in every theme, at rest, on
+ *                         every page. Kept separate from --primary for the same reason
+ *                         --danger-strong is separate from --danger: --primary is a
+ *                         FOREGROUND (links, icons) and wants to be light on a dark card,
+ *                         which is the opposite of what a fill under white text wants.
  *
  * Ratios are WCAG 2.x relative luminance in sRGB.
  */
@@ -91,10 +99,18 @@ for (const file of files) {
     if (parsed) tokens[m[1]] = parsed;
   }
 
-  // A theme that has not opted into the danger-fill tokens is not failed for it; the
-  // component rule falls back to whatever it defines. Report it so it is visible.
-  if (!tokens['--danger-strong']) {
-    console.log(`  ${name}: no --danger-strong, skipped`);
+  // A file that has not opted into ANY of the fill tokens is not a theme this check is about
+  // -- ui/src/themes also holds a barrel index.css. Gated on all of them rather than on
+  // --danger-strong alone, which would silently skip a theme that defined the primary fill and
+  // not the danger one (#1514).
+  const FILL_TOKENS = [
+    '--danger-strong',
+    '--danger-strong-alt',
+    '--primary-strong',
+    '--primary-strong-alt',
+  ];
+  if (!FILL_TOKENS.some((t) => tokens[t])) {
+    console.log(`  ${name}: no button-fill tokens, skipped`);
     continue;
   }
 
@@ -131,22 +147,34 @@ for (const file of files) {
     );
   }
 
-  // Fill role -- white label, at rest and hovered. Hover is the one that matters.
-  for (const key of ['--danger-strong', '--danger-strong-alt']) {
-    const fill = tokens[key];
-    if (!fill) {
-      failures.push(
-        `${name}: ${key} is missing but --danger-strong is defined -- .btn-danger's gradient needs both`,
+  // Fill role -- white label, at rest and hovered.
+  //
+  // Both states are measured because which one is worst is not a constant: .btn-danger keeps
+  // its gradient and lightens it, so hover is the worse case, while .btn-primary's failure was
+  // at REST -- a flat hardcoded hover colour was overriding the gradient and happened to pass
+  // (#1514). Checking only the state that bit last time is how the other one survives.
+  const FILL_PAIRS = [
+    ['--danger-strong', '--danger-strong-alt', '.btn-danger'],
+    ['--primary-strong', '--primary-strong-alt', '.btn-primary'],
+  ];
+  for (const [first, second, button] of FILL_PAIRS) {
+    if (!tokens[first] && !tokens[second]) continue;
+    for (const key of [first, second]) {
+      const fill = tokens[key];
+      if (!fill) {
+        failures.push(
+          `${name}: ${key} is missing but its pair is defined -- ${button}'s gradient needs both`,
+        );
+        continue;
+      }
+      check(`white label on ${key}`, WHITE, fill, AA_TEXT);
+      check(
+        `white label on ${key} while hovered (brightness ${HOVER_BRIGHTNESS})`,
+        WHITE,
+        brighten(fill, HOVER_BRIGHTNESS),
+        AA_TEXT,
       );
-      continue;
     }
-    check(`white label on ${key}`, WHITE, fill, AA_TEXT);
-    check(
-      `white label on ${key} while hovered (brightness ${HOVER_BRIGHTNESS})`,
-      WHITE,
-      brighten(fill, HOVER_BRIGHTNESS),
-      AA_TEXT,
-    );
   }
 
   if (!tokens['--danger-glow']) {
@@ -157,7 +185,7 @@ for (const file of files) {
 }
 
 if (failures.length) {
-  console.error('check-theme-contrast: danger colours below WCAG AA\n');
+  console.error('check-theme-contrast: button colours below WCAG AA\n');
   for (const f of failures) console.error(`  ${f}`);
   console.error(
     '\nSee the .btn-danger comment in ui/src/index.css for which token plays which role.',

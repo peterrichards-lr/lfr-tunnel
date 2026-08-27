@@ -179,7 +179,11 @@ body {
   box-shadow: 0 4px 12px var(--primary-glow);
 }
 .btn-primary:hover {
-  background: #0050e6;
+  /* No background here on purpose (#1514). This rule precedes the gradient one below, and the
+     later .btn-primary:hover sets no background -- so this literal used to WIN on hover and
+     replace the gradient with a flat, unthemed #0050e6. Dropping it lets the themed gradient
+     stay put and `filter: brightness(1.1)` provide the hover cue, which is how .btn-danger
+     already behaves. */
   border-color: transparent;
   transform: translateY(-1px);
   box-shadow: 0 6px 16px var(--primary-glow);
@@ -1288,8 +1292,18 @@ html[dir='rtl'] th {
   transform: scale(0.97);
 }
 
+/* Both gradient stops come from the theme (#1514). The second was the literal #60a5fa, a light
+   blue that suited the dark palette and no other -- and, measured, put white text at 2.54:1 at
+   rest, well under the 4.5:1 WCAG AA needs. --primary itself is not the right token here: it is
+   a FOREGROUND, used for links and icons, so it wants to be light on a dark card, which is the
+   opposite of what a fill under a white label wants. Hence the separate pair, as --danger-strong
+   is separate from --danger (#1458). */
 .btn-primary {
-  background: linear-gradient(135deg, var(--primary), #60a5fa);
+  background: linear-gradient(
+    135deg,
+    var(--primary-strong),
+    var(--primary-strong-alt)
+  );
   box-shadow: 0 4px 14px 0 var(--primary-glow);
   border: none;
   color: #fff;

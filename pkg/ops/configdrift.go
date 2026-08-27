@@ -388,3 +388,13 @@ func checkConfigFilePermissions(target DeployTarget, sshTarget, remotePath, unit
 
 	return errors
 }
+
+// parseDNSSpec unmarshals the committed DNS spec, shared by the drift check and the edge_nodes
+// renderer so the two cannot disagree about what the spec says.
+func parseDNSSpec(data []byte) (DNSSpec, error) {
+	var spec DNSSpec
+	if err := yaml.Unmarshal(data, &spec); err != nil {
+		return DNSSpec{}, fmt.Errorf("parsing the DNS spec: %w", err)
+	}
+	return spec, nil
+}

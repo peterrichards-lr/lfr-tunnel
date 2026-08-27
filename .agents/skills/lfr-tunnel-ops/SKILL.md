@@ -298,6 +298,42 @@ Manage Nginx maintenance mode or perform safe database backups/restores on the V
 
 ---
 
+## 6b. Rendering central's edge_nodes registry
+
+An edge's `url` should never be typed. `scripts/liferay/dns/lfr-demo-production.yaml` is the
+authoritative record of which edges exist and where (#941), so it is derived from there:
+
+```bash
+./bin/lfr-tunnel-ops render-edge-nodes            # reads gitignored edge_nodes.txt
+```
+
+Prints the `edge_nodes:` block for central's `server-config.yaml`. Tokens from
+`edge_nodes.txt` (format in `edge_nodes.txt.example`) are hashed with SHA-256 locally and the
+plaintext is never printed, logged or uploaded — which is what that example file has always
+promised, and what nothing implemented until #1452.
+
+Three things worth knowing:
+
+- **A url in the file is checked, not trusted.** The third field is optional; when present it
+  must match what the spec derives, and a mismatch is an error. Hand-typed addresses are how
+  three of four nodes came to name retired `aws-edge-*` hosts that resolve, via the zone
+  wildcard, to central itself — so central advertised its own address as three regions for
+  weeks (#1449).
+- **A token may be given as `sha256:<64 hex>`** instead of plaintext. Central stores only
+  hashes, so the plaintext for a hand-registered node may exist nowhere — without this the
+  *current* deployment could never be rendered from the repo, only future ones.
+- **The output contains token hashes.** It is for placing on the control plane. Do not commit
+  it, and do not paste it into an issue or a PR.
+
+Node ids normalise the way the gateway already does when advertising regions: a leading `aws-`
+or `edge-` is stripped to find the DNS label, so `edge-us` and the `us` A record are the same
+place.
+
+After placing it, verify with `check-config` below — same spec, so the two agree by
+construction.
+
+---
+
 ## 6a. Checking a Live Config Against This Repo
 
 Registering an edge is a **manual** step -- `docs/server/edge_setup_guide.md` says outright there

@@ -114,6 +114,35 @@ edge_nodes:
     token_hash: "4a2371ab6fbd2742e0fce40b2f3c1f94ecc8c02ad15f5455cd68bdf4e04f947a" # SHA-256 hash of plaintext token
 ```
 
+#### Rotating an Edge Node's Token
+
+An edge token is long-lived and has no expiry. Rotating one used to mean a flag day — edit
+central's config, restart it, re-provision every edge — with a window in which no edge could
+authenticate. Central now accepts more than one hash per node, so a rotation is a rolling change
+(#1491):
+
+```yaml
+edge_nodes:
+  - id: "edge-us"
+    token_hash: "<current>"
+    additional_token_hashes:
+      - "<incoming>"        # both authenticate while the rotation is in progress
+```
+
+1. Generate the new token and its hash, exactly as when registering a node.
+2. Add the hash to `additional_token_hashes` on central and restart it *once*.
+3. Re-provision the edges one at a time with the new plaintext token. Each keeps working before
+   and after, because both hashes are accepted.
+4. Remove the old value from `token_hash` and restart central again. **This is the step that
+   actually revokes the old token** — until then it still authenticates.
+
+Both hashes are accepted on the `/api/internal/*` endpoints *and* on the control channel, where
+the hash is used as an HMAC key rather than compared. A rotation that only covered the first would
+leave an edge authenticating for registration while silently failing to establish its control
+channel, losing schedule pushes, shutdown warnings and lease kicks.
+
+Revoking a token still requires a restart of central; see #1309 for the remaining work.
+
 #### Registering a New Edge Node with the Control Plane
 
 Track your nodes' plaintext tokens locally in a gitignored `edge_nodes.txt` (format in

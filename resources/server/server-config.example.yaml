@@ -108,6 +108,12 @@ edge_nodes:
   # - id: "edge-us"
   #   token_hash: "<sha256 of the edge token; never commit a real one>"
   #   url: "https://us.example.com"
+  #   # Accepted alongside token_hash, so a token can be rotated without a flag day (#1491):
+  #   # add the incoming hash, roll the edges one at a time, then remove the old one. Both
+  #   # authenticate while the rotation is in progress, on the REST endpoints and the control
+  #   # channel alike.
+  #   additional_token_hashes:
+  #     - "<incoming hash, during a rotation>"
   []
 edge_provisioner_url: "https://example.com"
 edge_provisioner_token_file: ""

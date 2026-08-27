@@ -189,3 +189,47 @@ func TestAuthorisedEdgeNodeWithNoNodesConfigured(t *testing.T) {
 		t.Error("an empty token matched an edge node with an empty TokenHash")
 	}
 }
+
+// A rotation authenticates on both tokens at once (#1491), so edges can be rolled one at a time
+// rather than all together during a restart.
+func TestAuthorisedEdgeNodeDuringRotation(t *testing.T) {
+	srv := setupTestServerForAPI(t)
+
+	oldRaw, newRaw := "edge-token-old", "edge-token-new"
+	oldH := sha256.Sum256([]byte(oldRaw))
+	newH := sha256.Sum256([]byte(newRaw))
+
+	// Step 1 -- before the rotation starts, only the current token works.
+	srv.cfg.EdgeNodes = []config.EdgeNodeConfig{
+		{ID: "edge-us", TokenHash: hex.EncodeToString(oldH[:])},
+	}
+	if _, ok := srv.authorisedEdgeNode(oldRaw); !ok {
+		t.Error("the current token must authenticate")
+	}
+	if _, ok := srv.authorisedEdgeNode(newRaw); ok {
+		t.Error("a token that is not configured must not authenticate")
+	}
+
+	// Step 2 -- the incoming hash is added. BOTH work, which is what removes the flag day.
+	srv.cfg.EdgeNodes[0].AdditionalTokenHashes = []string{hex.EncodeToString(newH[:])}
+	if _, ok := srv.authorisedEdgeNode(oldRaw); !ok {
+		t.Error("the old token must keep working while edges are still being rolled")
+	}
+	if _, ok := srv.authorisedEdgeNode(newRaw); !ok {
+		t.Error("the incoming token must authenticate once configured")
+	}
+
+	// Step 3 -- the old hash is removed. That is the step that actually revokes it.
+	srv.cfg.EdgeNodes[0].TokenHash = ""
+	if _, ok := srv.authorisedEdgeNode(oldRaw); ok {
+		t.Error("the old token must stop working once removed -- otherwise the rotation revokes nothing")
+	}
+	if _, ok := srv.authorisedEdgeNode(newRaw); !ok {
+		t.Error("the new token must still authenticate after the old one is removed")
+	}
+
+	// An empty token must never match, including against the now-empty TokenHash field.
+	if _, ok := srv.authorisedEdgeNode(""); ok {
+		t.Error("an empty token matched a node whose TokenHash is empty")
+	}
+}

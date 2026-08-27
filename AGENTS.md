@@ -108,6 +108,34 @@ different ones.
 - Client binaries must be signed before release/deployment — see the
   `lfr-tunnel-ops` skill for the exact signing command and required environment.
 
+## Git hooks: install once, then they follow the repo
+
+On a fresh clone, run this once:
+
+```bash
+make install-hook
+```
+
+It installs **shims** into `.git/hooks` that exec `scripts/pre-commit-hook.sh` and
+`scripts/pre-push-hook.sh` from the working tree, so a change to a hook script takes effect on the
+next commit with nothing to re-run (#1425). Before that, hooks were *copied*, and every edit was
+inert until each person reinstalled — silently, since a stale hook's output is indistinguishable
+from a current one. The attribution guard added in #1384 ran for nobody who had not reinstalled.
+
+Two things worth knowing:
+
+- **Hooks follow the branch.** Checking out a branch cut before a hook script existed runs that
+  branch's version, or warns loudly and runs nothing if the script is absent. That is deliberate:
+  a warning beats silence, and an old branch must still be committable.
+- **`core.hooksPath` is not used, on purpose.** It is git's own answer to this and looks like the
+  obvious fix, but it resolves against the working tree — point it at a directory the current
+  branch does not have and git runs **no hooks and says nothing**, verified. That trades a stale
+  secret scan for no secret scan. `make install-hook` clears the setting if it finds it, because
+  it would otherwise shadow the shims.
+
+If a commit's output does not list the checks you expect, the hooks are not installed — run the
+command above rather than assuming they passed.
+
 ## Linting locally: containerized, not installed
 
 `golangci-lint` is deliberately **not** installed via `brew` or `go install`. Its
@@ -171,4 +199,4 @@ trip over.
 
 <!-- markdownlint-disable MD049 -->
 ---
-*Last Updated: 2026-08-26* | *Last Reviewed: 2026-08-26*
+*Last Updated: 2026-08-27* | *Last Reviewed: 2026-08-27*

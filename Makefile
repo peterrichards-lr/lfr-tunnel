@@ -1,4 +1,4 @@
-.PHONY: fmt vet test test-hooks check-contexts check-attribution build deploy clean install-hook e2e e2e-sso e2e-edge e2e-ui help
+.PHONY: fmt vet test test-hooks check-contexts check-attribution check-css check-contrast build deploy clean install-hook e2e e2e-sso e2e-edge e2e-ui help
 
 VERSION ?= $(shell grep -oE 'Version = "[^"]+"' pkg/config/version.go | cut -d'"' -f2)
 
@@ -195,4 +195,15 @@ check-contexts:
 # nobody runs, and being make-reachable is what puts it in the bash 3.2 portable set.
 check-attribution:
 	@./scripts/check-commit-attribution.sh
+
+# Catches a Portal V2 BEM modifier class that is used but has no CSS rule (#1383). Node
+# rather than shell because it has to parse both TSX and CSS; the bash 3.2 rule in
+# AGENTS.md covers .sh files, so this one is outside that constraint by construction.
+check-css:
+	@node scripts/check-css-modifiers.cjs
+
+# Checks every theme's danger colours against WCAG AA (#1458). Discovers theme files
+# rather than listing them, so a theme added later is covered without touching this.
+check-contrast:
+	@node scripts/check-theme-contrast.cjs
 

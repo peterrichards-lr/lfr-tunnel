@@ -557,16 +557,6 @@ tr:hover td {
   opacity: 0.8;
 }
 
-.btn-outline-danger {
-  background: transparent;
-  color: #f43f5e;
-  border: 1px solid #f43f5e;
-  transition: background 0.2s;
-}
-.btn-outline-danger:hover {
-  background: rgba(244, 63, 94, 0.1);
-}
-
 /* Toggle Switch */
 .toggle-switch {
   position: relative;
@@ -1301,26 +1291,84 @@ html[dir='rtl'] th {
   border-color: var(--text-muted);
 }
 
+/* Solid destructive button (#1458). Every colour comes from the active theme so a new
+ * theme can define its own without touching this rule.
+ *
+ * The fill is --danger-strong, NOT --danger. They cannot be the same value: --danger is a
+ * foreground, used for btn-outline-danger's text and border, where it passes AA against a
+ * dark card (4.71 dark / 5.05 liferay). Darkening it enough to carry a white label would
+ * drop that to 3.52 / 3.25 and fail. One colour cannot be both a text colour on a dark
+ * card and a fill under white text.
+ *
+ * White label, measured on the HOVER state because filter: brightness(1.1) below lightens
+ * the fill and that is the worst case -- the first attempt at this passed at rest and
+ * failed at 4.26 on hover:
+ *
+ *              rest   hover
+ *   dark       5.65    4.81
+ *   liferay    5.68    4.83
+ *   light      6.47    5.55
+ *
+ * The border is what satisfies the 3:1 non-text requirement for the button's boundary
+ * (WCAG 1.4.11), which is why it exists rather than `border: none`. A fill dark enough for
+ * the hover label sits too close to a dark card to define its own edge -- on liferay only
+ * six lightness steps satisfied both bars at once, and the best of them managed 4.50 and
+ * 3.05, on the line for each. Giving the boundary to --danger, which is already 4.71-6.47
+ * against the page, leaves the fill free to be chosen purely for the label. It also ties
+ * this button visually to btn-outline-danger, which is the same rule from #1207 read the
+ * other way round.
+ *
+ * box-sizing: border-box is global, so the border costs no layout.
+ */
 .btn-danger {
-  background: linear-gradient(135deg, #ef4444, #f43f5e);
-  border: none;
+  background: linear-gradient(
+    135deg,
+    var(--danger-strong),
+    var(--danger-strong-alt)
+  );
+  border: 1px solid var(--danger);
   color: #fff;
-  box-shadow: 0 4px 14px 0 rgba(239, 68, 68, 0.35);
+  box-shadow: 0 4px 14px 0 var(--danger-glow);
 }
 .btn-danger:hover {
-  box-shadow: 0 6px 20px 0 rgba(239, 68, 68, 0.5);
+  box-shadow: 0 6px 20px 0 var(--danger-glow);
   transform: translateY(-2px);
   filter: brightness(1.1);
 }
 
+/* Destructive actions: which treatment applies where (#1207).
+ *
+ *   btn-danger          solid, for a destructive action with a visible text label in a
+ *                       row of other labelled buttons -- Delete on Users, Revoke on API
+ *                       Tokens. Red fill is what separates it from its neighbours.
+ *   btn-outline-danger  for an icon-only destructive action sitting among other icon
+ *                       buttons -- Kick All Tunnels on Edge Health. A solid red fill on a
+ *                       28px glyph reads as a status badge rather than a button, and the
+ *                       outline still distinguishes it from the btn-secondary icons
+ *                       either side.
+ *
+ * Both are confirmed before firing; the treatment is the at-a-glance signal, not the
+ * guard. Every destructive handler in V2 gates on showConfirm or showPrompt (deleteUser
+ * requires typing DELETE), which is verified on #1207.
+ *
+ * Colour comes from var(--danger) rather than a literal. These rules hardcoded #f43f5e
+ * in all three themes, which failed WCAG AA for normal text in two of them:
+ *
+ *              hardcoded #f43f5e      var(--danger)
+ *   dark               4.83 pass      4.71 pass
+ *   liferay            4.43 FAIL      5.05 pass
+ *   light              3.67 FAIL      6.47 pass
+ *
+ * The light theme was the worst affected and is not what the audit was looking at.
+ */
 .btn-outline-danger {
   background: transparent;
-  color: #f43f5e;
-  border: 1px solid #f43f5e;
+  color: var(--danger);
+  border: 1px solid var(--danger);
   transition: background 0.2s;
 }
 .btn-outline-danger:hover {
-  background: rgba(244, 63, 94, 0.1);
+  background: var(--status-danger-bg);
 }
 
 .login-card {
@@ -2178,6 +2226,48 @@ input[type='checkbox'] {
 .scroll-target {
   scroll-margin-top: 24px;
 }
+
+/* Overview jump nav (#1218). The page runs to roughly five screens and ScrollToTopButton
+   only appears once you are already down it, so there was nothing showing how much page
+   remained or letting you reach a section directly.
+
+   Sticky to the top of .main-content rather than fixed: .main-content is the scroll
+   container, so position: fixed would pin this to the viewport and float it over the
+   sidebar. Same reasoning as scroll-behavior living on .main-content above.
+
+   Wraps rather than scrolling horizontally -- six labels at narrow widths become two
+   rows, which stays readable, where a horizontal scroller hides entries behind an
+   affordance that is itself the thing #1206 was about. */
+.dashboard-jump-nav {
+  position: sticky;
+  top: 0;
+  z-index: 5;
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--spacing-xs);
+  padding: var(--spacing-sm) var(--spacing-md);
+  margin-bottom: var(--spacing-lg);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: var(--bg-card-solid);
+}
+.dashboard-jump-nav a {
+  padding: 4px 10px;
+  border-radius: 999px;
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--text-muted);
+  text-decoration: none;
+  white-space: nowrap;
+  transition:
+    background 0.2s,
+    color 0.2s;
+}
+.dashboard-jump-nav a:hover,
+.dashboard-jump-nav a:focus-visible {
+  background: var(--bg-card-hover);
+  color: var(--text-main);
+}
 .main-content {
   scroll-behavior: smooth;
 }
@@ -2384,6 +2474,19 @@ input[type='checkbox'] {
   border-radius: 12px;
   box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.7);
 }
+/* Six modals request a size modifier and none of the three was defined, so a confirm
+   dialog and a full user-details table both rendered at the base 640px. --md restates
+   the base width deliberately: it is the default, and a modifier that resolves to
+   nothing is what let this go unnoticed. */
+.modal-card--sm {
+  max-width: 420px;
+}
+.modal-card--md {
+  max-width: 640px;
+}
+.modal-card--lg {
+  max-width: 880px;
+}
 .modal-header {
   display: flex;
   justify-content: space-between;
@@ -2514,6 +2617,13 @@ input[type='checkbox'] {
 .status-dot--offline {
   background: var(--status-inactive);
 }
+/* AdminTelemetry renders a connecting tunnel as status-dot--warning, which was never
+   defined -- so a tunnel mid-handshake was indistinguishable from a healthy one. It
+   glows like --online because connecting is a live state, not an inactive one. */
+.status-dot--warning {
+  background: var(--warning);
+  box-shadow: 0 0 8px var(--warning);
+}
 
 /* Info/warning alert banner */
 .alert-banner {
@@ -2539,6 +2649,14 @@ input[type='checkbox'] {
   background: var(--status-danger-bg);
   border: 1px solid var(--status-danger-border);
   color: var(--status-danger-text);
+}
+/* Account Settings signals a saved change with alert-banner--success. Without this rule
+   the success and failure banners were the same unstyled base, so "MFA enabled" and
+   "MFA failed" looked identical. */
+.alert-banner--success {
+  background: var(--status-success-bg);
+  border: 1px solid var(--status-success-border);
+  color: var(--status-success-text);
 }
 
 /* Mono copy box */

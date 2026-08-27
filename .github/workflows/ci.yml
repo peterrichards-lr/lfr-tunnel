@@ -269,6 +269,18 @@ jobs:
       - name: Required status checks must always produce a check run
         run: ./scripts/check-required-contexts.sh
 
+      # A BEM modifier whose base class exists but whose own rule does not is always a
+      # mistake, and always an invisible one -- the base class right next to it makes the
+      # line look finished. Five shipped that way (#1383).
+      - name: Portal V2 BEM modifiers must have a rule
+        run: node scripts/check-css-modifiers.cjs
+
+      # A theme's danger colours have to carry the text placed on them. Discovers theme
+      # files rather than listing them, so a theme added later is covered by default
+      # instead of by someone remembering (#1458).
+      - name: Theme danger colours must meet WCAG AA
+        run: node scripts/check-theme-contrast.cjs
+
   govulncheck:
     name: Vulnerability Scan
     needs: changes

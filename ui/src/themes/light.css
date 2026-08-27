@@ -17,6 +17,13 @@
   --scrollbar-thumb: rgba(0, 0, 0, 0.28);
   --scrollbar-thumb-hover: rgba(0, 0, 0, 0.45);
   --danger: #b91c1c;
+  /* Danger as a FILL under white text, kept separate from --danger above (#1458).
+     --danger is a foreground: it passes as outline text on this theme's cards, and
+     darkening it enough to carry a white label would drop that below AA. One colour
+     cannot be both, so the fill gets its own token. */
+  --danger-strong: #b91c1c;
+  --danger-strong-alt: #c81e2e;
+  --danger-glow: rgba(185, 28, 28, 0.3);
   --success: #047857;
   --warning: #b45309;
   --login-gradient:

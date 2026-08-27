@@ -557,16 +557,6 @@ tr:hover td {
   opacity: 0.8;
 }
 
-.btn-outline-danger {
-  background: transparent;
-  color: #f43f5e;
-  border: 1px solid #f43f5e;
-  transition: background 0.2s;
-}
-.btn-outline-danger:hover {
-  background: rgba(244, 63, 94, 0.1);
-}
-
 /* Toggle Switch */
 .toggle-switch {
   position: relative;
@@ -1313,14 +1303,39 @@ html[dir='rtl'] th {
   filter: brightness(1.1);
 }
 
+/* Destructive actions: which treatment applies where (#1207).
+ *
+ *   btn-danger          solid, for a destructive action with a visible text label in a
+ *                       row of other labelled buttons -- Delete on Users, Revoke on API
+ *                       Tokens. Red fill is what separates it from its neighbours.
+ *   btn-outline-danger  for an icon-only destructive action sitting among other icon
+ *                       buttons -- Kick All Tunnels on Edge Health. A solid red fill on a
+ *                       28px glyph reads as a status badge rather than a button, and the
+ *                       outline still distinguishes it from the btn-secondary icons
+ *                       either side.
+ *
+ * Both are confirmed before firing; the treatment is the at-a-glance signal, not the
+ * guard. Every destructive handler in V2 gates on showConfirm or showPrompt (deleteUser
+ * requires typing DELETE), which is verified on #1207.
+ *
+ * Colour comes from var(--danger) rather than a literal. These rules hardcoded #f43f5e
+ * in all three themes, which failed WCAG AA for normal text in two of them:
+ *
+ *              hardcoded #f43f5e      var(--danger)
+ *   dark               4.83 pass      4.71 pass
+ *   liferay            4.43 FAIL      5.05 pass
+ *   light              3.67 FAIL      6.47 pass
+ *
+ * The light theme was the worst affected and is not what the audit was looking at.
+ */
 .btn-outline-danger {
   background: transparent;
-  color: #f43f5e;
-  border: 1px solid #f43f5e;
+  color: var(--danger);
+  border: 1px solid var(--danger);
   transition: background 0.2s;
 }
 .btn-outline-danger:hover {
-  background: rgba(244, 63, 94, 0.1);
+  background: var(--status-danger-bg);
 }
 
 .login-card {
@@ -2384,6 +2399,19 @@ input[type='checkbox'] {
   border-radius: 12px;
   box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.7);
 }
+/* Six modals request a size modifier and none of the three was defined, so a confirm
+   dialog and a full user-details table both rendered at the base 640px. --md restates
+   the base width deliberately: it is the default, and a modifier that resolves to
+   nothing is what let this go unnoticed. */
+.modal-card--sm {
+  max-width: 420px;
+}
+.modal-card--md {
+  max-width: 640px;
+}
+.modal-card--lg {
+  max-width: 880px;
+}
 .modal-header {
   display: flex;
   justify-content: space-between;
@@ -2514,6 +2542,13 @@ input[type='checkbox'] {
 .status-dot--offline {
   background: var(--status-inactive);
 }
+/* AdminTelemetry renders a connecting tunnel as status-dot--warning, which was never
+   defined -- so a tunnel mid-handshake was indistinguishable from a healthy one. It
+   glows like --online because connecting is a live state, not an inactive one. */
+.status-dot--warning {
+  background: var(--warning);
+  box-shadow: 0 0 8px var(--warning);
+}
 
 /* Info/warning alert banner */
 .alert-banner {
@@ -2539,6 +2574,14 @@ input[type='checkbox'] {
   background: var(--status-danger-bg);
   border: 1px solid var(--status-danger-border);
   color: var(--status-danger-text);
+}
+/* Account Settings signals a saved change with alert-banner--success. Without this rule
+   the success and failure banners were the same unstyled base, so "MFA enabled" and
+   "MFA failed" looked identical. */
+.alert-banner--success {
+  background: var(--status-success-bg);
+  border: 1px solid var(--status-success-border);
+  color: var(--status-success-text);
 }
 
 /* Mono copy box */

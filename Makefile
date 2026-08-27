@@ -66,9 +66,9 @@ fmt:
 vet:
 	go vet ./...
 
-# Ceiling on suppressed errcheck findings (#1331). Not wired into CI here:
-# .github/workflows/ci.yml is another agent's territory under #1328, so wiring belongs with
-# whoever holds it. Runnable now, and by the pre-commit hook.
+# Ceiling on suppressed errcheck findings (#1331). Runs in CI's Lint & Format Check job as of
+# #1498 -- until then it was wired nowhere, and the count drifted five over the ceiling without
+# anything failing.
 nolint-ratchet:
 	@./scripts/check-nolint-ratchet.sh
 

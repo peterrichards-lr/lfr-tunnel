@@ -8,31 +8,37 @@ import (
 	"time"
 )
 
-func setupTestDB(t *testing.T) (*DB, string) {
-	// Create a temporary file for SQLite DB to test proper file persistence and concurrency
-	tmpDir, err := os.MkdirTemp("", "lfr-tunnel-test-*")
-	if err != nil {
-		t.Fatalf("failed to create temp dir: %v", err)
-	}
+// setupTestDB opens a database in a temp directory and closes it when the test ends.
+//
+// The helper owns the lifecycle so no caller can forget it -- the same fix as #1496, where
+// setupTestServerForAPI left its SQLite file open and Windows refused to delete it during
+// t.TempDir cleanup. The hazard here was quieter: the old helper handed back a tmpDir for the
+// caller to os.RemoveAll, and that error was suppressed, so a Windows run leaked a temp
+// directory per test and said nothing.
+//
+// t.TempDir() reports a failed removal instead of swallowing it. The Close below is registered
+// after it, and cleanups run last-in-first-out, so the handle is always closed before the
+// directory is removed.
+func setupTestDB(t *testing.T) *DB {
+	t.Helper()
 
-	dbPath := filepath.Join(tmpDir, "test.db")
+	dbPath := filepath.Join(t.TempDir(), "test.db")
 	database, err := Open(dbPath)
 	if err != nil {
-		os.RemoveAll(tmpDir) //nolint:errcheck
 		t.Fatalf("failed to open test database: %v", err)
 	}
 
-	return database, tmpDir
-}
+	t.Cleanup(func() {
+		if err := database.Close(); err != nil {
+			t.Errorf("closing the test database failed: %v", err)
+		}
+	})
 
-func cleanupTestDB(database *DB, tmpDir string) {
-	database.Close()     //nolint:errcheck
-	os.RemoveAll(tmpDir) //nolint:errcheck
+	return database
 }
 
 func TestUserCRUD(t *testing.T) {
-	database, tmpDir := setupTestDB(t)
-	defer cleanupTestDB(database, tmpDir)
+	database := setupTestDB(t)
 
 	user := &User{
 		ID:            "user-1",
@@ -137,8 +143,7 @@ func TestUserCRUD(t *testing.T) {
 }
 
 func TestPATCRUD(t *testing.T) {
-	database, tmpDir := setupTestDB(t)
-	defer cleanupTestDB(database, tmpDir)
+	database := setupTestDB(t)
 
 	// Create user first
 	user := &User{
@@ -224,8 +229,7 @@ func TestPATCRUD(t *testing.T) {
 }
 
 func TestPATRetentionPruning(t *testing.T) {
-	database, tmpDir := setupTestDB(t)
-	defer cleanupTestDB(database, tmpDir)
+	database := setupTestDB(t)
 
 	// Create user
 	user := &User{
@@ -328,8 +332,7 @@ func TestPATRetentionPruning(t *testing.T) {
 }
 
 func TestPATForeignKeysAndCascade(t *testing.T) {
-	database, tmpDir := setupTestDB(t)
-	defer cleanupTestDB(database, tmpDir)
+	database := setupTestDB(t)
 
 	// Create PAT without existing user should fail (foreign key constraint)
 	pat := &PersonalAccessToken{
@@ -374,8 +377,7 @@ func TestPATForeignKeysAndCascade(t *testing.T) {
 }
 
 func TestAuditLogWriteAndFilter(t *testing.T) {
-	database, tmpDir := setupTestDB(t)
-	defer cleanupTestDB(database, tmpDir)
+	database := setupTestDB(t)
 
 	e1 := &AuditEntry{
 		ActorID:    "admin@test.com",
@@ -441,8 +443,7 @@ func TestAuditLogWriteAndFilter(t *testing.T) {
 }
 
 func TestListAllPATsAndCountAdmins(t *testing.T) {
-	database, tmpDir := setupTestDB(t)
-	defer cleanupTestDB(database, tmpDir)
+	database := setupTestDB(t)
 
 	u1 := &User{ID: "u1", Email: "admin1@test.com", Role: "admin", Status: "approved"}
 	u2 := &User{ID: "u2", Email: "admin2@test.com", Role: "admin", Status: "pending"}
@@ -475,8 +476,7 @@ func TestListAllPATsAndCountAdmins(t *testing.T) {
 }
 
 func TestBlacklistCRUD(t *testing.T) {
-	database, tmpDir := setupTestDB(t)
-	defer cleanupTestDB(database, tmpDir)
+	database := setupTestDB(t)
 
 	ip := "192.168.1.100"
 	reason := "Brute-force attempt detected"
@@ -540,8 +540,7 @@ func TestBlacklistCRUD(t *testing.T) {
 }
 
 func TestUserRateLimitCRUD(t *testing.T) {
-	database, tmpDir := setupTestDB(t)
-	defer cleanupTestDB(database, tmpDir)
+	database := setupTestDB(t)
 
 	email := "ratelimit_test@example.com"
 	user := &User{
@@ -611,8 +610,7 @@ func TestUserRateLimitCRUD(t *testing.T) {
 // without the corresponding schema migration or SQL wiring, so every read/write of it
 // silently no-op'd despite the admin UI reporting success.
 func TestUserMaxCustomDomainsCRUD(t *testing.T) {
-	database, tmpDir := setupTestDB(t)
-	defer cleanupTestDB(database, tmpDir)
+	database := setupTestDB(t)
 
 	userID := "custom-domain-quota-user"
 	maxDomains := 2
@@ -691,8 +689,7 @@ func TestUserMaxCustomDomainsCRUD(t *testing.T) {
 }
 
 func TestSubdomainReservationCRUD(t *testing.T) {
-	database, tmpDir := setupTestDB(t)
-	defer cleanupTestDB(database, tmpDir)
+	database := setupTestDB(t)
 
 	userID := "user-123"
 	email := "reservation_user@example.com"
@@ -1015,8 +1012,7 @@ func TestGatewayRuns(t *testing.T) {
 }
 
 func TestAnalyticsWithNullDates(t *testing.T) {
-	database, tmpDir := setupTestDB(t)
-	defer cleanupTestDB(database, tmpDir)
+	database := setupTestDB(t)
 
 	// Create user
 	user := &User{
@@ -1064,8 +1060,7 @@ func TestAnalyticsWithNullDates(t *testing.T) {
 }
 
 func TestAnonymizeUserDataTransaction(t *testing.T) {
-	database, tmpDir := setupTestDB(t)
-	defer cleanupTestDB(database, tmpDir)
+	database := setupTestDB(t)
 
 	// Create user
 	userID := "test-user-gdpr"
@@ -1113,8 +1108,7 @@ func TestAnonymizeUserDataTransaction(t *testing.T) {
 }
 
 func TestSchemaMigrationVersioning(t *testing.T) {
-	database, tmpDir := setupTestDB(t)
-	defer cleanupTestDB(database, tmpDir)
+	database := setupTestDB(t)
 
 	// Expectations are derived from the migrations slice rather than written as literals.
 	// Hardcoding the number meant every migration added to the repo broke this test for a
@@ -1169,8 +1163,7 @@ func TestSchemaMigrationVersioning(t *testing.T) {
 }
 
 func TestWebhookQueue(t *testing.T) {
-	database, tmpDir := setupTestDB(t)
-	defer cleanupTestDB(database, tmpDir)
+	database := setupTestDB(t)
 
 	// 1. Enqueue
 	err := database.EnqueueWebhookMessage("Title 1", "Desc 1", "info", `{"key":"val"}`)

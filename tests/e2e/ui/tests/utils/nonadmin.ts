@@ -120,3 +120,42 @@ export async function createApprovedUser(
 
   await ctx.dispose();
 }
+
+/**
+ * Deletes a user created by createApprovedUser.
+ *
+ * Not optional tidiness. Every spec shares one database and they run in file order, so a row
+ * left behind is a row the next spec sees: portal_v2_table_scroll asserts the Admin Users table
+ * fits a 1280px viewport, and an extra account with a longer address than admin@lfr-demo.local
+ * widens the email column enough to overflow it -- in CI, where the font stack is wider than
+ * macOS's, so it passes locally either way (#1512).
+ *
+ * Shortening the address was not enough: the column sizes to its widest cell, so any second
+ * account wider than the first moves it. Leaving nothing behind is the only version of this that
+ * does not depend on guessing how much slack the layout has.
+ */
+export async function deleteUser(email: string): Promise<void> {
+  const ctx = await request.newContext();
+
+  // An admin session, obtained the same way a person gets one. The context keeps the cookie.
+  await ctx.post(`${API}/api/auth/magic-link`, {
+    data: { email: ADMIN_EMAIL },
+  });
+  const mail = await waitForMail(ctx, ADMIN_EMAIL, /token=/);
+  const token = mail.match(/token=([a-zA-Z0-9]+)/)?.[1];
+  if (!token) throw new Error('No magic-link token for the admin');
+  await ctx.post(`${API}/api/auth/verify`, { data: { token, lang: 'en' } });
+
+  const res = await ctx.delete(
+    `${API}/api/admin/users/${encodeURIComponent(email)}`,
+  );
+  if (!res.ok()) {
+    // Loud rather than silent: a cleanup that quietly failed would leave the next spec to fail
+    // instead, somewhere that looks unrelated -- which is exactly how this was found.
+    throw new Error(
+      `deleting ${email} failed: ${res.status()} ${await res.text()}`,
+    );
+  }
+
+  await ctx.dispose();
+}

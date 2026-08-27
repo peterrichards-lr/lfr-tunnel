@@ -239,7 +239,11 @@ type Server struct {
 	// state. Stop waits on it so a cancelled goroutine has actually returned before the
 	// caller tears down what it was reading -- tests restoring package-level tunables
 	// raced the edge control channel still using them (issue #1131).
-	bgWG         sync.WaitGroup
+	bgWG sync.WaitGroup
+	// stopOnce makes Stop idempotent. Tests call it from a t.Cleanup registered by the setup
+	// helper AND, in older tests, from their own `defer srv.Stop()`; a second pass would
+	// RecordGatewayCleanShutdown into a closed database and log a spurious failure.
+	stopOnce     sync.Once
 	rateLimiters map[string]*ipLimiter
 	rlMutex      sync.Mutex
 	// trustedProxies are the hops whose forwarding headers may be believed when resolving a
@@ -2909,7 +2913,12 @@ func (s *Server) handleClaimToken(w http.ResponseWriter, r *http.Request) {
 }
 
 // Stop shuts down the server.
+// Stop shuts the gateway down and closes the database. Safe to call more than once.
 func (s *Server) Stop() {
+	s.stopOnce.Do(s.stop)
+}
+
+func (s *Server) stop() {
 	s.cancel()
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()

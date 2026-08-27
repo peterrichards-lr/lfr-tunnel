@@ -29,9 +29,34 @@ info "Entering maintenance window..."
 # Ensure we always clean up and disable maintenance mode on script exit
 cleanup() {
     info "Exiting maintenance window..."
+    # Withdraw the drain first, or clients keep migrating away from a gateway that is staying
+    # up. Ordered before disable-maintenance.sh so the announcement is gone by the time new
+    # connections are let back in.
+    if [ -x "${SCRIPT_DIR}/drain-and-wait.sh" ]; then
+        "${SCRIPT_DIR}/drain-and-wait.sh" clear || true
+    fi
     "${SCRIPT_DIR}/disable-maintenance.sh"
 }
 trap cleanup EXIT INT TERM
+
+# ── Drain attached tunnels ───────────────────────────────────────────────────
+# Maintenance mode above stops NEW connections arriving. It does nothing about the ones already
+# attached, and a restore stops the gateway underneath them -- so without this they are dropped
+# outright, which measured 24m36s of downtime for a client against none at all for one that
+# moved on a warning (#1246).
+#
+# This script predates the drain concept by about a month (it exists since 2026-07-29; drain
+# landed 2026-08-24 in #1305), so it never had anything to call. Not a judgement call that
+# restores may drop tunnels -- just the older of the two (#1455).
+#
+# Guarded on existence and never fatal, matching how deploy treats it: a box provisioned before
+# this script shipped must still be able to restore.
+if [ -x "${SCRIPT_DIR}/drain-and-wait.sh" ]; then
+    info "Announcing the restart to attached tunnels..."
+    "${SCRIPT_DIR}/drain-and-wait.sh" announce 45 90 "Gateway is restarting for a database restore" || true
+else
+    warn "drain-and-wait.sh not found; attached tunnels will be dropped rather than moved."
+fi
 
 # ── Run database restore ──────────────────────────────────────────────────────
 info "Initiating database restore..."

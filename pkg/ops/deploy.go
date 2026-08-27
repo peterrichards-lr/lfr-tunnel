@@ -127,6 +127,7 @@ func DeployCommand(args []string) {
 	scripts := []string{
 		"scripts/common/enable-maintenance.sh", "scripts/common/disable-maintenance.sh",
 		"scripts/common/restore-with-maintenance.sh", "scripts/common/restore-backup.sh",
+		"scripts/common/drain-and-wait.sh",
 		"scripts/liferay/vm6/sync-offsite-backups.sh", "scripts/liferay/vm6/sync-offsite-backups.service",
 		"scripts/liferay/vm6/sync-offsite-backups.timer",
 	}
@@ -145,6 +146,7 @@ func DeployCommand(args []string) {
 	sudo mv /home/` + vpsUser + `/disable-maintenance.sh /usr/local/bin/disable-maintenance.sh 2>/dev/null || true
 	sudo mv /home/` + vpsUser + `/restore-with-maintenance.sh /usr/local/bin/restore-with-maintenance.sh 2>/dev/null || true
 	sudo mv /home/` + vpsUser + `/restore-backup.sh /usr/local/bin/restore-backup.sh 2>/dev/null || true
+	sudo mv /home/` + vpsUser + `/drain-and-wait.sh /usr/local/bin/drain-and-wait.sh 2>/dev/null || true
 	sudo chmod +x /usr/local/bin/*.sh 2>/dev/null || true
 
 	sudo mkdir -p /var/www/lfr-tunnel/error_pages
@@ -168,48 +170,21 @@ func DeployCommand(args []string) {
 	# make-before-break path a scheduled stop uses (#1246), where a client that moved on the
 	# warning had no downtime and one that waited to be dropped was down 24m36s.
 	#
-	# Best-effort throughout: an older gateway with no /api/local/drain endpoint, or a config
-	# whose bind address cannot be read, must not stop a deploy. It simply behaves as it did
-	# before this existed.
-	DRAIN_URL=""
-	BIND=$(sudo grep -E '^http_bind_addr:' /etc/lfr-tunneld/server-config.yaml 2>/dev/null | sed -e 's/.*"\(.*\)".*/\1/')
-	if [ -n "$BIND" ]; then
-		case "$BIND" in
-			0.0.0.0:*|"[::]:"*) DRAIN_URL="http://127.0.0.1:${BIND##*:}/api/local/drain" ;;
-			*) DRAIN_URL="http://${BIND}/api/local/drain" ;;
-		esac
-	fi
-
-	if [ -n "$DRAIN_URL" ] && curl -sf -m 5 -X POST "$DRAIN_URL" \
-		-H 'Content-Type: application/json' \
-		-d "{\"seconds\": ` + fmt.Sprint(drainWindowSeconds) + `, \"reason\": \"Gateway is restarting for a deployment\"}" > /dev/null 2>&1; then
-		echo "Drain announced; waiting up to ` + fmt.Sprint(drainWaitSeconds) + `s for clients to move..."
-		WAITED=0
-		while [ "$WAITED" -lt ` + fmt.Sprint(drainWaitSeconds) + ` ]; do
-			LEASES=$(curl -sf -m 5 "$DRAIN_URL" 2>/dev/null | sed -n 's/.*"local_leases":\([0-9]*\).*/\1/p')
-			[ -z "$LEASES" ] && break
-			if [ "$LEASES" -eq 0 ]; then
-				echo "Gateway drained; no tunnels left attached."
-				break
-			fi
-			echo "  $LEASES tunnel(s) still attached..."
-			sleep 5
-			WAITED=$((WAITED + 5))
-		done
-		# Deliberately not fatal on timeout. Reporting what is still attached and carrying on
-		# is the same outcome as before this existed, whereas refusing to deploy because one
-		# client will not move would be a new way for a deploy to fail.
-		if [ -n "$LEASES" ] && [ "$LEASES" -ne 0 ]; then
-			echo "WARNING: restarting with $LEASES tunnel(s) still attached; they will be dropped."
-		fi
+	# One copy, in scripts/common/drain-and-wait.sh, installed just above -- before this point
+	# on purpose, so it is present even on the first deploy after this change. It used to be
+	# this bash block, which is why every maintenance path written before #1305 silently had
+	# no drain and every one after had to know to copy it (#1455). Guarded on existence and
+	# never fatal: an older box, or one where the scp was skipped, behaves as it did before.
+	if [ -x /usr/local/bin/drain-and-wait.sh ]; then
+		sudo /usr/local/bin/drain-and-wait.sh announce ` + fmt.Sprint(drainWindowSeconds) + ` ` + fmt.Sprint(drainWaitSeconds) + ` "Gateway is restarting for a deployment" || true
 	fi
 
 	sudo systemctl restart lfr-tunneld
 
 	# Clear the announcement, or clients keep migrating away from a node that is staying up.
-	if [ -n "$DRAIN_URL" ]; then
+	if [ -x /usr/local/bin/drain-and-wait.sh ]; then
 		sleep 2
-		curl -sf -m 5 -X POST "$DRAIN_URL" -H 'Content-Type: application/json' -d '{"seconds": 0}' > /dev/null 2>&1 || true
+		sudo /usr/local/bin/drain-and-wait.sh clear || true
 	fi
 
 	if [ -x /usr/local/bin/disable-maintenance.sh ]; then

@@ -27,6 +27,35 @@ const (
 	drainWaitSeconds   = 90
 )
 
+// uiDistIndex is the file //go:embed ui-dist/* needs in order for portal v2 to exist in the
+// binary. Generated, and no longer committed since #1196.
+const uiDistIndex = "pkg/server/ui-dist/index.html"
+
+// RequireBuiltUI refuses to deploy a gateway whose portal v2 would answer 500.
+//
+// `make build` builds the UI and copies it into the embed directory; deploy cross-compiles
+// directly and embeds whatever happens to be there. On a fresh clone that is just .gitkeep, and
+// after a `make test` or a CI run it is a ZERO-BYTE index.html, because both create a dummy to
+// satisfy the embed. Either way the deploy succeeds, reports success, and ships a gateway with no
+// portal -- which is exactly what reached production in #1494.
+//
+// The size check is the point. Existence alone is satisfied by the dummy, which is the most
+// likely way to hit this: anyone who has run the tests has one.
+func RequireBuiltUI() error {
+	info, err := os.Stat(uiDistIndex)
+	if err != nil {
+		return fmt.Errorf(
+			"%s is missing, so this binary would embed no portal v2 and serve 500 for it.\n"+
+				"Run `make build` first -- deploy cross-compiles but does not build the UI", uiDistIndex)
+	}
+	if info.Size() == 0 {
+		return fmt.Errorf(
+			"%s is empty -- this is the placeholder `make test` and CI create to satisfy the embed,\n"+
+				"not a built UI. Run `make build` to produce a real one", uiDistIndex)
+	}
+	return nil
+}
+
 func DeployCommand(args []string) {
 	if IsHelpRequest(args) {
 		fmt.Println("Usage: lfr-tunnel-ops deploy [-i identity_file] [-u user] [-s host] [-aws-region region] [-target name]")
@@ -120,6 +149,13 @@ func DeployCommand(args []string) {
 	version := os.Getenv("VERSION")
 	if version == "" {
 		version = extractVersion() // Re-use from build.go
+	}
+
+	// Before the build, not after: a binary with no UI must never reach the box (#1494).
+	if err := RequireBuiltUI(); err != nil {
+		fmt.Fprintf(os.Stderr, "FATAL: %v\n", err)
+		exitCode = 1
+		return
 	}
 
 	fmt.Printf("Building Linux binary (version: %s)...\n", version)
@@ -244,6 +280,13 @@ func DeployCommand(args []string) {
 		return
 	}
 
+	// The version check proves the right binary is running; this proves it is usable.
+	if err := verifyPortalV2(target.Host); err != nil {
+		fmt.Fprintf(os.Stderr, "FATAL: %v\n", err)
+		exitCode = 1
+		return
+	}
+
 	fmt.Println("=== Deployment Complete! ===")
 }
 
@@ -253,6 +296,41 @@ func DeployCommand(args []string) {
 // central on the control-channel handshake, but that is a second hop with its own timing,
 // and this needs to answer "is the binary I just installed the one now serving" rather than
 // "has central noticed yet".
+// verifyPortalV2 checks the deployed gateway actually serves its portal.
+//
+// The version check above proves the right BINARY is running. It says nothing about what is inside
+// it, and a gateway with no embedded UI passes every other check while answering 500 for the
+// portal -- up, correct version, and unusable (#1494). This is the check that would have caught
+// that from the deploying side rather than when somebody opened the page.
+//
+// Not fatal on a non-200 other than 500: an edge legitimately has no portal, and a deployment
+// behind maintenance mode answers 503. The specific failure being caught is "UI not built".
+func verifyPortalV2(host string) error {
+	return verifyPortalV2At("https://" + host)
+}
+
+func verifyPortalV2At(baseURL string) error {
+	client := &http.Client{Timeout: 15 * time.Second}
+	resp, err := client.Get(strings.TrimRight(baseURL, "/") + "/portalv2")
+	if err != nil {
+		// A gateway that cannot be reached at all is already reported by the version check; not
+		// worth failing twice for one problem.
+		return nil
+	}
+	defer resp.Body.Close() //nolint:errcheck
+
+	if resp.StatusCode != http.StatusInternalServerError {
+		return nil
+	}
+	body, err := io.ReadAll(io.LimitReader(resp.Body, 256))
+	if err == nil && strings.Contains(string(body), "UI not built") {
+		return fmt.Errorf(
+			"the deployed gateway serves 500 for /portalv2: %q.\n"+
+				"The binary embedded no UI. Run `make build` and deploy again", strings.TrimSpace(string(body)))
+	}
+	return fmt.Errorf("the deployed gateway serves 500 for /portalv2")
+}
+
 func verifyDeployedVersion(host, want string, timeout time.Duration) error {
 	return verifyDeployedVersionAt("https://"+host, want, timeout, 5*time.Second)
 }

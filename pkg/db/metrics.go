@@ -66,6 +66,57 @@ func (repo *SQLiteMetricRepo) GetGlobalAnalytics(days int) (*GlobalAnalytics, er
 		daily = append(daily, dbw)
 	}
 
+	// Sessions per gateway per day (#1150).
+	//
+	// COUNT(DISTINCT ...) rather than COUNT(*): a row here is a five-minute sample, not a
+	// session. MetricsCollector's ticker writes one row per lease per interval whenever
+	// bytes moved (metrics_collector.go:63-80), so counting rows would measure how long
+	// tunnels stayed busy and call it demand -- one long-lived tunnel would outrank a
+	// dozen short ones and the panel would say the opposite of the truth. Verified by
+	// swapping in COUNT(*): six samples of one session reported as six.
+	//
+	// connected_at is the lease's CreatedAt and is stable for the life of a session, so
+	// (full_host, connected_at) identifies one session across all of its samples. A
+	// reconnect gets a new connected_at and counts again, which is correct: it is a new
+	// session on whichever node it landed on, and landing somewhere different is exactly
+	// what this panel exists to reveal.
+	//
+	// Date handling mirrors dailyQuery above, including the substr fallback for rows
+	// written before recorded_at was normalised.
+	nodeDailyQuery := `
+		SELECT COALESCE(strftime('%Y-%m-%d', recorded_at), CASE WHEN length(recorded_at) >= 10 AND substr(recorded_at, 5, 1) = '-' AND substr(recorded_at, 8, 1) = '-' THEN substr(recorded_at, 1, 10) END) as d,
+		       COALESCE(NULLIF(node_id, ''), 'control') as n,
+		       COUNT(DISTINCT full_host || '|' || connected_at)
+		FROM tunnel_metrics
+		WHERE recorded_at >= ?
+		GROUP BY d, n
+		ORDER BY d ASC, n ASC
+	`
+	nodeRows, err := repo.conn.Query(nodeDailyQuery, timeLimit)
+	if err != nil {
+		return nil, err
+	}
+	nodeDaily := make([]NodeDailySession, 0)
+	for nodeRows.Next() {
+		var nds NodeDailySession
+		var dateNull sql.NullString
+		if err := nodeRows.Scan(&dateNull, &nds.NodeID, &nds.Sessions); err != nil {
+			_ = nodeRows.Close()
+			return nil, err
+		}
+		if dateNull.Valid {
+			nds.Date = dateNull.String
+		} else {
+			nds.Date = "Unknown"
+		}
+		nodeDaily = append(nodeDaily, nds)
+	}
+	if err := nodeRows.Err(); err != nil {
+		_ = nodeRows.Close()
+		return nil, err
+	}
+	_ = nodeRows.Close()
+
 	topQuery := `
 		SELECT COALESCE(u.email, m.user_id), SUM(m.bytes_in), SUM(m.bytes_out)
 		FROM tunnel_metrics m
@@ -146,7 +197,7 @@ func (repo *SQLiteMetricRepo) GetGlobalAnalytics(days int) (*GlobalAnalytics, er
 		portalStats = append(portalStats, ps)
 	}
 
-	return &GlobalAnalytics{Daily: daily, TopUsers: top, TopTunnels: tunnels, PortalStats: portalStats}, nil
+	return &GlobalAnalytics{Daily: daily, TopUsers: top, TopTunnels: tunnels, PortalStats: portalStats, NodeDaily: nodeDaily}, nil
 }
 
 // GetUserAnalytics retrieves bandwidth stats for a specific user for the last N days.

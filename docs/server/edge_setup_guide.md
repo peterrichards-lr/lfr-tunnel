@@ -116,11 +116,26 @@ edge_nodes:
 
 #### Registering a New Edge Node with the Control Plane
 
-There is currently **no automated tool** for this step — track your nodes' plaintext
-tokens locally in a gitignored `edge_nodes.txt` (format in
-[edge_nodes.txt.example](../../edge_nodes.txt.example):
-`node_id,plaintext_token[,optional_public_url]`), then register each one with the
-control plane by hand:
+Track your nodes' plaintext tokens locally in a gitignored `edge_nodes.txt` (format in
+[edge_nodes.txt.example](../../edge_nodes.txt.example)), then render the registry:
+
+```bash
+./bin/lfr-tunnel-ops render-edge-nodes
+```
+
+This hashes each token with SHA-256 locally — the plaintext is never printed, logged or
+uploaded — and **derives** each `url` from `scripts/liferay/dns/lfr-demo-production.yaml`
+rather than letting you type it. That matters: the url used to be hand-written, and three
+of four came to name retired `aws-edge-*` hosts which resolve, through the zone wildcard,
+to the control plane itself, so central advertised its own address as three separate
+regions for weeks (#1449). A url written in the file is now checked against the spec and a
+mismatch is an error.
+
+The output contains token hashes and is for placing on the control plane — do not commit
+it. Verify the result afterwards with `lfr-tunnel-ops check-config`, which re-checks the
+live file against the same spec.
+
+If you would rather do it by hand, the steps are: 
 
 1. Generate a random plaintext token and its SHA-256 hash (never uploaded in plaintext):
    ```bash

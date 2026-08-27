@@ -1,8 +1,10 @@
 package client
 
 import (
+	"bytes"
 	"encoding/json"
 	"fmt"
+	"io"
 	"os"
 	"path/filepath"
 	"strings"
@@ -149,11 +151,17 @@ type SessionLogPath struct {
 // error logs and nothing ever told the operator they existed; #1223 then added a Settings
 // field naming the directory, which made that worse rather than better.
 //
-// Paths only. Deliberately no contents: the traffic log records request and response
-// bodies whenever logBodies is on, and those routinely carry OAuth tokens, session cookies
-// and customer data, while the Inspector binds 0.0.0.0 under Docker (inspector.go
-// IsDocker). On disk they are behind 0600; over HTTP they would not be. See #1423, where
-// this was decided as option 3.
+// Paths as well as contents: the Inspector serves all three logs (#1423). An earlier
+// version of this comment argued for withholding the traffic log because it records
+// request and response bodies. That reasoning did not survive review -- /api/state
+// already returns the last 100 RequestRecords with ReqBody, RespBody, ReqHeaders,
+// RespHeaders and the passcode, and /api/replay re-sends them, all through the same
+// guardLocalOnly origin check. The traffic log is the same class of data over a longer
+// window, not a new exposure, and the operator reading it can already see the live
+// equivalent.
+//
+// The paths stay useful in their own right: they answer "where is this on disk" for
+// someone who wants to grep, ship or rotate the file rather than read it in a browser.
 func SessionLogPaths(subdomain string) []SessionLogPath {
 	if subdomain == "" {
 		return nil
@@ -173,17 +181,92 @@ func SessionLogPaths(subdomain string) []SessionLogPath {
 	// different directory from the other two. That is why each entry carries a full
 	// path rather than a shared directory heading and three filenames.
 	if console, err := ResolveClientLogPath(subdomain); err == nil {
-		paths = append(paths, stat("console", console))
+		paths = append(paths, stat(LogKindConsole, console))
 	}
 	dir, err := LogDir()
 	if err != nil {
 		return paths
 	}
 	paths = append(paths,
-		stat("traffic", filepath.Join(dir, fmt.Sprintf("traffic-%s.log", subdomain))),
-		stat("error", filepath.Join(dir, fmt.Sprintf("error-%s.log", subdomain))),
+		stat(LogKindTraffic, filepath.Join(dir, fmt.Sprintf("traffic-%s.log", subdomain))),
+		stat(LogKindError, filepath.Join(dir, fmt.Sprintf("error-%s.log", subdomain))),
 	)
 	return paths
+}
+
+// The three logs a client session writes. Named because they are part of the Inspector's
+// URL surface (/api/logs/<kind>) and its JSON, not just internal labels.
+const (
+	// LogKindConsole is the background-mode console log, served by /api/logs.
+	LogKindConsole = "console"
+	// LogKindTraffic is the per-request log, served by /api/logs/traffic.
+	LogKindTraffic = "traffic"
+	// LogKindError is the diagnostic event log, served by /api/logs/error.
+	LogKindError = "error"
+)
+
+// DefaultLogTailBytes is how much of a log the Inspector returns by default.
+//
+// These files rotate at DefaultLogMaxBytes (8 MiB), and the Logs tab polls every few
+// seconds, so serving whole files would ship megabytes per poll to render a view whose
+// useful part is the recent end.
+const DefaultLogTailBytes int64 = 256 << 10
+
+// ReadSessionLog returns the tail of one of the client's persistent logs.
+//
+// kind is "console", "traffic" or "error". Reading the tail rather than the whole file
+// keeps a poll cheap on an 8 MiB log; the returned bool reports whether the content was
+// truncated, so a caller can say so rather than silently presenting a partial file as
+// complete.
+//
+// Splitting on the first newline after the offset matters for traffic and error, which
+// are JSON Lines: an arbitrary byte offset lands mid-object and the first line would fail
+// to parse.
+func ReadSessionLog(kind, subdomain string, maxBytes int64) ([]byte, bool, error) {
+	var path string
+	var err error
+	switch kind {
+	case LogKindConsole:
+		path, err = ResolveClientLogPath(subdomain)
+	case LogKindTraffic, LogKindError:
+		var dir string
+		if dir, err = LogDir(); err == nil {
+			path = filepath.Join(dir, fmt.Sprintf("%s-%s.log", kind, subdomain))
+		}
+	default:
+		return nil, false, fmt.Errorf("unknown log %q", kind)
+	}
+	if err != nil {
+		return nil, false, err
+	}
+
+	f, err := os.Open(path) //nolint:gosec // path is built from LogDir and a validated kind
+	if err != nil {
+		return nil, false, err
+	}
+	defer f.Close() //nolint:errcheck
+
+	info, err := f.Stat()
+	if err != nil {
+		return nil, false, err
+	}
+	if maxBytes <= 0 || info.Size() <= maxBytes {
+		data, rerr := io.ReadAll(f)
+		return data, false, rerr
+	}
+
+	if _, err = f.Seek(info.Size()-maxBytes, io.SeekStart); err != nil {
+		return nil, false, err
+	}
+	data, err := io.ReadAll(f)
+	if err != nil {
+		return nil, false, err
+	}
+	// Drop the partial first line so JSON Lines stays parseable.
+	if idx := bytes.IndexByte(data, '\n'); idx >= 0 {
+		data = data[idx+1:]
+	}
+	return data, true, nil
 }
 
 // RotatingFile is an append-only file that rotates once it exceeds maxBytes, keeping a

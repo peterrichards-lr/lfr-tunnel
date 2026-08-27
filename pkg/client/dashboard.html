@@ -44,6 +44,12 @@
             font-size: 12px;
             word-break: break-all;
         }
+        .log-truncated {
+            font-size: 11px;
+            font-style: italic;
+            color: var(--text-muted, #8b93a7);
+            padding: 4px 0 8px;
+        }
         .log-file-empty {
             font-size: 12px;
             color: var(--text-muted, #8b93a7);
@@ -257,8 +263,9 @@
     <script>
 const clientTranslations = {
     "en": {
+        "client_logs_truncated": "Showing the most recent part of this log -- earlier lines are in the file on disk.",
         "client_logs_files_title": "Log files on this machine",
-        "client_logs_files_note": "The viewer above shows the console log. The traffic and error logs are not served over HTTP -- the traffic log can contain request and response bodies, so it stays readable only from disk. Open them directly.",
+        "client_logs_files_note": "All three logs are viewable above -- pick one from the selector. The traffic log records every proxied request, and includes bodies when the client is run with body logging on. Paths are listed so you can grep, ship or rotate them outside the Inspector.",
         "client_logs_files_none": "No log files -- the client has not connected yet.",
         "client_logs_files_error": "Could not read the log file locations.",
         "client_logs_file_missing": "not created yet",
@@ -321,8 +328,9 @@ const clientTranslations = {
         "client_config_saved": "Configuration saved successfully!"
     },
     "es": {
+        "client_logs_truncated": "Mostrando la parte más reciente de este registro: las líneas anteriores están en el archivo en disco.",
         "client_logs_files_title": "Archivos de registro en esta máquina",
-        "client_logs_files_note": "El visor de arriba muestra el registro de consola. Los registros de tráfico y de errores no se sirven por HTTP: el registro de tráfico puede contener cuerpos de peticiones y respuestas, por lo que solo se puede leer desde el disco. Ábrelos directamente.",
+        "client_logs_files_note": "Los tres registros se pueden ver arriba: elige uno en el selector. El registro de tráfico anota cada petición redirigida e incluye los cuerpos si el cliente se ejecuta con el registro de cuerpos activado. Las rutas se muestran para que puedas usarlos con grep, enviarlos o rotarlos fuera del Inspector.",
         "client_logs_files_none": "No hay archivos de registro: el cliente aún no se ha conectado.",
         "client_logs_files_error": "No se pudieron leer las ubicaciones de los archivos de registro.",
         "client_logs_file_missing": "aún no creado",
@@ -381,8 +389,9 @@ const clientTranslations = {
         "client_config_saved": "¡Configuración guardada!"
     },
     "de": {
+        "client_logs_truncated": "Es wird der neueste Teil dieses Protokolls angezeigt -- frühere Zeilen stehen in der Datei auf der Festplatte.",
         "client_logs_files_title": "Protokolldateien auf diesem Rechner",
-        "client_logs_files_note": "Der Betrachter oben zeigt das Konsolenprotokoll. Das Verkehrs- und das Fehlerprotokoll werden nicht über HTTP ausgeliefert -- das Verkehrsprotokoll kann Anfrage- und Antwortinhalte enthalten und bleibt daher nur von der Festplatte lesbar. Öffnen Sie sie direkt.",
+        "client_logs_files_note": "Alle drei Protokolle sind oben einsehbar -- wählen Sie eines im Auswahlfeld. Das Verkehrsprotokoll erfasst jede weitergeleitete Anfrage und enthält Inhalte, wenn der Client mit Inhaltsprotokollierung läuft. Die Pfade sind aufgeführt, damit Sie die Dateien außerhalb des Inspectors durchsuchen, übertragen oder rotieren können.",
         "client_logs_files_none": "Keine Protokolldateien -- der Client hat sich noch nicht verbunden.",
         "client_logs_files_error": "Die Speicherorte der Protokolldateien konnten nicht gelesen werden.",
         "client_logs_file_missing": "noch nicht erstellt",
@@ -441,8 +450,9 @@ const clientTranslations = {
         "client_config_saved": "Konfiguration erfolgreich gespeichert!"
     },
     "fr": {
+        "client_logs_truncated": "Affichage de la partie la plus récente de ce journal -- les lignes antérieures sont dans le fichier sur le disque.",
         "client_logs_files_title": "Fichiers journaux sur cette machine",
-        "client_logs_files_note": "La visionneuse ci-dessus affiche le journal de console. Les journaux de trafic et d'erreurs ne sont pas servis via HTTP : le journal de trafic peut contenir les corps des requêtes et des réponses, il reste donc lisible uniquement depuis le disque. Ouvrez-les directement.",
+        "client_logs_files_note": "Les trois journaux sont consultables ci-dessus : choisissez-en un dans le sélecteur. Le journal de trafic enregistre chaque requête relayée et inclut les corps si le client tourne avec la journalisation des corps activée. Les chemins sont indiqués pour vous permettre de les analyser, les transférer ou les faire tourner en dehors de l'Inspector.",
         "client_logs_files_none": "Aucun fichier journal -- le client ne s'est pas encore connecté.",
         "client_logs_files_error": "Impossible de lire l'emplacement des fichiers journaux.",
         "client_logs_file_missing": "pas encore créé",
@@ -501,8 +511,9 @@ const clientTranslations = {
         "client_config_saved": "Configuration enregistrée avec succès !"
     },
     "pt": {
+        "client_logs_truncated": "A mostrar a parte mais recente deste registo -- as linhas anteriores estão no ficheiro em disco.",
         "client_logs_files_title": "Ficheiros de registo nesta máquina",
-        "client_logs_files_note": "O visualizador acima mostra o registo de consola. Os registos de tráfego e de erros não são servidos por HTTP -- o registo de tráfego pode conter corpos de pedidos e respostas, por isso permanece legível apenas a partir do disco. Abra-os diretamente.",
+        "client_logs_files_note": "Os três registos podem ser vistos acima -- escolha um no seletor. O registo de tráfego regista cada pedido encaminhado e inclui corpos quando o cliente corre com o registo de corpos ativo. Os caminhos são listados para que possa pesquisá-los, enviá-los ou rodá-los fora do Inspector.",
         "client_logs_files_none": "Sem ficheiros de registo -- o cliente ainda não se ligou.",
         "client_logs_files_error": "Não foi possível ler a localização dos ficheiros de registo.",
         "client_logs_file_missing": "ainda não criado",
@@ -561,8 +572,9 @@ const clientTranslations = {
         "client_config_saved": "Configuração salva com sucesso!"
     },
     "ja": {
+        "client_logs_truncated": "このログの最新部分のみを表示しています。それ以前の行はディスク上のファイルにあります。",
         "client_logs_files_title": "このマシン上のログファイル",
-        "client_logs_files_note": "上のビューアはコンソールログを表示します。トラフィックログとエラーログは HTTP では提供されません。トラフィックログにはリクエストとレスポンスのボディが含まれる場合があるため、ディスクからのみ読み取れます。直接開いてください。",
+        "client_logs_files_note": "3 つのログはすべて上で閲覧できます。セレクタから選択してください。トラフィックログは転送された全リクエストを記録し、クライアントがボディログを有効にして実行されている場合はボディも含みます。パスは Inspector の外で grep・転送・ローテーションできるように表示しています。",
         "client_logs_files_none": "ログファイルがありません -- クライアントはまだ接続していません。",
         "client_logs_files_error": "ログファイルの場所を読み取れませんでした。",
         "client_logs_file_missing": "未作成",
@@ -1091,6 +1103,10 @@ function setLanguage(lang) {
         let logPollTimer = null;
         let allLogLines = [];
         let lastLogLineCount = -1;
+        // Which of the three logs the viewer is showing. Reset per tab entry rather than
+        // persisted: the console log is what someone opening Logs almost always wants.
+        let activeLogSource = 'console';
+        let logTruncated = false;
 
         // Lines look like: 2026/08/26 09:12:33 INFO [Client] message
         function parseLogLine(line) {
@@ -1115,7 +1131,10 @@ function setLanguage(lang) {
                 body.innerHTML = '<div class="empty-state" data-i18n="client_logs_empty">No log lines to show</div>';
                 return;
             }
-            body.innerHTML = rows.map(l => `
+            const notice = logTruncated
+                ? `<div class="log-truncated">${escapeHtml(t('client_logs_truncated'))}</div>`
+                : '';
+            body.innerHTML = notice + rows.map(l => `
                 <div class="log-line">
                     <span class="log-time">${escapeHtml(l.time)}</span>
                     <span class="log-level log-level--${escapeHtml(l.level.toLowerCase())}">${escapeHtml(l.level)}</span>
@@ -1126,7 +1145,8 @@ function setLanguage(lang) {
         async function fetchLogs() {
             const body = document.getElementById('log-lines');
             try {
-                const res = await fetch('/api/logs');
+                const url = activeLogSource === 'console' ? '/api/logs' : `/api/logs/${activeLogSource}`;
+                const res = await fetch(url);
                 if (res.status === 404) {
                     // The endpoint 404s until the client has a subdomain, which is a real
                     // state rather than a failure -- say so instead of showing an empty
@@ -1140,16 +1160,57 @@ function setLanguage(lang) {
                 const text = await res.text();
                 const lines = text.split('\n');
                 if (lines.length && lines[lines.length - 1] === '') lines.pop();
+                const truncated = res.headers.get('X-Log-Truncated') === 'true';
                 // Only re-render when something actually changed, so the pane does not
                 // flicker or lose the user's scroll position on every poll.
                 if (lines.length !== lastLogLineCount) {
-                    allLogLines = lines.map(parseLogLine);
+                    // Traffic and error are JSON Lines; the console log is plain text.
+                    // Both normalise to {time, level, message} so renderLogLines and the
+                    // level filter work the same whichever file is selected.
+                    allLogLines = activeLogSource === 'console'
+                        ? lines.map(parseLogLine)
+                        : lines.map((line) => parseJsonLogLine(line, activeLogSource));
                     lastLogLineCount = lines.length;
+                    logTruncated = truncated;
                     renderLogLines();
                 }
             } catch (e) {
                 console.error('Failed to fetch logs', e);
             }
+        }
+
+        // Normalises a JSON Lines record from the traffic or error log into the same
+        // {time, level, message} shape parseLogLine produces for the console log, so the
+        // viewer and its level filter need no special cases.
+        //
+        // Traffic entries carry no level of their own -- the status code is the signal an
+        // operator is scanning for, so it becomes one.
+        function parseJsonLogLine(line, kind) {
+            let entry;
+            try {
+                entry = JSON.parse(line);
+            } catch (e) {
+                return { time: '', level: 'INFO', message: line };
+            }
+            const time = entry.ts ? String(entry.ts).replace('T', ' ').replace(/\.\d+Z?$/, '') : '';
+            if (kind === 'error') {
+                const fields = entry.fields && Object.keys(entry.fields).length
+                    ? ' ' + Object.entries(entry.fields).map(([k, v]) => `${k}=${JSON.stringify(v)}`).join(' ')
+                    : '';
+                return {
+                    time,
+                    level: String(entry.level || 'INFO').toUpperCase(),
+                    message: `${entry.event || ''}${fields}`.trim(),
+                };
+            }
+            const status = Number(entry.status) || 0;
+            const level = status >= 500 ? 'ERROR' : status >= 400 ? 'WARN' : 'INFO';
+            let message = `${entry.method || ''} ${entry.path || ''} ${status} ${entry.dur_ms || 0}ms`;
+            if (entry.region) message += ` [${entry.region}]`;
+            // Bodies are present only when the client ran with body logging on.
+            if (entry.req_body) message += `\n  \u2192 ${entry.req_body}`;
+            if (entry.resp_body) message += `\n  \u2190 ${entry.resp_body}`;
+            return { time, level, message: message.trim() };
         }
 
         // Sizes are shown so an operator can tell "the traffic log is empty" from "the
@@ -1224,6 +1285,11 @@ function setLanguage(lang) {
                                 <input type="text" id="log-filter-search" class="input-field" style="flex: 1; min-width: 180px;"
                                        placeholder="Filter logs..." data-i18n-placeholder="client_logs_filter"
                                        aria-label="Filter logs" />
+                                <select id="log-source" class="input-field" style="width: auto;" aria-label="Log file">
+                                    <option value="console" data-i18n="client_logs_kind_console">Console</option>
+                                    <option value="traffic" data-i18n="client_logs_kind_traffic">Traffic</option>
+                                    <option value="error" data-i18n="client_logs_kind_error">Error</option>
+                                </select>
                                 <select id="log-filter-level" class="input-field" style="width: auto;" aria-label="Log level">
                                     <option value="" data-i18n="client_logs_all_levels">All levels</option>
                                     <option value="INFO">INFO</option>
@@ -1239,12 +1305,18 @@ function setLanguage(lang) {
                     <div class="panel" style="width: 100%; margin-top: 16px;">
                         <div class="panel-body" style="padding: 12px;">
                             <div style="font-weight: 600; margin-bottom: 4px;" data-i18n="client_logs_files_title">Log files on this machine</div>
-                            <div class="log-files-note" data-i18n="client_logs_files_note">The viewer above shows the console log. The traffic and error logs are not served over HTTP -- the traffic log can contain request and response bodies, so it stays readable only from disk. Open them directly.</div>
+                            <div class="log-files-note" data-i18n="client_logs_files_note">All three logs are viewable above -- pick one from the selector. The traffic log records every proxied request, and includes bodies when the client is run with body logging on. Paths are listed so you can grep, ship or rotate them outside the Inspector.</div>
                             <div id="log-file-list"></div>
                         </div>
                     </div>
                 </div>`;
 
+            document.getElementById('log-source').addEventListener('change', (e) => {
+                activeLogSource = e.target.value;
+                lastLogLineCount = -1;
+                allLogLines = [];
+                fetchLogs();
+            });
             document.getElementById('log-filter-search').addEventListener('input', renderLogLines);
             document.getElementById('log-filter-level').addEventListener('change', renderLogLines);
             document.getElementById('btn-log-refresh').addEventListener('click', () => {
@@ -1254,6 +1326,8 @@ function setLanguage(lang) {
 
             renderLogFileList();
 
+            activeLogSource = 'console';
+            logTruncated = false;
             lastLogLineCount = -1;
             fetchLogs();
             if (logPollTimer) clearInterval(logPollTimer);

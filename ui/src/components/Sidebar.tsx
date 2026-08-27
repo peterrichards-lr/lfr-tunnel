@@ -79,6 +79,20 @@ export default function Sidebar({ user, isOpen, onClose }: SidebarProps) {
             >
               {t('sidebar_account', 'Account Settings')}
             </NavLink>
+            {/* Only for non-admins (#1512). An admin already has Analytics under Admin Zone
+                and both links render the same page, so showing both would be two entries
+                pointing at one thing. Non-admins had no entry at all, which is the bug. */}
+            {user?.role !== 'admin' && user?.role !== 'owner' && (
+              <NavLink
+                to="/analytics"
+                onClick={onClose}
+                className={({ isActive }) =>
+                  `nav-item ${isActive ? 'active' : ''}`
+                }
+              >
+                {t('sidebar_analytics', 'Analytics')}
+              </NavLink>
+            )}
           </div>
 
           {(user?.role === 'admin' || user?.role === 'owner') && (

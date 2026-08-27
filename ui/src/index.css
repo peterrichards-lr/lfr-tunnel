@@ -79,6 +79,31 @@ body {
   border-radius: 50%;
   animation: spin 1s linear infinite;
 }
+/* The login button's spinner asked for 16px with a 2px rim via w-4 h-4 border-2, none of
+   which exist, so a 40px spinner sized for a full-page loader rendered inside a button
+   (#1383). A modifier rather than utilities: the two sizes are the same component. */
+/* A QR code needs a white quiet zone to be scannable, whatever the theme -- black modules
+   on a dark card is not a contrast preference, it is an unreadable code. The markup asked
+   for this with bg-white and inline-block, neither of which exists, so MFA setup rendered
+   its QR straight onto the card (#1383).
+ *
+ * Deliberately not var(--bg-card-solid) or similar: this is the one place in the app where
+ * the colour must NOT follow the theme.
+ */
+.qr-frame {
+  display: inline-block;
+  background: #ffffff;
+  padding: var(--spacing-lg);
+  border-radius: 10px;
+  margin-bottom: var(--spacing-lg);
+}
+
+.spinner--sm {
+  width: 16px;
+  height: 16px;
+  border-width: 2px;
+}
+
 @keyframes spin {
   100% {
     transform: rotate(360deg);
@@ -207,6 +232,10 @@ body {
 /* Mobile Header Default (Hidden on Desktop) */
 .mobile-header {
   display: none;
+  /* The markup asked for this with a bg-card utility that does not exist, so on mobile the
+     header bar was transparent (#1383). It belongs on the component rather than as a
+     utility -- .mobile-header is the only thing that wants it. */
+  background: var(--bg-card);
 }
 
 /* Actions Cell Helper */
@@ -2091,6 +2120,18 @@ html[dir='rtl'] th {
   box-shadow: 0 1px 2px rgba(0, 0, 0, 0.12);
   z-index: 40;
   flex-shrink: 0;
+}
+
+/* Login renders the same banner as a centred card above the sign-in box rather than as a
+   full-width strip. It previously hand-rolled the whole thing with bg-primary/text-white,
+   which are not defined -- so it had no background at all -- while this class sat ready
+   with the colour and typography (#1383). Only the geometry differs, so that is all this
+   modifier changes. */
+.v1-promo-banner--card {
+  max-width: 420px;
+  width: 100%;
+  padding: var(--spacing-md) var(--spacing-xl);
+  border-radius: 10px;
 }
 
 .v1-promo-banner a {

@@ -130,7 +130,7 @@ function MfaSetupGate() {
 
         {setupData ? (
           <div className="animate-fade-in-fast">
-            <div className="bg-white p-lg rounded-md inline-block mb-lg">
+            <div className="qr-frame">
               <QRCodeSVG value={setupData.otpauth_url} size={150} />
             </div>
             <div className="copy-box text-xs mb-lg">{setupData.secret}</div>

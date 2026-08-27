@@ -153,10 +153,10 @@ export default function Login() {
       <div className="login-orb" aria-hidden="true" />
 
       {/* V1 Promo Banner */}
-      <div className="z-10 bg-primary text-white py-md px-xl rounded-md mb-xl max-w-sm w-full text-center box-border shadow-md">
+      <div className="v1-promo-banner v1-promo-banner--card z-10 mb-xl">
         <p className="m-0 text-sm fw-medium">
           {t('banner_classic_look', 'Prefer the classic look?')}{' '}
-          <a href="/" className="text-white underline fw-bold ml-xs">
+          <a href="/" className="ml-xs">
             {t('btn_return_v1', 'Return to V1 →')}
           </a>
         </p>
@@ -278,7 +278,7 @@ export default function Login() {
               >
                 {isSending ? (
                   <>
-                    <span className="spinner w-4 h-4 border-2" />
+                    <span className="spinner spinner--sm" />
                     {t('sending', 'Sending...')}
                   </>
                 ) : mode === 'login' ? (
@@ -329,13 +329,13 @@ export default function Login() {
       {/* Footer Links & Language */}
       <div className="mt-2xl flex flex-col items-center gap-lg z-10">
         <select
-          className="input-field py-xs px-md bg-white/10 text-white/90 border border-white/20 cursor-pointer w-auto"
+          className="input-field py-xs px-md cursor-pointer w-auto"
           value={language}
           onChange={(e) => setLanguage(e.target.value)}
           aria-label={t('language', 'Language')}
         >
           {availableLanguages.map((l) => (
-            <option key={l.code} value={l.code} className="text-black">
+            <option key={l.code} value={l.code}>
               {l.label}
             </option>
           ))}

@@ -156,9 +156,13 @@ e2e-edge:
 e2e-ui:
 	@./scripts/run-e2e-ui.sh
 
-# Installs both hooks (#1343). pre-commit is the fast, irreversible-only set; pre-push carries
-# vet, tests and the conditional UI build. Installing only one of the two leaves a gap rather
-# than a slow hook, so they go together.
+# Installs hook SHIMS that exec the scripts in the working tree (#1425). It used to copy them, so
+# every edit was inert until each person re-ran this -- silently, since a stale hook's output is
+# indistinguishable from a current one. The attribution guard added in #1384 ran for nobody who
+# had not reinstalled since.
+#
+# pre-commit is the fast, irreversible-only set; pre-push carries vet, tests and the conditional
+# UI build (#1343). They go together: installing one leaves a gap rather than a slow hook.
 #
 # The destination is resolved with `git rev-parse --git-path hooks` rather than hardcoded to
 # `.git/hooks` (#1377). In a linked worktree `.git` is a FILE, not a directory, so the old
@@ -168,13 +172,7 @@ e2e-ui:
 HOOKS_DIR = $(shell git rev-parse --git-path hooks)
 
 install-hook:
-	@echo "Installing native git hooks into $(HOOKS_DIR)..."
-	@mkdir -p "$(HOOKS_DIR)"
-	@cp scripts/pre-commit-hook.sh "$(HOOKS_DIR)/pre-commit"
-	@chmod +x "$(HOOKS_DIR)/pre-commit"
-	@cp scripts/pre-push-hook.sh "$(HOOKS_DIR)/pre-push"
-	@chmod +x "$(HOOKS_DIR)/pre-push"
-	@echo "pre-commit and pre-push hooks installed successfully."
+	@./scripts/install-hook-shim.sh
 
 # Tests the hook and guard scripts themselves (#1377, #1395, #1402). Fast: the stubbed cases
 # need no Docker, and only the end-to-end cases do. Not part of `test`, which is the Go suite.
@@ -184,6 +182,7 @@ test-hooks:
 	@./tests/hooks/test-shell-portability.sh
 	@./tests/hooks/test-drain-and-wait.sh
 	@./tests/hooks/test-check-staged-prettier.sh
+	@./tests/hooks/test-hook-shim.sh
 
 # The pre-merge CI-configuration gate (#1391). Worth a target rather than only a path to type:
 # the whole point of this check is being run BEFORE pushing, and a check nobody can invoke

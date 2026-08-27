@@ -6,6 +6,7 @@ import (
 	"crypto/rand"
 	"crypto/rsa"
 	"crypto/sha256"
+	"crypto/subtle"
 	"crypto/x509"
 	"embed"
 	"encoding/csv"
@@ -5658,6 +5659,32 @@ func (s *Server) isServedDomain(host string) bool {
 	return false
 }
 
+// authorisedEdgeNode resolves an edge token to the node it belongs to (#1308).
+//
+// Four handlers each hashed the token and looped over cfg.EdgeNodes themselves. Simpler than the
+// PAT path -- an edge token has no expiry or revocation to get wrong -- but that is the point: an
+// edge token cannot currently be revoked without editing config and restarting (#1309), and four
+// copies make adding that harder than it needs to be.
+//
+// Returns the node, so the two callers that need the ID stop deriving it a second time.
+func (s *Server) authorisedEdgeNode(token string) (config.EdgeNodeConfig, bool) {
+	if token == "" {
+		return config.EdgeNodeConfig{}, false
+	}
+	hash := sha256.Sum256([]byte(token))
+	hashStr := hex.EncodeToString(hash[:])
+
+	for _, node := range s.cfg.EdgeNodes {
+		// Constant time: the stored value is a hash rather than a secret, but this runs on a path
+		// an unauthenticated caller can drive at will, and there is nothing to gain from letting
+		// timing report how much of a guess was right.
+		if subtle.ConstantTimeCompare([]byte(node.TokenHash), []byte(hashStr)) == 1 {
+			return node, true
+		}
+	}
+	return config.EdgeNodeConfig{}, false
+}
+
 func (s *Server) findEdgeNodeURL(nodeID string) string {
 	for _, node := range s.cfg.EdgeNodes {
 		if node.ID == nodeID {
@@ -5769,18 +5796,8 @@ func (s *Server) handleEdgeRegister(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	hash := sha256.Sum256([]byte(edgeToken))
-	hashStr := hex.EncodeToString(hash[:])
-
-	authorized := false
-	var edgeNodeID string
-	for _, node := range s.cfg.EdgeNodes {
-		if node.TokenHash == hashStr {
-			authorized = true
-			edgeNodeID = node.ID
-			break
-		}
-	}
+	node, authorized := s.authorisedEdgeNode(edgeToken)
+	edgeNodeID := node.ID
 
 	if !authorized {
 		respondJSON(w, http.StatusUnauthorized, map[string]string{"error": "invalid edge token"})
@@ -6093,17 +6110,7 @@ func (s *Server) handleEdgeDeregister(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	hash := sha256.Sum256([]byte(edgeToken))
-	hashStr := hex.EncodeToString(hash[:])
-
-	authorized := false
-	for _, node := range s.cfg.EdgeNodes {
-		if node.TokenHash == hashStr {
-			authorized = true
-			break
-		}
-	}
-
+	_, authorized := s.authorisedEdgeNode(edgeToken)
 	if !authorized {
 		respondJSON(w, http.StatusUnauthorized, map[string]string{"error": "invalid edge token"})
 		return
@@ -6165,17 +6172,7 @@ func (s *Server) handleEdgeAuditLog(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	hash := sha256.Sum256([]byte(edgeToken))
-	hashStr := hex.EncodeToString(hash[:])
-
-	authorized := false
-	for _, node := range s.cfg.EdgeNodes {
-		if node.TokenHash == hashStr {
-			authorized = true
-			break
-		}
-	}
-
+	_, authorized := s.authorisedEdgeNode(edgeToken)
 	if !authorized {
 		respondJSON(w, http.StatusUnauthorized, map[string]string{"error": "invalid edge token"})
 		return
@@ -6219,18 +6216,8 @@ func (s *Server) handleEdgeMetrics(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	hash := sha256.Sum256([]byte(edgeToken))
-	hashStr := hex.EncodeToString(hash[:])
-
-	authorized := false
-	var edgeNodeID string
-	for _, node := range s.cfg.EdgeNodes {
-		if node.TokenHash == hashStr {
-			authorized = true
-			edgeNodeID = node.ID
-			break
-		}
-	}
+	node, authorized := s.authorisedEdgeNode(edgeToken)
+	edgeNodeID := node.ID
 
 	if !authorized {
 		respondJSON(w, http.StatusUnauthorized, map[string]string{"error": "invalid edge token"})

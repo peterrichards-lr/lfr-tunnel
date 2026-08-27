@@ -290,14 +290,14 @@ export default function AccountSettings() {
                 <label className="form-label m-0" htmlFor="notifications">
                   {t('label_notifications', 'Email Notifications')}
                 </label>
-                <label className="switch">
+                <label className="toggle-switch">
                   <input
                     id="notifications"
                     type="checkbox"
                     checked={emailNotifications}
                     onChange={(e) => setEmailNotifications(e.target.checked)}
                   />
-                  <span className="slider round"></span>
+                  <span className="toggle-slider"></span>
                 </label>
               </div>
               <p className="text-xs text-muted mt-xs mb-0">
@@ -312,9 +312,9 @@ export default function AccountSettings() {
               <label className="form-label m-0">
                 {t('utc_time', 'UTC Time')}
               </label>
-              <label className="switch">
+              <label className="toggle-switch">
                 <input type="checkbox" checked={useUTC} onChange={toggleUTC} />
-                <span className="slider round"></span>
+                <span className="toggle-slider"></span>
               </label>
             </div>
 

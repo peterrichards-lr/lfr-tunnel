@@ -56,6 +56,13 @@ test.describe('Portal V2 analytics for a non-admin', () => {
     await page.goto('/portalv2/analytics');
     await expect(page).toHaveURL(/\/portalv2\/analytics$/);
 
+    // Anchor on something that MUST be there first. Mutation testing caught this: with the
+    // route removed the page renders nothing, and a test that only asserts absence passes
+    // just as happily against a blank page as against a correct one.
+    await expect(
+      page.getByRole('heading', { name: /My Usage/i }),
+    ).toBeVisible();
+
     // The admin half is one block guarded on `global`, which the API omits for a non-admin.
     // Checked by what renders, not by the guard: these are the headings that would appear if
     // the server ever started returning `global` to the wrong person.
@@ -75,6 +82,11 @@ test.describe('Portal V2 analytics for a non-admin', () => {
     await expect(link).toHaveCount(1);
     await link.click();
     await expect(page).toHaveURL(/\/portalv2\/analytics$/);
+    // Arriving at the URL is not the same as arriving at the page: without a route matching
+    // it, the address bar changes and nothing renders. Assert the destination exists.
+    await expect(
+      page.getByRole('heading', { name: /My Usage/i }),
+    ).toBeVisible();
   });
 
   test('the admin route stays closed to them', async ({ page }) => {

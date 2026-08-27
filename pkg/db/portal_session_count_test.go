@@ -1,7 +1,6 @@
 package db
 
 import (
-	"os"
 	"testing"
 	"time"
 )
@@ -15,11 +14,7 @@ import (
 
 func setupSessionRepo(t *testing.T) *SQLitePortalSessionRepo {
 	t.Helper()
-	database, tmpDir := setupTestDB(t)
-	t.Cleanup(func() {
-		_ = database.Close()     //nolint:errcheck
-		_ = os.RemoveAll(tmpDir) //nolint:errcheck
-	})
+	database := setupTestDB(t)
 	return NewSQLitePortalSessionRepo(database.conn)
 }
 

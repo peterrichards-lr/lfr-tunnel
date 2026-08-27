@@ -1,7 +1,6 @@
 package db
 
 import (
-	"os"
 	"testing"
 	"time"
 )
@@ -16,11 +15,7 @@ import (
 
 func setupMetricRepo(t *testing.T) *SQLiteMetricRepo {
 	t.Helper()
-	database, tmpDir := setupTestDB(t)
-	t.Cleanup(func() {
-		_ = database.Close()     //nolint:errcheck
-		_ = os.RemoveAll(tmpDir) //nolint:errcheck
-	})
+	database := setupTestDB(t)
 	return NewSQLiteMetricRepo(database.conn)
 }
 

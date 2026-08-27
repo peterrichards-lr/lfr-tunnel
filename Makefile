@@ -182,6 +182,7 @@ test-hooks:
 	@./tests/hooks/test-scan-staged-secrets.sh
 	@./tests/hooks/test-edr-guard.sh
 	@./tests/hooks/test-shell-portability.sh
+	@./tests/hooks/test-drain-and-wait.sh
 
 # The pre-merge CI-configuration gate (#1391). Worth a target rather than only a path to type:
 # the whole point of this check is being run BEFORE pushing, and a check nobody can invoke

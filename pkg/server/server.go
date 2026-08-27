@@ -5675,11 +5675,15 @@ func (s *Server) authorisedEdgeNode(token string) (config.EdgeNodeConfig, bool) 
 	hashStr := hex.EncodeToString(hash[:])
 
 	for _, node := range s.cfg.EdgeNodes {
-		// Constant time: the stored value is a hash rather than a secret, but this runs on a path
-		// an unauthenticated caller can drive at will, and there is nothing to gain from letting
-		// timing report how much of a guess was right.
-		if subtle.ConstantTimeCompare([]byte(node.TokenHash), []byte(hashStr)) == 1 {
-			return node, true
+		// Every accepted hash, not just the current one, so a rotation in progress authenticates
+		// on both the old and the new token (#1491).
+		for _, accepted := range node.AcceptedTokenHashes() {
+			// Constant time: the stored value is a hash rather than a secret, but this runs on a
+			// path an unauthenticated caller can drive at will, and there is nothing to gain from
+			// letting timing report how much of a guess was right.
+			if subtle.ConstantTimeCompare([]byte(accepted), []byte(hashStr)) == 1 {
+				return node, true
+			}
 		}
 	}
 	return config.EdgeNodeConfig{}, false

@@ -51,6 +51,11 @@ export async function createApprovedUser(
 ): Promise<void> {
   const ctx = await request.newContext();
 
+  // 1. Request registration. This does NOT notify the admin -- it emails the applicant a
+  //    verification link, and the admin hears nothing until that link is used. Worth stating
+  //    because it is not obvious from the endpoint name, and assuming otherwise is what made
+  //    the first version of this helper time out waiting for mail that was never going to
+  //    arrive.
   const reg = await ctx.post(`${API}/api/register-request`, {
     data: {
       email,
@@ -65,17 +70,47 @@ export async function createApprovedUser(
     );
   }
 
-  // The admin is emailed an approval link carrying a one-time token. Taking the token from the
-  // mail rather than from the database is deliberate -- it is the same value a human would
-  // click, so the test exercises the flow an operator actually uses.
-  const body = await waitForMail(ctx, ADMIN_EMAIL, /token=/);
-  const token = body.match(/token=([a-zA-Z0-9]+)/)?.[1];
-  if (!token) {
+  // 2. Complete setup, using the token from the applicant's own verification mail. This is
+  //    what the /setup page posts when a real person fills the form in.
+  const verifyMail = await waitForMail(ctx, email, /setup\?token=/);
+  const verifyToken = verifyMail.match(/setup\?token=([a-f0-9]+)/)?.[1];
+  if (!verifyToken) {
+    throw new Error(`No verification token in the setup mail for ${email}`);
+  }
+  const setup = await ctx.post(`${API}/api/complete-setup`, {
+    data: {
+      token: verifyToken,
+      first_name: firstName,
+      last_name: lastName,
+      preferred_name: firstName,
+      policy_consent: true,
+    },
+  });
+  if (!setup.ok()) {
+    throw new Error(
+      `complete-setup for ${email} failed: ${setup.status()} ${await setup.text()}`,
+    );
+  }
+
+  // 3. Approve, as the admin would by clicking the link they are now sent. Matched on the
+  //    applicant's address as well as the token, because the admin receives two mails about
+  //    every registration and only one of them carries an approval link.
+  const approvalMail = await waitForMail(
+    ctx,
+    ADMIN_EMAIL,
+    new RegExp(
+      `admin/approve\\?email=${encodeURIComponent(email).replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}&token=`,
+    ),
+  );
+  const approvalToken = approvalMail.match(
+    /admin\/approve\?email=[^&\s]+&token=([a-f0-9]+)/,
+  )?.[1];
+  if (!approvalToken) {
     throw new Error(`No approval token in the notification mail for ${email}`);
   }
 
   const approve = await ctx.post(`${API}/api/admin/approve`, {
-    form: { email, token },
+    form: { email, token: approvalToken },
   });
   if (!approve.ok()) {
     throw new Error(

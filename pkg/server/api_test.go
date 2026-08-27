@@ -28,9 +28,21 @@ func setupTestServerForAPI(t *testing.T) *Server {
 		t.Fatalf("failed to create server: %v", err)
 	}
 
-	t.Cleanup(func() {
-		time.Sleep(50 * time.Millisecond) // prevent SQLite TempDir cleanup races
-	})
+	// Stop the server here rather than leaving it to each caller.
+	//
+	// Stop is what closes the SQLite handle, and a test that forgot it left the database file
+	// open under t.TempDir(). On Unix that is invisible -- an open file can still be unlinked --
+	// but Windows refuses, so the cleanup failed and the test was marked FAIL after its body had
+	// passed ("The process cannot access the file because it is being used by another process").
+	//
+	// Owning the lifecycle in the helper is the fix rather than adding the missing `defer
+	// srv.Stop()` to the callers that lacked it: 86 tests use this helper, and the next one
+	// written would have had the same coin flip. Callers that already defer their own Stop are
+	// unaffected -- Stop is idempotent.
+	//
+	// This also replaces a 50ms sleep that was here to "prevent SQLite TempDir cleanup races".
+	// The race it was papering over is this one, and a sleep cannot close a file handle.
+	t.Cleanup(srv.Stop)
 
 	return srv
 }

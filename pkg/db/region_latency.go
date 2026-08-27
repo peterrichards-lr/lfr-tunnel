@@ -82,8 +82,10 @@ func (repo *SQLiteRegionProbeRepo) RecordRegionProbes(userID string, samples []R
 	if err != nil {
 		return fmt.Errorf("region probes: %w", err)
 	}
-	defer func() { _ = tx.Rollback() }()
-
+	// Rolled back explicitly rather than by `defer func() { _ = tx.Rollback() }()`. Discarding
+	// that error is the errcheck suppression the ratchet exists to stop (#1498), and a rollback
+	// that itself fails is worth saying: it means the write neither happened nor cleanly did
+	// not.
 	for _, s := range samples {
 		if s.Region == "" {
 			continue
@@ -97,6 +99,9 @@ func (repo *SQLiteRegionProbeRepo) RecordRegionProbes(userID string, samples []R
 			VALUES (?, ?, ?, ?, ?)
 			ON CONFLICT(user_id, region, day) DO UPDATE SET rtt_ms = excluded.rtt_ms, recorded_at = excluded.recorded_at`,
 			userID, s.Region, day, rtt, at.UTC()); err != nil {
+			if rbErr := tx.Rollback(); rbErr != nil {
+				return fmt.Errorf("region probes: %w (rollback also failed: %v)", err, rbErr)
+			}
 			return fmt.Errorf("region probes: %w", err)
 		}
 	}

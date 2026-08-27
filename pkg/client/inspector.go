@@ -235,6 +235,54 @@ func StartInspector(port int, engine *InterceptorEngine) (int, error) {
 		}
 	})
 
+	// The other two logs #1129 added (#1423). Neither had a reader for as long as they
+	// have existed, while /api/logs served the console log only.
+	//
+	// Serving them is consistent with what this listener already does: /api/state returns
+	// the last 100 RequestRecords with ReqBody, RespBody and ReqHeaders -- Authorization
+	// included -- plus the passcode, and /api/replay re-sends them. Everything here is
+	// behind the same guardLocalOnly origin check. The traffic log is that same data over
+	// a longer window, so withholding it protected nothing while costing the operator the
+	// history they came for.
+	//
+	// Returned as a tail rather than whole files: these rotate at 8 MiB and the Logs tab
+	// polls, so a full read would ship megabytes per poll for a view whose useful part is
+	// the recent end.
+	for _, kind := range []string{LogKindTraffic, LogKindError} {
+		logKind := kind
+		mux.HandleFunc("/api/logs/"+logKind, func(w http.ResponseWriter, r *http.Request) {
+			engine.mu.RLock()
+			subdomain := engine.ClientSubdomain
+			engine.mu.RUnlock()
+			if subdomain == "" {
+				http.Error(w, "Log file not found", http.StatusNotFound)
+				return
+			}
+
+			data, truncated, err := ReadSessionLog(logKind, subdomain, DefaultLogTailBytes)
+			if err != nil {
+				if os.IsNotExist(err) {
+					// Distinct from a read failure: the file not existing yet is the
+					// normal state of the traffic log when body logging has never run,
+					// and the panel says so rather than reporting an error.
+					http.Error(w, "Log file not found", http.StatusNotFound)
+					return
+				}
+				http.Error(w, "Failed to read log file", http.StatusInternalServerError)
+				return
+			}
+
+			w.Header().Set("Content-Type", "application/x-ndjson; charset=utf-8")
+			// Says the view is partial rather than letting a tail look like a whole file.
+			if truncated {
+				w.Header().Set("X-Log-Truncated", "true")
+			}
+			if _, err := w.Write(data); err != nil {
+				log.Printf("[Warning] Failed to write response: %v", err)
+			}
+		})
+	}
+
 	mux.HandleFunc("/api/config", func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
 
@@ -302,6 +350,25 @@ func StartInspector(port int, engine *InterceptorEngine) (int, error) {
 				"preserve_host": engine.PreserveHost,
 			}
 			engine.mu.RUnlock()
+
+			// All three logs the client writes, with their resolved paths (#1423).
+			// #1129 added the traffic and error logs and nothing ever surfaced them;
+			// #1223 then added a Settings field naming the directory, so the operator
+			// was told where to look and found two files the tool never mentioned.
+			//
+			// Paths as well as the viewers at /api/logs/traffic and /api/logs/error.
+			// An earlier revision withheld the contents, arguing the traffic log's
+			// bodies were too sensitive for this listener. That was wrong: /api/state
+			// above already returns ReqBody, RespBody, ReqHeaders and the passcode for
+			// the last 100 requests, and /api/replay re-sends them. The paths are still
+			// worth reporting for someone who wants to grep or ship the file rather
+			// than read it here.
+			//
+			// Resolved outside the lock: SessionLogPaths stats the filesystem, and
+			// engine.mu guards in-memory state that request handling also reads.
+			if logs := SessionLogPaths(effSubdomain); len(logs) > 0 {
+				resp["logs"] = logs
+			}
 			_ = json.NewEncoder(w).Encode(resp) //nolint:errcheck
 			return
 		}

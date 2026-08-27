@@ -31,7 +31,12 @@ func TestDeployCommandHasNoCheckFatalAfterPowerRestore(t *testing.T) {
 	if err != nil {
 		t.Fatalf("could not read deploy.go: %v", err)
 	}
-	lines := strings.Split(string(src), "\n")
+	// Normalise line endings before splitting. Git checks this file out with CRLF on Windows, and
+	// the scan below compares a line to "}" exactly -- which never matched there, so endAt stayed
+	// at len(lines) and the guard scanned the whole FILE instead of one function, reporting
+	// CheckFatal calls in DeployClientsCommand that are perfectly correct (#1481). A test that
+	// reads source has no business caring which platform checked the file out.
+	lines := strings.Split(strings.ReplaceAll(string(src), "\r\n", "\n"), "\n")
 
 	deferAt := -1
 	for i, line := range lines {

@@ -466,6 +466,18 @@
                                 <canvas id="portalStatsChart"></canvas>
                             </div>
                         </div>
+                        <!-- Sessions per gateway (#1150). Portal V2 already showed a live
+                             distribution pie and V1 showed nothing at all, which is a gap
+                             between the two arms of the V1/V2 comparison rather than a
+                             missing nicety. Both portals now carry the snapshot and the
+                             history. -->
+                        <div class="glass" style="padding: 16px; grid-column: span 3;" title="Distinct tunnel sessions each gateway carried per day. A line falling to zero means that gateway stopped receiving sessions.">
+                            <h4 style="margin-bottom: 12px; color: var(--text-muted); font-size: 14px; font-weight: 500;" data-i18n="sessions_per_edge">Sessions per Gateway</h4>
+                            <div style="position: relative; height: 250px; width: 100%;">
+                                <canvas id="nodeSessionsChart"></canvas>
+                            </div>
+                            <p id="node-sessions-empty" style="display: none; color: var(--text-muted); font-size: 13px; margin: 0;" data-i18n="sessions_per_edge_empty">No session data recorded yet for this period.</p>
+                        </div>
                         <div class="glass" style="padding: 16px; grid-column: span 3;">
                             <h4 style="margin-bottom: 12px; color: var(--text-muted); font-size: 14px; font-weight: 500;">Client Version Distribution</h4>
                             <div class="table-container" style="max-height: 250px; overflow-y: auto;">

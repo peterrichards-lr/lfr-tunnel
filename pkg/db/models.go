@@ -211,6 +211,18 @@ type GlobalAnalytics struct {
 	TopTunnels       []TunnelBandwidth  `json:"top_tunnels"`
 	PortalStats      []PortalUsageStats `json:"portal_stats"`
 	NodeDistribution map[string]int     `json:"node_distribution"`
+	NodeDaily        []NodeDailySession `json:"node_daily"`
+}
+
+// NodeDailySession is the number of distinct tunnel sessions a gateway carried on one
+// day. NodeDistribution above is the live snapshot; this is the history beside it,
+// because the signal worth seeing is an edge that has *stopped* receiving sessions, and a
+// snapshot cannot show that -- a scheduled power window and a dead control channel look
+// identical in one, and obviously different over time (#1150).
+type NodeDailySession struct {
+	Date     string `json:"date"`
+	NodeID   string `json:"node_id"`
+	Sessions int    `json:"sessions"`
 }
 
 type UserAnalytics struct {

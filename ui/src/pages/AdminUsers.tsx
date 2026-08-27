@@ -552,7 +552,7 @@ export default function AdminUsers() {
         </button>
       </div>
 
-      <div className="sub-tab-bar mb-xl">
+      <div className="sub-tabs mb-xl">
         <button
           onClick={() => setActiveTab('users')}
           className={`sub-tab ${activeTab === 'users' ? 'sub-tab--active' : ''}`}

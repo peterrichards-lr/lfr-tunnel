@@ -75,7 +75,7 @@ export default function ClientInstallationModal({
           <button
             type="button"
             aria-label={t('close', 'Close')}
-            className="modal-close-btn"
+            className="modal-close"
             onClick={onClose}
           >
             &times;

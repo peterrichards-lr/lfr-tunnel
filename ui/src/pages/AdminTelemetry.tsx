@@ -190,7 +190,7 @@ export default function AdminTelemetry() {
           <div className="stat-value text-main">
             {formatBytes(totalBandwidth)}
           </div>
-          <div className="stat-subtext text-muted mt-xs">
+          <div className="stat-sub text-muted mt-xs">
             📥 {formatBytes(totalBytesIn)} In | 📤 {formatBytes(totalBytesOut)}{' '}
             Out
           </div>

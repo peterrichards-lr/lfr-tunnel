@@ -37,6 +37,7 @@ import (
 
 	"lfr-tunnel/pkg/config"
 	"lfr-tunnel/pkg/db"
+	"lfr-tunnel/pkg/geo"
 	"lfr-tunnel/pkg/mail"
 	"lfr-tunnel/pkg/nginx"
 	"lfr-tunnel/pkg/provisioner"
@@ -224,12 +225,16 @@ func (s *safeConn) RemoteAddr() net.Addr {
 
 // Server coordinates the entire gateway operations.
 type Server struct {
-	cfg           *config.ServerConfig
-	chiselServer  *chserver.Server
-	registry      *Registry
-	proxyHandler  *ProxyHandler
-	chiselProxy   *httputil.ReverseProxy
-	db            *db.DB
+	cfg          *config.ServerConfig
+	chiselServer *chserver.Server
+	registry     *Registry
+	proxyHandler *ProxyHandler
+	chiselProxy  *httputil.ReverseProxy
+	db           *db.DB
+	// geo aggregates registrations into anonymous per-country counts (#1152). nil
+	// whenever no MaxMind database is configured, which is the default; every method on
+	// it is nil-safe so no call site needs to check.
+	geo           *geo.Aggregator
 	portalService PortalService
 	notifications *NotificationService
 	ctx           context.Context
@@ -451,6 +456,9 @@ func NewServer(cfg *config.ServerConfig) (*Server, error) {
 	srv.proxyHandler.SetRemoteRouteResolver(srv.resolveRemoteRouteForHost)
 	srv.webhooks = webhook.NewWebhookService(cfg.Webhooks, database)
 	srv.portalService = NewPortalService(srv.db, srv.cfg, srv.notifications, &srv.portalMap, caCert, caKey)
+	// Optional and absent by default: no MaxMind database is shipped, and without one
+	// this stays nil and every geo call becomes a no-op (#1152).
+	srv.geo = newGeoAggregator(cfg.GeoLite2DBPath, database)
 
 	// Edge power actions (start/stop/restart, schedule editing) are entirely
 	// optional and AWS-specific -- absent unless both the sidecar URL and its
@@ -1770,6 +1778,10 @@ func (s *Server) handleRegister(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
+	// Resolve the country in memory and drop the address (#1152). Nothing downstream of
+	// this sees the pair, and a failure here cannot fail the registration.
+	s.observeGeoLocation(user.ID, clientIP)
+
 	// Enforce active tunnels limit
 	if s.registry != nil {
 		leases := s.registry.ListLeases()
@@ -2148,6 +2160,12 @@ func (s *Server) Start() error {
 					// Expired bans stop blocking the moment they lapse; this only clears the
 					// rows once their history is no longer needed for escalation (#1353).
 					_, _ = s.db.PruneBlacklist(s.cfg.AutoBan.HistoryRetention) //nolint:errcheck
+					// Writes the running per-country cardinalities and rolls the ISO week
+					// over when the clock passes it. On this timer rather than a new one,
+					// for the same reason as the portal sessions above (#1152) -- and
+					// because without it a quiet server would never notice the boundary,
+					// there being no registrations to notice it on.
+					_ = s.geo.Flush() //nolint:errcheck
 					s.checkExpiringReservations()
 				}
 			}
@@ -2897,6 +2915,11 @@ func (s *Server) Stop() {
 		slog.Warn("[Server] Background goroutines did not stop within the shutdown timeout.")
 	}
 
+	// Before the database closes: writes the current period's cardinalities and releases
+	// the MaxMind handle. The in-memory user sets are simply dropped with the process --
+	// they have no persistent form to be written to (#1152).
+	_ = s.geo.Close() //nolint:errcheck
+
 	if s.db != nil {
 		_ = s.db.RecordGatewayCleanShutdown() //nolint:errcheck
 		s.db.Close()                          //nolint:errcheck
@@ -3124,6 +3147,14 @@ func (s *Server) handleAdminEndpoints(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		respondJSON(w, http.StatusOK, stats)
+		return
+	}
+
+	// Anonymous geographic distribution (#1152). Here rather than under /api/analytics
+	// because everything dispatched from this function is already behind requireAdmin,
+	// and it sits beside the client-version stats it is a sibling of.
+	if r.URL.Path == "/api/admin/analytics/locations" {
+		s.handleGetLocationAnalytics(w, r)
 		return
 	}
 
@@ -5768,6 +5799,11 @@ func (s *Server) handleEdgeRegister(w http.ResponseWriter, r *http.Request) {
 	if s.db != nil {
 		userRec, _ = s.db.GetUser(user.ID) //nolint:errcheck
 	}
+
+	// The edge forwards the real client address, so a client that registered against an
+	// edge node still lands in the right country bucket (#1152). Without this the whole
+	// aggregate would silently be "clients that happened to hit the control plane".
+	s.observeGeoLocation(user.ID, edgeReq.ClientIP)
 
 	finalSubdomain := edgeReq.SubdomainPrefix
 	requestedRandom := finalSubdomain == "" || finalSubdomain == "random"

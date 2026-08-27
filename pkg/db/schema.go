@@ -281,4 +281,17 @@ var migrations = []migration{
 	// were all placed under the old behaviour, and an operator may have meant them.
 	{22, "ALTER TABLE ip_blacklist ADD COLUMN expires_at DATETIME"},
 	{23, "ALTER TABLE ip_blacklist ADD COLUMN ban_count INTEGER NOT NULL DEFAULT 0"},
+	// Anonymous geographic distribution (#1152). The absence of a user column is the
+	// feature: a client IP is resolved to a country in memory at registration and then
+	// discarded, and only the number of distinct users per bucket per ISO week is
+	// written. With no identifier in the row there is nothing to re-link, which is what
+	// makes this anonymous rather than pseudonymous -- so this table must never gain a
+	// column capable of holding a user and a location together.
+	{24, `CREATE TABLE IF NOT EXISTS location_stats (
+		period TEXT NOT NULL,
+		bucket TEXT NOT NULL,
+		count INTEGER NOT NULL,
+		updated_at DATETIME NOT NULL DEFAULT (datetime('now')),
+		PRIMARY KEY (period, bucket)
+	)`},
 }

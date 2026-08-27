@@ -40,12 +40,31 @@ const formatBytes = (bytes: number, decimals = 2) => {
   return `${parseFloat((bytes / Math.pow(k, i)).toFixed(dm))} ${sizes[i]}`;
 };
 
+// countryName turns an ISO 3166-1 alpha-2 code into a readable name using the browser's
+// own locale data, so no country-name table has to ship or be kept current. The reserved
+// OTHER bucket is not a country and is labelled by the caller.
+const countryName = (code: string, locale: string) => {
+  try {
+    const display = new Intl.DisplayNames([locale], { type: 'region' });
+    return display.of(code) || code;
+  } catch {
+    // Intl.DisplayNames is unavailable, or the code is not a region -- the raw code is
+    // still perfectly legible.
+    return code;
+  }
+};
+
 export default function AdminAnalytics() {
   const { t } = useI18n();
   const { theme } = useSettings();
 
   const [data, setData] = useState<any>(null);
   const [clientStats, setClientStats] = useState<any[]>([]);
+  // Anonymous geographic distribution (#1152). `available: false` is the normal state --
+  // no MaxMind database ships with the server -- and is deliberately distinct from an
+  // empty bucket list, which means the feature is on but nothing has cleared the
+  // k-threshold yet.
+  const [locations, setLocations] = useState<any>(null);
   const [loading, setLoading] = useState(true);
   const [timeRange, setTimeRange] = useState('30'); // Default to 30 days
 
@@ -61,12 +80,18 @@ export default function AdminAnalytics() {
       setLoading(true);
       try {
         const query = timeRange !== '0' ? `?days=${timeRange}` : '';
-        const [analyticsRes, clientsRes] = await Promise.all([
+        const [analyticsRes, clientsRes, locationsRes] = await Promise.all([
           axios.get(`/api/analytics${query}`),
           axios.get('/api/admin/analytics/clients').catch(() => ({ data: [] })),
+          // Non-admins get a 403 here; the panel simply does not render for them, and a
+          // rejection must not take the rest of the page down with it.
+          axios
+            .get('/api/admin/analytics/locations')
+            .catch(() => ({ data: null })),
         ]);
         setData(analyticsRes.data);
         setClientStats(clientsRes.data || []);
+        setLocations(locationsRes.data);
       } catch (err) {
         console.error('Failed to load analytics', err);
       } finally {

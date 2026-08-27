@@ -19,6 +19,35 @@ const nginxUpgradeMapBlock = `map $http_upgrade $connection_upgrade {
 }
 `
 
+// renderRealIPBlock recovers the visitor's address on a request the CONTROL PLANE forwarded here.
+//
+// A visitor normally reaches an edge directly -- central publishes a per-tunnel CNAME to the edge
+// -- and there $remote_addr is the visitor and the headers below are already correct. But during
+// DNS propagation, and on the cross-node path generally (#1249), central proxies the request
+// instead. Then the edge's $remote_addr is CENTRAL, and the proxy_set_header lines overwrite the
+// visitor's address with it one hop before the gateway reads it: the per-tunnel IP whitelist, the
+// rate limiter's auto-ban and every audit entry then name the control plane (#1450).
+//
+// central forwards the visitor correctly in X-Forwarded-For (see the director in
+// pkg/server/proxy.go), so the address is present on the wire -- it is this nginx that discards
+// it. real_ip puts it back BEFORE proxy_set_header runs, so no Go-side change is needed and
+// clientIPFrom keeps its current, well-tested resolution order.
+//
+// Not spoofable: real_ip rewrites only when the immediate peer is in set_real_ip_from. A visitor
+// arriving directly is not central, so nothing is rewritten and #1325's guarantee stands. That is
+// also why the trusted address must be exact -- widen it and the forgeable path reopens.
+func renderRealIPBlock(trustedProxy string) string {
+	if strings.TrimSpace(trustedProxy) == "" {
+		return ""
+	}
+	return fmt.Sprintf(`
+# Recover the visitor's address on requests forwarded by the control plane (#1450).
+set_real_ip_from %s;
+real_ip_header X-Forwarded-For;
+real_ip_recursive on;
+`, strings.TrimSpace(trustedProxy))
+}
+
 // The forwarding-header rule, stated once (#1325, #1360).
 //
 // $remote_addr, never $proxy_add_x_forwarded_for: the latter APPENDS to whatever the caller
@@ -93,6 +122,12 @@ type nginxRenderConfig struct {
 	// RedirectDomain is where an edge sends browser traffic that arrives on its own apex --
 	// the control plane's landing page. Ignored for RoleCentral.
 	RedirectDomain string
+	// TrustedProxy is the control plane's address, as an IP or CIDR. Set on an edge so a
+	// request the control plane forwarded is attributed to the visitor rather than to central
+	// (#1450). Empty renders exactly what was rendered before this existed.
+	//
+	// Meaningless on central: nothing forwards to it, so there is no upstream to trust.
+	TrustedProxy string
 }
 
 // nginxACMEFallback is central-only. A vanity domain (e.g. dev.solaramoto.com) added later by
@@ -153,6 +188,9 @@ const nginxACMEFallbackHTTPS = `
 func buildNginxConfig(cfg nginxRenderConfig) string {
 	var b strings.Builder
 	b.WriteString(nginxUpgradeMapBlock)
+	if cfg.Role == RoleEdge {
+		b.WriteString(renderRealIPBlock(cfg.TrustedProxy))
+	}
 	for _, g := range cfg.Groups {
 		if !g.WildcardOnly {
 			b.WriteString(renderHTTPRedirect(cfg.Role, g))
@@ -315,6 +353,7 @@ type nginxFlags struct {
 	certRoot          *string
 	apexCertRoot      *string
 	redirectDomain    *string
+	trustedProxy      *string
 	allowVhostRemoval *bool
 }
 
@@ -332,6 +371,8 @@ func registerNginxFlags(fs *flag.FlagSet) nginxFlags {
 			"directory holding <domain>/fullchain.pem for -apex-domains (where lfr-install-certs.sh puts a bundle pushed from central)"),
 		redirectDomain: fs.String("redirect-domain", "",
 			"edge only: where browser traffic arriving on the edge's own apex is sent, i.e. the control plane"),
+		trustedProxy: fs.String("trusted-proxy", "",
+			"edge only: the control plane's address (IP or CIDR), so a request it forwards is attributed to the visitor rather than to central (#1450)"),
 		allowVhostRemoval: fs.Bool("allow-vhost-removal", false,
 			"proceed even if the new config stops serving a server_name the live config serves (reconcile-nginx only)"),
 	}
@@ -394,6 +435,15 @@ func buildRenderConfigFromFlags(f nginxFlags, port string) (nginxRenderConfig, e
 		Role:           role,
 		LocalPort:      port,
 		RedirectDomain: strings.TrimSpace(*f.redirectDomain),
+		TrustedProxy:   strings.TrimSpace(*f.trustedProxy),
+	}
+	// Refuse rather than silently ignore. Passing it for central reads as "central will now
+	// attribute forwarded requests correctly", which is not a thing central does -- nothing
+	// forwards to it.
+	if role == RoleCentral && cfg.TrustedProxy != "" {
+		return nginxRenderConfig{}, fmt.Errorf(
+			"-trusted-proxy applies to -role edge only: it exists so a request the CONTROL PLANE " +
+				"forwards is attributed to the visitor, and nothing forwards to central")
 	}
 	for _, d := range owned {
 		if err := checkApexDomain(d); err != nil {

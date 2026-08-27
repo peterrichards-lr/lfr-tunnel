@@ -322,3 +322,112 @@ func TestBuildNginxConfig_KeepsOnBoxRationale(t *testing.T) {
 		t.Errorf("expected the long ACME rationale exactly once per domain, got:\n%s", cfg)
 	}
 }
+
+// hasDirective reports whether the rendered config contains a DIRECTIVE line, ignoring comments.
+//
+// Needed because the generated config EXPLAINS real_ip in a comment -- "you would then want the
+// real_ip module with set_real_ip_from naming that upstream" -- so a plain substring search
+// matches the explanation and reports the directive present on every config, including central's.
+// The first version of these tests did exactly that and failed for the wrong reason.
+func hasDirective(conf, directive string) bool {
+	for _, line := range strings.Split(conf, "\n") {
+		line = strings.TrimSpace(line)
+		if line == "" || strings.HasPrefix(line, "#") {
+			continue
+		}
+		if strings.HasPrefix(line, directive) {
+			return true
+		}
+	}
+	return false
+}
+
+// countDirective counts DIRECTIVE occurrences, ignoring comments.
+func countDirective(conf, directive string) int {
+	n := 0
+	for _, line := range strings.Split(conf, "\n") {
+		line = strings.TrimSpace(line)
+		if line == "" || strings.HasPrefix(line, "#") {
+			continue
+		}
+		if strings.HasPrefix(line, directive) {
+			n++
+		}
+	}
+	return n
+}
+
+// Recovering the visitor's address on a cross-proxied request (#1450).
+//
+// A visitor normally reaches an edge directly, via the per-tunnel CNAME central publishes, and
+// there $remote_addr is already the visitor. During DNS propagation and on the cross-node path
+// central forwards instead, and then the edge's $remote_addr is central -- so the
+// proxy_set_header lines overwrite the visitor one hop before the gateway reads it, and the IP
+// whitelist, the rate limiter's auto-ban and every audit entry name the control plane.
+
+func TestRenderRealIPBlock_OnlyWhenConfigured(t *testing.T) {
+	cfg := nginxRenderConfig{
+		Role:           RoleEdge,
+		LocalPort:      "8090",
+		RedirectDomain: "example.com",
+		Groups:         []nginxDomainGroup{{Domain: "sa.example.com", CertRoot: certRootLetsEncrypt}},
+	}
+
+	// Absent, the config must be exactly what it was before this existed -- an edge that has
+	// not been given the control plane's address must not silently change behaviour.
+	if got := buildNginxConfig(cfg); hasDirective(got, "set_real_ip_from") {
+		t.Errorf("no trusted proxy configured, so no real_ip directives should appear:\n%s", got)
+	}
+
+	cfg.TrustedProxy = "203.0.113.7"
+	got := buildNginxConfig(cfg)
+	for _, want := range []string{
+		"set_real_ip_from 203.0.113.7;",
+		"real_ip_header X-Forwarded-For;",
+		"real_ip_recursive on;",
+	} {
+		if !strings.Contains(got, want) {
+			t.Errorf("expected %q in:\n%s", want, got)
+		}
+	}
+
+	// Once per file. These are http-context directives and the file is included into http;
+	// repeating them per domain group would be wrong even where nginx tolerates it.
+	if n := countDirective(got, "set_real_ip_from"); n != 1 {
+		t.Errorf("expected exactly one set_real_ip_from directive, got %d", n)
+	}
+}
+
+// TestRenderRealIPBlock_NeverOnCentral — central is not behind anything. Emitting real_ip there
+// would tell nginx to believe a forwarded-for header from whoever connected, which is the
+// forgeable path #1325 closed.
+func TestRenderRealIPBlock_NeverOnCentral(t *testing.T) {
+	got := buildNginxConfig(nginxRenderConfig{
+		Role:         RoleCentral,
+		LocalPort:    "8080",
+		TrustedProxy: "203.0.113.7",
+		Groups:       []nginxDomainGroup{{Domain: "example.com", CertRoot: certRootLetsEncrypt}},
+	})
+	if hasDirective(got, "set_real_ip_from") {
+		t.Errorf("central must never emit real_ip directives:\n%s", got)
+	}
+}
+
+// TestRenderRealIPBlock_MultipleGroupsStillOnce guards the same thing across the shape an edge
+// actually runs: its own regional group plus two wildcard-only apex groups.
+func TestRenderRealIPBlock_MultipleGroupsStillOnce(t *testing.T) {
+	got := buildNginxConfig(nginxRenderConfig{
+		Role:           RoleEdge,
+		LocalPort:      "8090",
+		RedirectDomain: "example.com",
+		TrustedProxy:   "203.0.113.7",
+		Groups: []nginxDomainGroup{
+			{Domain: "sa.example.com", CertRoot: certRootLetsEncrypt},
+			{Domain: "example.com", CertRoot: certRootCertSync, WildcardOnly: true},
+			{Domain: "example.net", CertRoot: certRootCertSync, WildcardOnly: true},
+		},
+	})
+	if n := countDirective(got, "set_real_ip_from"); n != 1 {
+		t.Errorf("expected exactly one set_real_ip_from directive across three groups, got %d", n)
+	}
+}

@@ -69,12 +69,12 @@ func TestStaticScheduleIsFallbackNotOverride(t *testing.T) {
 	srv, _, cleanup := setupTestServer(t)
 	defer cleanup()
 
-	srv.cfg.EdgeNodes = []config.EdgeNodeConfig{{
+	setEdgeNodesForTest(t, srv, []config.EdgeNodeConfig{{
 		ID: "edge-in",
 		Schedule: &config.EdgeScheduleConfig{
 			Enabled: true, StopTime: "23:00", StartTime: "07:00", Timezone: "UTC",
 		},
-	}}
+	}})
 
 	// A schedule already known from the provisioner -- represented by a populated timezone,
 	// which is exactly the condition updateEdgeHealth uses to decide whether to fall back.
@@ -96,7 +96,7 @@ func TestStaticScheduleIsFallbackNotOverride(t *testing.T) {
 	}
 
 	// And the static one is still there to be used if the provisioner never answers.
-	if got := staticScheduleFor(srv.cfg.EdgeNodes, "edge-in"); got == nil || got.StopTime != "23:00" {
+	if got := staticScheduleFor(srv.edgeNodes(), "edge-in"); got == nil || got.StopTime != "23:00" {
 		t.Error("the configured schedule should remain available as a fallback")
 	}
 }

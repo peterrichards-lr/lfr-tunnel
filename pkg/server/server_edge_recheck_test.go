@@ -18,9 +18,9 @@ func TestTriggerEdgeHealthRecheck_ChecksPromptly(t *testing.T) {
 	srv, _, cleanup := setupTestServer(t)
 	defer cleanup()
 
-	srv.cfg.EdgeNodes = []config.EdgeNodeConfig{
+	setEdgeNodesForTest(t, srv, []config.EdgeNodeConfig{
 		{ID: "edge-test", URL: "http://127.0.0.1:1"}, // reserved port, connection always refused
-	}
+	})
 	srv.outboundMutex.Lock()
 	srv.outboundConnected = true
 	srv.outboundMutex.Unlock()

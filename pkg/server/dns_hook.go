@@ -280,7 +280,7 @@ func (p *dnsPublisher) withdrawNow(fqdn, target string, g uint64) {
 // knows resolves to it. Empty when the node has no URL, in which case there is nothing
 // truthful to publish and the caller leaves DNS alone.
 func (s *Server) dnsTargetForEdge(nodeID string) string {
-	for _, node := range s.cfg.EdgeNodes {
+	for _, node := range s.edgeNodes() {
 		if node.ID == nodeID {
 			return hostFromURL(node.URL)
 		}

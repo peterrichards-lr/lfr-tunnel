@@ -8,6 +8,11 @@ User=lfr-tunnel
 Group=lfr-tunnel
 WorkingDirectory=/etc/lfr-tunneld
 ExecStart=/usr/local/bin/lfr-tunneld --config /etc/lfr-tunneld/server-config.yaml
+
+# `systemctl reload lfr-tunneld` re-reads edge_nodes and nothing else (#1309). Withdrawing an
+# edge token used to need a full restart, which drops every tunnel on every edge -- so revoking
+# a credential during an incident meant taking the fleet down to do it.
+ExecReload=/bin/kill -HUP $MAINPID
 Restart=on-failure
 RestartSec=5s
 

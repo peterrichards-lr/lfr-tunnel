@@ -77,15 +77,29 @@ func main() {
 		log.Fatalf("[Server] Failed to initialize server: %v", err)
 	}
 
-	// 5. Setup graceful shutdown handler
-	sigs := make(chan os.Signal, 1)
-	signal.Notify(sigs, syscall.SIGINT, syscall.SIGTERM)
+	// 5. Setup graceful shutdown and reload handlers
+	//
+	// Buffered generously: a reload must not be dropped because a shutdown arrived in the same
+	// instant, and signal.Notify discards rather than blocks when the channel is full.
+	sigs := make(chan os.Signal, 8)
+	signal.Notify(sigs, append([]os.Signal{syscall.SIGINT, syscall.SIGTERM}, reloadSignals()...)...)
 	stopped := make(chan struct{})
 	go func() {
-		<-sigs
-		slog.Info("[Server] Shutdown signal received, stopping...")
-		srv.Stop()
-		close(stopped)
+		for sig := range sigs {
+			if isReloadSignal(sig) {
+				// SIGHUP re-reads edge_nodes and nothing else (#1309). Withdrawing an edge
+				// token used to require a restart, which drops every tunnel on every edge --
+				// so revoking a credential during an incident meant taking the fleet down.
+				if err := srv.ReloadEdgeNodes(*configPath); err != nil {
+					slog.Error(fmt.Sprintf("[Server] Reload failed, so nothing changed: %v", err))
+				}
+				continue
+			}
+			slog.Info("[Server] Shutdown signal received, stopping...")
+			srv.Stop()
+			close(stopped)
+			return
+		}
 	}()
 
 	// 6. Start server

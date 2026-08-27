@@ -153,9 +153,9 @@ func TestAuthorisedEdgeNode(t *testing.T) {
 
 	raw := "edge-token-value"
 	h := sha256.Sum256([]byte(raw))
-	srv.cfg.EdgeNodes = []config.EdgeNodeConfig{
+	setEdgeNodesForTest(t, srv, []config.EdgeNodeConfig{
 		{ID: "edge-us", TokenHash: hex.EncodeToString(h[:]), URL: "https://us.example.com"},
-	}
+	})
 
 	node, ok := srv.authorisedEdgeNode(raw)
 	if !ok {
@@ -177,14 +177,14 @@ func TestAuthorisedEdgeNode(t *testing.T) {
 // rather than matching a zero value.
 func TestAuthorisedEdgeNodeWithNoNodesConfigured(t *testing.T) {
 	srv := setupTestServerForAPI(t)
-	srv.cfg.EdgeNodes = nil
+	setEdgeNodesForTest(t, srv, nil)
 
 	if _, ok := srv.authorisedEdgeNode("anything"); ok {
 		t.Error("accepted an edge token with no edge nodes configured")
 	}
 	// The empty-token case matters separately: an unconfigured node has TokenHash "", and a
 	// caller presenting "" must not match it.
-	srv.cfg.EdgeNodes = []config.EdgeNodeConfig{{ID: "edge-broken", TokenHash: ""}}
+	setEdgeNodesForTest(t, srv, []config.EdgeNodeConfig{{ID: "edge-broken", TokenHash: ""}})
 	if _, ok := srv.authorisedEdgeNode(""); ok {
 		t.Error("an empty token matched an edge node with an empty TokenHash")
 	}
@@ -200,9 +200,9 @@ func TestAuthorisedEdgeNodeDuringRotation(t *testing.T) {
 	newH := sha256.Sum256([]byte(newRaw))
 
 	// Step 1 -- before the rotation starts, only the current token works.
-	srv.cfg.EdgeNodes = []config.EdgeNodeConfig{
+	setEdgeNodesForTest(t, srv, []config.EdgeNodeConfig{
 		{ID: "edge-us", TokenHash: hex.EncodeToString(oldH[:])},
-	}
+	})
 	if _, ok := srv.authorisedEdgeNode(oldRaw); !ok {
 		t.Error("the current token must authenticate")
 	}
@@ -211,7 +211,11 @@ func TestAuthorisedEdgeNodeDuringRotation(t *testing.T) {
 	}
 
 	// Step 2 -- the incoming hash is added. BOTH work, which is what removes the flag day.
-	srv.cfg.EdgeNodes[0].AdditionalTokenHashes = []string{hex.EncodeToString(newH[:])}
+	setEdgeNodesForTest(t, srv, []config.EdgeNodeConfig{{
+		ID:                    "edge-us",
+		TokenHash:             hex.EncodeToString(oldH[:]),
+		AdditionalTokenHashes: []string{hex.EncodeToString(newH[:])},
+	}})
 	if _, ok := srv.authorisedEdgeNode(oldRaw); !ok {
 		t.Error("the old token must keep working while edges are still being rolled")
 	}
@@ -220,7 +224,10 @@ func TestAuthorisedEdgeNodeDuringRotation(t *testing.T) {
 	}
 
 	// Step 3 -- the old hash is removed. That is the step that actually revokes it.
-	srv.cfg.EdgeNodes[0].TokenHash = ""
+	setEdgeNodesForTest(t, srv, []config.EdgeNodeConfig{{
+		ID:                    "edge-us",
+		AdditionalTokenHashes: []string{hex.EncodeToString(newH[:])},
+	}})
 	if _, ok := srv.authorisedEdgeNode(oldRaw); ok {
 		t.Error("the old token must stop working once removed -- otherwise the rotation revokes nothing")
 	}

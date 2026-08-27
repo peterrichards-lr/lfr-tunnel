@@ -1307,21 +1307,21 @@ export default function AdminUsers() {
       )}
 
       {targetedUserId && (
-        <div className="fixed inset-0 z-10 flex items-center justify-center p-md bg-black/50">
+        <div className="modal-backdrop">
           <div
-            className="w-full max-w-sm p-lg bg-body border rounded shadow-lg"
+            className="modal-card modal-card--sm"
             role="dialog"
             aria-modal="true"
             aria-labelledby="direct-message-modal-title"
           >
-            <div className="flex items-center justify-between mb-md">
-              <h3 id="direct-message-modal-title" className="text-lg font-bold">
+            <div className="modal-header">
+              <h3 id="direct-message-modal-title" className="modal-title">
                 Send Direct Message
               </h3>
               <button
                 type="button"
                 onClick={() => setTargetedUserId('')}
-                className="text-muted hover:text-white"
+                className="modal-close"
                 aria-label={t('close', 'Close')}
               >
                 ✕
@@ -1331,9 +1331,9 @@ export default function AdminUsers() {
               Push a real-time banner alert to this specific active developer
               session.
             </p>
-            <div className="mb-lg">
+            <div className="form-group m-0">
               <textarea
-                className="w-full p-sm bg-surface border rounded text-sm"
+                className="input-field"
                 placeholder={t(
                   'enter_your_message_placeholder',
                   'Enter your message...',
@@ -1366,41 +1366,41 @@ export default function AdminUsers() {
       )}
 
       {showInviteModal && (
-        <div className="fixed inset-0 z-10 flex items-center justify-center p-md bg-black/50">
+        <div className="modal-backdrop">
           <div
-            className="w-full max-w-sm p-lg bg-body border rounded shadow-lg"
+            className="modal-card modal-card--sm"
             role="dialog"
             aria-modal="true"
             aria-labelledby="invite-user-modal-title"
           >
-            <div className="flex items-center justify-between mb-md">
-              <h3 id="invite-user-modal-title" className="text-lg font-bold">
+            <div className="modal-header">
+              <h3 id="invite-user-modal-title" className="modal-title">
                 {t('invite_user', 'Invite User')}
               </h3>
               <button
                 type="button"
                 onClick={() => setShowInviteModal(false)}
-                className="text-muted hover:text-white"
+                className="modal-close"
                 aria-label={t('close', 'Close')}
               >
                 ✕
               </button>
             </div>
             {inviteError && (
-              <div className="p-sm mb-lg bg-danger/10 text-danger border border-danger/20 rounded text-sm">
+              <div className="alert-banner alert-banner--danger">
                 {inviteError}
               </div>
             )}
             <form onSubmit={submitInvite}>
-              <div className="mb-md">
-                <label className="block text-xs uppercase tracking-wider text-muted mb-xs">
+              <div className="form-group m-0">
+                <label className="form-label text-xs">
                   {t('email_address', 'Email Address')}
                 </label>
                 <input
                   id="close"
                   type="email"
                   required
-                  className="w-full p-sm bg-surface border rounded text-sm"
+                  className="input-field"
                   value={inviteForm.email}
                   onChange={(e) =>
                     setInviteForm({ ...inviteForm, email: e.target.value })
@@ -1411,18 +1411,15 @@ export default function AdminUsers() {
                   )}
                 />
               </div>
-              <div className="mb-md">
-                <label
-                  className="block text-xs uppercase tracking-wider text-muted mb-xs"
-                  htmlFor="first-name"
-                >
+              <div className="form-group m-0">
+                <label className="form-label text-xs" htmlFor="first-name">
                   {t('first_name', 'First Name')}
                 </label>
                 <input
                   id="first-name"
                   type="text"
                   required
-                  className="w-full p-sm bg-surface border rounded text-sm"
+                  className="input-field"
                   value={inviteForm.first_name}
                   onChange={(e) =>
                     setInviteForm({ ...inviteForm, first_name: e.target.value })
@@ -1430,18 +1427,15 @@ export default function AdminUsers() {
                   placeholder={t('first_name_placeholder', 'John')}
                 />
               </div>
-              <div className="mb-md">
-                <label
-                  className="block text-xs uppercase tracking-wider text-muted mb-xs"
-                  htmlFor="last-name"
-                >
+              <div className="form-group m-0">
+                <label className="form-label text-xs" htmlFor="last-name">
                   {t('last_name', 'Last Name')}
                 </label>
                 <input
                   id="last-name"
                   type="text"
                   required
-                  className="w-full p-sm bg-surface border rounded text-sm"
+                  className="input-field"
                   value={inviteForm.last_name}
                   onChange={(e) =>
                     setInviteForm({ ...inviteForm, last_name: e.target.value })
@@ -1449,16 +1443,16 @@ export default function AdminUsers() {
                   placeholder={t('last_name_placeholder', 'Doe')}
                 />
               </div>
-              <div className="mb-lg">
+              <div className="form-group m-0">
                 <label
-                  className="block text-xs uppercase tracking-wider text-muted mb-xs"
+                  className="form-label text-xs"
                   htmlFor="language-preference"
                 >
                   {t('language_preference', 'Language Preference')}
                 </label>
                 <select
                   id="language-preference"
-                  className="w-full p-sm bg-surface border rounded text-sm"
+                  className="input-field"
                   value={inviteForm.language_preference}
                   onChange={(e) =>
                     setInviteForm({

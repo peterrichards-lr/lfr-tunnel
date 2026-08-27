@@ -12,6 +12,10 @@
 #                (scripts/scan-staged-secrets.sh -- extracted in #1377 so it can be tested)
 #   EDR guard  - 15 lines, and the thing it prevents costs a machine reinstall
 #   gofmt      - stops formatting churn entering the tree at all
+#   prettier   - the same rationale as gofmt, for the half of the tree gofmt does not cover
+#                (JS/TS/CSS/JSON). Left out originally; the asymmetry meant that churn reached
+#                CI instead of being stopped here, and cost a full round trip on #1446 for a
+#                whitespace-only change. ~0.8s warm on a normal commit (#1447)
 #   node -c    - milliseconds, catches a typo before it ships
 #
 # Every check is scoped to STAGED files. `gofmt -l .` used to walk the whole tree on every
@@ -79,6 +83,16 @@ if [ -n "$JS_FILES" ]; then
     else
         echo "⚠️ Warning: 'node' not found in PATH. Skipping JavaScript syntax check."
     fi
+fi
+
+# Extracted so it can be tested (scripts/check-staged-prettier.sh), the same reason the secret
+# scan was pulled out in #1377. Never blocks on the tool being unavailable -- see that script.
+if [ -x ./scripts/check-staged-prettier.sh ]; then
+    if ! ./scripts/check-staged-prettier.sh; then
+        exit 1
+    fi
+else
+    echo "[Git Hook] SKIPPED Prettier check -- scripts/check-staged-prettier.sh is not on this branch."
 fi
 
 echo "✅ Pre-commit checks passed. (vet, tests and the UI build run on push.)"

@@ -78,29 +78,7 @@ func main() {
 	}
 
 	// 5. Setup graceful shutdown and reload handlers
-	//
-	// Buffered generously: a reload must not be dropped because a shutdown arrived in the same
-	// instant, and signal.Notify discards rather than blocks when the channel is full.
-	sigs := make(chan os.Signal, 8)
-	signal.Notify(sigs, append([]os.Signal{syscall.SIGINT, syscall.SIGTERM}, reloadSignals()...)...)
-	stopped := make(chan struct{})
-	go func() {
-		for sig := range sigs {
-			if isReloadSignal(sig) {
-				// SIGHUP re-reads edge_nodes and nothing else (#1309). Withdrawing an edge
-				// token used to require a restart, which drops every tunnel on every edge --
-				// so revoking a credential during an incident meant taking the fleet down.
-				if err := srv.ReloadEdgeNodes(*configPath); err != nil {
-					slog.Error(fmt.Sprintf("[Server] Reload failed, so nothing changed: %v", err))
-				}
-				continue
-			}
-			slog.Info("[Server] Shutdown signal received, stopping...")
-			srv.Stop()
-			close(stopped)
-			return
-		}
-	}()
+	stopped := handleSignals(srv, *configPath)
 
 	// 6. Start server
 	slog.Info("[Server] Initializing Liferay Tunnel Gateway daemon...")
@@ -130,6 +108,40 @@ func main() {
 
 // exitIfConfigCheck prints the summary and exits when -check-config was passed. Lifted out of
 // main only to keep it within funlen; it is one branch and belongs conceptually where it is used.
+// handleSignals runs the daemon's signal loop and returns a channel closed once the server has
+// stopped.
+//
+// Extracted from main so that adding the reload path did not push main past the funlen limit,
+// but it earns its own name regardless: shutdown and reload are two different responses to two
+// different signals, and reading them together is the only way to see that a reload does NOT
+// fall through to a stop.
+func handleSignals(srv *server.Server, configPath string) <-chan struct{} {
+	// Buffered generously: a reload must not be dropped because a shutdown arrived in the same
+	// instant, and signal.Notify discards rather than blocks when the channel is full.
+	sigs := make(chan os.Signal, 8)
+	signal.Notify(sigs, append([]os.Signal{syscall.SIGINT, syscall.SIGTERM}, reloadSignals()...)...)
+
+	stopped := make(chan struct{})
+	go func() {
+		for sig := range sigs {
+			if isReloadSignal(sig) {
+				// SIGHUP re-reads edge_nodes and nothing else (#1309). Withdrawing an edge
+				// token used to require a restart, which drops every tunnel on every edge --
+				// so revoking a credential during an incident meant taking the fleet down.
+				if err := srv.ReloadEdgeNodes(configPath); err != nil {
+					slog.Error(fmt.Sprintf("[Server] Reload failed, so nothing changed: %v", err))
+				}
+				continue
+			}
+			slog.Info("[Server] Shutdown signal received, stopping...")
+			srv.Stop()
+			close(stopped)
+			return
+		}
+	}()
+	return stopped
+}
+
 func exitIfConfigCheck(enabled bool, cfg *config.ServerConfig, path string) {
 	if !enabled {
 		return

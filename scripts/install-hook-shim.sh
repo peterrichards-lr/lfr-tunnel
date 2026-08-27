@@ -30,10 +30,18 @@ install_shim() {
 # the checks live in $script and edits take effect immediately (#1425).
 TOP=\$(git rev-parse --show-toplevel) || exit 0
 SCRIPT="\$TOP/$script"
-if [ ! -x "\$SCRIPT" ]; then
+if [ ! -f "\$SCRIPT" ]; then
     # Loud, and not fatal. A branch cut before this script existed must still be committable --
     # but silence here would be the exact failure this shim was written to remove.
     echo "WARNING: \$SCRIPT not found on this branch, so NO $hook checks ran." >&2
+    exit 0
+fi
+if [ ! -x "\$SCRIPT" ]; then
+    # Distinguished from missing on purpose: a present-but-not-executable hook script is a repo
+    # bug, not a branch you happen to be on. The old copy-based install chmod +x'd its copy, which
+    # hid exactly this -- scripts/pre-push-hook.sh was mode 100644 in git and nobody could tell.
+    echo "WARNING: \$SCRIPT is not executable, so NO $hook checks ran." >&2
+    echo "         Fix with: chmod +x \$SCRIPT && git update-index --chmod=+x $script" >&2
     exit 0
 fi
 exec "\$SCRIPT" "\$@"

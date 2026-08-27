@@ -305,6 +305,30 @@ Manage Nginx maintenance mode or perform safe database backups/restores on the V
   sudo ./scripts/common/restore-with-maintenance.sh [backup_file]
   ```
 
+### Who gets warned before a central restart
+
+Anything that wraps work in a maintenance window — `deploy`, `restore-with-maintenance.sh` — goes
+through `scripts/common/drain-and-wait.sh`, which warns **both** affected populations. They are
+different sets of people and neither implies the other:
+
+| population | how they hear | what it costs them |
+| --- | --- | --- |
+| attached tunnels | the drain announcement, on the tunnel-status heartbeat they already send (#1238) | nothing, if they move in time — a client dropped without warning was down 24m36s (#1246) |
+| portal users | the portal banner, raised only when somebody is actually logged in (#1454) | failed in-flight requests and the maintenance page; **nobody is signed out**, sessions are persisted (#1304) |
+
+A browser never sends the tunnel heartbeat, so a restart judged on attached tunnels alone is
+blind to the portal — on 2026-08-27 central had zero tunnels attached and one active portal
+session at the moment of a restart.
+
+Check both before deciding a restart is free, straight from the box:
+
+```bash
+curl -s http://127.0.0.1:<http_bind_addr port>/api/local/drain
+# {"draining":false,"local_leases":0,"portal_sessions":1}
+```
+
+Neither figure refuses a restart. They exist so the cost is a decision rather than a surprise.
+
 ---
 
 ## 6b. Rendering central's edge_nodes registry

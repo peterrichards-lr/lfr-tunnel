@@ -25,7 +25,13 @@ cov.out
 *.db
 *.db-journal
 
-lfr-tunneld
+# The gateway binary a bare `go build ./cmd/lfr-tunneld` drops at the repo root. Anchored with a
+# leading slash on purpose: unanchored, git matches the pattern against EVERY path component, so
+# plain `lfr-tunneld` also ignored the cmd/lfr-tunneld/ SOURCE directory -- silently, so a new
+# file added there was never offered for commit and its tests never ran in CI. Found when a test
+# file added to that package did not appear in `git status` at all.
+# Binaries built to bin/ are covered by the bin/ rule above.
+/lfr-tunneld
 
 # AI Agent Scratch Files & Temporary Artifacts
 scratch/

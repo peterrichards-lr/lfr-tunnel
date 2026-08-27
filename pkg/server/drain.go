@@ -43,6 +43,16 @@ type drainStatus struct {
 	// are not included: an edge proxies independently, so restarting the control plane does
 	// not interrupt them, and waiting for them to drain would mean waiting forever.
 	LocalLeases int `json:"local_leases"`
+	// PortalSessions counts people currently logged into the portal, which local_leases says
+	// nothing about -- a drain announcement travels on the tunnel-status heartbeat, which a
+	// browser never sends, so a restart decision made on local_leases alone is blind to them
+	// (#1455). The two genuinely diverge: on 2026-08-27 central had zero tunnels attached and
+	// one active portal session at the moment of a restart.
+	//
+	// Not a reason to refuse a restart. Portal sessions are persisted, so nobody is logged out
+	// -- the cost is failed in-flight requests and the maintenance page for its duration. It is
+	// here so that cost is a decision rather than a surprise.
+	PortalSessions int `json:"portal_sessions"`
 }
 
 // isLocalRequest reports whether a request arrived directly over loopback. The proxy-header
@@ -132,6 +142,13 @@ func (s *Server) currentDrainStatus() drainStatus {
 	}
 	if s.registry != nil {
 		status.LocalLeases = len(s.registry.ListLeases())
+	}
+	// Best-effort: an edge runs with db_path empty and has no portal at all, and a counting
+	// error must not stop an operator finding out how many tunnels are attached.
+	if s.db != nil {
+		if n, err := s.db.CountActivePortalSessions(); err == nil {
+			status.PortalSessions = n
+		}
 	}
 	return status
 }

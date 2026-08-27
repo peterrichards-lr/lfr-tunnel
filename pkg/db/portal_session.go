@@ -110,6 +110,25 @@ func (repo *SQLitePortalSessionRepo) DeletePortalSessionsForEmail(email string) 
 	return n, nil
 }
 
+// CountActivePortalSessions reports how many portal sessions are currently valid.
+//
+// Exists so an operator can answer "is anybody using this?" for the PORTAL before restarting the
+// control plane. The drain endpoint already answers it for tunnels via local_leases, and the two
+// audiences genuinely diverge -- on 2026-08-27 central had zero tunnels attached and one active
+// portal session at the moment of a restart (#1455).
+//
+// Counts only unexpired rows. Expired ones are deleted on the cleanup cycle rather than
+// immediately, so counting every row would overstate the number of people actually logged in.
+func (repo *SQLitePortalSessionRepo) CountActivePortalSessions() (int, error) {
+	var n int
+	err := repo.conn.QueryRow(
+		`SELECT COUNT(*) FROM portal_sessions WHERE expires_at > datetime('now')`).Scan(&n)
+	if err != nil {
+		return 0, err
+	}
+	return n, nil
+}
+
 // PrunePortalSessions clears out expired rows. Called from the existing cleanup routine rather
 // than on its own timer.
 func (repo *SQLitePortalSessionRepo) PrunePortalSessions() (int64, error) {

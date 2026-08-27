@@ -132,6 +132,60 @@ func ResolveClientLogPath(subdomain string) (string, error) {
 	return current, nil
 }
 
+// SessionLogPath is one of the three logs the client writes: where it is, what it holds,
+// and whether it exists yet.
+type SessionLogPath struct {
+	Kind   string `json:"kind"`
+	Path   string `json:"path"`
+	Exists bool   `json:"exists"`
+	Size   int64  `json:"size"`
+}
+
+// SessionLogPaths reports all three logs a subdomain writes.
+//
+// Built from the same helpers the writers use -- ResolveClientLogPath for the console log
+// and LogDir for the other two -- rather than re-deriving the names here, so a change to
+// where logs live moves the writer and this reporter together. #1129 added the traffic and
+// error logs and nothing ever told the operator they existed; #1223 then added a Settings
+// field naming the directory, which made that worse rather than better.
+//
+// Paths only. Deliberately no contents: the traffic log records request and response
+// bodies whenever logBodies is on, and those routinely carry OAuth tokens, session cookies
+// and customer data, while the Inspector binds 0.0.0.0 under Docker (inspector.go
+// IsDocker). On disk they are behind 0600; over HTTP they would not be. See #1423, where
+// this was decided as option 3.
+func SessionLogPaths(subdomain string) []SessionLogPath {
+	if subdomain == "" {
+		return nil
+	}
+	stat := func(kind, path string) SessionLogPath {
+		entry := SessionLogPath{Kind: kind, Path: path}
+		if info, err := os.Stat(path); err == nil {
+			entry.Exists = true
+			entry.Size = info.Size()
+		}
+		return entry
+	}
+
+	paths := make([]SessionLogPath, 0, 3)
+	// The console log is the odd one out: ResolveClientLogPath falls back to the
+	// pre-move ~/.lfr-tunnel location, so on an upgraded machine it can sit in a
+	// different directory from the other two. That is why each entry carries a full
+	// path rather than a shared directory heading and three filenames.
+	if console, err := ResolveClientLogPath(subdomain); err == nil {
+		paths = append(paths, stat("console", console))
+	}
+	dir, err := LogDir()
+	if err != nil {
+		return paths
+	}
+	paths = append(paths,
+		stat("traffic", filepath.Join(dir, fmt.Sprintf("traffic-%s.log", subdomain))),
+		stat("error", filepath.Join(dir, fmt.Sprintf("error-%s.log", subdomain))),
+	)
+	return paths
+}
+
 // RotatingFile is an append-only file that rotates once it exceeds maxBytes, keeping a
 // bounded number of previous generations. It replaces truncate-on-start: a client that
 // dies unexpectedly leaves its log behind instead of erasing it on the next run.

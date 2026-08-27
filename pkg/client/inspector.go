@@ -302,6 +302,23 @@ func StartInspector(port int, engine *InterceptorEngine) (int, error) {
 				"preserve_host": engine.PreserveHost,
 			}
 			engine.mu.RUnlock()
+
+			// All three logs the client writes, with their resolved paths (#1423).
+			// #1129 added the traffic and error logs and nothing ever surfaced them;
+			// #1223 then added a Settings field naming the directory, so the operator
+			// was told where to look and found two files the tool never mentioned.
+			//
+			// Paths only, never contents. The traffic log records request and response
+			// bodies when logBodies is on -- OAuth tokens, session cookies, customer
+			// data -- and this listener is 0.0.0.0 under Docker. On disk those bytes are
+			// behind 0600; an endpoint serving them would not be. Recorded as option 3
+			// on #1423 before anything was built.
+			//
+			// Resolved outside the lock: SessionLogPaths stats the filesystem, and
+			// engine.mu guards in-memory state that request handling also reads.
+			if logs := SessionLogPaths(effSubdomain); len(logs) > 0 {
+				resp["logs"] = logs
+			}
 			_ = json.NewEncoder(w).Encode(resp) //nolint:errcheck
 			return
 		}

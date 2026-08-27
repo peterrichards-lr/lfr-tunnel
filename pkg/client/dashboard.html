@@ -8,6 +8,46 @@
     <style>
         /* Log viewer (#1420). Monospaced and scrollable, with the level colour-coded so
            an ERROR is findable without reading every line. */
+        /* Log file list (#1423). Paths are the payload here, so they get the monospace
+           treatment and are allowed to wrap -- a truncated path is useless for the one
+           thing this panel exists to let someone do, which is go and open the file. */
+        .log-files-note {
+            font-size: 12px;
+            color: var(--text-muted, #8b93a7);
+            margin-bottom: 10px;
+            line-height: 1.5;
+        }
+        .log-file-row {
+            padding: 10px 0;
+            border-top: 1px solid var(--border, #2a3050);
+        }
+        .log-file-row:first-of-type { border-top: none; }
+        .log-file-meta {
+            display: flex;
+            align-items: baseline;
+            gap: 8px;
+        }
+        .log-file-name { font-weight: 600; }
+        .log-file-state {
+            font-size: 11px;
+            color: var(--text-muted, #8b93a7);
+        }
+        .log-file-state--missing { font-style: italic; }
+        .log-file-desc {
+            font-size: 12px;
+            color: var(--text-muted, #8b93a7);
+            margin: 2px 0 6px;
+        }
+        .log-file-path {
+            display: block;
+            font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+            font-size: 12px;
+            word-break: break-all;
+        }
+        .log-file-empty {
+            font-size: 12px;
+            color: var(--text-muted, #8b93a7);
+        }
         .log-viewer {
             max-height: 60vh;
             overflow-y: auto;
@@ -217,6 +257,17 @@
     <script>
 const clientTranslations = {
     "en": {
+        "client_logs_files_title": "Log files on this machine",
+        "client_logs_files_note": "The viewer above shows the console log. The traffic and error logs are not served over HTTP -- the traffic log can contain request and response bodies, so it stays readable only from disk. Open them directly.",
+        "client_logs_files_none": "No log files -- the client has not connected yet.",
+        "client_logs_files_error": "Could not read the log file locations.",
+        "client_logs_file_missing": "not created yet",
+        "client_logs_kind_console": "Console",
+        "client_logs_kind_console_desc": "Background output -- shown in the viewer above",
+        "client_logs_kind_traffic": "Traffic",
+        "client_logs_kind_traffic_desc": "Every proxied request; includes bodies when body logging is on",
+        "client_logs_kind_error": "Error",
+        "client_logs_kind_error_desc": "Diagnostic events -- start here when something is broken",
         "client_inspector": "Inspector",
         "client_listening": "Listening on localhost:4040",
         "client_host_preserved": "Host Preserved",
@@ -270,6 +321,17 @@ const clientTranslations = {
         "client_config_saved": "Configuration saved successfully!"
     },
     "es": {
+        "client_logs_files_title": "Archivos de registro en esta máquina",
+        "client_logs_files_note": "El visor de arriba muestra el registro de consola. Los registros de tráfico y de errores no se sirven por HTTP: el registro de tráfico puede contener cuerpos de peticiones y respuestas, por lo que solo se puede leer desde el disco. Ábrelos directamente.",
+        "client_logs_files_none": "No hay archivos de registro: el cliente aún no se ha conectado.",
+        "client_logs_files_error": "No se pudieron leer las ubicaciones de los archivos de registro.",
+        "client_logs_file_missing": "aún no creado",
+        "client_logs_kind_console": "Consola",
+        "client_logs_kind_console_desc": "Salida en segundo plano: se muestra en el visor de arriba",
+        "client_logs_kind_traffic": "Tráfico",
+        "client_logs_kind_traffic_desc": "Cada petición redirigida; incluye los cuerpos si el registro de cuerpos está activado",
+        "client_logs_kind_error": "Errores",
+        "client_logs_kind_error_desc": "Eventos de diagnóstico: empieza aquí cuando algo falla",
         "client_inspector": "Inspector",
         "client_listening": "Escuchando en localhost:4040",
         "client_host_preserved": "Host Preservado",
@@ -319,6 +381,17 @@ const clientTranslations = {
         "client_config_saved": "¡Configuración guardada!"
     },
     "de": {
+        "client_logs_files_title": "Protokolldateien auf diesem Rechner",
+        "client_logs_files_note": "Der Betrachter oben zeigt das Konsolenprotokoll. Das Verkehrs- und das Fehlerprotokoll werden nicht über HTTP ausgeliefert -- das Verkehrsprotokoll kann Anfrage- und Antwortinhalte enthalten und bleibt daher nur von der Festplatte lesbar. Öffnen Sie sie direkt.",
+        "client_logs_files_none": "Keine Protokolldateien -- der Client hat sich noch nicht verbunden.",
+        "client_logs_files_error": "Die Speicherorte der Protokolldateien konnten nicht gelesen werden.",
+        "client_logs_file_missing": "noch nicht erstellt",
+        "client_logs_kind_console": "Konsole",
+        "client_logs_kind_console_desc": "Hintergrundausgabe -- im Betrachter oben zu sehen",
+        "client_logs_kind_traffic": "Verkehr",
+        "client_logs_kind_traffic_desc": "Jede weitergeleitete Anfrage; enthält Inhalte, wenn die Inhaltsprotokollierung aktiv ist",
+        "client_logs_kind_error": "Fehler",
+        "client_logs_kind_error_desc": "Diagnoseereignisse -- hier anfangen, wenn etwas defekt ist",
         "client_inspector": "Inspektor",
         "client_listening": "Hört auf localhost:4040",
         "client_host_preserved": "Host Beibehalten",
@@ -368,6 +441,17 @@ const clientTranslations = {
         "client_config_saved": "Konfiguration erfolgreich gespeichert!"
     },
     "fr": {
+        "client_logs_files_title": "Fichiers journaux sur cette machine",
+        "client_logs_files_note": "La visionneuse ci-dessus affiche le journal de console. Les journaux de trafic et d'erreurs ne sont pas servis via HTTP : le journal de trafic peut contenir les corps des requêtes et des réponses, il reste donc lisible uniquement depuis le disque. Ouvrez-les directement.",
+        "client_logs_files_none": "Aucun fichier journal -- le client ne s'est pas encore connecté.",
+        "client_logs_files_error": "Impossible de lire l'emplacement des fichiers journaux.",
+        "client_logs_file_missing": "pas encore créé",
+        "client_logs_kind_console": "Console",
+        "client_logs_kind_console_desc": "Sortie en arrière-plan -- affichée dans la visionneuse ci-dessus",
+        "client_logs_kind_traffic": "Trafic",
+        "client_logs_kind_traffic_desc": "Chaque requête relayée ; inclut les corps si la journalisation des corps est active",
+        "client_logs_kind_error": "Erreurs",
+        "client_logs_kind_error_desc": "Événements de diagnostic -- commencez ici quand quelque chose ne va pas",
         "client_inspector": "Inspecteur",
         "client_listening": "En écoute sur localhost:4040",
         "client_host_preserved": "Hôte Préservé",
@@ -417,6 +501,17 @@ const clientTranslations = {
         "client_config_saved": "Configuration enregistrée avec succès !"
     },
     "pt": {
+        "client_logs_files_title": "Ficheiros de registo nesta máquina",
+        "client_logs_files_note": "O visualizador acima mostra o registo de consola. Os registos de tráfego e de erros não são servidos por HTTP -- o registo de tráfego pode conter corpos de pedidos e respostas, por isso permanece legível apenas a partir do disco. Abra-os diretamente.",
+        "client_logs_files_none": "Sem ficheiros de registo -- o cliente ainda não se ligou.",
+        "client_logs_files_error": "Não foi possível ler a localização dos ficheiros de registo.",
+        "client_logs_file_missing": "ainda não criado",
+        "client_logs_kind_console": "Consola",
+        "client_logs_kind_console_desc": "Saída em segundo plano -- mostrada no visualizador acima",
+        "client_logs_kind_traffic": "Tráfego",
+        "client_logs_kind_traffic_desc": "Cada pedido encaminhado; inclui corpos quando o registo de corpos está ativo",
+        "client_logs_kind_error": "Erros",
+        "client_logs_kind_error_desc": "Eventos de diagnóstico -- comece aqui quando algo falha",
         "client_inspector": "Inspetor",
         "client_listening": "Ouvindo em localhost:4040",
         "client_host_preserved": "Host Preservado",
@@ -466,6 +561,17 @@ const clientTranslations = {
         "client_config_saved": "Configuração salva com sucesso!"
     },
     "ja": {
+        "client_logs_files_title": "このマシン上のログファイル",
+        "client_logs_files_note": "上のビューアはコンソールログを表示します。トラフィックログとエラーログは HTTP では提供されません。トラフィックログにはリクエストとレスポンスのボディが含まれる場合があるため、ディスクからのみ読み取れます。直接開いてください。",
+        "client_logs_files_none": "ログファイルがありません -- クライアントはまだ接続していません。",
+        "client_logs_files_error": "ログファイルの場所を読み取れませんでした。",
+        "client_logs_file_missing": "未作成",
+        "client_logs_kind_console": "コンソール",
+        "client_logs_kind_console_desc": "バックグラウンド出力 -- 上のビューアに表示されます",
+        "client_logs_kind_traffic": "トラフィック",
+        "client_logs_kind_traffic_desc": "転送された全リクエスト。ボディログが有効な場合はボディも含みます",
+        "client_logs_kind_error": "エラー",
+        "client_logs_kind_error_desc": "診断イベント -- 問題が起きたらここから",
         "client_inspector": "インスペクター",
         "client_listening": "localhost:4040 でリッスン中",
         "client_host_preserved": "ホスト保持",
@@ -1046,6 +1152,64 @@ function setLanguage(lang) {
             }
         }
 
+        // Sizes are shown so an operator can tell "the traffic log is empty" from "the
+        // traffic log is 40MB" without leaving the page -- both answer a different half of
+        // "is body logging actually on?".
+        function formatLogSize(bytes) {
+            if (!bytes) return '0 B';
+            const units = ['B', 'KB', 'MB', 'GB'];
+            let i = 0;
+            let n = bytes;
+            while (n >= 1024 && i < units.length - 1) { n /= 1024; i++; }
+            return `${i === 0 ? n : n.toFixed(1)} ${units[i]}`;
+        }
+
+        // Lists all three logs the client writes, with their resolved paths (#1423).
+        //
+        // Reads /api/config rather than a log-specific endpoint, because that response
+        // already resolves them server-side from the same helpers the writers use -- so
+        // the panel cannot drift from where bytes actually go.
+        //
+        // A file that does not exist is shown as missing rather than hidden: "there is no
+        // traffic log yet" answers "where are my logs?" as often as a path does, and
+        // hiding it recreates the gap this closes.
+        async function renderLogFileList() {
+            const host = document.getElementById('log-file-list');
+            if (!host) return;
+            const labels = {
+                console: [t('client_logs_kind_console'), t('client_logs_kind_console_desc')],
+                traffic: [t('client_logs_kind_traffic'), t('client_logs_kind_traffic_desc')],
+                error: [t('client_logs_kind_error'), t('client_logs_kind_error_desc')],
+            };
+            try {
+                const res = await fetch('/api/config');
+                if (!res.ok) throw new Error('config unavailable');
+                const cfg = await res.json();
+                const logs = cfg.logs || [];
+                if (!logs.length) {
+                    host.innerHTML = `<div class="log-file-empty">${escapeHtml(t('client_logs_files_none'))}</div>`;
+                    return;
+                }
+                host.innerHTML = logs.map((entry) => {
+                    const [name, desc] = labels[entry.kind] || [entry.kind, ''];
+                    const state = entry.exists
+                        ? formatLogSize(entry.size)
+                        : escapeHtml(t('client_logs_file_missing'));
+                    return `
+                        <div class="log-file-row">
+                            <div class="log-file-meta">
+                                <span class="log-file-name">${escapeHtml(name)}</span>
+                                <span class="log-file-state${entry.exists ? '' : ' log-file-state--missing'}">${state}</span>
+                            </div>
+                            <div class="log-file-desc">${escapeHtml(desc)}</div>
+                            <code class="log-file-path">${escapeHtml(entry.path)}</code>
+                        </div>`;
+                }).join('');
+            } catch (err) {
+                host.innerHTML = `<div class="log-file-empty">${escapeHtml(t('client_logs_files_error'))}</div>`;
+            }
+        }
+
         function renderLogsView() {
             const main = document.getElementById('main-view');
             main.innerHTML = `
@@ -1072,6 +1236,13 @@ function setLanguage(lang) {
                             <div id="log-lines" class="log-viewer"></div>
                         </div>
                     </div>
+                    <div class="panel" style="width: 100%; margin-top: 16px;">
+                        <div class="panel-body" style="padding: 12px;">
+                            <div style="font-weight: 600; margin-bottom: 4px;" data-i18n="client_logs_files_title">Log files on this machine</div>
+                            <div class="log-files-note" data-i18n="client_logs_files_note">The viewer above shows the console log. The traffic and error logs are not served over HTTP -- the traffic log can contain request and response bodies, so it stays readable only from disk. Open them directly.</div>
+                            <div id="log-file-list"></div>
+                        </div>
+                    </div>
                 </div>`;
 
             document.getElementById('log-filter-search').addEventListener('input', renderLogLines);
@@ -1080,6 +1251,8 @@ function setLanguage(lang) {
                 lastLogLineCount = -1;
                 fetchLogs();
             });
+
+            renderLogFileList();
 
             lastLogLineCount = -1;
             fetchLogs();

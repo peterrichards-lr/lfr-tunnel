@@ -794,7 +794,23 @@ func (s *Server) handleAdminDeleteUser(w http.ResponseWriter, r *http.Request, a
 }
 
 // getPortalBaseURL constructs the portal's base URL from the incoming request.
+//
+// An EDGE has no portal, so it must point at the control plane's rather than derive one from its
+// own hostname. The derivation below prefixes "tunnel." onto a configured domain, which is right
+// for central -- its domain is the apex and tunnel.<apex> is its hostname -- and wrong for every
+// edge, whose domain is already a subdomain. On edge-apac it produced
+// https://tunnel.apac.lfr-demo.se/portal, a name with no DNS record and no vhost: it does not
+// even fall through the zone wildcard, because *.lfr-demo.se matches one label and "tunnel.apac"
+// is two. A developer whose token was rejected got a dead link at the moment they needed the
+// portal to fix their credentials (#1473).
+//
+// control_plane_url is set on an edge and empty on central, so it doubles as the "am I an edge"
+// signal. cfg.PortalURL still wins where an operator has set it explicitly -- see
+// respondRegisterResponse, which checks that first.
 func (s *Server) getPortalBaseURL(r *http.Request) string {
+	if cp := strings.TrimSuffix(strings.TrimSpace(s.cfg.ControlPlaneURL), "/"); cp != "" {
+		return cp
+	}
 	if r == nil {
 		if len(s.cfg.Domains) > 0 {
 			return "https://tunnel." + s.cfg.Domains[0]

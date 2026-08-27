@@ -18,8 +18,15 @@ import { createApprovedUser } from './utils/nonadmin';
  * acceptance criteria -- the point is what this user can actually reach.
  */
 test.describe('Portal V2 analytics for a non-admin', () => {
-  // Unique per run so a re-run against a warm database does not collide with its own leftovers.
-  const email = `nonadmin-${Date.now()}@lfr-demo.local`;
+  // Unique per run so a re-run against a warm database does not collide with its own leftovers,
+  // but kept SHORT on purpose.
+  //
+  // The e2e database is shared by every spec, and portal_v2_table_scroll asserts that the Admin
+  // Users table fits a 1280px viewport. A `nonadmin-<13-digit-timestamp>@lfr-demo.local` row is
+  // twice the width of `admin@lfr-demo.local` and widens the email column for the spec that runs
+  // after it -- which is exactly how this one broke that one in CI while passing locally, where
+  // the font stack is narrower. Base36 keeps it comparable to the accounts already there.
+  const email = `na-${Date.now().toString(36).slice(-5)}@lfr-demo.local`;
 
   test.beforeAll(async () => {
     await clearMailpit();

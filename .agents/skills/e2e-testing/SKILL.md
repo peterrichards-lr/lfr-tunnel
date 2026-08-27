@@ -81,7 +81,31 @@ rendered nothing, and both still passed:
 then the absences. Without it a test proves the page did not render rather than that it rendered
 correctly, and reports the two identically.
 
-## 4. Running them
+## 4. The database is shared, so a fixture is a neighbour
+
+Every spec runs against one gateway and one database, in file order, with a single worker. A
+fixture that creates data does not only affect its own spec.
+
+`portal_v2_table_scroll` asserts the Admin Users table fits a 1280px viewport. The non-admin
+fixture originally used `nonadmin-<13-digit-timestamp>@lfr-demo.local` -- twice the width of
+`admin@lfr-demo.local` -- which widened the email column for the spec that runs after it
+alphabetically, and broke it **in CI only**: the Linux font stack is wider than macOS's, so it
+passed locally every time.
+
+So when adding a fixture:
+
+- **Keep created data comparable in size to what is already there.** A long identifier is not
+  free when another spec measures a layout.
+- **Assume your spec runs before every spec whose filename sorts after it.** That is the order
+  they run in.
+- **A local pass is not evidence for CI** where layout is concerned. Font metrics differ, and a
+  table that fits here can overflow there.
+
+Note that `docker compose up -d --build` recreates the containers and takes the database with
+them, so local runs often start clean while CI accumulates state across the whole suite. That
+difference hides exactly this class of bug.
+
+## 5. Running them
 
 ```bash
 cd tests/e2e && docker compose up -d --build          # stack; wait for /api/version to answer

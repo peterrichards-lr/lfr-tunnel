@@ -2027,9 +2027,18 @@ async function loadAnalytics() {
       // filled with 0 rather than skipped -- that gap is the whole signal, and left as a
       // hole Chart.js joins the surrounding points and draws a line straight over the
       // outage.
-      if (data.global.node_daily && data.global.node_daily.length) {
+      {
         const nodeCanvas = document.getElementById('nodeSessionsChart');
-        if (nodeCanvas) {
+        const nodeEmpty = document.getElementById('node-sessions-empty');
+        const hasNodeData =
+          data.global.node_daily && data.global.node_daily.length;
+        // Shown even with nothing to plot. An admin opening this to ask which gateways
+        // are carrying sessions learns nothing from an absent panel -- "no sessions
+        // recorded yet" is an answer, and hiding it recreates the gap this closes.
+        if (nodeCanvas)
+          nodeCanvas.parentElement.style.display = hasNodeData ? '' : 'none';
+        if (nodeEmpty) nodeEmpty.style.display = hasNodeData ? 'none' : '';
+        if (nodeCanvas && hasNodeData) {
           const nd = data.global.node_daily;
           const dates = [...new Set(nd.map((d) => d.date))].sort();
           const nodes = [...new Set(nd.map((d) => d.node_id))].sort();

@@ -84,21 +84,26 @@ test.describe('Sessions per gateway', () => {
 
     // The admin section is display:none until loadAnalytics confirms the role.
     await expect(page.locator('#admin-analytics-section')).toBeVisible();
-    await expect(page.locator('#nodeSessionsChart')).toBeAttached();
+    await expect(
+      page.getByRole('heading', { name: 'Sessions per Gateway' }),
+    ).toBeVisible();
 
-    // A canvas exists whether or not Chart.js ever drew into it, so assert the chart was
-    // actually constructed rather than that the markup is present.
+    // Presence of the panel is the parity guarantee, and it is what holds on a stack with
+    // no traffic. An earlier version asserted the Chart.js instance existed and failed
+    // here for a reason worth keeping: both portals gated the panel on having rows, so a
+    // gateway with no recorded sessions produced no panel at all -- which is the question
+    // the panel answers. They now render an empty state instead.
     //
-    // Evaluated as a string, and reading `charts` bare rather than off window: it is a
-    // top-level `let` in dashboard.js, which creates a global binding but NOT a property
-    // of window, so `window.charts` is undefined and the check would silently never pass.
+    // So: exactly one of the chart or the empty message is showing, never neither.
+    const chart = page.locator('#nodeSessionsChart');
+    const empty = page.locator('#node-sessions-empty');
     await expect
       .poll(
-        () =>
-          page.evaluate(
-            'typeof charts === "object" && charts !== null && !!charts.nodeSessions',
-          ),
-        { message: 'V1 should construct the nodeSessions Chart.js instance' },
+        async () => (await chart.isVisible()) !== (await empty.isVisible()),
+        {
+          message:
+            'V1 should show either the chart or the empty state, and exactly one of them',
+        },
       )
       .toBeTruthy();
   });
@@ -120,5 +125,22 @@ test.describe('Sessions per gateway', () => {
     await expect(
       page.getByRole('heading', { name: 'Sessions per Gateway' }),
     ).toBeVisible();
+
+    // Same guarantee as V1: never a heading with nothing under it. Scoped to the card the
+    // heading lives in, so a canvas belonging to one of the other analytics charts on this
+    // page cannot satisfy it.
+    const panel = page.locator('.card').filter({
+      has: page.getByRole('heading', { name: 'Sessions per Gateway' }),
+    });
+    await expect(panel).toHaveCount(1);
+
+    const hasChart = await panel.locator('canvas').count();
+    const hasEmpty = await panel
+      .getByText('No session data recorded yet')
+      .count();
+    expect(
+      hasChart + hasEmpty,
+      'V2 should show either the chart or the empty state, and exactly one of them',
+    ).toBe(1);
   });
 });

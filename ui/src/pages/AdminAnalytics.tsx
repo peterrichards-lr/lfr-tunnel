@@ -497,7 +497,7 @@ export default function AdminAnalytics() {
               this is the history beside it, because a snapshot cannot distinguish a
               scheduled power window from a dead control channel -- both just show an edge
               with no sessions right now. */}
-          {data.global.node_daily && data.global.node_daily.length > 0 && (
+          {data.global && (
             <div className="card p-xl mb-xl">
               <h4 className="text-muted text-base mb-lg">
                 {t('sessions_per_edge', 'Sessions per Gateway')}
@@ -508,29 +508,43 @@ export default function AdminAnalytics() {
                   'Distinct tunnel sessions each gateway carried per day. A line falling to zero means that gateway stopped receiving sessions.',
                 )}
               </p>
-              <div className="chart-container">
-                <Line
-                  data={nodeSeries(data.global.node_daily)}
-                  options={{
-                    responsive: true,
-                    maintainAspectRatio: false,
-                    plugins: {
-                      legend: {
-                        position: 'bottom',
-                        labels: { color: 'var(--text-color)' },
+              {/* Rendered even with nothing to plot. An admin opening this to ask which
+                  gateways are carrying sessions learns nothing from an absent panel --
+                  "no sessions recorded yet" is an answer, and hiding it recreates exactly
+                  the gap this closes. */}
+              {!data.global.node_daily ||
+              data.global.node_daily.length === 0 ? (
+                <p className="text-muted text-sm m-0">
+                  {t(
+                    'sessions_per_edge_empty',
+                    'No session data recorded yet for this period.',
+                  )}
+                </p>
+              ) : (
+                <div className="chart-container">
+                  <Line
+                    data={nodeSeries(data.global.node_daily)}
+                    options={{
+                      responsive: true,
+                      maintainAspectRatio: false,
+                      plugins: {
+                        legend: {
+                          position: 'bottom',
+                          labels: { color: 'var(--text-color)' },
+                        },
                       },
-                    },
-                    scales: {
-                      y: {
-                        beginAtZero: true,
-                        // Sessions are whole tunnels; a "2.5 sessions" gridline is
-                        // meaningless and Chart.js will produce one on small ranges.
-                        ticks: { precision: 0 },
+                      scales: {
+                        y: {
+                          beginAtZero: true,
+                          // Sessions are whole tunnels; a "2.5 sessions" gridline is
+                          // meaningless and Chart.js will produce one on small ranges.
+                          ticks: { precision: 0 },
+                        },
                       },
-                    },
-                  }}
-                />
-              </div>
+                    }}
+                  />
+                </div>
+              )}
             </div>
           )}
 

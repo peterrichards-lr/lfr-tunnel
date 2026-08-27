@@ -130,10 +130,10 @@ edge_nodes:
 ```
 
 1. Generate the new token and its hash, exactly as when registering a node.
-2. Add the hash to `additional_token_hashes` on central and restart it *once*.
+2. Add the hash to `additional_token_hashes` on central and `sudo systemctl reload lfr-tunneld`.
 3. Re-provision the edges one at a time with the new plaintext token. Each keeps working before
    and after, because both hashes are accepted.
-4. Remove the old value from `token_hash` and restart central again. **This is the step that
+4. Remove the old value from `token_hash` and reload central again. **This is the step that
    actually revokes the old token** — until then it still authenticates.
 
 Both hashes are accepted on the `/api/internal/*` endpoints *and* on the control channel, where
@@ -141,7 +141,30 @@ the hash is used as an HMAC key rather than compared. A rotation that only cover
 leave an edge authenticating for registration while silently failing to establish its control
 channel, losing schedule pushes, shutdown warnings and lease kicks.
 
-Revoking a token still requires a restart of central; see #1309 for the remaining work.
+#### Withdrawing an Edge Token
+
+`sudo systemctl reload lfr-tunneld` re-reads `edge_nodes` and applies it immediately. Removing a
+node, or removing a hash from one, takes effect on the next request — no restart, and no
+interruption to any tunnel on any edge (#1309).
+
+This used to require a restart, which meant an operator responding to a suspected leak had to
+choose between revoking the credential and keeping the fleet up. Reload removes the choice, so
+withdraw first and investigate afterwards.
+
+Check it landed. The reload names what changed, by node id and never by value:
+
+```bash
+sudo systemctl reload lfr-tunneld
+sudo journalctl -u lfr-tunneld -n 20 --no-pager | grep 'Edge node'
+```
+
+Two things to know before relying on it:
+
+- **Only `edge_nodes` is re-read.** Every other field still needs a restart (#1454). The reload
+  says so in its own log line, so a field that looks reloaded but is not cannot mislead you.
+- **A config that does not parse changes nothing.** The running list is kept and the failure is
+  logged, so a SIGHUP against a half-saved file cannot de-authenticate the fleet. Verify with
+  `lfr-tunneld -check-config` first if you want to know before signalling (#1455).
 
 #### Registering a New Edge Node with the Control Plane
 

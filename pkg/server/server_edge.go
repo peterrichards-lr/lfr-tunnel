@@ -23,7 +23,7 @@ func (s *Server) monitorEdgeHealth() {
 		s.outboundConnected = outboundOk
 		s.outboundMutex.Unlock()
 
-		for _, edge := range s.cfg.EdgeNodes {
+		for _, edge := range s.edgeNodes() {
 			s.checkEdgeNodeHealth(edge, outboundOk)
 		}
 		s.checkEdgeShutdownWarnings(time.Now())
@@ -70,7 +70,7 @@ func (s *Server) checkEdgeNodeHealth(edge config.EdgeNodeConfig, outboundOk bool
 func (s *Server) triggerEdgeHealthRecheck(nodeID string) {
 	var target config.EdgeNodeConfig
 	found := false
-	for _, edge := range s.cfg.EdgeNodes {
+	for _, edge := range s.edgeNodes() {
 		if edge.ID == nodeID {
 			target = edge
 			found = true
@@ -152,7 +152,7 @@ func (s *Server) updateEdgeHealth(id, status string, latency int64, errMsg strin
 	s.edgeClientsMu.RUnlock()
 
 	if ipv4 == "" && ipv6 == "" {
-		for _, edge := range s.cfg.EdgeNodes {
+		for _, edge := range s.edgeNodes() {
 			if edge.ID == id && edge.URL != "" {
 				if u, err := url.Parse(edge.URL); err == nil {
 					ipv4, ipv6 = resolveIPv4AndIPv6(u.Hostname())
@@ -250,7 +250,7 @@ func (s *Server) updateEdgeHealth(id, status string, latency int64, errMsg strin
 	// the live scheduler should lose. Where there is no provisioner, this is the only way a
 	// deployment outside AWS can have scheduled shutdown at all.
 	if timezone == "" {
-		if static := staticScheduleFor(s.cfg.EdgeNodes, id); static != nil {
+		if static := staticScheduleFor(s.edgeNodes(), id); static != nil {
 			timezone = static.Timezone
 			schedStop = static.StopTime
 			schedStart = static.StartTime

@@ -190,7 +190,7 @@ func (s *Server) handleEdgeControlWS(w http.ResponseWriter, r *http.Request) {
 
 	// 3. Verify HMAC response
 	var nodeConfig *config.EdgeNodeConfig
-	for _, node := range s.cfg.EdgeNodes {
+	for _, node := range s.edgeNodes() {
 		if node.ID == nodeID {
 			nodeConfig = &node
 			break

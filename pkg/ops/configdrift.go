@@ -3,6 +3,7 @@ package ops
 import (
 	"flag"
 	"fmt"
+	"net"
 	"net/url"
 	"os"
 	"reflect"
@@ -91,6 +92,12 @@ type liveConfig struct {
 		ID  string `yaml:"id"`
 		URL string `yaml:"url"`
 	} `yaml:"edge_nodes"`
+}
+
+// liveConfigWithCP reads only control_plane_url, which is set on an edge and empty on central and
+// therefore doubles as the "is this an edge" signal. Narrow on purpose: see the secrecy rule.
+type liveConfigWithCP struct {
+	ControlPlaneURL string `yaml:"control_plane_url"`
 }
 
 // Severities. Named because they are compared as well as printed, and a typo in a comparison
@@ -258,6 +265,72 @@ func expectedConfigOwner(unitPath string) string {
 	return user + ":" + group
 }
 
+// realIPKey names the finding, so the three places that report on it cannot drift apart.
+const realIPKey = "nginx set_real_ip_from"
+
+// realIPDirective extracts the address an nginx config trusts as the forwarding proxy.
+var realIPDirective = regexp.MustCompile(`(?m)^\s*set_real_ip_from\s+([^;]+);`)
+
+// checkEdgeRealIP reports whether an edge trusts the control plane's address, so a request the
+// control plane forwards is attributed to the visitor rather than to central (#1450).
+//
+// Baking an address into four edges' nginx is exactly the shape that goes stale unnoticed -- the
+// same shape as the edge_nodes urls that named retired hosts for weeks (#1449) -- so it is
+// checked rather than assumed.
+//
+// Only meaningful on an edge. control_plane_url is set there and empty on central, so its
+// presence in the live config is the signal.
+func checkEdgeRealIP(controlPlaneURL, nginxConf string) []DriftFinding {
+	if strings.TrimSpace(controlPlaneURL) == "" {
+		return nil // central: nothing forwards to it
+	}
+
+	m := realIPDirective.FindStringSubmatch(nginxConf)
+	if m == nil {
+		return []DriftFinding{{
+			Severity: severityWarning,
+			Key:      realIPKey,
+			Message: "this edge does not trust the control plane's address, so a request the control " +
+				"plane forwards is attributed to CENTRAL rather than to the visitor -- the per-tunnel " +
+				"IP whitelist, the rate limiter's auto-ban and audit entries all name central (#1450). " +
+				"Re-run reconcile-nginx with -trusted-proxy",
+		}}
+	}
+	trusted := strings.TrimSpace(m[1])
+
+	host := urlHost(controlPlaneURL)
+	if host == "" {
+		return nil
+	}
+	addrs, err := net.LookupHost(host)
+	if err != nil {
+		return []DriftFinding{{
+			Severity: severityWarning,
+			Key:      realIPKey,
+			Message: fmt.Sprintf("trusts %q, but %q could not be resolved to compare against (%v)",
+				trusted, host, err),
+		}}
+	}
+	for _, a := range addrs {
+		if a == trusted {
+			return nil
+		}
+	}
+	// A warning rather than an error: name resolution from an operator's machine is not
+	// authoritative, and a split-horizon or stale answer must not fail a check that is otherwise
+	// reporting real problems.
+	return []DriftFinding{{
+		Severity: severityWarning,
+		Key:      realIPKey,
+		Message: fmt.Sprintf(
+			"trusts %q, but %s currently resolves to %s. If the control plane moved, forwarded "+
+				"requests are being attributed to the wrong address (#1450) -- re-run reconcile-nginx "+
+				"with the new -trusted-proxy. Resolution from this machine is not authoritative, so "+
+				"confirm before acting",
+			trusted, host, strings.Join(addrs, ", ")),
+	}}
+}
+
 // CheckConfigCommand reports drift between a live gateway config and this repo.
 //
 // Reads the live file over SSH and never writes it. Output is by key, with any secret-looking
@@ -308,24 +381,48 @@ func CheckConfigCommand(args []string) {
 		"sudo cat "+*remotePath)
 	CheckFatal(err, "Failed to read the live config")
 
-	errors := reportConfigFindings([]byte(configYAML), specYAML)
+	errors, warnings := reportConfigFindings([]byte(configYAML), specYAML)
 
 	// Ownership and mode, which edge_setup_guide.md flags as easy to get wrong and silently
 	// fatal: root:root locks out the service user and crash-loops on the NEXT restart, so the
 	// mistake surfaces long after it was made.
 	errors += checkConfigFilePermissions(target, sshTarget, *remotePath, *unitPath)
 
+	// Edge only: does this node still trust the control plane's address? Reads the nginx config
+	// the reconcile writes, so it verifies what is actually serving rather than what was intended.
+	var live liveConfigWithCP
+	if err := yaml.Unmarshal([]byte(configYAML), &live); err == nil && live.ControlPlaneURL != "" {
+		nginxTarget, _ := nginxRemotePaths(RoleEdge)
+		if nginxConf, err := RunCommandCaptureOutput("ssh", "-i", target.IdentityFile, sshTarget,
+			"sudo cat "+nginxTarget+" 2>/dev/null || true"); err == nil {
+			for _, f := range checkEdgeRealIP(live.ControlPlaneURL, nginxConf) {
+				fmt.Printf("[%s] %s: %s\n", strings.ToUpper(f.Severity), f.Key, f.Message)
+				if f.Severity == severityError {
+					errors++
+				} else {
+					warnings++
+				}
+			}
+		}
+	}
+
 	fmt.Println()
 	if errors > 0 {
 		fmt.Printf("FAILED: %d error-severity finding(s).\n", errors)
 		os.Exit(1)
 	}
+	// "No drift found" under a warning would be a lie of omission: warnings are the findings an
+	// operator most needs to read, precisely because they do not stop the exit code.
+	if warnings > 0 {
+		fmt.Printf("No errors, but %d warning(s) above -- read them.\n", warnings)
+		return
+	}
 	fmt.Println("No drift found.")
 }
 
-// reportConfigFindings prints the findings and returns how many were error-severity.
-func reportConfigFindings(configYAML, specYAML []byte) int {
-	errors := 0
+// reportConfigFindings prints the findings and returns how many were error- and warning-severity.
+func reportConfigFindings(configYAML, specYAML []byte) (int, int) {
+	errors, warnings := 0, 0
 
 	findings, err := CheckEdgeNodeDrift(configYAML, specYAML)
 	CheckFatal(err, "Failed to check edge_nodes")
@@ -336,6 +433,8 @@ func reportConfigFindings(configYAML, specYAML []byte) int {
 		fmt.Printf("[%s] %s: %s\n", strings.ToUpper(f.Severity), f.Key, f.Message)
 		if f.Severity == severityError {
 			errors++
+		} else {
+			warnings++
 		}
 	}
 
@@ -345,9 +444,10 @@ func reportConfigFindings(configYAML, specYAML []byte) int {
 		// A warning, not an error: a key this binary does not know may simply be newer or older
 		// than the config, and failing on that would make the check unusable mid-upgrade.
 		fmt.Printf("[WARNING] %s: not a key this build recognises, so it is being ignored entirely -- check for a typo\n", k)
+		warnings++
 	}
 
-	return errors
+	return errors, warnings
 }
 
 // checkConfigFilePermissions reports ownership and mode problems, returning how many were

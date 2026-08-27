@@ -260,6 +260,15 @@ Three things differ from central, and they are the whole reason an edge needs it
   wildcard bundle pushed from central. Central holds the DNS-write credential and renews those,
   so an edge only ever receives them -- run `setup-certsync-edge.sh` too, or nginx will fail to
   start on a missing certificate.
+- **`-trusted-proxy` is the control plane's address** (IP or CIDR). Without it, a request the
+  control plane FORWARDS to this edge is attributed to central rather than to the visitor: the
+  per-tunnel IP whitelist, the rate limiter's auto-ban and every audit entry name the control
+  plane (#1450). It renders nginx's real_ip directives, which recover the visitor's address from
+  the forwarded header *before* the proxy_set_header lines run, so the gateway needs no change.
+  Not spoofable — real_ip only rewrites when the immediate peer is the trusted address, so a
+  visitor arriving edge-direct is untouched. Omit it and the config is exactly as it was.
+  `check-config` (§6a) warns when an edge does not trust the control plane, or trusts an address
+  that no longer resolves to it.
 - **`-redirect-domain` is required.** An edge's own apex has no portal to serve, so browser
   traffic arriving there is redirected to the control plane. Only `/api/` and `/tunnel` are
   served locally on that hostname.

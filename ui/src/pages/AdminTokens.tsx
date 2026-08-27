@@ -347,7 +347,7 @@ export default function AdminTokens() {
                     className="border-b hover:bg-white/5 transition-colors"
                   >
                     {isColumnVisible('user_id') && (
-                      <td className="td-cell font-medium">{pat.user_id}</td>
+                      <td className="td-cell fw-medium">{pat.user_id}</td>
                     )}
                     {isColumnVisible('name') && (
                       <td className="td-cell">
@@ -375,7 +375,7 @@ export default function AdminTokens() {
                     )}
                     <td className="td-cell">
                       <span
-                        className={`badge ${status.badge} text-xs font-semibold`}
+                        className={`badge ${status.badge} text-xs fw-semibold`}
                       >
                         {status.label}
                       </span>

@@ -186,7 +186,7 @@ export default function Login() {
             </p>
             <input
               type="text"
-              className="input-field text-center text-2xl font-bold tracking-widest mb-xl w-full"
+              className="input-field text-center text-2xl fw-bold tracking-widest mb-xl w-full"
               placeholder={t('mfa_otp_placeholder', '123456')}
               pattern="[0-9]{6}"
               maxLength={6}

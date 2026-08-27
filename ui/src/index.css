@@ -1545,6 +1545,107 @@ html[dir='rtl'] th {
 }
 
 /* --- Gap (using design tokens) --- */
+/* Utilities the markup already asks for (#1383).
+ *
+ * Each of these completes a family the sheet already has -- .tracking-wide and
+ * .tracking-wider without tight or widest, .min-w-xs..lg without 0, .flex-1 without
+ * .flex-2, .overflow-auto without the single-axis form, .opacity-60/80 without 70. A
+ * half-present family is what let these accumulate: every gap looked deliberate sitting
+ * next to the steps that were there.
+ *
+ * Values follow the Tailwind semantics the class names imply, since that is what whoever
+ * wrote the markup expected them to do.
+ *
+ * These APPLY on merge -- 60 declarations that did nothing start working. Most are
+ * inert-and-harmless (a font style, a letter-spacing), but four change layout and are
+ * called out because they are the ones to look at:
+ *
+ *   grid-cols-2    AccountSettings' MFA form becomes two columns, as `grid grid-cols-2`
+ *                  always meant; it renders as one today
+ *   flex-2         AdminBlacklist's wider field actually takes 2x the space
+ *   max-h-96       the What's New list gains its scroll cap instead of running long
+ *   min-h-screen   the app shell and login page get their viewport floor
+ */
+.align-middle {
+  vertical-align: middle;
+}
+.inline-block {
+  display: inline-block;
+}
+.italic {
+  font-style: italic;
+}
+.underline {
+  text-decoration-line: underline;
+}
+.capitalize {
+  text-transform: capitalize;
+}
+.break-all {
+  word-break: break-all;
+}
+.break-words {
+  overflow-wrap: break-word;
+}
+.leading-relaxed {
+  line-height: 1.625;
+}
+.tracking-tight {
+  letter-spacing: -0.025em;
+}
+.tracking-widest {
+  letter-spacing: 0.1em;
+}
+.min-w-0 {
+  min-width: 0;
+}
+.opacity-70 {
+  opacity: 0.7;
+}
+.border-dashed {
+  border-style: dashed;
+}
+.overflow-y-auto {
+  overflow-y: auto;
+}
+.max-h-96 {
+  max-height: 24rem;
+}
+.min-h-screen {
+  min-height: 100vh;
+}
+.grid-cols-2 {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+.flex-2 {
+  flex: 2 2 0%;
+}
+.z-10 {
+  z-index: 10;
+}
+.z-40 {
+  z-index: 40;
+}
+/* transition-* set only the property; duration comes from the base .btn/.card rules or
+   from .duration-200, matching how the markup pairs them. */
+.transition-all {
+  transition-property: all;
+  transition-timing-function: cubic-bezier(0.4, 0, 0.2, 1);
+  transition-duration: 0.2s;
+}
+.transition-colors {
+  transition-property: color, background-color, border-color, fill, stroke;
+  transition-timing-function: cubic-bezier(0.4, 0, 0.2, 1);
+  transition-duration: 0.2s;
+}
+.duration-200 {
+  transition-duration: 200ms;
+}
+.drop-shadow-md {
+  filter: drop-shadow(0 4px 3px rgb(0 0 0 / 0.07))
+    drop-shadow(0 2px 2px rgb(0 0 0 / 0.06));
+}
+
 .gap-2xs {
   gap: var(--spacing-2xs);
 }

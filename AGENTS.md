@@ -35,6 +35,11 @@ up with no further wiring. `/reload-skills` re-scans without restarting a sessio
   backlog concurrently, so resolve the session ID in an issue's claim comment
   before touching it — the `agent:` label alone cannot tell two Claude sessions
   apart, and you must not work on what another session holds.
+- **End-to-end / Playwright testing** — [`.agents/skills/e2e-testing/SKILL.md`](.agents/skills/e2e-testing/SKILL.md)
+  Read before writing or running a browser test, and before trusting a mutation test against the
+  containerised stack. Covers the non-admin fixture (every spec used to sign in as an admin), the
+  rebuild race that makes a mutation test report the opposite of the truth, and why an
+  absence-only assertion passes on a blank page.
 - **Documentation timestamps & review** — [`.agents/skills/global-docs/SKILL.md`](.agents/skills/global-docs/SKILL.md)
   Read before creating or editing any `.md` file.
 - **Edge node state synchronization** — [`.agents/skills/edge-sync/SKILL.md`](.agents/skills/edge-sync/SKILL.md)

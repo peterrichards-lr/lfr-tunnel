@@ -86,6 +86,9 @@ export default function AdminAnalytics() {
 
   const [data, setData] = useState<any>(null);
   const [clientStats, setClientStats] = useState<any[]>([]);
+  // Where the next edge should go (#1151). The data path shipped without a reader; this is
+  // the panel the epic (#1149) was left open for.
+  const [regionLatency, setRegionLatency] = useState<any>(null);
   const [loading, setLoading] = useState(true);
   const [timeRange, setTimeRange] = useState('30'); // Default to 30 days
 
@@ -101,12 +104,20 @@ export default function AdminAnalytics() {
       setLoading(true);
       try {
         const query = timeRange !== '0' ? `?days=${timeRange}` : '';
-        const [analyticsRes, clientsRes] = await Promise.all([
+        const [analyticsRes, clientsRes, latencyRes] = await Promise.all([
           axios.get(`/api/analytics${query}`),
           axios.get('/api/admin/analytics/clients').catch(() => ({ data: [] })),
+          // Its own days param rather than the shared one: the endpoint rejects 0, which
+          // is what the "All time" option sends.
+          axios
+            .get(
+              `/api/admin/analytics/region-latency?days=${timeRange === '0' ? 365 : timeRange}`,
+            )
+            .catch(() => ({ data: null })),
         ]);
         setData(analyticsRes.data);
         setClientStats(clientsRes.data || []);
+        setRegionLatency(latencyRes.data);
       } catch (err) {
         console.error('Failed to load analytics', err);
       } finally {
@@ -117,6 +128,10 @@ export default function AdminAnalytics() {
   }, [timeRange]);
 
   const isLight = theme === 'light';
+  // Resolved here rather than passed to Chart.js as var(--...): a chart draws to canvas,
+  // which has no CSS cascade, so a custom property reaches it as an unparseable string and
+  // Chart.js falls back to its default near-black. Three legends did that and were unreadable
+  // on the dark and liferay themes -- and --text-color was not a defined token either way.
   const textColor = isLight ? '#475569' : '#94a3b8';
   const gridColor = isLight ? '#e2e8f0' : '#334155';
 
@@ -441,7 +456,7 @@ export default function AdminAnalytics() {
                         plugins: {
                           legend: {
                             position: 'bottom',
-                            labels: { color: 'var(--text-color)' },
+                            labels: { color: textColor },
                           },
                         },
                         cutout: '70%',
@@ -483,7 +498,7 @@ export default function AdminAnalytics() {
                         plugins: {
                           legend: {
                             position: 'bottom',
-                            labels: { color: 'var(--text-color)' },
+                            labels: { color: textColor },
                           },
                         },
                       }}
@@ -530,7 +545,7 @@ export default function AdminAnalytics() {
                       plugins: {
                         legend: {
                           position: 'bottom',
-                          labels: { color: 'var(--text-color)' },
+                          labels: { color: textColor },
                         },
                       },
                       scales: {
@@ -547,6 +562,75 @@ export default function AdminAnalytics() {
               )}
             </div>
           )}
+
+          {/* Region latency (#1151). The data path merged in #1501 with no reader; the
+              epic was held open for exactly this panel.
+
+              Leads with poorly_served_users because that is the figure the placement
+              decision turns on -- a region can look healthy on its own median while the
+              people using it have no good option anywhere, and only this number shows
+              that. */}
+          <div className="card p-xl mb-xl">
+            <h4 className="text-muted text-base mb-lg">
+              {t('region_latency', 'Region Latency')}
+            </h4>
+            {!regionLatency || !regionLatency.regions?.length ? (
+              <p className="text-muted text-sm m-0">
+                {t(
+                  'region_latency_empty',
+                  'No region probes recorded yet. Clients report these when they pick a gateway.',
+                )}
+              </p>
+            ) : (
+              <>
+                <p
+                  className={`text-sm mb-lg ${regionLatency.poorly_served_users > 0 ? 'text-warning' : 'text-muted'}`}
+                >
+                  <strong>{regionLatency.poorly_served_users}</strong>{' '}
+                  {t(
+                    'region_latency_poorly_served',
+                    'users had no region faster than',
+                  )}{' '}
+                  {regionLatency.threshold_ms}ms
+                </p>
+                <div className="table-responsive">
+                  <table className="w-full">
+                    <thead>
+                      <tr className="border-b text-left">
+                        <th className="th-col">{t('region', 'Region')}</th>
+                        <th className="th-col">{t('users', 'Users')}</th>
+                        <th className="th-col">{t('median', 'Median')}</th>
+                        <th className="th-col">{t('p90', 'p90')}</th>
+                        <th className="th-col">
+                          {t('unreachable', 'Unreachable')}
+                        </th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {regionLatency.regions.map((r: any) => (
+                        <tr key={r.region} className="border-b">
+                          <td className="p-md fw-semibold">
+                            {r.region.toUpperCase()}
+                          </td>
+                          <td className="p-md">{r.users}</td>
+                          <td className="p-md">{r.median_ms}ms</td>
+                          <td className="p-md">{r.p90_ms}ms</td>
+                          {/* A region nobody can reach is a placement fact, not missing
+                              data, so a non-zero count is called out rather than shown
+                              as a plain 0. */}
+                          <td
+                            className={`p-md ${r.unreachable_users > 0 ? 'text-danger fw-semibold' : 'text-muted'}`}
+                          >
+                            {r.unreachable_users}
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              </>
+            )}
+          </div>
 
           <div className="card overflow-hidden">
             <div className="p-md px-lg border-b">

@@ -2090,6 +2090,52 @@ async function loadAnalytics() {
         }
       }
 
+      // Region latency (#1151). The data path shipped in #1501 with no reader in either
+      // portal, and the epic (#1149) was held open for this panel.
+      //
+      // Leads with poorly_served_users because that is the figure the placement decision
+      // turns on: a region can look healthy on its own median while the people using it
+      // have no good option anywhere, and only that number shows it.
+      try {
+        // 30 days, matching what /api/analytics defaults to above. V1 has no time-range
+        // control on this page, so there is nothing to read the window from.
+        const rlRes = await fetch(
+          '/api/admin/analytics/region-latency?days=30',
+        );
+        const headline = document.getElementById('region-latency-headline');
+        if (rlRes.ok) {
+          const rl = (await rlRes.json()) || {};
+          const regions = rl.regions || [];
+          if (headline) {
+            if (!regions.length) {
+              headline.textContent = t('region_latency_empty');
+              headline.style.color = 'var(--text-muted)';
+            } else {
+              headline.innerHTML = `<strong>${rl.poorly_served_users}</strong> ${escapeHTML(t('region_latency_poorly_served'))} ${rl.threshold_ms}ms`;
+              headline.style.color =
+                rl.poorly_served_users > 0
+                  ? 'var(--warning)'
+                  : 'var(--text-muted)';
+            }
+          }
+          renderTable(
+            'region-latency-table-body',
+            regions,
+            (r) => `
+                                <tr>
+                                    <td style="font-weight: 600;">${escapeHTML((r.region || '').toUpperCase())}</td>
+                                    <td>${r.users || 0}</td>
+                                    <td>${r.median_ms || 0}ms</td>
+                                    <td>${r.p90_ms || 0}ms</td>
+                                    <td style="color: ${r.unreachable_users > 0 ? 'var(--danger)' : 'var(--text-muted)'}; font-weight: ${r.unreachable_users > 0 ? '600' : '400'};">${r.unreachable_users || 0}</td>
+                                </tr>
+                            `,
+          );
+        }
+      } catch (e) {
+        console.error('Failed to load region latency', e);
+      }
+
       // Load Client Stats
       try {
         const cRes = await fetch('/api/admin/analytics/clients');

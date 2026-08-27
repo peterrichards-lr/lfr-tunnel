@@ -130,9 +130,9 @@ export default function Layout() {
         />
 
         {/* Mobile Top Header */}
-        <div className="mobile-header p-lg bg-card border-b items-center gap-lg">
+        <div className="mobile-header p-lg border-b items-center gap-lg">
           <button
-            className="btn btn-secondary p-sm bg-transparent border text-main"
+            className="btn btn-secondary p-sm border text-main"
             onClick={() => setIsSidebarOpen(true)}
           >
             <svg
@@ -155,7 +155,7 @@ export default function Layout() {
 
         <main id="main-content" className="main-content" tabIndex={-1}>
           {user.broadcast_message && (
-            <div className="bg-accent text-white p-md px-lg rounded-sm mb-xl flex items-center gap-md shadow-md">
+            <div className="alert-banner alert-banner--info">
               <span className="text-lg">📢</span>
               <div className="flex-1 text-sm">
                 <strong>{t('broadcast_alert', 'System Broadcast')}:</strong>{' '}
@@ -165,7 +165,7 @@ export default function Layout() {
           )}
 
           {user.targeted_message && (
-            <div className="bg-primary text-white p-md px-lg rounded-sm mb-xl flex items-center gap-md shadow-md">
+            <div className="alert-banner alert-banner--info">
               <span className="text-lg">💬</span>
               <div className="flex-1 text-sm">
                 <strong>{t('admin_message', 'Admin Message')}:</strong>{' '}
@@ -173,7 +173,7 @@ export default function Layout() {
               </div>
               <button
                 onClick={dismissTargetedMessage}
-                className="btn btn-secondary bg-black/20 text-white border-none py-xs px-md text-xs"
+                className="btn btn-secondary py-xs px-md text-xs"
               >
                 {t('dismiss', 'Dismiss')}
               </button>
@@ -188,7 +188,7 @@ export default function Layout() {
               {user.last_login_at && !user.last_login_at.startsWith('0001') && (
                 <p className="mt-xs m-0 text-muted text-xs">
                   Last login: {formatDate(user.last_login_at)} from{' '}
-                  <code className="bg-black/10 px-xs py-2xs rounded">
+                  <code className="surface-subtle px-xs py-2xs rounded">
                     {user.last_login_ip || 'Unknown'}
                   </code>
                 </p>

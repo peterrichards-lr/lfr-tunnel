@@ -909,7 +909,7 @@ export default function AdminUsers() {
       {selectedUser && (
         <div className="modal-backdrop">
           <div
-            className="modal-card modal-card--lg max-h-90vh overflow-y-auto"
+            className="modal-card modal-card--lg overflow-y-auto"
             role="dialog"
             aria-modal="true"
             aria-labelledby="user-details-modal-title"

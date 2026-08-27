@@ -37,7 +37,7 @@ export default function DataTableToolbar<T>({
   return (
     <div className="flex justify-between items-center gap-md flex-wrap">
       {/* Left side: Search, Status Filter & Extra Controls */}
-      <div className="flex items-center gap-md flex-1 min-w-[240px]">
+      <div className="flex items-center gap-md flex-1 min-w-lg">
         <input
           type="text"
           placeholder={

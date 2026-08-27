@@ -1611,6 +1611,16 @@ html[dir='rtl'] th {
 .max-h-96 {
   max-height: 24rem;
 }
+/* Lines a button up with the inputs beside it in a filter row. .btn is padded for its own
+   rhythm (8px 16px) and comes out shorter than .input-field (12px 16px plus a border), so
+   a button in a row of fields sits low without this.
+ *
+ * Named for the relationship rather than the measurement: the markup asked for h-[45px],
+ * the same number with none of the reason, which would need re-deriving by hand if
+ * .input-field's padding ever changed (#1383). */
+.h-input {
+  height: 45px;
+}
 .min-h-screen {
   min-height: 100vh;
 }

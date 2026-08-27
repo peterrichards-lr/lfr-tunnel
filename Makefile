@@ -131,6 +131,16 @@ build: clean
 	fi
 	rm -rf pkg/server/ui-dist
 	cp -r ui/dist pkg/server/ui-dist
+	@# ui/dist has no .gitkeep, so the two lines above delete a TRACKED file on every build
+	@# and leave it staged for whoever next runs `git commit -a` (#1511). Losing it means a
+	@# fresh clone has no pkg/server/ui-dist/ at all and `//go:embed ui-dist/*` stops
+	@# compiling -- and CI cannot catch that, because every job creates the directory itself
+	@# before building.
+	@#
+	@# Restored here rather than by narrowing the rm to `ui-dist/*`, which spares the dotfile
+	@# only because `*` does not match it in sh -- true by accident, and undone by the next
+	@# person who tidies that line.
+	touch pkg/server/ui-dist/.gitkeep
 	go build -ldflags="-s -w $(DEPLOYMENT_LDFLAGS) -X lfr-tunnel/pkg/config.Version=$(VERSION)" -trimpath -o bin/lfr-tunnel ./cmd/lfr-tunnel
 	go build -ldflags="-s -w $(DEPLOYMENT_LDFLAGS) -X lfr-tunnel/pkg/config.Version=$(VERSION)" -trimpath -o bin/lfr-tunneld ./cmd/lfr-tunneld
 
@@ -183,6 +193,7 @@ test-hooks:
 	@./tests/hooks/test-drain-and-wait.sh
 	@./tests/hooks/test-check-staged-prettier.sh
 	@./tests/hooks/test-hook-shim.sh
+	@./tests/hooks/test-build-keeps-tracked-files.sh
 
 # The pre-merge CI-configuration gate (#1391). Worth a target rather than only a path to type:
 # the whole point of this check is being run BEFORE pushing, and a check nobody can invoke

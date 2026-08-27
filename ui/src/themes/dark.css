@@ -50,6 +50,9 @@
   --table-row-hover: rgba(255, 255, 255, 0.03);
 
   /* Spacing Design Tokens (theme-independent but defined here as the canonical source) */
+  /* 2xs was the one step with no token, so .p-2xs hardcoded 2px while every other
+     utility read the scale -- the shape that lets a scale drift apart (#1383). */
+  --spacing-2xs: 2px;
   --spacing-xs: 4px;
   --spacing-sm: 8px;
   --spacing-md: 12px;

@@ -10,7 +10,11 @@ set -euo pipefail
 # Fixing them all is not this script's job. Stopping the number from growing is: that turns a
 # large debt into a fixed one, which can then be paid down opportunistically. Lower the ceiling
 # whenever the real count drops, and the ratchet tightens on its own.
-CEILING="${LFT_NOLINT_CEILING:-752}"
+#
+# Wired into CI as of #1498. It was not, originally -- the comment on the make target explained
+# that ci.yml belonged to another agent under #1328 -- and a gate nobody runs does not gate: the
+# count reached 757 against a ceiling of 752 without anything failing.
+CEILING="${LFT_NOLINT_CEILING:-748}"
 
 count() {
     grep -rho 'nolint:[a-z,]*' --include='*.go' pkg/ cmd/ 2>/dev/null \

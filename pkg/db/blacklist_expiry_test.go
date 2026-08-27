@@ -16,8 +16,7 @@ import (
 // access, that was often enough to fail unrelated PRs. A lifetime that cannot lapse
 // mid-test removes the race rather than widening it.
 func TestAutoBan_TakesEffect(t *testing.T) {
-	database, tmpDir := setupTestDB(t)
-	defer cleanupTestDB(database, tmpDir)
+	database := setupTestDB(t)
 
 	if _, err := database.AddAutoBan("203.0.113.9", "flooding", time.Hour, 1, 0); err != nil {
 		t.Fatalf("AddAutoBan: %v", err)
@@ -29,8 +28,7 @@ func TestAutoBan_TakesEffect(t *testing.T) {
 }
 
 func TestAutoBan_Expires(t *testing.T) {
-	database, tmpDir := setupTestDB(t)
-	defer cleanupTestDB(database, tmpDir)
+	database := setupTestDB(t)
 
 	// Assert on the returned entry rather than reading the row back, so this stays
 	// non-vacuous -- it proves an expiring ban was created -- without depending on
@@ -54,8 +52,7 @@ func TestAutoBan_Expires(t *testing.T) {
 
 // A zero duration is the pre-existing behaviour, kept available on purpose.
 func TestAutoBan_ZeroDurationNeverExpires(t *testing.T) {
-	database, tmpDir := setupTestDB(t)
-	defer cleanupTestDB(database, tmpDir)
+	database := setupTestDB(t)
 
 	entry, err := database.AddAutoBan("203.0.113.9", "flooding", 0, 2, time.Hour)
 	if err != nil {
@@ -67,8 +64,7 @@ func TestAutoBan_ZeroDurationNeverExpires(t *testing.T) {
 }
 
 func TestManualBan_NeverExpires(t *testing.T) {
-	database, tmpDir := setupTestDB(t)
-	defer cleanupTestDB(database, tmpDir)
+	database := setupTestDB(t)
 
 	if err := database.AddBlacklistIP("203.0.113.9", "banned by an admin"); err != nil {
 		t.Fatalf("AddBlacklistIP: %v", err)
@@ -89,8 +85,7 @@ func TestManualBan_NeverExpires(t *testing.T) {
 // The count has to outlive the ban, or a repeat offender starts from zero every time and the
 // escalation never escalates.
 func TestAutoBan_BanCountSurvivesExpiry(t *testing.T) {
-	database, tmpDir := setupTestDB(t)
-	defer cleanupTestDB(database, tmpDir)
+	database := setupTestDB(t)
 
 	if _, err := database.AddAutoBan("203.0.113.9", "flooding", 20*time.Millisecond, 2, time.Hour); err != nil {
 		t.Fatalf("first ban: %v", err)
@@ -109,8 +104,7 @@ func TestAutoBan_BanCountSurvivesExpiry(t *testing.T) {
 // An expired row stays until its history is no longer useful. Pruning it earlier would silently
 // reset escalation.
 func TestPruneBlacklist_KeepsRecentHistoryAndDropsOld(t *testing.T) {
-	database, tmpDir := setupTestDB(t)
-	defer cleanupTestDB(database, tmpDir)
+	database := setupTestDB(t)
 
 	if _, err := database.AddAutoBan("203.0.113.9", "flooding", 10*time.Millisecond, 1, 0); err != nil {
 		t.Fatalf("AddAutoBan: %v", err)
@@ -137,8 +131,7 @@ func TestPruneBlacklist_KeepsRecentHistoryAndDropsOld(t *testing.T) {
 }
 
 func TestPruneBlacklist_LeavesManualBansAlone(t *testing.T) {
-	database, tmpDir := setupTestDB(t)
-	defer cleanupTestDB(database, tmpDir)
+	database := setupTestDB(t)
 
 	if err := database.AddBlacklistIP("203.0.113.9", "banned by an admin"); err != nil {
 		t.Fatalf("AddBlacklistIP: %v", err)

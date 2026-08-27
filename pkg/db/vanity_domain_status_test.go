@@ -5,8 +5,7 @@ import (
 )
 
 func TestVanityDomainStatus_StartAttempt(t *testing.T) {
-	database, tmpDir := setupTestDB(t)
-	defer cleanupTestDB(database, tmpDir)
+	database := setupTestDB(t)
 
 	if err := database.StartVanityDomainAttempt("dev.example.com", "user-1"); err != nil {
 		t.Fatalf("StartVanityDomainAttempt failed: %v", err)
@@ -34,8 +33,7 @@ func TestVanityDomainStatus_StartAttempt(t *testing.T) {
 }
 
 func TestVanityDomainStatus_MarkStage(t *testing.T) {
-	database, tmpDir := setupTestDB(t)
-	defer cleanupTestDB(database, tmpDir)
+	database := setupTestDB(t)
 
 	if err := database.StartVanityDomainAttempt("dev.example.com", "user-1"); err != nil {
 		t.Fatalf("StartVanityDomainAttempt failed: %v", err)
@@ -63,8 +61,7 @@ func TestVanityDomainStatus_MarkStage(t *testing.T) {
 }
 
 func TestVanityDomainStatus_MarkStageRejectsUnknownStage(t *testing.T) {
-	database, tmpDir := setupTestDB(t)
-	defer cleanupTestDB(database, tmpDir)
+	database := setupTestDB(t)
 
 	if err := database.StartVanityDomainAttempt("dev.example.com", "user-1"); err != nil {
 		t.Fatalf("StartVanityDomainAttempt failed: %v", err)
@@ -75,8 +72,7 @@ func TestVanityDomainStatus_MarkStageRejectsUnknownStage(t *testing.T) {
 }
 
 func TestVanityDomainStatus_MarkFailed(t *testing.T) {
-	database, tmpDir := setupTestDB(t)
-	defer cleanupTestDB(database, tmpDir)
+	database := setupTestDB(t)
 
 	if err := database.StartVanityDomainAttempt("dev.example.com", "user-1"); err != nil {
 		t.Fatalf("StartVanityDomainAttempt failed: %v", err)
@@ -105,8 +101,7 @@ func TestVanityDomainStatus_MarkFailed(t *testing.T) {
 }
 
 func TestVanityDomainStatus_RetryResetsFailureState(t *testing.T) {
-	database, tmpDir := setupTestDB(t)
-	defer cleanupTestDB(database, tmpDir)
+	database := setupTestDB(t)
 
 	if err := database.StartVanityDomainAttempt("dev.example.com", "user-1"); err != nil {
 		t.Fatalf("StartVanityDomainAttempt failed: %v", err)
@@ -140,8 +135,7 @@ func TestVanityDomainStatus_RetryResetsFailureState(t *testing.T) {
 }
 
 func TestVanityDomainStatus_GetMissingReturnsNilNoError(t *testing.T) {
-	database, tmpDir := setupTestDB(t)
-	defer cleanupTestDB(database, tmpDir)
+	database := setupTestDB(t)
 
 	status, err := database.GetVanityDomainStatus("never-requested.example.com")
 	if err != nil {
@@ -153,8 +147,7 @@ func TestVanityDomainStatus_GetMissingReturnsNilNoError(t *testing.T) {
 }
 
 func TestVanityDomainStatus_ListForUserAndAll(t *testing.T) {
-	database, tmpDir := setupTestDB(t)
-	defer cleanupTestDB(database, tmpDir)
+	database := setupTestDB(t)
 
 	if err := database.StartVanityDomainAttempt("dev-a.example.com", "user-1"); err != nil {
 		t.Fatalf("StartVanityDomainAttempt failed: %v", err)

@@ -11,6 +11,11 @@
   --primary: #3b82f6;
   --primary-hover: #2563eb;
   --primary-glow: rgba(59, 130, 246, 0.5);
+  /* The .btn-primary gradient's two stops (#1514). Separate from --primary because that is a
+     FOREGROUND -- link and icon colour -- while these are FILLS under a white label, and the
+     two roles pull in opposite directions. Same split as --danger/--danger-strong (#1458). */
+  --primary-strong: #2d63bb;
+  --primary-strong-alt: #274fc6;
   --text-main: #f8fafc;
   --text-muted: #94a3b8;
   --text-secondary: #cbd5e1;

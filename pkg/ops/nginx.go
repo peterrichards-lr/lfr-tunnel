@@ -714,18 +714,38 @@ rm -f "$NEW"
 # left to be noticed later (#1443). Renamed rather than deleted, and restored by the rollback
 # path below if the new config does not hold.
 LEGACY=/etc/nginx/sites-enabled/lfr-apex-wildcards.conf
+RETIRED=/etc/nginx/sites-available/lfr-apex-wildcards.conf.retired-$STAMP
 if [ -L "$LEGACY" ] || [ -f "$LEGACY" ]; then
-	sudo mv "$LEGACY" "$LEGACY.retired-$STAMP"
-	echo "Stood down legacy apex vhost -> $LEGACY.retired-$STAMP"
+	# OUT of sites-enabled, not renamed within it. nginx.conf includes that directory with a
+	# bare glob and no extension filter, so a renamed file is still
+	# loaded and both copies of the apex blocks stay active -- which reproduced the very
+	# duplicate-server_name hazard this retirement exists to prevent (#1470). sites-available is
+	# not included, so the file survives as a record without being served. mv moves the symlink
+	# itself when it is one, so this works either way.
+	sudo mv "$LEGACY" "$RETIRED"
+	echo "Stood down legacy apex vhost -> $RETIRED"
 fi
 
-if sudo nginx -t; then
+NGINX_TEST=$(sudo nginx -t 2>&1)
+echo "$NGINX_TEST"
+# A conflicting server_name is reported by nginx as a WARNING, not an error, so nginx -t
+# still exits 0 and says "test is successful" while one of the two blocks is being silently
+# ignored. Gating on the exit status alone therefore accepts exactly the failure this whole
+# change exists to prevent (#1470), so success requires BOTH conditions -- and anything else
+# falls through to the same rollback, rather than exiting early under set -e and leaving the
+# retired vhost stood down.
+if echo "$NGINX_TEST" | grep -q "test is successful" && ! echo "$NGINX_TEST" | grep -q "conflicting server name"; then
 	sudo systemctl reload nginx
 	echo "RECONCILE_OK"
 else
-	echo "New config failed nginx -t -- rolling back to the previous config."
-	if [ -L "$LEGACY.retired-$STAMP" ] || [ -f "$LEGACY.retired-$STAMP" ]; then
-		sudo mv "$LEGACY.retired-$STAMP" "$LEGACY"
+	if echo "$NGINX_TEST" | grep -q "conflicting server name"; then
+		echo "New config declares a server_name another vhost already serves; nginx would keep"
+		echo "whichever it loaded first and ignore the other silently. Rolling back."
+	else
+		echo "New config failed nginx -t -- rolling back to the previous config."
+	fi
+	if [ -L "$RETIRED" ] || [ -f "$RETIRED" ]; then
+		sudo mv "$RETIRED" "$LEGACY"
 		echo "Restored the legacy apex vhost."
 	fi
 	if [ -f "$BACKUP" ]; then

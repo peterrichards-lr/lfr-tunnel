@@ -298,6 +298,48 @@ Manage Nginx maintenance mode or perform safe database backups/restores on the V
 
 ---
 
+## 6a. Checking a Live Config Against This Repo
+
+Registering an edge is a **manual** step -- `docs/server/edge_setup_guide.md` says outright there
+is no automated tool, and step 2 is "SSH to the control plane and add an entry to its
+`server-config.yaml`'s `edge_nodes` list by hand". Nothing validated those entries, which is how
+three of four `url` values came to name retired `aws-edge-*` hosts that resolve, through the zone
+wildcard, to **central itself** -- so central advertised its own address as three separate
+regions for weeks (#1449).
+
+```bash
+./bin/lfr-tunnel-ops check-config -target central
+```
+
+Read-only: it reads the live config over SSH and never writes it. Exits non-zero on any
+error-severity finding, so it can gate a deploy.
+
+What it checks, all against data already committed here:
+
+- **`edge_nodes[].url` against `scripts/liferay/dns/lfr-demo-production.yaml`**, the authoritative
+  edge record (#941). Two distinct failures: a host the spec does not declare at all, and a host
+  the spec declares as the *control plane*. Note a plain "does it resolve?" check would have
+  passed #1449 happily -- those names resolved fine, just to the wrong machine.
+- **Ownership and mode**, with the expected owner read from `resources/server/lfr-tunneld.service`
+  rather than hardcoded. `root:root` with mode 600 *looks* right and locks the service user out
+  entirely, crash-looping on the **next** restart -- so the mistake surfaces long after it was
+  made. The guide flags this as easy to get wrong; this is what catches it.
+- **Unknown top-level keys**, since yaml.v3 ignores them silently -- a typo'd setting is inert
+  while appearing to be applied. Reported as a warning, not an error, because a key may simply be
+  newer or older than the binary mid-upgrade.
+
+**It never prints a secret.** That file holds token hashes, SMTP credentials and webhook URLs, so
+findings are reported by KEY and any value whose key matches
+`token|secret|password|key|hash|credential|smtp|api|webhook|slack|teams|email` is redacted to a
+length. A test asserts none of a fixture's fake secrets appear in the output. Keep that property
+if you extend this: the schema is public (`pkg/config` is MIT), the values are not.
+
+Worth knowing: `-remote-config` can point at a backup, which is how the check was verified --
+run against central's own pre-#1449 backup it flags all three drifted URLs and the `root:root`
+ownership that a `sudo cp` backup inherits.
+
+---
+
 ## 7. VPS Diagnostics
 
 Run remote diagnostic checks on the VPS (system uptime/load, systemd service status, Nginx config test, UFW firewall rules, Let's Encrypt certificate status, and recent `lfr-tunneld` error logs):
@@ -308,4 +350,4 @@ Run remote diagnostic checks on the VPS (system uptime/load, systemd service sta
 
 <!-- markdownlint-disable MD049 -->
 ---
-*Last Updated: 2026-08-26* | *Last Reviewed: 2026-08-26*
+*Last Updated: 2026-08-27* | *Last Reviewed: 2026-08-27*

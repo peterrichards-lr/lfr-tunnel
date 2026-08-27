@@ -378,6 +378,7 @@ webhooks:
 # Versioning Controls (Optional)
 min_client_version: "v1.0.0"       # Minimum client version allowed to connect
 latest_client_version: "v1.9.3"    # Latest recommended client version (decouples server upgrades)
+```
 
 > [!NOTE]
 > **Slack & Microsoft Teams Notifications Configuration**
@@ -1373,4 +1374,4 @@ To guarantee that outbound connections originating from the VPS are consistently
 
 <!-- markdownlint-disable MD049 -->
 ---
-*Last Updated: 2026-08-26* | *Last Reviewed: 2026-08-26*
+*Last Updated: 2026-08-27* | *Last Reviewed: 2026-08-27*

@@ -118,7 +118,7 @@ edge_nodes:
 
 There is currently **no automated tool** for this step — track your nodes' plaintext
 tokens locally in a gitignored `edge_nodes.txt` (format in
-[edge_nodes.txt.example](file:///Volumes/SanDisk/repos/lfr-tunnel/edge_nodes.txt.example):
+[edge_nodes.txt.example](../../edge_nodes.txt.example):
 `node_id,plaintext_token[,optional_public_url]`), then register each one with the
 control plane by hand:
 
@@ -492,4 +492,4 @@ If your Edge VPS or Control Plane gateway has multiple public IP addresses confi
 
 <!-- markdownlint-disable MD049 -->
 ---
-*Last Updated: 2026-08-26* | *Last Reviewed: 2026-08-26*
+*Last Updated: 2026-08-27* | *Last Reviewed: 2026-08-27*

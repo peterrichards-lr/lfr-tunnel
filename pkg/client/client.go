@@ -17,6 +17,7 @@ import (
 	"regexp"
 	"strconv"
 	"strings"
+	"sync"
 	"time"
 
 	chclient "github.com/jpillora/chisel/client"
@@ -27,6 +28,46 @@ import (
 type PortMapping struct {
 	LocalPort  int    `json:"local_port"`
 	NameSuffix string `json:"name_suffix,omitempty"`
+}
+
+// RegionProbe is one measurement of one advertised region, reported at registration (#1151).
+//
+// The client already probes every region to choose one and then discards all but the winner.
+// Those discarded numbers are the best available answer to "do we need an edge here" -- better
+// than geography, because they carry the VPN, tethering and routing penalties a country code
+// cannot show.
+type RegionProbe struct {
+	Region string `json:"region"`
+	// RTTMs is the round trip in milliseconds. Omitted when the region did not answer, which
+	// Unreachable then states -- an edge nobody can reach is a placement fact, not missing data.
+	RTTMs       int  `json:"rtt_ms,omitempty"`
+	Unreachable bool `json:"unreachable,omitempty"`
+}
+
+// regionProbes holds this process's startup measurement.
+//
+// Package-level because RegisterTunnel already takes eleven positional parameters and a twelfth
+// would make every call site worse to read. It models a genuine singleton -- the probe runs once
+// per process, at startup, before any registration -- and the mutex is there because
+// registration retries happen on other goroutines.
+var (
+	regionProbesMu sync.Mutex
+	regionProbes   []RegionProbe
+)
+
+// RecordRegionProbes stores the startup probe results for the next registration to report.
+// Passing nil clears them, which is how the opt-out is expressed: nothing to send.
+func RecordRegionProbes(probes []RegionProbe) {
+	regionProbesMu.Lock()
+	defer regionProbesMu.Unlock()
+	regionProbes = probes
+}
+
+// reportableRegionProbes returns the probes to attach to a registration.
+func reportableRegionProbes() []RegionProbe {
+	regionProbesMu.Lock()
+	defer regionProbesMu.Unlock()
+	return regionProbes
 }
 
 // RegisterRequest matches the server's registration payload format.
@@ -42,6 +83,7 @@ type RegisterRequest struct {
 	ClientOS        string            `json:"client_os,omitempty"`
 	Passcode        string            `json:"passcode,omitempty"`
 	WhitelistIPs    string            `json:"whitelist_ips,omitempty"`
+	RegionProbes    []RegionProbe     `json:"region_probes,omitempty"`
 }
 
 // RegisterResponse matches the server DTO for response.
@@ -271,6 +313,7 @@ func RegisterTunnel(serverURL string, authToken string, subdomain string, custom
 		ClientOS:        clientOS,
 		Passcode:        passcode,
 		WhitelistIPs:    whitelistIPs,
+		RegionProbes:    reportableRegionProbes(),
 	})
 	if err != nil {
 		return nil, err

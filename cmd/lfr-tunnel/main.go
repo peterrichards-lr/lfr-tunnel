@@ -106,6 +106,10 @@ func main() {
 	// 2. Override with CLI flags
 	overrideConfigWithFlags(cfg)
 
+	// Latency reporting is opt-out (#1151). Read here rather than at the probe, because the
+	// probe runs from several call sites and none of them should have to remember it.
+	latencyReportDisabledByConfig = cfg.DisableLatencyReport
+
 	// Determine if subdomain flag was explicitly passed
 	subdomainFlagPassed := false
 	flag.Visit(func(f *flag.Flag) {
@@ -1808,18 +1812,56 @@ func probeFastestRegion(regions map[string]string) (string, []string) {
 
 	best := results[0]
 	fmt.Println("[Client] Region latency probe results:")
+	// Keep the whole measurement, not just the winner (#1151). Every one of these numbers was
+	// paid for and thrown away, and together they are the best evidence there is for whether a
+	// region needs an edge -- better than geography, which cannot see a VPN or a tethered
+	// phone.
+	probes := make([]client.RegionProbe, 0, len(results)+len(unreachable))
 	for _, r := range results {
 		fmt.Printf("  - %s: %v\n", r.region, r.rtt)
+		probes = append(probes, client.RegionProbe{
+			Region: r.region,
+			RTTMs:  int(r.rtt.Milliseconds()),
+		})
 		if r.rtt < best.rtt {
 			best = r
 		}
 	}
 	for _, reg := range unreachable {
 		fmt.Printf("  - %s: no response\n", reg)
+		probes = append(probes, client.RegionProbe{Region: reg, Unreachable: true})
 	}
+	reportRegionProbes(probes)
 
 	return best.region, unreachable
 }
+
+// reportRegionProbes hands the measurement to the registration path, unless the user has turned
+// reporting off.
+//
+// The opt-out is read from the environment rather than threaded through probeFastestRegion,
+// because the probe runs from several call sites and none of them should have to remember this.
+// Config file and environment both work: LFT_DISABLE_LATENCY_REPORT for a one-off,
+// disable_latency_report in the config for a permanent choice.
+func reportRegionProbes(probes []client.RegionProbe) {
+	if latencyReportDisabled() {
+		return
+	}
+	client.RecordRegionProbes(probes)
+}
+
+func latencyReportDisabled() bool {
+	switch strings.ToLower(strings.TrimSpace(os.Getenv("LFT_DISABLE_LATENCY_REPORT"))) {
+	case "1", "true", "yes":
+		return true
+	}
+	return latencyReportDisabledByConfig
+}
+
+// latencyReportDisabledByConfig mirrors the config file's disable_latency_report, set once the
+// config is loaded. A plain variable rather than a lookup because the probe runs before the
+// client package has anything to ask.
+var latencyReportDisabledByConfig bool
 
 func rewriteRemotes(regResp *client.RegisterResponse, portMap map[int]int) {
 	for idx, remote := range regResp.Remotes {

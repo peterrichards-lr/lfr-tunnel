@@ -360,6 +360,14 @@ type ClientConfig struct {
 	// type by hand.
 	LogDir string            `yaml:"log_dir,omitempty"`
 	Hooks  ClientHooksConfig `yaml:"hooks" json:"hooks,omitempty"`
+	// DisableLatencyReport suppresses reporting the region probe RTTs this client already
+	// measures to choose a gateway (#1151). Opt-out rather than opt-in because the figures are
+	// only useful in aggregate and a sample nobody sends is a region nobody can justify -- but
+	// a self-hosted deployment that would rather send nothing has one switch to throw.
+	//
+	// What is reported is a region name and a round trip in milliseconds. No IP, no location,
+	// nothing derived from either.
+	DisableLatencyReport bool `yaml:"disable_latency_report,omitempty"`
 }
 
 // DefaultServerConfig returns a ServerConfig with sensible default values.

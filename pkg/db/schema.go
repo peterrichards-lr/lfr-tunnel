@@ -160,6 +160,22 @@ func (db *DB) initSchema() error {
 		node_id TEXT DEFAULT 'control'
 	);
 
+	-- One row per user per region per day (#1151). The day is part of the key on purpose: a
+	-- user who reconnects fifty times overwrites the same row rather than adding fifty samples,
+	-- so the distribution counts PEOPLE rather than sessions. Counting sessions is the trap the
+	-- country panel fell into, where one heavy user dominated the figures.
+	--
+	-- No IP and no derived location. An RTT is not personal data in the way either of those is,
+	-- which is what makes this answerable at all.
+	CREATE TABLE IF NOT EXISTS region_probes (
+		user_id TEXT NOT NULL,
+		region TEXT NOT NULL,
+		day TEXT NOT NULL,
+		rtt_ms INTEGER,
+		recorded_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+		PRIMARY KEY (user_id, region, day)
+	);
+
 	CREATE TABLE IF NOT EXISTS admin_settings (
 		key   TEXT PRIMARY KEY,
 		value TEXT NOT NULL
@@ -281,4 +297,10 @@ var migrations = []migration{
 	// were all placed under the old behaviour, and an operator may have meant them.
 	{22, "ALTER TABLE ip_blacklist ADD COLUMN expires_at DATETIME"},
 	{23, "ALTER TABLE ip_blacklist ADD COLUMN ban_count INTEGER NOT NULL DEFAULT 0"},
+	// Region probe results, reported by the client at registration (#1151). The client already
+	// measured RTT to every advertised region to pick one, then threw the rest away -- and
+	// those numbers are the best available answer to "do we need an edge here", better than
+	// geography, because they include the VPN, tethering and routing penalties a country code
+	// cannot show.
+	{24, "CREATE TABLE IF NOT EXISTS region_probes (user_id TEXT NOT NULL, region TEXT NOT NULL, day TEXT NOT NULL, rtt_ms INTEGER, recorded_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP, PRIMARY KEY (user_id, region, day))"},
 }

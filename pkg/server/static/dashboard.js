@@ -1727,9 +1727,31 @@ function showTab(tabName, skipHistory = false) {
       if (backdrop) backdrop.classList.remove('visible');
     }
   }
-  document
-    .querySelectorAll('.main-content > div[id^="tab-"]')
-    .forEach((el) => el.classList.add('hidden'));
+  // An unknown section name -- a stale bookmark to a renamed tab, or a typo -- used to
+  // hide every section and show none, leaving a blank content area with nothing
+  // highlighted in the sidebar either. Nothing said anything had gone wrong; the portal
+  // simply looked broken. Confirmed against a running build: '#nonsense' rendered
+  // visible-tabs=[] nav-active=[] (#1215).
+  //
+  // The valid set is read from the DOM rather than kept as a list here, so renaming or
+  // adding a section cannot drift out of sync with it. It has to be the sections
+  // themselves -- direct children of .main-content -- and not every id starting with
+  // "tab-", because the install instructions use tab-btn-linux, tab-content-macos and
+  // friends, which are not sections and must not be reachable by fragment.
+  const sections = document.querySelectorAll('.main-content > div[id^="tab-"]');
+  const sectionNames = Array.from(sections).map((el) => el.id.slice(4));
+  if (!sectionNames.includes(tabName)) {
+    tabName = 'overview';
+    // Correct the URL so it matches what is actually shown; leaving '#nonsense' in the
+    // bar means a reload lands somewhere the address does not describe. replaceState
+    // rather than pushState, so a bad link does not add a history entry to go Back to,
+    // and it does not fire hashchange, so this cannot recurse.
+    if (window.location.hash && window.location.hash !== '#overview') {
+      history.replaceState({ tab: tabName }, '', '#' + tabName);
+    }
+  }
+
+  sections.forEach((el) => el.classList.add('hidden'));
   document.querySelectorAll('.nav-item').forEach((el) => {
     el.classList.remove('active');
     el.removeAttribute('aria-current');

@@ -478,6 +478,19 @@
                             </div>
                             <p id="node-sessions-empty" style="display: none; color: var(--text-muted); font-size: 13px; margin: 0;" data-i18n="sessions_per_edge_empty">No session data recorded yet for this period.</p>
                         </div>
+                        <!-- Region latency (#1151). The data path shipped in #1501 with no
+                             reader in either portal; V1 and V2 are an A/B test, so the panel
+                             lands in both. -->
+                        <div class="glass" style="padding: 16px; grid-column: span 3;" title="Round-trip time per region, measured by clients when they pick a gateway. Counts distinct users, not sessions.">
+                            <h4 style="margin-bottom: 12px; color: var(--text-muted); font-size: 14px; font-weight: 500;" data-i18n="region_latency">Region Latency</h4>
+                            <p id="region-latency-headline" style="font-size: 13px; margin: 0 0 12px;"></p>
+                            <div class="table-container" style="max-height: 250px; overflow-y: auto;">
+                                <table>
+                                    <thead><tr><th data-i18n="region">Region</th><th data-i18n="users">Users</th><th data-i18n="median">Median</th><th data-i18n="p90">p90</th><th data-i18n="unreachable">Unreachable</th></tr></thead>
+                                    <tbody id="region-latency-table-body"></tbody>
+                                </table>
+                            </div>
+                        </div>
                         <div class="glass" style="padding: 16px; grid-column: span 3;">
                             <h4 style="margin-bottom: 12px; color: var(--text-muted); font-size: 14px; font-weight: 500;">Client Version Distribution</h4>
                             <div class="table-container" style="max-height: 250px; overflow-y: auto;">

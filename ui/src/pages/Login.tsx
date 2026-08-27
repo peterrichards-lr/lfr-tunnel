@@ -311,7 +311,7 @@ export default function Login() {
                     setMode(mode === 'login' ? 'register' : 'login');
                     setStatusMsg({ text: '', isError: false });
                   }}
-                  className="btn-text text-muted text-sm underline cursor-pointer"
+                  className="btn-bare text-muted text-sm underline cursor-pointer"
                 >
                   {mode === 'login'
                     ? t(

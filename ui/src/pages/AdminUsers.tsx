@@ -675,7 +675,7 @@ export default function AdminUsers() {
                   return (
                     <tr
                       key={u.email}
-                      className={`border-b hover:bg-white/5 transition-colors ${isSelf ? 'opacity-60' : ''}`}
+                      className={`border-b transition-colors ${isSelf ? 'opacity-60' : ''}`}
                     >
                       {isColumnVisible('email') && (
                         <td className="td-cell">

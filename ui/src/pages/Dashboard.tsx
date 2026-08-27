@@ -266,13 +266,13 @@ export default function Dashboard() {
               </div>
             </div>
             <div className="flex gap-md items-center">
-              <div className="flex items-center bg-black/30 rounded border px-md py-xs gap-sm">
+              <div className="flex items-center surface-subtle rounded border px-md py-xs gap-sm">
                 <code className="text-xs font-mono text-main">
                   lfr-tunnel -upgrade
                 </code>
                 <button
                   onClick={handleCopyUpgradeCmd}
-                  className={`btn-text p-xs text-xs rounded hover:bg-white/10 transition-colors ${copiedUpgrade ? 'text-success' : 'text-muted'}`}
+                  className={`btn-bare p-xs text-xs rounded hover:bg-white/10 transition-colors ${copiedUpgrade ? 'text-success' : 'text-muted'}`}
                   title={copiedUpgrade ? 'Copied!' : 'Copy to clipboard'}
                 >
                   {copiedUpgrade ? '✓' : '📋'}

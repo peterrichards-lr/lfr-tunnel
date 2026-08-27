@@ -374,10 +374,7 @@ export default function AdminSubdomains() {
                 </tr>
               ) : (
                 paginatedSubdomains.map((sub) => (
-                  <tr
-                    key={sub.id}
-                    className="border-b hover:bg-white/5 transition-colors"
-                  >
+                  <tr key={sub.id} className="border-b transition-colors">
                     {isColumnVisible('subdomain') && (
                       <td className="td-cell fw-medium">
                         {sub.subdomain || '(wildcard)'}

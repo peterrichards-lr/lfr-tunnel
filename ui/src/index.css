@@ -545,6 +545,24 @@ tr:hover td {
   border: 1px solid var(--border);
 }
 .badge.info,
+/* Node type (#1383). AdminTelemetry and AdminSubdomains mark a row with the gateway it
+   landed on -- an edge, or the control plane -- and both modifiers were missing, so every
+   badge rendered in the default success green regardless of which it was. */
+.badge-node {
+  background: var(--status-info-bg);
+  color: var(--status-info-text);
+  border: 1px solid var(--status-info-border);
+}
+.badge-control {
+  background: var(--status-neutral-bg, var(--input-bg));
+  color: var(--text-muted);
+  border: 1px solid var(--border);
+}
+.badge-primary {
+  background: var(--primary);
+  color: #fff;
+  border: 1px solid var(--primary);
+}
 .badge-info {
   background: var(--status-info-bg);
   color: var(--status-info-text);
@@ -1618,6 +1636,23 @@ html[dir='rtl'] th {
  * Named for the relationship rather than the measurement: the markup asked for h-[45px],
  * the same number with none of the reason, which would need re-deriving by hand if
  * .input-field's padding ever changed (#1383). */
+/* Keeps a report section from being split across a page break when Export PDF prints the
+   Analytics page. Inert until now, so sections broke mid-chart (#1383). */
+.print-section {
+  break-inside: avoid;
+  page-break-inside: avoid;
+}
+
+/* The two hover variants the markup still asks for. The escaped colon is ordinary CSS, and
+   two rules is less churn than inventing a bespoke class for each call site -- but they are
+   the only Tailwind-shaped names kept, so new markup should reach for a component class. */
+.hover\:opacity-80:hover {
+  opacity: 0.8;
+}
+.hover\:bg-white\/10:hover {
+  background: rgba(255, 255, 255, 0.1);
+}
+
 .h-input {
   height: 45px;
 }
@@ -2724,6 +2759,18 @@ input[type='checkbox'] {
   align-items: center;
   margin-bottom: var(--spacing-lg);
 }
+/* The modal family had header, title and close but no body or footer, so five modals laid
+   those out with utilities and no shared rhythm (#1383). */
+.modal-body {
+  margin-bottom: var(--spacing-lg);
+}
+.modal-footer {
+  display: flex;
+  justify-content: flex-end;
+  align-items: center;
+  gap: var(--spacing-sm);
+  margin-top: var(--spacing-lg);
+}
 .modal-title {
   margin: 0;
   font-size: 20px;
@@ -2752,6 +2799,27 @@ input[type='checkbox'] {
   padding: 4px;
   gap: 4px;
   margin-bottom: var(--spacing-lg);
+}
+
+/* Underline tabs, as used by the install modal's OS picker. Distinct from .sub-tab below,
+   which is a filled pill in a bordered group -- swapping one for the other would be a
+   redesign rather than a fix, which is why this exists rather than reusing it (#1383). */
+.tab-btn {
+  background: transparent;
+  border: none;
+  border-bottom: 2px solid transparent;
+  color: var(--text-muted);
+  cursor: pointer;
+  transition:
+    color 0.2s ease,
+    border-color 0.2s ease;
+}
+.tab-btn:hover {
+  color: var(--text-main);
+}
+.tab-btn--active {
+  color: var(--text-main);
+  border-bottom-color: var(--primary);
 }
 
 .sub-tab {

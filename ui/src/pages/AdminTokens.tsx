@@ -342,10 +342,7 @@ export default function AdminTokens() {
                 const status = getTokenStatus(pat);
                 const expiresIn = getExpiresInText(pat);
                 return (
-                  <tr
-                    key={pat.id}
-                    className="border-b hover:bg-white/5 transition-colors"
-                  >
+                  <tr key={pat.id} className="border-b transition-colors">
                     {isColumnVisible('user_id') && (
                       <td className="td-cell fw-medium">{pat.user_id}</td>
                     )}

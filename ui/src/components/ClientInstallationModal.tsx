@@ -83,7 +83,7 @@ export default function ClientInstallationModal({
         </div>
 
         {/* Tab Selection */}
-        <div className="flex border-b border-subtle mt-md">
+        <div className="flex border-b mt-md">
           <button
             type="button"
             className={`tab-btn flex-1 py-xs text-xs fw-bold transition-all ${activeTab === 'macos' ? 'tab-btn--active text-main border-b-2 border-primary' : 'text-muted hover:text-main'}`}

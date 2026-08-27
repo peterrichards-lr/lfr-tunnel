@@ -298,6 +298,73 @@ Manage Nginx maintenance mode or perform safe database backups/restores on the V
 
 ---
 
+## 6b. Rendering central's edge_nodes registry
+
+An edge's `url` should never be typed. `scripts/liferay/dns/lfr-demo-production.yaml` is the
+authoritative record of which edges exist and where (#941), so it is derived from there:
+
+```bash
+./bin/lfr-tunnel-ops render-edge-nodes            # reads gitignored edge_nodes.txt
+```
+
+Prints the `edge_nodes:` block for central's `server-config.yaml`. Tokens from
+`edge_nodes.txt` (format in `edge_nodes.txt.example`) are hashed with SHA-256 locally and the
+plaintext is never printed, logged or uploaded — which is what that example file has always
+promised, and what nothing implemented until #1452.
+
+Three things worth knowing:
+
+- **A url in the file is checked, not trusted.** The third field is optional; when present it
+  must match what the spec derives, and a mismatch is an error. Hand-typed addresses are how
+  three of four nodes came to name retired `aws-edge-*` hosts that resolve, via the zone
+  wildcard, to central itself — so central advertised its own address as three regions for
+  weeks (#1449).
+- **A token may be given as `sha256:<64 hex>`** instead of plaintext. Central stores only
+  hashes, so the plaintext for a hand-registered node may exist nowhere — without this the
+  *current* deployment could never be rendered from the repo, only future ones.
+- **The output contains token hashes.** It is for placing on the control plane. Do not commit
+  it, and do not paste it into an issue or a PR.
+
+Node ids normalise the way the gateway already does when advertising regions: a leading `aws-`
+or `edge-` is stripped to find the DNS label, so `edge-us` and the `us` A record are the same
+place.
+
+After placing it, verify with `check-config` below — same spec, so the two agree by
+construction.
+
+---
+
+## 6c. Validating a config BEFORE restarting
+
+Editing `server-config.yaml` and restarting used to be a bet that the file parsed. If it did not,
+`LoadServerConfig` failed at startup and **the control plane did not come back** — the failure
+landed at the worst possible moment, during the restart it was supposed to survive.
+
+```bash
+sudo /usr/local/bin/lfr-tunneld -check-config -config /etc/lfr-tunneld/server-config.yaml
+```
+
+Loads the config, prints what the gateway *would* run with, and exits — without starting the
+gateway or touching the database. Exit 0 means it would start; exit 1 prints `INVALID:` and the
+parse error. Run it after every edit to that file and before every restart.
+
+It also warns about shapes that parse cleanly and are still wrong: an edge with no `url` (nothing
+can be routed to it), an edge with no `token_hash` (it can never authenticate), and `edge_nodes`
+on a node whose `db_path` is empty (a control-plane config sitting on an edge).
+
+**It reports presence, never values.** That file holds edge token hashes, SMTP credentials and
+webhook URLs, and an operator pastes this output into tickets — so a token shows as `set`, never
+as itself. Same rule as `lfr-tunnel-ops check-config` (§6a), which is the complementary check:
+this one validates the file, that one compares a *live* node against the committed DNS spec and
+checks ownership and mode.
+
+*Availability: `-check-config` ships with the gateway binary, so it is only present on a node
+that has been deployed since #1455. On an older node the flag is unknown and the binary starts
+normally — check `lfr-tunneld -check-config -config /dev/null` reports a flag error rather than
+silently booting.*
+
+---
+
 ## 6a. Checking a Live Config Against This Repo
 
 Registering an edge is a **manual** step -- `docs/server/edge_setup_guide.md` says outright there

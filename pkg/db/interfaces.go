@@ -74,6 +74,7 @@ type PortalSessionRepository interface {
 	DeletePortalSession(tokenHash string) error
 	DeletePortalSessionsForEmail(email string) (int64, error)
 	PrunePortalSessions() (int64, error)
+	CountActivePortalSessions() (int, error)
 }
 
 type MagicLinkRepository interface {

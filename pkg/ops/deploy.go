@@ -76,6 +76,24 @@ func DeployCommand(args []string) {
 		}
 	}()
 
+	// failed reports an error the way CheckFatal does, but WITHOUT os.Exit -- which skips
+	// deferred functions, including the restorePower below. Every failure past that point has to
+	// come through here and return, or a node started for this deploy is left running outside
+	// its schedule while the process exits blaming something else entirely (#1453).
+	//
+	// Returns a bool rather than doing the return itself, because a helper cannot return from
+	// its caller in Go. That makes `if failed(...) { return }` the pattern, and an omitted
+	// `return` the way to get this wrong again -- which is what TestDeployCommandHasNoCheckFatal
+	// AfterPowerRestore guards, since the mistake is invisible on every successful deploy.
+	failed := func(err error, msg string) bool {
+		if err == nil {
+			return false
+		}
+		fmt.Fprintf(os.Stderr, "FATAL: %s: %v\n", msg, err)
+		exitCode = 1
+		return true
+	}
+
 	// aws_region used to be the whole switch for power management. It is now just one of
 	// the values handed to a hook, so a config still carrying it alone would quietly stop
 	// managing power -- and silently leaving a started node running is the exact failure
@@ -107,21 +125,33 @@ func DeployCommand(args []string) {
 	fmt.Printf("Building Linux binary (version: %s)...\n", version)
 	ldflags := fmt.Sprintf("-s -w -X lfr-tunnel/pkg/config.Version=%s", version)
 	err = RunCommandWithEnv([]string{"GOOS=linux", "GOARCH=amd64"}, "go", "build", "-ldflags", ldflags, "-trimpath", "-o", "bin/lfr-tunneld-linux", "./cmd/lfr-tunneld")
-	CheckFatal(err, "Failed to build lfr-tunneld for Linux")
+	if failed(err, "Failed to build lfr-tunneld for Linux") {
+		return
+	}
 
 	fmt.Println("Uploading binary to VPS...")
 	err = RunCommand("scp", "-i", identityFile, "bin/lfr-tunneld-linux", sshTarget+":/home/"+vpsUser+"/lfr-tunneld")
-	CheckFatal(err, "Failed to SCP binary")
+	if failed(err, "Failed to SCP binary") {
+		return
+	}
 
 	fmt.Println("Uploading error pages, static assets, translations, and templates...")
 	err = RunCommand("scp", "-i", identityFile, "-r", "resources/server/error_pages", sshTarget+":/home/"+vpsUser+"/")
-	CheckFatal(err, "Failed to SCP error_pages")
+	if failed(err, "Failed to SCP error_pages") {
+		return
+	}
 	err = RunCommand("scp", "-i", identityFile, "-r", "pkg/server/static", sshTarget+":/home/"+vpsUser+"/")
-	CheckFatal(err, "Failed to SCP static")
+	if failed(err, "Failed to SCP static") {
+		return
+	}
 	err = RunCommand("scp", "-i", identityFile, "-r", "pkg/server/i18n", sshTarget+":/home/"+vpsUser+"/")
-	CheckFatal(err, "Failed to SCP i18n")
+	if failed(err, "Failed to SCP i18n") {
+		return
+	}
 	err = RunCommand("scp", "-i", identityFile, "-r", "pkg/server/templates", sshTarget+":/home/"+vpsUser+"/")
-	CheckFatal(err, "Failed to SCP templates")
+	if failed(err, "Failed to SCP templates") {
+		return
+	}
 
 	fmt.Println("Uploading maintenance and backup scripts...")
 	scripts := []string{
@@ -134,7 +164,9 @@ func DeployCommand(args []string) {
 	for _, script := range scripts {
 		if fileExists(script) {
 			err = RunCommand("scp", "-i", identityFile, script, sshTarget+":/home/"+vpsUser+"/")
-			CheckFatal(err, "Failed to SCP script: "+script)
+			if failed(err, "Failed to SCP script: "+script) {
+				return
+			}
 		}
 	}
 

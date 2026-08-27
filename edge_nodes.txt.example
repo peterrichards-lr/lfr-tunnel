@@ -4,7 +4,26 @@
 #  - Lines starting with '#' and empty lines are ignored.
 #  - Pre-shared plaintext tokens are automatically hashed using SHA-256 locally
 #    before configuration upload. Plaintext secrets are never uploaded.
+#    (`lfr-tunnel-ops render-edge-nodes` is what does this -- #1452.)
+#
+#  - The URL is DERIVED from scripts/liferay/dns/lfr-demo-production.yaml, which is
+#    the authoritative record of which edges exist and where (#941). The third field
+#    is optional and, when present, is CHECKED against the spec rather than trusted
+#    over it -- a hand-typed address is how three of four nodes came to name retired
+#    hosts that resolved, through the zone wildcard, to the control plane itself
+#    (#1449). A mismatch is an error, not a warning.
+#
+#  - A node id may be given as `edge-us` or plain `us`; a leading `aws-`/`edge-` is
+#    stripped to find the DNS label, matching how the gateway already maps node ids
+#    to regions when it advertises them to clients.
+#
+#  - Instead of a plaintext token you may supply an existing hash as
+#    `sha256:<64 hex chars>`. Central stores only hashes, so the plaintext for a node
+#    registered by hand may exist nowhere -- this is what lets the CURRENT deployment
+#    be rendered from this repo plus this file, rather than only future ones.
 #
 # Examples:
-# us-east-1,my-super-secure-edge-token-us,https://us.lfr-demo.se
-# apac-singapore:my-super-secure-edge-token-apac
+# edge-us,my-super-secure-edge-token-us
+# edge-apac:my-super-secure-edge-token-apac
+# edge-sa,sha256:0000000000000000000000000000000000000000000000000000000000000000
+# edge-in,my-super-secure-edge-token-in,https://in.lfr-demo.se   # url checked, not trusted

@@ -68,6 +68,13 @@ export default function AdminAnalytics() {
   const [loading, setLoading] = useState(true);
   const [timeRange, setTimeRange] = useState('30'); // Default to 30 days
 
+  // Recovered WIP (#1152). The location data is fetched below and stored, but the panel
+  // that renders it was never written -- the session that started this stopped here.
+  // Both bindings are referenced so the recovered work compiles and can be pushed rather
+  // than living only in a working tree; delete these two lines when the panel lands.
+  void countryName;
+  void locations;
+
   const {
     items: sortedClientStats,
     requestSort,

@@ -104,8 +104,26 @@ export default function AdminAnalytics() {
       setLoading(true);
       try {
         const query = timeRange !== '0' ? `?days=${timeRange}` : '';
-        const [analyticsRes, clientsRes, latencyRes] = await Promise.all([
-          axios.get(`/api/analytics${query}`),
+
+        // /api/analytics answers every authenticated user: `personal` always, `global` only
+        // for an admin. So its response is what decides whether the admin-only endpoints are
+        // worth calling -- asked of the SERVER rather than guessed from a client-side role,
+        // which cannot disagree with it (#1512).
+        //
+        // Fetched in sequence for that reason. It costs an admin one extra round trip and
+        // saves every non-admin two guaranteed 403s on every page load and every time-range
+        // change -- traffic that would otherwise show up in the audit trail and count toward
+        // the rate limiter for people doing nothing wrong.
+        const analyticsRes = await axios.get(`/api/analytics${query}`);
+        setData(analyticsRes.data);
+
+        if (!analyticsRes.data?.global) {
+          setClientStats([]);
+          setRegionLatency(null);
+          return;
+        }
+
+        const [clientsRes, latencyRes] = await Promise.all([
           axios.get('/api/admin/analytics/clients').catch(() => ({ data: [] })),
           // Its own days param rather than the shared one: the endpoint rejects 0, which
           // is what the "All time" option sends.
@@ -115,7 +133,6 @@ export default function AdminAnalytics() {
             )
             .catch(() => ({ data: null })),
         ]);
-        setData(analyticsRes.data);
         setClientStats(clientsRes.data || []);
         setRegionLatency(latencyRes.data);
       } catch (err) {
@@ -215,7 +232,13 @@ export default function AdminAnalytics() {
     <div className="analytics-page">
       <div className="page-header no-print">
         <h1 className="page-header__title">
-          {t('system_analytics', 'System Analytics')}
+          {/* "System Analytics" describes a page a non-admin is not being shown: they get
+              their own usage and nothing else. Keyed off data.global, the same signal the
+              admin sections use, so the title cannot say one thing while the body shows
+              another (#1512). */}
+          {data.global
+            ? t('system_analytics', 'System Analytics')
+            : t('my_usage', 'My Usage')}
         </h1>
         <div className="flex gap-md">
           <select

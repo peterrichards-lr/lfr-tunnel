@@ -35,6 +35,12 @@ function App() {
                 <Route element={<Layout />}>
                   <Route path="/dashboard" element={<Dashboard />} />
                   <Route path="/account" element={<AccountSettings />} />
+                  {/* Analytics is not admin-only (#1512). The same component serves both:
+                      it renders the personal section for everyone and the system sections
+                      only when the API returns `global`, which it does only for an admin.
+                      /admin/analytics stays mounted below so existing links and bookmarks
+                      keep working. */}
+                  <Route path="/analytics" element={<AdminAnalytics />} />
 
                   <Route element={<AdminRoute />}>
                     <Route

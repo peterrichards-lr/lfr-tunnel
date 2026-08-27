@@ -334,6 +334,37 @@ construction.
 
 ---
 
+## 6c. Validating a config BEFORE restarting
+
+Editing `server-config.yaml` and restarting used to be a bet that the file parsed. If it did not,
+`LoadServerConfig` failed at startup and **the control plane did not come back** — the failure
+landed at the worst possible moment, during the restart it was supposed to survive.
+
+```bash
+sudo /usr/local/bin/lfr-tunneld -check-config -config /etc/lfr-tunneld/server-config.yaml
+```
+
+Loads the config, prints what the gateway *would* run with, and exits — without starting the
+gateway or touching the database. Exit 0 means it would start; exit 1 prints `INVALID:` and the
+parse error. Run it after every edit to that file and before every restart.
+
+It also warns about shapes that parse cleanly and are still wrong: an edge with no `url` (nothing
+can be routed to it), an edge with no `token_hash` (it can never authenticate), and `edge_nodes`
+on a node whose `db_path` is empty (a control-plane config sitting on an edge).
+
+**It reports presence, never values.** That file holds edge token hashes, SMTP credentials and
+webhook URLs, and an operator pastes this output into tickets — so a token shows as `set`, never
+as itself. Same rule as `lfr-tunnel-ops check-config` (§6a), which is the complementary check:
+this one validates the file, that one compares a *live* node against the committed DNS spec and
+checks ownership and mode.
+
+*Availability: `-check-config` ships with the gateway binary, so it is only present on a node
+that has been deployed since #1455. On an older node the flag is unknown and the binary starts
+normally — check `lfr-tunneld -check-config -config /dev/null` reports a flag error rather than
+silently booting.*
+
+---
+
 ## 6a. Checking a Live Config Against This Repo
 
 Registering an edge is a **manual** step -- `docs/server/edge_setup_guide.md` says outright there

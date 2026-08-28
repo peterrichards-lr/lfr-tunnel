@@ -13,8 +13,7 @@ import (
 // A table with no column able to hold one cannot be, without a migration that would show
 // up in review as exactly what it is.
 func TestLocationStatsSchemaCannotHoldAUser(t *testing.T) {
-	database, tmpDir := setupTestDB(t)
-	defer cleanupTestDB(database, tmpDir)
+	database := setupTestDB(t)
 
 	rows, err := database.conn.Query(`PRAGMA table_info(location_stats)`)
 	if err != nil {
@@ -69,8 +68,7 @@ func TestLocationStatsSchemaCannotHoldAUser(t *testing.T) {
 }
 
 func TestUpsertAndGetLocationStats(t *testing.T) {
-	database, tmpDir := setupTestDB(t)
-	defer cleanupTestDB(database, tmpDir)
+	database := setupTestDB(t)
 
 	if err := database.UpsertLocationStats("2026-W35", []LocationStat{
 		{Bucket: "GB", Count: 12},
@@ -103,8 +101,7 @@ func TestUpsertAndGetLocationStats(t *testing.T) {
 // the cardinality comes from is lost, so the rebuilt one starts empty and would otherwise
 // overwrite a larger count with a smaller one.
 func TestUpsertLocationStatsNeverLowersACount(t *testing.T) {
-	database, tmpDir := setupTestDB(t)
-	defer cleanupTestDB(database, tmpDir)
+	database := setupTestDB(t)
 
 	if err := database.UpsertLocationStats("2026-W35", []LocationStat{{Bucket: "GB", Count: 12}}); err != nil {
 		t.Fatalf("first upsert: %v", err)
@@ -137,8 +134,7 @@ func TestUpsertLocationStatsNeverLowersACount(t *testing.T) {
 // TestGetLocationStatsDefaultsToTheLatestPeriod is what the admin panel relies on: it
 // asks for no period in particular and gets the most recent ISO week on record.
 func TestGetLocationStatsDefaultsToTheLatestPeriod(t *testing.T) {
-	database, tmpDir := setupTestDB(t)
-	defer cleanupTestDB(database, tmpDir)
+	database := setupTestDB(t)
 
 	if err := database.UpsertLocationStats("2026-W34", []LocationStat{{Bucket: "GB", Count: 8}}); err != nil {
 		t.Fatalf("upsert W34: %v", err)
@@ -162,8 +158,7 @@ func TestGetLocationStatsDefaultsToTheLatestPeriod(t *testing.T) {
 // TestGetLocationStatsOnAnEmptyTable is the state every deployment starts in, and the one
 // it stays in permanently without a MaxMind database.
 func TestGetLocationStatsOnAnEmptyTable(t *testing.T) {
-	database, tmpDir := setupTestDB(t)
-	defer cleanupTestDB(database, tmpDir)
+	database := setupTestDB(t)
 
 	period, stats, err := database.GetLocationStats("")
 	if err != nil {
@@ -180,8 +175,7 @@ func TestGetLocationStatsOnAnEmptyTable(t *testing.T) {
 // TestUpsertLocationStatsIgnoresEmptyInput keeps the scheduled flush from writing noise
 // on a server with no traffic.
 func TestUpsertLocationStatsIgnoresEmptyInput(t *testing.T) {
-	database, tmpDir := setupTestDB(t)
-	defer cleanupTestDB(database, tmpDir)
+	database := setupTestDB(t)
 
 	if err := database.UpsertLocationStats("", []LocationStat{{Bucket: "GB", Count: 5}}); err != nil {
 		t.Errorf("empty period: %v", err)

@@ -1,0 +1,97 @@
+/*
+ * Shared accessibility component rules, used by BOTH portals (#1520).
+ *
+ * V1 links this directly; V2 @imports it from ui/src/index.css. It lives here rather
+ * than being written twice for the same reason the theme tokens moved in #1522: V1 and
+ * V2 are a live A/B test, so a rule that exists in one portal and not the other is a
+ * parity defect, and two copies of an accessibility rule drift the moment one is fixed.
+ *
+ * Tokens (var(--text-muted) and friends) come from static/themes/*.css, which both
+ * portals already load before this file.
+ */
+/* --- Heading anchor links (#1520) --- */
+/*
+ * Two controls per section heading, never one: the heading TEXT is a link to the
+ * section's own anchor (click to navigate, and the URL changes), and the icon beside it
+ * copies that URL (click to copy). They are siblings -- a <button> nested inside an <a>
+ * is invalid HTML and a real assistive-technology failure.
+ *
+ * The popular version of this pattern (GitHub, MDN) reveals the icon on :hover only,
+ * which fails three groups at once: keyboard users cannot hover, touch users have no
+ * hover at all, and display:none removes the control from the tab order entirely. So
+ * only OPACITY varies here -- never display or visibility -- :focus-visible reveals it,
+ * and coarse pointers get it permanently. The cost is two tab stops per heading, which
+ * the repo owner accepted over losing keyboard reach.
+ */
+.heading-anchor-wrap {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--spacing-2xs);
+}
+.heading-anchor-link {
+  color: inherit;
+  text-decoration: none;
+}
+.heading-anchor-link:hover,
+.heading-anchor-link:focus-visible {
+  text-decoration: underline;
+}
+/* 24x24 is the floor from WCAG 2.2 SC 2.5.8, which a bare glyph misses without padding. */
+.heading-anchor {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 24px;
+  height: 24px;
+  padding: 0;
+  border: 1px solid transparent;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--text-muted);
+  font-size: 13px;
+  line-height: 1;
+  cursor: pointer;
+  opacity: 0;
+  transition:
+    opacity 0.15s ease,
+    background 0.15s ease,
+    color 0.15s ease;
+}
+.heading-anchor-wrap:hover .heading-anchor,
+.heading-anchor:focus-visible {
+  opacity: 1;
+}
+.heading-anchor:hover {
+  background: var(--bg-card-hover);
+  color: var(--text-main);
+}
+/* Hover does not exist on touch, so hiding it there removes the feature outright. */
+@media (pointer: coarse) {
+  .heading-anchor {
+    opacity: 1;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .heading-anchor {
+    transition: none;
+  }
+}
+
+/* --- Screen-reader-only text --- */
+/*
+ * Visible to assistive technology, invisible on screen. Deliberately NOT display:none or
+ * visibility:hidden, both of which remove the element from the accessibility tree -- which
+ * is the entire point of the class. The 1px clip rectangle is the technique that keeps the
+ * text announced while occupying no visual space.
+ */
+.sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
+}

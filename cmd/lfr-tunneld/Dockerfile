@@ -8,13 +8,19 @@ WORKDIR /app/ui
 RUN npm install -g pnpm && pnpm install
 # Copy the rest of the UI files and build
 COPY ui/ ./
-# The theme tokens are shared with Portal V1 and live with the static assets the Go server
-# embeds, so ui/src/themes/index.css @imports them from outside ui/ (#1522). This stage copies
-# only ui/, so without this the build fails with "Unable to resolve @import" -- which a local
-# build never sees, because there the whole repo is on disk.
+# Portal V2 @imports files that are shared with Portal V1 and live with the static assets the
+# Go server embeds -- the theme tokens (#1522) and the accessibility component rules (#1520).
+# This stage copies only ui/, so without them the build fails with "Unable to resolve
+# @import", which a local build never sees because there the whole repo is on disk.
 #
-# The destination has to mirror the repo layout, since the import is a relative path.
-COPY pkg/server/static/themes /app/pkg/server/static/themes
+# The destination has to mirror the repo layout, since the imports are relative paths.
+#
+# The whole static/ directory rather than the specific subdirectories: naming them meant this
+# line had to be remembered every time something new was shared, and it was not -- #1522 added
+# themes/ and #1520 then broke the image again with shared/. The cost is that editing
+# dashboard.js now invalidates this layer and re-runs the UI build; 428K of context is a
+# cheaper problem than a build that only fails in Docker.
+COPY pkg/server/static /app/pkg/server/static
 RUN pnpm run build
 
 # Go Build Stage

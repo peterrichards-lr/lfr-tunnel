@@ -1,4 +1,10 @@
-import React, { createContext, useContext, useState, useEffect } from 'react';
+import React, {
+  createContext,
+  useContext,
+  useState,
+  useEffect,
+  useRef,
+} from 'react';
 import { useI18n } from './I18nContext';
 
 interface Toast {
@@ -41,6 +47,23 @@ export const UIProvider: React.FC<{ children: React.ReactNode }> = ({
 }) => {
   const { t } = useI18n();
   const [toasts, setToasts] = useState<Toast[]>([]);
+  /*
+   * Screen-reader announcement for toasts (#1520).
+   *
+   * The visual toast stack is not a live region and never has been, so every
+   * "Copied to clipboard!" in this portal has been silent to screen readers. The
+   * announcement lives in its own visually-hidden element rather than on .toast-stack
+   * so the dismiss buttons inside each card are not read out too, and so removing a
+   * toast does not re-announce the ones left behind.
+   *
+   * Two regions, written alternately, because a live region only announces when its
+   * text CHANGES -- copying the same link twice would set identical text and say
+   * nothing the second time, which is exactly the case the heading copy buttons hit.
+   * Writing to the other slot each time guarantees a change every announcement.
+   */
+  const [liveA, setLiveA] = useState('');
+  const [liveB, setLiveB] = useState('');
+  const liveSlot = useRef(0);
   const [activeDialog, setActiveDialog] = useState<DialogConfig | null>(null);
   const [promptValue, setPromptValue] = useState('');
 
@@ -67,6 +90,15 @@ export const UIProvider: React.FC<{ children: React.ReactNode }> = ({
   ) => {
     const id = Math.random().toString(36).substring(2, 9);
     setToasts((prev) => [...prev, { id, message, type }]);
+    if (liveSlot.current === 0) {
+      setLiveA(message);
+      setLiveB('');
+      liveSlot.current = 1;
+    } else {
+      setLiveB(message);
+      setLiveA('');
+      liveSlot.current = 0;
+    }
   };
 
   const showAlert = (title: string, message: string): Promise<void> => {
@@ -139,6 +171,16 @@ export const UIProvider: React.FC<{ children: React.ReactNode }> = ({
       value={{ showToast, showAlert, showConfirm, showPrompt }}
     >
       {children}
+
+      {/* Toast announcements. role="status" is implicitly polite, which is right even for
+          errors here: assertive would interrupt whatever the user is reading, and a toast
+          that auto-dismisses after 4s is not urgent enough to earn that. */}
+      <div id="toast-live-a" className="sr-only" role="status">
+        {liveA}
+      </div>
+      <div id="toast-live-b" className="sr-only" role="status">
+        {liveB}
+      </div>
 
       {/* Floating Toasts container */}
       <div className="toast-stack">

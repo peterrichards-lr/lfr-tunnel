@@ -1,10 +1,13 @@
 @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap');
+/* Accessibility component rules shared with Portal V1 (#1520). */
+@import '../../pkg/server/static/shared/a11y.css';
 
 /*
  * Theme tokens (colours, shadows, spacing) are defined externally in:
- *   ui/src/themes/dark.css    — Dark theme (default)
- *   ui/src/themes/light.css   — Light theme
- *   ui/src/themes/liferay.css — Liferay Waffle theme (#0B5FFF)
+ *   pkg/server/static/themes/dark.css    — Dark theme (default)
+ *   pkg/server/static/themes/light.css   — Light theme
+ *   pkg/server/static/themes/liferay.css — Liferay Waffle theme (#0B5FFF)
+ * shared with Portal V1 since #1522, and pulled in via ui/src/themes/index.css.
  * All styles below reference var(--token-name) only — no hardcoded colours.
  */
 
@@ -3181,7 +3184,10 @@ input[type='checkbox'] {
   .card,
   .modal-content,
   .action-menu,
-  .toast {
+  /* .toast-card, not .toast: #1533 named V1's class here, and V2 renders neither the
+     .toast nor the .show vocabulary -- the live stack is .toast-stack > .toast-card, so
+     the rule matched nothing and the toasts kept no boundary under HCM. */
+  .toast-card {
     border: 1px solid CanvasText;
     box-shadow: none;
   }

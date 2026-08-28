@@ -2402,7 +2402,9 @@ async function loadAnalytics() {
       // completely different things to an admin staring at an empty table.
       try {
         const geoRes = await fetch('/api/admin/analytics/locations');
-        const geoHeadline = document.getElementById('geo-distribution-headline');
+        const geoHeadline = document.getElementById(
+          'geo-distribution-headline',
+        );
         if (geoRes.ok) {
           const geo = (await geoRes.json()) || {};
           const buckets = geo.buckets || [];

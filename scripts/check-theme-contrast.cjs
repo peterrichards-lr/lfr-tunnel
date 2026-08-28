@@ -61,7 +61,10 @@ function parseColor(value) {
   // Alpha is KEPT (#1538). Most of the status fills are rgba over the card, and measuring them
   // as if opaque is measuring a colour nobody sees: rgba(139,92,246,0.15) on a near-black card
   // renders as a very dark violet, not as #8b5cf6.
-  m = /^rgba?\(\s*([\d.]+)[\s,]+([\d.]+)[\s,]+([\d.]+)(?:[\s,/]+([\d.]+))?/i.exec(v);
+  m =
+    /^rgba?\(\s*([\d.]+)[\s,]+([\d.]+)[\s,]+([\d.]+)(?:[\s,/]+([\d.]+))?/i.exec(
+      v,
+    );
   if (m) {
     const rgb = [Number(m[1]), Number(m[2]), Number(m[3])];
     if (m[4] !== undefined) rgb.alpha = Number(m[4]);
@@ -228,7 +231,14 @@ for (const file of files) {
   //
   // The fills are rgba over the card, so they are composited first. Measuring them opaque was
   // the other half of why this went unnoticed: it flatters every one of them.
-  const STATUS_FAMILIES = ['danger', 'info', 'node', 'success', 'tunnels', 'warning'];
+  const STATUS_FAMILIES = [
+    'danger',
+    'info',
+    'node',
+    'success',
+    'tunnels',
+    'warning',
+  ];
   for (const family of STATUS_FAMILIES) {
     const fg = tokens[`--status-${family}-text`];
     const bgToken = tokens[`--status-${family}-bg`];

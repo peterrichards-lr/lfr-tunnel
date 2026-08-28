@@ -110,31 +110,67 @@ func TestPortalV1DefinesNoThemeTokens(t *testing.T) {
 	}
 }
 
-// TestDockerBuildCopiesTheSharedThemes guards the containerised build.
+// TestDockerBuildCopiesTheSharedFiles guards the containerised build.
 //
-// ui/src/themes/index.css @imports the shared files from outside ui/, and the ui-builder stage
-// copies only ui/ -- so the image build fails with "Unable to resolve @import" unless the stage
-// also copies them in. A local build never reveals this, because there the whole repo is on
-// disk; it took all four E2E jobs going red to surface it.
+// Portal V2 @imports files from outside ui/ -- the theme tokens (#1522) and the accessibility
+// component rules (#1520) -- and the ui-builder stage copies only ui/, so the image build fails
+// with "Unable to resolve @import" unless the stage also copies them in. A local build never
+// reveals this, because there the whole repo is on disk; it took all four E2E jobs going red to
+// surface it the first time, and #1520 then broke the image again the same way.
+//
+// So this asserts COVERAGE rather than a literal COPY line. Naming the exact path was what let
+// the second break through: static/themes was copied, static/shared was not, and the guard was
+// satisfied. Any COPY whose source is an ancestor of a required directory counts.
 //
 // Checked by reading the Dockerfile because the alternative is building an image in a unit test.
-func TestDockerBuildCopiesTheSharedThemes(t *testing.T) {
+func TestDockerBuildCopiesTheSharedFiles(t *testing.T) {
 	df, err := os.ReadFile(filepath.Join("..", "..", "cmd", "lfr-tunneld", "Dockerfile"))
 	if err != nil {
 		t.Fatalf("reading the gateway Dockerfile: %v", err)
 	}
 	text := strings.ReplaceAll(string(df), "\r\n", "\n")
 
-	copyIdx := strings.Index(text, "COPY pkg/server/static/themes")
-	if copyIdx < 0 {
-		t.Fatal("the ui-builder stage does not copy pkg/server/static/themes, so `pnpm run build` " +
-			"cannot resolve the @import and the image build fails (#1522)")
-	}
 	buildIdx := strings.Index(text, "RUN pnpm run build")
 	if buildIdx < 0 {
 		t.Fatal("could not find the UI build step; if it moved, move this guard with it")
 	}
-	if copyIdx > buildIdx {
-		t.Error("the themes are copied AFTER the UI build, so the import still cannot resolve")
+
+	// Every directory outside ui/ that the V2 CSS reaches into. Add to this when something new
+	// is shared -- that is cheaper than another round of red E2E jobs.
+	required := []string{
+		"pkg/server/static/themes",
+		"pkg/server/static/shared",
+	}
+
+	// Source paths staged before the build, from `COPY <src> <dst>` lines.
+	var staged []string
+	for _, line := range strings.Split(text[:buildIdx], "\n") {
+		line = strings.TrimSpace(line)
+		if !strings.HasPrefix(line, "COPY ") {
+			continue
+		}
+		fields := strings.Fields(line)
+		// COPY may carry flags (--from=...); the source is the first non-flag argument, and the
+		// last field is the destination.
+		for _, f := range fields[1 : len(fields)-1] {
+			if !strings.HasPrefix(f, "--") {
+				staged = append(staged, strings.TrimSuffix(f, "/"))
+				break
+			}
+		}
+	}
+
+	for _, want := range required {
+		covered := false
+		for _, src := range staged {
+			if src == want || strings.HasPrefix(want, src+"/") {
+				covered = true
+				break
+			}
+		}
+		if !covered {
+			t.Errorf("the ui-builder stage stages %v, none of which covers %s -- so `pnpm run build` "+
+				"cannot resolve its @import and the image build fails (#1522, #1520)", staged, want)
+		}
 	}
 }

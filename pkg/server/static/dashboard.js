@@ -30,6 +30,10 @@ function applyTranslations(bundle, lang) {
     }
   });
 
+  // Rebuilt rather than looked up: this name interpolates the heading text (#1520).
+  if (typeof refreshHeadingAnchorLabels === 'function')
+    refreshHeadingAnchorLabels();
+
   const dir = lang === 'ar' || lang === 'he' ? 'rtl' : 'ltr';
   document.documentElement.dir = dir;
 
@@ -514,7 +518,25 @@ let currentUser = null;
 let currentLanguage = 'en';
 let generatedRawToken = '';
 
+let toastLiveSlot = 0;
+
 function showToast(message, type = 'info') {
+  // Announce as well as paint (#1520). Alternating slots because a live region only
+  // speaks when its text changes, and the same toast twice is a real case here.
+  const a = document.getElementById('toast-live-a');
+  const b = document.getElementById('toast-live-b');
+  if (a && b) {
+    if (toastLiveSlot === 0) {
+      a.textContent = message;
+      b.textContent = '';
+      toastLiveSlot = 1;
+    } else {
+      b.textContent = message;
+      a.textContent = '';
+      toastLiveSlot = 0;
+    }
+  }
+
   const container = document.getElementById('toast-container');
   const toast = document.createElement('div');
   toast.className = `toast toast-${type}`;
@@ -693,6 +715,91 @@ async function init() {
 
   await loadVersionDetails();
   initSidebarSections();
+  decorateSectionHeadings();
+}
+
+/*
+ * Heading anchor links (#1520).
+ *
+ * Each section heading gets two controls: the heading TEXT becomes a link to that
+ * section's own fragment (click to navigate, the URL changes), and a link icon beside it
+ * copies that URL (click to copy). Siblings, never nested -- a <button> inside an <a> is
+ * invalid HTML and a real assistive-technology failure.
+ *
+ * Applied here rather than written into dashboard.html fifteen times so the accessibility
+ * rules are decided once, and so a section added later gets them without anyone
+ * remembering to. The section set and the slug are derived exactly as showTab() derives
+ * them -- direct children of .main-content whose id starts with "tab-" -- because the
+ * two must not drift: a heading linking to a fragment showTab rejects would bounce the
+ * user to the overview.
+ *
+ * data-i18n moves from the <h2> onto the inner <a>. applyTranslations() assigns
+ * el.innerText, which would wipe out the button on the next language change if the key
+ * stayed on the heading.
+ */
+function decorateSectionHeadings() {
+  document
+    .querySelectorAll('.main-content > div[id^="tab-"]')
+    .forEach((section) => {
+      const slug = section.id.slice(4);
+      const heading = section.querySelector('.header h2');
+      if (!heading || heading.querySelector('.heading-anchor-link')) return;
+
+      const link = document.createElement('a');
+      link.className = 'heading-anchor-link';
+      link.href = '#' + slug;
+      const key = heading.getAttribute('data-i18n');
+      if (key) {
+        link.setAttribute('data-i18n', key);
+        heading.removeAttribute('data-i18n');
+      }
+      while (heading.firstChild) link.appendChild(heading.firstChild);
+
+      const button = document.createElement('button');
+      button.type = 'button';
+      button.className = 'heading-anchor';
+      button.dataset.headingAnchorFor = slug;
+      // A bare link glyph announces as "link, link emoji" and says nothing about what it
+      // does, so the glyph is hidden and the button carries the name.
+      button.innerHTML = '<span aria-hidden="true">🔗</span>';
+      button.addEventListener('click', () => {
+        // Built from location so this follows whatever shape V1 routing has -- #1513
+        // proposes replacing these fragments with paths.
+        const url =
+          window.location.origin +
+          window.location.pathname +
+          window.location.search +
+          '#' +
+          slug;
+        navigator.clipboard.writeText(url).then(
+          () => showToast(t('link_copied', 'Link copied'), 'success'),
+          () =>
+            showToast(t('link_copy_failed', 'Could not copy link'), 'error'),
+        );
+      });
+
+      const wrap = document.createElement('span');
+      wrap.className = 'heading-anchor-wrap';
+      wrap.appendChild(link);
+      wrap.appendChild(button);
+      heading.appendChild(wrap);
+    });
+  refreshHeadingAnchorLabels();
+}
+
+/*
+ * The copy button's accessible name interpolates the heading text, which
+ * applyTranslations() cannot do -- it has no placeholder substitution, only key lookup.
+ * So the name is rebuilt after every translation pass, or it stays English in an
+ * otherwise translated portal (the defect #1216 fixed for the static aria-labels).
+ */
+function refreshHeadingAnchorLabels() {
+  const template = t('copy_link_to', 'Copy link to {0}');
+  document.querySelectorAll('.heading-anchor').forEach((button) => {
+    const link = button.parentElement.querySelector('.heading-anchor-link');
+    if (!link) return;
+    button.setAttribute('aria-label', template.replace('{0}', link.innerText));
+  });
 }
 
 async function showLogin() {

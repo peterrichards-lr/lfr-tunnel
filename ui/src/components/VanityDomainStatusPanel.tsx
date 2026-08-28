@@ -4,6 +4,7 @@ import { useSettings } from '../contexts/SettingsContext';
 import { useI18n } from '../contexts/I18nContext';
 import Skeleton from './Skeleton';
 import StageIcon from './VanityStageIcon';
+import SectionHeading from './SectionHeading';
 
 interface VanityDomainStatus {
   full_host: string;
@@ -112,9 +113,11 @@ export default function VanityDomainStatusPanel() {
   return (
     <div className="card p-0">
       <div className="p-xl border-b">
-        <h3 className="section-title m-0">
-          {t('vanity_status_title', 'Custom Domain Status')}
-        </h3>
+        <SectionHeading
+          anchor="custom-domain-status"
+          className="section-title m-0"
+          label={t('vanity_status_title', 'Custom Domain Status')}
+        />
         <p className="text-muted text-sm mt-xs mb-0">
           {t(
             'vanity_status_desc',

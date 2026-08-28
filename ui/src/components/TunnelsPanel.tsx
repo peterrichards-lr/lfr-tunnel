@@ -4,6 +4,7 @@ import { useDataTable, type ColumnDef } from '../hooks/useDataTable';
 import DataTableToolbar from '../components/DataTableToolbar';
 import DataTablePagination from '../components/DataTablePagination';
 import { useSettings } from '../contexts/SettingsContext';
+import SectionHeading from './SectionHeading';
 
 interface Tunnel {
   subdomain_prefix: string;
@@ -94,9 +95,11 @@ export default function TunnelsPanel({ tunnels, serverConfig, user }: Props) {
       <div className="p-xl border-b">
         <div className="section-header">
           <div>
-            <h3 className="section-title">
-              {t('active_tunnels', 'Active Tunnels')}
-            </h3>
+            <SectionHeading
+              anchor="active-tunnels"
+              className="section-title"
+              label={t('active_tunnels', 'Active Tunnels')}
+            />
             <p className="section-desc">
               {t(
                 'active_tunnels_desc',

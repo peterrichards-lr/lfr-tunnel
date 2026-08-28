@@ -6,6 +6,7 @@ import { useI18n } from '../contexts/I18nContext';
 import Skeleton from './Skeleton';
 import { useUI } from '../contexts/UIContext';
 import ReservationsTable from './ReservationsTable';
+import SectionHeading from './SectionHeading';
 
 interface Reservation {
   id: string;
@@ -387,9 +388,11 @@ export default function ReservationsPanel() {
     <>
       <div className="card mb-xl">
         <div className="section-header mb-md">
-          <h3 className="section-title">
-            {t('reservations_overview', 'Reservations Overview')}
-          </h3>
+          <SectionHeading
+            anchor="reservations-overview"
+            className="section-title"
+            label={t('reservations_overview', 'Reservations Overview')}
+          />
         </div>
 
         <div className="mb-xl">

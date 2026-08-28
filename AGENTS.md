@@ -57,7 +57,11 @@ up with no further wiring. `/reload-skills` re-scans without restarting a sessio
     destructive action should not need a second read to be warned about.
   - **Delete feature and fix branches, local and remote, as soon as they merge** — but that
     rule and the one above sit two clauses apart, so tidying branches on general principle is
-    exactly how the `checksums` branch gets removed.
+    exactly how the `checksums` branch gets removed. Use `make check-branches` and
+    `make prune-branches` rather than doing it by hand: the script refuses `master` and
+    `checksums` in code, reports stale worktrees (which silently block deletion), and knows that
+    `git branch -d` refuses squash-merged branches. Prose alone let this reach 271 branches
+    (#1528).
   - Release branches are `release/<version>`, and only one release PR may be open at a time.
     `scripts/create-release-tag.sh` enforces both.
   - Every PR builds standalone binaries for Linux, macOS and Windows, downloadable from its
@@ -204,4 +208,4 @@ trip over.
 
 <!-- markdownlint-disable MD049 -->
 ---
-*Last Updated: 2026-08-27* | *Last Reviewed: 2026-08-27*
+*Last Updated: 2026-08-28* | *Last Reviewed: 2026-08-28*

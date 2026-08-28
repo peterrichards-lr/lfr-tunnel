@@ -35,6 +35,15 @@ To ensure we build the capabilities that provide the highest impact for the Sale
    - **Conflict Resolution**: Before submitting a PR or merging it, pull the latest `master` into your branch to verify there are no merge conflicts. Resolve all conflicts locally prior to PR completion.
    - **Pass CI Gates**: PRs must pass all automated Github Actions checks, including unit tests, formatting, and lint rules, before they can be merged.
    - **Cleanup**: Delete both local and remote feature/fix branches immediately after they are merged into `master`. **Do NOT delete the persistent `checksums` branch**, as it is an orphaned branch used by the release CI/CD workflow to host client binary signatures.
+
+     Run it rather than remember it -- this rule was prose only until #1528, and the checkout reached **271 branches and 6 stale worktrees** behind it:
+
+     ```bash
+     make check-branches   # report what has landed and can go
+     make prune-branches   # delete it, after writing a recovery manifest
+     ```
+
+     The script refuses `master` and `checksums` by name, so the warning above is enforced rather than merely written down. It also lists stale worktrees: a branch checked out in one cannot be deleted at all, and `git branch -d` refuses squash-merged branches while `git branch --merged` fails to list them -- which is why doing this by hand goes wrong.
 3. If you are working on a stability or hardening task, please align with our **Hardening Workflow**.
 4. **Pass the Lint Check**: Before submitting, you MUST run the local checks:
 
@@ -120,4 +129,4 @@ Verify these administrative control flows on the Portal Dashboard:
 
 <!-- markdownlint-disable MD049 -->
 ---
-*Last Updated: 2026-08-05* | *Last Reviewed: 2026-08-05*
+*Last Updated: 2026-08-28* | *Last Reviewed: 2026-08-28*

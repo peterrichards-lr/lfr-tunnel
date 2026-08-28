@@ -66,6 +66,17 @@ fmt:
 vet:
 	go vet ./...
 
+# Branches whose work has landed (#1528). CONTRIBUTING.md has always said to delete them as they
+# merge; nothing ran it, and the checkout reached 271 branches and 6 stale worktrees. Reports by
+# default and fails only once the pile is over a threshold, so it nags when it matters. Refuses
+# to touch master or checksums in code rather than in prose -- deleting checksums breaks the
+# portal's checksum delivery silently.
+check-branches:
+	@./scripts/check-stale-branches.sh
+
+prune-branches:
+	@./scripts/check-stale-branches.sh --delete
+
 # Ceiling on suppressed errcheck findings (#1331). Runs in CI's Lint & Format Check job as of
 # #1498 -- until then it was wired nowhere, and the count drifted five over the ceiling without
 # anything failing.
@@ -194,6 +205,7 @@ test-hooks:
 	@./tests/hooks/test-check-staged-prettier.sh
 	@./tests/hooks/test-hook-shim.sh
 	@./tests/hooks/test-build-keeps-tracked-files.sh
+	@./tests/hooks/test-stale-branches.sh
 
 # The pre-merge CI-configuration gate (#1391). Worth a target rather than only a path to type:
 # the whole point of this check is being run BEFORE pushing, and a check nobody can invoke

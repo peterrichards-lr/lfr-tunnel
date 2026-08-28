@@ -158,6 +158,19 @@ git log -1 --format='%cr' origin/fix/1323-escape-proxy-pages
 *Active Constraint*: Before creating a Pull Request (`gh pr create`), you MUST ensure the following criteria are met:
 1. **Existing Issue Verification**: A GitHub issue MUST exist for the work being PR'd.
 2. **Issue Linking**: The PR description or commit message MUST contain `Closes #<issue-number>` or `Resolves #<issue-number>` for all associated issues. A single PR may close multiple issues (e.g., closing the final sub-issue and the parent Epic simultaneously).
+
+   **Never write the keyword next to the issue number when you mean the opposite.** GitHub's
+   parser matches `close`/`fixes`/`resolves` followed by `#<N>` and ignores any negation in front
+   of it, so a PR body reading `Does not close #1521.` **closes #1521 on merge**. That is not
+   hypothetical: #1533 was part 1 of a three-part issue, said exactly that to be helpful, and
+   closed the issue with two parts outstanding — while #1534 wrote `Does not close the issue`
+   with no `#N`, so the "Verify PR references an issue" check found nothing and failed. Same
+   intent, opposite failures.
+
+   For a PR that deliberately does not close its parent, name it without the keyword adjacent to
+   it — `Part 2 of #1521` — and give the PR its own sub-issue to close. **A multi-part issue
+   needs sub-issues**, because this repo requires every PR to close something and an intermediate
+   PR has nothing else to point at.
 3. **Issue Content Constraints**: The GitHub issue(s) being resolved MUST contain:
     - A clear description of the problem or feature.
     - An analysis section detailing how to resolve or implement the fix/change.
@@ -291,4 +304,4 @@ After any merge you expect to close an issue (whether via a `Closes #N` referenc
 
 <!-- markdownlint-disable MD049 -->
 ---
-*Last Updated: 2026-08-26* | *Last Reviewed: 2026-08-26*
+*Last Updated: 2026-08-28* | *Last Reviewed: 2026-08-28*

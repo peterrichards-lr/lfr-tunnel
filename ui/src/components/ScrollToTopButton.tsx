@@ -30,7 +30,7 @@ export default function ScrollToTopButton() {
       aria-label={t('return_to_top', 'Return to Top')}
       title={t('return_to_top', 'Return to Top')}
     >
-      <span className="text-xs font-semibold flex items-center gap-xs">
+      <span className="text-xs fw-semibold flex items-center gap-xs">
         ↑ {t('top', 'Top')}
       </span>
     </button>

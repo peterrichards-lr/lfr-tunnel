@@ -186,7 +186,7 @@ export default function Login() {
             </p>
             <input
               type="text"
-              className="input-field text-center text-2xl font-bold tracking-widest mb-xl w-full"
+              className="input-field text-center text-2xl fw-bold tracking-widest mb-xl w-full"
               placeholder={t('mfa_otp_placeholder', '123456')}
               pattern="[0-9]{6}"
               maxLength={6}
@@ -311,7 +311,7 @@ export default function Login() {
                     setMode(mode === 'login' ? 'register' : 'login');
                     setStatusMsg({ text: '', isError: false });
                   }}
-                  className="btn-text text-muted text-sm underline cursor-pointer"
+                  className="btn-bare text-muted text-sm underline cursor-pointer"
                 >
                   {mode === 'login'
                     ? t(

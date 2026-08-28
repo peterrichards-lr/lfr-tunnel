@@ -46,7 +46,7 @@ export default function Sidebar({ user, isOpen, onClose }: SidebarProps) {
             alt="Liferay Tunnel"
             width="28"
             height="28"
-            className="shrink-0"
+            className="flex-shrink-0"
           />
           <span className="fw-bold text-base text-main tracking-wide">
             Liferay Tunnel

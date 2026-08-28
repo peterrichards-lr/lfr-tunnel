@@ -452,7 +452,7 @@ export default function AccountSettings() {
                     <div className="flex gap-sm items-center">
                       <input
                         type="text"
-                        className="input-field text-center font-bold mb-0 w-narrow"
+                        className="input-field text-center fw-bold mb-0 w-narrow"
                         placeholder="123456"
                         maxLength={6}
                         value={disableCode}

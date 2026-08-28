@@ -46,7 +46,10 @@ test.describe('Portal V1 sidebar accessibility', () => {
     ]) {
       const item = page.locator(`#${id}`);
       await expect(item).toHaveRole('link');
-      await expect(item).toHaveAttribute('href', /^#/);
+      // A real, resolvable href -- that is what makes it a link to assistive technology,
+      // and what middle-click and "Copy link address" need. The shape changed from '#users'
+      // to '/admin/users' in #1513; what #1212 established is that there IS one.
+      await expect(item).toHaveAttribute('href', /^\/(admin|portal)\/[a-z-]+$/);
     }
 
     // Logout acts rather than navigates, so it is deliberately a button.

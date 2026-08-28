@@ -278,6 +278,9 @@ export default function AccountSettings() {
                 <option value="liferay">
                   {t('theme_liferay', 'Liferay Waffle 🧇')}
                 </option>
+                <option value="high-contrast">
+                  {t('theme_high_contrast', 'High Contrast')}
+                </option>
                 <option value="system">
                   {t('theme_system', 'System Default')}
                 </option>

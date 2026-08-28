@@ -56,48 +56,62 @@ test.describe('Portal V1 section URLs', () => {
     await signIn(page);
   });
 
-  test('a fragment URL deep-links to its section and survives a reload', async ({
+  test('a path URL deep-links to its section and survives a reload', async ({
     page,
   }) => {
-    await page.goto('/admin#users');
+    await page.goto('/admin/users');
     await page.reload();
     await expect.poll(() => visibleSection(page)).toEqual(['users']);
+    await expect(page).toHaveURL(/\/admin\/users$/);
 
     // The reload is the assertion that matters: it is what "bookmarkable" means, and a
-    // same-document hash change would prove nothing.
-    await page.goto('/admin#blacklist');
+    // same-document route change would prove nothing.
+    await page.goto('/admin/blacklist');
     await page.reload();
     await expect.poll(() => visibleSection(page)).toEqual(['blacklist']);
+    await expect(page).toHaveURL(/\/admin\/blacklist$/);
+  });
+
+  test('a fragment URL still works, and is upgraded to the path form', async ({
+    page,
+  }) => {
+    // Bookmarks made before #1513 have to keep working -- silently rewriting them to the
+    // path form is what stops the two shapes coexisting forever.
+    await page.goto('/admin#users');
+    await expect.poll(() => visibleSection(page)).toEqual(['users']);
+    await expect(page).toHaveURL(/\/admin\/users$/);
   });
 
   test('back and forward move between sections, not just the URL', async ({
     page,
   }) => {
-    await page.goto('/admin#users');
+    await page.goto('/admin/users');
     await expect.poll(() => visibleSection(page)).toEqual(['users']);
 
+    // A plain left click must route in place rather than reloading the document, or the
+    // session's loaded state is thrown away on every navigation.
     await page.click('#nav-blacklist');
     await expect.poll(() => visibleSection(page)).toEqual(['blacklist']);
 
     await page.goBack();
-    await expect(page).toHaveURL(/#users$/);
+    await expect(page).toHaveURL(/\/admin\/users$/);
     await expect.poll(() => visibleSection(page)).toEqual(['users']);
 
     await page.goForward();
-    await expect(page).toHaveURL(/#blacklist$/);
+    await expect(page).toHaveURL(/\/admin\/blacklist$/);
     await expect.poll(() => visibleSection(page)).toEqual(['blacklist']);
   });
 
-  test('an unknown fragment falls back to the overview instead of rendering nothing', async ({
+  test('an unknown section falls back to the overview instead of rendering nothing', async ({
     page,
   }) => {
-    for (const hash of ['#nonsense', '#tokens-renamed']) {
-      await page.goto(`/admin${hash}`);
+    for (const section of ['nonsense', 'tokens-renamed']) {
+      await page.goto(`/admin/${section}`);
       await page.reload();
 
       await expect
         .poll(() => visibleSection(page), {
-          message: `${hash} should fall back to the overview, not render an empty portal`,
+          message: `${section} should fall back to the overview, not render an empty portal`,
         })
         .toEqual(['overview']);
 
@@ -106,16 +120,16 @@ test.describe('Portal V1 section URLs', () => {
       await expect(page.locator('#nav-overview')).toHaveClass(/active/);
 
       // And the address bar is corrected, so a reload lands where the URL says.
-      await expect(page).toHaveURL(/#overview$/);
+      await expect(page).toHaveURL(/\/admin\/overview$/);
     }
   });
 
-  test('an unknown fragment adds no history entry to go back to', async ({
+  test('an unknown section adds no history entry to go back to', async ({
     page,
   }) => {
     // replaceState, not pushState -- otherwise Back from a corrected URL returns to the
     // broken one and the user bounces.
-    await page.goto('/admin#users');
+    await page.goto('/admin/users');
     await expect.poll(() => visibleSection(page)).toEqual(['users']);
 
     await page.evaluate(() => {
@@ -127,16 +141,58 @@ test.describe('Portal V1 section URLs', () => {
     await expect.poll(() => visibleSection(page)).toEqual(['users']);
   });
 
-  test('a path URL redirects to its section rather than the offline page', async ({
+  test('a path URL serves its section rather than the offline page', async ({
     page,
   }) => {
-    // The shape Portal V2 teaches. Before this it answered 404 carrying offline.html.
+    // The shape Portal V2 teaches. Before #1477 it answered 404 carrying offline.html;
+    // before #1513 it worked but bounced to the fragment form.
     const res = await page.goto('/admin/users');
     expect(res?.ok()).toBeTruthy();
 
-    await expect(page).toHaveURL(/#users$/);
+    await expect(page).toHaveURL(/\/admin\/users$/);
     await expect.poll(() => visibleSection(page)).toEqual(['users']);
     await expect(page.locator('body')).not.toContainText('Environment Offline');
+  });
+
+  test('the address bar keeps the path, which is the whole point (#1513)', async ({
+    page,
+  }) => {
+    // The gap this issue was filed for: V1 handed out /portal#users where V2 hands out
+    // /portalv2/admin/users, so the two portals produced different kinds of link for the
+    // same section while being compared against each other.
+    await page.goto('/admin/users');
+    await page.click('#nav-blacklist');
+    await expect(page).toHaveURL(/\/admin\/blacklist$/);
+    expect(new URL(page.url()).hash).toBe('');
+  });
+
+  test('the sidebar links are real, copyable URLs', async ({ page }) => {
+    // They are anchors with real hrefs (#1212) so that middle-click, open-in-new-tab and
+    // "Copy link address" work. Routing in place must not have cost that.
+    await page.goto('/admin/users');
+    const href = await page.locator('#nav-blacklist').getAttribute('href');
+    expect(href).toBe('/admin/blacklist');
+
+    // And that href is a real route, not decoration: opening it directly works.
+    await page.goto(href!);
+    await expect.poll(() => visibleSection(page)).toEqual(['blacklist']);
+  });
+
+  test('the portal document loads its script at every depth', async ({
+    page,
+  }) => {
+    // "static/dashboard.js" was relative. At /admin/users that resolves to
+    // /admin/static/dashboard.js and 404s, leaving an unstyled shell with no behaviour --
+    // and every server-side assertion would still have passed.
+    const failed: string[] = [];
+    page.on('response', (r) => {
+      if (r.status() >= 400 && r.url().includes('dashboard.js')) {
+        failed.push(`${r.status()} ${r.url()}`);
+      }
+    });
+    await page.goto('/admin/users');
+    await expect.poll(() => visibleSection(page)).toEqual(['users']);
+    expect(failed).toEqual([]);
   });
 
   test('a path URL for a section that does not exist still lands somewhere real', async ({

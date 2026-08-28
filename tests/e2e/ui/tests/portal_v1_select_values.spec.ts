@@ -91,7 +91,7 @@ test.describe('Portal V1 selects never render blank', () => {
     await page.request.put('/api/me', { data: { theme_preference: 'system' } });
   });
 
-  test('a theme chosen in Portal V2 still shows a value in V1', async ({
+  test('liferay, chosen in Portal V2, is a real option in V1', async ({
     page,
   }) => {
     await loadAccountWith(page, 'liferay');
@@ -115,15 +115,50 @@ test.describe('Portal V1 selects never render blank', () => {
     // The stored preference must be reported back, not quietly rewritten to a default:
     // showing "System Default" for a user whose setting is 'liferay' is a different lie.
     expect(state.value).toBe('liferay');
+
+    // It is now a first-class option rather than the "(unsupported in Portal V1)" placeholder
+    // #1201 had to invent, because both portals read one shared set of theme files (#1522).
+    const strays = await page
+      .locator('#acc-theme')
+      .evaluate(
+        (el: HTMLSelectElement) =>
+          el.querySelectorAll('option[data-unknown-value]').length,
+      );
+    expect(strays).toBe(0);
+  });
+
+  test('liferay actually renders in V1, rather than falling back', async ({
+    page,
+  }) => {
+    await loadAccountWith(page, 'liferay');
+
+    // The point of sharing the theme files (#1522): V1 owns `liferay` now. Before, V1 had no
+    // stylesheet for it, so applyTheme rewrote it to system and the user silently got
+    // something else.
+    const dataTheme = await page.evaluate(() =>
+      document.documentElement.getAttribute('data-theme'),
+    );
+    expect(dataTheme).toBe('liferay');
+
+    // Rendering it is what matters, not just the attribute: the tokens have to resolve, which
+    // they only do if the shared stylesheet was served and linked.
+    const bg = await page.evaluate(() =>
+      getComputedStyle(document.documentElement)
+        .getPropertyValue('--bg-base')
+        .trim(),
+    );
+    expect(bg).toBeTruthy();
   });
 
   test('an unknown theme does not leave the page on an unstyled data-theme', async ({
     page,
   }) => {
-    await loadAccountWith(page, 'liferay');
+    // A value NEITHER portal knows. This used to be 'liferay', which V1 had no stylesheet for
+    // -- setting data-theme to it fell back to :root defaults and ignored the OS setting
+    // entirely. V1 owns liferay since #1522, so the case needs a value that is genuinely
+    // unknown; theme_preference is still free text, so one can still arrive.
+    await loadAccountWith(page, 'no-such-theme');
 
-    // V1 ships no stylesheet for 'liferay', so setting data-theme to it silently fell
-    // back to :root defaults and ignored the user's OS setting entirely.
     const dataTheme = await page.evaluate(() =>
       document.documentElement.getAttribute('data-theme'),
     );

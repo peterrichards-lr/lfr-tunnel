@@ -27,6 +27,23 @@ jobs:
     name: Verify PR references an issue
     runs-on: ubuntu-latest
     steps:
+      # A negated closing reference still closes the issue: GitHub matches the keyword and the
+      # number and ignores the negation in front of them (#1540). Checked before the reference
+      # requirement below so the specific message wins over the generic one.
+      - name: Checkout Code
+        uses: actions/checkout@v7
+
+      - name: Reject a negated closing reference
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          REPO: ${{ github.repository }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+        run: |
+          set -euo pipefail
+          gh pr view "$PR_NUMBER" --repo "$REPO" --json title,body \
+            -q '"\(.title)\n\(.body // "")"' > /tmp/pr-text.md
+          ./scripts/check-closing-refs.sh /tmp/pr-text.md
+
       - name: Check for a closing issue reference or override label
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}

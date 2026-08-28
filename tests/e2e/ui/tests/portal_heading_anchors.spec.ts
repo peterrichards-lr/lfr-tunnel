@@ -148,7 +148,11 @@ test.describe('Portal V1 heading anchors', () => {
     );
     expect(pairs.length).toBeGreaterThan(0);
     for (const { slug, href } of pairs) {
-      expect(href, `section ${slug} has no heading link`).toBe(`#${slug}`);
+      // A path, not a fragment: V1 routes on the path since #1513, and a heading handing
+      // out '#users' would reintroduce the very gap that issue closed.
+      expect(href, `section ${slug} has no heading link`).toBe(
+        `/admin/${slug}`,
+      );
     }
   });
 

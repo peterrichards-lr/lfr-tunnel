@@ -768,44 +768,30 @@ func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 				return
 			}
 
-			// A deeper path under /portal/ or /admin/ is not a route. Portal V1 is served
-			// as a single document at /portal, so anything below it matched no control
-			// plane handler and fell through to the data-plane ProxyHandler, which has no
-			// lease for a control-domain host -- answering /portal/users with the
-			// "Developer Environment Offline" page. Someone who typed the shape Portal V2
-			// taught them was told their environment was down (#1215). Verified against a
-			// running stack: 404 carrying offline.html, not the 502 the report described.
+			// Portal V1 now routes on the PATH, so /portal/users is a real route serving the
+			// portal document, and the address bar keeps that path (#1513).
 			//
-			// This is the GET form of the problem the OPTIONS branch above already exists
-			// to solve, and it is fixed the same way: answer on the control plane rather
-			// than letting it reach the proxy.
+			// #1477 answered this with a 302 to /portal#users, which fixed the reported bug --
+			// the path used to fall through to the data-plane ProxyHandler and answer with the
+			// "Developer Environment Offline" page (#1215) -- but left V1 handing out fragment
+			// links where V2 hands out paths. Under an A/B test that is a parity gap: someone
+			// comparing the two portals sees them produce different kinds of link. That 302 was
+			// deliberately Found rather than MovedPermanently so this change would not have to
+			// fight browsers' aggressively cached 301s, and that is now the reason it works.
 			//
-			// V1 routes on the fragment, so the path maps straight onto it and no rewrite
-			// of its tab switching is needed. showTab falls back to the overview for a
-			// section that does not exist, so a typo lands somewhere real -- which is why
-			// that fallback has to be in place for this redirect to be safe.
+			// Served rather than enumerated: the server does NOT know which sections exist. The
+			// valid set is read from the DOM by showTab (see dashboard.js), so a section added
+			// or renamed in the markup cannot drift out of sync with a list kept here. An
+			// unknown section is normalised client-side to the overview, exactly as an unknown
+			// fragment already was. This mirrors how /portalv2 is served below.
 			//
-			// Found rather than MovedPermanently: browsers cache a 301 aggressively, and
-			// if V1 ever gains real path routing a cached one would keep bouncing users to
-			// the fragment form. The trailing-slash redirect above is a genuine
-			// canonicalisation and stays permanent.
-			//
-			// "/portalv2/..." does not match "/portal/" -- the character after "portal" is
-			// "v", not "/" -- so the V2 SPA is untouched.
+			// "/portalv2/..." does not match "/portal/" -- the character after "portal" is "v",
+			// not "/" -- so the V2 SPA is untouched.
 			for _, base := range []string{"/portal", "/admin"} {
-				if !strings.HasPrefix(p, base+"/") {
-					continue
+				if strings.HasPrefix(p, base+"/") {
+					s.serveDashboardHTML(w)
+					return
 				}
-				section := strings.Trim(strings.TrimPrefix(p, base+"/"), "/")
-				target := base
-				if r.URL.RawQuery != "" {
-					target += "?" + r.URL.RawQuery
-				}
-				if section != "" {
-					target += "#" + section
-				}
-				http.Redirect(w, r, target, http.StatusFound)
-				return
 			}
 		}
 
@@ -1381,13 +1367,7 @@ func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		}
 
 		if (r.Method == http.MethodGet || r.Method == http.MethodHead) && (r.URL.Path == "/" || r.URL.Path == "/admin" || r.URL.Path == "/portal") {
-			w.Header().Set("Content-Type", "text/html; charset=utf-8")
-			w.WriteHeader(http.StatusOK)
-			htmlContent := strings.ReplaceAll(dashboardHTML, "static/dashboard.js", "static/dashboard.js?v="+config.Version)
-			htmlContent = strings.ReplaceAll(htmlContent, "/static/dashboard.css", "/static/dashboard.css?v="+config.Version)
-			if _, err := w.Write([]byte(htmlContent)); err != nil {
-				log.Printf("[Warning] Failed to write response: %v", err)
-			}
+			s.serveDashboardHTML(w)
 			return
 		}
 
@@ -1453,6 +1433,22 @@ func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 }
 
 // handleRegister parses registration request and responds with leases.
+// serveDashboardHTML writes the Portal V1 document.
+//
+// Extracted for #1513: V1 is now served at /, /admin, /portal AND at every path beneath
+// /portal/ and /admin/, so the cache-busting rewrite could no longer sit inline at one of
+// those call sites. Two copies of it would drift, and the failure mode is a stale
+// dashboard.js served to everyone after a release.
+func (s *Server) serveDashboardHTML(w http.ResponseWriter) {
+	w.Header().Set("Content-Type", "text/html; charset=utf-8")
+	w.WriteHeader(http.StatusOK)
+	htmlContent := strings.ReplaceAll(dashboardHTML, "/static/dashboard.js", "/static/dashboard.js?v="+config.Version)
+	htmlContent = strings.ReplaceAll(htmlContent, "/static/dashboard.css", "/static/dashboard.css?v="+config.Version)
+	if _, err := w.Write([]byte(htmlContent)); err != nil {
+		log.Printf("[Warning] Failed to write response: %v", err)
+	}
+}
+
 func (s *Server) canUserAutoReserve(userRec *db.User) bool {
 	if userRec != nil && s.cfg.RoleSettings != nil {
 		if rs, ok := s.cfg.RoleSettings[userRec.Role]; ok && rs.AllowAutoReservation != nil {

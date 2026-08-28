@@ -94,6 +94,62 @@ else
     fail "no --write instruction in the failure output: $OUT"
 fi
 
+# 8-9. The GLOB itself (#1550).
+#
+# Every case above injects LFT_PRETTIER_FILES, which bypasses staged_prettier_files() entirely --
+# so the file-selection half of this script had no coverage at all, and that is exactly where the
+# bug was: .cjs and .mjs were missing while CI runs `prettier --check .` over the whole tree. A
+# .cjs file passed the hook and failed CI (#1548).
+#
+# These drive the real function against a real index, in a throwaway repo, with npx stubbed to
+# record which paths it was handed.
+GLOBREPO="$WORK/globrepo"
+git init -q "$GLOBREPO"
+git -C "$GLOBREPO" config user.email t@example.com
+git -C "$GLOBREPO" config user.name Test
+mkdir -p "$GLOBREPO/scripts" "$GLOBREPO/ui"
+cat > "$WORK/bin/npx-record" <<'STUB'
+#!/usr/bin/env bash
+# Record every argument that looks like a path, so the test can assert what was selected.
+for a in "$@"; do
+    case "$a" in
+        *.cjs|*.mjs|*.js|*.json|*.css|*.ts|*.tsx|*.jsx) echo "$a" >> "$RECORD" ;;
+    esac
+done
+echo "All matched files use Prettier code style!"
+exit 0
+STUB
+chmod +x "$WORK/bin/npx-record"
+
+for f in scripts/a.cjs scripts/b.mjs scripts/c.js ui/d.json notes.md; do
+    echo "x" > "$GLOBREPO/$f"
+    git -C "$GLOBREPO" add "$f"
+done
+
+RECORD="$WORK/selected.txt"
+: > "$RECORD"
+cp "$WORK/bin/npx-record" "$WORK/bin/npx"
+( cd "$GLOBREPO" && RECORD="$RECORD" PATH="$WORK/bin:$PATH" bash "$TARGET" >/dev/null 2>&1 )
+cp "$WORK/bin/npx-record" /dev/null 2>/dev/null || true
+stub_npx  # restore for anything after
+
+MISSING=""
+for want in scripts/a.cjs scripts/b.mjs scripts/c.js ui/d.json; do
+    grep -qx "$want" "$RECORD" || MISSING="$MISSING $want"
+done
+if [ -z "$MISSING" ]; then
+    pass "the glob selects .cjs and .mjs alongside the extensions that already worked"
+else
+    fail "not selected:$MISSING -- these pass the hook and fail CI, which runs prettier over the whole tree"
+fi
+
+# Markdown is held back on purpose (.prettierignore records why), so it must NOT be selected.
+if grep -qx "notes.md" "$RECORD"; then
+    fail "markdown was selected; .prettierignore holds it back deliberately"
+else
+    pass "markdown is still left alone"
+fi
+
 echo ""
 echo "passed: $PASS  failed: $FAIL"
 [ "$FAIL" -eq 0 ] || exit 1

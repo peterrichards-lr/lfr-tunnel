@@ -27,9 +27,14 @@ PRETTIER_VERSION="${LFT_PRETTIER_VERSION:-prettier@3.9.6}"
 # Prettier's own scope, per .prettierrc.yaml. Markdown, HTML and YAML are held back on purpose --
 # .prettierignore records why for each -- and Prettier applies those ignore rules even to paths
 # passed explicitly, so staged files can be handed over without filtering them here first.
+# .cjs and .mjs are in the list because CI runs `prettier --check .` over the WHOLE tree, and a
+# hook covering a narrower set than the gate it is meant to pre-empt is the shape that erodes
+# trust in it -- a green hook stops meaning anything. That is not hypothetical: #1548 failed CI on
+# scripts/check-theme-contrast.cjs after passing here (#1550). The repo uses both extensions for
+# its check scripts.
 staged_prettier_files() {
     git diff --cached --name-only --diff-filter=ACM -- \
-        '*.js' '*.jsx' '*.ts' '*.tsx' '*.css' '*.json'
+        '*.js' '*.cjs' '*.mjs' '*.jsx' '*.ts' '*.tsx' '*.css' '*.json'
 }
 
 FILES="${LFT_PRETTIER_FILES-$(staged_prettier_files)}"

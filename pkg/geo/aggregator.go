@@ -2,6 +2,7 @@ package geo
 
 import (
 	"crypto/sha256"
+	"log/slog"
 	"net/netip"
 	"sort"
 	"sync"
@@ -195,9 +196,15 @@ func (a *Aggregator) rotateLocked() {
 	// the users behind a count not outliving the count.
 	a.seen = make(map[string]map[userKey]struct{})
 	if len(counts) > 0 {
-		// Best-effort: the period is over either way, and this runs on the registration
-		// path, where a failed analytics write must not surface to the client.
-		_ = a.store.UpsertLocationStats(previous, counts) //nolint:errcheck
+		// Not surfaced to the caller -- this runs on the registration path, and a failed
+		// analytics write must never fail a connection -- but not swallowed either. The
+		// period has already rolled and the in-memory sets are gone by the time this runs,
+		// so a silent failure is the one case where a whole week of counts disappears with
+		// nothing anywhere saying why.
+		if err := a.store.UpsertLocationStats(previous, counts); err != nil {
+			slog.Warn("[Geo] Failed to write location stats; this period's counts are lost",
+				"period", previous, "buckets", len(counts), "error", err)
+		}
 	}
 }
 

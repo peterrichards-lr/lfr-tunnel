@@ -19,6 +19,8 @@ func TestLocationStatsSchemaCannotHoldAUser(t *testing.T) {
 	if err != nil {
 		t.Fatalf("reading table_info: %v", err)
 	}
+	// Test helper reading back what was written; a Close error here would be reported by
+	// the assertions that follow failing.
 	defer rows.Close() //nolint:errcheck
 
 	columns := make([]string, 0, 4)

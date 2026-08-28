@@ -30,6 +30,9 @@ func (repo *SQLiteMetricRepo) UpsertLocationStats(period string, stats []Locatio
 	if err != nil {
 		return err
 	}
+	// Rollback after a successful Commit returns sql.ErrTxDone by design, so on the happy
+	// path this error is not merely unactionable but expected. errcheck runs with
+	// check-blank, hence the suppression on top of the blank assignment.
 	defer func() { _ = tx.Rollback() }() //nolint:errcheck
 
 	stmt, err := tx.Prepare(`
@@ -42,6 +45,9 @@ func (repo *SQLiteMetricRepo) UpsertLocationStats(period string, stats []Locatio
 	if err != nil {
 		return err
 	}
+	// Closing a prepared statement can only report a problem releasing driver resources,
+	// after the writes it was used for have already succeeded or failed on their own
+	// errors. There is nothing a caller could do with it.
 	defer func() { _ = stmt.Close() }() //nolint:errcheck
 
 	for _, s := range stats {
@@ -77,6 +83,9 @@ func (repo *SQLiteMetricRepo) GetLocationStats(period string) (string, []Locatio
 	if err != nil {
 		return "", nil, err
 	}
+	// Redundant rather than ignored: any error that ends iteration early surfaces through
+	// rows.Err(), which IS checked below. Close would report the same failure a second
+	// time, and reporting it from a defer would mask the one already returned.
 	defer func() { _ = rows.Close() }() //nolint:errcheck
 
 	stats := make([]LocationStat, 0)

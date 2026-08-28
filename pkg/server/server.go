@@ -2222,7 +2222,9 @@ func (s *Server) Start() error {
 					// for the same reason as the portal sessions above (#1152) -- and
 					// because without it a quiet server would never notice the boundary,
 					// there being no registrations to notice it on.
-					_ = s.geo.Flush() //nolint:errcheck
+					if err := s.geo.Flush(); err != nil {
+						slog.Warn("[Geo] Periodic location stats flush failed", "error", err)
+					}
 					s.checkExpiringReservations()
 				}
 			}
@@ -2980,7 +2982,11 @@ func (s *Server) stop() {
 	// Before the database closes: writes the current period's cardinalities and releases
 	// the MaxMind handle. The in-memory user sets are simply dropped with the process --
 	// they have no persistent form to be written to (#1152).
-	_ = s.geo.Close() //nolint:errcheck
+	if err := s.geo.Close(); err != nil {
+		// Shutdown continues regardless -- there is nothing to retry with the database
+		// about to close -- but a final flush failing loses the current period silently.
+		slog.Warn("[Geo] Final location stats flush failed during shutdown", "error", err)
+	}
 
 	if s.db != nil {
 		_ = s.db.RecordGatewayCleanShutdown() //nolint:errcheck

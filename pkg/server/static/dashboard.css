@@ -1158,3 +1158,46 @@ html[dir='rtl'] th {
   padding: 4px 8px;
   font-size: 12px;
 }
+
+/*
+ * Windows High Contrast Mode (#1521). Same reasoning as Portal V2's block -- see
+ * ui/src/index.css -- applied to V1's markup, since the two portals are an A/B test and an
+ * accessibility fix in one arm only is a difference between the arms.
+ *
+ * V1's .btn-primary is the sharp case: it sets `border-color: transparent` and relies on
+ * background plus box-shadow. HCM drops the shadow and forces the background, so the button
+ * becomes an untethered label on the canvas.
+ */
+@media (forced-colors: active) {
+  .btn,
+  .btn-primary {
+    background: ButtonFace;
+    color: ButtonText;
+    border: 1px solid ButtonText;
+    box-shadow: none;
+  }
+
+  .btn-primary:hover {
+    /* The hover colour is an author value that HCM replaces anyway; restating it here would
+       just be noise. Keeping the border is what matters. */
+    border-color: ButtonText;
+  }
+
+  :focus-visible {
+    outline: 2px solid Highlight;
+    outline-offset: 2px;
+  }
+
+  .card,
+  .modal-content,
+  .action-menu,
+  .toast,
+  .driver-popover.driverjs-theme {
+    border: 1px solid CanvasText;
+    box-shadow: none;
+  }
+
+  .badge {
+    border: 1px solid CanvasText;
+  }
+}

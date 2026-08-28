@@ -3130,3 +3130,80 @@ input[type='checkbox'] {
 .scroll-to-top-btn:hover {
   transform: translateY(-2px);
 }
+
+/*
+ * Windows High Contrast Mode (#1521).
+ *
+ * forced-colors is not "a very high contrast theme" -- the browser REPLACES the author's
+ * palette with the user's system colours, and in doing so it silently drops three things this
+ * portal leans on:
+ *
+ *   * background-image, which includes every gradient. .btn-primary and .btn-danger are
+ *     gradients with `border: none`, so under HCM they lose their fill AND have no boundary:
+ *     white label on the system canvas, indistinguishable from body text.
+ *   * box-shadow, which several surfaces use as their only visible edge.
+ *   * author colours generally, so anything conveying state by colour alone stops conveying it.
+ *
+ * The fix is not to reassert colours -- that fights the user's stated preference and is what
+ * forced-color-adjust exists to prevent. It is to make sure a BOUNDARY survives, using the
+ * system keywords so the browser keeps control of the actual hues.
+ */
+@media (forced-colors: active) {
+  /* Buttons keep their shape: ButtonFace/ButtonText are the pair the OS reserves for controls,
+     so a button reads as a button rather than as text. The border is the load-bearing part --
+     without it the fill and the page are the same colour. */
+  .btn,
+  .btn-primary,
+  .btn-danger,
+  .btn-secondary {
+    background: ButtonFace;
+    color: ButtonText;
+    border: 1px solid ButtonText;
+  }
+
+  /* The gradients are dropped by the browser anyway; saying so keeps the intent legible and
+     stops a future gradient being added here on the assumption it would show. */
+  .btn-primary,
+  .btn-danger {
+    background-image: none;
+    box-shadow: none;
+  }
+
+  /* Focus must stay visible when every other colour has been replaced. Highlight is the system
+     colour for exactly this, and outline is one of the few properties HCM preserves. */
+  :focus-visible {
+    outline: 2px solid Highlight;
+    outline-offset: 2px;
+  }
+
+  /* Surfaces whose only edge is a shadow lose it. A border costs no layout -- box-sizing is
+     border-box globally -- and is the difference between a card and the page running together. */
+  .card,
+  .modal-content,
+  .action-menu,
+  .toast {
+    border: 1px solid CanvasText;
+    box-shadow: none;
+  }
+
+  /* Badges distinguish themselves by fill colour, which is gone. The border restores the
+     boundary; the text inside still says which state it is. */
+  [class*='badge'] {
+    border: 1px solid CanvasText;
+  }
+
+  /*
+   * The one place the colours must NOT be replaced.
+   *
+   * A QR code is only scannable as dark-on-light with enough contrast between the modules and
+   * the quiet zone. HCM would repaint the frame in system colours and can invert it, which
+   * cameras do not reliably read. forced-color-adjust: none opts this subtree out -- the
+   * narrow, intended use of that property, and the same reasoning that made this frame a fixed
+   * #ffffff rather than a themed token in the first place (#1508).
+   */
+  .qr-frame,
+  .qr-frame * {
+    forced-color-adjust: none;
+    background: #ffffff;
+  }
+}

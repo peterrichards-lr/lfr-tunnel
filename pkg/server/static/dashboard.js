@@ -177,7 +177,8 @@ function renderCustomDropdown() {
     };
 
     item.onclick = () => {
-      selectCustomLanguage(loc.code);
+      // A person chose this, so it is remembered.
+      selectCustomLanguage(loc.code, false, true);
     };
 
     item.innerHTML = `
@@ -188,7 +189,7 @@ function renderCustomDropdown() {
   });
 }
 
-function selectCustomLanguage(lang, skipSync = false) {
+function selectCustomLanguage(lang, skipSync = false, persist = false) {
   const loc =
     supportedLocales.find((l) => l.code === lang) || supportedLocales[1];
   const flagSpan = document.getElementById('custom-dropdown-flag');
@@ -205,7 +206,7 @@ function selectCustomLanguage(lang, skipSync = false) {
     selectAccLanguage(lang, true);
   }
 
-  changePortalLanguage(lang);
+  changePortalLanguage(lang, persist);
 }
 
 function toggleCustomDropdown() {
@@ -246,7 +247,7 @@ function renderAccCustomDropdown() {
     };
 
     item.onclick = () => {
-      selectAccLanguage(loc.code);
+      selectAccLanguage(loc.code, false, true);
     };
 
     item.innerHTML = `
@@ -257,7 +258,7 @@ function renderAccCustomDropdown() {
   });
 }
 
-function selectAccLanguage(lang, skipSync = false) {
+function selectAccLanguage(lang, skipSync = false, persist = false) {
   const loc =
     supportedLocales.find((l) => l.code === lang) || supportedLocales[1];
   const flagSpan = document.getElementById('acc-custom-flag');
@@ -273,7 +274,10 @@ function selectAccLanguage(lang, skipSync = false) {
   if (trigger) trigger.setAttribute('aria-expanded', 'false');
 
   if (!skipSync) {
-    selectCustomLanguage(lang, true);
+    selectCustomLanguage(lang, true, persist);
+  } else if (persist) {
+    // Reached when the account dropdown is the origin and the sync has already happened.
+    changePortalLanguage(lang, true);
   }
 }
 
@@ -643,15 +647,29 @@ async function loadVersionDetails() {
 async function init() {
   const urlParams = new URLSearchParams(window.location.search);
   const magicToken = urlParams.get('token');
-  const langParam = urlParams.get('lang') || '';
+  // Precedence: an explicit ?lang= wins, then the remembered choice, then the server's
+  // Accept-Language detection. The middle one is what makes a language survive a reload, and is
+  // how a choice made in Portal V2 reaches V1 (#1541).
+  let storedLang = '';
+  try {
+    storedLang = localStorage.getItem('lfr_lang') || '';
+  } catch (e) {
+    storedLang = '';
+  }
+  const langParam = urlParams.get('lang') || storedLang;
 
   // Load translations before showing login/dashboard to prevent FOUC
   try {
     const res = await fetch('/api/i18n?lang=' + encodeURIComponent(langParam));
     if (res.ok) {
       const bundle = await res.json();
-      let resolvedLang = 'en';
-      if (bundle.portal_welcome === 'Bienvenido') resolvedLang = 'es';
+      // With an explicit language there is nothing to infer, and inferring would be wrong: the
+      // guesses below key off portal_welcome and have no entry for Arabic, so an `ar` choice
+      // resolved to 'en'.
+      let resolvedLang = langParam || 'en';
+      if (langParam) {
+        // trusted as given
+      } else if (bundle.portal_welcome === 'Bienvenido') resolvedLang = 'es';
       else if (bundle.portal_welcome === 'Bienvenue') resolvedLang = 'fr';
       else if (bundle.portal_welcome === 'Willkommen') resolvedLang = 'de';
       else if (bundle.portal_welcome === 'Bem-vindo') resolvedLang = 'pt';
@@ -1250,8 +1268,21 @@ async function showDashboard() {
   // Render and initialize our high-fidelity custom SVG flag selectors
   renderCustomDropdown();
   renderAccCustomDropdown();
-  selectCustomLanguage(currentUser.language_preference || 'en');
-  selectAccLanguage(currentUser.language_preference || 'en');
+  // A remembered choice outranks the account's stored preference here.
+  //
+  // These two lines used to run unconditionally with the server default of 'en', so every
+  // profile load reset the interface to English and undid whatever the person had just picked
+  // (#1541). Neither persists -- only a click does -- so reading the stored value first cannot
+  // write anything back.
+  let rememberedLang = '';
+  try {
+    rememberedLang = localStorage.getItem('lfr_lang') || '';
+  } catch (e) {
+    rememberedLang = '';
+  }
+  const profileLang = rememberedLang || currentUser.language_preference || 'en';
+  selectCustomLanguage(profileLang);
+  selectAccLanguage(profileLang);
   setupDropdownA11y(
     'portal-custom-dropdown-trigger',
     'custom-dropdown-menu',
@@ -3751,8 +3782,26 @@ async function adminDeleteUser(email) {
   }
 }
 
-async function changePortalLanguage(lang) {
+// persist is OPT-IN, and that is the whole design (#1541).
+//
+// This function is called from two very different places: a person choosing a language, and the
+// profile loader syncing the controls to whatever the account already had. Persisting
+// unconditionally means the second overwrites the first -- on every page load, with the server
+// default of 'en' -- so a choice appeared to work and was gone by the next reload. Only the click
+// handlers pass true.
+async function changePortalLanguage(lang, persist = false) {
   currentLanguage = lang;
+  if (persist) {
+    try {
+      // The same key Portal V2 writes (I18nContext.tsx), so the two portals share one preference
+      // and a language chosen in either is honoured by both.
+      localStorage.setItem('lfr_lang', lang);
+    } catch (e) {
+      // Private browsing or blocked storage. The switch still applies to this page; it just will
+      // not be remembered, which beats failing the switch.
+      console.warn('Could not persist the language preference', e);
+    }
+  }
   try {
     const res = await fetch('/api/i18n?lang=' + encodeURIComponent(lang));
     if (res.ok) {

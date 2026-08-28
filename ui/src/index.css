@@ -558,7 +558,12 @@ tr:hover td {
   border: 1px solid var(--status-info-border);
 }
 .badge-control {
-  background: var(--status-neutral-bg, var(--input-bg));
+  /* --input-bg directly rather than a --status-neutral-bg that no theme defines. The fallback
+     already resolved to exactly this in every theme, so the rendering is unchanged -- but a
+     token with a fallback and no definition renders while never following the theme, which is
+     what check-theme-tokens.mjs exists to catch. The colour and border below already take the
+     generic neutral tokens, so this makes all three consistent. */
+  background: var(--input-bg);
   color: var(--text-muted);
   border: 1px solid var(--border);
 }

@@ -60,4 +60,5 @@ fi
 echo "Installing hook shims into $HOOKS_DIR..."
 install_shim pre-commit scripts/pre-commit-hook.sh
 install_shim pre-push scripts/pre-push-hook.sh
+install_shim commit-msg scripts/commit-msg-hook.sh
 echo "Hooks now exec the scripts in the working tree -- editing one takes effect immediately."

@@ -1,1 +1,41 @@
+# Line endings are normalised so a checkout is byte-identical on every platform (#1481).
+#
+# Without this, git converts on checkout according to each person's core.autocrlf, so the same
+# commit is a different file on Windows. That is not a tidiness concern: a test that reads Go
+# source compared a line to "}" and never matched, because on Windows every line ended \r. It
+# scanned the whole file instead of one function and turned master red on windows-latest, while
+# passing on ubuntu and macOS.
+#
+# text=auto still lets git detect and leave binaries alone; eol=lf fixes what the WORKING TREE
+# gets for anything it decides is text.
+* text=auto eol=lf
+
+# --- Windows-native batch files, which genuinely want CRLF ---------------------------------
+# cmd.exe is the one interpreter that cares: a .bat with LF-only endings can mis-parse labels and
+# goto targets, and lfr-tunnel.bat uses setlocal/:: comments.
+#
+# .ps1 is deliberately NOT here. PowerShell handles LF perfectly well, and install.ps1 is embedded
+# via staticFS and served from /install.ps1 -- forcing CRLF would change the bytes every Windows
+# user pipes into iex, for no benefit.
+*.bat  text eol=crlf
+*.cmd  text eol=crlf
+
+# --- Binaries, marked explicitly ------------------------------------------------------------
+# text=auto detects these correctly, but saying so removes the guess -- a mis-detected binary is
+# corrupted silently, and only on the platform doing the converting.
+*.png  binary
+*.jpg  binary
+*.jpeg binary
+*.gif  binary
+*.ico  binary
+*.pdf  binary
+*.zip  binary
+*.gz   binary
+*.woff binary
+*.woff2 binary
+*.ttf  binary
+
+# --- Existing ------------------------------------------------------------------------------
+# Concurrent agents append to their own sections of this file; a union merge keeps both sides
+# rather than producing a conflict neither wrote.
 .agents/gemini.md merge=union

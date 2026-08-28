@@ -1,10 +1,13 @@
 @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap');
+/* Accessibility component rules shared with Portal V1 (#1520). */
+@import '../../pkg/server/static/shared/a11y.css';
 
 /*
  * Theme tokens (colours, shadows, spacing) are defined externally in:
- *   ui/src/themes/dark.css    — Dark theme (default)
- *   ui/src/themes/light.css   — Light theme
- *   ui/src/themes/liferay.css — Liferay Waffle theme (#0B5FFF)
+ *   pkg/server/static/themes/dark.css    — Dark theme (default)
+ *   pkg/server/static/themes/light.css   — Light theme
+ *   pkg/server/static/themes/liferay.css — Liferay Waffle theme (#0B5FFF)
+ * shared with Portal V1 since #1522, and pulled in via ui/src/themes/index.css.
  * All styles below reference var(--token-name) only — no hardcoded colours.
  */
 
@@ -79,6 +82,31 @@ body {
   border-radius: 50%;
   animation: spin 1s linear infinite;
 }
+/* The login button's spinner asked for 16px with a 2px rim via w-4 h-4 border-2, none of
+   which exist, so a 40px spinner sized for a full-page loader rendered inside a button
+   (#1383). A modifier rather than utilities: the two sizes are the same component. */
+/* A QR code needs a white quiet zone to be scannable, whatever the theme -- black modules
+   on a dark card is not a contrast preference, it is an unreadable code. The markup asked
+   for this with bg-white and inline-block, neither of which exists, so MFA setup rendered
+   its QR straight onto the card (#1383).
+ *
+ * Deliberately not var(--bg-card-solid) or similar: this is the one place in the app where
+ * the colour must NOT follow the theme.
+ */
+.qr-frame {
+  display: inline-block;
+  background: #ffffff;
+  padding: var(--spacing-lg);
+  border-radius: 10px;
+  margin-bottom: var(--spacing-lg);
+}
+
+.spinner--sm {
+  width: 16px;
+  height: 16px;
+  border-width: 2px;
+}
+
 @keyframes spin {
   100% {
     transform: rotate(360deg);
@@ -154,7 +182,11 @@ body {
   box-shadow: 0 4px 12px var(--primary-glow);
 }
 .btn-primary:hover {
-  background: #0050e6;
+  /* No background here on purpose (#1514). This rule precedes the gradient one below, and the
+     later .btn-primary:hover sets no background -- so this literal used to WIN on hover and
+     replace the gradient with a flat, unthemed #0050e6. Dropping it lets the themed gradient
+     stay put and `filter: brightness(1.1)` provide the hover cue, which is how .btn-danger
+     already behaves. */
   border-color: transparent;
   transform: translateY(-1px);
   box-shadow: 0 6px 16px var(--primary-glow);
@@ -207,6 +239,10 @@ body {
 /* Mobile Header Default (Hidden on Desktop) */
 .mobile-header {
   display: none;
+  /* The markup asked for this with a bg-card utility that does not exist, so on mobile the
+     header bar was transparent (#1383). It belongs on the component rather than as a
+     utility -- .mobile-header is the only thing that wants it. */
+  background: var(--bg-card);
 }
 
 /* Actions Cell Helper */
@@ -516,6 +552,29 @@ tr:hover td {
   border: 1px solid var(--border);
 }
 .badge.info,
+/* Node type (#1383). AdminTelemetry and AdminSubdomains mark a row with the gateway it
+   landed on -- an edge, or the control plane -- and both modifiers were missing, so every
+   badge rendered in the default success green regardless of which it was. */
+.badge-node {
+  background: var(--status-info-bg);
+  color: var(--status-info-text);
+  border: 1px solid var(--status-info-border);
+}
+.badge-control {
+  /* --input-bg directly rather than a --status-neutral-bg that no theme defines. The fallback
+     already resolved to exactly this in every theme, so the rendering is unchanged -- but a
+     token with a fallback and no definition renders while never following the theme, which is
+     what check-theme-tokens.mjs exists to catch. The colour and border below already take the
+     generic neutral tokens, so this makes all three consistent. */
+  background: var(--input-bg);
+  color: var(--text-muted);
+  border: 1px solid var(--border);
+}
+.badge-primary {
+  background: var(--primary);
+  color: #fff;
+  border: 1px solid var(--primary);
+}
 .badge-info {
   background: var(--status-info-bg);
   color: var(--status-info-text);
@@ -649,48 +708,19 @@ input:checked + .toggle-slider:before {
   color: var(--danger);
   border: 1px solid rgba(239, 68, 68, 0.2);
 }
-/* Toaster Notifications */
-#toast-container {
-  position: fixed;
-  bottom: 24px;
-  right: 24px;
-  z-index: 9999;
-  display: flex;
-  flex-direction: column;
-  gap: 12px;
-}
-
-.toast {
-  background: var(--toast-bg);
-  color: var(--toast-color);
-  padding: 16px 24px;
-  border-radius: 12px;
-  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.15);
-  border: 1px solid var(--toast-border);
-  display: flex;
-  align-items: center;
-  gap: 12px;
-  font-size: 14px;
-  font-weight: 500;
-  transform: translateX(120%);
-  opacity: 0;
-  transition: all 0.3s cubic-bezier(0.68, -0.55, 0.265, 1.55);
-}
-
-.toast.show {
-  transform: translateX(0);
-  opacity: 1;
-}
-
-.toast-success {
-  border-left: 4px solid var(--success);
-}
-.toast-error {
-  border-left: 4px solid var(--danger);
-}
-.toast-info {
-  border-left: 4px solid var(--primary);
-}
+/*
+ * V1's toast vocabulary used to live here too -- #toast-container, .toast, .toast.show and the
+ * .toast-{success,error,info} variants -- and nothing in this portal ever rendered it (#1542).
+ * V2's live toasts are .toast-stack > .toast-card, defined further down; V1's copy stays in
+ * pkg/server/static/dashboard.css, where it is used.
+ *
+ * It was not merely unused, it misled: #1533's Windows High Contrast Mode rule named .toast,
+ * matched nothing, and left V2's toasts with no boundary under HCM.
+ *
+ * The class gate cannot catch this. check-css-modifiers.cjs verifies every class in the markup
+ * HAS a rule, not that every rule has a user -- and in that direction a genuinely dead rule and
+ * one used only via a runtime-built class string look identical.
+ */
 
 /* --- RIGHT-TO-LEFT (RTL) SUPPORT --- */
 html[dir='rtl'] body {
@@ -1259,8 +1289,18 @@ html[dir='rtl'] th {
   transform: scale(0.97);
 }
 
+/* Both gradient stops come from the theme (#1514). The second was the literal #60a5fa, a light
+   blue that suited the dark palette and no other -- and, measured, put white text at 2.54:1 at
+   rest, well under the 4.5:1 WCAG AA needs. --primary itself is not the right token here: it is
+   a FOREGROUND, used for links and icons, so it wants to be light on a dark card, which is the
+   opposite of what a fill under a white label wants. Hence the separate pair, as --danger-strong
+   is separate from --danger (#1458). */
 .btn-primary {
-  background: linear-gradient(135deg, var(--primary), #60a5fa);
+  background: linear-gradient(
+    135deg,
+    var(--primary-strong),
+    var(--primary-strong-alt)
+  );
   box-shadow: 0 4px 14px 0 var(--primary-glow);
   border: none;
   color: #fff;
@@ -1516,6 +1556,137 @@ html[dir='rtl'] th {
 }
 
 /* --- Gap (using design tokens) --- */
+/* Utilities the markup already asks for (#1383).
+ *
+ * Each of these completes a family the sheet already has -- .tracking-wide and
+ * .tracking-wider without tight or widest, .min-w-xs..lg without 0, .flex-1 without
+ * .flex-2, .overflow-auto without the single-axis form, .opacity-60/80 without 70. A
+ * half-present family is what let these accumulate: every gap looked deliberate sitting
+ * next to the steps that were there.
+ *
+ * Values follow the Tailwind semantics the class names imply, since that is what whoever
+ * wrote the markup expected them to do.
+ *
+ * These APPLY on merge -- 60 declarations that did nothing start working. Most are
+ * inert-and-harmless (a font style, a letter-spacing), but four change layout and are
+ * called out because they are the ones to look at:
+ *
+ *   grid-cols-2    AccountSettings' MFA form becomes two columns, as `grid grid-cols-2`
+ *                  always meant; it renders as one today
+ *   flex-2         AdminBlacklist's wider field actually takes 2x the space
+ *   max-h-96       the What's New list gains its scroll cap instead of running long
+ *   min-h-screen   the app shell and login page get their viewport floor
+ */
+.align-middle {
+  vertical-align: middle;
+}
+.inline-block {
+  display: inline-block;
+}
+.italic {
+  font-style: italic;
+}
+.underline {
+  text-decoration-line: underline;
+}
+.capitalize {
+  text-transform: capitalize;
+}
+.break-all {
+  word-break: break-all;
+}
+.break-words {
+  overflow-wrap: break-word;
+}
+.leading-relaxed {
+  line-height: 1.625;
+}
+.tracking-tight {
+  letter-spacing: -0.025em;
+}
+.tracking-widest {
+  letter-spacing: 0.1em;
+}
+.min-w-0 {
+  min-width: 0;
+}
+.opacity-70 {
+  opacity: 0.7;
+}
+.border-dashed {
+  border-style: dashed;
+}
+.overflow-y-auto {
+  overflow-y: auto;
+}
+.max-h-96 {
+  max-height: 24rem;
+}
+/* Lines a button up with the inputs beside it in a filter row. .btn is padded for its own
+   rhythm (8px 16px) and comes out shorter than .input-field (12px 16px plus a border), so
+   a button in a row of fields sits low without this.
+ *
+ * Named for the relationship rather than the measurement: the markup asked for h-[45px],
+ * the same number with none of the reason, which would need re-deriving by hand if
+ * .input-field's padding ever changed (#1383). */
+/* Keeps a report section from being split across a page break when Export PDF prints the
+   Analytics page. Inert until now, so sections broke mid-chart (#1383). */
+.print-section {
+  break-inside: avoid;
+  page-break-inside: avoid;
+}
+
+/* The two hover variants the markup still asks for. The escaped colon is ordinary CSS, and
+   two rules is less churn than inventing a bespoke class for each call site -- but they are
+   the only Tailwind-shaped names kept, so new markup should reach for a component class. */
+.hover\:opacity-80:hover {
+  opacity: 0.8;
+}
+.hover\:bg-white\/10:hover {
+  background: rgba(255, 255, 255, 0.1);
+}
+
+.h-input {
+  height: 45px;
+}
+.min-h-screen {
+  min-height: 100vh;
+}
+.grid-cols-2 {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+.flex-2 {
+  flex: 2 2 0%;
+}
+.z-10 {
+  z-index: 10;
+}
+.z-40 {
+  z-index: 40;
+}
+/* transition-* set only the property; duration comes from the base .btn/.card rules or
+   from .duration-200, matching how the markup pairs them. */
+.transition-all {
+  transition-property: all;
+  transition-timing-function: cubic-bezier(0.4, 0, 0.2, 1);
+  transition-duration: 0.2s;
+}
+.transition-colors {
+  transition-property: color, background-color, border-color, fill, stroke;
+  transition-timing-function: cubic-bezier(0.4, 0, 0.2, 1);
+  transition-duration: 0.2s;
+}
+.duration-200 {
+  transition-duration: 200ms;
+}
+.drop-shadow-md {
+  filter: drop-shadow(0 4px 3px rgb(0 0 0 / 0.07))
+    drop-shadow(0 2px 2px rgb(0 0 0 / 0.06));
+}
+
+.gap-2xs {
+  gap: var(--spacing-2xs);
+}
 .gap-xs {
   gap: var(--spacing-xs);
 }
@@ -1536,8 +1707,26 @@ html[dir='rtl'] th {
 }
 
 /* --- Padding --- */
+/* Spacing utilities (#1383).
+ *
+ * The sheet carried a PARTIAL scale: .px-lg and .px-md existed but not .px-sm, .pb-sm
+ * but not .pb-md, no .pl-* or .pr-* at all. Markup written against the missing steps
+ * therefore styled nothing -- 163 of the 325 inert class occurrences in Portal V2 were
+ * this one gap, with py-xs alone accounting for 64 and px-sm for 35.
+ *
+ * Completing the scale rather than rewriting the markup to dodge it: the classes say what
+ * their authors meant, the values come from the same tokens every other utility reads,
+ * and a half-present scale is what produced the problem in the first place.
+ *
+ * This IS a visual change -- 163 declarations that did nothing now apply. They are 2-24px
+ * of padding or margin from the existing scale, which is the spacing those lines were
+ * written to get.
+ */
+.p-0 {
+  padding: 0;
+}
 .p-2xs {
-  padding: 2px;
+  padding: var(--spacing-2xs);
 }
 .p-xs {
   padding: var(--spacing-xs);
@@ -1561,6 +1750,18 @@ html[dir='rtl'] th {
   padding-left: var(--spacing-md);
   padding-right: var(--spacing-md);
 }
+.px-xs {
+  padding-left: var(--spacing-xs);
+  padding-right: var(--spacing-xs);
+}
+.px-sm {
+  padding-left: var(--spacing-sm);
+  padding-right: var(--spacing-sm);
+}
+.px-xl {
+  padding-left: var(--spacing-xl);
+  padding-right: var(--spacing-xl);
+}
 .px-lg {
   padding-left: var(--spacing-lg);
   padding-right: var(--spacing-lg);
@@ -1568,6 +1769,22 @@ html[dir='rtl'] th {
 .py-sm {
   padding-top: var(--spacing-sm);
   padding-bottom: var(--spacing-sm);
+}
+.py-0 {
+  padding-top: 0;
+  padding-bottom: 0;
+}
+.py-2xs {
+  padding-top: var(--spacing-2xs);
+  padding-bottom: var(--spacing-2xs);
+}
+.py-xs {
+  padding-top: var(--spacing-xs);
+  padding-bottom: var(--spacing-xs);
+}
+.py-xl {
+  padding-top: var(--spacing-xl);
+  padding-bottom: var(--spacing-xl);
 }
 .py-md {
   padding-top: var(--spacing-md);
@@ -1611,6 +1828,36 @@ html[dir='rtl'] th {
 }
 .mb-0 {
   margin-bottom: 0;
+}
+.pt-md {
+  padding-top: var(--spacing-md);
+}
+.pb-xs {
+  padding-bottom: var(--spacing-xs);
+}
+.pb-md {
+  padding-bottom: var(--spacing-md);
+}
+.pb-lg {
+  padding-bottom: var(--spacing-lg);
+}
+.pl-lg {
+  padding-left: var(--spacing-lg);
+}
+.pr-sm {
+  padding-right: var(--spacing-sm);
+}
+.ml-xs {
+  margin-left: var(--spacing-xs);
+}
+.mt-2xs {
+  margin-top: var(--spacing-2xs);
+}
+.mt-2xl {
+  margin-top: var(--spacing-2xl);
+}
+.mb-2xs {
+  margin-bottom: var(--spacing-2xs);
 }
 .mb-xs {
   margin-bottom: var(--spacing-xs);
@@ -2012,6 +2259,18 @@ html[dir='rtl'] th {
   box-shadow: 0 1px 2px rgba(0, 0, 0, 0.12);
   z-index: 40;
   flex-shrink: 0;
+}
+
+/* Login renders the same banner as a centred card above the sign-in box rather than as a
+   full-width strip. It previously hand-rolled the whole thing with bg-primary/text-white,
+   which are not defined -- so it had no background at all -- while this class sat ready
+   with the colour and typography (#1383). Only the geometry differs, so that is all this
+   modifier changes. */
+.v1-promo-banner--card {
+  max-width: 420px;
+  width: 100%;
+  padding: var(--spacing-md) var(--spacing-xl);
+  border-radius: 10px;
 }
 
 .v1-promo-banner a {
@@ -2493,6 +2752,18 @@ input[type='checkbox'] {
   align-items: center;
   margin-bottom: var(--spacing-lg);
 }
+/* The modal family had header, title and close but no body or footer, so five modals laid
+   those out with utilities and no shared rhythm (#1383). */
+.modal-body {
+  margin-bottom: var(--spacing-lg);
+}
+.modal-footer {
+  display: flex;
+  justify-content: flex-end;
+  align-items: center;
+  gap: var(--spacing-sm);
+  margin-top: var(--spacing-lg);
+}
 .modal-title {
   margin: 0;
   font-size: 20px;
@@ -2521,6 +2792,27 @@ input[type='checkbox'] {
   padding: 4px;
   gap: 4px;
   margin-bottom: var(--spacing-lg);
+}
+
+/* Underline tabs, as used by the install modal's OS picker. Distinct from .sub-tab below,
+   which is a filled pill in a bordered group -- swapping one for the other would be a
+   redesign rather than a fix, which is why this exists rather than reusing it (#1383). */
+.tab-btn {
+  background: transparent;
+  border: none;
+  border-bottom: 2px solid transparent;
+  color: var(--text-muted);
+  cursor: pointer;
+  transition:
+    color 0.2s ease,
+    border-color 0.2s ease;
+}
+.tab-btn:hover {
+  color: var(--text-main);
+}
+.tab-btn--active {
+  color: var(--text-main);
+  border-bottom-color: var(--primary);
 }
 
 .sub-tab {
@@ -2811,4 +3103,84 @@ input[type='checkbox'] {
 }
 .scroll-to-top-btn:hover {
   transform: translateY(-2px);
+}
+
+/*
+ * Windows High Contrast Mode (#1521).
+ *
+ * forced-colors is not "a very high contrast theme" -- the browser REPLACES the author's
+ * palette with the user's system colours, and in doing so it silently drops three things this
+ * portal leans on:
+ *
+ *   * background-image, which includes every gradient. .btn-primary and .btn-danger are
+ *     gradients with `border: none`, so under HCM they lose their fill AND have no boundary:
+ *     white label on the system canvas, indistinguishable from body text.
+ *   * box-shadow, which several surfaces use as their only visible edge.
+ *   * author colours generally, so anything conveying state by colour alone stops conveying it.
+ *
+ * The fix is not to reassert colours -- that fights the user's stated preference and is what
+ * forced-color-adjust exists to prevent. It is to make sure a BOUNDARY survives, using the
+ * system keywords so the browser keeps control of the actual hues.
+ */
+@media (forced-colors: active) {
+  /* Buttons keep their shape: ButtonFace/ButtonText are the pair the OS reserves for controls,
+     so a button reads as a button rather than as text. The border is the load-bearing part --
+     without it the fill and the page are the same colour. */
+  .btn,
+  .btn-primary,
+  .btn-danger,
+  .btn-secondary {
+    background: ButtonFace;
+    color: ButtonText;
+    border: 1px solid ButtonText;
+  }
+
+  /* The gradients are dropped by the browser anyway; saying so keeps the intent legible and
+     stops a future gradient being added here on the assumption it would show. */
+  .btn-primary,
+  .btn-danger {
+    background-image: none;
+    box-shadow: none;
+  }
+
+  /* Focus must stay visible when every other colour has been replaced. Highlight is the system
+     colour for exactly this, and outline is one of the few properties HCM preserves. */
+  :focus-visible {
+    outline: 2px solid Highlight;
+    outline-offset: 2px;
+  }
+
+  /* Surfaces whose only edge is a shadow lose it. A border costs no layout -- box-sizing is
+     border-box globally -- and is the difference between a card and the page running together. */
+  .card,
+  .modal-content,
+  .action-menu,
+  /* .toast-card, not .toast: #1533 named V1's class here, and V2 renders neither the
+     .toast nor the .show vocabulary -- the live stack is .toast-stack > .toast-card, so
+     the rule matched nothing and the toasts kept no boundary under HCM. */
+  .toast-card {
+    border: 1px solid CanvasText;
+    box-shadow: none;
+  }
+
+  /* Badges distinguish themselves by fill colour, which is gone. The border restores the
+     boundary; the text inside still says which state it is. */
+  [class*='badge'] {
+    border: 1px solid CanvasText;
+  }
+
+  /*
+   * The one place the colours must NOT be replaced.
+   *
+   * A QR code is only scannable as dark-on-light with enough contrast between the modules and
+   * the quiet zone. HCM would repaint the frame in system colours and can invert it, which
+   * cameras do not reliably read. forced-color-adjust: none opts this subtree out -- the
+   * narrow, intended use of that property, and the same reasoning that made this frame a fixed
+   * #ffffff rather than a themed token in the first place (#1508).
+   */
+  .qr-frame,
+  .qr-frame * {
+    forced-color-adjust: none;
+    background: #ffffff;
+  }
 }

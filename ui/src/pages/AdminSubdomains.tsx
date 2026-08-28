@@ -374,12 +374,9 @@ export default function AdminSubdomains() {
                 </tr>
               ) : (
                 paginatedSubdomains.map((sub) => (
-                  <tr
-                    key={sub.id}
-                    className="border-b hover:bg-white/5 transition-colors"
-                  >
+                  <tr key={sub.id} className="border-b transition-colors">
                     {isColumnVisible('subdomain') && (
-                      <td className="td-cell font-medium">
+                      <td className="td-cell fw-medium">
                         {sub.subdomain || '(wildcard)'}
                       </td>
                     )}
@@ -389,7 +386,7 @@ export default function AdminSubdomains() {
                           href={`https://${sub.full_host}`}
                           target="_blank"
                           rel="noreferrer"
-                          className="text-primary no-underline font-medium"
+                          className="text-primary no-underline fw-medium"
                         >
                           {sub.full_host}
                         </a>

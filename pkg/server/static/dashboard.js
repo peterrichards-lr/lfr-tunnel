@@ -30,6 +30,10 @@ function applyTranslations(bundle, lang) {
     }
   });
 
+  // Rebuilt rather than looked up: this name interpolates the heading text (#1520).
+  if (typeof refreshHeadingAnchorLabels === 'function')
+    refreshHeadingAnchorLabels();
+
   const dir = lang === 'ar' || lang === 'he' ? 'rtl' : 'ltr';
   document.documentElement.dir = dir;
 
@@ -173,7 +177,8 @@ function renderCustomDropdown() {
     };
 
     item.onclick = () => {
-      selectCustomLanguage(loc.code);
+      // A person chose this, so it is remembered.
+      selectCustomLanguage(loc.code, false, true);
     };
 
     item.innerHTML = `
@@ -184,7 +189,7 @@ function renderCustomDropdown() {
   });
 }
 
-function selectCustomLanguage(lang, skipSync = false) {
+function selectCustomLanguage(lang, skipSync = false, persist = false) {
   const loc =
     supportedLocales.find((l) => l.code === lang) || supportedLocales[1];
   const flagSpan = document.getElementById('custom-dropdown-flag');
@@ -201,7 +206,7 @@ function selectCustomLanguage(lang, skipSync = false) {
     selectAccLanguage(lang, true);
   }
 
-  changePortalLanguage(lang);
+  changePortalLanguage(lang, persist);
 }
 
 function toggleCustomDropdown() {
@@ -242,7 +247,7 @@ function renderAccCustomDropdown() {
     };
 
     item.onclick = () => {
-      selectAccLanguage(loc.code);
+      selectAccLanguage(loc.code, false, true);
     };
 
     item.innerHTML = `
@@ -253,7 +258,7 @@ function renderAccCustomDropdown() {
   });
 }
 
-function selectAccLanguage(lang, skipSync = false) {
+function selectAccLanguage(lang, skipSync = false, persist = false) {
   const loc =
     supportedLocales.find((l) => l.code === lang) || supportedLocales[1];
   const flagSpan = document.getElementById('acc-custom-flag');
@@ -269,7 +274,10 @@ function selectAccLanguage(lang, skipSync = false) {
   if (trigger) trigger.setAttribute('aria-expanded', 'false');
 
   if (!skipSync) {
-    selectCustomLanguage(lang, true);
+    selectCustomLanguage(lang, true, persist);
+  } else if (persist) {
+    // Reached when the account dropdown is the origin and the sync has already happened.
+    changePortalLanguage(lang, true);
   }
 }
 
@@ -514,7 +522,25 @@ let currentUser = null;
 let currentLanguage = 'en';
 let generatedRawToken = '';
 
+let toastLiveSlot = 0;
+
 function showToast(message, type = 'info') {
+  // Announce as well as paint (#1520). Alternating slots because a live region only
+  // speaks when its text changes, and the same toast twice is a real case here.
+  const a = document.getElementById('toast-live-a');
+  const b = document.getElementById('toast-live-b');
+  if (a && b) {
+    if (toastLiveSlot === 0) {
+      a.textContent = message;
+      b.textContent = '';
+      toastLiveSlot = 1;
+    } else {
+      b.textContent = message;
+      a.textContent = '';
+      toastLiveSlot = 0;
+    }
+  }
+
   const container = document.getElementById('toast-container');
   const toast = document.createElement('div');
   toast.className = `toast toast-${type}`;
@@ -621,15 +647,29 @@ async function loadVersionDetails() {
 async function init() {
   const urlParams = new URLSearchParams(window.location.search);
   const magicToken = urlParams.get('token');
-  const langParam = urlParams.get('lang') || '';
+  // Precedence: an explicit ?lang= wins, then the remembered choice, then the server's
+  // Accept-Language detection. The middle one is what makes a language survive a reload, and is
+  // how a choice made in Portal V2 reaches V1 (#1541).
+  let storedLang = '';
+  try {
+    storedLang = localStorage.getItem('lfr_lang') || '';
+  } catch (e) {
+    storedLang = '';
+  }
+  const langParam = urlParams.get('lang') || storedLang;
 
   // Load translations before showing login/dashboard to prevent FOUC
   try {
     const res = await fetch('/api/i18n?lang=' + encodeURIComponent(langParam));
     if (res.ok) {
       const bundle = await res.json();
-      let resolvedLang = 'en';
-      if (bundle.portal_welcome === 'Bienvenido') resolvedLang = 'es';
+      // With an explicit language there is nothing to infer, and inferring would be wrong: the
+      // guesses below key off portal_welcome and have no entry for Arabic, so an `ar` choice
+      // resolved to 'en'.
+      let resolvedLang = langParam || 'en';
+      if (langParam) {
+        // trusted as given
+      } else if (bundle.portal_welcome === 'Bienvenido') resolvedLang = 'es';
       else if (bundle.portal_welcome === 'Bienvenue') resolvedLang = 'fr';
       else if (bundle.portal_welcome === 'Willkommen') resolvedLang = 'de';
       else if (bundle.portal_welcome === 'Bem-vindo') resolvedLang = 'pt';
@@ -693,6 +733,91 @@ async function init() {
 
   await loadVersionDetails();
   initSidebarSections();
+  decorateSectionHeadings();
+}
+
+/*
+ * Heading anchor links (#1520).
+ *
+ * Each section heading gets two controls: the heading TEXT becomes a link to that
+ * section's own fragment (click to navigate, the URL changes), and a link icon beside it
+ * copies that URL (click to copy). Siblings, never nested -- a <button> inside an <a> is
+ * invalid HTML and a real assistive-technology failure.
+ *
+ * Applied here rather than written into dashboard.html fifteen times so the accessibility
+ * rules are decided once, and so a section added later gets them without anyone
+ * remembering to. The section set and the slug are derived exactly as showTab() derives
+ * them -- direct children of .main-content whose id starts with "tab-" -- because the
+ * two must not drift: a heading linking to a fragment showTab rejects would bounce the
+ * user to the overview.
+ *
+ * data-i18n moves from the <h2> onto the inner <a>. applyTranslations() assigns
+ * el.innerText, which would wipe out the button on the next language change if the key
+ * stayed on the heading.
+ */
+function decorateSectionHeadings() {
+  document
+    .querySelectorAll('.main-content > div[id^="tab-"]')
+    .forEach((section) => {
+      const slug = section.id.slice(4);
+      const heading = section.querySelector('.header h2');
+      if (!heading || heading.querySelector('.heading-anchor-link')) return;
+
+      const link = document.createElement('a');
+      link.className = 'heading-anchor-link';
+      link.href = '#' + slug;
+      const key = heading.getAttribute('data-i18n');
+      if (key) {
+        link.setAttribute('data-i18n', key);
+        heading.removeAttribute('data-i18n');
+      }
+      while (heading.firstChild) link.appendChild(heading.firstChild);
+
+      const button = document.createElement('button');
+      button.type = 'button';
+      button.className = 'heading-anchor';
+      button.dataset.headingAnchorFor = slug;
+      // A bare link glyph announces as "link, link emoji" and says nothing about what it
+      // does, so the glyph is hidden and the button carries the name.
+      button.innerHTML = '<span aria-hidden="true">🔗</span>';
+      button.addEventListener('click', () => {
+        // Built from location so this follows whatever shape V1 routing has -- #1513
+        // proposes replacing these fragments with paths.
+        const url =
+          window.location.origin +
+          window.location.pathname +
+          window.location.search +
+          '#' +
+          slug;
+        navigator.clipboard.writeText(url).then(
+          () => showToast(t('link_copied', 'Link copied'), 'success'),
+          () =>
+            showToast(t('link_copy_failed', 'Could not copy link'), 'error'),
+        );
+      });
+
+      const wrap = document.createElement('span');
+      wrap.className = 'heading-anchor-wrap';
+      wrap.appendChild(link);
+      wrap.appendChild(button);
+      heading.appendChild(wrap);
+    });
+  refreshHeadingAnchorLabels();
+}
+
+/*
+ * The copy button's accessible name interpolates the heading text, which
+ * applyTranslations() cannot do -- it has no placeholder substitution, only key lookup.
+ * So the name is rebuilt after every translation pass, or it stays English in an
+ * otherwise translated portal (the defect #1216 fixed for the static aria-labels).
+ */
+function refreshHeadingAnchorLabels() {
+  const template = t('copy_link_to', 'Copy link to {0}');
+  document.querySelectorAll('.heading-anchor').forEach((button) => {
+    const link = button.parentElement.querySelector('.heading-anchor-link');
+    if (!link) return;
+    button.setAttribute('aria-label', template.replace('{0}', link.innerText));
+  });
 }
 
 async function showLogin() {
@@ -1099,16 +1224,13 @@ async function showDashboard() {
   document.getElementById('acc-last-name').value = currentUser.last_name || '';
   document.getElementById('acc-preferred-name').value =
     currentUser.preferred_name || '';
-  // V2 offers themes V1 does not (currently 'liferay'), and the server stores
-  // theme_preference as free text with no whitelist, so an unknown value lands
-  // here routinely rather than exceptionally (#1201).
+  // theme_preference is stored as free text with no whitelist, so a value neither portal
+  // knows can still land here -- kept for that, not for `liferay`, which V1 now renders
+  // itself (#1522).
   setSelectValueSafely(
     document.getElementById('acc-theme'),
     currentUser.theme_preference || 'system',
-    (v) =>
-      V2_ONLY_THEME_LABELS[v]
-        ? `${V2_ONLY_THEME_LABELS[v]} ${t('theme_portal_v2_only', '(set in Portal V2)')}`
-        : `${v} ${t('theme_unsupported_here', '(unsupported in Portal V1)')}`,
+    (v) => `${v} ${t('theme_unsupported_here', '(unsupported in Portal V1)')}`,
   );
   document.getElementById('acc-subdomain-style').value =
     currentUser.subdomain_style || 'liferay';
@@ -1146,8 +1268,21 @@ async function showDashboard() {
   // Render and initialize our high-fidelity custom SVG flag selectors
   renderCustomDropdown();
   renderAccCustomDropdown();
-  selectCustomLanguage(currentUser.language_preference || 'en');
-  selectAccLanguage(currentUser.language_preference || 'en');
+  // A remembered choice outranks the account's stored preference here.
+  //
+  // These two lines used to run unconditionally with the server default of 'en', so every
+  // profile load reset the interface to English and undid whatever the person had just picked
+  // (#1541). Neither persists -- only a click does -- so reading the stored value first cannot
+  // write anything back.
+  let rememberedLang = '';
+  try {
+    rememberedLang = localStorage.getItem('lfr_lang') || '';
+  } catch (e) {
+    rememberedLang = '';
+  }
+  const profileLang = rememberedLang || currentUser.language_preference || 'en';
+  selectCustomLanguage(profileLang);
+  selectAccLanguage(profileLang);
   setupDropdownA11y(
     'portal-custom-dropdown-trigger',
     'custom-dropdown-menu',
@@ -1468,10 +1603,10 @@ async function clearBroadcastMessage() {
   }
 }
 
-// Themes Portal V2 can store that V1 has no stylesheet for. Used only to label
-// the value honestly in Account Settings; V1 still renders a theme it owns.
-const V2_ONLY_THEME_LABELS = { liferay: 'Liferay Waffle \u{1F9C7}' };
-const V1_THEMES = ['system', 'light', 'dark', 'time'];
+// Both portals now read one shared set of theme files (#1522), so V1 renders every theme V2
+// offers. The V2_ONLY_THEME_LABELS map that used to live here existed to label `liferay`
+// honestly as unsupported (#1201); there is nothing left for it to describe.
+const V1_THEMES = ['system', 'light', 'dark', 'liferay', 'time'];
 
 function applyTheme(pref) {
   let themeToApply = pref;
@@ -1727,9 +1862,31 @@ function showTab(tabName, skipHistory = false) {
       if (backdrop) backdrop.classList.remove('visible');
     }
   }
-  document
-    .querySelectorAll('.main-content > div[id^="tab-"]')
-    .forEach((el) => el.classList.add('hidden'));
+  // An unknown section name -- a stale bookmark to a renamed tab, or a typo -- used to
+  // hide every section and show none, leaving a blank content area with nothing
+  // highlighted in the sidebar either. Nothing said anything had gone wrong; the portal
+  // simply looked broken. Confirmed against a running build: '#nonsense' rendered
+  // visible-tabs=[] nav-active=[] (#1215).
+  //
+  // The valid set is read from the DOM rather than kept as a list here, so renaming or
+  // adding a section cannot drift out of sync with it. It has to be the sections
+  // themselves -- direct children of .main-content -- and not every id starting with
+  // "tab-", because the install instructions use tab-btn-linux, tab-content-macos and
+  // friends, which are not sections and must not be reachable by fragment.
+  const sections = document.querySelectorAll('.main-content > div[id^="tab-"]');
+  const sectionNames = Array.from(sections).map((el) => el.id.slice(4));
+  if (!sectionNames.includes(tabName)) {
+    tabName = 'overview';
+    // Correct the URL so it matches what is actually shown; leaving '#nonsense' in the
+    // bar means a reload lands somewhere the address does not describe. replaceState
+    // rather than pushState, so a bad link does not add a history entry to go Back to,
+    // and it does not fire hashchange, so this cannot recurse.
+    if (window.location.hash && window.location.hash !== '#overview') {
+      history.replaceState({ tab: tabName }, '', '#' + tabName);
+    }
+  }
+
+  sections.forEach((el) => el.classList.add('hidden'));
   document.querySelectorAll('.nav-item').forEach((el) => {
     el.classList.remove('active');
     el.removeAttribute('aria-current');
@@ -1790,6 +1947,30 @@ window.addEventListener('popstate', (e) => {
 });
 
 let charts = {};
+
+/*
+ * Turns a bucket key into something readable (#1152).
+ *
+ * Intl.DisplayNames rather than a shipped country-name table, so nothing has to be kept
+ * current as countries are renamed, and names arrive in the reader's own language.
+ *
+ * OTHER is a reserved bucket, not a country code: it is what everything below the
+ * k-threshold is folded into, and handing it to Intl.DisplayNames would pass it straight
+ * back out as "OTHER".
+ */
+function geoBucketLabel(bucket) {
+  const code = bucket || '';
+  if (code === 'OTHER') return t('geo_other');
+  try {
+    const display = new Intl.DisplayNames([currentLanguage || 'en'], {
+      type: 'region',
+    });
+    return display.of(code) || code;
+  } catch (e) {
+    // Unavailable, or not a region code -- the raw code is still perfectly legible.
+    return code;
+  }
+}
 
 async function loadAnalytics() {
   const res = await fetch('/api/analytics');
@@ -1993,6 +2174,163 @@ async function loadAnalytics() {
             cutout: '70%',
           },
         });
+      }
+
+      // Sessions per gateway over time (#1150).
+      //
+      // Portal V2 already rendered a live distribution pie and V1 rendered nothing, so
+      // this was a difference between the two arms of the V1/V2 comparison rather than a
+      // missing nicety. Both now carry it.
+      //
+      // A gateway that carried nothing on a day has no row for it, so a missing entry is
+      // filled with 0 rather than skipped -- that gap is the whole signal, and left as a
+      // hole Chart.js joins the surrounding points and draws a line straight over the
+      // outage.
+      {
+        const nodeCanvas = document.getElementById('nodeSessionsChart');
+        const nodeEmpty = document.getElementById('node-sessions-empty');
+        const hasNodeData =
+          data.global.node_daily && data.global.node_daily.length;
+        // Shown even with nothing to plot. An admin opening this to ask which gateways
+        // are carrying sessions learns nothing from an absent panel -- "no sessions
+        // recorded yet" is an answer, and hiding it recreates the gap this closes.
+        if (nodeCanvas)
+          nodeCanvas.parentElement.style.display = hasNodeData ? '' : 'none';
+        if (nodeEmpty) nodeEmpty.style.display = hasNodeData ? 'none' : '';
+        if (nodeCanvas && hasNodeData) {
+          const nd = data.global.node_daily;
+          const dates = [...new Set(nd.map((d) => d.date))].sort();
+          const nodes = [...new Set(nd.map((d) => d.node_id))].sort();
+          const lookup = new Map(
+            nd.map((d) => [`${d.date}|${d.node_id}`, d.sessions]),
+          );
+          // Same order as Portal V2's palette, so a gateway keeps its colour across both.
+          const palette = [
+            '#3b82f6',
+            '#10b981',
+            '#f59e0b',
+            '#ef4444',
+            '#8b5cf6',
+            '#ec4899',
+            '#14b8a6',
+          ];
+          if (charts['nodeSessions']) charts['nodeSessions'].destroy();
+          charts['nodeSessions'] = new Chart(nodeCanvas.getContext('2d'), {
+            type: 'line',
+            data: {
+              labels: dates,
+              datasets: nodes.map((node, i) => ({
+                label: node.toUpperCase(),
+                data: dates.map((d) => lookup.get(`${d}|${node}`) ?? 0),
+                borderColor: palette[i % palette.length],
+                backgroundColor: palette[i % palette.length] + '20',
+                tension: 0.3,
+                fill: false,
+              })),
+            },
+            options: {
+              responsive: true,
+              maintainAspectRatio: false,
+              plugins: {
+                legend: { position: 'bottom', labels: { color: textColor } },
+              },
+              scales: {
+                x: { grid: { color: gridColor }, ticks: { color: textColor } },
+                y: {
+                  beginAtZero: true,
+                  grid: { color: gridColor },
+                  // Sessions are whole tunnels; getOptions() formats the axis as bytes,
+                  // which is why this chart does not reuse it.
+                  ticks: { color: textColor, precision: 0 },
+                },
+              },
+            },
+          });
+        }
+      }
+
+      // Region latency (#1151). The data path shipped in #1501 with no reader in either
+      // portal, and the epic (#1149) was held open for this panel.
+      //
+      // Leads with poorly_served_users because that is the figure the placement decision
+      // turns on: a region can look healthy on its own median while the people using it
+      // have no good option anywhere, and only that number shows it.
+      try {
+        // 30 days, matching what /api/analytics defaults to above. V1 has no time-range
+        // control on this page, so there is nothing to read the window from.
+        const rlRes = await fetch(
+          '/api/admin/analytics/region-latency?days=30',
+        );
+        const headline = document.getElementById('region-latency-headline');
+        if (rlRes.ok) {
+          const rl = (await rlRes.json()) || {};
+          const regions = rl.regions || [];
+          if (headline) {
+            if (!regions.length) {
+              headline.textContent = t('region_latency_empty');
+              headline.style.color = 'var(--text-muted)';
+            } else {
+              headline.innerHTML = `<strong>${rl.poorly_served_users}</strong> ${escapeHTML(t('region_latency_poorly_served'))} ${rl.threshold_ms}ms`;
+              headline.style.color =
+                rl.poorly_served_users > 0
+                  ? 'var(--warning)'
+                  : 'var(--text-muted)';
+            }
+          }
+          renderTable(
+            'region-latency-table-body',
+            regions,
+            (r) => `
+                                <tr>
+                                    <td style="font-weight: 600;">${escapeHTML((r.region || '').toUpperCase())}</td>
+                                    <td>${r.users || 0}</td>
+                                    <td>${r.median_ms || 0}ms</td>
+                                    <td>${r.p90_ms || 0}ms</td>
+                                    <td style="color: ${r.unreachable_users > 0 ? 'var(--danger)' : 'var(--text-muted)'}; font-weight: ${r.unreachable_users > 0 ? '600' : '400'};">${r.unreachable_users || 0}</td>
+                                </tr>
+                            `,
+          );
+        }
+      } catch (e) {
+        console.error('Failed to load region latency', e);
+      }
+
+      // Anonymous geographic distribution (#1152). Same panel as Portal V2 -- the two are
+      // an A/B test, so a reader in one and not the other is a parity defect.
+      //
+      // `available` is what separates "no MaxMind database deployed" from "deployed, but
+      // nothing has cleared the k-threshold yet". They look identical in the data and mean
+      // completely different things to an admin staring at an empty table.
+      try {
+        const geoRes = await fetch('/api/admin/analytics/locations');
+        const geoHeadline = document.getElementById('geo-distribution-headline');
+        if (geoRes.ok) {
+          const geo = (await geoRes.json()) || {};
+          const buckets = geo.buckets || [];
+          if (geoHeadline) {
+            if (!geo.available) {
+              geoHeadline.textContent = t('geo_unavailable');
+            } else if (!buckets.length) {
+              geoHeadline.textContent = t('geo_below_threshold');
+            } else {
+              geoHeadline.innerHTML = `${escapeHTML(t('geo_period'))} <strong>${escapeHTML(geo.period || '')}</strong>. ${escapeHTML(
+                t('geo_threshold_note').replace('{0}', String(geo.threshold)),
+              )}`;
+            }
+          }
+          renderTable(
+            'geo-distribution-table-body',
+            buckets,
+            (b) => `
+                                <tr>
+                                    <td style="font-weight: 600;">${escapeHTML(geoBucketLabel(b.bucket))}</td>
+                                    <td>${b.count || 0}</td>
+                                </tr>
+                            `,
+          );
+        }
+      } catch (e) {
+        console.error('Failed to load geographic distribution', e);
       }
 
       // Load Client Stats
@@ -3506,8 +3844,26 @@ async function adminDeleteUser(email) {
   }
 }
 
-async function changePortalLanguage(lang) {
+// persist is OPT-IN, and that is the whole design (#1541).
+//
+// This function is called from two very different places: a person choosing a language, and the
+// profile loader syncing the controls to whatever the account already had. Persisting
+// unconditionally means the second overwrites the first -- on every page load, with the server
+// default of 'en' -- so a choice appeared to work and was gone by the next reload. Only the click
+// handlers pass true.
+async function changePortalLanguage(lang, persist = false) {
   currentLanguage = lang;
+  if (persist) {
+    try {
+      // The same key Portal V2 writes (I18nContext.tsx), so the two portals share one preference
+      // and a language chosen in either is honoured by both.
+      localStorage.setItem('lfr_lang', lang);
+    } catch (e) {
+      // Private browsing or blocked storage. The switch still applies to this page; it just will
+      // not be remembered, which beats failing the switch.
+      console.warn('Could not persist the language preference', e);
+    }
+  }
   try {
     const res = await fetch('/api/i18n?lang=' + encodeURIComponent(lang));
     if (res.ok) {

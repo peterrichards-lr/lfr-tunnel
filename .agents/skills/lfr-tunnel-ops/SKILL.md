@@ -260,6 +260,15 @@ Three things differ from central, and they are the whole reason an edge needs it
   wildcard bundle pushed from central. Central holds the DNS-write credential and renews those,
   so an edge only ever receives them -- run `setup-certsync-edge.sh` too, or nginx will fail to
   start on a missing certificate.
+- **`-trusted-proxy` is the control plane's address** (IP or CIDR). Without it, a request the
+  control plane FORWARDS to this edge is attributed to central rather than to the visitor: the
+  per-tunnel IP whitelist, the rate limiter's auto-ban and every audit entry name the control
+  plane (#1450). It renders nginx's real_ip directives, which recover the visitor's address from
+  the forwarded header *before* the proxy_set_header lines run, so the gateway needs no change.
+  Not spoofable — real_ip only rewrites when the immediate peer is the trusted address, so a
+  visitor arriving edge-direct is untouched. Omit it and the config is exactly as it was.
+  `check-config` (§6a) warns when an edge does not trust the control plane, or trusts an address
+  that no longer resolves to it.
 - **`-redirect-domain` is required.** An edge's own apex has no portal to serve, so browser
   traffic arriving there is redirected to the control plane. Only `/api/` and `/tunnel` are
   served locally on that hostname.
@@ -296,6 +305,139 @@ Manage Nginx maintenance mode or perform safe database backups/restores on the V
   sudo ./scripts/common/restore-with-maintenance.sh [backup_file]
   ```
 
+### Who gets warned before a central restart
+
+Anything that wraps work in a maintenance window — `deploy`, `restore-with-maintenance.sh` — goes
+through `scripts/common/drain-and-wait.sh`, which warns **both** affected populations. They are
+different sets of people and neither implies the other:
+
+| population | how they hear | what it costs them |
+| --- | --- | --- |
+| attached tunnels | the drain announcement, on the tunnel-status heartbeat they already send (#1238) | nothing, if they move in time — a client dropped without warning was down 24m36s (#1246) |
+| portal users | the portal banner, raised only when somebody is actually logged in (#1454) | failed in-flight requests and the maintenance page; **nobody is signed out**, sessions are persisted (#1304) |
+
+A browser never sends the tunnel heartbeat, so a restart judged on attached tunnels alone is
+blind to the portal — on 2026-08-27 central had zero tunnels attached and one active portal
+session at the moment of a restart.
+
+Check both before deciding a restart is free, straight from the box:
+
+```bash
+curl -s http://127.0.0.1:<http_bind_addr port>/api/local/drain
+# {"draining":false,"local_leases":0,"portal_sessions":1}
+```
+
+Neither figure refuses a restart. They exist so the cost is a decision rather than a surprise.
+
+---
+
+## 6b. Rendering central's edge_nodes registry
+
+An edge's `url` should never be typed. `scripts/liferay/dns/lfr-demo-production.yaml` is the
+authoritative record of which edges exist and where (#941), so it is derived from there:
+
+```bash
+./bin/lfr-tunnel-ops render-edge-nodes            # reads gitignored edge_nodes.txt
+```
+
+Prints the `edge_nodes:` block for central's `server-config.yaml`. Tokens from
+`edge_nodes.txt` (format in `edge_nodes.txt.example`) are hashed with SHA-256 locally and the
+plaintext is never printed, logged or uploaded — which is what that example file has always
+promised, and what nothing implemented until #1452.
+
+Three things worth knowing:
+
+- **A url in the file is checked, not trusted.** The third field is optional; when present it
+  must match what the spec derives, and a mismatch is an error. Hand-typed addresses are how
+  three of four nodes came to name retired `aws-edge-*` hosts that resolve, via the zone
+  wildcard, to central itself — so central advertised its own address as three regions for
+  weeks (#1449).
+- **A token may be given as `sha256:<64 hex>`** instead of plaintext. Central stores only
+  hashes, so the plaintext for a hand-registered node may exist nowhere — without this the
+  *current* deployment could never be rendered from the repo, only future ones.
+- **The output contains token hashes.** It is for placing on the control plane. Do not commit
+  it, and do not paste it into an issue or a PR.
+
+Node ids normalise the way the gateway already does when advertising regions: a leading `aws-`
+or `edge-` is stripped to find the DNS label, so `edge-us` and the `us` A record are the same
+place.
+
+After placing it, verify with `check-config` below — same spec, so the two agree by
+construction.
+
+---
+
+## 6c. Validating a config BEFORE restarting
+
+Editing `server-config.yaml` and restarting used to be a bet that the file parsed. If it did not,
+`LoadServerConfig` failed at startup and **the control plane did not come back** — the failure
+landed at the worst possible moment, during the restart it was supposed to survive.
+
+```bash
+sudo /usr/local/bin/lfr-tunneld -check-config -config /etc/lfr-tunneld/server-config.yaml
+```
+
+Loads the config, prints what the gateway *would* run with, and exits — without starting the
+gateway or touching the database. Exit 0 means it would start; exit 1 prints `INVALID:` and the
+parse error. Run it after every edit to that file and before every restart.
+
+It also warns about shapes that parse cleanly and are still wrong: an edge with no `url` (nothing
+can be routed to it), an edge with no `token_hash` (it can never authenticate), and `edge_nodes`
+on a node whose `db_path` is empty (a control-plane config sitting on an edge).
+
+**It reports presence, never values.** That file holds edge token hashes, SMTP credentials and
+webhook URLs, and an operator pastes this output into tickets — so a token shows as `set`, never
+as itself. Same rule as `lfr-tunnel-ops check-config` (§6a), which is the complementary check:
+this one validates the file, that one compares a *live* node against the committed DNS spec and
+checks ownership and mode.
+
+*Availability: `-check-config` ships with the gateway binary, so it is only present on a node
+that has been deployed since #1455. On an older node the flag is unknown and the binary starts
+normally — check `lfr-tunneld -check-config -config /dev/null` reports a flag error rather than
+silently booting.*
+
+---
+
+## 6a. Checking a Live Config Against This Repo
+
+Registering an edge is a **manual** step -- `docs/server/edge_setup_guide.md` says outright there
+is no automated tool, and step 2 is "SSH to the control plane and add an entry to its
+`server-config.yaml`'s `edge_nodes` list by hand". Nothing validated those entries, which is how
+three of four `url` values came to name retired `aws-edge-*` hosts that resolve, through the zone
+wildcard, to **central itself** -- so central advertised its own address as three separate
+regions for weeks (#1449).
+
+```bash
+./bin/lfr-tunnel-ops check-config -target central
+```
+
+Read-only: it reads the live config over SSH and never writes it. Exits non-zero on any
+error-severity finding, so it can gate a deploy.
+
+What it checks, all against data already committed here:
+
+- **`edge_nodes[].url` against `scripts/liferay/dns/lfr-demo-production.yaml`**, the authoritative
+  edge record (#941). Two distinct failures: a host the spec does not declare at all, and a host
+  the spec declares as the *control plane*. Note a plain "does it resolve?" check would have
+  passed #1449 happily -- those names resolved fine, just to the wrong machine.
+- **Ownership and mode**, with the expected owner read from `resources/server/lfr-tunneld.service`
+  rather than hardcoded. `root:root` with mode 600 *looks* right and locks the service user out
+  entirely, crash-looping on the **next** restart -- so the mistake surfaces long after it was
+  made. The guide flags this as easy to get wrong; this is what catches it.
+- **Unknown top-level keys**, since yaml.v3 ignores them silently -- a typo'd setting is inert
+  while appearing to be applied. Reported as a warning, not an error, because a key may simply be
+  newer or older than the binary mid-upgrade.
+
+**It never prints a secret.** That file holds token hashes, SMTP credentials and webhook URLs, so
+findings are reported by KEY and any value whose key matches
+`token|secret|password|key|hash|credential|smtp|api|webhook|slack|teams|email` is redacted to a
+length. A test asserts none of a fixture's fake secrets appear in the output. Keep that property
+if you extend this: the schema is public (`pkg/config` is MIT), the values are not.
+
+Worth knowing: `-remote-config` can point at a backup, which is how the check was verified --
+run against central's own pre-#1449 backup it flags all three drifted URLs and the `root:root`
+ownership that a `sudo cp` backup inherits.
+
 ---
 
 ## 7. VPS Diagnostics
@@ -308,4 +450,4 @@ Run remote diagnostic checks on the VPS (system uptime/load, systemd service sta
 
 <!-- markdownlint-disable MD049 -->
 ---
-*Last Updated: 2026-08-26* | *Last Reviewed: 2026-08-26*
+*Last Updated: 2026-08-27* | *Last Reviewed: 2026-08-27*

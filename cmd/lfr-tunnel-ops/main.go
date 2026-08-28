@@ -19,6 +19,8 @@ func printUsage() {
 	fmt.Println("  reconcile-nginx Regenerate and push the core nginx config to an already-provisioned VPS")
 	fmt.Println("  render-nginx-config Print the core nginx config to stdout (no SSH; used by setup-central-vps.sh)")
 	fmt.Println("  maintenance Enable or disable maintenance mode on the VPS")
+	fmt.Println("  render-edge-nodes Print central's edge_nodes block, urls derived from the DNS spec")
+	fmt.Println("  check-config    Report drift between a live gateway config and this repo (read-only)")
 	fmt.Println("  diagnose    Run diagnostic checks on the gateway VPS")
 	fmt.Println("  dns         Reconcile DNS records (Cloudflare or Route53) against a YAML spec")
 	fmt.Println("  help        Print this help message")
@@ -49,6 +51,10 @@ func main() {
 		ops.RenderNginxConfigCommand(args)
 	case "maintenance":
 		ops.MaintenanceCommand(args)
+	case "render-edge-nodes":
+		ops.RenderEdgeNodesCommand(os.Args[2:])
+	case "check-config":
+		ops.CheckConfigCommand(os.Args[2:])
 	case "diagnose":
 		ops.DiagnoseCommand(args)
 	case "dns":

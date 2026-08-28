@@ -14,7 +14,22 @@ ARG TARGETOS
 ARG TARGETARCH
 WORKDIR /app
 COPY go.mod go.sum ./
-RUN go mod download
+# Retried, because a transient proxy.golang.org error used to fail the whole build (#1505).
+# Twice on master in one day the module proxy dropped an HTTP/2 stream mid-fetch
+# ("INTERNAL_ERROR; received from peer"), leaving a required check red and needing a manual
+# re-run. Retrying is safe by construction: this fetches immutable, checksum-verified content,
+# and go.sum means a corrupted or substituted response fails the build rather than being
+# retried into acceptance.
+#
+# The final attempt runs OUTSIDE the loop so its failure is the build's failure. A loop that
+# swallowed the last error would exit 0 with no modules and fail confusingly at `go build`
+# instead -- a late, misleading error in place of an early, accurate one.
+RUN for i in 1 2; do \
+        go mod download && exit 0; \
+        echo "go mod download failed (attempt $i), retrying..."; \
+        sleep 5; \
+    done; \
+    go mod download
 COPY . .
 ARG VERSION=dev
 RUN CGO_ENABLED=0 GOOS=$TARGETOS GOARCH=$TARGETARCH go build -ldflags="-s -w -X lfr-tunnel/pkg/config.Version=${VERSION}" -o lfr-tunnel ./cmd/lfr-tunnel

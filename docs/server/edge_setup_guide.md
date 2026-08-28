@@ -114,13 +114,80 @@ edge_nodes:
     token_hash: "4a2371ab6fbd2742e0fce40b2f3c1f94ecc8c02ad15f5455cd68bdf4e04f947a" # SHA-256 hash of plaintext token
 ```
 
+#### Rotating an Edge Node's Token
+
+An edge token is long-lived and has no expiry. Rotating one used to mean a flag day — edit
+central's config, restart it, re-provision every edge — with a window in which no edge could
+authenticate. Central now accepts more than one hash per node, so a rotation is a rolling change
+(#1491):
+
+```yaml
+edge_nodes:
+  - id: "edge-us"
+    token_hash: "<current>"
+    additional_token_hashes:
+      - "<incoming>"        # both authenticate while the rotation is in progress
+```
+
+1. Generate the new token and its hash, exactly as when registering a node.
+2. Add the hash to `additional_token_hashes` on central and `sudo systemctl reload lfr-tunneld`.
+3. Re-provision the edges one at a time with the new plaintext token. Each keeps working before
+   and after, because both hashes are accepted.
+4. Remove the old value from `token_hash` and reload central again. **This is the step that
+   actually revokes the old token** — until then it still authenticates.
+
+Both hashes are accepted on the `/api/internal/*` endpoints *and* on the control channel, where
+the hash is used as an HMAC key rather than compared. A rotation that only covered the first would
+leave an edge authenticating for registration while silently failing to establish its control
+channel, losing schedule pushes, shutdown warnings and lease kicks.
+
+#### Withdrawing an Edge Token
+
+`sudo systemctl reload lfr-tunneld` re-reads `edge_nodes` and applies it immediately. Removing a
+node, or removing a hash from one, takes effect on the next request — no restart, and no
+interruption to any tunnel on any edge (#1309).
+
+This used to require a restart, which meant an operator responding to a suspected leak had to
+choose between revoking the credential and keeping the fleet up. Reload removes the choice, so
+withdraw first and investigate afterwards.
+
+Check it landed. The reload names what changed, by node id and never by value:
+
+```bash
+sudo systemctl reload lfr-tunneld
+sudo journalctl -u lfr-tunneld -n 20 --no-pager | grep 'Edge node'
+```
+
+Two things to know before relying on it:
+
+- **Only `edge_nodes` is re-read.** Every other field still needs a restart (#1454). The reload
+  says so in its own log line, so a field that looks reloaded but is not cannot mislead you.
+- **A config that does not parse changes nothing.** The running list is kept and the failure is
+  logged, so a SIGHUP against a half-saved file cannot de-authenticate the fleet. Verify with
+  `lfr-tunneld -check-config` first if you want to know before signalling (#1455).
+
 #### Registering a New Edge Node with the Control Plane
 
-There is currently **no automated tool** for this step — track your nodes' plaintext
-tokens locally in a gitignored `edge_nodes.txt` (format in
-[edge_nodes.txt.example](file:///Volumes/SanDisk/repos/lfr-tunnel/edge_nodes.txt.example):
-`node_id,plaintext_token[,optional_public_url]`), then register each one with the
-control plane by hand:
+Track your nodes' plaintext tokens locally in a gitignored `edge_nodes.txt` (format in
+[edge_nodes.txt.example](../../edge_nodes.txt.example)), then render the registry:
+
+```bash
+./bin/lfr-tunnel-ops render-edge-nodes
+```
+
+This hashes each token with SHA-256 locally — the plaintext is never printed, logged or
+uploaded — and **derives** each `url` from `scripts/liferay/dns/lfr-demo-production.yaml`
+rather than letting you type it. That matters: the url used to be hand-written, and three
+of four came to name retired `aws-edge-*` hosts which resolve, through the zone wildcard,
+to the control plane itself, so central advertised its own address as three separate
+regions for weeks (#1449). A url written in the file is now checked against the spec and a
+mismatch is an error.
+
+The output contains token hashes and is for placing on the control plane — do not commit
+it. Verify the result afterwards with `lfr-tunnel-ops check-config`, which re-checks the
+live file against the same spec.
+
+If you would rather do it by hand, the steps are: 
 
 1. Generate a random plaintext token and its SHA-256 hash (never uploaded in plaintext):
    ```bash
@@ -492,4 +559,4 @@ If your Edge VPS or Control Plane gateway has multiple public IP addresses confi
 
 <!-- markdownlint-disable MD049 -->
 ---
-*Last Updated: 2026-08-26* | *Last Reviewed: 2026-08-26*
+*Last Updated: 2026-08-27* | *Last Reviewed: 2026-08-27*

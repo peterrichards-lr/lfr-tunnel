@@ -350,34 +350,34 @@ sudo mkdir -p /etc/lfr-tunneld
 sudo nano /etc/lfr-tunneld/server-config.yaml
 ```
 
-Paste the following configurations:
-```yaml
-domains:
-  - "portal.yourdomain.com"
-  - "tunnel.yourdomain.com"
-  - "yourdomain.com"
-http_bind_addr: "0.0.0.0:8080"
-chisel_bind_addr: ":8081"
-db_path: "/etc/lfr-tunneld/server.db"
+Start from the committed reference, which lists **every** key the gateway accepts with a
+placeholder value:
 
-# Owner and Admins
-owner:
-  user_id: "admin@yourdomain.com"
-  name: "Gateway Admin"
+```bash
+sudo cp resources/server/server-config.example.yaml /etc/lfr-tunneld/server-config.yaml
+sudo nano /etc/lfr-tunneld/server-config.yaml
+```
 
-admin_notification_email: "admin@yourdomain.com"
-disable_new_registrations: false   # Set to true to block NEW accounts (email or SSO) -- existing users unaffected
-enable_user_portal: true
+It is deliberately the complete key list rather than a minimal sample. A test
+(`TestExampleConfigCoversEveryField`) fails the build if a setting is added to the code without
+appearing there, so it cannot quietly fall behind — an example that omits a setting is worse than
+no example, because it reads as authoritative.
 
-# Collaboration & Webhook Alerts
-webhooks:
-  enabled: false                      # Set to true to activate Slack/Teams alerts
-  slack_url: "https://hooks.slack.com/services/T00/B00/X00"
-  teams_url: "https://liferay.webhook.office.com/webhookb2/..."
+The values in it are placeholders and describe no real deployment. Credentials — SMTP, webhook
+URLs, edge `token_hash` values — are left empty and supplied out of band; do not commit them.
 
-# Versioning Controls (Optional)
-min_client_version: "v1.0.0"       # Minimum client version allowed to connect
-latest_client_version: "v1.9.3"    # Latest recommended client version (decouples server upgrades)
+At minimum you must set `domains`, `owner.user_id`, `db_path` and the listener addresses. The
+settings below are the ones most worth understanding before you start; the rest are safe at their
+defaults.
+
+Before restarting the gateway on any config change, validate the file first:
+
+```bash
+sudo /usr/local/bin/lfr-tunneld -check-config -config /etc/lfr-tunneld/server-config.yaml
+```
+
+Exit 0 means it would start. Exit 1 prints the parse error — which is the difference between
+finding out now and finding out during a restart the control plane does not come back from.
 
 > [!NOTE]
 > **Slack & Microsoft Teams Notifications Configuration**
@@ -1373,4 +1373,4 @@ To guarantee that outbound connections originating from the VPS are consistently
 
 <!-- markdownlint-disable MD049 -->
 ---
-*Last Updated: 2026-08-26* | *Last Reviewed: 2026-08-26*
+*Last Updated: 2026-08-27* | *Last Reviewed: 2026-08-27*

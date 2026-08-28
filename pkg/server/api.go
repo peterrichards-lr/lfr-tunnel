@@ -483,7 +483,13 @@ func (s *Server) handleGetAnalytics(w http.ResponseWriter, r *http.Request) {
 
 	slog.Info(fmt.Sprintf("handleGetAnalytics: user=%s, role=%s, isAdmin=%v", user.Email, user.Role, isAdmin))
 
-	userStats, err := s.db.GetUserAnalytics(user.ID, days)
+	subject, err := s.analyticsSubject(r, user, isAdmin)
+	if err != nil {
+		http.Error(w, `{"error":"No such user"}`, http.StatusNotFound)
+		return
+	}
+
+	userStats, err := s.db.GetUserAnalytics(subject.ID, days)
 	if err != nil {
 		slog.Info(fmt.Sprintf("handleGetAnalytics: GetUserAnalytics failed: %v", err))
 		http.Error(w, `{"error":"Failed to fetch user analytics"}`, http.StatusInternalServerError)
@@ -492,6 +498,19 @@ func (s *Server) handleGetAnalytics(w http.ResponseWriter, r *http.Request) {
 
 	resp := map[string]interface{}{
 		"personal": userStats,
+		// Whose figures these are, stated rather than inferred (#1294). The UI has to label the
+		// panel, and a client that worked it out from the request it sent would show the wrong
+		// name the moment the server declined to honour a user_id -- which is exactly what
+		// happens to a non-admin who passes one.
+		"subject": map[string]string{
+			"id":    subject.ID,
+			"email": subject.Email,
+			"name":  displayName(subject),
+		},
+	}
+
+	if subject.ID != user.ID {
+		s.auditAnalyticsView(user, subject, r)
 	}
 
 	if isAdmin {
@@ -794,7 +813,23 @@ func (s *Server) handleAdminDeleteUser(w http.ResponseWriter, r *http.Request, a
 }
 
 // getPortalBaseURL constructs the portal's base URL from the incoming request.
+//
+// An EDGE has no portal, so it must point at the control plane's rather than derive one from its
+// own hostname. The derivation below prefixes "tunnel." onto a configured domain, which is right
+// for central -- its domain is the apex and tunnel.<apex> is its hostname -- and wrong for every
+// edge, whose domain is already a subdomain. On edge-apac it produced
+// https://tunnel.apac.lfr-demo.se/portal, a name with no DNS record and no vhost: it does not
+// even fall through the zone wildcard, because *.lfr-demo.se matches one label and "tunnel.apac"
+// is two. A developer whose token was rejected got a dead link at the moment they needed the
+// portal to fix their credentials (#1473).
+//
+// control_plane_url is set on an edge and empty on central, so it doubles as the "am I an edge"
+// signal. cfg.PortalURL still wins where an operator has set it explicitly -- see
+// respondRegisterResponse, which checks that first.
 func (s *Server) getPortalBaseURL(r *http.Request) string {
+	if cp := strings.TrimSuffix(strings.TrimSpace(s.cfg.ControlPlaneURL), "/"); cp != "" {
+		return cp
+	}
 	if r == nil {
 		if len(s.cfg.Domains) > 0 {
 			return "https://tunnel." + s.cfg.Domains[0]
@@ -2093,4 +2128,68 @@ func (s *Server) handleAdminUpdateSystemSettings(w http.ResponseWriter, r *http.
 	}
 
 	respondJSON(w, http.StatusOK, req)
+}
+
+// Viewing another user's Personal Usage (#1294).
+//
+// An admin answering "why is this user's bandwidth spiking" could see the global top-users
+// table and then had nowhere to click: the analytics endpoint always reported the caller's own
+// figures. This makes the subject selectable, without turning it into a session mode -- it is a
+// read of one report, so it is a query parameter, and cannot leak into any other page's
+// behaviour the way View As (#1225) deliberately does.
+
+// analyticsSubject resolves whose figures to report.
+//
+// A non-admin passing someone else's user_id gets their OWN figures rather than an error. That
+// is deliberate: refusing would answer "does this user exist", turning the parameter into an
+// enumeration oracle on an endpoint any authenticated user can reach. Ignoring it tells them
+// nothing they did not already know.
+func (s *Server) analyticsSubject(r *http.Request, caller *db.User, isAdmin bool) (*db.User, error) {
+	requested := strings.TrimSpace(r.URL.Query().Get("user_id"))
+	if requested == "" || !isAdmin || requested == caller.ID {
+		return caller, nil
+	}
+
+	subject, err := s.db.GetUser(requested)
+	if err != nil || subject == nil {
+		// Only an admin reaches here, and an admin may know a user does not exist.
+		return nil, fmt.Errorf("no such user: %s", requested)
+	}
+	return subject, nil
+}
+
+// auditAnalyticsView records that one person read another's usage.
+//
+// Reading someone else's figures is exactly the sort of access that should leave a trail, and
+// the admin audit log already exists for it. Recorded on the read rather than on the UI action,
+// so a request made with curl is logged the same as one made by clicking.
+func (s *Server) auditAnalyticsView(actor, subject *db.User, r *http.Request) {
+	// A failed audit write is worth saying out loud rather than discarding: the entry is the
+	// only record that this access happened, and a trail with silent gaps is worse than one
+	// known to be incomplete.
+	if err := s.db.WriteAuditEntry(&db.AuditEntry{
+		ActorID:    actor.Email,
+		Action:     "analytics.viewed_user",
+		TargetType: "user",
+		TargetID:   subject.ID,
+		Details:    fmt.Sprintf("Viewed personal usage analytics for %s", subject.Email),
+		IPAddress:  s.clientIP(r),
+		CreatedAt:  time.Now(),
+	}); err != nil {
+		slog.Error(fmt.Sprintf("[Audit] Could not record that %s viewed %s's analytics: %v",
+			actor.Email, subject.Email, err))
+	}
+}
+
+// displayName is the friendliest name available for a user, falling back to the email so the
+// UI never has to render an empty label.
+func displayName(u *db.User) string {
+	if name := strings.TrimSpace(u.PreferredName); name != "" {
+		return name
+	}
+	full := strings.TrimSpace(strings.TrimSpace(u.FirstName) + " " + strings.TrimSpace(u.LastName))
+	if full != "" {
+		return full
+	}
+	return u.Email
 }

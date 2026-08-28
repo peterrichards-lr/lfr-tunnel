@@ -272,10 +272,41 @@ type AutoBanConfig struct {
 	Ignore []string `yaml:"ignore"`
 }
 
+// AcceptedTokenHashes returns every hash that authenticates as this node: the current one plus
+// any additional hashes configured for a rotation in progress.
+//
+// One accessor rather than each caller assembling the list, for the reason #1308 exists -- the
+// REST endpoints and the control channel must agree on what counts as this node's token, or a
+// half-rotated edge passes /api/internal/* and then silently fails to establish its control
+// channel, losing schedules, shutdown warnings and lease kicks.
+//
+// Empty entries are dropped: an unconfigured node has TokenHash "", and a caller presenting ""
+// must not match it.
+func (e EdgeNodeConfig) AcceptedTokenHashes() []string {
+	out := make([]string, 0, 1+len(e.AdditionalTokenHashes))
+	if e.TokenHash != "" {
+		out = append(out, e.TokenHash)
+	}
+	for _, h := range e.AdditionalTokenHashes {
+		if h != "" {
+			out = append(out, h)
+		}
+	}
+	return out
+}
+
 type EdgeNodeConfig struct {
 	ID        string `yaml:"id"`
 	TokenHash string `yaml:"token_hash"`
-	URL       string `yaml:"url"`
+	// AdditionalTokenHashes are accepted alongside TokenHash, so a token can be rotated without
+	// a flag day: add the incoming hash, roll the edges one at a time, then remove the old one
+	// (#1491). Without it, changing a token means every edge fails to authenticate until it has
+	// been re-provisioned -- which is why rotation is something nobody does.
+	//
+	// Additive on purpose. Every existing deployment has TokenHash and nothing else, and must
+	// keep working untouched.
+	AdditionalTokenHashes []string `yaml:"additional_token_hashes,omitempty"`
+	URL                   string   `yaml:"url"`
 	// Schedule optionally declares when this node stops and starts, for deployments with no
 	// edge-provisioner sidecar to ask (#1282). Nil means "ask the provisioner, or treat the
 	// node as unscheduled" -- the previous and still the default behaviour.
@@ -336,6 +367,14 @@ type ClientConfig struct {
 	// type by hand.
 	LogDir string            `yaml:"log_dir,omitempty"`
 	Hooks  ClientHooksConfig `yaml:"hooks" json:"hooks,omitempty"`
+	// DisableLatencyReport suppresses reporting the region probe RTTs this client already
+	// measures to choose a gateway (#1151). Opt-out rather than opt-in because the figures are
+	// only useful in aggregate and a sample nobody sends is a region nobody can justify -- but
+	// a self-hosted deployment that would rather send nothing has one switch to throw.
+	//
+	// What is reported is a region name and a round trip in milliseconds. No IP, no location,
+	// nothing derived from either.
+	DisableLatencyReport bool `yaml:"disable_latency_report,omitempty"`
 }
 
 // DefaultServerConfig returns a ServerConfig with sensible default values.

@@ -290,14 +290,14 @@ export default function AccountSettings() {
                 <label className="form-label m-0" htmlFor="notifications">
                   {t('label_notifications', 'Email Notifications')}
                 </label>
-                <label className="switch">
+                <label className="toggle-switch">
                   <input
                     id="notifications"
                     type="checkbox"
                     checked={emailNotifications}
                     onChange={(e) => setEmailNotifications(e.target.checked)}
                   />
-                  <span className="slider round"></span>
+                  <span className="toggle-slider"></span>
                 </label>
               </div>
               <p className="text-xs text-muted mt-xs mb-0">
@@ -312,9 +312,9 @@ export default function AccountSettings() {
               <label className="form-label m-0">
                 {t('utc_time', 'UTC Time')}
               </label>
-              <label className="switch">
+              <label className="toggle-switch">
                 <input type="checkbox" checked={useUTC} onChange={toggleUTC} />
-                <span className="slider round"></span>
+                <span className="toggle-slider"></span>
               </label>
             </div>
 
@@ -452,7 +452,7 @@ export default function AccountSettings() {
                     <div className="flex gap-sm items-center">
                       <input
                         type="text"
-                        className="input-field text-center font-bold mb-0 w-narrow"
+                        className="input-field text-center fw-bold mb-0 w-narrow"
                         placeholder="123456"
                         maxLength={6}
                         value={disableCode}
@@ -518,7 +518,7 @@ export default function AccountSettings() {
 
             {setupData && !mfaEnabled && (
               <div className="mt-xl animate-fade-in-fast">
-                <div className="bg-white p-lg rounded-md inline-block mb-lg">
+                <div className="qr-frame">
                   <QRCodeSVG value={setupData.otpauth_url} size={150} />
                 </div>
                 <div className="copy-box text-xs mb-lg">{setupData.secret}</div>

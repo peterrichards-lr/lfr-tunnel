@@ -66,9 +66,20 @@ fmt:
 vet:
 	go vet ./...
 
-# Ceiling on suppressed errcheck findings (#1331). Not wired into CI here:
-# .github/workflows/ci.yml is another agent's territory under #1328, so wiring belongs with
-# whoever holds it. Runnable now, and by the pre-commit hook.
+# Branches whose work has landed (#1528). CONTRIBUTING.md has always said to delete them as they
+# merge; nothing ran it, and the checkout reached 271 branches and 6 stale worktrees. Reports by
+# default and fails only once the pile is over a threshold, so it nags when it matters. Refuses
+# to touch master or checksums in code rather than in prose -- deleting checksums breaks the
+# portal's checksum delivery silently.
+check-branches:
+	@./scripts/check-stale-branches.sh
+
+prune-branches:
+	@./scripts/check-stale-branches.sh --delete
+
+# Ceiling on suppressed errcheck findings (#1331). Runs in CI's Lint & Format Check job as of
+# #1498 -- until then it was wired nowhere, and the count drifted five over the ceiling without
+# anything failing.
 nolint-ratchet:
 	@./scripts/check-nolint-ratchet.sh
 
@@ -131,6 +142,16 @@ build: clean
 	fi
 	rm -rf pkg/server/ui-dist
 	cp -r ui/dist pkg/server/ui-dist
+	@# ui/dist has no .gitkeep, so the two lines above delete a TRACKED file on every build
+	@# and leave it staged for whoever next runs `git commit -a` (#1511). Losing it means a
+	@# fresh clone has no pkg/server/ui-dist/ at all and `//go:embed ui-dist/*` stops
+	@# compiling -- and CI cannot catch that, because every job creates the directory itself
+	@# before building.
+	@#
+	@# Restored here rather than by narrowing the rm to `ui-dist/*`, which spares the dotfile
+	@# only because `*` does not match it in sh -- true by accident, and undone by the next
+	@# person who tidies that line.
+	touch pkg/server/ui-dist/.gitkeep
 	go build -ldflags="-s -w $(DEPLOYMENT_LDFLAGS) -X lfr-tunnel/pkg/config.Version=$(VERSION)" -trimpath -o bin/lfr-tunnel ./cmd/lfr-tunnel
 	go build -ldflags="-s -w $(DEPLOYMENT_LDFLAGS) -X lfr-tunnel/pkg/config.Version=$(VERSION)" -trimpath -o bin/lfr-tunneld ./cmd/lfr-tunneld
 
@@ -156,9 +177,13 @@ e2e-edge:
 e2e-ui:
 	@./scripts/run-e2e-ui.sh
 
-# Installs both hooks (#1343). pre-commit is the fast, irreversible-only set; pre-push carries
-# vet, tests and the conditional UI build. Installing only one of the two leaves a gap rather
-# than a slow hook, so they go together.
+# Installs hook SHIMS that exec the scripts in the working tree (#1425). It used to copy them, so
+# every edit was inert until each person re-ran this -- silently, since a stale hook's output is
+# indistinguishable from a current one. The attribution guard added in #1384 ran for nobody who
+# had not reinstalled since.
+#
+# pre-commit is the fast, irreversible-only set; pre-push carries vet, tests and the conditional
+# UI build (#1343). They go together: installing one leaves a gap rather than a slow hook.
 #
 # The destination is resolved with `git rev-parse --git-path hooks` rather than hardcoded to
 # `.git/hooks` (#1377). In a linked worktree `.git` is a FILE, not a directory, so the old
@@ -168,13 +193,7 @@ e2e-ui:
 HOOKS_DIR = $(shell git rev-parse --git-path hooks)
 
 install-hook:
-	@echo "Installing native git hooks into $(HOOKS_DIR)..."
-	@mkdir -p "$(HOOKS_DIR)"
-	@cp scripts/pre-commit-hook.sh "$(HOOKS_DIR)/pre-commit"
-	@chmod +x "$(HOOKS_DIR)/pre-commit"
-	@cp scripts/pre-push-hook.sh "$(HOOKS_DIR)/pre-push"
-	@chmod +x "$(HOOKS_DIR)/pre-push"
-	@echo "pre-commit and pre-push hooks installed successfully."
+	@./scripts/install-hook-shim.sh
 
 # Tests the hook and guard scripts themselves (#1377, #1395, #1402). Fast: the stubbed cases
 # need no Docker, and only the end-to-end cases do. Not part of `test`, which is the Go suite.
@@ -183,6 +202,12 @@ test-hooks:
 	@./tests/hooks/test-edr-guard.sh
 	@./tests/hooks/test-shell-portability.sh
 	@./tests/hooks/test-drain-and-wait.sh
+	@./tests/hooks/test-check-staged-prettier.sh
+	@./tests/hooks/test-hook-shim.sh
+	@./tests/hooks/test-build-keeps-tracked-files.sh
+	@./tests/hooks/test-stale-branches.sh
+	@./tests/hooks/test-pull-images.sh
+	@./tests/hooks/test-closing-refs.sh
 
 # The pre-merge CI-configuration gate (#1391). Worth a target rather than only a path to type:
 # the whole point of this check is being run BEFORE pushing, and a check nobody can invoke

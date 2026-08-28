@@ -12,6 +12,7 @@ import ClientInstallationModal from '../components/ClientInstallationModal';
 import OnboardingTour from '../components/OnboardingTour';
 import { useSettings } from '../contexts/SettingsContext';
 import { useI18n } from '../contexts/I18nContext';
+import SectionHeading from '../components/SectionHeading';
 
 function isOlderVersion(current: string, target: string): boolean {
   if (!current || !target) return false;
@@ -266,13 +267,13 @@ export default function Dashboard() {
               </div>
             </div>
             <div className="flex gap-md items-center">
-              <div className="flex items-center bg-black/30 rounded border px-md py-xs gap-sm">
+              <div className="flex items-center surface-subtle rounded border px-md py-xs gap-sm">
                 <code className="text-xs font-mono text-main">
                   lfr-tunnel -upgrade
                 </code>
                 <button
                   onClick={handleCopyUpgradeCmd}
-                  className={`btn-text p-xs text-xs rounded hover:bg-white/10 transition-colors ${copiedUpgrade ? 'text-success' : 'text-muted'}`}
+                  className={`btn-bare p-xs text-xs rounded hover:bg-white/10 transition-colors ${copiedUpgrade ? 'text-success' : 'text-muted'}`}
                   title={copiedUpgrade ? 'Copied!' : 'Copy to clipboard'}
                 >
                   {copiedUpgrade ? '✓' : '📋'}
@@ -351,9 +352,11 @@ export default function Dashboard() {
         >
           <div className="p-xl border-b flex justify-between items-center flex-wrap gap-md">
             <div>
-              <h3 className="m-0 text-md fw-bold">
-                {t('pat_title', 'Personal Access Tokens')}
-              </h3>
+              <SectionHeading
+                anchor="access-tokens"
+                className="m-0 text-md fw-bold"
+                label={t('pat_title', 'Personal Access Tokens')}
+              />
               <p className="text-muted text-sm mt-xs m-0">
                 {t(
                   'pat_desc',

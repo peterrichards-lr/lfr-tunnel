@@ -2,6 +2,7 @@ import type { ColumnDef, StatusOption } from '../hooks/useDataTable';
 import DataTableToolbar from './DataTableToolbar';
 import DataTablePagination from './DataTablePagination';
 import { useI18n } from '../contexts/I18nContext';
+import SectionHeading from './SectionHeading';
 
 export interface ReservationRow {
   id: string;
@@ -100,7 +101,7 @@ export default function ReservationsTable({
   return (
     <div id={id} className="card mb-xl scroll-target">
       <div className="section-header mb-md">
-        <h3 className="section-title">{title}</h3>
+        <SectionHeading anchor={id} className="section-title" label={title} />
       </div>
 
       {totalUnfilteredCount > 0 && (

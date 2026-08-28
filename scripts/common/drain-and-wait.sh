@@ -12,6 +12,13 @@
 # path a scheduled edge stop uses. Clients pick the announcement up on the tunnel-status
 # heartbeat they already send (#1238).
 #
+# TWO populations, not one (#1454). A tunnel hears about a drain on that heartbeat; a browser
+# never sends one, so somebody working in the portal got no warning at all and simply watched
+# the page fail. They are genuinely different sets -- on 2026-08-27 central had zero tunnels
+# attached and one active portal session at the moment of a restart -- so a restart decision
+# made on tunnels alone is blind to the people it inconveniences. This warns the portal too,
+# through the banner that already exists, and only when somebody is actually logged in.
+#
 # Extracted from pkg/ops/deploy.go, which was the only caller when the drain concept landed
 # in #1305. Everything written BEFORE that -- restore-with-maintenance.sh in particular --
 # silently had no drain, because there was nothing to call. One copy, installed once, callable
@@ -36,18 +43,30 @@ usage() {
     exit 2
 }
 
-# drain_url resolves the local drain endpoint from the gateway's own config.
+# local_api_url resolves one of the gateway's localhost-only endpoints from its own config.
 #
 # The bind address may be a wildcard, which is not dialable -- 0.0.0.0 means "every
 # interface", so the request has to be aimed at loopback with the port kept.
-drain_url() {
-    local bind
+local_api_url() {
+    local path="$1" bind
     bind=$(grep -E '^http_bind_addr:' "$CONFIG" 2>/dev/null | sed -e 's/.*"\(.*\)".*/\1/')
     [ -n "$bind" ] || return 1
     case "$bind" in
-        0.0.0.0:*|"[::]:"*) echo "http://127.0.0.1:${bind##*:}/api/local/drain" ;;
-        *) echo "http://${bind}/api/local/drain" ;;
+        0.0.0.0:*|"[::]:"*) echo "http://127.0.0.1:${bind##*:}${path}" ;;
+        *) echo "http://${bind}${path}" ;;
     esac
+}
+
+drain_url() { local_api_url /api/local/drain; }
+broadcast_url() { local_api_url /api/local/broadcast; }
+
+# json_escape makes a caller-supplied string safe to embed in the payloads below.
+#
+# A reason containing a double quote used to produce invalid JSON, which the endpoint rejects
+# -- so the drain was silently skipped and the restart dropped every attached tunnel. Failing
+# open is right for a missing endpoint; failing open because of an apostrophe policy is not.
+json_escape() {
+    printf '%s' "$1" | sed -e 's/\\/\\\\/g' -e 's/"/\\"/g'
 }
 
 # local_leases reports how many tunnels this gateway is serving ITSELF.
@@ -57,6 +76,56 @@ drain_url() {
 # would mean waiting forever.
 local_leases() {
     curl -sf -m 5 "$1" 2>/dev/null | sed -n 's/.*"local_leases":\([0-9]*\).*/\1/p'
+}
+
+# portal_sessions reports how many people are logged into the portal right now.
+#
+# Absent on a gateway with no database -- an edge -- which reads as zero and means no banner is
+# raised there. That is correct rather than a fallback: an edge does not serve the portal at
+# all (#1478), so there is nobody on it to warn.
+portal_sessions() {
+    curl -sf -m 5 "$1" 2>/dev/null | sed -n 's/.*"portal_sessions":\([0-9]*\).*/\1/p'
+}
+
+# warn_portal raises the portal banner, and only when somebody is there to read it.
+#
+# The banner is set rather than the maintenance state machine armed. Arming it would flip the
+# gateway into maintenance mode and kick tunnels on a timer of its own -- a second thing
+# sequencing the restart, racing the caller that is already doing it. The script owns the
+# sequence; this only tells people what is about to happen.
+#
+# Nobody is signed out by the restart: portal sessions are persisted (#1304), so the honest
+# message is "briefly unavailable", not "you will be logged out".
+warn_portal() {
+    local window="$1" sessions="$2" url message
+
+    if ! url=$(broadcast_url); then
+        return 0
+    fi
+
+    message="Scheduled maintenance: the portal will be briefly unavailable in ${window}s while the gateway restarts. You will stay signed in."
+    if ! curl -sf -m 5 -X POST "$url" \
+        -H 'Content-Type: application/json' \
+        -d "{\"message\": \"$(json_escape "$message")\"}" > /dev/null 2>&1; then
+        echo "[drain] No broadcast endpoint answered; portal users were not warned."
+        return 0
+    fi
+    echo "[drain] Warned $sessions portal session(s): the portal is briefly unavailable in ${window}s."
+}
+
+# clear_portal_warning takes the banner down again.
+#
+# Separate from clearing the drain because they can fail independently, and a banner left up
+# after a successful restore tells everyone the system is in maintenance when it is not --
+# which is how a notice stops being believed.
+clear_portal_warning() {
+    local url
+    if ! url=$(broadcast_url); then
+        return 0
+    fi
+    curl -sf -m 5 -X POST "$url" \
+        -H 'Content-Type: application/json' \
+        -d '{"message": ""}' > /dev/null 2>&1 || true
 }
 
 announce() {
@@ -72,9 +141,17 @@ announce() {
 
     if ! curl -sf -m 5 -X POST "$url" \
         -H 'Content-Type: application/json' \
-        -d "{\"seconds\": $window, \"reason\": \"$reason\"}" > /dev/null 2>&1; then
+        -d "{\"seconds\": $window, \"reason\": \"$(json_escape "$reason")\"}" > /dev/null 2>&1; then
         echo "[drain] No drain endpoint answered at $url; continuing without a drain."
         return 0
+    fi
+
+    # Warn the portal too, if anyone is on it. Read after announcing rather than before, so a
+    # gateway with no drain endpoint short-circuits above and this never runs against one.
+    local sessions
+    sessions=$(portal_sessions "$url")
+    if [ -n "$sessions" ] && [ "$sessions" -gt 0 ]; then
+        warn_portal "$window" "$sessions"
     fi
 
     echo "[drain] Announced a ${window}s window; waiting up to ${wait_for}s for tunnels to move..."
@@ -113,6 +190,7 @@ clear_drain() {
     curl -sf -m 5 -X POST "$url" \
         -H 'Content-Type: application/json' \
         -d '{"seconds": 0}' > /dev/null 2>&1 || true
+    clear_portal_warning
     echo "[drain] Announcement cleared."
 }
 

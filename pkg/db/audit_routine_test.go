@@ -1,7 +1,6 @@
 package db
 
 import (
-	"os"
 	"testing"
 )
 
@@ -9,11 +8,7 @@ import (
 // near-identical rows bury the events someone opened the audit log to find (#1208).
 func setupAuditRepo(t *testing.T) *SQLiteAuditRepo {
 	t.Helper()
-	database, tmpDir := setupTestDB(t)
-	t.Cleanup(func() {
-		_ = database.Close()     //nolint:errcheck
-		_ = os.RemoveAll(tmpDir) //nolint:errcheck
-	})
+	database := setupTestDB(t)
 	return NewSQLiteAuditRepo(database.conn)
 }
 

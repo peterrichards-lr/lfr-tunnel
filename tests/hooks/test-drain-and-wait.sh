@@ -44,7 +44,7 @@ if [ -s "$WORK_DIR/leases.queue" ]; then
     sed -i.bak '1d' "$WORK_DIR/leases.queue" 2>/dev/null || true
     exit 0
 fi
-[ -n "${LEASES_DEFAULT:-}" ] && echo "{\"local_leases\":${LEASES_DEFAULT}}"
+[ -n "${LEASES_DEFAULT:-}" ] && echo "{\"local_leases\":${LEASES_DEFAULT},\"portal_sessions\":${SESSIONS_DEFAULT:-0}}"
 exit "${GET_EXIT:-0}"
 STUB
     chmod +x "$WORK/bin/curl"
@@ -153,6 +153,83 @@ if WORK_DIR="$WORK" PATH="$WORK/bin:$PATH" LFT_CONFIG="$WORK/server-config.yaml"
     fail "a misspelled verb exited 0, which would hide a broken maintenance script"
 else
     pass "an unknown verb fails loudly rather than pretending to drain"
+fi
+
+# 8. Somebody working in the portal used to get no warning at all (#1454). A drain travels on
+#    the tunnel-status heartbeat, which a browser never sends, so they simply watched the page
+#    fail. The banner must be raised when anyone is logged in.
+reset
+write_config "127.0.0.1:8080"
+printf '{"local_leases":0,"portal_sessions":3}\n{"local_leases":0,"portal_sessions":3}\n' > "$WORK/leases.queue"
+out=$(WORK_DIR="$WORK" PATH="$WORK/bin:$PATH" LFT_CONFIG="$WORK/server-config.yaml" \
+    "$TARGET" announce 45 90 "test" 2>&1)
+if grep -q "/api/local/broadcast" "$WORK/curl.log" && grep -q "briefly unavailable in 45s" "$WORK/curl.log"; then
+    pass "portal users are warned, with the window they actually have"
+else
+    fail "no portal warning was sent: $(cat "$WORK/curl.log")"
+fi
+# The warning must say what is true: sessions are persisted, so nobody is signed out (#1304).
+if grep -q "stay signed in" "$WORK/curl.log"; then
+    pass "the warning does not claim people will be logged out"
+else
+    fail "the warning's wording changed: $(cat "$WORK/curl.log")"
+fi
+
+# 9. Nobody logged in means no banner. A notice raised when there is nobody to read it is how
+#    a notice stops being believed.
+reset
+write_config "127.0.0.1:8080"
+printf '{"local_leases":0,"portal_sessions":0}\n{"local_leases":0,"portal_sessions":0}\n' > "$WORK/leases.queue"
+WORK_DIR="$WORK" PATH="$WORK/bin:$PATH" LFT_CONFIG="$WORK/server-config.yaml" \
+    "$TARGET" announce 45 90 "test" >/dev/null 2>&1
+if grep -q "/api/local/broadcast" "$WORK/curl.log"; then
+    fail "a banner was raised with nobody logged in: $(cat "$WORK/curl.log")"
+else
+    pass "no portal session means no banner"
+fi
+
+# 10. An edge has no database, so the endpoint omits portal_sessions entirely. That must read
+#     as zero rather than as an error -- an edge does not serve the portal at all (#1478), so
+#     there is nobody there to warn.
+reset
+write_config "127.0.0.1:8080"
+printf '{"local_leases":0}\n{"local_leases":0}\n' > "$WORK/leases.queue"
+if WORK_DIR="$WORK" PATH="$WORK/bin:$PATH" LFT_CONFIG="$WORK/server-config.yaml" \
+    "$TARGET" announce 45 90 "test" >/dev/null 2>&1; then
+    if grep -q "/api/local/broadcast" "$WORK/curl.log"; then
+        fail "an edge with no portal raised a portal banner: $(cat "$WORK/curl.log")"
+    else
+        pass "a gateway that reports no portal_sessions field raises no banner"
+    fi
+else
+    fail "a missing portal_sessions field made the script fail"
+fi
+
+# 11. clear must take the banner down as well as the drain. A banner left up after a successful
+#     restore tells everyone the system is in maintenance when it is not.
+reset
+write_config "127.0.0.1:8080"
+WORK_DIR="$WORK" PATH="$WORK/bin:$PATH" LFT_CONFIG="$WORK/server-config.yaml" \
+    "$TARGET" clear >/dev/null 2>&1
+if grep -q '"message": ""' "$WORK/curl.log"; then
+    pass "clear takes the portal banner down too"
+else
+    fail "clear left the banner up: $(cat "$WORK/curl.log")"
+fi
+
+# 12. A reason containing a double quote used to produce invalid JSON, which the endpoint
+#     rejects -- so the drain was silently skipped and the restart dropped every attached
+#     tunnel. Failing open for a missing endpoint is right; failing open because of
+#     punctuation is not.
+reset
+write_config "127.0.0.1:8080"
+printf '{"local_leases":0,"portal_sessions":0}\n' > "$WORK/leases.queue"
+WORK_DIR="$WORK" PATH="$WORK/bin:$PATH" LFT_CONFIG="$WORK/server-config.yaml" \
+    "$TARGET" announce 45 90 'restoring the "nightly" backup' >/dev/null 2>&1
+if grep -q '\\"nightly\\"' "$WORK/curl.log"; then
+    pass "a quote in the reason is escaped rather than breaking the payload"
+else
+    fail "the reason was not escaped: $(cat "$WORK/curl.log")"
 fi
 
 echo ""

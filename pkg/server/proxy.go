@@ -16,6 +16,8 @@ import (
 	"io"
 	"lfr-tunnel/pkg/config"
 	"lfr-tunnel/pkg/db"
+
+	"golang.org/x/crypto/bcrypt"
 	"log/slog"
 	"net"
 	"net/http"
@@ -710,6 +712,7 @@ func (p *ProxyHandler) checkAccessControls(w http.ResponseWriter, r *http.Reques
 		redirectURI := safeRedirectPath(r.FormValue("redirect_uri"))
 
 		passcodeRequired := ""
+		var passcodeRes *db.SubdomainReservation
 		if p.db != nil {
 			parts := strings.SplitN(host, ".", 2)
 			if len(parts) == 2 {
@@ -717,11 +720,29 @@ func (p *ProxyHandler) checkAccessControls(w http.ResponseWriter, r *http.Reques
 				res, err := p.db.GetSubdomainReservationByName(lease.SubdomainPrefix, domain)
 				if err == nil && res != nil {
 					passcodeRequired = res.Passcode
+					passcodeRes = res
 				}
 			}
 		}
 
 		if passcodeRequired != "" && VerifyPasscode(passcodeVal, passcodeRequired) {
+			// Upgrade a legacy value in place, now that it has been proven correct. This is the
+			// only moment the plaintext passcode is available, so a migration cannot be done any
+			// other way -- and it means the weak formats retire themselves as they are used
+			// rather than needing a reset (#1490).
+			//
+			// Best-effort: a visitor who entered the right passcode must be let in whether or not
+			// the upgrade write succeeds.
+			if passcodeRes != nil && PasscodeNeedsUpgrade(passcodeRequired) {
+				if upgraded := HashPasscode(passcodeVal); upgraded != "" {
+					passcodeRes.Passcode = upgraded
+					if err := p.db.UpdateSubdomainReservation(passcodeRes); err != nil {
+						slog.Info(fmt.Sprintf("[Proxy] Could not upgrade a legacy passcode hash for %s: %v", host, err))
+					} else {
+						slog.Info(fmt.Sprintf("[Proxy] Upgraded a legacy passcode hash for %s", host))
+					}
+				}
+			}
 			parts := strings.SplitN(host, ".", 2)
 			subdomain := parts[0]
 			cookieVal := p.createSessionCookie(subdomain)
@@ -878,22 +899,82 @@ func (p *ProxyHandler) injectBaseTag(htmlBytes []byte, r *http.Request, host str
 	return bytes.Replace(htmlBytes, []byte("<head>"), baseTag, 1)
 }
 
+// Subdomain passcode storage (#1490).
+//
+// #466 called for "SHA-256 with salt, or bcrypt". What shipped was unsalted single-round SHA-256
+// with a plaintext fallback, so the control was documented as fixed and was not -- the worst state
+// for a control to be in, because the next person to reason about it trusts the closed issue.
+//
+// Passcodes are short and human-chosen, so an unsalted single-round hash makes a leaked
+// subdomain_reservations table a lookup rather than a cracking exercise, and identical passcodes
+// across tenants are visibly identical in the database. bcrypt fixes both: per-hash salt, and a
+// work factor.
+//
+// Legacy values still verify, and are upgraded in place on the next successful use -- see
+// PasscodeNeedsUpgrade. Rejecting them outright would lock out every existing deployment; this
+// repo is MIT-licensed and the production gateway is not the only one.
+
+// bcryptPasscodeCost is deliberately the library default. A passcode is checked once per visitor
+// session on an interactive path, so the usual "raise it until it hurts" advice for login
+// endpoints does not apply, and a higher cost here is a denial-of-service lever on a page anyone
+// can POST to.
+const bcryptPasscodeCost = bcrypt.DefaultCost
+
+// HashPasscode hashes a passcode for storage.
 func HashPasscode(passcode string) string {
 	if passcode == "" {
 		return ""
 	}
+	// bcrypt silently truncates past 72 bytes, which would make two long passcodes sharing a
+	// prefix interchangeable. Refuse rather than store something that verifies more than it
+	// should; the caller treats "" as "no passcode set".
+	if len(passcode) > 72 {
+		slog.Info("[Proxy] Refusing to hash a passcode longer than bcrypt's 72-byte limit")
+		return ""
+	}
+	hashed, err := bcrypt.GenerateFromPassword([]byte(passcode), bcryptPasscodeCost)
+	if err != nil {
+		slog.Info(fmt.Sprintf("[Proxy] Failed to hash passcode: %v", err))
+		return ""
+	}
+	return string(hashed)
+}
+
+// legacyPasscodeHash is what HashPasscode produced before #1490: unsalted SHA-256, hex-encoded.
+func legacyPasscodeHash(passcode string) string {
 	hash := sha256.Sum256([]byte(passcode))
 	return hex.EncodeToString(hash[:])
 }
 
-func VerifyPasscode(rawPasscode, hashedPasscode string) bool {
-	if hashedPasscode == "" {
+// PasscodeNeedsUpgrade reports whether a stored value is in a legacy format and should be
+// re-hashed the next time it verifies. Callers that can persist the result should do so; the
+// value keeps working either way.
+func PasscodeNeedsUpgrade(storedPasscode string) bool {
+	if storedPasscode == "" {
 		return false
 	}
-	computed := HashPasscode(rawPasscode)
-	if subtle.ConstantTimeCompare([]byte(computed), []byte(hashedPasscode)) == 1 {
+	_, err := bcrypt.Cost([]byte(storedPasscode))
+	return err != nil
+}
+
+// VerifyPasscode reports whether rawPasscode matches what is stored, in any format this has ever
+// written.
+func VerifyPasscode(rawPasscode, hashedPasscode string) bool {
+	if hashedPasscode == "" || rawPasscode == "" {
+		return false
+	}
+
+	// Current format. bcrypt.CompareHashAndPassword is constant-time and carries its own salt.
+	if _, err := bcrypt.Cost([]byte(hashedPasscode)); err == nil {
+		return bcrypt.CompareHashAndPassword([]byte(hashedPasscode), []byte(rawPasscode)) == nil
+	}
+
+	// Legacy: unsalted SHA-256, upgraded on the next successful use.
+	if subtle.ConstantTimeCompare([]byte(legacyPasscodeHash(rawPasscode)), []byte(hashedPasscode)) == 1 {
 		return true
 	}
-	// Legacy fallback to support plain-text comparison
+
+	// Legacy: plaintext, from before #466 hashed anything at all. Kept for the same reason and on
+	// the same terms -- it upgrades itself away on first use.
 	return subtle.ConstantTimeCompare([]byte(rawPasscode), []byte(hashedPasscode)) == 1
 }

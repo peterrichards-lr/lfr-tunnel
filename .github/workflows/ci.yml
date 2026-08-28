@@ -207,6 +207,12 @@ jobs:
             exit 1
           fi
 
+      # Ceiling on suppressed errcheck findings (#1331). Kept here rather than left as a make
+      # target nobody runs: the count had drifted five over the ceiling before anything noticed
+      # (#1498).
+      - name: Check the errcheck suppression ratchet
+        run: ./scripts/check-nolint-ratchet.sh
+
       - name: Set up Node.js
         uses: actions/setup-node@v7
         with:

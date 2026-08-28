@@ -35,6 +35,11 @@ up with no further wiring. `/reload-skills` re-scans without restarting a sessio
   backlog concurrently, so resolve the session ID in an issue's claim comment
   before touching it — the `agent:` label alone cannot tell two Claude sessions
   apart, and you must not work on what another session holds.
+- **End-to-end / Playwright testing** — [`.agents/skills/e2e-testing/SKILL.md`](.agents/skills/e2e-testing/SKILL.md)
+  Read before writing or running a browser test, and before trusting a mutation test against the
+  containerised stack. Covers the non-admin fixture (every spec used to sign in as an admin), the
+  rebuild race that makes a mutation test report the opposite of the truth, and why an
+  absence-only assertion passes on a blank page.
 - **Documentation timestamps & review** — [`.agents/skills/global-docs/SKILL.md`](.agents/skills/global-docs/SKILL.md)
   Read before creating or editing any `.md` file.
 - **Edge node state synchronization** — [`.agents/skills/edge-sync/SKILL.md`](.agents/skills/edge-sync/SKILL.md)
@@ -52,7 +57,11 @@ up with no further wiring. `/reload-skills` re-scans without restarting a sessio
     destructive action should not need a second read to be warned about.
   - **Delete feature and fix branches, local and remote, as soon as they merge** — but that
     rule and the one above sit two clauses apart, so tidying branches on general principle is
-    exactly how the `checksums` branch gets removed.
+    exactly how the `checksums` branch gets removed. Use `make check-branches` and
+    `make prune-branches` rather than doing it by hand: the script refuses `master` and
+    `checksums` in code, reports stale worktrees (which silently block deletion), and knows that
+    `git branch -d` refuses squash-merged branches. Prose alone let this reach 271 branches
+    (#1528).
   - Release branches are `release/<version>`, and only one release PR may be open at a time.
     `scripts/create-release-tag.sh` enforces both.
   - Every PR builds standalone binaries for Linux, macOS and Windows, downloadable from its
@@ -107,6 +116,34 @@ different ones.
   above — that pattern risks the same local-execution problem).
 - Client binaries must be signed before release/deployment — see the
   `lfr-tunnel-ops` skill for the exact signing command and required environment.
+
+## Git hooks: install once, then they follow the repo
+
+On a fresh clone, run this once:
+
+```bash
+make install-hook
+```
+
+It installs **shims** into `.git/hooks` that exec `scripts/pre-commit-hook.sh` and
+`scripts/pre-push-hook.sh` from the working tree, so a change to a hook script takes effect on the
+next commit with nothing to re-run (#1425). Before that, hooks were *copied*, and every edit was
+inert until each person reinstalled — silently, since a stale hook's output is indistinguishable
+from a current one. The attribution guard added in #1384 ran for nobody who had not reinstalled.
+
+Two things worth knowing:
+
+- **Hooks follow the branch.** Checking out a branch cut before a hook script existed runs that
+  branch's version, or warns loudly and runs nothing if the script is absent. That is deliberate:
+  a warning beats silence, and an old branch must still be committable.
+- **`core.hooksPath` is not used, on purpose.** It is git's own answer to this and looks like the
+  obvious fix, but it resolves against the working tree — point it at a directory the current
+  branch does not have and git runs **no hooks and says nothing**, verified. That trades a stale
+  secret scan for no secret scan. `make install-hook` clears the setting if it finds it, because
+  it would otherwise shadow the shims.
+
+If a commit's output does not list the checks you expect, the hooks are not installed — run the
+command above rather than assuming they passed.
 
 ## Linting locally: containerized, not installed
 
@@ -171,4 +208,4 @@ trip over.
 
 <!-- markdownlint-disable MD049 -->
 ---
-*Last Updated: 2026-08-26* | *Last Reviewed: 2026-08-26*
+*Last Updated: 2026-08-28* | *Last Reviewed: 2026-08-28*

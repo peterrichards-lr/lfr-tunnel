@@ -1,0 +1,170 @@
+# Central control-plane configuration -- COMPLETE key reference.
+#
+# Every top-level key `pkg/config.ServerConfig` accepts appears here exactly once, with a
+# placeholder value. A test asserts that (`TestExampleConfigCoversEveryField`), so adding a
+# setting to the struct without adding it here fails the build -- which is the point. This file
+# existing and being incomplete would be worse than not existing, because it would look
+# authoritative (#1452).
+#
+# What this is NOT: a description of any live deployment. Values are placeholders, and the real
+# ones are not recorded in this repo. Anything a credential could hide in -- token hashes, SMTP
+# credentials, webhook URLs -- is left empty here and supplied out of band.
+#
+# Per-setting guidance lives in docs/server/setup_guide.md. Deliberately not restated here: one
+# rule, one home. This file answers "what keys exist"; that document answers "what should I set
+# them to".
+#
+# Two commands check a real deployment against this repo:
+#   lfr-tunneld -check-config -config <file>      does it parse, and would it start
+#   lfr-tunnel-ops check-config -target central   does it match the committed DNS spec, and are
+#                                                 ownership and mode right
+
+
+# --- Identity and listeners ---
+domains:
+  - "example.com"
+  - "example.net"
+tunnel_domains: []
+default_domain: ""
+domain_allocation_rule: ""
+bind_addr: ":443"
+http_bind_addr: "127.0.0.1:8080"
+chisel_bind_addr: ":8081"
+db_path: "/etc/lfr-tunneld/lfr-tunnel.db"
+
+# --- TLS ---
+ssl_cert_file: ""
+ssl_key_file: ""
+client_ca_file: ""
+client_ca_key_file: ""
+insecure_skip_verify: false
+
+# --- Who may connect, and how strictly ---
+force_client_cert: false
+force_passcode: false
+force_ip_whitelist: false
+force_mfa: false
+allowed_email_domains:
+  - "example.com"
+disable_email_login: false
+disable_new_registrations: false
+enforce_policy_consent: false
+
+# --- Quotas. A null means "inherit the default", which is not the same as zero ---
+default_max_reservations: 0
+admin_max_reservations: null
+owner_max_reservations: null
+default_max_custom_domains: 0
+admin_max_custom_domains: null
+owner_max_custom_domains: null
+default_max_active_tunnels: 0
+admin_max_active_tunnels: null
+owner_max_active_tunnels: null
+allow_client_auto_reservation: false
+subdomain_quarantine_days: 0
+max_tunnel_rate_limit: 0
+disable_api_rate_limit: false
+pat_retention_days: 0
+
+# --- Owner and notifications ---
+owner:
+  user_id: "admin@example.com"
+  name: "Gateway Admin"
+admin_notification_email: "admin@example.com"
+smtp_server:
+  host: "email-smtp.example.com"
+  port: 587
+  username: ""      # supply out of band; never commit
+  password: ""      # supply out of band; never commit
+  from_address: "Liferay Tunnel <noreply@example.com>"
+webhooks:
+  enabled: false
+  slack_url: ""     # secret; never commit
+  teams_url: ""     # secret; never commit
+  batch_interval_seconds: 0
+slack_app: {}
+
+# --- Portal ---
+enable_user_portal: false
+portal_url: "https://example.com"
+portal_session_duration: "1h"
+enable_onboarding: false
+view_config_allowed_role: ""
+role_settings:
+  admin:
+    allow_auto_reservation: false
+  owner:
+    allow_auto_reservation: true
+sso_providers: []
+
+# --- Edge tier. urls are DERIVED from the DNS spec -- see `lfr-tunnel-ops render-edge-nodes` (#1468) ---
+central_url: "https://example.com"
+control_plane_url: "https://example.com"
+edge_token: ""
+edge_nodes:
+  # Render with `lfr-tunnel-ops render-edge-nodes` rather than writing by hand: the url is
+  # derived from the committed DNS spec, and a hand-typed one is how three of four edges came
+  # to name hosts that resolved to the control plane itself (#1449).
+  # - id: "edge-us"
+  #   token_hash: "<sha256 of the edge token; never commit a real one>"
+  #   url: "https://us.example.com"
+  #   # Accepted alongside token_hash, so a token can be rotated without a flag day (#1491):
+  #   # add the incoming hash, roll the edges one at a time, then remove the old one. Both
+  #   # authenticate while the rotation is in progress, on the REST endpoints and the control
+  #   # channel alike.
+  #   additional_token_hashes:
+  #     - "<incoming hash, during a rotation>"
+  []
+edge_provisioner_url: "https://example.com"
+edge_provisioner_token_file: ""
+edge_shutdown_warning_minutes: 0
+
+# --- Hooks ---
+dns_hook: ""
+dns_withdraw_grace: "1h"
+vanity_domain_hook: ""
+maintenance_trigger_path: ""
+
+# --- Client distribution ---
+min_client_version: "v1.0.0"
+latest_client_version: ""
+client_platforms: {}
+docker_image: ""
+docker_bypass_url: "https://example.com"
+disable_client_downloads: false
+disable_brew: false
+disable_scoop: false
+
+# --- Links shown in the portal and CLI ---
+documentation_url: "https://example.com"
+repository_url: "https://example.com"
+secure_token_guide_url: "https://example.com"
+docker_hub_url: "https://example.com"
+status_page_url: "https://example.com"
+privacy_policy_url: "https://example.com"
+cookie_policy_url: "https://example.com"
+
+# --- Timers and housekeeping ---
+prune_interval: "1h"
+magic_link_expiry: "1h"
+invite_link_expiry: "1h"
+verification_link_expiry: "1h"
+visitor_timeout: "1h"
+disable_backup_scheduler: false
+
+# --- Abuse controls ---
+enable_waf: false
+auto_ban: {}
+ip_blacklist: []
+trusted_proxies: []
+proxy_headers: {}
+
+# --- Anonymous geographic distribution (#1152) ---
+# Path to a MaxMind GeoLite2/GeoIP2 Country or City database. A client IP is resolved to a
+# country in memory at registration and then discarded; only per-country counts of distinct
+# users are stored, and countries below the k-threshold are folded into an "OTHER" bucket.
+#
+# Empty is the default and a supported state: the feature reports itself unavailable, the
+# analytics panel says so, and registration is unaffected. No database ships with the server
+# -- MaxMind's licence terms and the ~60MB artefact are the operator's to take on.
+geolite2_db_path: ""

@@ -6,6 +6,7 @@ import (
 	"crypto/rand"
 	"crypto/rsa"
 	"crypto/sha256"
+	"crypto/subtle"
 	"crypto/x509"
 	"embed"
 	"encoding/csv"
@@ -72,6 +73,16 @@ type RegisterRequest struct {
 	ClientOS        string            `json:"client_os,omitempty"`
 	Passcode        string            `json:"passcode,omitempty"`
 	WhitelistIPs    string            `json:"whitelist_ips,omitempty"`
+	// RegionProbes are the latency measurements the client took to choose a gateway (#1151).
+	// Optional: an older client sends none, and a client with reporting turned off sends none.
+	RegionProbes []RegionProbe `json:"region_probes,omitempty"`
+}
+
+// RegionProbe is one client's measurement of one advertised region (#1151).
+type RegionProbe struct {
+	Region      string `json:"region"`
+	RTTMs       int    `json:"rtt_ms,omitempty"`
+	Unreachable bool   `json:"unreachable,omitempty"`
 }
 
 // RegisterResponse represents the JSON response payload.
@@ -243,7 +254,19 @@ type Server struct {
 	// state. Stop waits on it so a cancelled goroutine has actually returned before the
 	// caller tears down what it was reading -- tests restoring package-level tunables
 	// raced the edge control channel still using them (issue #1131).
-	bgWG         sync.WaitGroup
+	bgWG sync.WaitGroup
+	// stopOnce makes Stop idempotent. Tests call it from a t.Cleanup registered by the setup
+	// helper AND, in older tests, from their own `defer srv.Stop()`; a second pass would
+	// RecordGatewayCleanShutdown into a closed database and log a spurious failure.
+	stopOnce sync.Once
+
+	// edgeNodesMu guards edgeNodesCurrent, which is swapped wholesale on SIGHUP so an edge
+	// token can be withdrawn without restarting the control plane (#1309). Read it through
+	// edgeNodes(); cfg.EdgeNodes is the startup value and goes stale the moment a reload
+	// happens.
+	edgeNodesMu      sync.RWMutex
+	edgeNodesCurrent []config.EdgeNodeConfig
+
 	rateLimiters map[string]*ipLimiter
 	rlMutex      sync.Mutex
 	// trustedProxies are the hops whose forwarding headers may be believed when resolving a
@@ -472,22 +495,8 @@ func NewServer(cfg *config.ServerConfig) (*Server, error) {
 	// Same rules as the provisioner API path (#1250), reusing that validation rather than
 	// restating it -- edge-sa was once configured to stop at 16:00 and start at 15:45, up
 	// for fifteen minutes a day, and nothing rejected it.
-	for i := range cfg.EdgeNodes {
-		sched := cfg.EdgeNodes[i].Schedule
-		if sched == nil {
-			continue
-		}
-		candidate := provisioner.Schedule{
-			Enabled:   sched.Enabled,
-			StopTime:  sched.StopTime,
-			StartTime: sched.StartTime,
-			Timezone:  sched.Timezone,
-		}
-		if err := candidate.Validate(); err != nil {
-			slog.Error(fmt.Sprintf("[Server] Ignoring the schedule configured for %s: %v", cfg.EdgeNodes[i].ID, err))
-			cfg.EdgeNodes[i].Schedule = nil
-		}
-	}
+	normaliseEdgeSchedules(cfg.EdgeNodes)
+	srv.edgeNodesCurrent = cfg.EdgeNodes
 
 	if cfg.EdgeProvisionerURL != "" {
 		if token, err := provisioner.LoadToken(cfg.EdgeProvisionerTokenFile); err != nil {
@@ -719,7 +728,7 @@ func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if !isControl {
-		for _, edge := range s.cfg.EdgeNodes {
+		for _, edge := range s.edgeNodes() {
 			if edge.URL != "" {
 				if u, err := url.Parse(edge.URL); err == nil && u.Host != "" {
 					h := u.Host
@@ -764,6 +773,46 @@ func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 					target += "?" + r.URL.RawQuery
 				}
 				http.Redirect(w, r, target, http.StatusMovedPermanently)
+				return
+			}
+
+			// A deeper path under /portal/ or /admin/ is not a route. Portal V1 is served
+			// as a single document at /portal, so anything below it matched no control
+			// plane handler and fell through to the data-plane ProxyHandler, which has no
+			// lease for a control-domain host -- answering /portal/users with the
+			// "Developer Environment Offline" page. Someone who typed the shape Portal V2
+			// taught them was told their environment was down (#1215). Verified against a
+			// running stack: 404 carrying offline.html, not the 502 the report described.
+			//
+			// This is the GET form of the problem the OPTIONS branch above already exists
+			// to solve, and it is fixed the same way: answer on the control plane rather
+			// than letting it reach the proxy.
+			//
+			// V1 routes on the fragment, so the path maps straight onto it and no rewrite
+			// of its tab switching is needed. showTab falls back to the overview for a
+			// section that does not exist, so a typo lands somewhere real -- which is why
+			// that fallback has to be in place for this redirect to be safe.
+			//
+			// Found rather than MovedPermanently: browsers cache a 301 aggressively, and
+			// if V1 ever gains real path routing a cached one would keep bouncing users to
+			// the fragment form. The trailing-slash redirect above is a genuine
+			// canonicalisation and stays permanent.
+			//
+			// "/portalv2/..." does not match "/portal/" -- the character after "portal" is
+			// "v", not "/" -- so the V2 SPA is untouched.
+			for _, base := range []string{"/portal", "/admin"} {
+				if !strings.HasPrefix(p, base+"/") {
+					continue
+				}
+				section := strings.Trim(strings.TrimPrefix(p, base+"/"), "/")
+				target := base
+				if r.URL.RawQuery != "" {
+					target += "?" + r.URL.RawQuery
+				}
+				if section != "" {
+					target += "#" + section
+				}
+				http.Redirect(w, r, target, http.StatusFound)
 				return
 			}
 		}
@@ -920,7 +969,7 @@ func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 				regions["central"] = centralURL
 			}
 			s.edgeClientsMu.RLock()
-			for _, edge := range s.cfg.EdgeNodes {
+			for _, edge := range s.edgeNodes() {
 				if _, isUp := s.edgeClients[edge.ID]; isUp {
 					if edge.URL != "" {
 						regions[edge.ID] = edge.URL
@@ -1778,9 +1827,17 @@ func (s *Server) handleRegister(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
+	s.recordRegionProbes(userRec, req.RegionProbes)
+
 	// Resolve the country in memory and drop the address (#1152). Nothing downstream of
 	// this sees the pair, and a failure here cannot fail the registration.
-	s.observeGeoLocation(user.ID, clientIP)
+	//
+	// userRec, not the `user` this branch originally referenced: that identifier does not
+	// exist at this point on master, and observeGeoLocation is nil-safe on an empty ID, so
+	// an anonymous registration simply is not counted rather than panicking.
+	if userRec != nil {
+		s.observeGeoLocation(userRec.ID, clientIP)
+	}
 
 	// Enforce active tunnels limit
 	if s.registry != nil {
@@ -2886,7 +2943,12 @@ func (s *Server) handleClaimToken(w http.ResponseWriter, r *http.Request) {
 }
 
 // Stop shuts down the server.
+// Stop shuts the gateway down and closes the database. Safe to call more than once.
 func (s *Server) Stop() {
+	s.stopOnce.Do(s.stop)
+}
+
+func (s *Server) stop() {
 	s.cancel()
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
@@ -3139,6 +3201,13 @@ func (s *Server) handleAdminEndpoints(w http.ResponseWriter, r *http.Request) {
 	}
 
 	w.Header().Set("Content-Type", "application/json")
+
+	// Where should the next edge go (#1151). Served alongside the other admin analytics rather
+	// than on its own route, so it inherits the same admin check.
+	if r.URL.Path == "/api/admin/analytics/region-latency" {
+		s.handleRegionLatency(w, r)
+		return
+	}
 
 	if r.Method == http.MethodGet && r.URL.Path == "/api/admin/analytics/clients" {
 		stats, err := s.db.GetClientVersionStats()
@@ -4793,7 +4862,7 @@ func (s *Server) handleAdminKickLease(w http.ResponseWriter, r *http.Request, ac
 		// Found on Edge node! Look up node config to get the token hash
 		var nodeHash string
 		var nodeURL string
-		for _, node := range s.cfg.EdgeNodes {
+		for _, node := range s.edgeNodes() {
 			if node.ID == targetEdgeLease.NodeID {
 				nodeHash = node.TokenHash
 				nodeURL = strings.TrimSuffix(node.URL, "/")
@@ -5649,8 +5718,181 @@ func (s *Server) isServedDomain(host string) bool {
 	return false
 }
 
+// edgeNodes returns the edge node list currently in force.
+//
+// Every reader goes through here rather than through cfg.EdgeNodes, because the list is swapped
+// wholesale on reload (#1309) and cfg holds only what was on disk at startup.
+//
+// The returned slice must not be modified: reload replaces the slice rather than editing it in
+// place, so a reader holding an older one keeps a consistent view for as long as it needs it.
+func (s *Server) edgeNodes() []config.EdgeNodeConfig {
+	s.edgeNodesMu.RLock()
+	defer s.edgeNodesMu.RUnlock()
+	return s.edgeNodesCurrent
+}
+
+// normaliseEdgeSchedules drops any statically-declared schedule that would not validate.
+//
+// Rejected once, when the list is loaded, rather than acted on every health cycle (#1282).
+// Dropped rather than fatal: a bad schedule should stop the node being treated as scheduled, not
+// stop the gateway serving traffic. Same rules as the provisioner API path (#1250), reusing that
+// validation rather than restating it -- edge-sa was once configured to stop at 16:00 and start
+// at 15:45, up for fifteen minutes a day, and nothing rejected it.
+//
+// Shared by startup and reload, so the two cannot come to disagree about what a valid schedule
+// is -- the drift that CLAUDE.md and #1412 are both about.
+func normaliseEdgeSchedules(nodes []config.EdgeNodeConfig) {
+	for i := range nodes {
+		sched := nodes[i].Schedule
+		if sched == nil {
+			continue
+		}
+		candidate := provisioner.Schedule{
+			Enabled:   sched.Enabled,
+			StopTime:  sched.StopTime,
+			StartTime: sched.StartTime,
+			Timezone:  sched.Timezone,
+		}
+		if err := candidate.Validate(); err != nil {
+			slog.Error(fmt.Sprintf("[Server] Ignoring the schedule configured for %s: %v", nodes[i].ID, err))
+			nodes[i].Schedule = nil
+		}
+	}
+}
+
+// ReloadEdgeNodes re-reads the config file and swaps in its edge_nodes list.
+//
+// Withdrawing an edge token used to mean editing server-config.yaml on the control plane and
+// restarting lfr-tunneld -- which the edge setup guide warns "briefly interrupts every currently
+// active tunnel across every edge node" (#1309). An operator responding to a suspected leak had
+// to choose between revoking the credential and keeping the fleet up. This removes the choice.
+//
+// ONLY edge_nodes is applied. Every other field keeps its startup value, because the rest of the
+// config is wired into listeners, schedulers and the database at construction and cannot be
+// swapped underneath them (#1454). A field that appeared to reload but did not would be worse
+// than one that plainly does not, so this is deliberately narrow and says so in the log.
+//
+// A config that fails to parse leaves the running list untouched. The failure mode to avoid is
+// an operator with a half-saved file sending SIGHUP and de-authenticating the whole fleet.
+func (s *Server) ReloadEdgeNodes(configPath string) error {
+	cfg, err := config.LoadServerConfig(configPath)
+	if err != nil {
+		return fmt.Errorf("keeping the edge nodes already in force: %w", err)
+	}
+
+	normaliseEdgeSchedules(cfg.EdgeNodes)
+
+	s.edgeNodesMu.Lock()
+	previous := s.edgeNodesCurrent
+	s.edgeNodesCurrent = cfg.EdgeNodes
+	s.edgeNodesMu.Unlock()
+
+	for _, line := range describeEdgeNodeChanges(previous, cfg.EdgeNodes) {
+		slog.Info("[Server] " + line)
+	}
+	return nil
+}
+
+// describeEdgeNodeChanges reports what a reload did, by node id.
+//
+// An operator revoking a credential needs to see that it took effect, and "reloaded 4 nodes"
+// does not tell them that. It never reports a hash VALUE: the list is credential material, and
+// this goes to the journal, which is read and pasted around far more freely than the config file
+// it came from.
+func describeEdgeNodeChanges(before, after []config.EdgeNodeConfig) []string {
+	index := func(nodes []config.EdgeNodeConfig) map[string]config.EdgeNodeConfig {
+		m := make(map[string]config.EdgeNodeConfig, len(nodes))
+		for _, n := range nodes {
+			m[n.ID] = n
+		}
+		return m
+	}
+	was, now := index(before), index(after)
+
+	var changes []string
+	for _, n := range after {
+		prev, existed := was[n.ID]
+		if !existed {
+			changes = append(changes, fmt.Sprintf("Edge node %q added by reload.", n.ID))
+			continue
+		}
+		if !sameHashSet(prev.AcceptedTokenHashes(), n.AcceptedTokenHashes()) {
+			changes = append(changes, fmt.Sprintf(
+				"Edge node %q now accepts a different set of token hashes (%d before, %d now); "+
+					"any withdrawn token stopped authenticating immediately.",
+				n.ID, len(prev.AcceptedTokenHashes()), len(n.AcceptedTokenHashes())))
+		}
+		if prev.URL != n.URL {
+			changes = append(changes, fmt.Sprintf("Edge node %q url is now %q.", n.ID, n.URL))
+		}
+	}
+	for _, n := range before {
+		if _, still := now[n.ID]; !still {
+			changes = append(changes, fmt.Sprintf(
+				"Edge node %q removed by reload; its tokens no longer authenticate.", n.ID))
+		}
+	}
+
+	if len(changes) == 0 {
+		return []string{fmt.Sprintf(
+			"Reloaded edge_nodes: no change (%d node(s)). Nothing else is re-read -- every other "+
+				"config field still needs a restart (#1454).", len(after))}
+	}
+	return append(changes,
+		"Nothing else was re-read; every other config field still needs a restart (#1454).")
+}
+
+// sameHashSet compares two hash lists order-independently, so reordering edge_nodes in the file
+// is not reported as a credential change.
+func sameHashSet(a, b []string) bool {
+	if len(a) != len(b) {
+		return false
+	}
+	seen := make(map[string]int, len(a))
+	for _, v := range a {
+		seen[v]++
+	}
+	for _, v := range b {
+		seen[v]--
+		if seen[v] < 0 {
+			return false
+		}
+	}
+	return true
+}
+
+// authorisedEdgeNode resolves an edge token to the node it belongs to (#1308).
+//
+// Four handlers each hashed the token and looped over cfg.EdgeNodes themselves. Simpler than the
+// PAT path -- an edge token has no expiry or revocation to get wrong -- but that is the point: an
+// edge token cannot currently be revoked without editing config and restarting (#1309), and four
+// copies make adding that harder than it needs to be.
+//
+// Returns the node, so the two callers that need the ID stop deriving it a second time.
+func (s *Server) authorisedEdgeNode(token string) (config.EdgeNodeConfig, bool) {
+	if token == "" {
+		return config.EdgeNodeConfig{}, false
+	}
+	hash := sha256.Sum256([]byte(token))
+	hashStr := hex.EncodeToString(hash[:])
+
+	for _, node := range s.edgeNodes() {
+		// Every accepted hash, not just the current one, so a rotation in progress authenticates
+		// on both the old and the new token (#1491).
+		for _, accepted := range node.AcceptedTokenHashes() {
+			// Constant time: the stored value is a hash rather than a secret, but this runs on a
+			// path an unauthenticated caller can drive at will, and there is nothing to gain from
+			// letting timing report how much of a guess was right.
+			if subtle.ConstantTimeCompare([]byte(accepted), []byte(hashStr)) == 1 {
+				return node, true
+			}
+		}
+	}
+	return config.EdgeNodeConfig{}, false
+}
+
 func (s *Server) findEdgeNodeURL(nodeID string) string {
-	for _, node := range s.cfg.EdgeNodes {
+	for _, node := range s.edgeNodes() {
 		if node.ID == nodeID {
 			return node.URL
 		}
@@ -5760,18 +6002,8 @@ func (s *Server) handleEdgeRegister(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	hash := sha256.Sum256([]byte(edgeToken))
-	hashStr := hex.EncodeToString(hash[:])
-
-	authorized := false
-	var edgeNodeID string
-	for _, node := range s.cfg.EdgeNodes {
-		if node.TokenHash == hashStr {
-			authorized = true
-			edgeNodeID = node.ID
-			break
-		}
-	}
+	node, authorized := s.authorisedEdgeNode(edgeToken)
+	edgeNodeID := node.ID
 
 	if !authorized {
 		respondJSON(w, http.StatusUnauthorized, map[string]string{"error": "invalid edge token"})
@@ -6089,17 +6321,7 @@ func (s *Server) handleEdgeDeregister(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	hash := sha256.Sum256([]byte(edgeToken))
-	hashStr := hex.EncodeToString(hash[:])
-
-	authorized := false
-	for _, node := range s.cfg.EdgeNodes {
-		if node.TokenHash == hashStr {
-			authorized = true
-			break
-		}
-	}
-
+	_, authorized := s.authorisedEdgeNode(edgeToken)
 	if !authorized {
 		respondJSON(w, http.StatusUnauthorized, map[string]string{"error": "invalid edge token"})
 		return
@@ -6161,17 +6383,7 @@ func (s *Server) handleEdgeAuditLog(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	hash := sha256.Sum256([]byte(edgeToken))
-	hashStr := hex.EncodeToString(hash[:])
-
-	authorized := false
-	for _, node := range s.cfg.EdgeNodes {
-		if node.TokenHash == hashStr {
-			authorized = true
-			break
-		}
-	}
-
+	_, authorized := s.authorisedEdgeNode(edgeToken)
 	if !authorized {
 		respondJSON(w, http.StatusUnauthorized, map[string]string{"error": "invalid edge token"})
 		return
@@ -6215,18 +6427,8 @@ func (s *Server) handleEdgeMetrics(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	hash := sha256.Sum256([]byte(edgeToken))
-	hashStr := hex.EncodeToString(hash[:])
-
-	authorized := false
-	var edgeNodeID string
-	for _, node := range s.cfg.EdgeNodes {
-		if node.TokenHash == hashStr {
-			authorized = true
-			edgeNodeID = node.ID
-			break
-		}
-	}
+	node, authorized := s.authorisedEdgeNode(edgeToken)
+	edgeNodeID := node.ID
 
 	if !authorized {
 		respondJSON(w, http.StatusUnauthorized, map[string]string{"error": "invalid edge token"})

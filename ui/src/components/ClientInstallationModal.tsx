@@ -51,7 +51,7 @@ export default function ClientInstallationModal({
   return (
     <div className="modal-backdrop" onClick={onClose}>
       <div
-        className="modal-card modal-card--md max-h-[90vh] flex flex-col"
+        className="modal-card modal-card--md flex flex-col"
         onClick={(e) => e.stopPropagation()}
         role="dialog"
         aria-modal="true"
@@ -75,7 +75,7 @@ export default function ClientInstallationModal({
           <button
             type="button"
             aria-label={t('close', 'Close')}
-            className="modal-close-btn"
+            className="modal-close"
             onClick={onClose}
           >
             &times;
@@ -83,7 +83,7 @@ export default function ClientInstallationModal({
         </div>
 
         {/* Tab Selection */}
-        <div className="flex border-b border-subtle mt-md">
+        <div className="flex border-b mt-md">
           <button
             type="button"
             className={`tab-btn flex-1 py-xs text-xs fw-bold transition-all ${activeTab === 'macos' ? 'tab-btn--active text-main border-b-2 border-primary' : 'text-muted hover:text-main'}`}

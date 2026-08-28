@@ -27,6 +27,35 @@ const (
 	drainWaitSeconds   = 90
 )
 
+// uiDistIndex is the file //go:embed ui-dist/* needs in order for portal v2 to exist in the
+// binary. Generated, and no longer committed since #1196.
+const uiDistIndex = "pkg/server/ui-dist/index.html"
+
+// RequireBuiltUI refuses to deploy a gateway whose portal v2 would answer 500.
+//
+// `make build` builds the UI and copies it into the embed directory; deploy cross-compiles
+// directly and embeds whatever happens to be there. On a fresh clone that is just .gitkeep, and
+// after a `make test` or a CI run it is a ZERO-BYTE index.html, because both create a dummy to
+// satisfy the embed. Either way the deploy succeeds, reports success, and ships a gateway with no
+// portal -- which is exactly what reached production in #1494.
+//
+// The size check is the point. Existence alone is satisfied by the dummy, which is the most
+// likely way to hit this: anyone who has run the tests has one.
+func RequireBuiltUI() error {
+	info, err := os.Stat(uiDistIndex)
+	if err != nil {
+		return fmt.Errorf(
+			"%s is missing, so this binary would embed no portal v2 and serve 500 for it.\n"+
+				"Run `make build` first -- deploy cross-compiles but does not build the UI", uiDistIndex)
+	}
+	if info.Size() == 0 {
+		return fmt.Errorf(
+			"%s is empty -- this is the placeholder `make test` and CI create to satisfy the embed,\n"+
+				"not a built UI. Run `make build` to produce a real one", uiDistIndex)
+	}
+	return nil
+}
+
 func DeployCommand(args []string) {
 	if IsHelpRequest(args) {
 		fmt.Println("Usage: lfr-tunnel-ops deploy [-i identity_file] [-u user] [-s host] [-aws-region region] [-target name]")
@@ -76,6 +105,24 @@ func DeployCommand(args []string) {
 		}
 	}()
 
+	// failed reports an error the way CheckFatal does, but WITHOUT os.Exit -- which skips
+	// deferred functions, including the restorePower below. Every failure past that point has to
+	// come through here and return, or a node started for this deploy is left running outside
+	// its schedule while the process exits blaming something else entirely (#1453).
+	//
+	// Returns a bool rather than doing the return itself, because a helper cannot return from
+	// its caller in Go. That makes `if failed(...) { return }` the pattern, and an omitted
+	// `return` the way to get this wrong again -- which is what TestDeployCommandHasNoCheckFatal
+	// AfterPowerRestore guards, since the mistake is invisible on every successful deploy.
+	failed := func(err error, msg string) bool {
+		if err == nil {
+			return false
+		}
+		fmt.Fprintf(os.Stderr, "FATAL: %s: %v\n", msg, err)
+		exitCode = 1
+		return true
+	}
+
 	// aws_region used to be the whole switch for power management. It is now just one of
 	// the values handed to a hook, so a config still carrying it alone would quietly stop
 	// managing power -- and silently leaving a started node running is the exact failure
@@ -104,24 +151,43 @@ func DeployCommand(args []string) {
 		version = extractVersion() // Re-use from build.go
 	}
 
+	// Before the build, not after: a binary with no UI must never reach the box (#1494).
+	if err := RequireBuiltUI(); err != nil {
+		fmt.Fprintf(os.Stderr, "FATAL: %v\n", err)
+		exitCode = 1
+		return
+	}
+
 	fmt.Printf("Building Linux binary (version: %s)...\n", version)
 	ldflags := fmt.Sprintf("-s -w -X lfr-tunnel/pkg/config.Version=%s", version)
 	err = RunCommandWithEnv([]string{"GOOS=linux", "GOARCH=amd64"}, "go", "build", "-ldflags", ldflags, "-trimpath", "-o", "bin/lfr-tunneld-linux", "./cmd/lfr-tunneld")
-	CheckFatal(err, "Failed to build lfr-tunneld for Linux")
+	if failed(err, "Failed to build lfr-tunneld for Linux") {
+		return
+	}
 
 	fmt.Println("Uploading binary to VPS...")
 	err = RunCommand("scp", "-i", identityFile, "bin/lfr-tunneld-linux", sshTarget+":/home/"+vpsUser+"/lfr-tunneld")
-	CheckFatal(err, "Failed to SCP binary")
+	if failed(err, "Failed to SCP binary") {
+		return
+	}
 
 	fmt.Println("Uploading error pages, static assets, translations, and templates...")
 	err = RunCommand("scp", "-i", identityFile, "-r", "resources/server/error_pages", sshTarget+":/home/"+vpsUser+"/")
-	CheckFatal(err, "Failed to SCP error_pages")
+	if failed(err, "Failed to SCP error_pages") {
+		return
+	}
 	err = RunCommand("scp", "-i", identityFile, "-r", "pkg/server/static", sshTarget+":/home/"+vpsUser+"/")
-	CheckFatal(err, "Failed to SCP static")
+	if failed(err, "Failed to SCP static") {
+		return
+	}
 	err = RunCommand("scp", "-i", identityFile, "-r", "pkg/server/i18n", sshTarget+":/home/"+vpsUser+"/")
-	CheckFatal(err, "Failed to SCP i18n")
+	if failed(err, "Failed to SCP i18n") {
+		return
+	}
 	err = RunCommand("scp", "-i", identityFile, "-r", "pkg/server/templates", sshTarget+":/home/"+vpsUser+"/")
-	CheckFatal(err, "Failed to SCP templates")
+	if failed(err, "Failed to SCP templates") {
+		return
+	}
 
 	fmt.Println("Uploading maintenance and backup scripts...")
 	scripts := []string{
@@ -134,7 +200,9 @@ func DeployCommand(args []string) {
 	for _, script := range scripts {
 		if fileExists(script) {
 			err = RunCommand("scp", "-i", identityFile, script, sshTarget+":/home/"+vpsUser+"/")
-			CheckFatal(err, "Failed to SCP script: "+script)
+			if failed(err, "Failed to SCP script: "+script) {
+				return
+			}
 		}
 	}
 
@@ -212,6 +280,13 @@ func DeployCommand(args []string) {
 		return
 	}
 
+	// The version check proves the right binary is running; this proves it is usable.
+	if err := verifyPortalV2(target.Host); err != nil {
+		fmt.Fprintf(os.Stderr, "FATAL: %v\n", err)
+		exitCode = 1
+		return
+	}
+
 	fmt.Println("=== Deployment Complete! ===")
 }
 
@@ -221,6 +296,41 @@ func DeployCommand(args []string) {
 // central on the control-channel handshake, but that is a second hop with its own timing,
 // and this needs to answer "is the binary I just installed the one now serving" rather than
 // "has central noticed yet".
+// verifyPortalV2 checks the deployed gateway actually serves its portal.
+//
+// The version check above proves the right BINARY is running. It says nothing about what is inside
+// it, and a gateway with no embedded UI passes every other check while answering 500 for the
+// portal -- up, correct version, and unusable (#1494). This is the check that would have caught
+// that from the deploying side rather than when somebody opened the page.
+//
+// Not fatal on a non-200 other than 500: an edge legitimately has no portal, and a deployment
+// behind maintenance mode answers 503. The specific failure being caught is "UI not built".
+func verifyPortalV2(host string) error {
+	return verifyPortalV2At("https://" + host)
+}
+
+func verifyPortalV2At(baseURL string) error {
+	client := &http.Client{Timeout: 15 * time.Second}
+	resp, err := client.Get(strings.TrimRight(baseURL, "/") + "/portalv2")
+	if err != nil {
+		// A gateway that cannot be reached at all is already reported by the version check; not
+		// worth failing twice for one problem.
+		return nil
+	}
+	defer resp.Body.Close() //nolint:errcheck
+
+	if resp.StatusCode != http.StatusInternalServerError {
+		return nil
+	}
+	body, err := io.ReadAll(io.LimitReader(resp.Body, 256))
+	if err == nil && strings.Contains(string(body), "UI not built") {
+		return fmt.Errorf(
+			"the deployed gateway serves 500 for /portalv2: %q.\n"+
+				"The binary embedded no UI. Run `make build` and deploy again", strings.TrimSpace(string(body)))
+	}
+	return fmt.Errorf("the deployed gateway serves 500 for /portalv2")
+}
+
 func verifyDeployedVersion(host, want string, timeout time.Duration) error {
 	return verifyDeployedVersionAt("https://"+host, want, timeout, 5*time.Second)
 }

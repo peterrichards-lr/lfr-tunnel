@@ -24,7 +24,15 @@ import { readFileSync, readdirSync } from 'node:fs';
 import { join, basename } from 'node:path';
 
 const UI_SRC = join(process.cwd(), 'ui', 'src');
-const THEMES = join(UI_SRC, 'themes');
+
+// The theme files are shared by both portals and live with the static assets the Go server
+// embeds, because that is the one place BOTH can read them from: Portal V2 @imports them into
+// its bundle, Portal V1 links them (#1522).
+const THEMES = join(process.cwd(), 'pkg', 'server', 'static', 'themes');
+
+// Portal V1's stylesheet is scanned alongside V2's source, so one gate covers both. Until the
+// themes were shared, V1 defined its own tokens and nothing checked them.
+const V1_CSS = join(process.cwd(), 'pkg', 'server', 'static', 'dashboard.css');
 
 // Comments are stripped before scanning: prose describing a token -- including the
 // comments explaining these very bugs -- would otherwise register as a reference.
@@ -55,6 +63,15 @@ function collectReferences() {
     }
   };
   walk(UI_SRC);
+
+  // V1 is one file rather than a tree, so it is read directly rather than walked.
+  for (const m of read(V1_CSS).matchAll(/var\(\s*(--[a-z0-9-]+)\s*(,)?/g)) {
+    const existing = refs.get(m[1]) || { hasFallback: false, files: new Set() };
+    if (m[2]) existing.hasFallback = true;
+    existing.files.add(basename(V1_CSS));
+    refs.set(m[1], existing);
+  }
+
   return refs;
 }
 

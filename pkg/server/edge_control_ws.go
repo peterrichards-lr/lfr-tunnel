@@ -190,7 +190,7 @@ func (s *Server) handleEdgeControlWS(w http.ResponseWriter, r *http.Request) {
 
 	// 3. Verify HMAC response
 	var nodeConfig *config.EdgeNodeConfig
-	for _, node := range s.cfg.EdgeNodes {
+	for _, node := range s.edgeNodes() {
 		if node.ID == nodeID {
 			nodeConfig = &node
 			break
@@ -204,20 +204,31 @@ func (s *Server) handleEdgeControlWS(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	keyBytes, err := hex.DecodeString(nodeConfig.TokenHash)
-	if err != nil {
-		slog.Info(fmt.Sprintf("[Edge WS] Invalid token hash configured for %s", nodeID))
-		_ = conn.WriteJSON(ControlMessage{Type: "auth_failed", Reason: "invalid token hash"}) //nolint:errcheck
-		_ = conn.Close()                                                                      //nolint:errcheck
-		return
+	// The token hash is the HMAC KEY here, not a value to compare, so a rotation has to be tried
+	// against every accepted hash. Miss this and an edge presenting the incoming token passes
+	// /api/internal/* and then silently fails to establish its control channel -- losing schedule
+	// pushes, shutdown warnings and lease kicks, which is worse than not rotating at all (#1491).
+	respMAC, err := hex.DecodeString(authMsg.Response)
+	authOK := false
+	if err == nil {
+		for _, accepted := range nodeConfig.AcceptedTokenHashes() {
+			keyBytes, decodeErr := hex.DecodeString(accepted)
+			if decodeErr != nil {
+				slog.Info(fmt.Sprintf("[Edge WS] Ignoring an unparseable token hash configured for %s", nodeID))
+				continue
+			}
+			mac := hmac.New(sha256.New, keyBytes)
+			mac.Write([]byte(nonceStr))
+			// Every candidate is compared even once one has matched, so the time taken does not
+			// report WHICH hash was the match -- during a rotation that would leak whether an
+			// edge is still on the old token.
+			if subtle.ConstantTimeCompare(respMAC, mac.Sum(nil)) == 1 {
+				authOK = true
+			}
+		}
 	}
 
-	mac := hmac.New(sha256.New, keyBytes)
-	mac.Write([]byte(nonceStr))
-	expectedMAC := mac.Sum(nil)
-
-	respMAC, err := hex.DecodeString(authMsg.Response)
-	if err != nil || subtle.ConstantTimeCompare(respMAC, expectedMAC) != 1 {
+	if !authOK {
 		slog.Info(fmt.Sprintf("[Edge WS] HMAC verification failed for %s", nodeID))
 		_ = conn.WriteJSON(ControlMessage{Type: "auth_failed", Reason: "invalid signature"}) //nolint:errcheck
 		_ = conn.Close()                                                                     //nolint:errcheck

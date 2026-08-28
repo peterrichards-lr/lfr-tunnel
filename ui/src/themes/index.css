@@ -6,6 +6,6 @@
  *
  * Available values: "dark" | "light" | "liferay"
  */
-@import './dark.css';
-@import './light.css';
-@import './liferay.css';
+@import '../../../pkg/server/static/themes/dark.css';
+@import '../../../pkg/server/static/themes/light.css';
+@import '../../../pkg/server/static/themes/liferay.css';

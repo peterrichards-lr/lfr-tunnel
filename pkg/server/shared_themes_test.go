@@ -109,3 +109,32 @@ func TestPortalV1DefinesNoThemeTokens(t *testing.T) {
 		}
 	}
 }
+
+// TestDockerBuildCopiesTheSharedThemes guards the containerised build.
+//
+// ui/src/themes/index.css @imports the shared files from outside ui/, and the ui-builder stage
+// copies only ui/ -- so the image build fails with "Unable to resolve @import" unless the stage
+// also copies them in. A local build never reveals this, because there the whole repo is on
+// disk; it took all four E2E jobs going red to surface it.
+//
+// Checked by reading the Dockerfile because the alternative is building an image in a unit test.
+func TestDockerBuildCopiesTheSharedThemes(t *testing.T) {
+	df, err := os.ReadFile(filepath.Join("..", "..", "cmd", "lfr-tunneld", "Dockerfile"))
+	if err != nil {
+		t.Fatalf("reading the gateway Dockerfile: %v", err)
+	}
+	text := strings.ReplaceAll(string(df), "\r\n", "\n")
+
+	copyIdx := strings.Index(text, "COPY pkg/server/static/themes")
+	if copyIdx < 0 {
+		t.Fatal("the ui-builder stage does not copy pkg/server/static/themes, so `pnpm run build` " +
+			"cannot resolve the @import and the image build fails (#1522)")
+	}
+	buildIdx := strings.Index(text, "RUN pnpm run build")
+	if buildIdx < 0 {
+		t.Fatal("could not find the UI build step; if it moved, move this guard with it")
+	}
+	if copyIdx > buildIdx {
+		t.Error("the themes are copied AFTER the UI build, so the import still cannot resolve")
+	}
+}

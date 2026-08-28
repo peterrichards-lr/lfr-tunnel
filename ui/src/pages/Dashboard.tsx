@@ -12,6 +12,7 @@ import ClientInstallationModal from '../components/ClientInstallationModal';
 import OnboardingTour from '../components/OnboardingTour';
 import { useSettings } from '../contexts/SettingsContext';
 import { useI18n } from '../contexts/I18nContext';
+import SectionHeading from '../components/SectionHeading';
 
 function isOlderVersion(current: string, target: string): boolean {
   if (!current || !target) return false;
@@ -351,9 +352,11 @@ export default function Dashboard() {
         >
           <div className="p-xl border-b flex justify-between items-center flex-wrap gap-md">
             <div>
-              <h3 className="m-0 text-md fw-bold">
-                {t('pat_title', 'Personal Access Tokens')}
-              </h3>
+              <SectionHeading
+                anchor="access-tokens"
+                className="m-0 text-md fw-bold"
+                label={t('pat_title', 'Personal Access Tokens')}
+              />
               <p className="text-muted text-sm mt-xs m-0">
                 {t(
                   'pat_desc',

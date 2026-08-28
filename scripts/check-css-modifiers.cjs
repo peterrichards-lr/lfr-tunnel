@@ -46,6 +46,20 @@ const path = require('path');
 
 const UI_SRC = path.join(__dirname, '..', 'ui', 'src');
 
+// Rule 5: some rules V2 uses are not IN ui/src. The accessibility component rules are
+// shared with Portal V1 (#1520) and live under static/shared/, the same way the theme
+// tokens moved to static/themes/ in #1522. Reading only ui/src reported every one of
+// those classes as inert, which would have pushed them back into index.css -- recreating
+// the duplication the shared file exists to remove.
+const SHARED_CSS = path.join(
+  __dirname,
+  '..',
+  'pkg',
+  'server',
+  'static',
+  'shared',
+);
+
 // Tokens that appear where a class would, but are not classes.
 const NOT_A_CLASS = new Set(['buttonClassName']);
 
@@ -76,6 +90,11 @@ function collect(css, into) {
 const defined = new Set();
 for (const f of files.filter((f) => f.endsWith('.css'))) {
   collect(fs.readFileSync(f, 'utf8'), defined);
+}
+if (fs.existsSync(SHARED_CSS)) {
+  for (const f of walk(SHARED_CSS).filter((f) => f.endsWith('.css'))) {
+    collect(fs.readFileSync(f, 'utf8'), defined);
+  }
 }
 // Rule 2: a component's own <style> block defines classes too.
 for (const f of files.filter((f) => /\.tsx?$/.test(f))) {

@@ -8,6 +8,13 @@ WORKDIR /app/ui
 RUN npm install -g pnpm && pnpm install
 # Copy the rest of the UI files and build
 COPY ui/ ./
+# The theme tokens are shared with Portal V1 and live with the static assets the Go server
+# embeds, so ui/src/themes/index.css @imports them from outside ui/ (#1522). This stage copies
+# only ui/, so without this the build fails with "Unable to resolve @import" -- which a local
+# build never sees, because there the whole repo is on disk.
+#
+# The destination has to mirror the repo layout, since the import is a relative path.
+COPY pkg/server/static/themes /app/pkg/server/static/themes
 RUN pnpm run build
 
 # Go Build Stage

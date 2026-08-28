@@ -1,87 +1,12 @@
-:root {
-  --bg-base: #0f172a;
-  --bg-card: rgba(30, 41, 59, 0.7);
-  --bg-card-hover: rgba(30, 41, 59, 0.9);
-  --primary: #0b5fff;
-  --primary-glow: rgba(11, 95, 255, 0.4);
-  --text-main: #f8fafc;
-  --text-muted: #94a3b8;
-  --border: rgba(255, 255, 255, 0.1);
-  --scrollbar-thumb: rgba(255, 255, 255, 0.28);
-  --scrollbar-thumb-hover: rgba(255, 255, 255, 0.45);
-  --danger: #ef4444;
-  --success: #10b981;
-  --login-gradient: radial-gradient(circle at center, #1e293b 0%, #0f172a 100%);
-  --sidebar-bg: rgba(15, 23, 42, 0.6);
-  --input-bg: rgba(0, 0, 0, 0.2);
-  --modal-overlay: rgba(0, 0, 0, 0.6);
-  --copy-box-bg: #000;
-  --toast-bg: #1e293b;
-  --toast-color: #f8fafc;
-  --toast-border: rgba(255, 255, 255, 0.15);
-}
-
-:root[data-theme='light'] {
-  /* Light-theme variants. Without these, --success and --danger kept the values
-               tuned for a dark background and were used as text colour on light surfaces:
-               #10b981 on the copy box measured 2.42:1 and #ef4444 measured 3.60:1, against
-               a WCAG AA requirement of 4.5:1 (#1217). These are the same values Portal V2's
-               light theme already uses, so the two portals agree rather than diverging. */
-  --success: #047857;
-  --danger: #b91c1c;
-  --bg-base: #f1f5f9;
-  --bg-card: rgba(255, 255, 255, 0.8);
-  --bg-card-hover: rgba(255, 255, 255, 1);
-  --primary: #0b5fff;
-  --primary-glow: rgba(11, 95, 255, 0.2);
-  --text-main: #0f172a;
-  --text-muted: #475569;
-  --border: rgba(0, 0, 0, 0.1);
-  --scrollbar-thumb: rgba(0, 0, 0, 0.28);
-  --scrollbar-thumb-hover: rgba(0, 0, 0, 0.45);
-  --login-gradient: radial-gradient(circle at center, #e2e8f0 0%, #f1f5f9 100%);
-  --sidebar-bg: rgba(241, 245, 249, 0.6);
-  --input-bg: rgba(255, 255, 255, 0.5);
-  --modal-overlay: rgba(255, 255, 255, 0.4);
-  --copy-box-bg: #f8fafc;
-  --toast-bg: #ffffff;
-  --toast-color: #0f172a;
-  --toast-border: rgba(0, 0, 0, 0.1);
-}
-
-@media (prefers-color-scheme: light) {
-  :root:not([data-theme='dark']) {
-    /* Light-theme variants. Without these, --success and --danger kept the values
-               tuned for a dark background and were used as text colour on light surfaces:
-               #10b981 on the copy box measured 2.42:1 and #ef4444 measured 3.60:1, against
-               a WCAG AA requirement of 4.5:1 (#1217). These are the same values Portal V2's
-               light theme already uses, so the two portals agree rather than diverging. */
-    --success: #047857;
-    --danger: #b91c1c;
-    --bg-base: #f1f5f9;
-    --bg-card: rgba(255, 255, 255, 0.8);
-    --bg-card-hover: rgba(255, 255, 255, 1);
-    --primary: #0b5fff;
-    --primary-glow: rgba(11, 95, 255, 0.2);
-    --text-main: #0f172a;
-    --text-muted: #475569;
-    --border: rgba(0, 0, 0, 0.1);
-    --scrollbar-thumb: rgba(0, 0, 0, 0.28);
-    --scrollbar-thumb-hover: rgba(0, 0, 0, 0.45);
-    --login-gradient: radial-gradient(
-      circle at center,
-      #e2e8f0 0%,
-      #f1f5f9 100%
-    );
-    --sidebar-bg: rgba(241, 245, 249, 0.6);
-    --input-bg: rgba(255, 255, 255, 0.5);
-    --modal-overlay: rgba(255, 255, 255, 0.4);
-    --copy-box-bg: #f8fafc;
-    --toast-bg: #ffffff;
-    --toast-color: #0f172a;
-    --toast-border: rgba(0, 0, 0, 0.1);
-  }
-}
+/*
+ * Theme tokens live in static/themes/{dark,light,liferay}.css and are shared with Portal V2
+ * (#1522). They used to be duplicated here, which is why V1 had no `liferay` and why the
+ * contrast gate covered V2 only.
+ *
+ * Only the custom properties moved. V1's component rules that key off a theme -- the
+ * :root[data-theme='light'] .config-tree-* rules below, and friends -- are V1 markup and stay
+ * here.
+ */
 
 * {
   box-sizing: border-box;
@@ -767,8 +692,8 @@ html[dir='rtl'] th {
   }
 
   body {
-    background: var(--bg) !important;
-    color: var(--text-color) !important;
+    background: var(--bg-base) !important;
+    color: var(--text-main) !important;
     -webkit-print-color-adjust: exact !important;
     print-color-adjust: exact !important;
   }
@@ -944,7 +869,7 @@ html[dir='rtl'] th {
 /* --- Driver.js Custom Styling Overrides --- */
 .driver-popover.driverjs-theme {
   background: var(--bg-card) !important;
-  color: var(--text-color) !important;
+  color: var(--text-main) !important;
   border: 1px solid var(--border) !important;
   backdrop-filter: blur(12px) !important;
   -webkit-backdrop-filter: blur(12px) !important;
@@ -992,7 +917,7 @@ html[dir='rtl'] th {
 }
 
 .driver-popover.driverjs-theme .driver-popover-close-btn:hover {
-  color: var(--text-color) !important;
+  color: var(--text-main) !important;
 }
 
 .driver-popover.driverjs-theme .driver-popover-arrow {

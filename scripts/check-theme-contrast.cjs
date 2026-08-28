@@ -2,7 +2,7 @@
 /**
  * Fails when a Portal V2 theme's button fills cannot carry the text placed on them.
  *
- * Written to be theme-agnostic: it discovers every file in ui/src/themes and checks
+ * Written to be theme-agnostic: it discovers every file in the shared theme directory and checks
  * whatever it finds, so a theme added later is covered without anyone remembering this
  * script exists. That is the whole point -- #1458 shipped because the values were literals
  * in a component rule, where no amount of adding themes would have revealed the problem.
@@ -34,7 +34,10 @@
 const fs = require('fs');
 const path = require('path');
 
-const THEMES = path.join(__dirname, '..', 'ui', 'src', 'themes');
+// Shared by both portals since #1522: V2 @imports these files into its bundle, V1 links them.
+// So this gate now covers Portal V1's colours too, which nothing checked while V1 kept its own
+// copy of the tokens.
+const THEMES = path.join(__dirname, '..', 'pkg', 'server', 'static', 'themes');
 const AA_TEXT = 4.5;
 const AA_NONTEXT = 3.0;
 const HOVER_BRIGHTNESS = 1.1;

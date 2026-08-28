@@ -1099,16 +1099,13 @@ async function showDashboard() {
   document.getElementById('acc-last-name').value = currentUser.last_name || '';
   document.getElementById('acc-preferred-name').value =
     currentUser.preferred_name || '';
-  // V2 offers themes V1 does not (currently 'liferay'), and the server stores
-  // theme_preference as free text with no whitelist, so an unknown value lands
-  // here routinely rather than exceptionally (#1201).
+  // theme_preference is stored as free text with no whitelist, so a value neither portal
+  // knows can still land here -- kept for that, not for `liferay`, which V1 now renders
+  // itself (#1522).
   setSelectValueSafely(
     document.getElementById('acc-theme'),
     currentUser.theme_preference || 'system',
-    (v) =>
-      V2_ONLY_THEME_LABELS[v]
-        ? `${V2_ONLY_THEME_LABELS[v]} ${t('theme_portal_v2_only', '(set in Portal V2)')}`
-        : `${v} ${t('theme_unsupported_here', '(unsupported in Portal V1)')}`,
+    (v) => `${v} ${t('theme_unsupported_here', '(unsupported in Portal V1)')}`,
   );
   document.getElementById('acc-subdomain-style').value =
     currentUser.subdomain_style || 'liferay';
@@ -1468,10 +1465,10 @@ async function clearBroadcastMessage() {
   }
 }
 
-// Themes Portal V2 can store that V1 has no stylesheet for. Used only to label
-// the value honestly in Account Settings; V1 still renders a theme it owns.
-const V2_ONLY_THEME_LABELS = { liferay: 'Liferay Waffle \u{1F9C7}' };
-const V1_THEMES = ['system', 'light', 'dark', 'time'];
+// Both portals now read one shared set of theme files (#1522), so V1 renders every theme V2
+// offers. The V2_ONLY_THEME_LABELS map that used to live here existed to label `liferay`
+// honestly as unsupported (#1201); there is nothing left for it to describe.
+const V1_THEMES = ['system', 'light', 'dark', 'liferay', 'time'];
 
 function applyTheme(pref) {
   let themeToApply = pref;

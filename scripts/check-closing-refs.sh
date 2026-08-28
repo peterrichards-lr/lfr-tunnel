@@ -55,17 +55,45 @@ KEYWORD='close[sd]?|fix(e[sd])?|resolve[sd]?'
 MATCHES=$(printf '%s\n' "$TEXT" \
     | grep -inE "(${NEGATED})[[:space:]]+(${KEYWORD})[[:space:]]*:?[[:space:]]*#[0-9]+" || true)
 
-if [ -z "$MATCHES" ]; then
+# The second shape, which closed #1538 the same day this script was written (#1543).
+#
+# A PLACEHOLDER between the keyword and a real number bridges them. GitHub skips a #token that is
+# not a valid issue reference and matches the next one that is, so a squashed title reading
+#
+#     ... closes #N (#1538) (#1539)
+#
+# closes 1538. Not contrived: `#N` is the placeholder the documentation recommends for describing
+# this very trap, and every squashed commit here gains a `(#PR)` trailer -- so a stray keyword in
+# a title always has a real number waiting at the end of the line to reach.
+BRIDGED=$(printf '%s\n' "$TEXT" \
+    | grep -inE "(${KEYWORD})[[:space:]]*:?[[:space:]]*#[^0-9[:space:]][^[:space:]]*.*#[0-9]+" || true)
+
+if [ -z "$MATCHES" ] && [ -z "$BRIDGED" ]; then
     exit 0
 fi
 
-echo "::error::A negated closing reference still closes the issue."
+echo "::error::This text would close an issue you did not mean to close."
 echo
-echo "GitHub matches close/fixes/resolves followed by #<N> and ignores the negation in front"
-echo "of it, so these lines would CLOSE the issues they name on merge:"
-echo
-printf '%s\n' "$MATCHES" | sed 's/^/    /'
-echo
+
+if [ -n "$MATCHES" ]; then
+    echo "A NEGATED closing reference. GitHub matches close/fixes/resolves followed by #<N> and"
+    echo "ignores the negation in front of it, so these would CLOSE the issues they name:"
+    echo
+    printf '%s\n' "$MATCHES" | sed 's/^/    /'
+    echo
+fi
+
+if [ -n "$BRIDGED" ]; then
+    echo "A PLACEHOLDER bridging the keyword to a real issue. GitHub skips a #token that is not a"
+    echo "number and matches the next one that is -- and every squashed commit here gains a (#PR)"
+    echo "trailer, so a title always has a real number waiting at the end of the line:"
+    echo
+    printf '%s\n' "$BRIDGED" | sed 's/^/    /'
+    echo
+    echo "Keep a closing keyword off any line that also carries a real issue number. In a commit"
+    echo "TITLE that is every line, because of the trailer -- put closing references in the body."
+    echo
+fi
 echo "If the PR genuinely does not finish that issue, name it without the keyword beside it:"
 echo
 echo "    Part 2 of #1521          instead of   Does not close #1521"

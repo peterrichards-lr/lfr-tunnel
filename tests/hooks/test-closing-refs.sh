@@ -64,6 +64,22 @@ allows "an ordinary body with no negation at all" "Closes #1540.
 
 Adds a check. Fixes the gap #1533 fell into."
 
+# The second shape (#1543): a placeholder bridges the keyword to a real number. GitHub skips a
+# #token that is not a valid reference and matches the next one that is -- and every squashed
+# commit here gains a (#PR) trailer, so a title always has a real number at the end.
+rejects "the real one: a placeholder bridging to the trailer" \
+    'docs(agents): record that "Does not close #N" closes #N (#1538) (#1539)'
+rejects "angle-bracket placeholder" "Closes #<N> (#1234)"
+rejects "word placeholder" "fixes #issue (#99)"
+
+# ...and the legal forms it must not touch, which is where this could easily go wrong: the
+# adjacent token being a real number is the whole distinction.
+allows "an ordinary closing reference with a PR trailer" "ci: do a thing (#1543)
+
+Closes #1540."
+allows "a placeholder with no real number anywhere" "Write it as: Closes #<N>"
+allows "two real references on one line" "Closes #12 and closes #13"
+
 # A file argument, since CI passes one rather than piping.
 TMP=$(mktemp)
 trap 'rm -f "$TMP"' EXIT INT TERM

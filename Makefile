@@ -206,6 +206,7 @@ test-hooks:
 	@./tests/hooks/test-hook-shim.sh
 	@./tests/hooks/test-build-keeps-tracked-files.sh
 	@./tests/hooks/test-stale-branches.sh
+	@./tests/hooks/test-pull-images.sh
 
 # The pre-merge CI-configuration gate (#1391). Worth a target rather than only a path to type:
 # the whole point of this check is being run BEFORE pushing, and a check nobody can invoke

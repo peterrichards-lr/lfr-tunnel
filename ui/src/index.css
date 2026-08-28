@@ -708,48 +708,19 @@ input:checked + .toggle-slider:before {
   color: var(--danger);
   border: 1px solid rgba(239, 68, 68, 0.2);
 }
-/* Toaster Notifications */
-#toast-container {
-  position: fixed;
-  bottom: 24px;
-  right: 24px;
-  z-index: 9999;
-  display: flex;
-  flex-direction: column;
-  gap: 12px;
-}
-
-.toast {
-  background: var(--toast-bg);
-  color: var(--toast-color);
-  padding: 16px 24px;
-  border-radius: 12px;
-  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.15);
-  border: 1px solid var(--toast-border);
-  display: flex;
-  align-items: center;
-  gap: 12px;
-  font-size: 14px;
-  font-weight: 500;
-  transform: translateX(120%);
-  opacity: 0;
-  transition: all 0.3s cubic-bezier(0.68, -0.55, 0.265, 1.55);
-}
-
-.toast.show {
-  transform: translateX(0);
-  opacity: 1;
-}
-
-.toast-success {
-  border-left: 4px solid var(--success);
-}
-.toast-error {
-  border-left: 4px solid var(--danger);
-}
-.toast-info {
-  border-left: 4px solid var(--primary);
-}
+/*
+ * V1's toast vocabulary used to live here too -- #toast-container, .toast, .toast.show and the
+ * .toast-{success,error,info} variants -- and nothing in this portal ever rendered it (#1542).
+ * V2's live toasts are .toast-stack > .toast-card, defined further down; V1's copy stays in
+ * pkg/server/static/dashboard.css, where it is used.
+ *
+ * It was not merely unused, it misled: #1533's Windows High Contrast Mode rule named .toast,
+ * matched nothing, and left V2's toasts with no boundary under HCM.
+ *
+ * The class gate cannot catch this. check-css-modifiers.cjs verifies every class in the markup
+ * HAS a rule, not that every rule has a user -- and in that direction a genuinely dead rule and
+ * one used only via a runtime-built class string look identical.
+ */
 
 /* --- RIGHT-TO-LEFT (RTL) SUPPORT --- */
 html[dir='rtl'] body {

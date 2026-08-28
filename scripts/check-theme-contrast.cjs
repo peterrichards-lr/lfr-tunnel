@@ -40,6 +40,9 @@ const path = require('path');
 const THEMES = path.join(__dirname, '..', 'pkg', 'server', 'static', 'themes');
 const AA_TEXT = 4.5;
 const AA_NONTEXT = 3.0;
+// AAA for normal text. Only applied to the prefers-contrast overrides, whose reason for
+// existing is to clear a higher bar than the themes themselves are held to.
+const AAA_TEXT = 7.0;
 const HOVER_BRIGHTNESS = 1.1;
 const WHITE = [255, 255, 255];
 
@@ -96,11 +99,26 @@ for (const file of files) {
     .readFileSync(path.join(THEMES, file), 'utf8')
     .replace(/\/\*[\s\S]*?\*\//g, '');
 
-  const tokens = {};
-  for (const m of css.matchAll(/(--[\w-]+)\s*:\s*([^;]+);/g)) {
-    const parsed = parseColor(m[2]);
-    if (parsed) tokens[m[1]] = parsed;
-  }
+  // Split the file at the prefers-contrast block before collecting anything.
+  //
+  // A flat scan would let the high-contrast overrides shadow the base values, so the check would
+  // silently measure the wrong palette -- and report OK either way, which is the shape of bug
+  // this whole script exists to catch (#1521).
+  const contrastAt = css.indexOf('@media (prefers-contrast: more)');
+  const baseCss = contrastAt < 0 ? css : css.slice(0, contrastAt);
+  const moreCss = contrastAt < 0 ? '' : css.slice(contrastAt);
+
+  const collect = (text) => {
+    const out = {};
+    for (const m of text.matchAll(/(--[\w-]+)\s*:\s*([^;]+);/g)) {
+      const parsed = parseColor(m[2]);
+      if (parsed) out[m[1]] = parsed;
+    }
+    return out;
+  };
+
+  const tokens = collect(baseCss);
+  const moreTokens = collect(moreCss);
 
   // A file that has not opted into ANY of the fill tokens is not a theme this check is about
   // -- ui/src/themes also holds a barrel index.css. Gated on all of them rather than on
@@ -177,6 +195,44 @@ for (const file of files) {
         brighten(fill, HOVER_BRIGHTNESS),
         AA_TEXT,
       );
+    }
+  }
+
+  // prefers-contrast: more must actually RAISE contrast, and reach AAA for normal text.
+  //
+  // A theme that has not opted in is not failed for it -- the media block is optional -- but one
+  // that has opted in and made things no better is worse than not having done it, because it
+  // reads as handled.
+  if (Object.keys(moreTokens).length > 0) {
+    const surface = moreTokens['--bg-card-solid'] || tokens['--bg-card-solid'];
+    if (!surface) {
+      failures.push(
+        `${name}: prefers-contrast overrides exist but --bg-card-solid does not, so nothing can be measured against`,
+      );
+    } else {
+      for (const key of ['--text-main', '--text-muted']) {
+        const raised = moreTokens[key];
+        if (!raised) continue;
+        checks++;
+        const r = ratio(raised, surface);
+        if (r < AAA_TEXT) {
+          failures.push(
+            `${name}: prefers-contrast ${key} is ${fmt(r)}:1 on the card, needs ${AAA_TEXT}:1 -- ` +
+              `raising contrast is the entire point of the block`,
+          );
+        }
+        // And it must be an improvement, not a sideways move.
+        const before = tokens[key];
+        if (before) {
+          checks++;
+          const was = ratio(before, tokens['--bg-card-solid'] || surface);
+          if (r < was) {
+            failures.push(
+              `${name}: prefers-contrast ${key} LOWERS contrast, ${fmt(was)}:1 -> ${fmt(r)}:1`,
+            );
+          }
+        }
+      }
     }
   }
 

@@ -88,3 +88,34 @@
 
   --status-inactive: rgba(255, 255, 255, 0.2);
 }
+
+/*
+ * prefers-contrast: more (#1521).
+ *
+ * Honours the reader's OPERATING SYSTEM setting, with no action from them. Someone who needs
+ * more contrast has usually already said so there, and should not have to find a portal setting
+ * to say it again. The codebase already respects prefers-reduced-motion in three places, so
+ * honouring stated preferences is established practice.
+ *
+ * This raises contrast WITHIN whichever theme is active rather than replacing it: a deliberate
+ * theme choice is still honoured, it just stops being subtle. Only the tokens that were actually
+ * weak move -- --text-main is already 14.6:1 or better in every theme, so it is left alone.
+ *
+ *   --text-muted   was #8892b8, which measured AA but not AAA against the card.
+ *                  Raised to clear 7:1, the AAA bar for normal text.
+ *   --border       was barely visible at 0.08-0.1 alpha, which is a boundary only if you can
+ *                  already see it.
+ *   --bg-card      translucent, so text sat on whatever showed through. Made solid, so the
+ *                  measured contrast is the contrast.
+ *
+ * Living in the shared theme files means both portals get this from one place -- which is only
+ * possible because #1522 merged them.
+ */
+@media (prefers-contrast: more) {
+  :root[data-theme='liferay'] {
+    --text-muted: #a2acd2;
+    --border: rgba(255, 255, 255, 0.4);
+    --bg-card: #1a1f35;
+    --bg-card-hover: #1a1f35;
+  }
+}

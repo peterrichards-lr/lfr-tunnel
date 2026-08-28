@@ -1,7 +1,8 @@
 import React, { createContext, useContext, useState, useEffect } from 'react';
 
-export type ThemePreference = 'light' | 'dark' | 'liferay' | 'system' | 'time';
-export type ActiveTheme = 'light' | 'dark' | 'liferay';
+export type ThemePreference =
+  'light' | 'dark' | 'liferay' | 'high-contrast' | 'system' | 'time';
+export type ActiveTheme = 'light' | 'dark' | 'liferay' | 'high-contrast';
 
 interface SettingsContextType {
   themePreference: ThemePreference;
@@ -38,6 +39,7 @@ export function SettingsProvider({ children }: { children: React.ReactNode }) {
       if (themePreference === 'light') return 'light';
       if (themePreference === 'dark') return 'dark';
       if (themePreference === 'liferay') return 'liferay';
+      if (themePreference === 'high-contrast') return 'high-contrast';
       if (themePreference === 'time') {
         const hour = new Date().getHours();
         return hour >= 6 && hour < 18 ? 'light' : 'dark';

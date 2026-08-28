@@ -4,8 +4,9 @@
  * The active theme is controlled via the `data-theme` attribute on <html>
  * managed by SettingsContext.tsx.
  *
- * Available values: "dark" | "light" | "liferay"
+ * Available values: "dark" | "light" | "liferay" | "high-contrast"
  */
 @import '../../../pkg/server/static/themes/dark.css';
 @import '../../../pkg/server/static/themes/light.css';
 @import '../../../pkg/server/static/themes/liferay.css';
+@import '../../../pkg/server/static/themes/high-contrast.css';

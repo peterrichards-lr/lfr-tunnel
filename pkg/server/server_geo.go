@@ -79,6 +79,20 @@ func (s *Server) observeGeoLocation(userID, clientIP string) {
 	s.geo.Observe(userID, addr)
 }
 
+// apiError is the error body these handlers return.
+//
+// A typed struct rather than map[string]string{"error": ...}, because goconst counts the
+// bare "error" key at 88 occurrences repo-wide. The 49 in server.go do not get reported
+// only because that file is on .golangci.yml's per-file exclusion list -- and the comment
+// above that list says plainly that listing files exists so a NEW file in these packages
+// is linted from birth. This is a new file, so it is linted, and the right answer is to
+// not add the 89th rather than to add an exclusion (#319).
+//
+// The JSON is byte-identical to the map form.
+type apiError struct {
+	Error string `json:"error"`
+}
+
 // locationAnalyticsResponse is the payload of GET /api/admin/analytics/locations.
 //
 // Available distinguishes "no geo-IP database deployed" from "deployed, but nothing has
@@ -98,7 +112,7 @@ type locationAnalyticsResponse struct {
 // calls requireAdmin once at the top.
 func (s *Server) handleGetLocationAnalytics(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodGet {
-		respondJSON(w, http.StatusMethodNotAllowed, map[string]string{"error": "method not allowed"})
+		respondJSON(w, http.StatusMethodNotAllowed, apiError{Error: "method not allowed"})
 		return
 	}
 	resp := locationAnalyticsResponse{
@@ -115,7 +129,7 @@ func (s *Server) handleGetLocationAnalytics(w http.ResponseWriter, r *http.Reque
 	// no method that could serve one.
 	period, stats, err := s.db.GetLocationStats("")
 	if err != nil {
-		respondJSON(w, http.StatusInternalServerError, map[string]string{"error": "failed to read location stats"})
+		respondJSON(w, http.StatusInternalServerError, apiError{Error: "failed to read location stats"})
 		return
 	}
 	resp.Period = period

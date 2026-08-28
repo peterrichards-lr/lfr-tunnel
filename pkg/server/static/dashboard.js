@@ -1606,7 +1606,14 @@ async function clearBroadcastMessage() {
 // Both portals now read one shared set of theme files (#1522), so V1 renders every theme V2
 // offers. The V2_ONLY_THEME_LABELS map that used to live here existed to label `liferay`
 // honestly as unsupported (#1201); there is nothing left for it to describe.
-const V1_THEMES = ['system', 'light', 'dark', 'liferay', 'time'];
+const V1_THEMES = [
+  'system',
+  'light',
+  'dark',
+  'liferay',
+  'high-contrast',
+  'time',
+];
 
 function applyTheme(pref) {
   let themeToApply = pref;

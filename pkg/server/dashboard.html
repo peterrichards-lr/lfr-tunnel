@@ -187,10 +187,10 @@
                     <span class="sidebar-section-toggle">▼</span>
                 </button>
                 <div id="section-personal" class="sidebar-section-content">
-                    <a id="nav-overview" class="nav-item active" data-i18n="sidebar_overview" href="#overview">Overview</a>
-                    <a id="nav-tokens" class="nav-item" data-i18n="sidebar_tokens" href="#tokens">API Tokens</a>
-                    <a id="nav-reservations" class="nav-item" data-i18n="sidebar_reservations" href="#reservations">Reservations</a>
-                    <a id="nav-tunnels" class="nav-item" data-i18n="sidebar_tunnels" href="#tunnels">Active Tunnels</a>
+                    <a id="nav-overview" class="nav-item active" data-i18n="sidebar_overview" href="/portal/overview">Overview</a>
+                    <a id="nav-tokens" class="nav-item" data-i18n="sidebar_tokens" href="/portal/tokens">API Tokens</a>
+                    <a id="nav-reservations" class="nav-item" data-i18n="sidebar_reservations" href="/portal/reservations">Reservations</a>
+                    <a id="nav-tunnels" class="nav-item" data-i18n="sidebar_tunnels" href="/portal/tunnels">Active Tunnels</a>
                 </div>
                 
                 <div id="admin-sidebar-group" class="hidden">
@@ -199,9 +199,9 @@
                         <span class="sidebar-section-toggle">▼</span>
                     </button>
                     <div id="section-administration" class="sidebar-section-content">
-                        <a id="nav-registrations" class="nav-item" href="#registrations"><span data-i18n="sidebar_registrations">Registrations</span> <span id="reg-badge" class="badge" style="display:none; background: var(--danger); color: white; margin-left: 8px;">0</span></a>
-                        <a id="nav-users" class="nav-item" data-i18n="sidebar_users" href="#users">Users</a>
-                        <a id="nav-blacklist" class="nav-item" data-i18n="sidebar_blacklist" href="#blacklist">IP Blacklist</a>
+                        <a id="nav-registrations" class="nav-item" href="/portal/registrations"><span data-i18n="sidebar_registrations">Registrations</span> <span id="reg-badge" class="badge" style="display:none; background: var(--danger); color: white; margin-left: 8px;">0</span></a>
+                        <a id="nav-users" class="nav-item" data-i18n="sidebar_users" href="/portal/users">Users</a>
+                        <a id="nav-blacklist" class="nav-item" data-i18n="sidebar_blacklist" href="/portal/blacklist">IP Blacklist</a>
                     </div>
 
                     <button type="button" class="sidebar-section-header" onclick="toggleSidebarSection('reporting')" aria-expanded="true" aria-controls="section-reporting">
@@ -209,9 +209,9 @@
                         <span class="sidebar-section-toggle">▼</span>
                     </button>
                     <div id="section-reporting" class="sidebar-section-content">
-                        <a id="nav-analytics" class="nav-item" data-i18n="sidebar_analytics" href="#analytics">Analytics</a>
-                        <a id="nav-audit" class="nav-item" data-i18n="sidebar_audit" href="#audit">Audit Logs</a>
-                        <a id="nav-magic" class="nav-item" data-i18n="sidebar_magic" href="#magic">Magic Links</a>
+                        <a id="nav-analytics" class="nav-item" data-i18n="sidebar_analytics" href="/portal/analytics">Analytics</a>
+                        <a id="nav-audit" class="nav-item" data-i18n="sidebar_audit" href="/portal/audit">Audit Logs</a>
+                        <a id="nav-magic" class="nav-item" data-i18n="sidebar_magic" href="/portal/magic">Magic Links</a>
                     </div>
 
                     <button type="button" class="sidebar-section-header" onclick="toggleSidebarSection('maintenance')" aria-expanded="true" aria-controls="section-maintenance">
@@ -219,9 +219,9 @@
                         <span class="sidebar-section-toggle">▼</span>
                     </button>
                     <div id="section-maintenance" class="sidebar-section-content">
-                        <a id="nav-network-health" class="nav-item" data-i18n="sidebar_edge_gateways" href="#network-health">Edge Gateways</a>
-                        <a id="nav-backups" class="nav-item" data-i18n="sidebar_backups" href="#backups">Database Backups</a>
-                        <a id="nav-maintenance" class="nav-item" data-i18n="sidebar_maintenance_mode" href="#maintenance">Gateway Maintenance</a>
+                        <a id="nav-network-health" class="nav-item" data-i18n="sidebar_edge_gateways" href="/portal/network-health">Edge Gateways</a>
+                        <a id="nav-backups" class="nav-item" data-i18n="sidebar_backups" href="/portal/backups">Database Backups</a>
+                        <a id="nav-maintenance" class="nav-item" data-i18n="sidebar_maintenance_mode" href="/portal/maintenance">Gateway Maintenance</a>
                     </div>
                 </div>
             </div>
@@ -229,9 +229,9 @@
             <div class="sidebar-footer">
                 <!-- Hidden until the role is known. It sits in the footer rather than in
                      #admin-sidebar-group, which is what left it on show for every role (#1289). -->
-                <a id="nav-system" class="nav-item hidden" data-i18n="sidebar_system" href="#system">System Settings</a>
+                <a id="nav-system" class="nav-item hidden" data-i18n="sidebar_system" href="/portal/system">System Settings</a>
 
-                <a id="nav-account" class="nav-item" data-i18n="sidebar_account" href="#account">Account Settings</a>
+                <a id="nav-account" class="nav-item" data-i18n="sidebar_account" href="/portal/account">Account Settings</a>
                 <button type="button" class="nav-item" onclick="logout()">Logout</button>
                 <a href="https://status.lfr-demo.se" target="_blank" rel="noopener noreferrer" style="font-size: 11px; color: var(--text-muted); text-decoration: none; display: flex; align-items: center; gap: 6px; padding-left: 16px; margin-top: 12px; transition: 0.2s;" onmouseover="this.style.color='var(--primary)'" onmouseout="this.style.color='var(--text-muted)'">
                     <span style="width: 8px; height: 8px; border-radius: 50%; background-color: #10b981; display: inline-block;"></span>
@@ -1431,7 +1431,11 @@
     <div id="toast-live-a" class="sr-only" role="status"></div>
     <div id="toast-live-b" class="sr-only" role="status"></div>
     <script src="https://cdn.jsdelivr.net/npm/driver.js@1.3.1/dist/driver.js.iife.js"></script>
-    <script src="static/dashboard.js"></script>
+    <!-- Absolute, not "static/dashboard.js". V1 is now served at /portal/<section> as well as
+         /portal (#1513), and a relative src there resolves to /portal/static/dashboard.js --
+         a 404, leaving an unstyled shell with no behaviour at all. The server's cache-busting
+         rewrite keys off this exact string. -->
+    <script src="/static/dashboard.js"></script>
 
 </body>
 </html>

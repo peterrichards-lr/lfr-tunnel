@@ -747,7 +747,9 @@ function decorateSectionHeadings() {
 
       const link = document.createElement('a');
       link.className = 'heading-anchor-link';
-      link.href = '#' + slug;
+      // A path, not a fragment (#1513). This is the most literal instance of the gap that
+      // issue is about: a heading whose whole job is handing out a link to its section.
+      link.href = portalBase() + '/' + slug;
       const key = heading.getAttribute('data-i18n');
       if (key) {
         link.setAttribute('data-i18n', key);
@@ -763,14 +765,14 @@ function decorateSectionHeadings() {
       // does, so the glyph is hidden and the button carries the name.
       button.innerHTML = '<span aria-hidden="true">🔗</span>';
       button.addEventListener('click', () => {
-        // Built from location so this follows whatever shape V1 routing has -- #1513
-        // proposes replacing these fragments with paths.
+        // Built from origin + the canonical path so the copied link matches what the
+        // address bar shows and what the heading's own href points at (#1513).
         const url =
           window.location.origin +
-          window.location.pathname +
-          window.location.search +
-          '#' +
-          slug;
+          portalBase() +
+          '/' +
+          slug +
+          window.location.search;
         navigator.clipboard.writeText(url).then(
           () => showToast(t('link_copied', 'Link copied'), 'success'),
           () =>
@@ -1275,11 +1277,21 @@ async function showDashboard() {
   loadTunnels();
   renderMFAPanel();
 
-  // Route to initial tab based on URL hash
-  const initialTab = window.location.hash
-    ? window.location.hash.slice(1)
-    : 'overview';
-  showTab(initialTab, true);
+  // Route to the initial section from the path, falling back to the fragment for
+  // bookmarks made before #1513. showTab normalises the address to the path form.
+  // The sidebar hrefs are written as /portal/<section> in the markup. Someone who came in
+  // via /admin should get /admin/<section> when they copy a link or open one in a new tab,
+  // or the portal hands out links to a base they did not use.
+  if (portalBase() !== '/portal') {
+    document.querySelectorAll('a.nav-item[href^="/portal/"]').forEach((el) => {
+      el.setAttribute(
+        'href',
+        portalBase() + el.getAttribute('href').slice('/portal'.length),
+      );
+    });
+  }
+
+  showTab(sectionFromLocation(), true);
 
   // Trigger onboarding walkthrough if user onboarding_status is pending and enabled by server
   if (
@@ -1810,6 +1822,42 @@ const ADMIN_ONLY_TABS = [
   'analytics',
 ];
 
+/*
+ * Path-based section routing (#1513).
+ *
+ * V1 used to route on the fragment, so copying a link to a section gave /portal#users
+ * where V2 gives /portalv2/admin/users. Under an A/B test that is a parity gap -- someone
+ * comparing the two portals sees them hand out different kinds of link -- and #1215 waved
+ * it through on the since-corrected premise that V2 was replacing V1.
+ *
+ * The server now serves the portal document at every path beneath /portal/ and /admin/,
+ * so these are real URLs that survive a reload rather than client-side fiction.
+ */
+
+// Which base the user arrived on. "/" and "/portal" are the same document, and so is
+// "/admin"; whichever they used is the one they keep, because rewriting /admin to /portal
+// mid-session would look like being redirected somewhere else.
+function portalBase() {
+  const p = window.location.pathname;
+  return p === '/admin' || p.startsWith('/admin/') ? '/admin' : '/portal';
+}
+
+// The section named by the current URL. The path wins; the fragment is still read so that
+// bookmarks made before this change keep working, and so does anything that still links
+// with a '#'.
+function sectionFromLocation() {
+  for (const base of ['/portal', '/admin']) {
+    if (window.location.pathname.startsWith(base + '/')) {
+      const section = window.location.pathname
+        .slice(base.length + 1)
+        .replace(/\/+$/, '');
+      if (section) return section;
+    }
+  }
+  if (window.location.hash) return window.location.hash.slice(1);
+  return 'overview';
+}
+
 function showTab(tabName, skipHistory = false) {
   if (window.closeAllActionMenus) {
     window.closeAllActionMenus();
@@ -1846,13 +1894,9 @@ function showTab(tabName, skipHistory = false) {
   const sectionNames = Array.from(sections).map((el) => el.id.slice(4));
   if (!sectionNames.includes(tabName)) {
     tabName = 'overview';
-    // Correct the URL so it matches what is actually shown; leaving '#nonsense' in the
-    // bar means a reload lands somewhere the address does not describe. replaceState
-    // rather than pushState, so a bad link does not add a history entry to go Back to,
-    // and it does not fire hashchange, so this cannot recurse.
-    if (window.location.hash && window.location.hash !== '#overview') {
-      history.replaceState({ tab: tabName }, '', '#' + tabName);
-    }
+    // The address is corrected below, by the one rule that owns history for this
+    // function -- doing it here as well raced with it: an unknown section was normalised
+    // to the overview here, then the caller's own initialTab was written back over it.
   }
 
   sections.forEach((el) => el.classList.add('hidden'));
@@ -1870,8 +1914,20 @@ function showTab(tabName, skipHistory = false) {
     navEl.setAttribute('aria-current', 'page');
   }
 
-  if (!skipHistory) {
-    history.pushState({ tab: tabName }, '', '#' + tabName);
+  // One rule owns the address bar, covering three cases that used to be handled in three
+  // places and disagreed:
+  //
+  //   * a click or programmatic switch pushes a new entry;
+  //   * arriving at an unknown section (/portal/nonsense) rewrites to what is actually on
+  //     screen, because leaving it means a reload lands somewhere the address does not
+  //     describe -- replaceState so a bad link is not something you can go Back to;
+  //   * arriving by fragment (/portal#users, bookmarked before #1513) is upgraded to the
+  //     path form, silently and without adding an entry.
+  const canonical = portalBase() + '/' + tabName;
+  if (skipHistory) {
+    history.replaceState({ tab: tabName }, '', canonical);
+  } else {
+    history.pushState({ tab: tabName }, '', canonical);
   }
 
   if (tabName === 'users') loadUsers();
@@ -1895,9 +1951,8 @@ function showTab(tabName, skipHistory = false) {
   }
 }
 
-// The sidebar links are real anchors (#1212), so clicking one navigates the
-// fragment and the browser has already written the history entry. Drive the tab
-// from that, and pass skipHistory so showTab does not push a duplicate.
+// Still listened for: a '#section' link is now a legacy form rather than the routing
+// mechanism, but old bookmarks and any link that still carries one have to keep working.
 window.addEventListener('hashchange', () => {
   const tabName = window.location.hash
     ? window.location.hash.slice(1)
@@ -1906,13 +1961,50 @@ window.addEventListener('hashchange', () => {
 });
 
 window.addEventListener('popstate', (e) => {
-  const tabName =
-    e.state && e.state.tab
-      ? e.state.tab
-      : window.location.hash
-        ? window.location.hash.slice(1)
-        : 'overview';
+  // The path is the source of truth on Back/Forward. e.state.tab is preferred only
+  // because it is exact -- entries pushed before this change carry a fragment instead,
+  // and sectionFromLocation() reads either.
+  const tabName = e.state && e.state.tab ? e.state.tab : sectionFromLocation();
   showTab(tabName, true);
+});
+
+/*
+ * The sidebar links are real anchors (#1212) and stay that way -- middle-click,
+ * open-in-new-tab and right-click "Copy link address" all depend on a real href, and that
+ * was the point of making them anchors. But a real href to a real path means a plain click
+ * would reload the whole document, throwing away the session's loaded state for a
+ * navigation the portal can do in place.
+ *
+ * So plain left clicks are intercepted and everything else is left alone: a modified click
+ * (Ctrl/Cmd for a new tab, Shift for a new window, Alt to download) and a middle click must
+ * still reach the browser, or intercepting would take away the very affordances #1212 added.
+ */
+document.addEventListener('click', (e) => {
+  if (e.defaultPrevented || e.button !== 0) return;
+  if (e.metaKey || e.ctrlKey || e.shiftKey || e.altKey) return;
+
+  // Both kinds of in-portal link: the sidebar, and the section-heading anchors from
+  // #1520 -- which now point at paths too, so without this a click on a heading would
+  // reload the whole document.
+  const link =
+    e.target.closest &&
+    e.target.closest('a.nav-item[href], a.heading-anchor-link[href]');
+  if (!link) return;
+  if (link.target && link.target !== '_self') return;
+
+  const url = new URL(link.href, window.location.href);
+  if (url.origin !== window.location.origin) return;
+
+  for (const base of ['/portal', '/admin']) {
+    if (url.pathname.startsWith(base + '/')) {
+      const section = url.pathname.slice(base.length + 1).replace(/\/+$/, '');
+      if (section) {
+        e.preventDefault();
+        showTab(section);
+      }
+      return;
+    }
+  }
 });
 
 let charts = {};

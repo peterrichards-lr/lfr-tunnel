@@ -61,6 +61,12 @@ docker-compose -f docker-compose-edge.yml down -v --remove-orphans || true
 # the window first meant the stop had already passed by the time the stack was running -- the
 # warning window closed before anything could observe it.
 echo "=== Building images (before the schedule clock starts) ==="
+# Pre-pull the base images, retrying a transient registry error (#1530). Docker Hub 504d on
+# node:20-alpine and failed a required check on an unrelated PR; the build itself has no retry
+# around its FROM resolution. Never fatal -- if a pull really fails, the build below says so.
+"$(dirname -- "${BASH_SOURCE[0]}")/../../scripts/common/pull-images-with-retry.sh" \
+    "$(dirname -- "${BASH_SOURCE[0]}")/docker-compose-edge.yml" || true
+
 docker-compose -f docker-compose-edge.yml build
 
 # Generate the control config with a stop window a couple of minutes out, so the shutdown

@@ -107,6 +107,12 @@ sed -i.bak "s/localhost:8000/localhost:$E2E_PROXY_PORT/g" keycloak-realm.json
 
 # ── Start environment ─────────────────────────────────────────────────────────
 echo "[1/7] Starting Docker environment (Keycloak, lfr-tunneld, nginx)..."
+# Pre-pull the base images, retrying a transient registry error (#1530). Docker Hub 504d on
+# node:20-alpine and failed a required check on an unrelated PR; the build itself has no retry
+# around its FROM resolution. Never fatal -- if a pull really fails, the build below says so.
+"$(dirname -- "${BASH_SOURCE[0]}")/../../scripts/common/pull-images-with-retry.sh" \
+    "$(dirname -- "${BASH_SOURCE[0]}")/$COMPOSE_FILE" || true
+
 docker-compose -f "$COMPOSE_FILE" up --build -d
 
 echo "WAITING_HEALTHY" > "$SIGNAL_FILE"

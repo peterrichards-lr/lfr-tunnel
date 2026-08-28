@@ -54,6 +54,12 @@ touch pkg/server/ui-dist/.gitkeep
 echo "=== Starting Docker Compose for E2E UI Tests ==="
 cd tests/e2e || exit 1
 echo "=== Building Docker Images ==="
+# Pre-pull the base images, retrying a transient registry error (#1530). Docker Hub 504d on
+# node:20-alpine and failed a required check on an unrelated PR; the build itself has no retry
+# around its FROM resolution. Never fatal -- if a pull really fails, the build below says so.
+"$(dirname -- "${BASH_SOURCE[0]}")/common/pull-images-with-retry.sh" \
+    "$(dirname -- "${BASH_SOURCE[0]}")/../tests/e2e/docker-compose.yml" || true
+
 docker-compose build --no-cache lfr-tunnel lfr-tunneld
 echo "=== Starting E2E Environment ==="
 docker-compose up -d mailpit mock-target lfr-tunneld nginx-proxy lfr-tunnel

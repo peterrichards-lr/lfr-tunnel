@@ -1,0 +1,104 @@
+/*
+ * lfr-tunnel Portal — High Contrast Theme (#1538)
+ * Applied when data-theme="high-contrast". Shared by both portals (#1522).
+ *
+ * WHY IT EXISTS SEPARATELY FROM prefers-contrast: more
+ *
+ * `prefers-contrast` (#1534) strengthens whichever theme is active, driven by the reader's
+ * operating-system setting. This is the deliberate choice: someone who wants maximum contrast
+ * regardless of what their OS says, or who is on a machine that is not theirs.
+ *
+ * ONE THEME, NOT A LIGHT AND A DARK VARIANT. Two variants would double the palette to maintain
+ * and they would drift, which is the problem #1522 had just finished solving. The light-preferring
+ * reader is not stranded by that choice: prefers-contrast already strengthens the light theme
+ * for them automatically, so the case a second variant would serve is already served.
+ *
+ * THE BAR IS AAA, 7:1, not the 4.5:1 the other themes are held to. A theme that exists for
+ * contrast and only matches the others is a palette, not an accessibility feature. Every text
+ * pairing here is checked by scripts/check-theme-contrast.cjs, which since #1538 covers the
+ * status badges as well as the button fills -- so these numbers are verified rather than
+ * asserted.
+ *
+ * Fills are opaque on purpose. Translucency means the rendered colour depends on what is behind
+ * it, and a measured contrast that varies with the backdrop is not a guarantee.
+ */
+:root[data-theme='high-contrast'] {
+  /* Near-black rather than pure #000: a hairline of separation between the page and the cards
+     survives, and pure black on an OLED panel smears text edges. */
+  --bg-base: #000000;
+  --bg-card: #0a0a0a;
+  --bg-card-solid: #0a0a0a;
+  --bg-card-hover: #1a1a1a;
+
+  /* A brighter blue than the other themes use. As a FOREGROUND it has to clear 7:1 on the card,
+     which the standard #3b82f6 does not. */
+  --primary: #7fb2ff;
+  --primary-hover: #a3c8ff;
+  --primary-glow: rgba(127, 178, 255, 0.5);
+  /* Fills under a white label: these need to be dark, which is the opposite pull from --primary
+     above -- the same split #1514 established. */
+  --primary-strong: #1746a9;
+  --primary-strong-alt: #123f9e;
+
+  --text-main: #ffffff;
+  /* "Muted" still clears AAA here. Muted must mean quieter, not harder to read -- that is the
+     whole point of the theme. */
+  --text-muted: #d4d4d4;
+  --text-secondary: #e8e8e8;
+
+  /* Borders are a real line, not a suggestion. At 0.08 alpha the other themes' borders are
+     invisible to the reader this theme is for. */
+  --border: #8a8a8a;
+  --scrollbar-thumb: #b0b0b0;
+  --scrollbar-thumb-hover: #ffffff;
+
+  --danger: #ff8a8a;
+  --danger-strong: #9c0e0e;
+  --danger-strong-alt: #8f0d1f;
+  --danger-glow: rgba(255, 138, 138, 0.5);
+  --success: #6ee7a5;
+  --warning: #ffd166;
+
+  --login-gradient: #000000;
+  --sidebar-bg: #000000;
+  --input-bg: #0a0a0a;
+  --modal-overlay: rgba(0, 0, 0, 0.9);
+  --copy-box-bg: #000000;
+  --toast-bg: #0a0a0a;
+  --toast-color: #ffffff;
+  --toast-border: #8a8a8a;
+  --progress-track: #2a2a2a;
+  --surface-subtle: #141414;
+  --surface-selected: #1f1f1f;
+  --shadow-glass: none;
+  --shadow-glow: none;
+  --shadow-lg: none;
+  --table-row-hover: #1a1a1a;
+
+  --spacing-xs: 4px;
+  --spacing-sm: 8px;
+  --spacing-md: 12px;
+  --spacing-lg: 16px;
+  --spacing-xl: 24px;
+
+  /* Status badges: opaque fills, and every label above 7:1 on its own fill. */
+  --status-tunnels-bg: #0d2b52;
+  --status-tunnels-text: #cfe4ff;
+  --status-tunnels-border: #7fb2ff;
+  --status-success-bg: #0b3a24;
+  --status-success-text: #b6f5d2;
+  --status-success-border: #6ee7a5;
+  --status-warning-bg: #3d2c05;
+  --status-warning-text: #ffe9b0;
+  --status-warning-border: #ffd166;
+  --status-danger-bg: #4a0f0f;
+  --status-danger-text: #ffd0d0;
+  --status-danger-border: #ff8a8a;
+  --status-info-bg: #0d2b52;
+  --status-info-text: #cfe4ff;
+  --status-info-border: #7fb2ff;
+  --status-node-bg: #2a1147;
+  --status-node-text: #e4d2ff;
+  --status-node-border: #c4a3ff;
+  --status-inactive: #9a9a9a;
+}

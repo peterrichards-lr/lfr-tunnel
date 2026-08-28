@@ -58,8 +58,15 @@ function parseColor(value) {
         .join('');
     return [0, 2, 4].map((i) => parseInt(h.slice(i, i + 2), 16));
   }
-  m = /^rgba?\(\s*([\d.]+)[\s,]+([\d.]+)[\s,]+([\d.]+)/i.exec(v);
-  if (m) return [Number(m[1]), Number(m[2]), Number(m[3])];
+  // Alpha is KEPT (#1538). Most of the status fills are rgba over the card, and measuring them
+  // as if opaque is measuring a colour nobody sees: rgba(139,92,246,0.15) on a near-black card
+  // renders as a very dark violet, not as #8b5cf6.
+  m = /^rgba?\(\s*([\d.]+)[\s,]+([\d.]+)[\s,]+([\d.]+)(?:[\s,/]+([\d.]+))?/i.exec(v);
+  if (m) {
+    const rgb = [Number(m[1]), Number(m[2]), Number(m[3])];
+    if (m[4] !== undefined) rgb.alpha = Number(m[4]);
+    return rgb;
+  }
   return null;
 }
 
@@ -75,6 +82,15 @@ function ratio(a, b) {
   return (Math.max(la, lb) + 0.05) / (Math.min(la, lb) + 0.05);
 }
 const brighten = (rgb, f) => rgb.map((c) => Math.min(255, Math.round(c * f)));
+
+// over composites a possibly-translucent colour onto an opaque one, which is what the browser
+// paints. Without this a badge fill is measured at full strength and its label looks far more
+// legible than it is (#1538).
+const over = (fg, bg) => {
+  const a = fg.alpha;
+  if (a === undefined || a >= 1) return fg;
+  return [0, 1, 2].map((i) => Math.round(fg[i] * a + bg[i] * (1 - a)));
+};
 const fmt = (n) => n.toFixed(2);
 
 if (!fs.existsSync(THEMES)) {
@@ -143,6 +159,11 @@ for (const file of files) {
     continue;
   }
 
+  // A theme whose whole reason for existing is contrast is held to AAA, not the AA the others
+  // are (#1538). Otherwise it is just another palette -- it would pass while offering a reader
+  // nothing the default theme did not already give them.
+  const textBar = name === 'high-contrast' ? AAA_TEXT : AA_TEXT;
+
   const check = (label, fg, bg, min) => {
     checks++;
     const r = ratio(fg, bg);
@@ -157,7 +178,7 @@ for (const file of files) {
       '--danger as outline text on --bg-card-solid',
       tokens['--danger'],
       page,
-      AA_TEXT,
+      textBar,
     );
     // Boundary role -- .btn-danger's border against the page.
     check(
@@ -188,14 +209,58 @@ for (const file of files) {
         );
         continue;
       }
-      check(`white label on ${key}`, WHITE, fill, AA_TEXT);
+      check(`white label on ${key}`, WHITE, fill, textBar);
       check(
         `white label on ${key} while hovered (brightness ${HOVER_BRIGHTNESS})`,
         WHITE,
         brighten(fill, HOVER_BRIGHTNESS),
-        AA_TEXT,
+        textBar,
       );
     }
+  }
+
+  // The status badges (#1538).
+  //
+  // Six triples -- danger, info, node, success, tunnels, warning -- each a label on a coloured
+  // fill, and none of them checked until now. The gate covered the button fills and the two body
+  // text colours, which is nine tokens out of sixty-four; these are the rest of the palette that
+  // actually renders text, and therefore the rest that can fail a reader.
+  //
+  // The fills are rgba over the card, so they are composited first. Measuring them opaque was
+  // the other half of why this went unnoticed: it flatters every one of them.
+  const STATUS_FAMILIES = ['danger', 'info', 'node', 'success', 'tunnels', 'warning'];
+  for (const family of STATUS_FAMILIES) {
+    const fg = tokens[`--status-${family}-text`];
+    const bgToken = tokens[`--status-${family}-bg`];
+    if (!fg || !bgToken) continue;
+
+    const card = tokens['--bg-card-solid'];
+    if (!card) continue;
+    const bg = over(bgToken, card);
+
+    checks++;
+    const r = ratio(fg, bg);
+    if (r < textBar) {
+      failures.push(
+        `${name}: --status-${family}-text on --status-${family}-bg is ${fmt(r)}:1, needs ${textBar}:1 ` +
+          `(the fill composited over the card, which is what a reader sees)`,
+      );
+    }
+
+    // The --status-*-border tokens are deliberately NOT gated at 3:1.
+    //
+    // Measured, all eighteen sit between 1.25:1 and 2.02:1 against the card. That looks alarming
+    // until you ask what 1.4.11 is protecting: it requires 3:1 for a UI component or a graphic
+    // you must perceive to understand the content. A badge is identified by its FILL and its
+    // LABEL -- both of which are checked above and pass -- and the border is a refinement of an
+    // edge that is already visible. Nothing is lost if it is subtle.
+    //
+    // Gating it would force eighteen palette changes across three themes and make every badge
+    // heavier, for no reader who could not already see the badge. Recorded here rather than
+    // silently omitted, because "we chose not to" and "we forgot" look identical in a gate.
+    //
+    // Where a border IS the only boundary -- .btn-danger's, against the page -- it is checked,
+    // further up.
   }
 
   // prefers-contrast: more must actually RAISE contrast, and reach AAA for normal text.

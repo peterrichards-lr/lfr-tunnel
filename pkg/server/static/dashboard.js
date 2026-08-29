@@ -2108,8 +2108,9 @@ function changeAnalyticsRange() {
 
 async function loadAnalytics() {
   const range = analyticsRangeDays();
-  const query = range !== '0' ? `?days=${range}` : '';
-  const res = await fetch(`/api/analytics${query}`);
+  // '0' is sent rather than omitted: omitting it made the server fall back to its 30-day
+  // default, so All Time silently returned the same data as Last 30 Days (#1565).
+  const res = await fetch(`/api/analytics?days=${range}`);
   if (res.ok) {
     const data = await res.json();
 
@@ -2392,11 +2393,11 @@ async function loadAnalytics() {
       // turns on: a region can look healthy on its own median while the people using it
       // have no good option anywhere, and only that number shows it.
       try {
-        // Follows the toolbar's range now that V1 has one (#1560). All Time maps to 365 here
-        // rather than 0, because this endpoint takes a real window -- the same substitution V2
-        // makes, so both portals request the same thing.
+        // Follows the toolbar's range (#1560). All Time passes 0 straight through now that the
+        // server reads it as "no lower bound" -- the 365-day substitution this used to make
+        // showed a year of latency beside all-time bandwidth on the same screen (#1565).
         const rlRes = await fetch(
-          `/api/admin/analytics/region-latency?days=${range === '0' ? 365 : range}`,
+          `/api/admin/analytics/region-latency?days=${range}`,
         );
         const headline = document.getElementById('region-latency-headline');
         if (rlRes.ok) {

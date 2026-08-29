@@ -114,10 +114,10 @@ func (repo *SQLiteRegionProbeRepo) RecordRegionProbes(userID string, samples []R
 // function, and the row count is bounded by users x regions x days -- small enough that fetching
 // it is cheaper than the CTE gymnastics the alternative needs.
 func (repo *SQLiteRegionProbeRepo) GetRegionLatency(days int) (*RegionLatencyReport, error) {
-	if days <= 0 {
-		days = 30
-	}
-	since := time.Now().UTC().AddDate(0, 0, -days).Format("2006-01-02")
+	// Shares analyticsFloor so a window means the same thing here as it does for the analytics
+	// reports rendered beside this one. It previously defaulted days <= 0 to 30, which made All
+	// Time show a month of latency next to all-time bandwidth on the same screen (#1565).
+	since := analyticsFloor(days)
 
 	rows, err := repo.conn.Query(`
 		SELECT user_id, region, rtt_ms FROM region_probes WHERE day >= ?`, since)

@@ -122,7 +122,10 @@ export default function AdminAnalytics() {
     const fetchData = async () => {
       setLoading(true);
       try {
-        const query = timeRange !== '0' ? `?days=${timeRange}` : '';
+        // Always sent, including '0'. Omitting it for All Time made the server fall back to
+        // its 30-day default, so the option silently returned the same data as Last 30 Days
+        // (#1565). days=0 now means "no lower bound" server-side.
+        const query = `?days=${timeRange}`;
 
         // /api/analytics answers every authenticated user: `personal` always, `global` only
         // for an admin. So its response is what decides whether the admin-only endpoints are
@@ -148,9 +151,7 @@ export default function AdminAnalytics() {
           // Its own days param rather than the shared one: the endpoint rejects 0, which
           // is what the "All time" option sends.
           axios
-            .get(
-              `/api/admin/analytics/region-latency?days=${timeRange === '0' ? 365 : timeRange}`,
-            )
+            .get(`/api/admin/analytics/region-latency?days=${timeRange}`)
             .catch(() => ({ data: null })),
           // Admin-only, so it belongs inside this guard rather than in the first request:
           // #1512 made the admin endpoints conditional precisely so a non-admin does not

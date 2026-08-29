@@ -2986,23 +2986,48 @@ async function loadBackups() {
   const res = await fetch('/api/admin/backups');
   if (!res.ok) {
     tbody.innerHTML =
-      '<tr><td colspan="3" style="text-align:center;opacity:0.6;">Failed to load backups.</td></tr>';
+      '<tr><td colspan="4" style="text-align:center;opacity:0.6;">Failed to load backups.</td></tr>';
     return;
   }
   const backups = await res.json();
   if (!backups || backups.length === 0) {
     tbody.innerHTML =
-      '<tr><td colspan="3" style="text-align:center;opacity:0.6;">No backups found yet. The first backup runs on server startup.</td></tr>';
+      '<tr><td colspan="4" style="text-align:center;opacity:0.6;">No backups found yet. The first backup runs on server startup.</td></tr>';
     return;
   }
   renderTable('backups-table-body', backups, (b) => {
     const sizeKB = (b.size_bytes / 1024).toFixed(1);
+    // A real link rather than a fetch: the endpoint sets Content-Disposition: attachment, so
+    // the browser saves the file instead of this having to assemble a blob (#1567).
+    const href =
+      '/api/admin/backups/download/' + encodeURIComponent(b.filename);
     return `<tr>
                     <td style="font-family:monospace; font-size:0.85em;">${escapeHTML(b.filename)}</td>
                     <td>${sizeKB} KB</td>
                     <td>${renderTimestamp(b.created_at)}</td>
+                    <td><a class="btn btn-secondary" style="width:auto; display:inline-flex; padding:6px 12px; font-size:0.85em;" href="${href}">${t('download', 'Download')}</a></td>
                 </tr>`;
   });
+}
+
+// The API has always offered this; only the portals did not (#1567). The server audit-logs the
+// actor, so nothing extra is recorded here.
+async function triggerBackup() {
+  const btn = document.getElementById('btn-create-backup');
+  if (btn) btn.disabled = true;
+  try {
+    const res = await fetch('/api/admin/backups', { method: 'POST' });
+    if (!res.ok) {
+      showToast(t('backup_create_failed', 'Failed to create backup.'), 'error');
+      return;
+    }
+    showToast(t('backup_created', 'Backup created.'), 'success');
+    // Refetched rather than appended: the server names the file, so the row cannot be built
+    // here without guessing at it.
+    await loadBackups();
+  } finally {
+    if (btn) btn.disabled = false;
+  }
 }
 
 function openBlacklistModal() {

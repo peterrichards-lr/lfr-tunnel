@@ -4,6 +4,7 @@ import { useOutletContext } from 'react-router-dom';
 import { QRCodeSVG } from 'qrcode.react';
 import { useSettings } from '../contexts/SettingsContext';
 import { useI18n } from '../contexts/I18nContext';
+import ModalShell from '../components/ModalShell';
 
 export default function AccountSettings() {
   const { user } = useOutletContext<{ user: any }>();
@@ -586,82 +587,80 @@ export default function AccountSettings() {
       </div>
 
       {isDeleteModalOpen && (
-        <div className="modal-backdrop">
-          <div
-            className="modal-card modal-card--sm"
-            role="dialog"
-            aria-modal="true"
-            aria-labelledby="delete-account-title"
-          >
-            <div className="modal-header">
-              <h3 id="delete-account-title" className="modal-title text-danger">
-                {t('confirm_delete_title', 'Delete Account?')}
-              </h3>
-              <button
-                type="button"
-                onClick={() => {
-                  setIsDeleteModalOpen(false);
-                  setDeleteConfirmEmail('');
-                  setDeleteError('');
-                }}
-                className="modal-close"
-                aria-label={t('close', 'Close')}
-              >
-                ✕
-              </button>
-            </div>
-            <div className="modal-body">
-              <p className="text-muted text-sm mb-lg">
-                {t(
-                  'confirm_delete_desc',
-                  'This action is absolutely irreversible. Please type your email address to confirm.',
-                )}
-                <br />
-                <br />
-                <strong className="text-main">{user?.email}</strong>
-              </p>
-
-              <input
-                type="email"
-                className="input-field w-full mb-lg"
-                placeholder={user?.email}
-                value={deleteConfirmEmail}
-                onChange={(e) => setDeleteConfirmEmail(e.target.value)}
-                aria-label={t('confirm_email', 'Confirm your email address')}
-              />
-
-              {deleteError && (
-                <div className="alert-banner alert-banner--danger mb-lg">
-                  {deleteError}
-                </div>
-              )}
-            </div>
-
-            <div className="modal-footer">
-              <button
-                type="button"
-                className="btn btn-secondary w-auto"
-                onClick={() => {
-                  setIsDeleteModalOpen(false);
-                  setDeleteConfirmEmail('');
-                  setDeleteError('');
-                }}
-              >
-                {t('cancel', 'Cancel')}
-              </button>
-              <button
-                type="button"
-                className="btn btn-danger w-auto"
-                onClick={handleDeleteAccount}
-                disabled={isDeleting || deleteConfirmEmail !== user?.email}
-              >
-                {isDeleting
-                  ? t('deleting', 'Deleting...')
-                  : t('confirm_delete', 'Confirm Deletion')}
-              </button>
-            </div>
+        <ModalShell
+          isOpen
+          onClose={() => setIsDeleteModalOpen(false)}
+          labelledBy="delete-account-title"
+          cardClassName="modal-card modal-card--sm"
+        >
+          <div className="modal-header">
+            <h3 id="delete-account-title" className="modal-title text-danger">
+              {t('confirm_delete_title', 'Delete Account?')}
+            </h3>
+            <button
+              type="button"
+              onClick={() => {
+                setIsDeleteModalOpen(false);
+                setDeleteConfirmEmail('');
+                setDeleteError('');
+              }}
+              className="modal-close"
+              aria-label={t('close', 'Close')}
+            >
+              ✕
+            </button>
           </div>
-        </div>
+          <div className="modal-body">
+            <p className="text-muted text-sm mb-lg">
+              {t(
+                'confirm_delete_desc',
+                'This action is absolutely irreversible. Please type your email address to confirm.',
+              )}
+              <br />
+              <br />
+              <strong className="text-main">{user?.email}</strong>
+            </p>
+
+            <input
+              type="email"
+              className="input-field w-full mb-lg"
+              placeholder={user?.email}
+              value={deleteConfirmEmail}
+              onChange={(e) => setDeleteConfirmEmail(e.target.value)}
+              aria-label={t('confirm_email', 'Confirm your email address')}
+            />
+
+            {deleteError && (
+              <div className="alert-banner alert-banner--danger mb-lg">
+                {deleteError}
+              </div>
+            )}
+          </div>
+
+          <div className="modal-footer">
+            <button
+              type="button"
+              className="btn btn-secondary w-auto"
+              onClick={() => {
+                setIsDeleteModalOpen(false);
+                setDeleteConfirmEmail('');
+                setDeleteError('');
+              }}
+            >
+              {t('cancel', 'Cancel')}
+            </button>
+            <button
+              type="button"
+              className="btn btn-danger w-auto"
+              onClick={handleDeleteAccount}
+              disabled={isDeleting || deleteConfirmEmail !== user?.email}
+            >
+              {isDeleting
+                ? t('deleting', 'Deleting...')
+                : t('confirm_delete', 'Confirm Deletion')}
+            </button>
+          </div>
+        </ModalShell>
       )}
     </div>
   );

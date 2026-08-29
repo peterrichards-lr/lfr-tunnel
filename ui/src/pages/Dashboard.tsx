@@ -13,6 +13,7 @@ import OnboardingTour from '../components/OnboardingTour';
 import { useSettings } from '../contexts/SettingsContext';
 import { useI18n } from '../contexts/I18nContext';
 import SectionHeading from '../components/SectionHeading';
+import ModalShell from '../components/ModalShell';
 
 function isOlderVersion(current: string, target: string): boolean {
   if (!current || !target) return false;
@@ -553,130 +554,125 @@ export default function Dashboard() {
       />
 
       {isCreateTokenModalOpen && (
-        <div className="modal-backdrop">
-          <div
-            className="modal-card modal-card--sm"
-            role="dialog"
-            aria-modal="true"
-            aria-labelledby="generate-token-title"
-          >
-            <div className="modal-header">
-              <h3 id="generate-token-title" className="modal-title">
-                {t('generate_new_token', 'Generate Personal Access Token')}
-              </h3>
-              <button
-                type="button"
-                onClick={() => setIsCreateTokenModalOpen(false)}
-                className="modal-close"
-                aria-label={t('close', 'Close')}
-              >
-                ✕
-              </button>
-            </div>
-
-            {!generatedToken ? (
-              <form onSubmit={handleCreateToken}>
-                <div className="form-group mb-lg">
-                  <label className="form-label" htmlFor="token-name-label">
-                    {t('token_name_label', 'Token Name / Description')}
-                  </label>
-                  <input
-                    id="token-name-label"
-                    type="text"
-                    className="input-field"
-                    required
-                    placeholder={t(
-                      'token_name_placeholder',
-                      'e.g. Work Laptop',
-                    )}
-                    value={newTokenName}
-                    onChange={(e) => setNewTokenName(e.target.value)}
-                  />
-                </div>
-
-                <div className="form-group mb-xl">
-                  <label className="form-label" htmlFor="expiration">
-                    {t('expiration', 'Expiration')}
-                  </label>
-                  <select
-                    id="expiration"
-                    className="input-field"
-                    value={newTokenExpiresDays}
-                    onChange={(e) =>
-                      setNewTokenExpiresDays(Number(e.target.value))
-                    }
-                  >
-                    <option value={30}>30 Days</option>
-                    <option value={90}>90 Days</option>
-                    <option value={365}>365 Days</option>
-                    {(user?.role === 'admin' || user?.role === 'owner') && (
-                      <option value={0}>Never Expire</option>
-                    )}
-                  </select>
-                </div>
-
-                <div className="modal-footer">
-                  <button
-                    type="button"
-                    className="btn btn-secondary w-auto"
-                    onClick={() => setIsCreateTokenModalOpen(false)}
-                  >
-                    {t('cancel', 'Cancel')}
-                  </button>
-                  <button
-                    type="submit"
-                    className="btn btn-primary w-auto"
-                    disabled={generating}
-                  >
-                    {generating
-                      ? t('generating', 'Generating...')
-                      : t('generate', 'Generate')}
-                  </button>
-                </div>
-              </form>
-            ) : (
-              <div className="animate-fade-in-fast">
-                <div className="alert-banner alert-banner--warning text-xs mb-xl">
-                  ⚠️{' '}
-                  {t(
-                    'token_warning',
-                    'Copy this token now! It will not be shown again for security reasons.',
-                  )}
-                </div>
-
-                <div className="flex gap-sm mb-xl">
-                  <input
-                    type="text"
-                    className="input-field font-mono text-xs mb-0 w-full"
-                    readOnly
-                    value={generatedToken}
-                    aria-label={t('upgrade_command', 'Upgrade command')}
-                  />
-                  <button
-                    type="button"
-                    className="btn btn-primary px-lg w-auto"
-                    onClick={() => {
-                      navigator.clipboard.writeText(generatedToken);
-                      alert('Token copied to clipboard!');
-                    }}
-                  >
-                    {t('copy', 'Copy')}
-                  </button>
-                </div>
-
-                <div className="modal-footer">
-                  <button
-                    type="button"
-                    className="btn btn-secondary w-auto"
-                    onClick={() => setIsCreateTokenModalOpen(false)}
-                  >
-                    {t('close', 'Close')}
-                  </button>
-                </div>
-              </div>
-            )}
+        <ModalShell
+          isOpen
+          onClose={() => setIsCreateTokenModalOpen(false)}
+          labelledBy="generate-token-title"
+          cardClassName="modal-card modal-card--sm"
+        >
+          <div className="modal-header">
+            <h3 id="generate-token-title" className="modal-title">
+              {t('generate_new_token', 'Generate Personal Access Token')}
+            </h3>
+            <button
+              type="button"
+              onClick={() => setIsCreateTokenModalOpen(false)}
+              className="modal-close"
+              aria-label={t('close', 'Close')}
+            >
+              ✕
+            </button>
           </div>
-        </div>
+
+          {!generatedToken ? (
+            <form onSubmit={handleCreateToken}>
+              <div className="form-group mb-lg">
+                <label className="form-label" htmlFor="token-name-label">
+                  {t('token_name_label', 'Token Name / Description')}
+                </label>
+                <input
+                  id="token-name-label"
+                  type="text"
+                  className="input-field"
+                  required
+                  placeholder={t('token_name_placeholder', 'e.g. Work Laptop')}
+                  value={newTokenName}
+                  onChange={(e) => setNewTokenName(e.target.value)}
+                />
+              </div>
+
+              <div className="form-group mb-xl">
+                <label className="form-label" htmlFor="expiration">
+                  {t('expiration', 'Expiration')}
+                </label>
+                <select
+                  id="expiration"
+                  className="input-field"
+                  value={newTokenExpiresDays}
+                  onChange={(e) =>
+                    setNewTokenExpiresDays(Number(e.target.value))
+                  }
+                >
+                  <option value={30}>30 Days</option>
+                  <option value={90}>90 Days</option>
+                  <option value={365}>365 Days</option>
+                  {(user?.role === 'admin' || user?.role === 'owner') && (
+                    <option value={0}>Never Expire</option>
+                  )}
+                </select>
+              </div>
+
+              <div className="modal-footer">
+                <button
+                  type="button"
+                  className="btn btn-secondary w-auto"
+                  onClick={() => setIsCreateTokenModalOpen(false)}
+                >
+                  {t('cancel', 'Cancel')}
+                </button>
+                <button
+                  type="submit"
+                  className="btn btn-primary w-auto"
+                  disabled={generating}
+                >
+                  {generating
+                    ? t('generating', 'Generating...')
+                    : t('generate', 'Generate')}
+                </button>
+              </div>
+            </form>
+          ) : (
+            <div className="animate-fade-in-fast">
+              <div className="alert-banner alert-banner--warning text-xs mb-xl">
+                ⚠️{' '}
+                {t(
+                  'token_warning',
+                  'Copy this token now! It will not be shown again for security reasons.',
+                )}
+              </div>
+
+              <div className="flex gap-sm mb-xl">
+                <input
+                  type="text"
+                  className="input-field font-mono text-xs mb-0 w-full"
+                  readOnly
+                  value={generatedToken}
+                  aria-label={t('upgrade_command', 'Upgrade command')}
+                />
+                <button
+                  type="button"
+                  className="btn btn-primary px-lg w-auto"
+                  onClick={() => {
+                    navigator.clipboard.writeText(generatedToken);
+                    alert('Token copied to clipboard!');
+                  }}
+                >
+                  {t('copy', 'Copy')}
+                </button>
+              </div>
+
+              <div className="modal-footer">
+                <button
+                  type="button"
+                  className="btn btn-secondary w-auto"
+                  onClick={() => setIsCreateTokenModalOpen(false)}
+                >
+                  {t('close', 'Close')}
+                </button>
+              </div>
+            </div>
+          )}
+        </ModalShell>
       )}
 
       <OnboardingTour user={user} />

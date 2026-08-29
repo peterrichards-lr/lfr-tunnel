@@ -8,6 +8,7 @@ import { useSettings } from '../contexts/SettingsContext';
 import { useDataTable, type ColumnDef } from '../hooks/useDataTable';
 import DataTableToolbar from '../components/DataTableToolbar';
 import DataTablePagination from '../components/DataTablePagination';
+import ModalShell from '../components/ModalShell';
 
 interface User {
   id: string;
@@ -907,588 +908,579 @@ export default function AdminUsers() {
         />
       </div>
       {selectedUser && (
-        <div className="modal-backdrop">
-          <div
-            className="modal-card modal-card--lg overflow-y-auto"
-            role="dialog"
-            aria-modal="true"
-            aria-labelledby="user-details-modal-title"
-          >
-            <div className="modal-header">
-              <h3 id="user-details-modal-title" className="modal-title">
-                User Details & Tunnels
-              </h3>
-              <button
-                type="button"
-                onClick={() => setSelectedUser(null)}
-                className="modal-close"
-                aria-label={t('close', 'Close')}
-              >
-                ✕
-              </button>
-            </div>
+        <ModalShell
+          isOpen
+          onClose={() => setSelectedUser(null)}
+          labelledBy="user-details-modal-title"
+          cardClassName="modal-card modal-card--lg overflow-y-auto"
+        >
+          <div className="modal-header">
+            <h3 id="user-details-modal-title" className="modal-title">
+              User Details & Tunnels
+            </h3>
+            <button
+              type="button"
+              onClick={() => setSelectedUser(null)}
+              className="modal-close"
+              aria-label={t('close', 'Close')}
+            >
+              ✕
+            </button>
+          </div>
 
-            <div className="auto-grid-md gap-lg mb-xl">
-              <div>
-                <div className="text-2xs text-muted tracking-wider uppercase mb-2xs">
-                  Name
-                </div>
-                <div className="fw-medium">
-                  {selectedUser.first_name} {selectedUser.last_name}
-                </div>
+          <div className="auto-grid-md gap-lg mb-xl">
+            <div>
+              <div className="text-2xs text-muted tracking-wider uppercase mb-2xs">
+                Name
               </div>
-              <div>
-                <div className="text-2xs text-muted tracking-wider uppercase mb-2xs">
-                  Email
-                </div>
-                <div className="fw-medium font-mono">{selectedUser.email}</div>
-              </div>
-              <div>
-                <div className="text-2xs text-muted tracking-wider uppercase mb-2xs">
-                  Status & Role
-                </div>
-                <div>
-                  <span
-                    className={`badge ${selectedUser.status === 'approved' ? 'badge-success' : selectedUser.status === 'revoked' ? 'badge-danger' : 'badge-warning'} mr-sm`}
-                  >
-                    {selectedUser.status}
-                  </span>
-                  <span
-                    className={`badge ${selectedUser.role === 'admin' ? 'badge-success' : ''}`}
-                  >
-                    {selectedUser.role}
-                  </span>
-                </div>
-              </div>
-              <div>
-                <div className="text-2xs text-muted tracking-wider uppercase mb-2xs">
-                  Origin
-                </div>
-                <div className="fw-medium capitalize">
-                  {selectedUser.auth_method || 'Magic Link'}
-                </div>
-              </div>
-              <div>
-                <div className="text-2xs text-muted tracking-wider uppercase mb-2xs">
-                  Joined Date
-                </div>
-                <div className="fw-medium">
-                  {selectedUser.created_at
-                    ? formatDate(selectedUser.created_at)
-                    : 'N/A'}
-                </div>
-              </div>
-              <div>
-                <div className="text-2xs text-muted tracking-wider uppercase mb-2xs">
-                  API Quota
-                </div>
-                <div className="fw-medium">
-                  {selectedUser.rate_limit
-                    ? `${selectedUser.rate_limit} RPS`
-                    : 'Unlimited'}
-                </div>
+              <div className="fw-medium">
+                {selectedUser.first_name} {selectedUser.last_name}
               </div>
             </div>
-
-            <div className="flex justify-start mb-xl">
-              <button
-                type="button"
-                className="btn btn-primary"
-                onClick={() => setTargetedUserId(selectedUser.id)}
-              >
-                💬 Direct Message
-              </button>
+            <div>
+              <div className="text-2xs text-muted tracking-wider uppercase mb-2xs">
+                Email
+              </div>
+              <div className="fw-medium font-mono">{selectedUser.email}</div>
             </div>
-
-            <h4 className="section-title mb-lg border-b pb-xs">
-              Quotas & Security
-            </h4>
-            <div className="auto-grid-md gap-lg p-md rounded border">
+            <div>
+              <div className="text-2xs text-muted tracking-wider uppercase mb-2xs">
+                Status & Role
+              </div>
               <div>
-                <label
-                  className="form-label text-2xs text-muted mb-2xs tracking-wider uppercase"
-                  htmlFor="field"
+                <span
+                  className={`badge ${selectedUser.status === 'approved' ? 'badge-success' : selectedUser.status === 'revoked' ? 'badge-danger' : 'badge-warning'} mr-sm`}
                 >
-                  Rate Limit (RPS)
-                </label>
-                <div>
-                  <input
-                    id="field"
-                    type="number"
-                    className="input-field w-full py-xs px-sm text-sm"
-                    min={0}
-                    value={modalRateLimit}
-                    onChange={(e) => setModalRateLimit(Number(e.target.value))}
-                    placeholder="Unlimited"
-                  />
-                </div>
-              </div>
-
-              <div>
-                <label
-                  className="form-label text-2xs text-muted mb-2xs tracking-wider uppercase"
-                  htmlFor="field-2"
+                  {selectedUser.status}
+                </span>
+                <span
+                  className={`badge ${selectedUser.role === 'admin' ? 'badge-success' : ''}`}
                 >
-                  Max Subdomains
-                </label>
-                <div>
-                  <input
-                    id="field-2"
-                    type="number"
-                    className="input-field w-full py-xs px-sm text-sm"
-                    min={-1}
-                    value={modalMaxReservations}
-                    onChange={(e) =>
-                      setModalMaxReservations(Number(e.target.value))
-                    }
-                    placeholder="3"
-                  />
-                </div>
-              </div>
-
-              <div>
-                <label
-                  className="form-label text-2xs text-muted mb-2xs tracking-wider uppercase"
-                  htmlFor="field-3"
-                >
-                  Max Custom Domains
-                </label>
-                <div>
-                  <input
-                    id="field-3"
-                    type="number"
-                    className="input-field w-full py-xs px-sm text-sm"
-                    min={-1}
-                    value={modalMaxCustomDomains}
-                    onChange={(e) =>
-                      setModalMaxCustomDomains(Number(e.target.value))
-                    }
-                    placeholder="1"
-                  />
-                </div>
-              </div>
-
-              <div>
-                <label
-                  className="form-label text-2xs text-muted mb-2xs tracking-wider uppercase"
-                  htmlFor="field-4"
-                >
-                  Max Tunnels
-                </label>
-                <div>
-                  <input
-                    id="field-4"
-                    type="number"
-                    className="input-field w-full py-xs px-sm text-sm"
-                    min={-1}
-                    value={modalMaxTunnels}
-                    onChange={(e) => setModalMaxTunnels(Number(e.target.value))}
-                    placeholder="3"
-                  />
-                </div>
-              </div>
-
-              <div className="flex flex-col justify-center">
-                <label
-                  className="form-label text-2xs text-muted mb-2xs tracking-wider uppercase"
-                  htmlFor="close"
-                >
-                  MFA Security Status
-                </label>
-                <div className="flex items-center gap-md">
-                  {selectedUser.totp_enabled ? (
-                    <>
-                      <span className="badge badge-success">Enabled</span>
-                      <button
-                        type="button"
-                        className="btn btn-danger py-xs px-sm text-xs"
-                        onClick={resetUserMFA}
-                      >
-                        Reset MFA
-                      </button>
-                    </>
-                  ) : (
-                    <span className="badge neutral">Inactive</span>
-                  )}
-                </div>
+                  {selectedUser.role}
+                </span>
               </div>
             </div>
-
-            <div className="flex justify-end mt-md mb-xl">
-              <button
-                type="button"
-                className="btn btn-primary py-sm px-lg text-sm w-auto"
-                onClick={updateQuotas}
-                disabled={updatingLimits}
-              >
-                {updatingLimits ? 'Saving...' : 'Save Quotas'}
-              </button>
+            <div>
+              <div className="text-2xs text-muted tracking-wider uppercase mb-2xs">
+                Origin
+              </div>
+              <div className="fw-medium capitalize">
+                {selectedUser.auth_method || 'Magic Link'}
+              </div>
             </div>
-
-            <h4 className="section-title mb-lg border-b pb-xs flex items-center">
-              Connected Tunnels{' '}
-              <span className="badge ml-sm">
-                {(selectedUser.active_tunnels || []).length}
-              </span>
-            </h4>
-
-            <div className="table-responsive border rounded">
-              <table className="w-full m-0">
-                <tbody>
-                  {!(selectedUser.active_tunnels || []).length && (
-                    <tr>
-                      <td colSpan={4} className="td-empty">
-                        No active tunnels connected.
-                      </td>
-                    </tr>
-                  )}
-                  {(selectedUser.active_tunnels || []).map((t) => {
-                    const publicUrl = `https://${t.full_host}`;
-                    return (
-                      <tr key={t.subdomain_prefix} className="border-b">
-                        <td className="td-cell align-middle">
-                          <div className="fw-semibold font-mono text-sm">
-                            {t.subdomain_prefix}
-                          </div>
-                          <div className="text-2xs text-muted mt-2xs">
-                            Local Port: {t.local_port}
-                          </div>
-                        </td>
-                        <td className="td-cell align-middle">
-                          <a
-                            href={publicUrl}
-                            target="_blank"
-                            rel="noreferrer"
-                            className="text-primary no-underline text-sm font-mono break-all"
-                          >
-                            {publicUrl}
-                          </a>
-                          {t.node_id && t.node_id !== 'control' ? (
-                            <span className="badge badge-node text-2xs ml-xs">
-                              🌍 {t.node_id}
-                            </span>
-                          ) : (
-                            <span className="badge badge-control text-2xs ml-xs">
-                              🇬🇧 Control
-                            </span>
-                          )}
-                          <div className="text-2xs text-muted mt-2xs">
-                            IP: {t.client_ip} | Connected:{' '}
-                            {formatDate(t.created_at)}
-                          </div>
-                        </td>
-                        <td className="td-cell align-middle text-xs text-muted">
-                          <div>
-                            📥 In: <strong>{formatBytes(t.bytes_in)}</strong>
-                          </div>
-                          <div className="mt-2xs">
-                            📤 Out: <strong>{formatBytes(t.bytes_out)}</strong>
-                          </div>
-                        </td>
-                        <td className="td-cell align-middle text-right">
-                          <button
-                            type="button"
-                            className="btn btn-danger py-xs px-md text-xs"
-                            onClick={() => kickTunnel(t.subdomain_prefix)}
-                          >
-                            Kick
-                          </button>
-                        </td>
-                      </tr>
-                    );
-                  })}
-                </tbody>
-              </table>
+            <div>
+              <div className="text-2xs text-muted tracking-wider uppercase mb-2xs">
+                Joined Date
+              </div>
+              <div className="fw-medium">
+                {selectedUser.created_at
+                  ? formatDate(selectedUser.created_at)
+                  : 'N/A'}
+              </div>
             </div>
-
-            <h4 className="section-title mb-lg border-b pb-xs flex items-center mt-xl">
-              Personal Access Tokens{' '}
-              <span className="badge ml-sm">{selectedUserPATs.length}</span>
-            </h4>
-
-            <div className="table-responsive border rounded mb-xl">
-              <table className="w-full m-0">
-                <thead>
-                  <tr className="border-b text-left">
-                    <th className="th-col text-xs">Name</th>
-                    <th className="th-col text-xs">Prefix</th>
-                    <th className="th-col text-xs">Expires</th>
-                    <th className="th-col text-xs">Status</th>
-                    <th className="th-col text-xs text-right">Actions</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {!selectedUserPATs.length && (
-                    <tr>
-                      <td colSpan={5} className="td-empty">
-                        No tokens found for this user.
-                      </td>
-                    </tr>
-                  )}
-                  {selectedUserPATs.map((pat) => {
-                    const isRevoked =
-                      pat.revoked_at != null &&
-                      !pat.revoked_at.startsWith('0001-01-01');
-                    const isExpired =
-                      pat.expires_at &&
-                      !pat.expires_at.startsWith('0001-01-01') &&
-                      new Date(pat.expires_at) < new Date();
-
-                    let statusBadge = (
-                      <span className="badge badge-success">active</span>
-                    );
-                    if (isRevoked) {
-                      statusBadge = (
-                        <span className="badge badge-danger">revoked</span>
-                      );
-                    } else if (isExpired) {
-                      statusBadge = (
-                        <span className="badge badge-warning">expired</span>
-                      );
-                    }
-
-                    return (
-                      <tr key={pat.id} className="border-b">
-                        <td className="td-cell align-middle text-sm">
-                          {pat.name}
-                        </td>
-                        <td className="td-cell align-middle text-sm font-mono">
-                          {pat.token_prefix}...
-                        </td>
-                        <td className="td-cell align-middle text-sm">
-                          {pat.expires_at &&
-                          !pat.expires_at.startsWith('0001-01-01')
-                            ? formatDate(pat.expires_at)
-                            : 'Never'}
-                        </td>
-                        <td className="td-cell align-middle">{statusBadge}</td>
-                        <td className="td-cell align-middle text-right">
-                          {!isRevoked && (
-                            <div className="flex gap-xs justify-end">
-                              <button
-                                type="button"
-                                className="btn btn-outline py-2xs px-xs text-2xs"
-                                onClick={() => extendUserToken(pat.id, 30)}
-                              >
-                                +30d
-                              </button>
-                              <button
-                                type="button"
-                                className="btn btn-outline py-2xs px-xs text-2xs"
-                                onClick={() => extendUserToken(pat.id, 90)}
-                              >
-                                +90d
-                              </button>
-                              <button
-                                type="button"
-                                className="btn btn-outline py-2xs px-xs text-2xs"
-                                onClick={() => extendUserToken(pat.id, 0)}
-                              >
-                                Perm
-                              </button>
-                              <button
-                                type="button"
-                                className="btn btn-danger py-2xs px-xs text-2xs"
-                                onClick={() => revokeUserToken(pat.id)}
-                              >
-                                Revoke
-                              </button>
-                            </div>
-                          )}
-                        </td>
-                      </tr>
-                    );
-                  })}
-                </tbody>
-              </table>
+            <div>
+              <div className="text-2xs text-muted tracking-wider uppercase mb-2xs">
+                API Quota
+              </div>
+              <div className="fw-medium">
+                {selectedUser.rate_limit
+                  ? `${selectedUser.rate_limit} RPS`
+                  : 'Unlimited'}
+              </div>
             </div>
           </div>
-        </div>
+
+          <div className="flex justify-start mb-xl">
+            <button
+              type="button"
+              className="btn btn-primary"
+              onClick={() => setTargetedUserId(selectedUser.id)}
+            >
+              💬 Direct Message
+            </button>
+          </div>
+
+          <h4 className="section-title mb-lg border-b pb-xs">
+            Quotas & Security
+          </h4>
+          <div className="auto-grid-md gap-lg p-md rounded border">
+            <div>
+              <label
+                className="form-label text-2xs text-muted mb-2xs tracking-wider uppercase"
+                htmlFor="field"
+              >
+                Rate Limit (RPS)
+              </label>
+              <div>
+                <input
+                  id="field"
+                  type="number"
+                  className="input-field w-full py-xs px-sm text-sm"
+                  min={0}
+                  value={modalRateLimit}
+                  onChange={(e) => setModalRateLimit(Number(e.target.value))}
+                  placeholder="Unlimited"
+                />
+              </div>
+            </div>
+
+            <div>
+              <label
+                className="form-label text-2xs text-muted mb-2xs tracking-wider uppercase"
+                htmlFor="field-2"
+              >
+                Max Subdomains
+              </label>
+              <div>
+                <input
+                  id="field-2"
+                  type="number"
+                  className="input-field w-full py-xs px-sm text-sm"
+                  min={-1}
+                  value={modalMaxReservations}
+                  onChange={(e) =>
+                    setModalMaxReservations(Number(e.target.value))
+                  }
+                  placeholder="3"
+                />
+              </div>
+            </div>
+
+            <div>
+              <label
+                className="form-label text-2xs text-muted mb-2xs tracking-wider uppercase"
+                htmlFor="field-3"
+              >
+                Max Custom Domains
+              </label>
+              <div>
+                <input
+                  id="field-3"
+                  type="number"
+                  className="input-field w-full py-xs px-sm text-sm"
+                  min={-1}
+                  value={modalMaxCustomDomains}
+                  onChange={(e) =>
+                    setModalMaxCustomDomains(Number(e.target.value))
+                  }
+                  placeholder="1"
+                />
+              </div>
+            </div>
+
+            <div>
+              <label
+                className="form-label text-2xs text-muted mb-2xs tracking-wider uppercase"
+                htmlFor="field-4"
+              >
+                Max Tunnels
+              </label>
+              <div>
+                <input
+                  id="field-4"
+                  type="number"
+                  className="input-field w-full py-xs px-sm text-sm"
+                  min={-1}
+                  value={modalMaxTunnels}
+                  onChange={(e) => setModalMaxTunnels(Number(e.target.value))}
+                  placeholder="3"
+                />
+              </div>
+            </div>
+
+            <div className="flex flex-col justify-center">
+              <label
+                className="form-label text-2xs text-muted mb-2xs tracking-wider uppercase"
+                htmlFor="close"
+              >
+                MFA Security Status
+              </label>
+              <div className="flex items-center gap-md">
+                {selectedUser.totp_enabled ? (
+                  <>
+                    <span className="badge badge-success">Enabled</span>
+                    <button
+                      type="button"
+                      className="btn btn-danger py-xs px-sm text-xs"
+                      onClick={resetUserMFA}
+                    >
+                      Reset MFA
+                    </button>
+                  </>
+                ) : (
+                  <span className="badge neutral">Inactive</span>
+                )}
+              </div>
+            </div>
+          </div>
+
+          <div className="flex justify-end mt-md mb-xl">
+            <button
+              type="button"
+              className="btn btn-primary py-sm px-lg text-sm w-auto"
+              onClick={updateQuotas}
+              disabled={updatingLimits}
+            >
+              {updatingLimits ? 'Saving...' : 'Save Quotas'}
+            </button>
+          </div>
+
+          <h4 className="section-title mb-lg border-b pb-xs flex items-center">
+            Connected Tunnels{' '}
+            <span className="badge ml-sm">
+              {(selectedUser.active_tunnels || []).length}
+            </span>
+          </h4>
+
+          <div className="table-responsive border rounded">
+            <table className="w-full m-0">
+              <tbody>
+                {!(selectedUser.active_tunnels || []).length && (
+                  <tr>
+                    <td colSpan={4} className="td-empty">
+                      No active tunnels connected.
+                    </td>
+                  </tr>
+                )}
+                {(selectedUser.active_tunnels || []).map((t) => {
+                  const publicUrl = `https://${t.full_host}`;
+                  return (
+                    <tr key={t.subdomain_prefix} className="border-b">
+                      <td className="td-cell align-middle">
+                        <div className="fw-semibold font-mono text-sm">
+                          {t.subdomain_prefix}
+                        </div>
+                        <div className="text-2xs text-muted mt-2xs">
+                          Local Port: {t.local_port}
+                        </div>
+                      </td>
+                      <td className="td-cell align-middle">
+                        <a
+                          href={publicUrl}
+                          target="_blank"
+                          rel="noreferrer"
+                          className="text-primary no-underline text-sm font-mono break-all"
+                        >
+                          {publicUrl}
+                        </a>
+                        {t.node_id && t.node_id !== 'control' ? (
+                          <span className="badge badge-node text-2xs ml-xs">
+                            🌍 {t.node_id}
+                          </span>
+                        ) : (
+                          <span className="badge badge-control text-2xs ml-xs">
+                            🇬🇧 Control
+                          </span>
+                        )}
+                        <div className="text-2xs text-muted mt-2xs">
+                          IP: {t.client_ip} | Connected:{' '}
+                          {formatDate(t.created_at)}
+                        </div>
+                      </td>
+                      <td className="td-cell align-middle text-xs text-muted">
+                        <div>
+                          📥 In: <strong>{formatBytes(t.bytes_in)}</strong>
+                        </div>
+                        <div className="mt-2xs">
+                          📤 Out: <strong>{formatBytes(t.bytes_out)}</strong>
+                        </div>
+                      </td>
+                      <td className="td-cell align-middle text-right">
+                        <button
+                          type="button"
+                          className="btn btn-danger py-xs px-md text-xs"
+                          onClick={() => kickTunnel(t.subdomain_prefix)}
+                        >
+                          Kick
+                        </button>
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
+
+          <h4 className="section-title mb-lg border-b pb-xs flex items-center mt-xl">
+            Personal Access Tokens{' '}
+            <span className="badge ml-sm">{selectedUserPATs.length}</span>
+          </h4>
+
+          <div className="table-responsive border rounded mb-xl">
+            <table className="w-full m-0">
+              <thead>
+                <tr className="border-b text-left">
+                  <th className="th-col text-xs">Name</th>
+                  <th className="th-col text-xs">Prefix</th>
+                  <th className="th-col text-xs">Expires</th>
+                  <th className="th-col text-xs">Status</th>
+                  <th className="th-col text-xs text-right">Actions</th>
+                </tr>
+              </thead>
+              <tbody>
+                {!selectedUserPATs.length && (
+                  <tr>
+                    <td colSpan={5} className="td-empty">
+                      No tokens found for this user.
+                    </td>
+                  </tr>
+                )}
+                {selectedUserPATs.map((pat) => {
+                  const isRevoked =
+                    pat.revoked_at != null &&
+                    !pat.revoked_at.startsWith('0001-01-01');
+                  const isExpired =
+                    pat.expires_at &&
+                    !pat.expires_at.startsWith('0001-01-01') &&
+                    new Date(pat.expires_at) < new Date();
+
+                  let statusBadge = (
+                    <span className="badge badge-success">active</span>
+                  );
+                  if (isRevoked) {
+                    statusBadge = (
+                      <span className="badge badge-danger">revoked</span>
+                    );
+                  } else if (isExpired) {
+                    statusBadge = (
+                      <span className="badge badge-warning">expired</span>
+                    );
+                  }
+
+                  return (
+                    <tr key={pat.id} className="border-b">
+                      <td className="td-cell align-middle text-sm">
+                        {pat.name}
+                      </td>
+                      <td className="td-cell align-middle text-sm font-mono">
+                        {pat.token_prefix}...
+                      </td>
+                      <td className="td-cell align-middle text-sm">
+                        {pat.expires_at &&
+                        !pat.expires_at.startsWith('0001-01-01')
+                          ? formatDate(pat.expires_at)
+                          : 'Never'}
+                      </td>
+                      <td className="td-cell align-middle">{statusBadge}</td>
+                      <td className="td-cell align-middle text-right">
+                        {!isRevoked && (
+                          <div className="flex gap-xs justify-end">
+                            <button
+                              type="button"
+                              className="btn btn-outline py-2xs px-xs text-2xs"
+                              onClick={() => extendUserToken(pat.id, 30)}
+                            >
+                              +30d
+                            </button>
+                            <button
+                              type="button"
+                              className="btn btn-outline py-2xs px-xs text-2xs"
+                              onClick={() => extendUserToken(pat.id, 90)}
+                            >
+                              +90d
+                            </button>
+                            <button
+                              type="button"
+                              className="btn btn-outline py-2xs px-xs text-2xs"
+                              onClick={() => extendUserToken(pat.id, 0)}
+                            >
+                              Perm
+                            </button>
+                            <button
+                              type="button"
+                              className="btn btn-danger py-2xs px-xs text-2xs"
+                              onClick={() => revokeUserToken(pat.id)}
+                            >
+                              Revoke
+                            </button>
+                          </div>
+                        )}
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
+        </ModalShell>
       )}
 
       {targetedUserId && (
-        <div className="modal-backdrop">
-          <div
-            className="modal-card modal-card--sm"
-            role="dialog"
-            aria-modal="true"
-            aria-labelledby="direct-message-modal-title"
-          >
-            <div className="modal-header">
-              <h3 id="direct-message-modal-title" className="modal-title">
-                Send Direct Message
-              </h3>
-              <button
-                type="button"
-                onClick={() => setTargetedUserId('')}
-                className="modal-close"
-                aria-label={t('close', 'Close')}
-              >
-                ✕
-              </button>
+        <ModalShell
+          isOpen
+          onClose={() => setTargetedUserId('')}
+          labelledBy="direct-message-modal-title"
+          cardClassName="modal-card modal-card--sm"
+        >
+          <div className="modal-header">
+            <h3 id="direct-message-modal-title" className="modal-title">
+              Send Direct Message
+            </h3>
+            <button
+              type="button"
+              onClick={() => setTargetedUserId('')}
+              className="modal-close"
+              aria-label={t('close', 'Close')}
+            >
+              ✕
+            </button>
+          </div>
+          <p className="text-sm text-muted mb-lg">
+            Push a real-time banner alert to this specific active developer
+            session.
+          </p>
+          <div className="form-group m-0">
+            <textarea
+              className="input-field"
+              placeholder={t(
+                'enter_your_message_placeholder',
+                'Enter your message...',
+              )}
+              rows={3}
+              value={targetedMessage}
+              onChange={(e) => setTargetedMessage(e.target.value)}
+              aria-label={t('message_to_user', 'Message to user')}
+            />
+          </div>
+          <div className="flex justify-end gap-sm">
+            <button
+              type="button"
+              className="btn btn-secondary"
+              onClick={() => setTargetedUserId('')}
+            >
+              Cancel
+            </button>
+            <button
+              type="button"
+              className="btn btn-primary"
+              disabled={isSendingTargeted || !targetedMessage.trim()}
+              onClick={sendTargetedMessage}
+            >
+              {isSendingTargeted ? 'Sending...' : 'Send Message'}
+            </button>
+          </div>
+        </ModalShell>
+      )}
+
+      {showInviteModal && (
+        <ModalShell
+          isOpen
+          onClose={() => setShowInviteModal(false)}
+          labelledBy="invite-user-modal-title"
+          cardClassName="modal-card modal-card--sm"
+        >
+          <div className="modal-header">
+            <h3 id="invite-user-modal-title" className="modal-title">
+              {t('invite_user', 'Invite User')}
+            </h3>
+            <button
+              type="button"
+              onClick={() => setShowInviteModal(false)}
+              className="modal-close"
+              aria-label={t('close', 'Close')}
+            >
+              ✕
+            </button>
+          </div>
+          {inviteError && (
+            <div className="alert-banner alert-banner--danger">
+              {inviteError}
             </div>
-            <p className="text-sm text-muted mb-lg">
-              Push a real-time banner alert to this specific active developer
-              session.
-            </p>
+          )}
+          <form onSubmit={submitInvite}>
             <div className="form-group m-0">
-              <textarea
+              <label className="form-label text-xs">
+                {t('email_address', 'Email Address')}
+              </label>
+              <input
+                id="close"
+                type="email"
+                required
                 className="input-field"
-                placeholder={t(
-                  'enter_your_message_placeholder',
-                  'Enter your message...',
-                )}
-                rows={3}
-                value={targetedMessage}
-                onChange={(e) => setTargetedMessage(e.target.value)}
-                aria-label={t('message_to_user', 'Message to user')}
+                value={inviteForm.email}
+                onChange={(e) =>
+                  setInviteForm({ ...inviteForm, email: e.target.value })
+                }
+                placeholder={t('invite_email_placeholder', 'user@company.com')}
               />
+            </div>
+            <div className="form-group m-0">
+              <label className="form-label text-xs" htmlFor="first-name">
+                {t('first_name', 'First Name')}
+              </label>
+              <input
+                id="first-name"
+                type="text"
+                required
+                className="input-field"
+                value={inviteForm.first_name}
+                onChange={(e) =>
+                  setInviteForm({ ...inviteForm, first_name: e.target.value })
+                }
+                placeholder={t('first_name_placeholder', 'John')}
+              />
+            </div>
+            <div className="form-group m-0">
+              <label className="form-label text-xs" htmlFor="last-name">
+                {t('last_name', 'Last Name')}
+              </label>
+              <input
+                id="last-name"
+                type="text"
+                required
+                className="input-field"
+                value={inviteForm.last_name}
+                onChange={(e) =>
+                  setInviteForm({ ...inviteForm, last_name: e.target.value })
+                }
+                placeholder={t('last_name_placeholder', 'Doe')}
+              />
+            </div>
+            <div className="form-group m-0">
+              <label
+                className="form-label text-xs"
+                htmlFor="language-preference"
+              >
+                {t('language_preference', 'Language Preference')}
+              </label>
+              <select
+                id="language-preference"
+                className="input-field"
+                value={inviteForm.language_preference}
+                onChange={(e) =>
+                  setInviteForm({
+                    ...inviteForm,
+                    language_preference: e.target.value,
+                  })
+                }
+              >
+                <option value="en">English (UK)</option>
+                <option value="en-us">English (US)</option>
+                <option value="de">Deutsch (DE)</option>
+                <option value="es">Español (ES)</option>
+                <option value="fr">Français (FR)</option>
+              </select>
             </div>
             <div className="flex justify-end gap-sm">
               <button
                 type="button"
                 className="btn btn-secondary"
-                onClick={() => setTargetedUserId('')}
-              >
-                Cancel
-              </button>
-              <button
-                type="button"
-                className="btn btn-primary"
-                disabled={isSendingTargeted || !targetedMessage.trim()}
-                onClick={sendTargetedMessage}
-              >
-                {isSendingTargeted ? 'Sending...' : 'Send Message'}
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {showInviteModal && (
-        <div className="modal-backdrop">
-          <div
-            className="modal-card modal-card--sm"
-            role="dialog"
-            aria-modal="true"
-            aria-labelledby="invite-user-modal-title"
-          >
-            <div className="modal-header">
-              <h3 id="invite-user-modal-title" className="modal-title">
-                {t('invite_user', 'Invite User')}
-              </h3>
-              <button
-                type="button"
                 onClick={() => setShowInviteModal(false)}
-                className="modal-close"
-                aria-label={t('close', 'Close')}
               >
-                ✕
+                {t('cancel', 'Cancel')}
+              </button>
+              <button
+                type="submit"
+                className="btn btn-primary"
+                disabled={isInviting}
+              >
+                {isInviting
+                  ? t('sending', 'Sending...')
+                  : t('send_invitation', 'Send Invitation')}
               </button>
             </div>
-            {inviteError && (
-              <div className="alert-banner alert-banner--danger">
-                {inviteError}
-              </div>
-            )}
-            <form onSubmit={submitInvite}>
-              <div className="form-group m-0">
-                <label className="form-label text-xs">
-                  {t('email_address', 'Email Address')}
-                </label>
-                <input
-                  id="close"
-                  type="email"
-                  required
-                  className="input-field"
-                  value={inviteForm.email}
-                  onChange={(e) =>
-                    setInviteForm({ ...inviteForm, email: e.target.value })
-                  }
-                  placeholder={t(
-                    'invite_email_placeholder',
-                    'user@company.com',
-                  )}
-                />
-              </div>
-              <div className="form-group m-0">
-                <label className="form-label text-xs" htmlFor="first-name">
-                  {t('first_name', 'First Name')}
-                </label>
-                <input
-                  id="first-name"
-                  type="text"
-                  required
-                  className="input-field"
-                  value={inviteForm.first_name}
-                  onChange={(e) =>
-                    setInviteForm({ ...inviteForm, first_name: e.target.value })
-                  }
-                  placeholder={t('first_name_placeholder', 'John')}
-                />
-              </div>
-              <div className="form-group m-0">
-                <label className="form-label text-xs" htmlFor="last-name">
-                  {t('last_name', 'Last Name')}
-                </label>
-                <input
-                  id="last-name"
-                  type="text"
-                  required
-                  className="input-field"
-                  value={inviteForm.last_name}
-                  onChange={(e) =>
-                    setInviteForm({ ...inviteForm, last_name: e.target.value })
-                  }
-                  placeholder={t('last_name_placeholder', 'Doe')}
-                />
-              </div>
-              <div className="form-group m-0">
-                <label
-                  className="form-label text-xs"
-                  htmlFor="language-preference"
-                >
-                  {t('language_preference', 'Language Preference')}
-                </label>
-                <select
-                  id="language-preference"
-                  className="input-field"
-                  value={inviteForm.language_preference}
-                  onChange={(e) =>
-                    setInviteForm({
-                      ...inviteForm,
-                      language_preference: e.target.value,
-                    })
-                  }
-                >
-                  <option value="en">English (UK)</option>
-                  <option value="en-us">English (US)</option>
-                  <option value="de">Deutsch (DE)</option>
-                  <option value="es">Español (ES)</option>
-                  <option value="fr">Français (FR)</option>
-                </select>
-              </div>
-              <div className="flex justify-end gap-sm">
-                <button
-                  type="button"
-                  className="btn btn-secondary"
-                  onClick={() => setShowInviteModal(false)}
-                >
-                  {t('cancel', 'Cancel')}
-                </button>
-                <button
-                  type="submit"
-                  className="btn btn-primary"
-                  disabled={isInviting}
-                >
-                  {isInviting
-                    ? t('sending', 'Sending...')
-                    : t('send_invitation', 'Send Invitation')}
-                </button>
-              </div>
-            </form>
-          </div>
-        </div>
+          </form>
+        </ModalShell>
       )}
     </div>
   );

@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from 'react';
 import axios from 'axios';
 import { useI18n } from '../contexts/I18nContext';
 import { useUI } from '../contexts/UIContext';
+import ModalShell from './ModalShell';
 
 interface EdgeScheduleModalProps {
   nodeId: string;
@@ -163,126 +164,123 @@ export default function EdgeScheduleModal({
   };
 
   return (
-    <div className="modal-backdrop" onClick={onClose}>
-      <div
-        className="modal-card modal-card--md"
-        onClick={(e) => e.stopPropagation()}
-        role="dialog"
-        aria-modal="true"
-        aria-labelledby="edge-schedule-modal-title"
-      >
-        <div className="modal-header mb-md">
-          <h2 id="edge-schedule-modal-title" className="modal-title text-md">
-            {t('edge_schedule_modal_title', 'Edit Stop/Start Schedule')}
-          </h2>
-          <button
-            type="button"
-            onClick={onClose}
-            className="modal-close"
-            aria-label={t('close', 'Close')}
-          >
-            ×
-          </button>
-        </div>
-
-        <p className="text-xs text-muted mb-md">{nodeId}</p>
-
-        {loading ? (
-          <p className="text-xs text-muted">{t('loading', 'Loading...')}</p>
-        ) : (
-          <>
-            <div className="form-group m-0">
-              <label
-                className="form-label text-xs"
-                htmlFor="edge-schedule-stop-time"
-              >
-                {t('edge_schedule_stop_time', 'Stop time (local)')}
-              </label>
-              <input
-                id="edge-schedule-stop-time"
-                type="time"
-                className="input-field"
-                value={stopTime}
-                onChange={(e) => setStopTime(e.target.value)}
-              />
-            </div>
-            <div className="form-group m-0">
-              <label
-                className="form-label text-xs"
-                htmlFor="edge-schedule-start-time"
-              >
-                {t('edge_schedule_start_time', 'Start time (local)')}
-              </label>
-              <input
-                id="edge-schedule-start-time"
-                type="time"
-                className="input-field"
-                value={startTime}
-                onChange={(e) => setStartTime(e.target.value)}
-              />
-            </div>
-            <div className="form-group m-0">
-              <label
-                className="form-label text-xs"
-                htmlFor="edge-schedule-timezone"
-              >
-                {t('edge_schedule_timezone', 'Timezone')}
-              </label>
-              <select
-                id="edge-schedule-timezone"
-                className="input-field"
-                value={timezone}
-                onChange={(e) => setTimezone(e.target.value)}
-              >
-                <option value="">-- Select timezone --</option>
-                {timezoneGroups.map(([region, zones]) => (
-                  <optgroup key={region} label={region}>
-                    {zones.map((zone) => (
-                      <option key={zone} value={zone}>
-                        {zone} ({formatTimezoneOffset(zone)})
-                      </option>
-                    ))}
-                  </optgroup>
-                ))}
-              </select>
-            </div>
-
-            <label className="flex items-center gap-sm mt-md text-sm opacity-80">
-              <input
-                type="checkbox"
-                checked={enabled}
-                onChange={(e) => setEnabled(e.target.checked)}
-              />
-              {t('edge_schedule_enabled', 'Schedule enabled for this node')}
-            </label>
-            <p className="text-2xs text-muted mt-xs">
-              {t(
-                'edge_schedule_disabled_hint',
-                'Unchecking this pauses the stop/start schedule for this node only, without affecting other nodes -- it stays under manual control (see the Start/Stop/Restart actions) until re-enabled.',
-              )}
-            </p>
-
-            <div className="flex justify-end gap-sm mt-lg">
-              <button
-                type="button"
-                className="btn btn-secondary"
-                onClick={onClose}
-                disabled={saving}
-              >
-                {t('cancel', 'Cancel')}
-              </button>
-              <button
-                type="button"
-                className="btn btn-primary"
-                onClick={handleSave}
-                disabled={saving}
-              >
-                {saving ? t('saving', 'Saving...') : t('save', 'Save')}
-              </button>
-            </div>
-          </>
-        )}
+    <ModalShell
+      isOpen
+      onClose={onClose}
+      labelledBy="edge-schedule-modal-title"
+      cardClassName="modal-card modal-card--md"
+    >
+      <div className="modal-header mb-md">
+        <h2 id="edge-schedule-modal-title" className="modal-title text-md">
+          {t('edge_schedule_modal_title', 'Edit Stop/Start Schedule')}
+        </h2>
+        <button
+          type="button"
+          onClick={onClose}
+          className="modal-close"
+          aria-label={t('close', 'Close')}
+        >
+          ×
+        </button>
       </div>
-    </div>
+
+      <p className="text-xs text-muted mb-md">{nodeId}</p>
+
+      {loading ? (
+        <p className="text-xs text-muted">{t('loading', 'Loading...')}</p>
+      ) : (
+        <>
+          <div className="form-group m-0">
+            <label
+              className="form-label text-xs"
+              htmlFor="edge-schedule-stop-time"
+            >
+              {t('edge_schedule_stop_time', 'Stop time (local)')}
+            </label>
+            <input
+              id="edge-schedule-stop-time"
+              type="time"
+              className="input-field"
+              value={stopTime}
+              onChange={(e) => setStopTime(e.target.value)}
+            />
+          </div>
+          <div className="form-group m-0">
+            <label
+              className="form-label text-xs"
+              htmlFor="edge-schedule-start-time"
+            >
+              {t('edge_schedule_start_time', 'Start time (local)')}
+            </label>
+            <input
+              id="edge-schedule-start-time"
+              type="time"
+              className="input-field"
+              value={startTime}
+              onChange={(e) => setStartTime(e.target.value)}
+            />
+          </div>
+          <div className="form-group m-0">
+            <label
+              className="form-label text-xs"
+              htmlFor="edge-schedule-timezone"
+            >
+              {t('edge_schedule_timezone', 'Timezone')}
+            </label>
+            <select
+              id="edge-schedule-timezone"
+              className="input-field"
+              value={timezone}
+              onChange={(e) => setTimezone(e.target.value)}
+            >
+              <option value="">-- Select timezone --</option>
+              {timezoneGroups.map(([region, zones]) => (
+                <optgroup key={region} label={region}>
+                  {zones.map((zone) => (
+                    <option key={zone} value={zone}>
+                      {zone} ({formatTimezoneOffset(zone)})
+                    </option>
+                  ))}
+                </optgroup>
+              ))}
+            </select>
+          </div>
+
+          <label className="flex items-center gap-sm mt-md text-sm opacity-80">
+            <input
+              type="checkbox"
+              checked={enabled}
+              onChange={(e) => setEnabled(e.target.checked)}
+            />
+            {t('edge_schedule_enabled', 'Schedule enabled for this node')}
+          </label>
+          <p className="text-2xs text-muted mt-xs">
+            {t(
+              'edge_schedule_disabled_hint',
+              'Unchecking this pauses the stop/start schedule for this node only, without affecting other nodes -- it stays under manual control (see the Start/Stop/Restart actions) until re-enabled.',
+            )}
+          </p>
+
+          <div className="flex justify-end gap-sm mt-lg">
+            <button
+              type="button"
+              className="btn btn-secondary"
+              onClick={onClose}
+              disabled={saving}
+            >
+              {t('cancel', 'Cancel')}
+            </button>
+            <button
+              type="button"
+              className="btn btn-primary"
+              onClick={handleSave}
+              disabled={saving}
+            >
+              {saving ? t('saving', 'Saving...') : t('save', 'Save')}
+            </button>
+          </div>
+        </>
+      )}
+    </ModalShell>
   );
 }

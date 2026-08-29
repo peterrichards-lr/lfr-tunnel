@@ -7,6 +7,7 @@ import Skeleton from './Skeleton';
 import { useUI } from '../contexts/UIContext';
 import ReservationsTable from './ReservationsTable';
 import SectionHeading from './SectionHeading';
+import ModalShell from './ModalShell';
 
 interface Reservation {
   id: string;
@@ -611,149 +612,147 @@ export default function ReservationsPanel() {
 
       {/* Access Control Modal */}
       {acModalReservation && (
-        <div className="modal-backdrop">
-          <div
-            className="card modal-card max-w-md p-xl"
-            role="dialog"
-            aria-modal="true"
-            aria-labelledby="access-control-modal-title"
-          >
-            <div className="modal-header">
-              <h3 id="access-control-modal-title" className="modal-title">
-                🔒 {t('access_control', 'Access Control')}
-              </h3>
-              <button
-                type="button"
-                onClick={() => setAcModalReservation(null)}
-                className="modal-close"
-                aria-label={t('close', 'Close')}
-              >
-                ✕
-              </button>
-            </div>
-            <p className="text-muted text-sm mb-lg">
-              <strong className="text-primary font-mono">
-                {acModalReservation.subdomain
-                  ? `${acModalReservation.subdomain}.${acModalReservation.domain}`
-                  : acModalReservation.domain}
-              </strong>
-            </p>
+        <ModalShell
+          isOpen
+          onClose={() => setAcModalReservation(null)}
+          labelledBy="access-control-modal-title"
+          cardClassName="card modal-card max-w-md p-xl"
+        >
+          <div className="modal-header">
+            <h3 id="access-control-modal-title" className="modal-title">
+              🔒 {t('access_control', 'Access Control')}
+            </h3>
+            <button
+              type="button"
+              onClick={() => setAcModalReservation(null)}
+              className="modal-close"
+              aria-label={t('close', 'Close')}
+            >
+              ✕
+            </button>
+          </div>
+          <p className="text-muted text-sm mb-lg">
+            <strong className="text-primary font-mono">
+              {acModalReservation.subdomain
+                ? `${acModalReservation.subdomain}.${acModalReservation.domain}`
+                : acModalReservation.domain}
+            </strong>
+          </p>
 
-            <div className="form-group">
-              <span className="form-label--bold" id="access-mode-label">
-                {t('access_mode', 'Access Mode')}
-              </span>
-              {/* A caption for a set of radios, not for one control, so it is announced
+          <div className="form-group">
+            <span className="form-label--bold" id="access-mode-label">
+              {t('access_mode', 'Access Mode')}
+            </span>
+            {/* A caption for a set of radios, not for one control, so it is announced
                   via a group rather than htmlFor -- which names a single element. */}
-              <div
-                className="flex flex-col gap-sm"
-                role="radiogroup"
-                aria-labelledby="access-mode-label"
-              >
-                {(
+            <div
+              className="flex flex-col gap-sm"
+              role="radiogroup"
+              aria-labelledby="access-mode-label"
+            >
+              {(
+                [
                   [
-                    [
-                      'public',
-                      '🌐',
-                      t('access_public', 'Public — Anyone can access'),
-                    ],
-                    [
-                      'passcode',
-                      '🔑',
-                      t('access_passcode', 'Passcode — Requires a secret code'),
-                    ],
-                    [
-                      'whitelist',
-                      '🛡',
-                      t(
-                        'access_whitelist',
-                        'IP Whitelist — Restrict by IP address',
-                      ),
-                    ],
-                  ] as [string, string, string][]
-                ).map(([val, icon, label]) => (
-                  <label
-                    key={val}
-                    className={`flex items-center gap-md p-md rounded cursor-pointer border ${acMode === val ? 'border-primary surface-selected' : 'border'}`}
-                  >
-                    <input
-                      type="radio"
-                      name="acMode"
-                      value={val}
-                      checked={acMode === val}
-                      onChange={() => setAcMode(val)}
-                    />
-                    <span>
-                      {icon} {label}
-                    </span>
-                  </label>
-                ))}
-              </div>
-            </div>
-
-            {acMode === 'passcode' && (
-              <div className="form-group">
-                <label className="form-label--bold" htmlFor="passcode">
-                  {t('passcode', 'Passcode')}
+                    'public',
+                    '🌐',
+                    t('access_public', 'Public — Anyone can access'),
+                  ],
+                  [
+                    'passcode',
+                    '🔑',
+                    t('access_passcode', 'Passcode — Requires a secret code'),
+                  ],
+                  [
+                    'whitelist',
+                    '🛡',
+                    t(
+                      'access_whitelist',
+                      'IP Whitelist — Restrict by IP address',
+                    ),
+                  ],
+                ] as [string, string, string][]
+              ).map(([val, icon, label]) => (
+                <label
+                  key={val}
+                  className={`flex items-center gap-md p-md rounded cursor-pointer border ${acMode === val ? 'border-primary surface-selected' : 'border'}`}
+                >
+                  <input
+                    type="radio"
+                    name="acMode"
+                    value={val}
+                    checked={acMode === val}
+                    onChange={() => setAcMode(val)}
+                  />
+                  <span>
+                    {icon} {label}
+                  </span>
                 </label>
-                <input
-                  id="passcode"
-                  type="text"
-                  className="input-field"
-                  value={acPasscode}
-                  onChange={(e) => setAcPasscode(e.target.value)}
-                  placeholder={t(
-                    'passcode_placeholder',
-                    'Enter a secret passcode...',
-                  )}
-                />
-              </div>
-            )}
-
-            {acMode === 'whitelist' && (
-              <div className="form-group">
-                <label className="form-label--bold" htmlFor="allowed-ips">
-                  {t('allowed_ips', 'Allowed IPs')}
-                </label>
-                <textarea
-                  id="allowed-ips"
-                  className="input-field font-mono text-sm resize-y"
-                  value={acWhitelist}
-                  onChange={(e) => setAcWhitelist(e.target.value)}
-                  placeholder={
-                    'One IP or CIDR per line, e.g.\n192.168.1.0/24\n10.0.0.1'
-                  }
-                  rows={4}
-                />
-                <p className="form-hint">
-                  {t(
-                    'whitelist_hint',
-                    'Enter individual IP addresses or CIDR ranges, one per line.',
-                  )}
-                </p>
-              </div>
-            )}
-
-            <div className="flex gap-sm justify-end">
-              <button
-                type="button"
-                className="btn btn-secondary"
-                onClick={() => setAcModalReservation(null)}
-                disabled={acSaving}
-              >
-                {t('cancel', 'Cancel')}
-              </button>
-              <button
-                type="button"
-                className="btn btn-primary"
-                onClick={handleUpdateAccessControl}
-                disabled={acSaving}
-              >
-                {acSaving ? t('saving', 'Saving...') : t('save', 'Save')}
-              </button>
+              ))}
             </div>
           </div>
-        </div>
+
+          {acMode === 'passcode' && (
+            <div className="form-group">
+              <label className="form-label--bold" htmlFor="passcode">
+                {t('passcode', 'Passcode')}
+              </label>
+              <input
+                id="passcode"
+                type="text"
+                className="input-field"
+                value={acPasscode}
+                onChange={(e) => setAcPasscode(e.target.value)}
+                placeholder={t(
+                  'passcode_placeholder',
+                  'Enter a secret passcode...',
+                )}
+              />
+            </div>
+          )}
+
+          {acMode === 'whitelist' && (
+            <div className="form-group">
+              <label className="form-label--bold" htmlFor="allowed-ips">
+                {t('allowed_ips', 'Allowed IPs')}
+              </label>
+              <textarea
+                id="allowed-ips"
+                className="input-field font-mono text-sm resize-y"
+                value={acWhitelist}
+                onChange={(e) => setAcWhitelist(e.target.value)}
+                placeholder={
+                  'One IP or CIDR per line, e.g.\n192.168.1.0/24\n10.0.0.1'
+                }
+                rows={4}
+              />
+              <p className="form-hint">
+                {t(
+                  'whitelist_hint',
+                  'Enter individual IP addresses or CIDR ranges, one per line.',
+                )}
+              </p>
+            </div>
+          )}
+
+          <div className="flex gap-sm justify-end">
+            <button
+              type="button"
+              className="btn btn-secondary"
+              onClick={() => setAcModalReservation(null)}
+              disabled={acSaving}
+            >
+              {t('cancel', 'Cancel')}
+            </button>
+            <button
+              type="button"
+              className="btn btn-primary"
+              onClick={handleUpdateAccessControl}
+              disabled={acSaving}
+            >
+              {acSaving ? t('saving', 'Saving...') : t('save', 'Save')}
+            </button>
+          </div>
+        </ModalShell>
       )}
     </>
   );

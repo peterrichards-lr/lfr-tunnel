@@ -1,6 +1,6 @@
 import { test, expect } from './utils/fixtures';
 import { getMagicLinkToken, clearMailpit } from './utils/mailpit';
-import { createApprovedUser } from './utils/nonadmin';
+import { createApprovedUser, deleteUser } from './utils/nonadmin';
 
 /**
  * Database Backups, in both portals (#1567).
@@ -27,6 +27,16 @@ async function loginV2(page: any) {
 }
 
 test.describe('Database Backups parity', () => {
+  // Created once and removed afterwards. A fixture user left behind widens the Admin Users
+  // email column for portal_v2_table_scroll, which runs later against this same database and
+  // fails in CI only, where the Linux font stack is wider than macOS's (#1525). A short local
+  // part narrows the row but does not remove it, and each run would add another.
+  const nonAdminEmail = `nb${Date.now().toString().slice(-6)}@lfr-demo.local`;
+
+  test.afterAll(async () => {
+    await deleteUser(nonAdminEmail);
+  });
+
   test('V2 offers list, create and download', async ({ page }) => {
     await loginV2(page);
     await page.goto('/portalv2/admin/backups');
@@ -82,17 +92,13 @@ test.describe('Database Backups parity', () => {
   });
 
   test('a non-admin cannot reach the V2 backups route', async ({ page }) => {
-    // Short local part on purpose: a long address widens the Admin Users table and breaks
-    // portal_v2_table_scroll, which runs after this file alphabetically against the same
-    // database. That failure only reproduces in CI, where the font stack is wider.
-    const email = `nb${Date.now().toString().slice(-6)}@lfr-demo.local`;
-    await createApprovedUser(email);
+    await createApprovedUser(nonAdminEmail);
 
     await clearMailpit();
     await page.goto('/portalv2/');
-    await page.fill('#email-input', email);
+    await page.fill('#email-input', nonAdminEmail);
     await page.click('button[type="submit"]');
-    const token = await getMagicLinkToken(email);
+    const token = await getMagicLinkToken(nonAdminEmail);
     await page.goto(`/portalv2/login?token=${token}`);
     await page.waitForURL('**/portalv2/dashboard');
 

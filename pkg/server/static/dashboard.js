@@ -313,6 +313,37 @@ document.addEventListener('touchstart', handleOutsideDropdownClick, {
 
 let tableInstances = {};
 
+// Turns a table body's id into an accessible name for its search box: "users-table-body"
+// becomes "Search users", "region-latency-table-body" becomes "Search region latency" (#1584).
+//
+// Derived from the id rather than threaded through every renderTable call, so a new table gets a
+// name automatically instead of inheriting the unlabelled default that caused this.
+function tableSubject(tbodyId) {
+  return String(tbodyId)
+    .replace(/-table-body$/, '')
+    .replace(/-/g, ' ')
+    .trim();
+}
+
+function searchLabelFor(tbodyId) {
+  const subject = tableSubject(tbodyId);
+  if (!subject) return t('search', 'Search');
+  return `${t('search', 'Search')} ${subject}`;
+}
+
+// The page selector needs naming for the same reason the search box does, and needs to differ
+// per table for the same reason: a page carrying several tables would otherwise offer several
+// controls all called "Page".
+//
+// This one only renders when a table has more than one page, which is why it survived the first
+// pass -- a fresh local database had too little data to paginate, while CI accumulates state
+// across the suite and paginated the audit and magic-link tables (#1584).
+function pageLabelFor(tbodyId) {
+  const subject = tableSubject(tbodyId);
+  if (!subject) return t('page', 'Page');
+  return `${t('page', 'Page')}, ${subject}`;
+}
+
 function renderTable(tbodyId, data, renderRowFn) {
   if (!tableInstances[tbodyId]) {
     const tbody = document.getElementById(tbodyId);
@@ -324,6 +355,15 @@ function renderTable(tbodyId, data, renderRowFn) {
     filterInput.type = 'text';
     filterInput.className = 'input-field';
     filterInput.placeholder = 'Search...';
+    // A placeholder is not an accessible name: screen readers do not announce it as a label,
+    // and it disappears the moment someone types -- so the field was nameless exactly while in
+    // use. Every table in V1 shared this one generator, so all 13 search boxes were unlabelled
+    // (#1584). V2 has always set one via DataTableToolbar.
+    //
+    // Named after the table rather than a generic "Search", because the analytics page carries
+    // three of these and three controls all called "Search" are indistinguishable to anyone
+    // navigating by form control.
+    filterInput.setAttribute('aria-label', searchLabelFor(tbodyId));
     filterInput.style.maxWidth = '250px';
     filterInput.style.marginBottom = '12px';
 
@@ -461,6 +501,7 @@ function updateTableView(tbodyId) {
     };
 
     const pageSelect = document.createElement('select');
+    pageSelect.setAttribute('aria-label', pageLabelFor(tbodyId));
     pageSelect.className = 'form-control';
     pageSelect.style.width = 'auto';
     pageSelect.style.padding = '2px 8px';

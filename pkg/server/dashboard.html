@@ -192,6 +192,11 @@
                     <a id="nav-tokens" class="nav-item" data-i18n="sidebar_tokens" href="/portal/tokens">API Tokens</a>
                     <a id="nav-reservations" class="nav-item" data-i18n="sidebar_reservations" href="/portal/reservations">Reservations</a>
                     <a id="nav-tunnels" class="nav-item" data-i18n="sidebar_tunnels" href="/portal/tunnels">Active Tunnels</a>
+                    <!-- Non-admins only (#1561). Analytics already lives under Reporting for
+                         admins, and both links open the same tab, so showing both would be two
+                         entries pointing at one thing. Hidden by default and revealed for
+                         non-admins, mirroring how V2 solved the same gap in #1512. -->
+                    <a id="nav-analytics-personal" class="nav-item hidden" data-i18n="sidebar_analytics" href="/portal/analytics">Analytics</a>
                 </div>
                 
                 <div id="admin-sidebar-group" class="hidden">

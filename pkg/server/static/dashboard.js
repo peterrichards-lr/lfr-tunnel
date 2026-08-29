@@ -1207,6 +1207,20 @@ async function showDashboard() {
     console.error('Failed to check version', e);
   }
 
+  // Analytics is reachable by everyone, but from two different places (#1561). Admins get it
+  // under Reporting, inside the admin group revealed below. Non-admins had no entry at all --
+  // the whole admin group is hidden from them, and their own usage charts sit on that same tab.
+  // The page needs no gating of its own: the admin half is keyed off `data.global`, which the
+  // API only returns to an admin.
+  const personalAnalytics = document.getElementById('nav-analytics-personal');
+  if (personalAnalytics) {
+    if (currentUser.role === 'admin' || currentUser.role === 'owner') {
+      personalAnalytics.classList.add('hidden');
+    } else {
+      personalAnalytics.classList.remove('hidden');
+    }
+  }
+
   if (currentUser.role === 'admin' || currentUser.role === 'owner') {
     document.getElementById('admin-sidebar-group').classList.remove('hidden');
     // System Settings lives in the sidebar footer, outside that group, so it has
@@ -1857,8 +1871,13 @@ const ADMIN_ONLY_TABS = [
   'backups',
   'network-health',
   'maintenance',
-  'analytics',
 ];
+
+// 'analytics' was on that list and should not have been (#1561). The rule above holds for
+// tabs whose data the server refuses to a non-admin, and analytics is not one of them:
+// /api/analytics returns personal usage to everyone and adds the `global` block only for an
+// admin. Listing it here blocked non-admins from their own bandwidth and tunnel charts, which
+// are rendered on that tab and were unreachable in V1 while V2 showed them (#1512).
 
 /*
  * Path-based section routing (#1513).

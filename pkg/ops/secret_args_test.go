@@ -2,6 +2,7 @@ package ops
 
 import (
 	"os"
+	"runtime"
 	"strings"
 	"testing"
 )
@@ -100,7 +101,20 @@ func TestWriteSecretFileIsNotReadableByOthers(t *testing.T) {
 	if err != nil {
 		t.Fatalf("stat: %v", err)
 	}
-	if perm := info.Mode().Perm(); perm != 0o600 {
+
+	// Unix permission bits do not survive the trip to Windows: os.Chmod there only toggles the
+	// read-only attribute, so a file written as 0600 stats as 0666 and this assertion failed CI
+	// on windows-latest while passing everywhere else.
+	//
+	// Skipping rather than loosening the check, because the property still holds on Windows --
+	// it is just enforced by something this cannot see. os.CreateTemp writes into the per-user
+	// temp directory, whose ACL already excludes other users; the mode bits were never the
+	// mechanism there. Asserting 0666 "is fine on Windows" would encode the read as the rule and
+	// hide a genuine regression on the platform where the bits do mean something.
+	if runtime.GOOS == "windows" {
+		t.Log("skipping the mode assertion: Windows does not model Unix permission bits; " +
+			"the credential file is protected by the per-user temp directory ACL instead")
+	} else if perm := info.Mode().Perm(); perm != 0o600 {
 		t.Fatalf("credential file is mode %04o, want 0600", perm)
 	}
 

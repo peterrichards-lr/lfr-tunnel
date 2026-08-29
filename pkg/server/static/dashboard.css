@@ -1201,3 +1201,30 @@ html[dir='rtl'] th {
     border: 1px solid CanvasText;
   }
 }
+
+/* Analytics toolbar (#1560).
+   The range select and Export PDF rendered at different heights despite sharing padding and
+   font-size: .btn centres its label with flex, while a select's height comes from its own line
+   box, and .input-field additionally carries a margin-bottom: 16px intended for stacked forms.
+   align-items: stretch makes the two children equal height by construction rather than by
+   matching declarations, so the pair cannot drift apart again if either control's styling
+   changes -- and, unlike a fixed px height, it still fits the label when the browser text size
+   is increased. */
+.analytics-toolbar {
+  display: flex;
+  align-items: stretch;
+  gap: 12px;
+}
+.analytics-toolbar > .analytics-control {
+  box-sizing: border-box;
+  width: auto;
+  margin: 0;
+  padding: 12px 16px;
+  font-size: 14px;
+  font-family: inherit;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--bg-card);
+  color: var(--text-main);
+  cursor: pointer;
+}

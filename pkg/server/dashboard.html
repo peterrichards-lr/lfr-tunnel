@@ -754,8 +754,9 @@
 
             <!-- Database Backups Tab -->
             <div id="tab-backups" class="hidden">
-                <div class="header">
+                <div class="header" style="display: flex; justify-content: space-between; align-items: center;">
                     <h2>Database Backups</h2>
+                    <button id="btn-create-backup" class="btn btn-secondary" style="width: auto; margin: 0;" onclick="triggerBackup()" data-i18n="btn_create_backup">Create Backup</button>
                 </div>
                 <div class="glass" style="padding: 16px 20px; margin-bottom: 16px; border-left: 3px solid var(--accent);">
                     <strong>&#x1F6E1; Restore via CLI only.</strong>
@@ -765,8 +766,8 @@
                 </div>
                 <div class="glass table-container">
                     <table>
-                        <thead><tr><th data-sort="filename" data-i18n="th_filename">Filename</th><th data-sort="size_bytes" data-i18n="th_size">Size</th><th data-sort="created_at" data-i18n="th_created_utc">Created (UTC)</th></tr></thead>
-                        <tbody id="backups-table-body"><tr><td colspan="3" style="text-align:center;opacity:0.6;">Loading...</td></tr></tbody>
+                        <thead><tr><th data-sort="filename" data-i18n="th_filename">Filename</th><th data-sort="size_bytes" data-i18n="th_size">Size</th><th data-sort="created_at" data-i18n="th_created_utc">Created (UTC)</th><th data-i18n="th_actions">Actions</th></tr></thead>
+                        <tbody id="backups-table-body"><tr><td colspan="4" style="text-align:center;opacity:0.6;">Loading...</td></tr></tbody>
                     </table>
                 </div>
             </div>

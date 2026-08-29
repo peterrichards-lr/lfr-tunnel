@@ -208,6 +208,15 @@ export default function Sidebar({ user, isOpen, onClose }: SidebarProps) {
                   {t('sidebar_magic', 'Magic Links')}
                 </NavLink>
                 <NavLink
+                  to="/admin/backups"
+                  onClick={onClose}
+                  className={({ isActive }) =>
+                    `nav-item ${isActive ? 'active' : ''}`
+                  }
+                >
+                  {t('sidebar_backups', 'Database Backups')}
+                </NavLink>
+                <NavLink
                   to="/admin/settings"
                   onClick={onClose}
                   className={({ isActive }) =>

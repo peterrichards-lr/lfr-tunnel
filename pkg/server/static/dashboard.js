@@ -2071,8 +2071,24 @@ function geoBucketLabel(bucket) {
   }
 }
 
+// The analytics window, in days. '0' is V2's "All Time" value. Mirrors V2's request shape
+// exactly rather than improving on it: the portals are a live A/B test, so a difference in what
+// the two arms fetch would make the comparison measure the fix instead of the presentation.
+// (V2's All Time is itself wrong -- omitting `days` falls back to the server's 30-day default --
+// tracked in #1565 and deliberately left identical here.)
+function analyticsRangeDays() {
+  const select = document.getElementById('analytics-range');
+  return select ? select.value : '30';
+}
+
+function changeAnalyticsRange() {
+  loadAnalytics();
+}
+
 async function loadAnalytics() {
-  const res = await fetch('/api/analytics');
+  const range = analyticsRangeDays();
+  const query = range !== '0' ? `?days=${range}` : '';
+  const res = await fetch(`/api/analytics${query}`);
   if (res.ok) {
     const data = await res.json();
 
@@ -2355,10 +2371,11 @@ async function loadAnalytics() {
       // turns on: a region can look healthy on its own median while the people using it
       // have no good option anywhere, and only that number shows it.
       try {
-        // 30 days, matching what /api/analytics defaults to above. V1 has no time-range
-        // control on this page, so there is nothing to read the window from.
+        // Follows the toolbar's range now that V1 has one (#1560). All Time maps to 365 here
+        // rather than 0, because this endpoint takes a real window -- the same substitution V2
+        // makes, so both portals request the same thing.
         const rlRes = await fetch(
-          '/api/admin/analytics/region-latency?days=30',
+          `/api/admin/analytics/region-latency?days=${range === '0' ? 365 : range}`,
         );
         const headline = document.getElementById('region-latency-headline');
         if (rlRes.ok) {

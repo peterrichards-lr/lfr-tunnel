@@ -1455,9 +1455,62 @@ function connectTelemetryWS() {
   };
 }
 
+// Telemetry view (#1559). V1 has consumed /api/portal/telemetry/ws all along but only used the
+// payload to refresh other views; it had no screen of its own, while V2 has had one. This reads
+// the data V1 was already receiving.
+//
+// The aggregates match V2's exactly so the two arms cannot disagree about how many gateways are
+// live -- in particular Active Gateways counts DISTINCT node_id among active tunnels, which is
+// "how many gateways are carrying traffic", not how many exist.
+function renderTelemetry() {
+  const tbody = document.getElementById('telemetry-table-body');
+  if (!tbody) return;
+  // Nothing to do while the tab is closed: the socket fires often, and this is called from its
+  // handler.
+  const tab = document.getElementById('tab-telemetry');
+  if (!tab || tab.classList.contains('hidden')) return;
+
+  const tunnels = (currentUser && currentUser.tunnels) || [];
+
+  const bytesIn = tunnels.reduce((acc, t) => acc + (t.bytes_in || 0), 0);
+  const bytesOut = tunnels.reduce((acc, t) => acc + (t.bytes_out || 0), 0);
+  const activeNodes = new Set(tunnels.map((t) => t.node_id).filter(Boolean))
+    .size;
+
+  const setText = (id, value) => {
+    const el = document.getElementById(id);
+    if (el) el.innerText = value;
+  };
+  setText('telemetry-active-tunnels', String(tunnels.length));
+  setText('telemetry-total-bandwidth', formatBytes(bytesIn + bytesOut));
+  setText('telemetry-active-nodes', String(activeNodes));
+
+  if (!tunnels.length) {
+    tbody.innerHTML =
+      '<tr><td colspan="7" style="text-align:center;opacity:0.6;">No active tunnels right now.</td></tr>';
+    return;
+  }
+
+  renderTable('telemetry-table-body', tunnels, (t) => {
+    const visitors = Array.isArray(t.visitor_ips) ? t.visitor_ips.length : 0;
+    return `<tr>
+                    <td style="font-family:monospace; font-size:0.85em;">${escapeHTML(t.full_host || t.subdomain_prefix || '')}</td>
+                    <td>${escapeHTML(t.node_id || '')}</td>
+                    <td style="font-family:monospace; font-size:0.85em;">${escapeHTML(t.client_ip || '')}</td>
+                    <td>${formatBytes(t.bytes_in || 0)}</td>
+                    <td>${formatBytes(t.bytes_out || 0)}</td>
+                    <td>${visitors}</td>
+                    <td>${escapeHTML(t.status || '')}</td>
+                </tr>`;
+  });
+}
+
 function handleTelemetryPayload(data) {
   currentUser = data;
   loadTunnels();
+  // The telemetry screen reads the same payload, so it redraws here rather than polling. Cheap
+  // when the tab is closed: renderTelemetry bails if its container is not on screen (#1559).
+  renderTelemetry();
 
   if (activeDetailTunnelSubdomain) {
     const freshTunnel = (currentUser.tunnels || []).find(
@@ -1921,6 +1974,7 @@ const ADMIN_ONLY_TABS = [
   'network-health',
   'maintenance',
   'custom-domains',
+  'telemetry',
 ];
 
 // 'analytics' was on that list and should not have been (#1561). The rule above holds for
@@ -2125,6 +2179,7 @@ function showTab(tabName, skipHistory = false) {
   if (tabName === 'reservations') loadReservations();
   if (tabName === 'analytics') loadAnalytics();
   if (tabName === 'custom-domains') loadCustomDomains();
+  if (tabName === 'telemetry') renderTelemetry();
   if (tabName === 'overview') {
     loadWhatsNew();
     loadVersionDetails();

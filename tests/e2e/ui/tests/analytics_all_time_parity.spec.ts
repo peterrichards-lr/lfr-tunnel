@@ -58,8 +58,15 @@ test.describe('All Time analytics range', () => {
     );
     // Region latency used to be given 365 when the range was All Time, so the screen showed a
     // year of latency beside all-time bandwidth. It must follow the same window now.
-    const latency = page.waitForRequest((r) =>
-      r.url().includes('/api/admin/analytics/region-latency'),
+    //
+    // Matched on days=0 rather than on the path alone. The path fires twice -- once on initial
+    // load at days=30, then again when the range changes -- and an unfiltered waiter races them:
+    // it caught the second locally, where the first had already settled, and the first in CI,
+    // where it had not. That is a flaky assertion, not a flaky page.
+    const latency = page.waitForRequest(
+      (r) =>
+        r.url().includes('/api/admin/analytics/region-latency') &&
+        r.url().includes('days=0'),
     );
 
     await page.locator('#analytics-range').selectOption('0');
@@ -68,5 +75,8 @@ test.describe('All Time analytics range', () => {
     const latencyUrl = (await latency).url();
     expect(latencyUrl).toContain('days=0');
     expect(latencyUrl).not.toContain('days=365');
+    // The waiter above already requires days=0, so this line alone would be circular. It is the
+    // 365 check that carries the weight: it is the substitution this fix removed.
+    expect(latencyUrl).not.toContain('days=30');
   });
 });

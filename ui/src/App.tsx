@@ -6,6 +6,7 @@ import AdminRoute from './components/AdminRoute';
 import AdminSubdomains from './pages/AdminSubdomains';
 import AdminUsers from './pages/AdminUsers';
 import AdminSettings from './pages/AdminSettings';
+import AdminMaintenance from './pages/AdminMaintenance';
 import AdminTokens from './pages/AdminTokens';
 import AdminAnalytics from './pages/AdminAnalytics';
 import AdminAuditLog from './pages/AdminAuditLog';
@@ -79,6 +80,10 @@ function App() {
                     />
                     <Route path="/admin/tokens" element={<AdminTokens />} />
                     <Route path="/admin/settings" element={<AdminSettings />} />
+                    <Route
+                      path="/admin/maintenance"
+                      element={<AdminMaintenance />}
+                    />
                   </Route>
                 </Route>
 

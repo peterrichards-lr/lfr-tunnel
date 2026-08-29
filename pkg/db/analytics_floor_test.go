@@ -44,15 +44,14 @@ func TestAnalyticsFloorCountsBackFromToday(t *testing.T) {
 	}
 }
 
-// The three reports rendered on one screen must agree about what a window means. They did not:
-// the analytics queries read days=0 as today, while GetRegionLatency silently substituted 30.
-func TestAnalyticsFloorIsSharedByEveryWindowedReport(t *testing.T) {
-	// Same argument, same floor -- whichever report asks.
-	if analyticsFloor(7) != analyticsFloor(7) {
-		t.Fatal("analyticsFloor is not deterministic")
-	}
-	zero := analyticsFloor(0)
-	if zero == analyticsFloor(30) {
-		t.Fatal("All Time and Last 30 Days resolve to the same floor")
+// The bug users actually saw: All Time and Last 30 Days returned the same data, because the
+// portals omitted `days` and the server defaulted to 30. Whatever else changes, these two must
+// not resolve to the same window.
+//
+// (There is no assertion here that the three reports share the helper -- they call it directly,
+// so that is structural rather than something a test can meaningfully check.)
+func TestAllTimeAndThirtyDaysAreDifferentWindows(t *testing.T) {
+	if analyticsFloor(0) == analyticsFloor(30) {
+		t.Fatal("All Time and Last 30 Days resolve to the same floor -- the original bug")
 	}
 }

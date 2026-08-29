@@ -1,4 +1,4 @@
-.PHONY: fmt vet test test-hooks check-contexts check-attribution check-css check-contrast build deploy clean install-hook e2e e2e-sso e2e-edge e2e-ui help
+.PHONY: fmt vet test compile-check test-hooks check-contexts check-attribution check-css check-contrast build deploy clean install-hook e2e e2e-sso e2e-edge e2e-ui help
 
 VERSION ?= $(shell grep -oE 'Version = "[^"]+"' pkg/config/version.go | cut -d'"' -f2)
 
@@ -107,7 +107,19 @@ edr-guard:
 		exit 1; \
 	fi
 
-test: edr-guard
+# The test loop below only ever compiles packages that have test files, because `go list` is
+# filtered on TestGoFiles. A package with no _test.go never reaches `go test -c`, so its compile
+# errors are invisible and `make test` exits 0 on a tree that does not build (#1556). Four
+# packages are in that position today, `cmd/lfr-tunnel-ops` among them.
+#
+# `go build` with multiple packages compiles and DISCARDS the objects -- it writes no executable
+# -- so this is a typecheck rather than a build step. It still links inside GOTMPDIR, which is
+# why it depends on edr-guard rather than running as a bare recipe line.
+compile-check: edr-guard
+	@echo "Checking every package compiles, including those with no tests..."
+	@go build ./...
+
+test: compile-check
 	@for pkg in $$(go list -f '{{if .TestGoFiles}}{{.ImportPath}}{{end}}' $(PKG)); do \
 		rm -f $(TEST_BINARY); \
 		go test -c $(TEST_BUILD_FLAGS) -o $(TEST_BINARY) $$pkg || exit 1; \
@@ -208,6 +220,7 @@ test-hooks:
 	@./tests/hooks/test-stale-branches.sh
 	@./tests/hooks/test-pull-images.sh
 	@./tests/hooks/test-closing-refs.sh
+	@./tests/hooks/test-compile-check.sh
 
 # The pre-merge CI-configuration gate (#1391). Worth a target rather than only a path to type:
 # the whole point of this check is being run BEFORE pushing, and a check nobody can invoke

@@ -629,9 +629,17 @@ async function loadVersionDetails() {
               ' domain allocation.';
         }
       }
+      // Shown only when the deployment configures one (#1559). It used to carry a hardcoded
+      // status.lfr-demo.se in the markup as a fallback, so any other deployment advertised a
+      // status page that was not theirs. V2 renders it on the same condition.
       const statusLink = document.getElementById('status-page-link');
-      if (statusLink && vData.status_page_url) {
-        statusLink.href = vData.status_page_url;
+      if (statusLink) {
+        if (vData.status_page_url) {
+          statusLink.href = vData.status_page_url;
+          statusLink.hidden = false;
+        } else {
+          statusLink.hidden = true;
+        }
       }
       const displayVer = vData.server_version || vData.latest_version;
       if (displayVer) {

@@ -11,6 +11,8 @@ export default function Layout() {
   const [user, setUser] = useState<any>(null);
   const [loading, setLoading] = useState(true);
   const [uptime, setUptime] = useState<string>('');
+  // V1's footer has linked out to the status page all along; V2's did not (#1559).
+  const [statusPageUrl, setStatusPageUrl] = useState<string>('');
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
   const navigate = useNavigate();
   const { t } = useI18n();
@@ -42,6 +44,11 @@ export default function Layout() {
           axios.get('/api/version').catch(() => ({ data: {} })),
         ]);
         setUser(userRes.data);
+
+        // Only rendered when configured. V1 fell back to a hardcoded status.lfr-demo.se when it
+        // was not, which put one deployment's URL in the source and showed a link that a
+        // different deployment could not honour.
+        setStatusPageUrl(versionRes.data?.status_page_url || '');
 
         // Calculate Uptime
         const seconds = versionRes.data?.uptime_seconds;
@@ -127,6 +134,7 @@ export default function Layout() {
           user={user}
           isOpen={isSidebarOpen}
           onClose={() => setIsSidebarOpen(false)}
+          statusPageUrl={statusPageUrl}
         />
 
         {/* Mobile Top Header */}

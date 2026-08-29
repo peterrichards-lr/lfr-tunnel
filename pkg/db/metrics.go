@@ -35,8 +35,29 @@ func (repo *SQLiteMetricRepo) RecordTunnelMetric(m *TunnelMetric) error {
 }
 
 // GetGlobalAnalytics retrieves system-wide bandwidth stats for the last N days.
+// analyticsFloor turns a day count into the lower bound its queries compare against.
+//
+// days <= 0 means "no lower bound" -- the All Time option both portals offer. Before #1565 that
+// option was broken in two different directions at once: the portals omitted the parameter, so
+// the server fell back to its 30-day default and All Time silently showed 30 days; and had they
+// sent days=0, this floor became today, showing a single day instead.
+//
+// The same argument also meant three different things across the package -- today for the two
+// analytics queries, and a 30-day default in GetRegionLatency, which guarded days <= 0 itself.
+// One helper so the window cannot mean different things depending on which report is asked for.
+//
+// Expressed as a date old enough to precede any row rather than by dropping the predicate: it
+// appears in eight queries across three functions, and a conditional WHERE in each is a lot of
+// surface to add for one option.
+func analyticsFloor(days int) string {
+	if days <= 0 {
+		return "0001-01-01"
+	}
+	return time.Now().UTC().AddDate(0, 0, -days).Format("2006-01-02")
+}
+
 func (repo *SQLiteMetricRepo) GetGlobalAnalytics(days int) (*GlobalAnalytics, error) {
-	timeLimit := time.Now().UTC().AddDate(0, 0, -days).Format("2006-01-02")
+	timeLimit := analyticsFloor(days)
 
 	dailyQuery := `
 		SELECT COALESCE(strftime('%Y-%m-%d', recorded_at), CASE WHEN length(recorded_at) >= 10 AND substr(recorded_at, 5, 1) = '-' AND substr(recorded_at, 8, 1) = '-' THEN substr(recorded_at, 1, 10) END) as d, SUM(bytes_in), SUM(bytes_out)
@@ -202,7 +223,7 @@ func (repo *SQLiteMetricRepo) GetGlobalAnalytics(days int) (*GlobalAnalytics, er
 
 // GetUserAnalytics retrieves bandwidth stats for a specific user for the last N days.
 func (repo *SQLiteMetricRepo) GetUserAnalytics(userID string, days int) (*UserAnalytics, error) {
-	timeLimit := time.Now().UTC().AddDate(0, 0, -days).Format("2006-01-02")
+	timeLimit := analyticsFloor(days)
 
 	dailyQuery := `
 		SELECT COALESCE(strftime('%Y-%m-%d', recorded_at), CASE WHEN length(recorded_at) >= 10 AND substr(recorded_at, 5, 1) = '-' AND substr(recorded_at, 8, 1) = '-' THEN substr(recorded_at, 1, 10) END) as d, SUM(bytes_in), SUM(bytes_out)

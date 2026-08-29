@@ -1,6 +1,6 @@
 import { test, expect } from './utils/fixtures';
 import { getMagicLinkToken, clearMailpit } from './utils/mailpit';
-import { createApprovedUser } from './utils/nonadmin';
+import { createApprovedUser, deleteUser } from './utils/nonadmin';
 
 /**
  * Gateway Maintenance in V2 (#1568), the counterpart of V1's screen.
@@ -24,6 +24,16 @@ async function loginV2(page: any, email: string) {
 }
 
 test.describe('Gateway Maintenance in V2', () => {
+  // Created once and removed afterwards. A fixture user left behind widens the Admin Users
+  // email column for portal_v2_table_scroll, which runs later against this same database and
+  // fails in CI only, where the Linux font stack is wider than macOS's (#1525). A short local
+  // part narrows the row but does not remove it, and each run would add another.
+  const nonAdminEmail = `nm${Date.now().toString().slice(-6)}@lfr-demo.local`;
+
+  test.afterAll(async () => {
+    await deleteUser(nonAdminEmail);
+  });
+
   test('shows the current state, and the tri-state status is not a boolean', async ({
     page,
   }) => {
@@ -126,11 +136,8 @@ test.describe('Gateway Maintenance in V2', () => {
   });
 
   test('a non-admin cannot reach the route', async ({ page }) => {
-    // Short local part: a long address widens the Admin Users table and breaks
-    // portal_v2_table_scroll, which runs later against this same database, and only in CI.
-    const email = `nm${Date.now().toString().slice(-6)}@lfr-demo.local`;
-    await createApprovedUser(email);
-    await loginV2(page, email);
+    await createApprovedUser(nonAdminEmail);
+    await loginV2(page, nonAdminEmail);
 
     await page.goto('/portalv2/admin/maintenance');
 

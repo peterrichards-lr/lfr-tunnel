@@ -1916,6 +1916,78 @@ function sectionFromLocation() {
   return 'overview';
 }
 
+// Arrow-key movement within the sidebar (#1562).
+//
+// Additive on purpose: every nav item keeps its place in the tab order. The usual roving-tabindex
+// pattern makes the whole menu one Tab stop, which is right for a menubar but takes something away
+// from a plain list of links -- people who already navigate this sidebar with Tab would find it
+// behaves differently for no reason they asked for. Arrows are offered as a faster route, not a
+// replacement.
+//
+// Scoped to keydowns that originate inside the sidebar, so arrow keys anywhere else on the page --
+// including inside inputs and selects -- are untouched. Nothing here binds a printable character,
+// which would steal typing.
+//
+// Screen readers intercept arrow keys in browse mode before the page sees them, so this does not
+// fight them: the handler simply never runs in that mode.
+function initSidebarArrowKeys() {
+  const sidebar = document.querySelector('nav.sidebar');
+  if (!sidebar) return;
+
+  // Recomputed per keypress rather than cached: which items exist changes with role, and with
+  // whether a collapsible section is open. A list captured at startup would move focus to items
+  // that are no longer there (#1561 hides one link for admins, and the admin group is hidden
+  // entirely from everyone else).
+  const focusableItems = () =>
+    Array.from(sidebar.querySelectorAll('.nav-item')).filter(
+      (el) => el.offsetParent !== null,
+    );
+
+  sidebar.addEventListener('keydown', (e) => {
+    if (
+      e.key !== 'ArrowDown' &&
+      e.key !== 'ArrowUp' &&
+      e.key !== 'Home' &&
+      e.key !== 'End'
+    ) {
+      return;
+    }
+    // Modifier combinations belong to the browser -- Alt+Arrow is back/forward, and Home/End
+    // with a modifier is a document jump.
+    if (e.altKey || e.ctrlKey || e.metaKey || e.shiftKey) return;
+
+    const items = focusableItems();
+    if (!items.length) return;
+
+    const current = items.indexOf(document.activeElement);
+    if (current === -1) return; // focus is in the sidebar but not on a nav item
+
+    let next;
+    if (e.key === 'Home') {
+      next = 0;
+    } else if (e.key === 'End') {
+      next = items.length - 1;
+    } else {
+      const step = e.key === 'ArrowDown' ? 1 : -1;
+      // Wraps, so End-of-list does not feel like a dead end.
+      next = (current + step + items.length) % items.length;
+    }
+
+    e.preventDefault();
+    items[next].focus();
+  });
+}
+
+// Attached as soon as the document is ready rather than at the end of init(), which runs behind
+// `await loadVersionDetails()`. The sidebar is in the static HTML and this handler needs none of
+// that data, so waiting only created a window where the arrow keys silently did nothing -- long
+// enough for a test to catch it, and long enough for a fast keyboard user to hit it.
+if (document.readyState === 'loading') {
+  document.addEventListener('DOMContentLoaded', initSidebarArrowKeys);
+} else {
+  initSidebarArrowKeys();
+}
+
 function showTab(tabName, skipHistory = false) {
   if (window.closeAllActionMenus) {
     window.closeAllActionMenus();

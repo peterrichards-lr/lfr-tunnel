@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import axios from 'axios';
 import { NavLink } from 'react-router-dom';
 import { useI18n } from '../contexts/I18nContext';
@@ -10,6 +10,57 @@ interface SidebarProps {
 }
 
 export default function Sidebar({ user, isOpen, onClose }: SidebarProps) {
+  // Arrow-key movement within the sidebar (#1562), matching V1's behaviour so the two arms of the
+  // A/B test cost a keyboard user the same effort.
+  //
+  // Additive on purpose: every nav item keeps its place in the tab order. The usual roving-tabindex
+  // pattern collapses the menu to a single Tab stop, which suits a menubar but takes something away
+  // from a plain list of links -- anyone already tabbing this sidebar would find it behaves
+  // differently for no reason they asked for. Arrows are a faster route, not a replacement.
+  //
+  // Scoped to keydowns originating inside the nav, so arrows elsewhere -- inputs, selects, the page
+  // itself -- are untouched, and nothing here binds a printable character. Screen readers consume
+  // arrow keys in browse mode before the page sees them, so this does not compete with them.
+  const navRef = useRef<HTMLElement | null>(null);
+
+  useEffect(() => {
+    const nav = navRef.current;
+    if (!nav) return;
+
+    const onKeyDown = (e: KeyboardEvent) => {
+      if (!['ArrowDown', 'ArrowUp', 'Home', 'End'].includes(e.key)) return;
+      // Modifier combinations belong to the browser: Alt+Arrow is history, Home/End with one is a
+      // document jump.
+      if (e.altKey || e.ctrlKey || e.metaKey || e.shiftKey) return;
+
+      // Read per keypress rather than cached: which links render depends on role, and on whether
+      // the pending-registrations badge or a collapsible section has changed the list.
+      const items = Array.from(
+        nav.querySelectorAll<HTMLElement>('.nav-item'),
+      ).filter((el) => el.offsetParent !== null);
+      if (!items.length) return;
+
+      const current = items.indexOf(document.activeElement as HTMLElement);
+      if (current === -1) return; // inside the nav, but not on a nav item
+
+      let next: number;
+      if (e.key === 'Home') {
+        next = 0;
+      } else if (e.key === 'End') {
+        next = items.length - 1;
+      } else {
+        const step = e.key === 'ArrowDown' ? 1 : -1;
+        next = (current + step + items.length) % items.length;
+      }
+
+      e.preventDefault();
+      items[next].focus();
+    };
+
+    nav.addEventListener('keydown', onKeyDown);
+    return () => nav.removeEventListener('keydown', onKeyDown);
+  }, []);
+
   const { t } = useI18n();
   const [pendingCount, setPendingCount] = useState(0);
 
@@ -39,7 +90,11 @@ export default function Sidebar({ user, isOpen, onClose }: SidebarProps) {
       ></div>
       {/* A navigation landmark, so screen-reader users can jump straight here
           instead of tabbing through the page to find it (#1219). */}
-      <nav className={`sidebar ${isOpen ? 'active' : ''}`} aria-label="Primary">
+      <nav
+        ref={navRef}
+        className={`sidebar ${isOpen ? 'active' : ''}`}
+        aria-label="Primary"
+      >
         <div className="sidebar-brand flex items-center gap-sm px-lg py-md">
           <img
             src="/static/logo.svg"

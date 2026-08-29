@@ -92,10 +92,27 @@ fixture originally used `nonadmin-<13-digit-timestamp>@lfr-demo.local` -- twice 
 alphabetically, and broke it **in CI only**: the Linux font stack is wider than macOS's, so it
 passed locally every time.
 
+**Delete what you create.** This is the actual fix, and sizing is not a substitute for it.
+`tests/e2e/ui/tests/utils/nonadmin.ts` exports `deleteUser` for this:
+
+```ts
+const nonAdminEmail = `nb${Date.now().toString().slice(-6)}@lfr-demo.local`;
+test.afterAll(async () => {
+  await deleteUser(nonAdminEmail);
+});
+```
+
+Three specs were written on 2026-08-29 using a deliberately short local part *and no cleanup*,
+on the reading that keeping the row narrow was enough. All three failed CI on
+`portal_v2_table_scroll` anyway: `nb123456@lfr-demo.local` is still three characters wider than
+`admin@lfr-demo.local`, and the rows accumulate across runs. Shortening reduces the width, it
+does not remove it.
+
 So when adding a fixture:
 
-- **Keep created data comparable in size to what is already there.** A long identifier is not
-  free when another spec measures a layout.
+- **Remove it in `afterAll`.** Not optional, even for a read-only-looking test.
+- **Keep created data comparable in size to what is already there** as well. A long identifier
+  is not free when another spec measures a layout, and cleanup does not help the run it is in.
 - **Assume your spec runs before every spec whose filename sorts after it.** That is the order
   they run in.
 - **A local pass is not evidence for CI** where layout is concerned. Font metrics differ, and a
@@ -117,4 +134,4 @@ need. Docker is outside the EDR constraints that govern host binaries, so the co
 is fine to run; the host `lfr-tunnel` binary is not.
 
 ---
-*Last Updated: 2026-08-27* | *Last Reviewed: 2026-08-27*
+*Last Updated: 2026-08-29* | *Last Reviewed: 2026-08-29*

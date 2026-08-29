@@ -7,9 +7,15 @@ interface SidebarProps {
   user: any;
   isOpen: boolean;
   onClose: () => void;
+  statusPageUrl?: string;
 }
 
-export default function Sidebar({ user, isOpen, onClose }: SidebarProps) {
+export default function Sidebar({
+  user,
+  isOpen,
+  onClose,
+  statusPageUrl,
+}: SidebarProps) {
   // Arrow-key movement within the sidebar (#1562), matching V1's behaviour so the two arms of the
   // A/B test cost a keyboard user the same effort.
   //
@@ -297,6 +303,25 @@ export default function Sidebar({ user, isOpen, onClose }: SidebarProps) {
         <div className="sidebar-footer p-lg">
           <div className="pb-lg mb-lg border-b">
             <div className="flex gap-md text-xs">
+              {/* V1's footer has always linked out to the status page; V2's had no equivalent
+                  (#1559). Rendered only when the deployment configures one -- an unset value
+                  used to fall back to a hardcoded host in V1, which is not something to carry
+                  across. The dot is decorative and hidden from assistive tech; the link's name
+                  comes from its text. */}
+              {statusPageUrl && (
+                <a
+                  href={statusPageUrl}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="sidebar-footer-link"
+                >
+                  <span
+                    className="status-dot status-dot--online"
+                    aria-hidden="true"
+                  />
+                  {t('system_status', 'System Status')}
+                </a>
+              )}
               <a
                 href="/privacy"
                 target="_blank"

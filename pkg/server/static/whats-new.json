@@ -1,5 +1,12 @@
 [
   {
+    "version": "v1.48.9",
+    "release_date": "2026-08-29",
+    "features": [
+      "feat(portal): anonymous geographic distribution, in both portals (#1152) (#1552)"
+    ]
+  },
+  {
     "version": "v1.48.8",
     "release_date": "2026-08-28",
     "features": [
@@ -181,13 +188,6 @@
       "fix(server): stop putting the serving gateway in a tunnel's public URL (#1288)",
       "test(e2e): run the multi-region edge harness and prove a planned move; let central say how it is reachable (#1287)",
       "feat(config): allow an edge node's schedule to be declared statically (#1283)"
-    ]
-  },
-  {
-    "version": "v1.48.4",
-    "release_date": "2026-08-24",
-    "features": [
-      "feat(client): move off a gateway before its scheduled stop (#1280)"
     ]
   }
 ]

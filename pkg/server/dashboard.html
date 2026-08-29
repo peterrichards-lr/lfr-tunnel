@@ -148,6 +148,15 @@
     <div id="dashboard-shell">
     <!-- View As (#1225). Hidden until renderViewAs() decides otherwise. The session is
          read-only while previewing, so this has to be impossible to miss. -->
+    <!-- First thing a keyboard user reaches once signed in (#1562). It sits ahead of the
+         view-as bar and the V2 promo banner deliberately: both are outside #dashboard-screen
+         and earlier in the DOM, so a skip link placed inside the dashboard was the fourth stop
+         rather than the first, which defeats its purpose.
+
+         V2 has had this since #1219. V1 had none, so a keyboard user tabbed through the entire
+         sidebar to reach the content on every navigation while a V2 user pressed Tab once. -->
+    <a href="#main-content" class="skip-link" data-i18n="skip_to_content">Skip to content</a>
+
     <div id="view-as-bar" class="hidden"></div>
 
     <!-- V2 promo (#1200). Deliberately in normal flow, NOT position:fixed. As a fixed
@@ -251,7 +260,15 @@
             </div>
         </nav>
         
-        <div class="main-content" style="position: relative; padding-top: 60px;">
+        <!-- role="main" because this is a div rather than a <main> element.
+
+             tabindex="-1" is defensive rather than load-bearing here. Chromium already sets the
+             sequential focus navigation starting point when a fragment link is followed, so the
+             next Tab continues from the content with or without it -- confirmed by removing it
+             and watching the tests still pass. It is kept because that behaviour is not uniform
+             across browsers, and because focusing the target explicitly is what screen readers
+             rely on. No test claims to guard it, since none here can tell the difference. -->
+        <div id="main-content" class="main-content" role="main" tabindex="-1" style="position: relative; padding-top: 60px;">
             <button id="sidebar-toggle-btn" class="sidebar-toggle-btn" onclick="toggleSidebar()" aria-label="Toggle Sidebar">
                 <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
                     <rect x="3" y="3" width="18" height="18" rx="2" ry="2"></rect>

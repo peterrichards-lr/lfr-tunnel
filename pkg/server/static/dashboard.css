@@ -1228,3 +1228,28 @@ html[dir='rtl'] th {
   color: var(--text-main);
   cursor: pointer;
 }
+
+/* Skip link (#1562). Off-screen rather than display:none or visibility:hidden, both of which
+   remove an element from the tab order entirely -- a skip link that cannot be focused is worse
+   than none, because it looks present in the markup while doing nothing.
+
+   Matches V2's treatment so the two arms of the A/B test behave the same for a keyboard user. */
+.skip-link {
+  position: absolute;
+  left: -9999px;
+  top: 0;
+  z-index: 10001;
+  padding: 8px 16px;
+  background: var(--primary);
+  color: #fff;
+  text-decoration: none;
+  border-radius: 0 0 6px 0;
+}
+.skip-link:focus {
+  left: 0;
+}
+/* The skip target receives focus so the next Tab continues from the content, but it is not an
+   interactive control and should not look like one. */
+.main-content:focus {
+  outline: none;
+}

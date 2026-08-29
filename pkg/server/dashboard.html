@@ -452,7 +452,15 @@
             <div id="tab-analytics" class="hidden">
                 <div class="header" style="display: flex; justify-content: space-between; align-items: center;">
                     <h2 data-i18n="tab_analytics_title">Analytics & Monitoring</h2>
-                    <button class="btn btn-secondary print-hide" style="width: auto; margin: 0;" onclick="exportAnalyticsPDF()" data-i18n="btn_export_pdf">Export PDF</button>
+                    <div class="analytics-toolbar print-hide">
+                        <select id="analytics-range" class="analytics-control" aria-label="Time range" data-i18n-aria-label="time_range" onchange="changeAnalyticsRange(this.value)">
+                            <option value="7" data-i18n="range_7_days">Last 7 Days</option>
+                            <option value="14" data-i18n="range_14_days">Last 14 Days</option>
+                            <option value="30" selected data-i18n="range_30_days">Last 30 Days</option>
+                            <option value="0" data-i18n="range_all_time">All Time</option>
+                        </select>
+                        <button class="btn btn-secondary analytics-control" onclick="exportAnalyticsPDF()" data-i18n="btn_export_pdf">Export PDF</button>
+                    </div>
                 </div>
                 <p style="color: var(--text-muted); margin-bottom: 24px; font-size: 14px;" data-i18n="analytics_desc">View your bandwidth utilization over the last 30 days.</p>
                 

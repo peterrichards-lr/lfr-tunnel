@@ -503,6 +503,23 @@
                                 </table>
                             </div>
                         </div>
+                        <!-- Anonymous geographic distribution (#1152). V1 and V2 are an A/B
+                             test, so the panel lands in both.
+
+                             The headline carries the state, because an empty table has three
+                             very different meanings: no geo-IP database deployed (the normal
+                             state -- the server ships without one), deployed but nothing has
+                             cleared the k-threshold yet, or real counts. -->
+                        <div class="glass" style="padding: 16px; grid-column: span 3;" title="Distinct users per country per ISO week. The IP is resolved in memory and discarded; no row can be linked back to a person.">
+                            <h4 style="margin-bottom: 12px; color: var(--text-muted); font-size: 14px; font-weight: 500;" data-i18n="geo_distribution">Geographic Distribution</h4>
+                            <p id="geo-distribution-headline" style="font-size: 13px; margin: 0 0 12px; color: var(--text-muted);"></p>
+                            <div class="table-container" style="max-height: 250px; overflow-y: auto;">
+                                <table>
+                                    <thead><tr><th data-i18n="country">Country</th><th data-i18n="users">Users</th></tr></thead>
+                                    <tbody id="geo-distribution-table-body"></tbody>
+                                </table>
+                            </div>
+                        </div>
                         <div class="glass" style="padding: 16px; grid-column: span 3;">
                             <h4 style="margin-bottom: 12px; color: var(--text-muted); font-size: 14px; font-weight: 500;">Client Version Distribution</h4>
                             <div class="table-container" style="max-height: 250px; overflow-y: auto;">

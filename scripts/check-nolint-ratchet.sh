@@ -14,7 +14,20 @@ set -euo pipefail
 # Wired into CI as of #1498. It was not, originally -- the comment on the make target explained
 # that ci.yml belonged to another agent under #1328 -- and a gate nobody runs does not gate: the
 # count reached 757 against a ceiling of 752 without anything failing.
-CEILING="${LFT_NOLINT_CEILING:-748}"
+# Raised 748 -> 752 by #1152, deliberately and with the four named here, because the script
+# asks for exactly that rather than a silent bump. All four are deferred cleanup in the new
+# location-stats code where the error is unactionable or already reported elsewhere, and each
+# carries a comment beside it saying which:
+#
+#   pkg/db/location_stats.go       tx.Rollback   -- returns sql.ErrTxDone after a good Commit
+#   pkg/db/location_stats.go       stmt.Close    -- driver resource release, after the writes
+#   pkg/db/location_stats.go       rows.Close    -- same failure rows.Err() already reports
+#   pkg/db/location_stats_test.go  rows.Close    -- test read-back
+#
+# Three further suppressions this feature originally had were removed rather than counted: a
+# failed stats write, a failed periodic flush and a failed flush on shutdown now log, because
+# each of those silently loses a whole period of counts.
+CEILING="${LFT_NOLINT_CEILING:-752}"
 
 count() {
     grep -rho 'nolint:[a-z,]*' --include='*.go' pkg/ cmd/ 2>/dev/null \

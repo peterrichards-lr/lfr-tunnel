@@ -40,6 +40,20 @@ const formatBytes = (bytes: number, decimals = 2) => {
   return `${parseFloat((bytes / Math.pow(k, i)).toFixed(dm))} ${sizes[i]}`;
 };
 
+// countryName turns an ISO 3166-1 alpha-2 code into a readable name using the browser's
+// own locale data, so no country-name table has to ship or be kept current. The reserved
+// OTHER bucket is not a country and is labelled by the caller.
+const countryName = (code: string, locale: string) => {
+  try {
+    const display = new Intl.DisplayNames([locale], { type: 'region' });
+    return display.of(code) || code;
+  } catch {
+    // Intl.DisplayNames is unavailable, or the code is not a region -- the raw code is
+    // still perfectly legible.
+    return code;
+  }
+};
+
 // Palette for per-gateway series. Fixed order rather than random, so a given gateway keeps
 // the same colour between renders and between the two portals.
 const NODE_COLOURS = [
@@ -81,11 +95,16 @@ function nodeSeries(
 }
 
 export default function AdminAnalytics() {
-  const { t } = useI18n();
+  const { t, language } = useI18n();
   const { theme } = useSettings();
 
   const [data, setData] = useState<any>(null);
   const [clientStats, setClientStats] = useState<any[]>([]);
+  // Anonymous geographic distribution (#1152). `available: false` is the normal state --
+  // no MaxMind database ships with the server -- and is deliberately distinct from an
+  // empty bucket list, which means the feature is on but nothing has cleared the
+  // k-threshold yet.
+  const [locations, setLocations] = useState<any>(null);
   // Where the next edge should go (#1151). The data path shipped without a reader; this is
   // the panel the epic (#1149) was left open for.
   const [regionLatency, setRegionLatency] = useState<any>(null);
@@ -120,10 +139,11 @@ export default function AdminAnalytics() {
         if (!analyticsRes.data?.global) {
           setClientStats([]);
           setRegionLatency(null);
+          setLocations(null);
           return;
         }
 
-        const [clientsRes, latencyRes] = await Promise.all([
+        const [clientsRes, latencyRes, locationsRes] = await Promise.all([
           axios.get('/api/admin/analytics/clients').catch(() => ({ data: [] })),
           // Its own days param rather than the shared one: the endpoint rejects 0, which
           // is what the "All time" option sends.
@@ -132,9 +152,17 @@ export default function AdminAnalytics() {
               `/api/admin/analytics/region-latency?days=${timeRange === '0' ? 365 : timeRange}`,
             )
             .catch(() => ({ data: null })),
+          // Admin-only, so it belongs inside this guard rather than in the first request:
+          // #1512 made the admin endpoints conditional precisely so a non-admin does not
+          // collect a guaranteed 403 on every page load. Merging this branch's parallel
+          // version back in would have quietly undone that.
+          axios
+            .get('/api/admin/analytics/locations')
+            .catch(() => ({ data: null })),
         ]);
         setClientStats(clientsRes.data || []);
         setRegionLatency(latencyRes.data);
+        setLocations(locationsRes.data);
       } catch (err) {
         console.error('Failed to load analytics', err);
       } finally {
@@ -648,6 +676,79 @@ export default function AdminAnalytics() {
                           </td>
                         </tr>
                       ))}
+                    </tbody>
+                  </table>
+                </div>
+              </>
+            )}
+          </div>
+
+          {/* Anonymous geographic distribution (#1152).
+
+              Three states, and conflating any two of them misleads an admin looking at an
+              empty panel:
+
+                * available: false -- no MaxMind database is deployed. The normal state,
+                  and NOT a fault: the server ships without one, and the feature degrades
+                  to off rather than failing a registration.
+                * available, no buckets -- the feature is on, but nothing has yet cleared
+                  the k-threshold. Small deployments live here permanently.
+                * available with buckets -- real counts.
+
+              Counts are of distinct users per ISO week, never of requests: no row can be
+              re-linked to a person because no identifier is stored beside it. */}
+          <div className="card p-xl mb-xl">
+            <h4 className="text-muted text-base mb-lg">
+              {t('geo_distribution', 'Geographic Distribution')}
+            </h4>
+            {!locations?.available ? (
+              <p className="text-muted text-sm m-0">
+                {t(
+                  'geo_unavailable',
+                  'No geo-IP database is configured, so geographic distribution is off. Set geolite2_db_path to a MaxMind GeoLite2 country file to enable it.',
+                )}
+              </p>
+            ) : !locations.buckets?.length ? (
+              <p className="text-muted text-sm m-0">
+                {t(
+                  'geo_below_threshold',
+                  'No country yet has enough distinct users to be shown without identifying them.',
+                )}
+              </p>
+            ) : (
+              <>
+                <p className="text-muted text-sm mb-lg">
+                  {t('geo_period', 'Distinct users by country for week')}{' '}
+                  <strong>{locations.period}</strong>.{' '}
+                  {t(
+                    'geo_threshold_note',
+                    'Countries with fewer than {0} users are grouped into Other, so no one can be identified by being the only person somewhere.',
+                  ).replace('{0}', String(locations.threshold))}
+                </p>
+                <div className="table-responsive">
+                  <table className="w-full">
+                    <thead>
+                      <tr className="border-b text-left">
+                        <th className="th-col">{t('country', 'Country')}</th>
+                        <th className="th-col">{t('users', 'Users')}</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {locations.buckets.map(
+                        (b: { bucket: string; count: number }) => (
+                          <tr key={b.bucket} className="border-b">
+                            <td className="p-md fw-semibold">
+                              {/* OTHER is a reserved bucket, not a country code, so it is
+                                  named here rather than handed to Intl.DisplayNames --
+                                  which would pass it straight through as "OTHER". */}
+                              {b.bucket === 'OTHER'
+                                ? t('geo_other', 'Other')
+                                : countryName(b.bucket, language)}
+                            </td>
+                            <td className="p-md">{b.count}</td>
+                          </tr>
+                        ),
+                      )}
                     </tbody>
                   </table>
                 </div>

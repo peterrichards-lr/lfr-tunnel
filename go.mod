@@ -15,6 +15,7 @@ require (
 	github.com/jedisct1/go-minisign v0.0.0-20260527172527-a09352b57a22
 	github.com/jpillora/chisel v1.11.8
 	github.com/mattn/go-isatty v0.0.24
+	github.com/oschwald/maxminddb-golang/v2 v2.5.0
 	golang.org/x/crypto v0.55.0
 	golang.org/x/oauth2 v0.36.0
 	golang.org/x/time v0.15.0

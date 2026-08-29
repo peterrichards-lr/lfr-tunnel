@@ -303,4 +303,23 @@ var migrations = []migration{
 	// geography, because they include the VPN, tethering and routing penalties a country code
 	// cannot show.
 	{24, "CREATE TABLE IF NOT EXISTS region_probes (user_id TEXT NOT NULL, region TEXT NOT NULL, day TEXT NOT NULL, rtt_ms INTEGER, recorded_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP, PRIMARY KEY (user_id, region, day))"},
+
+	// Anonymous geographic distribution (#1152). The absence of a user column is the
+	// feature: a client IP is resolved to a country in memory at registration and then
+	// discarded, and only the number of distinct users per bucket per ISO week is
+	// written. With no identifier in the row there is nothing to re-link, which is what
+	// makes this anonymous rather than pseudonymous -- so this table must never gain a
+	// column capable of holding a user and a location together.
+	//
+	// 25, not 24: #1151 landed on 24 while this branch was parked, and two migrations
+	// sharing a version means whichever runs second is skipped on every database that
+	// already recorded that version -- a table that silently never exists in production
+	// while every fresh test database has it.
+	{25, `CREATE TABLE IF NOT EXISTS location_stats (
+		period TEXT NOT NULL,
+		bucket TEXT NOT NULL,
+		count INTEGER NOT NULL,
+		updated_at DATETIME NOT NULL DEFAULT (datetime('now')),
+		PRIMARY KEY (period, bucket)
+	)`},
 }

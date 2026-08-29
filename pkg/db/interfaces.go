@@ -61,6 +61,12 @@ type MetricRepository interface {
 	GetUserAnalytics(userID string, days int) (*UserAnalytics, error)
 	GetClientVersionStats() ([]ClientVersionStats, error)
 
+	// Anonymous geographic distribution (#1152). Neither signature is capable of
+	// carrying a user, which is the point: the aggregate is anonymous because nothing
+	// in this layer can express the pairing, not because the current caller declines to.
+	UpsertLocationStats(period string, stats []LocationStat) error
+	GetLocationStats(period string) (string, []LocationStat, error)
+
 	RecordGatewayStart(startTime time.Time) error
 	RecordGatewayCleanShutdown() error
 	GetGatewayRuns(limit int) ([]*GatewayRun, error)

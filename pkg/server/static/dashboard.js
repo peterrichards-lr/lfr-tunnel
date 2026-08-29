@@ -2047,6 +2047,30 @@ document.addEventListener('click', (e) => {
 
 let charts = {};
 
+/*
+ * Turns a bucket key into something readable (#1152).
+ *
+ * Intl.DisplayNames rather than a shipped country-name table, so nothing has to be kept
+ * current as countries are renamed, and names arrive in the reader's own language.
+ *
+ * OTHER is a reserved bucket, not a country code: it is what everything below the
+ * k-threshold is folded into, and handing it to Intl.DisplayNames would pass it straight
+ * back out as "OTHER".
+ */
+function geoBucketLabel(bucket) {
+  const code = bucket || '';
+  if (code === 'OTHER') return t('geo_other');
+  try {
+    const display = new Intl.DisplayNames([currentLanguage || 'en'], {
+      type: 'region',
+    });
+    return display.of(code) || code;
+  } catch (e) {
+    // Unavailable, or not a region code -- the raw code is still perfectly legible.
+    return code;
+  }
+}
+
 async function loadAnalytics() {
   const res = await fetch('/api/analytics');
   if (res.ok) {
@@ -2368,6 +2392,46 @@ async function loadAnalytics() {
         }
       } catch (e) {
         console.error('Failed to load region latency', e);
+      }
+
+      // Anonymous geographic distribution (#1152). Same panel as Portal V2 -- the two are
+      // an A/B test, so a reader in one and not the other is a parity defect.
+      //
+      // `available` is what separates "no MaxMind database deployed" from "deployed, but
+      // nothing has cleared the k-threshold yet". They look identical in the data and mean
+      // completely different things to an admin staring at an empty table.
+      try {
+        const geoRes = await fetch('/api/admin/analytics/locations');
+        const geoHeadline = document.getElementById(
+          'geo-distribution-headline',
+        );
+        if (geoRes.ok) {
+          const geo = (await geoRes.json()) || {};
+          const buckets = geo.buckets || [];
+          if (geoHeadline) {
+            if (!geo.available) {
+              geoHeadline.textContent = t('geo_unavailable');
+            } else if (!buckets.length) {
+              geoHeadline.textContent = t('geo_below_threshold');
+            } else {
+              geoHeadline.innerHTML = `${escapeHTML(t('geo_period'))} <strong>${escapeHTML(geo.period || '')}</strong>. ${escapeHTML(
+                t('geo_threshold_note').replace('{0}', String(geo.threshold)),
+              )}`;
+            }
+          }
+          renderTable(
+            'geo-distribution-table-body',
+            buckets,
+            (b) => `
+                                <tr>
+                                    <td style="font-weight: 600;">${escapeHTML(geoBucketLabel(b.bucket))}</td>
+                                    <td>${b.count || 0}</td>
+                                </tr>
+                            `,
+          );
+        }
+      } catch (e) {
+        console.error('Failed to load geographic distribution', e);
       }
 
       // Load Client Stats

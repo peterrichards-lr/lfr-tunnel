@@ -158,3 +158,13 @@ auto_ban: {}
 ip_blacklist: []
 trusted_proxies: []
 proxy_headers: {}
+
+# --- Anonymous geographic distribution (#1152) ---
+# Path to a MaxMind GeoLite2/GeoIP2 Country or City database. A client IP is resolved to a
+# country in memory at registration and then discarded; only per-country counts of distinct
+# users are stored, and countries below the k-threshold are folded into an "OTHER" bucket.
+#
+# Empty is the default and a supported state: the feature reports itself unavailable, the
+# analytics panel says so, and registration is unaffected. No database ships with the server
+# -- MaxMind's licence terms and the ~60MB artefact are the operator's to take on.
+geolite2_db_path: ""

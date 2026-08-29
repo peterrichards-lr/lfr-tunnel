@@ -1,6 +1,6 @@
 import { test, expect } from './utils/fixtures';
 import { getMagicLinkToken, clearMailpit } from './utils/mailpit';
-import { createApprovedUser } from './utils/nonadmin';
+import { createApprovedUser, deleteUser } from './utils/nonadmin';
 
 /**
  * V1 personal analytics for non-admins (#1561).
@@ -29,14 +29,24 @@ async function loginV1(page: any, email: string) {
 }
 
 test.describe('Portal V1 personal analytics', () => {
+  // One shared non-admin, created once and removed afterwards. Leaving fixture users behind
+  // widens the Admin Users email column for portal_v2_table_scroll, which runs later against
+  // this same database and only fails in CI, where the Linux font stack is wider than macOS's
+  // (#1525). A short local part is not sufficient on its own -- the row has to go.
+  const nonAdminEmail = `pa${Date.now().toString().slice(-6)}@lfr-demo.local`;
+
+  test.beforeAll(async () => {
+    await createApprovedUser(nonAdminEmail);
+  });
+
+  test.afterAll(async () => {
+    await deleteUser(nonAdminEmail);
+  });
+
   test('a non-admin can reach Analytics and sees their own usage', async ({
     page,
   }) => {
-    // Short local part: a longer address widens the Admin Users table and breaks
-    // portal_v2_table_scroll, which runs later against this same database, and only in CI.
-    const email = `pa${Date.now().toString().slice(-6)}@lfr-demo.local`;
-    await createApprovedUser(email);
-    await loginV1(page, email);
+    await loginV1(page, nonAdminEmail);
 
     const link = page.locator('#nav-analytics-personal');
     await expect(link).toBeVisible();
@@ -70,9 +80,7 @@ test.describe('Portal V1 personal analytics', () => {
   test('the admin-only tabs are still refused to a non-admin', async ({
     page,
   }) => {
-    const email = `pb${Date.now().toString().slice(-6)}@lfr-demo.local`;
-    await createApprovedUser(email);
-    await loginV1(page, email);
+    await loginV1(page, nonAdminEmail);
 
     // Removing 'analytics' from ADMIN_ONLY_TABS must not have opened the rest of that list.
     await page.goto('/portal/users');

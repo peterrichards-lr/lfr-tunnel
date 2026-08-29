@@ -1871,6 +1871,7 @@ const ADMIN_ONLY_TABS = [
   'backups',
   'network-health',
   'maintenance',
+  'custom-domains',
 ];
 
 // 'analytics' was on that list and should not have been (#1561). The rule above holds for
@@ -2002,6 +2003,7 @@ function showTab(tabName, skipHistory = false) {
   if (tabName === 'tunnels') loadTunnels();
   if (tabName === 'reservations') loadReservations();
   if (tabName === 'analytics') loadAnalytics();
+  if (tabName === 'custom-domains') loadCustomDomains();
   if (tabName === 'overview') {
     loadWhatsNew();
     loadVersionDetails();
@@ -2997,6 +2999,119 @@ async function loadMaintenanceStatus() {
     }
   } catch (e) {
     console.error('Failed to load maintenance status', e);
+  }
+}
+
+// Custom Domains (#1559). V2 has shown this since the vanity-domain work; V1 had only the
+// on/off hook toggle in System Settings, so an admin could enable custom domains but not see
+// whether any given one provisioned, and could not retry a failure without SSHing to the box.
+//
+// The stage semantics mirror V2's exactly so the two portals cannot disagree about whether a
+// domain is healthy: a stage is failed when failed_stage names it, done when its timestamp is
+// set, and otherwise simply not reached yet.
+function vanityStageCell(status, stage, timestamp) {
+  if (status.failed_stage === stage) {
+    const why = status.error_message || t('vanity_status_failed', 'Failed');
+    return `<td style="text-align:center;" title="${escapeHTML(why)}"><span style="color: var(--danger);">✕</span></td>`;
+  }
+  if (timestamp) {
+    return `<td style="text-align:center;" title="${escapeHTML(renderTimestamp(timestamp))}"><span style="color: var(--success);">✓</span></td>`;
+  }
+  const pending = t('vanity_status_not_reached', 'Not yet reached');
+  return `<td style="text-align:center;" title="${escapeHTML(pending)}"><span style="color: var(--text-muted);">○</span></td>`;
+}
+
+function vanitySummary(status) {
+  if (status.failed_stage) {
+    const why =
+      status.error_message || t('vanity_status_unknown_error', 'Unknown error');
+    return `${t('vanity_status_summary_failed', 'Failed')} (${status.failed_stage}): ${why}`;
+  }
+  if (status.live_at) {
+    return `${t('vanity_status_summary_live', 'Live since')} ${renderTimestamp(status.live_at)}`;
+  }
+  if (status.cert_issued_at) {
+    return t(
+      'vanity_status_summary_cert',
+      'Certificate issued, finishing setup...',
+    );
+  }
+  if (status.nginx_config_at) {
+    return t('vanity_status_summary_nginx', 'Requesting certificate...');
+  }
+  return t('vanity_status_summary_requested', 'Setup starting...');
+}
+
+async function loadCustomDomains() {
+  const tbody = document.getElementById('custom-domains-table-body');
+  if (!tbody) return;
+  const res = await fetch('/api/admin/vanity-domain-status');
+  if (!res.ok) {
+    tbody.innerHTML =
+      '<tr><td colspan="8" style="text-align:center;opacity:0.6;">Failed to load custom domains.</td></tr>';
+    return;
+  }
+  const domains = (await res.json()) || [];
+  if (!domains.length) {
+    tbody.innerHTML =
+      '<tr><td colspan="8" style="text-align:center;opacity:0.6;">No custom domains have been registered yet.</td></tr>';
+    return;
+  }
+  renderTable('custom-domains-table-body', domains, (d) => {
+    const host = escapeHTML(d.full_host);
+    return `<tr>
+                    <td style="font-family:monospace; font-size:0.85em;">${host}</td>
+                    <td style="font-size:0.85em; color: var(--text-muted);">${escapeHTML(d.user_id || '')}</td>
+                    ${vanityStageCell(d, 'requested', d.requested_at)}
+                    ${vanityStageCell(d, 'nginx_config', d.nginx_config_at)}
+                    ${vanityStageCell(d, 'cert_issued', d.cert_issued_at)}
+                    ${vanityStageCell(d, 'live', d.live_at)}
+                    <td style="font-size:0.85em;">${escapeHTML(vanitySummary(d))}</td>
+                    <td>
+                        <div class="action-menu">
+                            <button class="action-menu-btn" onclick="toggleActionMenu('menu-vd-${host}', event)">⋮</button>
+                            <div id="menu-vd-${host}" class="action-menu-content">
+                                <button class="action-menu-item" onclick="retryCustomDomain('${host}')">🔄 Retry</button>
+                                <button class="action-menu-item danger" onclick="removeCustomDomain('${host}')">Remove</button>
+                            </div>
+                        </div>
+                    </td>
+                </tr>`;
+  });
+}
+
+async function retryCustomDomain(host) {
+  const res = await fetch(
+    `/api/admin/vanity-domain-status/${encodeURIComponent(host)}/retry`,
+    { method: 'POST' },
+  );
+  if (res.ok) {
+    showToast(t('vanity_retry_started', 'Retry started'), 'success');
+    await loadCustomDomains();
+  } else {
+    showToast(t('vanity_retry_failed', 'Failed to retry'), 'error');
+  }
+}
+
+async function removeCustomDomain(host) {
+  // Confirmed because it is destructive and not obviously so from the menu: removing tears the
+  // domain's nginx config down, so a working domain stops resolving.
+  if (
+    !confirm(
+      `Remove ${host}?\n\nThis tears down its nginx configuration. A domain that is currently live will stop working.`,
+    )
+  ) {
+    return;
+  }
+  const res = await fetch(
+    `/api/admin/vanity-domain-status/${encodeURIComponent(host)}/remove`,
+    { method: 'POST' },
+  );
+  if (res.ok) {
+    showToast(t('vanity_removed', 'Custom domain removed'), 'success');
+    await loadCustomDomains();
+  } else {
+    showToast(t('vanity_remove_failed', 'Failed to remove'), 'error');
   }
 }
 

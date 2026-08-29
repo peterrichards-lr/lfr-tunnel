@@ -226,6 +226,7 @@
                     </button>
                     <div id="section-maintenance" class="sidebar-section-content">
                         <a id="nav-network-health" class="nav-item" data-i18n="sidebar_edge_gateways" href="/portal/network-health">Edge Gateways</a>
+                        <a id="nav-custom-domains" class="nav-item" data-i18n="sidebar_custom_domains" href="/portal/custom-domains">Custom Domains</a>
                         <a id="nav-backups" class="nav-item" data-i18n="sidebar_backups" href="/portal/backups">Database Backups</a>
                         <a id="nav-maintenance" class="nav-item" data-i18n="sidebar_maintenance_mode" href="/portal/maintenance">Gateway Maintenance</a>
                     </div>
@@ -758,6 +759,33 @@
             </div>
 
             <!-- Database Backups Tab -->
+            <!-- Custom Domains (#1559). V2 has had this since the vanity-domain work; V1 only
+                 ever had the on/off hook toggle in System Settings, which configures the feature
+                 without showing whether any given domain actually provisioned. The three stage
+                 columns are the points where provisioning fails -- nginx config written, cert
+                 issued, domain live -- and Retry/Remove are how an admin responds. -->
+            <div id="tab-custom-domains" class="hidden">
+                <div class="header">
+                    <h2 data-i18n="custom_domains_title">Custom Domains</h2>
+                </div>
+                <p style="color: var(--text-muted); margin-bottom: 24px; font-size: 14px;" data-i18n="custom_domains_desc">Provisioning state of every registered custom domain. A stage shows a cross when it is where setup failed.</p>
+                <div class="glass table-container">
+                    <table>
+                        <thead><tr>
+                            <th data-sort="full_host" data-i18n="th_domain">Domain</th>
+                            <th data-sort="user_id" data-i18n="th_owner">Owner</th>
+                            <th data-i18n="th_requested">Requested</th>
+                            <th data-i18n="th_nginx_config">Nginx Config</th>
+                            <th data-i18n="th_cert_issued">Cert Issued</th>
+                            <th data-i18n="th_live">Live</th>
+                            <th data-i18n="th_summary">Summary</th>
+                            <th data-i18n="th_actions">Actions</th>
+                        </tr></thead>
+                        <tbody id="custom-domains-table-body"><tr><td colspan="8" style="text-align:center;opacity:0.6;">Loading...</td></tr></tbody>
+                    </table>
+                </div>
+            </div>
+
             <div id="tab-backups" class="hidden">
                 <div class="header" style="display: flex; justify-content: space-between; align-items: center;">
                     <h2>Database Backups</h2>

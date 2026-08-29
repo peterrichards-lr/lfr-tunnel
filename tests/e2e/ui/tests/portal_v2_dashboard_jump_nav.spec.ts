@@ -42,6 +42,13 @@ test.describe('Portal V2 Overview jump navigation', () => {
 
   test('every nav entry points at a section that exists', async ({ page }) => {
     const nav = page.getByRole('navigation', { name: 'Dashboard sections' });
+
+    // evaluateAll resolves once against whatever is in the DOM at that instant -- it does not
+    // auto-wait like a web-first assertion does. Without this the read could land before the nav
+    // rendered, return [], and fail on the length check below while the nav was perfectly fine
+    // (#1564). The test above passes in the same situation because toHaveCount retries.
+    await expect(nav.locator('a').first()).toBeAttached();
+
     const hrefs = await nav
       .locator('a')
       .evaluateAll((links) => links.map((l) => l.getAttribute('href') || ''));

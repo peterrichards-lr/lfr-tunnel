@@ -8,8 +8,49 @@ import (
 )
 
 // RunCommand executes a local command and prints output to stdout/stderr.
+// secretFlags names flags whose *following* argument is a credential. The echo below prints
+// every argument it is given, so without this a caller that passes a password inline leaks it
+// to stdout -- and from there to scrollback, a piped log, or a CI transcript (#1555).
+//
+// This lives in the runner rather than in each caller deliberately. Redacting at the call site
+// only fixes the callers that exist today; the next one to pass a credential would reintroduce
+// the leak silently, which is exactly how this one survived.
+//
+// Redaction is defence in depth, NOT the primary fix. An argument is visible in the process
+// table to any local user for as long as the command runs, and no amount of not-printing it
+// changes that. Prefer the file-based option a tool offers (osslsigncode -readpass, gpg
+// --passphrase-file) so the secret never reaches argv at all.
+var secretFlags = map[string]struct{}{
+	"-pass":        {},
+	"-p":           {},
+	"--password":   {},
+	"--passphrase": {},
+	"--token":      {},
+	"--secret":     {},
+	"--access-key": {},
+}
+
+// redactArgs renders a command's arguments for display, masking the value after any flag in
+// secretFlags. It never mutates the arguments actually passed to the process.
+func redactArgs(args []string) string {
+	shown := make([]string, len(args))
+	maskNext := false
+	for i, a := range args {
+		if maskNext {
+			shown[i] = "<redacted>"
+			maskNext = false
+			continue
+		}
+		shown[i] = a
+		if _, ok := secretFlags[a]; ok {
+			maskNext = true
+		}
+	}
+	return strings.Join(shown, " ")
+}
+
 func RunCommand(name string, args ...string) error {
-	fmt.Printf("==> Executing: %s %s\n", name, strings.Join(args, " "))
+	fmt.Printf("==> Executing: %s %s\n", name, redactArgs(args))
 	cmd := exec.Command(name, args...)
 	cmd.Stdout = os.Stdout
 	cmd.Stderr = os.Stderr
@@ -18,7 +59,7 @@ func RunCommand(name string, args ...string) error {
 
 // RunCommandWithEnv executes a command with additional environment variables.
 func RunCommandWithEnv(env []string, name string, args ...string) error {
-	fmt.Printf("==> Executing (with env): %s %s\n", name, strings.Join(args, " "))
+	fmt.Printf("==> Executing (with env): %s %s\n", name, redactArgs(args))
 	cmd := exec.Command(name, args...)
 	cmd.Env = append(os.Environ(), env...)
 	cmd.Stdout = os.Stdout

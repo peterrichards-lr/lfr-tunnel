@@ -131,7 +131,12 @@ func SignCommand(args []string) {
 		}
 
 		if signPass != "" {
-			args = append(args, "-pass", signPass)
+			// -readpass rather than -pass: the password goes in a 0600 file that osslsigncode
+			// reads, so it never appears on argv where `ps` would show it (#1555).
+			passFile, err := writeSecretFile(signPass, "signpass-*")
+			CheckFatal(err, "failed to write the Windows signing password to a temp file")
+			tempFiles = append(tempFiles, passFile)
+			args = append(args, "-readpass", passFile)
 		}
 
 		args = append(args, "-n", "Liferay Tunnel", "-i", "https://github.com/peterrichards-lr/lfr-tunnel", "-in", in, "-out", out)
@@ -148,6 +153,15 @@ func SignCommand(args []string) {
 
 	// 3. Linux GPG Signing
 	if skipGPG != "true" && gpgKey != "skip" {
+		// One passphrase file for the import and both detached signatures, rather than
+		// --passphrase on each invocation, which would put it on argv three times (#1555).
+		gpgPassFile := ""
+		if gpgPass != "" {
+			var err error
+			gpgPassFile, err = writeSecretFile(gpgPass, "gpgpass-*")
+			CheckFatal(err, "failed to write the GPG passphrase to a temp file")
+			defer os.Remove(gpgPassFile)
+		}
 		if gpgSecret != "" {
 			if !fileExists(gpgSecret) && strings.Contains(gpgSecret, "-----BEGIN") {
 				tmpSec, _ := os.CreateTemp("", "gpg-*.asc")
@@ -161,8 +175,8 @@ func SignCommand(args []string) {
 
 			// Import the secret key into GPG
 			importArgs := []string{"--batch", "--yes"}
-			if gpgPass != "" {
-				importArgs = append(importArgs, "--pinentry-mode", "loopback", "--passphrase", gpgPass)
+			if gpgPassFile != "" {
+				importArgs = append(importArgs, "--pinentry-mode", "loopback", "--passphrase-file", gpgPassFile)
 			}
 			importArgs = append(importArgs, "--import", gpgSecret)
 			err := RunCommand("gpg", importArgs...)
@@ -181,8 +195,8 @@ func SignCommand(args []string) {
 
 			var gpgArgs []string
 			gpgArgs = append(gpgArgs, "--batch", "--yes")
-			if gpgPass != "" {
-				gpgArgs = append(gpgArgs, "--pinentry-mode", "loopback", "--passphrase", gpgPass)
+			if gpgPassFile != "" {
+				gpgArgs = append(gpgArgs, "--pinentry-mode", "loopback", "--passphrase-file", gpgPassFile)
 			}
 			if gpgKey != "" {
 				gpgArgs = append(gpgArgs, "--local-user", gpgKey)
@@ -206,6 +220,29 @@ func SignCommand(args []string) {
 	CheckFatal(err, "Failed to generate checksums")
 
 	fmt.Println("=== Client Signing Complete! ===")
+}
+
+// writeSecretFile puts a credential in a 0600 file so it can be handed to a tool by path
+// instead of on the command line.
+//
+// The point is argv, not the echo. While a process runs, its arguments are readable by any
+// local user through the process table, so a password passed as `-pass <value>` is exposed
+// whether or not anything prints it. Redacting the log fixes the visible half only (#1555).
+func writeSecretFile(content, pattern string) (string, error) {
+	f, err := os.CreateTemp("", pattern)
+	if err != nil {
+		return "", err
+	}
+	defer f.Close()
+	// CreateTemp already makes the file 0600; being explicit means a change to that default
+	// cannot quietly widen a credential file.
+	if err := f.Chmod(0o600); err != nil {
+		return "", err
+	}
+	if _, err := f.WriteString(content); err != nil {
+		return "", err
+	}
+	return f.Name(), nil
 }
 
 func fileExists(filename string) bool {

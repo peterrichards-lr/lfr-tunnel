@@ -101,6 +101,11 @@ test.describe('Portal V2 heading anchors', () => {
   });
 
   test('the target of every heading link exists', async ({ page }) => {
+    // Same one-shot read as the jump-nav spec had (#1564): evaluateAll does not auto-wait, so
+    // without this it can resolve before the anchors are injected and fail on the length check
+    // below while nothing is actually wrong.
+    await expect(page.locator('a.heading-anchor-link').first()).toBeAttached();
+
     const hrefs = await page
       .locator('a.heading-anchor-link')
       .evaluateAll((els) =>

@@ -225,6 +225,7 @@
                     </button>
                     <div id="section-reporting" class="sidebar-section-content">
                         <a id="nav-analytics" class="nav-item" data-i18n="sidebar_analytics" href="/portal/analytics">Analytics</a>
+                        <a id="nav-telemetry" class="nav-item" data-i18n="sidebar_telemetry" href="/portal/telemetry">Telemetry</a>
                         <a id="nav-audit" class="nav-item" data-i18n="sidebar_audit" href="/portal/audit">Audit Logs</a>
                         <a id="nav-magic" class="nav-item" data-i18n="sidebar_magic" href="/portal/magic">Magic Links</a>
                     </div>
@@ -471,6 +472,50 @@
             </div>
 
             
+            <!-- Telemetry Tab (#1559). V1 has consumed /api/portal/telemetry/ws all along to keep
+                 the dashboard current, but only ever used the payload to refresh other views --
+                 it had no telemetry screen, while V2 has had one. Same socket, same payload;
+                 this is a reader for data V1 was already receiving. -->
+            <div id="tab-telemetry" class="hidden">
+                <div class="header">
+                    <h2 data-i18n="telemetry_title">Real-time Telemetry</h2>
+                </div>
+                <p style="color: var(--text-muted); margin-bottom: 24px; font-size: 14px;" data-i18n="telemetry_desc">Live tunnel connections, updated as the gateway reports them.</p>
+
+                <div class="responsive-grid" style="display: grid; grid-template-columns: repeat(3, 1fr); gap: 24px; margin-bottom: 24px;">
+                    <div class="glass" style="padding: 16px;">
+                        <div style="color: var(--text-muted); font-size: 12px; text-transform: uppercase; font-weight: 600;" data-i18n="telemetry_active_tunnels">Active Tunnels</div>
+                        <div id="telemetry-active-tunnels" style="font-size: 28px; font-weight: 700; margin-top: 4px;">0</div>
+                    </div>
+                    <div class="glass" style="padding: 16px;">
+                        <div style="color: var(--text-muted); font-size: 12px; text-transform: uppercase; font-weight: 600;" data-i18n="telemetry_total_bandwidth">Total Live Traffic</div>
+                        <div id="telemetry-total-bandwidth" style="font-size: 28px; font-weight: 700; margin-top: 4px;">0 B</div>
+                    </div>
+                    <!-- The aggregate V1 had nowhere: how many gateways are actually carrying
+                         traffic, as distinct from how many exist. -->
+                    <div class="glass" style="padding: 16px;">
+                        <div style="color: var(--text-muted); font-size: 12px; text-transform: uppercase; font-weight: 600;" data-i18n="telemetry_active_nodes">Active Gateways</div>
+                        <div id="telemetry-active-nodes" style="font-size: 28px; font-weight: 700; margin-top: 4px;">0</div>
+                    </div>
+                </div>
+
+                <h3 style="margin-bottom: 16px; font-size: 16px;" data-i18n="telemetry_tunnels_list">Real-Time Tunnel Connections</h3>
+                <div class="glass table-container">
+                    <table>
+                        <thead><tr>
+                            <th data-sort="full_host" data-i18n="th_target_host">Target Host</th>
+                            <th data-sort="node_id" data-i18n="th_node">Node</th>
+                            <th data-sort="client_ip" data-i18n="th_client_ip">Client IP</th>
+                            <th data-sort="bytes_in" data-i18n="th_data_in">Data In</th>
+                            <th data-sort="bytes_out" data-i18n="th_data_out">Data Out</th>
+                            <th data-i18n="th_visitors">Visitors</th>
+                            <th data-sort="status" data-i18n="th_status">Status</th>
+                        </tr></thead>
+                        <tbody id="telemetry-table-body"><tr><td colspan="7" style="text-align:center;opacity:0.6;">Waiting for telemetry...</td></tr></tbody>
+                    </table>
+                </div>
+            </div>
+
             <!-- Analytics Tab -->
             <div id="tab-analytics" class="hidden">
                 <div class="header" style="display: flex; justify-content: space-between; align-items: center;">

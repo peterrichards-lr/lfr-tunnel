@@ -54,6 +54,8 @@ INSTALL_DIR="${LFR_TUNNEL_MACOS_ARM64_INSTALL_DIR:-${LFR_TUNNEL_MACOS_AMD64_INST
 # and a tilde inside a quoted variable is NOT expanded by the shell -- `mkdir -p "$INSTALL_DIR"`
 # would create a directory literally named "~" in whatever directory the installer happened to be
 # run from, and install the client there rather than in the user's home folder.
+# shellcheck disable=SC2088  # the literal tilde is the point: these are case patterns matching
+# a value that arrives unexpanded from the gateway, which is the bug being corrected here.
 case "$INSTALL_DIR" in
   "~") INSTALL_DIR="$HOME" ;;
   "~/"*) INSTALL_DIR="${HOME}/${INSTALL_DIR#\~/}" ;;

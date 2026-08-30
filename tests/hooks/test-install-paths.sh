@@ -66,6 +66,8 @@ else
 fi
 
 # Exercised rather than only grepped for, because the quoting is what makes it work or not.
+# shellcheck disable=SC2088  # literal tildes throughout, deliberately: this mirrors install.sh's
+# own patterns and feeds them the unexpanded value the gateway actually sends.
 probe_expand() {
   INSTALL_DIR="$1"
   case "$INSTALL_DIR" in
@@ -74,6 +76,7 @@ probe_expand() {
   esac
   printf '%s' "$INSTALL_DIR"
 }
+# shellcheck disable=SC2088  # the unexpanded tilde is the input under test.
 if [ "$(probe_expand '~/liferay/lfr-tunnel')" = "${HOME}/liferay/lfr-tunnel" ]; then
   pass "a templated ~/liferay/lfr-tunnel resolves into the home folder"
 else

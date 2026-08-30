@@ -44,7 +44,10 @@ func getCanonicalExePath() string {
 		}
 	}
 
-	defaultExe := filepath.Join(home, "runningpoc", "bin", "lfr-tunnel")
+	// Matches the installers' default (#1591). The EDR exclusion is the wildcard
+	// */liferay/lfr-tunnel/lfr-tunnel, so a service pointed anywhere else runs an unexcluded
+	// binary even when the interactive client is fine.
+	defaultExe := filepath.Join(home, "liferay", "lfr-tunnel", "lfr-tunnel")
 	if runtime.GOOS == "windows" {
 		defaultExe += ".exe"
 	}

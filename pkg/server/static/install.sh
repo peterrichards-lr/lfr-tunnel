@@ -42,7 +42,10 @@ esac
 
 # Fallback if templating failed or script was executed directly from raw source
 case "$DEFAULT_INSTALL_DIR" in
-  ""|\{\{*) DEFAULT_INSTALL_DIR="${HOME}/runningpoc/bin" ;;
+  # The path agreed with the S1 team (#1591). The EDR exclusion is the wildcard
+  # */liferay/lfr-tunnel/lfr-tunnel, so the last two directory segments and the binary name are
+  # all load-bearing -- installing anywhere else leaves the client unexcluded and quarantined.
+  ""|\{\{*) DEFAULT_INSTALL_DIR="${HOME}/liferay/lfr-tunnel" ;;
 esac
 
 INSTALL_DIR="${LFR_TUNNEL_MACOS_ARM64_INSTALL_DIR:-${LFR_TUNNEL_MACOS_AMD64_INSTALL_DIR:-${LFR_TUNNEL_LINUX_AMD64_INSTALL_DIR:-${LFR_TUNNEL_INSTALL_DIR:-${LFT_INSTALL_DIR:-${DEFAULT_INSTALL_DIR}}}}}}"

@@ -1,5 +1,28 @@
 [
   {
+    "version": "v1.48.10",
+    "release_date": "2026-08-30",
+    "features": [
+      "feat(portal-v1): a telemetry screen, for data V1 already receives (#1589)",
+      "feat(portal): the status-page link, in both portals (#1587)",
+      "a11y(portal-v1): give every table search box an accessible name (#1585)",
+      "a11y(portal): arrow-key movement in the sidebar, in both portals (#1583)",
+      "a11y(portal-v1): a skip link, and a main landmark to skip to (#1582)",
+      "test(e2e): wait for the nav before reading its links (#1580)",
+      "fix(portal): All Time analytics actually means all time (#1579)",
+      "feat(portal-v1): Custom Domains, so an admin can see why one failed (#1577)",
+      "fix(build): make test now fails when an untested package does not compile (#1574)",
+      "fix(test): the credential file mode assertion cannot hold on Windows (#1575)",
+      "fix(portal-v1): let a non-admin reach their own analytics (#1571)",
+      "feat(portal-v2): Gateway Maintenance, the counterpart of V1's screen (#1570)",
+      "docs(e2e): fixture cleanup is the fix, not a short identifier (#1572)",
+      "feat(portal): Database Backups in V2, and the full capability in both (#1569)",
+      "fix(portal-v1): a time range control on Analytics, aligned with Export PDF (#1566)",
+      "fix(portal-v2): render modals through a portal so they land on screen (#1563)",
+      "sec(ops): keep signing credentials off argv and out of the log (#1557)"
+    ]
+  },
+  {
     "version": "v1.48.9",
     "release_date": "2026-08-29",
     "features": [
@@ -164,30 +187,6 @@
       "fix(portal-v2): give the admin subdomains nav its own i18n key (#1209)",
       "feat(ops): provision certificate distribution, so a renewal reaches the edges (#1302)",
       "fix(ops): refuse to sign or publish artefacts that did not come from the current source (#1279)"
-    ]
-  },
-  {
-    "version": "v1.48.5",
-    "release_date": "2026-08-25",
-    "features": [
-      "fix(server): terminate unserved domain miss traffic locally at the edge (#1319) (#1320)",
-      "docs: record the state of the cluster resilience work before a restart (#1318)",
-      "feat(server): cross-node routing table and proxying during DNS propagation (#1249) (#1317)",
-      "fix(ops): installer scripts fail LDM auto-discovery and Portal V2 guide modal rendering (#1311) (#1313)",
-      "fix(ops): make edge DDNS a declared choice, not an unconditional install (#1316)",
-      "feat(ops): distribute renewed certificates from central to the edges (#1315)",
-      "feat(server): persist portal sessions so a restart does not sign everyone out (#1307)",
-      "feat(server): refuse new sessions on a gateway that is draining (#1314)",
-      "fix(client): failback prober respects cooldown so planned moves don't bounce back (#1310) (#1312)",
-      "feat(ops): drain a gateway before restarting it (#1305)",
-      "fix(ops): issue and renew certificates through Route53, not Cloudflare (#1301)",
-      "fix(ops): resolve the Route53 zone from the name being written (#1299)",
-      "fix(portal-v2): stop the Analytics time-range select clipping its own text (#1296)",
-      "feat(server): publish DNS that follows a tunnel to the gateway serving it (#1295)",
-      "fix(portal-v1): put the View As bar above the layout, and hide admin-only nav (#1292)",
-      "fix(server): stop putting the serving gateway in a tunnel's public URL (#1288)",
-      "test(e2e): run the multi-region edge harness and prove a planned move; let central say how it is reachable (#1287)",
-      "feat(config): allow an edge node's schedule to be declared statically (#1283)"
     ]
   }
 ]

@@ -49,6 +49,18 @@ case "$DEFAULT_INSTALL_DIR" in
 esac
 
 INSTALL_DIR="${LFR_TUNNEL_MACOS_ARM64_INSTALL_DIR:-${LFR_TUNNEL_MACOS_AMD64_INSTALL_DIR:-${LFR_TUNNEL_LINUX_AMD64_INSTALL_DIR:-${LFR_TUNNEL_INSTALL_DIR:-${LFT_INSTALL_DIR:-${DEFAULT_INSTALL_DIR}}}}}}"
+
+# Expand a leading tilde ourselves. The gateway templates this value in as "~/liferay/lfr-tunnel",
+# and a tilde inside a quoted variable is NOT expanded by the shell -- `mkdir -p "$INSTALL_DIR"`
+# would create a directory literally named "~" in whatever directory the installer happened to be
+# run from, and install the client there rather than in the user's home folder.
+# shellcheck disable=SC2088  # the literal tilde is the point: these are case patterns matching
+# a value that arrives unexpanded from the gateway, which is the bug being corrected here.
+case "$INSTALL_DIR" in
+  "~") INSTALL_DIR="$HOME" ;;
+  "~/"*) INSTALL_DIR="${HOME}/${INSTALL_DIR#\~/}" ;;
+esac
+
 INSTALL_PATH="${INSTALL_DIR}/lfr-tunnel"
 
 echo "Downloading lfr-tunnel for ${OS}-${ARCH}..."

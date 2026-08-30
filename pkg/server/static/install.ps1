@@ -30,6 +30,17 @@ If (-not $InstallDir) {
     $InstallDir = $DefaultInstallDir
 }
 
+# Expand a leading tilde. PowerShell only resolves "~" through its path provider, so a value
+# carrying one -- as the gateway's default does -- can otherwise land somewhere other than the
+# user's profile depending on the current location.
+#
+# Separators are deliberately NOT normalised here. The gateway sends Windows a backslash path,
+# so there is nothing to convert, and normalisation logic could not be exercised anywhere but
+# Windows -- untestable code guarding a path the EDR exclusion matches literally (#1591).
+If ($InstallDir -match '^~([\\/]|$)') {
+    $InstallDir = Join-Path $Home ($InstallDir -replace '^~[\\/]?', '')
+}
+
 If (!(Test-Path $InstallDir)) {
     Try {
         New-Item -ItemType Directory -Force -Path $InstallDir | Out-Null

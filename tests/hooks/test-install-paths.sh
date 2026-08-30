@@ -55,7 +55,48 @@ else
   fail "install.ps1 no longer names the binary lfr-tunnel.exe"
 fi
 
-# 4. What the gateway advertises. Production sets no install_dir in server-config.yaml, so these
+# 4. Tilde expansion. The gateway templates its default in as "~/liferay/lfr-tunnel", and a
+#    tilde inside a quoted shell variable is NOT expanded -- `mkdir -p "$INSTALL_DIR"` would
+#    create a directory literally named "~" wherever the installer was run from, putting the
+#    client in the working directory instead of the home folder.
+if grep -q 'INSTALL_DIR="${HOME}/${INSTALL_DIR#\\~/}"' "${REPO_ROOT}/pkg/server/static/install.sh"; then
+  pass "install.sh expands a leading tilde"
+else
+  fail "install.sh does not expand a leading tilde -- a templated ~ would create a literal '~' directory"
+fi
+
+# Exercised rather than only grepped for, because the quoting is what makes it work or not.
+# shellcheck disable=SC2088  # literal tildes throughout, deliberately: this mirrors install.sh's
+# own patterns and feeds them the unexpanded value the gateway actually sends.
+probe_expand() {
+  INSTALL_DIR="$1"
+  case "$INSTALL_DIR" in
+    "~") INSTALL_DIR="$HOME" ;;
+    "~/"*) INSTALL_DIR="${HOME}/${INSTALL_DIR#\~/}" ;;
+  esac
+  printf '%s' "$INSTALL_DIR"
+}
+# shellcheck disable=SC2088  # the unexpanded tilde is the input under test.
+if [ "$(probe_expand '~/liferay/lfr-tunnel')" = "${HOME}/liferay/lfr-tunnel" ]; then
+  pass "a templated ~/liferay/lfr-tunnel resolves into the home folder"
+else
+  fail "tilde expansion produced $(probe_expand '~/liferay/lfr-tunnel'), not ${HOME}/liferay/lfr-tunnel"
+fi
+if [ "$(probe_expand '/opt/custom')" = "/opt/custom" ]; then
+  pass "an absolute override is left alone"
+else
+  fail "tilde expansion mangled an absolute path"
+fi
+
+# 5. Windows gets a Windows-shaped default, so the installer needs no separator normalisation --
+#    logic that could not be exercised anywhere but Windows.
+if grep -qF '`~\liferay\lfr-tunnel`' "${REPO_ROOT}/pkg/server/server.go"; then
+  pass "the gateway sends Windows a backslash path"
+else
+  fail "the gateway no longer sends Windows a backslash path -- install.ps1 would need to normalise separators"
+fi
+
+# 6. What the gateway advertises. Production sets no install_dir in server-config.yaml, so these
 #    defaults are what users actually get.
 if ! grep -q 'runningpoc' "${REPO_ROOT}/pkg/server/server.go"; then
   pass "server.go carries no stale runningpoc default"
@@ -63,13 +104,20 @@ else
   fail "server.go still defaults somewhere to runningpoc"
 fi
 
-if [ "$(grep -c '"~/liferay/lfr-tunnel"' "${REPO_ROOT}/pkg/server/server.go")" -ge 4 ]; then
-  pass "server.go advertises ~/liferay/lfr-tunnel for every platform"
+# The three POSIX platforms share one value; Windows deliberately differs, checked above.
+missing_posix=""
+for plat in macos_arm64 macos_amd64 linux_amd64; do
+  if ! grep -qE "\"${plat}\":[[:space:]]+\"~/liferay/lfr-tunnel\"" "${REPO_ROOT}/pkg/server/server.go"; then
+    missing_posix="${missing_posix} ${plat}"
+  fi
+done
+if [ -z "$missing_posix" ]; then
+  pass "server.go advertises ~/liferay/lfr-tunnel for macOS and Linux"
 else
-  fail "server.go does not advertise ~/liferay/lfr-tunnel for all four platforms"
+  fail "server.go does not advertise ~/liferay/lfr-tunnel for:${missing_posix}"
 fi
 
-# 5. The service installer. A service pointed elsewhere runs an unexcluded binary even when the
+# 7. The service installer. A service pointed elsewhere runs an unexcluded binary even when the
 #    interactive client is fine, which is the harder version of this bug to notice.
 if grep -q 'filepath.Join(home, "liferay", "lfr-tunnel", "lfr-tunnel")' "${REPO_ROOT}/pkg/client/service_installer.go"; then
   pass "the service installer resolves the same path"
@@ -77,7 +125,7 @@ else
   fail "the service installer resolves a different path from the installers"
 fi
 
-# 6. The document InfoSec is handed. This is the one that was wrong before, and being wrong here
+# 8. The document InfoSec is handed. This is the one that was wrong before, and being wrong here
 #    means the exclusion someone applies does not match the binary anyone installs.
 INFOSEC="${REPO_ROOT}/docs/infosec.md"
 if grep -q '\*/liferay/lfr-tunnel/lfr-tunnel' "$INFOSEC" &&

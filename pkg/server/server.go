@@ -920,10 +920,14 @@ func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 				effectivePlatforms[k] = v
 			}
 			fallbacks := map[string]string{
-				"macos_arm64":   "~/liferay/lfr-tunnel",
-				"macos_amd64":   "~/liferay/lfr-tunnel",
-				"linux_amd64":   "~/liferay/lfr-tunnel",
-				"windows_amd64": "~/liferay/lfr-tunnel",
+				"macos_arm64": "~/liferay/lfr-tunnel",
+				"macos_amd64": "~/liferay/lfr-tunnel",
+				"linux_amd64": "~/liferay/lfr-tunnel",
+				// Backslashes for Windows. The agreed EDR exclusion is matched literally after the
+				// leading wildcard -- *\liferay\lfr-tunnel\lfr-tunnel.exe -- so handing the
+				// PowerShell installer a POSIX path would make it normalise separators itself,
+				// which is logic that cannot be exercised anywhere but Windows (#1591).
+				"windows_amd64": `~\liferay\lfr-tunnel`,
 			}
 			for key, fallback := range fallbacks {
 				if p, ok := effectivePlatforms[key]; ok {
@@ -1336,8 +1340,8 @@ func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 				return fallback
 			}
 
-			scriptStr = strings.ReplaceAll(scriptStr, "{{LFR_TUNNEL_WINDOWS_AMD64_INSTALL_DIR}}", getInstallDir("windows_amd64", "~/liferay/lfr-tunnel"))
-			scriptStr = strings.ReplaceAll(scriptStr, "{{WINDOWS_AMD64_INSTALL_DIR}}", getInstallDir("windows_amd64", "~/liferay/lfr-tunnel"))
+			scriptStr = strings.ReplaceAll(scriptStr, "{{LFR_TUNNEL_WINDOWS_AMD64_INSTALL_DIR}}", getInstallDir("windows_amd64", `~\liferay\lfr-tunnel`))
+			scriptStr = strings.ReplaceAll(scriptStr, "{{WINDOWS_AMD64_INSTALL_DIR}}", getInstallDir("windows_amd64", `~\liferay\lfr-tunnel`))
 
 			if _, err := w.Write([]byte(scriptStr)); err != nil {
 				log.Printf("[Warning] Failed to write response: %v", err)

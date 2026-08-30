@@ -920,10 +920,10 @@ func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 				effectivePlatforms[k] = v
 			}
 			fallbacks := map[string]string{
-				"macos_arm64":   "~/runningpoc/bin",
-				"macos_amd64":   "~/runningpoc/bin",
-				"linux_amd64":   "~/runningpoc/bin",
-				"windows_amd64": "~/runningpoc/bin",
+				"macos_arm64":   "~/liferay/lfr-tunnel",
+				"macos_amd64":   "~/liferay/lfr-tunnel",
+				"linux_amd64":   "~/liferay/lfr-tunnel",
+				"windows_amd64": "~/liferay/lfr-tunnel",
 			}
 			for key, fallback := range fallbacks {
 				if p, ok := effectivePlatforms[key]; ok {
@@ -1303,13 +1303,13 @@ func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 				return fallback
 			}
 
-			scriptStr = strings.ReplaceAll(scriptStr, "{{LFR_TUNNEL_MACOS_AMD64_INSTALL_DIR}}", getInstallDir("macos_amd64", "~/runningpoc/bin"))
-			scriptStr = strings.ReplaceAll(scriptStr, "{{LFR_TUNNEL_MACOS_ARM64_INSTALL_DIR}}", getInstallDir("macos_arm64", "~/runningpoc/bin"))
-			scriptStr = strings.ReplaceAll(scriptStr, "{{LFR_TUNNEL_LINUX_AMD64_INSTALL_DIR}}", getInstallDir("linux_amd64", "~/runningpoc/bin"))
+			scriptStr = strings.ReplaceAll(scriptStr, "{{LFR_TUNNEL_MACOS_AMD64_INSTALL_DIR}}", getInstallDir("macos_amd64", "~/liferay/lfr-tunnel"))
+			scriptStr = strings.ReplaceAll(scriptStr, "{{LFR_TUNNEL_MACOS_ARM64_INSTALL_DIR}}", getInstallDir("macos_arm64", "~/liferay/lfr-tunnel"))
+			scriptStr = strings.ReplaceAll(scriptStr, "{{LFR_TUNNEL_LINUX_AMD64_INSTALL_DIR}}", getInstallDir("linux_amd64", "~/liferay/lfr-tunnel"))
 			// Backward compatibility fallback for legacy non-prefixed placeholders
-			scriptStr = strings.ReplaceAll(scriptStr, "{{MACOS_AMD64_INSTALL_DIR}}", getInstallDir("macos_amd64", "~/runningpoc/bin"))
-			scriptStr = strings.ReplaceAll(scriptStr, "{{MACOS_ARM64_INSTALL_DIR}}", getInstallDir("macos_arm64", "~/runningpoc/bin"))
-			scriptStr = strings.ReplaceAll(scriptStr, "{{LINUX_AMD64_INSTALL_DIR}}", getInstallDir("linux_amd64", "~/runningpoc/bin"))
+			scriptStr = strings.ReplaceAll(scriptStr, "{{MACOS_AMD64_INSTALL_DIR}}", getInstallDir("macos_amd64", "~/liferay/lfr-tunnel"))
+			scriptStr = strings.ReplaceAll(scriptStr, "{{MACOS_ARM64_INSTALL_DIR}}", getInstallDir("macos_arm64", "~/liferay/lfr-tunnel"))
+			scriptStr = strings.ReplaceAll(scriptStr, "{{LINUX_AMD64_INSTALL_DIR}}", getInstallDir("linux_amd64", "~/liferay/lfr-tunnel"))
 
 			if _, err := w.Write([]byte(scriptStr)); err != nil {
 				log.Printf("[Warning] Failed to write response: %v", err)
@@ -1336,8 +1336,8 @@ func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 				return fallback
 			}
 
-			scriptStr = strings.ReplaceAll(scriptStr, "{{LFR_TUNNEL_WINDOWS_AMD64_INSTALL_DIR}}", getInstallDir("windows_amd64", "~/runningpoc/bin"))
-			scriptStr = strings.ReplaceAll(scriptStr, "{{WINDOWS_AMD64_INSTALL_DIR}}", getInstallDir("windows_amd64", "~/runningpoc/bin"))
+			scriptStr = strings.ReplaceAll(scriptStr, "{{LFR_TUNNEL_WINDOWS_AMD64_INSTALL_DIR}}", getInstallDir("windows_amd64", "~/liferay/lfr-tunnel"))
+			scriptStr = strings.ReplaceAll(scriptStr, "{{WINDOWS_AMD64_INSTALL_DIR}}", getInstallDir("windows_amd64", "~/liferay/lfr-tunnel"))
 
 			if _, err := w.Write([]byte(scriptStr)); err != nil {
 				log.Printf("[Warning] Failed to write response: %v", err)

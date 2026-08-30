@@ -32,7 +32,7 @@ Your tunnel will be reachable at:
 
 ### Method A: Native Installer Script (Recommended Native)
 
-This script downloads the officially signed client binary with Apple Developer hardened runtime signatures directly into the EDR-whitelisted canonical installation directory (`~/runningpoc/bin/lfr-tunnel` or `C:\Users\<username>\runningpoc\bin\lfr-tunnel.exe`):
+This script downloads the officially signed client binary with Apple Developer hardened runtime signatures directly into the EDR-whitelisted canonical installation directory (`$HOME/liferay/lfr-tunnel/lfr-tunnel` or `%USERPROFILE%\liferay\lfr-tunnel\lfr-tunnel.exe`):
 
 * **macOS / Linux:** `curl -fsSL https://tunnel.lfr-demo.se/install.sh | sh`
 * **Windows (PowerShell):** `irm https://tunnel.lfr-demo.se/install.ps1 | iex`

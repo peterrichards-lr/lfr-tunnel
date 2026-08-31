@@ -3230,3 +3230,23 @@ input[type='checkbox'] {
   grid-template-columns: 1fr 1fr;
   gap: var(--spacing-md);
 }
+
+/* Analytics toolbar (#1604), matching V1's fix in #1560.
+   The range select and Export PDF sat at different offsets: .input-field carries a
+   margin-bottom intended for stacked forms, which the select kept inside this row while the
+   button had none. Flex already equalised their heights -- it was the margin that pushed one
+   box down.
+
+   align-items: stretch keeps the two the same height by construction rather than by matching
+   declarations, and unlike a fixed pixel height it still fits the label when the browser text
+   size is increased, which is the usual reason this comes back. */
+.analytics-toolbar {
+  display: flex;
+  align-items: stretch;
+  gap: var(--spacing-md);
+}
+.analytics-toolbar > .analytics-control {
+  box-sizing: border-box;
+  width: auto;
+  margin: 0;
+}

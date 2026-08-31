@@ -269,9 +269,13 @@ export default function AdminAnalytics() {
             ? t('system_analytics', 'System Analytics')
             : t('my_usage', 'My Usage')}
         </h1>
-        <div className="flex gap-md">
+        {/* A named toolbar rather than a bare flex row (#1604). .input-field carries a
+            margin-bottom meant for stacked forms, which the select kept here while the button
+            had none -- so the two sat at different offsets even though flex already equalised
+            their heights. Same cause and same fix as V1's, in #1560. */}
+        <div className="analytics-toolbar">
           <select
-            className="input-field w-auto px-md"
+            className="input-field analytics-control w-auto px-md"
             value={timeRange}
             onChange={(e) => setTimeRange(e.target.value)}
             aria-label={t('time_range', 'Time range')}
@@ -282,7 +286,7 @@ export default function AdminAnalytics() {
             <option value="0">All Time</option>
           </select>
           <button
-            className="btn btn-secondary w-auto inline-flex items-center gap-sm"
+            className="btn btn-secondary analytics-control w-auto inline-flex items-center gap-sm"
             onClick={handlePrint}
           >
             📄 {t('export_pdf', 'Export PDF')}

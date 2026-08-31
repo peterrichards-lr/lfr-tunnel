@@ -162,6 +162,11 @@
          sidebar to reach the content on every navigation while a V2 user pressed Tab once. -->
     <a href="#main-content" class="skip-link" data-i18n="skip_to_content">Skip to content</a>
 
+    <!-- A visible way into the shortcuts list (#1611). One reachable only by the shortcut it
+         documents is no use to anyone who does not already know the shortcut, which is the
+         problem being fixed. -->
+    <button type="button" id="shortcuts-trigger" class="shortcuts-trigger" onclick="openShortcutsOverlay()" aria-label="Keyboard shortcuts" title="Keyboard shortcuts">?</button>
+
     <div id="view-as-bar" class="hidden"></div>
 
     <!-- V2 promo (#1200). Deliberately in normal flow, NOT position:fixed. As a fixed

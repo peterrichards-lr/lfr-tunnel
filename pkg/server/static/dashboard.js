@@ -2033,6 +2033,154 @@ function sectionFromLocation() {
 //
 // Screen readers intercept arrow keys in browse mode before the page sees them, so this does not
 // fight them: the handler simply never runs in that mode.
+// Keyboard shortcuts and the overlay documenting them (#1611). Mirrors V2's set exactly -- the
+// portals are an A/B test, and a shortcut that works in one arm is a capability difference.
+//
+// `g` then a letter rather than Ctrl+Shift+<letter>: the latter collides with the browser and
+// does so differently per browser (D is bookmark-all-tabs in Chrome and responsive design mode in
+// Firefox, T reopens a tab, I/J/C/K are developer tools). The g-prefix is the GitHub/Gmail
+// pattern and takes nothing from the browser.
+const SHORTCUT_DESTINATIONS = [
+  { key: 'd', nav: 'nav-overview', label: 'Dashboard' },
+  { key: 'a', nav: 'nav-analytics', label: 'Analytics' },
+  { key: 't', nav: 'nav-tokens', label: 'API Tokens' },
+  { key: 'u', nav: 'nav-users', label: 'Users' },
+  { key: 's', nav: 'nav-system', label: 'System Settings' },
+  { key: 'b', nav: 'nav-backups', label: 'Database Backups' },
+  { key: 'm', nav: 'nav-maintenance', label: 'Gateway Maintenance' },
+  { key: 'n', nav: 'nav-network-health', label: 'Network Health' },
+  { key: 'l', nav: 'nav-audit', label: 'Audit Logs' },
+  { key: 'c', nav: 'nav-custom-domains', label: 'Custom Domains' },
+];
+
+// True while the user is typing, when a plain key must be left alone.
+function shortcutsAreTyping(el) {
+  if (!el) return false;
+  const tag = el.tagName ? el.tagName.toLowerCase() : '';
+  if (tag === 'input' || tag === 'textarea' || tag === 'select') return true;
+  return !!el.isContentEditable;
+}
+
+// Only offer a destination the user can actually reach: the nav item is hidden for roles that
+// are not allowed there, so hidden means "not for you" without duplicating the role rules here.
+function shortcutIsAvailable(entry) {
+  const el = document.getElementById(entry.nav);
+  return !!el && el.offsetParent !== null;
+}
+
+function buildShortcutsOverlay() {
+  const rows = SHORTCUT_DESTINATIONS.filter(shortcutIsAvailable)
+    .map(
+      (d) =>
+        `<div class="shortcuts-row"><dt><kbd>g ${escapeHTML(d.key)}</kbd></dt><dd>${escapeHTML(d.label)}</dd></div>`,
+    )
+    .join('');
+
+  // The sidebar keys are listed but owned by initSidebarArrowKeys (#1562). The overlay answers
+  // "what can I do with the keyboard", not "what did this function register".
+  const navRows = [
+    ['&uarr; &darr;', 'Move between sidebar links'],
+    ['Home / End', 'First or last sidebar link'],
+    ['?', 'Show this list'],
+    ['Esc', 'Close a dialog'],
+  ]
+    .map(
+      ([k, l]) =>
+        `<div class="shortcuts-row"><dt><kbd>${k}</kbd></dt><dd>${l}</dd></div>`,
+    )
+    .join('');
+
+  return `
+    <div class="modal-header">
+      <h3 class="modal-title" id="shortcuts-title">Keyboard shortcuts</h3>
+      <button type="button" class="modal-close" aria-label="Close" onclick="closeShortcutsOverlay()">&times;</button>
+    </div>
+    <p class="section-desc">Press g then a letter to jump to a page. Shortcuts are ignored while you are typing.</p>
+    <h4 class="section-subtitle">Go to</h4>
+    <dl class="shortcuts-list">${rows}</dl>
+    <h4 class="section-subtitle">Navigation</h4>
+    <dl class="shortcuts-list">${navRows}</dl>
+  `;
+}
+
+function openShortcutsOverlay() {
+  let overlay = document.getElementById('shortcuts-overlay');
+  if (!overlay) {
+    overlay = document.createElement('div');
+    overlay.id = 'shortcuts-overlay';
+    overlay.className = 'modal-overlay';
+    overlay.innerHTML = `<div class="glass modal" role="dialog" aria-modal="true" aria-labelledby="shortcuts-title"></div>`;
+    overlay.addEventListener('click', (e) => {
+      if (e.target === overlay) closeShortcutsOverlay();
+    });
+    document.body.appendChild(overlay);
+  }
+  overlay.querySelector('.modal').innerHTML = buildShortcutsOverlay();
+  overlay.style.display = 'flex';
+}
+
+function closeShortcutsOverlay() {
+  const overlay = document.getElementById('shortcuts-overlay');
+  if (overlay) overlay.style.display = 'none';
+}
+
+function initKeyboardShortcuts() {
+  let awaitingG = false;
+  let chordTimer = null;
+  const clearChord = () => {
+    awaitingG = false;
+    if (chordTimer) clearTimeout(chordTimer);
+  };
+
+  document.addEventListener('keydown', (e) => {
+    // Never take a key from a field, and never from the browser -- Ctrl+G and friends stay
+    // theirs. Without this, typing "gd" in any search box would navigate mid-word.
+    if (shortcutsAreTyping(document.activeElement)) return;
+    if (e.ctrlKey || e.metaKey || e.altKey) return;
+
+    if (e.key === 'Escape') {
+      closeShortcutsOverlay();
+      clearChord();
+      return;
+    }
+
+    if (e.key === '?') {
+      e.preventDefault();
+      openShortcutsOverlay();
+      clearChord();
+      return;
+    }
+
+    if (awaitingG) {
+      const match = SHORTCUT_DESTINATIONS.find(
+        (d) => d.key === e.key.toLowerCase() && shortcutIsAvailable(d),
+      );
+      clearChord();
+      if (match) {
+        e.preventDefault();
+        closeShortcutsOverlay();
+        const el = document.getElementById(match.nav);
+        if (el) el.click();
+      }
+      return;
+    }
+
+    if (e.key.toLowerCase() === 'g') {
+      awaitingG = true;
+      // Times out so a stray g does not lie in wait and swallow the next keystroke.
+      chordTimer = setTimeout(() => {
+        awaitingG = false;
+      }, 1000);
+    }
+  });
+}
+
+if (document.readyState === 'loading') {
+  document.addEventListener('DOMContentLoaded', initKeyboardShortcuts);
+} else {
+  initKeyboardShortcuts();
+}
+
 function initSidebarArrowKeys() {
   const sidebar = document.querySelector('nav.sidebar');
   if (!sidebar) return;

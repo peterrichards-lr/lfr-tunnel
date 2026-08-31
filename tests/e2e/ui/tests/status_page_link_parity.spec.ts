@@ -32,9 +32,7 @@ test.describe('Status page link parity', () => {
     await page.unrouteAll({ behavior: 'ignoreErrors' });
   });
 
-  test('V2 shows it when configured, and links where told', async ({
-    page,
-  }) => {
+  test('V2 links the header indicator when configured', async ({ page }) => {
     await stubStatusUrl(page, STATUS_URL);
     await clearMailpit();
     await page.goto('/portalv2/');
@@ -44,7 +42,9 @@ test.describe('Status page link parity', () => {
     await page.goto(`/portalv2/login?token=${token}`);
     await page.waitForURL('**/portalv2/dashboard');
 
-    const link = page.getByRole('link', { name: /system status/i });
+    // The status link moved to the page header and is labelled "System Online" (#1603); the
+    // footer copy was removed as a duplicate.
+    const link = page.getByRole('link', { name: /system online/i });
     await expect(link).toBeAttached();
     await expect(link).toHaveAttribute('href', STATUS_URL);
     // Opening a third-party site from an authenticated portal without noopener leaks a handle
@@ -52,7 +52,9 @@ test.describe('Status page link parity', () => {
     await expect(link).toHaveAttribute('rel', /noopener/);
   });
 
-  test('V2 omits it when the deployment configures none', async ({ page }) => {
+  test('V2 shows the indicator unlinked when no status page is configured', async ({
+    page,
+  }) => {
     // The test stack leaves status_page_url empty, so this is the unstubbed behaviour.
     await clearMailpit();
     await page.goto('/portalv2/');
@@ -62,13 +64,20 @@ test.describe('Status page link parity', () => {
     await page.goto(`/portalv2/login?token=${token}`);
     await page.waitForURL('**/portalv2/dashboard');
 
-    // Positive anchor first: the footer must actually be present, or this passes on a page that
-    // rendered nothing.
+    // Positive anchor first, or this passes on a page that rendered nothing.
     await expect(
       page.getByRole('link', { name: /privacy policy/i }),
     ).toBeAttached();
+
+    // The indicator still shows -- "System Online" is worth saying on its own -- but it must not
+    // be a link when there is nowhere configured to send people (#1603).
+    await expect(page.getByText(/system online/i)).toBeAttached();
     await expect(
-      page.getByRole('link', { name: /system status/i }),
+      page.getByRole('link', { name: /system online/i }),
+    ).toHaveCount(0);
+    // And no footer copy, which was the duplicate this removed.
+    await expect(
+      page.locator('.sidebar-footer').getByText(/system status/i),
     ).toHaveCount(0);
   });
 

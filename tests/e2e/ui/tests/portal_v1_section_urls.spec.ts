@@ -170,8 +170,13 @@ test.describe('Portal V1 section URLs', () => {
     // They are anchors with real hrefs (#1212) so that middle-click, open-in-new-tab and
     // "Copy link address" work. Routing in place must not have cost that.
     await page.goto('/admin/users');
+    // Polled: the markup ships these as /portal/... and the portal rewrites them to match the
+    // prefix it was opened under. Reading the attribute once races that rewrite and sees the
+    // original -- which is how this failed in CI while passing locally.
+    await expect
+      .poll(() => page.locator('#nav-blacklist').getAttribute('href'))
+      .toBe('/admin/blacklist');
     const href = await page.locator('#nav-blacklist').getAttribute('href');
-    expect(href).toBe('/admin/blacklist');
 
     // And that href is a real route, not decoration: opening it directly works.
     await page.goto(href!);

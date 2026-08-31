@@ -97,7 +97,7 @@ export default function Layout() {
   if (!user) return null;
 
   return (
-    <div className="flex flex-col min-h-screen w-full">
+    <div className="flex flex-col h-screen w-full overflow-hidden">
       {/* Above the fold and above every other banner: while previewing, the session is
           read-only, so an owner who cannot tell would report the refusals as bugs. */}
       {/* First thing in the tab order: a keyboard user should not have to tab through
@@ -128,13 +128,12 @@ export default function Layout() {
 
       <div
         id="dashboard-screen"
-        className="flex flex-1 transition-all duration-200"
+        className="flex flex-1 min-h-0 transition-all duration-200"
       >
         <Sidebar
           user={user}
           isOpen={isSidebarOpen}
           onClose={() => setIsSidebarOpen(false)}
-          statusPageUrl={statusPageUrl}
         />
 
         {/* Mobile Top Header */}
@@ -203,17 +202,31 @@ export default function Layout() {
               )}
             </div>
             <div className="text-right">
-              <a
-                href="https://status.lfr-demo.se/"
-                target="_blank"
-                rel="noopener noreferrer"
-                className="flex items-center gap-sm justify-end mb-xs no-underline"
-              >
-                <div className="status-dot status-dot--online"></div>
-                <span className="text-xs fw-semibold text-main">
-                  {t('system_online', 'System Online')}
-                </span>
-              </a>
+              {/* Linked only when the deployment configures a status page (#1603). This used to
+                  hardcode status.lfr-demo.se, so every other deployment pointed its users at
+                  someone else's status page -- the same thing #1586 removed from the footer.
+                  The indicator itself still shows either way: "System Online" is worth saying
+                  on its own, it just should not link somewhere arbitrary. */}
+              {statusPageUrl ? (
+                <a
+                  href={statusPageUrl}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="flex items-center gap-sm justify-end mb-xs no-underline"
+                >
+                  <div className="status-dot status-dot--online"></div>
+                  <span className="text-xs fw-semibold text-main">
+                    {t('system_online', 'System Online')}
+                  </span>
+                </a>
+              ) : (
+                <div className="flex items-center gap-sm justify-end mb-xs">
+                  <div className="status-dot status-dot--online"></div>
+                  <span className="text-xs fw-semibold text-main">
+                    {t('system_online', 'System Online')}
+                  </span>
+                </div>
+              )}
               {uptime && (
                 <div className="text-xs text-muted">
                   {t('uptime', 'Uptime')}: {uptime}

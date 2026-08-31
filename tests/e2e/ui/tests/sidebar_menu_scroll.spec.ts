@@ -39,51 +39,77 @@ async function loginV2(page: any) {
 }
 
 test.describe('V2 sidebar stays on screen', () => {
-  test('the sidebar does not scroll away with the page', async ({ page }) => {
+  test('the wheel over the menu scrolls the menu, not the page', async ({
+    page,
+  }) => {
     await page.setViewportSize(SHORT);
     await loginV2(page);
 
-    // Precondition: the page really is taller than the window here. Without this the test would
-    // pass on a short dashboard where nothing could scroll away in the first place.
-    // documentElement, not body: body is a flex container here and reports the viewport height,
-    // which would make this precondition quietly measure nothing.
-    const pageHeight = await page.evaluate(() =>
-      Math.max(
-        document.documentElement.scrollHeight,
-        document.querySelector('.main-content')?.scrollHeight ?? 0,
-      ),
-    );
-    expect(
-      pageHeight,
-      'the dashboard should overflow the window at this height',
-    ).toBeGreaterThan(SHORT.height);
-
-    await page.evaluate(() => window.scrollTo(0, 400));
-    await page.waitForTimeout(200);
-
-    const after = await page.evaluate(() => {
-      const sb = document.querySelector('.sidebar')!.getBoundingClientRect();
-      const foot = document
-        .querySelector('.sidebar-footer')!
-        .getBoundingClientRect();
+    // This is the interaction that was reported, and the one the first fix never tested (#1605).
+    // Asserting that the sidebar was positioned correctly passed on a build where the wheel
+    // still scrolled the document.
+    const before = await page.evaluate(() => {
+      const m = document.querySelector('.sidebar-menu') as HTMLElement;
       return {
-        top: Math.round(sb.top),
-        bottom: Math.round(sb.bottom),
-        footerBottom: Math.round(foot.bottom),
-        viewport: window.innerHeight,
+        menuOverflows: m.scrollHeight > m.clientHeight,
+        menuScrollTop: m.scrollTop,
+        windowScrollY: window.scrollY,
       };
     });
 
-    // Pinned to the top of the window rather than carried up with the content.
-    expect(after.top, 'the sidebar should stick to the top').toBe(0);
+    // Precondition: there is something to scroll to. Otherwise the wheel assertion below is
+    // vacuous -- a menu that fits cannot scroll and cannot fail.
     expect(
-      after.bottom,
-      'the whole sidebar should fit the window once scrolled',
-    ).toBeLessThanOrEqual(after.viewport + 1);
+      before.menuOverflows,
+      'the menu should have more entries than fit at this height',
+    ).toBe(true);
+
+    const box = await page.locator('.sidebar-menu').boundingBox();
+    await page.mouse.move(box!.x + box!.width / 2, box!.y + box!.height / 2);
+    await page.mouse.wheel(0, 300);
+    await page.waitForTimeout(300);
+
+    const after = await page.evaluate(() => {
+      const m = document.querySelector('.sidebar-menu') as HTMLElement;
+      return { menuScrollTop: m.scrollTop, windowScrollY: window.scrollY };
+    });
+
     expect(
-      after.footerBottom,
-      'the footer should be on screen, not below the fold',
-    ).toBeLessThanOrEqual(after.viewport + 1);
+      after.menuScrollTop,
+      'the wheel should scroll the sidebar menu',
+    ).toBeGreaterThan(before.menuScrollTop);
+    expect(
+      after.windowScrollY,
+      'the wheel over the menu should not scroll the page',
+    ).toBe(before.windowScrollY);
+  });
+
+  test('main content still scrolls internally', async ({ page }) => {
+    // The other half of bounding the row: if main stopped scrolling, its content would become
+    // unreachable, which is a worse bug than the one being fixed.
+    await page.setViewportSize(SHORT);
+    await loginV2(page);
+
+    const before = await page.evaluate(() => {
+      const m = document.querySelector('.main-content') as HTMLElement;
+      return {
+        overflows: m.scrollHeight > m.clientHeight,
+        scrollTop: m.scrollTop,
+      };
+    });
+    expect(before.overflows, 'the dashboard should overflow main').toBe(true);
+
+    const box = await page.locator('.main-content').boundingBox();
+    await page.mouse.move(box!.x + box!.width / 2, box!.y + box!.height / 2);
+    await page.mouse.wheel(0, 400);
+    await page.waitForTimeout(300);
+
+    const after = await page.evaluate(
+      () => (document.querySelector('.main-content') as HTMLElement).scrollTop,
+    );
+    expect(after, 'main should scroll under the wheel').toBeGreaterThan(
+      before.scrollTop,
+    );
   });
 
   test('every admin entry can be brought into view', async ({ page }) => {

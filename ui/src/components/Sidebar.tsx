@@ -7,15 +7,9 @@ interface SidebarProps {
   user: any;
   isOpen: boolean;
   onClose: () => void;
-  statusPageUrl?: string;
 }
 
-export default function Sidebar({
-  user,
-  isOpen,
-  onClose,
-  statusPageUrl,
-}: SidebarProps) {
+export default function Sidebar({ user, isOpen, onClose }: SidebarProps) {
   // Arrow-key movement within the sidebar (#1562), matching V1's behaviour so the two arms of the
   // A/B test cost a keyboard user the same effort.
   //
@@ -302,30 +296,9 @@ export default function Sidebar({
 
         <div className="sidebar-footer p-lg">
           <div className="pb-lg mb-lg border-b">
-            {/* Status on its own row, the two policy links in a two-column row beneath it
-                (#1598). All three previously shared one flex row, which wrapped unevenly once
-                the status link was added and left the footer looking arbitrary. */}
-            {/* V1's footer has always linked out to the status page; V2's had no equivalent
-                (#1559). Rendered only when the deployment configures one -- an unset value used
-                to fall back to a hardcoded host in V1, which is not something to carry across.
-                The dot is decorative and hidden from assistive tech; the link's name comes from
-                its text. */}
-            {statusPageUrl && (
-              <div className="sidebar-footer-row text-xs">
-                <a
-                  href={statusPageUrl}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="sidebar-footer-link"
-                >
-                  <span
-                    className="status-dot status-dot--online"
-                    aria-hidden="true"
-                  />
-                  {t('system_status', 'System Status')}
-                </a>
-              </div>
-            )}
+            {/* No status link here: the page header already carries one beside the greeting,
+                and two links to the same place in one view is one too many (#1603). V1 keeps
+                its copy in the footer because V1 has no header indicator at all. */}
             <div className="sidebar-footer-policies text-xs">
               <a
                 href="/privacy"

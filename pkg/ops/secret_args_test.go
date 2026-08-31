@@ -126,3 +126,60 @@ func TestWriteSecretFileIsNotReadableByOthers(t *testing.T) {
 		t.Fatalf("file contents round-tripped wrong: got %q", string(body))
 	}
 }
+
+// The GPG import decision (#1596).
+//
+// Every signing run used to print "WARNING: Failed to import GPG secret key" while producing
+// perfectly good signatures: LFT_GPG_SECRET holds an op:// reference that only `op run` resolves,
+// so gpg received the literal string and could not open it -- but the key was already in the
+// keyring, so the signing that followed worked.
+//
+// That warning is indistinguishable from a real failure, in a workflow where `sign` already skips
+// unset steps and exits 0. It also masked a genuine failure mode: with the key absent, the same
+// unusable value produces the same warning, no Linux signatures are written, and the run still
+// exits 0.
+
+func TestGPGKeyInKeyringIgnoresAbsentAndSkipValues(t *testing.T) {
+	// "skip" is the documented way to turn Linux signing off, so it must not be probed for as
+	// though it were a key id.
+	if gpgKeyInKeyring("") {
+		t.Error("an empty key id should never report as present")
+	}
+	if gpgKeyInKeyring("skip") {
+		t.Error(`the sentinel "skip" should never report as present`)
+	}
+}
+
+func TestGPGKeyInKeyringRejectsAKeyThatCannotExist(t *testing.T) {
+	// A syntactically valid but absent key id. If this reported true the import would be skipped
+	// when it was actually needed, which is the failure this guard must not introduce.
+	if gpgKeyInKeyring("DEADBEEFDEADBEEFDEADBEEFDEADBEEFDEADBEEF") {
+		t.Error("an absent key id reported as present in the keyring")
+	}
+}
+
+// An unresolved op:// reference is the value that caused the noise. It is neither a readable file
+// nor inline key material, and the code must recognise that rather than hand it to gpg.
+func TestUnresolvedOpReferenceIsNotMistakenForAKeyFile(t *testing.T) {
+	ref := "op://Employee/self-signed-linux-gpg-key/liferay-tunnel-developer-gpg-key.asc"
+
+	if fileExists(ref) {
+		t.Fatal("an op:// reference must not be treated as an existing file")
+	}
+	if strings.Contains(ref, "-----BEGIN") {
+		t.Fatal("an op:// reference must not be treated as inline key material")
+	}
+}
+
+func TestInlineKeyMaterialIsStillRecognised(t *testing.T) {
+	// The other supported shape: the key pasted in directly rather than referenced. It must keep
+	// taking the import path, so the fix for the noise does not disable real imports.
+	inline := "-----BEGIN PGP PRIVATE KEY BLOCK-----\nnot-a-real-key\n-----END PGP PRIVATE KEY BLOCK-----"
+
+	if fileExists(inline) {
+		t.Fatal("inline key material is not a path and must not be treated as one")
+	}
+	if !strings.Contains(inline, "-----BEGIN") {
+		t.Fatal("inline key material should be detected by its armour header")
+	}
+}

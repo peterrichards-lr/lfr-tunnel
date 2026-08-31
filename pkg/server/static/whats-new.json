@@ -1,5 +1,14 @@
 [
   {
+    "version": "v1.48.13",
+    "release_date": "2026-08-31",
+    "features": [
+      "fix(portal-v2): remove the Backups and Maintenance copies from System Settings (#1601)",
+      "fix(portal-v2): keep the sidebar on screen, and restack the footer (#1600)",
+      "fix(ops): stop sign warning about an import it never needed (#1597)"
+    ]
+  },
+  {
     "version": "v1.48.12",
     "release_date": "2026-08-30",
     "features": [
@@ -41,33 +50,6 @@
     "release_date": "2026-08-29",
     "features": [
       "feat(portal): anonymous geographic distribution, in both portals (#1152) (#1552)"
-    ]
-  },
-  {
-    "version": "v1.48.8",
-    "release_date": "2026-08-28",
-    "features": [
-      "fix(hooks): check .cjs and .mjs at commit time, as CI already does (#1551)",
-      "feat(portal-v1): route on the path, so section links copy as paths (#1513) (#1549)",
-      "a11y(portal): a high-contrast theme, and a contrast gate that covers the badges (#1548)",
-      "tech-debt(portal-v2): remove the dead copy of V1's toast CSS (#1547)",
-      "fix(portal-v1): remember the language choice, and honour one made in V2 (#1546)",
-      "a11y(portal): copyable, keyboard-reachable heading anchors in both portals (#1520) (#1545)",
-      "ci: catch a placeholder bridging a closing keyword to a real issue (#1544)",
-      "docs(agents): record that \"Does not close #N\" closes #N (#1538) (#1539)",
-      "a11y(portal): honour prefers-contrast: more in both portals (#1521) (#1534)",
-      "security(deps): bump golang.org/x/crypto to v0.55.0 for GO-2026-6303 (#1536) (#1537)",
-      "a11y(portal): survive Windows High Contrast Mode in both portals (#1533)",
-      "a11y(portal): one set of theme files, shared by both portals (#1532)",
-      "ci: retry base image pulls, so a registry hiccup stops failing a required check (#1531)",
-      "tech-debt(agents): make the delete-merged-branches rule a check, not a sentence (#1528) (#1529)",
-      "chore(portal-v2): close #1383 -- widen the class gate, drop the Tailwind dependency (#1527)",
-      "fix(portal-v2): drive the inert class count to zero (#1524)",
-      "fix(test): delete the user the non-admin fixture creates (#1525) (#1526)",
-      "fix(portal-v2): let a non-admin reach analytics for their own tunnels (#1519)",
-      "fix(portal-v2): theme both stops of the primary button, which failed WCAG AA (#1514) (#1518)",
-      "feat(portal): show region latency in both portals, and fix the chart legends (#1516)",
-      "fix(build): stop make build deleting the tracked ui-dist/.gitkeep (#1511) (#1517)"
     ]
   }
 ]

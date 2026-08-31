@@ -225,7 +225,7 @@ export default function AdminMaintenance() {
         {/* Hidden once on, matching V1: the fields describe a window that has already been
             submitted, so editing them here would imply an effect they do not have. */}
         {!softOn && (
-          <div className="grid gap-md mb-lg" style={{ maxWidth: 560 }}>
+          <div className="grid gap-md mb-lg maintenance-fields">
             <div className="flex gap-md flex-wrap">
               <div className="flex-1">
                 <label className="form-label" htmlFor="maint-soft-action">
@@ -345,7 +345,7 @@ export default function AdminMaintenance() {
           </p>
 
           {!state?.iron_curtain && (
-            <div className="grid gap-md mb-lg" style={{ maxWidth: 560 }}>
+            <div className="grid gap-md mb-lg maintenance-fields">
               <div className="flex gap-md flex-wrap">
                 <div className="flex-1">
                   <label className="form-label" htmlFor="maint-hard-action">

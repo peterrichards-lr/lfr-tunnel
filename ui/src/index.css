@@ -3250,3 +3250,10 @@ input[type='checkbox'] {
   width: auto;
   margin: 0;
 }
+
+/* The maintenance form column (#1608). Was an inline style={{ maxWidth: 560 }} in two places --
+   the only inline styles in a codebase that otherwise has seven, so against the grain rather
+   than with it. */
+.maintenance-fields {
+  max-width: 560px;
+}

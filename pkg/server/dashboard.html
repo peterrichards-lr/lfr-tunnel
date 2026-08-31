@@ -98,22 +98,22 @@
                 <div id="mfa-msg" style="margin-top: 12px; font-size: 13px; color: var(--danger);"></div>
             </form>
 
-            <div class="sidebar-footer-links" style="margin-top: 24px; padding-top: 12px; border-top: 1px solid rgba(255,255,255,0.06); font-size: 11px;">
+            <div class="sidebar-footer-links">
                 <!-- Status on its own row, the two policy links in a two-column row beneath it
                      (#1598). All three previously sat in one centred row separated by bullets,
                      which wrapped unevenly once the status link could appear or not. -->
                 <div class="sidebar-footer-row">
-                    <a id="status-page-link" href="#" hidden target="_blank" rel="noopener noreferrer" style="color: var(--text-muted); text-decoration: none; display: inline-flex; align-items: center; gap: 6px;">
-                        <span style="width: 6px; height: 6px; border-radius: 50%; background-color: #10b981; display: inline-block;"></span>
+                    <a id="status-page-link" class="status-link" href="#" hidden target="_blank" rel="noopener noreferrer">
+                        <span class="status-dot" aria-hidden="true"></span>
                         <span data-i18n="system_status">System Status</span>
                     </a>
                 </div>
                 <div class="sidebar-footer-policies">
-                    <a href="/privacy" id="footer-privacy-link" style="color: var(--text-muted); text-decoration: none; transition: 0.2s;" data-i18n="privacy_policy">Privacy Policy</a>
-                    <a href="/cookies" id="footer-cookie-link" style="color: var(--text-muted); text-decoration: none; transition: 0.2s;" data-i18n="cookie_policy">Cookies</a>
+                    <a href="/privacy" id="footer-privacy-link" data-i18n="privacy_policy">Privacy Policy</a>
+                    <a href="/cookies" id="footer-cookie-link" data-i18n="cookie_policy">Cookies</a>
                 </div>
             </div>
-            <div style="text-align: center; font-size: 9px; color: var(--text-muted); opacity: 0.4; margin-top: 8px;">Gateway: <span class="server-version-display"></span></div>
+            <div class="sidebar-footer-version">Gateway: <span class="server-version-display"></span></div>
         </div>
     </div>
 
@@ -485,26 +485,26 @@
                 <div class="header">
                     <h2 data-i18n="telemetry_title">Real-time Telemetry</h2>
                 </div>
-                <p style="color: var(--text-muted); margin-bottom: 24px; font-size: 14px;" data-i18n="telemetry_desc">Live tunnel connections, updated as the gateway reports them.</p>
+                <p class="section-desc" data-i18n="telemetry_desc">Live tunnel connections, updated as the gateway reports them.</p>
 
-                <div class="responsive-grid" style="display: grid; grid-template-columns: repeat(3, 1fr); gap: 24px; margin-bottom: 24px;">
-                    <div class="glass" style="padding: 16px;">
-                        <div style="color: var(--text-muted); font-size: 12px; text-transform: uppercase; font-weight: 600;" data-i18n="telemetry_active_tunnels">Active Tunnels</div>
-                        <div id="telemetry-active-tunnels" style="font-size: 28px; font-weight: 700; margin-top: 4px;">0</div>
+                <div class="responsive-grid stat-grid">
+                    <div class="glass stat-card">
+                        <div class="stat-card-label" data-i18n="telemetry_active_tunnels">Active Tunnels</div>
+                        <div id="telemetry-active-tunnels" class="stat-card-value">0</div>
                     </div>
-                    <div class="glass" style="padding: 16px;">
-                        <div style="color: var(--text-muted); font-size: 12px; text-transform: uppercase; font-weight: 600;" data-i18n="telemetry_total_bandwidth">Total Live Traffic</div>
-                        <div id="telemetry-total-bandwidth" style="font-size: 28px; font-weight: 700; margin-top: 4px;">0 B</div>
+                    <div class="glass stat-card">
+                        <div class="stat-card-label" data-i18n="telemetry_total_bandwidth">Total Live Traffic</div>
+                        <div id="telemetry-total-bandwidth" class="stat-card-value">0 B</div>
                     </div>
                     <!-- The aggregate V1 had nowhere: how many gateways are actually carrying
                          traffic, as distinct from how many exist. -->
-                    <div class="glass" style="padding: 16px;">
-                        <div style="color: var(--text-muted); font-size: 12px; text-transform: uppercase; font-weight: 600;" data-i18n="telemetry_active_nodes">Active Gateways</div>
-                        <div id="telemetry-active-nodes" style="font-size: 28px; font-weight: 700; margin-top: 4px;">0</div>
+                    <div class="glass stat-card">
+                        <div class="stat-card-label" data-i18n="telemetry_active_nodes">Active Gateways</div>
+                        <div id="telemetry-active-nodes" class="stat-card-value">0</div>
                     </div>
                 </div>
 
-                <h3 style="margin-bottom: 16px; font-size: 16px;" data-i18n="telemetry_tunnels_list">Real-Time Tunnel Connections</h3>
+                <h3 class="section-subtitle" data-i18n="telemetry_tunnels_list">Real-Time Tunnel Connections</h3>
                 <div class="glass table-container">
                     <table>
                         <thead><tr>
@@ -516,7 +516,7 @@
                             <th data-i18n="th_visitors">Visitors</th>
                             <th data-sort="status" data-i18n="th_status">Status</th>
                         </tr></thead>
-                        <tbody id="telemetry-table-body"><tr><td colspan="7" style="text-align:center;opacity:0.6;">Waiting for telemetry...</td></tr></tbody>
+                        <tbody id="telemetry-table-body"><tr><td colspan="7" class="table-empty">Waiting for telemetry...</td></tr></tbody>
                     </table>
                 </div>
             </div>
@@ -835,7 +835,7 @@
                 <div class="header">
                     <h2 data-i18n="custom_domains_title">Custom Domains</h2>
                 </div>
-                <p style="color: var(--text-muted); margin-bottom: 24px; font-size: 14px;" data-i18n="custom_domains_desc">Provisioning state of every registered custom domain. A stage shows a cross when it is where setup failed.</p>
+                <p class="section-desc" data-i18n="custom_domains_desc">Provisioning state of every registered custom domain. A stage shows a cross when it is where setup failed.</p>
                 <div class="glass table-container">
                     <table>
                         <thead><tr>
@@ -848,7 +848,7 @@
                             <th data-i18n="th_summary">Summary</th>
                             <th data-i18n="th_actions">Actions</th>
                         </tr></thead>
-                        <tbody id="custom-domains-table-body"><tr><td colspan="8" style="text-align:center;opacity:0.6;">Loading...</td></tr></tbody>
+                        <tbody id="custom-domains-table-body"><tr><td colspan="8" class="table-empty">Loading...</td></tr></tbody>
                     </table>
                 </div>
             </div>

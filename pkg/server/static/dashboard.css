@@ -1270,3 +1270,108 @@ html[dir='rtl'] th {
   gap: 12px;
   text-align: center;
 }
+
+/* Shared section furniture (#1608).
+   The Telemetry and Custom Domains tabs were added with their styling inline, matching the 510
+   inline declarations already in dashboard.html. That is the idiom of the file, but it puts the
+   new sections outside the mechanisms the accessibility work depends on: forced-colors (#1533),
+   prefers-contrast (#1534) and the high-contrast theme (#1548) all act on CSS, and an inline
+   declaration cannot be overridden by them without !important everywhere.
+
+   These are deliberately generic rather than per-tab, because the same four shapes -- a section
+   description, a subtitle, a stat tile, an empty-table row -- already recur across the portal. */
+.section-desc {
+  color: var(--text-muted);
+  font-size: 14px;
+  margin-bottom: 24px;
+}
+.section-subtitle {
+  font-size: 16px;
+  margin-bottom: 16px;
+}
+.stat-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 24px;
+  margin-bottom: 24px;
+}
+.stat-card {
+  padding: 16px;
+}
+.stat-card-label {
+  color: var(--text-muted);
+  font-size: 12px;
+  text-transform: uppercase;
+  font-weight: 600;
+}
+.stat-card-value {
+  font-size: 28px;
+  font-weight: 700;
+  margin-top: 4px;
+}
+/* The "nothing here yet" row every table falls back to. */
+.table-empty {
+  text-align: center;
+  opacity: 0.6;
+}
+/* Stage indicators on the Custom Domains table: done, failed, not yet reached. Colour is not the
+   only signal -- the glyph differs too, and each cell carries a title -- which is what keeps this
+   readable under forced-colors, where these colours are replaced by the system palette. */
+.stage-done {
+  color: var(--success);
+}
+.stage-failed {
+  color: var(--danger);
+}
+.stage-pending {
+  color: var(--text-muted);
+}
+.cell-mono {
+  font-family: monospace;
+  font-size: 0.85em;
+}
+.cell-muted {
+  font-size: 0.85em;
+  color: var(--text-muted);
+}
+.cell-center {
+  text-align: center;
+}
+
+/* Sidebar footer links (#1608). Previously styled inline, including a hardcoded #10b981 for the
+   status dot -- a literal colour that forced-colors cannot substitute, so it stayed green
+   against a system palette that had replaced everything around it. It uses the success token
+   now, and is aria-hidden besides: the link text is what names it. */
+.sidebar-footer-links {
+  margin-top: 24px;
+  padding-top: 12px;
+  border-top: 1px solid var(--border);
+  font-size: 11px;
+}
+.sidebar-footer-links a {
+  color: var(--text-muted);
+  text-decoration: none;
+  transition: color 0.2s;
+}
+.sidebar-footer-links a:hover {
+  color: var(--primary);
+}
+.sidebar-footer-links .status-link {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+.sidebar-footer-links .status-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background-color: var(--success);
+  display: inline-block;
+}
+.sidebar-footer-version {
+  text-align: center;
+  font-size: 9px;
+  color: var(--text-muted);
+  opacity: 0.4;
+  margin-top: 8px;
+}

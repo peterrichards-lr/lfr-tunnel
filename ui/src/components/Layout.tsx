@@ -6,6 +6,7 @@ import ViewAsBar from './ViewAsBar';
 import ScrollToTopButton from './ScrollToTopButton';
 import { useI18n } from '../contexts/I18nContext';
 import { useSettings } from '../contexts/SettingsContext';
+import ShortcutsOverlay from './ShortcutsOverlay';
 
 export default function Layout() {
   const [user, setUser] = useState<any>(null);
@@ -135,6 +136,9 @@ export default function Layout() {
           isOpen={isSidebarOpen}
           onClose={() => setIsSidebarOpen(false)}
         />
+
+        {/* Registers the shortcuts and owns the overlay that documents them (#1611). */}
+        <ShortcutsOverlay user={user} />
 
         {/* Mobile Top Header */}
         <div className="mobile-header p-lg border-b items-center gap-lg">

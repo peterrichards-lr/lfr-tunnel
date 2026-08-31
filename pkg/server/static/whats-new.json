@@ -1,5 +1,13 @@
 [
   {
+    "version": "v1.48.15",
+    "release_date": "2026-08-31",
+    "features": [
+      "a11y(portal-v1): the same shortcuts overlay and page keys as V2 (#1614)",
+      "a11y(portal-v2): a shortcuts overlay, and keys to reach each page (#1612)"
+    ]
+  },
+  {
     "version": "v1.48.14",
     "release_date": "2026-08-31",
     "features": [
@@ -29,29 +37,6 @@
     "release_date": "2026-08-30",
     "features": [
       "fix(install): use the install path agreed with the S1 team (#1592)"
-    ]
-  },
-  {
-    "version": "v1.48.10",
-    "release_date": "2026-08-30",
-    "features": [
-      "feat(portal-v1): a telemetry screen, for data V1 already receives (#1589)",
-      "feat(portal): the status-page link, in both portals (#1587)",
-      "a11y(portal-v1): give every table search box an accessible name (#1585)",
-      "a11y(portal): arrow-key movement in the sidebar, in both portals (#1583)",
-      "a11y(portal-v1): a skip link, and a main landmark to skip to (#1582)",
-      "test(e2e): wait for the nav before reading its links (#1580)",
-      "fix(portal): All Time analytics actually means all time (#1579)",
-      "feat(portal-v1): Custom Domains, so an admin can see why one failed (#1577)",
-      "fix(build): make test now fails when an untested package does not compile (#1574)",
-      "fix(test): the credential file mode assertion cannot hold on Windows (#1575)",
-      "fix(portal-v1): let a non-admin reach their own analytics (#1571)",
-      "feat(portal-v2): Gateway Maintenance, the counterpart of V1's screen (#1570)",
-      "docs(e2e): fixture cleanup is the fix, not a short identifier (#1572)",
-      "feat(portal): Database Backups in V2, and the full capability in both (#1569)",
-      "fix(portal-v1): a time range control on Analytics, aligned with Export PDF (#1566)",
-      "fix(portal-v2): render modals through a portal so they land on screen (#1563)",
-      "sec(ops): keep signing credentials off argv and out of the log (#1557)"
     ]
   }
 ]

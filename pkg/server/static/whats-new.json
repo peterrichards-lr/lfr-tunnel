@@ -1,5 +1,14 @@
 [
   {
+    "version": "v1.48.14",
+    "release_date": "2026-08-31",
+    "features": [
+      "refactor(portal): move the new sections from inline styles to CSS classes (#1609)",
+      "fix(portal-v2): align Export PDF with the Analytics range select (#1607)",
+      "fix(portal-v2): make the sidebar menu scroll, and drop the duplicate status link (#1606)"
+    ]
+  },
+  {
     "version": "v1.48.13",
     "release_date": "2026-08-31",
     "features": [
@@ -43,13 +52,6 @@
       "fix(portal-v1): a time range control on Analytics, aligned with Export PDF (#1566)",
       "fix(portal-v2): render modals through a portal so they land on screen (#1563)",
       "sec(ops): keep signing credentials off argv and out of the log (#1557)"
-    ]
-  },
-  {
-    "version": "v1.48.9",
-    "release_date": "2026-08-29",
-    "features": [
-      "feat(portal): anonymous geographic distribution, in both portals (#1152) (#1552)"
     ]
   }
 ]

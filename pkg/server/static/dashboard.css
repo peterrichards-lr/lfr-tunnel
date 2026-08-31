@@ -1253,3 +1253,20 @@ html[dir='rtl'] th {
 .main-content:focus {
   outline: none;
 }
+
+/* Sidebar footer layout (#1598), matching V2. Status on its own row; the two policy links
+   beneath it in two equal columns. They previously shared one centred row separated by bullet
+   characters, which wrapped unevenly depending on whether the status link was configured.
+
+   Grid rather than flex so the columns stay equal whatever the labels say -- "Privacy Policy"
+   and "Cookies" are very different lengths, and translations widen that further. */
+.sidebar-footer-row {
+  margin-bottom: 8px;
+  text-align: center;
+}
+.sidebar-footer-policies {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 12px;
+  text-align: center;
+}

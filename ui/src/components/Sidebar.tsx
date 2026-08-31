@@ -302,13 +302,16 @@ export default function Sidebar({
 
         <div className="sidebar-footer p-lg">
           <div className="pb-lg mb-lg border-b">
-            <div className="flex gap-md text-xs">
-              {/* V1's footer has always linked out to the status page; V2's had no equivalent
-                  (#1559). Rendered only when the deployment configures one -- an unset value
-                  used to fall back to a hardcoded host in V1, which is not something to carry
-                  across. The dot is decorative and hidden from assistive tech; the link's name
-                  comes from its text. */}
-              {statusPageUrl && (
+            {/* Status on its own row, the two policy links in a two-column row beneath it
+                (#1598). All three previously shared one flex row, which wrapped unevenly once
+                the status link was added and left the footer looking arbitrary. */}
+            {/* V1's footer has always linked out to the status page; V2's had no equivalent
+                (#1559). Rendered only when the deployment configures one -- an unset value used
+                to fall back to a hardcoded host in V1, which is not something to carry across.
+                The dot is decorative and hidden from assistive tech; the link's name comes from
+                its text. */}
+            {statusPageUrl && (
+              <div className="sidebar-footer-row text-xs">
                 <a
                   href={statusPageUrl}
                   target="_blank"
@@ -321,7 +324,9 @@ export default function Sidebar({
                   />
                   {t('system_status', 'System Status')}
                 </a>
-              )}
+              </div>
+            )}
+            <div className="sidebar-footer-policies text-xs">
               <a
                 href="/privacy"
                 target="_blank"

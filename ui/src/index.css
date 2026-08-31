@@ -268,6 +268,21 @@ body {
   padding: 24px;
   background: var(--sidebar-bg);
   overflow: hidden;
+  /* Sticky, so the sidebar stays put while the page scrolls (#1598).
+     
+     Measured cause: the row holding the sidebar and the main content grows to fit the content --
+     1806px on a dashboard in a 600px window -- so the whole document scrolls. The sidebar was a
+     normal block inside that row, which meant it scrolled away with everything else and its
+     lower entries sat below the fold with no way to bring them back: pointing at it and using
+     the wheel scrolled the document, because that is genuinely what was under the pointer.
+     
+     Sticky pins it to the top of the viewport at 100vh, so the whole sidebar including its
+     footer is on screen and its own menu does the scrolling. align-self keeps it from being
+     stretched to the row's full height by the parent's default align-items: stretch, which is
+     what made height:100% resolve to 1806px and defeated the previous attempt at this. */
+  position: sticky;
+  top: 0;
+  align-self: flex-start;
   height: 100vh;
   flex-shrink: 0;
   transition:
@@ -3183,4 +3198,20 @@ input[type='checkbox'] {
     forced-color-adjust: none;
     background: #ffffff;
   }
+}
+
+/* Sidebar footer layout (#1598). Status on its own row; the two policy links beneath it in two
+   equal columns. Previously all three shared a single flex row, which wrapped unpredictably once
+   the status link joined them.
+
+   Grid rather than flex for the policy row so the two columns stay equal regardless of label
+   length -- "Privacy Policy" and "Cookies" differ enough that flex would leave them ragged, and
+   translations widen the gap further. */
+.sidebar-footer-row {
+  margin-bottom: var(--spacing-sm);
+}
+.sidebar-footer-policies {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: var(--spacing-md);
 }

@@ -3346,11 +3346,20 @@ function vanityStageCell(status, stage, timestamp) {
   return `<td style="text-align:center;" title="${escapeHTML(pending)}"><span style="color: var(--text-muted);">○</span></td>`;
 }
 
+// Returns HTML, not text. renderTimestamp emits a span carrying the local-time tooltip, so a
+// caller that escapes this whole string displays the markup instead of the timestamp -- which is
+// exactly what shipped in #1578 and what #1616 fixes.
+//
+// Because it returns HTML, the untrusted parts are escaped here rather than by the caller.
+// error_message comes from the provisioning pipeline, and failed_stage is a server-supplied
+// identifier; neither is ours to trust.
 function vanitySummary(status) {
   if (status.failed_stage) {
-    const why =
-      status.error_message || t('vanity_status_unknown_error', 'Unknown error');
-    return `${t('vanity_status_summary_failed', 'Failed')} (${status.failed_stage}): ${why}`;
+    const why = escapeHTML(
+      status.error_message || t('vanity_status_unknown_error', 'Unknown error'),
+    );
+    const stage = escapeHTML(status.failed_stage);
+    return `${t('vanity_status_summary_failed', 'Failed')} (${stage}): ${why}`;
   }
   if (status.live_at) {
     return `${t('vanity_status_summary_live', 'Live since')} ${renderTimestamp(status.live_at)}`;
@@ -3391,7 +3400,7 @@ async function loadCustomDomains() {
                     ${vanityStageCell(d, 'nginx_config', d.nginx_config_at)}
                     ${vanityStageCell(d, 'cert_issued', d.cert_issued_at)}
                     ${vanityStageCell(d, 'live', d.live_at)}
-                    <td style="font-size:0.85em;">${escapeHTML(vanitySummary(d))}</td>
+                    <td class="cell-muted">${vanitySummary(d)}</td>
                     <td>
                         <div class="action-menu">
                             <button class="action-menu-btn" onclick="toggleActionMenu('menu-vd-${host}', event)">⋮</button>

@@ -268,22 +268,17 @@ body {
   padding: 24px;
   background: var(--sidebar-bg);
   overflow: hidden;
-  /* Sticky, so the sidebar stays put while the page scrolls (#1598).
+  /* The row's height, matching V1 (#1598).
      
-     Measured cause: the row holding the sidebar and the main content grows to fit the content --
-     1806px on a dashboard in a 600px window -- so the whole document scrolls. The sidebar was a
-     normal block inside that row, which meant it scrolled away with everything else and its
-     lower entries sat below the fold with no way to bring them back: pointing at it and using
-     the wheel scrolled the document, because that is genuinely what was under the pointer.
+     V1's equivalent scrolls correctly and V2's did not, from near-identical rules -- the
+     difference was the parent. V1 bounds its row with `flex: 1 1 0; min-height: 0` so
+     .main-content stays bounded and scrolls internally; V2's row had flex-1 but no min-height,
+     so it grew to fit the content (1806px in a 600px window), the document scrolled instead of
+     main, and the sidebar rode away with it.
      
-     Sticky pins it to the top of the viewport at 100vh, so the whole sidebar including its
-     footer is on screen and its own menu does the scrolling. align-self keeps it from being
-     stretched to the row's full height by the parent's default align-items: stretch, which is
-     what made height:100% resolve to 1806px and defeated the previous attempt at this. */
-  position: sticky;
-  top: 0;
-  align-self: flex-start;
-  height: 100vh;
+     Fixed on the containers in Layout rather than here. With the row bounded, height: 100% is
+     exactly the visible row -- no sticky positioning needed, which was treating the symptom. */
+  height: 100%;
   flex-shrink: 0;
   transition:
     width 0.3s cubic-bezier(0.4, 0, 0.2, 1),
@@ -1666,6 +1661,26 @@ html[dir='rtl'] th {
 }
 .min-h-screen {
   min-height: 100vh;
+}
+
+/* Utilities the layout needs and this file did not define (#1598). Using a class that does not
+   exist fails silently -- the markup looks right and nothing happens, which is exactly how the
+   first attempt at the sidebar fix appeared to change nothing. */
+.h-screen {
+  /* The change that fixes it (#1605): the shell must BE the viewport, not merely at least it.
+     With min-h-screen the column grew to fit its content, the document scrolled instead of
+     .main-content, and the sidebar scrolled away with the page. Verified by mutation -- reverting
+     this alone fails three of the four sidebar tests. */
+  height: 100vh;
+}
+.min-h-0 {
+  /* Defensive, not load-bearing here -- said plainly because I have twice claimed otherwise on
+     this bug. Mutation testing shows the fix survives without it; what actually does the work is
+     h-screen + overflow-hidden on the shell, which bounds the row so .main-content scrolls
+     itself. Kept because it matches V1's #dashboard-screen (`flex: 1 1 0; min-height: 0`), which
+     is the layout known to behave, and because a flex item's min-height defaults to auto and
+     will grow past its parent as soon as content changes shape. */
+  min-height: 0;
 }
 .grid-cols-2 {
   grid-template-columns: repeat(2, minmax(0, 1fr));

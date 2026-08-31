@@ -181,7 +181,9 @@ export default function ShortcutsOverlay({ user }: { user: any }) {
           )}
         </p>
 
-        <h4 className="section-subtitle">{t('shortcuts_go_to', 'Go to')}</h4>
+        <h4 className="text-md fw-semibold mb-sm">
+          {t('shortcuts_go_to', 'Go to')}
+        </h4>
         <dl className="shortcuts-list mb-lg">
           {goTo.map((s) => (
             <div className="shortcuts-row" key={s.keys}>
@@ -193,7 +195,7 @@ export default function ShortcutsOverlay({ user }: { user: any }) {
           ))}
         </dl>
 
-        <h4 className="section-subtitle">
+        <h4 className="text-md fw-semibold mb-sm">
           {t('shortcuts_navigation', 'Navigation')}
         </h4>
         <dl className="shortcuts-list">

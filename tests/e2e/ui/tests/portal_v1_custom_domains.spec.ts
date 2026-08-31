@@ -114,6 +114,87 @@ test.describe('Portal V1 Custom Domains', () => {
     await expect(cells.nth(5)).toContainText('○'); // live: never reached, and NOT a failure
   });
 
+  test('the summary renders the timestamp, not its markup', async ({
+    page,
+  }) => {
+    // renderTimestamp returns HTML -- a span carrying the local-time tooltip -- so escaping the
+    // whole summary displays the markup instead (#1616). Only the "Live since" branch shows it,
+    // and no domain in the test stack ever reaches the live stage, so it is stubbed.
+    await loginV1(page, adminEmail);
+
+    await page.route('**/api/admin/vanity-domain-status', async (route) => {
+      if (route.request().method() !== 'GET') return route.fallback();
+      await route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify([
+          {
+            full_host: 'live.example.com',
+            user_id: 'someone@lfr-demo.local',
+            requested_at: '2026-08-11T15:30:00Z',
+            nginx_config_at: '2026-08-11T15:35:00Z',
+            cert_issued_at: '2026-08-11T15:38:00Z',
+            live_at: '2026-08-11T15:39:37Z',
+            failed_stage: '',
+            error_message: '',
+            updated_at: '2026-08-11T15:39:37Z',
+          },
+        ]),
+      });
+    });
+
+    await page.locator('#nav-custom-domains').click();
+    await expect(page.locator('#tab-custom-domains')).toBeVisible();
+
+    const row = page.locator('#custom-domains-table-body tr').first();
+    await expect(row).toContainText(/Live since/);
+    // The tooltip span must be a real element, not text.
+    await expect(row.locator('.timestamp-tooltip')).toHaveCount(1);
+    // And no raw markup leaked into the visible text.
+    await expect(row).not.toContainText('<span');
+    await expect(row).not.toContainText('timestamp-tooltip"');
+  });
+
+  test('an error message from the pipeline is still escaped', async ({
+    page,
+  }) => {
+    // The summary returns HTML now, so the untrusted parts must be escaped inside it. This is
+    // the assertion that keeps that honest.
+    await loginV1(page, adminEmail);
+
+    await page.route('**/api/admin/vanity-domain-status', async (route) => {
+      if (route.request().method() !== 'GET') return route.fallback();
+      await route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify([
+          {
+            full_host: 'evil.example.com',
+            user_id: 'someone@lfr-demo.local',
+            requested_at: '2026-08-11T15:30:00Z',
+            nginx_config_at: null,
+            cert_issued_at: null,
+            live_at: null,
+            failed_stage: 'nginx_config',
+            error_message: '<img src=x onerror="window.__pwned=1">boom',
+            updated_at: '2026-08-11T15:39:37Z',
+          },
+        ]),
+      });
+    });
+
+    await page.locator('#nav-custom-domains').click();
+    await expect(page.locator('#tab-custom-domains')).toBeVisible();
+
+    const row = page.locator('#custom-domains-table-body tr').first();
+    // Shown as text...
+    await expect(row).toContainText('boom');
+    // ...and not injected as an element that could run.
+    await expect(row.locator('img')).toHaveCount(0);
+    const pwned = await page.evaluate(() => (window as any).__pwned);
+    expect(pwned, 'the error message must not execute').toBeUndefined();
+  });
+
   test('a non-admin cannot reach it', async ({ page }) => {
     await createApprovedUser(nonAdminEmail);
     await loginV1(page, nonAdminEmail);

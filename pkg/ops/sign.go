@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"strings"
 
@@ -59,6 +60,11 @@ func SignCommand(args []string) {
 	}
 	gpgSecret := GetEnvOrDefault("LFT_GPG_SECRET", "")
 	skipGPG := GetEnvOrDefault("LFT_SKIP_GPG", "")
+
+	// Steps that were configured, attempted, and failed. A step nobody configured is skipped and
+	// does not belong here -- that is deliberate behaviour. This exists so the two cannot be
+	// confused: `sign` used to exit 0 after producing no signatures at all (#1596).
+	var signingFailures []string
 
 	// 1. macOS Signing
 	if macosIdentity != "" && macosIdentity != "skip" {
@@ -173,17 +179,41 @@ func SignCommand(args []string) {
 				defer os.Remove(gpgSecret)
 			}
 
-			// Import the secret key into GPG
-			importArgs := []string{"--batch", "--yes"}
-			if gpgPassFile != "" {
-				importArgs = append(importArgs, "--pinentry-mode", "loopback", "--passphrase-file", gpgPassFile)
-			}
-			importArgs = append(importArgs, "--import", gpgSecret)
-			err := RunCommand("gpg", importArgs...)
-			if err != nil {
-				fmt.Printf("WARNING: Failed to import GPG secret key: %v\n", err)
-			} else {
-				fmt.Println("GPG secret key imported successfully.")
+			// Decide whether there is anything to import before shelling out, so a redundant
+			// import cannot look like a failure (#1596).
+			switch {
+			case gpgKey != "" && gpgKeyInKeyring(gpgKey):
+				// Importing again would succeed as a no-op at best, and -- when LFT_GPG_SECRET
+				// holds an unresolved op:// reference, which is the usual local setup -- fails
+				// with "can't open op://..." while the signing that follows works perfectly.
+				// That warning is indistinguishable from a real failure in the one workflow
+				// where a misleading signal matters most.
+				fmt.Printf("GPG signing key %s is already in the keyring; no import needed.\n", gpgKey)
+
+			case !fileExists(gpgSecret):
+				// Neither a readable file nor inline key material. Almost always an op://
+				// reference that was never resolved because the command was not run under
+				// `op run`. Said plainly rather than handed to gpg, which reports it as an
+				// opaque "can't open".
+				//
+				// Not fatal on its own: the signing step below may still succeed from a key
+				// already present under a different identifier. It does warn, because if it
+				// cannot, the run produces no Linux signatures and still exits 0.
+				fmt.Println("WARNING: LFT_GPG_SECRET is neither a readable file nor inline key material.")
+				fmt.Println("         If it is an op:// reference, run this under `op run --` so it resolves.")
+				fmt.Println("         Skipping the import; Linux signing will fail unless the key is already present.")
+
+			default:
+				importArgs := []string{"--batch", "--yes"}
+				if gpgPassFile != "" {
+					importArgs = append(importArgs, "--pinentry-mode", "loopback", "--passphrase-file", gpgPassFile)
+				}
+				importArgs = append(importArgs, "--import", gpgSecret)
+				if err := RunCommand("gpg", importArgs...); err != nil {
+					fmt.Printf("WARNING: Failed to import GPG secret key: %v\n", err)
+				} else {
+					fmt.Println("GPG secret key imported successfully.")
+				}
 			}
 		}
 
@@ -206,6 +236,11 @@ func SignCommand(args []string) {
 			err := RunCommand("gpg", gpgArgs...)
 			if err != nil {
 				fmt.Printf("WARNING: GPG signing failed for %s: %v\n", arch, err)
+				// Recorded, not just printed. Linux signing was configured and attempted, so a
+				// failure here means the release is missing signatures it was meant to have --
+				// and the previous .asc was already removed above, so the artefacts are worse
+				// off than before the run (#1596).
+				signingFailures = append(signingFailures, fmt.Sprintf("Linux GPG signature for %s", arch))
 			} else {
 				fmt.Printf("Linux detached GPG signature for %s successfully created!\n", arch)
 			}
@@ -218,6 +253,16 @@ func SignCommand(args []string) {
 	fmt.Println("Updating checksums.txt...")
 	err := generateChecksums(binDir)
 	CheckFatal(err, "Failed to generate checksums")
+
+	if len(signingFailures) > 0 {
+		fmt.Println()
+		fmt.Println("=== Signing FAILED ===")
+		for _, f := range signingFailures {
+			fmt.Printf("  - %s\n", f)
+		}
+		fmt.Println("dist/ is NOT ready to publish. Fix the above and re-run.")
+		os.Exit(1)
+	}
 
 	fmt.Println("=== Client Signing Complete! ===")
 }
@@ -243,6 +288,21 @@ func writeSecretFile(content, pattern string) (string, error) {
 		return "", err
 	}
 	return f.Name(), nil
+}
+
+// gpgKeyInKeyring reports whether gpg already holds a secret key matching the given identifier.
+//
+// Deliberately quiet: this is a probe, and routing it through RunCommand would print a gpg
+// invocation and its stderr on every signing run, which is the sort of noise that trains people
+// to stop reading the output (#1596).
+func gpgKeyInKeyring(key string) bool {
+	if key == "" || key == "skip" {
+		return false
+	}
+	cmd := exec.Command("gpg", "--batch", "--list-secret-keys", key)
+	cmd.Stdout = io.Discard
+	cmd.Stderr = io.Discard
+	return cmd.Run() == nil
 }
 
 func fileExists(filename string) bool {

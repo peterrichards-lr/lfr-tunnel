@@ -3240,6 +3240,29 @@ input[type='checkbox'] {
    align-items: stretch keeps the two the same height by construction rather than by matching
    declarations, and unlike a fixed pixel height it still fits the label when the browser text
    size is increased, which is the usual reason this comes back. */
+/* A row of labelled inputs with an action button beside them (#1627).
+   .input-field carries `margin-bottom: 16px` for stacked forms, and the flex items here are the
+   .form-group wrappers -- so each field's box ended well below its visible edge and the button,
+   aligned to that box, sat 31px out of line with the inputs it belongs to.
+   Zeroed here rather than on .input-field itself, which would reflow every stacked form in the
+   portal. Same shape as the fix in #1558. */
+.inline-form-row {
+  display: flex;
+  align-items: flex-end;
+  flex-wrap: wrap;
+  gap: var(--spacing-md);
+}
+.inline-form-row .form-group {
+  margin-bottom: 0;
+}
+.inline-form-row .input-field {
+  margin-bottom: 0;
+  box-sizing: border-box;
+}
+.inline-form-row .btn {
+  box-sizing: border-box;
+}
+
 .analytics-toolbar {
   display: flex;
   align-items: stretch;

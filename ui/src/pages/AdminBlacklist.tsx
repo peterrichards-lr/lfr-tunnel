@@ -191,8 +191,8 @@ export default function AdminBlacklist() {
         <h4 className="text-md fw-bold mb-md">
           {t('block_new_ip', 'Block IP Address')}
         </h4>
-        <form onSubmit={addEntry} className="flex gap-md items-end flex-wrap">
-          <div className="form-group flex-1 min-w-md m-0">
+        <form onSubmit={addEntry} className="inline-form-row">
+          <div className="form-group flex-1 min-w-md">
             <label className="form-label mb-xs" htmlFor="ip-address">
               {t('ip_address', 'IP Address')}
             </label>
@@ -206,7 +206,7 @@ export default function AdminBlacklist() {
               required
             />
           </div>
-          <div className="form-group flex-2 min-w-lg m-0">
+          <div className="form-group flex-2 min-w-lg">
             <label className="form-label mb-xs" htmlFor="reason">
               {t('reason', 'Reason')}
             </label>

@@ -31,6 +31,28 @@ const (
 // binary. Generated, and no longer committed since #1196.
 const uiDistIndex = "pkg/server/ui-dist/index.html"
 
+// BuildUI builds portal v2 into the embed directory, by invoking the same `make ui-dist` rule
+// `make build` uses.
+//
+// deploy used to merely *check* that something was there and then embed it. That made the portal
+// which shipped a function of when the operator last ran `make build`, not of the commit being
+// deployed -- and in #1632 it put a 12-day-old portal v2 into production behind a correct
+// version string, on a deploy that reported success on all five gateways.
+//
+// Building here rather than detecting staleness because detection can be defeated by an operator
+// who does not know the rule, and not knowing the rule is the actual failure mode. RequireBuiltUI
+// still runs afterwards as a post-condition.
+func BuildUI() error {
+	fmt.Println("Building portal v2 (make ui-dist)...")
+	if err := RunCommand("make", "ui-dist"); err != nil {
+		return fmt.Errorf(
+			"building the UI failed: %w\n"+
+				"portal v2 is embedded from pkg/server/ui-dist, which is gitignored, so a deploy\n"+
+				"cannot proceed without building it -- see `make ui-dist`", err)
+	}
+	return nil
+}
+
 // RequireBuiltUI refuses to deploy a gateway whose portal v2 would answer 500.
 //
 // `make build` builds the UI and copies it into the embed directory; deploy cross-compiles
@@ -151,7 +173,17 @@ func DeployCommand(args []string) {
 		version = extractVersion() // Re-use from build.go
 	}
 
-	// Before the build, not after: a binary with no UI must never reach the box (#1494).
+	// Build the UI here rather than trusting whatever is on disk: ui-dist is gitignored, so
+	// without this the portal that ships is whatever the operator last built, which is how a
+	// 12-day-old portal v2 reached production in #1632.
+	if err := BuildUI(); err != nil {
+		fmt.Fprintf(os.Stderr, "FATAL: %v\n", err)
+		exitCode = 1
+		return
+	}
+
+	// Still checked afterwards, as a post-condition rather than a precondition: a build that
+	// exits 0 but produces nothing usable must not reach the box either (#1494).
 	if err := RequireBuiltUI(); err != nil {
 		fmt.Fprintf(os.Stderr, "FATAL: %v\n", err)
 		exitCode = 1

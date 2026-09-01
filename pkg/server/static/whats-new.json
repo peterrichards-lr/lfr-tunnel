@@ -1,5 +1,12 @@
 [
   {
+    "version": "v1.48.18",
+    "release_date": "2026-09-01",
+    "features": [
+      "fix(portal): give every sidebar destination a shortcut, and stop offering unreachable ones (#1640) (#1641)"
+    ]
+  },
+  {
     "version": "v1.48.17",
     "release_date": "2026-09-01",
     "features": [
@@ -37,15 +44,6 @@
       "refactor(portal): move the new sections from inline styles to CSS classes (#1609)",
       "fix(portal-v2): align Export PDF with the Analytics range select (#1607)",
       "fix(portal-v2): make the sidebar menu scroll, and drop the duplicate status link (#1606)"
-    ]
-  },
-  {
-    "version": "v1.48.13",
-    "release_date": "2026-08-31",
-    "features": [
-      "fix(portal-v2): remove the Backups and Maintenance copies from System Settings (#1601)",
-      "fix(portal-v2): keep the sidebar on screen, and restack the footer (#1600)",
-      "fix(ops): stop sign warning about an import it never needed (#1597)"
     ]
   }
 ]

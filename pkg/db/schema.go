@@ -322,4 +322,19 @@ var migrations = []migration{
 		updated_at DATETIME NOT NULL DEFAULT (datetime('now')),
 		PRIMARY KEY (period, bucket)
 	)`},
+
+	// The session cookie's SameSite mode, recorded per session (#1655).
+	//
+	// Browsers send a cookie's value back and none of its attributes, so a server re-issuing a
+	// cookie -- which sliding expiry requires -- cannot know how the original was configured.
+	// The three login paths do not agree (admin magic-link uses Strict, portal and SSO use Lax,
+	// see #1661), so guessing would silently downgrade the most privileged of the three.
+	//
+	// Stored rather than derived, and persisted rather than kept in memory only: a session
+	// surviving a restart (#1304) must be re-issued with the mode it was created with, not
+	// whatever the default happens to be.
+	//
+	// Empty means "created before this column existed" -- see sameSiteFromStored, which leaves
+	// such a session's cookie alone rather than re-issuing it with a guess.
+	{26, "ALTER TABLE portal_sessions ADD COLUMN same_site TEXT NOT NULL DEFAULT ''"},
 }

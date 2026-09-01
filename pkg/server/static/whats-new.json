@@ -1,5 +1,17 @@
 [
   {
+    "version": "v1.48.19",
+    "release_date": "2026-09-01",
+    "features": [
+      "fix(portal): show every known gateway in Sessions per Gateway (#1648) (#1654)",
+      "feat(portal-v2): show gateway and client versions in the sidebar footer (#1647) (#1653)",
+      "fix(portal-v2): inset the table footer to match the toolbar above it (#1651) (#1652)",
+      "fix(ci): run Hook Tests when the Makefile changes (#1643) (#1645)",
+      "fix(hooks): allow commits whose staged change is only deletions (#1649) (#1650)",
+      "fix(ops): say \"no credentials\" instead of blaming the region list (#1644) (#1646)"
+    ]
+  },
+  {
     "version": "v1.48.18",
     "release_date": "2026-09-01",
     "features": [
@@ -35,15 +47,6 @@
     "features": [
       "a11y(portal-v1): the same shortcuts overlay and page keys as V2 (#1614)",
       "a11y(portal-v2): a shortcuts overlay, and keys to reach each page (#1612)"
-    ]
-  },
-  {
-    "version": "v1.48.14",
-    "release_date": "2026-08-31",
-    "features": [
-      "refactor(portal): move the new sections from inline styles to CSS classes (#1609)",
-      "fix(portal-v2): align Export PDF with the Analytics range select (#1607)",
-      "fix(portal-v2): make the sidebar menu scroll, and drop the duplicate status link (#1606)"
     ]
   }
 ]

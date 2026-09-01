@@ -184,6 +184,27 @@ Cross-compiles the Linux `lfr-tunneld` binary and deploys it along with static a
 ```bash
 ./bin/lfr-tunnel-ops deploy
 ```
+
+*Note: the edges do not serve the portal. Every portal path on an edge 301-redirects to the
+apex, which central serves -- verified against production on 2026-09-01: `/portal/`,
+`/portalv2/` and `/static/dashboard.js` all return 301 to `https://lfr-demo.se/...` on
+in/apac, while central returns 200. So a portal-only release (`dashboard.*`, `ui/`,
+`static/`, and nothing in `*.go` but `version.go`) does not functionally require an edge
+deploy at all.*
+
+*We deploy them anyway, deliberately: a uniform `server_version` across the fleet is worth
+more than the saved restarts, and "which box is on what" is not a question anyone should
+have to ask mid-incident. Just know what it costs -- each edge deploy restarts the service,
+drops the control channel and triggers a client failover, and for a scheduled-off edge it
+also starts and stops the instance. To see whether a release touches anything an edge can
+actually run:*
+
+```bash
+git diff --name-only <last-tag>..<new-tag> -- '*.go'
+```
+
+*Empty, or only `pkg/config/version.go`, means the edges are getting the change purely for
+version alignment.*
 *Note: `deploy` never touches nginx config -- see "Reconciling Nginx Config" below for that.*
 
 *Note (#1050): pass `-aws-region <region>` (or set `AWS_REGION`/`central.aws_region`) if the
@@ -450,4 +471,4 @@ Run remote diagnostic checks on the VPS (system uptime/load, systemd service sta
 
 <!-- markdownlint-disable MD049 -->
 ---
-*Last Updated: 2026-08-27* | *Last Reviewed: 2026-08-27*
+*Last Updated: 2026-09-01* | *Last Reviewed: 2026-09-01*

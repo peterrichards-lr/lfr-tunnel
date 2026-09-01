@@ -194,6 +194,35 @@ else
     #
     # So the secret case alone cannot tell "the mount is fixed" from "the mount is broken and
     # the guard compensated". Both cases are load-bearing; do not drop this one as a duplicate.
+    # Case: a change consisting only of DELETIONS must not be blocked (#1649).
+    #
+    # gitleaks protect --staged scans added content, so a deletion-only edit legitimately
+    # scans 0 bytes. The guard keyed on "files are staged" instead, and --diff-filter=ACM
+    # still lists such an edit as M -- so every deletion-only commit was refused, and the only
+    # ways past were --no-verify (which disables the scan entirely, the opposite of the point)
+    # or padding the diff with a cosmetic addition.
+    #
+    # Committed content first, then a commit, then the deletion: staging a deletion requires
+    # something to delete, and a file added and removed in the same staging area nets to
+    # nothing at all, which is a different case.
+    if new_worktree deletiononly; then
+        ( cd "$NEW_WT" \
+            && printf 'line one\nline two\nline three\n' > todelete.txt \
+            && git add todelete.txt \
+            && git -c user.email=t@t -c user.name=t commit -qm "fixture" --no-verify \
+            && printf 'line one\nline three\n' > todelete.txt \
+            && git add todelete.txt \
+            && "$SCANNER" >/dev/null 2>&1 )
+        rc=$?
+        if [ "$rc" -eq 0 ]; then
+            pass "deletion-only change is allowed (exit $rc)"
+        else
+            fail "deletion-only change was blocked (exit $rc) -- false positive, see #1649"
+        fi
+    else
+        fail "could not create a worktree for the deletion-only case"
+    fi
+
     if new_worktree clean; then
         ( cd "$NEW_WT" && printf 'const greeting = "hello";\n' > probe.js \
             && git add probe.js && "$SCANNER" >/dev/null 2>&1 )

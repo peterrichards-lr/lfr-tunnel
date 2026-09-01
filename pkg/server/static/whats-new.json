@@ -1,5 +1,18 @@
 [
   {
+    "version": "v1.48.17",
+    "release_date": "2026-09-01",
+    "features": [
+      "chore(e2e): reap the test stack on failure and interrupt (#1628) (#1638)",
+      "feat(portal): let users switch the promo banner back on from Account Settings (#1626) (#1637)",
+      "fix(portal-v2): align the Block IP button with the fields beside it (#1627) (#1636)",
+      "fix(portal-v2): point Throttle at an endpoint that exists (#1629) (#1635)",
+      "fix(ops): make deploy build the portal instead of trusting what is on disk (#1632) (#1634)",
+      "docs(ops): record that the edges do not serve the portal (#1631)",
+      "feat(portal-v1): add an admin-wide Registered Subdomains screen (#1619) (#1625)"
+    ]
+  },
+  {
     "version": "v1.48.16",
     "release_date": "2026-09-01",
     "features": [
@@ -33,13 +46,6 @@
       "fix(portal-v2): remove the Backups and Maintenance copies from System Settings (#1601)",
       "fix(portal-v2): keep the sidebar on screen, and restack the footer (#1600)",
       "fix(ops): stop sign warning about an import it never needed (#1597)"
-    ]
-  },
-  {
-    "version": "v1.48.12",
-    "release_date": "2026-08-30",
-    "features": [
-      "fix(install): expand the tilde, so the client lands in the home folder (#1594)"
     ]
   }
 ]

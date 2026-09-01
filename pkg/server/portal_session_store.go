@@ -106,6 +106,7 @@ func (s *portalSessionStore) loadPortalSession(token string) (PortalSessionData,
 		PreviousLoginAt:       row.PreviousLoginAt,
 		KilledPreviousSession: row.KilledPreviousSession,
 		ViewAsRole:            row.ViewAsRole,
+		SameSite:              row.SameSite,
 	}
 	s.portalMap.Store(portalSessionKeyPrefix+token, data)
 	return data, true
@@ -130,6 +131,7 @@ func (s *portalSessionStore) storePortalSession(token string, data PortalSession
 		PreviousLoginAt:       data.PreviousLoginAt,
 		KilledPreviousSession: data.KilledPreviousSession,
 		ExpiresAt:             data.ExpiresAt,
+		SameSite:              data.SameSite,
 	})
 	if err != nil {
 		// Deliberately not fatal. A session that is only in memory behaves exactly as every

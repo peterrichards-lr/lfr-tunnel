@@ -719,16 +719,7 @@ func (s *Server) handleMFAVerify(w http.ResponseWriter, r *http.Request) {
 	}
 	s.invalidateUserCache(user.Email)
 
-	cookie := &http.Cookie{
-		Name:     "lfr_session",
-		Value:    sessionToken,
-		Path:     "/",
-		Expires:  time.Now().Add(s.cfg.PortalSessionDuration),
-		HttpOnly: true,
-		Secure:   r.TLS != nil || r.Header.Get("X-Forwarded-Proto") == "https",
-		SameSite: http.SameSiteLaxMode,
-	}
-	http.SetCookie(w, cookie)
+	http.SetCookie(w, s.newSessionCookie(r, sessionToken, http.SameSiteLaxMode))
 
 	respondJSON(w, http.StatusOK, map[string]string{"status": "success"})
 }

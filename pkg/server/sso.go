@@ -221,17 +221,12 @@ func (s *Server) handleSSOCallback(w http.ResponseWriter, r *http.Request) {
 		ExpiresAt:             time.Now().Add(s.cfg.PortalSessionDuration),
 		ClientIP:              r.Header.Get("X-Real-IP"),
 		KilledPreviousSession: killedPreviousSession,
+		// Recorded so a slide can re-issue the cookie with the mode it was created with
+		// rather than a default (#1655).
+		SameSite: sameSiteToStored(http.SameSiteLaxMode),
 	})
 
-	http.SetCookie(w, &http.Cookie{
-		Name:     "lfr_session",
-		Value:    sessionID,
-		Path:     "/",
-		Expires:  time.Now().Add(s.cfg.PortalSessionDuration),
-		HttpOnly: true,
-		Secure:   r.TLS != nil || r.Header.Get("X-Forwarded-Proto") == "https",
-		SameSite: http.SameSiteLaxMode,
-	})
+	http.SetCookie(w, s.newSessionCookie(r, sessionID, http.SameSiteLaxMode))
 
 	// Inject an audit log
 	_ = s.db.WriteAuditEntry(&db.AuditEntry{ //nolint:errcheck

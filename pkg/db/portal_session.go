@@ -23,6 +23,9 @@ type PortalSession struct {
 	KilledPreviousSession bool
 	CreatedAt             time.Time
 	ExpiresAt             time.Time
+	// SameSite is the cookie's SameSite mode as a string ("Strict"/"Lax"), recorded at login
+	// (#1655). Empty for sessions created before the column existed.
+	SameSite string
 }
 
 type SQLitePortalSessionRepo struct {
@@ -42,18 +45,22 @@ func (repo *SQLitePortalSessionRepo) UpsertPortalSession(sess *PortalSession) er
 	}
 	_, err := repo.conn.Exec(`
 		INSERT INTO portal_sessions
-			(token_hash, email, client_ip, view_as_role, previous_login_at, killed_previous_session, created_at, expires_at)
-		VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+			(token_hash, email, client_ip, view_as_role, previous_login_at, killed_previous_session, created_at, expires_at, same_site)
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
 		ON CONFLICT(token_hash) DO UPDATE SET
 			email = excluded.email,
 			client_ip = excluded.client_ip,
 			view_as_role = excluded.view_as_role,
 			previous_login_at = excluded.previous_login_at,
 			killed_previous_session = excluded.killed_previous_session,
-			expires_at = excluded.expires_at
+			expires_at = excluded.expires_at,
+			-- Not overwritten with an empty value: a slide writes the whole row back, and a
+			-- caller that did not carry the mode through would erase it and leave the session
+			-- un-refreshable (#1655).
+			same_site = CASE WHEN excluded.same_site = '' THEN portal_sessions.same_site ELSE excluded.same_site END
 	`, sess.TokenHash, sess.Email, sess.ClientIP, sess.ViewAsRole,
 		sess.PreviousLoginAt, boolToInt(sess.KilledPreviousSession),
-		sess.CreatedAt.UTC(), sess.ExpiresAt.UTC())
+		sess.CreatedAt.UTC(), sess.ExpiresAt.UTC(), sess.SameSite)
 	return err
 }
 
@@ -63,7 +70,8 @@ func (repo *SQLitePortalSessionRepo) UpsertPortalSession(sess *PortalSession) er
 func (repo *SQLitePortalSessionRepo) GetPortalSession(tokenHash string) (*PortalSession, error) {
 	row := repo.conn.QueryRow(`
 		SELECT token_hash, email, COALESCE(client_ip, ''), COALESCE(view_as_role, ''),
-		       previous_login_at, killed_previous_session, created_at, expires_at
+		       previous_login_at, killed_previous_session, created_at, expires_at,
+		       COALESCE(same_site, '')
 		FROM portal_sessions
 		WHERE token_hash = ? AND expires_at > datetime('now')
 	`, tokenHash)
@@ -72,7 +80,7 @@ func (repo *SQLitePortalSessionRepo) GetPortalSession(tokenHash string) (*Portal
 	var killed int
 	var previousLogin sql.NullTime
 	err := row.Scan(&sess.TokenHash, &sess.Email, &sess.ClientIP, &sess.ViewAsRole,
-		&previousLogin, &killed, &sess.CreatedAt, &sess.ExpiresAt)
+		&previousLogin, &killed, &sess.CreatedAt, &sess.ExpiresAt, &sess.SameSite)
 	if err == sql.ErrNoRows {
 		return nil, nil
 	}

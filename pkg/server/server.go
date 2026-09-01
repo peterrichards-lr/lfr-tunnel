@@ -660,6 +660,11 @@ func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// Keep a live session's cookie in step with the session itself (#1655). Before any
+	// routing, so it applies to every authenticated path rather than only the admin one, and
+	// harmless on the rest -- it returns immediately when there is no session cookie.
+	s.slidePortalSession(w, r)
+
 	// 2. Rate Limiting and Auto-Ban for API routes
 	if strings.HasPrefix(r.URL.Path, "/api/") && !s.cfg.DisableAPIRateLimit {
 		limiter := s.getRateLimiter(ip)
@@ -3809,20 +3814,13 @@ func (s *Server) handleAdminVerify(w http.ResponseWriter, r *http.Request) {
 		ClientIP:              clientIP,
 		PreviousLoginAt:       previousLoginAt,
 		KilledPreviousSession: killedPreviousSession,
+		// Strict here, Lax on the other two paths (#1661). Recorded so a slide preserves it.
+		SameSite: sameSiteToStored(http.SameSiteStrictMode),
 	})
 
 	s.writeAudit(email, "admin.login", "system", "admin", "Admin logged into dashboard via magic link", r)
 
-	cookie := &http.Cookie{
-		Name:     "lfr_session",
-		Value:    sessionToken,
-		Path:     "/",
-		Expires:  time.Now().Add(s.cfg.PortalSessionDuration),
-		HttpOnly: true,
-		Secure:   r.TLS != nil || r.Header.Get("X-Forwarded-Proto") == "https",
-		SameSite: http.SameSiteStrictMode,
-	}
-	http.SetCookie(w, cookie)
+	http.SetCookie(w, s.newSessionCookie(r, sessionToken, http.SameSiteStrictMode))
 
 	respondJSON(w, http.StatusOK, map[string]string{"status": "ok"})
 }
@@ -5347,6 +5345,13 @@ type PortalSessionData struct {
 	// Held on the session rather than sent by the client, so the effective role is the
 	// server's decision (#1225). A session carrying this is read-only.
 	ViewAsRole string
+	// SameSite is the mode the cookie was created with, as a string ("Strict"/"Lax").
+	//
+	// Recorded because a browser returns a cookie's value and none of its attributes, so
+	// re-issuing one -- which sliding expiry requires -- would otherwise have to guess. The
+	// three login paths disagree (#1661), so a guess would silently downgrade the admin
+	// session from Strict to Lax. Empty means a session created before this existed.
+	SameSite string
 }
 
 func (s *Server) handleAdminListMagicLinks(w http.ResponseWriter, r *http.Request) {

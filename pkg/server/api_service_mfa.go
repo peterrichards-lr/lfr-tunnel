@@ -2,6 +2,7 @@ package server
 
 import (
 	"fmt"
+	"net/http"
 	"time"
 
 	"lfr-tunnel/pkg/db"
@@ -126,6 +127,9 @@ func (s *portalService) MFAVerify(tempToken, code, ip string) (*db.User, string,
 		ClientIP:              ip,
 		PreviousLoginAt:       previousLoginAt,
 		KilledPreviousSession: killedPreviousSession,
+		// Lax, matching the portal login handler that issues the cookie for this token
+		// (api.go). Recorded so a slide preserves it (#1655).
+		SameSite: sameSiteToStored(http.SameSiteLaxMode),
 	})
 
 	_ = s.db.WriteAuditEntry(&db.AuditEntry{ //nolint:errcheck

@@ -102,9 +102,11 @@ func (s *Server) requireAdmin(w http.ResponseWriter, r *http.Request) (string, s
 				}
 				authenticated = true
 
-				// Optional: sliding expiration
-				sessionData.ExpiresAt = time.Now().Add(s.cfg.PortalSessionDuration)
-				s.sessionStore().storePortalSession(cookie.Value, sessionData)
+				// The sliding expiry used to live here, and only here (#1655) -- so an
+				// ordinary portal user's session was never extended, and even an admin's
+				// cookie was never re-issued, which is what made the whole mechanism
+				// ineffective. ServeHTTP now slides every live session in one place and
+				// re-issues the cookie with it.
 			}
 		}
 	}

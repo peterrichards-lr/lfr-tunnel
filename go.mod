@@ -7,7 +7,7 @@ require (
 	github.com/aws/aws-sdk-go-v2/config v1.33.1
 	github.com/aws/aws-sdk-go-v2/service/ec2 v1.321.0
 	github.com/aws/aws-sdk-go-v2/service/route53 v1.65.9
-	github.com/aws/aws-sdk-go-v2/service/scheduler v1.20.7
+	github.com/aws/aws-sdk-go-v2/service/scheduler v1.22.1
 	github.com/aws/aws-sdk-go-v2/service/sts v1.47.1
 	github.com/coreos/go-oidc/v3 v3.20.0
 	github.com/gogpu/systray v0.2.8

@@ -226,6 +226,7 @@
                     <div id="section-administration" class="sidebar-section-content">
                         <a id="nav-registrations" class="nav-item" href="/portal/registrations"><span data-i18n="sidebar_registrations">Registrations</span> <span id="reg-badge" class="badge" style="display:none; background: var(--danger); color: white; margin-left: 8px;">0</span></a>
                         <a id="nav-users" class="nav-item" data-i18n="sidebar_users" href="/portal/users">Users</a>
+                        <a id="nav-admin-subdomains" class="nav-item" data-i18n="sidebar_admin_subdomains" href="/portal/admin-subdomains">Registered Subdomains</a>
                         <a id="nav-blacklist" class="nav-item" data-i18n="sidebar_blacklist" href="/portal/blacklist">IP Blacklist</a>
                     </div>
 
@@ -799,6 +800,22 @@
                     <table>
                         <thead><tr><th data-sort="ip_address" data-i18n="th_ip_address">IP Address</th><th data-sort="reason" data-i18n="th_reason">Reason</th><th data-sort="banned_at" data-i18n="th_banned_at">Banned At</th><th data-i18n="th_actions">Actions</th></tr></thead>
                         <tbody id="blacklist-table-body"></tbody>
+                    </table>
+                </div>
+            </div>
+
+            <!-- Registered Subdomains Tab (admin-wide; the Reservations tab above is
+                 deliberately per-user and always has been -- see #1619) -->
+            <div id="tab-admin-subdomains" class="hidden">
+                <div class="header">
+                    <h2 data-i18n="tab_admin_subdomains_title">Registered Subdomains</h2>
+                    <a href="/api/admin/leases/export" class="btn btn-secondary" style="width: auto; margin: 0;" data-i18n="export_csv">📥 Export CSV</a>
+                </div>
+                <p style="color: var(--text-muted); margin-bottom: 24px; font-size: 14px;" data-i18n="admin_subdomains_desc">Every subdomain reserved on this gateway, across all users.</p>
+                <div class="glass table-container">
+                    <table>
+                        <thead><tr id="admin-subdomains-table-headers"></tr></thead>
+                        <tbody id="admin-subdomains-table-body"></tbody>
                     </table>
                 </div>
             </div>

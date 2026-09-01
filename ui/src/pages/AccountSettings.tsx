@@ -8,8 +8,14 @@ import ModalShell from '../components/ModalShell';
 
 export default function AccountSettings() {
   const { user } = useOutletContext<{ user: any }>();
-  const { themePreference, setThemePreference, useUTC, toggleUTC } =
-    useSettings();
+  const {
+    themePreference,
+    setThemePreference,
+    useUTC,
+    toggleUTC,
+    showPortalBanner,
+    setShowPortalBanner,
+  } = useSettings();
   const { language, setLanguage, t, availableLanguages } = useI18n();
 
   const [firstName, setFirstName] = useState(user?.first_name || '');
@@ -320,6 +326,32 @@ export default function AccountSettings() {
                 <input type="checkbox" checked={useUTC} onChange={toggleUTC} />
                 <span className="toggle-slider"></span>
               </label>
+            </div>
+
+            <div className="mb-xl">
+              <div className="flex items-center justify-between">
+                <label
+                  className="form-label m-0"
+                  htmlFor="portal-banner-toggle"
+                >
+                  {t('show_portal_banner', 'Portal switch banner')}
+                </label>
+                <label className="toggle-switch">
+                  <input
+                    id="portal-banner-toggle"
+                    type="checkbox"
+                    checked={showPortalBanner}
+                    onChange={(e) => setShowPortalBanner(e.target.checked)}
+                  />
+                  <span className="toggle-slider"></span>
+                </label>
+              </div>
+              <p className="text-xs text-muted mt-xs">
+                {t(
+                  'show_portal_banner_desc',
+                  'The banner offering the classic portal. Dismissing it hides it for good on this browser, so turn it back on here if you want the link back. This preference is per-browser.',
+                )}
+              </p>
             </div>
 
             <div className="form-group mb-lg">

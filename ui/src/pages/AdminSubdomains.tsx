@@ -174,10 +174,26 @@ export default function AdminSubdomains() {
       '10',
     );
     if (rate === null) return;
+
+    // parseInt('abc') is NaN, which JSON.stringify turns into null, which the handler reads as
+    // 0 -- silently REMOVING the limit when the intent was to set one. Rejected here instead.
+    const parsed = Number(rate);
+    if (!Number.isInteger(parsed) || parsed < 0) {
+      showToast(
+        'Enter a whole number of requests per second (0 removes the limit)',
+        'error',
+      );
+      return;
+    }
+
     try {
-      await axios.post('/api/admin/leases/throttle', {
-        full_host: fullHost,
-        rate_limit: parseInt(rate, 10),
+      // /api/admin/leases/rate-limit, and `host` rather than `full_host`: this used to post to
+      // /api/admin/leases/throttle, which has never existed -- there is no handler for it
+      // anywhere in pkg/server -- with a field the handler does not read either, so fixing only
+      // the path would still have failed with "Host is required" (#1629).
+      await axios.post('/api/admin/leases/rate-limit', {
+        host: fullHost,
+        rate_limit: parsed,
       });
       showToast(`Updated rate limit for ${fullHost}`, 'success');
       fetchSubdomains();

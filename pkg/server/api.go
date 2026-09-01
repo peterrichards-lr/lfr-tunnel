@@ -17,6 +17,7 @@ import (
 	"path"
 	"path/filepath"
 	"runtime"
+	"sort"
 	"strconv"
 	"strings"
 	"time"
@@ -539,12 +540,80 @@ func (s *Server) handleGetAnalytics(w http.ResponseWriter, r *http.Request) {
 		}
 		s.edgeLeasesMu.Unlock()
 		globalStats.NodeDistribution = nodeDistribution
+		globalStats.NodeDaily = padNodeDaily(globalStats.NodeDaily, s.knownNodeIDs())
 
 		slog.Info(fmt.Sprintf("handleGetAnalytics: globalStats loaded successfully (TopUsers: %d, Daily: %d)", len(globalStats.TopUsers), len(globalStats.Daily)))
 		resp["global"] = globalStats
 	}
 
 	respondJSON(w, http.StatusOK, resp)
+}
+
+// knownNodeIDs is every gateway this deployment expects sessions from: the configured edges
+// plus the control plane, which the metrics query already coalesces an empty node_id to.
+//
+// Read through edgeNodes() rather than cfg.EdgeNodes so a SIGHUP reload is reflected -- the
+// startup value goes stale the moment an edge is added or withdrawn (#1309).
+func (s *Server) knownNodeIDs() []string {
+	nodes := []string{"control"}
+	for _, e := range s.edgeNodes() {
+		if e.ID != "" && e.ID != "control" {
+			nodes = append(nodes, e.ID)
+		}
+	}
+	return nodes
+}
+
+// padNodeDaily gives every known gateway a point on every day already in the series, filling
+// the gaps with zero (#1648).
+//
+// The query behind NodeDaily groups the rows that exist, so a gateway that carried no sessions
+// in the window produces no rows and gets no line at all -- it vanishes rather than flatlining.
+// For an edge on a power schedule that is most of the time, which is how it came to look as
+// though the panel only showed running gateways. It never filtered on running state; there was
+// simply nothing to plot.
+//
+// A missing line and a zero line mean different things, and rendering them identically hides
+// exactly what #1150 built this panel to show: an edge that has stopped receiving sessions.
+//
+// Only days already present are filled. Inventing days would extend the x-axis past the range
+// the query was asked for, and an empty series stays empty so the UI can still say "no session
+// data recorded yet" rather than drawing flat lines through a period with no data at all.
+func padNodeDaily(existing []db.NodeDailySession, knownNodes []string) []db.NodeDailySession {
+	if len(existing) == 0 || len(knownNodes) == 0 {
+		return existing
+	}
+
+	seen := make(map[string]struct{}, len(existing))
+	dates := make([]string, 0)
+	dateSeen := make(map[string]struct{})
+	for _, e := range existing {
+		seen[e.Date+"|"+e.NodeID] = struct{}{}
+		if _, ok := dateSeen[e.Date]; !ok {
+			dateSeen[e.Date] = struct{}{}
+			dates = append(dates, e.Date)
+		}
+	}
+
+	padded := existing
+	for _, d := range dates {
+		for _, n := range knownNodes {
+			if _, ok := seen[d+"|"+n]; ok {
+				continue
+			}
+			padded = append(padded, db.NodeDailySession{Date: d, NodeID: n, Sessions: 0})
+		}
+	}
+
+	// Sorted the same way the query returns it (date, then node) so the series is stable and
+	// the UI's date axis does not depend on insertion order.
+	sort.Slice(padded, func(i, j int) bool {
+		if padded[i].Date != padded[j].Date {
+			return padded[i].Date < padded[j].Date
+		}
+		return padded[i].NodeID < padded[j].NodeID
+	})
+	return padded
 }
 
 // handleMFASetup generates a new TOTP secret and returns setup details.

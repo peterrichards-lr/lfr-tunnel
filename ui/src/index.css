@@ -3235,6 +3235,18 @@ input[type='checkbox'] {
 .sidebar-footer-row {
   margin-bottom: var(--spacing-sm);
 }
+/* Gateway/client versions in the sidebar footer (#1647). Muted and small on purpose: it is a
+   verification aid, not something to read on the way past -- V1 uses the same treatment. */
+.sidebar-footer-versions {
+  margin-top: var(--spacing-md);
+  font-size: 10px;
+  color: var(--text-muted);
+  opacity: 0.5;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
 .sidebar-footer-policies {
   display: grid;
   grid-template-columns: 1fr 1fr;

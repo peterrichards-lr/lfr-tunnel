@@ -14,6 +14,12 @@ export default function Layout() {
   const [uptime, setUptime] = useState<string>('');
   // V1's footer has linked out to the status page all along; V2's did not (#1559).
   const [statusPageUrl, setStatusPageUrl] = useState<string>('');
+  // Gateway and client versions for the sidebar footer (#1647). Deliberately without uptime:
+  // the header already shows that beside the status indicator, and two displays of one fact in
+  // a single view is what #1603 removed for the status link -- they disagree the moment one is
+  // not refreshed.
+  const [serverVersion, setServerVersion] = useState<string>('');
+  const [clientVersion, setClientVersion] = useState<string>('');
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
   const navigate = useNavigate();
   const { t } = useI18n();
@@ -47,6 +53,15 @@ export default function Layout() {
         // was not, which put one deployment's URL in the source and showed a link that a
         // different deployment could not honour.
         setStatusPageUrl(versionRes.data?.status_page_url || '');
+
+        // server_version first, latest_version as the fallback -- the same order V1 uses, so
+        // the two arms cannot disagree about what "Gateway" means.
+        setServerVersion(
+          versionRes.data?.server_version ||
+            versionRes.data?.latest_version ||
+            '',
+        );
+        setClientVersion(versionRes.data?.latest_version || '');
 
         // Calculate Uptime
         const seconds = versionRes.data?.uptime_seconds;
@@ -132,6 +147,8 @@ export default function Layout() {
           user={user}
           isOpen={isSidebarOpen}
           onClose={() => setIsSidebarOpen(false)}
+          serverVersion={serverVersion}
+          clientVersion={clientVersion}
         />
 
         {/* Registers the shortcuts and owns the overlay that documents them (#1611). */}

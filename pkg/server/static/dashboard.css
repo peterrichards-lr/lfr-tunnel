@@ -1432,9 +1432,9 @@ html[dir='rtl'] th {
   flex-wrap: wrap;
   flex-shrink: 0;
   padding: 8px 24px;
-  background: rgba(245, 158, 11, 0.15);
-  color: #f59e0b;
-  border-bottom: 1px solid #f59e0b;
+  background: var(--status-warning-bg);
+  color: var(--status-warning-text);
+  border-bottom: 1px solid var(--status-warning-border);
   text-align: center;
   font-size: 14px;
   box-sizing: border-box;

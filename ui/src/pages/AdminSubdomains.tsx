@@ -6,6 +6,7 @@ import { useUI } from '../contexts/UIContext';
 import { useDataTable, type ColumnDef } from '../hooks/useDataTable';
 import DataTableToolbar from '../components/DataTableToolbar';
 import DataTablePagination from '../components/DataTablePagination';
+import { useSettings } from '../contexts/SettingsContext';
 
 interface SubdomainInfo {
   id: number;
@@ -33,6 +34,13 @@ interface SubdomainInfo {
 }
 
 export default function AdminSubdomains() {
+  const { formatDate } = useSettings();
+
+  // Both date columns showed the raw ISO string -- "2026-08-11T15:39:37Z" -- because this page
+  // never pulled in the formatter the rest of V2 uses. Adding Expires (#1617) alongside Created
+  // Date would have doubled that, so both go through formatDate now.
+  const renderDate = (value?: string) =>
+    value && !value.startsWith('0001-01-01') ? formatDate(value) : '—';
   const [subdomains, setSubdomains] = useState<SubdomainInfo[]>([]);
   const [loading, setLoading] = useState(true);
   const { t } = useI18n();
@@ -49,6 +57,9 @@ export default function AdminSubdomains() {
       { key: 'bytes_in', label: 'Bytes In', sortable: true },
       { key: 'bytes_out', label: 'Bytes Out', sortable: true },
       { key: 'created_at', label: 'Created Date', sortable: true },
+      // Visible by default: expiry is the point of a reservation, and V1's equivalent screen
+      // has always shown it. Still hideable through the column toggle like any other (#1617).
+      { key: 'expires_at', label: 'Expires', sortable: true },
     ],
     [],
   );
@@ -359,6 +370,15 @@ export default function AdminSubdomains() {
                     Created Date{getSortIndicator('created_at')}
                   </th>
                 )}
+                {isColumnVisible('expires_at') && (
+                  <th
+                    className="th-col th-col--sortable"
+                    onClick={() => requestSort('expires_at')}
+                    aria-sort={getAriaSort('expires_at')}
+                  >
+                    Expires{getSortIndicator('expires_at')}
+                  </th>
+                )}
                 <th className="th-col text-right">Actions</th>
               </tr>
             </thead>
@@ -454,7 +474,12 @@ export default function AdminSubdomains() {
                     )}
                     {isColumnVisible('created_at') && (
                       <td className="td-cell whitespace-nowrap">
-                        {sub.created_at ? sub.created_at : '—'}
+                        {renderDate(sub.created_at)}
+                      </td>
+                    )}
+                    {isColumnVisible('expires_at') && (
+                      <td className="td-cell whitespace-nowrap">
+                        {renderDate(sub.expires_at)}
                       </td>
                     )}
                     <td className="td-cell text-right">

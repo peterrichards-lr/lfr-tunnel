@@ -148,6 +148,20 @@ func (s *Server) handleGetMe(w http.ResponseWriter, r *http.Request) {
 		resp["can_view_as"] = strings.EqualFold(realUser.Role, "owner")
 	}
 
+	// When this session expires, so the portal can warn before it does (#1656).
+	//
+	// It has to come from the server: the cookie is HttpOnly by design, so the client cannot
+	// read its own expiry, and guessing from a login timestamp would be wrong now that the
+	// session slides (#1655).
+	//
+	// Absent rather than zero when there is no session -- a PAT-authenticated caller has no
+	// expiry to report, and sending 0 would render as 1970 in anything that trusts the field.
+	if sessionToken != "" {
+		if data, ok := s.sessionStore().loadPortalSession(sessionToken); ok {
+			resp["session_expires_at"] = data.ExpiresAt.UTC().Format(time.RFC3339)
+		}
+	}
+
 	respondJSON(w, http.StatusOK, resp)
 }
 

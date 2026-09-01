@@ -772,6 +772,7 @@ async function init() {
     const res = await fetch('/api/me');
     if (res.ok) {
       currentUser = await res.json();
+      renderSessionExpiry(currentUser.session_expires_at);
       showDashboard();
     } else {
       showLogin();
@@ -1642,6 +1643,59 @@ function handleTelemetryPayload(data) {
 }
 
 let pollingInterval = null;
+// Session expiry warning (#1656), matching portal v2.
+//
+// Until #1655 this could not have been built honestly: the server slid the session's expiry but
+// never re-issued the cookie, so the browser's copy died 24h after login regardless of activity.
+// A countdown against the server's expiry would have shown time the user did not have, and a
+// warning that is wrong is worse than no warning at all.
+//
+// session_expires_at comes from /api/me because the cookie is HttpOnly by design and the client
+// cannot read its own expiry.
+const SESSION_WARN_BEFORE_MS = 15 * 60 * 1000;
+
+function renderSessionExpiry(expiresAt) {
+  const banner = document.getElementById('session-expiry-banner');
+  const text = document.getElementById('session-expiry-text');
+  if (!banner || !text) return;
+
+  if (!expiresAt) {
+    banner.style.display = 'none';
+    return;
+  }
+
+  const msLeft = Date.parse(expiresAt) - Date.now();
+  if (isNaN(msLeft) || msLeft > SESSION_WARN_BEFORE_MS) {
+    banner.style.display = 'none';
+    return;
+  }
+
+  const minutes = Math.max(0, Math.ceil(msLeft / 60000));
+  text.textContent =
+    minutes > 0
+      ? t(
+          'session_expiring_in',
+          `Your session ends in about ${minutes} minute${minutes === 1 ? '' : 's'}.`,
+        )
+      : t('session_expired_soon', 'Your session is about to end.');
+  banner.style.display = 'flex';
+}
+
+// A real authenticated request, not merely hiding the banner. Every request slides the session
+// and re-issues the cookie (#1655), so this genuinely extends it -- a button that only dismissed
+// the notice would be a lie.
+async function staySignedIn() {
+  try {
+    const res = await fetch('/api/me');
+    if (res.ok) {
+      const data = await res.json();
+      renderSessionExpiry(data.session_expires_at);
+    }
+  } catch (e) {
+    console.error('Failed to extend the session', e);
+  }
+}
+
 function startPolling() {
   if (pollingInterval) clearInterval(pollingInterval);
   pollingInterval = setInterval(async () => {
@@ -1656,6 +1710,7 @@ function startPolling() {
       if (res.ok) {
         const data = await res.json();
         handleTelemetryPayload(data);
+        renderSessionExpiry(data.session_expires_at);
       }
     } catch (e) {
       console.error('Polling error', e);

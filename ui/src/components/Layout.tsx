@@ -7,6 +7,7 @@ import ScrollToTopButton from './ScrollToTopButton';
 import { useI18n } from '../contexts/I18nContext';
 import { useSettings } from '../contexts/SettingsContext';
 import ShortcutsOverlay from './ShortcutsOverlay';
+import SessionExpiryWarning from './SessionExpiryWarning';
 
 export default function Layout() {
   const [user, setUser] = useState<any>(null);
@@ -37,6 +38,18 @@ export default function Layout() {
       setUser((prev: any) => ({ ...prev, targeted_message: '' }));
     } catch (e) {
       console.error('Failed to dismiss message', e);
+    }
+  };
+
+  // Re-reads /api/me so session_expires_at reflects the slide the request itself caused
+  // (#1655/#1656). Declared here rather than inside the effect because the expiry warning needs
+  // to call it after extending.
+  const refreshUser = async () => {
+    try {
+      const res = await axios.get('/api/me');
+      setUser(res.data);
+    } catch {
+      navigate('/login');
     }
   };
 
@@ -121,6 +134,13 @@ export default function Layout() {
       </a>
 
       <ViewAsBar viewAs={user.view_as} canViewAs={user.can_view_as} />
+
+      {/* Above the promo banner: losing unsaved work matters more than the offer to switch
+          portals, and only one of the two is time-critical (#1656). */}
+      <SessionExpiryWarning
+        expiresAt={user.session_expires_at}
+        onExtended={refreshUser}
+      />
 
       {showV1Promo && (
         <div className="v1-promo-banner">

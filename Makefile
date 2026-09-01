@@ -1,4 +1,4 @@
-.PHONY: fmt vet test compile-check test-hooks check-contexts check-attribution check-css check-contrast build deploy clean install-hook e2e e2e-sso e2e-edge e2e-ui help
+.PHONY: fmt vet test ui-dist compile-check test-hooks check-contexts check-attribution check-css check-contrast build deploy clean install-hook e2e e2e-sso e2e-edge e2e-ui help
 
 VERSION ?= $(shell grep -oE 'Version = "[^"]+"' pkg/config/version.go | cut -d'"' -f2)
 
@@ -132,8 +132,12 @@ test: compile-check
 clean:
 	rm -rf bin
 
-build: clean
-	mkdir -p bin
+# The UI build lives here on its own so `deploy` can invoke exactly this rule rather than
+# depending on someone having run `make build` at some point in the past. That dependency is
+# what shipped a 12-day-old portal v2 to production in #1632: ui-dist is gitignored and embedded
+# via //go:embed, so the portal that ships is a function of when the operator last built, not of
+# the commit being deployed.
+ui-dist:
 	@echo "Building UI..."
 	@# The fallback used to name a pnpm store path with exact transitive versions in it --
 	@# node_modules/.pnpm/vite@8.1.5_@types+node@24.13.3/... -- while ui/package.json declares
@@ -164,6 +168,9 @@ build: clean
 	@# only because `*` does not match it in sh -- true by accident, and undone by the next
 	@# person who tidies that line.
 	touch pkg/server/ui-dist/.gitkeep
+
+build: clean ui-dist
+	mkdir -p bin
 	go build -ldflags="-s -w $(DEPLOYMENT_LDFLAGS) -X lfr-tunnel/pkg/config.Version=$(VERSION)" -trimpath -o bin/lfr-tunnel ./cmd/lfr-tunnel
 	go build -ldflags="-s -w $(DEPLOYMENT_LDFLAGS) -X lfr-tunnel/pkg/config.Version=$(VERSION)" -trimpath -o bin/lfr-tunneld ./cmd/lfr-tunneld
 

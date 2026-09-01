@@ -117,3 +117,42 @@ func TestVerifyPortalV2(t *testing.T) {
 		t.Errorf("an unreachable host must not double-report, got: %v", err)
 	}
 }
+
+// A deploy must BUILD the UI, not merely check that one is present (#1632).
+//
+// RequireBuiltUI passes on any non-empty index.html, including one built weeks ago against
+// entirely different source. That is not a hypothetical: v1.48.16 shipped a 12-day-old portal v2
+// to all five gateways behind a correct version string, and every check reported success.
+//
+// So the guarantee under test is not "something is there" but "deploy runs the build rule".
+func TestDeployBuildsTheUIRatherThanTrustingDisk(t *testing.T) {
+	// A stale-but-valid ui-dist: exactly what an operator who ran `make build` a fortnight ago
+	// has, and exactly what RequireBuiltUI is happy with.
+	dir := t.TempDir()
+	if err := os.MkdirAll(filepath.Join(dir, "pkg", "server", "ui-dist"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(dir, uiDistIndex), []byte("<!doctype html><title>stale</title>"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	withWorkingDir(t, dir, func() {
+		// The precondition that used to be the only gate: it is satisfied, and it should be --
+		// the point is that being satisfied is not sufficient.
+		if err := RequireBuiltUI(); err != nil {
+			t.Fatalf("a stale but non-empty index.html satisfies RequireBuiltUI by design, got: %v", err)
+		}
+
+		// BuildUI must actually try to run the build. In this temp dir there is no Makefile, so
+		// it has to fail -- if it returned nil here it would mean BuildUI does not run anything,
+		// which is the regression this test exists to catch.
+		err := BuildUI()
+		if err == nil {
+			t.Fatal("BuildUI must invoke the build rule; it returned nil in a directory with no Makefile")
+		}
+		// The error has to point at the remedy, since the operator's next move depends on it.
+		if !strings.Contains(err.Error(), "ui-dist") {
+			t.Errorf("the error must name what failed to build, got: %v", err)
+		}
+	})
+}

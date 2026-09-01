@@ -31,8 +31,24 @@ fail() { printf '  \033[31mFAIL\033[0m  %s\n' "$1"; FAIL=$((FAIL + 1)); }
 echo "Testing that make build preserves tracked files"
 echo ""
 
-# The build recipe: from `build:` to the next line that starts at column zero and is not blank.
-BUILD_RECIPE=$(awk '/^build:/{f=1;next} f && /^[^\t[:space:]]/{exit} f{print}' "$MAKEFILE")
+# The build recipe, plus the recipes of everything `build` depends on.
+#
+# Following prerequisites is not optional here: #1632 split the UI build out of `build:` into its
+# own `ui-dist:` target so `deploy` could invoke the same rule, which moved BOTH the
+# `rm -rf pkg/server/ui-dist` and the `touch .gitkeep` that restores it. Reading only `build:`
+# then found nothing to check and this guard went quiet -- still exiting 0 on the wipe it exists
+# to watch. A guard that stops seeing its subject has to say so, so the "found nothing" case
+# below is a failure rather than a skip.
+recipe_of() {
+    awk -v target="^$1:" '$0 ~ target {f=1;next} f && /^[^\t[:space:]]/{exit} f{print}' "$MAKEFILE"
+}
+
+BUILD_PREREQS=$(sed -n 's/^build:[[:space:]]*//p' "$MAKEFILE" | head -1)
+BUILD_RECIPE=$(recipe_of build)
+for prereq in $BUILD_PREREQS; do
+    BUILD_RECIPE="${BUILD_RECIPE}
+$(recipe_of "$prereq")"
+done
 
 if [ -z "$BUILD_RECIPE" ]; then
     fail "could not find the build target in $MAKEFILE -- if it was renamed, move this guard with it"

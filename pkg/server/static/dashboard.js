@@ -1913,6 +1913,155 @@ function formatBytes(bytes, decimals = 2) {
   return `${parseFloat((bytes / Math.pow(k, i)).toFixed(dm))} ${sizes[i]}`;
 }
 
+/*
+ * Every subdomain reserved on the gateway, across all users.
+ *
+ * V1 never had this screen. Its Reservations tab is scoped to the caller by design --
+ * /api/portal/reservations calls ListSubdomainReservationsByUserID and has no admin branch for
+ * any role, owner included -- and Active Tunnels reads currentUser.tunnels, which is equally
+ * personal. So an admin could see their own reservations and nobody else's, while V2 had had an
+ * admin-wide list all along (#1619). That is a parity gap running V2 -> V1, the opposite
+ * direction to the ones closed so far.
+ *
+ * Columns and actions mirror ui/src/pages/AdminSubdomains.tsx deliberately, Expires included
+ * (#1617), because the two portals are an A/B test and a capability present in only one arm is a
+ * defect rather than a roadmap decision.
+ */
+async function loadAdminSubdomains() {
+  const headersEl = document.getElementById('admin-subdomains-table-headers');
+  if (headersEl) {
+    headersEl.innerHTML = `
+                    <th data-sort="subdomain">${t('th_subdomain', 'Subdomain')}</th>
+                    <th data-sort="full_host">${t('th_full_host', 'Full Host')}</th>
+                    <th data-sort="user_email">${t('th_user_email', 'User Email')}</th>
+                    <th data-sort="is_online">${t('th_status', 'Status')}</th>
+                    <th data-sort="node_id">${t('th_node', 'Node')}</th>
+                    <th data-sort="client_ip">${t('th_client_ip', 'Client IP')}</th>
+                    <th data-sort="bytes_in">${t('th_bytes_in', 'Bytes In')}</th>
+                    <th data-sort="bytes_out">${t('th_bytes_out', 'Bytes Out')}</th>
+                    <th data-sort="created_at">${t('th_created_at', 'Created Date')}</th>
+                    <th data-sort="expires_at">${t('th_expires_at', 'Expires')}</th>
+                    <th>${t('th_actions', 'Actions')}</th>
+                `;
+  }
+
+  // Two endpoints, merged, exactly as V2 does it: /api/admin/subdomains returns the
+  // reservations and knows nothing about live state, while is_online, full_host, client_ip,
+  // the byte counters, node_id and rate_limit all come from /api/admin/leases. Reading only the
+  // first gives a table where every row looks permanently offline.
+  let subs = [];
+  try {
+    const [subRes, leaseRes] = await Promise.all([
+      fetch('/api/admin/subdomains'),
+      fetch('/api/admin/leases'),
+    ]);
+    if (!subRes.ok) throw new Error(`subdomains HTTP ${subRes.status}`);
+    if (!leaseRes.ok) throw new Error(`leases HTTP ${leaseRes.status}`);
+    const reservations = (await subRes.json()) || [];
+    const leases = (await leaseRes.json()) || [];
+
+    subs = reservations.map((sub) => {
+      const fullHost = sub.subdomain
+        ? `${sub.subdomain}.${sub.domain}`
+        : sub.domain;
+      const lease = leases.find(
+        (l) =>
+          (l.subdomain_prefix === sub.subdomain ||
+            (!sub.subdomain && !l.subdomain_prefix)) &&
+          l.full_host.endsWith(sub.domain),
+      );
+      return {
+        ...sub,
+        full_host: fullHost,
+        is_online: !!lease,
+        client_ip: (lease && lease.client_ip) || '-',
+        bytes_in: (lease && lease.bytes_in) || 0,
+        bytes_out: (lease && lease.bytes_out) || 0,
+        rate_limit: (lease && lease.rate_limit) || 0,
+        node_id: lease && lease.node_id,
+      };
+    });
+  } catch (e) {
+    console.error('Failed to load registered subdomains', e);
+    showToast(
+      t('admin_subdomains_load_failed', 'Failed to load registered subdomains'),
+      'error',
+    );
+    subs = [];
+  }
+
+  renderTable('admin-subdomains-table-body', subs || [], (sub) => {
+    const online = !!sub.is_online;
+    const statusBadge = online
+      ? `<span class="badge success">🟢 ${t('status_online', 'Online')}</span>`
+      : `<span class="badge">⚪ ${t('status_offline', 'Offline')}</span>`;
+
+    let nodeCell = '-';
+    if (online) {
+      nodeCell =
+        sub.node_id && sub.node_id !== 'control'
+          ? `<span class="badge">🌍 ${escapeHTML(sub.node_id)}</span>`
+          : `<span class="badge">🇬🇧 ${t('node_control', 'Control')}</span>`;
+    }
+
+    // The action buttons act on a live lease, so they are offered only while one exists --
+    // matching V2, which disables rather than hides them.
+    const actions = online
+      ? `<div class="action-menu">
+                                <button class="action-menu-btn" onclick="toggleActionMenu('menu-adminsub-${escapeHTML(sub.subdomain)}', event)">⋮</button>
+                                <div id="menu-adminsub-${escapeHTML(sub.subdomain)}" class="action-menu-dropdown">
+                                    <button class="action-menu-item" onclick="openTunnelOverrideModal('${escapeHTML(sub.full_host)}', ${Number(sub.rate_limit) || 0})">${t('action_throttle', 'Throttle')}</button>
+                                    <button class="action-menu-item danger" onclick="kickAdminSubdomain('${escapeHTML(sub.subdomain)}')">${t('action_kick', 'Kick')}</button>
+                                </div>
+                            </div>`
+      : '<span class="text-muted">-</span>';
+
+    return `
+                    <tr>
+                        <td style="font-weight: 500;">${escapeHTML(sub.subdomain || '')}</td>
+                        <td><a href="https://${escapeHTML(sub.full_host || '')}" target="_blank" style="color: var(--primary); text-decoration: none;">${escapeHTML(sub.full_host || '')}</a></td>
+                        <td>${escapeHTML(sub.user_email || '')}</td>
+                        <td>${statusBadge}</td>
+                        <td>${nodeCell}</td>
+                        <td style="font-family: monospace; font-size: 12px;">${escapeHTML(sub.client_ip || '-')}</td>
+                        <td>${formatBytes(sub.bytes_in || 0)}</td>
+                        <td>${formatBytes(sub.bytes_out || 0)}</td>
+                        <td>${renderTimestamp(sub.created_at)}</td>
+                        <td>${renderTimestamp(sub.expires_at)}</td>
+                        <td>${actions}</td>
+                    </tr>
+                `;
+  });
+}
+
+// Kick from this screen has to refresh this screen. kickActiveTunnel() reloads /api/me and
+// redraws the personal tunnels table, which would leave a kicked lease still showing as online
+// here until a manual reload.
+async function kickAdminSubdomain(subdomain) {
+  if (
+    !confirm(
+      t(
+        'confirm_kick_lease',
+        `Are you sure you want to kick the tunnel lease for subdomain "${subdomain}"?`,
+      ),
+    )
+  ) {
+    return;
+  }
+  try {
+    const res = await fetch(
+      `/api/admin/leases/${encodeURIComponent(subdomain)}`,
+      { method: 'DELETE' },
+    );
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    showToast(`Kicked tunnel subdomain "${subdomain}"`, 'success');
+  } catch (e) {
+    console.error('Failed to kick lease', e);
+    showToast(t('kick_failed', 'Failed to kick lease'), 'error');
+  }
+  loadAdminSubdomains();
+}
+
 async function loadTunnels() {
   const isAdmin =
     currentUser &&
@@ -1966,6 +2115,7 @@ async function loadTunnels() {
 const ADMIN_ONLY_TABS = [
   'system',
   'users',
+  'admin-subdomains',
   'registrations',
   'blacklist',
   'audit',
@@ -2312,6 +2462,7 @@ function showTab(tabName, skipHistory = false) {
   }
 
   if (tabName === 'users') loadUsers();
+  if (tabName === 'admin-subdomains') loadAdminSubdomains();
   if (tabName === 'registrations') loadRegistrations();
   if (tabName === 'blacklist') loadBlacklist();
   if (tabName === 'audit') loadAudit();

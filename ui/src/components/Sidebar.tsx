@@ -329,12 +329,6 @@ export default function Sidebar({ user, isOpen, onClose }: SidebarProps) {
           >
             {t('sign_out', 'Sign Out')}
           </button>
-          <a
-            href="/portal"
-            className="sidebar-footer-link block text-center text-xs mt-sm"
-          >
-            ← {t('use_classic_dashboard', 'Use Classic Dashboard')}
-          </a>
         </div>
       </nav>
     </>

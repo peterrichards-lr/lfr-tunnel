@@ -18,7 +18,6 @@ set -uo pipefail
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_ROOT="$(cd "${SCRIPT_DIR}/../.." && pwd)"
 CI="${REPO_ROOT}/.github/workflows/ci.yml"
-MAKEFILE="${REPO_ROOT}/Makefile"
 
 [ -f "$CI" ] || { echo "FATAL: $CI missing"; exit 1; }
 

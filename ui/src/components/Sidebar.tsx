@@ -7,9 +7,17 @@ interface SidebarProps {
   user: any;
   isOpen: boolean;
   onClose: () => void;
+  serverVersion?: string;
+  clientVersion?: string;
 }
 
-export default function Sidebar({ user, isOpen, onClose }: SidebarProps) {
+export default function Sidebar({
+  user,
+  isOpen,
+  onClose,
+  serverVersion,
+  clientVersion,
+}: SidebarProps) {
   // Arrow-key movement within the sidebar (#1562), matching V1's behaviour so the two arms of the
   // A/B test cost a keyboard user the same effort.
   //
@@ -329,6 +337,30 @@ export default function Sidebar({ user, isOpen, onClose }: SidebarProps) {
           >
             {t('sign_out', 'Sign Out')}
           </button>
+
+          {/* Gateway and client versions (#1647), matching V1's footer. Deliberately WITHOUT
+              uptime: the header already carries it beside the status indicator, and repeating
+              it here is the duplication #1603 removed for the status link -- two displays of
+              one fact in a single view, which disagree as soon as one is not refreshed.
+
+              This is a deployment check as much as a nicety. #1632 shipped a twelve-day-old
+              portal behind a correct version string, and it took a user noticing a missing
+              column to find it. Rendered only when known, so a failed /api/version shows
+              nothing rather than an empty label. */}
+          {(serverVersion || clientVersion) && (
+            <div className="sidebar-footer-versions">
+              {serverVersion && (
+                <div>
+                  {t('version_gateway', 'Gateway')}: {serverVersion}
+                </div>
+              )}
+              {clientVersion && (
+                <div>
+                  {t('version_client', 'Client')}: {clientVersion}
+                </div>
+              )}
+            </div>
+          )}
         </div>
       </nav>
     </>

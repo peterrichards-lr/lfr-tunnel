@@ -1364,6 +1364,8 @@ async function showDashboard() {
     currentUser.notification_prefs === 'enabled' ||
     !currentUser.notification_prefs;
 
+  syncPortalBannerToggle();
+
   // Apply theme from preference if not system
   applyTheme(currentUser.theme_preference);
 
@@ -2389,6 +2391,20 @@ if (document.readyState === 'loading') {
   initSidebarArrowKeys();
 }
 
+// The banner toggle is not part of the account record and is not saved with the form: it is a
+// per-browser display preference applied the moment it is flipped (#1626).
+//
+// Re-read whenever the Account tab is shown, rather than only once on load. showDashboard() does
+// not run on every path that can land you on this tab, so initialising there alone left the
+// control showing "on" for someone who had already dismissed the banner -- the one state it
+// exists to let them undo.
+function syncPortalBannerToggle() {
+  const bannerToggle = document.getElementById('acc-portal-banner');
+  if (bannerToggle) {
+    bannerToggle.checked = !localStorage.getItem('v2_promo_dismissed');
+  }
+}
+
 function showTab(tabName, skipHistory = false) {
   if (window.closeAllActionMenus) {
     window.closeAllActionMenus();
@@ -2461,6 +2477,7 @@ function showTab(tabName, skipHistory = false) {
     history.pushState({ tab: tabName }, '', canonical);
   }
 
+  if (tabName === 'account') syncPortalBannerToggle();
   if (tabName === 'users') loadUsers();
   if (tabName === 'admin-subdomains') loadAdminSubdomains();
   if (tabName === 'registrations') loadRegistrations();

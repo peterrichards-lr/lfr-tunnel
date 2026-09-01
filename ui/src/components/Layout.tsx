@@ -17,16 +17,13 @@ export default function Layout() {
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
   const navigate = useNavigate();
   const { t } = useI18n();
-  const { formatDate } = useSettings();
+  const { formatDate, showPortalBanner, setShowPortalBanner } = useSettings();
 
-  const [showV1Promo, setShowV1Promo] = useState(
-    !localStorage.getItem('v1_promo_dismissed'),
-  );
+  // Read from SettingsContext rather than local state so the Account Settings toggle can turn it
+  // back on (#1626); dismissing here is the same preference, written the same way.
+  const showV1Promo = showPortalBanner;
 
-  const dismissV1Promo = () => {
-    localStorage.setItem('v1_promo_dismissed', 'true');
-    setShowV1Promo(false);
-  };
+  const dismissV1Promo = () => setShowPortalBanner(false);
 
   const dismissTargetedMessage = async () => {
     try {

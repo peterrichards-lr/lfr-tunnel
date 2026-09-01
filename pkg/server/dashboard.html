@@ -188,8 +188,19 @@
             document.getElementById('v2-promo-banner').style.display = 'block';
         }
         function dismissV2Promo() {
-            localStorage.setItem('v2_promo_dismissed', 'true');
-            document.getElementById('v2-promo-banner').style.display = 'none';
+            setV2PromoVisible(false);
+        }
+        // Shared by the dismiss button and the Account Settings toggle (#1626), so both write the
+        // same preference the same way. Before this, dismissing set the key with no expiry and
+        // nothing in the UI could clear it again.
+        function setV2PromoVisible(visible) {
+            if (visible) {
+                localStorage.removeItem('v2_promo_dismissed');
+            } else {
+                localStorage.setItem('v2_promo_dismissed', 'true');
+            }
+            var el = document.getElementById('v2-promo-banner');
+            if (el) el.style.display = visible ? 'block' : 'none';
         }
     </script>
 
@@ -448,6 +459,16 @@
                                 </label>
                             </div>
                             <p style="font-size: 12px; color: var(--text-muted); margin-top: 6px;">Disabling this will suppress administrative alerts (like new registration notifications). Essential emails like Magic Links and account status updates cannot be disabled.</p>
+                        </div>
+                        <div style="margin-bottom: 24px;">
+                            <div style="display: flex; align-items: center; gap: 12px; margin-bottom: 8px;">
+                                <label for="acc-portal-banner" style="margin: 0; color: var(--text-muted); font-size: 14px;" data-i18n="label_portal_banner">Portal switch banner</label>
+                                <label class="toggle-switch">
+                                    <input type="checkbox" id="acc-portal-banner" onchange="setV2PromoVisible(this.checked)">
+                                    <span class="toggle-slider"></span>
+                                </label>
+                            </div>
+                            <p style="font-size: 12px; color: var(--text-muted); margin-top: 6px;">The banner offering the V2 portal. Dismissing it hides it for good on this browser, so turn it back on here if you want the link back. This preference is per-browser.</p>
                         </div>
                         <button type="submit" class="btn btn-primary" style="width: auto;" id="btn-save-account" data-i18n="btn_save_changes">Save Changes</button>
                     </form>

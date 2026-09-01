@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useI18n } from '../contexts/I18nContext';
 import ModalShell from './ModalShell';
@@ -24,46 +24,48 @@ type Shortcut = {
   keys: string;
   label: string;
   path?: string;
-  adminOnly?: boolean;
 };
 
 const GO_TO: Shortcut[] = [
   { keys: 'g d', label: 'Dashboard', path: '/dashboard' },
-  { keys: 'g a', label: 'Analytics', path: '/admin/analytics' },
+  { keys: 'g a', label: 'Analytics', path: '/analytics' },
+  { keys: 'g o', label: 'Account Settings', path: '/account' },
+  { keys: 'g w', label: 'Registered Subdomains', path: '/admin/subdomains' },
+  { keys: 'g c', label: 'Custom Domains', path: '/admin/vanity-domain-status' },
+  { keys: 'g e', label: 'Extension Requests', path: '/admin/extensions' },
+  { keys: 'g u', label: 'Users', path: '/admin/users' },
   { keys: 'g t', label: 'API Tokens', path: '/admin/tokens' },
-  { keys: 'g u', label: 'Users', path: '/admin/users', adminOnly: true },
-  {
-    keys: 'g s',
-    label: 'System Settings',
-    path: '/admin/settings',
-    adminOnly: true,
-  },
-  {
-    keys: 'g b',
-    label: 'Database Backups',
-    path: '/admin/backups',
-    adminOnly: true,
-  },
-  {
-    keys: 'g m',
-    label: 'Gateway Maintenance',
-    path: '/admin/maintenance',
-    adminOnly: true,
-  },
-  {
-    keys: 'g n',
-    label: 'Network Health',
-    path: '/admin/edge-health',
-    adminOnly: true,
-  },
-  { keys: 'g l', label: 'Audit Logs', path: '/admin/audit', adminOnly: true },
-  {
-    keys: 'g c',
-    label: 'Custom Domains',
-    path: '/admin/vanity-domain-status',
-    adminOnly: true,
-  },
+  { keys: 'g y', label: 'Telemetry', path: '/admin/telemetry' },
+  { keys: 'g n', label: 'Network Health', path: '/admin/edge-health' },
+  { keys: 'g l', label: 'Audit Logs', path: '/admin/audit' },
+  { keys: 'g i', label: 'IP Blacklist', path: '/admin/blacklist' },
+  { keys: 'g k', label: 'Magic Links', path: '/admin/magic-links' },
+  { keys: 'g b', label: 'Database Backups', path: '/admin/backups' },
+  { keys: 'g m', label: 'Gateway Maintenance', path: '/admin/maintenance' },
+  { keys: 'g s', label: 'System Settings', path: '/admin/settings' },
 ];
+
+// Every destination the sidebar can show. Admin ones are simply absent from the DOM for a
+// non-admin, which is what availableDestinations() reads.
+//
+// Availability is NOT decided by a role flag here any more (#1640). It used to be, and the list
+// drifted from the sidebar: `g a` and `g t` pointed into the Admin Zone with no adminOnly flag,
+// so a non-admin was shown both in this overlay and navigated somewhere they could not use --
+// while their own Analytics and Account had no shortcut at all. Same shape as #1512.
+//
+// V1 never had that bug because it asks the nav element whether it is visible instead of
+// re-stating the role rules. This does the same: one source of truth, and a sidebar link added
+// or gated differently cannot leave a stale entry behind here.
+const PORTAL_BASENAME = '/portalv2';
+
+function isReachable(path: string): boolean {
+  const link = document.querySelector<HTMLElement>(
+    `.sidebar a[href="${PORTAL_BASENAME}${path}"]`,
+  );
+  // offsetParent is null for a link inside a collapsed or hidden section, so this covers "the
+  // sidebar chose not to show it" as well as "it is not rendered at all".
+  return !!link && link.offsetParent !== null;
+}
 
 // Documented but not bound here -- the sidebar owns these (#1562). Listed because the overlay is
 // meant to answer "what can I do with the keyboard", not "what did this component register".
@@ -93,10 +95,12 @@ export default function ShortcutsOverlay({ user }: { user: any }) {
   // Typing into any field re-renders, so the chord would break exactly when a key arrived during
   // one. Found by mutation testing: removing the typing guard left the tests passing, because
   // the chord was already failing for this reason instead.
-  const goTo = useMemo(
-    () => GO_TO.filter((s) => !s.adminOnly || isAdmin),
-    [isAdmin],
-  );
+  // Recomputed when the overlay opens and when the role changes, because the sidebar has to be
+  // in the DOM for isReachable() to read it.
+  const [goTo, setGoTo] = useState<Shortcut[]>(GO_TO);
+  useEffect(() => {
+    setGoTo(GO_TO.filter((s) => (s.path ? isReachable(s.path) : true)));
+  }, [isAdmin, open]);
   const awaitingG = useRef(false);
   const chordTimer = useRef<ReturnType<typeof setTimeout> | undefined>(
     undefined,

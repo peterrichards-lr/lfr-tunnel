@@ -2192,17 +2192,34 @@ function sectionFromLocation() {
 // does so differently per browser (D is bookmark-all-tabs in Chrome and responsive design mode in
 // Firefox, T reopens a tab, I/J/C/K are developer tools). The g-prefix is the GitHub/Gmail
 // pattern and takes nothing from the browser.
+// Every sidebar destination, not just the ten this started with (#1640). Letters match portal
+// v2's map so the same key goes to the same place in both arms; w, q, v and o are arbitrary
+// because the mnemonic letter was already taken.
+//
+// Availability is decided by shortcutIsAvailable() below, which asks whether the nav element is
+// visible. That is why entries for admin-only screens can sit in this one flat list without
+// re-stating the role rules -- and why V1 never had the bug #1640 found in V2, where a
+// hand-maintained flag list had drifted from the sidebar.
 const SHORTCUT_DESTINATIONS = [
   { key: 'd', nav: 'nav-overview', label: 'Dashboard' },
+  { key: 'a', nav: 'nav-analytics-personal', label: 'Analytics' },
   { key: 'a', nav: 'nav-analytics', label: 'Analytics' },
+  { key: 'o', nav: 'nav-account', label: 'Account Settings' },
   { key: 't', nav: 'nav-tokens', label: 'API Tokens' },
+  { key: 'r', nav: 'nav-reservations', label: 'Reservations' },
+  { key: 'v', nav: 'nav-tunnels', label: 'Active Tunnels' },
+  { key: 'q', nav: 'nav-registrations', label: 'Registrations' },
   { key: 'u', nav: 'nav-users', label: 'Users' },
-  { key: 's', nav: 'nav-system', label: 'System Settings' },
+  { key: 'w', nav: 'nav-admin-subdomains', label: 'Registered Subdomains' },
+  { key: 'i', nav: 'nav-blacklist', label: 'IP Blacklist' },
+  { key: 'y', nav: 'nav-telemetry', label: 'Telemetry' },
+  { key: 'l', nav: 'nav-audit', label: 'Audit Logs' },
+  { key: 'k', nav: 'nav-magic', label: 'Magic Links' },
+  { key: 'n', nav: 'nav-network-health', label: 'Network Health' },
+  { key: 'c', nav: 'nav-custom-domains', label: 'Custom Domains' },
   { key: 'b', nav: 'nav-backups', label: 'Database Backups' },
   { key: 'm', nav: 'nav-maintenance', label: 'Gateway Maintenance' },
-  { key: 'n', nav: 'nav-network-health', label: 'Network Health' },
-  { key: 'l', nav: 'nav-audit', label: 'Audit Logs' },
-  { key: 'c', nav: 'nav-custom-domains', label: 'Custom Domains' },
+  { key: 's', nav: 'nav-system', label: 'System Settings' },
 ];
 
 // True while the user is typing, when a plain key must be left alone.
@@ -2221,7 +2238,16 @@ function shortcutIsAvailable(entry) {
 }
 
 function buildShortcutsOverlay() {
+  // Deduped by key: 'a' is deliberately listed twice, for the personal and the admin Analytics
+  // nav items, because only one of the two is ever visible. If that ever stopped being true the
+  // overlay would otherwise print the same row twice rather than showing the mistake.
+  const seenKeys = new Set();
   const rows = SHORTCUT_DESTINATIONS.filter(shortcutIsAvailable)
+    .filter((d) => {
+      if (seenKeys.has(d.key)) return false;
+      seenKeys.add(d.key);
+      return true;
+    })
     .map(
       (d) =>
         `<div class="shortcuts-row"><dt><kbd>g ${escapeHTML(d.key)}</kbd></dt><dd>${escapeHTML(d.label)}</dd></div>`,

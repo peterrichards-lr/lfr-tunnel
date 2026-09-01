@@ -135,8 +135,28 @@ describe_in() {
 # Echoes "<region> <id> <state>". Every action needs all three -- start and stop have to name
 # the region the instance was actually found in, not the first one searched -- and resolving
 # them together keeps a start from describing the same instance twice.
+# Distinguishes "cannot talk to AWS" from "AWS says there is no such instance" (#1644).
+#
+# describe_in() discards stderr and swallows the exit status, so an auth failure returns an empty
+# result that is indistinguishable from an empty match -- and find_instance() then blamed the
+# region list. The region list was right; the credentials were missing. That message sent the
+# operator to audit AWS_REGION, lfr-tunnel-ops.yaml and the DNS spec, none of which were wrong.
+#
+# Checked once here rather than per region: it is one call, and the answer cannot differ between
+# regions.
+require_credentials() {
+    if aws sts get-caller-identity >/dev/null 2>&1; then
+        return 0
+    fi
+    echo "Error: no usable AWS credentials (AWS_PROFILE=${AWS_PROFILE:-unset})." >&2
+    echo "       This is not a region problem -- the instance lookup never reached AWS." >&2
+    echo "       Run 'aws login', or set AWS_PROFILE to a profile that has credentials." >&2
+    return 69
+}
+
 find_instance() {
     local ip filter region json id state
+    require_credentials || return 69
     ip="$(resolve_ipv4 "$HOST")"
     filter="$(tag_filter)"
 

@@ -1,5 +1,15 @@
 [
   {
+    "version": "v1.48.16",
+    "release_date": "2026-09-01",
+    "features": [
+      "chore(portal-v2): drop the Classic Dashboard link from the sidebar (#1622) (#1624)",
+      "feat(portal-v2): show subdomain expiry, and format both dates (#1617) (#1623)",
+      "fix(portal): page the audit log instead of silently truncating it (#1621)",
+      "fix(portal-v1): render the Custom Domains summary instead of escaping it (#1620)"
+    ]
+  },
+  {
     "version": "v1.48.15",
     "release_date": "2026-08-31",
     "features": [
@@ -30,13 +40,6 @@
     "release_date": "2026-08-30",
     "features": [
       "fix(install): expand the tilde, so the client lands in the home folder (#1594)"
-    ]
-  },
-  {
-    "version": "v1.48.11",
-    "release_date": "2026-08-30",
-    "features": [
-      "fix(install): use the install path agreed with the S1 team (#1592)"
     ]
   }
 ]

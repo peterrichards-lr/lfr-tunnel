@@ -53,6 +53,27 @@ touch pkg/server/ui-dist/.gitkeep
 
 echo "=== Starting Docker Compose for E2E UI Tests ==="
 cd tests/e2e || exit 1
+
+# Registered BEFORE anything is started, not after the tests (#1628). It used to sit just above
+# the Playwright run, so the whole window in which the stack exists but the tests have not begun
+# -- the build, the health-wait, a Ctrl-C while waiting -- left containers holding ports 8000,
+# 8025 and 4040 with nothing to reap them. run.sh, run-sso.sh and run-edge.sh already did this
+# correctly; only the UI path did not.
+#
+# INT and TERM as well as EXIT: bash does run an EXIT trap on Ctrl-C, but being explicit costs
+# nothing and does not depend on that.
+cleanup() {
+    if [ -n "${E2E_KEEP_STACK:-}" ]; then
+        echo "=== E2E_KEEP_STACK set -- leaving the stack up for inspection ==="
+        echo "    Tear it down with: (cd tests/e2e && docker compose down -v --remove-orphans)"
+        return
+    fi
+    echo "=== Tearing down Docker Compose ==="
+    cd "$PROJECT_ROOT/tests/e2e" || true
+    docker-compose down -v --remove-orphans || true
+}
+trap cleanup EXIT INT TERM
+
 echo "=== Building Docker Images ==="
 # Pre-pull the base images, retrying a transient registry error (#1530). Docker Hub 504d on
 # node:20-alpine and failed a required check on an unrelated PR; the build itself has no retry
@@ -80,16 +101,10 @@ done
 if [ "$HEALTHY" = false ]; then
     echo "❌ Timeout waiting for services to become healthy!"
     docker-compose logs
-    docker-compose down -v
+    # No teardown here: the EXIT trap owns it, and doing it twice raced with the trap's own
+    # `cd` and left the second one running in the wrong directory.
     exit 1
 fi
-
-cleanup() {
-    echo "=== Tearing down Docker Compose ==="
-    cd "$PROJECT_ROOT/tests/e2e" || true
-    docker-compose down -v || true
-}
-trap cleanup EXIT
 
 echo "=== Running Playwright UI Tests ==="
 cd "$PROJECT_ROOT/tests/e2e/ui" || exit 1

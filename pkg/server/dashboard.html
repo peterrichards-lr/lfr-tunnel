@@ -177,6 +177,14 @@
          flex column and #dashboard-screen is flex:1 1 0 precisely so a banner can sit
          above it (same arrangement as the View As bar, #1289). In flow it cannot overlap
          anything, which removes the failure mode rather than re-tuning a z-index. -->
+    <!-- Session expiry warning (#1656). Above the V2 promo below it: losing unsaved work
+         matters more than the offer to switch portals, and only one of the two is
+         time-critical. Hidden until the session is close to ending. -->
+    <div id="session-expiry-banner" class="session-expiry-banner" style="display: none;">
+        <span id="session-expiry-text"></span>
+        <button type="button" class="btn btn-secondary" style="width: auto; margin: 0; padding: 4px 12px; font-size: 12px;" onclick="staySignedIn()" data-i18n="stay_signed_in">Stay signed in</button>
+    </div>
+
     <div id="v2-promo-banner" style="display: none; position: relative; flex-shrink: 0; background-color: #0b5fff; color: white; padding: 12px 24px; text-align: center; font-family: 'Inter', sans-serif; box-sizing: border-box; box-shadow: 0 4px 12px rgba(0,0,0,0.15);">
         <p style="margin: 0; font-size: 14px; font-weight: 500;">
             Try out the new V2 Portal experience! <a href="/portalv2/" style="color: white; text-decoration: underline; font-weight: 700; margin-left: 8px;">Switch to V2 &rarr;</a>

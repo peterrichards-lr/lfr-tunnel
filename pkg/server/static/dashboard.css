@@ -1420,3 +1420,22 @@ html[dir='rtl'] th {
   background: var(--input-bg);
   color: var(--text-main);
 }
+
+/* Session expiry warning (#1656). Amber rather than red: the session has not ended and one
+   click extends it, so this is a heads-up rather than an error. Matches the V2 treatment so the
+   two arms of the A/B test look like the same product. */
+.session-expiry-banner {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 16px;
+  flex-wrap: wrap;
+  flex-shrink: 0;
+  padding: 8px 24px;
+  background: var(--status-warning-bg);
+  color: var(--status-warning-text);
+  border-bottom: 1px solid var(--status-warning-border);
+  text-align: center;
+  font-size: 14px;
+  box-sizing: border-box;
+}

@@ -3266,10 +3266,46 @@ function copyDockerCmd() {
     });
 }
 
+// The repository refuses more than 200 per request, so that is the page size. The ceiling stops
+// an ever-growing log being pulled into the browser wholesale; the export covers the rest.
+const AUDIT_PAGE_SIZE = 200;
+const AUDIT_MAX_ROWS = 2000;
+
 async function loadAudit() {
-  const res = await fetch('/api/admin/audit?limit=100');
+  // Paged, because one request cannot return everything (#1618). This asked for 100 and showed
+  // whatever came back, so the 101st entry was unreachable and nothing said so -- an absent
+  // entry and one beyond the cut looked identical, which is what made it worse than simply
+  // showing fewer rows. V2 was worse still at the server default of 50.
+  let logs = [];
+  let hitCeiling = false;
+  let ok = true;
+  for (let offset = 0; offset < AUDIT_MAX_ROWS; offset += AUDIT_PAGE_SIZE) {
+    const pageRes = await fetch(
+      `/api/admin/audit?limit=${AUDIT_PAGE_SIZE}&offset=${offset}`,
+    );
+    if (!pageRes.ok) {
+      ok = false;
+      break;
+    }
+    const page = (await pageRes.json()) || [];
+    logs = logs.concat(page);
+    if (page.length < AUDIT_PAGE_SIZE) break;
+    if (logs.length >= AUDIT_MAX_ROWS) {
+      hitCeiling = true;
+      break;
+    }
+  }
+
+  const notice = document.getElementById('audit-truncated-notice');
+  if (notice) {
+    notice.hidden = !hitCeiling;
+    notice.innerText = hitCeiling
+      ? `Showing the most recent ${AUDIT_MAX_ROWS} events. Use Export for the full history.`
+      : '';
+  }
+
+  const res = { ok };
   if (res.ok) {
-    const logs = (await res.json()) || [];
     renderTable(
       'audit-table-body',
       logs,

@@ -2,6 +2,11 @@ import { useEffect, useState, useMemo } from 'react';
 import axios from 'axios';
 import { useSettings } from '../contexts/SettingsContext';
 import { useDataTable, type ColumnDef } from '../hooks/useDataTable';
+
+// 200 is what the repository allows per request, so that is the page size. The ceiling stops an
+// ever-growing log being pulled into the browser wholesale; the export endpoint covers the rest.
+const AUDIT_PAGE = 200;
+const AUDIT_MAX = 2000;
 import DataTableToolbar from '../components/DataTableToolbar';
 import DataTablePagination from '../components/DataTablePagination';
 import Skeleton from '../components/Skeleton';
@@ -20,14 +25,38 @@ interface AuditEvent {
 
 export default function AdminAuditLog() {
   const [events, setEvents] = useState<AuditEvent[]>([]);
+  const [truncated, setTruncated] = useState(false);
   const [loading, setLoading] = useState(true);
   const { formatDate } = useSettings();
   const { t } = useI18n();
 
   const fetchEvents = async () => {
     try {
-      const res = await axios.get('/api/admin/audit');
-      setEvents(Array.isArray(res.data) ? res.data : res.data.events || []);
+      // Paged, because one request cannot return everything: the repository caps any single call
+      // at 200 and defaulted to 50 when no limit was given, so this screen showed the 50 most
+      // recent entries and offered no way to reach the 51st (#1618).
+      //
+      // Bounded rather than unbounded: an audit log grows without limit, and pulling all of it
+      // into the browser would eventually be worse than truncating. When the ceiling is reached
+      // the page says so and points at the export, rather than stopping silently as before.
+      const all: AuditEvent[] = [];
+      let hitCeiling = false;
+      for (let offset = 0; offset < AUDIT_MAX; offset += AUDIT_PAGE) {
+        const res = await axios.get(
+          `/api/admin/audit?limit=${AUDIT_PAGE}&offset=${offset}`,
+        );
+        const page: AuditEvent[] = Array.isArray(res.data)
+          ? res.data
+          : res.data.events || [];
+        all.push(...page);
+        if (page.length < AUDIT_PAGE) break;
+        if (all.length >= AUDIT_MAX) {
+          hitCeiling = true;
+          break;
+        }
+      }
+      setEvents(all);
+      setTruncated(hitCeiling);
     } catch (e) {
       console.error(e);
     } finally {
@@ -169,6 +198,17 @@ export default function AdminAuditLog() {
               'Immutable record of administrative and security events.',
             )}
           </p>
+          {/* Said out loud when the ceiling is reached. The previous behaviour was to stop at 50
+              with no indication, so an absent entry and an entry beyond the cut looked identical
+              -- which is the part that made this worse than merely showing fewer rows (#1618). */}
+          {truncated && (
+            <p className="text-sm text-warning mt-sm" role="status">
+              {t(
+                'audit_log_truncated',
+                `Showing the most recent ${AUDIT_MAX} events. Use Export for the full history.`,
+              )}
+            </p>
+          )}
         </div>
         <a
           href="/api/admin/audit/export"

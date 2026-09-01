@@ -54,8 +54,6 @@ case "$GIT_COMMON" in
         ;;
 esac
 
-STAGED=$(git diff --cached --name-only --diff-filter=ACM)
-
 SCAN_OUT=$(docker run --rm "${MOUNTS[@]}" -w /app "$GITLEAKS_IMAGE" \
     protect --source=/app --verbose --staged 2>&1)
 SCAN_RC=$?
@@ -81,8 +79,18 @@ if printf '%s' "$SCAN_OUT" | grep -qiE 'fatal:|not a git repository'; then
 fi
 
 # A scan of nothing is legitimate when there is nothing staged, or when the change is only
-# deletions -- so this only fires when files were actually staged for add/copy/modify.
-if [ -n "$STAGED" ] && printf '%s' "$SCAN_OUT" | grep -qE 'scanned ~0 bytes'; then
+# deletions -- so this only fires when there is added content that gitleaks should have seen.
+#
+# Counting ADDED LINES, not staged files (#1649). --diff-filter=ACM still lists a
+# deletion-only edit as M, so the old `[ -n "$STAGED" ]` test treated "nothing to scan by
+# construction" as "the scan failed to run" and blocked every deletion-only commit. The only
+# ways past were --no-verify, which disables the scan entirely and is the opposite of what
+# this guard wants, or padding the diff with a cosmetic addition.
+#
+# The #1377 case this exists for is unaffected: in a worktree there ARE added lines and
+# gitleaks still scans 0 bytes, so it still fails closed.
+ADDED_LINES=$(git diff --cached --diff-filter=ACM -U0 | grep -cE '^\+[^+]' || true)
+if [ "${ADDED_LINES:-0}" -gt 0 ] && printf '%s' "$SCAN_OUT" | grep -qE 'scanned ~0 bytes'; then
     echo ""
     echo "❌ Error: gitleaks scanned 0 bytes although files are staged, so the scan did not run."
     echo "   Treating that as a failure rather than as a clean result (#1377)."

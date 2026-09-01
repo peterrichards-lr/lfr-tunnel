@@ -13,10 +13,15 @@ import (
 // which that drift turns into a silent downgrade, so there is now exactly one definition.
 const sessionCookieName = "lfr_session"
 
+// schemeHTTPS is the value X-Forwarded-Proto carries when a proxy terminated TLS. A constant
+// because goconst counts this literal across the package and the comparison now lives in one
+// place rather than three.
+const schemeHTTPS = "https"
+
 // cookieSecure mirrors what the three login paths already did: trust TLS directly, or the
 // proxy's forwarded scheme when one is in front.
 func cookieSecure(r *http.Request) bool {
-	return r.TLS != nil || r.Header.Get("X-Forwarded-Proto") == "https"
+	return r.TLS != nil || r.Header.Get("X-Forwarded-Proto") == schemeHTTPS
 }
 
 // sameSiteToStored and sameSiteFromStored convert between http.SameSite and the string kept on

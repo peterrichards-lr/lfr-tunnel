@@ -10,6 +10,8 @@ interface SettingsContextType {
   theme: ActiveTheme;
   useUTC: boolean;
   toggleUTC: () => void;
+  showPortalBanner: boolean;
+  setShowPortalBanner: (show: boolean) => void;
   formatDate: (dateString: string | Date | undefined | null) => string;
 }
 
@@ -31,6 +33,28 @@ export function SettingsProvider({ children }: { children: React.ReactNode }) {
   const [useUTC, setUseUTC] = useState<boolean>(() => {
     return localStorage.getItem('useUTC') === 'true';
   });
+
+  // The promo banner offering the other portal. Held here rather than in Layout so Account
+  // Settings can switch it back on: dismissing it writes v1_promo_dismissed with no expiry, and
+  // before #1626 there was no way to undo that from the UI at all -- which mattered more once
+  // #1622 removed the sidebar's Classic Dashboard link and left the banner as the only in-app
+  // route back to V1.
+  //
+  // localStorage, matching theme_preference and useUTC above rather than the account: this is a
+  // per-browser display preference and the other two set that precedent. The cost is that it
+  // does not follow you to a new browser, where the banner reappears.
+  const [showPortalBanner, setShowPortalBannerState] = useState<boolean>(() => {
+    return !localStorage.getItem('v1_promo_dismissed');
+  });
+
+  const setShowPortalBanner = (show: boolean) => {
+    setShowPortalBannerState(show);
+    if (show) {
+      localStorage.removeItem('v1_promo_dismissed');
+    } else {
+      localStorage.setItem('v1_promo_dismissed', 'true');
+    }
+  };
 
   useEffect(() => {
     localStorage.setItem('theme_preference', themePreference);
@@ -126,6 +150,8 @@ export function SettingsProvider({ children }: { children: React.ReactNode }) {
         theme,
         useUTC,
         toggleUTC,
+        showPortalBanner,
+        setShowPortalBanner,
         formatDate,
       }}
     >

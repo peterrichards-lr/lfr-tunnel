@@ -158,6 +158,44 @@ jobs:
           echo "hooks=$HOOKS" | tee -a "$GITHUB_OUTPUT"
           echo "platform_sensitive=$PLATFORM_SENSITIVE" | tee -a "$GITHUB_OUTPUT"
 
+  # Notices a functional change that arrives without a test (#1660).
+  #
+  # ADVISORY, deliberately: it annotates and never fails. The reason checks like this get
+  # switched off is false positives, and there are real ones -- refactors, renames, dependency
+  # bumps, and above all a change already covered by an existing test, which no path-matching
+  # can know.
+  #
+  # It detects ABSENCE, not insufficiency, and that limit matters: #1648 added six unit tests
+  # and still left the one line that wires them up uncovered. This would have passed it. A green
+  # result means "a test file was touched", never "this change is tested".
+  #
+  # It IS in ci-gate's needs:, as every job must be -- check-required-contexts.sh enforces that,
+  # because a job outside the gate is ungated while the gate still reports green. Being a
+  # dependency costs nothing here: this job always exits 0, so it can never block a merge. Its
+  # advisory nature comes from that exit code, not from sitting outside the gate.
+  test-coverage-signal:
+    name: Test Coverage Signal
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+
+      - name: Flag functional changes with no test
+        env:
+          # Read from the environment rather than interpolated into the script: a PR body is
+          # attacker-controlled text, and ${{ }} would splice it into the shell.
+          PR_BODY: ${{ github.event.pull_request.body }}
+        run: |
+          set -uo pipefail
+          BASE="${{ github.event.pull_request.base.sha }}"
+          HEAD="${{ github.event.pull_request.head.sha }}"
+          # Three dots, from the merge base -- two would attribute everything merged to master
+          # since the branch was cut to this PR (#1398).
+          git diff --name-only "$BASE...$HEAD" \
+            | ./scripts/check-test-coverage-signal.sh
+
   docs-review-check:
     name: Documentation Review Check
     runs-on: ubuntu-latest
@@ -616,6 +654,7 @@ jobs:
     needs:
       - changes
       - docs-review-check
+      - test-coverage-signal
       - lint-and-format
       - govulncheck
       - shellcheck

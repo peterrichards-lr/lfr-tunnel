@@ -199,6 +199,28 @@ failure after the fact just means going back to create one anyway.
    ```
    If you ever see `pkg/server/ui-dist` in `git status`, something has force-added it — do not commit it. Its filenames are content-hashed, so committed bundles made every pair of concurrent UI branches conflict unresolvably.
 
+4. **golangci-lint**: run it, in Docker, at the version CI pins. It is the one required check
+   that cannot be run from this machine's toolchain -- `golangci-lint` is not installed -- which
+   makes it the likeliest source of a red PR after every local check passed:
+
+   ```bash
+   docker run --rm -v "$(pwd)":/app -w /app \
+     golangci/golangci-lint:v2.13.1 golangci-lint run --timeout 5m
+   ```
+
+   The version must match `.github/workflows/ci.yml`'s `golangci-lint-action` (`v2.13.1` at the
+   time of writing, pinned deliberately so a linter release cannot fail an unchanged PR -- #1343).
+   Running `latest` locally will disagree with CI in both directions.
+
+   Worth knowing that a *refactor* can trip a linter the code it replaced did not. #1655 collapsed
+   three copies of `r.Header.Get("X-Forwarded-Proto") == "https"` into one helper, and `goconst`
+   then attributed the literal's 25 package-wide occurrences to the new file. Nothing became more
+   duplicated; the count simply acquired a new home. So run this after moving code, not only after
+   writing it.
+
+   Docker is outside the EDR constraints that govern host binaries (see `edr-constraints`), so
+   this is safe to run locally.
+
 ## 7. CI Failure Remediation
 *Active Constraint*: If a Pull Request fails its CI checks (e.g., a GitHub Action fails), stay on it until it's green:
 1. **Fix on the same branch.** Diagnose the root cause and push a fix commit to the SAME branch/PR. Do not open a fresh PR for the same change, do not abandon the branch, and do not ask the user to route around the failure.
@@ -304,4 +326,4 @@ After any merge you expect to close an issue (whether via a `Closes #N` referenc
 
 <!-- markdownlint-disable MD049 -->
 ---
-*Last Updated: 2026-08-28* | *Last Reviewed: 2026-08-28*
+*Last Updated: 2026-09-01* | *Last Reviewed: 2026-09-01*

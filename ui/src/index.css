@@ -2880,6 +2880,16 @@ input[type='checkbox'] {
   margin-top: var(--spacing-lg);
   flex-wrap: wrap;
   gap: var(--spacing-sm);
+  /* Horizontal inset to match the toolbar above (#1651). The table card is `card p-0` so the
+     table itself can reach the edges, and the toolbar re-adds its own padding with `p-md` --
+     but the footer never did, so the page-size selector and the page buttons sat hard against
+     the card edge while the controls directly above them were inset. Same card, two insets.
+     var(--spacing-md) is exactly what .p-md applies, so the two line up rather than merely
+     both being non-zero. Set here rather than at the 29 call sites, all of which use the same
+     p-0 card. Left and right only: padding-top comes from the `pt-md` utility on the element
+     and must not be overridden. */
+  padding-left: var(--spacing-md);
+  padding-right: var(--spacing-md);
 }
 .pagination-count {
   font-size: 14px;

@@ -67,6 +67,61 @@ curl -s "http://localhost:8000/portalv2/assets/$b" | grep -oE 'path:`/[a-z/-]*an
 Note the backticks: the bundler emits route paths as template literals, so grepping for
 `"/analytics"` finds nothing and reads as "the route is gone" when it is present.
 
+## 2b. Five more ways a mutation test lies, all seen in one day
+
+Section 2 covers the stale container. These are different, and each one produced a confident
+wrong answer -- either "the test caught it" when nothing was mutated, or "the test is vacuous"
+when the mutation never reached the build. All five were found on 2026-09-01 while fixing #1617,
+#1622, #1640, #1647, #1648 and #1651.
+
+**A mutation that does not compile is not a mutation.** Deleting a call often orphans its
+variable or import, and `pnpm run build` fails on the unused symbol. The Docker build then fails
+too, the old image keeps serving, and the tests pass -- against unmutated code. Seen three times
+in a day: removing `formatDate(value)`, removing an `isReachable()` filter, and dropping a
+`padNodeDaily` call site. Keep the symbol referenced:
+
+```ts
+setGoTo(GO_TO.filter((s) => (s.path ? isReachable(s.path) : true)));
+// mutant, still compiles:
+void isReachable;
+setGoTo(GO_TO);
+```
+
+**Always check the build's exit code.** `pnpm run build > /dev/null 2>&1` hides the failure that
+causes the trap above. If the build exits non-zero the run proves nothing.
+
+**A marker in a comment does not survive the bundler.** `/* MUTANTMARKER */` is stripped from
+both JS and CSS output, so grepping the served asset for it always returns 0 -- which reads as
+"the mutation is not live" no matter what is true. Put the marker in a string literal, a class
+name or an identifier.
+
+**A marker that occurs anyway proves nothing.** Grepping the bundle for `admin/analytics` or
+`Expires` "confirmed" mutations that had never applied, because those strings appear elsewhere in
+the app. Pick something that exists only in the mutant.
+
+**A changed asset hash is not proof the intended thing changed.** It proves *something* did. A
+`str.replace(old, new, 1)` targeting a CSS declaration hit the **first** match in the file --
+`.px-md`, hundreds of lines above `.pagination-row` -- so the hash moved, the mutation looked
+live, and the real rule was untouched. Assert on the rule itself:
+
+```bash
+curl -s "http://localhost:8000/portalv2/assets/$css" | grep -o '\.pagination-row{[^}]*}'
+```
+
+**So: make every mutation self-identifying, and assert it in the served artefact.** Write the
+edit with an `assert` that the anchor was found *and* that the file changed, then grep the served
+bundle for something unique to the mutant. Anything less and a green run means nothing.
+
+```python
+old = "  padding-left: var(--spacing-md);"
+assert old in s, "anchor not found -- the mutation would silently no-op"
+s2 = s.replace(old, "", 1)
+assert s2 != s
+```
+
+Scoping matters as much as the assert: target the specific rule or function, not the first
+textual match in the file.
+
 ## 3. Assertions of absence pass on a blank page
 
 Mutation testing found two of four tests in #1512 were vacuous. With the route removed the page
@@ -134,4 +189,4 @@ need. Docker is outside the EDR constraints that govern host binaries, so the co
 is fine to run; the host `lfr-tunnel` binary is not.
 
 ---
-*Last Updated: 2026-08-29* | *Last Reviewed: 2026-08-29*
+*Last Updated: 2026-09-01* | *Last Reviewed: 2026-09-01*

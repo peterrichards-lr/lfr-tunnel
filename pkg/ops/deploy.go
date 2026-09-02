@@ -433,15 +433,18 @@ func DeployClientsCommand(args []string) {
 		fmt.Println("\nRefuses to run unless dist/'s build manifest matches pkg/config/version.go,")
 		fmt.Println("and afterwards verifies the gateway is serving the bytes just uploaded")
 		fmt.Println("(#1279). -allow-stale overrides the first check; -skip-verify the second.")
+		fmt.Println("\nAlso refuses to publish clients built with no default gateway, which force")
+		fmt.Println("every user to pass -server and so pin the client (#1692).")
+		fmt.Println("-allow-no-default overrides that, for a deployment that wants none.")
 		return
 	}
 
 	fmt.Println("=== Deploying Client Binaries and Checksums to VPS ===")
 
-	flagIdentity, flagUser, flagHost, flagTarget, allowStale, skipVerify, err := parseDeployClientsFlags("deploy-clients", args)
+	flags, err := parseDeployClientsFlags("deploy-clients", args)
 	CheckFatal(err, "Failed to parse arguments")
 
-	target, err := ResolveDeployTarget(flagUser, flagHost, flagIdentity, flagTarget)
+	target, err := ResolveDeployTarget(flags.user, flags.host, flags.identityFile, flags.target)
 	CheckFatal(err, "Failed to resolve deployment target")
 	identityFile := target.IdentityFile
 	vpsUser := target.User
@@ -455,7 +458,14 @@ func DeployClientsCommand(args []string) {
 	// Say which version is about to be published, before publishing it. This alone would have
 	// made the #1279 incident visible immediately: every step reported success, and none of them
 	// said what they were shipping.
-	manifest := RequireCurrentDist("dist", "deploy-clients", allowStale)
+	manifest := RequireCurrentDist("dist", "deploy-clients", flags.allowStale)
+
+	// Before the upload, not after: a client with no default gateway is unusable as downloaded,
+	// and unlike a stale version it cannot be spotted by looking at what is being published
+	// (#1692). The build already reported it, and that report was ignored twice because it
+	// scrolls past in a successful build -- so this one stops.
+	RequireDefaultGateway(manifest, "deploy-clients", flags.allowNoDefault)
+
 	fmt.Printf("Publishing client binaries for %s to %s.\n", manifest.Version, target.Host)
 
 	fmt.Println("Uploading files from dist/ to", sshTarget)
@@ -472,7 +482,7 @@ func DeployClientsCommand(args []string) {
 	err = RunCommand("ssh", "-i", identityFile, sshTarget, remoteScript)
 	CheckFatal(err, "Failed to move client binaries on VPS")
 
-	if skipVerify {
+	if flags.skipVerify {
 		fmt.Println("Skipping post-upload verification (-skip-verify).")
 	} else {
 		err = verifyPublishedClientsAt("https://"+target.Host, "dist", &http.Client{Timeout: 2 * time.Minute})

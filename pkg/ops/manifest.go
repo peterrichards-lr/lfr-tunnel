@@ -47,6 +47,23 @@ type BuildManifest struct {
 
 	// Artifacts are the files build wrote, so a partially-cleaned dist/ is detectable.
 	Artifacts []string `json:"artifacts"`
+
+	// Defaults is what the build baked into those artefacts via ldflags (#1692). Recorded so
+	// publishing can refuse binaries with no default gateway; see CheckDefaultGateway for why
+	// the record is the evidence rather than the binaries themselves.
+	Defaults BuildDefaults `json:"defaults"`
+}
+
+// BuildDefaults is the set of deployment defaults compiled into the client binaries.
+//
+// All three are recorded, not just the gateway that is gated on, because this manifest is
+// published into the downloads directory as provenance for what was shipped (#1279) -- and
+// "which defaults were in the binaries a user downloaded" is exactly the question #1692 had to
+// be answered by counting strings in a downloaded binary.
+type BuildDefaults struct {
+	ServerURL     string `json:"default_server_url"`
+	StatusPageURL string `json:"default_status_page_url"`
+	PortalURL     string `json:"default_portal_url"`
 }
 
 // BuildManifestPath is where the manifest lives for a given dist directory.
@@ -149,6 +166,63 @@ func RequireCurrentDist(dir, command string, allowStale bool) BuildManifest {
 	fmt.Fprintf(os.Stderr, "Pass -allow-stale to override if you really mean to %s these.\n", command)
 	os.Exit(1)
 	return m // unreachable; keeps the compiler happy
+}
+
+// CheckDefaultGateway reports whether the artefacts described by m have a default gateway
+// compiled in, which is the condition for publishing them (#1692).
+//
+// **Why the manifest rather than the binaries.** Reading the artefacts is the more obvious
+// check and it cannot work here, in either direction:
+//
+//   - Absence is unreadable. An empty `-X ...DefaultServerURL=` writes nothing, so a client
+//     built with no default is byte-indistinguishable from one whose ldflags never arrived.
+//     That invisibility is the defect itself -- it is why the same shape shipped three times
+//     (#1188, #1256, #1692) and why reportDefault, which only says so during the build, was
+//     ignored twice.
+//   - Presence is unreliable. #1692's own evidence table records `https://tunnel.lfr-demo.se`
+//     occurring 7 times in a build with the ldflags unset, because the URL reaches the binary
+//     from other sources too; and `build` links with `-s -w`, which strips the symbol table, so
+//     config.DefaultServerURL's value cannot be located and read back out. A grep would have
+//     called that broken binary fine.
+//
+// So `build` records what it baked in and publishing checks the record. The record is exactly
+// as trustworthy as the manifest that already gates publishing on version (#1279): dist/ with
+// no current manifest cannot be published at all, so there is no path where the guard is
+// evaluated against a manifest that does not describe the bytes being uploaded.
+func CheckDefaultGateway(m BuildManifest) error {
+	if m.Defaults.ServerURL != "" {
+		return nil
+	}
+	return fmt.Errorf("these binaries have no default gateway compiled in, so every user has to "+
+		"pass -server -- which pins the client and disables region selection and failover (#1691). "+
+		"Set LFT_DEFAULT_SERVER_URL and rebuild with `lfr-tunnel-ops build`. (A dist/ built before "+
+		"%s recorded its defaults reads the same way; rebuilding also fixes that.)", BuildManifestName)
+}
+
+// RequireDefaultGateway is the guard deploy-clients calls before anything leaves the machine.
+//
+// It exits rather than returning an error, for the same reason RequireCurrentDist does: what is
+// downstream of here reaches every user of `--upgrade` and the downloads page. allowNoDefault
+// downgrades it to a warning, because a deployment that genuinely wants no baked-in gateway is
+// a real case -- it just has to be stated rather than being what happens when a shell is missing
+// a variable (#1692).
+func RequireDefaultGateway(m BuildManifest, command string, allowNoDefault bool) {
+	err := CheckDefaultGateway(m)
+	if err == nil {
+		fmt.Printf("Clients in dist/ default to %s.\n", m.Defaults.ServerURL)
+		return
+	}
+
+	if allowNoDefault {
+		fmt.Printf("WARNING: %s\n", err)
+		fmt.Printf("Continuing anyway because -allow-no-default was passed. %s will publish clients "+
+			"that ask to be pointed at a gateway.\n", command)
+		return
+	}
+
+	fmt.Fprintf(os.Stderr, "FATAL: refusing to %s clients with no default gateway: %v\n", command, err)
+	fmt.Fprintf(os.Stderr, "Pass -allow-no-default to override if this deployment really wants none.\n")
+	os.Exit(1)
 }
 
 // currentGitCommit returns the short commit, or "unknown". Never fatal: building outside a

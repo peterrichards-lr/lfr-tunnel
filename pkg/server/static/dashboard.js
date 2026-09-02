@@ -1700,7 +1700,12 @@ function startPolling() {
   if (pollingInterval) clearInterval(pollingInterval);
   pollingInterval = setInterval(async () => {
     try {
-      const res = await fetch('/api/me');
+      // Marked as a background poll so it does not extend the session (#1676). Without this an
+      // open tab renews itself every ten seconds forever, and the idle timeout measures whether
+      // a tab is open rather than whether anyone is at the keyboard.
+      const res = await fetch('/api/me', {
+        headers: { 'X-Background-Poll': '1' },
+      });
       if (res.status === 401) {
         clearInterval(pollingInterval);
         showToast('Session expired or logged in from another device.');

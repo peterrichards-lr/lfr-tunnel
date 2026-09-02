@@ -30,11 +30,10 @@ trap 'rm -rf "$WORK"' EXIT
 # Render exactly as the gateway does: replace EVERY occurrence, which is the behaviour that
 # broke the old guard.
 GATEWAY="https://gw.example.test"
-python3 - "$TEMPLATE" "$GATEWAY" > "$WORK/rendered.sh" <<'PY'
-import sys
-src, url = sys.argv[1], sys.argv[2]
-sys.stdout.write(open(src).read().replace("{{SERVER_URL}}", url))
-PY
+# sed, not python3: this runs in whatever image CI provides, and a test that needs an
+# interpreter it was not promised fails for a reason unrelated to the thing under test.
+# `|` as the delimiter because the replacement is a URL.
+sed "s|{{SERVER_URL}}|${GATEWAY}|g" "$TEMPLATE" > "$WORK/rendered.sh"
 
 # Run only the prologue -- the part that decides SERVER_URL -- and print what it chose. Running
 # the whole script would try to download and install.

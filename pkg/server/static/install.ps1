@@ -5,9 +5,16 @@ $Arch = "amd64" # Windows only has amd64 release configured in release.yml
 
 $Binary = "lfr-tunnel-windows-amd64.exe"
 
+# Matched on the BRACES, not against the placeholder's own text (#1684). The gateway substitutes
+# with strings.ReplaceAll, so a comparison written as `-eq "{{SERVER_URL}}"` has its right-hand
+# side replaced too -- both sides then hold the gateway URL, the guard is always true, and the
+# fallback fired on every run, pointing users at a host that does not serve the binaries.
+#
+# No hardcoded fallback either: a script that does not know its gateway cannot guess one.
 $ServerUrl = "{{SERVER_URL}}"
-If ([string]::IsNullOrEmpty($ServerUrl) -or $ServerUrl -eq "{{SERVER_URL}}") {
-    $ServerUrl = "https://lfr-demo.se"
+If ([string]::IsNullOrEmpty($ServerUrl) -or $ServerUrl -like "*{{*") {
+    Write-Error "This installer does not know which gateway to download from. It was not served by one -- fetch it from your gateway: irm https://<your-gateway>/install.ps1 | iex"
+    Exit 1
 }
 $Url = "$ServerUrl/static/downloads/$Binary"
 

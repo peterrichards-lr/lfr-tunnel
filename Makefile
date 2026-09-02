@@ -233,6 +233,7 @@ test-hooks:
 	@./tests/hooks/test-power-hook-credentials.sh
 	@./tests/hooks/test-ci-hook-gate.sh
 	@./tests/hooks/test-coverage-signal.sh
+	@./tests/hooks/test-install-script.sh
 
 # The pre-merge CI-configuration gate (#1391). Worth a target rather than only a path to type:
 # the whole point of this check is being run BEFORE pushing, and a check nobody can invoke

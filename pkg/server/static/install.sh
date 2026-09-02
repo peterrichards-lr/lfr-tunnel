@@ -17,11 +17,25 @@ case "$ARCH" in
   *)            echo "Unsupported architecture: $ARCH"; exit 1 ;;
 esac
 
-# Server URL injected by Gateway
+# Server URL injected by the gateway that served this script.
+#
+# Matched on the BRACES, not against the placeholder's own text (#1684). The gateway substitutes
+# with strings.ReplaceAll, so a comparison written as `= "{{SERVER_URL}}"` has its right-hand
+# side replaced too -- both sides then hold the gateway URL, the guard is always true, and the
+# fallback below fired on every run. Every user of the documented one-liner was silently pointed
+# at a host that does not serve the binaries.
+#
+# No hardcoded fallback either. A script that does not know its gateway cannot guess one, and
+# baking a single deployment's hostname into shared source is how the wrong host got here.
 SERVER_URL="{{SERVER_URL}}"
-if [ -z "$SERVER_URL" ] || [ "$SERVER_URL" = "{{SERVER_URL}}" ]; then
-  SERVER_URL="https://lfr-demo.se"
-fi
+case "$SERVER_URL" in
+  ""|*"{{"*)
+    echo "This installer does not know which gateway to download from." >&2
+    echo "It was not served by one -- fetch it from your gateway instead:" >&2
+    echo "  curl -fsSL https://<your-gateway>/install.sh | sh" >&2
+    exit 1
+    ;;
+esac
 
 BINARY="lfr-tunnel-${OS}-${ARCH}"
 URL="${SERVER_URL}/static/downloads/${BINARY}"

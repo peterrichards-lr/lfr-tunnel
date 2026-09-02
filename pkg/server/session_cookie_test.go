@@ -1,8 +1,10 @@
 package server
 
 import (
+	"bytes"
 	"net/http"
 	"net/http/httptest"
+	"os"
 	"testing"
 	"time"
 
@@ -201,5 +203,72 @@ func TestSlidePortalSessionIgnoresAbsentAndExpired(t *testing.T) {
 	s.slidePortalSession(rec2, expired)
 	if findSetCookie(rec2) != nil {
 		t.Error("an expired session was re-issued a cookie -- expiry must be final")
+	}
+}
+
+// Every login path must issue the same SameSite mode (#1661).
+//
+// They disagreed: the admin magic-link path used Strict where portal login and SSO used Lax. A
+// browser does not send a Strict cookie on a cross-site navigation, and six email templates link
+// users into /portal -- subdomain reserved, expiring, expired, demoted, extension approved and
+// vanity hook failed -- so an admin clicking any of them arrived without their cookie and landed
+// on the login page while holding a valid session.
+//
+// Asserted on the source rather than by driving three login flows: the flows need a database, a
+// mail server and a magic-link round trip each, and the property under test is one literal per
+// call site. A test that cannot run is worth less than one that reads the code.
+func TestAllLoginPathsUseLaxSameSite(t *testing.T) {
+	for _, file := range []string{"api.go", "server.go", "sso.go", "api_service_mfa.go"} {
+		src, err := os.ReadFile(file)
+		if err != nil {
+			t.Fatalf("reading %s: %v", file, err)
+		}
+		if bytes.Contains(src, []byte("http.SameSiteStrictMode")) {
+			t.Errorf("%s still names SameSiteStrictMode. Every login path issues Lax (#1661); "+
+				"Strict is not sent on a cross-site navigation and breaks the PortalLink emails.", file)
+		}
+	}
+}
+
+// The clearing cookie must match what was set, or the browser keeps the original: a cookie is
+// identified by name, path and domain, and a Secure/non-Secure mismatch behind a TLS-terminating
+// proxy is enough to leave it in place.
+func TestClearSessionCookieMatchesTheIssuedOne(t *testing.T) {
+	s := testServerForCookies(t)
+	r := httptest.NewRequest(http.MethodGet, "http://example.com/api/auth/logout", nil)
+	r.Header.Set("X-Forwarded-Proto", "https")
+
+	issued := s.newSessionCookie(r, "tok", http.SameSiteLaxMode)
+	cleared := s.clearSessionCookie(r)
+
+	if cleared.Name != issued.Name {
+		t.Errorf("name %q != issued %q", cleared.Name, issued.Name)
+	}
+	if cleared.Path != issued.Path {
+		t.Errorf("path %q != issued %q", cleared.Path, issued.Path)
+	}
+	if cleared.Secure != issued.Secure {
+		t.Errorf("Secure %v != issued %v -- a mismatch behind a proxy can leave the cookie in place",
+			cleared.Secure, issued.Secure)
+	}
+	if cleared.HttpOnly != issued.HttpOnly {
+		t.Errorf("HttpOnly %v != issued %v", cleared.HttpOnly, issued.HttpOnly)
+	}
+	if cleared.SameSite != issued.SameSite {
+		t.Errorf("SameSite %v != issued %v", cleared.SameSite, issued.SameSite)
+	}
+	if cleared.Value != "" || !cleared.Expires.Before(time.Now()) {
+		t.Errorf("the clearing cookie must be empty and already expired, got value=%q expires=%v",
+			cleared.Value, cleared.Expires)
+	}
+}
+
+// Strict must still round-trip. Sessions created before #1661 are stored as Strict and have to
+// be re-issued as Strict rather than silently changed mid-session; they age out within the
+// session duration.
+func TestStrictStillRoundTripsForExistingSessions(t *testing.T) {
+	mode, known := sameSiteFromStored("Strict")
+	if !known || mode != http.SameSiteStrictMode {
+		t.Errorf("a session stored as Strict must still be re-issued as Strict, got (%v, %v)", mode, known)
 	}
 }

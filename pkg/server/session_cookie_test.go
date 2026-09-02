@@ -272,3 +272,57 @@ func TestStrictStillRoundTripsForExistingSessions(t *testing.T) {
 		t.Errorf("a session stored as Strict must still be re-issued as Strict, got (%v, %v)", mode, known)
 	}
 }
+
+// A background poll must not extend the session (#1676).
+//
+// Both portals refresh /api/me every ten seconds. Before this, each of those requests slid the
+// session, so an open tab renewed itself indefinitely and portal_session_duration measured
+// whether a tab was open rather than whether anyone was there -- unenforceable in exactly the
+// case an idle timeout exists for.
+func TestBackgroundPollDoesNotSlideTheSession(t *testing.T) {
+	s, r, rec := slideFixture(t, time.Hour, "Lax")
+	r.Header.Set(backgroundPollHeader, "1")
+
+	s.slidePortalSession(rec, r)
+
+	if c := findSetCookie(rec); c != nil {
+		t.Error("a background poll re-issued the cookie -- an open tab would renew itself forever")
+	}
+
+	data, ok := s.sessionStore().loadPortalSession("tok")
+	if !ok {
+		t.Fatal("the session was lost")
+	}
+	// Server-side expiry must be untouched too. Skipping only the cookie would leave the
+	// session alive on the server while the browser's copy aged out -- the mismatch #1655 fixed,
+	// reintroduced from the other side.
+	if data.ExpiresAt.After(time.Now().Add(2 * time.Hour)) {
+		t.Errorf("a background poll extended the server-side expiry to %v", data.ExpiresAt)
+	}
+}
+
+// The same request without the header still slides, so ordinary use never expires under you.
+// Paired with the test above deliberately: asserting only that polls are ignored would pass for
+// an implementation that had stopped sliding altogether.
+func TestUserRequestStillSlidesTheSession(t *testing.T) {
+	s, r, rec := slideFixture(t, time.Hour, "Lax")
+
+	s.slidePortalSession(rec, r)
+
+	if findSetCookie(rec) == nil {
+		t.Error("a user request did not slide the session -- active use must not expire")
+	}
+}
+
+// An empty header value is not a marker. Browsers and proxies can send empty headers, and
+// treating one as "this is a poll" would let a stray header shorten a real session.
+func TestEmptyBackgroundPollHeaderIsIgnored(t *testing.T) {
+	s, r, rec := slideFixture(t, time.Hour, "Lax")
+	r.Header.Set(backgroundPollHeader, "")
+
+	s.slidePortalSession(rec, r)
+
+	if findSetCookie(rec) == nil {
+		t.Error("an empty X-Background-Poll suppressed the slide; only a non-empty value marks a poll")
+	}
+}

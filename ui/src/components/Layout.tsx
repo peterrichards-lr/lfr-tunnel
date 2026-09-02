@@ -95,7 +95,10 @@ export default function Layout() {
 
     const interval = setInterval(() => {
       axios
-        .get('/api/me')
+        // Marked as a background poll so it does not extend the session (#1676). Without this
+        // an open tab renews itself every ten seconds forever, and the idle timeout measures
+        // whether a tab is open rather than whether anyone is at the keyboard.
+        .get('/api/me', { headers: { 'X-Background-Poll': '1' } })
         .then((res) => {
           setUser(res.data);
         })

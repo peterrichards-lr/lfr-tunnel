@@ -18,6 +18,10 @@ const sessionCookieName = "lfr_session"
 // place rather than three.
 const schemeHTTPS = "https"
 
+// backgroundPollHeader marks a request the portal made on a timer rather than one a person
+// caused. Requests carrying it do not extend the session (#1676).
+const backgroundPollHeader = "X-Background-Poll"
+
 // cookieSecure mirrors what the three login paths already did: trust TLS directly, or the
 // proxy's forwarded scheme when one is in front.
 func cookieSecure(r *http.Request) bool {
@@ -105,6 +109,20 @@ const refreshWindow = 4
 //     its original cookie and stops sliding -- the behaviour before this change -- and fixes
 //     itself at the next login.
 func (s *Server) slidePortalSession(w http.ResponseWriter, r *http.Request) {
+	// A background poll is not activity (#1676). Both portals refresh /api/me every ten
+	// seconds, so before this an open tab renewed its own session forever and the configured
+	// duration measured whether a tab was open rather than whether anyone was there --
+	// unenforceable in exactly the case an idle timeout exists for, someone away from an
+	// unlocked machine.
+	//
+	// The header is client-supplied, and that is safe in this direction only: honouring it can
+	// only ever let a session expire sooner, never extend one. A client that omits it, or an
+	// attacker who strips it, gets the old behaviour of a slide -- which is why the absolute
+	// cap below does not depend on it.
+	if r.Header.Get(backgroundPollHeader) != "" {
+		return
+	}
+
 	cookie, err := r.Cookie(sessionCookieName)
 	if err != nil || cookie.Value == "" {
 		return

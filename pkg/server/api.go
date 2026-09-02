@@ -838,17 +838,7 @@ func (s *Server) handleSelfDeleteAccount(w http.ResponseWriter, r *http.Request)
 		return
 	}
 
-	// Clear session cookie
-	cookie := &http.Cookie{
-		Name:     "lfr_session",
-		Value:    "",
-		Path:     "/",
-		Expires:  time.Unix(0, 0),
-		MaxAge:   -1,
-		HttpOnly: true,
-		Secure:   r.TLS != nil,
-	}
-	http.SetCookie(w, cookie)
+	http.SetCookie(w, s.clearSessionCookie(r))
 
 	respondJSON(w, http.StatusOK, map[string]string{"status": "success"})
 }

@@ -3814,13 +3814,17 @@ func (s *Server) handleAdminVerify(w http.ResponseWriter, r *http.Request) {
 		ClientIP:              clientIP,
 		PreviousLoginAt:       previousLoginAt,
 		KilledPreviousSession: killedPreviousSession,
-		// Strict here, Lax on the other two paths (#1661). Recorded so a slide preserves it.
-		SameSite: sameSiteToStored(http.SameSiteStrictMode),
+		// Lax, like every other login path. It was Strict here alone, which meant an admin
+		// clicking any of the six PortalLink emails -- subdomain reserved/expiring/expired/
+		// demoted, extension approved, vanity hook failed -- arrived without their cookie and
+		// landed on the login page despite holding a valid session. Strict is not sent on a
+		// cross-site navigation, and an emailed link is exactly that (#1661).
+		SameSite: sameSiteToStored(http.SameSiteLaxMode),
 	})
 
 	s.writeAudit(email, "admin.login", "system", "admin", "Admin logged into dashboard via magic link", r)
 
-	http.SetCookie(w, s.newSessionCookie(r, sessionToken, http.SameSiteStrictMode))
+	http.SetCookie(w, s.newSessionCookie(r, sessionToken, http.SameSiteLaxMode))
 
 	respondJSON(w, http.StatusOK, map[string]string{"status": "ok"})
 }
@@ -3830,15 +3834,7 @@ func (s *Server) handleAdminLogout(w http.ResponseWriter, r *http.Request) {
 	if err == nil {
 		s.sessionStore().deletePortalSession(cookie.Value)
 	}
-	http.SetCookie(w, &http.Cookie{
-		Name:     "lfr_session",
-		Value:    "",
-		Path:     "/",
-		Expires:  time.Unix(0, 0),
-		HttpOnly: true,
-		Secure:   r.TLS != nil || r.Header.Get("X-Forwarded-Proto") == "https",
-		SameSite: http.SameSiteStrictMode,
-	})
+	http.SetCookie(w, s.clearSessionCookie(r))
 	respondJSON(w, http.StatusOK, map[string]string{"status": "ok"})
 }
 

@@ -129,3 +129,24 @@ func (s *Server) slidePortalSession(w http.ResponseWriter, r *http.Request) {
 	s.sessionStore().storePortalSession(cookie.Value, data)
 	http.SetCookie(w, s.newSessionCookie(r, cookie.Value, mode))
 }
+
+// clearSessionCookie expires the session cookie.
+//
+// Same attributes as newSessionCookie, because a browser identifies a cookie by name, path and
+// domain, and a mismatch can leave the original in place. There were two hand-written copies of
+// this and they disagreed with each other and with the login paths (#1661): one carried
+// SameSite=Strict where the session was set Lax, and the other set `Secure: r.TLS != nil`
+// without the X-Forwarded-Proto check every other site uses -- so behind a TLS-terminating
+// proxy it tried to clear a Secure cookie with a non-Secure one.
+func (s *Server) clearSessionCookie(r *http.Request) *http.Cookie {
+	return &http.Cookie{
+		Name:     sessionCookieName,
+		Value:    "",
+		Path:     "/",
+		Expires:  time.Unix(0, 0),
+		MaxAge:   -1,
+		HttpOnly: true,
+		Secure:   cookieSecure(r),
+		SameSite: http.SameSiteLaxMode,
+	}
+}

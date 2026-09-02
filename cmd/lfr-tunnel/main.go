@@ -147,8 +147,18 @@ func main() {
 	// connect to. Say so now, in terms the user can act on -- otherwise the first symptom
 	// is a request to the empty string failing somewhere inside registration.
 	if cfg.ServerURL == "" {
-		log.Fatalf("[Error] No tunnel server configured. Pass -server https://your-gateway.example.com, " +
-			"set LFT_SERVER_URL, or add server_url to your client config file.")
+		// The three ways are NOT equivalent and used to be listed as though they were
+		// (#1691): -server and the environment variables pin the client, disabling region
+		// selection and failover, while the config file does not. Someone reading this
+		// message is choosing between them for the first time, so it has to say which is
+		// which -- a US user followed the old wording, named the control plane, and stayed
+		// on it from the US for the life of the tunnel.
+		log.Fatalf("[Error] No tunnel server configured.\n\n" +
+			"  Recommended: add this to your client config file --\n" +
+			"      server_url: \"https://your-gateway.example.com\"\n" +
+			"  The client then picks the closest gateway and fails over if it goes away.\n\n" +
+			"  Alternatively: -server <url> (or LFT_SERVER_URL) pins this client to that one\n" +
+			"  gateway -- no region selection, no failover.")
 	}
 
 	if *guiFlag {
@@ -284,6 +294,14 @@ func main() {
 	// client simply dropped when its gateway hit a scheduled stop and stayed down for the
 	// whole window. Say so now, while the user can still choose differently (#1275).
 	if notice := client.PinnedShutdownNotice(regResp, isExplicitServer); notice != "" {
+		slog.Warn(fmt.Sprintf("[Client] %s", notice))
+	}
+
+	// The cost that applies even when nothing is scheduled to stop (#1691): a pinned client
+	// never elects a region, so someone who names the control plane stays on it however close
+	// an edge is. Said once at registration, while the tunnel is being set up and the user can
+	// still choose differently.
+	if notice := client.PinnedRoutingNotice(isExplicitServer, len(cfg.Regions)); notice != "" {
 		slog.Warn(fmt.Sprintf("[Client] %s", notice))
 	}
 

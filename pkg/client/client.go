@@ -132,6 +132,34 @@ func PinnedShutdownNotice(resp *RegisterResponse, isExplicitServer bool) string 
 		when, formatTimeUntil(resp.NodeStopsInSeconds))
 }
 
+// PinnedRoutingNotice warns that naming a gateway has opted this client out of region
+// selection and failover (#1691).
+//
+// PinnedShutdownNotice above covers the case where the pinned gateway is about to stop. This
+// covers the cost that applies even when nothing stops: a user in the US who names the control
+// plane stays on the control plane, however close an edge is, for the life of the tunnel.
+//
+// Both behaviours are intended -- naming a gateway should use that gateway (#1275). What was
+// missing is that the three documented ways to supply one are not equivalent: -server and the
+// environment variables pin, while server_url in the config file does not, and nothing said so
+// at the point of choosing.
+//
+// Silent when only one region exists: there is nothing to elect between, so the advice would be
+// noise on a single-gateway deployment.
+func PinnedRoutingNotice(isExplicitServer bool, regionCount int) string {
+	if !isExplicitServer || regionCount < 2 {
+		return ""
+	}
+	return fmt.Sprintf(
+		"This client is pinned to the gateway you named, so it will not pick the closest of the "+
+			"%d available and will not fail over if that gateway goes away. To keep both, remove "+
+			"-server (and LFT_SERVER_URL / LFT_CLIENT_SERVER / LFT_SERVER) and put "+
+			"`server_url: \"<url>\"` in your client config file instead -- that supplies a "+
+			"starting point without pinning. Use -region <name> to prefer one region while "+
+			"keeping failover.",
+		regionCount)
+}
+
 // formatTimeUntil renders a span as coarse human units, e.g. "6h 12m".
 //
 // Distinct from tui.go's formatCountdown, which renders minutes and seconds because it ticks

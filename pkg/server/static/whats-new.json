@@ -1,5 +1,13 @@
 [
   {
+    "version": "v1.48.23",
+    "release_date": "2026-09-02",
+    "features": [
+      "fix(install): download from the gateway that served the installer (#1684) (#1685)",
+      "feat(ops): reconcile the session policy onto a running gateway (#1681) (#1683)"
+    ]
+  },
+  {
     "version": "v1.48.22",
     "release_date": "2026-09-02",
     "features": [
@@ -36,13 +44,6 @@
       "fix(ci): run Hook Tests when the Makefile changes (#1643) (#1645)",
       "fix(hooks): allow commits whose staged change is only deletions (#1649) (#1650)",
       "fix(ops): say \"no credentials\" instead of blaming the region list (#1644) (#1646)"
-    ]
-  },
-  {
-    "version": "v1.48.18",
-    "release_date": "2026-09-01",
-    "features": [
-      "fix(portal): give every sidebar destination a shortcut, and stop offering unreachable ones (#1640) (#1641)"
     ]
   }
 ]

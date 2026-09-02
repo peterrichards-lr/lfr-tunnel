@@ -67,16 +67,44 @@ func sameSiteFromStored(stored string) (http.SameSite, bool) {
 // newSessionCookie builds the cookie for a session token. Every attribute other than SameSite is
 // identical across all callers; SameSite is passed in because the login paths disagree and the
 // disagreement has to survive a refresh until #1661 settles it.
-func (s *Server) newSessionCookie(r *http.Request, token string, mode http.SameSite) *http.Cookie {
+//
+// expiresAt is passed in rather than computed here so the cookie cannot outlive the session it
+// represents: with an absolute cap configured (#1679) the session may end sooner than
+// now+PortalSessionDuration, and a cookie that survived it would leave the browser presenting
+// credentials the server has already retired.
+func (s *Server) newSessionCookie(r *http.Request, token string, mode http.SameSite, expiresAt time.Time) *http.Cookie {
 	return &http.Cookie{
 		Name:     sessionCookieName,
 		Value:    token,
 		Path:     "/",
-		Expires:  time.Now().Add(s.cfg.PortalSessionDuration),
+		Expires:  expiresAt,
 		HttpOnly: true,
 		Secure:   cookieSecure(r),
 		SameSite: mode,
 	}
+}
+
+// sessionDeadline is when a session actually ends: the earlier of its sliding idle expiry and
+// its absolute cap (#1679).
+//
+// The idle timeout slides on use, so a continuously-used session renews forever -- and since
+// #1676 that sliding is suppressed by a client-supplied header, which means the idle bound
+// depends on the client behaving. The cap does not: it is measured from the session's creation
+// and nothing sent by a client can move it.
+//
+// Returns the idle expiry unchanged when no cap is configured (the default) or when CreatedAt is
+// unknown, which is the case for a session that predates this. Such a session is bounded by the
+// idle timeout alone -- the behaviour before this change -- rather than being capped from an
+// assumed start time, which would sign people out early on deploy.
+func (s *Server) sessionDeadline(data PortalSessionData) time.Time {
+	if s.cfg.PortalSessionMaxLifetime <= 0 || data.CreatedAt.IsZero() {
+		return data.ExpiresAt
+	}
+	cap := data.CreatedAt.Add(s.cfg.PortalSessionMaxLifetime)
+	if cap.Before(data.ExpiresAt) {
+		return cap
+	}
+	return data.ExpiresAt
 }
 
 // refreshWindow is how much of a session's life must have elapsed before a request re-issues
@@ -143,9 +171,26 @@ func (s *Server) slidePortalSession(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	data.ExpiresAt = time.Now().Add(s.cfg.PortalSessionDuration)
+	// Never past the absolute cap. Without this the slide would push ExpiresAt beyond a
+	// deadline the session can no longer reach, and the pre-expiry warning -- which reads the
+	// effective deadline -- would promise time that does not exist (#1679).
+	extended := time.Now().Add(s.cfg.PortalSessionDuration)
+	if capped := s.sessionDeadline(PortalSessionData{
+		ExpiresAt: extended,
+		CreatedAt: data.CreatedAt,
+	}); capped.Before(extended) {
+		extended = capped
+	}
+
+	// Already at the cap: nothing to extend, and re-issuing a cookie that expires at the same
+	// instant is noise on every request for the rest of the session.
+	if !extended.After(data.ExpiresAt) {
+		return
+	}
+
+	data.ExpiresAt = extended
 	s.sessionStore().storePortalSession(cookie.Value, data)
-	http.SetCookie(w, s.newSessionCookie(r, cookie.Value, mode))
+	http.SetCookie(w, s.newSessionCookie(r, cookie.Value, mode, extended))
 }
 
 // clearSessionCookie expires the session cookie.

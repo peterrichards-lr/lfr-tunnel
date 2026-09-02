@@ -431,3 +431,47 @@ func TestRenderRealIPBlock_MultipleGroupsStillOnce(t *testing.T) {
 		t.Errorf("expected exactly one set_real_ip_from directive across three groups, got %d", n)
 	}
 }
+
+// Both the apex and the wildcard server blocks must serve the client downloads (#1687).
+//
+// /static/downloads/ is served from disk by nginx, bypassing the Go app, which only serves
+// /static/* from its compiled-in embed and never contains the binaries. The block was added to
+// the wildcard block alone (#955), so the apex served every other path -- API, portal,
+// install.sh, dashboard.js -- and 404d on the only path the installer needs.
+//
+// Two bugs masked each other: #1684 sent every install to the apex, so the failure was
+// attributed to the installer and this never surfaced on its own.
+func TestBothServerBlocksServeClientDownloads(t *testing.T) {
+	out := centralConfig("8080", "example.test")
+
+	if n := strings.Count(out, "location /static/downloads/"); n != 2 {
+		t.Errorf("expected the downloads location in BOTH the apex and wildcard blocks, found %d\n%s", n, out)
+	}
+
+	// Positionally: one before `server_name *.`, one after. Counting alone would pass if both
+	// landed in the same block.
+	wildcardAt := strings.Index(out, "server_name *.example.test")
+	if wildcardAt < 0 {
+		t.Fatalf("no wildcard server block rendered:\n%s", out)
+	}
+	if !strings.Contains(out[:wildcardAt], "location /static/downloads/") {
+		t.Error("the apex block has no downloads location -- an install from the bare domain 404s")
+	}
+	if !strings.Contains(out[wildcardAt:], "location /static/downloads/") {
+		t.Error("the wildcard block lost its downloads location")
+	}
+}
+
+// An edge node serves no client downloads: the binaries are only on central.
+func TestEdgeRoleDoesNotServeClientDownloads(t *testing.T) {
+	out := buildNginxConfig(nginxRenderConfig{
+		Role:      RoleEdge,
+		LocalPort: "8080",
+		Groups: []nginxDomainGroup{
+			{Domain: "example.test", CertRoot: certRootLetsEncrypt},
+		},
+	})
+	if strings.Contains(out, "location /static/downloads/") {
+		t.Error("an edge rendered a downloads location; those files only exist on central")
+	}
+}

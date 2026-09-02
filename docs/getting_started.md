@@ -237,6 +237,40 @@ If you are running a standalone Tomcat bundle on port `8080` without a Liferay W
 lfr-tunnel -subdomain your-name-se -ports 8080
 ```
 
+### Choosing Which Gateway to Use
+
+There are three ways to tell the client which gateway to connect to, and **they do not behave the
+same way**. Two of them pin the client to a single gateway, which switches off both the automatic
+choice of the closest one and failover if that gateway goes away.
+
+| How you supply it | Picks the closest gateway | Fails over |
+|---|---|---|
+| `server_url:` in your client config file | ✅ | ✅ |
+| `-server <url>` on the command line | ❌ pinned | ❌ |
+| `LFT_SERVER_URL` / `LFT_CLIENT_SERVER` / `LFT_SERVER` | ❌ pinned | ❌ |
+
+**Prefer the config file.** The client needs a starting point to fetch the list of gateways from,
+and the config file supplies one without pinning you to it:
+
+```yaml
+server_url: "https://your-gateway.example.com"
+```
+
+Then simply:
+
+```bash
+lfr-tunnel -subdomain your-name-se
+```
+
+Pinning is a deliberate feature -- use `-server` when you genuinely want one specific gateway and
+nothing else. But if you pin the control plane from another continent, you stay on the control
+plane no matter how close an edge is, and your tunnel drops for the whole window if that gateway
+is scheduled to stop.
+
+To prefer a region while keeping failover, use `-region <name>` rather than `-server`. To re-run
+the latency probe after a gateway has come back, add `-refresh-region` once -- the election is
+otherwise cached for 24 hours.
+
 ---
 
 ## Running in the Background & Start on Login
@@ -368,4 +402,4 @@ Bodies are capped at 10 KB each. Prefer the Inspector at `http://localhost:4040`
 
 <!-- markdownlint-disable MD049 -->
 ---
-*Last Updated: 2026-08-21* | *Last Reviewed: 2026-08-21*
+*Last Updated: 2026-09-02* | *Last Reviewed: 2026-09-02*

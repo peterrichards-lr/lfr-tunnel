@@ -8,6 +8,7 @@ import (
 	"os"
 	"path/filepath"
 	"strconv"
+	"strings"
 	"testing"
 )
 
@@ -207,5 +208,35 @@ func TestRegisterTunnel_Error(t *testing.T) {
 	}
 	if regErr.PortalURL != "https://portal.lfr-demo.se/portal" {
 		t.Errorf("expected portal URL 'https://portal.lfr-demo.se/portal', got %q", regErr.PortalURL)
+	}
+}
+
+// Naming a gateway opts the client out of region selection and failover, and nothing said so
+// (#1691). A US user named the control plane, stayed on it from the US for the life of the
+// tunnel, and only found the alternative by asking a colleague.
+func TestPinnedRoutingNotice(t *testing.T) {
+	// The case that bit: pinned, with better gateways available.
+	notice := PinnedRoutingNotice(true, 4)
+	if notice == "" {
+		t.Fatal("a pinned client with 4 regions was told nothing")
+	}
+	for _, want := range []string{"server_url", "-region", "fail over"} {
+		if !strings.Contains(notice, want) {
+			t.Errorf("the notice does not mention %q, so it does not say how to fix it:\n%s", want, notice)
+		}
+	}
+
+	// Not pinned: nothing to say.
+	if n := PinnedRoutingNotice(false, 4); n != "" {
+		t.Errorf("an unpinned client was warned anyway: %s", n)
+	}
+
+	// Pinned but only one gateway exists: there is nothing to elect between, so the advice
+	// would be noise on a single-gateway deployment.
+	if n := PinnedRoutingNotice(true, 1); n != "" {
+		t.Errorf("warned on a single-region deployment, where the advice cannot help: %s", n)
+	}
+	if n := PinnedRoutingNotice(true, 0); n != "" {
+		t.Errorf("warned when no regions were advertised: %s", n)
 	}
 }

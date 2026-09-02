@@ -1,5 +1,12 @@
 [
   {
+    "version": "v1.48.21",
+    "release_date": "2026-09-02",
+    "features": [
+      "fix(auth): stop background polling from extending the session (#1676) (#1677)"
+    ]
+  },
+  {
     "version": "v1.48.20",
     "release_date": "2026-09-02",
     "features": [
@@ -42,16 +49,6 @@
       "fix(ops): make deploy build the portal instead of trusting what is on disk (#1632) (#1634)",
       "docs(ops): record that the edges do not serve the portal (#1631)",
       "feat(portal-v1): add an admin-wide Registered Subdomains screen (#1619) (#1625)"
-    ]
-  },
-  {
-    "version": "v1.48.16",
-    "release_date": "2026-09-01",
-    "features": [
-      "chore(portal-v2): drop the Classic Dashboard link from the sidebar (#1622) (#1624)",
-      "feat(portal-v2): show subdomain expiry, and format both dates (#1617) (#1623)",
-      "fix(portal): page the audit log instead of silently truncating it (#1621)",
-      "fix(portal-v1): render the Custom Domains summary instead of escaping it (#1620)"
     ]
   }
 ]

@@ -947,6 +947,10 @@
                                 <th data-i18n="th_latency">Latency</th>
                                 <th data-i18n="th_last_check">Last Check</th>
                                 <th data-i18n="th_local_time">Local Time</th>
+                                <!-- Next to Local Time deliberately: the node's local time is what
+                                     makes a sleeping edge look broken, and its schedule is what
+                                     explains it (#1689). -->
+                                <th data-i18n="th_schedule">Schedule</th>
                                 <th data-i18n="th_uptime">Uptime</th>
                                 <th data-i18n="th_version">Version</th>
                                 <th data-i18n="th_details">Details</th>
@@ -954,7 +958,7 @@
                             </tr>
                         </thead>
                         <tbody id="network-health-body">
-                            <tr><td colspan="11" style="text-align:center;opacity:0.6;">Loading...</td></tr>
+                            <tr><td colspan="12" style="text-align:center;opacity:0.6;">Loading...</td></tr>
                         </tbody>
                     </table>
                 </div>

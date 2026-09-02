@@ -1439,3 +1439,54 @@ html[dir='rtl'] th {
   font-size: 14px;
   box-sizing: border-box;
 }
+
+/* Edge Gateways: the power schedule beside each node's status (#1689).
+
+   The screen showed a node's status and its own local time but not its schedule, which is
+   the worst of both -- enough to notice `edge-apac disabled 02:57` is odd, not enough to
+   explain that 02:57 in Tokyo is inside its configured stop window. Four dot colours rather
+   than three, because "Disabled" covered a node asleep on schedule, one an operator stopped
+   and (next to it) one that had simply gone dark, and only the last is an incident.
+
+   The dot's colour was written inline on the row (`#10b981` hardcoded for online, so it did
+   not follow the theme at all); it moves here so the fourth state can be added without a
+   fourth inline colour. */
+.edge-status {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+.edge-status-dot {
+  display: inline-block;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+.edge-status-dot--online {
+  background-color: var(--success);
+}
+/* Informational blue, matching Portal V2's .badge-asleep: a state the screen can positively
+   explain, not merely one it has no alarm for. */
+.edge-status-dot--asleep {
+  background-color: var(--status-info-text);
+}
+.edge-status-dot--disabled {
+  background-color: var(--text-muted);
+}
+.edge-status-dot--offline {
+  background-color: var(--danger);
+}
+.edge-schedule-cell {
+  white-space: nowrap;
+}
+/* The next transition, under the window it belongs to -- "starts in 5h 03m" is the part that
+   answers "is this fine?", so it is always rendered, never a tooltip. */
+.edge-schedule-next {
+  display: block;
+  font-size: 11px;
+  color: var(--text-muted);
+}
+.edge-schedule-unknown {
+  color: var(--text-muted);
+}

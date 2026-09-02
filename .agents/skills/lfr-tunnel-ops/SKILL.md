@@ -215,6 +215,35 @@ the instance first if it's stopped, waits for SSH, deploys, then stops it back a
 `deploy` doesn't handle AWS credentials itself. Leave unset for central (never scheduled off)
 or any target you know is already running.*
 
+### Reconciling Server Config (session policy)
+
+`deploy` uploads the binary and static assets and **never touches
+`/etc/lfr-tunneld/server-config.yaml`**. Provisioning uploads a config the operator built by
+hand, so a setting reached a box only on initial provision or by someone SSHing in -- the same
+gap `reconcile-nginx` exists to close for nginx (#997), and why `portal_session_duration` went
+24h -> 8h by hand on 2026-09-02 with nothing able to notice if it later drifted (#1681).
+
+```bash
+./bin/lfr-tunnel-ops reconcile-server-config -target central -dry-run   # report drift, write nothing
+./bin/lfr-tunnel-ops reconcile-server-config -target central            # apply
+```
+
+The desired values live in `lfr-tunnel-ops.yaml` under `session:`, **inside the target entry**
+for a multi-target file. At the top level of a multi-target file they are silently ignored and
+the command reports "no session: block declared" -- which reads like nothing needed doing.
+
+Only `portal_session_duration` and `portal_session_max_lifetime` are read or written. Every other
+key in that file, including the SMTP credentials and token hashes, is left untouched and
+unexamined -- the same secrecy rule `check-config` follows.
+
+It backs the file up, restarts the gateway, and **restores the backup if the gateway does not
+come back healthy**. There is no offline validator for this file, so the gateway is the test:
+"active" alone is not enough, because a crash-looping unit reports active, so it also waits for
+`/api/version` to answer.
+
+A policy where the cap is shorter than the idle timeout is refused before anything is written --
+it would make the idle setting unreachable, which is almost always a typo.
+
 ### Reconciling Nginx Config
 `deploy` only ever uploads the `lfr-tunneld` binary and static assets -- a fix to the nginx config template (e.g. the #979 ACME-fallback location block) only ever reached a box on its *initial* provision, never on a normal `deploy` (#997). Use `reconcile-nginx` to regenerate a node's nginx config and push it to an already-provisioned box -- central **or** an edge, selected with `-role` (#1442). Safe to re-run repeatedly: it backs up the existing config, swaps in the new one, runs `nginx -t`, and only reloads if that passes -- otherwise it restores the backup and reloads that instead, so a bad reconcile can't leave the box without a working config. `scripts/common/setup-central-vps.sh` **and** `scripts/common/setup-edge-vps.sh` generate their nginx config the same way, via `lfr-tunnel-ops render-nginx-config` -- provisioning and reconciling share exactly one template for both roles and cannot drift apart again (#1026, #1442). The edge script used to carry its own copy, which is how the live edges ended up still emitting the pre-#1360 appending `X-Forwarded-For` (#1441) and running an apex vhost with no source in this repo at all (#1443).
 ```bash
@@ -471,4 +500,4 @@ Run remote diagnostic checks on the VPS (system uptime/load, systemd service sta
 
 <!-- markdownlint-disable MD049 -->
 ---
-*Last Updated: 2026-09-01* | *Last Reviewed: 2026-09-01*
+*Last Updated: 2026-09-02* | *Last Reviewed: 2026-09-02*

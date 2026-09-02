@@ -59,6 +59,27 @@ central:
   # instance_tag: Project=my-tunnel
 
 # Only needed for `lfr-tunnel-ops reconcile-nginx`.
+# The portal session policy this deployment intends (#1681).
+#
+# Declared here rather than committed to the repo: these are deployment decisions, not project
+# ones -- a staging gateway may reasonably want shorter sessions than production.
+#
+# `lfr-tunnel-ops reconcile-server-config` applies these to a running gateway, and
+# `check-config` reports when a live box has drifted from them. deploy does NOT push config, so
+# without this a setting reached a box only on initial provision or by hand.
+#
+# Both are optional; omit either to leave that setting alone.
+#   portal_session_duration     -- idle timeout, slides on use
+#   portal_session_max_lifetime -- absolute cap from login, whatever the activity
+#
+# PLACEMENT: this sits beside central: and nginx:, so in a MULTI-target file it belongs INSIDE
+# the target entry (targets: -> <name>: -> session:), not at the top level. Put at the top level
+# of a multi-target file it is silently ignored -- the file still parses, reconcile-server-config
+# just reports "no session: block declared" and does nothing.
+session:
+  portal_session_duration: "8h"
+  portal_session_max_lifetime: "24h"
+
 nginx:
   # APEX domains, not hostnames. Each entry generates TWO server blocks -- `example.com` and
   # `*.example.com` -- and reads its certificate from /etc/letsencrypt/live/<entry>/. So the

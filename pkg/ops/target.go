@@ -17,6 +17,10 @@ type DeployTarget struct {
 	User         string
 	Host         string
 	IdentityFile string
+	// SessionDuration and SessionMaxLifetime are the portal session policy this deployment
+	// declares, empty when it declares none (#1681).
+	SessionDuration    string
+	SessionMaxLifetime string
 	// AWSRegion is optional and, unlike the three fields above, has no hardcoded
 	// requirement -- most commands never need it. When set, `deploy` uses it to check
 	// whether the target's EC2 instance is stopped (e.g. edge-us/edge-apac's
@@ -69,6 +73,21 @@ type opsConfigTarget struct {
 		Domains []string `yaml:"domains"`
 		Port    string   `yaml:"port"`
 	} `yaml:"nginx"`
+	// Session is the portal session policy this deployment intends (#1681).
+	//
+	// Declared here, in the operator's own file, rather than committed to the repo: these are
+	// deployment decisions, not project ones -- a staging gateway may reasonably want shorter
+	// sessions than production, and the repo has no business asserting one answer for every
+	// installation. It sits beside central: and nginx: because that is already where a
+	// deployment's own truth lives.
+	//
+	// Both fields are optional. An empty value means "this deployment does not manage that
+	// setting", and check-config and reconcile-server-config both leave it alone -- so an
+	// existing lfr-tunnel-ops.yaml keeps working untouched.
+	Session struct {
+		Duration    string `yaml:"portal_session_duration"`
+		MaxLifetime string `yaml:"portal_session_max_lifetime"`
+	} `yaml:"session"`
 }
 
 // opsConfigFile is the schema of lfr-tunnel-ops.yaml (see lfr-tunnel-ops.yaml.example).
@@ -219,6 +238,11 @@ func ResolveDeployTargetWithRegion(flagUser, flagHost, flagIdentity, flagAWSRegi
 		if target.PowerHook == "" {
 			target.PowerHook = cfg.Central.PowerHook
 		}
+		// No flag or env override: session policy is a deliberate, recorded decision, not
+		// something to set for one invocation. Anything else would make the declared value and
+		// the applied value differ with nothing to show for it (#1681).
+		target.SessionDuration = cfg.Session.Duration
+		target.SessionMaxLifetime = cfg.Session.MaxLifetime
 	}
 
 	var missing []string

@@ -1,5 +1,18 @@
 [
   {
+    "version": "v1.48.20",
+    "release_date": "2026-09-02",
+    "features": [
+      "fix(auth): issue the session cookie as Lax on every login path (#1661) (#1674)",
+      "feat(ci): flag functional changes that arrive without a test (#1660) (#1673)",
+      "chore(deps): bump aws-sdk-go-v2 ec2, route53 and scheduler (#1671) (#1672)",
+      "chore(deps): bump github.com/aws/aws-sdk-go-v2/config (#1667)",
+      "feat(portal): warn before the session expires, in both portals (#1656) (#1665)",
+      "docs(workflow): record how to run golangci-lint locally (#1663) (#1664)",
+      "fix(auth): re-issue the session cookie when the session slides (#1655) (#1662)"
+    ]
+  },
+  {
     "version": "v1.48.19",
     "release_date": "2026-09-01",
     "features": [
@@ -39,14 +52,6 @@
       "feat(portal-v2): show subdomain expiry, and format both dates (#1617) (#1623)",
       "fix(portal): page the audit log instead of silently truncating it (#1621)",
       "fix(portal-v1): render the Custom Domains summary instead of escaping it (#1620)"
-    ]
-  },
-  {
-    "version": "v1.48.15",
-    "release_date": "2026-08-31",
-    "features": [
-      "a11y(portal-v1): the same shortcuts overlay and page keys as V2 (#1614)",
-      "a11y(portal-v2): a shortcuts overlay, and keys to reach each page (#1612)"
     ]
   }
 ]

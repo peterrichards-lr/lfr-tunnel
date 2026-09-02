@@ -1,5 +1,12 @@
 [
   {
+    "version": "v1.48.22",
+    "release_date": "2026-09-02",
+    "features": [
+      "feat(auth): cap the absolute session lifetime, independent of activity (#1679) (#1680)"
+    ]
+  },
+  {
     "version": "v1.48.21",
     "release_date": "2026-09-02",
     "features": [
@@ -36,19 +43,6 @@
     "release_date": "2026-09-01",
     "features": [
       "fix(portal): give every sidebar destination a shortcut, and stop offering unreachable ones (#1640) (#1641)"
-    ]
-  },
-  {
-    "version": "v1.48.17",
-    "release_date": "2026-09-01",
-    "features": [
-      "chore(e2e): reap the test stack on failure and interrupt (#1628) (#1638)",
-      "feat(portal): let users switch the promo banner back on from Account Settings (#1626) (#1637)",
-      "fix(portal-v2): align the Block IP button with the fields beside it (#1627) (#1636)",
-      "fix(portal-v2): point Throttle at an endpoint that exists (#1629) (#1635)",
-      "fix(ops): make deploy build the portal instead of trusting what is on disk (#1632) (#1634)",
-      "docs(ops): record that the edges do not serve the portal (#1631)",
-      "feat(portal-v1): add an admin-wide Registered Subdomains screen (#1619) (#1625)"
     ]
   }
 ]

@@ -93,42 +93,51 @@ type ServerConfig struct {
 	// reports itself unavailable and registration is unaffected. No database file ships
 	// with the server: MaxMind's licence terms and the ~60MB artefact are the operator's
 	// to take on, and the feature is designed to be absent.
-	GeoLite2DBPath         string                    `yaml:"geolite2_db_path"`
-	SMTPServer             SMTPServerConfig          `yaml:"smtp_server"`
-	Webhooks               WebhookConfig             `yaml:"webhooks"`
-	SlackApp               SlackAppConfig            `yaml:"slack_app"`
-	AdminNotificationEmail string                    `yaml:"admin_notification_email"`
-	InsecureSkipVerify     bool                      `yaml:"insecure_skip_verify"`
-	Owner                  OwnerConfig               `yaml:"owner"`
-	AllowedEmailDomains    []string                  `yaml:"allowed_email_domains"`
-	IPBlacklist            []string                  `yaml:"ip_blacklist"`
-	MaxTunnelRateLimit     int                       `yaml:"max_tunnel_rate_limit"`
-	EnableUserPortal       bool                      `yaml:"enable_user_portal"`
-	PortalSessionDuration  time.Duration             `yaml:"portal_session_duration"`
-	MinClientVersion       string                    `yaml:"min_client_version"`
-	LatestClientVersion    string                    `yaml:"latest_client_version"`
-	DocumentationURL       string                    `yaml:"documentation_url"`
-	RepositoryURL          string                    `yaml:"repository_url"`
-	SecureTokenGuideURL    string                    `yaml:"secure_token_guide_url"`
-	DockerHubURL           string                    `yaml:"docker_hub_url"`
-	StatusPageURL          string                    `yaml:"status_page_url"`
-	PruneInterval          time.Duration             `yaml:"prune_interval"`
-	MagicLinkExpiry        time.Duration             `yaml:"magic_link_expiry"`
-	InviteLinkExpiry       time.Duration             `yaml:"invite_link_expiry"`
-	VerificationLinkExpiry time.Duration             `yaml:"verification_link_expiry"`
-	PrivacyPolicyURL       string                    `yaml:"privacy_policy_url"`
-	CookiePolicyURL        string                    `yaml:"cookie_policy_url"`
-	EnforcePolicyConsent   bool                      `yaml:"enforce_policy_consent"`
-	EnableOnboarding       bool                      `yaml:"enable_onboarding"`
-	DisableBackupScheduler bool                      `yaml:"disable_backup_scheduler"`
-	DockerImage            string                    `yaml:"docker_image"`
-	DockerBypassURL        string                    `yaml:"docker_bypass_url"`
-	MaintenanceTriggerPath string                    `yaml:"maintenance_trigger_path"`
-	ClientPlatforms        map[string]PlatformConfig `yaml:"client_platforms"`
-	VisitorTimeout         time.Duration             `yaml:"visitor_timeout"`
-	PATRetentionDays       int                       `yaml:"pat_retention_days"`
-	EnableWAF              bool                      `yaml:"enable_waf"`
-	DisableEmailLogin      bool                      `yaml:"disable_email_login"`
+	GeoLite2DBPath         string           `yaml:"geolite2_db_path"`
+	SMTPServer             SMTPServerConfig `yaml:"smtp_server"`
+	Webhooks               WebhookConfig    `yaml:"webhooks"`
+	SlackApp               SlackAppConfig   `yaml:"slack_app"`
+	AdminNotificationEmail string           `yaml:"admin_notification_email"`
+	InsecureSkipVerify     bool             `yaml:"insecure_skip_verify"`
+	Owner                  OwnerConfig      `yaml:"owner"`
+	AllowedEmailDomains    []string         `yaml:"allowed_email_domains"`
+	IPBlacklist            []string         `yaml:"ip_blacklist"`
+	MaxTunnelRateLimit     int              `yaml:"max_tunnel_rate_limit"`
+	EnableUserPortal       bool             `yaml:"enable_user_portal"`
+	PortalSessionDuration  time.Duration    `yaml:"portal_session_duration"`
+	// PortalSessionMaxLifetime bounds the TOTAL life of a session, however active it is
+	// (#1679). PortalSessionDuration above is an idle timeout and slides on use, which means a
+	// continuously-used session renews forever -- and since #1676 that sliding is suppressed by
+	// a client-supplied header, so the idle bound depends on the client behaving. This one does
+	// not: it is measured from the session's creation and nothing the client sends can move it.
+	//
+	// Zero disables it, which is the pre-#1679 behaviour, so an existing deployment that has
+	// not set it keeps working exactly as before.
+	PortalSessionMaxLifetime time.Duration             `yaml:"portal_session_max_lifetime"`
+	MinClientVersion         string                    `yaml:"min_client_version"`
+	LatestClientVersion      string                    `yaml:"latest_client_version"`
+	DocumentationURL         string                    `yaml:"documentation_url"`
+	RepositoryURL            string                    `yaml:"repository_url"`
+	SecureTokenGuideURL      string                    `yaml:"secure_token_guide_url"`
+	DockerHubURL             string                    `yaml:"docker_hub_url"`
+	StatusPageURL            string                    `yaml:"status_page_url"`
+	PruneInterval            time.Duration             `yaml:"prune_interval"`
+	MagicLinkExpiry          time.Duration             `yaml:"magic_link_expiry"`
+	InviteLinkExpiry         time.Duration             `yaml:"invite_link_expiry"`
+	VerificationLinkExpiry   time.Duration             `yaml:"verification_link_expiry"`
+	PrivacyPolicyURL         string                    `yaml:"privacy_policy_url"`
+	CookiePolicyURL          string                    `yaml:"cookie_policy_url"`
+	EnforcePolicyConsent     bool                      `yaml:"enforce_policy_consent"`
+	EnableOnboarding         bool                      `yaml:"enable_onboarding"`
+	DisableBackupScheduler   bool                      `yaml:"disable_backup_scheduler"`
+	DockerImage              string                    `yaml:"docker_image"`
+	DockerBypassURL          string                    `yaml:"docker_bypass_url"`
+	MaintenanceTriggerPath   string                    `yaml:"maintenance_trigger_path"`
+	ClientPlatforms          map[string]PlatformConfig `yaml:"client_platforms"`
+	VisitorTimeout           time.Duration             `yaml:"visitor_timeout"`
+	PATRetentionDays         int                       `yaml:"pat_retention_days"`
+	EnableWAF                bool                      `yaml:"enable_waf"`
+	DisableEmailLogin        bool                      `yaml:"disable_email_login"`
 	// DisableNewRegistrations is the umbrella flag gating NEW account creation regardless
 	// of method (email registration or first-time SSO login) -- see issue #910. This is
 	// distinct from DisableEmailLogin, which only affects the email-specific login/register
@@ -624,6 +633,11 @@ func LoadServerConfig(path string) (*ServerConfig, error) {
 	if val := os.Getenv("LFT_PORTAL_SESSION_DURATION"); val != "" {
 		if d, err := time.ParseDuration(val); err == nil {
 			cfg.PortalSessionDuration = d
+		}
+	}
+	if val := os.Getenv("LFT_PORTAL_SESSION_MAX_LIFETIME"); val != "" {
+		if d, err := time.ParseDuration(val); err == nil {
+			cfg.PortalSessionMaxLifetime = d
 		}
 	}
 	if val := os.Getenv("LFT_MIN_CLIENT_VERSION"); val != "" {

@@ -223,10 +223,15 @@ func (s *Server) handleSSOCallback(w http.ResponseWriter, r *http.Request) {
 		KilledPreviousSession: killedPreviousSession,
 		// Recorded so a slide can re-issue the cookie with the mode it was created with
 		// rather than a default (#1655).
-		SameSite: sameSiteToStored(http.SameSiteLaxMode),
+		SameSite:  sameSiteToStored(http.SameSiteLaxMode),
+		CreatedAt: time.Now().UTC(),
 	})
 
-	http.SetCookie(w, s.newSessionCookie(r, sessionID, http.SameSiteLaxMode))
+	http.SetCookie(w, s.newSessionCookie(r, sessionID, http.SameSiteLaxMode,
+		s.sessionDeadline(PortalSessionData{
+			ExpiresAt: time.Now().Add(s.cfg.PortalSessionDuration),
+			CreatedAt: time.Now().UTC(),
+		})))
 
 	// Inject an audit log
 	_ = s.db.WriteAuditEntry(&db.AuditEntry{ //nolint:errcheck

@@ -3819,12 +3819,17 @@ func (s *Server) handleAdminVerify(w http.ResponseWriter, r *http.Request) {
 		// demoted, extension approved, vanity hook failed -- arrived without their cookie and
 		// landed on the login page despite holding a valid session. Strict is not sent on a
 		// cross-site navigation, and an emailed link is exactly that (#1661).
-		SameSite: sameSiteToStored(http.SameSiteLaxMode),
+		SameSite:  sameSiteToStored(http.SameSiteLaxMode),
+		CreatedAt: time.Now().UTC(),
 	})
 
 	s.writeAudit(email, "admin.login", "system", "admin", "Admin logged into dashboard via magic link", r)
 
-	http.SetCookie(w, s.newSessionCookie(r, sessionToken, http.SameSiteLaxMode))
+	http.SetCookie(w, s.newSessionCookie(r, sessionToken, http.SameSiteLaxMode,
+		s.sessionDeadline(PortalSessionData{
+			ExpiresAt: time.Now().Add(s.cfg.PortalSessionDuration),
+			CreatedAt: time.Now().UTC(),
+		})))
 
 	respondJSON(w, http.StatusOK, map[string]string{"status": "ok"})
 }
@@ -5341,6 +5346,11 @@ type PortalSessionData struct {
 	// Held on the session rather than sent by the client, so the effective role is the
 	// server's decision (#1225). A session carrying this is read-only.
 	ViewAsRole string
+	// CreatedAt is when the session began, used to enforce the absolute lifetime cap (#1679).
+	// The database row has always carried this; it is read into memory so the cap can be
+	// applied without a query per request. Zero for a session loaded from a row written before
+	// this existed, which sameSiteFromStored's caller treats as "no cap knowable".
+	CreatedAt time.Time
 	// SameSite is the mode the cookie was created with, as a string ("Strict"/"Lax").
 	//
 	// Recorded because a browser returns a cookie's value and none of its attributes, so

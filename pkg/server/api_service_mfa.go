@@ -129,7 +129,8 @@ func (s *portalService) MFAVerify(tempToken, code, ip string) (*db.User, string,
 		KilledPreviousSession: killedPreviousSession,
 		// Lax, matching the portal login handler that issues the cookie for this token
 		// (api.go). Recorded so a slide preserves it (#1655).
-		SameSite: sameSiteToStored(http.SameSiteLaxMode),
+		SameSite:  sameSiteToStored(http.SameSiteLaxMode),
+		CreatedAt: time.Now().UTC(),
 	})
 
 	_ = s.db.WriteAuditEntry(&db.AuditEntry{ //nolint:errcheck

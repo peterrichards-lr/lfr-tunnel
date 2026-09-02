@@ -158,7 +158,12 @@ func (s *Server) handleGetMe(w http.ResponseWriter, r *http.Request) {
 	// expiry to report, and sending 0 would render as 1970 in anything that trusts the field.
 	if sessionToken != "" {
 		if data, ok := s.sessionStore().loadPortalSession(sessionToken); ok {
-			resp["session_expires_at"] = data.ExpiresAt.UTC().Format(time.RFC3339)
+			// The effective deadline, not the sliding one: with an absolute cap configured the
+			// session may end before its idle expiry, and the pre-expiry warning reads this
+			// field (#1656). Reporting the idle expiry alone would let the cap arrive with no
+			// warning while the idle timeout gives fifteen minutes -- an inconsistency a user
+			// would notice and could not explain (#1679).
+			resp["session_expires_at"] = s.sessionDeadline(data).UTC().Format(time.RFC3339)
 		}
 	}
 
@@ -733,7 +738,11 @@ func (s *Server) handleMFAVerify(w http.ResponseWriter, r *http.Request) {
 	}
 	s.invalidateUserCache(user.Email)
 
-	http.SetCookie(w, s.newSessionCookie(r, sessionToken, http.SameSiteLaxMode))
+	http.SetCookie(w, s.newSessionCookie(r, sessionToken, http.SameSiteLaxMode,
+		s.sessionDeadline(PortalSessionData{
+			ExpiresAt: time.Now().Add(s.cfg.PortalSessionDuration),
+			CreatedAt: time.Now().UTC(),
+		})))
 
 	respondJSON(w, http.StatusOK, map[string]string{"status": "success"})
 }

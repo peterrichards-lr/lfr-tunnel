@@ -52,7 +52,7 @@ func TestNewSessionCookieAttributes(t *testing.T) {
 
 	r := httptest.NewRequest(http.MethodGet, "https://example.com/api/me", nil)
 	r.Header.Set("X-Forwarded-Proto", "https")
-	c := s.newSessionCookie(r, "tok", http.SameSiteStrictMode)
+	c := s.newSessionCookie(r, "tok", http.SameSiteStrictMode, time.Now().Add(24*time.Hour))
 
 	if c.Name != sessionCookieName {
 		t.Errorf("name = %q, want %q", c.Name, sessionCookieName)
@@ -79,13 +79,13 @@ func TestNewSessionCookieSecureFollowsScheme(t *testing.T) {
 	s := testServerForCookies(t)
 
 	plain := httptest.NewRequest(http.MethodGet, "http://example.com/api/me", nil)
-	if s.newSessionCookie(plain, "tok", http.SameSiteLaxMode).Secure {
+	if s.newSessionCookie(plain, "tok", http.SameSiteLaxMode, time.Now().Add(24*time.Hour)).Secure {
 		t.Error("Secure must not be set for a plain http request")
 	}
 
 	proxied := httptest.NewRequest(http.MethodGet, "http://example.com/api/me", nil)
 	proxied.Header.Set("X-Forwarded-Proto", "https")
-	if !s.newSessionCookie(proxied, "tok", http.SameSiteLaxMode).Secure {
+	if !s.newSessionCookie(proxied, "tok", http.SameSiteLaxMode, time.Now().Add(24*time.Hour)).Secure {
 		t.Error("Secure must be set when a proxy reports https")
 	}
 }
@@ -238,7 +238,7 @@ func TestClearSessionCookieMatchesTheIssuedOne(t *testing.T) {
 	r := httptest.NewRequest(http.MethodGet, "http://example.com/api/auth/logout", nil)
 	r.Header.Set("X-Forwarded-Proto", "https")
 
-	issued := s.newSessionCookie(r, "tok", http.SameSiteLaxMode)
+	issued := s.newSessionCookie(r, "tok", http.SameSiteLaxMode, time.Now().Add(24*time.Hour))
 	cleared := s.clearSessionCookie(r)
 
 	if cleared.Name != issued.Name {
@@ -324,5 +324,107 @@ func TestEmptyBackgroundPollHeaderIsIgnored(t *testing.T) {
 
 	if findSetCookie(rec) == nil {
 		t.Error("an empty X-Background-Poll suppressed the slide; only a non-empty value marks a poll")
+	}
+}
+
+// capFixture builds a server with an absolute cap and one session of a given age.
+func capFixture(t *testing.T, maxLifetime, age, idleRemaining time.Duration) (*Server, *http.Request, *httptest.ResponseRecorder) {
+	t.Helper()
+	s := &Server{cfg: &config.ServerConfig{
+		PortalSessionDuration:    24 * time.Hour,
+		PortalSessionMaxLifetime: maxLifetime,
+	}}
+	s.sessionStore().storePortalSession("tok", PortalSessionData{
+		Email:     "someone@example.com",
+		ExpiresAt: time.Now().Add(idleRemaining),
+		CreatedAt: time.Now().Add(-age),
+		SameSite:  "Lax",
+	})
+	r := httptest.NewRequest(http.MethodGet, "https://example.com/api/me", nil)
+	r.AddCookie(&http.Cookie{Name: sessionCookieName, Value: "tok"})
+	return s, r, httptest.NewRecorder()
+}
+
+// A continuously-used session must still end at the cap (#1679). The idle timeout slides on use,
+// so without this it renews forever -- and since #1676 the sliding is suppressed by a
+// client-supplied header, which means the idle bound depends on the client behaving.
+func TestSessionDeadlineIsCappedByAbsoluteLifetime(t *testing.T) {
+	s := &Server{cfg: &config.ServerConfig{
+		PortalSessionDuration:    8 * time.Hour,
+		PortalSessionMaxLifetime: 24 * time.Hour,
+	}}
+	created := time.Now().Add(-23 * time.Hour)
+	data := PortalSessionData{
+		// Idle expiry a full 8h out, as a slide would set it...
+		ExpiresAt: time.Now().Add(8 * time.Hour),
+		CreatedAt: created,
+	}
+
+	got := s.sessionDeadline(data)
+	want := created.Add(24 * time.Hour)
+
+	// ...but the session began 23h ago, so it ends in an hour, not eight.
+	if !got.Equal(want) {
+		t.Errorf("deadline = %v, want the cap at %v -- a slide must not push past it", got, want)
+	}
+}
+
+// The idle timeout still binds when it comes first, which is the normal case.
+func TestSessionDeadlineUsesIdleExpiryWhenItComesFirst(t *testing.T) {
+	s := &Server{cfg: &config.ServerConfig{
+		PortalSessionDuration:    8 * time.Hour,
+		PortalSessionMaxLifetime: 24 * time.Hour,
+	}}
+	idle := time.Now().Add(2 * time.Hour)
+	got := s.sessionDeadline(PortalSessionData{
+		ExpiresAt: idle,
+		CreatedAt: time.Now().Add(-time.Hour),
+	})
+	if !got.Equal(idle) {
+		t.Errorf("deadline = %v, want the idle expiry %v", got, idle)
+	}
+}
+
+// No cap configured is the default and must behave exactly as before.
+func TestSessionDeadlineWithoutACapIsUnchanged(t *testing.T) {
+	s := &Server{cfg: &config.ServerConfig{PortalSessionDuration: 8 * time.Hour}}
+	idle := time.Now().Add(8 * time.Hour)
+	got := s.sessionDeadline(PortalSessionData{
+		ExpiresAt: idle,
+		CreatedAt: time.Now().Add(-100 * time.Hour),
+	})
+	if !got.Equal(idle) {
+		t.Errorf("with no cap the idle expiry must be returned unchanged, got %v", got)
+	}
+}
+
+// A session predating CreatedAt is bounded by the idle timeout alone rather than capped from an
+// assumed start, which would sign people out the moment this deploys.
+func TestSessionDeadlineIgnoresACapWhenCreatedAtIsUnknown(t *testing.T) {
+	s := &Server{cfg: &config.ServerConfig{
+		PortalSessionDuration:    8 * time.Hour,
+		PortalSessionMaxLifetime: time.Hour,
+	}}
+	idle := time.Now().Add(8 * time.Hour)
+	got := s.sessionDeadline(PortalSessionData{ExpiresAt: idle})
+	if !got.Equal(idle) {
+		t.Errorf("a session with no CreatedAt must not be capped from an assumed start, got %v", got)
+	}
+}
+
+// A session at its cap must not be re-issued a cookie: there is nothing to extend, and doing so
+// every request for the rest of the session is noise the browser has to carry.
+func TestSlideDoesNotReissueOnceCapped(t *testing.T) {
+	// 23h old against a 24h cap, so only an hour remains however far the idle timeout would go.
+	s, r, rec := capFixture(t, 24*time.Hour, 23*time.Hour, time.Hour)
+
+	s.slidePortalSession(rec, r)
+
+	c := findSetCookie(rec)
+	if c == nil {
+		t.Skip("no cookie issued; the refresh window did not open, which this test does not exercise")
+	}
+	if c.Expires.After(time.Now().Add(2 * time.Hour)) {
+		t.Errorf("re-issued cookie expires %v, past the cap -- the browser would outlive the session", c.Expires)
 	}
 }

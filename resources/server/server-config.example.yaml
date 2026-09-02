@@ -88,6 +88,12 @@ slack_app: {}
 enable_user_portal: false
 portal_url: "https://example.com"
 portal_session_duration: "1h"
+# The absolute life of a session, however active it is. portal_session_duration above is an idle
+# timeout that slides on use, so without this a continuously-used session renews indefinitely --
+# and the sliding is suppressed by a client-supplied header, so that bound depends on the client
+# behaving. This one is measured from login and nothing the client sends can move it.
+# Empty or unset disables it, which is the behaviour before it existed.
+portal_session_max_lifetime: "24h"
 enable_onboarding: false
 view_config_allowed_role: ""
 role_settings:

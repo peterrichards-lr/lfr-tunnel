@@ -1669,14 +1669,17 @@ func resolveServerURL(cfg *config.ClientConfig, isExplicitServer bool) {
 			}
 
 			slog.Info(fmt.Sprintf("[Client] No region specified. Performing latency auto-probing across %d regions...", len(cfg.Regions)))
+			missing := missingRegionNames(cfg.Regions, cfg.RegionsUnavailable)
 			bestRegion, unreachable := probeFastestRegion(cfg.Regions)
 			if bestRegion != "" {
 				cfg.Region = bestRegion
 				cfg.ServerURL = cfg.Regions[bestRegion]
-				saveRegionCacheFn(bestRegion, cfg.ServerURL, len(unreachable) > 0)
-				if len(unreachable) > 0 {
-					slog.Info(fmt.Sprintf("[Client] Auto-detected best reachable region: '%s' -> %s. %d region(s) did not answer (%s), so this choice is provisional and is re-probed within %s.",
-						bestRegion, cfg.ServerURL, len(unreachable), strings.Join(unreachable, ", "), provisionalRegionCacheTTL))
+				absent := append(append([]string{}, unreachable...), missing...)
+				sort.Strings(absent)
+				saveRegionCacheFn(bestRegion, cfg.ServerURL, len(absent) > 0)
+				if len(absent) > 0 {
+					slog.Info(fmt.Sprintf("[Client] Auto-detected best reachable region: '%s' -> %s. %d region(s) are currently unavailable (%s), so this choice is provisional and is re-probed within %s.",
+						bestRegion, cfg.ServerURL, len(absent), strings.Join(absent, ", "), provisionalRegionCacheTTL))
 				} else {
 					slog.Info(fmt.Sprintf("[Client] Auto-detected best region: '%s' -> %s (cached for %s)", bestRegion, cfg.ServerURL, regionCacheTTL))
 				}
@@ -1692,11 +1695,15 @@ func resolveServerURL(cfg *config.ClientConfig, isExplicitServer bool) {
 	} else {
 		if len(cfg.Regions) > 0 {
 			slog.Info(fmt.Sprintf("[Client] Specified region '%s' is currently unavailable or offline. Performing latency auto-probing across %d active regions...", regionLower, len(cfg.Regions)))
+			missing := missingRegionNames(cfg.Regions, cfg.RegionsUnavailable)
 			bestRegion, unreachable := probeFastestRegion(cfg.Regions)
 			if bestRegion != "" {
 				cfg.Region = bestRegion
 				cfg.ServerURL = cfg.Regions[bestRegion]
-				saveRegionCacheFn(bestRegion, cfg.ServerURL, len(unreachable) > 0)
+				// The region the user actually asked for is itself one of the absent ones, so
+				// this election is provisional for the same reason (#1690) -- without it, asking
+				// for a sleeping edge by name pinned the client to the fallback for 24h.
+				saveRegionCacheFn(bestRegion, cfg.ServerURL, len(unreachable) > 0 || len(missing) > 0)
 				slog.Info(fmt.Sprintf("[Client] Auto-selected next best online region: '%s' -> %s", bestRegion, cfg.ServerURL))
 				return
 			}
@@ -1720,12 +1727,45 @@ func fetchRemoteRegions(cfg *config.ClientConfig) {
 
 	if resp.StatusCode == http.StatusOK {
 		var payload struct {
-			Regions map[string]string `json:"regions"`
+			Regions            map[string]string `json:"regions"`
+			RegionsUnavailable map[string]string `json:"regions_unavailable"`
 		}
 		if err := json.NewDecoder(resp.Body).Decode(&payload); err == nil && len(payload.Regions) > 0 {
 			cfg.Regions = payload.Regions
+			// Assigned unconditionally, including when empty: a stale set left over from an
+			// earlier fetch would keep re-probing every 30 minutes after the edge returned.
+			cfg.RegionsUnavailable = payload.RegionsUnavailable
 		}
 	}
+}
+
+// missingRegionNames names the gateways the server knows about but which are currently down,
+// so an election made without them can be recognised as incomplete (#1690).
+//
+// Deduped by host and filtered against the regions that ARE up, because the same gateway is
+// advertised under several names ('edge-us' and 'us'). Counting names rather than hosts would
+// report one sleeping edge as two missing regions, and a name that also serves a live region
+// is not missing at all.
+func missingRegionNames(available, unavailable map[string]string) []string {
+	if len(unavailable) == 0 {
+		return nil
+	}
+	upHosts := make(map[string]bool, len(available))
+	for _, regionURL := range available {
+		if host := gatewayHostKey(regionURL); host != "" {
+			upHosts[host] = true
+		}
+	}
+	var names []string
+	for name, regionURL := range dedupeRegionsByHost(unavailable) {
+		host := gatewayHostKey(regionURL)
+		if host == "" || upHosts[host] {
+			continue
+		}
+		names = append(names, name)
+	}
+	sort.Strings(names)
+	return names
 }
 
 // dedupeRegionsByHost collapses region names that resolve to the same gateway, keeping one

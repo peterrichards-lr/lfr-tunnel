@@ -95,6 +95,32 @@ const certRootLetsEncrypt = "/etc/letsencrypt/live"
 // from /etc/letsencrypt. Keep in step with INSTALL_ROOT in that script.
 const certRootCertSync = "/etc/lfr-tunneld/certs"
 
+// nginxClientDownloads serves the signed client binaries and checksums (populated by
+// lfr-tunnel-ops deploy-clients) directly from disk, bypassing the Go app entirely -- it only
+// ever serves /static/* from its own compiled-in embed.FS, which never contains these. Without
+// it, /install's own download links 404 even though the files exist on disk (#949's follow-up,
+// #955).
+//
+// One constant used by BOTH the apex and the wildcard server blocks (#1687). It was written out
+// in the wildcard block alone, so the apex 404d on the only path the installer needs while
+// serving every other path identically -- a difference invisible unless you compare the two
+// blocks side by side. Shared so they cannot drift apart again.
+const nginxClientDownloads = `
+    # Signed client binaries/checksums (populated by lfr-tunnel-ops deploy-clients) are served
+    # directly from disk here, bypassing the Go app entirely -- it only ever serves /static/*
+    # from its own compiled-in embed.FS, which never contains these. Without this block,
+    # /install's own download links 404 even though the files exist on disk (see #949's
+    # follow-up, #955).
+    #
+    # Emitted in BOTH the apex and wildcard server blocks (#1687). It was in the wildcard alone,
+    # so the bare domain served every other path and 404d on the only one the installer needs.
+    location /static/downloads/ {
+        alias /var/www/lfr-tunnel/static/downloads/;
+        autoindex off;
+        add_header Content-Disposition 'attachment';
+    }
+`
+
 // nginxDomainGroup is one server_name family on a node.
 //
 // The two shapes exist because a node can serve a domain it does not own the apex of. An edge
@@ -253,6 +279,12 @@ func renderApexBlock(cfg nginxRenderConfig, g nginxDomainGroup) string {
 
 	if cfg.Role == RoleCentral {
 		b.WriteString(nginxACMEFallbackHTTPS)
+		// The same downloads block the wildcard server gets below (#1687). It was added to the
+		// wildcard only (#955), so the apex served every other path -- the API, the portal,
+		// install.sh, dashboard.js -- and 404d on the one path the installer needs. Two bugs
+		// masked each other: #1684 sent every install to the apex, so the failure looked like
+		// the installer's and this block's absence never surfaced on its own.
+		b.WriteString(nginxClientDownloads)
 		fmt.Fprintf(&b, `
     location / {
         proxy_pass http://127.0.0.1:%s;
@@ -310,18 +342,7 @@ server {
 	b.WriteString(renderTLS(g))
 
 	if cfg.Role == RoleCentral {
-		b.WriteString(`
-    # Signed client binaries/checksums (populated by lfr-tunnel-ops deploy-clients) are served
-    # directly from disk here, bypassing the Go app entirely -- it only ever serves /static/*
-    # from its own compiled-in embed.FS, which never contains these. Without this block,
-    # /install's own download links 404 even though the files exist on disk (see #949's
-    # follow-up, #955).
-    location /static/downloads/ {
-        alias /var/www/lfr-tunnel/static/downloads/;
-        autoindex off;
-        add_header Content-Disposition 'attachment';
-    }
-`)
+		b.WriteString(nginxClientDownloads)
 	}
 
 	fmt.Fprintf(&b, `

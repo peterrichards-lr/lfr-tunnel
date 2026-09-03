@@ -254,7 +254,7 @@ jobs:
       - name: Set up Go
         uses: actions/setup-go@v7
         with:
-          go-version: '1.25'
+          go-version: '1.26'
           cache: true
 
       - name: Check Formatting (gofmt)
@@ -359,7 +359,7 @@ jobs:
       - name: Set up Go
         uses: actions/setup-go@v7
         with:
-          go-version: '1.25'
+          go-version: '1.26'
           cache: true
 
       - name: Create dummy UI dist for Go embed
@@ -495,7 +495,7 @@ jobs:
         if: env.RUN_SUITE == 'true'
         uses: actions/setup-go@v7
         with:
-          go-version: '1.25'
+          go-version: '1.26'
           cache: true
 
       - name: Create dummy UI dist for Go embed
@@ -541,7 +541,7 @@ jobs:
       - name: Set up Go
         uses: actions/setup-go@v7
         with:
-          go-version: '1.25'
+          go-version: '1.26'
           cache: true
 
       - name: Create dummy UI dist for Go embed
@@ -566,7 +566,7 @@ jobs:
       - name: Set up Go
         uses: actions/setup-go@v7
         with:
-          go-version: '1.25'
+          go-version: '1.26'
           cache: true
 
       - name: Run E2E Integration Test
@@ -588,7 +588,7 @@ jobs:
       - name: Set up Go
         uses: actions/setup-go@v7
         with:
-          go-version: '1.25'
+          go-version: '1.26'
           cache: true
 
       - name: Run Multi-Region Edge E2E Test
@@ -606,7 +606,7 @@ jobs:
       - name: Set up Go
         uses: actions/setup-go@v7
         with:
-          go-version: '1.25'
+          go-version: '1.26'
           cache: true
 
       - name: Set up Node.js

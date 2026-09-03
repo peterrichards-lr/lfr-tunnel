@@ -488,7 +488,13 @@ func TestLogDir_ReaderFollowsTheConfiguredWriter(t *testing.T) {
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
-	if filepath.Dir(logPath) != dir {
+	// Compared cleaned, because the two sides are normalised differently and only one of
+	// them is under our control. ClientLogPath builds with filepath.Join, which converts
+	// separators; t.TempDir() returns whatever TMP holds, and on the Go 1.26 Windows runner
+	// that is a mixed "C:/Users/...\\Test...\\001". Both name the same directory, so a
+	// byte comparison was asserting the separator style of the runner's environment rather
+	// than that the reader follows the writer.
+	if filepath.Clean(filepath.Dir(logPath)) != filepath.Clean(dir) {
 		t.Errorf("expected the console log path to sit under %q, got %q", dir, logPath)
 	}
 }

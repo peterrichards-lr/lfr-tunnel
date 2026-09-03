@@ -350,20 +350,25 @@ type ClientHooksConfig struct {
 
 // ClientConfig holds configuration settings for the lfr-tunnel client.
 type ClientConfig struct {
-	ServerURL          string            `yaml:"server_url"`
-	AuthToken          string            `yaml:"auth_token"`
-	Subdomain          string            `yaml:"subdomain"`
-	CustomDomain       string            `yaml:"custom_domain"`
-	Ports              []int             `yaml:"ports"`
-	TokenFile          string            `yaml:"token_file"`
-	MaintenancePath    string            `yaml:"maintenance_path"`
-	RateLimit          int               `yaml:"rate_limit"`
-	BasicAuth          string            `yaml:"basic_auth"`
-	TargetHost         string            `yaml:"target_host"`
-	Passcode           string            `yaml:"passcode"`
-	WhitelistIPs       string            `yaml:"whitelist_ips"`
-	Region             string            `yaml:"region"`
-	Regions            map[string]string `yaml:"regions"`
+	ServerURL       string            `yaml:"server_url"`
+	AuthToken       string            `yaml:"auth_token"`
+	Subdomain       string            `yaml:"subdomain"`
+	CustomDomain    string            `yaml:"custom_domain"`
+	Ports           []int             `yaml:"ports"`
+	TokenFile       string            `yaml:"token_file"`
+	MaintenancePath string            `yaml:"maintenance_path"`
+	RateLimit       int               `yaml:"rate_limit"`
+	BasicAuth       string            `yaml:"basic_auth"`
+	TargetHost      string            `yaml:"target_host"`
+	Passcode        string            `yaml:"passcode"`
+	WhitelistIPs    string            `yaml:"whitelist_ips"`
+	Region          string            `yaml:"region"`
+	Regions         map[string]string `yaml:"regions"`
+	// RegionsUnavailable is filled in from the gateway at runtime, never from the config
+	// file: it is the set of regions the gateway knows about but which are currently down.
+	// It exists so an election made while an edge is asleep can be recognised as incomplete
+	// and cached provisionally rather than for a full day (#1690).
+	RegionsUnavailable map[string]string `yaml:"-"`
 	Latency            time.Duration     `yaml:"latency"`
 	Bandwidth          string            `yaml:"bandwidth"`
 	PreserveHost       bool              `yaml:"preserve_host"`

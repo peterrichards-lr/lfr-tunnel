@@ -89,6 +89,15 @@ func BuildCommand(args []string) {
 		Commit:        currentGitCommit(),
 		BuiltAt:       time.Now().UTC(),
 		Artifacts:     built,
+		// What went in via ldflags, recorded rather than only reported (#1692). An empty
+		// default is invisible in the finished binary, so this is the only place the fact
+		// survives the build -- and deploy-clients refuses to publish clients with no
+		// gateway on the strength of it.
+		Defaults: BuildDefaults{
+			ServerURL:     serverURL,
+			StatusPageURL: statusPageURL,
+			PortalURL:     portalURL,
+		},
 	}
 	CheckFatal(WriteBuildManifest("dist", manifest), "Failed to write build manifest")
 

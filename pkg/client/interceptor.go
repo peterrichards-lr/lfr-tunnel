@@ -962,9 +962,14 @@ func (e *InterceptorEngine) InterceptPort(targetPort int) (int, error) {
 		transport:  customTransport,
 	}
 
-	// Custom Director to inject headers
-	originalDirector := proxy.Director
-	proxy.Director = func(req *http.Request) {
+	// Custom Director to inject headers.
+	//
+	// Director is deprecated in favour of Rewrite as of Go 1.26, but migrating is not a
+	// rename: Rewrite has no original to chain to, and it does not append X-Forwarded-For
+	// the way Director does. Tracked in #1704 with a test-first plan rather than folded
+	// into the dependency bump that raised the language version (#1703).
+	originalDirector := proxy.Director         //nolint:staticcheck // SA1019: migration tracked in #1704
+	proxy.Director = func(req *http.Request) { //nolint:staticcheck // SA1019: migration tracked in #1704
 		originalDirector(req)
 
 		// Rewrite Host header if PreserveHost is unchecked

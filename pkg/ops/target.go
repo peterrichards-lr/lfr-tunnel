@@ -339,11 +339,36 @@ func parseTargetFlagsWithRegion(name string, args []string) (identityFile, user,
 	return *i, *u, *s, *r, *t, nil
 }
 
-// parseDeployClientsFlags is parseTargetFlags plus the two overrides only deploy-clients has
+// deployClientsFlags is what deploy-clients accepts beyond a deployment target: three overrides
+// for the three checks it makes before and after uploading (#1279, #1692).
+//
+// A struct rather than more return values: the third override tipped the tuple past the point
+// where a caller can be trusted to keep the booleans in the right order, and two of the three
+// mean "publish something the guard says not to".
+type deployClientsFlags struct {
+	identityFile string
+	user         string
+	host         string
+	target       string
+
+	// allowStale publishes dist/ even if it was not built from the current source (#1279).
+	allowStale bool
+
+	// allowNoDefault publishes clients with no default gateway compiled in (#1692). Separate
+	// from allowStale because they answer different questions -- artefacts can be current and
+	// still be built from a shell with no LFT_DEFAULT_SERVER_URL, which is exactly what
+	// happened.
+	allowNoDefault bool
+
+	// skipVerify skips the post-upload check that the gateway serves the uploaded bytes.
+	skipVerify bool
+}
+
+// parseDeployClientsFlags is parseTargetFlags plus the overrides only deploy-clients has
 // (#1279). A separate function for the same reason parseTargetFlagsWithRegion is one: adding
 // these to the shared parser would make `deploy` accept flags it silently ignores, which is its
 // own small version of a command reporting something it did not do.
-func parseDeployClientsFlags(name string, args []string) (identityFile, user, host, target string, allowStale, skipVerify bool, err error) {
+func parseDeployClientsFlags(name string, args []string) (deployClientsFlags, error) {
 	fs := flag.NewFlagSet(name, flag.ContinueOnError)
 	fs.SetOutput(io.Discard)
 	i := fs.String("i", "", "path to SSH private key file")
@@ -351,11 +376,20 @@ func parseDeployClientsFlags(name string, args []string) (identityFile, user, ho
 	s := fs.String("s", "", "SSH host (IP or hostname) of the central VPS")
 	t := fs.String("target", "", "named target to use from a multi-target lfr-tunnel-ops.yaml (#1028)")
 	stale := fs.Bool("allow-stale", false, "publish dist/ even if it was not built from the current source")
+	noDefault := fs.Bool("allow-no-default", false, "publish clients with no default gateway compiled in (#1692)")
 	noVerify := fs.Bool("skip-verify", false, "skip the post-upload check that the gateway is serving the uploaded bytes")
 	if err := fs.Parse(args); err != nil {
-		return "", "", "", "", false, false, err
+		return deployClientsFlags{}, err
 	}
-	return *i, *u, *s, *t, *stale, *noVerify, nil
+	return deployClientsFlags{
+		identityFile:   *i,
+		user:           *u,
+		host:           *s,
+		target:         *t,
+		allowStale:     *stale,
+		allowNoDefault: *noDefault,
+		skipVerify:     *noVerify,
+	}, nil
 }
 
 // expandHomeDir expands a leading ~ or ~/ the same way a shell would, since ssh/scp don't

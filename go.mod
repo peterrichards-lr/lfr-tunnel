@@ -1,6 +1,6 @@
 module lfr-tunnel
 
-go 1.25.0
+go 1.26.0
 
 require (
 	github.com/aws/aws-sdk-go-v2 v1.45.1
@@ -16,7 +16,7 @@ require (
 	github.com/jpillora/chisel v1.11.8
 	github.com/mattn/go-isatty v0.0.24
 	github.com/oschwald/maxminddb-golang/v2 v2.5.0
-	golang.org/x/crypto v0.55.0
+	golang.org/x/crypto v0.56.0
 	golang.org/x/oauth2 v0.36.0
 	golang.org/x/time v0.15.0
 	gopkg.in/yaml.v3 v3.0.1

@@ -963,23 +963,23 @@ func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 				regions["eu"] = centralURL
 				regions["central"] = centralURL
 			}
+			// An edge that is configured but currently down is reported separately rather
+			// than simply left out (#1690). Omitting it left the client unable to tell "every
+			// region answered" from "a region exists but is asleep": the absent edge was not
+			// unreachable, it was invisible, so an election made inside an edge's scheduled
+			// power-off window looked complete and was cached for the full 24h -- stranding
+			// the client on a distant gateway long after the edge came back.
+			regionsUnavailable := make(map[string]string)
 			s.edgeClientsMu.RLock()
 			for _, edge := range s.edgeNodes() {
-				if _, isUp := s.edgeClients[edge.ID]; isUp {
-					if edge.URL != "" {
-						regions[edge.ID] = edge.URL
-						cleanID := edge.ID
-						cleanID = strings.TrimPrefix(cleanID, "aws-")
-						cleanID = strings.TrimPrefix(cleanID, "edge-")
-						parts := strings.Split(cleanID, "-")
-						for _, p := range parts {
-							p = strings.TrimSpace(p)
-							if p != "" && p != "aws" && p != "edge" && p != "node" {
-								regions[p] = edge.URL
-							}
-						}
-					}
+				if edge.URL == "" {
+					continue
 				}
+				target := regionsUnavailable
+				if _, isUp := s.edgeClients[edge.ID]; isUp {
+					target = regions
+				}
+				addEdgeRegionNames(target, edge.ID, edge.URL)
 			}
 			s.edgeClientsMu.RUnlock()
 
@@ -1001,6 +1001,7 @@ func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 				"docker_bypass_url":        s.cfg.DockerBypassURL,
 				"client_platforms":         effectivePlatforms,
 				"regions":                  regions,
+				"regions_unavailable":      regionsUnavailable,
 				"disable_client_downloads": s.cfg.DisableClientDownloads,
 				"disable_brew":             s.cfg.DisableBrew,
 				"disable_scoop":            s.cfg.DisableScoop,
@@ -6746,4 +6747,22 @@ func (s *Server) getPublicServerURL(r *http.Request) string {
 		return ""
 	}
 	return fmt.Sprintf("%s://%s", proto, host)
+}
+
+// addEdgeRegionNames records an edge under its node ID and under each meaningful component of
+// that ID, so 'edge-us' can be selected as either 'edge-us' or 'us'.
+//
+// Extracted so that available and unavailable edges are named by exactly the same rules
+// (#1690). When the unavailable set was built by a second, hand-copied loop, the two could
+// drift, and a client comparing one against the other would see a phantom missing region.
+func addEdgeRegionNames(dst map[string]string, edgeID, edgeURL string) {
+	dst[edgeID] = edgeURL
+	cleanID := strings.TrimPrefix(edgeID, "aws-")
+	cleanID = strings.TrimPrefix(cleanID, "edge-")
+	for _, p := range strings.Split(cleanID, "-") {
+		p = strings.TrimSpace(p)
+		if p != "" && p != "aws" && p != "edge" && p != "node" {
+			dst[p] = edgeURL
+		}
+	}
 }

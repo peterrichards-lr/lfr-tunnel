@@ -9,7 +9,7 @@
 # The server image is cmd/lfr-tunneld/Dockerfile, and that is where the UI stage belongs.
 
 # Go Build Stage
-FROM --platform=$BUILDPLATFORM golang:1.25-alpine AS builder
+FROM --platform=$BUILDPLATFORM golang:1.26-alpine AS builder
 ARG TARGETOS
 ARG TARGETARCH
 WORKDIR /app

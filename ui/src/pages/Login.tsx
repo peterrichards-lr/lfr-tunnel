@@ -283,9 +283,9 @@ export default function Login() {
                   </>
                 ) : mode === 'login' ? (
                   countdown > 0 ? (
-                    t('resend_in', `Resend in ${countdown}s`).replace(
-                      '60s',
-                      `${countdown}s`,
+                    t('resend_in', 'Resend in {0}s').replace(
+                      '{0}',
+                      String(countdown),
                     )
                   ) : (
                     t('btn_send_magic_link', 'Send Magic Link')

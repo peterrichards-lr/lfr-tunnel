@@ -396,7 +396,7 @@ export default function AdminEdgeHealth() {
 
   const columns: ColumnDef<EdgeNode>[] = useMemo(
     () => [
-      { key: 'id', label: t('node', 'Node ID'), sortable: true },
+      { key: 'id', label: t('node_id', 'Node ID'), sortable: true },
       { key: 'status', label: t('status', 'Status'), sortable: true },
       {
         key: 'resolved_ip',
@@ -645,7 +645,7 @@ export default function AdminEdgeHealth() {
                       onClick={() => requestSort('id')}
                       aria-sort={getAriaSort('id')}
                     >
-                      {t('node', 'Node ID')}
+                      {t('node_id', 'Node ID')}
                       {getSortIndicator('id')}
                     </th>
                   )}

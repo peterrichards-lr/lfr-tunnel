@@ -41,10 +41,7 @@ export default function DataTablePagination({
     <div className="pagination-row flex justify-between items-center mt-lg pt-md border-t text-xs text-muted flex-wrap gap-md">
       {/* Items Summary */}
       <div>
-        {t(
-          'tbl_showing_items',
-          `Showing ${startItem} to ${endItem} of ${totalItems} items`,
-        )
+        {t('tbl_showing_items', 'Showing {0} to {1} of {2} items')
           .replace('{0}', String(startItem))
           .replace('{1}', String(endItem))
           .replace('{2}', String(totalItems))}

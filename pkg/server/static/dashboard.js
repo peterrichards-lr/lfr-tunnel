@@ -1674,10 +1674,15 @@ function renderSessionExpiry(expiresAt) {
   const minutes = Math.max(0, Math.ceil(msLeft / 60000));
   text.textContent =
     minutes > 0
-      ? t(
-          'session_expiring_in',
-          `Your session ends in about ${minutes} minute${minutes === 1 ? '' : 's'}.`,
-        )
+      ? minutes === 1
+        ? t(
+            'session_expiring_in_minute',
+            'Your session ends in about 1 minute.',
+          )
+        : t(
+            'session_expiring_in_minutes',
+            'Your session ends in about {0} minutes.',
+          ).replace('{0}', String(minutes))
       : t('session_expired_soon', 'Your session is about to end.');
   banner.style.display = 'flex';
 }
@@ -2267,8 +2272,8 @@ async function kickAdminSubdomain(subdomain) {
     !confirm(
       t(
         'confirm_kick_lease',
-        `Are you sure you want to kick the tunnel lease for subdomain "${subdomain}"?`,
-      ),
+        'Are you sure you want to kick the tunnel lease for subdomain "{0}"?',
+      ).replace('{0}', subdomain),
     )
   ) {
     return;

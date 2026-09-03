@@ -347,6 +347,13 @@ jobs:
       - name: Theme danger colours must meet WCAG AA
         run: node scripts/check-theme-contrast.cjs
 
+      # Every i18n key both portals use must exist in Language.properties, and every locale
+      # bundle must match it. The inline English fallback is what makes a missing key
+      # harmless in English and invisible in the other nine locales -- 477 keys had drifted
+      # out of the bundle before anything noticed (#1701).
+      - name: Portal i18n keys must be defined and translated
+        run: node scripts/check-i18n-keys.cjs
+
   govulncheck:
     name: Vulnerability Scan
     needs: changes

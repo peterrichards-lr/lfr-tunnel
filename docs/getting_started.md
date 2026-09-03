@@ -267,6 +267,13 @@ To prefer a region while keeping failover, use `-region <name>`. To re-run the l
 after a gateway has come back, add `-refresh-region` once -- the election is otherwise cached for
 24 hours.
 
+> [!TIP]
+> `server_url:` above goes in the client config file, `~/.lfr-tunnel/config.yaml`. It is worth
+> knowing that file exists: it holds every setting you would otherwise retype -- subdomain,
+> ports, target host, access controls -- and it is the only place a gateway can be named
+> without pinning. See the **[Client Configuration File](client_configuration.md)** reference
+> for every key, its default, and how it interacts with flags and environment variables.
+
 ---
 
 ## Running in the Background & Start on Login
@@ -328,6 +335,13 @@ To configure the System Tray / Menu Bar utility to launch on login:
 `lfr-tunnel` supports user-configured shell hooks that execute automatically during gateway state transitions (e.g. advance node shutdown warnings or regional failover).
 
 ### Configuration (`~/.lfr-tunnel/config.yaml`)
+
+> [!WARNING]
+> **These hooks do not fire yet.** The five keys below parse, and the executor exists, but no
+> code path calls it -- it has never been wired up. #1708 tracks the fix; until it closes,
+> configuring them has no effect. Every other key in the file is described in the [Client
+> Configuration File](client_configuration.md) reference.
+
 Add script paths or commands under the `hooks` section:
 
 ```yaml
@@ -398,4 +412,4 @@ Bodies are capped at 10 KB each. Prefer the Inspector at `http://localhost:4040`
 
 <!-- markdownlint-disable MD049 -->
 ---
-*Last Updated: 2026-09-02* | *Last Reviewed: 2026-09-02*
+*Last Updated: 2026-09-03* | *Last Reviewed: 2026-09-03*

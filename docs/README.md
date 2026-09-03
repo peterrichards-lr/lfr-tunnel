@@ -5,6 +5,7 @@ Welcome to the Liferay Tunnel documentation! This is the central hub for learnin
 ## 📖 Developer & Client Guides
 
 - **[Getting Started Guide](getting_started.md)**: Learn the basic concepts, registration flow, and how to start your first tunnel.
+- **[Client Configuration File](client_configuration.md)**: Complete key reference for `~/.lfr-tunnel/config.yaml` — every setting, its flag and environment equivalents, which of the three wins, and why `server_url:` is not the same as `-server`.
 - **[Liferay SE Guide](liferay-se-guide.md)**: Team-specific instructions for Liferay Sales Engineering (LDM setup, codesigning path exclusions, dynamic configurations).
 - **[MCP Guide](mcp.md)**: Learn how to set up the Model Context Protocol (MCP) server to use the tunnel with AI assistants.
 
@@ -29,4 +30,4 @@ All operator deployment and configuration resources are organized under the `doc
 
 <!-- markdownlint-disable MD049 -->
 ---
-*Last Updated: 2026-08-11* | *Last Reviewed: 2026-08-11*
+*Last Updated: 2026-09-03* | *Last Reviewed: 2026-09-03*

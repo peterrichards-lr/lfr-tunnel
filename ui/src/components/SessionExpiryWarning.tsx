@@ -68,10 +68,15 @@ export default function SessionExpiryWarning({
     <div className="session-expiry-banner" role="status">
       <p className="m-0 text-sm fw-medium">
         {remaining > 0
-          ? t(
-              'session_expiring_in',
-              `Your session ends in about ${remaining} minute${remaining === 1 ? '' : 's'}.`,
-            )
+          ? remaining === 1
+            ? t(
+                'session_expiring_in_minute',
+                'Your session ends in about 1 minute.',
+              )
+            : t(
+                'session_expiring_in_minutes',
+                'Your session ends in about {0} minutes.',
+              ).replace('{0}', String(remaining))
           : t('session_expired_soon', 'Your session is about to end.')}
       </p>
       <button

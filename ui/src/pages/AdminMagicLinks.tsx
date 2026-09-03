@@ -51,7 +51,7 @@ export default function AdminMagicLinks() {
       },
       {
         key: 'used_at',
-        label: t('status', 'Status / Used At'),
+        label: t('th_status_used_at', 'Status / Used At'),
         sortable: true,
       },
       {
@@ -221,7 +221,7 @@ export default function AdminMagicLinks() {
                       onClick={() => requestSort('used_at')}
                       aria-sort={getAriaSort('used_at')}
                     >
-                      {t('status', 'Status / Used At')}
+                      {t('th_status_used_at', 'Status / Used At')}
                       {getSortIndicator('used_at')}
                     </th>
                   )}

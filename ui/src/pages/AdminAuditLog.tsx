@@ -205,8 +205,8 @@ export default function AdminAuditLog() {
             <p className="text-sm text-warning mt-sm" role="status">
               {t(
                 'audit_log_truncated',
-                `Showing the most recent ${AUDIT_MAX} events. Use Export for the full history.`,
-              )}
+                'Showing the most recent {0} events. Use Export for the full history.',
+              ).replace('{0}', String(AUDIT_MAX))}
             </p>
           )}
         </div>

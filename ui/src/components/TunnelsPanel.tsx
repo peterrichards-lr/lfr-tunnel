@@ -113,7 +113,7 @@ export default function TunnelsPanel({ tunnels, serverConfig, user }: Props) {
           <div className="alert-banner alert-banner--warning mt-md">
             <span className="mr-sm">⚠️</span>
             <span>
-              {t('update_available', 'Update Available:')}{' '}
+              {t('update_available', 'Update Available')}:{' '}
               {t('update_available_desc', 'You are using CLI version')}{' '}
               <strong>v{clientVer}</strong>.{' '}
               {t('update_available_action', 'Please update to')}{' '}

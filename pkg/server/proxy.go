@@ -183,7 +183,10 @@ func (p *ProxyHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 
 	// 4. Create reverse proxy
 	proxy := &httputil.ReverseProxy{
-		Director: func(req *http.Request) {
+		// Deprecated in favour of Rewrite as of Go 1.26. Not migrated here: Rewrite does not
+		// append X-Forwarded-For on its own, and this Director is where the visitor IP that
+		// reaches the tunnel table, the WAF and the audit log is resolved. Tracked in #1704.
+		Director: func(req *http.Request) { //nolint:staticcheck // SA1019: migration tracked in #1704
 			req.URL.Scheme = "http"
 			req.URL.Host = fmt.Sprintf("127.0.0.1:%d", lease.LocalPort)
 			// Resolve client IP address using centralized helper from original request r
@@ -325,7 +328,9 @@ func (p *ProxyHandler) tryCrossNodeProxy(w http.ResponseWriter, r *http.Request,
 
 	// 5. Build reverse proxy
 	proxy := &httputil.ReverseProxy{
-		Director: func(req *http.Request) {
+		// Deprecated in favour of Rewrite as of Go 1.26; see the note on the other
+		// Director in this file. Migration tracked in #1704.
+		Director: func(req *http.Request) { //nolint:staticcheck // SA1019: migration tracked in #1704
 			req.URL.Scheme = targetParsed.Scheme
 			req.URL.Host = targetParsed.Host
 			if targetParsed.Path != "" && targetParsed.Path != "/" {

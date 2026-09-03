@@ -113,31 +113,71 @@ type ServerConfig struct {
 	//
 	// Zero disables it, which is the pre-#1679 behaviour, so an existing deployment that has
 	// not set it keeps working exactly as before.
-	PortalSessionMaxLifetime time.Duration             `yaml:"portal_session_max_lifetime"`
-	MinClientVersion         string                    `yaml:"min_client_version"`
-	LatestClientVersion      string                    `yaml:"latest_client_version"`
-	DocumentationURL         string                    `yaml:"documentation_url"`
-	RepositoryURL            string                    `yaml:"repository_url"`
-	SecureTokenGuideURL      string                    `yaml:"secure_token_guide_url"`
-	DockerHubURL             string                    `yaml:"docker_hub_url"`
-	StatusPageURL            string                    `yaml:"status_page_url"`
-	PruneInterval            time.Duration             `yaml:"prune_interval"`
-	MagicLinkExpiry          time.Duration             `yaml:"magic_link_expiry"`
-	InviteLinkExpiry         time.Duration             `yaml:"invite_link_expiry"`
-	VerificationLinkExpiry   time.Duration             `yaml:"verification_link_expiry"`
-	PrivacyPolicyURL         string                    `yaml:"privacy_policy_url"`
-	CookiePolicyURL          string                    `yaml:"cookie_policy_url"`
-	EnforcePolicyConsent     bool                      `yaml:"enforce_policy_consent"`
-	EnableOnboarding         bool                      `yaml:"enable_onboarding"`
-	DisableBackupScheduler   bool                      `yaml:"disable_backup_scheduler"`
-	DockerImage              string                    `yaml:"docker_image"`
-	DockerBypassURL          string                    `yaml:"docker_bypass_url"`
-	MaintenanceTriggerPath   string                    `yaml:"maintenance_trigger_path"`
-	ClientPlatforms          map[string]PlatformConfig `yaml:"client_platforms"`
-	VisitorTimeout           time.Duration             `yaml:"visitor_timeout"`
-	PATRetentionDays         int                       `yaml:"pat_retention_days"`
-	EnableWAF                bool                      `yaml:"enable_waf"`
-	DisableEmailLogin        bool                      `yaml:"disable_email_login"`
+	PortalSessionMaxLifetime time.Duration `yaml:"portal_session_max_lifetime"`
+	MinClientVersion         string        `yaml:"min_client_version"`
+	LatestClientVersion      string        `yaml:"latest_client_version"`
+	DocumentationURL         string        `yaml:"documentation_url"`
+	RepositoryURL            string        `yaml:"repository_url"`
+	SecureTokenGuideURL      string        `yaml:"secure_token_guide_url"`
+	DockerHubURL             string        `yaml:"docker_hub_url"`
+	StatusPageURL            string        `yaml:"status_page_url"`
+	PruneInterval            time.Duration `yaml:"prune_interval"`
+	MagicLinkExpiry          time.Duration `yaml:"magic_link_expiry"`
+	InviteLinkExpiry         time.Duration `yaml:"invite_link_expiry"`
+	VerificationLinkExpiry   time.Duration `yaml:"verification_link_expiry"`
+	PrivacyPolicyURL         string        `yaml:"privacy_policy_url"`
+	CookiePolicyURL          string        `yaml:"cookie_policy_url"`
+	EnforcePolicyConsent     bool          `yaml:"enforce_policy_consent"`
+	// PolicyVersion identifies the edition of the privacy/cookie policy currently in
+	// force. Bumping it is the whole re-consent trigger (#1707): every user whose
+	// acceptance history does not contain this exact string is asked again.
+	//
+	// Opaque by design -- a date, a content hash, "2". Nothing compares two versions for
+	// order, only for equality, so an operator cannot accidentally publish a version that
+	// sorts below one somebody already accepted and have it silently count.
+	//
+	// Empty disables re-consent entirely, which is the pre-#1707 behaviour: an existing
+	// deployment that has not set it keeps working exactly as before. The default is
+	// therefore empty, NOT "1" -- defaulting to a version would put every existing
+	// deployment's whole user base into a grace window on upgrade, without the operator
+	// having asked for it.
+	PolicyVersion string `yaml:"policy_version"`
+	// PolicyConsentGraceDays is how long a user may keep using the service after first
+	// being shown a new policy version. Measured from that user's own first sight of it,
+	// not from a global effective date, so somebody returning from leave gets the whole
+	// window rather than a deadline that expired while they were away.
+	//
+	// Zero means the default below rather than "no grace"; a deployment that genuinely
+	// wants no grace should not be configuring this at all, it should be blocking at the
+	// door. Configuration rather than a constant because different deployments will want
+	// different answers, and a hardcoded value here is the sort of thing that gets
+	// discovered during an incident.
+	PolicyConsentGraceDays int `yaml:"policy_consent_grace_days"`
+	// PolicyConsentWarningDays is how long before the deadline the escalated warning
+	// starts: a louder portal banner, a startup warning from the client, and one email.
+	// Clamped to the grace window at read time, so a warning cannot begin before the
+	// window it warns about.
+	PolicyConsentWarningDays int `yaml:"policy_consent_warning_days"`
+	// PolicyConsentStopsActiveTunnels extends expiry enforcement from "refuse new
+	// tunnels" to "drop the ones already running".
+	//
+	// Off by default, and separately configurable rather than implied, because this is a
+	// tunnel service used for live customer demos: refusing the next tunnel enforces the
+	// policy just as completely -- no tunnel survives a restart -- while cutting an
+	// established connection at the instant a timer expires is the exact outcome the
+	// five-day warning exists to prevent. An operator who needs the harder behaviour has
+	// to ask for it.
+	PolicyConsentStopsActiveTunnels bool                      `yaml:"policy_consent_stops_active_tunnels"`
+	EnableOnboarding                bool                      `yaml:"enable_onboarding"`
+	DisableBackupScheduler          bool                      `yaml:"disable_backup_scheduler"`
+	DockerImage                     string                    `yaml:"docker_image"`
+	DockerBypassURL                 string                    `yaml:"docker_bypass_url"`
+	MaintenanceTriggerPath          string                    `yaml:"maintenance_trigger_path"`
+	ClientPlatforms                 map[string]PlatformConfig `yaml:"client_platforms"`
+	VisitorTimeout                  time.Duration             `yaml:"visitor_timeout"`
+	PATRetentionDays                int                       `yaml:"pat_retention_days"`
+	EnableWAF                       bool                      `yaml:"enable_waf"`
+	DisableEmailLogin               bool                      `yaml:"disable_email_login"`
 	// DisableNewRegistrations is the umbrella flag gating NEW account creation regardless
 	// of method (email registration or first-time SSO login) -- see issue #910. This is
 	// distinct from DisableEmailLogin, which only affects the email-specific login/register
@@ -417,6 +457,8 @@ func DefaultServerConfig() *ServerConfig {
 		PruneInterval:              1 * time.Hour,
 		MagicLinkExpiry:            15 * time.Minute,
 		PATRetentionDays:           30,
+		PolicyConsentGraceDays:     14,
+		PolicyConsentWarningDays:   5,
 		InviteLinkExpiry:           7 * 24 * time.Hour,
 		VerificationLinkExpiry:     24 * time.Hour,
 		DockerImage:                "peterjrichards/lfr-tunnel:latest",
@@ -678,6 +720,22 @@ func LoadServerConfig(path string) (*ServerConfig, error) {
 		if d, err := time.ParseDuration(val); err == nil {
 			cfg.VisitorTimeout = d
 		}
+	}
+	if val := os.Getenv("LFT_POLICY_VERSION"); val != "" {
+		cfg.PolicyVersion = val
+	}
+	if val := os.Getenv("LFT_POLICY_CONSENT_GRACE_DAYS"); val != "" {
+		if days, err := strconv.Atoi(val); err == nil {
+			cfg.PolicyConsentGraceDays = days
+		}
+	}
+	if val := os.Getenv("LFT_POLICY_CONSENT_WARNING_DAYS"); val != "" {
+		if days, err := strconv.Atoi(val); err == nil {
+			cfg.PolicyConsentWarningDays = days
+		}
+	}
+	if val := os.Getenv("LFT_POLICY_CONSENT_STOPS_ACTIVE_TUNNELS"); val != "" {
+		cfg.PolicyConsentStopsActiveTunnels = strings.ToLower(val) == "true" || val == "1"
 	}
 	if val := os.Getenv("LFT_PAT_RETENTION_DAYS"); val != "" {
 		if days, err := strconv.Atoi(val); err == nil {

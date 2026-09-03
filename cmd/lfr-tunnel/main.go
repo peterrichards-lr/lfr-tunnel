@@ -322,6 +322,14 @@ func main() {
 		slog.Warn(fmt.Sprintf("[Client] %s", notice))
 	}
 
+	// The policy this account has to re-accept, and how long is left (#1707). Printed here
+	// rather than left to the portal because a CLI-only user never opens the portal, and
+	// the enforcement it warns about -- new tunnels refused at the deadline -- is what
+	// stops the client working. Silent unless the warning window has started.
+	if notice := client.PolicyConsentNotice(regResp); notice != "" {
+		slog.Warn(fmt.Sprintf("[Client] %s", notice))
+	}
+
 	if regResp.LanguagePreference != "" {
 		engine.LanguagePreference = regResp.LanguagePreference
 	}
@@ -1071,6 +1079,28 @@ func attemptRegistration(cfg *config.ClientConfig, portMappings []client.PortMap
 	regResp, err := client.RegisterTunnel(cfg.ServerURL, cfg.AuthToken, sub, cfg.CustomDomain, portMappings, cfg.RateLimit, cfg.BasicAuth, addedHeaders, clientOS, cfg.Passcode, cfg.WhitelistIPs)
 	if err != nil {
 		if regErr, ok := err.(*client.RegistrationError); ok && regErr.StatusCode == 403 {
+			// A consent refusal is also a 403, but it is not a reservation or quota problem
+			// and must not be reported as one -- the advice below would send the user
+			// looking for a limit that is not the cause (#1707). Terminal all the same: no
+			// other region will accept them either, since consent is per-user and held by
+			// the control plane.
+			if regErr.PolicyConsent != nil && regErr.PolicyConsent.Required {
+				portalURL := regErr.PolicyConsent.PortalURL
+				if portalURL == "" {
+					portalURL = regErr.PortalURL
+				}
+				return nil, &registrationFailure{
+					err:      err,
+					terminal: true,
+					advice: []string{
+						"[Client] The Privacy Policy and Cookie Disclosure have changed and your acceptance is overdue.",
+						"[Client] Accept the update in the User Portal to start tunnels again:",
+						fmt.Sprintf("         👉 %s (Cmd/Ctrl+Click to open)\n", portalURL),
+						"[Client] Tunnels already running are not affected.",
+					},
+				}
+			}
+
 			portalURL := regErr.PortalURL
 			if portalURL == "" {
 				portalURL = strings.Replace(cfg.ServerURL, "tunnel.", "portal.", 1)

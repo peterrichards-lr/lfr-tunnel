@@ -773,6 +773,7 @@ async function init() {
     if (res.ok) {
       currentUser = await res.json();
       renderSessionExpiry(currentUser.session_expires_at);
+      renderPolicyConsent(currentUser);
       showDashboard();
     } else {
       showLogin();
@@ -1696,6 +1697,164 @@ async function staySignedIn() {
   }
 }
 
+/*
+ * Policy re-consent gate and banner (#1707).
+ *
+ * Three phases, differing in what the user can still do, not merely in colour:
+ *
+ *   grace    portal works; gate offers Accept / Remind me later, then a banner remains
+ *   warning  the same, escalated; the CLI client also warns at startup
+ *   expired  the portal is blocked server-side and new tunnels are refused; the gate has
+ *            no dismiss
+ *
+ * "Remind me later" is per SESSION and lives on the server's session record, so the gate
+ * reappears at the next login. A permanent dismissal would leave the banner applying no
+ * pressure and make the grace window the only mechanism.
+ *
+ * None of this is the enforcement. `/api/*` is refused with 403 policy_consent_required
+ * once the window expires, whatever this file chooses to render.
+ */
+
+// Days and hours, or hours and minutes inside the last day. Coarse on purpose, and the
+// same shape the CLI client prints, so the two never disagree about "3d 4h".
+function formatConsentRemaining(seconds) {
+  if (!seconds || seconds <= 0) return '';
+  const days = Math.floor(seconds / 86400);
+  const hours = Math.floor((seconds % 86400) / 3600);
+  if (days > 0) return hours > 0 ? `${days}d ${hours}h` : `${days}d`;
+  const minutes = Math.floor((seconds % 3600) / 60);
+  return hours > 0 ? `${hours}h ${minutes}m` : `${minutes}m`;
+}
+
+function renderPolicyConsent(data) {
+  const modal = document.getElementById('policy-consent-modal');
+  const banner = document.getElementById('policy-consent-banner');
+  if (!modal || !banner) return;
+
+  const consent = (data && data.policy_consent) || null;
+  if (!consent || !consent.required) {
+    modal.style.display = 'none';
+    banner.style.display = 'none';
+    return;
+  }
+
+  const expired = consent.phase === 'expired';
+  const urgent = consent.phase === 'warning';
+  const remaining = formatConsentRemaining(consent.seconds_remaining);
+  const suppressed = !!data.policy_gate_suppressed;
+
+  // An expired user has nothing to dismiss the gate back to, so the banner is never the
+  // expired presentation.
+  if (suppressed && !expired) {
+    modal.style.display = 'none';
+    const text = document.getElementById('policy-consent-banner-text');
+    if (text) {
+      const base = urgent
+        ? t(
+            'policy_consent_banner_urgent',
+            'The Privacy Policy has changed. Accept it to keep your tunnels working.',
+          )
+        : t(
+            'policy_consent_banner',
+            'The Privacy Policy has been updated and needs your acceptance.',
+          );
+      text.textContent = remaining ? `${base} (${remaining})` : base;
+    }
+    banner.style.display = 'flex';
+    return;
+  }
+
+  banner.style.display = 'none';
+
+  const title = document.getElementById('policy-consent-title');
+  const desc = document.getElementById('policy-consent-desc');
+  const rem = document.getElementById('policy-consent-remaining');
+  const links = document.getElementById('policy-consent-links');
+  const later = document.getElementById('policy-consent-later');
+
+  if (title) {
+    title.textContent = expired
+      ? t(
+          'policy_consent_title_expired',
+          'Accept the Updated Privacy Policy to Continue',
+        )
+      : t('policy_consent_title', 'Our Privacy Policy Has Changed');
+  }
+  if (desc) {
+    desc.textContent = expired
+      ? t(
+          'policy_consent_desc_expired',
+          'The time to accept the updated Privacy Policy and Cookie Disclosure has passed. The portal is unavailable and new tunnels are being refused until you accept. Tunnels already running have not been interrupted.',
+        )
+      : t(
+          'policy_consent_desc',
+          'We have updated our Privacy Policy and Cookie Disclosure. Please read and accept them to carry on using Liferay Tunnel.',
+        );
+  }
+  if (rem) {
+    rem.textContent =
+      !expired && remaining
+        ? `${t('policy_consent_remaining', 'Time left to accept')}: ${remaining}`
+        : '';
+  }
+  if (links) {
+    // Built with createElement rather than innerHTML: these URLs come from server
+    // configuration, and building markup out of configuration is how a value with a quote
+    // in it stops being a value.
+    links.textContent = '';
+    if (consent.policy_url) {
+      const a = document.createElement('a');
+      a.href = consent.policy_url;
+      a.target = '_blank';
+      a.rel = 'noopener noreferrer';
+      a.textContent = t('privacy_policy', 'Privacy Policy');
+      links.appendChild(a);
+    }
+    if (consent.policy_url && consent.cookie_url) {
+      links.appendChild(document.createTextNode(' \u00b7 '));
+    }
+    if (consent.cookie_url) {
+      const a = document.createElement('a');
+      a.href = consent.cookie_url;
+      a.target = '_blank';
+      a.rel = 'noopener noreferrer';
+      a.textContent = t('cookie_disclosure', 'Cookie Disclosure');
+      links.appendChild(a);
+    }
+  }
+  if (later) {
+    later.style.display = expired ? 'none' : '';
+  }
+  modal.style.display = 'flex';
+}
+
+async function acceptPolicyConsent() {
+  try {
+    const res = await fetch('/api/me/policy-consent', { method: 'POST' });
+    if (!res.ok) throw new Error('failed');
+    // A full reload rather than a state patch: every panel that failed with 403 while the
+    // gate was up already ran its fetch and will not retry on its own.
+    window.location.reload();
+  } catch (e) {
+    showToast(
+      t(
+        'policy_consent_error',
+        'Could not record your acceptance. Please try again.',
+      ),
+    );
+  }
+}
+
+async function remindPolicyConsentLater() {
+  try {
+    await fetch('/api/me/policy-consent/remind-later', { method: 'POST' });
+  } catch (e) {
+    console.error('Failed to defer the policy notice', e);
+  }
+  if (currentUser) currentUser.policy_gate_suppressed = true;
+  renderPolicyConsent(currentUser);
+}
+
 function startPolling() {
   if (pollingInterval) clearInterval(pollingInterval);
   pollingInterval = setInterval(async () => {
@@ -1716,6 +1875,10 @@ function startPolling() {
         const data = await res.json();
         handleTelemetryPayload(data);
         renderSessionExpiry(data.session_expires_at);
+        // From the /api/me poll rather than from handleTelemetryPayload: the telemetry
+        // payload does not carry policy_consent, and passing the telemetry copy here
+        // would hide the gate every ten seconds.
+        renderPolicyConsent(data);
       }
     } catch (e) {
       console.error('Polling error', e);

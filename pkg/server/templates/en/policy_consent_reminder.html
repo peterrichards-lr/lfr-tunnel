@@ -1,0 +1,9 @@
+<p>Hi {{.Name}},</p>
+<p>The <strong>Privacy Policy</strong> and <strong>Cookie Disclosure</strong> for Liferay Tunnel have been updated, and your acceptance of the new version is outstanding.</p>
+<p>You have <strong>{{.Remaining}}</strong> left to accept &mdash; the deadline is <strong>{{.Deadline}}</strong>.</p>
+<p>After that, <strong>new tunnels will be refused</strong> until you accept. Tunnels that are already running are not interrupted, so nothing will drop mid&#8209;session; the next one you start simply will not be accepted.</p>
+<p>Accepting takes one click in the portal.</p>
+<p style="margin: 24px 0;"><a href="{{.PortalLink}}" style="background: #0969da; color: white; padding: 12px 24px; border-radius: 6px; text-decoration: none; font-weight: bold; display: inline-block;">Review and accept</a></p>
+{{if .PolicyURL}}<p style="font-size: 13px;">Privacy Policy: <a href="{{.PolicyURL}}">{{.PolicyURL}}</a></p>{{end}}
+{{if .CookieURL}}<p style="font-size: 13px;">Cookie Disclosure: <a href="{{.CookieURL}}">{{.CookieURL}}</a></p>{{end}}
+<p style="font-size: 13px; color: #57606a;">You are receiving this because acceptance is required to keep using the service. It is not a marketing message and is sent regardless of your notification preferences.</p>

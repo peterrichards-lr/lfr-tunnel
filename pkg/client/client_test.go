@@ -240,3 +240,42 @@ func TestPinnedRoutingNotice(t *testing.T) {
 		t.Errorf("warned when no regions were advertised: %s", n)
 	}
 }
+
+// -gateway must bootstrap WITHOUT pinning (#1694).
+//
+// -server does both jobs at once, so anyone who needed a starting point got pinning with it --
+// which is how a US user, whose client had no compiled-in default (#1692), ended up on the EU
+// control plane with no failover.
+//
+// Asserted on the flag wiring in main.go rather than by running the binary: EDR forbids
+// executing the client locally, and the property is which flag sets isExplicitServer.
+func TestGatewayFlagDoesNotPin(t *testing.T) {
+	src, err := os.ReadFile("../../cmd/lfr-tunnel/main.go")
+	if err != nil {
+		t.Fatalf("reading main.go: %v", err)
+	}
+	body := string(src)
+
+	// isExplicitServer is what disables election and failover. -gateway must not feed it.
+	start := strings.Index(body, "isExplicitServer :=")
+	if start < 0 {
+		t.Fatal("isExplicitServer is no longer assigned; this guard needs updating with it")
+	}
+	line := body[start : strings.Index(body[start:], "\n")+start]
+	if strings.Contains(line, "gatewayURL") {
+		t.Errorf("-gateway feeds isExplicitServer, so it pins like -server:\n%s", line)
+	}
+	if !strings.Contains(line, "serverURL") {
+		t.Errorf("-server no longer feeds isExplicitServer, so pinning is broken:\n%s", line)
+	}
+
+	// It still has to supply a bootstrap URL, or it does nothing at all.
+	if !strings.Contains(body, "cfg.ServerURL = *gatewayURL") {
+		t.Error("-gateway never sets cfg.ServerURL, so it cannot bootstrap the region fetch")
+	}
+
+	// Both together are contradictory and must be refused rather than silently ranked.
+	if !strings.Contains(body, `*gatewayURL != "" && *serverURL != ""`) {
+		t.Error("passing -gateway and -server together is not refused; a silent precedence rule is how the original confusion started")
+	}
+}

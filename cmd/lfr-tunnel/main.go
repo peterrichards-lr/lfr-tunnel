@@ -46,7 +46,7 @@ func (i *arrayFlags) Set(value string) error {
 var (
 	configPath         = flag.String("config", "", "Path to client-config.yaml")
 	guiFlag            = flag.Bool("gui", false, "Start client in system tray GUI mode")
-	serverURL          = flag.String("server", "", "Gateway server URL (e.g. https://tunnel.liferay.com)")
+	serverURL          = flag.String("server", "", "PIN this client to one gateway (e.g. https://tunnel.liferay.com) -- no region selection, no failover. Use -gateway to keep both.")
 	token              = flag.String("token", "", "Gateway auth token")
 	subdomain          = flag.String("subdomain", "", "Requested subdomain prefix (e.g. alpha-se)")
 	portsStr           = flag.String("ports", "", "Comma-separated ports to expose (e.g. 8080,3000)")
@@ -70,6 +70,7 @@ var (
 	logDirFlag         = flag.String("log-dir", "", "Directory for the persistent traffic and error logs (default ~/.lfr-tunnel/logs)")
 	passcode           = flag.String("passcode", "", "Passcode to protect the public tunnel URLs")
 	whitelistIP        = flag.String("whitelist-ip", "", "Comma-separated IP addresses allowed to access the tunnel")
+	gatewayURL         = flag.String("gateway", "", "Gateway to fetch the region list from, WITHOUT pinning to it -- the client still picks the closest region and fails over (#1694). Use -server instead to pin.")
 	region             = flag.String("region", "", "Gateway region to target (e.g. eu, us-east, us-west, latam, apac)")
 	refreshRegion      = flag.Bool("refresh-region", false, "Force re-probing region latencies and refresh the 24h region cache")
 	domain             = flag.String("domain", "", "Custom domain name (e.g. custom-client-site.com)")
@@ -140,6 +141,21 @@ func main() {
 		return
 	}
 
+	// -gateway bootstraps without pinning (#1694). -server does both jobs at once, and anyone
+	// who needed the first got the second whether they wanted it or not: a client with no
+	// compiled-in default (#1692) had to name a gateway to start at all, and silently lost
+	// region election and failover by doing so.
+	//
+	// Contradictory intents rather than a precedence rule: quietly honouring one of the two is
+	// how the original confusion started, so passing both is refused.
+	if *gatewayURL != "" && *serverURL != "" {
+		log.Fatalf("[Error] -gateway and -server contradict each other: -gateway picks the closest " +
+			"region and fails over, -server pins this client to one gateway. Pass whichever you meant, not both.")
+	}
+	if *gatewayURL != "" {
+		cfg.ServerURL = *gatewayURL
+	}
+
 	isExplicitServer := *serverURL != "" || os.Getenv("LFT_CLIENT_SERVER") != "" || os.Getenv("LFT_SERVER_URL") != "" || os.Getenv("LFT_SERVER") != ""
 	resolveServerURL(cfg, isExplicitServer)
 
@@ -154,10 +170,11 @@ func main() {
 		// which -- a US user followed the old wording, named the control plane, and stayed
 		// on it from the US for the life of the tunnel.
 		log.Fatalf("[Error] No tunnel server configured.\n\n" +
-			"  Recommended: add this to your client config file --\n" +
-			"      server_url: \"https://your-gateway.example.com\"\n" +
-			"  The client then picks the closest gateway and fails over if it goes away.\n\n" +
-			"  Alternatively: -server <url> (or LFT_SERVER_URL) pins this client to that one\n" +
+			"  Recommended: -gateway https://your-gateway.example.com\n" +
+			"  The client fetches the gateway list from there, picks the closest, and fails over.\n\n" +
+			"  To persist it, add the same thing to your client config file --\n" +
+			"      server_url: \"https://your-gateway.example.com\"\n\n" +
+			"  Alternatively: -server <url> (or LFT_SERVER_URL) PINS this client to that one\n" +
 			"  gateway -- no region selection, no failover.")
 	}
 

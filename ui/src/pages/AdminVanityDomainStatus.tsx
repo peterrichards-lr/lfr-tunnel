@@ -146,8 +146,8 @@ export default function AdminVanityDomainStatus() {
         t('vanity_retry_title', 'Retry Domain Setup'),
         t(
           'vanity_retry_confirm',
-          `Re-run the setup for ${fullHost}? This resets its progress and requests a fresh certificate.`,
-        ),
+          'Re-run the setup for {0}? This resets its progress and requests a fresh certificate.',
+        ).replace('{0}', fullHost),
       ))
     )
       return;
@@ -178,8 +178,8 @@ export default function AdminVanityDomainStatus() {
         t('vanity_remove_title', 'Remove Domain'),
         t(
           'vanity_remove_confirm',
-          `Tear down ${fullHost}'s nginx config and certificate, and clear its tracked status? The domain's own reservation is not affected.`,
-        ),
+          "Tear down {0}'s nginx config and certificate, and clear its tracked status? The domain's own reservation is not affected.",
+        ).replace('{0}', fullHost),
       ))
     )
       return;

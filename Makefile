@@ -1,4 +1,4 @@
-.PHONY: fmt vet test ui-dist compile-check test-hooks check-contexts check-attribution check-css check-contrast build deploy clean install-hook e2e e2e-sso e2e-edge e2e-ui help
+.PHONY: fmt vet test ui-dist compile-check test-hooks check-contexts check-attribution check-css check-contrast check-i18n build deploy clean install-hook e2e e2e-sso e2e-edge e2e-ui help
 
 VERSION ?= $(shell grep -oE 'Version = "[^"]+"' pkg/config/version.go | cut -d'"' -f2)
 
@@ -257,4 +257,10 @@ check-css:
 # rather than listing them, so a theme added later is covered without touching this.
 check-contrast:
 	@node scripts/check-theme-contrast.cjs
+
+# Catches an i18n key used by either portal that has no entry in Language.properties, and a
+# locale bundle that has drifted from the English one (#1701). Same shape as check-css: the
+# inline English fallback hides the gap from whoever added the string, so only a gate finds it.
+check-i18n:
+	@node scripts/check-i18n-keys.cjs
 

@@ -131,6 +131,10 @@ type InterceptorEngine struct {
 	shutdownWarnedAt    int64
 	shutdownWarnSeconds int
 	shutdownWarnReason  string
+	// shutdownWarnNodeID is the gateway that announced the stop. Kept because it is the
+	// only place a node ID reaches this client at all -- registration does not carry one --
+	// and the lifecycle hooks document an LFT_NODE_ID (#1708).
+	shutdownWarnNodeID string
 	// migrateOnShutdownAt is set when a warning arrives and the client should move off this
 	// gateway before it stops, rather than waiting to be dropped (#1246). Separate from
 	// shutdownWarnedAt because that one stays set so the TUI can keep rendering its
@@ -143,6 +147,15 @@ type InterceptorEngine struct {
 	// about a release, and those are exactly the users who do not revisit the portal
 	// after registering (issue #1168).
 	latestVersion string
+
+	// hooks are the user-configured lifecycle commands from the client config file, set
+	// once at startup via SetHooks. A zero value means every hook is unconfigured, which
+	// is the no-op case (#1708).
+	hooks config.ClientHooksConfig
+	// hookExec is the seam RunHook executes through. Nil means ExecuteHook, i.e. really
+	// run the command; tests substitute a recorder so the wiring can be asserted without
+	// spawning a shell.
+	hookExec func(event, hookCmd string, env map[string]string) error
 
 	// Latency & Bandwidth Simulation Settings
 	Latency         time.Duration
@@ -377,6 +390,7 @@ func (e *InterceptorEngine) noteShutdownWarning(w *NodeShutdownWarning) {
 	e.shutdownWarnedAt = w.ShutdownAt
 	e.shutdownWarnSeconds = w.SecondsRemaining
 	e.shutdownWarnReason = w.Reason
+	e.shutdownWarnNodeID = w.NodeID
 	if !already {
 		// Raised once per distinct shutdown, not on every heartbeat that repeats the
 		// warning -- the session loop consumes it to move off this gateway before it
@@ -395,6 +409,15 @@ func (e *InterceptorEngine) noteShutdownWarning(w *NodeShutdownWarning) {
 		"shutdown_at":       w.ShutdownAt,
 		"reason":            w.Reason,
 		"node_id":           w.NodeID,
+	})
+
+	// Fired off the goroutine rather than on it: this runs on the status-ping path, and
+	// the migrator cancels the session about a second from now. A 15s hook run inline
+	// would stall the heartbeat and delay the very move the warning exists to bring
+	// forward, so warning_received is the one hook that is not ordered against the rest.
+	go e.RunHook(HookWarningReceived, map[string]string{
+		"LFT_NODE_ID":           w.NodeID,
+		"LFT_SECONDS_REMAINING": strconv.Itoa(w.SecondsRemaining),
 	})
 }
 

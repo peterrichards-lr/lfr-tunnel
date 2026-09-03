@@ -207,12 +207,13 @@ through. Set only the one you mean.
 | `bandwidth` | string | *empty* — unthrottled | Simulated bandwidth ceiling. Accepts `bps`, `kbps`, `mbps`, `gbps` and byte-per-second forms such as `kb/s`; a bare number is bytes per second. Example: `"512kbps"`. |
 | `theme` | string | *empty* — your portal preference | Theme for the injected tunnel banner: `light`, `dark`, `system` or `time`. Example: `"dark"`. |
 | `log_dir` | string | `~/.lfr-tunnel/logs` | Where the persistent traffic and error logs are written. A leading `~` is expanded. Changing it applies to the next run: the logs already open cannot be moved. Example: `"~/tunnel-logs"`. |
+| `hooks` | map | *empty* — nothing runs | Shell commands run when the tunnel moves between gateways: `warning_received`, `stopping`, `stopped`, `starting`, `started`. Each is passed to `/bin/sh -c` with `LFT_EVENT`, `LFT_NODE_ID`, `LFT_SECONDS_REMAINING`, `LFT_FAILOVER_REGION` and `LFT_SUBDOMAIN` set, bounded at 15 seconds, and its exit status is logged but cannot veto the move. A pinned (`-server`) client fires none of them, because it never fails over. See [Client Lifecycle Hooks](getting_started.md#client-lifecycle-hooks--failover-automation) for the full contract. |
 
 ---
 
 ## Keys that are not settings
 
-Four keys parse and do nothing, and one is not a key at all. They are listed here so that
+Three keys parse and do nothing, and one is not a key at all. They are listed here so that
 finding them in the struct, the example file or someone else's config does not read as a feature
 you are missing.
 
@@ -221,13 +222,7 @@ you are missing.
 | `token_file` | **No effect** (#1709). The token file path comes from `LFT_TOKEN_FILE`, falling back to `~/.lfr-tunnel/token`. |
 | `bypass_proxy` | **No effect** (#1709). Nothing reads it. |
 | `nav_placement` | **No effect** (#1709). The Inspector saves it; nothing renders it. |
-| `hooks` | **Not fired** (#1708). The five lifecycle keys parse, and no code path executes them. |
 | `regions_unavailable` | Not a config key. The gateway reports the regions that are currently down, and the client uses that to cache a provisional election rather than a 24-hour one. It cannot be set from the file. |
-
-> [!NOTE]
-> `hooks:` is documented as working in the [Getting Started
-> Guide](getting_started.md#client-lifecycle-hooks--failover-automation). It is not — the
-> executor exists and has never had a caller. #1708 tracks wiring it up.
 
 ---
 
@@ -284,11 +279,20 @@ latency: "0s"        # e.g. "200ms" to demonstrate a slow link
 bandwidth: ""        # e.g. "512kbps"
 theme: "system"
 log_dir: ""
+
+# --- Run something when the tunnel moves gateway. All optional. ---
+
+hooks:
+  warning_received: ""
+  stopping: ""
+  stopped: ""
+  starting: ""
+  started: "/usr/local/bin/repoint-virtual-host.sh"
 ```
 
 The [committed
 example](https://github.com/peterrichards-lr/lfr-tunnel/blob/master/resources/client/client-config.example.yaml)
-carries the same keys plus the four that currently do nothing, so that it stays a complete record
+carries the same keys plus the three that currently do nothing, so that it stays a complete record
 of everything the parser accepts.
 
 ---

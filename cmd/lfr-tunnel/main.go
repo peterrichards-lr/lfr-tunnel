@@ -222,6 +222,10 @@ func main() {
 	engine.SelectedRegion = cfg.Region
 	engine.SetCentralURL(centralControlPlaneURL(cfg))
 	engine.SetLatestVersion(latestVersion)
+	// User-configured lifecycle hooks. Handed to the engine because both ends of the
+	// contract live there: the shutdown-warning path fires warning_received, and the
+	// session loop below fires the other four (#1708).
+	engine.SetHooks(cfg.Hooks)
 
 	// Where those logs live, resolved with the same precedence as every other client
 	// setting: flag, then environment, then the config file (#1223). Set before anything
@@ -484,6 +488,18 @@ func main() {
 		}
 
 		err = client.RunClient(clientCtx, cfg.ServerURL, regResp.SessionToken, regResp.Remotes, publicURLs, engine)
+
+		// Whether this session is ending because the client is about to move, rather than
+		// because the user stopped it or because it is pinned with -server and has nowhere
+		// to go. Same condition the failover branch below runs under -- cancelClient makes
+		// clientCtx.Err() non-nil unconditionally, so that test reduces to this one -- but
+		// evaluated here so `stopping` fires while the session is still standing, which is
+		// what "right before tearing down the old tunnel" means (#1708).
+		movingOn := ctx.Err() == nil && !isExplicitServer
+		if movingOn {
+			engine.RunHook(client.HookStopping, nil)
+		}
+
 		cancelClient()
 
 		if ctx.Err() != nil {
@@ -491,6 +507,12 @@ func main() {
 		}
 
 		if (err != nil || clientCtx.Err() != nil) && !isExplicitServer {
+			// The old tunnel is down and its session context is cancelled; the move has
+			// not started yet. Fired in this order and synchronously, so a hook can rely
+			// on stopped having completed before starting begins (#1708).
+			engine.RunHook(client.HookStopped, nil)
+			engine.RunHook(client.HookStarting, nil)
+
 			// applySession commits a successful re-registration to every place the
 			// current endpoint is recorded.
 			applySession := func(newResp *client.RegisterResponse, what string) {
@@ -509,6 +531,12 @@ func main() {
 					slog.Info(fmt.Sprintf("[Warning] Failed to update state file on %s: %v\n", what, werr))
 				}
 				cooldowns.clear(cfg.ServerURL)
+				// The one place both a failback and a failover land, so `started` fires
+				// once per re-established session however it was reached, and only after
+				// the new endpoint is recorded everywhere (#1708).
+				engine.RunHook(client.HookStarted, map[string]string{
+					"LFT_FAILOVER_REGION": cfg.Region,
+				})
 			}
 
 			// Set when a failback attempt failed and put us back on the region we were

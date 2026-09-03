@@ -1,5 +1,21 @@
 [
   {
+    "version": "v1.48.24",
+    "release_date": "2026-09-03",
+    "features": [
+      "fix(i18n): gate portal keys against Language.properties and backfill all locales (#1701) (#1713)",
+      "docs: document the client configuration file (#1698) (#1712)",
+      "fix(client): invalidate the region cache when the gateway list changes (#1706) (#1711)",
+      "feat(portal): show each edge node's power schedule and next transition (#1700)",
+      "fix(ops): refuse to publish clients with no default gateway (#1692) (#1699)",
+      "fix(routing): stop a sleeping edge from pinning clients for 24h (#1690) (#1702)",
+      "fix(deps): bump x/crypto to v0.56.0 for two reachable ssh advisories (#1703) (#1705)",
+      "feat(client): add -gateway to bootstrap without pinning (#1694) (#1697)",
+      "fix(client): say that naming a gateway disables region selection and failover (#1691) (#1695)",
+      "fix(nginx): serve client downloads from the apex as well as the wildcard (#1687) (#1688)"
+    ]
+  },
+  {
     "version": "v1.48.23",
     "release_date": "2026-09-02",
     "features": [
@@ -32,18 +48,6 @@
       "feat(portal): warn before the session expires, in both portals (#1656) (#1665)",
       "docs(workflow): record how to run golangci-lint locally (#1663) (#1664)",
       "fix(auth): re-issue the session cookie when the session slides (#1655) (#1662)"
-    ]
-  },
-  {
-    "version": "v1.48.19",
-    "release_date": "2026-09-01",
-    "features": [
-      "fix(portal): show every known gateway in Sessions per Gateway (#1648) (#1654)",
-      "feat(portal-v2): show gateway and client versions in the sidebar footer (#1647) (#1653)",
-      "fix(portal-v2): inset the table footer to match the toolbar above it (#1651) (#1652)",
-      "fix(ci): run Hook Tests when the Makefile changes (#1643) (#1645)",
-      "fix(hooks): allow commits whose staged change is only deletions (#1649) (#1650)",
-      "fix(ops): say \"no credentials\" instead of blaming the region list (#1644) (#1646)"
     ]
   }
 ]

@@ -86,7 +86,7 @@ func (repo *SQLiteAcknowledgementRepo) ListAcknowledgements(userID string) ([]*A
 	}
 	// Any error that ends iteration early surfaces through rows.Err(), which is checked
 	// below; reporting Close's copy of it from a defer would mask the returned one.
-	defer func() { _ = rows.Close() }() //nolint:errcheck
+	defer func() { _ = rows.Close() }()
 
 	out := make([]*Acknowledgement, 0)
 	for rows.Next() {
@@ -180,7 +180,7 @@ func (repo *SQLiteAcknowledgementRepo) ListPendingWarnings(documentID, version s
 	if err != nil {
 		return nil, err
 	}
-	defer func() { _ = rows.Close() }() //nolint:errcheck
+	defer func() { _ = rows.Close() }()
 
 	out := make([]string, 0)
 	for rows.Next() {

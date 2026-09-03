@@ -70,7 +70,9 @@ func registerTunnel(t *testing.T, srv *Server, token, subdomain string) (*httpte
 	srv.handleRegister(rec, req)
 
 	var resp RegisterResponse
-	_ = json.Unmarshal(rec.Body.Bytes(), &resp) //nolint:errcheck
+	if err := json.Unmarshal(rec.Body.Bytes(), &resp); err != nil {
+		t.Fatalf("decoding the register response: %v", err)
+	}
 	return rec, resp
 }
 
@@ -425,7 +427,9 @@ func TestPortalGateBlocksWhenExpired(t *testing.T) {
 		t.Errorf("gate status = %d, want 403", rec.Code)
 	}
 	var body map[string]interface{}
-	_ = json.Unmarshal(rec.Body.Bytes(), &body) //nolint:errcheck
+	if err := json.Unmarshal(rec.Body.Bytes(), &body); err != nil {
+		t.Fatalf("decoding the gate response: %v", err)
+	}
 	if body["policy_consent_required"] != true {
 		t.Errorf("the 403 must be distinguishable from any other: %v", body)
 	}

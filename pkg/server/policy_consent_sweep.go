@@ -111,7 +111,14 @@ func (s *Server) sendPolicyConsentWarningEmail(user *db.User, state ConsentState
 		"Hi %s,\n\nThe Privacy Policy and Cookie Disclosure have been updated. Your acceptance is due within %s (by %s).\n\nAfter that, new tunnels will be refused until you accept. Tunnels already running are not interrupted.\n\nAccept here: %s\n",
 		user.FirstName, remaining, deadline, portalLink,
 	)
-	go func() { _ = s.notifications.Sender().Send(user.Email, subject, body, plain) }() //nolint:errcheck
+	// Logged, not discarded (#1707). This reminder is the only warning a CLI-only user gets
+	// before their client stops at expiry, so a send that fails silently is a user cut off
+	// with no notice through any channel they saw.
+	go func() {
+		if err := s.notifications.Sender().Send(user.Email, subject, body, plain); err != nil {
+			slog.Info(fmt.Sprintf("[Consent] Failed to send the policy reminder to user %s: %v", user.ID, err))
+		}
+	}()
 }
 
 // policyReminderEmail is the template context for policy_consent_reminder.html. A named

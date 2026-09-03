@@ -13,6 +13,18 @@ import (
 	"lfr-tunnel/pkg/db"
 )
 
+// setupConsentServer is setupTestServer with client auto-reservation on.
+//
+// These tests drive real registrations, and without it a named subdomain is refused for
+// having no portal reservation -- a rule these tests are not about, and one that would
+// otherwise mask the refusal they ARE about behind an identically-shaped 403.
+func setupConsentServer(t *testing.T) (*Server, func()) {
+	t.Helper()
+	srv, _, cleanup := setupTestServer(t)
+	srv.cfg.AllowClientAutoReservation = true
+	return srv, cleanup
+}
+
 // seedConsentUser creates an approved user plus a PAT that handleRegister accepts.
 func seedConsentUser(t *testing.T, srv *Server, email, token string) *db.User {
 	t.Helper()
@@ -111,7 +123,7 @@ func TestConsentPhaseTransitions(t *testing.T) {
 // The warning window may not start before the window it warns about, or it is on
 // permanently and warns about nothing.
 func TestConsentWarningWindowIsClampedToGrace(t *testing.T) {
-	srv, _, cleanup := setupTestServer(t)
+	srv, cleanup := setupConsentServer(t)
 	defer cleanup()
 
 	srv.cfg.PolicyConsentGraceDays = 3
@@ -133,7 +145,7 @@ func TestConsentWarningWindowIsClampedToGrace(t *testing.T) {
 // With no policy_version configured nothing changes at all -- that is the upgrade path for
 // every existing deployment.
 func TestConsentInertWhenNoVersionConfigured(t *testing.T) {
-	srv, _, cleanup := setupTestServer(t)
+	srv, cleanup := setupConsentServer(t)
 	defer cleanup()
 
 	user := seedConsentUser(t, srv, "inert@example.com", "tok-inert")
@@ -149,7 +161,7 @@ func TestConsentInertWhenNoVersionConfigured(t *testing.T) {
 // A user inside the grace window keeps working, and the response carries the state the
 // client needs to decide whether to say anything.
 func TestConsentWithinGraceAllowsNewTunnels(t *testing.T) {
-	srv, _, cleanup := setupTestServer(t)
+	srv, cleanup := setupConsentServer(t)
 	defer cleanup()
 	srv.cfg.PolicyVersion = "2"
 
@@ -174,7 +186,7 @@ func TestConsentWithinGraceAllowsNewTunnels(t *testing.T) {
 }
 
 func TestConsentWarningWindowWarnsButAllows(t *testing.T) {
-	srv, _, cleanup := setupTestServer(t)
+	srv, cleanup := setupConsentServer(t)
 	defer cleanup()
 	srv.cfg.PolicyVersion = "2"
 	srv.cfg.PortalURL = "https://portal.example.com"
@@ -202,7 +214,7 @@ func TestConsentWarningWindowWarnsButAllows(t *testing.T) {
 // The enforcement test. A user past their deadline is refused a NEW tunnel, and the
 // refusal has to be distinguishable from the quota 403 the client already knows about.
 func TestConsentExpiredRefusesNewTunnel(t *testing.T) {
-	srv, _, cleanup := setupTestServer(t)
+	srv, cleanup := setupConsentServer(t)
 	defer cleanup()
 	srv.cfg.PolicyVersion = "2"
 	srv.cfg.PortalURL = "https://portal.example.com"
@@ -229,7 +241,7 @@ func TestConsentExpiredRefusesNewTunnel(t *testing.T) {
 // The hard requirement from the issue: refusing the NEXT tunnel must not disturb one that
 // is already established. This is a service used for live customer demos.
 func TestConsentExpiryLeavesEstablishedTunnelRunning(t *testing.T) {
-	srv, _, cleanup := setupTestServer(t)
+	srv, cleanup := setupConsentServer(t)
 	defer cleanup()
 	srv.cfg.PolicyVersion = "2"
 
@@ -275,7 +287,7 @@ func TestConsentExpiryLeavesEstablishedTunnelRunning(t *testing.T) {
 
 // The opt-in behaviour, so the config key is not a switch that does nothing.
 func TestConsentExpiryDropsActiveTunnelsWhenConfigured(t *testing.T) {
-	srv, _, cleanup := setupTestServer(t)
+	srv, cleanup := setupConsentServer(t)
 	defer cleanup()
 	srv.cfg.PolicyVersion = "2"
 
@@ -302,7 +314,7 @@ func TestConsentExpiryDropsActiveTunnelsWhenConfigured(t *testing.T) {
 
 // Accepting clears the block, and the acceptance lands in the append-only history.
 func TestAcceptingClearsTheBlock(t *testing.T) {
-	srv, _, cleanup := setupTestServer(t)
+	srv, cleanup := setupConsentServer(t)
 	defer cleanup()
 	srv.cfg.PolicyVersion = "2"
 
@@ -343,7 +355,7 @@ func TestAcceptingClearsTheBlock(t *testing.T) {
 // "Remind me later" clears with the session, not permanently. Otherwise the banner applies
 // no pressure and the grace window becomes the only mechanism.
 func TestRemindLaterIsPerSession(t *testing.T) {
-	srv, _, cleanup := setupTestServer(t)
+	srv, cleanup := setupConsentServer(t)
 	defer cleanup()
 	srv.cfg.PolicyVersion = "2"
 
@@ -390,7 +402,7 @@ func TestRemindLaterIsPerSession(t *testing.T) {
 // The portal gate blocks the API once expired, and lets through exactly what a blocked
 // user needs in order to become unblocked.
 func TestPortalGateBlocksWhenExpired(t *testing.T) {
-	srv, _, cleanup := setupTestServer(t)
+	srv, cleanup := setupConsentServer(t)
 	defer cleanup()
 	srv.cfg.PolicyVersion = "2"
 
@@ -441,7 +453,7 @@ func TestPortalGateBlocksWhenExpired(t *testing.T) {
 // /api/me is what both portals render from, so the shape it reports is part of the
 // contract for V1 and V2 alike.
 func TestGetMeReportsConsentState(t *testing.T) {
-	srv, _, cleanup := setupTestServer(t)
+	srv, cleanup := setupConsentServer(t)
 	defer cleanup()
 	srv.cfg.PolicyVersion = "2"
 

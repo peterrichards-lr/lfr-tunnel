@@ -94,15 +94,14 @@ func (s *Server) sendPolicyConsentWarningEmail(user *db.User, state ConsentState
 	}
 	remaining := formatConsentRemaining(state.SecondsRemaining)
 
-	data := map[string]interface{}{
-		"Name":       user.FirstName,
-		"Deadline":   deadline,
-		"Remaining":  remaining,
-		"PortalLink": portalLink,
-		"PolicyURL":  state.PolicyURL,
-		"CookieURL":  state.CookieURL,
-	}
-	body, err := s.renderEmailTemplate(user.LanguagePreference, "policy_consent_reminder.html", data)
+	body, err := s.renderEmailTemplate(user.LanguagePreference, "policy_consent_reminder.html", policyReminderEmail{
+		Name:       user.FirstName,
+		Deadline:   deadline,
+		Remaining:  remaining,
+		PortalLink: portalLink,
+		PolicyURL:  state.PolicyURL,
+		CookieURL:  state.CookieURL,
+	})
 	if err != nil {
 		slog.Info(fmt.Sprintf("[Consent] Failed to render the policy reminder template: %v", err))
 		return
@@ -113,6 +112,18 @@ func (s *Server) sendPolicyConsentWarningEmail(user *db.User, state ConsentState
 		user.FirstName, remaining, deadline, portalLink,
 	)
 	go func() { _ = s.notifications.Sender().Send(user.Email, subject, body, plain) }() //nolint:errcheck
+}
+
+// policyReminderEmail is the template context for policy_consent_reminder.html. A named
+// type rather than a map so a renamed field is a compile error rather than a blank in
+// somebody's inbox.
+type policyReminderEmail struct {
+	Name       string
+	Deadline   string
+	Remaining  string
+	PortalLink string
+	PolicyURL  string
+	CookieURL  string
 }
 
 // terminateExpiredConsentTunnels drops the live tunnels of users past their deadline.

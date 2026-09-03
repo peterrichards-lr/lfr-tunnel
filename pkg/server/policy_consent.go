@@ -21,6 +21,26 @@ import (
 // later and very hard to remove once they exist.
 const PolicyDocumentID = "privacy_policy"
 
+// The endpoints the consent gate lets through, named rather than repeated as literals.
+//
+// This is not the ForceMFA gate's bypass list with a different name: the two gates block
+// for different reasons and are cleared by different endpoints, so they overlap without
+// being the same set. Sharing one list would couple them into agreeing about things they
+// have no reason to agree about.
+const (
+	pathAPIMe               = "/api/me"
+	pathPolicyConsent       = "/api/me/policy-consent"
+	pathPolicyConsentRemind = "/api/me/policy-consent/remind-later"
+	pathAPILogout           = "/api/auth/logout"
+	pathAPIVersion          = "/api/version"
+	pathAPIi18n             = "/api/i18n"
+	pathAPICompleteSetup    = "/api/complete-setup"
+	pathAPILogin            = "/api/auth/login"
+	pathAPIRegister         = "/api/register"
+	pathAPIDeregister       = "/api/deregister"
+	pathAPITunnelStatus     = "/api/tunnel-status"
+)
+
 // Consent phases. These strings cross the wire to both portals and to the client, so
 // they are part of the API surface.
 const (
@@ -63,6 +83,23 @@ type ConsentState struct {
 	// when Required is false because they have accepted. Lets the portal show "you
 	// accepted version N on date D" rather than only ever showing an outstanding ask.
 	AcceptedAt string `json:"accepted_at,omitempty"`
+}
+
+// policyGateRefusal is the 403 body the portal gate returns. A named type rather than a
+// map so the wire keys live in struct tags -- the same shape the MFA gate's response has,
+// which is what lets a single global handler in each portal recognise it.
+type policyGateRefusal struct {
+	Error                 string `json:"error"`
+	PolicyConsentRequired bool   `json:"policy_consent_required"`
+}
+
+// policyConsentAcceptance is what POST /api/me/policy-consent answers with: the new state,
+// so the caller need not re-fetch /api/me to find out it is now clear.
+type policyConsentAcceptance struct {
+	Status string `json:"status"`
+	// A pointer with omitempty so "Remind me later", which shares this type, does not
+	// report a zero-valued consent block that reads as "nothing outstanding".
+	PolicyConsent *ConsentState `json:"policy_consent,omitempty"`
 }
 
 // Blocking reports whether this state should stop the user doing anything. Only the
@@ -283,7 +320,7 @@ func (s *Server) handlePolicyConsentAccept(w http.ResponseWriter, r *http.Reques
 		return
 	}
 	if s.cfg == nil || s.cfg.PolicyVersion == "" || s.db == nil {
-		respondJSON(w, http.StatusOK, map[string]interface{}{"status": "ok", "policy_consent": ConsentState{}})
+		respondJSON(w, http.StatusOK, policyConsentAcceptance{Status: "ok", PolicyConsent: &ConsentState{}})
 		return
 	}
 	if err := s.recordPolicyConsent(user, s.clientIP(r), r.UserAgent()); err != nil {
@@ -294,9 +331,10 @@ func (s *Server) handlePolicyConsentAccept(w http.ResponseWriter, r *http.Reques
 	s.writeAudit(user.Email, "policy.consent", "policy", s.cfg.PolicyVersion,
 		"Accepted "+PolicyDocumentID+" version "+s.cfg.PolicyVersion, r)
 
-	respondJSON(w, http.StatusOK, map[string]interface{}{
-		"status":         "ok",
-		"policy_consent": s.policyConsentState(user, false),
+	state := s.policyConsentState(user, false)
+	respondJSON(w, http.StatusOK, policyConsentAcceptance{
+		Status:        "ok",
+		PolicyConsent: &state,
 	})
 }
 
@@ -318,7 +356,7 @@ func (s *Server) handlePolicyConsentRemindLater(w http.ResponseWriter, r *http.R
 	}
 	data.PolicyReminderDismissed = true
 	s.sessionStore().storePortalSession(cookie.Value, data)
-	respondJSON(w, http.StatusOK, map[string]string{"status": "ok"})
+	respondJSON(w, http.StatusOK, policyConsentAcceptance{Status: "ok"})
 }
 
 // policyGateSuppressed reports whether this request's session has dismissed the gate.
@@ -353,19 +391,19 @@ func (s *Server) enforcePolicyConsentGate(w http.ResponseWriter, r *http.Request
 		return false
 	}
 	switch r.URL.Path {
-	case "/api/me",
-		"/api/me/policy-consent",
-		"/api/me/policy-consent/remind-later",
-		"/api/auth/logout",
-		"/api/version",
-		"/api/i18n",
-		"/api/complete-setup",
-		"/api/register",
-		"/api/deregister",
-		"/api/tunnel-status":
+	case pathAPIMe,
+		pathPolicyConsent,
+		pathPolicyConsentRemind,
+		pathAPILogout,
+		pathAPIVersion,
+		pathAPIi18n,
+		pathAPICompleteSetup,
+		pathAPIRegister,
+		pathAPIDeregister,
+		pathAPITunnelStatus:
 		return false
 	}
-	if strings.HasPrefix(r.URL.Path, "/api/auth/") && r.URL.Path != "/api/auth/login" {
+	if strings.HasPrefix(r.URL.Path, "/api/auth/") && r.URL.Path != pathAPILogin {
 		return false
 	}
 	if strings.HasPrefix(r.URL.Path, "/api/internal/") {
@@ -382,9 +420,9 @@ func (s *Server) enforcePolicyConsentGate(w http.ResponseWriter, r *http.Request
 	if !s.policyConsentState(user, false).Blocking() {
 		return false
 	}
-	respondJSON(w, http.StatusForbidden, map[string]interface{}{
-		"error":                   "Policy acceptance required",
-		"policy_consent_required": true,
+	respondJSON(w, http.StatusForbidden, policyGateRefusal{
+		Error:                 "Policy acceptance required",
+		PolicyConsentRequired: true,
 	})
 	return true
 }

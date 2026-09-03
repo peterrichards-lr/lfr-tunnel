@@ -17,6 +17,7 @@ nav:
   - Home: README.md
   - Client Guides:
     - Getting Started: getting_started.md
+    - Client Configuration File: client_configuration.md
     - Liferay SE Guide: liferay-se-guide.md
     - MCP Guide: mcp.md
   - Server & Operator Guides:

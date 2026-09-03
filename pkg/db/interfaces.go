@@ -20,6 +20,22 @@ type UserRepository interface {
 	AnonymizeUserData(userID, anonymizedID string) error
 }
 
+// AcknowledgementRepository stores the versioned-acknowledgement records behind the
+// policy re-consent gate (#1707).
+//
+// Note what is absent: no update, no delete. The acceptance history is append-only, and
+// that is enforced by there being no method that could do otherwise rather than by a
+// convention a later caller could break.
+type AcknowledgementRepository interface {
+	RecordAcknowledgement(a *Acknowledgement) error
+	HasAcknowledged(userID, documentID, version string) (bool, error)
+	ListAcknowledgements(userID string) ([]*Acknowledgement, error)
+	RecordFirstSeen(userID, documentID, version string, at time.Time) (time.Time, error)
+	GetFirstSeen(userID, documentID, version string) (time.Time, error)
+	MarkWarningNotified(userID, documentID, version string) (bool, error)
+	ListPendingWarnings(documentID, version string, cutoff time.Time) ([]string, error)
+}
+
 type PATRepository interface {
 	CreatePAT(pat *PersonalAccessToken) error
 	GetPATByHash(hash string) (*PersonalAccessToken, error)

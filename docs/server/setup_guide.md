@@ -905,7 +905,53 @@ To comply with strict IT auditing frameworks (like SOC2 or ISO 27001), you can o
    enforce_policy_consent: true
    ```
 3. **The User Experience**: The Complete Profile Setup page (`setup.html`) will dynamically render a required checkbox. The user cannot submit setup without checking it.
-4. **The Audit Trail**:    The server will capture the exact timestamp of consent and save it in the SQLite database under `policy_consent_at`. This provides an airtight compliance record.
+4. **The Audit Trail**:    The server will capture the exact timestamp of consent and save it in the SQLite database under `policy_consent_at`. This provides an airtight compliance record for the version that was current at registration; see 8.2.1 for keeping it accurate once the policy changes.
+
+### 8.2.1. Re-asking When the Policy Changes
+
+`enforce_policy_consent` above covers registration only, and it stamps a single
+`policy_consent_at`. That timestamp cannot say *which* text was agreed to, so before this
+existed a policy change reached nobody who had already registered.
+
+Set `policy_version` to close that. Every user whose acceptance history does not contain
+that exact string is asked again, with a grace period to answer in:
+
+```yaml
+policy_version: "2026-09"          # bump whenever the policy text changes
+policy_consent_grace_days: 14      # how long they have, from their OWN first sight of it
+policy_consent_warning_days: 5     # how long before the deadline the warnings escalate
+policy_consent_stops_active_tunnels: false
+```
+
+**Leave `policy_version` empty and nothing changes.** That is the default, so an existing
+gateway keeps behaving exactly as it did on upgrade; re-consent starts only when an
+operator sets a version.
+
+The version is an opaque label, compared for equality and never for order. A date, a
+content hash and `"2"` are all fine — but do not reuse a string somebody has already
+accepted, because that reads as "already agreed".
+
+| Phase | Portal | Clients and tunnels |
+|---|---|---|
+| Within grace | Usable. A gate appears at login offering **Accept** or **Remind me later**; a banner remains for the rest of the session | Working |
+| Warning window | The banner escalates, the client warns at startup, and one email goes out | Working |
+| After the deadline | Blocked until accepted | **New tunnels refused.** Tunnels already running are not interrupted |
+
+Three details worth knowing:
+
+- **The clock starts when the user first sees the new version**, recorded per user, not
+  when you published it. Somebody on two weeks' leave gets the full window rather than a
+  deadline that expired while they were away.
+- **"Remind me later" lasts for one session.** The gate is shown again at the next login,
+  which is what stops the banner becoming wallpaper.
+- **`policy_consent_stops_active_tunnels` is off by default** and should usually stay off.
+  Refusing the next tunnel enforces the policy completely — no tunnel survives a restart —
+  whereas turning this on drops live connections the moment the sweep notices, which for a
+  gateway used in customer demos is the outcome the warning window exists to prevent.
+
+The audit trail is the `user_acknowledgements` table, which is append-only: every
+acceptance is kept with its version, timestamp, IP and user agent, so "what did this user
+agree to, and when" stays answerable across any number of policy revisions.
 
 ### 8.3. Customizing Client Binary Downloads & Commands (Self-Hosting & EDR Bypass)
 

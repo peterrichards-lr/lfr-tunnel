@@ -134,6 +134,25 @@ test.describe('Keyboard shortcut coverage', () => {
     await expect(page).toHaveURL(/\/portalv2\/analytics$/);
   });
 
+  /**
+   * The shortcuts overlay that has just been opened.
+   *
+   * Filtered on visibility rather than taking the first match in DOM order. The
+   * `[role="dialog"]` arm is there for Portal V2, where the overlay is a dialog; in V1 it
+   * matched nothing until #1707 added a `role="dialog"` policy modal ABOVE the overlay in
+   * the document, at which point `.first()` started returning that modal -- permanently
+   * hidden, so the assertion failed on a page where the overlay had opened correctly.
+   *
+   * Any dialog added to either portal would have done the same, so this is the selector's
+   * bug rather than that modal's.
+   */
+  function shortcutsOverlay(page: any) {
+    return page
+      .locator('#shortcuts-overlay, [role="dialog"]')
+      .filter({ visible: true })
+      .first();
+  }
+
   test('V1 admin: every visible sidebar link has a shortcut row', async ({
     page,
   }) => {
@@ -143,7 +162,7 @@ test.describe('Keyboard shortcut coverage', () => {
     expect(links.length).toBeGreaterThan(10);
 
     await page.keyboard.press('?');
-    const overlay = page.locator('#shortcuts-overlay, [role="dialog"]').first();
+    const overlay = shortcutsOverlay(page);
     await expect(overlay).toBeVisible();
 
     const rows = await overlay.locator('.shortcuts-row').allTextContents();
@@ -166,7 +185,7 @@ test.describe('Keyboard shortcut coverage', () => {
   test('V1: no duplicate shortcut keys are listed', async ({ page }) => {
     await loginV1(page, adminEmail);
     await page.keyboard.press('?');
-    const overlay = page.locator('#shortcuts-overlay, [role="dialog"]').first();
+    const overlay = shortcutsOverlay(page);
     await expect(overlay).toBeVisible();
 
     const keys = await overlay.locator('.shortcuts-row kbd').allTextContents();

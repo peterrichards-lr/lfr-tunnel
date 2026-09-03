@@ -106,9 +106,18 @@ type RegisterResponse struct {
 	// NodeStopsInSeconds is computed here rather than left to the client: working it out
 	// needs time.LoadLocation, and the tz database is not reliably present on every client
 	// platform. The time and zone are sent alongside purely so the message can name them.
-	NodeStopsInSeconds int    `json:"node_stops_in_seconds,omitempty"`
-	NodeStopTime       string `json:"node_stop_time,omitempty"`
-	NodeTimezone       string `json:"node_timezone,omitempty"`
+	// PolicyConsent carries this user's standing against the current policy version
+	// (#1707). It rides the registration response because the client's copy has to come
+	// from an AUTHENTICATED exchange -- /api/version already advertises
+	// enforce_policy_consent, but it is unauthenticated and this is per-user.
+	//
+	// Present on a refusal too: the 403 that stops a new tunnel carries the same block, so
+	// the client can say what must be accepted and where, rather than only that it was
+	// rejected.
+	PolicyConsent      *ConsentState `json:"policy_consent,omitempty"`
+	NodeStopsInSeconds int           `json:"node_stops_in_seconds,omitempty"`
+	NodeStopTime       string        `json:"node_stop_time,omitempty"`
+	NodeTimezone       string        `json:"node_timezone,omitempty"`
 }
 
 // CheckSubdomainResponse represents the JSON response payload for subdomain checks.
@@ -837,6 +846,23 @@ func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 				}
 			}
 		}
+		// Once a user's grace window for an updated policy has run out, the portal is
+		// blocked until they accept (#1707). Sits beside the ForceMFA gate above and works
+		// the same way, at the boundary rather than in each of two portals.
+		if s.enforcePolicyConsentGate(w, r) {
+			return
+		}
+
+		if r.Method == http.MethodPost && r.URL.Path == "/api/me/policy-consent" {
+			s.handlePolicyConsentAccept(w, r)
+			return
+		}
+
+		if r.Method == http.MethodPost && r.URL.Path == "/api/me/policy-consent/remind-later" {
+			s.handlePolicyConsentRemindLater(w, r)
+			return
+		}
+
 		if r.Method == http.MethodPost && r.URL.Path == "/api/register" {
 			s.handleRegister(w, r)
 			return
@@ -1521,6 +1547,27 @@ func (s *Server) handleRegister(w http.ResponseWriter, r *http.Request) {
 		userRec, _ = s.db.GetUser(user.ID) //nolint:errcheck
 	}
 
+	// Outstanding policy consent (#1707). This is where the client first sees the new
+	// version, so it is recorded here -- a CLI-only user's grace window starts when they
+	// run a tunnel, not only if they happen to open the portal.
+	//
+	// Placed on NEW tunnel establishment and nowhere else. Deliberately NOT on the
+	// reverse-proxy request path and NOT on the edge control-plane connection: an
+	// established tunnel keeps running until it disconnects naturally. This is a service
+	// used for live customer demos, and no tunnel survives a restart, so refusing the next
+	// one enforces the policy just as completely as cutting the current one -- without the
+	// single worst outcome the five-day warning exists to prevent.
+	consent := s.policyConsentState(userRec, true)
+	if consent.Blocking() {
+		c := consent
+		s.respondRegisterResponse(w, http.StatusForbidden, r, RegisterResponse{
+			Status:        "error",
+			Error:         policyConsentRefusalMessage(consent),
+			PolicyConsent: &c,
+		})
+		return
+	}
+
 	// Determine active domains to register dynamically based on rules and request Host
 	activeDomains := topRankedDomain(s.getActiveDomainsForRequest(r, userRec))
 
@@ -1931,6 +1978,10 @@ func (s *Server) handleRegister(w http.ResponseWriter, r *http.Request) {
 	auditDetails := fmt.Sprintf("Started tunnel for subdomain %s (domains: %v, remotes: %v)", req.SubdomainPrefix, activeDomains, remotes)
 	s.writeAudit(user.Email, "tunnel.start", "subdomain", req.SubdomainPrefix, auditDetails, r)
 
+	// Attached even when nothing is outstanding: the client uses the absence of a phase to
+	// stay quiet, and sending the block unconditionally means a user who accepted between
+	// two tunnel starts stops being warned without needing a special "cleared" signal.
+	consentForResp := consent
 	s.respondRegisterResponse(w, http.StatusOK, r, RegisterResponse{
 		Status:             "success",
 		SessionToken:       sessionToken,
@@ -1941,6 +1992,7 @@ func (s *Server) handleRegister(w http.ResponseWriter, r *http.Request) {
 		LanguagePreference: langPref,
 		ThemePreference:    themePref,
 		ServerVersion:      config.Version,
+		PolicyConsent:      &consentForResp,
 	})
 }
 
@@ -2232,6 +2284,13 @@ func (s *Server) Start() error {
 						slog.Warn("[Geo] Periodic location stats flush failed", "error", err)
 					}
 					s.checkExpiringReservations()
+					// Warns users entering the policy-consent warning window, and (only
+					// when configured to) drops the tunnels of those past their deadline
+					// (#1707). On this timer for the same reason as the geo flush above: a
+					// quiet gateway would otherwise never notice the boundary. Passed no
+					// request because there is none -- getPortalBaseURL falls back to the
+					// configured portal_url.
+					s.runPolicyConsentSweep(nil)
 				}
 			}
 		}
@@ -5352,6 +5411,16 @@ type PortalSessionData struct {
 	// applied without a query per request. Zero for a session loaded from a row written before
 	// this existed, which sameSiteFromStored's caller treats as "no cap knowable".
 	CreatedAt time.Time
+	// PolicyReminderDismissed records that this session clicked "Remind me later" on the
+	// policy re-consent gate (#1707).
+	//
+	// Deliberately NOT persisted to the portal_sessions table, and deliberately not a user
+	// preference: it must clear when the session does, so the gate is seen again at the
+	// next login. A permanent dismissal would leave the banner applying no pressure at all
+	// and make the grace window the only mechanism -- which is the outcome the gate exists
+	// to avoid. Being in-memory-only also means a restart re-asks, which errs in the safe
+	// direction for a consent prompt.
+	PolicyReminderDismissed bool
 	// SameSite is the mode the cookie was created with, as a string ("Strict"/"Lax").
 	//
 	// Recorded because a browser returns a cookie's value and none of its attributes, so
@@ -5955,12 +6024,16 @@ func (s *Server) handleEdgeRegisterProxy(w http.ResponseWriter, r *http.Request,
 	if resp.StatusCode != http.StatusOK {
 		var errResp struct {
 			Error string `json:"error"`
+			// Relayed on the refusal path too (#1707): a client turned away for outstanding
+			// consent needs to be told what to accept and where, not merely that it was
+			// rejected.
+			PolicyConsent *ConsentState `json:"policy_consent"`
 		}
 		_ = json.NewDecoder(resp.Body).Decode(&errResp) //nolint:errcheck
 		if errResp.Error == "" {
 			errResp.Error = fmt.Sprintf("control plane rejected request with status %d", resp.StatusCode)
 		}
-		s.respondRegisterResponse(w, resp.StatusCode, r, RegisterResponse{Status: "error", Error: errResp.Error})
+		s.respondRegisterResponse(w, resp.StatusCode, r, RegisterResponse{Status: "error", Error: errResp.Error, PolicyConsent: errResp.PolicyConsent})
 		return
 	}
 
@@ -5977,6 +6050,9 @@ func (s *Server) handleEdgeRegisterProxy(w http.ResponseWriter, r *http.Request,
 			WhitelistIPs string `json:"whitelist_ips"`
 			AccessMode   string `json:"access_mode"`
 		} `json:"access_controls"`
+		// PolicyConsent is this user's consent standing, computed by the control plane
+		// (#1707). Relayed to the client unchanged.
+		PolicyConsent *ConsentState `json:"policy_consent"`
 	}
 	if err := json.NewDecoder(resp.Body).Decode(&valResp); err != nil {
 		s.respondRegisterResponse(w, http.StatusInternalServerError, r, RegisterResponse{Status: "error", Error: "invalid response from control plane"})
@@ -6010,6 +6086,7 @@ func (s *Server) handleEdgeRegisterProxy(w http.ResponseWriter, r *http.Request,
 		Domains:         activeDomains,
 		Warning:         warning,
 		ServerVersion:   config.Version,
+		PolicyConsent:   valResp.PolicyConsent,
 	})
 }
 
@@ -6048,6 +6125,19 @@ func (s *Server) handleEdgeRegister(w http.ResponseWriter, r *http.Request) {
 	var userRec *db.User
 	if s.db != nil {
 		userRec, _ = s.db.GetUser(user.ID) //nolint:errcheck
+	}
+
+	// The same NEW-tunnel refusal as the direct path (#1707). It has to be duplicated
+	// here rather than shared: a client registering through an edge node never executes
+	// handleRegister's body on the control plane, and the edge itself has no database to
+	// evaluate consent with.
+	edgeConsent := s.policyConsentState(userRec, true)
+	if edgeConsent.Blocking() {
+		respondJSON(w, http.StatusForbidden, map[string]interface{}{
+			"error":          policyConsentRefusalMessage(edgeConsent),
+			"policy_consent": edgeConsent,
+		})
+		return
 	}
 
 	// The edge forwards the real client address, so a client that registered against an
@@ -6329,6 +6419,11 @@ func (s *Server) handleEdgeRegister(w http.ResponseWriter, r *http.Request) {
 		"subdomain_prefix": finalSubdomain,
 		"rate_limit":       effectiveLimit,
 		"access_controls":  accessControls,
+		// Forwarded so the edge can hand it to the client verbatim (#1707). An edge holds
+		// no database, so being told is the only way a client registering there can learn
+		// its own consent deadline. An older control plane omits it, which decodes as nil
+		// and simply means "no warning to relay".
+		"policy_consent": edgeConsent,
 	})
 }
 

@@ -167,6 +167,25 @@ func (s *Server) handleGetMe(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
+	// Outstanding policy consent, and how long is left to give it (#1707).
+	//
+	// record=true: /api/me is the portal's bootstrap call, so reaching it IS the user's
+	// first sight of a new version, and that is what starts their grace window. The
+	// recording is idempotent, so the background poll every ten seconds cannot move the
+	// deadline.
+	//
+	// getCurrentUserRaw rather than the previewing copy above: consent belongs to the real
+	// account, and an owner previewing a member's view must not be shown -- or able to
+	// clear -- somebody else's outstanding ask.
+	if realUser, rerr := s.getCurrentUserRaw(r); rerr == nil && realUser != nil {
+		consent := s.policyConsentState(realUser, true)
+		resp["policy_consent"] = consent
+		// Whether THIS session has clicked "Remind me later". Reported separately from the
+		// consent state because it is a property of the session, not of the user: the same
+		// account logging in elsewhere still gets the gate.
+		resp["policy_gate_suppressed"] = consent.Required && s.policyGateSuppressed(r)
+	}
+
 	respondJSON(w, http.StatusOK, resp)
 }
 

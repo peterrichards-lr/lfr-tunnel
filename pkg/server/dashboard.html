@@ -185,6 +185,16 @@
         <button type="button" class="btn btn-secondary" style="width: auto; margin: 0; padding: 4px 12px; font-size: 12px;" onclick="staySignedIn()" data-i18n="stay_signed_in">Stay signed in</button>
     </div>
 
+    <!-- Policy re-consent banner (#1707). Above the V2 promo for the same reason the
+         session warning is: it carries a deadline, and the promo does not. Shown only
+         after the gate below has been dismissed for this session -- the server clears
+         that at the next login, so the gate comes back rather than the banner becoming
+         wallpaper. -->
+    <div id="policy-consent-banner" class="session-expiry-banner" style="display: none;">
+        <span id="policy-consent-banner-text"></span>
+        <button type="button" class="btn btn-secondary" style="width: auto; margin: 0; padding: 4px 12px; font-size: 12px;" onclick="acceptPolicyConsent()" data-i18n="policy_consent_accept">Review and accept</button>
+    </div>
+
     <div id="v2-promo-banner" style="display: none; position: relative; flex-shrink: 0; background-color: #0b5fff; color: white; padding: 12px 24px; text-align: center; font-family: 'Inter', sans-serif; box-sizing: border-box; box-shadow: 0 4px 12px rgba(0,0,0,0.15);">
         <p style="margin: 0; font-size: 14px; font-weight: 500;">
             Try out the new V2 Portal experience! <a href="/portalv2/" style="color: white; text-decoration: underline; font-weight: 700; margin-left: 8px;">Switch to V2 &rarr;</a>
@@ -1180,7 +1190,22 @@
     </div>
 
     <!-- BLACKLIST MODAL -->
-    <div id="blacklist-modal" class="modal-overlay">
+    <!-- Policy re-consent gate (#1707). Not one of the ordinary modals: while the grace
+     window is expired there is deliberately no Cancel and no way past it, because the
+     portal is blocked server-side until this is accepted. During the window it offers
+     "Remind me later", which the server holds against the SESSION only. -->
+<div id="policy-consent-modal" class="modal-overlay" role="dialog" aria-modal="true" aria-labelledby="policy-consent-title">
+    <div class="glass modal">
+        <h3 id="policy-consent-title" data-i18n="policy_consent_title">Our Privacy Policy Has Changed</h3>
+        <p id="policy-consent-desc" style="font-size: 14px; line-height: 1.5;"></p>
+        <p id="policy-consent-remaining" style="font-size: 14px; font-weight: 600;"></p>
+        <p id="policy-consent-links" style="font-size: 13px;"></p>
+        <button class="btn btn-primary" onclick="acceptPolicyConsent()" data-i18n="policy_consent_agree">I have read and accept</button>
+        <button id="policy-consent-later" class="btn" onclick="remindPolicyConsentLater()" data-i18n="policy_consent_later">Remind me later</button>
+    </div>
+</div>
+
+<div id="blacklist-modal" class="modal-overlay">
         <div class="glass modal">
             <h3 data-i18n="ban_ip_title">Ban IP Address</h3>
             <input type="text" id="blacklist-ip" class="input-field" data-i18n-placeholder="ban_ip_placeholder" placeholder="192.168.1.1" required aria-label="IP address to ban" data-i18n-aria-label="aria_blacklist_ip">

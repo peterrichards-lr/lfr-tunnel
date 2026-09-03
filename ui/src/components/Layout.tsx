@@ -8,6 +8,7 @@ import { useI18n } from '../contexts/I18nContext';
 import { useSettings } from '../contexts/SettingsContext';
 import ShortcutsOverlay from './ShortcutsOverlay';
 import SessionExpiryWarning from './SessionExpiryWarning';
+import PolicyConsentGate from './PolicyConsentGate';
 
 export default function Layout() {
   const [user, setUser] = useState<any>(null);
@@ -135,6 +136,17 @@ export default function Layout() {
       <a href="#main-content" className="skip-link">
         {t('skip_to_content', 'Skip to content')}
       </a>
+
+      {/* Above everything, including the session warning: while the grace window is
+          expired this is the only thing on the page that can be acted on, and during the
+          window it is the one notice with a deadline attached (#1707). */}
+      <PolicyConsentGate
+        consent={user.policy_consent}
+        suppressed={user.policy_gate_suppressed}
+        onRemindLater={() =>
+          setUser((prev: any) => ({ ...prev, policy_gate_suppressed: true }))
+        }
+      />
 
       <ViewAsBar viewAs={user.view_as} canViewAs={user.can_view_as} />
 

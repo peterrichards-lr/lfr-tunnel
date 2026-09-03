@@ -23,7 +23,7 @@ func TestResolveServerURL_SleepingEdgeMakesElectionProvisional(t *testing.T) {
 
 	var gotProvisional bool
 	var saved bool
-	saveRegionCacheFn = func(_, _ string, provisional bool) {
+	saveRegionCacheFn = func(_, _ string, provisional bool, _ []string) {
 		saved, gotProvisional = true, provisional
 	}
 
@@ -59,7 +59,7 @@ func TestResolveServerURL_CompleteElectionIsNotProvisional(t *testing.T) {
 	fetchRemoteRegionsFn = func(*config.ClientConfig) {}
 
 	var gotProvisional, saved bool
-	saveRegionCacheFn = func(_, _ string, provisional bool) {
+	saveRegionCacheFn = func(_, _ string, provisional bool, _ []string) {
 		saved, gotProvisional = true, provisional
 	}
 

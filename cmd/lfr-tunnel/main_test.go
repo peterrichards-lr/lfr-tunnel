@@ -106,7 +106,7 @@ func TestResolveServerURL_OfflineRegionFallback(t *testing.T) {
 	defer func() { fetchRemoteRegionsFn, saveRegionCacheFn = origFetch, origSave }()
 	fetchRemoteRegionsFn = func(*config.ClientConfig) {}
 	var cachedRegion, cachedURL string
-	saveRegionCacheFn = func(bestRegion, serverURL string, _ bool) {
+	saveRegionCacheFn = func(bestRegion, serverURL string, _ bool, _ []string) {
 		cachedRegion, cachedURL = bestRegion, serverURL
 	}
 
@@ -199,7 +199,7 @@ func TestRegionCooldownSurvivesRemoteRefresh(t *testing.T) {
 	fetchRemoteRegionsFn = func(c *config.ClientConfig) {
 		c.Regions = map[string]string{"apac": failedSrv.URL, "eu": goodSrv.URL}
 	}
-	saveRegionCacheFn = func(string, string, bool) {}
+	saveRegionCacheFn = func(string, string, bool, []string) {}
 
 	cooldowns.exclude(failedSrv.URL, regionFailoverCooldown)
 
@@ -229,7 +229,7 @@ func TestRegionCooldownFallsBackWhenAllExcluded(t *testing.T) {
 	fetchRemoteRegionsFn = func(c *config.ClientConfig) {
 		c.Regions = map[string]string{"eu": onlySrv.URL}
 	}
-	saveRegionCacheFn = func(string, string, bool) {}
+	saveRegionCacheFn = func(string, string, bool, []string) {}
 
 	cooldowns.exclude(onlySrv.URL, regionFailoverCooldown)
 
@@ -452,7 +452,7 @@ func TestReregisterAcrossRegionsMovesOn(t *testing.T) {
 	fetchRemoteRegionsFn = func(c *config.ClientConfig) {
 		c.Regions = map[string]string{"bad": badSrv.URL, "good": goodSrv.URL}
 	}
-	saveRegionCacheFn = func(string, string, bool) {}
+	saveRegionCacheFn = func(string, string, bool, []string) {}
 
 	cfg := &config.ClientConfig{ServerURL: badSrv.URL, AuthToken: "t"}
 	resp, ok := reregisterAcrossRegions(cfg, nil, "sub", nil)
@@ -486,7 +486,7 @@ func TestReregisterAcrossRegionsStopsOnTerminal(t *testing.T) {
 	fetchRemoteRegionsFn = func(c *config.ClientConfig) {
 		c.Regions = map[string]string{"a": srv.URL, "b": srv.URL}
 	}
-	saveRegionCacheFn = func(string, string, bool) {}
+	saveRegionCacheFn = func(string, string, bool, []string) {}
 
 	cfg := &config.ClientConfig{ServerURL: srv.URL, AuthToken: "t"}
 	if _, ok := reregisterAcrossRegions(cfg, nil, "sub", nil); ok {
@@ -511,7 +511,7 @@ func TestReregisterAcrossRegionsGivesUpCleanly(t *testing.T) {
 	fetchRemoteRegionsFn = func(c *config.ClientConfig) {
 		c.Regions = map[string]string{"a": srv.URL, "b": srv.URL}
 	}
-	saveRegionCacheFn = func(string, string, bool) {}
+	saveRegionCacheFn = func(string, string, bool, []string) {}
 
 	cfg := &config.ClientConfig{ServerURL: srv.URL, AuthToken: "t"}
 	if _, ok := reregisterAcrossRegions(cfg, nil, "sub", nil); ok {

@@ -95,7 +95,10 @@ func TestExecuteHook_BackgroundedChildDoesNotHang(t *testing.T) {
 	done := make(chan time.Duration, 1)
 	go func() {
 		start := time.Now()
-		_ = ExecuteHook(HookStarted, "sleep 3 & sleep 3", nil) //nolint:errcheck // the timing is the assertion
+		err := ExecuteHook(HookStarted, "sleep 3 & sleep 3", nil)
+		if err == nil {
+			t.Error("expected the killed hook to be reported as a timeout")
+		}
 		done <- time.Since(start)
 	}()
 

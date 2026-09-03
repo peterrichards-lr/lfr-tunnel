@@ -145,7 +145,15 @@ func (e *InterceptorEngine) RunHook(event string, extra map[string]string) {
 	if runner == nil {
 		runner = ExecuteHook
 	}
-	_ = runner(event, hookCmd, env) //nolint:errcheck // reported by the runner; never blocks the transition
+	if err := runner(event, hookCmd, env); err != nil {
+		// Recorded, not returned. The transition has already been decided, so there is
+		// nothing here to abort -- but a hook that quietly fails every failover is worth
+		// finding in error-<subdomain>.log next to the failover it belongs to.
+		e.LogEvent("warn", "client_hook_failed", map[string]any{
+			"hook_event": event,
+			"error":      err.Error(),
+		})
+	}
 }
 
 // secondsUntil is the countdown to an announced gateway stop, floored at zero. Zero also

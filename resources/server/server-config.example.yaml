@@ -49,6 +49,15 @@ allowed_email_domains:
 disable_email_login: false
 disable_new_registrations: false
 enforce_policy_consent: false
+# Bump policy_version whenever the privacy/cookie policy text changes: every user who has
+# not accepted this exact string is asked again, with policy_consent_grace_days to do it
+# before their client stops working. Empty means never re-ask (the historical behaviour).
+policy_version: ""
+policy_consent_grace_days: 14
+policy_consent_warning_days: 5
+# Refusing NEW tunnels at expiry already enforces the policy; turning this on also drops
+# tunnels that are already running, mid-session.
+policy_consent_stops_active_tunnels: false
 
 # --- Quotas. A null means "inherit the default", which is not the same as zero ---
 default_max_reservations: 0

@@ -25,6 +25,7 @@ type DB struct {
 	VanityDomainStatusRepository
 	PortalSessionRepository
 	RegionProbeRepository
+	AcknowledgementRepository
 }
 
 func Open(dsn string) (*DB, error) {
@@ -62,6 +63,7 @@ func Open(dsn string) (*DB, error) {
 		SystemRepository:             NewSQLiteSystemRepo(conn),
 		WebhookQueueRepository:       NewSQLiteWebhookQueueRepo(conn),
 		VanityDomainStatusRepository: NewSQLiteVanityDomainStatusRepo(conn),
+		AcknowledgementRepository:    NewSQLiteAcknowledgementRepo(conn),
 	}
 
 	if err := d.initSchema(); err != nil {

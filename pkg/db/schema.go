@@ -337,4 +337,45 @@ var migrations = []migration{
 	// Empty means "created before this column existed" -- see sameSiteFromStored, which leaves
 	// such a session's cookie alone rather than re-issuing it with a guess.
 	{26, "ALTER TABLE portal_sessions ADD COLUMN same_site TEXT NOT NULL DEFAULT ''"},
+
+	// The append-only consent history behind versioned re-consent (#1707).
+	//
+	// Append-only is the whole point. `users.policy_consent_at` was stamped once at
+	// registration and then overwritten by nothing, because nothing ever asked again;
+	// the moment a document can change, a single timestamp stops being able to say
+	// WHICH text was agreed to. There is deliberately no UNIQUE constraint on
+	// (user_id, document_id, version) -- re-accepting the same version is a real event
+	// with its own time, and deduplicating it here would throw that away.
+	//
+	// ip and user_agent are captured because a consent record that cannot say where the
+	// acceptance came from is materially weaker as evidence than one that can.
+	{27, `CREATE TABLE IF NOT EXISTS user_acknowledgements (
+		id INTEGER PRIMARY KEY AUTOINCREMENT,
+		user_id TEXT NOT NULL,
+		document_id TEXT NOT NULL,
+		version TEXT NOT NULL,
+		accepted_at DATETIME NOT NULL,
+		ip TEXT DEFAULT '',
+		user_agent TEXT DEFAULT '',
+		FOREIGN KEY(user_id) REFERENCES users(id) ON DELETE CASCADE
+	)`},
+	{28, "CREATE INDEX IF NOT EXISTS idx_user_ack_lookup ON user_acknowledgements(user_id, document_id, version)"},
+
+	// When each user first had a given document version put in front of them, which is
+	// what the grace window is measured from (#1707).
+	//
+	// Separate from user_acknowledgements rather than a column on it: a notice exists
+	// for people who have NOT accepted -- that is the entire population the deadline
+	// applies to -- so it cannot live on an acceptance row. Keeping it apart also keeps
+	// the mutable warning_sent_at out of the acceptance table, so "append-only" stays
+	// true of the table carrying the audit trail.
+	{29, `CREATE TABLE IF NOT EXISTS user_acknowledgement_notices (
+		user_id TEXT NOT NULL,
+		document_id TEXT NOT NULL,
+		version TEXT NOT NULL,
+		first_seen_at DATETIME NOT NULL,
+		warning_sent_at DATETIME,
+		PRIMARY KEY (user_id, document_id, version),
+		FOREIGN KEY(user_id) REFERENCES users(id) ON DELETE CASCADE
+	)`},
 }

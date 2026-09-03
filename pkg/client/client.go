@@ -101,9 +101,16 @@ type RegisterResponse struct {
 	ServerVersion      string   `json:"server_version,omitempty"`
 	// The serving gateway's own scheduled downtime, when it has one (#1275). Zero means
 	// this gateway is not scheduled to stop -- which is always true of the control plane.
-	NodeStopsInSeconds int    `json:"node_stops_in_seconds,omitempty"`
-	NodeStopTime       string `json:"node_stop_time,omitempty"`
-	NodeTimezone       string `json:"node_timezone,omitempty"`
+	// PolicyConsent is this user's standing against the current privacy/cookie policy
+	// version (#1707). It comes back on the registration exchange, which is the only
+	// AUTHENTICATED thing the client does before a tunnel exists -- /api/version carries
+	// enforce_policy_consent but is unauthenticated, and this is per-user.
+	//
+	// Nil from a gateway that predates this, which reads as "nothing to say".
+	PolicyConsent      *PolicyConsentState `json:"policy_consent,omitempty"`
+	NodeStopsInSeconds int                 `json:"node_stops_in_seconds,omitempty"`
+	NodeStopTime       string              `json:"node_stop_time,omitempty"`
+	NodeTimezone       string              `json:"node_timezone,omitempty"`
 }
 
 // PinnedShutdownNotice returns the warning a client pinned to a specific gateway should be
@@ -165,6 +172,93 @@ func PinnedRoutingNotice(isExplicitServer bool, regionCount int) string {
 // Distinct from tui.go's formatCountdown, which renders minutes and seconds because it ticks
 // down a five-minute warning. The same treatment here would print "372m 30s" for a stop
 // six hours away.
+// PolicyConsentState mirrors the server's ConsentState (pkg/server/policy_consent.go).
+// Like RegisterResponse itself, it is duplicated by hand rather than shared: there is no
+// package both sides import, so a field added on one side must be added on the other.
+type PolicyConsentState struct {
+	Required         bool   `json:"required"`
+	DocumentID       string `json:"document_id,omitempty"`
+	Version          string `json:"version,omitempty"`
+	Phase            string `json:"phase,omitempty"`
+	Deadline         string `json:"deadline,omitempty"`
+	SecondsRemaining int64  `json:"seconds_remaining,omitempty"`
+	PolicyURL        string `json:"policy_url,omitempty"`
+	CookieURL        string `json:"cookie_url,omitempty"`
+	PortalURL        string `json:"portal_url,omitempty"`
+	AcceptedAt       string `json:"accepted_at,omitempty"`
+}
+
+// Consent phases, matching the server's strings.
+const (
+	ConsentPhaseGrace   = "grace"
+	ConsentPhaseWarning = "warning"
+	ConsentPhaseExpired = "expired"
+)
+
+// PolicyConsentNotice renders the startup warning for an outstanding policy acceptance,
+// or "" when there is nothing to say.
+//
+// This is load-bearing rather than polish. Plenty of people here register once and then
+// live entirely on the command line; if clients stop at the deadline and the only warning
+// was a portal banner, the first they would learn of it is a tunnel refusing to start --
+// most likely at the worst possible moment, since that is when people reach for it.
+//
+// Silent during the grace phase on purpose. A message on every tunnel start for two weeks
+// is noise, and noise is exactly what stops the message that matters from being read.
+// Same shape as PinnedShutdownNotice above, so the call site stays a two-line if.
+func PolicyConsentNotice(resp *RegisterResponse) string {
+	if resp == nil {
+		return ""
+	}
+	return policyConsentNoticeFrom(resp.PolicyConsent)
+}
+
+func policyConsentNoticeFrom(c *PolicyConsentState) string {
+	if c == nil || !c.Required {
+		return ""
+	}
+	where := c.PortalURL
+	if where == "" {
+		where = "the Liferay Tunnel portal"
+	}
+	switch c.Phase {
+	case ConsentPhaseWarning:
+		return fmt.Sprintf(
+			"The Privacy Policy and Cookie Disclosure have changed. Accept the update at %s within %s, or new tunnels will stop being accepted.",
+			where, formatConsentRemaining(c.SecondsRemaining),
+		)
+	case ConsentPhaseExpired:
+		return fmt.Sprintf(
+			"Your acceptance of the updated Privacy Policy and Cookie Disclosure is overdue. Accept it at %s -- new tunnels are being refused until you do.",
+			where,
+		)
+	default:
+		return ""
+	}
+}
+
+// formatConsentRemaining renders days and hours, or hours and minutes inside the last
+// day. Coarse on purpose: a deadline days away rendered to the second reads as machine
+// output rather than as something to act on.
+func formatConsentRemaining(seconds int64) string {
+	if seconds <= 0 {
+		return "no time"
+	}
+	d := time.Duration(seconds) * time.Second
+	days := int(d.Hours()) / 24
+	hours := int(d.Hours()) % 24
+	if days > 0 {
+		if hours > 0 {
+			return fmt.Sprintf("%dd %dh", days, hours)
+		}
+		return fmt.Sprintf("%dd", days)
+	}
+	if hours > 0 {
+		return fmt.Sprintf("%dh %dm", hours, int(d.Minutes())%60)
+	}
+	return fmt.Sprintf("%dm", int(d.Minutes()))
+}
+
 func formatTimeUntil(seconds int) string {
 	d := time.Duration(seconds) * time.Second
 	h := int(d.Hours())
@@ -214,6 +308,11 @@ type RegistrationError struct {
 	StatusCode int
 	Message    string
 	PortalURL  string
+	// PolicyConsent is set when the gateway refused because this user's policy acceptance
+	// is overdue (#1707). Without it a consent 403 is indistinguishable from the
+	// reservation/quota 403 the client already knows about, and would be reported with
+	// advice that sends the user looking for a problem they do not have.
+	PolicyConsent *PolicyConsentState
 }
 
 func (e *RegistrationError) Error() string {
@@ -368,9 +467,10 @@ func RegisterTunnel(serverURL string, authToken string, subdomain string, custom
 	if resp.StatusCode != http.StatusOK {
 		if regResp.Error != "" {
 			return nil, &RegistrationError{
-				StatusCode: resp.StatusCode,
-				Message:    regResp.Error,
-				PortalURL:  regResp.PortalURL,
+				StatusCode:    resp.StatusCode,
+				Message:       regResp.Error,
+				PortalURL:     regResp.PortalURL,
+				PolicyConsent: regResp.PolicyConsent,
 			}
 		}
 		return nil, &RegistrationError{

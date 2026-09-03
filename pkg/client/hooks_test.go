@@ -67,16 +67,16 @@ func TestExecuteHook_TimesOut(t *testing.T) {
 	if runtime.GOOS == "windows" {
 		t.Skip("uses /bin/sh and sleep")
 	}
-	defer shortenHookBounds(t, 200*time.Millisecond, 200*time.Millisecond)()
+	defer shortenHookBounds(t, 100*time.Millisecond, 100*time.Millisecond)()
 
 	start := time.Now()
-	err := ExecuteHook(HookStarted, "sleep 30", nil)
+	err := ExecuteHook(HookStarted, "sleep 3", nil)
 	elapsed := time.Since(start)
 
 	if err == nil {
 		t.Fatal("expected a hook that outlives the timeout to return an error")
 	}
-	if elapsed > 5*time.Second {
+	if elapsed > 1500*time.Millisecond {
 		t.Fatalf("hook was not bounded: returned after %s", elapsed)
 	}
 }
@@ -85,26 +85,26 @@ func TestExecuteHook_TimesOut(t *testing.T) {
 // A hook that backgrounds a child inheriting stdout therefore holds those pipes open after
 // its parent is dead, and without cmd.WaitDelay the client blocks in cmd.Wait for as long as
 // the grandchild lives -- the "a hook hangs the client forever" defect, reached through a
-// hook that did nothing unusual. "sleep 30 & sleep 30" is exactly that shape.
+// hook that did nothing unusual. "sleep 3 & sleep 3" is exactly that shape.
 func TestExecuteHook_BackgroundedChildDoesNotHang(t *testing.T) {
 	if runtime.GOOS == "windows" {
 		t.Skip("uses /bin/sh and sleep")
 	}
-	defer shortenHookBounds(t, 200*time.Millisecond, 200*time.Millisecond)()
+	defer shortenHookBounds(t, 100*time.Millisecond, 100*time.Millisecond)()
 
 	done := make(chan time.Duration, 1)
 	go func() {
 		start := time.Now()
-		_ = ExecuteHook(HookStarted, "sleep 30 & sleep 30", nil) //nolint:errcheck // the timing is the assertion
+		_ = ExecuteHook(HookStarted, "sleep 3 & sleep 3", nil) //nolint:errcheck // the timing is the assertion
 		done <- time.Since(start)
 	}()
 
 	select {
 	case elapsed := <-done:
-		if elapsed > 5*time.Second {
+		if elapsed > 1500*time.Millisecond {
 			t.Fatalf("hook was not bounded: returned after %s", elapsed)
 		}
-	case <-time.After(10 * time.Second):
+	case <-time.After(5 * time.Second):
 		t.Fatal("ExecuteHook never returned: the output pipes outlived the killed process")
 	}
 }

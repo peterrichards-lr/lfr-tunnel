@@ -554,6 +554,19 @@ tr:hover td {
   color: var(--text-muted);
   border: 1px solid rgba(148, 163, 184, 0.3);
 }
+/* An edge node asleep inside its own power schedule (#1689). #887 folded this in
+   with .badge-neutral above, which also covers an operator stop and soft
+   maintenance -- so "asleep on schedule" and "someone stopped it" rendered
+   identically, and neither was distinguishable at a glance from a node that had
+   simply gone dark. Informational blue rather than grey: it is a state the
+   screen can positively explain, not merely one it has no alarm for. Same
+   tokens as .badge-info, kept as its own name so the meaning is in the markup
+   and can be restyled without dragging every other info badge with it. */
+.badge-asleep {
+  background: var(--status-info-bg);
+  color: var(--status-info-text);
+  border: 1px solid var(--status-info-border);
+}
 /* Neutral/inactive state. Was written inline as rgba(255,255,255,0.05), which is
            invisible on a light background (#1182). */
 .badge.neutral {

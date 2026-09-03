@@ -3954,6 +3954,94 @@ function formatNodeLocalTime(tz) {
   }
 }
 
+const EDGE_DAY_SECONDS = 86400;
+
+// Parse "HH:MM" into seconds-of-day, or null when absent/malformed. Mirrors
+// hhmmToSeconds in pkg/server/server_edge.go so this screen classifies a node the
+// same way central does rather than by a second, subtly different rule.
+function edgeHhmmToSeconds(hhmm) {
+  const m = /^(\d{1,2}):(\d{2})$/.exec(hhmm || '');
+  if (!m) return null;
+  const hour = Number(m[1]);
+  const minute = Number(m[2]);
+  if (hour > 23 || minute > 59) return null;
+  return hour * 3600 + minute * 60;
+}
+
+// Seconds elapsed today in the node's own timezone. hourCycle 'h23' rather than
+// hour12:false because the latter renders midnight as "24" in some engines, which
+// would put a node a whole day out at exactly the moment most of them stop.
+function edgeSecondsOfDayIn(tz) {
+  try {
+    const parts = new Intl.DateTimeFormat('en-GB', {
+      timeZone: tz,
+      hour: '2-digit',
+      minute: '2-digit',
+      second: '2-digit',
+      hourCycle: 'h23',
+    }).formatToParts(new Date());
+    const get = (type) => Number(parts.find((p) => p.type === type)?.value);
+    const h = get('hour');
+    const m = get('minute');
+    const sec = get('second');
+    if ([h, m, sec].some((v) => Number.isNaN(v))) return null;
+    return h * 3600 + m * 60 + sec;
+  } catch {
+    return null;
+  }
+}
+
+// Resolve what a node's schedule means *now*, from the fields the health payload
+// already carries (#1689). Returns null when there is no usable schedule, which is
+// a meaningful state of its own: a dark node with no schedule is an incident.
+//
+// The wrap case (stop 00:00, start 08:00) is handled by modular arithmetic on
+// seconds-of-day, the same way isWithinScheduledDowntime does it server-side.
+//
+// One deliberate difference from the server: no start-time grace period. Central
+// allows scheduledStartGraceSeconds past start_time before calling a node a real
+// outage, so a scheduled start that did not actually come back up still alerts.
+// Saying "asleep on schedule" during those minutes would undo exactly that -- so
+// past start_time this reports the node as awake-scheduled and the row falls back
+// to its plain offline/disabled treatment.
+function edgeScheduleView(h) {
+  const tz = h.timezone;
+  const stop = edgeHhmmToSeconds(h.schedule_stop_time);
+  const start = edgeHhmmToSeconds(h.schedule_start_time);
+  if (!tz || stop === null || start === null || stop === start) return null;
+  const nowSec = edgeSecondsOfDayIn(tz);
+  if (nowSec === null) return null;
+
+  const windowLen = (start - stop + EDGE_DAY_SECONDS) % EDGE_DAY_SECONDS;
+  const sinceStop = (nowSec - stop + EDGE_DAY_SECONDS) % EDGE_DAY_SECONDS;
+  const inStopWindow = sinceStop < windowLen;
+
+  return {
+    window: `${h.schedule_start_time}\u2013${h.schedule_stop_time}`,
+    timezone: tz,
+    enabled: !!h.schedule_enabled,
+    inStopWindow,
+    nextSeconds: inStopWindow
+      ? (start - nowSec + EDGE_DAY_SECONDS) % EDGE_DAY_SECONDS
+      : (stop - nowSec + EDGE_DAY_SECONDS) % EDGE_DAY_SECONDS,
+    nextIsStart: inStopWindow,
+  };
+}
+
+// "Asleep on schedule" is the whole point of #1689: it must not look like
+// "unexpectedly offline". All three conditions matter -- a paused schedule, or a
+// node that is up anyway, is not asleep, and central's own "Disabled" also covers
+// an operator stop and soft maintenance (server_edge.go's #887 switch), neither of
+// which this should claim to explain.
+function edgeIsAsleepOnSchedule(status, sv) {
+  return (
+    !!sv &&
+    sv.enabled &&
+    sv.inStopWindow &&
+    String(status || '').toLowerCase() !== 'online'
+  );
+}
+
 function formatLocalTime(utcDateStr) {
   if (!utcDateStr) return 'Never';
   const date = new Date(utcDateStr);
@@ -6325,17 +6413,48 @@ async function loadNetworkHealth() {
     const keys = Object.keys(data || {});
     if (keys.length === 0) {
       tbody.innerHTML =
-        '<tr><td colspan="11" style="text-align:center; opacity:0.6;">No edge nodes configured</td></tr>';
+        '<tr><td colspan="12" style="text-align:center; opacity:0.6;">No edge nodes configured</td></tr>';
     } else {
       keys.sort().forEach((id) => {
         const h = data[id];
         const isOnline = h.status === 'Online';
         const isDisabled = h.status === 'Disabled';
-        const dotColor = isOnline
-          ? '#10b981'
-          : isDisabled
-            ? 'var(--text-muted)'
-            : 'var(--danger)';
+        // Four states rather than three (#1689). "Disabled" used to cover both a
+        // node asleep inside its own power window and one an operator stopped,
+        // and neither was distinguishable at a glance from a node that had gone
+        // dark -- but only the last of those is an incident.
+        const sv = edgeScheduleView(h);
+        const isAsleep = edgeIsAsleepOnSchedule(h.status, sv);
+        const statusKind = isAsleep
+          ? 'asleep'
+          : isOnline
+            ? 'online'
+            : isDisabled
+              ? 'disabled'
+              : 'offline';
+        const statusLabel = isAsleep ? t('status_asleep', 'Asleep') : h.status;
+        let statusTitle = '';
+        if (isAsleep) {
+          statusTitle = `${t('status_asleep_title', 'Asleep on schedule')} \u2014 ${t('schedule_starts_in', 'starts in')} ${formatUptime(sv.nextSeconds)} (${h.schedule_start_time} ${sv.timezone})`;
+        } else if (statusKind === 'offline') {
+          statusTitle = t(
+            'status_offline_title',
+            'Offline outside any scheduled stop window -- treat as an incident.',
+          );
+        }
+
+        let scheduleHtml = '-';
+        if (sv) {
+          const nextText = sv.enabled
+            ? `${sv.nextIsStart ? t('schedule_starts_in', 'starts in') : t('schedule_stops_in', 'stops in')} ${formatUptime(sv.nextSeconds)}`
+            : t('schedule_paused', 'schedule paused');
+          scheduleHtml = `${escapeHTML(sv.window)} ${escapeHTML(sv.timezone)}<span class="edge-schedule-next">${escapeHTML(nextText)}</span>`;
+        } else if (h.schedule_error) {
+          // Central could not read this node's schedule, so the row genuinely
+          // cannot say whether being dark is expected. Saying so beats a dash
+          // that reads as "no schedule configured".
+          scheduleHtml = `<span class="edge-schedule-unknown" title="${escapeHTML(h.schedule_error)}">${escapeHTML(t('schedule_unknown', 'unknown'))}</span>`;
+        }
 
         let resolvedIP = h.resolved_ip || '-';
         let latText = isOnline ? `${h.latency_ms} ms` : '-';
@@ -6397,14 +6516,15 @@ async function loadNetworkHealth() {
                                 <td><strong>${escapeHTML(id)}</strong></td>
                                 <td><code style="font-family: monospace; font-size: 12px; background: rgba(255, 255, 255, 0.05); padding: 2px 6px; border-radius: 4px;">${escapeHTML(resolvedIP)}</code></td>
                                 <td>
-                                    <span style="display:inline-flex; align-items:center; gap:6px;">
-                                        <span style="width:8px; height:8px; border-radius:50%; background-color:${dotColor};"></span>
-                                        ${escapeHTML(h.status)}
+                                    <span class="edge-status"${statusTitle ? ` title="${escapeHTML(statusTitle)}"` : ''}>
+                                        <span class="edge-status-dot edge-status-dot--${statusKind}"></span>
+                                        ${escapeHTML(statusLabel)}
                                     </span>
                                 </td>
                                 <td>${latText}</td>
                                 <td>${timeSince}</td>
                                 <td style="white-space: nowrap;">${escapeHTML(localTimeText)}</td>
+                                <td class="edge-schedule-cell">${scheduleHtml}</td>
                                 <td style="white-space: nowrap;">${escapeHTML(uptimeText)}</td>
                                 <td><code style="font-family: monospace; font-size: 11px;">${escapeHTML(verText)}</code></td>
                                 <td>${errMsg}</td>
@@ -6416,7 +6536,7 @@ async function loadNetworkHealth() {
     }
   } catch (err) {
     console.error(err);
-    tbody.innerHTML = `<tr><td colspan="11" style="color:var(--danger);text-align:center;">Failed to load network health: ${escapeHTML(err.toString())}</td></tr>`;
+    tbody.innerHTML = `<tr><td colspan="12" style="color:var(--danger);text-align:center;">Failed to load network health: ${escapeHTML(err.toString())}</td></tr>`;
   }
 
   // Auto refresh every 30 seconds if tab is still active

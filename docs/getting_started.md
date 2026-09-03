@@ -325,27 +325,83 @@ To configure the System Tray / Menu Bar utility to launch on login:
 
 ## Client Lifecycle Hooks & Failover Automation
 
-`lfr-tunnel` supports user-configured shell hooks that execute automatically during gateway state transitions (e.g. advance node shutdown warnings or regional failover).
+`lfr-tunnel` runs user-configured shell commands when the tunnel moves between gateways --
+when a gateway announces it is stopping, and around the failover or failback that follows.
+They exist so the things that care about the tunnel's public URL (a Liferay virtual host, a
+webhook registration, a DNS record) can be updated without watching the logs.
 
 ### Configuration (`~/.lfr-tunnel/config.yaml`)
-Add script paths or commands under the `hooks` section:
+
+Add script paths or commands under the `hooks` section. Anything you leave out is simply not
+run:
 
 ```yaml
 hooks:
-  warning_received: "/usr/local/bin/on-gateway-warning.sh" # Fired immediately upon server shutdown warning
-  stopping: "/usr/local/bin/on-gateway-stopping.sh"       # Fired right before tearing down the old tunnel
-  stopped: "/usr/local/bin/on-gateway-stopped.sh"         # Fired after old tunnel connection closes
-  starting: "/usr/local/bin/on-gateway-starting.sh"       # Fired before connecting to failover gateway
-  started: "/usr/local/bin/on-gateway-started.sh"         # Fired after successful handshake on new gateway
+  warning_received: "/usr/local/bin/on-gateway-warning.sh" # The gateway has announced it is stopping
+  stopping: "/usr/local/bin/on-gateway-stopping.sh"        # Right before the old tunnel is torn down
+  stopped: "/usr/local/bin/on-gateway-stopped.sh"          # The old tunnel has closed
+  starting: "/usr/local/bin/on-gateway-starting.sh"        # Before the client re-registers elsewhere
+  started: "/usr/local/bin/on-gateway-started.sh"          # A session is live again on the new gateway
 ```
 
-### Contextual Environment Variables
-Every hook receives the following environment variables during execution:
-* `LFT_EVENT` — The active lifecycle event name (`warning_received`, `stopping`, `stopped`, `starting`, `started`).
-* `LFT_NODE_ID` — ID of the regional edge node or central gateway.
-* `LFT_SECONDS_REMAINING` — Time remaining in seconds before scheduled gateway shutdown.
-* `LFT_FAILOVER_REGION` — Target failover region selected during re-probing.
-* `LFT_SUBDOMAIN` — Leased subdomain prefix.
+Each value is a command line, not a file path with special handling -- it is passed to
+`/bin/sh -c` (`cmd.exe /c` on Windows), so pipes, arguments and shell syntax all work.
+
+### When each hook fires
+
+The four session hooks fire around a **move**, not around the process. A move is a failover
+after a fault, a failback to the primary region, or a planned migration ahead of an announced
+gateway stop.
+
+| Event | Fires |
+| --- | --- |
+| `warning_received` | The connected gateway announces it is going down. Once per announcement, not once per heartbeat -- the warning repeats for the whole countdown. |
+| `stopping` | The session is ending and the client is about to move, while the old tunnel is still standing. |
+| `stopped` | The old tunnel has closed and its session has been cancelled. |
+| `starting` | Before the client begins re-registering. The destination region is not chosen yet. |
+| `started` | A session has been re-established and the new endpoint recorded. Fires for both a failback and a failover. |
+
+In a planned migration the full sequence is
+`warning_received` → `stopping` → `stopped` → `starting` → `started`. An unannounced failure
+produces the same sequence without `warning_received`. If every candidate region is exhausted,
+`started` does not fire -- there is no new session to report.
+
+Three cases where nothing fires, deliberately:
+
+* **The first connection and a normal shutdown.** `starting`/`started` are about moving to a
+  different gateway; the initial connect prints its URLs and `stopping`/`stopped` on Ctrl+C
+  would delay the exit for a hook whose work is already done.
+* **A client pinned with `-server`.** A pinned client never fails over ([#1275](https://github.com/peterrichards-lr/lfr-tunnel/issues/1275)),
+  so it has no moves to report.
+* **A hook you have not configured.** No shell is spawned.
+
+### Contextual environment variables
+
+Every hook receives all five, always, plus the environment the client itself was started
+with. Values that are not knowable for that event are empty (or `0`):
+
+| Variable | Value |
+| --- | --- |
+| `LFT_EVENT` | The event name: `warning_received`, `stopping`, `stopped`, `starting`, `started`. |
+| `LFT_NODE_ID` | The gateway that announced a stop. Empty when the move was not triggered by an announcement. It keeps naming the gateway being *left* for the rest of the sequence. |
+| `LFT_SECONDS_REMAINING` | Seconds until the announced stop, counting down as the move proceeds. `0` when no stop has been announced. |
+| `LFT_FAILOVER_REGION` | The region now serving the tunnel. Set on `started`; empty on the others, because the destination is not elected until the move is underway. |
+| `LFT_SUBDOMAIN` | The leased subdomain prefix. |
+
+### What a hook can and cannot do
+
+* **A hook cannot veto a transition.** Its exit status is logged and discarded. The move has
+  already been decided by the time a hook runs, and letting a script refuse one would leave
+  the tunnel down with no way to recover it. A failing hook does not stop the next one.
+* **A hook is bounded at 15 seconds.** After that it is killed and the client carries on. The
+  bound covers a hook that backgrounds a child as well, so a stray `&` cannot wedge the
+  client.
+* **The four session hooks run in order, one at a time**, so `stopped` has finished before
+  `starting` begins. The cost of that guarantee is that a slow hook delays the move by up to
+  its 15-second bound. `warning_received` is the exception: it runs concurrently, because the
+  point of the warning is to move *sooner*, and blocking the heartbeat to run a script would
+  work against that.
+* **Failures are visible.** Every run is logged, with the hook's combined output on failure.
 
 ---
 
@@ -398,4 +454,4 @@ Bodies are capped at 10 KB each. Prefer the Inspector at `http://localhost:4040`
 
 <!-- markdownlint-disable MD049 -->
 ---
-*Last Updated: 2026-09-02* | *Last Reviewed: 2026-09-02*
+*Last Updated: 2026-09-03* | *Last Reviewed: 2026-09-03*

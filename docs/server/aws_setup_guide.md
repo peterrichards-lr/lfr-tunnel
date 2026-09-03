@@ -9,7 +9,7 @@ that point on (DNS, Nginx, Let's Encrypt, systemd, `lfr-tunneld` configuration) 
 identical regardless of hosting provider.
 
 `lfr-tunnel` does not require AWS — DigitalOcean, Hetzner, and Linode remain equally
-supported, per the provider list in [`setup_guide.md` §2](setup_guide.md#2-vps-server-setup--security-hardening).
+supported, per the provider list in [`setup_guide.md` §2](setup_guide.md#2-vps-server-setup-security-hardening).
 This guide exists because AWS has a few provisioning steps that other providers handle
 differently or don't require at all, most importantly the Elastic IP step below.
 
@@ -34,7 +34,7 @@ differently or don't require at all, most importantly the Elastic IP step below.
 > [!NOTE]
 > **Region choice isn't just about latency.** The central control plane's SQLite
 > database stores real user registration/auth data (see
-> [`infosec.md` §4](../infosec.md#4-gateway-governance--data-plane-risk-controls)), so if
+> [`infosec.md` §4](../infosec.md#4-gateway-governance-data-plane-risk-controls)), so if
 > your deployment is subject to GDPR or similar data-residency requirements, provision
 > the central control plane in a region within that jurisdiction (e.g. an EU-based
 > organization would use an EU AWS region). Stateless edge nodes hold no persistent data,
@@ -42,7 +42,7 @@ differently or don't require at all, most importantly the Elastic IP step below.
 
 Launch an instance using the standard **Canonical Ubuntu Server 22.04 LTS** or
 **24.04 LTS** AMI — the same OS versions required by
-[`setup_guide.md` §2](setup_guide.md#2-vps-server-setup--security-hardening). Using the
+[`setup_guide.md` §2](setup_guide.md#2-vps-server-setup-security-hardening). Using the
 official Canonical AMI keeps the default SSH user as `ubuntu` — pass `-u ubuntu` to
 `scripts/common/setup-edge-vps.sh` (it has no default of its own; every flag is required)
 if you use `scripts/common/provision-aws-ec2.sh` (§6) or that script directly.
@@ -174,7 +174,7 @@ Once the instance is running, has an associated Elastic IP, and you can SSH into
 `ubuntu` with the key pair from §2:
 
 - **Central control plane**: continue from
-  [`setup_guide.md` §2.1](setup_guide.md#21-basic-os--package-updates) onward — nothing
+  [`setup_guide.md` §2.1](setup_guide.md#21-basic-os-package-updates) onward — nothing
   else in that guide is AWS-specific.
 - **Regional edge node**: continue with [`edge_setup_guide.md`](edge_setup_guide.md), or
   run `scripts/common/setup-edge-vps.sh -s <elastic-ip> -i ~/.ssh/lfr-tunnel-gateway.pem -u ubuntu ...`
@@ -622,4 +622,4 @@ Confirmed live against both hosted zones while writing this:
 
 <!-- markdownlint-disable MD049 -->
 ---
-*Last Updated: 2026-08-11* | *Last Reviewed: 2026-08-11*
+*Last Updated: 2026-09-03* | *Last Reviewed: 2026-09-03*

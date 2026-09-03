@@ -169,7 +169,7 @@ Two things to know before relying on it:
 #### Registering a New Edge Node with the Control Plane
 
 Track your nodes' plaintext tokens locally in a gitignored `edge_nodes.txt` (format in
-[edge_nodes.txt.example](../../edge_nodes.txt.example)), then render the registry:
+[edge_nodes.txt.example](https://github.com/peterrichards-lr/lfr-tunnel/blob/master/edge_nodes.txt.example)), then render the registry:
 
 ```bash
 ./bin/lfr-tunnel-ops render-edge-nodes
@@ -559,4 +559,4 @@ If your Edge VPS or Control Plane gateway has multiple public IP addresses confi
 
 <!-- markdownlint-disable MD049 -->
 ---
-*Last Updated: 2026-08-27* | *Last Reviewed: 2026-08-27*
+*Last Updated: 2026-09-03* | *Last Reviewed: 2026-09-03*

@@ -32,8 +32,14 @@ func TestProbeFastestRegionReportsUnreachable(t *testing.T) {
 }
 
 // TestRegionCacheProvisionalExpiresSooner is the other half. A user whose nearest edge is
-// inside its power-off window elects a distant region; pinning that for 24h means they
+// inside its power-off window elects a distant region; pinning that for a day means they
 // stay there all the next working day. Marking it provisional re-probes far sooner.
+//
+// Ages are expressed relative to the constants rather than in absolute hours (#1706). The
+// "survives past the provisional window" case was written as a literal 1h30m, which asserted
+// the old 24h TTL by accident and failed the moment that value was reconsidered -- the
+// property being tested is that a complete election outlives a provisional one, not what
+// either duration happens to be this month.
 func TestRegionCacheProvisionalExpiresSooner(t *testing.T) {
 	if provisionalRegionCacheTTL >= regionCacheTTL {
 		t.Fatalf("a provisional election must expire sooner than a complete one (%s vs %s)", provisionalRegionCacheTTL, regionCacheTTL)
@@ -45,7 +51,7 @@ func TestRegionCacheProvisionalExpiresSooner(t *testing.T) {
 		age         time.Duration
 		wantValid   bool
 	}{
-		{"complete election survives well past the provisional window", false, provisionalRegionCacheTTL + time.Hour, true},
+		{"complete election survives past the provisional window", false, provisionalRegionCacheTTL + (regionCacheTTL-provisionalRegionCacheTTL)/2, true},
 		{"complete election expires after its own TTL", false, regionCacheTTL + time.Minute, false},
 		{"provisional election is still valid while fresh", true, time.Minute, true},
 		{"provisional election expires quickly", true, provisionalRegionCacheTTL + time.Minute, false},

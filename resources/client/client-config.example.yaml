@@ -101,7 +101,23 @@ theme: ""
 log_dir: ""
 
 
-# --- Accepted by the parser, but nothing reads them today (#1708, #1709) ---
+# --- Run something when the tunnel moves gateway ---
+# Each value is a command line, passed to /bin/sh -c (cmd.exe /c on Windows), with LFT_EVENT,
+# LFT_NODE_ID, LFT_SECONDS_REMAINING, LFT_FAILOVER_REGION and LFT_SUBDOMAIN in its environment.
+# Bounded at 15 seconds; the exit status is logged but cannot stop the move. Anything left
+# empty is not run. A client pinned with -server fires none of these: it never fails over.
+hooks:
+  # The gateway has announced it is stopping. Once per announcement.
+  warning_received: ""
+  # Right before the old tunnel is torn down, and again once it has closed.
+  stopping: ""
+  stopped: ""
+  # Before the client re-registers, and once a session is live on the new gateway.
+  starting: ""
+  started: ""
+
+
+# --- Accepted by the parser, but nothing reads them today (#1709) ---
 # Listed so this file stays a complete key reference. Setting them has no effect.
 
 # Ignored: the token file path comes from LFT_TOKEN_FILE, and otherwise ~/.lfr-tunnel/token.
@@ -112,11 +128,3 @@ bypass_proxy: false
 
 # Saved by the Inspector's Settings tab, but nothing renders it.
 nav_placement: ""
-
-# Parsed, and passed to nothing: the client has no call site that fires lifecycle hooks (#1708).
-hooks:
-  warning_received: ""
-  stopping: ""
-  stopped: ""
-  starting: ""
-  started: ""

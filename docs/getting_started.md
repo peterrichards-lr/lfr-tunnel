@@ -267,6 +267,13 @@ To prefer a region while keeping failover, use `-region <name>`. To re-run the l
 after a gateway has come back, add `-refresh-region` once -- the election is otherwise cached for
 24 hours.
 
+> [!TIP]
+> `server_url:` above goes in the client config file, `~/.lfr-tunnel/config.yaml`. It is worth
+> knowing that file exists: it holds every setting you would otherwise retype -- subdomain,
+> ports, target host, access controls -- and it is the only place a gateway can be named
+> without pinning. See the **[Client Configuration File](client_configuration.md)** reference
+> for every key, its default, and how it interacts with flags and environment variables.
+
 ---
 
 ## Running in the Background & Start on Login
@@ -333,7 +340,8 @@ webhook registration, a DNS record) can be updated without watching the logs.
 ### Configuration (`~/.lfr-tunnel/config.yaml`)
 
 Add script paths or commands under the `hooks` section. Anything you leave out is simply not
-run:
+run. Every other key in this file is described in the [Client Configuration
+File](client_configuration.md) reference:
 
 ```yaml
 hooks:

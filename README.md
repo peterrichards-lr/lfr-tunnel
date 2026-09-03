@@ -16,6 +16,7 @@ To prevent information overload, our documentation is divided into dedicated, to
 
 ### 🚀 Getting Started & CLI Usage
 *   **[Getting Started Guide](docs/getting_started.md)** — Step-by-step instructions to install the client CLI (`lfr-tunnel`), register for access, claim your Personal Access Token (PAT), and connect your first tunnel.
+*   **[Client Configuration File](docs/client_configuration.md)** — Complete reference for `~/.lfr-tunnel/config.yaml`: every setting with its type, default and flag/environment equivalent, how flags, environment and file interact, and why `server_url:` avoids the pinning that `-server` applies.
 *   **[Liferay Sales Engineering (SE) Guide](docs/liferay-se-guide.md)** — Team-specific quickstart instructions, Dockerized wrapper scripts, EDR/SentinelOne bypass instructions, and Tomcat/Docker network setups.
 *   **[Model Context Protocol (MCP) Guide](docs/mcp.md)** — Integration specifications for using `lfr-tunnel` tools inside AI agentic coding workspaces.
 
@@ -52,4 +53,4 @@ This project is licensed under the MIT License. See [LICENSE](LICENSE) for detai
 
 <!-- markdownlint-disable MD049 -->
 ---
-*Last Updated: 2026-07-02* | *Last Reviewed: 2026-07-02*
+*Last Updated: 2026-09-03* | *Last Reviewed: 2026-09-03*

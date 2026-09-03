@@ -1,0 +1,130 @@
+# lfr-tunnel client configuration -- COMPLETE key reference.
+#
+# Copy this to ~/.lfr-tunnel/config.yaml (%USERPROFILE%\.lfr-tunnel\config.yaml on Windows) and
+# delete everything you do not need: every key is optional, and the file itself is optional.
+#
+# Every key `pkg/config.ClientConfig` accepts appears here exactly once, with a placeholder
+# value. A test asserts that (`TestClientExampleConfigCoversEveryField`), so adding a setting to
+# the struct without adding it here fails the build -- which is the point. An incomplete example
+# is worse than none, because it reads as authoritative (#1452, #1698).
+#
+# Per-setting guidance lives in docs/client_configuration.md. Deliberately not restated here:
+# one rule, one home. This file answers "what keys exist"; that document answers "what should I
+# set them to", and explains how these values interact with flags and environment variables.
+#
+# Secrets: auth_token, passcode and basic_auth are left EMPTY here on purpose. Prefer
+# ~/.lfr-tunnel/token (written by `lfr-tunnel login`) over putting a token in this file.
+
+
+# --- Which gateway to talk to ---
+
+# A starting gateway, WITHOUT pinning: the client still fetches the region list from it, elects
+# the closest region, and fails over. This is not the same as `-server <url>` or LFT_SERVER_URL,
+# both of which PIN the client to one gateway -- no region election, no failover (#1691). The
+# `-gateway <url>` flag is the command-line equivalent of this key.
+server_url: "https://tunnel.example.com"
+
+# Force one region and SKIP the latency election entirely. Leave empty to let the client probe
+# and pick the closest. If the name is not in the region list the client falls back to probing.
+# Failover still works with this set.
+region: ""
+
+# Fallback region name -> gateway URL map, for a client that cannot reach a gateway to ask.
+# Normally left empty: the live list is fetched from <server_url>/api/version at startup and
+# REPLACES whatever is here.
+regions: {}
+
+# Suppress reporting this client's region probe round-trip times to the gateway. What is sent is
+# a region name and a round trip in milliseconds -- no IP, nothing derived from one.
+disable_latency_report: false
+
+
+# --- Who you are ---
+
+# Personal Access Token. Prefer leaving this empty and using ~/.lfr-tunnel/token instead.
+auth_token: ""
+
+# Requested subdomain prefix. Defaults to this machine's hostname when empty.
+subdomain: "your-name-se"
+
+# A custom domain you have already reserved in the portal, instead of a subdomain.
+custom_domain: ""
+
+
+# --- What to expose ---
+
+# Local ports to publish. The first is the primary; the rest get a suffixed subdomain.
+ports:
+  - 8080
+
+# Hostname or IP the tunnel forwards to. Empty means 127.0.0.1.
+target_host: ""
+
+# Send the visitor's Host header through unchanged instead of rewriting it to target_host.
+preserve_host: false
+
+# Skip TLS verification when the LOCAL target serves HTTPS with a self-signed certificate.
+insecure_skip_verify: false
+
+
+# --- Who may reach your tunnel ---
+
+# Passcode visitors must enter. Combined with whitelist_ips as OR: either satisfies access.
+passcode: ""
+
+# Comma-separated IPs and/or CIDR ranges allowed through, e.g. "203.0.113.4, 198.51.100.0/24".
+whitelist_ips: ""
+
+# HTTP Basic Auth, "username:password".
+basic_auth: ""
+
+# Requests per second per subdomain. The gateway lowers this to your account limit and to its own
+# max_tunnel_rate_limit, including when it is 0 -- so 0 means "whatever the gateway allows".
+rate_limit: 0
+
+
+# --- Local behaviour ---
+
+# HTML file served with 503 while the Inspector's maintenance toggle is on. Empty = built-in page.
+maintenance_path: ""
+
+# Simulated round-trip latency added to every proxied request, e.g. "200ms". "0s" = off.
+latency: "0s"
+
+# Simulated bandwidth ceiling, e.g. "512kbps", "2mbps". Empty = unthrottled.
+bandwidth: ""
+
+# Injected banner theme: light, dark, system or time. Empty = whatever the portal has for you.
+theme: ""
+
+# Where the traffic and error logs are written. Empty = ~/.lfr-tunnel/logs. A leading ~ expands.
+log_dir: ""
+
+
+# --- Run something when the tunnel moves gateway ---
+# Each value is a command line, passed to /bin/sh -c (cmd.exe /c on Windows), with LFT_EVENT,
+# LFT_NODE_ID, LFT_SECONDS_REMAINING, LFT_FAILOVER_REGION and LFT_SUBDOMAIN in its environment.
+# Bounded at 15 seconds; the exit status is logged but cannot stop the move. Anything left
+# empty is not run. A client pinned with -server fires none of these: it never fails over.
+hooks:
+  # The gateway has announced it is stopping. Once per announcement.
+  warning_received: ""
+  # Right before the old tunnel is torn down, and again once it has closed.
+  stopping: ""
+  stopped: ""
+  # Before the client re-registers, and once a session is live on the new gateway.
+  starting: ""
+  started: ""
+
+
+# --- Accepted by the parser, but nothing reads them today (#1709) ---
+# Listed so this file stays a complete key reference. Setting them has no effect.
+
+# Ignored: the token file path comes from LFT_TOKEN_FILE, and otherwise ~/.lfr-tunnel/token.
+token_file: ""
+
+# Ignored: no code path consumes it.
+bypass_proxy: false
+
+# Saved by the Inspector's Settings tab, but nothing renders it.
+nav_placement: ""

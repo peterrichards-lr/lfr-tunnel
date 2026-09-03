@@ -1443,10 +1443,63 @@ type RegionCacheData struct {
 	// answer. That choice is the best of what was reachable, not the best available, so
 	// it expires quickly rather than pinning the client for a day (issue #1148).
 	Provisional bool `json:"provisional,omitempty"`
+	// Candidates is the set of gateways this election chose between, so a later run can tell
+	// that the menu has changed (#1706).
+	//
+	// Without it the cache could only notice its own choice DISAPPEARING, never a better one
+	// APPEARING -- so a client that elected the control plane while its nearest edge was
+	// asleep kept using it after the edge returned: nothing had failed, and the cached region
+	// was still on offer.
+	//
+	// Hosts rather than region names, because one gateway is advertised under several names
+	// ('us' and 'edge-us') and a rename would otherwise read as a changed menu and re-probe
+	// for no reason.
+	Candidates []string `json:"candidates,omitempty"`
+}
+
+// candidateHosts reduces a region map to the sorted, deduplicated gateways it offers.
+func candidateHosts(regions map[string]string) []string {
+	seen := make(map[string]bool, len(regions))
+	hosts := make([]string, 0, len(regions))
+	for _, regionURL := range regions {
+		host := gatewayHostKey(regionURL)
+		if host == "" || seen[host] {
+			continue
+		}
+		seen[host] = true
+		hosts = append(hosts, host)
+	}
+	sort.Strings(hosts)
+	return hosts
+}
+
+// sameCandidates reports whether two candidate sets offer the same gateways.
+func sameCandidates(a, b []string) bool {
+	if len(a) != len(b) {
+		return false
+	}
+	for i := range a {
+		if a[i] != b[i] {
+			return false
+		}
+	}
+	return true
 }
 
 // regionCacheTTL is how long a complete election is trusted.
-const regionCacheTTL = 24 * time.Hour
+//
+// One hour, not the day it used to be (#1706). The probe this avoids runs every region
+// concurrently with a 1.5s timeout and answers in well under a millisecond in practice, so the
+// cache was saving a fraction of a second per client start -- during which the client is
+// already making an HTTP round trip to /api/version anyway. Edge nodes cycle daily on an
+// 08:00-00:00 local schedule, so a 24h window was near certain to span a sleep/wake and go on
+// handing the user a gateway that was no longer the best one.
+//
+// This is a backstop now rather than the main mechanism: a changed candidate set invalidates
+// the cache immediately, which covers the sleep/wake case exactly instead of waiting out a
+// timer. The TTL still catches what that comparison cannot see, such as a path getting slower
+// with the node list unchanged.
+const regionCacheTTL = time.Hour
 
 // provisionalRegionCacheTTL is how long an election made with regions missing is trusted.
 // Short enough that a client started while an edge sat in its power-off window re-probes
@@ -1465,7 +1518,7 @@ func getRegionCachePath() (string, error) {
 	return filepath.Join(dir, "region_cache.json"), nil
 }
 
-func loadRegionCache() *RegionCacheData {
+func loadRegionCache(current []string) *RegionCacheData {
 	path, err := getRegionCachePath()
 	if err != nil {
 		return nil
@@ -1485,10 +1538,17 @@ func loadRegionCache() *RegionCacheData {
 	if time.Since(cache.Timestamp) > ttl {
 		return nil
 	}
+	// A cache written before the set of gateways changed is answering a different question
+	// from the one being asked now (#1706). An absent Candidates means a cache written by an
+	// older client: fall back to the TTL alone rather than discarding it, so upgrading does
+	// not force one needless re-probe on everybody.
+	if len(cache.Candidates) > 0 && !sameCandidates(cache.Candidates, current) {
+		return nil
+	}
 	return &cache
 }
 
-func saveRegionCache(bestRegion, serverURL string, provisional bool) {
+func saveRegionCache(bestRegion, serverURL string, provisional bool, candidates []string) {
 	path, err := getRegionCachePath()
 	if err != nil {
 		return
@@ -1496,6 +1556,7 @@ func saveRegionCache(bestRegion, serverURL string, provisional bool) {
 	cache := RegionCacheData{
 		BestRegion:  bestRegion,
 		ServerURL:   serverURL,
+		Candidates:  candidates,
 		Timestamp:   time.Now(),
 		Provisional: provisional,
 	}
@@ -1703,11 +1764,15 @@ func resolveServerURL(cfg *config.ClientConfig, isExplicitServer bool) {
 	if cfg.Region == "" {
 		if !isExplicitServer && len(cfg.Regions) > 0 {
 			if !*refreshRegion {
-				if cached := loadRegionCache(); cached != nil && cached.BestRegion != "" {
+				if cached := loadRegionCache(candidateHosts(cfg.Regions)); cached != nil && cached.BestRegion != "" {
 					if url, ok := cfg.Regions[cached.BestRegion]; ok {
 						cfg.Region = cached.BestRegion
 						cfg.ServerURL = url
-						slog.Info(fmt.Sprintf("[Client] Using cached best region: '%s' -> %s (cached for 24h, use -refresh-region to re-probe)", cfg.Region, cfg.ServerURL))
+						ttl := regionCacheTTL
+						if cached.Provisional {
+							ttl = provisionalRegionCacheTTL
+						}
+						slog.Info(fmt.Sprintf("[Client] Using cached best region: '%s' -> %s (cached for %s, use -refresh-region to re-probe)", cfg.Region, cfg.ServerURL, ttl))
 						return
 					}
 				}
@@ -1721,7 +1786,7 @@ func resolveServerURL(cfg *config.ClientConfig, isExplicitServer bool) {
 				cfg.ServerURL = cfg.Regions[bestRegion]
 				absent := append(append([]string{}, unreachable...), missing...)
 				sort.Strings(absent)
-				saveRegionCacheFn(bestRegion, cfg.ServerURL, len(absent) > 0)
+				saveRegionCacheFn(bestRegion, cfg.ServerURL, len(absent) > 0, candidateHosts(cfg.Regions))
 				if len(absent) > 0 {
 					slog.Info(fmt.Sprintf("[Client] Auto-detected best reachable region: '%s' -> %s. %d region(s) are currently unavailable (%s), so this choice is provisional and is re-probed within %s.",
 						bestRegion, cfg.ServerURL, len(absent), strings.Join(absent, ", "), provisionalRegionCacheTTL))
@@ -1748,7 +1813,7 @@ func resolveServerURL(cfg *config.ClientConfig, isExplicitServer bool) {
 				// The region the user actually asked for is itself one of the absent ones, so
 				// this election is provisional for the same reason (#1690) -- without it, asking
 				// for a sleeping edge by name pinned the client to the fallback for 24h.
-				saveRegionCacheFn(bestRegion, cfg.ServerURL, len(unreachable) > 0 || len(missing) > 0)
+				saveRegionCacheFn(bestRegion, cfg.ServerURL, len(unreachable) > 0 || len(missing) > 0, candidateHosts(cfg.Regions))
 				slog.Info(fmt.Sprintf("[Client] Auto-selected next best online region: '%s' -> %s", bestRegion, cfg.ServerURL))
 				return
 			}

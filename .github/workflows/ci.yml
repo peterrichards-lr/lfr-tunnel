@@ -34,6 +34,7 @@ jobs:
       ui: ${{ steps.filter.outputs.ui }}
       shell: ${{ steps.filter.outputs.shell }}
       hooks: ${{ steps.filter.outputs.hooks }}
+      docs: ${{ steps.filter.outputs.docs }}
       platform_sensitive: ${{ steps.filter.outputs.platform_sensitive }}
     steps:
       - name: Checkout Code
@@ -53,6 +54,7 @@ jobs:
               echo "ui=true"
               echo "shell=true"
               echo "hooks=true"
+              echo "docs=true"
               echo "platform_sensitive=true"
             } >> "$GITHUB_OUTPUT"
             exit 0
@@ -134,6 +136,18 @@ jobs:
             HOOKS=false
           fi
 
+          # Documentation: what mkdocs actually reads. `docs_dir` defaults to `docs/`, so
+          # mkdocs cannot see anything outside it -- which is the whole shape of #1721: a link
+          # to `edge_nodes.txt.example` at the repo root resolved fine on GitHub and was
+          # unresolvable to mkdocs. mkdocs.yml is included because `nav:` names files, so a
+          # rename there breaks the build with no docs/ change at all, and
+          # requirements-dev.txt because it pins the toolchain that decides what is a warning.
+          if echo "$CHANGED" | grep -qE '^docs/|^mkdocs\.yml$|^requirements-dev\.txt$|^\.github/workflows/'; then
+            DOCS=true
+          else
+            DOCS=false
+          fi
+
           # Platform-sensitive: can this diff behave differently on macOS or Windows than it
           # does on ubuntu? Files that are per-OS by construction (_windows.go and friends),
           # plus the areas that have actually produced per-OS failures in this repo -- the
@@ -156,6 +170,7 @@ jobs:
           echo "ui=$UI"    | tee -a "$GITHUB_OUTPUT"
           echo "shell=$SHELL_CHANGED" | tee -a "$GITHUB_OUTPUT"
           echo "hooks=$HOOKS" | tee -a "$GITHUB_OUTPUT"
+          echo "docs=$DOCS" | tee -a "$GITHUB_OUTPUT"
           echo "platform_sensitive=$PLATFORM_SENSITIVE" | tee -a "$GITHUB_OUTPUT"
 
   # Notices a functional change that arrives without a test (#1660).
@@ -243,6 +258,45 @@ jobs:
           echo "$CHANGED"
           echo
           python3 scripts/check_docs_review.py --changed-files $CHANGED
+
+  # Builds the documentation site on PRs, so a broken link fails the PR that introduces it
+  # (#1725). This is NOT the same check as docs-review-check above: that one reads the review
+  # footer at the bottom of a markdown file, and would pass a page mkdocs cannot build at all.
+  #
+  # The blind spot this closes: `Deploy Documentation` (.github/workflows/docs.yml) runs only
+  # on a push to master and is not a required context, so when #1712 added a link mkdocs could
+  # not resolve, the PR merged green and every docs deploy from 27 August to 3 September failed
+  # where nobody looks. A publish job is the wrong place to first learn a change is broken --
+  # by then it is already merged.
+  #
+  # Job-level `if:` is safe here: no matrix, so a gated-off job still reports its own context
+  # as `skipped`, which GitHub accepts (#1380). This is not a required context in its own
+  # right -- CI Gate is, and it lists this job in `needs:`.
+  docs-build:
+    name: Documentation Build
+    needs: changes
+    if: needs.changes.outputs.docs == 'true'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v7
+
+      - name: Set up Python
+        uses: actions/setup-python@v7
+        with:
+          python-version: "3.12"
+          cache: "pip"
+          cache-dependency-path: requirements-dev.txt
+
+      - name: Install dependencies
+        run: pip install --disable-pip-version-check -r requirements-dev.txt
+
+      - name: Build site
+        # Byte-for-byte the command Deploy Documentation runs, deliberately: a check that
+        # approximates the real build can pass while the real one fails, which is the failure
+        # this job exists to stop. `--strict` promotes every mkdocs WARNING -- an unresolvable
+        # link among them -- to a non-zero exit. `_site` is gitignored.
+        run: mkdocs build --site-dir _site --strict
 
   lint-and-format:
     name: Lint & Format Check
@@ -661,6 +715,7 @@ jobs:
     needs:
       - changes
       - docs-review-check
+      - docs-build
       - test-coverage-signal
       - lint-and-format
       - govulncheck

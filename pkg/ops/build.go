@@ -1,7 +1,9 @@
 package ops
 
 import (
+	"flag"
 	"fmt"
+	"io"
 	"os"
 	"path/filepath"
 	"regexp"
@@ -11,12 +13,27 @@ import (
 // BuildCommand handles the cross-compilation of client binaries.
 func BuildCommand(args []string) {
 	if IsHelpRequest(args) {
-		fmt.Println("Usage: lfr-tunnel-ops build")
+		fmt.Println("Usage: lfr-tunnel-ops build [-allow-no-default]")
 		fmt.Println("\nCross-compiles client binaries for linux/amd64, linux/arm64, darwin/amd64,")
 		fmt.Println("darwin/arm64, and windows/amd64 into dist/. Set VERSION to override the")
 		fmt.Println("version embedded via ldflags (defaults to pkg/config/version.go's Version).")
+		fmt.Println("\nThe gateway, status page and portal URLs baked into the clients come from")
+		fmt.Println("LFT_DEFAULT_SERVER_URL / LFT_DEFAULT_STATUS_PAGE_URL / LFT_DEFAULT_PORTAL_URL,")
+		fmt.Println("falling back to the client_defaults block in lfr-tunnel-ops.yaml.")
+		fmt.Println("\nRefuses to build clients with no default gateway, because they force every")
+		fmt.Println("user to pass -server, which pins them and disables failover (#1692).")
+		fmt.Println("-allow-no-default overrides that, for a deployment that wants none.")
 		return
 	}
+
+	// A real FlagSet rather than scanning args, for the reason sign records: `-allow-no-defalt`
+	// must be rejected, not silently ignored into building exactly what the flag was meant to
+	// authorise.
+	fs := flag.NewFlagSet("build", flag.ContinueOnError)
+	fs.SetOutput(io.Discard)
+	allowNoDefaultFlag := fs.Bool("allow-no-default", false, "build clients with no default gateway compiled in")
+	CheckFatal(fs.Parse(args), "Failed to parse arguments")
+	allowNoDefault := *allowNoDefaultFlag
 
 	fmt.Println("Starting cross-platform build...")
 
@@ -45,15 +62,31 @@ func BuildCommand(args []string) {
 	//
 	// Unset stays supported and means the same here as everywhere else: the client asks to
 	// be pointed at a gateway rather than guessing one.
-	serverURL := GetEnvOrDefault("LFT_DEFAULT_SERVER_URL", "")
-	statusPageURL := GetEnvOrDefault("LFT_DEFAULT_STATUS_PAGE_URL", "")
-	portalURL := GetEnvOrDefault("LFT_DEFAULT_PORTAL_URL", "")
+	// Environment first, then lfr-tunnel-ops.yaml (#1723). The release workflow sets these
+	// from repository variables and must keep winning; the config file exists so a LOCAL build
+	// has any source at all. Before this, it had none: `ops build` on a laptop silently
+	// produced clients with no gateway -- the #1692 condition all over again -- because three
+	// environment variables nothing mentions were the only way to supply them.
+	fileDefaults, err := LoadClientDefaults()
+	CheckFatal(err, "Failed to read client defaults from the ops config")
+
+	defaults := ResolveClientDefaults(fileDefaults)
+	serverURL := defaults.ServerURL
+	statusPageURL := defaults.StatusPageURL
+	portalURL := defaults.PortalURL
 
 	// Say which defaults are going in before compiling. An empty value is invisible in the
 	// finished binary, which is how a release shipped with none and nobody noticed.
 	reportDefault("DefaultServerURL", serverURL, "clients will ask to be pointed at a gateway")
 	reportDefault("DefaultStatusPageURL", statusPageURL, "no status-page hint when a gateway looks unreachable")
 	reportDefault("DefaultPortalURL", portalURL, "browser login falls back to the gateway, which serves the portal too")
+
+	// Refuse here, before compiling, rather than leaving it to deploy-clients (#1723).
+	// The guard downstream is correct and was never bypassed, but signing sits BETWEEN the two
+	// in the documented order, so the natural sequence was to build, codesign, Authenticode-sign
+	// and GPG-sign a set of binaries that the very next command then refused. Failing at the
+	// start costs seconds; failing at publish costs the whole cycle.
+	RequireBuildableDefaults(serverURL, allowNoDefault)
 
 	sourceVersion := extractVersion()
 	var built []string

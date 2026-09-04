@@ -855,6 +855,27 @@ func executeSubcommands(cfg *config.ClientConfig, sub string, subdomainFlagPasse
 	return false
 }
 
+// defaultLocalPort is the port published when nobody asked for anything and discovery
+// turned up nothing either. It is decided here, at the point of use, rather than being
+// seeded into DefaultClientConfig -- seeding it there made "the user asked for 8080"
+// indistinguishable from "the user said nothing", which left every discovery branch below
+// unreachable (#1710).
+const defaultLocalPort = 8080
+
+// Indirection so the tests can drive each branch of resolvePortsAndMappings without a
+// Liferay workspace on disk, a Docker daemon, or a live listener on 8080. Production code
+// never reassigns these.
+var (
+	isLiferayWorkspace   = client.IsLiferayWorkspace
+	detectWorkspacePorts = client.DetectWorkspacePorts
+	autoDiscoverTarget   = client.AutoDiscoverTarget
+)
+
+// resolvePortsAndMappings decides which local ports the tunnel publishes.
+//
+// An empty resolved list means "nobody said" -- not "no ports" -- and is what makes the
+// workspace scan and host auto-discovery reachable. An explicit -ports flag, ports: in the
+// config file, or LFT_CLIENT_PORTS always wins and skips discovery entirely.
 func resolvePortsAndMappings(cfg *config.ClientConfig) []client.PortMapping {
 	var ports []int
 	var err error
@@ -887,17 +908,20 @@ func resolvePortsAndMappings(cfg *config.ClientConfig) []client.PortMapping {
 			})
 		}
 	} else {
-		if client.IsLiferayWorkspace(".") {
+		if isLiferayWorkspace(".") {
 			slog.Info("[Client] Liferay workspace detected. Scanning for Client Extensions...")
-			portMappings, err = client.DetectWorkspacePorts(".")
+			portMappings, err = detectWorkspacePorts(".")
 			if err != nil {
 				slog.Info(fmt.Sprintf("[Warning] Failed to scan workspace: %v. Using defaults.", err))
-				portMappings = []client.PortMapping{{LocalPort: 8080}}
+				portMappings = []client.PortMapping{{LocalPort: defaultLocalPort}}
 			}
 		} else {
 			slog.Info("[Client] No explicit ports provided. Auto-discovering Liferay / LDM instances...")
-			discoveryResult, err := client.AutoDiscoverTarget()
-			if err == nil && discoveryResult != nil {
+			discoveryResult, err := autoDiscoverTarget()
+			// len(Ports) is part of the condition so the 8080 fallback below is total:
+			// a result carrying no ports would otherwise leave portMappings nil and the
+			// client would publish nothing at all.
+			if err == nil && discoveryResult != nil && len(discoveryResult.Ports) > 0 {
 				slog.Info(fmt.Sprintf("[Client] Auto-discovered %s target on host '%s' with ports: %v", discoveryResult.Type, discoveryResult.Host, discoveryResult.Ports))
 
 				// Automatically update the target host if it wasn't explicitly set via flags
@@ -917,8 +941,8 @@ func resolvePortsAndMappings(cfg *config.ClientConfig) []client.PortMapping {
 					})
 				}
 			} else {
-				slog.Info("[Client] No active LDM/Liferay instances discovered. Defaulting to port 8080.")
-				portMappings = []client.PortMapping{{LocalPort: 8080}}
+				slog.Info(fmt.Sprintf("[Client] No active LDM/Liferay instances discovered. Defaulting to port %d.", defaultLocalPort))
+				portMappings = []client.PortMapping{{LocalPort: defaultLocalPort}}
 			}
 		}
 	}

@@ -806,7 +806,13 @@ func TestResolvePortsAndMappings_ScansARealWorkspaceOnDisk(t *testing.T) {
 	if err := os.Chdir(workspace); err != nil {
 		t.Fatalf("failed to chdir into the workspace fixture: %v", err)
 	}
-	t.Cleanup(func() { _ = os.Chdir(cwd) }) //nolint:errcheck
+	t.Cleanup(func() {
+		// Checked rather than discarded: a chdir that silently failed to restore would
+		// leave every later test in this binary running from the temp workspace.
+		if cerr := os.Chdir(cwd); cerr != nil {
+			t.Errorf("failed to restore the working directory: %v", cerr)
+		}
+	})
 
 	oldPortsStr := *portsStr
 	*portsStr = ""

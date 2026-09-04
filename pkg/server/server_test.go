@@ -325,11 +325,26 @@ type mockMailSender struct {
 	sentTextBody string
 	sentHtmlBody string
 	emails       []mockEmail
+	// failWith makes every Send fail, without recording the email. Set through
+	// failSends so a test can exercise the paths that have to cope with mail not
+	// arriving -- an email that failed to send is not an email, so it deliberately
+	// leaves getSentEmails() and the last* accessors untouched.
+	failWith error
+}
+
+// failSends makes subsequent sends fail with err, or succeed again when err is nil.
+func (m *mockMailSender) failSends(err error) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	m.failWith = err
 }
 
 func (m *mockMailSender) Send(to string, subject string, textBody string, htmlBody string) error {
 	m.mu.Lock()
 	defer m.mu.Unlock()
+	if m.failWith != nil {
+		return m.failWith
+	}
 	m.sentTo = to
 	m.sentSubject = subject
 	m.sentTextBody = textBody
@@ -371,6 +386,7 @@ func (m *mockMailSender) reset() {
 	defer m.mu.Unlock()
 	m.sentTo, m.sentSubject, m.sentTextBody, m.sentHtmlBody = "", "", "", ""
 	m.emails = nil
+	m.failWith = nil
 }
 
 func (m *mockMailSender) getSentEmails() []mockEmail {

@@ -944,6 +944,13 @@ Three details worth knowing:
   deadline that expired while they were away.
 - **"Remind me later" lasts for one session.** The gate is shown again at the next login,
   which is what stops the banner becoming wallpaper.
+- **A reminder that fails to send is retried on the next sweep.** The email is claimed
+  before it is sent, so two gateway processes cannot both send it, and the claim is given
+  back when the send fails -- an SMTP outage therefore delays the reminder rather than
+  losing it while recording it as delivered. If mail and the database fail together the
+  claim cannot be given back, and that one case is logged as
+  `[Consent] Could not release the policy warning claim`, naming the user who is now
+  recorded as warned without having been.
 - **`policy_consent_stops_active_tunnels` is off by default** and should usually stay off.
   Refusing the next tunnel enforces the policy completely — no tunnel survives a restart —
   whereas turning this on drops live connections the moment the sweep notices, which for a
@@ -1419,4 +1426,4 @@ To guarantee that outbound connections originating from the VPS are consistently
 
 <!-- markdownlint-disable MD049 -->
 ---
-*Last Updated: 2026-09-03* | *Last Reviewed: 2026-09-03*
+*Last Updated: 2026-09-04* | *Last Reviewed: 2026-09-04*

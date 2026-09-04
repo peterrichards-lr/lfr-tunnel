@@ -23,9 +23,17 @@ type UserRepository interface {
 // AcknowledgementRepository stores the versioned-acknowledgement records behind the
 // policy re-consent gate (#1707).
 //
-// Note what is absent: no update, no delete. The acceptance history is append-only, and
-// that is enforced by there being no method that could do otherwise rather than by a
-// convention a later caller could break.
+// Note what is absent: nothing here updates or deletes an ACCEPTANCE. The acceptance
+// history in user_acknowledgements is append-only, and that is enforced by there being
+// no method that could do otherwise rather than by a convention a later caller could
+// break.
+//
+// The notice methods -- RecordFirstSeen/GetFirstSeen and the warning-notified pair --
+// are a different table, user_acknowledgement_notices, recording what a user has been
+// SHOWN rather than what they agreed to. That table is mutable by design:
+// MarkWarningNotified is a compare-and-set on it, and ClearWarningNotified releases
+// that claim again. Neither touches consent, so the append-only rule above is
+// unaffected by them.
 type AcknowledgementRepository interface {
 	RecordAcknowledgement(a *Acknowledgement) error
 	HasAcknowledged(userID, documentID, version string) (bool, error)
@@ -33,6 +41,7 @@ type AcknowledgementRepository interface {
 	RecordFirstSeen(userID, documentID, version string, at time.Time) (time.Time, error)
 	GetFirstSeen(userID, documentID, version string) (time.Time, error)
 	MarkWarningNotified(userID, documentID, version string) (bool, error)
+	ClearWarningNotified(userID, documentID, version string) error
 	ListPendingWarnings(documentID, version string, cutoff time.Time) ([]string, error)
 }
 

@@ -30,8 +30,39 @@ func (s *Server) runPolicyConsentSweep(r *http.Request) {
 	if s.cfg == nil || s.db == nil || s.cfg.PolicyVersion == "" {
 		return
 	}
-	version := s.cfg.PolicyVersion
 
+	// A gateway with no mail sender skips the warning phase rather than working through
+	// it: the claim below is a compare-and-set with no second reader, so claiming when
+	// nothing can be sent would record warnings that never left the building and leave
+	// them for nobody to retry. Enforcement still runs -- it does not depend on mail.
+	if s.notifications != nil && s.notifications.Sender() != nil {
+		s.warnUsersEnteringConsentWindow(s.cfg.PolicyVersion, r)
+	}
+
+	if !s.cfg.PolicyConsentStopsActiveTunnels {
+		return
+	}
+	s.terminateExpiredConsentTunnels()
+}
+
+// warnUsersEnteringConsentWindow emails each user once, on entering the warning window.
+//
+// The ordering is claim, then send, then release if the send failed. Each step is there
+// for a reason and the reasons pull against each other:
+//
+//   - Claiming BEFORE the send is what makes this safe to run on every tick and on more
+//     than one gateway process. MarkWarningNotified is a compare-and-set; the loser gets
+//     false and stays quiet. Sending first and marking afterwards -- the pattern
+//     checkExpiringReservations uses -- would let two sweeps both send.
+//   - Releasing AFTER a failed send is what stops that claim becoming a lie (#1724).
+//     Without it the user is permanently recorded as warned having never been warned,
+//     and under #1707 their clients stop at expiry with no notice through any channel
+//     they saw.
+//
+// The two coexist because the release only ever happens on the path where nothing was
+// sent. The row returns to NULL exactly when nobody has been mailed, so a racing sweep
+// that claims it next is retrying the send rather than repeating it.
+func (s *Server) warnUsersEnteringConsentWindow(version string, r *http.Request) {
 	// Anyone whose first sight is older than (grace - warning) has entered the warning
 	// window. The query narrows the scan; whether each user has since accepted is decided
 	// below, per user, because acceptance lives in a different table.
@@ -58,15 +89,24 @@ func (s *Server) runPolicyConsentSweep(r *http.Request) {
 			slog.Error("[Consent] Failed to claim the policy warning email", "user", userID, "error", err)
 			continue
 		}
-		if claimed {
-			s.sendPolicyConsentWarningEmail(user, state, r)
+		if !claimed {
+			continue
+		}
+		if err := s.sendPolicyConsentWarningEmail(user, state, r); err != nil {
+			slog.Error("[Consent] Failed to send the policy reminder", "user", userID, "error", err)
+			if relErr := s.db.ClearWarningNotified(userID, PolicyDocumentID, version); relErr != nil {
+				// Mail and the database are failing at the same time. There is nothing
+				// better to do from here -- a retry against a database that has just
+				// refused a write has no better prospect, and holding the loop open makes
+				// the rest of the sweep wait on it -- so state the consequence plainly
+				// instead of logging a bare error. This is the one path where the record
+				// still ends up claiming a warning that did not happen, and the log line
+				// is the only thing that will ever say so.
+				slog.Error("[Consent] Could not release the policy warning claim: this user is recorded as warned but was not, and no later sweep will retry",
+					"user", userID, "error", relErr)
+			}
 		}
 	}
-
-	if !s.cfg.PolicyConsentStopsActiveTunnels {
-		return
-	}
-	s.terminateExpiredConsentTunnels()
 }
 
 // sendPolicyConsentWarningEmail is the one message a user who lives entirely on the CLI
@@ -76,12 +116,14 @@ func (s *Server) runPolicyConsentSweep(r *http.Request) {
 // does not suppress it. That matches email_policy.go's own criterion: silence here makes
 // the loss -- tunnel access cut off with no warning -- irreversible for the user, and the
 // mail is not marketing, it is the last notice before enforcement.
-func (s *Server) sendPolicyConsentWarningEmail(user *db.User, state ConsentState, r *http.Request) {
+func (s *Server) sendPolicyConsentWarningEmail(user *db.User, state ConsentState, r *http.Request) error {
 	if s.notifications == nil || s.notifications.Sender() == nil {
-		return
+		return fmt.Errorf("no mail sender is configured")
 	}
 	if !shouldSendTo(user, emailTransactional) {
-		return
+		// Declining to send is a decision, not a failure: a retry next hour would decide
+		// the same thing, forever. nil so the caller keeps the claim.
+		return nil
 	}
 
 	portalLink := state.PortalURL
@@ -103,22 +145,23 @@ func (s *Server) sendPolicyConsentWarningEmail(user *db.User, state ConsentState
 		CookieURL:  state.CookieURL,
 	})
 	if err != nil {
-		slog.Info(fmt.Sprintf("[Consent] Failed to render the policy reminder template: %v", err))
-		return
+		return fmt.Errorf("rendering the policy reminder template: %w", err)
 	}
 	subject := "Action required: accept the updated Privacy Policy"
 	plain := fmt.Sprintf(
 		"Hi %s,\n\nThe Privacy Policy and Cookie Disclosure have been updated. Your acceptance is due within %s (by %s).\n\nAfter that, new tunnels will be refused until you accept. Tunnels already running are not interrupted.\n\nAccept here: %s\n",
 		user.FirstName, remaining, deadline, portalLink,
 	)
-	// Logged, not discarded (#1707). This reminder is the only warning a CLI-only user gets
-	// before their client stops at expiry, so a send that fails silently is a user cut off
-	// with no notice through any channel they saw.
-	go func() {
-		if err := s.notifications.Sender().Send(user.Email, subject, body, plain); err != nil {
-			slog.Info(fmt.Sprintf("[Consent] Failed to send the policy reminder to user %s: %v", user.ID, err))
-		}
-	}()
+	// Returned, not logged-and-swallowed, and sent on this goroutine rather than a
+	// detached one (#1724). The caller claimed this send before making it, and a claim can
+	// only be released by somebody who observes the outcome -- a fire-and-forget `go func`
+	// has no outcome to hand back. The reminder is the only warning a CLI-only user gets
+	// before their client stops at expiry, so the caller needs to know.
+	//
+	// Blocking the sweep is affordable: it runs on the hourly prune ticker, where
+	// checkExpiringReservations already sends synchronously for the same reason, and
+	// mail.SMTPClient dials with its own timeout.
+	return s.notifications.Sender().Send(user.Email, subject, body, plain)
 }
 
 // policyReminderEmail is the template context for policy_consent_reminder.html. A named

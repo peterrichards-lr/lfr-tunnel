@@ -245,6 +245,7 @@ test-hooks:
 	@./tests/hooks/test-e2e-teardown.sh
 	@./tests/hooks/test-power-hook-credentials.sh
 	@./tests/hooks/test-ci-hook-gate.sh
+	@./tests/hooks/test-ci-docs-gate.sh
 	@./tests/hooks/test-coverage-signal.sh
 	@./tests/hooks/test-install-script.sh
 

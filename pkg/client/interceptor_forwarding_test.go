@@ -109,7 +109,9 @@ func TestInterceptPort_ForwardingHeadersAndHost(t *testing.T) {
 			if err != nil {
 				t.Fatalf("request through interceptor: %v", err)
 			}
-			_ = resp.Body.Close() //nolint:errcheck
+			if err := resp.Body.Close(); err != nil {
+				t.Errorf("close response body: %v", err)
+			}
 
 			if want := tc.wantHost(targetPort); got.Host != want {
 				t.Errorf("Host: got %q, want %q", got.Host, want)
@@ -150,7 +152,9 @@ func TestInterceptPort_QueryStringPreserved(t *testing.T) {
 	if err != nil {
 		t.Fatalf("request through interceptor: %v", err)
 	}
-	_ = resp.Body.Close() //nolint:errcheck
+	if err := resp.Body.Close(); err != nil {
+		t.Errorf("close response body: %v", err)
+	}
 
 	if got.URL.Path != "/api/search" {
 		t.Errorf("path: got %q, want %q", got.URL.Path, "/api/search")

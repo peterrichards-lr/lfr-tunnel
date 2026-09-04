@@ -109,6 +109,63 @@ type opsConfigTarget struct {
 type opsConfigFile struct {
 	opsConfigTarget `yaml:",inline"`
 	Targets         map[string]opsConfigTarget `yaml:"targets"`
+	// ClientDefaults is file-level rather than per-target, and deliberately so: `build`
+	// produces one dist/ that every target publishes, so there is no per-target answer to
+	// give. Putting it inside a target would also inherit the trap documented on session:,
+	// where a block at the top level of a multi-target file is silently ignored.
+	ClientDefaults ClientDefaults `yaml:"client_defaults"`
+}
+
+// ClientDefaults are the URLs compiled into client binaries at build time.
+//
+// These exist because a local `build` previously had no source for them at all (#1723). The
+// release workflow supplies them from repository variables; a laptop supplied nothing, so
+// `ops build` produced clients with no gateway -- the #1692 condition, which forces every user
+// onto -server and therefore pins them. Declaring them here gives a local build the same source
+// of truth CI has, alongside every other deployment setting.
+type ClientDefaults struct {
+	ServerURL     string `yaml:"server_url"`
+	StatusPageURL string `yaml:"status_page_url"`
+	PortalURL     string `yaml:"portal_url"`
+}
+
+// ResolveClientDefaults returns the URLs to compile into client binaries.
+//
+// Environment first, then the config file, PER FIELD. Per field matters: setting only
+// LFT_DEFAULT_SERVER_URL must not blank the status page URL the file supplies, which an
+// all-or-nothing choice between the two sources would do.
+//
+// The environment wins because that is how .github/workflows/release.yml supplies these from
+// repository variables. If the file won, a local checkout could change what CI ships.
+func ResolveClientDefaults(file ClientDefaults) ClientDefaults {
+	return ClientDefaults{
+		ServerURL:     GetEnvOrDefault("LFT_DEFAULT_SERVER_URL", file.ServerURL),
+		StatusPageURL: GetEnvOrDefault("LFT_DEFAULT_STATUS_PAGE_URL", file.StatusPageURL),
+		PortalURL:     GetEnvOrDefault("LFT_DEFAULT_PORTAL_URL", file.PortalURL),
+	}
+}
+
+// LoadClientDefaults reads the file-level client_defaults block, independently of any target.
+//
+// Absent file or absent block yields a zero value and no error: the config file is optional,
+// and callers decide whether an empty ServerURL is acceptable. A malformed file IS an error --
+// silently building with no defaults is the failure this exists to prevent.
+func LoadClientDefaults() (ClientDefaults, error) {
+	path := GetEnvOrDefault("LFT_OPS_CONFIG", "lfr-tunnel-ops.yaml")
+
+	raw, err := os.ReadFile(path)
+	if err != nil {
+		if os.IsNotExist(err) {
+			return ClientDefaults{}, nil
+		}
+		return ClientDefaults{}, fmt.Errorf("reading %s: %w", path, err)
+	}
+
+	var cfg opsConfigFile
+	if err := yaml.Unmarshal(raw, &cfg); err != nil {
+		return ClientDefaults{}, fmt.Errorf("parsing %s: %w", path, err)
+	}
+	return cfg.ClientDefaults, nil
 }
 
 // loadOpsConfigFile reads the path named by LFT_OPS_CONFIG (defaulting to

@@ -215,8 +215,8 @@ func RequireDefaultGateway(m BuildManifest, command string, allowNoDefault bool)
 
 	if allowNoDefault {
 		fmt.Printf("WARNING: %s\n", err)
-		fmt.Printf("Continuing anyway because -allow-no-default was passed. %s will publish clients "+
-			"that ask to be pointed at a gateway.\n", command)
+		fmt.Printf("Continuing anyway because -allow-no-default was passed. %s will proceed with "+
+			"clients that ask to be pointed at a gateway.\n", command)
 		return
 	}
 
@@ -237,4 +237,40 @@ func currentGitCommit() string {
 		return unknownValue
 	}
 	return commit
+}
+
+// RequireBuildableDefaults refuses to compile clients with no default gateway (#1723).
+//
+// The same condition RequireDefaultGateway enforces at publish time, moved to the start of the
+// pipeline. That guard is correct and was never bypassed -- but signing happens between build
+// and publish, so without this the natural sequence was to build, then codesign, Authenticode-sign
+// and GPG-sign a set of binaries that deploy-clients then refused. The cost of learning this
+// late is a whole build-and-sign cycle, and on a machine where signing raises a biometric
+// prompt, a person's attention as well.
+//
+// Takes the URL rather than a manifest because at this point nothing has been built, so there
+// is no manifest to read.
+func RequireBuildableDefaults(serverURL string, allowNoDefault bool) {
+	if serverURL != "" {
+		return
+	}
+
+	msg := "these clients would have no default gateway compiled in, so every user has to pass " +
+		"-server -- which pins the client and disables region selection and failover (#1691)"
+
+	if allowNoDefault {
+		fmt.Printf("WARNING: %s\n", msg)
+		fmt.Println("Continuing anyway because -allow-no-default was passed.")
+		return
+	}
+
+	fmt.Fprintf(os.Stderr, "FATAL: refusing to build clients with no default gateway: %s\n", msg)
+	fmt.Fprintln(os.Stderr, "Set LFT_DEFAULT_SERVER_URL, or add a client_defaults block to lfr-tunnel-ops.yaml:")
+	fmt.Fprintln(os.Stderr, "")
+	fmt.Fprintln(os.Stderr, "    client_defaults:")
+	fmt.Fprintln(os.Stderr, "      server_url: https://tunnel.example.com")
+	fmt.Fprintln(os.Stderr, "      status_page_url: https://status.example.com")
+	fmt.Fprintln(os.Stderr, "")
+	fmt.Fprintln(os.Stderr, "Pass -allow-no-default to override if this deployment really wants none.")
+	os.Exit(1)
 }

@@ -1,4 +1,4 @@
-.PHONY: fmt vet test ui-dist compile-check test-hooks check-contexts check-attribution check-css check-contrast check-i18n build deploy clean install-hook e2e e2e-sso e2e-edge e2e-ui help
+.PHONY: fmt vet test test-locked ui-dist compile-check test-hooks check-contexts check-attribution check-css check-contrast check-i18n build deploy clean install-hook e2e e2e-sso e2e-edge e2e-ui help
 
 VERSION ?= $(shell grep -oE 'Version = "[^"]+"' pkg/config/version.go | cut -d'"' -f2)
 
@@ -119,13 +119,25 @@ compile-check: edr-guard
 	@echo "Checking every package compiles, including those with no tests..."
 	@go build ./...
 
+# Serialised through the lock because TEST_BINARY is a fixed absolute path shared by every
+# worktree and clone -- concurrent runs deleted each other's binary and reported it as a test
+# failure (#1714). compile-check stays a prerequisite of test, not of test-locked, so it is
+# still guaranteed to run and does not hold the lock while it builds.
 test: compile-check
+	@./scripts/with-test-lock.sh $(MAKE) --no-print-directory test-locked
+
+# Internal: the body of `test`, run while holding the lock. Use `make test`.
+test-locked:
 	@for pkg in $$(go list -f '{{if .TestGoFiles}}{{.ImportPath}}{{end}}' $(PKG)); do \
 		rm -f $(TEST_BINARY); \
 		go test -c $(TEST_BUILD_FLAGS) -o $(TEST_BINARY) $$pkg || exit 1; \
-		if [ -f $(TEST_BINARY) ]; then \
-			(cd "$$(go list -f '{{.Dir}}' $$pkg | tr '\\' '/')" && $(TEST_BINARY) $(TEST_FLAGS)) || exit 1; \
+		if [ ! -f $(TEST_BINARY) ]; then \
+			echo "FAILED: $$pkg has test files but no binary was produced at $(TEST_BINARY)."; \
+			echo "Nothing ran for this package. If another test run is active it removed the"; \
+			echo "binary -- that is #1714, and it is not a failure of the code under test."; \
+			exit 1; \
 		fi; \
+		(cd "$$(go list -f '{{.Dir}}' $$pkg | tr '\\' '/')" && $(TEST_BINARY) $(TEST_FLAGS)) || exit 1; \
 	done
 	@rm -f $(TEST_BINARY)
 
@@ -228,6 +240,7 @@ test-hooks:
 	@./tests/hooks/test-pull-images.sh
 	@./tests/hooks/test-closing-refs.sh
 	@./tests/hooks/test-compile-check.sh
+	@./tests/hooks/test-test-lock.sh
 	@./tests/hooks/test-install-paths.sh
 	@./tests/hooks/test-e2e-teardown.sh
 	@./tests/hooks/test-power-hook-credentials.sh

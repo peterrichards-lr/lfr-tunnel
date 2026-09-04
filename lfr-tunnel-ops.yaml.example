@@ -12,6 +12,29 @@
 # in your shell profile (or pass -i/-u/-s flags every time), you don't need it at all.
 #
 # ---------------------------------------------------------------------------------------
+# Client build defaults (file-level -- applies to every target)
+# ---------------------------------------------------------------------------------------
+#
+# The URLs compiled into client binaries by `lfr-tunnel-ops build`. Environment variables
+# win over this block: LFT_DEFAULT_SERVER_URL, LFT_DEFAULT_STATUS_PAGE_URL and
+# LFT_DEFAULT_PORTAL_URL, which is how the release workflow supplies them from repository
+# variables.
+#
+# server_url matters most. A client built without it has no gateway to start from, so every
+# user has to pass -server -- and -server PINS the client to that one gateway, switching off
+# both the closest-gateway election and failover. `build`, `sign` and `deploy-clients` all
+# refuse rather than produce one; pass -allow-no-default if that is genuinely what you want.
+#
+# This block is file-level on purpose: `build` produces one dist/ that every target
+# publishes, so there is no per-target answer to give.
+#
+# client_defaults:
+#   server_url: https://tunnel.example.com
+#   status_page_url: https://status.example.com
+#   # Optional. Unset means browser login falls back to the gateway, which serves the portal.
+#   portal_url: https://tunnel.example.com/portal
+
+# ---------------------------------------------------------------------------------------
 # Option A: single target (most setups -- one operator, one central VPS)
 # ---------------------------------------------------------------------------------------
 

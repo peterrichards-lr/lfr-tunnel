@@ -18,7 +18,7 @@ import (
 // SignCommand handles the signing of macOS, Windows, and Linux binaries.
 func SignCommand(args []string) {
 	if IsHelpRequest(args) {
-		fmt.Println("Usage: lfr-tunnel-ops sign [-allow-stale]")
+		fmt.Println("Usage: lfr-tunnel-ops sign [-allow-stale] [-allow-no-default]")
 		fmt.Println("\nSigns dist/'s built binaries: macOS via codesign (LFT_MACOS_IDENTITY),")
 		fmt.Println("Windows via osslsigncode (LFT_SIGN_KEY/LFT_SIGN_CRT or LFT_SIGN_P12, plus")
 		fmt.Println("LFT_SIGN_PASS), and Linux via a detached GPG signature (LFT_GPG_KEY,")
@@ -27,6 +27,8 @@ func SignCommand(args []string) {
 		fmt.Println("\nRefuses to run unless dist/'s build manifest matches pkg/config/version.go,")
 		fmt.Println("so last release's binaries cannot be signed by accident (#1279).")
 		fmt.Println("-allow-stale overrides that, deliberately.")
+		fmt.Println("\nAlso refuses to sign clients with no default gateway, since deploy-clients")
+		fmt.Println("would refuse to publish them. -allow-no-default overrides that.")
 		return
 	}
 
@@ -35,6 +37,7 @@ func SignCommand(args []string) {
 	fs := flag.NewFlagSet("sign", flag.ContinueOnError)
 	fs.SetOutput(io.Discard)
 	allowStale := fs.Bool("allow-stale", false, "sign dist/ even if it was not built from the current source")
+	allowNoDefault := fs.Bool("allow-no-default", false, "sign clients that have no default gateway compiled in")
 	CheckFatal(fs.Parse(args), "Failed to parse arguments")
 
 	fmt.Println("=== Beginning Signing Process ===")
@@ -43,7 +46,13 @@ func SignCommand(args []string) {
 
 	// Before anything is signed. A signature over the wrong bytes is worse than no signature:
 	// it makes stale artefacts look verified all the way to the user (#1279).
-	RequireCurrentDist(binDir, "sign", *allowStale)
+	manifest := RequireCurrentDist(binDir, "sign", *allowStale)
+
+	// Signing is the expensive step -- it raises a biometric prompt and burns a person's
+	// attention -- and it sits between build and publish, so without this the natural sequence
+	// signed binaries deploy-clients would then refuse (#1723). Same condition, checked before
+	// the cost rather than after.
+	RequireDefaultGateway(manifest, "sign", *allowNoDefault)
 
 	macosIdentity := GetEnvOrDefault("LFT_MACOS_IDENTITY", "")
 	signP12 := GetEnvOrDefault("LFT_SIGN_P12", "")

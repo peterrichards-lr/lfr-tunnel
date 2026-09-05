@@ -2,6 +2,7 @@ package gui
 
 import (
 	"encoding/json"
+	"net/http/httptest"
 	"os"
 	"path/filepath"
 	"strconv"
@@ -80,5 +81,30 @@ func TestGetRunningState(t *testing.T) {
 	}
 	if resolvedState == nil || resolvedState.InspectorPort != 4040 {
 		t.Errorf("expected inspector port to be 4040")
+	}
+}
+
+// TestHandleConfigGetStillReportsPort8080WhenUnset — #1710 removed the []int{8080} seed
+// from DefaultClientConfig so that the client can tell "unset" from "explicitly 8080" and
+// reach port discovery. The settings UI must be unaffected: with no config file at all it
+// still reports 8080, because it applies that fallback itself.
+func TestHandleConfigGetStillReportsPort8080WhenUnset(t *testing.T) {
+	// An empty HOME means LoadClientConfig finds no file and falls back to the defaults.
+	t.Setenv("HOME", t.TempDir())
+	t.Setenv("LFT_CLIENT_PORTS", "")
+
+	rec := httptest.NewRecorder()
+	NewTempSettingsServer(0).handleConfigGet(rec)
+
+	var resp map[string]interface{}
+	if err := json.Unmarshal(rec.Body.Bytes(), &resp); err != nil {
+		t.Fatalf("failed to decode settings response: %v", err)
+	}
+	destPort, ok := resp["dest_port"].(float64)
+	if !ok {
+		t.Fatalf("expected a numeric dest_port, got %#v", resp["dest_port"])
+	}
+	if int(destPort) != 8080 {
+		t.Errorf("expected the settings UI to still default dest_port to 8080, got %d", int(destPort))
 	}
 }

@@ -181,10 +181,36 @@ Every key below is optional. Types are YAML types; a duration is a Go duration s
 
 | Key | Type | Default | What it does |
 | --- | --- | --- | --- |
-| `ports` | list of int | `[8080]` | Local ports to publish. The first is the primary; each subsequent port gets its own subdomain, suffixed with the port number. Example: `[8080, 3000]`. |
+| `ports` | list of int | *unset* — discovered, see below | Local ports to publish. The first is the primary; each subsequent port gets its own subdomain, suffixed with the port number. Example: `[8080, 3000]`. |
 | `target_host` | string | `127.0.0.1` | Hostname or IP the tunnel forwards to — a Docker service name, another machine on your LAN. Example: `"liferay"`. |
 | `preserve_host` | bool | `false` | Forward the visitor's `Host` header unchanged instead of rewriting it to `target_host`. Needed when the local application generates absolute URLs from the host it is asked for. |
 | `insecure_skip_verify` | bool | `false` | Skip TLS verification when the **local** target serves HTTPS with a self-signed certificate. It has no effect on the connection to the gateway. |
+
+#### Leaving `ports` unset
+
+`ports` is the one key here whose default is not a value but a **decision**. Set it — in this
+file, with `-ports`, or via `LFT_CLIENT_PORTS` — and the client publishes exactly that list and
+does nothing else. Leave it out and the client works the ports out for itself, in this order:
+
+1. **In a Liferay workspace** (a `client-extensions/` directory, `gradlew`, or
+   `gradle.properties` in the working directory) it walks the tree for `client-extension.yaml`
+   files and reads each one's `port`. Port `8080` is always published first, on your plain
+   subdomain; each extension is published alongside it on a subdomain suffixed with the
+   extension's key.
+2. **Otherwise** it looks for a running instance: `docker ps` for a container whose name or
+   image mentions `liferay`, `dxp` or `ldm`, then a probe of `8080`, `13000` and `3000` on
+   localhost.
+3. **If neither finds anything**, port `8080`.
+
+Two consequences worth knowing:
+
+- `ports: [8080]` and no `ports` key at all are **not** the same thing. The first pins you to
+  8080; the second is what gets you the scan. Until #1710 the client could not tell them
+  apart — it defaulted to `[8080]`, which looked identical to an explicit request, so steps 1
+  and 2 were unreachable for everyone.
+- Step 2 can publish something other than 8080. A Docker container matching the name test
+  above that publishes `80` or `443` and not `8080` will make that port your primary. Set
+  `ports` explicitly if you need to be certain what gets published.
 
 ### Who may reach your tunnel
 
@@ -258,6 +284,8 @@ custom_domain: ""
 
 # --- What is exposed ---
 
+# Omit this key entirely to let the client scan your workspace / discover a running
+# instance. Listing ports here pins them and skips discovery.
 ports:
   - 8080
   - 3000
@@ -327,4 +355,4 @@ chmod 600 ~/.lfr-tunnel/config.yaml
 
 <!-- markdownlint-disable MD049 -->
 ---
-*Last Updated: 2026-09-03* | *Last Reviewed: 2026-09-03*
+*Last Updated: 2026-09-04* | *Last Reviewed: 2026-09-04*

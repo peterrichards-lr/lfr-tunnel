@@ -54,6 +54,9 @@ custom_domain: ""
 # --- What to expose ---
 
 # Local ports to publish. The first is the primary; the rest get a suffixed subdomain.
+# Listing them here pins them. OMIT this key entirely and the client discovers instead:
+# a Liferay workspace's client-extension ports, or a running Liferay/LDM instance,
+# falling back to 8080. See docs/client_configuration.md, "Leaving ports unset".
 ports:
   - 8080
 

@@ -169,6 +169,34 @@ func (repo *SQLiteAcknowledgementRepo) MarkWarningNotified(userID, documentID, v
 	return n > 0, nil
 }
 
+// ClearWarningNotified releases a claim taken by MarkWarningNotified, so the user is
+// listed by ListPendingWarnings again and a later sweep retries the email (#1724).
+//
+// This is the counterpart the claim never had. The claim is deliberately taken BEFORE
+// the send -- it is the only thing stopping a second sweep, or a second gateway
+// process, mailing the same person twice -- so a send that fails after the claim leaves
+// the user permanently recorded as warned having never been warned. Under #1707 that
+// user's clients stop when the grace window expires, with no notice through any channel
+// they saw.
+//
+// Call it ONLY when the send that followed a successful claim actually failed. Clearing
+// after a send that succeeded would mail the user a second time, which is exactly what
+// the claim exists to prevent.
+//
+// Unconditional rather than a compare-and-set of its own, and safe to be: the claim's
+// UPDATE only matches while warning_sent_at IS NULL, so from the moment a claim succeeds
+// until it is released nobody else can hold this row. There is no other claim for this
+// to clobber. A row that has since been deleted, or a version that has moved on, simply
+// matches nothing and reports no error -- both mean the warning is no longer owed.
+func (repo *SQLiteAcknowledgementRepo) ClearWarningNotified(userID, documentID, version string) error {
+	_, err := repo.conn.Exec(`
+		UPDATE user_acknowledgement_notices
+		SET warning_sent_at = NULL
+		WHERE user_id = ? AND document_id = ? AND version = ?
+	`, userID, documentID, version)
+	return err
+}
+
 // ListPendingWarnings returns the users whose first sight of documentID/version is at or
 // before cutoff and who have not yet been sent the warning email. The caller still has to
 // check whether each has since accepted -- this narrows the scan, it does not decide.

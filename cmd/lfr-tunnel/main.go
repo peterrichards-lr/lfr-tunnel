@@ -157,6 +157,7 @@ func main() {
 	}
 
 	isExplicitServer := *serverURL != "" || os.Getenv("LFT_CLIENT_SERVER") != "" || os.Getenv("LFT_SERVER_URL") != "" || os.Getenv("LFT_SERVER") != ""
+	facts.pinnedBy = pinnedBy(*serverURL)
 	resolveServerURL(cfg, isExplicitServer)
 
 	// A build that bakes in no DefaultServerURL (#1188) reaches here with nothing to
@@ -207,6 +208,8 @@ func main() {
 
 	// 3. Resolve port mappings
 	portMappings := resolvePortsAndMappings(cfg)
+
+	logStartupConfiguration(cfg, portMappings)
 
 	// Copy original ports for status monitoring before we modify portMappings to point to Interceptor ports
 	var originalPorts []int
@@ -893,6 +896,7 @@ func resolvePortsAndMappings(cfg *config.ClientConfig) []client.PortMapping {
 
 	var portMappings []client.PortMapping
 	if len(ports) > 0 {
+		facts.portSource = " (given explicitly)"
 		for idx, port := range ports {
 			suffix := ""
 			if idx > 0 {
@@ -909,6 +913,7 @@ func resolvePortsAndMappings(cfg *config.ClientConfig) []client.PortMapping {
 		}
 	} else {
 		if isLiferayWorkspace(".") {
+			facts.portSource = " (from the Liferay workspace)"
 			slog.Info("[Client] Liferay workspace detected. Scanning for Client Extensions...")
 			portMappings, err = detectWorkspacePorts(".")
 			if err != nil {
@@ -922,6 +927,7 @@ func resolvePortsAndMappings(cfg *config.ClientConfig) []client.PortMapping {
 			// a result carrying no ports would otherwise leave portMappings nil and the
 			// client would publish nothing at all.
 			if err == nil && discoveryResult != nil && len(discoveryResult.Ports) > 0 {
+				facts.portSource = fmt.Sprintf(" (auto-discovered: %s on %s)", discoveryResult.Type, discoveryResult.Host)
 				slog.Info(fmt.Sprintf("[Client] Auto-discovered %s target on host '%s' with ports: %v", discoveryResult.Type, discoveryResult.Host, discoveryResult.Ports))
 
 				// Automatically update the target host if it wasn't explicitly set via flags
@@ -941,6 +947,7 @@ func resolvePortsAndMappings(cfg *config.ClientConfig) []client.PortMapping {
 					})
 				}
 			} else {
+				facts.portSource = " (fallback -- nothing discovered)"
 				slog.Info(fmt.Sprintf("[Client] No active LDM/Liferay instances discovered. Defaulting to port %d.", defaultLocalPort))
 				portMappings = []client.PortMapping{{LocalPort: defaultLocalPort}}
 			}
@@ -1802,6 +1809,22 @@ func statusPageAdvice() []string {
 	}
 }
 
+// startupFacts records HOW the client reached its configuration, not just what it reached.
+//
+// The value alone is not diagnosable (#1693): "gateway https://tunnel.lfr-demo.se" reads the
+// same whether the user chose it, a cached election chose it, or it is a compiled-in fallback
+// nobody intended -- and those three took several rounds of questions to tell apart when a US
+// user was stranded on the control plane.
+type startupFacts struct {
+	regionSource string // how the gateway was chosen, in words
+	pinnedBy     string // the mechanism that pinned it, or "" when not pinned
+	advertised   int    // regions the gateway offered
+	unavailable  []string
+	portSource   string
+}
+
+var facts startupFacts
+
 func resolveServerURL(cfg *config.ClientConfig, isExplicitServer bool) {
 	if *refreshRegion {
 		if path, err := getRegionCachePath(); err == nil {
@@ -1827,6 +1850,7 @@ func resolveServerURL(cfg *config.ClientConfig, isExplicitServer bool) {
 							ttl = provisionalRegionCacheTTL
 						}
 						slog.Info(fmt.Sprintf("[Client] Using cached best region: '%s' -> %s (cached for %s, use -refresh-region to re-probe)", cfg.Region, cfg.ServerURL, ttl))
+						facts.regionSource = fmt.Sprintf("cached election (valid for %s, -refresh-region re-probes)", ttl)
 						return
 					}
 				}
@@ -1840,6 +1864,9 @@ func resolveServerURL(cfg *config.ClientConfig, isExplicitServer bool) {
 				cfg.ServerURL = cfg.Regions[bestRegion]
 				absent := append(append([]string{}, unreachable...), missing...)
 				sort.Strings(absent)
+				facts.regionSource = "fresh latency probe"
+				facts.advertised = len(cfg.Regions)
+				facts.unavailable = absent
 				saveRegionCacheFn(bestRegion, cfg.ServerURL, len(absent) > 0, candidateHosts(cfg.Regions))
 				if len(absent) > 0 {
 					slog.Info(fmt.Sprintf("[Client] Auto-detected best reachable region: '%s' -> %s. %d region(s) are currently unavailable (%s), so this choice is provisional and is re-probed within %s.",
@@ -1855,6 +1882,8 @@ func resolveServerURL(cfg *config.ClientConfig, isExplicitServer bool) {
 	regionLower := strings.TrimSpace(strings.ToLower(cfg.Region))
 	if url, ok := cfg.Regions[regionLower]; ok {
 		cfg.ServerURL = url
+		facts.regionSource = "named explicitly (-region), no latency probe"
+		facts.advertised = len(cfg.Regions)
 		slog.Info(fmt.Sprintf("[Client] Selected region '%s' -> %s", regionLower, url))
 	} else {
 		if len(cfg.Regions) > 0 {
@@ -1867,6 +1896,9 @@ func resolveServerURL(cfg *config.ClientConfig, isExplicitServer bool) {
 				// The region the user actually asked for is itself one of the absent ones, so
 				// this election is provisional for the same reason (#1690) -- without it, asking
 				// for a sleeping edge by name pinned the client to the fallback for 24h.
+				facts.regionSource = fmt.Sprintf("requested region %q unavailable, re-probed", regionLower)
+				facts.advertised = len(cfg.Regions)
+				facts.unavailable = append(append([]string{}, unreachable...), missing...)
 				saveRegionCacheFn(bestRegion, cfg.ServerURL, len(unreachable) > 0 || len(missing) > 0, candidateHosts(cfg.Regions))
 				slog.Info(fmt.Sprintf("[Client] Auto-selected next best online region: '%s' -> %s", bestRegion, cfg.ServerURL))
 				return
@@ -2127,4 +2159,98 @@ func printAndCollectPublicURLs(cfg *config.ClientConfig, regResp *client.Registe
 		}
 	}
 	return publicURLs
+}
+
+// pinnedBy names the mechanism that pinned the client, or "" when nothing did.
+//
+// Named rather than reported as a boolean because the three mechanisms are not equivalent
+// (#1691): -server and the environment variables pin, disabling region election and failover,
+// while server_url: in the config file does not. "pinned: yes" would not have been enough to
+// tell a US user why they never left the control plane.
+func pinnedBy(serverFlag string) string {
+	if serverFlag != "" {
+		return "-server flag"
+	}
+	for _, name := range []string{"LFT_CLIENT_SERVER", "LFT_SERVER_URL", "LFT_SERVER"} {
+		if os.Getenv(name) != "" {
+			return name + " environment variable"
+		}
+	}
+	return ""
+}
+
+// logStartupConfiguration prints, once, what the client is actually running with (#1693).
+//
+// The point is to make a support conversation start from fact instead of from asking someone
+// what they typed. Every line reports the SOURCE of a value as well as the value, because the
+// value alone does not distinguish a deliberate choice from a fallback -- and that distinction
+// is what took several rounds of questions when a US user was stranded on the control plane.
+//
+// Safe to paste. It deliberately contains no token and nothing derived from one: the config
+// file holds a PAT, and being pasted into Slack is the whole purpose of this block.
+func logStartupConfiguration(cfg *config.ClientConfig, mappings []client.PortMapping) {
+	compiled := config.DefaultServerURL
+	if compiled == "" {
+		// The condition that forced every user onto -server, and so pinned them (#1692).
+		// Worth stating outright rather than leaving as an absence to be inferred.
+		compiled = "none compiled in"
+	}
+
+	region := cfg.Region
+	if region == "" {
+		region = "none"
+	}
+	source := facts.regionSource
+	if source == "" {
+		source = "gateway used as given, no election"
+	}
+
+	pinned := "no"
+	if facts.pinnedBy != "" {
+		pinned = fmt.Sprintf("yes, by %s -- region election and failover are OFF", facts.pinnedBy)
+	}
+
+	ports := make([]string, 0, len(mappings))
+	for _, m := range mappings {
+		ports = append(ports, strconv.Itoa(m.LocalPort))
+	}
+	portList := strings.Join(ports, ", ")
+	if portList == "" {
+		portList = "none"
+	}
+
+	configFile := *configPath
+	if configFile == "" {
+		configFile = "default location"
+	}
+
+	lines := []string{
+		"[Client] Configuration:",
+		fmt.Sprintf("  version        %s (default gateway: %s)", config.Version, compiled),
+		fmt.Sprintf("  gateway        %s  (region: %s)", cfg.ServerURL, region),
+		fmt.Sprintf("  region source  %s", source),
+		fmt.Sprintf("  pinned         %s", pinned),
+		fmt.Sprintf("  ports          %s%s", portList, facts.portSource),
+		fmt.Sprintf("  subdomain      %s", subdomainOrNone(cfg.Subdomain)),
+		fmt.Sprintf("  config file    %s", configFile),
+	}
+	if facts.advertised > 0 {
+		lines = append(lines, fmt.Sprintf("  regions        %d advertised", facts.advertised))
+	}
+	if len(facts.unavailable) > 0 {
+		// The gateway now reports edges it knows about but cannot reach (#1690). Naming them
+		// explains a worse-than-expected route without anyone having to ask.
+		lines = append(lines, fmt.Sprintf("  unavailable    %s", strings.Join(facts.unavailable, ", ")))
+	}
+
+	for _, line := range lines {
+		slog.Info(line)
+	}
+}
+
+func subdomainOrNone(s string) string {
+	if s == "" {
+		return "(auto-assigned)"
+	}
+	return s
 }

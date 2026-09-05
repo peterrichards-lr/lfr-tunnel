@@ -59,6 +59,20 @@ help:
 	@echo "  make clean        - Delete build binaries"
 	@echo "  make install-hook - Install the native Git pre-commit and pre-push hooks"
 	@echo "  make help         - Show this help message"
+	@echo ""
+	@echo "Gates (these run in CI and in the git hooks -- run them before pushing):"
+	@echo "  make compile-check     - Build every package, including those with no tests"
+	@echo "  make test-hooks        - Run the shell hook/guard test suites"
+	@echo "  make check-contexts    - Required status checks must all produce a check run"
+	@echo "  make check-contexts-live - As above, verified against live branch protection"
+	@echo "  make check-attribution - Commits are attributable"
+	@echo "  make check-css         - Portal V2 BEM modifiers have a matching rule"
+	@echo "  make check-contrast    - Theme danger colours meet WCAG AA"
+	@echo "  make check-i18n        - Portal keys are defined in Language.properties"
+	@echo "  make nolint-ratchet    - //nolint:errcheck suppressions have not grown"
+	@echo "  make check-branches    - Report stale remote branches"
+	@echo "  make prune-branches    - Delete merged remote branches"
+	@echo "  make check-workflow-failures - Report workflows failing repeatedly on master"
 
 fmt:
 	gofmt -w .
@@ -241,6 +255,7 @@ test-hooks:
 	@./tests/hooks/test-closing-refs.sh
 	@./tests/hooks/test-compile-check.sh
 	@./tests/hooks/test-test-lock.sh
+	@./tests/hooks/test-make-help-covers-targets.sh
 	@./tests/hooks/test-install-paths.sh
 	@./tests/hooks/test-e2e-teardown.sh
 	@./tests/hooks/test-power-hook-credentials.sh

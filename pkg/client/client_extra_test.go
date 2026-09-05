@@ -161,6 +161,12 @@ func TestRunLogin(t *testing.T) {
 	}
 	defer func() { listenHandoff = oldListen }()
 
+	// An already-empty stdin, so the manual-paste goroutine returns on EOF rather than
+	// leaking, blocked on the real one, for the rest of the package's tests.
+	origStdin := stdinReader
+	stdinReader = strings.NewReader("")
+	defer func() { stdinReader = origStdin }()
+
 	go func() {
 		resp, err := http.Post("http://"+(<-addrChan)+"/handoff", "text/plain", strings.NewReader("dummy-token"))
 		if err != nil {
@@ -205,9 +211,9 @@ func TestRunLogin_PortBusyFallsBackToManualPaste(t *testing.T) {
 	if err != nil {
 		t.Fatalf("failed to create stdin pipe: %v", err)
 	}
-	origStdin := os.Stdin
-	os.Stdin = stdinR
-	defer func() { os.Stdin = origStdin }()
+	origStdin := stdinReader
+	stdinReader = stdinR
+	defer func() { stdinReader = origStdin }()
 	go func() {
 		if _, err := stdinW.WriteString("pasted-token\n"); err != nil {
 			log.Printf("[Warning] Failed to write to stdin pipe: %v", err)
@@ -285,9 +291,9 @@ func TestRunLogin_PortBusyAndNoStdinFailsFast(t *testing.T) {
 	if err := stdinW.Close(); err != nil { // immediate EOF: a closed or /dev/null stdin
 		t.Fatalf("failed to close stdin writer: %v", err)
 	}
-	origStdin := os.Stdin
-	os.Stdin = stdinR
-	defer func() { os.Stdin = origStdin }()
+	origStdin := stdinReader
+	stdinReader = stdinR
+	defer func() { stdinReader = origStdin }()
 
 	fakeHome(t)
 

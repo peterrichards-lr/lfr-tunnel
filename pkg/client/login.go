@@ -79,11 +79,16 @@ func RunLogin(serverURL string) error {
 	fmt.Println("Waiting for token delivery...")
 	fmt.Print("If your browser didn't open or handoff fails, paste your token here: ")
 
-	// Read from stdin in a goroutine
+	// Read from stdin in a goroutine. The reader is resolved here, on the caller's
+	// goroutine, and captured -- not read inside the goroutine. That goroutine outlives
+	// RunLogin whenever stdin never yields (the normal case: the browser delivered the
+	// token first), so a test that swapped the source afterwards would be writing a
+	// variable a live goroutine is still reading. The race detector caught exactly that.
+	in := stdinReader
 	failChan := make(chan error, 1)
 	go func() {
 		var manualToken string
-		if _, err := fmt.Scan(&manualToken); err == nil && manualToken != "" {
+		if _, err := fmt.Fscan(in, &manualToken); err == nil && manualToken != "" {
 			tokenChan <- manualToken
 			return
 		}
@@ -161,6 +166,11 @@ const handoffAddr = "127.0.0.1:" + handoffPort
 var listenHandoff = func() (net.Listener, error) {
 	return net.Listen("tcp", handoffAddr)
 }
+
+// stdinReader is where the manual token paste is read from. A variable so tests can
+// supply their own pipe rather than mutating the os.Stdin global, which cannot be done
+// safely while an earlier login's reader goroutine is still blocked on it.
+var stdinReader io.Reader = os.Stdin
 
 // handoffPortHint returns the platform's command for identifying whatever holds the
 // handoff port. Naming the port is not actionable on its own -- the next thing anyone

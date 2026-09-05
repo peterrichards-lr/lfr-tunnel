@@ -112,7 +112,7 @@ for (const f of files.filter((f) => /\.tsx?$/.test(f))) {
 
 if (defined.size === 0) {
   console.error(
-    'check-css-modifiers: no CSS rules found -- the check would pass over nothing',
+    'check-css-modifiers [V2]: no CSS rules found -- the check would pass over nothing',
   );
   process.exit(1);
 }

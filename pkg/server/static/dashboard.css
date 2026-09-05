@@ -561,6 +561,15 @@ input:checked + .toggle-slider:before {
   color: var(--danger);
   border: 1px solid rgba(239, 68, 68, 0.2);
 }
+/* Same shape as its two siblings above: a 10%-alpha wash of the state colour, the token
+   for the text, and a 20%-alpha border. The literal rgba() is dark.css's --warning
+   (#f59e0b), matching how --success and --danger are spelled out here -- the alpha
+   variants predate colour-mix support in the browsers this portal targets. */
+.alert-warning {
+  background: rgba(245, 158, 11, 0.1);
+  color: var(--warning);
+  border: 1px solid rgba(245, 158, 11, 0.2);
+}
 /* Toaster Notifications */
 #toast-container {
   position: fixed;
@@ -1332,6 +1341,11 @@ html[dir='rtl'] th {
 }
 .cell-muted {
   font-size: 0.85em;
+  color: var(--text-muted);
+}
+/* The same colour without the size change, for a muted placeholder inside a normal cell
+   (the "-" rendered where a row has no action menu). Inert until #1744. */
+.text-muted {
   color: var(--text-muted);
 }
 .cell-center {

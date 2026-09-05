@@ -33,6 +33,13 @@ cov.out
 # Binaries built to bin/ are covered by the bin/ rule above.
 /lfr-tunneld
 
+# The client binary, for the same reason and with the same leading slash. `go build
+# ./cmd/lfr-tunnel/` from the repo root drops it here, which is what a mutation-testing loop
+# does routinely -- and it was twice staged by a `git add -A` and committed as a 13MB blob
+# before being caught. The server was ignored; the client, which is built far more often,
+# was not.
+/lfr-tunnel
+
 # AI Agent Scratch Files & Temporary Artifacts
 scratch/
 *.tmp

@@ -27,7 +27,7 @@ set -euo pipefail
 # Three further suppressions this feature originally had were removed rather than counted: a
 # failed stats write, a failed periodic flush and a failed flush on shutdown now log, because
 # each of those silently loses a whole period of counts.
-CEILING="${LFT_NOLINT_CEILING:-752}"
+CEILING="${LFT_NOLINT_CEILING:-750}"
 
 count() {
     grep -rho 'nolint:[a-z,]*' --include='*.go' pkg/ cmd/ 2>/dev/null \

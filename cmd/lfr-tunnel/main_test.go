@@ -9,6 +9,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"strings"
 	"sync/atomic"
 	"testing"
 	"time"
@@ -582,19 +583,51 @@ func TestOverrideConfigWithFlags(t *testing.T) {
 	}
 }
 
+// Asserts on WHY the child exited, not merely that it did (#1716).
+//
+// The original assertion was "the child exited non-zero", which every one of these satisfies
+// identically: bandwidth validation rejecting the value (the intended behaviour), main()
+// exiting because no gateway is configured, a panic, flag parsing refusing an argument, or
+// the test binary not existing at all -- that last one being a real occurrence, since
+// concurrent `make test` runs used to delete each other's binary at the shared path (#1714).
+//
+// So it could not distinguish the feature working from the feature being absent, and would
+// have kept passing had bandwidth validation been deleted outright.
 func TestMain_ValidationFailure(t *testing.T) {
 	if os.Getenv("BE_CRASHER_VALIDATION") == "1" {
 		*bandwidth = "invalid"
 		main()
 		return
 	}
+
 	cmd := exec.Command(os.Args[0], "-test.run=TestMain_ValidationFailure")
-	cmd.Env = append(os.Environ(), "BE_CRASHER_VALIDATION=1")
-	err := cmd.Run()
-	if e, ok := err.(*exec.ExitError); ok && !e.Success() {
-		return
+	cmd.Env = append(os.Environ(),
+		"BE_CRASHER_VALIDATION=1",
+		// The child has to get PAST the earlier fatals to reach bandwidth validation, and
+		// this is the part the original test missed: with none of this set, main() exits at
+		// "No tunnel server configured" and the old assertion counted that as a pass. The
+		// address is deliberately unreachable -- registration never has to succeed, the run
+		// only has to reach the validation, and a refused connection gets there fastest.
+		"LFT_SERVER_URL=http://127.0.0.1:1",
+		// Explicit ports skip auto-discovery, which would otherwise shell out to `docker ps`
+		// and probe live listeners -- slow, and dependent on whatever happens to be running
+		// on the machine.
+		"LFT_CLIENT_PORTS=8080",
+	)
+	output, err := cmd.CombinedOutput()
+
+	var exitErr *exec.ExitError
+	if !errors.As(err, &exitErr) {
+		t.Fatalf("child exited %v, want a non-zero exit status.\nOutput:\n%s", err, output)
 	}
-	t.Fatalf("process ran with err %v, want exit status 1", err)
+
+	// The specific message from the bandwidth validation path. Without this the test passes
+	// for any early exit, which is the whole defect.
+	const want = "Invalid bandwidth value"
+	if !strings.Contains(string(output), want) {
+		t.Fatalf("child exited non-zero, but not because of bandwidth validation.\n"+
+			"want output containing %q\ngot:\n%s", want, output)
+	}
 }
 
 // The failback prober only knows the primary is answering. The cooldown knows whether we left

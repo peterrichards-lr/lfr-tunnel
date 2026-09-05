@@ -5,8 +5,10 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
+	"errors"
 	"net/http"
 	"net/http/httptest"
+	"sync"
 	"testing"
 	"time"
 
@@ -497,4 +499,147 @@ func TestGetMeReportsConsentState(t *testing.T) {
 	if body.GateSuppressed {
 		t.Error("the gate reported as suppressed before anyone dismissed it")
 	}
+}
+
+// --- The warning claim and its release (#1724) ---------------------------------------
+//
+// The sweep claims the send before making it, so that a second sweep or a second gateway
+// process cannot mail the same person twice. These tests hold both halves of that in
+// place: the claim must survive a send that worked, and must NOT survive one that did
+// not, because a claim held over a send that never happened records a user as warned who
+// was never warned -- and under #1707 that user's clients stop with no notice.
+
+// setupConsentWarningServer is setupConsentServer plus the mock sender, for the tests
+// that care whether the reminder actually left the building.
+func setupConsentWarningServer(t *testing.T) (*Server, *mockMailSender, func()) {
+	t.Helper()
+	srv, mail, cleanup := setupTestServer(t)
+	srv.cfg.AllowClientAutoReservation = true
+	srv.cfg.PolicyVersion = "2"
+	return srv, mail, cleanup
+}
+
+// assertWarningPending reports whether the sweep would pick this user up again, which is
+// the observable meaning of "the claim is released".
+func assertWarningPending(t *testing.T, srv *Server, userID string, want bool) {
+	t.Helper()
+	pending, err := srv.db.ListPendingWarnings(PolicyDocumentID, srv.cfg.PolicyVersion, time.Now().UTC())
+	if err != nil {
+		t.Fatalf("listing pending warnings: %v", err)
+	}
+	var found bool
+	for _, id := range pending {
+		if id == userID {
+			found = true
+		}
+	}
+	if found != want {
+		if want {
+			t.Fatalf("expected %s to be owed a warning again (the claim should have been released), pending = %v", userID, pending)
+		}
+		t.Fatalf("expected %s to still hold the warning claim, but they are pending again: %v", userID, pending)
+	}
+}
+
+// The claim exists to stop a second send. A successful send must keep it.
+func TestPolicyWarningClaimHeldWhenTheSendSucceeds(t *testing.T) {
+	srv, mail, cleanup := setupConsentWarningServer(t)
+	defer cleanup()
+
+	user := seedConsentUser(t, srv, "held@example.com", "tok-held")
+	firstSeenDaysAgo(t, srv, user.ID, 10)
+
+	srv.runPolicyConsentSweep(nil)
+
+	if got := len(mail.getSentEmails()); got != 1 {
+		t.Fatalf("expected exactly one reminder to be sent, got %d", got)
+	}
+	assertWarningPending(t, srv, user.ID, false)
+
+	// The next tick must stay quiet. Releasing on the happy path would turn an hourly
+	// ticker into an hourly mailshot.
+	srv.runPolicyConsentSweep(nil)
+	if got := len(mail.getSentEmails()); got != 1 {
+		t.Fatalf("the reminder was sent again on the next sweep: %d emails in total", got)
+	}
+}
+
+// The defect in #1724: a send that failed left the claim held, so the user was recorded
+// as warned having never been warned and no later sweep would ever retry.
+func TestPolicyWarningClaimReleasedWhenTheSendFails(t *testing.T) {
+	srv, mail, cleanup := setupConsentWarningServer(t)
+	defer cleanup()
+
+	user := seedConsentUser(t, srv, "failed@example.com", "tok-failed")
+	firstSeenDaysAgo(t, srv, user.ID, 10)
+	mail.failSends(errors.New("smtp: connection refused"))
+
+	srv.runPolicyConsentSweep(nil)
+
+	if got := len(mail.getSentEmails()); got != 0 {
+		t.Fatalf("the sender was failing, so nothing should have been delivered; got %d", got)
+	}
+	assertWarningPending(t, srv, user.ID, true)
+}
+
+// ...and the release has to actually produce a retry, not merely leave a NULL behind.
+func TestPolicyWarningRetriedOnTheNextSweepAfterAFailure(t *testing.T) {
+	srv, mail, cleanup := setupConsentWarningServer(t)
+	defer cleanup()
+
+	user := seedConsentUser(t, srv, "retry@example.com", "tok-retry")
+	firstSeenDaysAgo(t, srv, user.ID, 10)
+
+	mail.failSends(errors.New("smtp: 421 service not available"))
+	srv.runPolicyConsentSweep(nil)
+	if got := len(mail.getSentEmails()); got != 0 {
+		t.Fatalf("expected nothing delivered while the sender was failing, got %d", got)
+	}
+
+	// Mail comes back.
+	mail.failSends(nil)
+	srv.runPolicyConsentSweep(nil)
+
+	sent := mail.getSentEmails()
+	if len(sent) != 1 {
+		t.Fatalf("expected the reminder to be retried exactly once, got %d emails", len(sent))
+	}
+	if sent[0].To != user.Email {
+		t.Errorf("the retry went to %q, want %q", sent[0].To, user.Email)
+	}
+	assertWarningPending(t, srv, user.ID, false)
+
+	// And the retry re-took the claim, so a third sweep is quiet again.
+	srv.runPolicyConsentSweep(nil)
+	if got := len(mail.getSentEmails()); got != 1 {
+		t.Fatalf("the retried reminder was sent again on a later sweep: %d emails in total", got)
+	}
+}
+
+// The release must not reopen the door the claim was fitted to. Two sweeps running at the
+// same time over the same user still produce one email.
+func TestConcurrentPolicyConsentSweepsSendOneWarning(t *testing.T) {
+	srv, mail, cleanup := setupConsentWarningServer(t)
+	defer cleanup()
+
+	user := seedConsentUser(t, srv, "race@example.com", "tok-race")
+	firstSeenDaysAgo(t, srv, user.ID, 10)
+
+	var wg sync.WaitGroup
+	start := make(chan struct{})
+	for i := 0; i < 4; i++ {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			<-start
+			srv.runPolicyConsentSweep(nil)
+		}()
+	}
+	close(start)
+	wg.Wait()
+
+	if got := len(mail.getSentEmails()); got != 1 {
+		t.Fatalf("four concurrent sweeps sent %d reminders; the compare-and-set should have allowed exactly 1", got)
+	}
+	assertWarningPending(t, srv, user.ID, false)
 }

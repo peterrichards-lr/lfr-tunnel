@@ -165,3 +165,50 @@ func TestMarkWarningNotifiedClaimsOnce(t *testing.T) {
 		t.Errorf("expected nobody pending after the claim, got %v", pending)
 	}
 }
+
+// The claim is taken before the email is sent, so a send that fails needs a way to give
+// it back -- otherwise the user is recorded as warned having never been warned (#1724).
+func TestClearWarningNotifiedReleasesTheClaimForRetry(t *testing.T) {
+	database := setupTestDB(t)
+	seedAckUser(t, database, "u5")
+
+	seen := time.Now().UTC().Add(-10 * 24 * time.Hour)
+	if _, err := database.RecordFirstSeen("u5", "privacy_policy", "2", seen); err != nil {
+		t.Fatalf("recording first sight: %v", err)
+	}
+	claimed, err := database.MarkWarningNotified("u5", "privacy_policy", "2")
+	if err != nil || !claimed {
+		t.Fatalf("expected the claim to succeed, got %v (err %v)", claimed, err)
+	}
+
+	if err := database.ClearWarningNotified("u5", "privacy_policy", "2"); err != nil {
+		t.Fatalf("releasing the claim: %v", err)
+	}
+
+	pending, err := database.ListPendingWarnings("privacy_policy", "2", time.Now().UTC())
+	if err != nil {
+		t.Fatalf("listing after the release: %v", err)
+	}
+	if len(pending) != 1 || pending[0] != "u5" {
+		t.Fatalf("expected u5 to be pending a warning again after the release, got %v", pending)
+	}
+
+	// And the claim is takeable again, which is the whole point: the next sweep has to be
+	// able to win it and retry the send.
+	claimed, err = database.MarkWarningNotified("u5", "privacy_policy", "2")
+	if err != nil || !claimed {
+		t.Fatalf("expected the released claim to be takeable again, got %v (err %v)", claimed, err)
+	}
+}
+
+// Releasing a claim for a user/version that was never claimed is not an error. The sweep
+// reaches this when a row has been removed or the policy version has moved on underneath
+// it, and both mean the warning is simply no longer owed.
+func TestClearWarningNotifiedOnAnUnclaimedRowIsNotAnError(t *testing.T) {
+	database := setupTestDB(t)
+	seedAckUser(t, database, "u6")
+
+	if err := database.ClearWarningNotified("u6", "privacy_policy", "nonexistent"); err != nil {
+		t.Fatalf("clearing a row that was never claimed: %v", err)
+	}
+}

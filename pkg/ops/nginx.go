@@ -35,18 +35,56 @@ const nginxUpgradeMapBlock = `map $http_upgrade $connection_upgrade {
 //
 // Not spoofable: real_ip rewrites only when the immediate peer is in set_real_ip_from. A visitor
 // arriving directly is not central, so nothing is rewritten and #1325's guarantee stands. That is
-// also why the trusted address must be exact -- widen it and the forgeable path reopens.
+// also why the CONTROL PLANE entry must be exact -- widen that one to a routable range and the
+// forgeable path reopens.
+//
+// Two addresses are trusted, not one, and the loopback entry is load-bearing (#1750). #1450 was
+// written against a chain of "<visitor>, <visitor>", but that is not what leaves central: central
+// nginx proxies to the gateway on 127.0.0.1, and the gateway appends the address it was connected
+// FROM, so what arrives here ends with central's own loopback peer:
+//
+//	X-Forwarded-For: <visitor>, 127.0.0.1
+//
+// real_ip_recursive walks that right-to-left and stops at the first address not in
+// set_real_ip_from. Trusting central alone stops the walk at 127.0.0.1 and rewrites $remote_addr
+// to loopback -- the identical failure #1450 set out to fix, naming loopback instead of central.
+// Naming loopback too lets the walk step over it and reach the visitor.
+//
+// Trusting loopback widens nothing an attacker can reach: the module fires only when the
+// IMMEDIATE peer is trusted, and no off-box connection can present 127.0.0.1 as its peer.
 func renderRealIPBlock(trustedProxy string) string {
 	if strings.TrimSpace(trustedProxy) == "" {
 		return ""
 	}
 	return fmt.Sprintf(`
 # Recover the visitor's address on requests forwarded by the control plane (#1450).
+#
+# Two trusted addresses, and the loopback one is load-bearing (#1750). The chain the control
+# plane sends ends with ITS OWN loopback peer -- central's nginx proxies to the gateway on
+# 127.0.0.1 and the gateway appends the address it was connected from -- so this node receives
+#
+#     X-Forwarded-For: <visitor>, 127.0.0.1
+#
+# real_ip_recursive walks that right to left and stops at the first address not named below.
+# Trusting the control plane alone stops the walk at 127.0.0.1 and attributes the visitor to
+# loopback: the per-tunnel IP whitelist, the rate limiter's auto-ban and every audit entry then
+# name 127.0.0.1. Naming loopback lets the walk step over it and reach the visitor.
+#
+# Trusting loopback widens nothing reachable, because real_ip rewrites only when the IMMEDIATE
+# peer is trusted and no off-box connection can present 127.0.0.1 as its peer. The control plane
+# entry still has to be exact -- widen THAT to a routable range and the forgeable path reopens.
+set_real_ip_from %s;
 set_real_ip_from %s;
 real_ip_header X-Forwarded-For;
 real_ip_recursive on;
-`, strings.TrimSpace(trustedProxy))
+`, strings.TrimSpace(trustedProxy), nginxLoopbackTrustedProxy)
 }
+
+// nginxLoopbackTrustedProxy is the address every proxy_pass in this template targets, and so the
+// address the control plane's gateway appends to X-Forwarded-For as the hop it observed. It is
+// named once because renderRealIPBlock has to trust it and configdrift.go has to verify that it
+// does (#1750).
+const nginxLoopbackTrustedProxy = "127.0.0.1"
 
 // The forwarding-header rule, stated once (#1325, #1360).
 //
@@ -59,10 +97,10 @@ real_ip_recursive on;
 // If a CDN or load balancer is ever placed IN FRONT of an nginx rendered from this template,
 // revisit: you would want the real_ip module with set_real_ip_from naming that upstream.
 //
-// Known gap, deliberately not papered over here (#1450): when CENTRAL cross-proxies to an edge,
-// the edge's $remote_addr is central, so overwriting attributes the request to central rather
-// than to the visitor. Fixing that needs trusted_proxies on the edge and a change to resolution
-// order, not a different directive in this file.
+// When CENTRAL cross-proxies to an edge, the edge's $remote_addr is central, so overwriting here
+// would attribute the request to central rather than to the visitor (#1450). That is fixed, but
+// not in this constant: renderRealIPBlock above rewrites $remote_addr to the visitor BEFORE these
+// lines run. The lines themselves are unchanged and stay honest either way.
 const nginxProxyHeaders = `        proxy_set_header Host $host;
         # $remote_addr, never $proxy_add_x_forwarded_for: the latter APPENDS to whatever the
         # client sent, so the leftmost entry is caller-supplied and forgeable. Both headers are

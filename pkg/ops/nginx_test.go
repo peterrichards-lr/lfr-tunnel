@@ -1,6 +1,7 @@
 package ops
 
 import (
+	"slices"
 	"strings"
 	"testing"
 )
@@ -383,6 +384,9 @@ func TestRenderRealIPBlock_OnlyWhenConfigured(t *testing.T) {
 	got := buildNginxConfig(cfg)
 	for _, want := range []string{
 		"set_real_ip_from 203.0.113.7;",
+		// Loopback is not decoration: the chain central sends ends with its own loopback peer,
+		// and without this line the recursive walk stops there (#1750).
+		"set_real_ip_from 127.0.0.1;",
 		"real_ip_header X-Forwarded-For;",
 		"real_ip_recursive on;",
 	} {
@@ -391,10 +395,96 @@ func TestRenderRealIPBlock_OnlyWhenConfigured(t *testing.T) {
 		}
 	}
 
-	// Once per file. These are http-context directives and the file is included into http;
-	// repeating them per domain group would be wrong even where nginx tolerates it.
-	if n := countDirective(got, "set_real_ip_from"); n != 1 {
-		t.Errorf("expected exactly one set_real_ip_from directive, got %d", n)
+	// Once per file, two addresses. These are http-context directives and the file is included
+	// into http; repeating the block per domain group would be wrong even where nginx tolerates
+	// it. Two is the whole set -- see TestRenderRealIPBlock_TrustedSet.
+	if n := countDirective(got, "set_real_ip_from"); n != 2 {
+		t.Errorf("expected exactly two set_real_ip_from directives, got %d", n)
+	}
+}
+
+// nginxTrustedRealIPSet reads the addresses the RENDERED config trusts, so the walk test below
+// cannot quietly diverge from what is actually emitted.
+func nginxTrustedRealIPSet(conf string) []string {
+	var out []string
+	for _, line := range strings.Split(conf, "\n") {
+		line = strings.TrimSpace(line)
+		if !strings.HasPrefix(line, "set_real_ip_from ") {
+			continue
+		}
+		out = append(out, strings.TrimSuffix(strings.TrimPrefix(line, "set_real_ip_from "), ";"))
+	}
+	return out
+}
+
+// nginxRecursiveRealIP reproduces ngx_http_realip's documented `real_ip_recursive on` behaviour:
+// the connecting peer is replaced by "the last non-trusted address sent in the request header
+// field". Concretely -- and this matches ngx_http_get_forwarded_addr_internal -- while the current
+// address is trusted, take the rightmost remaining X-Forwarded-For entry; stop at the first
+// address that is not trusted, or when the chain runs out.
+//
+// The module DECLINES entirely if the peer itself is not trusted, which this expresses as the
+// loop never running and the peer being returned unchanged.
+func nginxRecursiveRealIP(peer string, xff, trusted []string) string {
+	addr := peer
+	for slices.Contains(trusted, addr) && len(xff) > 0 {
+		addr, xff = xff[len(xff)-1], xff[:len(xff)-1]
+	}
+	return addr
+}
+
+// TestRenderRealIPBlock_TrustedSet is the assertion #1750 turned on: it walks the chain an edge
+// ACTUALLY receives against the trusted set the template ACTUALLY emits.
+//
+// #1450 was designed against "X-Forwarded-For: <visitor>, <visitor>", which is not what leaves
+// central. Central's nginx proxies to the gateway on 127.0.0.1, and the gateway appends the
+// address it was connected from, so the last entry is loopback -- both before #1737 removed the
+// duplicated hop ("<visitor>, <visitor>, 127.0.0.1") and after it ("<visitor>, 127.0.0.1").
+// Trusting central alone stops the walk on that loopback entry and hands the WAF, the rate
+// limiter and the audit log 127.0.0.1 for every cross-proxied visitor.
+func TestRenderRealIPBlock_TrustedSet(t *testing.T) {
+	const central, visitor = "203.0.113.7", "198.51.100.25"
+
+	trusted := nginxTrustedRealIPSet(buildNginxConfig(nginxRenderConfig{
+		Role:           RoleEdge,
+		LocalPort:      "8090",
+		RedirectDomain: "example.com",
+		TrustedProxy:   central,
+		Groups:         []nginxDomainGroup{{Domain: "sa.example.com", CertRoot: certRootLetsEncrypt}},
+	}))
+
+	for _, tc := range []struct {
+		name string
+		peer string
+		xff  []string
+		want string
+	}{{
+		name: "cross-proxied: the chain central sends today",
+		peer: central,
+		xff:  []string{visitor, "127.0.0.1"},
+		want: visitor,
+	}, {
+		name: "cross-proxied: the chain central sent before #1737",
+		peer: central,
+		xff:  []string{visitor, visitor, "127.0.0.1"},
+		want: visitor,
+	}, {
+		name: "edge-direct: nothing is rewritten, forged chain or not",
+		peer: visitor,
+		xff:  []string{"6.6.6.6"},
+		want: visitor,
+	}, {
+		name: "edge-direct: an attacker naming loopback buys nothing",
+		peer: visitor,
+		xff:  []string{"6.6.6.6", "127.0.0.1"},
+		want: visitor,
+	}} {
+		t.Run(tc.name, func(t *testing.T) {
+			if got := nginxRecursiveRealIP(tc.peer, tc.xff, trusted); got != tc.want {
+				t.Errorf("real_ip_recursive over %v from peer %s with trusted %v = %s, want %s",
+					tc.xff, tc.peer, trusted, got, tc.want)
+			}
+		})
 	}
 }
 
@@ -413,9 +503,10 @@ func TestRenderRealIPBlock_NeverOnCentral(t *testing.T) {
 	}
 }
 
-// TestRenderRealIPBlock_MultipleGroupsStillOnce guards the same thing across the shape an edge
-// actually runs: its own regional group plus two wildcard-only apex groups.
-func TestRenderRealIPBlock_MultipleGroupsStillOnce(t *testing.T) {
+// TestRenderRealIPBlock_MultipleGroupsStillOncePerFile guards the same thing across the shape an
+// edge actually runs: its own regional group plus two wildcard-only apex groups. One block, two
+// addresses, however many domain groups.
+func TestRenderRealIPBlock_MultipleGroupsStillOncePerFile(t *testing.T) {
 	got := buildNginxConfig(nginxRenderConfig{
 		Role:           RoleEdge,
 		LocalPort:      "8090",
@@ -427,8 +518,8 @@ func TestRenderRealIPBlock_MultipleGroupsStillOnce(t *testing.T) {
 			{Domain: "example.net", CertRoot: certRootCertSync, WildcardOnly: true},
 		},
 	})
-	if n := countDirective(got, "set_real_ip_from"); n != 1 {
-		t.Errorf("expected exactly one set_real_ip_from directive across three groups, got %d", n)
+	if n := countDirective(got, "set_real_ip_from"); n != 2 {
+		t.Errorf("expected exactly two set_real_ip_from directives across three groups, got %d", n)
 	}
 }
 

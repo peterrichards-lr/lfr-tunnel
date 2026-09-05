@@ -930,8 +930,24 @@ func resolvePortsAndMappings(cfg *config.ClientConfig) []client.PortMapping {
 				facts.portSource = fmt.Sprintf(" (auto-discovered: %s on %s)", discoveryResult.Type, discoveryResult.Host)
 				slog.Info(fmt.Sprintf("[Client] Auto-discovered %s target on host '%s' with ports: %v", discoveryResult.Type, discoveryResult.Host, discoveryResult.Ports))
 
-				// Automatically update the target host if it wasn't explicitly set via flags
-				if *targetHost == "localhost" {
+				// Discovery is the lowest-priority source of the target host: it fills the
+				// value in only when nobody supplied one. cfg.TargetHost is empty at this
+				// point exactly when no `target_host:` in the config file, no
+				// LFT_TARGET_HOST and no -target-host reached it -- DefaultClientConfig
+				// leaves the field empty, and all three overrides are guarded on "not
+				// empty" -- so this single test covers the whole documented precedence
+				// chain (docs/client_configuration.md, "Precedence").
+				//
+				// The condition used to be `*targetHost == "localhost"`, which was the
+				// exact opposite of the comment above it. The flag defaults to "", so it
+				// fired only for someone who typed `-target-host localhost` -- the one
+				// case that must be left alone -- and was inert for everybody else (#1735).
+				//
+				// Deliberately not flag.Visit: an explicitly-passed `-target-host ""` is
+				// documented to override nothing ("An empty value never overrides"), so it
+				// must not suppress discovery either. Testing the resolved value keeps
+				// that rule in one place instead of giving the empty flag a second meaning.
+				if cfg.TargetHost == "" && discoveryResult.Host != "" {
 					cfg.TargetHost = discoveryResult.Host
 				}
 

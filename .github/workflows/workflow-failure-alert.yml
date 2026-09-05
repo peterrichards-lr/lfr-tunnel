@@ -1,0 +1,87 @@
+# Sweeps for master-only and scheduled workflows that keep failing where nobody looks (#1730).
+#
+# `Deploy Documentation` failed on twelve consecutive master runs between 27 August and
+# 3 September 2026. Nothing reported it: not a pull request, not a merge, not the required-check
+# summary. It was found by accident, a week late. #1731 closed that specific hole by building the
+# docs on PRs that touch them; this closes the general one, for `release.yml`, the scheduled jobs,
+# and anything master-only added later.
+#
+# The design decisions -- why three failures, why an issue is the dedup state, and what the
+# self-monitoring does and does not cover -- are documented at the top of the script rather than
+# duplicated here.
+name: Workflow Failure Alert
+
+on:
+  # Every six hours. The target is not zero latency, it is that a week-long silent failure
+  # becomes a day-long one: three failures of a six-hourly job is 18 hours, and the docs streak
+  # would have alerted on 27 August instead of being noticed on 3 September.
+  schedule:
+    - cron: "23 */6 * * *"
+  workflow_dispatch:
+    inputs:
+      dry_run:
+        description: "Report verdicts without creating or closing any issue"
+        type: boolean
+        default: false
+      threshold:
+        description: "Consecutive failures before alerting"
+        type: string
+        default: "3"
+
+# Deliberately no `pull_request` trigger. This reports on master's health, so on a PR it would
+# both emit a pointless check run and start counting the PR's own runs.
+
+permissions:
+  actions: read # read every workflow's run history
+  issues: write # open, and close, the alert issue that is also the dedup state
+
+# Two sweeps overlapping would both see "no open alert" and both open one -- the duplicate-issue
+# failure the dedup exists to prevent. Never cancel a run in flight: it could be midway through
+# opening an alert.
+concurrency:
+  group: workflow-failure-alert
+  cancel-in-progress: false
+
+jobs:
+  sweep:
+    name: Sweep master-only and scheduled workflows
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v7
+
+      # Idempotent (--force), and load-bearing: `gh issue create --label` cannot attach a label
+      # that does not exist, so without this the very first alert fails to open.
+      #
+      # It does NOT protect the dedup. `gh issue list --label ci-failure` returns `[]` with exit 0
+      # for a label that has never existed -- measured, not assumed -- which is indistinguishable
+      # from "no workflow is currently alerted". That is the correct reading before the first
+      # alert and stays correct afterwards, since the label exists from this step onward.
+      - name: Ensure the alert label exists
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          gh label create ci-failure \
+            --repo "$GITHUB_REPOSITORY" \
+            --color d73a4a \
+            --description "A master-only or scheduled workflow is failing repeatedly (#1730)" \
+            --force
+
+      - name: Sweep workflow run history
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GITHUB_REPOSITORY: ${{ github.repository }}
+          # An alert nobody owns is noise. The repository owner is the fallback owner rather
+          # than a hardcoded login, so this keeps working if the repository moves.
+          ALERT_ASSIGNEE: ${{ github.repository_owner }}
+          # Through env rather than interpolated into the `run:` script. A workflow_dispatch
+          # input expanded directly into a shell line is a command-injection vector, and
+          # `--threshold "$X"` is also the only form the detector's integer validation can see.
+          ALERT_THRESHOLD: ${{ inputs.threshold || '3' }}
+          ALERT_DRY_RUN: ${{ inputs.dry_run || 'false' }}
+        run: |
+          if [ "$ALERT_DRY_RUN" = "true" ]; then
+            ./scripts/detect-workflow-failure-streak.sh --threshold "$ALERT_THRESHOLD" --dry-run
+          else
+            ./scripts/detect-workflow-failure-streak.sh --threshold "$ALERT_THRESHOLD"
+          fi

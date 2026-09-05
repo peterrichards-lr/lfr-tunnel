@@ -874,6 +874,32 @@ var (
 	autoDiscoverTarget   = client.AutoDiscoverTarget
 )
 
+// normalizeDiscoveredHost rewrites a discovered host of exactly "localhost" to the IPv4
+// loopback literal, and leaves every other value untouched.
+//
+// The two are interchangeable as *names* -- isLoopbackHostname treats "localhost",
+// "127.0.0.1" and "::1" as one set (pkg/client/inspector.go) -- but not as *dial targets*.
+// "localhost" commonly resolves to ::1 ahead of 127.0.0.1. Go's dialer tries both, so a
+// target bound only to IPv4 is usually still reached after a fast refusal on ::1; where ::1
+// is filtered rather than refused, that same fallback is a timeout. This client is used to
+// demo a local Liferay to a customer over a public URL, where a hang costs far more than
+// the microsecond the literal saves.
+//
+// So it matches the rest of the client, which already dials the literal: NewInterceptorEngine
+// and ReplayRequest both default an empty TargetHost to "127.0.0.1" rather than to
+// "localhost" (pkg/client/interceptor.go, pkg/client/inspector.go).
+//
+// Exact equality, not a loopback test: AutoDiscoverTarget hardcodes "localhost" on both of
+// its paths today, but the Docker path is the one that could reasonably learn to report a
+// container name or a network alias, and rewriting a real hostname would send traffic to the
+// wrong place. Only the literal this function was written for is touched.
+func normalizeDiscoveredHost(host string) string {
+	if host == "localhost" {
+		return "127.0.0.1"
+	}
+	return host
+}
+
 // resolvePortsAndMappings decides which local ports the tunnel publishes.
 //
 // An empty resolved list means "nobody said" -- not "no ports" -- and is what makes the
@@ -948,7 +974,7 @@ func resolvePortsAndMappings(cfg *config.ClientConfig) []client.PortMapping {
 				// must not suppress discovery either. Testing the resolved value keeps
 				// that rule in one place instead of giving the empty flag a second meaning.
 				if cfg.TargetHost == "" && discoveryResult.Host != "" {
-					cfg.TargetHost = discoveryResult.Host
+					cfg.TargetHost = normalizeDiscoveredHost(discoveryResult.Host)
 				}
 
 				for idx, port := range discoveryResult.Ports {

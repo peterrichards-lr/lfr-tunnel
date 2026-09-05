@@ -1013,6 +1013,18 @@ func TestResolvePortsAndMappings_TargetHostPrecedence(t *testing.T) {
 			why:            "this is the one case the old `*targetHost == \"localhost\"` guard acted on, and it is precisely the case that must be left alone",
 		},
 		{
+			name:           "a discovered localhost is applied as the IPv4 literal",
+			discoveredHost: "localhost",
+			want:           "127.0.0.1",
+			why:            "localhost commonly resolves to ::1 first, and a filtered ::1 turns the dialer's fallback into a hang -- the rest of the client dials 127.0.0.1 for the same reason",
+		},
+		{
+			name:           "a discovered hostname that is not localhost is applied verbatim",
+			discoveredHost: "ldm-container",
+			want:           "ldm-container",
+			why:            "normalisation is for the literal \"localhost\" only; rewriting a real hostname would send traffic somewhere else entirely",
+		},
+		{
 			name:           "a discovery result with no host leaves the field empty",
 			discoveredHost: "",
 			want:           "",
@@ -1080,4 +1092,30 @@ func TestResolvePortsAndMappings_TargetHostUntouchedWithoutDiscovery(t *testing.
 			t.Errorf("TargetHost = %q, want empty -- the workspace scan reports ports, not hosts", cfg.TargetHost)
 		}
 	})
+}
+
+// TestNormalizeDiscoveredHost pins the normalisation on its own, including everything it
+// must leave alone. The wider precedence table above exercises it through
+// resolvePortsAndMappings; this covers the values that never come out of AutoDiscoverTarget
+// today but would be silently corrupted if the check were ever widened to "is this
+// loopback" -- which is exactly the tempting generalisation.
+func TestNormalizeDiscoveredHost(t *testing.T) {
+	cases := []struct {
+		in, want, why string
+	}{
+		{"localhost", "127.0.0.1", "the one value that is rewritten: dial the IPv4 literal, not a name that may resolve to ::1 first"},
+		{"127.0.0.1", "127.0.0.1", "already the literal; nothing to do"},
+		{"::1", "::1", "an explicitly chosen IPv6 loopback is a choice, not a mistake to correct"},
+		{"ldm-container", "ldm-container", "a Docker container name must reach that container"},
+		{"localhost.localdomain", "localhost.localdomain", "a real FQDN that merely starts with the same eight characters"},
+		{"LOCALHOST", "LOCALHOST", "exact equality only -- a case-folded match would be a wider rule than the one justified"},
+		{"", "", "no host is not a host"},
+	}
+	for _, tc := range cases {
+		t.Run(tc.in, func(t *testing.T) {
+			if got := normalizeDiscoveredHost(tc.in); got != tc.want {
+				t.Errorf("normalizeDiscoveredHost(%q) = %q, want %q -- %s", tc.in, got, tc.want, tc.why)
+			}
+		})
+	}
 }

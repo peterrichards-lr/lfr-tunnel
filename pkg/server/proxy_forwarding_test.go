@@ -300,6 +300,29 @@ func TestCrossNodeProxy_ForwardingHeaders(t *testing.T) {
 			wantProto: "https",
 		},
 		{
+			// Anti-spoofing, on the hop that EXTENDS a chain rather than replacing one.
+			// The peer is untrusted, so the only address this hop may contribute is its
+			// own connection address -- neither the X-Real-IP the caller invented nor a
+			// tail it appended to the chain may become the entry recorded here. The
+			// inbound chain is still carried through verbatim, because a downstream
+			// gateway applies its own trust boundary to it; what must not happen is a
+			// forged address acquiring THIS gateway's endorsement by being appended as
+			// the hop it observed.
+			name: "untrusted peer: a forged X-Real-IP does not enter the chain",
+			inbound: map[string]string{
+				"X-Forwarded-For": "203.0.113.7, 192.0.2.4",
+				"X-Real-IP":       "10.0.0.9",
+			},
+			wantXFF: "203.0.113.7, 192.0.2.4, 198.51.100.25",
+			// X-Real-IP is forwarded as-is (this hop only fills it in when absent), so
+			// the forged value survives in it -- but a downstream gateway believes that
+			// header only from a peer in its own trusted_proxies. The chain above is the
+			// part this hop vouches for.
+			wantReal:  "10.0.0.9",
+			wantHost:  "demo.lfr-demo.se",
+			wantProto: "http",
+		},
+		{
 			// The production shape: nginx on loopback in front of central, forwarding to
 			// an edge. nginx's X-Forwarded-For is already the visitor (it sets
 			// $remote_addr, not $proxy_add_x_forwarded_for -- pkg/ops/nginx.go), so the

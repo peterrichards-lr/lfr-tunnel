@@ -216,7 +216,13 @@ The client CLI (`lfr-tunnel`) will automatically load your token from these file
 
 ## Step 4: Run Your First Tunnel
 
-Once your token is saved, you can run the client. By default, `lfr-tunnel` targets the primary Liferay port `8080` and scans for client extensions.
+Once your token is saved, you can run the client. **If you do not tell it which ports to
+publish, it works them out** — by scanning the Liferay Workspace you are standing in, or, if
+you are not in one, by looking for a running Liferay or LDM instance. Port `8080` is what you
+get when neither turns anything up.
+
+Naming ports yourself — `-ports`, `ports:` in your config file, or `LFT_CLIENT_PORTS` —
+switches all of that off and publishes exactly what you asked for.
 
 ### Zero-Config Workspace Mode (LDM/Workspaces)
 Navigate to your Liferay Workspace root directory and run:
@@ -230,12 +236,28 @@ The client will:
 2. Authenticate with the stored PAT.
 3. Print the live public HTTPS URLs where your local server and assets are now accessible.
 
+The scan walks the current directory for `client-extension.yaml` files and takes the `port`
+from each. Port `8080` is always the first thing published, on your plain subdomain; each
+client extension gets its own subdomain suffixed with the extension's key, so an extension
+named `my-remote-app` on port `4001` is served at `your-name-se-my-remote-app`.
+
+> **This did not work until #1710.** The client shipped with `ports` pre-set to `[8080]`,
+> which it could not tell apart from your having asked for `8080`, so the scan above never ran
+> and only `8080` was ever published. If you had worked around it with an explicit `ports:`
+> list, that list still wins — delete it to get the scan.
+
 ### Port-Specific Standalone Mode (Tomcat/Docker)
 If you are running a standalone Tomcat bundle on port `8080` without a Liferay Workspace:
 
 ```bash
 lfr-tunnel -subdomain your-name-se -ports 8080
 ```
+
+Outside a workspace, leaving `-ports` off instead asks the client to find the instance
+itself: it reads `docker ps` for a container whose name or image mentions `liferay`, `dxp` or
+`ldm` and takes the ports it publishes, and failing that probes `8080`, `13000` and `3000` on
+localhost. Naming the port explicitly, as above, is still the more predictable option when
+you already know it.
 
 ### Choosing Which Gateway to Use
 
@@ -462,4 +484,4 @@ Bodies are capped at 10 KB each. Prefer the Inspector at `http://localhost:4040`
 
 <!-- markdownlint-disable MD049 -->
 ---
-*Last Updated: 2026-09-03* | *Last Reviewed: 2026-09-03*
+*Last Updated: 2026-09-04* | *Last Reviewed: 2026-09-04*

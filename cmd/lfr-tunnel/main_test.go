@@ -1,12 +1,14 @@
 package main
 
 import (
+	"errors"
 	"lfr-tunnel/pkg/client"
 	"lfr-tunnel/pkg/config"
 	"net/http"
 	"net/http/httptest"
 	"os"
 	"os/exec"
+	"path/filepath"
 	"sync/atomic"
 	"testing"
 	"time"
@@ -660,3 +662,260 @@ func TestCoolingDown_ClearedOnReconnect(t *testing.T) {
 		t.Error("a cooldown survived a successful reconnection to that gateway")
 	}
 }
+
+// --- #1710: the discovery branches of resolvePortsAndMappings ---
+//
+// DefaultClientConfig used to seed Ports with []int{8080}, so cfg.Ports was never empty and
+// the workspace/auto-discovery branches below could not be reached by any user who had not
+// written an explicit `ports: []` into their config file. These tests pin each of the three
+// cases the fix has to keep straight: explicit ports still win, an unset list reaches
+// discovery, and 8080 is still what you get when discovery finds nothing.
+
+type portDiscoverySpies struct {
+	workspaceChecked int
+	workspaceScanned int
+	autoDiscovered   int
+}
+
+// stubPortDiscovery replaces the three discovery seams for the duration of a test and
+// returns the call counters. Every seam defaults to "would fail the test if reached"
+// behaviour that the caller overrides as needed.
+func stubPortDiscovery(t *testing.T) *portDiscoverySpies {
+	t.Helper()
+	oldIs, oldDetect, oldAuto := isLiferayWorkspace, detectWorkspacePorts, autoDiscoverTarget
+	t.Cleanup(func() {
+		isLiferayWorkspace, detectWorkspacePorts, autoDiscoverTarget = oldIs, oldDetect, oldAuto
+	})
+	return &portDiscoverySpies{}
+}
+
+// TestResolvePortsAndMappings_ExplicitConfigPortsSkipDiscovery — the user who wrote
+// `ports:` in their config file. Nothing about discovery may run for them.
+func TestResolvePortsAndMappings_ExplicitConfigPortsSkipDiscovery(t *testing.T) {
+	spies := stubPortDiscovery(t)
+	isLiferayWorkspace = func(string) bool { spies.workspaceChecked++; return true }
+	detectWorkspacePorts = func(string) ([]client.PortMapping, error) {
+		spies.workspaceScanned++
+		return nil, nil
+	}
+	autoDiscoverTarget = func() (*client.AutoDiscoverResult, error) {
+		spies.autoDiscovered++
+		return nil, nil
+	}
+
+	oldPortsStr := *portsStr
+	*portsStr = ""
+	defer func() { *portsStr = oldPortsStr }()
+
+	mappings := resolvePortsAndMappings(&config.ClientConfig{Ports: []int{9090, 7070}})
+
+	if spies.workspaceChecked != 0 || spies.workspaceScanned != 0 || spies.autoDiscovered != 0 {
+		t.Fatalf("explicit ports must skip discovery entirely, got %+v", *spies)
+	}
+	if len(mappings) != 2 {
+		t.Fatalf("expected 2 mappings, got %d (%+v)", len(mappings), mappings)
+	}
+	if mappings[0].LocalPort != 9090 || mappings[0].NameSuffix != "" {
+		t.Errorf("expected primary 9090 with no suffix, got %+v", mappings[0])
+	}
+	if mappings[1].LocalPort != 7070 || mappings[1].NameSuffix != "7070" {
+		t.Errorf("expected secondary 7070 suffixed \"7070\", got %+v", mappings[1])
+	}
+}
+
+// TestResolvePortsAndMappings_ExplicitFlagSkipsDiscovery — the -ports flag wins over an
+// unset config, and still skips discovery.
+func TestResolvePortsAndMappings_ExplicitFlagSkipsDiscovery(t *testing.T) {
+	spies := stubPortDiscovery(t)
+	isLiferayWorkspace = func(string) bool { spies.workspaceChecked++; return true }
+	detectWorkspacePorts = func(string) ([]client.PortMapping, error) {
+		spies.workspaceScanned++
+		return nil, nil
+	}
+	autoDiscoverTarget = func() (*client.AutoDiscoverResult, error) {
+		spies.autoDiscovered++
+		return nil, nil
+	}
+
+	oldPortsStr := *portsStr
+	*portsStr = "3000"
+	defer func() { *portsStr = oldPortsStr }()
+
+	mappings := resolvePortsAndMappings(&config.ClientConfig{})
+
+	if spies.workspaceChecked != 0 || spies.workspaceScanned != 0 || spies.autoDiscovered != 0 {
+		t.Fatalf("-ports must skip discovery entirely, got %+v", *spies)
+	}
+	if len(mappings) != 1 || mappings[0].LocalPort != 3000 {
+		t.Fatalf("expected a single mapping on 3000, got %+v", mappings)
+	}
+}
+
+// TestResolvePortsAndMappings_UnsetReachesWorkspaceScan — the bug in #1710. An unset port
+// list inside a Liferay workspace must reach DetectWorkspacePorts.
+func TestResolvePortsAndMappings_UnsetReachesWorkspaceScan(t *testing.T) {
+	spies := stubPortDiscovery(t)
+	isLiferayWorkspace = func(string) bool { spies.workspaceChecked++; return true }
+	detectWorkspacePorts = func(string) ([]client.PortMapping, error) {
+		spies.workspaceScanned++
+		return []client.PortMapping{
+			{LocalPort: 8080},
+			{LocalPort: 3000, NameSuffix: "my-remote-app"},
+		}, nil
+	}
+	autoDiscoverTarget = func() (*client.AutoDiscoverResult, error) {
+		spies.autoDiscovered++
+		return nil, nil
+	}
+
+	oldPortsStr := *portsStr
+	*portsStr = ""
+	defer func() { *portsStr = oldPortsStr }()
+
+	mappings := resolvePortsAndMappings(&config.ClientConfig{})
+
+	if spies.workspaceScanned != 1 {
+		t.Fatalf("workspace scan unreachable: DetectWorkspacePorts called %d times", spies.workspaceScanned)
+	}
+	if spies.autoDiscovered != 0 {
+		t.Errorf("a workspace must not also run host auto-discovery")
+	}
+	if len(mappings) != 2 || mappings[1].NameSuffix != "my-remote-app" {
+		t.Fatalf("expected the scan's mappings to be used, got %+v", mappings)
+	}
+}
+
+// TestResolvePortsAndMappings_ScansARealWorkspaceOnDisk exercises the genuine
+// IsLiferayWorkspace/DetectWorkspacePorts pair against real files -- no seams stubbed -- so
+// that a change which reconnects the branch but breaks the scan still fails.
+func TestResolvePortsAndMappings_ScansARealWorkspaceOnDisk(t *testing.T) {
+	workspace := t.TempDir()
+	extDir := filepath.Join(workspace, "client-extensions", "my-remote-app")
+	if err := os.MkdirAll(extDir, 0o755); err != nil {
+		t.Fatalf("failed to build workspace fixture: %v", err)
+	}
+	yaml := "my-remote-app:\n    name: My Remote App\n    type: customElement\n    port: 4001\n"
+	if err := os.WriteFile(filepath.Join(extDir, "client-extension.yaml"), []byte(yaml), 0o600); err != nil {
+		t.Fatalf("failed to write client-extension.yaml: %v", err)
+	}
+
+	cwd, err := os.Getwd()
+	if err != nil {
+		t.Fatalf("failed to read cwd: %v", err)
+	}
+	if err := os.Chdir(workspace); err != nil {
+		t.Fatalf("failed to chdir into the workspace fixture: %v", err)
+	}
+	t.Cleanup(func() {
+		// Checked rather than discarded: a chdir that silently failed to restore would
+		// leave every later test in this binary running from the temp workspace.
+		if cerr := os.Chdir(cwd); cerr != nil {
+			t.Errorf("failed to restore the working directory: %v", cerr)
+		}
+	})
+
+	oldPortsStr := *portsStr
+	*portsStr = ""
+	defer func() { *portsStr = oldPortsStr }()
+
+	// An unset Ports list, exactly as DefaultClientConfig now produces it.
+	mappings := resolvePortsAndMappings(&config.ClientConfig{})
+
+	if len(mappings) != 2 {
+		t.Fatalf("expected 8080 plus the client extension's port, got %+v", mappings)
+	}
+	if mappings[0].LocalPort != 8080 || mappings[0].NameSuffix != "" {
+		t.Errorf("8080 must stay the primary mapping so existing public URLs do not move, got %+v", mappings[0])
+	}
+	if mappings[1].LocalPort != 4001 || mappings[1].NameSuffix != "my-remote-app" {
+		t.Errorf("expected the client extension on 4001 suffixed \"my-remote-app\", got %+v", mappings[1])
+	}
+}
+
+// TestResolvePortsAndMappings_UnsetReachesAutoDiscovery — outside a workspace, an unset
+// port list must reach AutoDiscoverTarget.
+func TestResolvePortsAndMappings_UnsetReachesAutoDiscovery(t *testing.T) {
+	spies := stubPortDiscovery(t)
+	isLiferayWorkspace = func(string) bool { spies.workspaceChecked++; return false }
+	detectWorkspacePorts = func(string) ([]client.PortMapping, error) {
+		spies.workspaceScanned++
+		return nil, nil
+	}
+	autoDiscoverTarget = func() (*client.AutoDiscoverResult, error) {
+		spies.autoDiscovered++
+		return &client.AutoDiscoverResult{Host: "localhost", Ports: []int{8080, 3000}, Type: "Docker (LDM)"}, nil
+	}
+
+	oldPortsStr := *portsStr
+	*portsStr = ""
+	defer func() { *portsStr = oldPortsStr }()
+
+	mappings := resolvePortsAndMappings(&config.ClientConfig{})
+
+	if spies.autoDiscovered != 1 {
+		t.Fatalf("auto-discovery unreachable: AutoDiscoverTarget called %d times", spies.autoDiscovered)
+	}
+	if spies.workspaceScanned != 0 {
+		t.Errorf("a non-workspace directory must not run the client-extension scan")
+	}
+	if len(mappings) != 2 || mappings[0].LocalPort != 8080 || mappings[1].LocalPort != 3000 {
+		t.Fatalf("expected the discovered ports to be used, got %+v", mappings)
+	}
+	if mappings[1].NameSuffix != "3000" {
+		t.Errorf("expected the secondary discovered port to be suffixed \"3000\", got %q", mappings[1].NameSuffix)
+	}
+}
+
+// TestResolvePortsAndMappings_DefaultsTo8080WhenNothingIsDiscovered is the compatibility
+// guarantee: the user who has no config file, passes no flag and is not in a workspace
+// still ends up on 8080 whenever discovery turns up nothing.
+func TestResolvePortsAndMappings_DefaultsTo8080WhenNothingIsDiscovered(t *testing.T) {
+	cases := []struct {
+		name       string
+		result     *client.AutoDiscoverResult
+		discoveErr error
+	}{
+		{name: "nothing found", result: nil},
+		{name: "discovery failed", discoveErr: errDiscoveryForTest},
+		{name: "result with no ports", result: &client.AutoDiscoverResult{Host: "localhost"}},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			stubPortDiscovery(t)
+			isLiferayWorkspace = func(string) bool { return false }
+			detectWorkspacePorts = func(string) ([]client.PortMapping, error) { return nil, nil }
+			autoDiscoverTarget = func() (*client.AutoDiscoverResult, error) { return tc.result, tc.discoveErr }
+
+			oldPortsStr := *portsStr
+			*portsStr = ""
+			defer func() { *portsStr = oldPortsStr }()
+
+			mappings := resolvePortsAndMappings(&config.ClientConfig{})
+
+			if len(mappings) != 1 || mappings[0].LocalPort != 8080 || mappings[0].NameSuffix != "" {
+				t.Fatalf("expected the unchanged 8080 default, got %+v", mappings)
+			}
+		})
+	}
+}
+
+// TestResolvePortsAndMappings_DefaultsTo8080WhenTheWorkspaceScanFails — same guarantee on
+// the workspace side.
+func TestResolvePortsAndMappings_DefaultsTo8080WhenTheWorkspaceScanFails(t *testing.T) {
+	stubPortDiscovery(t)
+	isLiferayWorkspace = func(string) bool { return true }
+	detectWorkspacePorts = func(string) ([]client.PortMapping, error) { return nil, errDiscoveryForTest }
+	autoDiscoverTarget = func() (*client.AutoDiscoverResult, error) { return nil, nil }
+
+	oldPortsStr := *portsStr
+	*portsStr = ""
+	defer func() { *portsStr = oldPortsStr }()
+
+	mappings := resolvePortsAndMappings(&config.ClientConfig{})
+
+	if len(mappings) != 1 || mappings[0].LocalPort != 8080 {
+		t.Fatalf("expected the 8080 fallback after a failed scan, got %+v", mappings)
+	}
+}
+
+var errDiscoveryForTest = errors.New("discovery unavailable")

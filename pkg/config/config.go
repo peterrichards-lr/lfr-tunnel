@@ -533,10 +533,18 @@ func DefaultServerConfig() *ServerConfig {
 }
 
 // DefaultClientConfig returns a ClientConfig with sensible default values.
+//
+// Ports is deliberately left empty. Seeding it with []int{8080} made "the user asked for
+// 8080" and "the user said nothing" the same value, and resolvePortsAndMappings only runs
+// workspace/host discovery when the list is empty -- so the zero-config workspace scan
+// documented in docs/getting_started.md was unreachable for everyone who had not written
+// an explicit `ports: []` in their config file (#1710). 8080 is still what you end up with
+// when nothing is discovered; it is applied at the point of use, not here. Consumers that
+// need a value to display (pkg/gui, pkg/client/inspector) already fall back to 8080
+// themselves when the list is empty.
 func DefaultClientConfig() *ClientConfig {
 	return &ClientConfig{
 		ServerURL: DefaultServerURL,
-		Ports:     []int{8080},
 		Regions:   map[string]string{}, // Regions are now fetched dynamically from the Control Plane at runtime
 	}
 }

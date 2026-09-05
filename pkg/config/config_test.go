@@ -429,3 +429,52 @@ func TestInsecurePermissionWarning(t *testing.T) {
 		}
 	}
 }
+
+// TestDefaultClientConfigLeavesPortsUnset pins the fix for #1710. Seeding Ports with
+// []int{8080} here made "the user asked for 8080" and "the user said nothing" the same
+// value, and the client only runs workspace/host discovery when the list is empty -- so
+// the zero-config workspace scan was unreachable. 8080 is now applied at the point of use.
+func TestDefaultClientConfigLeavesPortsUnset(t *testing.T) {
+	if ports := DefaultClientConfig().Ports; len(ports) != 0 {
+		t.Fatalf("DefaultClientConfig must leave Ports unset so discovery is reachable, got %v", ports)
+	}
+}
+
+// TestLoadClientConfigDistinguishesUnsetPortsFromExplicitPorts is the property the fix
+// depends on: a config file that never mentions `ports` must load as unset, while one that
+// does must be honoured verbatim -- including an explicit 8080, which must not be confused
+// with the absence of a setting.
+func TestLoadClientConfigDistinguishesUnsetPortsFromExplicitPorts(t *testing.T) {
+	cases := []struct {
+		name string
+		yaml string
+		want []int
+	}{
+		{name: "no ports key", yaml: "server_url: \"https://tunnel.example.com\"\n", want: nil},
+		{name: "explicit 8080", yaml: "ports:\n  - 8080\n", want: []int{8080}},
+		{name: "explicit other ports", yaml: "ports:\n  - 3000\n  - 4001\n", want: []int{3000, 4001}},
+		{name: "explicit empty list", yaml: "ports: []\n", want: []int{}},
+	}
+	// An LFT_CLIENT_PORTS in the developer's own environment would override the file.
+	t.Setenv("LFT_CLIENT_PORTS", "")
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			path := filepath.Join(t.TempDir(), "config.yaml")
+			if err := os.WriteFile(path, []byte(tc.yaml), 0o600); err != nil {
+				t.Fatalf("failed to write config fixture: %v", err)
+			}
+			cfg, err := LoadClientConfig(path)
+			if err != nil {
+				t.Fatalf("failed to load client config: %v", err)
+			}
+			if len(cfg.Ports) != len(tc.want) {
+				t.Fatalf("expected Ports %v, got %v", tc.want, cfg.Ports)
+			}
+			for i := range tc.want {
+				if cfg.Ports[i] != tc.want[i] {
+					t.Fatalf("expected Ports %v, got %v", tc.want, cfg.Ports)
+				}
+			}
+		})
+	}
+}

@@ -52,14 +52,24 @@ func RunLogin(serverURL string) error {
 	// POST fired on a fixed timer, occasionally racing ListenAndServe's own goroutine and
 	// hanging the whole test until Go's 10-minute timeout killed it, since the browser
 	// mock and the stdin fallback would both then have nothing to deliver.
-	listener, err := net.Listen("tcp", "127.0.0.1:4444")
-	if err != nil {
-		return fmt.Errorf("failed to start local handoff listener: %w", err)
+	listener, listenErr := listenHandoff()
+	var srv *http.Server
+	if listenErr != nil {
+		// An occupied port is not a reason to refuse to log in (#1718). The portal
+		// already offers the token for copying whenever its handoff POST fails, and the
+		// prompt below accepts it on stdin, so the flow still completes -- just by hand.
+		// 4444 is a popular port (Selenium Grid's default, plus assorted debuggers and
+		// proxies), which makes a collision routine rather than a broken install, and
+		// aborting here threw away a login that would otherwise have worked.
+		fmt.Printf("\n⚠️  Could not listen on %s: %v\n", handoffAddr, listenErr)
+		fmt.Println("   Automatic token handoff is unavailable for this login -- copy the token from the portal instead.")
+		fmt.Printf("   To restore it, find and stop whatever is holding the port:\n     %s\n\n", handoffPortHint())
+	} else {
+		srv = &http.Server{Handler: mux, ReadHeaderTimeout: readHeaderTimeout}
+		go func() {
+			_ = srv.Serve(listener) //nolint:errcheck
+		}()
 	}
-	srv := &http.Server{Handler: mux, ReadHeaderTimeout: readHeaderTimeout}
-	go func() {
-		_ = srv.Serve(listener) //nolint:errcheck
-	}()
 
 	portalURL := resolvePortalURL(serverURL)
 
@@ -70,20 +80,37 @@ func RunLogin(serverURL string) error {
 	fmt.Print("If your browser didn't open or handoff fails, paste your token here: ")
 
 	// Read from stdin in a goroutine
+	failChan := make(chan error, 1)
 	go func() {
 		var manualToken string
 		if _, err := fmt.Scan(&manualToken); err == nil && manualToken != "" {
 			tokenChan <- manualToken
+			return
+		}
+		if listenErr != nil {
+			// Neither route can deliver a token now: the handoff listener never started,
+			// and stdin will not produce one either (closed, redirected from /dev/null,
+			// or a non-interactive shell). Report the bind failure rather than blocking
+			// forever on a channel nothing will ever send to -- an unattended
+			// `lfr-tunnel login` still has to fail fast, as it did before #1718.
+			failChan <- fmt.Errorf("failed to start local handoff listener on %s (%w), and no token was supplied on stdin", handoffAddr, listenErr)
 		}
 	}()
 
 	// Wait for token
-	token := <-tokenChan
+	var token string
+	select {
+	case token = <-tokenChan:
+	case err := <-failChan:
+		return err
+	}
 
 	// Shutdown server
-	ctx, cancel := context.WithTimeout(context.Background(), 1*time.Second)
-	defer cancel()
-	_ = srv.Shutdown(ctx) //nolint:errcheck
+	if srv != nil {
+		ctx, cancel := context.WithTimeout(context.Background(), 1*time.Second)
+		defer cancel()
+		_ = srv.Shutdown(ctx) //nolint:errcheck
+	}
 
 	// Save the token
 	home, err := os.UserHomeDir()
@@ -105,6 +132,45 @@ func RunLogin(serverURL string) error {
 }
 
 var openBrowserFunc = openBrowser
+
+// handoffPort is the loopback port the token handoff listener binds to.
+//
+// It is fixed, and cannot be moved to an ephemeral port or walked upwards the way
+// StartInspector walks its own: the portal page that delivers the token POSTs to this
+// exact address from the browser -- `fetch('http://127.0.0.1:4444/handoff', ...)` in
+// pkg/server/static/dashboard.js -- so the number is half of a contract with JavaScript
+// served by whichever gateway the user is logging in to. Nothing negotiates it: the POST
+// is fired blind under `mode: 'no-cors'`, and the portal URL this CLI opens carries no
+// port for the page to read back. A client that bound elsewhere would sit on a listener
+// no browser ever contacts, and would do so against every already-deployed gateway even
+// if the JavaScript were changed today.
+//
+// It is *not* an OAuth redirect_uri: no identity provider has it registered. The SSO flow
+// (pkg/server/sso.go) redirects back to the gateway, never to the CLI, and the only
+// registered redirect_uri in this repo is Slack's, which is server-side
+// (pkg/server/slack.go). So the constraint is the portal's JavaScript, not an IdP --
+// which is why #1718 fixes the failure mode rather than the port.
+const handoffPort = "4444"
+
+// handoffAddr is where that listener binds.
+const handoffAddr = "127.0.0.1:" + handoffPort
+
+// listenHandoff opens the handoff listener. It is a variable so tests can bind an
+// ephemeral port instead of the fixed one, or simulate the port being taken; the product
+// always uses handoffAddr for the reasons above.
+var listenHandoff = func() (net.Listener, error) {
+	return net.Listen("tcp", handoffAddr)
+}
+
+// handoffPortHint returns the platform's command for identifying whatever holds the
+// handoff port. Naming the port is not actionable on its own -- the next thing anyone
+// needs is the process behind it.
+func handoffPortHint() string {
+	if runtime.GOOS == "windows" {
+		return "netstat -ano | findstr :" + handoffPort
+	}
+	return "lsof -nP -iTCP:" + handoffPort + " -sTCP:LISTEN"
+}
 
 // resolvePortalURL works out which portal to open a browser at for a given gateway.
 //

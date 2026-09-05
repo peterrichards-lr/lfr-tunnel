@@ -21,6 +21,7 @@ import (
 	"time"
 
 	"lfr-tunnel/pkg/config"
+	"lfr-tunnel/pkg/proxyutil"
 
 	"golang.org/x/time/rate"
 )
@@ -971,7 +972,10 @@ func (e *InterceptorEngine) InterceptPort(targetPort int) (int, error) {
 	}
 	targetURL, _err := url.Parse(fmt.Sprintf("%s://%s:%d", scheme, e.TargetHost, targetPort))
 	_ = _err //nolint:errcheck
-	proxy := httputil.NewSingleHostReverseProxy(targetURL)
+	// Built directly rather than with NewSingleHostReverseProxy, which installs a Director:
+	// Director is deprecated as of Go 1.26, and ReverseProxy rejects a proxy carrying both a
+	// Director and a Rewrite. The Rewrite below performs the URL rewriting it provided (#1704).
+	proxy := &httputil.ReverseProxy{}
 
 	customTransport := http.DefaultTransport.(*http.Transport).Clone()
 	if scheme == "https" && e.InsecureSkipVerify {
@@ -985,25 +989,36 @@ func (e *InterceptorEngine) InterceptPort(targetPort int) (int, error) {
 		transport:  customTransport,
 	}
 
-	// Custom Director to inject headers.
-	//
-	// Director is deprecated in favour of Rewrite as of Go 1.26, but migrating is not a
-	// rename: Rewrite has no original to chain to, and it does not append X-Forwarded-For
-	// the way Director does. Tracked in #1704 with a test-first plan rather than folded
-	// into the dependency bump that raised the language version (#1703).
-	originalDirector := proxy.Director         //nolint:staticcheck // SA1019: migration tracked in #1704
-	proxy.Director = func(req *http.Request) { //nolint:staticcheck // SA1019: migration tracked in #1704
-		originalDirector(req)
+	// Custom Rewrite to point the request at the local target and inject headers.
+	proxy.Rewrite = func(pr *httputil.ProxyRequest) {
+		// SetURL is the same URL rewriting NewSingleHostReverseProxy's Director did, but it
+		// additionally clears Out.Host so the Host header follows the target URL. That is
+		// only one of the two PreserveHost states, and it is not even the same string --
+		// URL.Host keeps a default port ("host:443") where the old code sent bare "host" --
+		// so the Host header is set explicitly below in both states instead.
+		inboundHost := pr.Out.Host
+		pr.SetURL(targetURL)
+		pr.Out.Host = inboundHost
 
 		// Rewrite Host header if PreserveHost is unchecked
 		if !e.PreserveHost {
-			req.Host = getHostHeaderValue(e.TargetHost, targetPort)
+			pr.Out.Host = getHostHeaderValue(e.TargetHost, targetPort)
 		}
+
+		// ReverseProxy strips the inbound forwarding headers before calling a Rewrite, and
+		// does not append the peer to X-Forwarded-For the way it does for a Director.
+		// SetXForwarded is the wrong tool here: this proxy is an inner hop, so the gateway's
+		// X-Forwarded-Host/-Proto must survive -- interceptorTransport.RoundTrip reads them
+		// back off this request to rewrite Location headers and cookie domains, and
+		// overwriting them with the interceptor's own local view would send the developer's
+		// server "http" and 127.0.0.1 for a request that arrived over HTTPS.
+		proxyutil.RestoreInboundForwarded(pr)
+		proxyutil.AppendPeerToXForwardedFor(pr)
 
 		e.mu.RLock()
 		defer e.mu.RUnlock()
 		for k, v := range e.AddedHeaders {
-			req.Header.Set(k, v)
+			pr.Out.Header.Set(k, v)
 		}
 	}
 

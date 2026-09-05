@@ -16,6 +16,7 @@ import (
 	"io"
 	"lfr-tunnel/pkg/config"
 	"lfr-tunnel/pkg/db"
+	"lfr-tunnel/pkg/proxyutil"
 
 	"golang.org/x/crypto/bcrypt"
 	"log/slog"
@@ -183,10 +184,15 @@ func (p *ProxyHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 
 	// 4. Create reverse proxy
 	proxy := &httputil.ReverseProxy{
-		// Deprecated in favour of Rewrite as of Go 1.26. Not migrated here: Rewrite does not
-		// append X-Forwarded-For on its own, and this Director is where the visitor IP that
-		// reaches the tunnel table, the WAF and the audit log is resolved. Tracked in #1704.
-		Director: func(req *http.Request) { //nolint:staticcheck // SA1019: migration tracked in #1704
+		// Migrated from the deprecated Director in #1704. Rewrite is not a rename: this is
+		// where the visitor IP that reaches the tunnel table, the WAF and the audit log is
+		// resolved, and ReverseProxy neither leaves the inbound forwarding headers in place
+		// nor appends the peer to X-Forwarded-For for a Rewrite the way it does for a
+		// Director. proxyutil restores both, framing the body below unchanged.
+		Rewrite: func(pr *httputil.ProxyRequest) {
+			req := pr.Out
+			proxyutil.RestoreInboundForwarded(pr)
+
 			req.URL.Scheme = "http"
 			req.URL.Host = fmt.Sprintf("127.0.0.1:%d", lease.LocalPort)
 			// Resolve client IP address using centralized helper from original request r
@@ -229,6 +235,8 @@ func (p *ProxyHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 					req.Header.Set(k, interpolated)
 				}
 			}
+
+			proxyutil.AppendPeerToXForwardedFor(pr)
 		},
 		ModifyResponse: func(resp *http.Response) error {
 			origin := r.Header.Get("Origin")
@@ -328,9 +336,14 @@ func (p *ProxyHandler) tryCrossNodeProxy(w http.ResponseWriter, r *http.Request,
 
 	// 5. Build reverse proxy
 	proxy := &httputil.ReverseProxy{
-		// Deprecated in favour of Rewrite as of Go 1.26; see the note on the other
-		// Director in this file. Migration tracked in #1704.
-		Director: func(req *http.Request) { //nolint:staticcheck // SA1019: migration tracked in #1704
+		// Migrated from the deprecated Director in #1704; see the note on the other proxy in
+		// this file. Restoring the inbound forwarding headers matters more here than there:
+		// every "set it only if it is missing" check below is asking what the *upstream*
+		// gateway already recorded, and ReverseProxy has deleted all four by this point.
+		Rewrite: func(pr *httputil.ProxyRequest) {
+			req := pr.Out
+			proxyutil.RestoreInboundForwarded(pr)
+
 			req.URL.Scheme = targetParsed.Scheme
 			req.URL.Host = targetParsed.Host
 			if targetParsed.Path != "" && targetParsed.Path != "/" {
@@ -366,6 +379,8 @@ func (p *ProxyHandler) tryCrossNodeProxy(w http.ResponseWriter, r *http.Request,
 			} else {
 				req.Header.Set("X-LFR-Cross-Node-Visited", visited+","+currentNodeID)
 			}
+
+			proxyutil.AppendPeerToXForwardedFor(pr)
 		},
 		ErrorHandler: func(w http.ResponseWriter, req *http.Request, err error) {
 			slog.Info(fmt.Sprintf("[Proxy] Cross-node routing failure for %s to %s (%s): %v", host, targetNodeID, targetURL, err))

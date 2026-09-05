@@ -13,15 +13,17 @@ import (
 	chserver "github.com/jpillora/chisel/server"
 )
 
-// Characterisation tests for both reverse proxies in this file's production counterpart,
-// written against the Director-based implementation before the migration to Rewrite
-// (#1704) and expected to pass unchanged after it.
+// Tests for both reverse proxies in this file's production counterpart. They began as
+// characterisation tests written against the Director-based implementation before the
+// migration to Rewrite (#1704), and pinned the duplicated last hop that migration
+// preserved. #1737 removed the duplicate, so the X-Forwarded-For expectations below now
+// describe the chain the gateway can actually vouch for rather than the one it emitted.
 //
 // The forwarded headers here are not cosmetic: the visitor IP they carry is what reaches
 // the tunnel table, the WAF and the audit log, and httputil.ReverseProxy appends to
 // X-Forwarded-For for a Director but not for a Rewrite. These assertions are deliberately
 // exact strings rather than "is not empty", because a dropped hop still leaves a
-// populated header.
+// populated header -- and because a duplicated hop does too.
 
 // captureBackend starts a backend that records the request the proxy actually sent.
 func captureBackend(t *testing.T) (*http.Request, *httptest.Server) {
@@ -93,27 +95,59 @@ func TestLeaseProxy_ForwardingHeaders(t *testing.T) {
 			name:       "untrusted peer: inbound X-Forwarded-For is not believed",
 			remoteAddr: "192.0.2.1:1234",
 			inbound:    map[string]string{"X-Forwarded-For": "203.0.113.7"},
-			// The Director overwrites X-Forwarded-For with the resolved visitor IP, and
-			// ReverseProxy then appends the connecting peer to it.
-			wantXFF:     "192.0.2.1, 192.0.2.1",
+			// The forged 203.0.113.7 must not survive, and the address that replaces it
+			// must come from the connection rather than from a header. One entry, because
+			// there is exactly one hop between this visitor and the gateway: none. Before
+			// #1737 this read "192.0.2.1, 192.0.2.1" -- the proxy wrote the resolved
+			// visitor and ReverseProxy appended the same peer on top of it.
+			wantXFF:     "192.0.2.1",
 			wantRealIP:  "192.0.2.1",
 			wantProto:   "http",
 			wantVisitor: "192.0.2.1",
 		},
 		{
-			name:        "trusted peer: inbound X-Forwarded-For resolves the visitor",
-			remoteAddr:  "127.0.0.1:4444",
-			inbound:     map[string]string{"X-Forwarded-For": "203.0.113.7"},
+			name:       "trusted peer: inbound X-Forwarded-For resolves the visitor",
+			remoteAddr: "127.0.0.1:4444",
+			inbound:    map[string]string{"X-Forwarded-For": "203.0.113.7"},
+			// Two genuinely distinct hops -- the visitor, then the nginx that forwarded
+			// on loopback -- so this one is unchanged by #1737.
 			wantXFF:     "203.0.113.7, 127.0.0.1",
 			wantRealIP:  "203.0.113.7",
 			wantProto:   "http",
 			wantVisitor: "203.0.113.7",
 		},
 		{
+			// The production nginx template sets X-Real-IP and X-Forwarded-For alike
+			// (pkg/ops/nginx.go), but the e2e wildcard vhost sets only X-Real-IP, and an
+			// operator's may too. The visitor must still reach the chain: dropping the
+			// explicit set without this would have left just the loopback peer.
+			name:        "trusted peer: X-Real-IP alone still names the visitor in the chain",
+			remoteAddr:  "127.0.0.1:4444",
+			inbound:     map[string]string{"X-Real-IP": "203.0.113.7"},
+			wantXFF:     "203.0.113.7, 127.0.0.1",
+			wantRealIP:  "203.0.113.7",
+			wantProto:   "http",
+			wantVisitor: "203.0.113.7",
+		},
+		{
+			// A caller that forges the chain AND the peer's own address into it gains
+			// nothing: the chain is discarded wholesale before the peer is appended.
+			name:       "untrusted peer: a forged chain naming the peer is still discarded",
+			remoteAddr: "192.0.2.1:1234",
+			inbound: map[string]string{
+				"X-Forwarded-For": "203.0.113.7, 192.0.2.1",
+				"X-Real-IP":       "203.0.113.7",
+			},
+			wantXFF:     "192.0.2.1",
+			wantRealIP:  "192.0.2.1",
+			wantProto:   "http",
+			wantVisitor: "192.0.2.1",
+		},
+		{
 			name:        "inbound X-Forwarded-Proto decides the forwarded scheme",
 			remoteAddr:  "192.0.2.1:1234",
 			inbound:     map[string]string{"X-Forwarded-Proto": "https"},
-			wantXFF:     "192.0.2.1, 192.0.2.1",
+			wantXFF:     "192.0.2.1",
 			wantRealIP:  "192.0.2.1",
 			wantProto:   "https",
 			wantVisitor: "192.0.2.1",
@@ -225,19 +259,22 @@ func TestCrossNodeProxy_ForwardingHeaders(t *testing.T) {
 	got, mockEdge := captureBackend(t)
 
 	cases := []struct {
-		name      string
-		inbound   map[string]string
-		wantXFF   string
-		wantReal  string
-		wantHost  string
-		wantProto string
+		name string
+		// remoteAddr defaults to the untrusted 198.51.100.25:54321 when empty.
+		remoteAddr string
+		inbound    map[string]string
+		wantXFF    string
+		wantReal   string
+		wantHost   string
+		wantProto  string
 	}{
 		{
 			name:    "first hop populates the chain",
 			inbound: map[string]string{},
-			// The Director appends the resolved visitor IP, then ReverseProxy appends the
-			// peer on top of that.
-			wantXFF:   "198.51.100.25, 198.51.100.25",
+			// One hop: the visitor, who is also the peer. Before #1737 the proxy appended
+			// the resolved visitor IP and ReverseProxy appended the same peer after it,
+			// giving "198.51.100.25, 198.51.100.25".
+			wantXFF:   "198.51.100.25",
 			wantReal:  "198.51.100.25",
 			wantHost:  "demo.lfr-demo.se",
 			wantProto: "http",
@@ -253,10 +290,44 @@ func TestCrossNodeProxy_ForwardingHeaders(t *testing.T) {
 				"X-Forwarded-Host":  "vanity.example.com",
 				"X-Forwarded-Proto": "https",
 			},
-			wantXFF:   "203.0.113.7, 198.51.100.25, 198.51.100.25",
+			// The peer is untrusted, so the inbound X-Real-IP is NOT believed and the
+			// visitor resolves to the peer -- which is also the entry this hop adds. The
+			// prior chain is still carried through unchanged; only the repeat is gone
+			// (it was "203.0.113.7, 198.51.100.25, 198.51.100.25").
+			wantXFF:   "203.0.113.7, 198.51.100.25",
 			wantReal:  "203.0.113.7",
 			wantHost:  "vanity.example.com",
 			wantProto: "https",
+		},
+		{
+			// The production shape: nginx on loopback in front of central, forwarding to
+			// an edge. nginx's X-Forwarded-For is already the visitor (it sets
+			// $remote_addr, not $proxy_add_x_forwarded_for -- pkg/ops/nginx.go), so the
+			// chain already ends with the address this hop resolved. Naming it again
+			// described a hop that does not exist: before #1737 the edge received
+			// "203.0.113.7, 203.0.113.7, 127.0.0.1".
+			name:       "trusted peer: a chain already ending in the visitor is not repeated",
+			remoteAddr: "127.0.0.1:4444",
+			inbound: map[string]string{
+				"X-Forwarded-For": "203.0.113.7",
+				"X-Real-IP":       "203.0.113.7",
+			},
+			wantXFF:   "203.0.113.7, 127.0.0.1",
+			wantReal:  "203.0.113.7",
+			wantHost:  "demo.lfr-demo.se",
+			wantProto: "http",
+		},
+		{
+			// No inbound chain at all, only X-Real-IP -- the shape tests/e2e/nginx.conf's
+			// wildcard vhost produces. The visitor has to be introduced to the chain here
+			// or the edge sees nothing but the loopback peer.
+			name:       "trusted peer: X-Real-IP alone introduces the visitor to the chain",
+			remoteAddr: "127.0.0.1:4444",
+			inbound:    map[string]string{"X-Real-IP": "203.0.113.7"},
+			wantXFF:    "203.0.113.7, 127.0.0.1",
+			wantReal:   "203.0.113.7",
+			wantHost:   "demo.lfr-demo.se",
+			wantProto:  "http",
 		},
 	}
 
@@ -284,6 +355,9 @@ func TestCrossNodeProxy_ForwardingHeaders(t *testing.T) {
 			req := httptest.NewRequest(http.MethodGet, "http://demo.lfr-demo.se/api/test?q=search", nil)
 			req.Host = "demo.lfr-demo.se"
 			req.RemoteAddr = "198.51.100.25:54321"
+			if tc.remoteAddr != "" {
+				req.RemoteAddr = tc.remoteAddr
+			}
 			for k, v := range tc.inbound {
 				req.Header.Set(k, v)
 			}

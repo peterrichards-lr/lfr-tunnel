@@ -874,6 +874,32 @@ var (
 	autoDiscoverTarget   = client.AutoDiscoverTarget
 )
 
+// normalizeDiscoveredHost rewrites a discovered host of exactly "localhost" to the IPv4
+// loopback literal, and leaves every other value untouched.
+//
+// The two are interchangeable as *names* -- isLoopbackHostname treats "localhost",
+// "127.0.0.1" and "::1" as one set (pkg/client/inspector.go) -- but not as *dial targets*.
+// "localhost" commonly resolves to ::1 ahead of 127.0.0.1. Go's dialer tries both, so a
+// target bound only to IPv4 is usually still reached after a fast refusal on ::1; where ::1
+// is filtered rather than refused, that same fallback is a timeout. This client is used to
+// demo a local Liferay to a customer over a public URL, where a hang costs far more than
+// the microsecond the literal saves.
+//
+// So it matches the rest of the client, which already dials the literal: NewInterceptorEngine
+// and ReplayRequest both default an empty TargetHost to "127.0.0.1" rather than to
+// "localhost" (pkg/client/interceptor.go, pkg/client/inspector.go).
+//
+// Exact equality, not a loopback test: AutoDiscoverTarget hardcodes "localhost" on both of
+// its paths today, but the Docker path is the one that could reasonably learn to report a
+// container name or a network alias, and rewriting a real hostname would send traffic to the
+// wrong place. Only the literal this function was written for is touched.
+func normalizeDiscoveredHost(host string) string {
+	if host == "localhost" {
+		return "127.0.0.1"
+	}
+	return host
+}
+
 // resolvePortsAndMappings decides which local ports the tunnel publishes.
 //
 // An empty resolved list means "nobody said" -- not "no ports" -- and is what makes the
@@ -930,9 +956,25 @@ func resolvePortsAndMappings(cfg *config.ClientConfig) []client.PortMapping {
 				facts.portSource = fmt.Sprintf(" (auto-discovered: %s on %s)", discoveryResult.Type, discoveryResult.Host)
 				slog.Info(fmt.Sprintf("[Client] Auto-discovered %s target on host '%s' with ports: %v", discoveryResult.Type, discoveryResult.Host, discoveryResult.Ports))
 
-				// Automatically update the target host if it wasn't explicitly set via flags
-				if *targetHost == "localhost" {
-					cfg.TargetHost = discoveryResult.Host
+				// Discovery is the lowest-priority source of the target host: it fills the
+				// value in only when nobody supplied one. cfg.TargetHost is empty at this
+				// point exactly when no `target_host:` in the config file, no
+				// LFT_TARGET_HOST and no -target-host reached it -- DefaultClientConfig
+				// leaves the field empty, and all three overrides are guarded on "not
+				// empty" -- so this single test covers the whole documented precedence
+				// chain (docs/client_configuration.md, "Precedence").
+				//
+				// The condition used to be `*targetHost == "localhost"`, which was the
+				// exact opposite of the comment above it. The flag defaults to "", so it
+				// fired only for someone who typed `-target-host localhost` -- the one
+				// case that must be left alone -- and was inert for everybody else (#1735).
+				//
+				// Deliberately not flag.Visit: an explicitly-passed `-target-host ""` is
+				// documented to override nothing ("An empty value never overrides"), so it
+				// must not suppress discovery either. Testing the resolved value keeps
+				// that rule in one place instead of giving the empty flag a second meaning.
+				if cfg.TargetHost == "" && discoveryResult.Host != "" {
+					cfg.TargetHost = normalizeDiscoveredHost(discoveryResult.Host)
 				}
 
 				for idx, port := range discoveryResult.Ports {

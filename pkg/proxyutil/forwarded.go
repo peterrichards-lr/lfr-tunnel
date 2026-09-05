@@ -26,11 +26,15 @@ import (
 	"strings"
 )
 
+// headerXForwardedFor is the one forwarded header these helpers build a value for, rather
+// than merely copying, so it is named once.
+const headerXForwardedFor = "X-Forwarded-For"
+
 // forwardedHeaders are the four headers ReverseProxy strips from the outbound request
 // before invoking a Rewrite function.
 var forwardedHeaders = []string{
 	"Forwarded",
-	"X-Forwarded-For",
+	headerXForwardedFor,
 	"X-Forwarded-Host",
 	"X-Forwarded-Proto",
 }
@@ -60,20 +64,94 @@ func RestoreInboundForwarded(pr *httputil.ProxyRequest) {
 // Call it last, so it extends whatever chain the rewrite settled on rather than a chain
 // later code overwrites.
 func AppendPeerToXForwardedFor(pr *httputil.ProxyRequest) {
-	clientIP, _, err := net.SplitHostPort(pr.In.RemoteAddr)
+	peer, err := peerIP(pr)
 	if err != nil {
 		// No usable peer address. ReverseProxy leaves the header alone in this case.
 		return
 	}
 
-	prior, ok := pr.Out.Header["X-Forwarded-For"]
-	if ok && prior == nil {
-		// Go issue 38079: a header present in the map with a nil value means "do not
-		// populate X-Forwarded-For at all".
+	prior, suppressed := priorXForwardedFor(pr)
+	if suppressed {
 		return
 	}
-	if len(prior) > 0 {
-		clientIP = strings.Join(prior, ", ") + ", " + clientIP
+	appendXForwardedFor(pr, prior, peer)
+}
+
+// EnsureVisitorInXForwardedFor extends the outbound X-Forwarded-For with the resolved
+// visitor address, unless that address is already accounted for.
+//
+// It exists because both server proxies knew the visitor's address (resolved through the
+// trusted-proxy boundary in pkg/server/client_ip.go) and wrote it into X-Forwarded-For
+// themselves, and AppendPeerToXForwardedFor then added the connecting peer on top. For a
+// visitor connecting directly the two are the same address, so every such request carried
+// a duplicated last hop -- "192.0.2.1, 192.0.2.1" (#1737).
+//
+// Two cases are skipped, and skipping them is the whole fix:
+//
+//   - The visitor IS the peer. AppendPeerToXForwardedFor is about to contribute exactly
+//     this address, and it contributes the only entry in the chain that cannot be forged,
+//     since it comes from the connection rather than from a header.
+//   - The chain already ends with the visitor, because a trusted upstream recorded it.
+//     Naming a hop twice in a row describes a hop that does not exist.
+//
+// It deliberately does NOT decide what the chain to the left contains. A caller that must
+// not believe an inbound chain has to discard it before calling this; see the lease proxy
+// in pkg/server/proxy.go, which does exactly that.
+//
+// Call it before AppendPeerToXForwardedFor, which closes the chain with the peer.
+func EnsureVisitorInXForwardedFor(pr *httputil.ProxyRequest, visitorIP string) {
+	visitorIP = strings.TrimSpace(visitorIP)
+	if visitorIP == "" {
+		return
 	}
-	pr.Out.Header.Set("X-Forwarded-For", clientIP)
+
+	prior, suppressed := priorXForwardedFor(pr)
+	if suppressed {
+		return
+	}
+	if peer, err := peerIP(pr); err == nil && peer == visitorIP {
+		return
+	}
+	if lastXForwardedForEntry(prior) == visitorIP {
+		return
+	}
+	appendXForwardedFor(pr, prior, visitorIP)
+}
+
+// peerIP is the address of whoever opened the connection, with the port removed. It is
+// read from the INBOUND request: pr.Out is a clone whose RemoteAddr ReverseProxy clears.
+func peerIP(pr *httputil.ProxyRequest) (string, error) {
+	ip, _, err := net.SplitHostPort(pr.In.RemoteAddr)
+	return ip, err
+}
+
+// priorXForwardedFor returns the outbound chain so far. suppressed reports Go issue 38079's
+// opt-out: a header present in the map with a nil value means "do not populate
+// X-Forwarded-For at all", and no helper here may override that.
+func priorXForwardedFor(pr *httputil.ProxyRequest) (prior []string, suppressed bool) {
+	prior, ok := pr.Out.Header[headerXForwardedFor]
+	return prior, ok && prior == nil
+}
+
+// lastXForwardedForEntry is the rightmost address in the chain -- the hop nearest to us.
+// Values arrive either as repeated header lines or as one comma-separated line, so both
+// have to be unwrapped.
+func lastXForwardedForEntry(prior []string) string {
+	if len(prior) == 0 {
+		return ""
+	}
+	last := prior[len(prior)-1]
+	if i := strings.LastIndex(last, ","); i >= 0 {
+		last = last[i+1:]
+	}
+	return strings.TrimSpace(last)
+}
+
+// appendXForwardedFor writes prior + value back as a single comma-separated header value,
+// which is what ReverseProxy does when it folds a multi-valued chain.
+func appendXForwardedFor(pr *httputil.ProxyRequest, prior []string, value string) {
+	if len(prior) > 0 {
+		value = strings.Join(prior, ", ") + ", " + value
+	}
+	pr.Out.Header.Set(headerXForwardedFor, value)
 }

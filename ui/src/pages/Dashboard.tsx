@@ -36,6 +36,31 @@ function isOlderVersion(current: string, target: string): boolean {
   return false;
 }
 
+/**
+ * Where `lfr-tunnel login` waits for the token the portal is about to mint.
+ *
+ * Portal V1 has fired this same POST since the flow was built
+ * (`pkg/server/static/dashboard.js`, `generateToken`); V2 did not, so the identical login
+ * auto-configured itself or silently demanded a copy-paste depending on which arm of the
+ * A/B test served the user (#1741).
+ *
+ * The port is fixed and cannot move. It is half of a contract with browser JavaScript
+ * served by every already-deployed gateway, and the POST is fired blind, so there is
+ * nothing to negotiate it with -- see the `handoffPort` comment in `pkg/client/login.go`,
+ * which spells out why #1718 fixed the failure mode rather than the number.
+ */
+const CLI_HANDOFF_URL = 'http://127.0.0.1:4444/handoff';
+
+/**
+ * `pending` while the blind POST is in flight, then one of the two terminal states.
+ *
+ * `delivered` is a hopeful reading, not a confirmed one: `mode: 'no-cors'` makes the
+ * response opaque, so "the fetch did not reject" is the strongest signal available. That is
+ * exactly what V1 concludes from, and it is why the token stays on screen in every state --
+ * a handoff that quietly failed must still leave the user something to copy.
+ */
+type HandoffStatus = 'pending' | 'delivered' | 'unavailable';
+
 export default function Dashboard() {
   const { user } = useOutletContext<{ user: any }>();
   const [tokens, setTokens] = useState<any[]>([]);
@@ -46,6 +71,9 @@ export default function Dashboard() {
   const [newTokenName, setNewTokenName] = useState('');
   const [newTokenExpiresDays, setNewTokenExpiresDays] = useState(30);
   const [generatedToken, setGeneratedToken] = useState<string | null>(null);
+  const [handoffStatus, setHandoffStatus] = useState<HandoffStatus | null>(
+    null,
+  );
   const [generating, setGenerating] = useState(false);
   const { formatDate } = useSettings();
   const { t } = useI18n();
@@ -177,22 +205,51 @@ export default function Dashboard() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [user?.id]);
 
+  // Deliberately cannot reject: the caller runs it after the token is already on screen,
+  // and a throw escaping here would surface as "Failed to generate token" over a token that
+  // was generated perfectly well.
+  const deliverTokenToCli = async (rawToken: string) => {
+    try {
+      // Plain `fetch`, not the app's `axios` instance: this goes to the user's own machine,
+      // not the gateway, so it must not pick up the base URL, credentials or interceptors.
+      // `no-cors` is what lets the POST leave at all -- the CLI does answer with permissive
+      // CORS headers, but only when it is running, and a preflight against a dead port is
+      // just a slower failure. The cost is that the response is opaque and unreadable.
+      await fetch(CLI_HANDOFF_URL, {
+        method: 'POST',
+        mode: 'no-cors',
+        body: rawToken,
+      });
+      setHandoffStatus('delivered');
+    } catch {
+      setHandoffStatus('unavailable');
+    }
+  };
+
   const handleCreateToken = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!newTokenName.trim()) return;
     setGenerating(true);
+    let rawToken: string | null = null;
     try {
       const res = await axios.post('/api/tokens', {
         name: newTokenName,
         expires_in_days: Number(newTokenExpiresDays),
       });
-      setGeneratedToken(res.data.raw_token);
+      rawToken = res.data.raw_token;
+      setGeneratedToken(rawToken);
+      // Shown before the POST is attempted, as V1 does: the token must be readable and
+      // copyable for the whole time the handoff is in flight, not only once it settles.
+      setHandoffStatus('pending');
       fetchTokens();
     } catch (err: any) {
       console.error(err);
       alert(err.response?.data?.error || 'Failed to generate token');
     } finally {
       setGenerating(false);
+    }
+    if (rawToken) {
+      await deliverTokenToCli(rawToken);
     }
   };
 
@@ -206,6 +263,34 @@ export default function Dashboard() {
       alert(err.response?.data?.error || 'Failed to revoke token');
     }
   };
+
+  // V1 shows the handoff outcome in #handoff-alert with `alert`, `alert alert-success` and
+  // `alert alert-warning`. V2's equivalents are the alert-banner modifiers, which have the
+  // advantage of all three actually existing: V1's `alert-warning` has no rule anywhere in
+  // the repo, so its failure banner -- the one case where the styling carries the message --
+  // renders unstyled (#1744).
+  const handoffBanner = !handoffStatus
+    ? null
+    : handoffStatus === 'delivered'
+      ? {
+          className: 'alert-banner alert-banner--success text-xs mb-lg',
+          text: t(
+            'handoff_delivered',
+            'Token successfully delivered to your CLI! You may close this window.',
+          ),
+        }
+      : handoffStatus === 'unavailable'
+        ? {
+            className: 'alert-banner alert-banner--warning text-xs mb-lg',
+            text: t(
+              'handoff_unavailable',
+              "Heads up: If you started this from your terminal using 'lfr-tunnel login', the CLI would auto-configure. Since it isn't running, please manually copy your token below:",
+            ),
+          }
+        : {
+            className: 'alert-banner alert-banner--info text-xs mb-lg',
+            text: t('handoff_pending', 'Attempting to send token to CLI...'),
+          };
 
   const handleExportCSV = () => {
     window.location.href = '/api/tokens/export';
@@ -382,6 +467,7 @@ export default function Dashboard() {
                   setNewTokenName('');
                   setNewTokenExpiresDays(30);
                   setGeneratedToken(null);
+                  setHandoffStatus(null);
                   setIsCreateTokenModalOpen(true);
                 }}
               >
@@ -633,6 +719,22 @@ export default function Dashboard() {
             </form>
           ) : (
             <div className="animate-fade-in-fast">
+              {/* Mirrors V1's #handoff-alert. role="status" because the text changes on its
+                  own once the POST settles, with no interaction to prompt a re-read.
+                  The variant is resolved above rather than inline: check-css-modifiers reads
+                  every string literal inside a className expression as a class name, so a
+                  ternary on handoffStatus would report 'delivered' and 'unavailable' as
+                  undefined CSS classes. */}
+              {handoffBanner && (
+                <div
+                  role="status"
+                  data-testid="cli-handoff-status"
+                  className={handoffBanner.className}
+                >
+                  {handoffBanner.text}
+                </div>
+              )}
+
               <div className="alert-banner alert-banner--warning text-xs mb-xl">
                 ⚠️{' '}
                 {t(

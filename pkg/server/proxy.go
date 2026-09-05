@@ -223,7 +223,17 @@ func (p *ProxyHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 				}
 			} else {
 				req.Header.Set("X-Real-IP", clientIP)
-				req.Header.Set("X-Forwarded-For", clientIP)
+				// Anti-spoofing (#1325): discard whatever chain arrived and rebuild it from
+				// what this gateway knows. p.clientIP already applied the trusted-proxy
+				// boundary, so clientIP is the peer address itself for an untrusted caller
+				// and the header-supplied visitor only for one we vouch for. Discarding
+				// first is what makes an inbound X-Forwarded-For unforgeable here; it is
+				// the behaviour the previous Set had as a side effect, stated outright.
+				req.Header.Del("X-Forwarded-For")
+				// Then name the visitor, and let AppendPeerToXForwardedFor below close the
+				// chain with the peer -- once. Setting clientIP here unconditionally was
+				// what produced "192.0.2.1, 192.0.2.1" for a direct visitor (#1737).
+				proxyutil.EnsureVisitorInXForwardedFor(pr, clientIP)
 				req.Header.Set("X-Forwarded-Host", req.Host)
 				req.Header.Set("X-Forwarded-Proto", proto)
 			}
@@ -353,11 +363,13 @@ func (p *ProxyHandler) tryCrossNodeProxy(w http.ResponseWriter, r *http.Request,
 			req.Host = host
 
 			clientIP := p.clientIP(r)
-			if priorFor := req.Header.Get("X-Forwarded-For"); priorFor != "" {
-				req.Header.Set("X-Forwarded-For", priorFor+", "+clientIP)
-			} else {
-				req.Header.Set("X-Forwarded-For", clientIP)
-			}
+			// This hop EXTENDS the chain rather than replacing it: an upstream gateway's
+			// entries are the record of how the request got here. Name the visitor only if
+			// the chain does not already end with it, and leave the peer to
+			// AppendPeerToXForwardedFor below. Appending clientIP unconditionally added an
+			// entry that the peer append then repeated (#1737) -- and behind nginx, whose
+			// X-Forwarded-For is already the visitor, repeated the visitor as well.
+			proxyutil.EnsureVisitorInXForwardedFor(pr, clientIP)
 			if req.Header.Get("X-Real-IP") == "" {
 				req.Header.Set("X-Real-IP", clientIP)
 			}

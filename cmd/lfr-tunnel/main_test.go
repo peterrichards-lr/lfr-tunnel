@@ -919,3 +919,203 @@ func TestResolvePortsAndMappings_DefaultsTo8080WhenTheWorkspaceScanFails(t *test
 }
 
 var errDiscoveryForTest = errors.New("discovery unavailable")
+
+// --- #1735: which source of the target host wins ---
+//
+// Precedence, from docs/client_configuration.md "Precedence": built-in default <
+// config file < environment < flag. Auto-discovery sits below all three -- it fills the
+// host in only when nobody supplied one, exactly as it already does for `ports`.
+//
+// The guard that implements this used to read `*targetHost == "localhost"`, the opposite
+// of its own comment. Because the flag defaults to "" it fired only for `-target-host
+// localhost` (the one case it had to skip) and never otherwise, so it passed every test
+// in this file while being incapable of doing anything at all. These tests fail on that
+// condition rather than merely tolerating it.
+
+// withTargetHostFlag sets the -target-host flag value for one test and restores it after,
+// mirroring how the tests above drive *portsStr.
+func withTargetHostFlag(t *testing.T, val string) {
+	t.Helper()
+	old := *targetHost
+	*targetHost = val
+	t.Cleanup(func() { *targetHost = old })
+}
+
+// stubDiscoveryReturning wires the seams so resolvePortsAndMappings reaches auto-discovery
+// and gets back a result on the given host.
+func stubDiscoveryReturning(t *testing.T, host string) {
+	t.Helper()
+	stubPortDiscovery(t)
+	isLiferayWorkspace = func(string) bool { return false }
+	detectWorkspacePorts = func(string) ([]client.PortMapping, error) { return nil, nil }
+	autoDiscoverTarget = func() (*client.AutoDiscoverResult, error) {
+		return &client.AutoDiscoverResult{Host: host, Ports: []int{8080}, Type: "Docker (LDM)"}, nil
+	}
+
+	oldPortsStr := *portsStr
+	*portsStr = ""
+	t.Cleanup(func() { *portsStr = oldPortsStr })
+}
+
+// TestResolvePortsAndMappings_TargetHostPrecedence walks the four combinations of
+// "-target-host given" x "config file gave a target_host", plus the two degenerate
+// discovery results, through the real overrideConfigWithFlags so the chain under test is
+// the one main() actually runs.
+//
+// The environment variable has no case of its own on purpose: LFT_TARGET_HOST is applied
+// by config.LoadClientConfig, which writes the same cfg.TargetHost field the config file
+// does, so by the time resolvePortsAndMappings sees it the two are the same input. The
+// "config file only" case covers both.
+func TestResolvePortsAndMappings_TargetHostPrecedence(t *testing.T) {
+	const discovered = "ldm-container"
+
+	cases := []struct {
+		name           string
+		flag           string // -target-host, "" meaning not passed
+		fromConfigFile string // target_host: in the config file (or LFT_TARGET_HOST)
+		discoveredHost string
+		want           string
+		why            string
+	}{
+		{
+			name:           "nobody said: discovery fills it in",
+			discoveredHost: discovered,
+			want:           discovered,
+			why:            "with no flag, no environment and no config file, the discovered host is the only thing anyone knows",
+		},
+		{
+			name:           "config file wins over discovery",
+			fromConfigFile: "liferay",
+			discoveredHost: discovered,
+			want:           "liferay",
+			why:            "a configured target_host is an explicit choice; discovery must not clobber it",
+		},
+		{
+			name:           "flag wins over discovery",
+			flag:           "my-project.local",
+			discoveredHost: discovered,
+			want:           "my-project.local",
+			why:            "-target-host is the highest-priority source in the documented chain",
+		},
+		{
+			name:           "flag wins over both the config file and discovery",
+			flag:           "my-project.local",
+			fromConfigFile: "liferay",
+			discoveredHost: discovered,
+			want:           "my-project.local",
+			why:            "flags override the config file, and discovery overrides neither",
+		},
+		{
+			name:           "an explicit -target-host localhost survives discovery",
+			flag:           "localhost",
+			discoveredHost: discovered,
+			want:           "localhost",
+			why:            "this is the one case the old `*targetHost == \"localhost\"` guard acted on, and it is precisely the case that must be left alone",
+		},
+		{
+			name:           "a discovered localhost is applied as the IPv4 literal",
+			discoveredHost: "localhost",
+			want:           "127.0.0.1",
+			why:            "localhost commonly resolves to ::1 first, and a filtered ::1 turns the dialer's fallback into a hang -- the rest of the client dials 127.0.0.1 for the same reason",
+		},
+		{
+			name:           "a discovered hostname that is not localhost is applied verbatim",
+			discoveredHost: "ldm-container",
+			want:           "ldm-container",
+			why:            "normalisation is for the literal \"localhost\" only; rewriting a real hostname would send traffic somewhere else entirely",
+		},
+		{
+			name:           "a discovery result with no host leaves the field empty",
+			discoveredHost: "",
+			want:           "",
+			why:            "an empty discovered host is not a host; NewInterceptorEngine's 127.0.0.1 default handles it from here",
+		},
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			stubDiscoveryReturning(t, tc.discoveredHost)
+			withTargetHostFlag(t, tc.flag)
+
+			// Start from what LoadClientConfig would have produced, then run the real
+			// flag override -- the same two steps main() performs before it resolves
+			// ports (main.go: overrideConfigWithFlags, then resolvePortsAndMappings).
+			cfg := &config.ClientConfig{TargetHost: tc.fromConfigFile}
+			overrideConfigWithFlags(cfg)
+
+			resolvePortsAndMappings(cfg)
+
+			if cfg.TargetHost != tc.want {
+				t.Errorf("TargetHost = %q, want %q -- %s", cfg.TargetHost, tc.want, tc.why)
+			}
+		})
+	}
+}
+
+// TestResolvePortsAndMappings_TargetHostUntouchedWithoutDiscovery pins the other half of
+// the contract: the branches that never consult discovery must not rewrite the host
+// either. Without this, a guard placed one scope too high would still pass the table
+// above.
+func TestResolvePortsAndMappings_TargetHostUntouchedWithoutDiscovery(t *testing.T) {
+	t.Run("explicit ports skip discovery", func(t *testing.T) {
+		stubDiscoveryReturning(t, "ldm-container")
+		withTargetHostFlag(t, "")
+
+		cfg := &config.ClientConfig{Ports: []int{9090}}
+		resolvePortsAndMappings(cfg)
+
+		if cfg.TargetHost != "" {
+			t.Errorf("TargetHost = %q, want empty -- explicit ports skip discovery, so nothing may set a host", cfg.TargetHost)
+		}
+	})
+
+	t.Run("a workspace scan does not set a host", func(t *testing.T) {
+		stubPortDiscovery(t)
+		isLiferayWorkspace = func(string) bool { return true }
+		detectWorkspacePorts = func(string) ([]client.PortMapping, error) {
+			return []client.PortMapping{{LocalPort: 8080}}, nil
+		}
+		autoDiscoverTarget = func() (*client.AutoDiscoverResult, error) {
+			t.Error("a workspace must not run host auto-discovery")
+			return nil, nil
+		}
+
+		oldPortsStr := *portsStr
+		*portsStr = ""
+		t.Cleanup(func() { *portsStr = oldPortsStr })
+		withTargetHostFlag(t, "")
+
+		cfg := &config.ClientConfig{}
+		resolvePortsAndMappings(cfg)
+
+		if cfg.TargetHost != "" {
+			t.Errorf("TargetHost = %q, want empty -- the workspace scan reports ports, not hosts", cfg.TargetHost)
+		}
+	})
+}
+
+// TestNormalizeDiscoveredHost pins the normalisation on its own, including everything it
+// must leave alone. The wider precedence table above exercises it through
+// resolvePortsAndMappings; this covers the values that never come out of AutoDiscoverTarget
+// today but would be silently corrupted if the check were ever widened to "is this
+// loopback" -- which is exactly the tempting generalisation.
+func TestNormalizeDiscoveredHost(t *testing.T) {
+	cases := []struct {
+		in, want, why string
+	}{
+		{"localhost", "127.0.0.1", "the one value that is rewritten: dial the IPv4 literal, not a name that may resolve to ::1 first"},
+		{"127.0.0.1", "127.0.0.1", "already the literal; nothing to do"},
+		{"::1", "::1", "an explicitly chosen IPv6 loopback is a choice, not a mistake to correct"},
+		{"ldm-container", "ldm-container", "a Docker container name must reach that container"},
+		{"localhost.localdomain", "localhost.localdomain", "a real FQDN that merely starts with the same eight characters"},
+		{"LOCALHOST", "LOCALHOST", "exact equality only -- a case-folded match would be a wider rule than the one justified"},
+		{"", "", "no host is not a host"},
+	}
+	for _, tc := range cases {
+		t.Run(tc.in, func(t *testing.T) {
+			if got := normalizeDiscoveredHost(tc.in); got != tc.want {
+				t.Errorf("normalizeDiscoveredHost(%q) = %q, want %q -- %s", tc.in, got, tc.want, tc.why)
+			}
+		})
+	}
+}

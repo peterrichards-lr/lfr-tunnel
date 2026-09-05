@@ -1,4 +1,4 @@
-.PHONY: fmt vet test test-locked ui-dist compile-check test-hooks check-contexts check-workflow-failures check-attribution check-css check-contrast check-i18n build deploy clean install-hook e2e e2e-sso e2e-edge e2e-ui help
+.PHONY: fmt vet test test-locked ui-dist compile-check test-hooks check-contexts check-contexts-live check-workflow-failures check-attribution check-css check-contrast check-i18n build deploy clean install-hook e2e e2e-sso e2e-edge e2e-ui help
 
 VERSION ?= $(shell grep -oE 'Version = "[^"]+"' pkg/config/version.go | cut -d'"' -f2)
 
@@ -248,6 +248,7 @@ test-hooks:
 	@./tests/hooks/test-ci-docs-gate.sh
 	@./tests/hooks/test-coverage-signal.sh
 	@./tests/hooks/test-install-script.sh
+	@./tests/hooks/test-required-contexts-mirror.sh
 	@./tests/hooks/test-workflow-failure-alert.sh
 
 # The pre-merge CI-configuration gate (#1391). Worth a target rather than only a path to type:
@@ -256,6 +257,13 @@ test-hooks:
 # which is how tests/hooks/test-shell-portability.sh discovers what must stay bash 3.2 clean.
 check-contexts:
 	@./scripts/check-required-contexts.sh
+
+# The same gate, with the mirror actually compared against master's live required contexts
+# instead of only reported as unverified (#1729). Separate target because it needs a token
+# that can read branch protection, which neither CI's GITHUB_TOKEN nor an offline pre-push
+# run has -- so `check-contexts` must stay able to pass without it, and this one must not.
+check-contexts-live:
+	@./scripts/check-required-contexts.sh --verify-mirror
 
 # Replays the master-only / scheduled workflow failure sweep (#1730) without creating or
 # closing anything, so its verdicts can be inspected against live run history before trusting

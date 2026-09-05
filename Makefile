@@ -1,4 +1,4 @@
-.PHONY: fmt vet test test-locked ui-dist compile-check test-hooks check-contexts check-attribution check-css check-contrast check-i18n build deploy clean install-hook e2e e2e-sso e2e-edge e2e-ui help
+.PHONY: fmt vet test test-locked ui-dist compile-check test-hooks check-contexts check-workflow-failures check-attribution check-css check-contrast check-i18n build deploy clean install-hook e2e e2e-sso e2e-edge e2e-ui help
 
 VERSION ?= $(shell grep -oE 'Version = "[^"]+"' pkg/config/version.go | cut -d'"' -f2)
 
@@ -248,6 +248,7 @@ test-hooks:
 	@./tests/hooks/test-ci-docs-gate.sh
 	@./tests/hooks/test-coverage-signal.sh
 	@./tests/hooks/test-install-script.sh
+	@./tests/hooks/test-workflow-failure-alert.sh
 
 # The pre-merge CI-configuration gate (#1391). Worth a target rather than only a path to type:
 # the whole point of this check is being run BEFORE pushing, and a check nobody can invoke
@@ -255,6 +256,12 @@ test-hooks:
 # which is how tests/hooks/test-shell-portability.sh discovers what must stay bash 3.2 clean.
 check-contexts:
 	@./scripts/check-required-contexts.sh
+
+# Replays the master-only / scheduled workflow failure sweep (#1730) without creating or
+# closing anything, so its verdicts can be inspected against live run history before trusting
+# the scheduled job. Also what puts the detector in the bash 3.2 portable set.
+check-workflow-failures:
+	@./scripts/detect-workflow-failure-streak.sh --dry-run
 
 # Same reasoning as check-contexts above: a gate with no convenient invocation is a gate
 # nobody runs, and being make-reachable is what puts it in the bash 3.2 portable set.

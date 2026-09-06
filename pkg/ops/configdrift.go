@@ -86,6 +86,49 @@ func (s DNSSpec) hostAddresses() map[string]string {
 // time -- so an edge url resolving to it means the url names central, which is #1449.
 const centralPlaceholder = "${IPV4}"
 
+// centralPlaceholderV6 is the same thing for AAAA records. Named separately rather than matched
+// by prefix so a real address beginning with "${" cannot slip past either test.
+const centralPlaceholderV6 = "${IPV6}"
+
+// defaultDNSSpecPath is the committed spec every command that reads one defaults to. Named once
+// because four flags now share it, and a copy that drifted would point some of them at a file the
+// others do not use.
+const defaultDNSSpecPath = "scripts/liferay/dns/lfr-demo-production.yaml"
+
+// edgeAddresses maps every fully-qualified host the spec declares as an EDGE to the addresses it
+// declares for it, v4 and v6 alike.
+//
+// Both families, unlike hostAddresses above: an edge dialling a peer over IPv6 presents its IPv6
+// source address, and set_real_ip_from has to name whatever the peer actually is (#1757). Records
+// pointing at the control plane are excluded -- that address is the -trusted-proxy entry already
+// -- as are the wildcard and apex names, which resolve to central through `*` and were what made
+// #1449 invisible.
+//
+// ASSUMPTION worth challenging: an edge's published address is also its SOURCE address when it
+// dials out. True on EC2 with an Elastic IP attached directly, and for IPv6, which is not
+// translated at all. It would NOT hold behind a NAT gateway or a CDN -- and then the address
+// trusted here is not the peer that connects, so the block silently does nothing rather than
+// doing something wrong.
+func (s DNSSpec) edgeAddresses() map[string][]string {
+	out := map[string][]string{}
+	for _, d := range s.Domains {
+		for _, r := range d.Records {
+			if r.Type != "A" && r.Type != "AAAA" {
+				continue
+			}
+			if r.Name == "@" || r.Name == "*" || r.Name == "" {
+				continue
+			}
+			if r.Value == centralPlaceholder || r.Value == centralPlaceholderV6 {
+				continue
+			}
+			host := strings.ToLower(r.Name + "." + d.Zone)
+			out[host] = append(out[host], r.Value)
+		}
+	}
+	return out
+}
+
 // liveConfig is the subset of a gateway config this check reads. Deliberately narrow: anything
 // it does not need, it does not parse, and therefore cannot accidentally print.
 type liveConfig struct {
@@ -292,7 +335,7 @@ func trustedRealIPAddrs(nginxConf string) []string {
 //
 // Only meaningful on an edge. control_plane_url is set there and empty on central, so its
 // presence in the live config is the signal.
-func checkEdgeRealIP(controlPlaneURL, nginxConf string) []DriftFinding {
+func checkEdgeRealIP(controlPlaneURL string, spec DNSSpec, nginxConf string) []DriftFinding {
 	if strings.TrimSpace(controlPlaneURL) == "" {
 		return nil // central: nothing forwards to it
 	}
@@ -326,7 +369,54 @@ func checkEdgeRealIP(controlPlaneURL, nginxConf string) []DriftFinding {
 				strings.Join(trusted, ", "), nginxLoopbackTrustedProxy, nginxLoopbackTrustedProxy),
 		})
 	}
+
+	findings = append(findings, checkRealIPCoversPeerEdges(spec, trusted, nginxConf)...)
 	return findings
+}
+
+// checkRealIPCoversPeerEdges reports peer gateways this edge does not trust (#1757).
+//
+// Same treatment as the loopback gap #1750 added, for the same reason: an edge reconciled before
+// the fix looks entirely correct to the checks above, and the symptom -- visitors attributed to a
+// sibling edge -- is indistinguishable from ordinary traffic in the audit log.
+//
+// The node's OWN addresses are excluded by reading the server_names its live config serves, so
+// this needs no separate "which edge am I" input and cannot disagree with the file it is reading.
+func checkRealIPCoversPeerEdges(spec DNSSpec, trusted []string, nginxConf string) []DriftFinding {
+	declared := spec.edgeAddresses()
+	if len(declared) == 0 {
+		return nil // no fleet declared: nothing to compare against, and saying so would be noise
+	}
+	served := serverNamesIn(nginxConf)
+
+	var missing []string
+	for host, addrs := range declared {
+		if served[host] {
+			continue // this node itself
+		}
+		for _, a := range addrs {
+			if !slices.Contains(trusted, a) {
+				missing = append(missing, fmt.Sprintf("%s (%s)", a, host))
+			}
+		}
+	}
+	if len(missing) == 0 {
+		return nil
+	}
+	sort.Strings(missing)
+
+	return []DriftFinding{{
+		Severity: severityWarning,
+		Key:      realIPKey,
+		Message: fmt.Sprintf(
+			"does not trust %s. Central pushes the whole routing table to every edge, so an edge "+
+				"holding no lease for a name forwards straight to the edge that does -- with no "+
+				"control-plane hop. real_ip then declines entirely, because the peer is not trusted, "+
+				"and the visitor is attributed to the FORWARDING EDGE: the per-tunnel IP whitelist, "+
+				"the rate limiter's auto-ban and every audit entry name it instead (#1757). Re-run "+
+				"reconcile-nginx to render the current template",
+			strings.Join(missing, ", ")),
+	}}
 }
 
 // checkRealIPMatchesControlPlane reports whether any trusted address is still the control plane's.
@@ -371,7 +461,7 @@ func checkRealIPMatchesControlPlane(controlPlaneURL string, trusted []string) []
 // an error-severity problem, so this can gate a deploy later.
 func CheckConfigCommand(args []string) {
 	fs := flag.NewFlagSet("check-config", flag.ExitOnError)
-	specPath := fs.String("dns-spec", "scripts/liferay/dns/lfr-demo-production.yaml",
+	specPath := fs.String("dns-spec", defaultDNSSpecPath,
 		"committed DNS spec to validate edge_nodes urls against")
 	remotePath := fs.String("remote-config", "/etc/lfr-tunneld/server-config.yaml",
 		"path to the gateway config on the target")
@@ -421,23 +511,9 @@ func CheckConfigCommand(args []string) {
 	// mistake surfaces long after it was made.
 	errors += checkConfigFilePermissions(target, sshTarget, *remotePath, *unitPath)
 
-	// Edge only: does this node still trust the control plane's address? Reads the nginx config
-	// the reconcile writes, so it verifies what is actually serving rather than what was intended.
-	var live liveConfigWithCP
-	if err := yaml.Unmarshal([]byte(configYAML), &live); err == nil && live.ControlPlaneURL != "" {
-		nginxTarget, _ := nginxRemotePaths(RoleEdge)
-		if nginxConf, err := RunCommandCaptureOutput("ssh", "-i", target.IdentityFile, sshTarget,
-			"sudo cat "+nginxTarget+" 2>/dev/null || true"); err == nil {
-			for _, f := range checkEdgeRealIP(live.ControlPlaneURL, nginxConf) {
-				fmt.Printf("[%s] %s: %s\n", strings.ToUpper(f.Severity), f.Key, f.Message)
-				if f.Severity == severityError {
-					errors++
-				} else {
-					warnings++
-				}
-			}
-		}
-	}
+	e, w := reportEdgeRealIPFindings(target, sshTarget, configYAML, specYAML, *specPath)
+	errors += e
+	warnings += w
 
 	fmt.Println()
 	if errors > 0 {
@@ -451,6 +527,41 @@ func CheckConfigCommand(args []string) {
 		return
 	}
 	fmt.Println("No drift found.")
+}
+
+// reportEdgeRealIPFindings prints the edge real_ip findings and returns how many were error- and
+// warning-severity.
+//
+// Edge only: does this node still trust every gateway that forwards to it -- the control plane
+// (#1450), loopback (#1750) and its peer edges (#1757)? It reads the nginx config the reconcile
+// writes, so it verifies what is actually serving rather than what was intended. A restart does
+// not re-render that file, so nothing else surfaces a stale trusted set.
+func reportEdgeRealIPFindings(target DeployTarget, sshTarget, configYAML string, specYAML []byte, specPath string) (int, int) {
+	var live liveConfigWithCP
+	if err := yaml.Unmarshal([]byte(configYAML), &live); err != nil || live.ControlPlaneURL == "" {
+		return 0, 0 // central, or a config this build cannot read: nothing forwards to central
+	}
+
+	spec, err := parseDNSSpec(specYAML)
+	CheckFatal(err, "Failed to parse the DNS spec at "+specPath)
+
+	nginxTarget, _ := nginxRemotePaths(RoleEdge)
+	nginxConf, err := RunCommandCaptureOutput("ssh", "-i", target.IdentityFile, sshTarget,
+		"sudo cat "+nginxTarget+" 2>/dev/null || true")
+	if err != nil {
+		return 0, 0
+	}
+
+	errors, warnings := 0, 0
+	for _, f := range checkEdgeRealIP(live.ControlPlaneURL, spec, nginxConf) {
+		fmt.Printf("[%s] %s: %s\n", strings.ToUpper(f.Severity), f.Key, f.Message)
+		if f.Severity == severityError {
+			errors++
+		} else {
+			warnings++
+		}
+	}
+	return errors, warnings
 }
 
 // reportConfigFindings prints the findings and returns how many were error- and warning-severity.

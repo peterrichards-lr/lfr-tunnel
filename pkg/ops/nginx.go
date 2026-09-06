@@ -52,16 +52,37 @@ const nginxUpgradeMapBlock = `map $http_upgrade $connection_upgrade {
 //
 // Trusting loopback widens nothing an attacker can reach: the module fires only when the
 // IMMEDIATE peer is trusted, and no off-box connection can present 127.0.0.1 as its peer.
-func renderRealIPBlock(trustedProxy string) string {
+//
+// The control plane is not the only node that forwards here (#1757). tryCrossNodeProxy in
+// pkg/server/proxy.go runs on every gateway, and an edge's routing table is pushed to it by
+// central over the edge control WebSocket -- BroadcastRouteUpdate sends `fullHost -> <the edge
+// holding the lease>` to EVERY connected edge, not only to the one concerned. So an edge that
+// still receives a visitor for a name whose lease has moved (cached DNS, a lease that migrated)
+// proxies straight to the edge that holds it, with no central hop in between. Then the peer here
+// is the FORWARDING EDGE's public address, real_ip declines outright because that address is not
+// trusted, and $remote_addr stays as that edge -- the original #1450 failure on a hop #1450 never
+// scoped. peers closes it by naming the rest of the fleet.
+//
+// What that grants, precisely: any TCP connection whose SOURCE address is a peer edge's may
+// assert a visitor address in X-Forwarded-For. Only the peer edge's own box can present that
+// source address -- a spoofed source cannot complete the TCP (let alone TLS) handshake -- so the
+// grant is "the other gateways in this fleet may speak for visitors", which is the same trust
+// already extended to the control plane and no wider. It does not touch the visitor-direct path:
+// a visitor connecting here is not in the set, real_ip declines, and #1325's guarantee stands.
+//
+// Every peer address must therefore be an exact host address, never a range: a CIDR here would
+// let anything sharing that range assert a visitor.
+func renderRealIPBlock(trustedProxy string, peers []string) string {
 	if strings.TrimSpace(trustedProxy) == "" {
 		return ""
 	}
-	return fmt.Sprintf(`
-# Recover the visitor's address on requests forwarded by the control plane (#1450).
+	var b strings.Builder
+	b.WriteString(`
+# Recover the visitor's address on requests forwarded by another gateway (#1450, #1750, #1757).
 #
-# Two trusted addresses, and the loopback one is load-bearing (#1750). The chain the control
-# plane sends ends with ITS OWN loopback peer -- central's nginx proxies to the gateway on
-# 127.0.0.1 and the gateway appends the address it was connected from -- so this node receives
+# The loopback entry is load-bearing (#1750). The chain the control plane sends ends with ITS OWN
+# loopback peer -- central's nginx proxies to the gateway on 127.0.0.1 and the gateway appends the
+# address it was connected from -- so this node receives
 #
 #     X-Forwarded-For: <visitor>, 127.0.0.1
 #
@@ -70,14 +91,24 @@ func renderRealIPBlock(trustedProxy string) string {
 # loopback: the per-tunnel IP whitelist, the rate limiter's auto-ban and every audit entry then
 # name 127.0.0.1. Naming loopback lets the walk step over it and reach the visitor.
 #
-# Trusting loopback widens nothing reachable, because real_ip rewrites only when the IMMEDIATE
-# peer is trusted and no off-box connection can present 127.0.0.1 as its peer. The control plane
-# entry still has to be exact -- widen THAT to a routable range and the forgeable path reopens.
-set_real_ip_from %s;
-set_real_ip_from %s;
-real_ip_header X-Forwarded-For;
-real_ip_recursive on;
-`, strings.TrimSpace(trustedProxy), nginxLoopbackTrustedProxy)
+# The peer-edge entries close the same failure on a second hop (#1757). Central pushes the whole
+# routing table to EVERY edge, so an edge holding no lease for a name forwards directly to the
+# edge that does -- no central hop. Without those entries the peer is an untrusted edge, real_ip
+# declines entirely, and every such visitor is attributed to the forwarding edge instead.
+#
+# Trusting these widens nothing reachable: real_ip rewrites only when the IMMEDIATE peer is
+# trusted, no off-box connection can present 127.0.0.1 as its peer, and a source address cannot
+# be spoofed through a TCP handshake -- so only the named boxes themselves can assert anything.
+# Every entry must stay an EXACT address: widen one to a routable range and the forgeable path
+# #1325 closed reopens for everything inside it.
+`)
+	fmt.Fprintf(&b, "set_real_ip_from %s;\n", strings.TrimSpace(trustedProxy))
+	for _, p := range peers {
+		fmt.Fprintf(&b, "set_real_ip_from %s;\n", p)
+	}
+	fmt.Fprintf(&b, "set_real_ip_from %s;\n", nginxLoopbackTrustedProxy)
+	b.WriteString("real_ip_header X-Forwarded-For;\nreal_ip_recursive on;\n")
+	return b.String()
 }
 
 // nginxLoopbackTrustedProxy is the address every proxy_pass in this template targets, and so the
@@ -192,6 +223,14 @@ type nginxRenderConfig struct {
 	//
 	// Meaningless on central: nothing forwards to it, so there is no upstream to trust.
 	TrustedProxy string
+	// TrustedPeers is every OTHER gateway in the fleet, as exact host addresses. An edge is
+	// cross-proxied to by its peers as well as by central (#1757) -- see renderRealIPBlock.
+	// Derived from the committed DNS spec rather than typed, because a hand-maintained fleet
+	// list is the shape that went stale unnoticed in #1449.
+	//
+	// Ignored unless TrustedProxy is set: the real_ip block exists or it does not, and an edge
+	// that trusts its peers but not the control plane is not a configuration anyone wants.
+	TrustedPeers []string
 }
 
 // nginxACMEFallback is central-only. A vanity domain (e.g. dev.solaramoto.com) added later by
@@ -253,7 +292,7 @@ func buildNginxConfig(cfg nginxRenderConfig) string {
 	var b strings.Builder
 	b.WriteString(nginxUpgradeMapBlock)
 	if cfg.Role == RoleEdge {
-		b.WriteString(renderRealIPBlock(cfg.TrustedProxy))
+		b.WriteString(renderRealIPBlock(cfg.TrustedProxy, cfg.TrustedPeers))
 	}
 	for _, g := range cfg.Groups {
 		if !g.WildcardOnly {
@@ -413,6 +452,7 @@ type nginxFlags struct {
 	apexCertRoot      *string
 	redirectDomain    *string
 	trustedProxy      *string
+	dnsSpec           *string
 	allowVhostRemoval *bool
 }
 
@@ -432,6 +472,8 @@ func registerNginxFlags(fs *flag.FlagSet) nginxFlags {
 			"edge only: where browser traffic arriving on the edge's own apex is sent, i.e. the control plane"),
 		trustedProxy: fs.String("trusted-proxy", "",
 			"edge only: the control plane's address (IP or CIDR), so a request it forwards is attributed to the visitor rather than to central (#1450)"),
+		dnsSpec: fs.String("dns-spec", defaultDNSSpecPath,
+			"committed DNS spec the PEER EDGE addresses are derived from, so an edge cross-proxied to by another edge attributes the visitor correctly (#1757); empty disables peer trust"),
 		allowVhostRemoval: fs.Bool("allow-vhost-removal", false,
 			"proceed even if the new config stops serving a server_name the live config serves (reconcile-nginx only)"),
 	}
@@ -516,7 +558,76 @@ func buildRenderConfigFromFlags(f nginxFlags, port string) (nginxRenderConfig, e
 		}
 		cfg.Groups = append(cfg.Groups, nginxDomainGroup{Domain: d, CertRoot: *f.apexCertRoot, WildcardOnly: true})
 	}
+
+	// Peer-edge trust rides on the control-plane entry: no real_ip block, nothing to add to.
+	if cfg.TrustedProxy != "" {
+		peers, err := resolveTrustedPeers(*f.dnsSpec, owned)
+		if err != nil {
+			return nginxRenderConfig{}, err
+		}
+		cfg.TrustedPeers = peers
+	}
 	return cfg, nil
+}
+
+// resolveTrustedPeers derives the OTHER gateways' addresses from the committed DNS spec (#1757).
+//
+// Derived, never typed. The spec is already this repo's authoritative record of which edges exist
+// and where (#941), and the same derivation backs render-edge-nodes -- an address written by hand
+// is what named three retired hosts for weeks (#1449), and a trusted set that goes stale is worse
+// than one that is too small.
+//
+// Staying correct is therefore a property of the spec, not of anyone's memory: adding an edge or
+// moving one already REQUIRES editing this file (DeriveEdgeURL refuses a node with no A record),
+// and re-running reconcile-nginx against each edge picks the change up. Until that reconcile runs
+// the set is stale, which is why checkEdgeRealIP reports the gap rather than leaving it silent.
+//
+// ownDomains are dropped: an edge has no reason to trust itself, and naming its own address here
+// would read as one.
+//
+// A missing spec at the DEFAULT path is a warning, not an error. This tool is used outside
+// Liferay's own deployment, where that path does not exist, and refusing to render an nginx
+// config over an absent fleet list would break a single-edge install that never cross-proxies.
+// Passing -dns-spec explicitly means the operator asked for that file, so failing to read it is
+// an error. Passing -dns-spec "" opts out deliberately and says nothing.
+func resolveTrustedPeers(specPath string, ownDomains []string) ([]string, error) {
+	explicit := specPath != defaultDNSSpecPath
+	if strings.TrimSpace(specPath) == "" {
+		return nil, nil
+	}
+
+	data, err := os.ReadFile(specPath) //nolint:gosec // an operator-supplied path to a committed, non-secret spec
+	if err != nil {
+		if !explicit && os.IsNotExist(err) {
+			fmt.Fprintf(os.Stderr,
+				"WARNING: no DNS spec at %s, so no peer-edge addresses were trusted. A request "+
+					"cross-proxied here BY ANOTHER EDGE will be attributed to that edge rather than "+
+					"to the visitor (#1757). Pass -dns-spec with the fleet's spec, or -dns-spec \"\" "+
+					"to say that is intended.\n", specPath)
+			return nil, nil
+		}
+		return nil, fmt.Errorf("reading the DNS spec at %s, which the peer-edge trusted set is derived from: %w", specPath, err)
+	}
+
+	spec, err := parseDNSSpec(data)
+	if err != nil {
+		return nil, err
+	}
+
+	own := make(map[string]bool, len(ownDomains))
+	for _, d := range ownDomains {
+		own[strings.ToLower(strings.TrimSpace(d))] = true
+	}
+
+	var peers []string
+	for host, addrs := range spec.edgeAddresses() {
+		if own[host] {
+			continue
+		}
+		peers = append(peers, addrs...)
+	}
+	sort.Strings(peers)
+	return peers, nil
 }
 
 // serverNameDirective matches a server_name directive wherever it appears, including inline

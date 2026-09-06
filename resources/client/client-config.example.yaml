@@ -60,7 +60,11 @@ custom_domain: ""
 ports:
   - 8080
 
-# Hostname or IP the tunnel forwards to. Empty means 127.0.0.1.
+# Hostname or IP the tunnel forwards to. Setting it here beats auto-discovery but loses to
+# LFT_TARGET_HOST and -target-host. Leave it empty and the same discovery pass that finds your
+# ports supplies the host it found them on (a discovered "localhost" is normalised to
+# 127.0.0.1), falling back to 127.0.0.1 when nothing is discovered.
+# See docs/client_configuration.md, "Leaving target_host unset".
 target_host: ""
 
 # Send the visitor's Host header through unchanged instead of rewriting it to target_host.

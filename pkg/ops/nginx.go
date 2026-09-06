@@ -19,90 +19,146 @@ const nginxUpgradeMapBlock = `map $http_upgrade $connection_upgrade {
 }
 `
 
-// renderRealIPBlock recovers the visitor's address on a request the CONTROL PLANE forwarded here.
+// renderRealIPBlock recovers the visitor's address on a request ANOTHER GATEWAY forwarded here.
 //
 // A visitor normally reaches an edge directly -- central publishes a per-tunnel CNAME to the edge
 // -- and there $remote_addr is the visitor and the headers below are already correct. But during
-// DNS propagation, and on the cross-node path generally (#1249), central proxies the request
-// instead. Then the edge's $remote_addr is CENTRAL, and the proxy_set_header lines overwrite the
-// visitor's address with it one hop before the gateway reads it: the per-tunnel IP whitelist, the
-// rate limiter's auto-ban and every audit entry then name the control plane (#1450).
+// DNS propagation, and on the cross-node path generally (#1249), another gateway proxies the
+// request instead. Then this node's $remote_addr is THAT GATEWAY, and the proxy_set_header lines
+// overwrite the visitor's address with it one hop before the local gateway reads it: the
+// per-tunnel IP whitelist, the rate limiter's auto-ban and every audit entry then name the
+// forwarder (#1450).
 //
-// central forwards the visitor correctly in X-Forwarded-For (see the director in
+// The forwarding gateway sends the visitor correctly in X-Forwarded-For (see the Rewrite hooks in
 // pkg/server/proxy.go), so the address is present on the wire -- it is this nginx that discards
 // it. real_ip puts it back BEFORE proxy_set_header runs, so no Go-side change is needed and
 // clientIPFrom keeps its current, well-tested resolution order.
 //
 // Not spoofable: real_ip rewrites only when the immediate peer is in set_real_ip_from. A visitor
-// arriving directly is not central, so nothing is rewritten and #1325's guarantee stands. That is
-// also why the CONTROL PLANE entry must be exact -- widen that one to a routable range and the
-// forgeable path reopens.
+// arriving directly is not one of the named gateways, so nothing is rewritten and #1325's
+// guarantee stands. That is also why every entry must be exact -- widen one to a routable range
+// and the forgeable path reopens.
 //
-// Two addresses are trusted, not one, and the loopback entry is load-bearing (#1750). #1450 was
-// written against a chain of "<visitor>, <visitor>", but that is not what leaves central: central
-// nginx proxies to the gateway on 127.0.0.1, and the gateway appends the address it was connected
-// FROM, so what arrives here ends with central's own loopback peer:
+// The loopback entry is load-bearing (#1750). #1450 was written against a chain of
+// "<visitor>, <visitor>", but that is not what leaves a forwarding gateway: its nginx proxies to
+// its own gateway process on 127.0.0.1, and that process appends the address it was connected
+// FROM, so what arrives here ends with the FORWARDER's loopback peer:
 //
 //	X-Forwarded-For: <visitor>, 127.0.0.1
 //
 // real_ip_recursive walks that right-to-left and stops at the first address not in
-// set_real_ip_from. Trusting central alone stops the walk at 127.0.0.1 and rewrites $remote_addr
-// to loopback -- the identical failure #1450 set out to fix, naming loopback instead of central.
-// Naming loopback too lets the walk step over it and reach the visitor.
+// set_real_ip_from. Trusting the forwarder alone stops the walk at 127.0.0.1 and rewrites
+// $remote_addr to loopback -- the identical failure #1450 set out to fix, naming loopback instead
+// of the forwarder. Naming loopback too lets the walk step over it and reach the visitor.
 //
 // Trusting loopback widens nothing an attacker can reach: the module fires only when the
 // IMMEDIATE peer is trusted, and no off-box connection can present 127.0.0.1 as its peer.
 //
-// The control plane is not the only node that forwards here (#1757). tryCrossNodeProxy in
-// pkg/server/proxy.go runs on every gateway, and an edge's routing table is pushed to it by
-// central over the edge control WebSocket -- BroadcastRouteUpdate sends `fullHost -> <the edge
-// holding the lease>` to EVERY connected edge, not only to the one concerned. So an edge that
-// still receives a visitor for a name whose lease has moved (cached DNS, a lease that migrated)
-// proxies straight to the edge that holds it, with no central hop in between. Then the peer here
-// is the FORWARDING EDGE's public address, real_ip declines outright because that address is not
-// trusted, and $remote_addr stays as that edge -- the original #1450 failure on a hop #1450 never
-// scoped. peers closes it by naming the rest of the fleet.
+// # Which gateways forward here, by role
 //
-// What that grants, precisely: any TCP connection whose SOURCE address is a peer edge's may
-// assert a visitor address in X-Forwarded-For. Only the peer edge's own box can present that
-// source address -- a spoofed source cannot complete the TCP (let alone TLS) handshake -- so the
-// grant is "the other gateways in this fleet may speak for visitors", which is the same trust
-// already extended to the control plane and no wider. It does not touch the visitor-direct path:
-// a visitor connecting here is not in the set, real_ip declines, and #1325's guarantee stands.
+// ON AN EDGE, two kinds. The control plane, which is the -trusted-proxy entry. And its PEER EDGES
+// (#1757): tryCrossNodeProxy in pkg/server/proxy.go runs on every gateway, and an edge's routing
+// table is pushed to it by central over the edge control WebSocket -- BroadcastRouteUpdate sends
+// `fullHost -> <the edge holding the lease>` to EVERY connected edge, not only to the one
+// concerned. So an edge that still receives a visitor for a name whose lease has moved (cached
+// DNS, a lease that migrated) proxies straight to the edge that holds it, with no central hop in
+// between.
+//
+// ON CENTRAL, the edges (#1767). The previous rationale here said central needed no block because
+// "nothing forwards to central". That was simply false, and it was load-bearing for a guard that
+// refused a flag. resolveRemoteRouteForHost (pkg/server/server.go) ends, on an edge, with
+//
+//	// Fallback to Control Plane for recognized served domains
+//	return s.cfg.ControlPlaneURL, "control", true
+//
+// so an edge cross-proxies to central for ANY served domain it holds no pushed route for -- a
+// window BroadcastRouteUpdate normally closes, but which is open for an edge that connected after
+// the broadcast, and for any name central itself holds the lease for. What arrives at central is
+// shaped exactly like the chains above: peer = the edge's source address, and
+// "X-Forwarded-For: <visitor>, 127.0.0.1". Without this block central attributes every such
+// visitor to the forwarding edge, and -- because central's own proxy_set_header lines then
+// overwrite the chain -- the visitor is destroyed rather than merely mislabelled, so no trusted
+// set on a node central forwards on to can recover it either.
+//
+// Central has NO control-plane entry: there is no control plane above central, so the peer set
+// and loopback are the whole set. That is why the block renders on peers alone for RoleCentral
+// and only alongside -trusted-proxy for RoleEdge -- an edge that trusts its siblings but not the
+// control plane is not a configuration anyone wants, whereas on central it is the only one there
+// is.
+//
+// What the peer entries grant, precisely: any TCP connection whose SOURCE address is a named
+// gateway's may assert a visitor address in X-Forwarded-For. Only that gateway's own box can
+// present that source address -- a spoofed source cannot complete the TCP (let alone TLS)
+// handshake -- so the grant is "the other gateways in this fleet may speak for visitors", which
+// is the trust the fleet already runs on: an edge reports its visitors' addresses to central over
+// the edge control WebSocket regardless. It does not touch the visitor-direct path: a visitor
+// connecting here is not in the set, real_ip declines, and #1325's guarantee stands. On central
+// that also means the portal's own login rate limiting is unaffected for anyone arriving
+// directly, which is everyone who is not an edge.
 //
 // Every peer address must therefore be an exact host address, never a range: a CIDR here would
 // let anything sharing that range assert a visitor.
-func renderRealIPBlock(trustedProxy string, peers []string) string {
-	if strings.TrimSpace(trustedProxy) == "" {
+func renderRealIPBlock(role nginxRole, trustedProxy string, peers []string) string {
+	trustedProxy = strings.TrimSpace(trustedProxy)
+	if role == RoleCentral {
+		// No control plane above central, so no upstream entry -- see the doc comment. The
+		// peers ARE the set, and with no fleet declared there is nothing to trust.
+		trustedProxy = ""
+		if len(peers) == 0 {
+			return ""
+		}
+	} else if trustedProxy == "" {
+		// Peers ride on the control-plane entry on an edge: no upstream, no block.
 		return ""
 	}
+
 	var b strings.Builder
 	b.WriteString(`
-# Recover the visitor's address on requests forwarded by another gateway (#1450, #1750, #1757).
+# Recover the visitor's address on requests forwarded by another gateway (#1450, #1750, #1757,
+# #1767).
 #
-# The loopback entry is load-bearing (#1750). The chain the control plane sends ends with ITS OWN
-# loopback peer -- central's nginx proxies to the gateway on 127.0.0.1 and the gateway appends the
-# address it was connected from -- so this node receives
+# The loopback entry is load-bearing (#1750). The chain a forwarding gateway sends ends with ITS
+# OWN loopback peer -- its nginx proxies to its gateway process on 127.0.0.1 and that process
+# appends the address it was connected from -- so this node receives
 #
 #     X-Forwarded-For: <visitor>, 127.0.0.1
 #
 # real_ip_recursive walks that right to left and stops at the first address not named below.
-# Trusting the control plane alone stops the walk at 127.0.0.1 and attributes the visitor to
+# Trusting the forwarder alone stops the walk at 127.0.0.1 and attributes the visitor to
 # loopback: the per-tunnel IP whitelist, the rate limiter's auto-ban and every audit entry then
 # name 127.0.0.1. Naming loopback lets the walk step over it and reach the visitor.
+`)
+	if role == RoleCentral {
+		b.WriteString(`#
+# THIS IS CENTRAL, and it is behind its own edges (#1767). An edge falls back to the control
+# plane for any served domain it holds no pushed route for (resolveRemoteRouteForHost in
+# pkg/server/server.go), so edges cross-proxy here routinely. There is no control-plane entry
+# below because there is no control plane above central: the edge addresses and loopback are the
+# whole set. Without them central attributes such a visitor to the FORWARDING EDGE -- and since
+# the proxy_set_header lines below then overwrite the chain, the visitor is destroyed here rather
+# than merely mislabelled, so no node central forwards on to can recover it either.
 #
+# An earlier version of this template said central needed no real_ip block because "nothing
+# forwards to central". That was false. Do not restore it.
+`)
+	} else {
+		b.WriteString(`#
 # The peer-edge entries close the same failure on a second hop (#1757). Central pushes the whole
 # routing table to EVERY edge, so an edge holding no lease for a name forwards directly to the
 # edge that does -- no central hop. Without those entries the peer is an untrusted edge, real_ip
 # declines entirely, and every such visitor is attributed to the forwarding edge instead.
-#
+`)
+	}
+	b.WriteString(`#
 # Trusting these widens nothing reachable: real_ip rewrites only when the IMMEDIATE peer is
 # trusted, no off-box connection can present 127.0.0.1 as its peer, and a source address cannot
 # be spoofed through a TCP handshake -- so only the named boxes themselves can assert anything.
 # Every entry must stay an EXACT address: widen one to a routable range and the forgeable path
 # #1325 closed reopens for everything inside it.
 `)
-	fmt.Fprintf(&b, "set_real_ip_from %s;\n", strings.TrimSpace(trustedProxy))
+	if trustedProxy != "" {
+		fmt.Fprintf(&b, "set_real_ip_from %s;\n", trustedProxy)
+	}
 	for _, p := range peers {
 		fmt.Fprintf(&b, "set_real_ip_from %s;\n", p)
 	}
@@ -221,15 +277,19 @@ type nginxRenderConfig struct {
 	// request the control plane forwarded is attributed to the visitor rather than to central
 	// (#1450). Empty renders exactly what was rendered before this existed.
 	//
-	// Meaningless on central: nothing forwards to it, so there is no upstream to trust.
+	// Ignored for RoleCentral -- not because nothing forwards to central (edges do, #1767) but
+	// because there is no control plane ABOVE central for this to name. Central's whole trusted
+	// set is TrustedPeers plus loopback.
 	TrustedProxy string
 	// TrustedPeers is every OTHER gateway in the fleet, as exact host addresses. An edge is
-	// cross-proxied to by its peers as well as by central (#1757) -- see renderRealIPBlock.
-	// Derived from the committed DNS spec rather than typed, because a hand-maintained fleet
-	// list is the shape that went stale unnoticed in #1449.
+	// cross-proxied to by its peers as well as by central (#1757); central is cross-proxied to
+	// by every edge (#1767) -- see renderRealIPBlock. Derived from the committed DNS spec rather
+	// than typed, because a hand-maintained fleet list is the shape that went stale unnoticed in
+	// #1449.
 	//
-	// Ignored unless TrustedProxy is set: the real_ip block exists or it does not, and an edge
-	// that trusts its peers but not the control plane is not a configuration anyone wants.
+	// On an edge these ride on TrustedProxy: no control-plane entry, no block at all, because an
+	// edge that trusts its peers but not the control plane is not a configuration anyone wants.
+	// On central they are the entire set, so they render on their own.
 	TrustedPeers []string
 }
 
@@ -291,9 +351,9 @@ const nginxACMEFallbackHTTPS = `
 func buildNginxConfig(cfg nginxRenderConfig) string {
 	var b strings.Builder
 	b.WriteString(nginxUpgradeMapBlock)
-	if cfg.Role == RoleEdge {
-		b.WriteString(renderRealIPBlock(cfg.TrustedProxy, cfg.TrustedPeers))
-	}
+	// Both roles. Central is behind its own edges (#1767), not behind nothing -- renderRealIPBlock
+	// decides what each role trusts, and emits nothing when there is nothing to trust.
+	b.WriteString(renderRealIPBlock(cfg.Role, cfg.TrustedProxy, cfg.TrustedPeers))
 	for _, g := range cfg.Groups {
 		if !g.WildcardOnly {
 			b.WriteString(renderHTTPRedirect(cfg.Role, g))
@@ -471,9 +531,9 @@ func registerNginxFlags(fs *flag.FlagSet) nginxFlags {
 		redirectDomain: fs.String("redirect-domain", "",
 			"edge only: where browser traffic arriving on the edge's own apex is sent, i.e. the control plane"),
 		trustedProxy: fs.String("trusted-proxy", "",
-			"edge only: the control plane's address (IP or CIDR), so a request it forwards is attributed to the visitor rather than to central (#1450)"),
+			"edge only: the control plane's address (IP or CIDR), so a request it forwards is attributed to the visitor rather than to central (#1450). Central has no control plane above it, and gets its edge addresses from -dns-spec instead (#1767)"),
 		dnsSpec: fs.String("dns-spec", defaultDNSSpecPath,
-			"committed DNS spec the PEER EDGE addresses are derived from, so an edge cross-proxied to by another edge attributes the visitor correctly (#1757); empty disables peer trust"),
+			"committed DNS spec the EDGE addresses are derived from, so a cross-proxied request is attributed to the visitor rather than to the forwarding gateway -- peer edges on an edge (#1757), every edge on central (#1767); empty disables it"),
 		allowVhostRemoval: fs.Bool("allow-vhost-removal", false,
 			"proceed even if the new config stops serving a server_name the live config serves (reconcile-nginx only)"),
 	}
@@ -538,13 +598,24 @@ func buildRenderConfigFromFlags(f nginxFlags, port string) (nginxRenderConfig, e
 		RedirectDomain: strings.TrimSpace(*f.redirectDomain),
 		TrustedProxy:   strings.TrimSpace(*f.trustedProxy),
 	}
-	// Refuse rather than silently ignore. Passing it for central reads as "central will now
-	// attribute forwarded requests correctly", which is not a thing central does -- nothing
-	// forwards to it.
+	// Still refused on central, but NOT for the reason this used to give.
+	//
+	// The old text said "nothing forwards to central". That was false: an edge falls back to the
+	// control plane for any served domain it has no pushed route for, so edges cross-proxy here
+	// routinely (#1767) -- and central now renders a real_ip block for exactly that. What remains
+	// true is narrower and is what actually carries the refusal: -trusted-proxy names the address
+	// of the node's CONTROL PLANE, and central has no control plane above it. The only value an
+	// operator could plausibly pass here is central's own address, which would trust central to
+	// speak for visitors to itself.
+	//
+	// So the flag is refused rather than silently ignored -- accepting it would read as "central
+	// will now attribute forwarded requests correctly", when the thing that does that is the
+	// edge set derived from -dns-spec, which needs no flag.
 	if role == RoleCentral && cfg.TrustedProxy != "" {
 		return nginxRenderConfig{}, fmt.Errorf(
-			"-trusted-proxy applies to -role edge only: it exists so a request the CONTROL PLANE " +
-				"forwards is attributed to the visitor, and nothing forwards to central")
+			"-trusted-proxy names the address of this node's CONTROL PLANE, and central has no " +
+				"control plane above it. Central IS forwarded to -- by its edges -- and it trusts " +
+				"them via -dns-spec automatically (#1767); there is nothing to pass here")
 	}
 	for _, d := range owned {
 		if err := checkApexDomain(d); err != nil {
@@ -559,8 +630,11 @@ func buildRenderConfigFromFlags(f nginxFlags, port string) (nginxRenderConfig, e
 		cfg.Groups = append(cfg.Groups, nginxDomainGroup{Domain: d, CertRoot: *f.apexCertRoot, WildcardOnly: true})
 	}
 
-	// Peer-edge trust rides on the control-plane entry: no real_ip block, nothing to add to.
-	if cfg.TrustedProxy != "" {
+	// On an edge, peer trust rides on the control-plane entry: no real_ip block, nothing to add
+	// to. On central the edge set IS the block, so it is resolved unconditionally -- central has
+	// no flag to gate it on, and gating it on one would make the fix opt-in for the one role that
+	// cannot express the opt-in (#1767).
+	if role == RoleCentral || cfg.TrustedProxy != "" {
 		peers, err := resolveTrustedPeers(*f.dnsSpec, owned)
 		if err != nil {
 			return nginxRenderConfig{}, err
@@ -582,8 +656,11 @@ func buildRenderConfigFromFlags(f nginxFlags, port string) (nginxRenderConfig, e
 // and re-running reconcile-nginx against each edge picks the change up. Until that reconcile runs
 // the set is stale, which is why checkEdgeRealIP reports the gap rather than leaving it silent.
 //
-// ownDomains are dropped: an edge has no reason to trust itself, and naming its own address here
-// would read as one.
+// ownDomains are dropped: a node has no reason to trust itself, and naming its own address here
+// would read as one. On central this drops nothing -- central's owned domains are apexes, and no
+// edge's fully-qualified hostname is one -- which is correct: central must trust every edge
+// (#1767). Central's own address never appears anyway, because edgeAddresses excludes the
+// ${IPV4}/${IPV6} placeholder records the spec carries for it.
 //
 // A missing spec at the DEFAULT path is a warning, not an error. This tool is used outside
 // Liferay's own deployment, where that path does not exist, and refusing to render an nginx

@@ -1410,6 +1410,17 @@ than `$proxy_add_x_forwarded_for` which *appends* to whatever the client sent â€
 leftmost entry caller-controlled. If you place a CDN or load balancer in front of nginx, revisit
 this: you would then want nginx's `real_ip` module with `set_real_ip_from` naming that upstream.
 
+**In a multi-node deployment nginx already does this, on both roles.** `$remote_addr` is only the
+visitor when the visitor connected directly; when another gateway cross-proxies the request it is
+that gateway, and the lines above would then attribute the request to it. `render-nginx-config`
+emits a `real_ip` block naming the nodes that legitimately forward â€” the control plane, loopback
+and the peer edges on an edge (#1450, #1750, #1757); every edge plus loopback on central, which
+its own edges forward to whenever they hold no route for a served domain (#1767). It rewrites
+`$remote_addr` to the visitor *before* the `proxy_set_header` lines run, so the gateway's own
+resolution order is unaffected. It is not a way in: `real_ip` rewrites only when the immediate
+peer is one of the named addresses, so a visitor arriving directly is never rewritten however
+they forge the header. Every entry must be an exact address, never a range.
+
 
 ## 9. Asymmetric Outbound Routing Workaround (Dual-IP VPS)
 

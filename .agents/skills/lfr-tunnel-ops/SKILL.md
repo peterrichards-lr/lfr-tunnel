@@ -251,6 +251,12 @@ it would make the idle setting unreachable, which is almost always a typo.
 ```
 `-domains`/`-port` can be passed as flags to override `lfr-tunnel-ops.yaml`'s `nginx:` section for a one-off run; otherwise they're required there. `-port` must match the live `server-config.yaml`'s `http_bind_addr` port.
 
+**Central's config now carries a `real_ip` block too** (#1767), derived from `-dns-spec` and
+naming every edge plus loopback. Nothing about the command changes -- but merging that change
+ships nothing on its own, because nginx config is not re-rendered by a restart or by `deploy`.
+Run `reconcile-nginx` once per box for it to take effect, and `check-config -target central` to
+confirm it did.
+
 **`-domains` takes APEX domains, not hostnames, and the list must be complete.** Each entry
 generates two server blocks -- `<entry>` and `*.<entry>` -- and reads its certificate from
 `/etc/letsencrypt/live/<entry>/`. Liferay's central is therefore
@@ -319,6 +325,14 @@ Three things differ from central, and they are the whole reason an edge needs it
   visitor arriving edge-direct is untouched. Omit it and the config is exactly as it was.
   `check-config` (§6a) warns when an edge does not trust the control plane, or trusts an address
   that no longer resolves to it.
+
+  **Central takes no `-trusted-proxy` and never did -- but it does now get a `real_ip` block**
+  (#1767). It has no control plane above it to name, so the flag is still refused; what it needs
+  is the *edge* addresses, and those come from `-dns-spec` with no flag to pass. Edges cross-proxy
+  to central routinely -- an edge falls back to the control plane for any served domain it holds
+  no pushed route for -- and without the block central attributes those visitors to the forwarding
+  edge, then destroys the visitor's address for every hop after it. The template used to say
+  "nothing forwards to central"; that was false.
 - **`-redirect-domain` is required.** An edge's own apex has no portal to serve, so browser
   traffic arriving there is redirected to the control plane. Only `/api/` and `/tunnel` are
   served locally on that hostname.
@@ -477,6 +491,12 @@ What it checks, all against data already committed here:
 - **Unknown top-level keys**, since yaml.v3 ignores them silently -- a typo'd setting is inert
   while appearing to be applied. Reported as a warning, not an error, because a key may simply be
   newer or older than the binary mid-upgrade.
+- **The live nginx `set_real_ip_from` set**, on **either role** (#1450, #1750, #1757, #1767). It
+  reads the config that is actually serving, because a restart does not re-render that file and
+  nothing else surfaces a stale trusted set. An edge is expected to trust the control plane,
+  loopback and its peer edges; central is expected to trust every edge in the DNS spec, plus
+  loopback, and has no control-plane entry to check. Central used to be skipped entirely, which
+  meant the one box with no `real_ip` block was also the one box drift could not report on.
 
 **It never prints a secret.** That file holds token hashes, SMTP credentials and webhook URLs, so
 findings are reported by KEY and any value whose key matches
@@ -500,4 +520,4 @@ Run remote diagnostic checks on the VPS (system uptime/load, systemd service sta
 
 <!-- markdownlint-disable MD049 -->
 ---
-*Last Updated: 2026-09-02* | *Last Reviewed: 2026-09-02*
+*Last Updated: 2026-09-06* | *Last Reviewed: 2026-09-06*

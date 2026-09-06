@@ -326,46 +326,55 @@ func trustedRealIPAddrs(nginxConf string) []string {
 	return out
 }
 
-// checkEdgeRealIP reports whether an edge trusts the control plane's address, so a request the
-// control plane forwards is attributed to the visitor rather than to central (#1450).
+// checkGatewayRealIP reports whether a gateway trusts every node that forwards to it, so a
+// cross-proxied request is attributed to the visitor rather than to the forwarder (#1450).
 //
-// Baking an address into four edges' nginx is exactly the shape that goes stale unnoticed -- the
+// Baking addresses into five boxes' nginx is exactly the shape that goes stale unnoticed -- the
 // same shape as the edge_nodes urls that named retired hosts for weeks (#1449) -- so it is
 // checked rather than assumed.
 //
-// Only meaningful on an edge. control_plane_url is set there and empty on central, so its
-// presence in the live config is the signal.
-func checkEdgeRealIP(controlPlaneURL string, spec DNSSpec, nginxConf string) []DriftFinding {
-	if strings.TrimSpace(controlPlaneURL) == "" {
-		return nil // central: nothing forwards to it
-	}
-
+// BOTH roles, since #1767. control_plane_url is set on an edge and empty on central, so its
+// presence picks which set is expected: an edge is forwarded to by the control plane (#1450) and
+// by its peer edges (#1757); central is forwarded to by every edge (#1767), and has no control
+// plane of its own to check for. This used to return early on central, on the same false premise
+// the render side carried -- which meant the one box with no real_ip block was also the one box
+// the drift check could not report on.
+func checkGatewayRealIP(controlPlaneURL string, spec DNSSpec, nginxConf string) []DriftFinding {
+	isEdge := strings.TrimSpace(controlPlaneURL) != ""
 	trusted := trustedRealIPAddrs(nginxConf)
+
 	if len(trusted) == 0 {
+		if !isEdge && len(spec.edgeAddresses()) == 0 {
+			// Central with no fleet declared has nothing to trust and nothing to report. Saying
+			// so on a single-node install would be pure noise.
+			return nil
+		}
 		return []DriftFinding{{
 			Severity: severityWarning,
 			Key:      realIPKey,
-			Message: "this edge does not trust the control plane's address, so a request the control " +
-				"plane forwards is attributed to CENTRAL rather than to the visitor -- the per-tunnel " +
-				"IP whitelist, the rate limiter's auto-ban and audit entries all name central (#1450). " +
-				"Re-run reconcile-nginx with -trusted-proxy",
+			Message:  realIPAbsentMessage(isEdge),
 		}}
 	}
 
-	findings := checkRealIPMatchesControlPlane(controlPlaneURL, trusted)
+	var findings []DriftFinding
+	if isEdge {
+		// Only an edge has a control plane to still be pointing at.
+		findings = append(findings, checkRealIPMatchesControlPlane(controlPlaneURL, trusted)...)
+	}
 
-	// Trusting the control plane is necessary but not sufficient. nginx's recursive walk stops at
-	// the first untrusted address from the right, and the chain the control plane sends ends with
-	// its own loopback peer, so an edge that trusts central alone attributes the visitor to
-	// 127.0.0.1 (#1750). An edge reconciled before that fix looks correct to the check above.
+	// Trusting the forwarders is necessary but not sufficient. nginx's recursive walk stops at
+	// the first untrusted address from the right, and the chain a forwarding gateway sends ends
+	// with its own loopback peer, so a node that trusts the forwarder alone attributes the
+	// visitor to 127.0.0.1 (#1750). A box reconciled before that fix looks correct to the check
+	// above.
 	if !slices.Contains(trusted, nginxLoopbackTrustedProxy) {
 		findings = append(findings, DriftFinding{
 			Severity: severityWarning,
 			Key:      realIPKey,
 			Message: fmt.Sprintf(
 				"trusts %s but not %s, so nginx's recursive real_ip walk stops at the loopback entry "+
-					"the control plane appends and attributes a forwarded request to %s rather than to "+
-					"the visitor (#1750). Re-run reconcile-nginx to render the current template",
+					"the forwarding gateway appends and attributes a forwarded request to %s rather "+
+					"than to the visitor (#1750). Re-run reconcile-nginx to render the current template",
 				strings.Join(trusted, ", "), nginxLoopbackTrustedProxy, nginxLoopbackTrustedProxy),
 		})
 	}
@@ -374,14 +383,39 @@ func checkEdgeRealIP(controlPlaneURL string, spec DNSSpec, nginxConf string) []D
 	return findings
 }
 
-// checkRealIPCoversPeerEdges reports peer gateways this edge does not trust (#1757).
+// realIPAbsentMessage is what to say when a gateway has no real_ip block at all. Split out
+// because the two roles lose different things and are fixed by different commands.
+func realIPAbsentMessage(isEdge bool) string {
+	if isEdge {
+		return "this edge does not trust the control plane's address, so a request the control " +
+			"plane forwards is attributed to CENTRAL rather than to the visitor -- the per-tunnel " +
+			"IP whitelist, the rate limiter's auto-ban and audit entries all name central (#1450). " +
+			"Re-run reconcile-nginx with -trusted-proxy"
+	}
+	return "central trusts no forwarding address at all, so a request an EDGE cross-proxies here " +
+		"is attributed to that edge rather than to the visitor -- the per-tunnel IP whitelist, the " +
+		"rate limiter's auto-ban and every audit entry name the edge (#1767). An edge falls back " +
+		"to the control plane for any served domain it holds no pushed route for, so this is a " +
+		"path traffic actually takes. Re-run reconcile-nginx -role central (no -trusted-proxy: " +
+		"the edge addresses come from -dns-spec)"
+}
+
+// checkRealIPCoversPeerEdges reports edge gateways this node does not trust (#1757, #1767).
 //
-// Same treatment as the loopback gap #1750 added, for the same reason: an edge reconciled before
+// Same treatment as the loopback gap #1750 added, for the same reason: a box reconciled before
 // the fix looks entirely correct to the checks above, and the symptom -- visitors attributed to a
-// sibling edge -- is indistinguishable from ordinary traffic in the audit log.
+// forwarding gateway -- is indistinguishable from ordinary traffic in the audit log.
+//
+// Role-agnostic on purpose. On an edge the missing entries are its SIBLINGS; on central they are
+// the whole fleet, since every edge cross-proxies to the control plane for a served domain it
+// holds no route for (#1767). Either way the question is the same one -- which declared edge
+// addresses are absent from set_real_ip_from -- so it is asked once.
 //
 // The node's OWN addresses are excluded by reading the server_names its live config serves, so
-// this needs no separate "which edge am I" input and cannot disagree with the file it is reading.
+// this needs no separate "which node am I" input and cannot disagree with the file it is reading.
+// That works unchanged on central: central's server_names are its apexes and wildcards, and an
+// edge's fully-qualified hostname matches neither, so every edge is correctly counted as one it
+// must trust.
 func checkRealIPCoversPeerEdges(spec DNSSpec, trusted []string, nginxConf string) []DriftFinding {
 	declared := spec.edgeAddresses()
 	if len(declared) == 0 {
@@ -409,12 +443,13 @@ func checkRealIPCoversPeerEdges(spec DNSSpec, trusted []string, nginxConf string
 		Severity: severityWarning,
 		Key:      realIPKey,
 		Message: fmt.Sprintf(
-			"does not trust %s. Central pushes the whole routing table to every edge, so an edge "+
-				"holding no lease for a name forwards straight to the edge that does -- with no "+
-				"control-plane hop. real_ip then declines entirely, because the peer is not trusted, "+
-				"and the visitor is attributed to the FORWARDING EDGE: the per-tunnel IP whitelist, "+
-				"the rate limiter's auto-ban and every audit entry name it instead (#1757). Re-run "+
-				"reconcile-nginx to render the current template",
+			"does not trust %s. Any gateway may forward here: central pushes the whole routing "+
+				"table to every edge, so an edge holding no lease for a name forwards straight to "+
+				"the edge that does (#1757), and an edge with no pushed route for a served domain "+
+				"falls back to the control plane (#1767). real_ip then declines entirely, because "+
+				"the peer is not trusted, and the visitor is attributed to the FORWARDING GATEWAY: "+
+				"the per-tunnel IP whitelist, the rate limiter's auto-ban and every audit entry "+
+				"name it instead. Re-run reconcile-nginx to render the current template",
 			strings.Join(missing, ", ")),
 	}}
 }
@@ -511,7 +546,7 @@ func CheckConfigCommand(args []string) {
 	// mistake surfaces long after it was made.
 	errors += checkConfigFilePermissions(target, sshTarget, *remotePath, *unitPath)
 
-	e, w := reportEdgeRealIPFindings(target, sshTarget, configYAML, specYAML, *specPath)
+	e, w := reportGatewayRealIPFindings(target, sshTarget, configYAML, specYAML, *specPath)
 	errors += e
 	warnings += w
 
@@ -529,23 +564,32 @@ func CheckConfigCommand(args []string) {
 	fmt.Println("No drift found.")
 }
 
-// reportEdgeRealIPFindings prints the edge real_ip findings and returns how many were error- and
+// reportGatewayRealIPFindings prints the real_ip findings and returns how many were error- and
 // warning-severity.
 //
-// Edge only: does this node still trust every gateway that forwards to it -- the control plane
-// (#1450), loopback (#1750) and its peer edges (#1757)? It reads the nginx config the reconcile
-// writes, so it verifies what is actually serving rather than what was intended. A restart does
-// not re-render that file, so nothing else surfaces a stale trusted set.
-func reportEdgeRealIPFindings(target DeployTarget, sshTarget, configYAML string, specYAML []byte, specPath string) (int, int) {
+// Either role: does this node still trust every gateway that forwards to it -- on an edge the
+// control plane (#1450), loopback (#1750) and its peer edges (#1757); on central the edges
+// (#1767) and loopback? It reads the nginx config the reconcile writes, so it verifies what is
+// actually serving rather than what was intended. A restart does not re-render that file, so
+// nothing else surfaces a stale trusted set.
+//
+// The role also picks which file to read: an edge's config and central's live at different paths
+// (nginxRemotePaths), so getting this wrong would report "no real_ip block" against an empty
+// read rather than against the config that is actually serving.
+func reportGatewayRealIPFindings(target DeployTarget, sshTarget, configYAML string, specYAML []byte, specPath string) (int, int) {
 	var live liveConfigWithCP
-	if err := yaml.Unmarshal([]byte(configYAML), &live); err != nil || live.ControlPlaneURL == "" {
-		return 0, 0 // central, or a config this build cannot read: nothing forwards to central
+	if err := yaml.Unmarshal([]byte(configYAML), &live); err != nil {
+		return 0, 0 // a config this build cannot read
+	}
+	role := RoleCentral
+	if strings.TrimSpace(live.ControlPlaneURL) != "" {
+		role = RoleEdge
 	}
 
 	spec, err := parseDNSSpec(specYAML)
 	CheckFatal(err, "Failed to parse the DNS spec at "+specPath)
 
-	nginxTarget, _ := nginxRemotePaths(RoleEdge)
+	nginxTarget, _ := nginxRemotePaths(role)
 	nginxConf, err := RunCommandCaptureOutput("ssh", "-i", target.IdentityFile, sshTarget,
 		"sudo cat "+nginxTarget+" 2>/dev/null || true")
 	if err != nil {
@@ -553,7 +597,7 @@ func reportEdgeRealIPFindings(target DeployTarget, sshTarget, configYAML string,
 	}
 
 	errors, warnings := 0, 0
-	for _, f := range checkEdgeRealIP(live.ControlPlaneURL, spec, nginxConf) {
+	for _, f := range checkGatewayRealIP(live.ControlPlaneURL, spec, nginxConf) {
 		fmt.Printf("[%s] %s: %s\n", strings.ToUpper(f.Severity), f.Key, f.Message)
 		if f.Severity == severityError {
 			errors++

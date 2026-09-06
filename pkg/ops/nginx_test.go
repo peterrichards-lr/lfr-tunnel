@@ -495,16 +495,18 @@ func TestRenderRealIPBlock_TrustedSet(t *testing.T) {
 		xff:  []string{visitor, "127.0.0.1"},
 		want: visitor,
 	}, {
-		// The two-hop path (edge -> central -> here), and the honest answer is NOT the visitor.
+		// The two-hop path (edge -> central -> here) as it looked BEFORE #1767, kept as a
+		// regression pin on the mechanism rather than on the deployment.
 		//
-		// Central's own nginx overwrites X-Forwarded-For with $remote_addr, and central has no
-		// real_ip block by design -- so the visitor is destroyed at central and what leaves it is
-		// "<forwarding edge>, 127.0.0.1". No trusted set on THIS node can recover an address that
-		// is no longer on the wire. Asserted rather than omitted so the limit is written down;
-		// it resolved to the forwarding edge before this change too, so nothing regressed.
-		// Filed as #1767 -- fixing it means giving central a real_ip block, which contradicts
-		// "nothing forwards to central" (a claim that is itself false, see that issue).
-		name: "cross-proxied edge -> central -> here: central already lost the visitor",
+		// Central's nginx overwrites X-Forwarded-For with $remote_addr, so if central resolves
+		// the forwarding edge instead of the visitor, what leaves central is
+		// "<forwarding edge>, 127.0.0.1" and no trusted set on THIS node can recover an address
+		// that is no longer on the wire. #1767 fixed that at the only place it can be fixed --
+		// central now runs its own real_ip block, so the visitor survives that hop and this node
+		// receives "<visitor>, 127.0.0.1" instead (the first case above). The assertion here is
+		// the narrow one that still holds either way: given a chain whose visitor was already
+		// destroyed upstream, this node resolves whatever it was replaced by.
+		name: "a chain whose visitor was already destroyed upstream cannot be recovered here",
 		peer: central,
 		xff:  []string{peerV4, "127.0.0.1"},
 		want: peerV4,
@@ -535,18 +537,148 @@ func TestRenderRealIPBlock_TrustedSet(t *testing.T) {
 	}
 }
 
-// TestRenderRealIPBlock_NeverOnCentral — central is not behind anything. Emitting real_ip there
-// would tell nginx to believe a forwarded-for header from whoever connected, which is the
-// forgeable path #1325 closed.
-func TestRenderRealIPBlock_NeverOnCentral(t *testing.T) {
+// Central IS behind something: its own edges (#1767).
+//
+// This test replaced TestRenderRealIPBlock_NeverOnCentral, which asserted the opposite on two
+// premises that are both false. "Nothing forwards to central" is false --
+// resolveRemoteRouteForHost (pkg/server/server.go) falls back to ControlPlaneURL for ANY served
+// domain an edge holds no pushed route for, so edges cross-proxy here routinely. And "emitting
+// real_ip would tell nginx to believe a forwarded-for header from whoever connected" is false for
+// the same reason it is false on an edge: ngx_http_realip fires only when the IMMEDIATE PEER is
+// in set_real_ip_from, so a visitor connecting directly is never rewritten and #1325 is untouched
+// -- which the direct-visitor cases in TestRenderRealIPBlock_CentralTrustedSet assert.
+
+// Central takes NO control-plane entry -- there is no control plane above it -- so the edge set
+// plus loopback is the whole block, and it renders on peers alone.
+func TestRenderRealIPBlock_CentralTrustsItsEdges(t *testing.T) {
+	const peerV4, peerV6 = "192.0.2.40", "2001:db8::40"
+
 	got := buildNginxConfig(nginxRenderConfig{
 		Role:         RoleCentral,
 		LocalPort:    "8080",
-		TrustedProxy: "203.0.113.7",
-		Groups:       []nginxDomainGroup{{Domain: "example.com", CertRoot: certRootLetsEncrypt}},
+		TrustedPeers: []string{peerV4, peerV6},
+		Groups: []nginxDomainGroup{
+			{Domain: "example.com", CertRoot: certRootLetsEncrypt},
+			{Domain: "example.net", CertRoot: certRootLetsEncrypt},
+		},
 	})
-	if hasDirective(got, "set_real_ip_from") {
-		t.Errorf("central must never emit real_ip directives:\n%s", got)
+
+	want := []string{peerV4, peerV6, nginxLoopbackTrustedProxy}
+	if trusted := nginxTrustedRealIPSet(got); !slices.Equal(trusted, want) {
+		t.Errorf("central trusted set = %v, want %v", trusted, want)
+	}
+	for _, w := range []string{"real_ip_header X-Forwarded-For;", "real_ip_recursive on;"} {
+		if !strings.Contains(got, w) {
+			t.Errorf("expected %q in:\n%s", w, got)
+		}
+	}
+	// http-context directives, one block per file however many domain groups.
+	if n := countDirective(got, "real_ip_recursive"); n != 1 {
+		t.Errorf("expected exactly one real_ip_recursive across two groups, got %d", n)
+	}
+	// The rationale has to survive into the file an operator reads on the box, and it has to say
+	// the true thing -- the false claim is the reason the next reader would delete this.
+	for _, w := range []string{
+		"# THIS IS CENTRAL, and it is behind its own edges (#1767).",
+		`forwards to central". That was false. Do not restore it.`,
+	} {
+		if !strings.Contains(got, w) {
+			t.Errorf("generated central config lost its on-box rationale %q:\n%s", w, got)
+		}
+	}
+}
+
+// With no fleet declared there is nothing for central to trust, and it must render exactly what
+// it rendered before this existed. This is the shape a deployment outside Liferay's own has, and
+// the shape every other central test in this file relies on.
+func TestRenderRealIPBlock_CentralWithNoPeersRendersNothing(t *testing.T) {
+	if got := centralConfig("8080", "example.com"); hasDirective(got, "set_real_ip_from") {
+		t.Errorf("no edges declared, so central must emit no real_ip directives:\n%s", got)
+	}
+}
+
+// TestRenderRealIPBlock_CentralTrustedSet is TestRenderRealIPBlock_TrustedSet's counterpart for
+// central: it walks the chain central ACTUALLY receives against the trusted set the template
+// ACTUALLY emits, using the same transcription of ngx_http_get_forwarded_addr_internal.
+//
+// The chain an edge sends central is shaped identically to the one central sends an edge -- the
+// edge's nginx overwrites X-Forwarded-For with the visitor, its gateway process appends its own
+// loopback peer -- so what arrives is "<visitor>, 127.0.0.1" from a peer whose address is the
+// edge's. That is the whole of #1767.
+func TestRenderRealIPBlock_CentralTrustedSet(t *testing.T) {
+	const visitor = "198.51.100.25"
+	const edgeV4, edgeV6 = "192.0.2.40", "2001:db8::40"
+
+	trusted := nginxTrustedRealIPSet(buildNginxConfig(nginxRenderConfig{
+		Role:         RoleCentral,
+		LocalPort:    "8080",
+		TrustedPeers: []string{edgeV4, edgeV6},
+		Groups:       []nginxDomainGroup{{Domain: "example.com", CertRoot: certRootLetsEncrypt}},
+	}))
+
+	for _, tc := range []struct {
+		name string
+		peer string
+		xff  []string
+		want string
+	}{{
+		// #1767. Without edgeV4 in the set, real_ip declines and $remote_addr stays 192.0.2.40 --
+		// the whitelist, the auto-ban and every audit entry then name the forwarding edge, and
+		// central's own proxy_set_header lines destroy the visitor for every hop after this one.
+		name: "cross-proxied here by an edge over IPv4",
+		peer: edgeV4,
+		xff:  []string{visitor, "127.0.0.1"},
+		want: visitor,
+	}, {
+		name: "cross-proxied here by an edge over IPv6",
+		peer: edgeV6,
+		xff:  []string{visitor, "127.0.0.1"},
+		want: visitor,
+	}, {
+		// Loopback is as load-bearing here as on an edge (#1750): the edge's gateway appends its
+		// own loopback peer, and without that entry the walk stops on it.
+		name: "an edge chain from before #1737 removed the duplicated hop",
+		peer: edgeV4,
+		xff:  []string{visitor, visitor, "127.0.0.1"},
+		want: visitor,
+	}, {
+		// The premise the deleted test rested on. A visitor reaching the PORTAL directly is not
+		// an edge, so real_ip declines and no header they send is believed -- #1325 stands, and
+		// central's login rate limiting and audit trail are unaffected for everyone who is not an
+		// edge, which is everyone.
+		name: "portal-direct: nothing is rewritten, forged chain or not",
+		peer: visitor,
+		xff:  []string{"6.6.6.6"},
+		want: visitor,
+	}, {
+		name: "portal-direct: an attacker naming loopback buys nothing",
+		peer: visitor,
+		xff:  []string{"6.6.6.6", "127.0.0.1"},
+		want: visitor,
+	}, {
+		// Trusting the fleet does not let a visitor claim to BE one of them: real_ip keys on the
+		// connection's peer, and a header cannot change that.
+		name: "portal-direct: naming an edge in the header buys nothing either",
+		peer: visitor,
+		xff:  []string{"6.6.6.6", edgeV4, edgeV6},
+		want: visitor,
+	}, {
+		// The edge control WebSocket. The edge dials central with no forwarding headers
+		// (dialer.Dial(wsURL, nil), pkg/server/edge_control_ws.go), so the chain is empty, the
+		// walk cannot run, and handleEdgeControlWS still records the edge's own address. Asserted
+		// because this is the one connection on central where the EDGE is the address of
+		// interest, and it is now a trusted peer.
+		name: "edge control WS: a trusted peer with no chain stays itself",
+		peer: edgeV4,
+		xff:  nil,
+		want: edgeV4,
+	}} {
+		t.Run(tc.name, func(t *testing.T) {
+			if got := nginxRecursiveRealIP(tc.peer, tc.xff, trusted); got != tc.want {
+				t.Errorf("real_ip_recursive over %v from peer %s with trusted %v = %s, want %s",
+					tc.xff, tc.peer, trusted, got, tc.want)
+			}
+		})
 	}
 }
 

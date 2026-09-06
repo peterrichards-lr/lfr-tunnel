@@ -256,8 +256,17 @@ lfr-tunnel -subdomain your-name-se -ports 8080
 Outside a workspace, leaving `-ports` off instead asks the client to find the instance
 itself: it reads `docker ps` for a container whose name or image mentions `liferay`, `dxp` or
 `ldm` and takes the ports it publishes, and failing that probes `8080`, `13000` and `3000` on
-localhost. Naming the port explicitly, as above, is still the more predictable option when
+`127.0.0.1`. Naming the port explicitly, as above, is still the more predictable option when
 you already know it.
+
+That same pass also decides **where** to forward, not only what to publish: the host it found
+the instance on becomes `target_host`, unless you supplied one with `-target-host`,
+`LFT_TARGET_HOST` or `target_host:` — all three of which beat it. A discovered `localhost` is
+normalised to `127.0.0.1` first, because `localhost` often resolves to `::1` ahead of the IPv4
+address, and where `::1` is dropped rather than refused that costs you a hang mid-demo instead
+of a fast fallback. With nothing set and nothing discovered you still get `127.0.0.1`. The full
+order is in
+[Leaving `target_host` unset](client_configuration.md#leaving-target_host-unset).
 
 ### Choosing Which Gateway to Use
 
@@ -484,4 +493,4 @@ Bodies are capped at 10 KB each. Prefer the Inspector at `http://localhost:4040`
 
 <!-- markdownlint-disable MD049 -->
 ---
-*Last Updated: 2026-09-04* | *Last Reviewed: 2026-09-04*
+*Last Updated: 2026-09-06* | *Last Reviewed: 2026-09-06*

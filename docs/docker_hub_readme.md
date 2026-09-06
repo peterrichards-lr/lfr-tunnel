@@ -86,7 +86,7 @@ Configure the runtime execution using these environment variables:
 | **Server URL** | `LFT_CLIENT_SERVER` | `LFT_SERVER_URL`, `LFT_SERVER` | The public-facing gateway server managing the external entrypoint. | *Required* (e.g., `https://tunnel.lfr-demo.se`) |
 | **Auth Token** | `LFT_CLIENT_TOKEN` | `LFT_TOKEN` | The authentication secret used to register the secure connection with the gateway. | *Required* (e.g., `lfr_pat_...`) |
 | **Subdomain** | `LFT_CLIENT_SUBDOMAIN` | `LFT_SUBDOMAIN` | Custom subdomain prefix for your public endpoint. | `your-subdomain` |
-| **Target Host** | `LFT_TARGET_HOST` | — | The internal address/IP of your target Liferay instance (e.g., `localhost` or `container_name`). | `localhost` |
+| **Target Host** | `LFT_TARGET_HOST` | — | The internal address/IP of your target Liferay instance (e.g., `127.0.0.1` or `container_name`). Parsed as a URL and reduced to its hostname, so `http://liferay:8080` becomes `liferay`. Leave it unset and the client uses the host its auto-discovery pass found, then `127.0.0.1`. | auto-discovered, else `127.0.0.1` |
 | **Ports** | `LFT_CLIENT_PORTS` | — | Comma-separated list of ports to route. | `8080` (or `8080,3000`) |
 | **Inspector Bind** | `LFT_INSPECTOR_BIND` | — | Binding address for local inspector dashboard. | `0.0.0.0` or `127.0.0.1` |
 
@@ -101,4 +101,4 @@ The code for this agent is open source. You can view the implementation, report 
 
 <!-- markdownlint-disable MD049 -->
 ---
-*Last Updated: 2026-07-02* | *Last Reviewed: 2026-07-02*
+*Last Updated: 2026-09-06* | *Last Reviewed: 2026-09-06*

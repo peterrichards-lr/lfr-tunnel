@@ -191,7 +191,7 @@ func RenderEdgeNodesCommand(args []string) {
 	fs := flag.NewFlagSet("render-edge-nodes", flag.ExitOnError)
 	nodesFile := fs.String("nodes", "edge_nodes.txt",
 		"gitignored file of id,token[,url] lines -- see edge_nodes.txt.example")
-	specPath := fs.String("dns-spec", "scripts/liferay/dns/lfr-demo-production.yaml",
+	specPath := fs.String("dns-spec", defaultDNSSpecPath,
 		"committed DNS spec the urls are derived from")
 	fs.Usage = func() {
 		fmt.Println("Usage: lfr-tunnel-ops render-edge-nodes [-nodes edge_nodes.txt] [-dns-spec path]")

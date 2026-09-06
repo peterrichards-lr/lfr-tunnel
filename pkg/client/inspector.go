@@ -381,10 +381,17 @@ func StartInspector(port int, engine *InterceptorEngine) (int, error) {
 				Subdomain          string `json:"subdomain"`
 				PreserveHost       bool   `json:"preserve_host"`
 				InsecureSkipVerify bool   `json:"insecure_skip_verify"`
-				Passcode           string `json:"passcode"`
-				RateLimit          int    `json:"rate_limit"`
-				MaintenancePath    string `json:"maintenance_path"`
-				LogDir             string `json:"log_dir"`
+				// Pointers, so an ABSENT field is distinguishable from one deliberately set
+				// empty (#1762). These two are owned by the Access Control tab, which posts
+				// to /api/access-control; the Settings tab does not offer them. As plain
+				// values, a Settings save decoded them to "" and 0 and wrote that over a
+				// passcode the user had set -- silently removing the access control from
+				// their tunnel. AuthToken above already carries a guard against exactly this
+				// hazard; these were simply missed.
+				Passcode        *string `json:"passcode"`
+				RateLimit       *int    `json:"rate_limit"`
+				MaintenancePath string  `json:"maintenance_path"`
+				LogDir          string  `json:"log_dir"`
 			}
 			if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 				w.WriteHeader(http.StatusBadRequest)
@@ -408,8 +415,14 @@ func StartInspector(port int, engine *InterceptorEngine) (int, error) {
 			cfg.Subdomain = req.Subdomain
 			cfg.PreserveHost = req.PreserveHost
 			cfg.InsecureSkipVerify = req.InsecureSkipVerify
-			cfg.Passcode = req.Passcode
-			cfg.RateLimit = req.RateLimit
+			// Only when the caller actually sent them. Omitting a field means "leave it
+			// alone", not "clear it".
+			if req.Passcode != nil {
+				cfg.Passcode = *req.Passcode
+			}
+			if req.RateLimit != nil {
+				cfg.RateLimit = *req.RateLimit
+			}
 			cfg.MaintenancePath = req.MaintenancePath
 			// Saved for the next run only. The traffic and error logs are opened once at
 			// startup, so a directory change cannot move an open file handle -- the

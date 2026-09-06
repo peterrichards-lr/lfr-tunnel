@@ -261,6 +261,7 @@ test-hooks:
 	@./tests/hooks/test-power-hook-credentials.sh
 	@./tests/hooks/test-ci-hook-gate.sh
 	@./tests/hooks/test-ci-docs-gate.sh
+	@./tests/hooks/test-ci-platform-matrix.sh
 	@./tests/hooks/test-coverage-signal.sh
 	@./tests/hooks/test-install-script.sh
 	@./tests/hooks/test-required-contexts-mirror.sh

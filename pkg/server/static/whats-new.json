@@ -1,5 +1,43 @@
 [
   {
+    "version": "v1.48.25",
+    "release_date": "2026-09-06",
+    "features": [
+      "fix(ops): give central a real_ip block naming its edges (#1767) (#1782)",
+      "fix(portal): resolve 20 undefined theme-token references in Portal V1, and teach the gate to see inline styles (#1786)",
+      "docs(workflow): record how to stop fixing the instance instead of the class (#1780)",
+      "fix(gui): say why a client config failed to load instead of showing defaults (#1771) (#1778)",
+      "ci: run the platform matrix for every package the client ships (#1773) (#1776)",
+      "fix(client): stop the Settings tab erasing the tunnel's passcode (#1762) (#1770)",
+      "fix(test): quote token_file paths as YAML, unbreaking master on Windows (#1775)",
+      "feat(client): honour token_file, so a PAT need not sit in the config file (#1769)",
+      "fix(ops): trust peer edges in an edge's real_ip set (#1757) (#1768)",
+      "refactor(portal-v1): give the 15 inert V1 classes real rules (#1752) (#1766)",
+      "security(server): stop requireAdmin promoting any portal user to admin (#1760) (#1765)",
+      "feat(privacy): consent-gate collecting a client's diagnostic logs (#1696) (#1764)",
+      "chore(client): retire nav_placement rather than restore it (#1751) (#1761)",
+      "docs(client): document auto-discovery as a source of target_host (#1746) (#1759)",
+      "fix(ops): trust loopback in the edge's real_ip walk, so it reaches the visitor (#1756)",
+      "fix(portal): style V1's alert-warning, and point the CSS gate at V1 (#1744) (#1755)",
+      "test(client): make TestMain_ValidationFailure test validation (#1716) (#1754)",
+      "chore(config): remove two client config keys that were never implemented (#1709) (#1753)",
+      "chore(build): make every gate discoverable from make help (#1742) (#1749)",
+      "fix(server): stop X-Forwarded-For carrying a duplicated last hop (#1737) (#1748)",
+      "feat(portal-v2): hand a new token to a waiting CLI, as V1 does (#1741) (#1747)",
+      "fix(client): make auto-discovery's target_host override actually fire (#1735) (#1745)",
+      "feat(client): log the effective configuration at startup (#1693) (#1743)",
+      "fix(client): degrade gracefully when the login handoff port is taken (#1740)",
+      "ci: alert when a master-only or scheduled workflow keeps failing (#1730) (#1739)",
+      "fix(ci): add 'CI Gate' to the required-contexts mirror, and verify the mirror (#1729) (#1738)",
+      "refactor(proxy): migrate ReverseProxy.Director to Rewrite (#1704) (#1736)",
+      "fix(client): make workspace and host port discovery reachable (#1710) (#1734)",
+      "fix(consent): release the policy-warning claim when the email fails to send (#1733)",
+      "ci(docs): build the documentation site on PRs that change it (#1725) (#1731)",
+      "fix(ops): give a local build the same client defaults CI has (#1723) (#1728)",
+      "fix(build): serialise make test so concurrent runs stop deleting each other's binary (#1714) (#1727)"
+    ]
+  },
+  {
     "version": "v1.48.24",
     "release_date": "2026-09-03",
     "features": [
@@ -35,19 +73,6 @@
     "release_date": "2026-09-02",
     "features": [
       "fix(auth): stop background polling from extending the session (#1676) (#1677)"
-    ]
-  },
-  {
-    "version": "v1.48.20",
-    "release_date": "2026-09-02",
-    "features": [
-      "fix(auth): issue the session cookie as Lax on every login path (#1661) (#1674)",
-      "feat(ci): flag functional changes that arrive without a test (#1660) (#1673)",
-      "chore(deps): bump aws-sdk-go-v2 ec2, route53 and scheduler (#1671) (#1672)",
-      "chore(deps): bump github.com/aws/aws-sdk-go-v2/config (#1667)",
-      "feat(portal): warn before the session expires, in both portals (#1656) (#1665)",
-      "docs(workflow): record how to run golangci-lint locally (#1663) (#1664)",
-      "fix(auth): re-issue the session cookie when the session slides (#1655) (#1662)"
     ]
   }
 ]

@@ -478,3 +478,78 @@ func TestLoadClientConfigDistinguishesUnsetPortsFromExplicitPorts(t *testing.T) 
 		})
 	}
 }
+
+// TestLoadClientConfig_IgnoresKeysRemovedIn1709 is the compatibility guarantee for #1709.
+//
+// token_file and bypass_proxy were parsed by ClientConfig for months and were never read by
+// anything, so they were removed. People who copied them out of the example file still have them
+// in ~/.lfr-tunnel/config.yaml, and their client must keep starting. LoadClientConfig decodes
+// with a plain yaml.Decoder and deliberately does NOT call dec.KnownFields(true), so an
+// unrecognised key is skipped rather than rejected.
+//
+// The assertion that matters is the absence of an error. The rest of the config still being
+// applied is what proves the decode did not stop at the unknown key.
+//
+// Mutation-checked: adding dec.KnownFields(true) to LoadClientConfig makes this fail with
+// `field token_file not found in type config.ClientConfig`.
+func TestLoadClientConfig_IgnoresKeysRemovedIn1709(t *testing.T) {
+	removed := []string{"token_file", "bypass_proxy"}
+
+	// Guard against this test quietly becoming vacuous: if either key is ever re-added to
+	// ClientConfig it would be a known field again, and the test would pass without testing
+	// anything.
+	typ := reflect.TypeOf(ClientConfig{})
+	for i := 0; i < typ.NumField(); i++ {
+		tag := typ.Field(i).Tag.Get("yaml")
+		if tag == "" || tag == "-" {
+			continue
+		}
+		name := strings.Split(tag, ",")[0]
+		for _, r := range removed {
+			if name == r {
+				t.Fatalf("ClientConfig has re-acquired the %q field that #1709 removed -- this "+
+					"test no longer proves anything about unknown keys", r)
+			}
+		}
+	}
+
+	// Env overrides would mask a decode that silently produced nothing.
+	for _, k := range []string{
+		"LFT_CLIENT_SERVER", "LFT_SERVER_URL", "LFT_SERVER",
+		"LFT_CLIENT_SUBDOMAIN", "LFT_SUBDOMAIN",
+	} {
+		t.Setenv(k, "")
+	}
+
+	dir := t.TempDir()
+	path := filepath.Join(dir, "config.yaml")
+	// A config file as it stood before #1709: the two removed keys, set to non-zero values,
+	// surrounded by settings that still exist.
+	content := `
+server_url: "https://legacy.example.com"
+subdomain: "legacy-sub"
+token_file: "/home/someone/.lfr-tunnel/token"
+bypass_proxy: true
+rate_limit: 42
+`
+	if err := os.WriteFile(path, []byte(content), 0600); err != nil {
+		t.Fatalf("failed to write config: %v", err)
+	}
+
+	cfg, err := LoadClientConfig(path)
+	if err != nil {
+		t.Fatalf("a config file carrying the keys removed in #1709 must still load, got: %v", err)
+	}
+
+	if cfg.ServerURL != "https://legacy.example.com" {
+		t.Errorf("expected ServerURL https://legacy.example.com, got %q", cfg.ServerURL)
+	}
+	if cfg.Subdomain != "legacy-sub" {
+		t.Errorf("expected Subdomain legacy-sub, got %q", cfg.Subdomain)
+	}
+	// Declared after both removed keys in the file, so this is what proves decoding continued
+	// past them rather than stopping at the first one.
+	if cfg.RateLimit != 42 {
+		t.Errorf("expected RateLimit 42 -- a key declared after the removed ones -- got %d", cfg.RateLimit)
+	}
+}

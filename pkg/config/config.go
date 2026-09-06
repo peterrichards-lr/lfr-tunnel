@@ -395,7 +395,6 @@ type ClientConfig struct {
 	Subdomain       string            `yaml:"subdomain"`
 	CustomDomain    string            `yaml:"custom_domain"`
 	Ports           []int             `yaml:"ports"`
-	TokenFile       string            `yaml:"token_file"`
 	MaintenancePath string            `yaml:"maintenance_path"`
 	RateLimit       int               `yaml:"rate_limit"`
 	BasicAuth       string            `yaml:"basic_auth"`
@@ -412,10 +411,14 @@ type ClientConfig struct {
 	Latency            time.Duration     `yaml:"latency"`
 	Bandwidth          string            `yaml:"bandwidth"`
 	PreserveHost       bool              `yaml:"preserve_host"`
-	BypassProxy        bool              `yaml:"bypass_proxy,omitempty"`
 	InsecureSkipVerify bool              `yaml:"insecure_skip_verify,omitempty"`
 	Theme              string            `yaml:"theme,omitempty"`
-	NavPlacement       string            `yaml:"nav_placement,omitempty"`
+	// NavPlacement is accepted and persisted but nothing renders it. It drove the
+	// Inspector's own navigation layout (top tabs vs sidebar) from #606 until the
+	// dashboard rewrite in #783 deleted the JavaScript half without touching this one.
+	// Kept rather than removed with the other two inert keys of #1709 because it is a
+	// regression, not dead weight -- see #1751 for restore-or-retire.
+	NavPlacement string `yaml:"nav_placement,omitempty"`
 	// LogDir is where the persistent traffic and error logs are written. Empty means
 	// ~/.lfr-tunnel/logs (#1223). A leading ~ is expanded, since this is a value people
 	// type by hand.

@@ -478,6 +478,24 @@
                             </div>
                             <p style="font-size: 12px; color: var(--text-muted); margin-top: 6px;">Disabling this will suppress administrative alerts (like new registration notifications). Essential emails like Magic Links and account status updates cannot be disabled.</p>
                         </div>
+                        <!--
+                            Diagnostic log sharing (#1696). Applied immediately by
+                            setDiagnosticsConsent rather than on Save, like the banner
+                            toggle below: withdrawing consent should not need a second
+                            action, and the server records it as a timestamped, audited
+                            event rather than a profile field.
+                        -->
+                        <div style="margin-bottom: 24px;">
+                            <div style="display: flex; align-items: center; gap: 12px; margin-bottom: 8px;">
+                                <label for="acc-diagnostics-consent" style="margin: 0; color: var(--text-muted); font-size: 14px;" data-i18n="diagnostics_consent_label">Allow administrators to collect my client diagnostic logs</label>
+                                <label class="toggle-switch">
+                                    <input type="checkbox" id="acc-diagnostics-consent" onchange="setDiagnosticsConsent(this)">
+                                    <span class="toggle-slider"></span>
+                                </label>
+                            </div>
+                            <p style="font-size: 12px; color: var(--text-muted); margin-top: 6px;" data-i18n="diagnostics_consent_desc">Optional, and off unless you turn it on. Your client writes logs to ~/.lfr-tunnel/logs recording, for every request it proxies, the time, HTTP method, URL path (without the query string), response status, duration, the local port it was sent to and the edge region it arrived from, plus connection and error events that can include local hostnames and IP addresses, and the client's own console output. Request and response bodies are recorded only if you start the client with -log-bodies. You can change this at any time.</p>
+                            <p style="font-size: 12px; color: var(--danger); margin-top: 6px; display: none;" id="acc-diagnostics-consent-error"></p>
+                        </div>
                         <div style="margin-bottom: 24px;">
                             <div style="display: flex; align-items: center; gap: 12px; margin-bottom: 8px;">
                                 <label for="acc-portal-banner" style="margin: 0; color: var(--text-muted); font-size: 14px;" data-i18n="label_portal_banner">Portal switch banner</label>

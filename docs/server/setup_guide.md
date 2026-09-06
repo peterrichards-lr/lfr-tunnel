@@ -960,6 +960,41 @@ The audit trail is the `user_acknowledgements` table, which is append-only: ever
 acceptance is kept with its version, timestamp, IP and user agent, so "what did this user
 agree to, and when" stays answerable across any number of policy revisions.
 
+### 8.2.2. Diagnostic Log Sharing Consent
+
+An administrator can ask a user's client for its diagnostic logs, and the gateway will
+only issue that request for a user who has explicitly turned diagnostic log sharing on.
+There is nothing to configure -- it is always available and always off until the user acts.
+
+- **Where the user grants it**: an unticked checkbox beneath the policy statement on the
+  Complete Profile Setup page, and an on/off toggle in Account Settings in both portals.
+  It is a separate control from the policy consent above, deliberately: policy acceptance
+  is a condition of using the service, so a combined checkbox could not be refused without
+  refusing the service, and a consent that cannot be refused is not consent.
+- **Where it is stored**: `users.diagnostics_consent_at`, a nullable timestamp. `NULL`
+  means off. **No migration backfills it**, so every account that existed before this
+  shipped is off and has never been asked.
+- **Where it is enforced**: on the gateway, at the moment the request would be issued --
+  not at login and not at client startup. A user who switches it off mid-session has the
+  next request refused, with no message needing to reach their running client.
+- **What an admin sees when it is refused**: `403` and
+  `<email> has not enabled diagnostic log sharing`. Ask them to turn it on; there is no
+  override.
+- **The audit trail**: `diagnostics.consent_granted`, `diagnostics.consent_withdrawn`,
+  `diagnostics.collect_requested` and `diagnostics.collect_refused` in `admin_audit_log`.
+  Refused attempts are recorded too -- a run of them is a pattern worth being able to see.
+
+**If you deploy this onto a gateway with existing users, bump `policy_version`.** The
+consent text describes a new flow of user data off the machine, so the privacy policy
+changes with it, and 8.2.1 is the mechanism that puts a changed policy in front of people
+who registered before it. Without a version bump no existing user is ever shown the
+change. Their diagnostics setting stays off either way -- this is about them being told,
+not about their consent state.
+
+Note that log collection itself is not implemented yet: a request for a consenting user's
+logs is audited and answered with `501`. The consent mechanism is deliberately in place
+first, so the transport cannot ship without something to gate it.
+
 ### 8.3. Customizing Client Binary Downloads & Commands (Self-Hosting & EDR Bypass)
 
 By default, the Developer Portal Dashboard recommends client downloads and installation commands pointing directly to the project's official GitHub releases.
@@ -1426,4 +1461,4 @@ To guarantee that outbound connections originating from the VPS are consistently
 
 <!-- markdownlint-disable MD049 -->
 ---
-*Last Updated: 2026-09-04* | *Last Reviewed: 2026-09-04*
+*Last Updated: 2026-09-06* | *Last Reviewed: 2026-09-06*

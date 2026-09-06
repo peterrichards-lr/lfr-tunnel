@@ -27,6 +27,7 @@ func (db *DB) initSchema() error {
 		totp_secret TEXT DEFAULT '',
 		totp_enabled INTEGER DEFAULT 0,
 		policy_consent_at DATETIME,
+		diagnostics_consent_at DATETIME,
 		language_preference TEXT NOT NULL DEFAULT 'en',
 		subdomain_style TEXT DEFAULT 'liferay',
 		rate_limit INTEGER DEFAULT 0,
@@ -378,4 +379,12 @@ var migrations = []migration{
 		PRIMARY KEY (user_id, document_id, version),
 		FOREIGN KEY(user_id) REFERENCES users(id) ON DELETE CASCADE
 	)`},
+
+	// Whether this user has agreed to an administrator collecting their client's
+	// diagnostic logs (#1696).
+	//
+	// Nullable with no default, and deliberately NOT backfilled from anything: every
+	// account that exists when this migration runs has never been asked the question,
+	// and a column defaulted to "on" would record consent nobody gave. NULL is off.
+	{30, "ALTER TABLE users ADD COLUMN diagnostics_consent_at DATETIME"},
 }

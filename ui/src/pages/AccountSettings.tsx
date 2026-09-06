@@ -29,6 +29,12 @@ export default function AccountSettings() {
   const [emailNotifications, setEmailNotifications] = useState(
     user?.notification_prefs === 'enabled' || !user?.notification_prefs,
   );
+  // Diagnostic log sharing (#1696). Off unless the server says otherwise: an absent or
+  // malformed block is "not consented", never "consented".
+  const [diagnosticsConsent, setDiagnosticsConsent] = useState(
+    user?.diagnostics_consent?.enabled === true,
+  );
+  const [diagnosticsError, setDiagnosticsError] = useState('');
   const [mfaEnabled, setMfaEnabled] = useState(user?.totp_enabled || false);
   const [setupData, setSetupData] = useState<{
     secret: string;
@@ -66,6 +72,32 @@ export default function AccountSettings() {
   const [deleteConfirmEmail, setDeleteConfirmEmail] = useState('');
   const [isDeleting, setIsDeleting] = useState(false);
   const [deleteError, setDeleteError] = useState('');
+
+  // Applied immediately rather than on Save, unlike the other account toggles.
+  // Withdrawing consent should not require finding and pressing a button afterwards, and
+  // the server treats this as an event with its own timestamp and audit entry rather than
+  // as a profile field -- so it has its own endpoint, not a key on PUT /api/me.
+  //
+  // The switch is only moved once the server has accepted the change. Showing it flipped
+  // and then silently failing would tell the user they had withdrawn consent when they
+  // had not.
+  const handleDiagnosticsConsent = async (enabled: boolean) => {
+    setDiagnosticsError('');
+    try {
+      await axios.post('/api/me/diagnostics-consent', { enabled });
+      setDiagnosticsConsent(enabled);
+      if (user) {
+        user.diagnostics_consent = { enabled };
+      }
+    } catch {
+      setDiagnosticsError(
+        t(
+          'diagnostics_consent_error',
+          'Could not save your diagnostics preference. Please try again.',
+        ),
+      );
+    }
+  };
 
   const handleSaveProfile = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -316,6 +348,37 @@ export default function AccountSettings() {
                   'Covers subdomain and extension updates (reserved, approved, demoted). Login links, registration, and account security notices are always sent regardless of this setting.',
                 )}
               </p>
+            </div>
+
+            <div className="mb-lg">
+              <div className="flex items-center justify-between">
+                <label className="form-label m-0" htmlFor="diagnostics-consent">
+                  {t(
+                    'diagnostics_consent_label',
+                    'Allow administrators to collect my client diagnostic logs',
+                  )}
+                </label>
+                <label className="toggle-switch">
+                  <input
+                    id="diagnostics-consent"
+                    type="checkbox"
+                    checked={diagnosticsConsent}
+                    onChange={(e) => handleDiagnosticsConsent(e.target.checked)}
+                  />
+                  <span className="toggle-slider"></span>
+                </label>
+              </div>
+              <p className="text-xs text-muted mt-xs mb-0">
+                {t(
+                  'diagnostics_consent_desc',
+                  "Optional, and off unless you turn it on. Your client writes logs to ~/.lfr-tunnel/logs recording, for every request it proxies, the time, HTTP method, URL path (without the query string), response status, duration, the local port it was sent to and the edge region it arrived from, plus connection and error events that can include local hostnames and IP addresses, and the client's own console output. Request and response bodies are recorded only if you start the client with -log-bodies. You can change this at any time.",
+                )}
+              </p>
+              {diagnosticsError && (
+                <p className="text-xs text-danger mt-xs mb-0">
+                  {diagnosticsError}
+                </p>
+              )}
             </div>
 
             <div className="flex items-center justify-between mb-xl">

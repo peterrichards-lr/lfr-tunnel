@@ -50,9 +50,20 @@ func TestStartupConfigurationNeverLogsCredentials(t *testing.T) {
 		Region:    "edge-us",
 		Subdomain: "dxplive",
 		AuthToken: token,
+		// #1758 gave the block a token line. It reports the SOURCE -- a key name and a path
+		// -- and this test is what stops that becoming the value.
+		TokenFile:   "/home/dxplive/.lfr-tunnel/token",
+		TokenSource: "token_file (/home/dxplive/.lfr-tunnel/token)",
 	}
 
 	lines := captureStartupLog(t, cfg, []client.PortMapping{{LocalPort: 8080}})
+
+	// The path is safe and useful: "which of five places supplied the token" is the question
+	// behind most authentication reports, and it cannot be answered from the value.
+	if !strings.Contains(lines, "/home/dxplive/.lfr-tunnel/token") {
+		t.Error("the block does not report where the token came from, which is what makes it " +
+			"answerable without anyone revealing a token")
+	}
 
 	if strings.Contains(lines, token) {
 		t.Fatal("the startup block logged the auth token -- it is pasted into Slack by design")

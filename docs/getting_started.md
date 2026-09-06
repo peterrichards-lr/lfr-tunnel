@@ -165,6 +165,20 @@ Set-Content -Path "$Home\.lfr-tunnel\token" -Value "lfr_pat_your-token-here"
 > [!CAUTION]
 > **Never commit your PAT to source control.** Storing the token in `~/.lfr-tunnel/token` ensures it is kept completely outside your development workspace.
 
+### Storing it somewhere else
+
+`~/.lfr-tunnel/token` is found automatically, but it is the only path that is. If you keep
+credentials elsewhere — a password-manager mount, a per-project directory, `~/.config` — name
+that file with `token_file:` in `~/.lfr-tunnel/config.yaml` instead:
+
+```yaml
+token_file: "~/.config/lfr-tunnel/pat"
+```
+
+The point is the same as Option B's: the token stays out of the config file, which is the file
+that gets pasted into support threads and copied between machines. See [Keeping the token out of
+this file](client_configuration.md#keeping-the-token-out-of-this-file).
+
 ---
 
 ### Option C: Restricted Secrets File (Advanced & Secure)

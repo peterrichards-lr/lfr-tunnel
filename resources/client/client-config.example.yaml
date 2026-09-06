@@ -13,7 +13,8 @@
 # set them to", and explains how these values interact with flags and environment variables.
 #
 # Secrets: auth_token, passcode and basic_auth are left EMPTY here on purpose. Prefer
-# ~/.lfr-tunnel/token (written by `lfr-tunnel login`) over putting a token in this file.
+# ~/.lfr-tunnel/token (written by `lfr-tunnel login`), or token_file below, over putting a
+# token in this file.
 
 
 # --- Which gateway to talk to ---
@@ -43,6 +44,12 @@ disable_latency_report: false
 
 # Personal Access Token. Prefer leaving this empty and using ~/.lfr-tunnel/token instead.
 auth_token: ""
+
+# A file to read the Personal Access Token from, so it need not sit in this file at all.
+# Set it and any auth_token above is ignored; LFT_CLIENT_TOKEN, -token and LFT_TOKEN_FILE still
+# win. A leading ~ expands. The client FAILS TO START if the path cannot be read -- naming a
+# file and being given no token instead would surface as an authentication error.
+token_file: ""
 
 # Requested subdomain prefix. Defaults to this machine's hostname when empty.
 subdomain: "your-name-se"

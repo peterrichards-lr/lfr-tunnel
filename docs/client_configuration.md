@@ -25,9 +25,9 @@ page or the code.
 | Windows | `%USERPROFILE%\.lfr-tunnel\config.yaml` |
 
 That is the whole of the location logic. There is **no environment variable for the config
-path** — `LFT_TOKEN_FILE` moves the token file, not this one — and if your home directory cannot
-be resolved at all, the client falls back to `client-config.yaml` in the current working
-directory.
+path** — `LFT_TOKEN_FILE` moves the token file (the one `token_file:` names), not this one — and
+if your home directory cannot be resolved at all, the client falls back to `client-config.yaml`
+in the current working directory.
 
 `-config <path>` reads a different file instead:
 
@@ -66,25 +66,36 @@ Resolved in this order, each step overriding the one before it:
 1. **Built-in defaults** — including the gateway URL compiled into your binary, if the build had
    one.
 2. **The config file** — the default path, or `-config <path>`.
-3. **Token file fallbacks** — only when `auth_token` is still empty. `$LFT_TOKEN_FILE`, else
+3. **`token_file:`**, if the config file sets it — the token is read from the file it names,
+   **overriding an inline `auth_token:`**. `$LFT_TOKEN_FILE` moves that path, as it does for the
+   fallback below, so the environment still beats the file. A path that cannot be read is a
+   fatal error, not a fall-through. See [Keeping the token out of this
+   file](#keeping-the-token-out-of-this-file).
+4. **Token file fallbacks** — only when `auth_token` is still empty. `$LFT_TOKEN_FILE`, else
    `~/.lfr-tunnel/token` (what `lfr-tunnel login` writes), else `~/.config/lfr/secrets` and
    `~/.config/lfr/secrets.ps1`.
-4. **Environment variables** — `LFT_CLIENT_*` is checked first, then the shorter `LFT_*` alias.
-5. **Command-line flags.**
-6. **`-gateway <url>`**, which replaces the gateway after everything above — see below.
-7. **Region election**, which replaces the gateway again with the closest region's, unless the
+5. **Environment variables** — `LFT_CLIENT_*` is checked first, then the shorter `LFT_*` alias.
+6. **Command-line flags.**
+7. **`-gateway <url>`**, which replaces the gateway after everything above — see below.
+8. **Region election**, which replaces the gateway again with the closest region's, unless the
    client is pinned or `region:` is set.
 
 **Auto-discovery sits underneath all of that, and only for `ports` and `target_host`.** It runs
-*after* the seven steps above — it is the last thing to touch the configuration — but it only
+*after* the eight steps above — it is the last thing to touch the configuration — but it only
 fills a value in where every step above left one empty. It never overrides one, so in priority
 terms it is the bottom of the chain rather than the top: for the host, `-target-host` beats
 `LFT_TARGET_HOST` beats `target_host:` beats discovery. See
 [Leaving `ports` unset](#leaving-ports-unset) and
 [Leaving `target_host` unset](#leaving-target_host-unset).
 
-Three consequences worth knowing:
+Four consequences worth knowing:
 
+* **`token_file:` is the one key that outranks another key in the same file.** Everywhere else
+  the config file is a single layer and later steps beat it wholesale. Writing `token_file:` says
+  the token is not in this file, so an `auth_token:` left beside it is stale by construction —
+  and quietly preferring the stale one is the "it looked like a setting and did nothing" failure
+  this key was filed under (#1709). Steps above it still win: `LFT_CLIENT_TOKEN` and `-token`
+  both beat it.
 * **A built-in default is not always step 1.** `target_host` has no default in the config at
   all; the `127.0.0.1` you get is applied at the moment the client dials, after discovery has
   had its turn. That is what puts it *below* discovery in the chain, where reading step 1 would
@@ -104,6 +115,7 @@ Settings not listed here can only be set in the config file.
 | --- | --- | --- |
 | `server_url` | `-gateway <url>` (no pinning), `-server <url>` (**pins**) | `LFT_CLIENT_SERVER`, `LFT_SERVER_URL`, `LFT_SERVER` (all **pin**) |
 | `auth_token` | `-token` | `LFT_CLIENT_TOKEN`, `LFT_TOKEN` |
+| `token_file` | — | `LFT_TOKEN_FILE` (**moves** the path this key names) |
 | `subdomain` | `-subdomain` | `LFT_CLIENT_SUBDOMAIN`, `LFT_SUBDOMAIN` |
 | `custom_domain` | `-domain` | `LFT_CLIENT_CUSTOM_DOMAIN`, `LFT_CUSTOM_DOMAIN` |
 | `ports` | `-ports 8080,3000` | `LFT_CLIENT_PORTS` |
@@ -185,7 +197,8 @@ Every key below is optional. Types are YAML types; a duration is a Go duration s
 
 | Key | Type | Default | What it does |
 | --- | --- | --- | --- |
-| `auth_token` | string | *empty* — read from the token file | Your Personal Access Token. Prefer `~/.lfr-tunnel/token`; see [Secrets](#secrets). |
+| `auth_token` | string | *empty* — read from the token file | Your Personal Access Token. Prefer `~/.lfr-tunnel/token` or `token_file`; see [Secrets](#secrets). |
+| `token_file` | string | *empty* | A file to read the Personal Access Token from, so it need not be in this file at all. A leading `~` expands. **Overrides `auth_token`**, and is overridden by `LFT_CLIENT_TOKEN` and `-token`. Unlike the fallbacks, a path that cannot be read **stops the client** rather than leaving it with no token. Example: `"~/.lfr-tunnel/token"`. |
 | `subdomain` | string | this machine's hostname | Requested subdomain prefix. Example: `"your-name-se"`. The hostname fallback takes the first label, lowercases it and turns spaces and underscores into dashes; if even that is unavailable it uses `se-dev`. |
 | `custom_domain` | string | *empty* | A custom domain already reserved for you in the portal, used instead of a subdomain. Example: `"demo.example.com"`. |
 
@@ -297,20 +310,28 @@ through. Set only the one you mean.
 
 ## Keys that are not settings
 
-One is not a key at all; three were removed. They are listed here so that finding them in the
+One is not a key at all; two were removed. They are listed here so that finding them in the
 struct, the example file or someone else's config does not read as a feature you are missing.
+`token_file` used to be on this list: it was removed in #1709 as never-implemented and then
+implemented properly in #1758, and it is now a real setting — see
+[Identity](#identity).
 
 | Key | Status |
 | --- | --- |
 | `regions_unavailable` | Not a config key. The gateway reports the regions that are currently down, and the client uses that to cache a provisional election rather than a 24-hour one. It cannot be set from the file. |
-| `token_file` | **Removed** (#1709). Never had a read site in its whole life — it was added alongside `rate_limit` in June 2026 and nothing ever consulted it. The token file path comes from `LFT_TOKEN_FILE`, falling back to `~/.lfr-tunnel/token`; see [Precedence](#precedence). |
 | `bypass_proxy` | **Removed** (#1709). Never implemented — added with `theme` in July 2026 and read by nothing, in Go or in the UI. |
 | `nav_placement` | **Removed** (#1751). Unlike the two above it did work: it selected the Inspector's own navigation layout — `"sidebar"`, or empty for top tabs — from #606 on 17 July 2026 until the dashboard rewrite in #783 deleted the JavaScript that applied it six days later, without saying so. The Go half stayed and kept accepting the key for six weeks, so the Inspector offered to save a setting it could not act on. The July 2026 layout switcher is not coming back; a future Inspector layout option should be designed afresh rather than by reviving this key. |
 
-Leaving any of the three removed keys in a config file is harmless. The loader does not reject
-unknown keys, so an existing `~/.lfr-tunnel/config.yaml` that still sets them loads exactly as it
-did before — they are ignored now, which is what they were doing anyway. The one visible change
-is that the Inspector no longer writes them back when it saves the file.
+Leaving either removed key in a config file is harmless. The loader does not reject unknown
+keys, so an existing `~/.lfr-tunnel/config.yaml` that still sets them loads exactly as it did
+before — they are ignored now, which is what they were doing anyway. The one visible change is
+that the Inspector no longer writes them back when it saves the file.
+
+`token_file` is the exception, because it is a setting again: a config file that still carries a
+`token_file:` left over from before now **has it honoured**, and the client stops with an error
+if the path it names cannot be read. That is the intended behaviour and not a regression — the
+path was one you meant to work — but it is the one retired key whose reappearance in an old file
+does something.
 
 ---
 
@@ -382,8 +403,9 @@ hooks:
 
 The [committed
 example](https://github.com/peterrichards-lr/lfr-tunnel/blob/master/resources/client/client-config.example.yaml)
-carries the same keys plus the three that currently do nothing, so that it stays a complete record
-of everything the parser accepts.
+carries the same keys plus `token_file`, so that it stays a complete record of everything the
+parser accepts. It carries no removed key: a test rejects any key `ClientConfig` does not
+accept, since a user copying one would believe they had applied a setting that does nothing.
 
 ---
 
@@ -397,6 +419,49 @@ Prefer keeping the token out of the file altogether. `lfr-tunnel login` writes i
 `~/.lfr-tunnel/token` with `0600` permissions, and the client reads it from there whenever
 `auth_token` is empty. For the restricted-secrets-file approach used in LDM, see [Step 3 of the
 Getting Started Guide](getting_started.md#step-3-authenticate-and-store-your-token).
+
+### Keeping the token out of this file
+
+`~/.lfr-tunnel/token` is picked up automatically, but only from that one path. `token_file:`
+names any path you like:
+
+```yaml
+# ~/.lfr-tunnel/config.yaml -- contains no credential
+server_url: "https://tunnel.example.com"
+subdomain: "your-name-se"
+token_file: "~/.config/lfr-tunnel/pat"
+```
+
+This is the setting to reach for when the config file is going to be **read by someone else** —
+pasted into a support thread, committed to a dotfiles repository, copied to a second machine, or
+quoted back to you from the startup configuration block. The token stays in a file you never
+have to show anyone.
+
+Three behaviours are worth knowing before you rely on it:
+
+* **It wins over `auth_token:`.** If both are set, the file is used and the inline value is
+  ignored. You do not have to get the two-step migration right in one edit.
+* **A bad path stops the client**, with an error naming the path. It does not fall back to "no
+  token", because that arrives later as an authentication failure and sends you to the portal to
+  re-issue a PAT that was never the problem.
+* **The file's permissions are checked but not enforced.** A group- or world-readable token file
+  produces the same start-up warning as `~/.lfr-tunnel/token`, and the client carries on. It is a
+  warning rather than a refusal on purpose: a file created with the usual `022` umask is `0644`,
+  and the easiest way around a refusal would be putting the token back inline in this file —
+  whose own permissions nothing checks at all. Set them yourself: `chmod 600` on whatever
+  `token_file:` names.
+
+The startup configuration block reports **which** of these supplied the token, by name and path,
+and never the token itself:
+
+```
+[Client] Configuration:
+  ...
+  config file    default location
+  token from     token_file (/Users/you/.config/lfr-tunnel/pat)
+```
+
+### This file's own permissions
 
 On macOS and Linux the client warns on start-up if a token or secrets file is group- or
 world-accessible. It does not check this file's permissions, so set them yourself:

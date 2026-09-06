@@ -140,7 +140,7 @@
                 <p data-i18n="mfa_setup_step2" style="font-size: 14px; color: var(--text-muted); margin-bottom: 8px; text-align: left; line-height: 1.5;">
                     2. Enter the 6-digit code from your app to verify setup:
                 </p>
-                <input type="text" id="intercept-mfa-verify-code" class="input-field" placeholder="123456" pattern="[0-9]{6}" maxlength="6" inputmode="numeric" style="text-align: center; font-size: 18px; font-weight: bold; letter-spacing: 4px; margin-bottom: 16px; background: rgba(255,255,255,0.05); border: 1px solid rgba(255,255,255,0.1); border-radius: 6px; color: var(--text-color);" aria-label="Authentication code" data-i18n-aria-label="aria_mfa_code">
+                <input type="text" id="intercept-mfa-verify-code" class="input-field" placeholder="123456" pattern="[0-9]{6}" maxlength="6" inputmode="numeric" style="text-align: center; font-size: 18px; font-weight: bold; letter-spacing: 4px; margin-bottom: 16px; background: rgba(255,255,255,0.05); border: 1px solid rgba(255,255,255,0.1); border-radius: 6px; color: var(--text-main);" aria-label="Authentication code" data-i18n-aria-label="aria_mfa_code">
                 <button data-i18n="mfa_setup_verify" class="btn btn-primary" onclick="confirmInterceptMFA()" style="width: 100%; margin-bottom: 8px;">Verify & Enable</button>
             </div>
         </div>
@@ -227,7 +227,7 @@
         <nav class="sidebar" aria-label="Primary">
             <div class="sidebar-brand" style="display: flex; align-items: center; gap: 10px; padding: 12px 16px;">
                 <img src="/static/logo.svg" alt="Liferay Tunnel" width="28" height="28" style="flex-shrink: 0;">
-                <span style="font-weight: bold; font-size: 16px; color: var(--text-color); letter-spacing: 0.5px;">Liferay Tunnel</span>
+                <span style="font-weight: bold; font-size: 16px; color: var(--text-main); letter-spacing: 0.5px;">Liferay Tunnel</span>
             </div>
             
             <div class="sidebar-menu">
@@ -938,7 +938,7 @@
                     <h2>Database Backups</h2>
                     <button id="btn-create-backup" class="btn btn-secondary" onclick="triggerBackup()" data-i18n="btn_create_backup">Create Backup</button>
                 </div>
-                <div class="glass" style="padding: 16px 20px; margin-bottom: 16px; border-left: 3px solid var(--accent);">
+                <div class="glass" style="padding: 16px 20px; margin-bottom: 16px; border-left: 3px solid var(--primary);">
                     <strong>&#x1F6E1; Restore via CLI only.</strong>
                     To restore from a backup, SSH into the VPS and run the wrapper script:<br>
                     <code style="display:inline-block; margin-top:8px; font-size:0.85em;">sudo ./scripts/common/restore-with-maintenance.sh</code><br>
@@ -1172,7 +1172,7 @@
                     </div>
 
 
-                <div style="border-top: 1px solid var(--border-color); padding-top: 24px; text-align: right;">
+                <div style="border-top: 1px solid var(--border); padding-top: 24px; text-align: right;">
                     <button class="btn btn-primary" onclick="saveSystemSettings()" data-i18n="save_settings">Save Settings</button>
                 </div>
             </div>
@@ -1242,7 +1242,7 @@
             <input type="text" id="invite-last-name" class="input-field" data-i18n-placeholder="invite_last_name_placeholder" placeholder="Last Name" required aria-label="Invitee last name" data-i18n-aria-label="aria_invite_last_name">
             <div style="margin-bottom: 16px; text-align: left;">
                 <label style="display:block; margin-bottom: 8px; color: var(--text-muted); font-size: 13px;" data-i18n="invite_lbl_onboarding_lang" for="invite-language">Onboarding Language</label>
-                <select id="invite-language" class="input-field" style="background: #161b22; color: var(--text-color); border: 1px solid var(--border); border-radius: 6px; padding: 10px; font-weight: 500; height: 38px; box-sizing: border-box; width: 100%;">
+                <select id="invite-language" class="input-field" style="background: #161b22; color: var(--text-main); border: 1px solid var(--border); border-radius: 6px; padding: 10px; font-weight: 500; height: 38px; box-sizing: border-box; width: 100%;">
                     <option value="en" selected>English</option>
                     <option value="ar">العربية (Arabic)</option>
                     <option value="ro">Română (Romanian)</option>
@@ -1515,7 +1515,7 @@
                 </div>
                 <div>
                     <label data-i18n="user_lbl_preferred_domain" style="display:block; color: var(--text-muted); font-size: 11px; text-transform: uppercase; font-weight: 600;" for="detail-user-preferred-domain">Preferred Domain</label>
-                    <select id="detail-user-preferred-domain" style="margin-top: 4px; background: rgba(0,0,0,0.2); border: 1px solid var(--border); color: var(--text); border-radius: 4px; padding: 2px 4px; font-size: 13px;" onchange="updateUserPreferredDomain()">
+                    <select id="detail-user-preferred-domain" style="margin-top: 4px; background: rgba(0,0,0,0.2); border: 1px solid var(--border); color: var(--text-main); border-radius: 4px; padding: 2px 4px; font-size: 13px;" onchange="updateUserPreferredDomain()">
                         <option value="">Default (Contextual)</option>
                     </select>
                 </div>
@@ -1583,7 +1583,7 @@
                 <div id="tab-content-macos" class="tab-content active">
                     <h4 data-i18n="guide_macos_title" style="font-size: 14px; margin-bottom: 8px;">🚀 Apple Silicon (M1/M2/M3) & Intel Macs</h4>
                     <div id="guide-macos-brew-section">
-                        <div data-i18n="guide_macos_brew" style="font-size: 0.8rem; font-weight: bold; margin-top: 10px; color: var(--text);">Recommended via Homebrew:</div>
+                        <div data-i18n="guide_macos_brew" style="font-size: 0.8rem; font-weight: bold; margin-top: 10px; color: var(--text-main);">Recommended via Homebrew:</div>
                         <div style="margin-top: 4px; margin-bottom: 12px; position: relative; background: #0d1117; color: #e6edf3; border-radius: 6px; border: 1px solid rgba(255,255,255,0.1); padding: 10px 40px 10px 12px; font-family: monospace; font-size: 0.8rem;">
                             <span id="guide-cmd-macos">brew tap peterrichards-lr/tap && brew install lfr-tunnel</span>
                             <button onclick="navigator.clipboard.writeText(document.getElementById('guide-cmd-macos').innerText); this.innerHTML='✓'; setTimeout(() => this.innerHTML='📋', 2000);" style="position: absolute; top: 6px; right: 6px; background: transparent; border: 1px solid rgba(255,255,255,0.2); color: #8b949e; border-radius: 4px; width: 22px; height: 22px; cursor: pointer;">📋</button>
@@ -1606,7 +1606,7 @@
                 <div id="tab-content-windows" class="tab-content">
                     <h4 data-i18n="guide_windows_title" style="font-size: 14px; margin-bottom: 8px;">🚀 Windows 10 / 11 (64-bit)</h4>
                     <div id="guide-windows-scoop-section">
-                        <div data-i18n="guide_windows_scoop" style="font-size: 0.8rem; font-weight: bold; margin-top: 10px; color: var(--text);">Recommended via Scoop:</div>
+                        <div data-i18n="guide_windows_scoop" style="font-size: 0.8rem; font-weight: bold; margin-top: 10px; color: var(--text-main);">Recommended via Scoop:</div>
                         <div style="margin-top: 4px; margin-bottom: 12px; position: relative; background: #0d1117; color: #e6edf3; border-radius: 6px; border: 1px solid rgba(255,255,255,0.1); padding: 10px 40px 10px 12px; font-family: monospace; font-size: 0.8rem;">
                             <span id="guide-cmd-windows">scoop bucket add peterrichards-lr https://github.com/peterrichards-lr/scoop-bucket && scoop install lfr-tunnel</span>
                             <button onclick="navigator.clipboard.writeText(document.getElementById('guide-cmd-windows').innerText); this.innerHTML='✓'; setTimeout(() => this.innerHTML='📋', 2000);" style="position: absolute; top: 6px; right: 6px; background: transparent; border: 1px solid rgba(255,255,255,0.2); color: #8b949e; border-radius: 4px; width: 22px; height: 22px; cursor: pointer;">📋</button>
@@ -1627,7 +1627,7 @@
                 <!-- Linux -->
                 <div id="tab-content-linux" class="tab-content">
                     <h4 data-i18n="guide_linux_title" style="font-size: 14px; margin-bottom: 8px;">🚀 Linux (amd64 / arm64)</h4>
-                    <div data-i18n="guide_linux_direct" style="font-size: 0.8rem; font-weight: bold; margin-top: 10px; color: var(--text);">Direct Installation Command:</div>
+                    <div data-i18n="guide_linux_direct" style="font-size: 0.8rem; font-weight: bold; margin-top: 10px; color: var(--text-main);">Direct Installation Command:</div>
                     <div style="margin-top: 4px; margin-bottom: 12px; position: relative; background: #0d1117; color: #e6edf3; border-radius: 6px; border: 1px solid rgba(255,255,255,0.1); padding: 10px 40px 10px 12px; font-family: monospace; font-size: 0.8rem;">
                         <span id="guide-cmd-linux">curl -fsSL https://tunnel.lfr-demo.se/install | sh</span>
                         <button onclick="navigator.clipboard.writeText(document.getElementById('guide-cmd-linux').innerText); this.innerHTML='✓'; setTimeout(() => this.innerHTML='📋', 2000);" style="position: absolute; top: 6px; right: 6px; background: transparent; border: 1px solid rgba(255,255,255,0.2); color: #8b949e; border-radius: 4px; width: 22px; height: 22px; cursor: pointer;">📋</button>

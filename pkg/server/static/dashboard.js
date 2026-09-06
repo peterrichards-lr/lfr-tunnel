@@ -3862,7 +3862,7 @@ async function loadCustomDomains() {
                     <td>
                         <div class="action-menu">
                             <button class="action-menu-btn" onclick="toggleActionMenu('menu-vd-${host}', event)">⋮</button>
-                            <div id="menu-vd-${host}" class="action-menu-content">
+                            <div id="menu-vd-${host}" class="action-menu-dropdown">
                                 <button class="action-menu-item" onclick="retryCustomDomain('${host}')">🔄 Retry</button>
                                 <button class="action-menu-item danger" onclick="removeCustomDomain('${host}')">Remove</button>
                             </div>

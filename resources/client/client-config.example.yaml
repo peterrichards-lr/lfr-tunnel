@@ -120,14 +120,12 @@ hooks:
   started: ""
 
 
-# --- Accepted by the parser, but nothing reads them today (#1709) ---
-# Listed so this file stays a complete key reference. Setting them has no effect.
+# --- Accepted by the parser, but nothing reads it today ---
+# Listed so this file stays a complete key reference. Setting it has no effect.
 
-# Ignored: the token file path comes from LFT_TOKEN_FILE, and otherwise ~/.lfr-tunnel/token.
-token_file: ""
-
-# Ignored: no code path consumes it.
-bypass_proxy: false
-
-# Saved by the Inspector's Settings tab, but nothing renders it.
+# Chose the Inspector's own navigation layout ("sidebar" or empty for top tabs) until the
+# dashboard rewrite in #783 removed the code that applied it. The client still accepts and
+# saves the value; nothing acts on it. Tracked as a regression in #1751, not as a key to
+# delete. token_file and bypass_proxy used to sit here too and were removed in #1709: unlike
+# this one they were never implemented at all.
 nav_placement: ""

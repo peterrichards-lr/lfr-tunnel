@@ -169,7 +169,7 @@ function renderCustomDropdown() {
 
     item.onmouseover = () => {
       item.style.background = 'rgba(255,255,255,0.05)';
-      item.style.color = 'var(--text-color)';
+      item.style.color = 'var(--text-main)';
     };
     item.onmouseout = () => {
       item.style.background = 'transparent';
@@ -239,7 +239,7 @@ function renderAccCustomDropdown() {
 
     item.onmouseover = () => {
       item.style.background = 'rgba(255,255,255,0.05)';
-      item.style.color = 'var(--text-color)';
+      item.style.color = 'var(--text-main)';
     };
     item.onmouseout = () => {
       item.style.background = 'transparent';
@@ -1147,7 +1147,7 @@ async function showDashboard() {
       if (os === 'Unknown OS') {
         bannerDiv.innerHTML = `
                             <div style="display: flex; flex-direction: column; gap: 12px;">
-                                <div style="font-weight: bold; font-size: 1.05rem; color: var(--text);">${titleText}</div>
+                                <div style="font-weight: bold; font-size: 1.05rem; color: var(--text-main);">${titleText}</div>
                                 <div style="font-size: 0.9rem; color: var(--text-muted); line-height: 1.4;">${subText}</div>
                                 <div style="font-size: 0.8rem; margin-top: 12px; color: var(--text-muted); display: flex; flex-direction: column; gap: 4px; border-top: 1px solid rgba(255,255,255,0.05); padding-top: 12px;">
                                     <div>🖥️ <strong>Server Gateway:</strong> ${vData.server_version || latestVer}</div>
@@ -1164,7 +1164,7 @@ async function showDashboard() {
         bannerDiv.innerHTML = `
                             <div style="display: flex; flex-direction: column; gap: 16px;">
                                 <div>
-                                    <div style="font-weight: bold; font-size: 1.05rem; margin-bottom: 6px; color: var(--text);">${titleText}</div>
+                                    <div style="font-weight: bold; font-size: 1.05rem; margin-bottom: 6px; color: var(--text-main);">${titleText}</div>
                                     <div style="font-size: 0.9rem; color: var(--text-muted); line-height: 1.4;">${subText}</div>
                                 </div>
                                 
@@ -1172,7 +1172,7 @@ async function showDashboard() {
                                   recommendedCmd
                                     ? `
                                 <div>
-                                    <div style="font-size: 0.8rem; font-weight: bold; color: var(--text);">${cmdLabel}</div>
+                                    <div style="font-size: 0.8rem; font-weight: bold; color: var(--text-main);">${cmdLabel}</div>
                                     <div style="margin-top: 4px; position: relative; background: #0d1117; color: #e6edf3; border-radius: 6px; border: 1px solid rgba(255,255,255,0.1); padding: 10px 40px 10px 12px; font-family: ui-monospace, SFMono-Regular, Consolas, monospace; font-size: 0.8rem; overflow-x: auto;">
                                         <span style="user-select: all;">${recommendedCmd}</span>
                                         <button onclick="navigator.clipboard.writeText('${recommendedCmd}'); this.innerHTML='<span style=\\'font-size:12px;\\'>✓</span>'; setTimeout(() => this.innerHTML='📋', 2000);" style="position: absolute; top: 6px; right: 6px; background: transparent; border: 1px solid rgba(255,255,255,0.2); color: #8b949e; border-radius: 4px; width: 22px; height: 22px; display: flex; align-items: center; justify-content: center; cursor: pointer; transition: 0.2s;" onmouseover="this.style.color='#c9d1d9'; this.style.borderColor='rgba(255,255,255,0.4)';" onmouseout="this.style.color='#8b949e'; this.style.borderColor='rgba(255,255,255,0.2)';">📋</button>
@@ -1614,8 +1614,23 @@ function handleTelemetryPayload(data) {
     window.lastTargetedMessage = data.targeted_message;
     const tDiv = document.createElement('div');
     tDiv.className = 'toast show';
-    tDiv.style.backgroundColor = 'var(--accent)';
-    tDiv.style.borderColor = 'var(--accent)';
+    /*
+     * These were var(--accent), which no theme defines, so background-color computed to
+     * `transparent` and borderColor to `currentColor` -- the admin's message rendered as
+     * unstyled text over whatever it covered (#1774). --primary is the obvious rename and the
+     * wrong one: check-theme-contrast.cjs documents --primary as a FOREGROUND (light on a dark
+     * card), and .toast's own `color: var(--toast-color)` on it measures 2.2:1 in
+     * high-contrast and 3.4:1 in light. --status-info-* is the token set built for an
+     * informational surface, and it carries a text colour chosen against that fill.
+     *
+     * Block comment, not `//`: check-theme-tokens.mjs strips C-style block comments before
+     * scanning but cannot strip `//` safely, since a URL in a string literal would take the
+     * rest of its line with it. So prose that spells a var() reference has to sit in a block
+     * comment or it registers as a live reference -- writing this note with `//` is what made
+     * the gate fail on its own explanation.
+     */
+    tDiv.style.backgroundColor = 'var(--status-info-bg)';
+    tDiv.style.borderColor = 'var(--status-info-border)';
     tDiv.style.zIndex = '999999';
     tDiv.innerHTML = `
                     <div style="display: flex; flex-direction: column;">
@@ -3393,7 +3408,7 @@ document
     const msg = document.getElementById('reg-msg');
     btn.disabled = true;
     msg.textContent = 'Processing...';
-    msg.style.color = 'var(--text)';
+    msg.style.color = 'var(--text-main)';
 
     const payload = {
       email: document.getElementById('reg-email').value,
@@ -5311,7 +5326,7 @@ async function openUserDetailsModal(userJsonEncoded) {
       const trHtml = `
                         <tr style="border-bottom: 1px solid rgba(255,255,255,0.03);">
                             <td style="padding: 12px; vertical-align: middle;">
-                                <div style="font-weight: 600; font-family: monospace; font-size: 13px; color: var(--text);">${escapeHTML(t.subdomain_prefix)}</div>
+                                <div style="font-weight: 600; font-family: monospace; font-size: 13px; color: var(--text-main);">${escapeHTML(t.subdomain_prefix)}</div>
                                 <div style="font-size: 11px; color: var(--text-muted); margin-top: 2px;">Local Port: ${t.local_port}</div>
                             </td>
                             <td style="padding: 12px; vertical-align: middle;">
@@ -5320,8 +5335,8 @@ async function openUserDetailsModal(userJsonEncoded) {
                                 <div style="font-size: 11px; color: var(--text-muted); margin-top: 2px;">IP: ${escapeHTML(t.client_ip)} | Connected: ${connectedTime}</div>
                             </td>
                             <td style="padding: 12px; vertical-align: middle; font-size: 12px; color: var(--text-muted);">
-                                <div>📥 In: <strong style="color: var(--text);">${formatBytes(t.bytes_in)}</strong></div>
-                                <div style="margin-top: 2px;">📤 Out: <strong style="color: var(--text);">${formatBytes(t.bytes_out)}</strong></div>
+                                <div>📥 In: <strong style="color: var(--text-main);">${formatBytes(t.bytes_in)}</strong></div>
+                                <div style="margin-top: 2px;">📤 Out: <strong style="color: var(--text-main);">${formatBytes(t.bytes_out)}</strong></div>
                             </td>
                             <td style="padding: 12px; vertical-align: middle; text-align: right;">
                                 <button class="btn" style="padding: 4px 10px; font-size: 12px; color: var(--danger); border-color: var(--danger);" onclick="kickTunnelFromUserModal('${escapeHTML(t.subdomain_prefix)}', '${userJsonEncoded}')">Kick</button>

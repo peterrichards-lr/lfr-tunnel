@@ -19,9 +19,15 @@
  * themes) or defined in each theme block. A fallback -- var(--x, something) -- is accepted
  * as intentional, but reported, since it usually means a name is wrong rather than that a
  * default was wanted.
+ *
+ *   #1774  The scan read .css files only. Portal V1 keeps much of its styling in inline
+ *          `style` attributes, in `element.style.*` assignments, and in template literals
+ *          inside dashboard.js -- none of which is a stylesheet, so 20 references to four
+ *          properties no theme defines sat behind the gate's blind spot. Markup and script
+ *          are now scanned too (see collectMarkupReferences).
  */
-import { readFileSync, readdirSync } from 'node:fs';
-import { join, basename } from 'node:path';
+import { readFileSync, readdirSync, existsSync } from 'node:fs';
+import { join, basename, relative } from 'node:path';
 
 const UI_SRC = join(process.cwd(), 'ui', 'src');
 
@@ -34,14 +40,49 @@ const THEMES = join(process.cwd(), 'pkg', 'server', 'static', 'themes');
 // themes were shared, V1 defined its own tokens and nothing checked them.
 const V1_CSS = join(process.cwd(), 'pkg', 'server', 'static', 'dashboard.css');
 
+// Every page the Go server embeds. Walked rather than listed so a new page is covered the day
+// it is added -- the same reason test-shell-portability.sh derives its file set instead of
+// keeping one by hand.
+const SERVER_DIR = join(process.cwd(), 'pkg', 'server');
+
+// A page is governed by the shared themes only if it links them. That link is the whole
+// membership test, and deriving it beats an exclusion list: pages that carry their own token
+// set in their own <style> block -- passcode.html, the standalone error pages, the localized
+// legal/email templates -- must NOT be resolved against these themes, because their tokens are
+// legitimately absent from them. Checking a self-contained page here would report every one of
+// its own properties as undefined.
+const THEME_LINK = '/static/themes/';
+
 // Comments are stripped before scanning: prose describing a token -- including the
 // comments explaining these very bugs -- would otherwise register as a reference.
+//
+// C-style block comments ONLY, which matters now that JS is scanned as well as CSS: a `//`
+// comment cannot be stripped safely, because a URL inside a string literal would take the rest
+// of its line with it and silently hide any real reference sharing that line. Losing coverage
+// is worse than the false positive, so prose in a .js file that needs to spell a var()
+// reference must sit in a block comment. Both halves of that trade-off were paid for in #1774:
+// the note explaining the toast fix was written with `//` and failed this gate.
 const stripComments = (css) => css.replace(/\/\*[\s\S]*?\*\//g, '');
 const read = (p) => stripComments(readFileSync(p, 'utf8'));
 
+// HTML comments hide commented-out markup, which must not count as a live reference. Applied
+// on top of stripComments, since a page can carry both kinds.
+const readMarkup = (p) => read(p).replace(/<!--[\s\S]*?-->/g, '');
+
+const VAR_REF = /var\(\s*(--[a-z0-9-]+)\s*(,)?/g;
+
+function addRefs(refs, text, label) {
+  for (const m of text.matchAll(VAR_REF)) {
+    const existing = refs.get(m[1]) || { hasFallback: false, files: new Set() };
+    if (m[2]) existing.hasFallback = true;
+    existing.files.add(label);
+    refs.set(m[1], existing);
+  }
+}
+
 // Every var(--x) reference outside the theme files themselves.
 function collectReferences() {
-  const refs = new Map(); // name -> { hasFallback }
+  const refs = new Map(); // name -> { hasFallback, files }
   const walk = (dir) => {
     for (const entry of readdirSync(dir, { withFileTypes: true })) {
       const full = join(dir, entry.name);
@@ -50,29 +91,78 @@ function collectReferences() {
         continue;
       }
       if (!entry.name.endsWith('.css')) continue;
-      const css = read(full);
-      for (const m of css.matchAll(/var\(\s*(--[a-z0-9-]+)\s*(,)?/g)) {
-        const existing = refs.get(m[1]) || {
-          hasFallback: false,
-          files: new Set(),
-        };
-        if (m[2]) existing.hasFallback = true;
-        existing.files.add(basename(full));
-        refs.set(m[1], existing);
-      }
+      addRefs(refs, read(full), basename(full));
     }
   };
   walk(UI_SRC);
 
   // V1 is one file rather than a tree, so it is read directly rather than walked.
-  for (const m of read(V1_CSS).matchAll(/var\(\s*(--[a-z0-9-]+)\s*(,)?/g)) {
-    const existing = refs.get(m[1]) || { hasFallback: false, files: new Set() };
-    if (m[2]) existing.hasFallback = true;
-    existing.files.add(basename(V1_CSS));
-    refs.set(m[1], existing);
-  }
+  addRefs(refs, read(V1_CSS), basename(V1_CSS));
 
   return refs;
+}
+
+// Portal V1's styling is not all in its stylesheet, so scanning stylesheets alone exempts most
+// of it (#1774). The whole document is scanned, not just `style="…"` attributes, because the
+// references hide at three different depths and an attribute-only regex sees one of them:
+//
+//   <div style="color: var(--text-main)">              an inline style attribute
+//   item.style.color = 'var(--text-main)'              a property assignment in dashboard.js
+//   `<strong style="color: var(--text-main)">`         markup inside a JS template literal
+//   `<button onmouseover="this.style.color='…'">`      a handler inside that markup
+//
+// A var() token cannot appear in one of these files for any reason other than styling, so a
+// whole-file scan costs no false positives and needs no list of the shapes to look for -- the
+// next shape someone invents is covered without this script being touched.
+//
+// Scripts are found through the page that loads them rather than by globbing *.js, so a script
+// belonging to a self-contained page is not silently resolved against the shared themes.
+function collectMarkupReferences(refs) {
+  const scanned = [];
+  const skipped = [];
+
+  const walk = (dir) => {
+    for (const entry of readdirSync(dir, { withFileTypes: true }).sort((a, b) =>
+      a.name.localeCompare(b.name),
+    )) {
+      const full = join(dir, entry.name);
+      if (entry.isDirectory()) {
+        walk(full);
+        continue;
+      }
+      if (!entry.name.endsWith('.html')) continue;
+
+      const html = readMarkup(full);
+      const rel = relative(process.cwd(), full);
+      if (!html.includes(THEME_LINK)) {
+        skipped.push(rel);
+        continue;
+      }
+
+      const files = [rel];
+      addRefs(refs, html, basename(full));
+
+      // <script src="/static/x.js"> — resolved against the static dir the server serves it
+      // from, so only first-party scripts are read (a CDN src has no local path and is
+      // skipped by existsSync).
+      for (const m of html.matchAll(
+        /<script[^>]+src\s*=\s*["'](\/static\/[^"']+\.js)["']/g,
+      )) {
+        const script = join(
+          SERVER_DIR,
+          'static',
+          m[1].slice('/static/'.length),
+        );
+        if (!existsSync(script)) continue;
+        addRefs(refs, read(script), basename(script));
+        files.push(relative(process.cwd(), script));
+      }
+      scanned.push(files);
+    }
+  };
+  walk(SERVER_DIR);
+
+  return { scanned, skipped };
 }
 
 // Properties defined per theme file, split by whether they sit on a bare :root (inherited
@@ -121,7 +211,44 @@ function collectBaseColours() {
 }
 
 const refs = collectReferences();
+const { scanned, skipped } = collectMarkupReferences(refs);
 const { base, perTheme } = collectDefinitions();
+
+// Printed on every run, pass or fail. A gate that quietly narrows its own scope reads exactly
+// like one that is passing, which is how #1774 stayed hidden: saying out loud which pages were
+// checked and which were not is the only thing that makes the coverage reviewable.
+console.log('Pages linking the shared themes (markup and scripts scanned):');
+for (const files of scanned) console.log(`  ${files.join('  +  ')}`);
+const byDir = new Map();
+for (const f of skipped) {
+  const dir = f.split('/').slice(0, -1).join('/');
+  if (!byDir.has(dir)) byDir.set(dir, []);
+  byDir.get(dir).push(f.split('/').pop());
+}
+console.log(
+  '\nPages that do not link the shared themes, so their tokens are not resolved against them\n' +
+    '(each carries its own token set in its own <style> block):',
+);
+for (const [dir, names] of byDir) {
+  const shown = names.length > 6 ? `${names.length} files` : names.join(', ');
+  console.log(`  ${dir}/: ${shown}`);
+}
+console.log('');
+
+// Anti-vacuity. The membership rule is derived from a <link> in the markup, so deleting that
+// link -- or moving the themes to another path -- silently empties the markup scan while every
+// stylesheet still resolves and the gate still exits 0. A scan that covers nothing reads exactly
+// like a scan that found nothing, which is the failure #1402 recorded for the EDR guard and the
+// one #1774 was filed for. Nothing weaker than "at least one page was actually read" catches it.
+if (scanned.length === 0) {
+  console.error(
+    `\u274c No page under pkg/server links ${THEME_LINK}, so the markup and script scan\n` +
+      'covered nothing. Either the themes moved and this check needs its path updated, or a\n' +
+      'page lost its <link> and is no longer themed. Both are bugs; a silent pass is worse\n' +
+      'than either.',
+  );
+  process.exit(1);
+}
 
 const undefinedTokens = [];
 const fallbackOnly = [];

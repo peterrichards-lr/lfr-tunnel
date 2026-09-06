@@ -134,6 +134,32 @@ body {
   font-size: 18px;
 }
 
+/* The two button variants that named a shape and styled nothing (#1752).
+   .btn above is the LOGIN CARD's button: full width, stacked, 12px of bottom margin. The
+   dashboard reuses it for inline toolbar buttons, so all thirty-odd of those undid the
+   layout with their own copy of `width: auto; margin: 0` -- the declarations below, written
+   out once per element instead of once. Portal V2 avoids the problem by scoping the
+   full-width rule as `.login-card .btn` (ui/src/index.css:158); V1 cannot without restyling
+   every dashboard button, so the variant classes carry the reset instead.
+
+   Deliberately NOT a repaint. V2 gives these names distinct fills (ui/src/index.css:1337),
+   and copying that would change the appearance of sixty elements nobody asked to change.
+   The two arms are an A/B test that must match in capability, not in chrome. Anything a
+   single call site still wants -- padding, font-size, a danger colour -- stays inline. */
+.btn-secondary,
+.btn-outline {
+  width: auto;
+  margin: 0;
+}
+
+/* ...except inside the login card, where a variant button is still one of the stacked
+   full-width ones. Same scoping V2 uses; here it exists to outrank the reset above rather
+   than to define the look, which .btn already does. */
+.login-card .btn {
+  width: 100%;
+  margin-bottom: 12px;
+}
+
 .divider {
   display: flex;
   align-items: center;
@@ -153,6 +179,14 @@ body {
 }
 .divider:not(:empty)::after {
   margin-left: 0.25em;
+}
+
+/* Stacked label + control + help text (#1752). passcode.html has defined this at 20px in
+   its own <style> block all along; the four in the dashboard each inlined the same value.
+   Two of them override it with `margin-bottom: auto` to push the last group to the bottom
+   of a flex column, and keep that inline -- it is a per-site exception, not the default. */
+.form-group {
+  margin-bottom: 20px;
 }
 
 .input-field {
@@ -447,6 +481,54 @@ tr:hover td {
   background: rgba(255, 255, 255, 0.02);
 }
 
+/* The tunnels table inside the user-details modal (#1752). `width` and `border-collapse`
+   are already on the `table` element rule above, so its inline style was restating them;
+   min-width is the one declaration that was actually the class's own. */
+.dashboard-table {
+  min-width: 100%;
+}
+
+/* A UTC timestamp whose title carries the viewer's local time. The dashed underline and the
+   help cursor are what tell a reader there is something to hover (#1752). */
+.timestamp-tooltip {
+  cursor: help;
+  border-bottom: 1px dashed var(--text-muted);
+  padding-bottom: 2px;
+}
+
+/* The public hostname in a tunnel row: a link, but monospaced because it is an address the
+   reader compares character by character (#1752). */
+.host-link {
+  color: var(--primary);
+  font-family: monospace;
+  font-weight: 600;
+  text-decoration: none;
+}
+
+/* The copy-to-clipboard affordance beside it. Chromeless on purpose -- it sits inside a
+   table cell next to the value it copies, and a bordered button there reads as a second
+   action rather than an adornment (#1752). */
+.btn-copy {
+  background: none;
+  border: none;
+  color: var(--text-muted);
+  cursor: pointer;
+  padding: 2px 6px;
+  font-size: 13px;
+  transition: color 0.2s;
+}
+
+/* The "Page 3 of 9" jump control in a table's pagination row. Named for what it is: it was
+   `form-control`, a name that promised a shared form-widget style V1 never had, and carried
+   these five declarations inline instead (#1752). */
+.pagination-select {
+  width: auto;
+  margin: 0;
+  padding: 2px 8px;
+  display: inline-block;
+  font-size: 14px;
+}
+
 .badge {
   padding: 4px 8px;
   border-radius: 4px;
@@ -533,6 +615,72 @@ input:checked + .toggle-slider:before {
 }
 .modal h3 {
   margin-bottom: 16px;
+}
+
+/* Modal header row (#1752), matching V2's .modal-header / .modal-title / .modal-close
+   (ui/src/index.css:2809-2843) with V2's spacing tokens spelled out, since V1 uses px
+   throughout and only two of the four themes define --spacing-*.
+
+   This is not a new design. The keyboard-shortcuts overlay was written against these three
+   class names and this exact markup order; V1 simply never got the rules, so its close
+   button has been rendering as a bare user-agent <button> beside the heading. Restoring the
+   rules the markup already asks for is the fix -- inventing a different V1 look would be the
+   design decision, not this.
+
+   .modal-title needs the extra .modal-header to outrank `.modal h3` above, which would
+   otherwise keep its 16px bottom margin and sit 8px high in the centred flex row. */
+.modal-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 16px;
+}
+.modal-header .modal-title {
+  margin: 0;
+  font-size: 20px;
+  font-weight: 700;
+}
+.modal-close {
+  background: none;
+  border: none;
+  font-size: 20px;
+  cursor: pointer;
+  color: var(--text-muted);
+  padding: 4px;
+  line-height: 1;
+}
+.modal-close:hover {
+  color: var(--text-main);
+}
+
+/* Installer-guide tabs (#1752). Both the button and the panel were fully inline, and
+   switchInstallerTab() rewrote four inline properties on every click to move the underline.
+   With the rules here it toggles one class per element and the CSS decides the rest.
+
+   The active tab's colour is --text-main, not the --text the inline style named. No theme
+   defines --text, so that declaration was invalid at computed-value time and the colour
+   inherited from body -- which is `var(--text-main)`. Measured in the browser before the
+   swap: the active tab already computed to rgb(15, 23, 42), the value --text-main holds. So
+   this fixes the name without changing a pixel. It only became visible once the declaration
+   moved out of an inline style, where check-theme-tokens.mjs could finally see it. */
+.tab-btn {
+  background: none;
+  border: none;
+  color: var(--text-muted);
+  padding: 8px 16px;
+  cursor: pointer;
+  border-bottom: 2px solid transparent;
+  font-weight: 500;
+}
+.tab-btn.active {
+  color: var(--text-main);
+  border-bottom-color: var(--primary);
+}
+.tab-content {
+  display: none;
+}
+.tab-content.active {
+  display: block;
 }
 
 .copy-box {
@@ -691,6 +839,28 @@ html[dir='rtl'] th {
   z-index: 200 !important; /* Forces the absolute menu to float natively on top of everything */
   max-height: 175px !important; /* Restricts vertical size to fit completely inside the card bounds */
   overflow-y: auto !important; /* Enables smooth native vertical scrollbars */
+}
+/* The closed control the menu above hangs from (#1752). Both triggers -- the portal language
+   picker and the account one -- inlined this identical block and differed only in padding,
+   font-size and height, which stay at the call site.
+
+   The two rgba() literals are moved verbatim rather than tokenised: swapping them for theme
+   tokens would repaint the control, which is a separate decision from giving the class a rule.
+   The colour is not verbatim -- the inline style named --text-color, which no theme defines,
+   so it inherited body's --text-main. Measured at rgb(15, 23, 42) both before and after, the
+   same swap and the same reason as .tab-btn.active above. */
+.custom-dropdown-trigger {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  background: rgba(255, 255, 255, 0.05);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 6px;
+  cursor: pointer;
+  font-weight: 500;
+  color: var(--text-main);
+  transition: 0.2s;
+  box-sizing: border-box;
 }
 
 /* --- PRINT MEDIA RULES FOR PDF EXPORT --- */

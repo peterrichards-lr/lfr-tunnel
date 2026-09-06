@@ -3,6 +3,7 @@ package config
 import (
 	"bufio"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"log/slog"
 	"net/url"
@@ -390,8 +391,24 @@ type ClientHooksConfig struct {
 
 // ClientConfig holds configuration settings for the lfr-tunnel client.
 type ClientConfig struct {
-	ServerURL       string            `yaml:"server_url"`
-	AuthToken       string            `yaml:"auth_token"`
+	ServerURL string `yaml:"server_url"`
+	AuthToken string `yaml:"auth_token"`
+	// TokenFile names a file holding the Personal Access Token, so the token itself need not
+	// sit in this file (#1758). It matters because this file is shared: it gets pasted into
+	// support threads, copied between machines, and is what the startup configuration block
+	// (#1693) points people at.
+	//
+	// An explicitly configured token_file OUTRANKS an inline auth_token in the same file.
+	// Writing it says "the token is not in this file", so an auth_token left beside it is
+	// stale by construction, and the alternative -- silently preferring the inline value --
+	// is the failure #1709 filed this key under in the first place. Everything above the
+	// config file in docs/client_configuration.md's ladder still wins: LFT_CLIENT_TOKEN and
+	// -token both beat it.
+	//
+	// Unlike the implicit fallbacks in LoadClientConfig, an unreadable token_file is a fatal
+	// error rather than a fall-through to "no token": the latter surfaces as an
+	// authentication failure and sends people debugging the wrong thing.
+	TokenFile       string            `yaml:"token_file,omitempty"`
 	Subdomain       string            `yaml:"subdomain"`
 	CustomDomain    string            `yaml:"custom_domain"`
 	Ports           []int             `yaml:"ports"`
@@ -426,6 +443,11 @@ type ClientConfig struct {
 	// What is reported is a region name and a round trip in milliseconds. No IP, no location,
 	// nothing derived from either.
 	DisableLatencyReport bool `yaml:"disable_latency_report,omitempty"`
+	// TokenSource names where AuthToken came from, for the startup configuration block
+	// (#1693) -- which reports the source, not just the value. Never the token itself, and
+	// never anything derived from it: that block exists to be pasted into a support channel.
+	// Not a config key; yaml:"-" also keeps it out of TestClientExampleConfigCoversEveryField.
+	TokenSource string `yaml:"-"`
 }
 
 // DefaultServerConfig returns a ServerConfig with sensible default values.
@@ -822,6 +844,17 @@ func SaveClientConfig(path string, cfg *ClientConfig) error {
 	defer file.Close() //nolint:errcheck
 	enc := yaml.NewEncoder(file)
 	defer enc.Close() //nolint:errcheck
+
+	// A config that names a token_file must not be written back with the token it resolved
+	// inline (#1758). The Inspector's Settings tab and the tray GUI both save the whole
+	// in-memory config, so without this the first save after a token_file was honoured would
+	// copy the token into the very file the key exists to keep it out of -- and the user would
+	// have no reason to look.
+	if cfg.TokenFile != "" {
+		redacted := *cfg
+		redacted.AuthToken = ""
+		return enc.Encode(&redacted)
+	}
 	return enc.Encode(cfg)
 }
 
@@ -858,10 +891,43 @@ func LoadClientConfig(path string) (*ClientConfig, error) {
 		}
 	}
 
-	// 2. Load from token file if not set in YAML
+	if cfg.AuthToken != "" {
+		cfg.TokenSource = "config file"
+	}
+
+	// 2. An explicit token_file: in the config file (#1758). Handled separately from the
+	// implicit fallbacks below, and differently in both directions: it overrides an inline
+	// auth_token: rather than deferring to it, and a path that cannot be read is an error
+	// rather than a silent fall-through.
+	//
+	// LFT_TOKEN_FILE *moves* the token file -- that is already how
+	// docs/client_configuration.md describes it -- so when it is set it replaces the
+	// configured path. Environment above config file is the ladder's own rule; inventing the
+	// opposite one here would make the key whose whole purpose is indirection the one key the
+	// environment cannot redirect.
+	if configured := strings.TrimSpace(cfg.TokenFile); configured != "" {
+		tokenPath, source := expandClientHome(configured), "token_file"
+		if env := strings.TrimSpace(os.Getenv("LFT_TOKEN_FILE")); env != "" {
+			tokenPath, source = expandClientHome(env), "LFT_TOKEN_FILE"
+		}
+		token, err := readClientTokenFile(tokenPath)
+		if err != nil {
+			// cfg is returned non-nil alongside the error on purpose: pkg/gui calls this as
+			// `cfg, _ :=` and would panic on a nil config. Callers that check the error --
+			// cmd/lfr-tunnel does -- still stop.
+			return cfg, err
+		}
+		cfg.AuthToken = token
+		cfg.TokenSource = fmt.Sprintf("%s (%s)", source, tokenPath)
+	}
+
+	// 2a. Implicit token file fallbacks, only when nothing above supplied a token. These are
+	// guesses at where a token might be, so an absent or unreadable file is not an error.
 	if cfg.AuthToken == "" {
 		tokenFilePath := os.Getenv("LFT_TOKEN_FILE")
+		source := "LFT_TOKEN_FILE"
 		if tokenFilePath == "" {
+			source = "token file"
 			homeDir, err := os.UserHomeDir()
 			if err == nil {
 				tokenFilePath = filepath.Join(homeDir, ".lfr-tunnel", "token")
@@ -878,6 +944,9 @@ func LoadClientConfig(path string) (*ClientConfig, error) {
 					cfg.AuthToken = strings.TrimSpace(content)
 				}
 
+				if cfg.AuthToken != "" {
+					cfg.TokenSource = fmt.Sprintf("%s (%s)", source, tokenFilePath)
+				}
 				checkInsecurePermissions(tokenFilePath, "Token")
 			}
 		}
@@ -894,6 +963,7 @@ func LoadClientConfig(path string) (*ClientConfig, error) {
 			for _, p := range paths {
 				if val, parseErr := parseSecretsFile(p); parseErr == nil && val != "" {
 					cfg.AuthToken = val
+					cfg.TokenSource = fmt.Sprintf("LDM credentials file (%s)", p)
 					checkInsecurePermissions(p, "Secrets")
 					break
 				}
@@ -912,8 +982,10 @@ func LoadClientConfig(path string) (*ClientConfig, error) {
 
 	if val := os.Getenv("LFT_CLIENT_TOKEN"); val != "" {
 		cfg.AuthToken = val
+		cfg.TokenSource = "LFT_CLIENT_TOKEN environment variable"
 	} else if val := os.Getenv("LFT_TOKEN"); val != "" {
 		cfg.AuthToken = val
+		cfg.TokenSource = "LFT_TOKEN environment variable"
 	}
 
 	if val := os.Getenv("LFT_CLIENT_SUBDOMAIN"); val != "" {
@@ -1062,7 +1134,75 @@ func parseSecretsFile(path string) (string, error) {
 	return "", scanner.Err()
 }
 
+// expandClientHome expands a leading ~ against the user's home directory, the way a shell
+// would. token_file: and log_dir: are both paths people type by hand into YAML, where no shell
+// is present to do it for them.
+func expandClientHome(path string) string {
+	if path != "~" && !strings.HasPrefix(path, "~/") && !strings.HasPrefix(path, `~\`) {
+		return path
+	}
+	home, err := os.UserHomeDir()
+	if err != nil {
+		return path
+	}
+	if path == "~" {
+		return home
+	}
+	return filepath.Join(home, path[2:])
+}
+
+// readClientTokenFile reads the token out of an explicitly configured token_file (#1758).
+//
+// It accepts both shapes the client already writes and reads: a bare token on its own line, and
+// the `LFT_CLIENT_TOKEN=<token>` env-file form `lfr-tunnel login` produces. Surrounding
+// whitespace is stripped in both cases -- a file written with `echo`, or edited in any editor
+// that terminates the last line, ends in a newline, and a token with a trailing \n fails
+// authentication with no hint as to why.
+//
+// Every error names the path and says what the file was expected to contain. None of them
+// includes the file's contents: this error reaches a terminal and, from there, a support thread.
+func readClientTokenFile(path string) (string, error) {
+	data, err := os.ReadFile(path)
+	if err != nil {
+		if errors.Is(err, os.ErrNotExist) {
+			return "", fmt.Errorf("token_file %s does not exist -- it must contain your "+
+				"Personal Access Token, either on its own line or as LFT_CLIENT_TOKEN=<token>. "+
+				"`lfr-tunnel login` writes one to ~/.lfr-tunnel/token", path)
+		}
+		return "", fmt.Errorf("token_file %s could not be read (%v) -- it must be readable by "+
+			"you and contain your Personal Access Token", path, err)
+	}
+
+	content := string(data)
+	token := strings.TrimSpace(content)
+	if strings.Contains(content, "LFT_CLIENT_TOKEN") || strings.Contains(content, "LFT_TOKEN") {
+		val, parseErr := parseSecretsFile(path)
+		if parseErr != nil {
+			return "", fmt.Errorf("token_file %s looks like an environment file but could not "+
+				"be parsed (%v) -- it must contain a line reading LFT_CLIENT_TOKEN=<token>", path, parseErr)
+		}
+		token = val
+	}
+
+	if token == "" {
+		return "", fmt.Errorf("token_file %s is empty -- it must contain your Personal Access "+
+			"Token, either on its own line or as LFT_CLIENT_TOKEN=<token>", path)
+	}
+
+	// Warn rather than refuse, matching every other credential file this client reads. See
+	// checkInsecurePermissions.
+	checkInsecurePermissions(path, "Token")
+	return token, nil
+}
+
 // checkInsecurePermissions checks if a file has insecure permissions (0077 mask check) on Unix systems.
+//
+// It warns; it does not refuse. Refusing would be the ~/.ssh precedent, but it is the wrong
+// trade here: a token file created with a default 022 umask is 0644, so `echo $TOKEN >
+// ~/.lfr-tunnel/token` would become a hard failure, and the way out of a hard failure is to put
+// the token back inline in config.yaml -- whose permissions nothing checks at all. Refusing
+// would also make the same file fatal when reached through token_file: and merely noisy when
+// reached through LFT_TOKEN_FILE, which is not a distinction anyone could predict.
 func checkInsecurePermissions(path string, label string) {
 	if runtime.GOOS == "windows" {
 		return

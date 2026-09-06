@@ -480,24 +480,27 @@ func TestLoadClientConfigDistinguishesUnsetPortsFromExplicitPorts(t *testing.T) 
 }
 
 // TestLoadClientConfig_IgnoresRemovedKeys is the compatibility guarantee for the client keys
-// this repo has retired: token_file and bypass_proxy (#1709), and nav_placement (#1751).
+// this repo has retired: bypass_proxy (#1709) and nav_placement (#1751).
 //
-// token_file and bypass_proxy were parsed by ClientConfig for months and were never read by
-// anything. nav_placement was different -- it worked end to end from #606 until #783's dashboard
-// rewrite deleted the JavaScript that applied it, leaving the Go half write-only -- but it is
-// removed the same way and so needs the same guarantee. People who copied any of the three out
-// of the example file still have them in ~/.lfr-tunnel/config.yaml, and their client must keep
-// starting. LoadClientConfig decodes with a plain yaml.Decoder and deliberately does NOT call
+// bypass_proxy was parsed by ClientConfig for months and was never read by anything.
+// nav_placement was different -- it worked end to end from #606 until #783's dashboard rewrite
+// deleted the JavaScript that applied it, leaving the Go half write-only -- but it is removed
+// the same way and so needs the same guarantee. People who copied either out of the example
+// file still have them in ~/.lfr-tunnel/config.yaml, and their client must keep starting.
+// LoadClientConfig decodes with a plain yaml.Decoder and deliberately does NOT call
 // dec.KnownFields(true), so an unrecognised key is skipped rather than rejected.
+//
+// token_file was on this list until #1758 implemented it, which is why the guard below matters:
+// a retired key that comes back is no longer evidence about unknown keys, and a test that keeps
+// asserting over it passes while proving nothing.
 //
 // The assertion that matters is the absence of an error. The rest of the config still being
 // applied is what proves the decode did not stop at the unknown key.
 //
 // Mutation-checked: adding dec.KnownFields(true) to LoadClientConfig makes this fail with
-// `field token_file not found in type config.ClientConfig` (and, with token_file dropped from
-// the fixture, `field nav_placement not found`).
+// `field bypass_proxy not found in type config.ClientConfig`.
 func TestLoadClientConfig_IgnoresRemovedKeys(t *testing.T) {
-	removed := []string{"token_file", "bypass_proxy", "nav_placement"}
+	removed := []string{"bypass_proxy", "nav_placement"}
 
 	// Guard against this test quietly becoming vacuous: if any of these keys is ever re-added
 	// to ClientConfig it would be a known field again, and the test would pass without testing
@@ -532,7 +535,6 @@ func TestLoadClientConfig_IgnoresRemovedKeys(t *testing.T) {
 	content := `
 server_url: "https://legacy.example.com"
 subdomain: "legacy-sub"
-token_file: "/home/someone/.lfr-tunnel/token"
 bypass_proxy: true
 nav_placement: "sidebar"
 rate_limit: 42

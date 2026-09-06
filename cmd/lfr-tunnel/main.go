@@ -733,6 +733,7 @@ func overrideConfigWithFlags(cfg *config.ClientConfig) {
 	}
 	if *token != "" {
 		cfg.AuthToken = *token
+		cfg.TokenSource = "-token flag"
 	}
 	if *subdomain != "" {
 		cfg.Subdomain = *subdomain
@@ -2272,6 +2273,10 @@ func logStartupConfiguration(cfg *config.ClientConfig, mappings []client.PortMap
 		fmt.Sprintf("  ports          %s%s", portList, facts.portSource),
 		fmt.Sprintf("  subdomain      %s", subdomainOrNone(cfg.Subdomain)),
 		fmt.Sprintf("  config file    %s", configFile),
+		// The source, never the value (#1758). Which of five places supplied the token is
+		// the question behind "it says I am not authenticated", and it is answerable from
+		// here without anyone being asked to reveal anything.
+		fmt.Sprintf("  token from     %s", tokenSourceOrNone(cfg.TokenSource)),
 	}
 	if facts.advertised > 0 {
 		lines = append(lines, fmt.Sprintf("  regions        %d advertised", facts.advertised))
@@ -2285,6 +2290,16 @@ func logStartupConfiguration(cfg *config.ClientConfig, mappings []client.PortMap
 	for _, line := range lines {
 		slog.Info(line)
 	}
+}
+
+// tokenSourceOrNone renders where the token came from. It is deliberately incapable of
+// rendering the token: it only ever sees ClientConfig.TokenSource, which holds a source name and
+// at most a file path.
+func tokenSourceOrNone(s string) string {
+	if s == "" {
+		return "nowhere -- no token was found"
+	}
+	return s
 }
 
 func subdomainOrNone(s string) string {

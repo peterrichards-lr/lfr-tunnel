@@ -282,15 +282,84 @@ func TestExpectedConfigOwner_MatchesTheCommittedUnit(t *testing.T) {
 // The address is baked into each edge's nginx, which is precisely the shape that goes stale
 // unnoticed -- the same shape as the edge_nodes urls that named retired hosts for weeks (#1449).
 
-func TestCheckEdgeRealIP_CentralIsSkipped(t *testing.T) {
-	// Nothing forwards to central, so there is no upstream to trust and nothing to report.
-	if f := checkEdgeRealIP("", DNSSpec{}, "server { listen 443; }"); len(f) != 0 {
-		t.Errorf("central must produce no finding, got %+v", f)
+// Central with NO fleet declared has nothing to trust and nothing to report -- the single-node
+// shape a deployment outside Liferay's own has. Not because "nothing forwards to central": the
+// check below asserts that central WITH a fleet is reported on, which is #1767.
+func TestCheckGatewayRealIP_CentralWithNoFleetIsSilent(t *testing.T) {
+	if f := checkGatewayRealIP("", DNSSpec{}, "server { listen 443; }"); len(f) != 0 {
+		t.Errorf("central with no fleet declared must produce no finding, got %+v", f)
+	}
+}
+
+// centralConf is what central's live nginx looks like, with the trusted addresses substituted.
+// Its server_names are the apex and its wildcard -- no edge's fully-qualified hostname among
+// them, which is what makes checkRealIPCoversPeerEdges count every edge as one central must
+// trust without needing a "which node am I" input.
+func centralConf(trusted ...string) string {
+	conf := "server {\n    server_name example.com *.example.com;\n}\n"
+	for _, a := range trusted {
+		conf += "set_real_ip_from " + a + ";\n"
+	}
+	return conf
+}
+
+// Central with a fleet declared and no real_ip block at all is the live state #1767 describes,
+// and the check used to return early on exactly it -- so the one box that had no block was also
+// the one box drift could not report on.
+func TestCheckGatewayRealIP_CentralWithNoBlockIsReported(t *testing.T) {
+	f := checkGatewayRealIP("", twoEdgeSpec(t), centralConf())
+	if len(f) != 1 {
+		t.Fatalf("expected one finding for a central with no real_ip block, got %+v", f)
+	}
+	if f[0].Severity != severityWarning {
+		t.Errorf("expected a warning, got %q", f[0].Severity)
+	}
+	// It must say what breaks and how to fix it, and must NOT send the operator after
+	// -trusted-proxy, which central refuses.
+	for _, want := range []string{"#1767", "cross-proxies", "reconcile-nginx -role central", "-dns-spec"} {
+		if !strings.Contains(f[0].Message, want) {
+			t.Errorf("central finding should mention %q, got %q", want, f[0].Message)
+		}
+	}
+}
+
+// Every edge in the spec must be trusted on central, and the loopback gap #1750 found applies
+// here for the same reason: the forwarding edge's gateway appends its own loopback peer.
+func TestCheckGatewayRealIP_CentralMissingEdgesAndLoopback(t *testing.T) {
+	// Central trusting one edge only: the other edge and loopback are both missing.
+	f := checkGatewayRealIP("", twoEdgeSpec(t), centralConf("18.0.0.1"))
+
+	var sawLoopback, sawPeers bool
+	for _, finding := range f {
+		if strings.Contains(finding.Message, "#1750") {
+			sawLoopback = true
+		}
+		if strings.Contains(finding.Message, "3.0.0.1") && strings.Contains(finding.Message, "2600:db8::1") {
+			sawPeers = true
+		}
+		// Central has no control plane, so it must never be told its control plane moved.
+		if strings.Contains(finding.Message, "#1450") {
+			t.Errorf("central has no control plane to check against, got %q", finding.Message)
+		}
+	}
+	if !sawLoopback {
+		t.Errorf("expected the #1750 loopback finding on central, got %+v", f)
+	}
+	if !sawPeers {
+		t.Errorf("expected both of the untrusted edge's addresses named, got %+v", f)
+	}
+}
+
+// A fully reconciled central: both edge addresses plus loopback, and no control-plane entry.
+func TestCheckGatewayRealIP_CentralFullyTrustedIsClean(t *testing.T) {
+	conf := centralConf("18.0.0.1", "3.0.0.1", "2600:db8::1", nginxLoopbackTrustedProxy)
+	if f := checkGatewayRealIP("", twoEdgeSpec(t), conf); len(f) != 0 {
+		t.Errorf("a fully reconciled central must be clean, got %+v", f)
 	}
 }
 
 func TestCheckEdgeRealIP_MissingDirectiveIsReported(t *testing.T) {
-	f := checkEdgeRealIP("https://tunnel.example.com", DNSSpec{}, "server { listen 443; }")
+	f := checkGatewayRealIP("https://tunnel.example.com", DNSSpec{}, "server { listen 443; }")
 	if len(f) != 1 {
 		t.Fatalf("expected one finding, got %+v", f)
 	}
@@ -311,7 +380,7 @@ func TestCheckEdgeRealIP_MissingDirectiveIsReported(t *testing.T) {
 // that would turn the check into a rubber stamp on exactly the machines where DNS is broken.
 func TestCheckEdgeRealIP_UnresolvableHostIsReported(t *testing.T) {
 	conf := "set_real_ip_from 203.0.113.7;\nset_real_ip_from 127.0.0.1;\nreal_ip_header X-Forwarded-For;\n"
-	f := checkEdgeRealIP("https://nonexistent.invalid", DNSSpec{}, conf)
+	f := checkGatewayRealIP("https://nonexistent.invalid", DNSSpec{}, conf)
 	if len(f) != 1 || f[0].Severity != severityWarning {
 		t.Fatalf("expected one warning, got %+v", f)
 	}
@@ -323,7 +392,7 @@ func TestCheckEdgeRealIP_UnresolvableHostIsReported(t *testing.T) {
 // A commented-out directive is not in effect, and must not read as configured.
 func TestCheckEdgeRealIP_CommentedDirectiveDoesNotCount(t *testing.T) {
 	conf := "# set_real_ip_from 203.0.113.7;\nserver { listen 443; }\n"
-	f := checkEdgeRealIP("https://tunnel.example.com", DNSSpec{}, conf)
+	f := checkGatewayRealIP("https://tunnel.example.com", DNSSpec{}, conf)
 	if len(f) != 1 || !strings.Contains(f[0].Message, "does not trust") {
 		t.Errorf("a commented directive must count as absent, got %+v", f)
 	}
@@ -335,7 +404,7 @@ func TestCheckEdgeRealIP_CommentedDirectiveDoesNotCount(t *testing.T) {
 // config is not re-rendered by a restart, so nothing else would ever surface it.
 func TestCheckEdgeRealIP_MissingLoopbackIsReported(t *testing.T) {
 	conf := "set_real_ip_from 203.0.113.7;\nreal_ip_header X-Forwarded-For;\nreal_ip_recursive on;\n"
-	f := checkEdgeRealIP("https://nonexistent.invalid", DNSSpec{}, conf)
+	f := checkGatewayRealIP("https://nonexistent.invalid", DNSSpec{}, conf)
 
 	var loopback *DriftFinding
 	for i := range f {
@@ -365,7 +434,7 @@ func TestCheckEdgeRealIP_LoopbackPresentInEitherOrder(t *testing.T) {
 		"set_real_ip_from 203.0.113.7;\nset_real_ip_from 127.0.0.1;\n",
 		"set_real_ip_from 127.0.0.1;\nset_real_ip_from 203.0.113.7;\n",
 	} {
-		for _, f := range checkEdgeRealIP("https://nonexistent.invalid", DNSSpec{}, conf) {
+		for _, f := range checkGatewayRealIP("https://nonexistent.invalid", DNSSpec{}, conf) {
 			if strings.Contains(f.Message, "#1750") {
 				t.Errorf("both addresses are trusted, so no #1750 finding is due; got %q for:\n%s",
 					f.Message, conf)
@@ -428,7 +497,7 @@ func saEdgeConf(trusted ...string) string {
 func TestCheckEdgeRealIP_MissingPeerEdgesAreReported(t *testing.T) {
 	// An edge reconciled at #1750: central and loopback, no peers.
 	conf := saEdgeConf("203.0.113.7", nginxLoopbackTrustedProxy)
-	f := checkEdgeRealIP("https://nonexistent.invalid", twoEdgeSpec(t), conf)
+	f := checkGatewayRealIP("https://nonexistent.invalid", twoEdgeSpec(t), conf)
 
 	var peers *DriftFinding
 	for i := range f {
@@ -449,8 +518,10 @@ func TestCheckEdgeRealIP_MissingPeerEdgesAreReported(t *testing.T) {
 			t.Errorf("expected the untrusted peer %q named, got %q", want, peers.Message)
 		}
 	}
-	// The consequence, not just the absence.
-	if !strings.Contains(peers.Message, "FORWARDING EDGE") {
+	// The consequence, not just the absence. "GATEWAY" rather than "EDGE" since #1767: the same
+	// finding is now raised on central, where the forwarder is an edge and the node reading it is
+	// not one.
+	if !strings.Contains(peers.Message, "FORWARDING GATEWAY") {
 		t.Errorf("expected the mis-attribution spelled out, got %q", peers.Message)
 	}
 	if !strings.Contains(peers.Message, "reconcile-nginx") {
@@ -462,7 +533,7 @@ func TestCheckEdgeRealIP_MissingPeerEdgesAreReported(t *testing.T) {
 // reconciled edge, and a check that cries wolf gets switched off.
 func TestCheckEdgeRealIP_OwnAddressIsNotDemanded(t *testing.T) {
 	conf := saEdgeConf("203.0.113.7", "3.0.0.1", "2600:db8::1", nginxLoopbackTrustedProxy)
-	for _, f := range checkEdgeRealIP("https://nonexistent.invalid", twoEdgeSpec(t), conf) {
+	for _, f := range checkGatewayRealIP("https://nonexistent.invalid", twoEdgeSpec(t), conf) {
 		if strings.Contains(f.Message, "#1757") {
 			t.Errorf("every peer is trusted, so no #1757 finding is due; got %q", f.Message)
 		}
@@ -478,7 +549,7 @@ func TestCheckEdgeRealIP_OwnAddressIsNotDemanded(t *testing.T) {
 // be noise. This is the shape a deployment outside Liferay's own has.
 func TestCheckEdgeRealIP_NoFleetDeclaredIsSilent(t *testing.T) {
 	conf := saEdgeConf("203.0.113.7", nginxLoopbackTrustedProxy)
-	for _, f := range checkEdgeRealIP("https://nonexistent.invalid", DNSSpec{}, conf) {
+	for _, f := range checkGatewayRealIP("https://nonexistent.invalid", DNSSpec{}, conf) {
 		if strings.Contains(f.Message, "#1757") {
 			t.Errorf("no fleet declared, so no peer finding is possible; got %q", f.Message)
 		}

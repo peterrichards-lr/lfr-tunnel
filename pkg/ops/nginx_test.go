@@ -1,7 +1,10 @@
 package ops
 
 import (
+	"os"
+	"path/filepath"
 	"slices"
+	"sort"
 	"strings"
 	"testing"
 )
@@ -442,14 +445,25 @@ func nginxRecursiveRealIP(peer string, xff, trusted []string) string {
 // duplicated hop ("<visitor>, <visitor>, 127.0.0.1") and after it ("<visitor>, 127.0.0.1").
 // Trusting central alone stops the walk on that loopback entry and hands the WAF, the rate
 // limiter and the audit log 127.0.0.1 for every cross-proxied visitor.
+//
+// It also covers the second forwarding hop #1757 found. Central pushes the whole routing table to
+// EVERY edge (BroadcastRouteUpdate in pkg/server/edge_control_ws.go), so an edge holding no lease
+// for a name proxies straight to the edge that does, with no central hop in between. The chain
+// that arrives is shaped identically -- the forwarding edge's nginx overwrites X-Forwarded-For
+// with the visitor, its gateway appends its own loopback peer -- but the PEER is a sibling edge,
+// and real_ip declines outright unless that address is trusted too.
 func TestRenderRealIPBlock_TrustedSet(t *testing.T) {
 	const central, visitor = "203.0.113.7", "198.51.100.25"
+	// Two peer edges, one v4 and one v6: an edge dialling a peer over IPv6 presents its IPv6
+	// source address, so both families have to reach set_real_ip_from.
+	const peerV4, peerV6 = "192.0.2.40", "2001:db8::40"
 
 	trusted := nginxTrustedRealIPSet(buildNginxConfig(nginxRenderConfig{
 		Role:           RoleEdge,
 		LocalPort:      "8090",
 		RedirectDomain: "example.com",
 		TrustedProxy:   central,
+		TrustedPeers:   []string{peerV4, peerV6},
 		Groups:         []nginxDomainGroup{{Domain: "sa.example.com", CertRoot: certRootLetsEncrypt}},
 	}))
 
@@ -469,6 +483,32 @@ func TestRenderRealIPBlock_TrustedSet(t *testing.T) {
 		xff:  []string{visitor, visitor, "127.0.0.1"},
 		want: visitor,
 	}, {
+		// #1757. Without peerV4 in the set, real_ip declines and $remote_addr stays 192.0.2.40 --
+		// the whitelist, the auto-ban and every audit entry then name the sibling edge.
+		name: "cross-proxied BY ANOTHER EDGE over IPv4",
+		peer: peerV4,
+		xff:  []string{visitor, "127.0.0.1"},
+		want: visitor,
+	}, {
+		name: "cross-proxied BY ANOTHER EDGE over IPv6",
+		peer: peerV6,
+		xff:  []string{visitor, "127.0.0.1"},
+		want: visitor,
+	}, {
+		// The two-hop path (edge -> central -> here), and the honest answer is NOT the visitor.
+		//
+		// Central's own nginx overwrites X-Forwarded-For with $remote_addr, and central has no
+		// real_ip block by design -- so the visitor is destroyed at central and what leaves it is
+		// "<forwarding edge>, 127.0.0.1". No trusted set on THIS node can recover an address that
+		// is no longer on the wire. Asserted rather than omitted so the limit is written down;
+		// it resolved to the forwarding edge before this change too, so nothing regressed.
+		// Filed as #1767 -- fixing it means giving central a real_ip block, which contradicts
+		// "nothing forwards to central" (a claim that is itself false, see that issue).
+		name: "cross-proxied edge -> central -> here: central already lost the visitor",
+		peer: central,
+		xff:  []string{peerV4, "127.0.0.1"},
+		want: peerV4,
+	}, {
 		name: "edge-direct: nothing is rewritten, forged chain or not",
 		peer: visitor,
 		xff:  []string{"6.6.6.6"},
@@ -477,6 +517,13 @@ func TestRenderRealIPBlock_TrustedSet(t *testing.T) {
 		name: "edge-direct: an attacker naming loopback buys nothing",
 		peer: visitor,
 		xff:  []string{"6.6.6.6", "127.0.0.1"},
+		want: visitor,
+	}, {
+		// Trusting the fleet does not let a visitor claim to BE one of them: real_ip keys on the
+		// connection's peer, and a header cannot change that.
+		name: "edge-direct: naming a peer edge in the header buys nothing either",
+		peer: visitor,
+		xff:  []string{"6.6.6.6", peerV4, peerV6},
 		want: visitor,
 	}} {
 		t.Run(tc.name, func(t *testing.T) {
@@ -564,5 +611,112 @@ func TestEdgeRoleDoesNotServeClientDownloads(t *testing.T) {
 	})
 	if strings.Contains(out, "location /static/downloads/") {
 		t.Error("an edge rendered a downloads location; those files only exist on central")
+	}
+}
+
+// Deriving the peer-edge trusted set (#1757).
+//
+// The addresses must come from the committed DNS spec, never from anyone typing them: a
+// hand-maintained fleet list is what named three retired hosts for weeks (#1449), and a trusted
+// set that goes stale is worse than one that is too small.
+
+// TestResolveTrustedPeers_DerivedFromTheCommittedSpec runs against the REAL spec, not a fixture.
+// A fixture would prove the parser works while saying nothing about whether the file the default
+// flag points at actually yields a fleet -- which is the only question that matters here.
+func TestResolveTrustedPeers_DerivedFromTheCommittedSpec(t *testing.T) {
+	const spec = "../../" + defaultDNSSpecPath
+
+	// From the perspective of the sa edge: every other edge, and not itself.
+	peers, err := resolveTrustedPeers(spec, []string{"sa.lfr-demo.se"})
+	if err != nil {
+		t.Fatalf("the committed spec must yield a peer set: %v", err)
+	}
+	if len(peers) < 2 {
+		t.Fatalf("expected the rest of the fleet, got %v", peers)
+	}
+	for _, want := range []string{"3.139.247.146", "52.195.125.249", "13.233.187.64"} {
+		if !slices.Contains(peers, want) {
+			t.Errorf("expected peer %s (an edge the spec declares) in %v", want, peers)
+		}
+	}
+	// Its own address must not be there: an edge has no reason to trust itself, and naming it
+	// would read as one.
+	if slices.Contains(peers, "18.229.93.210") {
+		t.Errorf("sa's own address must be excluded from its own trusted set, got %v", peers)
+	}
+	// Central is the -trusted-proxy entry and is never a peer. The placeholder is what the spec
+	// carries for it, so a literal "${IPV4}" reaching set_real_ip_from would be a broken config
+	// nginx rejects at reload.
+	for _, p := range peers {
+		if strings.HasPrefix(p, "${") {
+			t.Errorf("an unsubstituted placeholder must never be trusted, got %v", peers)
+		}
+	}
+	if !sort.StringsAreSorted(peers) {
+		t.Errorf("peers must be ordered so the rendered config is stable across runs, got %v", peers)
+	}
+}
+
+// A spec at the DEFAULT path that is not there is a warning, not a failure: this tool is used
+// outside Liferay's deployment, where that file does not exist, and a single-edge install that
+// never cross-proxies must still be able to render an nginx config. An EXPLICIT path that cannot
+// be read is an error -- the operator named that file and got nothing.
+func TestResolveTrustedPeers_MissingSpec(t *testing.T) {
+	// The tests run from pkg/ops, so the default path does not resolve here.
+	if _, err := os.Stat(defaultDNSSpecPath); !os.IsNotExist(err) {
+		t.Skipf("the default spec path resolves from this directory, so the branch cannot be exercised")
+	}
+	peers, err := resolveTrustedPeers(defaultDNSSpecPath, nil)
+	if err != nil || peers != nil {
+		t.Errorf("an absent spec at the default path must warn and continue, got %v / %v", peers, err)
+	}
+
+	if _, err := resolveTrustedPeers(filepath.Join(t.TempDir(), "nope.yaml"), nil); err == nil {
+		t.Error("an explicitly named spec that cannot be read must be an error, not a silent empty set")
+	}
+
+	// Opting out deliberately says nothing at all.
+	if peers, err := resolveTrustedPeers("", nil); err != nil || peers != nil {
+		t.Errorf(`-dns-spec "" must opt out silently, got %v / %v`, peers, err)
+	}
+}
+
+// TestRenderRealIPBlock_PeersAreEmitted pins the shape of the rendered block: the control plane,
+// then each peer, then loopback, one directive each and one block per file.
+func TestRenderRealIPBlock_PeersAreEmitted(t *testing.T) {
+	got := buildNginxConfig(nginxRenderConfig{
+		Role:           RoleEdge,
+		LocalPort:      "8090",
+		RedirectDomain: "example.com",
+		TrustedProxy:   "203.0.113.7",
+		TrustedPeers:   []string{"192.0.2.40", "2001:db8::40"},
+		Groups: []nginxDomainGroup{
+			{Domain: "sa.example.com", CertRoot: certRootLetsEncrypt},
+			{Domain: "example.com", CertRoot: certRootCertSync, WildcardOnly: true},
+		},
+	})
+	want := []string{"203.0.113.7", "192.0.2.40", "2001:db8::40", nginxLoopbackTrustedProxy}
+	if got := nginxTrustedRealIPSet(got); !slices.Equal(got, want) {
+		t.Errorf("trusted set = %v, want %v", got, want)
+	}
+	// Still one block for the whole file however many groups it covers -- these are http-context
+	// directives and the file is included into http.
+	if n := countDirective(got, "real_ip_recursive"); n != 1 {
+		t.Errorf("expected exactly one real_ip_recursive across two groups, got %d", n)
+	}
+}
+
+// Peers ride on the control-plane entry. Without -trusted-proxy there is no real_ip block at all,
+// and a config that trusts its siblings but not the control plane is not one anyone wants.
+func TestRenderRealIPBlock_PeersAloneRenderNothing(t *testing.T) {
+	got := buildNginxConfig(nginxRenderConfig{
+		Role:           RoleEdge,
+		LocalPort:      "8090",
+		RedirectDomain: "example.com",
+		TrustedPeers:   []string{"192.0.2.40"},
+		Groups:         []nginxDomainGroup{{Domain: "sa.example.com", CertRoot: certRootLetsEncrypt}},
+	})
+	if hasDirective(got, "set_real_ip_from") {
+		t.Errorf("no control plane trusted, so no real_ip block at all:\n%s", got)
 	}
 }

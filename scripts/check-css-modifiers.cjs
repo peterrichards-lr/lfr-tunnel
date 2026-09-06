@@ -289,35 +289,14 @@ const V1_WEB_ROOT = path.join(__dirname, '..', 'pkg', 'server');
 // Classes V1 applies that have no rule and are not yet fixed. Each entry must say WHY.
 // Tracked for burndown by #1752; read that issue before adding to this list instead of
 // fixing the class.
-const V1_KNOWN_INERT = new Map(
-  Object.entries({
-    'btn-secondary':
-      'inert button variant; every use carries its own inline style. Hoisting those into a rule is a visual refactor of V1 buttons, not a bug fix (#1752)',
-    'btn-outline': 'inert button variant; same as btn-secondary (#1752)',
-    'form-group':
-      'inert layout class; each use inlines its own margin-bottom (#1752)',
-    'tab-btn':
-      'inert; the install-instructions tabs inline every declaration and swap them in JS (#1752)',
-    'tab-content':
-      'inert; paired with tab-btn, visibility driven by inline display (#1752)',
-    'custom-dropdown-trigger':
-      'inert; both triggers inline the full flex layout (#1752)',
-    'dashboard-table':
-      'inert; the one table using it inlines width and border-collapse (#1752)',
-    'timestamp-tooltip':
-      'inert; the span inlines cursor and border-bottom (#1752)',
-    'host-link': 'inert; the anchor inlines colour, font and weight (#1752)',
-    'btn-copy': 'inert; the button inlines its full appearance (#1752)',
-    'form-control':
-      'inert; the pagination select falls back to the global element style (#1752)',
-    'modal-header':
-      'inert; the keyboard-shortcuts overlay header is unstyled. Needs a design decision, not a one-line rule (#1752)',
-    'modal-title': 'inert; same overlay as modal-header (#1752)',
-    'modal-close': 'inert; same overlay as modal-header (#1752)',
-    'sidebar-collapsed':
-      'dead state marker on #dashboard-screen: no rule reads it and no script queries it. The collapse itself works through .sidebar.collapsed, so removing it is safe but out of scope (#1752)',
-  }),
-);
+//
+// #1752 emptied it. Everything it held was either an inline style waiting to be hoisted into
+// the class that already named it, a class V2 had rules for and V1 had only markup for, or a
+// marker nothing read. The map stays because it is the documented place for a genuinely
+// unfixable class -- a third-party stylesheet's name, say (note 3 above) -- and because
+// removing it would take the ratchet with it. Empty is the state to keep it in: an entry here
+// is an exemption, and every one added is a class the gate stops protecting.
+const V1_KNOWN_INERT = new Map(Object.entries({}));
 
 const v1InertSeen = new Set();
 

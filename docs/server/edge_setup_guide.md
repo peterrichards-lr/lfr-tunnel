@@ -489,8 +489,19 @@ go build -o bin/lfr-tunnel-ops ./cmd/lfr-tunnel-ops
 ./bin/lfr-tunnel-ops render-nginx-config -role edge \
   -domains us.lfr-demo.online \
   -apex-domains lfr-demo.online \
-  -redirect-domain lfr-demo.online -port 8090
+  -redirect-domain lfr-demo.online -port 8090 \
+  -trusted-proxy <the control plane's address>
 ```
+
+`-trusted-proxy` is not optional in practice. Without it the edge emits no `real_ip` block at
+all, and every request another gateway forwards here is attributed to that gateway rather than
+to the visitor: the per-tunnel IP whitelist, the rate limiter's auto-ban and every audit entry
+then name it (#1450). Pass the control plane's **exact** address, never a range -- a range lets
+anything inside it assert a visitor address.
+
+Given it, the rendered block trusts three things: the control plane, loopback (the hop central's
+own gateway appends, #1750), and **every other edge in the fleet** (#1757). That last set is
+derived from the committed DNS spec via `-dns-spec`, never typed -- see below.
 
 `setup-edge-vps.sh` calls exactly this during provisioning, and
 `lfr-tunnel-ops reconcile-nginx -role edge` pushes it to a box that is already running -- which
@@ -507,7 +518,7 @@ What the rendered config contains, and why:
 | `:443` for `*.<edge>` | the regional data plane, certificate from `/etc/letsencrypt/live/<edge>/` |
 | `:443` for `*.<apex>` | apex wildcards served edge-direct, certificate from `/etc/lfr-tunneld/certs/<apex>/` where certsync installs the bundle pushed from central |
 
-Two things that are easy to get wrong:
+Three things that are easy to get wrong:
 
 - The shared apex goes in **`-apex-domains`**, never `-domains`. `-domains` renders the apex
   server block too, so every edge would claim the control plane's own hostname -- and nginx
@@ -515,7 +526,19 @@ Two things that are easy to get wrong:
   silently steals traffic.
 - Forwarded headers are **overwritten**, not appended (`$remote_addr`, never
   `$proxy_add_x_forwarded_for`), because an appended value's leftmost entry is caller-supplied
-  and forgeable (#1325). Note the known gap for the central-to-edge hop in #1450.
+  and forgeable (#1325). The `real_ip` block above restores the visitor's address *before* those
+  lines run, which is what closes the forwarded-hop gap (#1450, #1750, #1757).
+- **The peer-edge trusted set is derived, and it is only correct after a reconcile.** Adding an
+  edge, or moving one to a new address, means editing
+  `scripts/liferay/dns/lfr-demo-production.yaml` (registering a node already requires that
+  record) and then re-running `reconcile-nginx -role edge` against **every other** edge. Until
+  that happens the fleet's trusted sets are stale, and
+  `lfr-tunnel-ops check-config -target <edge>` reports exactly which addresses are missing --
+  nothing else surfaces it, because nginx config is not re-rendered by a restart.
+
+  Outside Liferay's own deployment that spec does not exist. `render-nginx-config` then warns
+  and trusts no peers, which is correct for a single-edge install that never cross-proxies;
+  pass `-dns-spec ""` to say so deliberately, or `-dns-spec <path>` to point at your own.
 
 ---
 
@@ -559,4 +582,4 @@ If your Edge VPS or Control Plane gateway has multiple public IP addresses confi
 
 <!-- markdownlint-disable MD049 -->
 ---
-*Last Updated: 2026-09-03* | *Last Reviewed: 2026-09-03*
+*Last Updated: 2026-09-06* | *Last Reviewed: 2026-09-06*

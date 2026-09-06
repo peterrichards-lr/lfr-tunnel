@@ -284,13 +284,13 @@ func TestExpectedConfigOwner_MatchesTheCommittedUnit(t *testing.T) {
 
 func TestCheckEdgeRealIP_CentralIsSkipped(t *testing.T) {
 	// Nothing forwards to central, so there is no upstream to trust and nothing to report.
-	if f := checkEdgeRealIP("", "server { listen 443; }"); len(f) != 0 {
+	if f := checkEdgeRealIP("", DNSSpec{}, "server { listen 443; }"); len(f) != 0 {
 		t.Errorf("central must produce no finding, got %+v", f)
 	}
 }
 
 func TestCheckEdgeRealIP_MissingDirectiveIsReported(t *testing.T) {
-	f := checkEdgeRealIP("https://tunnel.example.com", "server { listen 443; }")
+	f := checkEdgeRealIP("https://tunnel.example.com", DNSSpec{}, "server { listen 443; }")
 	if len(f) != 1 {
 		t.Fatalf("expected one finding, got %+v", f)
 	}
@@ -311,7 +311,7 @@ func TestCheckEdgeRealIP_MissingDirectiveIsReported(t *testing.T) {
 // that would turn the check into a rubber stamp on exactly the machines where DNS is broken.
 func TestCheckEdgeRealIP_UnresolvableHostIsReported(t *testing.T) {
 	conf := "set_real_ip_from 203.0.113.7;\nset_real_ip_from 127.0.0.1;\nreal_ip_header X-Forwarded-For;\n"
-	f := checkEdgeRealIP("https://nonexistent.invalid", conf)
+	f := checkEdgeRealIP("https://nonexistent.invalid", DNSSpec{}, conf)
 	if len(f) != 1 || f[0].Severity != severityWarning {
 		t.Fatalf("expected one warning, got %+v", f)
 	}
@@ -323,7 +323,7 @@ func TestCheckEdgeRealIP_UnresolvableHostIsReported(t *testing.T) {
 // A commented-out directive is not in effect, and must not read as configured.
 func TestCheckEdgeRealIP_CommentedDirectiveDoesNotCount(t *testing.T) {
 	conf := "# set_real_ip_from 203.0.113.7;\nserver { listen 443; }\n"
-	f := checkEdgeRealIP("https://tunnel.example.com", conf)
+	f := checkEdgeRealIP("https://tunnel.example.com", DNSSpec{}, conf)
 	if len(f) != 1 || !strings.Contains(f[0].Message, "does not trust") {
 		t.Errorf("a commented directive must count as absent, got %+v", f)
 	}
@@ -335,7 +335,7 @@ func TestCheckEdgeRealIP_CommentedDirectiveDoesNotCount(t *testing.T) {
 // config is not re-rendered by a restart, so nothing else would ever surface it.
 func TestCheckEdgeRealIP_MissingLoopbackIsReported(t *testing.T) {
 	conf := "set_real_ip_from 203.0.113.7;\nreal_ip_header X-Forwarded-For;\nreal_ip_recursive on;\n"
-	f := checkEdgeRealIP("https://nonexistent.invalid", conf)
+	f := checkEdgeRealIP("https://nonexistent.invalid", DNSSpec{}, conf)
 
 	var loopback *DriftFinding
 	for i := range f {
@@ -365,7 +365,7 @@ func TestCheckEdgeRealIP_LoopbackPresentInEitherOrder(t *testing.T) {
 		"set_real_ip_from 203.0.113.7;\nset_real_ip_from 127.0.0.1;\n",
 		"set_real_ip_from 127.0.0.1;\nset_real_ip_from 203.0.113.7;\n",
 	} {
-		for _, f := range checkEdgeRealIP("https://nonexistent.invalid", conf) {
+		for _, f := range checkEdgeRealIP("https://nonexistent.invalid", DNSSpec{}, conf) {
 			if strings.Contains(f.Message, "#1750") {
 				t.Errorf("both addresses are trusted, so no #1750 finding is due; got %q for:\n%s",
 					f.Message, conf)
@@ -386,5 +386,123 @@ func TestTrustedRealIPAddrs_ReadsEveryDirective(t *testing.T) {
 	}
 	if len(trustedRealIPAddrs("server { listen 443; }")) != 0 {
 		t.Error("a config with no directive must trust nothing")
+	}
+}
+
+// An edge is cross-proxied to by its PEERS as well as by central (#1757).
+//
+// Same treatment as the loopback gap #1750 added, and for the same reason: an edge reconciled
+// before the fix satisfies every check above, and the symptom -- visitors attributed to a sibling
+// edge -- is indistinguishable from ordinary traffic in the audit log.
+
+// twoEdgeSpec declares this node (sa) and one peer (us), which is the smallest shape that can
+// tell "trusts the fleet" apart from "trusts everything the spec mentions".
+func twoEdgeSpec(t *testing.T) DNSSpec {
+	t.Helper()
+	spec, err := parseDNSSpec([]byte(`
+domains:
+  - zone: example.com
+    records:
+      - {name: "@", type: A, value: "${IPV4}"}
+      - {name: "*", type: A, value: "${IPV4}"}
+      - {name: tunnel, type: A, value: "${IPV4}"}
+      - {name: sa, type: A, value: "18.0.0.1"}
+      - {name: us, type: A, value: "3.0.0.1"}
+      - {name: us, type: AAAA, value: "2600:db8::1"}
+`))
+	if err != nil {
+		t.Fatalf("fixture spec: %v", err)
+	}
+	return spec
+}
+
+// saEdgeConf is what the sa edge's live nginx looks like, with the trusted addresses substituted.
+func saEdgeConf(trusted ...string) string {
+	conf := "server {\n    server_name sa.example.com *.sa.example.com;\n}\n"
+	for _, a := range trusted {
+		conf += "set_real_ip_from " + a + ";\n"
+	}
+	return conf
+}
+
+func TestCheckEdgeRealIP_MissingPeerEdgesAreReported(t *testing.T) {
+	// An edge reconciled at #1750: central and loopback, no peers.
+	conf := saEdgeConf("203.0.113.7", nginxLoopbackTrustedProxy)
+	f := checkEdgeRealIP("https://nonexistent.invalid", twoEdgeSpec(t), conf)
+
+	var peers *DriftFinding
+	for i := range f {
+		if strings.Contains(f[i].Message, "#1757") {
+			peers = &f[i]
+		}
+	}
+	if peers == nil {
+		t.Fatalf("expected a #1757 finding for an edge that trusts no peer, got %+v", f)
+	}
+	if peers.Severity != severityWarning {
+		t.Errorf("expected a warning, got %q", peers.Severity)
+	}
+	// Both families: an edge dialling a peer over IPv6 presents its IPv6 source address, and a
+	// v4-only trusted set silently does nothing for those requests.
+	for _, want := range []string{"3.0.0.1", "2600:db8::1", "us.example.com"} {
+		if !strings.Contains(peers.Message, want) {
+			t.Errorf("expected the untrusted peer %q named, got %q", want, peers.Message)
+		}
+	}
+	// The consequence, not just the absence.
+	if !strings.Contains(peers.Message, "FORWARDING EDGE") {
+		t.Errorf("expected the mis-attribution spelled out, got %q", peers.Message)
+	}
+	if !strings.Contains(peers.Message, "reconcile-nginx") {
+		t.Errorf("expected the remedy named, got %q", peers.Message)
+	}
+}
+
+// The node's OWN address is not a peer. Demanding it would report a finding on every correctly
+// reconciled edge, and a check that cries wolf gets switched off.
+func TestCheckEdgeRealIP_OwnAddressIsNotDemanded(t *testing.T) {
+	conf := saEdgeConf("203.0.113.7", "3.0.0.1", "2600:db8::1", nginxLoopbackTrustedProxy)
+	for _, f := range checkEdgeRealIP("https://nonexistent.invalid", twoEdgeSpec(t), conf) {
+		if strings.Contains(f.Message, "#1757") {
+			t.Errorf("every peer is trusted, so no #1757 finding is due; got %q", f.Message)
+		}
+	}
+	// And its own address (18.0.0.1) must not be what silenced it -- it is excluded by the
+	// server_name the live config serves, so adding it changes nothing either way.
+	if strings.Contains(saEdgeConf("203.0.113.7"), "18.0.0.1") {
+		t.Fatal("fixture is wrong: the node's own address must not be in its trusted set")
+	}
+}
+
+// A spec that declares no fleet has nothing to compare against, and saying so on every run would
+// be noise. This is the shape a deployment outside Liferay's own has.
+func TestCheckEdgeRealIP_NoFleetDeclaredIsSilent(t *testing.T) {
+	conf := saEdgeConf("203.0.113.7", nginxLoopbackTrustedProxy)
+	for _, f := range checkEdgeRealIP("https://nonexistent.invalid", DNSSpec{}, conf) {
+		if strings.Contains(f.Message, "#1757") {
+			t.Errorf("no fleet declared, so no peer finding is possible; got %q", f.Message)
+		}
+	}
+}
+
+// edgeAddresses must never hand an unsubstituted placeholder to set_real_ip_from: nginx rejects
+// it at reload, so a whole edge would stop serving on the next reconcile.
+func TestDNSSpec_EdgeAddressesExcludeTheControlPlane(t *testing.T) {
+	got := twoEdgeSpec(t).edgeAddresses()
+	if _, ok := got["tunnel.example.com"]; ok {
+		t.Errorf("a record pointing at the control plane is not an edge, got %v", got)
+	}
+	if _, ok := got["@.example.com"]; ok {
+		t.Errorf("the apex must never be treated as a host, got %v", got)
+	}
+	if !slices.Equal(got["us.example.com"], []string{"3.0.0.1", "2600:db8::1"}) {
+		t.Errorf("expected both families for us.example.com, got %v", got)
+	}
+	for host, addrs := range got {
+		for _, a := range addrs {
+			if strings.HasPrefix(a, "${") {
+				t.Errorf("%s: placeholder %q must never reach a trusted set", host, a)
+			}
+		}
 	}
 }

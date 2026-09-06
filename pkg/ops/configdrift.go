@@ -8,6 +8,7 @@ import (
 	"os"
 	"reflect"
 	"regexp"
+	"slices"
 	"sort"
 	"strings"
 
@@ -268,8 +269,19 @@ func expectedConfigOwner(unitPath string) string {
 // realIPKey names the finding, so the three places that report on it cannot drift apart.
 const realIPKey = "nginx set_real_ip_from"
 
-// realIPDirective extracts the address an nginx config trusts as the forwarding proxy.
+// realIPDirective extracts the addresses an nginx config trusts as forwarding proxies. There is
+// more than one of them since #1750, so every match has to be read -- taking only the first made
+// this check depend on the order renderRealIPBlock happens to emit them in.
 var realIPDirective = regexp.MustCompile(`(?m)^\s*set_real_ip_from\s+([^;]+);`)
+
+// trustedRealIPAddrs is every address a live nginx config trusts, in the order it names them.
+func trustedRealIPAddrs(nginxConf string) []string {
+	var out []string
+	for _, m := range realIPDirective.FindAllStringSubmatch(nginxConf, -1) {
+		out = append(out, strings.TrimSpace(m[1]))
+	}
+	return out
+}
 
 // checkEdgeRealIP reports whether an edge trusts the control plane's address, so a request the
 // control plane forwards is attributed to the visitor rather than to central (#1450).
@@ -285,8 +297,8 @@ func checkEdgeRealIP(controlPlaneURL, nginxConf string) []DriftFinding {
 		return nil // central: nothing forwards to it
 	}
 
-	m := realIPDirective.FindStringSubmatch(nginxConf)
-	if m == nil {
+	trusted := trustedRealIPAddrs(nginxConf)
+	if len(trusted) == 0 {
 		return []DriftFinding{{
 			Severity: severityWarning,
 			Key:      realIPKey,
@@ -296,8 +308,29 @@ func checkEdgeRealIP(controlPlaneURL, nginxConf string) []DriftFinding {
 				"Re-run reconcile-nginx with -trusted-proxy",
 		}}
 	}
-	trusted := strings.TrimSpace(m[1])
 
+	findings := checkRealIPMatchesControlPlane(controlPlaneURL, trusted)
+
+	// Trusting the control plane is necessary but not sufficient. nginx's recursive walk stops at
+	// the first untrusted address from the right, and the chain the control plane sends ends with
+	// its own loopback peer, so an edge that trusts central alone attributes the visitor to
+	// 127.0.0.1 (#1750). An edge reconciled before that fix looks correct to the check above.
+	if !slices.Contains(trusted, nginxLoopbackTrustedProxy) {
+		findings = append(findings, DriftFinding{
+			Severity: severityWarning,
+			Key:      realIPKey,
+			Message: fmt.Sprintf(
+				"trusts %s but not %s, so nginx's recursive real_ip walk stops at the loopback entry "+
+					"the control plane appends and attributes a forwarded request to %s rather than to "+
+					"the visitor (#1750). Re-run reconcile-nginx to render the current template",
+				strings.Join(trusted, ", "), nginxLoopbackTrustedProxy, nginxLoopbackTrustedProxy),
+		})
+	}
+	return findings
+}
+
+// checkRealIPMatchesControlPlane reports whether any trusted address is still the control plane's.
+func checkRealIPMatchesControlPlane(controlPlaneURL string, trusted []string) []DriftFinding {
 	host := urlHost(controlPlaneURL)
 	if host == "" {
 		return nil
@@ -307,12 +340,12 @@ func checkEdgeRealIP(controlPlaneURL, nginxConf string) []DriftFinding {
 		return []DriftFinding{{
 			Severity: severityWarning,
 			Key:      realIPKey,
-			Message: fmt.Sprintf("trusts %q, but %q could not be resolved to compare against (%v)",
-				trusted, host, err),
+			Message: fmt.Sprintf("trusts %s, but %q could not be resolved to compare against (%v)",
+				strings.Join(trusted, ", "), host, err),
 		}}
 	}
 	for _, a := range addrs {
-		if a == trusted {
+		if slices.Contains(trusted, a) {
 			return nil
 		}
 	}
@@ -323,11 +356,11 @@ func checkEdgeRealIP(controlPlaneURL, nginxConf string) []DriftFinding {
 		Severity: severityWarning,
 		Key:      realIPKey,
 		Message: fmt.Sprintf(
-			"trusts %q, but %s currently resolves to %s. If the control plane moved, forwarded "+
+			"trusts %s, but %s currently resolves to %s. If the control plane moved, forwarded "+
 				"requests are being attributed to the wrong address (#1450) -- re-run reconcile-nginx "+
 				"with the new -trusted-proxy. Resolution from this machine is not authoritative, so "+
 				"confirm before acting",
-			trusted, host, strings.Join(addrs, ", ")),
+			strings.Join(trusted, ", "), host, strings.Join(addrs, ", ")),
 	}}
 }
 

@@ -2671,12 +2671,18 @@ function syncPortalBannerToggle() {
 // state in which a missing value means yes.
 function syncDiagnosticsConsentToggle() {
   const toggle = document.getElementById('acc-diagnostics-consent');
-  if (toggle) {
-    toggle.checked = !!(
-      currentUser.diagnostics_consent &&
-      currentUser.diagnostics_consent.enabled === true
-    );
-  }
+  if (!toggle) return;
+  // currentUser is `null` until /api/me lands (it is declared null and only assigned on a
+  // successful fetch), and showTab() can run before that: the hashchange and popstate
+  // listeners are registered at module scope, so a Back/Forward or a '#account' fragment
+  // reaches this while the login screen is still up. syncPortalBannerToggle beside this
+  // reads localStorage and never had the problem; this one reads the user, so it has to
+  // say so rather than inherit that helper's shape.
+  toggle.checked = !!(
+    currentUser &&
+    currentUser.diagnostics_consent &&
+    currentUser.diagnostics_consent.enabled === true
+  );
 }
 
 // The switch is only left in its new position once the server has accepted the change, and is
@@ -2698,7 +2704,9 @@ async function setDiagnosticsConsent(input) {
     if (!res.ok) {
       throw new Error('save failed');
     }
-    currentUser.diagnostics_consent = { enabled: enabled };
+    if (currentUser) {
+      currentUser.diagnostics_consent = { enabled: enabled };
+    }
   } catch (e) {
     input.checked = !enabled;
     if (err) {

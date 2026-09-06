@@ -187,6 +187,63 @@ that wrote the prose rule in the same session — see the retrospective cleanup
 in issues #894-#897. File the issue *before* running `gh pr create`; a CI
 failure after the fact just means going back to create one anyway.
 
+## 5b. Fix the class, not the instance
+
+The most common way a fix here is wrong is not that it is incorrect — it is that it is
+*incomplete*. The reported symptom gets fixed; every other member of the same class survives.
+This has happened repeatedly and it is worth treating as a default failure mode rather than an
+occasional slip:
+
+| Fixed | What survived |
+|---|---|
+| `alert-warning` had no CSS rule (#1744) | the gate only scanned V2, so **25** undefined V1 classes were invisible |
+| Two `--text` references swapped for a defined token (#1766) | **16 more**, in inline styles the gate cannot read (#1774) |
+| Eight `tokenPath` paths YAML-quoted (#1775) | two more under different variable names — Windows broke again, identically |
+| Central→edge visitor attribution (#1750) | edge→edge (#1757), then edge→central (#1767) |
+| Two dead config keys removed (#1709) | a third turned out to be a *regression*, not dead weight (#1751) |
+
+### The rules that actually prevent it
+
+1. **Name the class before fixing the instance.** Write the sentence "this defect is an instance
+   of X" in the PR. If X cannot be named, the fix is not understood yet.
+
+2. **Search for the shape, not the symbol.** The #1775 miss is the canonical example: the search
+   was for the identifier `tokenPath`, so two call sites using `configured` and `missing`
+   survived. A regex over the *form* — a variable concatenated inside a double-quoted YAML
+   scalar — would have found all ten. Grep for what the defect looks like, never for the name
+   the first instance happened to use.
+
+3. **If a gate exists, widen the gate first and let it enumerate.** Do not hand-list the
+   instances. #1744 turned "one unstyled class" into "25 found, 5 fixed, 15 ratcheted" purely by
+   pointing the existing checker at V1 before fixing anything. The enumeration is the deliverable;
+   the fixes follow from it.
+
+4. **Assert the property, not the instances.** The durable artefact is a test that fails on *any*
+   member of the class, not N assertions about the N you found. `TestNoDoubleQuotedPathsInThisFile`
+   and `test-make-help-covers-targets.sh` are the shape to copy.
+
+5. **A deferral must be a ratchet, not an exclusion.** If some members genuinely cannot be fixed
+   now, list them somewhere a *stale entry fails the build* — `V1_KNOWN_INERT` works because
+   fixing an entry without removing it turns the check red, so the list can only shrink. An
+   exclusion list that silently tolerates its own staleness is a suppression wearing a ratchet's
+   clothes.
+
+6. **State a gate's blind spot as a test, not a comment.** Every checker in `scripts/` documents
+   what it does not look at, in prose. Prose does not fail. Three separate blind spots reached
+   production behaviour this way — CSS classes (V2 only), theme tokens (stylesheets only), and
+   `platform_sensitive` (no `pkg/config`, which cost two red masters). If a gate's scope is
+   deliberately narrow, assert the narrowness so widening it is a decision rather than an
+   accident.
+
+### The one-line check before opening a PR
+
+> *How do I know there is not a second one?*
+
+If the answer is "I looked", that is not an answer. The answer is a command someone else can
+re-run, and it belongs in the PR body.
+
+---
+
 ## 6. Pre-Commit / Pre-PR Checks
 *Active Constraint*: Before pushing commits and opening a PR, you MUST actively execute the following verification steps:
 1. **Branch Sync**: You MUST execute `git fetch origin && git merge origin/master` to ensure your feature branch is strictly up-to-date with `master`.
@@ -326,4 +383,4 @@ After any merge you expect to close an issue (whether via a `Closes #N` referenc
 
 <!-- markdownlint-disable MD049 -->
 ---
-*Last Updated: 2026-09-01* | *Last Reviewed: 2026-09-01*
+*Last Updated: 2026-09-06* | *Last Reviewed: 2026-09-06*

@@ -479,24 +479,28 @@ func TestLoadClientConfigDistinguishesUnsetPortsFromExplicitPorts(t *testing.T) 
 	}
 }
 
-// TestLoadClientConfig_IgnoresKeysRemovedIn1709 is the compatibility guarantee for #1709.
+// TestLoadClientConfig_IgnoresRemovedKeys is the compatibility guarantee for the client keys
+// this repo has retired: token_file and bypass_proxy (#1709), and nav_placement (#1751).
 //
 // token_file and bypass_proxy were parsed by ClientConfig for months and were never read by
-// anything, so they were removed. People who copied them out of the example file still have them
-// in ~/.lfr-tunnel/config.yaml, and their client must keep starting. LoadClientConfig decodes
-// with a plain yaml.Decoder and deliberately does NOT call dec.KnownFields(true), so an
-// unrecognised key is skipped rather than rejected.
+// anything. nav_placement was different -- it worked end to end from #606 until #783's dashboard
+// rewrite deleted the JavaScript that applied it, leaving the Go half write-only -- but it is
+// removed the same way and so needs the same guarantee. People who copied any of the three out
+// of the example file still have them in ~/.lfr-tunnel/config.yaml, and their client must keep
+// starting. LoadClientConfig decodes with a plain yaml.Decoder and deliberately does NOT call
+// dec.KnownFields(true), so an unrecognised key is skipped rather than rejected.
 //
 // The assertion that matters is the absence of an error. The rest of the config still being
 // applied is what proves the decode did not stop at the unknown key.
 //
 // Mutation-checked: adding dec.KnownFields(true) to LoadClientConfig makes this fail with
-// `field token_file not found in type config.ClientConfig`.
-func TestLoadClientConfig_IgnoresKeysRemovedIn1709(t *testing.T) {
-	removed := []string{"token_file", "bypass_proxy"}
+// `field token_file not found in type config.ClientConfig` (and, with token_file dropped from
+// the fixture, `field nav_placement not found`).
+func TestLoadClientConfig_IgnoresRemovedKeys(t *testing.T) {
+	removed := []string{"token_file", "bypass_proxy", "nav_placement"}
 
-	// Guard against this test quietly becoming vacuous: if either key is ever re-added to
-	// ClientConfig it would be a known field again, and the test would pass without testing
+	// Guard against this test quietly becoming vacuous: if any of these keys is ever re-added
+	// to ClientConfig it would be a known field again, and the test would pass without testing
 	// anything.
 	typ := reflect.TypeOf(ClientConfig{})
 	for i := 0; i < typ.NumField(); i++ {
@@ -507,7 +511,7 @@ func TestLoadClientConfig_IgnoresKeysRemovedIn1709(t *testing.T) {
 		name := strings.Split(tag, ",")[0]
 		for _, r := range removed {
 			if name == r {
-				t.Fatalf("ClientConfig has re-acquired the %q field that #1709 removed -- this "+
+				t.Fatalf("ClientConfig has re-acquired the retired %q field -- this "+
 					"test no longer proves anything about unknown keys", r)
 			}
 		}
@@ -523,13 +527,14 @@ func TestLoadClientConfig_IgnoresKeysRemovedIn1709(t *testing.T) {
 
 	dir := t.TempDir()
 	path := filepath.Join(dir, "config.yaml")
-	// A config file as it stood before #1709: the two removed keys, set to non-zero values,
-	// surrounded by settings that still exist.
+	// A config file as it stood before these removals: every retired key, set to a non-zero
+	// value, surrounded by settings that still exist.
 	content := `
 server_url: "https://legacy.example.com"
 subdomain: "legacy-sub"
 token_file: "/home/someone/.lfr-tunnel/token"
 bypass_proxy: true
+nav_placement: "sidebar"
 rate_limit: 42
 `
 	if err := os.WriteFile(path, []byte(content), 0600); err != nil {
@@ -538,7 +543,7 @@ rate_limit: 42
 
 	cfg, err := LoadClientConfig(path)
 	if err != nil {
-		t.Fatalf("a config file carrying the keys removed in #1709 must still load, got: %v", err)
+		t.Fatalf("a config file carrying the retired keys must still load, got: %v", err)
 	}
 
 	if cfg.ServerURL != "https://legacy.example.com" {
@@ -547,7 +552,7 @@ rate_limit: 42
 	if cfg.Subdomain != "legacy-sub" {
 		t.Errorf("expected Subdomain legacy-sub, got %q", cfg.Subdomain)
 	}
-	// Declared after both removed keys in the file, so this is what proves decoding continued
+	// Declared after every removed key in the file, so this is what proves decoding continued
 	// past them rather than stopping at the first one.
 	if cfg.RateLimit != 42 {
 		t.Errorf("expected RateLimit 42 -- a key declared after the removed ones -- got %d", cfg.RateLimit)

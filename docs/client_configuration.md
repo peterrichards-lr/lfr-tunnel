@@ -239,18 +239,17 @@ through. Set only the one you mean.
 
 ## Keys that are not settings
 
-One key parses and does nothing, one is not a key at all, and two more were removed. They are
-listed here so that finding them in the struct, the example file or someone else's config does
-not read as a feature you are missing.
+One is not a key at all; three were removed. They are listed here so that finding them in the
+struct, the example file or someone else's config does not read as a feature you are missing.
 
 | Key | Status |
 | --- | --- |
-| `nav_placement` | **No effect today, but a regression rather than a decoy** (#1751). It selected the Inspector's own navigation layout — `"sidebar"`, or empty for top tabs — from #606 until the dashboard rewrite in #783 removed the JavaScript that applied it, six days later. The client still accepts the key and the Inspector still saves it; nothing acts on it. Whether it comes back or is retired properly is #1751. |
 | `regions_unavailable` | Not a config key. The gateway reports the regions that are currently down, and the client uses that to cache a provisional election rather than a 24-hour one. It cannot be set from the file. |
 | `token_file` | **Removed** (#1709). Never had a read site in its whole life — it was added alongside `rate_limit` in June 2026 and nothing ever consulted it. The token file path comes from `LFT_TOKEN_FILE`, falling back to `~/.lfr-tunnel/token`; see [Precedence](#precedence). |
 | `bypass_proxy` | **Removed** (#1709). Never implemented — added with `theme` in July 2026 and read by nothing, in Go or in the UI. |
+| `nav_placement` | **Removed** (#1751). Unlike the two above it did work: it selected the Inspector's own navigation layout — `"sidebar"`, or empty for top tabs — from #606 on 17 July 2026 until the dashboard rewrite in #783 deleted the JavaScript that applied it six days later, without saying so. The Go half stayed and kept accepting the key for six weeks, so the Inspector offered to save a setting it could not act on. The July 2026 layout switcher is not coming back; a future Inspector layout option should be designed afresh rather than by reviving this key. |
 
-Leaving `token_file` and `bypass_proxy` in a config file is harmless. The loader does not reject
+Leaving any of the three removed keys in a config file is harmless. The loader does not reject
 unknown keys, so an existing `~/.lfr-tunnel/config.yaml` that still sets them loads exactly as it
 did before — they are ignored now, which is what they were doing anyway. The one visible change
 is that the Inspector no longer writes them back when it saves the file.
@@ -360,4 +359,4 @@ chmod 600 ~/.lfr-tunnel/config.yaml
 
 <!-- markdownlint-disable MD049 -->
 ---
-*Last Updated: 2026-09-05* | *Last Reviewed: 2026-09-05*
+*Last Updated: 2026-09-06* | *Last Reviewed: 2026-09-06*

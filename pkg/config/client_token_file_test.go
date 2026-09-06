@@ -53,7 +53,7 @@ func TestClientTokenFile_IsRead(t *testing.T) {
 	isolateTokenEnvironment(t)
 
 	tokenPath := writeTokenFile(t, "lft_pat_from_file\n")
-	cfgPath := writeClientConfigFile(t, "server_url: \"https://x.example.com\"\ntoken_file: \""+tokenPath+"\"\n")
+	cfgPath := writeClientConfigFile(t, "server_url: \"https://x.example.com\"\ntoken_file: "+yamlPath(tokenPath)+"\n")
 
 	cfg, err := LoadClientConfig(cfgPath)
 	if err != nil {
@@ -92,7 +92,7 @@ func TestClientTokenFile_StripsSurroundingWhitespace(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			isolateTokenEnvironment(t)
 			tokenPath := writeTokenFile(t, tc.contents)
-			cfgPath := writeClientConfigFile(t, "token_file: \""+tokenPath+"\"\n")
+			cfgPath := writeClientConfigFile(t, "token_file: "+yamlPath(tokenPath)+"\n")
 
 			cfg, err := LoadClientConfig(cfgPath)
 			if err != nil {
@@ -116,7 +116,7 @@ func TestClientTokenFile_OutranksInlineAuthToken(t *testing.T) {
 
 	tokenPath := writeTokenFile(t, "lft_pat_from_file\n")
 	cfgPath := writeClientConfigFile(t,
-		"auth_token: \"lft_pat_stale_inline\"\ntoken_file: \""+tokenPath+"\"\n")
+		"auth_token: \"lft_pat_stale_inline\"\ntoken_file: "+yamlPath(tokenPath)+"\n")
 
 	cfg, err := LoadClientConfig(cfgPath)
 	if err != nil {
@@ -140,7 +140,7 @@ func TestClientTokenFile_LosesToTheEnvironment(t *testing.T) {
 			t.Setenv(envVar, "lft_pat_from_env")
 
 			tokenPath := writeTokenFile(t, "lft_pat_from_file\n")
-			cfgPath := writeClientConfigFile(t, "token_file: \""+tokenPath+"\"\n")
+			cfgPath := writeClientConfigFile(t, "token_file: "+yamlPath(tokenPath)+"\n")
 
 			cfg, err := LoadClientConfig(cfgPath)
 			if err != nil {
@@ -213,7 +213,7 @@ func TestClientTokenFile_EmptyFileIsAnActionableError(t *testing.T) {
 	// Whitespace only: the file exists and is readable, so nothing but an explicit check
 	// distinguishes it from a token.
 	tokenPath := writeTokenFile(t, "\n\n  \n")
-	cfgPath := writeClientConfigFile(t, "token_file: \""+tokenPath+"\"\n")
+	cfgPath := writeClientConfigFile(t, "token_file: "+yamlPath(tokenPath)+"\n")
 
 	_, err := LoadClientConfig(cfgPath)
 	if err == nil {
@@ -239,7 +239,7 @@ func TestClientTokenFile_UnreadableFileIsAnActionableError(t *testing.T) {
 		t.Skip("running as a user that ignores permission bits (root), so 0000 is still readable")
 	}
 
-	cfgPath := writeClientConfigFile(t, "token_file: \""+tokenPath+"\"\n")
+	cfgPath := writeClientConfigFile(t, "token_file: "+yamlPath(tokenPath)+"\n")
 
 	_, err := LoadClientConfig(cfgPath)
 	if err == nil {
@@ -264,7 +264,7 @@ func TestClientTokenFile_AcceptsTheEnvFileForm(t *testing.T) {
 	isolateTokenEnvironment(t)
 
 	tokenPath := writeTokenFile(t, "# written by lfr-tunnel login\nexport LFT_CLIENT_TOKEN=\"lft_pat_env_form\"\n")
-	cfgPath := writeClientConfigFile(t, "token_file: \""+tokenPath+"\"\n")
+	cfgPath := writeClientConfigFile(t, "token_file: "+yamlPath(tokenPath)+"\n")
 
 	cfg, err := LoadClientConfig(cfgPath)
 	if err != nil {
@@ -315,7 +315,7 @@ func TestClientTokenFile_WorldReadableWarnsButLoads(t *testing.T) {
 	if err := os.Chmod(tokenPath, 0644); err != nil {
 		t.Fatalf("failed to chmod: %v", err)
 	}
-	cfgPath := writeClientConfigFile(t, "token_file: \""+tokenPath+"\"\n")
+	cfgPath := writeClientConfigFile(t, "token_file: "+yamlPath(tokenPath)+"\n")
 
 	oldStderr := os.Stderr
 	r, w, _ := os.Pipe()
@@ -425,5 +425,50 @@ func TestSaveClientConfigStillWritesAnInlineToken(t *testing.T) {
 	}
 	if !strings.Contains(string(written), "lft_pat_inline") {
 		t.Error("an inline auth_token must survive a save when no token_file is configured")
+	}
+}
+
+// yamlPath renders a filesystem path as a YAML scalar that survives Windows.
+//
+// These tests embed a temp-directory path into a config file, and on Windows that path contains
+// backslashes: `C:\Users\RUNNER~1\AppData\...`. Inside a DOUBLE-quoted YAML scalar `\U` is an
+// escape introducing an 8-digit hex code point, so the parser rejected the file outright --
+// `yaml: line 2: did not find expected hexdecimal number` -- and eight tests failed on Windows
+// only, for a reason that had nothing to do with token_file.
+//
+// Single-quoted YAML performs no escape processing at all, so the path goes in verbatim. The
+// only character with meaning there is `'`, escaped by doubling it; a path may legally contain
+// one, so that is handled rather than assumed away.
+func yamlPath(p string) string {
+	return "'" + strings.ReplaceAll(p, "'", "''") + "'"
+}
+
+// A path with backslashes must survive being written into a config file and read back (#1758).
+//
+// Runs on every platform, not just Windows, because the defect is in how the test suite writes
+// YAML rather than in anything OS-specific -- and because the CI filter that decides whether
+// Windows runs at all does not currently match pkg/config (#1773), so relying on the Windows
+// leg to catch a regression here would be relying on the thing that already missed it.
+func TestClientTokenFile_PathWithBackslashesIsReadable(t *testing.T) {
+	isolateTokenEnvironment(t)
+	tokenPath := writeTokenFile(t, "lft_pat_backslash_path\n")
+
+	// A literal Windows-shaped path exercises the escape hazard even on Unix, where the real
+	// temp path contains no backslashes and so would not.
+	const windowsish = `C:\Users\RUNNER~1\AppData\Local\Temp\token`
+	if got := yamlPath(windowsish); strings.Contains(got, `\\`) || !strings.HasPrefix(got, "'") {
+		t.Errorf("yamlPath must single-quote without escaping backslashes, got %s", got)
+	}
+	if got := yamlPath(`/tmp/it's/token`); got != `'/tmp/it''s/token'` {
+		t.Errorf("a quote in the path must be doubled, got %s", got)
+	}
+
+	cfgPath := writeClientConfigFile(t, "token_file: "+yamlPath(tokenPath)+"\n")
+	cfg, err := LoadClientConfig(cfgPath)
+	if err != nil {
+		t.Fatalf("a config whose token_file path is YAML-quoted must load, got: %v", err)
+	}
+	if cfg.AuthToken != "lft_pat_backslash_path" {
+		t.Errorf("AuthToken = %q, want the token read from the file", cfg.AuthToken)
 	}
 }

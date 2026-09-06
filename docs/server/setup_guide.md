@@ -991,8 +991,8 @@ who registered before it. Without a version bump no existing user is ever shown 
 change. Their diagnostics setting stays off either way -- this is about them being told,
 not about their consent state.
 
-Note that log collection itself is not implemented yet: a request for a consenting user's
-logs is audited and answered with `501`. The consent mechanism is deliberately in place
+Note that log collection itself is not implemented yet (#1763): a request for a consenting
+user's logs is audited and answered with `501`. The consent mechanism is deliberately in place
 first, so the transport cannot ship without something to gate it.
 
 ### 8.3. Customizing Client Binary Downloads & Commands (Self-Hosting & EDR Bypass)

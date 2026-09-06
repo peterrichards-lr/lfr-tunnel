@@ -181,7 +181,7 @@ type diagnosticsCollectRequest struct {
 // lands -- an endpoint that hands over somebody else's data should state its own
 // requirement rather than inherit one.
 //
-// The transport itself is NOT built yet -- see the issue filed alongside #1696. A
+// The transport itself is NOT built yet -- that is #1763. A
 // consenting user's request is audited and then answered with 501, which is the honest
 // answer: permission was granted, the mechanism to act on it does not exist. The refusal
 // path below is complete and live today, and it is the half that protects anybody.

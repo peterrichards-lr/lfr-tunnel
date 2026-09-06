@@ -89,13 +89,40 @@ func (s *TempSettingsServer) handleLogs(w http.ResponseWriter, r *http.Request) 
 	}
 }
 
+// loadUIConfig loads the client config for the settings server's handlers. It never
+// returns a nil config, and it never discards the error.
+//
+// LoadClientConfig is nil-on-error for two of its three error paths -- an unopenable file
+// and unparseable YAML -- and returns the defaults alongside the error only for the
+// token_file branch added in #1758. Normalising that here means pkg/config does not have
+// to keep remembering which of its callers cannot cope with a nil (#1771).
+//
+// Falling back to the defaults rather than failing is deliberate. This server only runs
+// while the tunnel is offline, and its /settings page is the only in-app way to repair a
+// broken config; refusing to serve it would take the repair tool away at exactly the
+// moment it is needed. A config that is already broken at launch never reaches here at
+// all -- cmd/lfr-tunnel exits on it before StartGUI -- so the case this handles is a file
+// edited while the tray is running, which is the user mid-repair. The error is logged and
+// returned so each handler can say why the values on screen are not the ones in the file.
+func loadUIConfig() (*config.ClientConfig, error) {
+	cfg, err := config.LoadClientConfig("")
+	if err != nil {
+		slog.Error("Failed to load client config; falling back to defaults",
+			"path", config.ResolveDefaultConfigPath(), "error", err)
+	}
+	if cfg == nil {
+		cfg = config.DefaultClientConfig()
+	}
+	return cfg, err
+}
+
 func (s *TempSettingsServer) handleInfo(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/json")
-	cfg, _ := config.LoadClientConfig("")
+	cfg, cfgErr := loadUIConfig()
 	const unknownStr = "unknown"
 	sub := unknownStr
 	url := unknownStr
-	if cfg != nil {
+	if cfgErr == nil {
 		sub = cfg.Subdomain
 		url = cfg.ServerURL
 	}
@@ -127,16 +154,28 @@ func (s *TempSettingsServer) handleInfo(w http.ResponseWriter, r *http.Request) 
 		"client_subdomain": sub,
 		"log_file":         logFile,
 	}
+	if cfgErr != nil {
+		// Reported rather than swallowed (#1771). Without it, a config file that does not
+		// parse is indistinguishable from having no config file at all: every field just
+		// reads "unknown", and nothing tells the user their typo is the reason.
+		info["config_error"] = cfgErr.Error()
+	}
 	_ = json.NewEncoder(w).Encode(info) //nolint:errcheck
 }
 
 func (s *TempSettingsServer) handleApiLogs(w http.ResponseWriter, r *http.Request) {
-	cfg, _ := config.LoadClientConfig("")
-	sub := ""
-	if cfg != nil {
-		sub = cfg.Subdomain
-	}
+	cfg, cfgErr := loadUIConfig()
+	sub := cfg.Subdomain
 	if sub == "" {
+		// "You have not set a subdomain yet" and "your config file could not be read" are
+		// different problems, and this used to report both as the first (#1771). The
+		// dashboard renders a 404 here as "No log file yet -- the client has not
+		// connected" (pkg/client/dashboard.html), which is an actively wrong explanation
+		// for a YAML syntax error.
+		if cfgErr != nil {
+			http.Error(w, fmt.Sprintf("Failed to load client config: %v", cfgErr), http.StatusInternalServerError)
+			return
+		}
 		http.Error(w, "Subdomain not configured", http.StatusNotFound)
 		return
 	}
@@ -178,10 +217,7 @@ func (s *TempSettingsServer) handleConfig(w http.ResponseWriter, r *http.Request
 }
 
 func (s *TempSettingsServer) handleConfigGet(w http.ResponseWriter) {
-	cfg, err := config.LoadClientConfig("")
-	if err != nil {
-		cfg = config.DefaultClientConfig()
-	}
+	cfg, cfgErr := loadUIConfig()
 	maskToken := func(t string) string {
 		if t == "" {
 			return ""
@@ -202,6 +238,9 @@ func (s *TempSettingsServer) handleConfigGet(w http.ResponseWriter) {
 		"insecure_skip_verify": cfg.InsecureSkipVerify,
 		"passcode":             cfg.Passcode,
 		"rate_limit":           cfg.RateLimit,
+	}
+	if cfgErr != nil {
+		resp["config_error"] = cfgErr.Error()
 	}
 	_ = json.NewEncoder(w).Encode(resp) //nolint:errcheck
 }
@@ -226,9 +265,14 @@ func (s *TempSettingsServer) handleConfigPost(w http.ResponseWriter, r *http.Req
 		return
 	}
 
-	cfg, err := config.LoadClientConfig("")
-	if err != nil {
-		cfg = config.DefaultClientConfig()
+	cfg, cfgErr := loadUIConfig()
+	if cfgErr != nil {
+		// The save below replaces the file rather than updating it, so any key the
+		// settings form does not carry is dropped. Still better than refusing to save --
+		// this form is the user's way out of a config that will not parse -- but it
+		// should not happen silently.
+		slog.Warn("Saving settings over a client config that could not be read",
+			"error", cfgErr)
 	}
 
 	cfg.ServerURL = req.ServerURL
@@ -243,8 +287,7 @@ func (s *TempSettingsServer) handleConfigPost(w http.ResponseWriter, r *http.Req
 	cfg.Passcode = req.Passcode
 	cfg.RateLimit = req.RateLimit
 
-	err = config.SaveClientConfig("", cfg)
-	if err != nil {
+	if err := config.SaveClientConfig("", cfg); err != nil {
 		w.WriteHeader(http.StatusInternalServerError)
 		_ = json.NewEncoder(w).Encode(map[string]string{"error": err.Error()}) //nolint:errcheck
 		return

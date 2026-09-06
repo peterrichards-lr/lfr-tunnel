@@ -152,15 +152,45 @@ jobs:
           # does on ubuntu? Files that are per-OS by construction (_windows.go and friends),
           # plus the areas that have actually produced per-OS failures in this repo -- the
           # Makefile's GOTMPDIR handling for the local EDR whitelist, bash 3.2 vs 4 under
-          # scripts/, dns_hook flaking only on Windows (#1362), and the client and GUI, which
-          # are the code that actually ships to all three. Workflow changes count as well:
-          # they change how the suite runs everywhere, so they are proved everywhere. So do
+          # scripts/, dns_hook flaking only on Windows (#1362) -- plus every package that the
+          # cross-platform client binary is built from. Workflow changes count as well: they
+          # change how the suite runs everywhere, so they are proved everywhere. So do
           # dependency bumps: go.mod/go.sum swap third-party code that may itself be per-OS,
           # and they are rare enough that proving them on all three costs almost nothing.
           #
+          # "The code that ships to all three" used to be spelled `pkg/client` and `pkg/gui`,
+          # chosen by eye. That is two of the seven packages `go list -deps ./cmd/lfr-tunnel`
+          # actually reports, and the five it missed are not decorative: pkg/config does ~
+          # expansion, runtime.GOOS branching and CRLF handling, and #1769 added all three
+          # while Test Suite (windows-latest) reported success in five seconds having run no
+          # test, because pkg/config was not on this list. The break landed on master and took
+          # #1775 plus a follow-up to clear (#1773).
+          #
+          # So the list is now the client's dependency closure, named explicitly:
+          # cmd/lfr-tunnel, pkg/client, pkg/config, pkg/gui, pkg/mcp, pkg/osutil, pkg/proxyutil.
+          # tests/hooks/test-ci-platform-matrix.sh re-derives that closure with `go list` and
+          # fails if a package joins it without joining this pattern -- the enumeration is
+          # checked, rather than trusted to stay accurate by eye a second time.
+          #
+          # `^cmd/lfr-tunnel/` is slash-terminated on purpose: it must not swallow
+          # cmd/lfr-tunneld (the Linux gateway) or cmd/lfr-tunnel-ops (a local dev tool).
+          #
+          # `_unix` joins the suffix group. It is not a GOOS suffix Go recognises, so it earns
+          # no build constraint by name -- pkg/osutil/exec_unix.go and
+          # cmd/lfr-tunneld/reload_unix.go carry `//go:build !windows` instead. The effect is
+          # the same as a GOOS suffix: the file compiles on two of the three legs and not the
+          # third, which is exactly what this filter exists to notice.
+          #
+          # NOT included, deliberately: pkg/server and its dependencies. It has per-OS lines of
+          # its own (runtime.GOOS guards in api.go), but it is the gateway -- it deploys to
+          # Linux only -- and it is the busiest tree in the repo, 609 file-touches in the last
+          # 200 commits against pkg/config's 225. Listing it would put the full matrix on most
+          # PRs and give back the speed-up #1343 bought. Same for pkg/ops, which builds and
+          # signs from a developer's own machine and is never shipped.
+          #
           # Anything that is not a pull_request -- a master push or a tag -- always gets the
           # full matrix, so a platform regression cannot reach a release unproven.
-          if [ "${{ github.event_name }}" != "pull_request" ] || echo "$CHANGED" | grep -qE '^Makefile$|^go\.(mod|sum)$|^\.github/workflows/|^scripts/|^pkg/client/|^pkg/gui/|_(windows|darwin|linux)(_test)?\.go$|dns_hook'; then
+          if [ "${{ github.event_name }}" != "pull_request" ] || echo "$CHANGED" | grep -qE '^Makefile$|^go\.(mod|sum)$|^\.github/workflows/|^scripts/|^cmd/lfr-tunnel/|^pkg/client/|^pkg/config/|^pkg/gui/|^pkg/mcp/|^pkg/osutil/|^pkg/proxyutil/|_(windows|darwin|linux|unix)(_test)?\.go$|dns_hook'; then
             PLATFORM_SENSITIVE=true
           else
             PLATFORM_SENSITIVE=false

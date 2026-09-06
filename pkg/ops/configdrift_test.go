@@ -3,6 +3,7 @@ package ops
 import (
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 	"testing"
 )
@@ -309,7 +310,7 @@ func TestCheckEdgeRealIP_MissingDirectiveIsReported(t *testing.T) {
 // A host that cannot be resolved must be reported rather than silently treated as agreeing --
 // that would turn the check into a rubber stamp on exactly the machines where DNS is broken.
 func TestCheckEdgeRealIP_UnresolvableHostIsReported(t *testing.T) {
-	conf := "set_real_ip_from 203.0.113.7;\nreal_ip_header X-Forwarded-For;\n"
+	conf := "set_real_ip_from 203.0.113.7;\nset_real_ip_from 127.0.0.1;\nreal_ip_header X-Forwarded-For;\n"
 	f := checkEdgeRealIP("https://nonexistent.invalid", conf)
 	if len(f) != 1 || f[0].Severity != severityWarning {
 		t.Fatalf("expected one warning, got %+v", f)
@@ -325,5 +326,65 @@ func TestCheckEdgeRealIP_CommentedDirectiveDoesNotCount(t *testing.T) {
 	f := checkEdgeRealIP("https://tunnel.example.com", conf)
 	if len(f) != 1 || !strings.Contains(f[0].Message, "does not trust") {
 		t.Errorf("a commented directive must count as absent, got %+v", f)
+	}
+}
+
+// An edge reconciled before #1750 trusts the control plane and nothing else, which the
+// control-plane comparison above reads as entirely correct. nginx's recursive walk still stops at
+// the loopback entry central appends, so the visitor is attributed to 127.0.0.1 -- and nginx
+// config is not re-rendered by a restart, so nothing else would ever surface it.
+func TestCheckEdgeRealIP_MissingLoopbackIsReported(t *testing.T) {
+	conf := "set_real_ip_from 203.0.113.7;\nreal_ip_header X-Forwarded-For;\nreal_ip_recursive on;\n"
+	f := checkEdgeRealIP("https://nonexistent.invalid", conf)
+
+	var loopback *DriftFinding
+	for i := range f {
+		if strings.Contains(f[i].Message, "#1750") {
+			loopback = &f[i]
+		}
+	}
+	if loopback == nil {
+		t.Fatalf("expected a #1750 finding for a config that trusts central alone, got %+v", f)
+	}
+	if loopback.Severity != severityWarning {
+		t.Errorf("expected a warning, got %q", loopback.Severity)
+	}
+	// The consequence, not just the absence -- an operator has to know what is being mis-attributed.
+	if !strings.Contains(loopback.Message, "127.0.0.1") {
+		t.Errorf("expected the address it wrongly attributes to, got %q", loopback.Message)
+	}
+	if !strings.Contains(loopback.Message, "reconcile-nginx") {
+		t.Errorf("expected the remedy named, got %q", loopback.Message)
+	}
+}
+
+// A config carrying both addresses must produce no #1750 finding, in either emission order --
+// reading only the first match is exactly how the old single-match regexp would have broken.
+func TestCheckEdgeRealIP_LoopbackPresentInEitherOrder(t *testing.T) {
+	for _, conf := range []string{
+		"set_real_ip_from 203.0.113.7;\nset_real_ip_from 127.0.0.1;\n",
+		"set_real_ip_from 127.0.0.1;\nset_real_ip_from 203.0.113.7;\n",
+	} {
+		for _, f := range checkEdgeRealIP("https://nonexistent.invalid", conf) {
+			if strings.Contains(f.Message, "#1750") {
+				t.Errorf("both addresses are trusted, so no #1750 finding is due; got %q for:\n%s",
+					f.Message, conf)
+			}
+		}
+	}
+}
+
+// trustedRealIPAddrs must return EVERY address, in order. The old FindStringSubmatch read the
+// first directive only, so once the template emitted two, whether the control-plane comparison
+// saw central at all depended on which line renderRealIPBlock happened to write first.
+func TestTrustedRealIPAddrs_ReadsEveryDirective(t *testing.T) {
+	conf := "# set_real_ip_from 10.0.0.1;\nset_real_ip_from 127.0.0.1;\nset_real_ip_from 203.0.113.7;\n"
+	got := trustedRealIPAddrs(conf)
+	want := []string{"127.0.0.1", "203.0.113.7"}
+	if !slices.Equal(got, want) {
+		t.Errorf("expected %v (the commented line does not count), got %v", want, got)
+	}
+	if len(trustedRealIPAddrs("server { listen 443; }")) != 0 {
+		t.Error("a config with no directive must trust nothing")
 	}
 }

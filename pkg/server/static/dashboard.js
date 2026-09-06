@@ -1366,6 +1366,8 @@ async function showDashboard() {
     currentUser.notification_prefs === 'enabled' ||
     !currentUser.notification_prefs;
 
+  syncDiagnosticsConsentToggle();
+
   syncPortalBannerToggle();
 
   // Apply theme from preference if not system
@@ -2659,6 +2661,64 @@ function syncPortalBannerToggle() {
   }
 }
 
+// Diagnostic log sharing (#1696). Like the banner toggle above it applies the moment it is
+// flipped rather than with the account form -- withdrawing consent should not require finding
+// and pressing Save -- but unlike it, this is an account setting the gateway enforces, not a
+// per-browser display preference, so it goes to the server.
+//
+// Off unless the server says otherwise. `currentUser.diagnostics_consent` is absent on any
+// response that predates this feature, and absent has to read as "not consented"; there is no
+// state in which a missing value means yes.
+function syncDiagnosticsConsentToggle() {
+  const toggle = document.getElementById('acc-diagnostics-consent');
+  if (!toggle) return;
+  // currentUser is `null` until /api/me lands (it is declared null and only assigned on a
+  // successful fetch), and showTab() can run before that: the hashchange and popstate
+  // listeners are registered at module scope, so a Back/Forward or a '#account' fragment
+  // reaches this while the login screen is still up. syncPortalBannerToggle beside this
+  // reads localStorage and never had the problem; this one reads the user, so it has to
+  // say so rather than inherit that helper's shape.
+  toggle.checked = !!(
+    currentUser &&
+    currentUser.diagnostics_consent &&
+    currentUser.diagnostics_consent.enabled === true
+  );
+}
+
+// The switch is only left in its new position once the server has accepted the change, and is
+// put back if it has not. Showing it flipped after a failed write would tell someone they had
+// withdrawn consent when they had not, which is the one direction this must never get wrong.
+async function setDiagnosticsConsent(input) {
+  const enabled = input.checked;
+  const err = document.getElementById('acc-diagnostics-consent-error');
+  if (err) {
+    err.style.display = 'none';
+    err.innerText = '';
+  }
+  try {
+    const res = await fetch('/api/me/diagnostics-consent', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ enabled: enabled }),
+    });
+    if (!res.ok) {
+      throw new Error('save failed');
+    }
+    if (currentUser) {
+      currentUser.diagnostics_consent = { enabled: enabled };
+    }
+  } catch (e) {
+    input.checked = !enabled;
+    if (err) {
+      err.innerText = t(
+        'diagnostics_consent_error',
+        'Could not save your diagnostics preference. Please try again.',
+      );
+      err.style.display = 'block';
+    }
+  }
+}
+
 function showTab(tabName, skipHistory = false) {
   if (window.closeAllActionMenus) {
     window.closeAllActionMenus();
@@ -2731,7 +2791,10 @@ function showTab(tabName, skipHistory = false) {
     history.pushState({ tab: tabName }, '', canonical);
   }
 
-  if (tabName === 'account') syncPortalBannerToggle();
+  if (tabName === 'account') {
+    syncPortalBannerToggle();
+    syncDiagnosticsConsentToggle();
+  }
   if (tabName === 'users') loadUsers();
   if (tabName === 'admin-subdomains') loadAdminSubdomains();
   if (tabName === 'registrations') loadRegistrations();

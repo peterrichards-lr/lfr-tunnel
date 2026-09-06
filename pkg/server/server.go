@@ -863,6 +863,15 @@ func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 
+		// Diagnostics consent (#1696). Beside the policy consent routes because it is the
+		// same shape -- a consent event, POSTed on its own rather than carried on a
+		// profile update -- but a separate decision: policy acceptance is a condition of
+		// using the service and this is optional.
+		if r.Method == http.MethodPost && r.URL.Path == "/api/me/diagnostics-consent" {
+			s.handleDiagnosticsConsent(w, r)
+			return
+		}
+
 		if r.Method == http.MethodPost && r.URL.Path == "/api/register" {
 			s.handleRegister(w, r)
 			return
@@ -2596,6 +2605,14 @@ func (s *Server) handleCompleteSetup(w http.ResponseWriter, r *http.Request) {
 		LastName      string `json:"last_name"`
 		PreferredName string `json:"preferred_name"`
 		PolicyConsent bool   `json:"policy_consent"`
+		// DiagnosticsConsent is a SEPARATE, optional opt-in (#1696), not part of
+		// PolicyConsent above. Bundling the two would make this one meaningless: policy
+		// acceptance is a condition of using the service, so a combined checkbox cannot
+		// be refused without refusing the service, and a consent that cannot be refused
+		// is not consent. Absent (the JSON zero value) means not granted, which is what
+		// an unticked box sends and what an older client that does not know the field
+		// sends.
+		DiagnosticsConsent bool `json:"diagnostics_consent"`
 	}
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 		http.Error(w, `{"error":"Invalid payload"}`, http.StatusBadRequest)
@@ -2629,6 +2646,13 @@ func (s *Server) handleCompleteSetup(w http.ResponseWriter, r *http.Request) {
 		user.PolicyConsentAt = &now
 	}
 
+	// Only ever stamped when the box was actually ticked. There is no branch that turns
+	// this on by default, and none that infers it from PolicyConsent (#1696).
+	if req.DiagnosticsConsent {
+		now := time.Now().UTC()
+		user.DiagnosticsConsentAt = &now
+	}
+
 	// Registration must be approved by admin
 	user.Status = "pending"
 	user.VerificationToken = ""
@@ -2640,6 +2664,10 @@ func (s *Server) handleCompleteSetup(w http.ResponseWriter, r *http.Request) {
 	}
 
 	s.writeAudit(user.Email, "user.verified", "user", user.Email, "User completed setup and is pending approval", r)
+	if req.DiagnosticsConsent {
+		s.auditDiagnostics(user.Email, diagnosticsAuditGranted, "user", user.ID,
+			"Granted consent for administrators to collect this client's diagnostic logs, at registration", r)
+	}
 	body, err := s.renderNotificationTemplate("en", "admin_registration_request.txt", map[string]interface{}{
 		"FirstName": user.FirstName,
 		"LastName":  user.LastName,
@@ -3300,6 +3328,13 @@ func (s *Server) handleAdminEndpoints(w http.ResponseWriter, r *http.Request) {
 
 	if r.Method == http.MethodGet && r.URL.Path == "/api/admin/uptime-history" {
 		s.handleAdminGetUptimeHistory(w, r, actor)
+		return
+	}
+
+	// Ask a user's client for its diagnostic logs (#1696). Behind requireAdmin like
+	// everything else dispatched here, and it re-checks the role itself as well.
+	if r.Method == http.MethodPost && r.URL.Path == "/api/admin/diagnostics/collect" {
+		s.handleAdminDiagnosticsCollect(w, r)
 		return
 	}
 

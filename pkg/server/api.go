@@ -184,6 +184,12 @@ func (s *Server) handleGetMe(w http.ResponseWriter, r *http.Request) {
 		// consent state because it is a property of the session, not of the user: the same
 		// account logging in elsewhere still gets the gate.
 		resp["policy_gate_suppressed"] = consent.Required && s.policyGateSuppressed(r)
+		// Diagnostics consent, from the same real account and for the same reason
+		// (#1696). Reported here rather than in getUserTelemetryData because the
+		// telemetry map is also what the previewing copy is built from, and a consent
+		// switch must never render -- let alone be flipped -- against somebody else's
+		// account.
+		resp["diagnostics_consent"] = diagnosticsConsentState(realUser)
 	}
 
 	respondJSON(w, http.StatusOK, resp)

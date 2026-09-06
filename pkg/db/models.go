@@ -59,39 +59,48 @@ type AuditFilter struct {
 }
 
 type User struct {
-	ID                 string     `json:"id"`
-	Email              string     `json:"email"`
-	FirstName          string     `json:"first_name"`
-	LastName           string     `json:"last_name"`
-	PreferredName      string     `json:"preferred_name"`
-	Role               string     `json:"role"`
-	Status             string     `json:"status"`
-	VerificationToken  string     `json:"-"`
-	ApprovalToken      string     `json:"-"`
-	ClaimToken         string     `json:"-"`
-	Timezone           string     `json:"timezone"`
-	AuthMethod         string     `json:"auth_method"`
-	PreferredDomain    string     `json:"preferred_domain"`
-	ThemePreference    string     `json:"theme_preference"`
-	NotificationPrefs  string     `json:"notification_prefs"`
-	CreatedAt          time.Time  `json:"created_at"`
-	UpdatedAt          time.Time  `json:"updated_at"`
-	LastLoginAt        *time.Time `json:"last_login_at"`
-	LastLoginIP        string     `json:"last_login_ip"`
-	LastClientVersion  string     `json:"last_client_version"`
-	LastClientOS       string     `json:"last_client_os"`
-	TOTPSecret         string     `json:"-"`
-	TOTPEnabled        bool       `json:"totp_enabled"`
-	PolicyConsentAt    *time.Time `json:"policy_consent_at,omitempty"`
-	LanguagePreference string     `json:"language_preference"`
-	SubdomainStyle     string     `json:"subdomain_style"`
-	RateLimit          int        `json:"rate_limit"`
-	MaxReservations    *int       `json:"max_reservations,omitempty"`
-	MaxCustomDomains   *int       `json:"max_custom_domains,omitempty"`
-	MaxTunnels         *int       `json:"max_tunnels,omitempty"`
-	OnboardingStatus   string     `json:"onboarding_status"`
-	OnboardingLastStep string     `json:"onboarding_last_step"`
-	OnboardingReruns   int        `json:"onboarding_reruns"`
+	ID                string     `json:"id"`
+	Email             string     `json:"email"`
+	FirstName         string     `json:"first_name"`
+	LastName          string     `json:"last_name"`
+	PreferredName     string     `json:"preferred_name"`
+	Role              string     `json:"role"`
+	Status            string     `json:"status"`
+	VerificationToken string     `json:"-"`
+	ApprovalToken     string     `json:"-"`
+	ClaimToken        string     `json:"-"`
+	Timezone          string     `json:"timezone"`
+	AuthMethod        string     `json:"auth_method"`
+	PreferredDomain   string     `json:"preferred_domain"`
+	ThemePreference   string     `json:"theme_preference"`
+	NotificationPrefs string     `json:"notification_prefs"`
+	CreatedAt         time.Time  `json:"created_at"`
+	UpdatedAt         time.Time  `json:"updated_at"`
+	LastLoginAt       *time.Time `json:"last_login_at"`
+	LastLoginIP       string     `json:"last_login_ip"`
+	LastClientVersion string     `json:"last_client_version"`
+	LastClientOS      string     `json:"last_client_os"`
+	TOTPSecret        string     `json:"-"`
+	TOTPEnabled       bool       `json:"totp_enabled"`
+	PolicyConsentAt   *time.Time `json:"policy_consent_at,omitempty"`
+	// DiagnosticsConsentAt is when this user last turned diagnostic log sharing ON.
+	// NULL means it is off, and NULL is the only default there is: an account that
+	// predates the setting has never been asked, and "never asked" is not consent
+	// (#1696). Nothing backfills this column.
+	//
+	// A nullable timestamp rather than a bool so the instant of the grant is part of
+	// the record -- and so an explicit "declined" state could be added later without
+	// a migration, should the support burden ever justify one.
+	DiagnosticsConsentAt *time.Time `json:"diagnostics_consent_at,omitempty"`
+	LanguagePreference   string     `json:"language_preference"`
+	SubdomainStyle       string     `json:"subdomain_style"`
+	RateLimit            int        `json:"rate_limit"`
+	MaxReservations      *int       `json:"max_reservations,omitempty"`
+	MaxCustomDomains     *int       `json:"max_custom_domains,omitempty"`
+	MaxTunnels           *int       `json:"max_tunnels,omitempty"`
+	OnboardingStatus     string     `json:"onboarding_status"`
+	OnboardingLastStep   string     `json:"onboarding_last_step"`
+	OnboardingReruns     int        `json:"onboarding_reruns"`
 }
 
 type SubdomainReservation struct {

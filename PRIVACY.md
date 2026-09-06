@@ -30,6 +30,17 @@ As an open-source, developer-first tool, Liferay Tunnel is designed with data mi
 * **Security Events**: Actions such as user registration, login attempts, token creations, and administrative status changes are recorded in a local database.
   * *Purpose*: Compliance, auditing, security reviews, and identifying unauthorized connection attempts.
 
+### D. Client Diagnostic Logs (Opt-In Only)
+The `lfr-tunnel` client keeps its own logs on **your** machine, in `~/.lfr-tunnel/logs`. They never leave your machine unless you explicitly allow it.
+
+* **What they contain**:
+  * `traffic-<subdomain>.log` — one line per request your tunnel proxies: the time, HTTP method, URL path (the query string is **not** recorded), response status, how long it took, the local port it was sent to, and the edge region it arrived from. Request and response bodies are recorded **only** if you start the client with `-log-bodies`, which is off by default.
+  * `error-<subdomain>.log` — connection and error events, which can include local hostnames and IP addresses.
+  * `client-<subdomain>.log` — the client's own console output when it runs in the background.
+* **Sharing them with an administrator**: an administrator can ask for these logs to help diagnose a problem, and they are shared **only if you have turned diagnostic log sharing on**. It is off by default, was never enabled for any existing account, and you can turn it on or off at any time from **Account Settings**. The gateway checks your setting at the moment the request is made, so withdrawing consent takes effect immediately — including for a client that is already running.
+* **Purpose**: Diagnosing routing, connectivity and proxying problems that cannot be reproduced on the gateway.
+* **Auditing**: every request for a user's diagnostic logs is recorded in the administrative audit log, including who asked, when, about whom, and requests that were **refused** because consent was absent.
+
 ---
 
 ## 2. Personal Access Tokens (PATs) & Security
@@ -63,6 +74,7 @@ In accordance with General Data Protection Regulation (GDPR) standards, Liferay 
     2.  Any active WebSocket tunnel connections are forcefully closed and disconnected.
     3.  The user's actual profile record (First Name, Last Name, email, and preferences) is permanently deleted from the database.
     4.  To preserve historical system metrics and auditing trails without violating privacy, any associated logs and bandwidth metrics in `tunnel_metrics`, `tunnel_audit_logs`, and `admin_audit_log` are **permanently obfuscated and anonymised** using a secure SHA-256 hash of their email address (e.g., `gdpr-deleted-user-hash123`).
+    5.  The diagnostic-log-sharing preference is part of the profile record and is deleted with it. No diagnostic log content is stored on the gateway.
 
 ---
 
@@ -76,4 +88,4 @@ Liferay Tunnel is fully self-hostable. If you run your own private instance of `
 
 <!-- markdownlint-disable MD049 -->
 ---
-*Last Updated: 2026-07-02* | *Last Reviewed: 2026-07-02*
+*Last Updated: 2026-09-06* | *Last Reviewed: 2026-09-06*

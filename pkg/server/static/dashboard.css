@@ -657,10 +657,12 @@ input:checked + .toggle-slider:before {
    switchInstallerTab() rewrote four inline properties on every click to move the underline.
    With the rules here it toggles one class per element and the CSS decides the rest.
 
-   `var(--text)` on the active tab is carried over verbatim from that inline style: no theme
-   defines --text, so the declaration is invalid at computed-value time and the colour
-   inherits -- which is exactly what it did before. Tracked separately rather than quietly
-   changed here, since picking a real token is a visible change and this is a hoist. */
+   The active tab's colour is --text-main, not the --text the inline style named. No theme
+   defines --text, so that declaration was invalid at computed-value time and the colour
+   inherited from body -- which is `var(--text-main)`. Measured in the browser before the
+   swap: the active tab already computed to rgb(15, 23, 42), the value --text-main holds. So
+   this fixes the name without changing a pixel. It only became visible once the declaration
+   moved out of an inline style, where check-theme-tokens.mjs could finally see it. */
 .tab-btn {
   background: none;
   border: none;
@@ -671,7 +673,7 @@ input:checked + .toggle-slider:before {
   font-weight: 500;
 }
 .tab-btn.active {
-  color: var(--text);
+  color: var(--text-main);
   border-bottom-color: var(--primary);
 }
 .tab-content {
@@ -842,9 +844,11 @@ html[dir='rtl'] th {
    picker and the account one -- inlined this identical block and differed only in padding,
    font-size and height, which stay at the call site.
 
-   The two rgba() literals and var(--text-color) are moved verbatim, not tokenised: --text-color
-   is defined by no theme, so it inherits, and swapping either for a real token would repaint
-   the control. That is a separate decision from giving the class a rule. */
+   The two rgba() literals are moved verbatim rather than tokenised: swapping them for theme
+   tokens would repaint the control, which is a separate decision from giving the class a rule.
+   The colour is not verbatim -- the inline style named --text-color, which no theme defines,
+   so it inherited body's --text-main. Measured at rgb(15, 23, 42) both before and after, the
+   same swap and the same reason as .tab-btn.active above. */
 .custom-dropdown-trigger {
   display: flex;
   align-items: center;
@@ -854,7 +858,7 @@ html[dir='rtl'] th {
   border-radius: 6px;
   cursor: pointer;
   font-weight: 500;
-  color: var(--text-color);
+  color: var(--text-main);
   transition: 0.2s;
   box-sizing: border-box;
 }

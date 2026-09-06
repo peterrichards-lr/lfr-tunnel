@@ -5,6 +5,7 @@ import (
 	"io"
 	"os"
 	"path/filepath"
+	"regexp"
 	"runtime"
 	"strings"
 	"testing"
@@ -167,7 +168,7 @@ func TestClientTokenFile_LFTTokenFileMovesThePath(t *testing.T) {
 	moved := writeTokenFile(t, "lft_pat_moved\n")
 	t.Setenv("LFT_TOKEN_FILE", moved)
 
-	cfgPath := writeClientConfigFile(t, "token_file: \""+configured+"\"\n")
+	cfgPath := writeClientConfigFile(t, "token_file: "+yamlPath(configured)+"\n")
 
 	cfg, err := LoadClientConfig(cfgPath)
 	if err != nil {
@@ -188,7 +189,7 @@ func TestClientTokenFile_MissingFileIsAnActionableError(t *testing.T) {
 	isolateTokenEnvironment(t)
 
 	missing := filepath.Join(t.TempDir(), "not-there", "token")
-	cfgPath := writeClientConfigFile(t, "token_file: \""+missing+"\"\n")
+	cfgPath := writeClientConfigFile(t, "token_file: "+yamlPath(missing)+"\n")
 
 	cfg, err := LoadClientConfig(cfgPath)
 	if err == nil {
@@ -441,6 +442,32 @@ func TestSaveClientConfigStillWritesAnInlineToken(t *testing.T) {
 // one, so that is handled rather than assumed away.
 func yamlPath(p string) string {
 	return "'" + strings.ReplaceAll(p, "'", "''") + "'"
+}
+
+// No test in this file may embed a path in a DOUBLE-quoted YAML scalar.
+//
+// The first fix converted the eight occurrences that used the variable name `tokenPath` and
+// missed two that used `configured` and `missing` -- so Windows went red a second time for the
+// same reason. This asserts the property instead of the instances, which is the difference
+// between fixing a bug and fixing the bugs you happened to grep for.
+//
+// Runs everywhere, because the hazard is in what the suite writes rather than where it runs.
+func TestNoDoubleQuotedPathsInThisFile(t *testing.T) {
+	src, err := os.ReadFile("client_token_file_test.go")
+	if err != nil {
+		t.Fatalf("reading this test file: %v", err)
+	}
+
+	// Matches a Go-concatenated variable sitting inside a double-quoted YAML scalar.
+	// The offending form is deliberately NOT written out in this comment: an earlier
+	// version gave an example of it and the check then matched its own documentation.
+	embed := regexp.MustCompile(`\\""\+[A-Za-z][A-Za-z0-9_]*\+"\\"`)
+	if found := embed.FindAllString(string(src), -1); len(found) > 0 {
+		t.Errorf("%d path(s) embedded in double-quoted YAML: %v\n"+
+			"On Windows a temp path contains backslashes, and `\\U` inside a double-quoted "+
+			"scalar is an escape expecting 8 hex digits -- the file fails to parse before the "+
+			"key under test is reached. Use yamlPath().", len(found), found)
+	}
 }
 
 // A path with backslashes must survive being written into a config file and read back (#1758).

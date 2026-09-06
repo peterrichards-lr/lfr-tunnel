@@ -84,7 +84,6 @@ type InterceptorEngine struct {
 	PublicURLs         []string
 	LanguagePreference string
 	ThemePreference    string
-	NavPlacement       string
 	ServerVersion      string
 
 	PrimaryRegion         string

@@ -345,9 +345,6 @@ func main() {
 	} else if regResp.ThemePreference != "" {
 		engine.ThemePreference = regResp.ThemePreference
 	}
-	if cfg.NavPlacement != "" {
-		engine.NavPlacement = cfg.NavPlacement
-	}
 
 	// Keep an un-mutated copy of portMappings for server registration
 	regPortMappings := make([]client.PortMapping, len(portMappings))

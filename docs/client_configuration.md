@@ -75,8 +75,20 @@ Resolved in this order, each step overriding the one before it:
 7. **Region election**, which replaces the gateway again with the closest region's, unless the
    client is pinned or `region:` is set.
 
-Two consequences worth knowing:
+**Auto-discovery sits underneath all of that, and only for `ports` and `target_host`.** It runs
+*after* the seven steps above — it is the last thing to touch the configuration — but it only
+fills a value in where every step above left one empty. It never overrides one, so in priority
+terms it is the bottom of the chain rather than the top: for the host, `-target-host` beats
+`LFT_TARGET_HOST` beats `target_host:` beats discovery. See
+[Leaving `ports` unset](#leaving-ports-unset) and
+[Leaving `target_host` unset](#leaving-target_host-unset).
 
+Three consequences worth knowing:
+
+* **A built-in default is not always step 1.** `target_host` has no default in the config at
+  all; the `127.0.0.1` you get is applied at the moment the client dials, after discovery has
+  had its turn. That is what puts it *below* discovery in the chain, where reading step 1 would
+  put it above.
 * **An empty value never overrides.** Every override is guarded on "not empty", so
   `LFT_SUBDOMAIN=""` does not clear a `subdomain:` from the file, and `-rate-limit 0` cannot put
   `0` back over a `rate_limit: 100` in the file. Edit the file, or point `-config` at a
@@ -182,7 +194,7 @@ Every key below is optional. Types are YAML types; a duration is a Go duration s
 | Key | Type | Default | What it does |
 | --- | --- | --- | --- |
 | `ports` | list of int | *unset* — discovered, see below | Local ports to publish. The first is the primary; each subsequent port gets its own subdomain, suffixed with the port number. Example: `[8080, 3000]`. |
-| `target_host` | string | `127.0.0.1` | Hostname or IP the tunnel forwards to — a Docker service name, another machine on your LAN. Example: `"liferay"`. |
+| `target_host` | string | *unset* — discovered, then `127.0.0.1`; see below | Hostname or IP the tunnel forwards to — a Docker service name, another machine on your LAN. Example: `"liferay"`. |
 | `preserve_host` | bool | `false` | Forward the visitor's `Host` header unchanged instead of rewriting it to `target_host`. Needed when the local application generates absolute URLs from the host it is asked for. |
 | `insecure_skip_verify` | bool | `false` | Skip TLS verification when the **local** target serves HTTPS with a self-signed certificate. It has no effect on the connection to the gateway. |
 
@@ -199,7 +211,8 @@ does nothing else. Leave it out and the client works the ports out for itself, i
    extension's key.
 2. **Otherwise** it looks for a running instance: `docker ps` for a container whose name or
    image mentions `liferay`, `dxp` or `ldm`, then a probe of `8080`, `13000` and `3000` on
-   localhost.
+   `127.0.0.1`. This step reports a **host** as well as ports — see
+   [Leaving `target_host` unset](#leaving-target_host-unset).
 3. **If neither finds anything**, port `8080`.
 
 Two consequences worth knowing:
@@ -211,6 +224,51 @@ Two consequences worth knowing:
 - Step 2 can publish something other than 8080. A Docker container matching the name test
   above that publishes `80` or `443` and not `8080` will make that port your primary. Set
   `ports` explicitly if you need to be certain what gets published.
+
+#### Leaving `target_host` unset
+
+`target_host` is the second key here whose default is a decision rather than a value, and it is
+decided by the same call. Step 2 above does not only report ports — it reports the **host** it
+found them on, and that host becomes `target_host` when nothing else supplied one.
+
+Resolved in this order, first match wins:
+
+| # | Source | Beats |
+| --- | --- | --- |
+| 1 | `-target-host <host>` | everything below |
+| 2 | `LFT_TARGET_HOST` | the config file and below |
+| 3 | `target_host:` in this file | discovery and below |
+| 4 | **Auto-discovery** — the host reported by step 2 above | the built-in default |
+| 5 | `127.0.0.1` | — |
+
+Four things follow from that:
+
+- **Only step 2 supplies a host, so anything that skips step 2 skips the host too.** Pinning
+  `ports` — in this file, with `-ports`, or via `LFT_CLIENT_PORTS` — turns the whole scan off,
+  and the workspace scan (step 1) reports ports and nothing else. In either case `target_host`
+  is whatever you set, or `127.0.0.1`. The two keys are decided by one call, so they are not
+  independent: you cannot pin your ports and still have the host discovered.
+- **A discovered `localhost` is rewritten to `127.0.0.1`, and that is not cosmetic.**
+  `localhost` commonly resolves to `::1` ahead of `127.0.0.1`. A target bound only to IPv4 is
+  still reached on the second try where `::1` is *refused* — but where `::1` is *filtered*, by a
+  firewall that drops rather than rejects, that same fallback is a connection timeout instead of
+  a fast retry. This client exists to show a local Liferay to a customer over a public URL, and
+  a stall mid-demo costs immeasurably more than the microsecond the literal saves. So the client
+  dials the literal, exactly as it does everywhere else it has to pick one.
+- **Anything else discovery reports is used verbatim.** Only the exact string `localhost` is
+  rewritten, never anything that merely looks loopback-ish. Both discovery paths report
+  `localhost` today, so in practice discovery hands you `127.0.0.1` — the same endpoint the
+  fallback would have given you, now set explicitly rather than left empty. The rule matters for
+  the case that is coming: the `docker ps` path is the one that could reasonably learn to report
+  a container name or a network alias, and rewriting a real hostname would forward your traffic
+  somewhere else entirely.
+- **`-target-host ""` suppresses nothing.** An empty value never overrides (see
+  [Precedence](#precedence)), and it does not switch discovery off either — the client tests the
+  host it ended up with, not whether you typed the flag.
+
+One asymmetry worth knowing, unrelated to discovery: `LFT_TARGET_HOST` is parsed as a URL and
+reduced to its hostname, so `http://liferay:8080` becomes `liferay`. `-target-host` and
+`target_host:` are taken literally, so give those two a bare host or IP.
 
 ### Who may reach your tunnel
 
@@ -239,18 +297,17 @@ through. Set only the one you mean.
 
 ## Keys that are not settings
 
-One key parses and does nothing, one is not a key at all, and two more were removed. They are
-listed here so that finding them in the struct, the example file or someone else's config does
-not read as a feature you are missing.
+One is not a key at all; three were removed. They are listed here so that finding them in the
+struct, the example file or someone else's config does not read as a feature you are missing.
 
 | Key | Status |
 | --- | --- |
-| `nav_placement` | **No effect today, but a regression rather than a decoy** (#1751). It selected the Inspector's own navigation layout — `"sidebar"`, or empty for top tabs — from #606 until the dashboard rewrite in #783 removed the JavaScript that applied it, six days later. The client still accepts the key and the Inspector still saves it; nothing acts on it. Whether it comes back or is retired properly is #1751. |
 | `regions_unavailable` | Not a config key. The gateway reports the regions that are currently down, and the client uses that to cache a provisional election rather than a 24-hour one. It cannot be set from the file. |
 | `token_file` | **Removed** (#1709). Never had a read site in its whole life — it was added alongside `rate_limit` in June 2026 and nothing ever consulted it. The token file path comes from `LFT_TOKEN_FILE`, falling back to `~/.lfr-tunnel/token`; see [Precedence](#precedence). |
 | `bypass_proxy` | **Removed** (#1709). Never implemented — added with `theme` in July 2026 and read by nothing, in Go or in the UI. |
+| `nav_placement` | **Removed** (#1751). Unlike the two above it did work: it selected the Inspector's own navigation layout — `"sidebar"`, or empty for top tabs — from #606 on 17 July 2026 until the dashboard rewrite in #783 deleted the JavaScript that applied it six days later, without saying so. The Go half stayed and kept accepting the key for six weeks, so the Inspector offered to save a setting it could not act on. The July 2026 layout switcher is not coming back; a future Inspector layout option should be designed afresh rather than by reviving this key. |
 
-Leaving `token_file` and `bypass_proxy` in a config file is harmless. The loader does not reject
+Leaving any of the three removed keys in a config file is harmless. The loader does not reject
 unknown keys, so an existing `~/.lfr-tunnel/config.yaml` that still sets them loads exactly as it
 did before — they are ignored now, which is what they were doing anyway. The one visible change
 is that the Inspector no longer writes them back when it saves the file.
@@ -360,4 +417,4 @@ chmod 600 ~/.lfr-tunnel/config.yaml
 
 <!-- markdownlint-disable MD049 -->
 ---
-*Last Updated: 2026-09-05* | *Last Reviewed: 2026-09-05*
+*Last Updated: 2026-09-06* | *Last Reviewed: 2026-09-06*

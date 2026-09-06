@@ -94,6 +94,17 @@ const tokenValue = (page: any, name: string) =>
     name,
   );
 
+/** The computed rgb() a declaration resolves to here, rather than the raw token text. */
+const rgbOf = (page: any, decl: string) =>
+  page.evaluate((d: string) => {
+    const el = document.createElement('span');
+    el.style.color = d;
+    document.body.appendChild(el);
+    const v = getComputedStyle(el).color;
+    el.remove();
+    return v;
+  }, decl);
+
 /** Applies a theme by attribute. The stylesheets are all linked, so the tokens re-resolve. */
 const setTheme = (page: any, theme: string) =>
   page.evaluate(
@@ -127,37 +138,52 @@ test.describe('Portal V1 inline theme-token references (#1774)', () => {
       expect(main).toBeTruthy();
       expect(main).not.toBe(muted);
 
-      const cellId = 'probe-1774-muted-cell';
-      await page.evaluate((id: string) => {
-        const td = document.createElement('div');
-        td.id = id;
-        td.setAttribute('style', 'color: var(--text-muted);');
-        document.body.appendChild(td);
-      }, cellId);
-
-      const r = await compare(
-        page,
-        `#${cellId}`,
-        'strong',
-        'color: var(--text);', // the pre-#1774 spelling
-        'color: var(--text-main);', // what dashboard.js now emits
-        'color',
+      // The <td>/<strong> pair is lifted out of the SERVED dashboard.js rather than written
+      // here, so this is a computed-style assertion against the shipped artefact. Revert the
+      // token in dashboard.js and the extracted markup carries the old spelling again, the
+      // emphasis collapses back to the cell colour, and the expectation below fails. A
+      // hardcoded copy of the markup would have passed either way -- it would only have been
+      // testing the browser.
+      const js = await (await page.request.get('/static/dashboard.js')).text();
+      const m = js.match(
+        /<td style="([^"]*color:\s*var\(--text-muted\)[^"]*)">\s*<div>[^<]*<strong style="([^"]*)"/,
+      );
+      expect(
+        m,
+        'the byte-counter cell is no longer recognisable in dashboard.js -- this test is measuring nothing',
+      ).not.toBeNull();
+      const [, tdStyle, strongStyle] = m!;
+      expect(strongStyle, 'the emphasis carries no colour at all').toContain(
+        'color:',
       );
 
-      // Before: invalid -> unset -> inherit -> the cell's muted colour. The emphasis was lost.
-      expect(r.before).toBe(r.parent);
-      // After: the emphasis colour the markup asks for, distinct from the label beside it.
-      expect(r.after).not.toBe(r.parent);
-      expect(r.after).toBe(
-        await page.evaluate(() => {
-          const p = document.createElement('span');
-          p.style.color = 'var(--text-main)';
-          document.body.appendChild(p);
-          const v = getComputedStyle(p).color;
-          p.remove();
-          return v;
-        }),
+      const r = await page.evaluate(
+        ({ tdStyle, strongStyle }: any) => {
+          const td = document.createElement('div');
+          td.setAttribute('style', tdStyle);
+          const strong = document.createElement('strong');
+          strong.setAttribute('style', strongStyle);
+          strong.textContent = '1.2 MB';
+          td.appendChild(strong);
+          document.body.appendChild(td);
+          const out = {
+            cell: getComputedStyle(td).color,
+            emphasis: getComputedStyle(strong).color,
+          };
+          td.remove();
+          return out;
+        },
+        { tdStyle, strongStyle },
       );
+
+      // The cell is the muted label colour, as its own markup asks.
+      expect(r.cell).toBe(await rgbOf(page, 'var(--text-muted)'));
+      // And the figure inside it is NOT -- which is the whole point, and was false before.
+      expect(
+        r.emphasis,
+        'the emphasised byte count inherited the cell colour',
+      ).not.toBe(r.cell);
+      expect(r.emphasis).toBe(await rgbOf(page, 'var(--text-main)'));
     });
   }
 
@@ -233,6 +259,13 @@ test.describe('Portal V1 inline theme-token references (#1774)', () => {
    */
   test('the system settings actions row has its divider', async ({ page }) => {
     await loginV1(page);
+
+    // Maintenance first, and not by accident: the row sits inside #card-server-config, which
+    // starts display:none and is only revealed by loadServerConfig() -- called from showTab()
+    // for 'maintenance', never for 'system'. So System Settings alone never renders it (filed
+    // separately). Routed this way so the assertion lands on a rendered element rather than on
+    // a computed style nobody can see.
+    await page.click('#nav-maintenance');
     await page.click('#nav-system');
 
     const save = page.locator(
@@ -335,8 +368,25 @@ test.describe('Portal V1 inline theme-token references (#1774)', () => {
     page,
   }) => {
     for (const path of ['/admin', '/static/dashboard.js']) {
-      const body = await (await page.request.get(path)).text();
-      expect(body.length, `${path} served nothing`).toBeGreaterThan(1000);
+      const raw = await (await page.request.get(path)).text();
+      expect(raw.length, `${path} served nothing`).toBeGreaterThan(1000);
+
+      // Comments first, exactly as check-theme-tokens.mjs does. Neither asset is minified,
+      // so the note explaining why the toast no longer uses --accent is served verbatim and
+      // would otherwise fail this test on its own explanation. Prose about a token is not a
+      // reference to it -- but only if it is stripped, which is why that note has to be a
+      // block comment.
+      const body = raw
+        .replace(/\/\*[\s\S]*?\*\//g, '')
+        .replace(/<!--[\s\S]*?-->/g, '');
+
+      // Anchored on presence: a route that 404s into an error page satisfies every absence
+      // below. The one token that must be there proves the real asset was read.
+      expect(
+        /var\(\s*--text-main\s*\)/.test(body),
+        `${path} does not reference var(--text-main) -- wrong asset?`,
+      ).toBe(true);
+
       for (const name of [
         '--text',
         '--text-color',

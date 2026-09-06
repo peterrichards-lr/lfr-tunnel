@@ -479,8 +479,6 @@ function updateTableView(tbodyId) {
     const firstBtn = document.createElement('button');
     firstBtn.className = 'btn btn-secondary';
     firstBtn.style.padding = '4px 8px';
-    firstBtn.style.margin = '0';
-    firstBtn.style.width = 'auto';
     firstBtn.innerHTML = '&laquo; First';
     firstBtn.disabled = inst.currentPage === 1;
     firstBtn.onclick = () => {
@@ -491,8 +489,6 @@ function updateTableView(tbodyId) {
     const prevBtn = document.createElement('button');
     prevBtn.className = 'btn btn-secondary';
     prevBtn.style.padding = '4px 8px';
-    prevBtn.style.margin = '0';
-    prevBtn.style.width = 'auto';
     prevBtn.innerText = 'Prev';
     prevBtn.disabled = inst.currentPage === 1;
     prevBtn.onclick = () => {
@@ -502,12 +498,10 @@ function updateTableView(tbodyId) {
 
     const pageSelect = document.createElement('select');
     pageSelect.setAttribute('aria-label', pageLabelFor(tbodyId));
-    pageSelect.className = 'form-control';
-    pageSelect.style.width = 'auto';
-    pageSelect.style.padding = '2px 8px';
-    pageSelect.style.margin = '0';
-    pageSelect.style.display = 'inline-block';
-    pageSelect.style.fontSize = '14px';
+    // `form-control` named a shared form-widget style V1 never defined, so all five
+    // declarations lived here instead. .pagination-select names what this actually is and
+    // carries them (#1752).
+    pageSelect.className = 'pagination-select';
     for (let i = 1; i <= totalPages; i++) {
       const opt = document.createElement('option');
       opt.value = i;
@@ -523,8 +517,6 @@ function updateTableView(tbodyId) {
     const nextBtn = document.createElement('button');
     nextBtn.className = 'btn btn-secondary';
     nextBtn.style.padding = '4px 8px';
-    nextBtn.style.margin = '0';
-    nextBtn.style.width = 'auto';
     nextBtn.innerText = 'Next';
     nextBtn.disabled = inst.currentPage === totalPages;
     nextBtn.onclick = () => {
@@ -535,8 +527,6 @@ function updateTableView(tbodyId) {
     const lastBtn = document.createElement('button');
     lastBtn.className = 'btn btn-secondary';
     lastBtn.style.padding = '4px 8px';
-    lastBtn.style.margin = '0';
-    lastBtn.style.width = 'auto';
     lastBtn.innerHTML = 'Last &raquo;';
     lastBtn.disabled = inst.currentPage === totalPages;
     lastBtn.onclick = () => {
@@ -1165,7 +1155,7 @@ async function showDashboard() {
                                     <div>🏷️ <strong>Latest Client Target:</strong> ${latestVer}</div>
                                 </div>
                                 <div style="display: flex; gap: 10px; margin-top: 8px;">
-                                    <button class="btn btn-secondary" style="white-space: nowrap; text-align: center; flex: 1; margin: 0;" onclick="showInstallerGuideModal()">Other Operating Systems</button>
+                                    <button class="btn btn-secondary" style="white-space: nowrap; text-align: center; flex: 1;" onclick="showInstallerGuideModal()">Other Operating Systems</button>
                                 </div>
                             </div>
                         `;
@@ -1216,7 +1206,7 @@ async function showDashboard() {
 
                                 <div style="display: flex; gap: 10px; margin-top: 8px;">
                                     ${showDownload ? `<a href="${dlUrl}" class="btn btn-primary" style="white-space: nowrap; text-align: center; flex: 1; margin: 0;">${downloadLabel}</a>` : ''}
-                                    <button class="btn btn-secondary" style="white-space: nowrap; text-align: center; flex: 1; margin: 0;" onclick="showInstallerGuideModal()">Other Operating Systems</button>
+                                    <button class="btn btn-secondary" style="white-space: nowrap; text-align: center; flex: 1;" onclick="showInstallerGuideModal()">Other Operating Systems</button>
                                 </div>
                             </div>
                         `;
@@ -3994,7 +3984,7 @@ async function loadBackups() {
                     <td style="font-family:monospace; font-size:0.85em;">${escapeHTML(b.filename)}</td>
                     <td>${sizeKB} KB</td>
                     <td>${renderTimestamp(b.created_at)}</td>
-                    <td><a class="btn btn-secondary" style="width:auto; display:inline-flex; padding:6px 12px; font-size:0.85em;" href="${href}">${t('download', 'Download')}</a></td>
+                    <td><a class="btn btn-secondary" style="display:inline-flex; padding:6px 12px; font-size:0.85em;" href="${href}">${t('download', 'Download')}</a></td>
                 </tr>`;
   });
 }
@@ -4305,7 +4295,7 @@ function renderTimestamp(utcDateStr) {
     localTimeStr = date.toLocaleString();
   }
 
-  return `<span class="timestamp-tooltip" title="Local Browser Time: ${escapeHTML(localTimeStr)}" style="cursor: help; border-bottom: 1px dashed var(--text-muted); padding-bottom: 2px;">${escapeHTML(utcTimeStr)}</span>`;
+  return `<span class="timestamp-tooltip" title="Local Browser Time: ${escapeHTML(localTimeStr)}">${escapeHTML(utcTimeStr)}</span>`;
 }
 
 function formatTimeRemaining(expiryDateStr, isRevoked) {
@@ -5441,10 +5431,11 @@ function switchInstallerTab(os) {
     const btn = document.getElementById('tab-btn-' + t);
     const content = document.getElementById('tab-content-' + t);
     if (btn && content) {
-      btn.className = 'tab-btn' + (t === os ? ' active' : '');
-      btn.style.color = t === os ? 'var(--text)' : 'var(--text-muted)';
-      btn.style.borderBottomColor = t === os ? 'var(--primary)' : 'transparent';
-      content.style.display = t === os ? 'block' : 'none';
+      // One class per element; .tab-btn.active and .tab-content.active decide the rest
+      // (#1752). This used to rewrite four inline properties on every click, which is why
+      // neither class had a rule to read.
+      btn.classList.toggle('active', t === os);
+      content.classList.toggle('active', t === os);
     }
   });
 }
@@ -5631,7 +5622,7 @@ function populateTunnelDetails(t) {
                             <td style="padding: 4px 0; font-family: monospace; color: var(--primary);">${escapeHTML(k)}</td>
                             <td style="padding: 4px 0; word-break: break-all;">${escapeHTML(headers[k])}</td>
                             <td style="padding: 4px 0; text-align: right;">
-                                <button class="btn btn-outline" style="padding: 2px 6px; font-size: 11px; margin: 0; min-width: auto; width: auto; color: var(--danger); border-color: var(--danger);" onclick="removeTunnelHeader('${escapeHTML(k)}')">Remove</button>
+                                <button class="btn btn-outline" style="padding: 2px 6px; font-size: 11px; min-width: auto; color: var(--danger); border-color: var(--danger);" onclick="removeTunnelHeader('${escapeHTML(k)}')">Remove</button>
                             </td>
                         `;
         table.appendChild(tr);
@@ -5981,9 +5972,9 @@ async function loadReservations() {
         const canExtend = !!(item.expires_at && !item.extension_requested);
 
         const host = `${item.subdomain}.${item.domain}`;
-        const hostLink = `<a href="https://${host}" target="_blank" class="host-link" style="color: var(--primary); font-family: monospace; font-weight: 600; text-decoration: none;">${escapeHTML(host)}</a>`;
+        const hostLink = `<a href="https://${host}" target="_blank" class="host-link">${escapeHTML(host)}</a>`;
         const copyBtn = `
-                            <button class="btn-copy" onclick="copyToClipboard('${escapeHTML(host)}')" style="background: none; border: none; color: var(--text-muted); cursor: pointer; padding: 2px 6px; font-size: 13px; transition: color 0.2s;" title="Copy Host to Clipboard">
+                            <button class="btn-copy" onclick="copyToClipboard('${escapeHTML(host)}')" title="Copy Host to Clipboard">
                                 📋
                             </button>
                         `;
@@ -6830,10 +6821,9 @@ window.toggleSidebarSection = function (sectionId) {
 };
 
 window.toggleSidebar = function () {
-  const screen = document.getElementById('dashboard-screen');
   const sidebar = document.querySelector('.sidebar');
   const backdrop = document.getElementById('sidebar-backdrop');
-  if (!screen || !sidebar) return;
+  if (!sidebar) return;
 
   if (window.innerWidth <= 1024) {
     const isActive = sidebar.classList.toggle('active');
@@ -6841,18 +6831,18 @@ window.toggleSidebar = function () {
       backdrop.classList.toggle('visible', isActive);
     }
   } else {
-    const isCollapsed = screen.classList.toggle('sidebar-collapsed');
-    sidebar.classList.toggle('collapsed', isCollapsed);
+    // .sidebar.collapsed is the state: it is what the stylesheet reads and what the
+    // media query at dashboard.css:1022 matches on. #dashboard-screen also carried a
+    // `sidebar-collapsed` marker that no rule and no selector ever looked at (#1752).
+    const isCollapsed = sidebar.classList.toggle('collapsed');
     localStorage.setItem('sidebar_collapsed', isCollapsed ? 'true' : 'false');
   }
 };
 
 function initSidebarCollapse() {
   const isCollapsed = localStorage.getItem('sidebar_collapsed') === 'true';
-  const screen = document.getElementById('dashboard-screen');
   const sidebar = document.querySelector('.sidebar');
-  if (screen && sidebar && isCollapsed) {
-    screen.classList.add('sidebar-collapsed');
+  if (sidebar && isCollapsed) {
     sidebar.classList.add('collapsed');
   }
 }

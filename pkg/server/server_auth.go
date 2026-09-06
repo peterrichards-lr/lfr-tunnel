@@ -87,20 +87,37 @@ func (s *Server) requireAdmin(w http.ResponseWriter, r *http.Request) (string, s
 		if sessionData, ok := s.sessionStore().loadPortalSession(cookie.Value); ok {
 			{
 				actorEmail = sessionData.Email
-				actorRole = "admin"
+
+				// The role comes from the database, and a lookup that succeeds is believed
+				// (#1760). This previously defaulted to "admin" and then folded `actorRole ==
+				// "user"` in with `actorRole == ""` before promoting -- so "the database says
+				// this person is an ordinary user" was treated identically to "we could not
+				// find out", and every authenticated portal session became admin on all ~47
+				// /api/admin/* routes, including database backup download and audit export.
+				//
+				// The PAT branch below has always required admin or owner explicitly. This is
+				// the same rule, applied on the path that a browser actually uses.
+				actorRole = ""
 				if s.db != nil {
 					if u, err := s.db.GetUserByEmail(actorEmail); err == nil && u != nil {
 						actorRole = u.Role
 					}
 				}
-				if actorRole == "" || actorRole == "user" {
-					if s.cfg.Owner.UserID != "" && strings.EqualFold(actorEmail, s.cfg.Owner.UserID) {
-						actorRole = "owner"
-					} else {
-						actorRole = "admin"
-					}
+
+				// The configured owner is the owner even if the row says otherwise: the
+				// account can be created by a login path that stamps "user" (SSO does), and
+				// the deployment's own configuration outranks that.
+				if s.cfg.Owner.UserID != "" && strings.EqualFold(actorEmail, s.cfg.Owner.UserID) {
+					actorRole = "owner"
 				}
-				authenticated = true
+
+				// Anything that is not explicitly admin or owner is refused, INCLUDING an
+				// unreadable role. Failing closed matters more here than staying reachable:
+				// a gateway whose database is unavailable should stop serving admin routes,
+				// not open them.
+				if actorRole == roleAdmin || actorRole == roleOwner {
+					authenticated = true
+				}
 
 				// The sliding expiry used to live here, and only here (#1655) -- so an
 				// ordinary portal user's session was never extended, and even an admin's

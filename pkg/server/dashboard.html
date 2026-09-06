@@ -182,7 +182,7 @@
          time-critical. Hidden until the session is close to ending. -->
     <div id="session-expiry-banner" class="session-expiry-banner" style="display: none;">
         <span id="session-expiry-text"></span>
-        <button type="button" class="btn btn-secondary" style="width: auto; margin: 0; padding: 4px 12px; font-size: 12px;" onclick="staySignedIn()" data-i18n="stay_signed_in">Stay signed in</button>
+        <button type="button" class="btn btn-secondary" style="padding: 4px 12px; font-size: 12px;" onclick="staySignedIn()" data-i18n="stay_signed_in">Stay signed in</button>
     </div>
 
     <!-- Policy re-consent banner (#1707). Above the V2 promo for the same reason the
@@ -192,7 +192,7 @@
          wallpaper. -->
     <div id="policy-consent-banner" class="session-expiry-banner" style="display: none;">
         <span id="policy-consent-banner-text"></span>
-        <button type="button" class="btn btn-secondary" style="width: auto; margin: 0; padding: 4px 12px; font-size: 12px;" onclick="acceptPolicyConsent()" data-i18n="policy_consent_accept">Review and accept</button>
+        <button type="button" class="btn btn-secondary" style="padding: 4px 12px; font-size: 12px;" onclick="acceptPolicyConsent()" data-i18n="policy_consent_accept">Review and accept</button>
     </div>
 
     <div id="v2-promo-banner" style="display: none; position: relative; flex-shrink: 0; background-color: #0b5fff; color: white; padding: 12px 24px; text-align: center; font-family: 'Inter', sans-serif; box-sizing: border-box; box-shadow: 0 4px 12px rgba(0,0,0,0.15);">
@@ -318,7 +318,7 @@
             </button>
             <div id="header-language-container" style="position: absolute; top: 16px; right: 24px; z-index: 100; display: flex; align-items: center; gap: 8px;">
                 <div class="custom-dropdown" id="portal-custom-dropdown" style="position: relative; user-select: none;">
-                    <div class="custom-dropdown-trigger" id="portal-custom-dropdown-trigger" onclick="toggleCustomDropdown()" role="combobox" aria-haspopup="listbox" aria-expanded="false" tabindex="0" style="display: flex; align-items: center; gap: 8px; background: rgba(255,255,255,0.05); border: 1px solid rgba(255,255,255,0.1); padding: 6px 12px; border-radius: 6px; cursor: pointer; font-size: 13px; font-weight: 500; color: var(--text-color); transition: 0.2s; height: 32px; box-sizing: border-box;">
+                    <div class="custom-dropdown-trigger" id="portal-custom-dropdown-trigger" onclick="toggleCustomDropdown()" role="combobox" aria-haspopup="listbox" aria-expanded="false" tabindex="0" style="padding: 6px 12px; font-size: 13px; height: 32px;">
                         <span id="custom-dropdown-flag"></span>
                         <span id="custom-dropdown-label">English</span>
                         <svg viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="currentColor" stroke-width="2" style="margin-left: 4px; transition: 0.2s;"><path d="M6 9l6 6 6-6"/></svg>
@@ -393,7 +393,7 @@
                 <div class="header">
                     <h2 data-i18n="tab_tokens_title">Personal Access Tokens</h2>
                     <div style="display: flex; gap: 12px; align-items: center;">
-                        <button class="btn btn-secondary" style="width: auto; margin: 0;" onclick="exportTokensCSV()" data-i18n="btn_export_csv">Export CSV</button>
+                        <button class="btn btn-secondary" onclick="exportTokensCSV()" data-i18n="btn_export_csv">Export CSV</button>
                         <button class="btn btn-primary" style="width: auto; margin: 0;" onclick="openTokenModal()" data-i18n="btn_generate_token">Generate New Token</button>
                     </div>
                 </div>
@@ -442,7 +442,7 @@
                             <label style="display:block; margin-bottom: 8px; color: var(--text-muted); font-size: 14px;" data-i18n="label_language">Language Preference</label>
                             <input type="hidden" id="acc-language" value="en" />
                             <div class="custom-dropdown" id="acc-language-custom-dropdown" style="position: relative; user-select: none;">
-                                <div class="custom-dropdown-trigger" id="acc-custom-dropdown-trigger" onclick="toggleAccDropdown()" role="combobox" aria-haspopup="listbox" aria-expanded="false" tabindex="0" style="display: flex; align-items: center; gap: 8px; background: rgba(255,255,255,0.05); border: 1px solid rgba(255,255,255,0.1); padding: 8px 12px; border-radius: 6px; cursor: pointer; font-size: 14px; font-weight: 500; color: var(--text-color); transition: 0.2s; height: 38px; box-sizing: border-box;">
+                                <div class="custom-dropdown-trigger" id="acc-custom-dropdown-trigger" onclick="toggleAccDropdown()" role="combobox" aria-haspopup="listbox" aria-expanded="false" tabindex="0" style="padding: 8px 12px; font-size: 14px; height: 38px;">
                                     <span id="acc-custom-flag"></span>
                                     <span id="acc-custom-label">English</span>
                                     <svg viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="currentColor" stroke-width="2" style="margin-left: auto; transition: 0.2s;"><path d="M6 9l6 6 6-6"/></svg>
@@ -527,7 +527,7 @@
                             <p style="color: var(--text-muted); margin-bottom: 16px; font-size: 14px;">Want to review the layout and learn how to use Liferay Tunnel's dashboard again? You can run through the interactive walkthrough tutorial at any time.</p>
                         </div>
                         <div style="margin-top: auto;">
-                            <button class="btn btn-outline" style="width: auto;" onclick="startTutorial(true)">Start Onboarding Tour</button>
+                            <button class="btn btn-outline" onclick="startTutorial(true)">Start Onboarding Tour</button>
                         </div>
                     </div>
                 </div>
@@ -535,7 +535,7 @@
                 <div class="glass" id="danger-zone-container" style="padding: 24px; border-radius: 8px; margin-top: 24px; border: 1px solid rgba(239, 68, 68, 0.2);">
                     <h3 style="margin-bottom: 8px; font-size: 18px; color: #f43f5e;" data-i18n="danger_zone_title">⚠️ Danger Zone (GDPR / Right to Be Forgotten)</h3>
                     <p style="color: var(--text-muted); margin-bottom: 16px; font-size: 14px;">Deleting your account will instantly and permanently revoke all of your personal access tokens, kick any active tunnel connections, and permanently purge your profile records from our systems. <strong>Any historical bandwidth metrics and logs will be permanently anonymised to protect your privacy.</strong></p>
-                    <button class="btn btn-outline" style="width: auto; color: #f43f5e; border-color: #f43f5e; background: transparent; transition: 0.2s;" onmouseover="this.style.background='rgba(244,63,94,0.1)'" onmouseout="this.style.background='transparent'" onclick="openDeleteAccountModal()">Delete Account...</button>
+                    <button class="btn btn-outline" style="color: #f43f5e; border-color: #f43f5e; background: transparent; transition: 0.2s;" onmouseover="this.style.background='rgba(244,63,94,0.1)'" onmouseout="this.style.background='transparent'" onclick="openDeleteAccountModal()">Delete Account...</button>
                 </div>
             </div>
 
@@ -754,7 +754,7 @@
                                 <option value="heroku">Adjective-Noun-Number</option>
                                 <option value="liferay">Liferay SE style</option>
                             </select>
-                            <button id="btn-generate-subdomain" class="btn btn-secondary" style="width: auto; margin: 0; padding: 6px 16px;" onclick="generateRandomSubdomain()">Generate Random</button>
+                            <button id="btn-generate-subdomain" class="btn btn-secondary" style="padding: 6px 16px;" onclick="generateRandomSubdomain()">Generate Random</button>
                         </div>
                     </div>
                     <div id="reservation-quota-warning" class="alert alert-warning hidden" style="margin-top: 16px;">
@@ -765,7 +765,7 @@
                 <!-- Active Reservations Table -->
                 <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 16px;">
                     <h3 id="reservations-title" style="margin: 0; font-size: 18px;" data-i18n="res_active_title">Your Reserved Subdomains</h3>
-                    <button class="btn btn-secondary" style="width: auto; margin: 0; padding: 6px 14px; font-size: 13px;" onclick="exportReservationsCSV()">Export CSV</button>
+                    <button class="btn btn-secondary" style="padding: 6px 14px; font-size: 13px;" onclick="exportReservationsCSV()">Export CSV</button>
                 </div>
                 <div class="glass table-container" style="margin-bottom: 32px;">
                     <table>
@@ -836,7 +836,7 @@
                     <div style="display: flex; gap: 12px;">
                         <input type="text" id="admin-broadcast-input" data-i18n-placeholder="broadcast_input_placeholder" placeholder="e.g. Server is going down for maintenance in 5 minutes..." style="flex: 1;"  aria-label="Broadcast message" data-i18n-aria-label="aria_broadcast_message"/>
                         <button class="btn btn-primary" style="width: auto; margin: 0;" onclick="setBroadcastMessage()" data-i18n="btn_broadcast">Broadcast</button>
-                        <button class="btn btn-secondary" style="width: auto; margin: 0;" onclick="clearBroadcastMessage()" data-i18n="btn_clear">Clear</button>
+                        <button class="btn btn-secondary" onclick="clearBroadcastMessage()" data-i18n="btn_clear">Clear</button>
                     </div>
                 </div>
                 <div class="glass table-container">
@@ -866,7 +866,7 @@
             <div id="tab-admin-subdomains" class="hidden">
                 <div class="header">
                     <h2 data-i18n="tab_admin_subdomains_title">Registered Subdomains</h2>
-                    <a href="/api/admin/leases/export" class="btn btn-secondary" style="width: auto; margin: 0;" data-i18n="export_csv">📥 Export CSV</a>
+                    <a href="/api/admin/leases/export" class="btn btn-secondary" data-i18n="export_csv">📥 Export CSV</a>
                 </div>
                 <p style="color: var(--text-muted); margin-bottom: 24px; font-size: 14px;" data-i18n="admin_subdomains_desc">Every subdomain reserved on this gateway, across all users.</p>
                 <div class="glass table-container">
@@ -881,7 +881,7 @@
             <div id="tab-audit" class="hidden">
                 <div class="header" style="display: flex; justify-content: space-between; align-items: center;">
                     <h2>Audit Logs</h2>
-                    <button class="btn btn-secondary" style="width: auto; margin: 0;" onclick="exportAuditLog()">Export CSV</button>
+                    <button class="btn btn-secondary" onclick="exportAuditLog()">Export CSV</button>
                 </div>
                 <p id="audit-truncated-notice" class="section-desc" hidden></p>
                 <div class="glass table-container">
@@ -936,7 +936,7 @@
             <div id="tab-backups" class="hidden">
                 <div class="header" style="display: flex; justify-content: space-between; align-items: center;">
                     <h2>Database Backups</h2>
-                    <button id="btn-create-backup" class="btn btn-secondary" style="width: auto; margin: 0;" onclick="triggerBackup()" data-i18n="btn_create_backup">Create Backup</button>
+                    <button id="btn-create-backup" class="btn btn-secondary" onclick="triggerBackup()" data-i18n="btn_create_backup">Create Backup</button>
                 </div>
                 <div class="glass" style="padding: 16px 20px; margin-bottom: 16px; border-left: 3px solid var(--accent);">
                     <strong>&#x1F6E1; Restore via CLI only.</strong>
@@ -956,13 +956,13 @@
             <div id="tab-network-health" class="hidden">
                 <div class="header">
                     <h2 data-i18n="edge_gateways_title">Edge Gateways</h2>
-                    <button class="btn btn-secondary" style="width: auto; margin: 0;" onclick="loadNetworkHealth()">Refresh</button>
+                    <button class="btn btn-secondary" onclick="loadNetworkHealth()">Refresh</button>
                 </div>
                 <div id="edge-bulk-toolbar" class="glass hidden" style="padding: 10px 16px; margin-bottom: 12px; display: flex; align-items: center; gap: 12px;">
                     <span id="edge-bulk-count" style="opacity: 0.8;"></span>
-                    <button class="btn btn-secondary" style="width: auto; margin: 0;" onclick="bulkEdgeAction('start')">Start Selected</button>
-                    <button class="btn btn-secondary" style="width: auto; margin: 0;" onclick="bulkEdgeAction('stop')">Stop Selected</button>
-                    <button class="btn btn-secondary" style="width: auto; margin: 0;" onclick="bulkEdgeAction('restart')">Restart Selected</button>
+                    <button class="btn btn-secondary" onclick="bulkEdgeAction('start')">Start Selected</button>
+                    <button class="btn btn-secondary" onclick="bulkEdgeAction('stop')">Stop Selected</button>
+                    <button class="btn btn-secondary" onclick="bulkEdgeAction('restart')">Restart Selected</button>
                 </div>
                 <div class="glass table-container">
                     <table>
@@ -1092,7 +1092,7 @@
                     <!-- Column 1: Domain Allocation -->
                     <div class="glass" style="padding: 24px; border-top: 4px solid var(--primary); display: flex; flex-direction: column;">
                         <h3 style="margin-bottom: 16px; font-size: 16px;">Domain Allocation</h3>
-                        <div class="form-group" style="margin-bottom: 20px;">
+                        <div class="form-group">
                             <label data-i18n="domain_allocation_rule" style="display: block; margin-bottom: 4px; font-weight: 500;" for="system-domain-allocation-rule">Domain Allocation Rule</label>
                             <p style="font-size: 13px; color: var(--text-muted); margin-bottom: 12px;" data-i18n="domain_allocation_rule_desc">Determine how domains are selected when a user requests a new tunnel.</p>
                             <select id="system-domain-allocation-rule" class="input-field" style="width: 100%;">
@@ -1124,7 +1124,7 @@
                             ⚠️ Only the System Owner is authorized to modify vanity domain hook configurations.
                         </div>
 
-                        <div class="form-group" style="margin-bottom: 20px;">
+                        <div class="form-group">
                             <label style="display: flex; align-items: center; gap: 8px; font-weight: 500; cursor: pointer;" for="system-enable-vanity-hook">
                                 <input type="checkbox" id="system-enable-vanity-hook" style="width: auto; margin: 0;" onchange="toggleVanityHookPathInput()" />
                                 <span>Enable Automated DNS/TLS Provisioning</span>
@@ -1298,7 +1298,7 @@
             </p>
             <input type="email" id="delete-acc-confirm-input" class="input-field" placeholder="you@liferay.com" required style="margin-bottom: 20px; width: 100%;" aria-label="Confirm your email address to delete the account" data-i18n-aria-label="aria_delete_confirm">
             <div style="display: flex; gap: 12px; justify-content: flex-end;">
-                <button class="btn btn-secondary" style="width: auto; margin: 0;" onclick="closeDeleteAccountModal()">Cancel</button>
+                <button class="btn btn-secondary" onclick="closeDeleteAccountModal()">Cancel</button>
                 <button class="btn" style="width: auto; margin: 0; background: #f43f5e; color: white; border: none;" onclick="submitSelfDeleteAccount()">Delete Permanently</button>
             </div>
         </div>
@@ -1317,7 +1317,7 @@
                 <span style="font-size: 11px; color: var(--text-muted); display: block; margin-top: 4px;">Set to 0 to grant unlimited requests.</span>
             </div>
             <div style="display: flex; gap: 12px; justify-content: flex-end;">
-                <button class="btn btn-secondary" style="width: auto; margin: 0;" onclick="closeUserQuotaModal()">Cancel</button>
+                <button class="btn btn-secondary" onclick="closeUserQuotaModal()">Cancel</button>
                 <button class="btn btn-primary" style="width: auto; margin: 0;" onclick="submitUserQuota()">Save Quota</button>
             </div>
         </div>
@@ -1336,7 +1336,7 @@
                 <span style="font-size: 11px; color: var(--text-muted); display: block; margin-top: 4px;">Leave blank/empty to reset and use gateway configuration default.</span>
             </div>
             <div style="display: flex; gap: 12px; justify-content: flex-end;">
-                <button class="btn btn-secondary" style="width: auto; margin: 0;" onclick="closeUserResLimitModal()">Cancel</button>
+                <button class="btn btn-secondary" onclick="closeUserResLimitModal()">Cancel</button>
                 <button class="btn btn-primary" style="width: auto; margin: 0;" onclick="submitUserResLimit()">Save Limit</button>
             </div>
         </div>
@@ -1355,7 +1355,7 @@
                 <span style="font-size: 11px; color: var(--text-muted); display: block; margin-top: 4px;">Leave blank/empty to reset and use gateway configuration default.</span>
             </div>
             <div style="display: flex; gap: 12px; justify-content: flex-end;">
-                <button class="btn btn-secondary" style="width: auto; margin: 0;" onclick="closeUserTunnelsLimitModal()">Cancel</button>
+                <button class="btn btn-secondary" onclick="closeUserTunnelsLimitModal()">Cancel</button>
                 <button class="btn btn-primary" style="width: auto; margin: 0;" onclick="submitUserTunnelsLimit()">Save Limit</button>
             </div>
         </div>
@@ -1377,7 +1377,7 @@
                 <span style="font-size: 11px; color: var(--text-muted); display: block; margin-top: 4px;">Changes are dynamically applied in-memory and will throttle the proxy instantly.</span>
             </div>
             <div style="display: flex; gap: 12px; justify-content: flex-end;">
-                <button class="btn btn-secondary" style="width: auto; margin: 0;" onclick="closeTunnelOverrideModal()">Cancel</button>
+                <button class="btn btn-secondary" onclick="closeTunnelOverrideModal()">Cancel</button>
                 <button class="btn" style="width: auto; margin: 0; background: #d97706; color: white; border: none;" onclick="submitTunnelOverride()">Apply Override</button>
             </div>
         </div>
@@ -1393,7 +1393,7 @@
                     <label data-i18n="detail_lbl_url" style="display:block; color: var(--text-muted); font-size: 11px; text-transform: uppercase; font-weight: 600;">Full Host / URL</label>
                     <div style="display: flex; align-items: center; gap: 8px; margin-top: 4px;">
                         <a id="detail-tunnel-host" href="#" target="_blank" style="color: var(--primary); text-decoration: none; font-weight: 500; word-break: break-all; flex-grow: 1;"></a>
-                        <button data-i18n="btn_copy_url" class="btn btn-outline" style="padding: 2px 8px; font-size: 11px; margin: 0; min-width: auto; width: auto;" onclick="copyTunnelUrlToClipboard()">Copy URL</button>
+                        <button data-i18n="btn_copy_url" class="btn btn-outline" style="padding: 2px 8px; font-size: 11px; min-width: auto;" onclick="copyTunnelUrlToClipboard()">Copy URL</button>
                     </div>
                 </div>
                 <div>
@@ -1414,7 +1414,7 @@
                     <label data-i18n="detail_lbl_rate_limit" style="display:block; color: var(--text-muted); font-size: 11px; text-transform: uppercase; font-weight: 600;">Rate Limit</label>
                     <div style="display: flex; align-items: center; gap: 8px; margin-top: 4px;">
                         <span id="detail-tunnel-limit" class="badge" style="font-weight: bold; background: rgba(139,92,246,0.15); color: #a78bfa; border: 1px solid rgba(139,92,246,0.3);"></span>
-                        <button id="detail-tunnel-override-btn" class="btn btn-outline" style="padding: 2px 6px; font-size: 11px; margin: 0; min-width: auto; width: auto; color: #d97706; border-color: #d97706;" onclick="openOverrideFromDetails()" data-i18n="btn_override">Override</button>
+                        <button id="detail-tunnel-override-btn" class="btn btn-outline" style="padding: 2px 6px; font-size: 11px; min-width: auto; color: #d97706; border-color: #d97706;" onclick="openOverrideFromDetails()" data-i18n="btn_override">Override</button>
                     </div>
                 </div>
                 <div>
@@ -1480,7 +1480,7 @@
             </div>
 
             <div style="display: flex; gap: 12px; justify-content: flex-end; border-top: 1px solid rgba(255,255,255,0.08); padding-top: 16px;">
-                <button class="btn btn-outline" style="width: auto; margin: 0; padding: 8px 16px;" onclick="refreshTunnelDetails()" data-i18n="btn_refresh">Refresh</button>
+                <button class="btn btn-outline" style="padding: 8px 16px;" onclick="refreshTunnelDetails()" data-i18n="btn_refresh">Refresh</button>
                 <button id="detail-tunnel-kick-btn" class="btn" style="width: auto; margin: 0; color: var(--danger); border-color: var(--danger);" onclick="kickFromDetails()" data-i18n="btn_kick_tunnel">Kick Tunnel</button>
                 <button class="btn btn-primary" style="width: auto; margin: 0; padding: 8px 24px;" onclick="closeTunnelDetailsModal()" data-i18n="btn_close">Close</button>
             </div>
@@ -1540,7 +1540,7 @@
             <!-- Active Tunnels Section -->
             <h4 style="font-size: 15px; font-weight: 600; margin-bottom: 12px; display: flex; align-items: center; gap: 6px;"><span data-i18n="user_lbl_connected_tunnels">🔌 Connected Tunnels</span> (<span id="detail-user-tunnels-count">0</span>)</h4>
             <div style="max-height: 240px; overflow-y: auto; margin-bottom: 24px; border: 1px solid rgba(255,255,255,0.05); border-radius: 8px; background: rgba(0,0,0,0.1);">
-                <table class="dashboard-table" style="width: 100%; border-collapse: collapse; min-width: 100%;">
+                <table class="dashboard-table">
                     <thead>
                         <tr style="border-bottom: 1px solid var(--border); text-align: left; background: rgba(255,255,255,0.02);">
                             <th style="padding: 10px 12px; color: var(--text-muted); font-size: 12px; font-weight: 500;" data-i18n="th_subdomain_prefix">Subdomain Prefix</th>
@@ -1572,15 +1572,15 @@
 
             <!-- Tab Headers -->
             <div style="display: flex; border-bottom: 1px solid var(--border); margin-bottom: 20px; gap: 16px;">
-                <button id="tab-btn-macos" class="tab-btn active" style="background: none; border: none; color: var(--text); padding: 8px 16px; cursor: pointer; border-bottom: 2px solid var(--primary); font-weight: 500;" onclick="switchInstallerTab('macos')" data-i18n="guide_tab_macos">macOS</button>
-                <button id="tab-btn-windows" class="tab-btn" style="background: none; border: none; color: var(--text-muted); padding: 8px 16px; cursor: pointer; border-bottom: 2px solid transparent; font-weight: 500;" onclick="switchInstallerTab('windows')" data-i18n="guide_tab_windows">Windows</button>
-                <button id="tab-btn-linux" class="tab-btn" style="background: none; border: none; color: var(--text-muted); padding: 8px 16px; cursor: pointer; border-bottom: 2px solid transparent; font-weight: 500;" onclick="switchInstallerTab('linux')" data-i18n="guide_tab_linux">Linux</button>
+                <button id="tab-btn-macos" class="tab-btn active" onclick="switchInstallerTab('macos')" data-i18n="guide_tab_macos">macOS</button>
+                <button id="tab-btn-windows" class="tab-btn" onclick="switchInstallerTab('windows')" data-i18n="guide_tab_windows">Windows</button>
+                <button id="tab-btn-linux" class="tab-btn" onclick="switchInstallerTab('linux')" data-i18n="guide_tab_linux">Linux</button>
             </div>
 
             <!-- Tab Contents -->
             <div style="flex-grow: 1; overflow-y: auto; padding-right: 4px; margin-bottom: 24px;">
                 <!-- macOS -->
-                <div id="tab-content-macos" class="tab-content">
+                <div id="tab-content-macos" class="tab-content active">
                     <h4 data-i18n="guide_macos_title" style="font-size: 14px; margin-bottom: 8px;">🚀 Apple Silicon (M1/M2/M3) & Intel Macs</h4>
                     <div id="guide-macos-brew-section">
                         <div data-i18n="guide_macos_brew" style="font-size: 0.8rem; font-weight: bold; margin-top: 10px; color: var(--text);">Recommended via Homebrew:</div>
@@ -1597,13 +1597,13 @@
                     </div>
                     
                     <div id="guide-dl-macos" style="margin-top: 16px; display: flex; gap: 12px;">
-                        <a href="/static/downloads/lfr-tunnel-darwin-arm64" class="btn btn-outline" style="font-size: 12px; padding: 6px 12px; width: auto; margin: 0;" data-i18n="guide_macos_dl_arm">Download arm64 (M1/M2/M3)</a>
-                        <a href="/static/downloads/lfr-tunnel-darwin-amd64" class="btn btn-outline" style="font-size: 12px; padding: 6px 12px; width: auto; margin: 0;" data-i18n="guide_macos_dl_intel">Download amd64 (Intel)</a>
+                        <a href="/static/downloads/lfr-tunnel-darwin-arm64" class="btn btn-outline" style="font-size: 12px; padding: 6px 12px;" data-i18n="guide_macos_dl_arm">Download arm64 (M1/M2/M3)</a>
+                        <a href="/static/downloads/lfr-tunnel-darwin-amd64" class="btn btn-outline" style="font-size: 12px; padding: 6px 12px;" data-i18n="guide_macos_dl_intel">Download amd64 (Intel)</a>
                     </div>
                 </div>
 
                 <!-- Windows -->
-                <div id="tab-content-windows" class="tab-content" style="display: none;">
+                <div id="tab-content-windows" class="tab-content">
                     <h4 data-i18n="guide_windows_title" style="font-size: 14px; margin-bottom: 8px;">🚀 Windows 10 / 11 (64-bit)</h4>
                     <div id="guide-windows-scoop-section">
                         <div data-i18n="guide_windows_scoop" style="font-size: 0.8rem; font-weight: bold; margin-top: 10px; color: var(--text);">Recommended via Scoop:</div>
@@ -1620,12 +1620,12 @@
                     </div>
 
                     <div id="guide-dl-windows" style="margin-top: 16px;">
-                        <a href="/static/downloads/lfr-tunnel-windows-amd64.exe" class="btn btn-outline" style="font-size: 12px; padding: 6px 12px; width: auto; margin: 0;" data-i18n="guide_windows_dl">Download Windows Binary (.exe)</a>
+                        <a href="/static/downloads/lfr-tunnel-windows-amd64.exe" class="btn btn-outline" style="font-size: 12px; padding: 6px 12px;" data-i18n="guide_windows_dl">Download Windows Binary (.exe)</a>
                     </div>
                 </div>
 
                 <!-- Linux -->
-                <div id="tab-content-linux" class="tab-content" style="display: none;">
+                <div id="tab-content-linux" class="tab-content">
                     <h4 data-i18n="guide_linux_title" style="font-size: 14px; margin-bottom: 8px;">🚀 Linux (amd64 / arm64)</h4>
                     <div data-i18n="guide_linux_direct" style="font-size: 0.8rem; font-weight: bold; margin-top: 10px; color: var(--text);">Direct Installation Command:</div>
                     <div style="margin-top: 4px; margin-bottom: 12px; position: relative; background: #0d1117; color: #e6edf3; border-radius: 6px; border: 1px solid rgba(255,255,255,0.1); padding: 10px 40px 10px 12px; font-family: monospace; font-size: 0.8rem;">
@@ -1634,8 +1634,8 @@
                     </div>
 
                     <div id="guide-dl-linux" style="margin-top: 16px; display: flex; gap: 12px;">
-                        <a href="/static/downloads/lfr-tunnel-linux-amd64" class="btn btn-outline" style="font-size: 12px; padding: 6px 12px; width: auto; margin: 0;" data-i18n="guide_linux_dl_amd">Download Linux amd64</a>
-                        <a href="/static/downloads/lfr-tunnel-linux-arm64" class="btn btn-outline" style="font-size: 12px; padding: 6px 12px; width: auto; margin: 0;" data-i18n="guide_linux_dl_arm">Download Linux arm64</a>
+                        <a href="/static/downloads/lfr-tunnel-linux-amd64" class="btn btn-outline" style="font-size: 12px; padding: 6px 12px;" data-i18n="guide_linux_dl_amd">Download Linux amd64</a>
+                        <a href="/static/downloads/lfr-tunnel-linux-arm64" class="btn btn-outline" style="font-size: 12px; padding: 6px 12px;" data-i18n="guide_linux_dl_arm">Download Linux arm64</a>
                     </div>
                 </div>
             </div>

@@ -2,6 +2,7 @@ package server
 
 import (
 	"encoding/json"
+	"lfr-tunnel/pkg/db"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -24,6 +25,22 @@ func adminRequest(method, path string, body []byte, sessionToken string) *http.R
 
 func newAdminSession(t *testing.T, srv *Server, email string) string {
 	t.Helper()
+
+	// The admin row is the point. Before #1760 this helper stored only a session, and the
+	// tests passed because requireAdmin defaulted an unresolvable user to "admin" -- so they
+	// exercised the escalation rather than an admin. With that closed, a session without a
+	// row is correctly refused, which is what these seven tests started reporting.
+	if srv.db != nil {
+		if u, err := srv.db.GetUserByEmail(email); err == nil && u != nil {
+			u.Role = roleAdmin
+			if err := srv.db.UpdateUser(u); err != nil {
+				t.Fatalf("promoting %s to admin: %v", email, err)
+			}
+		} else if err := srv.db.CreateUser(&db.User{ID: email, Email: email, Role: roleAdmin, Status: "approved"}); err != nil {
+			t.Fatalf("seeding admin %s: %v", email, err)
+		}
+	}
+
 	token := "test-admin-session-" + email
 	srv.portalMap.Store("admin_session_"+token, PortalSessionData{Email: email, ExpiresAt: time.Now().Add(time.Hour)})
 	return token

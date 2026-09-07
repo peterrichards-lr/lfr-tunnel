@@ -1170,12 +1170,20 @@
                     <div id="config-tree-container" style="background: var(--copy-box-bg); border: 1px solid var(--border); border-radius: 6px; padding: 16px; max-height: 400px; overflow-y: auto; font-family: monospace; font-size: 13px; line-height: 1.6; color: var(--text-main);">
                         <div style="text-align: center; color: var(--text-muted);">Loading server configuration...</div>
                     </div>
+                </div>
 
-
+                <!-- The save control for the System Settings form above. A sibling of the cards,
+                     never a child of #card-server-config: that card ships display:none and is
+                     revealed only for an admin whose /api/admin/config-view call succeeds. The
+                     card's closing tag was dropped in #606's responsive-grid rework, so this row
+                     was reparented into the read-only config viewer and inherited both its
+                     hidden default and its role gate -- leaving the whole tab with no reachable
+                     Save button on a direct visit (#1785). Note the closing tag was moved up
+                     rather than a new one added: the document was already balanced, just nested
+                     wrong, so adding one would have closed #tab-system too early. -->
                 <div style="border-top: 1px solid var(--border); padding-top: 24px; text-align: right;">
                     <button class="btn btn-primary" onclick="saveSystemSettings()" data-i18n="save_settings">Save Settings</button>
                 </div>
-            </div>
         </div>
     </div>
     </div><!-- /#dashboard-shell -->

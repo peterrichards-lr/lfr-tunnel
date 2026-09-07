@@ -2796,9 +2796,20 @@ function showTab(tabName, skipHistory = false) {
     history.pushState({ tab: tabName }, '', canonical);
   }
 
+  // Every branch below loads data for the tab it names. That is not decoration: the
+  // sections all ship hidden and a loader is the only thing that reveals its own markup,
+  // so a branch that populates another tab's elements makes those elements reachable only
+  // by visiting an unrelated section first. #1785 found three of them at once -- the
+  // Server Configuration card, the integration-test target and the Account tab's
+  // Preferred Domain options -- all with the same shape. TestShowTabLoadersStayInTheirTab
+  // in pkg/server asserts the property so a fourth cannot be added silently.
   if (tabName === 'account') {
     syncPortalBannerToggle();
     syncDiagnosticsConsentToggle();
+    // #acc-preferred-domain's options come from loadDomains(), whose only call site used
+    // to be loadReservations() -- so a direct visit to Account offered "None (Auto)" and
+    // nothing else. Idempotent behind its own domainsLoaded guard.
+    loadDomains();
   }
   if (tabName === 'users') loadUsers();
   if (tabName === 'admin-subdomains') loadAdminSubdomains();
@@ -2808,9 +2819,14 @@ function showTab(tabName, skipHistory = false) {
   if (tabName === 'magic') loadAdminMagicLinks();
   if (tabName === 'backups') loadBackups();
   if (tabName === 'network-health') loadNetworkHealth();
-  if (tabName === 'maintenance') {
-    loadMaintenanceStatus();
+  if (tabName === 'maintenance') loadMaintenanceStatus();
+  if (tabName === 'system') {
+    // Both of these populate markup in #tab-system. loadServerConfig() was wired to
+    // 'settings' in #522 -- a section that has never existed, the id is 'system' -- and
+    // #525 answered "the card never appears" by moving the call onto the maintenance
+    // branch instead of correcting the name, which is how it stayed for seven weeks.
     loadServerConfig();
+    loadIntegrationTestTarget();
   }
   if (tabName === 'tokens') loadTokens();
   if (tabName === 'tunnels') loadTunnels();
@@ -3838,18 +3854,34 @@ async function loadMaintenanceStatus() {
     if (res.ok) {
       const data = await res.json();
       updateMaintenanceModeUI(data.maintenance_mode, data.iron_curtain);
-
-      const targetContainer = document.getElementById(
-        'test-integration-target-container',
-      );
-      const targetEl = document.getElementById('test-integration-target');
-      if (targetContainer && targetEl && data.test_target) {
-        targetEl.innerText = data.test_target;
-        targetContainer.style.display = 'block';
-      }
     }
   } catch (e) {
     console.error('Failed to load maintenance status', e);
+  }
+}
+
+// The "Active Target:" line under Send Test Alert. It lives in the Test Integrations card
+// in #tab-system, ships display:none, and nothing else reveals it -- so while this ran as
+// part of loadMaintenanceStatus() it was the second element in System Settings that only
+// appeared once Gateway Maintenance had been visited (#1785). The two share an endpoint,
+// which is what made merging them look reasonable; they do not share a tab, which is what
+// makes them separate loaders.
+async function loadIntegrationTestTarget() {
+  const targetContainer = document.getElementById(
+    'test-integration-target-container',
+  );
+  const targetEl = document.getElementById('test-integration-target');
+  if (!targetContainer || !targetEl) return;
+  try {
+    const res = await fetch('/api/admin/maintenance');
+    if (!res.ok) return;
+    const data = await res.json();
+    if (data.test_target) {
+      targetEl.innerText = data.test_target;
+      targetContainer.style.display = 'block';
+    }
+  } catch (e) {
+    console.error('Failed to load integration test target', e);
   }
 }
 
@@ -5895,6 +5927,13 @@ async function loadDomains() {
           opt.textContent = d;
           accPrefSelect.appendChild(opt);
         });
+        // The saved preference is applied at sign-in, before these options exist, so that
+        // assignment is a no-op and rebuilding the list here would drop it again. Without
+        // this the control reads "None (Auto)" for a user who has a preferred domain, and
+        // saving the Account form would write that back.
+        if (currentUser && currentUser.preferred_domain) {
+          accPrefSelect.value = currentUser.preferred_domain;
+        }
       }
       domainsLoaded = true;
     }

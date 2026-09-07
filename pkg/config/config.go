@@ -450,6 +450,12 @@ type ClientConfig struct {
 	TokenSource string `yaml:"-"`
 }
 
+// TokenSourceConfigFile is the TokenSource value meaning "AuthToken came from auth_token: in
+// the config file itself". It is the only provenance SaveClientConfig writes back into
+// auth_token: -- see clientTokenBelongsInConfigFile (#1772). Named rather than spelled as a
+// literal at each site so the save guard and the loader cannot drift apart silently.
+const TokenSourceConfigFile = "config file"
+
 // DefaultServerConfig returns a ServerConfig with sensible default values.
 func DefaultServerConfig() *ServerConfig {
 	trueVal := true
@@ -845,17 +851,55 @@ func SaveClientConfig(path string, cfg *ClientConfig) error {
 	enc := yaml.NewEncoder(file)
 	defer enc.Close() //nolint:errcheck
 
-	// A config that names a token_file must not be written back with the token it resolved
-	// inline (#1758). The Inspector's Settings tab and the tray GUI both save the whole
-	// in-memory config, so without this the first save after a token_file was honoured would
-	// copy the token into the very file the key exists to keep it out of -- and the user would
-	// have no reason to look.
-	if cfg.TokenFile != "" {
+	// The whole in-memory config is written back, and it carries the token whichever source
+	// resolved it, so anything the user kept OUT of this file lands back in it on the first
+	// save (#1772). See clientTokenBelongsInConfigFile for the rule.
+	if cfg.AuthToken != "" && !clientTokenBelongsInConfigFile(cfg) {
 		redacted := *cfg
 		redacted.AuthToken = ""
 		return enc.Encode(&redacted)
 	}
 	return enc.Encode(cfg)
+}
+
+// clientTokenBelongsInConfigFile reports whether cfg's AuthToken may be written into
+// auth_token: in the config file.
+//
+// The property, which SaveClientConfig is the single place that can enforce: **a token
+// resolved from anywhere other than auth_token: in this very file must never be persisted
+// into auth_token:.** LoadClientConfig will take a token from ~/.lfr-tunnel/token, from
+// token_file:, from LFT_TOKEN_FILE, from ~/.config/lfr/secrets, or from LFT_CLIENT_TOKEN --
+// and the Inspector's Settings tab and the tray GUI then save the whole config, so without
+// this every one of those users has their PAT copied into the file they were told was safe to
+// paste into a support thread. Nothing tells them. #1758 guarded only the token_file: case.
+//
+// **Unknown provenance is denied**, deliberately. A caller that sets AuthToken without saying
+// where it came from gets a token that is not persisted -- a visible bug -- rather than one
+// silently copied out of the user's token file, which is not. That makes the guard safe
+// against a resolution path added later that forgets to set TokenSource, so it cannot be
+// forgotten at a fifth call site the way a per-caller check could. The counterpart is
+// SetInlineAuthToken, which is how a caller that genuinely authors a token says so.
+func clientTokenBelongsInConfigFile(cfg *ClientConfig) bool {
+	// A config that names token_file: has said the token lives elsewhere; token_file:
+	// outranks an inline auth_token: on load, so writing one beside it would be both a leak
+	// and dead weight (#1758). This is not subsumed by the TokenSource rule below: a token
+	// typed into the Settings form of a config that names a token_file is authored, and would
+	// otherwise be written into a key the next load ignores.
+	if strings.TrimSpace(cfg.TokenFile) != "" {
+		return false
+	}
+	return cfg.TokenSource == TokenSourceConfigFile
+}
+
+// SetInlineAuthToken records a token the user supplied for the config file itself -- the
+// Inspector's and the tray GUI's Settings forms are the only things that do -- so that
+// SaveClientConfig will persist it.
+//
+// Assigning AuthToken directly is deliberately not sufficient: see
+// clientTokenBelongsInConfigFile for why unknown provenance is denied.
+func (c *ClientConfig) SetInlineAuthToken(token string) {
+	c.AuthToken = token
+	c.TokenSource = TokenSourceConfigFile
 }
 
 // ResolveDefaultConfigPath returns the canonical path to the user's config file.
@@ -892,7 +936,7 @@ func LoadClientConfig(path string) (*ClientConfig, error) {
 	}
 
 	if cfg.AuthToken != "" {
-		cfg.TokenSource = "config file"
+		cfg.TokenSource = TokenSourceConfigFile
 	}
 
 	// 2. An explicit token_file: in the config file (#1758). Handled separately from the

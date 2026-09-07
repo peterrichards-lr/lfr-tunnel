@@ -34,6 +34,30 @@ count() {
         | grep -c 'errcheck' || true
 }
 
+# How many Go files the count above actually looked at.
+#
+# Without this the ratchet passes on a scan of NOTHING (#1779). `2>/dev/null` hides a missing
+# pkg/ or cmd/, the count comes back 0, 0 is under any ceiling, and the gate reports success --
+# then helpfully suggests LOWERING the ceiling to 0, which would permanently disarm it. Measured:
+# run from an empty directory it exits 0 with "The count has fallen".
+#
+# A wrong working directory, a rename, or a future change to the --include set all produce that
+# shape, and none of them look like a failure.
+corpus_size() {
+    find pkg cmd -name '*.go' -type f 2>/dev/null | wc -l | tr -d ' '
+}
+
+# A floor, not an exact figure: the point is to tell "hundreds of files" from "none", not to
+# encode a number that needs maintaining. The tree holds several hundred.
+MIN_GO_FILES="${LFT_NOLINT_MIN_FILES:-100}"
+CORPUS="$(corpus_size)"
+if [ "$CORPUS" -lt "$MIN_GO_FILES" ]; then
+    echo "FAILED: only $CORPUS Go files found under pkg/ and cmd/ (expected at least $MIN_GO_FILES)."
+    echo "The suppression count is therefore meaningless -- a scan of nothing counts zero and"
+    echo "would pass. Run this from the repository root."
+    exit 1
+fi
+
 ACTUAL="$(count)"
 
 echo "//nolint:errcheck suppressions: $ACTUAL (ceiling $CEILING)"

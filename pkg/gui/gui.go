@@ -276,8 +276,10 @@ func (s *TempSettingsServer) handleConfigPost(w http.ResponseWriter, r *http.Req
 	}
 
 	cfg.ServerURL = req.ServerURL
+	// SetInlineAuthToken, not a bare assignment: a token whose provenance is not
+	// declared is not written to the config file at all (#1772).
 	if req.AuthToken != "********" && req.AuthToken != "" {
-		cfg.AuthToken = req.AuthToken
+		cfg.SetInlineAuthToken(req.AuthToken)
 	}
 	cfg.TargetHost = req.TargetHost
 	cfg.Ports = []int{req.DestPort}

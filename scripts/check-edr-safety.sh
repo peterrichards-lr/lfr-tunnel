@@ -76,6 +76,35 @@ is_exempt_line() {
     return 1
 }
 
+# How many files the include/exclude set actually reaches.
+#
+# scan() below ends its grep with `2>/dev/null || true`, which is correct for "no matches" and
+# indistinguishable from "matched nothing because it looked nowhere" (#1779). Measured: run from
+# an empty directory this script prints "EDR Safety Check Passed" and exits 0.
+#
+# That matters more here than in any other gate. This is the guard against the `go test` / `go run`
+# pattern that has cost three full environment reinstalls, and a version of it that cannot fail
+# is worse than none -- it reads as proof the tree is clean.
+corpus_size() {
+    # `|| true` is load-bearing. grep exits 1 when nothing matches, and this script runs under
+    # `set -euo pipefail` -- so without it the script DIES here on an empty tree instead of
+    # reaching the comparison below. That still produced a non-zero exit, but by accident and
+    # with no message, which is a worse guard than none: the operator sees a silent failure and
+    # no reason for it. Found by mutation-testing this guard and noticing the mutant was killed
+    # for the wrong reason.
+    grep -rl '' "${INCLUDES[@]}" "${EXCLUDES[@]}" . 2>/dev/null | wc -l | tr -d ' ' || true
+}
+
+# A floor, deliberately well below the real figure: this distinguishes "the tree" from "nothing",
+# and is not a number anyone should have to maintain as files come and go.
+MIN_SCANNED="${LFT_EDR_MIN_FILES:-50}"
+SCANNED="$(corpus_size)"
+if [ "$SCANNED" -lt "$MIN_SCANNED" ]; then
+    echo "EDR SAFETY CHECK FAILED: only $SCANNED files matched the scan set (expected at least $MIN_SCANNED)."
+    echo "Nothing was examined, so a pass here would mean nothing. Run this from the repository root."
+    exit 1
+fi
+
 scan() {
     local pattern="$1" label="$2" advice="$3"
     local hits

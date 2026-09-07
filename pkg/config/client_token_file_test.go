@@ -412,10 +412,16 @@ func TestSaveClientConfigKeepsTheTokenOutOfAFileThatNamesATokenFile(t *testing.T
 
 // TestSaveClientConfigStillWritesAnInlineToken is the other side of the guard: a user who has
 // deliberately kept their token in the config file must not have it silently deleted on save.
+//
+// Constructed with SetInlineAuthToken since #1772. The guard is now default-deny -- a token of
+// unknown provenance is not written back -- so "the token came from this file" has to be said
+// rather than assumed. The user-level behaviour this test exists for is unchanged and is also
+// covered end to end, through LoadClientConfig, by the "inline auth_token:" case in
+// TestSaveClientConfigNeverPersistsATokenItDidNotGetFromTheConfigFile.
 func TestSaveClientConfigStillWritesAnInlineToken(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "config.yaml")
 	cfg := DefaultClientConfig()
-	cfg.AuthToken = "lft_pat_inline"
+	cfg.SetInlineAuthToken("lft_pat_inline")
 
 	if err := SaveClientConfig(path, cfg); err != nil {
 		t.Fatalf("failed to save: %v", err)

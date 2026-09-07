@@ -10,6 +10,23 @@ set -e
 SSH_USER=""
 DOMAINS=""
 CONTROL_PLANE_URL=""
+# The control plane's own ADDRESS, as distinct from CONTROL_PLANE_URL above, which is a URL.
+# Passed straight through to render-nginx-config as -trusted-proxy, and required for the same
+# reason -redirect-domain is: without it an edge renders with NO real_ip block at all, and every
+# request another gateway forwards here is attributed to that gateway instead of to the visitor
+# -- the per-tunnel IP whitelist, the rate limiter's auto-ban and every audit entry then name it
+# (#1450, #1750, #1757, #1781). A config missing this looks completely normal and passes
+# `nginx -t`, so nothing downstream notices; refusing to provision without it is the only point
+# at which the omission is visible.
+#
+# NOT derived from CONTROL_PLANE_URL. That is a URL, and resolving its host to an address inside
+# a provisioning script silently picks whichever family or stale answer the resolver happens to
+# return -- and the value ends up in a security boundary, where a wrong entry is either a broken
+# attribution or a trusted stranger. NOT derived from the DNS spec either, the way peer edges are
+# (#1757): the spec carries central as the ${IPV4}/${IPV6} placeholders -ipv4/-ipv6 substitute at
+# `dns apply` time, and edgeAddresses() deliberately excludes them, so central's address is not in
+# the file to derive.
+TRUSTED_PROXY=""
 EDGE_PORT=""
 EDGE_TOKEN=""
 SSH_KEY_ARG=""
@@ -37,7 +54,7 @@ DNS_AUTHENTICATOR_ARGS=""
 DDNS_PROVIDER="none"
 
 usage() {
-  echo "Usage: $0 -s <vps_ip> -t <edge_token> -r <redirect_domain> -i <identity_file> -u <ssh_user> -d <domains> -c <control_plane_url> -p <port> [-a <tunnel_domains>]"
+  echo "Usage: $0 -s <vps_ip> -t <edge_token> -r <redirect_domain> -i <identity_file> -u <ssh_user> -d <domains> -c <control_plane_url> -C <control_plane_ip> -p <port> [-a <tunnel_domains>]"
   echo "  -s: VPS Public IP address (required)"
   echo "  -t: Plaintext Edge Token for Control Plane validation (required)"
   echo "  -r: Domain to redirect root browser traffic to (required), e.g. your control plane's landing page"
@@ -45,6 +62,11 @@ usage() {
   echo "  -u: SSH username (required)"
   echo "  -d: Comma-separated list of edge domains (required)"
   echo "  -c: Control Plane URL (required)"
+  echo "  -C: Control Plane IP address (required), e.g. 203.0.113.10 -- the ADDRESS behind -c's"
+  echo "      URL. Rendered as nginx set_real_ip_from so a request the control plane forwards"
+  echo "      here is attributed to the visitor rather than to the control plane (#1450)."
+  echo "      Pass the EXACT address. A CIDR range is accepted but lets anything inside it"
+  echo "      assert a visitor address, so use one only if you genuinely mean to."
   echo "  -p: Port for lfr-tunneld to bind to on Edge node (required)"
   echo "  -D: Dynamic DNS updater to install: none (default), cloudflare, or route53."
   echo "      Only needed when this node's public address can change. A node with a static"
@@ -68,7 +90,7 @@ usage() {
 }
 
 # Parse parameters
-while getopts "s:t:i:u:d:c:p:r:a:A:n:N:D:" opt; do
+while getopts "s:t:i:u:d:c:C:p:r:a:A:n:N:D:" opt; do
   case $opt in
     s) VPS_IP="$OPTARG" ;;
     t) EDGE_TOKEN="$OPTARG" ;;
@@ -88,6 +110,7 @@ while getopts "s:t:i:u:d:c:p:r:a:A:n:N:D:" opt; do
     u) SSH_USER="$OPTARG" ;;
     d) DOMAINS="$OPTARG" ;;
     c) CONTROL_PLANE_URL="$OPTARG" ;;
+    C) TRUSTED_PROXY="$OPTARG" ;;
     p) EDGE_PORT="$OPTARG" ;;
     r) REDIRECT_DOMAIN="$OPTARG" ;;
     a) TUNNEL_DOMAINS="$OPTARG" ;;
@@ -103,6 +126,38 @@ if [ -z "$VPS_IP" ] || [ -z "$EDGE_TOKEN" ] || [ -z "$REDIRECT_DOMAIN" ] || [ -z
    [ -z "$SSH_USER" ] || [ -z "$DOMAINS" ] || [ -z "$CONTROL_PLANE_URL" ] || [ -z "$EDGE_PORT" ] || \
    [ -z "$DNS_AUTHENTICATOR" ]; then
   echo "❌ Error: -s, -t, -r, -i, -u, -d, -c, -p and -n are all required parameters."
+  usage
+fi
+
+# -C is checked separately from the block above so the message can say what it is FOR. Its
+# absence is not a typo an operator notices: the provision succeeds, nginx starts, traffic
+# flows, and only the attribution is wrong (#1781).
+if [ -z "$TRUSTED_PROXY" ]; then
+  echo "❌ Error: -C (the control plane's IP address) is required."
+  echo "   It becomes nginx's set_real_ip_from entry for the control plane. Without it this"
+  echo "   edge renders with no real_ip block at all, and every request the control plane or a"
+  echo "   peer edge forwards here is attributed to THAT GATEWAY rather than to the visitor:"
+  echo "   the per-tunnel IP whitelist, the rate limiter's auto-ban and every audit entry then"
+  echo "   name it (#1450, #1750, #1757). The rendered config looks entirely normal and passes"
+  echo "   nginx -t, so this is refused here rather than discovered later."
+  usage
+fi
+
+# Shape-checked, because -c and -C differ by one shift key and the value silently does nothing
+# useful if a URL or a hostname lands here: nginx compares set_real_ip_from against the peer's
+# ADDRESS, so a name never matches and the block is inert while looking present.
+case "$TRUSTED_PROXY" in
+  *://*)
+    echo "❌ Error: -C takes the control plane's ADDRESS, not a URL (got '$TRUSTED_PROXY')."
+    echo "   The URL goes in -c; -C is the address that URL resolves to."
+    usage
+    ;;
+esac
+if ! echo "$TRUSTED_PROXY" | grep -qE '^([0-9]{1,3}(\.[0-9]{1,3}){3}(/[0-9]{1,2})?|[0-9A-Fa-f:]*:[0-9A-Fa-f:.]*(/[0-9]{1,3})?)$'; then
+  echo "❌ Error: -C must be an IPv4 or IPv6 address, optionally with a prefix length"
+  echo "   (got '$TRUSTED_PROXY'). nginx matches set_real_ip_from against the peer's address,"
+  echo "   so a hostname there never matches and the real_ip block is inert while looking"
+  echo "   present -- the exact silent failure this argument exists to prevent."
   usage
 fi
 
@@ -191,7 +246,19 @@ rm -f "$CONFIG_TMP"
 #    file the edges actually run was hand-written on the box with no source anywhere here.
 echo "=> Generating Nginx configuration locally..."
 NGINX_TMP="/tmp/nginx-edge.conf"
-RENDER_ARGS=(-role edge -domains "$DOMAINS" -port "$EDGE_PORT" -redirect-domain "$REDIRECT_DOMAIN")
+#
+#    -trusted-proxy is not optional here even though the flag itself defaults to empty (#1781).
+#    An edge always has a control plane above it -- control_plane_url is required in its own
+#    server-config.yaml -- so "edge with nothing forwarding to it" is not a configuration that
+#    exists. The peer-edge entries ride on this one (renderRealIPBlock returns "" for an edge
+#    with no trusted proxy), so omitting it does not merely skip the control-plane entry: it
+#    drops the whole real_ip block, peers and loopback included.
+#
+#    -dns-spec is deliberately NOT passed: its default is the committed fleet spec, read
+#    relative to the repo root this script already runs from, and passing it explicitly would
+#    turn "no spec, so no peers" from a warning into a hard failure for every deployment that
+#    is not Liferay's own.
+RENDER_ARGS=(-role edge -domains "$DOMAINS" -port "$EDGE_PORT" -redirect-domain "$REDIRECT_DOMAIN" -trusted-proxy "$TRUSTED_PROXY")
 if [ -n "$APEX_DOMAINS" ]; then
   RENDER_ARGS+=(-apex-domains "$APEX_DOMAINS")
 fi

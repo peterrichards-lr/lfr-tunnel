@@ -268,6 +268,7 @@ test-hooks:
 	@./tests/hooks/test-workflow-failure-alert.sh
 	@./tests/hooks/test-css-modifiers.sh
 	@./tests/hooks/test-theme-tokens.sh
+	@./tests/hooks/test-edge-real-ip-provisioning.sh
 
 # The pre-merge CI-configuration gate (#1391). Worth a target rather than only a path to type:
 # the whole point of this check is being run BEFORE pushing, and a check nobody can invoke

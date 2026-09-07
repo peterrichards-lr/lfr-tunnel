@@ -46,14 +46,19 @@ run_case() {
     cp "$GUARD" "$dir/scripts/check-edr-safety.sh"
     printf '%s\n' "$body" > "$dir/$name"
 
-    ( cd "$dir" && ./scripts/check-edr-safety.sh >/dev/null 2>&1 )
+    # LFT_EDR_MIN_FILES=1 because these fixtures are deliberately tiny -- one or two files that
+    # isolate a single pattern. The guard's real floor (#1779) exists to catch the gate scanning
+    # the WRONG tree in normal use, where the corpus is hundreds of files; a fixture opting out
+    # is stating "this really is meant to be small", which is the distinction the floor cannot
+    # make for itself.
+    ( cd "$dir" && LFT_EDR_MIN_FILES=1 ./scripts/check-edr-safety.sh >/dev/null 2>&1 )
     got=$?
 
     if [ "$got" -eq "$want" ]; then
         pass "$label (exit $got)"
     else
         fail "$label (expected exit $want, got $got)"
-        ( cd "$dir" && ./scripts/check-edr-safety.sh 2>&1 | sed 's/^/        /' )
+        ( cd "$dir" && LFT_EDR_MIN_FILES=1 ./scripts/check-edr-safety.sh 2>&1 | sed 's/^/        /' )
     fi
 }
 

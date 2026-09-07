@@ -49,10 +49,15 @@ test.describe('Portal V1 System Settings on a direct visit', () => {
   }) => {
     await page.goto('/portal/system');
 
-    const onScreen = await page
-      .locator('.main-content > div[id^="tab-"]:not(.hidden)')
-      .evaluateAll((els) => els.map((e) => e.id.slice(4)));
-    expect(onScreen).toEqual(['system']);
+    // Polled, not read once: showTab() runs after the session check resolves, so a bare
+    // read here races the app and the whole premise would be measured before it is true.
+    await expect
+      .poll(() =>
+        page
+          .locator('.main-content > div[id^="tab-"]:not(.hidden)')
+          .evaluateAll((els) => els.map((e) => e.id.slice(4))),
+      )
+      .toEqual(['system']);
     await expect(page.locator('#nav-system')).toHaveAttribute(
       'aria-current',
       'page',

@@ -508,6 +508,21 @@ derived from the committed DNS spec via `-dns-spec`, never typed -- see below.
 is what did not exist before #1442, and why the edges ended up running a hand-written config
 with no source in this repo (#1443).
 
+The provisioning script takes the control plane's address as **`-C`**, and **refuses to provision
+without it** (#1781). Until then it omitted `-trusted-proxy` entirely, so a freshly provisioned
+edge started life with no `real_ip` block at all -- the defect #1450, #1750 and #1757 had just
+finished fixing everywhere else. It is refused rather than defaulted because the omission is
+invisible from the outside: the rendered config is well-formed, passes `nginx -t`, starts, and
+serves traffic, and only the attribution is wrong.
+
+Note `-C` is an **address**, distinct from `-c`, which is the control plane's **URL**. The
+address is not derived from the URL: resolving a hostname inside a provisioning script picks
+whichever address family or cached answer the resolver happens to return, and the value lands in
+a security boundary where a wrong entry is either broken attribution or a trusted stranger. Nor
+is it derived from the DNS spec the way the peer edges are -- the spec carries central as the
+`${IPV4}`/`${IPV6}` placeholders that `-ipv4`/`-ipv6` substitute at `dns apply` time, and
+`edgeAddresses()` deliberately excludes them, so central's address is not in the file to derive.
+
 What the rendered config contains, and why:
 
 | block | purpose |
@@ -582,4 +597,4 @@ If your Edge VPS or Control Plane gateway has multiple public IP addresses confi
 
 <!-- markdownlint-disable MD049 -->
 ---
-*Last Updated: 2026-09-06* | *Last Reviewed: 2026-09-06*
+*Last Updated: 2026-09-07* | *Last Reviewed: 2026-09-07*

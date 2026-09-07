@@ -244,6 +244,59 @@ re-run, and it belongs in the PR body.
 
 ---
 
+## 5c. An assertion satisfied by the wrong failure
+
+The sibling of §5b, and the more common of the two. A test goes red, or stays green, for a
+reason that has nothing to do with the thing it names — so it reports on something nobody is
+watching while appearing to cover the thing they care about.
+
+Nine instances surfaced in a single week, which is why this is a section and not a footnote:
+
+| The assertion | What actually satisfied it |
+|---|---|
+| `TestMain_ValidationFailure`: "child exited non-zero" | *"No tunnel server configured"* — bandwidth validation was **never** reached (#1716) |
+| "gate fails on an empty tree" | the gate died on a **bash array under dash**; the floor was never evaluated |
+| the same, earlier | the gate **self-matched** its own `go test` pattern — a match, not an empty scan |
+| "the script refuses a bad flag" (mutation) | the script ran on and died at the **first stubbed command** |
+| "this class is applied" (`toHaveClass`) | true throughout the bug's entire life — the **rule** was missing, not the class |
+| cross-node spoofing rejected | the forged address **already matched the chain's tail**, so believed and rejected were byte-identical |
+| decode preserves a field | the test decoded into its **own mirror** of the struct, not production's |
+| row shows "asleep" | the **node id** in the fixture was `asleep-node`, and satisfied the regex |
+| a doc anchor exists | the heading existed; the **generated id** differed (`&` collapses to one dash) |
+
+### The rules
+
+1. **Assert the cause, not the symptom.** "Exited non-zero", "is not visible", "threw", "went
+   red" are shared by every failure mode in the system. Assert the message, the exit code, the
+   computed value — something only the intended cause produces.
+
+2. **A mutation must be killed for the right reason.** Reading "1 test failed" is not the check;
+   reading *which* test and *what it said* is. Twice this week a mutant was killed by an
+   unrelated mechanism and the guard was believed to work.
+
+3. **Ask what the pre-fix code does to your assertion.** If the old behaviour also satisfies it,
+   the test is documentation, not a guard. The spoofing case is the sharp version: the fixture
+   made "trusted the forged header" and "rejected it" produce identical output.
+
+4. **Test production, not a copy of it.** A mirror struct, a re-implemented algorithm or a
+   recreated handler tests your copy. Reach for the real symbol, or assert against the real
+   source, and say why if you cannot.
+
+5. **Watch for the harness failing instead of the subject.** Stubbed commands, missing binaries,
+   the wrong shell, an empty Docker mount — all produce a non-zero exit that looks like a
+   finding. If a test can fail before reaching its subject, it can pass for that reason too.
+
+6. **Beware self-match.** A checker that greps for a pattern will find that pattern in its own
+   source and its own comments. Two guards here matched their own documentation.
+
+### The one-line check
+
+> **If this assertion fails, is there exactly one thing that could have caused it?**
+
+If several could, name the one you mean.
+
+---
+
 ## 6. Pre-Commit / Pre-PR Checks
 *Active Constraint*: Before pushing commits and opening a PR, you MUST actively execute the following verification steps:
 1. **Branch Sync**: You MUST execute `git fetch origin && git merge origin/master` to ensure your feature branch is strictly up-to-date with `master`.
@@ -383,4 +436,4 @@ After any merge you expect to close an issue (whether via a `Closes #N` referenc
 
 <!-- markdownlint-disable MD049 -->
 ---
-*Last Updated: 2026-09-06* | *Last Reviewed: 2026-09-06*
+*Last Updated: 2026-09-07* | *Last Reviewed: 2026-09-07*

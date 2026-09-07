@@ -420,6 +420,12 @@ Prefer keeping the token out of the file altogether. `lfr-tunnel login` writes i
 `auth_token` is empty. For the restricted-secrets-file approach used in LDM, see [Step 3 of the
 Getting Started Guide](getting_started.md#step-3-authenticate-and-store-your-token).
 
+**Saving from the Inspector or the tray GUI will not put it back.** Both save the whole config,
+and until #1772 that copied whichever token they had resolved -- from `~/.lfr-tunnel/token`, from
+`token_file:`, from `~/.config/lfr/secrets`, or from `LFT_CLIENT_TOKEN` -- into `auth_token:`,
+silently, the first time you changed any unrelated setting. A token now reaches this file only if
+it is the token this file already held, or one you typed into the Settings form yourself.
+
 ### Keeping the token out of this file
 
 `~/.lfr-tunnel/token` is picked up automatically, but only from that one path. `token_file:`
@@ -482,4 +488,4 @@ chmod 600 ~/.lfr-tunnel/config.yaml
 
 <!-- markdownlint-disable MD049 -->
 ---
-*Last Updated: 2026-09-06* | *Last Reviewed: 2026-09-06*
+*Last Updated: 2026-09-07* | *Last Reviewed: 2026-09-07*

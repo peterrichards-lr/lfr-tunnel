@@ -40,8 +40,14 @@ mkdir -p "$WORK/gates" "$WORK/empty"
 
 for gate in check-edr-safety.sh check-nolint-ratchet.sh; do
     cp "$REPO_ROOT/scripts/$gate" "$WORK/gates/"
+    chmod +x "$WORK/gates/$gate"
 
-    if (cd "$WORK/empty" && sh "$WORK/gates/$gate" >/dev/null 2>&1); then
+    # Executed directly so the shebang is honoured, NOT via `sh`. Both gates are
+    # `#!/usr/bin/env bash` and use bash arrays; on macOS `sh` is bash and this passed locally,
+    # while CI's `sh` is dash, where the arrays are a syntax error. The gate then died for that
+    # reason and the counterpart assertion below read it as "the floor is too high" -- a green
+    # local run and a red CI one, for a defect in the test rather than in either gate.
+    if (cd "$WORK/empty" && "$WORK/gates/$gate" >/dev/null 2>&1); then
         fail "$gate PASSES on an empty tree -- a scan of nothing must not report success"
     else
         pass "$gate fails on an empty tree"
@@ -51,7 +57,7 @@ done
 # The counterpart. A guard that fails everywhere is not a guard, it is an outage -- so each must
 # still pass against the real tree, where there genuinely is a corpus to examine.
 for gate in check-edr-safety.sh check-nolint-ratchet.sh; do
-    if (cd "$REPO_ROOT" && sh "scripts/$gate" >/dev/null 2>&1); then
+    if (cd "$REPO_ROOT" && "./scripts/$gate" >/dev/null 2>&1); then
         pass "$gate still passes against the real tree"
     else
         fail "$gate now fails on a clean checkout -- the floor is too high, or something is genuinely wrong"
@@ -60,13 +66,13 @@ done
 
 # The floors are overridable, so the failure can be reproduced deliberately without contriving
 # an empty directory. If these stop being read the guard becomes untestable in place.
-if (cd "$REPO_ROOT" && LFT_EDR_MIN_FILES=999999 sh scripts/check-edr-safety.sh >/dev/null 2>&1); then
+if (cd "$REPO_ROOT" && LFT_EDR_MIN_FILES=999999 ./scripts/check-edr-safety.sh >/dev/null 2>&1); then
     fail "check-edr-safety.sh ignores LFT_EDR_MIN_FILES, so its floor cannot be exercised"
 else
     pass "check-edr-safety.sh honours LFT_EDR_MIN_FILES"
 fi
 
-if (cd "$REPO_ROOT" && LFT_NOLINT_MIN_FILES=999999 sh scripts/check-nolint-ratchet.sh >/dev/null 2>&1); then
+if (cd "$REPO_ROOT" && LFT_NOLINT_MIN_FILES=999999 ./scripts/check-nolint-ratchet.sh >/dev/null 2>&1); then
     fail "check-nolint-ratchet.sh ignores LFT_NOLINT_MIN_FILES, so its floor cannot be exercised"
 else
     pass "check-nolint-ratchet.sh honours LFT_NOLINT_MIN_FILES"

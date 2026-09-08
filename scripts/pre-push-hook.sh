@@ -14,24 +14,70 @@ set -uo pipefail
 
 ZERO="0000000000000000000000000000000000000000"
 
+# Which commits is this push actually adding? (#1816)
+#
+# Two ways this got it wrong, both of which ended in "Nothing to check" and exit 0 -- a green
+# pre-push that had run no checks at all:
+#
+#   1. The fallback `origin/master..HEAD` was installed WITHOUT verifying origin/master
+#      resolves. The `rev-parse --verify` guard below it checked the left side of the range being
+#      REPLACED, not the fallback being installed. Where that ref is absent -- a fresh clone that
+#      has not fetched, a differently-named default branch -- `git diff` exits 128, stderr was
+#      discarded, CHANGED came back empty, and the hook passed.
+#
+#   2. On a FORCE-PUSH after a rebase, remote_oid and local_oid are divergent commits rather than
+#      ancestor and descendant. A rebase that preserves content makes their trees near-identical,
+#      so the two-dot diff between them is empty even though the push carries real work. Measured
+#      on 2026-09-08: `git diff --name-only 997e125f..e83a15ed` -> 0 files, while
+#      `git diff --name-only origin/master..e83a15ed` -> 3. go vet, the test suite and the React
+#      build were all skipped, on a branch whose base had just changed completely -- which is
+#      exactly when you most want them to run.
+#
+# The rule now: prefer the narrow remote_oid..local_oid range ONLY when it genuinely describes
+# the push (a fast-forward), otherwise ask what this branch adds to the target. And when the
+# range cannot be evaluated, REFUSE -- a hook that cannot tell what changed must not report that
+# nothing did.
+BASE_REF="${LFT_PREPUSH_BASE:-origin/master}"
+
+resolves() { git rev-parse --quiet --verify "$1" >/dev/null 2>&1; }
+
 # git feeds pre-push "<local ref> <local oid> <remote ref> <remote oid>" per ref on stdin.
-# Prefer that over a hardcoded origin/master so the diff is what is really being pushed.
 RANGE=""
 while read -r _local_ref local_oid _remote_ref remote_oid; do
     [ "$local_oid" = "$ZERO" ] && continue          # deleting a remote ref; nothing to check
-    if [ "$remote_oid" = "$ZERO" ]; then
-        RANGE="origin/master..$local_oid"           # new branch: everything not on master
+    if [ "$remote_oid" = "$ZERO" ] || ! resolves "$remote_oid"; then
+        RANGE="$BASE_REF..$local_oid"               # new branch: everything not on the target
+    elif git merge-base --is-ancestor "$remote_oid" "$local_oid" 2>/dev/null; then
+        RANGE="$remote_oid..$local_oid"             # fast-forward: exactly the new commits
     else
-        RANGE="$remote_oid..$local_oid"
+        # Rewritten history (force-push after rebase/amend). The old remote head is not an
+        # ancestor, so the narrow range does not describe what is being pushed.
+        RANGE="$BASE_REF..$local_oid"
     fi
 done
 
-# Run by hand (no stdin), or a range git could not resolve.
-if [ -z "$RANGE" ] || ! git rev-parse --quiet --verify "${RANGE%%..*}" >/dev/null 2>&1; then
-    RANGE="origin/master..HEAD"
+# Run by hand, with no stdin.
+if [ -z "$RANGE" ]; then
+    RANGE="$BASE_REF..HEAD"
 fi
 
-CHANGED=$(git diff --name-only "$RANGE" 2>/dev/null)
+# Refuse rather than pass when the range cannot be evaluated. This is the whole point of #1816:
+# "I could not tell" and "nothing changed" produced identical output and identical exit codes.
+LEFT="${RANGE%%..*}"
+if ! resolves "$LEFT"; then
+    echo "[Git Hook] REFUSING: cannot resolve '$LEFT', so the range '$RANGE' cannot be" >&2
+    echo "           evaluated and there is no way to tell what this push contains." >&2
+    echo "           Fetch the target branch (git fetch origin), or set LFT_PREPUSH_BASE to a" >&2
+    echo "           ref that exists. Skipping the checks silently is what #1816 was about." >&2
+    exit 1
+fi
+
+if ! CHANGED=$(git diff --name-only "$RANGE" 2>&1); then
+    echo "[Git Hook] REFUSING: 'git diff --name-only $RANGE' failed:" >&2
+    echo "$CHANGED" >&2
+    exit 1
+fi
+
 if [ -z "$CHANGED" ]; then
     echo "[Git Hook] Nothing to check in $RANGE."
     exit 0

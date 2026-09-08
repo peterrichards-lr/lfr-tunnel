@@ -92,10 +92,17 @@ func (s *TempSettingsServer) handleLogs(w http.ResponseWriter, r *http.Request) 
 // loadUIConfig loads the client config for the settings server's handlers. It never
 // returns a nil config, and it never discards the error.
 //
-// LoadClientConfig is nil-on-error for two of its three error paths -- an unopenable file
-// and unparseable YAML -- and returns the defaults alongside the error only for the
-// token_file branch added in #1758. Normalising that here means pkg/config does not have
-// to keep remembering which of its callers cannot cope with a nil (#1771).
+// LoadClientConfig is nil-on-error on every path -- an unopenable file, unparseable YAML,
+// and an unreadable token_file alike (#1777). So the fallback below is the only thing
+// standing between a config file that will not load and four handlers that dereference the
+// result; it is load-bearing, not belt-and-braces.
+//
+// It used to return the defaults alongside the error on the token_file branch alone (#1758),
+// under a comment saying that stopped this package panicking on a nil. It did not: the two
+// commoner failures still returned nil, and unparseable YAML is the one that was actually
+// reported. Normalising here rather than in pkg/config is what let that accommodation be
+// removed, instead of pkg/config having to remember which of its callers cannot cope with a
+// nil on every future error it learns to return (#1771).
 //
 // Falling back to the defaults rather than failing is deliberate. This server only runs
 // while the tunnel is offline, and its /settings page is the only in-app way to repair a
@@ -254,8 +261,17 @@ func (s *TempSettingsServer) handleConfigPost(w http.ResponseWriter, r *http.Req
 		Subdomain          string `json:"subdomain"`
 		PreserveHost       bool   `json:"preserve_host"`
 		InsecureSkipVerify bool   `json:"insecure_skip_verify"`
-		Passcode           string `json:"passcode"`
-		RateLimit          int    `json:"rate_limit"`
+		// Pointers, so an ABSENT field is distinguishable from one deliberately set empty
+		// (#1793). These two are owned by the Access Control tab, which posts to
+		// /api/access-control; the Settings tab has no control for them and stopped sending
+		// them in #1762. As plain values they decoded to "" and 0 and were written over the
+		// user's passcode -- silently removing the access control from their tunnel.
+		//
+		// #1762 fixed the identical handler in pkg/client/inspector.go and missed this one,
+		// which serves the SAME client.DashboardHTML page. AuthToken above already carries a
+		// guard against the same hazard.
+		Passcode  *string `json:"passcode"`
+		RateLimit *int    `json:"rate_limit"`
 	}
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 		w.WriteHeader(http.StatusBadRequest)
@@ -286,8 +302,14 @@ func (s *TempSettingsServer) handleConfigPost(w http.ResponseWriter, r *http.Req
 	cfg.Subdomain = req.Subdomain
 	cfg.PreserveHost = req.PreserveHost
 	cfg.InsecureSkipVerify = req.InsecureSkipVerify
-	cfg.Passcode = req.Passcode
-	cfg.RateLimit = req.RateLimit
+	// Only when the caller actually sent them. Omitting a field means "leave it alone",
+	// not "clear it".
+	if req.Passcode != nil {
+		cfg.Passcode = *req.Passcode
+	}
+	if req.RateLimit != nil {
+		cfg.RateLimit = *req.RateLimit
+	}
 
 	if err := config.SaveClientConfig("", cfg); err != nil {
 		w.WriteHeader(http.StatusInternalServerError)

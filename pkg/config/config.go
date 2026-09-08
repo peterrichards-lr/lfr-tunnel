@@ -575,6 +575,9 @@ func DefaultClientConfig() *ClientConfig {
 }
 
 // LoadServerConfig loads the server configuration from a YAML file and/or environment variables.
+//
+// Nil-on-error, like LoadClientConfig -- see the contract stated there, and
+// TestEveryConfigLoaderIsNilOnError, which holds both to it.
 func LoadServerConfig(path string) (*ServerConfig, error) {
 	cfg := DefaultServerConfig()
 
@@ -912,6 +915,28 @@ func ResolveDefaultConfigPath() string {
 }
 
 // LoadClientConfig loads the client configuration from a YAML file and/or environment variables.
+//
+// Contract: on success it returns a non-nil *ClientConfig and a nil error. **On every error it
+// returns a nil config** -- the same shape as LoadServerConfig and every other loader here.
+// Callers must not read the config without checking the error.
+//
+// The contract used to hold on two error paths in three. The token_file: branch returned its
+// partially-populated config alongside the error, under a comment claiming that kept pkg/gui
+// from dereferencing a nil -- a safety property the function did not have. An unopenable file
+// and unparseable YAML both still returned nil, and unparseable YAML is the failure that was
+// actually reported. #1771 fixed that caller (pkg/gui normalises the contract itself now), so
+// nothing depends on the accommodation (#1777).
+//
+// nil rather than DefaultClientConfig() is the deliberate half of the choice. Returning a
+// usable-looking config beside an error invites a caller to carry on with defaults it never
+// asked for; it also means the error path hands out an object carrying AuthToken, TokenFile and
+// TokenSource together, which is exactly the combination SaveClientConfig has to reason about to
+// keep a token out of config.yaml (#1772). An error path that returns nothing cannot be saved.
+//
+// The contract is asserted, not just described -- a comment is what failed here.
+// TestLoadClientConfigReturnsNilOnEveryErrorPath covers each cause behaviourally, and
+// TestEveryConfigLoaderIsNilOnError enforces it structurally across every Load*Config in the
+// package, so a new error path inherits the contract instead of having to remember it.
 func LoadClientConfig(path string) (*ClientConfig, error) {
 	cfg := DefaultClientConfig()
 
@@ -956,10 +981,7 @@ func LoadClientConfig(path string) (*ClientConfig, error) {
 		}
 		token, err := readClientTokenFile(tokenPath)
 		if err != nil {
-			// cfg is returned non-nil alongside the error on purpose: pkg/gui calls this as
-			// `cfg, _ :=` and would panic on a nil config. Callers that check the error --
-			// cmd/lfr-tunnel does -- still stop.
-			return cfg, err
+			return nil, err
 		}
 		cfg.AuthToken = token
 		cfg.TokenSource = fmt.Sprintf("%s (%s)", source, tokenPath)

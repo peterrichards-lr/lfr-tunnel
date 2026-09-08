@@ -48,9 +48,17 @@ test.describe('Portal V1 dashboard shell nesting', () => {
       0,
     );
     await expect(page.locator('#dashboard-shell #toast-live-a')).toHaveCount(0);
-    await expect(page.locator('#dashboard-shell .modal-overlay')).toHaveCount(
-      0,
+
+    // Every .modal-overlay declared after </#dashboard-screen> is now outside the shell --
+    // but #edge-schedule-modal is NOT one of them. It sits inside #tab-network-health, ahead
+    // of the closing tag, and always did. Asserting the exact set rather than "none" keeps
+    // that legitimate one from being mistaken for a regression, and keeps an empty result
+    // from passing because the selector is wrong.
+    const modalsInShell = await page.$$eval(
+      '#dashboard-shell .modal-overlay',
+      (els) => els.map((el) => el.id).sort(),
     );
+    expect(modalsInShell).toEqual(['edge-schedule-modal']);
 
     // ...and they are body's children, rather than having escaped somewhere else entirely.
     const parents = await page.evaluate(() =>
@@ -103,17 +111,31 @@ test.describe('Portal V1 dashboard shell nesting', () => {
     expect(Math.round(screen!.width)).toBe(Math.round(shell!.width));
     expect(screen!.y).toBeGreaterThanOrEqual(shell!.y);
 
-    // A toast raised while signed in still paints where it always did (bottom-right, fixed).
+    // A toast raised while signed in still paints where it always did: bottom-right, fixed,
+    // 24px in from both edges. Measured on the CONTAINER, not on the toast -- .toast ships
+    // `transform: translateX(120%)` and only animates in when showToast adds .show 10ms
+    // later, so a toast measured on arrival is legitimately off-screen and an assertion
+    // against its box fails for a reason that has nothing to do with nesting.
     await page.evaluate(() =>
       (window as unknown as { showToast: (m: string) => void }).showToast(
         'shell-nesting-probe',
       ),
     );
-    const toast = page.locator('#toast-container .toast');
-    await expect(toast).toBeVisible();
-    const box = (await toast.boundingBox())!;
-    expect(box.x + box.width).toBeLessThanOrEqual(viewport.width);
-    expect(box.y + box.height).toBeLessThanOrEqual(viewport.height);
+    await expect(page.locator('#toast-container .toast')).toBeVisible();
+
+    const anchored = await page.evaluate(() => {
+      const el = document.getElementById('toast-container')!;
+      const cs = getComputedStyle(el);
+      const box = el.getBoundingClientRect();
+      return {
+        position: cs.position,
+        fromRight: Math.round(window.innerWidth - box.right),
+        fromBottom: Math.round(window.innerHeight - box.bottom),
+      };
+    });
+    expect(anchored.position).toBe('fixed');
+    expect(anchored.fromRight).toBe(24);
+    expect(anchored.fromBottom).toBe(24);
   });
 
   test('a toast raised on the login screen is actually visible', async ({

@@ -24,8 +24,8 @@ github.com/aws/aws-sdk-go-v2/service/internal/presigned-url v1.14.2 h1:ZtHYnumr6
 github.com/aws/aws-sdk-go-v2/service/internal/presigned-url v1.14.2/go.mod h1:a1NXrYpBd311gBzn1UI5UzJyyvXktM4xNh/ydPiPpqY=
 github.com/aws/aws-sdk-go-v2/service/route53 v1.69.0 h1:Z714Jtt3Ivtf6b0g8wl2YW3Bb2hNRJu1iJCgQzV91D0=
 github.com/aws/aws-sdk-go-v2/service/route53 v1.69.0/go.mod h1:6isQ7Jl/mFTOScbAsF/0+dPkBEnbgSIY6IeSQ8G0f70=
-github.com/aws/aws-sdk-go-v2/service/scheduler v1.22.1 h1:i3OsAKELEesvHez+H2a7ikEXTwgxWU4IlP1hJGn0Eyc=
-github.com/aws/aws-sdk-go-v2/service/scheduler v1.22.1/go.mod h1:bOA6UIUtA2FzhprPcv19ET5RPAvx1qF18V0yHQIZsJA=
+github.com/aws/aws-sdk-go-v2/service/scheduler v1.24.0 h1:WrdQN4eVDw6x/HJUc3y+vsS999Ns6rUGQlj8BhzdVuo=
+github.com/aws/aws-sdk-go-v2/service/scheduler v1.24.0/go.mod h1:L6T+OGXki2pquAKs0h/h8uONBgD3VfSEH2e3e7Blr/o=
 github.com/aws/aws-sdk-go-v2/service/signin v1.7.1 h1:mdMtSVKdQ3+mzBh+l0ogrFYZVQUCg6pJZOirA2ARsYE=
 github.com/aws/aws-sdk-go-v2/service/signin v1.7.1/go.mod h1:9IqUlsJDbUPcg6cgx3WEzXdjrbWzLDQrak0aaSqlTcI=
 github.com/aws/aws-sdk-go-v2/service/sso v1.35.1 h1:B6WFn91tobD6gG4724ONHaqrpKsoETGnv98LHe/yIGM=

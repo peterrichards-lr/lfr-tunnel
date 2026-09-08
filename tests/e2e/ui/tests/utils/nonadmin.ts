@@ -18,17 +18,40 @@ const API = 'http://localhost:8000';
 const MAILPIT = 'http://localhost:8025';
 const ADMIN_EMAIL = 'admin@lfr-demo.local';
 
-/** Poll Mailpit for the newest message to `to` whose body matches, and return that body. */
+/** The login link both portals put in a magic-link mail. Nothing else in the inbox looks like it. */
+const MAGIC_LINK = /\/portal(?:v2\/login)?\?token=([a-zA-Z0-9]+)/;
+
+/** Every message Mailpit is holding right now. Anything absent from this set arrived later. */
+async function mailpitMessageIDs(ctx: APIRequestContext): Promise<Set<string>> {
+  const res = await ctx.get(`${MAILPIT}/api/v1/messages`);
+  const messages = (await res.json()).messages || [];
+  return new Set<string>(messages.map((m: { ID: string }) => m.ID));
+}
+
+/**
+ * Poll Mailpit for a message to `to` whose body matches, and return that body.
+ *
+ * `ignoreIDs` is what makes this safe to use on an inbox that was not cleared first. Mailpit
+ * answers newest-first, so without it the first matching message wins -- which is the newly sent
+ * one only if it has already been delivered. `POST /api/auth/magic-link` sends from a goroutine
+ * and answers before it (deliberately: a blocking send would make SMTP latency a timing oracle
+ * for whether an address exists, `handleAdminMagicLink` in pkg/server/server.go), so for a few
+ * milliseconds after that call returns the newest matching mail is still the PREVIOUS one. Pass
+ * the IDs seen before the request and the poll waits for the real answer instead of accepting a
+ * stale one.
+ */
 async function waitForMail(
   ctx: APIRequestContext,
   to: string,
   matching: RegExp,
+  ignoreIDs?: Set<string>,
 ): Promise<string> {
   for (let i = 0; i < 40; i++) {
     const res = await ctx.get(`${MAILPIT}/api/v1/messages`);
     const messages = (await res.json()).messages || [];
     for (const m of messages) {
       if (!m.To || m.To[0].Address !== to) continue;
+      if (ignoreIDs?.has(m.ID)) continue;
       const detail = await ctx.get(`${MAILPIT}/api/v1/message/${m.ID}`);
       const body = (await detail.json()).Text || '';
       if (matching.test(body)) return body;
@@ -133,18 +156,47 @@ export async function createApprovedUser(
  * Shortening the address was not enough: the column sizes to its widest cell, so any second
  * account wider than the first moves it. Leaving nothing behind is the only version of this that
  * does not depend on guessing how much slack the layout has.
+ *
+ * Every step is checked, and named in its own error. This used to request the link, read whatever
+ * matched `token=` and post it to /api/auth/verify without looking at the answer, so a session
+ * that was never established surfaced two steps later as
+ * `deleting <email> failed: 401 Unauthorized: admin access required` -- a message about the
+ * DELETE, on a run where the DELETE was the one thing that had behaved correctly (#1833).
  */
 export async function deleteUser(email: string): Promise<void> {
   const ctx = await request.newContext();
 
   // An admin session, obtained the same way a person gets one. The context keeps the cookie.
-  await ctx.post(`${API}/api/auth/magic-link`, {
+  //
+  // The inbox is NOT cleared first -- specs own their own mail -- so the mails already in it are
+  // recorded and skipped. The admin has almost always just signed in, leaving a magic-link mail
+  // whose token that login consumed, and requesting this one invalidates it a second time
+  // (`InvalidateOtherMagicLinks`). Accepting it yields 401 "Invalid or already used token" from
+  // verify, then 401 from the DELETE.
+  const seen = await mailpitMessageIDs(ctx);
+  const requested = await ctx.post(`${API}/api/auth/magic-link`, {
     data: { email: ADMIN_EMAIL },
   });
-  const mail = await waitForMail(ctx, ADMIN_EMAIL, /token=/);
-  const token = mail.match(/token=([a-zA-Z0-9]+)/)?.[1];
+  if (!requested.ok()) {
+    throw new Error(
+      `requesting a cleanup magic link for the admin failed: ${requested.status()} ${await requested.text()}`,
+    );
+  }
+
+  // Matched on the login-link shape rather than a bare `token=`: setup and approval mails carry
+  // a `token=` too, and neither is a magic link.
+  const mail = await waitForMail(ctx, ADMIN_EMAIL, MAGIC_LINK, seen);
+  const token = mail.match(MAGIC_LINK)?.[1];
   if (!token) throw new Error('No magic-link token for the admin');
-  await ctx.post(`${API}/api/auth/verify`, { data: { token, lang: 'en' } });
+  const verified = await ctx.post(`${API}/api/auth/verify`, {
+    data: { token, lang: 'en' },
+  });
+  if (!verified.ok()) {
+    throw new Error(
+      `the admin session for cleaning up ${email} could not be established: ` +
+        `/api/auth/verify answered ${verified.status()} ${await verified.text()}`,
+    );
+  }
 
   const res = await ctx.delete(
     `${API}/api/admin/users/${encodeURIComponent(email)}`,

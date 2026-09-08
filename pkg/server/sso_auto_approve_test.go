@@ -29,9 +29,11 @@ func waitForAuditEntry(t *testing.T, srv *Server, action string) *db.AuditEntry 
 			return entries[0]
 		}
 		if time.Now().After(deadline) {
-			t.Fatalf("no %s audit row appeared within 5s. A pending -> approved transition is "+
-				"the most security-relevant change a user undergoes and must leave a trace "+
-				"naming what did it.", action)
+			// Generic on purpose: this helper is shared, so a message describing one caller's
+			// subject would misattribute every other caller's failure. The action name is the
+			// specific part, and it is already in the message.
+			t.Fatalf("no %q audit row appeared within 5s -- the operation completed without "+
+				"leaving the trace an operator would need to find it.", action)
 		}
 		time.Sleep(20 * time.Millisecond)
 	}

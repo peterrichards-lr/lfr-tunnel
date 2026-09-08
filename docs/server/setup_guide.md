@@ -1402,8 +1402,35 @@ whitelist by naming an allowed address in a header.
 **Only widen this for a proxy you actually run.** Naming a range you do not control hands everyone
 inside it the ability to choose their own client address.
 
+**Each entry must name exactly one host, and the gateway refuses to start otherwise** (#1801).
+An entry is accepted when it is a bare address, a `/32` or a `/128` — or when the whole prefix
+lies inside address space no host on the internet can occupy: RFC1918 (`10/8`, `172.16/12`,
+`192.168/16`), CGNAT `100.64.0.0/10`, link-local, loopback, or IPv6 ULA `fc00::/7`. That last
+allowance is what keeps a load-balancer subnet inside your own VPC working, so the rule refuses
+what is dangerous rather than what is unfamiliar.
+
+The test is not prefix length — a `/24` is no safer than an `/8` in any way that matters. It is
+whether an attacker can obtain a source address inside the range, because that is the only thing
+trusting a forwarder grants on. So `trusted_proxies: ["10.20.0.0/16"]` starts and
+`trusted_proxies: ["203.0.113.0/24"]` does not, and neither does `10.0.0.0/7` — it begins in
+RFC1918 space but runs out of it into `11.0.0.0/8`, and containment is checked over the whole
+prefix.
+
+The gateway refuses rather than warning because there is no safe way to carry on. Starting with
+the entry dropped would attribute every visitor to the proxy instead: IP whitelists would deny
+everyone, the rate limiter's auto-ban would ban the proxy, and every audit entry would name the
+same host — the same outage, with nothing pointing at its cause. There is deliberately no opt-out
+key, since the legitimate wide case is already allowed above and an override could only ever
+re-enable the dangerous one. `lfr-tunnel-ops check-config` reports the same problem on a *running*
+gateway as an error-severity finding, so a fleet can be checked before any restart.
+
+The same rule governs nginx's `set_real_ip_from` entries, which `render-nginx-config` refuses at
+render time — one rule, one implementation (`pkg/nettrust`), applied on both boundaries.
+
 If you serve TLS directly *and* trust non-loopback ranges, the gateway logs a warning at startup:
-that combination means headers are honoured with nothing in front to sanitise them.
+that combination means headers are honoured with nothing in front to sanitise them. That warning
+is about the missing sanitiser, not about width — a private range is within the width rule and
+still worth knowing about here.
 
 **The nginx side matters too.** The generated config sets both headers to `$remote_addr`, rather
 than `$proxy_add_x_forwarded_for` which *appends* to whatever the client sent — leaving the
@@ -1472,4 +1499,4 @@ To guarantee that outbound connections originating from the VPS are consistently
 
 <!-- markdownlint-disable MD049 -->
 ---
-*Last Updated: 2026-09-06* | *Last Reviewed: 2026-09-06*
+*Last Updated: 2026-09-08* | *Last Reviewed: 2026-09-08*

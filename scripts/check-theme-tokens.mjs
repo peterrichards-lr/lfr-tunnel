@@ -25,6 +25,15 @@
  *          inside dashboard.js -- none of which is a stylesheet, so 20 references to four
  *          properties no theme defines sat behind the gate's blind spot. Markup and script
  *          are now scanned too (see collectMarkupReferences).
+ *
+ *   #1784  A page that does NOT link the shared themes was reported as held out and then
+ *          resolved against nothing at all. setup.css carries its own 18-property :root and
+ *          referenced three properties it does not define -- including, again, the @media
+ *          print body rule that #1221 was filed for. Holding those pages out of the SHARED
+ *          theme check was right; leaving them unchecked was not. Every page now has a
+ *          definition source: the shared themes if it links them, otherwise the tokens it
+ *          defines itself (see collectDocumentScope). The membership rule is unchanged --
+ *          only what a non-member is resolved against.
  */
 import { readFileSync, readdirSync, existsSync } from 'node:fs';
 import { join, basename, relative } from 'node:path';
@@ -71,6 +80,30 @@ const readMarkup = (p) => read(p).replace(/<!--[\s\S]*?-->/g, '');
 
 const VAR_REF = /var\(\s*(--[a-z0-9-]+)\s*(,)?/g;
 
+// A custom property DECLARATION, as opposed to a reference. Anchored on the character that can
+// legally precede one -- a block open, a preceding declaration's semicolon, or the start of a
+// line -- rather than on line start alone, because a page's own <style> block is often written
+// as `:root{--a:1;--b:2}` on one line and a line-anchored pattern would see one of the two.
+// `var(--x)` cannot match: a reference is followed by `)` or `,`, never by a colon.
+const VAR_DECL = /(?:^|[{;])\s*(--[a-z0-9-]+)\s*:/gm;
+
+function addDecls(set, text) {
+  for (const m of text.matchAll(VAR_DECL)) set.add(m[1]);
+}
+
+// A first-party asset a page pulls in by its served path. Resolved against the static dir the
+// server serves it from, so a CDN href has no local path and is dropped by existsSync.
+const SCRIPT_SRC = /<script[^>]+src\s*=\s*["'](\/static\/[^"']+\.js)["']/g;
+const STYLE_HREF = /<link[^>]+href\s*=\s*["'](\/static\/[^"']+\.css)["']/g;
+
+function* linkedAssets(html, pattern) {
+  for (const m of html.matchAll(pattern)) {
+    const path = join(SERVER_DIR, 'static', m[1].slice('/static/'.length));
+    if (!existsSync(path)) continue;
+    yield { path, rel: relative(process.cwd(), path) };
+  }
+}
+
 function addRefs(refs, text, label) {
   for (const m of text.matchAll(VAR_REF)) {
     const existing = refs.get(m[1]) || { hasFallback: false, files: new Set() };
@@ -115,11 +148,14 @@ function collectReferences() {
 // whole-file scan costs no false positives and needs no list of the shapes to look for -- the
 // next shape someone invents is covered without this script being touched.
 //
-// Scripts are found through the page that loads them rather than by globbing *.js, so a script
-// belonging to a self-contained page is not silently resolved against the shared themes.
+// Scripts and stylesheets are found through the page that loads them rather than by globbing
+// *.js and *.css, so an asset belonging to a self-contained page is not silently resolved
+// against the shared themes. The cost is that an asset NO page links is read by neither scope;
+// that gap is pinned by a case in tests/hooks/test-theme-tokens.sh rather than described here,
+// because a comment does not fail when the gap closes or widens.
 function collectMarkupReferences(refs) {
   const scanned = [];
-  const skipped = [];
+  const documents = [];
 
   const walk = (dir) => {
     for (const entry of readdirSync(dir, { withFileTypes: true }).sort((a, b) =>
@@ -135,34 +171,61 @@ function collectMarkupReferences(refs) {
       const html = readMarkup(full);
       const rel = relative(process.cwd(), full);
       if (!html.includes(THEME_LINK)) {
-        skipped.push(rel);
+        documents.push(collectDocumentScope(rel, html));
         continue;
       }
 
       const files = [rel];
       addRefs(refs, html, basename(full));
-
-      // <script src="/static/x.js"> — resolved against the static dir the server serves it
-      // from, so only first-party scripts are read (a CDN src has no local path and is
-      // skipped by existsSync).
-      for (const m of html.matchAll(
-        /<script[^>]+src\s*=\s*["'](\/static\/[^"']+\.js)["']/g,
-      )) {
-        const script = join(
-          SERVER_DIR,
-          'static',
-          m[1].slice('/static/'.length),
-        );
-        if (!existsSync(script)) continue;
-        addRefs(refs, read(script), basename(script));
-        files.push(relative(process.cwd(), script));
+      for (const script of linkedAssets(html, SCRIPT_SRC)) {
+        addRefs(refs, read(script.path), basename(script.path));
+        files.push(script.rel);
       }
       scanned.push(files);
     }
   };
   walk(SERVER_DIR);
 
-  return { scanned, skipped };
+  return { scanned, documents };
+}
+
+// A page that does not link the shared themes still has a definition source: the tokens it
+// defines itself. Resolving it against THOSE, rather than against nothing, is the whole of
+// #1784. The membership rule that sorts pages into the two scopes is untouched -- checking a
+// self-contained page against the shared themes would report every one of its own properties
+// as undefined, which is why it was held out in the first place and why it must stay held out.
+//
+// The model is the one scripts/check-css-modifiers.cjs already uses for class names (#1744):
+// each document gets the definitions it actually links, and nothing else. It needs no exclusion
+// list, and it covers the standalone error pages and the localized legal templates in the same
+// pass as setup.css.
+//
+// Definitions come from the page's own <style> blocks and from the stylesheets it links.
+// References come from those, from the whole document (see the note above collectMarkupReferences
+// for why the whole document and not just style attributes), and from the scripts it loads --
+// a script is reached through the page that loads it, so a script belonging to a self-contained
+// page is resolved against that page's tokens rather than against the shared themes.
+function collectDocumentScope(rel, html) {
+  const decls = new Set();
+  const refs = new Map();
+  const files = [rel];
+
+  for (const m of html.matchAll(/<style[^>]*>([\s\S]*?)<\/style>/gi))
+    addDecls(decls, m[1]);
+  addRefs(refs, html, rel);
+
+  for (const sheet of linkedAssets(html, STYLE_HREF)) {
+    const css = read(sheet.path);
+    addDecls(decls, css);
+    addRefs(refs, css, sheet.rel);
+    files.push(sheet.rel);
+  }
+  for (const script of linkedAssets(html, SCRIPT_SRC)) {
+    addRefs(refs, read(script.path), script.rel);
+    files.push(script.rel);
+  }
+
+  return { page: rel, files, decls, refs };
 }
 
 // Properties defined per theme file, split by whether they sit on a bare :root (inherited
@@ -211,31 +274,37 @@ function collectBaseColours() {
 }
 
 const refs = collectReferences();
-const { scanned, skipped } = collectMarkupReferences(refs);
+const { scanned, documents } = collectMarkupReferences(refs);
 const { base, perTheme } = collectDefinitions();
+
+// A document is only worth printing individually if it has something to resolve. The rest are
+// counted, so "nothing to check" stays visible without burying the pages that do have tokens.
+const resolved = documents.filter((d) => d.refs.size > 0);
+const tokenless = documents.filter((d) => d.refs.size === 0);
 
 // Printed on every run, pass or fail. A gate that quietly narrows its own scope reads exactly
 // like one that is passing, which is how #1774 stayed hidden: saying out loud which pages were
 // checked and which were not is the only thing that makes the coverage reviewable.
 console.log('Pages linking the shared themes (markup and scripts scanned):');
 for (const files of scanned) console.log(`  ${files.join('  +  ')}`);
-const byDir = new Map();
-for (const f of skipped) {
-  const dir = f.split('/').slice(0, -1).join('/');
-  if (!byDir.has(dir)) byDir.set(dir, []);
-  byDir.get(dir).push(f.split('/').pop());
-}
+
 console.log(
-  '\nPages that do not link the shared themes, so their tokens are not resolved against them\n' +
-    '(each carries its own token set in its own <style> block):',
+  '\nPages that do not link the shared themes, so each is resolved against the tokens it\n' +
+    'defines itself -- its own <style> blocks plus the stylesheets it links (#1784):',
 );
-for (const [dir, names] of byDir) {
-  const shown = names.length > 6 ? `${names.length} files` : names.join(', ');
-  console.log(`  ${dir}/: ${shown}`);
+for (const d of resolved) {
+  console.log(
+    `  ${d.files.join('  +  ')}  [${d.decls.size} defined, ${d.refs.size} referenced]`,
+  );
+}
+if (tokenless.length > 0) {
+  console.log(
+    `  ${tokenless.length} further pages reference no custom property at all.`,
+  );
 }
 console.log('');
 
-// Anti-vacuity. The membership rule is derived from a <link> in the markup, so deleting that
+// Anti-vacuity, both scopes. Membership is derived from a <link> in the markup, so deleting that
 // link -- or moving the themes to another path -- silently empties the markup scan while every
 // stylesheet still resolves and the gate still exits 0. A scan that covers nothing reads exactly
 // like a scan that found nothing, which is the failure #1402 recorded for the EDR guard and the
@@ -246,6 +315,21 @@ if (scanned.length === 0) {
       'covered nothing. Either the themes moved and this check needs its path updated, or a\n' +
       'page lost its <link> and is no longer themed. Both are bugs; a silent pass is worse\n' +
       'than either.',
+  );
+  process.exit(1);
+}
+
+// The document scope has its own way of emptying itself, and it is quieter than the one above:
+// if the declaration pattern stops matching, every page reports its own tokens as undefined and
+// the gate goes loudly red -- but if the REFERENCE side stops matching, or no page is routed
+// here at all, the scope resolves nothing and still exits 0. Require at least one page that both
+// defines and references a property, which is the only state that proves both halves ran.
+if (!documents.some((d) => d.decls.size > 0 && d.refs.size > 0)) {
+  console.error(
+    '\u274c No self-contained page was resolved against its own tokens, so the document scan\n' +
+      'covered nothing. Either every page now links the shared themes -- in which case delete\n' +
+      'this scope rather than leaving it reporting success over zero files -- or the pattern\n' +
+      "that finds a page's own <style> block or its linked stylesheet has stopped matching.",
   );
   process.exit(1);
 }
@@ -275,7 +359,22 @@ if (fallbackOnly.length > 0) {
   console.log('');
 }
 
+// The same resolution failure, one document at a time. A page's own token set is flat -- there
+// is no theme file to be complete across -- so the question here is only whether the property is
+// defined at all. Deliberately narrower than the shared check above, and asserted as narrower in
+// tests/hooks/test-theme-tokens.sh so widening it stays a decision rather than an accident.
+const docFindings = [];
+for (const d of documents) {
+  const missing = [...d.refs]
+    .filter(([name]) => !d.decls.has(name))
+    .sort(([a], [b]) => a.localeCompare(b));
+  if (missing.length > 0) docFindings.push({ d, missing });
+}
+
+let failed = false;
+
 if (undefinedTokens.length > 0) {
+  failed = true;
   console.error('❌ CSS custom properties that will not resolve:\n');
   for (const { name, info, missing } of undefinedTokens) {
     const where =
@@ -291,8 +390,32 @@ if (undefinedTokens.length > 0) {
   console.error(
     '\nDefine it in every theme, or in the base :root if it is theme-independent.',
   );
-  process.exit(1);
 }
+
+if (docFindings.length > 0) {
+  failed = true;
+  console.error(
+    '❌ CSS custom properties a self-contained page references but does not define:\n',
+  );
+  for (const { d, missing } of docFindings) {
+    console.error(`  ${d.page}`);
+    for (const [name, info] of missing) {
+      const fb = info.hasFallback
+        ? ' — it has a fallback, so it renders, but never follows the page'
+        : ' — the declaration is invalid and the browser drops it silently';
+      console.error(`    ${name}${fb}`);
+      console.error(`        referenced in: ${[...info.files].join(', ')}`);
+    }
+  }
+  console.error(
+    '\nThis page carries its own token set, so define it there, or correct the name to one\n' +
+      'the page already defines. An unresolved var() is not a no-op: the whole declaration\n' +
+      'becomes invalid at computed-value time and takes its UNSET value, which is `inherit`\n' +
+      'for color and the initial value -- transparent, none, medium -- for everything else.',
+  );
+}
+
+if (failed) process.exit(1);
 
 // Second check: a colour inherited by every theme from the base :root.
 const baseColours = collectBaseColours();

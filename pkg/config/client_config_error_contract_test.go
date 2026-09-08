@@ -1,9 +1,11 @@
 package config
 
 import (
+	"errors"
 	"go/ast"
 	"go/parser"
 	"go/token"
+	"io/fs"
 	"os"
 	"path/filepath"
 	"runtime"
@@ -32,14 +34,25 @@ func TestLoadClientConfigReturnsNilOnEveryErrorPath(t *testing.T) {
 		// setup returns the config path to load, or skips the case.
 		setup func(t *testing.T) string
 		// wantIn are substrings the error must contain, identifying the cause uniquely.
+		// Only ever strings this repository writes -- never text the operating system
+		// produces. Windows says "The system cannot find the path specified." where Unix
+		// says "no such file", and asserting on the latter made this suite red on
+		// windows-latest only. For an OS-produced failure, assert wantIs instead.
 		wantIn []string
+		// wantIs identifies the cause by sentinel rather than by message, for the cases whose
+		// error text belongs to the platform. errors.Is is the portable half of "this case
+		// must fail for its own reason".
+		wantIs error
 	}{
 		{
 			name: "the config file cannot be opened",
 			setup: func(t *testing.T) string {
 				return filepath.Join(t.TempDir(), "no-such-dir", "config.yaml")
 			},
-			wantIn: []string{"config.yaml", "no such file"},
+			// "config.yaml" is ours (it is the path we passed in); the rest of the message
+			// is the platform's, so the cause is pinned with a sentinel instead.
+			wantIn: []string{"config.yaml"},
+			wantIs: fs.ErrNotExist,
 		},
 		{
 			name: "the config file is not valid YAML",
@@ -100,6 +113,10 @@ func TestLoadClientConfigReturnsNilOnEveryErrorPath(t *testing.T) {
 					t.Fatalf("this case must fail for its own reason: expected the error to "+
 						"mention %q, got: %v", want, err)
 				}
+			}
+			if tc.wantIs != nil && !errors.Is(err, tc.wantIs) {
+				t.Fatalf("this case must fail for its own reason: expected an error matching "+
+					"%v, got: %v", tc.wantIs, err)
 			}
 			if cfg != nil {
 				t.Errorf("LoadClientConfig must return a nil config on every error path "+

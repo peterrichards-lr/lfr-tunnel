@@ -38,7 +38,7 @@ trap 'rm -rf "$WORK"' EXIT INT TERM
 # this whole issue is about.
 mkdir -p "$WORK/gates" "$WORK/empty"
 
-for gate in check-edr-safety.sh check-nolint-ratchet.sh; do
+for gate in check-edr-safety.sh check-nolint-ratchet.sh check-test-home-isolation.sh; do
     cp "$REPO_ROOT/scripts/$gate" "$WORK/gates/"
     chmod +x "$WORK/gates/$gate"
 
@@ -56,7 +56,7 @@ done
 
 # The counterpart. A guard that fails everywhere is not a guard, it is an outage -- so each must
 # still pass against the real tree, where there genuinely is a corpus to examine.
-for gate in check-edr-safety.sh check-nolint-ratchet.sh; do
+for gate in check-edr-safety.sh check-nolint-ratchet.sh check-test-home-isolation.sh; do
     if (cd "$REPO_ROOT" && "./scripts/$gate" >/dev/null 2>&1); then
         pass "$gate still passes against the real tree"
     else
@@ -76,6 +76,22 @@ if (cd "$REPO_ROOT" && LFT_NOLINT_MIN_FILES=999999 ./scripts/check-nolint-ratche
     fail "check-nolint-ratchet.sh ignores LFT_NOLINT_MIN_FILES, so its floor cannot be exercised"
 else
     pass "check-nolint-ratchet.sh honours LFT_NOLINT_MIN_FILES"
+fi
+
+if (cd "$REPO_ROOT" && LFT_HOME_ISOLATION_MIN_PACKAGES=999999 ./scripts/check-test-home-isolation.sh >/dev/null 2>&1); then
+    fail "check-test-home-isolation.sh ignores LFT_HOME_ISOLATION_MIN_PACKAGES, so its floor cannot be exercised"
+else
+    pass "check-test-home-isolation.sh honours LFT_HOME_ISOLATION_MIN_PACKAGES"
+fi
+
+# check-test-home-isolation.sh mentions os.UserHomeDir() in its own comments, which is one of the
+# patterns it searches for -- the self-match that made the first version of this file pass for the
+# wrong reason. It cannot happen here: the search is --include='*_test.go', so a .sh file is never
+# in the corpus. Asserted rather than reasoned about, because the include is what makes it true.
+if grep -q "include='\*_test.go'" "$REPO_ROOT/scripts/check-test-home-isolation.sh"; then
+    pass "check-test-home-isolation.sh restricts its corpus to _test.go, so it cannot match itself"
+else
+    fail "check-test-home-isolation.sh no longer restricts its corpus to _test.go -- it contains its own patterns in comments and would self-match"
 fi
 
 # The two gates that already had a guard, asserted so a later edit cannot quietly remove it.

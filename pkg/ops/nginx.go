@@ -3,12 +3,13 @@ package ops
 import (
 	"flag"
 	"fmt"
-	"net/netip"
 	"os"
 	"regexp"
 	"sort"
 	"strings"
 	"time"
+
+	"lfr-tunnel/pkg/nettrust"
 )
 
 // nginxUpgradeMapBlock is written once at the top of the generated config, regardless of
@@ -177,96 +178,23 @@ func renderRealIPBlock(role nginxRole, trustedProxy string, peers []string) stri
 // does (#1750).
 const nginxLoopbackTrustedProxy = "127.0.0.1"
 
-// The width rule for a trusted forwarder, enforced rather than asserted (#1792).
+// The width rule for a trusted forwarder lives in pkg/nettrust (#1801).
 //
-// renderRealIPBlock's doc comment and the rendered config both say every entry must be an exact
-// address, and until #1792 nothing checked it: `-trusted-proxy 0.0.0.0/0` rendered a config that
-// passed `nginx -t`, looked entirely normal, and let EVERY caller assert a visitor address in
-// X-Forwarded-For -- precisely the forgeable path #1325 closed.
+// It was written here in #1792, when nginx's set_real_ip_from was the only place this fleet
+// admitted an address to a forwarded-header trust set. It is not: the gateway's own
+// trusted_proxies decides whose X-Real-IP / X-Forwarded-For pkg/server's clientIPFrom will
+// believe AT ALL, a second boundary that holds even when there is no nginx -- and pkg/server
+// cannot import pkg/ops, so the rule had to move somewhere both can reach or be written twice.
+// It moved, with its reasoning and its tests; see pkg/nettrust/width.go for why the rule is what
+// it is (in short: not a prefix-length threshold, but whether an attacker can obtain a source
+// address inside the range).
 //
-// # Why not simply refuse every CIDR
-//
-// A /32 or /128 is exactly one host and so is identical to a bare address; refusing it would be
-// refusing a spelling, not a risk. And nginx's set_real_ip_from genuinely takes prefixes: a
-// deployment whose forwarders are a load-balancer subnet rather than one box is a real shape, and
-// there is no way to enumerate an autoscaled LB's addresses in advance.
-//
-// # The boundary that is actually load-bearing
-//
-// It is NOT prefix length. A /24 is not safer than a /8 in any way that matters; both were
-// candidate thresholds in #1792 and both are arbitrary. What decides the risk is whether an
-// attacker can obtain a source address inside the range, because that -- and only that -- is what
-// set_real_ip_from grants on. So the rule is:
-//
-//	an entry must name exactly one host, OR lie entirely inside address space
-//	that no host on the internet can occupy.
-//
-// A prefix inside RFC1918, CGNAT, link-local, loopback or IPv6 ULA space is reachable only from
-// inside the operator's own network, so trusting it grants nothing to anyone who is not already
-// there. A prefix covering more than one GLOBALLY ROUTABLE address grants it to whoever ends up
-// holding an address in that range -- which for 0.0.0.0/0 and ::/0 is the entire internet, and
-// for 203.0.113.0/24 is every other tenant of that block.
-//
-// Containment is checked against the WHOLE prefix, not its network address: 10.0.0.0/7 starts in
-// RFC1918 space and runs straight out of it into 11.0.0.0/8.
-//
-// This is deliberately more permissive than "exact addresses only", which is what the fleet
-// itself uses -- central is one elastic IP and the peer entries are literal A/AAAA records, so
-// nothing in this deployment needs the private-range allowance. It exists so the guard refuses
-// what is dangerous rather than what is merely unfamiliar.
-var privateTrustedProxyBlocks = []netip.Prefix{
-	netip.MustParsePrefix("10.0.0.0/8"),     // RFC1918
-	netip.MustParsePrefix("172.16.0.0/12"),  // RFC1918
-	netip.MustParsePrefix("192.168.0.0/16"), // RFC1918
-	netip.MustParsePrefix("100.64.0.0/10"),  // RFC6598 CGNAT
-	netip.MustParsePrefix("169.254.0.0/16"), // RFC3927 link-local
-	netip.MustParsePrefix("127.0.0.0/8"),    // loopback
-	netip.MustParsePrefix("fc00::/7"),       // RFC4193 unique local
-	netip.MustParsePrefix("fe80::/10"),      // IPv6 link-local
-	netip.MustParsePrefix("::1/128"),        // IPv6 loopback
-}
+// The two names below are local aliases, not a second copy. They exist so this package's four
+// call sites and their tests read exactly as they did before the move, which is what makes
+// pkg/ops/nginx_test.go's unchanged pass a real check that the extraction preserved behaviour.
+const trustedProxyWidthGuidance = nettrust.WidthGuidance
 
-// trustedProxyWidthGuidance is the remedy, written once so the render-time refusal and the drift
-// finding cannot say different things about the same rule.
-const trustedProxyWidthGuidance = "set_real_ip_from lets ANY peer whose source address falls " +
-	"inside the range assert an arbitrary visitor address in X-Forwarded-For, so a routable range " +
-	"reopens the forgeable path #1325 closed for everything inside it (#1792). Name the gateway's " +
-	"exact address -- a bare IP, a /32 or a /128. A wider prefix is accepted only when it lies " +
-	"entirely inside space no internet host can occupy (RFC1918, CGNAT 100.64.0.0/10, link-local, " +
-	"loopback, IPv6 ULA fc00::/7), e.g. a load-balancer subnet inside your own VPC"
-
-// trustedProxyTooWide reports why an entry may not appear in set_real_ip_from, or "" if it may.
-//
-// Returns "" for anything that is not an address or prefix at all -- a hostname, a URL, nginx's
-// `unix:` form. Those are separate defects with their own guards (setup-edge-vps.sh shape-checks
-// the flag, and a hostname never matches a peer address so the block is merely inert), and
-// reporting them here would make a width check fail for a reason that has nothing to do with
-// width.
-func trustedProxyTooWide(entry string) string {
-	entry = strings.TrimSpace(entry)
-	if entry == "" {
-		return ""
-	}
-	if _, err := netip.ParseAddr(entry); err == nil {
-		return "" // a bare address is exactly one host
-	}
-	p, err := netip.ParsePrefix(entry)
-	if err != nil {
-		return ""
-	}
-	p = p.Masked()
-	if p.IsSingleIP() {
-		return "" // /32 or /128: the same one host, spelled as a prefix
-	}
-	for _, private := range privateTrustedProxyBlocks {
-		// Bits() first so this is containment of the whole prefix, not just of its base address.
-		if private.Bits() <= p.Bits() && private.Contains(p.Addr()) {
-			return ""
-		}
-	}
-	return fmt.Sprintf("%q is a /%d range rather than a single host, and it reaches globally "+
-		"routable address space", entry, p.Bits())
-}
+func trustedProxyTooWide(entry string) string { return nettrust.TooWide(entry) }
 
 // The forwarding-header rule, stated once (#1325, #1360).
 //

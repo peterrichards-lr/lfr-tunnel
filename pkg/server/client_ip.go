@@ -1,10 +1,13 @@
 package server
 
 import (
+	"fmt"
 	"net"
 	"net/http"
 	"strconv"
 	"strings"
+
+	"lfr-tunnel/pkg/nettrust"
 )
 
 // Resolving the real client address behind a reverse proxy (#1325).
@@ -32,6 +35,14 @@ var defaultTrustedProxies = []string{"127.0.0.1/32", "::1/128"}
 // A malformed entry is skipped rather than fatal. The consequence is a narrower trusted set --
 // headers from that hop stop being honoured, so the address falls back to the peer -- which
 // fails closed. Refusing to start would be a worse trade for a typo.
+//
+// An entry that is well-formed but too WIDE is skipped for the same reason and by the same rule
+// (#1801): nettrust.TooWide. That makes the invariant unconditional -- no matcher this function
+// returns ever covers more than one host in globally routable address space, whoever called it.
+// The gateway does not merely narrow, though: NewServer calls trustedProxyWidthError first and
+// refuses to start, because silently narrowing is its own outage with a worse error message.
+// Skipping here is what holds for any OTHER caller, present or future -- NewProxyHandler returns
+// no error and so has nowhere to report one.
 func parseTrustedProxies(entries []string) []*net.IPNet {
 	if len(entries) == 0 {
 		entries = defaultTrustedProxies
@@ -40,6 +51,9 @@ func parseTrustedProxies(entries []string) []*net.IPNet {
 	for _, entry := range entries {
 		entry = strings.TrimSpace(entry)
 		if entry == "" {
+			continue
+		}
+		if nettrust.TooWide(entry) != "" {
 			continue
 		}
 		// A bare address is accepted as a single-host range, since writing "127.0.0.1" rather
@@ -58,6 +72,54 @@ func parseTrustedProxies(entries []string) []*net.IPNet {
 		}
 	}
 	return nets
+}
+
+// trustedProxyWidthError reports a configured trusted_proxies entry that trusts more than one
+// host in globally routable address space, or nil when the whole set is within the rule (#1801).
+//
+// # Why the gateway refuses to start rather than warning
+//
+// #1792 refused at render time on the grounds that provisioning is non-interactive, so a warning
+// scrolls past unread. A gateway that will not start is heavier than a provisioning tool that
+// will not render, so the same conclusion needs its own argument here rather than a copy of that
+// one.
+//
+// The alternative is not "warn and carry on safely" -- there is no safe carry-on. The choice is
+// between two outages:
+//
+//   - Refuse. The operator gets one precise line at startup naming the entry and the rule. The
+//     deployment is down until a one-line config edit and a restart.
+//   - Narrow and warn. The gateway starts, and every visitor now resolves to the proxy's address
+//     instead of their own. Per-tunnel IP whitelists deny everyone, the rate limiter's auto-ban
+//     bans the proxy and takes down all traffic, and every audit entry names the same host. That
+//     is also an outage -- with no message pointing at its cause.
+//
+// So refusing is not the heavier option; it is the same cost with a diagnosis attached. And the
+// state being refused is not neutral: a gateway already running with `trusted_proxies:
+// ["0.0.0.0/0"]` has a bypassable IP whitelist right now, so keeping it up is not the cautious
+// choice either.
+//
+// # Why there is no opt-out key
+//
+// The lockout worry is real -- this can strand an operator mid-restart -- and the issue suggested
+// a key to override it. Two things answer it without one. The legitimate wide case, a
+// load-balancer subnet, is already accepted by the rule itself, which allows any prefix inside
+// non-routable space; an override would therefore exist only for ROUTABLE ranges, which is
+// exactly the unsafe case, so its whole effect would be to reopen #1325 on request. And the
+// refusal is not the first line of defence: `lfr-tunnel-ops check-config` has reported this as an
+// error-severity finding on a live gateway since #1792, so an operator who runs the existing
+// check learns about it before the restart that would otherwise strand them.
+func trustedProxyWidthError(entries []string) error {
+	for _, entry := range entries {
+		if reason := nettrust.TooWide(strings.TrimSpace(entry)); reason != "" {
+			return fmt.Errorf("trusted_proxies entry %s, so this gateway would believe an "+
+				"X-Real-IP or X-Forwarded-For header from any caller inside that range -- the "+
+				"per-tunnel IP whitelist, the rate limiter's auto-ban and every audit entry could "+
+				"be pointed anywhere, whatever nginx in front of it does. %s",
+				reason, nettrust.WidthGuidance)
+		}
+	}
+	return nil
 }
 
 func isTrustedProxy(ip string, trusted []*net.IPNet) bool {

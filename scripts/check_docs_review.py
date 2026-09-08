@@ -95,11 +95,41 @@ def git_last_modified(filepath):
 
 def check_changed_files(files, max_git_drift_days):
     """Changed-files mode: require a footer, and flag it if it lags behind
-    git's real last-modified date by more than max_git_drift_days."""
+    git's real last-modified date by more than max_git_drift_days.
+
+    Anti-vacuity (#1779). Measured before the guard existed: given two .md paths that
+    do not exist, this printed
+
+        ✅ All documentation files are up to date and well-reviewed.
+
+    and exited 0. Every named file was dropped by the `os.path.isfile` filter without a
+    word. CI builds the list with `git diff --name-only ... -- '*.md'` and passes it
+    unquoted from the repository root, so a change of working directory, a path with a
+    space in it, or a diff computed against the wrong base all arrive here as paths that
+    do not resolve -- and the gate reported a clean bill of health for zero files.
+
+    A file the diff names but disk does not have is not automatically an error, though:
+    a PR that DELETES a markdown file names it too, and failing that would be a false
+    refusal on a legitimate change. The two are separated by asking git, which is the
+    same question `git_last_modified` already asks -- a deleted file has history, a
+    mistyped or wrongly-rooted path has none.
+    """
     issues_found = False
+    md_named = 0
+    md_examined = 0
+    unresolvable = []
     for f in files:
-        if not f.endswith('.md') or not os.path.isfile(f):
+        if not f.endswith('.md'):
+            # Not markdown. CI passes its whole changed-file list, so this is the normal,
+            # correct skip and must not count towards the floor in either direction.
             continue
+        md_named += 1
+        if not os.path.isfile(f):
+            if git_last_modified(f) is None:
+                unresolvable.append(f)
+            # else: git knows this path, so it is a deletion -- nothing left to check.
+            continue
+        md_examined += 1
         updated, _reviewed = parse_timestamps(f)
         if updated is None:
             print(f"[MISSING-FOOTER] {f}: no 'Last Updated / Last Reviewed' footer found. "
@@ -117,6 +147,25 @@ def check_changed_files(files, max_git_drift_days):
                   f"was actually last modified {real_last_modified.date()} "
                   f"({git_drift_days} days newer than the footer claims). Bump the footer's dates.")
             issues_found = True
+
+    if unresolvable:
+        print(f"[NO-SCAN] {len(unresolvable)} markdown path(s) were named but could not be read, "
+              f"and git has no history for them either, so they are not deletions:")
+        for f in unresolvable[:10]:
+            print(f"    {f}")
+        if len(unresolvable) > 10:
+            print(f"    …and {len(unresolvable) - 10} more")
+        print("  Nothing was checked for these. Most likely the caller's working directory is not "
+              "the repository root, or the changed-file list was built against the wrong base.")
+        issues_found = True
+    elif md_named > 0 and md_examined == 0:
+        # Every named .md was a deletion. Deliberately NOT a failure: a PR that only removes
+        # markdown has nothing left to read, and refusing it would be a false refusal on a
+        # legitimate change. Said out loud so the run is distinguishable from one that examined
+        # something -- which is the whole property, and is not the same as failing.
+        print(f"[NO-SCAN] {md_named} markdown path(s) were named and all of them are deletions, "
+              "so nothing was examined. Not a failure, but not evidence of anything either.")
+
     return issues_found
 
 
@@ -127,6 +176,24 @@ def check_full_repo(root_dir, max_review_days, max_update_days):
 
     print(f"Scanning {len(files)} markdown files...")
     print(f"Rules: Max Review Days = {max_review_days}, Max Update Days = {max_update_days}\n")
+
+    # Anti-vacuity floor (#1779). Measured before the guard existed: pointed at an empty
+    # directory this printed "Scanning 0 markdown files..." followed by
+    # "✅ All documentation files are up to date and well-reviewed." and exited 0 -- a
+    # green audit of nothing, reading exactly like a green audit of the repo.
+    #
+    # The routes there are all quiet ones: a wrong --dir, being run from somewhere other
+    # than the repository root, or the nested-worktree skip in find_md_files() widening
+    # until it swallows the tree it was meant to walk (#1815 added that skip; a bug in it
+    # would land here). 37 tracked .md files today, so the floor has generous headroom and
+    # only a genuine collapse of the walk reaches it.
+    min_files = int(os.environ.get('LFT_DOCS_MIN_FILES', '10'))
+    if len(files) < min_files:
+        print(f"[NO-SCAN] found {len(files)} markdown file(s) under {root_dir}, below the floor "
+              f"of {min_files}. A scan of nothing must not report success (#1779).")
+        print("  Check the working directory and --dir. If the repository genuinely has fewer "
+              "docs now, lower LFT_DOCS_MIN_FILES deliberately.")
+        return True
 
     for f in files:
         updated, reviewed = parse_timestamps(f)

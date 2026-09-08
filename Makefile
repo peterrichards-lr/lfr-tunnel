@@ -264,6 +264,7 @@ test-hooks:
 	@./tests/hooks/test-test-lock.sh
 	@./tests/hooks/test-make-help-covers-targets.sh
 	@./tests/hooks/test-gate-anti-vacuity.sh
+	@./tests/hooks/test-gate-fires.sh
 	@./tests/hooks/test-install-paths.sh
 	@./tests/hooks/test-e2e-teardown.sh
 	@./tests/hooks/test-power-hook-credentials.sh

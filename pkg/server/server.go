@@ -278,6 +278,12 @@ type Server struct {
 
 	rateLimiters map[string]*ipLimiter
 	rlMutex      sync.Mutex
+	// notifyFailures counts CONSECUTIVE notification-email failures per recipient address,
+	// cleared the moment anything reaches that address. It is the trigger for the
+	// notification.send_failing_repeatedly audit row (#1732) and nothing else reads it; the
+	// durable evidence is the audit rows themselves. See notify.go.
+	notifyFailuresMu sync.Mutex
+	notifyFailures   map[string]int
 	// trustedProxies are the hops whose forwarding headers may be believed when resolving a
 	// client address (#1325). Parsed once, because it is consulted on every request.
 	trustedProxies []*net.IPNet
@@ -494,7 +500,7 @@ func NewServer(cfg *config.ServerConfig) (*Server, error) {
 	srv.proxyHandler.caCert = caCert
 	srv.proxyHandler.SetRemoteRouteResolver(srv.resolveRemoteRouteForHost)
 	srv.webhooks = webhook.NewWebhookService(cfg.Webhooks, database)
-	srv.portalService = NewPortalService(srv.db, srv.cfg, srv.notifications, &srv.portalMap, caCert, caKey)
+	srv.portalService = NewPortalService(srv.db, srv.cfg, srv.sendAdminAlert, &srv.portalMap, caCert, caKey)
 	// Optional and absent by default: no MaxMind database is shipped, and without one
 	// this stays nil and every geo call becomes a no-op (#1152).
 	srv.geo = newGeoAggregator(cfg.GeoLite2DBPath, database)
@@ -701,7 +707,7 @@ func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 						s.writeAudit("system", "ip.blacklisted", "ip", ip, reason, r)
 						body, _err := s.renderNotificationTemplate("en", "admin_ip_autobanned.txt", map[string]interface{}{"IP": ip})
 						_ = _err //nolint:errcheck
-						s.notifications.SendAdminAlert("alert_notify_blacklist", "LFR Tunnel Alert: IP Auto-Banned", body)
+						s.sendAdminAlert("alert_notify_blacklist", "LFR Tunnel Alert: IP Auto-Banned", body)
 						// The real remaining time, not a fixed string. Operators were
 						// previously told every ban lasted 24h when none of them expired.
 						var remaining time.Duration
@@ -2114,7 +2120,7 @@ func (s *Server) handleTunnelStatus(w http.ResponseWriter, r *http.Request) {
 		if req.Status == "down" {
 			body, _err := s.renderNotificationTemplate("en", "admin_tunnel_offline.txt", nil)
 			_ = _err //nolint:errcheck
-			s.notifications.SendAdminAlert("alert_notify_tunnel_offline", "LFR Tunnel Alert: Tunnel Offline", body)
+			s.sendAdminAlert("alert_notify_tunnel_offline", "LFR Tunnel Alert: Tunnel Offline", body)
 		}
 		// The body distinguishes this path from the no-lease one below: the client's
 		// gatewayHasNoLease treats {"status":"ok"} as "this gateway holds nothing for
@@ -2572,12 +2578,8 @@ Best regards,
 
 Liferay Tunnel Team`, html.EscapeString(greetingName), verifyURL, clientIP, reportLink)
 
-		go func() {
-			plainBody := fmt.Sprintf("Hi %s,\n\nPlease complete your registration by visiting: %s\n\nIf you did not request this, you can report it at: %s", greetingName, verifyURL, reportLink)
-			if err := s.notifications.Sender().Send(user.Email, subject, body, plainBody); err != nil {
-				slog.Info(fmt.Sprintf("[Mail] Failed to send verification email to %s: %v", user.Email, err))
-			}
-		}()
+		plainBody := fmt.Sprintf("Hi %s,\n\nPlease complete your registration by visiting: %s\n\nIf you did not request this, you can report it at: %s", greetingName, verifyURL, reportLink)
+		s.sendNotificationAsync(notifyRegistrationVerification, user.Email, subject, body, plainBody)
 	}
 
 	w.WriteHeader(http.StatusOK)
@@ -2681,7 +2683,7 @@ func (s *Server) handleCompleteSetup(w http.ResponseWriter, r *http.Request) {
 		"Email":     user.Email,
 	})
 	_ = err //nolint:errcheck
-	s.notifications.SendAdminAlert("alert_notify_registration", "LFR Tunnel Alert: New User Registration", body)
+	s.sendAdminAlert("alert_notify_registration", "LFR Tunnel Alert: New User Registration", body)
 	s.webhooks.SendRegistrationAlert(user.Email, "Pending admin approval")
 
 	// Send approval email to admin.
@@ -2734,16 +2736,7 @@ func (s *Server) handleCompleteSetup(w http.ResponseWriter, r *http.Request) {
 			//
 			// Still asynchronous: an SMTP timeout must not block the registration response. What
 			// changes is that the outcome is now recorded either way.
-			adminEmail := s.cfg.AdminNotificationEmail
-			go func() {
-				if err := s.notifications.Sender().Send(adminEmail, subject, body, plainBody); err != nil {
-					slog.Error(fmt.Sprintf("[Server] Failed to notify %s of %s's registration: %v",
-						adminEmail, user.Email, err))
-					s.writeAudit(user.Email, "user.registered.notify_failed", "user", user.Email,
-						fmt.Sprintf("Admin notification to %s failed, so nobody has been told to approve this registration: %v",
-							adminEmail, err), nil)
-				}
-			}()
+			s.sendNotificationAsync(notifyAdminRegistrationNotice, s.cfg.AdminNotificationEmail, subject, body, plainBody)
 		}
 	}
 
@@ -2786,7 +2779,7 @@ func (s *Server) handleVerifyEmail(w http.ResponseWriter, r *http.Request) {
 		"Email": user.Email,
 	})
 	_ = err //nolint:errcheck
-	s.notifications.SendAdminAlert("alert_notify_registration", "LFR Tunnel Alert: New User Registration", body)
+	s.sendAdminAlert("alert_notify_registration", "LFR Tunnel Alert: New User Registration", body)
 
 	// Also send the original admin approval email now
 	if s.notifications != nil && s.notifications.Sender() != nil && s.cfg.AdminNotificationEmail != "" {
@@ -2815,12 +2808,8 @@ func (s *Server) handleVerifyEmail(w http.ResponseWriter, r *http.Request) {
 			body = fmt.Sprintf("<p>New registration request (Email Verified):</p><ul><li>Name: %s %s</li><li>Email: %s</li></ul><p><a href=\"%s\">Click here to approve this request</a></p>", user.FirstName, user.LastName, user.Email, approveURL)
 		}
 
-		go func() {
-			plainBody := fmt.Sprintf("A new user (%s) requires approval. Approve here: %s", user.Email, approveURL)
-			if err := s.notifications.Sender().Send(s.cfg.AdminNotificationEmail, subject, body, plainBody); err != nil {
-				slog.Info(fmt.Sprintf("[Server] Failed to send admin alert email: %v", err))
-			}
-		}()
+		plainBody := fmt.Sprintf("A new user (%s) requires approval. Approve here: %s", user.Email, approveURL)
+		s.sendNotificationAsync(notifyAdminRegistrationNotice, s.cfg.AdminNotificationEmail, subject, body, plainBody)
 	}
 
 	w.Header().Set("Content-Type", "text/html")
@@ -2992,15 +2981,10 @@ func (s *Server) handleApproveUser(w http.ResponseWriter, r *http.Request) {
 		claimURL := fmt.Sprintf("%s://%s/api/claim?token=%s", scheme, host, claimToken)
 		body := fmt.Sprintf("<p>Your registration request has been approved!</p><p><a href=\"%s\">Click here to claim your personal access token</a></p><p>Note: this link can only be used once.</p>", claimURL)
 		plainBody := fmt.Sprintf("Your registration has been approved. Claim your token here: %s", claimURL)
-		if err := s.notifications.Sender().Send(user.Email, subject, body, plainBody); err != nil {
-			// ERROR, not INFO. At INFO this never appeared in `journalctl -p err`, which is how
-			// a delivery problem stays invisible to whoever goes looking (#1824).
-			slog.Error(fmt.Sprintf("[Server] Failed to send developer approval email to %s: %v",
-				user.Email, err))
-			s.writeAudit(user.Email, "user.approved.notify_failed", "user", user.Email,
-				fmt.Sprintf("Approval succeeded but the notification email failed: %v", err), r)
-			emailErr = err
-		}
+		// Synchronous, unlike most of them: emailErr decides what the approval page tells the
+		// admin, and a page cannot report an outcome that has not happened yet. sendNotification
+		// has already logged at ERROR and written the audit row by the time it returns.
+		emailErr = s.sendNotification(notifyRegistrationApproved, user.Email, subject, body, plainBody)
 	}
 
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
@@ -3833,14 +3817,7 @@ func (s *Server) handleAdminMagicLink(w http.ResponseWriter, r *http.Request) {
 		//
 		// Still asynchronous, for the same reason: a blocking send would turn SMTP latency into
 		// a timing oracle for whether an address exists.
-		recipient := req.Email
-		go func() {
-			if err := s.notifications.Sender().Send(recipient, subject, body, plainBody); err != nil {
-				slog.Error(fmt.Sprintf("[Server] Failed to send magic link to %s: %v", recipient, err))
-				s.writeAudit(recipient, "user.magic_link.notify_failed", "user", recipient,
-					fmt.Sprintf("Magic-link email failed, so this user cannot sign in and has not been told: %v", err), nil)
-			}
-		}()
+		s.sendNotificationAsync(notifyMagicLink, req.Email, subject, body, plainBody)
 	} else {
 		slog.Info(fmt.Sprintf("[Admin] Magic Link for %s: /admin?token=%s", req.Email, magicToken))
 	}
@@ -4250,16 +4227,11 @@ Liferay Tunnel Team`, actor, inviteLink, actor, declineLink)
 		// anything. Same class as #1824, and the error was discarded outright here too (#1832).
 		//
 		// Unlike the magic link above, the caller here IS a trusted admin, so telling them would
-		// be reasonable. It is left as an audit row for now to keep this change to the two sites
-		// that block access; surfacing invite failures in the admin UI belongs with #1732.
-		recipient := req.Email
-		go func() {
-			if err := s.notifications.Sender().Send(recipient, subject, body, plainBody); err != nil {
-				slog.Error(fmt.Sprintf("[Server] Failed to send invite to %s: %v", recipient, err))
-				s.writeAudit(recipient, "user.invite.notify_failed", "user", recipient,
-					fmt.Sprintf("Invite email failed, so this user was created but never told: %v", err), nil)
-			}
-		}()
+		// be reasonable. The audit row remains the surface: it is now written under the same
+		// action as every other notification failure, so one filter shows an owner every address
+		// the gateway cannot reach rather than sixteen action names they would have to know
+		// (#1732).
+		s.sendNotificationAsync(notifyInvite, req.Email, subject, body, plainBody)
 	}
 
 	s.writeAudit(actor, "user.invited", "user", req.Email, "Admin invited new user", r)
@@ -4814,7 +4786,10 @@ Best regards,<br/>
 Liferay Tunnel Team`, html.EscapeString(greetingName))
 
 			plainBody := fmt.Sprintf("Hi %s,\n\nYour access on Liferay Tunnel has been suspended by an administrator.\n\nBest regards,\nLiferay Tunnel Team", greetingName)
-			go func() { _ = s.notifications.Sender().Send(user.Email, subject, body, plainBody) }() //nolint:errcheck
+			// This is the notice that explains why every tunnel a user has just stopped. Losing
+			// it silently leaves them debugging a network fault that is actually an
+			// administrative decision, so the failure has to be recorded (#1732).
+			s.sendNotificationAsync(notifyAccessSuspended, user.Email, subject, body, plainBody)
 		}
 	}
 
@@ -4849,7 +4824,7 @@ Liferay Tunnel Team<br/><br/>
 		}
 
 		plainBody := fmt.Sprintf("Hi %s,\n\nYour account role has been updated on Liferay Tunnel to: %s.\n\nUnsubscribe from optional emails here: %s\n\nBest regards,\nLiferay Tunnel Team", greetingName, *req.Role, unsubLink)
-		go func() { _ = s.notifications.Sender().Send(user.Email, subject, body, plainBody) }() //nolint:errcheck
+		s.sendNotificationAsync(notifyRoleChanged, user.Email, subject, body, plainBody)
 	}
 
 	detailsBytes, _ := json.Marshal(details)
@@ -5362,7 +5337,7 @@ func (s *Server) handleAdminBlacklist(w http.ResponseWriter, r *http.Request, ac
 		s.writeAudit(actor, "ip.blacklisted", "ip", payload.IPAddress, payload.Reason, r)
 		body, _err := s.renderNotificationTemplate("en", "admin_ip_banned.txt", map[string]interface{}{"IP": payload.IPAddress, "Actor": actor})
 		_ = _err //nolint:errcheck
-		s.notifications.SendAdminAlert("alert_notify_blacklist", "LFR Tunnel Alert: IP Banned", body)
+		s.sendAdminAlert("alert_notify_blacklist", "LFR Tunnel Alert: IP Banned", body)
 		s.webhooks.SendIPBlacklistAlert(payload.IPAddress, fmt.Sprintf("%s (Banned by admin: %s)", payload.Reason, actor))
 		_ = json.NewEncoder(w).Encode(map[string]string{"status": "success"}) //nolint:errcheck
 		return
@@ -5490,7 +5465,7 @@ func (s *Server) handleAdminTestWebhook(w http.ResponseWriter, r *http.Request, 
 			"Version":   version,
 		})
 		_ = err //nolint:errcheck
-		s.notifications.SendAdminAlert(
+		s.sendAdminAlert(
 			"alert_notify_test",
 			"Liferay Tunnel Integration Test",
 			body,

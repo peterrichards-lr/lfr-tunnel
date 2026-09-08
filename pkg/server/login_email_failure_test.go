@@ -87,9 +87,19 @@ func TestMagicLinkSendFailureIsRecorded(t *testing.T) {
 	}
 
 	// ...but it must be recorded where an operator can find it.
-	entry := waitForAuditEntry(t, srv, "user.magic_link.notify_failed")
+	//
+	// One canonical action rather than the per-kind user.magic_link.notify_failed this
+	// originally used: an owner asking "is there anybody we cannot email?" has to be able to ask
+	// it once, not sixteen times (#1732). Which notification it was is asserted below, from the
+	// details, so nothing is lost by the merge.
+	entry := waitForAuditEntry(t, srv, ActionNotifySendFailed)
 	if entry.TargetID != email {
 		t.Errorf("audit row names %q, want %q", entry.TargetID, email)
+	}
+	if !strings.Contains(entry.Details, "magic_link") {
+		t.Errorf("audit row details %q do not say which notification failed; with one action for "+
+			"all of them, the kind is what distinguishes a lockout from a lost courtesy notice",
+			entry.Details)
 	}
 	if !strings.Contains(entry.Details, "connection refused") {
 		t.Errorf("audit row details %q do not name the underlying cause; a row that says only "+
@@ -120,12 +130,11 @@ func TestMagicLinkSuccessWritesNoFailureRow(t *testing.T) {
 	// no failure row exists -- otherwise this passes simply by reading too early.
 	waitForSentEmail(t, m)
 
-	entries, err := srv.db.ListAuditEntries(db.AuditFilter{Action: "user.magic_link.notify_failed"})
-	if err != nil {
-		t.Fatalf("reading audit entries: %v", err)
-	}
-	if len(entries) != 0 {
-		t.Errorf("a successful send still wrote %d user.magic_link.notify_failed row(s); the row "+
-			"must mean the mail failed, or it means nothing", len(entries))
-	}
+	// And then poll for the absence rather than reading once. writeAudit's row is written on its
+	// own goroutine, so a single read here does not observe "no row", it observes not having
+	// waited: measured, a funnel mutated to write the failure row unconditionally left this test
+	// GREEN in the single-read form while the two sibling tests in
+	// notification_failure_visibility_test.go both went red on the same mutant (#1732).
+	assertAuditRowCountStaysAt(t, srv, ActionNotifySendFailed, 0,
+		"A successful send wrote a failure row; the row must mean the mail failed, or it means nothing.")
 }

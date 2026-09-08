@@ -549,8 +549,11 @@ func (s *Server) checkExpiringReservations() {
 				subject = fmt.Sprintf("Subdomain Expired & Quarantined: %s.%s", res.Subdomain, res.Domain)
 			}
 
-			if err := s.notifications.Sender().Send(user.Email, subject, body, plainBody); err != nil {
-				slog.Info(fmt.Sprintf("[Server] Failed to send subdomain expired email to %s: %v", user.Email, err))
+			// Synchronous and the error still gates the stage advance: ExpiryWarningSent must
+			// not move to 2 for a warning that was never delivered, or the user is recorded as
+			// warned having never been warned -- the same lie #1724 removed from the policy
+			// sweep. sendNotification logs at ERROR and audits before returning it (#1732).
+			if err := s.sendNotification(notifySubdomainExpired, user.Email, subject, body, plainBody); err != nil {
 				continue
 			}
 
@@ -587,8 +590,7 @@ func (s *Server) checkExpiringReservations() {
 				subject = fmt.Sprintf("Subdomain Expiring Soon: %s.%s", res.Subdomain, res.Domain)
 			}
 
-			if err := s.notifications.Sender().Send(user.Email, subject, body, plainBody); err != nil {
-				slog.Info(fmt.Sprintf("[Server] Failed to send subdomain expiring email to %s: %v", user.Email, err))
+			if err := s.sendNotification(notifySubdomainExpiring, user.Email, subject, body, plainBody); err != nil {
 				continue
 			}
 

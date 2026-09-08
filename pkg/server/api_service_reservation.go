@@ -201,8 +201,8 @@ func (s *portalService) RequestExtension(user *db.User, idStr, ip string) (*db.S
 		CreatedAt:  time.Now(),
 	})
 
-	if s.mailer != nil {
-		s.mailer.SendAdminAlert("alert_notify_extension_requested", "LFR Tunnel Alert: Subdomain Extension Requested",
+	if s.sendAlert != nil {
+		s.sendAlert("alert_notify_extension_requested", "LFR Tunnel Alert: Subdomain Extension Requested",
 			fmt.Sprintf("User %s has requested an extension for subdomain %s.%s.", user.Email, res.Subdomain, res.Domain))
 	}
 

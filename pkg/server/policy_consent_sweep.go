@@ -161,7 +161,10 @@ func (s *Server) sendPolicyConsentWarningEmail(user *db.User, state ConsentState
 	// Blocking the sweep is affordable: it runs on the hourly prune ticker, where
 	// checkExpiringReservations already sends synchronously for the same reason, and
 	// mail.SMTPClient dials with its own timeout.
-	return s.notifications.Sender().Send(user.Email, subject, body, plain)
+	// Through the funnel, so the failure the caller is about to log also leaves a durable,
+	// admin-readable row rather than only a line in the gateway log that nobody is watching --
+	// which is the specific complaint #1732 was raised about.
+	return s.sendNotification(notifyPolicyReminder, user.Email, subject, body, plain)
 }
 
 // policyReminderEmail is the template context for policy_consent_reminder.html. A named

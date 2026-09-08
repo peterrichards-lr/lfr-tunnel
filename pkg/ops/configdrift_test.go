@@ -577,3 +577,97 @@ func TestDNSSpec_EdgeAddressesExcludeTheControlPlane(t *testing.T) {
 		}
 	}
 }
+
+// An over-wide set_real_ip_from entry on a LIVE box (#1792).
+//
+// The render-side refusal added in the same change stops a NEW config being written with one and
+// says nothing whatever about a box already carrying one -- provisioned by hand, or by an older
+// copy of this tool, or edited on the box. Every other check here is satisfied by such a box: the
+// block is present, the control plane is trusted, loopback is trusted, every peer is trusted. What
+// it also trusts is everything else. A guard that lives only at render time makes the dangerous
+// state unwritable and invisible at the same time, which is the worse half of the two.
+func TestCheckGatewayRealIP_ReportsOverWideEntry(t *testing.T) {
+	for _, entry := range []string{"0.0.0.0/0", "::/0", "203.0.113.0/24", "10.0.0.0/7"} {
+		t.Run(entry, func(t *testing.T) {
+			// Otherwise a fully reconciled central -- the same config
+			// TestCheckGatewayRealIP_CentralFullyTrustedIsClean asserts produces NO findings --
+			// with one entry widened. So the only thing this can report is the width.
+			conf := centralConf(entry, "18.0.0.1", "3.0.0.1", "2600:db8::1", nginxLoopbackTrustedProxy)
+			f := checkGatewayRealIP("", twoEdgeSpec(t), conf)
+			if len(f) != 1 {
+				t.Fatalf("expected exactly one finding, the width one, got %+v", f)
+			}
+			// Assert the cause. This config is one edited line away from the absent-block, the
+			// missing-loopback and the missing-peer findings, all of which are DriftFindings on
+			// the same key -- so "a finding was produced" is satisfied by any of them.
+			if !strings.Contains(f[0].Message, entry) {
+				t.Errorf("the finding must NAME the over-wide entry, got %q", f[0].Message)
+			}
+			if !strings.Contains(f[0].Message, "#1792") {
+				t.Errorf("the finding must point at the rule it enforces, got %q", f[0].Message)
+			}
+			// Unlike every other real_ip finding here. The others are warnings because they rest
+			// on resolution from the operator's machine or on a spec that may be mid-edit; the
+			// width of a prefix in a file this tool just read is not a matter of opinion.
+			if f[0].Severity != severityError {
+				t.Errorf("expected %q, got %q", severityError, f[0].Severity)
+			}
+		})
+	}
+}
+
+// The other half of the rule, on the drift side: a fleet reconciled with exact addresses -- which
+// is what the four production edges and central actually carry -- must not start reporting an
+// error, and a genuine private proxy subnet must not either. Without this the check could be
+// "report every prefix" and every assertion above would still pass.
+func TestCheckGatewayRealIP_ExactAndPrivateEntriesAreNotReportedAsWide(t *testing.T) {
+	conf := centralConf("18.0.0.1", "3.0.0.1", "2600:db8::1", "10.20.0.0/16", "192.0.2.5/32", nginxLoopbackTrustedProxy)
+	if f := checkGatewayRealIP("", twoEdgeSpec(t), conf); len(f) != 0 {
+		t.Errorf("exact addresses, a /32 and a private subnet are all within the rule, got %+v", f)
+	}
+}
+
+// The SECOND forwarded-header trust boundary on a live box (#1792).
+//
+// #1792 was reported against nginx's set_real_ip_from, but that is not the only hand-configured
+// set in front of the resolved client address: trusted_proxies in the server config decides whose
+// X-Real-IP / X-Forwarded-For clientIPFrom will believe at all, it takes CIDRs by design, and
+// nothing here looked at it before. A gateway carrying `trusted_proxies: ["0.0.0.0/0"]` honours a
+// forged header from any caller on the internet whatever nginx in front of it does -- so fixing
+// only the nginx half would have fixed the instance and left the class.
+func TestCheckConfigTrustedProxies(t *testing.T) {
+	// The default (empty), the documented loopback pair, and a private proxy subnet are all
+	// within the rule and must stay silent -- otherwise this check would fire on every gateway
+	// that has ever been configured correctly.
+	for _, entries := range [][]string{
+		nil,
+		{"127.0.0.1/32", "::1/128"},
+		{"127.0.0.1/32", "10.20.0.0/16"},
+		{"203.0.113.7", "203.0.113.8/32"},
+	} {
+		if f := checkConfigTrustedProxies(entries); len(f) != 0 {
+			t.Errorf("%v is within the rule, got %+v", entries, f)
+		}
+	}
+
+	for _, entry := range []string{"0.0.0.0/0", "::/0", "203.0.113.0/24", "10.0.0.0/7"} {
+		t.Run(entry, func(t *testing.T) {
+			f := checkConfigTrustedProxies([]string{"127.0.0.1/32", entry})
+			if len(f) != 1 {
+				t.Fatalf("expected exactly one finding for %s, got %+v", entry, f)
+			}
+			if !strings.Contains(f[0].Message, entry) {
+				t.Errorf("the finding must NAME the over-wide entry, got %q", f[0].Message)
+			}
+			// The key has to distinguish the two files. Both boundaries produce an error-severity
+			// finding with the same remedy text, so without this an operator reading the output
+			// cannot tell which one to edit.
+			if f[0].Key != trustedProxiesKey {
+				t.Errorf("expected key %q so the operator knows which file is wrong, got %q", trustedProxiesKey, f[0].Key)
+			}
+			if f[0].Severity != severityError {
+				t.Errorf("expected %q, got %q", severityError, f[0].Severity)
+			}
+		})
+	}
+}

@@ -316,7 +316,10 @@ Three things differ from central, and they are the whole reason an edge needs it
   wildcard bundle pushed from central. Central holds the DNS-write credential and renews those,
   so an edge only ever receives them -- run `setup-certsync-edge.sh` too, or nginx will fail to
   start on a missing certificate.
-- **`-trusted-proxy` is the control plane's address** (IP or CIDR). Without it, a request the
+- **`-trusted-proxy` is the control plane's EXACT address** -- a bare IP, a `/32` or a `/128`.
+  A wider prefix is refused unless it lies entirely inside non-routable space (RFC1918, CGNAT,
+  link-local, loopback, IPv6 ULA), because `set_real_ip_from` lets anything inside the range
+  forge a visitor address (#1792). Without it, a request the
   control plane FORWARDS to this edge is attributed to central rather than to the visitor: the
   per-tunnel IP whitelist, the rate limiter's auto-ban and every audit entry name the control
   plane (#1450). It renders nginx's real_ip directives, which recover the visitor's address from
@@ -324,7 +327,7 @@ Three things differ from central, and they are the whole reason an edge needs it
   Not spoofable — real_ip only rewrites when the immediate peer is the trusted address, so a
   visitor arriving edge-direct is untouched. Omit it and the config is exactly as it was.
   `check-config` (§6a) warns when an edge does not trust the control plane, or trusts an address
-  that no longer resolves to it.
+  that no longer resolves to it, and reports an **error** when any live entry is over-wide.
 
   **Central takes no `-trusted-proxy` and never did -- but it does now get a `real_ip` block**
   (#1767). It has no control plane above it to name, so the flag is still refused; what it needs
@@ -495,7 +498,9 @@ What it checks, all against data already committed here:
   reads the config that is actually serving, because a restart does not re-render that file and
   nothing else surfaces a stale trusted set. An edge is expected to trust the control plane,
   loopback and its peer edges; central is expected to trust every edge in the DNS spec, plus
-  loopback, and has no control-plane entry to check. Central used to be skipped entirely, which
+  loopback, and has no control-plane entry to check. Every entry is also checked for WIDTH
+  (#1792): an entry naming more than one host in routable space is an error, since the render-side
+  refusal cannot see a box that was already provisioned with one. Central used to be skipped entirely, which
   meant the one box with no `real_ip` block was also the one box drift could not report on.
 
 **It never prints a secret.** That file holds token hashes, SMTP credentials and webhook URLs, so
@@ -520,4 +525,4 @@ Run remote diagnostic checks on the VPS (system uptime/load, systemd service sta
 
 <!-- markdownlint-disable MD049 -->
 ---
-*Last Updated: 2026-09-06* | *Last Reviewed: 2026-09-06*
+*Last Updated: 2026-09-08* | *Last Reviewed: 2026-09-08*

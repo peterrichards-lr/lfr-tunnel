@@ -418,11 +418,12 @@ func checkRealIPEntriesAreNarrow(trusted []string) []DriftFinding {
 			Severity: severityError,
 			Key:      realIPKey,
 			Message: fmt.Sprintf(
-				"trusts %s, and %s. Any caller inside that range -- for 0.0.0.0/0 and ::/0, every "+
-					"caller on the internet -- can assert an arbitrary visitor address, so the "+
+				"this config trusts it as a forwarding proxy, and %s. nginx therefore rewrites "+
+					"$remote_addr from an X-Forwarded-For chain supplied by any caller inside that "+
+					"range -- for 0.0.0.0/0 and ::/0, every caller on the internet -- so the "+
 					"per-tunnel IP whitelist, the rate limiter's auto-ban and every audit entry can "+
 					"be pointed anywhere. %s. Then re-run reconcile-nginx",
-				entry, reason, trustedProxyWidthGuidance),
+				reason, trustedProxyWidthGuidance),
 		})
 	}
 	return findings

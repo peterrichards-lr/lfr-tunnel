@@ -89,3 +89,7 @@ __pycache__/
 pkg/server/ui-dist/*
 !pkg/server/ui-dist/.gitkeep
 tests/e2e/server-config-control.generated.yaml
+
+# Agent/session handoff scratch state -- local only, never committed (#1812).
+# Git-ignored in every other repo here; this one had drifted.
+.agent-state.md

@@ -132,6 +132,117 @@ else
     fail "worktrees not reported: $out"
 fi
 
+# ------------------------------------------------------------------------------------------
+# The remaining cases are about the script's view of the remote being CURRENT (#1814).
+#
+# `%(upstream:track)` is computed entirely from local remote-tracking refs. Every case above
+# fetches in the fixture before running the script, so all of them pass against a script that
+# never fetches at all -- which is what shipped, and what reported "nothing to tidy" on
+# 2026-09-08 with five merged branches still sitting there.
+#
+# So these delete the branch INSIDE THE BARE ORIGIN and never fetch in the fixture. The local
+# remote-tracking ref is deliberately left stale; only the script fetching can discover it.
+# ------------------------------------------------------------------------------------------
+
+# delete_at_origin removes a branch from the bare origin without going through the clone, so the
+# clone's refs/remotes/origin/* is left untouched. `git push --delete` would update it locally
+# and destroy the whole point of these fixtures.
+delete_at_origin() {
+    local repo="$1"
+    shift
+    for b in "$@"; do
+        git -C "${repo}-origin" update-ref -d "refs/heads/$b"
+    done
+}
+
+# 7. The report must name a branch whose remote was deleted with no local fetch. This is the
+#    #1814 defect exactly: a clean report that is merely a stale one.
+R=$(make_repo nofetch feat/merged)
+delete_at_origin "$R" feat/merged
+if ! git -C "$R" show-ref --verify --quiet refs/remotes/origin/feat/merged; then
+    fail "HARNESS: refs/remotes/origin/feat/merged vanished without a fetch -- fixture is wrong,
+        this case proves nothing about the script"
+else
+    out=$( cd "$R" && bash "$TARGET" 2>&1 )
+    if printf '%s\n' "$out" | grep -q 'feat/merged'; then
+        pass "a branch whose remote was deleted without a local fetch is still reported"
+    else
+        fail "reported on stale remote-tracking refs -- the script never fetched: $out"
+    fi
+fi
+
+# 8. Protection is not a side effect of the old code path: with the deletion discovered by the
+#    script's OWN fetch, `checksums` must still survive and the ordinary branch must still go.
+R=$(make_repo protectednofetch feat/merged checksums)
+delete_at_origin "$R" feat/merged checksums
+( cd "$R" && bash "$TARGET" --delete >/dev/null 2>&1 )
+if git -C "$R" show-ref --verify --quiet refs/heads/checksums; then
+    pass "checksums survives --delete when the script's own fetch finds its remote gone"
+else
+    fail "checksums was DELETED -- this breaks checksum delivery to the portal silently"
+fi
+if git -C "$R" show-ref --verify --quiet refs/heads/master; then
+    pass "master survives --delete when the script's own fetch finds branches gone"
+else
+    fail "master was deleted"
+fi
+if git -C "$R" show-ref --verify --quiet refs/heads/feat/merged; then
+    fail "a branch deleted at the origin was not removed -- the script never fetched"
+else
+    pass "a branch deleted at the origin is removed after the script's own fetch"
+fi
+
+# 9. A branch held by a worktree cannot be deleted. Reporting that and exiting 0 is how
+#    `make prune-branches` reports success having left branches behind.
+R=$(make_repo worktreerc feat/held)
+git -C "$R" push -q origin --delete feat/held
+git -C "$R" fetch -q --prune origin
+git -C "$R" worktree add -q "$WORK/held-rc" feat/held 2>/dev/null
+if ! git -C "$R" show-ref --verify --quiet refs/heads/feat/held; then
+    fail "HARNESS: the worktree fixture lost feat/held before the script ran"
+else
+    out=$( cd "$R" && bash "$TARGET" --delete 2>&1 )
+    rc=$?
+    held=0
+    git -C "$R" show-ref --verify --quiet refs/heads/feat/held && held=1
+    if [ "$held" -ne 1 ]; then
+        fail "HARNESS: git deleted a worktree-held branch, so there was no failure to report"
+    elif [ "$rc" -ne 0 ] && printf '%s\n' "$out" | grep -q "could not delete feat/held"; then
+        pass "a branch a worktree holds makes --delete exit non-zero and names the branch"
+    else
+        fail "--delete left feat/held behind and exited $rc: $out"
+    fi
+fi
+
+# 10. If the fetch cannot happen the script must refuse, not fall back to the stale refs it
+#     already has. Reporting on yesterday's remote is the failure; doing it quietly is worse.
+R=$(make_repo deadremote feat/x)
+git -C "$R" push -q origin --delete feat/x
+git -C "$R" fetch -q --prune origin
+rm -rf "$R-origin"
+out=$( cd "$R" && bash "$TARGET" 2>&1 )
+rc=$?
+if [ "$rc" -ne 0 ] && printf '%s\n' "$out" | grep -q "could not fetch"; then
+    pass "an unreachable remote makes the script refuse rather than report stale refs"
+else
+    fail "unreachable remote: rc=$rc, expected a refusal naming the failed fetch: $out"
+fi
+
+# 11. Same decision, other cause: no remote at all means there is nothing to be current with.
+R="$WORK/noremote"
+rm -rf "$R"
+git init -q "$R"
+git -C "$R" config user.email t@example.com
+git -C "$R" config user.name Test
+git -C "$R" commit -q --allow-empty -m base
+out=$( cd "$R" && bash "$TARGET" 2>&1 )
+rc=$?
+if [ "$rc" -ne 0 ] && printf '%s\n' "$out" | grep -q "no remote"; then
+    pass "a repository with no remote is refused rather than reported clean"
+else
+    fail "no-remote repo: rc=$rc, expected a refusal: $out"
+fi
+
 echo ""
 echo "passed: $PASS  failed: $FAIL"
 [ "$FAIL" -eq 0 ] || exit 1

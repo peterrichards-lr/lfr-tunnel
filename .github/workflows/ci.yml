@@ -357,6 +357,12 @@ jobs:
       - name: Check the errcheck suppression ratchet
         run: ./scripts/check-nolint-ratchet.sh
 
+      # A test that resolves the user's home must not read the real one (#1798). This fails in
+      # the direction CI is worst at seeing -- the runner's home is empty, so an unisolated test
+      # passes here and fails only on a machine that has actually configured the product.
+      - name: Check test home isolation
+        run: ./scripts/check-test-home-isolation.sh
+
       - name: Set up Node.js
         uses: actions/setup-node@v7
         with:

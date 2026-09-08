@@ -201,10 +201,13 @@ func TestClientTokenFile_MissingFileIsAnActionableError(t *testing.T) {
 	if !strings.Contains(err.Error(), "Personal Access Token") {
 		t.Errorf("the error must say what the file was expected to contain, got: %v", err)
 	}
-	// pkg/gui calls LoadClientConfig as `cfg, _ :=`. Returning a nil config with the error
-	// would turn a misconfigured path into a panic in the tray app.
-	if cfg == nil {
-		t.Error("LoadClientConfig must still return a usable config alongside this error")
+	// The config is nil, like every other error path (#1777). The comment that used to sit
+	// here said the non-nil return protected pkg/gui from a panic; it never did, because a
+	// malformed config -- the reported failure -- returned nil anyway. pkg/gui normalises the
+	// contract itself since #1771. TestLoadClientConfigReturnsNilOnEveryErrorPath owns the
+	// contract; this line stops it drifting back one branch at a time.
+	if cfg != nil {
+		t.Error("LoadClientConfig must return a nil config alongside this error")
 	}
 }
 

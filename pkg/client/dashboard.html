@@ -204,7 +204,12 @@
                     </label>
                 </div>
             </div>
-            </div>
+            <!-- The status row below belongs INSIDE .header-panel, which is what the
+                 indentation has always said. A stray </div> sat here (#783) and a second
+                 one below the panel (#796), so the browser closed .header-panel early and
+                 dropped both extras on the floor: the row rendered outside the panel's 20px
+                 padding and below its bottom border. Neither file read wrong and no gate
+                 could see it -- same class as #1791/#1785. -->
             <div style="display: flex; justify-content: space-between; align-items: center; margin-top: 5px;">
                 <div style="font-size: 12px; color: var(--text-muted);"><span data-i18n="client_listening">Listening on localhost:4040</span></div>
                 <div id="preserve-host-pill" style="display: none; padding: 2px 6px; border-radius: 4px; font-size: 10px; font-weight: 600;"></div>
@@ -212,8 +217,7 @@
                 <div id="ratelimit-sim-pill" style="display: none; padding: 2px 6px; border-radius: 4px; font-size: 10px; font-weight: 600; background: rgba(168, 85, 247, 0.2); color: #a855f7; border: 1px solid rgba(168, 85, 247, 0.4);"></div>
                 <div id="domain-type-pill" style="display: none; padding: 2px 6px; border-radius: 4px; font-size: 10px; font-weight: 600; background: rgba(236, 72, 153, 0.2); color: #ec4899; border: 1px solid rgba(236, 72, 153, 0.4);"></div>
             </div>
-        </div>
-        </div>
+        </div><!-- /.header-panel -->
         <div style="display: flex; border-bottom: 1px solid var(--border); background: var(--bg-card);">
             <div id="tab-traffic" class="tab-item active" onclick="switchView('traffic')" data-i18n="client_traffic_log">Traffic Log</div>
             <div id="tab-settings" class="tab-item" onclick="switchView('settings')" data-i18n="client_settings">Settings</div>

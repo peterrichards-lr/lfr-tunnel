@@ -1184,8 +1184,18 @@
                 <div style="border-top: 1px solid var(--border); padding-top: 24px; text-align: right;">
                     <button class="btn btn-primary" onclick="saveSystemSettings()" data-i18n="save_settings">Save Settings</button>
                 </div>
-        </div>
-    </div>
+        </div><!-- /#tab-system -->
+    </div><!-- /#main-content -->
+    </div><!-- /#dashboard-screen -->
+    <!-- #dashboard-shell was never closed (#1791). It was opened in #1292 alongside a tag
+         labelled /#dashboard-shell, but #dashboard-screen had itself lost its closing tag in
+         #689's "extra closing div" removal, so the new tag was consumed one level too early
+         and the label has pointed at the wrong element ever since. Browsers auto-closed the
+         shell at </body>, which put every modal, #toast-container and the two toast live
+         regions INSIDE a container that carries display:none until sign-in -- so a toast
+         raised on the login screen (showToast on a bad magic link, dashboard.js) painted
+         nothing and announced nothing. Closing it here restores #1292's structure: the shell
+         wraps the banners and the sidebar+content row, and nothing else. -->
     </div><!-- /#dashboard-shell -->
 
     <!-- NEW TOKEN MODAL -->

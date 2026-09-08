@@ -444,6 +444,15 @@ jobs:
       - name: Portal i18n keys must be defined and translated
         run: node scripts/check-i18n-keys.cjs
 
+      # Tags that do not balance. Unlike the three gates above this one models nesting, which
+      # is the only way to see the defect: a dropped closing tag is not a parse error, *.html
+      # is prettier-ignored, and the browser recovers into a different DOM rather than
+      # complaining. #1785 lost the System Settings Save button that way and #1791 left
+      # #dashboard-shell open, putting every modal and the toast container inside a
+      # display:none container.
+      - name: HTML documents must have balanced tags
+        run: node scripts/check-html-balance.mjs
+
   govulncheck:
     name: Vulnerability Scan
     needs: changes

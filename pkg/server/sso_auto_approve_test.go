@@ -3,9 +3,39 @@ package server
 import (
 	"net/http/httptest"
 	"testing"
+	"time"
 
 	"lfr-tunnel/pkg/db"
 )
+
+// waitForAuditEntry polls for an audit row rather than reading once.
+//
+// writeAudit deliberately writes in a bare goroutine -- "so it doesn't block the HTTP response"
+// (server_audit.go) -- and there is no WaitGroup or flush to await. Asserting immediately after
+// the call is therefore a race with the write, not a test of it. That race won on a developer
+// machine and lost on ubuntu CI, which is exactly how this test first went red: the product was
+// correct and the assertion was not.
+//
+// Bounded rather than unbounded so a genuinely missing row still fails, and fails saying which.
+func waitForAuditEntry(t *testing.T, srv *Server, action string) *db.AuditEntry {
+	t.Helper()
+	deadline := time.Now().Add(5 * time.Second)
+	for {
+		entries, err := srv.db.ListAuditEntries(db.AuditFilter{Action: action})
+		if err != nil {
+			t.Fatalf("reading audit entries: %v", err)
+		}
+		if len(entries) > 0 {
+			return entries[0]
+		}
+		if time.Now().After(deadline) {
+			t.Fatalf("no %s audit row appeared within 5s. A pending -> approved transition is "+
+				"the most security-relevant change a user undergoes and must leave a trace "+
+				"naming what did it.", action)
+		}
+		time.Sleep(20 * time.Millisecond)
+	}
+}
 
 // SSO sign-in auto-approving is the intended behaviour, confirmed by the repo owner on
 // 2026-09-08: once Liferay SSO is configured, the Liferay server controls who may authenticate,
@@ -85,17 +115,9 @@ func TestSSOSignInCompletesTheApproval(t *testing.T) {
 			"never signed in")
 	}
 
-	entries, err := srv.db.ListAuditEntries(db.AuditFilter{Action: "user.approved.sso"})
-	if err != nil {
-		t.Fatalf("reading audit entries: %v", err)
-	}
-	if len(entries) == 0 {
-		t.Fatal("no user.approved.sso audit row was written. A pending -> approved transition " +
-			"is the most security-relevant change a user undergoes and must leave a trace " +
-			"naming what did it.")
-	}
-	if entries[0].TargetID != email {
-		t.Errorf("audit row names target %q, want %q", entries[0].TargetID, email)
+	entry := waitForAuditEntry(t, srv, "user.approved.sso")
+	if entry.TargetID != email {
+		t.Errorf("audit row names target %q, want %q", entry.TargetID, email)
 	}
 }
 

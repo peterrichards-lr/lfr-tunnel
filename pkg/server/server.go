@@ -2724,7 +2724,26 @@ func (s *Server) handleCompleteSetup(w http.ResponseWriter, r *http.Request) {
 			}
 
 			plainBody := fmt.Sprintf("New user registered: %s. Approve here: %s", user.Email, approveURL)
-			go func() { _ = s.notifications.Sender().Send(s.cfg.AdminNotificationEmail, subject, body, plainBody) }() //nolint:errcheck
+
+			// This is the mail that tells the owner there is somebody to approve. Its error used
+			// to be discarded outright -- `go func() { _ = ...Send(...) }()` -- so if it never
+			// arrived, nothing anywhere recorded that: not a log line, not an audit row. The
+			// registration then sat at "pending" indefinitely while the developer waited for an
+			// approval nobody knew to give. That is the likeliest reason five production
+			// registrations were never approved through this path (#1824).
+			//
+			// Still asynchronous: an SMTP timeout must not block the registration response. What
+			// changes is that the outcome is now recorded either way.
+			adminEmail := s.cfg.AdminNotificationEmail
+			go func() {
+				if err := s.notifications.Sender().Send(adminEmail, subject, body, plainBody); err != nil {
+					slog.Error(fmt.Sprintf("[Server] Failed to notify %s of %s's registration: %v",
+						adminEmail, user.Email, err))
+					s.writeAudit(user.Email, "user.registered.notify_failed", "user", user.Email,
+						fmt.Sprintf("Admin notification to %s failed, so nobody has been told to approve this registration: %v",
+							adminEmail, err), nil)
+				}
+			}()
 		}
 	}
 
@@ -2960,7 +2979,9 @@ func (s *Server) handleApproveUser(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Send approval email to developer with claim link
+	// Send approval email to developer with claim link. emailErr carries the outcome to the
+	// response below, so the admin is told the truth rather than a fixed string (#1824).
+	var emailErr error
 	if s.notifications != nil && s.notifications.Sender() != nil {
 		subject := "[Liferay Tunnel] Registration Approved!"
 		scheme := "http"
@@ -2972,13 +2993,36 @@ func (s *Server) handleApproveUser(w http.ResponseWriter, r *http.Request) {
 		body := fmt.Sprintf("<p>Your registration request has been approved!</p><p><a href=\"%s\">Click here to claim your personal access token</a></p><p>Note: this link can only be used once.</p>", claimURL)
 		plainBody := fmt.Sprintf("Your registration has been approved. Claim your token here: %s", claimURL)
 		if err := s.notifications.Sender().Send(user.Email, subject, body, plainBody); err != nil {
-			slog.Info(fmt.Sprintf("[Server] Failed to send developer approval email: %v", err))
+			// ERROR, not INFO. At INFO this never appeared in `journalctl -p err`, which is how
+			// a delivery problem stays invisible to whoever goes looking (#1824).
+			slog.Error(fmt.Sprintf("[Server] Failed to send developer approval email to %s: %v",
+				user.Email, err))
+			s.writeAudit(user.Email, "user.approved.notify_failed", "user", user.Email,
+				fmt.Sprintf("Approval succeeded but the notification email failed: %v", err), r)
+			emailErr = err
 		}
 	}
 
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
 	w.WriteHeader(http.StatusOK)
-	if _, err := w.Write([]byte("<h1>Approval Successful</h1><p>The user has been approved, and an email has been sent to them with instructions to claim their token.</p>")); err != nil {
+
+	// Tell the admin what actually happened. This page used to claim "an email has been sent"
+	// unconditionally, outside the error branch -- so when a send failed, the approver was told
+	// it had succeeded and the developer was left waiting for a mail nobody knew had not gone
+	// (#1824). The approval itself IS done either way; only the notification is in doubt, and
+	// saying so is what lets the admin pass the claim link on by hand.
+	page := "<h1>Approval Successful</h1><p>The user has been approved, and an email has been " +
+		"sent to them with instructions to claim their token.</p>"
+	if emailErr != nil {
+		page = "<h1>Approval Successful &mdash; but the email did NOT send</h1>" +
+			"<p>The user <strong>has been approved</strong> and can sign in. However the " +
+			"notification email failed, so <strong>they have not been told</strong>, and they " +
+			"have not received their one-time claim link.</p>" +
+			"<p>Contact them directly, or ask them to request a magic link from the portal " +
+			"&mdash; approved users can sign in without the claim link.</p>" +
+			"<p>The failure has been recorded in the audit log.</p>"
+	}
+	if _, err := w.Write([]byte(page)); err != nil {
 		log.Printf("[Warning] Failed to write response: %v", err)
 	}
 }

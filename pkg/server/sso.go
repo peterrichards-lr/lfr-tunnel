@@ -200,12 +200,7 @@ func (s *Server) handleSSOCallback(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 	} else if user.Status != "approved" {
-		user.Status = "approved"
-		if err := s.db.UpdateUser(user); err != nil {
-			slog.Info(fmt.Sprintf("Failed to update user tokens after SSO login: %v", err))
-		} else {
-			s.invalidateUserCache(user.Email)
-		}
+		s.approveOnSSOSignIn(user, providerID, r)
 	}
 
 	// Issue the admin session cookie
@@ -244,4 +239,47 @@ func (s *Server) handleSSOCallback(w http.ResponseWriter, r *http.Request) {
 
 	// Redirect to Dashboard (Root)
 	http.Redirect(w, r, "/", http.StatusFound)
+}
+
+// approveOnSSOSignIn completes the approval of an existing user who has just authenticated
+// through SSO.
+//
+// Auto-approving here is deliberate: once Liferay SSO is configured, the Liferay server is what
+// controls who may authenticate, so reaching this point IS the authorisation. A second, manual
+// approval would only duplicate a decision already made upstream.
+//
+// What was wrong (#1824) is that this approved PARTIALLY -- it set the status and stopped,
+// leaving three loose ends:
+//
+//   - approval_token stayed live, so the admin's emailed approve link still worked on an
+//     already-approved user. Following it later would mint a claim token and send a
+//     "Registration Approved!" mail for something that happened days earlier.
+//   - no audit row, so the single most security-relevant transition a user can undergo --
+//     pending to approved -- left no trace naming what did it.
+//   - no last_login_at, so these users read as "never logged in" (only server.go's magic-link
+//     path and api_service_mfa.go set it, and neither is on this route). That is what made the
+//     production data look as though nobody had ever signed in, when they had.
+//
+// Deliberately does NOT send a "you are approved" email: the user is completing a sign-in as this
+// runs, so they are about to be looking at the dashboard. The email in the admin-approval path
+// exists to reach somebody who is NOT present. Here, they are.
+//
+// Extracted from handleSSOCallback so the behaviour can be asserted directly: reaching the
+// callback requires a full OIDC token exchange, and a test that faked one would be testing the
+// fake. This is the real function the callback calls.
+func (s *Server) approveOnSSOSignIn(user *db.User, providerID string, r *http.Request) {
+	previousStatus := user.Status
+	user.Status = "approved"
+	user.ApprovalToken = "" // consumed by this approval; a stale link must not re-approve
+	now := time.Now().UTC()
+	user.LastLoginAt = &now
+
+	if err := s.db.UpdateUser(user); err != nil {
+		slog.Error(fmt.Sprintf("[SSO] Failed to approve %s on SSO sign-in: %v", user.Email, err))
+		return
+	}
+	s.invalidateUserCache(user.Email)
+	s.writeAudit(user.Email, "user.approved.sso", "user", user.Email,
+		fmt.Sprintf("Auto-approved on SSO sign-in via %s (was %q); the identity provider is the access decision",
+			providerID, previousStatus), r)
 }

@@ -899,9 +899,14 @@ html[dir='rtl'] th {
 
   /* Print styling rules for analytical sections and panels */
   .glass {
-    border: 1px solid var(--border) !important;
+    /* Literal, for the reason the body rule above already gives. #1221 fixed that rule
+       and left this one, so V2 has printed black body text on near-black analytics cards
+       ever since -- see the long note on the same rule in pkg/server/static/dashboard.css
+       (#1802). #767676 is 4.54:1 on white, past the 3:1 WCAG 1.4.11 asks of a component
+       boundary. */
+    border: 1px solid #767676 !important;
     box-shadow: none !important;
-    background: var(--bg-card) !important;
+    background: #ffffff !important;
     page-break-inside: avoid !important;
     break-inside: avoid !important;
     margin-bottom: 24px !important;

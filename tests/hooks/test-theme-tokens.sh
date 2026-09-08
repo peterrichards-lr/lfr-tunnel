@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# test-theme-tokens.sh — tests scripts/check-theme-tokens.mjs (#1217, #1221, #1774)
+# test-theme-tokens.sh — tests scripts/check-theme-tokens.mjs (#1217, #1221, #1774, #1784)
 #
 # The check compares custom properties REFERENCED against those DEFINED by every theme.
 # #1774 added the markup and script pass, after twenty references to four properties no
@@ -12,10 +12,17 @@
 # reported a clean run over zero files. Every fire-case below checks the exit status AND that
 # the offending property is named, from a tree that differs from the real one by one line.
 #
-# The two cases that matter most are the last two. Scope here is DERIVED -- a page is checked
+# The cases that matter most are the scope ones. Scope here is DERIVED -- a page is checked
 # against the shared themes only if it links them -- and a derived rule can fail in both
 # directions: too narrow (a themed page silently skipped) and too wide (a self-contained page
 # reported for properties it defines itself). Both are asserted.
+#
+# #1784 added a third direction, which is the one the derived rule got wrong for a year: a page
+# that is correctly held out of the SHARED check was then resolved against nothing at all, and
+# setup.css sat there referencing three properties it does not define. So "held out" now means
+# "resolved against its own tokens", and the difference between the two is asserted below --
+# a page's own token passes, a token nothing defines fails, and the tokens a page picks up from
+# a stylesheet it LINKS count as its own.
 #
 # Runs against a throwaway copy of the tree, never the working tree: a test that mutates
 # pkg/server to prove a point and then restores it loses on any interrupted run.
@@ -83,6 +90,8 @@ DASHBOARD_HTML="pkg/server/dashboard.html"
 DASHBOARD_JS="pkg/server/static/dashboard.js"
 DASHBOARD_CSS="pkg/server/static/dashboard.css"
 PASSCODE_HTML="pkg/server/passcode.html"
+SETUP_HTML="pkg/server/static/setup.html"
+SETUP_CSS="pkg/server/static/setup.css"
 
 echo "Testing check-theme-tokens..."
 
@@ -107,12 +116,18 @@ if says "$OUT" 'pkg/server/static/dashboard.js'; then
 else
   fail "dashboard.js was not scanned -- V1 renders most of its markup there: $OUT"
 fi
-# The pages that are NOT checked are reported too. An exclusion nobody can see is
-# indistinguishable from a scan that quietly stopped looking.
+# The pages held out of the SHARED check are reported too, with what each was resolved
+# against instead. A scope nobody can see is indistinguishable from a scan that quietly
+# stopped looking, and until #1784 those two were in fact the same thing here.
 if says "$OUT" 'do not link the shared themes'; then
-  pass "the pages held out of the check are named"
+  pass "the pages outside the shared scope are named"
 else
-  fail "the output does not say which pages were skipped: $OUT"
+  fail "the output does not say which pages were resolved separately: $OUT"
+fi
+if says "$OUT" "$SETUP_HTML  +  $SETUP_CSS"; then
+  pass "a self-contained page names the stylesheet it was resolved against"
+else
+  fail "setup.html's definition source is not reported: $OUT"
 fi
 
 # ---------------------------------------------------------------------------
@@ -183,15 +198,70 @@ fi
 #    resolved against them. passcode.html carries its own tokens in its own <style> block, so
 #    checking it here would report every one of them as undefined -- the false positive that
 #    makes a maintainer narrow a gate until it stops finding anything.
+#
+#    --text-primary is one of passcode.html's OWN eleven properties and is defined in no theme
+#    file, so a reference to it passes only if the page was resolved against itself.
 # ---------------------------------------------------------------------------
 reset_sandbox
-sed -i.bak 's/<body/<body style="color: var(--probe-selfcontained-token);"/' \
+sed -i.bak 's/<body/<body style="color: var(--text-primary);"/' \
   "$SANDBOX/$PASSCODE_HTML" && rm -f "$SANDBOX/$PASSCODE_HTML.bak"
 run
-if [ "$RC" -eq 0 ] && ! says "$OUT" 'probe-selfcontained-token'; then
-  pass "a self-contained page is not checked against the shared themes"
+if [ "$RC" -eq 0 ] && ! says "$OUT" '--text-primary'; then
+  pass "a self-contained page's own token resolves against its own <style> block"
 else
   fail "passcode.html was checked against themes it does not link (rc=$RC): $OUT"
+fi
+
+# ---------------------------------------------------------------------------
+# 6b. Scope is derived, direction three (#1784): held out of the SHARED check is not the same
+#     as unchecked. The case above passes just as well on a scan that reads self-contained
+#     pages and then does nothing with them -- which is precisely what the gate did until
+#     #1784, and how setup.css kept three undefined properties through two widenings.
+#
+#     Asserts the page is named as well as the property: the shared scope reports property
+#     names too, so "the token appears in the output" alone does not say which scope found it.
+# ---------------------------------------------------------------------------
+reset_sandbox
+sed -i.bak 's/<body/<body style="color: var(--probe-undefined-selfcontained);"/' \
+  "$SANDBOX/$PASSCODE_HTML" && rm -f "$SANDBOX/$PASSCODE_HTML.bak"
+run
+if [ "$RC" -ne 0 ] && says "$OUT" 'probe-undefined-selfcontained' &&
+  says "$OUT" 'does not define'; then
+  pass "a self-contained page referencing a token nothing defines fails and is named"
+else
+  fail "passcode.html's undefined token was not reported (rc=$RC): $OUT"
+fi
+
+# ---------------------------------------------------------------------------
+# 6c. A self-contained page's definitions include the stylesheets it LINKS, not only its own
+#     <style> block. This is the whole of setup.html: it defines nothing itself and gets all
+#     eighteen of its properties from setup.css, so a gate that read only <style> blocks would
+#     report all eighteen and be turned off within the day.
+# ---------------------------------------------------------------------------
+reset_sandbox
+sed -i.bak 's|<body>|<body style="color: var(--login-gradient);">|' \
+  "$SANDBOX/$SETUP_HTML" && rm -f "$SANDBOX/$SETUP_HTML.bak"
+run
+if [ "$RC" -eq 0 ] && ! says "$OUT" 'login-gradient'; then
+  pass "a linked stylesheet's tokens count as the page's own definitions"
+else
+  fail "setup.html was not resolved against setup.css (rc=$RC): $OUT"
+fi
+
+# ---------------------------------------------------------------------------
+# 6d. And the other half of the same link: a reference added to that linked stylesheet is
+#     found. setup.css is reached only through setup.html -- it is in no walked directory of
+#     its own -- so this is the path #1784's five references travelled.
+# ---------------------------------------------------------------------------
+reset_sandbox
+printf '\n.theme-token-probe {\n  color: var(--probe-undefined-in-linked-css);\n}\n' \
+  >>"$SANDBOX/$SETUP_CSS"
+run
+if [ "$RC" -ne 0 ] && says "$OUT" 'probe-undefined-in-linked-css' &&
+  says "$OUT" "$SETUP_HTML"; then
+  pass "an undefined token in a linked stylesheet fails, against the page that links it"
+else
+  fail "setup.css's undefined token was not reported (rc=$RC): $OUT"
 fi
 
 # ---------------------------------------------------------------------------
@@ -211,18 +281,65 @@ else
 fi
 
 # ---------------------------------------------------------------------------
-# 8. Anti-vacuity. Membership is a <link> in the markup, so deleting that link empties the
-#    markup scan while every stylesheet still resolves -- a green run over nothing, which is
-#    exactly how the blind spot this pass closes went unnoticed.
+# 8. Anti-vacuity, shared scope. Membership is a <link> in the markup, so deleting that link
+#    empties the markup scan while every stylesheet still resolves -- a green run over nothing,
+#    which is exactly how the blind spot this pass closes went unnoticed.
+#
+#    Matched on 'markup and script scan', not on 'covered nothing' alone: both scopes now have
+#    an anti-vacuity message and both contain that phrase, so the looser match would be
+#    satisfied by the wrong one of the two.
 # ---------------------------------------------------------------------------
 reset_sandbox
 sed -i.bak 's|/static/themes/|/static/nowhere/|g' "$SANDBOX/$DASHBOARD_HTML" &&
   rm -f "$SANDBOX/$DASHBOARD_HTML.bak"
 run
-if [ "$RC" -ne 0 ] && says "$OUT" 'covered nothing'; then
+if [ "$RC" -ne 0 ] && says "$OUT" 'markup and script scan'; then
   pass "a markup scan that covers nothing fails instead of reporting success"
 else
   fail "an empty markup scan reported success (rc=$RC): $OUT"
+fi
+
+# ---------------------------------------------------------------------------
+# 9. Anti-vacuity, document scope. The mirror of case 8, and the one that has teeth: if the
+#    document scan resolves nothing -- because every page joined the shared scope, or because
+#    the pattern that finds a page's own <style> block stopped matching -- the run still ends
+#    in the shared scope's success message. Every page is given the themes link here, which
+#    empties the document scope while leaving the shared one busier than ever.
+#
+#    Matched on the message, and the exit code alone would NOT do. Measured against the mutant
+#    that deletes the guard: the run still exits 1, because forty pages resolved against themes
+#    they do not belong to report their own tokens as undefined. An 'exited non-zero' assertion
+#    passes on that mutant and reports a working guard that is not there.
+# ---------------------------------------------------------------------------
+reset_sandbox
+find "$SANDBOX/pkg/server" -name '*.html' -exec \
+  sed -i.bak 's|<body|<link rel="stylesheet" href="/static/themes/dark.css"><body|' {} + &&
+  find "$SANDBOX/pkg/server" -name '*.html.bak' -delete
+run
+if [ "$RC" -ne 0 ] && says "$OUT" 'document scan'; then
+  pass "a document scan that covers nothing fails instead of reporting success"
+else
+  fail "an empty document scan reported success (rc=$RC): $OUT"
+fi
+
+# ---------------------------------------------------------------------------
+# 10. The blind spot that remains, asserted rather than described. A stylesheet no page links
+#     is read by neither scope: the shared scope walks ui/src and dashboard.css by name, and
+#     the document scope reaches a stylesheet only through the page that links it. There are
+#     two such files today -- pkg/server/static/offline.css and offline.js, which nothing
+#     references -- and this pins the gap so that closing it is a decision someone makes
+#     rather than something that quietly happens. See the follow-up issue for deleting them.
+#
+#     Prose in the script would not fail if the scope changed. This does.
+# ---------------------------------------------------------------------------
+reset_sandbox
+printf '.orphan-probe {\n  color: var(--probe-in-unlinked-stylesheet);\n}\n' \
+  >"$SANDBOX/pkg/server/static/orphan-probe.css"
+run
+if [ "$RC" -eq 0 ] && ! says "$OUT" 'probe-in-unlinked-stylesheet'; then
+  pass "known gap: a stylesheet no page links is read by neither scope"
+else
+  fail "an unlinked stylesheet is now covered -- update this case, it is out of date (rc=$RC): $OUT"
 fi
 
 echo

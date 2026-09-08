@@ -135,10 +135,11 @@ func writeBrokenClientConfig(t *testing.T) {
 	}
 }
 
-// TestLoadUIConfigNeverReturnsNil — LoadClientConfig is nil-on-error for two of its three
-// error paths, and #1758 made only the token_file branch return a usable config. #1771's
-// fix is to normalise that in the one package that needs it rather than leave pkg/config
-// carrying a caller's constraint on every future error it learns to return.
+// TestLoadUIConfigNeverReturnsNil — LoadClientConfig is nil-on-error on every path (#1777),
+// so this normalisation is what the four handlers actually rely on. #1758 had made only the
+// token_file branch return a usable config; #1771's fix was to normalise in the one package
+// that needs it rather than leave pkg/config carrying a caller's constraint on every future
+// error it learns to return, and #1777 then removed the half-kept accommodation.
 func TestLoadUIConfigNeverReturnsNil(t *testing.T) {
 	writeBrokenClientConfig(t)
 

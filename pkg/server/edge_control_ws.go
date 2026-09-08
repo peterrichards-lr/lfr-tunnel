@@ -139,16 +139,20 @@ func (s *Server) handleEdgeControlWS(w http.ResponseWriter, r *http.Request) {
 	}
 	version := r.URL.Query().Get("version")
 
-	var clientIP string
-	if xrip := r.Header.Get("X-Real-IP"); xrip != "" {
-		clientIP = xrip
-	} else if xff := r.Header.Get("X-Forwarded-For"); xff != "" {
-		parts := strings.Split(xff, ",")
-		clientIP = strings.TrimSpace(parts[0])
-	} else {
-		host, _, _ := net.SplitHostPort(r.RemoteAddr)
-		clientIP = host
-	}
+	// The edge's address, resolved through the same trust boundary as every other client
+	// address (#1818). This used to read X-Real-IP directly and, failing that, take the
+	// LEFTMOST X-Forwarded-For entry -- which is the caller-supplied end, because nginx's
+	// $proxy_add_x_forwarded_for appends. So any caller able to reach this endpoint could
+	// name the address recorded for a node. clientIPFrom walks the list right-to-left and
+	// only consults either header when the immediate peer is in trusted_proxies; otherwise
+	// it returns the peer, which is the same fallback the old `else` branch had.
+	//
+	// No behaviour change for this deployment: nginx proxies to 127.0.0.1, which is the
+	// default trusted set, so X-Real-IP is honoured exactly as before. What changes is a
+	// request arriving from an UNTRUSTED peer, where the header is now ignored rather than
+	// believed -- and edgeIPs is not merely displayed, it is a routing target
+	// (server.go returns "http://" + s.edgeIPs[nodeID]).
+	clientIP := s.clientIP(r)
 
 	conn, err := upgrader.Upgrade(w, r, nil)
 	if err != nil {

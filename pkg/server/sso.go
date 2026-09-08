@@ -219,7 +219,7 @@ func (s *Server) handleSSOCallback(w http.ResponseWriter, r *http.Request) {
 	s.sessionStore().storePortalSession(sessionID, PortalSessionData{
 		Email:                 user.Email,
 		ExpiresAt:             time.Now().Add(s.cfg.PortalSessionDuration),
-		ClientIP:              r.Header.Get("X-Real-IP"),
+		ClientIP:              s.clientIP(r),
 		KilledPreviousSession: killedPreviousSession,
 		// Recorded so a slide can re-issue the cookie with the mode it was created with
 		// rather than a default (#1655).
@@ -239,7 +239,7 @@ func (s *Server) handleSSOCallback(w http.ResponseWriter, r *http.Request) {
 		Action:     "user.login.sso",
 		TargetType: "user",
 		TargetID:   user.Email,
-		IPAddress:  r.Header.Get("X-Real-IP"),
+		IPAddress:  s.clientIP(r),
 	})
 
 	// Redirect to Dashboard (Root)

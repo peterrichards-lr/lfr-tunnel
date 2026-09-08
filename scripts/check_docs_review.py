@@ -177,24 +177,6 @@ def check_full_repo(root_dir, max_review_days, max_update_days):
     print(f"Scanning {len(files)} markdown files...")
     print(f"Rules: Max Review Days = {max_review_days}, Max Update Days = {max_update_days}\n")
 
-    # Anti-vacuity floor (#1779). Measured before the guard existed: pointed at an empty
-    # directory this printed "Scanning 0 markdown files..." followed by
-    # "✅ All documentation files are up to date and well-reviewed." and exited 0 -- a
-    # green audit of nothing, reading exactly like a green audit of the repo.
-    #
-    # The routes there are all quiet ones: a wrong --dir, being run from somewhere other
-    # than the repository root, or the nested-worktree skip in find_md_files() widening
-    # until it swallows the tree it was meant to walk (#1815 added that skip; a bug in it
-    # would land here). 37 tracked .md files today, so the floor has generous headroom and
-    # only a genuine collapse of the walk reaches it.
-    min_files = int(os.environ.get('LFT_DOCS_MIN_FILES', '10'))
-    if len(files) < min_files:
-        print(f"[NO-SCAN] found {len(files)} markdown file(s) under {root_dir}, below the floor "
-              f"of {min_files}. A scan of nothing must not report success (#1779).")
-        print("  Check the working directory and --dir. If the repository genuinely has fewer "
-              "docs now, lower LFT_DOCS_MIN_FILES deliberately.")
-        return True
-
     for f in files:
         updated, reviewed = parse_timestamps(f)
         if updated is None or reviewed is None:
@@ -209,6 +191,30 @@ def check_full_repo(root_dir, max_review_days, max_update_days):
         if update_age_days > max_update_days:
             print(f"[OUTDATED] {f}: Last updated {update_age_days} days ago (limit {max_update_days}).")
             issues_found = True
+
+    # Anti-vacuity floor (#1779). Measured before the guard existed: pointed at an empty
+    # directory this printed "Scanning 0 markdown files..." followed by
+    # "✅ All documentation files are up to date and well-reviewed." and exited 0 -- a
+    # green audit of nothing, reading exactly like a green audit of the repo.
+    #
+    # The routes there are all quiet ones: a wrong --dir, being run from somewhere other
+    # than the repository root, or the nested-worktree skip in find_md_files() widening
+    # until it swallows the tree it was meant to walk (#1815 added that skip; a bug in it
+    # would land here). 37 tracked .md files today, so the floor has generous headroom and
+    # only a genuine collapse of the walk reaches it.
+    #
+    # Applied after the audit rather than before it, so a short scan still reports whatever
+    # it did find. A vacuity message that displaces a concrete finding is a worse diagnosis
+    # than the one it replaced -- the same reason the floors in check-theme-contrast.cjs and
+    # check-required-contexts.sh are evaluated last.
+    min_files = int(os.environ.get('LFT_DOCS_MIN_FILES', '10'))
+    if len(files) < min_files:
+        print(f"[NO-SCAN] found {len(files)} markdown file(s) under {root_dir}, below the floor "
+              f"of {min_files}. A scan of nothing must not report success (#1779).")
+        print("  Check the working directory and --dir. If the repository genuinely has fewer "
+              "docs now, lower LFT_DOCS_MIN_FILES deliberately.")
+        issues_found = True
+
     return issues_found
 
 

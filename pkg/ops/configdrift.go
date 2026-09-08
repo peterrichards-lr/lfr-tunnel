@@ -142,6 +142,9 @@ type liveConfig struct {
 // therefore doubles as the "is this an edge" signal. Narrow on purpose: see the secrecy rule.
 type liveConfigWithCP struct {
 	ControlPlaneURL string `yaml:"control_plane_url"`
+	// The gateway's OWN forwarded-header trust set, checked for width by
+	// checkConfigTrustedProxies (#1792). A list of CIDRs, not a credential.
+	TrustedProxies []string `yaml:"trusted_proxies"`
 }
 
 // Severities. Named because they are compared as well as printed, and a typo in a comparison
@@ -356,7 +359,13 @@ func checkGatewayRealIP(controlPlaneURL string, spec DNSSpec, nginxConf string) 
 		}}
 	}
 
-	var findings []DriftFinding
+	// Width before staleness (#1792). Every other finding here is about a set that is too SMALL
+	// -- a missing forwarder, a missing loopback entry -- and is fixed by re-running
+	// reconcile-nginx. This one is about a set that is too LARGE, which no amount of reconciling
+	// notices on a box already provisioned with it: the render-side refusal added in #1792 stops
+	// a new one being written and says nothing at all about the boxes already carrying it.
+	findings := checkRealIPEntriesAreNarrow(trusted)
+
 	if isEdge {
 		// Only an edge has a control plane to still be pointing at.
 		findings = append(findings, checkRealIPMatchesControlPlane(controlPlaneURL, trusted)...)
@@ -380,6 +389,79 @@ func checkGatewayRealIP(controlPlaneURL string, spec DNSSpec, nginxConf string) 
 	}
 
 	findings = append(findings, checkRealIPCoversPeerEdges(spec, trusted, nginxConf)...)
+	return findings
+}
+
+// checkRealIPEntriesAreNarrow reports a live set_real_ip_from entry that trusts more than one
+// host in globally routable space (#1792).
+//
+// The render path refuses one now, but a box provisioned before that guard existed -- or by hand,
+// or by an older copy of this tool -- keeps serving with it and looks entirely healthy: the config
+// passes `nginx -t`, every other check here passes, and the only symptom is that any caller can
+// assert whatever visitor address it likes. A guard that exists only at render time makes the
+// dangerous state unwritable and invisible at the same time, which is the worse half of the two.
+//
+// The rule itself lives in trustedProxyTooWide (pkg/ops/nginx.go), so the config this tool WRITES
+// and the config it READS are judged by one predicate rather than by two that can drift apart.
+//
+// severityError, unlike every other real_ip finding here. The others are warnings because they
+// depend on resolution from the operator's machine, or on a spec that may be mid-edit; this one is
+// read straight out of the live file and the width of a prefix is not a matter of opinion.
+func checkRealIPEntriesAreNarrow(trusted []string) []DriftFinding {
+	var findings []DriftFinding
+	for _, entry := range trusted {
+		reason := trustedProxyTooWide(entry)
+		if reason == "" {
+			continue
+		}
+		findings = append(findings, DriftFinding{
+			Severity: severityError,
+			Key:      realIPKey,
+			Message: fmt.Sprintf(
+				"trusts %s, and %s. Any caller inside that range -- for 0.0.0.0/0 and ::/0, every "+
+					"caller on the internet -- can assert an arbitrary visitor address, so the "+
+					"per-tunnel IP whitelist, the rate limiter's auto-ban and every audit entry can "+
+					"be pointed anywhere. %s. Then re-run reconcile-nginx",
+				entry, reason, trustedProxyWidthGuidance),
+		})
+	}
+	return findings
+}
+
+// trustedProxiesKey names the finding for the gateway's own trusted set, kept distinct from
+// realIPKey so an operator can tell WHICH of the two files is over-wide.
+const trustedProxiesKey = "trusted_proxies"
+
+// checkConfigTrustedProxies applies the same width rule to the GATEWAY's own trusted set (#1792).
+//
+// Two independent boundaries sit in front of the resolved client address, both configured by hand,
+// both of which reopen #1325 when widened: nginx's set_real_ip_from, checked above, and
+// trusted_proxies in the server config, which decides whose X-Real-IP / X-Forwarded-For
+// clientIPFrom (pkg/server/client_ip.go) will believe AT ALL. #1792 was reported against the
+// first. Checking only the first would fix the instance and leave the class -- a gateway with
+// `trusted_proxies: ["0.0.0.0/0"]` honours a forged X-Real-IP from any caller on the internet,
+// whatever nginx in front of it says, and no check here looked at that field before.
+//
+// An empty list is the loopback default (defaultTrustedProxies in pkg/server/client_ip.go), which
+// is exactly one host per family, so there is nothing to report.
+func checkConfigTrustedProxies(entries []string) []DriftFinding {
+	var findings []DriftFinding
+	for _, entry := range entries {
+		reason := trustedProxyTooWide(entry)
+		if reason == "" {
+			continue
+		}
+		findings = append(findings, DriftFinding{
+			Severity: severityError,
+			Key:      trustedProxiesKey,
+			Message: fmt.Sprintf(
+				"%s, so this gateway believes an X-Real-IP or X-Forwarded-For header from any "+
+					"caller inside that range -- the per-tunnel IP whitelist, the rate limiter's "+
+					"auto-ban and every audit entry can be pointed anywhere, whatever nginx in front "+
+					"of it does (#1325). %s",
+				reason, trustedProxyWidthGuidance),
+		})
+	}
 	return findings
 }
 
@@ -589,15 +671,20 @@ func reportGatewayRealIPFindings(target DeployTarget, sshTarget, configYAML stri
 	spec, err := parseDNSSpec(specYAML)
 	CheckFatal(err, "Failed to parse the DNS spec at "+specPath)
 
+	// The gateway's own trusted set, read from the config already parsed above (#1792). Computed
+	// BEFORE the nginx read, and reported even when that read fails: the two are separate files
+	// and a box whose nginx cannot be read is not a box whose server config is fine.
+	findings := checkConfigTrustedProxies(live.TrustedProxies)
+
 	nginxTarget, _ := nginxRemotePaths(role)
 	nginxConf, err := RunCommandCaptureOutput("ssh", "-i", target.IdentityFile, sshTarget,
 		"sudo cat "+nginxTarget+" 2>/dev/null || true")
-	if err != nil {
-		return 0, 0
+	if err == nil {
+		findings = append(findings, checkGatewayRealIP(live.ControlPlaneURL, spec, nginxConf)...)
 	}
 
 	errors, warnings := 0, 0
-	for _, f := range checkGatewayRealIP(live.ControlPlaneURL, spec, nginxConf) {
+	for _, f := range findings {
 		fmt.Printf("[%s] %s: %s\n", strings.ToUpper(f.Severity), f.Key, f.Message)
 		if f.Severity == severityError {
 			errors++

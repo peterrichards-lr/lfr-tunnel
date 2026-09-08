@@ -158,6 +158,9 @@ if ! echo "$TRUSTED_PROXY" | grep -qE '^([0-9]{1,3}(\.[0-9]{1,3}){3}(/[0-9]{1,2}
   echo "   (got '$TRUSTED_PROXY'). nginx matches set_real_ip_from against the peer's address,"
   echo "   so a hostname there never matches and the real_ip block is inert while looking"
   echo "   present -- the exact silent failure this argument exists to prevent."
+  echo "   This is a SHAPE check only. How wide the prefix may be is checked by"
+  echo "   render-nginx-config below, which refuses anything covering more than one host in"
+  echo "   globally routable space (#1792) -- normally you want the control plane's exact address."
   usage
 fi
 

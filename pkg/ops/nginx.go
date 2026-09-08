@@ -3,6 +3,7 @@ package ops
 import (
 	"flag"
 	"fmt"
+	"net/netip"
 	"os"
 	"regexp"
 	"sort"
@@ -96,8 +97,11 @@ const nginxUpgradeMapBlock = `map $http_upgrade $connection_upgrade {
 // that also means the portal's own login rate limiting is unaffected for anyone arriving
 // directly, which is everyone who is not an edge.
 //
-// Every peer address must therefore be an exact host address, never a range: a CIDR here would
-// let anything sharing that range assert a visitor.
+// Every peer address must therefore be an exact host address, never a routable range: a CIDR here
+// would let anything sharing that range assert a visitor. That is enforced, not merely stated --
+// see trustedProxyTooWide below, which validateTrustedSetWidth applies to -trusted-proxy and to
+// every derived peer at render time, and which checkRealIPEntriesAreNarrow and
+// checkConfigTrustedProxies apply to a live gateway's two trust sets (#1792).
 func renderRealIPBlock(role nginxRole, trustedProxy string, peers []string) string {
 	trustedProxy = strings.TrimSpace(trustedProxy)
 	if role == RoleCentral {
@@ -172,6 +176,97 @@ func renderRealIPBlock(role nginxRole, trustedProxy string, peers []string) stri
 // named once because renderRealIPBlock has to trust it and configdrift.go has to verify that it
 // does (#1750).
 const nginxLoopbackTrustedProxy = "127.0.0.1"
+
+// The width rule for a trusted forwarder, enforced rather than asserted (#1792).
+//
+// renderRealIPBlock's doc comment and the rendered config both say every entry must be an exact
+// address, and until #1792 nothing checked it: `-trusted-proxy 0.0.0.0/0` rendered a config that
+// passed `nginx -t`, looked entirely normal, and let EVERY caller assert a visitor address in
+// X-Forwarded-For -- precisely the forgeable path #1325 closed.
+//
+// # Why not simply refuse every CIDR
+//
+// A /32 or /128 is exactly one host and so is identical to a bare address; refusing it would be
+// refusing a spelling, not a risk. And nginx's set_real_ip_from genuinely takes prefixes: a
+// deployment whose forwarders are a load-balancer subnet rather than one box is a real shape, and
+// there is no way to enumerate an autoscaled LB's addresses in advance.
+//
+// # The boundary that is actually load-bearing
+//
+// It is NOT prefix length. A /24 is not safer than a /8 in any way that matters; both were
+// candidate thresholds in #1792 and both are arbitrary. What decides the risk is whether an
+// attacker can obtain a source address inside the range, because that -- and only that -- is what
+// set_real_ip_from grants on. So the rule is:
+//
+//	an entry must name exactly one host, OR lie entirely inside address space
+//	that no host on the internet can occupy.
+//
+// A prefix inside RFC1918, CGNAT, link-local, loopback or IPv6 ULA space is reachable only from
+// inside the operator's own network, so trusting it grants nothing to anyone who is not already
+// there. A prefix covering more than one GLOBALLY ROUTABLE address grants it to whoever ends up
+// holding an address in that range -- which for 0.0.0.0/0 and ::/0 is the entire internet, and
+// for 203.0.113.0/24 is every other tenant of that block.
+//
+// Containment is checked against the WHOLE prefix, not its network address: 10.0.0.0/7 starts in
+// RFC1918 space and runs straight out of it into 11.0.0.0/8.
+//
+// This is deliberately more permissive than "exact addresses only", which is what the fleet
+// itself uses -- central is one elastic IP and the peer entries are literal A/AAAA records, so
+// nothing in this deployment needs the private-range allowance. It exists so the guard refuses
+// what is dangerous rather than what is merely unfamiliar.
+var privateTrustedProxyBlocks = []netip.Prefix{
+	netip.MustParsePrefix("10.0.0.0/8"),     // RFC1918
+	netip.MustParsePrefix("172.16.0.0/12"),  // RFC1918
+	netip.MustParsePrefix("192.168.0.0/16"), // RFC1918
+	netip.MustParsePrefix("100.64.0.0/10"),  // RFC6598 CGNAT
+	netip.MustParsePrefix("169.254.0.0/16"), // RFC3927 link-local
+	netip.MustParsePrefix("127.0.0.0/8"),    // loopback
+	netip.MustParsePrefix("fc00::/7"),       // RFC4193 unique local
+	netip.MustParsePrefix("fe80::/10"),      // IPv6 link-local
+	netip.MustParsePrefix("::1/128"),        // IPv6 loopback
+}
+
+// trustedProxyWidthGuidance is the remedy, written once so the render-time refusal and the drift
+// finding cannot say different things about the same rule.
+const trustedProxyWidthGuidance = "set_real_ip_from lets ANY peer whose source address falls " +
+	"inside the range assert an arbitrary visitor address in X-Forwarded-For, so a routable range " +
+	"reopens the forgeable path #1325 closed for everything inside it (#1792). Name the gateway's " +
+	"exact address -- a bare IP, a /32 or a /128. A wider prefix is accepted only when it lies " +
+	"entirely inside space no internet host can occupy (RFC1918, CGNAT 100.64.0.0/10, link-local, " +
+	"loopback, IPv6 ULA fc00::/7), e.g. a load-balancer subnet inside your own VPC"
+
+// trustedProxyTooWide reports why an entry may not appear in set_real_ip_from, or "" if it may.
+//
+// Returns "" for anything that is not an address or prefix at all -- a hostname, a URL, nginx's
+// `unix:` form. Those are separate defects with their own guards (setup-edge-vps.sh shape-checks
+// the flag, and a hostname never matches a peer address so the block is merely inert), and
+// reporting them here would make a width check fail for a reason that has nothing to do with
+// width.
+func trustedProxyTooWide(entry string) string {
+	entry = strings.TrimSpace(entry)
+	if entry == "" {
+		return ""
+	}
+	if _, err := netip.ParseAddr(entry); err == nil {
+		return "" // a bare address is exactly one host
+	}
+	p, err := netip.ParsePrefix(entry)
+	if err != nil {
+		return ""
+	}
+	p = p.Masked()
+	if p.IsSingleIP() {
+		return "" // /32 or /128: the same one host, spelled as a prefix
+	}
+	for _, private := range privateTrustedProxyBlocks {
+		// Bits() first so this is containment of the whole prefix, not just of its base address.
+		if private.Bits() <= p.Bits() && private.Contains(p.Addr()) {
+			return ""
+		}
+	}
+	return fmt.Sprintf("%q is a /%d range rather than a single host, and it reaches globally "+
+		"routable address space", entry, p.Bits())
+}
 
 // The forwarding-header rule, stated once (#1325, #1360).
 //
@@ -531,7 +626,7 @@ func registerNginxFlags(fs *flag.FlagSet) nginxFlags {
 		redirectDomain: fs.String("redirect-domain", "",
 			"edge only: where browser traffic arriving on the edge's own apex is sent, i.e. the control plane"),
 		trustedProxy: fs.String("trusted-proxy", "",
-			"edge only: the control plane's address (IP or CIDR), so a request it forwards is attributed to the visitor rather than to central (#1450). Central has no control plane above it, and gets its edge addresses from -dns-spec instead (#1767)"),
+			"edge only: the control plane's EXACT address (a bare IP, /32 or /128), so a request it forwards is attributed to the visitor rather than to central (#1450). A wider prefix is refused unless it lies entirely in non-routable space, because set_real_ip_from lets anything inside the range forge a visitor address (#1792). Central has no control plane above it, and gets its edge addresses from -dns-spec instead (#1767)"),
 		dnsSpec: fs.String("dns-spec", defaultDNSSpecPath,
 			"committed DNS spec the EDGE addresses are derived from, so a cross-proxied request is attributed to the visitor rather than to the forwarding gateway -- peer edges on an edge (#1757), every edge on central (#1767); empty disables it"),
 		allowVhostRemoval: fs.Bool("allow-vhost-removal", false,
@@ -639,9 +734,41 @@ func buildRenderConfigFromFlags(f nginxFlags, port string) (nginxRenderConfig, e
 		if err != nil {
 			return nginxRenderConfig{}, err
 		}
+		if err := validateTrustedSetWidth(cfg.TrustedProxy, *f.dnsSpec, peers); err != nil {
+			return nginxRenderConfig{}, err
+		}
 		cfg.TrustedPeers = peers
 	}
 	return cfg, nil
+}
+
+// validateTrustedSetWidth applies the width rule to every address that will reach
+// set_real_ip_from: the operator-typed -trusted-proxy and the spec-derived peers (#1792).
+//
+// Refused rather than warned about. reconcile-nginx and setup-edge-vps.sh both run
+// non-interactively during a provision, so a warning scrolls past unread and the box ships
+// trusting the range anyway -- and the rendered config gives nothing away, since it passes
+// `nginx -t` and reads exactly like a correct one.
+//
+// The peers cannot trip this today: edgeAddresses() returns literal A/AAAA record values. They
+// are checked because the guard has to hold for the trusted SET, not for the one field an
+// operator happens to type -- a spec that ever grew a prefix would widen every gateway in the
+// fleet at once, through a path with no flag to refuse.
+//
+// Reached whenever there is a set to render: on an edge only when -trusted-proxy is non-empty
+// (an empty one renders no block at all and is within the rule anyway), and on central always,
+// where -trusted-proxy is separately refused outright.
+func validateTrustedSetWidth(trustedProxy, specPath string, peers []string) error {
+	if reason := trustedProxyTooWide(trustedProxy); reason != "" {
+		return fmt.Errorf("-trusted-proxy %s. %s", reason, trustedProxyWidthGuidance)
+	}
+	for _, p := range peers {
+		if reason := trustedProxyTooWide(p); reason != "" {
+			return fmt.Errorf("the DNS spec at %s declares an edge address where %s. %s",
+				specPath, reason, trustedProxyWidthGuidance)
+		}
+	}
+	return nil
 }
 
 // resolveTrustedPeers derives the OTHER gateways' addresses from the committed DNS spec (#1757).

@@ -1,6 +1,8 @@
 package ops
 
 import (
+	"flag"
+	"io"
 	"os"
 	"path/filepath"
 	"slices"
@@ -850,5 +852,134 @@ func TestRenderRealIPBlock_PeersAloneRenderNothing(t *testing.T) {
 	})
 	if hasDirective(got, "set_real_ip_from") {
 		t.Errorf("no control plane trusted, so no real_ip block at all:\n%s", got)
+	}
+}
+
+// The width rule for a trusted forwarder, enforced rather than merely asserted (#1792).
+//
+// Before this, renderRealIPBlock's doc comment and the rendered config both insisted every entry
+// be an exact address and nothing checked it, so `-trusted-proxy 0.0.0.0/0` produced a config that
+// passed `nginx -t`, read as entirely normal, and let every caller on the internet assert a
+// visitor address in X-Forwarded-For -- the forgeable path #1325 closed, reopened.
+//
+// What the rule is NOT is a prefix-length threshold. A /24 is no safer than an /8 in any way that
+// matters. It is whether an attacker can obtain a source address inside the range, which is the
+// only thing set_real_ip_from grants on -- so exactly one host is fine at any spelling, and a
+// wider prefix is fine only where no internet host can occupy it.
+func TestTrustedProxyTooWide(t *testing.T) {
+	accepted := []string{
+		"203.0.113.7",     // a bare address: one host
+		"2001:db8::1",     // the same, IPv6
+		"203.0.113.7/32",  // one host, spelled as a prefix -- identical to the bare form
+		"2001:db8::1/128", // the same, IPv6
+		nginxLoopbackTrustedProxy,
+		"10.0.0.0/8",         // RFC1918: a proxy subnet nobody outside the network can join
+		"172.16.5.0/24",      // RFC1918, inside 172.16.0.0/12
+		"192.168.1.0/24",     // RFC1918
+		"100.64.0.0/10",      // RFC6598 CGNAT
+		"169.254.1.0/24",     // link-local
+		"fd12:3456::/32",     // IPv6 ULA, inside fc00::/7
+		"fe80::/10",          // IPv6 link-local
+		"tunnel.example.com", // not an address at all: a different defect, with its own guard
+		"",
+	}
+	for _, entry := range accepted {
+		if reason := trustedProxyTooWide(entry); reason != "" {
+			t.Errorf("%q must be accepted, got %q", entry, reason)
+		}
+	}
+
+	refused := []string{
+		"0.0.0.0/0",      // the whole internet
+		"::/0",           // the whole internet, IPv6
+		"203.0.113.0/24", // a routable /24: every other tenant of that block
+		"8.8.8.0/31",     // only two hosts, but two hosts an operator does not own
+		"2001:db8::/64",  // a routable IPv6 prefix
+		"0.0.0.0/1",      // half the internet, which is not half as safe
+		// Containment is of the WHOLE prefix, not of its base address: this one starts inside
+		// RFC1918 space and runs straight out of it into 11.0.0.0/8.
+		"10.0.0.0/7",
+	}
+	for _, entry := range refused {
+		reason := trustedProxyTooWide(entry)
+		if reason == "" {
+			t.Errorf("%q trusts more than one host in routable space and must be refused", entry)
+			continue
+		}
+		// Assert the cause, not that a non-empty string came back: the reason is what both the
+		// render refusal and the drift finding quote at the operator, and it is useless if it
+		// does not say which entry is the problem.
+		if !strings.Contains(reason, entry) {
+			t.Errorf("the reason for refusing %q must name it, got %q", entry, reason)
+		}
+	}
+}
+
+// renderFlags parses ARGS through the REAL flag set both render-nginx-config (nginx.go:947) and
+// reconcile-nginx (nginx.go:797) use, so these tests exercise production's validation rather than
+// a re-statement of it.
+func renderFlags(t *testing.T, args ...string) nginxFlags {
+	t.Helper()
+	fs := flag.NewFlagSet("render-nginx-config", flag.ContinueOnError)
+	fs.SetOutput(io.Discard)
+	nf := registerNginxFlags(fs)
+	if err := fs.Parse(args); err != nil {
+		t.Fatalf("parsing %v: %v", args, err)
+	}
+	return nf
+}
+
+// An over-wide -trusted-proxy is refused at the one place an operator types one (#1792).
+//
+// Refused, not warned about: reconcile-nginx and setup-edge-vps.sh both run non-interactively
+// during a provision, so a warning scrolls past and the box ships trusting the range anyway.
+func TestBuildRenderConfigFromFlags_RefusesOverWideTrustedProxy(t *testing.T) {
+	for _, entry := range []string{"0.0.0.0/0", "::/0", "203.0.113.0/24", "10.0.0.0/7"} {
+		t.Run(entry, func(t *testing.T) {
+			nf := renderFlags(t,
+				"-role", "edge", "-domains", "sa.example.com",
+				"-redirect-domain", "example.com", "-dns-spec", "",
+				"-trusted-proxy", entry)
+
+			_, err := buildRenderConfigFromFlags(nf, "8090")
+			if err == nil {
+				t.Fatalf("-trusted-proxy %s renders a config that trusts everything inside the range and must be refused", entry)
+			}
+			// This call site rejects a bad -role, a missing -redirect-domain, a service hostname
+			// in -domains and an unreadable -dns-spec, all of them non-nil errors -- so "err !=
+			// nil" alone would be satisfied by any of them. Only the width refusal names the
+			// entry and #1325.
+			if !strings.Contains(err.Error(), entry) {
+				t.Errorf("the refusal must name the entry, got %q", err)
+			}
+			if !strings.Contains(err.Error(), "#1325") {
+				t.Errorf("the refusal must say which guarantee the range reopens, got %q", err)
+			}
+		})
+	}
+}
+
+// The other half of the rule: what stays accepted. Without this the guard could be "refuse every
+// CIDR" -- which would break a load-balancer deployment -- and every refusal test above would
+// still pass.
+func TestBuildRenderConfigFromFlags_AcceptsAnExactAddressOrAPrivateSubnet(t *testing.T) {
+	for _, entry := range []string{"203.0.113.7", "203.0.113.7/32", "2001:db8::1/128", "10.20.0.0/16"} {
+		t.Run(entry, func(t *testing.T) {
+			nf := renderFlags(t,
+				"-role", "edge", "-domains", "sa.example.com",
+				"-redirect-domain", "example.com", "-dns-spec", "",
+				"-trusted-proxy", entry)
+
+			cfg, err := buildRenderConfigFromFlags(nf, "8090")
+			if err != nil {
+				t.Fatalf("-trusted-proxy %s names at most the operator's own network and must be accepted: %v", entry, err)
+			}
+			// Accepted has to mean RENDERED, not merely "no error": a guard that silently dropped
+			// the entry would pass an error-only assertion while leaving the edge with no
+			// control-plane trust at all, which is #1781's failure.
+			if got := buildNginxConfig(cfg); !strings.Contains(got, "set_real_ip_from "+entry+";") {
+				t.Errorf("expected set_real_ip_from %s; in:\n%s", entry, got)
+			}
+		})
 	}
 }

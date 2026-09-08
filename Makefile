@@ -1,4 +1,4 @@
-.PHONY: fmt vet test test-locked ui-dist compile-check test-hooks check-contexts check-contexts-live check-workflow-failures check-attribution check-css check-contrast check-i18n build deploy clean install-hook e2e e2e-sso e2e-edge e2e-ui help
+.PHONY: fmt vet test test-locked ui-dist compile-check test-hooks check-contexts check-contexts-live check-workflow-failures check-attribution check-css check-contrast check-i18n check-html build deploy clean install-hook e2e e2e-sso e2e-edge e2e-ui help
 
 VERSION ?= $(shell grep -oE 'Version = "[^"]+"' pkg/config/version.go | cut -d'"' -f2)
 
@@ -69,6 +69,7 @@ help:
 	@echo "  make check-css         - Portal V2 BEM modifiers have a matching rule"
 	@echo "  make check-contrast    - Theme danger colours meet WCAG AA"
 	@echo "  make check-i18n        - Portal keys are defined in Language.properties"
+	@echo "  make check-html        - Every HTML document has balanced tags"
 	@echo "  make nolint-ratchet    - //nolint:errcheck suppressions have not grown"
 	@echo "  make check-branches    - Report stale remote branches"
 	@echo "  make prune-branches    - Delete merged remote branches"
@@ -269,6 +270,7 @@ test-hooks:
 	@./tests/hooks/test-workflow-failure-alert.sh
 	@./tests/hooks/test-css-modifiers.sh
 	@./tests/hooks/test-theme-tokens.sh
+	@./tests/hooks/test-html-balance.sh
 	@./tests/hooks/test-edge-real-ip-provisioning.sh
 
 # The pre-merge CI-configuration gate (#1391). Worth a target rather than only a path to type:
@@ -312,4 +314,12 @@ check-contrast:
 # inline English fallback hides the gap from whoever added the string, so only a gate finds it.
 check-i18n:
 	@node scripts/check-i18n-keys.cjs
+
+# Catches an HTML document whose tags do not balance (#1791). Nothing else in this repo can:
+# it is not a parse error, *.html is in .prettierignore, and the browser silently recovers
+# into a DIFFERENT DOM -- which is how #1785 shipped a System Settings tab with no reachable
+# Save button, and how #dashboard-shell went unclosed for months. Node rather than shell
+# because it needs a tag stack, so the bash 3.2 rule in AGENTS.md does not apply to it.
+check-html:
+	@node scripts/check-html-balance.mjs
 

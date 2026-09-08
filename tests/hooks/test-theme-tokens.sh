@@ -1,5 +1,6 @@
 #!/usr/bin/env bash
-# test-theme-tokens.sh — tests scripts/check-theme-tokens.mjs (#1217, #1221, #1774, #1784)
+# test-theme-tokens.sh — tests scripts/check-theme-tokens.mjs
+#                        (#1217, #1221, #1774, #1784, #1802, #1803)
 #
 # The check compares custom properties REFERENCED against those DEFINED by every theme.
 # #1774 added the markup and script pass, after twenty references to four properties no
@@ -23,6 +24,28 @@
 # "resolved against its own tokens", and the difference between the two is asserted below --
 # a page's own token passes, a token nothing defines fails, and the tokens a page picks up from
 # a stylesheet it LINKS count as its own.
+#
+# #1802 added a fourth question, asked of a narrower place: inside @media print, does a token's
+# VALUE depend on the screen theme? A token that resolves in every theme is still a defect there,
+# because print-color-adjust: exact reproduces whatever it resolved to on paper. Cases 11a-11d
+# assert the scope in both directions -- a theme-varying token fires, a theme-invariant one does
+# not, and a reference outside the block does not -- because "any var() in a print block fails"
+# and "the right var()s fail" are indistinguishable from a single fire-case.
+#
+# #1803 closed the gap case 10 used to pin. Coverage is derived from a <link>, so a stylesheet
+# nothing links was read by neither scope; the shared scope now follows <link rel=stylesheet>
+# and the run fails naming any .css under pkg/server nothing read. Case 10 is now the inverse of
+# what it was -- it asserts the orphan FAILS -- which is the ratchet working: the old case was
+# written to go red the day the gap closed, and it did.
+#
+# One consequence worth stating, because it changed what several cases below can use as a
+# fixture: setup.html now links the shared themes (#1804), so it is no longer a self-contained
+# page and there is no longer ANY page in the tree that is both self-contained and links a
+# stylesheet. Cases 6c and 6d therefore build that fixture in the sandbox instead of borrowing
+# setup.html. They previously passed against setup.html for the wrong reason once it moved
+# scopes -- rc=0 because the shared scope resolved it -- which is the §5c failure this file
+# exists to avoid, so they are not merely re-pointed but re-anchored on a page whose scope the
+# case itself establishes.
 #
 # Runs against a throwaway copy of the tree, never the working tree: a test that mutates
 # pkg/server to prove a point and then restores it loses on any interrupted run.
@@ -86,12 +109,32 @@ run() {
 
 says() { printf '%s' "$1" | grep -q -- "$2"; }
 
+# A mutation that did not apply is not a mutation. Every sed below is anchored on a string in
+# a real file, and a sed whose anchor has moved exits 0 having changed nothing -- so the case
+# then runs against the committed tree and passes, reporting a guard that was never tested.
+# Cases that expect their edit to FIRE assert it landed first.
+landed() {
+  grep -q -- "$2" "$SANDBOX/$1" && return 0
+  fail "the mutation never applied: $2 not found in $1"
+  return 1
+}
+
 DASHBOARD_HTML="pkg/server/dashboard.html"
 DASHBOARD_JS="pkg/server/static/dashboard.js"
 DASHBOARD_CSS="pkg/server/static/dashboard.css"
 PASSCODE_HTML="pkg/server/passcode.html"
-SETUP_HTML="pkg/server/static/setup.html"
-SETUP_CSS="pkg/server/static/setup.css"
+A11Y_CSS="pkg/server/static/shared/a11y.css"
+
+# A self-contained page that links a stylesheet -- the fixture cases 6c and 6d need and the
+# tree no longer contains. Built here rather than borrowed from a real page so the case
+# establishes the scope it is testing instead of inheriting it from whatever setup.html
+# happens to link this month.
+PROBE_CSS="pkg/server/static/probe-doc-scope.css"
+make_self_contained_page_with_sheet() {
+  printf ':root {\n  --probe-sheet-token: #123456;\n}\n' >"$SANDBOX/$PROBE_CSS"
+  sed -i.bak 's|<body|<link rel="stylesheet" href="/static/probe-doc-scope.css"><body|' \
+    "$SANDBOX/$PASSCODE_HTML" && rm -f "$SANDBOX/$PASSCODE_HTML.bak"
+}
 
 echo "Testing check-theme-tokens..."
 
@@ -124,10 +167,27 @@ if says "$OUT" 'do not link the shared themes'; then
 else
   fail "the output does not say which pages were resolved separately: $OUT"
 fi
-if says "$OUT" "$SETUP_HTML  +  $SETUP_CSS"; then
-  pass "a self-contained page names the stylesheet it was resolved against"
+# The stylesheet a themed page LINKS is scanned with it (#1803). a11y.css is the file this
+# widening was for: dashboard.html has always linked it, the shared scope has always read
+# dashboard.html, and the link was never followed -- so it was covered by nothing at all
+# while looking exactly like part of a scanned page.
+if says "$OUT" "$DASHBOARD_HTML  +  $A11Y_CSS"; then
+  pass "the stylesheet a scanned page links is scanned with it"
 else
-  fail "setup.html's definition source is not reported: $OUT"
+  fail "a11y.css was not scanned -- both portals load it: $OUT"
+fi
+# Both new scopes report on a passing run, not only on a failing one. Without this a scope
+# that silently stopped running would be invisible here: every fire-case below would still
+# pass on the tree it mutates, because a scope that never runs cannot contradict them.
+if says "$OUT" 'were read by some scope'; then
+  pass "the coverage scope reports on a passing run"
+else
+  fail "the run does not say how many stylesheets it read: $OUT"
+fi
+if says "$OUT" 'blocks follows the screen theme'; then
+  pass "the print scope reports on a passing run"
+else
+  fail "the run does not say how many print blocks it read: $OUT"
 fi
 
 # ---------------------------------------------------------------------------
@@ -234,34 +294,44 @@ fi
 
 # ---------------------------------------------------------------------------
 # 6c. A self-contained page's definitions include the stylesheets it LINKS, not only its own
-#     <style> block. This is the whole of setup.html: it defines nothing itself and gets all
-#     eighteen of its properties from setup.css, so a gate that read only <style> blocks would
-#     report all eighteen and be turned off within the day.
+#     <style> block. This was setup.html until #1804: it defined nothing itself and got all
+#     eighteen of its properties from setup.css, so a gate reading only <style> blocks would
+#     have reported all eighteen and been turned off within the day. setup.html now links the
+#     shared themes, so the fixture is built here instead -- see the note at the top of the
+#     file about why re-pointing this case at setup.html would have passed for the wrong
+#     reason rather than testing anything.
+#
+#     --probe-sheet-token is defined ONLY in the linked stylesheet and in no theme, so this
+#     passes only if the link was followed and its definitions counted as the page's own.
 # ---------------------------------------------------------------------------
 reset_sandbox
-sed -i.bak 's|<body>|<body style="color: var(--login-gradient);">|' \
-  "$SANDBOX/$SETUP_HTML" && rm -f "$SANDBOX/$SETUP_HTML.bak"
+make_self_contained_page_with_sheet
+sed -i.bak 's|<body>|<body style="color: var(--probe-sheet-token);">|' \
+  "$SANDBOX/$PASSCODE_HTML" && rm -f "$SANDBOX/$PASSCODE_HTML.bak"
+landed "$PASSCODE_HTML" 'probe-sheet-token' &&
+  landed "$PASSCODE_HTML" 'probe-doc-scope.css'
 run
-if [ "$RC" -eq 0 ] && ! says "$OUT" 'login-gradient'; then
+if [ "$RC" -eq 0 ] && ! says "$OUT" 'probe-sheet-token'; then
   pass "a linked stylesheet's tokens count as the page's own definitions"
 else
-  fail "setup.html was not resolved against setup.css (rc=$RC): $OUT"
+  fail "passcode.html was not resolved against the stylesheet it links (rc=$RC): $OUT"
 fi
 
 # ---------------------------------------------------------------------------
 # 6d. And the other half of the same link: a reference added to that linked stylesheet is
-#     found. setup.css is reached only through setup.html -- it is in no walked directory of
-#     its own -- so this is the path #1784's five references travelled.
+#     found. The stylesheet is in no walked directory of its own -- it is reached only through
+#     the page that links it -- so this is the path #1784's five references travelled.
 # ---------------------------------------------------------------------------
 reset_sandbox
+make_self_contained_page_with_sheet
 printf '\n.theme-token-probe {\n  color: var(--probe-undefined-in-linked-css);\n}\n' \
-  >>"$SANDBOX/$SETUP_CSS"
+  >>"$SANDBOX/$PROBE_CSS"
 run
 if [ "$RC" -ne 0 ] && says "$OUT" 'probe-undefined-in-linked-css' &&
-  says "$OUT" "$SETUP_HTML"; then
+  says "$OUT" "$PASSCODE_HTML"; then
   pass "an undefined token in a linked stylesheet fails, against the page that links it"
 else
-  fail "setup.css's undefined token was not reported (rc=$RC): $OUT"
+  fail "the linked stylesheet's undefined token was not reported (rc=$RC): $OUT"
 fi
 
 # ---------------------------------------------------------------------------
@@ -288,10 +358,19 @@ fi
 #    Matched on 'markup and script scan', not on 'covered nothing' alone: both scopes now have
 #    an anti-vacuity message and both contain that phrase, so the looser match would be
 #    satisfied by the wrong one of the two.
+#
+#    Applied to EVERY page, not just dashboard.html. Two pages link the themes since #1804, so
+#    de-theming one of them no longer empties the scope -- it moves that page into the document
+#    scope, where it reports its own tokens as undefined and the run goes red with a message
+#    about resolution rather than about vacuity. The case caught that itself when setup.html
+#    moved: rc was 1 and the message did not match, which is the whole reason it matches on the
+#    message.
 # ---------------------------------------------------------------------------
 reset_sandbox
-sed -i.bak 's|/static/themes/|/static/nowhere/|g' "$SANDBOX/$DASHBOARD_HTML" &&
-  rm -f "$SANDBOX/$DASHBOARD_HTML.bak"
+find "$SANDBOX/pkg/server" -name '*.html' -exec \
+  sed -i.bak 's|/static/themes/|/static/nowhere/|g' {} + &&
+  find "$SANDBOX/pkg/server" -name '*.html.bak' -delete
+landed "$DASHBOARD_HTML" '/static/nowhere/'
 run
 if [ "$RC" -ne 0 ] && says "$OUT" 'markup and script scan'; then
   pass "a markup scan that covers nothing fails instead of reporting success"
@@ -323,23 +402,150 @@ else
 fi
 
 # ---------------------------------------------------------------------------
-# 10. The blind spot that remains, asserted rather than described. A stylesheet no page links
-#     is read by neither scope: the shared scope walks ui/src and dashboard.css by name, and
-#     the document scope reaches a stylesheet only through the page that links it. There are
-#     two such files today -- pkg/server/static/offline.css and offline.js, which nothing
-#     references -- and this pins the gap so that closing it is a decision someone makes
-#     rather than something that quietly happens. See the follow-up issue for deleting them.
+# 10. Coverage, direction one (#1803). This case used to assert the OPPOSITE: it dropped an
+#     orphan stylesheet into the sandbox and required the gate to stay green, pinning a known
+#     blind spot so that closing it could not happen by accident. It went red the moment the
+#     shared scope started following <link rel=stylesheet>, which is the ratchet doing its job
+#     -- a deferral that fails the build when it becomes stale, rather than an exclusion that
+#     quietly outlives the thing it excused.
 #
-#     Prose in the script would not fail if the scope changed. This does.
+#     So it is now inverted. A stylesheet nothing links must FAIL and be named.
 # ---------------------------------------------------------------------------
 reset_sandbox
 printf '.orphan-probe {\n  color: var(--probe-in-unlinked-stylesheet);\n}\n' \
   >"$SANDBOX/pkg/server/static/orphan-probe.css"
 run
-if [ "$RC" -eq 0 ] && ! says "$OUT" 'probe-in-unlinked-stylesheet'; then
-  pass "known gap: a stylesheet no page links is read by neither scope"
+if [ "$RC" -ne 0 ] && says "$OUT" 'orphan-probe.css' &&
+  says "$OUT" 'no scope read'; then
+  pass "a stylesheet no page links fails the run and is named"
 else
-  fail "an unlinked stylesheet is now covered -- update this case, it is out of date (rc=$RC): $OUT"
+  fail "an unlinked stylesheet was not reported (rc=$RC): $OUT"
+fi
+
+# ---------------------------------------------------------------------------
+# 10b. Coverage, direction two: it is the LINK that covers a stylesheet, not a list of names
+#      in the script. Without this, case 10 is satisfied by a gate that hardcodes the files it
+#      expects and reports anything else as an orphan -- which would pass every case here and
+#      be wrong the first time someone adds a stylesheet.
+#
+#      a11y.css is the real instance. Removing dashboard.html's link to it, and nothing else,
+#      has to turn a covered file into an orphan.
+# ---------------------------------------------------------------------------
+reset_sandbox
+sed -i.bak 's|<link rel="stylesheet" href="/static/shared/a11y.css">||' \
+  "$SANDBOX/$DASHBOARD_HTML" && rm -f "$SANDBOX/$DASHBOARD_HTML.bak"
+if grep -q 'shared/a11y.css' "$SANDBOX/$DASHBOARD_HTML"; then
+  fail "the mutation never applied: dashboard.html still links a11y.css"
+else
+  run
+  if [ "$RC" -ne 0 ] && says "$OUT" "$A11Y_CSS" && says "$OUT" 'no scope read'; then
+    pass "coverage follows the link: unlinking a stylesheet orphans it"
+  else
+    fail "a11y.css stayed covered with nothing linking it (rc=$RC): $OUT"
+  fi
+fi
+
+# ---------------------------------------------------------------------------
+# 11. The print scope (#1802). A token that resolves in every theme is still wrong inside
+#     @media print if its VALUE differs between them, because print-color-adjust: exact
+#     reproduces it on paper -- so the printout follows whichever theme the reader was using.
+#
+#     --bg-base is theme-varying (#09090b dark, #f8fafc light, and two more). A fresh @media
+#     print block is appended rather than the committed one edited, so this also proves a file
+#     with more than one print block has all of them read.
+# ---------------------------------------------------------------------------
+reset_sandbox
+printf '\n@media print {\n  .print-probe {\n    background: var(--bg-base);\n  }\n}\n' \
+  >>"$SANDBOX/$DASHBOARD_CSS"
+run
+if [ "$RC" -ne 0 ] && says "$OUT" 'follow the screen theme' &&
+  says "$OUT" '\-\-bg-base' && says "$OUT" "$DASHBOARD_CSS"; then
+  pass "a theme-varying colour inside @media print fails, named with its file"
+else
+  fail "a theme-varying colour in a print block was not reported (rc=$RC): $OUT"
+fi
+
+# ---------------------------------------------------------------------------
+# 11b. The same reference, OUTSIDE the print block, must not fire. Without this, case 11 is
+#      equally satisfied by a check that flags --bg-base anywhere in the file -- which would
+#      be a check on the wrong thing, and would fail on the hundred legitimate screen rules
+#      that use it two lines further down.
+# ---------------------------------------------------------------------------
+reset_sandbox
+printf '\n.print-probe {\n  background: var(--bg-base);\n}\n' \
+  >>"$SANDBOX/$DASHBOARD_CSS"
+run
+if [ "$RC" -eq 0 ]; then
+  pass "the same token outside a print block is not reported"
+else
+  fail "a screen rule using a theme-varying token was reported (rc=$RC): $OUT"
+fi
+
+# ---------------------------------------------------------------------------
+# 11c. And a theme-INVARIANT token inside a print block must not fire either. The spacing
+#      scale is defined once and identically for every theme, so a print rule is welcome to
+#      use it -- the defect is "the value follows the theme", not "a var() appears in print".
+#      Without this case, "flag every var() inside @media print" passes 11 and 11b both.
+# ---------------------------------------------------------------------------
+reset_sandbox
+printf '\n@media print {\n  .print-probe {\n    padding: var(--spacing-md);\n  }\n}\n' \
+  >>"$SANDBOX/$DASHBOARD_CSS"
+run
+if [ "$RC" -eq 0 ]; then
+  pass "a theme-invariant token inside @media print is not reported"
+else
+  fail "--spacing-md is identical in every theme but was reported (rc=$RC): $OUT"
+fi
+
+# ---------------------------------------------------------------------------
+# 11d. Anti-vacuity, print scope. Its healthy state is ZERO findings, so a scope that has
+#      stopped extracting blocks reports exactly what a clean tree reports. Nothing else in
+#      this repo renders a print rule, and review does not catch them either -- #1221 and
+#      #1784 both shipped a print defect past review -- so a silent scan of nothing here is
+#      the whole failure mode.
+#
+#      Renaming the at-rule leaves every declaration in place and every other check green, so
+#      the run can only go red for this reason.
+# ---------------------------------------------------------------------------
+reset_sandbox
+find "$SANDBOX" -name '*.css' -exec \
+  sed -i.bak 's|@media print|@media screen|g' {} + &&
+  find "$SANDBOX" -name '*.css.bak' -delete
+if grep -q '@media print' "$SANDBOX/$DASHBOARD_CSS"; then
+  fail "the mutation never applied: dashboard.css still has an @media print block"
+else
+  run
+  if [ "$RC" -ne 0 ] && says "$OUT" 'print scan found 0 blocks'; then
+    pass "a print scan that covers nothing fails instead of reporting success"
+  else
+    fail "an empty print scan reported success (rc=$RC): $OUT"
+  fi
+fi
+
+# ---------------------------------------------------------------------------
+# 12. Anti-vacuity, reference side. Every scope in the checker finds its work with one
+#     pattern, VAR_REF, so if that stops matching they all go quiet together and the run ends
+#     on the success message having resolved nothing. This is the one guard the scope-level
+#     cases cannot give: they prove a scope was handed files, not that anything was read out
+#     of them.
+#
+#     The subject here is the checker itself rather than the tree, because that is where the
+#     failure would live. It is also the only in-script cover the print scope's reference half
+#     gets -- a clean tree has zero print references, so the checker cannot assert it found
+#     one, and case 11 is what proves that half runs.
+# ---------------------------------------------------------------------------
+reset_sandbox
+sed -i.bak 's|^const VAR_REF = .*|const VAR_REF = /__never_matches_anything__(--[a-z0-9-]+)/g;|' \
+  "$SANDBOX/$CHECK_REL" && rm -f "$SANDBOX/$CHECK_REL.bak"
+if grep -q '__never_matches_anything__' "$SANDBOX/$CHECK_REL"; then
+  run
+  if [ "$RC" -ne 0 ] && says "$OUT" 'Not one var() reference'; then
+    pass "a reference pattern that matches nothing fails instead of passing"
+  else
+    fail "VAR_REF matching nothing reported success (rc=$RC): $OUT"
+  fi
+else
+  fail "the mutation never applied: VAR_REF was not replaced"
 fi
 
 echo

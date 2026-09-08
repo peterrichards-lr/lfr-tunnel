@@ -871,8 +871,13 @@ html[dir='rtl'] th {
   }
 
   body {
-    background: var(--bg-base) !important;
-    color: var(--text-main) !important;
+    /* Deliberately literal, not theme tokens. print-color-adjust: exact below is an
+       instruction to reproduce these faithfully on paper, so a token that follows the
+       screen theme prints whichever theme the reader happened to be using -- and on
+       dark that is a near-black page with light text. Analytics has a Print button.
+       Paper is not themed: print is black on white (#1221, #1802). */
+    background: #ffffff !important;
+    color: #000000 !important;
     -webkit-print-color-adjust: exact !important;
     print-color-adjust: exact !important;
   }
@@ -938,9 +943,24 @@ html[dir='rtl'] th {
 
   /* Print styling rules for analytical sections and panels */
   .glass {
-    border: 1px solid var(--border) !important;
+    /* Literal for the same reason the body rule above is, and this is the instance that
+       kept surviving the fix. #1221 replaced the tokens in ui/src/index.css's body rule
+       and #1784 did the same in setup.css, and both left THIS rule -- four lines below
+       the one they were looking at, in the same block, under the same
+       print-color-adjust: exact -- reading --bg-card and --border. All three stylesheets
+       carried it. The class is "a print colour that follows the screen theme", not "the
+       body rule", and check-theme-tokens.mjs now enumerates it rather than leaving it to
+       whoever next reads the file (#1802).
+
+       Fixing body alone was worse than fixing nothing: it made the body text black while
+       every analytics card stayed --bg-card, which is near-black on three of the four
+       themes -- so the cards printed black on black.
+
+       #767676 is 4.54:1 on white, comfortably past the 3:1 WCAG 1.4.11 asks of a
+       component boundary, and stays visible when the page is printed in greyscale. */
+    border: 1px solid #767676 !important;
     box-shadow: none !important;
-    background: var(--bg-card) !important;
+    background: #ffffff !important;
     page-break-inside: avoid !important;
     break-inside: avoid !important;
     margin-bottom: 24px !important;

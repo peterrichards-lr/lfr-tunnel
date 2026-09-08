@@ -16,6 +16,21 @@
 #   * A branch checked out in a WORKTREE cannot be deleted at all. Six survived a bulk delete
 #     for this reason and the worktrees were invisible until the error named them.
 #
+# `%(upstream:track)` is computed from the LOCAL remote-tracking refs, so this script is only as
+# truthful as its last fetch -- and it used not to fetch at all (#1814). On 2026-09-08 it reported
+# "nothing to tidy" with five merged branches still present; a plain `git fetch --prune` made all
+# five appear. A clean report was indistinguishable from a stale one, precisely when it mattered:
+# right after a merge. So it now fetches first, in BOTH modes.
+#
+# Two decisions that follow, stated rather than left as side effects:
+#
+#   * The read-only report fetches too. `--prune` deletes refs/remotes/* only -- never a branch,
+#     never a commit -- and a report computed from unpruned refs would reproduce the exact bug.
+#     A "read-only" mode that answers from a stale cache is not safer, only quieter.
+#   * If the fetch FAILS -- offline, no credentials, no remote -- this refuses and exits non-zero
+#     rather than falling back to the refs it already has. A cleanup tool quietly reporting on
+#     yesterday's remote is worse than one that says it cannot tell.
+#
 # PROTECTED, in code rather than in prose: `checksums` is an orphan branch the portal fetches
 # client checksums from over raw.githubusercontent.com, because Release assets fail CORS. Deleting
 # it breaks checksum delivery to the portal silently. CONTRIBUTING.md says so two clauses from the
@@ -38,6 +53,8 @@ for arg in "$@"; do
             echo "Usage: $0 [--delete]"
             echo "  Reports local branches whose remote is gone (i.e. merged and cleaned up on GitHub)."
             echo "  --delete removes them, after writing a manifest of branch + SHA to /tmp."
+            echo "  Both modes run 'git fetch --prune' first -- it removes remote-tracking refs"
+            echo "  only, never branches -- and refuse to report if that fetch fails."
             echo "  Never touches: $PROTECTED"
             exit 0 ;;
         *) echo "unknown argument: $arg" >&2; exit 2 ;;
@@ -50,6 +67,25 @@ is_protected() {
     done
     return 1
 }
+
+# Refresh the remote-tracking refs before deciding anything from them. `origin` by name where it
+# exists, because that is what this repo has and what the branches track; otherwise the only
+# remote, so a differently-named single remote still works.
+REMOTE=$(git remote 2>/dev/null | grep -x origin || git remote 2>/dev/null | head -n 1)
+if [ -z "$REMOTE" ]; then
+    echo "check-stale-branches: this repository has no remote, so 'whose remote is gone' has no" >&2
+    echo "  answer here. Refusing rather than reporting a clean tree from local refs alone." >&2
+    exit 1
+fi
+
+FETCH_OUT=$(git fetch --prune --quiet "$REMOTE" 2>&1)
+if [ $? -ne 0 ]; then
+    echo "check-stale-branches: could not fetch from '$REMOTE':" >&2
+    echo "$FETCH_OUT" | sed 's/^/  /' >&2
+    echo "  Refusing to report. Staleness is the defect this check exists to catch (#1814), so" >&2
+    echo "  answering from the remote-tracking refs already on disk would be the same bug." >&2
+    exit 1
+fi
 
 # Worktrees first. A branch held by one cannot be deleted, so a cleanup that ignores them
 # reports success while leaving them behind -- and the worktree is the thing to remove anyway.
@@ -107,20 +143,32 @@ MANIFEST="${TMPDIR:-/tmp}/lfr-deleted-branches-$(git rev-parse --short HEAD).txt
 : > "$MANIFEST"
 
 DELETED=0
+UNDELETED=0
 for b in $STALE; do
     if is_protected "$b"; then
         echo "  REFUSED  $b is protected and will never be deleted by this script"
         continue
     fi
     echo "$b $(git rev-parse --short "$b")" >> "$MANIFEST"
-    if git branch -D "$b" >/dev/null 2>&1; then
+    if ERR=$(git branch -D "$b" 2>&1); then
         DELETED=$((DELETED + 1))
     else
         # Almost always a worktree holding it; the report above says which.
-        echo "  could not delete $b -- $(git branch -D "$b" 2>&1 | tail -1)"
+        echo "  could not delete $b -- $(printf '%s\n' "$ERR" | tail -1)"
+        UNDELETED=$((UNDELETED + 1))
     fi
 done
 
 echo
 echo "Deleted $DELETED branch(es). Manifest: $MANIFEST"
+
+# A branch that could not be removed is work still outstanding, so this must not exit 0. It did,
+# and `make prune-branches` reported success with branches left behind (#1814) -- the same
+# "green while work remains" shape as the missing fetch, in the delete path.
+if [ "$UNDELETED" -ne 0 ]; then
+    echo
+    echo "FAILED: $UNDELETED branch(es) could not be deleted -- named above. A worktree holding a"
+    echo "branch is the usual cause; 'git worktree remove' it and run this again."
+    exit 1
+fi
 exit 0

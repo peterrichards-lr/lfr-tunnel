@@ -422,7 +422,7 @@ func (s *Server) handleCreateToken(w http.ResponseWriter, r *http.Request) {
 		Action:     "token.created",
 		TargetType: "token",
 		TargetID:   prefix,
-		IPAddress:  r.Header.Get("X-Real-IP"),
+		IPAddress:  s.clientIP(r),
 	})
 
 	// Return the raw token EXACTLY ONCE
@@ -483,7 +483,7 @@ func (s *Server) handleDeleteToken(w http.ResponseWriter, r *http.Request) {
 		Action:     "token.revoked",
 		TargetType: "token",
 		TargetID:   strconv.FormatInt(tokenID, 10),
-		IPAddress:  r.Header.Get("X-Real-IP"),
+		IPAddress:  s.clientIP(r),
 	})
 
 	respondJSON(w, http.StatusOK, map[string]string{"status": "ok"})

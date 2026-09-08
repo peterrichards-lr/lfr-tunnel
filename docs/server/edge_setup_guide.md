@@ -496,8 +496,16 @@ go build -o bin/lfr-tunnel-ops ./cmd/lfr-tunnel-ops
 `-trusted-proxy` is not optional in practice. Without it the edge emits no `real_ip` block at
 all, and every request another gateway forwards here is attributed to that gateway rather than
 to the visitor: the per-tunnel IP whitelist, the rate limiter's auto-ban and every audit entry
-then name it (#1450). Pass the control plane's **exact** address, never a range -- a range lets
-anything inside it assert a visitor address.
+then name it (#1450). Pass the control plane's **exact** address.
+
+That is now enforced, not just advised (#1792). `render-nginx-config` refuses a `-trusted-proxy`
+that names more than one host in globally routable space -- `0.0.0.0/0`, `::/0`, a public `/24` --
+because `set_real_ip_from` lets **anything** inside the range assert an arbitrary visitor address
+in `X-Forwarded-For`, which is the forgeable path #1325 closed. A bare address, a `/32` or a `/128`
+are the same one host and are all accepted. A wider prefix is accepted only when it lies entirely
+inside space no internet host can occupy (RFC1918, CGNAT `100.64.0.0/10`, link-local, loopback,
+IPv6 ULA `fc00::/7`) -- the load-balancer-subnet case. `check-config` reports an **error** for an
+over-wide entry in a live config, so a box provisioned before this guard is covered too.
 
 Given it, the rendered block trusts three things: the control plane, loopback (the hop central's
 own gateway appends, #1750), and **every other edge in the fleet** (#1757). That last set is
@@ -597,4 +605,4 @@ If your Edge VPS or Control Plane gateway has multiple public IP addresses confi
 
 <!-- markdownlint-disable MD049 -->
 ---
-*Last Updated: 2026-09-07* | *Last Reviewed: 2026-09-07*
+*Last Updated: 2026-09-08* | *Last Reviewed: 2026-09-08*

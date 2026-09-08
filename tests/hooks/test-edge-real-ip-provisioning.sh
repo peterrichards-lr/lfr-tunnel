@@ -158,7 +158,18 @@ fi
 # address must get PAST validation. It cannot go further -- the next step reads
 # pkg/config/version.go, which does not exist in the sandbox -- so this asserts only that the
 # script stopped complaining about -C, which is the property under test.
-for good in 203.0.113.10 2001:db8::1 203.0.113.0/24; do
+#
+# This is a SHAPE check and nothing more: it asks whether -C looks like an address at all,
+# because -c and -C differ by one shift key. How WIDE the value may be is a separate rule, and it
+# lives in exactly one place -- trustedProxyTooWide in pkg/ops/nginx.go, applied by
+# render-nginx-config, which this script invokes a few lines later (#1792). Stating it a second
+# time in bash would give the repo two versions of one rule to drift apart, and the private-range
+# containment it turns on is not something bash 3.2 expresses honestly.
+#
+# So the values below are ones BOTH accept. 203.0.113.0/24 used to be listed here; it still gets
+# past the shape check, but render-nginx-config now refuses it, so advertising it as "accepted"
+# described a provision that fails one step later.
+for good in 203.0.113.10 2001:db8::1 203.0.113.7/32 10.20.0.0/16; do
   OUT="$(run_edge -C "$good")"
   if printf '%s' "$OUT" | grep -q 'Error: -C'; then
     fail "-C rejected a valid address ${good}:

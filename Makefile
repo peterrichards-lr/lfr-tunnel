@@ -70,6 +70,7 @@ help:
 	@echo "  make check-contrast    - Theme danger colours meet WCAG AA"
 	@echo "  make check-i18n        - Portal keys are defined in Language.properties"
 	@echo "  make nolint-ratchet    - //nolint:errcheck suppressions have not grown"
+	@echo "  make home-isolation    - tests never read the developer's real home directory"
 	@echo "  make check-branches    - Report stale remote branches"
 	@echo "  make prune-branches    - Delete merged remote branches"
 	@echo "  make check-workflow-failures - Report workflows failing repeatedly on master"
@@ -96,6 +97,11 @@ prune-branches:
 # anything failing.
 nolint-ratchet:
 	@./scripts/check-nolint-ratchet.sh
+
+# Every package whose tests resolve os.UserHomeDir() isolates it, so the suite does not read the
+# developer's own ~/.lfr-tunnel (#1798). Runs in CI's Lint & Format Check job too.
+home-isolation:
+	@./scripts/check-test-home-isolation.sh
 
 # Asserts that the toolchain will really link inside the whitelisted directory, rather than
 # assuming it (#1335). The macOS default is resolved by an existence test, so a missing

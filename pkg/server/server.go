@@ -3818,7 +3818,29 @@ func (s *Server) handleAdminMagicLink(w http.ResponseWriter, r *http.Request) {
 		plainBody := fmt.Sprintf("Hi %s,\n\nUse this link to log in (expires in 15 minutes):\n%s\n\nReport abuse here:\n%s", greetingName, link, reportLink)
 		subject := s.GetTranslation(lang, "magic_link_subject")
 
-		go s.notifications.Sender().Send(req.Email, subject, body, plainBody) //nolint:errcheck
+		// The magic link is the primary way anyone signs into the portal, so a lost one is a
+		// lockout. This used to be a bare `go ...Send(...)` -- the error was not even assigned
+		// to _ -- so a failure left no log line, no audit row, and the endpoint had already
+		// answered {"status":"ok"}. The user saw "check your email", waited, and no evidence
+		// existed anywhere that anything had gone wrong (#1832).
+		//
+		// The RESPONSE deliberately does not change. handleAdminMagicLink answers identically
+		// for an unknown address, an out-of-domain address and a real one, which is what stops
+		// it enumerating accounts; reporting a send failure to an anonymous caller would undo
+		// that. The audit log is the right place for this. That is the asymmetry with #1824,
+		// where telling the ADMIN the truth was the fix -- there the caller is a trusted actor
+		// who had just acted, here they are anonymous.
+		//
+		// Still asynchronous, for the same reason: a blocking send would turn SMTP latency into
+		// a timing oracle for whether an address exists.
+		recipient := req.Email
+		go func() {
+			if err := s.notifications.Sender().Send(recipient, subject, body, plainBody); err != nil {
+				slog.Error(fmt.Sprintf("[Server] Failed to send magic link to %s: %v", recipient, err))
+				s.writeAudit(recipient, "user.magic_link.notify_failed", "user", recipient,
+					fmt.Sprintf("Magic-link email failed, so this user cannot sign in and has not been told: %v", err), nil)
+			}
+		}()
 	} else {
 		slog.Info(fmt.Sprintf("[Admin] Magic Link for %s: /admin?token=%s", req.Email, magicToken))
 	}
@@ -4222,7 +4244,22 @@ Liferay Tunnel Team`, actor, inviteLink, actor, declineLink)
 
 	if s.notifications != nil && s.notifications.Sender() != nil {
 		plainBody := fmt.Sprintf("Hi there,\n\nYou have been invited by an administrator to use the Liferay Tunnel portal.\n\nLog in here: %s\n\nDecline here: %s", inviteLink, declineLink)
-		go func() { _ = s.notifications.Sender().Send(req.Email, subject, body, plainBody) }() //nolint:errcheck
+
+		// An invite that never arrives leaves an account created and approved, and a person who
+		// has no idea it exists -- so the admin believes they onboarded somebody who never hears
+		// anything. Same class as #1824, and the error was discarded outright here too (#1832).
+		//
+		// Unlike the magic link above, the caller here IS a trusted admin, so telling them would
+		// be reasonable. It is left as an audit row for now to keep this change to the two sites
+		// that block access; surfacing invite failures in the admin UI belongs with #1732.
+		recipient := req.Email
+		go func() {
+			if err := s.notifications.Sender().Send(recipient, subject, body, plainBody); err != nil {
+				slog.Error(fmt.Sprintf("[Server] Failed to send invite to %s: %v", recipient, err))
+				s.writeAudit(recipient, "user.invite.notify_failed", "user", recipient,
+					fmt.Sprintf("Invite email failed, so this user was created but never told: %v", err), nil)
+			}
+		}()
 	}
 
 	s.writeAudit(actor, "user.invited", "user", req.Email, "Admin invited new user", r)

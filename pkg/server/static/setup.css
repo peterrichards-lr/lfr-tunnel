@@ -680,8 +680,19 @@ html[dir='rtl'] th {
   }
 
   body {
-    background: var(--bg) !important;
-    color: var(--text-color) !important;
+    /* Deliberately literal, not theme tokens -- the same call ui/src/index.css already
+       made for Portal V2 (#1221). This read var(--bg) and var(--text-color), neither of
+       which setup.css defines, so both declarations were invalid at computed-value time
+       and took their UNSET values instead. Measured on the served page, dark theme:
+       background-color rgba(0, 0, 0, 0) and color rgb(0, 0, 0) inherited from the root.
+       White paper and black ink -- correct output from invalid CSS.
+
+       Which is why the obvious repair is the wrong one. Pointing these at --bg-base and
+       --text-main, as dashboard.css:874 still does, measures rgb(15, 23, 42) on
+       rgb(248, 250, 252) with print-color-adjust: exact holding it -- a near-black
+       printed page, which is the #1221 defect, not the fix for it. Paper is not themed. */
+    background: #ffffff !important;
+    color: #000000 !important;
     -webkit-print-color-adjust: exact !important;
     print-color-adjust: exact !important;
   }
@@ -851,7 +862,7 @@ html[dir='rtl'] th {
 /* --- Driver.js Custom Styling Overrides --- */
 .driver-popover.driverjs-theme {
   background: var(--bg-card) !important;
-  color: var(--text-color) !important;
+  color: var(--text-main) !important;
   border: 1px solid var(--border) !important;
   backdrop-filter: blur(12px) !important;
   -webkit-backdrop-filter: blur(12px) !important;
@@ -899,7 +910,7 @@ html[dir='rtl'] th {
 }
 
 .driver-popover.driverjs-theme .driver-popover-close-btn:hover {
-  color: var(--text-color) !important;
+  color: var(--text-main) !important;
 }
 
 .driver-popover.driverjs-theme .driver-popover-arrow {

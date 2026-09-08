@@ -31,10 +31,29 @@ FOOTER_PATTERN = re.compile(r'\*Last Updated:\s*([\d\-]+)\*\s*\|\s*\*Last Review
 IGNORE_DIRS = {'.git', 'node_modules', '.venv', '.smoke_venv'}
 
 
+def is_nested_worktree_root(path):
+    """True if path is the root of a git worktree nested inside the tree being walked.
+
+    Its contents are a second checkout of THIS repository, so every file under it is a duplicate.
+    A walk that descends into one reports each finding once per worktree, naming paths that are
+    copies of the file rather than the file itself (#1815).
+
+    The test is `.git` present as a FILE: a real repository root carries `.git` as a directory, a
+    worktree root carries it as a regular file holding a `gitdir:` pointer. That identifies the
+    class itself rather than a directory name, so it keeps working whatever the tooling calls its
+    worktree directory -- where hardcoding `.claude` would not.
+    """
+    return os.path.isfile(os.path.join(path, '.git'))
+
+
 def find_md_files(root_dir):
     md_files = []
     for dirpath, dirnames, filenames in os.walk(root_dir):
-        dirnames[:] = [d for d in dirnames if d not in IGNORE_DIRS]
+        dirnames[:] = [
+            d for d in dirnames
+            if d not in IGNORE_DIRS
+            and not is_nested_worktree_root(os.path.join(dirpath, d))
+        ]
         for f in filenames:
             if f.endswith('.md'):
                 md_files.append(os.path.join(dirpath, f))

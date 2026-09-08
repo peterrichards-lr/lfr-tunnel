@@ -299,6 +299,25 @@ func TestSetInlineAuthTokenIsTheWayToAuthorAToken(t *testing.T) {
 // rather than noted in a comment: a comment does not fail. Matching the literal on the
 // enclosing type name is what keeps pkg/client's RegisterRequest -- a wire payload with an
 // AuthToken field of its own -- from reading as a violation.
+// isNestedWorktreeRoot reports whether dir is the root of a git worktree nested inside the tree
+// being walked -- an agent worktree under .claude/worktrees, or anything else `git worktree add`
+// put here.
+//
+// Its contents are a second checkout of THIS repository, so every file in it is a duplicate. A
+// walk that descends into one reports each finding once per worktree, naming paths that are
+// copies of the file rather than the file. On 2026-09-08 that made `make test` fail on a clean
+// master with three agent worktrees present, flagging the same three legitimate lines nine times
+// and blocking every push through the pre-push hook (#1815).
+//
+// The test is the presence of `.git` as a FILE. A real repository root carries `.git` as a
+// directory; a worktree root carries it as a regular file holding a `gitdir:` pointer. That is
+// what identifies the class, rather than a directory name -- so this keeps working if the tooling
+// stops using `.claude/worktrees`, which a hardcoded path would not.
+func isNestedWorktreeRoot(dir string) bool {
+	st, err := os.Stat(filepath.Join(dir, ".git"))
+	return err == nil && st.Mode().IsRegular()
+}
+
 func TestEveryClientTokenAssignmentDeclaresItsProvenance(t *testing.T) {
 	// pkg/config is the definition site: LoadClientConfig's ladder and the redaction inside
 	// SaveClientConfig both assign AuthToken by design, and the behavioural tests above are
@@ -322,6 +341,9 @@ func TestEveryClientTokenAssignmentDeclaresItsProvenance(t *testing.T) {
 		if info.IsDir() {
 			switch info.Name() {
 			case ".git", "node_modules", "vendor", "ui-dist", "bin":
+				return filepath.SkipDir
+			}
+			if path != root && isNestedWorktreeRoot(path) {
 				return filepath.SkipDir
 			}
 			return nil

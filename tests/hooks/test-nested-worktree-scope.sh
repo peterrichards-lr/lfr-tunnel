@@ -18,6 +18,13 @@
 # relied on is git's own on-disk shape -- a worktree root carries `.git` as a FILE holding a
 # `gitdir:` pointer, where a repository root carries it as a directory.
 #
+# The premise checks below ask git for that shape rather than testing "$REPO_ROOT/.git" (#1839).
+# The first version tested the path directly, which is true only from the main checkout: run
+# from a worktree -- which is how every agent on this repo works -- "$REPO_ROOT/.git" is a FILE,
+# the harness branch fired, and `make test-hooks` could not pass at all. The suite was defeated
+# by the very property it exists to assert, which is worth keeping in view: a premise check that
+# assumes one vantage point is a scope blind spot like any other (#1779).
+#
 # bash 3.2 compatible (macOS /bin/bash) -- no associative arrays, no mapfile. See AGENTS.md.
 
 set -uo pipefail
@@ -65,10 +72,43 @@ else
     exit 1
 fi
 
-if [ -d "$REPO_ROOT/.git" ]; then
-    pass "the real repository root still carries .git as a DIRECTORY (so it is not skipped)"
+# The other half of the premise: a real repository directory is a DIRECTORY, so a repository
+# root is not mistaken for a worktree and skipped.
+#
+# Asked of `git rev-parse --git-common-dir` rather than of "$REPO_ROOT/.git" (#1839). REPO_ROOT
+# is wherever this suite is run from, and that is not necessarily the main checkout -- every
+# agent on this repo works from a `git worktree add` under .claude/worktrees, where
+# "$REPO_ROOT/.git" is a FILE. The direct test therefore fired its own harness branch and failed
+# the suite from the vantage point the suite exists to describe: the property it asserts is
+# exactly what broke its own premise guard.
+#
+# --git-common-dir resolves the one real repository directory from either vantage point, so the
+# premise can be stated truthfully without weakening it. It is still a premise check: if git
+# ever stopped keeping that directory, every case below would start passing for the wrong
+# reason and this says so first.
+GIT_COMMON_DIR=$(git rev-parse --git-common-dir 2>/dev/null || true)
+case "$GIT_COMMON_DIR" in
+    "") ;;
+    /*) ;;
+    *) GIT_COMMON_DIR="$REPO_ROOT/$GIT_COMMON_DIR" ;;
+esac
+if [ -n "$GIT_COMMON_DIR" ] && [ -d "$GIT_COMMON_DIR" ]; then
+    pass "the real repository directory is a DIRECTORY (so a repository root is never skipped)"
 else
-    harness "repository root has no .git directory -- cannot distinguish root from worktree"
+    harness "git rev-parse --git-common-dir gave '$GIT_COMMON_DIR', which is not a directory -- cannot distinguish a repository root from a worktree"
+fi
+
+# And the two must actually be distinguishable, which is the property the fixes rely on rather
+# than either half of it alone. Inside a worktree, --git-dir is that worktree's private
+# administrative directory under <common>/worktrees/<name>; at a repository root the two are
+# the same path. Asserted against the FIXTURE, which this suite created, so the answer does not
+# depend on where the suite was invoked from.
+WT_GIT_DIR=$(cd "$WT_PATH" && git rev-parse --git-dir 2>/dev/null || true)
+WT_COMMON_DIR=$(cd "$WT_PATH" && git rev-parse --git-common-dir 2>/dev/null || true)
+if [ -n "$WT_GIT_DIR" ] && [ "$WT_GIT_DIR" != "$WT_COMMON_DIR" ]; then
+    pass "a worktree's --git-dir differs from its --git-common-dir (root and worktree are distinguishable)"
+else
+    harness "the fixture worktree reports --git-dir '$WT_GIT_DIR' and --git-common-dir '$WT_COMMON_DIR' -- git no longer distinguishes the two, and every case below would pass for the wrong reason"
 fi
 
 # ---------------------------------------------------------------------------

@@ -8,8 +8,11 @@
 # passed and the command then failed at runtime -- `make e2e-edge` was unrunnable on WSL2
 # while `make e2e` was fine, with an error naming Docker rather than the script.
 #
-# The rule this encodes, from .agent-state.md: prefer a check that proves the thing *works*
-# over one that proves it is *configured*.
+# The rule this encodes: prefer a check that proves the thing *works* over one that proves it
+# is *configured*. Same family as `.agents/skills/github-workflow/SKILL.md` §5c, an assertion
+# satisfied by the wrong failure -- here the existence check was satisfied by a shim that
+# could not run. (Previously cited .agent-state.md, which is local-only and git-ignored as of
+# #1812, so the citation would not resolve for anyone else.)
 #
 # Defines a `docker-compose` shell function that shadows the v1 binary, so call sites keep
 # using `docker-compose ...` unchanged and pick up v2 automatically.

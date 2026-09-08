@@ -1,5 +1,27 @@
 [
   {
+    "version": "v1.48.26",
+    "release_date": "2026-09-08",
+    "features": [
+      "fix(gates): skip nested git worktrees in every repo-tree walk (#1815) (#1821)",
+      "fix(server): refuse an over-wide trusted_proxies entry at startup (#1819)",
+      "fix(portal): resolve print colours and every stylesheet against a real scope (#1802, #1803, #1804) (#1820)",
+      "fix(scripts): fetch before deciding what is stale, and fail when a delete fails (#1814) (#1817)",
+      "chore: git-ignore .agent-state.md instead of committing it (#1812) (#1813)",
+      "fix(portal-v1): restore the dashboard shell's missing tag, and gate HTML tag balance (#1809)",
+      "fix(ops): refuse a trusted-proxy entry that trusts more than one host (#1808)",
+      "fix(gui): stop the tray Settings save erasing the tunnel's passcode (#1793) (#1807)",
+      "fix(config): make LoadClientConfig nil-on-error on every path (#1777) (#1806)",
+      "fix(portal): resolve every page against a definition source, not just the themed ones (#1805)",
+      "test: stop the suite reading the developer's own home directory (#1798) (#1800)",
+      "docs(workflow): record how an assertion gets satisfied by the wrong failure (#1797)",
+      "fix(ops): refuse to provision an edge with no real_ip block (#1781) (#1789)",
+      "chore(ci): make two gates fail closed on a scan of nothing (#1779) (#1788)",
+      "fix(portal): load System Settings' own cards from the System Settings tab (#1794)",
+      "fix(client): never persist a token the config file did not supply (#1772) (#1790)"
+    ]
+  },
+  {
     "version": "v1.48.25",
     "release_date": "2026-09-06",
     "features": [
@@ -66,13 +88,6 @@
     "release_date": "2026-09-02",
     "features": [
       "feat(auth): cap the absolute session lifetime, independent of activity (#1679) (#1680)"
-    ]
-  },
-  {
-    "version": "v1.48.21",
-    "release_date": "2026-09-02",
-    "features": [
-      "fix(auth): stop background polling from extending the session (#1676) (#1677)"
     ]
   }
 ]

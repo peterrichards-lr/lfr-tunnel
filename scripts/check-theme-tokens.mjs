@@ -34,6 +34,23 @@
  *          definition source: the shared themes if it links them, otherwise the tokens it
  *          defines itself (see collectDocumentScope). The membership rule is unchanged --
  *          only what a non-member is resolved against.
+ *
+ *   #1802  Resolving is not the only question worth asking about a var(). Inside @media
+ *          print, a token that resolves perfectly is still a defect if its value depends on
+ *          the screen theme, because print-color-adjust: exact then tells the browser to
+ *          reproduce the screen on paper. #1221 fixed the body rule in one file, #1784 fixed
+ *          it in a second, and BOTH left the .glass rule four lines below it untouched --
+ *          in all three stylesheets -- because the class was named as "the body rule" rather
+ *          than as "a print colour that follows the screen theme". See collectPrintScope.
+ *
+ *   #1803  Coverage is derived from a <link>, and until now the shared scope followed only
+ *          <script src>. So a stylesheet reached no other way was read by neither scope:
+ *          static/offline.css (no page links it at all) and static/shared/a11y.css (linked
+ *          by dashboard.html, which the shared scope read without following the link). Both
+ *          could have referenced anything and stayed green. The shared scope now follows
+ *          <link rel=stylesheet> as well, and every .css under pkg/server must end the run
+ *          having been read by some scope -- see the coverage report below. That converts
+ *          the blind spot #1784 could only pin into a build failure.
  */
 import { readFileSync, readdirSync, existsSync } from 'node:fs';
 import { join, basename, relative } from 'node:path';
@@ -91,6 +108,35 @@ function addDecls(set, text) {
   for (const m of text.matchAll(VAR_DECL)) set.add(m[1]);
 }
 
+// The same declaration, kept with its VALUE (#1802). Every check above this line asks only
+// whether a property is set; the print scope asks what it is set TO, because "does this
+// colour depend on the screen theme" is a question about values and cannot be answered from
+// names. Split from VAR_DECL rather than replacing it: the resolution checks want a flat set
+// of names and would be slower and no more correct reading values they never look at.
+const DECL_VALUE = /(?:^|[{;])\s*(--[a-z0-9-]+)\s*:\s*([^;{}]*)/g;
+
+// Whitespace is stripped, not collapsed, before two values are compared. Prettier wraps a
+// long declaration across lines, so one value can appear as two different strings in the same
+// file -- setup.css writes --login-gradient on one line in its :root and across five in its
+// prefers-color-scheme copy -- and a collapse-to-single-space normalisation reports those two
+// as a theme-varying pair. Stripping is safe here because the result is only ever compared for
+// equality, never parsed; the readable form is kept separately for the message.
+const normalise = (v) => v.replace(/\s+/g, '');
+
+// name -> normalised value -> { display, sources }. A property with more than one entry in its
+// inner map has a value that depends on which theme (or which media query) is in force.
+function addValues(map, text, source) {
+  for (const m of text.matchAll(DECL_VALUE)) {
+    const display = m[2].trim().replace(/\s+/g, ' ');
+    const norm = normalise(display);
+    if (!norm) continue;
+    if (!map.has(m[1])) map.set(m[1], new Map());
+    const byValue = map.get(m[1]);
+    if (!byValue.has(norm)) byValue.set(norm, { display, sources: new Set() });
+    byValue.get(norm).sources.add(source);
+  }
+}
+
 // A first-party asset a page pulls in by its served path. Resolved against the static dir the
 // server serves it from, so a CDN href has no local path and is dropped by existsSync.
 const SCRIPT_SRC = /<script[^>]+src\s*=\s*["'](\/static\/[^"']+\.js)["']/g;
@@ -101,6 +147,60 @@ function* linkedAssets(html, pattern) {
     const path = join(SERVER_DIR, 'static', m[1].slice('/static/'.length));
     if (!existsSync(path)) continue;
     yield { path, rel: relative(process.cwd(), path) };
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Coverage (#1803). Which stylesheets this run actually opened, recorded at the point each
+// one is read rather than derived from the same <link>-following logic being checked -- a
+// coverage report computed from the scan's own rules can only ever agree with itself.
+const readSheets = new Set();
+
+// ---------------------------------------------------------------------------
+// The print scope (#1802).
+//
+// The body of every @media print block, brace-MATCHED rather than regex-terminated. The
+// obvious /@media print\s*\{[^}]*\}/ stops at the first inner closing brace, which is the end
+// of the @page rule -- so it would read one of the twelve rules in dashboard.css's block and
+// report the other eleven as absent. That is the shape of failure this whole file exists to
+// catch, so it is worth not committing here.
+//
+// The prelude is matched loosely, so `@media screen, print` and `@media only print` are found
+// as well as the bare form. `@media not print` would be a false positive; there is none in the
+// tree, and a false positive here is loud rather than silent.
+function printBlocks(css) {
+  const bodies = [];
+  const open = /@media[^{}]*\bprint\b[^{}]*\{/g;
+  for (let m; (m = open.exec(css));) {
+    let depth = 1;
+    let i = open.lastIndex;
+    for (; i < css.length && depth > 0; i++) {
+      if (css[i] === '{') depth++;
+      else if (css[i] === '}') depth--;
+    }
+    bodies.push(css.slice(open.lastIndex, i - 1));
+    open.lastIndex = i;
+  }
+  return bodies;
+}
+
+// The label a print finding is resolved against when the file belongs to the shared scope.
+const SHARED_SCOPE = '(the shared themes)';
+
+const printScans = [];
+let printBlocksSeen = 0;
+let printDeclsSeen = 0;
+
+// Called wherever a file is read for references, with the scope that file resolves against --
+// SHARED_SCOPE, or the page path for a self-contained document. Same text, same trip through
+// the file: a separate walk would be a second membership rule to keep in step with the first.
+function recordPrint(fileRel, text, scope) {
+  for (const body of printBlocks(text)) {
+    printBlocksSeen++;
+    printDeclsSeen += [...body.matchAll(/[a-z-]+\s*:\s*[^;{}]/g)].length;
+    const tokens = new Set();
+    for (const m of body.matchAll(VAR_REF)) tokens.add(m[1]);
+    printScans.push({ file: fileRel, scope, tokens });
   }
 }
 
@@ -124,13 +224,18 @@ function collectReferences() {
         continue;
       }
       if (!entry.name.endsWith('.css')) continue;
-      addRefs(refs, read(full), basename(full));
+      const css = read(full);
+      addRefs(refs, css, basename(full));
+      recordPrint(relative(process.cwd(), full), css, SHARED_SCOPE);
     }
   };
   walk(UI_SRC);
 
   // V1 is one file rather than a tree, so it is read directly rather than walked.
-  addRefs(refs, read(V1_CSS), basename(V1_CSS));
+  const v1 = read(V1_CSS);
+  addRefs(refs, v1, basename(V1_CSS));
+  recordPrint(relative(process.cwd(), V1_CSS), v1, SHARED_SCOPE);
+  readSheets.add(relative(process.cwd(), V1_CSS));
 
   return refs;
 }
@@ -177,8 +282,24 @@ function collectMarkupReferences(refs) {
 
       const files = [rel];
       addRefs(refs, html, basename(full));
+      recordPrint(rel, html, SHARED_SCOPE);
+
+      // Stylesheets as well as scripts, as of #1803. Following only <script src> left
+      // static/shared/a11y.css read by nothing at all: dashboard.html links it, the shared
+      // scope read dashboard.html, and the link was never followed. It happened to be
+      // self-consistent; nothing checked that it was.
+      for (const sheet of linkedAssets(html, STYLE_HREF)) {
+        if (readSheets.has(sheet.rel)) continue;
+        const css = read(sheet.path);
+        addRefs(refs, css, basename(sheet.path));
+        recordPrint(sheet.rel, css, SHARED_SCOPE);
+        readSheets.add(sheet.rel);
+        files.push(sheet.rel);
+      }
       for (const script of linkedAssets(html, SCRIPT_SRC)) {
-        addRefs(refs, read(script.path), basename(script.path));
+        const js = read(script.path);
+        addRefs(refs, js, basename(script.path));
+        recordPrint(script.rel, js, SHARED_SCOPE);
         files.push(script.rel);
       }
       scanned.push(files);
@@ -207,25 +328,34 @@ function collectMarkupReferences(refs) {
 // page is resolved against that page's tokens rather than against the shared themes.
 function collectDocumentScope(rel, html) {
   const decls = new Set();
+  const values = new Map();
   const refs = new Map();
   const files = [rel];
 
-  for (const m of html.matchAll(/<style[^>]*>([\s\S]*?)<\/style>/gi))
+  for (const m of html.matchAll(/<style[^>]*>([\s\S]*?)<\/style>/gi)) {
     addDecls(decls, m[1]);
+    addValues(values, m[1], rel);
+  }
   addRefs(refs, html, rel);
+  recordPrint(rel, html, rel);
 
   for (const sheet of linkedAssets(html, STYLE_HREF)) {
     const css = read(sheet.path);
     addDecls(decls, css);
+    addValues(values, css, sheet.rel);
     addRefs(refs, css, sheet.rel);
+    recordPrint(sheet.rel, css, rel);
+    readSheets.add(sheet.rel);
     files.push(sheet.rel);
   }
   for (const script of linkedAssets(html, SCRIPT_SRC)) {
-    addRefs(refs, read(script.path), script.rel);
+    const js = read(script.path);
+    addRefs(refs, js, script.rel);
+    recordPrint(script.rel, js, rel);
     files.push(script.rel);
   }
 
-  return { page: rel, files, decls, refs };
+  return { page: rel, files, decls, values, refs };
 }
 
 // Properties defined per theme file, split by whether they sit on a bare :root (inherited
@@ -233,9 +363,14 @@ function collectDocumentScope(rel, html) {
 function collectDefinitions() {
   const base = new Set();
   const perTheme = new Map();
+  const values = new Map();
   for (const file of readdirSync(THEMES)) {
     if (!file.endsWith('.css') || file === 'index.css') continue;
-    const css = read(join(THEMES, file));
+    const full = join(THEMES, file);
+    const css = read(full);
+    readSheets.add(relative(process.cwd(), full));
+    addValues(values, css, file);
+    recordPrint(relative(process.cwd(), full), css, SHARED_SCOPE);
     const defined = new Set();
     for (const m of css.matchAll(/^\s*(--[a-z0-9-]+)\s*:/gm)) defined.add(m[1]);
     perTheme.set(file, defined);
@@ -249,7 +384,7 @@ function collectDefinitions() {
       for (const m of block[2].matchAll(/(--[a-z0-9-]+)\s*:/g)) base.add(m[1]);
     }
   }
-  return { base, perTheme };
+  return { base, perTheme, values };
 }
 
 // Colour values declared on the base :root, which every theme inherits unless it
@@ -273,9 +408,36 @@ function collectBaseColours() {
   return colours;
 }
 
+// Definitions first, so the theme files are in readSheets before any page's <link rel=
+// stylesheet> is followed (#1803). A themed page links the themes as well as its own
+// stylesheet, and the themes are the definition source rather than a consumer of it -- they
+// are deliberately outside the reference scan. Skipping an already-read sheet is what keeps
+// them out, so they have to be marked read before the link-following starts.
+const { base, perTheme, values: themeValues } = collectDefinitions();
 const refs = collectReferences();
 const { scanned, documents } = collectMarkupReferences(refs);
-const { base, perTheme } = collectDefinitions();
+
+// Every first-party stylesheet under pkg/server, whether or not anything reached it. The
+// difference between this and readSheets is the whole of #1803.
+function allServerStylesheets() {
+  const found = [];
+  const walk = (dir) => {
+    for (const entry of readdirSync(dir, { withFileTypes: true }).sort((a, b) =>
+      a.name.localeCompare(b.name),
+    )) {
+      const full = join(dir, entry.name);
+      if (entry.isDirectory()) {
+        // Generated, not authored: content-hashed bundles that are never committed (#1196).
+        if (entry.name !== 'ui-dist') walk(full);
+        continue;
+      }
+      if (entry.name.endsWith('.css'))
+        found.push(relative(process.cwd(), full));
+    }
+  };
+  walk(SERVER_DIR);
+  return found;
+}
 
 // A document is only worth printing individually if it has something to resolve. The rest are
 // counted, so "nothing to check" stays visible without burying the pages that do have tokens.
@@ -285,7 +447,9 @@ const tokenless = documents.filter((d) => d.refs.size === 0);
 // Printed on every run, pass or fail. A gate that quietly narrows its own scope reads exactly
 // like one that is passing, which is how #1774 stayed hidden: saying out loud which pages were
 // checked and which were not is the only thing that makes the coverage reviewable.
-console.log('Pages linking the shared themes (markup and scripts scanned):');
+console.log(
+  'Pages linking the shared themes (markup, scripts and linked stylesheets scanned):',
+);
 for (const files of scanned) console.log(`  ${files.join('  +  ')}`);
 
 console.log(
@@ -303,6 +467,22 @@ if (tokenless.length > 0) {
   );
 }
 console.log('');
+
+// Anti-vacuity, reference side. Every scope in this file finds its work with VAR_REF, so if
+// that pattern stops matching, all three go quiet together and the run ends on the success
+// message having resolved nothing. It is the one guard the two above cannot give: they prove a
+// scope was ROUTED files, not that anything was read out of them. It also covers the print
+// scope's reference half, which has no in-script guard of its own once the tree is clean --
+// the correct end state there is zero references, so "the print scan found a reference" cannot
+// be asserted here and is asserted in tests/hooks/test-theme-tokens.sh instead.
+if (refs.size === 0) {
+  console.error(
+    '❌ Not one var() reference was found in any stylesheet, page or script, which cannot\n' +
+      'be true of this tree. VAR_REF has stopped matching, and every check below it is now\n' +
+      'resolving an empty set and passing.',
+  );
+  process.exit(1);
+}
 
 // Anti-vacuity, both scopes. Membership is derived from a <link> in the markup, so deleting that
 // link -- or moving the themes to another path -- silently empties the markup scan while every
@@ -332,6 +512,48 @@ if (!documents.some((d) => d.decls.size > 0 && d.refs.size > 0)) {
       "that finds a page's own <style> block or its linked stylesheet has stopped matching.",
   );
   process.exit(1);
+}
+
+// Anti-vacuity, print scope. Its findings are expected to be ZERO on a healthy tree, so the
+// scope reports exactly the same thing whether it is working or has stopped extracting blocks
+// altogether. Both halves of the extraction are asserted: that a block was found at all, and
+// that the brace-matching produced a body with declarations in it rather than an empty slice.
+if (printBlocksSeen === 0 || printDeclsSeen === 0) {
+  console.error(
+    `❌ The @media print scan found ${printBlocksSeen} blocks containing ` +
+      `${printDeclsSeen} declarations, so it covered nothing.\n` +
+      'Either every print block has been deleted -- in which case delete this scope rather\n' +
+      'than leaving it reporting success over zero files -- or printBlocks() has stopped\n' +
+      'matching the prelude, or its brace-matching is returning empty bodies. A print rule is\n' +
+      'invisible to every other test in this repo and to review, so a scan of nothing here is\n' +
+      'indistinguishable from a clean one.',
+  );
+  process.exit(1);
+}
+
+// Coverage (#1803). A stylesheet nothing links is read by neither scope, so it could reference
+// any undefined property at all and every check in this file would stay green. That was true of
+// static/offline.css (linked by no page) and static/shared/a11y.css (linked by dashboard.html,
+// whose link was not followed) until this run. Asserted rather than described: prose in a
+// script does not fail when the gap widens, and #1784 could only pin this one in a test.
+// Findings are accumulated and reported together rather than exiting at the first one. Each of
+// the four checks below answers a different question, so stopping at the first would report one
+// instance of one class and hide the rest -- and enumerating the whole class in a single run is
+// the point of widening a gate at all (#1744).
+let failed = false;
+
+const unread = allServerStylesheets().filter((f) => !readSheets.has(f));
+if (unread.length > 0) {
+  failed = true;
+  console.error('❌ Stylesheets under pkg/server that no scope read:\n');
+  for (const f of unread) console.error(`  ${f}`);
+  console.error(
+    '\nCoverage here is derived from a <link>: a stylesheet is read because some page pulls it\n' +
+      'in, which is what keeps a self-contained page from being resolved against themes it does\n' +
+      'not load. The cost is that an unlinked file is checked by nothing. Either link it from\n' +
+      'the page that needs it, or delete it -- an asset no page can reach is not serving anyone,\n' +
+      'and leaving it here means the next property added to it is unchecked.\n',
+  );
 }
 
 const undefinedTokens = [];
@@ -371,7 +593,49 @@ for (const d of documents) {
   if (missing.length > 0) docFindings.push({ d, missing });
 }
 
-let failed = false;
+// The print scope (#1802). A different question from every check above: not "does this token
+// resolve" but "does its value depend on the screen theme". Both print blocks in this repo sit
+// under print-color-adjust: exact, which is an instruction to reproduce the screen colour on
+// paper -- so a token with one value in dark.css and another in light.css means the printout
+// follows whichever theme the reader happened to be using. Paper is not themed.
+//
+// A token defined identically everywhere is fine and is not reported: --spacing-2xs and the
+// other geometry tokens are single-valued, and a print block is welcome to use them.
+const printFindings = [];
+for (const scan of printScans) {
+  const source =
+    scan.scope === SHARED_SCOPE
+      ? themeValues
+      : documents.find((d) => d.page === scan.scope)?.values;
+  if (!source) continue;
+  for (const token of [...scan.tokens].sort()) {
+    const byValue = source.get(token);
+    // Undefined here rather than single-valued: the resolution checks above own that case,
+    // and reporting it twice would make one fix look like two.
+    if (!byValue || byValue.size < 2) continue;
+    printFindings.push({ file: scan.file, scope: scan.scope, token, byValue });
+  }
+}
+
+if (printFindings.length > 0) {
+  failed = true;
+  console.error(
+    '❌ Colours inside @media print that follow the screen theme:\n',
+  );
+  for (const { file, scope, token, byValue } of printFindings) {
+    console.error(`  ${file}  ${token}  (resolved against ${scope})`);
+    for (const { display, sources } of byValue.values())
+      console.error(`      ${display}  — ${[...sources].join(', ')}`);
+  }
+  console.error(
+    '\nThese blocks set print-color-adjust: exact, so the browser reproduces whatever this\n' +
+      'resolves to. On a dark theme that is a near-black page, which is #1221. Use a literal\n' +
+      'colour chosen for paper -- #ffffff and #000000 -- as ui/src/index.css already does for\n' +
+      'the body rule. Note that pointing the declaration at a token that does not exist is NOT\n' +
+      'a fix even though it prints correctly: the declaration is merely invalid, and the next\n' +
+      'person to define that name turns white paper black again.',
+  );
+}
 
 if (undefinedTokens.length > 0) {
   failed = true;
@@ -446,4 +710,10 @@ console.log(
 );
 console.log(
   `✅ No referenced colour is inherited un-overridden from the base :root.`,
+);
+console.log(
+  `✅ All ${readSheets.size} stylesheets under pkg/server were read by some scope.`,
+);
+console.log(
+  `✅ No colour in the ${printBlocksSeen} @media print blocks follows the screen theme.`,
 );

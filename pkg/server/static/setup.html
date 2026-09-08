@@ -6,6 +6,17 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Complete Setup - Liferay Tunnel</title>
+    <!--
+        The shared token set (#1522), linked BEFORE setup.css so setup.css's own rules still
+        win. setup.css used to carry a private 18-property copy of these, which is what
+        produced #1784: three properties drifted out of that copy and no gate could see it,
+        because the page was resolved against nothing. Two copies of a token set drift; one
+        cannot (#1804).
+    -->
+    <link rel="stylesheet" href="/static/themes/dark.css">
+    <link rel="stylesheet" href="/static/themes/light.css">
+    <link rel="stylesheet" href="/static/themes/liferay.css">
+    <link rel="stylesheet" href="/static/themes/high-contrast.css">
     <link rel="stylesheet" href="/static/setup.css">
     <style>
         .container {

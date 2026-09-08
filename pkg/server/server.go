@@ -380,6 +380,13 @@ type Server struct {
 func NewServer(cfg *config.ServerConfig) (*Server, error) {
 	validateTunnelDomains(cfg)
 
+	// Before anything is constructed: an over-wide trusted_proxies entry hands the choice of
+	// client address to whoever holds an address in the range (#1801). Refused rather than
+	// warned about -- see trustedProxyWidthError for why that is the lighter of two outages.
+	if err := trustedProxyWidthError(cfg.TrustedProxies); err != nil {
+		return nil, err
+	}
+
 	// Initialize Chisel server config
 	chiselCfg := &chserver.Config{
 		Reverse: true,

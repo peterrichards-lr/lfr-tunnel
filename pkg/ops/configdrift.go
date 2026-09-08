@@ -401,8 +401,9 @@ func checkGatewayRealIP(controlPlaneURL string, spec DNSSpec, nginxConf string) 
 // assert whatever visitor address it likes. A guard that exists only at render time makes the
 // dangerous state unwritable and invisible at the same time, which is the worse half of the two.
 //
-// The rule itself lives in trustedProxyTooWide (pkg/ops/nginx.go), so the config this tool WRITES
-// and the config it READS are judged by one predicate rather than by two that can drift apart.
+// The rule itself lives in pkg/nettrust (reached here through trustedProxyTooWide, nginx.go), so
+// the config this tool WRITES, the config it READS and the gateway's own startup check are judged
+// by one predicate rather than by three that can drift apart.
 //
 // severityError, unlike every other real_ip finding here. The others are warnings because they
 // depend on resolution from the operator's machine, or on a spec that may be mid-edit; this one is

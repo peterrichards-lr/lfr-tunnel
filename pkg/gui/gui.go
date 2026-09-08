@@ -254,8 +254,17 @@ func (s *TempSettingsServer) handleConfigPost(w http.ResponseWriter, r *http.Req
 		Subdomain          string `json:"subdomain"`
 		PreserveHost       bool   `json:"preserve_host"`
 		InsecureSkipVerify bool   `json:"insecure_skip_verify"`
-		Passcode           string `json:"passcode"`
-		RateLimit          int    `json:"rate_limit"`
+		// Pointers, so an ABSENT field is distinguishable from one deliberately set empty
+		// (#1793). These two are owned by the Access Control tab, which posts to
+		// /api/access-control; the Settings tab has no control for them and stopped sending
+		// them in #1762. As plain values they decoded to "" and 0 and were written over the
+		// user's passcode -- silently removing the access control from their tunnel.
+		//
+		// #1762 fixed the identical handler in pkg/client/inspector.go and missed this one,
+		// which serves the SAME client.DashboardHTML page. AuthToken above already carries a
+		// guard against the same hazard.
+		Passcode  *string `json:"passcode"`
+		RateLimit *int    `json:"rate_limit"`
 	}
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 		w.WriteHeader(http.StatusBadRequest)
@@ -286,8 +295,14 @@ func (s *TempSettingsServer) handleConfigPost(w http.ResponseWriter, r *http.Req
 	cfg.Subdomain = req.Subdomain
 	cfg.PreserveHost = req.PreserveHost
 	cfg.InsecureSkipVerify = req.InsecureSkipVerify
-	cfg.Passcode = req.Passcode
-	cfg.RateLimit = req.RateLimit
+	// Only when the caller actually sent them. Omitting a field means "leave it alone",
+	// not "clear it".
+	if req.Passcode != nil {
+		cfg.Passcode = *req.Passcode
+	}
+	if req.RateLimit != nil {
+		cfg.RateLimit = *req.RateLimit
+	}
 
 	if err := config.SaveClientConfig("", cfg); err != nil {
 		w.WriteHeader(http.StatusInternalServerError)

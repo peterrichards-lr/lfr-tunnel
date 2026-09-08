@@ -123,8 +123,6 @@ DASHBOARD_HTML="pkg/server/dashboard.html"
 DASHBOARD_JS="pkg/server/static/dashboard.js"
 DASHBOARD_CSS="pkg/server/static/dashboard.css"
 PASSCODE_HTML="pkg/server/passcode.html"
-SETUP_HTML="pkg/server/static/setup.html"
-SETUP_CSS="pkg/server/static/setup.css"
 A11Y_CSS="pkg/server/static/shared/a11y.css"
 
 # A self-contained page that links a stylesheet -- the fixture cases 6c and 6d need and the

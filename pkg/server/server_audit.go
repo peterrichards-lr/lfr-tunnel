@@ -37,14 +37,19 @@ func (s *Server) writeAudit(actorID, action, targetType, targetID string, detail
 		IPAddress:  ip,
 	}
 	dbConn := s.db
-	// Run in a goroutine so it doesn't block the HTTP response
-	go func() {
+	// Run in a goroutine so it doesn't block the HTTP response -- tracked, so Stop waits for
+	// the write instead of closing the database out from under it (#1833). The "database is
+	// closed" case below is what that race looked like from here: the row silently never
+	// appeared, and on Windows the same goroutine still held the file when t.TempDir() tried
+	// to remove it. It stays tolerated for the edge case Stop cannot cover -- a write already
+	// in flight when the process is killed.
+	s.goTracked(func() {
 		if err := dbConn.WriteAuditEntry(entry); err != nil {
 			if !strings.Contains(err.Error(), "database is closed") {
 				slog.Info(fmt.Sprintf("[Server] Failed to write audit log: %v", err))
 			}
 		}
-	}()
+	})
 }
 
 func (s *Server) forwardAuditToControlPlane(actorID, action, targetType, targetID, details, ip string) {

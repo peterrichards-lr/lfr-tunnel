@@ -264,6 +264,14 @@ type Server struct {
 	// caller tears down what it was reading -- tests restoring package-level tunables
 	// raced the edge control channel still using them (issue #1131).
 	bgWG sync.WaitGroup
+	// bgMu guards bgStopping and serialises it against bgWG.Add. Adding to a WaitGroup that
+	// another goroutine is already waiting on, from a counter of zero, panics ("WaitGroup is
+	// reused before previous Wait has returned"), so goTracked and stop must not race --
+	// see goTracked in background.go.
+	bgMu sync.Mutex
+	// bgStopping is set by stop before it waits, after which goTracked refuses to start new
+	// work rather than handing Stop a goroutine it cannot wait for.
+	bgStopping bool
 	// stopOnce makes Stop idempotent. Tests call it from a t.Cleanup registered by the setup
 	// helper AND, in older tests, from their own `defer srv.Stop()`; a second pass would
 	// RecordGatewayCleanShutdown into a closed database and log a spurious failure.
@@ -1977,7 +1985,7 @@ func (s *Server) handleRegister(w http.ResponseWriter, r *http.Request) {
 	centralTarget := s.dnsTargetForCentral()
 	for _, lease := range leases {
 		if s.isCustomDomain(lease.FullHost) {
-			go s.runVanityDomainHook("add", lease.FullHost, lease.UserID)
+			s.goTracked(func() { s.runVanityDomainHook("add", lease.FullHost, lease.UserID) })
 			continue
 		}
 		// Published rather than merely left to the wildcard, because this is also the
@@ -1996,7 +2004,7 @@ func (s *Server) handleRegister(w http.ResponseWriter, r *http.Request) {
 		warning = fmt.Sprintf("Version mismatch! Server is running %s but client is %s. Please consider upgrading using 'lfr-tunnel -upgrade'", config.Version, req.ClientVersion)
 	}
 
-	go s.BroadcastTelemetry()
+	s.goTracked(s.BroadcastTelemetry)
 
 	var langPref string
 	var themePref string
@@ -2286,8 +2294,10 @@ func (s *Server) Start() error {
 
 	go s.monitorEdgeHealth()
 
-	// Periodic task: Prune and check expiring reservations every hour
-	go func() {
+	// Periodic task: Prune and check expiring reservations every hour. Tracked, because a tick
+	// that lands on Stop is a run of database writes Stop would otherwise close the handle
+	// underneath (#1833); it returns on s.ctx.Done, which Stop cancels before it waits.
+	s.goTracked(func() {
 		ticker := time.NewTicker(s.cfg.PruneInterval)
 		defer ticker.Stop()
 		for {
@@ -2324,7 +2334,7 @@ func (s *Server) Start() error {
 				}
 			}
 		}
-	}()
+	})
 
 	// 1. Start Chisel Server on localhost:8081
 	go func() {
@@ -3117,6 +3127,9 @@ func (s *Server) Stop() {
 
 func (s *Server) stop() {
 	s.cancel()
+	// Before anything else: no new tracked background work from here on, so bgWG's counter
+	// can only fall and the Wait below cannot race an Add (see goTracked).
+	s.beginStopping()
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 
@@ -4365,7 +4378,7 @@ func (s *Server) handleLocalBroadcast(w http.ResponseWriter, r *http.Request) {
 				}
 			}
 			slog.Info("[Server] Local-triggered Scheduled Soft Maintenance countdown hit 0. Soft Maintenance Mode is now ACTIVE.")
-			go s.BroadcastTelemetry()
+			s.goTracked(s.BroadcastTelemetry)
 		})
 		s.maintMutex.Unlock()
 	}
@@ -4508,7 +4521,7 @@ func (s *Server) handleAdminMaintenance(w http.ResponseWriter, r *http.Request, 
 						}
 					}
 					slog.Info("[Server] Scheduled Soft Maintenance countdown hit 0. Soft Maintenance Mode is now ACTIVE.")
-					go s.BroadcastTelemetry()
+					s.goTracked(s.BroadcastTelemetry)
 				})
 
 				action = "system.maintenance_scheduled"
@@ -4568,7 +4581,7 @@ func (s *Server) handleAdminMaintenance(w http.ResponseWriter, r *http.Request, 
 
 	hardActive := s.nginxManager.IsActive()
 
-	go s.BroadcastTelemetry()
+	s.goTracked(s.BroadcastTelemetry)
 
 	respondJSON(w, http.StatusOK, map[string]interface{}{
 		"status":           "ok",
@@ -5164,7 +5177,7 @@ func (s *Server) handleAdminOverrideRateLimit(w http.ResponseWriter, r *http.Req
 		return
 	}
 
-	go s.BroadcastTelemetry()
+	s.goTracked(s.BroadcastTelemetry)
 
 	// Log audit event
 	s.writeAudit(actor, "tunnel.rate_limit_overridden", "subdomain", req.Host, fmt.Sprintf("Overrode rate limit to %d RPS", req.RateLimit), r)

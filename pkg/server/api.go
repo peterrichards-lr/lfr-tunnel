@@ -1248,7 +1248,7 @@ func (s *Server) handleAdminRetryVanityDomain(w http.ResponseWriter, r *http.Req
 		return
 	}
 
-	go s.runVanityDomainHook("add", fullHost, status.UserID)
+	s.goTracked(func() { s.runVanityDomainHook("add", fullHost, status.UserID) })
 	s.writeAudit(actor, "vanity_domain.retry", "vanity_domain", fullHost, "", r)
 	respondJSON(w, http.StatusOK, map[string]string{"status": "retry queued"})
 }
@@ -1278,7 +1278,7 @@ func (s *Server) handleAdminRemoveVanityDomain(w http.ResponseWriter, r *http.Re
 		return
 	}
 
-	go s.runVanityDomainHook("remove", fullHost, status.UserID)
+	s.goTracked(func() { s.runVanityDomainHook("remove", fullHost, status.UserID) })
 	s.writeAudit(actor, "vanity_domain.removed", "vanity_domain", fullHost, "", r)
 	respondJSON(w, http.StatusOK, map[string]string{"status": "removal queued"})
 }
@@ -1332,7 +1332,7 @@ func (s *Server) handleDeleteReservation(w http.ResponseWriter, r *http.Request)
 	// explicit action that should trigger that cleanup now, mirroring
 	// handleAdminRemoveVanityDomain's admin-facing equivalent.
 	if res != nil && res.Subdomain == "" {
-		go s.runVanityDomainHook("remove", res.Domain, res.UserID)
+		s.goTracked(func() { s.runVanityDomainHook("remove", res.Domain, res.UserID) })
 	}
 
 	if res != nil {

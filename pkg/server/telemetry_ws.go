@@ -349,7 +349,7 @@ func (s *Server) BroadcastTelemetry() {
 	s.wsMutex.RLock()
 	defer s.wsMutex.RUnlock()
 	for client := range s.wsClients {
-		go s.pushUserTelemetry(client)
+		s.goTracked(func() { s.pushUserTelemetry(client) })
 	}
 }
 
@@ -359,14 +359,17 @@ func (s *Server) PushUserTelemetryByID(userID string) {
 	defer s.wsMutex.RUnlock()
 	for client := range s.wsClients {
 		if client.userID == userID {
-			go s.pushUserTelemetry(client)
+			s.goTracked(func() { s.pushUserTelemetry(client) })
 		}
 	}
 }
 
 // StartTelemetryTicker starts the periodic broadcast loop.
 func (s *Server) StartTelemetryTicker() {
-	go func() {
+	// Tracked: a tick reads the database to build each client's payload, and a tick landing
+	// on Stop would otherwise still be reading it after the handle closed (#1833). Returns on
+	// s.ctx.Done, which Stop cancels before it waits.
+	s.goTracked(func() {
 		ticker := time.NewTicker(2 * time.Second)
 		defer ticker.Stop()
 		for {
@@ -377,5 +380,5 @@ func (s *Server) StartTelemetryTicker() {
 				s.BroadcastTelemetry()
 			}
 		}
-	}()
+	})
 }

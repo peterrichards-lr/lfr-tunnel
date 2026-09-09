@@ -183,7 +183,9 @@ func (s *Server) sendNotificationAsync(kind notificationKind, recipient, subject
 	// is no caller left to return it to, and sendNotification has already logged it at ERROR,
 	// written the audit row and counted it towards the repeated-failure threshold. That is the
 	// difference between this line and the eleven it replaces.
-	go func() { _ = s.sendNotification(kind, recipient, subject, htmlBody, plainBody) }() //nolint:errcheck
+	// Tracked, because sendNotification records the outcome in the database and Stop must not
+	// close it mid-write (#1833).
+	s.goTracked(func() { _ = s.sendNotification(kind, recipient, subject, htmlBody, plainBody) }) //nolint:errcheck
 }
 
 // recordNotificationFailure counts consecutive failures per address and writes exactly one

@@ -37,7 +37,10 @@ func (s *Server) BackupDatabase() error {
 
 // startDatabaseBackupScheduler triggers daily automated background backups.
 func (s *Server) startDatabaseBackupScheduler() {
-	go func() {
+	// Tracked: this loop VACUUMs INTO a backup file straight off the live connection, so Stop
+	// closing the database mid-backup would both lose the backup and keep the file open
+	// (#1833). It returns on s.ctx.Done, which Stop cancels before it waits.
+	s.goTracked(func() {
 		ticker := time.NewTicker(24 * time.Hour)
 		defer ticker.Stop()
 
@@ -56,5 +59,5 @@ func (s *Server) startDatabaseBackupScheduler() {
 				}
 			}
 		}
-	}()
+	})
 }

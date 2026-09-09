@@ -58,11 +58,11 @@ func (s *Server) validatePAT(token string) (*db.User, *db.PersonalAccessToken, b
 // not a reason to reject a credential that is otherwise good.
 func (s *Server) touchPAT(patID int64) {
 	dbConn := s.db
-	go func() {
+	s.goTracked(func() {
 		if err := dbConn.UpdatePATUsed(patID); err != nil {
 			slog.Info(fmt.Sprintf("[Server] Failed to update PAT last used time: %v", err))
 		}
-	}()
+	})
 }
 
 // isValidToken checks if a token is valid, checking personal access tokens (PATs)

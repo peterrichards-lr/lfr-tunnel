@@ -38,11 +38,9 @@ import (
 // Keyed by "<file> <enclosing function>", which survives the line moves that a line number
 // would not.
 var untrackedGoroutineExceptions = map[string]string{
-	"server_domain.go runVanityDomainHook": "the hook's output scanner. It writes stage rows, " +
-		"but runVanityDomainHook joins it on scanDone before returning, so it cannot outlive " +
-		"its own spawner -- and that spawner is what the call sites now track.",
-	"server.go NewServer": "the edge control channel, which does its own bgWG.Add/Done around " +
-		"this exact goroutine (the pattern predates goTracked).",
+	"server_domain.go runVanityDomainHook func() { ... }": "the hook's output scanner. It writes " +
+		"stage rows, but runVanityDomainHook joins it on scanDone before returning, so it cannot " +
+		"outlive its own spawner -- and that spawner is what every call site now tracks.",
 }
 
 type goSite struct {
@@ -54,7 +52,11 @@ type goSite struct {
 	tracked bool
 }
 
-func (g goSite) key() string { return g.file + " " + g.fn }
+// key identifies one goroutine, deliberately including what it starts as well as where.
+// Keying on file and function alone let a single exception cover every `go` in that function --
+// NewServer has three -- so a new leak added beside an excused one would have been excused with
+// it. It stays free of line numbers so that moving code does not turn the list red.
+func (g goSite) key() string { return g.file + " " + g.fn + " " + g.target }
 
 // TestNoUntrackedGoroutineReachesTheDatabase is the class-level gate. See the comment above.
 func TestNoUntrackedGoroutineReachesTheDatabase(t *testing.T) {

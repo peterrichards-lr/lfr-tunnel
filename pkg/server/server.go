@@ -639,14 +639,18 @@ func NewServer(cfg *config.ServerConfig) (*Server, error) {
 		srv.startDatabaseBackupScheduler()
 	}
 
-	go srv.metrics.Start(ctx)
+	// Both of these write to the database on every tick -- RecordTunnelMetric here,
+	// DequeueWebhookMessages in the consumer -- and both return on ctx.Done, which Stop
+	// cancels before it waits. Untracked, a tick landing on Stop was still inside SQLite when
+	// the handle closed (#1833).
+	srv.goTracked(func() { srv.metrics.Start(ctx) })
 
 	if srv.webhooks != nil {
 		interval := 10 * time.Second
 		if srv.cfg.Webhooks.BatchIntervalSeconds > 0 {
 			interval = time.Duration(srv.cfg.Webhooks.BatchIntervalSeconds) * time.Second
 		}
-		go srv.webhooks.StartQueueConsumer(ctx, interval)
+		srv.goTracked(func() { srv.webhooks.StartQueueConsumer(ctx, interval) })
 	}
 
 	srv.startRateLimiterCleaner(ctx)

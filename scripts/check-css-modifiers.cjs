@@ -50,6 +50,13 @@
 const fs = require('fs');
 const path = require('path');
 
+// Portal V1's corpus -- the documents, the assets each links, and every class applied across
+// them -- comes from the pass check-theme-tokens.mjs also consumes (#1841). Before that, each
+// gate walked V1 with its own collector and each missed a different half: this one did not
+// read subdirectories of pkg/server, that one did not follow a relative href. What counts as
+// DEFINED stays here, because the two gates genuinely disagree about it.
+const { collectV1Usage, DYN } = require('./lib/collect-v1-usage.cjs');
+
 const UI_SRC = path.join(__dirname, '..', 'ui', 'src');
 
 // Rule 5: some rules V2 uses are not IN ui/src. The accessibility component rules are
@@ -258,6 +265,14 @@ if (used.size === 0) {
 //   Reading only the HTML misses `.alert-warning` at dashboard.js:4071 -- the exact
 //   occurrence #1744 was filed for.
 //
+// All four of those now come from scripts/lib/collect-v1-usage.cjs, which check-theme-tokens.mjs
+// consumes as well (#1841). They were duplicated in the two gates, and the copies had already
+// drifted: this one listed pkg/server/*.html and pkg/server/static/*.html rather than walking,
+// so the 34 localized templates under pkg/server/templates were invisible to it. A new markup
+// shape is now either visible to both gates or to neither, and "neither" is loud --
+// tests/hooks/test-v1-usage-parity.sh plants a class and a custom property in the same place
+// and requires both to react.
+//
 // THREE THINGS THAT LOOK LIKE VIOLATIONS AND ARE NOT. Each is recognised in code rather
 // than listed, so it keeps working as the source changes:
 //
@@ -280,11 +295,8 @@ if (used.size === 0) {
 // is a ratchet, not an escape hatch: an entry that no longer matches anything FAILS the
 // check, so it can only shrink, and it cannot quietly outlive the problem it describes.
 
-const V1_HTML_DIRS = [
-  path.join(__dirname, '..', 'pkg', 'server'),
-  path.join(__dirname, '..', 'pkg', 'server', 'static'),
-];
-const V1_WEB_ROOT = path.join(__dirname, '..', 'pkg', 'server');
+const REPO_ROOT = path.join(__dirname, '..');
+const V1_WEB_ROOT = path.join(REPO_ROOT, 'pkg', 'server');
 
 // Classes V1 applies that have no rule and are not yet fixed. Each entry must say WHY.
 // Tracked for burndown by #1752; read that issue before adding to this list instead of
@@ -300,83 +312,36 @@ const V1_KNOWN_INERT = new Map(Object.entries({}));
 
 const v1InertSeen = new Set();
 
-const V1_SELECTOR_CALLS =
-  /(?:querySelectorAll|querySelector|closest|matches|getElementsByClassName)\s*\(\s*(?:'([^']*)'|"([^"]*)"|`([^`]*)`)/g;
-
-function v1ResolveHref(href, docPath) {
-  if (/^(?:[a-z]+:)?\/\//i.test(href) || /^data:/i.test(href)) return null; // external
-  const clean = href.split(/[?#]/)[0];
-  if (!clean) return null;
-  if (clean.startsWith('/')) return path.join(V1_WEB_ROOT, clean.slice(1));
-  return path.join(path.dirname(docPath), clean);
-}
-
-// `${...}` collapses to a sentinel rather than a space, so a token that was built by
-// interpolation stays distinguishable from one written out in full.
-const DYN = '\u0000';
-function v1Tokens(literal) {
-  return literal.replace(/\$\{[^}]*\}/g, DYN).split(/\s+/);
-}
-
 function checkV1() {
-  const rootRel = (p) => path.relative(path.join(__dirname, '..'), p);
-  const docs = [];
-  for (const dir of V1_HTML_DIRS) {
-    if (!fs.existsSync(dir)) continue;
-    for (const e of fs.readdirSync(dir, { withFileTypes: true })) {
-      if (e.isFile() && e.name.endsWith('.html'))
-        docs.push(path.join(dir, e.name));
-    }
-  }
+  const { documents } = collectV1Usage({
+    webRoot: V1_WEB_ROOT,
+    repoRoot: REPO_ROOT,
+  });
 
   const undef = new Map();
   const nearby = new Set();
   const seen = new Set(); // every class name the pass actually examined
   let examinedDocs = 0;
 
-  for (const doc of docs) {
-    const docRel = rootRel(doc);
-    const src = fs.readFileSync(doc, 'utf8');
+  for (const doc of documents) {
+    const docRel = doc.page;
 
+    // What counts as DEFINED is this gate's own question and stays here: the document's own
+    // <style> blocks plus the stylesheets it links, and nothing pooled from any other page.
     const defined = new Set();
-    for (const m of src.matchAll(/<style[^>]*>([\s\S]*?)<\/style>/g))
-      collect(m[1], defined);
-    for (const m of src.matchAll(/<link\b[^>]*>/g)) {
-      if (!/\brel\s*=\s*(['"])stylesheet\1/i.test(m[0])) continue;
-      const href = /\bhref\s*=\s*(?:"([^"]*)"|'([^']*)')/.exec(m[0]);
-      if (!href) continue;
-      const raw = href[1] ?? href[2];
-      const resolved = v1ResolveHref(raw, doc);
-      if (!resolved) continue; // third-party; see note 3 above
-      if (fs.existsSync(resolved))
-        collect(fs.readFileSync(resolved, 'utf8'), defined);
-      else
-        console.error(
-          `check-css-modifiers [V1]: ${docRel} links ${raw}, which does not exist`,
-        );
-    }
-
-    const scripts = [];
-    for (const m of src.matchAll(
-      /<script\b[^>]*\bsrc\s*=\s*(?:"([^"]*)"|'([^']*)')/g,
-    )) {
-      const resolved = v1ResolveHref(m[1] ?? m[2], doc);
-      if (resolved && fs.existsSync(resolved)) scripts.push(resolved);
+    for (const block of doc.styleBlocks) collect(block, defined);
+    for (const sheet of doc.stylesheets) collect(sheet.text, defined);
+    for (const missing of doc.missingAssets) {
+      if (missing.kind !== 'stylesheet') continue;
+      console.error(
+        `check-css-modifiers [V1]: ${docRel} links ${missing.href}, which does not exist`,
+      );
     }
 
     // Note 2: classes this document's own scripts read back are behaviour hooks.
-    const hooks = new Set();
-    const scriptSrc = new Map();
-    for (const s of scripts) {
-      const js = fs.readFileSync(s, 'utf8');
-      scriptSrc.set(s, js);
-      for (const m of js.matchAll(V1_SELECTOR_CALLS)) {
-        const sel = m[1] ?? m[2] ?? m[3];
-        for (const c of sel.matchAll(/\.(-?[A-Za-z][-\w]*)/g)) hooks.add(c[1]);
-      }
-    }
+    const hooks = doc.classHooks;
 
-    if (defined.size === 0 && !/(?<![-\w])class\s*=/.test(src)) continue;
+    if (defined.size === 0 && !/(?<![-\w])class\s*=/.test(doc.markup)) continue;
     examinedDocs++;
 
     const add = (tok, where) => {
@@ -410,37 +375,11 @@ function checkV1() {
       undef.get(tok).push(where);
     };
 
-    const scanClassAttrs = (text, rel) => {
-      for (const m of text.matchAll(
-        /(?<![-\w])class\s*=\s*(?:"([^"]*)"|'([^']*)')/g,
-      )) {
-        const line = text.slice(0, m.index).split('\n').length;
-        for (const tok of v1Tokens(m[1] ?? m[2])) add(tok, `${rel}:${line}`);
-      }
-    };
-
-    scanClassAttrs(src, docRel);
-
-    for (const s of scripts) {
-      const rel = rootRel(s);
-      const js = scriptSrc.get(s);
-      scanClassAttrs(js, rel);
-      for (const m of js.matchAll(
-        /\.className\s*\+?=\s*(?:'([^']*)'|"([^"]*)"|`([^`]*)`)/g,
-      )) {
-        const line = js.slice(0, m.index).split('\n').length;
-        for (const tok of v1Tokens(m[1] ?? m[2] ?? m[3]))
-          add(tok, `${rel}:${line}`);
-      }
-      for (const m of js.matchAll(
-        /\.classList\.(?:add|remove|toggle|replace)\(([^)]*)\)/g,
-      )) {
-        const line = js.slice(0, m.index).split('\n').length;
-        for (const lit of m[1].matchAll(/'([^']*)'|"([^"]*)"|`([^`]*)`/g))
-          for (const tok of v1Tokens(lit[1] ?? lit[2] ?? lit[3]))
-            add(tok, `${rel}:${line}`);
-      }
-    }
+    // The four places V1 applies a class -- `class="…"` in the page, the same attribute
+    // inside a template literal in the script, `className = "…"`, and classList.* -- are
+    // collected once, by the shared pass. Each use arrives with the file and line it came
+    // from, which is what the report prints.
+    for (const use of doc.classUses) add(use.name, `${use.file}:${use.line}`);
   }
 
   // A pass that examined nothing reads as coverage and is none -- the lesson #1402 wrote

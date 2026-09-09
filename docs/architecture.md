@@ -267,6 +267,25 @@ sequenceDiagram
     Dev->>GW: "Visits /claim?token=abc to download PAT"
 ```
 
+The same admin email carries a **reject** link (`/api/admin/reject`), and both links describe the
+decision on `GET` and only perform it on `POST` — the mail is delivered into a chat channel where
+link previews and crawlers follow URLs, so a `GET` that decided anything would decide it without a
+human (#1143, #1830).
+
+Rejecting sets the user's status to `rejected` and, by default, emails the applicant a short notice
+with an optional reason the admin may type and an invitation to reply if it is a mistake. The
+audit row (`user.rejected`) is written regardless of whether that email sends; an admin may also
+tick **reject silently** to send nothing at all, for a bad actor who got past
+`allowed_email_domains`. The domain gate itself stays silent as it always has — it is the
+anti-abuse layer, and anyone reaching an explicit rejection has already passed it.
+
+The rejected row is **kept, not deleted**, which is what blocks re-registration with the same
+address and — more importantly — what stops SSO from undoing the decision: `handleSSOCallback`
+auto-provisions an *unknown* address as an approved user, so a deleted row would let a rejected
+person approve themselves by signing in. `approveOnSSOSignIn` refuses `rejected` outright and the
+callback answers 403. An admin reverses a rejection deliberately, by changing the user's status
+from the admin portal.
+
 ### 10.2. OAuth2/OIDC SSO Integration
 When OpenID Connect (OIDC) is enabled, the CLI login flow retrieves authorization codes and exchanges them with Keycloak, Google, or Liferay SSO, automatically provisioning the local `~/.lfr-tunnel/token` credentials.
 
@@ -410,4 +429,4 @@ sequenceDiagram
 
 <!-- markdownlint-disable MD049 -->
 ---
-*Last Updated: 2026-09-03* | *Last Reviewed: 2026-09-03*
+*Last Updated: 2026-09-09* | *Last Reviewed: 2026-09-09*

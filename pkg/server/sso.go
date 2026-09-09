@@ -4,6 +4,7 @@ import (
 	"context"
 	"crypto/rand"
 	"encoding/base64"
+	"errors"
 	"fmt"
 	"log/slog"
 	"net/http"
@@ -16,6 +17,19 @@ import (
 	"github.com/coreos/go-oidc/v3/oidc"
 	"golang.org/x/oauth2"
 )
+
+// ActionSSODeniedRejected is written when SSO sign-in is refused because an administrator had
+// already rejected this registration.
+//
+// Its own action rather than a variant of the rejection row: this is somebody attempting to use
+// the account after the decision, which is the row an owner wants to see if a rejection turns out
+// to have been contentious.
+const ActionSSODeniedRejected = "user.sso_denied.rejected"
+
+// errSSORegistrationRejected distinguishes "this gateway has decided against this person" from
+// "the approval write failed", which the callback answers with 403 and 500 respectively. A bare
+// bool made both of them read as a refusal to the person signing in.
+var errSSORegistrationRejected = errors.New("registration was rejected by an administrator")
 
 // generateRandomState generates a secure random state for OAuth2 CSRF protection
 func generateRandomState() string {
@@ -200,7 +214,21 @@ func (s *Server) handleSSOCallback(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 	} else if user.Status != "approved" {
-		s.approveOnSSOSignIn(user, providerID, r)
+		// A rejected registration is the one status SSO must not promote, so the outcome is
+		// checked rather than assumed: approveOnSSOSignIn refuses it, and refusing to approve
+		// while still issuing a session would hand a rejected person a portal session anyway
+		// (#1830).
+		if err := s.approveOnSSOSignIn(user, providerID, r); err != nil {
+			if errors.Is(err, errSSORegistrationRejected) {
+				http.Error(w, "Your access request has been declined. Please contact the gateway "+
+					"administrator if you think this is a mistake.", http.StatusForbidden)
+				return
+			}
+			// The approval did not persist, so there is no approved account to issue a session
+			// for. Saying so beats signing them in against a status the database does not hold.
+			http.Error(w, "Failed to complete sign-in", http.StatusInternalServerError)
+			return
+		}
 	}
 
 	// Issue the admin session cookie
@@ -264,10 +292,27 @@ func (s *Server) handleSSOCallback(w http.ResponseWriter, r *http.Request) {
 // runs, so they are about to be looking at the dashboard. The email in the admin-approval path
 // exists to reach somebody who is NOT present. Here, they are.
 //
+// It refuses exactly one status, and returning false is how it says so: a registration an admin
+// explicitly REJECTED (#1830). Everything above is about a decision the identity provider has
+// already made and this gateway has not; a rejection is a decision this gateway made about a
+// person who can authenticate perfectly well upstream. Without this, rejection lasted until the
+// rejected person clicked "Sign in with Liferay" -- status was not "approved", so this function
+// made it "approved", and they had approved themselves. An admin who wants to reverse a rejection
+// does it deliberately, from the admin portal.
+//
 // Extracted from handleSSOCallback so the behaviour can be asserted directly: reaching the
 // callback requires a full OIDC token exchange, and a test that faked one would be testing the
 // fake. This is the real function the callback calls.
-func (s *Server) approveOnSSOSignIn(user *db.User, providerID string, r *http.Request) {
+func (s *Server) approveOnSSOSignIn(user *db.User, providerID string, r *http.Request) error {
+	if user.Status == statusRejected {
+		slog.Warn(fmt.Sprintf("[SSO] Refused to auto-approve %s on SSO sign-in: the registration "+
+			"was rejected by an administrator", user.Email))
+		s.writeAudit(user.Email, ActionSSODeniedRejected, "user", user.Email,
+			fmt.Sprintf("Sign-in through %s refused: this registration was rejected by an "+
+				"administrator, and SSO auto-approval does not override that", providerID), r)
+		return errSSORegistrationRejected
+	}
+
 	previousStatus := user.Status
 	user.Status = "approved"
 	user.ApprovalToken = "" // consumed by this approval; a stale link must not re-approve
@@ -276,10 +321,13 @@ func (s *Server) approveOnSSOSignIn(user *db.User, providerID string, r *http.Re
 
 	if err := s.db.UpdateUser(user); err != nil {
 		slog.Error(fmt.Sprintf("[SSO] Failed to approve %s on SSO sign-in: %v", user.Email, err))
-		return
+		// The write failed, so this user is not approved. Reporting success would issue a portal
+		// session on the strength of an approval that is not in the database.
+		return fmt.Errorf("persisting the SSO approval of %s: %w", user.Email, err)
 	}
 	s.invalidateUserCache(user.Email)
 	s.writeAudit(user.Email, "user.approved.sso", "user", user.Email,
 		fmt.Sprintf("Auto-approved on SSO sign-in via %s (was %q); the identity provider is the access decision",
 			providerID, previousStatus), r)
+	return nil
 }

@@ -22,13 +22,36 @@
 set -uo pipefail
 
 # Paths whose change suggests a test should exist. Deliberately not `docs/` or `.github/`.
-FUNCTIONAL='^(pkg/.*\.go|ui/src/.*|pkg/server/static/.*|pkg/server/dashboard\.html|scripts/.*|Makefile)$'
+#
+# `cmd/.*\.go` and every `pkg/**/*.html` are here as of #1779, which audited each gate for what
+# it does not look at. Both were outside for no stated reason: cmd/ holds the two binaries'
+# entry points and has real tests next to them (cmd/lfr-tunnel/main_test.go), and the pattern
+# named pkg/server/dashboard.html specifically -- so blocked.html, passcode.html and the client
+# inspector's 1600-line page were all invisible while the page next to them was not. The scope
+# is now stated by directory and extension rather than by naming the one file someone thought of.
+FUNCTIONAL='^(pkg/.*\.(go|html)|cmd/.*\.go|ui/src/.*|pkg/server/static/.*|scripts/.*|Makefile)$'
 # Paths that satisfy it.
 TESTS='(_test\.go$|^tests/)'
 # Go test files are under pkg/ too, so they match FUNCTIONAL first -- excluded explicitly.
 NOT_FUNCTIONAL='(_test\.go$|^tests/)'
 
 CHANGED=$(cat)
+
+# "The diff was empty" and "the diff never ran" arrive here as the same thing: no bytes on
+# stdin. This check is advisory and must NOT be turned into a failing gate to tell them apart
+# -- that would block every PR whose diff command hiccupped, which is the opposite of what an
+# advisory check is for. But it must not report the two identically either, which is what it
+# did: both printed "No functional change in this diff" and exited 0, so a caller whose
+# `git diff` had failed got the same green line as a documentation-only PR (#1779).
+#
+# So: say which one it was, and exit 0 either way. The distinction is in the output, where a
+# human or a later gate can act on it.
+if [ -z "$CHANGED" ]; then
+    echo "No file list was given, so nothing was examined."
+    echo "Note: that is NOT the same as 'this diff changes nothing'. An empty list is also what"
+    echo "a failed 'git diff' produces, and this check cannot tell the two apart from here."
+    exit 0
+fi
 
 functional=$(printf '%s\n' "$CHANGED" | grep -E "$FUNCTIONAL" 2>/dev/null | grep -Ev "$NOT_FUNCTIONAL" 2>/dev/null || true)
 tests=$(printf '%s\n' "$CHANGED" | grep -E "$TESTS" 2>/dev/null || true)

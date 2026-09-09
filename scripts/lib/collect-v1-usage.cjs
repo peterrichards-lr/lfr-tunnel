@@ -33,6 +33,20 @@
  * red build. tests/hooks/test-v1-usage-parity.sh plants a class AND a property in each shape
  * and requires both gates to react.
  *
+ * A third was found the same way in #1779, and unlike those two it was live: every script-only
+ * shape -- `.className =`, `.classList.add()`, and the selector read-back that marks a class as
+ * a behaviour hook rather than a styling one -- was reached only through a `<script src>`. A
+ * page keeping its behaviour in an INLINE `<script>` had all three invisible. pkg/client's
+ * dashboard is 1600 lines of exactly that, and pkg/server/static/setup.html toggles a class the
+ * same way. Both halves matter: without the hook half, widening the corpus reports a handle the
+ * page queries as an undefined class.
+ *
+ * WHAT COUNTS AS THE CORPUS is the caller's question, not this module's. It walks one web root
+ * per call; the gates name their roots and concatenate. That list -- `pkg/server` and
+ * `pkg/client` -- is asserted in tests/hooks/test-gate-scope-boundaries.sh from both directions,
+ * so a document inside it is read and a document outside it is not, and changing either is a
+ * decision rather than a side effect (#1779).
+ *
  * WHAT IS SHARED AND WHAT IS NOT. This module collects USAGE and the corpus it comes from: the
  * documents, the assets each one links, and every class and property referenced across them.
  * It deliberately does NOT resolve anything. Which classes count as defined, which themes must
@@ -77,6 +91,15 @@ const SELECTOR_CALLS =
 const STYLE_BLOCK = /<style[^>]*>([\s\S]*?)<\/style>/gi;
 const LINK_TAG = /<link\b[^>]*>/g;
 const SCRIPT_SRC = /<script\b[^>]*\bsrc\s*=\s*(?:"([^"]*)"|'([^']*)')/g;
+
+// An INLINE <script>, i.e. one with no src. Its body is script, not markup, and the two
+// differ in what can be read out of them: `class="…"` inside it is already covered by the
+// whole-document scan, but `.className =`, `.classList.add()` and a selector read-back are
+// script-only shapes that a markup scan cannot see (#1779).
+//
+// The negative lookahead is on the whole tag rather than on one attribute position, because
+// `src` may appear after `type`, `defer` or `nonce`.
+const INLINE_SCRIPT = /<script\b(?![^>]*\bsrc\s*=)[^>]*>([\s\S]*?)<\/script>/gi;
 
 const stripBlockComments = (text) => text.replace(/\/\*[\s\S]*?\*\//g, '');
 const stripHtmlComments = (text) => text.replace(/<!--[\s\S]*?-->/g, '');
@@ -143,22 +166,42 @@ function collectClassUses(text, file, into) {
   }
 }
 
-function collectScriptClassUses(js, file, into) {
-  // Portal V1 renders most of its tables from template literals, so `class="…"` inside the
-  // script is markup and is collected by the same rule as the page's own.
-  collectClassUses(js, file, into);
+// The two shapes only script has. Split out from collectScriptClassUses so an INLINE <script>
+// can be scanned for them WITHOUT re-collecting its `class="…"` template literals, which the
+// whole-document scan has already read (#1779). Double-counting those would not change any
+// gate's verdict, but it would double every occurrence count in the report.
+//
+// `line` is relative to whatever text is passed in; callers scanning an inline block pass an
+// offset so the number is the document's.
+function collectScriptOnlyClassUses(js, file, into, lineOffset = 0) {
   for (const m of js.matchAll(CLASS_NAME_ASSIGN)) {
-    const line = lineAt(js, m.index);
+    const line = lineAt(js, m.index) + lineOffset;
     for (const tok of splitClassLiteral(m[1] ?? m[2] ?? m[3]))
       if (tok) into.push({ name: tok, file, line, source: 'className' });
   }
   for (const m of js.matchAll(CLASS_LIST_CALL)) {
-    const line = lineAt(js, m.index);
+    const line = lineAt(js, m.index) + lineOffset;
     for (const lit of m[1].matchAll(STRING_LITERAL)) {
       for (const tok of splitClassLiteral(lit[1] ?? lit[2] ?? lit[3]))
         if (tok) into.push({ name: tok, file, line, source: 'classList' });
     }
   }
+}
+
+// A class both applied and read back through a selector is a handle for script, not styling.
+// Extracted as a function so an inline <script> feeds the same set an external one does.
+function collectClassHooks(js, into) {
+  for (const m of js.matchAll(SELECTOR_CALLS)) {
+    const sel = m[1] ?? m[2] ?? m[3];
+    for (const c of sel.matchAll(/\.(-?[A-Za-z][-\w]*)/g)) into.add(c[1]);
+  }
+}
+
+function collectScriptClassUses(js, file, into) {
+  // Portal V1 renders most of its tables from template literals, so `class="…"` inside the
+  // script is markup and is collected by the same rule as the page's own.
+  collectClassUses(js, file, into);
+  collectScriptOnlyClassUses(js, file, into);
 }
 
 function collectTokenRefs(text, file, source, into) {
@@ -188,8 +231,11 @@ function collectTokenRefs(text, file, source, into) {
  *   stylesheets   [{abs, rel, text}] for every first-party <link rel=stylesheet> that exists
  *   scripts       [{abs, rel, text}] for every first-party <script src> that exists
  *   missingAssets [{href, kind}] for a link or src that resolves inside the tree but is absent
- *   classUses     [{name, file, line, source}] -- name may contain DYN
- *   classHooks    Set of class names this document's scripts read back through a selector
+ *   classUses     [{name, file, line, source}] -- name may contain DYN; `source` is
+ *                 class-attribute, className or classList, and the last two come from the
+ *                 document's linked scripts AND its inline <script> blocks
+ *   classHooks    Set of class names this document's scripts -- linked or inline -- read back
+ *                 through a selector
  *   tokenRefs     [{name, hasFallback, file, line, source}]
  */
 function collectV1Usage({ webRoot, repoRoot }) {
@@ -250,11 +296,28 @@ function collectV1Usage({ webRoot, repoRoot }) {
     for (const script of scripts) {
       collectScriptClassUses(script.text, script.rel, classUses);
       collectTokenRefs(script.text, script.rel, 'script', tokenRefs);
-      for (const m of script.text.matchAll(SELECTOR_CALLS)) {
-        const sel = m[1] ?? m[2] ?? m[3];
-        for (const c of sel.matchAll(/\.(-?[A-Za-z][-\w]*)/g))
-          classHooks.add(c[1]);
-      }
+      collectClassHooks(script.text, classHooks);
+    }
+
+    // The inline <script> blocks (#1779). Until this, every script-only shape was reached
+    // through a <script src>, so a page that keeps its behaviour inline had `className = …`,
+    // `classList.add(…)` and its selector read-backs invisible to both gates. That is not a
+    // hypothetical shape here: pkg/client/dashboard.html is one 1600-line page with all of its
+    // script inline, and pkg/server/static/setup.html manipulates classList the same way.
+    //
+    // The cost of the gap was in BOTH directions, which is why it is worth closing rather than
+    // declaring deliberate: an applied class went unchecked, AND a class read back through
+    // querySelector was not recognised as a behaviour hook, so widening the corpus without this
+    // would have reported `.access-control-panel` and `.public-urls-panel` as undefined when
+    // they are handles the page's own script reads.
+    //
+    // markup, not the raw file: comments are already stripped, and the offset arithmetic below
+    // is against the same text every other line number here is derived from.
+    for (const m of markup.matchAll(INLINE_SCRIPT)) {
+      const body = m[1];
+      const offset = lineAt(markup, m.index + m[0].indexOf(body)) - 1;
+      collectScriptOnlyClassUses(body, docRel, classUses, offset);
+      collectClassHooks(body, classHooks);
     }
 
     documents.push({

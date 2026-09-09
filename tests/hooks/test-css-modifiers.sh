@@ -66,6 +66,12 @@ reset_sandbox() {
   # a corpus 34 documents smaller than the one CI checks.
   cp -R "${REPO_ROOT}"/pkg/server/templates "$SANDBOX/pkg/server/templates"
   cp -R "${REPO_ROOT}"/ui/src "$SANDBOX/ui/src"
+  # The client inspector (#1779). Both V1 gates now walk pkg/client as well as pkg/server: it is
+  # a page of the same kind, written in the same idiom, and it was outside both scans. Copied
+  # here so the sandbox corpus is the one CI checks -- an absent directory is walked as empty,
+  # which passes, so leaving it out would quietly shrink every case below.
+  mkdir -p "$SANDBOX/pkg/client"
+  cp "${REPO_ROOT}"/pkg/client/*.html "$SANDBOX/pkg/client/"
 }
 
 # run -> sets $OUT and $RC. Deliberately not called through a command substitution: that runs in a

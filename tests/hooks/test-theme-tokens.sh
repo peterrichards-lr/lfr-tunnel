@@ -98,6 +98,12 @@ reset_sandbox() {
   cp -R "${REPO_ROOT}"/pkg/server/static/. "$SANDBOX/pkg/server/static/"
   cp -R "${REPO_ROOT}"/pkg/server/templates "$SANDBOX/pkg/server/templates"
   cp -R "${REPO_ROOT}"/ui/src "$SANDBOX/ui/src"
+  # The client inspector (#1779). Both V1 gates now walk pkg/client as well as pkg/server: it is
+  # a page of the same kind, written in the same idiom, and it was outside both scans. Copied
+  # here so the sandbox corpus is the one CI checks -- an absent directory is walked as empty,
+  # which passes, so leaving it out would quietly shrink every case below.
+  mkdir -p "$SANDBOX/pkg/client"
+  cp "${REPO_ROOT}"/pkg/client/*.html "$SANDBOX/pkg/client/"
 }
 
 # run -> sets $OUT and $RC. Deliberately not called through a command substitution: that runs
@@ -406,10 +412,15 @@ fi
 #    they do not belong to report their own tokens as undefined. An 'exited non-zero' assertion
 #    passes on that mutant and reports a working guard that is not there.
 # ---------------------------------------------------------------------------
+#
+#    Applied across "$SANDBOX/pkg", not "$SANDBOX/pkg/server" (#1779). The gate walks pkg/client
+#    as well now, and pkg/client/dashboard.html is a document-scope page -- so a fixture that
+#    only converts pkg/server leaves the document scope non-empty and this case reports a
+#    working guard while never reaching it.
 reset_sandbox
-find "$SANDBOX/pkg/server" -name '*.html' -exec \
+find "$SANDBOX/pkg" -name '*.html' -exec \
   sed -i.bak 's|<body|<link rel="stylesheet" href="/static/themes/dark.css"><body|' {} + &&
-  find "$SANDBOX/pkg/server" -name '*.html.bak' -delete
+  find "$SANDBOX/pkg" -name '*.html.bak' -delete
 run
 if [ "$RC" -ne 0 ] && says "$OUT" 'document scan'; then
   pass "a document scan that covers nothing fails instead of reporting success"

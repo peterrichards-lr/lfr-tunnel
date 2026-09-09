@@ -235,6 +235,15 @@ occasional slip:
    deliberately narrow, assert the narrowness so widening it is a decision rather than an
    accident.
 
+   `tests/hooks/test-gate-scope-boundaries.sh` is where those assertions live for the checkers
+   in `scripts/`, and it is worth reading before adding a gate or widening one. Every case in it
+   is labelled **FIRING** (fails against the state before it was written — evidence a gate now
+   reads something it did not) or **BOUNDING** (passes before *and* after, on purpose — it pins
+   a deliberate edge so that crossing it turns the suite red). Do not present a bounding case as
+   evidence of a fix; that is §5c's mistake wearing §5b's clothes. A bounding case that has gone
+   red usually means someone widened a scan and should confirm the wider scope is wanted — not
+   that the gate should be narrowed back.
+
 ### The one-line check before opening a PR
 
 > *How do I know there is not a second one?*
@@ -436,4 +445,4 @@ After any merge you expect to close an issue (whether via a `Closes #N` referenc
 
 <!-- markdownlint-disable MD049 -->
 ---
-*Last Updated: 2026-09-07* | *Last Reviewed: 2026-09-07*
+*Last Updated: 2026-09-09* | *Last Reviewed: 2026-09-09*

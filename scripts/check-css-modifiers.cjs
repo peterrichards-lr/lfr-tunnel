@@ -296,7 +296,23 @@ if (used.size === 0) {
 // check, so it can only shrink, and it cannot quietly outlive the problem it describes.
 
 const REPO_ROOT = path.join(__dirname, '..');
-const V1_WEB_ROOT = path.join(REPO_ROOT, 'pkg', 'server');
+
+// The web roots this gate walks, and the whole of its scope. Named as a list rather than as a
+// single path (#1779), because the answer to "what does this gate not look at" was `pkg/client`
+// and nothing said so.
+//
+// pkg/client/dashboard.html is the client inspector: a 1600-line server-rendered-style page,
+// styled by one inline <style> block, written in the same idiom as Portal V1 and by the same
+// hand. Every reason this gate exists applies to it verbatim -- and pointing the gate at it
+// found `.input-field` (3), `.btn` and `.btn-secondary` applied in the Logs view with no rule
+// anywhere on the page, which is `.alert-warning` (#1744) in a different file.
+//
+// Each root is walked independently and served-path hrefs (`/static/…`) resolve against the
+// root the document was found under, which is what the server does at runtime.
+const V1_WEB_ROOTS = [
+  path.join(REPO_ROOT, 'pkg', 'server'),
+  path.join(REPO_ROOT, 'pkg', 'client'),
+];
 
 // Classes V1 applies that have no rule and are not yet fixed. Each entry must say WHY.
 // Tracked for burndown by #1752; read that issue before adding to this list instead of
@@ -308,20 +324,45 @@ const V1_WEB_ROOT = path.join(REPO_ROOT, 'pkg', 'server');
 // unfixable class -- a third-party stylesheet's name, say (note 3 above) -- and because
 // removing it would take the ratchet with it. Empty is the state to keep it in: an entry here
 // is an exemption, and every one added is a class the gate stops protecting.
-const V1_KNOWN_INERT = new Map(Object.entries({}));
+//
+// The four below are what widening the scan to pkg/client turned up (#1779), all in the client
+// inspector's own page. They are deferred rather than fixed here because each one needs a rule
+// written and the visual result looked at, and this change is a scope-boundary change whose
+// whole property is "the gate now reads a file it did not". Burning them down is #1853. The
+// enumeration is the deliverable; a fix buried in it would make the before/after unreadable.
+const V1_KNOWN_INERT = new Map(
+  Object.entries({
+    'input-field':
+      'pkg/client/dashboard.html: the three Logs-view filter inputs and selects carry it; the ' +
+      'page defines no rule, so they render unstyled. Needs a rule, not a rename (#1853).',
+    'traffic-header':
+      'pkg/client/dashboard.html:254: fully styled by its own inline style attribute, so the ' +
+      'class is a name with nothing behind it. Hoist the inline style into it or drop it (#1853).',
+    btn:
+      'pkg/client/dashboard.html:1304: the Logs Refresh button. `.btn`/`.btn-secondary` are ' +
+      'Portal V1 names that pkg/server/static/dashboard.css defines and this page never links ' +
+      '(#1853).',
+    'btn-secondary':
+      'pkg/client/dashboard.html:1304: the other half of the same button. See .btn (#1853).',
+  }),
+);
 
 const v1InertSeen = new Set();
 
 function checkV1() {
-  const { documents } = collectV1Usage({
-    webRoot: V1_WEB_ROOT,
-    repoRoot: REPO_ROOT,
-  });
+  const documents = [];
+  for (const webRoot of V1_WEB_ROOTS) {
+    documents.push(
+      ...collectV1Usage({ webRoot, repoRoot: REPO_ROOT }).documents,
+    );
+  }
 
   const undef = new Map();
   const nearby = new Set();
   const seen = new Set(); // every class name the pass actually examined
   let examinedDocs = 0;
+  const brokenLinks = [];
+  let resolvedAssets = 0;
 
   for (const doc of documents) {
     const docRel = doc.page;
@@ -331,12 +372,17 @@ function checkV1() {
     const defined = new Set();
     for (const block of doc.styleBlocks) collect(block, defined);
     for (const sheet of doc.stylesheets) collect(sheet.text, defined);
+    // A first-party asset the page links that is not there (#1849). This used to print the
+    // stylesheet half to stderr WITHOUT setting the failure flag, and `continue` past the
+    // script half entirely -- so `<script src="/static/dashbaord.js">` produced a 404 at
+    // runtime, every behaviour that file provides silently absent, and a green build.
+    //
+    // Both kinds now fail. What counts as first-party is resolveAsset's question and is
+    // already answered: a CDN href, a scheme-relative URL and a data: URI never reach here.
     for (const missing of doc.missingAssets) {
-      if (missing.kind !== 'stylesheet') continue;
-      console.error(
-        `check-css-modifiers [V1]: ${docRel} links ${missing.href}, which does not exist`,
-      );
+      brokenLinks.push({ page: docRel, ...missing });
     }
+    resolvedAssets += doc.stylesheets.length + doc.scripts.length;
 
     // Note 2: classes this document's own scripts read back are behaviour hooks.
     const hooks = doc.classHooks;
@@ -392,8 +438,34 @@ function checkV1() {
     return false;
   }
 
+  // The link check's own anti-vacuity floor (#1849). "No page links a missing asset" and "the
+  // resolver returned null for every href it was given" print the same thing and exit the same
+  // way, so require that at least one first-party asset was actually resolved AND read.
+  if (resolvedAssets === 0) {
+    console.error(
+      'check-css-modifiers [V1]: not one first-party stylesheet or script was resolved from any\n' +
+        'page, so the broken-link check below covered nothing. Either every asset is now loaded\n' +
+        'from a CDN, or resolveAsset has stopped matching and a missing file would go unreported.',
+    );
+    return false;
+  }
+
   const stale = [...V1_KNOWN_INERT.keys()].filter((c) => !v1InertSeen.has(c));
   let ok = true;
+
+  if (brokenLinks.length > 0) {
+    ok = false;
+    console.error(
+      `check-css-modifiers [V1]: ${brokenLinks.length} link(s) to a first-party asset that does not exist:\n`,
+    );
+    for (const b of brokenLinks)
+      console.error(`  ${b.page} links ${b.kind} ${b.href}`);
+    console.error(
+      '\nThe browser 404s and carries on: the page renders, and every rule or behaviour that\n' +
+        'file provides is silently absent. Correct the path, or remove the tag. Only first-party\n' +
+        'paths are checked -- a CDN href, a scheme-relative URL and a data: URI never reach here.\n',
+    );
+  }
 
   if (undef.size > 0) {
     ok = false;

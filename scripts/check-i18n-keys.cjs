@@ -50,10 +50,32 @@ const ROOT = path.join(__dirname, '..');
 const I18N_DIR = path.join(ROOT, 'pkg', 'server', 'i18n');
 const BASE = path.join(I18N_DIR, 'Language.properties');
 
-// The locale set the server actually loads (pkg/server/i18n.go initI18n). Kept in step with
-// that list deliberately: a bundle nobody loads is not worth failing a build over, and a
-// locale the server loads but nobody translated is exactly what this check is for.
-const LOCALES = ['es', 'fr', 'de', 'pt', 'ko', 'ja', 'zh', 'ro', 'ar'];
+// The locale set the server actually loads: READ OUT of pkg/server/i18n.go rather than copied
+// from it (#1779). "Kept in step with that list deliberately" is what the comment here used to
+// say, and a hand-kept copy of another file's list is kept in step until the day it is not --
+// at which point a locale the server loads has an unchecked bundle and the gate reports success
+// over it. This is the same derive-don't-list rule test-shell-portability.sh follows.
+//
+// `en` is dropped because it is Language.properties itself, which is the baseline everything
+// else is compared against rather than one of the bundles being compared.
+const I18N_GO = path.join(ROOT, 'pkg', 'server', 'i18n.go');
+function localesFromServer() {
+  const src = fs.readFileSync(I18N_GO, 'utf8');
+  const m = /locales\s*:?=\s*\[\]string\{([^}]*)\}/.exec(src);
+  if (!m) return null;
+  return [...m[1].matchAll(/"([a-z]{2}(?:-[A-Za-z]+)?)"/g)]
+    .map((x) => x[1])
+    .filter((l) => l !== 'en');
+}
+const LOCALES = localesFromServer();
+if (!LOCALES || LOCALES.length === 0) {
+  console.error(
+    `check-i18n-keys: could not read the locale list out of ${rel(I18N_GO)}.\n` +
+      'It is derived rather than duplicated here, so a shape change in initI18n must fail this\n' +
+      'gate rather than silently reduce it to checking nothing. Update the pattern above.',
+  );
+  process.exit(1);
+}
 
 const errors = [];
 
@@ -160,6 +182,79 @@ const V1_MARKUP = [
 ];
 for (const f of V1_MARKUP) {
   scan(f, [{ re: ATTR, keyGroup: 1 }]);
+}
+
+// Rule 6 (#1779). An explicit list is a scope boundary, and this one was stated only as rule 4's
+// prose: two files are checked against Language.properties, and every OTHER document that uses
+// data-i18n is out of scope because it carries its own inline `translations` object. That is
+// the right call -- checking a standalone page here reports 19 keys as missing that are in fact
+// translated into ten locales -- but nothing made the list answer for the tree.
+//
+// So the two lists must together account for EVERY tracked document using the attribute:
+//
+//   * a document using data-i18n that is in neither list is unaccounted for, and the run fails.
+//     That is not hypothetical -- pkg/client/dashboard.html has used the attribute for 40 keys
+//     since it was written, resolves them against its own bundle, and appeared in neither list
+//     nor in any comment. It could have been either kind and nobody would have been asked.
+//   * an entry in SELF_CONTAINED that no longer uses the attribute -- or no longer exists --
+//     also fails, so this is a ratchet rather than an exclusion list. An exclusion that outlives
+//     its subject silently exempts whatever lands at that path next.
+//
+// What it does NOT assert is that a self-contained page's own bundle is internally consistent.
+// Measured while writing this: the client inspector's bundle has four keys (client_replay_req,
+// client_req, client_resp, client_replaying) only in `en`, so five locales fall back to English
+// -- exactly the drift this gate exists for, one bundle out of its reach. Filed as #1854 rather
+// than bolted on here, because "which bundle governs this page" is a different question from
+// "do these keys resolve" and answering both in one pass is how the collector duplication in
+// #1841 started.
+const SELF_CONTAINED = [
+  // Standalone error pages: never load /api/i18n, each carries its own `translations` object
+  // keyed by locale (offline.html:340-397). This is rule 4 above, stated as data.
+  path.join(ROOT, 'pkg', 'server', 'static', 'offline.html'),
+  path.join(ROOT, 'pkg', 'server', 'static', 'maintenance.html'),
+  // The client inspector. Served by the client binary on localhost, with no server to ask, so
+  // its `clientTranslations` object is the only bundle it can have.
+  path.join(ROOT, 'pkg', 'client', 'dashboard.html'),
+];
+
+// Documents only. dashboard.js is scanned too, but it is not a document and does not appear in
+// the listing below, so including it here would be a set member that can never be matched.
+const SCANNED_MARKUP = new Set(V1_MARKUP);
+const declaredSelfContained = new Set(SELF_CONTAINED);
+const htmlFiles = execFileSync('git', ['ls-files', '*.html', '*.htm'], {
+  cwd: ROOT,
+  encoding: 'utf8',
+})
+  .split('\n')
+  .filter(Boolean)
+  .map((f) => path.join(ROOT, f));
+
+const usesAttr = (f) =>
+  fs.existsSync(f) &&
+  /data-i18n(?:-[a-z-]+)?\s*=/.test(fs.readFileSync(f, 'utf8'));
+
+const unaccounted = htmlFiles.filter(
+  (f) => usesAttr(f) && !SCANNED_MARKUP.has(f) && !declaredSelfContained.has(f),
+);
+const staleSelfContained = SELF_CONTAINED.filter((f) => !usesAttr(f));
+
+if (unaccounted.length > 0) {
+  errors.push(
+    `${unaccounted.length} document(s) use data-i18n but are in neither scan list:\n` +
+      unaccounted.map((f) => `  ${rel(f)}`).join('\n') +
+      '\n\n  Decide which it is and say so in code. If the page resolves its keys through' +
+      '\n  /api/i18n, add it to V1_MARKUP so they are checked against Language.properties. If it' +
+      '\n  carries its own inline bundle, add it to SELF_CONTAINED with the reason. Leaving it in' +
+      '\n  neither means nothing has ever checked its keys and nothing ever asked why.',
+  );
+}
+if (staleSelfContained.length > 0) {
+  errors.push(
+    `${staleSelfContained.length} stale SELF_CONTAINED entr(ies) -- no data-i18n attribute there any more:\n` +
+      staleSelfContained.map((f) => `  ${rel(f)}`).join('\n') +
+      '\n\n  Remove them. The list is a ratchet: an exemption that outlives its subject silently' +
+      '\n  exempts whatever is written at that path next.',
+  );
 }
 const V1_SCRIPT = path.join(ROOT, 'pkg', 'server', 'static', 'dashboard.js');
 scan(V1_SCRIPT, [

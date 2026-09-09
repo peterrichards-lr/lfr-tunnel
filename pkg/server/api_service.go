@@ -46,20 +46,24 @@ type PortalService interface {
 }
 
 type portalService struct {
-	db        *db.DB
-	cfg       *config.ServerConfig
-	mailer    *NotificationService
+	db  *db.DB
+	cfg *config.ServerConfig
+	// sendAlert raises an operational alert to the owner. A function rather than the
+	// *NotificationService this used to hold, because that field existed for exactly one
+	// SendAdminAlert call and the alert send now goes through Server.sendAdminAlert so its
+	// failures are recorded like every other notification's (#1732).
+	sendAlert func(settingKey, subject, htmlBody string)
 	portalMap *sync.Map
 	sessions  *portalSessionStore
 	caCert    *x509.Certificate
 	caKey     *rsa.PrivateKey
 }
 
-func NewPortalService(database *db.DB, cfg *config.ServerConfig, mailer *NotificationService, pMap *sync.Map, caCert *x509.Certificate, caKey *rsa.PrivateKey) PortalService {
+func NewPortalService(database *db.DB, cfg *config.ServerConfig, sendAlert func(settingKey, subject, htmlBody string), pMap *sync.Map, caCert *x509.Certificate, caKey *rsa.PrivateKey) PortalService {
 	return &portalService{
 		db:        database,
 		cfg:       cfg,
-		mailer:    mailer,
+		sendAlert: sendAlert,
 		portalMap: pMap,
 		sessions:  newPortalSessionStore(pMap, database),
 		caCert:    caCert,

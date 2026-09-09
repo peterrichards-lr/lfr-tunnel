@@ -823,7 +823,11 @@ Best regards,<br/>
 Liferay Tunnel Team`, html.EscapeString(greetingName))
 
 		plainBody := fmt.Sprintf("Hi %s,\n\nYour Liferay Tunnel account has been successfully deleted and anonymised under GDPR.\n\nBest regards,\nLiferay Tunnel Team", greetingName)
-		_ = s.notifications.Sender().Send(user.Email, subject, body, plainBody) //nolint:errcheck
+		// Synchronous, as it was: this runs before the profile is purged in step 6, and the
+		// address it is sent to is about to stop existing. The error is still deliberately not
+		// propagated -- a failed confirmation must not abort an erasure the user is entitled to
+		// -- but it is no longer discarded: sendNotification has logged and audited it (#1732).
+		_ = s.sendNotification(notifyAccountDeleted, user.Email, subject, body, plainBody) //nolint:errcheck
 	}
 
 	// 6. Delete the actual profile record from the users database entirely
@@ -985,7 +989,7 @@ func (s *Server) sendSubdomainReservedEmail(user *db.User, subdomain, domain str
 	subject := fmt.Sprintf("Subdomain Reserved: %s.%s", subdomain, domain)
 	plain := fmt.Sprintf("Hi %s,\n\nYou have reserved the subdomain %s.%s.\nExpires on: %s\nPortal: %s", user.FirstName, subdomain, domain, formattedExpiry, portalLink)
 
-	go func() { _ = s.notifications.Sender().Send(user.Email, subject, body, plain) }() //nolint:errcheck
+	s.sendNotificationAsync(notifySubdomainReserved, user.Email, subject, body, plain)
 }
 
 // Notification: confirms an outcome the user asked for and can see in the portal.
@@ -1019,7 +1023,7 @@ func (s *Server) sendExtensionApprovedEmail(user *db.User, subdomain, domain str
 	subject := fmt.Sprintf("Extension Approved: %s.%s", subdomain, domain)
 	plain := fmt.Sprintf("Hi %s,\n\nYour extension request for %s.%s has been approved.\nNew Expiration: %s\nPortal: %s", user.FirstName, subdomain, domain, formattedExpiry, portalLink)
 
-	go func() { _ = s.notifications.Sender().Send(user.Email, subject, body, plain) }() //nolint:errcheck
+	s.sendNotificationAsync(notifyExtensionApproved, user.Email, subject, body, plain)
 }
 
 // Transactional: the user's subdomain changed status without them asking. Silence here
@@ -1051,37 +1055,14 @@ func (s *Server) sendSubdomainDemotedEmail(user *db.User, subdomain, domain stri
 	subject := fmt.Sprintf("Subdomain Demoted: %s.%s", subdomain, domain)
 	plain := fmt.Sprintf("Hi %s,\n\nYour permanent subdomain reservation %s.%s has been demoted back to a standard reservation.\nNew Expiration: %s\nPortal: %s", user.FirstName, subdomain, domain, formattedExpiry, portalLink)
 
-	go func() { _ = s.notifications.Sender().Send(user.Email, subject, body, plain) }() //nolint:errcheck
+	s.sendNotificationAsync(notifySubdomainDemoted, user.Email, subject, body, plain)
 }
 
-/*
-func (s *Server) sendSubdomainExpiredEmail(user *db.User, subdomain, domain string, releasedAt time.Time, r *http.Request) {
-	if s.notifications == nil || s.notifications.Sender() == nil {
-		return
-	}
-	lang := user.LanguagePreference
-	baseURL := s.getPortalBaseURL(r)
-	portalLink := baseURL + "/portal"
-
-	formattedRelease := releasedAt.Format("2006-01-02 15:04:05 MST")
-
-	body, err := s.renderEmailTemplate(lang, "subdomain_expired.html", map[string]interface{}{
-		"Name":       user.FirstName,
-		"Subdomain":  subdomain,
-		"Domain":     domain,
-		"ReleasedAt": formattedRelease,
-		"PortalLink": portalLink,
-	})
-	if err != nil {
-		log.Printf("[Server] Failed to render subdomain_expired email: %v", err)
-		return
-	}
-	subject := fmt.Sprintf("Subdomain Expired: %s.%s", subdomain, domain)
-	plain := fmt.Sprintf("Hi %s,\n\nYour subdomain reservation %s.%s has expired.\nIt will be released to the public pool on: %s\nPortal: %s", user.FirstName, subdomain, domain, formattedRelease, portalLink)
-
-	go func() { _ = s.notifications.Sender().Send(user.Email, subject, body, plain) }()
-}
-*/
+// The commented-out sendSubdomainExpiredEmail that used to sit here was removed with #1732.
+// It was a dead copy of the discard-the-error pattern this change exists to eliminate, and a
+// commented-out one is the worst kind: invisible to the compiler, invisible to the linter, and
+// one uncomment away from reintroducing the defect. The live version of that email is
+// checkExpiringReservations in server_edge.go, which does go through the funnel.
 
 // getUserMaxReservations resolves the maximum reservations limit for a given user,
 // taking into account explicit user overrides, role-specific defaults, and server settings.

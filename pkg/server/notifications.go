@@ -30,24 +30,32 @@ func (n *NotificationService) Sender() mail.Sender {
 	return n.sender
 }
 
-// SendAdminAlert checks admin preferences in the database and dispatches the alert via email.
-func (n *NotificationService) SendAdminAlert(settingKey, subject, htmlBody string) {
+// adminAlertRecipient decides whether an alert for settingKey should go out at all, and to
+// whom. It returns "" when the alert is suppressed -- by configuration, by the per-alert admin
+// setting, or by the admin's own notification preference.
+//
+// This used to be SendAdminAlert, which also did the sending. The decision stayed here and the
+// send moved to Server.sendAdminAlert (notify.go), because the send was the one remaining place
+// in the package that dispatched mail and logged its failure at INFO with no audit row -- and of
+// all the sites for that to be true of, the owner's own alert channel is the worst: a missing
+// alert is indistinguishable from nothing having happened (#1732).
+func (n *NotificationService) adminAlertRecipient(settingKey string) string {
 	if n.db == nil || n.sender == nil || n.cfg.AdminNotificationEmail == "" {
-		return
+		return ""
 	}
 
 	val, err := n.db.GetAdminSetting(settingKey)
 	if err != nil {
 		slog.Info(fmt.Sprintf("[Warning] Failed to fetch admin setting %s: %v", settingKey, err))
-		return
+		return ""
 	}
 
 	// Default true for "alert_notify_registration" and "alert_notify_blacklist"
 	if val == "false" {
-		return
+		return ""
 	}
 	if val == "" && settingKey == "alert_notify_tunnel_offline" {
-		return // default false
+		return "" // default false
 	}
 
 	// Notification: routine operational news -- a registration happened, an IP was
@@ -56,13 +64,9 @@ func (n *NotificationService) SendAdminAlert(settingKey, subject, htmlBody strin
 	// registration is classified transactional at its own send site and is unaffected.
 	if adminUser, err := n.db.GetUserByEmail(n.cfg.AdminNotificationEmail); err == nil && adminUser != nil {
 		if !shouldSendTo(adminUser, emailNotification) {
-			return
+			return ""
 		}
 	}
 
-	go func() {
-		if err := n.sender.Send(n.cfg.AdminNotificationEmail, subject, htmlBody, "An alert has been triggered."); err != nil {
-			slog.Info(fmt.Sprintf("[Mail] Failed to send admin alert %s: %v", settingKey, err))
-		}
-	}()
+	return n.cfg.AdminNotificationEmail
 }

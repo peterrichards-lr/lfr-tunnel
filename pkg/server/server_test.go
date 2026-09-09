@@ -330,6 +330,14 @@ type mockMailSender struct {
 	// arriving -- an email that failed to send is not an email, so it deliberately
 	// leaves getSentEmails() and the last* accessors untouched.
 	failWith error
+	// attempts counts every call to Send, including the ones failWith rejects.
+	//
+	// getSentEmails() cannot answer "did this code path try to send?" while sends are
+	// failing, which is exactly when some paths must not try: the repeated-failure
+	// escalation in notify.go must never report a broken mail channel over that same
+	// channel (#1732), and a mutant that did was invisible to an assertion on
+	// getSentEmails() because its send failed like all the others.
+	attempts int
 }
 
 // failSends makes subsequent sends fail with err, or succeed again when err is nil.
@@ -342,6 +350,7 @@ func (m *mockMailSender) failSends(err error) {
 func (m *mockMailSender) Send(to string, subject string, textBody string, htmlBody string) error {
 	m.mu.Lock()
 	defer m.mu.Unlock()
+	m.attempts++
 	if m.failWith != nil {
 		return m.failWith
 	}
@@ -387,6 +396,14 @@ func (m *mockMailSender) reset() {
 	m.sentTo, m.sentSubject, m.sentTextBody, m.sentHtmlBody = "", "", "", ""
 	m.emails = nil
 	m.failWith = nil
+	m.attempts = 0
+}
+
+// sendAttempts is every Send call, delivered or not. See the attempts field.
+func (m *mockMailSender) sendAttempts() int {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	return m.attempts
 }
 
 func (m *mockMailSender) getSentEmails() []mockEmail {

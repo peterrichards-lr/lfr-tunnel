@@ -229,7 +229,7 @@ func (s *Server) alertVanityDomainHookFailure(action, domain, requestingUserID s
 			"<p>The vanity domain hook failed.</p><ul><li>Action: %s</li><li>Domain: %s</li><li>Requested by: %s</li><li>Error: %s</li></ul>",
 			action, domain, requestingUserID, hookErr.Error(),
 		)
-		s.notifications.SendAdminAlert("alert_notify_vanity_hook_failure", "LFR Tunnel Alert: Vanity Domain Hook Failed", body)
+		s.sendAdminAlert("alert_notify_vanity_hook_failure", "LFR Tunnel Alert: Vanity Domain Hook Failed", body)
 	}
 	if s.webhooks != nil {
 		s.webhooks.SendVanityDomainHookFailureAlert(action, domain, requestingUserID, hookErr.Error())
@@ -259,7 +259,10 @@ func (s *Server) alertVanityDomainHookFailure(action, domain, requestingUserID s
 	subject := fmt.Sprintf("Action Needed: Custom Domain Setup Failed for %s", domain)
 	plain := fmt.Sprintf("Hi %s,\n\nSomething went wrong setting up automated DNS/TLS provisioning for your custom domain %s. The administrator has been alerted, but %s may currently have no valid SSL certificate or be unreachable.", user.FirstName, domain, domain)
 
-	go func() { _ = s.notifications.Sender().Send(user.Email, subject, body, plain) }() //nolint:errcheck
+	// The admin alert above went out through the same funnel, so if SMTP is the reason this
+	// hook failed, both failures are now recorded rather than the user's silently vanishing
+	// while the admin's silently vanishes too (#1732).
+	s.sendNotificationAsync(notifyVanityDomainHookFailed, user.Email, subject, body, plain)
 }
 
 func (s *Server) checkQuarantineStatus(host string) (bool, string, string) {

@@ -51,9 +51,22 @@
  *          <link rel=stylesheet> as well, and every .css under pkg/server must end the run
  *          having been read by some scope -- see the coverage report below. That converts
  *          the blind spot #1784 could only pin into a build failure.
+ *
+ *   #1841  The Portal V1 half of that scan is no longer this file's own. Both this gate and
+ *          scripts/check-css-modifiers.cjs need the same input -- every class and property V1
+ *          uses, from markup, inline styles, template literals, and the assets each page links
+ *          -- and they had grown two collectors over one corpus. Each missed a different half:
+ *          #1744 was the class gate not reading V1 at all, #1774 was this one not reading
+ *          inline styles, and when they were unified two more gaps were sitting there, each
+ *          visible to exactly one gate. This one's was the link resolver: it matched only
+ *          href="/static/…", so a stylesheet or script linked by a RELATIVE href was opened by
+ *          neither scope and could reference anything. Collection now lives in
+ *          scripts/lib/collect-v1-usage.cjs; RESOLUTION -- everything below, which is the part
+ *          the two gates genuinely disagree about -- stays here.
  */
 import { readFileSync, readdirSync, existsSync } from 'node:fs';
 import { join, basename, relative } from 'node:path';
+import { collectV1Usage, VAR_REF } from './lib/collect-v1-usage.cjs';
 
 const UI_SRC = join(process.cwd(), 'ui', 'src');
 
@@ -79,23 +92,57 @@ const SERVER_DIR = join(process.cwd(), 'pkg', 'server');
 // its own properties as undefined.
 const THEME_LINK = '/static/themes/';
 
+// Run from a directory that is not this repository, every check below has nothing to resolve.
+// That already exited 1 -- but by throwing an uncaught ENOENT out of readdirSync, several
+// hundred lines before the `refs.size === 0` guard written to catch exactly this, so the gate
+// failed closed for a reason unrelated to the one it reports (#1842 recorded the discrepancy
+// and left it; #1841 is the natural place to fix it, because the corpus is now named in one
+// place). A stack trace and a refusal are not the same evidence: the first says the tool
+// broke, the second says the tree is not the one it checks. Named files rather than a
+// try/catch, so a MISSING corpus is distinguishable from a corpus that failed to parse.
+const CORPUS = [
+  ['Portal V2 source', UI_SRC],
+  ['the shared theme files', THEMES],
+  ["Portal V1's stylesheet", V1_CSS],
+  ['Portal V1', SERVER_DIR],
+];
+const absentCorpus = CORPUS.filter(([, p]) => !existsSync(p));
+if (absentCorpus.length > 0) {
+  console.error(
+    '❌ check-theme-tokens: there is no corpus here to check. Missing:\n',
+  );
+  for (const [label, p] of absentCorpus)
+    console.error(`  ${label}: ${relative(process.cwd(), p) || p}`);
+  console.error(
+    '\nEvery path this gate reads is resolved against the WORKING DIRECTORY, so it must be run\n' +
+      'from the repository root. A run that found none of them would resolve an empty set of\n' +
+      'references against an empty set of themes and report success over nothing.',
+  );
+  process.exit(1);
+}
+
 // Comments are stripped before scanning: prose describing a token -- including the
 // comments explaining these very bugs -- would otherwise register as a reference.
 //
-// C-style block comments ONLY, which matters now that JS is scanned as well as CSS: a `//`
+// C-style block comments ONLY, which matters because JS is scanned as well as CSS: a `//`
 // comment cannot be stripped safely, because a URL inside a string literal would take the rest
 // of its line with it and silently hide any real reference sharing that line. Losing coverage
 // is worse than the false positive, so prose in a .js file that needs to spell a var()
 // reference must sit in a block comment. Both halves of that trade-off were paid for in #1774:
 // the note explaining the toast fix was written with `//` and failed this gate.
+//
+// Used here for the files this gate reads on its own -- Portal V2's stylesheets and the theme
+// files. Everything under pkg/server arrives already stripped, by the same rule, from
+// scripts/lib/collect-v1-usage.cjs, which is where the HTML-comment half of it now lives too.
 const stripComments = (css) => css.replace(/\/\*[\s\S]*?\*\//g, '');
 const read = (p) => stripComments(readFileSync(p, 'utf8'));
 
-// HTML comments hide commented-out markup, which must not count as a live reference. Applied
-// on top of stripComments, since a page can carry both kinds.
-const readMarkup = (p) => read(p).replace(/<!--[\s\S]*?-->/g, '');
-
-const VAR_REF = /var\(\s*(--[a-z0-9-]+)\s*(,)?/g;
+// Imported, not redeclared. Every scope in this file finds its work with this one pattern, and
+// the `refs.size === 0` guard at the bottom is what catches it silently ceasing to match. Two
+// copies -- one here for Portal V2, one in the shared pass for Portal V1 -- would mean breaking
+// either left the other still matching, and the guard would never fire on a half-blind run.
+// tests/hooks/test-theme-tokens.sh breaks it in the shared pass and requires this file to
+// refuse, so the assertion covers both halves through one edit.
 
 // A custom property DECLARATION, as opposed to a reference. Anchored on the character that can
 // legally precede one -- a block open, a preceding declaration's semicolon, or the start of a
@@ -137,16 +184,36 @@ function addValues(map, text, source) {
   }
 }
 
-// A first-party asset a page pulls in by its served path. Resolved against the static dir the
-// server serves it from, so a CDN href has no local path and is dropped by existsSync.
-const SCRIPT_SRC = /<script[^>]+src\s*=\s*["'](\/static\/[^"']+\.js)["']/g;
-const STYLE_HREF = /<link[^>]+href\s*=\s*["'](\/static\/[^"']+\.css)["']/g;
+// ---------------------------------------------------------------------------
+// Portal V1's corpus, from the pass check-css-modifiers.cjs also consumes (#1841): every
+// document under pkg/server, the stylesheets and scripts each one links, and every var()
+// reference across all three with the file it came from. Comments -- block comments in every
+// language, and `<!-- -->` in markup -- are already stripped by the collector, on the same
+// reasoning that used to live here.
+//
+// The gate that replaced was a local `linkedAssets` matching href="/static/….css" and
+// src="/static/….js" only. check-css-modifiers.cjs resolved a RELATIVE href as well, so a page
+// linking its own stylesheet next to itself was read by one gate and not the other -- the
+// asymmetry this refactor exists to remove, sitting in this file at the time it was written.
+const V1 = collectV1Usage({ webRoot: SERVER_DIR, repoRoot: process.cwd() });
 
-function* linkedAssets(html, pattern) {
-  for (const m of html.matchAll(pattern)) {
-    const path = join(SERVER_DIR, 'static', m[1].slice('/static/'.length));
-    if (!existsSync(path)) continue;
-    yield { path, rel: relative(process.cwd(), path) };
+// The references the collector found in one file of one document. Kept as a filter over the
+// document's flat list rather than as a per-file map, because the caller decides what to do
+// with a file -- the shared scope skips a stylesheet the themes already own, the document scope
+// does not -- and that decision belongs with the scope, not with the collector.
+function refsIn(doc, file) {
+  return doc.tokenRefs.filter((r) => r.file === file);
+}
+
+function addCollected(refs, doc, file, label) {
+  for (const r of refsIn(doc, file)) {
+    const existing = refs.get(r.name) || {
+      hasFallback: false,
+      files: new Set(),
+    };
+    if (r.hasFallback) existing.hasFallback = true;
+    existing.files.add(label);
+    refs.set(r.name, existing);
   }
 }
 
@@ -258,54 +325,46 @@ function collectReferences() {
 // against the shared themes. The cost is that an asset NO page links is read by neither scope;
 // that gap is pinned by a case in tests/hooks/test-theme-tokens.sh rather than described here,
 // because a comment does not fail when the gap closes or widens.
+//
+// The walk, the link-following and the reference extraction are the shared pass's (#1841). What
+// stays here is the part that is this gate's alone: which SCOPE a document belongs to, and what
+// each scope resolves its references against.
 function collectMarkupReferences(refs) {
   const scanned = [];
   const documents = [];
 
-  const walk = (dir) => {
-    for (const entry of readdirSync(dir, { withFileTypes: true }).sort((a, b) =>
-      a.name.localeCompare(b.name),
-    )) {
-      const full = join(dir, entry.name);
-      if (entry.isDirectory()) {
-        walk(full);
-        continue;
-      }
-      if (!entry.name.endsWith('.html')) continue;
-
-      const html = readMarkup(full);
-      const rel = relative(process.cwd(), full);
-      if (!html.includes(THEME_LINK)) {
-        documents.push(collectDocumentScope(rel, html));
-        continue;
-      }
-
-      const files = [rel];
-      addRefs(refs, html, basename(full));
-      recordPrint(rel, html, SHARED_SCOPE);
-
-      // Stylesheets as well as scripts, as of #1803. Following only <script src> left
-      // static/shared/a11y.css read by nothing at all: dashboard.html links it, the shared
-      // scope read dashboard.html, and the link was never followed. It happened to be
-      // self-consistent; nothing checked that it was.
-      for (const sheet of linkedAssets(html, STYLE_HREF)) {
-        if (readSheets.has(sheet.rel)) continue;
-        const css = read(sheet.path);
-        addRefs(refs, css, basename(sheet.path));
-        recordPrint(sheet.rel, css, SHARED_SCOPE);
-        readSheets.add(sheet.rel);
-        files.push(sheet.rel);
-      }
-      for (const script of linkedAssets(html, SCRIPT_SRC)) {
-        const js = read(script.path);
-        addRefs(refs, js, basename(script.path));
-        recordPrint(script.rel, js, SHARED_SCOPE);
-        files.push(script.rel);
-      }
-      scanned.push(files);
+  for (const doc of V1.documents) {
+    if (!doc.markup.includes(THEME_LINK)) {
+      documents.push(collectDocumentScope(doc));
+      continue;
     }
-  };
-  walk(SERVER_DIR);
+
+    const files = [doc.page];
+    addCollected(refs, doc, doc.page, basename(doc.page));
+    recordPrint(doc.page, doc.markup, SHARED_SCOPE);
+
+    // Stylesheets as well as scripts, as of #1803. Following only <script src> left
+    // static/shared/a11y.css read by nothing at all: dashboard.html links it, the shared
+    // scope read dashboard.html, and the link was never followed. It happened to be
+    // self-consistent; nothing checked that it was.
+    //
+    // A sheet already in readSheets is skipped, and that is what keeps the THEME FILES out of
+    // the reference scan: they are the definition source, not a consumer of it, and every
+    // themed page links them.
+    for (const sheet of doc.stylesheets) {
+      if (readSheets.has(sheet.rel)) continue;
+      addCollected(refs, doc, sheet.rel, basename(sheet.rel));
+      recordPrint(sheet.rel, sheet.text, SHARED_SCOPE);
+      readSheets.add(sheet.rel);
+      files.push(sheet.rel);
+    }
+    for (const script of doc.scripts) {
+      addCollected(refs, doc, script.rel, basename(script.rel));
+      recordPrint(script.rel, script.text, SHARED_SCOPE);
+      files.push(script.rel);
+    }
+    scanned.push(files);
+  }
 
   return { scanned, documents };
 }
@@ -326,32 +385,31 @@ function collectMarkupReferences(refs) {
 // for why the whole document and not just style attributes), and from the scripts it loads --
 // a script is reached through the page that loads it, so a script belonging to a self-contained
 // page is resolved against that page's tokens rather than against the shared themes.
-function collectDocumentScope(rel, html) {
+function collectDocumentScope(doc) {
+  const rel = doc.page;
   const decls = new Set();
   const values = new Map();
   const refs = new Map();
   const files = [rel];
 
-  for (const m of html.matchAll(/<style[^>]*>([\s\S]*?)<\/style>/gi)) {
-    addDecls(decls, m[1]);
-    addValues(values, m[1], rel);
+  for (const block of doc.styleBlocks) {
+    addDecls(decls, block);
+    addValues(values, block, rel);
   }
-  addRefs(refs, html, rel);
-  recordPrint(rel, html, rel);
+  addCollected(refs, doc, rel, rel);
+  recordPrint(rel, doc.markup, rel);
 
-  for (const sheet of linkedAssets(html, STYLE_HREF)) {
-    const css = read(sheet.path);
-    addDecls(decls, css);
-    addValues(values, css, sheet.rel);
-    addRefs(refs, css, sheet.rel);
-    recordPrint(sheet.rel, css, rel);
+  for (const sheet of doc.stylesheets) {
+    addDecls(decls, sheet.text);
+    addValues(values, sheet.text, sheet.rel);
+    addCollected(refs, doc, sheet.rel, sheet.rel);
+    recordPrint(sheet.rel, sheet.text, rel);
     readSheets.add(sheet.rel);
     files.push(sheet.rel);
   }
-  for (const script of linkedAssets(html, SCRIPT_SRC)) {
-    const js = read(script.path);
-    addRefs(refs, js, script.rel);
-    recordPrint(script.rel, js, rel);
+  for (const script of doc.scripts) {
+    addCollected(refs, doc, script.rel, script.rel);
+    recordPrint(script.rel, script.text, rel);
     files.push(script.rel);
   }
 

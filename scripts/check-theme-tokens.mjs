@@ -84,6 +84,17 @@ const V1_CSS = join(process.cwd(), 'pkg', 'server', 'static', 'dashboard.css');
 // keeping one by hand.
 const SERVER_DIR = join(process.cwd(), 'pkg', 'server');
 
+// And the client inspector, which is the same kind of page and was outside this gate's scan
+// until #1779. It is one self-contained document with its own <style> block -- so it is a
+// document-scope page by the membership rule below, needing no new rule to be checked, only to
+// be walked. Pointing the walk at it found `var(--text-color)` twice, with no fallback, in the
+// two Settings-view headings: #1774's defect exactly, in the arm #1774 did not read.
+//
+// Kept separate from SERVER_DIR rather than walking pkg/ wholesale: a served path (`/static/…`)
+// resolves against the root its document was found under, and pkg/client is a different web
+// root from pkg/server even though both are under pkg/.
+const CLIENT_DIR = join(process.cwd(), 'pkg', 'client');
+
 // A page is governed by the shared themes only if it links them. That link is the whole
 // membership test, and deriving it beats an exclusion list: pages that carry their own token
 // set in their own <style> block -- passcode.html, the standalone error pages, the localized
@@ -105,6 +116,7 @@ const CORPUS = [
   ['the shared theme files', THEMES],
   ["Portal V1's stylesheet", V1_CSS],
   ['Portal V1', SERVER_DIR],
+  ['the client inspector', CLIENT_DIR],
 ];
 const absentCorpus = CORPUS.filter(([, p]) => !existsSync(p));
 if (absentCorpus.length > 0) {
@@ -195,7 +207,14 @@ function addValues(map, text, source) {
 // src="/static/….js" only. check-css-modifiers.cjs resolved a RELATIVE href as well, so a page
 // linking its own stylesheet next to itself was read by one gate and not the other -- the
 // asymmetry this refactor exists to remove, sitting in this file at the time it was written.
-const V1 = collectV1Usage({ webRoot: SERVER_DIR, repoRoot: process.cwd() });
+// Both web roots, walked separately and concatenated (#1779). check-css-modifiers.cjs holds the
+// same list, and tests/hooks/test-v1-usage-parity.sh plants its fixtures in each root so a root
+// added to one gate and not the other is a red build rather than a quiet asymmetry.
+const V1 = {
+  documents: [SERVER_DIR, CLIENT_DIR].flatMap(
+    (webRoot) => collectV1Usage({ webRoot, repoRoot: process.cwd() }).documents,
+  ),
+};
 
 // The references the collector found in one file of one document. Kept as a filter over the
 // document's flat list rather than as a per-file map, because the caller decides what to do

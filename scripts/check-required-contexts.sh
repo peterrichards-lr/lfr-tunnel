@@ -86,6 +86,27 @@ done <<REQ
 $REQUIRED_JOBS
 REQ
 
+# Anti-vacuity floor (#1779). The malformed-entry guard above catches one line losing its
+# delimiter; it says nothing about the list losing its lines. Checks 1-3 below iterate
+# REQUIRED_JOBS, so an empty or truncated mirror makes all three examine nothing and fall
+# through -- and check 5, the one that would notice, prints "NOT VERIFIED" and carries on in
+# the default mode CI runs. The result is "OK: required contexts all report", over zero
+# contexts.
+#
+# That is the same shape as #1729, one level up: there a single entry was missing and the
+# script still printed OK; here the whole list could be. A mirror is state that can only
+# shrink by accident, so its size is asserted rather than assumed.
+#
+# It is EVALUATED AT THE END, not here, and that placement was forced by a test rather than
+# chosen: tests/hooks/test-required-contexts-mirror.sh reproduces #1729 by deleting one entry
+# from the mirror and requires the run to name the missing context. With the floor checked up
+# front, all three of its cases exited 1 for the floor instead, and it caught that -- because
+# it asserts the MESSAGE rather than the exit code. A floor that pre-empts the finding it was
+# added to protect replaces a specific diagnosis with a vaguer one, which is a small version of
+# the defect this whole issue is about. So: concrete findings first, vacuity last.
+MIN_REQUIRED_JOBS=${LFT_CONTEXTS_MIN_JOBS:-8}
+required_job_count=$(printf '%s\n' "$REQUIRED_JOBS" | grep -c '|' || true)
+
 # Unique workflow files backing a required context.
 REQUIRED_FILES=$(printf '%s\n' "$REQUIRED_JOBS" | awk -F'|' 'NF { print $2 }' | sort -u)
 
@@ -298,4 +319,16 @@ if [ "$fail" -ne 0 ]; then
     exit 1
 fi
 
-echo "OK: required contexts all report, and CI Gate covers every job."
+# The anti-vacuity floor declared near REQUIRED_JOBS, applied here so nothing concrete is
+# pre-empted by it. Reaching this line means every check above examined the mirror and found
+# nothing -- so the only question left is whether there was a mirror to examine.
+if [ "$required_job_count" -lt "$MIN_REQUIRED_JOBS" ]; then
+    echo "ERROR: REQUIRED_JOBS holds $required_job_count entr(ies), below the floor of $MIN_REQUIRED_JOBS." >&2
+    echo "       Checks 1-3 iterate that list, so a short list means they examined that many" >&2
+    echo "       fewer contexts while still reporting OK -- which is exactly what #1729 was." >&2
+    echo "       If a context was genuinely removed from master, lower LFT_CONTEXTS_MIN_JOBS" >&2
+    echo "       in the same commit, deliberately." >&2
+    exit 1
+fi
+
+echo "OK: required contexts all report ($required_job_count mirrored), and CI Gate covers every job."

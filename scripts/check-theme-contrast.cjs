@@ -109,6 +109,22 @@ if (files.length === 0) {
   process.exit(1);
 }
 
+// Anti-vacuity floor (#1779). The file-count guard above is NOT the same property, and the
+// difference is not theoretical: with four theme files present and none of them carrying a
+// fill token, this printed
+//
+//   check-theme-contrast: OK -- 0 contrast checks across 1 theme(s)
+//
+// and exited 0. Measured, not reasoned about. Every route to that state is a silent one --
+// rename a token, restructure the files so the tokens land in a file the reader below skips,
+// or break the `--token: value;` regex -- and each ends with every theme reported as
+// "no button-fill tokens, skipped" and the gate calling that a pass. A gate whose entire job
+// is to say "these colours are legible" must not be able to say it having measured nothing.
+//
+// The floor is on CHECKS PERFORMED rather than on themes found, because the count of themes
+// is what the vacuous run already got right.
+const MIN_CHECKS = Number(process.env.LFT_CONTRAST_MIN_CHECKS || 40);
+
 const failures = [];
 let checks = 0;
 
@@ -326,6 +342,25 @@ if (failures.length) {
   );
   console.error(
     'A fill needs to be darker for a white label; a foreground needs to be lighter on a dark card.',
+  );
+  process.exit(1);
+}
+
+// The floor runs only once there is nothing concrete to report. Ordering matters: a real
+// contrast failure already exits non-zero and names the token, so pre-empting it with
+// "you measured too little" would replace an actionable message with a vaguer one. A vacuous
+// run, by contrast, has no failures at all -- which is exactly why it needs its own refusal.
+if (checks < MIN_CHECKS) {
+  console.error(
+    `check-theme-contrast: performed ${checks} contrast check(s) across ${files.length} theme ` +
+      `file(s), below the floor of ${MIN_CHECKS}. This is a pass over nothing, not a legible palette.\n`,
+  );
+  console.error(
+    '  Four themes measure 70 checks today. Reaching this means the fill tokens stopped being\n' +
+      '  found -- renamed, moved out of pkg/server/static/themes, or no longer matching the\n' +
+      "  `--token: value;` reader -- and every theme was reported as 'no button-fill tokens,\n" +
+      "  skipped'. Fix the discovery, or lower LFT_CONTRAST_MIN_CHECKS deliberately if the\n" +
+      '  palette genuinely shrank (#1779).',
   );
   process.exit(1);
 }

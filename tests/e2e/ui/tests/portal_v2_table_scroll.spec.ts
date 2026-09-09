@@ -100,9 +100,27 @@ test.describe('Portal V2 wide tables scroll on narrow viewports', () => {
         (
           el.querySelector('thead th:last-child') as HTMLElement
         ).getBoundingClientRect().right <= window.innerWidth,
+      scrollWidth: el.scrollWidth,
+      clientWidth: el.clientWidth,
+      // Named, not counted. This assertion goes red for two quite different reasons -- a real
+      // layout regression, or an account row another spec created and failed to delete, which
+      // widens the email column past the viewport (#1512, #1833). They are indistinguishable
+      // from "expected false, received true", and the second one is diagnosed 160 tests away
+      // from the spec that caused it, so the rows are reported with the failure.
+      rows: Array.from(el.querySelectorAll('tbody tr'), (r) =>
+        (r.textContent || '').replace(/\s+/g, ' ').trim(),
+      ),
     }));
 
-    expect(state.overflows).toBe(false);
+    expect(
+      state.overflows,
+      `the Users table needed ${state.scrollWidth}px in a ${state.clientWidth}px wrapper at a ` +
+        `1280px viewport. The ${state.rows.length} account row(s) it was sizing to:\n  ` +
+        `${state.rows.join('\n  ')}\n` +
+        `If one of those is a fixture account (kbd-..., nb..., nonadmin-...), an earlier spec's ` +
+        `cleanup failed and this is the symptom, not the cause -- see deleteUser in ` +
+        `tests/e2e/ui/tests/utils/nonadmin.ts.`,
+    ).toBe(false);
     expect(state.actionsWithinViewport).toBe(true);
   });
 });

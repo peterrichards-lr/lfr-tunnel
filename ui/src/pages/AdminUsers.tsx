@@ -431,6 +431,11 @@ export default function AdminUsers() {
       { value: 'approved', label: t('status_approved', 'Approved') },
       { value: 'pending', label: t('status_pending', 'Pending') },
       { value: 'unverified', label: t('status_unverified', 'Unverified') },
+      // A registration declined by an admin (#1830). This list is both the status filter and
+      // the dropdown used to CHANGE a status, so omitting it meant a rejected user could not be
+      // filtered for and -- the part that actually mattered -- could not be un-rejected here,
+      // which is the control reversing a rejection is meant to use (#1847).
+      { value: 'rejected', label: t('status_rejected', 'Rejected') },
       { value: 'revoked', label: t('status_revoked', 'Revoked') },
     ],
     [t],
@@ -949,7 +954,12 @@ export default function AdminUsers() {
               </div>
               <div>
                 <span
-                  className={`badge ${selectedUser.status === 'approved' ? 'badge-success' : selectedUser.status === 'revoked' ? 'badge-danger' : 'badge-warning'} mr-sm`}
+                  // 'rejected' must be listed explicitly here. This ternary defaults to
+                  // badge-warning, where the table's defaults to badge-danger -- so before
+                  // #1847 the same user rendered amber in this panel and red in the table.
+                  // Amber reads as "in progress", which is the opposite of a declined
+                  // registration.
+                  className={`badge ${selectedUser.status === 'approved' ? 'badge-success' : selectedUser.status === 'revoked' || selectedUser.status === 'rejected' ? 'badge-danger' : 'badge-warning'} mr-sm`}
                 >
                   {selectedUser.status}
                 </span>

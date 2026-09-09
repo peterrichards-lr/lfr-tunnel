@@ -55,8 +55,16 @@ reset_sandbox() {
   SANDBOX="$(mktemp -d "${TMPDIR:-/tmp}/css-modifiers-test.XXXXXX")"
   mkdir -p "$SANDBOX/scripts" "$SANDBOX/pkg/server/static" "$SANDBOX/ui"
   cp "${REPO_ROOT}/${CHECK_REL}" "$SANDBOX/scripts/"
+  # The V1 collection pass, shared with check-theme-tokens.mjs (#1841). Without it every case
+  # below fails on MODULE_NOT_FOUND -- which is a non-zero exit and would have satisfied any
+  # fire-case asserting only on rc. See the guard in run().
+  cp -R "${REPO_ROOT}/scripts/lib" "$SANDBOX/scripts/lib"
   cp "${REPO_ROOT}"/pkg/server/*.html "$SANDBOX/pkg/server/"
   cp -R "${REPO_ROOT}"/pkg/server/static/. "$SANDBOX/pkg/server/static/"
+  # The localized templates. Copied as of #1841: the V1 pass walks pkg/server rather than
+  # listing its top two directories, so leaving them out would mean every case here ran against
+  # a corpus 34 documents smaller than the one CI checks.
+  cp -R "${REPO_ROOT}"/pkg/server/templates "$SANDBOX/pkg/server/templates"
   cp -R "${REPO_ROOT}"/ui/src "$SANDBOX/ui/src"
 }
 
@@ -69,6 +77,18 @@ run() {
   (cd "$SANDBOX" && node "$CHECK_REL") >"$OUT_FILE" 2>&1
   RC=$?
   OUT="$(cat "$OUT_FILE")"
+  # The harness failing instead of the subject (github-workflow §5c.5). A gate that cannot load
+  # its own module exits non-zero and prints a stack trace, which satisfies every "rc is
+  # non-zero" below while having examined nothing. Caught here rather than per-case, because it
+  # would otherwise turn the whole file green for the wrong reason on one mis-copied sandbox.
+  case "$OUT" in
+  # One pattern: ERR_MODULE_NOT_FOUND (the ESM form) ends in the same substring as
+  # MODULE_NOT_FOUND (the CJS form), so this matches both.
+  *MODULE_NOT_FOUND*)
+    fail "the sandbox is missing a module the gate requires -- reset_sandbox is incomplete, and every assertion below would pass on the crash:
+$(printf '%s' "$OUT" | head -6)"
+    ;;
+  esac
 }
 
 says() { printf '%s' "$1" | grep -q -- "$2"; }

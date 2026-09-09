@@ -102,10 +102,24 @@ fi
 #
 # Same isolation as above -- the gate is copied to $WORK/gates and run from $WORK/empty, so
 # the .cjs/.mjs path resolution (relative to the script's own directory) finds no corpus.
+#
+# scripts/lib is copied alongside them. check-css-modifiers.cjs requires the shared Portal V1
+# collection pass from there (#1841), and without it node exits 1 on MODULE_NOT_FOUND before
+# reaching any gate code at all -- a refusal, and the assertion below would have read it as the
+# guard firing. That is this file's own subject arriving in this file: the harness failing
+# instead of the subject. So each run is checked for a module-resolution error as well.
 for gate in check-css-modifiers.cjs check-i18n-keys.cjs check-html-balance.mjs check-theme-contrast.cjs; do
     cp "$REPO_ROOT/scripts/$gate" "$WORK/gates/"
-    if (cd "$WORK/empty" && node "$WORK/gates/$gate" >/dev/null 2>&1); then
+done
+cp -R "$REPO_ROOT/scripts/lib" "$WORK/gates/lib"
+
+for gate in check-css-modifiers.cjs check-i18n-keys.cjs check-html-balance.mjs check-theme-contrast.cjs; do
+    OUT=$( (cd "$WORK/empty" && node "$WORK/gates/$gate" 2>&1) ) && RC=0 || RC=$?
+    if [ "$RC" -eq 0 ]; then
         fail "$gate PASSES with no corpus at all -- the guard that fixed #1744/#1774 is inert"
+    elif printf '%s' "$OUT" | grep -q 'MODULE_NOT_FOUND'; then
+        fail "$gate exited non-zero because it could not load a module, not because it refused an empty corpus -- copy what it requires into \$WORK/gates:
+    $(printf '%s' "$OUT" | head -3 | tr '\n' ' ')"
     else
         pass "$gate refuses when there is no corpus to examine"
     fi
@@ -113,15 +127,23 @@ done
 
 # check-theme-tokens.mjs is deliberately in its own case: it resolves its inputs against the
 # WORKING DIRECTORY rather than the script's own directory, so the loop above would test
-# something different for it. Run from a directory with no pkg/ it refuses -- but by throwing an
-# uncaught ENOENT from readdirSync, before reaching its own `refs.size === 0` guard. Exit 1
-# either way, so it fails closed and the property holds; recorded here because the two are not
-# the same thing and a future reader should not mistake the crash for the guard firing.
+# something different for it.
+#
+# Until #1841 it refused by throwing an uncaught ENOENT out of readdirSync, several hundred
+# lines before its own `refs.size === 0` guard. Exit 1 either way, so the property held -- but a
+# stack trace and a refusal are not the same evidence, and this file recorded the discrepancy
+# rather than asserting past it. It now names the corpus it could not find, and that message is
+# what is asserted: "exited non-zero" is shared by a crash, a missing node, and a syntax error,
+# and only one of those is the gate refusing (github-workflow §5c.1).
 cp "$REPO_ROOT/scripts/check-theme-tokens.mjs" "$WORK/gates/"
-if (cd "$WORK/empty" && node "$WORK/gates/check-theme-tokens.mjs" >/dev/null 2>&1); then
+OUT=$( (cd "$WORK/empty" && node "$WORK/gates/check-theme-tokens.mjs" 2>&1) ) && RC=0 || RC=$?
+if [ "$RC" -eq 0 ]; then
     fail "check-theme-tokens.mjs PASSES with no corpus at all -- the #1774 guard is inert"
+elif printf '%s' "$OUT" | grep -q 'there is no corpus here to check'; then
+    pass "check-theme-tokens.mjs refuses, naming the corpus it could not find"
 else
-    pass "check-theme-tokens.mjs refuses when there is no corpus to examine"
+    fail "check-theme-tokens.mjs exited $RC without reaching its corpus guard -- it is failing closed by crashing, which is a different thing and stops being reliable the moment the crash moves:
+    $(printf '%s' "$OUT" | head -3 | tr '\n' ' ')"
 fi
 
 # ---------------------------------------------------------------------------

@@ -90,6 +90,10 @@ reset_sandbox() {
   SANDBOX="$(mktemp -d "${TMPDIR:-/tmp}/theme-tokens-test.XXXXXX")"
   mkdir -p "$SANDBOX/scripts" "$SANDBOX/pkg/server/static" "$SANDBOX/ui"
   cp "${REPO_ROOT}/${CHECK_REL}" "$SANDBOX/scripts/"
+  # The V1 collection pass, shared with check-css-modifiers.cjs (#1841). Without it every case
+  # below fails on ERR_MODULE_NOT_FOUND -- a non-zero exit that would have satisfied any
+  # fire-case asserting only on rc. See the guard in run().
+  cp -R "${REPO_ROOT}/scripts/lib" "$SANDBOX/scripts/lib"
   cp "${REPO_ROOT}"/pkg/server/*.html "$SANDBOX/pkg/server/"
   cp -R "${REPO_ROOT}"/pkg/server/static/. "$SANDBOX/pkg/server/static/"
   cp -R "${REPO_ROOT}"/pkg/server/templates "$SANDBOX/pkg/server/templates"
@@ -105,6 +109,18 @@ run() {
   (cd "$SANDBOX" && node "$CHECK_REL") >"$OUT_FILE" 2>&1
   RC=$?
   OUT="$(cat "$OUT_FILE")"
+  # The harness failing instead of the subject (github-workflow §5c.5). A gate that cannot load
+  # its own module exits non-zero and prints a stack trace, which satisfies every "rc is
+  # non-zero" below while having examined nothing. Caught here rather than per-case, because it
+  # would otherwise turn the whole file green for the wrong reason on one mis-copied sandbox.
+  case "$OUT" in
+  # One pattern: ERR_MODULE_NOT_FOUND (the ESM form) ends in the same substring as
+  # MODULE_NOT_FOUND (the CJS form), so this matches both.
+  *MODULE_NOT_FOUND*)
+    fail "the sandbox is missing a module the gate imports -- reset_sandbox is incomplete, and every assertion below would pass on the crash:
+$(printf '%s' "$OUT" | head -6)"
+    ;;
+  esac
 }
 
 says() { printf '%s' "$1" | grep -q -- "$2"; }
@@ -534,10 +550,18 @@ fi
 #     gets -- a clean tree has zero print references, so the checker cannot assert it found
 #     one, and case 11 is what proves that half runs.
 # ---------------------------------------------------------------------------
+#     Mutated in scripts/lib/collect-v1-usage.cjs as of #1841, which is where VAR_REF now
+#     lives: the checker imports it rather than declaring its own. That is deliberate and this
+#     case is why. When the Portal V1 collection moved to the shared pass it briefly had a
+#     SECOND copy of the pattern, and breaking the one in this file left 22 of the 57
+#     references still resolving -- the guard stayed quiet, the run reported
+#     "✅ All 22 referenced CSS custom properties resolve", and this case failed for the right
+#     reason at the right moment. One definition, so one edit still empties every scope.
 reset_sandbox
+COLLECTOR="scripts/lib/collect-v1-usage.cjs"
 sed -i.bak 's|^const VAR_REF = .*|const VAR_REF = /__never_matches_anything__(--[a-z0-9-]+)/g;|' \
-  "$SANDBOX/$CHECK_REL" && rm -f "$SANDBOX/$CHECK_REL.bak"
-if grep -q '__never_matches_anything__' "$SANDBOX/$CHECK_REL"; then
+  "$SANDBOX/$COLLECTOR" && rm -f "$SANDBOX/$COLLECTOR.bak"
+if grep -q '__never_matches_anything__' "$SANDBOX/$COLLECTOR"; then
   run
   if [ "$RC" -ne 0 ] && says "$OUT" 'Not one var() reference'; then
     pass "a reference pattern that matches nothing fails instead of passing"
@@ -545,7 +569,20 @@ if grep -q '__never_matches_anything__' "$SANDBOX/$CHECK_REL"; then
     fail "VAR_REF matching nothing reported success (rc=$RC): $OUT"
   fi
 else
-  fail "the mutation never applied: VAR_REF was not replaced"
+  fail "the mutation never applied: VAR_REF was not replaced in $COLLECTOR"
+fi
+
+# ---------------------------------------------------------------------------
+# 13. ...and the checker must not have quietly reacquired its own copy. The case above passes
+#     either way if this file declares VAR_REF as well: the shared pattern would be dead and
+#     the local one would find everything. Asserted on the source because the property is
+#     "there is one definition", which no run can demonstrate.
+# ---------------------------------------------------------------------------
+reset_sandbox
+if grep -q '^const VAR_REF' "$SANDBOX/$CHECK_REL"; then
+  fail "check-theme-tokens.mjs declares its own VAR_REF again -- the shared one is no longer what finds Portal V1's references, and case 12 above now proves nothing about it"
+else
+  pass "check-theme-tokens.mjs has no VAR_REF of its own; the shared pass owns the pattern"
 fi
 
 echo

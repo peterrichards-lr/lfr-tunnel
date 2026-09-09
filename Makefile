@@ -277,6 +277,7 @@ test-hooks:
 	@./tests/hooks/test-workflow-failure-alert.sh
 	@./tests/hooks/test-css-modifiers.sh
 	@./tests/hooks/test-theme-tokens.sh
+	@./tests/hooks/test-v1-usage-parity.sh
 	@./tests/hooks/test-html-balance.sh
 	@./tests/hooks/test-edge-real-ip-provisioning.sh
 	@./tests/hooks/test-nested-worktree-scope.sh

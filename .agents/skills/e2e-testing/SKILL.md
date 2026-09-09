@@ -177,6 +177,38 @@ Note that `docker compose up -d --build` recreates the containers and takes the 
 them, so local runs often start clean while CI accumulates state across the whole suite. That
 difference hides exactly this class of bug.
 
+## 4b. Mailpit is shared too, and the mail you want may not have arrived yet
+
+The corollary of §4, and the reason a cleanup that §4 calls mandatory silently did not run.
+
+`POST /api/auth/magic-link` **sends from a goroutine and answers before it**
+(`handleAdminMagicLink`, `pkg/server/server.go`) -- deliberately, so SMTP latency cannot become a
+timing oracle for whether an address exists. So the request returning is not the mail existing.
+Mailpit answers newest-first, and for a few milliseconds after that call the newest mail matching
+`admin@lfr-demo.local` is still the **previous** one -- whose token the previous login consumed,
+and which the new request has just invalidated again (`InvalidateOtherMagicLinks`).
+
+Taking it produces `401 Invalid or already used token` from `/api/auth/verify`, and if that
+response is not checked, a 401 from whatever the session was needed for. That is how #1833's
+`deleting kbd-56910@lfr-demo.local failed: 401 Unauthorized: admin access required` was really a
+message about `/api/auth/verify`, from a run in which the DELETE was the only step that behaved
+correctly -- and it cost a second, unrelated-looking spec 160 tests later, because the row it
+failed to delete stayed in the database.
+
+Measured against the live stack: **2 of 140** runs took the stale mail; first-poll latency median
+6 ms, the same order as the send. Rare enough to be re-run away, frequent enough to happen weekly.
+
+So, when a helper reads mail:
+
+- **Either clear the inbox immediately before the request, or record the message IDs already in it
+  and skip them while polling.** Every spec does the first (`clearMailpit()` in its login helper);
+  `waitForMail` in `utils/nonadmin.ts` takes an `ignoreIDs` set for the second. Waiting on "a
+  message that was not there before" is the condition; "a message that matches" is not.
+- **Match the login-link shape, not a bare `token=`.** Setup and approval mails carry a `token=`
+  too, and neither is a magic link.
+- **Check the response of every step and name it in the error.** An unchecked `/api/auth/verify`
+  turns a session that was never established into a 401 attributed to the next call.
+
 ## 5. Running them
 
 ```bash
@@ -189,4 +221,4 @@ need. Docker is outside the EDR constraints that govern host binaries, so the co
 is fine to run; the host `lfr-tunnel` binary is not.
 
 ---
-*Last Updated: 2026-09-01* | *Last Reviewed: 2026-09-01*
+*Last Updated: 2026-09-08* | *Last Reviewed: 2026-09-08*

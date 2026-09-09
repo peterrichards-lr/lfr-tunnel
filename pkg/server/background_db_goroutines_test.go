@@ -134,15 +134,21 @@ func TestTheGateCatchesTheShapeItExistsFor(t *testing.T) {
 	const fixture = `package server
 
 type Server struct{ db *DB }
+type worker struct{}
 
+func (w *worker) run()                {}
+func (s *Server) run()                {}
 func (s *Server) readSetting() string { return s.db.Get("x") }
 func (s *Server) runHook(a string)    { s.readSetting() }
 func (s *Server) harmless()           {}
 
-func (s *Server) leaks(a string)       { go s.runHook(a) }
-func (s *Server) leaksInClosure()      { go func() { s.runHook("x") }() }
-func (s *Server) fixed(a string)       { s.goTracked(func() { s.runHook(a) }) }
-func (s *Server) fine()                { go s.harmless() }
+func (s *Server) leaks(a string)  { go s.runHook(a) }
+func (s *Server) leaksInClosure() { go func() { s.runHook("x") }() }
+func (s *Server) fixed(a string)  { s.goTracked(func() { s.runHook(a) }) }
+func (s *Server) fine()           { go s.harmless() }
+func (s *Server) opaque(w *worker) {
+	go func() { w.run() }()
+}
 `
 	fset := token.NewFileSet()
 	f, err := parser.ParseFile(fset, "fixture.go", fixture, 0)
@@ -171,6 +177,14 @@ func (s *Server) fine()                { go s.harmless() }
 	if flagged["fine"] {
 		t.Error("the gate flagged a goroutine that never touches the database -- it is reporting " +
 			"on `go`, not on database access, and would force noise into the exception list.")
+	}
+	// The blind spot, asserted rather than described: a method the analysis cannot attribute to
+	// a type (`run` is defined on two of them, and the value is a parameter) must be reported as
+	// unresolved, not waved through. Silence there would be the gate saying "safe" about source
+	// it did not understand -- the exact failure this test exists to prevent.
+	if !flagged["opaque"] {
+		t.Error("the gate treated an unresolvable call as safe. Anything it cannot follow has to " +
+			"reach the exception list, where a human decides, rather than passing unnoticed.")
 	}
 }
 

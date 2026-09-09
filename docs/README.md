@@ -8,6 +8,7 @@ Welcome to the Liferay Tunnel documentation! This is the central hub for learnin
 - **[Client Configuration File](client_configuration.md)**: Complete key reference for `~/.lfr-tunnel/config.yaml` — every setting, its flag and environment equivalents, which of the three wins, and why `server_url:` is not the same as `-server`.
 - **[Liferay SE Guide](liferay-se-guide.md)**: Team-specific instructions for Liferay Sales Engineering (LDM setup, codesigning path exclusions, dynamic configurations).
 - **[MCP Guide](mcp.md)**: Learn how to set up the Model Context Protocol (MCP) server to use the tunnel with AI assistants.
+- **[Exposing Any Local HTTP Service](exposing-any-http-service.md)**: Addendum — the tunnel does not inspect what is listening on the port it publishes, so a client extension in dev mode, a Node service or any other local HTTP server works with `-ports`. Naming a port switches the Liferay auto-discovery off.
 
 ## ⚙️ Server & Operator Deployment Guides
 
@@ -30,4 +31,4 @@ All operator deployment and configuration resources are organized under the `doc
 
 <!-- markdownlint-disable MD049 -->
 ---
-*Last Updated: 2026-09-03* | *Last Reviewed: 2026-09-03*
+*Last Updated: 2026-09-09* | *Last Reviewed: 2026-09-09*

@@ -81,6 +81,11 @@ var (
 		"registration_approved",
 		"the approval stands but this user has not been told and has no claim link",
 	}
+	notifyRegistrationRejected = notificationKind{
+		"registration_rejected",
+		"the rejection stands but this user has not been told, so they will keep waiting for an " +
+			"answer that has already been given",
+	}
 	notifyMagicLink = notificationKind{
 		"magic_link",
 		"this user cannot sign in and has not been told",

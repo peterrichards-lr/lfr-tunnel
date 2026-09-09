@@ -91,7 +91,9 @@ func TestSSOSignInCompletesTheApproval(t *testing.T) {
 	req := httptest.NewRequest("GET", "http://example.com/api/auth/callback?provider=liferay", nil)
 	req.RemoteAddr = "127.0.0.1:5555"
 
-	srv.approveOnSSOSignIn(user, "liferay", req)
+	if err := srv.approveOnSSOSignIn(user, "liferay", req); err != nil {
+		t.Fatalf("approveOnSSOSignIn refused a pending user: %v", err)
+	}
 
 	got, err := srv.db.GetUserByEmail(email)
 	if err != nil || got == nil {
@@ -143,7 +145,9 @@ func TestSSOApprovalDoesNotEmailTheUser(t *testing.T) {
 
 	// If approveOnSSOSignIn ever starts sending mail, this call panics on the nil sender rather
 	// than returning -- so reaching the assertion below is the property.
-	srv.approveOnSSOSignIn(user, "liferay", req)
+	if err := srv.approveOnSSOSignIn(user, "liferay", req); err != nil {
+		t.Fatalf("approveOnSSOSignIn refused a pending user: %v", err)
+	}
 
 	got, err := srv.db.GetUserByEmail(email)
 	if err != nil || got == nil || got.Status != "approved" {
@@ -169,7 +173,9 @@ func TestSSOApprovalSurvivesAnAlreadyApprovedUser(t *testing.T) {
 	}
 
 	req := httptest.NewRequest("GET", "http://example.com/", nil)
-	srv.approveOnSSOSignIn(u, "liferay", req)
+	if err := srv.approveOnSSOSignIn(u, "liferay", req); err != nil {
+		t.Fatalf("approveOnSSOSignIn refused an already-approved user: %v", err)
+	}
 
 	got, err := srv.db.GetUserByEmail(email)
 	if err != nil || got == nil {

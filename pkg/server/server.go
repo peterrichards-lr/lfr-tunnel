@@ -1093,6 +1093,14 @@ func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 
+		// Same GET-describes / POST-performs split as the approve route above, and for the same
+		// reason (#1143): the link is emailed into a Slack channel where previews and crawlers
+		// follow URLs (#1830).
+		if (r.Method == http.MethodGet || r.Method == http.MethodPost) && r.URL.Path == "/api/admin/reject" {
+			s.handleRejectUser(w, r)
+			return
+		}
+
 		if r.Method == http.MethodGet && r.URL.Path == "/api/claim" {
 			s.handleClaimToken(w, r)
 			return
@@ -2494,8 +2502,21 @@ func (s *Server) handleRegisterRequest(w http.ResponseWriter, r *http.Request) {
 
 	// Check if user already exists
 	if existingUser, err := s.db.GetUser(req.Email); err == nil {
-		// Log the attempt to the audit log to keep visibility for admins
-		s.writeAudit(req.Email, "auth.registration_attempt_existing", "user", existingUser.Email, "Attempted to register but account already exists", r)
+		// Log the attempt to the audit log to keep visibility for admins.
+		//
+		// A rejected row gets its own action and detail. This is the cost of blocking rather than
+		// deleting on rejection (#1830): re-registration is refused, and refused the same silent
+		// way an existing account is, so the only place the attempt can surface is here. An
+		// administrator filtering the audit log on this action sees a colleague trying again --
+		// which is the signal to reverse the decision if it was wrong, and to ignore it if it
+		// was not.
+		action := "auth.registration_attempt_existing"
+		details := "Attempted to register but account already exists"
+		if existingUser.Status == statusRejected {
+			action = "auth.registration_attempt_rejected"
+			details = "Attempted to register again after an administrator rejected this registration"
+		}
+		s.writeAudit(req.Email, action, "user", existingUser.Email, details, r)
 
 		// Mimic a successful registration to prevent email enumeration
 		w.WriteHeader(http.StatusOK)
@@ -2712,20 +2733,25 @@ func (s *Server) handleCompleteSetup(w http.ResponseWriter, r *http.Request) {
 				scheme = "https"
 			}
 			approveURL := fmt.Sprintf("%s://%s/api/admin/approve?email=%s&token=%s", scheme, r.Host, url.QueryEscape(user.Email), user.ApprovalToken)
+			// The decline half of the decision, carried by the same mail as the approve link.
+			// Without it there is no rejection flow an admin can actually reach: the endpoint
+			// authenticates on the approval token alone and nothing else ever shows it (#1830).
+			rejectURL := rejectionURL(scheme, r.Host, user.Email, user.ApprovalToken)
 
 			body, err := s.renderEmailTemplate("en", "admin_registration_request.html", map[string]interface{}{
 				"FirstName":  user.FirstName,
 				"LastName":   user.LastName,
 				"Email":      user.Email,
 				"ApproveURL": approveURL,
+				"RejectURL":  rejectURL,
 				"Status":     "Email Verified & Setup Complete",
 			})
 			if err != nil {
 				slog.Info(fmt.Sprintf("[Server] Failed to render admin_registration_request template: %v", err))
-				body = fmt.Sprintf("<p>New registration request (Email Verified & Setup Complete):</p><ul><li>Name: %s %s</li><li>Email: %s</li></ul><p><a href=\"%s\">Click here to approve this request</a></p>", user.FirstName, user.LastName, user.Email, approveURL)
+				body = fmt.Sprintf("<p>New registration request (Email Verified & Setup Complete):</p><ul><li>Name: %s %s</li><li>Email: %s</li></ul><p><a href=\"%s\">Click here to approve this request</a></p><p><a href=\"%s\">Or reject it</a></p>", user.FirstName, user.LastName, user.Email, approveURL, rejectURL)
 			}
 
-			plainBody := fmt.Sprintf("New user registered: %s. Approve here: %s", user.Email, approveURL)
+			plainBody := fmt.Sprintf("New user registered: %s. Approve here: %s\nReject here: %s", user.Email, approveURL, rejectURL)
 
 			// This is the mail that tells the owner there is somebody to approve. Its error used
 			// to be discarded outright -- `go func() { _ = ...Send(...) }()` -- so if it never
@@ -2796,19 +2822,21 @@ func (s *Server) handleVerifyEmail(w http.ResponseWriter, r *http.Request) {
 		}
 		host := r.Host
 		approveURL := fmt.Sprintf("%s://%s/api/admin/approve?email=%s&token=%s", scheme, host, url.QueryEscape(user.Email), user.ApprovalToken)
+		rejectURL := rejectionURL(scheme, host, user.Email, user.ApprovalToken)
 		body, err := s.renderEmailTemplate("en", "admin_registration_request.html", map[string]interface{}{
 			"FirstName":  user.FirstName,
 			"LastName":   user.LastName,
 			"Email":      user.Email,
 			"ApproveURL": approveURL,
+			"RejectURL":  rejectURL,
 			"Status":     "Email Verified",
 		})
 		if err != nil {
 			slog.Info(fmt.Sprintf("[Server] Failed to render admin_registration_request template: %v", err))
-			body = fmt.Sprintf("<p>New registration request (Email Verified):</p><ul><li>Name: %s %s</li><li>Email: %s</li></ul><p><a href=\"%s\">Click here to approve this request</a></p>", user.FirstName, user.LastName, user.Email, approveURL)
+			body = fmt.Sprintf("<p>New registration request (Email Verified):</p><ul><li>Name: %s %s</li><li>Email: %s</li></ul><p><a href=\"%s\">Click here to approve this request</a></p><p><a href=\"%s\">Or reject it</a></p>", user.FirstName, user.LastName, user.Email, approveURL, rejectURL)
 		}
 
-		plainBody := fmt.Sprintf("A new user (%s) requires approval. Approve here: %s", user.Email, approveURL)
+		plainBody := fmt.Sprintf("A new user (%s) requires approval. Approve here: %s\nReject here: %s", user.Email, approveURL, rejectURL)
 		s.sendNotificationAsync(notifyAdminRegistrationNotice, s.cfg.AdminNotificationEmail, subject, body, plainBody)
 	}
 
@@ -2967,6 +2995,15 @@ func (s *Server) handleApproveUser(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "Failed to update user status", http.StatusInternalServerError)
 		return
 	}
+	s.invalidateUserCache(user.Email)
+
+	// Written before the send and regardless of it, exactly like the rejection half. This row did
+	// not exist until #1830: the SSO path has audited its auto-approval since #1824 -- "pending to
+	// approved is the most security-relevant transition a user can undergo and it left no trace
+	// naming what did it" -- and that was equally true here, on the path most registrations
+	// actually take.
+	s.writeAudit(actorApprovalLink, ActionUserApproved, "user", user.Email,
+		"Registration approved via the emailed admin link", r)
 
 	// Send approval email to developer with claim link. emailErr carries the outcome to the
 	// response below, so the admin is told the truth rather than a fixed string (#1824).

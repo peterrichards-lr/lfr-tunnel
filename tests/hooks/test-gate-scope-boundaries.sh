@@ -464,16 +464,18 @@ else
 fi
 
 # ---------------------------------------------------------------------------
-# 10. BOUNDING. A self-contained page's OWN bundle is not checked for internal drift.
+# 10. FIRING. A self-contained page's OWN bundle IS checked for internal drift.
 #
-#     Deliberate for now, and measured rather than assumed: the client inspector's
-#     clientTranslations object has four keys (client_replay_req, client_req, client_resp,
-#     client_replaying) present only in `en`, so five locales fall back to English -- the same
-#     drift this gate exists for, one bundle out of its reach. Filed as #1854.
+#     This was a BOUNDING case until #1854: the gate read Language_<locale>.properties and the
+#     keys documents used, but nothing compared a self-contained page's own locales against its
+#     own English. The client inspector's clientTranslations had four keys (client_replay_req,
+#     client_req, client_resp, client_replaying) in `en` only, so five locales fell back to
+#     English for them -- twenty missing translations, invisible, because t() falls back
+#     silently.
 #
-#     The case exists so that closing #1854 turns it red, and whoever closes it has to come
-#     here and say the scope grew. Deleting a key from a self-contained bundle must NOT fail
-#     today; the day it does, this comment is out of date.
+#     The old case asserted that deleting a key from such a bundle did NOT fail, and existed so
+#     that closing #1854 would turn it red and force whoever closed it to come here and say the
+#     scope grew. This is that edit. The scope grew.
 # ---------------------------------------------------------------------------
 reset_i18n_sandbox
 if ! python3 - "$SANDBOX/pkg/client/dashboard.html" <<'PY'; then
@@ -493,10 +495,10 @@ PY
   harness "could not remove a key from the client inspector's own bundle"
 else
   run_i18n
-  if [ "$RC" -eq 0 ]; then
-    pass "BOUNDING  a self-contained page's own bundle is not checked for drift (#1854)"
+  if [ "$RC" -ne 0 ]; then
+    pass "FIRING    a self-contained page's own bundle IS checked for drift (#1854)"
   else
-    fail "the gate now reads a self-contained page's inline bundle -- if that is #1854 landing, update this case: $OUT"
+    fail "deleting a key from the client inspector's own bundle did not fail the gate -- the twenty missing translations #1854 found could come back unnoticed: $OUT"
   fi
 fi
 

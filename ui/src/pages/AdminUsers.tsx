@@ -86,6 +86,7 @@ export default function AdminUsers() {
   const { user: currentUser } = useOutletContext<{ user: any }>();
   const { showToast, showConfirm, showPrompt } = useUI();
   const { formatDate } = useSettings();
+  const [loadError, setLoadError] = useState('');
   const [users, setUsers] = useState<User[]>([]);
   const [loading, setLoading] = useState(true);
   const [selectedUser, setSelectedUser] = useState<User | null>(null);
@@ -107,8 +108,16 @@ export default function AdminUsers() {
           `/api/admin/users/${encodeURIComponent(selectedUser.email)}`,
         );
         setSelectedUserPATs(res.data.pats || []);
-      } catch (err) {
+      } catch (err: any) {
+        // An empty PAT list is indistinguishable from "this user has none" (#1868).
         console.error('Failed to fetch user details', err);
+        setLoadError(
+          err.response?.data?.error ||
+            t(
+              'admin_load_failed',
+              'Could not load this page. The server may be unreachable — what you see is not current.',
+            ),
+        );
       }
     };
     fetchUserDetails();
@@ -287,8 +296,16 @@ export default function AdminUsers() {
       setUsers(res.data);
       if (confRes.data) setServerConfig(confRes.data);
       if (domRes.data) _setDomains(domRes.data);
-    } catch (e) {
+    } catch (e: any) {
+      // An empty table is indistinguishable from "no results" (#1868). Say which.
       console.error(e);
+      setLoadError(
+        e.response?.data?.error ||
+          t(
+            'admin_load_failed',
+            'Could not load this page. The server may be unreachable — what you see is not current.',
+          ),
+      );
     } finally {
       setLoading(false);
     }
@@ -566,6 +583,12 @@ export default function AdminUsers() {
 
   return (
     <div>
+      {loadError && (
+        <div className="alert-banner alert-banner--danger mb-xl">
+          {loadError}
+        </div>
+      )}
+
       <div className="flex items-center justify-between mb-xl">
         <div>
           <h1 className="page-header__title">

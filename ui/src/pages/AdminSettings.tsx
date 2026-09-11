@@ -40,6 +40,13 @@ export default function AdminSettings() {
   const [loading, setLoading] = useState(true);
 
   // System Settings state
+  // Whether /api/admin/system-settings actually answered. The four fields below have plausible
+  // initial values -- 'round_robin', empty, false -- so a failed load renders a form that looks
+  // authoritative and is not. Saving from that state would PUT those defaults over the real
+  // configuration (#1868), which is a worse outcome than the failure that caused it.
+  const [settingsLoaded, setSettingsLoaded] = useState(false);
+  const [loadError, setLoadError] = useState('');
+
   const [allocationRule, setAllocationRule] = useState('round_robin');
   const [defaultDomain, setDefaultDomain] = useState('');
   const [supportedDomains, setSupportedDomains] = useState<string[]>([]);
@@ -74,6 +81,8 @@ export default function AdminSettings() {
       setDefaultDomain(sRes.data.default_domain || '');
       setVanityHookPath(sRes.data.vanity_domain_hook_path || '');
       setEnableVanityHook(!!sRes.data.enable_vanity_domain_hook);
+      // Only now are the four fields the server's rather than React's initial state.
+      setSettingsLoaded(true);
 
       // Fetched for test_target alone; see the state declaration above.
       const mRes = await axios.get('/api/admin/maintenance');
@@ -91,8 +100,18 @@ export default function AdminSettings() {
           );
         }
       }
-    } catch (e) {
+    } catch (e: any) {
+      // Not console.error alone (#1868). That left setLoading(false) to run and the form to
+      // render with its initial state, indistinguishable from values the server had supplied.
+      // The nested config-view catch above already did this correctly; this one did not.
       console.error(e);
+      setLoadError(
+        e.response?.data?.error ||
+          t(
+            'admin_load_failed',
+            'Could not load this page. The server may be unreachable — what you see is not current.',
+          ),
+      );
     } finally {
       setLoading(false);
     }
@@ -104,6 +123,18 @@ export default function AdminSettings() {
   }, []);
 
   const saveSystemSettings = async () => {
+    // Refuse rather than write defaults nobody chose. The disabled buttons below are the visible
+    // half; this is the half that holds if the page is reached another way.
+    if (!settingsLoaded) {
+      showToast(
+        t(
+          'admin_load_failed',
+          'Could not load this page. The server may be unreachable — what you see is not current.',
+        ),
+        'error',
+      );
+      return;
+    }
     try {
       await axios.put('/api/admin/system-settings', {
         domain_allocation_rule: allocationRule,
@@ -197,6 +228,12 @@ export default function AdminSettings() {
 
   return (
     <div>
+      {loadError && (
+        <div className="alert-banner alert-banner--danger mb-xl">
+          {loadError}
+        </div>
+      )}
+
       <div className="mb-xl">
         <h1 className="page-header__title">System Settings</h1>
         <p className="page-header__desc">
@@ -255,7 +292,11 @@ export default function AdminSettings() {
             ))}
           </select>
         </div>
-        <button className="btn btn-primary" onClick={saveSystemSettings}>
+        <button
+          className="btn btn-primary"
+          onClick={saveSystemSettings}
+          disabled={!settingsLoaded}
+        >
           Save Settings
         </button>
       </div>
@@ -305,7 +346,7 @@ export default function AdminSettings() {
         <button
           className="btn btn-primary"
           onClick={saveSystemSettings}
-          disabled={user.role !== 'owner'}
+          disabled={user.role !== 'owner' || !settingsLoaded}
         >
           Save Settings
         </button>

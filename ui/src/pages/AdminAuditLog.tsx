@@ -24,6 +24,7 @@ interface AuditEvent {
 }
 
 export default function AdminAuditLog() {
+  const [loadError, setLoadError] = useState('');
   const [events, setEvents] = useState<AuditEvent[]>([]);
   const [truncated, setTruncated] = useState(false);
   const [loading, setLoading] = useState(true);
@@ -57,8 +58,16 @@ export default function AdminAuditLog() {
       }
       setEvents(all);
       setTruncated(hitCeiling);
-    } catch (e) {
+    } catch (e: any) {
+      // An empty table is indistinguishable from "no results" (#1868). Say which.
       console.error(e);
+      setLoadError(
+        e.response?.data?.error ||
+          t(
+            'admin_load_failed',
+            'Could not load this page. The server may be unreachable — what you see is not current.',
+          ),
+      );
     } finally {
       setLoading(false);
     }
@@ -187,6 +196,12 @@ export default function AdminAuditLog() {
 
   return (
     <div>
+      {loadError && (
+        <div className="alert-banner alert-banner--danger mb-xl">
+          {loadError}
+        </div>
+      )}
+
       <div className="page-header">
         <div>
           <h1 className="page-header__title">

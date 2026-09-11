@@ -19,6 +19,7 @@ interface ExtRequest {
 }
 
 export default function AdminExtensions() {
+  const [loadError, setLoadError] = useState('');
   const [requests, setRequests] = useState<ExtRequest[]>([]);
   const [loading, setLoading] = useState(true);
   const { formatDate } = useSettings();
@@ -65,8 +66,15 @@ export default function AdminExtensions() {
     try {
       const res = await axios.get('/api/admin/reservations/extensions');
       setRequests(res.data || []);
-    } catch (err) {
+    } catch (err: any) {
       console.error(err);
+      setLoadError(
+        err.response?.data?.error ||
+          t(
+            'admin_load_failed',
+            'Could not load this page. The server may be unreachable — what you see is not current.',
+          ),
+      );
     } finally {
       setLoading(false);
     }
@@ -166,6 +174,12 @@ export default function AdminExtensions() {
 
   return (
     <div>
+      {loadError && (
+        <div className="alert-banner alert-banner--danger mb-xl">
+          {loadError}
+        </div>
+      )}
+
       <div className="page-header mb-xl">
         <div>
           <h1 className="page-header__title">

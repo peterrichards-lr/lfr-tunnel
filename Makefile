@@ -1,4 +1,4 @@
-.PHONY: fmt vet test test-locked ui-dist compile-check test-hooks check-contexts check-contexts-live check-workflow-failures check-attribution check-css check-contrast check-i18n check-html check-status build deploy clean install-hook install-go-guard ops-bin e2e e2e-sso e2e-edge e2e-ui help
+.PHONY: fmt vet test test-locked ui-dist compile-check test-hooks check-contexts check-contexts-live check-workflow-failures check-attribution check-css check-contrast check-i18n check-html check-status check-load-errors build deploy clean install-hook install-go-guard ops-bin e2e e2e-sso e2e-edge e2e-ui help
 
 VERSION ?= $(shell grep -oE 'Version = "[^"]+"' pkg/config/version.go | cut -d'"' -f2)
 
@@ -73,6 +73,7 @@ help:
 	@echo "  make check-i18n        - Portal keys are defined in Language.properties"
 	@echo "  make check-status      - Portal user statuses match the server's vocabulary"
 	@echo "  make check-html        - Every HTML document has balanced tags"
+	@echo "  make check-load-errors - Portal pages surface a failed data load"
 	@echo "  make nolint-ratchet    - //nolint:errcheck suppressions have not grown"
 	@echo "  make home-isolation    - tests never read the developer's real home directory"
 	@echo "  make check-branches    - Report stale remote branches"
@@ -289,6 +290,7 @@ test-hooks:
 	@./tests/hooks/test-e2e-teardown.sh
 	@./tests/hooks/test-e2e-ui-containerised.sh
 	@./tests/hooks/test-status-vocabulary.sh
+	@./tests/hooks/test-load-failure-gate.sh
 	@./tests/hooks/test-power-hook-credentials.sh
 	@./tests/hooks/test-ci-hook-gate.sh
 	@./tests/hooks/test-ci-docs-gate.sh
@@ -360,4 +362,9 @@ check-i18n:
 # because it needs a tag stack, so the bash 3.2 rule in AGENTS.md does not apply to it.
 check-html:
 	@node scripts/check-html-balance.mjs
+
+# A page that logs a failed load and carries on renders as if it succeeded -- an empty table that
+# reads as "no results", or a settings form showing React's initial state (#1868).
+check-load-errors:
+	@node scripts/check-load-failure-surfaced.cjs
 

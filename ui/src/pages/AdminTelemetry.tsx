@@ -65,6 +65,9 @@ export default function AdminTelemetry() {
           setTelemetryData(payload.data);
         }
       } catch (e) {
+        // load-failure-gate: one malformed WebSocket frame, not a page load. Blanking the screen
+        // for a single unparseable message would be a worse failure than dropping it; the next
+        // frame replaces the data anyway.
         console.error('[Telemetry V2] Failed to parse message:', e);
       }
     };

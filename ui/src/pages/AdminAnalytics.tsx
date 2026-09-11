@@ -98,6 +98,7 @@ export default function AdminAnalytics() {
   const { t, language } = useI18n();
   const { theme } = useSettings();
 
+  const [loadError, setLoadError] = useState('');
   const [data, setData] = useState<any>(null);
   const [clientStats, setClientStats] = useState<any[]>([]);
   // Anonymous geographic distribution (#1152). `available: false` is the normal state --
@@ -164,8 +165,15 @@ export default function AdminAnalytics() {
         setClientStats(clientsRes.data || []);
         setRegionLatency(latencyRes.data);
         setLocations(locationsRes.data);
-      } catch (err) {
+      } catch (err: any) {
         console.error('Failed to load analytics', err);
+        setLoadError(
+          err.response?.data?.error ||
+            t(
+              'admin_load_failed',
+              'Could not load this page. The server may be unreachable — what you see is not current.',
+            ),
+        );
       } finally {
         setLoading(false);
       }
@@ -259,6 +267,12 @@ export default function AdminAnalytics() {
 
   return (
     <div className="analytics-page">
+      {loadError && (
+        <div className="alert-banner alert-banner--danger mb-xl">
+          {loadError}
+        </div>
+      )}
+
       <div className="page-header no-print">
         <h1 className="page-header__title">
           {/* "System Analytics" describes a page a non-admin is not being shown: they get

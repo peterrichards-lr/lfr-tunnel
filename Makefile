@@ -1,4 +1,4 @@
-.PHONY: fmt vet test test-locked ui-dist compile-check test-hooks check-contexts check-contexts-live check-workflow-failures check-attribution check-css check-contrast check-i18n check-html build deploy clean install-hook e2e e2e-sso e2e-edge e2e-ui help
+.PHONY: fmt vet test test-locked ui-dist compile-check test-hooks check-contexts check-contexts-live check-workflow-failures check-attribution check-css check-contrast check-i18n check-html build deploy clean install-hook install-go-guard e2e e2e-sso e2e-edge e2e-ui help
 
 VERSION ?= $(shell grep -oE 'Version = "[^"]+"' pkg/config/version.go | cut -d'"' -f2)
 
@@ -58,6 +58,7 @@ help:
 	@echo "  make deploy       - Cross-compile and deploy server binary to VPS"
 	@echo "  make clean        - Delete build binaries"
 	@echo "  make install-hook - Install the native Git pre-commit and pre-push hooks"
+	@echo "  make install-go-guard - Install the PATH shim that keeps go inside the EDR whitelist"
 	@echo "  make help         - Show this help message"
 	@echo ""
 	@echo "Gates (these run in CI and in the git hooks -- run them before pushing):"
@@ -247,11 +248,21 @@ HOOKS_DIR = $(shell git rev-parse --git-path hooks)
 install-hook:
 	@./scripts/install-hook-shim.sh
 
+# Installs scripts/edr-go-wrapper.sh as `go` on PATH ahead of the real toolchain (#1860).
+#
+# A copy rather than a symlink into the worktree: this guard must keep working while a branch is
+# checked out that predates it, and while the repo is not mounted at all. The hook shims make the
+# opposite choice on purpose -- they must follow the branch (#1425) -- so the reasoning is spelt
+# out here rather than assumed to match.
+install-go-guard:
+	@./scripts/install-go-guard.sh
+
 # Tests the hook and guard scripts themselves (#1377, #1395, #1402). Fast: the stubbed cases
 # need no Docker, and only the end-to-end cases do. Not part of `test`, which is the Go suite.
 test-hooks:
 	@./tests/hooks/test-scan-staged-secrets.sh
 	@./tests/hooks/test-edr-guard.sh
+	@./tests/hooks/test-go-guard.sh
 	@./tests/hooks/test-shell-portability.sh
 	@./tests/hooks/test-drain-and-wait.sh
 	@./tests/hooks/test-check-staged-prettier.sh

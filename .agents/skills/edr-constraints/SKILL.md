@@ -24,6 +24,51 @@ description: Critical SentinelOne End Point Detection and Response (EDR) constra
 - **A tool you were told to build rather than `go run` can still spawn `go run` itself** (#1402). The rule had always been applied to how `lfr-tunnel-ops` is *invoked* — build it, never `go run ./cmd/lfr-tunnel-ops` — and never to what it *does*. `pkg/ops/sign.go` shelled out to `go run scripts/minisign_helper.go` on every `sign`, and `sign` is documented as being run directly (`op run -- lfr-tunnel-ops sign`), never through `make`, so `GOTMPDIR` was unset and it linked and executed out of `/var/folders` each time. Now done in-process via `pkg/minisign`.
 - **`scripts/check-edr-safety.sh` covers Go source as of #1402, and needed two changes to do it.** Adding `--include=*.go` alone caught nothing: the script's patterns are the literal `go run` / `go test`, and Go spells it as separate string literals — `exec.Command("go", "run", ...)`. Measured against the real defect: includes alone → exit 0; includes plus a `"go"[[:space:]]*,[[:space:]]*"(run|test)"` pattern → exit 1. `tests/hooks/test-edr-guard.sh` (via `make test-hooks`) holds both halves in place. When widening this guard again, check that the new coverage actually fires — an include that matches no pattern reads as coverage and is none.
 
+## The `go` PATH shim -- local defence in depth (#1860)
+
+**`GOTMPDIR` is pinned by the Makefile and by nothing else.** `Makefile:34` exports it, so every
+`make` target is safe -- but a bare `go build` at a prompt, and `lfr-tunnel-ops build` through
+`exec.Command`, inherit nothing and link into `/var/folders`. That is what SentinelOne acted on at
+2026-09-09 10:55: it quarantined this project's freshly built Mach-O binaries (size-matched to
+`dist/lfr-tunnel-darwin-*` and `bin/lfr-tunnel-ops` within 16 bytes) and took 61 tracked gate
+scripts, the three `.git/hooks` shims and two node `bin` directories with them as remediation
+collateral. **The scripts were never the detection.** See #1859 for the repo-side fix.
+
+`make install-go-guard` installs `scripts/edr-go-wrapper.sh` as `go` on PATH ahead of the real
+toolchain. It **fixes rather than blocks** -- `deploy` -> `make ui-dist` genuinely needs
+`go build`, so refusing the command would break releases:
+
+| Form | Verdict |
+| --- | --- |
+| `go run …` | refused -- links *and executes* from an arbitrary temp path |
+| `go test …` without `-c` | refused -- same shape |
+| `go test -c -o …` | **allowed** -- compiles without executing, and `Makefile:154` depends on it |
+| everything else | allowed, with `GOTMPDIR` pinned to the whitelist |
+
+Measured before and after, same command: `WORK=/var/folders/62/.../T/go-build1726362403` became
+`WORK=/private/tmp/go-build3661106187`.
+
+**Why a PATH shim and not an alias or a rename**, each measured rather than assumed: agent shells
+are non-interactive so `.zshrc` is never read, and `make` recipes run under `/bin/sh` which never
+reads it either, so an alias would miss the Makefile and `ops build` entirely. Renaming the
+toolchain silently self-heals, because `/opt/homebrew/bin/go` is a brew symlink that the next
+`brew upgrade go` restores -- leaving a guard that has stopped existing and looks identical to one
+that works, the same trap `AGENTS.md` rejected `core.hooksPath` for.
+
+Two things to know:
+
+- **It is machine-local. It is not the fix.** CI, a fresh clone and anyone else's laptop have no
+  shim. #1859 is the durable half.
+- **It is silent when nothing needs changing.** Inside `make`, `GOTMPDIR` is already correct, so
+  the shim says nothing -- verified by `make test` passing 18/18 with zero notices. If the two
+  ever disagree about the whitelist, `Makefile:34`'s `:=` wins and the shim's guarantee
+  evaporates, which is why both derive it the same way from `LFT_TEST_DIR`.
+
+`tests/hooks/test-go-guard.sh` holds all of it in place, including a CONTROL that strips the
+refusal and requires the test to notice. It earned that: an earlier draft resolved `head`/`grep`
+through PATH, so on a minimal PATH the shim failed to recognise itself, chose itself as the
+toolchain and `exec`'d itself forever. The test hung, which is how it was found.
+
 ## Running the server locally -- DON'T (as of 2026-08-13, no verified-safe way exists)
 
 Three incidents in a row now, each one a full local environment reinstall (Homebrew, jenv,
@@ -49,4 +94,4 @@ local-execution workaround.
 
 <!-- markdownlint-disable MD049 -->
 ---
-*Last Updated: 2026-08-26* | *Last Reviewed: 2026-08-26*
+*Last Updated: 2026-09-11* | *Last Reviewed: 2026-09-11*

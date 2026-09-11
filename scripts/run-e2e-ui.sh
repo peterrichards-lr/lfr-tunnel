@@ -131,44 +131,14 @@ echo "=== Running Playwright UI Tests (containerised) ==="
 # needs the docker CLI (below), and installing it on every run re-fetches from the apt mirrors
 # each time -- the same transient-registry flakiness #1530 added a retry for one layer up. A
 # tagged image is built once and reused, and the build context is stdin, so nothing is uploaded.
-# DERIVED from the lockfile that governs the install, not pinned as a literal.
-#
-# The image ships browser builds for exactly ONE library version, so the tag and the installed
-# @playwright/test have to agree. Pinning a literal taken from package.json's range (^1.60.0) was
-# tried and failed loudly: pnpm installs 1.61.1, and Playwright refused to launch --
-#
-#   Executable doesn't exist at /ms-playwright/chromium_headless_shell-1228/...
-#   current: mcr.microsoft.com/playwright:v1.60.0-jammy / required: v1.61.1-jammy
-#
-# A caret range cannot decide this; only the lockfile can. tests/e2e/ui also carries a stale
-# package-lock.json pinning 1.60.0 (#1863) -- pnpm-lock.yaml is the one `pnpm install` below
-# reads, so it is the one this derives from. Derived rather than listed, for the same reason
-# test-shell-portability.sh derives its file set: a listed value is a second source of truth that
-# drifts the moment the first one moves.
-PLAYWRIGHT_LOCKFILE="$PROJECT_ROOT/tests/e2e/ui/pnpm-lock.yaml"
-PLAYWRIGHT_VERSION="$(sed -n "s/^  '@playwright\/test@\([0-9][0-9.]*\)':.*/\1/p" "$PLAYWRIGHT_LOCKFILE" | head -1)"
-if [ -z "$PLAYWRIGHT_VERSION" ]; then
-    echo "❌ Could not read the @playwright/test version from $PLAYWRIGHT_LOCKFILE." >&2
-    echo "   Refusing to guess an image tag: a mismatch means Playwright cannot launch a browser." >&2
-    exit 1
-fi
-PLAYWRIGHT_IMAGE="lfr-tunnel-e2e-playwright:v${PLAYWRIGHT_VERSION}"
+# The image tag is derived from the lockfile that governs the install, in tests/e2e/lib so the
+# other runner cannot drift from it -- which is exactly what had happened (#1863).
+# shellcheck source=../tests/e2e/lib/playwright-image.sh
+. "$PROJECT_ROOT/tests/e2e/lib/playwright-image.sh"
+lft_playwright_image "$PROJECT_ROOT/tests/e2e/ui" || exit 1
+
 echo "=== Preparing the Playwright runner image ($PLAYWRIGHT_IMAGE, from pnpm-lock.yaml) ==="
-docker build -t "$PLAYWRIGHT_IMAGE" --build-arg "PW_VERSION=$PLAYWRIGHT_VERSION" - <<'DOCKERFILE'
-ARG PW_VERSION
-FROM mcr.microsoft.com/playwright:v${PW_VERSION}-jammy
-
-# analytics.spec.ts drives the client with `docker exec ${E2E_PROJECT_NAME}-lfr-tunnel-1`, so the
-# runner needs the CLI. --no-install-recommends keeps this to the client; the daemon is the host's,
-# reached through the socket mounted at run time.
-RUN apt-get update \
-    && apt-get install -y --no-install-recommends docker.io \
-    && rm -rf /var/lib/apt/lists/*
-
-# pnpm, not npm. This project has both a pnpm-lock.yaml and a package-lock.json, and the previous
-# containerised path ran `npm install`, which silently resolves against the wrong one.
-RUN corepack enable
-DOCKERFILE
+lft_playwright_build
 
 export INSPECTOR_URL="http://localhost:${E2E_PROXY_PORT}"
 

@@ -4773,6 +4773,24 @@ func (s *Server) handleAdminPatchUser(w http.ResponseWriter, r *http.Request, ac
 	}
 
 	if req.Status != nil {
+		// Validated, unlike every other write to this field before #1872.
+		//
+		// The consequence was not merely an odd value in a column. approveOnSSOSignIn refuses
+		// exactly one status -- `if user.Status == statusRejected` -- and auto-approves everything
+		// else. So a rejection written as "Rejected", or mistyped, produced a row that looked
+		// rejected in the portal and in the audit log, and was then silently APPROVED on the
+		// user's next SSO sign-in. A security control that reports success and does nothing.
+		//
+		// Rejected rather than normalised on purpose. Silently accepting "Rejected" and storing
+		// "rejected" would hide that the caller was wrong, and the next caller would be a script
+		// that keeps being wrong. The error names the accepted values so the fix is obvious.
+		if !db.IsValidUserStatus(*req.Status) {
+			http.Error(w, fmt.Sprintf(
+				`{"error":"Invalid status %q. Valid values are: %s"}`,
+				*req.Status, strings.Join(db.UserStatuses, ", "),
+			), http.StatusBadRequest)
+			return
+		}
 		details["status_before"] = user.Status
 		details["status_after"] = *req.Status
 		user.Status = *req.Status

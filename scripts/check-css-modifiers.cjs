@@ -325,27 +325,16 @@ const V1_WEB_ROOTS = [
 // removing it would take the ratchet with it. Empty is the state to keep it in: an entry here
 // is an exemption, and every one added is a class the gate stops protecting.
 //
-// The four below are what widening the scan to pkg/client turned up (#1779), all in the client
-// inspector's own page. They are deferred rather than fixed here because each one needs a rule
-// written and the visual result looked at, and this change is a scope-boundary change whose
-// whole property is "the gate now reads a file it did not". Burning them down is #1853. The
-// enumeration is the deliverable; a fix buried in it would make the before/after unreadable.
-const V1_KNOWN_INERT = new Map(
-  Object.entries({
-    'input-field':
-      'pkg/client/dashboard.html: the three Logs-view filter inputs and selects carry it; the ' +
-      'page defines no rule, so they render unstyled. Needs a rule, not a rename (#1853).',
-    'traffic-header':
-      'pkg/client/dashboard.html:254: fully styled by its own inline style attribute, so the ' +
-      'class is a name with nothing behind it. Hoist the inline style into it or drop it (#1853).',
-    btn:
-      'pkg/client/dashboard.html:1304: the Logs Refresh button. `.btn`/`.btn-secondary` are ' +
-      'Portal V1 names that pkg/server/static/dashboard.css defines and this page never links ' +
-      '(#1853).',
-    'btn-secondary':
-      'pkg/client/dashboard.html:1304: the other half of the same button. See .btn (#1853).',
-  }),
-);
+// Widening the scan to pkg/client (#1779) added four entries here -- `.input-field`, `.btn`,
+// `.btn-secondary` and `.traffic-header`, all in the client inspector's own page. #1853 burned
+// them down: the page now defines the three control classes in its own <style> block (it is
+// served by a different binary from Portal V1 and cannot link V1's stylesheet, and embedding a
+// copy would have made two sets of the same rules that drift), and `.traffic-header`'s inline
+// style was hoisted into the class that already named it.
+//
+// Empty again, and empty is the state to keep it in. An entry here is a class the gate stops
+// protecting.
+const V1_KNOWN_INERT = new Map(Object.entries({}));
 
 const v1InertSeen = new Set();
 

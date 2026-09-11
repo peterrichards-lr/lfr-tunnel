@@ -169,6 +169,34 @@
         :root[data-theme="light"] .icon-sun { display: none; }
         :root:not([data-theme="light"]) .icon-moon { display: none; }
         :root:not([data-theme="light"]) .icon-sun { display: block; }
+
+        /* Controls (#1853).
+         *
+         * This page applied .input-field, .btn and .btn-secondary and defined none of them, so
+         * the Logs view's filter box, its two selects and its Refresh button rendered with the
+         * browser default next to styled controls. They are Portal V1 names, and V1's
+         * pkg/server/static/dashboard.css does define them -- but this page is served by a
+         * different binary and never links that file, so the names resolved to nothing.
+         *
+         * Written here rather than by embedding a copy of that stylesheet: two copies of the
+         * same rules in two binaries drift, which is the defect one level up from this one. The
+         * declarations below match what every other control on this page already does inline.
+         */
+        .input-field { background: var(--bg-solid); color: var(--text-main); border: 1px solid var(--border); border-radius: 6px; padding: 8px 10px; font-size: 13px; font-family: inherit; transition: border-color 0.2s; }
+        .input-field:focus { outline: none; border-color: var(--primary); }
+        .input-field::placeholder { color: var(--text-muted); }
+
+        .btn { background: var(--primary); color: #fff; border: none; border-radius: 6px; padding: 8px 16px; font-size: 13px; font-weight: 600; font-family: inherit; cursor: pointer; transition: background 0.2s, opacity 0.2s; }
+        .btn:hover { opacity: 0.9; }
+        /* Secondary is the quieter of the two: Refresh sits beside filter inputs and should not
+         * outrank them. Same geometry as .btn so the two line up in a row. */
+        .btn-secondary { background: transparent; color: var(--text-main); border: 1px solid var(--border); }
+        .btn-secondary:hover { background: rgba(255, 255, 255, 0.04); opacity: 1; }
+        :root[data-theme="light"] .btn-secondary:hover { background: rgba(0, 0, 0, 0.04); }
+
+        /* Hoisted from the element's own style attribute, which did all of this and left the
+         * class as a name with nothing behind it. */
+        .traffic-header { display: flex; justify-content: space-between; align-items: center; padding: 12px 16px; border-bottom: 1px solid var(--border); background: var(--bg-card); }
     </style>
     <script>
         document.addEventListener('DOMContentLoaded', () => {
@@ -251,7 +279,7 @@
                 <!-- Injected via JS -->
             </div>
         </div>
-        <div class="traffic-header" style="display: flex; justify-content: space-between; align-items: center; padding: 12px 16px; border-bottom: 1px solid var(--border); background: var(--bg-card);">
+        <div class="traffic-header">
             <div style="font-size: 12px; font-weight: 600; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.05em;" data-i18n="client_traffic_log">Traffic Log</div>
             <button onclick="clearTraffic()" style="background: transparent; color: var(--danger); border: 1px solid rgba(255, 60, 60, 0.3); padding: 4px 8px; border-radius: 4px; font-size: 11px; cursor: pointer; transition: background 0.2s;" onmouseover="this.style.background='rgba(255, 60, 60, 0.1)'" onmouseout="this.style.background='transparent'" data-i18n="client_clear_traffic">Clear</button>
         </div>

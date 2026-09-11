@@ -328,3 +328,43 @@ func grantDiagnosticsConsent(t *testing.T, srv *Server, sessionToken string, ena
 		t.Fatalf("setting diagnostics consent to %v returned %d: %s", enabled, rec.Code, rec.Body.String())
 	}
 }
+
+// The route existed as a handler and was wired to nothing (#1894). It compiled, every test
+// passed, and the client would have POSTed into a 404 -- an admin would have requested logs and
+// simply never received them. golangci-lint found it indirectly, by reporting two constants as
+// unused because the only thing referencing them was a handler no route reached.
+//
+// This asserts the seam directly, since that is what nothing covered: the tests exercised the
+// store and the client separately and never the path between them.
+func TestTheClientUploadRouteIsReachable(t *testing.T) {
+	srv := setupTestServerForAPI(t)
+	defer srv.Stop()
+
+	req := httptest.NewRequest(http.MethodPost, "/api/client/diagnostics/upload",
+		bytes.NewReader([]byte(`{"request_id":"nope","logs":[]}`)))
+	req.Header.Set("Content-Type", "application/json")
+	w := httptest.NewRecorder()
+	srv.ServeHTTP(w, req)
+
+	// 404 is the failure this guards: it means no route reaches the handler. Any other status
+	// -- 401 without a session, 403 for an unrequested collection -- proves the handler ran.
+	if w.Code == http.StatusNotFound {
+		t.Fatalf("POST /api/client/diagnostics/upload returned 404: the handler is not routed, "+
+			"so a client would upload into nothing (body: %s)", w.Body.String())
+	}
+}
+
+// The admin surface has the same exposure: a handler nothing routes to looks identical to a
+// working one from the Go side.
+func TestTheAdminBundlesRouteIsReachable(t *testing.T) {
+	srv := setupTestServerForAPI(t)
+	defer srv.Stop()
+
+	req := httptest.NewRequest(http.MethodGet, "/api/admin/diagnostics/bundles?email=nobody@example.com", nil)
+	w := httptest.NewRecorder()
+	srv.ServeHTTP(w, req)
+
+	if w.Code == http.StatusNotFound {
+		t.Fatalf("GET /api/admin/diagnostics/bundles returned 404: the handler is not routed")
+	}
+}

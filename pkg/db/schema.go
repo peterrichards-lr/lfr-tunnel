@@ -177,6 +177,28 @@ func (db *DB) initSchema() error {
 		PRIMARY KEY (user_id, region, day)
 	);
 
+	-- Collected diagnostic log bundles (#1894). The first user data this gateway stores on the
+	-- owner's behalf; #1696 created no store deliberately so that this would be a decision.
+	--
+	-- ON DELETE CASCADE is the load-bearing part: a GDPR erasure cannot leave a bundle behind,
+	-- and it cannot be forgotten the way a second deletion path in Go could be. The content is
+	-- the redacted, bounded bundle from #1885 -- application request and response bodies never
+	-- travel, so this is log metadata rather than customer traffic.
+	CREATE TABLE IF NOT EXISTS diagnostics_bundles (
+		id TEXT PRIMARY KEY,
+		user_id TEXT NOT NULL,
+		requested_by TEXT NOT NULL,
+		kind TEXT NOT NULL,
+		content BLOB NOT NULL,
+		bytes INTEGER NOT NULL,
+		truncated INTEGER NOT NULL DEFAULT 0,
+		dropped_lines INTEGER NOT NULL DEFAULT 0,
+		collected_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+		FOREIGN KEY(user_id) REFERENCES users(id) ON DELETE CASCADE
+	);
+
+	CREATE INDEX IF NOT EXISTS idx_diagnostics_bundles_user ON diagnostics_bundles(user_id, collected_at);
+
 	CREATE TABLE IF NOT EXISTS admin_settings (
 		key   TEXT PRIMARY KEY,
 		value TEXT NOT NULL
@@ -387,4 +409,31 @@ var migrations = []migration{
 	// account that exists when this migration runs has never been asked the question,
 	// and a column defaulted to "on" would record consent nobody gave. NULL is off.
 	{30, "ALTER TABLE users ADD COLUMN diagnostics_consent_at DATETIME"},
+
+	// Collected diagnostic log bundles (#1894, part 3b of #1763).
+	//
+	// The first user data this gateway stores on the owner's behalf. #1696 deliberately created
+	// no store so that this would be a decision rather than a side effect, and the decisions are
+	// recorded here because the schema is where they become real:
+	//
+	//   * ON DELETE CASCADE, so a GDPR erasure cannot leave a bundle behind. The alternative --
+	//     remembering to delete it in api.go -- is the kind of thing that is right until someone
+	//     adds a second deletion path.
+	//   * requested_by is kept because an uploaded bundle without the admin who asked for it is
+	//     evidence of a collection nobody can account for.
+	//   * content is the redacted, bounded bundle from #1885. Application request and response
+	//     bodies never travel, so this is log metadata, not customer traffic.
+	{31, `CREATE TABLE IF NOT EXISTS diagnostics_bundles (
+		id TEXT PRIMARY KEY,
+		user_id TEXT NOT NULL,
+		requested_by TEXT NOT NULL,
+		kind TEXT NOT NULL,
+		content BLOB NOT NULL,
+		bytes INTEGER NOT NULL,
+		truncated INTEGER NOT NULL DEFAULT 0,
+		dropped_lines INTEGER NOT NULL DEFAULT 0,
+		collected_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+		FOREIGN KEY(user_id) REFERENCES users(id) ON DELETE CASCADE
+	)`},
+	{32, "CREATE INDEX IF NOT EXISTS idx_diagnostics_bundles_user ON diagnostics_bundles(user_id, collected_at)"},
 }

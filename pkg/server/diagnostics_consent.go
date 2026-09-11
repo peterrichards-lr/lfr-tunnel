@@ -170,6 +170,14 @@ func (s *Server) handleDiagnosticsConsent(w http.ResponseWriter, r *http.Request
 	}
 	s.auditDiagnostics(user.Email, action, "user", user.ID, details, r)
 
+	// Withdrawal destroys what was already collected, not just what would be collected next
+	// (#1894). "We stop collecting new ones" is not what the portal promises, and it is not
+	// what #1763 asked for. Done after the audit above so the trail reads in the order the
+	// events happened: consent withdrawn, then the erasure that followed from it.
+	if !req.Enabled {
+		s.purgeDiagnosticsBundlesOnWithdrawal(user.ID, user.Email, r)
+	}
+
 	respondJSON(w, http.StatusOK, diagnosticsConsentResponse{
 		Status:  "ok",
 		Consent: diagnosticsConsentState(user),

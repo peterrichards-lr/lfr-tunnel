@@ -938,6 +938,17 @@ func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 
+		// The client's diagnostic upload (#1894). A client endpoint, not an admin one:
+		// registering it under handleAdminEndpoints made it unreachable, and the client
+		// would have POSTed into a 404 with nothing reporting a problem.
+		//
+		// Authorised by the collection command the body carries, not by who is calling, so
+		// it needs no admin session -- and must not be behind one.
+		if r.URL.Path == "/api/client/diagnostics/upload" {
+			s.handleDiagnosticsUpload(w, r)
+			return
+		}
+
 		if r.Method == http.MethodPost && r.URL.Path == "/api/tunnel-status" {
 			s.handleTunnelStatus(w, r)
 			return
@@ -2345,6 +2356,9 @@ func (s *Server) Start() error {
 					// restarts the daemon, so forwarding at startup alone would leave it
 					// unreported until something unrelated bounced the gateway (#1875).
 					s.forwardWatchdogEvents()
+					// The retention period PRIVACY.md states is only true because this
+					// runs (#1894).
+					s.pruneDiagnosticsBundles()
 					_ = s.db.PruneExpiredMagicLinks()                          //nolint:errcheck
 					_ = s.db.PruneExpiredOrRevokedPATs(s.cfg.PATRetentionDays) //nolint:errcheck
 					// Expired sessions are read as absent, so this is housekeeping rather
@@ -3427,6 +3441,11 @@ func (s *Server) handleAdminEndpoints(w http.ResponseWriter, r *http.Request) {
 
 	// Where should the next edge go (#1151). Served alongside the other admin analytics rather
 	// than on its own route, so it inherits the same admin check.
+	if r.URL.Path == "/api/admin/diagnostics/bundles" {
+		s.handleAdminDiagnosticsBundles(w, r)
+		return
+	}
+
 	if r.URL.Path == "/api/admin/analytics/node-placement" {
 		s.handleNodePlacement(w, r)
 		return

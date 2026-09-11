@@ -1,8 +1,14 @@
 package client
 
 import (
+	"bytes"
 	"encoding/json"
+	"fmt"
+	"log/slog"
+	"net/http"
+	"strings"
 	"sync"
+	"time"
 )
 
 // Receiving a diagnostic-collection request from the gateway (#1763, part 2 of #1696).
@@ -28,6 +34,14 @@ type DiagnosticsCommand struct {
 	ID   string `json:"id"`
 	Type string `json:"t"`
 }
+
+// Field names used in more than one diagnostics event. Named because they are the shape a reader
+// greps the error log for, and three spellings of "request_id" would make that grep wrong.
+const (
+	fieldRequestID  = "request_id"
+	fieldReason     = "reason"
+	fieldStatusCode = "status_code"
+)
 
 // DiagnosticsCommandCollectLogs is the only command that exists, and the only one this will act
 // on. Anything else is ignored rather than dispatched: a general "run what the gateway says"
@@ -119,4 +133,102 @@ func (e *InterceptorEngine) takeDiagnosticsAcks() []string {
 	}
 	e.diagAcks.pending = nil
 	return out
+}
+
+// uploadDiagnosticsBundle reads this client's logs, redacts them, and sends them to the gateway
+// (#1894, completing #1763).
+//
+// Everything it sends comes from #1885's CollectRedactedLogs: application request and response
+// bodies are excluded entirely rather than filtered, secrets are removed from what remains, and
+// the whole thing is capped. Nothing here chooses what to read -- the paths come from the
+// client's own LogDir, never from the gateway, so a collection request cannot name a file.
+//
+// Runs on its own goroutine. The heartbeat that delivered the command has already been answered,
+// and reading and redacting several megabytes must not sit in the middle of a health check.
+func (e *InterceptorEngine) uploadDiagnosticsBundle(serverURL, sessionToken, subdomain, requestID string) {
+	logs, err := CollectRedactedLogs("", subdomain, DefaultCollectionMaxBytes)
+	if err != nil {
+		slog.Info(fmt.Sprintf("[Client] Could not read the logs for collection %s: %v", requestID, err))
+		e.LogEvent("warn", "diagnostics_collect_failed", map[string]any{
+			fieldRequestID: requestID,
+			fieldReason:    "read_failed",
+		})
+		return
+	}
+	if len(logs) == 0 {
+		slog.Info(fmt.Sprintf("[Client] Collection %s found no logs to send.", requestID))
+		return
+	}
+
+	type wireLog struct {
+		Kind         string `json:"kind"`
+		Content      string `json:"content"`
+		Truncated    bool   `json:"truncated"`
+		DroppedLines int    `json:"dropped_lines"`
+	}
+	payload := struct {
+		RequestID string    `json:"request_id"`
+		Logs      []wireLog `json:"logs"`
+	}{RequestID: requestID}
+	total := 0
+	for _, l := range logs {
+		payload.Logs = append(payload.Logs, wireLog{
+			Kind: l.Kind, Content: string(l.Content),
+			Truncated: l.Truncated, DroppedLines: l.DroppedLines,
+		})
+		total += l.Bytes
+	}
+
+	body, err := json.Marshal(payload)
+	if err != nil {
+		slog.Info(fmt.Sprintf("[Client] Could not encode collection %s: %v", requestID, err))
+		return
+	}
+
+	req, err := http.NewRequest(http.MethodPost,
+		strings.TrimRight(serverURL, "/")+"/api/client/diagnostics/upload", bytes.NewReader(body))
+	if err != nil {
+		return
+	}
+	req.Header.Set("Content-Type", "application/json")
+	// The session token is what proves who this is; the request id is what proves the gateway
+	// asked. Neither alone is enough, which is why both travel.
+	req.Header.Set("X-Session-Token", sessionToken)
+
+	client := &http.Client{Timeout: 60 * time.Second}
+	resp, err := client.Do(req)
+	if err != nil {
+		slog.Info(fmt.Sprintf("[Client] Could not send collection %s: %v", requestID, err))
+		e.LogEvent("warn", "diagnostics_collect_failed", map[string]any{
+			fieldRequestID: requestID,
+			fieldReason:    "upload_failed",
+		})
+		return
+	}
+	defer func() {
+		// Checked rather than suppressed: the nolint ratchet is at its ceiling, and a close
+		// error on a response we have already read is worth a line rather than a slot.
+		if cerr := resp.Body.Close(); cerr != nil {
+			slog.Debug(fmt.Sprintf("[Client] Closing the upload response for %s: %v", requestID, cerr))
+		}
+	}()
+
+	if resp.StatusCode != http.StatusOK {
+		slog.Info(fmt.Sprintf("[Client] The gateway refused collection %s (HTTP %d).", requestID, resp.StatusCode))
+		e.LogEvent("warn", "diagnostics_collect_failed", map[string]any{
+			"request_id":    requestID,
+			fieldStatusCode: resp.StatusCode,
+		})
+		return
+	}
+
+	// Said out loud, and recorded in the user's own log. A collection they cannot see is
+	// indistinguishable from one that did not happen, and this is their machine.
+	slog.Info(fmt.Sprintf("[Client] Sent %d diagnostic log(s) (%d bytes) for collection %s, as requested by an administrator.",
+		len(logs), total, requestID))
+	e.LogEvent("info", "diagnostics_collect_sent", map[string]any{
+		fieldRequestID: requestID,
+		"logs":         len(logs),
+		"bytes":        total,
+	})
 }

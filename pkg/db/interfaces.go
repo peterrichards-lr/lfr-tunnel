@@ -97,6 +97,20 @@ type MetricRepository interface {
 	GetGatewayRuns(limit int) ([]*GatewayRun, error)
 }
 
+// DiagnosticsRepository stores collected diagnostic log bundles (#1894).
+//
+// Deletion appears twice on purpose. DeleteDiagnosticsBundlesForUser is the withdrawal path --
+// consent going away destroys what was already collected -- while the schema's ON DELETE CASCADE
+// covers account erasure. Relying on the cascade alone would leave withdrawal silently retaining
+// data, and relying on Go alone would leave erasure depending on someone remembering.
+type DiagnosticsRepository interface {
+	StoreDiagnosticsBundle(b *DiagnosticsBundle) error
+	ListDiagnosticsBundles(userID string) ([]DiagnosticsBundle, error)
+	GetDiagnosticsBundle(id string) (*DiagnosticsBundle, error)
+	DeleteDiagnosticsBundlesForUser(userID string) (int64, error)
+	PruneDiagnosticsBundles() (int64, error)
+}
+
 // RegionProbeRepository stores the latency measurements clients already take and used to throw
 // away, so edge placement can be judged on what users experience rather than on geography
 // (#1151).

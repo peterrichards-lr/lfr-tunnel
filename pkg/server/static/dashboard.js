@@ -5473,7 +5473,84 @@ async function openUserDetailsModal(userJsonEncoded) {
     });
   }
 
+  loadDiagnosticsBundles(u.email);
+
   document.getElementById('user-details-modal').style.display = 'flex';
+}
+
+// Collected diagnostic logs for one user (#1894, completing #1763).
+//
+// A failure here is tolerated and leaves the section hidden: a gateway that has never collected
+// anything is the normal case, and it must not make the rest of the panel look broken.
+async function loadDiagnosticsBundles(email) {
+  const wrap = document.getElementById('detail-diag-wrap');
+  const btn = document.getElementById('detail-diag-collect');
+  if (btn) {
+    btn.disabled = false;
+    btn.textContent = t('diag_collect');
+    btn.onclick = () => requestDiagnosticsCollection(email);
+  }
+  if (!wrap) return;
+  wrap.style.display = 'none';
+  try {
+    const res = await fetch(
+      `/api/admin/diagnostics/bundles?email=${encodeURIComponent(email)}`,
+    );
+    if (!res.ok) return;
+    const data = (await res.json()) || {};
+    const bundles = data.bundles || [];
+    if (!bundles.length) return;
+    renderTable(
+      'detail-diag-tbody',
+      bundles,
+      (b) => `
+                        <tr>
+                            <td style="font-weight: 600;">${escapeHTML(b.kind || '')}</td>
+                            <td style="color: var(--text-muted);">${escapeHTML(new Date(b.collected_at).toLocaleString())}</td>
+                            <td style="color: var(--text-muted);">${Math.max(1, Math.round((b.bytes || 0) / 1024))} KB${b.truncated ? ' *' : ''}</td>
+                            <td><a class="btn btn-secondary" style="width: auto; margin: 0; padding: 4px 10px; font-size: 12px;" href="/api/admin/diagnostics/bundles?id=${encodeURIComponent(b.id)}">${escapeHTML(t('diag_download'))}</a></td>
+                        </tr>
+                    `,
+    );
+    const ret = document.getElementById('detail-diag-retention');
+    if (ret && data.retention_days) {
+      ret.textContent = `${t('diag_retention')} ${data.retention_days} ${t('diag_retention_days')}`;
+    }
+    wrap.style.display = '';
+  } catch (e) {
+    console.error('Failed to load diagnostic bundles', e);
+  }
+}
+
+// Ask this user's client for its logs. The endpoint answers on two axes -- whether the request
+// was permitted, and whether it could be delivered -- so a consenting user whose laptop is shut
+// reads as "nobody to ask", not as a refusal.
+async function requestDiagnosticsCollection(email) {
+  const btn = document.getElementById('detail-diag-collect');
+  if (btn) {
+    btn.disabled = true;
+    btn.textContent = t('diag_collecting');
+  }
+  try {
+    const res = await fetch('/api/admin/diagnostics/collect', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ email }),
+    });
+    const data = (await res.json()) || {};
+    showToast(
+      data.delivery_detail || data.error || t('diag_requested'),
+      res.ok && data.delivery === 'queued' ? 'success' : 'info',
+    );
+  } catch (e) {
+    console.error('Failed to request diagnostics', e);
+    showToast(t('diag_refused'), 'error');
+  } finally {
+    if (btn) {
+      btn.disabled = false;
+      btn.textContent = t('diag_collect');
+    }
+  }
 }
 
 function closeUserDetailsModal() {

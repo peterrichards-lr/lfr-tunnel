@@ -16,11 +16,6 @@
       "fix(hooks): decide the pre-push range against the target, and refuse when it cannot (#1816) (#1835)",
       "fix(server): record magic-link and invite email failures instead of discarding them (#1832) (#1834)",
       "fix(server): complete the SSO auto-approval, and stop losing approval emails silently (#1824) (#1831)",
-      "chore(deps): bump github.com/aws/aws-sdk-go-v2/service/scheduler (#1829)",
-      "chore(deps): bump github.com/aws/aws-sdk-go-v2/service/sts (#1827)",
-      "chore(deps): bump golang.org/x/oauth2 from 0.36.0 to 0.37.0 (#1828)",
-      "chore(deps): bump modernc.org/sqlite from 1.57.0 to 1.58.0 (#1826)",
-      "chore(deps): bump github.com/aws/aws-sdk-go-v2/service/route53 (#1825)",
       "fix(server): resolve every recorded address through the trusted-proxy boundary (#1818) (#1823)"
     ]
   },

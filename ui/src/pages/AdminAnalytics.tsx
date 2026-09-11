@@ -109,6 +109,7 @@ export default function AdminAnalytics() {
   // Where the next edge should go (#1151). The data path shipped without a reader; this is
   // the panel the epic (#1149) was left open for.
   const [regionLatency, setRegionLatency] = useState<any>(null);
+  const [nodePlacement, setNodePlacement] = useState<any>(null);
   const [loading, setLoading] = useState(true);
   const [timeRange, setTimeRange] = useState('30'); // Default to 30 days
 
@@ -147,24 +148,31 @@ export default function AdminAnalytics() {
           return;
         }
 
-        const [clientsRes, latencyRes, locationsRes] = await Promise.all([
-          axios.get('/api/admin/analytics/clients').catch(() => ({ data: [] })),
-          // Its own days param rather than the shared one: the endpoint rejects 0, which
-          // is what the "All time" option sends.
-          axios
-            .get(`/api/admin/analytics/region-latency?days=${timeRange}`)
-            .catch(() => ({ data: null })),
-          // Admin-only, so it belongs inside this guard rather than in the first request:
-          // #1512 made the admin endpoints conditional precisely so a non-admin does not
-          // collect a guaranteed 403 on every page load. Merging this branch's parallel
-          // version back in would have quietly undone that.
-          axios
-            .get('/api/admin/analytics/locations')
-            .catch(() => ({ data: null })),
-        ]);
+        const [clientsRes, latencyRes, locationsRes, placementRes] =
+          await Promise.all([
+            axios
+              .get('/api/admin/analytics/clients')
+              .catch(() => ({ data: [] })),
+            // Its own days param rather than the shared one: the endpoint rejects 0, which
+            // is what the "All time" option sends.
+            axios
+              .get(`/api/admin/analytics/region-latency?days=${timeRange}`)
+              .catch(() => ({ data: null })),
+            // Admin-only, so it belongs inside this guard rather than in the first request:
+            // #1512 made the admin endpoints conditional precisely so a non-admin does not
+            // collect a guaranteed 403 on every page load. Merging this branch's parallel
+            // version back in would have quietly undone that.
+            axios
+              .get('/api/admin/analytics/locations')
+              .catch(() => ({ data: null })),
+            axios
+              .get(`/api/admin/analytics/node-placement?days=${timeRange}`)
+              .catch(() => ({ data: null })),
+          ]);
         setClientStats(clientsRes.data || []);
         setRegionLatency(latencyRes.data);
         setLocations(locationsRes.data);
+        setNodePlacement(placementRes.data);
       } catch (err: any) {
         console.error('Failed to load analytics', err);
         setLoadError(
@@ -698,6 +706,130 @@ export default function AdminAnalytics() {
                     </tbody>
                   </table>
                 </div>
+              </>
+            )}
+          </div>
+
+          {/* Node placement (#1892): did tunnels start on the closest node the user could
+              reach? Sits beside Region Latency because it is the same subject and the same
+              data -- region_probes joined to which node actually served each session.
+
+              THE PERCENTAGE IS OF ASSESSABLE SESSIONS, NOT OF ALL SESSIONS, and the
+              not-assessable count is shown beside it rather than folded in. The commonest
+              reason a session cannot be assessed is the client's 24h region cache: a cached
+              choice runs no probe, so there is nothing that day to compare against. Rendering
+              those as part of a pass/fail bar would report "40% wrong" for sessions that were
+              merely unmeasured, and somebody would move an edge because of it. */}
+          <div className="card p-xl mb-xl">
+            <h4 className="text-muted text-base mb-lg">
+              {t('node_placement', 'Node Placement')}
+            </h4>
+            {!nodePlacement || !nodePlacement.sessions ? (
+              <p className="text-muted text-sm m-0">
+                {t(
+                  'node_placement_empty',
+                  'No sessions to assess yet. This compares where a tunnel started against what that user measured the same day.',
+                )}
+              </p>
+            ) : (
+              <>
+                {(() => {
+                  const assessable =
+                    (nodePlacement.optimal || 0) +
+                    (nodePlacement.suboptimal || 0);
+                  const pct = assessable
+                    ? Math.round(
+                        ((nodePlacement.optimal || 0) / assessable) * 100,
+                      )
+                    : 0;
+                  return (
+                    <p
+                      className={`text-sm mb-lg ${
+                        assessable && nodePlacement.suboptimal > 0
+                          ? 'text-warning'
+                          : 'text-muted'
+                      }`}
+                    >
+                      <strong>{assessable ? `${pct}%` : '--'}</strong>{' '}
+                      {t(
+                        'node_placement_headline',
+                        'of assessable sessions started on the closest node the user could reach',
+                      )}
+                      {nodePlacement.unverifiable > 0 && (
+                        <>
+                          {' ('}
+                          {nodePlacement.unverifiable}{' '}
+                          {t('node_placement_unverifiable', 'Not assessable')}
+                          {')'}
+                        </>
+                      )}
+                    </p>
+                  );
+                })()}
+                <div className="table-responsive">
+                  <table className="w-full">
+                    <thead>
+                      <tr className="border-b text-left">
+                        <th className="th-col">{t('region', 'Region')}</th>
+                        <th className="th-col">
+                          {t('node_placement_sessions', 'Sessions')}
+                        </th>
+                        <th className="th-col">
+                          {t('node_placement_optimal', 'Closest')}
+                        </th>
+                        <th className="th-col">
+                          {t('node_placement_suboptimal', 'Slower option')}
+                        </th>
+                        <th className="th-col">
+                          {t('node_placement_unverifiable', 'Not assessable')}
+                        </th>
+                        <th className="th-col">
+                          {t('node_placement_worst_miss', 'Worst miss')}
+                        </th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {nodePlacement.nodes?.map((n: any) => (
+                        <tr key={n.node_id} className="border-b">
+                          <td className="p-md fw-semibold">
+                            {(n.node_id || '').toUpperCase()}
+                          </td>
+                          <td className="p-md">{n.sessions}</td>
+                          <td className="p-md">{n.optimal}</td>
+                          {/* Only a real miss is called out. Not-assessable stays muted
+                              because it is not a fault. */}
+                          <td
+                            className={`p-md ${n.suboptimal > 0 ? 'text-warning fw-semibold' : 'text-muted'}`}
+                          >
+                            {n.suboptimal}
+                          </td>
+                          <td className="p-md text-muted">{n.unverifiable}</td>
+                          <td className="p-md text-muted">
+                            {n.worst_miss_ms ? `${n.worst_miss_ms}ms` : '--'}
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+                {nodePlacement.unknown_nodes?.length > 0 && (
+                  <p className="text-warning text-sm mt-lg mb-0">
+                    {t(
+                      'node_placement_unknown_nodes',
+                      'Sessions ran on a node matching no probed region',
+                    )}
+                    : {nodePlacement.unknown_nodes.join(', ')}
+                  </p>
+                )}
+                {/* The caveats travel in the payload precisely so the counts cannot be
+                    read as a score. Rendering the numbers and dropping these would defeat
+                    the reason they are there. */}
+                <p className="text-muted text-xs mt-lg mb-0">
+                  {t(
+                    'node_placement_caveat_unverifiable',
+                    'Not assessable is not a failure: the client caches its region choice for 24h, and a cached choice runs no probe, so there is nothing that day to compare against.',
+                  )}
+                </p>
               </>
             )}
           </div>

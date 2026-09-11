@@ -3427,6 +3427,11 @@ func (s *Server) handleAdminEndpoints(w http.ResponseWriter, r *http.Request) {
 
 	// Where should the next edge go (#1151). Served alongside the other admin analytics rather
 	// than on its own route, so it inherits the same admin check.
+	if r.URL.Path == "/api/admin/analytics/node-placement" {
+		s.handleNodePlacement(w, r)
+		return
+	}
+
 	if r.URL.Path == "/api/admin/analytics/region-latency" {
 		s.handleRegionLatency(w, r)
 		return

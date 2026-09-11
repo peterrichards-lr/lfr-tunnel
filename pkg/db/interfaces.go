@@ -103,6 +103,11 @@ type MetricRepository interface {
 type RegionProbeRepository interface {
 	RecordRegionProbes(userID string, samples []RegionProbeSample, at time.Time) error
 	GetRegionLatency(days int) (*RegionLatencyReport, error)
+	// GetNodePlacement answers whether tunnels started on the closest node the user could
+	// reach, by joining these probes against tunnel_metrics.node_id (#1888). It lives on this
+	// repository rather than the metrics one because the probe set is the harder half and the
+	// dialect mismatch between the two tables is documented beside it.
+	GetNodePlacement(days int) (*NodePlacementReport, error)
 }
 
 // PortalSessionRepository persists logged-in portal sessions so a restart -- including a

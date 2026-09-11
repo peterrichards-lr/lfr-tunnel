@@ -78,8 +78,10 @@ if [ -z "$REAL" ]; then
         # defeat the check entirely. Fall back to a PATH lookup only if they are absent.
         _head=/usr/bin/head
         _grep=/usr/bin/grep
-        [ -x "$_head" ] || _head=head
-        [ -x "$_grep" ] || _grep=grep
+        # Quoted literals, not command substitutions: if the absolute paths are absent we want
+        # the bare names resolved through PATH as a last resort (SC2209).
+        [ -x "$_head" ] || _head="head"
+        [ -x "$_grep" ] || _grep="grep"
         if "$_head" -40 "$candidate" 2>/dev/null | "$_grep" -q "$MARKER"; then
             continue
         fi

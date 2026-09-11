@@ -193,6 +193,65 @@ Use these configurations to expose a standard Liferay bundle unzipped and runnin
       -ports 8080
     ```
 
+### 2b. Why Liferay generates `localhost` URLs, and how to stop it
+
+If your pages load through the tunnel but every generated link points back at
+`http://localhost:8080` — or you land in a redirect loop after signing in — this is why.
+
+**Liferay decides what it is called from the `Host` header.** By default the client rewrites
+`Host` to your local target before forwarding, so Liferay is told it is `localhost:8080` and
+generates its links accordingly. The public hostname *is* sent, on `X-Forwarded-Host`, but
+Liferay does not use it for link generation.
+
+Measured against **Liferay DXP 2026.Q1.12 LTS** behind this tunnel, counting the generated links
+on the portal home page:
+
+| client setting | what Liferay is told it is | generated links |
+|---|---|---|
+| default (`preserve_host` off) | the local target | 33 x `http://<target>:8080` |
+| **`-preserve-host`** | the public hostname | 33 x `http://<subdomain>.lfr-demo.se` |
+
+So the fix is one flag:
+
+```bash
+lfr-tunnel -subdomain dev-tomcat -ports 8080 -preserve-host
+```
+
+or, permanently, `preserve_host: true` in your client config file.
+
+**Liferay must also accept the hostname.** Until it does, it refuses the request outright with
+HTTP 500 and logs `java.lang.RuntimeException: Invalid host name <host>` — not a localhost URL, a
+dead page. Either way round:
+
+* set the Virtual Host as in the step above (Control Panel -> Instance Settings -> Virtual
+  Hosts), which is the normal route; or
+* add the hostname to `virtual.hosts.valid.hosts` in `portal-ext.properties`, which is what a
+  container image without an interactive setup step needs:
+
+  ```properties
+  virtual.hosts.valid.hosts=localhost,127.0.0.1,dev-tomcat.lfr-demo.se
+  ```
+
+**That is the whole configuration.** `-preserve-host`, plus the hostname accepted by Liferay.
+Nothing else was required to get correct links and a working sign-in.
+
+#### Properties you do not need
+
+`web.server.host`, `web.server.http.port`, `redirect.url.security.mode` and
+`redirect.url.domains.allowed` are commonly suggested for this symptom and were **not** needed in
+the configuration above. They pin Liferay to one hostname, which a tunnel subdomain may not keep
+across restarts. Do not add them speculatively.
+
+#### One thing this guide does not yet tell you
+
+Whether Liferay generates `https://` rather than `http://` links depends on it acting on
+`X-Forwarded-Proto`, which the gateway does send. **That leg was not tested**, because the test
+harness fronts with plain HTTP -- so `web.server.https.port` and
+`company.security.auth.requires.https` are deliberately absent from this guide rather than
+recommended on reasoning. If you hit a redirect loop specifically on sign-in over HTTPS, that is
+the pair to look at, and please say so on the tracker so this section can be finished from a
+measurement rather than a guess.
+
 ### 3. Exposing a Liferay Docker Container or Custom Image
 Use these configurations if Liferay itself is running as a Docker container.
 
@@ -342,4 +401,4 @@ Ngrok is a popular commercial tunnel provider. Note that running raw unsigned ng
 
 <!-- markdownlint-disable MD049 -->
 ---
-*Last Updated: 2026-09-04* | *Last Reviewed: 2026-09-04*
+*Last Updated: 2026-09-11* | *Last Reviewed: 2026-09-11*

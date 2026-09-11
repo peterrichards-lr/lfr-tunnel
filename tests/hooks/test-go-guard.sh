@@ -41,6 +41,20 @@ echo "GOTMPDIR:${GOTMPDIR:-unset}"
 STUBEOF
 chmod +x "$STUB"
 
+# A whitelist that exists on every platform. The wrapper's default is /private/tmp on macOS and
+# /tmp elsewhere; hardcoding the macOS path made the "quiet" case below fail on Linux, where the
+# wrapper correctly REFUSED because /private/tmp cannot be created.
+WL="$WORK/whitelist"
+mkdir -p "$WL"
+
+# head and grep, and deliberately no `go`. The no-toolchain case below cannot just use
+# /usr/bin:/bin -- a CI runner may well have a real go there, and then the search finds one and
+# proceeds, which is how that case passed locally and failed on ubuntu.
+TOOLS="$WORK/tools"
+mkdir -p "$TOOLS"
+ln -s "$(command -v head)" "$TOOLS/head" 2>/dev/null || true
+ln -s "$(command -v grep)" "$TOOLS/grep" 2>/dev/null || true
+
 echo "Testing the go EDR guard wrapper"
 echo ""
 
@@ -93,7 +107,7 @@ fi
 
 # -- BOUNDING. Inside make, GOTMPDIR is already correct; the wrapper must then be silent, or
 #    every build in the repo grows a line of noise.
-LFT_GO_REAL="$STUB" GOTMPDIR=/private/tmp LFT_TEST_DIR=/private/tmp \
+LFT_GO_REAL="$STUB" GOTMPDIR="$WL" LFT_TEST_DIR="$WL" \
     "$WRAPPER" build ./... >"$WORK/quiet" 2>"$WORK/quiet.err"
 if [ ! -s "$WORK/quiet.err" ]; then
     pass "BOUNDING  an already-correct GOTMPDIR produces no notice"
@@ -116,7 +130,8 @@ ONLY="$WORK/onlyshim"
 mkdir -p "$ONLY"
 cp "$WRAPPER" "$ONLY/go"
 chmod +x "$ONLY/go"
-env -i PATH="$ONLY:/usr/bin:/bin" HOME="$HOME" "$ONLY/go" build ./... >"$WORK/noreal" 2>&1
+env -i PATH="$ONLY:$TOOLS" HOME="$HOME" LFT_TEST_DIR="$WL" \
+    "$ONLY/go" build ./... >"$WORK/noreal" 2>&1
 if [ $? -ne 0 ] && grep -q "no real Go toolchain" "$WORK/noreal"; then
     pass "FIRING    a shim with no toolchain behind it refuses instead of picking itself"
 else
@@ -127,7 +142,8 @@ fi
 #    shelled out to `head`/`grep` through PATH, found neither, so the shim did not recognise
 #    itself, chose itself as the toolchain and exec'd itself forever -- one spinning process,
 #    since exec replaces rather than forks. Absolute tool paths fixed it; assert it stays fixed.
-env -i PATH="$ONLY" HOME="$HOME" "$ONLY/go" build ./... >"$WORK/nocoreutils" 2>&1
+env -i PATH="$ONLY" HOME="$HOME" LFT_TEST_DIR="$WL" \
+    "$ONLY/go" build ./... >"$WORK/nocoreutils" 2>&1
 if [ $? -ne 0 ] && grep -q "REFUSED" "$WORK/nocoreutils"; then
     pass "FIRING    a PATH without coreutils still refuses rather than looping"
 else

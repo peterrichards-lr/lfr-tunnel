@@ -15,7 +15,17 @@ export default function Layout() {
   const [loading, setLoading] = useState(true);
   const [uptime, setUptime] = useState<string>('');
   // V1's footer has linked out to the status page all along; V2's did not (#1559).
-  const [statusPageUrl, setStatusPageUrl] = useState<string>('');
+  // Seeded from the last successful load. The status page URL comes from /api/version -- the
+  // gateway -- so during an outage the one pointer telling a user where to look was fetched from
+  // the thing that is down, and the link simply disappeared (#1869). localStorage is read
+  // synchronously and needs no server, which is the whole requirement here.
+  const [statusPageUrl, setStatusPageUrl] = useState<string>(
+    () => localStorage.getItem('lft.statusPageUrl') || '',
+  );
+
+  // The indicator used to render status-dot--online unconditionally, in both branches, from state
+  // that no failed request ever touched. So the portal said "System Online" throughout an outage.
+  const [gatewayReachable, setGatewayReachable] = useState(true);
   // Gateway and client versions for the sidebar footer (#1647). Deliberately without uptime:
   // the header already shows that beside the status indicator, and two displays of one fact in
   // a single view is what #1603 removed for the status link -- they disagree the moment one is
@@ -59,26 +69,41 @@ export default function Layout() {
       try {
         const [userRes, versionRes] = await Promise.all([
           axios.get('/api/me'),
-          axios.get('/api/version').catch(() => ({ data: {} })),
+          axios.get('/api/version').catch(() => null),
         ]);
         setUser(userRes.data);
+
+        // null means the gateway did not answer, which is different from answering with nothing
+        // configured. Collapsing the two is what made the outage invisible.
+        setGatewayReachable(versionRes !== null);
 
         // Only rendered when configured. V1 fell back to a hardcoded status.lfr-demo.se when it
         // was not, which put one deployment's URL in the source and showed a link that a
         // different deployment could not honour.
-        setStatusPageUrl(versionRes.data?.status_page_url || '');
+        if (versionRes?.data?.status_page_url) {
+          setStatusPageUrl(versionRes.data.status_page_url);
+          localStorage.setItem(
+            'lft.statusPageUrl',
+            versionRes.data.status_page_url,
+          );
+        } else if (versionRes !== null) {
+          // Answered, and this deployment configures no status page. Forget the stale one rather
+          // than linking somewhere the deployment no longer honours (#1603).
+          setStatusPageUrl('');
+          localStorage.removeItem('lft.statusPageUrl');
+        }
 
         // server_version first, latest_version as the fallback -- the same order V1 uses, so
         // the two arms cannot disagree about what "Gateway" means.
         setServerVersion(
-          versionRes.data?.server_version ||
-            versionRes.data?.latest_version ||
+          versionRes?.data?.server_version ||
+            versionRes?.data?.latest_version ||
             '',
         );
-        setClientVersion(versionRes.data?.latest_version || '');
+        setClientVersion(versionRes?.data?.latest_version || '');
 
         // Calculate Uptime
-        const seconds = versionRes.data?.uptime_seconds;
+        const seconds = versionRes?.data?.uptime_seconds;
         if (typeof seconds === 'number') {
           const d = Math.floor(seconds / (3600 * 24));
           const h = Math.floor((seconds % (3600 * 24)) / 3600);
@@ -102,11 +127,18 @@ export default function Layout() {
         .get('/api/me', { headers: { 'X-Background-Poll': '1' } })
         .then((res) => {
           setUser(res.data);
+          setGatewayReachable(true);
         })
         .catch((err) => {
           if (err.response?.status === 401) {
             navigate('/login');
+            return;
           }
+          // Anything else -- a network failure, a 502 from nginx while lfr-tunneld restarts --
+          // was swallowed here, so the poll failed silently every ten seconds while the header
+          // kept saying "System Online" (#1869). It recovers on its own when the next poll
+          // succeeds, which is what makes this honest rather than sticky.
+          setGatewayReachable(false);
         });
     }, 10000);
 
@@ -260,26 +292,45 @@ export default function Layout() {
                   someone else's status page -- the same thing #1586 removed from the footer.
                   The indicator itself still shows either way: "System Online" is worth saying
                   on its own, it just should not link somewhere arbitrary. */}
-              {statusPageUrl ? (
-                <a
-                  href={statusPageUrl}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="flex items-center gap-sm justify-end mb-xs no-underline"
-                >
-                  <div className="status-dot status-dot--online"></div>
-                  <span className="text-xs fw-semibold text-main">
-                    {t('system_online', 'System Online')}
-                  </span>
-                </a>
-              ) : (
-                <div className="flex items-center gap-sm justify-end mb-xs">
-                  <div className="status-dot status-dot--online"></div>
-                  <span className="text-xs fw-semibold text-main">
-                    {t('system_online', 'System Online')}
-                  </span>
-                </div>
-              )}
+              {/* The dot and label now follow gatewayReachable rather than being hardcoded. They
+                  used to render status-dot--online in BOTH branches from state no failed request
+                  touched, so the portal said "System Online" for the whole of an outage (#1869).
+
+                  The link is still only rendered when a URL is known, for #1603's reason -- a
+                  hardcoded status.lfr-demo.se pointed every other deployment at someone else's
+                  status page. What changed is that the URL now survives the outage: it is cached
+                  in localStorage on every successful load, because it comes FROM the gateway and
+                  is therefore unavailable exactly when it is most wanted. */}
+              {(() => {
+                const dot = gatewayReachable
+                  ? 'status-dot--online'
+                  : 'status-dot--offline';
+                const label = gatewayReachable
+                  ? t('system_online', 'System Online')
+                  : t('system_unreachable', 'Gateway unreachable');
+                const body = (
+                  <>
+                    <div className={`status-dot ${dot}`}></div>
+                    <span className="text-xs fw-semibold text-main">
+                      {label}
+                    </span>
+                  </>
+                );
+                return statusPageUrl ? (
+                  <a
+                    href={statusPageUrl}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="flex items-center gap-sm justify-end mb-xs no-underline"
+                  >
+                    {body}
+                  </a>
+                ) : (
+                  <div className="flex items-center gap-sm justify-end mb-xs">
+                    {body}
+                  </div>
+                );
+              })()}
               {uptime && (
                 <div className="text-xs text-muted">
                   {t('uptime', 'Uptime')}: {uptime}

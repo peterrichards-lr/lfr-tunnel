@@ -65,7 +65,22 @@ echo "=== Running Playwright Tests ==="
 # is the one case it exists for. Note `|| true` does NOT work here -- it makes the list succeed
 # and `$?` read 0, so every run would look green.
 TEST_EXIT_CODE=0
-docker run --rm --network host -v /var/run/docker.sock:/var/run/docker.sock -v "$(pwd)/ui":/e2e -w /e2e mcr.microsoft.com/playwright:v1.60.0-jammy /bin/sh -c "apt-get update && apt-get install -y docker.io && npm install && npx playwright test" || TEST_EXIT_CODE=$?
+# pnpm and a derived image tag, via the shared lib (#1863). This line used to run `npm install`
+# against a pnpm project and hardcode v1.60.0-jammy. Those two agreed with each other and with the
+# stale package-lock.json, so nothing failed -- this runner simply executed a different Playwright
+# from the one `make e2e-ui` used. package-lock.json is gone; there is one lockfile now.
+# shellcheck source=lib/playwright-image.sh
+. "$SCRIPT_DIR/lib/playwright-image.sh"
+lft_playwright_image "$SCRIPT_DIR/ui" || exit 1
+lft_playwright_build
+
+docker run --rm --network host \
+    -v /var/run/docker.sock:/var/run/docker.sock \
+    -v "$SCRIPT_DIR/ui":/e2e \
+    -v lfr-tunnel-e2e-ui-node-modules:/e2e/node_modules \
+    -w /e2e \
+    "$PLAYWRIGHT_IMAGE" \
+    /bin/sh -c "pnpm install --frozen-lockfile && pnpm exec playwright test" || TEST_EXIT_CODE=$?
 
 if [ $TEST_EXIT_CODE -ne 0 ]; then
     echo -e "\n❌ Tests failed. Printing Server Logs:\n"

@@ -292,6 +292,7 @@ test-hooks:
 	@./tests/hooks/test-status-vocabulary.sh
 	@./tests/hooks/test-load-failure-gate.sh
 	@./tests/hooks/test-outage-visibility.sh
+	@./tests/hooks/test-watchdog-spool.sh
 	@./tests/hooks/test-power-hook-credentials.sh
 	@./tests/hooks/test-ci-hook-gate.sh
 	@./tests/hooks/test-ci-docs-gate.sh

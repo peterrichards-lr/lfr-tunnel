@@ -2304,12 +2304,22 @@ func (s *Server) Start() error {
 	s.goTracked(func() {
 		ticker := time.NewTicker(s.cfg.PruneInterval)
 		defer ticker.Stop()
+		// Once at startup, before the first tick. A gateway that was just restarted by the
+		// watchdog is exactly the case this exists for, and PruneInterval is an hour -- an
+		// hour is too long to sit on "this box went down and came back" (#1875).
+		if s.db != nil {
+			s.forwardWatchdogEvents()
+		}
 		for {
 			select {
 			case <-s.ctx.Done():
 				return
 			case <-ticker.C:
 				if s.db != nil {
+					// On this timer rather than its own: an nginx-only restart never
+					// restarts the daemon, so forwarding at startup alone would leave it
+					// unreported until something unrelated bounced the gateway (#1875).
+					s.forwardWatchdogEvents()
 					_ = s.db.PruneExpiredMagicLinks()                          //nolint:errcheck
 					_ = s.db.PruneExpiredOrRevokedPATs(s.cfg.PATRetentionDays) //nolint:errcheck
 					// Expired sessions are read as absent, so this is housekeeping rather

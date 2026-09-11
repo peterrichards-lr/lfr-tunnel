@@ -161,6 +161,13 @@ cookie_policy_url: "https://example.com"
 
 # --- Timers and housekeeping ---
 prune_interval: "1h"
+
+# Where scripts/common/gateway-watchdog.sh records the services it restarted, so the gateway can
+# forward them to the admin address once it is back up (#1875). Leave empty unless the watchdog
+# was installed with LFT_WATCHDOG_SPOOL pointing somewhere other than its default
+# (/var/lib/lfr-tunnel/watchdog-events.jsonl) -- the two have to agree or the gateway reads a file
+# nothing writes and reports no restarts at all.
+watchdog_spool_path: ""
 magic_link_expiry: "1h"
 invite_link_expiry: "1h"
 verification_link_expiry: "1h"

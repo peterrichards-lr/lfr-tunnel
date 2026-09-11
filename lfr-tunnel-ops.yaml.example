@@ -103,6 +103,29 @@ session:
   portal_session_duration: "8h"
   portal_session_max_lifetime: "24h"
 
+# The edition of the privacy/cookie policy this deployment has published (#1887, #1707).
+#
+# Managed here for a sharper reason than the session keys above. Nothing compares two versions
+# for ORDER, only for equality, so a gateway left on a different value does not fail -- it
+# re-prompts. A user who accepts on central and then lands on an edge carrying a stale value is
+# asked again, and keeps being asked, alternating between gateways, with nothing anywhere
+# reporting a problem. That is why it belongs in one declared place rather than in five
+# server-config.yaml files edited by hand.
+#
+# Opaque on purpose: a date, a content hash, "2". Leading or trailing whitespace is rejected,
+# because " 2026-09-11" and "2026-09-11" compare unequal and the difference is invisible.
+#
+# CHANGING THIS RE-PROMPTS EVERY USER whose acceptance history does not contain the new value.
+# That is what it is for, but note two things: the window is 14 days by default
+# (policy_consent_grace_days) after which the portal is blocked and new tunnels refused, and
+# setting the old value back does NOT undo it -- consent already given against the new version
+# stands. Bump it when the policy text actually changed, and not during a week of demos.
+#
+# Empty or absent means this deployment does not manage it, which is the pre-#1887 behaviour:
+# nothing is written and no user is re-prompted.
+policy:
+  policy_version: ""
+
 nginx:
   # APEX domains, not hostnames. Each entry generates TWO server blocks -- `example.com` and
   # `*.example.com` -- and reads its certificate from /etc/letsencrypt/live/<entry>/. So the

@@ -123,12 +123,18 @@ type ServerConfig struct {
 	DockerHubURL             string        `yaml:"docker_hub_url"`
 	StatusPageURL            string        `yaml:"status_page_url"`
 	PruneInterval            time.Duration `yaml:"prune_interval"`
-	MagicLinkExpiry          time.Duration `yaml:"magic_link_expiry"`
-	InviteLinkExpiry         time.Duration `yaml:"invite_link_expiry"`
-	VerificationLinkExpiry   time.Duration `yaml:"verification_link_expiry"`
-	PrivacyPolicyURL         string        `yaml:"privacy_policy_url"`
-	CookiePolicyURL          string        `yaml:"cookie_policy_url"`
-	EnforcePolicyConsent     bool          `yaml:"enforce_policy_consent"`
+
+	// WatchdogSpoolPath is where scripts/common/gateway-watchdog.sh records the services it
+	// restarted, so the gateway can forward them to the owner once it is back up (#1875). Empty
+	// means the default both sides agree on; override only if the watchdog was installed with
+	// LFT_WATCHDOG_SPOOL pointing somewhere else.
+	WatchdogSpoolPath      string        `yaml:"watchdog_spool_path"`
+	MagicLinkExpiry        time.Duration `yaml:"magic_link_expiry"`
+	InviteLinkExpiry       time.Duration `yaml:"invite_link_expiry"`
+	VerificationLinkExpiry time.Duration `yaml:"verification_link_expiry"`
+	PrivacyPolicyURL       string        `yaml:"privacy_policy_url"`
+	CookiePolicyURL        string        `yaml:"cookie_policy_url"`
+	EnforcePolicyConsent   bool          `yaml:"enforce_policy_consent"`
 	// PolicyVersion identifies the edition of the privacy/cookie policy currently in
 	// force. Bumping it is the whole re-consent trigger (#1707): every user whose
 	// acceptance history does not contain this exact string is asked again.

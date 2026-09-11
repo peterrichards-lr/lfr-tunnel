@@ -261,11 +261,14 @@ func CollectRedactedLogs(dir, subdomain string, maxTotalBytes int64) ([]Redacted
 
 // collectOne reads and redacts a single log, keeping the NEWEST lines within budget.
 func collectOne(kind, path string, budget int64) (RedactedLog, error) {
-	f, err := os.Open(path) //nolint:gosec // a path this process derived from its own log dir
+	// No //nolint here on purpose: .golangci.yml already excludes gosec G304 globally and
+	// lists (*os.File).Close in errcheck's exclude-functions, so a suppression would spend a
+	// slot on the nolint ratchet for a warning that was never going to fire.
+	f, err := os.Open(path)
 	if err != nil {
 		return RedactedLog{}, err
 	}
-	defer func() { _ = f.Close() }() //nolint:errcheck
+	defer func() { _ = f.Close() }()
 
 	result := RedactedLog{Kind: kind}
 

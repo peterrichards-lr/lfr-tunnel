@@ -1,4 +1,4 @@
-.PHONY: fmt vet test test-locked ui-dist compile-check test-hooks check-contexts check-contexts-live check-workflow-failures check-attribution check-css check-contrast check-i18n check-html build deploy clean install-hook install-go-guard e2e e2e-sso e2e-edge e2e-ui help
+.PHONY: fmt vet test test-locked ui-dist compile-check test-hooks check-contexts check-contexts-live check-workflow-failures check-attribution check-css check-contrast check-i18n check-html build deploy clean install-hook install-go-guard ops-bin e2e e2e-sso e2e-edge e2e-ui help
 
 VERSION ?= $(shell grep -oE 'Version = "[^"]+"' pkg/config/version.go | cut -d'"' -f2)
 
@@ -59,6 +59,7 @@ help:
 	@echo "  make clean        - Delete build binaries"
 	@echo "  make install-hook - Install the native Git pre-commit and pre-push hooks"
 	@echo "  make install-go-guard - Install the PATH shim that keeps go inside the EDR whitelist"
+	@echo "  make ops-bin      - Build bin/lfr-tunnel-ops with GOTMPDIR pinned (never a bare go build)"
 	@echo "  make help         - Show this help message"
 	@echo ""
 	@echo "Gates (these run in CI and in the git hooks -- run them before pushing):"
@@ -214,8 +215,15 @@ build: clean ui-dist
 # is what makes it look malicious rather than merely unknown.
 #
 # The repo already forbade this pattern in three other places; only the Makefile disagreed.
-deploy: edr-guard
+# One place builds the ops tool, and it is a target rather than a documented `go build` (#1859).
+# AGENTS.md and the edr-constraints skill used to prescribe `go build -o bin/lfr-tunnel-ops`
+# directly. That advice is right about `go run` and wrong about safety: run outside make it
+# inherits no GOTMPDIR, so it links into /var/folders regardless of -o -- the exact misreading
+# #1337 exists to kill, still live in the docs one step from where it was fixed.
+ops-bin: edr-guard
 	@go build -o $(OPS_BINARY) ./cmd/lfr-tunnel-ops
+
+deploy: ops-bin
 	@$(OPS_BINARY) deploy
 
 e2e:

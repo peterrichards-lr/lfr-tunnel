@@ -104,7 +104,7 @@ func BuildCommand(args []string) {
 				" -X lfr-tunnel/pkg/config.DefaultPortalURL=%s",
 			version, serverURL, statusPageURL, portalURL)
 
-		err := RunCommandWithEnv(env, "go", "build", "-ldflags", ldflags, "-trimpath", "-o", target.Output, "./cmd/lfr-tunnel")
+		err := RunGoCommand(env, "build", "-ldflags", ldflags, "-trimpath", "-o", target.Output, "./cmd/lfr-tunnel")
 		CheckFatal(err, fmt.Sprintf("Failed to build for %s/%s", target.GOOS, target.GOARCH))
 		built = append(built, filepath.Base(target.Output))
 	}

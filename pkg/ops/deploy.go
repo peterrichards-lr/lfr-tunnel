@@ -192,7 +192,7 @@ func DeployCommand(args []string) {
 
 	fmt.Printf("Building Linux binary (version: %s)...\n", version)
 	ldflags := fmt.Sprintf("-s -w -X lfr-tunnel/pkg/config.Version=%s", version)
-	err = RunCommandWithEnv([]string{"GOOS=linux", "GOARCH=amd64"}, "go", "build", "-ldflags", ldflags, "-trimpath", "-o", "bin/lfr-tunneld-linux", "./cmd/lfr-tunneld")
+	err = RunGoCommand([]string{"GOOS=linux", "GOARCH=amd64"}, "build", "-ldflags", ldflags, "-trimpath", "-o", "bin/lfr-tunneld-linux", "./cmd/lfr-tunneld")
 	if failed(err, "Failed to build lfr-tunneld for Linux") {
 		return
 	}

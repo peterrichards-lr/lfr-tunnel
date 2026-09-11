@@ -64,6 +64,65 @@ run_case() {
 
 echo "EDR guard cases:"
 
+# The #1859 coverage. Widening a guard is worth nothing unless the new pattern actually fires --
+# the same skill warns that an include matching no pattern reads as coverage and is none -- so
+# each case below has a matching BOUNDING case proving it is a boundary and not a blanket.
+
+# `ops build` passed only GOOS and GOARCH, so every release linked five unsigned executables into
+# /var/folders. This is that defect in the form it actually shipped.
+run_case "go build spawned from Go source is caught" 1 "build.go" \
+'package main
+
+import "os/exec"
+
+func main() {
+	_ = exec.Command("go", "build", "-o", "bin/tool", "./cmd/tool").Run()
+}'
+
+# The boundary that actually keeps pkg/ops safe: the toolchain is reached through a helper, so no
+# literal `"go", "build"` pair exists at the call site and the pin lives in one place
+# (pkg/ops/gotmpdir.go's RunGoCommand). This is what build.go and deploy.go look like after #1859.
+run_case "a call routed through a helper has no literal pair to flag" 0 "routed_build.go" \
+'package main
+
+func main() {
+	_ = RunGoCommand([]string{"GOOS=linux"}, "build", "-o", "bin/tool", "./cmd/tool")
+}'
+
+# Worth knowing: a Go file that sets the pin inside cmd.Env -- "GOTMPDIR=..." within a string on
+# another line -- is still flagged. file_establishes_gotmpdir matches a line-start assignment, and
+# a line-local grep cannot verify that an Env slice reaches the right command. That is a false
+# positive in the conservative direction, which is the correct direction for this guard: the fix
+# is to route through the helper, which is what the case above asserts.
+
+# A documented command is one a reader copies and runs at a prompt -- outside make, inheriting no
+# pin. AGENTS.md and the ops skill both prescribed exactly this, which is how #1859 happened.
+run_case "go build prescribed in a fenced doc block is caught" 1 "README.md" \
+'# Tool
+
+Build it first:
+
+```bash
+go build -o bin/lfr-tunnel-ops ./cmd/lfr-tunnel-ops
+```
+'
+
+run_case "prose mentioning go build is not a prescription" 0 "PROSE.md" \
+'# Notes
+
+The Makefile runs `go build` for you, which is why a bare one is not needed here.
+'
+
+run_case "a doc prescribing the make target is clean" 0 "GOOD.md" \
+'# Tool
+
+Build it first:
+
+```bash
+make ops-bin
+```
+'
+
 # The defect from #1402, in the form it actually appeared in pkg/ops/sign.go.
 run_case "go run spawned from Go source is caught" 1 "spawn.go" \
 'package main

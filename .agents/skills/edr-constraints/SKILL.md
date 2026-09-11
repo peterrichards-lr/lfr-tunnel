@@ -24,6 +24,29 @@ description: Critical SentinelOne End Point Detection and Response (EDR) constra
 - **A tool you were told to build rather than `go run` can still spawn `go run` itself** (#1402). The rule had always been applied to how `lfr-tunnel-ops` is *invoked* — build it, never `go run ./cmd/lfr-tunnel-ops` — and never to what it *does*. `pkg/ops/sign.go` shelled out to `go run scripts/minisign_helper.go` on every `sign`, and `sign` is documented as being run directly (`op run -- lfr-tunnel-ops sign`), never through `make`, so `GOTMPDIR` was unset and it linked and executed out of `/var/folders` each time. Now done in-process via `pkg/minisign`.
 - **`scripts/check-edr-safety.sh` covers Go source as of #1402, and needed two changes to do it.** Adding `--include=*.go` alone caught nothing: the script's patterns are the literal `go run` / `go test`, and Go spells it as separate string literals — `exec.Command("go", "run", ...)`. Measured against the real defect: includes alone → exit 0; includes plus a `"go"[[:space:]]*,[[:space:]]*"(run|test)"` pattern → exit 1. `tests/hooks/test-edr-guard.sh` (via `make test-hooks`) holds both halves in place. When widening this guard again, check that the new coverage actually fires — an include that matches no pattern reads as coverage and is none.
 
+## Building the ops tool: `make ops-bin`, never a bare `go build` (#1859)
+
+`GOTMPDIR` is the control. `Makefile:34` pins it, **nothing outside make inherits that**, and
+`-o` does not help -- the toolchain links inside `GOTMPDIR` and only then moves the result. So a
+bare `go build` at a prompt links into `/var/folders`, which is what SentinelOne acted on.
+
+Two things changed so this cannot recur without someone noticing:
+
+- **`make ops-bin`** builds `bin/lfr-tunnel-ops` with the pin in place, and `deploy` now depends
+  on it rather than duplicating the build line. This repo's own docs used to prescribe the bare
+  form; they no longer do.
+- **`pkg/ops` shells out to the toolchain only through `RunGoCommand`** (`pkg/ops/gotmpdir.go`),
+  which appends `GOTMPDIR` last so it beats an inherited value -- the same reasoning as the
+  Makefile using `:=` rather than `?=` (#1335). Before this, `ops build` passed only `GOOS` and
+  `GOARCH`, so every release linked five executables outside the whitelist.
+
+`scripts/check-edr-safety.sh` now also fails on `"go", "build"` in Go source and on a `go build`
+prescribed in Markdown. The Markdown half is narrow on purpose: widening it to every `.sh` was
+measured first and produced 14 hits, mostly scripts that `make` runs -- which inherit the export
+at runtime, invisibly to any line-local grep -- or assertion text describing the command rather
+than running it. A gate that is mostly false positives gets exemptions bolted on until it says
+nothing.
+
 ## The `go` PATH shim -- local defence in depth (#1860)
 
 **`GOTMPDIR` is pinned by the Makefile and by nothing else.** `Makefile:34` exports it, so every

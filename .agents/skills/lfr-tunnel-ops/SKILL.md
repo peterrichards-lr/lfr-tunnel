@@ -68,7 +68,7 @@ Always run unit and E2E integration tests before proposing deployment.
   *(Outputs `bin/lfr-tunnel` and `bin/lfr-tunneld`)*
 - **Build Multi-Platform Client Binaries**:
   ```bash
-  go build -o bin/lfr-tunnel-ops ./cmd/lfr-tunnel-ops
+  make ops-bin
   ./bin/lfr-tunnel-ops build
   ```
   *(Outputs to `dist/`: Darwin arm64/amd64, Linux arm64/amd64, and Windows amd64)*
@@ -137,7 +137,7 @@ predating the change stays unrecoverable.
 Before deploying client binaries or making releases, they must be signed.
 - **Run Signing Script**:
   ```bash
-  go build -o bin/lfr-tunnel-ops ./cmd/lfr-tunnel-ops
+  make ops-bin
   op run -- ./bin/lfr-tunnel-ops sign
   ```
   *(**CRITICAL**: You MUST use `op run --` so that 1Password prompts the user to extract the keys needed for Windows and Linux signing. And build first — never `go run ./cmd/lfr-tunnel-ops ...`.)*

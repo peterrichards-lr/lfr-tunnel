@@ -47,7 +47,7 @@ func (s *Server) validatePAT(token string) (*db.User, *db.PersonalAccessToken, b
 	}
 
 	user, err := s.db.GetUser(pat.UserID)
-	if err != nil || user == nil || user.Status != "approved" {
+	if err != nil || user == nil || user.Status != db.UserStatusApproved {
 		return nil, nil, false
 	}
 	return user, pat, true

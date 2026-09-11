@@ -199,7 +199,7 @@ func (s *Server) handleSSOCallback(w http.ResponseWriter, r *http.Request) {
 			FirstName:  claims.GivenName,
 			LastName:   claims.FamilyName,
 			Role:       "user",
-			Status:     "approved",
+			Status:     db.UserStatusApproved,
 			AuthMethod: "sso - " + providerID,
 			CreatedAt:  time.Now(),
 			UpdatedAt:  time.Now(),
@@ -213,7 +213,7 @@ func (s *Server) handleSSOCallback(w http.ResponseWriter, r *http.Request) {
 			http.Error(w, "Failed to create user", http.StatusInternalServerError)
 			return
 		}
-	} else if user.Status != "approved" {
+	} else if user.Status != db.UserStatusApproved {
 		// A rejected registration is the one status SSO must not promote, so the outcome is
 		// checked rather than assumed: approveOnSSOSignIn refuses it, and refusing to approve
 		// while still issuing a session would hand a rejected person a portal session anyway
@@ -314,7 +314,7 @@ func (s *Server) approveOnSSOSignIn(user *db.User, providerID string, r *http.Re
 	}
 
 	previousStatus := user.Status
-	user.Status = "approved"
+	user.Status = db.UserStatusApproved
 	user.ApprovalToken = "" // consumed by this approval; a stale link must not re-approve
 	now := time.Now().UTC()
 	user.LastLoginAt = &now

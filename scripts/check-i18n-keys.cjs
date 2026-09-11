@@ -45,6 +45,7 @@
 const fs = require('fs');
 const path = require('path');
 const { execFileSync } = require('child_process');
+const vm = require('vm');
 
 const ROOT = path.join(__dirname, '..');
 const I18N_DIR = path.join(ROOT, 'pkg', 'server', 'i18n');
@@ -200,7 +201,9 @@ for (const f of V1_MARKUP) {
 //     also fails, so this is a ratchet rather than an exclusion list. An exclusion that outlives
 //     its subject silently exempts whatever lands at that path next.
 //
-// What it does NOT assert is that a self-contained page's own bundle is internally consistent.
+// It also asserts, since #1854, that each self-contained page's own bundle is internally
+// consistent -- the same absent/extra/placeholder comparison the locale files get, with the
+// page's own `en` as the baseline. The paragraph below describes the state before that.
 // Measured while writing this: the client inspector's bundle has four keys (client_replay_req,
 // client_req, client_resp, client_replaying) only in `en`, so five locales fall back to English
 // -- exactly the drift this gate exists for, one bundle out of its reach. Filed as #1854 rather
@@ -385,6 +388,157 @@ for (const locale of LOCALES) {
     );
 }
 
+// -- Self-contained bundles (#1854).
+//
+// The three pages above never load /api/i18n, so Language_<locale>.properties says nothing about
+// them and the comparison above cannot reach them. Nothing compared a self-contained page's own
+// locales against its own English, and one had already drifted: the client inspector's bundle had
+// four keys (client_replay_req, client_req, client_resp, client_replaying) in `en` only, so five
+// locales fell back to English for them. Twenty missing translations, invisible -- because t()
+// falls back silently, which is #1701's defect exactly, in the bundles that gate could not see.
+//
+// Parsed by brace-matching and evaluating, not by regex: these pages carry markup inside string
+// literals, and both key styles appear (quoted in the client inspector, bare in the error pages).
+// A regex that half-works here is worse than none -- it would report a clean comparison over the
+// part it managed to parse.
+
+// braceMatch returns the index of the `}` closing the `{` at start, skipping over string
+// literals so that a brace inside translated markup does not end the object early.
+function braceMatch(src, start) {
+  let depth = 0;
+  let quote = null;
+  let escaped = false;
+  for (let i = start; i < src.length; i++) {
+    const c = src[i];
+    if (quote) {
+      if (escaped) escaped = false;
+      else if (c === '\\') escaped = true;
+      else if (c === quote) quote = null;
+      continue;
+    }
+    if (c === '"' || c === "'" || c === '`') {
+      quote = c;
+      continue;
+    }
+    if (c === '{') depth++;
+    else if (c === '}') {
+      depth--;
+      if (depth === 0) return i;
+    }
+  }
+  return -1;
+}
+
+// Accepts `translations` and `clientTranslations` alike. Named by suffix rather than by an exact
+// list so that a page naming its bundle something else is still found -- and if it is not found,
+// the floor below fails the run rather than skipping the page.
+const BUNDLE_DECL =
+  /(?:const|let|var)\s+((?:[A-Za-z_$][\w$]*)?[Tt]ranslations)\s*=\s*\{/;
+
+let selfContainedKeys = 0;
+for (const file of SELF_CONTAINED) {
+  if (!fs.existsSync(file)) continue; // already reported by the staleSelfContained ratchet
+  const src = fs.readFileSync(file, 'utf8');
+
+  const decl = src.match(BUNDLE_DECL);
+  if (!decl) {
+    errors.push(
+      `${rel(file)} is declared self-contained but no inline translations object was found.\n` +
+        `  A self-contained page's bundle IS its i18n; if it moved or was renamed, this check\n` +
+        `  stops looking at the page entirely, which is worse than the drift it exists to catch.`,
+    );
+    continue;
+  }
+
+  const open = src.indexOf('{', decl.index);
+  const close = braceMatch(src, open);
+  if (close === -1) {
+    errors.push(`${rel(file)}: could not find the end of ${decl[1]}.`);
+    continue;
+  }
+
+  let bundle;
+  try {
+    // Empty context and a timeout: this is repo source, but a gate that can be made to run
+    // arbitrary code by editing a page is not a gate.
+    bundle = vm.runInNewContext(
+      `(${src.slice(open, close + 1)})`,
+      Object.create(null),
+      { timeout: 2000 },
+    );
+  } catch (e) {
+    errors.push(`${rel(file)}: ${decl[1]} could not be parsed: ${e.message}`);
+    continue;
+  }
+
+  const locales = Object.keys(bundle || {});
+  const en = bundle && bundle.en;
+
+  // Anti-vacuity floor. Two empty sets agree perfectly, and a page that parses to nothing would
+  // otherwise report a clean comparison forever.
+  if (!en || typeof en !== 'object' || Object.keys(en).length === 0) {
+    errors.push(
+      `${rel(file)}: ${decl[1]} has no usable \`en\` bundle (locales found: ` +
+        `${locales.join(', ') || 'none'}).\n` +
+        `  Refusing to report that its locales agree with an English bundle that is not there.`,
+    );
+    continue;
+  }
+  if (locales.length < 2) {
+    errors.push(
+      `${rel(file)}: ${decl[1]} declares only \`en\`, so nothing was compared.\n` +
+        `  If the page is genuinely English-only, remove it from SELF_CONTAINED -- an entry\n` +
+        `  here that compares nothing reads as a page that has been checked.`,
+    );
+    continue;
+  }
+
+  const enKeys = Object.keys(en);
+  selfContainedKeys += enKeys.length;
+
+  for (const locale of locales) {
+    if (locale === 'en') continue;
+    const loc = bundle[locale] || {};
+    const locKeys = Object.keys(loc);
+    const absent = enKeys.filter((k) => !(k in loc));
+    const extra = locKeys.filter((k) => !(k in en));
+    const holes = [];
+    for (const k of locKeys) {
+      if (!(k in en)) continue;
+      const want = placeholders(String(en[k])).join(' ');
+      const got = placeholders(String(loc[k])).join(' ');
+      if (want !== got)
+        holes.push(
+          `  ${k}: en has [${want || 'none'}], ${locale} has [${got || 'none'}]`,
+        );
+    }
+    if (absent.length)
+      errors.push(
+        `${absent.length} key(s) missing from \`${locale}\` in ${rel(file)}:\n` +
+          absent
+            .slice(0, 20)
+            .map((k) => `  ${k}`)
+            .join('\n') +
+          (absent.length > 20 ? `\n  …and ${absent.length - 20} more` : '') +
+          `\n\n  This page carries its own bundle, so a missing key here falls back to English\n` +
+          `  silently -- there is no server bundle behind it to catch the difference.`,
+      );
+    if (extra.length)
+      errors.push(
+        `${extra.length} key(s) in \`${locale}\` but not \`en\` in ${rel(file)}:\n` +
+          extra
+            .slice(0, 20)
+            .map((k) => `  ${k}`)
+            .join('\n'),
+      );
+    if (holes.length)
+      errors.push(
+        `${holes.length} placeholder mismatch(es) in ${rel(file)} (${locale}):\n` +
+          holes.join('\n'),
+      );
+  }
+}
+
 if (errors.length) {
   console.error('check-i18n-keys: FAILED\n');
   console.error(errors.join('\n\n'));
@@ -393,5 +547,7 @@ if (errors.length) {
 
 console.log(
   `check-i18n-keys: OK -- ${used.size} key(s) used across Portal V1, Portal V2 and the server ` +
-    `all resolve, and ${LOCALES.length} locale bundle(s) match the ${base.props.size} English keys`,
+    `all resolve, ${LOCALES.length} locale bundle(s) match the ${base.props.size} English keys, ` +
+    `and ${SELF_CONTAINED.length} self-contained page(s) agree with their own English ` +
+    `(${selfContainedKeys} key(s))`,
 );

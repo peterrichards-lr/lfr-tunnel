@@ -35,6 +35,14 @@ type DiagnosticsCommand struct {
 	Type string `json:"t"`
 }
 
+// Field names used in more than one diagnostics event. Named because they are the shape a reader
+// greps the error log for, and three spellings of "request_id" would make that grep wrong.
+const (
+	fieldRequestID  = "request_id"
+	fieldReason     = "reason"
+	fieldStatusCode = "status_code"
+)
+
 // DiagnosticsCommandCollectLogs is the only command that exists, and the only one this will act
 // on. Anything else is ignored rather than dispatched: a general "run what the gateway says"
 // path in a client that runs on a developer's machine is a foothold, not a feature.
@@ -142,8 +150,8 @@ func (e *InterceptorEngine) uploadDiagnosticsBundle(serverURL, sessionToken, sub
 	if err != nil {
 		slog.Info(fmt.Sprintf("[Client] Could not read the logs for collection %s: %v", requestID, err))
 		e.LogEvent("warn", "diagnostics_collect_failed", map[string]any{
-			"request_id": requestID,
-			"reason":     "read_failed",
+			fieldRequestID: requestID,
+			fieldReason:    "read_failed",
 		})
 		return
 	}
@@ -192,18 +200,24 @@ func (e *InterceptorEngine) uploadDiagnosticsBundle(serverURL, sessionToken, sub
 	if err != nil {
 		slog.Info(fmt.Sprintf("[Client] Could not send collection %s: %v", requestID, err))
 		e.LogEvent("warn", "diagnostics_collect_failed", map[string]any{
-			"request_id": requestID,
-			"reason":     "upload_failed",
+			fieldRequestID: requestID,
+			fieldReason:    "upload_failed",
 		})
 		return
 	}
-	defer func() { _ = resp.Body.Close() }()
+	defer func() {
+		// Checked rather than suppressed: the nolint ratchet is at its ceiling, and a close
+		// error on a response we have already read is worth a line rather than a slot.
+		if cerr := resp.Body.Close(); cerr != nil {
+			slog.Debug(fmt.Sprintf("[Client] Closing the upload response for %s: %v", requestID, cerr))
+		}
+	}()
 
 	if resp.StatusCode != http.StatusOK {
 		slog.Info(fmt.Sprintf("[Client] The gateway refused collection %s (HTTP %d).", requestID, resp.StatusCode))
 		e.LogEvent("warn", "diagnostics_collect_failed", map[string]any{
-			"request_id":  requestID,
-			"status_code": resp.StatusCode,
+			"request_id":    requestID,
+			fieldStatusCode: resp.StatusCode,
 		})
 		return
 	}
@@ -213,8 +227,8 @@ func (e *InterceptorEngine) uploadDiagnosticsBundle(serverURL, sessionToken, sub
 	slog.Info(fmt.Sprintf("[Client] Sent %d diagnostic log(s) (%d bytes) for collection %s, as requested by an administrator.",
 		len(logs), total, requestID))
 	e.LogEvent("info", "diagnostics_collect_sent", map[string]any{
-		"request_id": requestID,
-		"logs":       len(logs),
-		"bytes":      total,
+		fieldRequestID: requestID,
+		"logs":         len(logs),
+		"bytes":        total,
 	})
 }

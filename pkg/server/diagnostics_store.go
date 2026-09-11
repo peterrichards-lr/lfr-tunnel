@@ -45,6 +45,15 @@ type bundleUpload struct {
 	} `json:"logs"`
 }
 
+// bundleUploadResult is what a successful upload answers with. A struct rather than a map so the
+// response shape is declared once and readable from the type.
+type bundleUploadResult struct {
+	Status        string `json:"status"`
+	Logs          int    `json:"logs"`
+	Bytes         int    `json:"bytes"`
+	RetentionDays int    `json:"retention_days"`
+}
+
 // handleDiagnosticsUpload accepts a bundle from a client that was asked for one.
 //
 // Authorised by the COMMAND, not by the caller's say-so. A client may only upload against a
@@ -140,11 +149,11 @@ func (s *Server) handleDiagnosticsUpload(w http.ResponseWriter, r *http.Request)
 		fmt.Sprintf("Received %d diagnostic log(s), %d bytes, for request %s (kept %d days)",
 			stored, total, cmd.ID, db.DiagnosticsRetentionDays), r)
 
-	respondJSON(w, http.StatusOK, map[string]any{
-		"status":         "stored",
-		"logs":           stored,
-		"bytes":          total,
-		"retention_days": db.DiagnosticsRetentionDays,
+	respondJSON(w, http.StatusOK, bundleUploadResult{
+		Status:        "stored",
+		Logs:          stored,
+		Bytes:         total,
+		RetentionDays: db.DiagnosticsRetentionDays,
 	})
 }
 

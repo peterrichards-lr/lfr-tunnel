@@ -938,6 +938,17 @@ func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 
+		// The client's diagnostic upload (#1894). A client endpoint, not an admin one:
+		// registering it under handleAdminEndpoints made it unreachable, and the client
+		// would have POSTed into a 404 with nothing reporting a problem.
+		//
+		// Authorised by the collection command the body carries, not by who is calling, so
+		// it needs no admin session -- and must not be behind one.
+		if r.URL.Path == "/api/client/diagnostics/upload" {
+			s.handleDiagnosticsUpload(w, r)
+			return
+		}
+
 		if r.Method == http.MethodPost && r.URL.Path == "/api/tunnel-status" {
 			s.handleTunnelStatus(w, r)
 			return

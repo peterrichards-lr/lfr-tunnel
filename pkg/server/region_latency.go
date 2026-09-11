@@ -69,6 +69,43 @@ func (s *Server) recordRegionProbes(user *db.User, probes []RegionProbe) {
 	}
 }
 
+// handleNodePlacement serves the node placement report (#1888): did tunnels start on the closest
+// node the user could reach?
+//
+// Admin-only and aggregate-only, on the same reasoning as handleRegionLatency below -- it is
+// built from every user's measurements and answers an operator's question. No user id leaves
+// this handler; the per-user join happens inside the query and only counts come out.
+func (s *Server) handleNodePlacement(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodGet {
+		http.Error(w, `{"error":"Method not allowed"}`, http.StatusMethodNotAllowed)
+		return
+	}
+
+	days := 30
+	if raw := r.URL.Query().Get("days"); raw != "" {
+		parsed, err := strconv.Atoi(raw)
+		if err != nil || parsed <= 0 || parsed > 365 {
+			http.Error(w, `{"error":"days must be between 1 and 365"}`, http.StatusBadRequest)
+			return
+		}
+		days = parsed
+	}
+
+	if s.db == nil {
+		http.Error(w, `{"error":"Database storage not enabled"}`, http.StatusNotImplemented)
+		return
+	}
+
+	report, err := s.db.GetNodePlacement(days)
+	if err != nil {
+		slog.Error(fmt.Sprintf("[Analytics] Node placement report failed: %v", err))
+		http.Error(w, `{"error":"Failed to build the node placement report"}`, http.StatusInternalServerError)
+		return
+	}
+
+	respondJSON(w, http.StatusOK, report)
+}
+
 // handleRegionLatency serves the aggregated report.
 //
 // Admin-only: it is a fleet-wide view built from every user's measurements, and the question it

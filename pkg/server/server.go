@@ -632,7 +632,7 @@ func NewServer(cfg *config.ServerConfig) (*Server, error) {
 					FirstName: first,
 					LastName:  last,
 					Role:      "owner",
-					Status:    "approved",
+					Status:    db.UserStatusApproved,
 				})
 			} else if ownerUser.Role != "owner" {
 				ownerUser.Role = "owner"
@@ -2597,7 +2597,7 @@ func (s *Server) handleRegisterRequest(w http.ResponseWriter, r *http.Request) {
 		LastName:          req.LastName,
 		PreferredName:     req.PreferredName,
 		Role:              "user",
-		Status:            "unverified",
+		Status:            db.UserStatusUnverified,
 		ApprovalToken:     approvalToken,
 		VerificationToken: verificationToken,
 		AuthMethod:        "registration",
@@ -2704,7 +2704,7 @@ func (s *Server) handleCompleteSetup(w http.ResponseWriter, r *http.Request) {
 	}
 
 	user, err := s.db.GetUserByVerificationToken(req.Token)
-	if err != nil || user.Status != "unverified" {
+	if err != nil || user.Status != db.UserStatusUnverified {
 		http.Error(w, `{"error":"Invalid or expired token"}`, http.StatusBadRequest)
 		return
 	}
@@ -2733,7 +2733,7 @@ func (s *Server) handleCompleteSetup(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Registration must be approved by admin
-	user.Status = "pending"
+	user.Status = db.UserStatusPending
 	user.VerificationToken = ""
 	// Keep user.ApprovalToken so the admin can approve!
 
@@ -2833,7 +2833,7 @@ func (s *Server) handleVerifyEmail(w http.ResponseWriter, r *http.Request) {
 	}
 
 	user, err := s.db.GetUserByVerificationToken(token)
-	if err != nil || user.Status != "unverified" {
+	if err != nil || user.Status != db.UserStatusUnverified {
 		http.Error(w, "invalid or expired token", http.StatusBadRequest)
 		return
 	}
@@ -2842,7 +2842,7 @@ func (s *Server) handleVerifyEmail(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	user.Status = "pending"
+	user.Status = db.UserStatusPending
 	user.VerificationToken = "" // Clear it
 	if err := s.db.UpdateUser(user); err != nil {
 		http.Error(w, "failed to update user", http.StatusInternalServerError)
@@ -2987,7 +2987,7 @@ func (s *Server) handleApproveUser(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if user.Status != "pending" || user.ApprovalToken != token {
+	if user.Status != db.UserStatusPending || user.ApprovalToken != token {
 		http.Error(w, "Invalid approval link or request already processed", http.StatusGone)
 		return
 	}
@@ -3036,7 +3036,7 @@ func (s *Server) handleApproveUser(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	user.Status = "approved"
+	user.Status = db.UserStatusApproved
 	user.ApprovalToken = ""
 	user.ClaimToken = claimToken + ":" + pat
 
@@ -3802,7 +3802,7 @@ func (s *Server) handleAdminMagicLink(w http.ResponseWriter, r *http.Request) {
 	if s.db != nil {
 		user, err := s.db.GetUserByEmail(req.Email)
 		if err == nil {
-			if user.Status == "approved" {
+			if user.Status == db.UserStatusApproved {
 				isApproved = true
 			}
 			if user.PreferredName != "" {
@@ -3970,7 +3970,7 @@ func (s *Server) handleAdminVerify(w http.ResponseWriter, r *http.Request) {
 				Email:     email,
 				FirstName: s.cfg.Owner.Name,
 				Role:      "owner",
-				Status:    "approved",
+				Status:    db.UserStatusApproved,
 			}
 			_ = s.db.CreateUser(u) //nolint:errcheck
 		}
@@ -4239,7 +4239,7 @@ func (s *Server) handleAdminInviteUser(w http.ResponseWriter, r *http.Request, a
 		LastName:           req.LastName,
 		PreferredName:      req.FirstName,
 		Role:               "user",
-		Status:             "approved", // Instant approval because invited by Admin
+		Status:             db.UserStatusApproved, // Instant approval because invited by Admin
 		ThemePreference:    "system",
 		LanguagePreference: req.LanguagePreference,
 		AuthMethod:         "invite",
@@ -4884,7 +4884,7 @@ func (s *Server) handleAdminPatchUser(w http.ResponseWriter, r *http.Request, ac
 			greetingName = "there"
 		}
 
-		if *req.Status == "revoked" {
+		if *req.Status == db.UserStatusRevoked {
 			body := fmt.Sprintf(`Hi %s,<br/><br/>
 Your access permissions on Liferay Tunnel have been <strong>suspended</strong> by an administrator.<br/><br/>
 All your active tunnel connections have been closed, and you will no longer be able to establish connections or access the portal.<br/><br/>

@@ -1,7 +1,8 @@
 #!/usr/bin/env bash
 # test-status-vocabulary.sh -- assert check-status-vocabulary.cjs actually fires (#1851).
 #
-# The gate compares pkg/db/user_status.go's UserStatuses against the portal's two enumerations.
+# The gate compares pkg/db/user_status.go's UserStatuses against the portal's three enumerations
+# -- V2's statusOptions and STATUS_BADGE, and V1's STATUS_BADGE (#1866).
 # A comparison that always passes is the failure this repo keeps finding (#1779), so every case
 # below plants a fixture pair and requires a specific verdict -- including the vacuity case, where
 # both sides parse to nothing and a naive implementation would report that they agree.
@@ -26,12 +27,16 @@ if [ ! -f "$GATE" ]; then
     exit 1
 fi
 
-# run_case <label> <expected-exit> <go-statuses csv> <ui-statuses csv> <badge-statuses csv>
+# run_case <label> <expected-exit> <go csv> <statusOptions csv> <V2 badge csv> [V1 badge csv]
+#
+# The V1 list defaults to the V2 one, so every case below exercises V1 too and the cases that name
+# it are the ones where the two arms deliberately disagree.
 run_case() {
     local label="$1" want="$2" go_list="$3" ui_list="$4" badge_list="$5"
+    local v1_list="${6-$badge_list}"
     local dir
     dir="$WORK/$(printf '%s' "$label" | tr -c 'a-zA-Z0-9' '_')"
-    mkdir -p "$dir/pkg/db" "$dir/ui/src/pages" "$dir/scripts"
+    mkdir -p "$dir/pkg/db" "$dir/ui/src/pages" "$dir/pkg/server/static" "$dir/scripts"
     cp "$GATE" "$dir/scripts/"
 
     {
@@ -75,6 +80,25 @@ run_case() {
         echo "}"
     } > "$dir/ui/src/pages/AdminUsers.tsx"
 
+    if [ "$v1_list" = "__inline__" ]; then
+        # V1 having gone back to deciding the colour in a ternary -- the defect itself, not a
+        # mismatched list. The gate must refuse to parse rather than skip the arm it cannot find.
+        printf '%s\n' \
+            "function renderUser(u) {" \
+            "  return \`<span class=\"badge \${u.status === 'approved' ? 'success' : 'warning'}\">\`;" \
+            "}" > "$dir/pkg/server/static/dashboard.js"
+    else
+        {
+            echo "const STATUS_BADGE = {"
+            local IFS=,
+            for s in $v1_list; do
+                [ -n "$s" ] || continue
+                printf "  %s: 'success',\n" "$s"
+            done
+            echo "};"
+        } > "$dir/pkg/server/static/dashboard.js"
+    fi
+
     ( cd "$dir" && node scripts/check-status-vocabulary.cjs >/dev/null 2>&1 )
     local got=$?
 
@@ -109,9 +133,21 @@ run_case "statusOptions has one the server does not define" 1 "approved,pending"
 # lifecycle order, and requiring them to match would fail for a difference nobody cares about.
 run_case "a different order still agrees" 0 "approved,pending,rejected" "rejected,approved,pending" "pending,rejected,approved"
 
+# FIRING. The #1866 defect: V2 learned the status and V1 did not, so the same user renders a
+# different colour depending on which arm of the A/B test they land in.
+run_case "V1 STATUS_BADGE missing a server status" 1 "approved,pending,rejected" "approved,pending,rejected" "approved,pending,rejected" "approved,pending"
+
+# FIRING. V1 in the other direction, so the arm is genuinely compared and not merely required to
+# be non-empty.
+run_case "V1 STATUS_BADGE has one the server does not define" 1 "approved,pending" "approved,pending" "approved,pending" "approved,pending,ghost"
+
+# FIRING. V1 reverting to an inline ternary. The map is what the gate can read; if it disappears,
+# the gate must fail rather than quietly stop checking that arm.
+run_case "V1 back to an inline ternary is not a silent skip" 1 "approved,pending" "approved,pending" "approved,pending" "__inline__"
+
 # CONTROL. Both sides empty. A comparison with no anti-vacuity floor reports that they agree, and
 # the gate then passes forever on a tree it cannot parse.
-run_case "empty on both sides must NOT be reported as agreement" 1 "" "" ""
+run_case "empty on both sides must NOT be reported as agreement" 1 "" "" "" ""ile
 
 echo ""
 echo "passed: $PASS  failed: $FAIL"

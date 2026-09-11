@@ -72,6 +72,42 @@ const supportedLocales = [
   { code: 'zh', name: '简体中文' },
 ];
 
+// Status -> badge class for the user vocabulary, as data rather than as a ternary (#1866).
+//
+// This existed THREE times in this file and no two agreed. :3590 and :5282 both read
+// approved->success, revoked->danger, everything else->warning, so a REJECTED registration
+// rendered amber -- and amber reads as "in progress", which is the opposite of a declined one.
+// Portal V2 had the same defect and #1847 fixed it there, leaving V1 as the other arm of an A/B
+// test showing a different colour for the same row. A third site (:3653) coloured only 'pending'
+// and left everything else unstyled.
+//
+// A map has no default for three copies to disagree about. The keys must match
+// pkg/db/user_status.go's UserStatuses exactly; scripts/check-status-vocabulary.cjs enforces that
+// for this object as well as for V2's.
+const STATUS_BADGE = {
+  // Terminal and good.
+  approved: 'success',
+  // In progress: the registration is moving, nobody has declined anything.
+  unverified: 'warning',
+  pending: 'warning',
+  // Terminal and not good.
+  rejected: 'danger',
+  revoked: 'danger',
+};
+
+// An unrecognised status gets the bare .badge rule -- visible, but dressed as neither success nor
+// failure. The role badge already uses that treatment for the same reason.
+function statusBadgeClass(status) {
+  return STATUS_BADGE[status] || '';
+}
+
+// Whether a registration is still waiting on an admin decision. Written out twice identically
+// (:3533, :3640) and negated by hand a third time (:3544), which is three chances for the set to
+// drift as statuses are added.
+function isAwaitingDecision(u) {
+  return u.status === 'pending' || u.status === 'unverified';
+}
+
 function getFlagSVG(lang) {
   const flags = {
     ar: `<svg viewBox="0 0 640 480" width="16" height="12" style="border-radius: 2px;"><rect width="640" height="480" fill="#006C35"/><path d="M190 280h260M190 280l40-20M320 180c-20 0-30 20-30 30s10 30 30 30s30-20 30-30s-10-30-30-30" stroke="#fff" stroke-width="12" fill="none"/></svg>`, // Saudi Arabia flag (Standard DXP compliant!)
@@ -3529,9 +3565,7 @@ async function loadUsers() {
   const res = await fetch('/api/admin/users');
   if (res.ok) {
     const allUsers = (await res.json()) || [];
-    const pendingUsers = allUsers.filter(
-      (u) => u.status === 'pending' || u.status === 'unverified',
-    );
+    const pendingUsers = allUsers.filter((u) => isAwaitingDecision(u));
     const badge = document.getElementById('reg-badge');
     if (pendingUsers.length > 0) {
       badge.style.display = 'inline-block';
@@ -3540,9 +3574,7 @@ async function loadUsers() {
       badge.style.display = 'none';
     }
 
-    const users = allUsers.filter(
-      (u) => u.status !== 'pending' && u.status !== 'unverified',
-    );
+    const users = allUsers.filter((u) => !isAwaitingDecision(u));
     renderTable('users-table-body', users, (u) => {
       const isSelf = currentUser && u.email === currentUser.email;
       const rowStyle = isSelf ? 'opacity: 0.6;' : '';
@@ -3587,7 +3619,7 @@ async function loadUsers() {
                         </td>
                         <td>${escapeHTML(u.first_name)} ${escapeHTML(u.last_name)}</td>
                         <td><span class="badge ${u.role === 'admin' ? 'success' : ''}">${escapeHTML(u.role)}</span></td>
-                        <td><span class="badge ${u.status === 'approved' ? 'success' : u.status === 'revoked' ? 'danger' : 'warning'}">${escapeHTML(u.status)}</span></td>
+                        <td><span class="badge ${statusBadgeClass(u.status)}">${escapeHTML(u.status)}</span></td>
                         <td>${quotaCell}</td>
                         <td>${lastSeenText}</td>
                         <td>
@@ -3636,9 +3668,7 @@ async function loadRegistrations() {
   const res = await fetch('/api/admin/users');
   if (res.ok) {
     const allUsers = (await res.json()) || [];
-    const pendingUsers = allUsers.filter(
-      (u) => u.status === 'pending' || u.status === 'unverified',
-    );
+    const pendingUsers = allUsers.filter((u) => isAwaitingDecision(u));
     const badge = document.getElementById('reg-badge');
     if (pendingUsers.length > 0) {
       badge.style.display = 'inline-block';
@@ -3650,7 +3680,7 @@ async function loadRegistrations() {
     renderTable('registrations-table-body', pendingUsers, (u) => {
       return `
                     <tr>
-                        <td style="font-weight: 500;">${escapeHTML(u.email)} <span class="badge ${u.status === 'pending' ? 'warning' : ''}">${escapeHTML(u.status)}</span></td>
+                        <td style="font-weight: 500;">${escapeHTML(u.email)} <span class="badge ${statusBadgeClass(u.status)}">${escapeHTML(u.status)}</span></td>
                         <td>${escapeHTML(u.first_name)} ${escapeHTML(u.last_name)}</td>
                         <td>${renderTimestamp(u.created_at)}</td>
                         <td>
@@ -5279,7 +5309,7 @@ async function openUserDetailsModal(userJsonEncoded) {
 
   const statusEl = document.getElementById('detail-user-status');
   statusEl.innerText = u.status;
-  statusEl.className = `badge ${u.status === 'approved' ? 'success' : u.status === 'revoked' ? 'danger' : 'warning'}`;
+  statusEl.className = `badge ${statusBadgeClass(u.status)}`;
 
   // Account Origin
   const originEl = document.getElementById('detail-user-origin');

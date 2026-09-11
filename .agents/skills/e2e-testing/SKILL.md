@@ -209,16 +209,73 @@ So, when a helper reads mail:
 - **Check the response of every step and name it in the error.** An unchecked `/api/auth/verify`
   turns a session that was never established into a 401 attributed to the next call.
 
-## 5. Running them
+## 5. Running them -- Playwright runs in a container, not on your machine (#1858)
 
 ```bash
-cd tests/e2e && docker compose up -d --build          # stack; wait for /api/version to answer
-cd tests/e2e/ui && npx playwright test <spec-name>    # one spec, not the whole suite
+make e2e-ui                                           # the whole suite, Playwright containerised
+cd tests/e2e && docker compose up -d --build          # stack only; wait for /api/version to answer
 ```
 
-`tests/e2e/run-ui.sh` does the full sequence including a client tunnel, which most specs do not
-need. Docker is outside the EDR constraints that govern host binaries, so the containerised client
-is fine to run; the host `lfr-tunnel` binary is not.
+**Do not run `npx playwright test` or `pnpm exec playwright test` on the host.** This section used
+to prescribe exactly that, and it is how `make e2e-ui` came to download chromium into
+`~/Library/Caches/ms-playwright` and execute it on the workstation -- against the rule that a local
+E2E belongs in Docker or an LDM environment precisely to stay clear of the EDR. Docker is a
+different risk profile and is explicitly not blocked; the host browser is not.
+`tests/hooks/test-e2e-ui-containerised.sh` fails if the runner grows a host-side invocation again.
+
+To iterate on one spec, bring the stack up and run that spec **through the same container** the
+runner uses (`E2E_KEEP_STACK=1 make e2e-ui` leaves the stack up afterwards):
+
+```bash
+docker run --rm --network host -v /var/run/docker.sock:/var/run/docker.sock \
+  -v "$PWD/tests/e2e/ui":/e2e -v lfr-tunnel-e2e-ui-node-modules:/e2e/node_modules -w /e2e \
+  -e INSPECTOR_URL=http://localhost:8000 -e E2E_PROJECT_NAME="$E2E_PROJECT_NAME" \
+  lfr-tunnel-e2e-playwright:v1.61.1 \
+  /bin/sh -c "pnpm install --frozen-lockfile && pnpm exec playwright test <spec-name>"
+```
+
+Three things about that command are load-bearing:
+
+- **The docker socket.** `analytics.spec.ts` drives the client with
+  `docker exec ${E2E_PROJECT_NAME}-lfr-tunnel-1`, so the runner needs the CLI and the host daemon.
+- **`node_modules` is a named volume, not the bind mount.** The host tree is macOS/arm64 and the
+  container is linux; sharing one directory installs packages built for the wrong OS.
+- **The image tag is derived, never typed.** `scripts/run-e2e-ui.sh` reads the version out of
+  `tests/e2e/ui/pnpm-lock.yaml`, because the image ships browser builds for exactly ONE library
+  version. Pinning `v1.60.0` from `package.json`'s `^1.60.0` was tried and Playwright refused to
+  launch: *"Looks like Playwright was just updated to 1.61.1 ... required:
+  mcr.microsoft.com/playwright:v1.61.1-jammy"*. `tests/e2e/ui` also carries a stale
+  `package-lock.json` pinning 1.60.0, which is #1863.
+
+### The suite needs more than colima's default 4 CPUs
+
+Containerising Playwright moves chromium **into** the same VM as the five service containers.
+Measured on this machine, same code, only the allocation and competing load changing:
+
+| CPUs | Other load | Result | Test time |
+| --- | --- | --- | --- |
+| host (10 native cores) | -- | 258 passed | 11.3m |
+| 4 | other agents' containers | 257 passed, **1 failed** | 13.8m |
+| 4 | other agents' containers | 257 passed, **1 failed** (a *different* test) | 13.1m |
+| **8** | none | **258 passed** | 12.5m |
+
+Two different single failures across two runs of identical code, then clean at 8 CPUs. Both were
+timing-shaped -- a sidebar link count sampled before the sidebar finished rendering, and a 5s
+timeout waiting for `text=Magic Link Sent`. Note the test time barely moved (13.1 -> 12.5m): the
+extra cores relieved scheduling pressure on marginal timeouts rather than making the suite faster,
+which is the signature of contention rather than of slow code.
+
+So **a red run at 4 CPUs is not evidence of a defect.** Check the allocation first
+(`colima list`), and re-run before investigating. `colima stop && colima start --cpu 8 --memory 12`
+if you have the cores.
+
+**`retries: process.env.CI ? 2 : 0`** (`playwright.config.ts:15`) makes this asymmetric: CI
+absorbs a flake and reports it as flaky-but-passed, while a local run has no retries and goes red.
+A green CI run therefore does not prove the local flakiness is gone -- it proves CI tolerated it.
+
+`tests/e2e/run-ui.sh` is a second, older runner that also does a client tunnel, which most specs
+do not need. It runs `npm install` against a pnpm project (#1863) and installs `docker.io` into
+the container on every run; `scripts/run-e2e-ui.sh` is the maintained path.
 
 ---
-*Last Updated: 2026-09-08* | *Last Reviewed: 2026-09-08*
+*Last Updated: 2026-09-11* | *Last Reviewed: 2026-09-11*

@@ -286,6 +286,7 @@ test-hooks:
 	@./tests/hooks/test-gate-fires.sh
 	@./tests/hooks/test-install-paths.sh
 	@./tests/hooks/test-e2e-teardown.sh
+	@./tests/hooks/test-e2e-ui-containerised.sh
 	@./tests/hooks/test-power-hook-credentials.sh
 	@./tests/hooks/test-ci-hook-gate.sh
 	@./tests/hooks/test-ci-docs-gate.sh

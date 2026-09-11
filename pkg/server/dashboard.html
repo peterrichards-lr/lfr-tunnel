@@ -647,6 +647,24 @@
                                 </table>
                             </div>
                         </div>
+                        <!-- Node placement (#1892). Did tunnels start on the closest node the
+                             user could reach? Same data as Region Latency above, joined to
+                             which node actually served each session, so it sits beside it.
+                             V1 and V2 are an A/B test, so the panel lands in both. -->
+                        <div class="glass" style="padding: 16px; grid-column: span 3;" title="Where each tunnel started, against what that user measured the same day. The percentage is of assessable sessions only.">
+                            <h4 style="margin-bottom: 12px; color: var(--text-muted); font-size: 14px; font-weight: 500;" data-i18n="node_placement">Node Placement</h4>
+                            <p id="node-placement-headline" style="font-size: 13px; margin: 0 0 12px;"></p>
+                            <div class="table-container" style="max-height: 250px; overflow-y: auto;">
+                                <table>
+                                    <thead><tr><th data-i18n="region">Region</th><th data-i18n="node_placement_sessions">Sessions</th><th data-i18n="node_placement_optimal">Closest</th><th data-i18n="node_placement_suboptimal">Slower option</th><th data-i18n="node_placement_unverifiable">Not assessable</th><th data-i18n="node_placement_worst_miss">Worst miss</th></tr></thead>
+                                    <tbody id="node-placement-table-body"></tbody>
+                                </table>
+                            </div>
+                            <p id="node-placement-unknown" style="display: none; color: var(--warning); font-size: 12px; margin: 12px 0 0;"></p>
+                            <!-- The caveat is rendered, not dropped: the counts must not be
+                                 readable as a score. -->
+                            <p style="color: var(--text-muted); font-size: 11px; margin: 12px 0 0;" data-i18n="node_placement_caveat_unverifiable">Not assessable is not a failure: the client caches its region choice for 24h, and a cached choice runs no probe, so there is nothing that day to compare against.</p>
+                        </div>
                         <!-- Anonymous geographic distribution (#1152). V1 and V2 are an A/B
                              test, so the panel lands in both.
 

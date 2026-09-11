@@ -3299,6 +3299,70 @@ async function loadAnalytics() {
         console.error('Failed to load region latency', e);
       }
 
+      // Node placement (#1892). Did tunnels start on the closest node the user could reach?
+      //
+      // THE PERCENTAGE IS OF ASSESSABLE SESSIONS, and the not-assessable count sits beside it
+      // rather than in the denominator. The commonest reason a session cannot be assessed is
+      // the client's 24h region cache -- a cached choice runs no probe, so there is nothing
+      // that day to compare against. Counting those as failures would report a placement
+      // problem for sessions that were merely unmeasured, and somebody would move an edge.
+      try {
+        const npRes = await fetch(
+          `/api/admin/analytics/node-placement?days=${range}`,
+        );
+        const npHeadline = document.getElementById('node-placement-headline');
+        const npUnknown = document.getElementById('node-placement-unknown');
+        if (npRes.ok) {
+          const np = (await npRes.json()) || {};
+          const nodes = np.nodes || [];
+          const assessable = (np.optimal || 0) + (np.suboptimal || 0);
+          if (npHeadline) {
+            if (!np.sessions) {
+              npHeadline.textContent = t('node_placement_empty');
+              npHeadline.style.color = 'var(--text-muted)';
+            } else {
+              const pct = assessable
+                ? Math.round(((np.optimal || 0) / assessable) * 100)
+                : 0;
+              const notAssessable = np.unverifiable
+                ? ` (${np.unverifiable} ${escapeHTML(t('node_placement_unverifiable'))})`
+                : '';
+              npHeadline.innerHTML = `<strong>${assessable ? pct + '%' : '--'}</strong> ${escapeHTML(t('node_placement_headline'))}${notAssessable}`;
+              // Only a real miss is warned about. Not-assessable stays muted: it is not
+              // a fault.
+              npHeadline.style.color =
+                assessable && np.suboptimal > 0
+                  ? 'var(--warning)'
+                  : 'var(--text-muted)';
+            }
+          }
+          if (npUnknown) {
+            if (np.unknown_nodes && np.unknown_nodes.length) {
+              npUnknown.textContent = `${t('node_placement_unknown_nodes')}: ${np.unknown_nodes.join(', ')}`;
+              npUnknown.style.display = '';
+            } else {
+              npUnknown.style.display = 'none';
+            }
+          }
+          renderTable(
+            'node-placement-table-body',
+            nodes,
+            (n) => `
+                                <tr>
+                                    <td style="font-weight: 600;">${escapeHTML((n.node_id || '').toUpperCase())}</td>
+                                    <td>${n.sessions || 0}</td>
+                                    <td>${n.optimal || 0}</td>
+                                    <td style="color: ${n.suboptimal > 0 ? 'var(--warning)' : 'var(--text-muted)'}; font-weight: ${n.suboptimal > 0 ? '600' : '400'};">${n.suboptimal || 0}</td>
+                                    <td style="color: var(--text-muted);">${n.unverifiable || 0}</td>
+                                    <td style="color: var(--text-muted);">${n.worst_miss_ms ? n.worst_miss_ms + 'ms' : '--'}</td>
+                                </tr>
+                            `,
+          );
+        }
+      } catch (e) {
+        console.error('Failed to load node placement', e);
+      }
+
       // Anonymous geographic distribution (#1152). Same panel as Portal V2 -- the two are
       // an A/B test, so a reader in one and not the other is a parity defect.
       //

@@ -611,8 +611,8 @@ An active watchdog runs every minute to verify Nginx and `lfr-tunneld` are answe
 missing Let's Encrypt configuration files on the fly, and restarts whatever is not responding.
 
 **The script is not reproduced here.** It lives in this repo as
-[`scripts/common/gateway-watchdog.sh`](../../scripts/common/gateway-watchdog.sh), with its unit
-and timer beside it, and `scripts/common/setup-central-vps.sh` and `setup-edge-vps.sh` install
+`scripts/common/gateway-watchdog.sh`, with its unit and timer
+beside it, and `scripts/common/setup-central-vps.sh` and `setup-edge-vps.sh` install
 all three. This section used to inline a full copy, and that copy had already drifted -- it was
 missing the `Environment=LFT_BACKEND_PORT=` line the real unit carries, which is the line without
 which the script exits immediately. A stale copy of an operational script is worse than a

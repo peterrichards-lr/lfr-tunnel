@@ -52,6 +52,14 @@ const (
 	// which is the point of the issue: the failure being fixed is that nobody was told.
 	alertKeyWatchdogRestart = "alert_notify_watchdog_restart"
 
+	// watchdogEventRestart is the only event type the spool carries today. Named here rather
+	// than shared with the "restart" that appears in the edge control vocabulary
+	// (api.go, edge_control_ws.go, server_edge_provisioner.go): those are an operator asking an
+	// edge to bounce a service, which has nothing to do with a watchdog recording that one
+	// bounced itself. Same word, different vocabulary -- a shared constant would imply a
+	// relationship that does not exist.
+	watchdogEventRestart = "restart"
+
 	// watchdogMaxEventsPerAlert bounds one email. A box that restart-loops all night produces
 	// hundreds of events and the owner needs to know that it did, not to read each one -- the
 	// count above the list carries that, so the list can be truncated safely.
@@ -111,7 +119,7 @@ func readWatchdogEventsSince(path, since string) ([]watchdogEvent, int, error) {
 			skipped++
 			continue
 		}
-		if ev.TS == "" || ev.Event != "restart" {
+		if ev.TS == "" || ev.Event != watchdogEventRestart {
 			skipped++
 			continue
 		}
@@ -213,12 +221,12 @@ func watchdogAlertBody(events []watchdogEvent, path string) string {
 
 	b.WriteString("The gateway watchdog restarted one or more services on this gateway.\n\n")
 	if failed > 0 {
-		b.WriteString(fmt.Sprintf("%d of %d restart(s) did NOT recover. This gateway may still be degraded.\n\n", failed, len(events)))
+		fmt.Fprintf(&b, "%d of %d restart(s) did NOT recover. This gateway may still be degraded.\n\n", failed, len(events))
 	} else {
 		b.WriteString("All of them recovered. No action may be needed -- this is a record, not a page.\n\n")
 	}
 	if peak >= 3 {
-		b.WriteString(fmt.Sprintf("A service restarted %d times within an hour. Repeated restarts are a different\nproblem from a single one: something is putting it back into the state the\nwatchdog is healing, and healing it is not fixing that.\n\n", peak))
+		fmt.Fprintf(&b, "A service restarted %d times within an hour. Repeated restarts are a different\nproblem from a single one: something is putting it back into the state the\nwatchdog is healing, and healing it is not fixing that.\n\n", peak)
 	}
 
 	b.WriteString("Events:\n")
@@ -227,13 +235,13 @@ func watchdogAlertBody(events []watchdogEvent, path string) string {
 		shown = shown[len(shown)-watchdogMaxEventsPerAlert:]
 	}
 	for _, ev := range shown {
-		b.WriteString(fmt.Sprintf("  %s  %-16s %s\n", ev.TS, ev.Service, ev.Outcome))
+		fmt.Fprintf(&b, "  %s  %-16s %s\n", ev.TS, ev.Service, ev.Outcome)
 	}
 	if len(shown) < len(events) {
-		b.WriteString(fmt.Sprintf("  ... and %d earlier event(s), omitted. The count above is the whole set.\n", len(events)-len(shown)))
+		fmt.Fprintf(&b, "  ... and %d earlier event(s), omitted. The count above is the whole set.\n", len(events)-len(shown))
 	}
 
-	b.WriteString(fmt.Sprintf("\nFull history on the gateway: %s\n", path))
+	fmt.Fprintf(&b, "\nFull history on the gateway: %s\n", path)
 	b.WriteString("Service logs: journalctl -u lfr-tunneld -u nginx -u gateway-watchdog\n")
 	return b.String()
 }

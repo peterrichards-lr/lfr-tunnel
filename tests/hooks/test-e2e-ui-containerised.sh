@@ -12,6 +12,8 @@ set -uo pipefail
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_ROOT="$(cd "${SCRIPT_DIR}/../.." && pwd)"
 RUNNER="${REPO_ROOT}/scripts/run-e2e-ui.sh"
+SECOND_RUNNER="${REPO_ROOT}/tests/e2e/run-ui.sh"
+LIB="${REPO_ROOT}/tests/e2e/lib/playwright-image.sh"
 LOCKFILE="${REPO_ROOT}/tests/e2e/ui/pnpm-lock.yaml"
 
 PASS=0
@@ -25,7 +27,7 @@ trap 'rm -rf "$WORK"' EXIT INT TERM
 echo "Testing that the UI E2E suite runs Playwright in a container"
 echo ""
 
-for required in "$RUNNER" "$LOCKFILE"; do
+for required in "$RUNNER" "$SECOND_RUNNER" "$LIB" "$LOCKFILE"; do
     if [ ! -f "$required" ]; then
         fail "$required is missing -- if it moved, move this guard with it"
         echo ""
@@ -74,36 +76,38 @@ fi
 # -- The image tag must be DERIVED from the lockfile, because the image ships browser builds for
 #    exactly one library version. A literal is a second source of truth: pinning v1.60.0 from
 #    package.json's ^1.60.0 while pnpm installed 1.61.1 made Playwright refuse to launch.
-DERIVE_LINE="$(grep -n 'PLAYWRIGHT_VERSION=' "$RUNNER" | head -1 | cut -d: -f2-)"
+DERIVE_LINE="$(grep -n 'PLAYWRIGHT_VERSION=' "$LIB" | head -1 | cut -d: -f2-)"
 if [ -n "$DERIVE_LINE" ]; then
     pass "BOUNDING  the image tag is derived, not written as a literal version"
 else
     fail "BOUNDING  no PLAYWRIGHT_VERSION derivation found -- a hardcoded tag will drift (#1863)"
 fi
 
-# Run the real expression from the runner against the real lockfile, rather than restating it
-# here. A copy of the sed would be the same second-source-of-truth mistake one level down.
-derive() { # derive <lockfile>
-    PLAYWRIGHT_LOCKFILE="$1" bash -c "
-        PROJECT_ROOT='$REPO_ROOT'
-        $(grep 'PLAYWRIGHT_VERSION=' "$RUNNER" | head -1)
-        printf '%s' \"\$PLAYWRIGHT_VERSION\"
-    " 2>/dev/null
+# Source the lib and call its function, rather than scraping the expression out of it. Scraping
+# was tried and could not work: the sed lives inside lft_playwright_image and reads a local, so a
+# lifted copy of that one line has nothing to read. Calling the real entry point also means this
+# tests the API the runners actually use.
+derive() { # derive <ui-dir>
+    bash -c '
+        . "$1" >/dev/null 2>&1 || exit 1
+        lft_playwright_image "$2" >/dev/null 2>&1 || exit 1
+        printf "%s" "$PLAYWRIGHT_VERSION"
+    ' _ "$LIB" "$1" 2>/dev/null
 }
 
 WANT="$(sed -n "s/^  '@playwright\/test@\([0-9][0-9.]*\)':.*/\1/p" "$LOCKFILE" | head -1)"
-GOT="$(derive "$LOCKFILE")"
+GOT="$(derive "${REPO_ROOT}/tests/e2e/ui")"
 if [ -n "$WANT" ] && [ "$GOT" = "$WANT" ]; then
     pass "FIRING    the derivation reads $WANT out of the real pnpm-lock.yaml"
 else
     fail "FIRING    derivation returned '$GOT', lockfile says '$WANT' -- pnpm's format may have changed"
 fi
 
-# -- CONTROL. A lockfile the expression cannot parse must yield nothing, so the runner's
-#    fail-closed branch fires. Without this case, a derivation that always returned empty would
-#    pass every assertion above that only checks the happy path.
-printf 'lockfileVersion: 9.0\nsettings:\n  autoInstallPeers: true\n' > "$WORK/garbage-lock.yaml"
-if [ -z "$(derive "$WORK/garbage-lock.yaml")" ]; then
+# -- CONTROL. A lockfile the expression cannot parse must yield nothing, so the fail-closed branch
+#    fires. Without this, a derivation that always returned empty would pass the happy path above.
+mkdir -p "$WORK/garbage"
+printf 'lockfileVersion: 9.0\nsettings:\n  autoInstallPeers: true\n' > "$WORK/garbage/pnpm-lock.yaml"
+if [ -z "$(derive "$WORK/garbage")" ]; then
     pass "CONTROL   an unparseable lockfile derives nothing, so the runner refuses rather than guesses"
 else
     fail "CONTROL   derivation invented a version from a lockfile with no Playwright entry"
@@ -111,11 +115,42 @@ fi
 
 # -- FIRING. And the runner must actually refuse on that empty value rather than building
 #    `:v` and failing somewhere less legible.
-if grep -qE 'if \[ -z "\$PLAYWRIGHT_VERSION" \]' "$RUNNER"; then
+if grep -qE 'if \[ -z "\$PLAYWRIGHT_VERSION" \]' "$LIB"; then
     pass "FIRING    the runner fails closed when no version can be derived"
 else
     fail "FIRING    no empty-version guard; a bad lockfile would build an image tagged ':v'"
 fi
+
+# -- FIRING. One lockfile. Two disagreeing ones is what #1863 was: package-lock.json pinned
+#    @playwright/test 1.60.0 while pnpm-lock.yaml pinned 1.61.1, and which applied depended on
+#    which runner you used. Neither failed, because each runner was internally consistent.
+LOCKFILES="$(ls "${REPO_ROOT}/tests/e2e/ui/"*lock* 2>/dev/null | wc -l | tr -d ' ')"
+if [ "$LOCKFILES" = "1" ] && [ -f "$LOCKFILE" ]; then
+    pass "FIRING    tests/e2e/ui has exactly one lockfile, and it is pnpm's"
+else
+    fail "FIRING    expected exactly one lockfile (pnpm-lock.yaml), found $LOCKFILES:"
+    ls "${REPO_ROOT}/tests/e2e/ui/"*lock* 2>/dev/null | sed 's/^/            /'
+fi
+
+# -- FIRING. Neither runner may pin an image tag by hand, or the lib's derivation is bypassed and
+#    the drift returns in the place it already happened once.
+for script in "$RUNNER" "$SECOND_RUNNER"; do
+    if grep -vE '^[[:space:]]*#' "$script" | grep -qE "mcr\.microsoft\.com/playwright:v[0-9]"; then
+        fail "FIRING    $(basename "$script") hardcodes a Playwright image tag instead of deriving it"
+    else
+        pass "FIRING    $(basename "$script") does not hardcode an image tag"
+    fi
+done
+
+# -- FIRING. And neither may install with npm, which resolves against the lockfile that no longer
+#    exists.
+for script in "$RUNNER" "$SECOND_RUNNER"; do
+    if grep -vE '^[[:space:]]*#' "$script" | grep -qE '\bnpm (install|ci)\b'; then
+        fail "FIRING    $(basename "$script") installs with npm; this is a pnpm project"
+    else
+        pass "FIRING    $(basename "$script") installs with pnpm"
+    fi
+done
 
 echo ""
 echo "passed: $PASS  failed: $FAIL"

@@ -34,29 +34,16 @@ import (
 // not touched by any of this.
 
 const (
-	// statusRejected is the status an admin-rejected registration is left in.
+	// The user status vocabulary now lives in one place, pkg/db/user_status.go (#1851), and is
+	// checked against the portal's copy by scripts/check-status-vocabulary.cjs. These two were
+	// declared here by #1830 because goconst counts a package's occurrences against whichever file
+	// is newest; the reason they are named has not changed, only where the names come from.
 	//
-	// The row is KEPT rather than deleted, which is the design question #1830 left open. Both
-	// answers are defensible on friendliness grounds -- deletion lets a colleague who fixed
-	// whatever the problem was simply register again -- but only one of them is safe, and the
-	// reason is in sso.go:
-	//
-	// handleSSOCallback auto-provisions an unknown address as a fully APPROVED user on first
-	// sign-in (that is deliberate: once Liferay SSO is configured the identity provider is the
-	// access decision). Deleting the row on rejection therefore hands the rejected person the
-	// approval directly -- sign in through SSO, be unknown, be created approved. Rejection would
-	// last exactly as long as it took them to click "Sign in with Liferay".
-	//
-	// Keeping the row is what gives every path something to check, and approveOnSSOSignIn now
-	// refuses it. The admin is not locked out of reversing the decision: PATCH /api/admin/users/<email>
-	// sets status directly, so un-rejecting is one dropdown change in the portal.
-	statusRejected = "rejected"
-
-	// statusPending is the status a verified registration waits in for a decision. Named here
-	// rather than spelled as a literal because goconst counts the package's nine occurrences
-	// against whichever file is newest, and because the two halves of the decision have to agree
-	// on exactly which status they act on.
-	statusPending = "pending"
+	// The rejection design decision that used to be documented here moved with them: the row is
+	// KEPT rather than deleted, because handleSSOCallback auto-provisions an unknown address as
+	// approved, so deleting it would hand the rejected person the approval back.
+	statusRejected = db.UserStatusRejected
+	statusPending  = db.UserStatusPending
 
 	// fallbackGreetingName is the salutation for a registration that gave no usable name. Same
 	// reason as above; the literal appears six times across this package's email builders.

@@ -52,6 +52,35 @@ const formatBytes = (bytes: number, decimals = 2) => {
   return `${parseFloat((bytes / Math.pow(k, i)).toFixed(dm))} ${sizes[i]}`;
 };
 
+// Status -> badge class, as data rather than as a ternary (#1851).
+//
+// There were two ternaries and they defaulted in OPPOSITE directions: the table fell through to
+// badge-danger, the detail panel to badge-warning. So the same user rendered red in one and amber
+// in the other -- which #1847 fixed for 'rejected' by naming it in both, while leaving the
+// structure that caused it. `unverified` was still doing exactly this: red in the table, amber in
+// the panel, for a registration that has merely not confirmed its email yet.
+//
+// A map has no default to disagree about, and an unknown status is now visibly unknown rather
+// than silently taking whichever branch happened to be last. The keys must match
+// pkg/db/user_status.go's UserStatuses exactly; scripts/check-status-vocabulary.cjs enforces that.
+const STATUS_BADGE: Record<string, string> = {
+  // Terminal and good.
+  approved: 'badge-success',
+  // In progress: the registration is moving, nobody has declined anything.
+  unverified: 'badge-warning',
+  pending: 'badge-warning',
+  // Terminal and not good. Amber would read as "in progress", which is the opposite of a
+  // declined or withdrawn account.
+  rejected: 'badge-danger',
+  revoked: 'badge-danger',
+};
+
+// An unrecognised status is a bug -- either the server grew one the portal has not learned, or a
+// literal is misspelled. Neutral styling makes it visible instead of dressing it as success or
+// failure; the gate is what stops it reaching here in the first place.
+const statusBadgeClass = (status: string): string =>
+  STATUS_BADGE[status] ?? 'badge-secondary';
+
 export default function AdminUsers() {
   const { t } = useI18n();
   const { user: currentUser } = useOutletContext<{ user: any }>();
@@ -727,7 +756,7 @@ export default function AdminUsers() {
                       {isColumnVisible('status') && (
                         <td className="td-cell">
                           <span
-                            className={`badge ${u.status === 'approved' ? 'badge-success' : u.status === 'pending' ? 'badge-warning' : 'badge-danger'}`}
+                            className={`badge ${statusBadgeClass(u.status)}`}
                           >
                             {u.status.toLowerCase()}
                           </span>
@@ -954,12 +983,9 @@ export default function AdminUsers() {
               </div>
               <div>
                 <span
-                  // 'rejected' must be listed explicitly here. This ternary defaults to
-                  // badge-warning, where the table's defaults to badge-danger -- so before
-                  // #1847 the same user rendered amber in this panel and red in the table.
-                  // Amber reads as "in progress", which is the opposite of a declined
-                  // registration.
-                  className={`badge ${selectedUser.status === 'approved' ? 'badge-success' : selectedUser.status === 'revoked' || selectedUser.status === 'rejected' ? 'badge-danger' : 'badge-warning'} mr-sm`}
+                  // Same mapping as the table, which is the point: these two used to be separate
+                  // ternaries with opposite defaults (#1851).
+                  className={`badge ${statusBadgeClass(selectedUser.status)} mr-sm`}
                 >
                   {selectedUser.status}
                 </span>

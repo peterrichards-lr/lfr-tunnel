@@ -1,4 +1,4 @@
-.PHONY: fmt vet test test-locked ui-dist compile-check test-hooks check-contexts check-contexts-live check-workflow-failures check-attribution check-css check-contrast check-i18n check-html build deploy clean install-hook install-go-guard ops-bin e2e e2e-sso e2e-edge e2e-ui help
+.PHONY: fmt vet test test-locked ui-dist compile-check test-hooks check-contexts check-contexts-live check-workflow-failures check-attribution check-css check-contrast check-i18n check-html check-status build deploy clean install-hook install-go-guard ops-bin e2e e2e-sso e2e-edge e2e-ui help
 
 VERSION ?= $(shell grep -oE 'Version = "[^"]+"' pkg/config/version.go | cut -d'"' -f2)
 
@@ -71,6 +71,7 @@ help:
 	@echo "  make check-css         - Portal V2 BEM modifiers have a matching rule"
 	@echo "  make check-contrast    - Theme danger colours meet WCAG AA"
 	@echo "  make check-i18n        - Portal keys are defined in Language.properties"
+	@echo "  make check-status      - Portal user statuses match the server's vocabulary"
 	@echo "  make check-html        - Every HTML document has balanced tags"
 	@echo "  make nolint-ratchet    - //nolint:errcheck suppressions have not grown"
 	@echo "  make home-isolation    - tests never read the developer's real home directory"
@@ -287,6 +288,7 @@ test-hooks:
 	@./tests/hooks/test-install-paths.sh
 	@./tests/hooks/test-e2e-teardown.sh
 	@./tests/hooks/test-e2e-ui-containerised.sh
+	@./tests/hooks/test-status-vocabulary.sh
 	@./tests/hooks/test-power-hook-credentials.sh
 	@./tests/hooks/test-ci-hook-gate.sh
 	@./tests/hooks/test-ci-docs-gate.sh
@@ -334,6 +336,11 @@ check-attribution:
 # AGENTS.md covers .sh files, so this one is outside that constraint by construction.
 check-css:
 	@node scripts/check-css-modifiers.cjs
+
+# The user status vocabulary lived in six places and was checked in none, so #1830 added one and
+# the portal did not learn it (#1847, #1851). Compares rather than documents.
+check-status:
+	@node scripts/check-status-vocabulary.cjs
 
 # Checks every theme's danger colours against WCAG AA (#1458). Discovers theme files
 # rather than listing them, so a theme added later is covered without touching this.

@@ -1,5 +1,30 @@
 [
   {
+    "version": "v1.48.27",
+    "release_date": "2026-09-11",
+    "features": [
+      "fix(server): stop handler goroutines outliving the database they write to (#1852)",
+      "test(gates): assert what each quality gate does not look at (#1779) (#1855)",
+      "fix(portal): teach the admin status vocabulary about 'rejected' (#1847) (#1850)",
+      "feat(server): let an admin reject a registration, and tell the person (#1830) (#1848)",
+      "refactor(gates): one V1 collection pass for the class and token gates (#1841) (#1846)",
+      "docs: add an addendum on exposing any local HTTP service (#1844) (#1845)",
+      "fix(server): send every notification through one funnel that records its failures (#1732) (#1843)",
+      "test(gates): assert anti-vacuity and \"it fires\" on four unproven gates (#1842)",
+      "fix(test): stop the Playwright cleanup taking a magic link it has already used (#1838)",
+      "docs(contributing): drop the CHANGELOG.md requirement, which pointed at nothing (#1811) (#1836)",
+      "fix(hooks): decide the pre-push range against the target, and refuse when it cannot (#1816) (#1835)",
+      "fix(server): record magic-link and invite email failures instead of discarding them (#1832) (#1834)",
+      "fix(server): complete the SSO auto-approval, and stop losing approval emails silently (#1824) (#1831)",
+      "chore(deps): bump github.com/aws/aws-sdk-go-v2/service/scheduler (#1829)",
+      "chore(deps): bump github.com/aws/aws-sdk-go-v2/service/sts (#1827)",
+      "chore(deps): bump golang.org/x/oauth2 from 0.36.0 to 0.37.0 (#1828)",
+      "chore(deps): bump modernc.org/sqlite from 1.57.0 to 1.58.0 (#1826)",
+      "chore(deps): bump github.com/aws/aws-sdk-go-v2/service/route53 (#1825)",
+      "fix(server): resolve every recorded address through the trusted-proxy boundary (#1818) (#1823)"
+    ]
+  },
+  {
     "version": "v1.48.26",
     "release_date": "2026-09-08",
     "features": [
@@ -81,13 +106,6 @@
     "features": [
       "fix(install): download from the gateway that served the installer (#1684) (#1685)",
       "feat(ops): reconcile the session policy onto a running gateway (#1681) (#1683)"
-    ]
-  },
-  {
-    "version": "v1.48.22",
-    "release_date": "2026-09-02",
-    "features": [
-      "feat(auth): cap the absolute session lifetime, independent of activity (#1679) (#1680)"
     ]
   }
 ]

@@ -138,7 +138,7 @@ This uses our existing E2E Keycloak Docker setup to run a local OIDC Identity Pr
    ```
 3. Build the gateway server, then run the built binary:
    ```bash
-   go build -o bin/lfr-tunneld ./cmd/lfr-tunneld
+   make build
    ./bin/lfr-tunneld -config server-config-local-sso.yaml
    ```
 
@@ -189,4 +189,4 @@ This uses our existing E2E Keycloak Docker setup to run a local OIDC Identity Pr
 
 <!-- markdownlint-disable MD049 -->
 ---
-*Last Updated: 2026-08-25* | *Last Reviewed: 2026-08-25*
+*Last Updated: 2026-09-11* | *Last Reviewed: 2026-09-11*

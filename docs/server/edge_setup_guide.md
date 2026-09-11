@@ -485,7 +485,7 @@ Do not hand-write this. It is generated from the same template central uses, so 
 drift apart (#1442):
 
 ```bash
-go build -o bin/lfr-tunnel-ops ./cmd/lfr-tunnel-ops
+make ops-bin
 ./bin/lfr-tunnel-ops render-nginx-config -role edge \
   -domains us.lfr-demo.online \
   -apex-domains lfr-demo.online \
@@ -605,4 +605,4 @@ If your Edge VPS or Control Plane gateway has multiple public IP addresses confi
 
 <!-- markdownlint-disable MD049 -->
 ---
-*Last Updated: 2026-09-08* | *Last Reviewed: 2026-09-08*
+*Last Updated: 2026-09-11* | *Last Reviewed: 2026-09-11*

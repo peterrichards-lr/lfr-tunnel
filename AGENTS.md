@@ -110,10 +110,18 @@ different ones.
 - **Never bypass branch protection** (`gh pr merge --admin` or equivalent) to force
   a merge. Let CI checks pass naturally. If a check is wrong, fix the check, don't
   route around it.
-- `bin/lfr-tunnel-ops` is not a committed binary — build it first
-  (`go build -o bin/lfr-tunnel-ops ./cmd/lfr-tunnel-ops`) before using it. Never
-  substitute `go run ./cmd/lfr-tunnel-ops` for this (see the EDR constraints skill
-  above — that pattern risks the same local-execution problem).
+- `bin/lfr-tunnel-ops` is not a committed binary — build it with **`make ops-bin`**
+  before using it. Never substitute `go run ./cmd/lfr-tunnel-ops` for this (see the
+  EDR constraints skill above — that pattern risks the same local-execution problem).
+
+  This line used to say `go build -o bin/lfr-tunnel-ops ./cmd/lfr-tunnel-ops`, and that
+  advice was right about `go run` and wrong about safety. `GOTMPDIR`, not `-o`, decides
+  where an unsigned binary first exists (#1337); the Makefile pins it and nothing outside
+  make inherits that, so the prescribed command linked into `/var/folders` every time.
+  SentinelOne quarantined exactly those binaries on 2026-09-09 and took 61 tracked scripts
+  with them as collateral (#1859). A documented command must not defeat a documented
+  control — `scripts/check-edr-safety.sh` now fails on a `go build` prescribed in any
+  Markdown file, so this cannot quietly come back.
 - Client binaries must be signed before release/deployment — see the
   `lfr-tunnel-ops` skill for the exact signing command and required environment.
 
@@ -208,4 +216,4 @@ trip over.
 
 <!-- markdownlint-disable MD049 -->
 ---
-*Last Updated: 2026-08-28* | *Last Reviewed: 2026-08-28*
+*Last Updated: 2026-09-11* | *Last Reviewed: 2026-09-11*

@@ -334,11 +334,13 @@ sudo useradd -r -s /bin/false lfr-tunnel
 ### 4.2. Build the Server Binary
 Build the Go binary locally on your computer and copy it to the VPS, or build it directly on the VPS if you have Go installed:
 ```bash
-# Compile
-go build -ldflags="-s -w" -o lfr-tunneld ./cmd/lfr-tunneld
+# Compile. `make build` rather than a bare `go build`: the Makefile pins GOTMPDIR, and the
+# toolchain links inside GOTMPDIR before moving the result to -o, so a bare build leaves an
+# unsigned binary in the system temp directory whatever -o says (#1337, #1859).
+make build
 
 # Install binary to system path
-sudo cp lfr-tunneld /usr/local/bin/
+sudo cp bin/lfr-tunneld /usr/local/bin/
 sudo chmod 755 /usr/local/bin/lfr-tunneld
 sudo chown root:root /usr/local/bin/lfr-tunneld
 ```
@@ -1499,4 +1501,4 @@ To guarantee that outbound connections originating from the VPS are consistently
 
 <!-- markdownlint-disable MD049 -->
 ---
-*Last Updated: 2026-09-08* | *Last Reviewed: 2026-09-08*
+*Last Updated: 2026-09-11* | *Last Reviewed: 2026-09-11*

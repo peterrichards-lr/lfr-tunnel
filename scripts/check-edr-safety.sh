@@ -53,7 +53,7 @@ is_documentation_prose() {
     case "$file" in
         *.md)
             # Anything other than a line that *starts* with the command is prose.
-            if ! printf '%s' "$code" | grep -qE '^[[:space:]]*(go|GOOS=[^ ]+ go|GOTMPDIR=[^ ]+ go) (test|run)\b'; then
+            if ! printf '%s' "$code" | grep -qE '^[[:space:]]*(go|GOOS=[^ ]+ go|GOTMPDIR=[^ ]+ go) (test|run|build)\b'; then
                 return 0
             fi
             ;;
@@ -105,10 +105,21 @@ if [ "$SCANNED" -lt "$MIN_SCANNED" ]; then
     exit 1
 fi
 
+# scan <pattern> <label> <advice> [include...]
+#
+# With no include override the full set above is searched. An override narrows it, which the
+# `go build` check below needs: see its comment for why that check is Markdown-only.
 scan() {
     local pattern="$1" label="$2" advice="$3"
+    shift 3
+    local -a includes
+    if [ "$#" -gt 0 ]; then
+        includes=("$@")
+    else
+        includes=("${INCLUDES[@]}")
+    fi
     local hits
-    hits="$(grep -rnE "$pattern" "${INCLUDES[@]}" "${EXCLUDES[@]}" . 2>/dev/null || true)"
+    hits="$(grep -rnE "$pattern" "${includes[@]}" "${EXCLUDES[@]}" . 2>/dev/null || true)"
 
     [ -n "$hits" ] || return 0
 
@@ -151,6 +162,34 @@ scan '(^|[^[:alnum:]_-])go run ' \
      'go run' \
      'Build with "go build -o <path>" and run the built binary. go run executes it from inside GOTMPDIR.'
 
+# go build links inside GOTMPDIR exactly as the other two do -- it just does not execute the
+# result, which is why it read as harmless for so long. It is not: on 2026-09-09 SentinelOne
+# quarantined this project's freshly built, unsigned Mach-O binaries and took 61 tracked scripts
+# with them as remediation collateral (#1859). The bypass was being PRESCRIBED at the time --
+# AGENTS.md and the edr-constraints skill both told agents to run
+# `go build -o bin/lfr-tunnel-ops ./cmd/lfr-tunnel-ops` directly, and this guard could not see it
+# because it only ever looked for the two spellings already known to be unsafe, rather than for
+# the property that makes them unsafe.
+#
+# A documented command counts. Anything a reader copies out of a fenced block runs outside make,
+# which is the whole problem -- so is_documentation_prose above was widened to recognise a
+# prescribed `go build` rather than treating it as description.
+# Markdown only, and that narrowing is deliberate rather than timid.
+#
+# A documented command is one a reader copies and runs at a prompt, which is outside make and so
+# inherits no pin -- exactly how #1859 happened, with AGENTS.md and the edr-constraints skill both
+# prescribing `go build -o bin/lfr-tunnel-ops`. Widening this to every *.sh was measured first and
+# produced 14 hits, of which the large majority are already safe or are not invocations at all:
+# scripts that `make` runs inherit the exported GOTMPDIR at runtime, which no line-local grep can
+# see, and several hits were assertion or echo text describing the command rather than running it.
+# A gate that reports mostly false positives gets exemptions bolted on until it says nothing --
+# the failure this repo keeps finding. The shell half is tracked separately with that measured
+# list rather than shipped noisy.
+scan '(^|[^[:alnum:]_-])go build ' \
+     'go build prescribed in documentation' \
+     'Prescribe a make target (e.g. "make ops-bin"), which pins GOTMPDIR. -o names where the binary ENDS UP; GOTMPDIR decides where it is linked.' \
+     --include=*.md
+
 # The same two commands, but spawned FROM Go source. This needs its own pattern rather than
 # riding on the two above: Go never contains the literal "go run". It spells it as separate
 # string literals -- exec.Command("go", "run", ...) -- so widening the includes to *.go changes
@@ -160,7 +199,7 @@ scan '(^|[^[:alnum:]_-])go run ' \
 #
 # Matches the argument pair with optional whitespace, which covers exec.Command, exec.CommandContext
 # and this repo's RunCommand / RunCommandWithEnv / RunCommandCaptureOutput wrappers alike.
-scan '"go"[[:space:]]*,[[:space:]]*"(run|test)"' \
+scan '"go"[[:space:]]*,[[:space:]]*"(run|test|build)"' \
      'go toolchain spawned from Go source' \
      'Do the work in-process, or build to a path and exec that. A subprocess "go run" links and executes inside GOTMPDIR just as a shell one does.'
 
@@ -171,4 +210,4 @@ if [ "$FAILED" -ne 0 ]; then
     exit 1
 fi
 
-echo "EDR Safety Check Passed: no unguarded 'go test' or 'go run' invocations found."
+echo "EDR Safety Check Passed: no unguarded 'go build', 'go test' or 'go run' invocations found."

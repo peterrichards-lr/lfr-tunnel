@@ -86,7 +86,7 @@ To automate the release lifecycle (bumping the version in `pkg/config/version.go
   ```
   - `NEW_VERSION_TAG` must follow semantic versioning (e.g., `v1.17.0`).
   - *Note: the script requires you to be on the `master` branch (it pulls latest before branching); it does not itself check for a clean working tree — commit or stash unrelated changes first regardless.*
-  - *Note: the script creates and pushes a `release-<version>` branch and PR only. It does not create or push a git tag — tagging is a manual step the script prints as its final instruction.*
+  - *Note: the script creates and pushes a `release/<version>` branch and PR only (a slash, matching `git checkout -b release/$NEW_VERSION` in the script itself and the `startswith("release/")` guard it uses to refuse a second open release PR). It does not create or push a git tag — tagging is a manual step the script prints as its final instruction.*
   - **CRITICAL COMPLIANCE NOTE**: Never use `--admin` to bypass branch protection rules to merge the resulting PR, or any other PR. The AI assistant must let CI/CD checks pass naturally and follow the repository rules to the letter.
 
 ### Pushing the tag is one-shot — verify the run started
@@ -158,6 +158,59 @@ Before deploying client binaries or making releases, they must be signed.
     them. `env | grep -E '^(LFT_|MINISIGN)'` confirms it. If they are absent, `sign` does not
     fail: it **skips** each platform in turn and still writes `checksums.txt`, which would
     publish unsigned binaries that look signed. That is the one outcome to avoid here.
+
+  **Run it in the FOREGROUND, and never treat a prompt error as a blocker** (learned signing
+  v1.48.27, 2026-09-11). The biometric dialog has to be raised from an attached process, and the
+  operator needs a realistic window to reach it. Two failure strings and what each one means:
+
+  | What `op run` printed | What it actually means | What to do |
+  | --- | --- | --- |
+  | `error initializing client: response: promptError` | the command was **backgrounded**, so the prompt could not be raised | re-run it in the foreground |
+  | `error initializing client: authorization timeout` | the prompt **did** reach the operator and simply was not approved in time | re-run it and say the prompt is coming; allow several minutes |
+
+  Neither is a reason to hand the task back. **When the operator has asked for a release or a
+  deploy, that includes this step** -- run it, tell them the prompt is about to appear, and give
+  it a long timeout rather than stopping to ask permission you already have. Saying "blocked on
+  your biometric" after a timeout wastes a round trip on something the operator expected to
+  approve all along.
+
+  A failed `sign` is safe to retry: it establishes the 1Password session before touching
+  anything, so `dist/` is byte-identical afterwards. Verify that rather than assuming it --
+  record the signature files' hashes first, and confirm they are unchanged after a failure and
+  changed after a success.
+
+### Verifying a signature -- and the one result that looks like failure and is not
+
+`sign` exits 0 having skipped whatever it could not do, so exit 0 is not evidence. Check each
+artefact, and know what a pass looks like for each:
+
+```bash
+codesign --verify --verbose=1 dist/lfr-tunnel-darwin-{arm64,amd64}   # "valid on disk"
+gpg --verify dist/lfr-tunnel-linux-amd64.asc dist/lfr-tunnel-linux-amd64
+osslsigncode verify dist/lfr-tunnel-windows-amd64.exe
+```
+
+**`osslsigncode verify` reports `Signature verification: failed` / `Failed` on a correctly signed
+binary, and that is expected.** The project's Windows certificate is self-signed
+(`CN=Lfr-Tunnel Windows Code Signing`), so chain validation against `/etc/ssl/cert.pem` can never
+succeed -- the sole error is `Verify error: self-signed certificate`. What proves the signature is
+good is the pair of digests it prints:
+
+```
+Current message digest    : 2E6F61FD...
+Calculated message digest : 2E6F61FD...   <-- equal means the signature covers these exact bytes
+```
+
+So read the digests and the signer CN, not the final verdict. Reading the verdict alone would
+send someone re-signing a binary that was never broken. `Timestamp is not available` is likewise
+normal -- no TSA is used.
+
+Two more worth knowing: macOS reports `TeamIdentifier=not set`, which is correct for this
+identity, and the Linux GPG signature must come back as
+`Good signature from "Liferay Tunnel Developer <developer@lfr-demo.se>"` on key
+`E8E407B5D8F557B3F0749EE676219C6F0B96C87B` -- the shared project key, not anyone's personal one.
+Finally, confirm `checksums.txt` describes the bytes actually in `dist/`, since it is rewritten
+last and is what the portal serves.
   - **Environment Variables** (used to bypass interactive prompts):
     - `LFT_MACOS_IDENTITY`: macOS codesigning identity (e.g. from `security find-identity`).
     - `LFT_SIGN_P12` / `LFT_SIGN_KEY` / `LFT_SIGN_CRT`: Credentials for Windows code signing (can refer to 1Password reference `op://...` or local path).
@@ -171,7 +224,104 @@ Before deploying client binaries or making releases, they must be signed.
 
 ## 5. Deploying to the VPS
 
+### Before any gateway deploy: check the AWS session, and refresh it yourself if it is dead
+
+Every `deploy -target …` in this repo goes through the power hook, which needs live AWS
+credentials **before** it reaches AWS at all. The SSO session expires, and an expired one is the
+single most likely reason a deploy stops -- so check it first rather than discovering it on the
+first target:
+
+```bash
+AWS_PROFILE=lfr-tunnel aws sts get-caller-identity    # expect account 499290259678
+```
+
+If it fails with `Token has expired and refresh failed`, **run the login yourself** -- do not hand
+it back and do not report being blocked:
+
+```bash
+aws sso login --profile lfr-tunnel
+```
+
+It prints a verification URL and opens a browser; the operator completes the SSO approval there,
+exactly as they approve the 1Password prompt in §4. Tell them the browser is opening, give it a
+long timeout, and carry on with the deploy when `get-caller-identity` answers. **This is the only
+thing a release or deploy needs to prompt for.** Everything else in §§1-5 runs unattended:
+if the session is already live, say nothing and continue as normal.
+
+`AWS_PROFILE=lfr-tunnel` is still required on every such command -- the default profile is empty.
+Note `deploy-clients` is the exception that will *not* warn you: it is pure `scp`/`ssh` to central
+and succeeds with no AWS credentials at all, so a clients-first deploy can look completely healthy
+right up to the first gateway.
+
+
 Deployments require SSH access to the VPS -- see §0 for how the target (user/host/key) is resolved. Build `bin/lfr-tunnel-ops` first (see §2) — never `go run ./cmd/lfr-tunnel-ops ...`.
+
+### Scheduled edges: why a node is down, and what a deploy does about it
+
+**All four edges power off overnight. Central never does.** So an edge answering nothing is the
+normal state for a third of the day, and reading it as an outage is the mistake to avoid --
+v1.48.26's notes call this out as "probe, do not infer", in reverse.
+
+Read from AWS on 2026-09-11, not copied from anywhere:
+
+| Edge | Region | Up | Down | Timezone |
+| --- | --- | --- | --- | --- |
+| `in` | ap-south-1 | 08:00 | 00:00 | Asia/Kolkata |
+| `sa` | sa-east-1 | 08:00 | 00:00 | America/Sao_Paulo |
+| `us` | us-east-2 | 08:00 | 00:00 | America/New_York |
+| `apac` | ap-northeast-1 | 08:00 | 00:00 | Asia/Tokyo |
+| `central` | eu-west-1 | -- | -- | **no schedule, never off** |
+
+Each edge runs 08:00-00:00 in **its own local time**, so which ones are down depends on the hour
+you look. At 08:04 UTC on 2026-09-11: `in` was 13:34 local and up, `apac` 17:04 and up, `sa` 05:04
+and stopped, `us` 04:04 and stopped -- which is exactly what probing found. Note the earlier
+framing of this as "edge-us/edge-apac's deliberately-wrong midnight-8am schedule, kept as a live
+test case for #885" no longer distinguishes anything: **all four carry the same window.**
+
+These are EventBridge Scheduler schedules, one pair per edge, in the group
+`lfr-tunnel-edge-nodes` in each edge's own region -- not cron on the box, and not in this repo.
+To read them (note `--group-name` is required; without it `get-schedule` reports
+`ResourceNotFoundException` and it looks like the schedule is missing):
+
+```bash
+aws scheduler list-schedules --region <region> --query 'Schedules[].[Name,GroupName,State]' --output text
+aws scheduler get-schedule --region <region> --group-name lfr-tunnel-edge-nodes --name edge-<x>-start
+```
+
+**Confirming a silent node is scheduled-off rather than broken**, in order of directness:
+
+```bash
+aws ec2 describe-instances --region <region> --instance-ids <id> \
+  --query 'Reservations[0].Instances[0].State.Name' --output text     # "stopped" settles it
+curl -s https://tunnel.lfr-demo.se/api/version | python3 -m json.tool | grep -A6 regions_unavailable
+```
+
+Central lists a stopped edge under `regions_unavailable`, so central's own view corroborates it.
+
+#### What `deploy -target <scheduled-edge>` does, and the one part worth knowing
+
+Nothing extra is required -- every target in `lfr-tunnel-ops.yaml` already carries `power_hook`
+and `aws_region`, so a single `deploy -target sa` handles the whole cycle:
+
+1. reads the instance's power state through the hook (**this is the step that needs live AWS
+   credentials** -- see the section above);
+2. if stopped, starts it and waits for SSH;
+3. uploads the binary and assets, enables maintenance mode, then **drains**: announces a 45s
+   window and waits up to 90s for tunnels to move to another gateway;
+4. restarts `lfr-tunneld` and clears the announcement;
+5. verifies `https://<edge>.lfr-demo.se` serves the new version before declaring success;
+6. **restores the instance to its previous state** -- so a box that was stopped is stopped again,
+   and one that was already running is left running. It restores on failure too, not just success.
+
+Measured on v1.48.27 (2026-09-11): `sa` went `stopped` -> started -> `[drain] Drained; no tunnels
+left attached` -> `Verified: https://sa.lfr-demo.se is serving v1.48.27` -> `is stopping`, and
+`describe-instances` confirmed `stopped` afterwards. Budget several minutes per scheduled edge
+against seconds for a live one -- almost all of it is instance start and SSH wait.
+
+**So verify a scheduled edge from the deploy's own output, not by probing it afterwards.** By the
+time the command returns the box is off again and `/api/version` will not answer. That is a
+success, not a regression -- the `Verified:` line inside the run is the evidence, and it is the
+only chance to see it.
 
 ### Deploying Client Binaries
 Copies the multi-platform binaries from `dist/` and `checksums.txt` to the VPS static downloads directory (`/var/www/lfr-tunnel/static/downloads`).
@@ -525,4 +675,4 @@ Run remote diagnostic checks on the VPS (system uptime/load, systemd service sta
 
 <!-- markdownlint-disable MD049 -->
 ---
-*Last Updated: 2026-09-08* | *Last Reviewed: 2026-09-08*
+*Last Updated: 2026-09-11* | *Last Reviewed: 2026-09-11*

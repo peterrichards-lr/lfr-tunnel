@@ -2345,6 +2345,9 @@ func (s *Server) Start() error {
 					// restarts the daemon, so forwarding at startup alone would leave it
 					// unreported until something unrelated bounced the gateway (#1875).
 					s.forwardWatchdogEvents()
+					// The retention period PRIVACY.md states is only true because this
+					// runs (#1894).
+					s.pruneDiagnosticsBundles()
 					_ = s.db.PruneExpiredMagicLinks()                          //nolint:errcheck
 					_ = s.db.PruneExpiredOrRevokedPATs(s.cfg.PATRetentionDays) //nolint:errcheck
 					// Expired sessions are read as absent, so this is housekeeping rather
@@ -3427,6 +3430,11 @@ func (s *Server) handleAdminEndpoints(w http.ResponseWriter, r *http.Request) {
 
 	// Where should the next edge go (#1151). Served alongside the other admin analytics rather
 	// than on its own route, so it inherits the same admin check.
+	if r.URL.Path == "/api/admin/diagnostics/bundles" {
+		s.handleAdminDiagnosticsBundles(w, r)
+		return
+	}
+
 	if r.URL.Path == "/api/admin/analytics/node-placement" {
 		s.handleNodePlacement(w, r)
 		return

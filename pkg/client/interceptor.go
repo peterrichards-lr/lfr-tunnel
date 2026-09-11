@@ -641,11 +641,16 @@ func (e *InterceptorEngine) StartHealthChecks(ctx context.Context, cancel contex
 								// also why only the serving gateway can deliver one of
 								// these (#1763).
 								for _, cmd := range e.noteDiagnosticsCommands(ParseDiagnosticsCommands(body)) {
-									slog.Info("[Client] The gateway has asked for diagnostic logs; acknowledging.",
+									slog.Info("[Client] The gateway has asked for diagnostic logs; collecting.",
 										"request_id", cmd.ID)
 									e.LogEvent("info", "diagnostics_collect_requested", map[string]any{
 										"request_id": cmd.ID,
 									})
+									// Off the heartbeat goroutine: reading and redacting
+									// several megabytes must not sit inside a health check
+									// that runs every five seconds (#1894).
+									go e.uploadDiagnosticsBundle(serverURL, sessionToken,
+										e.ClientSubdomain, cmd.ID)
 								}
 							}
 

@@ -830,6 +830,20 @@ Liferay Tunnel Team`, html.EscapeString(greetingName))
 		_ = s.sendNotification(notifyAccountDeleted, user.Email, subject, body, plainBody) //nolint:errcheck
 	}
 
+	// 5b. Destroy any collected diagnostic log bundles (#1894).
+	//
+	// The schema carries ON DELETE CASCADE, so the row below would take these with it. Done
+	// explicitly anyway, and BEFORE the user row goes, for two reasons: the count is worth
+	// having in the log of an erasure, and a future change to how users are deleted -- a soft
+	// delete, an anonymise-in-place -- would silently stop the cascade firing while this line
+	// keeps working. Belt and braces is the right posture for the one operation that must not
+	// leave data behind.
+	if n, derr := s.db.DeleteDiagnosticsBundlesForUser(user.ID); derr != nil {
+		slog.Error(fmt.Sprintf("[GDPR] Could not delete diagnostic bundles for %s: %v", user.Email, derr))
+	} else if n > 0 {
+		slog.Info(fmt.Sprintf("[GDPR] Deleted %d diagnostic log bundle(s) for %s", n, user.Email))
+	}
+
 	// 6. Delete the actual profile record from the users database entirely
 	err = s.db.DeleteUser(user.ID)
 	if err != nil {

@@ -25,6 +25,7 @@ type DB struct {
 	VanityDomainStatusRepository
 	PortalSessionRepository
 	RegionProbeRepository
+	DiagnosticsRepository
 	AcknowledgementRepository
 }
 
@@ -57,6 +58,7 @@ func Open(dsn string) (*DB, error) {
 		MagicLinkRepository:          NewSQLiteMagicLinkRepo(conn),
 		PortalSessionRepository:      NewSQLitePortalSessionRepo(conn),
 		RegionProbeRepository:        NewSQLiteRegionProbeRepo(conn),
+		DiagnosticsRepository:        NewSQLiteDiagnosticsRepo(conn),
 		BlacklistRepository:          NewSQLiteBlacklistRepo(conn),
 		GuestInviteRepository:        NewSQLiteInviteRepo(conn),
 		SettingsRepository:           NewSQLiteSettingsRepo(conn),

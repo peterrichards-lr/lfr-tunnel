@@ -95,6 +95,9 @@ export default function AdminUsers() {
     'users',
   );
   const [selectedUserPATs, setSelectedUserPATs] = useState<any[]>([]);
+  const [diagBundles, setDiagBundles] = useState<any[]>([]);
+  const [diagRetention, setDiagRetention] = useState<number>(0);
+  const [diagBusy, setDiagBusy] = useState(false);
   const [_domains, _setDomains] = useState<string[]>([]);
 
   useEffect(() => {
@@ -108,6 +111,18 @@ export default function AdminUsers() {
           `/api/admin/users/${encodeURIComponent(selectedUser.email)}`,
         );
         setSelectedUserPATs(res.data.pats || []);
+        // Collected diagnostic logs (#1894). A separate call, and a tolerated failure: a
+        // gateway that has never collected anything is the normal case, and it must not make
+        // the rest of this panel look broken.
+        try {
+          const bundles = await axios.get(
+            `/api/admin/diagnostics/bundles?email=${encodeURIComponent(selectedUser.email)}`,
+          );
+          setDiagBundles(bundles.data?.bundles || []);
+          setDiagRetention(bundles.data?.retention_days || 0);
+        } catch {
+          setDiagBundles([]);
+        }
       } catch (err: any) {
         // An empty PAT list is indistinguishable from "this user has none" (#1868).
         console.error('Failed to fetch user details', err);
@@ -122,6 +137,32 @@ export default function AdminUsers() {
     };
     fetchUserDetails();
   }, [selectedUser?.email]);
+
+  // Ask this user's client for its logs (#1763). The endpoint answers on two axes: whether the
+  // request was permitted (consent) and whether it could be delivered (is a client connected),
+  // and both are surfaced -- a consenting user whose laptop is shut is not a refusal.
+  const collectDiagnostics = async () => {
+    if (!selectedUser) return;
+    setDiagBusy(true);
+    try {
+      const res = await axios.post('/api/admin/diagnostics/collect', {
+        email: selectedUser.email,
+      });
+      const d = res.data || {};
+      showToast(
+        d.delivery_detail || t('diag_requested', 'Collection requested.'),
+        d.delivery === 'queued' ? 'success' : 'info',
+      );
+    } catch (err: any) {
+      showToast(
+        err.response?.data?.error ||
+          t('diag_refused', 'The collection could not be requested.'),
+        'error',
+      );
+    } finally {
+      setDiagBusy(false);
+    }
+  };
 
   const extendUserToken = async (tokenId: number, days: number) => {
     if (!selectedUser) return;
@@ -1361,6 +1402,86 @@ export default function AdminUsers() {
               </tbody>
             </table>
           </div>
+
+          {/* Diagnostic logs (#1894, completing #1763).
+
+              Consent is the user's, not the admin's: the button is offered either way and the
+              server refuses when consent is absent, because hiding it would leave an admin
+              unable to tell "not allowed" from "feature missing". The response says which. */}
+          <h4 className="section-title mb-lg border-b pb-xs flex items-center mt-xl">
+            {t('diag_logs', 'Diagnostic Logs')}{' '}
+            <span className="badge ml-sm">{diagBundles.length}</span>
+          </h4>
+
+          <div className="mb-lg">
+            <button
+              className="btn btn-secondary"
+              onClick={collectDiagnostics}
+              disabled={diagBusy}
+            >
+              {diagBusy
+                ? t('diag_collecting', 'Requesting...')
+                : t('diag_collect', 'Request logs from this client')}
+            </button>
+            <p className="text-muted text-xs mt-sm mb-0">
+              {t(
+                'diag_consent_note',
+                'Only collected if this user has turned diagnostic log sharing on. Every request, and every download below, is recorded in the audit log.',
+              )}
+            </p>
+          </div>
+
+          {diagBundles.length > 0 && (
+            <div className="table-responsive border rounded mb-xl">
+              <table className="w-full m-0">
+                <thead>
+                  <tr className="border-b text-left">
+                    <th className="th-col text-xs">{t('diag_kind', 'Log')}</th>
+                    <th className="th-col text-xs">
+                      {t('diag_collected', 'Collected')}
+                    </th>
+                    <th className="th-col text-xs">{t('diag_size', 'Size')}</th>
+                    <th className="th-col text-xs text-right">
+                      {t('diag_download', 'Download')}
+                    </th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {diagBundles.map((b: any) => (
+                    <tr key={b.id} className="border-b">
+                      <td className="p-md fw-semibold">{b.kind}</td>
+                      <td className="p-md text-muted">
+                        {new Date(b.collected_at).toLocaleString()}
+                      </td>
+                      <td className="p-md text-muted">
+                        {Math.max(1, Math.round(b.bytes / 1024))} KB
+                        {b.truncated ? ' *' : ''}
+                      </td>
+                      <td className="p-md text-right">
+                        {/* A plain link, so the browser handles the download and the
+                            audit-on-read fires server-side exactly once per open. */}
+                        <a
+                          className="btn btn-secondary"
+                          href={`/api/admin/diagnostics/bundles?id=${encodeURIComponent(b.id)}`}
+                        >
+                          {t('diag_download', 'Download')}
+                        </a>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+              {diagRetention > 0 && (
+                <p className="text-muted text-xs p-md m-0">
+                  {t('diag_retention', 'Kept for at most')} {diagRetention}{' '}
+                  {t(
+                    'diag_retention_days',
+                    'days, and deleted immediately if this user withdraws consent.',
+                  )}
+                </p>
+              )}
+            </div>
+          )}
         </ModalShell>
       )}
 

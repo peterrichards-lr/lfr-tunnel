@@ -37,7 +37,10 @@ The `lfr-tunnel` client keeps its own logs on **your** machine, in `~/.lfr-tunne
   * `traffic-<subdomain>.log` — one line per request your tunnel proxies: the time, HTTP method, URL path (the query string is **not** recorded), response status, how long it took, the local port it was sent to, and the edge region it arrived from. Request and response bodies are recorded **only** if you start the client with `-log-bodies`, which is off by default.
   * `error-<subdomain>.log` — connection and error events, which can include local hostnames and IP addresses.
   * `client-<subdomain>.log` — the client's own console output when it runs in the background.
-* **Sharing them with an administrator**: an administrator can ask for these logs to help diagnose a problem, and they are shared **only if you have turned diagnostic log sharing on**. It is off by default, was never enabled for any existing account, and you can turn it on or off at any time from **Account Settings**. The gateway checks your setting at the moment the request is made, so withdrawing consent takes effect immediately — including for a client that is already running.
+* **Sharing them with an administrator**: an administrator can ask for these logs to help diagnose a problem, and they are shared **only if you have turned diagnostic log sharing on**. It is off by default, was never enabled for any existing account, and you can turn it on or off at any time from **Account Settings**. Your setting is checked when the request is made, again before the request is delivered to your client, and once more when the logs arrive — so withdrawing consent takes effect immediately, including for a client that is already running.
+* **What is actually sent**: the current copy of each of the three logs above, with secrets removed — personal access tokens, `Authorization` values, credentials in a URL, and anything in a query string that names a token or password. **Request and response bodies are never sent at all**, even if you run the client with `-log-bodies`: they are removed before upload rather than filtered, because no automatic filter can be trusted over your application's own data. What remains of the traffic log is the method, path, status, duration, local port and region of each request.
+* **Where they are kept and for how long**: on the gateway, in its database, for **at most 30 days**. They are deleted **immediately** if you withdraw consent — not just "no new logs are collected", the ones already collected are destroyed — and immediately if your account is deleted. Every collection, every upload, and **every time an administrator opens one** is recorded in the administrative audit log.
+* **What deletion does not cover**: deleting a bundle removes it from the gateway's live database. The gateway's routine backups, taken before the deletion, still contain it until those backups age out on their own schedule. We are stating this rather than implying deletion is total.
 * **Purpose**: Diagnosing routing, connectivity and proxying problems that cannot be reproduced on the gateway.
 * **Auditing**: every request for a user's diagnostic logs is recorded in the administrative audit log, including who asked, when, about whom, and requests that were **refused** because consent was absent.
 
@@ -88,4 +91,4 @@ Liferay Tunnel is fully self-hostable. If you run your own private instance of `
 
 <!-- markdownlint-disable MD049 -->
 ---
-*Last Updated: 2026-09-06* | *Last Reviewed: 2026-09-06*
+*Last Updated: 2026-09-11* | *Last Reviewed: 2026-09-11*

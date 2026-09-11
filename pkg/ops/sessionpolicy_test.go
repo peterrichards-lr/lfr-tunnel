@@ -150,3 +150,101 @@ func TestApplySessionPolicyLeavesUndeclaredKeysAlone(t *testing.T) {
 		t.Errorf("the declared key was not applied: %q", got.MaxLifetime)
 	}
 }
+
+// policy_version joins the two session keys as a managed setting (#1887).
+//
+// It is managed for a sharper reason than they are. A drifting session timeout is wrong but
+// visible; a drifting policy_version re-prompts users and reports nothing, because nothing
+// compares two versions for order -- only for equality.
+
+func TestPolicyVersionIsReadFromALiveConfig(t *testing.T) {
+	live, err := ReadSessionPolicy([]byte(`
+portal_session_duration: "8h"
+policy_version: "2026-09-11-a"
+smtp_password: "not-yours-to-read"
+`))
+	if err != nil {
+		t.Fatalf("reading: %v", err)
+	}
+	if live.PolicyVersion != "2026-09-11-a" {
+		t.Errorf("PolicyVersion = %q, want %q", live.PolicyVersion, "2026-09-11-a")
+	}
+}
+
+func TestPolicyVersionDriftIsReported(t *testing.T) {
+	drift := DiffSessionPolicy(
+		SessionPolicy{PolicyVersion: "2026-09-11-b"},
+		SessionPolicy{PolicyVersion: "2026-09-11-a"},
+	)
+	if len(drift) != 1 {
+		t.Fatalf("got %d drift(s), want 1: %+v", len(drift), drift)
+	}
+	if drift[0].Key != keyPolicyVersion {
+		t.Errorf("drift key = %q, want %q", drift[0].Key, keyPolicyVersion)
+	}
+}
+
+func TestAnUndeclaredPolicyVersionIsNotDrift(t *testing.T) {
+	// An existing lfr-tunnel-ops.yaml has no policy: block. Upgrading this tool must not
+	// report drift, and must certainly not write an empty version onto a live gateway --
+	// which would re-prompt every user on it.
+	drift := DiffSessionPolicy(
+		SessionPolicy{Duration: "8h"},
+		SessionPolicy{Duration: "8h", PolicyVersion: "2026-09-11-a"},
+	)
+	if len(drift) != 0 {
+		t.Fatalf("an undeclared policy_version was reported as drift: %+v", drift)
+	}
+}
+
+func TestApplyWritesPolicyVersionAndLeavesEverythingElseAlone(t *testing.T) {
+	original := []byte(`# a comment the operator wrote
+portal_session_duration: "8h"
+smtp_password: "hunter2"
+policy_version: "old"
+`)
+	out, err := ApplySessionPolicy(original, SessionPolicy{PolicyVersion: "new"})
+	if err != nil {
+		t.Fatalf("applying: %v", err)
+	}
+	got := string(out)
+	if !strings.Contains(got, `policy_version: "new"`) {
+		t.Errorf("the new version was not written:\n%s", got)
+	}
+	// The secrecy rule: every other key is left untouched and unexamined.
+	if !strings.Contains(got, `smtp_password: "hunter2"`) {
+		t.Errorf("an unmanaged key was altered:\n%s", got)
+	}
+	if !strings.Contains(got, "# a comment the operator wrote") {
+		t.Errorf("the operator's comment was lost:\n%s", got)
+	}
+}
+
+func TestApplyAppendsPolicyVersionWhenAbsent(t *testing.T) {
+	out, err := ApplySessionPolicy([]byte("portal_session_duration: \"8h\"\n"),
+		SessionPolicy{PolicyVersion: "2026-09-11-a"})
+	if err != nil {
+		t.Fatalf("applying: %v", err)
+	}
+	if !strings.Contains(string(out), "policy_version") {
+		t.Errorf("policy_version was not appended to a config that lacked it:\n%s", out)
+	}
+}
+
+// The one way to get this wrong invisibly. " 2026-09-11" and "2026-09-11" compare unequal, so a
+// stray space re-prompts every user on that gateway and nothing reports a problem.
+func TestPolicyVersionWithSurroundingWhitespaceIsRefused(t *testing.T) {
+	for _, bad := range []string{" 2026-09-11", "2026-09-11 ", "\t2026-09-11"} {
+		if err := ValidateSessionPolicy(SessionPolicy{PolicyVersion: bad}); err == nil {
+			t.Errorf("ValidateSessionPolicy accepted %q, which would silently re-prompt every user", bad)
+		}
+	}
+
+	// NARROWNESS CONTROL. The version is opaque -- a date, a hash, a digit -- and validation
+	// that rejected any of those would stop an operator publishing a policy at all.
+	for _, good := range []string{"2026-09-11-diagnostics-store", "2", "9f86d081884c7d65", "v1.2"} {
+		if err := ValidateSessionPolicy(SessionPolicy{PolicyVersion: good}); err != nil {
+			t.Errorf("ValidateSessionPolicy refused the legitimate version %q: %v", good, err)
+		}
+	}
+}

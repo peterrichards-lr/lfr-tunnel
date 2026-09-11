@@ -27,14 +27,34 @@ import (
 const (
 	keySessionDuration    = "portal_session_duration"
 	keySessionMaxLifetime = "portal_session_max_lifetime"
+
+	// keyPolicyVersion is the re-consent trigger (#1707): every user whose acceptance
+	// history does not contain this exact string is asked again.
+	//
+	// Managed here for a sharper reason than the session keys. Nothing compares two versions
+	// for order, only for equality, so a gateway carrying a different value from its
+	// neighbours does not fail -- it re-prompts. A user who consents on central and then
+	// lands on an edge with a stale value is asked again, and keeps being asked, alternating
+	// between gateways, with no error anywhere to notice. Drift in this key is invisible in
+	// exactly the way drift in a session timeout is not.
+	keyPolicyVersion = "policy_version"
 )
 
-// SessionPolicy is a declared or observed pair of session settings. An empty string means "not
-// set", which is distinct from a zero duration: unset means the deployment expresses no opinion
-// and the value is left alone.
+// SessionPolicy is the set of server-config keys this tool manages, declared or observed. An
+// empty string means "not set", which is distinct from a zero duration: unset means the
+// deployment expresses no opinion and the value is left alone.
+//
+// The name is now narrower than the contents -- PolicyVersion is not a session setting, and the
+// command has always been `reconcile-server-config` rather than `reconcile-session-policy`, so
+// the type name is what lagged. Left alone deliberately: renaming it is 44 sites across two
+// files for no behaviour, and this repo's rules say not to refactor working code that was not
+// asked about (#1887).
 type SessionPolicy struct {
 	Duration    string
 	MaxLifetime string
+	// PolicyVersion is opaque on purpose (#1707): a date, a content hash, "2". Nothing
+	// compares two of them for order, only for equality.
+	PolicyVersion string
 }
 
 // PolicyDrift is one setting whose live value differs from what the deployment declares.
@@ -58,7 +78,24 @@ func (d PolicyDrift) String() string {
 // An unparseable duration would be silently ignored by the server -- yaml decodes it into a
 // zero time.Duration and the gateway falls back to its default -- so a typo would look like the
 // setting simply having no effect. Better to refuse it here than to push it and wonder.
+// validatePolicyVersion rejects a version the gateway would read differently from what was typed.
+//
+// There is no format to enforce -- the value is opaque by design, and nothing compares two of
+// them for order. Surrounding whitespace is the one way to get it wrong invisibly: " 2026-09-11"
+// and "2026-09-11" compare unequal, so a stray space re-prompts every user on that gateway and
+// nothing anywhere reports a problem.
+func validatePolicyVersion(v string) error {
+	if v != strings.TrimSpace(v) {
+		return fmt.Errorf("%s: %q has leading or trailing whitespace, which would not match the version users accepted", keyPolicyVersion, v)
+	}
+	return nil
+}
+
 func ValidateSessionPolicy(p SessionPolicy) error {
+	if err := validatePolicyVersion(p.PolicyVersion); err != nil {
+		return err
+	}
+
 	for key, val := range map[string]string{
 		keySessionDuration:    p.Duration,
 		keySessionMaxLifetime: p.MaxLifetime,
@@ -107,8 +144,9 @@ func ReadSessionPolicy(configYAML []byte) (SessionPolicy, error) {
 		return ""
 	}
 	return SessionPolicy{
-		Duration:    get(keySessionDuration),
-		MaxLifetime: get(keySessionMaxLifetime),
+		Duration:      get(keySessionDuration),
+		MaxLifetime:   get(keySessionMaxLifetime),
+		PolicyVersion: get(keyPolicyVersion),
 	}, nil
 }
 
@@ -120,6 +158,7 @@ func DiffSessionPolicy(declared, live SessionPolicy) []PolicyDrift {
 	pairs := []struct{ key, want, got string }{
 		{keySessionDuration, declared.Duration, live.Duration},
 		{keySessionMaxLifetime, declared.MaxLifetime, live.MaxLifetime},
+		{keyPolicyVersion, declared.PolicyVersion, live.PolicyVersion},
 	}
 	for _, p := range pairs {
 		if p.want == "" || p.want == p.got {
@@ -137,7 +176,7 @@ func DiffSessionPolicy(declared, live SessionPolicy) []PolicyDrift {
 // key order in the file. Rewriting an operator's config into an unrecognisable shape -- however
 // semantically identical -- is not something a tool should do to a file it does not own.
 func ApplySessionPolicy(configYAML []byte, declared SessionPolicy) ([]byte, error) {
-	if declared.Duration == "" && declared.MaxLifetime == "" {
+	if declared.Duration == "" && declared.MaxLifetime == "" && declared.PolicyVersion == "" {
 		return configYAML, nil
 	}
 
@@ -169,6 +208,7 @@ func ApplySessionPolicy(configYAML []byte, declared SessionPolicy) ([]byte, erro
 	}
 	set(keySessionDuration, declared.Duration)
 	set(keySessionMaxLifetime, declared.MaxLifetime)
+	set(keyPolicyVersion, declared.PolicyVersion)
 
 	out, err := yaml.Marshal(&doc)
 	if err != nil {
@@ -186,6 +226,25 @@ func ApplySessionPolicy(configYAML []byte, declared SessionPolicy) ([]byte, erro
 //
 // Safe to re-run: when the live values already match, it reports so and writes nothing, which
 // also means it doubles as a way to confirm a box is where it should be.
+// reconcileServerConfigUsage is the command's help text, lifted out of the command itself: it is
+// prose, it accounted for half that function's statements, and it changes for reasons that have
+// nothing to do with the reconcile logic.
+func reconcileServerConfigUsage() {
+	fmt.Println("Usage: lfr-tunnel-ops reconcile-server-config [-dry-run] [-remote-config path] [-i key] [-u user] [-s host] [-target name]")
+	fmt.Println("\nApplies the session: and policy: blocks from lfr-tunnel-ops.yaml to a running gateway.")
+	fmt.Println("\ndeploy uploads the binary and never touches server-config.yaml, so a setting")
+	fmt.Println("reached a box only on initial provision or by hand -- and nothing could tell you")
+	fmt.Println("afterwards whether it had drifted (#1681).")
+	fmt.Println("\nBacks the file up first, restarts the gateway, and restores the backup if it")
+	fmt.Println("does not come back healthy. Only the three managed keys are read or written --")
+	fmt.Println("portal_session_duration, portal_session_max_lifetime and policy_version -- and")
+	fmt.Println("every other key, including the credentials in the same file, is left untouched")
+	fmt.Println("and unexamined.")
+	fmt.Println("\nChanging policy_version re-prompts every user whose acceptance history does")
+	fmt.Println("not contain the new value. That is the point of it, but it is not reversible by")
+	fmt.Println("setting the old value back: consent already given against the new one stands.")
+}
+
 func ReconcileServerConfigCommand(args []string) {
 	fs := flag.NewFlagSet("reconcile-server-config", flag.ExitOnError)
 	remotePath := fs.String("remote-config", "/etc/lfr-tunneld/server-config.yaml",
@@ -195,17 +254,7 @@ func ReconcileServerConfigCommand(args []string) {
 	flagHost := fs.String("s", "", "SSH host of the target")
 	flagTarget := fs.String("target", "", "named target from a multi-target lfr-tunnel-ops.yaml")
 	dryRun := fs.Bool("dry-run", false, "report what would change and write nothing")
-	fs.Usage = func() {
-		fmt.Println("Usage: lfr-tunnel-ops reconcile-server-config [-dry-run] [-remote-config path] [-i key] [-u user] [-s host] [-target name]")
-		fmt.Println("\nApplies the session: block from lfr-tunnel-ops.yaml to a running gateway.")
-		fmt.Println("\ndeploy uploads the binary and never touches server-config.yaml, so a setting")
-		fmt.Println("reached a box only on initial provision or by hand -- and nothing could tell you")
-		fmt.Println("afterwards whether it had drifted (#1681).")
-		fmt.Println("\nBacks the file up first, restarts the gateway, and restores the backup if it")
-		fmt.Println("does not come back healthy. Only the two session keys are read or written; every")
-		fmt.Println("other key, including the credentials in the same file, is left untouched and")
-		fmt.Println("unexamined.")
-	}
+	fs.Usage = reconcileServerConfigUsage
 	if IsHelpRequest(args) {
 		fs.Usage()
 		return
@@ -219,13 +268,15 @@ func ReconcileServerConfigCommand(args []string) {
 	sshTarget := fmt.Sprintf("%s@%s", target.User, target.Host)
 
 	declared := SessionPolicy{
-		Duration:    target.SessionDuration,
-		MaxLifetime: target.SessionMaxLifetime,
+		Duration:      target.SessionDuration,
+		MaxLifetime:   target.SessionMaxLifetime,
+		PolicyVersion: target.PolicyVersion,
 	}
-	if declared.Duration == "" && declared.MaxLifetime == "" {
-		fmt.Println("No session: block declared in lfr-tunnel-ops.yaml -- nothing to reconcile.")
-		fmt.Println("Declare portal_session_duration and/or portal_session_max_lifetime under session:")
-		fmt.Println("to have this manage them. See lfr-tunnel-ops.yaml.example.")
+	if declared.Duration == "" && declared.MaxLifetime == "" && declared.PolicyVersion == "" {
+		fmt.Println("Nothing declared in lfr-tunnel-ops.yaml -- nothing to reconcile.")
+		fmt.Println("Declare portal_session_duration and/or portal_session_max_lifetime under session:,")
+		fmt.Println("or policy_version under policy:, to have this manage them.")
+		fmt.Println("See lfr-tunnel-ops.yaml.example.")
 		return
 	}
 	// Validated before the file is read, let alone written: a typo should cost nothing.

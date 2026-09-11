@@ -21,6 +21,10 @@ type DeployTarget struct {
 	// declares, empty when it declares none (#1681).
 	SessionDuration    string
 	SessionMaxLifetime string
+	// PolicyVersion is the policy edition this deployment declares, empty when it declares
+	// none (#1887). Drift in this one re-prompts users rather than failing, so it is managed
+	// for a sharper reason than the two above.
+	PolicyVersion string
 	// AWSRegion is optional and, unlike the three fields above, has no hardcoded
 	// requirement -- most commands never need it. When set, `deploy` uses it to check
 	// whether the target's EC2 instance is stopped (e.g. edge-us/edge-apac's
@@ -88,6 +92,18 @@ type opsConfigTarget struct {
 		Duration    string `yaml:"portal_session_duration"`
 		MaxLifetime string `yaml:"portal_session_max_lifetime"`
 	} `yaml:"session"`
+	// Policy is the privacy/cookie policy edition this deployment has published (#1887).
+	//
+	// A sibling of session: rather than a field inside it, because a policy version is not a
+	// session setting -- it is the re-consent trigger, and filing it under session: would put
+	// the thing that asks every user to accept a document under a heading about timeouts.
+	//
+	// Optional, like session:. Empty means this deployment does not manage it, which is also
+	// the pre-#1887 behaviour: an existing lfr-tunnel-ops.yaml keeps working untouched and no
+	// user is re-prompted by upgrading this tool.
+	Policy struct {
+		Version string `yaml:"policy_version"`
+	} `yaml:"policy"`
 }
 
 // opsConfigFile is the schema of lfr-tunnel-ops.yaml (see lfr-tunnel-ops.yaml.example).
@@ -300,6 +316,7 @@ func ResolveDeployTargetWithRegion(flagUser, flagHost, flagIdentity, flagAWSRegi
 		// the applied value differ with nothing to show for it (#1681).
 		target.SessionDuration = cfg.Session.Duration
 		target.SessionMaxLifetime = cfg.Session.MaxLifetime
+		target.PolicyVersion = cfg.Policy.Version
 	}
 
 	var missing []string

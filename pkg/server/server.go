@@ -354,6 +354,12 @@ type Server struct {
 	edgePingMu     sync.Mutex
 	startTime      time.Time
 	edgeLeases     map[string][]EdgeLease
+
+	// Queued diagnostic-collection commands, keyed by user ID (#1763). In memory on purpose:
+	// a request is only meaningful while the client is connected, and surviving a restart
+	// would mean delivering one whose consent basis predates it -- see diagnosticsCommandTTL.
+	diagCommands   map[string][]*diagnosticsCommand
+	diagCommandsMu sync.Mutex
 	edgeLeasesMu   sync.RWMutex
 	remoteRoutes   map[string]string // fullHost -> targetURL for fast cross-node proxying (issue #1249)
 	remoteRoutesMu sync.RWMutex
@@ -2107,6 +2113,9 @@ func (s *Server) handleTunnelStatus(w http.ResponseWriter, r *http.Request) {
 		SessionToken string `json:"session_token"`
 		Region       string `json:"region"`
 		Status       string `json:"status"`
+		// Ack carries the ids of diagnostic commands the client has received (#1763). The
+		// ack is what proves a command arrived; writing one to a socket does not.
+		Ack []string `json:"ack,omitempty"`
 	}
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 		http.Error(w, "invalid request", http.StatusBadRequest)
@@ -2136,6 +2145,10 @@ func (s *Server) handleTunnelStatus(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	if len(req.Ack) > 0 {
+		s.recordDiagnosticsAcks(leases, req.Ack, r)
+	}
+
 	if s.registry.UpdateLeaseStatus(req.SessionToken, req.Status) {
 		if req.Status == "down" {
 			body, _err := s.renderNotificationTemplate("en", "admin_tunnel_offline.txt", nil)
@@ -2147,8 +2160,20 @@ func (s *Server) handleTunnelStatus(w http.ResponseWriter, r *http.Request) {
 		// me". Answering that here would make a successful heartbeat look like a lost
 		// lease and re-register the tunnel every few seconds, so this path must never
 		// carry a status field -- only a pending shutdown, when there is one.
-		if warning := s.pendingShutdownWarning(); warning != nil {
-			respondJSON(w, http.StatusOK, warning)
+		// One body carries both, because there is only one body. The shutdown warning keeps
+		// its exact shape -- ParseNodeShutdownWarning matches on `type` -- and the commands
+		// ride beside it under their own key, so a client that knows about neither, either or
+		// both reads what it understands and ignores the rest. Neither may introduce a
+		// top-level `status` field; see the comment above.
+		body := s.pendingShutdownWarning()
+		if cmds := s.diagnosticsCommandsForSession(leases, r); len(cmds) > 0 {
+			if body == nil {
+				body = map[string]interface{}{}
+			}
+			body["commands"] = cmds
+		}
+		if body != nil {
+			respondJSON(w, http.StatusOK, body)
 		} else {
 			w.WriteHeader(http.StatusOK)
 		}

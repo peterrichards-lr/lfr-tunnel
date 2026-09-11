@@ -286,8 +286,23 @@ func TestAdminDiagnosticsCollectPermittedWithConsent(t *testing.T) {
 	if err := json.Unmarshal(rec.Body.Bytes(), &body); err != nil {
 		t.Fatalf("decoding the response: %v", err)
 	}
+	// Unchanged on purpose. #1763 predicted this expectation would have to move once the
+	// transport existed; it should not. `status` answers "was this allowed", and that answer
+	// does not depend on whether the client happened to be connected. The transport outcome is
+	// its own field, asserted below.
 	if status, _ := body["status"].(string); status != "consent_granted" {
 		t.Errorf("status = %q, want %q", status, "consent_granted")
+	}
+	if rec.Code != http.StatusAccepted {
+		t.Errorf("code = %d, want %d -- the 501 should be gone now that a transport exists", rec.Code, http.StatusAccepted)
+	}
+	// This user was seeded without a tunnel, so the request is permitted and undeliverable.
+	// Both halves have to be legible, or an admin cannot tell "refused" from "nobody home".
+	if delivery, _ := body["delivery"].(string); delivery != "not_reachable" {
+		t.Errorf("delivery = %q, want %q for a consenting user with no connected client", delivery, "not_reachable")
+	}
+	if detail, _ := body["delivery_detail"].(string); detail == "" {
+		t.Error("an undeliverable request gave the admin no reason")
 	}
 
 	entry := hasAuditAction(auditActions(t, srv, target.ID), diagnosticsAuditRequested)

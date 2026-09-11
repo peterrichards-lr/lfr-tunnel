@@ -95,6 +95,21 @@ type diagnosticsCollectResponse struct {
 	// Consented is always present, including in the refusal, so an admin tool can tell a
 	// consent refusal from any other 403 without parsing prose.
 	Consented bool `json:"diagnostics_consent"`
+	// RequestID identifies the queued command, so the audit trail and any later upload can be
+	// tied back to the request that caused them (#1763). Empty when nothing was queued.
+	RequestID string `json:"request_id,omitempty"`
+	// Delivery is the transport outcome, and is deliberately NOT folded into Status.
+	//
+	// Status answers "was this allowed" and Delivery answers "did it go anywhere"; they are
+	// independent, and a consenting user whose client is simply offline is a permitted request
+	// that could not be delivered, not a refused one. #1763 predicted that Status would change
+	// meaning here -- it should not, because an admin tool that keyed on "consent_granted"
+	// would start reading a permitted request as a failed one.
+	//
+	// One of: queued, already_requested, not_reachable.
+	Delivery string `json:"delivery,omitempty"`
+	// DeliveryDetail explains a Delivery that is not "queued", in words an admin can act on.
+	DeliveryDetail string `json:"delivery_detail,omitempty"`
 }
 
 // diagnosticsConsentRequest is the body of POST /api/me/diagnostics-consent.
@@ -160,6 +175,28 @@ func (s *Server) handleDiagnosticsConsent(w http.ResponseWriter, r *http.Request
 		Consent: diagnosticsConsentState(user),
 	})
 }
+
+// The values Status and Delivery take on the wire (#1763).
+//
+// Named because they are a contract, not prose: the portals and any admin tooling read them to
+// tell a consent refusal from a permitted request, and a queued command from one that had
+// nowhere to go. The two are separate axes on purpose -- a consenting user whose client is
+// offline is a PERMITTED request that could not be DELIVERED, and folding that into one field
+// would make it read as a refusal.
+const (
+	// diagnosticsStatusConsentGranted is the authorisation verdict. It does not depend on
+	// whether the client happened to be connected.
+	diagnosticsStatusConsentGranted = "consent_granted"
+
+	// diagnosticsDeliveryQueued means the command is waiting for the client's next heartbeat.
+	diagnosticsDeliveryQueued = "queued"
+	// diagnosticsDeliveryAlreadyRequested means one is already waiting; an admin clicking
+	// twice gets this rather than a second command.
+	diagnosticsDeliveryAlreadyRequested = "already_requested"
+	// diagnosticsDeliveryNotReachable means nothing was queued because nothing could collect
+	// it -- see diagnosticsReachability for which case and why.
+	diagnosticsDeliveryNotReachable = "not_reachable"
+)
 
 // diagnosticsCollectRequest is the body of POST /api/admin/diagnostics/collect.
 type diagnosticsCollectRequest struct {
@@ -239,11 +276,82 @@ func (s *Server) handleAdminDiagnosticsCollect(w http.ResponseWriter, r *http.Re
 		fmt.Sprintf("Requested diagnostic logs from %s (consent given %s)",
 			target.Email, diagnosticsConsentState(target).ConsentedAt), r)
 
-	respondJSON(w, http.StatusNotImplemented, diagnosticsCollectResponse{
-		Status:    "consent_granted",
+	// The transport (#1763). Consent is established above and is not re-established here --
+	// this is the one authorisation point, and a second would be a second thing to get wrong.
+	//
+	// Whether the command can actually be handed over is a separate question from whether it is
+	// permitted, and the response says which. A permitted request to a client that is not
+	// connected is not an error: the admin asked a reasonable thing at an unreasonable moment,
+	// and telling them that is more useful than queueing into a void.
+	if s.hasPendingDiagnosticsCommand(target.ID) {
+		respondJSON(w, http.StatusAccepted, diagnosticsCollectResponse{
+			Status:         diagnosticsStatusConsentGranted,
+			Consented:      true,
+			Delivery:       diagnosticsDeliveryAlreadyRequested,
+			DeliveryDetail: fmt.Sprintf("A collection from %s is already waiting to be delivered. It expires after %s if the client does not pick it up.", target.Email, diagnosticsCommandTTL),
+		})
+		return
+	}
+
+	reach := s.diagnosticsReachability(target.ID)
+	if !reach.served {
+		respondJSON(w, http.StatusAccepted, diagnosticsCollectResponse{
+			Status:         diagnosticsStatusConsentGranted,
+			Consented:      true,
+			Delivery:       diagnosticsDeliveryNotReachable,
+			DeliveryDetail: reach.reason,
+		})
+		return
+	}
+
+	cmd := s.queueDiagnosticsCollect(target.ID, actor.Email)
+	respondJSON(w, http.StatusAccepted, diagnosticsCollectResponse{
+		Status:    diagnosticsStatusConsentGranted,
 		Consented: true,
-		Error:     "Consent is in place, but log collection is not available on this gateway yet.",
+		Delivery:  diagnosticsDeliveryQueued,
+		RequestID: cmd.ID,
+		// Honest about where this stops today, and in DeliveryDetail rather than Error,
+		// because nothing has gone wrong. The command reaches the client and the client
+		// acknowledges it; reading, redacting and uploading the files is the next part of
+		// #1763, and an admin told "collected" when nothing was collected would be worse
+		// than an admin told exactly this.
+		DeliveryDetail: "Requested. The client will acknowledge it within a few seconds; log upload itself is not implemented yet.",
 	})
+}
+
+// diagnosticsReachability answers whether this gateway can hand a command to a user's client,
+// and if not, why not in words an admin can act on.
+//
+// The distinction matters because only the SERVING gateway's heartbeat response is parsed by the
+// client (interceptor.go checks `pingURL == serverURL`). Central receives the heartbeat of an
+// edge-hosted session too, but the client ignores central's body, so central cannot deliver to
+// one. Forwarding via the edge control channel is the next step; until it exists this says so
+// rather than queueing a command that would expire undelivered.
+type diagnosticsReach struct {
+	served bool
+	reason string
+}
+
+func (s *Server) diagnosticsReachability(userID string) diagnosticsReach {
+	for _, l := range s.registry.ListLeases() {
+		if l != nil && l.UserID == userID && l.NodeID == "" {
+			return diagnosticsReach{served: true}
+		}
+	}
+
+	s.edgeLeasesMu.RLock()
+	edgeNode := ""
+	for _, el := range s.edgeLeases[userID] {
+		edgeNode = el.NodeID
+		break
+	}
+	s.edgeLeasesMu.RUnlock()
+
+	if edgeNode != "" {
+		return diagnosticsReach{reason: fmt.Sprintf(
+			"This user's tunnel is served by edge node %s. Only the gateway serving a session can deliver to it, and forwarding a collection request to an edge is not implemented yet.", edgeNode)}
+	}
+	return diagnosticsReach{reason: "This user has no connected tunnel right now, so there is nothing to collect from. Ask them to start their client and try again."}
 }
 
 // auditDiagnostics writes one diagnostics audit entry, synchronously.

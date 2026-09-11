@@ -43,6 +43,10 @@ type RequestRecord struct {
 
 // InterceptorEngine manages the traffic routing, modification, and capture.
 type InterceptorEngine struct {
+	// diagAcks tracks diagnostic-collection commands received from the gateway and the acks
+	// owed for them (#1763). Delivery is at-least-once, so dedupe lives here.
+	diagAcks diagnosticsAckState
+
 	mu                 sync.RWMutex
 	MaintenanceMode    bool
 	Status             string
@@ -555,11 +559,18 @@ func (e *InterceptorEngine) StartHealthChecks(ctx context.Context, cancel contex
 				e.mu.Unlock()
 
 				// Send status update/heartbeat to Gateway and Central Control Plane
-				payload, _ := json.Marshal(map[string]string{
+				// map[string]any rather than map[string]string: the ack list is a slice.
+				// The three existing fields keep their exact names and types, because the
+				// gateway decodes this into a struct that has always had them.
+				statusReport := map[string]any{
 					"session_token": sessionToken,
 					"region":        region,
 					"status":        newStatus,
-				})
+				}
+				if acks := e.takeDiagnosticsAcks(); len(acks) > 0 {
+					statusReport["ack"] = acks
+				}
+				payload, _ := json.Marshal(statusReport)
 
 				urlsToPing := statusReportTargets(serverURL, e.CentralURL())
 
@@ -625,6 +636,16 @@ func (e *InterceptorEngine) StartHealthChecks(ctx context.Context, cancel contex
 							if pingURL == serverURL {
 								if warning, ok := ParseNodeShutdownWarning(body); ok {
 									e.noteShutdownWarning(warning)
+								}
+								// Only the serving gateway's body is read at all, which is
+								// also why only the serving gateway can deliver one of
+								// these (#1763).
+								for _, cmd := range e.noteDiagnosticsCommands(ParseDiagnosticsCommands(body)) {
+									slog.Info("[Client] The gateway has asked for diagnostic logs; acknowledging.",
+										"request_id", cmd.ID)
+									e.LogEvent("info", "diagnostics_collect_requested", map[string]any{
+										"request_id": cmd.ID,
+									})
 								}
 							}
 

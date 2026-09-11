@@ -41,6 +41,7 @@ export default function AdminSubdomains() {
   // Date would have doubled that, so both go through formatDate now.
   const renderDate = (value?: string) =>
     value && !value.startsWith('0001-01-01') ? formatDate(value) : '—';
+  const [loadError, setLoadError] = useState('');
   const [subdomains, setSubdomains] = useState<SubdomainInfo[]>([]);
   const [loading, setLoading] = useState(true);
   const { t } = useI18n();
@@ -127,8 +128,16 @@ export default function AdminSubdomains() {
       });
 
       setSubdomains(mapped);
-    } catch (e) {
+    } catch (e: any) {
+      // An empty table is indistinguishable from "no results" (#1868). Say which.
       console.error(e);
+      setLoadError(
+        e.response?.data?.error ||
+          t(
+            'admin_load_failed',
+            'Could not load this page. The server may be unreachable — what you see is not current.',
+          ),
+      );
     } finally {
       setLoading(false);
     }
@@ -274,6 +283,12 @@ export default function AdminSubdomains() {
 
   return (
     <div>
+      {loadError && (
+        <div className="alert-banner alert-banner--danger mb-xl">
+          {loadError}
+        </div>
+      )}
+
       <div className="page-header">
         <h1 className="page-header__title">Registered Subdomains</h1>
         <a

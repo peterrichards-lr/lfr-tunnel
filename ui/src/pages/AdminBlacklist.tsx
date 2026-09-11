@@ -15,6 +15,7 @@ interface BlacklistEntry {
 }
 
 export default function AdminBlacklist() {
+  const [loadError, setLoadError] = useState('');
   const [entries, setEntries] = useState<BlacklistEntry[]>([]);
   const [loading, setLoading] = useState(true);
   const [ipInput, setIpInput] = useState('');
@@ -27,8 +28,16 @@ export default function AdminBlacklist() {
     try {
       const res = await axios.get('/api/admin/blacklist');
       setEntries(res.data || []);
-    } catch (e) {
+    } catch (e: any) {
+      // An empty table is indistinguishable from "no results" (#1868). Say which.
       console.error(e);
+      setLoadError(
+        e.response?.data?.error ||
+          t(
+            'admin_load_failed',
+            'Could not load this page. The server may be unreachable — what you see is not current.',
+          ),
+      );
     } finally {
       setLoading(false);
     }
@@ -173,6 +182,12 @@ export default function AdminBlacklist() {
 
   return (
     <div>
+      {loadError && (
+        <div className="alert-banner alert-banner--danger mb-xl">
+          {loadError}
+        </div>
+      )}
+
       <div className="page-header">
         <div>
           <h1 className="page-header__title">

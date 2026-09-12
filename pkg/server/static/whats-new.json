@@ -1,5 +1,32 @@
 [
   {
+    "version": "v1.48.28",
+    "release_date": "2026-09-12",
+    "features": [
+      "feat(diagnostics): store, retain and erase collected logs, end to end (#1894) (#1895)",
+      "feat(portal): render the node placement report in both arms (#1892) (#1893)",
+      "feat(analytics): report whether tunnels started on the closest node (#1888) (#1891)",
+      "docs(se-guide): explain the localhost-URL symptom, from a measurement (#1810) (#1890)",
+      "feat(ops): let reconcile-server-config manage policy_version (#1887) (#1889)",
+      "feat(client): redact and bound the logs before anything can upload them (#1763 part 2) (#1886)",
+      "feat(diagnostics): carry a collection request from the admin to the client (#1763) (#1883)",
+      "refactor(server): use the status constants where the value is a user status (#1870) (#1880)",
+      "fix(i18n): check the bundles the i18n gate could not reach (#1854) (#1879)",
+      "feat(server): tell someone when the watchdog restarts a gateway service (#1875) (#1877)",
+      "fix(client): give the client inspector rules for the classes it applies (#1853) (#1878)",
+      "fix(portal): give V1 one status-badge mapping instead of three (#1866) (#1876)",
+      "fix(portal): stop the header claiming the gateway is up while it is unreachable (#1869) (#1874)",
+      "fix(server): validate the status on PATCH /api/admin/users/<email> (#1872) (#1873)",
+      "fix(portal): surface a failed data load, and stop System Settings saving defaults over real config (#1868) (#1871)",
+      "fix(server): give the user status vocabulary one home, and check the portal against it (#1851) (#1867)",
+      "fix(e2e): one lockfile, and one place that derives the Playwright image (#1863) (#1865)",
+      "fix(e2e): run Playwright and chromium in a container, not on the workstation (#1858) (#1864)",
+      "fix(edr): make GOTMPDIR travel with the repo, not with the invocation (#1859) (#1862)",
+      "fix(edr): ship the go PATH shim that keeps the toolchain inside the whitelist (#1860) (#1861)",
+      "docs(ops): record what a release actually needs a human for, and why an edge is dark (#1857)"
+    ]
+  },
+  {
     "version": "v1.48.27",
     "release_date": "2026-09-11",
     "features": [
@@ -93,14 +120,6 @@
       "feat(client): add -gateway to bootstrap without pinning (#1694) (#1697)",
       "fix(client): say that naming a gateway disables region selection and failover (#1691) (#1695)",
       "fix(nginx): serve client downloads from the apex as well as the wildcard (#1687) (#1688)"
-    ]
-  },
-  {
-    "version": "v1.48.23",
-    "release_date": "2026-09-02",
-    "features": [
-      "fix(install): download from the gateway that served the installer (#1684) (#1685)",
-      "feat(ops): reconcile the session policy onto a running gateway (#1681) (#1683)"
     ]
   }
 ]
